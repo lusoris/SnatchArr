@@ -107,6 +107,15 @@ func SettingsFromRow(r sqlcgen.Setting) domain.Settings {
 	}
 }
 
+// CleanuparrLinkFromRow converts a row; the API key is never carried.
+func CleanuparrLinkFromRow(r sqlcgen.CleanuparrLink) domain.CleanuparrLink {
+	return domain.CleanuparrLink{
+		ID: r.ID, Name: r.Name, BaseURL: r.BaseUrl, Enabled: r.Enabled,
+		LastSeenVersion: deref(r.LastSeenVersion), LastCheckAt: r.LastCheckAt, LastError: deref(r.LastError),
+		CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+	}
+}
+
 // SeerrLinkFromRow converts a row; the API key is never carried.
 func SeerrLinkFromRow(r sqlcgen.SeerrLink) domain.SeerrLink {
 	return domain.SeerrLink{

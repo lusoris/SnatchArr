@@ -27,6 +27,8 @@ tags:
     description: Torrent and Usenet clients observed for backpressure (never driven)
   - name: seerr
     description: Seerr requests snatched first (read-only; nothing is written to Seerr)
+  - name: cleanuparr
+    description: Cleanuparr status and strikes (read-only; complementary to snatching)
 security:
   - cookieAuth: []
   - bearerAuth: []
@@ -920,6 +922,142 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
 
+  /cleanuparr:
+    get:
+      tags: [cleanuparr]
+      operationId: listCleanuparrLinks
+      summary: List Cleanuparr links (API keys are never returned)
+      responses:
+        "200":
+          description: Links
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CleanuparrLink"
+        default:
+          $ref: "#/components/responses/Problem"
+    post:
+      tags: [cleanuparr]
+      operationId: createCleanuparrLink
+      summary: Add a Cleanuparr link
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CleanuparrLinkInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CleanuparrLink"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /cleanuparr/test:
+    post:
+      tags: [cleanuparr]
+      operationId: testCleanuparrLinkInput
+      summary: Probe Cleanuparr credentials that are not stored yet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CleanuparrLinkInput"
+      responses:
+        "200":
+          description: Probe result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProbeResult"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /cleanuparr/status:
+    get:
+      tags: [cleanuparr]
+      operationId: getCleanuparrStatus
+      summary: Live view of every enabled Cleanuparr link (cached 30 s)
+      responses:
+        "200":
+          description: Status per link
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CleanuparrStatus"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /cleanuparr/{linkId}:
+    parameters:
+      - $ref: "#/components/parameters/LinkId"
+    get:
+      tags: [cleanuparr]
+      operationId: getCleanuparrLink
+      summary: Get one Cleanuparr link
+      responses:
+        "200":
+          description: Link
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CleanuparrLink"
+        default:
+          $ref: "#/components/responses/Problem"
+    put:
+      tags: [cleanuparr]
+      operationId: updateCleanuparrLink
+      summary: Update a Cleanuparr link (omit api_key to keep it)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CleanuparrLinkInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CleanuparrLink"
+        default:
+          $ref: "#/components/responses/Problem"
+    delete:
+      tags: [cleanuparr]
+      operationId: deleteCleanuparrLink
+      summary: Delete a Cleanuparr link
+      responses:
+        "204":
+          description: Deleted
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /cleanuparr/{linkId}/test:
+    parameters:
+      - $ref: "#/components/parameters/LinkId"
+    post:
+      tags: [cleanuparr]
+      operationId: testCleanuparrLink
+      summary: Probe a stored Cleanuparr link and record the outcome
+      responses:
+        "200":
+          description: Probe result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProbeResult"
+        default:
+          $ref: "#/components/responses/Problem"
+
 components:
   securitySchemes:
     cookieAuth:
@@ -1717,3 +1855,105 @@ components:
           type: array
           items:
             type: string
+
+    CleanuparrLink:
+      type: object
+      required: [id, name, base_url, enabled, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        base_url:
+          type: string
+        enabled:
+          type: boolean
+        last_seen_version:
+          type: string
+        last_check_at:
+          type: string
+          format: date-time
+        last_error:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CleanuparrLinkInput:
+      type: object
+      required: [name, base_url]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+        base_url:
+          type: string
+        api_key:
+          type: string
+          description: Required on create; omit on update to keep the stored key
+        enabled:
+          type: boolean
+          default: true
+
+    CleanuparrStrike:
+      type: object
+      required: [id, type, created_at, download_id, title, dry_run]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          description: "Stalled, DownloadingMetadata, FailedImport, SlowSpeed, SlowTime or DeadTorrent"
+        created_at:
+          type: string
+          format: date-time
+        download_id:
+          type: string
+          description: Download client hash or id
+        title:
+          type: string
+        dry_run:
+          type: boolean
+
+    CleanuparrStatus:
+      type: object
+      required: [link_id, name, reachable, checked_at, struck_downloads, marked_for_removal, removed_downloads, media_managers, recent_strikes]
+      properties:
+        link_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        reachable:
+          type: boolean
+        error:
+          type: string
+        version:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+        checked_at:
+          type: string
+          format: date-time
+        struck_downloads:
+          type: integer
+          description: Downloads that currently carry strikes
+        marked_for_removal:
+          type: integer
+        removed_downloads:
+          type: integer
+        media_managers:
+          type: object
+          description: Instance count per *arr type as Cleanuparr names them
+          additionalProperties:
+            type: integer
+        recent_strikes:
+          type: array
+          items:
+            $ref: "#/components/schemas/CleanuparrStrike"

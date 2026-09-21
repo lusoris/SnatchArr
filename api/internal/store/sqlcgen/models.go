@@ -21,6 +21,19 @@ type ApiKey struct {
 	RevokedAt *time.Time
 }
 
+type CleanuparrLink struct {
+	ID              uuid.UUID
+	Name            string
+	BaseUrl         string
+	ApiKeyEnc       []byte
+	Enabled         bool
+	LastSeenVersion *string
+	LastCheckAt     *time.Time
+	LastError       *string
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+}
+
 type DownloadClient struct {
 	ID                 uuid.UUID
 	InstanceID         *uuid.UUID

@@ -28,6 +28,7 @@ import (
 
 	"github.com/lusoris/SnatchArr/api/internal/arrclient"
 	"github.com/lusoris/SnatchArr/api/internal/auth"
+	"github.com/lusoris/SnatchArr/api/internal/cleanuparr"
 	"github.com/lusoris/SnatchArr/api/internal/config"
 	"github.com/lusoris/SnatchArr/api/internal/dlclients"
 	"github.com/lusoris/SnatchArr/api/internal/events"
@@ -63,6 +64,7 @@ var Module = fx.Options(
 	snatch.Module,
 	dlclients.Module,
 	seerr.Module,
+	cleanuparr.Module,
 	fx.Provide(func(s *dlclients.Service) workergrpc.Pacer { return s }),
 	workergrpc.Module,
 	httpapi.Module,

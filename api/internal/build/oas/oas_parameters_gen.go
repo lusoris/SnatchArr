@@ -80,6 +80,71 @@ func decodeCancelRunParams(args [1]string, argsEscaped bool, r *http.Request) (p
 	return params, nil
 }
 
+// DeleteCleanuparrLinkParams is parameters of deleteCleanuparrLink operation.
+type DeleteCleanuparrLinkParams struct {
+	LinkId uuid.UUID
+}
+
+func unpackDeleteCleanuparrLinkParams(packed middleware.Parameters) (params DeleteCleanuparrLinkParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "linkId",
+			In:   "path",
+		}
+		params.LinkId = packed[key].(uuid.UUID)
+	}
+	return params
+}
+
+func decodeDeleteCleanuparrLinkParams(args [1]string, argsEscaped bool, r *http.Request) (params DeleteCleanuparrLinkParams, _ error) {
+	// Decode path: linkId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "linkId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.LinkId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "linkId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
 // DeleteDownloadClientParams is parameters of deleteDownloadClient operation.
 type DeleteDownloadClientParams struct {
 	ClientId uuid.UUID
@@ -463,6 +528,71 @@ func decodeDiscoverDownloadClientsParams(args [1]string, argsEscaped bool, r *ht
 	}(); err != nil {
 		return params, &ogenerrors.DecodeParamError{
 			Name: "instanceId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
+// GetCleanuparrLinkParams is parameters of getCleanuparrLink operation.
+type GetCleanuparrLinkParams struct {
+	LinkId uuid.UUID
+}
+
+func unpackGetCleanuparrLinkParams(packed middleware.Parameters) (params GetCleanuparrLinkParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "linkId",
+			In:   "path",
+		}
+		params.LinkId = packed[key].(uuid.UUID)
+	}
+	return params
+}
+
+func decodeGetCleanuparrLinkParams(args [1]string, argsEscaped bool, r *http.Request) (params GetCleanuparrLinkParams, _ error) {
+	// Decode path: linkId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "linkId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.LinkId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "linkId",
 			In:   "path",
 			Err:  err,
 		}
@@ -1469,6 +1599,71 @@ func decodeSyncSeerrLinkParams(args [1]string, argsEscaped bool, r *http.Request
 	return params, nil
 }
 
+// TestCleanuparrLinkParams is parameters of testCleanuparrLink operation.
+type TestCleanuparrLinkParams struct {
+	LinkId uuid.UUID
+}
+
+func unpackTestCleanuparrLinkParams(packed middleware.Parameters) (params TestCleanuparrLinkParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "linkId",
+			In:   "path",
+		}
+		params.LinkId = packed[key].(uuid.UUID)
+	}
+	return params
+}
+
+func decodeTestCleanuparrLinkParams(args [1]string, argsEscaped bool, r *http.Request) (params TestCleanuparrLinkParams, _ error) {
+	// Decode path: linkId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "linkId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.LinkId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "linkId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
 // TestDownloadClientParams is parameters of testDownloadClient operation.
 type TestDownloadClientParams struct {
 	ClientId uuid.UUID
@@ -1722,6 +1917,71 @@ func decodeTriggerRunParams(args [1]string, argsEscaped bool, r *http.Request) (
 	}(); err != nil {
 		return params, &ogenerrors.DecodeParamError{
 			Name: "instanceId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
+// UpdateCleanuparrLinkParams is parameters of updateCleanuparrLink operation.
+type UpdateCleanuparrLinkParams struct {
+	LinkId uuid.UUID
+}
+
+func unpackUpdateCleanuparrLinkParams(packed middleware.Parameters) (params UpdateCleanuparrLinkParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "linkId",
+			In:   "path",
+		}
+		params.LinkId = packed[key].(uuid.UUID)
+	}
+	return params
+}
+
+func decodeUpdateCleanuparrLinkParams(args [1]string, argsEscaped bool, r *http.Request) (params UpdateCleanuparrLinkParams, _ error) {
+	// Decode path: linkId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "linkId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.LinkId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "linkId",
 			In:   "path",
 			Err:  err,
 		}

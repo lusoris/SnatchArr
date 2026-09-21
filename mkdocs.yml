@@ -66,6 +66,7 @@ nav:
   - Configuration: configuration.md
   - Download clients: download-clients.md
   - Seerr: seerr.md
+  - Cleanuparr: cleanuparr.md
   - API: api.md
   - Architecture Decisions:
       - Overview: adr/README.md

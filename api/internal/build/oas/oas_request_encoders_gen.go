@@ -24,6 +24,20 @@ func encodeCompleteSetupRequest(
 	return nil
 }
 
+func encodeCreateCleanuparrLinkRequest(
+	req *CleanuparrLinkInput,
+	r *http.Request,
+) error {
+	const contentType = "application/json"
+	e := new(jx.Encoder)
+	{
+		req.Encode(e)
+	}
+	encoded := e.Bytes()
+	ht.SetBody(r, bytes.NewReader(encoded), contentType)
+	return nil
+}
+
 func encodeCreateDownloadClientRequest(
 	req *DownloadClientInput,
 	r *http.Request,
@@ -114,6 +128,20 @@ func encodeResetStateRequest(
 	return nil
 }
 
+func encodeTestCleanuparrLinkInputRequest(
+	req *CleanuparrLinkInput,
+	r *http.Request,
+) error {
+	const contentType = "application/json"
+	e := new(jx.Encoder)
+	{
+		req.Encode(e)
+	}
+	encoded := e.Bytes()
+	ht.SetBody(r, bytes.NewReader(encoded), contentType)
+	return nil
+}
+
 func encodeTestDownloadClientInputRequest(
 	req *DownloadClientInput,
 	r *http.Request,
@@ -158,6 +186,20 @@ func encodeTestSeerrLinkInputRequest(
 
 func encodeTriggerRunRequest(
 	req *RunTrigger,
+	r *http.Request,
+) error {
+	const contentType = "application/json"
+	e := new(jx.Encoder)
+	{
+		req.Encode(e)
+	}
+	encoded := e.Bytes()
+	ht.SetBody(r, bytes.NewReader(encoded), contentType)
+	return nil
+}
+
+func encodeUpdateCleanuparrLinkRequest(
+	req *CleanuparrLinkInput,
 	r *http.Request,
 ) error {
 	const contentType = "application/json"

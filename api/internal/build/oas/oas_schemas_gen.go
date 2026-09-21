@@ -216,6 +216,380 @@ func (s *CapStatusScope) UnmarshalText(data []byte) error {
 	}
 }
 
+// Ref: #/components/schemas/CleanuparrLink
+type CleanuparrLink struct {
+	ID              uuid.UUID   `json:"id"`
+	Name            string      `json:"name"`
+	BaseURL         string      `json:"base_url"`
+	Enabled         bool        `json:"enabled"`
+	LastSeenVersion OptString   `json:"last_seen_version"`
+	LastCheckAt     OptDateTime `json:"last_check_at"`
+	LastError       OptString   `json:"last_error"`
+	CreatedAt       time.Time   `json:"created_at"`
+	UpdatedAt       time.Time   `json:"updated_at"`
+}
+
+// GetID returns the value of ID.
+func (s *CleanuparrLink) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetName returns the value of Name.
+func (s *CleanuparrLink) GetName() string {
+	return s.Name
+}
+
+// GetBaseURL returns the value of BaseURL.
+func (s *CleanuparrLink) GetBaseURL() string {
+	return s.BaseURL
+}
+
+// GetEnabled returns the value of Enabled.
+func (s *CleanuparrLink) GetEnabled() bool {
+	return s.Enabled
+}
+
+// GetLastSeenVersion returns the value of LastSeenVersion.
+func (s *CleanuparrLink) GetLastSeenVersion() OptString {
+	return s.LastSeenVersion
+}
+
+// GetLastCheckAt returns the value of LastCheckAt.
+func (s *CleanuparrLink) GetLastCheckAt() OptDateTime {
+	return s.LastCheckAt
+}
+
+// GetLastError returns the value of LastError.
+func (s *CleanuparrLink) GetLastError() OptString {
+	return s.LastError
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *CleanuparrLink) GetCreatedAt() time.Time {
+	return s.CreatedAt
+}
+
+// GetUpdatedAt returns the value of UpdatedAt.
+func (s *CleanuparrLink) GetUpdatedAt() time.Time {
+	return s.UpdatedAt
+}
+
+// SetID sets the value of ID.
+func (s *CleanuparrLink) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetName sets the value of Name.
+func (s *CleanuparrLink) SetName(val string) {
+	s.Name = val
+}
+
+// SetBaseURL sets the value of BaseURL.
+func (s *CleanuparrLink) SetBaseURL(val string) {
+	s.BaseURL = val
+}
+
+// SetEnabled sets the value of Enabled.
+func (s *CleanuparrLink) SetEnabled(val bool) {
+	s.Enabled = val
+}
+
+// SetLastSeenVersion sets the value of LastSeenVersion.
+func (s *CleanuparrLink) SetLastSeenVersion(val OptString) {
+	s.LastSeenVersion = val
+}
+
+// SetLastCheckAt sets the value of LastCheckAt.
+func (s *CleanuparrLink) SetLastCheckAt(val OptDateTime) {
+	s.LastCheckAt = val
+}
+
+// SetLastError sets the value of LastError.
+func (s *CleanuparrLink) SetLastError(val OptString) {
+	s.LastError = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *CleanuparrLink) SetCreatedAt(val time.Time) {
+	s.CreatedAt = val
+}
+
+// SetUpdatedAt sets the value of UpdatedAt.
+func (s *CleanuparrLink) SetUpdatedAt(val time.Time) {
+	s.UpdatedAt = val
+}
+
+// Ref: #/components/schemas/CleanuparrLinkInput
+type CleanuparrLinkInput struct {
+	Name    string `json:"name"`
+	BaseURL string `json:"base_url"`
+	// Required on create; omit on update to keep the stored key.
+	APIKey  OptString `json:"api_key"`
+	Enabled OptBool   `json:"enabled"`
+}
+
+// GetName returns the value of Name.
+func (s *CleanuparrLinkInput) GetName() string {
+	return s.Name
+}
+
+// GetBaseURL returns the value of BaseURL.
+func (s *CleanuparrLinkInput) GetBaseURL() string {
+	return s.BaseURL
+}
+
+// GetAPIKey returns the value of APIKey.
+func (s *CleanuparrLinkInput) GetAPIKey() OptString {
+	return s.APIKey
+}
+
+// GetEnabled returns the value of Enabled.
+func (s *CleanuparrLinkInput) GetEnabled() OptBool {
+	return s.Enabled
+}
+
+// SetName sets the value of Name.
+func (s *CleanuparrLinkInput) SetName(val string) {
+	s.Name = val
+}
+
+// SetBaseURL sets the value of BaseURL.
+func (s *CleanuparrLinkInput) SetBaseURL(val string) {
+	s.BaseURL = val
+}
+
+// SetAPIKey sets the value of APIKey.
+func (s *CleanuparrLinkInput) SetAPIKey(val OptString) {
+	s.APIKey = val
+}
+
+// SetEnabled sets the value of Enabled.
+func (s *CleanuparrLinkInput) SetEnabled(val OptBool) {
+	s.Enabled = val
+}
+
+// Ref: #/components/schemas/CleanuparrStatus
+type CleanuparrStatus struct {
+	LinkID    uuid.UUID   `json:"link_id"`
+	Name      string      `json:"name"`
+	Reachable bool        `json:"reachable"`
+	Error     OptString   `json:"error"`
+	Version   OptString   `json:"version"`
+	StartedAt OptDateTime `json:"started_at"`
+	CheckedAt time.Time   `json:"checked_at"`
+	// Downloads that currently carry strikes.
+	StruckDownloads  int `json:"struck_downloads"`
+	MarkedForRemoval int `json:"marked_for_removal"`
+	RemovedDownloads int `json:"removed_downloads"`
+	// Instance count per *arr type as Cleanuparr names them.
+	MediaManagers CleanuparrStatusMediaManagers `json:"media_managers"`
+	RecentStrikes []CleanuparrStrike            `json:"recent_strikes"`
+}
+
+// GetLinkID returns the value of LinkID.
+func (s *CleanuparrStatus) GetLinkID() uuid.UUID {
+	return s.LinkID
+}
+
+// GetName returns the value of Name.
+func (s *CleanuparrStatus) GetName() string {
+	return s.Name
+}
+
+// GetReachable returns the value of Reachable.
+func (s *CleanuparrStatus) GetReachable() bool {
+	return s.Reachable
+}
+
+// GetError returns the value of Error.
+func (s *CleanuparrStatus) GetError() OptString {
+	return s.Error
+}
+
+// GetVersion returns the value of Version.
+func (s *CleanuparrStatus) GetVersion() OptString {
+	return s.Version
+}
+
+// GetStartedAt returns the value of StartedAt.
+func (s *CleanuparrStatus) GetStartedAt() OptDateTime {
+	return s.StartedAt
+}
+
+// GetCheckedAt returns the value of CheckedAt.
+func (s *CleanuparrStatus) GetCheckedAt() time.Time {
+	return s.CheckedAt
+}
+
+// GetStruckDownloads returns the value of StruckDownloads.
+func (s *CleanuparrStatus) GetStruckDownloads() int {
+	return s.StruckDownloads
+}
+
+// GetMarkedForRemoval returns the value of MarkedForRemoval.
+func (s *CleanuparrStatus) GetMarkedForRemoval() int {
+	return s.MarkedForRemoval
+}
+
+// GetRemovedDownloads returns the value of RemovedDownloads.
+func (s *CleanuparrStatus) GetRemovedDownloads() int {
+	return s.RemovedDownloads
+}
+
+// GetMediaManagers returns the value of MediaManagers.
+func (s *CleanuparrStatus) GetMediaManagers() CleanuparrStatusMediaManagers {
+	return s.MediaManagers
+}
+
+// GetRecentStrikes returns the value of RecentStrikes.
+func (s *CleanuparrStatus) GetRecentStrikes() []CleanuparrStrike {
+	return s.RecentStrikes
+}
+
+// SetLinkID sets the value of LinkID.
+func (s *CleanuparrStatus) SetLinkID(val uuid.UUID) {
+	s.LinkID = val
+}
+
+// SetName sets the value of Name.
+func (s *CleanuparrStatus) SetName(val string) {
+	s.Name = val
+}
+
+// SetReachable sets the value of Reachable.
+func (s *CleanuparrStatus) SetReachable(val bool) {
+	s.Reachable = val
+}
+
+// SetError sets the value of Error.
+func (s *CleanuparrStatus) SetError(val OptString) {
+	s.Error = val
+}
+
+// SetVersion sets the value of Version.
+func (s *CleanuparrStatus) SetVersion(val OptString) {
+	s.Version = val
+}
+
+// SetStartedAt sets the value of StartedAt.
+func (s *CleanuparrStatus) SetStartedAt(val OptDateTime) {
+	s.StartedAt = val
+}
+
+// SetCheckedAt sets the value of CheckedAt.
+func (s *CleanuparrStatus) SetCheckedAt(val time.Time) {
+	s.CheckedAt = val
+}
+
+// SetStruckDownloads sets the value of StruckDownloads.
+func (s *CleanuparrStatus) SetStruckDownloads(val int) {
+	s.StruckDownloads = val
+}
+
+// SetMarkedForRemoval sets the value of MarkedForRemoval.
+func (s *CleanuparrStatus) SetMarkedForRemoval(val int) {
+	s.MarkedForRemoval = val
+}
+
+// SetRemovedDownloads sets the value of RemovedDownloads.
+func (s *CleanuparrStatus) SetRemovedDownloads(val int) {
+	s.RemovedDownloads = val
+}
+
+// SetMediaManagers sets the value of MediaManagers.
+func (s *CleanuparrStatus) SetMediaManagers(val CleanuparrStatusMediaManagers) {
+	s.MediaManagers = val
+}
+
+// SetRecentStrikes sets the value of RecentStrikes.
+func (s *CleanuparrStatus) SetRecentStrikes(val []CleanuparrStrike) {
+	s.RecentStrikes = val
+}
+
+// Instance count per *arr type as Cleanuparr names them.
+type CleanuparrStatusMediaManagers map[string]int
+
+func (s *CleanuparrStatusMediaManagers) init() CleanuparrStatusMediaManagers {
+	m := *s
+	if m == nil {
+		m = map[string]int{}
+		*s = m
+	}
+	return m
+}
+
+// Ref: #/components/schemas/CleanuparrStrike
+type CleanuparrStrike struct {
+	ID string `json:"id"`
+	// Stalled, DownloadingMetadata, FailedImport, SlowSpeed, SlowTime or DeadTorrent.
+	Type      string    `json:"type"`
+	CreatedAt time.Time `json:"created_at"`
+	// Download client hash or id.
+	DownloadID string `json:"download_id"`
+	Title      string `json:"title"`
+	DryRun     bool   `json:"dry_run"`
+}
+
+// GetID returns the value of ID.
+func (s *CleanuparrStrike) GetID() string {
+	return s.ID
+}
+
+// GetType returns the value of Type.
+func (s *CleanuparrStrike) GetType() string {
+	return s.Type
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *CleanuparrStrike) GetCreatedAt() time.Time {
+	return s.CreatedAt
+}
+
+// GetDownloadID returns the value of DownloadID.
+func (s *CleanuparrStrike) GetDownloadID() string {
+	return s.DownloadID
+}
+
+// GetTitle returns the value of Title.
+func (s *CleanuparrStrike) GetTitle() string {
+	return s.Title
+}
+
+// GetDryRun returns the value of DryRun.
+func (s *CleanuparrStrike) GetDryRun() bool {
+	return s.DryRun
+}
+
+// SetID sets the value of ID.
+func (s *CleanuparrStrike) SetID(val string) {
+	s.ID = val
+}
+
+// SetType sets the value of Type.
+func (s *CleanuparrStrike) SetType(val string) {
+	s.Type = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *CleanuparrStrike) SetCreatedAt(val time.Time) {
+	s.CreatedAt = val
+}
+
+// SetDownloadID sets the value of DownloadID.
+func (s *CleanuparrStrike) SetDownloadID(val string) {
+	s.DownloadID = val
+}
+
+// SetTitle sets the value of Title.
+func (s *CleanuparrStrike) SetTitle(val string) {
+	s.Title = val
+}
+
+// SetDryRun sets the value of DryRun.
+func (s *CleanuparrStrike) SetDryRun(val bool) {
+	s.DryRun = val
+}
+
 type CookieAuth struct {
 	APIKey string
 	Roles  []string
@@ -240,6 +614,9 @@ func (s *CookieAuth) SetAPIKey(val string) {
 func (s *CookieAuth) SetRoles(val []string) {
 	s.Roles = val
 }
+
+// DeleteCleanuparrLinkNoContent is response for DeleteCleanuparrLink operation.
+type DeleteCleanuparrLinkNoContent struct{}
 
 // DeleteDownloadClientNoContent is response for DeleteDownloadClient operation.
 type DeleteDownloadClientNoContent struct{}

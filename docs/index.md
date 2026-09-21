@@ -34,6 +34,7 @@ same intent, none of the code.
 - [Configuration](configuration.md): environment, profiles, Configarr link.
 - [Download clients](download-clients.md): discovery, backpressure, bandwidth pacing.
 - [Seerr](seerr.md): requests snatched first, request dashboard, instance import.
+- [Cleanuparr](cleanuparr.md): status and strikes next to your snatches.
 - [API](api.md): the OpenAPI contract and how to talk to it.
 - [Architecture decisions](adr/README.md): why it is built the way it is.
 

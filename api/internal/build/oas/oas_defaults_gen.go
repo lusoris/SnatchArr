@@ -8,6 +8,14 @@ import (
 )
 
 // setDefaults set default value of fields.
+func (s *CleanuparrLinkInput) setDefaults() {
+	{
+		val := bool(true)
+		s.Enabled.SetTo(val)
+	}
+}
+
+// setDefaults set default value of fields.
 func (s *DownloadClientInput) setDefaults() {
 	{
 		val := bool(true)

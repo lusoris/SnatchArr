@@ -20,6 +20,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/auth"
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/buildinfo"
+	"github.com/lusoris/SnatchArr/api/internal/cleanuparr"
 	"github.com/lusoris/SnatchArr/api/internal/config"
 	"github.com/lusoris/SnatchArr/api/internal/dlclients"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
@@ -32,37 +33,39 @@ import (
 
 // Handlers implements oas.Handler.
 type Handlers struct {
-	build     buildinfo.Info
-	cfg       config.Options
-	clk       clock.Clock
-	auth      *auth.Service
-	sessions  *session.Manager
-	instances *instances.Service
-	policies  *policies.Service
-	runs      *snatch.Runs
-	rec       *snatch.Recorder
-	budget    *snatch.Budget
-	memory    *snatch.Memory
-	planner   *snatch.Planner
-	schedules *snatch.Schedules
-	clients   *dlclients.Service
-	settings  *settings.Service
-	seerr     *seerr.Service
-	logger    *slog.Logger
+	build      buildinfo.Info
+	cfg        config.Options
+	clk        clock.Clock
+	auth       *auth.Service
+	sessions   *session.Manager
+	instances  *instances.Service
+	policies   *policies.Service
+	runs       *snatch.Runs
+	rec        *snatch.Recorder
+	budget     *snatch.Budget
+	memory     *snatch.Memory
+	planner    *snatch.Planner
+	schedules  *snatch.Schedules
+	clients    *dlclients.Service
+	settings   *settings.Service
+	seerr      *seerr.Service
+	cleanuparr *cleanuparr.Service
+	logger     *slog.Logger
 }
 
 // Deps groups the snatch services the handlers need.
 type Deps struct {
 	fx.In
-	Runs      *snatch.Runs
-	Rec       *snatch.Recorder
-	Budget    *snatch.Budget
-	Memory    *snatch.Memory
-	Planner   *snatch.Planner
-	Schedules *snatch.Schedules
-	Clients   *dlclients.Service
-	Settings  *settings.Service
-	Seerr     *seerr.Service
+	Runs       *snatch.Runs
+	Rec        *snatch.Recorder
+	Budget     *snatch.Budget
+	Memory     *snatch.Memory
+	Planner    *snatch.Planner
+	Schedules  *snatch.Schedules
+	Clients    *dlclients.Service
+	Settings   *settings.Service
+	Seerr      *seerr.Service
+	Cleanuparr *cleanuparr.Service
 }
 
 // NewHandlers wires the operation handlers.
@@ -71,7 +74,7 @@ func NewHandlers(build buildinfo.Info, cfg config.Options, clk clock.Clock, auth
 ) *Handlers {
 	return &Handlers{
 		build: build, cfg: cfg, clk: clk, auth: authSvc, sessions: sessions, instances: inst, policies: pol,
-		runs: d.Runs, rec: d.Rec, budget: d.Budget, memory: d.Memory, planner: d.Planner, schedules: d.Schedules, clients: d.Clients, settings: d.Settings, seerr: d.Seerr, logger: logger,
+		runs: d.Runs, rec: d.Rec, budget: d.Budget, memory: d.Memory, planner: d.Planner, schedules: d.Schedules, clients: d.Clients, settings: d.Settings, seerr: d.Seerr, cleanuparr: d.Cleanuparr, logger: logger,
 	}
 }
 
