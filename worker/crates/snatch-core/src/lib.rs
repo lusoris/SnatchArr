@@ -22,7 +22,7 @@
     )
 )]
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use rand::RngExt;
 
@@ -33,7 +33,12 @@ pub enum Selection {
     Random,
     /// Walk the list in order from a cursor.
     Sequential,
+    /// Newest releases first, with a slice of every pick reserved for the backlog.
+    Recent,
 }
+
+/// Share of a recency selection that is drawn at random from the older backlog.
+pub const BACKLOG_SHARE: usize = 5; // one in five
 
 /// Which pages of a paged wanted list to fetch this cycle.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -75,6 +80,11 @@ impl PagePlan {
         match selection {
             Selection::Random => Self::random(total_pages, count, rng),
             Selection::Sequential => Self::sequential(total_pages, count, cursor),
+            // Recency needs a wide pool to sort, so it always reads from the front with the
+            // full page allowance.
+            Selection::Recent => {
+                Self::sequential(total_pages, MAX_PAGES_PER_CYCLE.min(total_pages), 1)
+            }
         }
     }
 
@@ -174,14 +184,35 @@ pub fn select<R: RngExt>(
         Selection::Sequential => candidates.iter().take(want).cloned().collect(),
         Selection::Random => {
             let mut pool: Vec<Candidate> = candidates.to_vec();
-            for i in 0..want {
-                let j = rng.random_range(i..pool.len());
-                pool.swap(i, j);
-            }
+            partial_shuffle(&mut pool, want, rng);
             pool.truncate(want);
             pool
         }
+        Selection::Recent => select_recent(candidates, want, rng),
     }
+}
+
+/// Moves `want` uniformly chosen elements to the front (partial Fisher-Yates).
+fn partial_shuffle<R: RngExt>(pool: &mut [Candidate], want: usize, rng: &mut R) {
+    for i in 0..want.min(pool.len()) {
+        let j = rng.random_range(i..pool.len());
+        pool.swap(i, j);
+    }
+}
+
+/// Newest releases first (unknown dates last); one pick in [`BACKLOG_SHARE`] is drawn at
+/// random from whatever is left so an old backlog still gets attention.
+fn select_recent<R: RngExt>(candidates: &[Candidate], want: usize, rng: &mut R) -> Vec<Candidate> {
+    let mut pool: Vec<Candidate> = candidates.to_vec();
+    // `None < Some(_)`, so a descending sort puts the newest first and undated last.
+    pool.sort_by_key(|c| std::cmp::Reverse(c.release_unix));
+    let backlog = want.checked_div(BACKLOG_SHARE).unwrap_or(0);
+    let newest = want.saturating_sub(backlog).min(pool.len());
+    let mut picked: Vec<Candidate> = pool.drain(..newest).collect();
+    let extra = backlog.min(pool.len());
+    partial_shuffle(&mut pool, extra, rng);
+    picked.extend(pool.into_iter().take(extra));
+    picked
 }
 
 /// Sonarr (and Whisparr v2) search granularity.
@@ -228,6 +259,8 @@ pub enum Target {
     Series {
         /// Series id.
         series_id: i64,
+        /// Distinct seasons among the covered episodes (one indexer query each).
+        seasons: u32,
         /// Episode ids covered.
         items: Vec<i64>,
     },
@@ -266,10 +299,26 @@ impl Target {
         }
     }
 
-    /// Number of items the hourly cap charges for this target.
+    /// Number of candidate items the target covers (what afterglow remembers).
     #[must_use]
     pub fn item_count(&self) -> u32 {
         u32::try_from(self.items().len()).unwrap_or(u32::MAX)
+    }
+
+    /// Indexer queries the target costs, which is what stamina charges: one per episode in
+    /// an `EpisodeSearch`, one per season pack, one per season of a `SeriesSearch`, one
+    /// per movie, album (also inside an `ArtistSearch`) or book (also inside an
+    /// `AuthorSearch`).
+    #[must_use]
+    pub fn query_cost(&self) -> u32 {
+        match self {
+            Self::Season { .. } => 1,
+            Self::Series { seasons, .. } => (*seasons).max(1),
+            Self::Episodes { .. }
+            | Self::Items { .. }
+            | Self::Artist { .. }
+            | Self::Author { .. } => self.item_count().max(1),
+        }
     }
 }
 
@@ -289,10 +338,25 @@ pub fn group_sonarr(selected: &[Candidate], mode: SonarrMode) -> Vec<Target> {
             .into_iter()
             .map(|(series_id, items)| Target::Episodes { series_id, items })
             .collect(),
-        SonarrMode::Shows => by_group(selected)
-            .into_iter()
-            .map(|(series_id, items)| Target::Series { series_id, items })
-            .collect(),
+        SonarrMode::Shows => {
+            let mut seasons: BTreeMap<i64, BTreeSet<i32>> = BTreeMap::new();
+            for c in selected {
+                seasons
+                    .entry(c.group)
+                    .or_default()
+                    .insert(c.season.unwrap_or(0));
+            }
+            by_group(selected)
+                .into_iter()
+                .map(|(series_id, items)| Target::Series {
+                    series_id,
+                    seasons: seasons
+                        .get(&series_id)
+                        .map_or(1, |s| u32::try_from(s.len()).unwrap_or(u32::MAX)),
+                    items,
+                })
+                .collect()
+        }
         SonarrMode::SeasonPacks => {
             let mut seasons: BTreeMap<(i64, i32), Vec<i64>> = BTreeMap::new();
             for c in selected {
@@ -345,15 +409,15 @@ pub fn group_flat(selected: &[Candidate]) -> Vec<Target> {
     }]
 }
 
-/// Keeps whole targets while their cumulative item count fits into `granted`; the rest is
-/// returned as deferred so the caller can report what the cap withheld.
+/// Keeps whole targets while their cumulative query cost fits into `granted`; the rest is
+/// returned as deferred so the caller can report what stamina withheld.
 #[must_use]
 pub fn cap(targets: Vec<Target>, granted: u32) -> (Vec<Target>, Vec<Target>) {
     let mut used: u32 = 0;
     let mut dispatch = Vec::new();
     let mut deferred = Vec::new();
     for t in targets {
-        let n = t.item_count();
+        let n = t.query_cost();
         if used.saturating_add(n) <= granted {
             used = used.saturating_add(n);
             dispatch.push(t);
@@ -408,7 +472,7 @@ mod tests {
         #[test]
         fn plan_pages_are_distinct_and_in_range(total in 0u32..5000, size in 1u32..250, want in 0u32..100, cursor in 0u32..60, seed in any::<u64>()) {
             let mut rng = SmallRng::seed_from_u64(seed);
-            for sel in [Selection::Random, Selection::Sequential] {
+            for sel in [Selection::Random, Selection::Sequential, Selection::Recent] {
                 let plan = PagePlan::plan(total, size, want, sel, cursor, &mut rng);
                 let total_pages = total.div_ceil(size);
                 let set: BTreeSet<u32> = plan.pages.iter().copied().collect();
@@ -432,7 +496,7 @@ mod tests {
         #[test]
         fn select_is_a_subset_without_duplicates(cands in arb_candidates(), want in 0usize..80, seed in any::<u64>()) {
             let mut rng = SmallRng::seed_from_u64(seed);
-            for sel in [Selection::Random, Selection::Sequential] {
+            for sel in [Selection::Random, Selection::Sequential, Selection::Recent] {
                 let picked = select(&cands, want, sel, &mut rng);
                 prop_assert!(picked.len() <= want.min(cands.len()));
                 let ids: BTreeSet<i64> = picked.iter().map(|c| c.id).collect();
@@ -465,10 +529,10 @@ mod tests {
         #[test]
         fn cap_never_exceeds_grant(cands in arb_candidates(), granted in 0u32..40) {
             let targets = group_sonarr(&cands, SonarrMode::Episodes);
-            let total: u32 = targets.iter().map(Target::item_count).sum();
+            let total: u32 = targets.iter().map(Target::query_cost).sum();
             let (dispatch, deferred) = cap(targets, granted);
-            let used: u32 = dispatch.iter().map(Target::item_count).sum();
-            let left: u32 = deferred.iter().map(Target::item_count).sum();
+            let used: u32 = dispatch.iter().map(Target::query_cost).sum();
+            let left: u32 = deferred.iter().map(Target::query_cost).sum();
             prop_assert!(used <= granted);
             prop_assert_eq!(used + left, total);
         }
@@ -508,5 +572,49 @@ mod tests {
         assert!(group_flat(&[]).is_empty());
         let (d, f) = cap(Vec::new(), 0);
         assert!(d.is_empty() && f.is_empty());
+    }
+
+    #[test]
+    fn recent_prefers_newest_and_keeps_a_backlog_slice() {
+        let mut rng = SmallRng::seed_from_u64(7);
+        let cands: Vec<Candidate> = (1..=10)
+            .map(|i| cand(i, 1, 1, Some(i * 100), true))
+            .chain([cand(99, 1, 1, None, true)])
+            .collect();
+        let picked = select(&cands, 5, Selection::Recent, &mut rng);
+        assert_eq!(picked.len(), 5);
+        let newest: Vec<i64> = picked.iter().take(4).map(|c| c.id).collect();
+        assert_eq!(
+            newest,
+            vec![10, 9, 8, 7],
+            "four of five picks are the newest"
+        );
+        assert!(
+            picked[4].id <= 6 || picked[4].id == 99,
+            "the fifth comes from the backlog"
+        );
+        assert!(select(&cands, 1, Selection::Recent, &mut rng)[0].id == 10);
+    }
+
+    #[test]
+    fn query_cost_charges_indexer_queries() {
+        let eps = vec![
+            cand(1, 1, 1, None, true),
+            cand(2, 1, 2, None, true),
+            cand(3, 1, 2, None, true),
+        ];
+        let by_episode = group_sonarr(&eps, SonarrMode::Episodes);
+        assert_eq!(by_episode.iter().map(Target::query_cost).sum::<u32>(), 3);
+        let packs = group_sonarr(&eps, SonarrMode::SeasonPacks);
+        assert_eq!(packs.len(), 2);
+        assert_eq!(packs.iter().map(Target::query_cost).sum::<u32>(), 2);
+        let shows = group_sonarr(&eps, SonarrMode::Shows);
+        assert_eq!(shows.len(), 1);
+        assert_eq!(
+            shows[0].query_cost(),
+            2,
+            "a series search costs one query per season"
+        );
+        assert_eq!(shows[0].item_count(), 3);
     }
 }

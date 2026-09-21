@@ -54,7 +54,13 @@ pub struct Outcome {
     pub searched: Vec<SearchedItem>,
     /// Sequential cursor to persist.
     pub cursor: String,
+    /// Set when the run was cut short (circuit breaker); the items already searched still
+    /// count, but the run is reported as failed so the API backs the instance off.
+    pub error: Option<String>,
 }
+
+/// Consecutive search-command failures that open the circuit (HISS-02 bound on retries).
+const MAX_CONSECUTIVE_FAILURES: u32 = 3;
 
 /// One event to report; a small struct keeps call sites short.
 struct Ev {
@@ -154,6 +160,7 @@ fn wanted_of(snatch: i32) -> Result<Wanted, ExecError> {
 fn selection_of(p: &Policy) -> Selection {
     match p.selection() {
         snatch_proto::Selection::Sequential => Selection::Sequential,
+        snatch_proto::Selection::Recent => Selection::Recent,
         snatch_proto::Selection::Random | snatch_proto::Selection::Unspecified => Selection::Random,
     }
 }
@@ -233,7 +240,19 @@ pub async fn execute(mut client: Client, run: Run, arr_timeout: Duration, worker
     };
     let (outcome, searched, cursor, error) =
         match snatch(&mut client, &run, arr_timeout, &events).await {
-            Ok(o) => (RunOutcome::Done, o.searched, o.cursor, String::new()),
+            Ok(Outcome {
+                searched,
+                cursor,
+                error: None,
+            }) => (RunOutcome::Done, searched, cursor, String::new()),
+            Ok(Outcome {
+                searched,
+                cursor,
+                error: Some(e),
+            }) => {
+                tracing::warn!(run = %run.run_id, error = %e, "run cut short");
+                (RunOutcome::Failed, searched, cursor, e)
+            }
             Err(e) => {
                 tracing::warn!(run = %run.run_id, error = %e, "run failed");
                 events
@@ -288,8 +307,12 @@ async fn snatch(
     events
         .emit(Ev::run(Level::Debug, EventType::PageFetched, msg))
         .await;
-    let keep = collect_candidates(client, &p, run, &plan.pages, first).await?;
-    let msg = format!("{} candidate(s) after filters and memory", keep.len());
+    let (keep, busy) = collect_candidates(client, &p, run, &plan.pages, first).await?;
+    let msg = format!(
+        "{} candidate(s) after filters and afterglow; {busy} skipped as queued or grabbed within {} h",
+        keep.len(),
+        p.policy.recent_grab_hours
+    );
     events
         .emit(Ev::run(Level::Debug, EventType::CandidatesFiltered, msg))
         .await;
@@ -305,11 +328,37 @@ async fn snatch(
     let mut outcome = Outcome {
         searched: Vec::new(),
         cursor: plan.next_cursor.to_string(),
+        error: None,
     };
-    for target in &dispatch {
-        dispatch_target(&p, target, &titles, events, &mut outcome).await;
-    }
+    dispatch_all(&p, &dispatch, &titles, events, &mut outcome).await;
     Ok(outcome)
+}
+
+/// Dispatches every target, opening the circuit after MAX_CONSECUTIVE_FAILURES failed
+/// commands in a row: a dead indexer or instance must not burn the rest of the stamina.
+async fn dispatch_all(
+    p: &Prepared,
+    dispatch: &[Target],
+    titles: &HashMap<i64, String>,
+    events: &Events,
+    outcome: &mut Outcome,
+) {
+    let mut failures: u32 = 0;
+    for target in dispatch {
+        if dispatch_target(p, target, titles, events, outcome).await {
+            failures = 0;
+            continue;
+        }
+        failures = failures.saturating_add(1);
+        if failures >= MAX_CONSECUTIVE_FAILURES {
+            let msg = format!("circuit open after {failures} consecutive search failures");
+            events
+                .emit(Ev::run(Level::Error, EventType::RunFinished, msg.clone()))
+                .await;
+            outcome.error = Some(msg);
+            return;
+        }
+    }
 }
 
 async fn plan_pages(p: &Prepared, rng: &mut SmallRng) -> Result<(PagePlan, WantedPage), ExecError> {
@@ -329,15 +378,16 @@ async fn plan_pages(p: &Prepared, rng: &mut SmallRng) -> Result<(PagePlan, Wante
     Ok((plan, first))
 }
 
-/// Fetches the planned pages, applies the local filters, and asks the API which ids are
-/// not in processed memory.
+/// Fetches the planned pages, applies the local filters, drops what is already queued or
+/// freshly grabbed, and asks the API which ids are not in afterglow. Returns the
+/// candidates and how many were skipped as busy.
 async fn collect_candidates(
     client: &mut Client,
     p: &Prepared,
     run: &Run,
     pages: &[u32],
     first: WantedPage,
-) -> Result<Vec<Candidate>, ExecError> {
+) -> Result<(Vec<Candidate>, usize), ExecError> {
     let mut candidates = Vec::new();
     for page in pages {
         let fetched = if *page == 1 {
@@ -355,6 +405,13 @@ async fn collect_candidates(
         now_unix: chrono::Utc::now().timestamp(),
     };
     let filtered = snatch_core::filter(&candidates, &filter);
+    let busy = p.arr.busy_ids(p.policy.recent_grab_hours).await?;
+    let before = filtered.len();
+    let filtered: Vec<Candidate> = filtered
+        .into_iter()
+        .filter(|c| busy.binary_search(&c.id).is_err())
+        .collect();
+    let skipped = before.saturating_sub(filtered.len());
     let req = FilterCandidatesRequest {
         run_id: run.run_id.clone(),
         entity_type: p.kind.entity_type().to_owned(),
@@ -365,10 +422,11 @@ async fn collect_candidates(
         .await?
         .into_inner()
         .unprocessed_ids;
-    Ok(filtered
+    let keep = filtered
         .into_iter()
         .filter(|c| unprocessed.contains(&c.id))
-        .collect())
+        .collect();
+    Ok((keep, skipped))
 }
 
 /// Asks the API for budget and trims the targets to what was granted.
@@ -378,14 +436,14 @@ async fn acquire(
     targets: Vec<Target>,
     events: &Events,
 ) -> Result<Vec<Target>, ExecError> {
-    let requested: u32 = targets.iter().map(Target::item_count).sum();
+    let requested: u32 = targets.iter().map(Target::query_cost).sum();
     let req = AcquireBudgetRequest {
         run_id: run.run_id.clone(),
         requested,
     };
     let grant = client.acquire_budget(Request::new(req)).await?.into_inner();
     let msg = format!(
-        "budget: {} of {} requested ({} left this hour)",
+        "stamina: {} of {} indexer queries granted ({} left this hour)",
         grant.granted, requested, grant.remaining_in_window
     );
     events
@@ -393,7 +451,10 @@ async fn acquire(
         .await;
     let (dispatch, deferred) = snatch_core::cap(targets, grant.granted);
     if !deferred.is_empty() {
-        let msg = format!("{} target(s) deferred by the hourly cap", deferred.len());
+        let msg = format!(
+            "{} target(s) deferred: out of stamina this hour",
+            deferred.len()
+        );
         events
             .emit(Ev::run(Level::Warn, EventType::BudgetAcquired, msg))
             .await;
@@ -401,13 +462,14 @@ async fn acquire(
     Ok(dispatch)
 }
 
+/// Dispatches one target; returns whether the *arr accepted the search command.
 async fn dispatch_target(
     p: &Prepared,
     target: &Target,
     titles: &HashMap<i64, String>,
     events: &Events,
     outcome: &mut Outcome,
-) {
+) -> bool {
     let entity_type = p.kind.entity_type();
     let cmd = match p.arr.search(target).await {
         Ok(cmd) => cmd,
@@ -418,7 +480,7 @@ async fn dispatch_target(
                     Ev::run(Level::Warn, EventType::SearchFailed, title).entity(entity_type, *id);
                 events.emit(ev.detail(e.to_string())).await;
             }
-            return;
+            return false;
         }
     };
     for id in target.items() {
@@ -435,6 +497,7 @@ async fn dispatch_target(
     if p.policy.await_command {
         await_command(p, cmd, events).await;
     }
+    true
 }
 
 /// Polls a command until it reaches a terminal state or the bounded poll budget ends.

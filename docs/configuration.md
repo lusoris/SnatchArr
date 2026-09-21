@@ -52,7 +52,7 @@ Every instance has one policy (`GET/PUT /api/v1/instances/{id}/policy`).
 | `upgrade_per_cycle` | 0 | 0 to 100 |
 | `cycle_interval_s` | 900 | at least 60 |
 | `hourly_cap` (stamina) | 20 | 1 to 500 |
-| `selection` | `random` | `random`, `sequential` |
+| `selection` | `random` | `random`, `sequential`, `recent` |
 | `monitored_only` | true | |
 | `skip_future_releases` | true | |
 | `radarr_release_type` | `physical` | `physical`, `digital`, `cinema` |
@@ -63,6 +63,18 @@ Every instance has one policy (`GET/PUT /api/v1/instances/{id}/policy`).
 | `max_queue_size` | -1 | -1 disables the *arr queue ceiling |
 | `await_command` | false | Poll the search command until it completes (5 min max) |
 | `page_size` | 100 | 10 to 1000 |
+| `recent_grab_window_h` | 24 | 0 to 720; items grabbed this recently (and everything queued) are skipped |
+| `afterglow_max_h` | 720 | 1 to 8760; cap for the doubling afterglow |
+
+## Runtime settings
+
+`GET/PUT /api/v1/settings`:
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `history_retention_days` | 90 | How long events are kept |
+| `user_agent` | `SnatchArr/1.0 (...)` | Sent to every *arr and download client |
+| `global_hourly_cap` | 0 | Stamina shared by every instance (0 = off) |
 
 ## Configarr
 

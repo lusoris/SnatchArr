@@ -219,6 +219,20 @@ struct Paged<T> {
     records: Vec<T>,
 }
 
+/// Bounds for the queue walk (HISS-02).
+const QUEUE_PAGE_SIZE: u32 = 500;
+const MAX_QUEUE_PAGES: u32 = 10;
+
+/// The entity id fields a queue or history record may carry, one per *arr family.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BusyLike {
+    episode_id: Option<i64>,
+    movie_id: Option<i64>,
+    album_id: Option<i64>,
+    book_id: Option<i64>,
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct MonitoredParent {
@@ -509,6 +523,56 @@ impl ArrClient {
             )
             .await?;
         Ok(p.total_records)
+    }
+
+    /// Ids that are already on their way and must not be searched again: everything in
+    /// the download queue plus, when `grab_hours > 0`, everything the *arr grabbed within
+    /// that window (`GET history/since?eventType=1`). Sorted and deduplicated.
+    pub async fn busy_ids(&self, grab_hours: u32) -> Result<Vec<i64>, Error> {
+        let mut ids = self.queue_ids().await?;
+        if grab_hours > 0 {
+            ids.extend(self.grabbed_since(grab_hours).await?);
+        }
+        ids.sort_unstable();
+        ids.dedup();
+        Ok(ids)
+    }
+
+    async fn queue_ids(&self) -> Result<Vec<i64>, Error> {
+        let mut ids = Vec::new();
+        for page in 1..=MAX_QUEUE_PAGES {
+            let query = [
+                ("page", page.to_string()),
+                ("pageSize", QUEUE_PAGE_SIZE.to_string()),
+            ];
+            let p: Paged<BusyLike> = self.get_json("queue", &query).await?;
+            let fetched = p.records.len();
+            ids.extend(p.records.iter().filter_map(|r| self.busy_id(r)));
+            if fetched < QUEUE_PAGE_SIZE as usize {
+                break;
+            }
+        }
+        Ok(ids)
+    }
+
+    async fn grabbed_since(&self, hours: u32) -> Result<Vec<i64>, Error> {
+        let window = chrono::TimeDelta::try_hours(i64::from(hours)).unwrap_or_default();
+        let since = Utc::now()
+            .checked_sub_signed(window)
+            .unwrap_or_else(Utc::now)
+            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        let query = [("date", since), ("eventType", "1".to_owned())];
+        let records: Vec<BusyLike> = self.get_json("history/since", &query).await?;
+        Ok(records.iter().filter_map(|r| self.busy_id(r)).collect())
+    }
+
+    fn busy_id(&self, r: &BusyLike) -> Option<i64> {
+        match self.kind {
+            Kind::Sonarr | Kind::WhisparrV2 => r.episode_id,
+            Kind::Radarr | Kind::WhisparrV3 => r.movie_id,
+            Kind::Lidarr => r.album_id,
+            Kind::Readarr => r.book_id,
+        }
     }
 
     /// One page of a wanted list, normalised to candidates.
@@ -840,5 +904,33 @@ mod tests {
             ArrClient::new(Kind::Sonarr, "not a url", "k", opts()),
             Err(Error::BaseUrl(_))
         ));
+    }
+
+    #[tokio::test]
+    async fn busy_ids_merge_queue_and_recent_grabs() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/v3/queue"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "page": 1, "pageSize": 500, "totalRecords": 2,
+                "records": [{"id": 1, "episodeId": 7}, {"id": 2, "episodeId": 5}]
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/v3/history/since"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+                {"id": 10, "episodeId": 9, "eventType": "grabbed"},
+                {"id": 11, "episodeId": 5, "eventType": "grabbed"}
+            ])))
+            .mount(&server)
+            .await;
+        let c = ArrClient::new(Kind::Sonarr, &server.uri(), "k", Options::default()).unwrap();
+        assert_eq!(c.busy_ids(24).await.unwrap(), vec![5, 7, 9]);
+        assert_eq!(
+            c.busy_ids(0).await.unwrap(),
+            vec![5, 7],
+            "0 hours skips history"
+        );
     }
 }
