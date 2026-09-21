@@ -104,7 +104,7 @@ func (r *Runs) Complete(ctx context.Context, runID uuid.UUID, workerID string, s
 	}
 	row, err := r.st.Q().CompleteRun(ctx, sqlcgen.CompleteRunParams{
 		ID: runID, LeasedBy: &workerID, Status: string(status), FinishedAt: timePtr(r.clk.Now()),
-		SearchedCount: int32(min(searched, 1<<30)), //nolint:gosec // clamped
+		SearchedCount: int32(min(searched, 1<<30)), // #nosec G115 -- clamped
 		Error:         errPtr,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -130,7 +130,7 @@ func (r *Runs) Cancel(ctx context.Context, runID uuid.UUID) error {
 
 // List pages runs, newest first, optionally for one instance.
 func (r *Runs) List(ctx context.Context, instanceID *uuid.UUID, limit, offset int) ([]domain.Run, error) {
-	rows, err := r.st.Q().ListRuns(ctx, sqlcgen.ListRunsParams{Limit: int32(min(max(limit, 1), 500)), Offset: int32(max(offset, 0)), InstanceID: instanceID}) //nolint:gosec // clamped
+	rows, err := r.st.Q().ListRuns(ctx, sqlcgen.ListRunsParams{Limit: int32(min(max(limit, 1), 500)), Offset: int32(max(offset, 0)), InstanceID: instanceID}) // #nosec G115 -- clamped
 	if err != nil {
 		return nil, fmt.Errorf("hunt: list runs: %w", store.MapError(err))
 	}

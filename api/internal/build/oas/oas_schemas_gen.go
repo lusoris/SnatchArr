@@ -110,6 +110,57 @@ func (s *BearerAuth) SetRoles(val []string) {
 	s.Roles = val
 }
 
+// CancelRunNoContent is response for CancelRun operation.
+type CancelRunNoContent struct{}
+
+// Ref: #/components/schemas/CapStatus
+type CapStatus struct {
+	InstanceID uuid.UUID `json:"instance_id"`
+	Used       int       `json:"used"`
+	Cap        int       `json:"cap"`
+	ResetsAt   time.Time `json:"resets_at"`
+}
+
+// GetInstanceID returns the value of InstanceID.
+func (s *CapStatus) GetInstanceID() uuid.UUID {
+	return s.InstanceID
+}
+
+// GetUsed returns the value of Used.
+func (s *CapStatus) GetUsed() int {
+	return s.Used
+}
+
+// GetCap returns the value of Cap.
+func (s *CapStatus) GetCap() int {
+	return s.Cap
+}
+
+// GetResetsAt returns the value of ResetsAt.
+func (s *CapStatus) GetResetsAt() time.Time {
+	return s.ResetsAt
+}
+
+// SetInstanceID sets the value of InstanceID.
+func (s *CapStatus) SetInstanceID(val uuid.UUID) {
+	s.InstanceID = val
+}
+
+// SetUsed sets the value of Used.
+func (s *CapStatus) SetUsed(val int) {
+	s.Used = val
+}
+
+// SetCap sets the value of Cap.
+func (s *CapStatus) SetCap(val int) {
+	s.Cap = val
+}
+
+// SetResetsAt sets the value of ResetsAt.
+func (s *CapStatus) SetResetsAt(val time.Time) {
+	s.ResetsAt = val
+}
+
 type CookieAuth struct {
 	APIKey string
 	Roles  []string
@@ -135,8 +186,225 @@ func (s *CookieAuth) SetRoles(val []string) {
 	s.Roles = val
 }
 
+// DeleteInstanceEventsNoContent is response for DeleteInstanceEvents operation.
+type DeleteInstanceEventsNoContent struct{}
+
 // DeleteInstanceNoContent is response for DeleteInstance operation.
 type DeleteInstanceNoContent struct{}
+
+// DeleteScheduleNoContent is response for DeleteSchedule operation.
+type DeleteScheduleNoContent struct{}
+
+// Ref: #/components/schemas/Event
+type Event struct {
+	ID         int64      `json:"id"`
+	RunID      OptUUID    `json:"run_id"`
+	InstanceID uuid.UUID  `json:"instance_id"`
+	Ts         time.Time  `json:"ts"`
+	Level      EventLevel `json:"level"`
+	Type       string     `json:"type"`
+	EntityType OptString  `json:"entity_type"`
+	EntityID   OptInt64   `json:"entity_id"`
+	Title      OptString  `json:"title"`
+	Detail     OptString  `json:"detail"`
+}
+
+// GetID returns the value of ID.
+func (s *Event) GetID() int64 {
+	return s.ID
+}
+
+// GetRunID returns the value of RunID.
+func (s *Event) GetRunID() OptUUID {
+	return s.RunID
+}
+
+// GetInstanceID returns the value of InstanceID.
+func (s *Event) GetInstanceID() uuid.UUID {
+	return s.InstanceID
+}
+
+// GetTs returns the value of Ts.
+func (s *Event) GetTs() time.Time {
+	return s.Ts
+}
+
+// GetLevel returns the value of Level.
+func (s *Event) GetLevel() EventLevel {
+	return s.Level
+}
+
+// GetType returns the value of Type.
+func (s *Event) GetType() string {
+	return s.Type
+}
+
+// GetEntityType returns the value of EntityType.
+func (s *Event) GetEntityType() OptString {
+	return s.EntityType
+}
+
+// GetEntityID returns the value of EntityID.
+func (s *Event) GetEntityID() OptInt64 {
+	return s.EntityID
+}
+
+// GetTitle returns the value of Title.
+func (s *Event) GetTitle() OptString {
+	return s.Title
+}
+
+// GetDetail returns the value of Detail.
+func (s *Event) GetDetail() OptString {
+	return s.Detail
+}
+
+// SetID sets the value of ID.
+func (s *Event) SetID(val int64) {
+	s.ID = val
+}
+
+// SetRunID sets the value of RunID.
+func (s *Event) SetRunID(val OptUUID) {
+	s.RunID = val
+}
+
+// SetInstanceID sets the value of InstanceID.
+func (s *Event) SetInstanceID(val uuid.UUID) {
+	s.InstanceID = val
+}
+
+// SetTs sets the value of Ts.
+func (s *Event) SetTs(val time.Time) {
+	s.Ts = val
+}
+
+// SetLevel sets the value of Level.
+func (s *Event) SetLevel(val EventLevel) {
+	s.Level = val
+}
+
+// SetType sets the value of Type.
+func (s *Event) SetType(val string) {
+	s.Type = val
+}
+
+// SetEntityType sets the value of EntityType.
+func (s *Event) SetEntityType(val OptString) {
+	s.EntityType = val
+}
+
+// SetEntityID sets the value of EntityID.
+func (s *Event) SetEntityID(val OptInt64) {
+	s.EntityID = val
+}
+
+// SetTitle sets the value of Title.
+func (s *Event) SetTitle(val OptString) {
+	s.Title = val
+}
+
+// SetDetail sets the value of Detail.
+func (s *Event) SetDetail(val OptString) {
+	s.Detail = val
+}
+
+type EventLevel string
+
+const (
+	EventLevelDebug EventLevel = "debug"
+	EventLevelInfo  EventLevel = "info"
+	EventLevelWarn  EventLevel = "warn"
+	EventLevelError EventLevel = "error"
+)
+
+// AllValues returns all EventLevel values.
+func (EventLevel) AllValues() []EventLevel {
+	return []EventLevel{
+		EventLevelDebug,
+		EventLevelInfo,
+		EventLevelWarn,
+		EventLevelError,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s EventLevel) MarshalText() ([]byte, error) {
+	switch s {
+	case EventLevelDebug:
+		return []byte(s), nil
+	case EventLevelInfo:
+		return []byte(s), nil
+	case EventLevelWarn:
+		return []byte(s), nil
+	case EventLevelError:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *EventLevel) UnmarshalText(data []byte) error {
+	switch EventLevel(data) {
+	case EventLevelDebug:
+		*s = EventLevelDebug
+		return nil
+	case EventLevelInfo:
+		*s = EventLevelInfo
+		return nil
+	case EventLevelWarn:
+		*s = EventLevelWarn
+		return nil
+	case EventLevelError:
+		*s = EventLevelError
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/HuntKind
+type HuntKind string
+
+const (
+	HuntKindMissing HuntKind = "missing"
+	HuntKindUpgrade HuntKind = "upgrade"
+)
+
+// AllValues returns all HuntKind values.
+func (HuntKind) AllValues() []HuntKind {
+	return []HuntKind{
+		HuntKindMissing,
+		HuntKindUpgrade,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s HuntKind) MarshalText() ([]byte, error) {
+	switch s {
+	case HuntKindMissing:
+		return []byte(s), nil
+	case HuntKindUpgrade:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *HuntKind) UnmarshalText(data []byte) error {
+	switch HuntKind(data) {
+	case HuntKindMissing:
+		*s = HuntKindMissing
+		return nil
+	case HuntKindUpgrade:
+		*s = HuntKindUpgrade
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
 
 // Ref: #/components/schemas/HuntPolicy
 type HuntPolicy struct {
@@ -954,6 +1222,144 @@ func (o OptDateTime) Or(d time.Time) time.Time {
 	return d
 }
 
+// NewOptInt returns new OptInt with value set to v.
+func NewOptInt(v int) OptInt {
+	return OptInt{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptInt is optional int.
+type OptInt struct {
+	Value int
+	Set   bool
+}
+
+// IsSet returns true if OptInt was set.
+func (o OptInt) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptInt) Reset() {
+	var v int
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptInt) SetTo(v int) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptInt) Get() (v int, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptInt) Or(d int) int {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptInt64 returns new OptInt64 with value set to v.
+func NewOptInt64(v int64) OptInt64 {
+	return OptInt64{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptInt64 is optional int64.
+type OptInt64 struct {
+	Value int64
+	Set   bool
+}
+
+// IsSet returns true if OptInt64 was set.
+func (o OptInt64) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptInt64) Reset() {
+	var v int64
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptInt64) SetTo(v int64) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptInt64) Get() (v int64, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptInt64) Or(d int64) int64 {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptStateReset returns new OptStateReset with value set to v.
+func NewOptStateReset(v StateReset) OptStateReset {
+	return OptStateReset{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptStateReset is optional StateReset.
+type OptStateReset struct {
+	Value StateReset
+	Set   bool
+}
+
+// IsSet returns true if OptStateReset was set.
+func (o OptStateReset) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptStateReset) Reset() {
+	var v StateReset
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptStateReset) SetTo(v StateReset) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptStateReset) Get() (v StateReset, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptStateReset) Or(d StateReset) StateReset {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
 // NewOptString returns new OptString with value set to v.
 func NewOptString(v string) OptString {
 	return OptString{
@@ -994,6 +1400,52 @@ func (o OptString) Get() (v string, ok bool) {
 
 // Or returns value if set, or given parameter if does not.
 func (o OptString) Or(d string) string {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptUUID returns new OptUUID with value set to v.
+func NewOptUUID(v uuid.UUID) OptUUID {
+	return OptUUID{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptUUID is optional uuid.UUID.
+type OptUUID struct {
+	Value uuid.UUID
+	Set   bool
+}
+
+// IsSet returns true if OptUUID was set.
+func (o OptUUID) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptUUID) Reset() {
+	var v uuid.UUID
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptUUID) SetTo(v uuid.UUID) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptUUID) Get() (v uuid.UUID, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptUUID) Or(d uuid.UUID) uuid.UUID {
 	if v, ok := o.Get(); ok {
 		return v
 	}
@@ -1147,6 +1599,534 @@ func (s *ProblemStatusCode) SetResponse(val Problem) {
 	s.Response = val
 }
 
+// Ref: #/components/schemas/Run
+type Run struct {
+	ID             uuid.UUID   `json:"id"`
+	InstanceID     uuid.UUID   `json:"instance_id"`
+	Kind           HuntKind    `json:"kind"`
+	Status         RunStatus   `json:"status"`
+	LeasedBy       OptString   `json:"leased_by"`
+	LeaseExpiresAt OptDateTime `json:"lease_expires_at"`
+	QueuedAt       time.Time   `json:"queued_at"`
+	StartedAt      OptDateTime `json:"started_at"`
+	FinishedAt     OptDateTime `json:"finished_at"`
+	SearchedCount  int         `json:"searched_count"`
+	Error          OptString   `json:"error"`
+}
+
+// GetID returns the value of ID.
+func (s *Run) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetInstanceID returns the value of InstanceID.
+func (s *Run) GetInstanceID() uuid.UUID {
+	return s.InstanceID
+}
+
+// GetKind returns the value of Kind.
+func (s *Run) GetKind() HuntKind {
+	return s.Kind
+}
+
+// GetStatus returns the value of Status.
+func (s *Run) GetStatus() RunStatus {
+	return s.Status
+}
+
+// GetLeasedBy returns the value of LeasedBy.
+func (s *Run) GetLeasedBy() OptString {
+	return s.LeasedBy
+}
+
+// GetLeaseExpiresAt returns the value of LeaseExpiresAt.
+func (s *Run) GetLeaseExpiresAt() OptDateTime {
+	return s.LeaseExpiresAt
+}
+
+// GetQueuedAt returns the value of QueuedAt.
+func (s *Run) GetQueuedAt() time.Time {
+	return s.QueuedAt
+}
+
+// GetStartedAt returns the value of StartedAt.
+func (s *Run) GetStartedAt() OptDateTime {
+	return s.StartedAt
+}
+
+// GetFinishedAt returns the value of FinishedAt.
+func (s *Run) GetFinishedAt() OptDateTime {
+	return s.FinishedAt
+}
+
+// GetSearchedCount returns the value of SearchedCount.
+func (s *Run) GetSearchedCount() int {
+	return s.SearchedCount
+}
+
+// GetError returns the value of Error.
+func (s *Run) GetError() OptString {
+	return s.Error
+}
+
+// SetID sets the value of ID.
+func (s *Run) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetInstanceID sets the value of InstanceID.
+func (s *Run) SetInstanceID(val uuid.UUID) {
+	s.InstanceID = val
+}
+
+// SetKind sets the value of Kind.
+func (s *Run) SetKind(val HuntKind) {
+	s.Kind = val
+}
+
+// SetStatus sets the value of Status.
+func (s *Run) SetStatus(val RunStatus) {
+	s.Status = val
+}
+
+// SetLeasedBy sets the value of LeasedBy.
+func (s *Run) SetLeasedBy(val OptString) {
+	s.LeasedBy = val
+}
+
+// SetLeaseExpiresAt sets the value of LeaseExpiresAt.
+func (s *Run) SetLeaseExpiresAt(val OptDateTime) {
+	s.LeaseExpiresAt = val
+}
+
+// SetQueuedAt sets the value of QueuedAt.
+func (s *Run) SetQueuedAt(val time.Time) {
+	s.QueuedAt = val
+}
+
+// SetStartedAt sets the value of StartedAt.
+func (s *Run) SetStartedAt(val OptDateTime) {
+	s.StartedAt = val
+}
+
+// SetFinishedAt sets the value of FinishedAt.
+func (s *Run) SetFinishedAt(val OptDateTime) {
+	s.FinishedAt = val
+}
+
+// SetSearchedCount sets the value of SearchedCount.
+func (s *Run) SetSearchedCount(val int) {
+	s.SearchedCount = val
+}
+
+// SetError sets the value of Error.
+func (s *Run) SetError(val OptString) {
+	s.Error = val
+}
+
+type RunStatus string
+
+const (
+	RunStatusQueued    RunStatus = "queued"
+	RunStatusLeased    RunStatus = "leased"
+	RunStatusDone      RunStatus = "done"
+	RunStatusFailed    RunStatus = "failed"
+	RunStatusCancelled RunStatus = "cancelled"
+)
+
+// AllValues returns all RunStatus values.
+func (RunStatus) AllValues() []RunStatus {
+	return []RunStatus{
+		RunStatusQueued,
+		RunStatusLeased,
+		RunStatusDone,
+		RunStatusFailed,
+		RunStatusCancelled,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s RunStatus) MarshalText() ([]byte, error) {
+	switch s {
+	case RunStatusQueued:
+		return []byte(s), nil
+	case RunStatusLeased:
+		return []byte(s), nil
+	case RunStatusDone:
+		return []byte(s), nil
+	case RunStatusFailed:
+		return []byte(s), nil
+	case RunStatusCancelled:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *RunStatus) UnmarshalText(data []byte) error {
+	switch RunStatus(data) {
+	case RunStatusQueued:
+		*s = RunStatusQueued
+		return nil
+	case RunStatusLeased:
+		*s = RunStatusLeased
+		return nil
+	case RunStatusDone:
+		*s = RunStatusDone
+		return nil
+	case RunStatusFailed:
+		*s = RunStatusFailed
+		return nil
+	case RunStatusCancelled:
+		*s = RunStatusCancelled
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/RunTrigger
+type RunTrigger struct {
+	Kind HuntKind `json:"kind"`
+}
+
+// GetKind returns the value of Kind.
+func (s *RunTrigger) GetKind() HuntKind {
+	return s.Kind
+}
+
+// SetKind sets the value of Kind.
+func (s *RunTrigger) SetKind(val HuntKind) {
+	s.Kind = val
+}
+
+// Merged schema.
+// Ref: #/components/schemas/Schedule
+type Schedule struct {
+	// Omit for a global window.
+	InstanceID OptUUID `json:"instance_id"`
+	Name       string  `json:"name"`
+	// Weekdays the window applies to (0 = Sunday).
+	Days      []int          `json:"days"`
+	Start     string         `json:"start"`
+	End       string         `json:"end"`
+	Tz        string         `json:"tz"`
+	Action    ScheduleAction `json:"action"`
+	CapValue  OptInt         `json:"cap_value"`
+	Enabled   bool           `json:"enabled"`
+	ID        uuid.UUID      `json:"id"`
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
+}
+
+// GetInstanceID returns the value of InstanceID.
+func (s *Schedule) GetInstanceID() OptUUID {
+	return s.InstanceID
+}
+
+// GetName returns the value of Name.
+func (s *Schedule) GetName() string {
+	return s.Name
+}
+
+// GetDays returns the value of Days.
+func (s *Schedule) GetDays() []int {
+	return s.Days
+}
+
+// GetStart returns the value of Start.
+func (s *Schedule) GetStart() string {
+	return s.Start
+}
+
+// GetEnd returns the value of End.
+func (s *Schedule) GetEnd() string {
+	return s.End
+}
+
+// GetTz returns the value of Tz.
+func (s *Schedule) GetTz() string {
+	return s.Tz
+}
+
+// GetAction returns the value of Action.
+func (s *Schedule) GetAction() ScheduleAction {
+	return s.Action
+}
+
+// GetCapValue returns the value of CapValue.
+func (s *Schedule) GetCapValue() OptInt {
+	return s.CapValue
+}
+
+// GetEnabled returns the value of Enabled.
+func (s *Schedule) GetEnabled() bool {
+	return s.Enabled
+}
+
+// GetID returns the value of ID.
+func (s *Schedule) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *Schedule) GetCreatedAt() time.Time {
+	return s.CreatedAt
+}
+
+// GetUpdatedAt returns the value of UpdatedAt.
+func (s *Schedule) GetUpdatedAt() time.Time {
+	return s.UpdatedAt
+}
+
+// SetInstanceID sets the value of InstanceID.
+func (s *Schedule) SetInstanceID(val OptUUID) {
+	s.InstanceID = val
+}
+
+// SetName sets the value of Name.
+func (s *Schedule) SetName(val string) {
+	s.Name = val
+}
+
+// SetDays sets the value of Days.
+func (s *Schedule) SetDays(val []int) {
+	s.Days = val
+}
+
+// SetStart sets the value of Start.
+func (s *Schedule) SetStart(val string) {
+	s.Start = val
+}
+
+// SetEnd sets the value of End.
+func (s *Schedule) SetEnd(val string) {
+	s.End = val
+}
+
+// SetTz sets the value of Tz.
+func (s *Schedule) SetTz(val string) {
+	s.Tz = val
+}
+
+// SetAction sets the value of Action.
+func (s *Schedule) SetAction(val ScheduleAction) {
+	s.Action = val
+}
+
+// SetCapValue sets the value of CapValue.
+func (s *Schedule) SetCapValue(val OptInt) {
+	s.CapValue = val
+}
+
+// SetEnabled sets the value of Enabled.
+func (s *Schedule) SetEnabled(val bool) {
+	s.Enabled = val
+}
+
+// SetID sets the value of ID.
+func (s *Schedule) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *Schedule) SetCreatedAt(val time.Time) {
+	s.CreatedAt = val
+}
+
+// SetUpdatedAt sets the value of UpdatedAt.
+func (s *Schedule) SetUpdatedAt(val time.Time) {
+	s.UpdatedAt = val
+}
+
+type ScheduleAction string
+
+const (
+	ScheduleActionPause       ScheduleAction = "pause"
+	ScheduleActionCapOverride ScheduleAction = "cap_override"
+)
+
+// AllValues returns all ScheduleAction values.
+func (ScheduleAction) AllValues() []ScheduleAction {
+	return []ScheduleAction{
+		ScheduleActionPause,
+		ScheduleActionCapOverride,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s ScheduleAction) MarshalText() ([]byte, error) {
+	switch s {
+	case ScheduleActionPause:
+		return []byte(s), nil
+	case ScheduleActionCapOverride:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *ScheduleAction) UnmarshalText(data []byte) error {
+	switch ScheduleAction(data) {
+	case ScheduleActionPause:
+		*s = ScheduleActionPause
+		return nil
+	case ScheduleActionCapOverride:
+		*s = ScheduleActionCapOverride
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/ScheduleInput
+type ScheduleInput struct {
+	// Omit for a global window.
+	InstanceID OptUUID `json:"instance_id"`
+	Name       string  `json:"name"`
+	// Weekdays the window applies to (0 = Sunday).
+	Days     []int               `json:"days"`
+	Start    string              `json:"start"`
+	End      string              `json:"end"`
+	Tz       string              `json:"tz"`
+	Action   ScheduleInputAction `json:"action"`
+	CapValue OptInt              `json:"cap_value"`
+	Enabled  bool                `json:"enabled"`
+}
+
+// GetInstanceID returns the value of InstanceID.
+func (s *ScheduleInput) GetInstanceID() OptUUID {
+	return s.InstanceID
+}
+
+// GetName returns the value of Name.
+func (s *ScheduleInput) GetName() string {
+	return s.Name
+}
+
+// GetDays returns the value of Days.
+func (s *ScheduleInput) GetDays() []int {
+	return s.Days
+}
+
+// GetStart returns the value of Start.
+func (s *ScheduleInput) GetStart() string {
+	return s.Start
+}
+
+// GetEnd returns the value of End.
+func (s *ScheduleInput) GetEnd() string {
+	return s.End
+}
+
+// GetTz returns the value of Tz.
+func (s *ScheduleInput) GetTz() string {
+	return s.Tz
+}
+
+// GetAction returns the value of Action.
+func (s *ScheduleInput) GetAction() ScheduleInputAction {
+	return s.Action
+}
+
+// GetCapValue returns the value of CapValue.
+func (s *ScheduleInput) GetCapValue() OptInt {
+	return s.CapValue
+}
+
+// GetEnabled returns the value of Enabled.
+func (s *ScheduleInput) GetEnabled() bool {
+	return s.Enabled
+}
+
+// SetInstanceID sets the value of InstanceID.
+func (s *ScheduleInput) SetInstanceID(val OptUUID) {
+	s.InstanceID = val
+}
+
+// SetName sets the value of Name.
+func (s *ScheduleInput) SetName(val string) {
+	s.Name = val
+}
+
+// SetDays sets the value of Days.
+func (s *ScheduleInput) SetDays(val []int) {
+	s.Days = val
+}
+
+// SetStart sets the value of Start.
+func (s *ScheduleInput) SetStart(val string) {
+	s.Start = val
+}
+
+// SetEnd sets the value of End.
+func (s *ScheduleInput) SetEnd(val string) {
+	s.End = val
+}
+
+// SetTz sets the value of Tz.
+func (s *ScheduleInput) SetTz(val string) {
+	s.Tz = val
+}
+
+// SetAction sets the value of Action.
+func (s *ScheduleInput) SetAction(val ScheduleInputAction) {
+	s.Action = val
+}
+
+// SetCapValue sets the value of CapValue.
+func (s *ScheduleInput) SetCapValue(val OptInt) {
+	s.CapValue = val
+}
+
+// SetEnabled sets the value of Enabled.
+func (s *ScheduleInput) SetEnabled(val bool) {
+	s.Enabled = val
+}
+
+type ScheduleInputAction string
+
+const (
+	ScheduleInputActionPause       ScheduleInputAction = "pause"
+	ScheduleInputActionCapOverride ScheduleInputAction = "cap_override"
+)
+
+// AllValues returns all ScheduleInputAction values.
+func (ScheduleInputAction) AllValues() []ScheduleInputAction {
+	return []ScheduleInputAction{
+		ScheduleInputActionPause,
+		ScheduleInputActionCapOverride,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s ScheduleInputAction) MarshalText() ([]byte, error) {
+	switch s {
+	case ScheduleInputActionPause:
+		return []byte(s), nil
+	case ScheduleInputActionCapOverride:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *ScheduleInputAction) UnmarshalText(data []byte) error {
+	switch ScheduleInputAction(data) {
+	case ScheduleInputActionPause:
+		*s = ScheduleInputActionPause
+		return nil
+	case ScheduleInputActionCapOverride:
+		*s = ScheduleInputActionCapOverride
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
 // Ref: #/components/schemas/Session
 type Session struct {
 	User      User      `json:"user"`
@@ -1249,6 +2229,36 @@ func (s *SetupStatus) GetSetupComplete() bool {
 // SetSetupComplete sets the value of SetupComplete.
 func (s *SetupStatus) SetSetupComplete(val bool) {
 	s.SetupComplete = val
+}
+
+// Ref: #/components/schemas/StateReset
+type StateReset struct {
+	InstanceID OptUUID `json:"instance_id"`
+}
+
+// GetInstanceID returns the value of InstanceID.
+func (s *StateReset) GetInstanceID() OptUUID {
+	return s.InstanceID
+}
+
+// SetInstanceID sets the value of InstanceID.
+func (s *StateReset) SetInstanceID(val OptUUID) {
+	s.InstanceID = val
+}
+
+// Ref: #/components/schemas/StateResetResult
+type StateResetResult struct {
+	Forgotten int64 `json:"forgotten"`
+}
+
+// GetForgotten returns the value of Forgotten.
+func (s *StateResetResult) GetForgotten() int64 {
+	return s.Forgotten
+}
+
+// SetForgotten sets the value of Forgotten.
+func (s *StateResetResult) SetForgotten(val int64) {
+	s.Forgotten = val
 }
 
 // Ref: #/components/schemas/SystemStatus
@@ -1361,6 +2371,14 @@ func (s *SystemStatusProfile) UnmarshalText(data []byte) error {
 		return errors.Errorf("invalid value: %q", data)
 	}
 }
+
+type TriggerRunCreated Run
+
+func (*TriggerRunCreated) triggerRunRes() {}
+
+type TriggerRunOK Run
+
+func (*TriggerRunOK) triggerRunRes() {}
 
 // Ref: #/components/schemas/User
 type User struct {

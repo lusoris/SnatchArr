@@ -74,7 +74,7 @@ func (r *Recorder) List(ctx context.Context, p ListParams) ([]domain.Event, erro
 	}
 	rows, err := r.st.Q().ListEvents(ctx, sqlcgen.ListEventsParams{
 		InstanceID: p.InstanceID, BeforeID: p.BeforeID, Type: typ,
-		PageSize: int32(min(max(p.PageSize, 1), 1000)), //nolint:gosec // clamped
+		PageSize: int32(min(max(p.PageSize, 1), 1000)), // #nosec G115 -- clamped
 	})
 	if err != nil {
 		return nil, fmt.Errorf("hunt: list events: %w", store.MapError(err))

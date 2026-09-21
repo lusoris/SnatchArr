@@ -82,6 +82,29 @@ func updateFromOAS(in *oas.InstanceUpdate) instances.Input {
 	}
 }
 
+func runToOAS(r domain.Run) oas.Run {
+	return oas.Run{
+		ID: r.ID, InstanceID: r.InstanceID, Kind: oas.HuntKind(r.Kind), Status: oas.RunStatus(r.Status),
+		LeasedBy: optString(r.LeasedBy), LeaseExpiresAt: optTime(r.LeaseExpiresAt), QueuedAt: r.QueuedAt,
+		StartedAt: optTime(r.StartedAt), FinishedAt: optTime(r.FinishedAt), SearchedCount: r.SearchedCount,
+		Error: optString(r.Error),
+	}
+}
+
+func eventToOAS(e domain.Event) oas.Event {
+	out := oas.Event{
+		ID: e.ID, InstanceID: e.InstanceID, Ts: e.Timestamp, Level: oas.EventLevel(e.Level), Type: e.Type,
+		EntityType: optString(e.EntityType), Title: optString(e.Title), Detail: optString(e.Detail),
+	}
+	if e.RunID != nil {
+		out.RunID = oas.NewOptUUID(*e.RunID)
+	}
+	if e.EntityID != 0 {
+		out.EntityID = oas.NewOptInt64(e.EntityID)
+	}
+	return out
+}
+
 func policyToOAS(p domain.Policy) *oas.HuntPolicy {
 	return &oas.HuntPolicy{
 		MissingPerCycle:    p.MissingPerCycle,

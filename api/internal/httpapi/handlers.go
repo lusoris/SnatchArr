@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"net/url"
 
+	"go.uber.org/fx"
+
 	"github.com/golusoris/golusoris/auth/session"
 	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/httpx/csrf"
@@ -19,6 +21,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/buildinfo"
 	"github.com/lusoris/SnatchArr/api/internal/config"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
+	"github.com/lusoris/SnatchArr/api/internal/hunt"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
 	"github.com/lusoris/SnatchArr/api/internal/policies"
 )
@@ -32,13 +35,33 @@ type Handlers struct {
 	sessions  *session.Manager
 	instances *instances.Service
 	policies  *policies.Service
+	runs      *hunt.Runs
+	rec       *hunt.Recorder
+	budget    *hunt.Budget
+	memory    *hunt.Memory
+	planner   *hunt.Planner
+	schedules *hunt.Schedules
+}
+
+// Deps groups the hunt services the handlers need.
+type Deps struct {
+	fx.In
+	Runs      *hunt.Runs
+	Rec       *hunt.Recorder
+	Budget    *hunt.Budget
+	Memory    *hunt.Memory
+	Planner   *hunt.Planner
+	Schedules *hunt.Schedules
 }
 
 // NewHandlers wires the operation handlers.
 func NewHandlers(build buildinfo.Info, cfg config.Options, clk clock.Clock, authSvc *auth.Service,
-	sessions *session.Manager, inst *instances.Service, pol *policies.Service,
+	sessions *session.Manager, inst *instances.Service, pol *policies.Service, d Deps,
 ) *Handlers {
-	return &Handlers{build: build, cfg: cfg, clk: clk, auth: authSvc, sessions: sessions, instances: inst, policies: pol}
+	return &Handlers{
+		build: build, cfg: cfg, clk: clk, auth: authSvc, sessions: sessions, instances: inst, policies: pol,
+		runs: d.Runs, rec: d.Rec, budget: d.Budget, memory: d.Memory, planner: d.Planner, schedules: d.Schedules,
+	}
 }
 
 var _ oas.Handler = (*Handlers)(nil)

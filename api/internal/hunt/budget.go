@@ -69,7 +69,7 @@ func (b *Budget) Acquire(ctx context.Context, instanceID uuid.UUID, capacity, re
 		g = grant(int(used), capacity, requested, window)
 		if g.Granted > 0 {
 			err = q.SetBucketUsed(ctx, sqlcgen.SetBucketUsedParams{
-				InstanceID: instanceID, WindowStart: window, Used: int32(g.Used), //nolint:gosec // bounded by cap <= 500
+				InstanceID: instanceID, WindowStart: window, Used: int32(g.Used), // #nosec G115 -- bounded by cap <= 500
 			})
 			if err != nil {
 				return fmt.Errorf("set bucket: %w", err)

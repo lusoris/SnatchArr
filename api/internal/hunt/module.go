@@ -98,7 +98,7 @@ func (t *Ticker) tick(ctx context.Context) {
 
 // Module provides the hunt services and starts the planner ticker.
 var Module = fx.Module("snatcharr.hunt",
-	fx.Provide(NewBudget, NewMemory, NewRuns, NewRecorder, newPlanner, NewTicker),
+	fx.Provide(NewBudget, NewMemory, NewRuns, NewRecorder, NewSchedules, newPlanner, NewTicker),
 	fx.Invoke(func(lc fx.Lifecycle, t *Ticker) {
 		lc.Append(fx.Hook{OnStart: t.Start, OnStop: t.Stop})
 	}),

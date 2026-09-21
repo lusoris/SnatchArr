@@ -13,6 +13,15 @@ type UnimplementedHandler struct{}
 
 var _ Handler = UnimplementedHandler{}
 
+// CancelRun implements cancelRun operation.
+//
+// Cancel a queued or leased run.
+//
+// POST /runs/{runId}/cancel
+func (UnimplementedHandler) CancelRun(ctx context.Context, params CancelRunParams) error {
+	return ht.ErrNotImplemented
+}
+
 // CompleteSetup implements completeSetup operation.
 //
 // Create the first admin user and start a session.
@@ -31,6 +40,15 @@ func (UnimplementedHandler) CreateInstance(ctx context.Context, req *InstanceInp
 	return r, ht.ErrNotImplemented
 }
 
+// CreateSchedule implements createSchedule operation.
+//
+// Add a schedule window.
+//
+// POST /schedules
+func (UnimplementedHandler) CreateSchedule(ctx context.Context, req *ScheduleInput) (r *Schedule, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // DeleteInstance implements deleteInstance operation.
 //
 // Delete an instance and everything it owns.
@@ -38,6 +56,33 @@ func (UnimplementedHandler) CreateInstance(ctx context.Context, req *InstanceInp
 // DELETE /instances/{instanceId}
 func (UnimplementedHandler) DeleteInstance(ctx context.Context, params DeleteInstanceParams) error {
 	return ht.ErrNotImplemented
+}
+
+// DeleteInstanceEvents implements deleteInstanceEvents operation.
+//
+// Clear the history of one instance.
+//
+// DELETE /instances/{instanceId}/events
+func (UnimplementedHandler) DeleteInstanceEvents(ctx context.Context, params DeleteInstanceEventsParams) error {
+	return ht.ErrNotImplemented
+}
+
+// DeleteSchedule implements deleteSchedule operation.
+//
+// Delete a schedule window.
+//
+// DELETE /schedules/{scheduleId}
+func (UnimplementedHandler) DeleteSchedule(ctx context.Context, params DeleteScheduleParams) error {
+	return ht.ErrNotImplemented
+}
+
+// GetHourlyCaps implements getHourlyCaps operation.
+//
+// Per-instance hourly budget consumption.
+//
+// GET /hourly-caps
+func (UnimplementedHandler) GetHourlyCaps(ctx context.Context) (r []CapStatus, _ error) {
+	return r, ht.ErrNotImplemented
 }
 
 // GetInstance implements getInstance operation.
@@ -85,12 +130,39 @@ func (UnimplementedHandler) GetSystemStatus(ctx context.Context) (r *SystemStatu
 	return r, ht.ErrNotImplemented
 }
 
+// ListEvents implements listEvents operation.
+//
+// Hunt history, newest first (cursor on before_id).
+//
+// GET /events
+func (UnimplementedHandler) ListEvents(ctx context.Context, params ListEventsParams) (r []Event, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // ListInstances implements listInstances operation.
 //
 // List instances (API keys are never returned).
 //
 // GET /instances
 func (UnimplementedHandler) ListInstances(ctx context.Context) (r []Instance, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ListRuns implements listRuns operation.
+//
+// Recent hunt runs, newest first.
+//
+// GET /runs
+func (UnimplementedHandler) ListRuns(ctx context.Context, params ListRunsParams) (r []Run, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ListSchedules implements listSchedules operation.
+//
+// All schedule windows.
+//
+// GET /schedules
+func (UnimplementedHandler) ListSchedules(ctx context.Context) (r []Schedule, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -112,6 +184,15 @@ func (UnimplementedHandler) Logout(ctx context.Context) error {
 	return ht.ErrNotImplemented
 }
 
+// ResetState implements resetState operation.
+//
+// Forget processed items (one instance or all).
+//
+// POST /state/reset
+func (UnimplementedHandler) ResetState(ctx context.Context, req OptStateReset) (r *StateResetResult, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // TestInstance implements testInstance operation.
 //
 // Probe a stored instance and record the outcome.
@@ -130,6 +211,15 @@ func (UnimplementedHandler) TestInstanceInput(ctx context.Context, req *Instance
 	return r, ht.ErrNotImplemented
 }
 
+// TriggerRun implements triggerRun operation.
+//
+// Queue a hunt run now (ignores the cycle interval).
+//
+// POST /instances/{instanceId}/runs
+func (UnimplementedHandler) TriggerRun(ctx context.Context, req *RunTrigger, params TriggerRunParams) (r TriggerRunRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // UpdateInstance implements updateInstance operation.
 //
 // Update a manual instance (omit api_key to keep it).
@@ -145,6 +235,15 @@ func (UnimplementedHandler) UpdateInstance(ctx context.Context, req *InstanceUpd
 //
 // PUT /instances/{instanceId}/policy
 func (UnimplementedHandler) UpdatePolicy(ctx context.Context, req *HuntPolicy, params UpdatePolicyParams) (r *HuntPolicy, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UpdateSchedule implements updateSchedule operation.
+//
+// Replace a schedule window.
+//
+// PUT /schedules/{scheduleId}
+func (UnimplementedHandler) UpdateSchedule(ctx context.Context, req *ScheduleInput, params UpdateScheduleParams) (r *Schedule, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

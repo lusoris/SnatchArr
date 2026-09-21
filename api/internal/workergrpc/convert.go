@@ -90,7 +90,7 @@ func policyProto(p domain.Policy, kind domain.HuntKind) *snatcharrv1.Policy {
 		perCycle, mode = p.UpgradePerCycle, p.SonarrUpgradeMode
 	}
 	return &snatcharrv1.Policy{
-		PerCycle:           uint32(max(perCycle, 0)), //nolint:gosec // validated 0..100
+		PerCycle:           uint32(max(perCycle, 0)), // #nosec G115 -- validated 0..100
 		Selection:          selection(p.Selection),
 		MonitoredOnly:      p.MonitoredOnly,
 		SkipFutureReleases: p.SkipFutureReleases,
@@ -98,7 +98,7 @@ func policyProto(p domain.Policy, kind domain.HuntKind) *snatcharrv1.Policy {
 		LidarrMode:         lidarrMode(p.LidarrMissingMode),
 		RadarrReleaseType:  releaseType(p.RadarrReleaseType),
 		AwaitCommand:       p.AwaitCommand,
-		PageSize:           uint32(max(p.PageSize, 0)), //nolint:gosec // validated 10..1000
+		PageSize:           uint32(max(p.PageSize, 0)), // #nosec G115 -- validated 10..1000
 	}
 }
 

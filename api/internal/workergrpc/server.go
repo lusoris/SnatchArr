@@ -169,7 +169,7 @@ func (s *Server) AcquireBudget(ctx context.Context, req *snatcharrv1.AcquireBudg
 		s.logger.WarnContext(ctx, "hunt: hourly cap nearly exhausted", slog.String("instance", run.InstanceID.String()), slog.Int("used", g.Used), slog.Int("cap", g.Cap))
 	}
 	return &snatcharrv1.AcquireBudgetResponse{
-		Granted: uint32(g.Granted), RemainingInWindow: uint32(g.Remaining), WindowResetsUnix: g.ResetsAt.Unix(), //nolint:gosec // non-negative, <= 500
+		Granted: uint32(g.Granted), RemainingInWindow: uint32(g.Remaining), WindowResetsUnix: g.ResetsAt.Unix(), // #nosec G115 -- non-negative, <= 500
 	}, nil
 }
 

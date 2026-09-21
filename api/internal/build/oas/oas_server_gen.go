@@ -8,6 +8,12 @@ import (
 
 // Handler handles operations described by OpenAPI v3 specification.
 type Handler interface {
+	// CancelRun implements cancelRun operation.
+	//
+	// Cancel a queued or leased run.
+	//
+	// POST /runs/{runId}/cancel
+	CancelRun(ctx context.Context, params CancelRunParams) error
 	// CompleteSetup implements completeSetup operation.
 	//
 	// Create the first admin user and start a session.
@@ -20,12 +26,36 @@ type Handler interface {
 	//
 	// POST /instances
 	CreateInstance(ctx context.Context, req *InstanceInput) (*Instance, error)
+	// CreateSchedule implements createSchedule operation.
+	//
+	// Add a schedule window.
+	//
+	// POST /schedules
+	CreateSchedule(ctx context.Context, req *ScheduleInput) (*Schedule, error)
 	// DeleteInstance implements deleteInstance operation.
 	//
 	// Delete an instance and everything it owns.
 	//
 	// DELETE /instances/{instanceId}
 	DeleteInstance(ctx context.Context, params DeleteInstanceParams) error
+	// DeleteInstanceEvents implements deleteInstanceEvents operation.
+	//
+	// Clear the history of one instance.
+	//
+	// DELETE /instances/{instanceId}/events
+	DeleteInstanceEvents(ctx context.Context, params DeleteInstanceEventsParams) error
+	// DeleteSchedule implements deleteSchedule operation.
+	//
+	// Delete a schedule window.
+	//
+	// DELETE /schedules/{scheduleId}
+	DeleteSchedule(ctx context.Context, params DeleteScheduleParams) error
+	// GetHourlyCaps implements getHourlyCaps operation.
+	//
+	// Per-instance hourly budget consumption.
+	//
+	// GET /hourly-caps
+	GetHourlyCaps(ctx context.Context) ([]CapStatus, error)
 	// GetInstance implements getInstance operation.
 	//
 	// Get one instance.
@@ -56,12 +86,30 @@ type Handler interface {
 	//
 	// GET /system/status
 	GetSystemStatus(ctx context.Context) (*SystemStatus, error)
+	// ListEvents implements listEvents operation.
+	//
+	// Hunt history, newest first (cursor on before_id).
+	//
+	// GET /events
+	ListEvents(ctx context.Context, params ListEventsParams) ([]Event, error)
 	// ListInstances implements listInstances operation.
 	//
 	// List instances (API keys are never returned).
 	//
 	// GET /instances
 	ListInstances(ctx context.Context) ([]Instance, error)
+	// ListRuns implements listRuns operation.
+	//
+	// Recent hunt runs, newest first.
+	//
+	// GET /runs
+	ListRuns(ctx context.Context, params ListRunsParams) ([]Run, error)
+	// ListSchedules implements listSchedules operation.
+	//
+	// All schedule windows.
+	//
+	// GET /schedules
+	ListSchedules(ctx context.Context) ([]Schedule, error)
 	// Login implements login operation.
 	//
 	// Start a session with username and password.
@@ -74,6 +122,12 @@ type Handler interface {
 	//
 	// POST /auth/logout
 	Logout(ctx context.Context) error
+	// ResetState implements resetState operation.
+	//
+	// Forget processed items (one instance or all).
+	//
+	// POST /state/reset
+	ResetState(ctx context.Context, req OptStateReset) (*StateResetResult, error)
 	// TestInstance implements testInstance operation.
 	//
 	// Probe a stored instance and record the outcome.
@@ -86,6 +140,12 @@ type Handler interface {
 	//
 	// POST /instances/test
 	TestInstanceInput(ctx context.Context, req *InstanceInput) (*ProbeResult, error)
+	// TriggerRun implements triggerRun operation.
+	//
+	// Queue a hunt run now (ignores the cycle interval).
+	//
+	// POST /instances/{instanceId}/runs
+	TriggerRun(ctx context.Context, req *RunTrigger, params TriggerRunParams) (TriggerRunRes, error)
 	// UpdateInstance implements updateInstance operation.
 	//
 	// Update a manual instance (omit api_key to keep it).
@@ -98,6 +158,12 @@ type Handler interface {
 	//
 	// PUT /instances/{instanceId}/policy
 	UpdatePolicy(ctx context.Context, req *HuntPolicy, params UpdatePolicyParams) (*HuntPolicy, error)
+	// UpdateSchedule implements updateSchedule operation.
+	//
+	// Replace a schedule window.
+	//
+	// PUT /schedules/{scheduleId}
+	UpdateSchedule(ctx context.Context, req *ScheduleInput, params UpdateScheduleParams) (*Schedule, error)
 	// NewError creates *ProblemStatusCode from error returned by handler.
 	//
 	// Used for common default response.
