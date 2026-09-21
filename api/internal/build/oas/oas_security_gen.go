@@ -51,6 +51,7 @@ var operationRolesBearerAuth = map[string][]string{
 	GetInstanceOperation:             []string{},
 	GetPolicyOperation:               []string{},
 	GetSessionOperation:              []string{},
+	GetSettingsOperation:             []string{},
 	ListDownloadClientsOperation:     []string{},
 	ListEventsOperation:              []string{},
 	ListInstancesOperation:           []string{},
@@ -67,6 +68,7 @@ var operationRolesBearerAuth = map[string][]string{
 	UpdateInstanceOperation:          []string{},
 	UpdatePolicyOperation:            []string{},
 	UpdateScheduleOperation:          []string{},
+	UpdateSettingsOperation:          []string{},
 }
 
 // GetRolesForBearerAuth returns the required roles for the given operation.
@@ -107,6 +109,7 @@ var operationRolesCookieAuth = map[string][]string{
 	GetInstanceOperation:             []string{},
 	GetPolicyOperation:               []string{},
 	GetSessionOperation:              []string{},
+	GetSettingsOperation:             []string{},
 	ListDownloadClientsOperation:     []string{},
 	ListEventsOperation:              []string{},
 	ListInstancesOperation:           []string{},
@@ -123,6 +126,7 @@ var operationRolesCookieAuth = map[string][]string{
 	UpdateInstanceOperation:          []string{},
 	UpdatePolicyOperation:            []string{},
 	UpdateScheduleOperation:          []string{},
+	UpdateSettingsOperation:          []string{},
 }
 
 // GetRolesForCookieAuth returns the required roles for the given operation.

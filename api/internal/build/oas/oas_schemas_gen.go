@@ -115,14 +115,22 @@ type CancelRunNoContent struct{}
 
 // Ref: #/components/schemas/CapStatus
 type CapStatus struct {
-	InstanceID uuid.UUID `json:"instance_id"`
+	// Global is the stamina shared by every instance (present only when configured).
+	Scope CapStatusScope `json:"scope"`
+	// Absent for the global entry.
+	InstanceID OptUUID   `json:"instance_id"`
 	Used       int       `json:"used"`
 	Cap        int       `json:"cap"`
 	ResetsAt   time.Time `json:"resets_at"`
 }
 
+// GetScope returns the value of Scope.
+func (s *CapStatus) GetScope() CapStatusScope {
+	return s.Scope
+}
+
 // GetInstanceID returns the value of InstanceID.
-func (s *CapStatus) GetInstanceID() uuid.UUID {
+func (s *CapStatus) GetInstanceID() OptUUID {
 	return s.InstanceID
 }
 
@@ -141,8 +149,13 @@ func (s *CapStatus) GetResetsAt() time.Time {
 	return s.ResetsAt
 }
 
+// SetScope sets the value of Scope.
+func (s *CapStatus) SetScope(val CapStatusScope) {
+	s.Scope = val
+}
+
 // SetInstanceID sets the value of InstanceID.
-func (s *CapStatus) SetInstanceID(val uuid.UUID) {
+func (s *CapStatus) SetInstanceID(val OptUUID) {
 	s.InstanceID = val
 }
 
@@ -159,6 +172,48 @@ func (s *CapStatus) SetCap(val int) {
 // SetResetsAt sets the value of ResetsAt.
 func (s *CapStatus) SetResetsAt(val time.Time) {
 	s.ResetsAt = val
+}
+
+// Global is the stamina shared by every instance (present only when configured).
+type CapStatusScope string
+
+const (
+	CapStatusScopeInstance CapStatusScope = "instance"
+	CapStatusScopeGlobal   CapStatusScope = "global"
+)
+
+// AllValues returns all CapStatusScope values.
+func (CapStatusScope) AllValues() []CapStatusScope {
+	return []CapStatusScope{
+		CapStatusScopeInstance,
+		CapStatusScopeGlobal,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s CapStatusScope) MarshalText() ([]byte, error) {
+	switch s {
+	case CapStatusScopeInstance:
+		return []byte(s), nil
+	case CapStatusScopeGlobal:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *CapStatusScope) UnmarshalText(data []byte) error {
+	switch CapStatusScope(data) {
+	case CapStatusScopeInstance:
+		*s = CapStatusScopeInstance
+		return nil
+	case CapStatusScopeGlobal:
+		*s = CapStatusScopeGlobal
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
 }
 
 type CookieAuth struct {
@@ -2376,6 +2431,56 @@ func (s *SessionHeaders) SetResponse(val Session) {
 	s.Response = val
 }
 
+// Ref: #/components/schemas/Settings
+type Settings struct {
+	HistoryRetentionDays int    `json:"history_retention_days"`
+	UserAgent            string `json:"user_agent"`
+	// Shared stamina across every instance for setups where several *arr apps hit the same indexers (0 =
+	// off).
+	GlobalHourlyCap int         `json:"global_hourly_cap"`
+	UpdatedAt       OptDateTime `json:"updated_at"`
+}
+
+// GetHistoryRetentionDays returns the value of HistoryRetentionDays.
+func (s *Settings) GetHistoryRetentionDays() int {
+	return s.HistoryRetentionDays
+}
+
+// GetUserAgent returns the value of UserAgent.
+func (s *Settings) GetUserAgent() string {
+	return s.UserAgent
+}
+
+// GetGlobalHourlyCap returns the value of GlobalHourlyCap.
+func (s *Settings) GetGlobalHourlyCap() int {
+	return s.GlobalHourlyCap
+}
+
+// GetUpdatedAt returns the value of UpdatedAt.
+func (s *Settings) GetUpdatedAt() OptDateTime {
+	return s.UpdatedAt
+}
+
+// SetHistoryRetentionDays sets the value of HistoryRetentionDays.
+func (s *Settings) SetHistoryRetentionDays(val int) {
+	s.HistoryRetentionDays = val
+}
+
+// SetUserAgent sets the value of UserAgent.
+func (s *Settings) SetUserAgent(val string) {
+	s.UserAgent = val
+}
+
+// SetGlobalHourlyCap sets the value of GlobalHourlyCap.
+func (s *Settings) SetGlobalHourlyCap(val int) {
+	s.GlobalHourlyCap = val
+}
+
+// SetUpdatedAt sets the value of UpdatedAt.
+func (s *Settings) SetUpdatedAt(val OptDateTime) {
+	s.UpdatedAt = val
+}
+
 // Ref: #/components/schemas/SetupRequest
 type SetupRequest struct {
 	Username string `json:"username"`
@@ -2468,7 +2573,9 @@ type SnatchPolicy struct {
 	// Refractory period: seconds between two snatches of the same kind.
 	CycleIntervalS int `json:"cycle_interval_s"`
 	// Stamina: items an instance may search per hour before it needs a rest (1-500).
-	HourlyCap          int                           `json:"hourly_cap"`
+	HourlyCap int `json:"hourly_cap"`
+	// Random spreads searches over the library, sequential walks it with a cursor, recent prefers the
+	// newest releases with a slice reserved for the backlog.
 	Selection          SnatchPolicySelection         `json:"selection"`
 	MonitoredOnly      bool                          `json:"monitored_only"`
 	SkipFutureReleases bool                          `json:"skip_future_releases"`
@@ -2477,10 +2584,15 @@ type SnatchPolicy struct {
 	SonarrUpgradeMode  SnatchPolicySonarrUpgradeMode `json:"sonarr_upgrade_mode"`
 	LidarrMissingMode  SnatchPolicyLidarrMissingMode `json:"lidarr_missing_mode"`
 	// Afterglow: hours an item rests after a snatch before it may be touched again.
-	ProcessedTTLH int         `json:"processed_ttl_h"`
-	MaxQueueSize  int         `json:"max_queue_size"`
-	AwaitCommand  bool        `json:"await_command"`
-	PageSize      int         `json:"page_size"`
+	ProcessedTTLH int  `json:"processed_ttl_h"`
+	MaxQueueSize  int  `json:"max_queue_size"`
+	AwaitCommand  bool `json:"await_command"`
+	PageSize      int  `json:"page_size"`
+	// Skip items the *arr grabbed within this many hours (its history) and items already in its download
+	// queue; 0 keeps only the queue check.
+	RecentGrabWindowH int `json:"recent_grab_window_h"`
+	// Afterglow doubles after every fruitless snatch of the same item, up to this many hours.
+	AfterglowMaxH int         `json:"afterglow_max_h"`
 	UpdatedAt     OptDateTime `json:"updated_at"`
 }
 
@@ -2557,6 +2669,16 @@ func (s *SnatchPolicy) GetAwaitCommand() bool {
 // GetPageSize returns the value of PageSize.
 func (s *SnatchPolicy) GetPageSize() int {
 	return s.PageSize
+}
+
+// GetRecentGrabWindowH returns the value of RecentGrabWindowH.
+func (s *SnatchPolicy) GetRecentGrabWindowH() int {
+	return s.RecentGrabWindowH
+}
+
+// GetAfterglowMaxH returns the value of AfterglowMaxH.
+func (s *SnatchPolicy) GetAfterglowMaxH() int {
+	return s.AfterglowMaxH
 }
 
 // GetUpdatedAt returns the value of UpdatedAt.
@@ -2637,6 +2759,16 @@ func (s *SnatchPolicy) SetAwaitCommand(val bool) {
 // SetPageSize sets the value of PageSize.
 func (s *SnatchPolicy) SetPageSize(val int) {
 	s.PageSize = val
+}
+
+// SetRecentGrabWindowH sets the value of RecentGrabWindowH.
+func (s *SnatchPolicy) SetRecentGrabWindowH(val int) {
+	s.RecentGrabWindowH = val
+}
+
+// SetAfterglowMaxH sets the value of AfterglowMaxH.
+func (s *SnatchPolicy) SetAfterglowMaxH(val int) {
+	s.AfterglowMaxH = val
 }
 
 // SetUpdatedAt sets the value of UpdatedAt.
@@ -2733,11 +2865,14 @@ func (s *SnatchPolicyRadarrReleaseType) UnmarshalText(data []byte) error {
 	}
 }
 
+// Random spreads searches over the library, sequential walks it with a cursor, recent prefers the
+// newest releases with a slice reserved for the backlog.
 type SnatchPolicySelection string
 
 const (
 	SnatchPolicySelectionRandom     SnatchPolicySelection = "random"
 	SnatchPolicySelectionSequential SnatchPolicySelection = "sequential"
+	SnatchPolicySelectionRecent     SnatchPolicySelection = "recent"
 )
 
 // AllValues returns all SnatchPolicySelection values.
@@ -2745,6 +2880,7 @@ func (SnatchPolicySelection) AllValues() []SnatchPolicySelection {
 	return []SnatchPolicySelection{
 		SnatchPolicySelectionRandom,
 		SnatchPolicySelectionSequential,
+		SnatchPolicySelectionRecent,
 	}
 }
 
@@ -2754,6 +2890,8 @@ func (s SnatchPolicySelection) MarshalText() ([]byte, error) {
 	case SnatchPolicySelectionRandom:
 		return []byte(s), nil
 	case SnatchPolicySelectionSequential:
+		return []byte(s), nil
+	case SnatchPolicySelectionRecent:
 		return []byte(s), nil
 	default:
 		return nil, errors.Errorf("invalid value: %q", s)
@@ -2768,6 +2906,9 @@ func (s *SnatchPolicySelection) UnmarshalText(data []byte) error {
 		return nil
 	case SnatchPolicySelectionSequential:
 		*s = SnatchPolicySelectionSequential
+		return nil
+	case SnatchPolicySelectionRecent:
+		*s = SnatchPolicySelectionRecent
 		return nil
 	default:
 		return errors.Errorf("invalid value: %q", data)

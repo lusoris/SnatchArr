@@ -13,7 +13,7 @@ import (
 const ensureSettings = `-- name: EnsureSettings :one
 INSERT INTO settings (singleton, updated_at) VALUES (TRUE, $1)
 ON CONFLICT (singleton) DO UPDATE SET singleton = TRUE
-RETURNING singleton, history_retention_days, user_agent, updated_at
+RETURNING singleton, history_retention_days, user_agent, updated_at, global_hourly_cap
 `
 
 func (q *Queries) EnsureSettings(ctx context.Context, updatedAt time.Time) (Setting, error) {
@@ -24,13 +24,14 @@ func (q *Queries) EnsureSettings(ctx context.Context, updatedAt time.Time) (Sett
 		&i.HistoryRetentionDays,
 		&i.UserAgent,
 		&i.UpdatedAt,
+		&i.GlobalHourlyCap,
 	)
 	return i, err
 }
 
 const getSettings = `-- name: GetSettings :one
 
-SELECT singleton, history_retention_days, user_agent, updated_at FROM settings WHERE singleton
+SELECT singleton, history_retention_days, user_agent, updated_at, global_hourly_cap FROM settings WHERE singleton
 `
 
 // SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
@@ -43,31 +44,39 @@ func (q *Queries) GetSettings(ctx context.Context) (Setting, error) {
 		&i.HistoryRetentionDays,
 		&i.UserAgent,
 		&i.UpdatedAt,
+		&i.GlobalHourlyCap,
 	)
 	return i, err
 }
 
 const updateSettings = `-- name: UpdateSettings :one
 UPDATE settings
-SET history_retention_days = $1, user_agent = $2, updated_at = $3
+SET history_retention_days = $1, user_agent = $2, global_hourly_cap = $3, updated_at = $4
 WHERE singleton
-RETURNING singleton, history_retention_days, user_agent, updated_at
+RETURNING singleton, history_retention_days, user_agent, updated_at, global_hourly_cap
 `
 
 type UpdateSettingsParams struct {
 	HistoryRetentionDays int32
 	UserAgent            string
+	GlobalHourlyCap      int32
 	UpdatedAt            time.Time
 }
 
 func (q *Queries) UpdateSettings(ctx context.Context, arg UpdateSettingsParams) (Setting, error) {
-	row := q.db.QueryRow(ctx, updateSettings, arg.HistoryRetentionDays, arg.UserAgent, arg.UpdatedAt)
+	row := q.db.QueryRow(ctx, updateSettings,
+		arg.HistoryRetentionDays,
+		arg.UserAgent,
+		arg.GlobalHourlyCap,
+		arg.UpdatedAt,
+	)
 	var i Setting
 	err := row.Scan(
 		&i.Singleton,
 		&i.HistoryRetentionDays,
 		&i.UserAgent,
 		&i.UpdatedAt,
+		&i.GlobalHourlyCap,
 	)
 	return i, err
 }

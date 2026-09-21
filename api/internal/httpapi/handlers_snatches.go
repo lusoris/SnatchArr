@@ -128,13 +128,18 @@ func (h *Handlers) DeleteInstanceEvents(ctx context.Context, params oas.DeleteIn
 	return err
 }
 
-// GetHourlyCaps reports budget consumption per instance.
+// GetHourlyCaps reports stamina per instance, plus the shared global stamina when set.
 func (h *Handlers) GetHourlyCaps(ctx context.Context) ([]oas.CapStatus, error) {
 	list, err := h.instances.List(ctx)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]oas.CapStatus, 0, len(list))
+	out := make([]oas.CapStatus, 0, len(list)+1)
+	if global, ok, err := h.globalCap(ctx); err != nil {
+		return nil, err
+	} else if ok {
+		out = append(out, global)
+	}
 	for _, inst := range list {
 		policy, err := h.policies.Get(ctx, inst.ID)
 		if err != nil {
@@ -148,9 +153,43 @@ func (h *Handlers) GetHourlyCaps(ctx context.Context) ([]oas.CapStatus, error) {
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, oas.CapStatus{InstanceID: inst.ID, Used: used, Cap: capacity, ResetsAt: resets})
+		out = append(out, oas.CapStatus{Scope: oas.CapStatusScopeInstance, InstanceID: oas.NewOptUUID(inst.ID), Used: used, Cap: capacity, ResetsAt: resets})
 	}
 	return out, nil
+}
+
+// globalCap is the shared stamina entry, absent when no global cap is configured.
+func (h *Handlers) globalCap(ctx context.Context) (oas.CapStatus, bool, error) {
+	cfg, err := h.settings.Get(ctx)
+	if err != nil || cfg.GlobalHourlyCap <= 0 {
+		return oas.CapStatus{}, false, err
+	}
+	used, resets, err := h.budget.GlobalUsed(ctx)
+	if err != nil {
+		return oas.CapStatus{}, false, err
+	}
+	return oas.CapStatus{Scope: oas.CapStatusScopeGlobal, Used: used, Cap: cfg.GlobalHourlyCap, ResetsAt: resets}, true, nil
+}
+
+// GetSettings returns the runtime settings.
+func (h *Handlers) GetSettings(ctx context.Context) (*oas.Settings, error) {
+	s, err := h.settings.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return settingsToOAS(s), nil
+}
+
+// UpdateSettings replaces the runtime settings.
+func (h *Handlers) UpdateSettings(ctx context.Context, req *oas.Settings) (*oas.Settings, error) {
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
+	}
+	s, err := h.settings.Update(ctx, settingsFromOAS(req))
+	if err != nil {
+		return nil, err
+	}
+	return settingsToOAS(s), nil
 }
 
 // ResetState forgets processed items.

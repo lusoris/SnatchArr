@@ -74,3 +74,24 @@ func TestPolicyValidate(t *testing.T) {
 		})
 	}
 }
+
+func TestPolicyRefinementFields(t *testing.T) {
+	t.Parallel()
+	p := domain.DefaultPolicy(uuid.New())
+	if p.RecentGrabWindow != 24*time.Hour || p.AfterglowMax != 720*time.Hour {
+		t.Fatalf("defaults: %+v", p)
+	}
+	p.Selection = domain.SelectionRecent
+	if err := p.Validate(); err != nil {
+		t.Fatalf("recent selection must validate: %v", err)
+	}
+	p.RecentGrabWindow = 721 * time.Hour
+	if err := p.Validate(); !errors.Is(err, domain.ErrInvalid) {
+		t.Fatalf("recent_grab_window_h above 720 must fail, got %v", err)
+	}
+	p.RecentGrabWindow = 0
+	p.AfterglowMax = 0
+	if err := p.Validate(); !errors.Is(err, domain.ErrInvalid) {
+		t.Fatalf("afterglow_max_h 0 must fail, got %v", err)
+	}
+}

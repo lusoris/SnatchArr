@@ -64,6 +64,8 @@ func PolicyFromRow(r sqlcgen.SnatchPolicy) domain.Policy {
 		MaxQueueSize:       int(r.MaxQueueSize),
 		AwaitCommand:       r.AwaitCommand,
 		PageSize:           int(r.PageSize),
+		RecentGrabWindow:   time.Duration(r.RecentGrabWindowH) * time.Hour,
+		AfterglowMax:       time.Duration(r.AfterglowMaxH) * time.Hour,
 		UpdatedAt:          r.UpdatedAt,
 	}
 }
@@ -86,8 +88,20 @@ func PolicyParams(p domain.Policy, now time.Time) sqlcgen.UpsertPolicyParams {
 		ProcessedTtlH:      int32(p.ProcessedTTL / time.Hour), // #nosec G115 -- validated 1..8760
 		MaxQueueSize:       int32(p.MaxQueueSize),             // #nosec G115 -- validated -1..100000
 		AwaitCommand:       p.AwaitCommand,
-		PageSize:           int32(p.PageSize), // #nosec G115 -- validated 10..1000
+		PageSize:           int32(p.PageSize),                     // #nosec G115 -- validated 10..1000
+		RecentGrabWindowH:  int32(p.RecentGrabWindow / time.Hour), // #nosec G115 -- validated 0..720
+		AfterglowMaxH:      int32(p.AfterglowMax / time.Hour),     // #nosec G115 -- validated 1..8760
 		UpdatedAt:          now,
+	}
+}
+
+// SettingsFromRow converts the singleton settings row.
+func SettingsFromRow(r sqlcgen.Setting) domain.Settings {
+	return domain.Settings{
+		HistoryRetentionDays: int(r.HistoryRetentionDays),
+		UserAgent:            r.UserAgent,
+		GlobalHourlyCap:      int(r.GlobalHourlyCap),
+		UpdatedAt:            r.UpdatedAt,
 	}
 }
 

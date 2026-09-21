@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	snatcharrv1 "github.com/lusoris/SnatchArr/api/internal/gen/snatcharr/v1"
@@ -48,10 +49,16 @@ func snatchKind(k domain.SnatchKind) snatcharrv1.SnatchKind {
 }
 
 func selection(s domain.Selection) snatcharrv1.Selection {
-	if s == domain.SelectionSequential {
+	switch s {
+	case domain.SelectionSequential:
 		return snatcharrv1.Selection_SELECTION_SEQUENTIAL
+	case domain.SelectionRecent:
+		return snatcharrv1.Selection_SELECTION_RECENT
+	case domain.SelectionRandom:
+		return snatcharrv1.Selection_SELECTION_RANDOM
+	default:
+		return snatcharrv1.Selection_SELECTION_RANDOM
 	}
-	return snatcharrv1.Selection_SELECTION_RANDOM
 }
 
 func sonarrMode(mode string) snatcharrv1.SonarrMode {
@@ -98,7 +105,8 @@ func policyProto(p domain.Policy, kind domain.SnatchKind) *snatcharrv1.Policy {
 		LidarrMode:         lidarrMode(p.LidarrMissingMode),
 		RadarrReleaseType:  releaseType(p.RadarrReleaseType),
 		AwaitCommand:       p.AwaitCommand,
-		PageSize:           uint32(max(p.PageSize, 0)), // #nosec G115 -- validated 10..1000
+		PageSize:           uint32(max(p.PageSize, 0)),                   // #nosec G115 -- validated 10..1000
+		RecentGrabHours:    uint32(max(p.RecentGrabWindow/time.Hour, 0)), // #nosec G115 -- validated 0..720
 	}
 }
 

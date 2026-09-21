@@ -51,3 +51,28 @@ func TestWindow(t *testing.T) {
 		t.Fatalf("Window = %v, want %v", got, want)
 	}
 }
+
+func TestTrimToGlobal(t *testing.T) {
+	t.Parallel()
+	window := time.Date(2026, 9, 21, 14, 0, 0, 0, time.UTC)
+	g := grant(5, 20, 10, window) // instance: 15 left, grants 10
+	cases := []struct {
+		name                     string
+		globalUsed, globalCap    int
+		granted, used, remaining int
+	}{
+		{"global has room", 0, 100, 10, 15, 5},
+		{"global tighter than instance", 95, 100, 5, 10, 0},
+		{"global exhausted", 100, 100, 0, 5, 0},
+		{"global remaining is the binding one", 90, 100, 10, 15, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			out := trimToGlobal(g, tc.globalUsed, tc.globalCap)
+			if out.Granted != tc.granted || out.Used != tc.used || out.Remaining != tc.remaining {
+				t.Fatalf("got granted=%d used=%d remaining=%d", out.Granted, out.Used, out.Remaining)
+			}
+		})
+	}
+}

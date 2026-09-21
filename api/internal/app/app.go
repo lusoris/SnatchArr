@@ -34,6 +34,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/httpapi"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
 	"github.com/lusoris/SnatchArr/api/internal/policies"
+	"github.com/lusoris/SnatchArr/api/internal/settings"
 	"github.com/lusoris/SnatchArr/api/internal/snatch"
 	"github.com/lusoris/SnatchArr/api/internal/store"
 	"github.com/lusoris/SnatchArr/api/internal/webui"
@@ -55,6 +56,7 @@ var Module = fx.Options(
 	arrclient.Module,
 	instances.Module,
 	policies.Module,
+	settings.Module,
 	auth.Module,
 	events.Module,
 	snatch.Module,

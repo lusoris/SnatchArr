@@ -19,7 +19,12 @@ type Selection string
 const (
 	SelectionRandom     Selection = "random"
 	SelectionSequential Selection = "sequential"
+	// SelectionRecent prefers the newest releases with a slice reserved for the backlog.
+	SelectionRecent Selection = "recent"
 )
+
+// AllSelections lists every selection strategy.
+var AllSelections = []Selection{SelectionRandom, SelectionSequential, SelectionRecent}
 
 // Policy is the per-instance snatch policy. Defaults mirror newtarr's gentle defaults:
 // one missing item per cycle, no upgrades, 15 minutes between cycles, 20 items per hour.
@@ -40,7 +45,11 @@ type Policy struct {
 	MaxQueueSize       int
 	AwaitCommand       bool
 	PageSize           int
-	UpdatedAt          time.Time
+	// RecentGrabWindow skips items the *arr grabbed this recently (0 = only the queue).
+	RecentGrabWindow time.Duration
+	// AfterglowMax caps the exponential rest time of repeatedly snatched items.
+	AfterglowMax time.Duration
+	UpdatedAt    time.Time
 }
 
 // DefaultPolicy returns the gentle defaults for a new instance.
@@ -62,6 +71,8 @@ func DefaultPolicy(instanceID uuid.UUID) Policy {
 		MaxQueueSize:       -1,
 		AwaitCommand:       false,
 		PageSize:           100,
+		RecentGrabWindow:   24 * time.Hour,
+		AfterglowMax:       720 * time.Hour,
 	}
 }
 
@@ -97,10 +108,12 @@ func (p Policy) Validate() error {
 		{"processed_ttl_h", int(p.ProcessedTTL / time.Hour), 1, 8760},
 		{"max_queue_size", p.MaxQueueSize, -1, 100000},
 		{"page_size", p.PageSize, 10, 1000},
+		{"recent_grab_window_h", int(p.RecentGrabWindow / time.Hour), 0, 720},
+		{"afterglow_max_h", int(p.AfterglowMax / time.Hour), 1, 8760},
 	}); err != nil {
 		return err
 	}
-	if err := checkEnum("selection", string(p.Selection), string(SelectionRandom), string(SelectionSequential)); err != nil {
+	if err := checkEnum("selection", string(p.Selection), string(SelectionRandom), string(SelectionSequential), string(SelectionRecent)); err != nil {
 		return err
 	}
 	if err := checkEnum("radarr_release_type", p.RadarrReleaseType, "physical", "digital", "cinema"); err != nil {

@@ -71,8 +71,14 @@ func (s *CapStatus) Encode(e *jx.Encoder) {
 // encodeFields encodes fields.
 func (s *CapStatus) encodeFields(e *jx.Encoder) {
 	{
-		e.FieldStart("instance_id")
-		json.EncodeUUID(e, s.InstanceID)
+		e.FieldStart("scope")
+		s.Scope.Encode(e)
+	}
+	{
+		if s.InstanceID.Set {
+			e.FieldStart("instance_id")
+			s.InstanceID.Encode(e)
+		}
 	}
 	{
 		e.FieldStart("used")
@@ -88,11 +94,12 @@ func (s *CapStatus) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfCapStatus = [4]string{
-	0: "instance_id",
-	1: "used",
-	2: "cap",
-	3: "resets_at",
+var jsonFieldsNameOfCapStatus = [5]string{
+	0: "scope",
+	1: "instance_id",
+	2: "used",
+	3: "cap",
+	4: "resets_at",
 }
 
 // Decode decodes CapStatus from json.
@@ -104,12 +111,20 @@ func (s *CapStatus) Decode(d *jx.Decoder) error {
 
 	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
 		switch string(k) {
-		case "instance_id":
+		case "scope":
 			requiredBitSet[0] |= 1 << 0
 			if err := func() error {
-				v, err := json.DecodeUUID(d)
-				s.InstanceID = v
-				if err != nil {
+				if err := s.Scope.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"scope\"")
+			}
+		case "instance_id":
+			if err := func() error {
+				s.InstanceID.Reset()
+				if err := s.InstanceID.Decode(d); err != nil {
 					return err
 				}
 				return nil
@@ -117,7 +132,7 @@ func (s *CapStatus) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"instance_id\"")
 			}
 		case "used":
-			requiredBitSet[0] |= 1 << 1
+			requiredBitSet[0] |= 1 << 2
 			if err := func() error {
 				v, err := d.Int()
 				s.Used = int(v)
@@ -129,7 +144,7 @@ func (s *CapStatus) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"used\"")
 			}
 		case "cap":
-			requiredBitSet[0] |= 1 << 2
+			requiredBitSet[0] |= 1 << 3
 			if err := func() error {
 				v, err := d.Int()
 				s.Cap = int(v)
@@ -141,7 +156,7 @@ func (s *CapStatus) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"cap\"")
 			}
 		case "resets_at":
-			requiredBitSet[0] |= 1 << 3
+			requiredBitSet[0] |= 1 << 4
 			if err := func() error {
 				v, err := json.DecodeDateTime(d)
 				s.ResetsAt = v
@@ -162,7 +177,7 @@ func (s *CapStatus) Decode(d *jx.Decoder) error {
 	// Validate required fields.
 	var failures []validate.FieldError
 	for i, mask := range [1]uint8{
-		0b00001111,
+		0b00011101,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -204,6 +219,46 @@ func (s *CapStatus) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *CapStatus) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes CapStatusScope as json.
+func (s CapStatusScope) Encode(e *jx.Encoder) {
+	e.Str(string(s))
+}
+
+// Decode decodes CapStatusScope from json.
+func (s *CapStatusScope) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode CapStatusScope to nil")
+	}
+	v, err := d.StrBytes()
+	if err != nil {
+		return err
+	}
+	// Try to use constant string.
+	switch CapStatusScope(v) {
+	case CapStatusScopeInstance:
+		*s = CapStatusScopeInstance
+	case CapStatusScopeGlobal:
+		*s = CapStatusScopeGlobal
+	default:
+		*s = CapStatusScope(v)
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s CapStatusScope) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *CapStatusScope) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }
@@ -4229,6 +4284,153 @@ func (s *Session) UnmarshalJSON(data []byte) error {
 }
 
 // Encode implements json.Marshaler.
+func (s *Settings) Encode(e *jx.Encoder) {
+	e.ObjStart()
+	s.encodeFields(e)
+	e.ObjEnd()
+}
+
+// encodeFields encodes fields.
+func (s *Settings) encodeFields(e *jx.Encoder) {
+	{
+		e.FieldStart("history_retention_days")
+		e.Int(s.HistoryRetentionDays)
+	}
+	{
+		e.FieldStart("user_agent")
+		e.Str(s.UserAgent)
+	}
+	{
+		e.FieldStart("global_hourly_cap")
+		e.Int(s.GlobalHourlyCap)
+	}
+	{
+		if s.UpdatedAt.Set {
+			e.FieldStart("updated_at")
+			s.UpdatedAt.Encode(e, json.EncodeDateTime)
+		}
+	}
+}
+
+var jsonFieldsNameOfSettings = [4]string{
+	0: "history_retention_days",
+	1: "user_agent",
+	2: "global_hourly_cap",
+	3: "updated_at",
+}
+
+// Decode decodes Settings from json.
+func (s *Settings) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode Settings to nil")
+	}
+	var requiredBitSet [1]uint8
+
+	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
+		switch string(k) {
+		case "history_retention_days":
+			requiredBitSet[0] |= 1 << 0
+			if err := func() error {
+				v, err := d.Int()
+				s.HistoryRetentionDays = int(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"history_retention_days\"")
+			}
+		case "user_agent":
+			requiredBitSet[0] |= 1 << 1
+			if err := func() error {
+				v, err := d.Str()
+				s.UserAgent = string(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"user_agent\"")
+			}
+		case "global_hourly_cap":
+			requiredBitSet[0] |= 1 << 2
+			if err := func() error {
+				v, err := d.Int()
+				s.GlobalHourlyCap = int(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"global_hourly_cap\"")
+			}
+		case "updated_at":
+			if err := func() error {
+				s.UpdatedAt.Reset()
+				if err := s.UpdatedAt.Decode(d, json.DecodeDateTime); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"updated_at\"")
+			}
+		default:
+			return d.Skip()
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "decode Settings")
+	}
+	// Validate required fields.
+	var failures []validate.FieldError
+	for i, mask := range [1]uint8{
+		0b00000111,
+	} {
+		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
+			// Mask only required fields and check equality to mask using XOR.
+			//
+			// If XOR result is not zero, result is not equal to expected, so some fields are missed.
+			// Bits of fields which would be set are actually bits of missed fields.
+			missed := bits.OnesCount8(result)
+			for bitN := 0; bitN < missed; bitN++ {
+				bitIdx := bits.TrailingZeros8(result)
+				fieldIdx := i*8 + bitIdx
+				var name string
+				if fieldIdx < len(jsonFieldsNameOfSettings) {
+					name = jsonFieldsNameOfSettings[fieldIdx]
+				} else {
+					name = strconv.Itoa(fieldIdx)
+				}
+				failures = append(failures, validate.FieldError{
+					Name:  name,
+					Error: validate.ErrFieldRequired,
+				})
+				// Reset bit.
+				result &^= 1 << bitIdx
+			}
+		}
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *Settings) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *Settings) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode implements json.Marshaler.
 func (s *SetupRequest) Encode(e *jx.Encoder) {
 	e.ObjStart()
 	s.encodeFields(e)
@@ -4547,6 +4749,14 @@ func (s *SnatchPolicy) encodeFields(e *jx.Encoder) {
 		e.Int(s.PageSize)
 	}
 	{
+		e.FieldStart("recent_grab_window_h")
+		e.Int(s.RecentGrabWindowH)
+	}
+	{
+		e.FieldStart("afterglow_max_h")
+		e.Int(s.AfterglowMaxH)
+	}
+	{
 		if s.UpdatedAt.Set {
 			e.FieldStart("updated_at")
 			s.UpdatedAt.Encode(e, json.EncodeDateTime)
@@ -4554,7 +4764,7 @@ func (s *SnatchPolicy) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfSnatchPolicy = [16]string{
+var jsonFieldsNameOfSnatchPolicy = [18]string{
 	0:  "missing_per_cycle",
 	1:  "upgrade_per_cycle",
 	2:  "cycle_interval_s",
@@ -4570,7 +4780,9 @@ var jsonFieldsNameOfSnatchPolicy = [16]string{
 	12: "max_queue_size",
 	13: "await_command",
 	14: "page_size",
-	15: "updated_at",
+	15: "recent_grab_window_h",
+	16: "afterglow_max_h",
+	17: "updated_at",
 }
 
 // Decode decodes SnatchPolicy from json.
@@ -4578,7 +4790,7 @@ func (s *SnatchPolicy) Decode(d *jx.Decoder) error {
 	if s == nil {
 		return errors.New("invalid: unable to decode SnatchPolicy to nil")
 	}
-	var requiredBitSet [2]uint8
+	var requiredBitSet [3]uint8
 
 	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
 		switch string(k) {
@@ -4752,6 +4964,30 @@ func (s *SnatchPolicy) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"page_size\"")
 			}
+		case "recent_grab_window_h":
+			requiredBitSet[1] |= 1 << 7
+			if err := func() error {
+				v, err := d.Int()
+				s.RecentGrabWindowH = int(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"recent_grab_window_h\"")
+			}
+		case "afterglow_max_h":
+			requiredBitSet[2] |= 1 << 0
+			if err := func() error {
+				v, err := d.Int()
+				s.AfterglowMaxH = int(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"afterglow_max_h\"")
+			}
 		case "updated_at":
 			if err := func() error {
 				s.UpdatedAt.Reset()
@@ -4771,9 +5007,10 @@ func (s *SnatchPolicy) Decode(d *jx.Decoder) error {
 	}
 	// Validate required fields.
 	var failures []validate.FieldError
-	for i, mask := range [2]uint8{
+	for i, mask := range [3]uint8{
 		0b11111111,
-		0b01111111,
+		0b11111111,
+		0b00000001,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -4921,6 +5158,8 @@ func (s *SnatchPolicySelection) Decode(d *jx.Decoder) error {
 		*s = SnatchPolicySelectionRandom
 	case SnatchPolicySelectionSequential:
 		*s = SnatchPolicySelectionSequential
+	case SnatchPolicySelectionRecent:
+		*s = SnatchPolicySelectionRecent
 	default:
 		*s = SnatchPolicySelection(v)
 	}

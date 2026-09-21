@@ -54,5 +54,11 @@ WHERE (sqlc.narg(instance_id)::uuid IS NULL OR instance_id = sqlc.narg(instance_
 ORDER BY queued_at DESC
 LIMIT $1 OFFSET $2;
 
+-- name: RecentRunStatuses :many
+SELECT status FROM snatch_runs
+WHERE instance_id = $1 AND kind = $2 AND status IN ('done', 'failed')
+ORDER BY finished_at DESC
+LIMIT 10;
+
 -- name: PurgeRunsBefore :execrows
 DELETE FROM snatch_runs WHERE status IN ('done', 'failed', 'cancelled') AND finished_at < $1;

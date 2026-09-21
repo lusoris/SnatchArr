@@ -104,6 +104,12 @@ type Handler interface {
 	//
 	// GET /auth/session
 	GetSession(ctx context.Context) (*SessionHeaders, error)
+	// GetSettings implements getSettings operation.
+	//
+	// Runtime settings.
+	//
+	// GET /settings
+	GetSettings(ctx context.Context) (*Settings, error)
 	// GetSetupStatus implements getSetupStatus operation.
 	//
 	// Whether the first user still has to be created.
@@ -218,6 +224,12 @@ type Handler interface {
 	//
 	// PUT /schedules/{scheduleId}
 	UpdateSchedule(ctx context.Context, req *ScheduleInput, params UpdateScheduleParams) (*Schedule, error)
+	// UpdateSettings implements updateSettings operation.
+	//
+	// Replace the runtime settings.
+	//
+	// PUT /settings
+	UpdateSettings(ctx context.Context, req *Settings) (*Settings, error)
 	// NewError creates *ProblemStatusCode from error returned by handler.
 	//
 	// Used for common default response.

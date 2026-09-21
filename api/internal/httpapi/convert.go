@@ -122,6 +122,8 @@ func policyToOAS(p domain.Policy) *oas.SnatchPolicy {
 		MaxQueueSize:       p.MaxQueueSize,
 		AwaitCommand:       p.AwaitCommand,
 		PageSize:           p.PageSize,
+		RecentGrabWindowH:  int(p.RecentGrabWindow / time.Hour),
+		AfterglowMaxH:      int(p.AfterglowMax / time.Hour),
 		UpdatedAt:          oas.NewOptDateTime(p.UpdatedAt),
 	}
 }
@@ -144,5 +146,18 @@ func policyFromOAS(instanceID uuid.UUID, in *oas.SnatchPolicy) domain.Policy {
 		MaxQueueSize:       in.MaxQueueSize,
 		AwaitCommand:       in.AwaitCommand,
 		PageSize:           in.PageSize,
+		RecentGrabWindow:   time.Duration(in.RecentGrabWindowH) * time.Hour,
+		AfterglowMax:       time.Duration(in.AfterglowMaxH) * time.Hour,
 	}
+}
+
+func settingsToOAS(s domain.Settings) *oas.Settings {
+	return &oas.Settings{
+		HistoryRetentionDays: s.HistoryRetentionDays, UserAgent: s.UserAgent, GlobalHourlyCap: s.GlobalHourlyCap,
+		UpdatedAt: oas.NewOptDateTime(s.UpdatedAt),
+	}
+}
+
+func settingsFromOAS(in *oas.Settings) domain.Settings {
+	return domain.Settings{HistoryRetentionDays: in.HistoryRetentionDays, UserAgent: in.UserAgent, GlobalHourlyCap: in.GlobalHourlyCap}
 }

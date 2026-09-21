@@ -50,14 +50,22 @@ func (m *Memory) FilterUnprocessed(ctx context.Context, instanceID uuid.UUID, ki
 	return out, nil
 }
 
-// Mark records ids as searched until now+ttl (extending an existing entry).
-func (m *Memory) Mark(ctx context.Context, instanceID uuid.UUID, kind domain.SnatchKind, entityType string, ids []int64, ttl time.Duration) error {
+// PurgeGrace is how long an expired afterglow row is kept so its attempt count still
+// counts when the item comes back; after that it is forgotten for good.
+const PurgeGrace = 90 * 24 * time.Hour
+
+// Mark records ids as searched: the first snatch rests `base`, every further snatch of the
+// same item doubles the rest up to `maxRest` (exponential afterglow).
+func (m *Memory) Mark(ctx context.Context, instanceID uuid.UUID, kind domain.SnatchKind, entityType string, ids []int64, base, maxRest time.Duration) error {
 	if len(ids) == 0 {
 		return nil
 	}
+	if maxRest < base {
+		maxRest = base
+	}
 	err := m.st.Q().MarkProcessed(ctx, sqlcgen.MarkProcessedParams{
 		InstanceID: instanceID, Kind: string(kind), EntityType: entityType,
-		ExpiresAt: m.clk.Now().Add(ttl), EntityIds: ids,
+		Now: m.clk.Now(), BaseS: int64(base / time.Second), MaxS: int64(maxRest / time.Second), EntityIds: ids,
 	})
 	if err != nil {
 		return fmt.Errorf("snatch: mark processed: %w", store.MapError(err))
@@ -74,15 +82,19 @@ func (m *Memory) Reset(ctx context.Context, instanceID *uuid.UUID) (int64, error
 	return n, nil
 }
 
-// Purge drops expired entries and old buckets; meant for a periodic job.
+// Purge drops long-expired entries and old buckets; meant for a periodic job. Rows that
+// expired less than PurgeGrace ago stay so the afterglow backoff remembers them.
 func (m *Memory) Purge(ctx context.Context) (int64, error) {
 	now := m.clk.Now()
-	n, err := m.st.Q().PurgeExpiredProcessed(ctx, now)
+	n, err := m.st.Q().PurgeExpiredProcessed(ctx, now.Add(-PurgeGrace))
 	if err != nil {
 		return 0, fmt.Errorf("snatch: purge processed: %w", store.MapError(err))
 	}
 	if _, err := m.st.Q().PurgeBucketsBefore(ctx, Window(now).Add(-24*time.Hour)); err != nil {
 		return n, fmt.Errorf("snatch: purge buckets: %w", store.MapError(err))
+	}
+	if _, err := m.st.Q().PurgeGlobalBucketsBefore(ctx, Window(now).Add(-24*time.Hour)); err != nil {
+		return n, fmt.Errorf("snatch: purge global buckets: %w", store.MapError(err))
 	}
 	return n, nil
 }

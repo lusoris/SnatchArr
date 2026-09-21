@@ -25,6 +25,7 @@ import (
 	snatcharrv1 "github.com/lusoris/SnatchArr/api/internal/gen/snatcharr/v1"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
 	"github.com/lusoris/SnatchArr/api/internal/policies"
+	"github.com/lusoris/SnatchArr/api/internal/settings"
 	"github.com/lusoris/SnatchArr/api/internal/snatch"
 )
 
@@ -58,6 +59,7 @@ type Server struct {
 	planner   *snatch.Planner
 	instances *instances.Service
 	policies  *policies.Service
+	settings  *settings.Service
 	pacer     Pacer
 	clk       clock.Clock
 	logger    *slog.Logger
@@ -65,11 +67,11 @@ type Server struct {
 
 // New wires the server.
 func New(runs *snatch.Runs, budget *snatch.Budget, memory *snatch.Memory, rec *snatch.Recorder, planner *snatch.Planner,
-	inst *instances.Service, pol *policies.Service, clk clock.Clock, logger *slog.Logger, opts Options,
+	inst *instances.Service, pol *policies.Service, cfg *settings.Service, clk clock.Clock, logger *slog.Logger, opts Options,
 ) *Server {
 	return &Server{
 		runs: runs, budget: budget, memory: memory, rec: rec, planner: planner, instances: inst, policies: pol,
-		pacer: opts.Pacer, clk: clk, logger: logger,
+		settings: cfg, pacer: opts.Pacer, clk: clk, logger: logger,
 	}
 }
 
@@ -206,7 +208,11 @@ func (s *Server) AcquireBudget(ctx context.Context, req *snatcharrv1.AcquireBudg
 	if err != nil {
 		return nil, toStatus(err)
 	}
-	g, err := s.budget.Acquire(ctx, run.InstanceID, capacity, int(min(req.GetRequested(), maxSearchedPerRun)))
+	cfg, err := s.settings.Get(ctx)
+	if err != nil {
+		return nil, toStatus(err)
+	}
+	g, err := s.budget.Acquire(ctx, run.InstanceID, capacity, cfg.GlobalHourlyCap, int(min(req.GetRequested(), maxSearchedPerRun)))
 	if err != nil {
 		return nil, toStatus(err)
 	}
@@ -285,10 +291,31 @@ func (s *Server) CompleteRun(ctx context.Context, req *snatcharrv1.CompleteRunRe
 	if _, err := s.runs.Complete(ctx, run.ID, req.GetWorkerId(), outcome(req.GetOutcome()), len(searched), req.GetError()); err != nil {
 		return nil, toStatus(err)
 	}
+	if outcome(req.GetOutcome()) == domain.RunFailed {
+		s.recordBackoff(ctx, run, policy)
+	}
 	return &snatcharrv1.CompleteRunResponse{}, s.rec.Record(ctx, domain.Event{
 		RunID: &run.ID, InstanceID: run.InstanceID, Level: "info", Type: "run_finished",
 		Title: fmt.Sprintf("%s snatch %s: %d item(s) searched", run.Kind, outcome(req.GetOutcome()), len(searched)), Detail: req.GetError(),
 	})
+}
+
+// recordBackoff writes one history entry per failed run saying how long the circuit
+// stays open; a recording failure is logged, never surfaced to the worker.
+func (s *Server) recordBackoff(ctx context.Context, run domain.Run, policy domain.Policy) {
+	failures, err := s.runs.TrailingFailures(ctx, run.InstanceID, run.Kind)
+	if err != nil {
+		s.logger.WarnContext(ctx, "workergrpc: trailing failures", slog.String("error", err.Error()))
+		return
+	}
+	wait := snatch.Backoff(policy.CycleInterval, failures)
+	err = s.rec.Record(ctx, domain.Event{
+		RunID: &run.ID, InstanceID: run.InstanceID, Level: "warn", Type: "snatch_backoff",
+		Title: fmt.Sprintf("Circuit open: %d failure(s) in a row; next %s snatch not before %s", failures, run.Kind, s.clk.Now().Add(wait).UTC().Format(time.RFC3339)),
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "workergrpc: record backoff", slog.String("error", err.Error()))
+	}
 }
 
 func (s *Server) remember(ctx context.Context, run domain.Run, policy domain.Policy, searched []*snatcharrv1.SearchedItem) error {
@@ -297,7 +324,7 @@ func (s *Server) remember(ctx context.Context, run domain.Run, policy domain.Pol
 		byType[item.GetEntityType()] = append(byType[item.GetEntityType()], item.GetEntityId())
 	}
 	for entityType, ids := range byType {
-		if err := s.memory.Mark(ctx, run.InstanceID, run.Kind, entityType, ids, policy.ProcessedTTL); err != nil {
+		if err := s.memory.Mark(ctx, run.InstanceID, run.Kind, entityType, ids, policy.ProcessedTTL, policy.AfterglowMax); err != nil {
 			return err
 		}
 	}

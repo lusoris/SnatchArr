@@ -157,6 +157,15 @@ func (UnimplementedHandler) GetSession(ctx context.Context) (r *SessionHeaders, 
 	return r, ht.ErrNotImplemented
 }
 
+// GetSettings implements getSettings operation.
+//
+// Runtime settings.
+//
+// GET /settings
+func (UnimplementedHandler) GetSettings(ctx context.Context) (r *Settings, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // GetSetupStatus implements getSetupStatus operation.
 //
 // Whether the first user still has to be created.
@@ -325,6 +334,15 @@ func (UnimplementedHandler) UpdatePolicy(ctx context.Context, req *SnatchPolicy,
 //
 // PUT /schedules/{scheduleId}
 func (UnimplementedHandler) UpdateSchedule(ctx context.Context, req *ScheduleInput, params UpdateScheduleParams) (r *Schedule, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UpdateSettings implements updateSettings operation.
+//
+// Replace the runtime settings.
+//
+// PUT /settings
+func (UnimplementedHandler) UpdateSettings(ctx context.Context, req *Settings) (r *Settings, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

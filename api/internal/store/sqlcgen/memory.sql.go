@@ -43,6 +43,16 @@ func (q *Queries) EnsureBucket(ctx context.Context, arg EnsureBucketParams) erro
 	return err
 }
 
+const ensureGlobalBucket = `-- name: EnsureGlobalBucket :exec
+INSERT INTO global_rate_buckets (window_start, used) VALUES ($1, 0)
+ON CONFLICT (window_start) DO NOTHING
+`
+
+func (q *Queries) EnsureGlobalBucket(ctx context.Context, windowStart time.Time) error {
+	_, err := q.db.Exec(ctx, ensureGlobalBucket, windowStart)
+	return err
+}
+
 const filterUnprocessed = `-- name: FilterUnprocessed :many
 
 SELECT c.id::bigint AS entity_id
@@ -109,6 +119,17 @@ func (q *Queries) GetBucketUsed(ctx context.Context, arg GetBucketUsedParams) (i
 	return used, err
 }
 
+const getGlobalBucketUsed = `-- name: GetGlobalBucketUsed :one
+SELECT COALESCE((SELECT used FROM global_rate_buckets WHERE window_start = $1), 0)::int AS used
+`
+
+func (q *Queries) GetGlobalBucketUsed(ctx context.Context, windowStart time.Time) (int32, error) {
+	row := q.db.QueryRow(ctx, getGlobalBucketUsed, windowStart)
+	var used int32
+	err := row.Scan(&used)
+	return used, err
+}
+
 const lockBucket = `-- name: LockBucket :one
 SELECT used FROM rate_buckets WHERE instance_id = $1 AND window_start = $2 FOR UPDATE
 `
@@ -125,30 +146,79 @@ func (q *Queries) LockBucket(ctx context.Context, arg LockBucketParams) (int32, 
 	return used, err
 }
 
+const lockGlobalBucket = `-- name: LockGlobalBucket :one
+SELECT used FROM global_rate_buckets WHERE window_start = $1 FOR UPDATE
+`
+
+func (q *Queries) LockGlobalBucket(ctx context.Context, windowStart time.Time) (int32, error) {
+	row := q.db.QueryRow(ctx, lockGlobalBucket, windowStart)
+	var used int32
+	err := row.Scan(&used)
+	return used, err
+}
+
 const markProcessed = `-- name: MarkProcessed :exec
-INSERT INTO processed_items (instance_id, kind, entity_type, entity_id, expires_at)
-SELECT $1, $2, $3, c.id, $4
-FROM unnest($5::bigint[]) AS c(id)
-ON CONFLICT (instance_id, kind, entity_type, entity_id) DO UPDATE SET expires_at = EXCLUDED.expires_at
+INSERT INTO processed_items (instance_id, kind, entity_type, entity_id, expires_at, attempts, last_snatched_at)
+SELECT $1, $2, $3, c.id,
+       $4::timestamptz + make_interval(secs => $5::bigint), 1, $4::timestamptz
+FROM unnest($6::bigint[]) AS c(id)
+ON CONFLICT (instance_id, kind, entity_type, entity_id) DO UPDATE SET
+    attempts = processed_items.attempts + 1,
+    last_snatched_at = EXCLUDED.last_snatched_at,
+    expires_at = EXCLUDED.last_snatched_at + make_interval(
+        secs => LEAST($5::bigint * power(2, LEAST(processed_items.attempts, 20))::bigint, $7::bigint)
+    )
 `
 
 type MarkProcessedParams struct {
 	InstanceID uuid.UUID
 	Kind       string
 	EntityType string
-	ExpiresAt  time.Time
+	Now        time.Time
+	BaseS      int64
 	EntityIds  []int64
+	MaxS       int64
 }
 
+// Afterglow backoff: the first snatch rests base_s seconds, every further snatch of the
+// same item doubles the rest, capped at max_s.
 func (q *Queries) MarkProcessed(ctx context.Context, arg MarkProcessedParams) error {
 	_, err := q.db.Exec(ctx, markProcessed,
 		arg.InstanceID,
 		arg.Kind,
 		arg.EntityType,
-		arg.ExpiresAt,
+		arg.Now,
+		arg.BaseS,
 		arg.EntityIds,
+		arg.MaxS,
 	)
 	return err
+}
+
+const processedAttempts = `-- name: ProcessedAttempts :one
+SELECT COALESCE((
+    SELECT attempts FROM processed_items
+    WHERE instance_id = $1 AND kind = $2 AND entity_type = $3 AND entity_id = $4
+), 0)::int AS attempts
+`
+
+type ProcessedAttemptsParams struct {
+	InstanceID uuid.UUID
+	Kind       string
+	EntityType string
+	EntityID   int64
+}
+
+func (q *Queries) ProcessedAttempts(ctx context.Context, arg ProcessedAttemptsParams) (int32, error) {
+	row := q.db.QueryRow(ctx, processedAttempts,
+		arg.InstanceID,
+		arg.Kind,
+		arg.EntityType,
+		arg.EntityID,
+	)
+	var attempts int32
+	err := row.Scan(&attempts)
+	return attempts, err
 }
 
 const purgeBucketsBefore = `-- name: PurgeBucketsBefore :execrows
@@ -169,6 +239,18 @@ DELETE FROM processed_items WHERE expires_at <= $1
 
 func (q *Queries) PurgeExpiredProcessed(ctx context.Context, expiresAt time.Time) (int64, error) {
 	result, err := q.db.Exec(ctx, purgeExpiredProcessed, expiresAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const purgeGlobalBucketsBefore = `-- name: PurgeGlobalBucketsBefore :execrows
+DELETE FROM global_rate_buckets WHERE window_start < $1
+`
+
+func (q *Queries) PurgeGlobalBucketsBefore(ctx context.Context, windowStart time.Time) (int64, error) {
+	result, err := q.db.Exec(ctx, purgeGlobalBucketsBefore, windowStart)
 	if err != nil {
 		return 0, err
 	}
@@ -200,5 +282,19 @@ type SetBucketUsedParams struct {
 
 func (q *Queries) SetBucketUsed(ctx context.Context, arg SetBucketUsedParams) error {
 	_, err := q.db.Exec(ctx, setBucketUsed, arg.InstanceID, arg.WindowStart, arg.Used)
+	return err
+}
+
+const setGlobalBucketUsed = `-- name: SetGlobalBucketUsed :exec
+UPDATE global_rate_buckets SET used = $2 WHERE window_start = $1
+`
+
+type SetGlobalBucketUsedParams struct {
+	WindowStart time.Time
+	Used        int32
+}
+
+func (q *Queries) SetGlobalBucketUsed(ctx context.Context, arg SetGlobalBucketUsedParams) error {
+	_, err := q.db.Exec(ctx, setGlobalBucketUsed, arg.WindowStart, arg.Used)
 	return err
 }

@@ -298,3 +298,35 @@ func (q *Queries) PurgeRunsBefore(ctx context.Context, finishedAt *time.Time) (i
 	}
 	return result.RowsAffected(), nil
 }
+
+const recentRunStatuses = `-- name: RecentRunStatuses :many
+SELECT status FROM snatch_runs
+WHERE instance_id = $1 AND kind = $2 AND status IN ('done', 'failed')
+ORDER BY finished_at DESC
+LIMIT 10
+`
+
+type RecentRunStatusesParams struct {
+	InstanceID uuid.UUID
+	Kind       string
+}
+
+func (q *Queries) RecentRunStatuses(ctx context.Context, arg RecentRunStatusesParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, recentRunStatuses, arg.InstanceID, arg.Kind)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var status string
+		if err := rows.Scan(&status); err != nil {
+			return nil, err
+		}
+		items = append(items, status)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

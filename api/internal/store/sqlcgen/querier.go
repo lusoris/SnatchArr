@@ -40,6 +40,7 @@ type Querier interface {
 	EnqueueRun(ctx context.Context, arg EnqueueRunParams) (SnatchRun, error)
 	EnsureBucket(ctx context.Context, arg EnsureBucketParams) error
 	EnsureDefaultPolicy(ctx context.Context, arg EnsureDefaultPolicyParams) (SnatchPolicy, error)
+	EnsureGlobalBucket(ctx context.Context, windowStart time.Time) error
 	EnsureSettings(ctx context.Context, updatedAt time.Time) (Setting, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
@@ -47,6 +48,7 @@ type Querier interface {
 	GetAPIKey(ctx context.Context, id string) (ApiKey, error)
 	GetBucketUsed(ctx context.Context, arg GetBucketUsedParams) (int32, error)
 	GetDownloadClient(ctx context.Context, id uuid.UUID) (DownloadClient, error)
+	GetGlobalBucketUsed(ctx context.Context, windowStart time.Time) (int32, error)
 	GetInstance(ctx context.Context, id uuid.UUID) (Instance, error)
 	GetInstanceByConfigarrKey(ctx context.Context, configarrKey *string) (Instance, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
@@ -79,12 +81,18 @@ type Querier interface {
 	ListUsers(ctx context.Context) ([]User, error)
 	LoadSession(ctx context.Context, arg LoadSessionParams) ([]byte, error)
 	LockBucket(ctx context.Context, arg LockBucketParams) (int32, error)
+	LockGlobalBucket(ctx context.Context, windowStart time.Time) (int32, error)
+	// Afterglow backoff: the first snatch rests base_s seconds, every further snatch of the
+	// same item doubles the rest, capped at max_s.
 	MarkProcessed(ctx context.Context, arg MarkProcessedParams) error
+	ProcessedAttempts(ctx context.Context, arg ProcessedAttemptsParams) (int32, error)
 	PurgeBucketsBefore(ctx context.Context, windowStart time.Time) (int64, error)
 	PurgeEventsBefore(ctx context.Context, ts time.Time) (int64, error)
 	PurgeExpiredProcessed(ctx context.Context, expiresAt time.Time) (int64, error)
 	PurgeExpiredSessions(ctx context.Context, expiresAt time.Time) (int64, error)
+	PurgeGlobalBucketsBefore(ctx context.Context, windowStart time.Time) (int64, error)
 	PurgeRunsBefore(ctx context.Context, finishedAt *time.Time) (int64, error)
+	RecentRunStatuses(ctx context.Context, arg RecentRunStatusesParams) ([]string, error)
 	RecordDownloadClientCheck(ctx context.Context, arg RecordDownloadClientCheckParams) error
 	RecordInstanceCheck(ctx context.Context, arg RecordInstanceCheckParams) error
 	ResetProcessed(ctx context.Context, instanceID *uuid.UUID) (int64, error)
@@ -93,6 +101,7 @@ type Querier interface {
 	SavePolicyCursor(ctx context.Context, arg SavePolicyCursorParams) error
 	SaveSession(ctx context.Context, arg SaveSessionParams) error
 	SetBucketUsed(ctx context.Context, arg SetBucketUsedParams) error
+	SetGlobalBucketUsed(ctx context.Context, arg SetGlobalBucketUsedParams) error
 	UpdateDownloadClient(ctx context.Context, arg UpdateDownloadClientParams) (DownloadClient, error)
 	UpdateInstance(ctx context.Context, arg UpdateInstanceParams) (Instance, error)
 	UpdateSchedule(ctx context.Context, arg UpdateScheduleParams) (Schedule, error)

@@ -122,7 +122,11 @@ func (p *Planner) maybeEnqueue(ctx context.Context, inst domain.Instance, policy
 	if err != nil {
 		return false, err
 	}
-	if !last.IsZero() && p.clk.Now().Before(last.Add(policy.CycleInterval)) {
+	failures, err := p.runs.TrailingFailures(ctx, inst.ID, kind)
+	if err != nil {
+		return false, err
+	}
+	if due := DueAt(inst.ID, kind, last, policy.CycleInterval, failures); p.clk.Now().Before(due) {
 		return false, nil
 	}
 	for _, g := range p.gates {

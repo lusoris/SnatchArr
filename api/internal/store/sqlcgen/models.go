@@ -40,6 +40,11 @@ type DownloadClient struct {
 	UpdatedAt          time.Time
 }
 
+type GlobalRateBucket struct {
+	WindowStart time.Time
+	Used        int32
+}
+
 type Instance struct {
 	ID              uuid.UUID
 	Kind            string
@@ -57,11 +62,13 @@ type Instance struct {
 }
 
 type ProcessedItem struct {
-	InstanceID uuid.UUID
-	Kind       string
-	EntityType string
-	EntityID   int64
-	ExpiresAt  time.Time
+	InstanceID     uuid.UUID
+	Kind           string
+	EntityType     string
+	EntityID       int64
+	ExpiresAt      time.Time
+	Attempts       int32
+	LastSnatchedAt *time.Time
 }
 
 type RateBucket struct {
@@ -96,6 +103,7 @@ type Setting struct {
 	HistoryRetentionDays int32
 	UserAgent            string
 	UpdatedAt            time.Time
+	GlobalHourlyCap      int32
 }
 
 type SnatchEvent struct {
@@ -131,6 +139,8 @@ type SnatchPolicy struct {
 	CursorMissing      string
 	CursorUpgrade      string
 	UpdatedAt          time.Time
+	RecentGrabWindowH  int32
+	AfterglowMaxH      int32
 }
 
 type SnatchRun struct {

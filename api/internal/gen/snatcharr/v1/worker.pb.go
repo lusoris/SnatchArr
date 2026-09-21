@@ -142,6 +142,8 @@ const (
 	Selection_SELECTION_UNSPECIFIED Selection = 0
 	Selection_SELECTION_RANDOM      Selection = 1
 	Selection_SELECTION_SEQUENTIAL  Selection = 2
+	// Newest releases first with a slice reserved for the backlog.
+	Selection_SELECTION_RECENT Selection = 3
 )
 
 // Enum value maps for Selection.
@@ -150,11 +152,13 @@ var (
 		0: "SELECTION_UNSPECIFIED",
 		1: "SELECTION_RANDOM",
 		2: "SELECTION_SEQUENTIAL",
+		3: "SELECTION_RECENT",
 	}
 	Selection_value = map[string]int32{
 		"SELECTION_UNSPECIFIED": 0,
 		"SELECTION_RANDOM":      1,
 		"SELECTION_SEQUENTIAL":  2,
+		"SELECTION_RECENT":      3,
 	}
 )
 
@@ -577,9 +581,11 @@ type Policy struct {
 	AwaitCommand       bool                   `protobuf:"varint,8,opt,name=await_command,json=awaitCommand,proto3" json:"await_command,omitempty"`
 	PageSize           uint32                 `protobuf:"varint,9,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
 	// Opaque sequential cursor from the previous run (empty for random selection).
-	Cursor        string `protobuf:"bytes,10,opt,name=cursor,proto3" json:"cursor,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Cursor string `protobuf:"bytes,10,opt,name=cursor,proto3" json:"cursor,omitempty"`
+	// Skip items the *arr grabbed within this many hours (0 = only skip the download queue).
+	RecentGrabHours uint32 `protobuf:"varint,11,opt,name=recent_grab_hours,json=recentGrabHours,proto3" json:"recent_grab_hours,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *Policy) Reset() {
@@ -680,6 +686,13 @@ func (x *Policy) GetCursor() string {
 		return x.Cursor
 	}
 	return ""
+}
+
+func (x *Policy) GetRecentGrabHours() uint32 {
+	if x != nil {
+		return x.RecentGrabHours
+	}
+	return 0
 }
 
 type LeaseRunRequest struct {
@@ -1579,7 +1592,7 @@ var File_snatcharr_v1_worker_proto protoreflect.FileDescriptor
 
 const file_snatcharr_v1_worker_proto_rawDesc = "" +
 	"\n" +
-	"\x19snatcharr/v1/worker.proto\x12\fsnatcharr.v1\"\xd6\x03\n" +
+	"\x19snatcharr/v1/worker.proto\x12\fsnatcharr.v1\"\x82\x04\n" +
 	"\x06Policy\x12\x1b\n" +
 	"\tper_cycle\x18\x01 \x01(\rR\bperCycle\x125\n" +
 	"\tselection\x18\x02 \x01(\x0e2\x17.snatcharr.v1.SelectionR\tselection\x12%\n" +
@@ -1593,7 +1606,8 @@ const file_snatcharr_v1_worker_proto_rawDesc = "" +
 	"\rawait_command\x18\b \x01(\bR\fawaitCommand\x12\x1b\n" +
 	"\tpage_size\x18\t \x01(\rR\bpageSize\x12\x16\n" +
 	"\x06cursor\x18\n" +
-	" \x01(\tR\x06cursor\"Q\n" +
+	" \x01(\tR\x06cursor\x12*\n" +
+	"\x11recent_grab_hours\x18\v \x01(\rR\x0frecentGrabHours\"Q\n" +
 	"\x0fLeaseRunRequest\x12\x1b\n" +
 	"\tworker_id\x18\x01 \x01(\tR\bworkerId\x12!\n" +
 	"\fwait_seconds\x18\x02 \x01(\rR\vwaitSeconds\"D\n" +
@@ -1673,11 +1687,12 @@ const file_snatcharr_v1_worker_proto_rawDesc = "" +
 	"SnatchKind\x12\x1b\n" +
 	"\x17SNATCH_KIND_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13SNATCH_KIND_MISSING\x10\x01\x12\x17\n" +
-	"\x13SNATCH_KIND_UPGRADE\x10\x02*V\n" +
+	"\x13SNATCH_KIND_UPGRADE\x10\x02*l\n" +
 	"\tSelection\x12\x19\n" +
 	"\x15SELECTION_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10SELECTION_RANDOM\x10\x01\x12\x18\n" +
-	"\x14SELECTION_SEQUENTIAL\x10\x02*x\n" +
+	"\x14SELECTION_SEQUENTIAL\x10\x02\x12\x14\n" +
+	"\x10SELECTION_RECENT\x10\x03*x\n" +
 	"\n" +
 	"SonarrMode\x12\x1b\n" +
 	"\x17SONARR_MODE_UNSPECIFIED\x10\x00\x12\x18\n" +

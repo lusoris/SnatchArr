@@ -22,6 +22,7 @@ const (
 	GetInstanceOperation             OperationName = "GetInstance"
 	GetPolicyOperation               OperationName = "GetPolicy"
 	GetSessionOperation              OperationName = "GetSession"
+	GetSettingsOperation             OperationName = "GetSettings"
 	GetSetupStatusOperation          OperationName = "GetSetupStatus"
 	GetSystemStatusOperation         OperationName = "GetSystemStatus"
 	ListDownloadClientsOperation     OperationName = "ListDownloadClients"
@@ -41,4 +42,5 @@ const (
 	UpdateInstanceOperation          OperationName = "UpdateInstance"
 	UpdatePolicyOperation            OperationName = "UpdatePolicy"
 	UpdateScheduleOperation          OperationName = "UpdateSchedule"
+	UpdateSettingsOperation          OperationName = "UpdateSettings"
 )

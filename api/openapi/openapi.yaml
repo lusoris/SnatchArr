@@ -427,6 +427,40 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
 
+  /settings:
+    get:
+      tags: [system]
+      operationId: getSettings
+      summary: Runtime settings
+      responses:
+        "200":
+          description: Settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+        default:
+          $ref: "#/components/responses/Problem"
+    put:
+      tags: [system]
+      operationId: updateSettings
+      summary: Replace the runtime settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Settings"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+        default:
+          $ref: "#/components/responses/Problem"
+
   /hourly-caps:
     get:
       tags: [snatches]
@@ -931,6 +965,8 @@ components:
         - max_queue_size
         - await_command
         - page_size
+        - recent_grab_window_h
+        - afterglow_max_h
       properties:
         missing_per_cycle:
           type: integer
@@ -954,7 +990,8 @@ components:
           maximum: 500
         selection:
           type: string
-          enum: [random, sequential]
+          enum: [random, sequential, recent]
+          description: "random spreads searches over the library, sequential walks it with a cursor, recent prefers the newest releases with a slice reserved for the backlog"
         monitored_only:
           type: boolean
         skip_future_releases:
@@ -986,6 +1023,16 @@ components:
           type: integer
           minimum: 10
           maximum: 1000
+        recent_grab_window_h:
+          type: integer
+          minimum: 0
+          maximum: 720
+          description: "Skip items the *arr grabbed within this many hours (its history) and items already in its download queue; 0 keeps only the queue check."
+        afterglow_max_h:
+          type: integer
+          minimum: 1
+          maximum: 8760
+          description: "Afterglow doubles after every fruitless snatch of the same item, up to this many hours."
         updated_at:
           type: string
           format: date-time
@@ -1069,16 +1116,42 @@ components:
 
     CapStatus:
       type: object
-      required: [instance_id, used, cap, resets_at]
+      required: [scope, used, cap, resets_at]
       properties:
+        scope:
+          type: string
+          enum: [instance, global]
+          description: "global is the stamina shared by every instance (present only when configured)"
         instance_id:
           type: string
           format: uuid
+          description: Absent for the global entry
         used:
           type: integer
         cap:
           type: integer
         resets_at:
+          type: string
+          format: date-time
+
+    Settings:
+      type: object
+      required: [history_retention_days, user_agent, global_hourly_cap]
+      properties:
+        history_retention_days:
+          type: integer
+          minimum: 1
+          maximum: 3650
+        user_agent:
+          type: string
+          minLength: 1
+          maxLength: 200
+        global_hourly_cap:
+          type: integer
+          minimum: 0
+          maximum: 5000
+          description: "Shared stamina across every instance for setups where several *arr apps hit the same indexers (0 = off)."
+        updated_at:
           type: string
           format: date-time
 

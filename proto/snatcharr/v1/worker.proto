@@ -54,6 +54,8 @@ enum Selection {
   SELECTION_UNSPECIFIED = 0;
   SELECTION_RANDOM = 1;
   SELECTION_SEQUENTIAL = 2;
+  // Newest releases first with a slice reserved for the backlog.
+  SELECTION_RECENT = 3;
 }
 
 enum SonarrMode {
@@ -89,6 +91,8 @@ message Policy {
   uint32 page_size = 9;
   // Opaque sequential cursor from the previous run (empty for random selection).
   string cursor = 10;
+  // Skip items the *arr grabbed within this many hours (0 = only skip the download queue).
+  uint32 recent_grab_hours = 11;
 }
 
 message LeaseRunRequest {
