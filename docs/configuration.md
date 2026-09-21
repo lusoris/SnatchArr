@@ -79,6 +79,13 @@ Every instance has one policy (`GET/PUT /api/v1/instances/{id}/policy`).
 ## Configarr
 
 Point `APP_SNATCHARR_CONFIGARR_CONFIG` (and `_SECRETS`) at your Configarr files and every
-`sonarr`, `radarr`, `lidarr`, `readarr` and `whisparr` instance is imported and kept in
-sync. Imported instances are read-only in SnatchArr except for their snatch policy. A
-one-shot import is `POST /api/v1/configarr/import`.
+`sonarr`, `radarr`, `lidarr`, `readarr` and `whisparr` instance is imported on start and
+kept in sync: the files are polled every 30 seconds (inotify misses Kubernetes ConfigMap
+swaps, polling does not). Only `base_url`, `api_key` and the `enabled` flags are read;
+`!secret`, `!env` and `!file` values are resolved like Configarr does. Whisparr entries are
+probed to tell v2 from v3. An instance that disappears from the file is switched off, not
+deleted. Imported instances are read-only in SnatchArr except for their snatch policy.
+
+`POST /api/v1/configarr/import` runs a one-shot import (with `config_path` and
+`secrets_path` in the body, or the linked files); `GET /api/v1/configarr/status` shows
+linked mode and the last result.

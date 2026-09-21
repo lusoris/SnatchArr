@@ -265,6 +265,80 @@ func (s *Service) ensureNoDuplicateURL(ctx context.Context, baseURL string, self
 	return nil
 }
 
+// UpsertOutcome says whether an upsert created or refreshed an instance.
+type UpsertOutcome struct {
+	Instance domain.Instance
+	Inserted bool
+}
+
+// UpsertConfigarr creates or refreshes an instance owned by Configarr under a stable key.
+// A URL already used by an instance from another source is refused with ErrConflict.
+func (s *Service) UpsertConfigarr(ctx context.Context, key string, in Input) (UpsertOutcome, error) {
+	in, err := s.normalize(in)
+	if err != nil {
+		return UpsertOutcome{}, err
+	}
+	n, err := s.st.Q().CountInstancesByBaseURLAndNotSource(ctx, sqlcgen.CountInstancesByBaseURLAndNotSourceParams{Lower: in.BaseURL, Source: string(domain.SourceConfigarr)})
+	if err != nil {
+		return UpsertOutcome{}, fmt.Errorf("instances: duplicate check: %w", store.MapError(err))
+	}
+	if n > 0 {
+		return UpsertOutcome{}, fmt.Errorf("%w: %s is already configured by hand; remove it or the Configarr entry", domain.ErrConflict, in.BaseURL)
+	}
+	instID, err := s.ids.NewUUID()
+	if err != nil {
+		return UpsertOutcome{}, fmt.Errorf("instances: new id: %w", err)
+	}
+	sealed, err := s.enc.Seal([]byte(in.APIKey))
+	if err != nil {
+		return UpsertOutcome{}, fmt.Errorf("instances: seal api key: %w", err)
+	}
+	now := s.clk.Now()
+	var out UpsertOutcome
+	err = s.st.Tx(ctx, func(q *sqlcgen.Queries) error {
+		row, txErr := q.UpsertConfigarrInstance(ctx, sqlcgen.UpsertConfigarrInstanceParams{
+			ID: instID, Kind: string(in.Kind), Name: in.Name, BaseUrl: in.BaseURL, ApiKeyEnc: sealed, Enabled: in.Enabled, ConfigarrKey: &key, CreatedAt: now,
+		})
+		if txErr != nil {
+			return fmt.Errorf("upsert configarr instance: %w", txErr)
+		}
+		if _, txErr = q.EnsureDefaultPolicy(ctx, sqlcgen.EnsureDefaultPolicyParams{InstanceID: row.ID, UpdatedAt: now}); txErr != nil {
+			return fmt.Errorf("default policy: %w", txErr)
+		}
+		out = UpsertOutcome{Instance: store.InstanceFromRow(sqlcgen.Instance{
+			ID: row.ID, Kind: row.Kind, Name: row.Name, BaseUrl: row.BaseUrl, ApiKeyEnc: row.ApiKeyEnc, Enabled: row.Enabled, Source: row.Source,
+			ConfigarrKey: row.ConfigarrKey, LastSeenVersion: row.LastSeenVersion, LastCheckAt: row.LastCheckAt, LastError: row.LastError,
+			CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
+		}), Inserted: row.Inserted}
+		return nil
+	})
+	if err != nil {
+		return UpsertOutcome{}, fmt.Errorf("instances: upsert configarr: %w", store.MapError(err))
+	}
+	return out, nil
+}
+
+// DisableConfigarrNotIn disables Configarr-owned instances whose key is no longer defined.
+func (s *Service) DisableConfigarrNotIn(ctx context.Context, keepKeys []string) (int, error) {
+	if keepKeys == nil {
+		keepKeys = []string{}
+	}
+	n, err := s.st.Q().DisableConfigarrInstancesNotIn(ctx, sqlcgen.DisableConfigarrInstancesNotInParams{UpdatedAt: s.clk.Now(), KeepKeys: keepKeys})
+	if err != nil {
+		return 0, fmt.Errorf("instances: disable configarr: %w", store.MapError(err))
+	}
+	return int(n), nil
+}
+
+// KindByConfigarrKey returns the stored kind of a Configarr-owned instance, if any.
+func (s *Service) KindByConfigarrKey(ctx context.Context, key string) (domain.AppKind, bool) {
+	row, err := s.st.Q().GetInstanceByConfigarrKey(ctx, &key)
+	if err != nil {
+		return "", false
+	}
+	return domain.AppKind(row.Kind), true
+}
+
 // IsNotFound reports whether err is the not-found sentinel.
 func IsNotFound(err error) bool { return errors.Is(err, domain.ErrNotFound) }
 

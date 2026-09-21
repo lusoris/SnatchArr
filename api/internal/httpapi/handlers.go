@@ -22,6 +22,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/buildinfo"
 	"github.com/lusoris/SnatchArr/api/internal/cleanuparr"
 	"github.com/lusoris/SnatchArr/api/internal/config"
+	"github.com/lusoris/SnatchArr/api/internal/configarr"
 	"github.com/lusoris/SnatchArr/api/internal/dlclients"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
@@ -50,6 +51,7 @@ type Handlers struct {
 	settings   *settings.Service
 	seerr      *seerr.Service
 	cleanuparr *cleanuparr.Service
+	configarr  *configarr.Service
 	logger     *slog.Logger
 }
 
@@ -66,6 +68,7 @@ type Deps struct {
 	Settings   *settings.Service
 	Seerr      *seerr.Service
 	Cleanuparr *cleanuparr.Service
+	Configarr  *configarr.Service
 }
 
 // NewHandlers wires the operation handlers.
@@ -74,7 +77,7 @@ func NewHandlers(build buildinfo.Info, cfg config.Options, clk clock.Clock, auth
 ) *Handlers {
 	return &Handlers{
 		build: build, cfg: cfg, clk: clk, auth: authSvc, sessions: sessions, instances: inst, policies: pol,
-		runs: d.Runs, rec: d.Rec, budget: d.Budget, memory: d.Memory, planner: d.Planner, schedules: d.Schedules, clients: d.Clients, settings: d.Settings, seerr: d.Seerr, cleanuparr: d.Cleanuparr, logger: logger,
+		runs: d.Runs, rec: d.Rec, budget: d.Budget, memory: d.Memory, planner: d.Planner, schedules: d.Schedules, clients: d.Clients, settings: d.Settings, seerr: d.Seerr, cleanuparr: d.Cleanuparr, configarr: d.Configarr, logger: logger,
 	}
 }
 

@@ -28,6 +28,22 @@ func (q *Queries) CountInstancesByBaseURL(ctx context.Context, arg CountInstance
 	return count, err
 }
 
+const countInstancesByBaseURLAndNotSource = `-- name: CountInstancesByBaseURLAndNotSource :one
+SELECT count(*) FROM instances WHERE lower(base_url) = lower($1) AND source <> $2
+`
+
+type CountInstancesByBaseURLAndNotSourceParams struct {
+	Lower  string
+	Source string
+}
+
+func (q *Queries) CountInstancesByBaseURLAndNotSource(ctx context.Context, arg CountInstancesByBaseURLAndNotSourceParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countInstancesByBaseURLAndNotSource, arg.Lower, arg.Source)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createInstance = `-- name: CreateInstance :one
 
 INSERT INTO instances (id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, created_at, updated_at)
@@ -86,6 +102,25 @@ DELETE FROM instances WHERE id = $1
 
 func (q *Queries) DeleteInstance(ctx context.Context, id uuid.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteInstance, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const disableConfigarrInstancesNotIn = `-- name: DisableConfigarrInstancesNotIn :execrows
+UPDATE instances
+SET enabled = FALSE, last_error = 'removed from the Configarr configuration', updated_at = $1
+WHERE source = 'configarr' AND enabled AND NOT (configarr_key = ANY($2::text[]))
+`
+
+type DisableConfigarrInstancesNotInParams struct {
+	UpdatedAt time.Time
+	KeepKeys  []string
+}
+
+func (q *Queries) DisableConfigarrInstancesNotIn(ctx context.Context, arg DisableConfigarrInstancesNotInParams) (int64, error) {
+	result, err := q.db.Exec(ctx, disableConfigarrInstancesNotIn, arg.UpdatedAt, arg.KeepKeys)
 	if err != nil {
 		return 0, err
 	}
@@ -293,7 +328,7 @@ VALUES ($1, $2, $3, $4, $5, $6, 'configarr', $7, $8, $8)
 ON CONFLICT (configarr_key) DO UPDATE
 SET kind = EXCLUDED.kind, name = EXCLUDED.name, base_url = EXCLUDED.base_url,
     api_key_enc = EXCLUDED.api_key_enc, enabled = EXCLUDED.enabled, updated_at = EXCLUDED.updated_at
-RETURNING id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at
+RETURNING id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, (xmax = 0) AS inserted
 `
 
 type UpsertConfigarrInstanceParams struct {
@@ -307,7 +342,24 @@ type UpsertConfigarrInstanceParams struct {
 	CreatedAt    time.Time
 }
 
-func (q *Queries) UpsertConfigarrInstance(ctx context.Context, arg UpsertConfigarrInstanceParams) (Instance, error) {
+type UpsertConfigarrInstanceRow struct {
+	ID              uuid.UUID
+	Kind            string
+	Name            string
+	BaseUrl         string
+	ApiKeyEnc       []byte
+	Enabled         bool
+	Source          string
+	ConfigarrKey    *string
+	LastSeenVersion *string
+	LastCheckAt     *time.Time
+	LastError       *string
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	Inserted        bool
+}
+
+func (q *Queries) UpsertConfigarrInstance(ctx context.Context, arg UpsertConfigarrInstanceParams) (UpsertConfigarrInstanceRow, error) {
 	row := q.db.QueryRow(ctx, upsertConfigarrInstance,
 		arg.ID,
 		arg.Kind,
@@ -318,7 +370,7 @@ func (q *Queries) UpsertConfigarrInstance(ctx context.Context, arg UpsertConfiga
 		arg.ConfigarrKey,
 		arg.CreatedAt,
 	)
-	var i Instance
+	var i UpsertConfigarrInstanceRow
 	err := row.Scan(
 		&i.ID,
 		&i.Kind,
@@ -333,6 +385,7 @@ func (q *Queries) UpsertConfigarrInstance(ctx context.Context, arg UpsertConfiga
 		&i.LastError,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Inserted,
 	)
 	return i, err
 }

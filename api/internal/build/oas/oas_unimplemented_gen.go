@@ -157,6 +157,15 @@ func (UnimplementedHandler) GetCleanuparrStatus(ctx context.Context) (r []Cleanu
 	return r, ht.ErrNotImplemented
 }
 
+// GetConfigarrStatus implements getConfigarrStatus operation.
+//
+// Linked-mode state and the last import.
+//
+// GET /configarr/status
+func (UnimplementedHandler) GetConfigarrStatus(ctx context.Context) (r *ConfigarrStatus, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // GetDownloadClient implements getDownloadClient operation.
 //
 // Get one download client.
@@ -244,6 +253,15 @@ func (UnimplementedHandler) GetSetupStatus(ctx context.Context) (r *SetupStatus,
 //
 // GET /system/status
 func (UnimplementedHandler) GetSystemStatus(ctx context.Context) (r *SystemStatus, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ImportConfigarr implements importConfigarr operation.
+//
+// Import instances from a Configarr config.yml (defaults to the linked files).
+//
+// POST /configarr/import
+func (UnimplementedHandler) ImportConfigarr(ctx context.Context, req OptConfigarrImportRequest) (r *ConfigarrImportResult, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

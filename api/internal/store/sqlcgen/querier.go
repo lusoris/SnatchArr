@@ -15,6 +15,7 @@ type Querier interface {
 	CancelRun(ctx context.Context, arg CancelRunParams) (int64, error)
 	CompleteRun(ctx context.Context, arg CompleteRunParams) (SnatchRun, error)
 	CountInstancesByBaseURL(ctx context.Context, arg CountInstancesByBaseURLParams) (int64, error)
+	CountInstancesByBaseURLAndNotSource(ctx context.Context, arg CountInstancesByBaseURLAndNotSourceParams) (int64, error)
 	CountProcessed(ctx context.Context, arg CountProcessedParams) (int64, error)
 	CountSeerrRequests(ctx context.Context, linkID uuid.UUID) (int64, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
@@ -45,6 +46,7 @@ type Querier interface {
 	DeleteSession(ctx context.Context, id string) error
 	DeleteStaleDiscoveredDownloadClients(ctx context.Context, arg DeleteStaleDiscoveredDownloadClientsParams) (int64, error)
 	DeleteUnseenSeerrRequests(ctx context.Context, arg DeleteUnseenSeerrRequestsParams) (int64, error)
+	DisableConfigarrInstancesNotIn(ctx context.Context, arg DisableConfigarrInstancesNotInParams) (int64, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
 	EnqueueRun(ctx context.Context, arg EnqueueRunParams) (SnatchRun, error)
@@ -132,7 +134,7 @@ type Querier interface {
 	UpdateSchedule(ctx context.Context, arg UpdateScheduleParams) (Schedule, error)
 	UpdateSeerrLink(ctx context.Context, arg UpdateSeerrLinkParams) (SeerrLink, error)
 	UpdateSettings(ctx context.Context, arg UpdateSettingsParams) (Setting, error)
-	UpsertConfigarrInstance(ctx context.Context, arg UpsertConfigarrInstanceParams) (Instance, error)
+	UpsertConfigarrInstance(ctx context.Context, arg UpsertConfigarrInstanceParams) (UpsertConfigarrInstanceRow, error)
 	UpsertDiscoveredDownloadClient(ctx context.Context, arg UpsertDiscoveredDownloadClientParams) (UpsertDiscoveredDownloadClientRow, error)
 	UpsertPolicy(ctx context.Context, arg UpsertPolicyParams) (SnatchPolicy, error)
 	UpsertSeerrRequest(ctx context.Context, arg UpsertSeerrRequestParams) error

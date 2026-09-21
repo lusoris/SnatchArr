@@ -30,7 +30,15 @@ VALUES ($1, $2, $3, $4, $5, $6, 'configarr', $7, $8, $8)
 ON CONFLICT (configarr_key) DO UPDATE
 SET kind = EXCLUDED.kind, name = EXCLUDED.name, base_url = EXCLUDED.base_url,
     api_key_enc = EXCLUDED.api_key_enc, enabled = EXCLUDED.enabled, updated_at = EXCLUDED.updated_at
-RETURNING *;
+RETURNING *, (xmax = 0) AS inserted;
+
+-- name: DisableConfigarrInstancesNotIn :execrows
+UPDATE instances
+SET enabled = FALSE, last_error = 'removed from the Configarr configuration', updated_at = sqlc.arg(updated_at)
+WHERE source = 'configarr' AND enabled AND NOT (configarr_key = ANY(sqlc.arg(keep_keys)::text[]));
+
+-- name: CountInstancesByBaseURLAndNotSource :one
+SELECT count(*) FROM instances WHERE lower(base_url) = lower($1) AND source <> $2;
 
 -- name: RecordInstanceCheck :exec
 UPDATE instances

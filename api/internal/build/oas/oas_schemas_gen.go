@@ -590,6 +590,177 @@ func (s *CleanuparrStrike) SetDryRun(val bool) {
 	s.DryRun = val
 }
 
+// Ref: #/components/schemas/ConfigarrImportRequest
+type ConfigarrImportRequest struct {
+	// Path to config.yml on the API host; omit to use the linked configuration.
+	ConfigPath OptString `json:"config_path"`
+	// Path to secrets.yml; optional.
+	SecretsPath OptString `json:"secrets_path"`
+}
+
+// GetConfigPath returns the value of ConfigPath.
+func (s *ConfigarrImportRequest) GetConfigPath() OptString {
+	return s.ConfigPath
+}
+
+// GetSecretsPath returns the value of SecretsPath.
+func (s *ConfigarrImportRequest) GetSecretsPath() OptString {
+	return s.SecretsPath
+}
+
+// SetConfigPath sets the value of ConfigPath.
+func (s *ConfigarrImportRequest) SetConfigPath(val OptString) {
+	s.ConfigPath = val
+}
+
+// SetSecretsPath sets the value of SecretsPath.
+func (s *ConfigarrImportRequest) SetSecretsPath(val OptString) {
+	s.SecretsPath = val
+}
+
+// Ref: #/components/schemas/ConfigarrImportResult
+type ConfigarrImportResult struct {
+	Imported int `json:"imported"`
+	Updated  int `json:"updated"`
+	// Configarr-owned instances no longer defined, switched off.
+	Disabled int       `json:"disabled"`
+	Warnings []string  `json:"warnings"`
+	At       time.Time `json:"at"`
+}
+
+// GetImported returns the value of Imported.
+func (s *ConfigarrImportResult) GetImported() int {
+	return s.Imported
+}
+
+// GetUpdated returns the value of Updated.
+func (s *ConfigarrImportResult) GetUpdated() int {
+	return s.Updated
+}
+
+// GetDisabled returns the value of Disabled.
+func (s *ConfigarrImportResult) GetDisabled() int {
+	return s.Disabled
+}
+
+// GetWarnings returns the value of Warnings.
+func (s *ConfigarrImportResult) GetWarnings() []string {
+	return s.Warnings
+}
+
+// GetAt returns the value of At.
+func (s *ConfigarrImportResult) GetAt() time.Time {
+	return s.At
+}
+
+// SetImported sets the value of Imported.
+func (s *ConfigarrImportResult) SetImported(val int) {
+	s.Imported = val
+}
+
+// SetUpdated sets the value of Updated.
+func (s *ConfigarrImportResult) SetUpdated(val int) {
+	s.Updated = val
+}
+
+// SetDisabled sets the value of Disabled.
+func (s *ConfigarrImportResult) SetDisabled(val int) {
+	s.Disabled = val
+}
+
+// SetWarnings sets the value of Warnings.
+func (s *ConfigarrImportResult) SetWarnings(val []string) {
+	s.Warnings = val
+}
+
+// SetAt sets the value of At.
+func (s *ConfigarrImportResult) SetAt(val time.Time) {
+	s.At = val
+}
+
+// Ref: #/components/schemas/ConfigarrStatus
+type ConfigarrStatus struct {
+	// APP_SNATCHARR_CONFIGARR_CONFIG is set.
+	Linked      bool      `json:"linked"`
+	ConfigPath  OptString `json:"config_path"`
+	SecretsPath OptString `json:"secrets_path"`
+	// The files are polled every 30 s for changes.
+	Watching     bool                     `json:"watching"`
+	LastImportAt OptDateTime              `json:"last_import_at"`
+	LastResult   OptConfigarrImportResult `json:"last_result"`
+	LastError    OptString                `json:"last_error"`
+}
+
+// GetLinked returns the value of Linked.
+func (s *ConfigarrStatus) GetLinked() bool {
+	return s.Linked
+}
+
+// GetConfigPath returns the value of ConfigPath.
+func (s *ConfigarrStatus) GetConfigPath() OptString {
+	return s.ConfigPath
+}
+
+// GetSecretsPath returns the value of SecretsPath.
+func (s *ConfigarrStatus) GetSecretsPath() OptString {
+	return s.SecretsPath
+}
+
+// GetWatching returns the value of Watching.
+func (s *ConfigarrStatus) GetWatching() bool {
+	return s.Watching
+}
+
+// GetLastImportAt returns the value of LastImportAt.
+func (s *ConfigarrStatus) GetLastImportAt() OptDateTime {
+	return s.LastImportAt
+}
+
+// GetLastResult returns the value of LastResult.
+func (s *ConfigarrStatus) GetLastResult() OptConfigarrImportResult {
+	return s.LastResult
+}
+
+// GetLastError returns the value of LastError.
+func (s *ConfigarrStatus) GetLastError() OptString {
+	return s.LastError
+}
+
+// SetLinked sets the value of Linked.
+func (s *ConfigarrStatus) SetLinked(val bool) {
+	s.Linked = val
+}
+
+// SetConfigPath sets the value of ConfigPath.
+func (s *ConfigarrStatus) SetConfigPath(val OptString) {
+	s.ConfigPath = val
+}
+
+// SetSecretsPath sets the value of SecretsPath.
+func (s *ConfigarrStatus) SetSecretsPath(val OptString) {
+	s.SecretsPath = val
+}
+
+// SetWatching sets the value of Watching.
+func (s *ConfigarrStatus) SetWatching(val bool) {
+	s.Watching = val
+}
+
+// SetLastImportAt sets the value of LastImportAt.
+func (s *ConfigarrStatus) SetLastImportAt(val OptDateTime) {
+	s.LastImportAt = val
+}
+
+// SetLastResult sets the value of LastResult.
+func (s *ConfigarrStatus) SetLastResult(val OptConfigarrImportResult) {
+	s.LastResult = val
+}
+
+// SetLastError sets the value of LastError.
+func (s *ConfigarrStatus) SetLastError(val OptString) {
+	s.LastError = val
+}
+
 type CookieAuth struct {
 	APIKey string
 	Roles  []string
@@ -1798,6 +1969,98 @@ func (o OptBool) Get() (v bool, ok bool) {
 
 // Or returns value if set, or given parameter if does not.
 func (o OptBool) Or(d bool) bool {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptConfigarrImportRequest returns new OptConfigarrImportRequest with value set to v.
+func NewOptConfigarrImportRequest(v ConfigarrImportRequest) OptConfigarrImportRequest {
+	return OptConfigarrImportRequest{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptConfigarrImportRequest is optional ConfigarrImportRequest.
+type OptConfigarrImportRequest struct {
+	Value ConfigarrImportRequest
+	Set   bool
+}
+
+// IsSet returns true if OptConfigarrImportRequest was set.
+func (o OptConfigarrImportRequest) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptConfigarrImportRequest) Reset() {
+	var v ConfigarrImportRequest
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptConfigarrImportRequest) SetTo(v ConfigarrImportRequest) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptConfigarrImportRequest) Get() (v ConfigarrImportRequest, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptConfigarrImportRequest) Or(d ConfigarrImportRequest) ConfigarrImportRequest {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptConfigarrImportResult returns new OptConfigarrImportResult with value set to v.
+func NewOptConfigarrImportResult(v ConfigarrImportResult) OptConfigarrImportResult {
+	return OptConfigarrImportResult{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptConfigarrImportResult is optional ConfigarrImportResult.
+type OptConfigarrImportResult struct {
+	Value ConfigarrImportResult
+	Set   bool
+}
+
+// IsSet returns true if OptConfigarrImportResult was set.
+func (o OptConfigarrImportResult) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptConfigarrImportResult) Reset() {
+	var v ConfigarrImportResult
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptConfigarrImportResult) SetTo(v ConfigarrImportResult) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptConfigarrImportResult) Get() (v ConfigarrImportResult, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptConfigarrImportResult) Or(d ConfigarrImportResult) ConfigarrImportResult {
 	if v, ok := o.Get(); ok {
 		return v
 	}

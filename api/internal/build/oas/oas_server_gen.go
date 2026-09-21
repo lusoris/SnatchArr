@@ -104,6 +104,12 @@ type Handler interface {
 	//
 	// GET /cleanuparr/status
 	GetCleanuparrStatus(ctx context.Context) ([]CleanuparrStatus, error)
+	// GetConfigarrStatus implements getConfigarrStatus operation.
+	//
+	// Linked-mode state and the last import.
+	//
+	// GET /configarr/status
+	GetConfigarrStatus(ctx context.Context) (*ConfigarrStatus, error)
 	// GetDownloadClient implements getDownloadClient operation.
 	//
 	// Get one download client.
@@ -164,6 +170,12 @@ type Handler interface {
 	//
 	// GET /system/status
 	GetSystemStatus(ctx context.Context) (*SystemStatus, error)
+	// ImportConfigarr implements importConfigarr operation.
+	//
+	// Import instances from a Configarr config.yml (defaults to the linked files).
+	//
+	// POST /configarr/import
+	ImportConfigarr(ctx context.Context, req OptConfigarrImportRequest) (*ConfigarrImportResult, error)
 	// ImportSeerrInstances implements importSeerrInstances operation.
 	//
 	// Create instances from the Sonarr/Radarr servers configured in Seerr.

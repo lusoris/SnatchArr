@@ -29,6 +29,8 @@ tags:
     description: Seerr requests snatched first (read-only; nothing is written to Seerr)
   - name: cleanuparr
     description: Cleanuparr status and strikes (read-only; complementary to snatching)
+  - name: configarr
+    description: Instances imported from a Configarr config.yml (ADR-0003)
 security:
   - cookieAuth: []
   - bearerAuth: []
@@ -1058,6 +1060,42 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
 
+  /configarr/import:
+    post:
+      tags: [configarr]
+      operationId: importConfigarr
+      summary: Import instances from a Configarr config.yml (defaults to the linked files)
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfigarrImportRequest"
+      responses:
+        "200":
+          description: Import result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConfigarrImportResult"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /configarr/status:
+    get:
+      tags: [configarr]
+      operationId: getConfigarrStatus
+      summary: Linked-mode state and the last import
+      responses:
+        "200":
+          description: Status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConfigarrStatus"
+        default:
+          $ref: "#/components/responses/Problem"
+
 components:
   securitySchemes:
     cookieAuth:
@@ -1957,3 +1995,54 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/CleanuparrStrike"
+
+    ConfigarrImportRequest:
+      type: object
+      properties:
+        config_path:
+          type: string
+          description: Path to config.yml on the API host; omit to use the linked configuration
+        secrets_path:
+          type: string
+          description: Path to secrets.yml; optional
+
+    ConfigarrImportResult:
+      type: object
+      required: [imported, updated, disabled, warnings, at]
+      properties:
+        imported:
+          type: integer
+        updated:
+          type: integer
+        disabled:
+          type: integer
+          description: Configarr-owned instances no longer defined, switched off
+        warnings:
+          type: array
+          items:
+            type: string
+        at:
+          type: string
+          format: date-time
+
+    ConfigarrStatus:
+      type: object
+      required: [linked, watching]
+      properties:
+        linked:
+          type: boolean
+          description: APP_SNATCHARR_CONFIGARR_CONFIG is set
+        config_path:
+          type: string
+        secrets_path:
+          type: string
+        watching:
+          type: boolean
+          description: The files are polled every 30 s for changes
+        last_import_at:
+          type: string
+          format: date-time
+        last_result:
+          $ref: "#/components/schemas/ConfigarrImportResult"
+        last_error:
+          type: string
