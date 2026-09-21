@@ -88,6 +88,20 @@ impl PagePlan {
         }
     }
 
+    /// Reads the list from the front with the full page allowance: for focused runs that
+    /// must find one specific entity.
+    #[must_use]
+    pub fn sweep(total_records: u32, page_size: u32) -> Self {
+        let total_pages = total_records.div_ceil(page_size.max(1));
+        if total_pages == 0 {
+            return Self {
+                pages: Vec::new(),
+                next_cursor: 1,
+            };
+        }
+        Self::sequential(total_pages, MAX_PAGES_PER_CYCLE.min(total_pages), 1)
+    }
+
     fn random<R: RngExt>(total_pages: u32, count: u32, rng: &mut R) -> Self {
         let mut pages = Vec::with_capacity(count as usize);
         // Bounded rejection sampling: at most 8 * count draws.
@@ -190,6 +204,31 @@ pub fn select<R: RngExt>(
         }
         Selection::Recent => select_recent(candidates, want, rng),
     }
+}
+
+/// Like [`select`], but candidates whose id is in `priority_ids` or whose group is in
+/// `priority_groups` (open Seerr requests) are picked before anything else. Within each
+/// half the normal selection applies.
+#[must_use]
+pub fn select_prioritised<R: RngExt>(
+    candidates: &[Candidate],
+    want: usize,
+    selection: Selection,
+    priority_ids: &[i64],
+    priority_groups: &[i64],
+    rng: &mut R,
+) -> Vec<Candidate> {
+    if priority_ids.is_empty() && priority_groups.is_empty() {
+        return select(candidates, want, selection, rng);
+    }
+    let (first, rest): (Vec<Candidate>, Vec<Candidate>) = candidates
+        .iter()
+        .cloned()
+        .partition(|c| priority_ids.contains(&c.id) || priority_groups.contains(&c.group));
+    let mut picked = select(&first, want, selection, rng);
+    let remaining = want.saturating_sub(picked.len());
+    picked.extend(select(&rest, remaining, selection, rng));
+    picked
 }
 
 /// Moves `want` uniformly chosen elements to the front (partial Fisher-Yates).
@@ -594,6 +633,36 @@ mod tests {
             "the fifth comes from the backlog"
         );
         assert!(select(&cands, 1, Selection::Recent, &mut rng)[0].id == 10);
+    }
+
+    #[test]
+    fn prioritised_selection_puts_requests_first() {
+        let mut rng = SmallRng::seed_from_u64(3);
+        let cands: Vec<Candidate> = (1..=20).map(|i| cand(i, i % 4, 1, Some(i), true)).collect();
+        let picked = select_prioritised(&cands, 3, Selection::Random, &[7], &[2], &mut rng);
+        assert_eq!(picked.len(), 3);
+        assert!(
+            picked.iter().all(|c| c.id == 7 || c.group == 2),
+            "all picks are requested: {picked:?}"
+        );
+        let few = select_prioritised(&cands, 8, Selection::Sequential, &[7], &[], &mut rng);
+        assert_eq!(few[0].id, 7, "the requested movie comes first");
+        assert_eq!(few.len(), 8);
+        assert_eq!(
+            select_prioritised(&cands, 2, Selection::Sequential, &[], &[], &mut rng),
+            select(&cands, 2, Selection::Sequential, &mut rng)
+        );
+    }
+
+    #[test]
+    fn sweep_reads_from_the_front() {
+        let plan = PagePlan::sweep(2500, 500);
+        assert_eq!(plan.pages, vec![1, 2, 3, 4, 5]);
+        assert_eq!(PagePlan::sweep(0, 500).pages.len(), 0);
+        assert_eq!(
+            PagePlan::sweep(100_000, 100).pages.len() as u32,
+            MAX_PAGES_PER_CYCLE
+        );
     }
 
     #[test]

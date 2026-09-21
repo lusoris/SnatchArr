@@ -803,8 +803,12 @@ type Run struct {
 	Policy           *Policy                `protobuf:"bytes,7,opt,name=policy,proto3" json:"policy,omitempty"`
 	LeaseExpiresUnix int64                  `protobuf:"varint,8,opt,name=lease_expires_unix,json=leaseExpiresUnix,proto3" json:"lease_expires_unix,omitempty"`
 	UserAgent        string                 `protobuf:"bytes,9,opt,name=user_agent,json=userAgent,proto3" json:"user_agent,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// A focused run (quickie for one Seerr request) only considers this movie/album/book id...
+	FocusEntityId int64 `protobuf:"varint,10,opt,name=focus_entity_id,json=focusEntityId,proto3" json:"focus_entity_id,omitempty"`
+	// ...or every item of this series/artist/author id. Zero means unfocused.
+	FocusGroupId  int64 `protobuf:"varint,11,opt,name=focus_group_id,json=focusGroupId,proto3" json:"focus_group_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Run) Reset() {
@@ -898,6 +902,20 @@ func (x *Run) GetUserAgent() string {
 		return x.UserAgent
 	}
 	return ""
+}
+
+func (x *Run) GetFocusEntityId() int64 {
+	if x != nil {
+		return x.FocusEntityId
+	}
+	return 0
+}
+
+func (x *Run) GetFocusGroupId() int64 {
+	if x != nil {
+		return x.FocusGroupId
+	}
+	return 0
 }
 
 type HeartbeatRequest struct {
@@ -1067,8 +1085,12 @@ func (x *FilterCandidatesRequest) GetEntityIds() []int64 {
 type FilterCandidatesResponse struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	UnprocessedIds []int64                `protobuf:"varint,1,rep,packed,name=unprocessed_ids,json=unprocessedIds,proto3" json:"unprocessed_ids,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Entity ids (movies) open Seerr requests point at; the worker snatches them first.
+	PriorityIds []int64 `protobuf:"varint,2,rep,packed,name=priority_ids,json=priorityIds,proto3" json:"priority_ids,omitempty"`
+	// Group ids (series) open Seerr requests point at; every episode of them comes first.
+	PriorityGroupIds []int64 `protobuf:"varint,3,rep,packed,name=priority_group_ids,json=priorityGroupIds,proto3" json:"priority_group_ids,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *FilterCandidatesResponse) Reset() {
@@ -1104,6 +1126,20 @@ func (*FilterCandidatesResponse) Descriptor() ([]byte, []int) {
 func (x *FilterCandidatesResponse) GetUnprocessedIds() []int64 {
 	if x != nil {
 		return x.UnprocessedIds
+	}
+	return nil
+}
+
+func (x *FilterCandidatesResponse) GetPriorityIds() []int64 {
+	if x != nil {
+		return x.PriorityIds
+	}
+	return nil
+}
+
+func (x *FilterCandidatesResponse) GetPriorityGroupIds() []int64 {
+	if x != nil {
+		return x.PriorityGroupIds
 	}
 	return nil
 }
@@ -1409,10 +1445,12 @@ func (x *ReportEventsResponse) GetAccepted() uint32 {
 }
 
 type SearchedItem struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	EntityType    string                 `protobuf:"bytes,1,opt,name=entity_type,json=entityType,proto3" json:"entity_type,omitempty"`
-	EntityId      int64                  `protobuf:"varint,2,opt,name=entity_id,json=entityId,proto3" json:"entity_id,omitempty"`
-	Title         string                 `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	EntityType string                 `protobuf:"bytes,1,opt,name=entity_type,json=entityType,proto3" json:"entity_type,omitempty"`
+	EntityId   int64                  `protobuf:"varint,2,opt,name=entity_id,json=entityId,proto3" json:"entity_id,omitempty"`
+	Title      string                 `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
+	// Parent id (series, artist, author); equals entity_id for movies.
+	GroupId       int64 `protobuf:"varint,4,opt,name=group_id,json=groupId,proto3" json:"group_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1466,6 +1504,13 @@ func (x *SearchedItem) GetTitle() string {
 		return x.Title
 	}
 	return ""
+}
+
+func (x *SearchedItem) GetGroupId() int64 {
+	if x != nil {
+		return x.GroupId
+	}
+	return 0
 }
 
 type CompleteRunRequest struct {
@@ -1613,7 +1658,7 @@ const file_snatcharr_v1_worker_proto_rawDesc = "" +
 	"\fwait_seconds\x18\x02 \x01(\rR\vwaitSeconds\"D\n" +
 	"\x10LeaseRunResponse\x12(\n" +
 	"\x03run\x18\x01 \x01(\v2\x11.snatcharr.v1.RunH\x00R\x03run\x88\x01\x01B\x06\n" +
-	"\x04_run\"\xc7\x02\n" +
+	"\x04_run\"\x95\x03\n" +
 	"\x03Run\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12\x1f\n" +
 	"\vinstance_id\x18\x02 \x01(\tR\n" +
@@ -1625,7 +1670,10 @@ const file_snatcharr_v1_worker_proto_rawDesc = "" +
 	"\x06policy\x18\a \x01(\v2\x14.snatcharr.v1.PolicyR\x06policy\x12,\n" +
 	"\x12lease_expires_unix\x18\b \x01(\x03R\x10leaseExpiresUnix\x12\x1d\n" +
 	"\n" +
-	"user_agent\x18\t \x01(\tR\tuserAgent\"F\n" +
+	"user_agent\x18\t \x01(\tR\tuserAgent\x12&\n" +
+	"\x0ffocus_entity_id\x18\n" +
+	" \x01(\x03R\rfocusEntityId\x12$\n" +
+	"\x0efocus_group_id\x18\v \x01(\x03R\ffocusGroupId\"F\n" +
 	"\x10HeartbeatRequest\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12\x1b\n" +
 	"\tworker_id\x18\x02 \x01(\tR\bworkerId\"\x81\x01\n" +
@@ -1637,9 +1685,11 @@ const file_snatcharr_v1_worker_proto_rawDesc = "" +
 	"\ventity_type\x18\x02 \x01(\tR\n" +
 	"entityType\x12\x1d\n" +
 	"\n" +
-	"entity_ids\x18\x03 \x03(\x03R\tentityIds\"C\n" +
+	"entity_ids\x18\x03 \x03(\x03R\tentityIds\"\x94\x01\n" +
 	"\x18FilterCandidatesResponse\x12'\n" +
-	"\x0funprocessed_ids\x18\x01 \x03(\x03R\x0eunprocessedIds\"K\n" +
+	"\x0funprocessed_ids\x18\x01 \x03(\x03R\x0eunprocessedIds\x12!\n" +
+	"\fpriority_ids\x18\x02 \x03(\x03R\vpriorityIds\x12,\n" +
+	"\x12priority_group_ids\x18\x03 \x03(\x03R\x10priorityGroupIds\"K\n" +
 	"\x14AcquireBudgetRequest\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12\x1c\n" +
 	"\trequested\x18\x02 \x01(\rR\trequested\"\x8f\x01\n" +
@@ -1661,12 +1711,13 @@ const file_snatcharr_v1_worker_proto_rawDesc = "" +
 	"\x13ReportEventsRequest\x12/\n" +
 	"\x05event\x18\x01 \x01(\v2\x19.snatcharr.v1.SnatchEventR\x05event\"2\n" +
 	"\x14ReportEventsResponse\x12\x1a\n" +
-	"\baccepted\x18\x01 \x01(\rR\baccepted\"b\n" +
+	"\baccepted\x18\x01 \x01(\rR\baccepted\"}\n" +
 	"\fSearchedItem\x12\x1f\n" +
 	"\ventity_type\x18\x01 \x01(\tR\n" +
 	"entityType\x12\x1b\n" +
 	"\tentity_id\x18\x02 \x01(\x03R\bentityId\x12\x14\n" +
-	"\x05title\x18\x03 \x01(\tR\x05title\"\xe2\x01\n" +
+	"\x05title\x18\x03 \x01(\tR\x05title\x12\x19\n" +
+	"\bgroup_id\x18\x04 \x01(\x03R\agroupId\"\xe2\x01\n" +
 	"\x12CompleteRunRequest\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12\x1b\n" +
 	"\tworker_id\x18\x02 \x01(\tR\bworkerId\x122\n" +

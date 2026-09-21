@@ -310,6 +310,15 @@ func (UnimplementedHandler) ResetState(ctx context.Context, req OptStateReset) (
 	return r, ht.ErrNotImplemented
 }
 
+// SnatchSeerrRequest implements snatchSeerrRequest operation.
+//
+// Quickie focused on one request (missing snatch of its instance, limited to that movie or series).
+//
+// POST /seerr/requests/{linkId}/{requestId}/snatch
+func (UnimplementedHandler) SnatchSeerrRequest(ctx context.Context, params SnatchSeerrRequestParams) (r *Run, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // SyncSeerrLink implements syncSeerrLink operation.
 //
 // Refresh the request cache now (also runs every five minutes).

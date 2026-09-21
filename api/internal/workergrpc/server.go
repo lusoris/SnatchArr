@@ -133,7 +133,16 @@ func (s *Server) leaseResponse(ctx context.Context, run domain.Run) (*snatcharrv
 		Policy:           pol,
 		LeaseExpiresUnix: expires,
 		UserAgent:        userAgent,
+		FocusEntityId:    deref64(run.FocusEntityID),
+		FocusGroupId:     deref64(run.FocusGroupID),
 	}}, nil
+}
+
+func deref64(p *int64) int64 {
+	if p == nil {
+		return 0
+	}
+	return *p
 }
 
 // pace applies download-client bandwidth pacing to the per-cycle count. A pacer failure
@@ -193,7 +202,32 @@ func (s *Server) FilterCandidates(ctx context.Context, req *snatcharrv1.FilterCa
 	if err != nil {
 		return nil, toStatus(err)
 	}
-	return &snatcharrv1.FilterCandidatesResponse{UnprocessedIds: ids}, nil
+	resp := &snatcharrv1.FilterCandidatesResponse{UnprocessedIds: ids}
+	s.addPriorities(ctx, run, resp)
+	return resp, nil
+}
+
+// addPriorities attaches the entities open Seerr requests point at: movie ids for
+// Radarr-shaped instances, series ids (groups) for Sonarr-shaped ones. A lookup failure
+// only costs the priority, never the run.
+func (s *Server) addPriorities(ctx context.Context, run domain.Run, resp *snatcharrv1.FilterCandidatesResponse) {
+	inst, err := s.instances.Get(ctx, run.InstanceID)
+	if err != nil {
+		return
+	}
+	ids, err := s.seerr.PriorityFor(ctx, run.InstanceID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "workergrpc: seerr priorities", slog.String("error", err.Error()))
+		return
+	}
+	switch inst.Kind {
+	case domain.KindRadarr, domain.KindWhisparrV3:
+		resp.PriorityIds = ids
+	case domain.KindSonarr, domain.KindWhisparrV2:
+		resp.PriorityGroupIds = ids
+	case domain.KindLidarr, domain.KindReadarr:
+		// Seerr has no music or book requests.
+	}
 }
 
 // AcquireBudget debits the instance's hourly bucket (schedule overrides applied).
@@ -322,18 +356,23 @@ func (s *Server) recordBackoff(ctx context.Context, run domain.Run, policy domai
 
 func (s *Server) remember(ctx context.Context, run domain.Run, policy domain.Policy, searched []*snatcharrv1.SearchedItem) error {
 	byType := map[string][]int64{}
+	requested := make([]int64, 0, len(searched))
 	for _, item := range searched {
 		byType[item.GetEntityType()] = append(byType[item.GetEntityType()], item.GetEntityId())
+		// Seerr requests point at movies (the entity) or series (the group).
+		if item.GetEntityType() == "movie" {
+			requested = append(requested, item.GetEntityId())
+		} else if item.GetGroupId() > 0 {
+			requested = append(requested, item.GetGroupId())
+		}
 	}
 	for entityType, ids := range byType {
 		if err := s.memory.Mark(ctx, run.InstanceID, run.Kind, entityType, ids, policy.ProcessedTTL, policy.AfterglowMax); err != nil {
 			return err
 		}
-		if entityType == "movie" {
-			if err := s.seerr.MarkSnatched(ctx, run.InstanceID, ids); err != nil {
-				s.logger.WarnContext(ctx, "workergrpc: mark seerr requests", slog.String("error", err.Error()))
-			}
-		}
+	}
+	if err := s.seerr.MarkSnatched(ctx, run.InstanceID, requested); err != nil {
+		s.logger.WarnContext(ctx, "workergrpc: mark seerr requests", slog.String("error", err.Error()))
 	}
 	return nil
 }

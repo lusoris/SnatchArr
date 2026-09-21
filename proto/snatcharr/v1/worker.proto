@@ -115,6 +115,10 @@ message Run {
   Policy policy = 7;
   int64 lease_expires_unix = 8;
   string user_agent = 9;
+  // A focused run (quickie for one Seerr request) only considers this movie/album/book id...
+  int64 focus_entity_id = 10;
+  // ...or every item of this series/artist/author id. Zero means unfocused.
+  int64 focus_group_id = 11;
 }
 
 message HeartbeatRequest {
@@ -141,6 +145,10 @@ message FilterCandidatesRequest {
 
 message FilterCandidatesResponse {
   repeated int64 unprocessed_ids = 1;
+  // Entity ids (movies) open Seerr requests point at; the worker snatches them first.
+  repeated int64 priority_ids = 2;
+  // Group ids (series) open Seerr requests point at; every episode of them comes first.
+  repeated int64 priority_group_ids = 3;
 }
 
 message AcquireBudgetRequest {
@@ -205,6 +213,8 @@ message SearchedItem {
   string entity_type = 1;
   int64 entity_id = 2;
   string title = 3;
+  // Parent id (series, artist, author); equals entity_id for movies.
+  int64 group_id = 4;
 }
 
 message CompleteRunRequest {

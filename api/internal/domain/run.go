@@ -35,6 +35,9 @@ type Run struct {
 	FinishedAt     *time.Time
 	SearchedCount  int
 	Error          string
+	// FocusEntityID / FocusGroupID narrow a quickie to one Seerr request (nil = unfocused).
+	FocusEntityID *int64
+	FocusGroupID  *int64
 }
 
 // Event is one history entry, also streamed live over SSE.

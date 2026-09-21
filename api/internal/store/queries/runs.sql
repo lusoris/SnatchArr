@@ -2,8 +2,8 @@
 -- SPDX-License-Identifier: EUPL-1.2
 
 -- name: EnqueueRun :one
-INSERT INTO snatch_runs (id, instance_id, kind, status, queued_at)
-VALUES ($1, $2, $3, 'queued', $4)
+INSERT INTO snatch_runs (id, instance_id, kind, status, queued_at, focus_entity_id, focus_group_id)
+VALUES ($1, $2, $3, 'queued', $4, $5, $6)
 RETURNING *;
 
 -- name: HasActiveRun :one

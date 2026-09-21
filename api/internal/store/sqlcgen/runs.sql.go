@@ -76,16 +76,18 @@ func (q *Queries) CompleteRun(ctx context.Context, arg CompleteRunParams) (Snatc
 
 const enqueueRun = `-- name: EnqueueRun :one
 
-INSERT INTO snatch_runs (id, instance_id, kind, status, queued_at)
-VALUES ($1, $2, $3, 'queued', $4)
+INSERT INTO snatch_runs (id, instance_id, kind, status, queued_at, focus_entity_id, focus_group_id)
+VALUES ($1, $2, $3, 'queued', $4, $5, $6)
 RETURNING id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error, focus_entity_id, focus_group_id
 `
 
 type EnqueueRunParams struct {
-	ID         uuid.UUID
-	InstanceID uuid.UUID
-	Kind       string
-	QueuedAt   time.Time
+	ID            uuid.UUID
+	InstanceID    uuid.UUID
+	Kind          string
+	QueuedAt      time.Time
+	FocusEntityID *int64
+	FocusGroupID  *int64
 }
 
 // SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
@@ -96,6 +98,8 @@ func (q *Queries) EnqueueRun(ctx context.Context, arg EnqueueRunParams) (SnatchR
 		arg.InstanceID,
 		arg.Kind,
 		arg.QueuedAt,
+		arg.FocusEntityID,
+		arg.FocusGroupID,
 	)
 	var i SnatchRun
 	err := row.Scan(

@@ -801,6 +801,29 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
 
+  /seerr/requests/{linkId}/{requestId}/snatch:
+    parameters:
+      - $ref: "#/components/parameters/LinkId"
+      - name: requestId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    post:
+      tags: [seerr]
+      operationId: snatchSeerrRequest
+      summary: Quickie focused on one request (missing snatch of its instance, limited to that movie or series)
+      responses:
+        "201":
+          description: Queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Run"
+        default:
+          $ref: "#/components/responses/Problem"
+
   /seerr/{linkId}:
     parameters:
       - $ref: "#/components/parameters/LinkId"
@@ -1261,6 +1284,14 @@ components:
           type: integer
         error:
           type: string
+        focus_entity_id:
+          type: integer
+          format: int64
+          description: Set for a quickie limited to one movie (Seerr request)
+        focus_group_id:
+          type: integer
+          format: int64
+          description: Set for a quickie limited to one series (Seerr request)
 
     Event:
       type: object

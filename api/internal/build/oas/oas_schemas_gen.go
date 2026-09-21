@@ -1863,6 +1863,10 @@ type Run struct {
 	FinishedAt     OptDateTime `json:"finished_at"`
 	SearchedCount  int         `json:"searched_count"`
 	Error          OptString   `json:"error"`
+	// Set for a quickie limited to one movie (Seerr request).
+	FocusEntityID OptInt64 `json:"focus_entity_id"`
+	// Set for a quickie limited to one series (Seerr request).
+	FocusGroupID OptInt64 `json:"focus_group_id"`
 }
 
 // GetID returns the value of ID.
@@ -1920,6 +1924,16 @@ func (s *Run) GetError() OptString {
 	return s.Error
 }
 
+// GetFocusEntityID returns the value of FocusEntityID.
+func (s *Run) GetFocusEntityID() OptInt64 {
+	return s.FocusEntityID
+}
+
+// GetFocusGroupID returns the value of FocusGroupID.
+func (s *Run) GetFocusGroupID() OptInt64 {
+	return s.FocusGroupID
+}
+
 // SetID sets the value of ID.
 func (s *Run) SetID(val uuid.UUID) {
 	s.ID = val
@@ -1973,6 +1987,16 @@ func (s *Run) SetSearchedCount(val int) {
 // SetError sets the value of Error.
 func (s *Run) SetError(val OptString) {
 	s.Error = val
+}
+
+// SetFocusEntityID sets the value of FocusEntityID.
+func (s *Run) SetFocusEntityID(val OptInt64) {
+	s.FocusEntityID = val
+}
+
+// SetFocusGroupID sets the value of FocusGroupID.
+func (s *Run) SetFocusGroupID(val OptInt64) {
+	s.FocusGroupID = val
 }
 
 type RunStatus string

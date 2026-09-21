@@ -87,8 +87,15 @@ func runToOAS(r domain.Run) oas.Run {
 		ID: r.ID, InstanceID: r.InstanceID, Kind: oas.SnatchKind(r.Kind), Status: oas.RunStatus(r.Status),
 		LeasedBy: optString(r.LeasedBy), LeaseExpiresAt: optTime(r.LeaseExpiresAt), QueuedAt: r.QueuedAt,
 		StartedAt: optTime(r.StartedAt), FinishedAt: optTime(r.FinishedAt), SearchedCount: r.SearchedCount,
-		Error: optString(r.Error),
+		Error: optString(r.Error), FocusEntityID: optInt64(r.FocusEntityID), FocusGroupID: optInt64(r.FocusGroupID),
 	}
+}
+
+func optInt64(p *int64) oas.OptInt64 {
+	if p == nil {
+		return oas.OptInt64{}
+	}
+	return oas.NewOptInt64(*p)
 }
 
 func eventToOAS(e domain.Event) oas.Event {

@@ -206,6 +206,12 @@ type Handler interface {
 	//
 	// POST /state/reset
 	ResetState(ctx context.Context, req OptStateReset) (*StateResetResult, error)
+	// SnatchSeerrRequest implements snatchSeerrRequest operation.
+	//
+	// Quickie focused on one request (missing snatch of its instance, limited to that movie or series).
+	//
+	// POST /seerr/requests/{linkId}/{requestId}/snatch
+	SnatchSeerrRequest(ctx context.Context, params SnatchSeerrRequestParams) (*Run, error)
 	// SyncSeerrLink implements syncSeerrLink operation.
 	//
 	// Refresh the request cache now (also runs every five minutes).

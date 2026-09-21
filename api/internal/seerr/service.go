@@ -22,6 +22,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
 	"github.com/lusoris/SnatchArr/api/internal/seerrclient"
+	"github.com/lusoris/SnatchArr/api/internal/snatch"
 	"github.com/lusoris/SnatchArr/api/internal/store"
 	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
 )
@@ -71,14 +72,54 @@ type Service struct {
 	client    seerrclient.Client
 	resolver  arrclient.Resolver
 	instances *instances.Service
+	runs      *snatch.Runs
+	rec       *snatch.Recorder
 	logger    *slog.Logger
 }
 
 // New wires the service.
 func New(st *store.Store, enc *crypto.Encryptor, clk clock.Clock, ids id.Generator, client seerrclient.Client,
-	resolver arrclient.Resolver, inst *instances.Service, logger *slog.Logger,
+	resolver arrclient.Resolver, inst *instances.Service, runs *snatch.Runs, rec *snatch.Recorder, logger *slog.Logger,
 ) *Service {
-	return &Service{st: st, enc: enc, clk: clk, ids: ids, client: client, resolver: resolver, instances: inst, logger: logger}
+	return &Service{st: st, enc: enc, clk: clk, ids: ids, client: client, resolver: resolver, instances: inst, runs: runs, rec: rec, logger: logger}
+}
+
+// SnatchRequest queues a quickie focused on one resolved request: a missing snatch of the
+// request's instance limited to its movie or series.
+func (s *Service) SnatchRequest(ctx context.Context, linkID uuid.UUID, requestID int) (domain.Run, error) {
+	row, err := s.st.Q().GetSeerrRequest(ctx, sqlcgen.GetSeerrRequestParams{LinkID: linkID, RequestID: int32(min(max(requestID, 0), 1<<30))}) // #nosec G115 -- clamped
+	if err != nil {
+		return domain.Run{}, fmt.Errorf("seerr: request: %w", store.MapError(err))
+	}
+	r := store.SeerrRequestFromRow(row)
+	if !r.Resolved() {
+		return domain.Run{}, fmt.Errorf("%w: request %d is not resolved: %s", domain.ErrConflict, requestID, UnresolvedReason(r))
+	}
+	var entity, group *int64
+	if r.MediaType == domain.SeerrMovie {
+		entity = r.EntityID
+	} else {
+		group = r.EntityID
+	}
+	run, created, err := s.runs.EnqueueFocused(ctx, *r.InstanceID, domain.SnatchMissing, entity, group)
+	if err != nil {
+		return domain.Run{}, err
+	}
+	if !created {
+		return domain.Run{}, fmt.Errorf("%w: a missing snatch is already queued or running for this instance", domain.ErrConflict)
+	}
+	title := r.Title
+	if title == "" {
+		title = fmt.Sprintf("%s request %d", r.MediaType, r.RequestID)
+	}
+	err = s.rec.Record(ctx, domain.Event{
+		RunID: &run.ID, InstanceID: run.InstanceID, Level: "info", Type: "run_queued",
+		Title: "Quickie for a Seerr request: " + title, Detail: "requested by " + r.RequestedBy,
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "seerr: record quickie", slog.String("error", err.Error()))
+	}
+	return run, nil
 }
 
 // List returns every link without secrets.

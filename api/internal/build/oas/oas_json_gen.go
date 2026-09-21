@@ -3200,9 +3200,21 @@ func (s *Run) encodeFields(e *jx.Encoder) {
 			s.Error.Encode(e)
 		}
 	}
+	{
+		if s.FocusEntityID.Set {
+			e.FieldStart("focus_entity_id")
+			s.FocusEntityID.Encode(e)
+		}
+	}
+	{
+		if s.FocusGroupID.Set {
+			e.FieldStart("focus_group_id")
+			s.FocusGroupID.Encode(e)
+		}
+	}
 }
 
-var jsonFieldsNameOfRun = [11]string{
+var jsonFieldsNameOfRun = [13]string{
 	0:  "id",
 	1:  "instance_id",
 	2:  "kind",
@@ -3214,6 +3226,8 @@ var jsonFieldsNameOfRun = [11]string{
 	8:  "finished_at",
 	9:  "searched_count",
 	10: "error",
+	11: "focus_entity_id",
+	12: "focus_group_id",
 }
 
 // Decode decodes Run from json.
@@ -3342,6 +3356,26 @@ func (s *Run) Decode(d *jx.Decoder) error {
 				return nil
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"error\"")
+			}
+		case "focus_entity_id":
+			if err := func() error {
+				s.FocusEntityID.Reset()
+				if err := s.FocusEntityID.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"focus_entity_id\"")
+			}
+		case "focus_group_id":
+			if err := func() error {
+				s.FocusGroupID.Reset()
+				if err := s.FocusGroupID.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"focus_group_id\"")
 			}
 		default:
 			return d.Skip()

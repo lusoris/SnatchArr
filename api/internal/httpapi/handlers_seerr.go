@@ -114,6 +114,19 @@ func (h *Handlers) ImportSeerrInstances(ctx context.Context, params oas.ImportSe
 	return &oas.SeerrImportResult{Created: emptyIfNil(res.Created), Skipped: emptyIfNil(res.Skipped)}, nil
 }
 
+// SnatchSeerrRequest queues a quickie focused on one request.
+func (h *Handlers) SnatchSeerrRequest(ctx context.Context, params oas.SnatchSeerrRequestParams) (*oas.Run, error) {
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
+	}
+	run, err := h.seerr.SnatchRequest(ctx, params.LinkId, params.RequestId)
+	if err != nil {
+		return nil, err
+	}
+	out := runToOAS(run)
+	return &out, nil
+}
+
 // ListSeerrRequests returns the cached requests with their snatch status.
 func (h *Handlers) ListSeerrRequests(ctx context.Context) ([]oas.SeerrRequest, error) {
 	list, err := h.seerr.Requests(ctx)

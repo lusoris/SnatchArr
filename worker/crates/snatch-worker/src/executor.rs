@@ -124,6 +124,36 @@ impl Events {
     }
 }
 
+/// A run limited to one entity (movie) or group (series): a quickie for a Seerr request.
+#[derive(Debug, Clone, Copy)]
+struct Focus {
+    entity: Option<i64>,
+    group: Option<i64>,
+}
+
+impl Focus {
+    fn of(run: &Run) -> Option<Self> {
+        let entity = (run.focus_entity_id > 0).then_some(run.focus_entity_id);
+        let group = (run.focus_group_id > 0).then_some(run.focus_group_id);
+        (entity.is_some() || group.is_some()).then_some(Self { entity, group })
+    }
+
+    fn matches(self, c: &Candidate) -> bool {
+        self.entity == Some(c.id) || self.group == Some(c.group)
+    }
+}
+
+/// Page size a focused run sweeps the wanted list with.
+const FOCUS_PAGE_SIZE: u32 = 500;
+
+/// What candidate collection hands to selection.
+struct Collected {
+    keep: Vec<Candidate>,
+    busy: usize,
+    priority_ids: Vec<i64>,
+    priority_groups: Vec<i64>,
+}
+
 /// Everything derived from the lease before any I/O.
 struct Prepared {
     kind: Kind,
@@ -131,6 +161,7 @@ struct Prepared {
     policy: Policy,
     arr: ArrClient,
     page_size: u32,
+    focus: Option<Focus>,
 }
 
 fn kind_of(app: i32) -> Result<Kind, ExecError> {
@@ -215,13 +246,19 @@ fn prepare(run: &Run, arr_timeout: Duration) -> Result<Prepared, ExecError> {
         ..Options::default()
     };
     let arr = ArrClient::new(kind, &run.base_url, &run.api_key, opts)?;
-    let page_size = policy.page_size.clamp(10, 1000);
+    let focus = Focus::of(run);
+    let page_size = if focus.is_some() {
+        FOCUS_PAGE_SIZE
+    } else {
+        policy.page_size.clamp(10, 1000)
+    };
     Ok(Prepared {
         kind,
         wanted,
         policy,
         arr,
         page_size,
+        focus,
     })
 }
 
@@ -290,11 +327,16 @@ async fn snatch(
     events: &Events,
 ) -> Result<Outcome, ExecError> {
     let p = prepare(run, arr_timeout)?;
+    let focused = if p.focus.is_some() {
+        " (focused on one Seerr request)"
+    } else {
+        ""
+    };
     events
         .emit(Ev::run(
             Level::Info,
             EventType::RunStarted,
-            format!("{:?} snatch started", p.wanted),
+            format!("{:?} snatch started{focused}", p.wanted),
         ))
         .await;
     let mut rng = SmallRng::from_rng(&mut rand::rng());
@@ -307,30 +349,34 @@ async fn snatch(
     events
         .emit(Ev::run(Level::Debug, EventType::PageFetched, msg))
         .await;
-    let (keep, busy) = collect_candidates(client, &p, run, &plan.pages, first).await?;
+    let c = collect_candidates(client, &p, run, &plan.pages, first).await?;
     let msg = format!(
-        "{} candidate(s) after filters and afterglow; {busy} skipped as queued or grabbed within {} h",
-        keep.len(),
-        p.policy.recent_grab_hours
+        "{} candidate(s) after filters and afterglow; {} skipped as queued or grabbed within {} h; {} requested via Seerr",
+        c.keep.len(),
+        c.busy,
+        p.policy.recent_grab_hours,
+        c.priority_ids.len().saturating_add(c.priority_groups.len())
     );
     events
         .emit(Ev::run(Level::Debug, EventType::CandidatesFiltered, msg))
         .await;
-    let selected = snatch_core::select(
-        &keep,
+    let selected = snatch_core::select_prioritised(
+        &c.keep,
         p.policy.per_cycle as usize,
         selection_of(&p.policy),
+        &c.priority_ids,
+        &c.priority_groups,
         &mut rng,
     );
     let targets = group(p.kind, &p.policy, &selected);
     let dispatch = acquire(client, run, targets, events).await?;
-    let titles: HashMap<i64, String> = selected.iter().map(|c| (c.id, c.title.clone())).collect();
+    let by_id: HashMap<i64, Candidate> = selected.iter().map(|c| (c.id, c.clone())).collect();
     let mut outcome = Outcome {
         searched: Vec::new(),
         cursor: plan.next_cursor.to_string(),
         error: None,
     };
-    dispatch_all(&p, &dispatch, &titles, events, &mut outcome).await;
+    dispatch_all(&p, &dispatch, &by_id, events, &mut outcome).await;
     Ok(outcome)
 }
 
@@ -339,13 +385,13 @@ async fn snatch(
 async fn dispatch_all(
     p: &Prepared,
     dispatch: &[Target],
-    titles: &HashMap<i64, String>,
+    by_id: &HashMap<i64, Candidate>,
     events: &Events,
     outcome: &mut Outcome,
 ) {
     let mut failures: u32 = 0;
     for target in dispatch {
-        if dispatch_target(p, target, titles, events, outcome).await {
+        if dispatch_target(p, target, by_id, events, outcome).await {
             failures = 0;
             continue;
         }
@@ -367,14 +413,18 @@ async fn plan_pages(p: &Prepared, rng: &mut SmallRng) -> Result<(PagePlan, Wante
         .wanted_page(p.wanted, 1, p.page_size, release_of(&p.policy))
         .await?;
     let cursor: u32 = p.policy.cursor.parse().unwrap_or(1);
-    let plan = PagePlan::plan(
-        first.total_records,
-        p.page_size,
-        p.policy.per_cycle,
-        selection_of(&p.policy),
-        cursor,
-        rng,
-    );
+    let plan = if p.focus.is_some() {
+        PagePlan::sweep(first.total_records, p.page_size)
+    } else {
+        PagePlan::plan(
+            first.total_records,
+            p.page_size,
+            p.policy.per_cycle,
+            selection_of(&p.policy),
+            cursor,
+            rng,
+        )
+    };
     Ok((plan, first))
 }
 
@@ -387,7 +437,7 @@ async fn collect_candidates(
     run: &Run,
     pages: &[u32],
     first: WantedPage,
-) -> Result<(Vec<Candidate>, usize), ExecError> {
+) -> Result<Collected, ExecError> {
     let mut candidates = Vec::new();
     for page in pages {
         let fetched = if *page == 1 {
@@ -398,6 +448,9 @@ async fn collect_candidates(
                 .await?
         };
         candidates.extend(fetched.records);
+    }
+    if let Some(focus) = p.focus {
+        candidates.retain(|c| focus.matches(c));
     }
     let filter = Filter {
         monitored_only: p.policy.monitored_only,
@@ -417,16 +470,20 @@ async fn collect_candidates(
         entity_type: p.kind.entity_type().to_owned(),
         entity_ids: filtered.iter().map(|c| c.id).collect(),
     };
-    let unprocessed = client
+    let resp = client
         .filter_candidates(Request::new(req))
         .await?
-        .into_inner()
-        .unprocessed_ids;
+        .into_inner();
     let keep = filtered
         .into_iter()
-        .filter(|c| unprocessed.contains(&c.id))
+        .filter(|c| resp.unprocessed_ids.contains(&c.id))
         .collect();
-    Ok((keep, skipped))
+    Ok(Collected {
+        keep,
+        busy: skipped,
+        priority_ids: resp.priority_ids,
+        priority_groups: resp.priority_group_ids,
+    })
 }
 
 /// Asks the API for budget and trims the targets to what was granted.
@@ -466,7 +523,7 @@ async fn acquire(
 async fn dispatch_target(
     p: &Prepared,
     target: &Target,
-    titles: &HashMap<i64, String>,
+    by_id: &HashMap<i64, Candidate>,
     events: &Events,
     outcome: &mut Outcome,
 ) -> bool {
@@ -475,7 +532,7 @@ async fn dispatch_target(
         Ok(cmd) => cmd,
         Err(e) => {
             for id in target.items() {
-                let title = titles.get(id).cloned().unwrap_or_default();
+                let title = by_id.get(id).map(|c| c.title.clone()).unwrap_or_default();
                 let ev =
                     Ev::run(Level::Warn, EventType::SearchFailed, title).entity(entity_type, *id);
                 events.emit(ev.detail(e.to_string())).await;
@@ -484,7 +541,10 @@ async fn dispatch_target(
         }
     };
     for id in target.items() {
-        let title = titles.get(id).cloned().unwrap_or_default();
+        let (title, group_id) = by_id
+            .get(id)
+            .map(|c| (c.title.clone(), c.group))
+            .unwrap_or_default();
         let ev = Ev::run(Level::Info, EventType::SearchDispatched, title.clone())
             .entity(entity_type, *id);
         events.emit(ev.detail(format!("command {}", cmd.id))).await;
@@ -492,6 +552,7 @@ async fn dispatch_target(
             entity_type: entity_type.to_owned(),
             entity_id: *id,
             title,
+            group_id,
         });
     }
     if p.policy.await_command {

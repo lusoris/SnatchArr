@@ -41,6 +41,12 @@ func NewRuns(st *store.Store, clk clock.Clock, ids id.Generator) *Runs {
 
 // Enqueue creates a queued run unless one is already queued or leased for the pair.
 func (r *Runs) Enqueue(ctx context.Context, instanceID uuid.UUID, kind domain.SnatchKind) (domain.Run, bool, error) {
+	return r.EnqueueFocused(ctx, instanceID, kind, nil, nil)
+}
+
+// EnqueueFocused queues a run limited to one entity (movie) or group (series), for a
+// quickie on a single Seerr request. Like Enqueue it refuses while a run is active.
+func (r *Runs) EnqueueFocused(ctx context.Context, instanceID uuid.UUID, kind domain.SnatchKind, focusEntity, focusGroup *int64) (domain.Run, bool, error) {
 	active, err := r.st.Q().HasActiveRun(ctx, sqlcgen.HasActiveRunParams{InstanceID: instanceID, Kind: string(kind)})
 	if err != nil {
 		return domain.Run{}, false, fmt.Errorf("snatch: active run check: %w", store.MapError(err))
@@ -52,7 +58,9 @@ func (r *Runs) Enqueue(ctx context.Context, instanceID uuid.UUID, kind domain.Sn
 	if err != nil {
 		return domain.Run{}, false, fmt.Errorf("snatch: new run id: %w", err)
 	}
-	row, err := r.st.Q().EnqueueRun(ctx, sqlcgen.EnqueueRunParams{ID: runID, InstanceID: instanceID, Kind: string(kind), QueuedAt: r.clk.Now()})
+	row, err := r.st.Q().EnqueueRun(ctx, sqlcgen.EnqueueRunParams{
+		ID: runID, InstanceID: instanceID, Kind: string(kind), QueuedAt: r.clk.Now(), FocusEntityID: focusEntity, FocusGroupID: focusGroup,
+	})
 	if err != nil {
 		return domain.Run{}, false, fmt.Errorf("snatch: enqueue: %w", store.MapError(err))
 	}
@@ -182,5 +190,6 @@ func runFromRow(row sqlcgen.SnatchRun) domain.Run {
 		ID: row.ID, InstanceID: row.InstanceID, Kind: domain.SnatchKind(row.Kind), Status: domain.RunStatus(row.Status),
 		LeasedBy: leasedBy, LeaseExpiresAt: row.LeaseExpiresAt, QueuedAt: row.QueuedAt, StartedAt: row.StartedAt,
 		FinishedAt: row.FinishedAt, SearchedCount: int(row.SearchedCount), Error: errMsg,
+		FocusEntityID: row.FocusEntityID, FocusGroupID: row.FocusGroupID,
 	}
 }

@@ -39,6 +39,7 @@ const (
 	LoginOperation                   OperationName = "Login"
 	LogoutOperation                  OperationName = "Logout"
 	ResetStateOperation              OperationName = "ResetState"
+	SnatchSeerrRequestOperation      OperationName = "SnatchSeerrRequest"
 	SyncSeerrLinkOperation           OperationName = "SyncSeerrLink"
 	TestDownloadClientOperation      OperationName = "TestDownloadClient"
 	TestDownloadClientInputOperation OperationName = "TestDownloadClientInput"
