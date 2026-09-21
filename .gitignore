@@ -11,6 +11,7 @@ api/bin/
 api/tmp/
 api/coverage.out
 api/coverage.html
+*.exe
 # --- Rust ---
 worker/target/
 # --- Node / SvelteKit ---

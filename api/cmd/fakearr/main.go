@@ -35,6 +35,7 @@ type fake struct {
 	cutoff   int
 	commands []command
 	nextID   int64
+	logger   *slog.Logger
 }
 
 func main() {
@@ -44,13 +45,14 @@ func main() {
 	missing := flag.Int("missing", 250, "number of missing items")
 	cutoff := flag.Int("cutoff", 40, "number of cutoff-unmet items")
 	flag.Parse()
-	f := &fake{kind: *kind, apiKey: *apiKey, missing: *missing, cutoff: *cutoff, nextID: 100}
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	f := &fake{kind: *kind, apiKey: *apiKey, missing: *missing, cutoff: *cutoff, nextID: 100, logger: logger}
 	mux := http.NewServeMux()
 	f.routes(mux)
 	srv := &http.Server{Addr: *addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
-	slog.Info("fakearr listening", slog.String("kind", f.kind), slog.String("addr", *addr), slog.Int("missing", f.missing), slog.Int("cutoff", f.cutoff))
+	logger.Info("fakearr listening", slog.String("kind", f.kind), slog.String("addr", *addr), slog.Int("missing", f.missing), slog.Int("cutoff", f.cutoff))
 	if err := srv.ListenAndServe(); err != nil {
-		slog.Error("fakearr stopped", slog.String("error", err.Error()))
+		logger.Error("fakearr stopped", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
 }
@@ -164,6 +166,6 @@ func (f *fake) listCommands(w http.ResponseWriter, _ *http.Request) {
 
 func writeJSON(w http.ResponseWriter, v any) {
 	if err := json.NewEncoder(w).Encode(v); err != nil {
-		slog.Warn("fakearr encode", slog.String("error", err.Error()))
+		http.Error(w, `{"error":"encode"}`, http.StatusInternalServerError)
 	}
 }
