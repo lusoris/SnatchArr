@@ -1,0 +1,16 @@
+# Package Managers
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+bun.lock
+bun.lockb
+# Generated
+src/lib/paraglide/
+src/lib/api/schema.d.ts
+src/lib/theme.css
+build/
+.svelte-kit/
+coverage/
+playwright-report/
+test-results/
+project.inlang/cache/

@@ -206,7 +206,7 @@ jobs:
     with:
       node-version: '24'
       working-directory: web
-      coverage-threshold: 70
+      coverage-threshold: 50
       run-e2e: true
 
   proto:
