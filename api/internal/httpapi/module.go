@@ -19,9 +19,10 @@ import (
 // PathPrefix is where the OpenAPI server is mounted.
 const PathPrefix = "/api/v1"
 
-type mountParams struct {
+// MountParams are the dependencies Mount needs. The app calls Mount from its single
+// route-registration invoke so chi sees every Use() before the first route.
+type MountParams struct {
 	fx.In
-	Router   chi.Router
 	Logger   *slog.Logger
 	Handlers *Handlers
 	Security *Security
@@ -30,7 +31,7 @@ type mountParams struct {
 
 // Mount builds the ogen server and attaches it under PathPrefix with the request-context
 // bridge and CSRF protection for cookie traffic.
-func Mount(p mountParams) error {
+func Mount(r chi.Router, p MountParams) error {
 	srv, err := oas.NewServer(p.Handlers, p.Security,
 		oas.WithPathPrefix(PathPrefix),
 		oas.WithErrorHandler(ErrorHandler(p.Logger)),
@@ -38,12 +39,11 @@ func Mount(p mountParams) error {
 	if err != nil {
 		return fmt.Errorf("httpapi: new server: %w", err)
 	}
-	p.Router.With(withHTTP, csrfUnlessBearer(p.CSRF)).Handle(PathPrefix+"/*", srv)
+	r.With(withHTTP, csrfUnlessBearer(p.CSRF)).Handle(PathPrefix+"/*", srv)
 	return nil
 }
 
-// Module provides the handlers and mounts the API.
+// Module provides the handlers and security resolver. Mounting is the app's job.
 var Module = fx.Module("snatcharr.httpapi",
 	fx.Provide(NewHandlers, NewSecurity),
-	fx.Invoke(Mount),
 )

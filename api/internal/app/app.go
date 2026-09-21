@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -51,11 +52,16 @@ var Module = fx.Options(
 	policies.Module,
 	auth.Module,
 	events.Module,
+	httpapi.Module,
 	fx.Provide(statuspage.NewRegistry, health.NewStartupGate),
 	fx.Invoke(registerHealthChecks),
-	fx.Invoke(mountBase),
-	httpapi.Module,
-	fx.Invoke(mountWebUI),
+	// fx constructs providers lazily: the HTTP server and the migrator only exist (and run
+	// their lifecycle hooks) if something depends on them.
+	fx.Invoke(func(*http.Server, *dbmigrate.Migrator) {}),
+	// One invoke registers every route: chi requires all Use() calls before the first
+	// route, and fx runs child-module invokes before the parent's, so mounting must not be
+	// spread across modules.
+	fx.Invoke(mountHTTP),
 )
 
 // embedMigrations points golusoris db/migrate at the embedded SQL and runs it on start.
@@ -65,6 +71,7 @@ func embedMigrations(o dbmigrate.Options) (dbmigrate.Options, error) {
 		return dbmigrate.Options{}, fmt.Errorf("app: %w", err)
 	}
 	o.Auto = true
+	o.Path = "." // MigrationsFS is already rooted at migrations/postgres
 	return o.WithFS(fsys), nil
 }
 
@@ -99,7 +106,7 @@ type httpDeps struct {
 	Cfg    config.Options
 }
 
-func mountBase(d httpDeps) error {
+func mountHTTP(d httpDeps, api httpapi.MountParams) error {
 	d.Router.Use(
 		middleware.RequestID,
 		middleware.Recover(d.Logger),
@@ -111,7 +118,10 @@ func mountBase(d httpDeps) error {
 		return fmt.Errorf("app: mount metrics: %w", err)
 	}
 	d.Router.Handle("/api/v1/events/stream", d.Events.Hub().Handler())
-	return nil
+	if err := httpapi.Mount(d.Router, api); err != nil {
+		return err
+	}
+	return mountWebUI(d)
 }
 
 func mountWebUI(d httpDeps) error {

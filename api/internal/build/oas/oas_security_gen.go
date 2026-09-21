@@ -125,7 +125,7 @@ func (s *Server) securityBearerAuth(ctx context.Context, operationName Operation
 
 func (s *Server) securityCookieAuth(ctx context.Context, operationName OperationName, req *http.Request) (context.Context, bool, error) {
 	var t CookieAuth
-	const parameterName = "__Host-session"
+	const parameterName = "snatcharr_session"
 	var value string
 	switch cookie, err := req.Cookie(parameterName); {
 	case err == nil: // if NO error
@@ -168,7 +168,7 @@ func (s *Client) securityCookieAuth(ctx context.Context, operationName Operation
 		return errors.Wrap(err, "security source \"CookieAuth\"")
 	}
 	req.AddCookie(&http.Cookie{
-		Name:  "__Host-session",
+		Name:  "snatcharr_session",
 		Value: t.APIKey,
 	})
 	return nil

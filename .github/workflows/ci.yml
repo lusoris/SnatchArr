@@ -74,6 +74,10 @@ jobs:
     name: api (Go)
     needs: changes
     if: needs.changes.outputs.api == 'true'
+    permissions:
+      contents: read
+      actions: read
+      security-events: write # gosec SARIF upload inside the reusable workflow
     uses: golusoris/golusoris/.github/workflows/ci-go.yml@1ac7e112d9e24c2df441fab646b2c331ce696021 # main 2026-09-21
     with:
       runs-on: ubuntu-latest

@@ -97,7 +97,9 @@ func Default() Options {
 	}
 }
 
-// Load reads the "snatcharr" subtree and validates it for the selected profile.
+// Load reads the "snatcharr" subtree and validates it for the selected profile. In prod
+// it also insists on golusoris' crypto.key (APP_CRYPTO_KEY): without it *arr API keys
+// would be sealed with a built-in development key.
 func Load(cfg *config.Config) (Options, error) {
 	o := Default()
 	if err := cfg.Unmarshal("snatcharr", &o); err != nil {
@@ -105,6 +107,9 @@ func Load(cfg *config.Config) (Options, error) {
 	}
 	if err := o.Validate(); err != nil {
 		return Options{}, err
+	}
+	if o.Profile == ProfileProd && cfg.String("crypto.key") == "" {
+		return Options{}, fmt.Errorf("%w: crypto.key (APP_CRYPTO_KEY, hex 16/24/32 bytes)", ErrMissingSecret)
 	}
 	return o, nil
 }

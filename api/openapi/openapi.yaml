@@ -4,7 +4,7 @@ info:
   version: 0.1.0
   description: |
     Control-plane API for SnatchArr. Every non-2xx response is an RFC 9457 problem
-    (`application/problem+json`). Browser clients authenticate with the `__Host-session`
+    (`application/problem+json`). Browser clients authenticate with the `snatcharr_session`
     cookie plus an `X-CSRF-Token` header on unsafe methods; automation uses an API key
     as a Bearer token.
   license:
@@ -292,7 +292,7 @@ components:
     cookieAuth:
       type: apiKey
       in: cookie
-      name: __Host-session
+      name: snatcharr_session
     bearerAuth:
       type: http
       scheme: bearer

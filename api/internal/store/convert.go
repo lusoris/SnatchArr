@@ -72,10 +72,10 @@ func PolicyFromRow(r sqlcgen.HuntPolicy) domain.Policy {
 func PolicyParams(p domain.Policy, now time.Time) sqlcgen.UpsertPolicyParams {
 	return sqlcgen.UpsertPolicyParams{
 		InstanceID:         p.InstanceID,
-		MissingPerCycle:    int32(p.MissingPerCycle),             //nolint:gosec // validated 0..100
-		UpgradePerCycle:    int32(p.UpgradePerCycle),             //nolint:gosec // validated 0..100
-		CycleIntervalS:     int32(p.CycleInterval / time.Second), //nolint:gosec // validated <= 7 days
-		HourlyCap:          int32(p.HourlyCap),                   //nolint:gosec // validated 1..500
+		MissingPerCycle:    int32(p.MissingPerCycle),             // #nosec G115 -- validated 0..100
+		UpgradePerCycle:    int32(p.UpgradePerCycle),             // #nosec G115 -- validated 0..100
+		CycleIntervalS:     int32(p.CycleInterval / time.Second), // #nosec G115 -- validated <= 7 days
+		HourlyCap:          int32(p.HourlyCap),                   // #nosec G115 -- validated 1..500
 		Selection:          string(p.Selection),
 		MonitoredOnly:      p.MonitoredOnly,
 		SkipFutureReleases: p.SkipFutureReleases,
@@ -83,10 +83,10 @@ func PolicyParams(p domain.Policy, now time.Time) sqlcgen.UpsertPolicyParams {
 		SonarrMissingMode:  p.SonarrMissingMode,
 		SonarrUpgradeMode:  p.SonarrUpgradeMode,
 		LidarrMissingMode:  p.LidarrMissingMode,
-		ProcessedTtlH:      int32(p.ProcessedTTL / time.Hour), //nolint:gosec // validated 1..8760
-		MaxQueueSize:       int32(p.MaxQueueSize),             //nolint:gosec // validated -1..100000
+		ProcessedTtlH:      int32(p.ProcessedTTL / time.Hour), // #nosec G115 -- validated 1..8760
+		MaxQueueSize:       int32(p.MaxQueueSize),             // #nosec G115 -- validated -1..100000
 		AwaitCommand:       p.AwaitCommand,
-		PageSize:           int32(p.PageSize), //nolint:gosec // validated 10..1000
+		PageSize:           int32(p.PageSize), // #nosec G115 -- validated 10..1000
 		UpdatedAt:          now,
 	}
 }

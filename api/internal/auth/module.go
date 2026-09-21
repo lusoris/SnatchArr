@@ -21,19 +21,13 @@ import (
 // validation rejects an empty secret there.
 const devAPIKeySecret = "snatcharr-dev-only-api-key-secret" // #nosec G101 -- dev-profile fallback only; prod config validation rejects an empty secret
 
-// Session cookie names. `__Host-` requires Secure, which plain-http dev cannot satisfy.
-const (
-	cookieNameSecure   = "__Host-session"
-	cookieNameInsecure = "snatcharr_session"
-)
+// cookieName is fixed because the OpenAPI security scheme names it; the Secure flag still
+// follows config (`__Host-` prefixed names cannot be set over plain-http dev).
+const cookieName = "snatcharr_session"
 
 func newSessionManager(st *PgSessionStore, cfg config.Options) *session.Manager {
-	name := cookieNameSecure
-	if !cfg.Session.Secure {
-		name = cookieNameInsecure
-	}
 	return session.NewManager(st, session.Options{
-		CookieName: name,
+		CookieName: cookieName,
 		TTL:        cfg.Session.TTL,
 		Secure:     cfg.Session.Secure,
 	})
