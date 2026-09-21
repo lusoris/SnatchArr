@@ -1,0 +1,576 @@
+openapi: 3.1.0
+info:
+  title: SnatchArr API
+  version: 0.1.0
+  description: |
+    Control-plane API for SnatchArr. Every non-2xx response is an RFC 9457 problem
+    (`application/problem+json`). Browser clients authenticate with the `__Host-session`
+    cookie plus an `X-CSRF-Token` header on unsafe methods; automation uses an API key
+    as a Bearer token.
+  license:
+    name: EUPL-1.2
+    identifier: EUPL-1.2
+servers:
+  - url: /api/v1
+tags:
+  - name: system
+    description: Service status
+  - name: auth
+    description: Setup, login and sessions
+  - name: instances
+    description: "*arr instances and their hunt policies"
+
+security:
+  - cookieAuth: []
+  - bearerAuth: []
+
+paths:
+  /system/status:
+    get:
+      tags: [system]
+      operationId: getSystemStatus
+      summary: Service status and build information
+      security: []
+      responses:
+        "200":
+          description: Status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemStatus"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /auth/setup/status:
+    get:
+      tags: [auth]
+      operationId: getSetupStatus
+      summary: Whether the first user still has to be created
+      security: []
+      responses:
+        "200":
+          description: Setup status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SetupStatus"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /auth/setup:
+    post:
+      tags: [auth]
+      operationId: completeSetup
+      summary: Create the first admin user and start a session
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetupRequest"
+      responses:
+        "201":
+          description: User created and session started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      summary: Start a session with username and password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Session started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      summary: End the current session
+      responses:
+        "204":
+          description: Session ended
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /auth/session:
+    get:
+      tags: [auth]
+      operationId: getSession
+      summary: Current session, user and CSRF token
+      responses:
+        "200":
+          description: Session
+          headers:
+            X-CSRF-Token:
+              description: Token to echo on unsafe requests
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /instances:
+    get:
+      tags: [instances]
+      operationId: listInstances
+      summary: List instances (API keys are never returned)
+      responses:
+        "200":
+          description: Instances
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Instance"
+        default:
+          $ref: "#/components/responses/Problem"
+    post:
+      tags: [instances]
+      operationId: createInstance
+      summary: Add a manual instance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InstanceInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Instance"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /instances/test:
+    post:
+      tags: [instances]
+      operationId: testInstanceInput
+      summary: Probe credentials that are not stored yet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InstanceInput"
+      responses:
+        "200":
+          description: Probe result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProbeResult"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /instances/{instanceId}:
+    parameters:
+      - $ref: "#/components/parameters/InstanceId"
+    get:
+      tags: [instances]
+      operationId: getInstance
+      summary: Get one instance
+      responses:
+        "200":
+          description: Instance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Instance"
+        default:
+          $ref: "#/components/responses/Problem"
+    put:
+      tags: [instances]
+      operationId: updateInstance
+      summary: Update a manual instance (omit api_key to keep it)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InstanceUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Instance"
+        default:
+          $ref: "#/components/responses/Problem"
+    delete:
+      tags: [instances]
+      operationId: deleteInstance
+      summary: Delete an instance and everything it owns
+      responses:
+        "204":
+          description: Deleted
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /instances/{instanceId}/test:
+    parameters:
+      - $ref: "#/components/parameters/InstanceId"
+    post:
+      tags: [instances]
+      operationId: testInstance
+      summary: Probe a stored instance and record the outcome
+      responses:
+        "200":
+          description: Probe result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProbeResult"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /instances/{instanceId}/policy:
+    parameters:
+      - $ref: "#/components/parameters/InstanceId"
+    get:
+      tags: [instances]
+      operationId: getPolicy
+      summary: Hunt policy of an instance
+      responses:
+        "200":
+          description: Policy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HuntPolicy"
+        default:
+          $ref: "#/components/responses/Problem"
+    put:
+      tags: [instances]
+      operationId: updatePolicy
+      summary: Replace the hunt policy of an instance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HuntPolicy"
+      responses:
+        "200":
+          description: Policy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HuntPolicy"
+        default:
+          $ref: "#/components/responses/Problem"
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: __Host-session
+    bearerAuth:
+      type: http
+      scheme: bearer
+
+  parameters:
+    InstanceId:
+      name: instanceId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    Problem:
+      description: RFC 9457 problem details
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+
+  schemas:
+    Problem:
+      type: object
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          format: uri
+          default: about:blank
+        title:
+          type: string
+        status:
+          type: integer
+          minimum: 100
+          maximum: 599
+        detail:
+          type: string
+        instance:
+          type: string
+        invalid-params:
+          type: array
+          items:
+            type: object
+            required: [name, reason]
+            properties:
+              name:
+                type: string
+              reason:
+                type: string
+
+    SystemStatus:
+      type: object
+      required: [name, version, commit, build_date, profile, setup_complete]
+      properties:
+        name:
+          type: string
+        version:
+          type: string
+        commit:
+          type: string
+        build_date:
+          type: string
+        profile:
+          type: string
+          enum: [prod, dev]
+        setup_complete:
+          type: boolean
+
+    SetupStatus:
+      type: object
+      required: [setup_complete]
+      properties:
+        setup_complete:
+          type: boolean
+
+    SetupRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 64
+        password:
+          type: string
+          minLength: 12
+          maxLength: 256
+
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+
+    User:
+      type: object
+      required: [id, username, role]
+      properties:
+        id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        role:
+          type: string
+          enum: [admin, viewer]
+
+    Session:
+      type: object
+      required: [user, csrf_token, expires_at]
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        csrf_token:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+
+    AppKind:
+      type: string
+      enum: [sonarr, radarr, lidarr, readarr, whisparr_v2, whisparr_v3]
+
+    Instance:
+      type: object
+      required: [id, kind, name, base_url, enabled, source, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          $ref: "#/components/schemas/AppKind"
+        name:
+          type: string
+        base_url:
+          type: string
+          format: uri
+        enabled:
+          type: boolean
+        source:
+          type: string
+          enum: [manual, configarr]
+        configarr_key:
+          type: string
+        last_seen_version:
+          type: string
+        last_check_at:
+          type: string
+          format: date-time
+        last_error:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    InstanceInput:
+      type: object
+      required: [kind, name, base_url, api_key]
+      properties:
+        kind:
+          $ref: "#/components/schemas/AppKind"
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+        base_url:
+          type: string
+        api_key:
+          type: string
+          minLength: 8
+        enabled:
+          type: boolean
+          default: true
+
+    InstanceUpdate:
+      type: object
+      required: [kind, name, base_url]
+      properties:
+        kind:
+          $ref: "#/components/schemas/AppKind"
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+        base_url:
+          type: string
+        api_key:
+          type: string
+          description: Omit or leave empty to keep the stored key
+        enabled:
+          type: boolean
+          default: true
+
+    ProbeResult:
+      type: object
+      required: [app_name, version]
+      properties:
+        app_name:
+          type: string
+        version:
+          type: string
+
+    HuntPolicy:
+      type: object
+      required:
+        - missing_per_cycle
+        - upgrade_per_cycle
+        - cycle_interval_s
+        - hourly_cap
+        - selection
+        - monitored_only
+        - skip_future_releases
+        - radarr_release_type
+        - sonarr_missing_mode
+        - sonarr_upgrade_mode
+        - lidarr_missing_mode
+        - processed_ttl_h
+        - max_queue_size
+        - await_command
+        - page_size
+      properties:
+        missing_per_cycle:
+          type: integer
+          minimum: 0
+          maximum: 100
+        upgrade_per_cycle:
+          type: integer
+          minimum: 0
+          maximum: 100
+        cycle_interval_s:
+          type: integer
+          minimum: 60
+          maximum: 604800
+        hourly_cap:
+          type: integer
+          minimum: 1
+          maximum: 500
+        selection:
+          type: string
+          enum: [random, sequential]
+        monitored_only:
+          type: boolean
+        skip_future_releases:
+          type: boolean
+        radarr_release_type:
+          type: string
+          enum: [physical, digital, cinema]
+        sonarr_missing_mode:
+          type: string
+          enum: [episodes, season_packs, shows]
+        sonarr_upgrade_mode:
+          type: string
+          enum: [episodes, season_packs]
+        lidarr_missing_mode:
+          type: string
+          enum: [artist, album]
+        processed_ttl_h:
+          type: integer
+          minimum: 1
+          maximum: 8760
+        max_queue_size:
+          type: integer
+          minimum: -1
+          maximum: 100000
+        await_command:
+          type: boolean
+        page_size:
+          type: integer
+          minimum: 10
+          maximum: 1000
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true

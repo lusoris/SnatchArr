@@ -97,7 +97,8 @@ Purpose: hunt missing + cutoff-unmet media across *arr instances; respect per-in
 
 ## Contracts
 
-- OpenAPI first. Source of truth: `api/openapi/openapi.yaml`. `make api-gen` -> ogen server (`api/internal/oas`); `make web-gen` -> `web/src/lib/api/schema.d.ts`. Never hand-edit outputs.
+- OpenAPI first. Source of truth: `api/openapi/openapi.yaml`. `make api-gen` -> ogen server (`api/internal/build/oas`); `make web-gen` -> `web/src/lib/api/schema.d.ts`. Never hand-edit outputs.
+- Generated Go lives under `api/internal/build/` on purpose: praetor HISS scanner has no `// Code generated` exemption but skips any `build` directory segment. `api/internal/gen` (protobuf) stays put; `make proto-gen` adds `// SAFETY:` lines there.
 - RFC 9457 everywhere. Every non-2xx HTTP response = `application/problem+json`. SPA `problemMiddleware` depends on that media type.
 - gRPC lease model. Worker PULLS: `LeaseRun` -> `Heartbeat` -> `FilterCandidates` -> `AcquireBudget` -> `ReportEvents` -> `CompleteRun`. Api = only writer of processed memory + rate buckets; worker never exceeds granted budget.
 - Hourly cap counts items searched, not HTTP requests. Debit per dispatch; warn at 80 %.
@@ -117,7 +118,7 @@ Purpose: hunt missing + cutoff-unmet media across *arr instances; respect per-in
 
 - No SvelteKit server routes, hooks, `+page.server.ts`. SPA static; API = Go.
 - No `latest` image tags; no unpinned `uses:` in workflows.
-- Never edit generated code (`api/internal/oas`, `api/internal/gen`, `web/src/lib/api/schema.d.ts`, `worker/crates/snatch-proto/src/gen`) or compiled vendor context (`CLAUDE.md`, `.cursor/**`, `.windsurfrules`, `.gemini/**`, `.codex/**`, `.github/copilot-instructions.md`). Edit `AGENTS.md`, run `praetorctl compile-context`.
+- Never edit generated code (`api/internal/build/oas`, `api/internal/gen`, `api/internal/store/sqlcgen`, `web/src/lib/api/schema.d.ts`, `worker/crates/snatch-proto/src/gen`) or compiled vendor context (`CLAUDE.md`, `.cursor/**`, `.windsurfrules`, `.gemini/**`, `.codex/**`, `.github/copilot-instructions.md`). Edit `AGENTS.md`, run `praetorctl compile-context`.
 - Never store or return *arr API keys in plaintext: encrypt at rest (`core/crypto` AES-GCM); write-only in API.
 - No Swaparr / stalled-download handling: Cleanuparr owns that. Cleanuparr integration = v1.1.
 

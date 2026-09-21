@@ -20,7 +20,8 @@ web/build/
 web/playwright-report/
 web/test-results/
 web/coverage/
-api/internal/webui/dist/
+api/internal/webui/dist/*
+!api/internal/webui/dist/index.html
 # --- tooling ---
 .DS_Store
 Thumbs.db

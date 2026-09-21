@@ -134,6 +134,8 @@ linters:
         - name: use-any
         - name: dot-imports
     wrapcheck:
+      ignore-package-globs:
+        - github.com/lusoris/SnatchArr/*
       extra-ignore-sigs:
         - .Errorf(
         - errors.New(
@@ -330,6 +332,7 @@ formatters:
         - standard
         - default
         - prefix(github.com/golusoris/golusoris)
+        - prefix(github.com/lusoris/SnatchArr)
       custom-order: true
 
 issues:

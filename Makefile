@@ -35,7 +35,7 @@ api-verify: ## golangci-lint + gosec + govulncheck + go test -race + generated-c
 	cd api
 	gosec -quiet -conf ../.gosec.json -exclude-generated ./...
 	go generate ./...
-	git diff --exit-code -- internal/oas internal/gen
+	git diff --exit-code -- internal/build internal/gen
 	cd ..
 	if [ -f api/openapi/openapi.yaml ]; then
 	  npx --yes @stoplight/spectral-cli@6.15.0 lint api/openapi/openapi.yaml --ruleset tools/spectral.yaml --fail-severity warn
