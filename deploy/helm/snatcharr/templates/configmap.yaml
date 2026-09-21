@@ -8,6 +8,9 @@ data:
   APP_HTTP_ADDR: ":{{ .Values.api.service.port }}"
   APP_GRPC_LISTEN: ":{{ .Values.api.service.grpcPort }}"
   APP_SNATCHARR_PROFILE: prod
+  # Planner, Seerr sync and Configarr poll run on one elected replica (pg advisory lock).
+  APP_LEADER_ENABLED: "true"
+  APP_LEADER_NAME: {{ include "snatcharr.fullname" . | quote }}
   APP_SNATCHARR_SESSION_TTL: {{ .Values.config.sessionTtl | quote }}
   APP_SNATCHARR_SESSION_SECURE: "true"
   APP_HTTP_CSRF_SECURE: "true"

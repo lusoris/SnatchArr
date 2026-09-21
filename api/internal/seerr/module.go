@@ -14,6 +14,7 @@ import (
 	"github.com/golusoris/golusoris/core/clock"
 
 	"github.com/lusoris/SnatchArr/api/internal/arrclient"
+	"github.com/lusoris/SnatchArr/api/internal/leaderx"
 	"github.com/lusoris/SnatchArr/api/internal/seerrclient"
 )
 
@@ -91,7 +92,6 @@ var Module = fx.Module("snatcharr.seerr",
 		},
 		func(p *arrclient.GoenvoyProber) arrclient.Resolver { return p },
 	),
-	fx.Invoke(func(lc fx.Lifecycle, t *Ticker) {
-		lc.Append(fx.Hook{OnStart: t.Start, OnStop: t.Stop})
-	}),
+	// The sync runs on the leader only (internal/leaderx).
+	fx.Provide(leaderx.Provide[*Ticker]()),
 )

@@ -113,6 +113,7 @@ Purpose: snatch missing + cutoff-unmet media across *arr instances; respect per-
 - Hourly cap counts items searched, not HTTP requests. Debit per dispatch; warn at 80 %.
 - Processed memory: per instance x snatch kind x entity, per-row `expires_at`.
 - SSE event names = `snatcharr.v1.EventType` names, lower snake case (`search_dispatched`, ...).
+- Periodic loops (planner tick, Seerr sync, Configarr poll) never start from their own module: register in fx group `leader_loops` via `leaderx.Provide[*T]()`; `internal/leaderx` runs them on the elected replica (`APP_LEADER_ENABLED`, pg advisory lock).
 - Configarr instances: read-only in UI except snatch policy; `source=configarr` rows re-import on file change.
 
 ## Language rules
@@ -136,7 +137,7 @@ Purpose: snatch missing + cutoff-unmet media across *arr instances; respect per-
 ```bash
 make setup                     # hooks + praetor state
 make dev                       # postgres via compose, then api (air), worker (cargo watch), web (vite)
-APP_PROFILE=dev                # SQLite + in-process scheduler instead of Postgres + river
+APP_SNATCHARR_PROFILE=dev      # relaxed cookies + built-in dev secrets; still Postgres
 ```
 
 Reference sources: remote only. golusoris, goenvoy, sveltesentio (github.com/golusoris); praetor (github.com/cordanaLLM). Verify symbol against remote tree before use.

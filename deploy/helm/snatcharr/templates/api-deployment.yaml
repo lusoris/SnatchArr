@@ -54,6 +54,10 @@ spec:
             - configMapRef:
                 name: {{ include "snatcharr.fullname" . }}-config
           env:
+            - name: APP_LEADER_IDENTITY
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
             - name: APP_DB_DSN
               valueFrom:
                 secretKeyRef:

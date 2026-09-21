@@ -35,6 +35,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/events"
 	"github.com/lusoris/SnatchArr/api/internal/httpapi"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
+	"github.com/lusoris/SnatchArr/api/internal/leaderx"
 	"github.com/lusoris/SnatchArr/api/internal/policies"
 	"github.com/lusoris/SnatchArr/api/internal/seerr"
 	"github.com/lusoris/SnatchArr/api/internal/settings"
@@ -70,6 +71,8 @@ var Module = fx.Options(
 	fx.Provide(func(s *dlclients.Service) workergrpc.Pacer { return s }),
 	workergrpc.Module,
 	httpapi.Module,
+	// After every module that registers a loop: the gate collects the leader_loops group.
+	leaderx.Module,
 	fx.Provide(statuspage.NewRegistry, health.NewStartupGate),
 	fx.Invoke(registerHealthChecks),
 	// fx constructs providers lazily: the HTTP server and the migrator only exist (and run

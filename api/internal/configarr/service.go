@@ -21,6 +21,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/config"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
+	"github.com/lusoris/SnatchArr/api/internal/leaderx"
 )
 
 // Result summarises one import.
@@ -252,7 +253,6 @@ func fileFingerprint(path string) string {
 // Module provides the service and runs linked mode for the process lifetime.
 var Module = fx.Module("snatcharr.configarr",
 	fx.Provide(New),
-	fx.Invoke(func(lc fx.Lifecycle, s *Service) {
-		lc.Append(fx.Hook{OnStart: s.Start, OnStop: s.Stop})
-	}),
+	// The poll runs on the leader only (internal/leaderx).
+	fx.Provide(leaderx.Provide[*Service]()),
 )

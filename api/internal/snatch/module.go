@@ -12,6 +12,8 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/clock"
+
+	"github.com/lusoris/SnatchArr/api/internal/leaderx"
 )
 
 // GateGroup is the fx value group other modules add Gate implementations to.
@@ -99,7 +101,6 @@ func (t *Ticker) tick(ctx context.Context) {
 // Module provides the snatch services and starts the planner ticker.
 var Module = fx.Module("snatcharr.snatch",
 	fx.Provide(NewBudget, NewMemory, NewRuns, NewRecorder, NewSchedules, newPlanner, NewTicker),
-	fx.Invoke(func(lc fx.Lifecycle, t *Ticker) {
-		lc.Append(fx.Hook{OnStart: t.Start, OnStop: t.Stop})
-	}),
+	// The planner runs on the leader only (internal/leaderx).
+	fx.Provide(leaderx.Provide[*Ticker]()),
 )

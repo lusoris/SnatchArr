@@ -75,6 +75,7 @@ configarr:
   watch: true
 
 api:
+  # Safe above 1: periodic work runs on the replica holding the Postgres advisory lock.
   replicaCount: 1
   resources:
     requests:

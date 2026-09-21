@@ -18,6 +18,10 @@ UI.
 | `APP_GRPC_LISTEN` | `:9090` | gRPC listen address for workers |
 | `APP_CRYPTO_KEY` | required in prod | Key that encrypts *arr API keys and download-client secrets at rest |
 | `APP_HTTP_CSRF_SECRET` | required in prod | Secret behind the double-submit CSRF token; set it so tokens survive restarts and replicas |
+| `APP_LEADER_ENABLED` | `false` | Elect one replica (Postgres advisory lock) to run the planner, Seerr sync and Configarr poll; leave off for a single replica |
+| `APP_LEADER_NAME` | `snatcharr` | Lock name; one per deployment |
+| `APP_LEADER_IDENTITY` | hostname | This replica's name in logs |
+| `APP_LEADER_PG_RETRY` | `2s` | How often a follower retries the lock |
 | `APP_SNATCHARR_PROFILE` | `prod` | `prod` or `dev`; `dev` relaxes cookie security and uses the built-in dev key |
 | `APP_SNATCHARR_PUBLIC_URL` | | External base URL (cookies, links) |
 | `APP_SNATCHARR_WORKER_TOKEN` | | Shared bearer the worker presents over gRPC |
