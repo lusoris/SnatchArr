@@ -81,40 +81,48 @@ func (p *GoenvoyProber) clientOptions() []arr.Option {
 	return []arr.Option{arr.WithTimeout(p.opts.Timeout), arr.WithUserAgent(p.opts.UserAgent)}
 }
 
-func (p *GoenvoyProber) status(ctx context.Context, kind domain.AppKind, baseURL, apiKey string) (*arr.StatusResponse, error) {
-	o := p.clientOptions()
-	switch kind {
-	case domain.KindSonarr:
-		return statusOf(sonarr.New(baseURL, apiKey, o...))(ctx)
-	case domain.KindRadarr:
-		return statusOf(radarr.New(baseURL, apiKey, o...))(ctx)
-	case domain.KindLidarr:
-		return statusOf(lidarr.New(baseURL, apiKey, o...))(ctx)
-	case domain.KindReadarr:
-		return statusOf(readarr.New(baseURL, apiKey, o...))(ctx)
-	case domain.KindWhisparrV2:
-		return statusOf(whisparr.New(baseURL, apiKey, o...))(ctx)
-	case domain.KindWhisparrV3:
-		return statusOf(whisparr.NewV3(baseURL, apiKey, o...))(ctx)
-	default:
-		return nil, fmt.Errorf("%w: unsupported kind %q", domain.ErrInvalid, kind)
-	}
-}
-
 // statusClient is satisfied by every goenvoy *arr client.
 type statusClient interface {
 	GetSystemStatus(ctx context.Context) (*arr.StatusResponse, error)
 }
 
-// statusOf adapts a constructor result into a status call, folding the construction
-// error into the call so the switch above stays one line per kind.
-func statusOf[C statusClient](c C, err error) func(context.Context) (*arr.StatusResponse, error) {
-	return func(ctx context.Context) (*arr.StatusResponse, error) {
-		if err != nil {
-			return nil, err
-		}
-		return c.GetSystemStatus(ctx)
+// newClient builds the goenvoy client for a kind. Kept non-generic on purpose: govulncheck
+// v1.4.0's call-graph analysis panics on generic helpers ("ForEachElement called on type
+// containing *types.TypeParam").
+func (p *GoenvoyProber) newClient(kind domain.AppKind, baseURL, apiKey string) (statusClient, error) {
+	o := p.clientOptions()
+	switch kind {
+	case domain.KindSonarr:
+		return wrapNew(sonarr.New(baseURL, apiKey, o...))
+	case domain.KindRadarr:
+		return wrapNew(radarr.New(baseURL, apiKey, o...))
+	case domain.KindLidarr:
+		return wrapNew(lidarr.New(baseURL, apiKey, o...))
+	case domain.KindReadarr:
+		return wrapNew(readarr.New(baseURL, apiKey, o...))
+	case domain.KindWhisparrV2:
+		return wrapNew(whisparr.New(baseURL, apiKey, o...))
+	case domain.KindWhisparrV3:
+		return wrapNew(whisparr.NewV3(baseURL, apiKey, o...))
+	default:
+		return nil, fmt.Errorf("%w: unsupported kind %q", domain.ErrInvalid, kind)
 	}
+}
+
+// wrapNew folds a goenvoy constructor result into the interface and wraps its error.
+func wrapNew(c statusClient, err error) (statusClient, error) {
+	if err != nil {
+		return nil, fmt.Errorf("arrclient: new client: %w", err)
+	}
+	return c, nil
+}
+
+func (p *GoenvoyProber) status(ctx context.Context, kind domain.AppKind, baseURL, apiKey string) (*arr.StatusResponse, error) {
+	c, err := p.newClient(kind, baseURL, apiKey)
+	if err != nil {
+		return nil, err
+	}
+	return c.GetSystemStatus(ctx)
 }
 
 func checkWhisparrGeneration(kind domain.AppKind, version string) error {

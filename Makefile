@@ -37,12 +37,23 @@ api-verify: ## golangci-lint + gosec + govulncheck + go test -race + generated-c
 	go generate ./...
 	git diff --exit-code -- internal/build internal/gen
 	cd ..
+	$(MAKE) api-cover
 	if [ -f api/openapi/openapi.yaml ]; then
 	  npx --yes @stoplight/spectral-cli@6.15.0 lint api/openapi/openapi.yaml --ruleset tools/spectral.yaml --fail-severity warn
 	fi
 
 api-gen: ## ogen + sqlc generation inside api/
 	cd api && go generate ./...
+
+# Ratchet: raise as store/handler integration tests land (target 70, HISS-15). Never lower.
+API_COVER_MIN ?= 20
+api-cover: ## Coverage gate on hand-written packages (generated code excluded)
+	cd api
+	go test -count=1 -covermode=atomic -coverprofile=tmp/cover.out ./... >/dev/null
+	grep -vE 'internal/(build|gen)/|internal/store/sqlcgen/' tmp/cover.out > tmp/cover.filtered.out
+	pct=$$(go tool cover -func=tmp/cover.filtered.out | awk '/^total:/ {gsub("%","",$$3); print $$3}')
+	echo "coverage (non-generated): $${pct}% (min $(API_COVER_MIN)%)"
+	awk -v p="$$pct" -v m="$(API_COVER_MIN)" 'BEGIN { exit (p+0 < m+0) ? 1 : 0 }'
 
 # ── worker/ (Rust) ────────────────────────────────────────────────────────────
 worker-verify: ## cargo fmt/clippy(-D warnings)/audit/deny/test

@@ -1,0 +1,77 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.90"
+license = "EUPL-1.2"
+repository = "https://github.com/lusoris/SnatchArr"
+authors = ["lusoris <lusoris@pm.me>"]
+publish = false
+
+[workspace.dependencies]
+snatch-proto = { path = "crates/snatch-proto", version = "0.1.0" }
+hunt-core = { path = "crates/hunt-core", version = "0.1.0" }
+arr-client = { path = "crates/arr-client", version = "0.1.0" }
+
+tokio = { version = "1.53", features = ["rt-multi-thread", "macros", "signal", "time", "sync"] }
+tonic = { version = "0.14", default-features = false, features = ["channel", "codegen", "transport"] }
+tonic-prost = "0.14"
+prost = "0.14"
+prost-types = "0.14"
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls", "http2"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
+rand = "0.10"
+thiserror = "2.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "fmt"] }
+url = "2.5"
+humantime = "2.4"
+
+# build
+tonic-prost-build = "0.14"
+protox = "0.9"
+
+# test
+proptest = "1.11"
+wiremock = "0.6"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+unused_must_use = "deny"
+
+[workspace.lints.clippy]
+# HISS-07: no unwrap/expect/panic in production code (tests opt back in per crate).
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+dbg_macro = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+# HISS-04 style bounds.
+cognitive_complexity = "warn"
+too_many_lines = "warn"
+# Correctness hygiene.
+indexing_slicing = "warn"
+arithmetic_side_effects = "warn"
+cast_possible_truncation = "warn"
+cast_sign_loss = "warn"
+missing_errors_doc = "allow"
+module_name_repetitions = "allow"
+
+[profile.release]
+codegen-units = 1
+lto = "fat"
+opt-level = 3
+panic = "abort"
+strip = true

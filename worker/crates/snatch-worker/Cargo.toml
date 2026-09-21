@@ -1,0 +1,25 @@
+[package]
+name = "snatch-worker"
+description = "SnatchArr hunt data-plane: leases runs from the API and executes them against *arr instances"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[dependencies]
+snatch-proto = { workspace = true }
+hunt-core = { workspace = true }
+arr-client = { workspace = true }
+tokio = { workspace = true }
+tonic = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+rand = { workspace = true }
+thiserror = { workspace = true }
+humantime = { workspace = true }
+
+[lints]
+workspace = true
