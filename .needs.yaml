@@ -1,0 +1,44 @@
+version: 1
+repository: github.com/lusoris/SnatchArr
+language: go
+languages:
+  - go
+  - rust
+  - typescript
+  - svelte
+go_version: "1.27"
+framework: github.com/golusoris/golusoris
+builder_kits:
+  - golusoris/golusoris
+  - golusoris/goenvoy
+  - golusoris/sveltesentio
+capabilities:
+  required:
+    - config.loader
+    - config.env
+    - config.watch
+    - telemetry.logging
+    - errors.problem_details
+    - db.postgres
+    - http.router
+    - http.openapi
+    - ui.framework
+  optional:
+    - jobs.queue
+    - jobs.cron
+    - telemetry.otel
+    - telemetry.prometheus
+    - auth.oidc
+    - crypto.password
+    - crypto.aead
+    - id.uuid
+    - validate.struct
+    - clikit.cli
+    - time.clock
+    - build.version
+dependencies: []
+readiness:
+  score: 0
+  total_third_party_deps: 0
+  covered_deps: 0
+  gap_deps: 0

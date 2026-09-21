@@ -1,0 +1,189 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    name: Detect changed components
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      api: ${{ steps.filter.outputs.api }}
+      worker: ${{ steps.filter.outputs.worker }}
+      web: ${{ steps.filter.outputs.web }}
+      proto: ${{ steps.filter.outputs.proto }}
+      deploy: ${{ steps.filter.outputs.deploy }}
+      governance: ${{ steps.filter.outputs.governance }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: filter
+        with:
+          filters: |
+            api:
+              - 'api/**'
+              - 'proto/**'
+              - '.golangci.yml'
+              - '.gosec.json'
+              - 'tools/spectral.yaml'
+              - 'Dockerfile'
+              - '.github/workflows/ci.yml'
+            worker:
+              - 'worker/**'
+              - 'proto/**'
+              - '.github/workflows/ci.yml'
+            web:
+              - 'web/**'
+              - 'api/openapi/**'
+              - '.github/workflows/ci.yml'
+            proto:
+              - 'proto/**'
+              - '.github/workflows/ci.yml'
+            deploy:
+              - 'deploy/**'
+              - '.github/workflows/ci.yml'
+            governance:
+              - 'AGENTS.md'
+              - 'CLAUDE.md'
+              - '.standards*'
+              - '.needs.yaml'
+              - 'Makefile'
+              - 'lefthook.yml'
+              - '.config/**'
+              - '.cursor/**'
+              - '.windsurfrules'
+              - '.gemini/**'
+              - '.codex/**'
+              - '.github/copilot-instructions.md'
+              - '.github/workflows/ci.yml'
+
+  api:
+    name: api (Go)
+    needs: changes
+    if: needs.changes.outputs.api == 'true'
+    uses: golusoris/golusoris/.github/workflows/ci-go.yml@1ac7e112d9e24c2df441fab646b2c331ce696021 # main 2026-09-21
+    with:
+      runs-on: ubuntu-latest
+      working-directory: api
+      go-version-file: api/go.mod
+      golangci-config: ../.golangci.yml
+      coverage-threshold: 70
+      needs-docker: true
+      module-path: github.com/lusoris/SnatchArr/api
+      skip-apidiff: true
+      openapi-spec: api/openapi/openapi.yaml
+      spectral-ruleset: tools/spectral.yaml
+
+  worker:
+    name: worker (Rust)
+    needs: changes
+    if: needs.changes.outputs.worker == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: worker
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: worker
+      - name: Format
+        run: cargo fmt --all --check
+      - name: Clippy (zero warnings)
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Test
+        run: cargo test --workspace --locked
+      - name: cargo-audit
+        run: cargo install cargo-audit --locked && cargo audit
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          manifest-path: worker/Cargo.toml
+          command: check
+
+  web:
+    name: web (SvelteKit)
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    uses: golusoris/sveltesentio/.github/workflows/ci-sveltekit.yml@5b3b01ef8b0bd664acfa621eeb84a1c7e626e7da # main 2026-09-21
+    with:
+      node-version: '24'
+      working-directory: web
+      coverage-threshold: 70
+      run-e2e: true
+
+  proto:
+    name: proto (buf)
+    needs: changes
+    if: needs.changes.outputs.proto == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: bufbuild/buf-action@8c6a16e16f12ba20b6470afa9c2ba9b5ba8c97c3 # v1.5.0
+        with:
+          input: proto
+          lint: true
+          format: true
+          breaking: ${{ github.event_name == 'pull_request' }}
+          breaking_against: ${{ github.event.repository.clone_url }}#format=git,commit=${{ github.event.pull_request.base.sha }},subdir=proto
+          push: false
+          archive: false
+      - name: Generated Go stubs are committed
+        run: cd proto && buf generate && git diff --exit-code -- ../api/internal/gen
+
+  deploy:
+    name: deploy (Helm)
+    needs: changes
+    if: needs.changes.outputs.deploy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+      - name: helm lint
+        run: helm lint deploy/helm/snatcharr
+      - name: kubeconform
+        run: |
+          helm template snatcharr deploy/helm/snatcharr \
+            | docker run --rm -i ghcr.io/yannh/kubeconform:v0.7.0 -strict -ignore-missing-schemas -summary
+
+  governance:
+    name: governance (praetor)
+    needs: changes
+    if: needs.changes.outputs.governance == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27'
+          cache: false
+      - name: Install praetorctl
+        run: |
+          go install github.com/cordanaLLM/praetor/cmd/standardsctl@b131e9eca668533d82881eaed2d2b19ec674de00
+          ln -s "$(go env GOPATH)/bin/standardsctl" "$(go env GOPATH)/bin/praetorctl"
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Context integrity
+        run: praetorctl compile-context --verify
+      - name: HISS audit
+        run: praetorctl audit
+      - name: Flavor audit
+        run: praetorctl flavor audit --flavor=go-service .

@@ -1,0 +1,215 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+// SPDX-License-Identifier: EUPL-1.2
+
+syntax = "proto3";
+
+package snatcharr.v1;
+
+// WorkerService is the contract between the Go control plane (server) and the Rust
+// hunt-worker (client). The worker dials the API and PULLS work: it leases a run,
+// heartbeats while it works, asks the API which candidates are still unprocessed and
+// how much hourly budget it may spend, streams events, and completes the run.
+//
+// The API owns every durable decision (schedules, budget, processed-item memory);
+// the worker owns execution against the *arr instance. A worker restart loses nothing:
+// an expired lease requeues the run.
+service WorkerService {
+  // LeaseRun long-polls (up to wait_seconds, max 30) for a queued hunt run and leases
+  // it to the calling worker. Returns NOT_FOUND-free: an empty response means no work.
+  rpc LeaseRun(LeaseRunRequest) returns (LeaseRunResponse);
+  // Heartbeat extends the lease. The API may answer CANCEL, in which case the worker
+  // stops dispatching and completes the run as cancelled.
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+  // FilterCandidates returns the subset of entity ids that are not in processed memory
+  // for this run's instance and hunt kind.
+  rpc FilterCandidates(FilterCandidatesRequest) returns (FilterCandidatesResponse);
+  // AcquireBudget atomically debits the instance's hourly bucket and returns how many
+  // items the worker may search now (0..requested).
+  rpc AcquireBudget(AcquireBudgetRequest) returns (AcquireBudgetResponse);
+  // ReportEvents streams hunt events for history and the live UI.
+  rpc ReportEvents(stream ReportEventsRequest) returns (ReportEventsResponse);
+  // CompleteRun closes the run and records searched items into processed memory.
+  rpc CompleteRun(CompleteRunRequest) returns (CompleteRunResponse);
+}
+
+// AppKind identifies the *arr application family and API generation.
+enum AppKind {
+  APP_KIND_UNSPECIFIED = 0;
+  APP_KIND_SONARR = 1;
+  APP_KIND_RADARR = 2;
+  APP_KIND_LIDARR = 3;
+  APP_KIND_READARR = 4;
+  APP_KIND_WHISPARR_V2 = 5;
+  APP_KIND_WHISPARR_V3 = 6;
+}
+
+// HuntKind selects the wanted list to walk.
+enum HuntKind {
+  HUNT_KIND_UNSPECIFIED = 0;
+  HUNT_KIND_MISSING = 1;
+  HUNT_KIND_UPGRADE = 2;
+}
+
+enum Selection {
+  SELECTION_UNSPECIFIED = 0;
+  SELECTION_RANDOM = 1;
+  SELECTION_SEQUENTIAL = 2;
+}
+
+enum SonarrMode {
+  SONARR_MODE_UNSPECIFIED = 0;
+  SONARR_MODE_EPISODES = 1;
+  SONARR_MODE_SEASON_PACKS = 2;
+  SONARR_MODE_SHOWS = 3;
+}
+
+enum LidarrMode {
+  LIDARR_MODE_UNSPECIFIED = 0;
+  LIDARR_MODE_ARTIST = 1;
+  LIDARR_MODE_ALBUM = 2;
+}
+
+enum RadarrReleaseType {
+  RADARR_RELEASE_TYPE_UNSPECIFIED = 0;
+  RADARR_RELEASE_TYPE_PHYSICAL = 1;
+  RADARR_RELEASE_TYPE_DIGITAL = 2;
+  RADARR_RELEASE_TYPE_CINEMA = 3;
+}
+
+// Policy is the per-instance hunt policy snapshot the worker executes against.
+message Policy {
+  uint32 per_cycle = 1;
+  Selection selection = 2;
+  bool monitored_only = 3;
+  bool skip_future_releases = 4;
+  SonarrMode sonarr_mode = 5;
+  LidarrMode lidarr_mode = 6;
+  RadarrReleaseType radarr_release_type = 7;
+  bool await_command = 8;
+  uint32 page_size = 9;
+  // Opaque sequential cursor from the previous run (empty for random selection).
+  string cursor = 10;
+}
+
+message LeaseRunRequest {
+  string worker_id = 1;
+  uint32 wait_seconds = 2;
+}
+
+message LeaseRunResponse {
+  // Unset when no run is available.
+  optional Run run = 1;
+}
+
+message Run {
+  string run_id = 1;
+  string instance_id = 2;
+  AppKind app = 3;
+  HuntKind hunt = 4;
+  string base_url = 5;
+  string api_key = 6;
+  Policy policy = 7;
+  int64 lease_expires_unix = 8;
+  string user_agent = 9;
+}
+
+message HeartbeatRequest {
+  string run_id = 1;
+  string worker_id = 2;
+}
+
+enum HeartbeatDirective {
+  HEARTBEAT_DIRECTIVE_UNSPECIFIED = 0;
+  HEARTBEAT_DIRECTIVE_CONTINUE = 1;
+  HEARTBEAT_DIRECTIVE_CANCEL = 2;
+}
+
+message HeartbeatResponse {
+  HeartbeatDirective directive = 1;
+  int64 lease_expires_unix = 2;
+}
+
+message FilterCandidatesRequest {
+  string run_id = 1;
+  string entity_type = 2;
+  repeated int64 entity_ids = 3;
+}
+
+message FilterCandidatesResponse {
+  repeated int64 unprocessed_ids = 1;
+}
+
+message AcquireBudgetRequest {
+  string run_id = 1;
+  uint32 requested = 2;
+}
+
+message AcquireBudgetResponse {
+  uint32 granted = 1;
+  uint32 remaining_in_window = 2;
+  int64 window_resets_unix = 3;
+}
+
+enum Level {
+  LEVEL_UNSPECIFIED = 0;
+  LEVEL_DEBUG = 1;
+  LEVEL_INFO = 2;
+  LEVEL_WARN = 3;
+  LEVEL_ERROR = 4;
+}
+
+enum EventType {
+  EVENT_TYPE_UNSPECIFIED = 0;
+  EVENT_TYPE_RUN_STARTED = 1;
+  EVENT_TYPE_PAGE_FETCHED = 2;
+  EVENT_TYPE_CANDIDATES_FILTERED = 3;
+  EVENT_TYPE_BUDGET_ACQUIRED = 4;
+  EVENT_TYPE_SEARCH_DISPATCHED = 5;
+  EVENT_TYPE_SEARCH_COMPLETED = 6;
+  EVENT_TYPE_SEARCH_FAILED = 7;
+  EVENT_TYPE_INSTANCE_UNREACHABLE = 8;
+  EVENT_TYPE_RUN_FINISHED = 9;
+}
+
+message HuntEvent {
+  string run_id = 1;
+  int64 ts_unix_ms = 2;
+  Level level = 3;
+  EventType type = 4;
+  string entity_type = 5;
+  int64 entity_id = 6;
+  string title = 7;
+  string detail = 8;
+}
+
+message ReportEventsRequest {
+  HuntEvent event = 1;
+}
+
+message ReportEventsResponse {
+  uint32 accepted = 1;
+}
+
+enum RunOutcome {
+  RUN_OUTCOME_UNSPECIFIED = 0;
+  RUN_OUTCOME_DONE = 1;
+  RUN_OUTCOME_FAILED = 2;
+  RUN_OUTCOME_CANCELLED = 3;
+}
+
+message SearchedItem {
+  string entity_type = 1;
+  int64 entity_id = 2;
+  string title = 3;
+}
+
+message CompleteRunRequest {
+  string run_id = 1;
+  string worker_id = 2;
+  RunOutcome outcome = 3;
+  repeated SearchedItem searched = 4;
+  string cursor = 5;
+  string error = 6;
+}
+
+message CompleteRunResponse {}

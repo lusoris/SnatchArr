@@ -1,0 +1,15 @@
+# air hot-reload for api/ — run from api/: air -c ../tools/air.toml
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  cmd = "go build -o ./tmp/snatcharr ./cmd/snatcharr"
+  bin = "./tmp/snatcharr"
+  full_bin = "APP_PROFILE=dev APP_WEB_DEV=1 ./tmp/snatcharr"
+  include_ext = ["go", "yaml", "sql"]
+  exclude_dir = ["tmp", "internal/webui/dist"]
+  exclude_regex = ["_test\.go$"]
+  delay = 500
+
+[log]
+  time = true

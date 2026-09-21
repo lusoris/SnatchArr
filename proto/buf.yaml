@@ -1,0 +1,13 @@
+version: v2
+modules:
+  - path: .
+    name: buf.build/lusoris/snatcharr
+lint:
+  use:
+    - STANDARD
+  enum_zero_value_suffix: _UNSPECIFIED
+  rpc_allow_same_request_response: false
+  service_suffix: Service
+breaking:
+  use:
+    - FILE

@@ -1,0 +1,337 @@
+# golangci-lint v2 config — shared baseline for golusoris and downstream apps.
+# Override per-app via `--config`.
+version: "2"
+
+run:
+  # Sized to the measured cold-cache cost of the root module (~810 CPU-s) on a
+  # 750m-CPU-guaranteed ARC runner, plus headroom for the one office worker
+  # losing cores to hypervisor steal; see the Lint job comment in ci.yml.
+  timeout: 30m
+  go: "1.27"
+  tests: true
+  allow-parallel-runners: true
+
+linters:
+  default: none
+  enable:
+    # correctness
+    - govet
+    - staticcheck
+    - errcheck
+    - ineffassign
+    - unused
+    - gocritic
+    - revive
+    - bodyclose
+    - rowserrcheck
+    - sqlclosecheck
+    - errorlint
+    - wrapcheck
+    - nilerr
+    - nilnil
+    - nilnesserr
+    - exhaustive
+    - copyloopvar
+    - intrange
+    - predeclared
+    - reassign
+    - recvcheck
+    - nakedret
+    - musttag
+    - contextcheck
+    - fatcontext
+    - containedctx
+    - noctx
+    - loggercheck
+    - sloglint
+    - spancheck
+    # security
+    - gosec
+    - bidichk
+    - asciicheck
+    # complexity
+    - gocyclo
+    - funlen
+    - gocognit
+    - cyclop
+    # style / hygiene
+    - misspell
+    - godot
+    - whitespace
+    - unconvert
+    - unparam
+    - tagliatelle
+    - usestdlibvars
+    - dupword
+    - canonicalheader
+    - importas
+    - perfsprint
+    - prealloc
+    - makezero
+    # project discipline
+    - goheader
+    - forbidigo
+    - depguard
+    - gochecknoinits
+    - nolintlint
+    # test hygiene
+    - paralleltest
+    - tparallel
+    - thelper
+    - usetesting
+    - testifylint
+    # supply-chain
+    - gomoddirectives
+    - gomodguard_v2
+
+  settings:
+    # Every first-party Go file carries the REUSE/SPDX header (see LICENSING.md).
+    goheader:
+      values:
+        regexp:
+          year: 20\d\d
+      template: |-
+        SPDX-FileCopyrightText: {{ year }} lusoris <lusoris@pm.me>
+
+        SPDX-License-Identifier: EUPL-1.2
+    gocyclo:
+      min-complexity: 10 # HISS-04 cap, same as praetor's audit
+    funlen:
+      lines: 60 # HISS-04 cap, same as praetor's audit
+      statements: 50
+    gocognit:
+      min-complexity: 15 # HISS-04 cap, same as praetor's audit
+    cyclop:
+      max-complexity: 18
+    gosec:
+      excludes:
+        - G104  # errors handled via wrapcheck/errcheck instead
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+    staticcheck:
+      checks: ["all", "-ST1000"]
+    revive:
+      rules:
+        - name: var-naming
+        - name: package-comments
+        - name: exported
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: if-return
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: errorf
+        - name: empty-block
+        - name: superfluous-else
+        - name: unreachable-code
+        - name: redefines-builtin-id
+        - name: use-any
+        - name: dot-imports
+    wrapcheck:
+      extra-ignore-sigs:
+        - .Errorf(
+        - errors.New(
+        - errors.Unwrap(
+        - errors.Wrap(
+        - errors.Wrapf(
+        - errors.WithStack(
+        - errors.WithMessage(
+        - errors.WithMessagef(
+        # stdlib leaf-error returns we forward verbatim — wrapping adds noise.
+        - context.Canceled
+        - context.DeadlineExceeded
+        - (*net/http.Client).Do(
+        - net/http.NewRequestWithContext(
+        - io.ReadAll(
+        - io/fs.WalkDir(
+        - os.Remove(
+        - os.Stat(
+        - (*bytes.Buffer).Write(
+        - (*encoding/json.Decoder).Decode(
+        - (context.Context).Err(
+        - (github.com/jackc/pgx/v5.Rows).Err(
+    tagliatelle:
+      case:
+        rules:
+          json: snake
+          yaml: snake
+          xml: camel
+          bson: camel
+          avro: snake
+          mapstructure: kebab
+    nakedret:
+      max-func-lines: 15
+    sloglint:
+      no-mixed-args: true
+      kv-only: false
+      attr-only: false
+      no-global: "all"
+      context: "scope"
+      static-msg: false
+      key-naming-case: snake
+    forbidigo:
+      forbid:
+        # time.Now is banned outside clock/ — project rule.
+        - pattern: ^time\.Now$
+          msg: "use clock.Now(ctx) or inject clockwork.Clock (CLAUDE.md: time.Now is banned outside clock/)"
+        # fmt.Print* is banned — use slog.
+        - pattern: ^fmt\.Print(|f|ln)$
+          msg: "use slog — no direct stdout prints"
+        # math/rand is banned — use crypto/rand.
+        - pattern: ^rand\.(Int|Intn|Int31|Int63|Float32|Float64|Read|Seed|New)$
+          pkg: ^math/rand(/v2)?$
+          msg: "math/rand is forbidden — use crypto/rand (security) or expose via testutil/"
+      analyze-types: true
+    depguard:
+      rules:
+        # Force slog usage — deny stdlib `log` package.
+        no-stdlib-log:
+          list-mode: lax
+          deny:
+            - pkg: "log$"
+              desc: "use log/slog via golusoris/log; not stdlib log"
+    importas:
+      no-unaliased: false
+      alias:
+        - pkg: github.com/jackc/pgx/v5
+          alias: pgx
+        - pkg: github.com/jackc/pgx/v5/pgxpool
+          alias: pgxpool
+        - pkg: go.uber.org/fx
+          alias: fx
+        - pkg: go.opentelemetry.io/otel/trace
+          alias: trace
+        - pkg: go.opentelemetry.io/otel/metric
+          alias: metric
+    gomoddirectives:
+      replace-allow-list: []
+      replace-local: true
+      retract-allow-no-explanation: false
+      exclude-forbidden: true
+    # gomodguard_v2 schema (golangci-lint >= v2.12; the v1 linter is deprecated):
+    # `blocked` is a flat list of {module, recommendations, reason}; an empty
+    # match-type means an exact module-path match.
+    gomodguard_v2:
+      blocked:
+        - module: github.com/pkg/errors
+          recommendations:
+            - github.com/go-faster/errors
+            - github.com/golusoris/golusoris/core/errors
+          reason: "use go-faster/errors or golusoris/core/errors"
+
+  exclusions:
+    presets:
+      - common-false-positives
+      - legacy
+    rules:
+      # gosec and gocritic run as separate CI steps or are suppressed by presets;
+      # //nolint:gosec and //nolint:gocritic directives in the codebase are
+      # intentional documentation — suppress nolintlint's "unused directive" check.
+      - linters:
+          - nolintlint
+        text: "unused for linter \"(gosec|gocritic)\""
+      - path: _test\.go$
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - cyclop
+          - wrapcheck
+          - gosec
+          - errcheck
+          - forbidigo   # tests may use time.Now / fmt.Print* directly
+          - containedctx
+          - noctx
+          - musttag     # ad-hoc test fixture structs don't need json tags
+      - path: example_test\.go$
+        linters:
+          - forbidigo   # godoc examples must use fmt.Println for output comment
+      - path: testutil/
+        linters:
+          - wrapcheck
+          - gosec
+          - forbidigo
+      # cmd/ is CLI surface — fmt.Print* is how CLIs output.
+      - path: cmd/
+        linters:
+          - forbidigo
+      # clock/ is the sanctioned owner of time.Now.
+      - path: clock/
+        linters:
+          - forbidigo
+      # apidocs marshals MCP (JSON-RPC) protocol fields, which are camelCase
+      # by spec. tagliatelle's snake-case rule doesn't apply.
+      - path: apidocs/
+        linters:
+          - tagliatelle
+      # Vite's manifest.json schema is camelCase (isEntry, dynamicImports, …).
+      - path: httpx/vite/
+        linters:
+          - tagliatelle
+      # SCIM 2.0 (RFC 7643/7644) mandates camelCase wire field names.
+      - path: auth/scim/
+        linters:
+          - tagliatelle
+      # Google reCAPTCHA wire format uses kebab-case `error-codes`.
+      - path: auth/captcha/
+        linters:
+          - tagliatelle
+      # Postmark wire format is PascalCase (From, To, HtmlBody, …) per spec.
+      - path: notify/postmark/
+        linters:
+          - tagliatelle
+      # SES webhook uses camelCase (notificationType, emailAddress) + Postmark
+      # bounce webhook uses PascalCase.
+      - path: notify/bounce/
+        linters:
+          - tagliatelle
+      # SES inbound uses camelCase (messageId) + Postmark inbound uses
+      # PascalCase (FromFull, ToFull, TextBody, HtmlBody).
+      - path: notify/inbound/
+        linters:
+          - tagliatelle
+      # Teams MessageCard wire format uses @context/@type/themeColor by spec.
+      - path: notify/teams/
+        linters:
+          - tagliatelle
+      # Meilisearch wire format uses camelCase (estimatedTotalHits, processingTimeMs).
+      - path: search/meilisearch/
+        linters:
+          - tagliatelle
+      # APNs wire format uses kebab-case (thread-id, content-available) per spec.
+      - path: notify/apns2/
+        linters:
+          - tagliatelle
+      # OAuth 2.0 (RFC 6749) standard wire field name `access_token`.
+      - path: auth/oauth2server/
+        linters:
+          - gosec   # G117 false-positive on RFC-mandated field name
+      # testifylint go-require false positives: tests use require inside
+      # httptest server handlers — calls happen on the test goroutine, not
+      # via t.Run, so the FailNow restriction doesn't actually bite.
+      - path: _test\.go$
+        linters:
+          - testifylint
+
+formatters:
+  enable:
+    - gofumpt
+    - gci
+    - goimports
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/golusoris/golusoris)
+      custom-order: true
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" role="img" aria-labelledby="snatcharr-mark-title">
+  <title id="snatcharr-mark-title">SnatchArr</title>
+  <path d="M32 6C14 22 14 42 32 58C50 42 50 22 32 6Z"/>
+  <path d="M32 18C24 28 24 38 32 48"/>
+  <path d="M32 18C40 28 40 38 32 48"/>
+  <circle cx="32" cy="14.5" r="1.8" fill="currentColor" stroke="none"/>
+</svg>

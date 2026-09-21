@@ -1,0 +1,55 @@
+# Lefthook configuration — praetor HISS governance jobs plus per-component hygiene.
+# Governance commands fail closed: a failing or missing praetorctl blocks the commit or push.
+min_version: 2.1.12
+assert_lefthook_installed: true
+
+pre-commit:
+  parallel: true
+  commands:
+    go-fmt:
+      glob: "api/**/*.go"
+      run: cd api && gofmt -l -w $(printf '%s\n' {staged_files} | sed 's|^api/||')
+      stage_fixed: true
+    go-vet:
+      glob: "api/**/*.go"
+      run: cd api && go vet ./...
+    rust-fmt:
+      glob: "worker/**/*.rs"
+      run: cd worker && cargo fmt --all --check
+    proto-lint:
+      glob: "proto/**/*.proto"
+      run: cd proto && buf lint
+    web-format:
+      glob: "web/**/*.{ts,js,svelte,json,css,md}"
+      run: cd web && pnpm exec prettier --write $(printf '%s\n' {staged_files} | sed 's|^web/||')
+      stage_fixed: true
+    context-check:
+      run: if command -v praetorctl >/dev/null 2>&1; then praetorctl compile-context --verify; elif [ -d ./cmd/standardsctl ]; then go run ./cmd/standardsctl compile-context --verify; else echo HISS governance hook cannot run because praetorctl is not installed >&2; exit 1; fi
+    hiss-audit:
+      run: if command -v praetorctl >/dev/null 2>&1; then praetorctl audit; elif [ -d ./cmd/standardsctl ]; then go run ./cmd/standardsctl audit; else echo HISS governance hook cannot run because praetorctl is not installed >&2; exit 1; fi
+
+commit-msg:
+  commands:
+    conventional-dco:
+      run: |
+        msg="$(sed -e '/^#/d' {1})"
+        head="$(printf '%s\n' "$msg" | head -n1)"
+        printf '%s' "$head" | grep -Eq '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z0-9/_-]+\))?!?: .{1,72}$' || { echo "commit-msg: first line must be a Conventional Commit" >&2; exit 1; }
+        printf '%s\n' "$msg" | grep -Eq '^Signed-off-by: .+ <.+@.+>$' || { echo "commit-msg: missing DCO Signed-off-by (use git commit -s)" >&2; exit 1; }
+
+post-commit:
+  commands:
+    state-sync:
+      run: if command -v praetorctl >/dev/null 2>&1; then praetorctl state sync .; elif [ -d ./cmd/standardsctl ]; then go run ./cmd/standardsctl state sync .; else echo HISS governance hook cannot run because praetorctl is not installed >&2; exit 1; fi
+    dedupe-cadence:
+      run: if command -v praetorctl >/dev/null 2>&1; then praetorctl dedupe cadence --threshold=20 --record .; elif [ -d ./cmd/standardsctl ]; then go run ./cmd/standardsctl dedupe cadence --threshold=20 --record .; else echo HISS governance hook cannot run because praetorctl is not installed >&2; exit 1; fi
+
+pre-push:
+  parallel: false
+  commands:
+    security:
+      run: if command -v govulncheck >/dev/null 2>&1; then if [ -f api/go.mod ]; then cd api && govulncheck ./...; fi; else echo govulncheck is not installed, skipping >&2; fi
+    flavor-audit:
+      run: if command -v praetorctl >/dev/null 2>&1; then praetorctl flavor audit --flavor=go-service .; elif [ -d ./cmd/standardsctl ]; then go run ./cmd/standardsctl flavor audit --flavor=go-service .; else echo HISS governance hook cannot run because praetorctl is not installed >&2; exit 1; fi
+    audit:
+      run: if command -v praetorctl >/dev/null 2>&1; then praetorctl audit; elif [ -d ./cmd/standardsctl ]; then go run ./cmd/standardsctl audit; else echo HISS governance hook cannot run because praetorctl is not installed >&2; exit 1; fi

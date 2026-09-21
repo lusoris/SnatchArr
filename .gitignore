@@ -1,0 +1,29 @@
+# --- praetor / agents ---
+.workingdir/
+.standards-receipt*
+# --- secrets / local ---
+.env
+.env.*
+!.env.example
+*.local
+# --- Go ---
+api/bin/
+api/tmp/
+api/coverage.out
+api/coverage.html
+# --- Rust ---
+worker/target/
+# --- Node / SvelteKit ---
+web/node_modules/
+web/.svelte-kit/
+web/build/
+web/playwright-report/
+web/test-results/
+web/coverage/
+api/internal/webui/dist/
+# --- tooling ---
+.DS_Store
+Thumbs.db
+*.log
+# --- claude code local ---
+.claude/settings.local.json
