@@ -1,0 +1,43 @@
+SnatchArr {{ .Chart.AppVersion }} is on its way.
+
+1. Namespace hardening: both images run as 65532 on distroless static and satisfy the
+   restricted Pod Security Standard, so you can label the namespace:
+
+     kubectl label namespace {{ .Release.Namespace }} pod-security.kubernetes.io/enforce=restricted
+
+2. Reach the UI:
+{{- if .Values.api.ingress.enabled }}
+{{- range .Values.api.ingress.hosts }}
+     http{{ if $.Values.api.ingress.tls }}s{{ end }}://{{ .host }}
+{{- end }}
+{{- else if .Values.api.httpRoute.enabled }}
+{{- range .Values.api.httpRoute.hostnames }}
+     https://{{ . }}
+{{- end }}
+{{- else }}
+     kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "snatcharr.apiServiceName" . }} 8080:{{ .Values.api.service.port }}
+     open http://localhost:8080
+{{- end }}
+   The first visit runs the setup wizard and creates the admin account.
+
+3. Database:
+{{- if .Values.postgres.cnpg.enabled }}
+   CloudNativePG cluster {{ include "snatcharr.dbClusterName" . }} ({{ .Values.postgres.cnpg.instances }} instance(s)).
+   The API reads its DSN from Secret {{ include "snatcharr.dbSecretName" . }} key uri.
+{{- else }}
+   External Postgres via Secret {{ .Values.postgres.external.dsnSecretRef.name }} key {{ .Values.postgres.external.dsnSecretRef.key }}.
+{{- end }}
+
+4. Secrets:
+{{- if .Values.secrets.existingSecret }}
+   Using {{ .Values.secrets.existingSecret }} (crypto-key, csrf-secret, apikey-secret, worker-token).
+{{- else }}
+   Generated into Secret {{ include "snatcharr.secretName" . }} and kept across upgrades.
+   If a GitOps tool renders this chart without cluster access (ArgoCD), create the Secret
+   yourself and set secrets.existingSecret, or the keys rotate on every sync.
+{{- end }}
+{{- if not .Values.networkPolicy.enabled }}
+
+5. networkPolicy.enabled is false. Turn it on and set networkPolicy.arrCidrs to where
+   your *arr apps live so the worker can only talk to them and to the API.
+{{- end }}

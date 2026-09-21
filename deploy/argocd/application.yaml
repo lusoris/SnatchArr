@@ -1,0 +1,59 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+# Render-time note: ArgoCD templates without cluster access, so the chart cannot reuse
+# generated secrets. Create the Secret first (see docs/deployment.md) and reference it.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: snatcharr
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: snatcharr
+  source:
+    repoURL: https://github.com/lusoris/SnatchArr
+    targetRevision: main
+    path: deploy/helm/snatcharr
+    helm:
+      releaseName: snatcharr
+      valueFiles:
+        - values.yaml
+      valuesObject:
+        secrets:
+          existingSecret: snatcharr-secrets
+        config:
+          publicUrl: https://snatcharr.example.com
+        api:
+          ingress:
+            enabled: true
+            hosts:
+              - host: snatcharr.example.com
+                paths:
+                  - path: /
+                    pathType: Prefix
+        networkPolicy:
+          enabled: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: snatcharr
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - RespectIgnoreDifferences=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      name: snatcharr-worker
+      jsonPointers:
+        - /spec/replicas

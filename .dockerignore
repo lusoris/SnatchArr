@@ -1,0 +1,25 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+#
+# Both Dockerfiles use the repo root as context; keep it small and hermetic.
+.git
+.github
+.devcontainer
+docs
+site
+deploy
+tools
+**/.DS_Store
+**/*.log
+**/tmp
+api/tmp
+api/internal/webui/dist
+web/node_modules
+web/.svelte-kit
+web/build
+web/coverage
+web/test-results
+web/playwright-report
+web/src/lib/paraglide
+web/project.inlang/cache
+worker/target

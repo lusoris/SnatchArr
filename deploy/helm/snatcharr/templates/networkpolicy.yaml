@@ -1,0 +1,95 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- $api := dict "root" . "component" "api" }}
+{{- $worker := dict "root" . "component" "worker" }}
+{{- $arr := list }}
+{{- range .Values.networkPolicy.arrCidrs }}
+{{- $arr = append $arr (dict "ipBlock" (dict "cidr" . "except" (list "169.254.169.254/32"))) }}
+{{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "snatcharr.fullname" . }}-api
+  labels:
+    {{- include "snatcharr.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "snatcharr.selectorLabels" $api | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    # HTTP: UI, API, SSE.
+    - ports:
+        - port: http
+          protocol: TCP
+      {{- with .Values.networkPolicy.ingressFrom }}
+      from:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    # gRPC: only the worker may lease runs.
+    - ports:
+        - port: grpc
+          protocol: TCP
+      from:
+        - podSelector:
+            matchLabels:
+              {{- include "snatcharr.selectorLabels" $worker | nindent 14 }}
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    {{- if .Values.postgres.cnpg.enabled }}
+    - to:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: {{ include "snatcharr.dbClusterName" . }}
+      ports:
+        - port: 5432
+          protocol: TCP
+    {{- else }}
+    - ports:
+        - port: 5432
+          protocol: TCP
+    {{- end }}
+    # *arr apps, Seerr, Cleanuparr, download clients (the API probes and discovers them).
+    - to:
+        {{- toYaml $arr | nindent 8 }}
+    {{- with .Values.networkPolicy.extraEgress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "snatcharr.fullname" . }}-worker
+  labels:
+    {{- include "snatcharr.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "snatcharr.selectorLabels" $worker | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "snatcharr.selectorLabels" $api | nindent 14 }}
+      ports:
+        - port: {{ .Values.api.service.grpcPort }}
+          protocol: TCP
+    - to:
+        {{- toYaml $arr | nindent 8 }}
+    {{- with .Values.networkPolicy.extraEgress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}

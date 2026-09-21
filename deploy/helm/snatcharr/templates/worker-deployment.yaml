@@ -1,0 +1,92 @@
+{{- $sel := dict "root" . "component" "worker" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "snatcharr.fullname" . }}-worker
+  labels:
+    {{- include "snatcharr.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  {{- if not .Values.worker.autoscaling.enabled }}
+  replicas: {{ .Values.worker.replicaCount }}
+  {{- end }}
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      {{- include "snatcharr.selectorLabels" $sel | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "snatcharr.selectorLabels" $sel | nindent 8 }}
+        {{- with .Values.worker.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.worker.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "snatcharr.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      {{- with .Values.worker.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      # Long enough to finish leased runs; the API requeues anything a worker drops.
+      terminationGracePeriodSeconds: {{ .Values.worker.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: worker
+          image: {{ include "snatcharr.workerImage" . }}
+          imagePullPolicy: {{ .Values.image.worker.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          # The worker exposes no listener (it only dials the API), so there is nothing to
+          # probe: the kubelet restarts it if the process exits.
+          env:
+            - name: SNATCH_API_GRPC
+              value: http://{{ include "snatcharr.apiServiceName" . }}:{{ .Values.api.service.grpcPort }}
+            - name: SNATCH_WORKER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "snatcharr.secretName" . }}
+                  key: worker-token
+            - name: SNATCH_WORKER_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: SNATCH_CONCURRENCY
+              value: {{ .Values.worker.concurrency | quote }}
+            - name: SNATCH_HEARTBEAT_SECS
+              value: {{ .Values.worker.heartbeatSecs | quote }}
+            - name: SNATCH_LEASE_WAIT_SECS
+              value: {{ .Values.worker.leaseWaitSecs | quote }}
+            - name: SNATCH_ARR_TIMEOUT_SECS
+              value: {{ .Values.worker.arrTimeoutSecs | quote }}
+            - name: RUST_LOG
+              value: {{ .Values.worker.logFilter | quote }}
+            {{- with .Values.worker.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.worker.resources | nindent 12 }}
+      {{- with .Values.worker.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.worker.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.worker.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.worker.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

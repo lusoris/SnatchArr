@@ -3,17 +3,20 @@
 #
 # snatcharr-worker: Rust snatch data-plane. Static musl build via cargo-zigbuild → distroless static.
 
-FROM rust:1-bookworm AS build
+FROM --platform=$BUILDPLATFORM rust:1-bookworm AS build
 ARG TARGETARCH
 RUN apt-get update && apt-get install -y --no-install-recommends xz-utils curl ca-certificates \
  && rm -rf /var/lib/apt/lists/*
-# zig for cross-linking musl targets
+# zig for cross-linking musl targets (tarballs are named zig-<arch>-<os>-<version> since 0.14.1)
 RUN ZIG_VERSION=0.14.1 && ZIG_ARCH="$(uname -m)" \
- && curl -fsSL "https://ziglang.org/download/${ZIG_VERSION}/zig-linux-${ZIG_ARCH}-${ZIG_VERSION}.tar.xz" | tar -xJ -C /opt \
- && ln -s "/opt/zig-linux-${ZIG_ARCH}-${ZIG_VERSION}/zig" /usr/local/bin/zig
-RUN cargo install cargo-zigbuild --locked
-RUN rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
+ && curl -fsSL "https://ziglang.org/download/${ZIG_VERSION}/zig-${ZIG_ARCH}-linux-${ZIG_VERSION}.tar.xz" | tar -xJ -C /opt \
+ && ln -s "/opt/zig-${ZIG_ARCH}-linux-${ZIG_VERSION}/zig" /usr/local/bin/zig
 WORKDIR /src
+# rust-toolchain.toml pins the channel and lists the musl targets; `rustup show` installs
+# them before the sources land so the layer caches.
+COPY worker/rust-toolchain.toml ./
+RUN rustup show
+RUN cargo install cargo-zigbuild --locked
 COPY proto/ /proto/
 COPY worker/ ./
 RUN case "${TARGETARCH}" in \

@@ -1,0 +1,21 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: snatcharr
+  namespace: argocd
+spec:
+  description: SnatchArr (control plane, worker, CloudNativePG)
+  sourceRepos:
+    - https://github.com/lusoris/SnatchArr
+    - ghcr.io/lusoris/charts
+  destinations:
+    - namespace: snatcharr
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"

@@ -68,5 +68,6 @@
 		"openapi-fetch": "^0.17.0",
 		"svelte-sonner": "^1.2.1",
 		"zod": "^4.6.5"
-	}
+	},
+	"packageManager": "pnpm@12.5.1"
 }

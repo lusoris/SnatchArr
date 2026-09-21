@@ -1,2 +1,9 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+#
+# pnpm settings (pnpm >= 10 no longer reads package.json#pnpm).
 allowBuilds:
   esbuild: true
+# cookie < 0.7 accepts out-of-bounds characters (GHSA-pxg6-pf52-xh8x); SvelteKit pins ^0.6.
+overrides:
+  'cookie@<0.7.0': '^0.7.2'

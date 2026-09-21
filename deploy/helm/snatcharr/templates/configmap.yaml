@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "snatcharr.fullname" . }}-config
+  labels:
+    {{- include "snatcharr.labels" . | nindent 4 }}
+data:
+  APP_HTTP_ADDR: ":{{ .Values.api.service.port }}"
+  APP_GRPC_LISTEN: ":{{ .Values.api.service.grpcPort }}"
+  APP_SNATCHARR_PROFILE: prod
+  APP_SNATCHARR_SESSION_TTL: {{ .Values.config.sessionTtl | quote }}
+  APP_SNATCHARR_SESSION_SECURE: "true"
+  APP_HTTP_CSRF_SECURE: "true"
+  {{- with .Values.config.publicUrl }}
+  APP_SNATCHARR_PUBLIC_URL: {{ . | quote }}
+  {{- end }}
+  APP_OTEL_ENABLED: {{ .Values.config.otel.enabled | quote }}
+  {{- if .Values.config.otel.enabled }}
+  APP_OTEL_ENDPOINT: {{ required "config.otel.endpoint is required when OTEL is enabled" .Values.config.otel.endpoint | quote }}
+  APP_OTEL_INSECURE: {{ .Values.config.otel.insecure | quote }}
+  APP_OTEL_SERVICE_NAME: snatcharr-api
+  APP_OTEL_SERVICE_VERSION: {{ .Chart.AppVersion | quote }}
+  {{- end }}
+  {{- if .Values.configarr.enabled }}
+  APP_SNATCHARR_CONFIGARR_CONFIG: /etc/snatcharr/configarr/{{ .Values.configarr.configKey }}
+  {{- if .Values.configarr.existingSecret }}
+  APP_SNATCHARR_CONFIGARR_SECRETS: /etc/snatcharr/configarr-secrets/{{ .Values.configarr.secretsKey }}
+  {{- end }}
+  APP_SNATCHARR_CONFIGARR_WATCH: {{ .Values.configarr.watch | quote }}
+  {{- end }}

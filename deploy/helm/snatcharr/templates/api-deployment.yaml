@@ -1,0 +1,146 @@
+{{- $sel := dict "root" . "component" "api" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "snatcharr.fullname" . }}-api
+  labels:
+    {{- include "snatcharr.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  replicas: {{ .Values.api.replicaCount }}
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      {{- include "snatcharr.selectorLabels" $sel | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "snatcharr.selectorLabels" $sel | nindent 8 }}
+        {{- with .Values.api.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.api.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "snatcharr.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      {{- with .Values.api.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.api.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: api
+          image: {{ include "snatcharr.apiImage" . }}
+          imagePullPolicy: {{ .Values.image.api.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.api.service.port }}
+              protocol: TCP
+            - name: grpc
+              containerPort: {{ .Values.api.service.grpcPort }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "snatcharr.fullname" . }}-config
+          env:
+            - name: APP_DB_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "snatcharr.dbSecretName" . }}
+                  key: {{ include "snatcharr.dbSecretKey" . }}
+            - name: APP_CRYPTO_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "snatcharr.secretName" . }}
+                  key: crypto-key
+            - name: APP_HTTP_CSRF_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "snatcharr.secretName" . }}
+                  key: csrf-secret
+            - name: APP_SNATCHARR_APIKEY_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "snatcharr.secretName" . }}
+                  key: apikey-secret
+            - name: APP_SNATCHARR_WORKER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "snatcharr.secretName" . }}
+                  key: worker-token
+            {{- with .Values.config.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          startupProbe:
+            httpGet:
+              path: /startupz
+              port: http
+            periodSeconds: 2
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: http
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- if .Values.configarr.enabled }}
+            - name: configarr
+              mountPath: /etc/snatcharr/configarr
+              readOnly: true
+            {{- if .Values.configarr.existingSecret }}
+            - name: configarr-secrets
+              mountPath: /etc/snatcharr/configarr-secrets
+              readOnly: true
+            {{- end }}
+            {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Mi
+        {{- if .Values.configarr.enabled }}
+        - name: configarr
+          configMap:
+            name: {{ required "configarr.existingConfigMap is required when configarr.enabled=true" .Values.configarr.existingConfigMap }}
+        {{- if .Values.configarr.existingSecret }}
+        - name: configarr-secrets
+          secret:
+            secretName: {{ .Values.configarr.existingSecret }}
+        {{- end }}
+        {{- end }}
+      {{- with .Values.api.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

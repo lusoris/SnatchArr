@@ -25,7 +25,18 @@ Governance: [praetor](https://github.com/cordanaLLM/praetor) (HISS invariants, c
 
 ## Status
 
-Pre-alpha. Nothing is released yet.
+Pre-alpha, heading for 0.1.0. Releases publish `ghcr.io/lusoris/snatcharr-api`,
+`ghcr.io/lusoris/snatcharr-worker` and the chart `oci://ghcr.io/lusoris/charts/snatcharr`,
+all cosign-signed with SBOM and provenance.
+
+## Deploy
+
+```sh
+helm install snatcharr oci://ghcr.io/lusoris/charts/snatcharr --namespace snatcharr --create-namespace
+```
+
+Needs the CloudNativePG operator (or an external Postgres). Details, ArgoCD and a kind
+recipe: [Deployment](https://lusoris.github.io/SnatchArr/deployment/).
 
 ## Instances from Configarr
 

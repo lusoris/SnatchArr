@@ -1,0 +1,33 @@
+{{- if .Values.postgres.cnpg.enabled }}
+{{- $c := .Values.postgres.cnpg }}
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ include "snatcharr.dbClusterName" . }}
+  labels:
+    {{- include "snatcharr.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+spec:
+  instances: {{ $c.instances }}
+  {{- with $c.imageName }}
+  imageName: {{ . }}
+  {{- end }}
+  storage:
+    size: {{ $c.storage.size }}
+    {{- with $c.storage.storageClass }}
+    storageClass: {{ . }}
+    {{- end }}
+  bootstrap:
+    initdb:
+      database: {{ $c.database }}
+      owner: {{ $c.owner }}
+  {{- with $c.resources }}
+  resources:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  monitoring:
+    enablePodMonitor: {{ $.Values.serviceMonitor.enabled }}
+  {{- with $c.extraSpec }}
+  {{- toYaml . | nindent 2 }}
+  {{- end }}
+{{- end }}

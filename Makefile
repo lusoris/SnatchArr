@@ -20,6 +20,7 @@ GOLUSORIS_VER    = $(shell cd api && go list -m -f '{{.Version}}' github.com/gol
 GOLUSORIS_SHARED = $(GOMODCACHE)/github.com/golusoris/golusoris@$(GOLUSORIS_VER)/tools/Makefile.shared
 
 .PHONY: help verify-all api-verify worker-verify web-verify web-e2e proto-verify deploy-verify governance-verify \
+	images kind-up kind-deploy kind-down \
         api-gen web-gen proto-gen dev hooks setup
 
 help: ## Show this help
@@ -108,13 +109,34 @@ proto-gen: ## buf generate (Go stubs; Rust stubs build via tonic-build)
 	done
 
 # ── deploy/ ───────────────────────────────────────────────────────────────────
-deploy-verify: ## helm lint + kubeconform + kustomize build
-	@if [ ! -f deploy/helm/snatcharr/Chart.yaml ]; then echo "deploy/helm not scaffolded yet; skipping"; exit 0; fi
-	helm lint deploy/helm/snatcharr
-	helm template snatcharr deploy/helm/snatcharr | kubeconform -strict -ignore-missing-schemas -summary
-	if [ -f deploy/kustomize/kind/kustomization.yaml ]; then
-	  kustomize build --enable-helm deploy/kustomize/kind >/dev/null
-	fi
+# kubeconform binary if installed, else the same pinned image CI uses.
+KUBECONFORM ?= $(shell command -v kubeconform >/dev/null 2>&1 && echo kubeconform || echo "docker run --rm -i ghcr.io/yannh/kubeconform:v0.7.0")
+deploy-verify: ## helm lint --strict + kubeconform (default and all-features renders) + kustomize build
+	helm lint --strict deploy/helm/snatcharr
+	helm template snatcharr deploy/helm/snatcharr | $(KUBECONFORM) -strict -ignore-missing-schemas -summary
+	helm template snatcharr deploy/helm/snatcharr 	  --set networkPolicy.enabled=true --set api.ingress.enabled=true --set serviceMonitor.enabled=true 	  --set worker.autoscaling.enabled=true --set api.pdb.enabled=true --set worker.pdb.enabled=true 	  --set configarr.enabled=true --set configarr.existingConfigMap=cfg --set configarr.existingSecret=sec 	  | $(KUBECONFORM) -strict -ignore-missing-schemas -summary
+	kustomize build --enable-helm deploy/kustomize/kind >/dev/null
+
+images: ## Build both images locally (tag dev)
+	docker build -t snatcharr-api:dev -f Dockerfile .
+	docker build -t snatcharr-worker:dev -f worker/Dockerfile .
+
+KIND_CLUSTER ?= snatcharr
+CNPG_VERSION ?= 1.28.0
+kind-up: images ## kind cluster + CloudNativePG operator + SnatchArr (deploy/kustomize/kind)
+	kind get clusters | grep -qx $(KIND_CLUSTER) || kind create cluster --name $(KIND_CLUSTER) --config deploy/kustomize/kind/cluster.yaml
+	kubectl --context kind-$(KIND_CLUSTER) apply --server-side -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-$(shell echo $(CNPG_VERSION) | cut -d. -f1,2)/releases/cnpg-$(CNPG_VERSION).yaml
+	kubectl --context kind-$(KIND_CLUSTER) -n cnpg-system rollout status deploy/cnpg-controller-manager --timeout=180s
+	$(MAKE) kind-deploy
+
+kind-deploy: ## Load dev images and apply the kind overlay
+	kind load docker-image snatcharr-api:dev snatcharr-worker:dev --name $(KIND_CLUSTER)
+	kustomize build --enable-helm deploy/kustomize/kind | kubectl --context kind-$(KIND_CLUSTER) apply --server-side -f -
+	kubectl --context kind-$(KIND_CLUSTER) -n snatcharr rollout status deploy/snatcharr-api --timeout=300s
+	@echo "UI: kubectl --context kind-$(KIND_CLUSTER) -n snatcharr port-forward svc/snatcharr-api 8080:8080"
+
+kind-down: ## Delete the kind cluster
+	kind delete cluster --name $(KIND_CLUSTER)
 
 # ── governance (praetor) ──────────────────────────────────────────────────────
 governance-verify: ## compile-context --verify, audit, state audit, flavor audit (go-service)

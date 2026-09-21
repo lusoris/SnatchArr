@@ -17,6 +17,7 @@ UI.
 | `APP_HTTP_ADDR` | `:8080` | HTTP listen address (API, SSE, embedded UI) |
 | `APP_GRPC_LISTEN` | `:9090` | gRPC listen address for workers |
 | `APP_CRYPTO_KEY` | required in prod | Key that encrypts *arr API keys and download-client secrets at rest |
+| `APP_HTTP_CSRF_SECRET` | required in prod | Secret behind the double-submit CSRF token; set it so tokens survive restarts and replicas |
 | `APP_SNATCHARR_PROFILE` | `prod` | `prod` or `dev`; `dev` relaxes cookie security and uses the built-in dev key |
 | `APP_SNATCHARR_PUBLIC_URL` | | External base URL (cookies, links) |
 | `APP_SNATCHARR_WORKER_TOKEN` | | Shared bearer the worker presents over gRPC |

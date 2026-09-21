@@ -1,0 +1,16 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+# Inflates the chart for a local kind cluster: `make kind-up` (installs CNPG first).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: snatcharr
+resources:
+  - namespace.yaml
+helmGlobals:
+  chartHome: ../../helm
+helmCharts:
+  - name: snatcharr
+    releaseName: snatcharr
+    namespace: snatcharr
+    valuesFile: values-kind.yaml
+    includeCRDs: false

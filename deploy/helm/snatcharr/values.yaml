@@ -1,0 +1,182 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+# Default values for snatcharr. Full reference: https://lusoris.github.io/SnatchArr/deployment/
+
+image:
+  api:
+    repository: ghcr.io/lusoris/snatcharr-api
+    # Defaults to the chart's appVersion.
+    tag: ""
+    pullPolicy: IfNotPresent
+  worker:
+    repository: ghcr.io/lusoris/snatcharr-worker
+    tag: ""
+    pullPolicy: IfNotPresent
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# Runtime configuration that is not secret (rendered into a ConfigMap as APP_* env).
+config:
+  # External base URL, used for cookies and links (APP_SNATCHARR_PUBLIC_URL).
+  publicUrl: ""
+  sessionTtl: 8h
+  otel:
+    enabled: false
+    endpoint: ""
+    insecure: true
+  # Extra environment for the API container (list of EnvVar).
+  extraEnv: []
+
+# Secrets the control plane needs. Either point at an existing Secret with the keys
+# crypto-key (hex, 16/24/32 bytes), csrf-secret, apikey-secret and worker-token, or set
+# the values here. Empty values are generated once and reused across upgrades via lookup;
+# ArgoCD renders without cluster access, so give it existingSecret.
+secrets:
+  existingSecret: ""
+  cryptoKey: ""
+  csrfSecret: ""
+  apiKeySecret: ""
+  workerToken: ""
+
+postgres:
+  # CloudNativePG Cluster managed by this chart (operator must be installed).
+  cnpg:
+    enabled: true
+    instances: 1
+    # Empty picks the operator's default Postgres image.
+    imageName: ""
+    storage:
+      size: 5Gi
+      storageClass: ""
+    database: snatcharr
+    owner: snatcharr
+    resources: {}
+    # Extra Cluster spec merged verbatim (backup, affinity, postgresql.parameters, ...).
+    extraSpec: {}
+  # External Postgres instead: a Secret holding the DSN.
+  external:
+    dsnSecretRef:
+      name: ""
+      key: dsn
+
+# Linked Configarr mode: mount an existing config.yml (and optional secrets.yml).
+configarr:
+  enabled: false
+  existingConfigMap: ""
+  configKey: config.yml
+  existingSecret: ""
+  secretsKey: secrets.yml
+  watch: true
+
+api:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+  service:
+    type: ClusterIP
+    port: 8080
+    grpcPort: 9090
+    annotations: {}
+  ingress:
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts:
+      - host: snatcharr.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []
+  httpRoute:
+    enabled: false
+    annotations: {}
+    parentRefs: []
+    hostnames: []
+  pdb:
+    enabled: false
+    minAvailable: 1
+  podAnnotations: {}
+  podLabels: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  topologySpreadConstraints: []
+  priorityClassName: ""
+  terminationGracePeriodSeconds: 30
+
+worker:
+  replicaCount: 1
+  # Parallel runs per worker replica (SNATCH_CONCURRENCY).
+  concurrency: 2
+  heartbeatSecs: 30
+  leaseWaitSecs: 30
+  arrTimeoutSecs: 30
+  # RUST_LOG filter.
+  logFilter: info
+  resources:
+    requests:
+      cpu: 20m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 70
+  pdb:
+    enabled: false
+    minAvailable: 1
+  extraEnv: []
+  podAnnotations: {}
+  podLabels: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  topologySpreadConstraints: []
+  priorityClassName: ""
+  terminationGracePeriodSeconds: 60
+
+networkPolicy:
+  enabled: false
+  # Peers allowed to reach the API on 8080 (NetworkPolicyPeer list). Empty allows any.
+  ingressFrom: []
+  # Where your *arr apps, Seerr, Cleanuparr and download clients live. The cloud metadata
+  # address is always excluded.
+  arrCidrs:
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+  # Extra egress rules appended to both components.
+  extraEgress: []
+
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  scrapeTimeout: 10s
+  labels: {}
+
+# Restricted Pod Security Standard. Both images run as 65532 on distroless static.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL

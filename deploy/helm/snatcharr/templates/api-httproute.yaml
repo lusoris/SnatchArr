@@ -1,0 +1,27 @@
+{{- if .Values.api.httpRoute.enabled }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "snatcharr.fullname" . }}
+  labels:
+    {{- include "snatcharr.labels" . | nindent 4 }}
+  {{- with .Values.api.httpRoute.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  parentRefs:
+    {{- toYaml (required "api.httpRoute.parentRefs is required" .Values.api.httpRoute.parentRefs) | nindent 4 }}
+  {{- with .Values.api.httpRoute.hostnames }}
+  hostnames:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: {{ include "snatcharr.apiServiceName" . }}
+          port: {{ .Values.api.service.port }}
+{{- end }}

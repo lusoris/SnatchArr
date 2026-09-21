@@ -1,0 +1,31 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+apiVersion: v2
+name: snatcharr
+description: SnatchArr keeps your *arr apps searching for missing and cutoff-unmet media, gently.
+type: application
+# version and appVersion are bumped by release-please (see release-please-config.json).
+version: 0.1.0
+appVersion: 0.1.0
+kubeVersion: ">=1.29.0-0"
+home: https://lusoris.github.io/SnatchArr/
+icon: https://lusoris.github.io/SnatchArr/assets/mark.svg
+sources:
+  - https://github.com/lusoris/SnatchArr
+maintainers:
+  - name: lusoris
+    email: lusoris@pm.me
+keywords:
+  - sonarr
+  - radarr
+  - lidarr
+  - readarr
+  - whisparr
+  - arr
+annotations:
+  artifacthub.io/license: EUPL-1.2
+  artifacthub.io/images: |
+    - name: snatcharr-api
+      image: ghcr.io/lusoris/snatcharr-api:0.1.0
+    - name: snatcharr-worker
+      image: ghcr.io/lusoris/snatcharr-worker:0.1.0

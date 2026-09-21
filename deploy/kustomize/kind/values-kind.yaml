@@ -1,0 +1,31 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+# Local-only values: images loaded with `kind load docker-image`, throwaway secrets.
+image:
+  api:
+    repository: snatcharr-api
+    tag: dev
+    pullPolicy: Never
+  worker:
+    repository: snatcharr-worker
+    tag: dev
+    pullPolicy: Never
+config:
+  publicUrl: http://localhost:8080
+secrets:
+  cryptoKey: 0123456789abcdef0123456789abcdef
+  csrfSecret: kind-only-csrf-secret-not-for-production
+  apiKeySecret: kind-only-apikey-secret-not-for-production
+  workerToken: kind-only-worker-token
+postgres:
+  cnpg:
+    enabled: true
+    instances: 1
+    storage:
+      size: 1Gi
+networkPolicy:
+  enabled: true
+  arrCidrs:
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16

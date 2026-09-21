@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "snatcharr values",
+  "type": "object",
+  "properties": {
+    "image": {
+      "type": "object",
+      "properties": {
+        "api": { "$ref": "#/$defs/image" },
+        "worker": { "$ref": "#/$defs/image" }
+      }
+    },
+    "secrets": {
+      "type": "object",
+      "properties": {
+        "existingSecret": { "type": "string" },
+        "cryptoKey": { "type": "string", "pattern": "^([0-9a-fA-F]{32}|[0-9a-fA-F]{48}|[0-9a-fA-F]{64})?$" },
+        "csrfSecret": { "type": "string" },
+        "apiKeySecret": { "type": "string" },
+        "workerToken": { "type": "string" }
+      }
+    },
+    "postgres": {
+      "type": "object",
+      "properties": {
+        "cnpg": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "instances": { "type": "integer", "minimum": 1 },
+            "storage": {
+              "type": "object",
+              "properties": { "size": { "type": "string" }, "storageClass": { "type": "string" } }
+            }
+          }
+        },
+        "external": {
+          "type": "object",
+          "properties": {
+            "dsnSecretRef": {
+              "type": "object",
+              "properties": { "name": { "type": "string" }, "key": { "type": "string" } }
+            }
+          }
+        }
+      }
+    },
+    "api": { "$ref": "#/$defs/component" },
+    "worker": {
+      "allOf": [
+        { "$ref": "#/$defs/component" },
+        {
+          "properties": {
+            "concurrency": { "type": "integer", "minimum": 1, "maximum": 32 },
+            "heartbeatSecs": { "type": "integer", "minimum": 5 },
+            "leaseWaitSecs": { "type": "integer", "minimum": 1, "maximum": 60 },
+            "arrTimeoutSecs": { "type": "integer", "minimum": 5 }
+          }
+        }
+      ]
+    },
+    "networkPolicy": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "arrCidrs": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  },
+  "$defs": {
+    "image": {
+      "type": "object",
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "tag": { "type": "string" },
+        "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+      }
+    },
+    "component": {
+      "type": "object",
+      "properties": {
+        "replicaCount": { "type": "integer", "minimum": 0 },
+        "resources": { "type": "object" }
+      }
+    }
+  }
+}
