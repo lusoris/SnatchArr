@@ -18,6 +18,7 @@
     )
 )]
 
+use std::sync::OnceLock;
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
@@ -96,8 +97,9 @@ pub enum RadarrRelease {
 /// Client errors.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    /// Transport-level failure (DNS, connect, timeout).
-    #[error("arr: transport: {0}")]
+    /// Transport-level failure (DNS, connect, timeout, TLS setup). The message carries the
+    /// whole source chain because `reqwest::Error` alone prints only "builder error".
+    #[error("arr: transport: {}", error_chain(.0))]
     Transport(#[from] reqwest::Error),
     /// Non-2xx after retries.
     #[error("arr: {method} {path}: HTTP {status}: {body}")]
@@ -358,14 +360,44 @@ impl<'a> CommandBody<'a> {
 
 const MAX_BODY_IN_ERROR: usize = 256;
 
+/// Renders an error followed by every `source()` below it, joined with ": ".
+fn error_chain(err: &(dyn std::error::Error + 'static)) -> String {
+    let mut out = err.to_string();
+    let mut cur = err.source();
+    // Bounded: a pathological cycle must not spin forever.
+    for _ in 0..16 {
+        let Some(next) = cur else { break };
+        out.push_str(": ");
+        out.push_str(&next.to_string());
+        cur = next.source();
+    }
+    out
+}
+
+/// Mozilla's root bundle, parsed once. It is added as *extra* roots, so the OS store is
+/// still honoured when present, but a container without `ca-certificates` (or a scratch
+/// image) no longer fails at client construction with "No CA certificates were loaded".
+fn bundled_roots() -> &'static [reqwest::Certificate] {
+    static ROOTS: OnceLock<Vec<reqwest::Certificate>> = OnceLock::new();
+    ROOTS.get_or_init(|| {
+        webpki_root_certs::TLS_SERVER_ROOT_CERTS
+            .iter()
+            .filter_map(|der| reqwest::Certificate::from_der(der).ok())
+            .collect()
+    })
+}
+
 impl ArrClient {
     /// Builds a client for one instance.
     pub fn new(kind: Kind, base_url: &str, api_key: &str, opts: Options) -> Result<Self, Error> {
         let base = Url::parse(base_url.trim_end_matches('/'))?;
-        let http = reqwest::Client::builder()
+        let mut builder = reqwest::Client::builder()
             .timeout(opts.timeout)
-            .user_agent(opts.user_agent.clone())
-            .build()?;
+            .user_agent(opts.user_agent.clone());
+        for cert in bundled_roots() {
+            builder = builder.add_root_certificate(cert.clone());
+        }
+        let http = builder.build()?;
         Ok(Self {
             http,
             base,
@@ -598,6 +630,20 @@ fn child_candidate(c: ChildLike) -> Candidate {
 
 #[cfg(test)]
 mod tests {
+    #[derive(Debug, thiserror::Error)]
+    #[error("outer")]
+    struct Outer(#[source] Inner);
+
+    #[derive(Debug, thiserror::Error)]
+    #[error("inner cause")]
+    struct Inner;
+
+    #[test]
+    fn error_chain_joins_sources() {
+        assert_eq!(super::error_chain(&Outer(Inner)), "outer: inner cause");
+        assert!(super::bundled_roots().len() > 100);
+    }
+
     use super::*;
     use wiremock::matchers::{body_partial_json, header, method, path, query_param};
     use wiremock::{Mock, MockServer, ResponseTemplate};

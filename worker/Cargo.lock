@@ -39,6 +39,7 @@ dependencies = [
  "tokio",
  "tracing",
  "url",
+ "webpki-root-certs",
  "wiremock",
 ]
 
