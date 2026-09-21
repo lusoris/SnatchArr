@@ -6,6 +6,7 @@ package httpapi
 
 import (
 	"context"
+	"maps"
 
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/cleanuparr"
@@ -123,9 +124,7 @@ func cleanuparrStatusToOAS(v cleanuparr.LinkStatus) oas.CleanuparrStatus {
 		RemovedDownloads: v.Summary.RemovedDownloads, MediaManagers: oas.CleanuparrStatusMediaManagers{},
 		RecentStrikes: make([]oas.CleanuparrStrike, 0, len(v.Recent)),
 	}
-	for name, n := range v.Status.MediaManagers {
-		out.MediaManagers[name] = n
-	}
+	maps.Copy(out.MediaManagers, v.Status.MediaManagers)
 	for _, s := range v.Recent {
 		out.RecentStrikes = append(out.RecentStrikes, oas.CleanuparrStrike{
 			ID: s.ID, Type: s.Type, CreatedAt: s.CreatedAt, DownloadID: s.DownloadID, Title: s.Title, DryRun: s.DryRun,
