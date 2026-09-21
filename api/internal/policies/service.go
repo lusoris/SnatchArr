@@ -57,5 +57,19 @@ func (s *Service) Update(ctx context.Context, p domain.Policy) (domain.Policy, e
 	return store.PolicyFromRow(row), nil
 }
 
+// SaveCursor persists the sequential-selection cursor for one hunt kind.
+func (s *Service) SaveCursor(ctx context.Context, instanceID uuid.UUID, kind domain.HuntKind, cursor string) error {
+	if len(cursor) > 256 {
+		return fmt.Errorf("%w: cursor too long", domain.ErrInvalid)
+	}
+	err := s.st.Q().SavePolicyCursor(ctx, sqlcgen.SavePolicyCursorParams{
+		Kind: string(kind), Cursor: cursor, UpdatedAt: s.clk.Now(), InstanceID: instanceID,
+	})
+	if err != nil {
+		return fmt.Errorf("policies: save cursor: %w", store.MapError(err))
+	}
+	return nil
+}
+
 // Module provides the Service.
 var Module = fx.Module("snatcharr.policies", fx.Provide(New))

@@ -199,7 +199,7 @@ func (s *Service) recordCheck(ctx context.Context, instID uuid.UUID, res arrclie
 		version = &res.Version
 	}
 	if err := s.st.Q().RecordInstanceCheck(ctx, sqlcgen.RecordInstanceCheckParams{
-		ID: instID, LastSeenVersion: version, LastCheckAt: ptr(s.clk.Now()), LastError: lastErr,
+		ID: instID, LastSeenVersion: version, LastCheckAt: timePtr(s.clk.Now()), LastError: lastErr,
 	}); err != nil {
 		s.logger.WarnContext(ctx, "instances: record check", slog.String("error", err.Error()))
 	}

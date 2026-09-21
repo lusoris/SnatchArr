@@ -4,4 +4,6 @@
 
 package instances
 
-func ptr[T any](v T) *T { return &v }
+import "time"
+
+func timePtr(t time.Time) *time.Time { return &t }

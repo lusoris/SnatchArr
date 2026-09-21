@@ -14,12 +14,14 @@ snatch-proto = { workspace = true }
 hunt-core = { workspace = true }
 arr-client = { workspace = true }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
+tokio-stream = { workspace = true }
 tonic = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 rand = { workspace = true }
 thiserror = { workspace = true }
-humantime = { workspace = true }
+chrono = { workspace = true }
 
 [lints]
 workspace = true

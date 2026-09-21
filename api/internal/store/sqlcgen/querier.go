@@ -12,41 +12,79 @@ import (
 )
 
 type Querier interface {
+	CancelRun(ctx context.Context, arg CancelRunParams) (int64, error)
+	CompleteRun(ctx context.Context, arg CompleteRunParams) (HuntRun, error)
 	CountInstancesByBaseURL(ctx context.Context, arg CountInstancesByBaseURLParams) (int64, error)
+	CountProcessed(ctx context.Context, arg CountProcessedParams) (int64, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
 	CountUsers(ctx context.Context) (int64, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
 	CreateInstance(ctx context.Context, arg CreateInstanceParams) (Instance, error)
+	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+	// SPDX-License-Identifier: EUPL-1.2
+	CreateSchedule(ctx context.Context, arg CreateScheduleParams) (Schedule, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	DeleteEventsForInstance(ctx context.Context, instanceID uuid.UUID) (int64, error)
 	DeleteInstance(ctx context.Context, id uuid.UUID) (int64, error)
+	DeleteSchedule(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteSession(ctx context.Context, id string) error
+	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+	// SPDX-License-Identifier: EUPL-1.2
+	EnqueueRun(ctx context.Context, arg EnqueueRunParams) (HuntRun, error)
+	EnsureBucket(ctx context.Context, arg EnsureBucketParams) error
 	EnsureDefaultPolicy(ctx context.Context, arg EnsureDefaultPolicyParams) (HuntPolicy, error)
 	EnsureSettings(ctx context.Context, updatedAt time.Time) (Setting, error)
+	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+	// SPDX-License-Identifier: EUPL-1.2
+	FilterUnprocessed(ctx context.Context, arg FilterUnprocessedParams) ([]int64, error)
 	GetAPIKey(ctx context.Context, id string) (ApiKey, error)
+	GetBucketUsed(ctx context.Context, arg GetBucketUsedParams) (int32, error)
 	GetInstance(ctx context.Context, id uuid.UUID) (Instance, error)
 	GetInstanceByConfigarrKey(ctx context.Context, configarrKey *string) (Instance, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
 	GetPolicy(ctx context.Context, instanceID uuid.UUID) (HuntPolicy, error)
+	GetRun(ctx context.Context, id uuid.UUID) (HuntRun, error)
+	GetSchedule(ctx context.Context, id uuid.UUID) (Schedule, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
 	GetSettings(ctx context.Context) (Setting, error)
 	GetUser(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserByUsername(ctx context.Context, username string) (User, error)
+	HasActiveRun(ctx context.Context, arg HasActiveRunParams) (bool, error)
+	HeartbeatRun(ctx context.Context, arg HeartbeatRunParams) (HuntRun, error)
+	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+	// SPDX-License-Identifier: EUPL-1.2
+	InsertEvent(ctx context.Context, arg InsertEventParams) (int64, error)
+	LastFinishedAt(ctx context.Context, arg LastFinishedAtParams) (time.Time, error)
+	LeaseRun(ctx context.Context, arg LeaseRunParams) (HuntRun, error)
 	ListAPIKeysByOwner(ctx context.Context, ownerID uuid.UUID) ([]ApiKey, error)
 	ListEnabledInstances(ctx context.Context) ([]Instance, error)
+	ListEnabledSchedulesFor(ctx context.Context, instanceID *uuid.UUID) ([]Schedule, error)
+	ListEvents(ctx context.Context, arg ListEventsParams) ([]HuntEvent, error)
 	ListInstances(ctx context.Context) ([]Instance, error)
+	ListRuns(ctx context.Context, arg ListRunsParams) ([]HuntRun, error)
+	ListSchedules(ctx context.Context) ([]Schedule, error)
 	ListUsers(ctx context.Context) ([]User, error)
 	LoadSession(ctx context.Context, arg LoadSessionParams) ([]byte, error)
+	LockBucket(ctx context.Context, arg LockBucketParams) (int32, error)
+	MarkProcessed(ctx context.Context, arg MarkProcessedParams) error
+	PurgeBucketsBefore(ctx context.Context, windowStart time.Time) (int64, error)
+	PurgeEventsBefore(ctx context.Context, ts time.Time) (int64, error)
+	PurgeExpiredProcessed(ctx context.Context, expiresAt time.Time) (int64, error)
 	PurgeExpiredSessions(ctx context.Context, expiresAt time.Time) (int64, error)
+	PurgeRunsBefore(ctx context.Context, finishedAt *time.Time) (int64, error)
 	RecordInstanceCheck(ctx context.Context, arg RecordInstanceCheckParams) error
+	ResetProcessed(ctx context.Context, instanceID *uuid.UUID) (int64, error)
 	RevokeAPIKey(ctx context.Context, arg RevokeAPIKeyParams) (int64, error)
 	SaveAPIKey(ctx context.Context, arg SaveAPIKeyParams) error
 	SavePolicyCursor(ctx context.Context, arg SavePolicyCursorParams) error
 	SaveSession(ctx context.Context, arg SaveSessionParams) error
+	SetBucketUsed(ctx context.Context, arg SetBucketUsedParams) error
 	UpdateInstance(ctx context.Context, arg UpdateInstanceParams) (Instance, error)
+	UpdateSchedule(ctx context.Context, arg UpdateScheduleParams) (Schedule, error)
 	UpdateSettings(ctx context.Context, arg UpdateSettingsParams) (Setting, error)
 	UpsertConfigarrInstance(ctx context.Context, arg UpsertConfigarrInstanceParams) (Instance, error)
 	UpsertPolicy(ctx context.Context, arg UpsertPolicyParams) (HuntPolicy, error)

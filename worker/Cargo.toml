@@ -20,6 +20,8 @@ hunt-core = { path = "crates/hunt-core", version = "0.1.0" }
 arr-client = { path = "crates/arr-client", version = "0.1.0" }
 
 tokio = { version = "1.53", features = ["rt-multi-thread", "macros", "signal", "time", "sync"] }
+tokio-util = "0.7"
+tokio-stream = "0.1"
 tonic = { version = "0.14", default-features = false, features = ["channel", "codegen", "transport"] }
 tonic-prost = "0.14"
 prost = "0.14"

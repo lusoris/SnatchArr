@@ -18,6 +18,7 @@ import (
 	"github.com/golusoris/golusoris"
 	"github.com/golusoris/golusoris/core/clock"
 	dbmigrate "github.com/golusoris/golusoris/db/migrate"
+	grpcx "github.com/golusoris/golusoris/grpc"
 	"github.com/golusoris/golusoris/httpx/csrf"
 	"github.com/golusoris/golusoris/httpx/middleware"
 	"github.com/golusoris/golusoris/k8s/health"
@@ -30,10 +31,12 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/config"
 	"github.com/lusoris/SnatchArr/api/internal/events"
 	"github.com/lusoris/SnatchArr/api/internal/httpapi"
+	"github.com/lusoris/SnatchArr/api/internal/hunt"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
 	"github.com/lusoris/SnatchArr/api/internal/policies"
 	"github.com/lusoris/SnatchArr/api/internal/store"
 	"github.com/lusoris/SnatchArr/api/internal/webui"
+	"github.com/lusoris/SnatchArr/api/internal/workergrpc"
 )
 
 // Module is the complete SnatchArr control plane. Order matters for fx.Invoke: the base
@@ -44,6 +47,7 @@ var Module = fx.Options(
 	golusoris.HTTP,
 	otel.Module,
 	csrf.Module,
+	grpcx.Module,
 	fx.Decorate(embedMigrations),
 	config.Module,
 	store.Module,
@@ -52,6 +56,8 @@ var Module = fx.Options(
 	policies.Module,
 	auth.Module,
 	events.Module,
+	hunt.Module,
+	workergrpc.Module,
 	httpapi.Module,
 	fx.Provide(statuspage.NewRegistry, health.NewStartupGate),
 	fx.Invoke(registerHealthChecks),

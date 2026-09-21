@@ -136,9 +136,15 @@ linters:
     wrapcheck:
       ignore-package-globs:
         - github.com/lusoris/SnatchArr/*
+        # gRPC status errors and stream replies must be returned as-is so clients read the code.
+        - google.golang.org/grpc/*
+        - google.golang.org/grpc
       extra-ignore-sigs:
         - .Errorf(
         - errors.New(
+        - status.Error(
+        - status.Errorf(
+        - .SendAndClose(
         - errors.Unwrap(
         - errors.Wrap(
         - errors.Wrapf(
