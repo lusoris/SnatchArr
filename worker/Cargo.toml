@@ -16,7 +16,7 @@ publish = false
 
 [workspace.dependencies]
 snatch-proto = { path = "crates/snatch-proto", version = "0.1.0" }
-hunt-core = { path = "crates/hunt-core", version = "0.1.0" }
+snatch-core = { path = "crates/snatch-core", version = "0.1.0" }
 arr-client = { path = "crates/arr-client", version = "0.1.0" }
 
 tokio = { version = "1.53", features = ["rt-multi-thread", "macros", "signal", "time", "sync"] }

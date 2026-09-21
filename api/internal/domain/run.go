@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// RunStatus is the lifecycle state of a hunt run.
+// RunStatus is the lifecycle state of a snatch run.
 type RunStatus string
 
 // Run states.
@@ -22,11 +22,11 @@ const (
 	RunCancelled RunStatus = "cancelled"
 )
 
-// Run is one hunt cycle for one instance and hunt kind, executed by a worker.
+// Run is one snatch cycle for one instance and snatch kind, executed by a worker.
 type Run struct {
 	ID             uuid.UUID
 	InstanceID     uuid.UUID
-	Kind           HuntKind
+	Kind           SnatchKind
 	Status         RunStatus
 	LeasedBy       string
 	LeaseExpiresAt *time.Time

@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-//! Minimal *arr REST client for hunting. Only what a hunt run needs: the wanted lists
+//! Minimal *arr REST client for snatching. Only what a snatch run needs: the wanted lists
 //! (`wanted/missing`, `wanted/cutoff`), search commands, command status, the queue size and
 //! `system/status`. Every request has a timeout, bounded retries, and the product User-Agent.
 
@@ -22,8 +22,8 @@ use std::sync::OnceLock;
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use hunt_core::{Candidate, Target};
 use serde::{Deserialize, Serialize};
+use snatch_core::{Candidate, Target};
 use url::Url;
 
 /// *arr application family and API generation.

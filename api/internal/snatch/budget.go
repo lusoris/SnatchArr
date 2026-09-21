@@ -2,10 +2,10 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-// Package hunt is the control plane's hunting brain: per-instance hourly budgets,
+// Package snatch is the control plane's snatching brain: per-instance hourly budgets,
 // processed-item memory, run lifecycle, schedule evaluation and the planner tick.
 // Execution against *arr instances happens in the Rust worker.
-package hunt
+package snatch
 
 import (
 	"context"
@@ -54,7 +54,7 @@ func (b *Budget) Acquire(ctx context.Context, instanceID uuid.UUID, capacity, re
 	now := b.clk.Now()
 	window := Window(now)
 	if requested < 0 || capacity <= 0 {
-		return Grant{}, fmt.Errorf("hunt: budget: invalid request (capacity %d, requested %d)", capacity, requested)
+		return Grant{}, fmt.Errorf("snatch: budget: invalid request (capacity %d, requested %d)", capacity, requested)
 	}
 	var g Grant
 	err := b.st.Tx(ctx, func(q *sqlcgen.Queries) error {
@@ -78,7 +78,7 @@ func (b *Budget) Acquire(ctx context.Context, instanceID uuid.UUID, capacity, re
 		return nil
 	})
 	if err != nil {
-		return Grant{}, fmt.Errorf("hunt: budget: %w", store.MapError(err))
+		return Grant{}, fmt.Errorf("snatch: budget: %w", store.MapError(err))
 	}
 	return g, nil
 }
@@ -101,7 +101,7 @@ func (b *Budget) Used(ctx context.Context, instanceID uuid.UUID) (int, time.Time
 	window := Window(b.clk.Now())
 	used, err := b.st.Q().GetBucketUsed(ctx, sqlcgen.GetBucketUsedParams{InstanceID: instanceID, WindowStart: window})
 	if err != nil {
-		return 0, window, fmt.Errorf("hunt: budget used: %w", store.MapError(err))
+		return 0, window, fmt.Errorf("snatch: budget used: %w", store.MapError(err))
 	}
 	return int(used), window.Add(time.Hour), nil
 }

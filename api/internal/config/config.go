@@ -10,7 +10,7 @@
 //	snatcharr.profile            APP_SNATCHARR_PROFILE            prod | dev (default prod)
 //	snatcharr.public.url         APP_SNATCHARR_PUBLIC_URL         external base URL (for cookies/links)
 //	snatcharr.web.dev            APP_SNATCHARR_WEB_DEV            disable the embedded SPA (Vite proxies instead)
-//	snatcharr.worker.token       APP_SNATCHARR_WORKER_TOKEN       shared bearer the hunt-worker presents over gRPC
+//	snatcharr.worker.token       APP_SNATCHARR_WORKER_TOKEN       shared bearer the snatch-worker presents over gRPC
 //	snatcharr.configarr.config   APP_SNATCHARR_CONFIGARR_CONFIG   path to Configarr config.yml (linked mode)
 //	snatcharr.configarr.secrets  APP_SNATCHARR_CONFIGARR_SECRETS  path to Configarr secrets.yml
 //	snatcharr.configarr.watch    APP_SNATCHARR_CONFIGARR_WATCH    re-import on file change (default true)

@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 // Package arrclient is the Go side's thin use of goenvoy: connectivity probes and queue
-// sizes. Hunting itself lives in the Rust worker.
+// sizes. Snatching itself lives in the Rust worker.
 package arrclient
 
 import (

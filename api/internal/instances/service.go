@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 // Package instances manages *arr instance definitions: validation, encryption of API
-// keys at rest, connectivity tests, and the default hunt policy each instance gets.
+// keys at rest, connectivity tests, and the default snatch policy each instance gets.
 package instances
 
 import (
@@ -35,7 +35,7 @@ type Input struct {
 	Enabled bool
 }
 
-// Credentials are what the hunt-worker needs to talk to an instance.
+// Credentials are what the snatch-worker needs to talk to an instance.
 type Credentials struct {
 	BaseURL string
 	APIKey  string
@@ -199,7 +199,7 @@ func (s *Service) recordCheck(ctx context.Context, instID uuid.UUID, res arrclie
 		version = &res.Version
 	}
 	if err := s.st.Q().RecordInstanceCheck(ctx, sqlcgen.RecordInstanceCheckParams{
-		ID: instID, LastSeenVersion: version, LastCheckAt: timePtr(s.clk.Now()), LastError: lastErr,
+		ID: instID, LastSeenVersion: version, LastCheckAt: new(s.clk.Now()), LastError: lastErr,
 	}); err != nil {
 		s.logger.WarnContext(ctx, "instances: record check", slog.String("error", err.Error()))
 	}

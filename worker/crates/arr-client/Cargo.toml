@@ -1,6 +1,6 @@
 [package]
 name = "arr-client"
-description = "Minimal *arr REST client for hunting: wanted lists, search commands, queue, status"
+description = "Minimal *arr REST client for snatching: wanted lists, search commands, queue, status"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,7 +10,7 @@ authors.workspace = true
 publish.workspace = true
 
 [dependencies]
-hunt-core = { workspace = true }
+snatch-core = { workspace = true }
 reqwest = { workspace = true }
 webpki-root-certs = { workspace = true }
 serde = { workspace = true }

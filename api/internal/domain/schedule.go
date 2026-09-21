@@ -13,7 +13,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// ScheduleAction is what a matching schedule window does to hunting.
+// ScheduleAction is what a matching schedule window does to snatching.
 type ScheduleAction string
 
 // Schedule actions.
@@ -22,7 +22,7 @@ const (
 	ScheduleCapOverride ScheduleAction = "cap_override"
 )
 
-// Schedule is a weekly time window that pauses hunting or lowers the hourly cap, for one
+// Schedule is a weekly time window that pauses snatching or lowers the hourly cap, for one
 // instance or globally (InstanceID nil). Start and End are "HH:MM" in TZ; a window whose
 // End is before Start crosses midnight.
 type Schedule struct {

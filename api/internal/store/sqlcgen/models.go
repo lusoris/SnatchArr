@@ -40,55 +40,6 @@ type DownloadClient struct {
 	UpdatedAt          time.Time
 }
 
-type HuntEvent struct {
-	ID         int64
-	RunID      *uuid.UUID
-	InstanceID uuid.UUID
-	Ts         time.Time
-	Level      string
-	Type       string
-	EntityType string
-	EntityID   int64
-	Title      string
-	Detail     string
-}
-
-type HuntPolicy struct {
-	InstanceID         uuid.UUID
-	MissingPerCycle    int32
-	UpgradePerCycle    int32
-	CycleIntervalS     int32
-	HourlyCap          int32
-	Selection          string
-	MonitoredOnly      bool
-	SkipFutureReleases bool
-	RadarrReleaseType  string
-	SonarrMissingMode  string
-	SonarrUpgradeMode  string
-	LidarrMissingMode  string
-	ProcessedTtlH      int32
-	MaxQueueSize       int32
-	AwaitCommand       bool
-	PageSize           int32
-	CursorMissing      string
-	CursorUpgrade      string
-	UpdatedAt          time.Time
-}
-
-type HuntRun struct {
-	ID             uuid.UUID
-	InstanceID     uuid.UUID
-	Kind           string
-	Status         string
-	LeasedBy       *string
-	LeaseExpiresAt *time.Time
-	QueuedAt       time.Time
-	StartedAt      *time.Time
-	FinishedAt     *time.Time
-	SearchedCount  int32
-	Error          *string
-}
-
 type Instance struct {
 	ID              uuid.UUID
 	Kind            string
@@ -145,6 +96,55 @@ type Setting struct {
 	HistoryRetentionDays int32
 	UserAgent            string
 	UpdatedAt            time.Time
+}
+
+type SnatchEvent struct {
+	ID         int64
+	RunID      *uuid.UUID
+	InstanceID uuid.UUID
+	Ts         time.Time
+	Level      string
+	Type       string
+	EntityType string
+	EntityID   int64
+	Title      string
+	Detail     string
+}
+
+type SnatchPolicy struct {
+	InstanceID         uuid.UUID
+	MissingPerCycle    int32
+	UpgradePerCycle    int32
+	CycleIntervalS     int32
+	HourlyCap          int32
+	Selection          string
+	MonitoredOnly      bool
+	SkipFutureReleases bool
+	RadarrReleaseType  string
+	SonarrMissingMode  string
+	SonarrUpgradeMode  string
+	LidarrMissingMode  string
+	ProcessedTtlH      int32
+	MaxQueueSize       int32
+	AwaitCommand       bool
+	PageSize           int32
+	CursorMissing      string
+	CursorUpgrade      string
+	UpdatedAt          time.Time
+}
+
+type SnatchRun struct {
+	ID             uuid.UUID
+	InstanceID     uuid.UUID
+	Kind           string
+	Status         string
+	LeasedBy       *string
+	LeaseExpiresAt *time.Time
+	QueuedAt       time.Time
+	StartedAt      *time.Time
+	FinishedAt     *time.Time
+	SearchedCount  int32
+	Error          *string
 }
 
 type User struct {

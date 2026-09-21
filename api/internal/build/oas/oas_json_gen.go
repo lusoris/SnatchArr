@@ -1659,592 +1659,6 @@ func (s *EventLevel) UnmarshalJSON(data []byte) error {
 	return s.Decode(d)
 }
 
-// Encode encodes HuntKind as json.
-func (s HuntKind) Encode(e *jx.Encoder) {
-	e.Str(string(s))
-}
-
-// Decode decodes HuntKind from json.
-func (s *HuntKind) Decode(d *jx.Decoder) error {
-	if s == nil {
-		return errors.New("invalid: unable to decode HuntKind to nil")
-	}
-	v, err := d.StrBytes()
-	if err != nil {
-		return err
-	}
-	// Try to use constant string.
-	switch HuntKind(v) {
-	case HuntKindMissing:
-		*s = HuntKindMissing
-	case HuntKindUpgrade:
-		*s = HuntKindUpgrade
-	default:
-		*s = HuntKind(v)
-	}
-
-	return nil
-}
-
-// MarshalJSON implements stdjson.Marshaler.
-func (s HuntKind) MarshalJSON() ([]byte, error) {
-	e := jx.Encoder{}
-	s.Encode(&e)
-	return e.Bytes(), nil
-}
-
-// UnmarshalJSON implements stdjson.Unmarshaler.
-func (s *HuntKind) UnmarshalJSON(data []byte) error {
-	d := jx.DecodeBytes(data)
-	return s.Decode(d)
-}
-
-// Encode implements json.Marshaler.
-func (s *HuntPolicy) Encode(e *jx.Encoder) {
-	e.ObjStart()
-	s.encodeFields(e)
-	e.ObjEnd()
-}
-
-// encodeFields encodes fields.
-func (s *HuntPolicy) encodeFields(e *jx.Encoder) {
-	{
-		e.FieldStart("missing_per_cycle")
-		e.Int(s.MissingPerCycle)
-	}
-	{
-		e.FieldStart("upgrade_per_cycle")
-		e.Int(s.UpgradePerCycle)
-	}
-	{
-		e.FieldStart("cycle_interval_s")
-		e.Int(s.CycleIntervalS)
-	}
-	{
-		e.FieldStart("hourly_cap")
-		e.Int(s.HourlyCap)
-	}
-	{
-		e.FieldStart("selection")
-		s.Selection.Encode(e)
-	}
-	{
-		e.FieldStart("monitored_only")
-		e.Bool(s.MonitoredOnly)
-	}
-	{
-		e.FieldStart("skip_future_releases")
-		e.Bool(s.SkipFutureReleases)
-	}
-	{
-		e.FieldStart("radarr_release_type")
-		s.RadarrReleaseType.Encode(e)
-	}
-	{
-		e.FieldStart("sonarr_missing_mode")
-		s.SonarrMissingMode.Encode(e)
-	}
-	{
-		e.FieldStart("sonarr_upgrade_mode")
-		s.SonarrUpgradeMode.Encode(e)
-	}
-	{
-		e.FieldStart("lidarr_missing_mode")
-		s.LidarrMissingMode.Encode(e)
-	}
-	{
-		e.FieldStart("processed_ttl_h")
-		e.Int(s.ProcessedTTLH)
-	}
-	{
-		e.FieldStart("max_queue_size")
-		e.Int(s.MaxQueueSize)
-	}
-	{
-		e.FieldStart("await_command")
-		e.Bool(s.AwaitCommand)
-	}
-	{
-		e.FieldStart("page_size")
-		e.Int(s.PageSize)
-	}
-	{
-		if s.UpdatedAt.Set {
-			e.FieldStart("updated_at")
-			s.UpdatedAt.Encode(e, json.EncodeDateTime)
-		}
-	}
-}
-
-var jsonFieldsNameOfHuntPolicy = [16]string{
-	0:  "missing_per_cycle",
-	1:  "upgrade_per_cycle",
-	2:  "cycle_interval_s",
-	3:  "hourly_cap",
-	4:  "selection",
-	5:  "monitored_only",
-	6:  "skip_future_releases",
-	7:  "radarr_release_type",
-	8:  "sonarr_missing_mode",
-	9:  "sonarr_upgrade_mode",
-	10: "lidarr_missing_mode",
-	11: "processed_ttl_h",
-	12: "max_queue_size",
-	13: "await_command",
-	14: "page_size",
-	15: "updated_at",
-}
-
-// Decode decodes HuntPolicy from json.
-func (s *HuntPolicy) Decode(d *jx.Decoder) error {
-	if s == nil {
-		return errors.New("invalid: unable to decode HuntPolicy to nil")
-	}
-	var requiredBitSet [2]uint8
-
-	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
-		switch string(k) {
-		case "missing_per_cycle":
-			requiredBitSet[0] |= 1 << 0
-			if err := func() error {
-				v, err := d.Int()
-				s.MissingPerCycle = int(v)
-				if err != nil {
-					return err
-				}
-				return nil
-			}(); err != nil {
-				return errors.Wrap(err, "decode field \"missing_per_cycle\"")
-			}
-		case "upgrade_per_cycle":
-			requiredBitSet[0] |= 1 << 1
-			if err := func() error {
-				v, err := d.Int()
-				s.UpgradePerCycle = int(v)
-				if err != nil {
-					return err
-				}
-				return nil
-			}(); err != nil {
-				return errors.Wrap(err, "decode field \"upgrade_per_cycle\"")
-			}
-		case "cycle_interval_s":
-			requiredBitSet[0] |= 1 << 2
-			if err := func() error {
-				v, err := d.Int()
-				s.CycleIntervalS = int(v)
-				if err != nil {
-					return err
-				}
-				return nil
-			}(); err != nil {
-				return errors.Wrap(err, "decode field \"cycle_interval_s\"")
-			}
-		case "hourly_cap":
-			requiredBitSet[0] |= 1 << 3
-			if err := func() error {
-				v, err := d.Int()
-				s.HourlyCap = int(v)
-				if err != nil {
-					return err
-				}
-				return nil
-			}(); err != nil {
-				return errors.Wrap(err, "decode field \"hourly_cap\"")
-			}
-		case "selection":
-			requiredBitSet[0] |= 1 << 4
-			if err := func() error {
-				if err := s.Selection.Decode(d); err != nil {
-					return err
-				}
-				return nil
-			}(); err != nil {
-				return errors.Wrap(err, "decode field \"selection\"")
-			}
-		case "monitored_only":
-			requiredBitSet[0] |= 1 << 5
-			if err := func() error {
-				v, err := d.Bool()
-				s.MonitoredOnly = bool(v)
-				if err != nil {
-					return err
-				}
-				return nil
-			}(); err != nil {
-				return errors.Wrap(err, "decode field \"monitored_only\"")
-			}
-		case "skip_future_releases":
-			requiredBitSet[0] |= 1 << 6
-			if err := func() error {
-				v, err := d.Bool()
-				s.SkipFutureReleases = bool(v)
-				if err != nil {
-					return err
-				}
-				return nil
-			}(); err != nil {
-				return errors.Wrap(err, "decode field \"skip_future_releases\"")
-			}
-		case "radarr_release_type":
-			requiredBitSet[0] |= 1 << 7
-			if err := func() error {
-				if err := s.RadarrReleaseType.Decode(d); err != nil {
-					return err
-				}
-				return nil
-			}(); err != nil {
-				return errors.Wrap(err, "decode field \"radarr_release_type\"")
-			}
-		case "sonarr_missing_mode":
-			requiredBitSet[1] |= 1 << 0
-			if err := func() error {
-				if err := s.SonarrMissingMode.Decode(d); err != nil {
-					return err
-				}
-				return nil
-			}(); err != nil {
-				return errors.Wrap(err, "decode field \"sonarr_missing_mode\"")
-			}
-		case "sonarr_upgrade_mode":
-			requiredBitSet[1] |= 1 << 1
-			if err := func() error {
-				if err := s.SonarrUpgradeMode.Decode(d); err != nil {
-					return err
-				}
-				return nil
-			}(); err != nil {
-				return errors.Wrap(err, "decode field \"sonarr_upgrade_mode\"")
-			}
-		case "lidarr_missing_mode":
-			requiredBitSet[1] |= 1 << 2
-			if err := func() error {
-				if err := s.LidarrMissingMode.Decode(d); err != nil {
-					return err
-				}
-				return nil
-			}(); err != nil {
-				return errors.Wrap(err, "decode field \"lidarr_missing_mode\"")
-			}
-		case "processed_ttl_h":
-			requiredBitSet[1] |= 1 << 3
-			if err := func() error {
-				v, err := d.Int()
-				s.ProcessedTTLH = int(v)
-				if err != nil {
-					return err
-				}
-				return nil
-			}(); err != nil {
-				return errors.Wrap(err, "decode field \"processed_ttl_h\"")
-			}
-		case "max_queue_size":
-			requiredBitSet[1] |= 1 << 4
-			if err := func() error {
-				v, err := d.Int()
-				s.MaxQueueSize = int(v)
-				if err != nil {
-					return err
-				}
-				return nil
-			}(); err != nil {
-				return errors.Wrap(err, "decode field \"max_queue_size\"")
-			}
-		case "await_command":
-			requiredBitSet[1] |= 1 << 5
-			if err := func() error {
-				v, err := d.Bool()
-				s.AwaitCommand = bool(v)
-				if err != nil {
-					return err
-				}
-				return nil
-			}(); err != nil {
-				return errors.Wrap(err, "decode field \"await_command\"")
-			}
-		case "page_size":
-			requiredBitSet[1] |= 1 << 6
-			if err := func() error {
-				v, err := d.Int()
-				s.PageSize = int(v)
-				if err != nil {
-					return err
-				}
-				return nil
-			}(); err != nil {
-				return errors.Wrap(err, "decode field \"page_size\"")
-			}
-		case "updated_at":
-			if err := func() error {
-				s.UpdatedAt.Reset()
-				if err := s.UpdatedAt.Decode(d, json.DecodeDateTime); err != nil {
-					return err
-				}
-				return nil
-			}(); err != nil {
-				return errors.Wrap(err, "decode field \"updated_at\"")
-			}
-		default:
-			return d.Skip()
-		}
-		return nil
-	}); err != nil {
-		return errors.Wrap(err, "decode HuntPolicy")
-	}
-	// Validate required fields.
-	var failures []validate.FieldError
-	for i, mask := range [2]uint8{
-		0b11111111,
-		0b01111111,
-	} {
-		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
-			// Mask only required fields and check equality to mask using XOR.
-			//
-			// If XOR result is not zero, result is not equal to expected, so some fields are missed.
-			// Bits of fields which would be set are actually bits of missed fields.
-			missed := bits.OnesCount8(result)
-			for bitN := 0; bitN < missed; bitN++ {
-				bitIdx := bits.TrailingZeros8(result)
-				fieldIdx := i*8 + bitIdx
-				var name string
-				if fieldIdx < len(jsonFieldsNameOfHuntPolicy) {
-					name = jsonFieldsNameOfHuntPolicy[fieldIdx]
-				} else {
-					name = strconv.Itoa(fieldIdx)
-				}
-				failures = append(failures, validate.FieldError{
-					Name:  name,
-					Error: validate.ErrFieldRequired,
-				})
-				// Reset bit.
-				result &^= 1 << bitIdx
-			}
-		}
-	}
-	if len(failures) > 0 {
-		return &validate.Error{Fields: failures}
-	}
-
-	return nil
-}
-
-// MarshalJSON implements stdjson.Marshaler.
-func (s *HuntPolicy) MarshalJSON() ([]byte, error) {
-	e := jx.Encoder{}
-	s.Encode(&e)
-	return e.Bytes(), nil
-}
-
-// UnmarshalJSON implements stdjson.Unmarshaler.
-func (s *HuntPolicy) UnmarshalJSON(data []byte) error {
-	d := jx.DecodeBytes(data)
-	return s.Decode(d)
-}
-
-// Encode encodes HuntPolicyLidarrMissingMode as json.
-func (s HuntPolicyLidarrMissingMode) Encode(e *jx.Encoder) {
-	e.Str(string(s))
-}
-
-// Decode decodes HuntPolicyLidarrMissingMode from json.
-func (s *HuntPolicyLidarrMissingMode) Decode(d *jx.Decoder) error {
-	if s == nil {
-		return errors.New("invalid: unable to decode HuntPolicyLidarrMissingMode to nil")
-	}
-	v, err := d.StrBytes()
-	if err != nil {
-		return err
-	}
-	// Try to use constant string.
-	switch HuntPolicyLidarrMissingMode(v) {
-	case HuntPolicyLidarrMissingModeArtist:
-		*s = HuntPolicyLidarrMissingModeArtist
-	case HuntPolicyLidarrMissingModeAlbum:
-		*s = HuntPolicyLidarrMissingModeAlbum
-	default:
-		*s = HuntPolicyLidarrMissingMode(v)
-	}
-
-	return nil
-}
-
-// MarshalJSON implements stdjson.Marshaler.
-func (s HuntPolicyLidarrMissingMode) MarshalJSON() ([]byte, error) {
-	e := jx.Encoder{}
-	s.Encode(&e)
-	return e.Bytes(), nil
-}
-
-// UnmarshalJSON implements stdjson.Unmarshaler.
-func (s *HuntPolicyLidarrMissingMode) UnmarshalJSON(data []byte) error {
-	d := jx.DecodeBytes(data)
-	return s.Decode(d)
-}
-
-// Encode encodes HuntPolicyRadarrReleaseType as json.
-func (s HuntPolicyRadarrReleaseType) Encode(e *jx.Encoder) {
-	e.Str(string(s))
-}
-
-// Decode decodes HuntPolicyRadarrReleaseType from json.
-func (s *HuntPolicyRadarrReleaseType) Decode(d *jx.Decoder) error {
-	if s == nil {
-		return errors.New("invalid: unable to decode HuntPolicyRadarrReleaseType to nil")
-	}
-	v, err := d.StrBytes()
-	if err != nil {
-		return err
-	}
-	// Try to use constant string.
-	switch HuntPolicyRadarrReleaseType(v) {
-	case HuntPolicyRadarrReleaseTypePhysical:
-		*s = HuntPolicyRadarrReleaseTypePhysical
-	case HuntPolicyRadarrReleaseTypeDigital:
-		*s = HuntPolicyRadarrReleaseTypeDigital
-	case HuntPolicyRadarrReleaseTypeCinema:
-		*s = HuntPolicyRadarrReleaseTypeCinema
-	default:
-		*s = HuntPolicyRadarrReleaseType(v)
-	}
-
-	return nil
-}
-
-// MarshalJSON implements stdjson.Marshaler.
-func (s HuntPolicyRadarrReleaseType) MarshalJSON() ([]byte, error) {
-	e := jx.Encoder{}
-	s.Encode(&e)
-	return e.Bytes(), nil
-}
-
-// UnmarshalJSON implements stdjson.Unmarshaler.
-func (s *HuntPolicyRadarrReleaseType) UnmarshalJSON(data []byte) error {
-	d := jx.DecodeBytes(data)
-	return s.Decode(d)
-}
-
-// Encode encodes HuntPolicySelection as json.
-func (s HuntPolicySelection) Encode(e *jx.Encoder) {
-	e.Str(string(s))
-}
-
-// Decode decodes HuntPolicySelection from json.
-func (s *HuntPolicySelection) Decode(d *jx.Decoder) error {
-	if s == nil {
-		return errors.New("invalid: unable to decode HuntPolicySelection to nil")
-	}
-	v, err := d.StrBytes()
-	if err != nil {
-		return err
-	}
-	// Try to use constant string.
-	switch HuntPolicySelection(v) {
-	case HuntPolicySelectionRandom:
-		*s = HuntPolicySelectionRandom
-	case HuntPolicySelectionSequential:
-		*s = HuntPolicySelectionSequential
-	default:
-		*s = HuntPolicySelection(v)
-	}
-
-	return nil
-}
-
-// MarshalJSON implements stdjson.Marshaler.
-func (s HuntPolicySelection) MarshalJSON() ([]byte, error) {
-	e := jx.Encoder{}
-	s.Encode(&e)
-	return e.Bytes(), nil
-}
-
-// UnmarshalJSON implements stdjson.Unmarshaler.
-func (s *HuntPolicySelection) UnmarshalJSON(data []byte) error {
-	d := jx.DecodeBytes(data)
-	return s.Decode(d)
-}
-
-// Encode encodes HuntPolicySonarrMissingMode as json.
-func (s HuntPolicySonarrMissingMode) Encode(e *jx.Encoder) {
-	e.Str(string(s))
-}
-
-// Decode decodes HuntPolicySonarrMissingMode from json.
-func (s *HuntPolicySonarrMissingMode) Decode(d *jx.Decoder) error {
-	if s == nil {
-		return errors.New("invalid: unable to decode HuntPolicySonarrMissingMode to nil")
-	}
-	v, err := d.StrBytes()
-	if err != nil {
-		return err
-	}
-	// Try to use constant string.
-	switch HuntPolicySonarrMissingMode(v) {
-	case HuntPolicySonarrMissingModeEpisodes:
-		*s = HuntPolicySonarrMissingModeEpisodes
-	case HuntPolicySonarrMissingModeSeasonPacks:
-		*s = HuntPolicySonarrMissingModeSeasonPacks
-	case HuntPolicySonarrMissingModeShows:
-		*s = HuntPolicySonarrMissingModeShows
-	default:
-		*s = HuntPolicySonarrMissingMode(v)
-	}
-
-	return nil
-}
-
-// MarshalJSON implements stdjson.Marshaler.
-func (s HuntPolicySonarrMissingMode) MarshalJSON() ([]byte, error) {
-	e := jx.Encoder{}
-	s.Encode(&e)
-	return e.Bytes(), nil
-}
-
-// UnmarshalJSON implements stdjson.Unmarshaler.
-func (s *HuntPolicySonarrMissingMode) UnmarshalJSON(data []byte) error {
-	d := jx.DecodeBytes(data)
-	return s.Decode(d)
-}
-
-// Encode encodes HuntPolicySonarrUpgradeMode as json.
-func (s HuntPolicySonarrUpgradeMode) Encode(e *jx.Encoder) {
-	e.Str(string(s))
-}
-
-// Decode decodes HuntPolicySonarrUpgradeMode from json.
-func (s *HuntPolicySonarrUpgradeMode) Decode(d *jx.Decoder) error {
-	if s == nil {
-		return errors.New("invalid: unable to decode HuntPolicySonarrUpgradeMode to nil")
-	}
-	v, err := d.StrBytes()
-	if err != nil {
-		return err
-	}
-	// Try to use constant string.
-	switch HuntPolicySonarrUpgradeMode(v) {
-	case HuntPolicySonarrUpgradeModeEpisodes:
-		*s = HuntPolicySonarrUpgradeModeEpisodes
-	case HuntPolicySonarrUpgradeModeSeasonPacks:
-		*s = HuntPolicySonarrUpgradeModeSeasonPacks
-	default:
-		*s = HuntPolicySonarrUpgradeMode(v)
-	}
-
-	return nil
-}
-
-// MarshalJSON implements stdjson.Marshaler.
-func (s HuntPolicySonarrUpgradeMode) MarshalJSON() ([]byte, error) {
-	e := jx.Encoder{}
-	s.Encode(&e)
-	return e.Bytes(), nil
-}
-
-// UnmarshalJSON implements stdjson.Unmarshaler.
-func (s *HuntPolicySonarrUpgradeMode) UnmarshalJSON(data []byte) error {
-	d := jx.DecodeBytes(data)
-	return s.Decode(d)
-}
-
 // Encode implements json.Marshaler.
 func (s *Instance) Encode(e *jx.Encoder) {
 	e.ObjStart()
@@ -5019,6 +4433,592 @@ func (s *SetupStatus) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *SetupStatus) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes SnatchKind as json.
+func (s SnatchKind) Encode(e *jx.Encoder) {
+	e.Str(string(s))
+}
+
+// Decode decodes SnatchKind from json.
+func (s *SnatchKind) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode SnatchKind to nil")
+	}
+	v, err := d.StrBytes()
+	if err != nil {
+		return err
+	}
+	// Try to use constant string.
+	switch SnatchKind(v) {
+	case SnatchKindMissing:
+		*s = SnatchKindMissing
+	case SnatchKindUpgrade:
+		*s = SnatchKindUpgrade
+	default:
+		*s = SnatchKind(v)
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s SnatchKind) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *SnatchKind) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode implements json.Marshaler.
+func (s *SnatchPolicy) Encode(e *jx.Encoder) {
+	e.ObjStart()
+	s.encodeFields(e)
+	e.ObjEnd()
+}
+
+// encodeFields encodes fields.
+func (s *SnatchPolicy) encodeFields(e *jx.Encoder) {
+	{
+		e.FieldStart("missing_per_cycle")
+		e.Int(s.MissingPerCycle)
+	}
+	{
+		e.FieldStart("upgrade_per_cycle")
+		e.Int(s.UpgradePerCycle)
+	}
+	{
+		e.FieldStart("cycle_interval_s")
+		e.Int(s.CycleIntervalS)
+	}
+	{
+		e.FieldStart("hourly_cap")
+		e.Int(s.HourlyCap)
+	}
+	{
+		e.FieldStart("selection")
+		s.Selection.Encode(e)
+	}
+	{
+		e.FieldStart("monitored_only")
+		e.Bool(s.MonitoredOnly)
+	}
+	{
+		e.FieldStart("skip_future_releases")
+		e.Bool(s.SkipFutureReleases)
+	}
+	{
+		e.FieldStart("radarr_release_type")
+		s.RadarrReleaseType.Encode(e)
+	}
+	{
+		e.FieldStart("sonarr_missing_mode")
+		s.SonarrMissingMode.Encode(e)
+	}
+	{
+		e.FieldStart("sonarr_upgrade_mode")
+		s.SonarrUpgradeMode.Encode(e)
+	}
+	{
+		e.FieldStart("lidarr_missing_mode")
+		s.LidarrMissingMode.Encode(e)
+	}
+	{
+		e.FieldStart("processed_ttl_h")
+		e.Int(s.ProcessedTTLH)
+	}
+	{
+		e.FieldStart("max_queue_size")
+		e.Int(s.MaxQueueSize)
+	}
+	{
+		e.FieldStart("await_command")
+		e.Bool(s.AwaitCommand)
+	}
+	{
+		e.FieldStart("page_size")
+		e.Int(s.PageSize)
+	}
+	{
+		if s.UpdatedAt.Set {
+			e.FieldStart("updated_at")
+			s.UpdatedAt.Encode(e, json.EncodeDateTime)
+		}
+	}
+}
+
+var jsonFieldsNameOfSnatchPolicy = [16]string{
+	0:  "missing_per_cycle",
+	1:  "upgrade_per_cycle",
+	2:  "cycle_interval_s",
+	3:  "hourly_cap",
+	4:  "selection",
+	5:  "monitored_only",
+	6:  "skip_future_releases",
+	7:  "radarr_release_type",
+	8:  "sonarr_missing_mode",
+	9:  "sonarr_upgrade_mode",
+	10: "lidarr_missing_mode",
+	11: "processed_ttl_h",
+	12: "max_queue_size",
+	13: "await_command",
+	14: "page_size",
+	15: "updated_at",
+}
+
+// Decode decodes SnatchPolicy from json.
+func (s *SnatchPolicy) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode SnatchPolicy to nil")
+	}
+	var requiredBitSet [2]uint8
+
+	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
+		switch string(k) {
+		case "missing_per_cycle":
+			requiredBitSet[0] |= 1 << 0
+			if err := func() error {
+				v, err := d.Int()
+				s.MissingPerCycle = int(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"missing_per_cycle\"")
+			}
+		case "upgrade_per_cycle":
+			requiredBitSet[0] |= 1 << 1
+			if err := func() error {
+				v, err := d.Int()
+				s.UpgradePerCycle = int(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"upgrade_per_cycle\"")
+			}
+		case "cycle_interval_s":
+			requiredBitSet[0] |= 1 << 2
+			if err := func() error {
+				v, err := d.Int()
+				s.CycleIntervalS = int(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"cycle_interval_s\"")
+			}
+		case "hourly_cap":
+			requiredBitSet[0] |= 1 << 3
+			if err := func() error {
+				v, err := d.Int()
+				s.HourlyCap = int(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"hourly_cap\"")
+			}
+		case "selection":
+			requiredBitSet[0] |= 1 << 4
+			if err := func() error {
+				if err := s.Selection.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"selection\"")
+			}
+		case "monitored_only":
+			requiredBitSet[0] |= 1 << 5
+			if err := func() error {
+				v, err := d.Bool()
+				s.MonitoredOnly = bool(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"monitored_only\"")
+			}
+		case "skip_future_releases":
+			requiredBitSet[0] |= 1 << 6
+			if err := func() error {
+				v, err := d.Bool()
+				s.SkipFutureReleases = bool(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"skip_future_releases\"")
+			}
+		case "radarr_release_type":
+			requiredBitSet[0] |= 1 << 7
+			if err := func() error {
+				if err := s.RadarrReleaseType.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"radarr_release_type\"")
+			}
+		case "sonarr_missing_mode":
+			requiredBitSet[1] |= 1 << 0
+			if err := func() error {
+				if err := s.SonarrMissingMode.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"sonarr_missing_mode\"")
+			}
+		case "sonarr_upgrade_mode":
+			requiredBitSet[1] |= 1 << 1
+			if err := func() error {
+				if err := s.SonarrUpgradeMode.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"sonarr_upgrade_mode\"")
+			}
+		case "lidarr_missing_mode":
+			requiredBitSet[1] |= 1 << 2
+			if err := func() error {
+				if err := s.LidarrMissingMode.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"lidarr_missing_mode\"")
+			}
+		case "processed_ttl_h":
+			requiredBitSet[1] |= 1 << 3
+			if err := func() error {
+				v, err := d.Int()
+				s.ProcessedTTLH = int(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"processed_ttl_h\"")
+			}
+		case "max_queue_size":
+			requiredBitSet[1] |= 1 << 4
+			if err := func() error {
+				v, err := d.Int()
+				s.MaxQueueSize = int(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"max_queue_size\"")
+			}
+		case "await_command":
+			requiredBitSet[1] |= 1 << 5
+			if err := func() error {
+				v, err := d.Bool()
+				s.AwaitCommand = bool(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"await_command\"")
+			}
+		case "page_size":
+			requiredBitSet[1] |= 1 << 6
+			if err := func() error {
+				v, err := d.Int()
+				s.PageSize = int(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"page_size\"")
+			}
+		case "updated_at":
+			if err := func() error {
+				s.UpdatedAt.Reset()
+				if err := s.UpdatedAt.Decode(d, json.DecodeDateTime); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"updated_at\"")
+			}
+		default:
+			return d.Skip()
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "decode SnatchPolicy")
+	}
+	// Validate required fields.
+	var failures []validate.FieldError
+	for i, mask := range [2]uint8{
+		0b11111111,
+		0b01111111,
+	} {
+		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
+			// Mask only required fields and check equality to mask using XOR.
+			//
+			// If XOR result is not zero, result is not equal to expected, so some fields are missed.
+			// Bits of fields which would be set are actually bits of missed fields.
+			missed := bits.OnesCount8(result)
+			for bitN := 0; bitN < missed; bitN++ {
+				bitIdx := bits.TrailingZeros8(result)
+				fieldIdx := i*8 + bitIdx
+				var name string
+				if fieldIdx < len(jsonFieldsNameOfSnatchPolicy) {
+					name = jsonFieldsNameOfSnatchPolicy[fieldIdx]
+				} else {
+					name = strconv.Itoa(fieldIdx)
+				}
+				failures = append(failures, validate.FieldError{
+					Name:  name,
+					Error: validate.ErrFieldRequired,
+				})
+				// Reset bit.
+				result &^= 1 << bitIdx
+			}
+		}
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *SnatchPolicy) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *SnatchPolicy) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes SnatchPolicyLidarrMissingMode as json.
+func (s SnatchPolicyLidarrMissingMode) Encode(e *jx.Encoder) {
+	e.Str(string(s))
+}
+
+// Decode decodes SnatchPolicyLidarrMissingMode from json.
+func (s *SnatchPolicyLidarrMissingMode) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode SnatchPolicyLidarrMissingMode to nil")
+	}
+	v, err := d.StrBytes()
+	if err != nil {
+		return err
+	}
+	// Try to use constant string.
+	switch SnatchPolicyLidarrMissingMode(v) {
+	case SnatchPolicyLidarrMissingModeArtist:
+		*s = SnatchPolicyLidarrMissingModeArtist
+	case SnatchPolicyLidarrMissingModeAlbum:
+		*s = SnatchPolicyLidarrMissingModeAlbum
+	default:
+		*s = SnatchPolicyLidarrMissingMode(v)
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s SnatchPolicyLidarrMissingMode) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *SnatchPolicyLidarrMissingMode) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes SnatchPolicyRadarrReleaseType as json.
+func (s SnatchPolicyRadarrReleaseType) Encode(e *jx.Encoder) {
+	e.Str(string(s))
+}
+
+// Decode decodes SnatchPolicyRadarrReleaseType from json.
+func (s *SnatchPolicyRadarrReleaseType) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode SnatchPolicyRadarrReleaseType to nil")
+	}
+	v, err := d.StrBytes()
+	if err != nil {
+		return err
+	}
+	// Try to use constant string.
+	switch SnatchPolicyRadarrReleaseType(v) {
+	case SnatchPolicyRadarrReleaseTypePhysical:
+		*s = SnatchPolicyRadarrReleaseTypePhysical
+	case SnatchPolicyRadarrReleaseTypeDigital:
+		*s = SnatchPolicyRadarrReleaseTypeDigital
+	case SnatchPolicyRadarrReleaseTypeCinema:
+		*s = SnatchPolicyRadarrReleaseTypeCinema
+	default:
+		*s = SnatchPolicyRadarrReleaseType(v)
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s SnatchPolicyRadarrReleaseType) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *SnatchPolicyRadarrReleaseType) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes SnatchPolicySelection as json.
+func (s SnatchPolicySelection) Encode(e *jx.Encoder) {
+	e.Str(string(s))
+}
+
+// Decode decodes SnatchPolicySelection from json.
+func (s *SnatchPolicySelection) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode SnatchPolicySelection to nil")
+	}
+	v, err := d.StrBytes()
+	if err != nil {
+		return err
+	}
+	// Try to use constant string.
+	switch SnatchPolicySelection(v) {
+	case SnatchPolicySelectionRandom:
+		*s = SnatchPolicySelectionRandom
+	case SnatchPolicySelectionSequential:
+		*s = SnatchPolicySelectionSequential
+	default:
+		*s = SnatchPolicySelection(v)
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s SnatchPolicySelection) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *SnatchPolicySelection) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes SnatchPolicySonarrMissingMode as json.
+func (s SnatchPolicySonarrMissingMode) Encode(e *jx.Encoder) {
+	e.Str(string(s))
+}
+
+// Decode decodes SnatchPolicySonarrMissingMode from json.
+func (s *SnatchPolicySonarrMissingMode) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode SnatchPolicySonarrMissingMode to nil")
+	}
+	v, err := d.StrBytes()
+	if err != nil {
+		return err
+	}
+	// Try to use constant string.
+	switch SnatchPolicySonarrMissingMode(v) {
+	case SnatchPolicySonarrMissingModeEpisodes:
+		*s = SnatchPolicySonarrMissingModeEpisodes
+	case SnatchPolicySonarrMissingModeSeasonPacks:
+		*s = SnatchPolicySonarrMissingModeSeasonPacks
+	case SnatchPolicySonarrMissingModeShows:
+		*s = SnatchPolicySonarrMissingModeShows
+	default:
+		*s = SnatchPolicySonarrMissingMode(v)
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s SnatchPolicySonarrMissingMode) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *SnatchPolicySonarrMissingMode) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes SnatchPolicySonarrUpgradeMode as json.
+func (s SnatchPolicySonarrUpgradeMode) Encode(e *jx.Encoder) {
+	e.Str(string(s))
+}
+
+// Decode decodes SnatchPolicySonarrUpgradeMode from json.
+func (s *SnatchPolicySonarrUpgradeMode) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode SnatchPolicySonarrUpgradeMode to nil")
+	}
+	v, err := d.StrBytes()
+	if err != nil {
+		return err
+	}
+	// Try to use constant string.
+	switch SnatchPolicySonarrUpgradeMode(v) {
+	case SnatchPolicySonarrUpgradeModeEpisodes:
+		*s = SnatchPolicySonarrUpgradeModeEpisodes
+	case SnatchPolicySonarrUpgradeModeSeasonPacks:
+		*s = SnatchPolicySonarrUpgradeModeSeasonPacks
+	default:
+		*s = SnatchPolicySonarrUpgradeMode(v)
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s SnatchPolicySonarrUpgradeMode) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *SnatchPolicySonarrUpgradeMode) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }

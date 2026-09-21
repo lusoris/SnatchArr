@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-package hunt
+package snatch
 
 import (
 	"context"
@@ -19,7 +19,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
 )
 
-// Recorder persists hunt events and fans them out over SSE.
+// Recorder persists snatch events and fans them out over SSE.
 type Recorder struct {
 	st  *store.Store
 	clk clock.Clock
@@ -45,7 +45,7 @@ func (r *Recorder) Record(ctx context.Context, e domain.Event) error {
 		RunID: e.RunID, InstanceID: e.InstanceID, Ts: e.Timestamp, Level: e.Level, Type: e.Type,
 		EntityType: e.EntityType, EntityID: e.EntityID, Title: e.Title, Detail: e.Detail,
 	}); err != nil {
-		return fmt.Errorf("hunt: record event: %w", store.MapError(err))
+		return fmt.Errorf("snatch: record event: %w", store.MapError(err))
 	}
 	runID := ""
 	if e.RunID != nil {
@@ -77,7 +77,7 @@ func (r *Recorder) List(ctx context.Context, p ListParams) ([]domain.Event, erro
 		PageSize: int32(min(max(p.PageSize, 1), 1000)), // #nosec G115 -- clamped
 	})
 	if err != nil {
-		return nil, fmt.Errorf("hunt: list events: %w", store.MapError(err))
+		return nil, fmt.Errorf("snatch: list events: %w", store.MapError(err))
 	}
 	out := make([]domain.Event, 0, len(rows))
 	for _, row := range rows {
@@ -93,7 +93,7 @@ func (r *Recorder) List(ctx context.Context, p ListParams) ([]domain.Event, erro
 func (r *Recorder) DeleteForInstance(ctx context.Context, instanceID uuid.UUID) (int64, error) {
 	n, err := r.st.Q().DeleteEventsForInstance(ctx, instanceID)
 	if err != nil {
-		return 0, fmt.Errorf("hunt: delete events: %w", store.MapError(err))
+		return 0, fmt.Errorf("snatch: delete events: %w", store.MapError(err))
 	}
 	return n, nil
 }

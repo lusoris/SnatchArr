@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 
 	"go.uber.org/fx"
@@ -22,9 +23,9 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/config"
 	"github.com/lusoris/SnatchArr/api/internal/dlclients"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
-	"github.com/lusoris/SnatchArr/api/internal/hunt"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
 	"github.com/lusoris/SnatchArr/api/internal/policies"
+	"github.com/lusoris/SnatchArr/api/internal/snatch"
 )
 
 // Handlers implements oas.Handler.
@@ -36,34 +37,35 @@ type Handlers struct {
 	sessions  *session.Manager
 	instances *instances.Service
 	policies  *policies.Service
-	runs      *hunt.Runs
-	rec       *hunt.Recorder
-	budget    *hunt.Budget
-	memory    *hunt.Memory
-	planner   *hunt.Planner
-	schedules *hunt.Schedules
+	runs      *snatch.Runs
+	rec       *snatch.Recorder
+	budget    *snatch.Budget
+	memory    *snatch.Memory
+	planner   *snatch.Planner
+	schedules *snatch.Schedules
 	clients   *dlclients.Service
+	logger    *slog.Logger
 }
 
-// Deps groups the hunt services the handlers need.
+// Deps groups the snatch services the handlers need.
 type Deps struct {
 	fx.In
-	Runs      *hunt.Runs
-	Rec       *hunt.Recorder
-	Budget    *hunt.Budget
-	Memory    *hunt.Memory
-	Planner   *hunt.Planner
-	Schedules *hunt.Schedules
+	Runs      *snatch.Runs
+	Rec       *snatch.Recorder
+	Budget    *snatch.Budget
+	Memory    *snatch.Memory
+	Planner   *snatch.Planner
+	Schedules *snatch.Schedules
 	Clients   *dlclients.Service
 }
 
 // NewHandlers wires the operation handlers.
 func NewHandlers(build buildinfo.Info, cfg config.Options, clk clock.Clock, authSvc *auth.Service,
-	sessions *session.Manager, inst *instances.Service, pol *policies.Service, d Deps,
+	sessions *session.Manager, inst *instances.Service, pol *policies.Service, logger *slog.Logger, d Deps,
 ) *Handlers {
 	return &Handlers{
 		build: build, cfg: cfg, clk: clk, auth: authSvc, sessions: sessions, instances: inst, policies: pol,
-		runs: d.Runs, rec: d.Rec, budget: d.Budget, memory: d.Memory, planner: d.Planner, schedules: d.Schedules, clients: d.Clients,
+		runs: d.Runs, rec: d.Rec, budget: d.Budget, memory: d.Memory, planner: d.Planner, schedules: d.Schedules, clients: d.Clients, logger: logger,
 	}
 }
 

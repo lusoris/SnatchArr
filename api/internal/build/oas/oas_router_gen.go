@@ -1436,7 +1436,7 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 					switch method {
 					case "GET":
 						r.name = ListEventsOperation
-						r.summary = "Hunt history, newest first (cursor on before_id)"
+						r.summary = "Snatch history, newest first (cursor on before_id)"
 						r.operationID = "listEvents"
 						r.operationGroup = ""
 						r.pathPattern = "/events"
@@ -1663,7 +1663,7 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 								switch method {
 								case "GET":
 									r.name = GetPolicyOperation
-									r.summary = "Hunt policy of an instance"
+									r.summary = "Snatch policy of an instance"
 									r.operationID = "getPolicy"
 									r.operationGroup = ""
 									r.pathPattern = "/instances/{instanceId}/policy"
@@ -1672,7 +1672,7 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 									return r, true
 								case "PUT":
 									r.name = UpdatePolicyOperation
-									r.summary = "Replace the hunt policy of an instance"
+									r.summary = "Replace the snatch policy of an instance"
 									r.operationID = "updatePolicy"
 									r.operationGroup = ""
 									r.pathPattern = "/instances/{instanceId}/policy"
@@ -1697,7 +1697,7 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 								switch method {
 								case "POST":
 									r.name = TriggerRunOperation
-									r.summary = "Queue a hunt run now (ignores the cycle interval)"
+									r.summary = "Quickie - queue a snatch now (ignores the refractory period)"
 									r.operationID = "triggerRun"
 									r.operationGroup = ""
 									r.pathPattern = "/instances/{instanceId}/runs"
@@ -1752,7 +1752,7 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 					switch method {
 					case "GET":
 						r.name = ListRunsOperation
-						r.summary = "Recent hunt runs, newest first"
+						r.summary = "Recent snatch runs, newest first"
 						r.operationID = "listRuns"
 						r.operationGroup = ""
 						r.pathPattern = "/runs"

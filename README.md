@@ -8,14 +8,16 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 <img src="web/static/brand/mark.svg" alt="" width="72" align="right" />
 
-SnatchArr keeps your *arr libraries complete without hammering your indexers. It asks Sonarr, Radarr, Lidarr, Readarr and Whisparr (v2 and v3) to search for **missing** items and **cutoff-unmet upgrades** in small, randomised batches, remembers what it already searched, and enforces a per-instance hourly cap.
+SnatchArr keeps your *arr libraries complete without hammering your indexers. It asks Sonarr, Radarr, Lidarr, Readarr and Whisparr (v2 and v3) to search for **missing** items and **cutoff-unmet upgrades** in small batches. Every search is a *snatch*: it remembers what it already snatched (the *afterglow*), never exceeds an instance's hourly *stamina*, and slows down (*foreplay*) while your download client is busy, paused or gone. Yes, the name means what you think it means.
+
+Docs: <https://lusoris.github.io/SnatchArr/>
 
 It is a from-scratch, cloud-native rewrite of the Huntarr lineage ([newtarr](https://github.com/elfhosted/newtarr)), built on the lusoris stack:
 
 | Component | Stack |
 | --- | --- |
 | `api/` | Go 1.27 control plane on [golusoris](https://github.com/golusoris/golusoris) with [goenvoy](https://github.com/golusoris/goenvoy) *arr clients, OpenAPI 3.1, RFC 9457, SSE |
-| `worker/` | Rust hunt-worker (tokio + tonic) that leases hunt runs from the API over gRPC |
+| `worker/` | Rust snatch-worker (tokio + tonic) that leases snatch runs from the API over gRPC |
 | `web/` | SvelteKit SPA on [sveltesentio](https://github.com/golusoris/sveltesentio), WCAG 2.2 AA / EN 301 549, en + de |
 | `deploy/` | Distroless OCI images, Helm chart, CloudNativePG, ArgoCD |
 
@@ -31,7 +33,7 @@ If you already run [Configarr](https://github.com/raydak-labs/configarr), point 
 
 ## Running Cleanuparr too?
 
-[Cleanuparr](https://github.com/Cleanuparr/Cleanuparr)'s *Seeker* feature also hunts missing and cutoff-unmet items. Running both against the same instance doubles the searches your indexers see. Disable Seeker for instances SnatchArr manages, or the other way round. A Cleanuparr integration that warns about this is planned for v1.1.
+[Cleanuparr](https://github.com/Cleanuparr/Cleanuparr) cleans up what your download clients choke on; SnatchArr only decides what to search for next. They complement each other. A read-only Cleanuparr integration (status, recent strikes, skipping struck items) is part of v1.
 
 ## License
 

@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-package hunt
+package snatch
 
 import (
 	"go.uber.org/fx"

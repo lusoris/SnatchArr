@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 // Command snatcharr runs the SnatchArr control plane: HTTP API + embedded UI, SSE,
-// and the gRPC WorkerService the Rust hunt-worker leases runs from.
+// and the gRPC WorkerService the Rust snatch-worker leases runs from.
 package main
 
 import (

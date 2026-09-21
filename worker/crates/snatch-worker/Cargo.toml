@@ -1,6 +1,6 @@
 [package]
 name = "snatch-worker"
-description = "SnatchArr hunt data-plane: leases runs from the API and executes them against *arr instances"
+description = "SnatchArr snatch data-plane: leases runs from the API and executes them against *arr instances"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,7 +11,7 @@ publish.workspace = true
 
 [dependencies]
 snatch-proto = { workspace = true }
-hunt-core = { workspace = true }
+snatch-core = { workspace = true }
 arr-client = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }

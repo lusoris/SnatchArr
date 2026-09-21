@@ -171,7 +171,7 @@ func encodeUpdateInstanceRequest(
 }
 
 func encodeUpdatePolicyRequest(
-	req *HuntPolicy,
+	req *SnatchPolicy,
 	r *http.Request,
 ) error {
 	const contentType = "application/json"

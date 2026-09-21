@@ -86,12 +86,12 @@ make verify-all
 
 # SnatchArr repository guide
 
-Purpose: hunt missing + cutoff-unmet media across *arr instances; respect per-instance hourly caps. Three components, one contract each:
+Purpose: snatch missing + cutoff-unmet media across *arr instances; respect per-instance hourly caps. Three components, one contract each:
 
 | Path | Role | Verify |
 | :--- | :--- | :--- |
 | `api/` | Go 1.27 control plane, golusoris fx. Owns durable state + every "when / how much" decision. Serves OpenAPI 3.1 HTTP, SSE, gRPC `WorkerService`. Embeds built SPA. | `make api-verify` |
-| `worker/` | Rust hunt data-plane (tokio + tonic). Stateless: leases runs from api, pages *arr wanted lists, dispatches searches, reports events. | `make worker-verify` |
+| `worker/` | Rust snatch data-plane (tokio + tonic). Stateless: leases runs from api, pages *arr wanted lists, dispatches searches, reports events. | `make worker-verify` |
 | `web/` | SvelteKit SPA (adapter-static) on `@sveltesentio/*`. Pure client of Go API; never touches *arr. | `make web-verify`, `make web-e2e` |
 | `proto/` | `snatcharr.v1.WorkerService`: only Go<->Rust contract. | `make proto-verify` |
 | `deploy/` | Helm chart, kind overlay, ArgoCD, compose. | `make deploy-verify` |
@@ -105,14 +105,14 @@ Purpose: hunt missing + cutoff-unmet media across *arr instances; respect per-in
 - RFC 9457 everywhere. Every non-2xx HTTP response = `application/problem+json`. SPA `problemMiddleware` depends on that media type.
 - gRPC lease model. Worker PULLS: `LeaseRun` -> `Heartbeat` -> `FilterCandidates` -> `AcquireBudget` -> `ReportEvents` -> `CompleteRun`. Api = only writer of processed memory + rate buckets; worker never exceeds granted budget.
 - Hourly cap counts items searched, not HTTP requests. Debit per dispatch; warn at 80 %.
-- Processed memory: per instance x hunt kind x entity, per-row `expires_at`.
+- Processed memory: per instance x snatch kind x entity, per-row `expires_at`.
 - SSE event names = `snatcharr.v1.EventType` names, lower snake case (`search_dispatched`, ...).
-- Configarr instances: read-only in UI except hunt policy; `source=configarr` rows re-import on file change.
+- Configarr instances: read-only in UI except snatch policy; `source=configarr` rows re-import on file change.
 
 ## Language rules
 
 - Go: golangci-lint v2, root `.golangci.yml` (HISS-04 caps: cyclomatic <= 10, cognitive <= 15, <= 60 lines / 50 statements per function). gosec zero exclusions; every `#nosec` carries `Gxxx -- <reason>`. `time.Now()` banned outside golusoris `core/clock`. Every I/O call: `context.Context` with deadline. Wrap errors with `%w`. Table-driven tests: positive, negative, boundary.
-- Rust: `#![forbid(unsafe_code)]`, `cargo clippy -D warnings`, `clippy::unwrap_used` / `clippy::expect_used` denied outside `#[cfg(test)]`. Bounded retries with jitter; every request has timeout. `hunt-core` stays pure (no I/O), property-tested.
+- Rust: `#![forbid(unsafe_code)]`, `cargo clippy -D warnings`, `clippy::unwrap_used` / `clippy::expect_used` denied outside `#[cfg(test)]`. Bounded retries with jitter; every request has timeout. `snatch-core` stays pure (no I/O), property-tested.
 - TypeScript / Svelte: sveltesentio section 2 rules via shared ESLint config (complexity 10, <= 60 lines per function, `no-direct-time`, `no-unsanitised-html`, `chart-a11y-wrapper`). Svelte 5 runes only. Zod v4 schemas pinned to OpenAPI types with `satisfies`.
 - Accessibility = gate: Playwright + axe-core, zero violations on every route (WCAG 2.2 AA / EN 301 549). Never suppress with `|| true`.
 - Colour: oklch only. Locales: en + de via Paraglide; every user-facing string through messages.

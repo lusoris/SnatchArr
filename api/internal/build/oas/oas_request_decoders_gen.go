@@ -872,7 +872,7 @@ func (s *Server) decodeUpdateInstanceRequest(r *http.Request) (
 }
 
 func (s *Server) decodeUpdatePolicyRequest(r *http.Request) (
-	req *HuntPolicy,
+	req *SnatchPolicy,
 	rawBody []byte,
 	close func() error,
 	rerr error,
@@ -919,7 +919,7 @@ func (s *Server) decodeUpdatePolicyRequest(r *http.Request) (
 		rawBody = append(rawBody, buf...)
 		d := jx.DecodeBytes(buf)
 
-		var request HuntPolicy
+		var request SnatchPolicy
 		if err := func() error {
 			if err := request.Decode(d); err != nil {
 				return err

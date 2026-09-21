@@ -35,7 +35,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
 // WorkerService is the contract between the Go control plane (server) and the Rust
-// hunt-worker (client). The worker dials the API and PULLS work: it leases a run,
+// snatch-worker (client). The worker dials the API and PULLS work: it leases a run,
 // heartbeats while it works, asks the API which candidates are still unprocessed and
 // how much hourly budget it may spend, streams events, and completes the run.
 //
@@ -43,19 +43,19 @@ const (
 // the worker owns execution against the *arr instance. A worker restart loses nothing:
 // an expired lease requeues the run.
 type WorkerServiceClient interface {
-	// LeaseRun long-polls (up to wait_seconds, max 30) for a queued hunt run and leases
+	// LeaseRun long-polls (up to wait_seconds, max 30) for a queued snatch run and leases
 	// it to the calling worker. Returns NOT_FOUND-free: an empty response means no work.
 	LeaseRun(ctx context.Context, in *LeaseRunRequest, opts ...grpc.CallOption) (*LeaseRunResponse, error)
 	// Heartbeat extends the lease. The API may answer CANCEL, in which case the worker
 	// stops dispatching and completes the run as cancelled.
 	Heartbeat(ctx context.Context, in *HeartbeatRequest, opts ...grpc.CallOption) (*HeartbeatResponse, error)
 	// FilterCandidates returns the subset of entity ids that are not in processed memory
-	// for this run's instance and hunt kind.
+	// for this run's instance and snatch kind.
 	FilterCandidates(ctx context.Context, in *FilterCandidatesRequest, opts ...grpc.CallOption) (*FilterCandidatesResponse, error)
 	// AcquireBudget atomically debits the instance's hourly bucket and returns how many
 	// items the worker may search now (0..requested).
 	AcquireBudget(ctx context.Context, in *AcquireBudgetRequest, opts ...grpc.CallOption) (*AcquireBudgetResponse, error)
-	// ReportEvents streams hunt events for history and the live UI.
+	// ReportEvents streams snatch events for history and the live UI.
 	ReportEvents(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[ReportEventsRequest, ReportEventsResponse], error)
 	// CompleteRun closes the run and records searched items into processed memory.
 	CompleteRun(ctx context.Context, in *CompleteRunRequest, opts ...grpc.CallOption) (*CompleteRunResponse, error)
@@ -137,7 +137,7 @@ func (c *workerServiceClient) CompleteRun(ctx context.Context, in *CompleteRunRe
 // for forward compatibility.
 //
 // WorkerService is the contract between the Go control plane (server) and the Rust
-// hunt-worker (client). The worker dials the API and PULLS work: it leases a run,
+// snatch-worker (client). The worker dials the API and PULLS work: it leases a run,
 // heartbeats while it works, asks the API which candidates are still unprocessed and
 // how much hourly budget it may spend, streams events, and completes the run.
 //
@@ -145,19 +145,19 @@ func (c *workerServiceClient) CompleteRun(ctx context.Context, in *CompleteRunRe
 // the worker owns execution against the *arr instance. A worker restart loses nothing:
 // an expired lease requeues the run.
 type WorkerServiceServer interface {
-	// LeaseRun long-polls (up to wait_seconds, max 30) for a queued hunt run and leases
+	// LeaseRun long-polls (up to wait_seconds, max 30) for a queued snatch run and leases
 	// it to the calling worker. Returns NOT_FOUND-free: an empty response means no work.
 	LeaseRun(context.Context, *LeaseRunRequest) (*LeaseRunResponse, error)
 	// Heartbeat extends the lease. The API may answer CANCEL, in which case the worker
 	// stops dispatching and completes the run as cancelled.
 	Heartbeat(context.Context, *HeartbeatRequest) (*HeartbeatResponse, error)
 	// FilterCandidates returns the subset of entity ids that are not in processed memory
-	// for this run's instance and hunt kind.
+	// for this run's instance and snatch kind.
 	FilterCandidates(context.Context, *FilterCandidatesRequest) (*FilterCandidatesResponse, error)
 	// AcquireBudget atomically debits the instance's hourly bucket and returns how many
 	// items the worker may search now (0..requested).
 	AcquireBudget(context.Context, *AcquireBudgetRequest) (*AcquireBudgetResponse, error)
-	// ReportEvents streams hunt events for history and the live UI.
+	// ReportEvents streams snatch events for history and the live UI.
 	ReportEvents(grpc.ClientStreamingServer[ReportEventsRequest, ReportEventsResponse]) error
 	// CompleteRun closes the run and records searched items into processed memory.
 	CompleteRun(context.Context, *CompleteRunRequest) (*CompleteRunResponse, error)

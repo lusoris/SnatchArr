@@ -20,7 +20,7 @@ CREATE TABLE instances (
     updated_at        TIMESTAMPTZ NOT NULL
 );
 
-CREATE TABLE hunt_policies (
+CREATE TABLE snatch_policies (
     instance_id          UUID PRIMARY KEY REFERENCES instances (id) ON DELETE CASCADE,
     missing_per_cycle    INTEGER NOT NULL DEFAULT 1 CHECK (missing_per_cycle BETWEEN 0 AND 100),
     upgrade_per_cycle    INTEGER NOT NULL DEFAULT 0 CHECK (upgrade_per_cycle BETWEEN 0 AND 100),
@@ -42,7 +42,7 @@ CREATE TABLE hunt_policies (
     updated_at           TIMESTAMPTZ NOT NULL
 );
 
-CREATE TABLE hunt_runs (
+CREATE TABLE snatch_runs (
     id               UUID PRIMARY KEY,
     instance_id      UUID NOT NULL REFERENCES instances (id) ON DELETE CASCADE,
     kind             TEXT NOT NULL CHECK (kind IN ('missing', 'upgrade')),
@@ -55,8 +55,8 @@ CREATE TABLE hunt_runs (
     searched_count   INTEGER NOT NULL DEFAULT 0,
     error            TEXT
 );
-CREATE INDEX hunt_runs_queue_idx ON hunt_runs (status, queued_at) WHERE status IN ('queued', 'leased');
-CREATE INDEX hunt_runs_instance_idx ON hunt_runs (instance_id, finished_at DESC);
+CREATE INDEX snatch_runs_queue_idx ON snatch_runs (status, queued_at) WHERE status IN ('queued', 'leased');
+CREATE INDEX snatch_runs_instance_idx ON snatch_runs (instance_id, finished_at DESC);
 
 CREATE TABLE processed_items (
     instance_id UUID NOT NULL REFERENCES instances (id) ON DELETE CASCADE,
@@ -75,9 +75,9 @@ CREATE TABLE rate_buckets (
     PRIMARY KEY (instance_id, window_start)
 );
 
-CREATE TABLE hunt_events (
+CREATE TABLE snatch_events (
     id          BIGSERIAL PRIMARY KEY,
-    run_id      UUID REFERENCES hunt_runs (id) ON DELETE SET NULL,
+    run_id      UUID REFERENCES snatch_runs (id) ON DELETE SET NULL,
     instance_id UUID NOT NULL REFERENCES instances (id) ON DELETE CASCADE,
     ts          TIMESTAMPTZ NOT NULL,
     level       TEXT NOT NULL CHECK (level IN ('debug', 'info', 'warn', 'error')),
@@ -87,8 +87,8 @@ CREATE TABLE hunt_events (
     title       TEXT NOT NULL DEFAULT '',
     detail      TEXT NOT NULL DEFAULT ''
 );
-CREATE INDEX hunt_events_instance_ts_idx ON hunt_events (instance_id, ts DESC);
-CREATE INDEX hunt_events_ts_idx ON hunt_events (ts);
+CREATE INDEX snatch_events_instance_ts_idx ON snatch_events (instance_id, ts DESC);
+CREATE INDEX snatch_events_ts_idx ON snatch_events (ts);
 
 CREATE TABLE schedules (
     id          UUID PRIMARY KEY,

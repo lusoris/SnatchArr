@@ -13,7 +13,7 @@ import (
 
 type Querier interface {
 	CancelRun(ctx context.Context, arg CancelRunParams) (int64, error)
-	CompleteRun(ctx context.Context, arg CompleteRunParams) (HuntRun, error)
+	CompleteRun(ctx context.Context, arg CompleteRunParams) (SnatchRun, error)
 	CountInstancesByBaseURL(ctx context.Context, arg CountInstancesByBaseURLParams) (int64, error)
 	CountProcessed(ctx context.Context, arg CountProcessedParams) (int64, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
@@ -37,9 +37,9 @@ type Querier interface {
 	DeleteStaleDiscoveredDownloadClients(ctx context.Context, arg DeleteStaleDiscoveredDownloadClientsParams) (int64, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
-	EnqueueRun(ctx context.Context, arg EnqueueRunParams) (HuntRun, error)
+	EnqueueRun(ctx context.Context, arg EnqueueRunParams) (SnatchRun, error)
 	EnsureBucket(ctx context.Context, arg EnsureBucketParams) error
-	EnsureDefaultPolicy(ctx context.Context, arg EnsureDefaultPolicyParams) (HuntPolicy, error)
+	EnsureDefaultPolicy(ctx context.Context, arg EnsureDefaultPolicyParams) (SnatchPolicy, error)
 	EnsureSettings(ctx context.Context, updatedAt time.Time) (Setting, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
@@ -51,8 +51,8 @@ type Querier interface {
 	GetInstanceByConfigarrKey(ctx context.Context, configarrKey *string) (Instance, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
-	GetPolicy(ctx context.Context, instanceID uuid.UUID) (HuntPolicy, error)
-	GetRun(ctx context.Context, id uuid.UUID) (HuntRun, error)
+	GetPolicy(ctx context.Context, instanceID uuid.UUID) (SnatchPolicy, error)
+	GetRun(ctx context.Context, id uuid.UUID) (SnatchRun, error)
 	GetSchedule(ctx context.Context, id uuid.UUID) (Schedule, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
@@ -60,21 +60,21 @@ type Querier interface {
 	GetUser(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserByUsername(ctx context.Context, username string) (User, error)
 	HasActiveRun(ctx context.Context, arg HasActiveRunParams) (bool, error)
-	HeartbeatRun(ctx context.Context, arg HeartbeatRunParams) (HuntRun, error)
+	HeartbeatRun(ctx context.Context, arg HeartbeatRunParams) (SnatchRun, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
 	InsertEvent(ctx context.Context, arg InsertEventParams) (int64, error)
 	LastFinishedAt(ctx context.Context, arg LastFinishedAtParams) (time.Time, error)
-	LeaseRun(ctx context.Context, arg LeaseRunParams) (HuntRun, error)
+	LeaseRun(ctx context.Context, arg LeaseRunParams) (SnatchRun, error)
 	ListAPIKeysByOwner(ctx context.Context, ownerID uuid.UUID) ([]ApiKey, error)
 	ListDownloadClients(ctx context.Context) ([]DownloadClient, error)
 	ListDownloadClientsForInstance(ctx context.Context, instanceID *uuid.UUID) ([]DownloadClient, error)
 	ListEnabledDownloadClients(ctx context.Context) ([]DownloadClient, error)
 	ListEnabledInstances(ctx context.Context) ([]Instance, error)
 	ListEnabledSchedulesFor(ctx context.Context, instanceID *uuid.UUID) ([]Schedule, error)
-	ListEvents(ctx context.Context, arg ListEventsParams) ([]HuntEvent, error)
+	ListEvents(ctx context.Context, arg ListEventsParams) ([]SnatchEvent, error)
 	ListInstances(ctx context.Context) ([]Instance, error)
-	ListRuns(ctx context.Context, arg ListRunsParams) ([]HuntRun, error)
+	ListRuns(ctx context.Context, arg ListRunsParams) ([]SnatchRun, error)
 	ListSchedules(ctx context.Context) ([]Schedule, error)
 	ListUsers(ctx context.Context) ([]User, error)
 	LoadSession(ctx context.Context, arg LoadSessionParams) ([]byte, error)
@@ -99,7 +99,7 @@ type Querier interface {
 	UpdateSettings(ctx context.Context, arg UpdateSettingsParams) (Setting, error)
 	UpsertConfigarrInstance(ctx context.Context, arg UpsertConfigarrInstanceParams) (Instance, error)
 	UpsertDiscoveredDownloadClient(ctx context.Context, arg UpsertDiscoveredDownloadClientParams) (UpsertDiscoveredDownloadClientRow, error)
-	UpsertPolicy(ctx context.Context, arg UpsertPolicyParams) (HuntPolicy, error)
+	UpsertPolicy(ctx context.Context, arg UpsertPolicyParams) (SnatchPolicy, error)
 }
 
 var _ Querier = (*Queries)(nil)

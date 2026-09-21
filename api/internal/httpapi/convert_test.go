@@ -29,7 +29,7 @@ func TestPolicyRoundTrip(t *testing.T) {
 	if out != in {
 		t.Fatalf("round trip changed the policy:\n got %+v\nwant %+v", out, in)
 	}
-	if got := policyToOAS(in); got.CycleIntervalS != 900 || got.ProcessedTTLH != 48 || got.Selection != oas.HuntPolicySelectionSequential {
+	if got := policyToOAS(in); got.CycleIntervalS != 900 || got.ProcessedTTLH != 48 || got.Selection != oas.SnatchPolicySelectionSequential {
 		t.Fatalf("policyToOAS: %+v", got)
 	}
 }
@@ -63,7 +63,7 @@ func TestRunAndEventConversions(t *testing.T) {
 	t.Parallel()
 	now := time.Unix(1_700_000_000, 0).UTC()
 	runID := uuid.New()
-	r := domain.Run{ID: runID, InstanceID: uuid.New(), Kind: domain.HuntMissing, Status: domain.RunLeased, LeasedBy: "w1", LeaseExpiresAt: &now, QueuedAt: now, StartedAt: &now, SearchedCount: 4, Error: ""}
+	r := domain.Run{ID: runID, InstanceID: uuid.New(), Kind: domain.SnatchMissing, Status: domain.RunLeased, LeasedBy: "w1", LeaseExpiresAt: &now, QueuedAt: now, StartedAt: &now, SearchedCount: 4, Error: ""}
 	got := runToOAS(r)
 	if got.Status != oas.RunStatusLeased || !got.LeasedBy.Set || got.Error.Set || got.FinishedAt.Set || got.SearchedCount != 4 {
 		t.Fatalf("runToOAS: %+v", got)

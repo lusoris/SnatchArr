@@ -10,7 +10,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 ## Context
 
-Huntarr and newtarr only look at the *arr queue size before hunting. A hunt that succeeds
+Huntarr and newtarr only look at the *arr queue size before snatching. A snatch that succeeds
 while the download client is unreachable, paused or saturated just piles up grabs the
 client cannot take, and a bandwidth-starved client turns every extra search into a stalled
 download. Users asked for the common torrent and Usenet clients to be first-class.
@@ -23,11 +23,11 @@ paused, active, queued, download and upload rate). Client definitions are import
 each *arr's `/downloadclient` list (secrets included, unless the *arr masks them) or added
 by hand; a hand-added client applies to every instance unless it is pinned to one.
 
-Two rules turn snapshots into hunting decisions:
+Two rules turn snapshots into snatching decisions:
 
-1. **Backpressure gate** (planner, `hunt.Gate`): an unreachable or paused client, or one
-   at its `max_active` limit, defers the instance's hunts. Transitions are recorded as
-   `hunt_deferred` / `hunt_resumed` events, never one event per tick.
+1. **Backpressure gate** (planner, `snatch.Gate`): an unreachable or paused client, or one
+   at its `max_active` limit, defers the instance's snatches. Transitions are recorded as
+   `snatch_deferred` / `snatch_resumed` events, never one event per tick.
 2. **Bandwidth pacing** (lease): with a `bandwidth_budget_bps`, the share of the budget
    still free scales `per_cycle` (`ceil(per_cycle * free)`, floor 1); a saturated budget
    blocks. The tightest client wins.

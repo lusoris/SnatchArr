@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-// Package events fans hunt events out to browser clients over Server-Sent Events.
+// Package events fans snatch events out to browser clients over Server-Sent Events.
 // Event names are the snatcharr.v1.EventType names in lower snake case.
 package events
 

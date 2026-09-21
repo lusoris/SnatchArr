@@ -23,6 +23,8 @@ web/test-results/
 web/coverage/
 api/internal/webui/dist/*
 !api/internal/webui/dist/index.html
+# --- docs (mkdocs build output) ---
+site/
 # --- tooling ---
 .DS_Store
 Thumbs.db

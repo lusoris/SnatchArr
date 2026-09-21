@@ -13,7 +13,7 @@ import (
 )
 
 const deleteEventsForInstance = `-- name: DeleteEventsForInstance :execrows
-DELETE FROM hunt_events WHERE instance_id = $1
+DELETE FROM snatch_events WHERE instance_id = $1
 `
 
 func (q *Queries) DeleteEventsForInstance(ctx context.Context, instanceID uuid.UUID) (int64, error) {
@@ -26,7 +26,7 @@ func (q *Queries) DeleteEventsForInstance(ctx context.Context, instanceID uuid.U
 
 const insertEvent = `-- name: InsertEvent :one
 
-INSERT INTO hunt_events (run_id, instance_id, ts, level, type, entity_type, entity_id, title, detail)
+INSERT INTO snatch_events (run_id, instance_id, ts, level, type, entity_type, entity_id, title, detail)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 RETURNING id
 `
@@ -63,7 +63,7 @@ func (q *Queries) InsertEvent(ctx context.Context, arg InsertEventParams) (int64
 }
 
 const listEvents = `-- name: ListEvents :many
-SELECT id, run_id, instance_id, ts, level, type, entity_type, entity_id, title, detail FROM hunt_events
+SELECT id, run_id, instance_id, ts, level, type, entity_type, entity_id, title, detail FROM snatch_events
 WHERE ($1::uuid IS NULL OR instance_id = $1::uuid)
   AND ($2::bigint IS NULL OR id < $2::bigint)
   AND ($3::text IS NULL OR type = $3::text)
@@ -78,7 +78,7 @@ type ListEventsParams struct {
 	PageSize   int32
 }
 
-func (q *Queries) ListEvents(ctx context.Context, arg ListEventsParams) ([]HuntEvent, error) {
+func (q *Queries) ListEvents(ctx context.Context, arg ListEventsParams) ([]SnatchEvent, error) {
 	rows, err := q.db.Query(ctx, listEvents,
 		arg.InstanceID,
 		arg.BeforeID,
@@ -89,9 +89,9 @@ func (q *Queries) ListEvents(ctx context.Context, arg ListEventsParams) ([]HuntE
 		return nil, err
 	}
 	defer rows.Close()
-	items := []HuntEvent{}
+	items := []SnatchEvent{}
 	for rows.Next() {
-		var i HuntEvent
+		var i SnatchEvent
 		if err := rows.Scan(
 			&i.ID,
 			&i.RunID,
@@ -115,7 +115,7 @@ func (q *Queries) ListEvents(ctx context.Context, arg ListEventsParams) ([]HuntE
 }
 
 const purgeEventsBefore = `-- name: PurgeEventsBefore :execrows
-DELETE FROM hunt_events WHERE ts < $1
+DELETE FROM snatch_events WHERE ts < $1
 `
 
 func (q *Queries) PurgeEventsBefore(ctx context.Context, ts time.Time) (int64, error) {

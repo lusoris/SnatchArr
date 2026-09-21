@@ -114,10 +114,10 @@ type Invoker interface {
 	GetInstance(ctx context.Context, params GetInstanceParams) (*Instance, error)
 	// GetPolicy invokes getPolicy operation.
 	//
-	// Hunt policy of an instance.
+	// Snatch policy of an instance.
 	//
 	// GET /instances/{instanceId}/policy
-	GetPolicy(ctx context.Context, params GetPolicyParams) (*HuntPolicy, error)
+	GetPolicy(ctx context.Context, params GetPolicyParams) (*SnatchPolicy, error)
 	// GetSession invokes getSession operation.
 	//
 	// Current session, user and CSRF token.
@@ -144,7 +144,7 @@ type Invoker interface {
 	ListDownloadClients(ctx context.Context) ([]DownloadClient, error)
 	// ListEvents invokes listEvents operation.
 	//
-	// Hunt history, newest first (cursor on before_id).
+	// Snatch history, newest first (cursor on before_id).
 	//
 	// GET /events
 	ListEvents(ctx context.Context, params ListEventsParams) ([]Event, error)
@@ -156,7 +156,7 @@ type Invoker interface {
 	ListInstances(ctx context.Context) ([]Instance, error)
 	// ListRuns invokes listRuns operation.
 	//
-	// Recent hunt runs, newest first.
+	// Recent snatch runs, newest first.
 	//
 	// GET /runs
 	ListRuns(ctx context.Context, params ListRunsParams) ([]Run, error)
@@ -210,7 +210,7 @@ type Invoker interface {
 	TestInstanceInput(ctx context.Context, request *InstanceInput) (*ProbeResult, error)
 	// TriggerRun invokes triggerRun operation.
 	//
-	// Queue a hunt run now (ignores the cycle interval).
+	// Quickie - queue a snatch now (ignores the refractory period).
 	//
 	// POST /instances/{instanceId}/runs
 	TriggerRun(ctx context.Context, request *RunTrigger, params TriggerRunParams) (TriggerRunRes, error)
@@ -228,10 +228,10 @@ type Invoker interface {
 	UpdateInstance(ctx context.Context, request *InstanceUpdate, params UpdateInstanceParams) (*Instance, error)
 	// UpdatePolicy invokes updatePolicy operation.
 	//
-	// Replace the hunt policy of an instance.
+	// Replace the snatch policy of an instance.
 	//
 	// PUT /instances/{instanceId}/policy
-	UpdatePolicy(ctx context.Context, request *HuntPolicy, params UpdatePolicyParams) (*HuntPolicy, error)
+	UpdatePolicy(ctx context.Context, request *SnatchPolicy, params UpdatePolicyParams) (*SnatchPolicy, error)
 	// UpdateSchedule invokes updateSchedule operation.
 	//
 	// Replace a schedule window.
@@ -2063,15 +2063,15 @@ func (c *Client) sendGetInstance(ctx context.Context, params GetInstanceParams) 
 
 // GetPolicy invokes getPolicy operation.
 //
-// Hunt policy of an instance.
+// Snatch policy of an instance.
 //
 // GET /instances/{instanceId}/policy
-func (c *Client) GetPolicy(ctx context.Context, params GetPolicyParams) (*HuntPolicy, error) {
+func (c *Client) GetPolicy(ctx context.Context, params GetPolicyParams) (*SnatchPolicy, error) {
 	res, err := c.sendGetPolicy(ctx, params)
 	return res, err
 }
 
-func (c *Client) sendGetPolicy(ctx context.Context, params GetPolicyParams) (res *HuntPolicy, err error) {
+func (c *Client) sendGetPolicy(ctx context.Context, params GetPolicyParams) (res *SnatchPolicy, err error) {
 	otelAttrs := []attribute.KeyValue{
 		otelogen.OperationID("getPolicy"),
 		semconv.HTTPRequestMethodKey.String("GET"),
@@ -2587,7 +2587,7 @@ func (c *Client) sendListDownloadClients(ctx context.Context) (res []DownloadCli
 
 // ListEvents invokes listEvents operation.
 //
-// Hunt history, newest first (cursor on before_id).
+// Snatch history, newest first (cursor on before_id).
 //
 // GET /events
 func (c *Client) ListEvents(ctx context.Context, params ListEventsParams) ([]Event, error) {
@@ -2897,7 +2897,7 @@ func (c *Client) sendListInstances(ctx context.Context) (res []Instance, err err
 
 // ListRuns invokes listRuns operation.
 //
-// Recent hunt runs, newest first.
+// Recent snatch runs, newest first.
 //
 // GET /runs
 func (c *Client) ListRuns(ctx context.Context, params ListRunsParams) ([]Run, error) {
@@ -4028,7 +4028,7 @@ func (c *Client) sendTestInstanceInput(ctx context.Context, request *InstanceInp
 
 // TriggerRun invokes triggerRun operation.
 //
-// Queue a hunt run now (ignores the cycle interval).
+// Quickie - queue a snatch now (ignores the refractory period).
 //
 // POST /instances/{instanceId}/runs
 func (c *Client) TriggerRun(ctx context.Context, request *RunTrigger, params TriggerRunParams) (TriggerRunRes, error) {
@@ -4449,15 +4449,15 @@ func (c *Client) sendUpdateInstance(ctx context.Context, request *InstanceUpdate
 
 // UpdatePolicy invokes updatePolicy operation.
 //
-// Replace the hunt policy of an instance.
+// Replace the snatch policy of an instance.
 //
 // PUT /instances/{instanceId}/policy
-func (c *Client) UpdatePolicy(ctx context.Context, request *HuntPolicy, params UpdatePolicyParams) (*HuntPolicy, error) {
+func (c *Client) UpdatePolicy(ctx context.Context, request *SnatchPolicy, params UpdatePolicyParams) (*SnatchPolicy, error) {
 	res, err := c.sendUpdatePolicy(ctx, request, params)
 	return res, err
 }
 
-func (c *Client) sendUpdatePolicy(ctx context.Context, request *HuntPolicy, params UpdatePolicyParams) (res *HuntPolicy, err error) {
+func (c *Client) sendUpdatePolicy(ctx context.Context, request *SnatchPolicy, params UpdatePolicyParams) (res *SnatchPolicy, err error) {
 	otelAttrs := []attribute.KeyValue{
 		otelogen.OperationID("updatePolicy"),
 		semconv.HTTPRequestMethodKey.String("PUT"),

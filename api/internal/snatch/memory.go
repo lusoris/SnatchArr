@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-package hunt
+package snatch
 
 import (
 	"context"
@@ -22,7 +22,7 @@ import (
 const MaxFilterBatch = 5000
 
 // Memory remembers which entities were searched so they are not searched again inside
-// their TTL. Namespaced per instance × hunt kind × entity type.
+// their TTL. Namespaced per instance × snatch kind × entity type.
 type Memory struct {
 	st  *store.Store
 	clk clock.Clock
@@ -34,7 +34,7 @@ func NewMemory(st *store.Store, clk clock.Clock) *Memory {
 }
 
 // FilterUnprocessed returns the subset of ids with no live memory entry.
-func (m *Memory) FilterUnprocessed(ctx context.Context, instanceID uuid.UUID, kind domain.HuntKind, entityType string, ids []int64) ([]int64, error) {
+func (m *Memory) FilterUnprocessed(ctx context.Context, instanceID uuid.UUID, kind domain.SnatchKind, entityType string, ids []int64) ([]int64, error) {
 	if len(ids) == 0 {
 		return []int64{}, nil
 	}
@@ -45,13 +45,13 @@ func (m *Memory) FilterUnprocessed(ctx context.Context, instanceID uuid.UUID, ki
 		EntityIds: ids, InstanceID: instanceID, Kind: string(kind), EntityType: entityType, Now: m.clk.Now(),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("hunt: filter unprocessed: %w", store.MapError(err))
+		return nil, fmt.Errorf("snatch: filter unprocessed: %w", store.MapError(err))
 	}
 	return out, nil
 }
 
 // Mark records ids as searched until now+ttl (extending an existing entry).
-func (m *Memory) Mark(ctx context.Context, instanceID uuid.UUID, kind domain.HuntKind, entityType string, ids []int64, ttl time.Duration) error {
+func (m *Memory) Mark(ctx context.Context, instanceID uuid.UUID, kind domain.SnatchKind, entityType string, ids []int64, ttl time.Duration) error {
 	if len(ids) == 0 {
 		return nil
 	}
@@ -60,7 +60,7 @@ func (m *Memory) Mark(ctx context.Context, instanceID uuid.UUID, kind domain.Hun
 		ExpiresAt: m.clk.Now().Add(ttl), EntityIds: ids,
 	})
 	if err != nil {
-		return fmt.Errorf("hunt: mark processed: %w", store.MapError(err))
+		return fmt.Errorf("snatch: mark processed: %w", store.MapError(err))
 	}
 	return nil
 }
@@ -69,7 +69,7 @@ func (m *Memory) Mark(ctx context.Context, instanceID uuid.UUID, kind domain.Hun
 func (m *Memory) Reset(ctx context.Context, instanceID *uuid.UUID) (int64, error) {
 	n, err := m.st.Q().ResetProcessed(ctx, instanceID)
 	if err != nil {
-		return 0, fmt.Errorf("hunt: reset processed: %w", store.MapError(err))
+		return 0, fmt.Errorf("snatch: reset processed: %w", store.MapError(err))
 	}
 	return n, nil
 }
@@ -79,10 +79,10 @@ func (m *Memory) Purge(ctx context.Context) (int64, error) {
 	now := m.clk.Now()
 	n, err := m.st.Q().PurgeExpiredProcessed(ctx, now)
 	if err != nil {
-		return 0, fmt.Errorf("hunt: purge processed: %w", store.MapError(err))
+		return 0, fmt.Errorf("snatch: purge processed: %w", store.MapError(err))
 	}
 	if _, err := m.st.Q().PurgeBucketsBefore(ctx, Window(now).Add(-24*time.Hour)); err != nil {
-		return n, fmt.Errorf("hunt: purge buckets: %w", store.MapError(err))
+		return n, fmt.Errorf("snatch: purge buckets: %w", store.MapError(err))
 	}
 	return n, nil
 }

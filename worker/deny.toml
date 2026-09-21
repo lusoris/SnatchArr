@@ -1,4 +1,4 @@
-# cargo-deny policy for the hunt-worker workspace.
+# cargo-deny policy for the snatch-worker workspace.
 [graph]
 all-features = false
 

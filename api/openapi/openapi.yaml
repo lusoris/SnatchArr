@@ -18,8 +18,8 @@ tags:
   - name: auth
     description: Setup, login and sessions
   - name: instances
-    description: "*arr instances and their hunt policies"
-  - name: hunts
+    description: "*arr instances and their snatch policies"
+  - name: snatches
     description: Runs, history, hourly caps and processed memory
   - name: schedules
     description: Pause and cap-override windows
@@ -262,33 +262,33 @@ paths:
     get:
       tags: [instances]
       operationId: getPolicy
-      summary: Hunt policy of an instance
+      summary: Snatch policy of an instance
       responses:
         "200":
           description: Policy
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HuntPolicy"
+                $ref: "#/components/schemas/SnatchPolicy"
         default:
           $ref: "#/components/responses/Problem"
     put:
       tags: [instances]
       operationId: updatePolicy
-      summary: Replace the hunt policy of an instance
+      summary: Replace the snatch policy of an instance
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/HuntPolicy"
+              $ref: "#/components/schemas/SnatchPolicy"
       responses:
         "200":
           description: Policy
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HuntPolicy"
+                $ref: "#/components/schemas/SnatchPolicy"
         default:
           $ref: "#/components/responses/Problem"
 
@@ -296,9 +296,9 @@ paths:
     parameters:
       - $ref: "#/components/parameters/InstanceId"
     post:
-      tags: [hunts]
+      tags: [snatches]
       operationId: triggerRun
-      summary: Queue a hunt run now (ignores the cycle interval)
+      summary: Quickie - queue a snatch now (ignores the refractory period)
       requestBody:
         required: true
         content:
@@ -325,7 +325,7 @@ paths:
     parameters:
       - $ref: "#/components/parameters/InstanceId"
     delete:
-      tags: [hunts]
+      tags: [snatches]
       operationId: deleteInstanceEvents
       summary: Clear the history of one instance
       responses:
@@ -336,9 +336,9 @@ paths:
 
   /runs:
     get:
-      tags: [hunts]
+      tags: [snatches]
       operationId: listRuns
-      summary: Recent hunt runs, newest first
+      summary: Recent snatch runs, newest first
       parameters:
         - name: instance_id
           in: query
@@ -372,7 +372,7 @@ paths:
 
   /runs/{runId}/cancel:
     post:
-      tags: [hunts]
+      tags: [snatches]
       operationId: cancelRun
       summary: Cancel a queued or leased run
       parameters:
@@ -390,9 +390,9 @@ paths:
 
   /events:
     get:
-      tags: [hunts]
+      tags: [snatches]
       operationId: listEvents
-      summary: Hunt history, newest first (cursor on before_id)
+      summary: Snatch history, newest first (cursor on before_id)
       parameters:
         - name: instance_id
           in: query
@@ -429,7 +429,7 @@ paths:
 
   /hourly-caps:
     get:
-      tags: [hunts]
+      tags: [snatches]
       operationId: getHourlyCaps
       summary: Per-instance hourly budget consumption
       responses:
@@ -446,7 +446,7 @@ paths:
 
   /state/reset:
     post:
-      tags: [hunts]
+      tags: [snatches]
       operationId: resetState
       summary: Forget processed items (one instance or all)
       requestBody:
@@ -913,7 +913,7 @@ components:
         version:
           type: string
 
-    HuntPolicy:
+    SnatchPolicy:
       type: object
       required:
         - missing_per_cycle
@@ -934,18 +934,22 @@ components:
       properties:
         missing_per_cycle:
           type: integer
+          description: "How many missing items one snatch goes after (0 disables missing snatches)."
           minimum: 0
           maximum: 100
         upgrade_per_cycle:
           type: integer
+          description: "How many cutoff-unmet items one snatch goes after (0 disables upgrade snatches)."
           minimum: 0
           maximum: 100
         cycle_interval_s:
           type: integer
+          description: "Refractory period: seconds between two snatches of the same kind."
           minimum: 60
           maximum: 604800
         hourly_cap:
           type: integer
+          description: "Stamina: items an instance may search per hour before it needs a rest (1-500)."
           minimum: 1
           maximum: 500
         selection:
@@ -969,6 +973,7 @@ components:
           enum: [artist, album]
         processed_ttl_h:
           type: integer
+          description: "Afterglow: hours an item rests after a snatch before it may be touched again."
           minimum: 1
           maximum: 8760
         max_queue_size:
@@ -986,7 +991,7 @@ components:
           format: date-time
           readOnly: true
 
-    HuntKind:
+    SnatchKind:
       type: string
       enum: [missing, upgrade]
 
@@ -995,7 +1000,7 @@ components:
       required: [kind]
       properties:
         kind:
-          $ref: "#/components/schemas/HuntKind"
+          $ref: "#/components/schemas/SnatchKind"
 
     Run:
       type: object
@@ -1008,7 +1013,7 @@ components:
           type: string
           format: uuid
         kind:
-          $ref: "#/components/schemas/HuntKind"
+          $ref: "#/components/schemas/SnatchKind"
         status:
           type: string
           enum: [queued, leased, done, failed, cancelled]
@@ -1181,11 +1186,11 @@ components:
           enum: [manual, discovered]
         max_active:
           type: integer
-          description: Defer hunts once this many downloads are active (0 = no limit)
+          description: Foreplay - defer snatches once this many downloads are active (0 = no limit)
         bandwidth_budget_bps:
           type: integer
           format: int64
-          description: Bytes per second the client may use before hunts are paced (0 = off)
+          description: Foreplay - bytes per second the client may use before snatches are paced (0 = off)
         last_check_at:
           type: string
           format: date-time

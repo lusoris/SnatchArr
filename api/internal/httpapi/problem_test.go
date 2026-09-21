@@ -79,11 +79,11 @@ func TestErrorHandlerHidesInternalDetail(t *testing.T) {
 	h := ErrorHandler(slog.New(slog.DiscardHandler))
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/x", nil)
-	h(context.Background(), rec, req, errors.New("password=hunter2 leaked"))
+	h(context.Background(), rec, req, errors.New("password=snatcher2 leaked"))
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d", rec.Code)
 	}
-	if got := rec.Body.String(); contains(got, "hunter2") {
+	if got := rec.Body.String(); contains(got, "snatcher2") {
 		t.Fatalf("internal detail leaked: %s", got)
 	}
 }

@@ -94,10 +94,10 @@ type Handler interface {
 	GetInstance(ctx context.Context, params GetInstanceParams) (*Instance, error)
 	// GetPolicy implements getPolicy operation.
 	//
-	// Hunt policy of an instance.
+	// Snatch policy of an instance.
 	//
 	// GET /instances/{instanceId}/policy
-	GetPolicy(ctx context.Context, params GetPolicyParams) (*HuntPolicy, error)
+	GetPolicy(ctx context.Context, params GetPolicyParams) (*SnatchPolicy, error)
 	// GetSession implements getSession operation.
 	//
 	// Current session, user and CSRF token.
@@ -124,7 +124,7 @@ type Handler interface {
 	ListDownloadClients(ctx context.Context) ([]DownloadClient, error)
 	// ListEvents implements listEvents operation.
 	//
-	// Hunt history, newest first (cursor on before_id).
+	// Snatch history, newest first (cursor on before_id).
 	//
 	// GET /events
 	ListEvents(ctx context.Context, params ListEventsParams) ([]Event, error)
@@ -136,7 +136,7 @@ type Handler interface {
 	ListInstances(ctx context.Context) ([]Instance, error)
 	// ListRuns implements listRuns operation.
 	//
-	// Recent hunt runs, newest first.
+	// Recent snatch runs, newest first.
 	//
 	// GET /runs
 	ListRuns(ctx context.Context, params ListRunsParams) ([]Run, error)
@@ -190,7 +190,7 @@ type Handler interface {
 	TestInstanceInput(ctx context.Context, req *InstanceInput) (*ProbeResult, error)
 	// TriggerRun implements triggerRun operation.
 	//
-	// Queue a hunt run now (ignores the cycle interval).
+	// Quickie - queue a snatch now (ignores the refractory period).
 	//
 	// POST /instances/{instanceId}/runs
 	TriggerRun(ctx context.Context, req *RunTrigger, params TriggerRunParams) (TriggerRunRes, error)
@@ -208,10 +208,10 @@ type Handler interface {
 	UpdateInstance(ctx context.Context, req *InstanceUpdate, params UpdateInstanceParams) (*Instance, error)
 	// UpdatePolicy implements updatePolicy operation.
 	//
-	// Replace the hunt policy of an instance.
+	// Replace the snatch policy of an instance.
 	//
 	// PUT /instances/{instanceId}/policy
-	UpdatePolicy(ctx context.Context, req *HuntPolicy, params UpdatePolicyParams) (*HuntPolicy, error)
+	UpdatePolicy(ctx context.Context, req *SnatchPolicy, params UpdatePolicyParams) (*SnatchPolicy, error)
 	// UpdateSchedule implements updateSchedule operation.
 	//
 	// Replace a schedule window.

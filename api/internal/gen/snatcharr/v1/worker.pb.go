@@ -86,53 +86,53 @@ func (AppKind) EnumDescriptor() ([]byte, []int) {
 	return file_snatcharr_v1_worker_proto_rawDescGZIP(), []int{0}
 }
 
-// HuntKind selects the wanted list to walk.
-type HuntKind int32
+// SnatchKind selects the wanted list to walk.
+type SnatchKind int32
 
 const (
-	HuntKind_HUNT_KIND_UNSPECIFIED HuntKind = 0
-	HuntKind_HUNT_KIND_MISSING     HuntKind = 1
-	HuntKind_HUNT_KIND_UPGRADE     HuntKind = 2
+	SnatchKind_SNATCH_KIND_UNSPECIFIED SnatchKind = 0
+	SnatchKind_SNATCH_KIND_MISSING     SnatchKind = 1
+	SnatchKind_SNATCH_KIND_UPGRADE     SnatchKind = 2
 )
 
-// Enum value maps for HuntKind.
+// Enum value maps for SnatchKind.
 var (
-	HuntKind_name = map[int32]string{
-		0: "HUNT_KIND_UNSPECIFIED",
-		1: "HUNT_KIND_MISSING",
-		2: "HUNT_KIND_UPGRADE",
+	SnatchKind_name = map[int32]string{
+		0: "SNATCH_KIND_UNSPECIFIED",
+		1: "SNATCH_KIND_MISSING",
+		2: "SNATCH_KIND_UPGRADE",
 	}
-	HuntKind_value = map[string]int32{
-		"HUNT_KIND_UNSPECIFIED": 0,
-		"HUNT_KIND_MISSING":     1,
-		"HUNT_KIND_UPGRADE":     2,
+	SnatchKind_value = map[string]int32{
+		"SNATCH_KIND_UNSPECIFIED": 0,
+		"SNATCH_KIND_MISSING":     1,
+		"SNATCH_KIND_UPGRADE":     2,
 	}
 )
 
-func (x HuntKind) Enum() *HuntKind {
-	p := new(HuntKind)
+func (x SnatchKind) Enum() *SnatchKind {
+	p := new(SnatchKind)
 	*p = x
 	return p
 }
 
-func (x HuntKind) String() string {
+func (x SnatchKind) String() string {
 	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
 }
 
-func (HuntKind) Descriptor() protoreflect.EnumDescriptor {
+func (SnatchKind) Descriptor() protoreflect.EnumDescriptor {
 	return file_snatcharr_v1_worker_proto_enumTypes[1].Descriptor()
 }
 
-func (HuntKind) Type() protoreflect.EnumType {
+func (SnatchKind) Type() protoreflect.EnumType {
 	return &file_snatcharr_v1_worker_proto_enumTypes[1]
 }
 
-func (x HuntKind) Number() protoreflect.EnumNumber {
+func (x SnatchKind) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use HuntKind.Descriptor instead.
-func (HuntKind) EnumDescriptor() ([]byte, []int) {
+// Deprecated: Use SnatchKind.Descriptor instead.
+func (SnatchKind) EnumDescriptor() ([]byte, []int) {
 	return file_snatcharr_v1_worker_proto_rawDescGZIP(), []int{1}
 }
 
@@ -564,7 +564,7 @@ func (RunOutcome) EnumDescriptor() ([]byte, []int) {
 	return file_snatcharr_v1_worker_proto_rawDescGZIP(), []int{9}
 }
 
-// Policy is the per-instance hunt policy snapshot the worker executes against.
+// Policy is the per-instance snatch policy snapshot the worker executes against.
 type Policy struct {
 	state              protoimpl.MessageState `protogen:"open.v1"`
 	PerCycle           uint32                 `protobuf:"varint,1,opt,name=per_cycle,json=perCycle,proto3" json:"per_cycle,omitempty"`
@@ -784,7 +784,7 @@ type Run struct {
 	RunId            string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
 	InstanceId       string                 `protobuf:"bytes,2,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
 	App              AppKind                `protobuf:"varint,3,opt,name=app,proto3,enum=snatcharr.v1.AppKind" json:"app,omitempty"`
-	Hunt             HuntKind               `protobuf:"varint,4,opt,name=hunt,proto3,enum=snatcharr.v1.HuntKind" json:"hunt,omitempty"`
+	Snatch           SnatchKind             `protobuf:"varint,4,opt,name=snatch,proto3,enum=snatcharr.v1.SnatchKind" json:"snatch,omitempty"`
 	BaseUrl          string                 `protobuf:"bytes,5,opt,name=base_url,json=baseUrl,proto3" json:"base_url,omitempty"`
 	ApiKey           string                 `protobuf:"bytes,6,opt,name=api_key,json=apiKey,proto3" json:"api_key,omitempty"`
 	Policy           *Policy                `protobuf:"bytes,7,opt,name=policy,proto3" json:"policy,omitempty"`
@@ -845,11 +845,11 @@ func (x *Run) GetApp() AppKind {
 	return AppKind_APP_KIND_UNSPECIFIED
 }
 
-func (x *Run) GetHunt() HuntKind {
+func (x *Run) GetSnatch() SnatchKind {
 	if x != nil {
-		return x.Hunt
+		return x.Snatch
 	}
-	return HuntKind_HUNT_KIND_UNSPECIFIED
+	return SnatchKind_SNATCH_KIND_UNSPECIFIED
 }
 
 func (x *Run) GetBaseUrl() string {
@@ -1207,7 +1207,7 @@ func (x *AcquireBudgetResponse) GetWindowResetsUnix() int64 {
 	return 0
 }
 
-type HuntEvent struct {
+type SnatchEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	RunId         string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
 	TsUnixMs      int64                  `protobuf:"varint,2,opt,name=ts_unix_ms,json=tsUnixMs,proto3" json:"ts_unix_ms,omitempty"`
@@ -1221,20 +1221,20 @@ type HuntEvent struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *HuntEvent) Reset() {
-	*x = HuntEvent{}
+func (x *SnatchEvent) Reset() {
+	*x = SnatchEvent{}
 	mi := &file_snatcharr_v1_worker_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *HuntEvent) String() string {
+func (x *SnatchEvent) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*HuntEvent) ProtoMessage() {}
+func (*SnatchEvent) ProtoMessage() {}
 
-func (x *HuntEvent) ProtoReflect() protoreflect.Message {
+func (x *SnatchEvent) ProtoReflect() protoreflect.Message {
 	mi := &file_snatcharr_v1_worker_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1246,61 +1246,61 @@ func (x *HuntEvent) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use HuntEvent.ProtoReflect.Descriptor instead.
-func (*HuntEvent) Descriptor() ([]byte, []int) {
+// Deprecated: Use SnatchEvent.ProtoReflect.Descriptor instead.
+func (*SnatchEvent) Descriptor() ([]byte, []int) {
 	return file_snatcharr_v1_worker_proto_rawDescGZIP(), []int{10}
 }
 
-func (x *HuntEvent) GetRunId() string {
+func (x *SnatchEvent) GetRunId() string {
 	if x != nil {
 		return x.RunId
 	}
 	return ""
 }
 
-func (x *HuntEvent) GetTsUnixMs() int64 {
+func (x *SnatchEvent) GetTsUnixMs() int64 {
 	if x != nil {
 		return x.TsUnixMs
 	}
 	return 0
 }
 
-func (x *HuntEvent) GetLevel() Level {
+func (x *SnatchEvent) GetLevel() Level {
 	if x != nil {
 		return x.Level
 	}
 	return Level_LEVEL_UNSPECIFIED
 }
 
-func (x *HuntEvent) GetType() EventType {
+func (x *SnatchEvent) GetType() EventType {
 	if x != nil {
 		return x.Type
 	}
 	return EventType_EVENT_TYPE_UNSPECIFIED
 }
 
-func (x *HuntEvent) GetEntityType() string {
+func (x *SnatchEvent) GetEntityType() string {
 	if x != nil {
 		return x.EntityType
 	}
 	return ""
 }
 
-func (x *HuntEvent) GetEntityId() int64 {
+func (x *SnatchEvent) GetEntityId() int64 {
 	if x != nil {
 		return x.EntityId
 	}
 	return 0
 }
 
-func (x *HuntEvent) GetTitle() string {
+func (x *SnatchEvent) GetTitle() string {
 	if x != nil {
 		return x.Title
 	}
 	return ""
 }
 
-func (x *HuntEvent) GetDetail() string {
+func (x *SnatchEvent) GetDetail() string {
 	if x != nil {
 		return x.Detail
 	}
@@ -1309,7 +1309,7 @@ func (x *HuntEvent) GetDetail() string {
 
 type ReportEventsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Event         *HuntEvent             `protobuf:"bytes,1,opt,name=event,proto3" json:"event,omitempty"`
+	Event         *SnatchEvent           `protobuf:"bytes,1,opt,name=event,proto3" json:"event,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1344,7 +1344,7 @@ func (*ReportEventsRequest) Descriptor() ([]byte, []int) {
 	return file_snatcharr_v1_worker_proto_rawDescGZIP(), []int{11}
 }
 
-func (x *ReportEventsRequest) GetEvent() *HuntEvent {
+func (x *ReportEventsRequest) GetEvent() *SnatchEvent {
 	if x != nil {
 		return x.Event
 	}
@@ -1599,13 +1599,13 @@ const file_snatcharr_v1_worker_proto_rawDesc = "" +
 	"\fwait_seconds\x18\x02 \x01(\rR\vwaitSeconds\"D\n" +
 	"\x10LeaseRunResponse\x12(\n" +
 	"\x03run\x18\x01 \x01(\v2\x11.snatcharr.v1.RunH\x00R\x03run\x88\x01\x01B\x06\n" +
-	"\x04_run\"\xc1\x02\n" +
+	"\x04_run\"\xc7\x02\n" +
 	"\x03Run\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12\x1f\n" +
 	"\vinstance_id\x18\x02 \x01(\tR\n" +
 	"instanceId\x12'\n" +
-	"\x03app\x18\x03 \x01(\x0e2\x15.snatcharr.v1.AppKindR\x03app\x12*\n" +
-	"\x04hunt\x18\x04 \x01(\x0e2\x16.snatcharr.v1.HuntKindR\x04hunt\x12\x19\n" +
+	"\x03app\x18\x03 \x01(\x0e2\x15.snatcharr.v1.AppKindR\x03app\x120\n" +
+	"\x06snatch\x18\x04 \x01(\x0e2\x18.snatcharr.v1.SnatchKindR\x06snatch\x12\x19\n" +
 	"\bbase_url\x18\x05 \x01(\tR\abaseUrl\x12\x17\n" +
 	"\aapi_key\x18\x06 \x01(\tR\x06apiKey\x12,\n" +
 	"\x06policy\x18\a \x01(\v2\x14.snatcharr.v1.PolicyR\x06policy\x12,\n" +
@@ -1632,8 +1632,8 @@ const file_snatcharr_v1_worker_proto_rawDesc = "" +
 	"\x15AcquireBudgetResponse\x12\x18\n" +
 	"\agranted\x18\x01 \x01(\rR\agranted\x12.\n" +
 	"\x13remaining_in_window\x18\x02 \x01(\rR\x11remainingInWindow\x12,\n" +
-	"\x12window_resets_unix\x18\x03 \x01(\x03R\x10windowResetsUnix\"\x84\x02\n" +
-	"\tHuntEvent\x12\x15\n" +
+	"\x12window_resets_unix\x18\x03 \x01(\x03R\x10windowResetsUnix\"\x86\x02\n" +
+	"\vSnatchEvent\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12\x1c\n" +
 	"\n" +
 	"ts_unix_ms\x18\x02 \x01(\x03R\btsUnixMs\x12)\n" +
@@ -1643,9 +1643,9 @@ const file_snatcharr_v1_worker_proto_rawDesc = "" +
 	"entityType\x12\x1b\n" +
 	"\tentity_id\x18\x06 \x01(\x03R\bentityId\x12\x14\n" +
 	"\x05title\x18\a \x01(\tR\x05title\x12\x16\n" +
-	"\x06detail\x18\b \x01(\tR\x06detail\"D\n" +
-	"\x13ReportEventsRequest\x12-\n" +
-	"\x05event\x18\x01 \x01(\v2\x17.snatcharr.v1.HuntEventR\x05event\"2\n" +
+	"\x06detail\x18\b \x01(\tR\x06detail\"F\n" +
+	"\x13ReportEventsRequest\x12/\n" +
+	"\x05event\x18\x01 \x01(\v2\x19.snatcharr.v1.SnatchEventR\x05event\"2\n" +
 	"\x14ReportEventsResponse\x12\x1a\n" +
 	"\baccepted\x18\x01 \x01(\rR\baccepted\"b\n" +
 	"\fSearchedItem\x12\x1f\n" +
@@ -1668,11 +1668,12 @@ const file_snatcharr_v1_worker_proto_rawDesc = "" +
 	"\x0fAPP_KIND_LIDARR\x10\x03\x12\x14\n" +
 	"\x10APP_KIND_READARR\x10\x04\x12\x18\n" +
 	"\x14APP_KIND_WHISPARR_V2\x10\x05\x12\x18\n" +
-	"\x14APP_KIND_WHISPARR_V3\x10\x06*S\n" +
-	"\bHuntKind\x12\x19\n" +
-	"\x15HUNT_KIND_UNSPECIFIED\x10\x00\x12\x15\n" +
-	"\x11HUNT_KIND_MISSING\x10\x01\x12\x15\n" +
-	"\x11HUNT_KIND_UPGRADE\x10\x02*V\n" +
+	"\x14APP_KIND_WHISPARR_V3\x10\x06*[\n" +
+	"\n" +
+	"SnatchKind\x12\x1b\n" +
+	"\x17SNATCH_KIND_UNSPECIFIED\x10\x00\x12\x17\n" +
+	"\x13SNATCH_KIND_MISSING\x10\x01\x12\x17\n" +
+	"\x13SNATCH_KIND_UPGRADE\x10\x02*V\n" +
 	"\tSelection\x12\x19\n" +
 	"\x15SELECTION_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10SELECTION_RANDOM\x10\x01\x12\x18\n" +
@@ -1748,7 +1749,7 @@ var file_snatcharr_v1_worker_proto_enumTypes = make([]protoimpl.EnumInfo, 10)
 var file_snatcharr_v1_worker_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_snatcharr_v1_worker_proto_goTypes = []any{
 	(AppKind)(0),                     // 0: snatcharr.v1.AppKind
-	(HuntKind)(0),                    // 1: snatcharr.v1.HuntKind
+	(SnatchKind)(0),                  // 1: snatcharr.v1.SnatchKind
 	(Selection)(0),                   // 2: snatcharr.v1.Selection
 	(SonarrMode)(0),                  // 3: snatcharr.v1.SonarrMode
 	(LidarrMode)(0),                  // 4: snatcharr.v1.LidarrMode
@@ -1767,7 +1768,7 @@ var file_snatcharr_v1_worker_proto_goTypes = []any{
 	(*FilterCandidatesResponse)(nil), // 17: snatcharr.v1.FilterCandidatesResponse
 	(*AcquireBudgetRequest)(nil),     // 18: snatcharr.v1.AcquireBudgetRequest
 	(*AcquireBudgetResponse)(nil),    // 19: snatcharr.v1.AcquireBudgetResponse
-	(*HuntEvent)(nil),                // 20: snatcharr.v1.HuntEvent
+	(*SnatchEvent)(nil),              // 20: snatcharr.v1.SnatchEvent
 	(*ReportEventsRequest)(nil),      // 21: snatcharr.v1.ReportEventsRequest
 	(*ReportEventsResponse)(nil),     // 22: snatcharr.v1.ReportEventsResponse
 	(*SearchedItem)(nil),             // 23: snatcharr.v1.SearchedItem
@@ -1781,12 +1782,12 @@ var file_snatcharr_v1_worker_proto_depIdxs = []int32{
 	5,  // 3: snatcharr.v1.Policy.radarr_release_type:type_name -> snatcharr.v1.RadarrReleaseType
 	13, // 4: snatcharr.v1.LeaseRunResponse.run:type_name -> snatcharr.v1.Run
 	0,  // 5: snatcharr.v1.Run.app:type_name -> snatcharr.v1.AppKind
-	1,  // 6: snatcharr.v1.Run.hunt:type_name -> snatcharr.v1.HuntKind
+	1,  // 6: snatcharr.v1.Run.snatch:type_name -> snatcharr.v1.SnatchKind
 	10, // 7: snatcharr.v1.Run.policy:type_name -> snatcharr.v1.Policy
 	6,  // 8: snatcharr.v1.HeartbeatResponse.directive:type_name -> snatcharr.v1.HeartbeatDirective
-	7,  // 9: snatcharr.v1.HuntEvent.level:type_name -> snatcharr.v1.Level
-	8,  // 10: snatcharr.v1.HuntEvent.type:type_name -> snatcharr.v1.EventType
-	20, // 11: snatcharr.v1.ReportEventsRequest.event:type_name -> snatcharr.v1.HuntEvent
+	7,  // 9: snatcharr.v1.SnatchEvent.level:type_name -> snatcharr.v1.Level
+	8,  // 10: snatcharr.v1.SnatchEvent.type:type_name -> snatcharr.v1.EventType
+	20, // 11: snatcharr.v1.ReportEventsRequest.event:type_name -> snatcharr.v1.SnatchEvent
 	9,  // 12: snatcharr.v1.CompleteRunRequest.outcome:type_name -> snatcharr.v1.RunOutcome
 	23, // 13: snatcharr.v1.CompleteRunRequest.searched:type_name -> snatcharr.v1.SearchedItem
 	11, // 14: snatcharr.v1.WorkerService.LeaseRun:input_type -> snatcharr.v1.LeaseRunRequest

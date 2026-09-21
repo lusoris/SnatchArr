@@ -13,7 +13,7 @@ import (
 )
 
 const ensureDefaultPolicy = `-- name: EnsureDefaultPolicy :one
-INSERT INTO hunt_policies (instance_id, updated_at)
+INSERT INTO snatch_policies (instance_id, updated_at)
 VALUES ($1, $2)
 ON CONFLICT (instance_id) DO UPDATE SET instance_id = EXCLUDED.instance_id
 RETURNING instance_id, missing_per_cycle, upgrade_per_cycle, cycle_interval_s, hourly_cap, selection, monitored_only, skip_future_releases, radarr_release_type, sonarr_missing_mode, sonarr_upgrade_mode, lidarr_missing_mode, processed_ttl_h, max_queue_size, await_command, page_size, cursor_missing, cursor_upgrade, updated_at
@@ -24,9 +24,9 @@ type EnsureDefaultPolicyParams struct {
 	UpdatedAt  time.Time
 }
 
-func (q *Queries) EnsureDefaultPolicy(ctx context.Context, arg EnsureDefaultPolicyParams) (HuntPolicy, error) {
+func (q *Queries) EnsureDefaultPolicy(ctx context.Context, arg EnsureDefaultPolicyParams) (SnatchPolicy, error) {
 	row := q.db.QueryRow(ctx, ensureDefaultPolicy, arg.InstanceID, arg.UpdatedAt)
-	var i HuntPolicy
+	var i SnatchPolicy
 	err := row.Scan(
 		&i.InstanceID,
 		&i.MissingPerCycle,
@@ -53,14 +53,14 @@ func (q *Queries) EnsureDefaultPolicy(ctx context.Context, arg EnsureDefaultPoli
 
 const getPolicy = `-- name: GetPolicy :one
 
-SELECT instance_id, missing_per_cycle, upgrade_per_cycle, cycle_interval_s, hourly_cap, selection, monitored_only, skip_future_releases, radarr_release_type, sonarr_missing_mode, sonarr_upgrade_mode, lidarr_missing_mode, processed_ttl_h, max_queue_size, await_command, page_size, cursor_missing, cursor_upgrade, updated_at FROM hunt_policies WHERE instance_id = $1
+SELECT instance_id, missing_per_cycle, upgrade_per_cycle, cycle_interval_s, hourly_cap, selection, monitored_only, skip_future_releases, radarr_release_type, sonarr_missing_mode, sonarr_upgrade_mode, lidarr_missing_mode, processed_ttl_h, max_queue_size, await_command, page_size, cursor_missing, cursor_upgrade, updated_at FROM snatch_policies WHERE instance_id = $1
 `
 
 // SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 // SPDX-License-Identifier: EUPL-1.2
-func (q *Queries) GetPolicy(ctx context.Context, instanceID uuid.UUID) (HuntPolicy, error) {
+func (q *Queries) GetPolicy(ctx context.Context, instanceID uuid.UUID) (SnatchPolicy, error) {
 	row := q.db.QueryRow(ctx, getPolicy, instanceID)
-	var i HuntPolicy
+	var i SnatchPolicy
 	err := row.Scan(
 		&i.InstanceID,
 		&i.MissingPerCycle,
@@ -86,7 +86,7 @@ func (q *Queries) GetPolicy(ctx context.Context, instanceID uuid.UUID) (HuntPoli
 }
 
 const savePolicyCursor = `-- name: SavePolicyCursor :exec
-UPDATE hunt_policies
+UPDATE snatch_policies
 SET cursor_missing = CASE WHEN $1::text = 'missing' THEN $2::text ELSE cursor_missing END,
     cursor_upgrade = CASE WHEN $1::text = 'upgrade' THEN $2::text ELSE cursor_upgrade END,
     updated_at = $3
@@ -111,7 +111,7 @@ func (q *Queries) SavePolicyCursor(ctx context.Context, arg SavePolicyCursorPara
 }
 
 const upsertPolicy = `-- name: UpsertPolicy :one
-INSERT INTO hunt_policies (
+INSERT INTO snatch_policies (
     instance_id, missing_per_cycle, upgrade_per_cycle, cycle_interval_s, hourly_cap, selection,
     monitored_only, skip_future_releases, radarr_release_type, sonarr_missing_mode, sonarr_upgrade_mode,
     lidarr_missing_mode, processed_ttl_h, max_queue_size, await_command, page_size, updated_at
@@ -160,7 +160,7 @@ type UpsertPolicyParams struct {
 	UpdatedAt          time.Time
 }
 
-func (q *Queries) UpsertPolicy(ctx context.Context, arg UpsertPolicyParams) (HuntPolicy, error) {
+func (q *Queries) UpsertPolicy(ctx context.Context, arg UpsertPolicyParams) (SnatchPolicy, error) {
 	row := q.db.QueryRow(ctx, upsertPolicy,
 		arg.InstanceID,
 		arg.MissingPerCycle,
@@ -180,7 +180,7 @@ func (q *Queries) UpsertPolicy(ctx context.Context, arg UpsertPolicyParams) (Hun
 		arg.PageSize,
 		arg.UpdatedAt,
 	)
-	var i HuntPolicy
+	var i SnatchPolicy
 	err := row.Scan(
 		&i.InstanceID,
 		&i.MissingPerCycle,

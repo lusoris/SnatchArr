@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-//! Pure hunt policy. No I/O, no clocks, no randomness of its own: callers pass `now` and an
+//! Pure snatch policy. No I/O, no clocks, no randomness of its own: callers pass `now` and an
 //! `Rng`, which keeps every function deterministic under test and property-checkable.
 //!
 //! One cycle, in order: [`PagePlan::plan`] decides which wanted-list pages to fetch,

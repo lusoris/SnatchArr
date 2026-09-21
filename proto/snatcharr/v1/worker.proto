@@ -6,7 +6,7 @@ syntax = "proto3";
 package snatcharr.v1;
 
 // WorkerService is the contract between the Go control plane (server) and the Rust
-// hunt-worker (client). The worker dials the API and PULLS work: it leases a run,
+// snatch-worker (client). The worker dials the API and PULLS work: it leases a run,
 // heartbeats while it works, asks the API which candidates are still unprocessed and
 // how much hourly budget it may spend, streams events, and completes the run.
 //
@@ -14,19 +14,19 @@ package snatcharr.v1;
 // the worker owns execution against the *arr instance. A worker restart loses nothing:
 // an expired lease requeues the run.
 service WorkerService {
-  // LeaseRun long-polls (up to wait_seconds, max 30) for a queued hunt run and leases
+  // LeaseRun long-polls (up to wait_seconds, max 30) for a queued snatch run and leases
   // it to the calling worker. Returns NOT_FOUND-free: an empty response means no work.
   rpc LeaseRun(LeaseRunRequest) returns (LeaseRunResponse);
   // Heartbeat extends the lease. The API may answer CANCEL, in which case the worker
   // stops dispatching and completes the run as cancelled.
   rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
   // FilterCandidates returns the subset of entity ids that are not in processed memory
-  // for this run's instance and hunt kind.
+  // for this run's instance and snatch kind.
   rpc FilterCandidates(FilterCandidatesRequest) returns (FilterCandidatesResponse);
   // AcquireBudget atomically debits the instance's hourly bucket and returns how many
   // items the worker may search now (0..requested).
   rpc AcquireBudget(AcquireBudgetRequest) returns (AcquireBudgetResponse);
-  // ReportEvents streams hunt events for history and the live UI.
+  // ReportEvents streams snatch events for history and the live UI.
   rpc ReportEvents(stream ReportEventsRequest) returns (ReportEventsResponse);
   // CompleteRun closes the run and records searched items into processed memory.
   rpc CompleteRun(CompleteRunRequest) returns (CompleteRunResponse);
@@ -43,11 +43,11 @@ enum AppKind {
   APP_KIND_WHISPARR_V3 = 6;
 }
 
-// HuntKind selects the wanted list to walk.
-enum HuntKind {
-  HUNT_KIND_UNSPECIFIED = 0;
-  HUNT_KIND_MISSING = 1;
-  HUNT_KIND_UPGRADE = 2;
+// SnatchKind selects the wanted list to walk.
+enum SnatchKind {
+  SNATCH_KIND_UNSPECIFIED = 0;
+  SNATCH_KIND_MISSING = 1;
+  SNATCH_KIND_UPGRADE = 2;
 }
 
 enum Selection {
@@ -76,7 +76,7 @@ enum RadarrReleaseType {
   RADARR_RELEASE_TYPE_CINEMA = 3;
 }
 
-// Policy is the per-instance hunt policy snapshot the worker executes against.
+// Policy is the per-instance snatch policy snapshot the worker executes against.
 message Policy {
   uint32 per_cycle = 1;
   Selection selection = 2;
@@ -105,7 +105,7 @@ message Run {
   string run_id = 1;
   string instance_id = 2;
   AppKind app = 3;
-  HuntKind hunt = 4;
+  SnatchKind snatch = 4;
   string base_url = 5;
   string api_key = 6;
   Policy policy = 7;
@@ -171,7 +171,7 @@ enum EventType {
   EVENT_TYPE_RUN_FINISHED = 9;
 }
 
-message HuntEvent {
+message SnatchEvent {
   string run_id = 1;
   int64 ts_unix_ms = 2;
   Level level = 3;
@@ -183,7 +183,7 @@ message HuntEvent {
 }
 
 message ReportEventsRequest {
-  HuntEvent event = 1;
+  SnatchEvent event = 1;
 }
 
 message ReportEventsResponse {

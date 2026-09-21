@@ -3,7 +3,7 @@ repository:
     owner: lusoris
     name: SnatchArr
     visibility: public
-    description: "Hunts missing and cutoff-unmet media across *arr instances while respecting per-instance hourly caps"
+    description: "Snatches missing and cutoff-unmet media across *arr instances while respecting per-instance hourly caps"
     homepage: "https://github.com/lusoris/SnatchArr"
     topics:
         - arr

@@ -1258,7 +1258,7 @@ func decodeGetInstanceResponse(resp *http.Response) (res *Instance, _ error) {
 	return res, errors.Wrap(defRes, "error")
 }
 
-func decodeGetPolicyResponse(resp *http.Response) (res *HuntPolicy, _ error) {
+func decodeGetPolicyResponse(resp *http.Response) (res *SnatchPolicy, _ error) {
 	switch resp.StatusCode {
 	case 200:
 		// Code 200.
@@ -1274,7 +1274,7 @@ func decodeGetPolicyResponse(resp *http.Response) (res *HuntPolicy, _ error) {
 			}
 			d := jx.DecodeBytes(buf)
 
-			var response HuntPolicy
+			var response SnatchPolicy
 			if err := func() error {
 				if err := response.Decode(d); err != nil {
 					return err
@@ -3309,7 +3309,7 @@ func decodeUpdateInstanceResponse(resp *http.Response) (res *Instance, _ error) 
 	return res, errors.Wrap(defRes, "error")
 }
 
-func decodeUpdatePolicyResponse(resp *http.Response) (res *HuntPolicy, _ error) {
+func decodeUpdatePolicyResponse(resp *http.Response) (res *SnatchPolicy, _ error) {
 	switch resp.StatusCode {
 	case 200:
 		// Code 200.
@@ -3325,7 +3325,7 @@ func decodeUpdatePolicyResponse(resp *http.Response) (res *HuntPolicy, _ error) 
 			}
 			d := jx.DecodeBytes(buf)
 
-			var response HuntPolicy
+			var response SnatchPolicy
 			if err := func() error {
 				if err := response.Decode(d); err != nil {
 					return err

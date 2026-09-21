@@ -32,9 +32,9 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/dlclients"
 	"github.com/lusoris/SnatchArr/api/internal/events"
 	"github.com/lusoris/SnatchArr/api/internal/httpapi"
-	"github.com/lusoris/SnatchArr/api/internal/hunt"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
 	"github.com/lusoris/SnatchArr/api/internal/policies"
+	"github.com/lusoris/SnatchArr/api/internal/snatch"
 	"github.com/lusoris/SnatchArr/api/internal/store"
 	"github.com/lusoris/SnatchArr/api/internal/webui"
 	"github.com/lusoris/SnatchArr/api/internal/workergrpc"
@@ -57,7 +57,7 @@ var Module = fx.Options(
 	policies.Module,
 	auth.Module,
 	events.Module,
-	hunt.Module,
+	snatch.Module,
 	dlclients.Module,
 	fx.Provide(func(s *dlclients.Service) workergrpc.Pacer { return s }),
 	workergrpc.Module,

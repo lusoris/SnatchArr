@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-package hunt
+package snatch
 
 import (
 	"context"
@@ -28,17 +28,17 @@ const maxTicks = 1 << 30
 // MaxInstancesPerTick bounds one tick (HISS-02).
 const MaxInstancesPerTick = 500
 
-// Gate lets other subsystems veto a hunt for an instance (download-client backpressure,
+// Gate lets other subsystems veto a snatch for an instance (download-client backpressure,
 // Cleanuparr signals). A nil reason means "allowed".
 type Gate interface {
-	Allow(ctx context.Context, inst domain.Instance, kind domain.HuntKind) (allowed bool, reason string, err error)
+	Allow(ctx context.Context, inst domain.Instance, kind domain.SnatchKind) (allowed bool, reason string, err error)
 }
 
 // AllowAll is the gate used until download-client backpressure lands.
 type AllowAll struct{}
 
 // Allow always allows.
-func (AllowAll) Allow(context.Context, domain.Instance, domain.HuntKind) (bool, string, error) {
+func (AllowAll) Allow(context.Context, domain.Instance, domain.SnatchKind) (bool, string, error) {
 	return true, "", nil
 }
 
@@ -62,7 +62,7 @@ func NewPlanner(st *store.Store, clk clock.Clock, runs *Runs, rec *Recorder, log
 func (p *Planner) Tick(ctx context.Context) (int, error) {
 	rows, err := p.st.Q().ListEnabledInstances(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("hunt: planner list instances: %w", store.MapError(err))
+		return 0, fmt.Errorf("snatch: planner list instances: %w", store.MapError(err))
 	}
 	if len(rows) > MaxInstancesPerTick {
 		rows = rows[:MaxInstancesPerTick]
@@ -72,7 +72,7 @@ func (p *Planner) Tick(ctx context.Context) (int, error) {
 		inst := store.InstanceFromRow(row)
 		n, err := p.planInstance(ctx, inst)
 		if err != nil {
-			p.logger.WarnContext(ctx, "hunt: planner skipped instance", slog.String("instance", inst.Name), slog.String("error", err.Error()))
+			p.logger.WarnContext(ctx, "snatch: planner skipped instance", slog.String("instance", inst.Name), slog.String("error", err.Error()))
 			continue
 		}
 		queued += n
@@ -106,18 +106,18 @@ func (p *Planner) planInstance(ctx context.Context, inst domain.Instance) (int, 
 	return queued, nil
 }
 
-func dueKinds(policy domain.Policy) []domain.HuntKind {
-	kinds := make([]domain.HuntKind, 0, 2)
+func dueKinds(policy domain.Policy) []domain.SnatchKind {
+	kinds := make([]domain.SnatchKind, 0, 2)
 	if policy.MissingPerCycle > 0 {
-		kinds = append(kinds, domain.HuntMissing)
+		kinds = append(kinds, domain.SnatchMissing)
 	}
 	if policy.UpgradePerCycle > 0 {
-		kinds = append(kinds, domain.HuntUpgrade)
+		kinds = append(kinds, domain.SnatchUpgrade)
 	}
 	return kinds
 }
 
-func (p *Planner) maybeEnqueue(ctx context.Context, inst domain.Instance, policy domain.Policy, kind domain.HuntKind) (bool, error) {
+func (p *Planner) maybeEnqueue(ctx context.Context, inst domain.Instance, policy domain.Policy, kind domain.SnatchKind) (bool, error) {
 	last, err := p.runs.LastFinished(ctx, inst.ID, kind)
 	if err != nil {
 		return false, err
@@ -131,7 +131,7 @@ func (p *Planner) maybeEnqueue(ctx context.Context, inst domain.Instance, policy
 			return false, fmt.Errorf("gate: %w", gateErr)
 		}
 		if !allowed {
-			p.logger.InfoContext(ctx, "hunt: gated", slog.String("instance", inst.Name), slog.String("kind", string(kind)), slog.String("reason", reason))
+			p.logger.InfoContext(ctx, "snatch: gated", slog.String("instance", inst.Name), slog.String("kind", string(kind)), slog.String("reason", reason))
 			return false, nil
 		}
 	}
@@ -141,7 +141,7 @@ func (p *Planner) maybeEnqueue(ctx context.Context, inst domain.Instance, policy
 	}
 	return true, p.rec.Record(ctx, domain.Event{
 		RunID: &run.ID, InstanceID: inst.ID, Level: "debug", Type: "run_queued",
-		Title: fmt.Sprintf("%s hunt queued", kind),
+		Title: fmt.Sprintf("%s snatch queued", kind),
 	})
 }
 
@@ -155,7 +155,7 @@ func (p *Planner) decision(ctx context.Context, instanceID uuid.UUID) (Decision,
 	for _, row := range rows {
 		w, err := windowFromRow(row)
 		if err != nil {
-			p.logger.WarnContext(ctx, "hunt: bad schedule", slog.String("id", row.ID.String()), slog.String("error", err.Error()))
+			p.logger.WarnContext(ctx, "snatch: bad schedule", slog.String("id", row.ID.String()), slog.String("error", err.Error()))
 			continue
 		}
 		windows = append(windows, w)

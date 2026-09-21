@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-package hunt
+package snatch
 
 import (
 	"context"
@@ -37,7 +37,7 @@ func NewSchedules(st *store.Store, clk clock.Clock, ids id.Generator) *Schedules
 func (s *Schedules) List(ctx context.Context) ([]domain.Schedule, error) {
 	rows, err := s.st.Q().ListSchedules(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("hunt: list schedules: %w", store.MapError(err))
+		return nil, fmt.Errorf("snatch: list schedules: %w", store.MapError(err))
 	}
 	out := make([]domain.Schedule, 0, len(rows))
 	for _, row := range rows {
@@ -49,14 +49,14 @@ func (s *Schedules) List(ctx context.Context) ([]domain.Schedule, error) {
 // Create validates and stores a window.
 func (s *Schedules) Create(ctx context.Context, in domain.Schedule) (domain.Schedule, error) {
 	if err := in.Validate(); err != nil {
-		return domain.Schedule{}, fmt.Errorf("hunt: %w", err)
+		return domain.Schedule{}, fmt.Errorf("snatch: %w", err)
 	}
 	if err := s.checkInstance(ctx, in.InstanceID); err != nil {
 		return domain.Schedule{}, err
 	}
 	schedID, err := s.ids.NewUUID()
 	if err != nil {
-		return domain.Schedule{}, fmt.Errorf("hunt: new schedule id: %w", err)
+		return domain.Schedule{}, fmt.Errorf("snatch: new schedule id: %w", err)
 	}
 	start, end := clockOf(in.Start), clockOf(in.End)
 	row, err := s.st.Q().CreateSchedule(ctx, sqlcgen.CreateScheduleParams{
@@ -65,7 +65,7 @@ func (s *Schedules) Create(ctx context.Context, in domain.Schedule) (domain.Sche
 		Enabled: in.Enabled, CreatedAt: s.clk.Now(),
 	})
 	if err != nil {
-		return domain.Schedule{}, fmt.Errorf("hunt: create schedule: %w", store.MapError(err))
+		return domain.Schedule{}, fmt.Errorf("snatch: create schedule: %w", store.MapError(err))
 	}
 	return scheduleFromRow(row), nil
 }
@@ -73,7 +73,7 @@ func (s *Schedules) Create(ctx context.Context, in domain.Schedule) (domain.Sche
 // Update validates and replaces a window.
 func (s *Schedules) Update(ctx context.Context, schedID uuid.UUID, in domain.Schedule) (domain.Schedule, error) {
 	if err := in.Validate(); err != nil {
-		return domain.Schedule{}, fmt.Errorf("hunt: %w", err)
+		return domain.Schedule{}, fmt.Errorf("snatch: %w", err)
 	}
 	if err := s.checkInstance(ctx, in.InstanceID); err != nil {
 		return domain.Schedule{}, err
@@ -85,7 +85,7 @@ func (s *Schedules) Update(ctx context.Context, schedID uuid.UUID, in domain.Sch
 		Enabled: in.Enabled, UpdatedAt: s.clk.Now(),
 	})
 	if err != nil {
-		return domain.Schedule{}, fmt.Errorf("hunt: update schedule: %w", store.MapError(err))
+		return domain.Schedule{}, fmt.Errorf("snatch: update schedule: %w", store.MapError(err))
 	}
 	return scheduleFromRow(row), nil
 }
@@ -94,10 +94,10 @@ func (s *Schedules) Update(ctx context.Context, schedID uuid.UUID, in domain.Sch
 func (s *Schedules) Delete(ctx context.Context, schedID uuid.UUID) error {
 	n, err := s.st.Q().DeleteSchedule(ctx, schedID)
 	if err != nil {
-		return fmt.Errorf("hunt: delete schedule: %w", store.MapError(err))
+		return fmt.Errorf("snatch: delete schedule: %w", store.MapError(err))
 	}
 	if n == 0 {
-		return fmt.Errorf("hunt: delete schedule: %w", domain.ErrNotFound)
+		return fmt.Errorf("snatch: delete schedule: %w", domain.ErrNotFound)
 	}
 	return nil
 }
@@ -107,7 +107,7 @@ func (s *Schedules) checkInstance(ctx context.Context, instanceID *uuid.UUID) er
 		return nil
 	}
 	if _, err := s.st.Q().GetInstance(ctx, *instanceID); err != nil {
-		return fmt.Errorf("hunt: schedule instance: %w", store.MapError(err))
+		return fmt.Errorf("snatch: schedule instance: %w", store.MapError(err))
 	}
 	return nil
 }

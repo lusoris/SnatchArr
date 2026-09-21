@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-// Package policies reads and writes per-instance hunt policies.
+// Package policies reads and writes per-instance snatch policies.
 package policies
 
 import (
@@ -57,8 +57,8 @@ func (s *Service) Update(ctx context.Context, p domain.Policy) (domain.Policy, e
 	return store.PolicyFromRow(row), nil
 }
 
-// SaveCursor persists the sequential-selection cursor for one hunt kind.
-func (s *Service) SaveCursor(ctx context.Context, instanceID uuid.UUID, kind domain.HuntKind, cursor string) error {
+// SaveCursor persists the sequential-selection cursor for one snatch kind.
+func (s *Service) SaveCursor(ctx context.Context, instanceID uuid.UUID, kind domain.SnatchKind, cursor string) error {
 	if len(cursor) > 256 {
 		return fmt.Errorf("%w: cursor too long", domain.ErrInvalid)
 	}

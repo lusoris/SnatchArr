@@ -9,13 +9,13 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use arr_client::{ArrClient, CommandStatus, Kind, Options, RadarrRelease, Wanted, WantedPage};
-use hunt_core::{Candidate, Filter, LidarrMode, PagePlan, Selection, SonarrMode, Target};
 use rand::SeedableRng;
 use rand::rngs::SmallRng;
+use snatch_core::{Candidate, Filter, LidarrMode, PagePlan, Selection, SonarrMode, Target};
 use snatch_proto::worker_service_client::WorkerServiceClient;
 use snatch_proto::{
-    AcquireBudgetRequest, AppKind, CompleteRunRequest, EventType, FilterCandidatesRequest,
-    HuntEvent, HuntKind, Level, Policy, ReportEventsRequest, Run, RunOutcome, SearchedItem,
+    AcquireBudgetRequest, AppKind, CompleteRunRequest, EventType, FilterCandidatesRequest, Level,
+    Policy, ReportEventsRequest, Run, RunOutcome, SearchedItem, SnatchEvent, SnatchKind,
 };
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
@@ -97,7 +97,7 @@ struct Events {
 
 impl Events {
     async fn emit(&self, e: Ev) {
-        let ev = HuntEvent {
+        let ev = SnatchEvent {
             run_id: self.run_id.clone(),
             ts_unix_ms: chrono::Utc::now().timestamp_millis(),
             level: e.level.into(),
@@ -141,13 +141,13 @@ fn kind_of(app: i32) -> Result<Kind, ExecError> {
     }
 }
 
-fn wanted_of(hunt: i32) -> Result<Wanted, ExecError> {
-    let hunt = HuntKind::try_from(hunt)
-        .map_err(|_| ExecError::Lease(format!("unknown hunt kind {hunt}")))?;
-    match hunt {
-        HuntKind::Missing => Ok(Wanted::Missing),
-        HuntKind::Upgrade => Ok(Wanted::Cutoff),
-        HuntKind::Unspecified => Err(ExecError::Lease("hunt kind unspecified".to_owned())),
+fn wanted_of(snatch: i32) -> Result<Wanted, ExecError> {
+    let snatch = SnatchKind::try_from(snatch)
+        .map_err(|_| ExecError::Lease(format!("unknown snatch kind {snatch}")))?;
+    match snatch {
+        SnatchKind::Missing => Ok(Wanted::Missing),
+        SnatchKind::Upgrade => Ok(Wanted::Cutoff),
+        SnatchKind::Unspecified => Err(ExecError::Lease("snatch kind unspecified".to_owned())),
     }
 }
 
@@ -188,16 +188,16 @@ fn lidarr_mode(p: &Policy) -> LidarrMode {
 
 fn group(kind: Kind, p: &Policy, selected: &[Candidate]) -> Vec<Target> {
     match kind {
-        Kind::Sonarr | Kind::WhisparrV2 => hunt_core::group_sonarr(selected, sonarr_mode(p)),
-        Kind::Lidarr => hunt_core::group_lidarr(selected, lidarr_mode(p)),
-        Kind::Readarr => hunt_core::group_readarr(selected),
-        Kind::Radarr | Kind::WhisparrV3 => hunt_core::group_flat(selected),
+        Kind::Sonarr | Kind::WhisparrV2 => snatch_core::group_sonarr(selected, sonarr_mode(p)),
+        Kind::Lidarr => snatch_core::group_lidarr(selected, lidarr_mode(p)),
+        Kind::Readarr => snatch_core::group_readarr(selected),
+        Kind::Radarr | Kind::WhisparrV3 => snatch_core::group_flat(selected),
     }
 }
 
 fn prepare(run: &Run, arr_timeout: Duration) -> Result<Prepared, ExecError> {
     let kind = kind_of(run.app)?;
-    let wanted = wanted_of(run.hunt)?;
+    let wanted = wanted_of(run.snatch)?;
     let policy = run
         .policy
         .clone()
@@ -232,13 +232,13 @@ pub async fn execute(mut client: Client, run: Run, arr_timeout: Duration, worker
         run_id: run.run_id.clone(),
     };
     let (outcome, searched, cursor, error) =
-        match hunt(&mut client, &run, arr_timeout, &events).await {
+        match snatch(&mut client, &run, arr_timeout, &events).await {
             Ok(o) => (RunOutcome::Done, o.searched, o.cursor, String::new()),
             Err(e) => {
                 tracing::warn!(run = %run.run_id, error = %e, "run failed");
                 events
                     .emit(
-                        Ev::run(Level::Error, EventType::RunFinished, "hunt failed")
+                        Ev::run(Level::Error, EventType::RunFinished, "snatch failed")
                             .detail(e.to_string()),
                     )
                     .await;
@@ -264,7 +264,7 @@ pub async fn execute(mut client: Client, run: Run, arr_timeout: Duration, worker
     }
 }
 
-async fn hunt(
+async fn snatch(
     client: &mut Client,
     run: &Run,
     arr_timeout: Duration,
@@ -275,7 +275,7 @@ async fn hunt(
         .emit(Ev::run(
             Level::Info,
             EventType::RunStarted,
-            format!("{:?} hunt started", p.wanted),
+            format!("{:?} snatch started", p.wanted),
         ))
         .await;
     let mut rng = SmallRng::from_rng(&mut rand::rng());
@@ -293,7 +293,7 @@ async fn hunt(
     events
         .emit(Ev::run(Level::Debug, EventType::CandidatesFiltered, msg))
         .await;
-    let selected = hunt_core::select(
+    let selected = snatch_core::select(
         &keep,
         p.policy.per_cycle as usize,
         selection_of(&p.policy),
@@ -354,7 +354,7 @@ async fn collect_candidates(
         skip_future: p.policy.skip_future_releases,
         now_unix: chrono::Utc::now().timestamp(),
     };
-    let filtered = hunt_core::filter(&candidates, &filter);
+    let filtered = snatch_core::filter(&candidates, &filter);
     let req = FilterCandidatesRequest {
         run_id: run.run_id.clone(),
         entity_type: p.kind.entity_type().to_owned(),
@@ -391,7 +391,7 @@ async fn acquire(
     events
         .emit(Ev::run(Level::Info, EventType::BudgetAcquired, msg))
         .await;
-    let (dispatch, deferred) = hunt_core::cap(targets, grant.granted);
+    let (dispatch, deferred) = snatch_core::cap(targets, grant.granted);
     if !deferred.is_empty() {
         let msg = format!("{} target(s) deferred by the hourly cap", deferred.len());
         events

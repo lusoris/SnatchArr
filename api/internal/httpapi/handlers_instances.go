@@ -104,8 +104,8 @@ func (h *Handlers) TestInstanceInput(ctx context.Context, req *oas.InstanceInput
 	return &oas.ProbeResult{AppName: res.AppName, Version: res.Version}, nil
 }
 
-// GetPolicy returns an instance's hunt policy.
-func (h *Handlers) GetPolicy(ctx context.Context, params oas.GetPolicyParams) (*oas.HuntPolicy, error) {
+// GetPolicy returns an instance's snatch policy.
+func (h *Handlers) GetPolicy(ctx context.Context, params oas.GetPolicyParams) (*oas.SnatchPolicy, error) {
 	p, err := h.policies.Get(ctx, params.InstanceId)
 	if err != nil {
 		return nil, err
@@ -113,8 +113,8 @@ func (h *Handlers) GetPolicy(ctx context.Context, params oas.GetPolicyParams) (*
 	return policyToOAS(p), nil
 }
 
-// UpdatePolicy replaces an instance's hunt policy.
-func (h *Handlers) UpdatePolicy(ctx context.Context, req *oas.HuntPolicy, params oas.UpdatePolicyParams) (*oas.HuntPolicy, error) {
+// UpdatePolicy replaces an instance's snatch policy.
+func (h *Handlers) UpdatePolicy(ctx context.Context, req *oas.SnatchPolicy, params oas.UpdatePolicyParams) (*oas.SnatchPolicy, error) {
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}

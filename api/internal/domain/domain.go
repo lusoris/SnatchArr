@@ -41,22 +41,22 @@ func ParseAppKind(s string) (AppKind, error) {
 	return "", fmt.Errorf("%w: app kind %q", ErrInvalid, s)
 }
 
-// HuntKind selects which wanted list a run walks.
-type HuntKind string
+// SnatchKind selects which wanted list a run walks.
+type SnatchKind string
 
-// Hunt kinds.
+// Snatch kinds.
 const (
-	HuntMissing HuntKind = "missing"
-	HuntUpgrade HuntKind = "upgrade"
+	SnatchMissing SnatchKind = "missing"
+	SnatchUpgrade SnatchKind = "upgrade"
 )
 
-// ParseHuntKind validates a hunt kind string.
-func ParseHuntKind(s string) (HuntKind, error) {
-	switch HuntKind(s) {
-	case HuntMissing, HuntUpgrade:
-		return HuntKind(s), nil
+// ParseSnatchKind validates a snatch kind string.
+func ParseSnatchKind(s string) (SnatchKind, error) {
+	switch SnatchKind(s) {
+	case SnatchMissing, SnatchUpgrade:
+		return SnatchKind(s), nil
 	default:
-		return "", fmt.Errorf("%w: hunt kind %q", ErrInvalid, s)
+		return "", fmt.Errorf("%w: snatch kind %q", ErrInvalid, s)
 	}
 }
 

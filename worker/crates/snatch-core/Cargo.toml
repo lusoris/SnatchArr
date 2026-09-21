@@ -1,6 +1,6 @@
 [package]
-name = "hunt-core"
-description = "Pure hunt policy: paging plans, candidate filtering, selection, grouping and budget math"
+name = "snatch-core"
+description = "Pure snatch policy: paging plans, candidate filtering, selection, grouping and budget math"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

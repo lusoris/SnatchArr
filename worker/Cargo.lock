@@ -31,10 +31,10 @@ name = "arr-client"
 version = "0.1.0"
 dependencies = [
  "chrono",
- "hunt-core",
  "reqwest",
  "serde",
  "serde_json",
+ "snatch-core",
  "thiserror",
  "tokio",
  "tracing",
@@ -560,14 +560,6 @@ name = "httpdate"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
-
-[[package]]
-name = "hunt-core"
-version = "0.1.0"
-dependencies = [
- "proptest",
- "rand 0.10.3",
-]
 
 [[package]]
 name = "hyper"
@@ -1778,6 +1770,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba467056f1b547ed52077911161fc86985becbc60e8e1857c8a144dab0def891"
 
 [[package]]
+name = "snatch-core"
+version = "0.1.0"
+dependencies = [
+ "proptest",
+ "rand 0.10.3",
+]
+
+[[package]]
 name = "snatch-proto"
 version = "0.1.0"
 dependencies = [
@@ -1795,8 +1795,8 @@ version = "0.1.0"
 dependencies = [
  "arr-client",
  "chrono",
- "hunt-core",
  "rand 0.10.3",
+ "snatch-core",
  "snatch-proto",
  "thiserror",
  "tokio",

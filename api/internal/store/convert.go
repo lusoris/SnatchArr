@@ -46,7 +46,7 @@ func InstancesFromRows(rows []sqlcgen.Instance) []domain.Instance {
 }
 
 // PolicyFromRow converts a policy row.
-func PolicyFromRow(r sqlcgen.HuntPolicy) domain.Policy {
+func PolicyFromRow(r sqlcgen.SnatchPolicy) domain.Policy {
 	return domain.Policy{
 		InstanceID:         r.InstanceID,
 		MissingPerCycle:    int(r.MissingPerCycle),

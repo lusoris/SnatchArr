@@ -29,10 +29,11 @@ verify-all: governance-verify proto-verify api-verify worker-verify web-verify d
 	@echo "All SnatchArr verification gates passed."
 
 # ── api/ (Go, golusoris) ──────────────────────────────────────────────────────
-api-verify: ## golangci-lint + gosec + govulncheck + go test -race + generated-code drift + spectral
+api-verify: ## golangci-lint + go fix + gosec + govulncheck + go test -race + generated-code drift + spectral
 	@if [ ! -f api/go.mod ]; then echo "api/ not scaffolded yet; skipping"; exit 0; fi
 	$(MAKE) -C api -f "$(GOLUSORIS_SHARED)" ci GOLANGCI_CONFIG=../.golangci.yml
 	cd api
+	go fix -diff ./...
 	gosec -quiet -conf ../.gosec.json -exclude-generated ./...
 	go generate ./...
 	git diff --exit-code -- internal/build internal/gen

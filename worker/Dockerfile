@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
 #
-# snatcharr-worker: Rust hunt data-plane. Static musl build via cargo-zigbuild → distroless static.
+# snatcharr-worker: Rust snatch data-plane. Static musl build via cargo-zigbuild → distroless static.
 
 FROM rust:1-bookworm AS build
 ARG TARGETARCH

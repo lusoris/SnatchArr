@@ -13,7 +13,7 @@ import (
 )
 
 const cancelRun = `-- name: CancelRun :execrows
-UPDATE hunt_runs SET status = 'cancelled', finished_at = $2
+UPDATE snatch_runs SET status = 'cancelled', finished_at = $2
 WHERE id = $1 AND status IN ('queued', 'leased')
 `
 
@@ -31,7 +31,7 @@ func (q *Queries) CancelRun(ctx context.Context, arg CancelRunParams) (int64, er
 }
 
 const completeRun = `-- name: CompleteRun :one
-UPDATE hunt_runs
+UPDATE snatch_runs
 SET status = $3, finished_at = $4, searched_count = $5, error = $6, lease_expires_at = NULL
 WHERE id = $1 AND leased_by = $2 AND status IN ('leased', 'cancelled')
 RETURNING id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error
@@ -46,7 +46,7 @@ type CompleteRunParams struct {
 	Error         *string
 }
 
-func (q *Queries) CompleteRun(ctx context.Context, arg CompleteRunParams) (HuntRun, error) {
+func (q *Queries) CompleteRun(ctx context.Context, arg CompleteRunParams) (SnatchRun, error) {
 	row := q.db.QueryRow(ctx, completeRun,
 		arg.ID,
 		arg.LeasedBy,
@@ -55,7 +55,7 @@ func (q *Queries) CompleteRun(ctx context.Context, arg CompleteRunParams) (HuntR
 		arg.SearchedCount,
 		arg.Error,
 	)
-	var i HuntRun
+	var i SnatchRun
 	err := row.Scan(
 		&i.ID,
 		&i.InstanceID,
@@ -74,7 +74,7 @@ func (q *Queries) CompleteRun(ctx context.Context, arg CompleteRunParams) (HuntR
 
 const enqueueRun = `-- name: EnqueueRun :one
 
-INSERT INTO hunt_runs (id, instance_id, kind, status, queued_at)
+INSERT INTO snatch_runs (id, instance_id, kind, status, queued_at)
 VALUES ($1, $2, $3, 'queued', $4)
 RETURNING id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error
 `
@@ -88,14 +88,14 @@ type EnqueueRunParams struct {
 
 // SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 // SPDX-License-Identifier: EUPL-1.2
-func (q *Queries) EnqueueRun(ctx context.Context, arg EnqueueRunParams) (HuntRun, error) {
+func (q *Queries) EnqueueRun(ctx context.Context, arg EnqueueRunParams) (SnatchRun, error) {
 	row := q.db.QueryRow(ctx, enqueueRun,
 		arg.ID,
 		arg.InstanceID,
 		arg.Kind,
 		arg.QueuedAt,
 	)
-	var i HuntRun
+	var i SnatchRun
 	err := row.Scan(
 		&i.ID,
 		&i.InstanceID,
@@ -113,12 +113,12 @@ func (q *Queries) EnqueueRun(ctx context.Context, arg EnqueueRunParams) (HuntRun
 }
 
 const getRun = `-- name: GetRun :one
-SELECT id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error FROM hunt_runs WHERE id = $1
+SELECT id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error FROM snatch_runs WHERE id = $1
 `
 
-func (q *Queries) GetRun(ctx context.Context, id uuid.UUID) (HuntRun, error) {
+func (q *Queries) GetRun(ctx context.Context, id uuid.UUID) (SnatchRun, error) {
 	row := q.db.QueryRow(ctx, getRun, id)
-	var i HuntRun
+	var i SnatchRun
 	err := row.Scan(
 		&i.ID,
 		&i.InstanceID,
@@ -137,7 +137,7 @@ func (q *Queries) GetRun(ctx context.Context, id uuid.UUID) (HuntRun, error) {
 
 const hasActiveRun = `-- name: HasActiveRun :one
 SELECT EXISTS (
-    SELECT 1 FROM hunt_runs
+    SELECT 1 FROM snatch_runs
     WHERE instance_id = $1 AND kind = $2 AND status IN ('queued', 'leased')
 )
 `
@@ -155,7 +155,7 @@ func (q *Queries) HasActiveRun(ctx context.Context, arg HasActiveRunParams) (boo
 }
 
 const heartbeatRun = `-- name: HeartbeatRun :one
-UPDATE hunt_runs
+UPDATE snatch_runs
 SET lease_expires_at = $3
 WHERE id = $1 AND leased_by = $2 AND status = 'leased'
 RETURNING id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error
@@ -167,9 +167,9 @@ type HeartbeatRunParams struct {
 	LeaseExpiresAt *time.Time
 }
 
-func (q *Queries) HeartbeatRun(ctx context.Context, arg HeartbeatRunParams) (HuntRun, error) {
+func (q *Queries) HeartbeatRun(ctx context.Context, arg HeartbeatRunParams) (SnatchRun, error) {
 	row := q.db.QueryRow(ctx, heartbeatRun, arg.ID, arg.LeasedBy, arg.LeaseExpiresAt)
-	var i HuntRun
+	var i SnatchRun
 	err := row.Scan(
 		&i.ID,
 		&i.InstanceID,
@@ -188,7 +188,7 @@ func (q *Queries) HeartbeatRun(ctx context.Context, arg HeartbeatRunParams) (Hun
 
 const lastFinishedAt = `-- name: LastFinishedAt :one
 SELECT COALESCE(max(finished_at), '1970-01-01'::timestamptz)::timestamptz AS last_finished
-FROM hunt_runs
+FROM snatch_runs
 WHERE instance_id = $1 AND kind = $2 AND status IN ('done', 'failed')
 `
 
@@ -205,10 +205,10 @@ func (q *Queries) LastFinishedAt(ctx context.Context, arg LastFinishedAtParams) 
 }
 
 const leaseRun = `-- name: LeaseRun :one
-UPDATE hunt_runs
+UPDATE snatch_runs
 SET status = 'leased', leased_by = $1, lease_expires_at = $2, started_at = COALESCE(started_at, $3)
 WHERE id = (
-    SELECT id FROM hunt_runs
+    SELECT id FROM snatch_runs
     WHERE status = 'queued' OR (status = 'leased' AND lease_expires_at < $3)
     ORDER BY queued_at
     LIMIT 1
@@ -223,9 +223,9 @@ type LeaseRunParams struct {
 	StartedAt      *time.Time
 }
 
-func (q *Queries) LeaseRun(ctx context.Context, arg LeaseRunParams) (HuntRun, error) {
+func (q *Queries) LeaseRun(ctx context.Context, arg LeaseRunParams) (SnatchRun, error) {
 	row := q.db.QueryRow(ctx, leaseRun, arg.LeasedBy, arg.LeaseExpiresAt, arg.StartedAt)
-	var i HuntRun
+	var i SnatchRun
 	err := row.Scan(
 		&i.ID,
 		&i.InstanceID,
@@ -243,7 +243,7 @@ func (q *Queries) LeaseRun(ctx context.Context, arg LeaseRunParams) (HuntRun, er
 }
 
 const listRuns = `-- name: ListRuns :many
-SELECT id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error FROM hunt_runs
+SELECT id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error FROM snatch_runs
 WHERE ($3::uuid IS NULL OR instance_id = $3::uuid)
 ORDER BY queued_at DESC
 LIMIT $1 OFFSET $2
@@ -255,15 +255,15 @@ type ListRunsParams struct {
 	InstanceID *uuid.UUID
 }
 
-func (q *Queries) ListRuns(ctx context.Context, arg ListRunsParams) ([]HuntRun, error) {
+func (q *Queries) ListRuns(ctx context.Context, arg ListRunsParams) ([]SnatchRun, error) {
 	rows, err := q.db.Query(ctx, listRuns, arg.Limit, arg.Offset, arg.InstanceID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []HuntRun{}
+	items := []SnatchRun{}
 	for rows.Next() {
-		var i HuntRun
+		var i SnatchRun
 		if err := rows.Scan(
 			&i.ID,
 			&i.InstanceID,
@@ -288,7 +288,7 @@ func (q *Queries) ListRuns(ctx context.Context, arg ListRunsParams) ([]HuntRun, 
 }
 
 const purgeRunsBefore = `-- name: PurgeRunsBefore :execrows
-DELETE FROM hunt_runs WHERE status IN ('done', 'failed', 'cancelled') AND finished_at < $1
+DELETE FROM snatch_runs WHERE status IN ('done', 'failed', 'cancelled') AND finished_at < $1
 `
 
 func (q *Queries) PurgeRunsBefore(ctx context.Context, finishedAt *time.Time) (int64, error) {

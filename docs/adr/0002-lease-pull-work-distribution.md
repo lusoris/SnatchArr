@@ -16,7 +16,7 @@ The worker **pulls**. `snatcharr.v1.WorkerService` (served by the API on `:9090`
 2. `Heartbeat` every 30 s extends the lease and can return `CANCEL`.
 3. `FilterCandidates` — the API strips processed ids before selection (filter first, then select).
 4. `AcquireBudget` — the API atomically debits the per-instance hourly bucket and returns the granted count.
-5. `ReportEvents` — client stream of hunt events.
+5. `ReportEvents` — client stream of snatch events.
 6. `CompleteRun` — the API records searched items into processed memory and closes the run.
 
 Instance API keys travel in the lease payload; gRPC stays in-cluster behind a NetworkPolicy, optionally TLS, and the worker authenticates with a shared token.

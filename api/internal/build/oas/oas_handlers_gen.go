@@ -3006,7 +3006,7 @@ func (s *Server) handleGetInstanceRequest(args [1]string, argsEscaped bool, w ht
 
 // handleGetPolicyRequest handles getPolicy operation.
 //
-// Hunt policy of an instance.
+// Snatch policy of an instance.
 //
 // GET /instances/{instanceId}/policy
 func (s *Server) handleGetPolicyRequest(args [1]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
@@ -3158,12 +3158,12 @@ func (s *Server) handleGetPolicyRequest(args [1]string, argsEscaped bool, w http
 
 	var rawBody []byte
 
-	var response *HuntPolicy
+	var response *SnatchPolicy
 	if m := s.cfg.Middleware; m != nil {
 		mreq := middleware.Request{
 			Context:          ctx,
 			OperationName:    GetPolicyOperation,
-			OperationSummary: "Hunt policy of an instance",
+			OperationSummary: "Snatch policy of an instance",
 			OperationID:      "getPolicy",
 			Body:             nil,
 			RawBody:          rawBody,
@@ -3179,7 +3179,7 @@ func (s *Server) handleGetPolicyRequest(args [1]string, argsEscaped bool, w http
 		type (
 			Request  = struct{}
 			Params   = GetPolicyParams
-			Response = *HuntPolicy
+			Response = *SnatchPolicy
 		)
 		response, err = middleware.HookMiddleware[
 			Request,
@@ -3903,7 +3903,7 @@ func (s *Server) handleListDownloadClientsRequest(args [0]string, argsEscaped bo
 
 // handleListEventsRequest handles listEvents operation.
 //
-// Hunt history, newest first (cursor on before_id).
+// Snatch history, newest first (cursor on before_id).
 //
 // GET /events
 func (s *Server) handleListEventsRequest(args [0]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
@@ -4060,7 +4060,7 @@ func (s *Server) handleListEventsRequest(args [0]string, argsEscaped bool, w htt
 		mreq := middleware.Request{
 			Context:          ctx,
 			OperationName:    ListEventsOperation,
-			OperationSummary: "Hunt history, newest first (cursor on before_id)",
+			OperationSummary: "Snatch history, newest first (cursor on before_id)",
 			OperationID:      "listEvents",
 			Body:             nil,
 			RawBody:          rawBody,
@@ -4338,7 +4338,7 @@ func (s *Server) handleListInstancesRequest(args [0]string, argsEscaped bool, w 
 
 // handleListRunsRequest handles listRuns operation.
 //
-// Recent hunt runs, newest first.
+// Recent snatch runs, newest first.
 //
 // GET /runs
 func (s *Server) handleListRunsRequest(args [0]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
@@ -4495,7 +4495,7 @@ func (s *Server) handleListRunsRequest(args [0]string, argsEscaped bool, w http.
 		mreq := middleware.Request{
 			Context:          ctx,
 			OperationName:    ListRunsOperation,
-			OperationSummary: "Recent hunt runs, newest first",
+			OperationSummary: "Recent snatch runs, newest first",
 			OperationID:      "listRuns",
 			Body:             nil,
 			RawBody:          rawBody,
@@ -6222,7 +6222,7 @@ func (s *Server) handleTestInstanceInputRequest(args [0]string, argsEscaped bool
 
 // handleTriggerRunRequest handles triggerRun operation.
 //
-// Queue a hunt run now (ignores the cycle interval).
+// Quickie - queue a snatch now (ignores the refractory period).
 //
 // POST /instances/{instanceId}/runs
 func (s *Server) handleTriggerRunRequest(args [1]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
@@ -6394,7 +6394,7 @@ func (s *Server) handleTriggerRunRequest(args [1]string, argsEscaped bool, w htt
 		mreq := middleware.Request{
 			Context:          ctx,
 			OperationName:    TriggerRunOperation,
-			OperationSummary: "Queue a hunt run now (ignores the cycle interval)",
+			OperationSummary: "Quickie - queue a snatch now (ignores the refractory period)",
 			OperationID:      "triggerRun",
 			Body:             request,
 			RawBody:          rawBody,
@@ -6924,7 +6924,7 @@ func (s *Server) handleUpdateInstanceRequest(args [1]string, argsEscaped bool, w
 
 // handleUpdatePolicyRequest handles updatePolicy operation.
 //
-// Replace the hunt policy of an instance.
+// Replace the snatch policy of an instance.
 //
 // PUT /instances/{instanceId}/policy
 func (s *Server) handleUpdatePolicyRequest(args [1]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
@@ -7091,12 +7091,12 @@ func (s *Server) handleUpdatePolicyRequest(args [1]string, argsEscaped bool, w h
 		}
 	}()
 
-	var response *HuntPolicy
+	var response *SnatchPolicy
 	if m := s.cfg.Middleware; m != nil {
 		mreq := middleware.Request{
 			Context:          ctx,
 			OperationName:    UpdatePolicyOperation,
-			OperationSummary: "Replace the hunt policy of an instance",
+			OperationSummary: "Replace the snatch policy of an instance",
 			OperationID:      "updatePolicy",
 			Body:             request,
 			RawBody:          rawBody,
@@ -7110,9 +7110,9 @@ func (s *Server) handleUpdatePolicyRequest(args [1]string, argsEscaped bool, w h
 		}
 
 		type (
-			Request  = *HuntPolicy
+			Request  = *SnatchPolicy
 			Params   = UpdatePolicyParams
-			Response = *HuntPolicy
+			Response = *SnatchPolicy
 		)
 		response, err = middleware.HookMiddleware[
 			Request,

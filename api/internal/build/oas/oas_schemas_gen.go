@@ -269,9 +269,9 @@ type DownloadClient struct {
 	Username   string                 `json:"username"`
 	Enabled    bool                   `json:"enabled"`
 	Source     DownloadClientSource   `json:"source"`
-	// Defer hunts once this many downloads are active (0 = no limit).
+	// Foreplay - defer snatches once this many downloads are active (0 = no limit).
 	MaxActive int `json:"max_active"`
-	// Bytes per second the client may use before hunts are paced (0 = off).
+	// Foreplay - bytes per second the client may use before snatches are paced (0 = off).
 	BandwidthBudgetBps int64       `json:"bandwidth_budget_bps"`
 	LastCheckAt        OptDateTime `json:"last_check_at"`
 	LastError          OptString   `json:"last_error"`
@@ -985,447 +985,6 @@ func (s *EventLevel) UnmarshalText(data []byte) error {
 		return nil
 	case EventLevelError:
 		*s = EventLevelError
-		return nil
-	default:
-		return errors.Errorf("invalid value: %q", data)
-	}
-}
-
-// Ref: #/components/schemas/HuntKind
-type HuntKind string
-
-const (
-	HuntKindMissing HuntKind = "missing"
-	HuntKindUpgrade HuntKind = "upgrade"
-)
-
-// AllValues returns all HuntKind values.
-func (HuntKind) AllValues() []HuntKind {
-	return []HuntKind{
-		HuntKindMissing,
-		HuntKindUpgrade,
-	}
-}
-
-// MarshalText implements encoding.TextMarshaler.
-func (s HuntKind) MarshalText() ([]byte, error) {
-	switch s {
-	case HuntKindMissing:
-		return []byte(s), nil
-	case HuntKindUpgrade:
-		return []byte(s), nil
-	default:
-		return nil, errors.Errorf("invalid value: %q", s)
-	}
-}
-
-// UnmarshalText implements encoding.TextUnmarshaler.
-func (s *HuntKind) UnmarshalText(data []byte) error {
-	switch HuntKind(data) {
-	case HuntKindMissing:
-		*s = HuntKindMissing
-		return nil
-	case HuntKindUpgrade:
-		*s = HuntKindUpgrade
-		return nil
-	default:
-		return errors.Errorf("invalid value: %q", data)
-	}
-}
-
-// Ref: #/components/schemas/HuntPolicy
-type HuntPolicy struct {
-	MissingPerCycle    int                         `json:"missing_per_cycle"`
-	UpgradePerCycle    int                         `json:"upgrade_per_cycle"`
-	CycleIntervalS     int                         `json:"cycle_interval_s"`
-	HourlyCap          int                         `json:"hourly_cap"`
-	Selection          HuntPolicySelection         `json:"selection"`
-	MonitoredOnly      bool                        `json:"monitored_only"`
-	SkipFutureReleases bool                        `json:"skip_future_releases"`
-	RadarrReleaseType  HuntPolicyRadarrReleaseType `json:"radarr_release_type"`
-	SonarrMissingMode  HuntPolicySonarrMissingMode `json:"sonarr_missing_mode"`
-	SonarrUpgradeMode  HuntPolicySonarrUpgradeMode `json:"sonarr_upgrade_mode"`
-	LidarrMissingMode  HuntPolicyLidarrMissingMode `json:"lidarr_missing_mode"`
-	ProcessedTTLH      int                         `json:"processed_ttl_h"`
-	MaxQueueSize       int                         `json:"max_queue_size"`
-	AwaitCommand       bool                        `json:"await_command"`
-	PageSize           int                         `json:"page_size"`
-	UpdatedAt          OptDateTime                 `json:"updated_at"`
-}
-
-// GetMissingPerCycle returns the value of MissingPerCycle.
-func (s *HuntPolicy) GetMissingPerCycle() int {
-	return s.MissingPerCycle
-}
-
-// GetUpgradePerCycle returns the value of UpgradePerCycle.
-func (s *HuntPolicy) GetUpgradePerCycle() int {
-	return s.UpgradePerCycle
-}
-
-// GetCycleIntervalS returns the value of CycleIntervalS.
-func (s *HuntPolicy) GetCycleIntervalS() int {
-	return s.CycleIntervalS
-}
-
-// GetHourlyCap returns the value of HourlyCap.
-func (s *HuntPolicy) GetHourlyCap() int {
-	return s.HourlyCap
-}
-
-// GetSelection returns the value of Selection.
-func (s *HuntPolicy) GetSelection() HuntPolicySelection {
-	return s.Selection
-}
-
-// GetMonitoredOnly returns the value of MonitoredOnly.
-func (s *HuntPolicy) GetMonitoredOnly() bool {
-	return s.MonitoredOnly
-}
-
-// GetSkipFutureReleases returns the value of SkipFutureReleases.
-func (s *HuntPolicy) GetSkipFutureReleases() bool {
-	return s.SkipFutureReleases
-}
-
-// GetRadarrReleaseType returns the value of RadarrReleaseType.
-func (s *HuntPolicy) GetRadarrReleaseType() HuntPolicyRadarrReleaseType {
-	return s.RadarrReleaseType
-}
-
-// GetSonarrMissingMode returns the value of SonarrMissingMode.
-func (s *HuntPolicy) GetSonarrMissingMode() HuntPolicySonarrMissingMode {
-	return s.SonarrMissingMode
-}
-
-// GetSonarrUpgradeMode returns the value of SonarrUpgradeMode.
-func (s *HuntPolicy) GetSonarrUpgradeMode() HuntPolicySonarrUpgradeMode {
-	return s.SonarrUpgradeMode
-}
-
-// GetLidarrMissingMode returns the value of LidarrMissingMode.
-func (s *HuntPolicy) GetLidarrMissingMode() HuntPolicyLidarrMissingMode {
-	return s.LidarrMissingMode
-}
-
-// GetProcessedTTLH returns the value of ProcessedTTLH.
-func (s *HuntPolicy) GetProcessedTTLH() int {
-	return s.ProcessedTTLH
-}
-
-// GetMaxQueueSize returns the value of MaxQueueSize.
-func (s *HuntPolicy) GetMaxQueueSize() int {
-	return s.MaxQueueSize
-}
-
-// GetAwaitCommand returns the value of AwaitCommand.
-func (s *HuntPolicy) GetAwaitCommand() bool {
-	return s.AwaitCommand
-}
-
-// GetPageSize returns the value of PageSize.
-func (s *HuntPolicy) GetPageSize() int {
-	return s.PageSize
-}
-
-// GetUpdatedAt returns the value of UpdatedAt.
-func (s *HuntPolicy) GetUpdatedAt() OptDateTime {
-	return s.UpdatedAt
-}
-
-// SetMissingPerCycle sets the value of MissingPerCycle.
-func (s *HuntPolicy) SetMissingPerCycle(val int) {
-	s.MissingPerCycle = val
-}
-
-// SetUpgradePerCycle sets the value of UpgradePerCycle.
-func (s *HuntPolicy) SetUpgradePerCycle(val int) {
-	s.UpgradePerCycle = val
-}
-
-// SetCycleIntervalS sets the value of CycleIntervalS.
-func (s *HuntPolicy) SetCycleIntervalS(val int) {
-	s.CycleIntervalS = val
-}
-
-// SetHourlyCap sets the value of HourlyCap.
-func (s *HuntPolicy) SetHourlyCap(val int) {
-	s.HourlyCap = val
-}
-
-// SetSelection sets the value of Selection.
-func (s *HuntPolicy) SetSelection(val HuntPolicySelection) {
-	s.Selection = val
-}
-
-// SetMonitoredOnly sets the value of MonitoredOnly.
-func (s *HuntPolicy) SetMonitoredOnly(val bool) {
-	s.MonitoredOnly = val
-}
-
-// SetSkipFutureReleases sets the value of SkipFutureReleases.
-func (s *HuntPolicy) SetSkipFutureReleases(val bool) {
-	s.SkipFutureReleases = val
-}
-
-// SetRadarrReleaseType sets the value of RadarrReleaseType.
-func (s *HuntPolicy) SetRadarrReleaseType(val HuntPolicyRadarrReleaseType) {
-	s.RadarrReleaseType = val
-}
-
-// SetSonarrMissingMode sets the value of SonarrMissingMode.
-func (s *HuntPolicy) SetSonarrMissingMode(val HuntPolicySonarrMissingMode) {
-	s.SonarrMissingMode = val
-}
-
-// SetSonarrUpgradeMode sets the value of SonarrUpgradeMode.
-func (s *HuntPolicy) SetSonarrUpgradeMode(val HuntPolicySonarrUpgradeMode) {
-	s.SonarrUpgradeMode = val
-}
-
-// SetLidarrMissingMode sets the value of LidarrMissingMode.
-func (s *HuntPolicy) SetLidarrMissingMode(val HuntPolicyLidarrMissingMode) {
-	s.LidarrMissingMode = val
-}
-
-// SetProcessedTTLH sets the value of ProcessedTTLH.
-func (s *HuntPolicy) SetProcessedTTLH(val int) {
-	s.ProcessedTTLH = val
-}
-
-// SetMaxQueueSize sets the value of MaxQueueSize.
-func (s *HuntPolicy) SetMaxQueueSize(val int) {
-	s.MaxQueueSize = val
-}
-
-// SetAwaitCommand sets the value of AwaitCommand.
-func (s *HuntPolicy) SetAwaitCommand(val bool) {
-	s.AwaitCommand = val
-}
-
-// SetPageSize sets the value of PageSize.
-func (s *HuntPolicy) SetPageSize(val int) {
-	s.PageSize = val
-}
-
-// SetUpdatedAt sets the value of UpdatedAt.
-func (s *HuntPolicy) SetUpdatedAt(val OptDateTime) {
-	s.UpdatedAt = val
-}
-
-type HuntPolicyLidarrMissingMode string
-
-const (
-	HuntPolicyLidarrMissingModeArtist HuntPolicyLidarrMissingMode = "artist"
-	HuntPolicyLidarrMissingModeAlbum  HuntPolicyLidarrMissingMode = "album"
-)
-
-// AllValues returns all HuntPolicyLidarrMissingMode values.
-func (HuntPolicyLidarrMissingMode) AllValues() []HuntPolicyLidarrMissingMode {
-	return []HuntPolicyLidarrMissingMode{
-		HuntPolicyLidarrMissingModeArtist,
-		HuntPolicyLidarrMissingModeAlbum,
-	}
-}
-
-// MarshalText implements encoding.TextMarshaler.
-func (s HuntPolicyLidarrMissingMode) MarshalText() ([]byte, error) {
-	switch s {
-	case HuntPolicyLidarrMissingModeArtist:
-		return []byte(s), nil
-	case HuntPolicyLidarrMissingModeAlbum:
-		return []byte(s), nil
-	default:
-		return nil, errors.Errorf("invalid value: %q", s)
-	}
-}
-
-// UnmarshalText implements encoding.TextUnmarshaler.
-func (s *HuntPolicyLidarrMissingMode) UnmarshalText(data []byte) error {
-	switch HuntPolicyLidarrMissingMode(data) {
-	case HuntPolicyLidarrMissingModeArtist:
-		*s = HuntPolicyLidarrMissingModeArtist
-		return nil
-	case HuntPolicyLidarrMissingModeAlbum:
-		*s = HuntPolicyLidarrMissingModeAlbum
-		return nil
-	default:
-		return errors.Errorf("invalid value: %q", data)
-	}
-}
-
-type HuntPolicyRadarrReleaseType string
-
-const (
-	HuntPolicyRadarrReleaseTypePhysical HuntPolicyRadarrReleaseType = "physical"
-	HuntPolicyRadarrReleaseTypeDigital  HuntPolicyRadarrReleaseType = "digital"
-	HuntPolicyRadarrReleaseTypeCinema   HuntPolicyRadarrReleaseType = "cinema"
-)
-
-// AllValues returns all HuntPolicyRadarrReleaseType values.
-func (HuntPolicyRadarrReleaseType) AllValues() []HuntPolicyRadarrReleaseType {
-	return []HuntPolicyRadarrReleaseType{
-		HuntPolicyRadarrReleaseTypePhysical,
-		HuntPolicyRadarrReleaseTypeDigital,
-		HuntPolicyRadarrReleaseTypeCinema,
-	}
-}
-
-// MarshalText implements encoding.TextMarshaler.
-func (s HuntPolicyRadarrReleaseType) MarshalText() ([]byte, error) {
-	switch s {
-	case HuntPolicyRadarrReleaseTypePhysical:
-		return []byte(s), nil
-	case HuntPolicyRadarrReleaseTypeDigital:
-		return []byte(s), nil
-	case HuntPolicyRadarrReleaseTypeCinema:
-		return []byte(s), nil
-	default:
-		return nil, errors.Errorf("invalid value: %q", s)
-	}
-}
-
-// UnmarshalText implements encoding.TextUnmarshaler.
-func (s *HuntPolicyRadarrReleaseType) UnmarshalText(data []byte) error {
-	switch HuntPolicyRadarrReleaseType(data) {
-	case HuntPolicyRadarrReleaseTypePhysical:
-		*s = HuntPolicyRadarrReleaseTypePhysical
-		return nil
-	case HuntPolicyRadarrReleaseTypeDigital:
-		*s = HuntPolicyRadarrReleaseTypeDigital
-		return nil
-	case HuntPolicyRadarrReleaseTypeCinema:
-		*s = HuntPolicyRadarrReleaseTypeCinema
-		return nil
-	default:
-		return errors.Errorf("invalid value: %q", data)
-	}
-}
-
-type HuntPolicySelection string
-
-const (
-	HuntPolicySelectionRandom     HuntPolicySelection = "random"
-	HuntPolicySelectionSequential HuntPolicySelection = "sequential"
-)
-
-// AllValues returns all HuntPolicySelection values.
-func (HuntPolicySelection) AllValues() []HuntPolicySelection {
-	return []HuntPolicySelection{
-		HuntPolicySelectionRandom,
-		HuntPolicySelectionSequential,
-	}
-}
-
-// MarshalText implements encoding.TextMarshaler.
-func (s HuntPolicySelection) MarshalText() ([]byte, error) {
-	switch s {
-	case HuntPolicySelectionRandom:
-		return []byte(s), nil
-	case HuntPolicySelectionSequential:
-		return []byte(s), nil
-	default:
-		return nil, errors.Errorf("invalid value: %q", s)
-	}
-}
-
-// UnmarshalText implements encoding.TextUnmarshaler.
-func (s *HuntPolicySelection) UnmarshalText(data []byte) error {
-	switch HuntPolicySelection(data) {
-	case HuntPolicySelectionRandom:
-		*s = HuntPolicySelectionRandom
-		return nil
-	case HuntPolicySelectionSequential:
-		*s = HuntPolicySelectionSequential
-		return nil
-	default:
-		return errors.Errorf("invalid value: %q", data)
-	}
-}
-
-type HuntPolicySonarrMissingMode string
-
-const (
-	HuntPolicySonarrMissingModeEpisodes    HuntPolicySonarrMissingMode = "episodes"
-	HuntPolicySonarrMissingModeSeasonPacks HuntPolicySonarrMissingMode = "season_packs"
-	HuntPolicySonarrMissingModeShows       HuntPolicySonarrMissingMode = "shows"
-)
-
-// AllValues returns all HuntPolicySonarrMissingMode values.
-func (HuntPolicySonarrMissingMode) AllValues() []HuntPolicySonarrMissingMode {
-	return []HuntPolicySonarrMissingMode{
-		HuntPolicySonarrMissingModeEpisodes,
-		HuntPolicySonarrMissingModeSeasonPacks,
-		HuntPolicySonarrMissingModeShows,
-	}
-}
-
-// MarshalText implements encoding.TextMarshaler.
-func (s HuntPolicySonarrMissingMode) MarshalText() ([]byte, error) {
-	switch s {
-	case HuntPolicySonarrMissingModeEpisodes:
-		return []byte(s), nil
-	case HuntPolicySonarrMissingModeSeasonPacks:
-		return []byte(s), nil
-	case HuntPolicySonarrMissingModeShows:
-		return []byte(s), nil
-	default:
-		return nil, errors.Errorf("invalid value: %q", s)
-	}
-}
-
-// UnmarshalText implements encoding.TextUnmarshaler.
-func (s *HuntPolicySonarrMissingMode) UnmarshalText(data []byte) error {
-	switch HuntPolicySonarrMissingMode(data) {
-	case HuntPolicySonarrMissingModeEpisodes:
-		*s = HuntPolicySonarrMissingModeEpisodes
-		return nil
-	case HuntPolicySonarrMissingModeSeasonPacks:
-		*s = HuntPolicySonarrMissingModeSeasonPacks
-		return nil
-	case HuntPolicySonarrMissingModeShows:
-		*s = HuntPolicySonarrMissingModeShows
-		return nil
-	default:
-		return errors.Errorf("invalid value: %q", data)
-	}
-}
-
-type HuntPolicySonarrUpgradeMode string
-
-const (
-	HuntPolicySonarrUpgradeModeEpisodes    HuntPolicySonarrUpgradeMode = "episodes"
-	HuntPolicySonarrUpgradeModeSeasonPacks HuntPolicySonarrUpgradeMode = "season_packs"
-)
-
-// AllValues returns all HuntPolicySonarrUpgradeMode values.
-func (HuntPolicySonarrUpgradeMode) AllValues() []HuntPolicySonarrUpgradeMode {
-	return []HuntPolicySonarrUpgradeMode{
-		HuntPolicySonarrUpgradeModeEpisodes,
-		HuntPolicySonarrUpgradeModeSeasonPacks,
-	}
-}
-
-// MarshalText implements encoding.TextMarshaler.
-func (s HuntPolicySonarrUpgradeMode) MarshalText() ([]byte, error) {
-	switch s {
-	case HuntPolicySonarrUpgradeModeEpisodes:
-		return []byte(s), nil
-	case HuntPolicySonarrUpgradeModeSeasonPacks:
-		return []byte(s), nil
-	default:
-		return nil, errors.Errorf("invalid value: %q", s)
-	}
-}
-
-// UnmarshalText implements encoding.TextUnmarshaler.
-func (s *HuntPolicySonarrUpgradeMode) UnmarshalText(data []byte) error {
-	switch HuntPolicySonarrUpgradeMode(data) {
-	case HuntPolicySonarrUpgradeModeEpisodes:
-		*s = HuntPolicySonarrUpgradeModeEpisodes
-		return nil
-	case HuntPolicySonarrUpgradeModeSeasonPacks:
-		*s = HuntPolicySonarrUpgradeModeSeasonPacks
 		return nil
 	default:
 		return errors.Errorf("invalid value: %q", data)
@@ -2230,7 +1789,7 @@ func (s *ProblemStatusCode) SetResponse(val Problem) {
 type Run struct {
 	ID             uuid.UUID   `json:"id"`
 	InstanceID     uuid.UUID   `json:"instance_id"`
-	Kind           HuntKind    `json:"kind"`
+	Kind           SnatchKind  `json:"kind"`
 	Status         RunStatus   `json:"status"`
 	LeasedBy       OptString   `json:"leased_by"`
 	LeaseExpiresAt OptDateTime `json:"lease_expires_at"`
@@ -2252,7 +1811,7 @@ func (s *Run) GetInstanceID() uuid.UUID {
 }
 
 // GetKind returns the value of Kind.
-func (s *Run) GetKind() HuntKind {
+func (s *Run) GetKind() SnatchKind {
 	return s.Kind
 }
 
@@ -2307,7 +1866,7 @@ func (s *Run) SetInstanceID(val uuid.UUID) {
 }
 
 // SetKind sets the value of Kind.
-func (s *Run) SetKind(val HuntKind) {
+func (s *Run) SetKind(val SnatchKind) {
 	s.Kind = val
 }
 
@@ -2415,16 +1974,16 @@ func (s *RunStatus) UnmarshalText(data []byte) error {
 
 // Ref: #/components/schemas/RunTrigger
 type RunTrigger struct {
-	Kind HuntKind `json:"kind"`
+	Kind SnatchKind `json:"kind"`
 }
 
 // GetKind returns the value of Kind.
-func (s *RunTrigger) GetKind() HuntKind {
+func (s *RunTrigger) GetKind() SnatchKind {
 	return s.Kind
 }
 
 // SetKind sets the value of Kind.
-func (s *RunTrigger) SetKind(val HuntKind) {
+func (s *RunTrigger) SetKind(val SnatchKind) {
 	s.Kind = val
 }
 
@@ -2856,6 +2415,452 @@ func (s *SetupStatus) GetSetupComplete() bool {
 // SetSetupComplete sets the value of SetupComplete.
 func (s *SetupStatus) SetSetupComplete(val bool) {
 	s.SetupComplete = val
+}
+
+// Ref: #/components/schemas/SnatchKind
+type SnatchKind string
+
+const (
+	SnatchKindMissing SnatchKind = "missing"
+	SnatchKindUpgrade SnatchKind = "upgrade"
+)
+
+// AllValues returns all SnatchKind values.
+func (SnatchKind) AllValues() []SnatchKind {
+	return []SnatchKind{
+		SnatchKindMissing,
+		SnatchKindUpgrade,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s SnatchKind) MarshalText() ([]byte, error) {
+	switch s {
+	case SnatchKindMissing:
+		return []byte(s), nil
+	case SnatchKindUpgrade:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *SnatchKind) UnmarshalText(data []byte) error {
+	switch SnatchKind(data) {
+	case SnatchKindMissing:
+		*s = SnatchKindMissing
+		return nil
+	case SnatchKindUpgrade:
+		*s = SnatchKindUpgrade
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/SnatchPolicy
+type SnatchPolicy struct {
+	// How many missing items one snatch goes after (0 disables missing snatches).
+	MissingPerCycle int `json:"missing_per_cycle"`
+	// How many cutoff-unmet items one snatch goes after (0 disables upgrade snatches).
+	UpgradePerCycle int `json:"upgrade_per_cycle"`
+	// Refractory period: seconds between two snatches of the same kind.
+	CycleIntervalS int `json:"cycle_interval_s"`
+	// Stamina: items an instance may search per hour before it needs a rest (1-500).
+	HourlyCap          int                           `json:"hourly_cap"`
+	Selection          SnatchPolicySelection         `json:"selection"`
+	MonitoredOnly      bool                          `json:"monitored_only"`
+	SkipFutureReleases bool                          `json:"skip_future_releases"`
+	RadarrReleaseType  SnatchPolicyRadarrReleaseType `json:"radarr_release_type"`
+	SonarrMissingMode  SnatchPolicySonarrMissingMode `json:"sonarr_missing_mode"`
+	SonarrUpgradeMode  SnatchPolicySonarrUpgradeMode `json:"sonarr_upgrade_mode"`
+	LidarrMissingMode  SnatchPolicyLidarrMissingMode `json:"lidarr_missing_mode"`
+	// Afterglow: hours an item rests after a snatch before it may be touched again.
+	ProcessedTTLH int         `json:"processed_ttl_h"`
+	MaxQueueSize  int         `json:"max_queue_size"`
+	AwaitCommand  bool        `json:"await_command"`
+	PageSize      int         `json:"page_size"`
+	UpdatedAt     OptDateTime `json:"updated_at"`
+}
+
+// GetMissingPerCycle returns the value of MissingPerCycle.
+func (s *SnatchPolicy) GetMissingPerCycle() int {
+	return s.MissingPerCycle
+}
+
+// GetUpgradePerCycle returns the value of UpgradePerCycle.
+func (s *SnatchPolicy) GetUpgradePerCycle() int {
+	return s.UpgradePerCycle
+}
+
+// GetCycleIntervalS returns the value of CycleIntervalS.
+func (s *SnatchPolicy) GetCycleIntervalS() int {
+	return s.CycleIntervalS
+}
+
+// GetHourlyCap returns the value of HourlyCap.
+func (s *SnatchPolicy) GetHourlyCap() int {
+	return s.HourlyCap
+}
+
+// GetSelection returns the value of Selection.
+func (s *SnatchPolicy) GetSelection() SnatchPolicySelection {
+	return s.Selection
+}
+
+// GetMonitoredOnly returns the value of MonitoredOnly.
+func (s *SnatchPolicy) GetMonitoredOnly() bool {
+	return s.MonitoredOnly
+}
+
+// GetSkipFutureReleases returns the value of SkipFutureReleases.
+func (s *SnatchPolicy) GetSkipFutureReleases() bool {
+	return s.SkipFutureReleases
+}
+
+// GetRadarrReleaseType returns the value of RadarrReleaseType.
+func (s *SnatchPolicy) GetRadarrReleaseType() SnatchPolicyRadarrReleaseType {
+	return s.RadarrReleaseType
+}
+
+// GetSonarrMissingMode returns the value of SonarrMissingMode.
+func (s *SnatchPolicy) GetSonarrMissingMode() SnatchPolicySonarrMissingMode {
+	return s.SonarrMissingMode
+}
+
+// GetSonarrUpgradeMode returns the value of SonarrUpgradeMode.
+func (s *SnatchPolicy) GetSonarrUpgradeMode() SnatchPolicySonarrUpgradeMode {
+	return s.SonarrUpgradeMode
+}
+
+// GetLidarrMissingMode returns the value of LidarrMissingMode.
+func (s *SnatchPolicy) GetLidarrMissingMode() SnatchPolicyLidarrMissingMode {
+	return s.LidarrMissingMode
+}
+
+// GetProcessedTTLH returns the value of ProcessedTTLH.
+func (s *SnatchPolicy) GetProcessedTTLH() int {
+	return s.ProcessedTTLH
+}
+
+// GetMaxQueueSize returns the value of MaxQueueSize.
+func (s *SnatchPolicy) GetMaxQueueSize() int {
+	return s.MaxQueueSize
+}
+
+// GetAwaitCommand returns the value of AwaitCommand.
+func (s *SnatchPolicy) GetAwaitCommand() bool {
+	return s.AwaitCommand
+}
+
+// GetPageSize returns the value of PageSize.
+func (s *SnatchPolicy) GetPageSize() int {
+	return s.PageSize
+}
+
+// GetUpdatedAt returns the value of UpdatedAt.
+func (s *SnatchPolicy) GetUpdatedAt() OptDateTime {
+	return s.UpdatedAt
+}
+
+// SetMissingPerCycle sets the value of MissingPerCycle.
+func (s *SnatchPolicy) SetMissingPerCycle(val int) {
+	s.MissingPerCycle = val
+}
+
+// SetUpgradePerCycle sets the value of UpgradePerCycle.
+func (s *SnatchPolicy) SetUpgradePerCycle(val int) {
+	s.UpgradePerCycle = val
+}
+
+// SetCycleIntervalS sets the value of CycleIntervalS.
+func (s *SnatchPolicy) SetCycleIntervalS(val int) {
+	s.CycleIntervalS = val
+}
+
+// SetHourlyCap sets the value of HourlyCap.
+func (s *SnatchPolicy) SetHourlyCap(val int) {
+	s.HourlyCap = val
+}
+
+// SetSelection sets the value of Selection.
+func (s *SnatchPolicy) SetSelection(val SnatchPolicySelection) {
+	s.Selection = val
+}
+
+// SetMonitoredOnly sets the value of MonitoredOnly.
+func (s *SnatchPolicy) SetMonitoredOnly(val bool) {
+	s.MonitoredOnly = val
+}
+
+// SetSkipFutureReleases sets the value of SkipFutureReleases.
+func (s *SnatchPolicy) SetSkipFutureReleases(val bool) {
+	s.SkipFutureReleases = val
+}
+
+// SetRadarrReleaseType sets the value of RadarrReleaseType.
+func (s *SnatchPolicy) SetRadarrReleaseType(val SnatchPolicyRadarrReleaseType) {
+	s.RadarrReleaseType = val
+}
+
+// SetSonarrMissingMode sets the value of SonarrMissingMode.
+func (s *SnatchPolicy) SetSonarrMissingMode(val SnatchPolicySonarrMissingMode) {
+	s.SonarrMissingMode = val
+}
+
+// SetSonarrUpgradeMode sets the value of SonarrUpgradeMode.
+func (s *SnatchPolicy) SetSonarrUpgradeMode(val SnatchPolicySonarrUpgradeMode) {
+	s.SonarrUpgradeMode = val
+}
+
+// SetLidarrMissingMode sets the value of LidarrMissingMode.
+func (s *SnatchPolicy) SetLidarrMissingMode(val SnatchPolicyLidarrMissingMode) {
+	s.LidarrMissingMode = val
+}
+
+// SetProcessedTTLH sets the value of ProcessedTTLH.
+func (s *SnatchPolicy) SetProcessedTTLH(val int) {
+	s.ProcessedTTLH = val
+}
+
+// SetMaxQueueSize sets the value of MaxQueueSize.
+func (s *SnatchPolicy) SetMaxQueueSize(val int) {
+	s.MaxQueueSize = val
+}
+
+// SetAwaitCommand sets the value of AwaitCommand.
+func (s *SnatchPolicy) SetAwaitCommand(val bool) {
+	s.AwaitCommand = val
+}
+
+// SetPageSize sets the value of PageSize.
+func (s *SnatchPolicy) SetPageSize(val int) {
+	s.PageSize = val
+}
+
+// SetUpdatedAt sets the value of UpdatedAt.
+func (s *SnatchPolicy) SetUpdatedAt(val OptDateTime) {
+	s.UpdatedAt = val
+}
+
+type SnatchPolicyLidarrMissingMode string
+
+const (
+	SnatchPolicyLidarrMissingModeArtist SnatchPolicyLidarrMissingMode = "artist"
+	SnatchPolicyLidarrMissingModeAlbum  SnatchPolicyLidarrMissingMode = "album"
+)
+
+// AllValues returns all SnatchPolicyLidarrMissingMode values.
+func (SnatchPolicyLidarrMissingMode) AllValues() []SnatchPolicyLidarrMissingMode {
+	return []SnatchPolicyLidarrMissingMode{
+		SnatchPolicyLidarrMissingModeArtist,
+		SnatchPolicyLidarrMissingModeAlbum,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s SnatchPolicyLidarrMissingMode) MarshalText() ([]byte, error) {
+	switch s {
+	case SnatchPolicyLidarrMissingModeArtist:
+		return []byte(s), nil
+	case SnatchPolicyLidarrMissingModeAlbum:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *SnatchPolicyLidarrMissingMode) UnmarshalText(data []byte) error {
+	switch SnatchPolicyLidarrMissingMode(data) {
+	case SnatchPolicyLidarrMissingModeArtist:
+		*s = SnatchPolicyLidarrMissingModeArtist
+		return nil
+	case SnatchPolicyLidarrMissingModeAlbum:
+		*s = SnatchPolicyLidarrMissingModeAlbum
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+type SnatchPolicyRadarrReleaseType string
+
+const (
+	SnatchPolicyRadarrReleaseTypePhysical SnatchPolicyRadarrReleaseType = "physical"
+	SnatchPolicyRadarrReleaseTypeDigital  SnatchPolicyRadarrReleaseType = "digital"
+	SnatchPolicyRadarrReleaseTypeCinema   SnatchPolicyRadarrReleaseType = "cinema"
+)
+
+// AllValues returns all SnatchPolicyRadarrReleaseType values.
+func (SnatchPolicyRadarrReleaseType) AllValues() []SnatchPolicyRadarrReleaseType {
+	return []SnatchPolicyRadarrReleaseType{
+		SnatchPolicyRadarrReleaseTypePhysical,
+		SnatchPolicyRadarrReleaseTypeDigital,
+		SnatchPolicyRadarrReleaseTypeCinema,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s SnatchPolicyRadarrReleaseType) MarshalText() ([]byte, error) {
+	switch s {
+	case SnatchPolicyRadarrReleaseTypePhysical:
+		return []byte(s), nil
+	case SnatchPolicyRadarrReleaseTypeDigital:
+		return []byte(s), nil
+	case SnatchPolicyRadarrReleaseTypeCinema:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *SnatchPolicyRadarrReleaseType) UnmarshalText(data []byte) error {
+	switch SnatchPolicyRadarrReleaseType(data) {
+	case SnatchPolicyRadarrReleaseTypePhysical:
+		*s = SnatchPolicyRadarrReleaseTypePhysical
+		return nil
+	case SnatchPolicyRadarrReleaseTypeDigital:
+		*s = SnatchPolicyRadarrReleaseTypeDigital
+		return nil
+	case SnatchPolicyRadarrReleaseTypeCinema:
+		*s = SnatchPolicyRadarrReleaseTypeCinema
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+type SnatchPolicySelection string
+
+const (
+	SnatchPolicySelectionRandom     SnatchPolicySelection = "random"
+	SnatchPolicySelectionSequential SnatchPolicySelection = "sequential"
+)
+
+// AllValues returns all SnatchPolicySelection values.
+func (SnatchPolicySelection) AllValues() []SnatchPolicySelection {
+	return []SnatchPolicySelection{
+		SnatchPolicySelectionRandom,
+		SnatchPolicySelectionSequential,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s SnatchPolicySelection) MarshalText() ([]byte, error) {
+	switch s {
+	case SnatchPolicySelectionRandom:
+		return []byte(s), nil
+	case SnatchPolicySelectionSequential:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *SnatchPolicySelection) UnmarshalText(data []byte) error {
+	switch SnatchPolicySelection(data) {
+	case SnatchPolicySelectionRandom:
+		*s = SnatchPolicySelectionRandom
+		return nil
+	case SnatchPolicySelectionSequential:
+		*s = SnatchPolicySelectionSequential
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+type SnatchPolicySonarrMissingMode string
+
+const (
+	SnatchPolicySonarrMissingModeEpisodes    SnatchPolicySonarrMissingMode = "episodes"
+	SnatchPolicySonarrMissingModeSeasonPacks SnatchPolicySonarrMissingMode = "season_packs"
+	SnatchPolicySonarrMissingModeShows       SnatchPolicySonarrMissingMode = "shows"
+)
+
+// AllValues returns all SnatchPolicySonarrMissingMode values.
+func (SnatchPolicySonarrMissingMode) AllValues() []SnatchPolicySonarrMissingMode {
+	return []SnatchPolicySonarrMissingMode{
+		SnatchPolicySonarrMissingModeEpisodes,
+		SnatchPolicySonarrMissingModeSeasonPacks,
+		SnatchPolicySonarrMissingModeShows,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s SnatchPolicySonarrMissingMode) MarshalText() ([]byte, error) {
+	switch s {
+	case SnatchPolicySonarrMissingModeEpisodes:
+		return []byte(s), nil
+	case SnatchPolicySonarrMissingModeSeasonPacks:
+		return []byte(s), nil
+	case SnatchPolicySonarrMissingModeShows:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *SnatchPolicySonarrMissingMode) UnmarshalText(data []byte) error {
+	switch SnatchPolicySonarrMissingMode(data) {
+	case SnatchPolicySonarrMissingModeEpisodes:
+		*s = SnatchPolicySonarrMissingModeEpisodes
+		return nil
+	case SnatchPolicySonarrMissingModeSeasonPacks:
+		*s = SnatchPolicySonarrMissingModeSeasonPacks
+		return nil
+	case SnatchPolicySonarrMissingModeShows:
+		*s = SnatchPolicySonarrMissingModeShows
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+type SnatchPolicySonarrUpgradeMode string
+
+const (
+	SnatchPolicySonarrUpgradeModeEpisodes    SnatchPolicySonarrUpgradeMode = "episodes"
+	SnatchPolicySonarrUpgradeModeSeasonPacks SnatchPolicySonarrUpgradeMode = "season_packs"
+)
+
+// AllValues returns all SnatchPolicySonarrUpgradeMode values.
+func (SnatchPolicySonarrUpgradeMode) AllValues() []SnatchPolicySonarrUpgradeMode {
+	return []SnatchPolicySonarrUpgradeMode{
+		SnatchPolicySonarrUpgradeModeEpisodes,
+		SnatchPolicySonarrUpgradeModeSeasonPacks,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s SnatchPolicySonarrUpgradeMode) MarshalText() ([]byte, error) {
+	switch s {
+	case SnatchPolicySonarrUpgradeModeEpisodes:
+		return []byte(s), nil
+	case SnatchPolicySonarrUpgradeModeSeasonPacks:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *SnatchPolicySonarrUpgradeMode) UnmarshalText(data []byte) error {
+	switch SnatchPolicySonarrUpgradeMode(data) {
+	case SnatchPolicySonarrUpgradeModeEpisodes:
+		*s = SnatchPolicySonarrUpgradeModeEpisodes
+		return nil
+	case SnatchPolicySonarrUpgradeModeSeasonPacks:
+		*s = SnatchPolicySonarrUpgradeModeSeasonPacks
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
 }
 
 // Ref: #/components/schemas/StateReset

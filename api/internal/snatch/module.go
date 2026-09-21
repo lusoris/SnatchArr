@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-package hunt
+package snatch
 
 import (
 	"context"
@@ -15,11 +15,11 @@ import (
 )
 
 // GateGroup is the fx value group other modules add Gate implementations to.
-const GateGroup = `group:"hunt.gates"`
+const GateGroup = `group:"snatch.gates"`
 
 type plannerParams struct {
 	fx.In
-	Gates []Gate `group:"hunt.gates"`
+	Gates []Gate `group:"snatch.gates"`
 }
 
 func newPlanner(st storeParam, clk clock.Clock, runs *Runs, rec *Recorder, logger *slog.Logger, p plannerParams) *Planner {
@@ -88,16 +88,16 @@ func (t *Ticker) tick(ctx context.Context) {
 	defer cancel()
 	n, err := t.planner.Tick(tctx)
 	if err != nil {
-		t.logger.ErrorContext(ctx, "hunt: planner tick", slog.String("error", err.Error()))
+		t.logger.ErrorContext(ctx, "snatch: planner tick", slog.String("error", err.Error()))
 		return
 	}
 	if n > 0 {
-		t.logger.InfoContext(ctx, "hunt: runs queued", slog.Int("count", n))
+		t.logger.InfoContext(ctx, "snatch: runs queued", slog.Int("count", n))
 	}
 }
 
-// Module provides the hunt services and starts the planner ticker.
-var Module = fx.Module("snatcharr.hunt",
+// Module provides the snatch services and starts the planner ticker.
+var Module = fx.Module("snatcharr.snatch",
 	fx.Provide(NewBudget, NewMemory, NewRuns, NewRecorder, NewSchedules, newPlanner, NewTicker),
 	fx.Invoke(func(lc fx.Lifecycle, t *Ticker) {
 		lc.Append(fx.Hook{OnStart: t.Start, OnStop: t.Stop})

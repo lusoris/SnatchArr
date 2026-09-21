@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 // Package dlclients observes torrent and Usenet download clients and turns what it sees
-// into hunt backpressure (ADR-0006): an unreachable, paused or saturated client stops
-// hunts that would only pile up grabs, and a bandwidth budget paces per-cycle counts.
+// into snatch backpressure (ADR-0006): an unreachable, paused or saturated client stops
+// snatches that would only pile up grabs, and a bandwidth budget paces per-cycle counts.
 // It never adds, removes or reorders downloads.
 package dlclients
 
@@ -19,7 +19,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/lusoris/SnatchArr/api/internal/domain"
-	"github.com/lusoris/SnatchArr/api/internal/hunt"
+	"github.com/lusoris/SnatchArr/api/internal/snatch"
 )
 
 // Snapshot is one download client's state as last observed.
@@ -89,7 +89,7 @@ func paceFactor(c domain.DownloadClient, s Snapshot) float64 {
 	return max(0, min(1, 1-used))
 }
 
-// Scale reduces a per-cycle count by the pace factor, never below one while hunting is
+// Scale reduces a per-cycle count by the pace factor, never below one while snatching is
 // allowed at all.
 func Scale(perCycle int, factor float64) int {
 	switch {
@@ -102,23 +102,23 @@ func Scale(perCycle int, factor float64) int {
 	}
 }
 
-// PlannerGate adapts the service to hunt.Gate and records state transitions as events so
-// history shows why an instance stopped hunting, without an entry per planner tick.
+// PlannerGate adapts the service to snatch.Gate and records state transitions as events so
+// history shows why an instance stopped snatching, without an entry per planner tick.
 type PlannerGate struct {
 	svc    *Service
-	rec    *hunt.Recorder
+	rec    *snatch.Recorder
 	logger *slog.Logger
 	mu     sync.Mutex
 	block  map[uuid.UUID]string
 }
 
 // NewPlannerGate wires the gate.
-func NewPlannerGate(svc *Service, rec *hunt.Recorder, logger *slog.Logger) *PlannerGate {
+func NewPlannerGate(svc *Service, rec *snatch.Recorder, logger *slog.Logger) *PlannerGate {
 	return &PlannerGate{svc: svc, rec: rec, logger: logger, block: make(map[uuid.UUID]string)}
 }
 
-// Allow implements hunt.Gate.
-func (g *PlannerGate) Allow(ctx context.Context, inst domain.Instance, _ domain.HuntKind) (bool, string, error) {
+// Allow implements snatch.Gate.
+func (g *PlannerGate) Allow(ctx context.Context, inst domain.Instance, _ domain.SnatchKind) (bool, string, error) {
 	v, err := g.svc.Verdict(ctx, inst.ID)
 	if err != nil {
 		return false, "", err
@@ -138,9 +138,9 @@ func (g *PlannerGate) transition(ctx context.Context, inst domain.Instance, v Ve
 	g.mu.Unlock()
 	switch {
 	case !v.Allowed && prev != v.Reason:
-		g.record(ctx, domain.Event{InstanceID: inst.ID, Level: "warn", Type: "hunt_deferred", Title: "Hunting deferred by download-client backpressure", Detail: v.Reason})
+		g.record(ctx, domain.Event{InstanceID: inst.ID, Level: "warn", Type: "snatch_deferred", Title: "Foreplay: snatching deferred by download-client backpressure", Detail: v.Reason})
 	case v.Allowed && wasBlocked:
-		g.record(ctx, domain.Event{InstanceID: inst.ID, Level: "info", Type: "hunt_resumed", Title: "Download-client backpressure cleared", Detail: prev})
+		g.record(ctx, domain.Event{InstanceID: inst.ID, Level: "info", Type: "snatch_resumed", Title: "Foreplay over: download-client backpressure cleared", Detail: prev})
 	}
 }
 

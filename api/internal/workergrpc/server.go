@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 // Package workergrpc serves snatcharr.v1.WorkerService: the lease/pull contract the Rust
-// hunt-worker executes against (ADR-0002).
+// snatch-worker executes against (ADR-0002).
 package workergrpc
 
 import (
@@ -23,9 +23,9 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/dlclients"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	snatcharrv1 "github.com/lusoris/SnatchArr/api/internal/gen/snatcharr/v1"
-	"github.com/lusoris/SnatchArr/api/internal/hunt"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
 	"github.com/lusoris/SnatchArr/api/internal/policies"
+	"github.com/lusoris/SnatchArr/api/internal/snatch"
 )
 
 // Bounds (HISS-02).
@@ -51,11 +51,11 @@ type Options struct {
 // Server implements snatcharrv1.WorkerServiceServer.
 type Server struct {
 	snatcharrv1.UnimplementedWorkerServiceServer
-	runs      *hunt.Runs
-	budget    *hunt.Budget
-	memory    *hunt.Memory
-	rec       *hunt.Recorder
-	planner   *hunt.Planner
+	runs      *snatch.Runs
+	budget    *snatch.Budget
+	memory    *snatch.Memory
+	rec       *snatch.Recorder
+	planner   *snatch.Planner
 	instances *instances.Service
 	policies  *policies.Service
 	pacer     Pacer
@@ -64,7 +64,7 @@ type Server struct {
 }
 
 // New wires the server.
-func New(runs *hunt.Runs, budget *hunt.Budget, memory *hunt.Memory, rec *hunt.Recorder, planner *hunt.Planner,
+func New(runs *snatch.Runs, budget *snatch.Budget, memory *snatch.Memory, rec *snatch.Recorder, planner *snatch.Planner,
 	inst *instances.Service, pol *policies.Service, clk clock.Clock, logger *slog.Logger, opts Options,
 ) *Server {
 	return &Server{
@@ -85,7 +85,7 @@ func (s *Server) LeaseRun(ctx context.Context, req *snatcharrv1.LeaseRunRequest)
 		if err == nil {
 			return s.leaseResponse(ctx, run)
 		}
-		if !errors.Is(err, hunt.ErrNoRun) {
+		if !errors.Is(err, snatch.ErrNoRun) {
 			return nil, toStatus(err)
 		}
 		if !s.clk.Now().Before(deadline) {
@@ -123,7 +123,7 @@ func (s *Server) leaseResponse(ctx context.Context, run domain.Run) (*snatcharrv
 		RunId:            run.ID.String(),
 		InstanceId:       run.InstanceID.String(),
 		App:              appKind(inst.Kind),
-		Hunt:             huntKind(run.Kind),
+		Snatch:           snatchKind(run.Kind),
 		BaseUrl:          creds.BaseURL,
 		ApiKey:           creds.APIKey,
 		Policy:           pol,
@@ -150,8 +150,8 @@ func (s *Server) pace(ctx context.Context, run domain.Run, pol *snatcharrv1.Poli
 	}
 	pol.PerCycle = uint32(max(scaled, 0)) // #nosec G115 -- scaled <= before <= 100
 	err = s.rec.Record(ctx, domain.Event{
-		RunID: &run.ID, InstanceID: run.InstanceID, Level: "info", Type: "hunt_paced",
-		Title: fmt.Sprintf("per-cycle reduced from %d to %d by download-client pacing", before, scaled),
+		RunID: &run.ID, InstanceID: run.InstanceID, Level: "info", Type: "snatch_paced",
+		Title: fmt.Sprintf("Foreplay: per-cycle reduced from %d to %d by download-client pacing", before, scaled),
 	})
 	if err != nil {
 		s.logger.WarnContext(ctx, "workergrpc: record pacing", slog.String("error", err.Error()))
@@ -210,15 +210,15 @@ func (s *Server) AcquireBudget(ctx context.Context, req *snatcharrv1.AcquireBudg
 	if err != nil {
 		return nil, toStatus(err)
 	}
-	if g.Used >= int(float64(g.Cap)*hunt.WarnRatio) {
-		s.logger.WarnContext(ctx, "hunt: hourly cap nearly exhausted", slog.String("instance", run.InstanceID.String()), slog.Int("used", g.Used), slog.Int("cap", g.Cap))
+	if g.Used >= int(float64(g.Cap)*snatch.WarnRatio) {
+		s.logger.WarnContext(ctx, "snatch: hourly cap nearly exhausted", slog.String("instance", run.InstanceID.String()), slog.Int("used", g.Used), slog.Int("cap", g.Cap))
 	}
 	return &snatcharrv1.AcquireBudgetResponse{
 		Granted: uint32(g.Granted), RemainingInWindow: uint32(g.Remaining), WindowResetsUnix: g.ResetsAt.Unix(), // #nosec G115 -- non-negative, <= 500
 	}, nil
 }
 
-// ReportEvents persists a bounded client stream of hunt events.
+// ReportEvents persists a bounded client stream of snatch events.
 func (s *Server) ReportEvents(stream snatcharrv1.WorkerService_ReportEventsServer) error {
 	ctx := stream.Context()
 	accepted := uint32(0)
@@ -241,7 +241,7 @@ func (s *Server) ReportEvents(stream snatcharrv1.WorkerService_ReportEventsServe
 	return stream.SendAndClose(&snatcharrv1.ReportEventsResponse{Accepted: accepted})
 }
 
-func (s *Server) recordProto(ctx context.Context, ev *snatcharrv1.HuntEvent) error {
+func (s *Server) recordProto(ctx context.Context, ev *snatcharrv1.SnatchEvent) error {
 	if ev == nil {
 		return nil
 	}
@@ -287,7 +287,7 @@ func (s *Server) CompleteRun(ctx context.Context, req *snatcharrv1.CompleteRunRe
 	}
 	return &snatcharrv1.CompleteRunResponse{}, s.rec.Record(ctx, domain.Event{
 		RunID: &run.ID, InstanceID: run.InstanceID, Level: "info", Type: "run_finished",
-		Title: fmt.Sprintf("%s hunt %s: %d item(s) searched", run.Kind, outcome(req.GetOutcome()), len(searched)), Detail: req.GetError(),
+		Title: fmt.Sprintf("%s snatch %s: %d item(s) searched", run.Kind, outcome(req.GetOutcome()), len(searched)), Detail: req.GetError(),
 	})
 }
 

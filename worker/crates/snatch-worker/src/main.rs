@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-//! SnatchArr hunt-worker: leases hunt runs from the API over gRPC and executes them
+//! SnatchArr snatch-worker: leases snatch runs from the API over gRPC and executes them
 //! against *arr instances (ADR-0001, ADR-0002). Stateless; safe to scale horizontally.
 
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]

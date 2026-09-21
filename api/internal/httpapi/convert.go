@@ -84,7 +84,7 @@ func updateFromOAS(in *oas.InstanceUpdate) instances.Input {
 
 func runToOAS(r domain.Run) oas.Run {
 	return oas.Run{
-		ID: r.ID, InstanceID: r.InstanceID, Kind: oas.HuntKind(r.Kind), Status: oas.RunStatus(r.Status),
+		ID: r.ID, InstanceID: r.InstanceID, Kind: oas.SnatchKind(r.Kind), Status: oas.RunStatus(r.Status),
 		LeasedBy: optString(r.LeasedBy), LeaseExpiresAt: optTime(r.LeaseExpiresAt), QueuedAt: r.QueuedAt,
 		StartedAt: optTime(r.StartedAt), FinishedAt: optTime(r.FinishedAt), SearchedCount: r.SearchedCount,
 		Error: optString(r.Error),
@@ -105,19 +105,19 @@ func eventToOAS(e domain.Event) oas.Event {
 	return out
 }
 
-func policyToOAS(p domain.Policy) *oas.HuntPolicy {
-	return &oas.HuntPolicy{
+func policyToOAS(p domain.Policy) *oas.SnatchPolicy {
+	return &oas.SnatchPolicy{
 		MissingPerCycle:    p.MissingPerCycle,
 		UpgradePerCycle:    p.UpgradePerCycle,
 		CycleIntervalS:     int(p.CycleInterval / time.Second),
 		HourlyCap:          p.HourlyCap,
-		Selection:          oas.HuntPolicySelection(p.Selection),
+		Selection:          oas.SnatchPolicySelection(p.Selection),
 		MonitoredOnly:      p.MonitoredOnly,
 		SkipFutureReleases: p.SkipFutureReleases,
-		RadarrReleaseType:  oas.HuntPolicyRadarrReleaseType(p.RadarrReleaseType),
-		SonarrMissingMode:  oas.HuntPolicySonarrMissingMode(p.SonarrMissingMode),
-		SonarrUpgradeMode:  oas.HuntPolicySonarrUpgradeMode(p.SonarrUpgradeMode),
-		LidarrMissingMode:  oas.HuntPolicyLidarrMissingMode(p.LidarrMissingMode),
+		RadarrReleaseType:  oas.SnatchPolicyRadarrReleaseType(p.RadarrReleaseType),
+		SonarrMissingMode:  oas.SnatchPolicySonarrMissingMode(p.SonarrMissingMode),
+		SonarrUpgradeMode:  oas.SnatchPolicySonarrUpgradeMode(p.SonarrUpgradeMode),
+		LidarrMissingMode:  oas.SnatchPolicyLidarrMissingMode(p.LidarrMissingMode),
 		ProcessedTTLH:      int(p.ProcessedTTL / time.Hour),
 		MaxQueueSize:       p.MaxQueueSize,
 		AwaitCommand:       p.AwaitCommand,
@@ -126,7 +126,7 @@ func policyToOAS(p domain.Policy) *oas.HuntPolicy {
 	}
 }
 
-func policyFromOAS(instanceID uuid.UUID, in *oas.HuntPolicy) domain.Policy {
+func policyFromOAS(instanceID uuid.UUID, in *oas.SnatchPolicy) domain.Policy {
 	return domain.Policy{
 		InstanceID:         instanceID,
 		MissingPerCycle:    in.MissingPerCycle,

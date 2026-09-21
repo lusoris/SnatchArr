@@ -36,14 +36,14 @@ func appKind(k domain.AppKind) snatcharrv1.AppKind {
 	}
 }
 
-func huntKind(k domain.HuntKind) snatcharrv1.HuntKind {
+func snatchKind(k domain.SnatchKind) snatcharrv1.SnatchKind {
 	switch k {
-	case domain.HuntMissing:
-		return snatcharrv1.HuntKind_HUNT_KIND_MISSING
-	case domain.HuntUpgrade:
-		return snatcharrv1.HuntKind_HUNT_KIND_UPGRADE
+	case domain.SnatchMissing:
+		return snatcharrv1.SnatchKind_SNATCH_KIND_MISSING
+	case domain.SnatchUpgrade:
+		return snatcharrv1.SnatchKind_SNATCH_KIND_UPGRADE
 	default:
-		return snatcharrv1.HuntKind_HUNT_KIND_UNSPECIFIED
+		return snatcharrv1.SnatchKind_SNATCH_KIND_UNSPECIFIED
 	}
 }
 
@@ -83,10 +83,10 @@ func releaseType(rt string) snatcharrv1.RadarrReleaseType {
 	}
 }
 
-// policyProto snapshots the policy for one hunt kind.
-func policyProto(p domain.Policy, kind domain.HuntKind) *snatcharrv1.Policy {
+// policyProto snapshots the policy for one snatch kind.
+func policyProto(p domain.Policy, kind domain.SnatchKind) *snatcharrv1.Policy {
 	perCycle, mode := p.MissingPerCycle, p.SonarrMissingMode
-	if kind == domain.HuntUpgrade {
+	if kind == domain.SnatchUpgrade {
 		perCycle, mode = p.UpgradePerCycle, p.SonarrUpgradeMode
 	}
 	return &snatcharrv1.Policy{

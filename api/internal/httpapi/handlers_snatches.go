@@ -6,15 +6,17 @@ package httpapi
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
 
 	"github.com/google/uuid"
 
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
-	"github.com/lusoris/SnatchArr/api/internal/hunt"
+	"github.com/lusoris/SnatchArr/api/internal/snatch"
 )
 
-// TriggerRun queues a hunt run immediately.
+// TriggerRun queues a snatch run immediately.
 func (h *Handlers) TriggerRun(ctx context.Context, req *oas.RunTrigger, params oas.TriggerRunParams) (oas.TriggerRunRes, error) {
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
@@ -22,7 +24,7 @@ func (h *Handlers) TriggerRun(ctx context.Context, req *oas.RunTrigger, params o
 	if _, err := h.instances.Get(ctx, params.InstanceId); err != nil {
 		return nil, err
 	}
-	kind, err := domain.ParseHuntKind(string(req.Kind))
+	kind, err := domain.ParseSnatchKind(string(req.Kind))
 	if err != nil {
 		return nil, err
 	}
@@ -31,6 +33,7 @@ func (h *Handlers) TriggerRun(ctx context.Context, req *oas.RunTrigger, params o
 		return nil, err
 	}
 	if created {
+		h.recordQuickie(ctx, run)
 		out := oas.TriggerRunCreated(runToOAS(run))
 		return &out, nil
 	}
@@ -42,8 +45,20 @@ func (h *Handlers) TriggerRun(ctx context.Context, req *oas.RunTrigger, params o
 	return &out, nil
 }
 
+// recordQuickie writes the history entry for a manual run-now; a failure to record never
+// fails the trigger itself.
+func (h *Handlers) recordQuickie(ctx context.Context, run domain.Run) {
+	err := h.rec.Record(ctx, domain.Event{
+		RunID: &run.ID, InstanceID: run.InstanceID, Level: "info", Type: "run_queued",
+		Title: fmt.Sprintf("Quickie: %s snatch queued by hand", run.Kind),
+	})
+	if err != nil {
+		h.logger.WarnContext(ctx, "httpapi: record quickie", slog.String("error", err.Error()))
+	}
+}
+
 // activeRun finds the queued or leased run that blocked a new enqueue.
-func (h *Handlers) activeRun(ctx context.Context, instanceID uuid.UUID, kind domain.HuntKind) (domain.Run, error) {
+func (h *Handlers) activeRun(ctx context.Context, instanceID uuid.UUID, kind domain.SnatchKind) (domain.Run, error) {
 	recent, err := h.runs.List(ctx, &instanceID, 10, 0)
 	if err != nil {
 		return domain.Run{}, err
@@ -83,7 +98,7 @@ func (h *Handlers) CancelRun(ctx context.Context, params oas.CancelRunParams) er
 
 // ListEvents pages history.
 func (h *Handlers) ListEvents(ctx context.Context, params oas.ListEventsParams) ([]oas.Event, error) {
-	p := hunt.ListParams{PageSize: params.PageSize.Or(100), Type: params.Type.Or("")}
+	p := snatch.ListParams{PageSize: params.PageSize.Or(100), Type: params.Type.Or("")}
 	if v, ok := params.InstanceID.Get(); ok {
 		p.InstanceID = &v
 	}

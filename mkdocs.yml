@@ -1,0 +1,77 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+site_name: SnatchArr
+site_description: Keeps your *arr libraries complete without hammering your indexers. Gentle, cloud-native, a little naughty.
+site_url: https://lusoris.github.io/SnatchArr/
+site_author: lusoris
+repo_url: https://github.com/lusoris/SnatchArr
+repo_name: lusoris/SnatchArr
+edit_uri: edit/main/docs/
+docs_dir: docs
+copyright: Docs CC BY-SA 4.0 · Code EUPL-1.2
+
+theme:
+  name: material
+  favicon: assets/mark.svg
+  logo: assets/mark.svg
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: pink
+      accent: deep purple
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: pink
+      accent: deep purple
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - content.action.edit
+    - search.suggest
+    - search.highlight
+    - toc.follow
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+
+nav:
+  - Home: index.md
+  - Concepts: concepts.md
+  - Configuration: configuration.md
+  - Download clients: download-clients.md
+  - API: api.md
+  - Architecture Decisions:
+      - Overview: adr/README.md
+      - "ADR-0001: Go control plane, Rust snatch-worker": adr/0001-go-control-plane-rust-snatch-worker.md
+      - "ADR-0002: Lease/pull work distribution": adr/0002-lease-pull-work-distribution.md
+      - "ADR-0003: Configarr as instance source": adr/0003-configarr-as-instance-source.md
+      - "ADR-0004: No Swaparr, Cleanuparr complementary": adr/0004-no-swaparr-cleanuparr-deferred.md
+      - "ADR-0005: Static SPA embedded in the API image": adr/0005-static-spa-embedded-in-api-image.md
+      - "ADR-0006: Download-client backpressure": adr/0006-download-client-backpressure.md
+      - Template: adr/0000-template.md

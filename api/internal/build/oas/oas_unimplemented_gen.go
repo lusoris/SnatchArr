@@ -141,10 +141,10 @@ func (UnimplementedHandler) GetInstance(ctx context.Context, params GetInstanceP
 
 // GetPolicy implements getPolicy operation.
 //
-// Hunt policy of an instance.
+// Snatch policy of an instance.
 //
 // GET /instances/{instanceId}/policy
-func (UnimplementedHandler) GetPolicy(ctx context.Context, params GetPolicyParams) (r *HuntPolicy, _ error) {
+func (UnimplementedHandler) GetPolicy(ctx context.Context, params GetPolicyParams) (r *SnatchPolicy, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -186,7 +186,7 @@ func (UnimplementedHandler) ListDownloadClients(ctx context.Context) (r []Downlo
 
 // ListEvents implements listEvents operation.
 //
-// Hunt history, newest first (cursor on before_id).
+// Snatch history, newest first (cursor on before_id).
 //
 // GET /events
 func (UnimplementedHandler) ListEvents(ctx context.Context, params ListEventsParams) (r []Event, _ error) {
@@ -204,7 +204,7 @@ func (UnimplementedHandler) ListInstances(ctx context.Context) (r []Instance, _ 
 
 // ListRuns implements listRuns operation.
 //
-// Recent hunt runs, newest first.
+// Recent snatch runs, newest first.
 //
 // GET /runs
 func (UnimplementedHandler) ListRuns(ctx context.Context, params ListRunsParams) (r []Run, _ error) {
@@ -285,7 +285,7 @@ func (UnimplementedHandler) TestInstanceInput(ctx context.Context, req *Instance
 
 // TriggerRun implements triggerRun operation.
 //
-// Queue a hunt run now (ignores the cycle interval).
+// Quickie - queue a snatch now (ignores the refractory period).
 //
 // POST /instances/{instanceId}/runs
 func (UnimplementedHandler) TriggerRun(ctx context.Context, req *RunTrigger, params TriggerRunParams) (r TriggerRunRes, _ error) {
@@ -312,10 +312,10 @@ func (UnimplementedHandler) UpdateInstance(ctx context.Context, req *InstanceUpd
 
 // UpdatePolicy implements updatePolicy operation.
 //
-// Replace the hunt policy of an instance.
+// Replace the snatch policy of an instance.
 //
 // PUT /instances/{instanceId}/policy
-func (UnimplementedHandler) UpdatePolicy(ctx context.Context, req *HuntPolicy, params UpdatePolicyParams) (r *HuntPolicy, _ error) {
+func (UnimplementedHandler) UpdatePolicy(ctx context.Context, req *SnatchPolicy, params UpdatePolicyParams) (r *SnatchPolicy, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

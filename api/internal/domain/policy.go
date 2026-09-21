@@ -6,6 +6,7 @@ package domain
 
 import (
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -20,7 +21,7 @@ const (
 	SelectionSequential Selection = "sequential"
 )
 
-// Policy is the per-instance hunt policy. Defaults mirror newtarr's gentle defaults:
+// Policy is the per-instance snatch policy. Defaults mirror newtarr's gentle defaults:
 // one missing item per cycle, no upgrades, 15 minutes between cycles, 20 items per hour.
 type Policy struct {
 	InstanceID         uuid.UUID
@@ -80,10 +81,8 @@ func checkRanges(rules []rangeRule) error {
 }
 
 func checkEnum(name, value string, allowed ...string) error {
-	for _, a := range allowed {
-		if a == value {
-			return nil
-		}
+	if slices.Contains(allowed, value) {
+		return nil
 	}
 	return fmt.Errorf("%w: %s must be one of %v", ErrInvalid, name, allowed)
 }

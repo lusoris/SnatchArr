@@ -25,8 +25,8 @@ func TestEnumConversions(t *testing.T) {
 			t.Errorf("appKind(%q) = %v, want %v", in, got, want)
 		}
 	}
-	if huntKind(domain.HuntMissing) != snatcharrv1.HuntKind_HUNT_KIND_MISSING || huntKind(domain.HuntUpgrade) != snatcharrv1.HuntKind_HUNT_KIND_UPGRADE || huntKind("x") != snatcharrv1.HuntKind_HUNT_KIND_UNSPECIFIED {
-		t.Error("huntKind mapping")
+	if snatchKind(domain.SnatchMissing) != snatcharrv1.SnatchKind_SNATCH_KIND_MISSING || snatchKind(domain.SnatchUpgrade) != snatcharrv1.SnatchKind_SNATCH_KIND_UPGRADE || snatchKind("x") != snatcharrv1.SnatchKind_SNATCH_KIND_UNSPECIFIED {
+		t.Error("snatchKind mapping")
 	}
 	if selection(domain.SelectionSequential) != snatcharrv1.Selection_SELECTION_SEQUENTIAL || selection(domain.SelectionRandom) != snatcharrv1.Selection_SELECTION_RANDOM {
 		t.Error("selection mapping")
@@ -42,18 +42,18 @@ func TestEnumConversions(t *testing.T) {
 	}
 }
 
-func TestPolicyProtoPicksTheHuntKindsFields(t *testing.T) {
+func TestPolicyProtoPicksTheSnatchKindsFields(t *testing.T) {
 	t.Parallel()
 	p := domain.Policy{
 		MissingPerCycle: 3, UpgradePerCycle: 2, Selection: domain.SelectionRandom, MonitoredOnly: true, SkipFutureReleases: true,
 		SonarrMissingMode: "shows", SonarrUpgradeMode: "season_packs", LidarrMissingMode: "album", RadarrReleaseType: "digital",
 		AwaitCommand: true, PageSize: 250, CycleInterval: time.Minute,
 	}
-	missing := policyProto(p, domain.HuntMissing)
+	missing := policyProto(p, domain.SnatchMissing)
 	if missing.GetPerCycle() != 3 || missing.GetSonarrMode() != snatcharrv1.SonarrMode_SONARR_MODE_SHOWS || !missing.GetMonitoredOnly() || missing.GetPageSize() != 250 {
 		t.Fatalf("missing: %+v", missing)
 	}
-	upgrade := policyProto(p, domain.HuntUpgrade)
+	upgrade := policyProto(p, domain.SnatchUpgrade)
 	if upgrade.GetPerCycle() != 2 || upgrade.GetSonarrMode() != snatcharrv1.SonarrMode_SONARR_MODE_SEASON_PACKS || !upgrade.GetAwaitCommand() {
 		t.Fatalf("upgrade: %+v", upgrade)
 	}
