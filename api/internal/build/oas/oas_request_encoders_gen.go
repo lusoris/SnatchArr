@@ -24,6 +24,20 @@ func encodeCompleteSetupRequest(
 	return nil
 }
 
+func encodeCreateDownloadClientRequest(
+	req *DownloadClientInput,
+	r *http.Request,
+) error {
+	const contentType = "application/json"
+	e := new(jx.Encoder)
+	{
+		req.Encode(e)
+	}
+	encoded := e.Bytes()
+	ht.SetBody(r, bytes.NewReader(encoded), contentType)
+	return nil
+}
+
 func encodeCreateInstanceRequest(
 	req *InstanceInput,
 	r *http.Request,
@@ -86,6 +100,20 @@ func encodeResetStateRequest(
 	return nil
 }
 
+func encodeTestDownloadClientInputRequest(
+	req *DownloadClientInput,
+	r *http.Request,
+) error {
+	const contentType = "application/json"
+	e := new(jx.Encoder)
+	{
+		req.Encode(e)
+	}
+	encoded := e.Bytes()
+	ht.SetBody(r, bytes.NewReader(encoded), contentType)
+	return nil
+}
+
 func encodeTestInstanceInputRequest(
 	req *InstanceInput,
 	r *http.Request,
@@ -102,6 +130,20 @@ func encodeTestInstanceInputRequest(
 
 func encodeTriggerRunRequest(
 	req *RunTrigger,
+	r *http.Request,
+) error {
+	const contentType = "application/json"
+	e := new(jx.Encoder)
+	{
+		req.Encode(e)
+	}
+	encoded := e.Bytes()
+	ht.SetBody(r, bytes.NewReader(encoded), contentType)
+	return nil
+}
+
+func encodeUpdateDownloadClientRequest(
+	req *DownloadClientInput,
 	r *http.Request,
 ) error {
 	const contentType = "application/json"

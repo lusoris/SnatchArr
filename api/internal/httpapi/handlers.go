@@ -20,6 +20,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/buildinfo"
 	"github.com/lusoris/SnatchArr/api/internal/config"
+	"github.com/lusoris/SnatchArr/api/internal/dlclients"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/hunt"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
@@ -41,6 +42,7 @@ type Handlers struct {
 	memory    *hunt.Memory
 	planner   *hunt.Planner
 	schedules *hunt.Schedules
+	clients   *dlclients.Service
 }
 
 // Deps groups the hunt services the handlers need.
@@ -52,6 +54,7 @@ type Deps struct {
 	Memory    *hunt.Memory
 	Planner   *hunt.Planner
 	Schedules *hunt.Schedules
+	Clients   *dlclients.Service
 }
 
 // NewHandlers wires the operation handlers.
@@ -60,7 +63,7 @@ func NewHandlers(build buildinfo.Info, cfg config.Options, clk clock.Clock, auth
 ) *Handlers {
 	return &Handlers{
 		build: build, cfg: cfg, clk: clk, auth: authSvc, sessions: sessions, instances: inst, policies: pol,
-		runs: d.Runs, rec: d.Rec, budget: d.Budget, memory: d.Memory, planner: d.Planner, schedules: d.Schedules,
+		runs: d.Runs, rec: d.Rec, budget: d.Budget, memory: d.Memory, planner: d.Planner, schedules: d.Schedules, clients: d.Clients,
 	}
 }
 

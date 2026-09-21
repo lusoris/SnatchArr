@@ -21,15 +21,20 @@ type Querier interface {
 	CountUsers(ctx context.Context) (int64, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
+	CreateDownloadClient(ctx context.Context, arg CreateDownloadClientParams) (DownloadClient, error)
+	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+	// SPDX-License-Identifier: EUPL-1.2
 	CreateInstance(ctx context.Context, arg CreateInstanceParams) (Instance, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
 	CreateSchedule(ctx context.Context, arg CreateScheduleParams) (Schedule, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	DeleteDownloadClient(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteEventsForInstance(ctx context.Context, instanceID uuid.UUID) (int64, error)
 	DeleteInstance(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteSchedule(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteSession(ctx context.Context, id string) error
+	DeleteStaleDiscoveredDownloadClients(ctx context.Context, arg DeleteStaleDiscoveredDownloadClientsParams) (int64, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
 	EnqueueRun(ctx context.Context, arg EnqueueRunParams) (HuntRun, error)
@@ -41,6 +46,7 @@ type Querier interface {
 	FilterUnprocessed(ctx context.Context, arg FilterUnprocessedParams) ([]int64, error)
 	GetAPIKey(ctx context.Context, id string) (ApiKey, error)
 	GetBucketUsed(ctx context.Context, arg GetBucketUsedParams) (int32, error)
+	GetDownloadClient(ctx context.Context, id uuid.UUID) (DownloadClient, error)
 	GetInstance(ctx context.Context, id uuid.UUID) (Instance, error)
 	GetInstanceByConfigarrKey(ctx context.Context, configarrKey *string) (Instance, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
@@ -61,6 +67,9 @@ type Querier interface {
 	LastFinishedAt(ctx context.Context, arg LastFinishedAtParams) (time.Time, error)
 	LeaseRun(ctx context.Context, arg LeaseRunParams) (HuntRun, error)
 	ListAPIKeysByOwner(ctx context.Context, ownerID uuid.UUID) ([]ApiKey, error)
+	ListDownloadClients(ctx context.Context) ([]DownloadClient, error)
+	ListDownloadClientsForInstance(ctx context.Context, instanceID *uuid.UUID) ([]DownloadClient, error)
+	ListEnabledDownloadClients(ctx context.Context) ([]DownloadClient, error)
 	ListEnabledInstances(ctx context.Context) ([]Instance, error)
 	ListEnabledSchedulesFor(ctx context.Context, instanceID *uuid.UUID) ([]Schedule, error)
 	ListEvents(ctx context.Context, arg ListEventsParams) ([]HuntEvent, error)
@@ -76,6 +85,7 @@ type Querier interface {
 	PurgeExpiredProcessed(ctx context.Context, expiresAt time.Time) (int64, error)
 	PurgeExpiredSessions(ctx context.Context, expiresAt time.Time) (int64, error)
 	PurgeRunsBefore(ctx context.Context, finishedAt *time.Time) (int64, error)
+	RecordDownloadClientCheck(ctx context.Context, arg RecordDownloadClientCheckParams) error
 	RecordInstanceCheck(ctx context.Context, arg RecordInstanceCheckParams) error
 	ResetProcessed(ctx context.Context, instanceID *uuid.UUID) (int64, error)
 	RevokeAPIKey(ctx context.Context, arg RevokeAPIKeyParams) (int64, error)
@@ -83,10 +93,12 @@ type Querier interface {
 	SavePolicyCursor(ctx context.Context, arg SavePolicyCursorParams) error
 	SaveSession(ctx context.Context, arg SaveSessionParams) error
 	SetBucketUsed(ctx context.Context, arg SetBucketUsedParams) error
+	UpdateDownloadClient(ctx context.Context, arg UpdateDownloadClientParams) (DownloadClient, error)
 	UpdateInstance(ctx context.Context, arg UpdateInstanceParams) (Instance, error)
 	UpdateSchedule(ctx context.Context, arg UpdateScheduleParams) (Schedule, error)
 	UpdateSettings(ctx context.Context, arg UpdateSettingsParams) (Setting, error)
 	UpsertConfigarrInstance(ctx context.Context, arg UpsertConfigarrInstanceParams) (Instance, error)
+	UpsertDiscoveredDownloadClient(ctx context.Context, arg UpsertDiscoveredDownloadClientParams) (UpsertDiscoveredDownloadClientRow, error)
 	UpsertPolicy(ctx context.Context, arg UpsertPolicyParams) (HuntPolicy, error)
 }
 

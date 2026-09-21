@@ -31,6 +31,15 @@ func (UnimplementedHandler) CompleteSetup(ctx context.Context, req *SetupRequest
 	return r, ht.ErrNotImplemented
 }
 
+// CreateDownloadClient implements createDownloadClient operation.
+//
+// Add a download client by hand.
+//
+// POST /download-clients
+func (UnimplementedHandler) CreateDownloadClient(ctx context.Context, req *DownloadClientInput) (r *DownloadClient, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // CreateInstance implements createInstance operation.
 //
 // Add a manual instance.
@@ -47,6 +56,15 @@ func (UnimplementedHandler) CreateInstance(ctx context.Context, req *InstanceInp
 // POST /schedules
 func (UnimplementedHandler) CreateSchedule(ctx context.Context, req *ScheduleInput) (r *Schedule, _ error) {
 	return r, ht.ErrNotImplemented
+}
+
+// DeleteDownloadClient implements deleteDownloadClient operation.
+//
+// Delete a download client.
+//
+// DELETE /download-clients/{clientId}
+func (UnimplementedHandler) DeleteDownloadClient(ctx context.Context, params DeleteDownloadClientParams) error {
+	return ht.ErrNotImplemented
 }
 
 // DeleteInstance implements deleteInstance operation.
@@ -74,6 +92,33 @@ func (UnimplementedHandler) DeleteInstanceEvents(ctx context.Context, params Del
 // DELETE /schedules/{scheduleId}
 func (UnimplementedHandler) DeleteSchedule(ctx context.Context, params DeleteScheduleParams) error {
 	return ht.ErrNotImplemented
+}
+
+// DiscoverDownloadClients implements discoverDownloadClients operation.
+//
+// Import the download clients this instance has configured.
+//
+// POST /instances/{instanceId}/download-clients/discover
+func (UnimplementedHandler) DiscoverDownloadClients(ctx context.Context, params DiscoverDownloadClientsParams) (r *DiscoveryResult, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// GetDownloadClient implements getDownloadClient operation.
+//
+// Get one download client.
+//
+// GET /download-clients/{clientId}
+func (UnimplementedHandler) GetDownloadClient(ctx context.Context, params GetDownloadClientParams) (r *DownloadClient, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// GetDownloadClientStatus implements getDownloadClientStatus operation.
+//
+// Latest observation of every enabled download client (cached 20 s).
+//
+// GET /download-clients/status
+func (UnimplementedHandler) GetDownloadClientStatus(ctx context.Context) (r []DownloadClientStatus, _ error) {
+	return r, ht.ErrNotImplemented
 }
 
 // GetHourlyCaps implements getHourlyCaps operation.
@@ -127,6 +172,15 @@ func (UnimplementedHandler) GetSetupStatus(ctx context.Context) (r *SetupStatus,
 //
 // GET /system/status
 func (UnimplementedHandler) GetSystemStatus(ctx context.Context) (r *SystemStatus, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ListDownloadClients implements listDownloadClients operation.
+//
+// List download clients (secrets are never returned).
+//
+// GET /download-clients
+func (UnimplementedHandler) ListDownloadClients(ctx context.Context) (r []DownloadClient, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -193,6 +247,24 @@ func (UnimplementedHandler) ResetState(ctx context.Context, req OptStateReset) (
 	return r, ht.ErrNotImplemented
 }
 
+// TestDownloadClient implements testDownloadClient operation.
+//
+// Observe a stored download client now and record the outcome.
+//
+// POST /download-clients/{clientId}/test
+func (UnimplementedHandler) TestDownloadClient(ctx context.Context, params TestDownloadClientParams) (r *DownloadClientStatus, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// TestDownloadClientInput implements testDownloadClientInput operation.
+//
+// Observe a download client whose credentials are not stored yet.
+//
+// POST /download-clients/test
+func (UnimplementedHandler) TestDownloadClientInput(ctx context.Context, req *DownloadClientInput) (r *DownloadClientStatus, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // TestInstance implements testInstance operation.
 //
 // Probe a stored instance and record the outcome.
@@ -217,6 +289,15 @@ func (UnimplementedHandler) TestInstanceInput(ctx context.Context, req *Instance
 //
 // POST /instances/{instanceId}/runs
 func (UnimplementedHandler) TriggerRun(ctx context.Context, req *RunTrigger, params TriggerRunParams) (r TriggerRunRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UpdateDownloadClient implements updateDownloadClient operation.
+//
+// Update a download client (omit secret to keep it).
+//
+// PUT /download-clients/{clientId}
+func (UnimplementedHandler) UpdateDownloadClient(ctx context.Context, req *DownloadClientInput, params UpdateDownloadClientParams) (r *DownloadClient, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

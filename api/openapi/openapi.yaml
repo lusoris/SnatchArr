@@ -23,7 +23,8 @@ tags:
     description: Runs, history, hourly caps and processed memory
   - name: schedules
     description: Pause and cap-override windows
-
+  - name: download-clients
+    description: Torrent and Usenet clients observed for backpressure (never driven)
 security:
   - cookieAuth: []
   - bearerAuth: []
@@ -537,6 +538,159 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
 
+  /download-clients:
+    get:
+      tags: [download-clients]
+      operationId: listDownloadClients
+      summary: List download clients (secrets are never returned)
+      responses:
+        "200":
+          description: Download clients
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DownloadClient"
+        default:
+          $ref: "#/components/responses/Problem"
+    post:
+      tags: [download-clients]
+      operationId: createDownloadClient
+      summary: Add a download client by hand
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DownloadClientInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DownloadClient"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /download-clients/test:
+    post:
+      tags: [download-clients]
+      operationId: testDownloadClientInput
+      summary: Observe a download client whose credentials are not stored yet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DownloadClientInput"
+      responses:
+        "200":
+          description: Observation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DownloadClientStatus"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /download-clients/status:
+    get:
+      tags: [download-clients]
+      operationId: getDownloadClientStatus
+      summary: Latest observation of every enabled download client (cached 20 s)
+      responses:
+        "200":
+          description: Observations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DownloadClientStatus"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /download-clients/{clientId}:
+    parameters:
+      - $ref: "#/components/parameters/ClientId"
+    get:
+      tags: [download-clients]
+      operationId: getDownloadClient
+      summary: Get one download client
+      responses:
+        "200":
+          description: Download client
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DownloadClient"
+        default:
+          $ref: "#/components/responses/Problem"
+    put:
+      tags: [download-clients]
+      operationId: updateDownloadClient
+      summary: Update a download client (omit secret to keep it)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DownloadClientInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DownloadClient"
+        default:
+          $ref: "#/components/responses/Problem"
+    delete:
+      tags: [download-clients]
+      operationId: deleteDownloadClient
+      summary: Delete a download client
+      responses:
+        "204":
+          description: Deleted
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /download-clients/{clientId}/test:
+    parameters:
+      - $ref: "#/components/parameters/ClientId"
+    post:
+      tags: [download-clients]
+      operationId: testDownloadClient
+      summary: Observe a stored download client now and record the outcome
+      responses:
+        "200":
+          description: Observation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DownloadClientStatus"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /instances/{instanceId}/download-clients/discover:
+    parameters:
+      - $ref: "#/components/parameters/InstanceId"
+    post:
+      tags: [download-clients]
+      operationId: discoverDownloadClients
+      summary: Import the download clients this instance has configured
+      responses:
+        "200":
+          description: Discovery result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiscoveryResult"
+        default:
+          $ref: "#/components/responses/Problem"
+
 components:
   securitySchemes:
     cookieAuth:
@@ -556,6 +710,13 @@ components:
         type: string
         format: uuid
 
+    ClientId:
+      name: clientId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
   responses:
     Problem:
       description: RFC 9457 problem details
@@ -986,3 +1147,140 @@ components:
             updated_at:
               type: string
               format: date-time
+
+    DownloadClientKind:
+      type: string
+      enum: [qbittorrent, transmission, deluge, rtorrent, sabnzbd, nzbget]
+
+    DownloadClient:
+      type: object
+      required: [id, kind, protocol, name, base_url, username, enabled, source, max_active, bandwidth_budget_bps, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        instance_id:
+          type: string
+          format: uuid
+          description: Absent when the client applies to every instance
+        kind:
+          $ref: "#/components/schemas/DownloadClientKind"
+        protocol:
+          type: string
+          enum: [torrent, usenet]
+        name:
+          type: string
+        base_url:
+          type: string
+        username:
+          type: string
+        enabled:
+          type: boolean
+        source:
+          type: string
+          enum: [manual, discovered]
+        max_active:
+          type: integer
+          description: Defer hunts once this many downloads are active (0 = no limit)
+        bandwidth_budget_bps:
+          type: integer
+          format: int64
+          description: Bytes per second the client may use before hunts are paced (0 = off)
+        last_check_at:
+          type: string
+          format: date-time
+        last_error:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    DownloadClientInput:
+      type: object
+      required: [kind, name, base_url]
+      properties:
+        instance_id:
+          type: string
+          format: uuid
+          description: Pin the client to one instance; omit to apply it to every instance
+        kind:
+          $ref: "#/components/schemas/DownloadClientKind"
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+        base_url:
+          type: string
+        username:
+          type: string
+        secret:
+          type: string
+          description: Password, or the API key for SABnzbd. On update, omit to keep the stored one.
+        enabled:
+          type: boolean
+          default: true
+        max_active:
+          type: integer
+          minimum: 0
+          maximum: 1000
+          default: 0
+        bandwidth_budget_bps:
+          type: integer
+          format: int64
+          minimum: 0
+          default: 0
+
+    DownloadClientStatus:
+      type: object
+      required: [name, kind, reachable, paused, active, queued, download_rate_bps, upload_rate_bps, checked_at]
+      properties:
+        client_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        kind:
+          $ref: "#/components/schemas/DownloadClientKind"
+        reachable:
+          type: boolean
+        paused:
+          type: boolean
+        active:
+          type: integer
+        queued:
+          type: integer
+        download_rate_bps:
+          type: integer
+          format: int64
+        upload_rate_bps:
+          type: integer
+          format: int64
+        version:
+          type: string
+        error:
+          type: string
+        checked_at:
+          type: string
+          format: date-time
+
+    DiscoveryResult:
+      type: object
+      required: [imported, updated, removed, unsupported, warnings]
+      properties:
+        imported:
+          type: integer
+        updated:
+          type: integer
+        removed:
+          type: integer
+        unsupported:
+          type: array
+          items:
+            type: string
+        warnings:
+          type: array
+          items:
+            type: string

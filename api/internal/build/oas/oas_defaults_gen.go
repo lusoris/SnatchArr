@@ -8,6 +8,22 @@ import (
 )
 
 // setDefaults set default value of fields.
+func (s *DownloadClientInput) setDefaults() {
+	{
+		val := bool(true)
+		s.Enabled.SetTo(val)
+	}
+	{
+		val := int(0)
+		s.MaxActive.SetTo(val)
+	}
+	{
+		val := int64(0)
+		s.BandwidthBudgetBps.SetTo(val)
+	}
+}
+
+// setDefaults set default value of fields.
 func (s *InstanceInput) setDefaults() {
 	{
 		val := bool(true)

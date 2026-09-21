@@ -21,6 +21,25 @@ type ApiKey struct {
 	RevokedAt *time.Time
 }
 
+type DownloadClient struct {
+	ID                 uuid.UUID
+	InstanceID         *uuid.UUID
+	Kind               string
+	Name               string
+	BaseUrl            string
+	Username           string
+	SecretEnc          []byte
+	Enabled            bool
+	Source             string
+	RemoteID           *int32
+	MaxActive          int32
+	BandwidthBudgetBps int64
+	LastCheckAt        *time.Time
+	LastError          *string
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+}
+
 type HuntEvent struct {
 	ID         int64
 	RunID      *uuid.UUID

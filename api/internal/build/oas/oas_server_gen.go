@@ -20,6 +20,12 @@ type Handler interface {
 	//
 	// POST /auth/setup
 	CompleteSetup(ctx context.Context, req *SetupRequest) (*Session, error)
+	// CreateDownloadClient implements createDownloadClient operation.
+	//
+	// Add a download client by hand.
+	//
+	// POST /download-clients
+	CreateDownloadClient(ctx context.Context, req *DownloadClientInput) (*DownloadClient, error)
 	// CreateInstance implements createInstance operation.
 	//
 	// Add a manual instance.
@@ -32,6 +38,12 @@ type Handler interface {
 	//
 	// POST /schedules
 	CreateSchedule(ctx context.Context, req *ScheduleInput) (*Schedule, error)
+	// DeleteDownloadClient implements deleteDownloadClient operation.
+	//
+	// Delete a download client.
+	//
+	// DELETE /download-clients/{clientId}
+	DeleteDownloadClient(ctx context.Context, params DeleteDownloadClientParams) error
 	// DeleteInstance implements deleteInstance operation.
 	//
 	// Delete an instance and everything it owns.
@@ -50,6 +62,24 @@ type Handler interface {
 	//
 	// DELETE /schedules/{scheduleId}
 	DeleteSchedule(ctx context.Context, params DeleteScheduleParams) error
+	// DiscoverDownloadClients implements discoverDownloadClients operation.
+	//
+	// Import the download clients this instance has configured.
+	//
+	// POST /instances/{instanceId}/download-clients/discover
+	DiscoverDownloadClients(ctx context.Context, params DiscoverDownloadClientsParams) (*DiscoveryResult, error)
+	// GetDownloadClient implements getDownloadClient operation.
+	//
+	// Get one download client.
+	//
+	// GET /download-clients/{clientId}
+	GetDownloadClient(ctx context.Context, params GetDownloadClientParams) (*DownloadClient, error)
+	// GetDownloadClientStatus implements getDownloadClientStatus operation.
+	//
+	// Latest observation of every enabled download client (cached 20 s).
+	//
+	// GET /download-clients/status
+	GetDownloadClientStatus(ctx context.Context) ([]DownloadClientStatus, error)
 	// GetHourlyCaps implements getHourlyCaps operation.
 	//
 	// Per-instance hourly budget consumption.
@@ -86,6 +116,12 @@ type Handler interface {
 	//
 	// GET /system/status
 	GetSystemStatus(ctx context.Context) (*SystemStatus, error)
+	// ListDownloadClients implements listDownloadClients operation.
+	//
+	// List download clients (secrets are never returned).
+	//
+	// GET /download-clients
+	ListDownloadClients(ctx context.Context) ([]DownloadClient, error)
 	// ListEvents implements listEvents operation.
 	//
 	// Hunt history, newest first (cursor on before_id).
@@ -128,6 +164,18 @@ type Handler interface {
 	//
 	// POST /state/reset
 	ResetState(ctx context.Context, req OptStateReset) (*StateResetResult, error)
+	// TestDownloadClient implements testDownloadClient operation.
+	//
+	// Observe a stored download client now and record the outcome.
+	//
+	// POST /download-clients/{clientId}/test
+	TestDownloadClient(ctx context.Context, params TestDownloadClientParams) (*DownloadClientStatus, error)
+	// TestDownloadClientInput implements testDownloadClientInput operation.
+	//
+	// Observe a download client whose credentials are not stored yet.
+	//
+	// POST /download-clients/test
+	TestDownloadClientInput(ctx context.Context, req *DownloadClientInput) (*DownloadClientStatus, error)
 	// TestInstance implements testInstance operation.
 	//
 	// Probe a stored instance and record the outcome.
@@ -146,6 +194,12 @@ type Handler interface {
 	//
 	// POST /instances/{instanceId}/runs
 	TriggerRun(ctx context.Context, req *RunTrigger, params TriggerRunParams) (TriggerRunRes, error)
+	// UpdateDownloadClient implements updateDownloadClient operation.
+	//
+	// Update a download client (omit secret to keep it).
+	//
+	// PUT /download-clients/{clientId}
+	UpdateDownloadClient(ctx context.Context, req *DownloadClientInput, params UpdateDownloadClientParams) (*DownloadClient, error)
 	// UpdateInstance implements updateInstance operation.
 	//
 	// Update a manual instance (omit api_key to keep it).

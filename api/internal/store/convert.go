@@ -90,3 +90,37 @@ func PolicyParams(p domain.Policy, now time.Time) sqlcgen.UpsertPolicyParams {
 		UpdatedAt:          now,
 	}
 }
+
+// DownloadClientFromRow converts a row to the domain type. The secret is never carried.
+func DownloadClientFromRow(r sqlcgen.DownloadClient) domain.DownloadClient {
+	remote := 0
+	if r.RemoteID != nil {
+		remote = int(*r.RemoteID)
+	}
+	return domain.DownloadClient{
+		ID:                 r.ID,
+		InstanceID:         r.InstanceID,
+		Kind:               domain.DownloadClientKind(r.Kind),
+		Name:               r.Name,
+		BaseURL:            r.BaseUrl,
+		Username:           r.Username,
+		Enabled:            r.Enabled,
+		Source:             domain.DownloadClientSource(r.Source),
+		RemoteID:           remote,
+		MaxActive:          int(r.MaxActive),
+		BandwidthBudgetBPS: r.BandwidthBudgetBps,
+		LastCheckAt:        r.LastCheckAt,
+		LastError:          deref(r.LastError),
+		CreatedAt:          r.CreatedAt,
+		UpdatedAt:          r.UpdatedAt,
+	}
+}
+
+// DownloadClientsFromRows converts a slice.
+func DownloadClientsFromRows(rows []sqlcgen.DownloadClient) []domain.DownloadClient {
+	out := make([]domain.DownloadClient, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, DownloadClientFromRow(r))
+	}
+	return out
+}

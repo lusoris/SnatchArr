@@ -14,11 +14,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.uber.org/fx"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"github.com/golusoris/golusoris/core/clock"
 
+	"github.com/lusoris/SnatchArr/api/internal/dlclients"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	snatcharrv1 "github.com/lusoris/SnatchArr/api/internal/gen/snatcharr/v1"
 	"github.com/lusoris/SnatchArr/api/internal/hunt"
@@ -35,6 +37,17 @@ const (
 	userAgent          = "SnatchArr/1.0 (https://github.com/lusoris/SnatchArr)"
 )
 
+// Pacer scales a leased run's per-cycle count by download-client bandwidth (ADR-0006).
+type Pacer interface {
+	PaceFactor(ctx context.Context, instanceID uuid.UUID) (float64, error)
+}
+
+// Options are the optional collaborators.
+type Options struct {
+	fx.In
+	Pacer Pacer `optional:"true"`
+}
+
 // Server implements snatcharrv1.WorkerServiceServer.
 type Server struct {
 	snatcharrv1.UnimplementedWorkerServiceServer
@@ -45,15 +58,19 @@ type Server struct {
 	planner   *hunt.Planner
 	instances *instances.Service
 	policies  *policies.Service
+	pacer     Pacer
 	clk       clock.Clock
 	logger    *slog.Logger
 }
 
 // New wires the server.
 func New(runs *hunt.Runs, budget *hunt.Budget, memory *hunt.Memory, rec *hunt.Recorder, planner *hunt.Planner,
-	inst *instances.Service, pol *policies.Service, clk clock.Clock, logger *slog.Logger,
+	inst *instances.Service, pol *policies.Service, clk clock.Clock, logger *slog.Logger, opts Options,
 ) *Server {
-	return &Server{runs: runs, budget: budget, memory: memory, rec: rec, planner: planner, instances: inst, policies: pol, clk: clk, logger: logger}
+	return &Server{
+		runs: runs, budget: budget, memory: memory, rec: rec, planner: planner, instances: inst, policies: pol,
+		pacer: opts.Pacer, clk: clk, logger: logger,
+	}
 }
 
 // LeaseRun long-polls for a queued run and returns it with credentials and policy.
@@ -100,6 +117,8 @@ func (s *Server) leaseResponse(ctx context.Context, run domain.Run) (*snatcharrv
 	if run.LeaseExpiresAt != nil {
 		expires = run.LeaseExpiresAt.Unix()
 	}
+	pol := policyProto(policy, run.Kind)
+	s.pace(ctx, run, pol)
 	return &snatcharrv1.LeaseRunResponse{Run: &snatcharrv1.Run{
 		RunId:            run.ID.String(),
 		InstanceId:       run.InstanceID.String(),
@@ -107,10 +126,36 @@ func (s *Server) leaseResponse(ctx context.Context, run domain.Run) (*snatcharrv
 		Hunt:             huntKind(run.Kind),
 		BaseUrl:          creds.BaseURL,
 		ApiKey:           creds.APIKey,
-		Policy:           policyProto(policy, run.Kind),
+		Policy:           pol,
 		LeaseExpiresUnix: expires,
 		UserAgent:        userAgent,
 	}}, nil
+}
+
+// pace applies download-client bandwidth pacing to the per-cycle count. A pacer failure
+// is logged and leaves the count alone: pacing is a courtesy, not a gate.
+func (s *Server) pace(ctx context.Context, run domain.Run, pol *snatcharrv1.Policy) {
+	if s.pacer == nil || pol.GetPerCycle() == 0 {
+		return
+	}
+	factor, err := s.pacer.PaceFactor(ctx, run.InstanceID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "workergrpc: pace factor", slog.String("error", err.Error()))
+		return
+	}
+	before := int(pol.GetPerCycle())
+	scaled := dlclients.Scale(before, factor)
+	if scaled == before {
+		return
+	}
+	pol.PerCycle = uint32(max(scaled, 0)) // #nosec G115 -- scaled <= before <= 100
+	err = s.rec.Record(ctx, domain.Event{
+		RunID: &run.ID, InstanceID: run.InstanceID, Level: "info", Type: "hunt_paced",
+		Title: fmt.Sprintf("per-cycle reduced from %d to %d by download-client pacing", before, scaled),
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "workergrpc: record pacing", slog.String("error", err.Error()))
+	}
 }
 
 // Heartbeat extends a lease and tells a worker when its run was cancelled.

@@ -34,6 +34,11 @@ type Prober interface {
 	Probe(ctx context.Context, kind domain.AppKind, baseURL, apiKey string) (Result, error)
 }
 
+// Discoverer lists the download clients an *arr instance has configured.
+type Discoverer interface {
+	DownloadClients(ctx context.Context, kind domain.AppKind, baseURL, apiKey string) ([]arr.ProviderResource, error)
+}
+
 // Options tune the probe.
 type Options struct {
 	Timeout   time.Duration
@@ -81,15 +86,16 @@ func (p *GoenvoyProber) clientOptions() []arr.Option {
 	return []arr.Option{arr.WithTimeout(p.opts.Timeout), arr.WithUserAgent(p.opts.UserAgent)}
 }
 
-// statusClient is satisfied by every goenvoy *arr client.
-type statusClient interface {
+// arrClient is the slice of every goenvoy *arr client the control plane uses.
+type arrClient interface {
 	GetSystemStatus(ctx context.Context) (*arr.StatusResponse, error)
+	GetDownloadClients(ctx context.Context) ([]arr.ProviderResource, error)
 }
 
 // newClient builds the goenvoy client for a kind. Kept non-generic on purpose: govulncheck
 // v1.4.0's call-graph analysis panics on generic helpers ("ForEachElement called on type
 // containing *types.TypeParam").
-func (p *GoenvoyProber) newClient(kind domain.AppKind, baseURL, apiKey string) (statusClient, error) {
+func (p *GoenvoyProber) newClient(kind domain.AppKind, baseURL, apiKey string) (arrClient, error) {
 	o := p.clientOptions()
 	switch kind {
 	case domain.KindSonarr:
@@ -110,7 +116,7 @@ func (p *GoenvoyProber) newClient(kind domain.AppKind, baseURL, apiKey string) (
 }
 
 // wrapNew folds a goenvoy constructor result into the interface and wraps its error.
-func wrapNew(c statusClient, err error) (statusClient, error) {
+func wrapNew(c arrClient, err error) (arrClient, error) {
 	if err != nil {
 		return nil, fmt.Errorf("arrclient: new client: %w", err)
 	}
@@ -123,6 +129,21 @@ func (p *GoenvoyProber) status(ctx context.Context, kind domain.AppKind, baseURL
 		return nil, err
 	}
 	return c.GetSystemStatus(ctx)
+}
+
+// DownloadClients implements Discoverer: GET /api/v{1,3}/downloadclient.
+func (p *GoenvoyProber) DownloadClients(ctx context.Context, kind domain.AppKind, baseURL, apiKey string) ([]arr.ProviderResource, error) {
+	ctx, cancel := context.WithTimeout(ctx, p.opts.Timeout)
+	defer cancel()
+	c, err := p.newClient(kind, baseURL, apiKey)
+	if err != nil {
+		return nil, err
+	}
+	list, err := c.GetDownloadClients(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", domain.ErrUnreachable, err)
+	}
+	return list, nil
 }
 
 func checkWhisparrGeneration(kind domain.AppKind, version string) error {
@@ -142,7 +163,11 @@ func checkWhisparrGeneration(kind domain.AppKind, version string) error {
 	return nil
 }
 
-// Module provides the goenvoy-backed Prober.
+// Module provides the goenvoy-backed Prober and Discoverer.
 var Module = fx.Module("snatcharr.arrclient",
-	fx.Provide(func() Prober { return NewGoenvoyProber(DefaultOptions()) }),
+	fx.Provide(
+		func() *GoenvoyProber { return NewGoenvoyProber(DefaultOptions()) },
+		func(p *GoenvoyProber) Prober { return p },
+		func(p *GoenvoyProber) Discoverer { return p },
+	),
 )

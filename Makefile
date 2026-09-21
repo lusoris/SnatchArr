@@ -49,6 +49,7 @@ api-gen: ## ogen + sqlc generation inside api/
 API_COVER_MIN ?= 20
 api-cover: ## Coverage gate on hand-written packages (generated code excluded)
 	cd api
+	mkdir -p tmp
 	go test -count=1 -covermode=atomic -coverprofile=tmp/cover.out ./... >/dev/null
 	grep -vE 'internal/(build|gen)/|internal/store/sqlcgen/' tmp/cover.out > tmp/cover.filtered.out
 	pct=$$(go tool cover -func=tmp/cover.filtered.out | awk '/^total:/ {gsub("%","",$$3); print $$3}')
