@@ -2177,6 +2177,8 @@ func (s *InstanceSource) Decode(d *jx.Decoder) error {
 		*s = InstanceSourceManual
 	case InstanceSourceConfigarr:
 		*s = InstanceSourceConfigarr
+	case InstanceSourceSeerr:
+		*s = InstanceSourceSeerr
 	default:
 		*s = InstanceSource(v)
 	}
@@ -4151,6 +4153,1227 @@ func (s ScheduleInputAction) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *ScheduleInputAction) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode implements json.Marshaler.
+func (s *SeerrImportResult) Encode(e *jx.Encoder) {
+	e.ObjStart()
+	s.encodeFields(e)
+	e.ObjEnd()
+}
+
+// encodeFields encodes fields.
+func (s *SeerrImportResult) encodeFields(e *jx.Encoder) {
+	{
+		e.FieldStart("created")
+		e.ArrStart()
+		for _, elem := range s.Created {
+			e.Str(elem)
+		}
+		e.ArrEnd()
+	}
+	{
+		e.FieldStart("skipped")
+		e.ArrStart()
+		for _, elem := range s.Skipped {
+			e.Str(elem)
+		}
+		e.ArrEnd()
+	}
+}
+
+var jsonFieldsNameOfSeerrImportResult = [2]string{
+	0: "created",
+	1: "skipped",
+}
+
+// Decode decodes SeerrImportResult from json.
+func (s *SeerrImportResult) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode SeerrImportResult to nil")
+	}
+	var requiredBitSet [1]uint8
+
+	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
+		switch string(k) {
+		case "created":
+			requiredBitSet[0] |= 1 << 0
+			if err := func() error {
+				s.Created = make([]string, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem string
+					v, err := d.Str()
+					elem = string(v)
+					if err != nil {
+						return err
+					}
+					s.Created = append(s.Created, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"created\"")
+			}
+		case "skipped":
+			requiredBitSet[0] |= 1 << 1
+			if err := func() error {
+				s.Skipped = make([]string, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem string
+					v, err := d.Str()
+					elem = string(v)
+					if err != nil {
+						return err
+					}
+					s.Skipped = append(s.Skipped, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"skipped\"")
+			}
+		default:
+			return d.Skip()
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "decode SeerrImportResult")
+	}
+	// Validate required fields.
+	var failures []validate.FieldError
+	for i, mask := range [1]uint8{
+		0b00000011,
+	} {
+		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
+			// Mask only required fields and check equality to mask using XOR.
+			//
+			// If XOR result is not zero, result is not equal to expected, so some fields are missed.
+			// Bits of fields which would be set are actually bits of missed fields.
+			missed := bits.OnesCount8(result)
+			for bitN := 0; bitN < missed; bitN++ {
+				bitIdx := bits.TrailingZeros8(result)
+				fieldIdx := i*8 + bitIdx
+				var name string
+				if fieldIdx < len(jsonFieldsNameOfSeerrImportResult) {
+					name = jsonFieldsNameOfSeerrImportResult[fieldIdx]
+				} else {
+					name = strconv.Itoa(fieldIdx)
+				}
+				failures = append(failures, validate.FieldError{
+					Name:  name,
+					Error: validate.ErrFieldRequired,
+				})
+				// Reset bit.
+				result &^= 1 << bitIdx
+			}
+		}
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *SeerrImportResult) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *SeerrImportResult) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode implements json.Marshaler.
+func (s *SeerrLink) Encode(e *jx.Encoder) {
+	e.ObjStart()
+	s.encodeFields(e)
+	e.ObjEnd()
+}
+
+// encodeFields encodes fields.
+func (s *SeerrLink) encodeFields(e *jx.Encoder) {
+	{
+		e.FieldStart("id")
+		json.EncodeUUID(e, s.ID)
+	}
+	{
+		e.FieldStart("name")
+		e.Str(s.Name)
+	}
+	{
+		e.FieldStart("base_url")
+		e.Str(s.BaseURL)
+	}
+	{
+		e.FieldStart("enabled")
+		e.Bool(s.Enabled)
+	}
+	{
+		if s.SonarrInstanceID.Set {
+			e.FieldStart("sonarr_instance_id")
+			s.SonarrInstanceID.Encode(e)
+		}
+	}
+	{
+		if s.RadarrInstanceID.Set {
+			e.FieldStart("radarr_instance_id")
+			s.RadarrInstanceID.Encode(e)
+		}
+	}
+	{
+		if s.LastSeenVersion.Set {
+			e.FieldStart("last_seen_version")
+			s.LastSeenVersion.Encode(e)
+		}
+	}
+	{
+		if s.LastCheckAt.Set {
+			e.FieldStart("last_check_at")
+			s.LastCheckAt.Encode(e, json.EncodeDateTime)
+		}
+	}
+	{
+		if s.LastError.Set {
+			e.FieldStart("last_error")
+			s.LastError.Encode(e)
+		}
+	}
+	{
+		if s.LastSyncAt.Set {
+			e.FieldStart("last_sync_at")
+			s.LastSyncAt.Encode(e, json.EncodeDateTime)
+		}
+	}
+	{
+		e.FieldStart("created_at")
+		json.EncodeDateTime(e, s.CreatedAt)
+	}
+	{
+		e.FieldStart("updated_at")
+		json.EncodeDateTime(e, s.UpdatedAt)
+	}
+}
+
+var jsonFieldsNameOfSeerrLink = [12]string{
+	0:  "id",
+	1:  "name",
+	2:  "base_url",
+	3:  "enabled",
+	4:  "sonarr_instance_id",
+	5:  "radarr_instance_id",
+	6:  "last_seen_version",
+	7:  "last_check_at",
+	8:  "last_error",
+	9:  "last_sync_at",
+	10: "created_at",
+	11: "updated_at",
+}
+
+// Decode decodes SeerrLink from json.
+func (s *SeerrLink) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode SeerrLink to nil")
+	}
+	var requiredBitSet [2]uint8
+
+	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
+		switch string(k) {
+		case "id":
+			requiredBitSet[0] |= 1 << 0
+			if err := func() error {
+				v, err := json.DecodeUUID(d)
+				s.ID = v
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"id\"")
+			}
+		case "name":
+			requiredBitSet[0] |= 1 << 1
+			if err := func() error {
+				v, err := d.Str()
+				s.Name = string(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"name\"")
+			}
+		case "base_url":
+			requiredBitSet[0] |= 1 << 2
+			if err := func() error {
+				v, err := d.Str()
+				s.BaseURL = string(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"base_url\"")
+			}
+		case "enabled":
+			requiredBitSet[0] |= 1 << 3
+			if err := func() error {
+				v, err := d.Bool()
+				s.Enabled = bool(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"enabled\"")
+			}
+		case "sonarr_instance_id":
+			if err := func() error {
+				s.SonarrInstanceID.Reset()
+				if err := s.SonarrInstanceID.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"sonarr_instance_id\"")
+			}
+		case "radarr_instance_id":
+			if err := func() error {
+				s.RadarrInstanceID.Reset()
+				if err := s.RadarrInstanceID.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"radarr_instance_id\"")
+			}
+		case "last_seen_version":
+			if err := func() error {
+				s.LastSeenVersion.Reset()
+				if err := s.LastSeenVersion.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"last_seen_version\"")
+			}
+		case "last_check_at":
+			if err := func() error {
+				s.LastCheckAt.Reset()
+				if err := s.LastCheckAt.Decode(d, json.DecodeDateTime); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"last_check_at\"")
+			}
+		case "last_error":
+			if err := func() error {
+				s.LastError.Reset()
+				if err := s.LastError.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"last_error\"")
+			}
+		case "last_sync_at":
+			if err := func() error {
+				s.LastSyncAt.Reset()
+				if err := s.LastSyncAt.Decode(d, json.DecodeDateTime); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"last_sync_at\"")
+			}
+		case "created_at":
+			requiredBitSet[1] |= 1 << 2
+			if err := func() error {
+				v, err := json.DecodeDateTime(d)
+				s.CreatedAt = v
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"created_at\"")
+			}
+		case "updated_at":
+			requiredBitSet[1] |= 1 << 3
+			if err := func() error {
+				v, err := json.DecodeDateTime(d)
+				s.UpdatedAt = v
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"updated_at\"")
+			}
+		default:
+			return d.Skip()
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "decode SeerrLink")
+	}
+	// Validate required fields.
+	var failures []validate.FieldError
+	for i, mask := range [2]uint8{
+		0b00001111,
+		0b00001100,
+	} {
+		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
+			// Mask only required fields and check equality to mask using XOR.
+			//
+			// If XOR result is not zero, result is not equal to expected, so some fields are missed.
+			// Bits of fields which would be set are actually bits of missed fields.
+			missed := bits.OnesCount8(result)
+			for bitN := 0; bitN < missed; bitN++ {
+				bitIdx := bits.TrailingZeros8(result)
+				fieldIdx := i*8 + bitIdx
+				var name string
+				if fieldIdx < len(jsonFieldsNameOfSeerrLink) {
+					name = jsonFieldsNameOfSeerrLink[fieldIdx]
+				} else {
+					name = strconv.Itoa(fieldIdx)
+				}
+				failures = append(failures, validate.FieldError{
+					Name:  name,
+					Error: validate.ErrFieldRequired,
+				})
+				// Reset bit.
+				result &^= 1 << bitIdx
+			}
+		}
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *SeerrLink) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *SeerrLink) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode implements json.Marshaler.
+func (s *SeerrLinkInput) Encode(e *jx.Encoder) {
+	e.ObjStart()
+	s.encodeFields(e)
+	e.ObjEnd()
+}
+
+// encodeFields encodes fields.
+func (s *SeerrLinkInput) encodeFields(e *jx.Encoder) {
+	{
+		e.FieldStart("name")
+		e.Str(s.Name)
+	}
+	{
+		e.FieldStart("base_url")
+		e.Str(s.BaseURL)
+	}
+	{
+		if s.APIKey.Set {
+			e.FieldStart("api_key")
+			s.APIKey.Encode(e)
+		}
+	}
+	{
+		if s.Enabled.Set {
+			e.FieldStart("enabled")
+			s.Enabled.Encode(e)
+		}
+	}
+	{
+		if s.SonarrInstanceID.Set {
+			e.FieldStart("sonarr_instance_id")
+			s.SonarrInstanceID.Encode(e)
+		}
+	}
+	{
+		if s.RadarrInstanceID.Set {
+			e.FieldStart("radarr_instance_id")
+			s.RadarrInstanceID.Encode(e)
+		}
+	}
+}
+
+var jsonFieldsNameOfSeerrLinkInput = [6]string{
+	0: "name",
+	1: "base_url",
+	2: "api_key",
+	3: "enabled",
+	4: "sonarr_instance_id",
+	5: "radarr_instance_id",
+}
+
+// Decode decodes SeerrLinkInput from json.
+func (s *SeerrLinkInput) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode SeerrLinkInput to nil")
+	}
+	var requiredBitSet [1]uint8
+	s.setDefaults()
+
+	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
+		switch string(k) {
+		case "name":
+			requiredBitSet[0] |= 1 << 0
+			if err := func() error {
+				v, err := d.Str()
+				s.Name = string(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"name\"")
+			}
+		case "base_url":
+			requiredBitSet[0] |= 1 << 1
+			if err := func() error {
+				v, err := d.Str()
+				s.BaseURL = string(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"base_url\"")
+			}
+		case "api_key":
+			if err := func() error {
+				s.APIKey.Reset()
+				if err := s.APIKey.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"api_key\"")
+			}
+		case "enabled":
+			if err := func() error {
+				s.Enabled.Reset()
+				if err := s.Enabled.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"enabled\"")
+			}
+		case "sonarr_instance_id":
+			if err := func() error {
+				s.SonarrInstanceID.Reset()
+				if err := s.SonarrInstanceID.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"sonarr_instance_id\"")
+			}
+		case "radarr_instance_id":
+			if err := func() error {
+				s.RadarrInstanceID.Reset()
+				if err := s.RadarrInstanceID.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"radarr_instance_id\"")
+			}
+		default:
+			return d.Skip()
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "decode SeerrLinkInput")
+	}
+	// Validate required fields.
+	var failures []validate.FieldError
+	for i, mask := range [1]uint8{
+		0b00000011,
+	} {
+		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
+			// Mask only required fields and check equality to mask using XOR.
+			//
+			// If XOR result is not zero, result is not equal to expected, so some fields are missed.
+			// Bits of fields which would be set are actually bits of missed fields.
+			missed := bits.OnesCount8(result)
+			for bitN := 0; bitN < missed; bitN++ {
+				bitIdx := bits.TrailingZeros8(result)
+				fieldIdx := i*8 + bitIdx
+				var name string
+				if fieldIdx < len(jsonFieldsNameOfSeerrLinkInput) {
+					name = jsonFieldsNameOfSeerrLinkInput[fieldIdx]
+				} else {
+					name = strconv.Itoa(fieldIdx)
+				}
+				failures = append(failures, validate.FieldError{
+					Name:  name,
+					Error: validate.ErrFieldRequired,
+				})
+				// Reset bit.
+				result &^= 1 << bitIdx
+			}
+		}
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *SeerrLinkInput) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *SeerrLinkInput) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode implements json.Marshaler.
+func (s *SeerrRequest) Encode(e *jx.Encoder) {
+	e.ObjStart()
+	s.encodeFields(e)
+	e.ObjEnd()
+}
+
+// encodeFields encodes fields.
+func (s *SeerrRequest) encodeFields(e *jx.Encoder) {
+	{
+		e.FieldStart("link_id")
+		json.EncodeUUID(e, s.LinkID)
+	}
+	{
+		e.FieldStart("link_name")
+		e.Str(s.LinkName)
+	}
+	{
+		e.FieldStart("request_id")
+		e.Int(s.RequestID)
+	}
+	{
+		e.FieldStart("media_type")
+		s.MediaType.Encode(e)
+	}
+	{
+		e.FieldStart("tmdb_id")
+		e.Int(s.TmdbID)
+	}
+	{
+		e.FieldStart("tvdb_id")
+		e.Int(s.TvdbID)
+	}
+	{
+		e.FieldStart("title")
+		e.Str(s.Title)
+	}
+	{
+		e.FieldStart("request_status")
+		e.Int(s.RequestStatus)
+	}
+	{
+		e.FieldStart("media_status")
+		e.Int(s.MediaStatus)
+	}
+	{
+		e.FieldStart("is_4k")
+		e.Bool(s.Is4k)
+	}
+	{
+		e.FieldStart("requested_by")
+		e.Str(s.RequestedBy)
+	}
+	{
+		e.FieldStart("seasons")
+		e.ArrStart()
+		for _, elem := range s.Seasons {
+			e.Int(elem)
+		}
+		e.ArrEnd()
+	}
+	{
+		if s.InstanceID.Set {
+			e.FieldStart("instance_id")
+			s.InstanceID.Encode(e)
+		}
+	}
+	{
+		if s.InstanceName.Set {
+			e.FieldStart("instance_name")
+			s.InstanceName.Encode(e)
+		}
+	}
+	{
+		if s.EntityID.Set {
+			e.FieldStart("entity_id")
+			s.EntityID.Encode(e)
+		}
+	}
+	{
+		e.FieldStart("resolved")
+		e.Bool(s.Resolved)
+	}
+	{
+		if s.UnresolvedReason.Set {
+			e.FieldStart("unresolved_reason")
+			s.UnresolvedReason.Encode(e)
+		}
+	}
+	{
+		if s.RequestedAt.Set {
+			e.FieldStart("requested_at")
+			s.RequestedAt.Encode(e, json.EncodeDateTime)
+		}
+	}
+	{
+		if s.LastSnatchedAt.Set {
+			e.FieldStart("last_snatched_at")
+			s.LastSnatchedAt.Encode(e, json.EncodeDateTime)
+		}
+	}
+	{
+		e.FieldStart("last_seen_at")
+		json.EncodeDateTime(e, s.LastSeenAt)
+	}
+}
+
+var jsonFieldsNameOfSeerrRequest = [20]string{
+	0:  "link_id",
+	1:  "link_name",
+	2:  "request_id",
+	3:  "media_type",
+	4:  "tmdb_id",
+	5:  "tvdb_id",
+	6:  "title",
+	7:  "request_status",
+	8:  "media_status",
+	9:  "is_4k",
+	10: "requested_by",
+	11: "seasons",
+	12: "instance_id",
+	13: "instance_name",
+	14: "entity_id",
+	15: "resolved",
+	16: "unresolved_reason",
+	17: "requested_at",
+	18: "last_snatched_at",
+	19: "last_seen_at",
+}
+
+// Decode decodes SeerrRequest from json.
+func (s *SeerrRequest) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode SeerrRequest to nil")
+	}
+	var requiredBitSet [3]uint8
+
+	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
+		switch string(k) {
+		case "link_id":
+			requiredBitSet[0] |= 1 << 0
+			if err := func() error {
+				v, err := json.DecodeUUID(d)
+				s.LinkID = v
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"link_id\"")
+			}
+		case "link_name":
+			requiredBitSet[0] |= 1 << 1
+			if err := func() error {
+				v, err := d.Str()
+				s.LinkName = string(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"link_name\"")
+			}
+		case "request_id":
+			requiredBitSet[0] |= 1 << 2
+			if err := func() error {
+				v, err := d.Int()
+				s.RequestID = int(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"request_id\"")
+			}
+		case "media_type":
+			requiredBitSet[0] |= 1 << 3
+			if err := func() error {
+				if err := s.MediaType.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"media_type\"")
+			}
+		case "tmdb_id":
+			requiredBitSet[0] |= 1 << 4
+			if err := func() error {
+				v, err := d.Int()
+				s.TmdbID = int(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"tmdb_id\"")
+			}
+		case "tvdb_id":
+			requiredBitSet[0] |= 1 << 5
+			if err := func() error {
+				v, err := d.Int()
+				s.TvdbID = int(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"tvdb_id\"")
+			}
+		case "title":
+			requiredBitSet[0] |= 1 << 6
+			if err := func() error {
+				v, err := d.Str()
+				s.Title = string(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"title\"")
+			}
+		case "request_status":
+			requiredBitSet[0] |= 1 << 7
+			if err := func() error {
+				v, err := d.Int()
+				s.RequestStatus = int(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"request_status\"")
+			}
+		case "media_status":
+			requiredBitSet[1] |= 1 << 0
+			if err := func() error {
+				v, err := d.Int()
+				s.MediaStatus = int(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"media_status\"")
+			}
+		case "is_4k":
+			requiredBitSet[1] |= 1 << 1
+			if err := func() error {
+				v, err := d.Bool()
+				s.Is4k = bool(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"is_4k\"")
+			}
+		case "requested_by":
+			requiredBitSet[1] |= 1 << 2
+			if err := func() error {
+				v, err := d.Str()
+				s.RequestedBy = string(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"requested_by\"")
+			}
+		case "seasons":
+			requiredBitSet[1] |= 1 << 3
+			if err := func() error {
+				s.Seasons = make([]int, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem int
+					v, err := d.Int()
+					elem = int(v)
+					if err != nil {
+						return err
+					}
+					s.Seasons = append(s.Seasons, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"seasons\"")
+			}
+		case "instance_id":
+			if err := func() error {
+				s.InstanceID.Reset()
+				if err := s.InstanceID.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"instance_id\"")
+			}
+		case "instance_name":
+			if err := func() error {
+				s.InstanceName.Reset()
+				if err := s.InstanceName.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"instance_name\"")
+			}
+		case "entity_id":
+			if err := func() error {
+				s.EntityID.Reset()
+				if err := s.EntityID.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"entity_id\"")
+			}
+		case "resolved":
+			requiredBitSet[1] |= 1 << 7
+			if err := func() error {
+				v, err := d.Bool()
+				s.Resolved = bool(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"resolved\"")
+			}
+		case "unresolved_reason":
+			if err := func() error {
+				s.UnresolvedReason.Reset()
+				if err := s.UnresolvedReason.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"unresolved_reason\"")
+			}
+		case "requested_at":
+			if err := func() error {
+				s.RequestedAt.Reset()
+				if err := s.RequestedAt.Decode(d, json.DecodeDateTime); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"requested_at\"")
+			}
+		case "last_snatched_at":
+			if err := func() error {
+				s.LastSnatchedAt.Reset()
+				if err := s.LastSnatchedAt.Decode(d, json.DecodeDateTime); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"last_snatched_at\"")
+			}
+		case "last_seen_at":
+			requiredBitSet[2] |= 1 << 3
+			if err := func() error {
+				v, err := json.DecodeDateTime(d)
+				s.LastSeenAt = v
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"last_seen_at\"")
+			}
+		default:
+			return d.Skip()
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "decode SeerrRequest")
+	}
+	// Validate required fields.
+	var failures []validate.FieldError
+	for i, mask := range [3]uint8{
+		0b11111111,
+		0b10001111,
+		0b00001000,
+	} {
+		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
+			// Mask only required fields and check equality to mask using XOR.
+			//
+			// If XOR result is not zero, result is not equal to expected, so some fields are missed.
+			// Bits of fields which would be set are actually bits of missed fields.
+			missed := bits.OnesCount8(result)
+			for bitN := 0; bitN < missed; bitN++ {
+				bitIdx := bits.TrailingZeros8(result)
+				fieldIdx := i*8 + bitIdx
+				var name string
+				if fieldIdx < len(jsonFieldsNameOfSeerrRequest) {
+					name = jsonFieldsNameOfSeerrRequest[fieldIdx]
+				} else {
+					name = strconv.Itoa(fieldIdx)
+				}
+				failures = append(failures, validate.FieldError{
+					Name:  name,
+					Error: validate.ErrFieldRequired,
+				})
+				// Reset bit.
+				result &^= 1 << bitIdx
+			}
+		}
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *SeerrRequest) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *SeerrRequest) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes SeerrRequestMediaType as json.
+func (s SeerrRequestMediaType) Encode(e *jx.Encoder) {
+	e.Str(string(s))
+}
+
+// Decode decodes SeerrRequestMediaType from json.
+func (s *SeerrRequestMediaType) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode SeerrRequestMediaType to nil")
+	}
+	v, err := d.StrBytes()
+	if err != nil {
+		return err
+	}
+	// Try to use constant string.
+	switch SeerrRequestMediaType(v) {
+	case SeerrRequestMediaTypeMovie:
+		*s = SeerrRequestMediaTypeMovie
+	case SeerrRequestMediaTypeTv:
+		*s = SeerrRequestMediaTypeTv
+	default:
+		*s = SeerrRequestMediaType(v)
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s SeerrRequestMediaType) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *SeerrRequestMediaType) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode implements json.Marshaler.
+func (s *SeerrSyncResult) Encode(e *jx.Encoder) {
+	e.ObjStart()
+	s.encodeFields(e)
+	e.ObjEnd()
+}
+
+// encodeFields encodes fields.
+func (s *SeerrSyncResult) encodeFields(e *jx.Encoder) {
+	{
+		e.FieldStart("seen")
+		e.Int(s.Seen)
+	}
+	{
+		e.FieldStart("resolved")
+		e.Int(s.Resolved)
+	}
+	{
+		e.FieldStart("unresolved")
+		e.Int(s.Unresolved)
+	}
+	{
+		e.FieldStart("removed")
+		e.Int(s.Removed)
+	}
+}
+
+var jsonFieldsNameOfSeerrSyncResult = [4]string{
+	0: "seen",
+	1: "resolved",
+	2: "unresolved",
+	3: "removed",
+}
+
+// Decode decodes SeerrSyncResult from json.
+func (s *SeerrSyncResult) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode SeerrSyncResult to nil")
+	}
+	var requiredBitSet [1]uint8
+
+	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
+		switch string(k) {
+		case "seen":
+			requiredBitSet[0] |= 1 << 0
+			if err := func() error {
+				v, err := d.Int()
+				s.Seen = int(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"seen\"")
+			}
+		case "resolved":
+			requiredBitSet[0] |= 1 << 1
+			if err := func() error {
+				v, err := d.Int()
+				s.Resolved = int(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"resolved\"")
+			}
+		case "unresolved":
+			requiredBitSet[0] |= 1 << 2
+			if err := func() error {
+				v, err := d.Int()
+				s.Unresolved = int(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"unresolved\"")
+			}
+		case "removed":
+			requiredBitSet[0] |= 1 << 3
+			if err := func() error {
+				v, err := d.Int()
+				s.Removed = int(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"removed\"")
+			}
+		default:
+			return d.Skip()
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "decode SeerrSyncResult")
+	}
+	// Validate required fields.
+	var failures []validate.FieldError
+	for i, mask := range [1]uint8{
+		0b00001111,
+	} {
+		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
+			// Mask only required fields and check equality to mask using XOR.
+			//
+			// If XOR result is not zero, result is not equal to expected, so some fields are missed.
+			// Bits of fields which would be set are actually bits of missed fields.
+			missed := bits.OnesCount8(result)
+			for bitN := 0; bitN < missed; bitN++ {
+				bitIdx := bits.TrailingZeros8(result)
+				fieldIdx := i*8 + bitIdx
+				var name string
+				if fieldIdx < len(jsonFieldsNameOfSeerrSyncResult) {
+					name = jsonFieldsNameOfSeerrSyncResult[fieldIdx]
+				} else {
+					name = strconv.Itoa(fieldIdx)
+				}
+				failures = append(failures, validate.FieldError{
+					Name:  name,
+					Error: validate.ErrFieldRequired,
+				})
+				// Reset bit.
+				result &^= 1 << bitIdx
+			}
+		}
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *SeerrSyncResult) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *SeerrSyncResult) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }

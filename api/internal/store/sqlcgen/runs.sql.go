@@ -34,7 +34,7 @@ const completeRun = `-- name: CompleteRun :one
 UPDATE snatch_runs
 SET status = $3, finished_at = $4, searched_count = $5, error = $6, lease_expires_at = NULL
 WHERE id = $1 AND leased_by = $2 AND status IN ('leased', 'cancelled')
-RETURNING id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error
+RETURNING id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error, focus_entity_id, focus_group_id
 `
 
 type CompleteRunParams struct {
@@ -68,6 +68,8 @@ func (q *Queries) CompleteRun(ctx context.Context, arg CompleteRunParams) (Snatc
 		&i.FinishedAt,
 		&i.SearchedCount,
 		&i.Error,
+		&i.FocusEntityID,
+		&i.FocusGroupID,
 	)
 	return i, err
 }
@@ -76,7 +78,7 @@ const enqueueRun = `-- name: EnqueueRun :one
 
 INSERT INTO snatch_runs (id, instance_id, kind, status, queued_at)
 VALUES ($1, $2, $3, 'queued', $4)
-RETURNING id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error
+RETURNING id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error, focus_entity_id, focus_group_id
 `
 
 type EnqueueRunParams struct {
@@ -108,12 +110,14 @@ func (q *Queries) EnqueueRun(ctx context.Context, arg EnqueueRunParams) (SnatchR
 		&i.FinishedAt,
 		&i.SearchedCount,
 		&i.Error,
+		&i.FocusEntityID,
+		&i.FocusGroupID,
 	)
 	return i, err
 }
 
 const getRun = `-- name: GetRun :one
-SELECT id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error FROM snatch_runs WHERE id = $1
+SELECT id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error, focus_entity_id, focus_group_id FROM snatch_runs WHERE id = $1
 `
 
 func (q *Queries) GetRun(ctx context.Context, id uuid.UUID) (SnatchRun, error) {
@@ -131,6 +135,8 @@ func (q *Queries) GetRun(ctx context.Context, id uuid.UUID) (SnatchRun, error) {
 		&i.FinishedAt,
 		&i.SearchedCount,
 		&i.Error,
+		&i.FocusEntityID,
+		&i.FocusGroupID,
 	)
 	return i, err
 }
@@ -158,7 +164,7 @@ const heartbeatRun = `-- name: HeartbeatRun :one
 UPDATE snatch_runs
 SET lease_expires_at = $3
 WHERE id = $1 AND leased_by = $2 AND status = 'leased'
-RETURNING id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error
+RETURNING id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error, focus_entity_id, focus_group_id
 `
 
 type HeartbeatRunParams struct {
@@ -182,6 +188,8 @@ func (q *Queries) HeartbeatRun(ctx context.Context, arg HeartbeatRunParams) (Sna
 		&i.FinishedAt,
 		&i.SearchedCount,
 		&i.Error,
+		&i.FocusEntityID,
+		&i.FocusGroupID,
 	)
 	return i, err
 }
@@ -214,7 +222,7 @@ WHERE id = (
     LIMIT 1
     FOR UPDATE SKIP LOCKED
 )
-RETURNING id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error
+RETURNING id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error, focus_entity_id, focus_group_id
 `
 
 type LeaseRunParams struct {
@@ -238,12 +246,14 @@ func (q *Queries) LeaseRun(ctx context.Context, arg LeaseRunParams) (SnatchRun, 
 		&i.FinishedAt,
 		&i.SearchedCount,
 		&i.Error,
+		&i.FocusEntityID,
+		&i.FocusGroupID,
 	)
 	return i, err
 }
 
 const listRuns = `-- name: ListRuns :many
-SELECT id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error FROM snatch_runs
+SELECT id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error, focus_entity_id, focus_group_id FROM snatch_runs
 WHERE ($3::uuid IS NULL OR instance_id = $3::uuid)
 ORDER BY queued_at DESC
 LIMIT $1 OFFSET $2
@@ -276,6 +286,8 @@ func (q *Queries) ListRuns(ctx context.Context, arg ListRunsParams) ([]SnatchRun
 			&i.FinishedAt,
 			&i.SearchedCount,
 			&i.Error,
+			&i.FocusEntityID,
+			&i.FocusGroupID,
 		); err != nil {
 			return nil, err
 		}

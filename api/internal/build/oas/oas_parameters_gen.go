@@ -340,6 +340,71 @@ func decodeDeleteScheduleParams(args [1]string, argsEscaped bool, r *http.Reques
 	return params, nil
 }
 
+// DeleteSeerrLinkParams is parameters of deleteSeerrLink operation.
+type DeleteSeerrLinkParams struct {
+	LinkId uuid.UUID
+}
+
+func unpackDeleteSeerrLinkParams(packed middleware.Parameters) (params DeleteSeerrLinkParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "linkId",
+			In:   "path",
+		}
+		params.LinkId = packed[key].(uuid.UUID)
+	}
+	return params
+}
+
+func decodeDeleteSeerrLinkParams(args [1]string, argsEscaped bool, r *http.Request) (params DeleteSeerrLinkParams, _ error) {
+	// Decode path: linkId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "linkId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.LinkId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "linkId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
 // DiscoverDownloadClientsParams is parameters of discoverDownloadClients operation.
 type DiscoverDownloadClientsParams struct {
 	InstanceId uuid.UUID
@@ -593,6 +658,136 @@ func decodeGetPolicyParams(args [1]string, argsEscaped bool, r *http.Request) (p
 	}(); err != nil {
 		return params, &ogenerrors.DecodeParamError{
 			Name: "instanceId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
+// GetSeerrLinkParams is parameters of getSeerrLink operation.
+type GetSeerrLinkParams struct {
+	LinkId uuid.UUID
+}
+
+func unpackGetSeerrLinkParams(packed middleware.Parameters) (params GetSeerrLinkParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "linkId",
+			In:   "path",
+		}
+		params.LinkId = packed[key].(uuid.UUID)
+	}
+	return params
+}
+
+func decodeGetSeerrLinkParams(args [1]string, argsEscaped bool, r *http.Request) (params GetSeerrLinkParams, _ error) {
+	// Decode path: linkId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "linkId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.LinkId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "linkId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
+// ImportSeerrInstancesParams is parameters of importSeerrInstances operation.
+type ImportSeerrInstancesParams struct {
+	LinkId uuid.UUID
+}
+
+func unpackImportSeerrInstancesParams(packed middleware.Parameters) (params ImportSeerrInstancesParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "linkId",
+			In:   "path",
+		}
+		params.LinkId = packed[key].(uuid.UUID)
+	}
+	return params
+}
+
+func decodeImportSeerrInstancesParams(args [1]string, argsEscaped bool, r *http.Request) (params ImportSeerrInstancesParams, _ error) {
+	// Decode path: linkId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "linkId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.LinkId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "linkId",
 			In:   "path",
 			Err:  err,
 		}
@@ -1073,6 +1268,71 @@ func decodeListRunsParams(args [0]string, argsEscaped bool, r *http.Request) (pa
 	return params, nil
 }
 
+// SyncSeerrLinkParams is parameters of syncSeerrLink operation.
+type SyncSeerrLinkParams struct {
+	LinkId uuid.UUID
+}
+
+func unpackSyncSeerrLinkParams(packed middleware.Parameters) (params SyncSeerrLinkParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "linkId",
+			In:   "path",
+		}
+		params.LinkId = packed[key].(uuid.UUID)
+	}
+	return params
+}
+
+func decodeSyncSeerrLinkParams(args [1]string, argsEscaped bool, r *http.Request) (params SyncSeerrLinkParams, _ error) {
+	// Decode path: linkId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "linkId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.LinkId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "linkId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
 // TestDownloadClientParams is parameters of testDownloadClient operation.
 type TestDownloadClientParams struct {
 	ClientId uuid.UUID
@@ -1196,6 +1456,71 @@ func decodeTestInstanceParams(args [1]string, argsEscaped bool, r *http.Request)
 	}(); err != nil {
 		return params, &ogenerrors.DecodeParamError{
 			Name: "instanceId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
+// TestSeerrLinkParams is parameters of testSeerrLink operation.
+type TestSeerrLinkParams struct {
+	LinkId uuid.UUID
+}
+
+func unpackTestSeerrLinkParams(packed middleware.Parameters) (params TestSeerrLinkParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "linkId",
+			In:   "path",
+		}
+		params.LinkId = packed[key].(uuid.UUID)
+	}
+	return params
+}
+
+func decodeTestSeerrLinkParams(args [1]string, argsEscaped bool, r *http.Request) (params TestSeerrLinkParams, _ error) {
+	// Decode path: linkId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "linkId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.LinkId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "linkId",
 			In:   "path",
 			Err:  err,
 		}
@@ -1521,6 +1846,71 @@ func decodeUpdateScheduleParams(args [1]string, argsEscaped bool, r *http.Reques
 	}(); err != nil {
 		return params, &ogenerrors.DecodeParamError{
 			Name: "scheduleId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
+// UpdateSeerrLinkParams is parameters of updateSeerrLink operation.
+type UpdateSeerrLinkParams struct {
+	LinkId uuid.UUID
+}
+
+func unpackUpdateSeerrLinkParams(packed middleware.Parameters) (params UpdateSeerrLinkParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "linkId",
+			In:   "path",
+		}
+		params.LinkId = packed[key].(uuid.UUID)
+	}
+	return params
+}
+
+func decodeUpdateSeerrLinkParams(args [1]string, argsEscaped bool, r *http.Request) (params UpdateSeerrLinkParams, _ error) {
+	// Decode path: linkId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "linkId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.LinkId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "linkId",
 			In:   "path",
 			Err:  err,
 		}

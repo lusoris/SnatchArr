@@ -46,3 +46,11 @@ func (s *Problem) setDefaults() {
 		s.Type = val
 	}
 }
+
+// setDefaults set default value of fields.
+func (s *SeerrLinkInput) setDefaults() {
+	{
+		val := bool(true)
+		s.Enabled.SetTo(val)
+	}
+}

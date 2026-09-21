@@ -92,6 +92,43 @@ type Schedule struct {
 	UpdatedAt  time.Time
 }
 
+type SeerrLink struct {
+	ID               uuid.UUID
+	Name             string
+	BaseUrl          string
+	ApiKeyEnc        []byte
+	Enabled          bool
+	SonarrInstanceID *uuid.UUID
+	RadarrInstanceID *uuid.UUID
+	LastSeenVersion  *string
+	LastCheckAt      *time.Time
+	LastError        *string
+	LastSyncAt       *time.Time
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
+type SeerrRequest struct {
+	LinkID         uuid.UUID
+	RequestID      int32
+	MediaType      string
+	TmdbID         int32
+	TvdbID         int32
+	Title          string
+	RequestStatus  int32
+	MediaStatus    int32
+	Is4k           bool
+	RequestedBy    string
+	Seasons        []int32
+	SeerrServerID  *int32
+	InstanceID     *uuid.UUID
+	EntityID       *int64
+	RequestedAt    *time.Time
+	LastSnatchedAt *time.Time
+	LastSeenAt     time.Time
+	UpdatedAt      time.Time
+}
+
 type Session struct {
 	ID        string
 	Data      []byte
@@ -155,6 +192,8 @@ type SnatchRun struct {
 	FinishedAt     *time.Time
 	SearchedCount  int32
 	Error          *string
+	FocusEntityID  *int64
+	FocusGroupID   *int64
 }
 
 type User struct {

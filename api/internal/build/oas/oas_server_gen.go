@@ -38,6 +38,12 @@ type Handler interface {
 	//
 	// POST /schedules
 	CreateSchedule(ctx context.Context, req *ScheduleInput) (*Schedule, error)
+	// CreateSeerrLink implements createSeerrLink operation.
+	//
+	// Add a Seerr link.
+	//
+	// POST /seerr
+	CreateSeerrLink(ctx context.Context, req *SeerrLinkInput) (*SeerrLink, error)
 	// DeleteDownloadClient implements deleteDownloadClient operation.
 	//
 	// Delete a download client.
@@ -62,6 +68,12 @@ type Handler interface {
 	//
 	// DELETE /schedules/{scheduleId}
 	DeleteSchedule(ctx context.Context, params DeleteScheduleParams) error
+	// DeleteSeerrLink implements deleteSeerrLink operation.
+	//
+	// Delete a Seerr link and its cached requests.
+	//
+	// DELETE /seerr/{linkId}
+	DeleteSeerrLink(ctx context.Context, params DeleteSeerrLinkParams) error
 	// DiscoverDownloadClients implements discoverDownloadClients operation.
 	//
 	// Import the download clients this instance has configured.
@@ -98,6 +110,12 @@ type Handler interface {
 	//
 	// GET /instances/{instanceId}/policy
 	GetPolicy(ctx context.Context, params GetPolicyParams) (*SnatchPolicy, error)
+	// GetSeerrLink implements getSeerrLink operation.
+	//
+	// Get one Seerr link.
+	//
+	// GET /seerr/{linkId}
+	GetSeerrLink(ctx context.Context, params GetSeerrLinkParams) (*SeerrLink, error)
 	// GetSession implements getSession operation.
 	//
 	// Current session, user and CSRF token.
@@ -122,6 +140,12 @@ type Handler interface {
 	//
 	// GET /system/status
 	GetSystemStatus(ctx context.Context) (*SystemStatus, error)
+	// ImportSeerrInstances implements importSeerrInstances operation.
+	//
+	// Create instances from the Sonarr/Radarr servers configured in Seerr.
+	//
+	// POST /seerr/{linkId}/import-instances
+	ImportSeerrInstances(ctx context.Context, params ImportSeerrInstancesParams) (*SeerrImportResult, error)
 	// ListDownloadClients implements listDownloadClients operation.
 	//
 	// List download clients (secrets are never returned).
@@ -152,6 +176,18 @@ type Handler interface {
 	//
 	// GET /schedules
 	ListSchedules(ctx context.Context) ([]Schedule, error)
+	// ListSeerrLinks implements listSeerrLinks operation.
+	//
+	// List Seerr links (API keys are never returned).
+	//
+	// GET /seerr
+	ListSeerrLinks(ctx context.Context) ([]SeerrLink, error)
+	// ListSeerrRequests implements listSeerrRequests operation.
+	//
+	// Cached approved-but-unavailable requests with their snatch status.
+	//
+	// GET /seerr/requests
+	ListSeerrRequests(ctx context.Context) ([]SeerrRequest, error)
 	// Login implements login operation.
 	//
 	// Start a session with username and password.
@@ -170,6 +206,12 @@ type Handler interface {
 	//
 	// POST /state/reset
 	ResetState(ctx context.Context, req OptStateReset) (*StateResetResult, error)
+	// SyncSeerrLink implements syncSeerrLink operation.
+	//
+	// Refresh the request cache now (also runs every five minutes).
+	//
+	// POST /seerr/{linkId}/sync
+	SyncSeerrLink(ctx context.Context, params SyncSeerrLinkParams) (*SeerrSyncResult, error)
 	// TestDownloadClient implements testDownloadClient operation.
 	//
 	// Observe a stored download client now and record the outcome.
@@ -194,6 +236,18 @@ type Handler interface {
 	//
 	// POST /instances/test
 	TestInstanceInput(ctx context.Context, req *InstanceInput) (*ProbeResult, error)
+	// TestSeerrLink implements testSeerrLink operation.
+	//
+	// Probe a stored Seerr link and record the outcome.
+	//
+	// POST /seerr/{linkId}/test
+	TestSeerrLink(ctx context.Context, params TestSeerrLinkParams) (*ProbeResult, error)
+	// TestSeerrLinkInput implements testSeerrLinkInput operation.
+	//
+	// Probe Seerr credentials that are not stored yet.
+	//
+	// POST /seerr/test
+	TestSeerrLinkInput(ctx context.Context, req *SeerrLinkInput) (*ProbeResult, error)
 	// TriggerRun implements triggerRun operation.
 	//
 	// Quickie - queue a snatch now (ignores the refractory period).
@@ -224,6 +278,12 @@ type Handler interface {
 	//
 	// PUT /schedules/{scheduleId}
 	UpdateSchedule(ctx context.Context, req *ScheduleInput, params UpdateScheduleParams) (*Schedule, error)
+	// UpdateSeerrLink implements updateSeerrLink operation.
+	//
+	// Update a Seerr link (omit api_key to keep it).
+	//
+	// PUT /seerr/{linkId}
+	UpdateSeerrLink(ctx context.Context, req *SeerrLinkInput, params UpdateSeerrLinkParams) (*SeerrLink, error)
 	// UpdateSettings implements updateSettings operation.
 	//
 	// Replace the runtime settings.

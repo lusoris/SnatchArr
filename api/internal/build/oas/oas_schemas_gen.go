@@ -253,6 +253,9 @@ type DeleteInstanceNoContent struct{}
 // DeleteScheduleNoContent is response for DeleteSchedule operation.
 type DeleteScheduleNoContent struct{}
 
+// DeleteSeerrLinkNoContent is response for DeleteSeerrLink operation.
+type DeleteSeerrLinkNoContent struct{}
+
 // Ref: #/components/schemas/DiscoveryResult
 type DiscoveryResult struct {
 	Imported    int      `json:"imported"`
@@ -1246,6 +1249,7 @@ type InstanceSource string
 const (
 	InstanceSourceManual    InstanceSource = "manual"
 	InstanceSourceConfigarr InstanceSource = "configarr"
+	InstanceSourceSeerr     InstanceSource = "seerr"
 )
 
 // AllValues returns all InstanceSource values.
@@ -1253,6 +1257,7 @@ func (InstanceSource) AllValues() []InstanceSource {
 	return []InstanceSource{
 		InstanceSourceManual,
 		InstanceSourceConfigarr,
+		InstanceSourceSeerr,
 	}
 }
 
@@ -1262,6 +1267,8 @@ func (s InstanceSource) MarshalText() ([]byte, error) {
 	case InstanceSourceManual:
 		return []byte(s), nil
 	case InstanceSourceConfigarr:
+		return []byte(s), nil
+	case InstanceSourceSeerr:
 		return []byte(s), nil
 	default:
 		return nil, errors.Errorf("invalid value: %q", s)
@@ -1276,6 +1283,9 @@ func (s *InstanceSource) UnmarshalText(data []byte) error {
 		return nil
 	case InstanceSourceConfigarr:
 		*s = InstanceSourceConfigarr
+		return nil
+	case InstanceSourceSeerr:
+		*s = InstanceSourceSeerr
 		return nil
 	default:
 		return errors.Errorf("invalid value: %q", data)
@@ -2366,6 +2376,558 @@ func (s *ScheduleInputAction) UnmarshalText(data []byte) error {
 	default:
 		return errors.Errorf("invalid value: %q", data)
 	}
+}
+
+// Ref: #/components/schemas/SeerrImportResult
+type SeerrImportResult struct {
+	Created []string `json:"created"`
+	Skipped []string `json:"skipped"`
+}
+
+// GetCreated returns the value of Created.
+func (s *SeerrImportResult) GetCreated() []string {
+	return s.Created
+}
+
+// GetSkipped returns the value of Skipped.
+func (s *SeerrImportResult) GetSkipped() []string {
+	return s.Skipped
+}
+
+// SetCreated sets the value of Created.
+func (s *SeerrImportResult) SetCreated(val []string) {
+	s.Created = val
+}
+
+// SetSkipped sets the value of Skipped.
+func (s *SeerrImportResult) SetSkipped(val []string) {
+	s.Skipped = val
+}
+
+// Ref: #/components/schemas/SeerrLink
+type SeerrLink struct {
+	ID      uuid.UUID `json:"id"`
+	Name    string    `json:"name"`
+	BaseURL string    `json:"base_url"`
+	Enabled bool      `json:"enabled"`
+	// Fallback instance for TV requests whose Seerr server cannot be matched by URL.
+	SonarrInstanceID OptUUID `json:"sonarr_instance_id"`
+	// Fallback instance for movie requests whose Seerr server cannot be matched by URL.
+	RadarrInstanceID OptUUID     `json:"radarr_instance_id"`
+	LastSeenVersion  OptString   `json:"last_seen_version"`
+	LastCheckAt      OptDateTime `json:"last_check_at"`
+	LastError        OptString   `json:"last_error"`
+	LastSyncAt       OptDateTime `json:"last_sync_at"`
+	CreatedAt        time.Time   `json:"created_at"`
+	UpdatedAt        time.Time   `json:"updated_at"`
+}
+
+// GetID returns the value of ID.
+func (s *SeerrLink) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetName returns the value of Name.
+func (s *SeerrLink) GetName() string {
+	return s.Name
+}
+
+// GetBaseURL returns the value of BaseURL.
+func (s *SeerrLink) GetBaseURL() string {
+	return s.BaseURL
+}
+
+// GetEnabled returns the value of Enabled.
+func (s *SeerrLink) GetEnabled() bool {
+	return s.Enabled
+}
+
+// GetSonarrInstanceID returns the value of SonarrInstanceID.
+func (s *SeerrLink) GetSonarrInstanceID() OptUUID {
+	return s.SonarrInstanceID
+}
+
+// GetRadarrInstanceID returns the value of RadarrInstanceID.
+func (s *SeerrLink) GetRadarrInstanceID() OptUUID {
+	return s.RadarrInstanceID
+}
+
+// GetLastSeenVersion returns the value of LastSeenVersion.
+func (s *SeerrLink) GetLastSeenVersion() OptString {
+	return s.LastSeenVersion
+}
+
+// GetLastCheckAt returns the value of LastCheckAt.
+func (s *SeerrLink) GetLastCheckAt() OptDateTime {
+	return s.LastCheckAt
+}
+
+// GetLastError returns the value of LastError.
+func (s *SeerrLink) GetLastError() OptString {
+	return s.LastError
+}
+
+// GetLastSyncAt returns the value of LastSyncAt.
+func (s *SeerrLink) GetLastSyncAt() OptDateTime {
+	return s.LastSyncAt
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *SeerrLink) GetCreatedAt() time.Time {
+	return s.CreatedAt
+}
+
+// GetUpdatedAt returns the value of UpdatedAt.
+func (s *SeerrLink) GetUpdatedAt() time.Time {
+	return s.UpdatedAt
+}
+
+// SetID sets the value of ID.
+func (s *SeerrLink) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetName sets the value of Name.
+func (s *SeerrLink) SetName(val string) {
+	s.Name = val
+}
+
+// SetBaseURL sets the value of BaseURL.
+func (s *SeerrLink) SetBaseURL(val string) {
+	s.BaseURL = val
+}
+
+// SetEnabled sets the value of Enabled.
+func (s *SeerrLink) SetEnabled(val bool) {
+	s.Enabled = val
+}
+
+// SetSonarrInstanceID sets the value of SonarrInstanceID.
+func (s *SeerrLink) SetSonarrInstanceID(val OptUUID) {
+	s.SonarrInstanceID = val
+}
+
+// SetRadarrInstanceID sets the value of RadarrInstanceID.
+func (s *SeerrLink) SetRadarrInstanceID(val OptUUID) {
+	s.RadarrInstanceID = val
+}
+
+// SetLastSeenVersion sets the value of LastSeenVersion.
+func (s *SeerrLink) SetLastSeenVersion(val OptString) {
+	s.LastSeenVersion = val
+}
+
+// SetLastCheckAt sets the value of LastCheckAt.
+func (s *SeerrLink) SetLastCheckAt(val OptDateTime) {
+	s.LastCheckAt = val
+}
+
+// SetLastError sets the value of LastError.
+func (s *SeerrLink) SetLastError(val OptString) {
+	s.LastError = val
+}
+
+// SetLastSyncAt sets the value of LastSyncAt.
+func (s *SeerrLink) SetLastSyncAt(val OptDateTime) {
+	s.LastSyncAt = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *SeerrLink) SetCreatedAt(val time.Time) {
+	s.CreatedAt = val
+}
+
+// SetUpdatedAt sets the value of UpdatedAt.
+func (s *SeerrLink) SetUpdatedAt(val time.Time) {
+	s.UpdatedAt = val
+}
+
+// Ref: #/components/schemas/SeerrLinkInput
+type SeerrLinkInput struct {
+	Name    string `json:"name"`
+	BaseURL string `json:"base_url"`
+	// Required on create; omit on update to keep the stored key.
+	APIKey           OptString `json:"api_key"`
+	Enabled          OptBool   `json:"enabled"`
+	SonarrInstanceID OptUUID   `json:"sonarr_instance_id"`
+	RadarrInstanceID OptUUID   `json:"radarr_instance_id"`
+}
+
+// GetName returns the value of Name.
+func (s *SeerrLinkInput) GetName() string {
+	return s.Name
+}
+
+// GetBaseURL returns the value of BaseURL.
+func (s *SeerrLinkInput) GetBaseURL() string {
+	return s.BaseURL
+}
+
+// GetAPIKey returns the value of APIKey.
+func (s *SeerrLinkInput) GetAPIKey() OptString {
+	return s.APIKey
+}
+
+// GetEnabled returns the value of Enabled.
+func (s *SeerrLinkInput) GetEnabled() OptBool {
+	return s.Enabled
+}
+
+// GetSonarrInstanceID returns the value of SonarrInstanceID.
+func (s *SeerrLinkInput) GetSonarrInstanceID() OptUUID {
+	return s.SonarrInstanceID
+}
+
+// GetRadarrInstanceID returns the value of RadarrInstanceID.
+func (s *SeerrLinkInput) GetRadarrInstanceID() OptUUID {
+	return s.RadarrInstanceID
+}
+
+// SetName sets the value of Name.
+func (s *SeerrLinkInput) SetName(val string) {
+	s.Name = val
+}
+
+// SetBaseURL sets the value of BaseURL.
+func (s *SeerrLinkInput) SetBaseURL(val string) {
+	s.BaseURL = val
+}
+
+// SetAPIKey sets the value of APIKey.
+func (s *SeerrLinkInput) SetAPIKey(val OptString) {
+	s.APIKey = val
+}
+
+// SetEnabled sets the value of Enabled.
+func (s *SeerrLinkInput) SetEnabled(val OptBool) {
+	s.Enabled = val
+}
+
+// SetSonarrInstanceID sets the value of SonarrInstanceID.
+func (s *SeerrLinkInput) SetSonarrInstanceID(val OptUUID) {
+	s.SonarrInstanceID = val
+}
+
+// SetRadarrInstanceID sets the value of RadarrInstanceID.
+func (s *SeerrLinkInput) SetRadarrInstanceID(val OptUUID) {
+	s.RadarrInstanceID = val
+}
+
+// Ref: #/components/schemas/SeerrRequest
+type SeerrRequest struct {
+	LinkID    uuid.UUID             `json:"link_id"`
+	LinkName  string                `json:"link_name"`
+	RequestID int                   `json:"request_id"`
+	MediaType SeerrRequestMediaType `json:"media_type"`
+	TmdbID    int                   `json:"tmdb_id"`
+	TvdbID    int                   `json:"tvdb_id"`
+	Title     string                `json:"title"`
+	// Seerr MediaRequestStatus: 1 pending, 2 approved, 3 declined, 4 failed, 5 completed.
+	RequestStatus int `json:"request_status"`
+	// Seerr MediaStatus: 1 unknown, 2 pending, 3 processing, 4 partially available, 5 available.
+	MediaStatus  int       `json:"media_status"`
+	Is4k         bool      `json:"is_4k"`
+	RequestedBy  string    `json:"requested_by"`
+	Seasons      []int     `json:"seasons"`
+	InstanceID   OptUUID   `json:"instance_id"`
+	InstanceName OptString `json:"instance_name"`
+	// Radarr movie id or Sonarr series id in the resolved instance.
+	EntityID OptInt64 `json:"entity_id"`
+	// True when the request maps to an instance and a library entity and is snatched first.
+	Resolved         bool        `json:"resolved"`
+	UnresolvedReason OptString   `json:"unresolved_reason"`
+	RequestedAt      OptDateTime `json:"requested_at"`
+	LastSnatchedAt   OptDateTime `json:"last_snatched_at"`
+	LastSeenAt       time.Time   `json:"last_seen_at"`
+}
+
+// GetLinkID returns the value of LinkID.
+func (s *SeerrRequest) GetLinkID() uuid.UUID {
+	return s.LinkID
+}
+
+// GetLinkName returns the value of LinkName.
+func (s *SeerrRequest) GetLinkName() string {
+	return s.LinkName
+}
+
+// GetRequestID returns the value of RequestID.
+func (s *SeerrRequest) GetRequestID() int {
+	return s.RequestID
+}
+
+// GetMediaType returns the value of MediaType.
+func (s *SeerrRequest) GetMediaType() SeerrRequestMediaType {
+	return s.MediaType
+}
+
+// GetTmdbID returns the value of TmdbID.
+func (s *SeerrRequest) GetTmdbID() int {
+	return s.TmdbID
+}
+
+// GetTvdbID returns the value of TvdbID.
+func (s *SeerrRequest) GetTvdbID() int {
+	return s.TvdbID
+}
+
+// GetTitle returns the value of Title.
+func (s *SeerrRequest) GetTitle() string {
+	return s.Title
+}
+
+// GetRequestStatus returns the value of RequestStatus.
+func (s *SeerrRequest) GetRequestStatus() int {
+	return s.RequestStatus
+}
+
+// GetMediaStatus returns the value of MediaStatus.
+func (s *SeerrRequest) GetMediaStatus() int {
+	return s.MediaStatus
+}
+
+// GetIs4k returns the value of Is4k.
+func (s *SeerrRequest) GetIs4k() bool {
+	return s.Is4k
+}
+
+// GetRequestedBy returns the value of RequestedBy.
+func (s *SeerrRequest) GetRequestedBy() string {
+	return s.RequestedBy
+}
+
+// GetSeasons returns the value of Seasons.
+func (s *SeerrRequest) GetSeasons() []int {
+	return s.Seasons
+}
+
+// GetInstanceID returns the value of InstanceID.
+func (s *SeerrRequest) GetInstanceID() OptUUID {
+	return s.InstanceID
+}
+
+// GetInstanceName returns the value of InstanceName.
+func (s *SeerrRequest) GetInstanceName() OptString {
+	return s.InstanceName
+}
+
+// GetEntityID returns the value of EntityID.
+func (s *SeerrRequest) GetEntityID() OptInt64 {
+	return s.EntityID
+}
+
+// GetResolved returns the value of Resolved.
+func (s *SeerrRequest) GetResolved() bool {
+	return s.Resolved
+}
+
+// GetUnresolvedReason returns the value of UnresolvedReason.
+func (s *SeerrRequest) GetUnresolvedReason() OptString {
+	return s.UnresolvedReason
+}
+
+// GetRequestedAt returns the value of RequestedAt.
+func (s *SeerrRequest) GetRequestedAt() OptDateTime {
+	return s.RequestedAt
+}
+
+// GetLastSnatchedAt returns the value of LastSnatchedAt.
+func (s *SeerrRequest) GetLastSnatchedAt() OptDateTime {
+	return s.LastSnatchedAt
+}
+
+// GetLastSeenAt returns the value of LastSeenAt.
+func (s *SeerrRequest) GetLastSeenAt() time.Time {
+	return s.LastSeenAt
+}
+
+// SetLinkID sets the value of LinkID.
+func (s *SeerrRequest) SetLinkID(val uuid.UUID) {
+	s.LinkID = val
+}
+
+// SetLinkName sets the value of LinkName.
+func (s *SeerrRequest) SetLinkName(val string) {
+	s.LinkName = val
+}
+
+// SetRequestID sets the value of RequestID.
+func (s *SeerrRequest) SetRequestID(val int) {
+	s.RequestID = val
+}
+
+// SetMediaType sets the value of MediaType.
+func (s *SeerrRequest) SetMediaType(val SeerrRequestMediaType) {
+	s.MediaType = val
+}
+
+// SetTmdbID sets the value of TmdbID.
+func (s *SeerrRequest) SetTmdbID(val int) {
+	s.TmdbID = val
+}
+
+// SetTvdbID sets the value of TvdbID.
+func (s *SeerrRequest) SetTvdbID(val int) {
+	s.TvdbID = val
+}
+
+// SetTitle sets the value of Title.
+func (s *SeerrRequest) SetTitle(val string) {
+	s.Title = val
+}
+
+// SetRequestStatus sets the value of RequestStatus.
+func (s *SeerrRequest) SetRequestStatus(val int) {
+	s.RequestStatus = val
+}
+
+// SetMediaStatus sets the value of MediaStatus.
+func (s *SeerrRequest) SetMediaStatus(val int) {
+	s.MediaStatus = val
+}
+
+// SetIs4k sets the value of Is4k.
+func (s *SeerrRequest) SetIs4k(val bool) {
+	s.Is4k = val
+}
+
+// SetRequestedBy sets the value of RequestedBy.
+func (s *SeerrRequest) SetRequestedBy(val string) {
+	s.RequestedBy = val
+}
+
+// SetSeasons sets the value of Seasons.
+func (s *SeerrRequest) SetSeasons(val []int) {
+	s.Seasons = val
+}
+
+// SetInstanceID sets the value of InstanceID.
+func (s *SeerrRequest) SetInstanceID(val OptUUID) {
+	s.InstanceID = val
+}
+
+// SetInstanceName sets the value of InstanceName.
+func (s *SeerrRequest) SetInstanceName(val OptString) {
+	s.InstanceName = val
+}
+
+// SetEntityID sets the value of EntityID.
+func (s *SeerrRequest) SetEntityID(val OptInt64) {
+	s.EntityID = val
+}
+
+// SetResolved sets the value of Resolved.
+func (s *SeerrRequest) SetResolved(val bool) {
+	s.Resolved = val
+}
+
+// SetUnresolvedReason sets the value of UnresolvedReason.
+func (s *SeerrRequest) SetUnresolvedReason(val OptString) {
+	s.UnresolvedReason = val
+}
+
+// SetRequestedAt sets the value of RequestedAt.
+func (s *SeerrRequest) SetRequestedAt(val OptDateTime) {
+	s.RequestedAt = val
+}
+
+// SetLastSnatchedAt sets the value of LastSnatchedAt.
+func (s *SeerrRequest) SetLastSnatchedAt(val OptDateTime) {
+	s.LastSnatchedAt = val
+}
+
+// SetLastSeenAt sets the value of LastSeenAt.
+func (s *SeerrRequest) SetLastSeenAt(val time.Time) {
+	s.LastSeenAt = val
+}
+
+type SeerrRequestMediaType string
+
+const (
+	SeerrRequestMediaTypeMovie SeerrRequestMediaType = "movie"
+	SeerrRequestMediaTypeTv    SeerrRequestMediaType = "tv"
+)
+
+// AllValues returns all SeerrRequestMediaType values.
+func (SeerrRequestMediaType) AllValues() []SeerrRequestMediaType {
+	return []SeerrRequestMediaType{
+		SeerrRequestMediaTypeMovie,
+		SeerrRequestMediaTypeTv,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s SeerrRequestMediaType) MarshalText() ([]byte, error) {
+	switch s {
+	case SeerrRequestMediaTypeMovie:
+		return []byte(s), nil
+	case SeerrRequestMediaTypeTv:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *SeerrRequestMediaType) UnmarshalText(data []byte) error {
+	switch SeerrRequestMediaType(data) {
+	case SeerrRequestMediaTypeMovie:
+		*s = SeerrRequestMediaTypeMovie
+		return nil
+	case SeerrRequestMediaTypeTv:
+		*s = SeerrRequestMediaTypeTv
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/SeerrSyncResult
+type SeerrSyncResult struct {
+	Seen       int `json:"seen"`
+	Resolved   int `json:"resolved"`
+	Unresolved int `json:"unresolved"`
+	Removed    int `json:"removed"`
+}
+
+// GetSeen returns the value of Seen.
+func (s *SeerrSyncResult) GetSeen() int {
+	return s.Seen
+}
+
+// GetResolved returns the value of Resolved.
+func (s *SeerrSyncResult) GetResolved() int {
+	return s.Resolved
+}
+
+// GetUnresolved returns the value of Unresolved.
+func (s *SeerrSyncResult) GetUnresolved() int {
+	return s.Unresolved
+}
+
+// GetRemoved returns the value of Removed.
+func (s *SeerrSyncResult) GetRemoved() int {
+	return s.Removed
+}
+
+// SetSeen sets the value of Seen.
+func (s *SeerrSyncResult) SetSeen(val int) {
+	s.Seen = val
+}
+
+// SetResolved sets the value of Resolved.
+func (s *SeerrSyncResult) SetResolved(val int) {
+	s.Resolved = val
+}
+
+// SetUnresolved sets the value of Unresolved.
+func (s *SeerrSyncResult) SetUnresolved(val int) {
+	s.Unresolved = val
+}
+
+// SetRemoved sets the value of Removed.
+func (s *SeerrSyncResult) SetRemoved(val int) {
+	s.Removed = val
 }
 
 // Ref: #/components/schemas/Session

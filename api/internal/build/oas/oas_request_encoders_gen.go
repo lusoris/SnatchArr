@@ -66,6 +66,20 @@ func encodeCreateScheduleRequest(
 	return nil
 }
 
+func encodeCreateSeerrLinkRequest(
+	req *SeerrLinkInput,
+	r *http.Request,
+) error {
+	const contentType = "application/json"
+	e := new(jx.Encoder)
+	{
+		req.Encode(e)
+	}
+	encoded := e.Bytes()
+	ht.SetBody(r, bytes.NewReader(encoded), contentType)
+	return nil
+}
+
 func encodeLoginRequest(
 	req *LoginRequest,
 	r *http.Request,
@@ -116,6 +130,20 @@ func encodeTestDownloadClientInputRequest(
 
 func encodeTestInstanceInputRequest(
 	req *InstanceInput,
+	r *http.Request,
+) error {
+	const contentType = "application/json"
+	e := new(jx.Encoder)
+	{
+		req.Encode(e)
+	}
+	encoded := e.Bytes()
+	ht.SetBody(r, bytes.NewReader(encoded), contentType)
+	return nil
+}
+
+func encodeTestSeerrLinkInputRequest(
+	req *SeerrLinkInput,
 	r *http.Request,
 ) error {
 	const contentType = "application/json"
@@ -186,6 +214,20 @@ func encodeUpdatePolicyRequest(
 
 func encodeUpdateScheduleRequest(
 	req *ScheduleInput,
+	r *http.Request,
+) error {
+	const contentType = "application/json"
+	e := new(jx.Encoder)
+	{
+		req.Encode(e)
+	}
+	encoded := e.Bytes()
+	ht.SetBody(r, bytes.NewReader(encoded), contentType)
+	return nil
+}
+
+func encodeUpdateSeerrLinkRequest(
+	req *SeerrLinkInput,
 	r *http.Request,
 ) error {
 	const contentType = "application/json"

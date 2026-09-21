@@ -33,6 +33,7 @@ same intent, none of the code.
 - [Concepts](concepts.md): snatches, afterglow, stamina, foreplay, quickies.
 - [Configuration](configuration.md): environment, profiles, Configarr link.
 - [Download clients](download-clients.md): discovery, backpressure, bandwidth pacing.
+- [Seerr](seerr.md): requests snatched first, request dashboard, instance import.
 - [API](api.md): the OpenAPI contract and how to talk to it.
 - [Architecture decisions](adr/README.md): why it is built the way it is.
 

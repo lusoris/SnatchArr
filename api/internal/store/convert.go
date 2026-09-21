@@ -7,6 +7,8 @@ package store
 import (
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
 )
@@ -103,6 +105,46 @@ func SettingsFromRow(r sqlcgen.Setting) domain.Settings {
 		GlobalHourlyCap:      int(r.GlobalHourlyCap),
 		UpdatedAt:            r.UpdatedAt,
 	}
+}
+
+// SeerrLinkFromRow converts a row; the API key is never carried.
+func SeerrLinkFromRow(r sqlcgen.SeerrLink) domain.SeerrLink {
+	return domain.SeerrLink{
+		ID: r.ID, Name: r.Name, BaseURL: r.BaseUrl, Enabled: r.Enabled,
+		SonarrInstanceID: r.SonarrInstanceID, RadarrInstanceID: r.RadarrInstanceID,
+		LastSeenVersion: deref(r.LastSeenVersion), LastCheckAt: r.LastCheckAt, LastError: deref(r.LastError),
+		LastSyncAt: r.LastSyncAt, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+	}
+}
+
+// SeerrRequestFromRow converts a cached request row.
+func SeerrRequestFromRow(r sqlcgen.SeerrRequest) domain.SeerrRequest {
+	return seerrRequest(r.LinkID, r.RequestID, r.MediaType, r.TmdbID, r.TvdbID, r.Title, r.RequestStatus, r.MediaStatus, r.Is4k,
+		r.RequestedBy, r.Seasons, r.SeerrServerID, r.InstanceID, r.EntityID, r.RequestedAt, r.LastSnatchedAt, r.LastSeenAt, r.UpdatedAt)
+}
+
+// SeerrRequestFromListRow converts a dashboard row (same columns plus names).
+func SeerrRequestFromListRow(r sqlcgen.ListSeerrRequestsRow) domain.SeerrRequest {
+	return seerrRequest(r.LinkID, r.RequestID, r.MediaType, r.TmdbID, r.TvdbID, r.Title, r.RequestStatus, r.MediaStatus, r.Is4k,
+		r.RequestedBy, r.Seasons, r.SeerrServerID, r.InstanceID, r.EntityID, r.RequestedAt, r.LastSnatchedAt, r.LastSeenAt, r.UpdatedAt)
+}
+
+func seerrRequest(linkID uuid.UUID, requestID int32, mediaType string, tmdb, tvdb int32, title string, reqStatus, mediaStatus int32, is4k bool,
+	requestedBy string, seasons []int32, serverID *int32, instanceID *uuid.UUID, entityID *int64, requestedAt, lastSnatched *time.Time, lastSeen, updated time.Time,
+) domain.SeerrRequest {
+	out := domain.SeerrRequest{
+		LinkID: linkID, RequestID: int(requestID), MediaType: domain.SeerrMediaType(mediaType), TmdbID: int(tmdb), TvdbID: int(tvdb),
+		Title: title, RequestStatus: int(reqStatus), MediaStatus: int(mediaStatus), Is4K: is4k, RequestedBy: requestedBy,
+		InstanceID: instanceID, EntityID: entityID, RequestedAt: requestedAt, LastSnatchedAt: lastSnatched, LastSeenAt: lastSeen, UpdatedAt: updated,
+	}
+	if serverID != nil {
+		out.SeerrServerID = int(*serverID)
+	}
+	out.Seasons = make([]int, 0, len(seasons))
+	for _, s := range seasons {
+		out.Seasons = append(out.Seasons, int(s))
+	}
+	return out
 }
 
 // DownloadClientFromRow converts a row to the domain type. The secret is never carried.

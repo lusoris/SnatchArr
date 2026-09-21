@@ -58,6 +58,15 @@ func (UnimplementedHandler) CreateSchedule(ctx context.Context, req *ScheduleInp
 	return r, ht.ErrNotImplemented
 }
 
+// CreateSeerrLink implements createSeerrLink operation.
+//
+// Add a Seerr link.
+//
+// POST /seerr
+func (UnimplementedHandler) CreateSeerrLink(ctx context.Context, req *SeerrLinkInput) (r *SeerrLink, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // DeleteDownloadClient implements deleteDownloadClient operation.
 //
 // Delete a download client.
@@ -91,6 +100,15 @@ func (UnimplementedHandler) DeleteInstanceEvents(ctx context.Context, params Del
 //
 // DELETE /schedules/{scheduleId}
 func (UnimplementedHandler) DeleteSchedule(ctx context.Context, params DeleteScheduleParams) error {
+	return ht.ErrNotImplemented
+}
+
+// DeleteSeerrLink implements deleteSeerrLink operation.
+//
+// Delete a Seerr link and its cached requests.
+//
+// DELETE /seerr/{linkId}
+func (UnimplementedHandler) DeleteSeerrLink(ctx context.Context, params DeleteSeerrLinkParams) error {
 	return ht.ErrNotImplemented
 }
 
@@ -148,6 +166,15 @@ func (UnimplementedHandler) GetPolicy(ctx context.Context, params GetPolicyParam
 	return r, ht.ErrNotImplemented
 }
 
+// GetSeerrLink implements getSeerrLink operation.
+//
+// Get one Seerr link.
+//
+// GET /seerr/{linkId}
+func (UnimplementedHandler) GetSeerrLink(ctx context.Context, params GetSeerrLinkParams) (r *SeerrLink, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // GetSession implements getSession operation.
 //
 // Current session, user and CSRF token.
@@ -181,6 +208,15 @@ func (UnimplementedHandler) GetSetupStatus(ctx context.Context) (r *SetupStatus,
 //
 // GET /system/status
 func (UnimplementedHandler) GetSystemStatus(ctx context.Context) (r *SystemStatus, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ImportSeerrInstances implements importSeerrInstances operation.
+//
+// Create instances from the Sonarr/Radarr servers configured in Seerr.
+//
+// POST /seerr/{linkId}/import-instances
+func (UnimplementedHandler) ImportSeerrInstances(ctx context.Context, params ImportSeerrInstancesParams) (r *SeerrImportResult, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -229,6 +265,24 @@ func (UnimplementedHandler) ListSchedules(ctx context.Context) (r []Schedule, _ 
 	return r, ht.ErrNotImplemented
 }
 
+// ListSeerrLinks implements listSeerrLinks operation.
+//
+// List Seerr links (API keys are never returned).
+//
+// GET /seerr
+func (UnimplementedHandler) ListSeerrLinks(ctx context.Context) (r []SeerrLink, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ListSeerrRequests implements listSeerrRequests operation.
+//
+// Cached approved-but-unavailable requests with their snatch status.
+//
+// GET /seerr/requests
+func (UnimplementedHandler) ListSeerrRequests(ctx context.Context) (r []SeerrRequest, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // Login implements login operation.
 //
 // Start a session with username and password.
@@ -253,6 +307,15 @@ func (UnimplementedHandler) Logout(ctx context.Context) error {
 //
 // POST /state/reset
 func (UnimplementedHandler) ResetState(ctx context.Context, req OptStateReset) (r *StateResetResult, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// SyncSeerrLink implements syncSeerrLink operation.
+//
+// Refresh the request cache now (also runs every five minutes).
+//
+// POST /seerr/{linkId}/sync
+func (UnimplementedHandler) SyncSeerrLink(ctx context.Context, params SyncSeerrLinkParams) (r *SeerrSyncResult, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -289,6 +352,24 @@ func (UnimplementedHandler) TestInstance(ctx context.Context, params TestInstanc
 //
 // POST /instances/test
 func (UnimplementedHandler) TestInstanceInput(ctx context.Context, req *InstanceInput) (r *ProbeResult, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// TestSeerrLink implements testSeerrLink operation.
+//
+// Probe a stored Seerr link and record the outcome.
+//
+// POST /seerr/{linkId}/test
+func (UnimplementedHandler) TestSeerrLink(ctx context.Context, params TestSeerrLinkParams) (r *ProbeResult, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// TestSeerrLinkInput implements testSeerrLinkInput operation.
+//
+// Probe Seerr credentials that are not stored yet.
+//
+// POST /seerr/test
+func (UnimplementedHandler) TestSeerrLinkInput(ctx context.Context, req *SeerrLinkInput) (r *ProbeResult, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -334,6 +415,15 @@ func (UnimplementedHandler) UpdatePolicy(ctx context.Context, req *SnatchPolicy,
 //
 // PUT /schedules/{scheduleId}
 func (UnimplementedHandler) UpdateSchedule(ctx context.Context, req *ScheduleInput, params UpdateScheduleParams) (r *Schedule, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UpdateSeerrLink implements updateSeerrLink operation.
+//
+// Update a Seerr link (omit api_key to keep it).
+//
+// PUT /seerr/{linkId}
+func (UnimplementedHandler) UpdateSeerrLink(ctx context.Context, req *SeerrLinkInput, params UpdateSeerrLinkParams) (r *SeerrLink, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

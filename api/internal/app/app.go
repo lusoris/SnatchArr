@@ -34,6 +34,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/httpapi"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
 	"github.com/lusoris/SnatchArr/api/internal/policies"
+	"github.com/lusoris/SnatchArr/api/internal/seerr"
 	"github.com/lusoris/SnatchArr/api/internal/settings"
 	"github.com/lusoris/SnatchArr/api/internal/snatch"
 	"github.com/lusoris/SnatchArr/api/internal/store"
@@ -61,6 +62,7 @@ var Module = fx.Options(
 	events.Module,
 	snatch.Module,
 	dlclients.Module,
+	seerr.Module,
 	fx.Provide(func(s *dlclients.Service) workergrpc.Pacer { return s }),
 	workergrpc.Module,
 	httpapi.Module,

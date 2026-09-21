@@ -25,6 +25,8 @@ tags:
     description: Pause and cap-override windows
   - name: download-clients
     description: Torrent and Usenet clients observed for backpressure (never driven)
+  - name: seerr
+    description: Seerr requests snatched first (read-only; nothing is written to Seerr)
 security:
   - cookieAuth: []
   - bearerAuth: []
@@ -725,6 +727,176 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
 
+  /seerr:
+    get:
+      tags: [seerr]
+      operationId: listSeerrLinks
+      summary: List Seerr links (API keys are never returned)
+      responses:
+        "200":
+          description: Links
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SeerrLink"
+        default:
+          $ref: "#/components/responses/Problem"
+    post:
+      tags: [seerr]
+      operationId: createSeerrLink
+      summary: Add a Seerr link
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SeerrLinkInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SeerrLink"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /seerr/test:
+    post:
+      tags: [seerr]
+      operationId: testSeerrLinkInput
+      summary: Probe Seerr credentials that are not stored yet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SeerrLinkInput"
+      responses:
+        "200":
+          description: Probe result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProbeResult"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /seerr/requests:
+    get:
+      tags: [seerr]
+      operationId: listSeerrRequests
+      summary: Cached approved-but-unavailable requests with their snatch status
+      responses:
+        "200":
+          description: Requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SeerrRequest"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /seerr/{linkId}:
+    parameters:
+      - $ref: "#/components/parameters/LinkId"
+    get:
+      tags: [seerr]
+      operationId: getSeerrLink
+      summary: Get one Seerr link
+      responses:
+        "200":
+          description: Link
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SeerrLink"
+        default:
+          $ref: "#/components/responses/Problem"
+    put:
+      tags: [seerr]
+      operationId: updateSeerrLink
+      summary: Update a Seerr link (omit api_key to keep it)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SeerrLinkInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SeerrLink"
+        default:
+          $ref: "#/components/responses/Problem"
+    delete:
+      tags: [seerr]
+      operationId: deleteSeerrLink
+      summary: Delete a Seerr link and its cached requests
+      responses:
+        "204":
+          description: Deleted
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /seerr/{linkId}/test:
+    parameters:
+      - $ref: "#/components/parameters/LinkId"
+    post:
+      tags: [seerr]
+      operationId: testSeerrLink
+      summary: Probe a stored Seerr link and record the outcome
+      responses:
+        "200":
+          description: Probe result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProbeResult"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /seerr/{linkId}/sync:
+    parameters:
+      - $ref: "#/components/parameters/LinkId"
+    post:
+      tags: [seerr]
+      operationId: syncSeerrLink
+      summary: Refresh the request cache now (also runs every five minutes)
+      responses:
+        "200":
+          description: Sync result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SeerrSyncResult"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /seerr/{linkId}/import-instances:
+    parameters:
+      - $ref: "#/components/parameters/LinkId"
+    post:
+      tags: [seerr]
+      operationId: importSeerrInstances
+      summary: Create instances from the Sonarr/Radarr servers configured in Seerr
+      responses:
+        "200":
+          description: Import result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SeerrImportResult"
+        default:
+          $ref: "#/components/responses/Problem"
+
 components:
   securitySchemes:
     cookieAuth:
@@ -746,6 +918,13 @@ components:
 
     ClientId:
       name: clientId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    LinkId:
+      name: linkId
       in: path
       required: true
       schema:
@@ -883,7 +1062,7 @@ components:
           type: boolean
         source:
           type: string
-          enum: [manual, configarr]
+          enum: [manual, configarr, seerr]
         configarr_key:
           type: string
         last_seen_version:
@@ -1359,6 +1538,151 @@ components:
           items:
             type: string
         warnings:
+          type: array
+          items:
+            type: string
+
+    SeerrLink:
+      type: object
+      required: [id, name, base_url, enabled, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        base_url:
+          type: string
+        enabled:
+          type: boolean
+        sonarr_instance_id:
+          type: string
+          format: uuid
+          description: Fallback instance for TV requests whose Seerr server cannot be matched by URL
+        radarr_instance_id:
+          type: string
+          format: uuid
+          description: Fallback instance for movie requests whose Seerr server cannot be matched by URL
+        last_seen_version:
+          type: string
+        last_check_at:
+          type: string
+          format: date-time
+        last_error:
+          type: string
+        last_sync_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    SeerrLinkInput:
+      type: object
+      required: [name, base_url]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+        base_url:
+          type: string
+        api_key:
+          type: string
+          description: Required on create; omit on update to keep the stored key
+        enabled:
+          type: boolean
+          default: true
+        sonarr_instance_id:
+          type: string
+          format: uuid
+        radarr_instance_id:
+          type: string
+          format: uuid
+
+    SeerrRequest:
+      type: object
+      required: [link_id, link_name, request_id, media_type, tmdb_id, tvdb_id, title, request_status, media_status, is_4k, requested_by, seasons, resolved, last_seen_at]
+      properties:
+        link_id:
+          type: string
+          format: uuid
+        link_name:
+          type: string
+        request_id:
+          type: integer
+        media_type:
+          type: string
+          enum: [movie, tv]
+        tmdb_id:
+          type: integer
+        tvdb_id:
+          type: integer
+        title:
+          type: string
+        request_status:
+          type: integer
+          description: "Seerr MediaRequestStatus: 1 pending, 2 approved, 3 declined, 4 failed, 5 completed"
+        media_status:
+          type: integer
+          description: "Seerr MediaStatus: 1 unknown, 2 pending, 3 processing, 4 partially available, 5 available"
+        is_4k:
+          type: boolean
+        requested_by:
+          type: string
+        seasons:
+          type: array
+          items:
+            type: integer
+        instance_id:
+          type: string
+          format: uuid
+        instance_name:
+          type: string
+        entity_id:
+          type: integer
+          format: int64
+          description: Radarr movie id or Sonarr series id in the resolved instance
+        resolved:
+          type: boolean
+          description: True when the request maps to an instance and a library entity and is snatched first
+        unresolved_reason:
+          type: string
+        requested_at:
+          type: string
+          format: date-time
+        last_snatched_at:
+          type: string
+          format: date-time
+        last_seen_at:
+          type: string
+          format: date-time
+
+    SeerrSyncResult:
+      type: object
+      required: [seen, resolved, unresolved, removed]
+      properties:
+        seen:
+          type: integer
+        resolved:
+          type: integer
+        unresolved:
+          type: integer
+        removed:
+          type: integer
+
+    SeerrImportResult:
+      type: object
+      required: [created, skipped]
+      properties:
+        created:
+          type: array
+          items:
+            type: string
+        skipped:
           type: array
           items:
             type: string

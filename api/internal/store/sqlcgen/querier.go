@@ -16,6 +16,7 @@ type Querier interface {
 	CompleteRun(ctx context.Context, arg CompleteRunParams) (SnatchRun, error)
 	CountInstancesByBaseURL(ctx context.Context, arg CountInstancesByBaseURLParams) (int64, error)
 	CountProcessed(ctx context.Context, arg CountProcessedParams) (int64, error)
+	CountSeerrRequests(ctx context.Context, linkID uuid.UUID) (int64, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
 	CountUsers(ctx context.Context) (int64, error)
@@ -28,13 +29,18 @@ type Querier interface {
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
 	CreateSchedule(ctx context.Context, arg CreateScheduleParams) (Schedule, error)
+	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+	// SPDX-License-Identifier: EUPL-1.2
+	CreateSeerrLink(ctx context.Context, arg CreateSeerrLinkParams) (SeerrLink, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	DeleteDownloadClient(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteEventsForInstance(ctx context.Context, instanceID uuid.UUID) (int64, error)
 	DeleteInstance(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteSchedule(ctx context.Context, id uuid.UUID) (int64, error)
+	DeleteSeerrLink(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteSession(ctx context.Context, id string) error
 	DeleteStaleDiscoveredDownloadClients(ctx context.Context, arg DeleteStaleDiscoveredDownloadClientsParams) (int64, error)
+	DeleteUnseenSeerrRequests(ctx context.Context, arg DeleteUnseenSeerrRequestsParams) (int64, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
 	EnqueueRun(ctx context.Context, arg EnqueueRunParams) (SnatchRun, error)
@@ -56,6 +62,9 @@ type Querier interface {
 	GetPolicy(ctx context.Context, instanceID uuid.UUID) (SnatchPolicy, error)
 	GetRun(ctx context.Context, id uuid.UUID) (SnatchRun, error)
 	GetSchedule(ctx context.Context, id uuid.UUID) (Schedule, error)
+	GetSeerrLink(ctx context.Context, id uuid.UUID) (SeerrLink, error)
+	GetSeerrRequest(ctx context.Context, arg GetSeerrRequestParams) (SeerrRequest, error)
+	GetSeerrRequestTitle(ctx context.Context, arg GetSeerrRequestTitleParams) (string, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
 	GetSettings(ctx context.Context) (Setting, error)
@@ -74,10 +83,13 @@ type Querier interface {
 	ListEnabledDownloadClients(ctx context.Context) ([]DownloadClient, error)
 	ListEnabledInstances(ctx context.Context) ([]Instance, error)
 	ListEnabledSchedulesFor(ctx context.Context, instanceID *uuid.UUID) ([]Schedule, error)
+	ListEnabledSeerrLinks(ctx context.Context) ([]SeerrLink, error)
 	ListEvents(ctx context.Context, arg ListEventsParams) ([]SnatchEvent, error)
 	ListInstances(ctx context.Context) ([]Instance, error)
 	ListRuns(ctx context.Context, arg ListRunsParams) ([]SnatchRun, error)
 	ListSchedules(ctx context.Context) ([]Schedule, error)
+	ListSeerrLinks(ctx context.Context) ([]SeerrLink, error)
+	ListSeerrRequests(ctx context.Context, limit int32) ([]ListSeerrRequestsRow, error)
 	ListUsers(ctx context.Context) ([]User, error)
 	LoadSession(ctx context.Context, arg LoadSessionParams) ([]byte, error)
 	LockBucket(ctx context.Context, arg LockBucketParams) (int32, error)
@@ -85,6 +97,8 @@ type Querier interface {
 	// Afterglow backoff: the first snatch rests base_s seconds, every further snatch of the
 	// same item doubles the rest, capped at max_s.
 	MarkProcessed(ctx context.Context, arg MarkProcessedParams) error
+	MarkSeerrRequestsSnatched(ctx context.Context, arg MarkSeerrRequestsSnatchedParams) (int64, error)
+	PriorityEntityIDs(ctx context.Context, instanceID *uuid.UUID) ([]int64, error)
 	ProcessedAttempts(ctx context.Context, arg ProcessedAttemptsParams) (int32, error)
 	PurgeBucketsBefore(ctx context.Context, windowStart time.Time) (int64, error)
 	PurgeEventsBefore(ctx context.Context, ts time.Time) (int64, error)
@@ -95,6 +109,8 @@ type Querier interface {
 	RecentRunStatuses(ctx context.Context, arg RecentRunStatusesParams) ([]string, error)
 	RecordDownloadClientCheck(ctx context.Context, arg RecordDownloadClientCheckParams) error
 	RecordInstanceCheck(ctx context.Context, arg RecordInstanceCheckParams) error
+	RecordSeerrCheck(ctx context.Context, arg RecordSeerrCheckParams) error
+	RecordSeerrSync(ctx context.Context, arg RecordSeerrSyncParams) error
 	ResetProcessed(ctx context.Context, instanceID *uuid.UUID) (int64, error)
 	RevokeAPIKey(ctx context.Context, arg RevokeAPIKeyParams) (int64, error)
 	SaveAPIKey(ctx context.Context, arg SaveAPIKeyParams) error
@@ -105,10 +121,12 @@ type Querier interface {
 	UpdateDownloadClient(ctx context.Context, arg UpdateDownloadClientParams) (DownloadClient, error)
 	UpdateInstance(ctx context.Context, arg UpdateInstanceParams) (Instance, error)
 	UpdateSchedule(ctx context.Context, arg UpdateScheduleParams) (Schedule, error)
+	UpdateSeerrLink(ctx context.Context, arg UpdateSeerrLinkParams) (SeerrLink, error)
 	UpdateSettings(ctx context.Context, arg UpdateSettingsParams) (Setting, error)
 	UpsertConfigarrInstance(ctx context.Context, arg UpsertConfigarrInstanceParams) (Instance, error)
 	UpsertDiscoveredDownloadClient(ctx context.Context, arg UpsertDiscoveredDownloadClientParams) (UpsertDiscoveredDownloadClientRow, error)
 	UpsertPolicy(ctx context.Context, arg UpsertPolicyParams) (SnatchPolicy, error)
+	UpsertSeerrRequest(ctx context.Context, arg UpsertSeerrRequestParams) error
 }
 
 var _ Querier = (*Queries)(nil)

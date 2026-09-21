@@ -25,6 +25,7 @@ import (
 	snatcharrv1 "github.com/lusoris/SnatchArr/api/internal/gen/snatcharr/v1"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
 	"github.com/lusoris/SnatchArr/api/internal/policies"
+	"github.com/lusoris/SnatchArr/api/internal/seerr"
 	"github.com/lusoris/SnatchArr/api/internal/settings"
 	"github.com/lusoris/SnatchArr/api/internal/snatch"
 )
@@ -60,6 +61,7 @@ type Server struct {
 	instances *instances.Service
 	policies  *policies.Service
 	settings  *settings.Service
+	seerr     *seerr.Service
 	pacer     Pacer
 	clk       clock.Clock
 	logger    *slog.Logger
@@ -67,11 +69,11 @@ type Server struct {
 
 // New wires the server.
 func New(runs *snatch.Runs, budget *snatch.Budget, memory *snatch.Memory, rec *snatch.Recorder, planner *snatch.Planner,
-	inst *instances.Service, pol *policies.Service, cfg *settings.Service, clk clock.Clock, logger *slog.Logger, opts Options,
+	inst *instances.Service, pol *policies.Service, cfg *settings.Service, requests *seerr.Service, clk clock.Clock, logger *slog.Logger, opts Options,
 ) *Server {
 	return &Server{
 		runs: runs, budget: budget, memory: memory, rec: rec, planner: planner, instances: inst, policies: pol,
-		settings: cfg, pacer: opts.Pacer, clk: clk, logger: logger,
+		settings: cfg, seerr: requests, pacer: opts.Pacer, clk: clk, logger: logger,
 	}
 }
 
@@ -326,6 +328,11 @@ func (s *Server) remember(ctx context.Context, run domain.Run, policy domain.Pol
 	for entityType, ids := range byType {
 		if err := s.memory.Mark(ctx, run.InstanceID, run.Kind, entityType, ids, policy.ProcessedTTL, policy.AfterglowMax); err != nil {
 			return err
+		}
+		if entityType == "movie" {
+			if err := s.seerr.MarkSnatched(ctx, run.InstanceID, ids); err != nil {
+				s.logger.WarnContext(ctx, "workergrpc: mark seerr requests", slog.String("error", err.Error()))
+			}
 		}
 	}
 	return nil

@@ -65,6 +65,7 @@ nav:
   - Concepts: concepts.md
   - Configuration: configuration.md
   - Download clients: download-clients.md
+  - Seerr: seerr.md
   - API: api.md
   - Architecture Decisions:
       - Overview: adr/README.md

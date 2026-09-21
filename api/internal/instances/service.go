@@ -33,6 +33,8 @@ type Input struct {
 	BaseURL string
 	APIKey  string
 	Enabled bool
+	// Source records who created the instance; empty means manual.
+	Source domain.InstanceSource
 }
 
 // Credentials are what the snatch-worker needs to talk to an instance.
@@ -100,7 +102,7 @@ func (s *Service) Create(ctx context.Context, in Input) (domain.Instance, error)
 		var txErr error
 		row, txErr = q.CreateInstance(ctx, sqlcgen.CreateInstanceParams{
 			ID: instID, Kind: string(in.Kind), Name: in.Name, BaseUrl: in.BaseURL, ApiKeyEnc: sealed,
-			Enabled: in.Enabled, Source: string(domain.SourceManual), CreatedAt: now,
+			Enabled: in.Enabled, Source: string(sourceOrManual(in.Source)), CreatedAt: now,
 		})
 		if txErr != nil {
 			return fmt.Errorf("create instance: %w", txErr)
@@ -147,6 +149,13 @@ func (s *Service) Update(ctx context.Context, instID uuid.UUID, in Input) (domai
 		return domain.Instance{}, fmt.Errorf("instances: update: %w", store.MapError(err))
 	}
 	return store.InstanceFromRow(row), nil
+}
+
+func sourceOrManual(src domain.InstanceSource) domain.InstanceSource {
+	if src == "" {
+		return domain.SourceManual
+	}
+	return src
 }
 
 func (s *Service) sealUnlessUnchanged(apiKey string, current []byte) ([]byte, error) {
