@@ -27,3 +27,6 @@ Thumbs.db
 *.log
 # --- claude code local ---
 .claude/settings.local.json
+/.workingdir/
+/.standards/worktrees/
+/.agents/mcp_config.json

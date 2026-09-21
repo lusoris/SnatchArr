@@ -1,0 +1,27 @@
+version: 1
+repository:
+    owner: lusoris
+    name: SnatchArr
+    visibility: public
+    description: "Hunts missing and cutoff-unmet media across *arr instances while respecting per-instance hourly caps"
+    homepage: "https://github.com/lusoris/SnatchArr"
+    topics:
+        - arr
+        - sonarr
+        - radarr
+        - lidarr
+        - readarr
+        - whisparr
+        - kubernetes
+        - golusoris
+        - sveltesentio
+adoption:
+    # Our devcontainer carries Go + Rust + Node; praetor's generated bundle is Go-only.
+    decline:
+        - dev-container
+profiles:
+    - app-service
+facets:
+    - security:high
+    - api:public-contract
+    - agent:sandboxed

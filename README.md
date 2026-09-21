@@ -36,3 +36,16 @@ If you already run [Configarr](https://github.com/raydak-labs/configarr), point 
 ## License
 
 Code: [EUPL-1.2](LICENSES/EUPL-1.2.txt). Documentation: [CC BY-SA 4.0](LICENSES/CC-BY-SA-4.0.txt). REUSE-compliant.
+
+<!-- praetor:readme-governance:start -->
+[![HISS Adopted](https://img.shields.io/badge/Standards-HISS%20Adopted-blue)](AGENTS.md)
+
+Praetor manages this repository's declared governance policy. This managed block records adoption state; it is not a verification certificate.
+
+| Gate | Command | Contract |
+| :--- | :--- | :--- |
+| **Verification** | `make verify-all` | Runs the repository's configured verification cascade |
+| **HISS Audit** | `praetorctl audit` | Enforces policy, generated-surface integrity, and the debt ratchet |
+| **Context Sync** | `praetorctl compile-context --verify` | Verifies every generated agent context against `AGENTS.md` |
+| **Debt Baseline** | `.standards-baseline.json` | 0 recorded infractions; audit forbids growth |
+<!-- praetor:readme-governance:end -->

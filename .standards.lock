@@ -1,0 +1,18 @@
+version: 1
+pinned_version: v1.0.0
+digest: sha256:987c86d330f4174c5b819a8a930e8f07360c9655263b04a5dff267b8972f6ab2
+generated_at: ""
+profiles:
+    - id: app-service
+      version: v1.0.0
+      digest: sha256:f9bf5a186f252fc3ed5bd75f4e2167538135e7f2577547b07d7632cde4e224e5
+facets:
+    - id: security:high
+      version: v1.0.0
+      digest: sha256:34de9dc4fe2b7da48c152c2e7457891ebc41ace8e671fd1db0f49e1fafcb567f
+    - id: api:public-contract
+      version: v1.0.0
+      digest: sha256:19963be9ae6292bc4ea0dcb44cbbc5f903886209387d33fbeb3bed8af9cde486
+    - id: agent:sandboxed
+      version: v1.0.0
+      digest: sha256:1a89a7a93d8f054d03edd203bb15006431468641d59ac61999b1997fa0a3233f

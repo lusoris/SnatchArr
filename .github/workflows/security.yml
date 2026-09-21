@@ -1,0 +1,81 @@
+name: Security Scan
+
+on:
+  schedule:
+    - cron: '0 4 * * *'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  go-vulncheck:
+    name: api (govulncheck + gosec)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Skip until api/ exists
+        id: present
+        run: test -f go.mod && echo "ok=true" >> "$GITHUB_OUTPUT" || echo "ok=false" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: steps.present.outputs.ok == 'true'
+        with:
+          go-version-file: api/go.mod
+          cache: false
+      - name: Install tools
+        if: steps.present.outputs.ok == 'true'
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+      - name: govulncheck
+        if: steps.present.outputs.ok == 'true'
+        run: govulncheck ./...
+      - name: gosec (zero exclusions)
+        if: steps.present.outputs.ok == 'true'
+        run: gosec -conf ../.gosec.json -exclude-generated ./...
+
+  rust-audit:
+    name: worker (cargo-audit + cargo-deny)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Skip until worker/ exists
+        id: present
+        run: test -f worker/Cargo.toml && echo "ok=true" >> "$GITHUB_OUTPUT" || echo "ok=false" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        if: steps.present.outputs.ok == 'true'
+      - name: cargo-audit
+        if: steps.present.outputs.ok == 'true'
+        run: cargo install cargo-audit --locked && cd worker && cargo audit
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        if: steps.present.outputs.ok == 'true'
+        with:
+          manifest-path: worker/Cargo.toml
+          command: check advisories
+
+  web-audit:
+    name: web (pnpm audit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Skip until web/ exists
+        id: present
+        run: test -f web/package.json && echo "ok=true" >> "$GITHUB_OUTPUT" || echo "ok=false" >> "$GITHUB_OUTPUT"
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        if: steps.present.outputs.ok == 'true'
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        if: steps.present.outputs.ok == 'true'
+        with:
+          node-version: '24'
+      - name: pnpm audit
+        if: steps.present.outputs.ok == 'true'
+        run: cd web && pnpm audit --audit-level=high

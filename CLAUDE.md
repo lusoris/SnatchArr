@@ -1,3 +1,6 @@
+<!-- markdownlint-disable MD013 -->
+<!-- Compiled automatically by praetorctl compile-context from AGENTS.md. DO NOT EDIT DIRECTLY. -->
+
 <!-- markdownlint-disable MD013 MD025 -->
 # SnatchArr Agent Operating Harness
 
