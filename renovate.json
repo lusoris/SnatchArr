@@ -27,6 +27,118 @@
   ],
   "packageRules": [
     {
+      "description": "One weekly pull request per manager for non-major updates, so the strict up-to-date rule reruns CI once per group (HISS-18)",
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest",
+        "pin",
+        "pinDigest"
+      ],
+      "groupName": "gomod non-major"
+    },
+    {
+      "description": "One weekly pull request per manager for non-major updates, so the strict up-to-date rule reruns CI once per group (HISS-18)",
+      "matchManagers": [
+        "cargo"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest",
+        "pin",
+        "pinDigest"
+      ],
+      "groupName": "cargo non-major"
+    },
+    {
+      "description": "One weekly pull request per manager for non-major updates, so the strict up-to-date rule reruns CI once per group (HISS-18)",
+      "matchManagers": [
+        "npm"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest",
+        "pin",
+        "pinDigest"
+      ],
+      "groupName": "npm non-major"
+    },
+    {
+      "description": "One weekly pull request per manager for non-major updates, so the strict up-to-date rule reruns CI once per group (HISS-18)",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest",
+        "pin",
+        "pinDigest"
+      ],
+      "groupName": "github-actions non-major"
+    },
+    {
+      "description": "One weekly pull request per manager for non-major updates, so the strict up-to-date rule reruns CI once per group (HISS-18)",
+      "matchManagers": [
+        "dockerfile"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest",
+        "pin",
+        "pinDigest"
+      ],
+      "groupName": "dockerfile non-major"
+    },
+    {
+      "description": "One weekly pull request per manager for non-major updates, so the strict up-to-date rule reruns CI once per group (HISS-18)",
+      "matchManagers": [
+        "helm-values"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest",
+        "pin",
+        "pinDigest"
+      ],
+      "groupName": "helm-values non-major"
+    },
+    {
+      "description": "One weekly pull request per manager for non-major updates, so the strict up-to-date rule reruns CI once per group (HISS-18)",
+      "matchManagers": [
+        "helmv3"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest",
+        "pin",
+        "pinDigest"
+      ],
+      "groupName": "helmv3 non-major"
+    },
+    {
+      "description": "One weekly pull request per manager for non-major updates, so the strict up-to-date rule reruns CI once per group (HISS-18)",
+      "matchManagers": [
+        "devcontainer"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest",
+        "pin",
+        "pinDigest"
+      ],
+      "groupName": "devcontainer non-major"
+    },
+    {
       "matchPackageNames": [
         "/^github.com/golusoris//"
       ],
@@ -54,13 +166,13 @@
       "automerge": false
     },
     {
+      "description": "Automerge non-major updates once the required checks pass; majors stay manual",
       "matchUpdateTypes": [
         "minor",
         "patch",
-        "digest"
-      ],
-      "matchManagers": [
-        "github-actions"
+        "digest",
+        "pin",
+        "pinDigest"
       ],
       "automerge": true
     },
@@ -73,5 +185,14 @@
       ],
       "enabled": false
     }
-  ]
+  ],
+  "minimumReleaseAge": "3 days",
+  "platformCommit": "enabled",
+  "vulnerabilityAlerts": {
+    "groupName": null,
+    "schedule": [
+      "at any time"
+    ],
+    "minimumReleaseAge": null
+  }
 }
