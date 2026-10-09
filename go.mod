@@ -1,8 +1,11 @@
-module github.com/lusoris/SnatchArr/api
+module github.com/lusoris/SnatchArr
 
 go 1.27.1
 
 toolchain go1.27.2
+
+// pnpm installs packages that ship stray .go files (flatted/golang); keep ./... off them.
+ignore ./web/node_modules
 
 require (
 	github.com/go-chi/chi/v5 v5.3.2

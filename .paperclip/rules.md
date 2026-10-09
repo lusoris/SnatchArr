@@ -22,7 +22,7 @@ git push origin HEAD:refs/heads/paperclip/<issue-id>
 
 ## High-Integrity Invariants
 
-- HISS-01: recursion prohibited; call graph = DAG; Go, C/C++: zero `goto`
+- HISS-01: recursion prohibited; call graph = DAG; Go: zero `goto`
 - HISS-02: scalar upper bound on every loop; explicit deadline on every I/O
   call; Go: I/O takes `context.Context` deadline
 - HISS-04: McCabe cyclomatic <= 12, cognitive <= 15, statements <= 55; func

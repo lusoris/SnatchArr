@@ -13,7 +13,7 @@ api/coverage.out
 api/coverage.html
 *.exe
 # --- Rust ---
-worker/target/
+/target/
 # --- Node / SvelteKit ---
 web/node_modules/
 web/.svelte-kit/

@@ -22,4 +22,4 @@ web/test-results
 web/playwright-report
 web/src/lib/paraglide
 web/project.inlang/cache
-worker/target
+target

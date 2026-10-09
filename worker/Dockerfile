@@ -14,11 +14,12 @@ RUN ZIG_VERSION=0.14.1 && ZIG_ARCH="$(uname -m)" \
 WORKDIR /src
 # rust-toolchain.toml pins the channel and lists the musl targets; `rustup show` installs
 # them before the sources land so the layer caches.
-COPY worker/rust-toolchain.toml ./
+COPY rust-toolchain.toml ./
 RUN rustup show
 RUN cargo install cargo-zigbuild --locked
-COPY proto/ /proto/
-COPY worker/ ./
+COPY proto/ ./proto/
+COPY Cargo.toml Cargo.lock ./
+COPY worker/ ./worker/
 RUN case "${TARGETARCH}" in \
       amd64) T=x86_64-unknown-linux-musl ;; \
       arm64) T=aarch64-unknown-linux-musl ;; \
