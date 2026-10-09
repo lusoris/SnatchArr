@@ -8,14 +8,72 @@
     "docker:pinDigests"
   ],
   "timezone": "Europe/Berlin",
-  "schedule": ["before 6am on monday"],
-  "enabledManagers": ["gomod", "cargo", "npm", "github-actions", "dockerfile", "helm-values", "helmv3", "devcontainer"],
-  "postUpdateOptions": ["gomodTidy", "pnpmDedupe"],
+  "schedule": [
+    "before 6am on monday"
+  ],
+  "enabledManagers": [
+    "gomod",
+    "cargo",
+    "npm",
+    "github-actions",
+    "dockerfile",
+    "helm-values",
+    "helmv3",
+    "devcontainer"
+  ],
+  "postUpdateOptions": [
+    "gomodTidy",
+    "pnpmDedupe"
+  ],
   "packageRules": [
-    { "matchPackageNames": ["/^github.com/golusoris//"], "groupName": "golusoris" },
-    { "matchPackageNames": ["/^@sveltesentio//"], "groupName": "sveltesentio" },
-    { "matchPackageNames": ["tonic", "tonic-build", "prost", "prost-types"], "groupName": "tonic" },
-    { "matchUpdateTypes": ["major"], "automerge": false },
-    { "matchUpdateTypes": ["minor", "patch", "digest"], "matchManagers": ["github-actions"], "automerge": true }
+    {
+      "matchPackageNames": [
+        "/^github.com/golusoris//"
+      ],
+      "groupName": "golusoris"
+    },
+    {
+      "matchPackageNames": [
+        "/^@sveltesentio//"
+      ],
+      "groupName": "sveltesentio"
+    },
+    {
+      "matchPackageNames": [
+        "tonic",
+        "tonic-build",
+        "prost",
+        "prost-types"
+      ],
+      "groupName": "tonic"
+    },
+    {
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "automerge": false
+    },
+    {
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest"
+      ],
+      "matchManagers": [
+        "github-actions"
+      ],
+      "automerge": true
+    },
+    {
+      "description": "praetor-managed files: praetorctl adopt ships their updates and praetorctl audit locks them byte for byte",
+      "matchFileNames": [
+        ".github/workflows/praetor-api.yml",
+        "tools/apicompat/gate/main.go",
+        "tools/apicompat/gate/placeholder.go",
+        ".devcontainer/devcontainer.json",
+        ".devcontainer/Dockerfile.praetor"
+      ],
+      "enabled": false
+    }
   ]
 }

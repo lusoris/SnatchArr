@@ -190,6 +190,8 @@ jobs:
       - name: Clippy (zero warnings)
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Test
+        env:
+          RUSTFLAGS: -D warnings
         run: cargo test --workspace --locked
       - name: cargo-audit
         run: cargo install cargo-audit --locked && cargo audit
@@ -260,7 +262,7 @@ jobs:
           cache: false
       - name: Install praetorctl
         run: |
-          go install github.com/cordanaLLM/praetor/cmd/standardsctl@b131e9eca668533d82881eaed2d2b19ec674de00
+          go install github.com/cordanaLLM/praetor/cmd/standardsctl@a259c5149d82decac74d956b7b1aa47d5e50d3f8
           ln -s "$(go env GOPATH)/bin/standardsctl" "$(go env GOPATH)/bin/praetorctl"
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - name: Context integrity

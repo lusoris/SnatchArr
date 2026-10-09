@@ -22,8 +22,7 @@ cargo install cargo-audit cargo-deny cargo-watch
 # Node
 corepack enable && corepack prepare pnpm@latest --activate
 
-# Kubernetes tooling
-curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+# Kubernetes tooling (kubectl and helm come from the kubectl-helm-minikube feature in devcontainer.json)
 go install github.com/yannh/kubeconform/cmd/kubeconform@latest
 go install sigs.k8s.io/kind@latest
 
