@@ -3,7 +3,7 @@
 #
 # snatcharr-worker: Rust snatch data-plane. Static musl build via cargo-zigbuild → distroless static.
 
-FROM --platform=$BUILDPLATFORM rust:1-bookworm AS build
+FROM --platform=$BUILDPLATFORM rust:1-bookworm@sha256:114c7a4425406451c2866b6aafe69fe29b1b298832db1277d411ac73c82d04d6 AS build
 ARG TARGETARCH
 RUN apt-get update && apt-get install -y --no-install-recommends xz-utils curl ca-certificates \
  && rm -rf /var/lib/apt/lists/*
@@ -28,7 +28,7 @@ RUN case "${TARGETARCH}" in \
  && cargo zigbuild --release --locked --target "$T" -p snatch-worker \
  && cp "target/$T/release/snatch-worker" /out-snatch-worker
 
-FROM gcr.io/distroless/static-debian12:nonroot
+FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
 COPY --from=build /out-snatch-worker /snatch-worker
 USER 65532:65532
 EXPOSE 9091
