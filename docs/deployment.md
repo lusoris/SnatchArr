@@ -66,7 +66,7 @@ cluster access, such as ArgoCD, cannot reuse them, so create the Secret first:
 ```sh
 kubectl -n snatcharr create secret generic snatcharr-secrets \
   --from-literal=crypto-key="$(openssl rand -hex 32)" \
-  --from-literal=csrf-secret="$(openssl rand -base64 36)" \
+  --from-literal=csrf-secret="$(openssl rand -hex 32)" \
   --from-literal=apikey-secret="$(openssl rand -base64 36)" \
   --from-literal=worker-token="$(openssl rand -base64 36)"
 ```

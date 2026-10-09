@@ -15,7 +15,7 @@
       "properties": {
         "existingSecret": { "type": "string" },
         "cryptoKey": { "type": "string", "pattern": "^([0-9a-fA-F]{32}|[0-9a-fA-F]{48}|[0-9a-fA-F]{64})?$" },
-        "csrfSecret": { "type": "string" },
+        "csrfSecret": { "type": "string", "pattern": "^([0-9a-fA-F]{64}|[A-Za-z0-9+/]{43}=|[A-Za-z0-9_-]{43}=)?$" },
         "apiKeySecret": { "type": "string" },
         "workerToken": { "type": "string" }
       }
