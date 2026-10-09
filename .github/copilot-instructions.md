@@ -19,7 +19,7 @@ Adopted check = check adoption generated here (none: no generated `make verify-a
 
 | Invariant | Rule | Adopted check | On fail |
 | :--- | :--- | :--- | :--- |
-| **HISS-01** control flow | recursion prohibited; call graph = DAG; Go, C/C++: zero `goto` | not enforced | advisory |
+| **HISS-01** control flow | recursion prohibited; call graph = DAG; Go: zero `goto` | not enforced | advisory |
 | **HISS-02** loops, I/O | scalar upper bound on every loop; explicit deadline on every I/O call; Go: I/O takes `context.Context` deadline | not enforced | advisory |
 | **HISS-03** memory | Go, Rust, C/C++: zero heap allocation in hot simulation/tick loops | not enforced | advisory |
 | **HISS-04** complexity | McCabe cyclomatic <= 12, cognitive <= 15, statements <= 55; func LOC <= 60 (audit ceiling) | not enforced | advisory |
