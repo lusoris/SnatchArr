@@ -40,7 +40,7 @@ humantime = "2.4"
 
 # build
 tonic-prost-build = "0.14"
-protox = "0.9"
+protox = "0.10"
 
 # test
 proptest = "1.11"
