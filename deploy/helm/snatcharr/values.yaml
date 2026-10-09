@@ -114,6 +114,19 @@ api:
   topologySpreadConstraints: []
   priorityClassName: ""
   terminationGracePeriodSeconds: 30
+  # Extra volumes and mounts for the API container, for example the CloudNativePG CA for an
+  # external Postgres with sslmode=verify-full (docs/deployment.md). Mount only ca.crt.
+  extraVolumes: []
+  #  - name: db-ca
+  #    secret:
+  #      secretName: pg-cluster-ca
+  #      items:
+  #        - key: ca.crt
+  #          path: ca.crt
+  extraVolumeMounts: []
+  #  - name: db-ca
+  #    mountPath: /etc/snatcharr/db-ca
+  #    readOnly: true
 
 worker:
   replicaCount: 1
