@@ -66,6 +66,10 @@ jobs:
         with:
           ref: ${{ needs.meta.outputs.tag }}
           persist-credentials: false
+      # Build date for -X main.date: the release's publish time, or on a workflow_dispatch
+      # rebuild the tagged commit's date (the github context has no run start time).
+      - id: date
+        run: echo "commit=$(git log -1 --format=%cI)" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
@@ -97,7 +101,7 @@ jobs:
           build-args: |
             VERSION=${{ needs.meta.outputs.version }}
             COMMIT=${{ github.sha }}
-            DATE=${{ github.event.release.published_at || github.run_started_at }}
+            DATE=${{ github.event.release.published_at || steps.date.outputs.commit }}
           sbom: true
           provenance: mode=max
           cache-from: type=gha,scope=${{ matrix.component }}
@@ -113,13 +117,15 @@ jobs:
           subject-name: ${{ env.REGISTRY }}/lusoris/snatcharr-${{ matrix.component }}
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
-      - name: SBOM (SPDX) attached to the release
+      # The SBOM leaves as a workflow artifact; the chart job, which holds contents: write,
+      # attaches it to the release, so this job keeps contents: read.
+      - name: SBOM (SPDX)
         uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
           image: ${{ env.REGISTRY }}/lusoris/snatcharr-${{ matrix.component }}@${{ steps.build.outputs.digest }}
           artifact-name: snatcharr-${{ matrix.component }}-${{ needs.meta.outputs.version }}.spdx.json
           output-file: snatcharr-${{ matrix.component }}-${{ needs.meta.outputs.version }}.spdx.json
-          upload-release-assets: ${{ github.event_name == 'release' }}
+          upload-release-assets: false
       - id: out
         run: echo "digest-${{ matrix.component }}=${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT"
 
@@ -158,9 +164,16 @@ jobs:
         env:
           DIGEST: ${{ steps.push.outputs.digest }}
         run: cosign sign --yes "ghcr.io/lusoris/charts/snatcharr@${DIGEST}"
-      - name: attach chart to the release
-        if: github.event_name == 'release'
+      - name: download the image SBOMs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: snatcharr-*-${{ needs.meta.outputs.version }}.spdx.json
+          merge-multiple: true
+          path: sbom
+      # Runs on workflow_dispatch too: a rebuild of an existing tag re-attaches its assets.
+      - name: attach chart and SBOMs to the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
           TAG: ${{ needs.meta.outputs.tag }}
-        run: gh release upload "$TAG" dist/snatcharr-*.tgz --clobber
+        run: gh release upload "$TAG" dist/snatcharr-*.tgz sbom/*.spdx.json --clobber
