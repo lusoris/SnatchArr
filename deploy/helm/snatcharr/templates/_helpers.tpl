@@ -80,3 +80,36 @@ app.kubernetes.io/component: {{ .component }}
 {{- define "snatcharr.apiServiceName" -}}
 {{- printf "%s-api" (include "snatcharr.fullname" .) -}}
 {{- end -}}
+
+{{/*
+snatcharr.arrEgressPeers renders the ipBlock peers for networkPolicy.arrCidrs. An IPv4 CIDR
+that contains the cloud metadata address 169.254.169.254 excludes it. Kubernetes accepts an
+`except` only as a strict subset of its `cidr`, so a CIDR that does not contain the address
+(10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16) gets no `except`, and a /32 on the address
+itself is refused. An IPv6 CIDR cannot contain it and gets none either.
+*/}}
+{{- define "snatcharr.arrEgressPeers" -}}
+{{- $meta := 0 -}}
+{{- range list 169 254 169 254 -}}{{- $meta = add (mul $meta 256) . -}}{{- end -}}
+{{- $peers := list -}}
+{{- range .Values.networkPolicy.arrCidrs -}}
+{{- $peer := dict "cidr" . -}}
+{{- if not (contains ":" .) -}}
+{{- $parts := splitList "/" . -}}
+{{- $bits := 32 -}}
+{{- if eq (len $parts) 2 -}}{{- $bits = atoi (index $parts 1) -}}{{- end -}}
+{{- $net := 0 -}}
+{{- range splitList "." (index $parts 0) -}}{{- $net = add (mul $net 256) (atoi .) -}}{{- end -}}
+{{- $scale := 1 -}}
+{{- range until (int (sub 32 $bits)) -}}{{- $scale = mul $scale 2 -}}{{- end -}}
+{{- if eq (div $net $scale) (div $meta $scale) -}}
+{{- if eq $bits 32 -}}
+{{- fail (printf "networkPolicy.arrCidrs: %s is the cloud metadata address, which egress never allows" .) -}}
+{{- end -}}
+{{- $_ := set $peer "except" (list "169.254.169.254/32") -}}
+{{- end -}}
+{{- end -}}
+{{- $peers = append $peers (dict "ipBlock" $peer) -}}
+{{- end -}}
+{{- toYaml $peers -}}
+{{- end -}}

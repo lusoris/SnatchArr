@@ -286,7 +286,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.deploy == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
@@ -296,6 +296,27 @@ jobs:
         run: |
           helm template snatcharr deploy/helm/snatcharr \
             | docker run --rm -i ghcr.io/yannh/kubeconform:v0.7.0 -strict -ignore-missing-schemas -summary
+      # kubeconform checks schemas only. The API server also validates semantics, such as an
+      # ipBlock `except` having to lie inside its `cidr`, which shipped broken in 0.1.0. kind
+      # runs here on the disposable runner only; locally it runs inside an incus VM (#61).
+      - uses: helm/kind-action@06c1ae10762d3b9c1644e7fe69596ae519e015a2 # v1.15.0
+        with:
+          cluster_name: chart-check
+      - name: CloudNativePG operator (its CRDs and webhooks validate the Cluster)
+        run: |
+          kubectl apply --server-side -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.28/releases/cnpg-1.28.0.yaml
+          kubectl -n cnpg-system rollout status deploy/cnpg-controller-manager --timeout=180s
+      - name: server-side dry run (default and all-features renders)
+        run: |
+          kubectl create namespace snatcharr
+          helm template snatcharr deploy/helm/snatcharr --namespace snatcharr \
+            | kubectl apply --dry-run=server --namespace snatcharr -f -
+          helm template snatcharr deploy/helm/snatcharr --namespace snatcharr \
+            --set networkPolicy.enabled=true --set api.ingress.enabled=true \
+            --set worker.autoscaling.enabled=true --set api.pdb.enabled=true --set worker.pdb.enabled=true \
+            --set configarr.enabled=true --set configarr.existingConfigMap=cfg --set configarr.existingSecret=sec \
+            --set 'networkPolicy.arrCidrs={10.0.0.0/8,0.0.0.0/0}' \
+            | kubectl apply --dry-run=server --namespace snatcharr -f -
 
   governance:
     name: governance (praetor)
