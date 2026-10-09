@@ -13,4 +13,6 @@ build/
 coverage/
 playwright-report/
 test-results/
-project.inlang/cache/
+# inlang writes its cache, .meta.json and README.md locally; only settings.json is tracked
+project.inlang/*
+!project.inlang/settings.json
