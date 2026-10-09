@@ -302,6 +302,9 @@ jobs:
       - uses: helm/kind-action@06c1ae10762d3b9c1644e7fe69596ae519e015a2 # v1.15.0
         with:
           cluster_name: chart-check
+          # Same image kind v0.33.0 pins, from mirror.gcr.io: Docker Hub's anonymous pull limit
+          # failed this step on shared runner IPs.
+          node_image: mirror.gcr.io/kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5
       - name: CloudNativePG operator (its CRDs and webhooks validate the Cluster)
         run: |
           kubectl apply --server-side -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.28/releases/cnpg-1.28.0.yaml
