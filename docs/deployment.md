@@ -102,7 +102,21 @@ automated prune and self-heal, server-side apply and retries. Override values un
 
 ## Local cluster
 
-`make kind-up` builds both images, creates a kind cluster, installs CloudNativePG and
+`make kind-up` builds both images, starts an incus VM (`tools/incus-kind-vm.sh`, 6 CPUs
+and 12 GiB by default), creates a kind cluster inside it, installs CloudNativePG and
 applies `deploy/kustomize/kind` (restricted namespace, NetworkPolicy on, throwaway
-secrets). `make kind-down` removes it. For plain local development `make dev` starts
-Postgres with Docker Compose and runs the three processes on the host.
+secrets). kind never runs in host Docker: its kubelet changes kernel settings such as
+`vm.overcommit_memory` that are not namespaced, so on the host it would change the
+workstation's kernel (#61).
+
+The host reaches the cluster through a dedicated kubeconfig:
+
+```bash
+export KUBECONFIG=$PWD/.kind/snatcharr.kubeconfig
+kubectl -n snatcharr port-forward svc/snatcharr-api 8080:8080
+```
+
+`make kind-down` deletes the VM, its profile and the kubeconfig. The VM needs incus with
+KVM on the host; `SNATCHARR_KIND_VM_CPUS` and `SNATCHARR_KIND_VM_MEMORY` size it. For plain
+local development `make dev` starts Postgres with Docker Compose and runs the three
+processes on the host.
