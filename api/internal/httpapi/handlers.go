@@ -180,7 +180,7 @@ func (h *Handlers) startSession(ctx context.Context, u domain.User) (*oas.Sessio
 		return nil, fmt.Errorf("httpapi: load session: %w", err)
 	}
 	sess.Set(sessionUserKey, u.ID.String())
-	if err := h.sessions.Save(w, sess); err != nil {
+	if err := h.sessions.SaveContext(ctx, w, sess); err != nil {
 		return nil, fmt.Errorf("httpapi: save session: %w", err)
 	}
 	return &oas.Session{
