@@ -21,7 +21,7 @@ GOLUSORIS_SHARED = $(GOMODCACHE)/github.com/golusoris/golusoris@$(GOLUSORIS_VER)
 
 .PHONY: help verify-all api-verify worker-verify web-verify web-e2e proto-verify deploy-verify governance-verify \
 	images kind-up kind-deploy kind-down \
-        api-gen web-gen proto-gen dev hooks setup
+        api-gen gosec-install web-gen proto-gen dev hooks setup
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-18s %s\n", $$1, $$2}'
@@ -45,6 +45,20 @@ api-verify: ## golangci-lint + go fix + gosec + govulncheck + go test -race + ge
 
 api-gen: ## ogen + sqlc generation inside api/
 	cd api && go generate ./...
+
+# gosec v2.29.0, the latest release, pins golang.org/x/tools v0.49.0, which cannot read the export
+# data Go 1.27.2 writes (version 5; x/tools reads it from v0.50.0), so it fails to load every
+# package. Build the release against a newer x/tools in a throwaway module until a gosec release
+# carries one. CI (ci.yml, security.yml) installs gosec through this target.
+GOSEC_VERSION ?= v2.29.0
+GOSEC_XTOOLS  ?= v0.50.0
+gosec-install: ## Install gosec built against an x/tools that reads Go 1.27.2 export data
+	tmp=$$(mktemp -d)
+	trap 'rm -rf "$$tmp"' EXIT
+	cd "$$tmp"
+	go mod init gosec-build
+	go get github.com/securego/gosec/v2/cmd/gosec@$(GOSEC_VERSION) golang.org/x/tools@$(GOSEC_XTOOLS)
+	go install github.com/securego/gosec/v2/cmd/gosec
 
 # Ratchet: raise as store/handler integration tests land (target 70, HISS-15). Never lower.
 API_COVER_MIN ?= 20

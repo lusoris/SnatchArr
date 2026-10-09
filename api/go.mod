@@ -2,6 +2,8 @@ module github.com/lusoris/SnatchArr/api
 
 go 1.27.1
 
+toolchain go1.27.2
+
 require (
 	github.com/go-chi/chi/v5 v5.3.2
 	github.com/go-faster/errors v0.8.0

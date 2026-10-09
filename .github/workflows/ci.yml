@@ -100,7 +100,7 @@ jobs:
           cache-dependency-path: api/go.sum
       - name: golangci-lint
         run: |
-          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
           golangci-lint run --config ../.golangci.yml --timeout 10m ./...
       - name: go fix (modernizers) leaves no diff
         run: go fix -diff ./...
@@ -148,7 +148,7 @@ jobs:
           cache-dependency-path: api/go.sum
       - name: gosec (zero exclusions)
         run: |
-          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          make -C .. gosec-install
           gosec -conf ../.gosec.json -exclude-generated ./...
       - name: govulncheck
         run: |
@@ -228,6 +228,8 @@ jobs:
           breaking_against: ${{ github.event.repository.clone_url }}#format=git,commit=${{ github.event.pull_request.base.sha }},subdir=proto
           push: false
           archive: false
+          # The workflow token is read-only; results go to the job log instead of a PR comment.
+          pr_comment: false
       - name: Generated Go stubs are committed
         # make proto-gen = buf generate + the HISS-09 SAFETY post-pass; raw buf generate would drift.
         run: make proto-gen && git diff --exit-code -- api/internal/gen

@@ -2,7 +2,7 @@ version: 1
 repository:
     owner: lusoris
     name: SnatchArr
-    visibility: private
+    visibility: public
     description: "Snatches missing and cutoff-unmet media across *arr instances while respecting per-instance hourly caps"
     homepage: "https://github.com/lusoris/SnatchArr"
     topics:
