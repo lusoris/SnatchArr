@@ -50,7 +50,7 @@ jobs:
       - name: Skip until worker/ exists
         id: present
         run: test -f Cargo.toml && echo "ok=true" >> "$GITHUB_OUTPUT" || echo "ok=false" >> "$GITHUB_OUTPUT"
-      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
         if: steps.present.outputs.ok == 'true'
       - name: cargo-audit
         if: steps.present.outputs.ok == 'true'
