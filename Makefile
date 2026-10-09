@@ -133,22 +133,40 @@ images: ## Build both images locally (tag dev)
 	docker build -t snatcharr-api:dev -f Dockerfile .
 	docker build -t snatcharr-worker:dev -f worker/Dockerfile .
 
-KIND_CLUSTER ?= snatcharr
-CNPG_VERSION ?= 1.28.0
-kind-up: images ## kind cluster + CloudNativePG operator + SnatchArr (deploy/kustomize/kind)
-	kind get clusters | grep -qx $(KIND_CLUSTER) || kind create cluster --name $(KIND_CLUSTER) --config deploy/kustomize/kind/cluster.yaml
-	kubectl --context kind-$(KIND_CLUSTER) apply --server-side -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-$(shell echo $(CNPG_VERSION) | cut -d. -f1,2)/releases/cnpg-$(CNPG_VERSION).yaml
-	kubectl --context kind-$(KIND_CLUSTER) -n cnpg-system rollout status deploy/cnpg-controller-manager --timeout=180s
+# kind runs only inside an incus VM (tools/incus-kind-vm.sh, #61): its kubelet writes host
+# kernel settings (vm.overcommit_memory, kernel.panic) when it runs in host Docker. The host
+# reaches the API server at the VM's address through a dedicated kubeconfig.
+KIND_CLUSTER    ?= snatcharr
+KIND_VM         ?= snatcharr-kind
+KIND_VM_SCRIPT   = SNATCHARR_KIND_VM=$(KIND_VM) tools/incus-kind-vm.sh
+KIND_KUBECONFIG ?= $(CURDIR)/.kind/$(KIND_CLUSTER).kubeconfig
+KIND_KUBECTL     = kubectl --kubeconfig $(KIND_KUBECONFIG)
+CNPG_VERSION    ?= 1.28.0
+kind-up: images ## incus VM + kind cluster + CloudNativePG operator + SnatchArr (deploy/kustomize/kind)
+	$(KIND_VM_SCRIPT) create
+	addr=$$($(KIND_VM_SCRIPT) address)
+	if ! incus exec $(KIND_VM) -- kind get clusters | grep -qx $(KIND_CLUSTER); then
+	  { cat deploy/kustomize/kind/cluster.yaml; printf 'networking:\n  apiServerAddress: "%s"\n  apiServerPort: 6443\n' "$$addr"; } |
+	    incus exec $(KIND_VM) -- kind create cluster --name $(KIND_CLUSTER) --config - --wait 120s
+	fi
+	mkdir -p $(dir $(KIND_KUBECONFIG))
+	(umask 077; incus exec $(KIND_VM) -- kind get kubeconfig --name $(KIND_CLUSTER) > $(KIND_KUBECONFIG))
+	$(KIND_KUBECTL) apply --server-side -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-$(shell echo $(CNPG_VERSION) | cut -d. -f1,2)/releases/cnpg-$(CNPG_VERSION).yaml
+	$(KIND_KUBECTL) -n cnpg-system rollout status deploy/cnpg-controller-manager --timeout=180s
 	$(MAKE) kind-deploy
 
-kind-deploy: ## Load dev images and apply the kind overlay
-	kind load docker-image snatcharr-api:dev snatcharr-worker:dev --name $(KIND_CLUSTER)
-	kustomize build --enable-helm deploy/kustomize/kind | kubectl --context kind-$(KIND_CLUSTER) apply --server-side -f -
-	kubectl --context kind-$(KIND_CLUSTER) -n snatcharr rollout status deploy/snatcharr-api --timeout=300s
-	@echo "UI: kubectl --context kind-$(KIND_CLUSTER) -n snatcharr port-forward svc/snatcharr-api 8080:8080"
+kind-deploy: ## Load dev images into the VM's kind cluster and apply the kind overlay
+	for img in snatcharr-api:dev snatcharr-worker:dev; do
+	  docker save $$img | incus exec $(KIND_VM) -- docker load
+	  incus exec $(KIND_VM) -- kind load docker-image $$img --name $(KIND_CLUSTER)
+	done
+	kustomize build --enable-helm deploy/kustomize/kind | $(KIND_KUBECTL) apply --server-side -f -
+	$(KIND_KUBECTL) -n snatcharr rollout status deploy/snatcharr-api --timeout=300s
+	@echo "UI: $(KIND_KUBECTL) -n snatcharr port-forward svc/snatcharr-api 8080:8080"
 
-kind-down: ## Delete the kind cluster
-	kind delete cluster --name $(KIND_CLUSTER)
+kind-down: ## Delete the kind VM, its profile and the kubeconfig
+	$(KIND_VM_SCRIPT) destroy
+	rm -f $(KIND_KUBECONFIG)
 
 # ── governance (praetor) ──────────────────────────────────────────────────────
 governance-verify: ## compile-context --verify, audit, state audit, flavor audit (go-service)
