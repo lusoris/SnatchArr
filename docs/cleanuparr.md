@@ -7,7 +7,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 [Cleanuparr](https://github.com/Cleanuparr/Cleanuparr) strikes and removes downloads
 that stall, crawl, fail to import or turn out dead. SnatchArr decides what to search for
-next. The two do not overlap ([ADR-0004](adr/0004-no-swaparr-cleanuparr-deferred.md)),
+next. The two do not overlap ([ADR-0007](adr/0007-read-only-cleanuparr-link.md)),
 and SnatchArr shows what Cleanuparr is doing right next to its own snatches.
 
 ## Linking

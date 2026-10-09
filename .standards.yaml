@@ -4,7 +4,7 @@ repository:
     name: SnatchArr
     visibility: public
     description: "Snatches missing and cutoff-unmet media across *arr instances while respecting per-instance hourly caps"
-    homepage: "https://github.com/lusoris/SnatchArr"
+    homepage: "https://lusoris.github.io/SnatchArr/"
     topics:
         - arr
         - sonarr

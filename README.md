@@ -44,7 +44,7 @@ If you already run [Configarr](https://github.com/raydak-labs/configarr), point 
 
 ## Running Cleanuparr too?
 
-[Cleanuparr](https://github.com/Cleanuparr/Cleanuparr) cleans up what your download clients choke on; SnatchArr only decides what to search for next. They complement each other. A read-only Cleanuparr integration (status, recent strikes, skipping struck items) is part of v1.
+[Cleanuparr](https://github.com/Cleanuparr/Cleanuparr) cleans up what your download clients choke on; SnatchArr only decides what to search for next. They complement each other. v1 links Cleanuparr read-only and shows its status and recent strikes next to your snatches ([ADR-0007](docs/adr/0007-read-only-cleanuparr-link.md)). A download Cleanuparr is striking is still in the *arr queue, so SnatchArr already skips its item.
 
 ## License
 

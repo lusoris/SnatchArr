@@ -77,7 +77,7 @@ Every instance has one policy (`GET/PUT /api/v1/instances/{id}/policy`).
 
 | Field | Default | Meaning |
 | --- | --- | --- |
-| `history_retention_days` | 90 | How long events are kept |
+| `history_retention_days` | 90 | How long events should be kept. Not enforced yet: no retention job runs (#15) |
 | `user_agent` | `SnatchArr/1.0 (...)` | Sent to every *arr and download client |
 | `global_hourly_cap` | 0 | Stamina shared by every instance (0 = off) |
 
