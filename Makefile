@@ -15,8 +15,8 @@ SHELL := /bin/sh
 PRAETORCTL ?= praetorctl
 # golusoris' shared Makefile is consumed from the module cache (docs/ci-downstream.md); the
 # variables are recursively expanded so they resolve only when an api-* target runs.
-GOMODCACHE       = $(subst \,/,$(shell cd api && go env GOMODCACHE))
-GOLUSORIS_VER    = $(shell cd api && go list -m -f '{{.Version}}' github.com/golusoris/golusoris)
+GOMODCACHE       = $(subst \,/,$(shell go env GOMODCACHE))
+GOLUSORIS_VER    = $(shell go list -m -f '{{.Version}}' github.com/golusoris/golusoris)
 GOLUSORIS_SHARED = $(GOMODCACHE)/github.com/golusoris/golusoris@$(GOLUSORIS_VER)/tools/Makefile.shared
 
 .PHONY: help verify-all api-verify worker-verify web-verify web-e2e proto-verify deploy-verify governance-verify \
@@ -31,7 +31,7 @@ verify-all: governance-verify proto-verify api-verify worker-verify web-verify d
 
 # ── api/ (Go, golusoris) ──────────────────────────────────────────────────────
 api-verify: ## golangci-lint + go fix + gosec + govulncheck + go test -race + generated-code drift + spectral
-	@if [ ! -f api/go.mod ]; then echo "api/ not scaffolded yet; skipping"; exit 0; fi
+	@if [ ! -f go.mod ]; then echo "go.mod not scaffolded yet; skipping"; exit 0; fi
 	$(MAKE) -C api -f "$(GOLUSORIS_SHARED)" ci GOLANGCI_CONFIG=../.golangci.yml GOSEC="gosec -exclude-generated -conf ../.gosec.json"
 	cd api
 	go fix -diff ./...
@@ -73,8 +73,7 @@ api-cover: ## Coverage gate on hand-written packages (generated code excluded)
 
 # ── worker/ (Rust) ────────────────────────────────────────────────────────────
 worker-verify: ## cargo fmt/clippy(-D warnings)/audit/deny/test
-	@if [ ! -f worker/Cargo.toml ]; then echo "worker/ not scaffolded yet; skipping"; exit 0; fi
-	cd worker
+	@if [ ! -f Cargo.toml ]; then echo "Cargo workspace not scaffolded yet; skipping"; exit 0; fi
 	cargo fmt --all --check
 	cargo clippy --workspace --all-targets --locked -- -D warnings
 	cargo audit
@@ -169,5 +168,5 @@ dev: ## Local stack: postgres (compose) + api (air) + worker (cargo watch) + web
 	docker compose -f deploy/compose/docker-compose.yml up -d postgres
 	@echo "Run in three terminals:"
 	echo "  cd api    && air -c ../tools/air.toml"
-	echo "  cd worker && cargo watch -x 'run -p snatch-worker'"
+	echo "  cargo watch -x 'run -p snatch-worker'"
 	echo "  cd web    && pnpm dev"

@@ -3,7 +3,7 @@
 
 [workspace]
 resolver = "3"
-members = ["crates/*"]
+members = ["worker/crates/*"]
 
 [workspace.package]
 version = "0.1.0"
@@ -15,9 +15,9 @@ authors = ["lusoris <lusoris@pm.me>"]
 publish = false
 
 [workspace.dependencies]
-snatch-proto = { path = "crates/snatch-proto", version = "0.1.0" }
-snatch-core = { path = "crates/snatch-core", version = "0.1.0" }
-arr-client = { path = "crates/arr-client", version = "0.1.0" }
+snatch-proto = { path = "worker/crates/snatch-proto", version = "0.1.0" }
+snatch-core = { path = "worker/crates/snatch-core", version = "0.1.0" }
+arr-client = { path = "worker/crates/arr-client", version = "0.1.0" }
 
 tokio = { version = "1.53", features = ["rt-multi-thread", "macros", "signal", "time", "sync"] }
 tokio-util = "0.7"

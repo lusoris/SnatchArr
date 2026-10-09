@@ -34,8 +34,8 @@ jobs:
         id: present
         run: |
           {
-            echo "api=$([ -f api/go.mod ] && echo true || echo false)"
-            echo "worker=$([ -f worker/Cargo.toml ] && echo true || echo false)"
+            echo "api=$([ -f go.mod ] && echo true || echo false)"
+            echo "worker=$([ -f Cargo.toml ] && echo true || echo false)"
             echo "web=$([ -f web/package.json ] && echo true || echo false)"
             echo "proto=$([ -f proto/buf.yaml ] && echo true || echo false)"
             echo "deploy=$([ -f deploy/helm/snatcharr/Chart.yaml ] && echo true || echo false)"
@@ -46,6 +46,8 @@ jobs:
           filters: |
             api:
               - 'api/**'
+              - 'go.mod'
+              - 'go.sum'
               - 'proto/**'
               - '.golangci.yml'
               - '.gosec.json'
@@ -54,6 +56,11 @@ jobs:
               - '.github/workflows/ci.yml'
             worker:
               - 'worker/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'rust-toolchain.toml'
+              - 'rustfmt.toml'
+              - 'deny.toml'
               - 'proto/**'
               - '.github/workflows/ci.yml'
             web:
@@ -96,8 +103,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: api/go.mod
-          cache-dependency-path: api/go.sum
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
       - name: golangci-lint
         run: |
           go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
@@ -119,8 +126,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: api/go.mod
-          cache-dependency-path: api/go.sum
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
       - name: go vet + build
         run: cd api && go vet ./... && go build ./...
       - name: go test -race
@@ -144,8 +151,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: api/go.mod
-          cache-dependency-path: api/go.sum
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
       - name: gosec (zero exclusions)
         run: |
           make -C .. gosec-install
@@ -174,17 +181,12 @@ jobs:
     if: needs.changes.outputs.worker == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    defaults:
-      run:
-        working-directory: worker
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
         with:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          workspaces: worker
       - name: Format
         run: cargo fmt --all --check
       - name: Clippy (zero warnings)
@@ -197,7 +199,7 @@ jobs:
         run: cargo install cargo-audit --locked && cargo audit
       - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
         with:
-          manifest-path: worker/Cargo.toml
+          manifest-path: Cargo.toml
           command: check
 
   web:
@@ -260,7 +262,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: api/go.mod
+          go-version-file: go.mod
           cache: false
       - name: Install praetorctl
         run: |

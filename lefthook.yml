@@ -12,10 +12,10 @@ pre-commit:
       stage_fixed: true
     go-vet:
       glob: "api/**/*.go"
-      run: if [ ! -f api/go.mod ]; then exit 0; fi; cd api && go vet ./...
+      run: if [ ! -f go.mod ]; then exit 0; fi; cd api && go vet ./...
     rust-fmt:
       glob: "worker/**/*.rs"
-      run: cd worker && cargo fmt --all --check
+      run: cargo fmt --all --check
     proto-lint:
       glob: "proto/**/*.proto"
       run: cd proto && buf lint
@@ -44,7 +44,7 @@ pre-push:
   parallel: false
   commands:
     security:
-      run: if command -v govulncheck >/dev/null 2>&1; then if [ -f api/go.mod ]; then cd api && govulncheck ./...; fi; else echo govulncheck is not installed, skipping >&2; fi
+      run: if command -v govulncheck >/dev/null 2>&1; then if [ -f go.mod ]; then cd api && govulncheck ./...; fi; else echo govulncheck is not installed, skipping >&2; fi
     flavor-audit:
       run: if command -v praetorctl >/dev/null 2>&1; then praetorctl flavor audit --flavor=go-service .; elif [ -d ./cmd/standardsctl ]; then go run ./cmd/standardsctl flavor audit --flavor=go-service .; else echo HISS governance hook cannot run because praetorctl is not installed >&2; exit 1; fi
     audit:
