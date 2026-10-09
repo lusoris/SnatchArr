@@ -25,12 +25,16 @@ const devAPIKeySecret = "snatcharr-dev-only-api-key-secret" // #nosec G101 -- de
 // follows config (`__Host-` prefixed names cannot be set over plain-http dev).
 const cookieName = "snatcharr_session"
 
-func newSessionManager(st *PgSessionStore, cfg config.Options) *session.Manager {
-	return session.NewManager(st, session.Options{
-		CookieName: cookieName,
-		TTL:        cfg.Session.TTL,
-		Secure:     cfg.Session.Secure,
+func newSessionManager(st *PgSessionStore, cfg config.Options) (*session.Manager, error) {
+	m, err := session.NewManager(st, session.Options{
+		CookieName:          cookieName,
+		TTL:                 cfg.Session.TTL,
+		AllowInsecureCookie: !cfg.Session.Secure,
 	})
+	if err != nil {
+		return nil, fmt.Errorf("auth: session manager: %w", err)
+	}
+	return m, nil
 }
 
 func newAPIKeyService(st *PgAPIKeyStore, cfg config.Options, clk clock.Clock, logger *slog.Logger) (*apikey.Service, error) {
