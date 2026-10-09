@@ -1,6 +1,8 @@
+---
 id: "app-service"
 name: "Application Backend Service"
-description: "Production backend services and microservices exposing HTTP/gRPC APIs with structured telemetry and bounded concurrency"
+description: "Production backend services and microservices exposing HTTP/gRPC
+  APIs with structured telemetry and bounded concurrency"
 runtime: "go"
 
 complexity:
@@ -28,5 +30,5 @@ linters:
 
 devcontainer_features:
   - "ghcr.io/devcontainers/features/go:1"
-  - "ghcr.io/devcontainers/features/docker-in-docker:2"
+  - "ghcr.io/devcontainers/features/docker-in-docker:4"
   - "ghcr.io/devcontainers/features/common-utils:2"

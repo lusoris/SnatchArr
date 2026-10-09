@@ -10,6 +10,8 @@
   "files.watcherExclude": {
     "**/.standards/worktrees/**": true,
     "**/.workingdir*/**": true,
+    "**/.workingdir/**": true,
+    "**/.workingdir2/**": true,
     "**/bin/**": true,
     "**/dist/**": true
   },

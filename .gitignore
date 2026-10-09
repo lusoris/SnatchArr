@@ -31,6 +31,11 @@ Thumbs.db
 *.log
 # --- claude code local ---
 .claude/settings.local.json
+
+# BEGIN praetor private artifacts (praetorctl adopt)
 /.workingdir/
+/.workingdir2/
 /.standards/worktrees/
 /.agents/mcp_config.json
+/.standards/cache/
+# END praetor private artifacts
