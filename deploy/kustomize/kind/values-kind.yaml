@@ -14,7 +14,8 @@ config:
   publicUrl: http://localhost:8080
 secrets:
   cryptoKey: 0123456789abcdef0123456789abcdef
-  csrfSecret: kind-only-csrf-secret-not-for-production
+  # 32 bytes as hex, as golusoris httpx/csrf requires; kind-only, never for production.
+  csrfSecret: 0cc7f5ad2e7f34c9ff986e809062d3f783511ed5ae70f610dea056aa34ac330e
   apiKeySecret: kind-only-apikey-secret-not-for-production
   workerToken: kind-only-worker-token
 postgres:
