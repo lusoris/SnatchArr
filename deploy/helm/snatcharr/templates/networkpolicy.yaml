@@ -1,10 +1,7 @@
 {{- if .Values.networkPolicy.enabled }}
 {{- $api := dict "root" . "component" "api" }}
 {{- $worker := dict "root" . "component" "worker" }}
-{{- $arr := list }}
-{{- range .Values.networkPolicy.arrCidrs }}
-{{- $arr = append $arr (dict "ipBlock" (dict "cidr" . "except" (list "169.254.169.254/32"))) }}
-{{- end }}
+{{- $arr := include "snatcharr.arrEgressPeers" . }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -56,7 +53,7 @@ spec:
     {{- end }}
     # *arr apps, Seerr, Cleanuparr, download clients (the API probes and discovers them).
     - to:
-        {{- toYaml $arr | nindent 8 }}
+        {{- $arr | nindent 8 }}
     {{- with .Values.networkPolicy.extraEgress }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
@@ -88,7 +85,7 @@ spec:
         - port: {{ .Values.api.service.grpcPort }}
           protocol: TCP
     - to:
-        {{- toYaml $arr | nindent 8 }}
+        {{- $arr | nindent 8 }}
     {{- with .Values.networkPolicy.extraEgress }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
