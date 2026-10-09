@@ -19,3 +19,8 @@ SvelteKit server hooks are therefore unavailable: sessions (`__Host-session` coo
 - One image, one process, same-origin API calls, no CORS.
 - Theme preference is applied client-side (a first-paint flash is accepted).
 - `APP_WEB_DEV=1` disables the embedded SPA so Vite's dev server can proxy to the API.
+
+## Notes
+
+2026-10-09: no OIDC login exists yet. The OIDC redirects named above are where that flow
+will live once it is built (#26).

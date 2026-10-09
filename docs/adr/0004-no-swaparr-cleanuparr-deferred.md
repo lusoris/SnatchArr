@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted (2026-09-21)
+Accepted (2026-09-21). The Cleanuparr part is superseded by
+[ADR-0007](0007-read-only-cleanuparr-link.md) (2026-10-09); the no-Swaparr decision stands.
 
 ## Context
 

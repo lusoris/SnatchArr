@@ -77,4 +77,5 @@ nav:
       - "ADR-0004: No Swaparr, Cleanuparr complementary": adr/0004-no-swaparr-cleanuparr-deferred.md
       - "ADR-0005: Static SPA embedded in the API image": adr/0005-static-spa-embedded-in-api-image.md
       - "ADR-0006: Download-client backpressure": adr/0006-download-client-backpressure.md
+      - "ADR-0007: Read-only Cleanuparr link": adr/0007-read-only-cleanuparr-link.md
       - Template: adr/0000-template.md

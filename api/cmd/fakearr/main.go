@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 // Command fakearr is a deterministic stand-in for a Sonarr- or Radarr-shaped instance,
-// used by the end-to-end smoke test. It serves system/status, wanted/missing,
+// built for the planned end-to-end smoke test (#19). It serves system/status, wanted/missing,
 // wanted/cutoff, queue and command endpoints, records every search command, and exposes
 // them at /_fake/commands for assertions. It is not part of the product image.
 package main
