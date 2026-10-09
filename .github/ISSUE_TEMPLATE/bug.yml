@@ -1,0 +1,101 @@
+name: Bug report
+description: Something in SnatchArr behaves differently than documented.
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Issues are public: before you paste anything, remove every detail
+        of your own environment. Use placeholders such as `<arr-host>`, `<client-host>`,
+        `<title>`, `<user>` and `<token>` instead of real values.
+  - type: checkboxes
+    id: redaction
+    attributes:
+      label: Redaction checklist
+      description: Every box must be ticked before you submit.
+      options:
+        - label: No hostnames, domains, IP addresses or URLs of my own services (replaced with `<arr-host>`, `<client-host>`, ...)
+          required: true
+        - label: No API keys, tokens, passwords, cookies or session IDs (replaced with `<token>`)
+          required: true
+        - label: No usernames, e-mail addresses or Seerr requesters (replaced with `<user>`)
+          required: true
+        - label: No media titles, library names or file paths (replaced with `<title>`, `<library>`, `<path>`)
+          required: true
+        - label: Chart values are listed by key only, without their values
+          required: true
+  - type: input
+    id: version
+    attributes:
+      label: SnatchArr version
+      description: Image tag or chart version, for example 0.1.1.
+      placeholder: 0.1.1
+    validations:
+      required: true
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: Deployment
+      options:
+        - Helm chart
+        - Docker Compose
+        - make dev
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      multiple: true
+      options:
+        - API (control plane)
+        - Worker
+        - Web UI
+        - Helm chart
+        - Docs
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you saw, including the error message.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: The smallest sequence of steps that shows the problem.
+      placeholder: |
+        1. Link an instance of type ... with policy ...
+        2. Wait for the planner tick
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: integrations
+    attributes:
+      label: Integrations involved
+      description: Instance types and versions only (for example Sonarr 4.0, qBittorrent 5.1, Seerr 2.x).
+  - type: textarea
+    id: values-keys
+    attributes:
+      label: Chart value keys you set
+      description: Keys only, one per line, for example `networkPolicy.enabled` or `postgres.external.dsnSecretRef.name`.
+      render: text
+  - type: textarea
+    id: logs
+    attributes:
+      label: Redacted logs
+      description: The relevant lines only, with the placeholders above.
+      render: text
