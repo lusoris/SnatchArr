@@ -113,6 +113,7 @@ jobs:
               - '.github/workflows/ci.yml'
             deploy:
               - 'deploy/**'
+              - 'Makefile'
               - '.github/workflows/ci.yml'
             governance:
               - 'AGENTS.md'
@@ -300,12 +301,22 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
-      - name: helm lint
-        run: helm lint deploy/helm/snatcharr
-      - name: kubeconform
+      # Pinned release tarball, checksum from the release's checksums.txt (no install action
+      # covers kustomize).
+      - name: kustomize v5.8.2
+        env:
+          KUSTOMIZE_SHA256: 06af0a202c2b831207d0173f9c9cdb1b30abceca0747cb3fbb72792d26055c95
         run: |
-          helm template snatcharr deploy/helm/snatcharr \
-            | docker run --rm -i ghcr.io/yannh/kubeconform:v0.7.0 -strict -ignore-missing-schemas -summary
+          curl -fsSL --max-time 60 -o "$RUNNER_TEMP/kustomize.tgz" \
+            https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize/v5.8.2/kustomize_v5.8.2_linux_amd64.tar.gz
+          echo "$KUSTOMIZE_SHA256  $RUNNER_TEMP/kustomize.tgz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/kustomize.tgz" -C "$RUNNER_TEMP" kustomize
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      # The same checks as locally: strict lint, kubeconform on the default and all-features
+      # renders (kubeconform runs from its pinned image), the kind overlay build and the render
+      # guards (#116).
+      - name: make deploy-verify
+        run: make deploy-verify
       # kubeconform checks schemas only. The API server also validates semantics, such as an
       # ipBlock `except` having to lie inside its `cidr`, which shipped broken in 0.1.0. kind
       # runs here on the disposable runner only; locally it runs inside an incus VM (#61).
