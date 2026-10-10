@@ -144,7 +144,7 @@ type Invoker interface {
 	GetDownloadClientStatus(ctx context.Context) ([]DownloadClientStatus, error)
 	// GetHourlyCaps invokes getHourlyCaps operation.
 	//
-	// Per-instance hourly budget consumption.
+	// Per-instance stamina spent in the last 60 minutes (rolling window).
 	//
 	// GET /hourly-caps
 	GetHourlyCaps(ctx context.Context) ([]CapStatus, error)
@@ -2838,7 +2838,7 @@ func (c *Client) sendGetDownloadClientStatus(ctx context.Context) (res []Downloa
 
 // GetHourlyCaps invokes getHourlyCaps operation.
 //
-// Per-instance hourly budget consumption.
+// Per-instance stamina spent in the last 60 minutes (rolling window).
 //
 // GET /hourly-caps
 func (c *Client) GetHourlyCaps(ctx context.Context) ([]CapStatus, error) {

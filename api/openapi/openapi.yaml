@@ -471,7 +471,7 @@ paths:
     get:
       tags: [snatches]
       operationId: getHourlyCaps
-      summary: Per-instance hourly budget consumption
+      summary: Per-instance stamina spent in the last 60 minutes (rolling window)
       responses:
         "200":
           description: Caps
@@ -1514,11 +1514,13 @@ components:
           description: Absent for the global entry
         used:
           type: integer
+          description: Items granted within the rolling 60-minute window, the same sum the grant enforces
         cap:
           type: integer
         resets_at:
           type: string
           format: date-time
+          description: When stamina next frees up (the oldest spend still counted leaves the window); now when nothing is spent
 
     Settings:
       type: object

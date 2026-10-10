@@ -12,6 +12,61 @@ import (
 	"github.com/google/uuid"
 )
 
+const addBucketUsed = `-- name: AddBucketUsed :exec
+INSERT INTO rate_buckets (instance_id, window_start, used) VALUES ($1, $2, $3)
+ON CONFLICT (instance_id, window_start) DO UPDATE SET used = rate_buckets.used + EXCLUDED.used
+`
+
+type AddBucketUsedParams struct {
+	InstanceID  uuid.UUID
+	WindowStart time.Time
+	Used        int32
+}
+
+func (q *Queries) AddBucketUsed(ctx context.Context, arg AddBucketUsedParams) error {
+	_, err := q.db.Exec(ctx, addBucketUsed, arg.InstanceID, arg.WindowStart, arg.Used)
+	return err
+}
+
+const addGlobalBucketUsed = `-- name: AddGlobalBucketUsed :exec
+INSERT INTO global_rate_buckets (window_start, used) VALUES ($1, $2)
+ON CONFLICT (window_start) DO UPDATE SET used = global_rate_buckets.used + EXCLUDED.used
+`
+
+type AddGlobalBucketUsedParams struct {
+	WindowStart time.Time
+	Used        int32
+}
+
+func (q *Queries) AddGlobalBucketUsed(ctx context.Context, arg AddGlobalBucketUsedParams) error {
+	_, err := q.db.Exec(ctx, addGlobalBucketUsed, arg.WindowStart, arg.Used)
+	return err
+}
+
+const bucketUsage = `-- name: BucketUsage :one
+SELECT COALESCE(sum(used), 0)::int AS used,
+       COALESCE(min(window_start), $1::timestamptz)::timestamptz AS oldest
+FROM rate_buckets
+WHERE instance_id = $2 AND window_start >= $1::timestamptz AND used > 0
+`
+
+type BucketUsageParams struct {
+	Since      time.Time
+	InstanceID uuid.UUID
+}
+
+type BucketUsageRow struct {
+	Used   int32
+	Oldest time.Time
+}
+
+func (q *Queries) BucketUsage(ctx context.Context, arg BucketUsageParams) (BucketUsageRow, error) {
+	row := q.db.QueryRow(ctx, bucketUsage, arg.Since, arg.InstanceID)
+	var i BucketUsageRow
+	err := row.Scan(&i.Used, &i.Oldest)
+	return i, err
+}
+
 const countProcessed = `-- name: CountProcessed :one
 SELECT count(*) FROM processed_items WHERE instance_id = $1 AND expires_at > $2
 `
@@ -26,31 +81,6 @@ func (q *Queries) CountProcessed(ctx context.Context, arg CountProcessedParams) 
 	var count int64
 	err := row.Scan(&count)
 	return count, err
-}
-
-const ensureBucket = `-- name: EnsureBucket :exec
-INSERT INTO rate_buckets (instance_id, window_start, used) VALUES ($1, $2, 0)
-ON CONFLICT (instance_id, window_start) DO NOTHING
-`
-
-type EnsureBucketParams struct {
-	InstanceID  uuid.UUID
-	WindowStart time.Time
-}
-
-func (q *Queries) EnsureBucket(ctx context.Context, arg EnsureBucketParams) error {
-	_, err := q.db.Exec(ctx, ensureBucket, arg.InstanceID, arg.WindowStart)
-	return err
-}
-
-const ensureGlobalBucket = `-- name: EnsureGlobalBucket :exec
-INSERT INTO global_rate_buckets (window_start, used) VALUES ($1, 0)
-ON CONFLICT (window_start) DO NOTHING
-`
-
-func (q *Queries) EnsureGlobalBucket(ctx context.Context, windowStart time.Time) error {
-	_, err := q.db.Exec(ctx, ensureGlobalBucket, windowStart)
-	return err
 }
 
 const filterUnprocessed = `-- name: FilterUnprocessed :many
@@ -103,58 +133,45 @@ func (q *Queries) FilterUnprocessed(ctx context.Context, arg FilterUnprocessedPa
 	return items, nil
 }
 
-const getBucketUsed = `-- name: GetBucketUsed :one
-SELECT COALESCE((SELECT used FROM rate_buckets WHERE instance_id = $1 AND window_start = $2), 0)::int AS used
+const globalBucketUsage = `-- name: GlobalBucketUsage :one
+SELECT COALESCE(sum(used), 0)::int AS used,
+       COALESCE(min(window_start), $1::timestamptz)::timestamptz AS oldest
+FROM global_rate_buckets
+WHERE window_start >= $1::timestamptz AND used > 0
 `
 
-type GetBucketUsedParams struct {
-	InstanceID  uuid.UUID
-	WindowStart time.Time
+type GlobalBucketUsageRow struct {
+	Used   int32
+	Oldest time.Time
 }
 
-func (q *Queries) GetBucketUsed(ctx context.Context, arg GetBucketUsedParams) (int32, error) {
-	row := q.db.QueryRow(ctx, getBucketUsed, arg.InstanceID, arg.WindowStart)
-	var used int32
-	err := row.Scan(&used)
-	return used, err
+func (q *Queries) GlobalBucketUsage(ctx context.Context, since time.Time) (GlobalBucketUsageRow, error) {
+	row := q.db.QueryRow(ctx, globalBucketUsage, since)
+	var i GlobalBucketUsageRow
+	err := row.Scan(&i.Used, &i.Oldest)
+	return i, err
 }
 
-const getGlobalBucketUsed = `-- name: GetGlobalBucketUsed :one
-SELECT COALESCE((SELECT used FROM global_rate_buckets WHERE window_start = $1), 0)::int AS used
+const lockGlobalBudget = `-- name: LockGlobalBudget :exec
+SELECT pg_advisory_xact_lock(hashtextextended('snatcharr.budget:global', 0))
 `
 
-func (q *Queries) GetGlobalBucketUsed(ctx context.Context, windowStart time.Time) (int32, error) {
-	row := q.db.QueryRow(ctx, getGlobalBucketUsed, windowStart)
-	var used int32
-	err := row.Scan(&used)
-	return used, err
+// Taken after LockInstanceBudget, never before, so the two locks cannot deadlock.
+func (q *Queries) LockGlobalBudget(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, lockGlobalBudget)
+	return err
 }
 
-const lockBucket = `-- name: LockBucket :one
-SELECT used FROM rate_buckets WHERE instance_id = $1 AND window_start = $2 FOR UPDATE
+const lockInstanceBudget = `-- name: LockInstanceBudget :exec
+SELECT pg_advisory_xact_lock(hashtextextended('snatcharr.budget:' || $1::uuid::text, 0))
 `
 
-type LockBucketParams struct {
-	InstanceID  uuid.UUID
-	WindowStart time.Time
-}
-
-func (q *Queries) LockBucket(ctx context.Context, arg LockBucketParams) (int32, error) {
-	row := q.db.QueryRow(ctx, lockBucket, arg.InstanceID, arg.WindowStart)
-	var used int32
-	err := row.Scan(&used)
-	return used, err
-}
-
-const lockGlobalBucket = `-- name: LockGlobalBucket :one
-SELECT used FROM global_rate_buckets WHERE window_start = $1 FOR UPDATE
-`
-
-func (q *Queries) LockGlobalBucket(ctx context.Context, windowStart time.Time) (int32, error) {
-	row := q.db.QueryRow(ctx, lockGlobalBucket, windowStart)
-	var used int32
-	err := row.Scan(&used)
-	return used, err
+// Stamina is a rolling window of one-minute buckets (#16). Every grant for an instance
+// runs under this transaction-scoped lock, so two grants on either side of a minute
+// boundary (different bucket rows) still see each other.
+func (q *Queries) LockInstanceBudget(ctx context.Context, instanceID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, lockInstanceBudget, instanceID)
+	return err
 }
 
 const markProcessed = `-- name: MarkProcessed :exec
@@ -295,33 +312,4 @@ func (q *Queries) ResetProcessed(ctx context.Context, instanceID *uuid.UUID) (in
 		return 0, err
 	}
 	return result.RowsAffected(), nil
-}
-
-const setBucketUsed = `-- name: SetBucketUsed :exec
-UPDATE rate_buckets SET used = $3 WHERE instance_id = $1 AND window_start = $2
-`
-
-type SetBucketUsedParams struct {
-	InstanceID  uuid.UUID
-	WindowStart time.Time
-	Used        int32
-}
-
-func (q *Queries) SetBucketUsed(ctx context.Context, arg SetBucketUsedParams) error {
-	_, err := q.db.Exec(ctx, setBucketUsed, arg.InstanceID, arg.WindowStart, arg.Used)
-	return err
-}
-
-const setGlobalBucketUsed = `-- name: SetGlobalBucketUsed :exec
-UPDATE global_rate_buckets SET used = $2 WHERE window_start = $1
-`
-
-type SetGlobalBucketUsedParams struct {
-	WindowStart time.Time
-	Used        int32
-}
-
-func (q *Queries) SetGlobalBucketUsed(ctx context.Context, arg SetGlobalBucketUsedParams) error {
-	_, err := q.db.Exec(ctx, setGlobalBucketUsed, arg.WindowStart, arg.Used)
-	return err
 }

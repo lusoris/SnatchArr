@@ -315,7 +315,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Per-instance hourly budget consumption */
+        /** Per-instance stamina spent in the last 60 minutes (rolling window) */
         get: operations["getHourlyCaps"];
         put?: never;
         post?: never;
@@ -962,9 +962,13 @@ export interface components {
              * @description Absent for the global entry
              */
             instance_id?: string;
+            /** @description Items granted within the rolling 60-minute window, the same sum the grant enforces */
             used: number;
             cap: number;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description When stamina next frees up (the oldest spend still counted leaves the window); now when nothing is spent
+             */
             resets_at: string;
         };
         Settings: {

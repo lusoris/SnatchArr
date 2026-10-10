@@ -4086,7 +4086,7 @@ func (s *Server) handleGetDownloadClientStatusRequest(args [0]string, argsEscape
 
 // handleGetHourlyCapsRequest handles getHourlyCaps operation.
 //
-// Per-instance hourly budget consumption.
+// Per-instance stamina spent in the last 60 minutes (rolling window).
 //
 // GET /hourly-caps
 func (s *Server) handleGetHourlyCapsRequest(args [0]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
@@ -4233,7 +4233,7 @@ func (s *Server) handleGetHourlyCapsRequest(args [0]string, argsEscaped bool, w 
 		mreq := middleware.Request{
 			Context:          ctx,
 			OperationName:    GetHourlyCapsOperation,
-			OperationSummary: "Per-instance hourly budget consumption",
+			OperationSummary: "Per-instance stamina spent in the last 60 minutes (rolling window)",
 			OperationID:      "getHourlyCaps",
 			Body:             nil,
 			RawBody:          rawBody,

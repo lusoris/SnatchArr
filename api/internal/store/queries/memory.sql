@@ -49,18 +49,21 @@ WHERE (instance_id, kind, entity_type, entity_id) IN (
     WHERE expires_at <= sqlc.arg(before)::timestamptz LIMIT sqlc.arg(batch)::int)
   AND expires_at <= sqlc.arg(before)::timestamptz;
 
--- name: EnsureBucket :exec
-INSERT INTO rate_buckets (instance_id, window_start, used) VALUES ($1, $2, 0)
-ON CONFLICT (instance_id, window_start) DO NOTHING;
+-- Stamina is a rolling window of one-minute buckets (#16). Every grant for an instance
+-- runs under this transaction-scoped lock, so two grants on either side of a minute
+-- boundary (different bucket rows) still see each other.
+-- name: LockInstanceBudget :exec
+SELECT pg_advisory_xact_lock(hashtextextended('snatcharr.budget:' || sqlc.arg(instance_id)::uuid::text, 0));
 
--- name: LockBucket :one
-SELECT used FROM rate_buckets WHERE instance_id = $1 AND window_start = $2 FOR UPDATE;
+-- name: BucketUsage :one
+SELECT COALESCE(sum(used), 0)::int AS used,
+       COALESCE(min(window_start), sqlc.arg(since)::timestamptz)::timestamptz AS oldest
+FROM rate_buckets
+WHERE instance_id = sqlc.arg(instance_id) AND window_start >= sqlc.arg(since)::timestamptz AND used > 0;
 
--- name: SetBucketUsed :exec
-UPDATE rate_buckets SET used = $3 WHERE instance_id = $1 AND window_start = $2;
-
--- name: GetBucketUsed :one
-SELECT COALESCE((SELECT used FROM rate_buckets WHERE instance_id = $1 AND window_start = $2), 0)::int AS used;
+-- name: AddBucketUsed :exec
+INSERT INTO rate_buckets (instance_id, window_start, used) VALUES (sqlc.arg(instance_id), sqlc.arg(window_start), sqlc.arg(used))
+ON CONFLICT (instance_id, window_start) DO UPDATE SET used = rate_buckets.used + EXCLUDED.used;
 
 -- name: PurgeBucketsBefore :execrows
 DELETE FROM rate_buckets
@@ -68,18 +71,19 @@ WHERE (instance_id, window_start) IN (
     SELECT instance_id, window_start FROM rate_buckets
     WHERE window_start < sqlc.arg(before)::timestamptz LIMIT sqlc.arg(batch)::int);
 
--- name: EnsureGlobalBucket :exec
-INSERT INTO global_rate_buckets (window_start, used) VALUES ($1, 0)
-ON CONFLICT (window_start) DO NOTHING;
+-- Taken after LockInstanceBudget, never before, so the two locks cannot deadlock.
+-- name: LockGlobalBudget :exec
+SELECT pg_advisory_xact_lock(hashtextextended('snatcharr.budget:global', 0));
 
--- name: LockGlobalBucket :one
-SELECT used FROM global_rate_buckets WHERE window_start = $1 FOR UPDATE;
+-- name: GlobalBucketUsage :one
+SELECT COALESCE(sum(used), 0)::int AS used,
+       COALESCE(min(window_start), sqlc.arg(since)::timestamptz)::timestamptz AS oldest
+FROM global_rate_buckets
+WHERE window_start >= sqlc.arg(since)::timestamptz AND used > 0;
 
--- name: SetGlobalBucketUsed :exec
-UPDATE global_rate_buckets SET used = $2 WHERE window_start = $1;
-
--- name: GetGlobalBucketUsed :one
-SELECT COALESCE((SELECT used FROM global_rate_buckets WHERE window_start = $1), 0)::int AS used;
+-- name: AddGlobalBucketUsed :exec
+INSERT INTO global_rate_buckets (window_start, used) VALUES (sqlc.arg(window_start), sqlc.arg(used))
+ON CONFLICT (window_start) DO UPDATE SET used = global_rate_buckets.used + EXCLUDED.used;
 
 -- name: PurgeGlobalBucketsBefore :execrows
 DELETE FROM global_rate_buckets

@@ -111,12 +111,12 @@ func (f fixture) seed(t *testing.T) {
 	grace := now.Add(-snatch.PurgeGrace)
 	f.exec(t, `INSERT INTO processed_items (instance_id, kind, entity_type, entity_id, expires_at) VALUES
 		($1, 'missing', 'episode', 1, $2), ($1, 'missing', 'episode', 2, $3)`, f.instance, grace, grace.Add(time.Second))
-	window := snatch.Window(now).Add(-snatch.BucketKeep)
-	for _, w := range []time.Time{window.Add(-time.Hour), window} { // first purged, second kept
-		if err := f.st.Q().EnsureBucket(ctx, sqlcgen.EnsureBucketParams{InstanceID: f.instance, WindowStart: w}); err != nil {
+	bucket := snatch.Minute(now).Add(-snatch.BucketKeep)
+	for _, w := range []time.Time{bucket.Add(-time.Minute), bucket} { // first purged, second kept
+		if err := f.st.Q().AddBucketUsed(ctx, sqlcgen.AddBucketUsedParams{InstanceID: f.instance, WindowStart: w, Used: 1}); err != nil {
 			t.Fatalf("seed bucket: %v", err)
 		}
-		if err := f.st.Q().EnsureGlobalBucket(ctx, w); err != nil {
+		if err := f.st.Q().AddGlobalBucketUsed(ctx, sqlcgen.AddGlobalBucketUsedParams{WindowStart: w, Used: 1}); err != nil {
 			t.Fatalf("seed global bucket: %v", err)
 		}
 	}
