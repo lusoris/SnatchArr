@@ -6,6 +6,7 @@
 #
 # Recipes run as ONE shell (-e: first failing command aborts the recipe), so a component that
 # is not scaffolded yet can `exit 0` early and the rest of the recipe is skipped.
+-include .config/praetor/engine.mk
 
 SHELL := /bin/sh
 .SHELLFLAGS := -ec
