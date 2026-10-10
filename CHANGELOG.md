@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.1.3](https://github.com/lusoris/SnatchArr/compare/v0.1.2...v0.1.3) (2026-10-10)
+
+
+### Features
+
+* **helm:** select in-cluster *arr apps with networkPolicy.arrPeers ([#130](https://github.com/lusoris/SnatchArr/issues/130)) ([77708b0](https://github.com/lusoris/SnatchArr/commit/77708b046c4b7c80637687a1e095d13c49485df8)), closes [#121](https://github.com/lusoris/SnatchArr/issues/121)
+
+
+### Bug Fixes
+
+* **api:** end a run as failed after its lease expired three times ([#113](https://github.com/lusoris/SnatchArr/issues/113)) ([fa8cd61](https://github.com/lusoris/SnatchArr/commit/fa8cd61d198bb21c8cce5f9cfcdad94adcc54e8f)), closes [#17](https://github.com/lusoris/SnatchArr/issues/17)
+* **api:** give the schema migrator the pool's TLS settings ([#126](https://github.com/lusoris/SnatchArr/issues/126)) ([896b84c](https://github.com/lusoris/SnatchArr/commit/896b84cfc7b351e1d1a5f827209bc1bdc104fbb4)), closes [#123](https://github.com/lusoris/SnatchArr/issues/123)
+* **api:** make stamina a rolling 60-minute window ([#119](https://github.com/lusoris/SnatchArr/issues/119)) ([30aeaa2](https://github.com/lusoris/SnatchArr/commit/30aeaa2f0ce4825c5f76e93f22d7e414585abda9)), closes [#16](https://github.com/lusoris/SnatchArr/issues/16)
+* **api:** start store users only after the schema migrations ([#128](https://github.com/lusoris/SnatchArr/issues/128)) ([692a652](https://github.com/lusoris/SnatchArr/commit/692a6521a35f688ccb51fc9b50a443c94837d961)), closes [#124](https://github.com/lusoris/SnatchArr/issues/124)
+* **api:** trim events, runs, afterglow, buckets and sessions every hour ([#117](https://github.com/lusoris/SnatchArr/issues/117)) ([147363b](https://github.com/lusoris/SnatchArr/commit/147363bbf899901b0d478cb392a4da183beb668f)), closes [#15](https://github.com/lusoris/SnatchArr/issues/15)
+* **helm:** an empty networkPolicy.arrCidrs no longer allows all egress ([#127](https://github.com/lusoris/SnatchArr/issues/127)) ([a410bad](https://github.com/lusoris/SnatchArr/commit/a410badddf1c71f54d559421fe3e88e5db34bdcb)), closes [#120](https://github.com/lusoris/SnatchArr/issues/120)
+* **helm:** keep the Artifact Hub image tags at appVersion ([#129](https://github.com/lusoris/SnatchArr/issues/129)) ([5525b19](https://github.com/lusoris/SnatchArr/commit/5525b192203c0fb3f693ae4df71276cd9cc16a4b)), closes [#122](https://github.com/lusoris/SnatchArr/issues/122)
+* **helm:** let release-please bump the chart with its generic updater only ([#133](https://github.com/lusoris/SnatchArr/issues/133)) ([5165bb4](https://github.com/lusoris/SnatchArr/commit/5165bb4e5aac98233f656326c13d17ae7c92452d)), closes [#122](https://github.com/lusoris/SnatchArr/issues/122)
+
 ## [0.1.2](https://github.com/lusoris/SnatchArr/compare/v0.1.1...v0.1.2) (2026-10-10)
 
 
