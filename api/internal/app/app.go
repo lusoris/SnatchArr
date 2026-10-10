@@ -56,6 +56,8 @@ var Module = fx.Options(
 	csrf.Module,
 	grpcx.Module,
 	fx.Decorate(embedMigrations),
+	// The dev profile may start without APP_CRYPTO_KEY (crypto.go).
+	fx.Decorate(newEncryptor),
 	config.Module,
 	store.Module,
 	arrclient.Module,

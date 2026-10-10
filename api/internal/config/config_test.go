@@ -5,7 +5,9 @@
 package config_test
 
 import (
+	"encoding/hex"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -65,5 +67,50 @@ func TestLinked(t *testing.T) {
 	}
 	if !(config.ConfigarrOptions{Config: "/c.yml"}).Linked() {
 		t.Fatal("config path must mean linked")
+	}
+}
+
+// A key of the deployment's own, as `openssl rand -hex 32` prints it.
+const ownKey = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
+
+func TestCryptoKey(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		profile    config.Profile
+		configured string
+		wantKey    string
+		wantDev    bool
+		wantErr    error
+	}{
+		{"positive prod with its own key", config.ProfileProd, ownKey, ownKey, false, nil},
+		{"positive dev without a key runs on the development key", config.ProfileDev, "", config.DevCryptoKey, true, nil},
+		{"positive dev with its own key", config.ProfileDev, ownKey, ownKey, false, nil},
+		{"boundary dev set to the development key still reports development", config.ProfileDev, config.DevCryptoKey, config.DevCryptoKey, true, nil},
+		{"negative prod without a key", config.ProfileProd, "", "", false, config.ErrMissingSecret},
+		{"negative prod with the development key", config.ProfileProd, config.DevCryptoKey, "", false, config.ErrDevelopmentKey},
+		{"negative prod with the development key in upper case", config.ProfileProd, strings.ToUpper(config.DevCryptoKey), "", false, config.ErrDevelopmentKey},
+		{"negative default profile without a key", config.Default().Profile, "", "", false, config.ErrMissingSecret},
+		{"negative default profile with the development key", config.Default().Profile, config.DevCryptoKey, "", false, config.ErrDevelopmentKey},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			o := config.Default()
+			o.Profile = tc.profile
+			key, dev, err := o.CryptoKey(tc.configured)
+			if !errors.Is(err, tc.wantErr) || key != tc.wantKey || dev != tc.wantDev {
+				t.Fatalf("CryptoKey(%q) = %q, %v, %v; want %q, %v, %v", tc.configured, key, dev, err, tc.wantKey, tc.wantDev, tc.wantErr)
+			}
+		})
+	}
+}
+
+// The development key is a valid AES-256 key: 64 hex digits.
+func TestDevCryptoKeyIsAES256(t *testing.T) {
+	t.Parallel()
+	raw, err := hex.DecodeString(config.DevCryptoKey)
+	if err != nil || len(raw) != 32 {
+		t.Fatalf("DevCryptoKey decodes to %d bytes, %v; want 32", len(raw), err)
 	}
 }
