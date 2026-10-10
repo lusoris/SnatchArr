@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.4](https://github.com/lusoris/SnatchArr/compare/v0.1.3...v0.1.4) (2026-10-10)
+
+
+### Bug Fixes
+
+* **api:** let the dev profile start without APP_CRYPTO_KEY ([#143](https://github.com/lusoris/SnatchArr/issues/143)) ([866fdac](https://github.com/lusoris/SnatchArr/commit/866fdacc5d5a16efaf8f64a6e488e3bd17888df4)), closes [#138](https://github.com/lusoris/SnatchArr/issues/138)
+* **worker:** spend a partial stamina grant instead of deferring the whole target ([#137](https://github.com/lusoris/SnatchArr/issues/137)) ([c0602a3](https://github.com/lusoris/SnatchArr/commit/c0602a374cbee2776822b3e1e8680b51009478f1)), closes [#136](https://github.com/lusoris/SnatchArr/issues/136)
+
 ## [0.1.3](https://github.com/lusoris/SnatchArr/compare/v0.1.2...v0.1.3) (2026-10-10)
 
 
