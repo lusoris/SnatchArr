@@ -4,8 +4,8 @@ description: >-
   SnatchArr keeps your *arr apps searching for missing and cutoff-unmet media,
   gently.
 type: application
-version: 0.1.3 # x-release-please-version
-appVersion: 0.1.3 # x-release-please-version
+version: 0.1.4 # x-release-please-version
+appVersion: 0.1.4 # x-release-please-version
 kubeVersion: '>=1.29.0-0'
 home: https://lusoris.github.io/SnatchArr/
 icon: https://lusoris.github.io/SnatchArr/assets/mark.svg
@@ -29,7 +29,7 @@ annotations:
   # x-release-please-start-version
   artifacthub.io/images: |
     - name: snatcharr-api
-      image: ghcr.io/lusoris/snatcharr-api:0.1.3
+      image: ghcr.io/lusoris/snatcharr-api:0.1.4
     - name: snatcharr-worker
-      image: ghcr.io/lusoris/snatcharr-worker:0.1.3
+      image: ghcr.io/lusoris/snatcharr-worker:0.1.4
   # x-release-please-end
