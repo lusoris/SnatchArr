@@ -15,6 +15,13 @@ repository:
         - kubernetes
         - golusoris
         - sveltesentio
+        - cloud-native
+        - go
+        - huntarr
+        - media-automation
+        - rust
+        - seerr
+        - svelte
 adoption:
     # Our devcontainer carries Go + Rust + Node; praetor's generated bundle is Go-only.
     decline:
