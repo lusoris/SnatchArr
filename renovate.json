@@ -181,7 +181,9 @@
       "matchFileNames": [
         ".github/workflows/praetor-api.yml",
         "tools/apicompat/gate/main.go",
-        "tools/apicompat/gate/placeholder.go"
+        "tools/apicompat/gate/placeholder.go",
+        ".devcontainer/devcontainer.json",
+        ".devcontainer/Dockerfile.praetor"
       ],
       "enabled": false
     }
