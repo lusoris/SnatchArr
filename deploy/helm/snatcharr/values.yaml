@@ -171,6 +171,14 @@ networkPolicy:
     - 10.0.0.0/8
     - 172.16.0.0/12
     - 192.168.0.0/16
+  # The same apps as pods in this cluster (NetworkPolicyPeer list: podSelector and/or
+  # namespaceSelector). Some CNIs, Cilium among them, never apply CIDR rules to traffic
+  # between pods they manage, so in-cluster apps need a selector here; arrCidrs alone cannot
+  # reach them. Example:
+  #   - namespaceSelector:
+  #       matchLabels:
+  #         kubernetes.io/metadata.name: media
+  arrPeers: []
   # Extra egress rules appended to both components.
   extraEgress: []
 

@@ -40,8 +40,8 @@ SnatchArr {{ .Chart.AppVersion }} is on its way.
 
 5. networkPolicy.enabled is false. Turn it on and set networkPolicy.arrCidrs to where
    your *arr apps live so the worker can only talk to them and to the API.
-{{- else if not (or .Values.networkPolicy.arrCidrs .Values.networkPolicy.extraEgress) }}
+{{- else if not (or .Values.networkPolicy.arrCidrs .Values.networkPolicy.arrPeers .Values.networkPolicy.extraEgress) }}
 
-5. networkPolicy.arrCidrs and networkPolicy.extraEgress are both empty, so the API and the
-   worker cannot reach any *arr app. List their CIDRs, or allow them in extraEgress.
+5. networkPolicy.arrCidrs, arrPeers and extraEgress are all empty, so the API and the
+   worker cannot reach any *arr app. List their CIDRs, or select their pods in arrPeers.
 {{- end }}

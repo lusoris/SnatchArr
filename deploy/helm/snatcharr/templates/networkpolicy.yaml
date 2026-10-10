@@ -51,9 +51,9 @@ spec:
         - port: 5432
           protocol: TCP
     {{- end }}
-    {{- if .Values.networkPolicy.arrCidrs }}
+    {{- if or .Values.networkPolicy.arrCidrs .Values.networkPolicy.arrPeers }}
     # *arr apps, Seerr, Cleanuparr, download clients (the API probes and discovers them).
-    # An empty arrCidrs renders no rule: an empty `to` would allow every destination (#120).
+    # No arrCidrs and no arrPeers renders no rule: an empty `to` would allow every destination (#120).
     - to:
         {{- $arr | nindent 8 }}
     {{- end }}
@@ -87,7 +87,7 @@ spec:
       ports:
         - port: {{ .Values.api.service.grpcPort }}
           protocol: TCP
-    {{- if .Values.networkPolicy.arrCidrs }}
+    {{- if or .Values.networkPolicy.arrCidrs .Values.networkPolicy.arrPeers }}
     - to:
         {{- $arr | nindent 8 }}
     {{- end }}

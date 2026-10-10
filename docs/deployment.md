@@ -53,9 +53,29 @@ no Ingress or HTTPRoute is enabled.
 | Ingress or HTTPRoute | `api.ingress.*` or `api.httpRoute.*` |
 | CNPG `Cluster` `-db` | `postgres.cnpg.*`; the API reads the DSN from the operator's `-db-app` Secret |
 | Secret `-secrets` | crypto key, CSRF secret, API-key HMAC secret, worker token |
-| NetworkPolicy | worker may only reach the API and `networkPolicy.arrCidrs` (an empty list allows no *arr egress, never all of it); gRPC only from the worker |
+| NetworkPolicy | worker may only reach the API, `networkPolicy.arrCidrs` and `networkPolicy.arrPeers` (both empty allow no *arr egress, never all of it); gRPC only from the worker |
 | ServiceMonitor | `serviceMonitor.enabled` scrapes `/metrics` on the API |
 | PodDisruptionBudget | per component, opt-in |
+
+### NetworkPolicy and in-cluster *arr apps
+
+`networkPolicy.arrCidrs` allows egress by IP range. That reaches *arr apps outside the
+cluster, but some CNIs never apply CIDR rules to traffic between pods they manage: Cilium
+states that "CIDR rules do not apply to traffic where both sides of the connection are
+either managed by Cilium" (its layer 3 policy docs). If your *arr apps, Seerr, Cleanuparr
+or download clients run as pods in the same cluster, select them in `networkPolicy.arrPeers`:
+
+```yaml
+networkPolicy:
+  enabled: true
+  arrPeers:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: media
+```
+
+`arrPeers` accepts `podSelector` and `namespaceSelector` only; IP ranges belong in
+`arrCidrs`, which always excludes the cloud metadata address.
 
 ### Secrets
 
