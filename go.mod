@@ -16,11 +16,17 @@ require (
 	github.com/golusoris/goenvoy/arr/v2 v2.1.0
 	github.com/golusoris/goenvoy/arr/whisparr v1.3.1
 	github.com/golusoris/goenvoy/downloadclient/deluge v1.3.0
+	github.com/golusoris/goenvoy/downloadclient/deluge/v2 v2.0.0
 	github.com/golusoris/goenvoy/downloadclient/nzbget v1.3.0
+	github.com/golusoris/goenvoy/downloadclient/nzbget/v2 v2.0.0
 	github.com/golusoris/goenvoy/downloadclient/qbit v1.3.0
+	github.com/golusoris/goenvoy/downloadclient/qbit/v2 v2.0.0
 	github.com/golusoris/goenvoy/downloadclient/rtorrent v1.3.0
+	github.com/golusoris/goenvoy/downloadclient/rtorrent/v2 v2.0.0
 	github.com/golusoris/goenvoy/downloadclient/sabnzbd v1.3.0
+	github.com/golusoris/goenvoy/downloadclient/sabnzbd/v2 v2.0.0
 	github.com/golusoris/goenvoy/downloadclient/transmission v1.3.0
+	github.com/golusoris/goenvoy/downloadclient/transmission/v2 v2.0.0
 	github.com/golusoris/golusoris v0.15.0
 	github.com/golusoris/golusoris/core v0.10.1
 	github.com/google/uuid v1.6.0
