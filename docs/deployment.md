@@ -113,6 +113,12 @@ api:
 `verify-full` also checks the host name, so the DSN must name a host on the server
 certificate, such as CloudNativePG's `<cluster>-rw.<namespace>.svc`.
 
+The schema migrations that run at start use the same settings: SnatchArr adds the
+`APP_DB_SSL_*` values (and, when set, the password from the `db.password_file` config key)
+to the DSN it hands the migrator. Before 0.2 the migrator ignored them and the API crash-looped on
+`x509: certificate signed by unknown authority`; on 0.1.x, add `sslrootcert=<path>` to the
+DSN itself. An explicit `APP_DB_MIGRATE_DSN` is used exactly as given.
+
 ### Configarr
 
 Already running [Configarr](https://github.com/raydak-labs/configarr)? Mount the same

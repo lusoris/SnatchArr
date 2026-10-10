@@ -86,17 +86,6 @@ var Module = fx.Options(
 	fx.Invoke(mountHTTP),
 )
 
-// embedMigrations points golusoris db/migrate at the embedded SQL and runs it on start.
-func embedMigrations(o dbmigrate.Options) (dbmigrate.Options, error) {
-	fsys, err := store.MigrationsFS()
-	if err != nil {
-		return dbmigrate.Options{}, fmt.Errorf("app: %w", err)
-	}
-	o.Auto = true
-	o.Path = "." // MigrationsFS is already rooted at migrations/postgres
-	return o.WithFS(fsys), nil
-}
-
 func registerHealthChecks(reg *statuspage.Registry, pool *pgxpool.Pool, gate *health.StartupGate, lc fx.Lifecycle) {
 	reg.Register(statuspage.Check{
 		Name: "process", Tags: []string{health.TagLiveness},
