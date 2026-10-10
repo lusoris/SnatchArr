@@ -82,6 +82,13 @@ worker-verify: ## cargo fmt/clippy(-D warnings)/audit/deny/test
 	cargo deny check
 	cargo test --workspace --locked
 
+# Worker line coverage floor; ratchet up as tests land (84.9 % measured at #18). CI runs it;
+# locally it needs cargo-llvm-cov and the llvm-tools rustup component (or LLVM_COV and
+# LLVM_PROFDATA pointing at a system LLVM matching rustc's).
+WORKER_COVER_MIN ?= 83
+worker-cover: ## cargo-llvm-cov line coverage gate for the Rust workspace
+	cargo llvm-cov --workspace --locked --summary-only --fail-under-lines $(WORKER_COVER_MIN)
+
 # ── web/ (SvelteKit + sveltesentio) ───────────────────────────────────────────
 web-verify: ## pnpm lint/typecheck/test(+coverage)/build + OpenAPI type drift
 	@if [ ! -f web/package.json ]; then echo "web/ not scaffolded yet; skipping"; exit 0; fi

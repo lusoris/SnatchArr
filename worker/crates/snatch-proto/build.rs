@@ -15,7 +15,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let fds = protox::compile([proto.as_path()], [proto_root.as_path()])?;
     tonic_prost_build::configure()
-        .build_server(false)
+        .build_server(std::env::var_os("CARGO_FEATURE_SERVER").is_some())
         .build_client(true)
         .compile_fds(fds)?;
     Ok(())
