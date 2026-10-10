@@ -1,0 +1,18 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://github.com/lusoris/SnatchArr/blob/main/security/vex/go.openvex.json",
+  "author": "SnatchArr maintainers",
+  "timestamp": "2026-10-10T01:40:42Z",
+  "version": 1,
+  "statements": [
+    {
+      "vulnerability": {
+        "name": "GO-2026-5932"
+      },
+      "last_updated": "2026-10-10T01:40:42Z",
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "No package of golang.org/x/crypto/openpgp is built: go list -deps ./... names none. The module is required only for other x/crypto packages."
+    }
+  ]
+}
