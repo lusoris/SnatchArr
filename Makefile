@@ -137,6 +137,14 @@ deploy-verify: ## helm lint --strict + kubeconform (default and all-features ren
 	if printf '%s\n' "$$netpol" | grep -A1 -E '^ *- to:( *\[\])?$$' | grep -qE '^ *(- to: *)?\[\]$$'; then
 	  echo "networkPolicy: an egress rule with an empty 'to' allows every destination" >&2; exit 1
 	fi
+	# The Artifact Hub image annotation names the appVersion images (#122).
+	chart=deploy/helm/snatcharr/Chart.yaml
+	app=$$(sed -n 's/^appVersion: *//p' "$$chart" | tr -d "\"'")
+	images=$$(grep -cE '^ +image: ghcr\.io/lusoris/snatcharr-(api|worker):' "$$chart")
+	stale=$$(grep -E '^ +image: ghcr\.io/lusoris/snatcharr-(api|worker):' "$$chart" | grep -cv ":$$app$$" || true)
+	if [ "$$images" -ne 2 ] || [ "$$stale" -ne 0 ]; then
+	  echo "Chart.yaml: artifacthub.io/images must list both images at appVersion $$app ($$images found, $$stale stale)" >&2; exit 1
+	fi
 
 images: ## Build both images locally (tag dev)
 	docker build -t snatcharr-api:dev -f Dockerfile .
