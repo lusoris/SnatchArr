@@ -51,9 +51,12 @@ spec:
         - port: 5432
           protocol: TCP
     {{- end }}
+    {{- if .Values.networkPolicy.arrCidrs }}
     # *arr apps, Seerr, Cleanuparr, download clients (the API probes and discovers them).
+    # An empty arrCidrs renders no rule: an empty `to` would allow every destination (#120).
     - to:
         {{- $arr | nindent 8 }}
+    {{- end }}
     {{- with .Values.networkPolicy.extraEgress }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
@@ -84,8 +87,10 @@ spec:
       ports:
         - port: {{ .Values.api.service.grpcPort }}
           protocol: TCP
+    {{- if .Values.networkPolicy.arrCidrs }}
     - to:
         {{- $arr | nindent 8 }}
+    {{- end }}
     {{- with .Values.networkPolicy.extraEgress }}
     {{- toYaml . | nindent 4 }}
     {{- end }}

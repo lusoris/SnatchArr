@@ -132,6 +132,11 @@ deploy-verify: ## helm lint --strict + kubeconform (default and all-features ren
 	helm template snatcharr deploy/helm/snatcharr | $(KUBECONFORM) -strict -ignore-missing-schemas -summary
 	helm template snatcharr deploy/helm/snatcharr 	  --set networkPolicy.enabled=true --set api.ingress.enabled=true --set serviceMonitor.enabled=true 	  --set worker.autoscaling.enabled=true --set api.pdb.enabled=true --set worker.pdb.enabled=true 	  --set configarr.enabled=true --set configarr.existingConfigMap=cfg --set configarr.existingSecret=sec 	  | $(KUBECONFORM) -strict -ignore-missing-schemas -summary
 	kustomize build --enable-helm deploy/kustomize/kind >/dev/null
+	# No egress rule may have an empty `to`, which allows every destination (#120).
+	netpol=$$(helm template snatcharr deploy/helm/snatcharr --set networkPolicy.enabled=true --set-json 'networkPolicy.arrCidrs=[]')
+	if printf '%s\n' "$$netpol" | grep -A1 -E '^ *- to:( *\[\])?$$' | grep -qE '^ *(- to: *)?\[\]$$'; then
+	  echo "networkPolicy: an egress rule with an empty 'to' allows every destination" >&2; exit 1
+	fi
 
 images: ## Build both images locally (tag dev)
 	docker build -t snatcharr-api:dev -f Dockerfile .
