@@ -53,7 +53,9 @@ dispatch time, so two workers can never overspend it together. The window rolls:
 stamina comes back 60 to 61 minutes after it was spent, never at the top of the clock hour,
 so no 60 minutes ever see more than the cap. At 80 % the dashboard shows the instance
 getting tired; at 100 % remaining targets are deferred until stamina frees up, with a
-`budget_acquired` event that says so.
+`budget_acquired` event that says so. When less stamina is left than a snatch wants, it
+searches as many movies, albums, books or single episodes as the stamina covers and defers
+the rest; a season pack, series, artist or author search is one command and waits whole.
 
 Several *arr apps often share the same indexers. A **global stamina**
 (`global_hourly_cap` in `/api/v1/settings`, 0 = off) is debited alongside every instance
