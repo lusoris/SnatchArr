@@ -93,6 +93,8 @@ jobs:
               - '.golangci.yml'
               - '.gosec.json'
               - 'tools/spectral.yaml'
+              - 'tools/e2e/**'
+              - 'Makefile'
               - 'Dockerfile'
               - '.github/workflows/ci.yml'
             worker:
@@ -257,6 +259,40 @@ jobs:
         run: cargo deny check
       - name: Coverage (line floor)
         run: make worker-cover
+
+  e2e:
+    name: e2e (smoke)
+    needs: changes
+    if: needs.changes.outputs.api == 'true' || needs.changes.outputs.worker == 'true' || needs.changes.outputs.proto == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      # The Postgres the integration tests pin, through the Docker Hub mirror.
+      postgres:
+        image: mirror.gcr.io/library/postgres:17-alpine@sha256:f02121de6f74d30d8a94cd1d9584125e2178d7e6c377d8130112d4e52d867995
+        env:
+          POSTGRES_PASSWORD: smoke
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+        ports:
+          - 5432:5432
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      # Postgres, the API, two workers and two fakearr instances: lease, stamina and dispatch
+      # together (#19). The same target runs locally.
+      - name: make e2e-smoke
+        env:
+          SMOKE_DSN: postgres://postgres:smoke@127.0.0.1:5432/postgres?sslmode=disable
+        run: make e2e-smoke
 
   web:
     name: web (SvelteKit)
