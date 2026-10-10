@@ -118,10 +118,13 @@ type CapStatus struct {
 	// Global is the stamina shared by every instance (present only when configured).
 	Scope CapStatusScope `json:"scope"`
 	// Absent for the global entry.
-	InstanceID OptUUID   `json:"instance_id"`
-	Used       int       `json:"used"`
-	Cap        int       `json:"cap"`
-	ResetsAt   time.Time `json:"resets_at"`
+	InstanceID OptUUID `json:"instance_id"`
+	// Items granted within the rolling 60-minute window, the same sum the grant enforces.
+	Used int `json:"used"`
+	Cap  int `json:"cap"`
+	// When stamina next frees up (the oldest spend still counted leaves the window); now when nothing is
+	// spent.
+	ResetsAt time.Time `json:"resets_at"`
 }
 
 // GetScope returns the value of Scope.

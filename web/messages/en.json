@@ -25,7 +25,7 @@
 	"setup_submit": "Create admin",
 	"dashboard_title": "Dashboard",
 	"stamina": "Stamina",
-	"stamina_used": "{used} of {cap} this hour",
+	"stamina_used": "{used} of {cap} in the last 60 minutes",
 	"stamina_global": "Global stamina",
 	"stamina_tired": "getting tired",
 	"stamina_spent": "spent",

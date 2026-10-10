@@ -25,7 +25,7 @@
 	"setup_submit": "Admin anlegen",
 	"dashboard_title": "Übersicht",
 	"stamina": "Ausdauer",
-	"stamina_used": "{used} von {cap} in dieser Stunde",
+	"stamina_used": "{used} von {cap} in den letzten 60 Minuten",
 	"stamina_global": "Globale Ausdauer",
 	"stamina_tired": "wird müde",
 	"stamina_spent": "verausgabt",

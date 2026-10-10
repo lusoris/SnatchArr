@@ -47,10 +47,12 @@ are tracked separately, so an upgrade search never blocks a missing one.
 ## Stamina
 
 `hourly_cap` (default 20, range 1 to 500) is how many **indexer queries** an instance may
-spend per clock hour: one per episode in an episode search, one per season pack, one per
+spend in any 60 minutes: one per episode in an episode search, one per season pack, one per
 season of a series search, one per movie, album or book. It is debited atomically at
-dispatch time, so two workers can never overspend it together. At 80 % the dashboard shows
-the instance getting tired; at 100 % remaining targets are deferred to the next hour with a
+dispatch time, so two workers can never overspend it together. The window rolls: spent
+stamina comes back 60 to 61 minutes after it was spent, never at the top of the clock hour,
+so no 60 minutes ever see more than the cap. At 80 % the dashboard shows the instance
+getting tired; at 100 % remaining targets are deferred until stamina frees up, with a
 `budget_acquired` event that says so.
 
 Several *arr apps often share the same indexers. A **global stamina**

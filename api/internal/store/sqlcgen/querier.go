@@ -12,6 +12,9 @@ import (
 )
 
 type Querier interface {
+	AddBucketUsed(ctx context.Context, arg AddBucketUsedParams) error
+	AddGlobalBucketUsed(ctx context.Context, arg AddGlobalBucketUsedParams) error
+	BucketUsage(ctx context.Context, arg BucketUsageParams) (BucketUsageRow, error)
 	CancelRun(ctx context.Context, arg CancelRunParams) (int64, error)
 	CompleteRun(ctx context.Context, arg CompleteRunParams) (SnatchRun, error)
 	CountInstancesByBaseURL(ctx context.Context, arg CountInstancesByBaseURLParams) (int64, error)
@@ -50,9 +53,7 @@ type Querier interface {
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
 	EnqueueRun(ctx context.Context, arg EnqueueRunParams) (SnatchRun, error)
-	EnsureBucket(ctx context.Context, arg EnsureBucketParams) error
 	EnsureDefaultPolicy(ctx context.Context, arg EnsureDefaultPolicyParams) (SnatchPolicy, error)
-	EnsureGlobalBucket(ctx context.Context, windowStart time.Time) error
 	EnsureSettings(ctx context.Context, updatedAt time.Time) (Setting, error)
 	// Ends, as failed, runs whose lease expired after max_leases leases, oldest first and at
 	// most batch per call.
@@ -61,10 +62,8 @@ type Querier interface {
 	// SPDX-License-Identifier: EUPL-1.2
 	FilterUnprocessed(ctx context.Context, arg FilterUnprocessedParams) ([]int64, error)
 	GetAPIKey(ctx context.Context, id string) (ApiKey, error)
-	GetBucketUsed(ctx context.Context, arg GetBucketUsedParams) (int32, error)
 	GetCleanuparrLink(ctx context.Context, id uuid.UUID) (CleanuparrLink, error)
 	GetDownloadClient(ctx context.Context, id uuid.UUID) (DownloadClient, error)
-	GetGlobalBucketUsed(ctx context.Context, windowStart time.Time) (int32, error)
 	GetInstance(ctx context.Context, id uuid.UUID) (Instance, error)
 	GetInstanceByConfigarrKey(ctx context.Context, configarrKey *string) (Instance, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
@@ -80,6 +79,7 @@ type Querier interface {
 	GetSettings(ctx context.Context) (Setting, error)
 	GetUser(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserByUsername(ctx context.Context, username string) (User, error)
+	GlobalBucketUsage(ctx context.Context, since time.Time) (GlobalBucketUsageRow, error)
 	HasActiveRun(ctx context.Context, arg HasActiveRunParams) (bool, error)
 	HeartbeatRun(ctx context.Context, arg HeartbeatRunParams) (SnatchRun, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
@@ -106,8 +106,12 @@ type Querier interface {
 	ListSeerrRequests(ctx context.Context, limit int32) ([]ListSeerrRequestsRow, error)
 	ListUsers(ctx context.Context) ([]User, error)
 	LoadSession(ctx context.Context, arg LoadSessionParams) ([]byte, error)
-	LockBucket(ctx context.Context, arg LockBucketParams) (int32, error)
-	LockGlobalBucket(ctx context.Context, windowStart time.Time) (int32, error)
+	// Taken after LockInstanceBudget, never before, so the two locks cannot deadlock.
+	LockGlobalBudget(ctx context.Context) error
+	// Stamina is a rolling window of one-minute buckets (#16). Every grant for an instance
+	// runs under this transaction-scoped lock, so two grants on either side of a minute
+	// boundary (different bucket rows) still see each other.
+	LockInstanceBudget(ctx context.Context, instanceID uuid.UUID) error
 	// Afterglow backoff: the first snatch rests base_s seconds, every further snatch of the
 	// same item doubles the rest, capped at max_s.
 	MarkProcessed(ctx context.Context, arg MarkProcessedParams) error
@@ -133,8 +137,6 @@ type Querier interface {
 	SaveAPIKey(ctx context.Context, arg SaveAPIKeyParams) error
 	SavePolicyCursor(ctx context.Context, arg SavePolicyCursorParams) error
 	SaveSession(ctx context.Context, arg SaveSessionParams) error
-	SetBucketUsed(ctx context.Context, arg SetBucketUsedParams) error
-	SetGlobalBucketUsed(ctx context.Context, arg SetGlobalBucketUsedParams) error
 	UpdateCleanuparrLink(ctx context.Context, arg UpdateCleanuparrLinkParams) (CleanuparrLink, error)
 	UpdateDownloadClient(ctx context.Context, arg UpdateDownloadClientParams) (DownloadClient, error)
 	UpdateInstance(ctx context.Context, arg UpdateInstanceParams) (Instance, error)

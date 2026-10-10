@@ -124,7 +124,7 @@ type Handler interface {
 	GetDownloadClientStatus(ctx context.Context) ([]DownloadClientStatus, error)
 	// GetHourlyCaps implements getHourlyCaps operation.
 	//
-	// Per-instance hourly budget consumption.
+	// Per-instance stamina spent in the last 60 minutes (rolling window).
 	//
 	// GET /hourly-caps
 	GetHourlyCaps(ctx context.Context) ([]CapStatus, error)

@@ -186,7 +186,7 @@ func (UnimplementedHandler) GetDownloadClientStatus(ctx context.Context) (r []Do
 
 // GetHourlyCaps implements getHourlyCaps operation.
 //
-// Per-instance hourly budget consumption.
+// Per-instance stamina spent in the last 60 minutes (rolling window).
 //
 // GET /hourly-caps
 func (UnimplementedHandler) GetHourlyCaps(ctx context.Context) (r []CapStatus, _ error) {

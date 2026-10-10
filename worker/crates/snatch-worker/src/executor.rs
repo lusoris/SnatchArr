@@ -500,7 +500,7 @@ async fn acquire(
     };
     let grant = client.acquire_budget(Request::new(req)).await?.into_inner();
     let msg = format!(
-        "stamina: {} of {} indexer queries granted ({} left this hour)",
+        "stamina: {} of {} indexer queries granted ({} left in the last 60 minutes)",
         grant.granted, requested, grant.remaining_in_window
     );
     events
@@ -509,7 +509,7 @@ async fn acquire(
     let (dispatch, deferred) = snatch_core::cap(targets, grant.granted);
     if !deferred.is_empty() {
         let msg = format!(
-            "{} target(s) deferred: out of stamina this hour",
+            "{} target(s) deferred: out of stamina for the last 60 minutes",
             deferred.len()
         );
         events

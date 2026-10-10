@@ -2340,7 +2340,7 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 					switch method {
 					case "GET":
 						r.name = GetHourlyCapsOperation
-						r.summary = "Per-instance hourly budget consumption"
+						r.summary = "Per-instance stamina spent in the last 60 minutes (rolling window)"
 						r.operationID = "getHourlyCaps"
 						r.operationGroup = ""
 						r.pathPattern = "/hourly-caps"
