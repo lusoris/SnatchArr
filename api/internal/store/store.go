@@ -19,6 +19,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/fx"
 
+	dbmigrate "github.com/golusoris/golusoris/db/migrate"
+
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
 )
@@ -95,5 +97,14 @@ func MapError(err error) error {
 	return err
 }
 
-// Module provides *Store from the golusoris pool.
-var Module = fx.Module("snatcharr.store", fx.Provide(New))
+// Module provides *Store from the golusoris pool, and only once the migrator exists: fx runs
+// start hooks in the order they were appended, so every store user (leader loops, gRPC,
+// HTTP handlers) appends its hook after the migrator's Up and starts on a migrated schema.
+// Without this, leaderx's child-module invoke started the loops before the root invoke
+// built the migrator (#124).
+var Module = fx.Module("snatcharr.store", fx.Provide(newAfterMigrations))
+
+// newAfterMigrations is New for fx; the migrator parameter only orders construction.
+func newAfterMigrations(pool *pgxpool.Pool, _ *dbmigrate.Migrator) *Store {
+	return New(pool)
+}
