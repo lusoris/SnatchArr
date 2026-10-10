@@ -20,7 +20,7 @@ GOMODCACHE       = $(subst \,/,$(shell go env GOMODCACHE))
 GOLUSORIS_VER    = $(shell go list -m -f '{{.Version}}' github.com/golusoris/golusoris)
 GOLUSORIS_SHARED = $(GOMODCACHE)/github.com/golusoris/golusoris@$(GOLUSORIS_VER)/tools/Makefile.shared
 
-.PHONY: help verify-all api-verify worker-verify web-verify web-e2e proto-verify deploy-verify governance-verify \
+.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke web-verify web-e2e proto-verify deploy-verify governance-verify \
 	images kind-up kind-deploy kind-down \
         api-gen gosec-install web-gen proto-gen dev hooks setup
 
@@ -89,6 +89,31 @@ worker-verify: ## cargo fmt/clippy(-D warnings)/audit/deny/test
 WORKER_COVER_MIN ?= 83
 worker-cover: ## cargo-llvm-cov line coverage gate for the Rust workspace
 	cargo llvm-cov --workspace --locked --summary-only --fail-under-lines $(WORKER_COVER_MIN)
+
+# ── end-to-end smoke (#19) ────────────────────────────────────────────────────
+E2E_BIN := api/tmp/e2e
+# The Postgres the integration tests pin (storetest), through the Docker Hub mirror.
+E2E_POSTGRES ?= mirror.gcr.io/library/postgres:17-alpine@sha256:f02121de6f74d30d8a94cd1d9584125e2178d7e6c377d8130112d4e52d867995
+e2e-smoke: ## Postgres + api + two workers + fakearr end to end (needs Docker unless SMOKE_DSN is set)
+	mkdir -p $(E2E_BIN)
+	go build -o $(E2E_BIN)/snatcharr ./api/cmd/snatcharr
+	go build -o $(E2E_BIN)/fakearr ./api/cmd/fakearr
+	cargo build --locked -p snatch-worker
+	if [ -z "$${SMOKE_DSN:-}" ]; then
+	  cid=$$(docker run -d --rm -e POSTGRES_PASSWORD=smoke -p 127.0.0.1::5432 $(E2E_POSTGRES))
+	  trap 'docker rm -f "$$cid" >/dev/null 2>&1' EXIT
+	  tries=0
+	  # Over TCP: the image's first-start server listens on the socket only, then restarts.
+	  until docker exec "$$cid" pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1; do
+	    tries=$$((tries + 1))
+	    [ "$$tries" -lt 120 ] || { echo "e2e-smoke: postgres not ready after 60 s" >&2; exit 1; }
+	    sleep 0.5
+	  done
+	  port=$$(docker port "$$cid" 5432/tcp | head -n 1 | sed 's/.*://')
+	  SMOKE_DSN="postgres://postgres:smoke@127.0.0.1:$$port/postgres?sslmode=disable"
+	fi
+	SMOKE_DSN="$$SMOKE_DSN" SMOKE_API_BIN=$(E2E_BIN)/snatcharr SMOKE_FAKEARR_BIN=$(E2E_BIN)/fakearr \
+	  SMOKE_WORKER_BIN=target/debug/snatch-worker tools/e2e/smoke.sh
 
 # ── web/ (SvelteKit + sveltesentio) ───────────────────────────────────────────
 web-verify: ## pnpm lint/typecheck/test(+coverage)/build + OpenAPI type drift
