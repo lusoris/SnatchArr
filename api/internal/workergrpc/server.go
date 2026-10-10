@@ -82,6 +82,7 @@ func (s *Server) LeaseRun(ctx context.Context, req *snatcharrv1.LeaseRunRequest)
 	if req.GetWorkerId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "worker_id is required")
 	}
+	s.failExhausted(ctx)
 	wait := min(time.Duration(req.GetWaitSeconds())*time.Second, maxLeaseWait)
 	deadline := s.clk.Now().Add(wait)
 	for attempt := 0; attempt <= int(maxLeaseWait/leasePollInterval); attempt++ {
@@ -334,6 +335,31 @@ func (s *Server) CompleteRun(ctx context.Context, req *snatcharrv1.CompleteRunRe
 		RunID: &run.ID, InstanceID: run.InstanceID, Level: "info", Type: "run_finished",
 		Title: fmt.Sprintf("%s snatch %s: %d item(s) searched", run.Kind, outcome(req.GetOutcome()), len(searched)), Detail: req.GetError(),
 	})
+}
+
+// failExhausted ends the runs whose lease expired snatch.MaxLeases times and records each
+// as a failed run, so history, the SSE stream and the planner's backoff see it like any
+// other failure. A failure here is logged, never surfaced to the worker asking for a lease.
+func (s *Server) failExhausted(ctx context.Context) {
+	runs, err := s.runs.FailExhausted(ctx)
+	if err != nil {
+		s.logger.WarnContext(ctx, "workergrpc: fail exhausted leases", slog.String("error", err.Error()))
+		return
+	}
+	for _, run := range runs {
+		if err := s.rec.Record(ctx, domain.Event{
+			RunID: &run.ID, InstanceID: run.InstanceID, Level: "error", Type: "run_finished",
+			Title: fmt.Sprintf("%s snatch failed", run.Kind), Detail: snatch.ExhaustedReason,
+		}); err != nil {
+			s.logger.WarnContext(ctx, "workergrpc: record exhausted run", slog.String("error", err.Error()))
+		}
+		policy, err := s.policies.Get(ctx, run.InstanceID)
+		if err != nil {
+			s.logger.WarnContext(ctx, "workergrpc: policy of exhausted run", slog.String("error", err.Error()))
+			continue
+		}
+		s.recordBackoff(ctx, run, policy)
+	}
 }
 
 // recordBackoff writes one history entry per failed run saying how long the circuit

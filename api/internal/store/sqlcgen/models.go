@@ -207,6 +207,7 @@ type SnatchRun struct {
 	Error          *string
 	FocusEntityID  *int64
 	FocusGroupID   *int64
+	LeaseCount     int32
 }
 
 type User struct {

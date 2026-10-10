@@ -159,6 +159,10 @@ jobs:
 
   api-test:
     name: api / test (race + coverage)
+    env:
+      # The Postgres integration tests (api/internal/store/storetest) start containers through
+      # testcontainers; pull its Docker Hub images (postgres, ryuk) from the mirror.
+      TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX: mirror.gcr.io
     needs: changes
     if: needs.changes.outputs.api == 'true'
     runs-on: ubuntu-latest

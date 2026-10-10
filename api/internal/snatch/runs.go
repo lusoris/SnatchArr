@@ -24,6 +24,16 @@ import (
 // LeaseTTL is how long a worker may go silent before its run is handed to another.
 const LeaseTTL = 90 * time.Second
 
+// MaxLeases is how often one run is leased before an expired lease ends it as failed: a
+// run that crashes every worker would otherwise be handed out forever (#17).
+const MaxLeases = 3
+
+// exhaustedBatch bounds the runs FailExhausted ends per call (HISS-02).
+const exhaustedBatch = 100
+
+// ExhaustedReason is the error a run gets when its last lease expired.
+var ExhaustedReason = fmt.Sprintf("lease expired %d times without the run completing", MaxLeases)
+
 // ErrNoRun means no run is queued right now.
 var ErrNoRun = errors.New("snatch: no run available")
 
@@ -70,7 +80,7 @@ func (r *Runs) EnqueueFocused(ctx context.Context, instanceID uuid.UUID, kind do
 // Lease hands the oldest queued (or expired-lease) run to workerID.
 func (r *Runs) Lease(ctx context.Context, workerID string) (domain.Run, error) {
 	now := r.clk.Now()
-	row, err := r.st.Q().LeaseRun(ctx, sqlcgen.LeaseRunParams{LeasedBy: &workerID, LeaseExpiresAt: new(now.Add(LeaseTTL)), StartedAt: new(now)})
+	row, err := r.st.Q().LeaseRun(ctx, sqlcgen.LeaseRunParams{LeasedBy: &workerID, LeaseExpiresAt: new(now.Add(LeaseTTL)), Now: now, MaxLeases: MaxLeases})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Run{}, ErrNoRun
 	}
@@ -78,6 +88,22 @@ func (r *Runs) Lease(ctx context.Context, workerID string) (domain.Run, error) {
 		return domain.Run{}, fmt.Errorf("snatch: lease: %w", store.MapError(err))
 	}
 	return runFromRow(row), nil
+}
+
+// FailExhausted ends, as failed, the runs whose lease expired after MaxLeases leases and
+// returns them, at most exhaustedBatch per call.
+func (r *Runs) FailExhausted(ctx context.Context) ([]domain.Run, error) {
+	rows, err := r.st.Q().FailExhaustedLeases(ctx, sqlcgen.FailExhaustedLeasesParams{
+		Now: r.clk.Now(), Error: ExhaustedReason, MaxLeases: MaxLeases, Batch: exhaustedBatch,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("snatch: fail exhausted leases: %w", store.MapError(err))
+	}
+	out := make([]domain.Run, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, runFromRow(row))
+	}
+	return out, nil
 }
 
 // Heartbeat extends the lease; returns the current status so a cancelled run is noticed.

@@ -15,6 +15,11 @@ monitored items that have no file, an **upgrade snatch** goes after items below 
 quality cutoff. A snatch is planned by the API, leased by a worker, and ends with a list of
 what was searched. Runs live under `/api/v1/runs`.
 
+A worker that goes silent for 90 s loses its lease, and the snatch goes to the next worker.
+After three leases that all expired, the snatch ends as failed ("lease expired 3 times without
+the run completing") instead of being handed out again, so a snatch that crashes every worker
+cannot loop forever. It counts as a failed run for the circuit breaker below.
+
 The planner queues a snatch when the instance's **refractory period** (`cycle_interval_s`,
 default 900 s, jittered by ±20 % per instance so several instances never hit the same
 indexers in lockstep) has passed since the last one of that kind, nothing is paused by a

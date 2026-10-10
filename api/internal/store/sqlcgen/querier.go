@@ -54,6 +54,9 @@ type Querier interface {
 	EnsureDefaultPolicy(ctx context.Context, arg EnsureDefaultPolicyParams) (SnatchPolicy, error)
 	EnsureGlobalBucket(ctx context.Context, windowStart time.Time) error
 	EnsureSettings(ctx context.Context, updatedAt time.Time) (Setting, error)
+	// Ends, as failed, runs whose lease expired after max_leases leases, oldest first and at
+	// most batch per call.
+	FailExhaustedLeases(ctx context.Context, arg FailExhaustedLeasesParams) ([]SnatchRun, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
 	FilterUnprocessed(ctx context.Context, arg FilterUnprocessedParams) ([]int64, error)
@@ -83,6 +86,8 @@ type Querier interface {
 	// SPDX-License-Identifier: EUPL-1.2
 	InsertEvent(ctx context.Context, arg InsertEventParams) (int64, error)
 	LastFinishedAt(ctx context.Context, arg LastFinishedAtParams) (time.Time, error)
+	// An expired lease is handed out again only while the run has been leased fewer than
+	// max_leases times; FailExhaustedLeases ends the others.
 	LeaseRun(ctx context.Context, arg LeaseRunParams) (SnatchRun, error)
 	ListAPIKeysByOwner(ctx context.Context, ownerID uuid.UUID) ([]ApiKey, error)
 	ListCleanuparrLinks(ctx context.Context) ([]CleanuparrLink, error)
