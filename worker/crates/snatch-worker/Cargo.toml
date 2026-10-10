@@ -25,3 +25,10 @@ chrono = { workspace = true }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+tokio = { workspace = true, features = ["test-util"] }
+wiremock.workspace = true
+tonic = { workspace = true, features = ["router", "server"] }
+snatch-proto = { workspace = true, features = ["server"] }

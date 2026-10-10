@@ -9,6 +9,9 @@ repository.workspace = true
 authors.workspace = true
 publish.workspace = true
 
+[features]
+server = ["tonic/server"]
+
 [dependencies]
 tonic = { workspace = true }
 tonic-prost = { workspace = true }

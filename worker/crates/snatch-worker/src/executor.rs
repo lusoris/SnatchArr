@@ -33,6 +33,15 @@ const MAX_COMMAND_POLLS: u32 = 150;
 const COMMAND_POLL_INTERVAL: Duration = Duration::from_secs(2);
 const MAX_EVENTS_BUFFER: usize = 512;
 
+/// How long a dispatched search command is polled for a terminal state: at most `max` polls,
+/// `interval` apart. Production is MAX_COMMAND_POLLS x COMMAND_POLL_INTERVAL (5 minutes); tests
+/// pass a short budget through [`execute_with`].
+#[derive(Clone, Copy)]
+pub(crate) struct Polling {
+    pub max: u32,
+    pub interval: Duration,
+}
+
 /// Execution errors.
 #[derive(Debug, thiserror::Error)]
 pub enum ExecError {
@@ -162,6 +171,7 @@ struct Prepared {
     arr: ArrClient,
     page_size: u32,
     focus: Option<Focus>,
+    polling: Polling,
 }
 
 fn kind_of(app: i32) -> Result<Kind, ExecError> {
@@ -233,7 +243,7 @@ fn group(kind: Kind, p: &Policy, selected: &[Candidate]) -> Vec<Target> {
     }
 }
 
-fn prepare(run: &Run, arr_timeout: Duration) -> Result<Prepared, ExecError> {
+fn prepare(run: &Run, arr_timeout: Duration, polling: Polling) -> Result<Prepared, ExecError> {
     let kind = kind_of(run.app)?;
     let wanted = wanted_of(run.snatch)?;
     let policy = run
@@ -259,11 +269,27 @@ fn prepare(run: &Run, arr_timeout: Duration) -> Result<Prepared, ExecError> {
         arr,
         page_size,
         focus,
+        polling,
     })
 }
 
 /// Runs one lease to completion and reports the outcome to the API.
-pub async fn execute(mut client: Client, run: Run, arr_timeout: Duration, worker_id: &str) {
+pub async fn execute(client: Client, run: Run, arr_timeout: Duration, worker_id: &str) {
+    let polling = Polling {
+        max: MAX_COMMAND_POLLS,
+        interval: COMMAND_POLL_INTERVAL,
+    };
+    execute_with(client, run, arr_timeout, worker_id, polling).await
+}
+
+/// [`execute`] with an explicit command-polling budget.
+pub(crate) async fn execute_with(
+    mut client: Client,
+    run: Run,
+    arr_timeout: Duration,
+    worker_id: &str,
+    polling: Polling,
+) {
     let (tx, rx) = mpsc::channel::<ReportEventsRequest>(MAX_EVENTS_BUFFER);
     let mut reporter = client.clone();
     let report = tokio::spawn(async move {
@@ -276,7 +302,7 @@ pub async fn execute(mut client: Client, run: Run, arr_timeout: Duration, worker
         run_id: run.run_id.clone(),
     };
     let (outcome, searched, cursor, error) =
-        match snatch(&mut client, &run, arr_timeout, &events).await {
+        match snatch(&mut client, &run, arr_timeout, &events, polling).await {
             Ok(Outcome {
                 searched,
                 cursor,
@@ -325,8 +351,9 @@ async fn snatch(
     run: &Run,
     arr_timeout: Duration,
     events: &Events,
+    polling: Polling,
 ) -> Result<Outcome, ExecError> {
-    let p = prepare(run, arr_timeout)?;
+    let p = prepare(run, arr_timeout, polling)?;
     let focused = if p.focus.is_some() {
         " (focused on one Seerr request)"
     } else {
@@ -564,9 +591,9 @@ async fn dispatch_target(
 /// Polls a command until it reaches a terminal state or the bounded poll budget ends.
 async fn await_command(p: &Prepared, mut cmd: CommandStatus, events: &Events) {
     let mut polls: u32 = 0;
-    while !cmd.is_terminal() && polls < MAX_COMMAND_POLLS {
+    while !cmd.is_terminal() && polls < p.polling.max {
         polls = polls.saturating_add(1);
-        tokio::time::sleep(COMMAND_POLL_INTERVAL).await;
+        tokio::time::sleep(p.polling.interval).await;
         match p.arr.command_status(cmd.id).await {
             Ok(c) => cmd = c,
             Err(e) => {
@@ -588,3 +615,6 @@ async fn await_command(p: &Prepared, mut cmd: CommandStatus, events: &Events) {
         ))
         .await;
 }
+
+#[cfg(test)]
+mod executor_tests;
