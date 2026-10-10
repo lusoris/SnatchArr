@@ -38,8 +38,6 @@ ROUNDS=3    # run triggers per instance
 API="http://127.0.0.1:$API_PORT/api/v1"
 FAKE_KEY=fake-api-key-0123456789
 TOKEN=smoke-worker-token
-# Throwaway key for this run only; the dev profile does not supply one (#138).
-CRYPTO_KEY=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
 
 LOG_DIR=$(mktemp -d)
 PIDS=()
@@ -106,8 +104,8 @@ searched() {
 
 start sonarr "$SMOKE_FAKEARR_BIN" -addr "127.0.0.1:$SONARR_PORT" -kind sonarr -api-key "$FAKE_KEY"
 start radarr "$SMOKE_FAKEARR_BIN" -addr "127.0.0.1:$RADARR_PORT" -kind radarr -api-key "$FAKE_KEY"
+# No APP_CRYPTO_KEY: the dev profile must start on its development key (#138).
 start api env APP_SNATCHARR_PROFILE=dev APP_DB_DSN="$SMOKE_DSN" APP_SNATCHARR_WORKER_TOKEN="$TOKEN" \
-    APP_CRYPTO_KEY="$CRYPTO_KEY" \
     APP_HTTP_ADDR="127.0.0.1:$API_PORT" APP_GRPC_LISTEN="127.0.0.1:$GRPC_PORT" "$SMOKE_API_BIN"
 wait_http "http://127.0.0.1:$SONARR_PORT/healthz"
 wait_http "http://127.0.0.1:$RADARR_PORT/healthz"

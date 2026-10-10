@@ -22,6 +22,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"go.uber.org/fx"
@@ -97,9 +98,8 @@ func Default() Options {
 	}
 }
 
-// Load reads the "snatcharr" subtree and validates it for the selected profile. In prod
-// it also insists on golusoris' crypto.key (APP_CRYPTO_KEY): without it *arr API keys
-// would be sealed with a built-in development key.
+// Load reads the "snatcharr" subtree and validates it for the selected profile, including
+// which crypto.key the profile may run on (CryptoKey).
 func Load(cfg *config.Config) (Options, error) {
 	o := Default()
 	if err := cfg.Unmarshal("snatcharr", &o); err != nil {
@@ -108,10 +108,37 @@ func Load(cfg *config.Config) (Options, error) {
 	if err := o.Validate(); err != nil {
 		return Options{}, err
 	}
-	if o.Profile == ProfileProd && cfg.String("crypto.key") == "" {
-		return Options{}, fmt.Errorf("%w: crypto.key (APP_CRYPTO_KEY, hex 16/24/32 bytes)", ErrMissingSecret)
+	if _, _, err := o.CryptoKey(cfg.String("crypto.key")); err != nil {
+		return Options{}, err
 	}
 	return o, nil
+}
+
+// DevCryptoKey is the development key the dev profile falls back to when crypto.key is
+// empty (hex of the 32 bytes "snatcharr-development-key-000000"). It is published in this
+// repository, so anything sealed with it is unprotected. Prod refuses it.
+const DevCryptoKey = "736e617463686172722d646576656c6f706d656e742d6b65792d303030303030"
+
+// ErrDevelopmentKey is returned when a production deployment is configured with the
+// published development key.
+var ErrDevelopmentKey = errors.New("config: crypto.key is the published development key")
+
+// CryptoKey decides which key seals *arr API keys and download-client secrets, given the
+// configured crypto.key (APP_CRYPTO_KEY, hex 16/24/32 bytes). Only the explicit dev profile
+// may run on DevCryptoKey; development reports that, so the caller can warn. Prod, which is
+// also the default profile, refuses an empty key and the development key.
+func (o Options) CryptoKey(configured string) (key string, development bool, err error) {
+	isDevKey := strings.EqualFold(configured, DevCryptoKey)
+	switch {
+	case o.Profile == ProfileDev && (configured == "" || isDevKey):
+		return DevCryptoKey, true, nil
+	case configured == "":
+		return "", false, fmt.Errorf("%w: crypto.key (APP_CRYPTO_KEY, hex 16/24/32 bytes)", ErrMissingSecret)
+	case isDevKey:
+		return "", false, fmt.Errorf("%w: set APP_CRYPTO_KEY to a key of your own (openssl rand -hex 32)", ErrDevelopmentKey)
+	default:
+		return configured, false, nil
+	}
 }
 
 // Validate applies cross-field rules. Dev relaxes the secret requirements so a first

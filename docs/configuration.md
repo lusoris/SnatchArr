@@ -16,7 +16,7 @@ UI.
 | `APP_DB_DSN` | required | Postgres DSN, e.g. `postgres://snatcharr:secret@postgres:5432/snatcharr?sslmode=disable` |
 | `APP_HTTP_ADDR` | `:8080` | HTTP listen address (API, SSE, embedded UI) |
 | `APP_GRPC_LISTEN` | `:9090` | gRPC listen address for workers |
-| `APP_CRYPTO_KEY` | required in prod | Key that encrypts *arr API keys and download-client secrets at rest |
+| `APP_CRYPTO_KEY` | required in prod | Key that encrypts *arr API keys and download-client secrets at rest (`openssl rand -hex 32`). The dev profile without it runs on a development key published in the source and warns that stored secrets are unprotected; prod refuses to start on that key |
 | `APP_HTTP_CSRF_SECRET` | required in prod | Secret behind the double-submit CSRF token; set it so tokens survive restarts and replicas |
 | `APP_LEADER_ENABLED` | `false` | Elect one replica (Postgres advisory lock) to run the planner, Seerr sync and Configarr poll; leave off for a single replica |
 | `APP_LEADER_NAME` | `snatcharr` | Lock name; one per deployment |
