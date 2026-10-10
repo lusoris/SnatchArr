@@ -359,6 +359,40 @@ impl Target {
             | Self::Author { .. } => self.item_count().max(1),
         }
     }
+
+    /// Splits a target whose items are searched one by one into its first `keep` items and
+    /// the rest. Returns the target unchanged as `Err` when it cannot be split: it is one
+    /// command for a whole parent, or `keep` is 0 or covers every item.
+    ///
+    /// # Errors
+    ///
+    /// The unsplit target, so the caller keeps ownership.
+    pub fn split(self, keep: u32) -> Result<(Self, Self), Self> {
+        if keep == 0 || keep >= self.item_count() {
+            return Err(self);
+        }
+        let keep = usize::try_from(keep).unwrap_or(usize::MAX);
+        match self {
+            Self::Items { mut items } => {
+                let rest = items.split_off(keep);
+                Ok((Self::Items { items }, Self::Items { items: rest }))
+            }
+            Self::Episodes {
+                series_id,
+                mut items,
+            } => {
+                let rest = items.split_off(keep);
+                Ok((
+                    Self::Episodes { series_id, items },
+                    Self::Episodes {
+                        series_id,
+                        items: rest,
+                    },
+                ))
+            }
+            whole => Err(whole),
+        }
+    }
 }
 
 fn by_group(selected: &[Candidate]) -> BTreeMap<i64, Vec<i64>> {
@@ -448,8 +482,11 @@ pub fn group_flat(selected: &[Candidate]) -> Vec<Target> {
     }]
 }
 
-/// Keeps whole targets while their cumulative query cost fits into `granted`; the rest is
-/// returned as deferred so the caller can report what stamina withheld.
+/// Keeps targets while their cumulative query cost fits into `granted` and returns the rest
+/// as deferred so the caller can report what stamina withheld. A target whose items are
+/// searched one by one (`Items`, `Episodes`) is split at the grant: the API has already
+/// debited what it granted, so leaving it unused would lose stamina (#136). A target that is
+/// one command for a whole parent stays whole.
 #[must_use]
 pub fn cap(targets: Vec<Target>, granted: u32) -> (Vec<Target>, Vec<Target>) {
     let mut used: u32 = 0;
@@ -457,11 +494,19 @@ pub fn cap(targets: Vec<Target>, granted: u32) -> (Vec<Target>, Vec<Target>) {
     let mut deferred = Vec::new();
     for t in targets {
         let n = t.query_cost();
-        if used.saturating_add(n) <= granted {
+        let left = granted.saturating_sub(used);
+        if n <= left {
             used = used.saturating_add(n);
             dispatch.push(t);
-        } else {
-            deferred.push(t);
+            continue;
+        }
+        match t.split(left) {
+            Ok((head, tail)) => {
+                used = used.saturating_add(head.query_cost());
+                dispatch.push(head);
+                deferred.push(tail);
+            }
+            Err(whole) => deferred.push(whole),
         }
     }
     (dispatch, deferred)
@@ -575,6 +620,74 @@ mod tests {
             prop_assert!(used <= granted);
             prop_assert_eq!(used + left, total);
         }
+
+        // Targets searched item by item use the grant exactly and lose no item (#136).
+        #[test]
+        fn cap_spends_the_whole_grant_on_item_targets(cands in arb_candidates(), granted in 0u32..40, flat in any::<bool>()) {
+            let targets = if flat { group_flat(&cands) } else { group_sonarr(&cands, SonarrMode::Episodes) };
+            let total: u32 = targets.iter().map(Target::query_cost).sum();
+            let mut before: Vec<i64> = targets.iter().flat_map(|t| t.items().to_vec()).collect();
+            let (dispatch, deferred) = cap(targets, granted);
+            let used: u32 = dispatch.iter().map(Target::query_cost).sum();
+            prop_assert_eq!(used, granted.min(total));
+            prop_assert!(dispatch.iter().chain(&deferred).all(|t| t.item_count() > 0), "no empty target");
+            let mut after: Vec<i64> = dispatch.iter().chain(&deferred).flat_map(|t| t.items().to_vec()).collect();
+            before.sort_unstable();
+            after.sort_unstable();
+            prop_assert_eq!(before, after);
+        }
+    }
+
+    // A grant smaller than one multi-item target still searches as many items as granted:
+    // the API has already debited the grant, so dispatching nothing would lose stamina (#136).
+    #[test]
+    fn cap_splits_an_item_target_to_the_grant() {
+        let cands: Vec<_> = (1..=5).map(|i| cand(i, i, 1, None, true)).collect();
+        let (dispatch, deferred) = cap(group_flat(&cands), 3);
+        assert_eq!(dispatch.iter().map(Target::query_cost).sum::<u32>(), 3);
+        assert_eq!(deferred.iter().map(Target::query_cost).sum::<u32>(), 2);
+        let mut all: Vec<i64> = dispatch
+            .iter()
+            .chain(&deferred)
+            .flat_map(|t| t.items().to_vec())
+            .collect();
+        all.sort_unstable();
+        assert_eq!(
+            all,
+            vec![1, 2, 3, 4, 5],
+            "every item is dispatched or deferred exactly once"
+        );
+    }
+
+    // Negative: one command for a whole parent is never split, so it waits whole; a smaller
+    // target after it still uses what is left.
+    #[test]
+    fn cap_keeps_whole_parent_targets_whole() {
+        let series = Target::Series {
+            series_id: 1,
+            seasons: 2,
+            items: vec![1, 2, 3],
+        };
+        let pack = Target::Season {
+            series_id: 2,
+            season: 1,
+            items: vec![4, 5],
+        };
+        let (dispatch, deferred) = cap(vec![series.clone(), pack.clone()], 1);
+        assert_eq!(dispatch, vec![pack]);
+        assert_eq!(deferred, vec![series]);
+    }
+
+    // Boundary: no grant defers everything unsplit; a grant equal to the cost keeps it whole.
+    #[test]
+    fn cap_boundaries_do_not_split() {
+        let cands: Vec<_> = (1..=3).map(|i| cand(i, i, 1, None, true)).collect();
+        let (dispatch, deferred) = cap(group_flat(&cands), 0);
+        assert!(dispatch.is_empty());
+        assert_eq!(deferred, group_flat(&cands));
+        let (dispatch, deferred) = cap(group_flat(&cands), 3);
+        assert_eq!(dispatch, group_flat(&cands));
+        assert!(deferred.is_empty());
     }
 
     #[test]

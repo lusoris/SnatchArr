@@ -310,6 +310,58 @@ async fn cap_defers_over_budget() -> TestResult {
     Ok(())
 }
 
+/// A grant smaller than one series' episodes still searches as many episodes as granted
+/// (#136): the target is split at the grant instead of waiting whole.
+#[tokio::test]
+async fn cap_splits_one_series_to_the_grant() -> TestResult {
+    let api = FakeApi {
+        budget_granted: 2,
+        filter_unprocessed: vec![1, 2, 3],
+        ..Default::default()
+    };
+    let (client, _) = start_fake_api(api.clone()).await?;
+    let mock_server = MockServer::start().await;
+    mount_sonarr(
+        &mock_server,
+        wanted_page(episodes(&[(1, 10), (2, 10), (3, 10)])),
+        queue_page(),
+        serde_json::json!([]),
+    )
+    .await;
+    mount_command(&mock_server, queued_command()).await;
+
+    let mut run = default_run(&mock_server.uri());
+    some(run.policy.as_mut(), "run policy")?.per_cycle = 3;
+    run_short_polling(client, run).await;
+
+    let requests = some(mock_server.received_requests().await, "recorded requests")?;
+    assert_eq!(
+        search_posts(&requests),
+        1,
+        "one EpisodeSearch for the part that fits"
+    );
+    let post = some(
+        requests
+            .iter()
+            .find(|r| r.method == "POST" && r.url.path() == "/api/v3/command"),
+        "a search POST",
+    )?;
+    let body: serde_json::Value = serde_json::from_slice(&post.body)?;
+    assert_eq!(
+        body.get("episodeIds")
+            .and_then(|ids| ids.as_array())
+            .map(Vec::len),
+        Some(2),
+        "two of the three episodes are searched: {body}"
+    );
+    let complete = api.completed_requests.lock().await;
+    assert_eq!(
+        some(complete.first(), "a CompleteRun call")?.searched.len(),
+        2
+    );
+    Ok(())
+}
+
 #[tokio::test]
 async fn heartbeat_cancel_terminates_run() -> TestResult {
     let api = FakeApi {
