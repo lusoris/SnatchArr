@@ -53,7 +53,7 @@ no Ingress or HTTPRoute is enabled.
 | Ingress or HTTPRoute | `api.ingress.*` or `api.httpRoute.*` |
 | CNPG `Cluster` `-db` | `postgres.cnpg.*`; the API reads the DSN from the operator's `-db-app` Secret |
 | Secret `-secrets` | crypto key, CSRF secret, API-key HMAC secret, worker token |
-| NetworkPolicy | worker may only reach the API and `networkPolicy.arrCidrs`; gRPC only from the worker |
+| NetworkPolicy | worker may only reach the API and `networkPolicy.arrCidrs` (an empty list allows no *arr egress, never all of it); gRPC only from the worker |
 | ServiceMonitor | `serviceMonitor.enabled` scrapes `/metrics` on the API |
 | PodDisruptionBudget | per component, opt-in |
 
