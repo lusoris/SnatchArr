@@ -144,9 +144,14 @@ deploy-verify: ## helm lint --strict + kubeconform (default and all-features ren
 	if printf '%s\n' "$$netpol" | grep -A1 -E '^ *- to:( *\[\])?$$' | grep -qE '^ *(- to: *)?\[\]$$'; then
 	  echo "networkPolicy: an egress rule with an empty 'to' allows every destination" >&2; exit 1
 	fi
-	# The Artifact Hub image annotation names the appVersion images (#122).
+	# The Artifact Hub image annotation names the appVersion images (#122), and the four
+	# release-please markers that keep it so are still in the file (a yaml updater drops them).
 	chart=deploy/helm/snatcharr/Chart.yaml
-	app=$$(sed -n 's/^appVersion: *//p' "$$chart" | tr -d "\"'")
+	app=$$(helm show chart deploy/helm/snatcharr | sed -n 's/^appVersion: *//p' | tr -d "\"'")
+	markers=$$(grep -c 'x-release-please' "$$chart" || true)
+	if [ -z "$$app" ] || [ "$$markers" -ne 4 ]; then
+	  echo "Chart.yaml: appVersion '$$app', $$markers of 4 x-release-please markers" >&2; exit 1
+	fi
 	images=$$(grep -cE '^ +image: ghcr\.io/lusoris/snatcharr-(api|worker):' "$$chart")
 	stale=$$(grep -E '^ +image: ghcr\.io/lusoris/snatcharr-(api|worker):' "$$chart" | grep -cv ":$$app$$" || true)
 	if [ "$$images" -ne 2 ] || [ "$$stale" -ne 0 ]; then

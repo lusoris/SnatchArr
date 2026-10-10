@@ -50,16 +50,6 @@
       "bump-patch-for-minor-pre-major": true,
       "extra-files": [
         {
-          "type": "yaml",
-          "path": "deploy/helm/snatcharr/Chart.yaml",
-          "jsonpath": "$.version"
-        },
-        {
-          "type": "yaml",
-          "path": "deploy/helm/snatcharr/Chart.yaml",
-          "jsonpath": "$.appVersion"
-        },
-        {
           "type": "generic",
           "path": "deploy/helm/snatcharr/Chart.yaml"
         }

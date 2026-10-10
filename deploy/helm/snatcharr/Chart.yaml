@@ -4,8 +4,8 @@ description: >-
   SnatchArr keeps your *arr apps searching for missing and cutoff-unmet media,
   gently.
 type: application
-version: 0.1.2
-appVersion: 0.1.2
+version: 0.1.2 # x-release-please-version
+appVersion: 0.1.2 # x-release-please-version
 kubeVersion: '>=1.29.0-0'
 home: https://lusoris.github.io/SnatchArr/
 icon: https://lusoris.github.io/SnatchArr/assets/mark.svg
@@ -24,6 +24,8 @@ keywords:
 annotations:
   artifacthub.io/license: EUPL-1.2
   # release-please bumps the tags below with appVersion; make deploy-verify checks they match.
+  # Only its generic updater may touch this file: the yaml updater rewrites the document
+  # and drops these marker comments (release-please-config.json).
   # x-release-please-start-version
   artifacthub.io/images: |
     - name: snatcharr-api
