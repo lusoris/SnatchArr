@@ -253,6 +253,7 @@ func (s *Client) securityCookieAuth(ctx context.Context, operationName Operation
 	if err != nil {
 		return errors.Wrap(err, "security source \"CookieAuth\"")
 	}
+	// #nosec G124 -- ogen client adds the session cookie to an outgoing request; Secure, HttpOnly and SameSite are response attributes
 	req.AddCookie(&http.Cookie{
 		Name:  "snatcharr_session",
 		Value: t.APIKey,

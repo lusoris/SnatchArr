@@ -198,6 +198,10 @@ jobs:
         run: |
           make -C .. gosec-install
           gosec -conf ../.gosec.json -exclude-generated ./...
+      - name: gosec annotations of generated code
+        # Each finding in ogen, sqlc and protoc-gen-go output carries one `#nosec <rule> -- <reason>`
+        # from tools/gennosec, and no annotation outlives its finding.
+        run: go run ../tools/gennosec check
       - name: govulncheck
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest

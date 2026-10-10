@@ -36,8 +36,10 @@ api-verify: ## golangci-lint + go fix + gosec + govulncheck + go test -race + ge
 	cd api
 	go fix -diff ./...
 	go generate ./...
-	git diff --exit-code -- internal/build internal/gen
+	git diff --exit-code -- internal/build internal/gen internal/store/sqlcgen
 	cd ..
+	# Every gosec finding in generated code is annotated, and every annotation still has its finding.
+	go run ./tools/gennosec check
 	$(MAKE) api-cover
 	if [ -f api/openapi/openapi.yaml ]; then
 	  npx --yes @stoplight/spectral-cli@6.15.0 lint api/openapi/openapi.yaml --ruleset tools/spectral.yaml --fail-severity warn
@@ -119,6 +121,8 @@ proto-gen: ## buf generate (Go stubs; Rust stubs build via tonic-build)
 	for f in $$(find api/internal/gen -name '*.pb.go'); do
 	  sed -i -E 's|^([[:space:]]*)(.*unsafe\.Slice\(unsafe\.StringData\(.*)$$|\1// SAFETY: protoc-gen-go reads immutable string bytes of the raw descriptor; never written or retained past the call.\n\1\2|' "$$f"
 	done
+	# gosec findings of generated code carry one `#nosec <rule> -- <reason>` each (tools/gennosec).
+	go run ./tools/gennosec apply
 
 # ── deploy/ ───────────────────────────────────────────────────────────────────
 # kubeconform binary if installed, else the same pinned image CI uses.
