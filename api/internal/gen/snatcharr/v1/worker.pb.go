@@ -1806,6 +1806,7 @@ var (
 func file_snatcharr_v1_worker_proto_rawDescGZIP() []byte {
 	file_snatcharr_v1_worker_proto_rawDescOnce.Do(func() {
 		// SAFETY: protoc-gen-go reads immutable string bytes of the raw descriptor; never written or retained past the call.
+		// #nosec G103 -- protoc-gen-go views the immutable raw descriptor read-only; see the SAFETY proof above
 		file_snatcharr_v1_worker_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_snatcharr_v1_worker_proto_rawDesc), len(file_snatcharr_v1_worker_proto_rawDesc)))
 	})
 	return file_snatcharr_v1_worker_proto_rawDescData
@@ -1886,6 +1887,7 @@ func file_snatcharr_v1_worker_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			// SAFETY: protoc-gen-go reads immutable string bytes of the raw descriptor; never written or retained past the call.
+			// #nosec G103 -- protoc-gen-go views the immutable raw descriptor read-only; see the SAFETY proof above
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_snatcharr_v1_worker_proto_rawDesc), len(file_snatcharr_v1_worker_proto_rawDesc)),
 			NumEnums:      10,
 			NumMessages:   16,

@@ -21,6 +21,9 @@ adoption:
         - dev-container
 profiles:
     - app-service
+# The Go control plane at the root is the audited flavor (#1103 pin; api/ holds its packages).
+flavors:
+    - name: go-service
 facets:
     - security:high
     - api:public-contract

@@ -69,6 +69,7 @@ func (q *Queries) DeleteSession(ctx context.Context, id string) error {
 	return err
 }
 
+// #nosec G101 -- sqlc query constant named after a table; the value is SQL, not a credential
 const getAPIKey = `-- name: GetAPIKey :one
 SELECT id, owner_id, scopes, hash, created_at, expires_at, revoked_at FROM api_keys WHERE id = $1
 `
@@ -124,6 +125,7 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 	return i, err
 }
 
+// #nosec G101 -- sqlc query constant named after a table; the value is SQL, not a credential
 const listAPIKeysByOwner = `-- name: ListAPIKeysByOwner :many
 SELECT id, owner_id, scopes, hash, created_at, expires_at, revoked_at FROM api_keys WHERE owner_id = $1 AND revoked_at IS NULL ORDER BY created_at
 `
@@ -215,6 +217,7 @@ func (q *Queries) PurgeExpiredSessions(ctx context.Context, expiresAt time.Time)
 	return result.RowsAffected(), nil
 }
 
+// #nosec G101 -- sqlc query constant named after a table; the value is SQL, not a credential
 const revokeAPIKey = `-- name: RevokeAPIKey :execrows
 UPDATE api_keys SET revoked_at = $2 WHERE id = $1 AND revoked_at IS NULL
 `
@@ -232,6 +235,7 @@ func (q *Queries) RevokeAPIKey(ctx context.Context, arg RevokeAPIKeyParams) (int
 	return result.RowsAffected(), nil
 }
 
+// #nosec G101 -- sqlc query constant named after a table; the value is SQL, not a credential
 const saveAPIKey = `-- name: SaveAPIKey :exec
 INSERT INTO api_keys (id, owner_id, scopes, hash, created_at, expires_at)
 VALUES ($1, $2, $3, $4, $5, $6)

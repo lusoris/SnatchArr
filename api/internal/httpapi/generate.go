@@ -7,3 +7,4 @@
 package httpapi
 
 //go:generate go run github.com/ogen-go/ogen/cmd/ogen@v1.20.2 --target ../build/oas --package oas --clean ../../openapi/openapi.yaml
+//go:generate go run github.com/lusoris/SnatchArr/tools/gennosec apply

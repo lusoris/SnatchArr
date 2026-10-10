@@ -32,6 +32,10 @@ Thumbs.db
 # --- claude code local ---
 .claude/settings.local.json
 
+
+# kind kubeconfig written by make kind-up (VM-local cluster, #61)
+/.kind/
+
 # BEGIN praetor private artifacts (praetorctl adopt)
 /.workingdir/
 /.workingdir2/
@@ -39,6 +43,3 @@ Thumbs.db
 /.agents/mcp_config.json
 /.standards/cache/
 # END praetor private artifacts
-
-# kind kubeconfig written by make kind-up (VM-local cluster, #61)
-/.kind/
