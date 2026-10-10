@@ -23,8 +23,11 @@ keywords:
   - arr
 annotations:
   artifacthub.io/license: EUPL-1.2
+  # release-please bumps the tags below with appVersion; make deploy-verify checks they match.
+  # x-release-please-start-version
   artifacthub.io/images: |
     - name: snatcharr-api
-      image: ghcr.io/lusoris/snatcharr-api:0.1.0
+      image: ghcr.io/lusoris/snatcharr-api:0.1.2
     - name: snatcharr-worker
-      image: ghcr.io/lusoris/snatcharr-worker:0.1.0
+      image: ghcr.io/lusoris/snatcharr-worker:0.1.2
+  # x-release-please-end

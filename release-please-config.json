@@ -58,6 +58,10 @@
           "type": "yaml",
           "path": "deploy/helm/snatcharr/Chart.yaml",
           "jsonpath": "$.appVersion"
+        },
+        {
+          "type": "generic",
+          "path": "deploy/helm/snatcharr/Chart.yaml"
         }
       ]
     }
