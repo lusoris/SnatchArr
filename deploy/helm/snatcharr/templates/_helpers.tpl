@@ -82,7 +82,8 @@ app.kubernetes.io/component: {{ .component }}
 {{- end -}}
 
 {{/*
-snatcharr.arrEgressPeers renders the ipBlock peers for networkPolicy.arrCidrs. An IPv4 CIDR
+snatcharr.arrEgressPeers renders the *arr egress peers: an ipBlock per networkPolicy.arrCidrs
+entry, then networkPolicy.arrPeers as given (selectors for in-cluster apps). An IPv4 CIDR
 that contains the cloud metadata address 169.254.169.254 excludes it. Kubernetes accepts an
 `except` only as a strict subset of its `cidr`, so a CIDR that does not contain the address
 (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16) gets no `except`, and a /32 on the address
@@ -111,5 +112,5 @@ itself is refused. An IPv6 CIDR cannot contain it and gets none either.
 {{- end -}}
 {{- $peers = append $peers (dict "ipBlock" $peer) -}}
 {{- end -}}
-{{- toYaml $peers -}}
+{{- toYaml (concat $peers .Values.networkPolicy.arrPeers) -}}
 {{- end -}}

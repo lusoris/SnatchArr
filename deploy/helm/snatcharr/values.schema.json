@@ -63,7 +63,16 @@
       "type": "object",
       "properties": {
         "enabled": { "type": "boolean" },
-        "arrCidrs": { "type": "array", "items": { "type": "string" } }
+        "arrCidrs": { "type": "array", "items": { "type": "string" } },
+        "arrPeers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": { "podSelector": { "type": "object" }, "namespaceSelector": { "type": "object" } },
+            "anyOf": [{ "required": ["podSelector"] }, { "required": ["namespaceSelector"] }],
+            "additionalProperties": false
+          }
+        }
       }
     }
   },
