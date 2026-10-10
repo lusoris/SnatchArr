@@ -6,6 +6,8 @@ package snatch
 
 import (
 	"errors"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -107,4 +109,67 @@ func TestLiveLeaseAtLimitIsKept(t *testing.T) {
 	if err != nil || got.Status != domain.RunLeased {
 		t.Fatalf("Get() = %q, %v; want leased", got.Status, err)
 	}
+}
+
+// Concurrent workers never lease the same run (FOR UPDATE SKIP LOCKED): every queued run goes
+// to exactly one worker, the surplus workers get ErrNoRun, and a live lease is not handed out
+// again.
+func TestConcurrentLeasesNeverShareARun(t *testing.T) {
+	t.Parallel()
+	const instances, workers = 4, 16
+	st := storetest.New(t)
+	clk := clock.NewFake()
+	runs := NewRuns(st, clk, id.New())
+	queued := map[uuid.UUID]bool{}
+	for range instances {
+		instanceID := storetest.Instance(t, st, clk.Now())
+		for _, kind := range []domain.SnatchKind{domain.SnatchMissing, domain.SnatchUpgrade} {
+			run, ok, err := runs.Enqueue(t.Context(), instanceID, kind)
+			if err != nil || !ok {
+				t.Fatalf("Enqueue() = %v, %v", ok, err)
+			}
+			queued[run.ID] = true
+		}
+	}
+	leased, empty := leaseConcurrently(t, runs, workers)
+	if len(leased) != len(queued) || empty != workers-len(queued) {
+		t.Fatalf("%d runs leased, %d workers empty-handed; want %d and %d", len(leased), empty, len(queued), workers-len(queued))
+	}
+	for runID, n := range leased {
+		if n != 1 || !queued[runID] {
+			t.Fatalf("run %s leased %d times (queued: %v)", runID, n, queued[runID])
+		}
+	}
+	if _, err := runs.Lease(t.Context(), "late"); !errors.Is(err, ErrNoRun) {
+		t.Fatalf("Lease() while every lease is live = %v, want ErrNoRun", err)
+	}
+}
+
+// leaseConcurrently starts n Lease calls at once and counts how often each run was leased
+// and how many calls got ErrNoRun.
+func leaseConcurrently(t *testing.T, runs *Runs, n int) (map[uuid.UUID]int, int) {
+	t.Helper()
+	var mu sync.Mutex
+	leased, empty := map[uuid.UUID]int{}, 0
+	var wg sync.WaitGroup
+	release := make(chan struct{})
+	for w := range n {
+		wg.Go(func() {
+			<-release
+			run, err := runs.Lease(t.Context(), fmt.Sprintf("worker-%d", w))
+			mu.Lock()
+			defer mu.Unlock()
+			switch {
+			case errors.Is(err, ErrNoRun):
+				empty++
+			case err != nil:
+				t.Errorf("Lease() = %v", err)
+			default:
+				leased[run.ID]++
+			}
+		})
+	}
+	close(release)
+	wg.Wait()
+	return leased, empty
 }

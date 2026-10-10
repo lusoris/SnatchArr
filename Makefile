@@ -63,7 +63,7 @@ gosec-install: ## Install gosec built against an x/tools that reads Go 1.27.2 ex
 	go install github.com/securego/gosec/v2/cmd/gosec
 
 # Ratchet: raise as store/handler integration tests land (target 70, HISS-15). Never lower.
-API_COVER_MIN ?= 20
+API_COVER_MIN ?= 28
 api-cover: ## Coverage gate on hand-written packages (generated code excluded)
 	cd api
 	mkdir -p tmp

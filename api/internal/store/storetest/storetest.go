@@ -18,7 +18,10 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net"
+	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -103,20 +106,48 @@ func start() (func() error, error) {
 // migrateTemplate applies every migration to the template database and disconnects from it,
 // since CREATE DATABASE ... TEMPLATE refuses a template that has open connections.
 func migrateTemplate(dsn string) error {
-	fsys, err := store.MigrationsFS()
-	if err != nil {
-		return fmt.Errorf("migrations: %w", err)
-	}
 	// golusoris registers golang-migrate's pgx/v5 driver under the pgx5:// scheme.
-	m, err := dbmigrate.Open(dbmigrate.Options{FS: fsys, Path: "."}, "pgx5://"+strings.TrimPrefix(dsn, "postgres://"),
-		slog.New(slog.DiscardHandler))
+	m, err := openMigrator("pgx5://" + strings.TrimPrefix(dsn, "postgres://"))
 	if err != nil {
-		return fmt.Errorf("open migrator: %w", err)
+		return err
 	}
 	if upErr := errors.Join(m.Up(), m.Close()); upErr != nil {
 		return fmt.Errorf("migrate template: %w", upErr)
 	}
 	return nil
+}
+
+func openMigrator(url string) (*dbmigrate.Migrator, error) {
+	fsys, err := store.MigrationsFS()
+	if err != nil {
+		return nil, fmt.Errorf("migrations: %w", err)
+	}
+	m, err := dbmigrate.Open(dbmigrate.Options{FS: fsys, Path: "."}, url, slog.New(slog.DiscardHandler))
+	if err != nil {
+		return nil, fmt.Errorf("open migrator: %w", err)
+	}
+	return m, nil
+}
+
+// Migrator opens the migrations against the test's own database (the one New cloned for
+// st), already at the latest version, for tests that walk migrations down and up.
+func Migrator(t *testing.T, st *store.Store) *dbmigrate.Migrator {
+	t.Helper()
+	cc := st.Pool().Config().ConnConfig
+	u := url.URL{
+		Scheme: "pgx5", User: url.UserPassword(cc.User, cc.Password),
+		Host: net.JoinHostPort(cc.Host, strconv.Itoa(int(cc.Port))), Path: "/" + cc.Database, RawQuery: "sslmode=disable",
+	}
+	m, err := openMigrator(u.String())
+	if err != nil {
+		t.Fatalf("storetest: %v", err)
+	}
+	t.Cleanup(func() {
+		if closeErr := m.Close(); closeErr != nil {
+			t.Errorf("storetest: close migrator: %v", closeErr)
+		}
+	})
+	return m
 }
 
 func connectAdmin(ctx context.Context, dsn string) error {
