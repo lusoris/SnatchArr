@@ -339,7 +339,7 @@ jobs:
           cache: false
       - name: Install praetorctl
         run: |
-          go install github.com/cordanaLLM/praetor/cmd/standardsctl@645f2580dddb31c51a3d990e7ed357dfcd5c316d
+          go install github.com/cordanaLLM/praetor/cmd/standardsctl@e9b102a4d9f4da32d476ea1eb9bc0335582764be
           ln -s "$(go env GOPATH)/bin/standardsctl" "$(go env GOPATH)/bin/praetorctl"
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - name: Context integrity
