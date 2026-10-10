@@ -117,6 +117,9 @@ spec:
               readOnly: true
             {{- end }}
             {{- end }}
+            {{- with .Values.api.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
       volumes:
         - name: tmp
           emptyDir:
@@ -131,6 +134,9 @@ spec:
           secret:
             secretName: {{ .Values.configarr.existingSecret }}
         {{- end }}
+        {{- end }}
+        {{- with .Values.api.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
         {{- end }}
       {{- with .Values.api.nodeSelector }}
       nodeSelector:

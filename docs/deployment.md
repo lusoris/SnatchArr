@@ -80,7 +80,38 @@ API key and download-client password at rest; losing it means re-entering them.
 `postgres.cnpg.instances` replicas and `postgres.cnpg.storage.size` per instance;
 `postgres.cnpg.extraSpec` is merged verbatim for backups, affinity or parameters.
 For an external database set `postgres.cnpg.enabled=false` and point
-`postgres.external.dsnSecretRef` at a Secret holding the DSN.
+`postgres.external.dsnSecretRef` at a Secret holding the DSN. Only the API connects to
+Postgres.
+
+`sslmode=require` in the DSN encrypts the connection without checking the server
+certificate. To verify it against the cluster CA (`verify-full`), mount the CA and point
+the API at it. The settings override the DSN, and the CA file is re-read for every new
+connection, so a rotated CA applies without a restart. With CloudNativePG the CA lives in
+the `<cluster>-ca` Secret; mount only its `ca.crt`, never `ca.key`:
+
+```yaml
+config:
+  extraEnv:
+    - name: APP_DB_SSL_MODE
+      value: verify-full
+    - name: APP_DB_SSL_ROOTCERT
+      value: /etc/snatcharr/db-ca/ca.crt
+api:
+  extraVolumes:
+    - name: db-ca
+      secret:
+        secretName: pg-cluster-ca
+        items:
+          - key: ca.crt
+            path: ca.crt
+  extraVolumeMounts:
+    - name: db-ca
+      mountPath: /etc/snatcharr/db-ca
+      readOnly: true
+```
+
+`verify-full` also checks the host name, so the DSN must name a host on the server
+certificate, such as CloudNativePG's `<cluster>-rw.<namespace>.svc`.
 
 ### Configarr
 
