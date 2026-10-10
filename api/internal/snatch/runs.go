@@ -106,6 +106,16 @@ func (r *Runs) FailExhausted(ctx context.Context) ([]domain.Run, error) {
 	return out, nil
 }
 
+// Purge deletes up to limit runs that finished (done, failed or cancelled) before `before`
+// (one batch of the retention janitor). Their events stay, with run_id cleared.
+func (r *Runs) Purge(ctx context.Context, before time.Time, limit int32) (int64, error) {
+	n, err := r.st.Q().PurgeRunsBefore(ctx, sqlcgen.PurgeRunsBeforeParams{Before: before, Batch: limit})
+	if err != nil {
+		return 0, fmt.Errorf("snatch: purge runs: %w", store.MapError(err))
+	}
+	return n, nil
+}
+
 // Heartbeat extends the lease; returns the current status so a cancelled run is noticed.
 func (r *Runs) Heartbeat(ctx context.Context, runID uuid.UUID, workerID string) (domain.Run, error) {
 	row, err := r.st.Q().HeartbeatRun(ctx, sqlcgen.HeartbeatRunParams{ID: runID, LeasedBy: &workerID, LeaseExpiresAt: new(r.clk.Now().Add(LeaseTTL))})

@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -94,6 +95,16 @@ func (r *Recorder) DeleteForInstance(ctx context.Context, instanceID uuid.UUID) 
 	n, err := r.st.Q().DeleteEventsForInstance(ctx, instanceID)
 	if err != nil {
 		return 0, fmt.Errorf("snatch: delete events: %w", store.MapError(err))
+	}
+	return n, nil
+}
+
+// Purge deletes up to limit events recorded before `before` (one batch of the retention
+// janitor).
+func (r *Recorder) Purge(ctx context.Context, before time.Time, limit int32) (int64, error) {
+	n, err := r.st.Q().PurgeEventsBefore(ctx, sqlcgen.PurgeEventsBeforeParams{Before: before, Batch: limit})
+	if err != nil {
+		return 0, fmt.Errorf("snatch: purge events: %w", store.MapError(err))
 	}
 	return n, nil
 }

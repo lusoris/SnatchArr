@@ -82,19 +82,14 @@ func (m *Memory) Reset(ctx context.Context, instanceID *uuid.UUID) (int64, error
 	return n, nil
 }
 
-// Purge drops long-expired entries and old buckets; meant for a periodic job. Rows that
-// expired less than PurgeGrace ago stay so the afterglow backoff remembers them.
-func (m *Memory) Purge(ctx context.Context) (int64, error) {
-	now := m.clk.Now()
-	n, err := m.st.Q().PurgeExpiredProcessed(ctx, now.Add(-PurgeGrace))
+// Purge drops up to limit long-expired entries (one batch of the retention janitor). Rows
+// that expired less than PurgeGrace ago stay so the afterglow backoff remembers them.
+func (m *Memory) Purge(ctx context.Context, limit int32) (int64, error) {
+	n, err := m.st.Q().PurgeExpiredProcessed(ctx, sqlcgen.PurgeExpiredProcessedParams{
+		Before: m.clk.Now().Add(-PurgeGrace), Batch: limit,
+	})
 	if err != nil {
 		return 0, fmt.Errorf("snatch: purge processed: %w", store.MapError(err))
-	}
-	if _, err := m.st.Q().PurgeBucketsBefore(ctx, Window(now).Add(-24*time.Hour)); err != nil {
-		return n, fmt.Errorf("snatch: purge buckets: %w", store.MapError(err))
-	}
-	if _, err := m.st.Q().PurgeGlobalBucketsBefore(ctx, Window(now).Add(-24*time.Hour)); err != nil {
-		return n, fmt.Errorf("snatch: purge global buckets: %w", store.MapError(err))
 	}
 	return n, nil
 }

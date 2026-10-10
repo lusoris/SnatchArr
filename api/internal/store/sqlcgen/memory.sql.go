@@ -222,11 +222,19 @@ func (q *Queries) ProcessedAttempts(ctx context.Context, arg ProcessedAttemptsPa
 }
 
 const purgeBucketsBefore = `-- name: PurgeBucketsBefore :execrows
-DELETE FROM rate_buckets WHERE window_start < $1
+DELETE FROM rate_buckets
+WHERE (instance_id, window_start) IN (
+    SELECT instance_id, window_start FROM rate_buckets
+    WHERE window_start < $1::timestamptz LIMIT $2::int)
 `
 
-func (q *Queries) PurgeBucketsBefore(ctx context.Context, windowStart time.Time) (int64, error) {
-	result, err := q.db.Exec(ctx, purgeBucketsBefore, windowStart)
+type PurgeBucketsBeforeParams struct {
+	Before time.Time
+	Batch  int32
+}
+
+func (q *Queries) PurgeBucketsBefore(ctx context.Context, arg PurgeBucketsBeforeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, purgeBucketsBefore, arg.Before, arg.Batch)
 	if err != nil {
 		return 0, err
 	}
@@ -234,11 +242,22 @@ func (q *Queries) PurgeBucketsBefore(ctx context.Context, windowStart time.Time)
 }
 
 const purgeExpiredProcessed = `-- name: PurgeExpiredProcessed :execrows
-DELETE FROM processed_items WHERE expires_at <= $1
+DELETE FROM processed_items
+WHERE (instance_id, kind, entity_type, entity_id) IN (
+    SELECT instance_id, kind, entity_type, entity_id FROM processed_items
+    WHERE expires_at <= $1::timestamptz LIMIT $2::int)
+  AND expires_at <= $1::timestamptz
 `
 
-func (q *Queries) PurgeExpiredProcessed(ctx context.Context, expiresAt time.Time) (int64, error) {
-	result, err := q.db.Exec(ctx, purgeExpiredProcessed, expiresAt)
+type PurgeExpiredProcessedParams struct {
+	Before time.Time
+	Batch  int32
+}
+
+// The outer expires_at condition is repeated on purpose: Postgres re-checks it on a row a
+// concurrent snatch extended meanwhile, so that row is kept.
+func (q *Queries) PurgeExpiredProcessed(ctx context.Context, arg PurgeExpiredProcessedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, purgeExpiredProcessed, arg.Before, arg.Batch)
 	if err != nil {
 		return 0, err
 	}
@@ -246,11 +265,19 @@ func (q *Queries) PurgeExpiredProcessed(ctx context.Context, expiresAt time.Time
 }
 
 const purgeGlobalBucketsBefore = `-- name: PurgeGlobalBucketsBefore :execrows
-DELETE FROM global_rate_buckets WHERE window_start < $1
+DELETE FROM global_rate_buckets
+WHERE window_start IN (
+    SELECT window_start FROM global_rate_buckets
+    WHERE window_start < $1::timestamptz LIMIT $2::int)
 `
 
-func (q *Queries) PurgeGlobalBucketsBefore(ctx context.Context, windowStart time.Time) (int64, error) {
-	result, err := q.db.Exec(ctx, purgeGlobalBucketsBefore, windowStart)
+type PurgeGlobalBucketsBeforeParams struct {
+	Before time.Time
+	Batch  int32
+}
+
+func (q *Queries) PurgeGlobalBucketsBefore(ctx context.Context, arg PurgeGlobalBucketsBeforeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, purgeGlobalBucketsBefore, arg.Before, arg.Batch)
 	if err != nil {
 		return 0, err
 	}

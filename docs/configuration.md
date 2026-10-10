@@ -77,9 +77,14 @@ Every instance has one policy (`GET/PUT /api/v1/instances/{id}/policy`).
 
 | Field | Default | Meaning |
 | --- | --- | --- |
-| `history_retention_days` | 90 | How long events should be kept. Not enforced yet: no retention job runs (#15) |
+| `history_retention_days` | 90 | 1 to 3650; how long events and finished runs are kept. The elected replica deletes older ones once an hour |
 | `user_agent` | `SnatchArr/1.0 (...)` | Sent to every *arr and download client |
 | `global_hourly_cap` | 0 | Stamina shared by every instance (0 = off) |
+
+The same hourly pass also forgets afterglow entries 90 days after they expired, spent
+stamina buckets after 24 hours and expired login sessions. It deletes at most 100,000 rows
+per table per pass and logs one `retention: purge pass` line with the counts. A larger
+backlog shrinks over the following hours.
 
 ## Configarr
 

@@ -67,9 +67,9 @@ func (p *PgSessionStore) Delete(ctx context.Context, sessID string) error {
 	return nil
 }
 
-// PurgeExpired removes expired rows; meant for a periodic job.
-func (p *PgSessionStore) PurgeExpired(ctx context.Context) (int64, error) {
-	n, err := p.st.Q().PurgeExpiredSessions(ctx, p.clk.Now())
+// PurgeExpired removes up to limit expired rows (one batch of the retention janitor).
+func (p *PgSessionStore) PurgeExpired(ctx context.Context, limit int32) (int64, error) {
+	n, err := p.st.Q().PurgeExpiredSessions(ctx, sqlcgen.PurgeExpiredSessionsParams{Now: p.clk.Now(), Batch: limit})
 	if err != nil {
 		return 0, fmt.Errorf("auth: purge sessions: %w", err)
 	}

@@ -206,11 +206,17 @@ func (q *Queries) LoadSession(ctx context.Context, arg LoadSessionParams) ([]byt
 }
 
 const purgeExpiredSessions = `-- name: PurgeExpiredSessions :execrows
-DELETE FROM sessions WHERE expires_at <= $1
+DELETE FROM sessions
+WHERE id IN (SELECT id FROM sessions WHERE expires_at <= $1::timestamptz LIMIT $2::int)
 `
 
-func (q *Queries) PurgeExpiredSessions(ctx context.Context, expiresAt time.Time) (int64, error) {
-	result, err := q.db.Exec(ctx, purgeExpiredSessions, expiresAt)
+type PurgeExpiredSessionsParams struct {
+	Now   time.Time
+	Batch int32
+}
+
+func (q *Queries) PurgeExpiredSessions(ctx context.Context, arg PurgeExpiredSessionsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, purgeExpiredSessions, arg.Now, arg.Batch)
 	if err != nil {
 		return 0, err
 	}

@@ -41,7 +41,13 @@ DELETE FROM processed_items
 WHERE (sqlc.narg(instance_id)::uuid IS NULL OR instance_id = sqlc.narg(instance_id)::uuid);
 
 -- name: PurgeExpiredProcessed :execrows
-DELETE FROM processed_items WHERE expires_at <= $1;
+-- The outer expires_at condition is repeated on purpose: Postgres re-checks it on a row a
+-- concurrent snatch extended meanwhile, so that row is kept.
+DELETE FROM processed_items
+WHERE (instance_id, kind, entity_type, entity_id) IN (
+    SELECT instance_id, kind, entity_type, entity_id FROM processed_items
+    WHERE expires_at <= sqlc.arg(before)::timestamptz LIMIT sqlc.arg(batch)::int)
+  AND expires_at <= sqlc.arg(before)::timestamptz;
 
 -- name: EnsureBucket :exec
 INSERT INTO rate_buckets (instance_id, window_start, used) VALUES ($1, $2, 0)
@@ -57,7 +63,10 @@ UPDATE rate_buckets SET used = $3 WHERE instance_id = $1 AND window_start = $2;
 SELECT COALESCE((SELECT used FROM rate_buckets WHERE instance_id = $1 AND window_start = $2), 0)::int AS used;
 
 -- name: PurgeBucketsBefore :execrows
-DELETE FROM rate_buckets WHERE window_start < $1;
+DELETE FROM rate_buckets
+WHERE (instance_id, window_start) IN (
+    SELECT instance_id, window_start FROM rate_buckets
+    WHERE window_start < sqlc.arg(before)::timestamptz LIMIT sqlc.arg(batch)::int);
 
 -- name: EnsureGlobalBucket :exec
 INSERT INTO global_rate_buckets (window_start, used) VALUES ($1, 0)
@@ -73,4 +82,7 @@ UPDATE global_rate_buckets SET used = $2 WHERE window_start = $1;
 SELECT COALESCE((SELECT used FROM global_rate_buckets WHERE window_start = $1), 0)::int AS used;
 
 -- name: PurgeGlobalBucketsBefore :execrows
-DELETE FROM global_rate_buckets WHERE window_start < $1;
+DELETE FROM global_rate_buckets
+WHERE window_start IN (
+    SELECT window_start FROM global_rate_buckets
+    WHERE window_start < sqlc.arg(before)::timestamptz LIMIT sqlc.arg(batch)::int);
