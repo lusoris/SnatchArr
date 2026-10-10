@@ -382,11 +382,19 @@ func (q *Queries) ListRuns(ctx context.Context, arg ListRunsParams) ([]SnatchRun
 }
 
 const purgeRunsBefore = `-- name: PurgeRunsBefore :execrows
-DELETE FROM snatch_runs WHERE status IN ('done', 'failed', 'cancelled') AND finished_at < $1
+DELETE FROM snatch_runs
+WHERE id IN (SELECT id FROM snatch_runs
+    WHERE status IN ('done', 'failed', 'cancelled') AND finished_at < $1::timestamptz
+    LIMIT $2::int)
 `
 
-func (q *Queries) PurgeRunsBefore(ctx context.Context, finishedAt *time.Time) (int64, error) {
-	result, err := q.db.Exec(ctx, purgeRunsBefore, finishedAt)
+type PurgeRunsBeforeParams struct {
+	Before time.Time
+	Batch  int32
+}
+
+func (q *Queries) PurgeRunsBefore(ctx context.Context, arg PurgeRunsBeforeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, purgeRunsBefore, arg.Before, arg.Batch)
 	if err != nil {
 		return 0, err
 	}

@@ -37,6 +37,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/instances"
 	"github.com/lusoris/SnatchArr/api/internal/leaderx"
 	"github.com/lusoris/SnatchArr/api/internal/policies"
+	"github.com/lusoris/SnatchArr/api/internal/retention"
 	"github.com/lusoris/SnatchArr/api/internal/seerr"
 	"github.com/lusoris/SnatchArr/api/internal/settings"
 	"github.com/lusoris/SnatchArr/api/internal/snatch"
@@ -68,6 +69,7 @@ var Module = fx.Options(
 	seerr.Module,
 	cleanuparr.Module,
 	configarr.Module,
+	retention.Module,
 	fx.Provide(func(s *dlclients.Service) workergrpc.Pacer { return s }),
 	workergrpc.Module,
 	httpapi.Module,

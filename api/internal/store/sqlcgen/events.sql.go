@@ -115,11 +115,17 @@ func (q *Queries) ListEvents(ctx context.Context, arg ListEventsParams) ([]Snatc
 }
 
 const purgeEventsBefore = `-- name: PurgeEventsBefore :execrows
-DELETE FROM snatch_events WHERE ts < $1
+DELETE FROM snatch_events
+WHERE id IN (SELECT id FROM snatch_events WHERE ts < $1::timestamptz LIMIT $2::int)
 `
 
-func (q *Queries) PurgeEventsBefore(ctx context.Context, ts time.Time) (int64, error) {
-	result, err := q.db.Exec(ctx, purgeEventsBefore, ts)
+type PurgeEventsBeforeParams struct {
+	Before time.Time
+	Batch  int32
+}
+
+func (q *Queries) PurgeEventsBefore(ctx context.Context, arg PurgeEventsBeforeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, purgeEventsBefore, arg.Before, arg.Batch)
 	if err != nil {
 		return 0, err
 	}

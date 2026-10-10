@@ -49,6 +49,24 @@ func Window(now time.Time) time.Time {
 	return now.UTC().Truncate(time.Hour)
 }
 
+// BucketKeep is how long spent instance and global buckets are kept after their hour.
+const BucketKeep = 24 * time.Hour
+
+// Purge drops up to limit instance and up to limit global buckets older than BucketKeep (one
+// batch of the retention janitor) and returns how many rows went.
+func (b *Budget) Purge(ctx context.Context, limit int32) (int64, error) {
+	before := Window(b.clk.Now()).Add(-BucketKeep)
+	n, err := b.st.Q().PurgeBucketsBefore(ctx, sqlcgen.PurgeBucketsBeforeParams{Before: before, Batch: limit})
+	if err != nil {
+		return 0, fmt.Errorf("snatch: purge buckets: %w", store.MapError(err))
+	}
+	global, err := b.st.Q().PurgeGlobalBucketsBefore(ctx, sqlcgen.PurgeGlobalBucketsBeforeParams{Before: before, Batch: limit})
+	if err != nil {
+		return n, fmt.Errorf("snatch: purge global buckets: %w", store.MapError(err))
+	}
+	return n + global, nil
+}
+
 // Acquire grants up to `requested` items from the current window without exceeding the
 // instance cap nor, when globalCap > 0, the stamina shared by every instance.
 func (b *Budget) Acquire(ctx context.Context, instanceID uuid.UUID, capacity, globalCap, requested int) (Grant, error) {

@@ -18,4 +18,5 @@ LIMIT sqlc.arg(page_size);
 DELETE FROM snatch_events WHERE instance_id = $1;
 
 -- name: PurgeEventsBefore :execrows
-DELETE FROM snatch_events WHERE ts < $1;
+DELETE FROM snatch_events
+WHERE id IN (SELECT id FROM snatch_events WHERE ts < sqlc.arg(before)::timestamptz LIMIT sqlc.arg(batch)::int);

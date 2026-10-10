@@ -114,12 +114,14 @@ type Querier interface {
 	MarkSeerrRequestsSnatched(ctx context.Context, arg MarkSeerrRequestsSnatchedParams) (int64, error)
 	PriorityEntityIDs(ctx context.Context, instanceID *uuid.UUID) ([]int64, error)
 	ProcessedAttempts(ctx context.Context, arg ProcessedAttemptsParams) (int32, error)
-	PurgeBucketsBefore(ctx context.Context, windowStart time.Time) (int64, error)
-	PurgeEventsBefore(ctx context.Context, ts time.Time) (int64, error)
-	PurgeExpiredProcessed(ctx context.Context, expiresAt time.Time) (int64, error)
-	PurgeExpiredSessions(ctx context.Context, expiresAt time.Time) (int64, error)
-	PurgeGlobalBucketsBefore(ctx context.Context, windowStart time.Time) (int64, error)
-	PurgeRunsBefore(ctx context.Context, finishedAt *time.Time) (int64, error)
+	PurgeBucketsBefore(ctx context.Context, arg PurgeBucketsBeforeParams) (int64, error)
+	PurgeEventsBefore(ctx context.Context, arg PurgeEventsBeforeParams) (int64, error)
+	// The outer expires_at condition is repeated on purpose: Postgres re-checks it on a row a
+	// concurrent snatch extended meanwhile, so that row is kept.
+	PurgeExpiredProcessed(ctx context.Context, arg PurgeExpiredProcessedParams) (int64, error)
+	PurgeExpiredSessions(ctx context.Context, arg PurgeExpiredSessionsParams) (int64, error)
+	PurgeGlobalBucketsBefore(ctx context.Context, arg PurgeGlobalBucketsBeforeParams) (int64, error)
+	PurgeRunsBefore(ctx context.Context, arg PurgeRunsBeforeParams) (int64, error)
 	RecentRunStatuses(ctx context.Context, arg RecentRunStatusesParams) ([]string, error)
 	RecordCleanuparrCheck(ctx context.Context, arg RecordCleanuparrCheckParams) error
 	RecordDownloadClientCheck(ctx context.Context, arg RecordDownloadClientCheckParams) error

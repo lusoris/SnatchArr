@@ -79,4 +79,7 @@ ORDER BY finished_at DESC
 LIMIT 10;
 
 -- name: PurgeRunsBefore :execrows
-DELETE FROM snatch_runs WHERE status IN ('done', 'failed', 'cancelled') AND finished_at < $1;
+DELETE FROM snatch_runs
+WHERE id IN (SELECT id FROM snatch_runs
+    WHERE status IN ('done', 'failed', 'cancelled') AND finished_at < sqlc.arg(before)::timestamptz
+    LIMIT sqlc.arg(batch)::int);

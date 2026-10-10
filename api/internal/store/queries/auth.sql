@@ -29,7 +29,8 @@ ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, expires_at = EXCLUDED.expir
 DELETE FROM sessions WHERE id = $1;
 
 -- name: PurgeExpiredSessions :execrows
-DELETE FROM sessions WHERE expires_at <= $1;
+DELETE FROM sessions
+WHERE id IN (SELECT id FROM sessions WHERE expires_at <= sqlc.arg(now)::timestamptz LIMIT sqlc.arg(batch)::int);
 
 -- name: SaveAPIKey :exec
 INSERT INTO api_keys (id, owner_id, scopes, hash, created_at, expires_at)
