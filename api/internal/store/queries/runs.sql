@@ -18,13 +18,31 @@ FROM snatch_runs
 WHERE instance_id = $1 AND kind = $2 AND status IN ('done', 'failed');
 
 -- name: LeaseRun :one
+-- An expired lease is handed out again only while the run has been leased fewer than
+-- max_leases times; FailExhaustedLeases ends the others.
 UPDATE snatch_runs
-SET status = 'leased', leased_by = $1, lease_expires_at = $2, started_at = COALESCE(started_at, $3)
+SET status = 'leased', leased_by = sqlc.arg(leased_by), lease_expires_at = sqlc.arg(lease_expires_at),
+    started_at = COALESCE(started_at, sqlc.arg(now)::timestamptz), lease_count = lease_count + 1
 WHERE id = (
     SELECT id FROM snatch_runs
-    WHERE status = 'queued' OR (status = 'leased' AND lease_expires_at < $3)
+    WHERE status = 'queued'
+       OR (status = 'leased' AND lease_expires_at < sqlc.arg(now)::timestamptz AND lease_count < sqlc.arg(max_leases)::int)
     ORDER BY queued_at
     LIMIT 1
+    FOR UPDATE SKIP LOCKED
+)
+RETURNING *;
+
+-- name: FailExhaustedLeases :many
+-- Ends, as failed, runs whose lease expired after max_leases leases, oldest first and at
+-- most batch per call.
+UPDATE snatch_runs
+SET status = 'failed', finished_at = sqlc.arg(now)::timestamptz, lease_expires_at = NULL, error = sqlc.arg(error)::text
+WHERE id IN (
+    SELECT id FROM snatch_runs
+    WHERE status = 'leased' AND lease_expires_at < sqlc.arg(now)::timestamptz AND lease_count >= sqlc.arg(max_leases)::int
+    ORDER BY queued_at
+    LIMIT sqlc.arg(batch)::int
     FOR UPDATE SKIP LOCKED
 )
 RETURNING *;

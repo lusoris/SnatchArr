@@ -34,7 +34,7 @@ const completeRun = `-- name: CompleteRun :one
 UPDATE snatch_runs
 SET status = $3, finished_at = $4, searched_count = $5, error = $6, lease_expires_at = NULL
 WHERE id = $1 AND leased_by = $2 AND status IN ('leased', 'cancelled')
-RETURNING id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error, focus_entity_id, focus_group_id
+RETURNING id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error, focus_entity_id, focus_group_id, lease_count
 `
 
 type CompleteRunParams struct {
@@ -70,6 +70,7 @@ func (q *Queries) CompleteRun(ctx context.Context, arg CompleteRunParams) (Snatc
 		&i.Error,
 		&i.FocusEntityID,
 		&i.FocusGroupID,
+		&i.LeaseCount,
 	)
 	return i, err
 }
@@ -78,7 +79,7 @@ const enqueueRun = `-- name: EnqueueRun :one
 
 INSERT INTO snatch_runs (id, instance_id, kind, status, queued_at, focus_entity_id, focus_group_id)
 VALUES ($1, $2, $3, 'queued', $4, $5, $6)
-RETURNING id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error, focus_entity_id, focus_group_id
+RETURNING id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error, focus_entity_id, focus_group_id, lease_count
 `
 
 type EnqueueRunParams struct {
@@ -116,12 +117,75 @@ func (q *Queries) EnqueueRun(ctx context.Context, arg EnqueueRunParams) (SnatchR
 		&i.Error,
 		&i.FocusEntityID,
 		&i.FocusGroupID,
+		&i.LeaseCount,
 	)
 	return i, err
 }
 
+const failExhaustedLeases = `-- name: FailExhaustedLeases :many
+UPDATE snatch_runs
+SET status = 'failed', finished_at = $1::timestamptz, lease_expires_at = NULL, error = $2::text
+WHERE id IN (
+    SELECT id FROM snatch_runs
+    WHERE status = 'leased' AND lease_expires_at < $1::timestamptz AND lease_count >= $3::int
+    ORDER BY queued_at
+    LIMIT $4::int
+    FOR UPDATE SKIP LOCKED
+)
+RETURNING id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error, focus_entity_id, focus_group_id, lease_count
+`
+
+type FailExhaustedLeasesParams struct {
+	Now       time.Time
+	Error     string
+	MaxLeases int32
+	Batch     int32
+}
+
+// Ends, as failed, runs whose lease expired after max_leases leases, oldest first and at
+// most batch per call.
+func (q *Queries) FailExhaustedLeases(ctx context.Context, arg FailExhaustedLeasesParams) ([]SnatchRun, error) {
+	rows, err := q.db.Query(ctx, failExhaustedLeases,
+		arg.Now,
+		arg.Error,
+		arg.MaxLeases,
+		arg.Batch,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SnatchRun{}
+	for rows.Next() {
+		var i SnatchRun
+		if err := rows.Scan(
+			&i.ID,
+			&i.InstanceID,
+			&i.Kind,
+			&i.Status,
+			&i.LeasedBy,
+			&i.LeaseExpiresAt,
+			&i.QueuedAt,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.SearchedCount,
+			&i.Error,
+			&i.FocusEntityID,
+			&i.FocusGroupID,
+			&i.LeaseCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getRun = `-- name: GetRun :one
-SELECT id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error, focus_entity_id, focus_group_id FROM snatch_runs WHERE id = $1
+SELECT id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error, focus_entity_id, focus_group_id, lease_count FROM snatch_runs WHERE id = $1
 `
 
 func (q *Queries) GetRun(ctx context.Context, id uuid.UUID) (SnatchRun, error) {
@@ -141,6 +205,7 @@ func (q *Queries) GetRun(ctx context.Context, id uuid.UUID) (SnatchRun, error) {
 		&i.Error,
 		&i.FocusEntityID,
 		&i.FocusGroupID,
+		&i.LeaseCount,
 	)
 	return i, err
 }
@@ -168,7 +233,7 @@ const heartbeatRun = `-- name: HeartbeatRun :one
 UPDATE snatch_runs
 SET lease_expires_at = $3
 WHERE id = $1 AND leased_by = $2 AND status = 'leased'
-RETURNING id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error, focus_entity_id, focus_group_id
+RETURNING id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error, focus_entity_id, focus_group_id, lease_count
 `
 
 type HeartbeatRunParams struct {
@@ -194,6 +259,7 @@ func (q *Queries) HeartbeatRun(ctx context.Context, arg HeartbeatRunParams) (Sna
 		&i.Error,
 		&i.FocusEntityID,
 		&i.FocusGroupID,
+		&i.LeaseCount,
 	)
 	return i, err
 }
@@ -218,25 +284,35 @@ func (q *Queries) LastFinishedAt(ctx context.Context, arg LastFinishedAtParams) 
 
 const leaseRun = `-- name: LeaseRun :one
 UPDATE snatch_runs
-SET status = 'leased', leased_by = $1, lease_expires_at = $2, started_at = COALESCE(started_at, $3)
+SET status = 'leased', leased_by = $1, lease_expires_at = $2,
+    started_at = COALESCE(started_at, $3::timestamptz), lease_count = lease_count + 1
 WHERE id = (
     SELECT id FROM snatch_runs
-    WHERE status = 'queued' OR (status = 'leased' AND lease_expires_at < $3)
+    WHERE status = 'queued'
+       OR (status = 'leased' AND lease_expires_at < $3::timestamptz AND lease_count < $4::int)
     ORDER BY queued_at
     LIMIT 1
     FOR UPDATE SKIP LOCKED
 )
-RETURNING id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error, focus_entity_id, focus_group_id
+RETURNING id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error, focus_entity_id, focus_group_id, lease_count
 `
 
 type LeaseRunParams struct {
 	LeasedBy       *string
 	LeaseExpiresAt *time.Time
-	StartedAt      *time.Time
+	Now            time.Time
+	MaxLeases      int32
 }
 
+// An expired lease is handed out again only while the run has been leased fewer than
+// max_leases times; FailExhaustedLeases ends the others.
 func (q *Queries) LeaseRun(ctx context.Context, arg LeaseRunParams) (SnatchRun, error) {
-	row := q.db.QueryRow(ctx, leaseRun, arg.LeasedBy, arg.LeaseExpiresAt, arg.StartedAt)
+	row := q.db.QueryRow(ctx, leaseRun,
+		arg.LeasedBy,
+		arg.LeaseExpiresAt,
+		arg.Now,
+		arg.MaxLeases,
+	)
 	var i SnatchRun
 	err := row.Scan(
 		&i.ID,
@@ -252,12 +328,13 @@ func (q *Queries) LeaseRun(ctx context.Context, arg LeaseRunParams) (SnatchRun, 
 		&i.Error,
 		&i.FocusEntityID,
 		&i.FocusGroupID,
+		&i.LeaseCount,
 	)
 	return i, err
 }
 
 const listRuns = `-- name: ListRuns :many
-SELECT id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error, focus_entity_id, focus_group_id FROM snatch_runs
+SELECT id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error, focus_entity_id, focus_group_id, lease_count FROM snatch_runs
 WHERE ($3::uuid IS NULL OR instance_id = $3::uuid)
 ORDER BY queued_at DESC
 LIMIT $1 OFFSET $2
@@ -292,6 +369,7 @@ func (q *Queries) ListRuns(ctx context.Context, arg ListRunsParams) ([]SnatchRun
 			&i.Error,
 			&i.FocusEntityID,
 			&i.FocusGroupID,
+			&i.LeaseCount,
 		); err != nil {
 			return nil, err
 		}
