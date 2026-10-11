@@ -1,7 +1,7 @@
 {{- if .Values.networkPolicy.enabled }}
 {{- $api := dict "root" . "component" "api" }}
 {{- $worker := dict "root" . "component" "worker" }}
-{{- $arr := include "snatcharr.arrEgressPeers" . }}
+{{- $arr := include "snatcharr.arrEgressRules" . }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -51,11 +51,11 @@ spec:
         - port: 5432
           protocol: TCP
     {{- end }}
-    {{- if or .Values.networkPolicy.arrCidrs .Values.networkPolicy.arrPeers }}
+    {{- with $arr }}
     # *arr apps, Seerr, Cleanuparr, download clients (the API probes and discovers them).
-    # No arrCidrs and no arrPeers renders no rule: an empty `to` would allow every destination (#120).
-    - to:
-        {{- $arr | nindent 8 }}
+    # No arrCidrs and no arrPeers renders no rule: an empty `to` would allow every destination
+    # (#120). A peer with `ports` has its own rule (#145).
+    {{- . | nindent 4 }}
     {{- end }}
     {{- with .Values.networkPolicy.extraEgress }}
     {{- toYaml . | nindent 4 }}
@@ -87,9 +87,8 @@ spec:
       ports:
         - port: {{ .Values.api.service.grpcPort }}
           protocol: TCP
-    {{- if or .Values.networkPolicy.arrCidrs .Values.networkPolicy.arrPeers }}
-    - to:
-        {{- $arr | nindent 8 }}
+    {{- with $arr }}
+    {{- . | nindent 4 }}
     {{- end }}
     {{- with .Values.networkPolicy.extraEgress }}
     {{- toYaml . | nindent 4 }}

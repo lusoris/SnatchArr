@@ -393,6 +393,7 @@ jobs:
             --set worker.autoscaling.enabled=true --set api.pdb.enabled=true --set worker.pdb.enabled=true \
             --set configarr.enabled=true --set configarr.existingConfigMap=cfg --set configarr.existingSecret=sec \
             --set 'networkPolicy.arrCidrs={10.0.0.0/8,0.0.0.0/0}' \
+            --set-json 'networkPolicy.arrPeers=[{"namespaceSelector":{"matchLabels":{"kubernetes.io/metadata.name":"media"}}},{"podSelector":{"matchLabels":{"app.kubernetes.io/name":"lidarr"}},"ports":[{"port":8686,"protocol":"TCP"}]}]' \
             | kubectl apply --dry-run=server --namespace snatcharr -f -
 
   governance:

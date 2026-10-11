@@ -188,12 +188,26 @@ KUBECONFORM ?= $(shell command -v kubeconform >/dev/null 2>&1 && echo kubeconfor
 deploy-verify: ## helm lint --strict + kubeconform (default and all-features renders) + kustomize build
 	helm lint --strict deploy/helm/snatcharr
 	helm template snatcharr deploy/helm/snatcharr | $(KUBECONFORM) -strict -ignore-missing-schemas -summary
-	helm template snatcharr deploy/helm/snatcharr 	  --set networkPolicy.enabled=true --set api.ingress.enabled=true --set serviceMonitor.enabled=true 	  --set worker.autoscaling.enabled=true --set api.pdb.enabled=true --set worker.pdb.enabled=true 	  --set configarr.enabled=true --set configarr.existingConfigMap=cfg --set configarr.existingSecret=sec 	  --set-json 'networkPolicy.arrPeers=[{"namespaceSelector":{"matchLabels":{"kubernetes.io/metadata.name":"media"}}}]' 	  | $(KUBECONFORM) -strict -ignore-missing-schemas -summary
+	helm template snatcharr deploy/helm/snatcharr 	  --set networkPolicy.enabled=true --set api.ingress.enabled=true --set serviceMonitor.enabled=true 	  --set worker.autoscaling.enabled=true --set api.pdb.enabled=true --set worker.pdb.enabled=true 	  --set configarr.enabled=true --set configarr.existingConfigMap=cfg --set configarr.existingSecret=sec 	  --set-json 'networkPolicy.arrPeers=[{"namespaceSelector":{"matchLabels":{"kubernetes.io/metadata.name":"media"}}},{"podSelector":{"matchLabels":{"app.kubernetes.io/name":"lidarr"}},"ports":[{"port":8686,"protocol":"TCP"}]}]' 	  | $(KUBECONFORM) -strict -ignore-missing-schemas -summary
 	kustomize build --enable-helm deploy/kustomize/kind >/dev/null
 	# No egress rule may have an empty `to`, which allows every destination (#120).
 	netpol=$$(helm template snatcharr deploy/helm/snatcharr --set networkPolicy.enabled=true --set-json 'networkPolicy.arrCidrs=[]')
 	if printf '%s\n' "$$netpol" | grep -A1 -E '^ *- to:( *\[\])?$$' | grep -qE '^ *(- to: *)?\[\]$$'; then
 	  echo "networkPolicy: an egress rule with an empty 'to' allows every destination" >&2; exit 1
+	fi
+	# An arrPeers entry with `ports` is reachable on those ports only (#145). With that entry as the
+	# only *arr peer, both policies hold two egress rules with a `to` (database or API, and the
+	# peer), and each of the four carries `ports`.
+	netpol=$$(helm template snatcharr deploy/helm/snatcharr --set networkPolicy.enabled=true --set-json 'networkPolicy.arrCidrs=[]' \
+	  --set-json 'networkPolicy.arrPeers=[{"podSelector":{"matchLabels":{"app.kubernetes.io/name":"lidarr"}},"ports":[{"port":8686,"protocol":"TCP"}]}]')
+	scoped=$$(printf '%s\n' "$$netpol" | awk '
+	  function rule_end() { if (to) { rules++; if (!ports) open++ }; to = 0; ports = 0 }
+	  /^    - / || /^---/ { rule_end() }
+	  /^    (- |  )to:/ { to = 1 }
+	  /^    (- |  )ports:/ { ports = 1 }
+	  END { rule_end(); printf "%d with a to, %d of them without ports", rules, open }')
+	if [ "$$scoped" != "4 with a to, 0 of them without ports" ]; then
+	  echo "networkPolicy: an arrPeers entry with ports must be reachable on those ports only; egress rules: $$scoped" >&2; exit 1
 	fi
 	# The Artifact Hub image annotation names the appVersion images (#122), and the four
 	# release-please markers that keep it so are still in the file (a yaml updater drops them).

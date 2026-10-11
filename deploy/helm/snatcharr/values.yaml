@@ -166,7 +166,8 @@ networkPolicy:
   # Peers allowed to reach the API on 8080 (NetworkPolicyPeer list). Empty allows any.
   ingressFrom: []
   # Where your *arr apps, Seerr, Cleanuparr and download clients live. The cloud metadata
-  # address is always excluded.
+  # address is always excluded. Every port of these ranges is allowed; a rule for one port of a
+  # range belongs in extraEgress.
   arrCidrs:
     - 10.0.0.0/8
     - 172.16.0.0/12
@@ -178,6 +179,14 @@ networkPolicy:
   #   - namespaceSelector:
   #       matchLabels:
   #         kubernetes.io/metadata.name: media
+  # An entry without `ports` allows every port of the selected pods. Add `ports` (a
+  # NetworkPolicyPort list: port, protocol, endPort) to allow only those:
+  #   - podSelector:
+  #       matchLabels:
+  #         app.kubernetes.io/name: lidarr
+  #     ports:
+  #       - port: 8686
+  #         protocol: TCP
   arrPeers: []
   # Extra egress rules appended to both components.
   extraEgress: []
