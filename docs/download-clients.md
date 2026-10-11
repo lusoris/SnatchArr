@@ -33,6 +33,10 @@ Supported out of the box: **qBittorrent**, **Transmission**, **Deluge**, **rTorr
 | `queued` | Downloads waiting to start |
 | `download_rate_bps` / `upload_rate_bps` | Current throughput |
 
+For rTorrent `queued` is always 0. The adapter reads three flags per download (open, active,
+complete), and none of them says that a download waits to start: a download counts as
+`active` when it is open, active and not complete, and is not counted otherwise.
+
 `GET /api/v1/download-clients/status` returns the latest observation of every enabled
 client; observations are cached for 20 seconds.
 
