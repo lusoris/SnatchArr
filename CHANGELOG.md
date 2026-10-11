@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.1.4](https://github.com/lusoris/SnatchArr/compare/v0.1.3...v0.1.4) (2026-10-11)
+
+
+### Bug Fixes
+
+* **api:** debit stamina only for searches that can be sent ([#150](https://github.com/lusoris/SnatchArr/issues/150)) ([e813a5b](https://github.com/lusoris/SnatchArr/commit/e813a5b63c017be2dc3bacde34a9ee5addceb70f)), closes [#142](https://github.com/lusoris/SnatchArr/issues/142)
+* **api:** let the dev profile start without APP_CRYPTO_KEY ([#143](https://github.com/lusoris/SnatchArr/issues/143)) ([866fdac](https://github.com/lusoris/SnatchArr/commit/866fdacc5d5a16efaf8f64a6e488e3bd17888df4)), closes [#138](https://github.com/lusoris/SnatchArr/issues/138)
+* **api:** stop serving gRPC before the database pool closes ([#156](https://github.com/lusoris/SnatchArr/issues/156)) ([6d60571](https://github.com/lusoris/SnatchArr/commit/6d60571a3b7e46d11a169ac297921a4b752e8f60)), closes [#146](https://github.com/lusoris/SnatchArr/issues/146)
+* **helm:** let an arrPeers entry name its ports ([#155](https://github.com/lusoris/SnatchArr/issues/155)) ([90cf73d](https://github.com/lusoris/SnatchArr/commit/90cf73d9c7294d9867aac433ca1cf2811850e9fe)), closes [#145](https://github.com/lusoris/SnatchArr/issues/145)
+* **worker:** spend a partial stamina grant instead of deferring the whole target ([#137](https://github.com/lusoris/SnatchArr/issues/137)) ([c0602a3](https://github.com/lusoris/SnatchArr/commit/c0602a374cbee2776822b3e1e8680b51009478f1)), closes [#136](https://github.com/lusoris/SnatchArr/issues/136)
+
 ## [0.1.3](https://github.com/lusoris/SnatchArr/compare/v0.1.2...v0.1.3) (2026-10-10)
 
 
