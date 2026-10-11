@@ -28,7 +28,7 @@ env:
 jobs:
   meta:
     name: resolve tag
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     outputs:
       tag: ${{ steps.v.outputs.tag }}
       version: ${{ steps.v.outputs.version }}
@@ -43,7 +43,7 @@ jobs:
   image:
     name: image (${{ matrix.component }})
     needs: meta
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 60
     permissions:
       contents: read
@@ -160,7 +160,7 @@ jobs:
   chart:
     name: helm chart
     needs: [meta, image]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     permissions:
       contents: write
@@ -228,7 +228,7 @@ jobs:
   verify:
     name: verify signatures and provenance
     needs: [image, chart]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     permissions:
       contents: read
