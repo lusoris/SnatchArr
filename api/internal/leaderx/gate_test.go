@@ -16,6 +16,7 @@ import (
 	"github.com/golusoris/golusoris/leader"
 
 	"github.com/lusoris/SnatchArr/api/internal/leaderx"
+	"github.com/lusoris/SnatchArr/api/internal/leaderx/leaderxtest"
 )
 
 type fakeLoop struct {
@@ -56,15 +57,6 @@ func (f *fakeLoop) counts() (int, int) {
 
 func quiet() *slog.Logger { return slog.New(slog.DiscardHandler) }
 
-func waitFor(t *testing.T, ch <-chan struct{}, what string) {
-	t.Helper()
-	select {
-	case <-ch:
-	case <-time.After(5 * time.Second):
-		t.Fatalf("timed out waiting for %s", what)
-	}
-}
-
 // Positive: without an elector the loops run from start until the context ends.
 func TestRun_NoElector(t *testing.T) {
 	t.Parallel()
@@ -78,12 +70,12 @@ func TestRun_NoElector(t *testing.T) {
 			t.Errorf("Run: %v", err)
 		}
 	}()
-	waitFor(t, loop.started, "loop start")
+	leaderxtest.Await(t, loop.started, "loop start")
 	if !g.Running() {
 		t.Fatal("gate should be running")
 	}
 	cancel()
-	waitFor(t, done, "Run to return")
+	leaderxtest.Await(t, done, "Run to return")
 	if starts, stops := loop.counts(); starts != 1 || stops != 1 {
 		t.Fatalf("starts=%d stops=%d, want 1/1", starts, stops)
 	}
@@ -104,9 +96,9 @@ func TestRun_LoopStartError(t *testing.T) {
 		defer close(done)
 		_ = g.Run(ctx, nil, 0)
 	}()
-	waitFor(t, fine.started, "second loop start")
+	leaderxtest.Await(t, fine.started, "second loop start")
 	cancel()
-	waitFor(t, done, "Run to return")
+	leaderxtest.Await(t, done, "Run to return")
 	if _, stops := broken.counts(); stops != 0 {
 		t.Fatalf("broken loop stopped %d times, want 0", stops)
 	}
@@ -135,9 +127,9 @@ func TestRun_FollowsLease(t *testing.T) {
 			t.Errorf("Run: %v", err)
 		}
 	}()
-	waitFor(t, loop.started, "leadership")
+	leaderxtest.Await(t, loop.started, "leadership")
 	cancel()
-	waitFor(t, done, "Run to return")
+	leaderxtest.Await(t, done, "Run to return")
 	if starts, stops := loop.counts(); starts != 1 || stops != 1 {
 		t.Fatalf("starts=%d stops=%d, want 1/1 (stopAll must be idempotent)", starts, stops)
 	}
@@ -177,7 +169,7 @@ func TestRun_RetriesAfterElectionError(t *testing.T) {
 		t.Fatalf("second attempt = %d", got)
 	}
 	cancel()
-	waitFor(t, done, "Run to return")
+	leaderxtest.Await(t, done, "Run to return")
 	if starts, _ := loop.counts(); starts != 0 {
 		t.Fatalf("loops started %d times without leadership", starts)
 	}

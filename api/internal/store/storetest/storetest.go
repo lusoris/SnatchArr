@@ -208,7 +208,7 @@ func Instance(t *testing.T, st *store.Store, now time.Time) uuid.UUID {
 	t.Helper()
 	instanceID := uuid.New()
 	_, err := st.Q().CreateInstance(t.Context(), sqlcgen.CreateInstanceParams{
-		ID: instanceID, Kind: "sonarr", Name: "storetest-" + instanceID.String()[:8], BaseUrl: "http://arr.invalid",
+		ID: instanceID, Kind: "sonarr", Name: "storetest-" + instanceID.String(), BaseUrl: "http://arr.invalid",
 		ApiKeyEnc: []byte("placeholder"), Enabled: true, Source: "manual", CreatedAt: now,
 	})
 	if err != nil {
