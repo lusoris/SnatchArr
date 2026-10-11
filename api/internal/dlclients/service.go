@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -21,6 +20,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/arrclient"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
+	"github.com/lusoris/SnatchArr/api/internal/keyed"
 	"github.com/lusoris/SnatchArr/api/internal/store"
 	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
 )
@@ -64,8 +64,7 @@ type Service struct {
 	instances *instances.Service
 	logger    *slog.Logger
 
-	mu    sync.Mutex
-	cache map[uuid.UUID]Snapshot
+	cache keyed.Map[uuid.UUID, Snapshot]
 }
 
 // New wires the service.
@@ -74,7 +73,6 @@ func New(st *store.Store, enc *crypto.Encryptor, clk clock.Clock, ids id.Generat
 ) *Service {
 	return &Service{
 		st: st, enc: enc, clk: clk, ids: ids, observer: observer, discover: discover, instances: inst, logger: logger,
-		cache: make(map[uuid.UUID]Snapshot),
 	}
 }
 
@@ -152,7 +150,7 @@ func (s *Service) Update(ctx context.Context, clientID uuid.UUID, in Input) (dom
 	if err != nil {
 		return domain.DownloadClient{}, fmt.Errorf("dlclients: update: %w", store.MapError(err))
 	}
-	s.forget(clientID)
+	s.cache.Forget(clientID)
 	return store.DownloadClientFromRow(row), nil
 }
 
@@ -165,7 +163,7 @@ func (s *Service) Delete(ctx context.Context, clientID uuid.UUID) error {
 	if n == 0 {
 		return fmt.Errorf("dlclients: delete: %w", domain.ErrNotFound)
 	}
-	s.forget(clientID)
+	s.cache.Forget(clientID)
 	return nil
 }
 
@@ -229,9 +227,7 @@ func (s *Service) PaceFactor(ctx context.Context, instanceID uuid.UUID) (float64
 }
 
 func (s *Service) cachedObserve(ctx context.Context, row sqlcgen.DownloadClient) Snapshot {
-	s.mu.Lock()
-	snap, ok := s.cache[row.ID]
-	s.mu.Unlock()
+	snap, ok := s.cache.Get(row.ID)
 	if ok && s.clk.Now().Before(snap.CheckedAt.Add(SnapshotTTL)) {
 		return snap
 	}
@@ -244,9 +240,7 @@ func (s *Service) observe(ctx context.Context, c domain.DownloadClient, sealed [
 		return Snapshot{ClientID: c.ID, Name: c.Name, Kind: c.Kind, CheckedAt: s.clk.Now(), Error: "stored secret cannot be decrypted"}
 	}
 	snap := s.observer.Snapshot(ctx, c, string(secret))
-	s.mu.Lock()
-	s.cache[c.ID] = snap
-	s.mu.Unlock()
+	s.cache.Put(c.ID, snap)
 	s.recordCheck(ctx, c.ID, snap)
 	return snap
 }
@@ -263,12 +257,6 @@ func (s *Service) recordCheck(ctx context.Context, clientID uuid.UUID, snap Snap
 	if err != nil {
 		s.logger.WarnContext(ctx, "dlclients: record check", slog.String("error", err.Error()))
 	}
-}
-
-func (s *Service) forget(clientID uuid.UUID) {
-	s.mu.Lock()
-	delete(s.cache, clientID)
-	s.mu.Unlock()
 }
 
 func (s *Service) normalize(ctx context.Context, in Input) (Input, error) {
@@ -360,6 +348,6 @@ func (s *Service) upsertDiscovered(ctx context.Context, d Discovered, res *Disco
 	} else {
 		res.Updated++
 	}
-	s.forget(row.ID)
+	s.cache.Forget(row.ID)
 	return nil
 }

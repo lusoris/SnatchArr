@@ -22,9 +22,6 @@ import (
 // TickInterval is how often the planner evaluates every instance.
 const TickInterval = 60 * time.Second
 
-// maxTicks bounds the planner loop (HISS-02): 2^30 minutes is about 2000 years.
-const maxTicks = 1 << 30
-
 // MaxInstancesPerTick bounds one tick (HISS-02).
 const MaxInstancesPerTick = 500
 

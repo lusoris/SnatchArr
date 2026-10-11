@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,6 +25,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/arrclient"
 	"github.com/lusoris/SnatchArr/api/internal/cleanuparrclient"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
+	"github.com/lusoris/SnatchArr/api/internal/keyed"
 	"github.com/lusoris/SnatchArr/api/internal/store"
 	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
 )
@@ -66,13 +66,12 @@ type Service struct {
 	client cleanuparrclient.Client
 	logger *slog.Logger
 
-	mu    sync.Mutex
-	cache map[uuid.UUID]LinkStatus
+	cache keyed.Map[uuid.UUID, LinkStatus]
 }
 
 // New wires the service.
 func New(st *store.Store, enc *crypto.Encryptor, clk clock.Clock, ids id.Generator, client cleanuparrclient.Client, logger *slog.Logger) *Service {
-	return &Service{st: st, enc: enc, clk: clk, ids: ids, client: client, logger: logger, cache: make(map[uuid.UUID]LinkStatus)}
+	return &Service{st: st, enc: enc, clk: clk, ids: ids, client: client, logger: logger}
 }
 
 // List returns every link without secrets.
@@ -145,7 +144,7 @@ func (s *Service) Update(ctx context.Context, linkID uuid.UUID, in Input) (domai
 	if err != nil {
 		return domain.CleanuparrLink{}, fmt.Errorf("cleanuparr: update: %w", store.MapError(err))
 	}
-	s.forget(linkID)
+	s.cache.Forget(linkID)
 	return store.CleanuparrLinkFromRow(row), nil
 }
 
@@ -158,7 +157,7 @@ func (s *Service) Delete(ctx context.Context, linkID uuid.UUID) error {
 	if n == 0 {
 		return fmt.Errorf("cleanuparr: delete: %w", domain.ErrNotFound)
 	}
-	s.forget(linkID)
+	s.cache.Forget(linkID)
 	return nil
 }
 
@@ -196,9 +195,7 @@ func (s *Service) Status(ctx context.Context) ([]LinkStatus, error) {
 	}
 	out := make([]LinkStatus, 0, len(rows))
 	for _, row := range rows {
-		s.mu.Lock()
-		view, ok := s.cache[row.ID]
-		s.mu.Unlock()
+		view, ok := s.cache.Get(row.ID)
 		if ok && s.clk.Now().Before(view.CheckedAt.Add(StatusTTL)) {
 			out = append(out, view)
 			continue
@@ -234,9 +231,7 @@ func (s *Service) observe(ctx context.Context, row sqlcgen.CleanuparrLink) LinkS
 }
 
 func (s *Service) remember(ctx context.Context, view LinkStatus) LinkStatus {
-	s.mu.Lock()
-	s.cache[view.Link.ID] = view
-	s.mu.Unlock()
+	s.cache.Put(view.Link.ID, view)
 	var lastErr, version *string
 	if view.Reachable {
 		version = &view.Status.Version
@@ -249,12 +244,6 @@ func (s *Service) remember(ctx context.Context, view LinkStatus) LinkStatus {
 		s.logger.WarnContext(ctx, "cleanuparr: record check", slog.String("error", err.Error()))
 	}
 	return view
-}
-
-func (s *Service) forget(linkID uuid.UUID) {
-	s.mu.Lock()
-	delete(s.cache, linkID)
-	s.mu.Unlock()
 }
 
 func normalize(in Input) (Input, error) {

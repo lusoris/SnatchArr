@@ -35,8 +35,6 @@ const (
 	MaxBatches = 100
 	// opTimeout bounds one batch and the settings read.
 	opTimeout = 30 * time.Second
-	// maxTicks bounds the loop (HISS-02): 2^20 hours is about 120 years.
-	maxTicks = 1 << 20
 )
 
 // Counts are the rows one pass deleted, per table.
@@ -61,18 +59,20 @@ type Deps struct {
 	Logger   *slog.Logger
 }
 
-// Janitor runs retention passes on a timer. It implements leaderx.Loop.
+// Janitor runs a retention pass once per Interval while this replica leads; the first pass
+// runs at once.
 type Janitor struct {
-	deps     Deps
-	interval time.Duration
-	batch    int32
-	cancel   context.CancelFunc
-	done     chan struct{}
+	*leaderx.Periodic
+
+	deps  Deps
+	batch int32
 }
 
 // New builds a janitor with the default interval and batch size.
 func New(d Deps) *Janitor {
-	return &Janitor{deps: d, interval: Interval, batch: Batch}
+	j := &Janitor{deps: d, batch: Batch}
+	j.Periodic = leaderx.NewPeriodic("retention", Interval, d.Clock, j.tick)
+	return j
 }
 
 // step is one table's purge: it deletes at most limit rows and reports how many went.
@@ -134,59 +134,20 @@ func drain(ctx context.Context, batch int32, purge func(context.Context, int32) 
 	return total, nil
 }
 
-// Start launches the loop; the first pass runs at once.
-func (j *Janitor) Start(parent context.Context) error {
-	ctx, cancel := context.WithCancel(context.WithoutCancel(parent))
-	j.cancel = cancel
-	j.done = make(chan struct{})
-	go j.loop(ctx)
-	return nil
-}
-
-// Stop ends the loop and waits for the pass in flight.
-func (j *Janitor) Stop(ctx context.Context) error {
-	if j.cancel != nil {
-		j.cancel()
-	}
-	select {
-	case <-j.done:
-	case <-ctx.Done():
-		return fmt.Errorf("retention: stop: %w", ctx.Err())
-	}
-	return nil
-}
-
-func (j *Janitor) loop(ctx context.Context) {
-	defer close(j.done)
-	timer := j.deps.Clock.NewTicker(j.interval)
-	defer timer.Stop()
-	j.tick(ctx)
-	for range maxTicks {
-		select {
-		case <-ctx.Done():
-			return
-		case <-timer.Chan():
-			j.tick(ctx)
-		}
-	}
-}
-
 // tick runs one pass and logs one summary line with the row counts.
 func (j *Janitor) tick(ctx context.Context) {
-	tctx, cancel := context.WithTimeout(ctx, j.interval)
-	defer cancel()
-	c, err := j.Pass(tctx)
+	c, err := j.Pass(ctx)
 	attrs := []any{
 		slog.Int64("events", c.Events), slog.Int64("runs", c.Runs), slog.Int64("afterglow", c.Afterglow),
 		slog.Int64("buckets", c.Buckets), slog.Int64("sessions", c.Sessions),
 	}
 	switch {
 	case err != nil:
-		j.deps.Logger.ErrorContext(tctx, "retention: purge pass", append(attrs, slog.String("error", err.Error()))...)
+		j.deps.Logger.ErrorContext(ctx, "retention: purge pass", append(attrs, slog.String("error", err.Error()))...)
 	case c.Total() > 0:
-		j.deps.Logger.InfoContext(tctx, "retention: purge pass", attrs...)
+		j.deps.Logger.InfoContext(ctx, "retention: purge pass", attrs...)
 	default:
-		j.deps.Logger.DebugContext(tctx, "retention: purge pass", attrs...)
+		j.deps.Logger.DebugContext(ctx, "retention: purge pass", attrs...)
 	}
 }
 
