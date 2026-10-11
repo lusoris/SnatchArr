@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.5](https://github.com/lusoris/SnatchArr/compare/v0.1.4...v0.1.5) (2026-10-11)
+
+
+### Bug Fixes
+
+* **api:** take the migrator's TLS and password settings from golusoris 0.16.4 ([#157](https://github.com/lusoris/SnatchArr/issues/157)) ([1448142](https://github.com/lusoris/SnatchArr/commit/14481420eeaf15d2bfeff1a9a194839685cbd978))
+
+
+### Refactoring
+
+* **api:** one leader-loop runner for planner, Seerr sync and retention ([#158](https://github.com/lusoris/SnatchArr/issues/158)) ([f3bc418](https://github.com/lusoris/SnatchArr/commit/f3bc418b202c6240d345c7319d92ffc4c9340eaf)), closes [#118](https://github.com/lusoris/SnatchArr/issues/118)
+
 ## [0.1.4](https://github.com/lusoris/SnatchArr/compare/v0.1.3...v0.1.4) (2026-10-11)
 
 
