@@ -8,7 +8,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 <img src="web/static/brand/mark.svg" alt="" width="72" align="right" />
 
-SnatchArr keeps your *arr libraries complete without hammering your indexers. It asks Sonarr, Radarr, Lidarr, Readarr and Whisparr (v2 and v3) to search for **missing** items and **cutoff-unmet upgrades** in small batches. Every search is a *snatch*: it remembers what it already snatched (the *afterglow*), never exceeds an instance's hourly *stamina*, and slows down (*foreplay*) while your download client is busy, paused or gone. Yes, the name means what you think it means.
+SnatchArr keeps your *arr libraries complete without hammering your indexers. It asks Sonarr, Radarr, Lidarr, Whisparr (v2 and v3) and Readarr ([legacy](https://lusoris.github.io/SnatchArr/readarr/)) to search for **missing** items and **cutoff-unmet upgrades** in small batches. Every search is a *snatch*: it remembers what it already snatched (the *afterglow*), never exceeds an instance's hourly *stamina*, and slows down (*foreplay*) while your download client is busy, paused or gone. Yes, the name means what you think it means.
 
 Docs: <https://lusoris.github.io/SnatchArr/>
 

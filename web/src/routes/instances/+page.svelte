@@ -7,14 +7,12 @@ SPDX-License-Identifier: EUPL-1.2
 	import { createSentioQuery, createSentioMutation } from '@sveltesentio/query';
 	import { toast } from 'svelte-sonner';
 	import { api, describeError } from '$lib/api/client.js';
-	import type { components } from '$lib/api/schema.js';
 	import Field from '$lib/components/Field.svelte';
+	import KindSelect from '$lib/components/KindSelect.svelte';
 	import ProblemNote from '$lib/components/ProblemNote.svelte';
+	import { type AppKind, kindLabel } from '$lib/kinds.js';
 	import { m } from '$lib/paraglide/messages.js';
 	import { keys } from '$lib/query.js';
-
-	type AppKind = components['schemas']['AppKind'];
-	const kinds: AppKind[] = ['sonarr', 'radarr', 'lidarr', 'readarr', 'whisparr_v2', 'whisparr_v3'];
 
 	const instances = createSentioQuery({
 		queryKey: keys.instances,
@@ -87,7 +85,7 @@ SPDX-License-Identifier: EUPL-1.2
 			{#each instances.data ?? [] as inst (inst.id)}
 				<tr>
 					<td><a class="underline" href={resolve(`/instances/${inst.id}`)}>{inst.name}</a></td>
-					<td>{inst.kind}</td>
+					<td>{kindLabel(inst.kind)}</td>
 					<td class="break-all">{inst.base_url}</td>
 					<td>{inst.source}</td>
 					<td>{inst.enabled ? '✓' : '–'}</td>
@@ -114,13 +112,7 @@ SPDX-License-Identifier: EUPL-1.2
 			create.mutate();
 		}}
 	>
-		<Field id="kind" label={m.instance_kind()}>
-			<select id="kind" class="select" bind:value={kind}>
-				{#each kinds as k (k)}
-					<option value={k}>{k}</option>
-				{/each}
-			</select>
-		</Field>
+		<KindSelect bind:value={kind} />
 		<Field id="name" label={m.instance_name()}>
 			<input id="name" class="input" required maxlength="64" bind:value={name} />
 		</Field>

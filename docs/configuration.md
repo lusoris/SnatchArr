@@ -89,8 +89,8 @@ backlog shrinks over the following hours.
 ## Configarr
 
 Point `APP_SNATCHARR_CONFIGARR_CONFIG` (and `_SECRETS`) at your Configarr files and every
-`sonarr`, `radarr`, `lidarr`, `readarr` and `whisparr` instance is imported on start and
-kept in sync: the files are polled every 30 seconds (inotify misses Kubernetes ConfigMap
+`sonarr`, `radarr`, `lidarr`, `readarr` ([legacy](readarr.md)) and `whisparr` instance is
+imported on start and kept in sync: the files are polled every 30 seconds (inotify misses Kubernetes ConfigMap
 swaps, polling does not). Only `base_url`, `api_key` and the `enabled` flags are read;
 `!secret`, `!env` and `!file` values are resolved like Configarr does. Whisparr entries are
 probed to tell v2 from v3. An instance that disappears from the file is switched off, not

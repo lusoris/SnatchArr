@@ -67,6 +67,7 @@ nav:
   - Download clients: download-clients.md
   - Seerr: seerr.md
   - Cleanuparr: cleanuparr.md
+  - Readarr (legacy): readarr.md
   - API: api.md
   - Upstream contracts: upstream-contracts.md
   - Deployment: deployment.md
@@ -79,4 +80,5 @@ nav:
       - "ADR-0005: Static SPA embedded in the API image": adr/0005-static-spa-embedded-in-api-image.md
       - "ADR-0006: Download-client backpressure": adr/0006-download-client-backpressure.md
       - "ADR-0007: Read-only Cleanuparr link": adr/0007-read-only-cleanuparr-link.md
+      - "ADR-0008: Readarr frozen as a legacy target": adr/0008-readarr-frozen-legacy-target.md
       - Template: adr/0000-template.md
