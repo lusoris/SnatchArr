@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/golusoris/golusoris/core/clock"
@@ -217,6 +218,44 @@ func TestUnreachableClientIsASnapshotNotAnError(t *testing.T) {
 		s := observe(t, kind, url, "u", "p")
 		if s.Reachable || s.Error == "" || s.Kind != kind {
 			t.Fatalf("%s: got %+v", kind, s)
+		}
+	}
+}
+
+// Since goenvoy's download-client modules v2 a constructor refuses an address that is not
+// http(s) with a host. The service stores normalised addresses only, so a refused one comes
+// from a row written past it; it must still end as a snapshot that names the cause.
+func TestSnapshot_AddressTheClientRefuses(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.NotFoundHandler())
+	closed := srv.URL
+	srv.Close()
+	cases := []struct {
+		name        string
+		baseURL     string
+		wantRefused bool
+	}{
+		// Positive: a well-formed address passes the constructor and fails at the request.
+		{name: "http with a host", baseURL: closed},
+		// Negative.
+		{name: "another scheme", baseURL: "ftp://downloads.invalid", wantRefused: true},
+		// Boundary.
+		{name: "a scheme without a host", baseURL: "http://", wantRefused: true},
+		{name: "a trailing slash", baseURL: closed + "/"},
+	}
+	for _, tc := range cases {
+		for _, kind := range domain.AllDownloadClientKinds {
+			t.Run(tc.name+"/"+string(kind), func(t *testing.T) {
+				t.Parallel()
+				s := observe(t, kind, tc.baseURL, "u", "p")
+				if s.Reachable || s.Error == "" {
+					t.Fatalf("got %+v, want an unreachable snapshot with its cause", s)
+				}
+				prefix := string(kind) + " client: "
+				if refused := strings.HasPrefix(s.Error, prefix); refused != tc.wantRefused {
+					t.Errorf("error = %q, want the prefix %q = %v", s.Error, prefix, tc.wantRefused)
+				}
+			})
 		}
 	}
 }
