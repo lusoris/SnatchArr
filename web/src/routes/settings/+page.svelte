@@ -5,12 +5,12 @@ SPDX-License-Identifier: EUPL-1.2
 <script lang="ts">
 	import { createSentioQuery, createSentioMutation } from '@sveltesentio/query';
 	import { toast } from 'svelte-sonner';
-	import { api, describeError } from '$lib/api/client.js';
-	import type { components } from '$lib/api/schema.js';
-	import Field from '$lib/components/Field.svelte';
-	import ProblemNote from '$lib/components/ProblemNote.svelte';
-	import { m } from '$lib/paraglide/messages.js';
-	import { keys } from '$lib/query.js';
+	import { api, describeError } from '#lib/api/client.js';
+	import type { components } from '#lib/api/schema.js';
+	import Field from '#lib/components/Field.svelte';
+	import ProblemNote from '#lib/components/ProblemNote.svelte';
+	import { m } from '#lib/paraglide/messages.js';
+	import { keys } from '#lib/query.js';
 
 	type Settings = components['schemas']['Settings'];
 

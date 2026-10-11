@@ -6,14 +6,14 @@ SPDX-License-Identifier: EUPL-1.2
 	import { resolve } from '$app/paths';
 	import { createSentioQuery, createSentioMutation } from '@sveltesentio/query';
 	import { toast } from 'svelte-sonner';
-	import { api, describeError } from '$lib/api/client.js';
-	import Field from '$lib/components/Field.svelte';
-	import KindSelect from '$lib/components/KindSelect.svelte';
-	import ProblemNote from '$lib/components/ProblemNote.svelte';
-	import type { AppKind } from '$lib/kinds.js';
-	import { m } from '$lib/paraglide/messages.js';
-	import { instanceKindLabel, probeMessage } from '$lib/products.js';
-	import { keys } from '$lib/query.js';
+	import { api, describeError } from '#lib/api/client.js';
+	import Field from '#lib/components/Field.svelte';
+	import KindSelect from '#lib/components/KindSelect.svelte';
+	import ProblemNote from '#lib/components/ProblemNote.svelte';
+	import type { AppKind } from '#lib/kinds.js';
+	import { m } from '#lib/paraglide/messages.js';
+	import { instanceKindLabel, probeMessage } from '#lib/products.js';
+	import { keys } from '#lib/query.js';
 
 	const instances = createSentioQuery({
 		queryKey: keys.instances,
@@ -84,7 +84,7 @@ SPDX-License-Identifier: EUPL-1.2
 		<tbody>
 			{#each instances.data ?? [] as inst (inst.id)}
 				<tr>
-					<td><a class="underline" href={resolve(`/instances/${inst.id}`)}>{inst.name}</a></td>
+					<td><a class="underline" href={resolve(`instances/${inst.id}`)}>{inst.name}</a></td>
 					<td>{instanceKindLabel(inst.kind, inst.last_seen_product)}</td>
 					<td class="break-all">{inst.base_url}</td>
 					<td>{inst.source}</td>

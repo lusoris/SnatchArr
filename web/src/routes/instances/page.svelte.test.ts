@@ -11,7 +11,7 @@ import {
 	renderWithQuery,
 	stubGet,
 	untestedInstance
-} from '$lib/testing/harness.js';
+} from '#lib/testing/harness.js';
 import InstancesPage from './+page.svelte';
 
 /** The text of every cell in the body rows of the instance table. */

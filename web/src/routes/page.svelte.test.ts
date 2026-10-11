@@ -5,14 +5,14 @@
 import { screen } from '@testing-library/svelte';
 import { ProblemError } from '@sveltesentio/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { m } from '$lib/paraglide/messages.js';
+import { m } from '#lib/paraglide/messages.js';
 import {
 	failedInstance,
 	forkInstance,
 	renderWithQuery,
 	stubGet,
 	untestedInstance
-} from '$lib/testing/harness.js';
+} from '#lib/testing/harness.js';
 import Dashboard from './+page.svelte';
 
 const lastCheck = new RegExp(m.instance_last_check());

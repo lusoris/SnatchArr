@@ -6,15 +6,15 @@ SPDX-License-Identifier: EUPL-1.2
 	import { resolve } from '$app/paths';
 	import { createSentioQuery, createSentioMutation } from '@sveltesentio/query';
 	import { toast } from 'svelte-sonner';
-	import { api, describeError } from '$lib/api/client.js';
-	import type { components } from '$lib/api/schema.js';
-	import ProblemNote from '$lib/components/ProblemNote.svelte';
-	import StaminaGauge from '$lib/components/StaminaGauge.svelte';
-	import { m } from '$lib/paraglide/messages.js';
-	import { getLocale } from '$lib/paraglide/runtime.js';
-	import { instanceKindLabel } from '$lib/products.js';
-	import { keys } from '$lib/query.js';
-	import { formatWhen } from '$lib/stamina.js';
+	import { api, describeError } from '#lib/api/client.js';
+	import type { components } from '#lib/api/schema.js';
+	import ProblemNote from '#lib/components/ProblemNote.svelte';
+	import StaminaGauge from '#lib/components/StaminaGauge.svelte';
+	import { m } from '#lib/paraglide/messages.js';
+	import { getLocale } from '#lib/paraglide/runtime.js';
+	import { instanceKindLabel } from '#lib/products.js';
+	import { keys } from '#lib/query.js';
+	import { formatWhen } from '#lib/stamina.js';
 
 	type Instance = components['schemas']['Instance'];
 	type Cap = components['schemas']['CapStatus'];
@@ -55,7 +55,7 @@ SPDX-License-Identifier: EUPL-1.2
 	<ProblemNote error={instances.error} />
 {:else if (instances.data ?? []).length === 0}
 	<p class="card">
-		{m.empty_instances()} <a class="underline" href={resolve('/instances')}>{m.nav_instances()}</a>
+		{m.empty_instances()} <a class="underline" href={resolve('instances')}>{m.nav_instances()}</a>
 	</p>
 {:else}
 	{#if globalCap}
@@ -71,7 +71,7 @@ SPDX-License-Identifier: EUPL-1.2
 				<div class="flex items-start justify-between gap-2">
 					<div>
 						<h2 class="text-lg font-semibold">
-							<a class="hover:underline" href={resolve(`/instances/${inst.id}`)}>{inst.name}</a>
+							<a class="hover:underline" href={resolve(`instances/${inst.id}`)}>{inst.name}</a>
 						</h2>
 						<p class="text-sm text-subtle">
 							{instanceKindLabel(inst.kind, inst.last_seen_product)} · {inst.base_url}

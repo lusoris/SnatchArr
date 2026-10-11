@@ -3,9 +3,9 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
-	import Field from '$lib/components/Field.svelte';
-	import { APP_KINDS, type AppKind, isLegacyKind, kindLabel } from '$lib/kinds.js';
-	import { m } from '$lib/paraglide/messages.js';
+	import Field from '#lib/components/Field.svelte';
+	import { APP_KINDS, type AppKind, isLegacyKind, kindLabel } from '#lib/kinds.js';
+	import { m } from '#lib/paraglide/messages.js';
 
 	interface Props {
 		value: AppKind;

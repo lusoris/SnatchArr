@@ -5,10 +5,10 @@ SPDX-License-Identifier: EUPL-1.2
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { describeError } from '$lib/api/client.js';
-	import Field from '$lib/components/Field.svelte';
-	import { m } from '$lib/paraglide/messages.js';
-	import { session } from '$lib/session.svelte.js';
+	import { describeError } from '#lib/api/client.js';
+	import Field from '#lib/components/Field.svelte';
+	import { m } from '#lib/paraglide/messages.js';
+	import { session } from '#lib/session.svelte.js';
 
 	let username = $state('');
 	let password = $state('');
