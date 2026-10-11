@@ -14,6 +14,7 @@ import (
 	"github.com/golusoris/golusoris/core/clock"
 
 	"github.com/lusoris/SnatchArr/api/internal/leaderx"
+	"github.com/lusoris/SnatchArr/api/internal/leaderx/leaderxtest"
 )
 
 const (
@@ -138,7 +139,7 @@ func TestPeriodic_StopDeadlineExpires(t *testing.T) {
 	})
 	t.Cleanup(func() { close(release) })
 	mustStart(t, p, t.Context())
-	waitFor(t, entered, "the tick")
+	leaderxtest.Await(t, entered, "the tick")
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
 	defer cancel()
 	err := p.Stop(ctx)
@@ -180,7 +181,7 @@ func TestPeriodic_StopCancelsTheTickInFlight(t *testing.T) {
 	})
 	parent, cancel := context.WithCancel(t.Context())
 	mustStart(t, p, parent)
-	waitFor(t, entered, "the tick")
+	leaderxtest.Await(t, entered, "the tick")
 	cancel()
 	select {
 	case <-cancelled:
