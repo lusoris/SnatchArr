@@ -47,7 +47,7 @@ Adopted check = check adoption generated here (none: no generated `make verify-a
 
 2. **Lead with output.** Direct answers, diffs, commands. No filler preamble, no "Based on", no restatement, no chatter.
 
-3. **Context transpiler first.** Never edit `CLAUDE.md`, `.cursor/rules/hiss-invariants.mdc`, `.github/copilot-instructions.md`, `.windsurfrules`, `.gemini/GEMINI.md`, `.codex/rules.md` manually. All agent instruction updates -> `AGENTS.md`, then:
+3. **Context transpiler first.** Never edit `CLAUDE.md`, `.gemini/GEMINI.md`, `.codex/rules.md` manually. All agent instruction updates -> `AGENTS.md`, then:
 
    ```bash
    praetorctl compile-context
@@ -139,7 +139,7 @@ Purpose: snatch missing + cutoff-unmet media across *arr instances; respect per-
 
 - No SvelteKit server routes, hooks, `+page.server.ts`. SPA static; API = Go.
 - No `latest` image tags; no unpinned `uses:` in workflows.
-- Never edit generated code (`api/internal/build/oas`, `api/internal/gen`, `api/internal/store/sqlcgen`, `web/src/lib/api/schema.d.ts`, `worker/crates/snatch-proto/src/gen`) or compiled vendor context (`CLAUDE.md`, `.cursor/**`, `.windsurfrules`, `.gemini/**`, `.codex/**`, `.github/copilot-instructions.md`). Edit `AGENTS.md`, run `praetorctl compile-context`.
+- Never edit generated code (`api/internal/build/oas`, `api/internal/gen`, `api/internal/store/sqlcgen`, `web/src/lib/api/schema.d.ts`, `worker/crates/snatch-proto/src/gen`) or compiled vendor context (`CLAUDE.md`, `.gemini/**`, `.codex/**`). Edit `AGENTS.md`, run `praetorctl compile-context`.
 - Never store or return *arr API keys in plaintext: encrypt at rest (`core/crypto` AES-GCM); write-only in API.
 - No Swaparr / stalled-download handling: Cleanuparr owns that. Cleanuparr link = read-only (ADR-0007); never write to Cleanuparr.
 

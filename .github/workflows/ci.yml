@@ -128,11 +128,8 @@ jobs:
               - 'Makefile'
               - 'lefthook.yml'
               - '.config/**'
-              - '.cursor/**'
-              - '.windsurfrules'
               - '.gemini/**'
               - '.codex/**'
-              - '.github/copilot-instructions.md'
               - '.github/workflows/ci.yml'
             contracts:
               - 'tools/upstreamspec/**'
