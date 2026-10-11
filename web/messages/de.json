@@ -48,6 +48,8 @@
 	"instance_save": "Speichern",
 	"instance_delete": "Löschen",
 	"instance_probe_ok": "{app} {version} hat geantwortet",
+	"instance_probe_unknown": "{app} {version} hat geantwortet. Das ist weder Readarr noch ein Fork, den SnatchArr kennt.",
+	"instance_product_readarr_faustvii": "Readarr (Fork von Faustvii)",
 	"policy_title": "Snatch-Regeln",
 	"policy_missing_per_cycle": "Fehlende Titel pro Snatch",
 	"policy_upgrade_per_cycle": "Upgrades pro Snatch",

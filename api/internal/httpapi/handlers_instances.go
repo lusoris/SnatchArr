@@ -89,7 +89,7 @@ func (h *Handlers) TestInstance(ctx context.Context, params oas.TestInstancePara
 	if err != nil {
 		return nil, err
 	}
-	return &oas.ProbeResult{AppName: res.AppName, Version: res.Version}, nil
+	return probeResultToOAS(res), nil
 }
 
 // TestInstanceInput probes unsaved credentials.
@@ -101,7 +101,7 @@ func (h *Handlers) TestInstanceInput(ctx context.Context, req *oas.InstanceInput
 	if err != nil {
 		return nil, err
 	}
-	return &oas.ProbeResult{AppName: res.AppName, Version: res.Version}, nil
+	return probeResultToOAS(res), nil
 }
 
 // GetPolicy returns an instance's snatch policy.

@@ -28,6 +28,23 @@ func (s AppKind) Validate() error {
 	}
 }
 
+func (s ArrProduct) Validate() error {
+	switch s {
+	case "readarr":
+		return nil
+	case "bookshelf":
+		return nil
+	case "chaptarr":
+		return nil
+	case "readarr_faustvii":
+		return nil
+	case "unknown":
+		return nil
+	default:
+		return errors.Errorf("invalid value: %v", s)
+	}
+}
+
 func (s *CapStatus) Validate() error {
 	if s == nil {
 		return validate.ErrNilPointer
@@ -609,6 +626,36 @@ func (s *InstanceUpdate) Validate() error {
 	}(); err != nil {
 		failures = append(failures, validate.FieldError{
 			Name:  "name",
+			Error: err,
+		})
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+	return nil
+}
+
+func (s *ProbeResult) Validate() error {
+	if s == nil {
+		return validate.ErrNilPointer
+	}
+
+	var failures []validate.FieldError
+	if err := func() error {
+		if value, ok := s.Product.Get(); ok {
+			if err := func() error {
+				if err := value.Validate(); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		failures = append(failures, validate.FieldError{
+			Name:  "product",
 			Error: err,
 		})
 	}

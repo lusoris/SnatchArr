@@ -858,9 +858,15 @@ export interface components {
             /** @default true */
             enabled: boolean;
         };
+        /**
+         * @description The product that answered the probe of an instance kind several products serve. That is the kind `readarr` alone: forks of the retired Readarr keep its API layout. The probe tells them apart by `appName`, `packageAuthor` and `version` of `system/status`. `unknown` is an answer that matches none of the others.
+         * @enum {string}
+         */
+        ArrProduct: "readarr" | "bookshelf" | "chaptarr" | "readarr_faustvii" | "unknown";
         ProbeResult: {
             app_name: string;
             version: string;
+            product?: components["schemas"]["ArrProduct"];
         };
         SnatchPolicy: {
             /** @description How many missing items one snatch goes after (0 disables missing snatches). */

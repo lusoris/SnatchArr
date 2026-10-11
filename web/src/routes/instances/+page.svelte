@@ -12,6 +12,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import ProblemNote from '$lib/components/ProblemNote.svelte';
 	import { type AppKind, kindLabel } from '$lib/kinds.js';
 	import { m } from '$lib/paraglide/messages.js';
+	import { probeMessage } from '$lib/products.js';
 	import { keys } from '$lib/query.js';
 
 	const instances = createSentioQuery({
@@ -48,8 +49,7 @@ SPDX-License-Identifier: EUPL-1.2
 					body: { kind, name: name || 'probe', base_url: baseUrl, api_key: apiKey, enabled: true }
 				})
 			).data,
-		onSuccess: (r) =>
-			toast.success(m.instance_probe_ok({ app: r?.app_name ?? '', version: r?.version ?? '' })),
+		onSuccess: (r) => toast.success(probeMessage(r)),
 		onError: (err) => toast.error(describeError(err))
 	});
 

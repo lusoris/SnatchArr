@@ -6,11 +6,14 @@ package arrclient_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/golusoris/goenvoy/arr/v2"
 
 	"github.com/lusoris/SnatchArr/api/internal/arrclient"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
@@ -19,6 +22,16 @@ import (
 // fakeArr answers /api/v{1,3}/system/status like a real *arr when the key matches.
 func fakeArr(t *testing.T, version string, wantKey string) *httptest.Server {
 	t.Helper()
+	return fakeStatus(t, arr.StatusResponse{AppName: "Fake", Version: version}, wantKey)
+}
+
+// fakeStatus is fakeArr with the whole status answer chosen by the test.
+func fakeStatus(t *testing.T, status arr.StatusResponse, wantKey string) *httptest.Server {
+	t.Helper()
+	body, err := json.Marshal(status)
+	if err != nil {
+		t.Fatalf("encode the status answer: %v", err)
+	}
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-Api-Key") != wantKey {
 			w.WriteHeader(http.StatusUnauthorized)
@@ -30,7 +43,7 @@ func fakeArr(t *testing.T, version string, wantKey string) *httptest.Server {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"appName":"Fake","version":"` + version + `"}`))
+		_, _ = w.Write(body)
 	}))
 }
 

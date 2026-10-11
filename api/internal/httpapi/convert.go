@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/lusoris/SnatchArr/api/internal/arrclient"
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
@@ -31,6 +32,16 @@ func optTime(t *time.Time) oas.OptDateTime {
 
 func userToOAS(u domain.User) oas.User {
 	return oas.User{ID: u.ID, Username: u.Username, Role: oas.UserRole(u.Role)}
+}
+
+// probeResultToOAS is the answer of an instance probe. The product is left out for a kind
+// that one product serves.
+func probeResultToOAS(res arrclient.Result) *oas.ProbeResult {
+	out := &oas.ProbeResult{AppName: res.AppName, Version: res.Version}
+	if res.Product != arrclient.ProductNone {
+		out.Product = oas.NewOptArrProduct(oas.ArrProduct(res.Product))
+	}
+	return out
 }
 
 func instanceToOAS(i domain.Instance) oas.Instance {
