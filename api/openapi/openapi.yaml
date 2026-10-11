@@ -1316,6 +1316,15 @@ components:
           type: boolean
           default: true
 
+    ArrProduct:
+      type: string
+      description: >-
+        The product that answered the probe of an instance kind several products serve. That
+        is the kind `readarr` alone: forks of the retired Readarr keep its API layout. The
+        probe tells them apart by `appName`, `packageAuthor` and `version` of
+        `system/status`. `unknown` is an answer that matches none of the others.
+      enum: [readarr, bookshelf, chaptarr, readarr_faustvii, unknown]
+
     ProbeResult:
       type: object
       required: [app_name, version]
@@ -1324,6 +1333,8 @@ components:
           type: string
         version:
           type: string
+        product:
+          $ref: "#/components/schemas/ArrProduct"
 
     SnatchPolicy:
       type: object

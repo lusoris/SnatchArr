@@ -27,6 +27,8 @@ import (
 type Result struct {
 	AppName string
 	Version string
+	// Product is set for a kind that several products serve, and ProductNone otherwise.
+	Product Product
 }
 
 // Prober checks that an *arr instance answers with the expected API.
@@ -75,7 +77,7 @@ func (p *GoenvoyProber) Probe(ctx context.Context, kind domain.AppKind, baseURL,
 	if err != nil {
 		return Result{}, fmt.Errorf("%w: %w", domain.ErrUnreachable, err)
 	}
-	res := Result{AppName: st.AppName, Version: st.Version}
+	res := Result{AppName: st.AppName, Version: st.Version, Product: detectProduct(kind, st)}
 	if err := checkWhisparrGeneration(kind, st.Version); err != nil {
 		return res, err
 	}

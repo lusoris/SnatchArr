@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/lusoris/SnatchArr/api/internal/arrclient"
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/dlclients"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
@@ -56,6 +57,49 @@ func TestInstanceAndInputConversions(t *testing.T) {
 	up := updateFromOAS(&oas.InstanceUpdate{Kind: oas.AppKindSonarr, Name: "tv", BaseURL: "http://s", Enabled: oas.NewOptBool(false)})
 	if up.APIKey != "" || up.Enabled {
 		t.Fatalf("updateFromOAS: %+v", up)
+	}
+}
+
+func TestProbeResultToOAS(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		product arrclient.Product
+		want    oas.OptArrProduct
+	}{
+		// Positive: every product the probe names is a value of the API enumeration.
+		{"readarr", arrclient.ProductReadarr, oas.NewOptArrProduct(oas.ArrProductReadarr)},
+		{"bookshelf", arrclient.ProductBookshelf, oas.NewOptArrProduct(oas.ArrProductBookshelf)},
+		{"chaptarr", arrclient.ProductChaptarr, oas.NewOptArrProduct(oas.ArrProductChaptarr)},
+		{"faustvii", arrclient.ProductReadarrFaustvii, oas.NewOptArrProduct(oas.ArrProductReadarrFaustvii)},
+		// Negative: an answer the probe could not name is still an answer.
+		{"unknown", arrclient.ProductUnknown, oas.NewOptArrProduct(oas.ArrProductUnknown)},
+		// Boundary: a kind that one product serves carries no product.
+		{"none", arrclient.ProductNone, oas.OptArrProduct{}},
+	}
+	named := 0
+	for _, tc := range tests {
+		if tc.want.Set {
+			named++
+		}
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := probeResultToOAS(arrclient.Result{AppName: "Readarr", Version: "0.4.18.2805", Product: tc.product})
+			if got.AppName != "Readarr" || got.Version != "0.4.18.2805" {
+				t.Errorf("probeResultToOAS() = %+v, want the name and the version unchanged", got)
+			}
+			if got.Product != tc.want {
+				t.Errorf("probeResultToOAS() product = %+v, want %+v", got.Product, tc.want)
+			}
+			// The server encodes what it validates: a value outside the enumeration is a 500.
+			if err := got.Validate(); err != nil {
+				t.Errorf("Validate() = %v", err)
+			}
+		})
+	}
+	// A product added to the API enumeration must get a row above.
+	if all := oas.ArrProduct("").AllValues(); named != len(all) {
+		t.Errorf("%d products covered, the API enumerates %d: %v", named, len(all), all)
 	}
 }
 

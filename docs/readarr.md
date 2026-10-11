@@ -40,3 +40,36 @@ SnatchArr has not been tested against either. Adding one with the kind `readarr`
 your own risk until [#22](https://github.com/lusoris/SnatchArr/issues/22) is closed. That
 issue adds the forks that pass the compatibility tests as targets of their own and lists
 the ones that fail here, with the reason.
+
+### What the connection test names
+
+The connection test of an instance with the kind `readarr` says which product answered.
+Most forks still report the name `Readarr`, so the test reads three fields of
+`/api/v1/system/status`. The first row that matches decides; upper and lower case make no
+difference.
+
+| `appName` | `packageAuthor` | `version` | Named as |
+| --- | --- | --- | --- |
+| `Chaptarr` | any | any | Chaptarr |
+| not `Readarr` | any | any | not recognised |
+| `Readarr` | contains `pennydreadful` | any | Bookshelf |
+| `Readarr` | contains `Faustvii` | any | Readarr (Faustvii fork) |
+| `Readarr` | anything else | 0.4.19 or lower | Readarr |
+| `Readarr` | anything else | higher, or not a version | not recognised |
+
+The third fork in the table is [Faustvii/Readarr](https://github.com/Faustvii/Readarr),
+last commit 2026-09-02. The retired Readarr never built a version above 0.4.19, which is
+what the last two rows rest on.
+
+Two limits follow from the fields:
+
+- `packageAuthor` is written by whoever builds the image. Bookshelf or the Faustvii fork
+  from a build without that field is named "not recognised".
+- A fork that reports `Readarr`, a version up to 0.4.19 and no known packager cannot be
+  told from Readarr.
+
+A name is not a statement of support: the test still succeeds for every row, and the first
+paragraph of this section holds. The rule is `readarrProduct` in
+`api/internal/arrclient/product.go`; `TestProbe_Product` in the same directory holds the
+answers each product gave on 2026-10-11. The API carries the name as `product` of
+`ProbeResult` (`api/openapi/openapi.yaml`).

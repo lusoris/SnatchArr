@@ -85,6 +85,73 @@ func (s *AppKind) UnmarshalText(data []byte) error {
 	}
 }
 
+// The product that answered the probe of an instance kind several products serve. That is the kind
+// `readarr` alone: forks of the retired Readarr keep its API layout. The probe tells them apart by
+// `appName`, `packageAuthor` and `version` of `system/status`. `unknown` is an answer that matches
+// none of the others.
+// Ref: #/components/schemas/ArrProduct
+type ArrProduct string
+
+const (
+	ArrProductReadarr         ArrProduct = "readarr"
+	ArrProductBookshelf       ArrProduct = "bookshelf"
+	ArrProductChaptarr        ArrProduct = "chaptarr"
+	ArrProductReadarrFaustvii ArrProduct = "readarr_faustvii"
+	ArrProductUnknown         ArrProduct = "unknown"
+)
+
+// AllValues returns all ArrProduct values.
+func (ArrProduct) AllValues() []ArrProduct {
+	return []ArrProduct{
+		ArrProductReadarr,
+		ArrProductBookshelf,
+		ArrProductChaptarr,
+		ArrProductReadarrFaustvii,
+		ArrProductUnknown,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s ArrProduct) MarshalText() ([]byte, error) {
+	switch s {
+	case ArrProductReadarr:
+		return []byte(s), nil
+	case ArrProductBookshelf:
+		return []byte(s), nil
+	case ArrProductChaptarr:
+		return []byte(s), nil
+	case ArrProductReadarrFaustvii:
+		return []byte(s), nil
+	case ArrProductUnknown:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *ArrProduct) UnmarshalText(data []byte) error {
+	switch ArrProduct(data) {
+	case ArrProductReadarr:
+		*s = ArrProductReadarr
+		return nil
+	case ArrProductBookshelf:
+		*s = ArrProductBookshelf
+		return nil
+	case ArrProductChaptarr:
+		*s = ArrProductChaptarr
+		return nil
+	case ArrProductReadarrFaustvii:
+		*s = ArrProductReadarrFaustvii
+		return nil
+	case ArrProductUnknown:
+		*s = ArrProductUnknown
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
 type BearerAuth struct {
 	Token string
 	Roles []string
@@ -1932,6 +1999,52 @@ func (s *LoginRequest) SetPassword(val string) {
 // LogoutNoContent is response for Logout operation.
 type LogoutNoContent struct{}
 
+// NewOptArrProduct returns new OptArrProduct with value set to v.
+func NewOptArrProduct(v ArrProduct) OptArrProduct {
+	return OptArrProduct{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptArrProduct is optional ArrProduct.
+type OptArrProduct struct {
+	Value ArrProduct
+	Set   bool
+}
+
+// IsSet returns true if OptArrProduct was set.
+func (o OptArrProduct) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptArrProduct) Reset() {
+	var v ArrProduct
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptArrProduct) SetTo(v ArrProduct) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptArrProduct) Get() (v ArrProduct, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptArrProduct) Or(d ArrProduct) ArrProduct {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
 // NewOptBool returns new OptBool with value set to v.
 func NewOptBool(v bool) OptBool {
 	return OptBool{
@@ -2348,8 +2461,9 @@ func (o OptUUID) Or(d uuid.UUID) uuid.UUID {
 
 // Ref: #/components/schemas/ProbeResult
 type ProbeResult struct {
-	AppName string `json:"app_name"`
-	Version string `json:"version"`
+	AppName string        `json:"app_name"`
+	Version string        `json:"version"`
+	Product OptArrProduct `json:"product"`
 }
 
 // GetAppName returns the value of AppName.
@@ -2362,6 +2476,11 @@ func (s *ProbeResult) GetVersion() string {
 	return s.Version
 }
 
+// GetProduct returns the value of Product.
+func (s *ProbeResult) GetProduct() OptArrProduct {
+	return s.Product
+}
+
 // SetAppName sets the value of AppName.
 func (s *ProbeResult) SetAppName(val string) {
 	s.AppName = val
@@ -2370,6 +2489,11 @@ func (s *ProbeResult) SetAppName(val string) {
 // SetVersion sets the value of Version.
 func (s *ProbeResult) SetVersion(val string) {
 	s.Version = val
+}
+
+// SetProduct sets the value of Product.
+func (s *ProbeResult) SetProduct(val OptArrProduct) {
+	s.Product = val
 }
 
 // Ref: #/components/schemas/Problem

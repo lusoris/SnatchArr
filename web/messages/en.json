@@ -48,6 +48,8 @@
 	"instance_save": "Save",
 	"instance_delete": "Delete",
 	"instance_probe_ok": "{app} {version} answered",
+	"instance_probe_unknown": "{app} {version} answered. It is neither Readarr nor a fork SnatchArr knows.",
+	"instance_product_readarr_faustvii": "Readarr (Faustvii fork)",
 	"policy_title": "Snatch policy",
 	"policy_missing_per_cycle": "Missing items per snatch",
 	"policy_upgrade_per_cycle": "Upgrades per snatch",

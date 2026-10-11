@@ -61,6 +61,52 @@ func (s *AppKind) UnmarshalJSON(data []byte) error {
 	return s.Decode(d)
 }
 
+// Encode encodes ArrProduct as json.
+func (s ArrProduct) Encode(e *jx.Encoder) {
+	e.Str(string(s))
+}
+
+// Decode decodes ArrProduct from json.
+func (s *ArrProduct) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode ArrProduct to nil")
+	}
+	v, err := d.StrBytes()
+	if err != nil {
+		return err
+	}
+	// Try to use constant string.
+	switch ArrProduct(v) {
+	case ArrProductReadarr:
+		*s = ArrProductReadarr
+	case ArrProductBookshelf:
+		*s = ArrProductBookshelf
+	case ArrProductChaptarr:
+		*s = ArrProductChaptarr
+	case ArrProductReadarrFaustvii:
+		*s = ArrProductReadarrFaustvii
+	case ArrProductUnknown:
+		*s = ArrProductUnknown
+	default:
+		*s = ArrProduct(v)
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s ArrProduct) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *ArrProduct) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
 // Encode implements json.Marshaler.
 func (s *CapStatus) Encode(e *jx.Encoder) {
 	e.ObjStart()
@@ -3839,6 +3885,39 @@ func (s *LoginRequest) UnmarshalJSON(data []byte) error {
 	return s.Decode(d)
 }
 
+// Encode encodes ArrProduct as json.
+func (o OptArrProduct) Encode(e *jx.Encoder) {
+	if !o.Set {
+		return
+	}
+	e.Str(string(o.Value))
+}
+
+// Decode decodes ArrProduct from json.
+func (o *OptArrProduct) Decode(d *jx.Decoder) error {
+	if o == nil {
+		return errors.New("invalid: unable to decode OptArrProduct to nil")
+	}
+	o.Set = true
+	if err := o.Value.Decode(d); err != nil {
+		return err
+	}
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s OptArrProduct) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *OptArrProduct) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
 // Encode encodes bool as json.
 func (o OptBool) Encode(e *jx.Encoder) {
 	if !o.Set {
@@ -4165,11 +4244,18 @@ func (s *ProbeResult) encodeFields(e *jx.Encoder) {
 		e.FieldStart("version")
 		e.Str(s.Version)
 	}
+	{
+		if s.Product.Set {
+			e.FieldStart("product")
+			s.Product.Encode(e)
+		}
+	}
 }
 
-var jsonFieldsNameOfProbeResult = [2]string{
+var jsonFieldsNameOfProbeResult = [3]string{
 	0: "app_name",
 	1: "version",
+	2: "product",
 }
 
 // Decode decodes ProbeResult from json.
@@ -4204,6 +4290,16 @@ func (s *ProbeResult) Decode(d *jx.Decoder) error {
 				return nil
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"version\"")
+			}
+		case "product":
+			if err := func() error {
+				s.Product.Reset()
+				if err := s.Product.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"product\"")
 			}
 		default:
 			return d.Skip()

@@ -12,6 +12,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import ProblemNote from '$lib/components/ProblemNote.svelte';
 	import { kindLabel } from '$lib/kinds.js';
 	import { m } from '$lib/paraglide/messages.js';
+	import { probeMessage } from '$lib/products.js';
 	import { keys } from '$lib/query.js';
 
 	type Policy = components['schemas']['SnatchPolicy'];
@@ -53,8 +54,7 @@ SPDX-License-Identifier: EUPL-1.2
 		mutationFn: async () =>
 			(await api.POST('/instances/{instanceId}/test', { params: { path: { instanceId } } })).data,
 		invalidates: [keys.instances],
-		onSuccess: (r) =>
-			toast.success(m.instance_probe_ok({ app: r?.app_name ?? '', version: r?.version ?? '' })),
+		onSuccess: (r) => toast.success(probeMessage(r)),
 		onError: (err) => toast.error(describeError(err))
 	});
 </script>
