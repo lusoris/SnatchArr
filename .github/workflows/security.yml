@@ -39,7 +39,16 @@ jobs:
         run: govulncheck ./...
       - name: gosec (zero exclusions)
         if: steps.present.outputs.ok == 'true'
-        run: gosec -conf ../.gosec.json -exclude-generated ./...
+        # From the module root: started in api/, gosec loads no package and passes on zero files.
+        working-directory: ${{ github.workspace }}
+        run: make api-gosec
+      - name: Upload gosec results to code scanning
+        # The run on main is the one that opens and closes the alerts of the default branch.
+        if: ${{ !cancelled() && hashFiles('api/tmp/gosec.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: api/tmp/gosec.sarif
+          category: gosec/api
 
   rust-audit:
     name: worker (cargo-audit + cargo-deny)
