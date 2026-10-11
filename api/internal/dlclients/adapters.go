@@ -13,12 +13,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golusoris/goenvoy/downloadclient/deluge"
-	"github.com/golusoris/goenvoy/downloadclient/nzbget"
-	"github.com/golusoris/goenvoy/downloadclient/qbit"
-	"github.com/golusoris/goenvoy/downloadclient/rtorrent"
-	"github.com/golusoris/goenvoy/downloadclient/sabnzbd"
-	"github.com/golusoris/goenvoy/downloadclient/transmission"
+	"github.com/golusoris/goenvoy/downloadclient/deluge/v2"
+	"github.com/golusoris/goenvoy/downloadclient/nzbget/v2"
+	"github.com/golusoris/goenvoy/downloadclient/qbit/v2"
+	"github.com/golusoris/goenvoy/downloadclient/rtorrent/v2"
+	"github.com/golusoris/goenvoy/downloadclient/sabnzbd/v2"
+	"github.com/golusoris/goenvoy/downloadclient/transmission/v2"
 
 	"github.com/golusoris/golusoris/core/clock"
 
@@ -93,9 +93,12 @@ func (g *Goenvoy) observe(ctx context.Context, c domain.DownloadClient, secret s
 }
 
 func (g *Goenvoy) qbittorrent(ctx context.Context, c domain.DownloadClient, secret string) (observation, error) {
-	cl := qbit.New(c.BaseURL, qbit.WithTimeout(g.timeout), qbit.WithUserAgent(g.userAgent))
+	cl, err := qbit.New(c.BaseURL, qbit.WithTimeout(g.timeout), qbit.WithUserAgent(g.userAgent))
+	if err != nil {
+		return observation{}, fmt.Errorf("qbittorrent client: %w", err)
+	}
 	if c.Username != "" || secret != "" {
-		if err := cl.Login(ctx, c.Username, secret); err != nil {
+		if err = cl.Login(ctx, c.Username, secret); err != nil {
 			return observation{}, fmt.Errorf("qbittorrent login: %w", err)
 		}
 	}
@@ -157,7 +160,10 @@ func (g *Goenvoy) transmission(ctx context.Context, c domain.DownloadClient, sec
 	if rpcPath != "" {
 		opts = append(opts, transmission.WithRPCPath(rpcPath))
 	}
-	cl := transmission.New(base, opts...)
+	cl, err := transmission.New(base, opts...)
+	if err != nil {
+		return observation{}, fmt.Errorf("transmission client: %w", err)
+	}
 	session, err := cl.GetSession(ctx)
 	if err != nil {
 		return observation{}, fmt.Errorf("transmission session: %w", err)
@@ -181,8 +187,11 @@ func (g *Goenvoy) transmission(ctx context.Context, c domain.DownloadClient, sec
 }
 
 func (g *Goenvoy) deluge(ctx context.Context, c domain.DownloadClient, secret string) (observation, error) {
-	cl := deluge.New(c.BaseURL, deluge.WithTimeout(g.timeout), deluge.WithUserAgent(g.userAgent))
-	if err := cl.Login(ctx, secret); err != nil {
+	cl, err := deluge.New(c.BaseURL, deluge.WithTimeout(g.timeout), deluge.WithUserAgent(g.userAgent))
+	if err != nil {
+		return observation{}, fmt.Errorf("deluge client: %w", err)
+	}
+	if err = cl.Login(ctx, secret); err != nil {
 		return observation{}, fmt.Errorf("deluge login: %w", err)
 	}
 	version, err := cl.GetVersion(ctx)
@@ -215,7 +224,10 @@ func (g *Goenvoy) rtorrent(ctx context.Context, c domain.DownloadClient, secret 
 	if c.Username != "" {
 		opts = append(opts, rtorrent.WithAuth(c.Username, secret))
 	}
-	cl := rtorrent.New(c.BaseURL, opts...)
+	cl, err := rtorrent.New(c.BaseURL, opts...)
+	if err != nil {
+		return observation{}, fmt.Errorf("rtorrent client: %w", err)
+	}
 	info, err := cl.GetSystemInfo(ctx)
 	if err != nil {
 		return observation{}, fmt.Errorf("rtorrent system info: %w", err)
@@ -236,7 +248,10 @@ func (g *Goenvoy) rtorrent(ctx context.Context, c domain.DownloadClient, secret 
 }
 
 func (g *Goenvoy) sabnzbd(ctx context.Context, c domain.DownloadClient, secret string) (observation, error) {
-	cl := sabnzbd.New(c.BaseURL, secret, sabnzbd.WithTimeout(g.timeout), sabnzbd.WithUserAgent(g.userAgent))
+	cl, err := sabnzbd.New(c.BaseURL, secret, sabnzbd.WithTimeout(g.timeout), sabnzbd.WithUserAgent(g.userAgent))
+	if err != nil {
+		return observation{}, fmt.Errorf("sabnzbd client: %w", err)
+	}
 	version, err := cl.GetVersion(ctx)
 	if err != nil {
 		return observation{}, fmt.Errorf("sabnzbd version: %w", err)
@@ -277,7 +292,10 @@ func ParseSABSpeed(s string) int64 {
 }
 
 func (g *Goenvoy) nzbget(ctx context.Context, c domain.DownloadClient, secret string) (observation, error) {
-	cl := nzbget.New(c.BaseURL, c.Username, secret, nzbget.WithTimeout(g.timeout), nzbget.WithUserAgent(g.userAgent))
+	cl, err := nzbget.New(c.BaseURL, c.Username, secret, nzbget.WithTimeout(g.timeout), nzbget.WithUserAgent(g.userAgent))
+	if err != nil {
+		return observation{}, fmt.Errorf("nzbget client: %w", err)
+	}
 	version, err := cl.GetVersion(ctx)
 	if err != nil {
 		return observation{}, fmt.Errorf("nzbget version: %w", err)
