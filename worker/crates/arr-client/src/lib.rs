@@ -693,6 +693,9 @@ fn child_candidate(c: ChildLike) -> Candidate {
 }
 
 #[cfg(test)]
+mod contract_tests;
+
+#[cfg(test)]
 mod tests {
     #[derive(Debug, thiserror::Error)]
     #[error("outer")]

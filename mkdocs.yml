@@ -68,6 +68,7 @@ nav:
   - Seerr: seerr.md
   - Cleanuparr: cleanuparr.md
   - API: api.md
+  - Upstream contracts: upstream-contracts.md
   - Deployment: deployment.md
   - Architecture Decisions:
       - Overview: adr/README.md

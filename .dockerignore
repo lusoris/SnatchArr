@@ -4,6 +4,8 @@
 # Both Dockerfiles use the repo root as context; keep it small and hermetic.
 .git
 .github
+# Upstream OpenAPI specs fetched by make contracts-verify; `upstreamspec guard` requires this rule.
+.cache
 .devcontainer
 docs
 site

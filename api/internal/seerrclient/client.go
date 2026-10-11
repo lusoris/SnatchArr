@@ -110,19 +110,22 @@ func (h *HTTP) base(baseURL, apiKey string) (*arr.BaseClient, error) {
 	return c, nil
 }
 
+// statusJSON is what Status reads from `GET /api/v1/status`.
+type statusJSON struct {
+	Version string `json:"version"`
+}
+
 // Status implements Client.
 func (h *HTTP) Status(ctx context.Context, baseURL, apiKey string) (Status, error) {
 	c, err := h.base(baseURL, apiKey)
 	if err != nil {
 		return Status{}, err
 	}
-	var out struct {
-		Version string `json:"version"`
-	}
+	var out statusJSON
 	if err := c.Get(ctx, "/api/v1/status", &out); err != nil {
 		return Status{}, fmt.Errorf("%w: seerr status: %w", domain.ErrUnreachable, err)
 	}
-	return Status{Version: out.Version}, nil
+	return Status(out), nil
 }
 
 //nolint:tagliatelle // Seerr speaks camelCase
@@ -208,16 +211,19 @@ func ServerURL(hostname string, port int, useSSL bool, base string) string {
 	return u.String()
 }
 
+// titleJSON is what Title reads: a movie has `title`, a show has `name`.
+type titleJSON struct {
+	Title string `json:"title"`
+	Name  string `json:"name"`
+}
+
 // Title implements Client: the TMDB title Seerr knows for a movie or show.
 func (h *HTTP) Title(ctx context.Context, baseURL, apiKey string, mediaType domain.SeerrMediaType, tmdbID int) (string, error) {
 	c, err := h.base(baseURL, apiKey)
 	if err != nil {
 		return "", err
 	}
-	var out struct {
-		Title string `json:"title"`
-		Name  string `json:"name"`
-	}
+	var out titleJSON
 	if err := c.Get(ctx, fmt.Sprintf("/api/v1/%s/%d", mediaType, tmdbID), &out); err != nil {
 		return "", fmt.Errorf("%w: seerr title: %w", domain.ErrUnreachable, err)
 	}

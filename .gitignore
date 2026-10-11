@@ -36,6 +36,11 @@ Thumbs.db
 # kind kubeconfig written by make kind-up (VM-local cluster, #61)
 /.kind/
 
+# Upstream OpenAPI specs and the contracts built from them (make contracts-verify). Sonarr, Radarr
+# and Lidarr publish theirs under GPL-3.0, so the directory is never committed
+# (docs/upstream-contracts.md); `upstreamspec guard` fails when this rule is missing.
+/.cache/
+
 # BEGIN praetor private artifacts (praetorctl adopt)
 /.workingdir/
 /.workingdir2/

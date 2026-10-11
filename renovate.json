@@ -19,7 +19,22 @@
     "dockerfile",
     "helm-values",
     "helmv3",
-    "devcontainer"
+    "devcontainer",
+    "custom.regex"
+  ],
+  "customManagers": [
+    {
+      "description": "Upstream OpenAPI spec pins: repository, release tag and commit of each entry, in this order (docs/upstream-contracts.md)",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "tools/upstreamspec/specs.yaml"
+      ],
+      "matchStrings": [
+        "- name: (?<depName>\\S+)\\n +repository: (?<packageName>\\S+)\\n +tag: (?<currentValue>\\S+)\\n +commit: (?<currentDigest>[0-9a-f]{40})\\n"
+      ],
+      "datasourceTemplate": "github-tags",
+      "versioningTemplate": "loose"
+    }
   ],
   "postUpdateOptions": [
     "gomodTidy",
@@ -175,6 +190,14 @@
         "pinDigest"
       ],
       "automerge": true
+    },
+    {
+      "description": "Upstream spec pins: one pull request, merged by hand. Renovate cannot renew the sha256 of a spec file, and the contracts job that fails on a stale one is not a required check, so platform automerge would not wait for it (docs/upstream-contracts.md)",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "groupName": "upstream specs",
+      "automerge": false
     },
     {
       "description": "praetor-managed files: praetorctl adopt ships their updates and praetorctl audit locks them byte for byte",

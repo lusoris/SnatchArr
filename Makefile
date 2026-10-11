@@ -20,14 +20,14 @@ GOMODCACHE       = $(subst \,/,$(shell go env GOMODCACHE))
 GOLUSORIS_VER    = $(shell go list -m -f '{{.Version}}' github.com/golusoris/golusoris)
 GOLUSORIS_SHARED = $(GOMODCACHE)/github.com/golusoris/golusoris@$(GOLUSORIS_VER)/tools/Makefile.shared
 
-.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke web-verify web-e2e proto-verify deploy-verify governance-verify \
+.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke web-verify web-e2e proto-verify deploy-verify governance-verify contracts-verify \
 	images kind-up kind-deploy kind-down \
         api-gen api-gosec gosec-install tools-verify tools-lint tools-test tools-gosec web-gen proto-gen dev hooks setup
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-18s %s\n", $$1, $$2}'
 
-verify-all: governance-verify proto-verify api-verify worker-verify web-verify deploy-verify ## Every gate (praetor universal verification)
+verify-all: governance-verify proto-verify api-verify worker-verify web-verify deploy-verify contracts-verify ## Every gate (praetor universal verification)
 	@echo "All SnatchArr verification gates passed."
 
 # ── api/ (Go, golusoris) ──────────────────────────────────────────────────────
@@ -297,6 +297,24 @@ kind-down: ## Delete the kind VM, its profile and the kubeconfig
 	rm -f $(KIND_KUBECONFIG)
 
 # ── governance (praetor) ──────────────────────────────────────────────────────
+# ── upstream contracts ────────────────────────────────────────────────────────
+# The hand-written clients (worker/crates/arr-client, api/internal/seerrclient) against the OpenAPI
+# specs their upstream projects publish, pinned in tools/upstreamspec/specs.yaml. The specs are
+# downloaded into SPEC_CACHE, which is never committed and never enters an image build context
+# (docs/upstream-contracts.md). A cold cache needs the network.
+#
+# A test command that matches no test exits 0, so the last step asks for the receipt each
+# contract test leaves when it passed against the pinned commit.
+SPEC_CACHE ?= .cache/upstream-specs
+contracts-verify: ## Hand-written clients against the pinned upstream OpenAPI specs
+	go test -count=1 ./tools/upstreamspec/...
+	go run ./tools/upstreamspec fetch -cache "$(SPEC_CACHE)"
+	go run ./tools/upstreamspec guard -cache "$(SPEC_CACHE)"
+	export SNATCHARR_SPEC_CACHE="$(abspath $(SPEC_CACHE))"
+	go test -count=1 -run '^TestUpstreamContract$$' ./api/internal/seerrclient/
+	cargo test --locked -p arr-client -- --ignored upstream_contract
+	go run ./tools/upstreamspec receipts -cache "$(SPEC_CACHE)"
+
 governance-verify: ## compile-context --verify, audit, state audit, flavor audit (go-service)
 	$(PRAETORCTL) compile-context --verify
 	$(PRAETORCTL) audit
