@@ -74,8 +74,27 @@ networkPolicy:
           kubernetes.io/metadata.name: media
 ```
 
-`arrPeers` accepts `podSelector` and `namespaceSelector` only; IP ranges belong in
-`arrCidrs`, which always excludes the cloud metadata address.
+An entry without `ports` allows every port of the pods it selects. To allow one port per
+app, give the entry a `ports` list; the chart then renders an egress rule of its own for it:
+
+```yaml
+networkPolicy:
+  enabled: true
+  arrCidrs: []
+  arrPeers:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: lidarr
+      ports:
+        - port: 8686
+          protocol: TCP
+```
+
+A `podSelector` without a `namespaceSelector` selects pods in the release namespace only.
+Each `ports` entry needs a `port` (number or port name) and may set `protocol` (TCP by
+default) and `endPort`. `arrPeers` accepts `podSelector`, `namespaceSelector` and `ports`
+only; IP ranges belong in `arrCidrs`, which always excludes the cloud metadata address and
+allows every port. A rule for one port of an IP range belongs in `networkPolicy.extraEgress`.
 
 ### Secrets
 

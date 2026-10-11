@@ -82,14 +82,19 @@ app.kubernetes.io/component: {{ .component }}
 {{- end -}}
 
 {{/*
-snatcharr.arrEgressPeers renders the *arr egress peers: an ipBlock per networkPolicy.arrCidrs
-entry, then networkPolicy.arrPeers as given (selectors for in-cluster apps). An IPv4 CIDR
-that contains the cloud metadata address 169.254.169.254 excludes it. Kubernetes accepts an
-`except` only as a strict subset of its `cidr`, so a CIDR that does not contain the address
-(10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16) gets no `except`, and a /32 on the address
+snatcharr.arrEgressRules renders the *arr egress rules, or nothing when there is no peer (an
+empty `to` would allow every destination, #120).
+
+The first rule allows every port: an ipBlock per networkPolicy.arrCidrs entry, then each
+networkPolicy.arrPeers entry without `ports`. An arrPeers entry with `ports` gets a rule of its
+own that allows those ports only (#145).
+
+An IPv4 CIDR that contains the cloud metadata address 169.254.169.254 excludes it. Kubernetes
+accepts an `except` only as a strict subset of its `cidr`, so a CIDR that does not contain the
+address (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16) gets no `except`, and a /32 on the address
 itself is refused. An IPv6 CIDR cannot contain it and gets none either.
 */}}
-{{- define "snatcharr.arrEgressPeers" -}}
+{{- define "snatcharr.arrEgressRules" -}}
 {{- $meta := 0 -}}
 {{- range list 169 254 169 254 -}}{{- $meta = add (mul $meta 256) . -}}{{- end -}}
 {{- $peers := list -}}
@@ -112,5 +117,15 @@ itself is refused. An IPv6 CIDR cannot contain it and gets none either.
 {{- end -}}
 {{- $peers = append $peers (dict "ipBlock" $peer) -}}
 {{- end -}}
-{{- toYaml (concat $peers .Values.networkPolicy.arrPeers) -}}
+{{- $scoped := list -}}
+{{- range .Values.networkPolicy.arrPeers -}}
+{{- if .ports -}}
+{{- $scoped = append $scoped (dict "to" (list (omit . "ports")) "ports" .ports) -}}
+{{- else -}}
+{{- $peers = append $peers (omit . "ports") -}}
+{{- end -}}
+{{- end -}}
+{{- $rules := $scoped -}}
+{{- if $peers -}}{{- $rules = prepend $scoped (dict "to" $peers) -}}{{- end -}}
+{{- if $rules -}}{{- toYaml $rules -}}{{- end -}}
 {{- end -}}

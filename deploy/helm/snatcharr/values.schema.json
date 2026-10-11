@@ -68,7 +68,24 @@
           "type": "array",
           "items": {
             "type": "object",
-            "properties": { "podSelector": { "type": "object" }, "namespaceSelector": { "type": "object" } },
+            "properties": {
+              "podSelector": { "type": "object" },
+              "namespaceSelector": { "type": "object" },
+              "ports": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "port": { "type": ["integer", "string"] },
+                    "endPort": { "type": "integer" },
+                    "protocol": { "type": "string", "enum": ["TCP", "UDP", "SCTP"] }
+                  },
+                  "required": ["port"],
+                  "additionalProperties": false
+                }
+              }
+            },
             "anyOf": [{ "required": ["podSelector"] }, { "required": ["namespaceSelector"] }],
             "additionalProperties": false
           }
