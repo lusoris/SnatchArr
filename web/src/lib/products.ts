@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 import type { components } from './api/schema.js';
+import { kindLabel } from './kinds.js';
 import { m } from './paraglide/messages.js';
 
 export type ArrProduct = components['schemas']['ArrProduct'];
@@ -22,6 +23,17 @@ const names = {
 /** The name of a product the probe named, or undefined for `unknown` and for any other value. */
 export function productName(product: string): string | undefined {
 	return Object.hasOwn(names, product) ? names[product as ArrProduct]?.() : undefined;
+}
+
+/**
+ * The kind of a stored instance as the UI shows it. The product comes from the last
+ * successful connection test. Without one, and for Readarr itself, the kind keeps its own
+ * label, which marks `readarr` as legacy. A fork is named next to the kind, and a product
+ * the test could not name is shown as such instead of being called Readarr.
+ */
+export function instanceKindLabel(kind: string, product: string | undefined): string {
+	if (product === undefined || product === 'readarr') return kindLabel(kind);
+	return `${kind} · ${productName(product) ?? m.instance_product_unknown()}`;
 }
 
 /**

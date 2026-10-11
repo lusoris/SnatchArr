@@ -18,7 +18,9 @@ per author, and respects stamina, afterglow and foreplay like for every other in
 ([Concepts](concepts.md)).
 
 The instance form, the instance list, the dashboard and the instance page show the kind as
-`readarr (legacy)`. The form adds a one-line note when you choose it.
+`readarr (legacy)`. The form adds a one-line note when you choose it. Once a connection
+test has reached a fork, the list, the dashboard and the instance page name the fork
+instead ([Where the name is kept](#where-the-name-is-kept)).
 
 ## What frozen means
 
@@ -73,3 +75,33 @@ paragraph of this section holds. The rule is `readarrProduct` in
 `api/internal/arrclient/product.go`; `TestProbe_Product` in the same directory holds the
 answers each product gave on 2026-10-11. The API carries the name as `product` of
 `ProbeResult` (`api/openapi/openapi.yaml`).
+
+### Where the name is kept
+
+The connection test of a stored instance (`POST /instances/{instanceId}/test`, the test
+button on the instance page) keeps the name with the instance. The API returns it as
+`last_seen_product` of `Instance`. The instance list, the dashboard and the instance page
+show it next to the kind:
+
+| Last successful test found | Shown as |
+| --- | --- |
+| Bookshelf | `readarr · Bookshelf` |
+| Chaptarr | `readarr · Chaptarr` |
+| Readarr (Faustvii fork) | `readarr · Readarr (Faustvii fork)` |
+| not recognised | `readarr · unknown product` |
+| Readarr, or no test yet | `readarr (legacy)` |
+
+SnatchArr tests an instance only when you ask it to, so the name is as old as
+`last_check_at`. The test of unsaved form values (`POST /instances/test`) names the product
+in its answer and keeps nothing.
+
+- A test that fails keeps the name: an instance that does not answer is still that product.
+- A change of the kind or the base URL forgets the name until the next test, whether you
+  edit the instance or a Configarr import changes it. Any other edit keeps it.
+- An instance of a kind that one product serves has no name.
+
+The column is `last_seen_product` of the table `instances`
+(`api/internal/store/migrations/postgres/000008_instance_product.up.sql`); the three rules
+are in `api/internal/store/queries/instances.sql` and checked by
+`api/internal/instances/service_integration_test.go`. The label is `instanceKindLabel` in
+`web/src/lib/products.ts`.

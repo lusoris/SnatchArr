@@ -88,7 +88,8 @@ func (s *AppKind) UnmarshalText(data []byte) error {
 // The product that answered the probe of an instance kind several products serve. That is the kind
 // `readarr` alone: forks of the retired Readarr keep its API layout. The probe tells them apart by
 // `appName`, `packageAuthor` and `version` of `system/status`. `unknown` is an answer that matches
-// none of the others.
+// none of the others. An instance carries the product of its last successful connection test as
+// `last_seen_product`.
 // Ref: #/components/schemas/ArrProduct
 type ArrProduct string
 
@@ -1677,6 +1678,7 @@ type Instance struct {
 	Source          InstanceSource `json:"source"`
 	ConfigarrKey    OptString      `json:"configarr_key"`
 	LastSeenVersion OptString      `json:"last_seen_version"`
+	LastSeenProduct OptArrProduct  `json:"last_seen_product"`
 	LastCheckAt     OptDateTime    `json:"last_check_at"`
 	LastError       OptString      `json:"last_error"`
 	CreatedAt       time.Time      `json:"created_at"`
@@ -1721,6 +1723,11 @@ func (s *Instance) GetConfigarrKey() OptString {
 // GetLastSeenVersion returns the value of LastSeenVersion.
 func (s *Instance) GetLastSeenVersion() OptString {
 	return s.LastSeenVersion
+}
+
+// GetLastSeenProduct returns the value of LastSeenProduct.
+func (s *Instance) GetLastSeenProduct() OptArrProduct {
+	return s.LastSeenProduct
 }
 
 // GetLastCheckAt returns the value of LastCheckAt.
@@ -1781,6 +1788,11 @@ func (s *Instance) SetConfigarrKey(val OptString) {
 // SetLastSeenVersion sets the value of LastSeenVersion.
 func (s *Instance) SetLastSeenVersion(val OptString) {
 	s.LastSeenVersion = val
+}
+
+// SetLastSeenProduct sets the value of LastSeenProduct.
+func (s *Instance) SetLastSeenProduct(val OptArrProduct) {
+	s.LastSeenProduct = val
 }
 
 // SetLastCheckAt sets the value of LastCheckAt.

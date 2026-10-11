@@ -33,7 +33,7 @@ func (p *stubProber) Probe(context.Context, domain.AppKind, string, string) (arr
 func TestTestInstanceInput(t *testing.T) {
 	t.Parallel()
 	admin := &domain.User{Role: domain.RoleAdmin}
-	bookshelf := arrclient.Result{AppName: "Readarr", Version: "0.4.21.182", Product: arrclient.ProductBookshelf}
+	bookshelf := arrclient.Result{AppName: "Readarr", Version: "0.4.21.182", Product: domain.ProductBookshelf}
 	sonarr := arrclient.Result{AppName: "Sonarr", Version: "4.0.10.2544"}
 	valid := oas.InstanceInput{Kind: oas.AppKindReadarr, Name: "books", BaseURL: "http://books:8787", APIKey: "a-key-for-the-stub"}
 	noURL := valid

@@ -32,40 +32,40 @@ func TestProbe_Product(t *testing.T) {
 		app     string
 		version string
 		author  string
-		want    arrclient.Product
+		want    domain.Product
 	}{
 		// Positive.
-		{"readarr as recorded", domain.KindReadarr, "Readarr", "0.4.18.2805", linuxserver, arrclient.ProductReadarr},
-		{"readarr nightly as recorded", domain.KindReadarr, "Readarr", "0.4.19.2811", linuxserver, arrclient.ProductReadarr},
-		{"bookshelf as recorded", domain.KindReadarr, "Readarr", "0.4.21.182", pennydreadful, arrclient.ProductBookshelf},
-		{"chaptarr as recorded", domain.KindReadarr, "Chaptarr", "0.9.965.0", "", arrclient.ProductChaptarr},
-		{"faustvii as recorded", domain.KindReadarr, "Readarr", "0.10.0.0", faustvii, arrclient.ProductReadarrFaustvii},
-		{"readarr from another packager", domain.KindReadarr, "Readarr", "0.4.18.2805", "", arrclient.ProductReadarr},
-		{"the packager in another case", domain.KindReadarr, "readarr", "0.4.21.182", "PennyDreadful", arrclient.ProductBookshelf},
-		{"the name in another case", domain.KindReadarr, "CHAPTARR", "0.9.965.0", "", arrclient.ProductChaptarr},
+		{"readarr as recorded", domain.KindReadarr, "Readarr", "0.4.18.2805", linuxserver, domain.ProductReadarr},
+		{"readarr nightly as recorded", domain.KindReadarr, "Readarr", "0.4.19.2811", linuxserver, domain.ProductReadarr},
+		{"bookshelf as recorded", domain.KindReadarr, "Readarr", "0.4.21.182", pennydreadful, domain.ProductBookshelf},
+		{"chaptarr as recorded", domain.KindReadarr, "Chaptarr", "0.9.965.0", "", domain.ProductChaptarr},
+		{"faustvii as recorded", domain.KindReadarr, "Readarr", "0.10.0.0", faustvii, domain.ProductReadarrFaustvii},
+		{"readarr from another packager", domain.KindReadarr, "Readarr", "0.4.18.2805", "", domain.ProductReadarr},
+		{"the packager in another case", domain.KindReadarr, "readarr", "0.4.21.182", "PennyDreadful", domain.ProductBookshelf},
+		{"the name in another case", domain.KindReadarr, "CHAPTARR", "0.9.965.0", "", domain.ProductChaptarr},
 		// The packager decides before the version: a fork may still carry a version Readarr built.
-		{"bookshelf at a version readarr built", domain.KindReadarr, "Readarr", "0.4.18.2805", pennydreadful, arrclient.ProductBookshelf},
-		{"faustvii at a version readarr built", domain.KindReadarr, "Readarr", "0.4.19.0", faustvii, arrclient.ProductReadarrFaustvii},
+		{"bookshelf at a version readarr built", domain.KindReadarr, "Readarr", "0.4.18.2805", pennydreadful, domain.ProductBookshelf},
+		{"faustvii at a version readarr built", domain.KindReadarr, "Readarr", "0.4.19.0", faustvii, domain.ProductReadarrFaustvii},
 		// Negative.
-		{"a newer readarr from nobody known", domain.KindReadarr, "Readarr", "0.4.21.182", linuxserver, arrclient.ProductUnknown},
-		{"another application", domain.KindReadarr, "Lidarr", "0.4.18.2805", linuxserver, arrclient.ProductUnknown},
-		{"another application from a known packager", domain.KindReadarr, "Lidarr", "0.4.21.182", pennydreadful, arrclient.ProductUnknown},
-		{"no name", domain.KindReadarr, "", "0.4.18.2805", "", arrclient.ProductUnknown},
-		{"no version", domain.KindReadarr, "Readarr", "", "", arrclient.ProductUnknown},
-		{"a version that is no number", domain.KindReadarr, "Readarr", "nightly", "", arrclient.ProductUnknown},
-		{"a version with a letter in it", domain.KindReadarr, "Readarr", "0.4.x", "", arrclient.ProductUnknown},
-		{"a negative version", domain.KindReadarr, "Readarr", "0.-4.18", "", arrclient.ProductUnknown},
-		{"a kind one product serves", domain.KindLidarr, "Lidarr", "2.8.2", linuxserver, arrclient.ProductNone},
-		{"a fork's answer behind another kind", domain.KindLidarr, "Chaptarr", "0.9.965.0", "", arrclient.ProductNone},
+		{"a newer readarr from nobody known", domain.KindReadarr, "Readarr", "0.4.21.182", linuxserver, domain.ProductUnknown},
+		{"another application", domain.KindReadarr, "Lidarr", "0.4.18.2805", linuxserver, domain.ProductUnknown},
+		{"another application from a known packager", domain.KindReadarr, "Lidarr", "0.4.21.182", pennydreadful, domain.ProductUnknown},
+		{"no name", domain.KindReadarr, "", "0.4.18.2805", "", domain.ProductUnknown},
+		{"no version", domain.KindReadarr, "Readarr", "", "", domain.ProductUnknown},
+		{"a version that is no number", domain.KindReadarr, "Readarr", "nightly", "", domain.ProductUnknown},
+		{"a version with a letter in it", domain.KindReadarr, "Readarr", "0.4.x", "", domain.ProductUnknown},
+		{"a negative version", domain.KindReadarr, "Readarr", "0.-4.18", "", domain.ProductUnknown},
+		{"a kind one product serves", domain.KindLidarr, "Lidarr", "2.8.2", linuxserver, domain.ProductNone},
+		{"a fork's answer behind another kind", domain.KindLidarr, "Chaptarr", "0.9.965.0", "", domain.ProductNone},
 		// Boundary: 0.4.19 is the last line the retired Readarr built.
-		{"the last readarr line", domain.KindReadarr, "Readarr", "0.4.19", "", arrclient.ProductReadarr},
-		{"the last readarr line, any build", domain.KindReadarr, "Readarr", "0.4.19.99999", "", arrclient.ProductReadarr},
-		{"one patch above", domain.KindReadarr, "Readarr", "0.4.20.0", "", arrclient.ProductUnknown},
-		{"one minor above", domain.KindReadarr, "Readarr", "0.5.0.0", "", arrclient.ProductUnknown},
-		{"one major above", domain.KindReadarr, "Readarr", "1.0.0.0", "", arrclient.ProductUnknown},
-		{"a lower minor with a higher patch", domain.KindReadarr, "Readarr", "0.3.99.1", "", arrclient.ProductReadarr},
-		{"two numbers only", domain.KindReadarr, "Readarr", "0.4", "", arrclient.ProductReadarr},
-		{"one number only", domain.KindReadarr, "Readarr", "1", "", arrclient.ProductUnknown},
+		{"the last readarr line", domain.KindReadarr, "Readarr", "0.4.19", "", domain.ProductReadarr},
+		{"the last readarr line, any build", domain.KindReadarr, "Readarr", "0.4.19.99999", "", domain.ProductReadarr},
+		{"one patch above", domain.KindReadarr, "Readarr", "0.4.20.0", "", domain.ProductUnknown},
+		{"one minor above", domain.KindReadarr, "Readarr", "0.5.0.0", "", domain.ProductUnknown},
+		{"one major above", domain.KindReadarr, "Readarr", "1.0.0.0", "", domain.ProductUnknown},
+		{"a lower minor with a higher patch", domain.KindReadarr, "Readarr", "0.3.99.1", "", domain.ProductReadarr},
+		{"two numbers only", domain.KindReadarr, "Readarr", "0.4", "", domain.ProductReadarr},
+		{"one number only", domain.KindReadarr, "Readarr", "1", "", domain.ProductUnknown},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

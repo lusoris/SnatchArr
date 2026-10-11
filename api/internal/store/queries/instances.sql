@@ -20,7 +20,9 @@ SELECT * FROM instances WHERE enabled ORDER BY kind, name;
 
 -- name: UpdateInstance :one
 UPDATE instances
-SET kind = $2, name = $3, base_url = $4, api_key_enc = $5, enabled = $6, updated_at = $7
+SET kind = $2, name = $3, base_url = $4, api_key_enc = $5, enabled = $6, updated_at = $7,
+    -- The product was seen at the old kind and address: a change of either forgets it.
+    last_seen_product = CASE WHEN kind = $2 AND base_url = $4 THEN last_seen_product END
 WHERE id = $1
 RETURNING *;
 
@@ -29,7 +31,11 @@ INSERT INTO instances (id, kind, name, base_url, api_key_enc, enabled, source, c
 VALUES ($1, $2, $3, $4, $5, $6, 'configarr', $7, $8, $8)
 ON CONFLICT (configarr_key) DO UPDATE
 SET kind = EXCLUDED.kind, name = EXCLUDED.name, base_url = EXCLUDED.base_url,
-    api_key_enc = EXCLUDED.api_key_enc, enabled = EXCLUDED.enabled, updated_at = EXCLUDED.updated_at
+    api_key_enc = EXCLUDED.api_key_enc, enabled = EXCLUDED.enabled, updated_at = EXCLUDED.updated_at,
+    -- As in UpdateInstance: a change of kind or address forgets the product.
+    last_seen_product = CASE
+        WHEN instances.kind = EXCLUDED.kind AND instances.base_url = EXCLUDED.base_url THEN instances.last_seen_product
+    END
 RETURNING *, (xmax = 0) AS inserted;
 
 -- name: DisableConfigarrInstancesNotIn :execrows
@@ -42,8 +48,14 @@ SELECT count(*) FROM instances WHERE lower(base_url) = lower($1) AND source <> $
 
 -- name: RecordInstanceCheck :exec
 UPDATE instances
-SET last_seen_version = $2, last_check_at = $3, last_error = $4, updated_at = $3
-WHERE id = $1;
+SET last_seen_version = sqlc.narg(last_seen_version), last_check_at = sqlc.narg(last_check_at),
+    last_error = sqlc.narg(last_error), updated_at = sqlc.narg(last_check_at),
+    -- A failed check keeps the product: an instance that does not answer is still that product.
+    last_seen_product = CASE
+        WHEN sqlc.narg(last_error)::text IS NULL THEN sqlc.narg(last_seen_product)
+        ELSE last_seen_product
+    END
+WHERE id = sqlc.arg(id);
 
 -- name: DeleteInstance :execrows
 DELETE FROM instances WHERE id = $1;

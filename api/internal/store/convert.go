@@ -31,6 +31,7 @@ func InstanceFromRow(r sqlcgen.Instance) domain.Instance {
 		Source:          domain.InstanceSource(r.Source),
 		ConfigarrKey:    deref(r.ConfigarrKey),
 		LastSeenVersion: deref(r.LastSeenVersion),
+		LastSeenProduct: domain.Product(deref(r.LastSeenProduct)),
 		LastCheckAt:     r.LastCheckAt,
 		LastError:       deref(r.LastError),
 		CreatedAt:       r.CreatedAt,

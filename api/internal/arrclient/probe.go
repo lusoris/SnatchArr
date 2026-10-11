@@ -28,7 +28,7 @@ type Result struct {
 	AppName string
 	Version string
 	// Product is set for a kind that several products serve, and ProductNone otherwise.
-	Product Product
+	Product domain.Product
 }
 
 // Prober checks that an *arr instance answers with the expected API.

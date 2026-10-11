@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 import { describe, expect, it } from 'vitest';
-import { probeMessage, productName } from './products.js';
+import { instanceKindLabel, probeMessage, productName } from './products.js';
 
 describe('productName', () => {
 	it.each([
@@ -44,5 +44,28 @@ describe('probeMessage', () => {
 
 	it('survives an answer without a body', () => {
 		expect(probeMessage(undefined)).toBe('  answered');
+	});
+});
+
+describe('instanceKindLabel', () => {
+	it.each([
+		['readarr', 'bookshelf', 'readarr · Bookshelf'],
+		['readarr', 'chaptarr', 'readarr · Chaptarr'],
+		['readarr', 'readarr_faustvii', 'readarr · Readarr (Faustvii fork)']
+	])('names the fork behind %s: %s', (kind, product, label) => {
+		expect(instanceKindLabel(kind, product)).toBe(label);
+	});
+
+	it('keeps the legacy label for Readarr itself', () => {
+		expect(instanceKindLabel('readarr', 'readarr')).toBe('readarr (legacy)');
+	});
+
+	it('keeps the label of the kind while no test has named a product', () => {
+		expect(instanceKindLabel('readarr', undefined)).toBe('readarr (legacy)');
+		expect(instanceKindLabel('sonarr', undefined)).toBe('sonarr');
+	});
+
+	it.each(['unknown', 'a_later_product', ''])('does not call "%s" Readarr', (product) => {
+		expect(instanceKindLabel('readarr', product)).toBe('readarr · unknown product');
 	});
 });
