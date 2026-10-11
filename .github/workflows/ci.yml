@@ -39,6 +39,8 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Check the policy against its cases
+        run: sh .config/hooks/commit-msg_test.sh
       # The same script the commit-msg hook runs, applied to every commit of the pull request.
       - name: Check every commit of the pull request
         env:

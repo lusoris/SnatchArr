@@ -60,6 +60,13 @@ pre-commit:
     hiss-audit:
       run: sh .config/lefthook/engine.sh audit --offline
 
+# Repository-owned, not rendered by praetor: the policy CI applies to every commit of a pull
+# request (job `commits`), run here before the commit exists.
+commit-msg:
+  commands:
+    commit-policy:
+      run: sh .config/hooks/commit-msg.sh {1}
+
 post-commit:
   commands:
     state-sync:

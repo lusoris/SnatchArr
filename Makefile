@@ -20,14 +20,14 @@ GOMODCACHE       = $(subst \,/,$(shell go env GOMODCACHE))
 GOLUSORIS_VER    = $(shell go list -m -f '{{.Version}}' github.com/golusoris/golusoris)
 GOLUSORIS_SHARED = $(GOMODCACHE)/github.com/golusoris/golusoris@$(GOLUSORIS_VER)/tools/Makefile.shared
 
-.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke web-verify web-e2e proto-verify deploy-verify governance-verify contracts-verify \
+.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke web-verify web-e2e proto-verify deploy-verify governance-verify hooks-verify contracts-verify \
 	images kind-up kind-deploy kind-down \
         api-gen api-gosec gosec-install tools-verify tools-lint tools-test tools-gosec web-gen proto-gen dev hooks setup
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-18s %s\n", $$1, $$2}'
 
-verify-all: governance-verify proto-verify api-verify worker-verify web-verify deploy-verify contracts-verify ## Every gate (praetor universal verification)
+verify-all: governance-verify hooks-verify proto-verify api-verify worker-verify web-verify deploy-verify contracts-verify ## Every gate (praetor universal verification)
 	@echo "All SnatchArr verification gates passed."
 
 # ── api/ (Go, golusoris) ──────────────────────────────────────────────────────
@@ -320,6 +320,9 @@ governance-verify: ## compile-context --verify, audit, state audit, flavor audit
 	$(PRAETORCTL) audit
 	$(PRAETORCTL) state audit .
 	$(PRAETORCTL) flavor audit --flavor=go-service .
+
+hooks-verify: ## The commit-message policy against its accepted and refused cases
+	sh .config/hooks/commit-msg_test.sh
 
 hooks: ## Install git hooks
 	lefthook install
