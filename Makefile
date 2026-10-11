@@ -22,7 +22,7 @@ GOLUSORIS_SHARED = $(GOMODCACHE)/github.com/golusoris/golusoris@$(GOLUSORIS_VER)
 
 .PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke web-verify web-e2e proto-verify deploy-verify governance-verify \
 	images kind-up kind-deploy kind-down \
-        api-gen gosec-install web-gen proto-gen dev hooks setup
+        api-gen api-gosec gosec-install web-gen proto-gen dev hooks setup
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-18s %s\n", $$1, $$2}'
@@ -33,7 +33,10 @@ verify-all: governance-verify proto-verify api-verify worker-verify web-verify d
 # ── api/ (Go, golusoris) ──────────────────────────────────────────────────────
 api-verify: ## golangci-lint + go fix + gosec + govulncheck + go test -race + generated-code drift + spectral
 	@if [ ! -f go.mod ]; then echo "go.mod not scaffolded yet; skipping"; exit 0; fi
-	$(MAKE) -C api -f "$(GOLUSORIS_SHARED)" ci GOLANGCI_CONFIG=../.golangci.yml GOSEC="gosec -exclude-generated -conf ../.gosec.json"
+	# The shared `ci` goal is `lint sec test`; its gosec step runs inside api/, where gosec loads no
+	# package (see api-gosec), so the three other goals run here and gosec runs from the module root.
+	$(MAKE) -C api -f "$(GOLUSORIS_SHARED)" lint vuln test GOLANGCI_CONFIG=../.golangci.yml
+	$(MAKE) api-gosec
 	cd api
 	go fix -diff ./...
 	go generate ./...
@@ -48,6 +51,26 @@ api-verify: ## golangci-lint + go fix + gosec + govulncheck + go test -race + ge
 
 api-gen: ## ogen + sqlc generation inside api/
 	cd api && go generate ./...
+
+# gosec loads packages only when it starts in the directory that holds go.mod. Started in api/ it
+# lists the directories, checks no file, prints "Files  : 0" and exits 0. This target is the one
+# place that runs it (api-verify, ci.yml, security.yml): from the module root, over every package,
+# and it fails when the summary reports no scanned file. The SARIF report feeds code scanning.
+GOSEC_SARIF ?= api/tmp/gosec.sarif
+GOSEC_PKG   ?= ./...
+api-gosec: ## gosec over the whole module (zero exclusions); fails on a finding or when no file was scanned
+	mkdir -p "$(dir $(GOSEC_SARIF))"
+	log=$$(mktemp)
+	trap 'rm -f "$$log"' EXIT
+	status=0
+	gosec -conf .gosec.json -exclude-generated -fmt sarif -out "$(GOSEC_SARIF)" -stdout -verbose text $(GOSEC_PKG) >"$$log" 2>&1 || status=$$?
+	cat "$$log"
+	if ! grep -q -E '^[[:space:]]*Files[[:space:]]*:[[:space:]]*[1-9]' "$$log"; then
+	  echo "api-gosec: gosec scanned no file ($(GOSEC_PKG), started in $$(pwd)); a scan of nothing is not a pass" >&2
+	  exit 1
+	fi
+	test -s "$(GOSEC_SARIF)"
+	exit $$status
 
 # gosec v2.29.0, the latest release, pins golang.org/x/tools v0.49.0, which cannot read the export
 # data Go 1.27.2 writes (version 5; x/tools reads it from v0.50.0), so it fails to load every
