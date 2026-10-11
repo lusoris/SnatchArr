@@ -24,7 +24,7 @@ service WorkerService {
   // for this run's instance and snatch kind.
   rpc FilterCandidates(FilterCandidatesRequest) returns (FilterCandidatesResponse);
   // AcquireBudget atomically debits the instance's hourly bucket and returns how many
-  // items the worker may search now (0..requested).
+  // items the worker may search now (0..requested), per target when the request names them.
   rpc AcquireBudget(AcquireBudgetRequest) returns (AcquireBudgetResponse);
   // ReportEvents streams snatch events for history and the live UI.
   rpc ReportEvents(stream ReportEventsRequest) returns (ReportEventsResponse);
@@ -151,15 +151,31 @@ message FilterCandidatesResponse {
   repeated int64 priority_group_ids = 3;
 }
 
+// BudgetItem is one search target asking for budget.
+message BudgetItem {
+  // Items the target counts against the hourly cap when it is searched whole.
+  uint32 cost = 1;
+  // True for one command over a whole season, series, artist or author: it cannot be split,
+  // so it is granted its full cost or nothing.
+  bool atomic = 2;
+}
+
 message AcquireBudgetRequest {
   string run_id = 1;
+  // Sum of the item costs. The only field a worker without `items` sends.
   uint32 requested = 2;
+  // The targets in dispatch order (at most 512). Granted in that order, and only what is
+  // granted is debited. Empty: `requested` is granted as one divisible amount.
+  repeated BudgetItem items = 3;
 }
 
 message AcquireBudgetResponse {
   uint32 granted = 1;
   uint32 remaining_in_window = 2;
   int64 window_resets_unix = 3;
+  // Budget granted to each of `items`, same length and order; `granted` is their sum.
+  // Empty when the request named no items.
+  repeated uint32 granted_items = 4;
 }
 
 enum Level {

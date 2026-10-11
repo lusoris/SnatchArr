@@ -36,6 +36,7 @@ const (
 	leasePollInterval  = time.Second
 	maxEventsPerStream = 10_000
 	maxSearchedPerRun  = 5_000
+	maxBudgetItems     = 512
 	userAgent          = "SnatchArr/1.0 (https://github.com/lusoris/SnatchArr)"
 )
 
@@ -231,8 +232,12 @@ func (s *Server) addPriorities(ctx context.Context, run domain.Run, resp *snatch
 	}
 }
 
-// AcquireBudget debits the instance's hourly bucket (schedule overrides applied).
+// AcquireBudget debits the instance's hourly bucket (schedule overrides applied). A request
+// that names its items is granted item by item and debited only for what it can use (#142).
 func (s *Server) AcquireBudget(ctx context.Context, req *snatcharrv1.AcquireBudgetRequest) (*snatcharrv1.AcquireBudgetResponse, error) {
+	if len(req.GetItems()) > maxBudgetItems {
+		return nil, status.Errorf(codes.InvalidArgument, "items must hold at most %d entries", maxBudgetItems)
+	}
 	run, err := s.leasedRun(ctx, req.GetRunId())
 	if err != nil {
 		return nil, err
@@ -249,16 +254,36 @@ func (s *Server) AcquireBudget(ctx context.Context, req *snatcharrv1.AcquireBudg
 	if err != nil {
 		return nil, toStatus(err)
 	}
-	g, err := s.budget.Acquire(ctx, run.InstanceID, capacity, cfg.GlobalHourlyCap, int(min(req.GetRequested(), maxSearchedPerRun)))
+	g, err := s.grantBudget(ctx, run.InstanceID, capacity, cfg.GlobalHourlyCap, req)
 	if err != nil {
 		return nil, toStatus(err)
 	}
 	if g.Used >= int(float64(g.Cap)*snatch.WarnRatio) {
 		s.logger.WarnContext(ctx, "snatch: hourly cap nearly exhausted", slog.String("instance", run.InstanceID.String()), slog.Int("used", g.Used), slog.Int("cap", g.Cap))
 	}
+	grantedItems := make([]uint32, len(g.GrantedItems))
+	for i, granted := range g.GrantedItems {
+		grantedItems[i] = uint32(granted) // #nosec G115 -- non-negative, <= 500
+	}
 	return &snatcharrv1.AcquireBudgetResponse{
 		Granted: uint32(g.Granted), RemainingInWindow: uint32(g.Remaining), WindowResetsUnix: g.ResetsAt.Unix(), // #nosec G115 -- non-negative, <= 500
+		GrantedItems: grantedItems,
 	}, nil
+}
+
+// grantBudget asks the budget item by item when the worker named its items, and for the
+// plain total when it did not (a worker from before #142).
+func (s *Server) grantBudget(ctx context.Context, instanceID uuid.UUID, capacity, globalCap int, req *snatcharrv1.AcquireBudgetRequest) (snatch.ItemsGrant, error) {
+	if len(req.GetItems()) == 0 {
+		g, err := s.budget.Acquire(ctx, instanceID, capacity, globalCap, int(min(req.GetRequested(), maxSearchedPerRun)))
+		return snatch.ItemsGrant{Grant: g}, err
+	}
+	items := make([]snatch.BudgetItem, len(req.GetItems()))
+	for i, item := range req.GetItems() {
+		// No cap reaches maxSearchedPerRun, so a larger cost is granted the same way.
+		items[i] = snatch.BudgetItem{Cost: int(min(item.GetCost(), maxSearchedPerRun)), Atomic: item.GetAtomic()}
+	}
+	return s.budget.AcquireItems(ctx, instanceID, capacity, globalCap, items)
 }
 
 // ReportEvents persists a bounded client stream of snatch events.

@@ -25,6 +25,12 @@ fn some<T>(value: Option<T>, what: &str) -> Result<T, Box<dyn std::error::Error>
 struct FakeApi {
     pub cancel_heartbeat: bool,
     pub budget_granted: u32,
+    /// False answers like an API from before #142: a total, no per-target grants.
+    pub per_target_grants: bool,
+    /// Grants to answer instead of the API's own rule, to tell them apart from a recount.
+    pub scripted_grants: Option<Vec<u32>>,
+    /// Every AcquireBudget call: the items asked for and the grants answered.
+    pub budget_calls: Arc<Mutex<Vec<BudgetCall>>>,
     pub filter_unprocessed: Vec<i64>,
     pub reported_events: Arc<Mutex<Vec<SnatchEvent>>>,
     pub completed_requests: Arc<Mutex<Vec<CompleteRunRequest>>>,
@@ -35,11 +41,36 @@ impl Default for FakeApi {
         Self {
             cancel_heartbeat: false,
             budget_granted: 1000,
+            per_target_grants: true,
+            scripted_grants: None,
+            budget_calls: Arc::new(Mutex::new(Vec::new())),
             filter_unprocessed: vec![1, 2, 3, 4, 5],
             reported_events: Arc::new(Mutex::new(Vec::new())),
             completed_requests: Arc::new(Mutex::new(Vec::new())),
         }
     }
+}
+
+/// One AcquireBudget call: the items asked for and the grants answered.
+type BudgetCall = (Vec<BudgetItem>, Vec<u32>);
+
+/// The API's grant rule: in order, an item that fits gets its cost, a divisible one gets what
+/// is left, an atomic one that does not fit gets nothing.
+fn fake_grants(mut left: u32, items: &[BudgetItem]) -> Vec<u32> {
+    items
+        .iter()
+        .map(|item| {
+            let grant = if item.cost <= left {
+                item.cost
+            } else if item.atomic {
+                0
+            } else {
+                left
+            };
+            left = left.saturating_sub(grant);
+            grant
+        })
+        .collect()
 }
 
 #[tonic::async_trait]
@@ -91,11 +122,27 @@ impl WorkerService for FakeApi {
         // Leaves the heartbeat time to cancel first in heartbeat_cancel_terminates_run.
         tokio::time::sleep(Duration::from_millis(200)).await;
         let req = request.into_inner();
-        let granted = std::cmp::min(self.budget_granted, req.requested);
+        let (granted, granted_items) = if self.per_target_grants {
+            let grants = self
+                .scripted_grants
+                .clone()
+                .unwrap_or_else(|| fake_grants(self.budget_granted, &req.items));
+            (grants.iter().sum(), grants)
+        } else {
+            (
+                std::cmp::min(self.budget_granted, req.requested),
+                Vec::new(),
+            )
+        };
+        self.budget_calls
+            .lock()
+            .await
+            .push((req.items, granted_items.clone()));
         Ok(tonic::Response::new(AcquireBudgetResponse {
             granted,
             remaining_in_window: 1000,
             window_resets_unix: 0,
+            granted_items,
         }))
     }
 
@@ -732,6 +779,150 @@ async fn heartbeat_negative_without_cancel() -> TestResult {
         some(complete.first(), "a CompleteRun call")?.searched.len(),
         2,
         "All granted targets should be dispatched"
+    );
+    Ok(())
+}
+
+/// Two wanted episodes of series 10 in two seasons: one SeriesSearch that costs 2.
+fn two_season_series() -> serde_json::Value {
+    serde_json::json!([
+        {
+            "id": 1, "seriesId": 10, "seasonNumber": 1, "episodeNumber": 1,
+            "title": "Ep 1", "monitored": true, "series": { "monitored": true }
+        },
+        {
+            "id": 2, "seriesId": 10, "seasonNumber": 2, "episodeNumber": 1,
+            "title": "Ep 2", "monitored": true, "series": { "monitored": true }
+        },
+    ])
+}
+
+/// Runs one whole-series (Shows mode) cycle over `two_season_series` with `budget` stamina
+/// left; returns the search commands sent and the AcquireBudget calls the API saw.
+async fn series_run(budget: u32) -> Result<(usize, Vec<BudgetCall>), Box<dyn std::error::Error>> {
+    let api = FakeApi {
+        budget_granted: budget,
+        filter_unprocessed: vec![1, 2],
+        ..Default::default()
+    };
+    let (client, _) = start_fake_api(api.clone()).await?;
+    let mock_server = MockServer::start().await;
+    mount_sonarr(
+        &mock_server,
+        wanted_page(two_season_series()),
+        queue_page(),
+        serde_json::json!([]),
+    )
+    .await;
+    mount_command(&mock_server, queued_command()).await;
+
+    let mut run = default_run(&mock_server.uri());
+    some(run.policy.as_mut(), "run policy")?.sonarr_mode = snatch_proto::SonarrMode::Shows as i32;
+    run_short_polling(client, run).await;
+
+    let requests = some(mock_server.received_requests().await, "recorded requests")?;
+    let calls = api.budget_calls.lock().await.clone();
+    Ok((search_posts(&requests), calls))
+}
+
+/// Negative: a whole-series search that does not fit waits whole and is charged nothing
+/// (#142). The worker marks it atomic, so the API grants zero instead of a share it could
+/// never spend.
+#[tokio::test]
+async fn whole_series_that_does_not_fit_is_not_charged() -> TestResult {
+    let (commands, calls) = series_run(1).await?;
+    assert_eq!(commands, 0, "a series that costs 2 is not searched on 1");
+    let whole = BudgetItem {
+        cost: 2,
+        atomic: true,
+    };
+    assert_eq!(calls, vec![(vec![whole], vec![0])]);
+    Ok(())
+}
+
+/// Positive and boundary: with exactly its cost left, the whole series is searched once and
+/// charged its cost.
+#[tokio::test]
+async fn whole_series_that_fits_is_searched_and_charged() -> TestResult {
+    let (commands, calls) = series_run(2).await?;
+    assert_eq!(commands, 1, "one SeriesSearch");
+    let whole = BudgetItem {
+        cost: 2,
+        atomic: true,
+    };
+    assert_eq!(calls, vec![(vec![whole], vec![2])]);
+    Ok(())
+}
+
+/// The worker dispatches what the API granted per target and does not recount the total: with
+/// grants of 0 and 1 for two series, only the second one is searched (a recount of the total 1
+/// would search an episode of the first).
+#[tokio::test]
+async fn per_target_grants_decide_what_is_searched() -> TestResult {
+    let api = FakeApi {
+        scripted_grants: Some(vec![0, 1]),
+        filter_unprocessed: vec![1, 2, 3],
+        ..Default::default()
+    };
+    let (client, _) = start_fake_api(api.clone()).await?;
+    let mock_server = MockServer::start().await;
+    mount_sonarr(
+        &mock_server,
+        wanted_page(episodes(&[(1, 10), (2, 10), (3, 11)])),
+        queue_page(),
+        serde_json::json!([]),
+    )
+    .await;
+    mount_command(&mock_server, queued_command()).await;
+
+    let mut run = default_run(&mock_server.uri());
+    some(run.policy.as_mut(), "run policy")?.per_cycle = 3;
+    run_short_polling(client, run).await;
+
+    let complete = api.completed_requests.lock().await;
+    let searched: Vec<i64> = some(complete.first(), "a CompleteRun call")?
+        .searched
+        .iter()
+        .map(|item| item.entity_id)
+        .collect();
+    assert_eq!(
+        searched,
+        vec![3],
+        "only the episode of the second series was granted"
+    );
+    Ok(())
+}
+
+/// An API from before #142 answers with a total only; the worker then caps the targets
+/// itself, as it did before.
+#[tokio::test]
+async fn api_without_per_target_grants_is_capped_by_the_total() -> TestResult {
+    let api = FakeApi {
+        budget_granted: 2,
+        per_target_grants: false,
+        filter_unprocessed: vec![1, 2, 3],
+        ..Default::default()
+    };
+    let (client, _) = start_fake_api(api.clone()).await?;
+    let mock_server = MockServer::start().await;
+    mount_sonarr(
+        &mock_server,
+        wanted_page(episodes(&[(1, 10), (2, 10), (3, 10)])),
+        queue_page(),
+        serde_json::json!([]),
+    )
+    .await;
+    mount_command(&mock_server, queued_command()).await;
+
+    let mut run = default_run(&mock_server.uri());
+    some(run.policy.as_mut(), "run policy")?.per_cycle = 3;
+    run_short_polling(client, run).await;
+
+    let complete = api.completed_requests.lock().await;
+    assert_eq!(
+        some(complete.first(), "a CompleteRun call")?.searched.len(),
+        2,
+        "two of three episodes fit the total of 2"
     );
     Ok(())
 }

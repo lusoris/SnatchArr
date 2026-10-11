@@ -513,17 +513,26 @@ async fn collect_candidates(
     })
 }
 
-/// Asks the API for budget and trims the targets to what was granted.
+/// Asks the API for stamina per target and keeps what was granted: a target searched item by
+/// item may be granted in part, one command for a whole parent only whole (#142).
 async fn acquire(
     client: &mut Client,
     run: &Run,
     targets: Vec<Target>,
     events: &Events,
 ) -> Result<Vec<Target>, ExecError> {
-    let requested: u32 = targets.iter().map(Target::query_cost).sum();
+    let items: Vec<snatch_proto::BudgetItem> = targets
+        .iter()
+        .map(|t| snatch_proto::BudgetItem {
+            cost: t.query_cost(),
+            atomic: t.atomic(),
+        })
+        .collect();
+    let requested: u32 = items.iter().map(|item| item.cost).sum();
     let req = AcquireBudgetRequest {
         run_id: run.run_id.clone(),
         requested,
+        items,
     };
     let grant = client.acquire_budget(Request::new(req)).await?.into_inner();
     let msg = format!(
@@ -533,7 +542,12 @@ async fn acquire(
     events
         .emit(Ev::run(Level::Info, EventType::BudgetAcquired, msg))
         .await;
-    let (dispatch, deferred) = snatch_core::cap(targets, grant.granted);
+    // An API from before #142 answers without per-target grants.
+    let (dispatch, deferred) = if grant.granted_items.is_empty() {
+        snatch_core::cap(targets, grant.granted)
+    } else {
+        snatch_core::apply_grants(targets, &grant.granted_items)
+    };
     if !deferred.is_empty() {
         let msg = format!(
             "{} target(s) deferred: out of stamina for the last 60 minutes",

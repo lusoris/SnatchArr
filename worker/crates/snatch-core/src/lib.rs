@@ -344,6 +344,13 @@ impl Target {
         u32::try_from(self.items().len()).unwrap_or(u32::MAX)
     }
 
+    /// Whether the target is one command for a whole parent (`Season`, `Series`, `Artist`,
+    /// `Author`). It cannot be split, so stamina grants it whole or not at all (#142).
+    #[must_use]
+    pub fn atomic(&self) -> bool {
+        !matches!(self, Self::Items { .. } | Self::Episodes { .. })
+    }
+
     /// Indexer queries the target costs, which is what stamina charges: one per episode in
     /// an `EpisodeSearch`, one per season pack, one per season of a `SeriesSearch`, one
     /// per movie, album (also inside an `ArtistSearch`) or book (also inside an
@@ -482,11 +489,38 @@ pub fn group_flat(selected: &[Candidate]) -> Vec<Target> {
     }]
 }
 
+/// Applies the per-target grants of one `AcquireBudget` answer, in target order (#142). A
+/// full grant dispatches the target. A partial grant, which the API only gives to a target
+/// searched item by item, dispatches that many items and defers the rest. No grant defers
+/// the target. A partial grant for a whole-parent target dispatches nothing and a missing
+/// grant counts as zero, so the dispatched cost never exceeds what was granted.
+#[must_use]
+pub fn apply_grants(targets: Vec<Target>, grants: &[u32]) -> (Vec<Target>, Vec<Target>) {
+    let mut dispatch = Vec::new();
+    let mut deferred = Vec::new();
+    let grants = grants.iter().copied().chain(std::iter::repeat(0));
+    for (target, grant) in targets.into_iter().zip(grants) {
+        if grant >= target.query_cost() {
+            dispatch.push(target);
+            continue;
+        }
+        match target.split(grant) {
+            Ok((head, tail)) => {
+                dispatch.push(head);
+                deferred.push(tail);
+            }
+            Err(whole) => deferred.push(whole),
+        }
+    }
+    (dispatch, deferred)
+}
+
 /// Keeps targets while their cumulative query cost fits into `granted` and returns the rest
 /// as deferred so the caller can report what stamina withheld. A target whose items are
 /// searched one by one (`Items`, `Episodes`) is split at the grant: the API has already
 /// debited what it granted, so leaving it unused would lose stamina (#136). A target that is
-/// one command for a whole parent stays whole.
+/// one command for a whole parent stays whole. This is the path for an API that answers
+/// without per-target grants.
 #[must_use]
 pub fn cap(targets: Vec<Target>, granted: u32) -> (Vec<Target>, Vec<Target>) {
     let mut used: u32 = 0;
@@ -552,6 +586,37 @@ mod tests {
         })
     }
 
+    // Targets of every shape: flat items, episodes per series, season packs, whole series.
+    fn arb_targets() -> impl Strategy<Value = Vec<Target>> {
+        (arb_candidates(), 0u8..4).prop_map(|(cands, shape)| match shape {
+            0 => group_flat(&cands),
+            1 => group_sonarr(&cands, SonarrMode::Episodes),
+            2 => group_sonarr(&cands, SonarrMode::SeasonPacks),
+            _ => group_sonarr(&cands, SonarrMode::Shows),
+        })
+    }
+
+    // The API's rule, restated for the tests: in order, a target that fits is granted its
+    // cost, one searched item by item gets what is left, a whole parent that does not fit
+    // gets nothing.
+    fn greedy_grants(targets: &[Target], mut left: u32) -> Vec<u32> {
+        targets
+            .iter()
+            .map(|t| {
+                let cost = t.query_cost();
+                let grant = if cost <= left {
+                    cost
+                } else if t.atomic() {
+                    0
+                } else {
+                    left
+                };
+                left -= grant;
+                grant
+            })
+            .collect()
+    }
+
     proptest! {
         #[test]
         fn plan_pages_are_distinct_and_in_range(total in 0u32..5000, size in 1u32..250, want in 0u32..100, cursor in 0u32..60, seed in any::<u64>()) {
@@ -608,6 +673,38 @@ mod tests {
                 prop_assert_eq!(set.len(), seen.len(), "no id appears in two targets");
                 prop_assert_eq!(set, all.clone(), "every selected id is covered");
             }
+        }
+
+        // With grants as the API computes them, the worker searches exactly what was debited
+        // and loses no item (#142).
+        #[test]
+        fn apply_grants_spends_exactly_what_the_api_granted(targets in arb_targets(), left in 0u32..40) {
+            let grants = greedy_grants(&targets, left);
+            let mut before: Vec<i64> = targets.iter().flat_map(|t| t.items().to_vec()).collect();
+            let (dispatch, deferred) = apply_grants(targets, &grants);
+            let used: u32 = dispatch.iter().map(Target::query_cost).sum();
+            prop_assert_eq!(used, grants.iter().sum::<u32>());
+            prop_assert!(used <= left);
+            prop_assert!(dispatch.iter().chain(&deferred).all(|t| t.item_count() > 0), "no empty target");
+            let mut after: Vec<i64> = dispatch.iter().chain(&deferred).flat_map(|t| t.items().to_vec()).collect();
+            before.sort_unstable();
+            after.sort_unstable();
+            prop_assert_eq!(before, after);
+        }
+
+        // Whatever the answer holds (short, long, partial grants for whole parents), the
+        // dispatched cost stays within the grants and no item is lost or duplicated.
+        #[test]
+        fn apply_grants_never_exceeds_any_grant(targets in arb_targets(), grants in prop::collection::vec(0u32..20, 0..80)) {
+            let budget: u32 = grants.iter().take(targets.len()).sum();
+            let mut before: Vec<i64> = targets.iter().flat_map(|t| t.items().to_vec()).collect();
+            let (dispatch, deferred) = apply_grants(targets, &grants);
+            let used: u32 = dispatch.iter().map(Target::query_cost).sum();
+            prop_assert!(used <= budget, "dispatched {} of {} granted", used, budget);
+            let mut after: Vec<i64> = dispatch.iter().chain(&deferred).flat_map(|t| t.items().to_vec()).collect();
+            before.sort_unstable();
+            after.sort_unstable();
+            prop_assert_eq!(before, after);
         }
 
         #[test]
@@ -798,5 +895,91 @@ mod tests {
             "a series search costs one query per season"
         );
         assert_eq!(shows[0].item_count(), 3);
+    }
+    fn series(series_id: i64, seasons: u32, items: Vec<i64>) -> Target {
+        Target::Series {
+            series_id,
+            seasons,
+            items,
+        }
+    }
+
+    // Positive: a full grant dispatches the target whole; a partial grant on an item target
+    // dispatches exactly that many items.
+    #[test]
+    fn apply_grants_dispatches_full_and_partial_grants() {
+        let whole = series(1, 2, vec![1, 2, 3]);
+        let episodes = Target::Episodes {
+            series_id: 2,
+            items: vec![4, 5, 6],
+        };
+        let (dispatch, deferred) = apply_grants(vec![whole.clone(), episodes], &[2, 1]);
+        let head = Target::Episodes {
+            series_id: 2,
+            items: vec![4],
+        };
+        let tail = Target::Episodes {
+            series_id: 2,
+            items: vec![5, 6],
+        };
+        assert_eq!(dispatch, vec![whole, head]);
+        assert_eq!(deferred, vec![tail]);
+    }
+
+    // Negative: a whole-parent target is never searched on a partial or missing grant, and a
+    // smaller target after it still uses its own grant.
+    #[test]
+    fn apply_grants_keeps_whole_parent_targets_whole() {
+        let whole = series(1, 2, vec![1, 2, 3]);
+        let pack = Target::Season {
+            series_id: 2,
+            season: 1,
+            items: vec![4, 5],
+        };
+        let (dispatch, deferred) = apply_grants(vec![whole.clone(), pack.clone()], &[1, 1]);
+        assert_eq!(dispatch, vec![pack.clone()]);
+        assert_eq!(deferred, vec![whole.clone()]);
+
+        let (dispatch, deferred) = apply_grants(vec![whole.clone(), pack.clone()], &[]);
+        assert!(dispatch.is_empty(), "a missing grant is no grant");
+        assert_eq!(deferred, vec![whole, pack]);
+    }
+
+    // Boundary: zero grants defer everything; a grant above the cost dispatches the target
+    // once, never more than it holds.
+    #[test]
+    fn apply_grants_boundaries() {
+        let items = Target::Items { items: vec![1, 2] };
+        let (dispatch, deferred) = apply_grants(vec![items.clone()], &[0]);
+        assert!(dispatch.is_empty());
+        assert_eq!(deferred, vec![items.clone()]);
+
+        let (dispatch, deferred) = apply_grants(vec![items.clone()], &[9]);
+        assert_eq!(dispatch, vec![items]);
+        assert!(deferred.is_empty());
+
+        let (dispatch, deferred) = apply_grants(Vec::new(), &[3]);
+        assert!(dispatch.is_empty() && deferred.is_empty());
+    }
+
+    #[test]
+    fn atomic_marks_whole_parent_targets() {
+        assert!(series(1, 1, vec![1]).atomic());
+        assert!(
+            Target::Season {
+                series_id: 1,
+                season: 1,
+                items: vec![1]
+            }
+            .atomic()
+        );
+        assert!(!Target::Items { items: vec![1] }.atomic());
+        assert!(
+            !Target::Episodes {
+                series_id: 1,
+                items: vec![1]
+            }
+            .atomic()
+        );
     }
 }

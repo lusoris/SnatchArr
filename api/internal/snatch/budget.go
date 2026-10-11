@@ -30,6 +30,35 @@ const Span = time.Hour
 // BucketKeep is how long spent one-minute buckets are kept: one span plus a margin.
 const BucketKeep = 2 * time.Hour
 
+// BudgetItem is one search target asking for stamina (#142).
+type BudgetItem struct {
+	// Cost is the stamina the target spends when it is searched whole.
+	Cost int
+	// Atomic marks a target that cannot be split: one command for a whole season, series,
+	// artist or author. It is granted its full cost or nothing.
+	Atomic bool
+}
+
+// grantFrom is what the item gets while left stamina remains: its cost when that fits,
+// otherwise what is left for a divisible item and nothing for an atomic one.
+func (i BudgetItem) grantFrom(left int) int {
+	switch {
+	case i.Cost <= left:
+		return i.Cost
+	case i.Atomic:
+		return 0
+	default:
+		return left
+	}
+}
+
+// ItemsGrant is the outcome of a budget request that names its items.
+type ItemsGrant struct {
+	Grant
+	// GrantedItems holds the stamina granted to each item, in request order.
+	GrantedItems []int
+}
+
 // Grant is the outcome of a budget request.
 type Grant struct {
 	Granted   int
@@ -114,99 +143,122 @@ func (b *Budget) Purge(ctx context.Context, limit int32) (int64, error) {
 }
 
 // Acquire grants up to `requested` items without exceeding the instance cap within the
-// rolling span nor, when globalCap > 0, the stamina shared by every instance.
+// rolling span nor, when globalCap > 0, the stamina shared by every instance. It is
+// AcquireItems for one divisible item.
 func (b *Budget) Acquire(ctx context.Context, instanceID uuid.UUID, capacity, globalCap, requested int) (Grant, error) {
+	ig, err := b.AcquireItems(ctx, instanceID, capacity, globalCap, []BudgetItem{{Cost: requested}})
+	return ig.Grant, err
+}
+
+// AcquireItems grants stamina item by item, in order, and debits only what it grants, so a
+// target that has to wait costs nothing (#142). An item that fits gets its cost; one that
+// does not gets what is left when it is divisible and nothing when it is atomic, and a
+// later, smaller item may still fit.
+func (b *Budget) AcquireItems(ctx context.Context, instanceID uuid.UUID, capacity, globalCap int, items []BudgetItem) (ItemsGrant, error) {
 	now := b.clk.Now()
-	if requested < 0 || capacity <= 0 || globalCap < 0 {
-		return Grant{}, fmt.Errorf("snatch: budget: invalid request (capacity %d, global %d, requested %d)", capacity, globalCap, requested)
+	if capacity <= 0 || globalCap < 0 {
+		return ItemsGrant{}, fmt.Errorf("snatch: budget: invalid request (capacity %d, global %d)", capacity, globalCap)
 	}
-	var g Grant
+	for _, item := range items {
+		if item.Cost < 0 {
+			return ItemsGrant{}, fmt.Errorf("snatch: budget: invalid request (item cost %d)", item.Cost)
+		}
+	}
+	var ig ItemsGrant
 	err := b.st.Tx(ctx, func(q *sqlcgen.Queries) error {
 		var txErr error
-		g, txErr = acquireTx(ctx, q, instanceID, capacity, globalCap, requested, now)
+		ig, txErr = acquireTx(ctx, q, instanceID, capacity, globalCap, items, now)
 		return txErr
 	})
 	if err != nil {
-		return Grant{}, fmt.Errorf("snatch: budget: %w", store.MapError(err))
+		return ItemsGrant{}, fmt.Errorf("snatch: budget: %w", store.MapError(err))
 	}
-	return g, nil
+	return ig, nil
 }
 
-// acquireTx takes the instance lock, sums the span, trims the grant to the global stamina
-// and debits the current minute, all inside the caller's transaction.
-func acquireTx(ctx context.Context, q *sqlcgen.Queries, instanceID uuid.UUID, capacity, globalCap, requested int, now time.Time) (Grant, error) {
+// acquireTx takes the instance lock and, when a global cap applies, the global lock (always
+// after the instance lock), sums both spans, grants the items and debits the current
+// minute, all inside the caller's transaction.
+func acquireTx(ctx context.Context, q *sqlcgen.Queries, instanceID uuid.UUID, capacity, globalCap int, items []BudgetItem, now time.Time) (ItemsGrant, error) {
 	if err := q.LockInstanceBudget(ctx, instanceID); err != nil {
-		return Grant{}, fmt.Errorf("lock instance budget: %w", err)
+		return ItemsGrant{}, fmt.Errorf("lock instance budget: %w", err)
 	}
 	row, err := q.BucketUsage(ctx, sqlcgen.BucketUsageParams{InstanceID: instanceID, Since: SpanStart(now)})
 	if err != nil {
-		return Grant{}, fmt.Errorf("instance usage: %w", err)
+		return ItemsGrant{}, fmt.Errorf("instance usage: %w", err)
 	}
-	inst := usage{used: int(row.Used), oldest: row.Oldest}
-	g := grant(inst, capacity, requested, now)
+	var global usage
 	if globalCap > 0 {
-		if g, err = applyGlobal(ctx, q, g, inst, globalCap, now); err != nil {
-			return Grant{}, err
+		if global, err = lockedGlobalUsage(ctx, q, now); err != nil {
+			return ItemsGrant{}, err
 		}
 	}
-	if g.Granted > 0 {
-		addErr := q.AddBucketUsed(ctx, sqlcgen.AddBucketUsedParams{
-			InstanceID: instanceID, WindowStart: Minute(now), Used: int32(g.Granted), // #nosec G115 -- bounded by cap <= 500
-		})
-		if addErr != nil {
-			return Grant{}, fmt.Errorf("debit bucket: %w", addErr)
+	ig := grantItems(usage{used: int(row.Used), oldest: row.Oldest}, global, capacity, globalCap, items, now)
+	if ig.Granted > 0 {
+		if err = debit(ctx, q, instanceID, globalCap, ig.Granted, now); err != nil {
+			return ItemsGrant{}, err
 		}
 	}
-	return g, nil
+	return ig, nil
 }
 
-// applyGlobal takes the global lock (always after the instance lock), trims the grant to
-// the global stamina and debits it.
-func applyGlobal(ctx context.Context, q *sqlcgen.Queries, g Grant, inst usage, globalCap int, now time.Time) (Grant, error) {
+// lockedGlobalUsage takes the global lock and sums the shared span.
+func lockedGlobalUsage(ctx context.Context, q *sqlcgen.Queries, now time.Time) (usage, error) {
 	if err := q.LockGlobalBudget(ctx); err != nil {
-		return g, fmt.Errorf("lock global budget: %w", err)
+		return usage{}, fmt.Errorf("lock global budget: %w", err)
 	}
 	row, err := q.GlobalBucketUsage(ctx, SpanStart(now))
 	if err != nil {
-		return g, fmt.Errorf("global usage: %w", err)
+		return usage{}, fmt.Errorf("global usage: %w", err)
 	}
-	g = trimToGlobal(g, inst, usage{used: int(row.Used), oldest: row.Oldest}, globalCap, now)
-	if g.Granted > 0 {
-		err = q.AddGlobalBucketUsed(ctx, sqlcgen.AddGlobalBucketUsedParams{
-			WindowStart: Minute(now), Used: int32(g.Granted), // #nosec G115 -- bounded by cap <= 5000
-		})
-		if err != nil {
-			return g, fmt.Errorf("debit global bucket: %w", err)
+	return usage{used: int(row.Used), oldest: row.Oldest}, nil
+}
+
+// debit books granted items on the instance's current minute and, when a global cap
+// applies, on the shared one.
+func debit(ctx context.Context, q *sqlcgen.Queries, instanceID uuid.UUID, globalCap, granted int, now time.Time) error {
+	err := q.AddBucketUsed(ctx, sqlcgen.AddBucketUsedParams{
+		InstanceID: instanceID, WindowStart: Minute(now), Used: int32(granted), // #nosec G115 -- bounded by cap <= 500
+	})
+	if err != nil {
+		return fmt.Errorf("debit bucket: %w", err)
+	}
+	if globalCap <= 0 {
+		return nil
+	}
+	err = q.AddGlobalBucketUsed(ctx, sqlcgen.AddGlobalBucketUsedParams{
+		WindowStart: Minute(now), Used: int32(granted), // #nosec G115 -- bounded by cap <= 500
+	})
+	if err != nil {
+		return fmt.Errorf("debit global bucket: %w", err)
+	}
+	return nil
+}
+
+// grantItems is the pure cap arithmetic: the items are served in order from the tighter of
+// what the instance and, when globalCap > 0, the shared stamina have left. Remaining and
+// ResetsAt follow the tighter of the two budgets after the grant.
+func grantItems(inst, global usage, capacity, globalCap int, items []BudgetItem, now time.Time) ItemsGrant {
+	left := max(capacity-inst.used, 0)
+	if globalCap > 0 {
+		left = min(left, max(globalCap-global.used, 0))
+	}
+	grants := make([]int, len(items))
+	total := 0
+	for i, item := range items {
+		grants[i] = item.grantFrom(left)
+		left -= grants[i]
+		total += grants[i]
+	}
+	after := inst.debit(total, now)
+	g := Grant{Granted: total, Used: after.used, Cap: capacity, Remaining: max(capacity-after.used, 0), ResetsAt: after.resetsAt(now)}
+	if globalCap > 0 {
+		shared := global.debit(total, now)
+		if rest := max(globalCap-shared.used, 0); rest < g.Remaining {
+			g.Remaining, g.ResetsAt = rest, shared.resetsAt(now)
 		}
 	}
-	return g, nil
-}
-
-// trimToGlobal is the pure part of applyGlobal: the grant never exceeds what the global
-// span has left, and Remaining and ResetsAt follow the tighter of the two budgets.
-func trimToGlobal(g Grant, inst, global usage, globalCap int, now time.Time) Grant {
-	globalLeft := max(globalCap-global.used, 0)
-	g.Granted = min(g.Granted, globalLeft)
-	after := inst.debit(g.Granted, now)
-	g.Used, g.Remaining, g.ResetsAt = after.used, max(g.Cap-after.used, 0), after.resetsAt(now)
-	if left := globalLeft - g.Granted; left < g.Remaining {
-		g.Remaining, g.ResetsAt = left, global.debit(g.Granted, now).resetsAt(now)
-	}
-	return g
-}
-
-// grant is the pure cap arithmetic for one instance.
-func grant(u usage, capacity, requested int, now time.Time) Grant {
-	remaining := max(capacity-u.used, 0)
-	granted := min(requested, remaining)
-	after := u.debit(granted, now)
-	return Grant{
-		Granted:   granted,
-		Used:      after.used,
-		Cap:       capacity,
-		Remaining: remaining - granted,
-		ResetsAt:  after.resetsAt(now),
-	}
+	return ItemsGrant{Grant: g, GrantedItems: grants}
 }
 
 // Used reports the instance's stamina spent within the span, without debiting, and when it
