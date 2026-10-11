@@ -56,6 +56,8 @@ getting tired; at 100 % remaining targets are deferred until stamina frees up, w
 `budget_acquired` event that says so. When less stamina is left than a snatch wants, it
 searches as many movies, albums, books or single episodes as the stamina covers and defers
 the rest; a season pack, series, artist or author search is one command and waits whole.
+A search that waits costs no stamina: only what is sent is debited, and a smaller search
+behind it in the same snatch still goes out when it fits.
 
 Several *arr apps often share the same indexers. A **global stamina**
 (`global_hourly_cap` in `/api/v1/settings`, 0 = off) is debited alongside every instance

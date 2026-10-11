@@ -5,6 +5,7 @@
 package snatch
 
 import (
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -113,4 +114,58 @@ func TestRollingGlobalCapAcrossBoundary(t *testing.T) {
 func newInstance(t *testing.T, st *store.Store) uuid.UUID {
 	t.Helper()
 	return storetest.Instance(t, st, spendStart)
+}
+
+// Per-item grants against Postgres (#142): only what is granted is debited, on the instance
+// and on the shared stamina alike.
+func TestAcquireItemsDebitsOnlyWhatItGrants(t *testing.T) {
+	t.Parallel()
+	const capacity = 10
+	cases := []struct {
+		name      string
+		globalCap int
+		items     []BudgetItem
+		want      []int
+		used      int
+	}{
+		{"negative atomic over the instance cap", 0, []BudgetItem{{Cost: 11, Atomic: true}}, []int{0}, 0},
+		{"negative atomic over the global cap", 5, []BudgetItem{{Cost: 6, Atomic: true}}, []int{0}, 0},
+		{"positive smaller items after a waiting atomic one", 5, []BudgetItem{{Cost: 6, Atomic: true}, {Cost: 3}, {Cost: 1, Atomic: true}}, []int{0, 3, 1}, 4},
+		{"boundary atomic exactly the global cap", 5, []BudgetItem{{Cost: 5, Atomic: true}, {Cost: 1}}, []int{5, 0}, 5},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			st := storetest.New(t)
+			instanceID := newInstance(t, st)
+			b := budgetAt(st, spendStart)
+			g, err := b.AcquireItems(t.Context(), instanceID, capacity, tc.globalCap, tc.items)
+			if err != nil || !slices.Equal(g.GrantedItems, tc.want) || g.Granted != tc.used {
+				t.Fatalf("AcquireItems() = %+v, %v; want items %v", g, err, tc.want)
+			}
+			if used, _, usedErr := b.Used(t.Context(), instanceID); usedErr != nil || used != tc.used {
+				t.Fatalf("Used() = %d, %v; want %d", used, usedErr, tc.used)
+			}
+			if used, _, usedErr := b.GlobalUsed(t.Context()); usedErr != nil || used != tc.used {
+				t.Fatalf("GlobalUsed() = %d, %v; want %d", used, usedErr, tc.used)
+			}
+		})
+	}
+}
+
+// Negative: a negative request or item cost is refused before anything is locked.
+func TestAcquireRejectsNegativeCost(t *testing.T) {
+	t.Parallel()
+	st := storetest.New(t)
+	instanceID := newInstance(t, st)
+	b := budgetAt(st, spendStart)
+	if _, err := b.Acquire(t.Context(), instanceID, 10, 0, -1); err == nil {
+		t.Error("Acquire(requested -1) = nil error")
+	}
+	if _, err := b.AcquireItems(t.Context(), instanceID, 10, 0, []BudgetItem{{Cost: 1}, {Cost: -1, Atomic: true}}); err == nil {
+		t.Error("AcquireItems(cost -1) = nil error")
+	}
+	if used, _, err := b.Used(t.Context(), instanceID); err != nil || used != 0 {
+		t.Fatalf("Used() = %d, %v; want 0", used, err)
+	}
 }

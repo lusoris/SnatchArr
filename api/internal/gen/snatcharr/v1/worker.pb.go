@@ -1144,17 +1144,77 @@ func (x *FilterCandidatesResponse) GetPriorityGroupIds() []int64 {
 	return nil
 }
 
+// BudgetItem is one search target asking for budget.
+type BudgetItem struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Items the target counts against the hourly cap when it is searched whole.
+	Cost uint32 `protobuf:"varint,1,opt,name=cost,proto3" json:"cost,omitempty"`
+	// True for one command over a whole season, series, artist or author: it cannot be split,
+	// so it is granted its full cost or nothing.
+	Atomic        bool `protobuf:"varint,2,opt,name=atomic,proto3" json:"atomic,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BudgetItem) Reset() {
+	*x = BudgetItem{}
+	mi := &file_snatcharr_v1_worker_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BudgetItem) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BudgetItem) ProtoMessage() {}
+
+func (x *BudgetItem) ProtoReflect() protoreflect.Message {
+	mi := &file_snatcharr_v1_worker_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BudgetItem.ProtoReflect.Descriptor instead.
+func (*BudgetItem) Descriptor() ([]byte, []int) {
+	return file_snatcharr_v1_worker_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *BudgetItem) GetCost() uint32 {
+	if x != nil {
+		return x.Cost
+	}
+	return 0
+}
+
+func (x *BudgetItem) GetAtomic() bool {
+	if x != nil {
+		return x.Atomic
+	}
+	return false
+}
+
 type AcquireBudgetRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RunId         string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	Requested     uint32                 `protobuf:"varint,2,opt,name=requested,proto3" json:"requested,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	RunId string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	// Sum of the item costs. The only field a worker without `items` sends.
+	Requested uint32 `protobuf:"varint,2,opt,name=requested,proto3" json:"requested,omitempty"`
+	// The targets in dispatch order (at most 512). Granted in that order, and only what is
+	// granted is debited. Empty: `requested` is granted as one divisible amount.
+	Items         []*BudgetItem `protobuf:"bytes,3,rep,name=items,proto3" json:"items,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AcquireBudgetRequest) Reset() {
 	*x = AcquireBudgetRequest{}
-	mi := &file_snatcharr_v1_worker_proto_msgTypes[8]
+	mi := &file_snatcharr_v1_worker_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1166,7 +1226,7 @@ func (x *AcquireBudgetRequest) String() string {
 func (*AcquireBudgetRequest) ProtoMessage() {}
 
 func (x *AcquireBudgetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_snatcharr_v1_worker_proto_msgTypes[8]
+	mi := &file_snatcharr_v1_worker_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1179,7 +1239,7 @@ func (x *AcquireBudgetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AcquireBudgetRequest.ProtoReflect.Descriptor instead.
 func (*AcquireBudgetRequest) Descriptor() ([]byte, []int) {
-	return file_snatcharr_v1_worker_proto_rawDescGZIP(), []int{8}
+	return file_snatcharr_v1_worker_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *AcquireBudgetRequest) GetRunId() string {
@@ -1196,18 +1256,28 @@ func (x *AcquireBudgetRequest) GetRequested() uint32 {
 	return 0
 }
 
+func (x *AcquireBudgetRequest) GetItems() []*BudgetItem {
+	if x != nil {
+		return x.Items
+	}
+	return nil
+}
+
 type AcquireBudgetResponse struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	Granted           uint32                 `protobuf:"varint,1,opt,name=granted,proto3" json:"granted,omitempty"`
 	RemainingInWindow uint32                 `protobuf:"varint,2,opt,name=remaining_in_window,json=remainingInWindow,proto3" json:"remaining_in_window,omitempty"`
 	WindowResetsUnix  int64                  `protobuf:"varint,3,opt,name=window_resets_unix,json=windowResetsUnix,proto3" json:"window_resets_unix,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Budget granted to each of `items`, same length and order; `granted` is their sum.
+	// Empty when the request named no items.
+	GrantedItems  []uint32 `protobuf:"varint,4,rep,packed,name=granted_items,json=grantedItems,proto3" json:"granted_items,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AcquireBudgetResponse) Reset() {
 	*x = AcquireBudgetResponse{}
-	mi := &file_snatcharr_v1_worker_proto_msgTypes[9]
+	mi := &file_snatcharr_v1_worker_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1219,7 +1289,7 @@ func (x *AcquireBudgetResponse) String() string {
 func (*AcquireBudgetResponse) ProtoMessage() {}
 
 func (x *AcquireBudgetResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_snatcharr_v1_worker_proto_msgTypes[9]
+	mi := &file_snatcharr_v1_worker_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1232,7 +1302,7 @@ func (x *AcquireBudgetResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AcquireBudgetResponse.ProtoReflect.Descriptor instead.
 func (*AcquireBudgetResponse) Descriptor() ([]byte, []int) {
-	return file_snatcharr_v1_worker_proto_rawDescGZIP(), []int{9}
+	return file_snatcharr_v1_worker_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *AcquireBudgetResponse) GetGranted() uint32 {
@@ -1256,6 +1326,13 @@ func (x *AcquireBudgetResponse) GetWindowResetsUnix() int64 {
 	return 0
 }
 
+func (x *AcquireBudgetResponse) GetGrantedItems() []uint32 {
+	if x != nil {
+		return x.GrantedItems
+	}
+	return nil
+}
+
 type SnatchEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	RunId         string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
@@ -1272,7 +1349,7 @@ type SnatchEvent struct {
 
 func (x *SnatchEvent) Reset() {
 	*x = SnatchEvent{}
-	mi := &file_snatcharr_v1_worker_proto_msgTypes[10]
+	mi := &file_snatcharr_v1_worker_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1284,7 +1361,7 @@ func (x *SnatchEvent) String() string {
 func (*SnatchEvent) ProtoMessage() {}
 
 func (x *SnatchEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_snatcharr_v1_worker_proto_msgTypes[10]
+	mi := &file_snatcharr_v1_worker_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1297,7 +1374,7 @@ func (x *SnatchEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SnatchEvent.ProtoReflect.Descriptor instead.
 func (*SnatchEvent) Descriptor() ([]byte, []int) {
-	return file_snatcharr_v1_worker_proto_rawDescGZIP(), []int{10}
+	return file_snatcharr_v1_worker_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *SnatchEvent) GetRunId() string {
@@ -1365,7 +1442,7 @@ type ReportEventsRequest struct {
 
 func (x *ReportEventsRequest) Reset() {
 	*x = ReportEventsRequest{}
-	mi := &file_snatcharr_v1_worker_proto_msgTypes[11]
+	mi := &file_snatcharr_v1_worker_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1377,7 +1454,7 @@ func (x *ReportEventsRequest) String() string {
 func (*ReportEventsRequest) ProtoMessage() {}
 
 func (x *ReportEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_snatcharr_v1_worker_proto_msgTypes[11]
+	mi := &file_snatcharr_v1_worker_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1390,7 +1467,7 @@ func (x *ReportEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportEventsRequest.ProtoReflect.Descriptor instead.
 func (*ReportEventsRequest) Descriptor() ([]byte, []int) {
-	return file_snatcharr_v1_worker_proto_rawDescGZIP(), []int{11}
+	return file_snatcharr_v1_worker_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ReportEventsRequest) GetEvent() *SnatchEvent {
@@ -1409,7 +1486,7 @@ type ReportEventsResponse struct {
 
 func (x *ReportEventsResponse) Reset() {
 	*x = ReportEventsResponse{}
-	mi := &file_snatcharr_v1_worker_proto_msgTypes[12]
+	mi := &file_snatcharr_v1_worker_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1421,7 +1498,7 @@ func (x *ReportEventsResponse) String() string {
 func (*ReportEventsResponse) ProtoMessage() {}
 
 func (x *ReportEventsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_snatcharr_v1_worker_proto_msgTypes[12]
+	mi := &file_snatcharr_v1_worker_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1434,7 +1511,7 @@ func (x *ReportEventsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportEventsResponse.ProtoReflect.Descriptor instead.
 func (*ReportEventsResponse) Descriptor() ([]byte, []int) {
-	return file_snatcharr_v1_worker_proto_rawDescGZIP(), []int{12}
+	return file_snatcharr_v1_worker_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ReportEventsResponse) GetAccepted() uint32 {
@@ -1457,7 +1534,7 @@ type SearchedItem struct {
 
 func (x *SearchedItem) Reset() {
 	*x = SearchedItem{}
-	mi := &file_snatcharr_v1_worker_proto_msgTypes[13]
+	mi := &file_snatcharr_v1_worker_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1469,7 +1546,7 @@ func (x *SearchedItem) String() string {
 func (*SearchedItem) ProtoMessage() {}
 
 func (x *SearchedItem) ProtoReflect() protoreflect.Message {
-	mi := &file_snatcharr_v1_worker_proto_msgTypes[13]
+	mi := &file_snatcharr_v1_worker_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1482,7 +1559,7 @@ func (x *SearchedItem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchedItem.ProtoReflect.Descriptor instead.
 func (*SearchedItem) Descriptor() ([]byte, []int) {
-	return file_snatcharr_v1_worker_proto_rawDescGZIP(), []int{13}
+	return file_snatcharr_v1_worker_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *SearchedItem) GetEntityType() string {
@@ -1527,7 +1604,7 @@ type CompleteRunRequest struct {
 
 func (x *CompleteRunRequest) Reset() {
 	*x = CompleteRunRequest{}
-	mi := &file_snatcharr_v1_worker_proto_msgTypes[14]
+	mi := &file_snatcharr_v1_worker_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1539,7 +1616,7 @@ func (x *CompleteRunRequest) String() string {
 func (*CompleteRunRequest) ProtoMessage() {}
 
 func (x *CompleteRunRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_snatcharr_v1_worker_proto_msgTypes[14]
+	mi := &file_snatcharr_v1_worker_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1552,7 +1629,7 @@ func (x *CompleteRunRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteRunRequest.ProtoReflect.Descriptor instead.
 func (*CompleteRunRequest) Descriptor() ([]byte, []int) {
-	return file_snatcharr_v1_worker_proto_rawDescGZIP(), []int{14}
+	return file_snatcharr_v1_worker_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *CompleteRunRequest) GetRunId() string {
@@ -1605,7 +1682,7 @@ type CompleteRunResponse struct {
 
 func (x *CompleteRunResponse) Reset() {
 	*x = CompleteRunResponse{}
-	mi := &file_snatcharr_v1_worker_proto_msgTypes[15]
+	mi := &file_snatcharr_v1_worker_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1617,7 +1694,7 @@ func (x *CompleteRunResponse) String() string {
 func (*CompleteRunResponse) ProtoMessage() {}
 
 func (x *CompleteRunResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_snatcharr_v1_worker_proto_msgTypes[15]
+	mi := &file_snatcharr_v1_worker_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1630,7 +1707,7 @@ func (x *CompleteRunResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteRunResponse.ProtoReflect.Descriptor instead.
 func (*CompleteRunResponse) Descriptor() ([]byte, []int) {
-	return file_snatcharr_v1_worker_proto_rawDescGZIP(), []int{15}
+	return file_snatcharr_v1_worker_proto_rawDescGZIP(), []int{16}
 }
 
 var File_snatcharr_v1_worker_proto protoreflect.FileDescriptor
@@ -1689,14 +1766,20 @@ const file_snatcharr_v1_worker_proto_rawDesc = "" +
 	"\x18FilterCandidatesResponse\x12'\n" +
 	"\x0funprocessed_ids\x18\x01 \x03(\x03R\x0eunprocessedIds\x12!\n" +
 	"\fpriority_ids\x18\x02 \x03(\x03R\vpriorityIds\x12,\n" +
-	"\x12priority_group_ids\x18\x03 \x03(\x03R\x10priorityGroupIds\"K\n" +
+	"\x12priority_group_ids\x18\x03 \x03(\x03R\x10priorityGroupIds\"8\n" +
+	"\n" +
+	"BudgetItem\x12\x12\n" +
+	"\x04cost\x18\x01 \x01(\rR\x04cost\x12\x16\n" +
+	"\x06atomic\x18\x02 \x01(\bR\x06atomic\"{\n" +
 	"\x14AcquireBudgetRequest\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12\x1c\n" +
-	"\trequested\x18\x02 \x01(\rR\trequested\"\x8f\x01\n" +
+	"\trequested\x18\x02 \x01(\rR\trequested\x12.\n" +
+	"\x05items\x18\x03 \x03(\v2\x18.snatcharr.v1.BudgetItemR\x05items\"\xb4\x01\n" +
 	"\x15AcquireBudgetResponse\x12\x18\n" +
 	"\agranted\x18\x01 \x01(\rR\agranted\x12.\n" +
 	"\x13remaining_in_window\x18\x02 \x01(\rR\x11remainingInWindow\x12,\n" +
-	"\x12window_resets_unix\x18\x03 \x01(\x03R\x10windowResetsUnix\"\x86\x02\n" +
+	"\x12window_resets_unix\x18\x03 \x01(\x03R\x10windowResetsUnix\x12#\n" +
+	"\rgranted_items\x18\x04 \x03(\rR\fgrantedItems\"\x86\x02\n" +
 	"\vSnatchEvent\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12\x1c\n" +
 	"\n" +
@@ -1813,7 +1896,7 @@ func file_snatcharr_v1_worker_proto_rawDescGZIP() []byte {
 }
 
 var file_snatcharr_v1_worker_proto_enumTypes = make([]protoimpl.EnumInfo, 10)
-var file_snatcharr_v1_worker_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_snatcharr_v1_worker_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_snatcharr_v1_worker_proto_goTypes = []any{
 	(AppKind)(0),                     // 0: snatcharr.v1.AppKind
 	(SnatchKind)(0),                  // 1: snatcharr.v1.SnatchKind
@@ -1833,14 +1916,15 @@ var file_snatcharr_v1_worker_proto_goTypes = []any{
 	(*HeartbeatResponse)(nil),        // 15: snatcharr.v1.HeartbeatResponse
 	(*FilterCandidatesRequest)(nil),  // 16: snatcharr.v1.FilterCandidatesRequest
 	(*FilterCandidatesResponse)(nil), // 17: snatcharr.v1.FilterCandidatesResponse
-	(*AcquireBudgetRequest)(nil),     // 18: snatcharr.v1.AcquireBudgetRequest
-	(*AcquireBudgetResponse)(nil),    // 19: snatcharr.v1.AcquireBudgetResponse
-	(*SnatchEvent)(nil),              // 20: snatcharr.v1.SnatchEvent
-	(*ReportEventsRequest)(nil),      // 21: snatcharr.v1.ReportEventsRequest
-	(*ReportEventsResponse)(nil),     // 22: snatcharr.v1.ReportEventsResponse
-	(*SearchedItem)(nil),             // 23: snatcharr.v1.SearchedItem
-	(*CompleteRunRequest)(nil),       // 24: snatcharr.v1.CompleteRunRequest
-	(*CompleteRunResponse)(nil),      // 25: snatcharr.v1.CompleteRunResponse
+	(*BudgetItem)(nil),               // 18: snatcharr.v1.BudgetItem
+	(*AcquireBudgetRequest)(nil),     // 19: snatcharr.v1.AcquireBudgetRequest
+	(*AcquireBudgetResponse)(nil),    // 20: snatcharr.v1.AcquireBudgetResponse
+	(*SnatchEvent)(nil),              // 21: snatcharr.v1.SnatchEvent
+	(*ReportEventsRequest)(nil),      // 22: snatcharr.v1.ReportEventsRequest
+	(*ReportEventsResponse)(nil),     // 23: snatcharr.v1.ReportEventsResponse
+	(*SearchedItem)(nil),             // 24: snatcharr.v1.SearchedItem
+	(*CompleteRunRequest)(nil),       // 25: snatcharr.v1.CompleteRunRequest
+	(*CompleteRunResponse)(nil),      // 26: snatcharr.v1.CompleteRunResponse
 }
 var file_snatcharr_v1_worker_proto_depIdxs = []int32{
 	2,  // 0: snatcharr.v1.Policy.selection:type_name -> snatcharr.v1.Selection
@@ -1852,28 +1936,29 @@ var file_snatcharr_v1_worker_proto_depIdxs = []int32{
 	1,  // 6: snatcharr.v1.Run.snatch:type_name -> snatcharr.v1.SnatchKind
 	10, // 7: snatcharr.v1.Run.policy:type_name -> snatcharr.v1.Policy
 	6,  // 8: snatcharr.v1.HeartbeatResponse.directive:type_name -> snatcharr.v1.HeartbeatDirective
-	7,  // 9: snatcharr.v1.SnatchEvent.level:type_name -> snatcharr.v1.Level
-	8,  // 10: snatcharr.v1.SnatchEvent.type:type_name -> snatcharr.v1.EventType
-	20, // 11: snatcharr.v1.ReportEventsRequest.event:type_name -> snatcharr.v1.SnatchEvent
-	9,  // 12: snatcharr.v1.CompleteRunRequest.outcome:type_name -> snatcharr.v1.RunOutcome
-	23, // 13: snatcharr.v1.CompleteRunRequest.searched:type_name -> snatcharr.v1.SearchedItem
-	11, // 14: snatcharr.v1.WorkerService.LeaseRun:input_type -> snatcharr.v1.LeaseRunRequest
-	14, // 15: snatcharr.v1.WorkerService.Heartbeat:input_type -> snatcharr.v1.HeartbeatRequest
-	16, // 16: snatcharr.v1.WorkerService.FilterCandidates:input_type -> snatcharr.v1.FilterCandidatesRequest
-	18, // 17: snatcharr.v1.WorkerService.AcquireBudget:input_type -> snatcharr.v1.AcquireBudgetRequest
-	21, // 18: snatcharr.v1.WorkerService.ReportEvents:input_type -> snatcharr.v1.ReportEventsRequest
-	24, // 19: snatcharr.v1.WorkerService.CompleteRun:input_type -> snatcharr.v1.CompleteRunRequest
-	12, // 20: snatcharr.v1.WorkerService.LeaseRun:output_type -> snatcharr.v1.LeaseRunResponse
-	15, // 21: snatcharr.v1.WorkerService.Heartbeat:output_type -> snatcharr.v1.HeartbeatResponse
-	17, // 22: snatcharr.v1.WorkerService.FilterCandidates:output_type -> snatcharr.v1.FilterCandidatesResponse
-	19, // 23: snatcharr.v1.WorkerService.AcquireBudget:output_type -> snatcharr.v1.AcquireBudgetResponse
-	22, // 24: snatcharr.v1.WorkerService.ReportEvents:output_type -> snatcharr.v1.ReportEventsResponse
-	25, // 25: snatcharr.v1.WorkerService.CompleteRun:output_type -> snatcharr.v1.CompleteRunResponse
-	20, // [20:26] is the sub-list for method output_type
-	14, // [14:20] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	18, // 9: snatcharr.v1.AcquireBudgetRequest.items:type_name -> snatcharr.v1.BudgetItem
+	7,  // 10: snatcharr.v1.SnatchEvent.level:type_name -> snatcharr.v1.Level
+	8,  // 11: snatcharr.v1.SnatchEvent.type:type_name -> snatcharr.v1.EventType
+	21, // 12: snatcharr.v1.ReportEventsRequest.event:type_name -> snatcharr.v1.SnatchEvent
+	9,  // 13: snatcharr.v1.CompleteRunRequest.outcome:type_name -> snatcharr.v1.RunOutcome
+	24, // 14: snatcharr.v1.CompleteRunRequest.searched:type_name -> snatcharr.v1.SearchedItem
+	11, // 15: snatcharr.v1.WorkerService.LeaseRun:input_type -> snatcharr.v1.LeaseRunRequest
+	14, // 16: snatcharr.v1.WorkerService.Heartbeat:input_type -> snatcharr.v1.HeartbeatRequest
+	16, // 17: snatcharr.v1.WorkerService.FilterCandidates:input_type -> snatcharr.v1.FilterCandidatesRequest
+	19, // 18: snatcharr.v1.WorkerService.AcquireBudget:input_type -> snatcharr.v1.AcquireBudgetRequest
+	22, // 19: snatcharr.v1.WorkerService.ReportEvents:input_type -> snatcharr.v1.ReportEventsRequest
+	25, // 20: snatcharr.v1.WorkerService.CompleteRun:input_type -> snatcharr.v1.CompleteRunRequest
+	12, // 21: snatcharr.v1.WorkerService.LeaseRun:output_type -> snatcharr.v1.LeaseRunResponse
+	15, // 22: snatcharr.v1.WorkerService.Heartbeat:output_type -> snatcharr.v1.HeartbeatResponse
+	17, // 23: snatcharr.v1.WorkerService.FilterCandidates:output_type -> snatcharr.v1.FilterCandidatesResponse
+	20, // 24: snatcharr.v1.WorkerService.AcquireBudget:output_type -> snatcharr.v1.AcquireBudgetResponse
+	23, // 25: snatcharr.v1.WorkerService.ReportEvents:output_type -> snatcharr.v1.ReportEventsResponse
+	26, // 26: snatcharr.v1.WorkerService.CompleteRun:output_type -> snatcharr.v1.CompleteRunResponse
+	21, // [21:27] is the sub-list for method output_type
+	15, // [15:21] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_snatcharr_v1_worker_proto_init() }
@@ -1890,7 +1975,7 @@ func file_snatcharr_v1_worker_proto_init() {
 			// #nosec G103 -- protoc-gen-go views the immutable raw descriptor read-only; see the SAFETY proof above
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_snatcharr_v1_worker_proto_rawDesc), len(file_snatcharr_v1_worker_proto_rawDesc)),
 			NumEnums:      10,
-			NumMessages:   16,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

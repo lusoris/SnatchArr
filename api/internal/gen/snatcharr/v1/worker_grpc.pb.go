@@ -53,7 +53,7 @@ type WorkerServiceClient interface {
 	// for this run's instance and snatch kind.
 	FilterCandidates(ctx context.Context, in *FilterCandidatesRequest, opts ...grpc.CallOption) (*FilterCandidatesResponse, error)
 	// AcquireBudget atomically debits the instance's hourly bucket and returns how many
-	// items the worker may search now (0..requested).
+	// items the worker may search now (0..requested), per target when the request names them.
 	AcquireBudget(ctx context.Context, in *AcquireBudgetRequest, opts ...grpc.CallOption) (*AcquireBudgetResponse, error)
 	// ReportEvents streams snatch events for history and the live UI.
 	ReportEvents(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[ReportEventsRequest, ReportEventsResponse], error)
@@ -155,7 +155,7 @@ type WorkerServiceServer interface {
 	// for this run's instance and snatch kind.
 	FilterCandidates(context.Context, *FilterCandidatesRequest) (*FilterCandidatesResponse, error)
 	// AcquireBudget atomically debits the instance's hourly bucket and returns how many
-	// items the worker may search now (0..requested).
+	// items the worker may search now (0..requested), per target when the request names them.
 	AcquireBudget(context.Context, *AcquireBudgetRequest) (*AcquireBudgetResponse, error)
 	// ReportEvents streams snatch events for history and the live UI.
 	ReportEvents(grpc.ClientStreamingServer[ReportEventsRequest, ReportEventsResponse]) error

@@ -6,6 +6,7 @@ package snatch
 
 import (
 	"maps"
+	"slices"
 	"testing"
 	"testing/quick"
 	"time"
@@ -88,11 +89,15 @@ func TestSpanBoundary(t *testing.T) {
 	}
 }
 
-func TestTrimToGlobal(t *testing.T) {
+// grant is the arithmetic for a request without items: one divisible item, no global cap.
+func grant(u usage, capacity, requested int, now time.Time) Grant {
+	return grantItems(u, usage{}, capacity, 0, []BudgetItem{{Cost: requested}}, now).Grant
+}
+
+func TestGrantUnderGlobalCap(t *testing.T) {
 	t.Parallel()
 	now := t0.Add(30 * time.Second)
-	inst := usage{used: 5, oldest: t0.Add(-5 * time.Minute)}
-	g := grant(inst, 20, 10, now) // instance: 15 left, grants 10
+	inst := usage{used: 5, oldest: t0.Add(-5 * time.Minute)} // instance: 15 of 20 left
 	globalOldest := t0.Add(-20 * time.Minute)
 	cases := []struct {
 		name                     string
@@ -103,6 +108,7 @@ func TestTrimToGlobal(t *testing.T) {
 		{"global has room", 0, 100, 10, 15, 5, FreesAt(inst.oldest)},
 		{"global tighter than instance", 95, 100, 5, 10, 0, FreesAt(globalOldest)},
 		{"global exhausted", 100, 100, 0, 5, 0, FreesAt(globalOldest)},
+		{"global over its cap (cap lowered mid-span)", 120, 100, 0, 5, 0, FreesAt(globalOldest)},
 		{"global remaining is the binding one", 90, 100, 10, 15, 0, FreesAt(globalOldest)},
 	}
 	for _, tc := range cases {
@@ -112,11 +118,121 @@ func TestTrimToGlobal(t *testing.T) {
 			if tc.globalUsed == 0 {
 				global = usage{}
 			}
-			out := trimToGlobal(g, inst, global, tc.globalCap, now)
+			out := grantItems(inst, global, 20, tc.globalCap, []BudgetItem{{Cost: 10}}, now)
 			if out.Granted != tc.granted || out.Used != tc.used || out.Remaining != tc.remaining || !out.ResetsAt.Equal(tc.resets) {
 				t.Fatalf("got granted=%d used=%d remaining=%d resets=%v", out.Granted, out.Used, out.Remaining, out.ResetsAt)
 			}
 		})
+	}
+}
+
+// Per-item grants (#142): positive, negative and boundary, instance cap 10 with 4 spent
+// (6 left) unless the case says otherwise.
+func TestGrantItems(t *testing.T) {
+	t.Parallel()
+	now := t0.Add(30 * time.Second)
+	whole := func(cost int) BudgetItem { return BudgetItem{Cost: cost, Atomic: true} }
+	part := func(cost int) BudgetItem { return BudgetItem{Cost: cost} }
+	cases := []struct {
+		name                  string
+		globalUsed, globalCap int
+		items                 []BudgetItem
+		want                  []int
+		used, remaining       int
+	}{
+		{"positive all fit", 0, 0, []BudgetItem{whole(2), part(3)}, []int{2, 3}, 9, 1},
+		{"positive divisible takes what is left", 0, 0, []BudgetItem{part(9)}, []int{6}, 10, 0},
+		{"negative atomic that does not fit costs nothing", 0, 0, []BudgetItem{whole(7)}, []int{0}, 4, 6},
+		{"negative every atomic too big", 0, 0, []BudgetItem{whole(7), whole(8)}, []int{0, 0}, 4, 6},
+		{"positive smaller item after a waiting atomic one", 0, 0, []BudgetItem{whole(7), whole(2), part(9)}, []int{0, 2, 4}, 10, 0},
+		{"negative nothing left after a divisible item", 0, 0, []BudgetItem{part(9), whole(1), part(1)}, []int{6, 0, 0}, 10, 0},
+		{"boundary atomic exactly what is left", 0, 0, []BudgetItem{whole(6)}, []int{6}, 10, 0},
+		{"boundary atomic one over what is left", 0, 0, []BudgetItem{whole(5), whole(2)}, []int{5, 0}, 9, 1},
+		{"boundary no items", 0, 0, nil, []int{}, 4, 6},
+		{"boundary zero cost", 0, 0, []BudgetItem{whole(0), part(0)}, []int{0, 0}, 4, 6},
+		{"negative atomic fits the instance but not the global", 47, 50, []BudgetItem{whole(4), part(5)}, []int{0, 3}, 7, 0},
+		{"boundary atomic exactly the global rest", 47, 50, []BudgetItem{whole(3), whole(1)}, []int{3, 0}, 7, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			inst := usage{used: 4, oldest: t0.Add(-5 * time.Minute)}
+			global := usage{used: tc.globalUsed, oldest: t0.Add(-20 * time.Minute)}
+			out := grantItems(inst, global, 10, tc.globalCap, tc.items, now)
+			if !slices.Equal(out.GrantedItems, tc.want) {
+				t.Fatalf("granted items = %v, want %v", out.GrantedItems, tc.want)
+			}
+			if out.Used != tc.used || out.Remaining != tc.remaining || out.Granted != tc.used-4 {
+				t.Fatalf("got granted=%d used=%d remaining=%d, want used=%d remaining=%d", out.Granted, out.Used, out.Remaining, tc.used, tc.remaining)
+			}
+		})
+	}
+}
+
+// budgetCase is one generated request: usage and caps of both budgets and the items.
+type budgetCase struct {
+	instUsed, capacity    int
+	globalUsed, globalCap int
+	items                 []BudgetItem
+}
+
+// newBudgetCase folds raw random values into a small case; globalCap 0 means no global cap.
+func newBudgetCase(instUsed, capacity, globalUsed, globalCap uint8, costs []uint8, atomicMask uint64) budgetCase {
+	c := budgetCase{
+		instUsed: int(instUsed % 40), capacity: int(capacity%40) + 1,
+		globalUsed: int(globalUsed % 60), globalCap: int(globalCap % 60),
+	}
+	for i, cost := range costs {
+		c.items = append(c.items, BudgetItem{Cost: int(cost % 12), Atomic: atomicMask&(1<<(i%64)) != 0})
+	}
+	return c
+}
+
+// left is the stamina the case has before any item is served.
+func (c budgetCase) left() int {
+	left := max(c.capacity-c.instUsed, 0)
+	if c.globalCap > 0 {
+		left = min(left, max(c.globalCap-c.globalUsed, 0))
+	}
+	return left
+}
+
+// holds states the grant rule item by item, without the code under test: an item that fits
+// gets its cost, a divisible one that does not gets everything left, an atomic one that
+// does not gets nothing; the total is the sum and is all that is debited.
+func (c budgetCase) holds(out ItemsGrant) bool {
+	if len(out.GrantedItems) != len(c.items) {
+		return false
+	}
+	left, sum := c.left(), 0
+	for i, item := range c.items {
+		got := out.GrantedItems[i]
+		fits := item.Cost <= left
+		switch {
+		case fits && got != item.Cost,
+			!fits && item.Atomic && got != 0,
+			!fits && !item.Atomic && got != left:
+			return false
+		}
+		left -= got
+		sum += got
+	}
+	return left >= 0 && out.Granted == sum && out.Used == c.instUsed+sum && out.Remaining == left
+}
+
+// Property: for any usage, caps and items, every grant follows the rule in order, an atomic
+// item is never granted in part, and nothing beyond the sum of the grants is debited.
+func TestGrantItemsProperty(t *testing.T) {
+	t.Parallel()
+	now := t0.Add(30 * time.Second)
+	prop := func(instUsed, capacity, globalUsed, globalCap uint8, costs []uint8, atomicMask uint64) bool {
+		c := newBudgetCase(instUsed, capacity, globalUsed, globalCap, costs, atomicMask)
+		inst := usage{used: c.instUsed, oldest: t0.Add(-5 * time.Minute)}
+		global := usage{used: c.globalUsed, oldest: t0.Add(-20 * time.Minute)}
+		return c.holds(grantItems(inst, global, c.capacity, c.globalCap, c.items, now))
+	}
+	if err := quick.Check(prop, &quick.Config{MaxCount: 2000}); err != nil {
+		t.Fatal(err)
 	}
 }
 
