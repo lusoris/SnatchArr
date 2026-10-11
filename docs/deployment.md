@@ -15,14 +15,39 @@ Pod Security Standard.
 | `ghcr.io/lusoris/snatcharr-worker` | Rust snatch-worker (no listener) |
 | `oci://ghcr.io/lusoris/charts/snatcharr` | Helm chart |
 
-Every image and the chart are signed with cosign (keyless, GitHub OIDC) and ship an SPDX
-SBOM and SLSA provenance attestation. Tags are semver only: there is no `latest`.
+Every image and the chart are signed with cosign (keyless, GitHub OIDC) and carry a SLSA
+build provenance attestation. Each image also has an SPDX SBOM, attached to the GitHub
+release. Tags are semver only: there is no `latest`.
+
+Verify an artifact before you deploy it. The script checks that signature and attestation
+both come from this repository's release workflow, run on the release tag (it needs `cosign`
+and `gh`):
 
 ```sh
-cosign verify ghcr.io/lusoris/snatcharr-api:0.1.0 \
-  --certificate-identity-regexp 'https://github.com/lusoris/SnatchArr/' \
-  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+tools/release/verify.sh ghcr.io/lusoris/snatcharr-api:0.1.5 lusoris/SnatchArr refs/tags/v0.1.5
+tools/release/verify.sh ghcr.io/lusoris/snatcharr-worker:0.1.5 lusoris/SnatchArr refs/tags/v0.1.5
+tools/release/verify.sh ghcr.io/lusoris/charts/snatcharr:0.1.5 lusoris/SnatchArr refs/tags/v0.1.5
 ```
+
+It runs these two commands, which also work without a checkout:
+
+```sh
+cosign verify ghcr.io/lusoris/charts/snatcharr:0.1.5 \
+  --certificate-identity https://github.com/lusoris/SnatchArr/.github/workflows/release.yml@refs/tags/v0.1.5 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+gh attestation verify oci://ghcr.io/lusoris/charts/snatcharr:0.1.5 --repo lusoris/SnatchArr \
+  --signer-workflow lusoris/SnatchArr/.github/workflows/release.yml --source-ref refs/tags/v0.1.5
+```
+
+The release workflow (`.github/workflows/release.yml`, job `verify`) runs the same check on
+both images and the chart and fails the release when a signature or an attestation is
+missing. The chart carries an attestation from 0.1.5 on; the charts up to 0.1.4 are signed
+only.
+
+The git ref is the one the release workflow ran on. That is the tag for every release
+except 0.1.1, which was rebuilt by hand from `main`: verify it with `refs/heads/main`. A
+rebuild started with `gh workflow run release.yml --ref v0.1.5 -f tag=v0.1.5` keeps the tag
+as the ref.
 
 ## Helm
 

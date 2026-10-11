@@ -27,7 +27,7 @@ Governance: [praetor](https://github.com/cordanaLLM/praetor) (HISS invariants, c
 
 Pre-alpha, heading for 0.1.0. Releases publish `ghcr.io/lusoris/snatcharr-api`,
 `ghcr.io/lusoris/snatcharr-worker` and the chart `oci://ghcr.io/lusoris/charts/snatcharr`,
-all cosign-signed with SBOM and provenance.
+all cosign-signed with build provenance; both images come with an SBOM.
 
 ## Deploy
 
