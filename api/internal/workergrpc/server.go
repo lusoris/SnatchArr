@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -38,6 +39,8 @@ const (
 	maxSearchedPerRun  = 5_000
 	maxBudgetItems     = 512
 	userAgent          = "SnatchArr/1.0 (https://github.com/lusoris/SnatchArr)"
+	// stoppingMessage goes out with Unavailable once the control plane shuts down.
+	stoppingMessage = "control plane is shutting down"
 )
 
 // Pacer scales a leased run's per-cycle count by download-client bandwidth (ADR-0006).
@@ -66,6 +69,9 @@ type Server struct {
 	pacer     Pacer
 	clk       clock.Clock
 	logger    *slog.Logger
+	// stopping is closed by Shutdown.
+	stopping chan struct{}
+	stopOnce sync.Once
 }
 
 // New wires the server.
@@ -75,6 +81,35 @@ func New(runs *snatch.Runs, budget *snatch.Budget, memory *snatch.Memory, rec *s
 	return &Server{
 		runs: runs, budget: budget, memory: memory, rec: rec, planner: planner, instances: inst, policies: pol,
 		settings: cfg, seerr: requests, pacer: opts.Pacer, clk: clk, logger: logger,
+		stopping: make(chan struct{}),
+	}
+}
+
+// Shutdown ends every waiting LeaseRun with Unavailable and has later ones answer the same,
+// so the gRPC server's graceful stop does not wait for a long-poll and a worker reads a
+// planned stop as retryable (#146). Calling it again is a no-op.
+func (s *Server) Shutdown() {
+	s.stopOnce.Do(func() { close(s.stopping) })
+}
+
+func (s *Server) isStopping() bool {
+	select {
+	case <-s.stopping:
+		return true
+	default:
+		return false
+	}
+}
+
+// pause waits one poll interval; the caller's context or a shutdown ends it early.
+func (s *Server) pause(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return status.FromContextError(ctx.Err()).Err()
+	case <-s.stopping:
+		return status.Error(codes.Unavailable, stoppingMessage)
+	case <-s.clk.After(leasePollInterval):
+		return nil
 	}
 }
 
@@ -87,6 +122,9 @@ func (s *Server) LeaseRun(ctx context.Context, req *snatcharrv1.LeaseRunRequest)
 	wait := min(time.Duration(req.GetWaitSeconds())*time.Second, maxLeaseWait)
 	deadline := s.clk.Now().Add(wait)
 	for attempt := 0; attempt <= int(maxLeaseWait/leasePollInterval); attempt++ {
+		if s.isStopping() {
+			return nil, status.Error(codes.Unavailable, stoppingMessage)
+		}
 		run, err := s.runs.Lease(ctx, req.GetWorkerId())
 		if err == nil {
 			return s.leaseResponse(ctx, run)
@@ -97,10 +135,8 @@ func (s *Server) LeaseRun(ctx context.Context, req *snatcharrv1.LeaseRunRequest)
 		if !s.clk.Now().Before(deadline) {
 			break
 		}
-		select {
-		case <-ctx.Done():
-			return nil, status.FromContextError(ctx.Err()).Err()
-		case <-s.clk.After(leasePollInterval):
+		if pauseErr := s.pause(ctx); pauseErr != nil {
+			return nil, pauseErr
 		}
 	}
 	return &snatcharrv1.LeaseRunResponse{}, nil
