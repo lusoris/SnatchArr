@@ -41,7 +41,10 @@ jobs:
         if: steps.present.outputs.ok == 'true'
         # From the module root: started in api/, gosec loads no package and passes on zero files.
         working-directory: ${{ github.workspace }}
-        run: make api-gosec
+        run: |
+          make api-gosec
+          # The files under tools/ that build only with the apicompatgate tag.
+          make tools-gosec
       - name: Upload gosec results to code scanning
         # The run on main is the one that opens and closes the alerts of the default branch.
         if: ${{ !cancelled() && hashFiles('api/tmp/gosec.sarif') != '' }}

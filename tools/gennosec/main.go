@@ -76,7 +76,7 @@ func run(args []string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
-	return checkAll(ctx, root)
+	return checkAll(ctx, root, os.Stdout)
 }
 
 // repoRoot walks up from the working directory to the directory holding go.mod.
@@ -147,12 +147,14 @@ func annotation(indent string, r rule) string {
 // annotate returns lines with an annotation above every line r matches that lacks one.
 func annotate(lines []string, r rule) []string {
 	out := make([]string, 0, len(lines))
-	for i, line := range lines {
-		if r.match.MatchString(line) && (i == 0 || !strings.Contains(lines[i-1], "#nosec "+r.id+" ")) {
+	previous := ""
+	for _, line := range lines {
+		if r.match.MatchString(line) && !strings.Contains(previous, "#nosec "+r.id+" ") {
 			indent := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
 			out = append(out, annotation(indent, r))
 		}
 		out = append(out, line)
+		previous = line
 	}
 	return out
 }
