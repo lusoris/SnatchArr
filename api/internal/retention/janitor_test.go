@@ -90,7 +90,7 @@ func TestModuleRegistersLeaderLoop(t *testing.T) {
 	if !ok {
 		t.Fatalf("leader loop is %T, want *Janitor", loops[0])
 	}
-	if j.done != nil {
+	if j.Running() {
 		t.Fatal("the janitor was started outside the leader gate")
 	}
 }
