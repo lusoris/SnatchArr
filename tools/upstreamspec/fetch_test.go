@@ -115,6 +115,35 @@ func TestFetchDownloadsThenReusesTheCache(t *testing.T) {
 	}
 }
 
+// A pin on a branch is fetched at its commit like a pin on a release; the summary and the
+// contract name the branch in the place of the tag.
+func TestFetchNamesTheBranchOfABranchPin(t *testing.T) {
+	t.Parallel()
+	body := []byte(sampleSpec)
+	up := serve(t, body)
+	cache := filepath.Join(t.TempDir(), "cache")
+	p := fetchPin(body)
+	p.Tag, p.Branch = "", "develop"
+
+	out, err := fetchInto(t, up.URL, cache, p)
+	if err != nil {
+		t.Fatalf("fetch: %v", err)
+	}
+	if want := "upstreamspec: sample branch develop (0123456789ab): 1 operation(s), spec downloaded\n"; out != want {
+		t.Errorf("summary = %q, want %q", out, want)
+	}
+	file, err := contract.Read(cache, "sample")
+	if err != nil {
+		t.Fatalf("contract: %v", err)
+	}
+	if file.Branch != "develop" || file.Tag != "" || file.Commit != someCommit {
+		t.Errorf("contract names tag %q, branch %q, commit %q; want the branch develop and no tag", file.Tag, file.Branch, file.Commit)
+	}
+	if up.requests.Load() != 1 {
+		t.Errorf("upstream answered %d request(s), want 1 at the commit", up.requests.Load())
+	}
+}
+
 func TestFetchRefusesAnotherChecksum(t *testing.T) {
 	t.Parallel()
 	body := []byte(sampleSpec)

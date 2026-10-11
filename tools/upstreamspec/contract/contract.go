@@ -40,10 +40,12 @@ type Operation struct {
 }
 
 // File is the contract of one pinned spec. Operations is keyed by "<METHOD> <path>", with the
-// path as the client requests it and path parameters in braces.
+// path as the client requests it and path parameters in braces. Tag or Branch says what the
+// commit belongs to; a pin has exactly one of them.
 type File struct {
 	Spec       string               `json:"spec"`
-	Tag        string               `json:"tag"`
+	Tag        string               `json:"tag,omitempty"`
+	Branch     string               `json:"branch,omitempty"`
 	Commit     string               `json:"commit"`
 	Operations map[string]Operation `json:"operations"`
 }

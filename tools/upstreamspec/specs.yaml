@@ -6,8 +6,10 @@
 # refuses it when its sha256 differs. Nothing listed here is committed or copied into an image.
 #
 # Renovate reads repository, tag and commit, in this order (customManagers in renovate.json), and
-# proposes the next stable upstream release. When the spec file changed with that release, the
-# sha256 no longer fits and the gate fails until the pin is renewed by hand:
+# proposes the next stable upstream release. A project that tags no release is pinned with
+# `branch` in the place of `tag`; Renovate then proposes the newest commit of that branch. When
+# the spec file changed with the proposed commit, the sha256 no longer fits and the gate fails
+# until the pin is renewed by hand:
 #
 #   go run ./tools/upstreamspec fetch    # prints the sha256 of the new file
 #
@@ -74,3 +76,48 @@ specs:
       - GET /api/v1/settings/radarr
       - GET /api/v1/movie/{movieId}
       - GET /api/v1/tv/{tvId}
+  - name: bookshelf
+    repository: pennydreadful/bookshelf
+    branch: develop
+    commit: 3ac41f7e31427684a37138e8e539b7e6c7b73869
+    path: src/Readarr.Api.V1/openapi.json
+    sha256: 4c4704911b1e65fe8cdf55fd69b717c75a2c5cbb21ee2db387ef55db691680e8
+    license: GPL-3.0
+    operations:
+      - GET /api/v1/system/status
+      - GET /api/v1/queue
+      - GET /api/v1/history/since
+      - GET /api/v1/wanted/missing
+      - GET /api/v1/wanted/cutoff
+      - POST /api/v1/command
+      - GET /api/v1/command/{id}
+  - name: chaptarr
+    repository: Chaptarr/chaptarr
+    tag: v0.9.965
+    commit: e67374f4b3fed01bbf08f18672add944062fcb49
+    path: src/Chaptarr.Api.V1/openapi.json
+    sha256: 1444bc8e56f39a741070b4434a63dea7a18b9ef7e6f0f2fb105a2882a2a352d6
+    license: GPL-3.0
+    operations:
+      - GET /api/v1/system/status
+      - GET /api/v1/queue
+      - GET /api/v1/history/since
+      - GET /api/v1/wanted/missing
+      - GET /api/v1/wanted/cutoff
+      - POST /api/v1/command
+      - GET /api/v1/command/{id}
+  - name: readarr-faustvii
+    repository: Faustvii/Readarr
+    tag: v0.10.0
+    commit: 7f02ffa52997c92165c541a38be154054debc285
+    path: src/Readarr.Api.V1/openapi.json
+    sha256: 67816240e90b225d897fa713bd3f842f90d26d4c73cb522d8a8b59d32391cad8
+    license: GPL-3.0
+    operations:
+      - GET /api/v1/system/status
+      - GET /api/v1/queue
+      - GET /api/v1/history/since
+      - GET /api/v1/wanted/missing
+      - GET /api/v1/wanted/cutoff
+      - POST /api/v1/command
+      - GET /api/v1/command/{id}

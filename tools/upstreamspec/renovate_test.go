@@ -18,6 +18,13 @@ const (
 	// committedManifest is the manifest as the Renovate configuration names it.
 	committedManifest = "tools/upstreamspec/specs.yaml"
 	customRegex       = "custom.regex"
+	// tagSource lists the tags of a repository with the date of each. branchSource resolves a
+	// branch to its newest commit and dates it; git-refs would do the first but gives no date,
+	// and Renovate holds an update without one for as long as minimumReleaseAge is set.
+	tagSource    = "github-tags"
+	branchSource = "github-digest"
+	// readers is the number of custom managers that read the manifest: one per datasource.
+	readers = 2
 )
 
 // renovateConfig is the part of renovate.json that decides whether Renovate keeps the pins of the
@@ -45,13 +52,37 @@ type packageRule struct {
 	Automerge     *bool    `json:"automerge"`
 }
 
-// reading is what Renovate takes from one manifest entry.
-type reading struct{ repository, tag, commit string }
+// reading is what Renovate takes from one manifest entry, and the datasource it asks about it.
+type reading struct{ datasource, repository, ref, commit string }
+
+// wanted returns the reading that keeps p current: a tag pin is asked of the tags of its
+// repository, a branch pin of the newest commit of its branch.
+func wanted(p pin) reading {
+	if p.Branch != "" {
+		return reading{branchSource, p.Repository, p.Branch, p.Commit}
+	}
+	return reading{tagSource, p.Repository, p.Tag, p.Commit}
+}
+
+// versioningFor returns the versioning a manager of the datasource must name, and whether the
+// datasource is one the pins are asked of. Tags have four parts, which only loose compares; a
+// branch is compared with nothing, which is the default of its datasource.
+func versioningFor(datasource string) (versioning string, known bool) {
+	switch datasource {
+	case tagSource:
+		return "loose", true
+	case branchSource:
+		return "", true
+	default:
+		return "", false
+	}
+}
 
 // renovateProblems returns why Renovate would not keep the pins current, one line per reason:
-// custom managers are off, no manager or more than one reads the manifest, the manager asks
-// another datasource or compares the four-part tags with another versioning, its pattern does not
-// capture a pin as the manifest has it, or a pin update would be merged without a person.
+// custom managers are off, the manifest is not read by one manager for tag pins and one for
+// branch pins, a manager asks another datasource or compares with another versioning, the
+// patterns do not capture a pin as the manifest has it or capture it for the wrong datasource, or
+// a pin update would be merged without a person.
 func renovateProblems(config renovateConfig, manifest string, pins []pin) []string {
 	var problems []string
 	if !slices.Contains(config.EnabledManagers, customRegex) {
@@ -60,17 +91,24 @@ func renovateProblems(config renovateConfig, manifest string, pins []pin) []stri
 	if !config.mergedByHand() {
 		problems = append(problems, "the last package rule that sets automerge for custom.regex does not set it to false")
 	}
-	var readers []customManager
+	var reading []customManager
 	for _, manager := range config.CustomManagers {
 		if slices.Contains(manager.ManagerFilePatterns, committedManifest) {
-			readers = append(readers, manager)
+			reading = append(reading, manager)
 		}
 	}
-	if len(readers) != 1 {
-		return append(problems, fmt.Sprintf("%d custom manager(s) read %s; want 1", len(readers), committedManifest))
+	if len(reading) != readers {
+		return append(problems, fmt.Sprintf("%d custom manager(s) read %s; want %d, one for tag pins and one for branch pins",
+			len(reading), committedManifest, readers))
 	}
-	problems = append(problems, readers[0].settingProblems()...)
-	return append(problems, readers[0].pinProblems(manifest, pins)...)
+	var settings []string
+	for _, manager := range reading {
+		settings = append(settings, manager.settingProblems()...)
+	}
+	if len(settings) > 0 {
+		return append(problems, settings...)
+	}
+	return append(problems, pinProblems(reading, manifest, pins)...)
 }
 
 // mergedByHand reports whether the last package rule that sets automerge and can apply to an
@@ -92,29 +130,33 @@ func (c renovateConfig) mergedByHand() bool {
 }
 
 func (m customManager) settingProblems() []string {
+	versioning, known := versioningFor(m.DatasourceTemplate)
+	if !known {
+		return []string{fmt.Sprintf("datasourceTemplate is %q; want %q for tag pins or %q for branch pins",
+			m.DatasourceTemplate, tagSource, branchSource)}
+	}
 	settings := []struct{ name, got, want string }{
 		{"customType", m.CustomType, "regex"},
-		{"datasourceTemplate", m.DatasourceTemplate, "github-tags"},
-		{"versioningTemplate", m.VersioningTemplate, "loose"},
+		{"versioningTemplate", m.VersioningTemplate, versioning},
 	}
 	var problems []string
 	for _, setting := range settings {
 		if setting.got != setting.want {
-			problems = append(problems, fmt.Sprintf("%s is %q; want %q", setting.name, setting.got, setting.want))
+			problems = append(problems, fmt.Sprintf("the %s manager: %s is %q; want %q", m.DatasourceTemplate, setting.name, setting.got, setting.want))
 		}
 	}
 	return problems
 }
 
-// pinProblems applies matchStrings to the manifest text the way the regex manager does (every
-// match of every pattern is one dependency) and compares what it captures with the pins.
-func (m customManager) pinProblems(manifest string, pins []pin) []string {
-	read := map[string]reading{}
+// readInto applies matchStrings to the manifest text the way the regex manager does (every match
+// of every pattern is one dependency), stores what it captures by dependency name and returns the
+// number of matches.
+func (m customManager) readInto(read map[string]reading, manifest string) (int, error) {
 	matches := 0
 	for _, pattern := range m.MatchStrings {
 		expression, err := regexp.Compile(pattern)
 		if err != nil {
-			return []string{"matchStrings: " + err.Error()}
+			return 0, fmt.Errorf("matchStrings: %w", err)
 		}
 		for _, match := range expression.FindAllStringSubmatch(manifest, -1) {
 			group := func(name string) string {
@@ -123,13 +165,27 @@ func (m customManager) pinProblems(manifest string, pins []pin) []string {
 				}
 				return ""
 			}
-			read[group("depName")] = reading{group("packageName"), group("currentValue"), group("currentDigest")}
+			read[group("depName")] = reading{m.DatasourceTemplate, group("packageName"), group("currentValue"), group("currentDigest")}
 			matches++
 		}
 	}
+	return matches, nil
+}
+
+// pinProblems compares what the managers capture from the manifest text with the pins.
+func pinProblems(managers []customManager, manifest string, pins []pin) []string {
+	read := map[string]reading{}
+	matches := 0
+	for _, manager := range managers {
+		count, err := manager.readInto(read, manifest)
+		if err != nil {
+			return []string{err.Error()}
+		}
+		matches += count
+	}
 	var problems []string
 	for _, p := range pins {
-		if got, want := read[p.Name], (reading{p.Repository, p.Tag, p.Commit}); got != want {
+		if got, want := read[p.Name], wanted(p); got != want {
 			problems = append(problems, fmt.Sprintf("%s: Renovate reads %+v; the manifest pins %+v", p.Name, got, want))
 		}
 	}
@@ -168,13 +224,71 @@ func planted(t *testing.T, text, old, replacement string) string {
 
 func forSpecs(rule packageRule) bool { return slices.Contains(rule.MatchManagers, customRegex) }
 
-// renovateCase is one defect: change plants it in the configuration, manifest (when set) replaces
-// the committed manifest text, and want holds a part of each problem it must be reported with.
+// renovateCase is one defect: change plants it in the configuration, of which tags and branches
+// are the two managers, manifest (when set) replaces the committed manifest text, and want holds
+// a part of each problem it must be reported with.
 type renovateCase struct {
 	name     string
-	change   func(config *renovateConfig, manager *customManager)
+	change   func(config *renovateConfig, tags, branches *customManager)
 	manifest string
 	want     []string
+}
+
+// managerDefects returns the defects of one of the two managers.
+func managerDefects() []renovateCase {
+	return []renovateCase{
+		{
+			name:   "the manager for tag pins reads another file",
+			want:   []string{"1 custom manager(s) read"},
+			change: func(_ *renovateConfig, tags, _ *customManager) { tags.ManagerFilePatterns = []string{"specs.yaml"} },
+		},
+		{
+			name: "no manager for branch pins",
+			want: []string{"1 custom manager(s) read"},
+			change: func(config *renovateConfig, _, _ *customManager) {
+				config.CustomManagers = slices.DeleteFunc(config.CustomManagers, func(manager customManager) bool {
+					return manager.DatasourceTemplate == branchSource
+				})
+			},
+		},
+		{
+			name:   "a datasource that lists releases only",
+			want:   []string{`datasourceTemplate is "github-releases"`},
+			change: func(_ *renovateConfig, tags, _ *customManager) { tags.DatasourceTemplate = "github-releases" },
+		},
+		{
+			name:   "a datasource that dates no commit of a branch",
+			want:   []string{`datasourceTemplate is "git-refs"`},
+			change: func(_ *renovateConfig, _, branches *customManager) { branches.DatasourceTemplate = "git-refs" },
+		},
+		{
+			name:   "the default versioning for tags",
+			want:   []string{`the github-tags manager: versioningTemplate is ""`},
+			change: func(_ *renovateConfig, tags, _ *customManager) { tags.VersioningTemplate = "" },
+		},
+		{
+			name:   "a versioning that compares a branch",
+			want:   []string{`the github-digest manager: versioningTemplate is "loose"`},
+			change: func(_ *renovateConfig, _, branches *customManager) { branches.VersioningTemplate = "loose" },
+		},
+		{
+			name:   "a manager of another type",
+			want:   []string{`the github-digest manager: customType is "jsonata"`},
+			change: func(_ *renovateConfig, _, branches *customManager) { branches.CustomType = "jsonata" },
+		},
+		{
+			name: "branch pins asked of the tags",
+			want: []string{": Renovate reads {datasource:github-tags"},
+			change: func(_ *renovateConfig, _, branches *customManager) {
+				branches.DatasourceTemplate, branches.VersioningTemplate = tagSource, "loose"
+			},
+		},
+		{
+			name:   "a pattern that does not compile",
+			want:   []string{"matchStrings: "},
+			change: func(_ *renovateConfig, tags, _ *customManager) { tags.MatchStrings = []string{"("} },
+		},
+	}
 }
 
 func configurationDefects() []renovateCase {
@@ -182,41 +296,21 @@ func configurationDefects() []renovateCase {
 		{
 			name: "custom managers are off",
 			want: []string{"enabledManagers lacks custom.regex"},
-			change: func(config *renovateConfig, _ *customManager) {
+			change: func(config *renovateConfig, _, _ *customManager) {
 				config.EnabledManagers = slices.DeleteFunc(config.EnabledManagers, func(name string) bool { return name == customRegex })
 			},
 		},
 		{
-			name:   "the manager reads another file",
-			want:   []string{"0 custom manager(s) read"},
-			change: func(_ *renovateConfig, manager *customManager) { manager.ManagerFilePatterns = []string{"specs.yaml"} },
-		},
-		{
-			name:   "a datasource that lists releases only",
-			want:   []string{`datasourceTemplate is "github-releases"`},
-			change: func(_ *renovateConfig, manager *customManager) { manager.DatasourceTemplate = "github-releases" },
-		},
-		{
-			name:   "the default versioning",
-			want:   []string{`versioningTemplate is ""`},
-			change: func(_ *renovateConfig, manager *customManager) { manager.VersioningTemplate = "" },
-		},
-		{
-			name:   "a pattern that does not compile",
-			want:   []string{"matchStrings: "},
-			change: func(_ *renovateConfig, manager *customManager) { manager.MatchStrings = []string{"("} },
-		},
-		{
 			name: "no rule keeps the pins from automerge",
 			want: []string{"automerge"},
-			change: func(config *renovateConfig, _ *customManager) {
+			change: func(config *renovateConfig, _, _ *customManager) {
 				config.PackageRules = slices.DeleteFunc(config.PackageRules, forSpecs)
 			},
 		},
 		{
 			name: "the rule for the pins comes before the general automerge rule",
 			want: []string{"automerge"},
-			change: func(config *renovateConfig, _ *customManager) {
+			change: func(config *renovateConfig, _, _ *customManager) {
 				index := slices.IndexFunc(config.PackageRules, forSpecs)
 				rule := config.PackageRules[index]
 				config.PackageRules = slices.Insert(slices.Delete(config.PackageRules, index, index+1), 0, rule)
@@ -225,32 +319,64 @@ func configurationDefects() []renovateCase {
 	}
 }
 
-// manifestDefects returns the manifest layouts the pattern of renovate.json must not read as the
-// first pin: its fields in another order, and a commit id that is one digit short.
+// manifestDefects returns the manifest layouts the patterns of renovate.json must not read as a
+// pin, for the first tag pin and the first branch pin: its fields in another order, and a commit
+// id that is one digit short.
 func manifestDefects(t *testing.T, manifest string, pins []pin) []renovateCase {
 	t.Helper()
-	first := pins[0]
-	inOrder := fmt.Sprintf("    repository: %s\n    tag: %s\n", first.Repository, first.Tag)
-	swapped := fmt.Sprintf("    tag: %s\n    repository: %s\n", first.Tag, first.Repository)
-	unread := []string{first.Name + ": Renovate reads", fmt.Sprintf("match %d time(s)", len(pins)-1)}
-	return []renovateCase{
-		{name: "the tag before the repository in one entry", want: unread, manifest: planted(t, manifest, inOrder, swapped)},
-		{name: "a commit id of 39 digits", want: unread, manifest: planted(t, manifest, first.Commit, first.Commit[:39])},
+	kinds := []struct {
+		field string
+		of    func(pin) string
+	}{
+		{"tag", func(p pin) string { return p.Tag }},
+		{"branch", func(p pin) string { return p.Branch }},
 	}
+	// Two planted defects per kind of pin.
+	cases := make([]renovateCase, 0, 2*len(kinds))
+	for _, kind := range kinds {
+		index := slices.IndexFunc(pins, func(p pin) bool { return kind.of(p) != "" })
+		if index < 0 {
+			t.Fatalf("the manifest has no %s pin; the planted defects need one", kind.field)
+		}
+		first := pins[index]
+		inOrder := fmt.Sprintf("    repository: %s\n    %s: %s\n", first.Repository, kind.field, kind.of(first))
+		swapped := fmt.Sprintf("    %s: %s\n    repository: %s\n", kind.field, kind.of(first), first.Repository)
+		unread := []string{first.Name + ": Renovate reads", fmt.Sprintf("match %d time(s)", len(pins)-1)}
+		cases = append(cases,
+			renovateCase{name: "the " + kind.field + " before the repository in one entry", want: unread, manifest: planted(t, manifest, inOrder, swapped)},
+			renovateCase{name: "a commit id of 39 digits in a " + kind.field + " pin", want: unread, manifest: planted(t, manifest, first.Commit, first.Commit[:39])},
+		)
+	}
+	return cases
 }
 
-// decoded returns a fresh copy of the committed configuration and its one custom manager.
-func decoded(t *testing.T, raw []byte) (*renovateConfig, *customManager) {
+// decoded returns a fresh copy of the committed configuration.
+func decoded(t *testing.T, raw []byte) *renovateConfig {
 	t.Helper()
-	var config renovateConfig
-	if err := json.Unmarshal(raw, &config); err != nil {
+	config := &renovateConfig{}
+	if err := json.Unmarshal(raw, config); err != nil {
 		t.Fatalf("decode renovate.json: %v", err)
 	}
-	if len(config.CustomManagers) != 1 || !slices.ContainsFunc(config.PackageRules, forSpecs) {
-		t.Fatalf("renovate.json has %d custom manager(s) and package rules %+v; the planted defects need one manager and a rule for it",
-			len(config.CustomManagers), config.PackageRules)
+	return config
+}
+
+// managers returns the two custom managers a defect is planted in: the one for tag pins and the
+// one for branch pins.
+func managers(t *testing.T, config *renovateConfig) (tags, branches *customManager) {
+	t.Helper()
+	for index := range config.CustomManagers {
+		switch manager := &config.CustomManagers[index]; manager.DatasourceTemplate {
+		case tagSource:
+			tags = manager
+		case branchSource:
+			branches = manager
+		}
 	}
-	return &config, &config.CustomManagers[0]
+	if len(config.CustomManagers) != readers || tags == nil || branches == nil || !slices.ContainsFunc(config.PackageRules, forSpecs) {
+		t.Fatalf("renovate.json has %d custom manager(s) and package rules %+v; the planted defects need a manager for %s, one for %s and a rule for them",
+			len(config.CustomManagers), config.PackageRules, tagSource, branchSource)
+	}
+	return tags, branches
 }
 
 // TestRenovateKeepsEveryPinCurrent checks the committed renovate.json against the committed
@@ -258,13 +384,14 @@ func decoded(t *testing.T, raw []byte) (*renovateConfig, *customManager) {
 func TestRenovateKeepsEveryPinCurrent(t *testing.T) {
 	t.Parallel()
 	raw, manifest, pins := committed(t)
-	cases := slices.Concat([]renovateCase{{name: "the committed files"}}, configurationDefects(), manifestDefects(t, manifest, pins))
+	cases := slices.Concat([]renovateCase{{name: "the committed files"}}, configurationDefects(), managerDefects(), manifestDefects(t, manifest, pins))
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
-			config, manager := decoded(t, raw)
+			config := decoded(t, raw)
 			if c.change != nil {
-				c.change(config, manager)
+				tags, branches := managers(t, config)
+				c.change(config, tags, branches)
 			}
 			text := manifest
 			if c.manifest != "" {

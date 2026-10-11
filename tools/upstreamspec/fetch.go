@@ -52,7 +52,7 @@ func (f fetcher) all(ctx context.Context, pins []pin) error {
 			return fmt.Errorf("%s: %w", p.Name, err)
 		}
 		if _, err := fmt.Fprintf(f.out, "upstreamspec: %s %s (%s): %d operation(s), spec %s\n",
-			p.Name, p.Tag, p.Commit[:12], len(p.Operations), origin); err != nil {
+			p.Name, p.ref(), p.Commit[:12], len(p.Operations), origin); err != nil {
 			return fmt.Errorf("write summary: %w", err)
 		}
 	}

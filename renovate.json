@@ -24,7 +24,7 @@
   ],
   "customManagers": [
     {
-      "description": "Upstream OpenAPI spec pins: repository, release tag and commit of each entry, in this order (docs/upstream-contracts.md)",
+      "description": "Upstream OpenAPI spec pins on a release: repository, release tag and commit of each entry, in this order (docs/upstream-contracts.md)",
       "customType": "regex",
       "managerFilePatterns": [
         "tools/upstreamspec/specs.yaml"
@@ -34,6 +34,17 @@
       ],
       "datasourceTemplate": "github-tags",
       "versioningTemplate": "loose"
+    },
+    {
+      "description": "Upstream OpenAPI spec pins on a branch, for a project that tags no release: repository, branch and commit of each entry, in this order. github-digest resolves the branch to its newest commit and dates it, so minimumReleaseAge applies (docs/upstream-contracts.md)",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "tools/upstreamspec/specs.yaml"
+      ],
+      "matchStrings": [
+        "- name: (?<depName>\\S+)\\n +repository: (?<packageName>\\S+)\\n +branch: (?<currentValue>\\S+)\\n +commit: (?<currentDigest>[0-9a-f]{40})\\n"
+      ],
+      "datasourceTemplate": "github-digest"
     }
   ],
   "postUpdateOptions": [

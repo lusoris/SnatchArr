@@ -70,12 +70,18 @@ func TestReadManifest(t *testing.T) {
 		{"well formed", entry(nil), ""},
 		{"no prefix", entry(map[string]string{"prefix": "", "operations": "operations: [GET /status]"}), ""},
 		{"a tag with four numbers", with("tag", "tag: v4.0.20.3014"), ""},
+		{"a branch in the place of the tag", with("tag", "branch: develop"), ""},
+		{"a branch with a slash", with("tag", "branch: release/v1"), ""},
 		{"no entry", "specs: []\n", `no "specs" entry`},
 		{"an empty file", "", "EOF"},
 		{"a misspelled key", with("sha256", "sha265: "+someSHA256), "field sha265 not found"},
 		{"a name with a path", with("name", "name: ../sample"), "name must be"},
 		{"a repository with a host", with("repository", "repository: github.com/Owner/Project"), "repository must be <owner>/<name>"},
 		{"a tag with a space", with("tag", "tag: v1 beta"), "tag must name one release tag"},
+		{"neither tag nor branch", with("tag", ""), "exactly one of tag and branch"},
+		{"a tag and a branch", with("tag", "tag: v1.2.3\n    branch: develop"), "exactly one of tag and branch"},
+		{"a branch with a space", with("tag", "branch: my branch"), "branch must name one branch"},
+		{"a branch that ends with a slash", with("tag", "branch: release/"), "branch must name one branch"},
 		{"a short commit id", with("commit", "commit: 0123456"), "full 40-digit commit id"},
 		{"a branch for a commit", with("commit", "commit: main"), "full 40-digit commit id"},
 		{"an upper-case commit id", with("commit", "commit: "+strings.ToUpper(someCommit)), "full 40-digit commit id"},
@@ -126,7 +132,8 @@ func TestCommittedManifest(t *testing.T) {
 	for _, p := range pins {
 		names = append(names, p.Name)
 	}
-	if want := []string{"sonarr", "radarr", "lidarr", "seerr"}; !slices.Equal(names, want) {
+	want := []string{"sonarr", "radarr", "lidarr", "seerr", "bookshelf", "chaptarr", "readarr-faustvii"}
+	if !slices.Equal(names, want) {
 		t.Errorf("pinned specs = %q, want %q", names, want)
 	}
 }
@@ -142,5 +149,20 @@ func TestPinSource(t *testing.T) {
 	}
 	if got := p.specFile(); got != "sample.spec" {
 		t.Errorf("specFile = %q", got)
+	}
+}
+
+func TestPinRef(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		pin  pin
+		want string
+	}{
+		{pin{Tag: "v1.2.3"}, "v1.2.3"},
+		{pin{Branch: "develop"}, "branch develop"},
+	} {
+		if got := test.pin.ref(); got != test.want {
+			t.Errorf("ref of %+v = %q, want %q", test.pin, got, test.want)
+		}
 	}
 }

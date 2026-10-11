@@ -121,7 +121,7 @@ func parseDocument(data []byte) (*document, error) {
 // contractOf builds the contract of p from its spec: for each operation of the manifest the
 // documented query parameters and an example of the documented response.
 func (d *document) contractOf(p pin) (contract.File, error) {
-	file := contract.File{Spec: p.Name, Tag: p.Tag, Commit: p.Commit, Operations: map[string]contract.Operation{}}
+	file := contract.File{Spec: p.Name, Tag: p.Tag, Branch: p.Branch, Commit: p.Commit, Operations: map[string]contract.Operation{}}
 	for _, entry := range p.Operations {
 		method, route, _ := strings.Cut(entry, " ")
 		item, ok := d.Paths[strings.TrimPrefix(route, p.Prefix)]
