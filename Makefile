@@ -33,6 +33,8 @@ verify-all: governance-verify proto-verify api-verify worker-verify web-verify d
 # ── api/ (Go, golusoris) ──────────────────────────────────────────────────────
 api-verify: ## golangci-lint + go fix + gosec + govulncheck + go test -race + generated-code drift + spectral
 	@if [ ! -f go.mod ]; then echo "go.mod not scaffolded yet; skipping"; exit 0; fi
+	# go.mod and go.sum hold exactly what the code needs: prints the missing changes and fails.
+	go mod tidy -diff
 	# The shared `ci` goal is `lint sec test`; its gosec step runs inside api/, where gosec loads no
 	# package (see api-gosec), so the three other goals run here and gosec runs from the module root.
 	$(MAKE) -C api -f "$(GOLUSORIS_SHARED)" lint vuln test GOLANGCI_CONFIG=../.golangci.yml

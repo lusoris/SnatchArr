@@ -149,6 +149,10 @@ jobs:
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
+      - name: go.mod and go.sum are tidy
+        # A dependency update that leaves a requirement unused, or marked indirect while the code
+        # imports it, still builds; this prints the missing changes and fails.
+        run: go mod tidy -diff
       - name: golangci-lint
         run: |
           go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
