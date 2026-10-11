@@ -48,7 +48,7 @@ const createInstance = `-- name: CreateInstance :one
 
 INSERT INTO instances (id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, created_at, updated_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
-RETURNING id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at
+RETURNING id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product
 `
 
 type CreateInstanceParams struct {
@@ -92,6 +92,7 @@ func (q *Queries) CreateInstance(ctx context.Context, arg CreateInstanceParams) 
 		&i.LastError,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LastSeenProduct,
 	)
 	return i, err
 }
@@ -128,7 +129,7 @@ func (q *Queries) DisableConfigarrInstancesNotIn(ctx context.Context, arg Disabl
 }
 
 const getInstance = `-- name: GetInstance :one
-SELECT id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at FROM instances WHERE id = $1
+SELECT id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product FROM instances WHERE id = $1
 `
 
 func (q *Queries) GetInstance(ctx context.Context, id uuid.UUID) (Instance, error) {
@@ -148,12 +149,13 @@ func (q *Queries) GetInstance(ctx context.Context, id uuid.UUID) (Instance, erro
 		&i.LastError,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LastSeenProduct,
 	)
 	return i, err
 }
 
 const getInstanceByConfigarrKey = `-- name: GetInstanceByConfigarrKey :one
-SELECT id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at FROM instances WHERE configarr_key = $1
+SELECT id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product FROM instances WHERE configarr_key = $1
 `
 
 func (q *Queries) GetInstanceByConfigarrKey(ctx context.Context, configarrKey *string) (Instance, error) {
@@ -173,12 +175,13 @@ func (q *Queries) GetInstanceByConfigarrKey(ctx context.Context, configarrKey *s
 		&i.LastError,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LastSeenProduct,
 	)
 	return i, err
 }
 
 const listEnabledInstances = `-- name: ListEnabledInstances :many
-SELECT id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at FROM instances WHERE enabled ORDER BY kind, name
+SELECT id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product FROM instances WHERE enabled ORDER BY kind, name
 `
 
 func (q *Queries) ListEnabledInstances(ctx context.Context) ([]Instance, error) {
@@ -204,6 +207,7 @@ func (q *Queries) ListEnabledInstances(ctx context.Context) ([]Instance, error) 
 			&i.LastError,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.LastSeenProduct,
 		); err != nil {
 			return nil, err
 		}
@@ -216,7 +220,7 @@ func (q *Queries) ListEnabledInstances(ctx context.Context) ([]Instance, error) 
 }
 
 const listInstances = `-- name: ListInstances :many
-SELECT id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at FROM instances ORDER BY kind, name
+SELECT id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product FROM instances ORDER BY kind, name
 `
 
 func (q *Queries) ListInstances(ctx context.Context) ([]Instance, error) {
@@ -242,6 +246,7 @@ func (q *Queries) ListInstances(ctx context.Context) ([]Instance, error) {
 			&i.LastError,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.LastSeenProduct,
 		); err != nil {
 			return nil, err
 		}
@@ -255,32 +260,42 @@ func (q *Queries) ListInstances(ctx context.Context) ([]Instance, error) {
 
 const recordInstanceCheck = `-- name: RecordInstanceCheck :exec
 UPDATE instances
-SET last_seen_version = $2, last_check_at = $3, last_error = $4, updated_at = $3
-WHERE id = $1
+SET last_seen_version = $1, last_check_at = $2,
+    last_error = $3, updated_at = $2,
+    -- A failed check keeps the product: an instance that does not answer is still that product.
+    last_seen_product = CASE
+        WHEN $3::text IS NULL THEN $4
+        ELSE last_seen_product
+    END
+WHERE id = $5
 `
 
 type RecordInstanceCheckParams struct {
-	ID              uuid.UUID
 	LastSeenVersion *string
 	LastCheckAt     *time.Time
 	LastError       *string
+	LastSeenProduct *string
+	ID              uuid.UUID
 }
 
 func (q *Queries) RecordInstanceCheck(ctx context.Context, arg RecordInstanceCheckParams) error {
 	_, err := q.db.Exec(ctx, recordInstanceCheck,
-		arg.ID,
 		arg.LastSeenVersion,
 		arg.LastCheckAt,
 		arg.LastError,
+		arg.LastSeenProduct,
+		arg.ID,
 	)
 	return err
 }
 
 const updateInstance = `-- name: UpdateInstance :one
 UPDATE instances
-SET kind = $2, name = $3, base_url = $4, api_key_enc = $5, enabled = $6, updated_at = $7
+SET kind = $2, name = $3, base_url = $4, api_key_enc = $5, enabled = $6, updated_at = $7,
+    -- The product was seen at the old kind and address: a change of either forgets it.
+    last_seen_product = CASE WHEN kind = $2 AND base_url = $4 THEN last_seen_product END
 WHERE id = $1
-RETURNING id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at
+RETURNING id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product
 `
 
 type UpdateInstanceParams struct {
@@ -318,6 +333,7 @@ func (q *Queries) UpdateInstance(ctx context.Context, arg UpdateInstanceParams) 
 		&i.LastError,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LastSeenProduct,
 	)
 	return i, err
 }
@@ -327,8 +343,12 @@ INSERT INTO instances (id, kind, name, base_url, api_key_enc, enabled, source, c
 VALUES ($1, $2, $3, $4, $5, $6, 'configarr', $7, $8, $8)
 ON CONFLICT (configarr_key) DO UPDATE
 SET kind = EXCLUDED.kind, name = EXCLUDED.name, base_url = EXCLUDED.base_url,
-    api_key_enc = EXCLUDED.api_key_enc, enabled = EXCLUDED.enabled, updated_at = EXCLUDED.updated_at
-RETURNING id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, (xmax = 0) AS inserted
+    api_key_enc = EXCLUDED.api_key_enc, enabled = EXCLUDED.enabled, updated_at = EXCLUDED.updated_at,
+    -- As in UpdateInstance: a change of kind or address forgets the product.
+    last_seen_product = CASE
+        WHEN instances.kind = EXCLUDED.kind AND instances.base_url = EXCLUDED.base_url THEN instances.last_seen_product
+    END
+RETURNING id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product, (xmax = 0) AS inserted
 `
 
 type UpsertConfigarrInstanceParams struct {
@@ -356,6 +376,7 @@ type UpsertConfigarrInstanceRow struct {
 	LastError       *string
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
+	LastSeenProduct *string
 	Inserted        bool
 }
 
@@ -385,6 +406,7 @@ func (q *Queries) UpsertConfigarrInstance(ctx context.Context, arg UpsertConfiga
 		&i.LastError,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LastSeenProduct,
 		&i.Inserted,
 	)
 	return i, err

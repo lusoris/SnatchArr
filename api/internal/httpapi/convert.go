@@ -37,11 +37,20 @@ func userToOAS(u domain.User) oas.User {
 // probeResultToOAS is the answer of an instance probe. The product is left out for a kind
 // that one product serves.
 func probeResultToOAS(res arrclient.Result) *oas.ProbeResult {
-	out := &oas.ProbeResult{AppName: res.AppName, Version: res.Version}
-	if res.Product != arrclient.ProductNone {
-		out.Product = oas.NewOptArrProduct(oas.ArrProduct(res.Product))
+	return &oas.ProbeResult{AppName: res.AppName, Version: res.Version, Product: productToOAS(res.Product)}
+}
+
+// productToOAS names a product in the API. A value outside the enumeration is a row a newer
+// build wrote: this build cannot name it, and the encoder would refuse it, so it is `unknown`.
+func productToOAS(p domain.Product) oas.OptArrProduct {
+	if p == domain.ProductNone {
+		return oas.OptArrProduct{}
 	}
-	return out
+	out := oas.ArrProduct(p)
+	if out.Validate() != nil {
+		out = oas.ArrProductUnknown
+	}
+	return oas.NewOptArrProduct(out)
 }
 
 func instanceToOAS(i domain.Instance) oas.Instance {
@@ -58,6 +67,7 @@ func instanceToOAS(i domain.Instance) oas.Instance {
 		Source:          oas.InstanceSource(i.Source),
 		ConfigarrKey:    optString(i.ConfigarrKey),
 		LastSeenVersion: optString(i.LastSeenVersion),
+		LastSeenProduct: productToOAS(i.LastSeenProduct),
 		LastCheckAt:     optTime(i.LastCheckAt),
 		LastError:       optString(i.LastError),
 		CreatedAt:       i.CreatedAt,

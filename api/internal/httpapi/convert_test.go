@@ -47,6 +47,14 @@ func TestInstanceAndInputConversions(t *testing.T) {
 	if got.Kind != oas.AppKindRadarr || got.BaseURL.String() != inst.BaseURL || !got.ConfigarrKey.Set || got.LastError.Set || !got.LastCheckAt.Set {
 		t.Fatalf("instanceToOAS: %+v", got)
 	}
+	// Boundary: a kind that one product serves carries no product.
+	if got.LastSeenProduct.Set {
+		t.Errorf("instanceToOAS: product %q for a kind one product serves", got.LastSeenProduct.Value)
+	}
+	inst.Kind, inst.LastSeenProduct = domain.KindReadarr, domain.ProductBookshelf
+	if got := instanceToOAS(inst).LastSeenProduct; got != oas.NewOptArrProduct(oas.ArrProductBookshelf) {
+		t.Errorf("instanceToOAS: product = %+v, want bookshelf", got)
+	}
 	if list := instancesToOAS([]domain.Instance{inst, inst}); len(list) != 2 {
 		t.Fatal("instancesToOAS length")
 	}
@@ -64,23 +72,25 @@ func TestProbeResultToOAS(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name    string
-		product arrclient.Product
+		product domain.Product
 		want    oas.OptArrProduct
 	}{
 		// Positive: every product the probe names is a value of the API enumeration.
-		{"readarr", arrclient.ProductReadarr, oas.NewOptArrProduct(oas.ArrProductReadarr)},
-		{"bookshelf", arrclient.ProductBookshelf, oas.NewOptArrProduct(oas.ArrProductBookshelf)},
-		{"chaptarr", arrclient.ProductChaptarr, oas.NewOptArrProduct(oas.ArrProductChaptarr)},
-		{"faustvii", arrclient.ProductReadarrFaustvii, oas.NewOptArrProduct(oas.ArrProductReadarrFaustvii)},
-		// Negative: an answer the probe could not name is still an answer.
-		{"unknown", arrclient.ProductUnknown, oas.NewOptArrProduct(oas.ArrProductUnknown)},
+		{"readarr", domain.ProductReadarr, oas.NewOptArrProduct(oas.ArrProductReadarr)},
+		{"bookshelf", domain.ProductBookshelf, oas.NewOptArrProduct(oas.ArrProductBookshelf)},
+		{"chaptarr", domain.ProductChaptarr, oas.NewOptArrProduct(oas.ArrProductChaptarr)},
+		{"faustvii", domain.ProductReadarrFaustvii, oas.NewOptArrProduct(oas.ArrProductReadarrFaustvii)},
+		// Negative: an answer the probe could not name is still an answer, and so is a value
+		// this build does not know (a row a newer build wrote).
+		{"unknown", domain.ProductUnknown, oas.NewOptArrProduct(oas.ArrProductUnknown)},
+		{"a later product", domain.Product("a_later_product"), oas.NewOptArrProduct(oas.ArrProductUnknown)},
 		// Boundary: a kind that one product serves carries no product.
-		{"none", arrclient.ProductNone, oas.OptArrProduct{}},
+		{"none", domain.ProductNone, oas.OptArrProduct{}},
 	}
-	named := 0
+	named := map[oas.ArrProduct]bool{}
 	for _, tc := range tests {
 		if tc.want.Set {
-			named++
+			named[tc.want.Value] = true
 		}
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -98,8 +108,8 @@ func TestProbeResultToOAS(t *testing.T) {
 		})
 	}
 	// A product added to the API enumeration must get a row above.
-	if all := oas.ArrProduct("").AllValues(); named != len(all) {
-		t.Errorf("%d products covered, the API enumerates %d: %v", named, len(all), all)
+	if all := oas.ArrProduct("").AllValues(); len(named) != len(all) {
+		t.Errorf("%d products covered, the API enumerates %d: %v", len(named), len(all), all)
 	}
 }
 

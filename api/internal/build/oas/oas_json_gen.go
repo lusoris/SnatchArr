@@ -3170,6 +3170,12 @@ func (s *Instance) encodeFields(e *jx.Encoder) {
 		}
 	}
 	{
+		if s.LastSeenProduct.Set {
+			e.FieldStart("last_seen_product")
+			s.LastSeenProduct.Encode(e)
+		}
+	}
+	{
 		if s.LastCheckAt.Set {
 			e.FieldStart("last_check_at")
 			s.LastCheckAt.Encode(e, json.EncodeDateTime)
@@ -3191,7 +3197,7 @@ func (s *Instance) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfInstance = [12]string{
+var jsonFieldsNameOfInstance = [13]string{
 	0:  "id",
 	1:  "kind",
 	2:  "name",
@@ -3200,10 +3206,11 @@ var jsonFieldsNameOfInstance = [12]string{
 	5:  "source",
 	6:  "configarr_key",
 	7:  "last_seen_version",
-	8:  "last_check_at",
-	9:  "last_error",
-	10: "created_at",
-	11: "updated_at",
+	8:  "last_seen_product",
+	9:  "last_check_at",
+	10: "last_error",
+	11: "created_at",
+	12: "updated_at",
 }
 
 // Decode decodes Instance from json.
@@ -3303,6 +3310,16 @@ func (s *Instance) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"last_seen_version\"")
 			}
+		case "last_seen_product":
+			if err := func() error {
+				s.LastSeenProduct.Reset()
+				if err := s.LastSeenProduct.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"last_seen_product\"")
+			}
 		case "last_check_at":
 			if err := func() error {
 				s.LastCheckAt.Reset()
@@ -3324,7 +3341,7 @@ func (s *Instance) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"last_error\"")
 			}
 		case "created_at":
-			requiredBitSet[1] |= 1 << 2
+			requiredBitSet[1] |= 1 << 3
 			if err := func() error {
 				v, err := json.DecodeDateTime(d)
 				s.CreatedAt = v
@@ -3336,7 +3353,7 @@ func (s *Instance) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"created_at\"")
 			}
 		case "updated_at":
-			requiredBitSet[1] |= 1 << 3
+			requiredBitSet[1] |= 1 << 4
 			if err := func() error {
 				v, err := json.DecodeDateTime(d)
 				s.UpdatedAt = v
@@ -3358,7 +3375,7 @@ func (s *Instance) Decode(d *jx.Decoder) error {
 	var failures []validate.FieldError
 	for i, mask := range [2]uint8{
 		0b00111111,
-		0b00001100,
+		0b00011000,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.

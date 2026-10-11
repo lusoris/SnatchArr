@@ -81,6 +81,8 @@ type Instance struct {
 	Source          InstanceSource
 	ConfigarrKey    string
 	LastSeenVersion string
+	// LastSeenProduct is what the last successful connection test found; see Product.
+	LastSeenProduct Product
 	LastCheckAt     *time.Time
 	LastError       string
 	CreatedAt       time.Time

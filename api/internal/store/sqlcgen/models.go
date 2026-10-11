@@ -72,6 +72,7 @@ type Instance struct {
 	LastError       *string
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
+	LastSeenProduct *string
 }
 
 type ProcessedItem struct {

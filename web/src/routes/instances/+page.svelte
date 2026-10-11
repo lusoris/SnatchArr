@@ -10,9 +10,9 @@ SPDX-License-Identifier: EUPL-1.2
 	import Field from '$lib/components/Field.svelte';
 	import KindSelect from '$lib/components/KindSelect.svelte';
 	import ProblemNote from '$lib/components/ProblemNote.svelte';
-	import { type AppKind, kindLabel } from '$lib/kinds.js';
+	import type { AppKind } from '$lib/kinds.js';
 	import { m } from '$lib/paraglide/messages.js';
-	import { probeMessage } from '$lib/products.js';
+	import { instanceKindLabel, probeMessage } from '$lib/products.js';
 	import { keys } from '$lib/query.js';
 
 	const instances = createSentioQuery({
@@ -85,7 +85,7 @@ SPDX-License-Identifier: EUPL-1.2
 			{#each instances.data ?? [] as inst (inst.id)}
 				<tr>
 					<td><a class="underline" href={resolve(`/instances/${inst.id}`)}>{inst.name}</a></td>
-					<td>{kindLabel(inst.kind)}</td>
+					<td>{instanceKindLabel(inst.kind, inst.last_seen_product)}</td>
 					<td class="break-all">{inst.base_url}</td>
 					<td>{inst.source}</td>
 					<td>{inst.enabled ? '✓' : '–'}</td>

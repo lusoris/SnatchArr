@@ -13,26 +13,6 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 )
 
-// Product names what answered the probe of an instance kind that several products serve.
-// Today that is the kind `readarr` alone: forks of the retired Readarr keep its /api/v1
-// layout (ADR-0008), so the kind does not say which of them an instance is.
-type Product string
-
-const (
-	// ProductNone is the answer for a kind that one product serves.
-	ProductNone Product = ""
-	// ProductReadarr is a build of the retired Readarr.
-	ProductReadarr Product = "readarr"
-	// ProductBookshelf is github.com/pennydreadful/bookshelf.
-	ProductBookshelf Product = "bookshelf"
-	// ProductChaptarr is github.com/Chaptarr/chaptarr.
-	ProductChaptarr Product = "chaptarr"
-	// ProductReadarrFaustvii is github.com/Faustvii/Readarr.
-	ProductReadarrFaustvii Product = "readarr_faustvii"
-	// ProductUnknown is an answer that matches none of the products above.
-	ProductUnknown Product = "unknown"
-)
-
 // versionParts is how many leading numbers of a version order two builds.
 const versionParts = 3
 
@@ -40,9 +20,9 @@ const versionParts = 3
 var lastReadarr = [versionParts]int{0, 4, 19}
 
 // detectProduct tells the products apart that share one instance kind.
-func detectProduct(kind domain.AppKind, st *arr.StatusResponse) Product {
+func detectProduct(kind domain.AppKind, st *arr.StatusResponse) domain.Product {
 	if kind != domain.KindReadarr {
-		return ProductNone
+		return domain.ProductNone
 	}
 	return readarrProduct(st)
 }
@@ -50,21 +30,21 @@ func detectProduct(kind domain.AppKind, st *arr.StatusResponse) Product {
 // readarrProduct reads the product from a system/status answer. Chaptarr reports its own
 // name. The other forks report `Readarr`, so their packager and, last, the version decide:
 // a Readarr that is newer than the retired project ever was is a fork nobody named here.
-func readarrProduct(st *arr.StatusResponse) Product {
+func readarrProduct(st *arr.StatusResponse) domain.Product {
 	author := strings.ToLower(st.PackageAuthor)
 	switch {
 	case strings.EqualFold(st.AppName, "Chaptarr"):
-		return ProductChaptarr
+		return domain.ProductChaptarr
 	case !strings.EqualFold(st.AppName, "Readarr"):
-		return ProductUnknown
+		return domain.ProductUnknown
 	case strings.Contains(author, "pennydreadful"):
-		return ProductBookshelf
+		return domain.ProductBookshelf
 	case strings.Contains(author, "faustvii"):
-		return ProductReadarrFaustvii
+		return domain.ProductReadarrFaustvii
 	case builtByReadarr(st.Version):
-		return ProductReadarr
+		return domain.ProductReadarr
 	default:
-		return ProductUnknown
+		return domain.ProductUnknown
 	}
 }
 

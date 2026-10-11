@@ -200,18 +200,27 @@ func (s *Service) Test(ctx context.Context, instID uuid.UUID) (arrclient.Result,
 }
 
 func (s *Service) recordCheck(ctx context.Context, instID uuid.UUID, res arrclient.Result, probeErr error) {
-	var lastErr, version *string
+	var lastErr, version, product *string
 	if probeErr != nil {
 		msg := probeErr.Error()
 		lastErr = &msg
 	} else {
 		version = &res.Version
+		product = productOrNil(res.Product)
 	}
 	if err := s.st.Q().RecordInstanceCheck(ctx, sqlcgen.RecordInstanceCheckParams{
-		ID: instID, LastSeenVersion: version, LastCheckAt: new(s.clk.Now()), LastError: lastErr,
+		ID: instID, LastSeenVersion: version, LastSeenProduct: product, LastCheckAt: new(s.clk.Now()), LastError: lastErr,
 	}); err != nil {
 		s.logger.WarnContext(ctx, "instances: record check", slog.String("error", err.Error()))
 	}
+}
+
+// productOrNil is the product as the store keeps it: no row value for a kind one product serves.
+func productOrNil(p domain.Product) *string {
+	if p == domain.ProductNone {
+		return nil
+	}
+	return new(string(p))
 }
 
 // TestInput probes credentials that are not stored yet (the "test" button on the form).
@@ -307,7 +316,8 @@ func (s *Service) UpsertConfigarr(ctx context.Context, key string, in Input) (Up
 		}
 		out = UpsertOutcome{Instance: store.InstanceFromRow(sqlcgen.Instance{
 			ID: row.ID, Kind: row.Kind, Name: row.Name, BaseUrl: row.BaseUrl, ApiKeyEnc: row.ApiKeyEnc, Enabled: row.Enabled, Source: row.Source,
-			ConfigarrKey: row.ConfigarrKey, LastSeenVersion: row.LastSeenVersion, LastCheckAt: row.LastCheckAt, LastError: row.LastError,
+			ConfigarrKey: row.ConfigarrKey, LastSeenVersion: row.LastSeenVersion, LastSeenProduct: row.LastSeenProduct,
+			LastCheckAt: row.LastCheckAt, LastError: row.LastError,
 			CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
 		}), Inserted: row.Inserted}
 		return nil
