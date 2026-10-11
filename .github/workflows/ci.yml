@@ -69,6 +69,7 @@ jobs:
       proto: ${{ steps.filter.outputs.proto == 'true' && steps.present.outputs.proto == 'true' }}
       deploy: ${{ steps.filter.outputs.deploy == 'true' && steps.present.outputs.deploy == 'true' }}
       governance: ${{ steps.filter.outputs.governance }}
+      contracts: ${{ steps.filter.outputs.contracts == 'true' && steps.present.outputs.api == 'true' && steps.present.outputs.worker == 'true' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Detect scaffolded components
@@ -132,6 +133,21 @@ jobs:
               - '.gemini/**'
               - '.codex/**'
               - '.github/copilot-instructions.md'
+              - '.github/workflows/ci.yml'
+            contracts:
+              - 'tools/upstreamspec/**'
+              - 'renovate.json'
+              - 'api/internal/seerrclient/**'
+              - 'worker/crates/arr-client/**'
+              - 'worker/crates/snatch-core/**'
+              - 'go.mod'
+              - 'go.sum'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'rust-toolchain.toml'
+              - '.gitignore'
+              - '.dockerignore'
+              - 'Makefile'
               - '.github/workflows/ci.yml'
 
   # The Go jobs mirror golusoris' reusable ci-go.yml but pin tool versions that build with
@@ -406,6 +422,26 @@ jobs:
             --set 'networkPolicy.arrCidrs={10.0.0.0/8,0.0.0.0/0}' \
             --set-json 'networkPolicy.arrPeers=[{"namespaceSelector":{"matchLabels":{"kubernetes.io/metadata.name":"media"}}},{"podSelector":{"matchLabels":{"app.kubernetes.io/name":"lidarr"}},"ports":[{"port":8686,"protocol":"TCP"}]}]' \
             | kubectl apply --dry-run=server --namespace snatcharr -f -
+
+  # The hand-written clients against the OpenAPI specs their upstream projects publish. The specs
+  # are downloaded at the commits pinned in tools/upstreamspec/specs.yaml and checked against their
+  # sha256; they are never committed (docs/upstream-contracts.md).
+  contracts:
+    name: contracts (pinned upstream specs)
+    needs: changes
+    if: needs.changes.outputs.contracts == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: Clients against the pinned upstream specs
+        run: make contracts-verify
 
   governance:
     name: governance (praetor)

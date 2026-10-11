@@ -1,0 +1,76 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+#
+# Upstream OpenAPI specs the contract tests check the hand-written clients against
+# (docs/upstream-contracts.md). `make contracts-verify` downloads each file at its commit and
+# refuses it when its sha256 differs. Nothing listed here is committed or copied into an image.
+#
+# Renovate reads repository, tag and commit, in this order (customManagers in renovate.json), and
+# proposes the next stable upstream release. When the spec file changed with that release, the
+# sha256 no longer fits and the gate fails until the pin is renewed by hand:
+#
+#   go run ./tools/upstreamspec fetch    # prints the sha256 of the new file
+#
+# operations: "<METHOD> <path>" as the client requests it. `prefix` is the part of the path the
+# spec leaves to its `servers` entry.
+specs:
+  - name: sonarr
+    repository: Sonarr/Sonarr
+    tag: v4.0.20.3014
+    commit: cab419ade8ac7fcab5bf80394ee492abd35d5f5a
+    path: src/Sonarr.Api.V3/openapi.json
+    sha256: 03108f7f6b20300b84af879392ac44947cd3d3c19c073184e5fbf94e127165f9
+    license: GPL-3.0
+    operations:
+      - GET /api/v3/system/status
+      - GET /api/v3/queue
+      - GET /api/v3/history/since
+      - GET /api/v3/wanted/missing
+      - GET /api/v3/wanted/cutoff
+      - POST /api/v3/command
+      - GET /api/v3/command/{id}
+  - name: radarr
+    repository: Radarr/Radarr
+    tag: v6.4.4.10685
+    commit: a96bf7c3ecb23cb76993770727285dc17a613fbc
+    path: src/Radarr.Api.V3/openapi.json
+    sha256: 95ea9062485118d6a8abed8250b9bfbf94e4de0f55e9c5611da6805864f9a26e
+    license: GPL-3.0
+    operations:
+      - GET /api/v3/system/status
+      - GET /api/v3/queue
+      - GET /api/v3/history/since
+      - GET /api/v3/wanted/missing
+      - GET /api/v3/wanted/cutoff
+      - POST /api/v3/command
+      - GET /api/v3/command/{id}
+  - name: lidarr
+    repository: Lidarr/Lidarr
+    tag: v3.1.0.4875
+    commit: 350860e524029b7fb4165ed14fbcabb11217ada2
+    path: src/Lidarr.Api.V1/openapi.json
+    sha256: 4ae9e79e9662898ed4704ce80f091161587a9f0d664f9e518b11a038616e491f
+    license: GPL-3.0
+    operations:
+      - GET /api/v1/system/status
+      - GET /api/v1/queue
+      - GET /api/v1/history/since
+      - GET /api/v1/wanted/missing
+      - GET /api/v1/wanted/cutoff
+      - POST /api/v1/command
+      - GET /api/v1/command/{id}
+  - name: seerr
+    repository: seerr-team/seerr
+    tag: v3.5.0
+    commit: e2f24cb46079746936516c723b09820360f95113
+    path: seerr-api.yml
+    sha256: 9533fc4ce04a5e68ef3d7c2deef5a25c43b560dbde07c361eb0f736fce66bf56
+    license: MIT
+    prefix: /api/v1
+    operations:
+      - GET /api/v1/status
+      - GET /api/v1/request
+      - GET /api/v1/settings/sonarr
+      - GET /api/v1/settings/radarr
+      - GET /api/v1/movie/{movieId}
+      - GET /api/v1/tv/{tvId}
