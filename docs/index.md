@@ -9,7 +9,8 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 Gentle by default, cloud-native from day one, and yes, the name means exactly what you
 think it means.
 
-SnatchArr asks Sonarr, Radarr, Lidarr, Readarr and Whisparr (v2 and v3) to search for
+SnatchArr asks Sonarr, Radarr, Lidarr, Whisparr (v2 and v3) and Readarr
+([legacy](readarr.md)) to search for
 **missing** items and **cutoff-unmet upgrades** in small batches. Every search is a
 *snatch*. It remembers what it already snatched (the *afterglow*), never exceeds an
 instance's hourly *stamina*, and slows down (*foreplay*) when your download client is

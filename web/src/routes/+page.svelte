@@ -10,6 +10,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import type { components } from '$lib/api/schema.js';
 	import ProblemNote from '$lib/components/ProblemNote.svelte';
 	import StaminaGauge from '$lib/components/StaminaGauge.svelte';
+	import { kindLabel } from '$lib/kinds.js';
 	import { m } from '$lib/paraglide/messages.js';
 	import { getLocale } from '$lib/paraglide/runtime.js';
 	import { keys } from '$lib/query.js';
@@ -72,7 +73,7 @@ SPDX-License-Identifier: EUPL-1.2
 						<h2 class="text-lg font-semibold">
 							<a class="hover:underline" href={resolve(`/instances/${inst.id}`)}>{inst.name}</a>
 						</h2>
-						<p class="text-sm text-subtle">{inst.kind} · {inst.base_url}</p>
+						<p class="text-sm text-subtle">{kindLabel(inst.kind)} · {inst.base_url}</p>
 					</div>
 					<span class="rounded-full border border-line px-2 py-0.5 text-xs"
 						>{inst.enabled ? m.instance_enabled() : 'off'}</span

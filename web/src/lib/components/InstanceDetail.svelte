@@ -10,6 +10,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import type { components } from '$lib/api/schema.js';
 	import Field from '$lib/components/Field.svelte';
 	import ProblemNote from '$lib/components/ProblemNote.svelte';
+	import { kindLabel } from '$lib/kinds.js';
 	import { m } from '$lib/paraglide/messages.js';
 	import { keys } from '$lib/query.js';
 
@@ -66,7 +67,7 @@ SPDX-License-Identifier: EUPL-1.2
 	<ProblemNote error={policy.error} />
 {:else if instance.data && draft}
 	<h1 class="mb-1 text-2xl font-semibold">{instance.data.name}</h1>
-	<p class="mb-4 text-sm text-subtle">{instance.data.kind} · {instance.data.base_url}</p>
+	<p class="mb-4 text-sm text-subtle">{kindLabel(instance.data.kind)} · {instance.data.base_url}</p>
 	<button type="button" class="btn mb-6" onclick={() => probe.mutate()} disabled={probe.isPending}
 		>{m.instance_test()}</button
 	>
