@@ -28,6 +28,16 @@ adoption:
         - dev-container
 profiles:
     - app-service
+# The agent clients and editors in use. Praetor generates and verifies the files of these
+# only; the files of an unselected one are not kept in the tree.
+agent_clients:
+    - claude
+    - codex
+    - gemini
+editors:
+    - universal
+    - vscode
+    - antigravity
 # The Go control plane at the root is the audited flavor (#1103 pin; api/ holds its packages).
 flavors:
     - name: go-service
