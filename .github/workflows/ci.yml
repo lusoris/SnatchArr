@@ -57,6 +57,27 @@ jobs:
           done
           exit "$status"
 
+  # Runs on every change, with no filter: a change that touches no component skips the jobs
+  # below, and the workflow files are then all that is left to gate.
+  workflows:
+    name: Workflows (actionlint, pinned actions)
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: The aggregate rule refuses its planted cases
+        run: sh tools/ci/status_test.sh
+      - name: The workflow check refuses its planted cases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash tools/ci/workflow-check_test.sh
+      - name: Lint workflows and check action pins
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash tools/ci/workflow-check.sh
+
   changes:
     name: Detect changed components
     runs-on: ubuntu-26.04
@@ -472,3 +493,38 @@ jobs:
         run: |
           praetorctl state init --if-absent .
           praetorctl flavor audit --flavor=go-service .
+
+  # The required check that stands for every job of this workflow. A job the change filter
+  # leaves out ends as skipped, and a skipped job satisfies a required check on its own, so this
+  # job reads every result (tools/ci/status.sh). A new job needs a line here and a rule there;
+  # the workflows job fails until both exist.
+  status:
+    name: CI success
+    if: always()
+    needs:
+      - commits
+      - workflows
+      - changes
+      - api-lint
+      - api-test
+      - api-security
+      - api-openapi
+      - worker
+      - e2e
+      - web
+      - proto
+      - deploy
+      - contracts
+      - governance
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check every job result
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          # The condition of the commits job, word for word.
+          COMMITS_EXPECTED: ${{ github.event_name == 'pull_request' && github.event.pull_request.user.type != 'Bot' }}
+        run: sh tools/ci/status.sh
