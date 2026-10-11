@@ -22,7 +22,7 @@ GOLUSORIS_SHARED = $(GOMODCACHE)/github.com/golusoris/golusoris@$(GOLUSORIS_VER)
 
 .PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke web-verify web-e2e proto-verify deploy-verify governance-verify \
 	images kind-up kind-deploy kind-down \
-        api-gen api-gosec gosec-install web-gen proto-gen dev hooks setup
+        api-gen api-gosec gosec-install tools-verify tools-lint tools-test tools-gosec web-gen proto-gen dev hooks setup
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-18s %s\n", $$1, $$2}'
@@ -31,7 +31,7 @@ verify-all: governance-verify proto-verify api-verify worker-verify web-verify d
 	@echo "All SnatchArr verification gates passed."
 
 # ── api/ (Go, golusoris) ──────────────────────────────────────────────────────
-api-verify: ## golangci-lint + go fix + gosec + govulncheck + go test -race + generated-code drift + spectral
+api-verify: ## golangci-lint + go fix + gosec + govulncheck + go test -race + generated-code drift + spectral + tools-verify
 	@if [ ! -f go.mod ]; then echo "go.mod not scaffolded yet; skipping"; exit 0; fi
 	# go.mod and go.sum hold exactly what the code needs: prints the missing changes and fails.
 	go mod tidy -diff
@@ -46,6 +46,7 @@ api-verify: ## golangci-lint + go fix + gosec + govulncheck + go test -race + ge
 	cd ..
 	# Every gosec finding in generated code is annotated, and every annotation still has its finding.
 	go run ./tools/gennosec check
+	$(MAKE) tools-verify
 	$(MAKE) api-cover
 	if [ -f api/openapi/openapi.yaml ]; then
 	  npx --yes @stoplight/spectral-cli@6.15.0 lint api/openapi/openapi.yaml --ruleset tools/spectral.yaml --fail-severity warn
@@ -60,12 +61,13 @@ api-gen: ## ogen + sqlc generation inside api/
 # and it fails when the summary reports no scanned file. The SARIF report feeds code scanning.
 GOSEC_SARIF ?= api/tmp/gosec.sarif
 GOSEC_PKG   ?= ./...
+GOSEC_TAGS  ?=
 api-gosec: ## gosec over the whole module (zero exclusions); fails on a finding or when no file was scanned
 	mkdir -p "$(dir $(GOSEC_SARIF))"
 	log=$$(mktemp)
 	trap 'rm -f "$$log"' EXIT
 	status=0
-	gosec -conf .gosec.json -exclude-generated -fmt sarif -out "$(GOSEC_SARIF)" -stdout -verbose text $(GOSEC_PKG) >"$$log" 2>&1 || status=$$?
+	gosec -conf .gosec.json -exclude-generated $(if $(GOSEC_TAGS),-tags $(GOSEC_TAGS)) -fmt sarif -out "$(GOSEC_SARIF)" -stdout -verbose text $(GOSEC_PKG) >"$$log" 2>&1 || status=$$?
 	cat "$$log"
 	if ! grep -q -E '^[[:space:]]*Files[[:space:]]*:[[:space:]]*[1-9]' "$$log"; then
 	  echo "api-gosec: gosec scanned no file ($(GOSEC_PKG), started in $$(pwd)); a scan of nothing is not a pass" >&2
@@ -98,6 +100,38 @@ api-cover: ## Coverage gate on hand-written packages (generated code excluded)
 	pct=$$(go tool cover -func=tmp/cover.filtered.out | awk '/^total:/ {gsub("%","",$$3); print $$3}')
 	echo "coverage (non-generated): $${pct}% (min $(API_COVER_MIN)%)"
 	awk -v p="$$pct" -v m="$(API_COVER_MIN)" 'BEGIN { exit (p+0 < m+0) ? 1 : 0 }'
+
+# ── tools/ (Go, root module) ─────────────────────────────────────────────────
+# The gate code under tools/ gets the gate it applies to api/: the same .golangci.yml, go vet,
+# go test -race and gosec. tools/apicompat/gate/main.go builds only with TOOLS_TAG, so each step
+# runs once without the tag and once with it.
+GOLANGCI   ?= golangci-lint
+TOOLS_PKG  ?= ./tools/...
+TOOLS_TAG  ?= apicompatgate
+TOOLS_LIST ?= exceptions.yaml
+tools-verify: tools-lint tools-test tools-gosec ## golangci-lint + go vet + go test -race + gosec over tools/
+
+# The tagged run fails on no finding by itself: it writes every finding to a report, and
+# tools/lintexcept accepts the report only when each finding has a dated exception in
+# TOOLS_LIST that still holds and each exception still has its finding. No file is excluded in
+# .golangci.yml, so the list is the one place that excuses a finding.
+tools-lint: ## golangci-lint over tools/; a finding needs a dated exception in exceptions.yaml
+	$(GOLANGCI) run --config .golangci.yml $(TOOLS_PKG)
+	report=$$(mktemp)
+	trap 'rm -f "$$report"' EXIT
+	$(GOLANGCI) run --config .golangci.yml --build-tags $(TOOLS_TAG) --issues-exit-code 0 \
+	  --max-issues-per-linter 0 --max-same-issues 0 --uniq-by-line=false \
+	  --output.json.path "$$report" $(TOOLS_PKG)
+	go run ./tools/lintexcept check -list "$(TOOLS_LIST)" -report "$$report"
+
+tools-test: ## go vet + go test -race over tools/
+	go vet $(TOOLS_PKG)
+	go vet -tags $(TOOLS_TAG) $(TOOLS_PKG)
+	go test -race -count=1 -timeout=120s $(TOOLS_PKG)
+
+# api-gosec scans tools/ without the tag (it runs over ./...); this is the scan with it.
+tools-gosec: ## gosec over tools/ built with the apicompatgate tag
+	$(MAKE) api-gosec GOSEC_PKG=$(TOOLS_PKG) GOSEC_TAGS=$(TOOLS_TAG) GOSEC_SARIF=api/tmp/gosec-tools.sarif
 
 # ── worker/ (Rust) ────────────────────────────────────────────────────────────
 worker-verify: ## cargo fmt/clippy(-D warnings)/audit/deny/test

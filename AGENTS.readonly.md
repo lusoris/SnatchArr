@@ -122,6 +122,7 @@ verification gate = all gates. Run before concluding any turn.
 ## Language rules
 
 - Go: golangci-lint v2, root `.golangci.yml` (HISS-04 caps: cyclomatic <= 10, cognitive <= 15, <= 60 lines / 50 statements per function). gosec zero exclusions; every `#nosec` carries `Gxxx -- <reason>`. `time.Now()` banned outside golusoris `core/clock`. Every I/O call: `context.Context` with deadline. Wrap errors with `%w`. Table-driven tests: positive, negative, boundary.
+- Go under `tools/`: same gate as `api/` (`make tools-verify`, part of `make api-verify`); runs without + with build tag `apicompatgate`. No per-file exclusion in `.golangci.yml`. Finding in file not editable here -> entry in root `exceptions.yaml` (`rule: golangci-lint/<linter>`, one file, reason, `expires` <= 90 days); `tools/lintexcept` fails on missing, expired, stale entry. `tools/apicompat/gate/main.go` = locked praetor asset: never edit.
 - Rust: `#![forbid(unsafe_code)]`, `cargo clippy -D warnings`, `clippy::unwrap_used` / `clippy::expect_used` denied outside `#[cfg(test)]`. Bounded retries with jitter; every request has timeout. `snatch-core` stays pure (no I/O), property-tested.
 - TypeScript / Svelte: sveltesentio section 2 rules via shared ESLint config (complexity 10, <= 60 lines per function, `no-direct-time`, `no-unsanitised-html`, `chart-a11y-wrapper`). Svelte 5 runes only. Zod v4 schemas pinned to OpenAPI types with `satisfies`.
 - Accessibility = gate: Playwright + axe-core, zero violations on every route (WCAG 2.2 AA / EN 301 549). Never suppress with `|| true`.

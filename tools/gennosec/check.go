@@ -8,7 +8,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -17,6 +19,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/lusoris/SnatchArr/tools/internal/findings"
 )
 
 // issue is the part of a gosec JSON finding the check reads.
@@ -37,8 +41,12 @@ type site struct {
 
 var annotationLine = regexp.MustCompile(`^\s*// #nosec (G\d{3}) -- `)
 
+// gosecFlags come before the directories: a JSON report that also lists suppressed findings.
+var gosecFlags = []string{"-quiet", "-fmt=json", "-track-suppressions", "-conf", ".gosec.json"}
+
 // checkAll runs gosec over every generated directory and compares findings with annotations.
-func checkAll(ctx context.Context, root string) error {
+// It writes one summary line to out when they agree.
+func checkAll(ctx context.Context, root string, out io.Writer) error {
 	issues, err := runGosec(ctx, root)
 	if err != nil {
 		return err
@@ -55,12 +63,14 @@ func checkAll(ctx context.Context, root string) error {
 	if len(problems) > 0 {
 		return fmt.Errorf("%d problem(s):\n  %s", len(problems), strings.Join(problems, "\n  "))
 	}
-	fmt.Printf("gennosec: %d generated finding(s), each annotated; no stale annotation\n", len(found))
+	if _, err = fmt.Fprintf(out, "gennosec: %d generated finding(s), each annotated; no stale annotation\n", len(found)); err != nil {
+		return fmt.Errorf("write summary: %w", err)
+	}
 	return nil
 }
 
 func runGosec(ctx context.Context, root string) ([]issue, error) {
-	args := []string{"-quiet", "-fmt=json", "-track-suppressions", "-conf", ".gosec.json"}
+	args := append(make([]string, 0, len(gosecFlags)+len(rules)), gosecFlags...)
 	for _, r := range rules {
 		args = append(args, "./"+r.dir+"/...")
 	}
@@ -70,13 +80,11 @@ func runGosec(ctx context.Context, root string) ([]issue, error) {
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	runErr := cmd.Run() // gosec exits 1 when it finds anything; the JSON decides
-	var out struct {
-		Issues []issue `json:"Issues"`
+	issues, err := findings.Decode[issue](stdout.Bytes())
+	if err != nil {
+		return nil, fmt.Errorf("gosec output (stderr %q): %w", stderr.String(), errors.Join(err, runErr))
 	}
-	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
-		return nil, fmt.Errorf("gosec output (run error %v, stderr %q): %w", runErr, stderr.String(), err)
-	}
-	return out.Issues, nil
+	return issues, nil
 }
 
 // classify splits gosec's issues into the suppressed sites and the unannotated ones.

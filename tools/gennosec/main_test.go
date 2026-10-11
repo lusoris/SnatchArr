@@ -14,6 +14,7 @@ import (
 var testRule = rule{dir: "x", id: "G101", match: regexp.MustCompile("^const \\w*Token\\w* = `"), reason: "test reason"}
 
 func TestAnnotate(t *testing.T) {
+	t.Parallel()
 	note := annotation("", testRule)
 	tests := []struct {
 		name string
@@ -28,6 +29,7 @@ func TestAnnotate(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if got := annotate(tt.in, testRule); !slices.Equal(got, tt.want) {
 				t.Errorf("annotate() =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(tt.want, "\n"))
 			}
@@ -36,6 +38,7 @@ func TestAnnotate(t *testing.T) {
 }
 
 func TestAnnotateKeepsIndentation(t *testing.T) {
+	t.Parallel()
 	r := rule{id: "G103", match: regexp.MustCompile(`unsafe\.Slice`), reason: "r"}
 	got := annotate([]string{"\t\tx := unsafe.Slice(p, n)"}, r)
 	if want := "\t\t// #nosec G103 -- r"; got[0] != want {
@@ -44,6 +47,7 @@ func TestAnnotateKeepsIndentation(t *testing.T) {
 }
 
 func TestLineSite(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		lines   string
 		want    int
@@ -69,6 +73,7 @@ func TestLineSite(t *testing.T) {
 }
 
 func TestCollectCoversTheNextLine(t *testing.T) {
+	t.Parallel()
 	out := map[site]bool{}
 	collect(out, "f.go", []string{"package p", "\t// #nosec G124 -- reason", "\treq.AddCookie(c)"})
 	if !out[site{file: "f.go", line: 3, rule: "G124"}] || len(out) != 1 {
@@ -77,6 +82,7 @@ func TestCollectCoversTheNextLine(t *testing.T) {
 }
 
 func TestReport(t *testing.T) {
+	t.Parallel()
 	a := site{file: "f.go", line: 3, rule: "G101"}
 	b := site{file: "f.go", line: 9, rule: "G103"}
 	tests := []struct {
@@ -91,6 +97,7 @@ func TestReport(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if got := report(tt.found, tt.unannotated, tt.annotated); len(got) != tt.want {
 				t.Errorf("report() = %v, want %d problem(s)", got, tt.want)
 			}
@@ -99,6 +106,7 @@ func TestReport(t *testing.T) {
 }
 
 func TestRunRejectsUnknownCommand(t *testing.T) {
+	t.Parallel()
 	for _, args := range [][]string{nil, {"bogus"}, {"apply", "extra"}} {
 		if err := run(args); err == nil {
 			t.Errorf("run(%q) = nil, want a usage error", args)
