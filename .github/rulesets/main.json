@@ -47,6 +47,12 @@
             "context": "Detect changed components"
           },
           {
+            "context": "CI success"
+          },
+          {
+            "context": "Workflows (actionlint, pinned actions)"
+          },
+          {
             "context": "Go API Compatibility"
           },
           {

@@ -364,17 +364,23 @@ func decoded(t *testing.T, raw []byte) *renovateConfig {
 // one for branch pins.
 func managers(t *testing.T, config *renovateConfig) (tags, branches *customManager) {
 	t.Helper()
+	reading := 0
 	for index := range config.CustomManagers {
-		switch manager := &config.CustomManagers[index]; manager.DatasourceTemplate {
+		manager := &config.CustomManagers[index]
+		if !slices.Contains(manager.ManagerFilePatterns, committedManifest) {
+			continue
+		}
+		reading++
+		switch manager.DatasourceTemplate {
 		case tagSource:
 			tags = manager
 		case branchSource:
 			branches = manager
 		}
 	}
-	if len(config.CustomManagers) != readers || tags == nil || branches == nil || !slices.ContainsFunc(config.PackageRules, forSpecs) {
-		t.Fatalf("renovate.json has %d custom manager(s) and package rules %+v; the planted defects need a manager for %s, one for %s and a rule for them",
-			len(config.CustomManagers), config.PackageRules, tagSource, branchSource)
+	if reading != readers || tags == nil || branches == nil || !slices.ContainsFunc(config.PackageRules, forSpecs) {
+		t.Fatalf("renovate.json has %d custom manager(s) for %s and package rules %+v; the planted defects need a manager for %s, one for %s and a rule for them",
+			reading, committedManifest, config.PackageRules, tagSource, branchSource)
 	}
 	return tags, branches
 }

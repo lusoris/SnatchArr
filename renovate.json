@@ -45,6 +45,19 @@
         "- name: (?<depName>\\S+)\\n +repository: (?<packageName>\\S+)\\n +branch: (?<currentValue>\\S+)\\n +commit: (?<currentDigest>[0-9a-f]{40})\\n"
       ],
       "datasourceTemplate": "github-digest"
+    },
+    {
+      "description": "Images of the workflow gate, each pinned by version and digest on one line (tools/ci/workflow-check.sh)",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "tools/ci/tool-versions.env"
+      ],
+      "matchStrings": [
+        "ACTIONLINT_IMAGE=mirror\\.gcr\\.io/(?<depName>rhysd/actionlint):(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})\\n",
+        "ZIZMOR_IMAGE=(?<depName>ghcr\\.io/zizmorcore/zizmor):(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})\\n"
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
     }
   ],
   "postUpdateOptions": [
@@ -203,12 +216,22 @@
       "automerge": true
     },
     {
-      "description": "Upstream spec pins: one pull request, merged by hand. Renovate cannot renew the sha256 of a spec file, and the contracts job that fails on a stale one is not a required check, so platform automerge would not wait for it (docs/upstream-contracts.md)",
+      "description": "Pins a custom manager reads are merged by hand. Upstream spec pins: Renovate cannot renew the sha256 of a spec file (docs/upstream-contracts.md). Workflow gate tools: a new version changes what a required check refuses, so a person reads its release notes",
       "matchManagers": [
         "custom.regex"
       ],
       "groupName": "upstream specs",
       "automerge": false
+    },
+    {
+      "description": "The two images of the workflow gate move in a pull request of their own",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchFileNames": [
+        "tools/ci/tool-versions.env"
+      ],
+      "groupName": "workflow gate tools"
     },
     {
       "description": "praetor-managed files: praetorctl adopt ships their updates and praetorctl audit locks them byte for byte",
