@@ -3,7 +3,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 //! Contract tests: the wire types and the requests of this client against the `OpenAPI` specs
-//! that Sonarr, Radarr and Lidarr publish (`docs/upstream-contracts.md`).
+//! that Sonarr, Radarr, Lidarr and the three supported Readarr forks (Bookshelf, Chaptarr and
+//! the Faustvii fork) publish (`docs/upstream-contracts.md`).
 //!
 //! `upstreamspec fetch` writes one contract file per pinned spec into a cache directory that is
 //! never committed. A contract lists the operations the client calls, each with the documented
@@ -781,4 +782,22 @@ async fn upstream_contract_radarr() -> Result<(), Failure> {
 #[ignore = "needs the spec cache; run `make contracts-verify`"]
 async fn upstream_contract_lidarr() -> Result<(), Failure> {
     upstream(Kind::Lidarr, "lidarr").await
+}
+
+#[tokio::test]
+#[ignore = "needs the spec cache; run `make contracts-verify`"]
+async fn upstream_contract_bookshelf() -> Result<(), Failure> {
+    upstream(Kind::Readarr, "bookshelf").await
+}
+
+#[tokio::test]
+#[ignore = "needs the spec cache; run `make contracts-verify`"]
+async fn upstream_contract_chaptarr() -> Result<(), Failure> {
+    upstream(Kind::Readarr, "chaptarr").await
+}
+
+#[tokio::test]
+#[ignore = "needs the spec cache; run `make contracts-verify`"]
+async fn upstream_contract_readarr_faustvii() -> Result<(), Failure> {
+    upstream(Kind::Readarr, "readarr-faustvii").await
 }

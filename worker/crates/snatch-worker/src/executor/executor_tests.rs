@@ -14,6 +14,8 @@ use tonic::transport::Server;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
+mod readarr_forks;
+
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 /// The value, or a test error naming what was missing (no unwrap: HISS-07).

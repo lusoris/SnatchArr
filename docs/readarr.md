@@ -32,16 +32,72 @@ instead ([Where the name is kept](#where-the-name-is-kept)).
 
 ## Forks
 
-No Readarr fork is a supported target yet. Two forks keep Readarr's v1 API layout,
-including the wanted lists SnatchArr reads (checked 2026-10-11):
+Three forks of Readarr are tested targets (2026-10-11). Add one with the kind `readarr`,
+like Readarr itself: there is no kind per fork. The connection test names the fork it
+reached ([What the connection test names](#what-the-connection-test-names)).
 
-- [Bookshelf](https://github.com/pennydreadful/bookshelf), last commit 2026-09-11
-- [Chaptarr](https://github.com/Chaptarr/chaptarr), last commit 2026-09-27
+| Fork | Tested version | Spec pinned at | Last commit |
+| --- | --- | --- | --- |
+| [Bookshelf](https://github.com/pennydreadful/bookshelf) | 0.4.21.182 | branch `develop`, commit `3ac41f7e3142` | 2026-09-11 |
+| [Chaptarr](https://github.com/Chaptarr/chaptarr) | 0.9.965.0 | tag `v0.9.965`, commit `e67374f4b3fe` | 2026-09-27 |
+| [Readarr (Faustvii fork)](https://github.com/Faustvii/Readarr) | 0.10.0.0 | tag `v0.10.0`, commit `7f02ffa52997` | 2026-09-02 |
 
-SnatchArr has not been tested against either. Adding one with the kind `readarr` is at
-your own risk until [#22](https://github.com/lusoris/SnatchArr/issues/22) is closed. That
-issue adds the forks that pass the compatibility tests as targets of their own and lists
-the ones that fail here, with the reason.
+No fork failed the tests, so none is listed as unsupported. A fork that is not in the
+table is untested: the connection test names it "not recognised", and adding it with the
+kind `readarr` is at your own risk.
+
+### What tested means
+
+Each fork passes two kinds of test.
+
+- **Contract.** `upstream_contract_bookshelf`, `upstream_contract_chaptarr` and
+  `upstream_contract_readarr_faustvii` in `worker/crates/arr-client/src/contract_tests.rs`
+  run the worker's client against the OpenAPI spec the fork publishes at the pinned commit:
+  system status, queue, history, both wanted lists, the search command and its status. Run
+  them with `make contracts-verify` ([Upstream contracts](upstream-contracts.md)); the pins
+  are in `tools/upstreamspec/specs.yaml`.
+- **Worker run.** `worker/crates/snatch-worker/src/executor/executor_tests/readarr_forks.rs`
+  runs a whole snatch, for missing books and for upgrades, against what each fork answered
+  on 2026-10-11. Run it with `cargo test -p snatch-worker readarr_forks`.
+
+The answers were recorded from these images, each started with an empty library:
+
+- Bookshelf: `ghcr.io/pennydreadful/bookshelf@sha256:67498dd5ece516867d72ee642abd6c1a66b36a135c8f7da0127109564372beb1`.
+  Its status answer names the pinned commit as the package version.
+- Chaptarr: `chaptarr/chaptarr@sha256:bb00d67cbe1485d1cd61ef178362a29b42aa08f86b290841aab4b115ad2647a6`.
+- Readarr (Faustvii fork): `ghcr.io/faustvii/readarr@sha256:23b3dfeac0a60d3395bee862e6b954dc14bc6bd13411a89e36f92e9bbaf7bdfa`.
+
+### What a run sends
+
+A run sends one `AuthorSearch` command per author who has a selected wanted book, and no
+`BookSearch` (`group_readarr` in `worker/crates/snatch-core/src/lib.rs`; ADR-0008 names
+both commands, a run sends only the first). All three forks accepted the command with
+HTTP 201.
+
+The fork then searches every monitored book of that author, not only the books the run
+selected (`AuthorSearch` in `src/NzbDrone.Core/IndexerSearch/ReleaseSearchService.cs` of
+each fork at the pinned commit; Chaptarr limits it to the media profiles configured for
+the author). Stamina is debited per selected book all the same
+([#180](https://github.com/lusoris/SnatchArr/issues/180)).
+
+### Limits of the tests
+
+- The libraries were empty, so no fork returned a wanted book. The paging envelopes of the
+  lists, the history and the command answers in the worker test are the forks' own; the
+  two book records are written by hand from the fields the worker reads.
+- The recorded author search named an author the forks did not have. Each fork accepted
+  it and then ended the command as `failed`. No search of a real author, and no grab, has
+  been observed ([#181](https://github.com/lusoris/SnatchArr/issues/181)).
+- The contract tests compare what the client reads and which requests it sends. They do
+  not compare the body of the search command with the spec
+  ([Limits](upstream-contracts.md#limits)).
+- Chaptarr's wanted lists take an optional `mediaType` (`ebook`, `audiobook` or `all`).
+  SnatchArr does not send it, and Chaptarr then lists both media types
+  (`GetBookMonitoringFilter` in `src/NzbDrone.Core/Books/Extensions/AuthorExtensions.cs`
+  at the pinned commit). A snatch for one media type only is not possible.
+- A newer version of a fork is covered once its pin is renewed
+  ([Renewing a pin](upstream-contracts.md#renewing-a-pin)); the worker test keeps the
+  answers of the versions in the table.
 
 ### What the connection test names
 
@@ -59,9 +115,8 @@ difference.
 | `Readarr` | anything else | 0.4.19 or lower | Readarr |
 | `Readarr` | anything else | higher, or not a version | not recognised |
 
-The third fork in the table is [Faustvii/Readarr](https://github.com/Faustvii/Readarr),
-last commit 2026-09-02. The retired Readarr never built a version above 0.4.19, which is
-what the last two rows rest on.
+The retired Readarr never built a version above 0.4.19, which is what the last two rows
+rest on.
 
 Two limits follow from the fields:
 
@@ -70,8 +125,9 @@ Two limits follow from the fields:
 - A fork that reports `Readarr`, a version up to 0.4.19 and no known packager cannot be
   told from Readarr.
 
-A name is not a statement of support: the test still succeeds for every row, and the first
-paragraph of this section holds. The rule is `readarrProduct` in
+A name is not a statement of support: the test succeeds for every row, also for "not
+recognised". The tested forks are the three in the table under [Forks](#forks). The rule
+is `readarrProduct` in
 `api/internal/arrclient/product.go`; `TestProbe_Product` in the same directory holds the
 answers each product gave on 2026-10-11. The API carries the name as `product` of
 `ProbeResult` (`api/openapi/openapi.yaml`).

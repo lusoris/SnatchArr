@@ -19,11 +19,13 @@ import (
 //
 // Tag is the upstream release the commit belongs to. Renovate reads Repository, Tag and Commit
 // (renovate.json) and proposes the next stable release; SHA256 then decides whether the spec file
-// changed with it.
+// changed with it. An upstream project that tags no release is pinned with Branch in the place of
+// Tag: the commit is then one of that branch, and Renovate proposes the newest one.
 type pin struct {
 	Name       string   `yaml:"name"`
 	Repository string   `yaml:"repository"`
 	Tag        string   `yaml:"tag"`
+	Branch     string   `yaml:"branch"`
 	Commit     string   `yaml:"commit"`
 	Path       string   `yaml:"path"`
 	SHA256     string   `yaml:"sha256"`
@@ -36,6 +38,7 @@ var (
 	pinName    = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 	repository = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9._-]+$`)
 	tagName    = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
+	branchName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$`)
 	commitID   = regexp.MustCompile(`^[0-9a-f]{40}$`)
 	sha256Hex  = regexp.MustCompile(`^[0-9a-f]{64}$`)
 	licenseID  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.+-]*$`)
@@ -83,7 +86,9 @@ func (p pin) problem() string {
 	}{
 		{pinName.MatchString(p.Name), "name must be lower-case letters, digits and hyphens"},
 		{repository.MatchString(p.Repository), "repository must be <owner>/<name>"},
-		{tagName.MatchString(p.Tag), "tag must name one release tag"},
+		{(p.Tag == "") != (p.Branch == ""), "exactly one of tag and branch must be set"},
+		{p.Tag == "" || tagName.MatchString(p.Tag), "tag must name one release tag"},
+		{p.Branch == "" || branchName.MatchString(p.Branch), "branch must name one branch"},
 		{commitID.MatchString(p.Commit), "commit must be a full 40-digit commit id"},
 		{cleanRelative(p.Path), "path must be one clean file path inside the upstream repository"},
 		{sha256Hex.MatchString(p.SHA256), "sha256 must be 64 lower-case hex digits"},
@@ -128,6 +133,14 @@ func cleanRelative(file string) bool {
 // source is where the pinned file is read from below base.
 func (p pin) source(base string) string {
 	return strings.TrimSuffix(base, "/") + "/" + p.Repository + "/" + p.Commit + "/" + p.Path
+}
+
+// ref is the tag or the branch the commit belongs to, as the summary of a fetch names it.
+func (p pin) ref() string {
+	if p.Branch != "" {
+		return "branch " + p.Branch
+	}
+	return p.Tag
 }
 
 // specFile is the name of the cached spec inside the cache directory.

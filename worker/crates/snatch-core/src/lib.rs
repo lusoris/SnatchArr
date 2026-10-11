@@ -469,7 +469,8 @@ pub fn group_lidarr(selected: &[Candidate], mode: LidarrMode) -> Vec<Target> {
     }
 }
 
-/// Groups book candidates into one Readarr `BookSearch` per author.
+/// Groups book candidates into one Readarr `AuthorSearch` per author. A Readarr run never
+/// sends a `BookSearch`.
 #[must_use]
 pub fn group_readarr(selected: &[Candidate]) -> Vec<Target> {
     by_group(selected)
@@ -807,6 +808,35 @@ mod tests {
         assert!(
             matches!(&targets[0], Target::Season { series_id: 7, season: 1, items } if items == &vec![1, 2])
         );
+    }
+
+    /// A wanted book is searched through its author: one `Target::Author` per author with the
+    /// author's wanted books, in author order (docs/readarr.md).
+    #[test]
+    fn readarr_books_group_into_one_author_search_per_author() {
+        let cands = vec![
+            cand(1, 7, 0, None, true),
+            cand(2, 9, 0, None, true),
+            cand(3, 7, 0, None, true),
+        ];
+        let by_author = vec![
+            Target::Author {
+                author_id: 7,
+                items: vec![1, 3],
+            },
+            Target::Author {
+                author_id: 9,
+                items: vec![2],
+            },
+        ];
+        assert_eq!(group_readarr(&cands), by_author);
+        // Boundary: one book is still an author search, and no book is no search.
+        let single = vec![Target::Author {
+            author_id: 7,
+            items: vec![1],
+        }];
+        assert_eq!(group_readarr(&cands[..1]), single);
+        assert!(group_readarr(&[]).is_empty());
     }
 
     #[test]
