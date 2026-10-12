@@ -68,6 +68,9 @@ func (p *Periodic) Stop(ctx context.Context) error {
 	}
 }
 
+// Name is the name the loop was built with.
+func (p *Periodic) Name() string { return p.name }
+
 // Running reports whether the loop is started.
 func (p *Periodic) Running() bool {
 	p.mu.Lock()

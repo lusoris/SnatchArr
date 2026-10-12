@@ -89,7 +89,12 @@ var Module = fx.Options(
 	fx.Invoke(mountHTTP),
 )
 
-func registerHealthChecks(reg *statuspage.Registry, pool *pgxpool.Pool, gate *health.StartupGate, lc fx.Lifecycle) {
+// registerHealthChecks registers the probe checks. Readiness covers Postgres and the leader
+// gate: a replica whose periodic loops cannot run (gate stopped, a loop failed to start,
+// election failing) reports not ready instead of serving as if the planner ran.
+func registerHealthChecks(reg *statuspage.Registry, pool *pgxpool.Pool, gate *health.StartupGate,
+	loops *leaderx.Gate, lc fx.Lifecycle,
+) {
 	reg.Register(statuspage.Check{
 		Name: "process", Tags: []string{health.TagLiveness},
 		Fn: func(context.Context) error { return nil },
@@ -103,6 +108,7 @@ func registerHealthChecks(reg *statuspage.Registry, pool *pgxpool.Pool, gate *he
 			return nil
 		},
 	})
+	reg.Register(loops.Check("leader"))
 	reg.Register(gate.Check("startup"))
 	lc.Append(fx.Hook{OnStart: func(context.Context) error {
 		gate.MarkComplete()
