@@ -85,26 +85,16 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      # A component only runs when it changed AND its manifest exists (scaffolding is incremental).
-      api: ${{ steps.filter.outputs.api == 'true' && steps.present.outputs.api == 'true' }}
-      worker: ${{ steps.filter.outputs.worker == 'true' && steps.present.outputs.worker == 'true' }}
-      web: ${{ steps.filter.outputs.web == 'true' && steps.present.outputs.web == 'true' }}
-      proto: ${{ steps.filter.outputs.proto == 'true' && steps.present.outputs.proto == 'true' }}
-      deploy: ${{ steps.filter.outputs.deploy == 'true' && steps.present.outputs.deploy == 'true' }}
+      # A component runs when it changed. A missing manifest fails its job instead of skipping it.
+      api: ${{ steps.filter.outputs.api }}
+      worker: ${{ steps.filter.outputs.worker }}
+      web: ${{ steps.filter.outputs.web }}
+      proto: ${{ steps.filter.outputs.proto }}
+      deploy: ${{ steps.filter.outputs.deploy }}
       governance: ${{ steps.filter.outputs.governance }}
-      contracts: ${{ steps.filter.outputs.contracts == 'true' && steps.present.outputs.api == 'true' && steps.present.outputs.worker == 'true' }}
+      contracts: ${{ steps.filter.outputs.contracts }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Detect scaffolded components
-        id: present
-        run: |
-          {
-            echo "api=$([ -f go.mod ] && echo true || echo false)"
-            echo "worker=$([ -f Cargo.toml ] && echo true || echo false)"
-            echo "web=$([ -f web/package.json ] && echo true || echo false)"
-            echo "proto=$([ -f proto/buf.yaml ] && echo true || echo false)"
-            echo "deploy=$([ -f deploy/helm/snatcharr/Chart.yaml ] && echo true || echo false)"
-          } >> "$GITHUB_OUTPUT"
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         with:
@@ -141,6 +131,7 @@ jobs:
               - '.github/workflows/ci.yml'
             deploy:
               - 'deploy/**'
+              - 'tools/deploy/**'
               - 'Makefile'
               - '.github/workflows/ci.yml'
             governance:

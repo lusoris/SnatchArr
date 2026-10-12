@@ -4,8 +4,9 @@
 # SnatchArr monorepo verification entrypoint. `make verify-all` is the universal gate praetor
 # audits; every component gate below is also runnable on its own.
 #
-# Recipes run as ONE shell (-e: first failing command aborts the recipe), so a component that
-# is not scaffolded yet can `exit 0` early and the rest of the recipe is skipped.
+# Recipes run as ONE shell (-e: first failing command aborts the recipe). Without pipefail a
+# pipe's status is its last command's, so no gate pipes a check's input from a command that can
+# fail; it writes that input to a file first.
 -include .config/praetor/engine.mk
 
 SHELL := /bin/sh
@@ -32,7 +33,6 @@ verify-all: governance-verify hooks-verify workflows-verify proto-verify api-ver
 
 # ── api/ (Go, golusoris) ──────────────────────────────────────────────────────
 api-verify: ## golangci-lint + go fix + gosec + govulncheck + go test -race + generated-code drift + spectral + tools-verify
-	@if [ ! -f go.mod ]; then echo "go.mod not scaffolded yet; skipping"; exit 0; fi
 	# go.mod and go.sum hold exactly what the code needs: prints the missing changes and fails.
 	go mod tidy -diff
 	# The shared `ci` goal is `lint sec test`; its gosec step runs inside api/, where gosec loads no
@@ -135,7 +135,6 @@ tools-gosec: ## gosec over tools/ built with the apicompatgate tag
 
 # ── worker/ (Rust) ────────────────────────────────────────────────────────────
 worker-verify: ## cargo fmt/clippy(-D warnings)/audit/deny/test
-	@if [ ! -f Cargo.toml ]; then echo "Cargo workspace not scaffolded yet; skipping"; exit 0; fi
 	cargo fmt --all --check
 	cargo clippy --workspace --all-targets --locked -- -D warnings
 	cargo audit
@@ -176,7 +175,6 @@ e2e-smoke: ## Postgres + api + two workers + fakearr end to end (needs Docker un
 
 # ── web/ (SvelteKit + sveltesentio) ───────────────────────────────────────────
 web-verify: ## pnpm lint/typecheck/test(+coverage)/build + OpenAPI type drift
-	@if [ ! -f web/package.json ]; then echo "web/ not scaffolded yet; skipping"; exit 0; fi
 	cd web
 	pnpm install --frozen-lockfile
 	pnpm gen:api
@@ -194,14 +192,13 @@ web-e2e: ## Playwright + axe-core (zero violations; never suppressed)
 
 # ── proto/ ────────────────────────────────────────────────────────────────────
 proto-verify: ## buf lint + breaking (vs main) + generation drift
-	@if [ ! -f proto/buf.yaml ]; then echo "proto/ not scaffolded yet; skipping"; exit 0; fi
 	cd proto
 	buf lint
-	if git rev-parse --verify -q origin/main >/dev/null 2>&1; then
-	  buf breaking --against '../.git#branch=main,subdir=proto'
-	else
-	  echo "no origin/main yet; skipping buf breaking"
+	# Against origin/main, which must exist: without it the check was skipped and passed (A2-05).
+	if ! git rev-parse --verify -q origin/main >/dev/null; then
+	  echo "proto-verify: no origin/main to check breaking changes against; run git fetch origin main" >&2; exit 1
 	fi
+	buf breaking --against '../.git#ref=origin/main,subdir=proto'
 	cd ..
 	$(MAKE) proto-gen
 	git diff --exit-code -- api/internal/gen
@@ -219,10 +216,20 @@ proto-gen: ## buf generate (Go stubs; Rust stubs build via tonic-build)
 # ── deploy/ ───────────────────────────────────────────────────────────────────
 # kubeconform binary if installed, else the same pinned image CI uses.
 KUBECONFORM ?= $(shell command -v kubeconform >/dev/null 2>&1 && echo kubeconform || echo "docker run --rm -i ghcr.io/yannh/kubeconform:v0.7.0")
-deploy-verify: ## helm lint --strict + kubeconform (default and all-features renders) + kustomize build
+deploy-verify: ## render.sh planted cases + helm lint --strict + kubeconform (default and all-features renders) + kustomize build
+	sh tools/deploy/render_test.sh
 	helm lint --strict deploy/helm/snatcharr
-	helm template snatcharr deploy/helm/snatcharr | $(KUBECONFORM) -strict -ignore-missing-schemas -summary
-	helm template snatcharr deploy/helm/snatcharr 	  --set networkPolicy.enabled=true --set api.ingress.enabled=true --set serviceMonitor.enabled=true 	  --set worker.autoscaling.enabled=true --set api.pdb.enabled=true --set worker.pdb.enabled=true 	  --set configarr.enabled=true --set configarr.existingConfigMap=cfg --set configarr.existingSecret=sec 	  --set-json 'networkPolicy.arrPeers=[{"namespaceSelector":{"matchLabels":{"kubernetes.io/metadata.name":"media"}}},{"podSelector":{"matchLabels":{"app.kubernetes.io/name":"lidarr"}},"ports":[{"port":8686,"protocol":"TCP"}]}]' 	  | $(KUBECONFORM) -strict -ignore-missing-schemas -summary
+	render=$$(mktemp -d)
+	trap 'rm -rf "$$render"' EXIT
+	# Rendered to a file first: a pipe into kubeconform passed a failing render (A2-01).
+	tools/deploy/render.sh "$$render/default.yaml" snatcharr deploy/helm/snatcharr
+	$(KUBECONFORM) -strict -ignore-missing-schemas -summary <"$$render/default.yaml"
+	tools/deploy/render.sh "$$render/all.yaml" snatcharr deploy/helm/snatcharr \
+	  --set networkPolicy.enabled=true --set api.ingress.enabled=true --set serviceMonitor.enabled=true \
+	  --set worker.autoscaling.enabled=true --set api.pdb.enabled=true --set worker.pdb.enabled=true \
+	  --set configarr.enabled=true --set configarr.existingConfigMap=cfg --set configarr.existingSecret=sec \
+	  --set-json 'networkPolicy.arrPeers=[{"namespaceSelector":{"matchLabels":{"kubernetes.io/metadata.name":"media"}}},{"podSelector":{"matchLabels":{"app.kubernetes.io/name":"lidarr"}},"ports":[{"port":8686,"protocol":"TCP"}]}]'
+	$(KUBECONFORM) -strict -ignore-missing-schemas -summary <"$$render/all.yaml"
 	kustomize build --enable-helm deploy/kustomize/kind >/dev/null
 	# No egress rule may have an empty `to`, which allows every destination (#120).
 	netpol=$$(helm template snatcharr deploy/helm/snatcharr --set networkPolicy.enabled=true --set-json 'networkPolicy.arrCidrs=[]')
