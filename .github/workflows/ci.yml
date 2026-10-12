@@ -265,7 +265,7 @@ jobs:
           ${{ !cancelled() && hashFiles('api/tmp/gosec.sarif') != ''
           && (github.event_name != 'pull_request'
           || github.event.pull_request.head.repo.full_name == github.repository) }}
-        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         with:
           sarif_file: api/tmp/gosec.sarif
           category: gosec/api
@@ -286,7 +286,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
       - run: npx --yes @stoplight/spectral-cli@6.15.0 lint api/openapi/openapi.yaml --ruleset tools/spectral.yaml --fail-severity warn
@@ -313,7 +313,7 @@ jobs:
         run: cargo test --workspace --locked
       # Prebuilt, checksum-verified binaries from GitHub releases. cargo-deny-action built a
       # container from Docker Hub on every run and failed on its anonymous pull limit (429).
-      - uses: taiki-e/install-action@9983c65e42da123ff25d1f78505eb6de315aa172 # v2.87.20
+      - uses: taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad # v2.87.26
         with:
           tool: cargo-audit,cargo-deny,cargo-llvm-cov@0.9.1
           fallback: none
@@ -377,7 +377,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: bufbuild/buf-action@8c6a16e16f12ba20b6470afa9c2ba9b5ba8c97c3 # v1.5.0
+      - uses: bufbuild/buf-action@85aebf73123b5c15fd5528aaecbf9129cddf7fa7 # v1.6.0
         with:
           input: proto
           lint: true
@@ -420,7 +420,7 @@ jobs:
       # kubeconform checks schemas only. The API server also validates semantics, such as an
       # ipBlock `except` having to lie inside its `cidr`, which shipped broken in 0.1.0. kind
       # runs here on the disposable runner only; locally it runs inside an incus VM (#61).
-      - uses: helm/kind-action@06c1ae10762d3b9c1644e7fe69596ae519e015a2 # v1.15.0
+      - uses: helm/kind-action@1544676c07bb3570fcb70166beaa07c4528fd4aa # v1.15.1
         with:
           cluster_name: chart-check
           # Same image kind v0.33.0 pins, from mirror.gcr.io: Docker Hub's anonymous pull limit
