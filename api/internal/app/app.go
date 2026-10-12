@@ -55,6 +55,7 @@ var Module = fx.Options(
 	otel.Module,
 	csrf.Module,
 	grpcx.Module,
+	grpcConfig,
 	fx.Decorate(embedMigrations),
 	// The dev profile may start without APP_CRYPTO_KEY (crypto.go).
 	fx.Decorate(newEncryptor),
