@@ -10,6 +10,7 @@
 mod auth;
 mod config;
 mod executor;
+mod health;
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -25,6 +26,7 @@ use tracing_subscriber::EnvFilter;
 use crate::auth::AuthInterceptor;
 use crate::config::Config;
 use crate::executor::Client;
+use crate::health::{Call, Health};
 
 /// Upper bound on heartbeats per run (HISS-02): 2^20 * 5 s is ~60 days.
 const MAX_HEARTBEATS: u32 = 1 << 20;
@@ -82,6 +84,7 @@ async fn heartbeat(
     run_id: String,
     worker_id: String,
     every: Duration,
+    health: Arc<Health>,
     cancel: CancellationToken,
 ) {
     let mut ticker = tokio::time::interval(every);
@@ -91,21 +94,31 @@ async fn heartbeat(
             _ = cancel.cancelled() => return,
             _ = ticker.tick() => {
                 let req = HeartbeatRequest { run_id: run_id.clone(), worker_id: worker_id.clone() };
-                match client.heartbeat(Request::new(req)).await {
-                    Ok(resp) if resp.get_ref().directive() == HeartbeatDirective::Cancel => {
-                        tracing::info!(run = %run_id, "run cancelled by API");
-                        cancel.cancel();
-                        return;
+                let resp = match client.heartbeat(Request::new(req)).await {
+                    Ok(resp) => resp,
+                    Err(status) => {
+                        health.failure(Call::Heartbeat);
+                        tracing::warn!(run = %run_id, %status, "heartbeat failed");
+                        continue;
                     }
-                    Ok(_) => {}
-                    Err(status) => tracing::warn!(run = %run_id, %status, "heartbeat failed"),
+                };
+                health.contact();
+                if resp.get_ref().directive() == HeartbeatDirective::Cancel {
+                    tracing::info!(run = %run_id, "run cancelled by API");
+                    cancel.cancel();
+                    return;
                 }
             }
         }
     }
 }
 
-async fn lease_loop(cfg: Arc<Config>, mut client: Client, stop: CancellationToken) {
+async fn lease_loop(
+    cfg: Arc<Config>,
+    mut client: Client,
+    health: Arc<Health>,
+    stop: CancellationToken,
+) {
     let permits = Arc::new(Semaphore::new(cfg.concurrency));
     let mut backoff = MIN_BACKOFF;
     let mut tasks = tokio::task::JoinSet::new();
@@ -123,6 +136,7 @@ async fn lease_loop(cfg: Arc<Config>, mut client: Client, stop: CancellationToke
         };
         match lease {
             Ok(resp) => {
+                health.contact();
                 backoff = MIN_BACKOFF;
                 let Some(run) = resp.into_inner().run else {
                     continue;
@@ -134,14 +148,16 @@ async fn lease_loop(cfg: Arc<Config>, mut client: Client, stop: CancellationToke
                     run.run_id.clone(),
                     cfg.worker_id.clone(),
                     cfg.heartbeat,
+                    health.clone(),
                     cancel.clone(),
                 ));
                 let exec_client = client.clone();
                 let cfg2 = cfg.clone();
+                let health2 = health.clone();
                 tasks.spawn(async move {
                     let _permit = permit;
                     tokio::select! {
-                        () = executor::execute(exec_client, run, cfg2.arr_timeout, &cfg2.worker_id) => {},
+                        () = executor::execute(exec_client, run, cfg2.arr_timeout, &cfg2.worker_id, &health2) => {},
                         () = cancel.cancelled() => tracing::info!("run execution aborted"),
                     }
                     cancel.cancel();
@@ -149,6 +165,7 @@ async fn lease_loop(cfg: Arc<Config>, mut client: Client, stop: CancellationToke
                 });
             }
             Err(status) => {
+                health.failure(Call::LeaseRun);
                 tracing::warn!(%status, backoff_ms = u64::try_from(backoff.as_millis()).unwrap_or(u64::MAX), "lease failed");
                 tokio::select! {
                     _ = tokio::time::sleep(backoff) => {},
@@ -168,6 +185,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let cfg = Arc::new(Config::from_env()?);
     tracing::info!(api = %cfg.api_grpc, worker = %cfg.worker_id, concurrency = cfg.concurrency, "snatch-worker starting");
     let client = connect(&cfg).await?;
+    let health = Arc::new(Health::new(cfg.stale));
+    let listener = health::bind(cfg.http_addr).await?;
+    tracing::info!(addr = %listener.local_addr()?, stale_secs = cfg.stale.as_secs(), "health listener on /livez and /metrics");
+    // The listener outlives the drain below: a terminating worker still answers its probe.
+    let http_stop = CancellationToken::new();
+    let http = tokio::spawn(health::serve(listener, health.clone(), http_stop.clone()));
     let stop = CancellationToken::new();
     let stopper = stop.clone();
     tokio::spawn(async move {
@@ -175,7 +198,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         tracing::info!("shutdown requested");
         stopper.cancel();
     });
-    lease_loop(cfg, client, stop).await;
+    lease_loop(cfg, client, health, stop).await;
+    http_stop.cancel();
+    if let Err(e) = http.await {
+        tracing::warn!(error = %e, "health listener ended abnormally");
+    }
     tracing::info!("snatch-worker stopped");
     Ok(())
 }

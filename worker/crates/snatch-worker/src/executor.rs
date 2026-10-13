@@ -24,6 +24,7 @@ use tonic::transport::Channel;
 use tonic::{Request, Status};
 
 use crate::auth::AuthInterceptor;
+use crate::health::{Call, Health};
 
 /// Client type with the auth interceptor applied.
 pub type Client = WorkerServiceClient<InterceptedService<Channel, AuthInterceptor>>;
@@ -274,12 +275,18 @@ fn prepare(run: &Run, arr_timeout: Duration, polling: Polling) -> Result<Prepare
 }
 
 /// Runs one lease to completion and reports the outcome to the API.
-pub async fn execute(client: Client, run: Run, arr_timeout: Duration, worker_id: &str) {
+pub async fn execute(
+    client: Client,
+    run: Run,
+    arr_timeout: Duration,
+    worker_id: &str,
+    health: &Health,
+) {
     let polling = Polling {
         max: MAX_COMMAND_POLLS,
         interval: COMMAND_POLL_INTERVAL,
     };
-    execute_with(client, run, arr_timeout, worker_id, polling).await
+    execute_with(client, run, arr_timeout, worker_id, polling, health).await
 }
 
 /// [`execute`] with an explicit command-polling budget.
@@ -289,6 +296,7 @@ pub(crate) async fn execute_with(
     arr_timeout: Duration,
     worker_id: &str,
     polling: Polling,
+    health: &Health,
 ) {
     let (tx, rx) = mpsc::channel::<ReportEventsRequest>(MAX_EVENTS_BUFFER);
     let mut reporter = client.clone();
@@ -328,11 +336,7 @@ pub(crate) async fn execute_with(
             }
         };
     drop(events);
-    match report.await {
-        Ok(Ok(resp)) => tracing::debug!(accepted = resp.into_inner().accepted, "events reported"),
-        Ok(Err(status)) => tracing::warn!(%status, "event stream rejected"),
-        Err(join) => tracing::warn!(error = %join, "event reporter panicked"),
-    }
+    record_report(report.await, health);
     let req = CompleteRunRequest {
         run_id: run.run_id.clone(),
         worker_id: worker_id.to_owned(),
@@ -341,8 +345,36 @@ pub(crate) async fn execute_with(
         cursor,
         error,
     };
-    if let Err(status) = client.complete_run(Request::new(req)).await {
-        tracing::error!(run = %run.run_id, %status, "CompleteRun failed; lease will expire");
+    match client.complete_run(Request::new(req)).await {
+        Ok(_) => health.contact(),
+        Err(status) => {
+            health.failure(Call::CompleteRun);
+            tracing::error!(run = %run.run_id, %status, "CompleteRun failed; lease will expire");
+        }
+    }
+}
+
+/// Records the end of the event stream: an answer is contact, a refusal or a panic a failure.
+fn record_report(
+    joined: Result<
+        Result<tonic::Response<snatch_proto::ReportEventsResponse>, Status>,
+        tokio::task::JoinError,
+    >,
+    health: &Health,
+) {
+    match joined {
+        Ok(Ok(resp)) => {
+            health.contact();
+            tracing::debug!(accepted = resp.into_inner().accepted, "events reported");
+        }
+        Ok(Err(status)) => {
+            health.failure(Call::ReportEvents);
+            tracing::warn!(%status, "event stream rejected");
+        }
+        Err(join) => {
+            health.failure(Call::ReportEvents);
+            tracing::warn!(error = %join, "event reporter panicked");
+        }
     }
 }
 

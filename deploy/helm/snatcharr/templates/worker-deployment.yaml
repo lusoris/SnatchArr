@@ -45,8 +45,19 @@ spec:
           imagePullPolicy: {{ .Values.image.worker.pullPolicy }}
           securityContext:
             {{- toYaml .Values.containerSecurityContext | nindent 12 }}
-          # The worker exposes no listener (it only dials the API), so there is nothing to
-          # probe: the kubelet restarts it if the process exits.
+          ports:
+            - name: http
+              containerPort: {{ .Values.worker.httpPort }}
+              protocol: TCP
+          # /livez fails once the worker has had no successful API call for staleSecs, so a
+          # worker that cannot lease or heartbeat restarts instead of idling unseen.
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: http
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 3
           env:
             - name: SNATCH_API_GRPC
               value: http://{{ include "snatcharr.apiServiceName" . }}:{{ .Values.api.service.grpcPort }}
@@ -67,6 +78,10 @@ spec:
               value: {{ .Values.worker.leaseWaitSecs | quote }}
             - name: SNATCH_ARR_TIMEOUT_SECS
               value: {{ .Values.worker.arrTimeoutSecs | quote }}
+            - name: SNATCH_HTTP_ADDR
+              value: "0.0.0.0:{{ .Values.worker.httpPort }}"
+            - name: SNATCH_STALE_SECS
+              value: {{ .Values.worker.staleSecs | quote }}
             - name: RUST_LOG
               value: {{ .Values.worker.logFilter | quote }}
             {{- with .Values.worker.extraEnv }}
