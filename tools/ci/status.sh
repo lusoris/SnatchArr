@@ -31,7 +31,8 @@ web web
 proto proto
 deploy deploy
 contracts contracts
-governance governance'
+governance governance
+docs docs'
 
 decide() {
   case "${COMMITS_EXPECTED:-}" in

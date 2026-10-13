@@ -325,8 +325,9 @@ governance-verify: ## compile-context --verify, audit, state audit, flavor audit
 hooks-verify: ## The commit-message policy against its accepted and refused cases
 	sh .config/hooks/commit-msg_test.sh
 
-workflows-verify: ## The rule of the required "CI success" check against its cases and against ci.yml
+workflows-verify: ## The rule of "CI success" and the Security Scan issue step, against their cases
 	sh tools/ci/status_test.sh
+	sh tools/ci/security_issue_test.sh
 
 # Not part of verify-all: needs Docker, the network and a forge token (GH_TOKEN, read access).
 # The CI job "workflows" runs it on every pull request.

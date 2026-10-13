@@ -1,18 +1,15 @@
 name: Docs
 
+# Deploys the docs from main. Pull requests build the same site in the CI job docs, under the
+# required check "CI success": a path-filtered workflow of its own never reports on a pull request
+# that does not touch it, so it cannot be a required check.
 on:
   push:
     branches: [main]
     paths:
       - 'docs/**'
       - 'mkdocs.yml'
-      - '.github/workflows/pages.yml'
-  pull_request:
-    branches: [main]
-    types: [opened, synchronize, reopened, ready_for_review]
-    paths:
-      - 'docs/**'
-      - 'mkdocs.yml'
+      - 'tools/docs/**'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -21,7 +18,7 @@ permissions:
 
 concurrency:
   group: pages-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -29,28 +26,16 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
-      - name: Stop on a draft pull request
-        if: github.event.pull_request.draft == true
-        shell: bash
-        env:
-          TITLE: Gate not run on a draft
-          MESSAGE: >-
-            The gate did not run because the pull request is a draft.
-            It runs when the pull request is marked ready for review.
-        run: |
-          echo "::error title=$TITLE::$MESSAGE"
-          echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
-          exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.14'
-      - name: Install mkdocs-material
-        run: python -m pip install 'mkdocs-material==9.7.7' 'pymdown-extensions==10.20'
+      - name: Install the docs toolchain
+        run: python -m pip install -r tools/docs/requirements.txt
       - name: Build site
         run: mkdocs build --strict
       - name: Upload Pages artifact
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        if: github.ref == 'refs/heads/main'
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: site
@@ -58,7 +43,7 @@ jobs:
   deploy:
     name: Deploy to GitHub Pages
     needs: build
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     permissions:
