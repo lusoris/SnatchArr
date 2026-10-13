@@ -54,7 +54,9 @@
             "concurrency": { "type": "integer", "minimum": 1, "maximum": 32 },
             "heartbeatSecs": { "type": "integer", "minimum": 5 },
             "leaseWaitSecs": { "type": "integer", "minimum": 1, "maximum": 60 },
-            "arrTimeoutSecs": { "type": "integer", "minimum": 5 }
+            "arrTimeoutSecs": { "type": "integer", "minimum": 5 },
+            "httpPort": { "type": "integer", "minimum": 1024, "maximum": 65535 },
+            "staleSecs": { "type": "integer", "minimum": 60, "maximum": 3600 }
           }
         }
       ]

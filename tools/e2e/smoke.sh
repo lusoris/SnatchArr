@@ -11,7 +11,9 @@
 #   d. no item is searched twice (afterglow);
 #   e. searches happened at all (the checks above are not vacuous);
 #   f. a whole-series search that does not fit the cap is not sent and costs no stamina; once
-#      the cap fits it, it is sent once and costs exactly its seasons (#142).
+#      the cap fits it, it is sent once and costs exactly its seasons (#142);
+#   g. each worker's health listener answers /livez with 200 and /metrics with the API failure
+#      counter (A1-01).
 # `make e2e-smoke` builds the binaries and provides Postgres. Needs curl and jq.
 set -euo pipefail
 
@@ -35,6 +37,9 @@ SONARR_SERIES_PORT=$(free_port "${SMOKE_SONARR_SERIES_PORT:-18990}")
 RADARR_PORT=$(free_port "${SMOKE_RADARR_PORT:-17878}")
 API_PORT=$(free_port "${SMOKE_API_PORT:-18080}")
 GRPC_PORT=$(free_port "${SMOKE_GRPC_PORT:-19090}")
+# Two workers on one host: each needs its own health listener port.
+W1_HTTP_PORT=$(free_port "${SMOKE_WORKER_HTTP_PORT:-18081}")
+W2_HTTP_PORT=$(free_port "$((W1_HTTP_PORT + 1))")
 CAP=3       # hourly cap per instance
 PER_CYCLE=5 # items one snatch wants: more than the cap, so the cap binds
 ROUNDS=3    # run triggers per instance
@@ -117,10 +122,12 @@ wait_http "http://127.0.0.1:$SONARR_PORT/healthz"
 wait_http "http://127.0.0.1:$RADARR_PORT/healthz"
 wait_http "http://127.0.0.1:$SONARR_SERIES_PORT/healthz"
 wait_http "$API/system/status"
-for worker in w1 w2; do
-    start "$worker" env SNATCH_WORKER_ID="$worker" SNATCH_API_GRPC="http://127.0.0.1:$GRPC_PORT" \
-        SNATCH_WORKER_TOKEN="$TOKEN" SNATCH_CONCURRENCY=1 SNATCH_LEASE_WAIT_SECS=5 "$SMOKE_WORKER_BIN"
-done
+start w1 env SNATCH_WORKER_ID=w1 SNATCH_API_GRPC="http://127.0.0.1:$GRPC_PORT" \
+    SNATCH_WORKER_TOKEN="$TOKEN" SNATCH_CONCURRENCY=1 SNATCH_LEASE_WAIT_SECS=5 \
+    SNATCH_HTTP_ADDR="127.0.0.1:$W1_HTTP_PORT" "$SMOKE_WORKER_BIN"
+start w2 env SNATCH_WORKER_ID=w2 SNATCH_API_GRPC="http://127.0.0.1:$GRPC_PORT" \
+    SNATCH_WORKER_TOKEN="$TOKEN" SNATCH_CONCURRENCY=1 SNATCH_LEASE_WAIT_SECS=5 \
+    SNATCH_HTTP_ADDR="127.0.0.1:$W2_HTTP_PORT" "$SMOKE_WORKER_BIN"
 
 # Setup wizard, then every call carries the session cookie and the CSRF token.
 token=$(api POST /auth/setup '{"username":"admin","password":"smoke-password-1234"}' | jq -r '.csrf_token // empty')
@@ -226,5 +233,18 @@ for worker in w1 w2; do
     leases=$(printf '%s' "$runs" | jq -s --arg w "$worker" '[.[][] | select(.leased_by == $w)] | length')
     [ "$leases" -gt 0 ] || fail "c. worker $worker leased no run"
     echo "smoke: $worker leased $leases run(s)"
+done
+for port in "$W1_HTTP_PORT" "$W2_HTTP_PORT"; do
+    live=$(curl -fsS --max-time 5 "http://127.0.0.1:$port/livez") || fail "g. worker on $port: /livez did not answer 200"
+    case "$live" in
+        "ok: last successful API call "*) ;;
+        *) fail "g. worker on $port: /livez says '$live'" ;;
+    esac
+    metrics=$(curl -fsS --max-time 5 "http://127.0.0.1:$port/metrics") || fail "g. worker on $port: /metrics failed"
+    case "$metrics" in
+        *'snatcharr_worker_api_failures_total{call="lease_run"} '*) ;;
+        *) fail "g. worker on $port: /metrics has no lease_run failure counter" ;;
+    esac
+    echo "smoke: worker on $port: $live"
 done
 echo "smoke: passed"

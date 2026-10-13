@@ -36,6 +36,13 @@ struct FakeApi {
     pub filter_unprocessed: Vec<i64>,
     pub reported_events: Arc<Mutex<Vec<SnatchEvent>>>,
     pub completed_requests: Arc<Mutex<Vec<CompleteRunRequest>>>,
+    /// True answers LeaseRun with no run; false refuses it as unimplemented.
+    pub lease_empty: bool,
+    /// A run to answer every LeaseRun with; takes precedence over `lease_empty`.
+    pub leased: Option<Run>,
+    pub fail_heartbeat: bool,
+    pub fail_report: bool,
+    pub fail_complete: bool,
 }
 
 impl Default for FakeApi {
@@ -49,6 +56,11 @@ impl Default for FakeApi {
             filter_unprocessed: vec![1, 2, 3, 4, 5],
             reported_events: Arc::new(Mutex::new(Vec::new())),
             completed_requests: Arc::new(Mutex::new(Vec::new())),
+            lease_empty: false,
+            leased: None,
+            fail_heartbeat: false,
+            fail_report: false,
+            fail_complete: false,
         }
     }
 }
@@ -81,6 +93,14 @@ impl WorkerService for FakeApi {
         &self,
         _: tonic::Request<LeaseRunRequest>,
     ) -> Result<tonic::Response<LeaseRunResponse>, Status> {
+        if let Some(run) = &self.leased {
+            return Ok(tonic::Response::new(LeaseRunResponse {
+                run: Some(run.clone()),
+            }));
+        }
+        if self.lease_empty {
+            return Ok(tonic::Response::new(LeaseRunResponse { run: None }));
+        }
         Err(Status::unimplemented("unimplemented"))
     }
 
@@ -88,6 +108,9 @@ impl WorkerService for FakeApi {
         &self,
         _: tonic::Request<HeartbeatRequest>,
     ) -> Result<tonic::Response<HeartbeatResponse>, Status> {
+        if self.fail_heartbeat {
+            return Err(Status::unavailable("planted heartbeat failure"));
+        }
         let directive = if self.cancel_heartbeat {
             HeartbeatDirective::Cancel
         } else {
@@ -160,6 +183,9 @@ impl WorkerService for FakeApi {
                 accepted = accepted.saturating_add(1);
             }
         }
+        if self.fail_report {
+            return Err(Status::unavailable("planted ReportEvents failure"));
+        }
         Ok(tonic::Response::new(ReportEventsResponse { accepted }))
     }
 
@@ -167,6 +193,9 @@ impl WorkerService for FakeApi {
         &self,
         request: tonic::Request<CompleteRunRequest>,
     ) -> Result<tonic::Response<CompleteRunResponse>, Status> {
+        if self.fail_complete {
+            return Err(Status::unavailable("planted CompleteRun failure"));
+        }
         self.completed_requests
             .lock()
             .await
@@ -278,8 +307,10 @@ fn queued_command() -> ResponseTemplate {
         .set_body_json(serde_json::json!({"id": 100, "name": "EpisodeSearch", "status": "queued"}))
 }
 
-/// Runs `run` with a short command-polling budget (3 polls, 10 ms apart).
-async fn run_short_polling(client: Client, run: Run) {
+/// Runs `run` with a short command-polling budget (3 polls, 10 ms apart); returns what the
+/// run recorded about its API calls.
+async fn run_short_polling(client: Client, run: Run) -> crate::health::Health {
+    let health = crate::health::Health::new(Duration::from_secs(180));
     crate::executor::execute_with(
         client,
         run,
@@ -289,8 +320,10 @@ async fn run_short_polling(client: Client, run: Run) {
             max: 3,
             interval: Duration::from_millis(10),
         },
+        &health,
     )
     .await;
+    health
 }
 
 /// Counts the search command POSTs Sonarr received.
@@ -446,6 +479,7 @@ async fn heartbeat_cancel_terminates_run() -> TestResult {
                 run_id,
                 "worker-1".to_string(),
                 Duration::from_millis(10),
+                Arc::new(crate::health::Health::new(Duration::from_secs(180))),
                 c,
             )
             .await;
@@ -453,7 +487,7 @@ async fn heartbeat_cancel_terminates_run() -> TestResult {
     };
 
     tokio::select! {
-        () = run_short_polling(client, run) => {
+        _ = run_short_polling(client, run) => {
         },
         () = cancel.cancelled() => {
         },
@@ -926,5 +960,203 @@ async fn api_without_per_target_grants_is_capped_by_the_total() -> TestResult {
         2,
         "two of three episodes fit the total of 2"
     );
+    Ok(())
+}
+
+// Liveness (gap audit A1-01): every API call the worker makes either records a contact or
+// counts a failure, so /livez and /metrics see an API the worker cannot use.
+
+#[tokio::test]
+async fn completed_run_records_contact_and_no_failure() -> TestResult {
+    let sonarr = MockServer::start().await;
+    let (client, _) = start_fake_api(FakeApi::default()).await?;
+    let health = run_short_polling(client, default_run(&sonarr.uri())).await;
+    assert!(health.contacted(), "ReportEvents and CompleteRun answered");
+    for call in [
+        crate::health::Call::ReportEvents,
+        crate::health::Call::CompleteRun,
+    ] {
+        assert_eq!(health.failures(call), 0, "{call:?}");
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn failed_complete_run_is_counted() -> TestResult {
+    let sonarr = MockServer::start().await;
+    let api = FakeApi {
+        fail_complete: true,
+        ..FakeApi::default()
+    };
+    let (client, _) = start_fake_api(api).await?;
+    let health = run_short_polling(client, default_run(&sonarr.uri())).await;
+    assert_eq!(health.failures(crate::health::Call::CompleteRun), 1);
+    assert_eq!(health.failures(crate::health::Call::ReportEvents), 0);
+    // The answered event stream is the only successful call of this run.
+    assert!(health.contacted());
+    Ok(())
+}
+
+#[tokio::test]
+async fn refused_event_stream_is_counted() -> TestResult {
+    let sonarr = MockServer::start().await;
+    let api = FakeApi {
+        fail_report: true,
+        ..FakeApi::default()
+    };
+    let (client, _) = start_fake_api(api).await?;
+    let health = run_short_polling(client, default_run(&sonarr.uri())).await;
+    assert_eq!(health.failures(crate::health::Call::ReportEvents), 1);
+    assert_eq!(health.failures(crate::health::Call::CompleteRun), 0);
+    Ok(())
+}
+
+fn loop_config() -> Arc<crate::config::Config> {
+    Arc::new(crate::config::Config {
+        api_grpc: String::new(),
+        token: None,
+        worker_id: "w-1".to_owned(),
+        concurrency: 1,
+        lease_wait_secs: 1,
+        heartbeat: Duration::from_secs(5),
+        arr_timeout: Duration::from_secs(1),
+        http_addr: std::net::SocketAddr::from(([127, 0, 0, 1], 0)),
+        stale: Duration::from_secs(180),
+    })
+}
+
+/// Waits up to 5 s for `done`, then stops the task behind `stop`.
+async fn until(
+    health: &crate::health::Health,
+    done: impl Fn(&crate::health::Health) -> bool,
+    stop: &CancellationToken,
+    task: tokio::task::JoinHandle<()>,
+) -> TestResult {
+    for _ in 0..500 {
+        if done(health) {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    stop.cancel();
+    tokio::time::timeout(Duration::from_secs(5), task).await??;
+    Ok(())
+}
+
+#[tokio::test]
+async fn refused_lease_is_counted_and_is_no_contact() -> TestResult {
+    let (client, _) = start_fake_api(FakeApi::default()).await?;
+    let health = Arc::new(crate::health::Health::new(Duration::from_secs(180)));
+    let stop = CancellationToken::new();
+    let task = tokio::spawn(crate::lease_loop(
+        loop_config(),
+        client,
+        health.clone(),
+        stop.clone(),
+    ));
+    until(
+        &health,
+        |h| h.failures(crate::health::Call::LeaseRun) > 0,
+        &stop,
+        task,
+    )
+    .await?;
+    assert!(health.failures(crate::health::Call::LeaseRun) >= 1);
+    assert!(
+        !health.contacted(),
+        "a refused lease must not refresh /livez"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn answered_lease_records_contact() -> TestResult {
+    let api = FakeApi {
+        lease_empty: true,
+        ..FakeApi::default()
+    };
+    let (client, _) = start_fake_api(api).await?;
+    let health = Arc::new(crate::health::Health::new(Duration::from_secs(180)));
+    let stop = CancellationToken::new();
+    let task = tokio::spawn(crate::lease_loop(
+        loop_config(),
+        client,
+        health.clone(),
+        stop.clone(),
+    ));
+    until(&health, crate::health::Health::contacted, &stop, task).await?;
+    assert!(health.contacted());
+    assert_eq!(health.failures(crate::health::Call::LeaseRun), 0);
+    Ok(())
+}
+
+#[tokio::test]
+async fn leased_run_is_executed_and_completed() -> TestResult {
+    // The *arr address refuses connections: the run fails fast and must still be completed.
+    let api = FakeApi {
+        leased: Some(default_run("http://127.0.0.1:1")),
+        ..FakeApi::default()
+    };
+    let completed = api.completed_requests.clone();
+    let (client, _) = start_fake_api(api).await?;
+    let health = Arc::new(crate::health::Health::new(Duration::from_secs(180)));
+    let stop = CancellationToken::new();
+    let task = tokio::spawn(crate::lease_loop(
+        loop_config(),
+        client,
+        health.clone(),
+        stop.clone(),
+    ));
+    let mut done = false;
+    for _ in 0..500 {
+        if !completed.lock().await.is_empty() {
+            done = true;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    stop.cancel();
+    tokio::time::timeout(Duration::from_secs(5), task).await??;
+    assert!(done, "the leased run was never completed");
+    assert_eq!(
+        completed.lock().await.first().map(|c| c.run_id.as_str()),
+        Some("test_run")
+    );
+    assert_eq!(health.failures(crate::health::Call::CompleteRun), 0);
+    Ok(())
+}
+
+#[tokio::test]
+async fn heartbeat_failure_is_counted_and_success_is_contact() -> TestResult {
+    for (fail, want_failures, want_contact) in [(true, true, false), (false, false, true)] {
+        let api = FakeApi {
+            fail_heartbeat: fail,
+            ..FakeApi::default()
+        };
+        let (client, _) = start_fake_api(api).await?;
+        let health = Arc::new(crate::health::Health::new(Duration::from_secs(180)));
+        let stop = CancellationToken::new();
+        let task = tokio::spawn(crate::heartbeat(
+            client,
+            "run-1".to_owned(),
+            "w-1".to_owned(),
+            Duration::from_millis(10),
+            health.clone(),
+            stop.clone(),
+        ));
+        until(
+            &health,
+            |h| h.contacted() || h.failures(crate::health::Call::Heartbeat) > 0,
+            &stop,
+            task,
+        )
+        .await?;
+        assert_eq!(
+            health.failures(crate::health::Call::Heartbeat) > 0,
+            want_failures,
+            "fail={fail}"
+        );
+        assert_eq!(health.contacted(), want_contact, "fail={fail}");
+    }
     Ok(())
 }

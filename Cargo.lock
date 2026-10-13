@@ -1849,7 +1849,11 @@ name = "snatch-worker"
 version = "0.1.0"
 dependencies = [
  "arr-client",
+ "bytes",
  "chrono",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
  "rand 0.10.3",
  "serde_json",
  "snatch-core",
