@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -29,9 +30,12 @@ const (
 )
 
 // recordTicks is a tick function that hands each call's context to the test.
-func recordTicks() (<-chan context.Context, func(context.Context)) {
+func recordTicks() (<-chan context.Context, func(context.Context) error) {
 	calls := make(chan context.Context, tickBuffer)
-	return calls, func(ctx context.Context) { calls <- ctx }
+	return calls, func(ctx context.Context) error {
+		calls <- ctx
+		return nil
+	}
 }
 
 func nextTick(t *testing.T, calls <-chan context.Context) context.Context {
@@ -70,7 +74,7 @@ func TestPeriodic_TicksAtOnceAndPerInterval(t *testing.T) {
 	t.Parallel()
 	clk := clock.NewFake()
 	calls, tick := recordTicks()
-	p := leaderx.NewPeriodic("job", periodicInterval, clk, tick)
+	p := leaderx.NewPeriodic("job", periodicInterval, clk, &observed{}, tick)
 	if p.Running() {
 		t.Fatal("a new loop runs before Start")
 	}
@@ -98,7 +102,7 @@ func TestPeriodic_TicksAtOnceAndPerInterval(t *testing.T) {
 func TestPeriodic_StartsAgainAfterStop(t *testing.T) {
 	t.Parallel()
 	calls, tick := recordTicks()
-	p := leaderx.NewPeriodic("job", periodicInterval, clock.NewFake(), tick)
+	p := leaderx.NewPeriodic("job", periodicInterval, clock.NewFake(), &observed{}, tick)
 	for term := range 3 {
 		mustStart(t, p, t.Context())
 		nextTick(t, calls)
@@ -114,7 +118,7 @@ func TestPeriodic_SecondStartIsRefused(t *testing.T) {
 	t.Parallel()
 	clk := clock.NewFake()
 	calls, tick := recordTicks()
-	p := leaderx.NewPeriodic("job", periodicInterval, clk, tick)
+	p := leaderx.NewPeriodic("job", periodicInterval, clk, &observed{}, tick)
 	mustStart(t, p, t.Context())
 	nextTick(t, calls)
 	if err := p.Start(t.Context()); err == nil || !strings.HasPrefix(err.Error(), "job: ") {
@@ -133,9 +137,10 @@ func TestPeriodic_SecondStartIsRefused(t *testing.T) {
 func TestPeriodic_StopDeadlineExpires(t *testing.T) {
 	t.Parallel()
 	entered, release := make(chan struct{}), make(chan struct{})
-	p := leaderx.NewPeriodic("job", periodicInterval, clock.NewFake(), func(context.Context) {
+	p := leaderx.NewPeriodic("job", periodicInterval, clock.NewFake(), &observed{}, func(context.Context) error {
 		close(entered)
 		<-release
+		return nil
 	})
 	t.Cleanup(func() { close(release) })
 	mustStart(t, p, t.Context())
@@ -153,7 +158,7 @@ func TestPeriodic_StopDeadlineExpires(t *testing.T) {
 func TestPeriodic_StopWithoutRunningLoop(t *testing.T) {
 	t.Parallel()
 	calls, tick := recordTicks()
-	p := leaderx.NewPeriodic("job", periodicInterval, clock.NewFake(), tick)
+	p := leaderx.NewPeriodic("job", periodicInterval, clock.NewFake(), &observed{}, tick)
 	ended, cancel := context.WithCancel(t.Context())
 	cancel()
 	if err := p.Stop(ended); err != nil {
@@ -168,16 +173,19 @@ func TestPeriodic_StopWithoutRunningLoop(t *testing.T) {
 }
 
 // Boundary: the loop outlives the context it was started with (the gate's is often cancelled
-// by the time the loop works), and Stop cancels the tick in flight and waits for it.
+// by the time the loop works), and Stop cancels the tick in flight and waits for it. The tick
+// Stop cut short is no failure: the observer never hears of it.
 func TestPeriodic_StopCancelsTheTickInFlight(t *testing.T) {
 	t.Parallel()
 	entered, cancelled, left := make(chan struct{}), make(chan struct{}), make(chan struct{})
-	p := leaderx.NewPeriodic("job", periodicInterval, clock.NewFake(), func(ctx context.Context) {
+	obs := &observed{}
+	p := leaderx.NewPeriodic("job", periodicInterval, clock.NewFake(), obs, func(ctx context.Context) error {
 		close(entered)
 		<-ctx.Done()
 		close(cancelled)
 		time.Sleep(windDown)
 		close(left)
+		return ctx.Err()
 	})
 	parent, cancel := context.WithCancel(t.Context())
 	mustStart(t, p, parent)
@@ -193,5 +201,77 @@ func TestPeriodic_StopCancelsTheTickInFlight(t *testing.T) {
 	case <-left:
 	default:
 		t.Fatal("Stop returned before the tick in flight ended")
+	}
+	if got := obs.snapshot(); len(got) != 0 {
+		t.Fatalf("the stopped tick was reported: %+v, want no report", got)
+	}
+}
+
+// observed is an Observer that keeps every reported tick and, when seen is set, hands it to
+// the test as well.
+type observed struct {
+	mu    sync.Mutex
+	ticks []observedTick
+	seen  chan observedTick
+}
+
+type observedTick struct {
+	name     string
+	interval time.Duration
+	at       time.Time
+	err      error
+}
+
+func (o *observed) LoopTicked(name string, interval time.Duration, at time.Time, err error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	tick := observedTick{name, interval, at, err}
+	o.ticks = append(o.ticks, tick)
+	if o.seen != nil {
+		o.seen <- tick
+	}
+}
+
+func (o *observed) snapshot() []observedTick {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return append([]observedTick(nil), o.ticks...)
+}
+
+// Positive, negative, boundary: every tick reaches the observer with the loop's name and
+// interval, the time it ended and the error it returned; a failed tick does not stop the loop.
+func TestPeriodic_ReportsEachTick(t *testing.T) {
+	t.Parallel()
+	errTick := errors.New("tick failed")
+	results := []error{nil, errTick, nil}
+	clk := clock.NewFake()
+	obs := &observed{seen: make(chan observedTick, tickBuffer)}
+	n := 0
+	p := leaderx.NewPeriodic("job", periodicInterval, clk, obs, func(context.Context) error {
+		err := results[n%len(results)]
+		n++
+		return err
+	})
+	mustStart(t, p, t.Context())
+	for i, want := range results {
+		if i > 0 {
+			clk.Advance(periodicInterval)
+		}
+		var g observedTick
+		select {
+		case g = <-obs.seen:
+		case <-time.After(stopBound):
+			t.Fatalf("tick %d was not reported", i)
+		}
+		if g.name != "job" || g.interval != periodicInterval || !errors.Is(g.err, want) || (want == nil) != (g.err == nil) {
+			t.Fatalf("tick %d reported %+v, want job, %v, err %v", i, g, periodicInterval, want)
+		}
+		if !g.at.Equal(clk.Now()) {
+			t.Fatalf("tick %d reported at %v, want the clock's time %v when it ended", i, g.at, clk.Now())
+		}
+	}
+	mustStop(t, p)
+	if got := len(obs.snapshot()); got != len(results) {
+		t.Fatalf("%d ticks reported, want %d", got, len(results))
 	}
 }

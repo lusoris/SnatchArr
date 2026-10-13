@@ -17,6 +17,7 @@ import (
 
 	"github.com/lusoris/SnatchArr/api/internal/auth"
 	"github.com/lusoris/SnatchArr/api/internal/leaderx"
+	"github.com/lusoris/SnatchArr/api/internal/metrics"
 	"github.com/lusoris/SnatchArr/api/internal/settings"
 	"github.com/lusoris/SnatchArr/api/internal/snatch"
 )
@@ -76,7 +77,7 @@ func TestModuleRegistersLeaderLoop(t *testing.T) {
 	var loops []leaderx.Loop
 	app := fxtest.New(t,
 		fx.Supply((*settings.Service)(nil), (*snatch.Recorder)(nil), (*snatch.Runs)(nil), (*snatch.Workers)(nil), (*snatch.Memory)(nil),
-			(*snatch.Budget)(nil), (*auth.PgSessionStore)(nil), slog.New(slog.DiscardHandler)),
+			(*snatch.Budget)(nil), (*auth.PgSessionStore)(nil), slog.New(slog.DiscardHandler), (*metrics.Metrics)(nil)),
 		fx.Provide(func() clock.Clock { return clock.NewFake() }),
 		Module,
 		fx.Invoke(fx.Annotate(func(l []leaderx.Loop) { loops = l }, fx.ParamTags(`group:"leader_loops"`))),

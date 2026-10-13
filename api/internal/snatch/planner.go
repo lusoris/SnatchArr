@@ -15,6 +15,7 @@ import (
 	"github.com/golusoris/golusoris/core/clock"
 
 	"github.com/lusoris/SnatchArr/api/internal/domain"
+	"github.com/lusoris/SnatchArr/api/internal/metrics"
 	"github.com/lusoris/SnatchArr/api/internal/store"
 	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
 )
@@ -47,11 +48,12 @@ type Planner struct {
 	gates  []Gate
 	rec    *Recorder
 	logger *slog.Logger
+	m      *metrics.Metrics
 }
 
-// NewPlanner wires the planner.
-func NewPlanner(st *store.Store, clk clock.Clock, runs *Runs, rec *Recorder, logger *slog.Logger, gates ...Gate) *Planner {
-	return &Planner{st: st, clk: clk, runs: runs, rec: rec, logger: logger, gates: gates}
+// NewPlanner wires the planner. m counts the instances a tick skips.
+func NewPlanner(st *store.Store, clk clock.Clock, runs *Runs, rec *Recorder, logger *slog.Logger, m *metrics.Metrics, gates ...Gate) *Planner {
+	return &Planner{st: st, clk: clk, runs: runs, rec: rec, logger: logger, m: m, gates: gates}
 }
 
 // Tick evaluates every enabled instance once. It never returns early on a single
@@ -70,6 +72,7 @@ func (p *Planner) Tick(ctx context.Context) (int, error) {
 		n, err := p.planInstance(ctx, inst)
 		if err != nil {
 			p.logger.WarnContext(ctx, "snatch: planner skipped instance", slog.String("instance", inst.Name), slog.String("error", err.Error()))
+			p.m.PlanFailed(inst.Name)
 			continue
 		}
 		queued += n
@@ -146,7 +149,8 @@ func (p *Planner) maybeEnqueue(ctx context.Context, inst domain.Instance, policy
 	})
 }
 
-// decision evaluates the instance's own and global schedules.
+// decision evaluates the instance's own and global schedules. A schedule it cannot read
+// fails the decision instead of being skipped (gap audit A1-06).
 func (p *Planner) decision(ctx context.Context, instanceID uuid.UUID) (Decision, error) {
 	rows, err := p.st.Q().ListEnabledSchedulesFor(ctx, &instanceID)
 	if err != nil {
@@ -156,19 +160,21 @@ func (p *Planner) decision(ctx context.Context, instanceID uuid.UUID) (Decision,
 	for _, row := range rows {
 		w, err := windowFromRow(row)
 		if err != nil {
-			p.logger.WarnContext(ctx, "snatch: bad schedule", slog.String("id", row.ID.String()), slog.String("error", err.Error()))
-			continue
+			// Fail closed: a dropped pause window would let searches run while the
+			// operator asked for none.
+			return Decision{}, fmt.Errorf("schedule %s: %w", row.ID, err)
 		}
 		windows = append(windows, w)
 	}
 	return Evaluate(windows, p.clk.Now()), nil
 }
 
-// EffectiveCap applies the schedule's cap override to a policy cap.
+// EffectiveCap applies the schedule's cap override to a policy cap. When the schedules
+// cannot be read it grants nothing: the caller must not fall back to the policy cap.
 func (p *Planner) EffectiveCap(ctx context.Context, instanceID uuid.UUID, policyCap int) (int, error) {
 	d, err := p.decision(ctx, instanceID)
 	if err != nil {
-		return policyCap, err
+		return 0, err
 	}
 	if d.CapOverride > 0 && d.CapOverride < policyCap {
 		return d.CapOverride, nil

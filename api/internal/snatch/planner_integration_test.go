@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jonboulle/clockwork"
+	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/core/id"
@@ -23,6 +24,8 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/events"
 	"github.com/lusoris/SnatchArr/api/internal/leaderx/leaderxtest"
+	"github.com/lusoris/SnatchArr/api/internal/metrics"
+	"github.com/lusoris/SnatchArr/api/internal/metrics/metricstest"
 	"github.com/lusoris/SnatchArr/api/internal/store"
 	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
 	"github.com/lusoris/SnatchArr/api/internal/store/storetest"
@@ -62,6 +65,9 @@ type plannerFixture struct {
 	planner *Planner
 	// logged is what the planner logged. Read it only while no tick runs.
 	logged *bytes.Buffer
+	// m and reg are the fixture's own metrics and the registry that holds them.
+	m   *metrics.Metrics
+	reg *prometheus.Registry
 }
 
 func newPlannerFixture(t *testing.T, gate Gate) plannerFixture {
@@ -71,7 +77,11 @@ func newPlannerFixture(t *testing.T, gate Gate) plannerFixture {
 	logged := &bytes.Buffer{}
 	logger := slog.New(slog.NewTextHandler(logged, nil))
 	rec := NewRecorder(st, clk, events.New(logger))
-	return plannerFixture{st: st, clk: clk, planner: NewPlanner(st, clk, NewRuns(st, clk, id.New()), rec, logger, gate), logged: logged}
+	m, reg := metricstest.New(t)
+	return plannerFixture{
+		st: st, clk: clk, planner: NewPlanner(st, clk, NewRuns(st, clk, id.New()), rec, logger, m, gate),
+		logged: logged, m: m, reg: reg,
+	}
 }
 
 // pauseAlways inserts a global pause window that covers every minute of every day.
@@ -199,8 +209,17 @@ func TestNewTicker_RunsThePlannerPerInterval(t *testing.T) {
 	gate := signalGate{asked: make(chan struct{}, askedBuffer)}
 	f := newPlannerFixture(t, gate)
 	storetest.Instance(t, f.st, f.clk.Now())
+	startTicker(t, f)
 
-	ticker := NewTicker(f.planner, f.clk, slog.New(slog.DiscardHandler))
+	leaderxtest.Await(t, gate.asked, "the first planner tick")
+	f.clk.Advance(TickInterval)
+	leaderxtest.Await(t, gate.asked, "the planner tick after one interval")
+}
+
+// startTicker starts the planner's leader loop and stops it when the test ends.
+func startTicker(t *testing.T, f plannerFixture) {
+	t.Helper()
+	ticker := NewTicker(f.planner, f.clk, slog.New(slog.DiscardHandler), f.m)
 	if err := ticker.Start(t.Context()); err != nil {
 		t.Fatalf("Start() = %v", err)
 	}
@@ -211,8 +230,30 @@ func TestNewTicker_RunsThePlannerPerInterval(t *testing.T) {
 			t.Errorf("Stop() = %v", err)
 		}
 	})
+}
 
-	leaderxtest.Await(t, gate.asked, "the first planner tick")
-	f.clk.Advance(TickInterval)
-	leaderxtest.Await(t, gate.asked, "the planner tick after one interval")
+// Positive: a planner tick that succeeds reaches the loop metrics as the last success at the
+// clock's time, with no failure (gap audit A1-04).
+func TestNewTicker_RecordsTheLastSuccess(t *testing.T) {
+	t.Parallel()
+	f := newPlannerFixture(t, AllowAll{})
+	storetest.Instance(t, f.st, f.clk.Now())
+	startTicker(t, f)
+	metricstest.Await(t, f.reg, "snatcharr_loop_last_success_timestamp_seconds", "loop", "snatch_planner",
+		float64(f.clk.Now().UnixNano())/float64(time.Second))
+	metricstest.Await(t, f.reg, "snatcharr_loop_failures_total", "loop", "snatch_planner", 0)
+}
+
+// Negative: a planner tick that cannot list the instances counts as a failed tick.
+func TestNewTicker_CountsAFailedTick(t *testing.T) {
+	t.Parallel()
+	f := newPlannerFixture(t, AllowAll{})
+	if _, err := f.st.Pool().Exec(t.Context(), `DROP TABLE instances CASCADE`); err != nil {
+		t.Fatalf("drop instances: %v", err)
+	}
+	startTicker(t, f)
+	metricstest.Await(t, f.reg, "snatcharr_loop_failures_total", "loop", "snatch_planner", 1)
+	if got, ok := metricstest.Value(t, f.reg, "snatcharr_loop_last_success_timestamp_seconds", "loop", "snatch_planner"); ok {
+		t.Errorf("last success = %v after a failed tick only, want no series", got)
+	}
 }

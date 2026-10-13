@@ -82,6 +82,21 @@ no Ingress or HTTPRoute is enabled.
 | ServiceMonitor | `serviceMonitor.enabled` scrapes `/metrics` on the API |
 | PodDisruptionBudget | per component, opt-in |
 
+### Metrics
+
+The API serves these on `/metrics` next to the framework's own (`api/internal/metrics`). The
+loops run on the elected replica only, so only its series move. The chart ships no alert
+rules; the cluster that scrapes the API owns them.
+
+| Series | Meaning |
+| --- | --- |
+| `snatcharr_loop_failures_total{loop}` | ticks of a leader loop that returned an error; `loop` is `snatch_planner`, `retention` or `seerr_sync`. The series exists at 0 from the first tick on |
+| `snatcharr_loop_last_success_timestamp_seconds{loop}` | Unix time of the loop's last tick without error; absent until one succeeded |
+| `snatcharr_loop_interval_seconds{loop}` | the loop's interval, to compare the last success against |
+| `snatcharr_planner_instance_failures_total{instance}` | planner passes that skipped the instance because planning it failed, for example on a schedule the API cannot read |
+
+A tick that a replica cuts short because it stopped leading counts as neither.
+
 ### NetworkPolicy and in-cluster *arr apps
 
 `networkPolicy.arrCidrs` allows egress by IP range. That reaches *arr apps outside the
