@@ -69,6 +69,8 @@ jobs:
           persist-credentials: false
       - name: The aggregate rule refuses its planted cases
         run: sh tools/ci/status_test.sh
+      - name: The Security Scan issue step behaves on its planted cases
+        run: sh tools/ci/security_issue_test.sh
       - name: The workflow check refuses its planted cases
         env:
           GH_TOKEN: ${{ github.token }}
@@ -157,6 +159,7 @@ jobs:
       deploy: ${{ steps.filter.outputs.deploy }}
       governance: ${{ steps.filter.outputs.governance }}
       contracts: ${{ steps.filter.outputs.contracts }}
+      docs: ${{ steps.filter.outputs.docs }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
@@ -228,6 +231,11 @@ jobs:
               - '.gitignore'
               - '.dockerignore'
               - 'Makefile'
+              - '.github/workflows/ci.yml'
+            docs:
+              - 'docs/**'
+              - 'mkdocs.yml'
+              - 'tools/docs/**'
               - '.github/workflows/ci.yml'
 
   # The Go jobs mirror golusoris' reusable ci-go.yml but pin tool versions that build with
@@ -557,6 +565,27 @@ jobs:
           praetorctl state init --if-absent .
           praetorctl flavor audit --flavor=go-service .
 
+  # The build pages.yml deploys from main, run on the pull request: a change that breaks the
+  # docs build fails "CI success" instead of reaching main (gap audit A2-03).
+  docs:
+    name: docs (mkdocs --strict)
+    needs: changes
+    if: needs.changes.outputs.docs == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14'
+      - name: Install the docs toolchain
+        run: python -m pip install -r tools/docs/requirements.txt
+      - name: Build site
+        # --strict turns every warning into a failure; no -q, which would hide them.
+        run: mkdocs build --strict
+
   # The required check that stands for every job of this workflow. A job the change filter
   # leaves out ends as skipped, and a skipped job satisfies a required check on its own, so this
   # job reads every result (tools/ci/status.sh). A new job needs a line here and a rule there;
@@ -582,6 +611,7 @@ jobs:
       - deploy
       - contracts
       - governance
+      - docs
     runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:

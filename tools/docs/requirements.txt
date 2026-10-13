@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+#
+# The docs toolchain, read by the CI job docs (every pull request that touches the docs) and by
+# pages.yml (the deployment on main), so the build a pull request passes is the build that ships.
+mkdocs-material==9.7.7
+pymdown-extensions==10.20

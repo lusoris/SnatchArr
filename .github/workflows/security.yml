@@ -78,3 +78,26 @@ jobs:
           node-version: '24'
       - name: pnpm audit
         run: cd web && pnpm audit --audit-level=high
+
+  # A failed scan on main opens the issue "Security Scan fails on main", or comments on it while it
+  # is open: new advisories against unchanged code reach the issue list, not only the run email
+  # (gap audit A2-02). Pull requests run the same scanners under "CI success".
+  report:
+    name: Open an issue on a failure on main
+    needs: [go-vulncheck, rust-audit, web-audit]
+    if: ${{ failure() && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Open or update the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: sh tools/ci/security_issue.sh "$RUN_URL"

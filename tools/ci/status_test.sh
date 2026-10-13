@@ -18,16 +18,16 @@ trap 'rm -rf "$WORK"' EXIT
 # Every job ran and succeeded; the change filter selected every component.
 ALL="$(jq -n '
   [ "workflows", "secret-scan", "semgrep", "trivy", "changes", "commits", "api-lint", "api-test", "api-security", "api-openapi",
-    "worker", "e2e", "web", "proto", "deploy", "contracts", "governance" ]
+    "worker", "e2e", "web", "proto", "deploy", "contracts", "governance", "docs" ]
   | map({key: ., value: {result: "success", outputs: {}}}) | from_entries
-  | .changes.outputs = ( [ "api", "worker", "web", "proto", "deploy", "governance", "contracts" ]
+  | .changes.outputs = ( [ "api", "worker", "web", "proto", "deploy", "governance", "contracts", "docs" ]
                          | map({key: ., value: "true"}) | from_entries )
 ')"
 # No component selected: every filtered job is skipped.
 NONE="$(printf '%s' "$ALL" | jq '
   .changes.outputs |= map_values("false")
   | (.["api-lint"], .["api-test"], .["api-security"], .["api-openapi"], .worker, .e2e, .web,
-     .proto, .deploy, .contracts, .governance).result = "skipped"
+     .proto, .deploy, .contracts, .governance, .docs).result = "skipped"
 ')"
 
 accepted=0
@@ -68,6 +68,8 @@ expect 1 "api selected, api-test skipped" true "$ALL" \
   '.["api-test"].result = "skipped"' "job api-test: skipped, must succeed"
 expect 1 "only proto changed, e2e skipped" true "$NONE" \
   '.changes.outputs.proto = "true" | .proto.result = "success"' "job e2e: skipped, must succeed"
+expect 1 "docs changed, docs skipped" true "$NONE" \
+  '.changes.outputs.docs = "true"' "job docs: skipped, must succeed"
 expect 1 "web cancelled" true "$ALL" '.web.result = "cancelled"' "job web: cancelled, must succeed"
 expect 1 "unselected job failed" true "$NONE" \
   '.deploy.result = "failure"' "job deploy: failure, may only be skipped"
@@ -77,7 +79,7 @@ expect 1 "commits failed (draft)" true "$ALL" '.commits.result = "failure"' "job
 expect 1 "commits failed although not expected" false "$NONE" \
   '.commits.result = "failure"' "job commits: failure, may only be skipped"
 expect 1 "job without a rule" true "$ALL" \
-  '.docs = {result: "success", outputs: {}}' "job docs: no rule in tools/ci/status.sh"
+  '.stray = {result: "success", outputs: {}}' "job stray: no rule in tools/ci/status.sh"
 expect 1 "job missing from needs" true "$ALL" 'del(.governance)' "job governance: not in needs, must succeed"
 expect 1 "results are not an object" true '[]' . "the job results could not be read"
 
@@ -125,8 +127,8 @@ echo "ok   the CI workflow matches the rule table"
 
 mirror_refuses "job dropped from the needs of status" "job governance: not needed by the status job" \
   '!/^      - governance$/'
-mirror_refuses "job that is not in the rule table" "job docs: no rule in tools/ci/status.sh" \
-  '{ sub(/^  governance:$/, "  docs:"); print }'
+mirror_refuses "job that is not in the rule table" "job stray: no rule in tools/ci/status.sh" \
+  '{ sub(/^  governance:$/, "  stray:"); print }'
 mirror_refuses "condition of a job changed" \
   "job e2e: the workflow does not carry the condition of its rule (api,worker,proto)" \
   '/^    if: needs.changes.outputs.api == .true. .. needs.changes.outputs.worker / {

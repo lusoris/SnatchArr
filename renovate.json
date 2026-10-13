@@ -20,6 +20,7 @@
     "helm-values",
     "helmv3",
     "devcontainer",
+    "pip_requirements",
     "custom.regex"
   ],
   "customManagers": [
