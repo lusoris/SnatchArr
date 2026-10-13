@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.1.6](https://github.com/lusoris/SnatchArr/compare/v0.1.5...v0.1.6) (2026-10-13)
+
+
+### Features
+
+* **api:** count failed leader-loop ticks and unreadable schedules ([#203](https://github.com/lusoris/SnatchArr/issues/203)) ([d4ad5a9](https://github.com/lusoris/SnatchArr/commit/d4ad5a95b4b87c50334f11a2f25d5b4f584caaf8))
+* **api:** count leased, finished and budgeted runs and worker events ([#204](https://github.com/lusoris/SnatchArr/issues/204)) ([c967e4f](https://github.com/lusoris/SnatchArr/commit/c967e4f7c7aa93160c4364833c5a3635740e1d93))
+* **api:** keep the product a connection test found with the instance ([#175](https://github.com/lusoris/SnatchArr/issues/175)) ([5e93da3](https://github.com/lusoris/SnatchArr/commit/5e93da34d39ed1b647a19a189cea9a734df8fa44)), closes [#22](https://github.com/lusoris/SnatchArr/issues/22)
+* **api:** name the product a Readarr-kind instance probe reached ([#173](https://github.com/lusoris/SnatchArr/issues/173)) ([ddcba32](https://github.com/lusoris/SnatchArr/commit/ddcba323c5a125adbfc838085e817c4e19d2e858)), closes [#22](https://github.com/lusoris/SnatchArr/issues/22)
+* **api:** report the last worker contact in the system status ([#202](https://github.com/lusoris/SnatchArr/issues/202)) ([76fcfe4](https://github.com/lusoris/SnatchArr/commit/76fcfe4883c44ece058006b806e283b328c5815e))
+* **web:** label Readarr as a frozen legacy target ([#167](https://github.com/lusoris/SnatchArr/issues/167)) ([729f412](https://github.com/lusoris/SnatchArr/commit/729f4128c5b2a570af2ce896fb449b1a98e3a43f)), closes [#21](https://github.com/lusoris/SnatchArr/issues/21)
+* **worker:** serve /livez and API failure metrics ([#201](https://github.com/lusoris/SnatchArr/issues/201)) ([998199f](https://github.com/lusoris/SnatchArr/commit/998199fe99a7850df40ad16f40a0438d30cba919))
+* **worker:** test three Readarr forks as targets of their own ([#182](https://github.com/lusoris/SnatchArr/issues/182)) ([520ebd3](https://github.com/lusoris/SnatchArr/commit/520ebd3a4672e073e38f3baac3b22f6d51a70b7a)), closes [#22](https://github.com/lusoris/SnatchArr/issues/22)
+
+
+### Bug Fixes
+
+* **api:** count the downloads rTorrent transfers ([#190](https://github.com/lusoris/SnatchArr/issues/190)) ([9e49e44](https://github.com/lusoris/SnatchArr/commit/9e49e4431d1875c2f4490f05edae9091213503c4)), closes [#184](https://github.com/lusoris/SnatchArr/issues/184)
+* **api:** fail readiness while the leader loops cannot run ([#195](https://github.com/lusoris/SnatchArr/issues/195)) ([33ece09](https://github.com/lusoris/SnatchArr/commit/33ece09f142174b4cbf2c826b19f693cb7234680))
+* **api:** stop gRPC connection rotation from cutting worker leases ([#194](https://github.com/lusoris/SnatchArr/issues/194)) ([f995828](https://github.com/lusoris/SnatchArr/commit/f995828d57a436e79b3c0b555adc7d75193cba4d))
+* **ci:** fail gates closed on broken renders and missing inputs ([#196](https://github.com/lusoris/SnatchArr/issues/196)) ([a3aaa23](https://github.com/lusoris/SnatchArr/commit/a3aaa23333b71a4ecfef47330db9737b138fd35f))
+* **deps:** move the download-client adapters to goenvoy v2 ([#185](https://github.com/lusoris/SnatchArr/issues/185)) ([e39f852](https://github.com/lusoris/SnatchArr/commit/e39f852533f67a3272dd354d9faf6cdf304af5c8))
+
 ## [0.1.5](https://github.com/lusoris/SnatchArr/compare/v0.1.4...v0.1.5) (2026-10-11)
 
 
