@@ -936,4 +936,124 @@ mod tests {
             "0 hours skips history"
         );
     }
+
+    /// Removes the empty certificate directory when the test ends.
+    #[cfg(target_os = "linux")]
+    struct DirGuard(std::path::PathBuf);
+
+    #[cfg(target_os = "linux")]
+    impl Drop for DirGuard {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// Waits at most 100 polls of 100ms (10s) for the child, kills it on timeout, and
+    /// returns whether it exited on its own with its output.
+    #[cfg(target_os = "linux")]
+    fn wait_bounded(mut child: std::process::Child) -> (bool, std::process::Output) {
+        let mut exited = false;
+        for _ in 0..100 {
+            if child.try_wait().expect("try_wait failed").is_some() {
+                exited = true;
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        if !exited {
+            let _ = child.kill();
+        }
+        let output = child.wait_with_output().expect("wait_with_output failed");
+        (exited, output)
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn empty_system_store_client_construction() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "snatcharr-empty-store-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&temp_dir).expect("failed to create empty cert dir");
+        let _guard = DirGuard(temp_dir.clone());
+        let child_ran = temp_dir.join("child-ran");
+
+        let exe = std::env::current_exe().expect("failed to get current_exe");
+        let child = std::process::Command::new(exe)
+            .args([
+                "--exact",
+                "tests::child_empty_system_store",
+                "--ignored",
+                "--nocapture",
+            ])
+            .env("SSL_CERT_DIR", &temp_dir)
+            .env("SSL_CERT_FILE", temp_dir.join("missing-ca.pem"))
+            .env("SNATCHARR_EMPTY_STORE_CHILD", &child_ran)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .expect("failed to spawn child test process");
+        let (exited, output) = wait_bounded(child);
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            exited,
+            "child test timed out after 10s:\nstdout:\n{stdout}\nstderr:\n{stderr}"
+        );
+        assert!(
+            output.status.success(),
+            "child test failed with exit code {:?}:\nstdout:\n{stdout}\nstderr:\n{stderr}",
+            output.status.code()
+        );
+        // A wrong test name or marker makes the child run nothing and still exit 0.
+        assert!(
+            child_ran.exists(),
+            "child test did not run its assertions:\nstdout:\n{stdout}\nstderr:\n{stderr}"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    #[ignore = "re-exec child test under empty store"]
+    async fn child_empty_system_store() {
+        // The parent names the file this child writes once its assertions pass.
+        let Some(child_ran) = std::env::var_os("SNATCHARR_EMPTY_STORE_CHILD") else {
+            return;
+        };
+
+        let opts = Options {
+            timeout: Duration::from_millis(500),
+            attempts: 1,
+            backoff: Duration::from_millis(1),
+            ..Options::default()
+        };
+
+        // Assert client builds Ok under empty system store.
+        let client = ArrClient::new(Kind::Sonarr, "https://127.0.0.1:1", "test-key", opts);
+        assert!(client.is_ok(), "ArrClient::new failed: {client:?}");
+        let client = client.unwrap();
+
+        // Assert a request to an https URL gets past client construction.
+        let res = client.system_status().await;
+        let err = res.expect_err("request to 127.0.0.1:1 should fail at transport");
+        assert!(
+            matches!(err, Error::Transport(_)),
+            "expected transport error, got: {err:?}"
+        );
+        let msg = err.to_string();
+        assert!(
+            !msg.contains("No CA certificates were loaded from the system"),
+            "error should not be empty CA cert store: {msg}"
+        );
+        assert!(
+            !msg.contains("builder error"),
+            "error should not be client builder error: {msg}"
+        );
+        std::fs::write(child_ran, "ok").expect("write child sentinel");
+    }
 }
