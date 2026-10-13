@@ -37,8 +37,14 @@ func (p *PgAPIKeyStore) Save(ctx context.Context, k apikey.Key) error {
 	if err != nil {
 		return fmt.Errorf("auth: api key owner id: %w", err)
 	}
+	// A key issued without scopes carries a nil slice, which pgx sends as NULL; the column is
+	// NOT NULL, so store the empty array instead.
+	scopes := k.Scopes
+	if scopes == nil {
+		scopes = []string{}
+	}
 	if err := p.st.Q().SaveAPIKey(ctx, sqlcgen.SaveAPIKeyParams{
-		ID: k.ID, OwnerID: owner, Scopes: k.Scopes, Hash: k.Hash, CreatedAt: k.CreatedAt, ExpiresAt: k.ExpiresAt,
+		ID: k.ID, OwnerID: owner, Scopes: scopes, Hash: k.Hash, CreatedAt: k.CreatedAt, ExpiresAt: k.ExpiresAt,
 	}); err != nil {
 		return fmt.Errorf("auth: save api key: %w", err)
 	}
