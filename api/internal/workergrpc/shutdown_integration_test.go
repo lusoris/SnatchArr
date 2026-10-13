@@ -40,6 +40,7 @@ func leaseServer(t *testing.T) (*Server, *clockwork.FakeClock, *store.Store) {
 		runs: snatch.NewRuns(st, clk, id.New()), workers: snatch.NewWorkers(st, clk), rec: snatch.NewRecorder(st, clk, events.New(logger)),
 		policies: policies.New(st, clk), clk: clk, logger: logger, stopping: make(chan struct{}),
 	}
+	withMetrics(t, srv)
 	return srv, clk, st
 }
 

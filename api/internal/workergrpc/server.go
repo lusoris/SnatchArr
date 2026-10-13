@@ -25,6 +25,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	snatcharrv1 "github.com/lusoris/SnatchArr/api/internal/gen/snatcharr/v1"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
+	"github.com/lusoris/SnatchArr/api/internal/metrics"
 	"github.com/lusoris/SnatchArr/api/internal/policies"
 	"github.com/lusoris/SnatchArr/api/internal/seerr"
 	"github.com/lusoris/SnatchArr/api/internal/settings"
@@ -70,6 +71,7 @@ type Server struct {
 	pacer     Pacer
 	clk       clock.Clock
 	logger    *slog.Logger
+	m         *metrics.Metrics
 	// stopping is closed by Shutdown.
 	stopping chan struct{}
 	stopOnce sync.Once
@@ -77,11 +79,13 @@ type Server struct {
 
 // New wires the server.
 func New(runs *snatch.Runs, workers *snatch.Workers, budget *snatch.Budget, memory *snatch.Memory, rec *snatch.Recorder, planner *snatch.Planner,
-	inst *instances.Service, pol *policies.Service, cfg *settings.Service, requests *seerr.Service, clk clock.Clock, logger *slog.Logger, opts Options,
+	inst *instances.Service, pol *policies.Service, cfg *settings.Service, requests *seerr.Service, clk clock.Clock, logger *slog.Logger, m *metrics.Metrics,
+	opts Options,
 ) *Server {
+	m.WorkerEventTypes(eventTypes()...)
 	return &Server{
 		runs: runs, workers: workers, budget: budget, memory: memory, rec: rec, planner: planner, instances: inst, policies: pol,
-		settings: cfg, seerr: requests, pacer: opts.Pacer, clk: clk, logger: logger,
+		settings: cfg, seerr: requests, pacer: opts.Pacer, clk: clk, logger: logger, m: m,
 		stopping: make(chan struct{}),
 	}
 }
@@ -137,6 +141,7 @@ func (s *Server) LeaseRun(ctx context.Context, req *snatcharrv1.LeaseRunRequest)
 		}
 		run, err := s.runs.Lease(ctx, req.GetWorkerId())
 		if err == nil {
+			s.m.RunLeased(string(run.Kind))
 			return s.leaseResponse(ctx, run)
 		}
 		if !errors.Is(err, snatch.ErrNoRun) {
@@ -283,7 +288,41 @@ func (s *Server) addPriorities(ctx context.Context, run domain.Run, resp *snatch
 
 // AcquireBudget debits the instance's hourly bucket (schedule overrides applied). A request
 // that names its items is granted item by item and debited only for what it can use (#142).
+// Every request is counted by its result.
 func (s *Server) AcquireBudget(ctx context.Context, req *snatcharrv1.AcquireBudgetRequest) (*snatcharrv1.AcquireBudgetResponse, error) {
+	resp, err := s.acquireBudget(ctx, req)
+	s.m.BudgetRequested(budgetResult(req, resp, err))
+	return resp, err
+}
+
+// budgetResult names the outcome of a budget request for the budget counter.
+func budgetResult(req *snatcharrv1.AcquireBudgetRequest, resp *snatcharrv1.AcquireBudgetResponse, err error) string {
+	asked := askedStamina(req)
+	switch {
+	case err != nil:
+		return metrics.BudgetError
+	case int(resp.GetGranted()) >= asked:
+		return metrics.BudgetGranted
+	case resp.GetGranted() == 0:
+		return metrics.BudgetDenied
+	default:
+		return metrics.BudgetPartial
+	}
+}
+
+// askedStamina is the stamina a request asks for, each cost capped the way grantBudget caps it.
+func askedStamina(req *snatcharrv1.AcquireBudgetRequest) int {
+	if len(req.GetItems()) == 0 {
+		return int(min(req.GetRequested(), maxSearchedPerRun))
+	}
+	total := 0
+	for _, item := range req.GetItems() {
+		total += int(min(item.GetCost(), maxSearchedPerRun))
+	}
+	return total
+}
+
+func (s *Server) acquireBudget(ctx context.Context, req *snatcharrv1.AcquireBudgetRequest) (*snatcharrv1.AcquireBudgetResponse, error) {
 	if len(req.GetItems()) > maxBudgetItems {
 		return nil, status.Errorf(codes.InvalidArgument, "items must hold at most %d entries", maxBudgetItems)
 	}
@@ -353,6 +392,9 @@ func (s *Server) ReportEvents(stream snatcharrv1.WorkerService_ReportEventsServe
 		if err := s.recordProto(ctx, req.GetEvent()); err != nil {
 			return toStatus(err)
 		}
+		if req.GetEvent() != nil {
+			s.m.WorkerEvent(eventType(req.GetEvent().GetType()))
+		}
 		accepted++
 	}
 	return stream.SendAndClose(&snatcharrv1.ReportEventsResponse{Accepted: accepted})
@@ -402,6 +444,7 @@ func (s *Server) CompleteRun(ctx context.Context, req *snatcharrv1.CompleteRunRe
 	if _, err := s.runs.Complete(ctx, run.ID, req.GetWorkerId(), outcome(req.GetOutcome()), len(searched), req.GetError()); err != nil {
 		return nil, toStatus(err)
 	}
+	s.m.RunFinished(string(outcome(req.GetOutcome())))
 	if outcome(req.GetOutcome()) == domain.RunFailed {
 		s.recordBackoff(ctx, run, policy)
 	}
@@ -421,6 +464,7 @@ func (s *Server) failExhausted(ctx context.Context) {
 		return
 	}
 	for _, run := range runs {
+		s.m.RunFinished(metrics.OutcomeLeaseExhausted)
 		if err := s.rec.Record(ctx, domain.Event{
 			RunID: &run.ID, InstanceID: run.InstanceID, Level: "error", Type: "run_finished",
 			Title: fmt.Sprintf("%s snatch failed", run.Kind), Detail: snatch.ExhaustedReason,

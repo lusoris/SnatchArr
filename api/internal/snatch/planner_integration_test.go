@@ -216,6 +216,9 @@ func TestNewTicker_RunsThePlannerPerInterval(t *testing.T) {
 	leaderxtest.Await(t, gate.asked, "the planner tick after one interval")
 }
 
+// runsQueued counts the runs the planner queued (gap audit A1-02).
+const runsQueued = "snatcharr_runs_queued_total"
+
 // startTicker starts the planner's leader loop and stops it when the test ends.
 func startTicker(t *testing.T, f plannerFixture) {
 	t.Helper()
@@ -242,6 +245,7 @@ func TestNewTicker_RecordsTheLastSuccess(t *testing.T) {
 	metricstest.Await(t, f.reg, "snatcharr_loop_last_success_timestamp_seconds", "loop", "snatch_planner",
 		float64(f.clk.Now().UnixNano())/float64(time.Second))
 	metricstest.Await(t, f.reg, "snatcharr_loop_failures_total", "loop", "snatch_planner", 0)
+	metricstest.Await(t, f.reg, runsQueued, "", "", 1)
 }
 
 // Negative: a planner tick that cannot list the instances counts as a failed tick.
@@ -255,5 +259,8 @@ func TestNewTicker_CountsAFailedTick(t *testing.T) {
 	metricstest.Await(t, f.reg, "snatcharr_loop_failures_total", "loop", "snatch_planner", 1)
 	if got, ok := metricstest.Value(t, f.reg, "snatcharr_loop_last_success_timestamp_seconds", "loop", "snatch_planner"); ok {
 		t.Errorf("last success = %v after a failed tick only, want no series", got)
+	}
+	if got, ok := metricstest.Value(t, f.reg, runsQueued, "", ""); !ok || got != 0 {
+		t.Errorf("%s = %v (present %t) after a failed tick only, want 0", runsQueued, got, ok)
 	}
 }

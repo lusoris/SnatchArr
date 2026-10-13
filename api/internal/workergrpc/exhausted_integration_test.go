@@ -19,6 +19,8 @@ import (
 
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/events"
+	"github.com/lusoris/SnatchArr/api/internal/metrics"
+	"github.com/lusoris/SnatchArr/api/internal/metrics/metricstest"
 	"github.com/lusoris/SnatchArr/api/internal/policies"
 	"github.com/lusoris/SnatchArr/api/internal/snatch"
 	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
@@ -40,6 +42,7 @@ func TestExhaustedRunIsRecorded(t *testing.T) {
 	bus := events.New(logger)
 	runs := snatch.NewRuns(st, clk, id.New())
 	s := &Server{runs: runs, workers: snatch.NewWorkers(st, clk), rec: snatch.NewRecorder(st, clk, bus), policies: policies.New(st, clk), clk: clk, logger: logger}
+	reg := withMetrics(t, s)
 	instanceID := storetest.Instance(t, st, clk.Now())
 	run, _, err := runs.Enqueue(t.Context(), instanceID, domain.SnatchMissing)
 	if err != nil {
@@ -57,6 +60,9 @@ func TestExhaustedRunIsRecorded(t *testing.T) {
 
 	if !streamHas(stream, "event: run_finished", snatch.ExhaustedReason) {
 		t.Errorf("SSE stream has no run_finished frame naming %q", snatch.ExhaustedReason)
+	}
+	if got, _ := metricstest.Value(t, reg, runsFinished, "outcome", metrics.OutcomeLeaseExhausted); got != 1 {
+		t.Errorf("%s{lease_exhausted} = %v, want 1", runsFinished, got)
 	}
 	kind := "run_finished"
 	rows, err := st.Q().ListEvents(t.Context(), sqlcgen.ListEventsParams{InstanceID: &instanceID, Type: &kind, PageSize: 10})
