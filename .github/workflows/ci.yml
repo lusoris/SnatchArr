@@ -483,6 +483,17 @@ jobs:
           echo "$KUSTOMIZE_SHA256  $RUNNER_TEMP/kustomize.tgz" | sha256sum -c -
           tar -xzf "$RUNNER_TEMP/kustomize.tgz" -C "$RUNNER_TEMP" kustomize
           echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      # Pinned release tarball. Helm v4 checks a plugin's .prov signature by default, and the runner
+      # holds no keyring for its signer, so the pinned sha256 is the integrity check, as for
+      # kustomize above; --verify=false only skips the keyring step.
+      - name: helm-unittest v1.2.1
+        env:
+          HELM_UNITTEST_SHA256: bbcebd42631dff9fc595462fad839c49a1b06f9635e952e7e837d7e5fe82865f
+        run: |
+          curl -fsSL --max-time 60 -o "$RUNNER_TEMP/unittest.tgz" \
+            https://github.com/helm-unittest/helm-unittest/releases/download/v1.2.1/unittest-1.2.1.tgz
+          echo "$HELM_UNITTEST_SHA256  $RUNNER_TEMP/unittest.tgz" | sha256sum -c -
+          helm plugin install "$RUNNER_TEMP/unittest.tgz" --verify=false
       # The same checks as locally: strict lint, kubeconform on the default and all-features
       # renders (kubeconform runs from its pinned image), the kind overlay build and the render
       # guards (#116).
