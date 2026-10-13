@@ -29,6 +29,7 @@ type Metrics struct {
 	runsLeased      *prometheus.CounterVec
 	runsFinished    *prometheus.CounterVec
 	workerEvents    *prometheus.CounterVec
+	unconfirmed     *prometheus.CounterVec
 	budgetRequests  *prometheus.CounterVec
 }
 
@@ -61,6 +62,7 @@ func New(reg prometheus.Registerer) (*Metrics, error) {
 		runsLeased:      b.counter("snatcharr_runs_leased_total", "Runs a worker leased, by snatch kind.", "kind"),
 		runsFinished:    b.counter("snatcharr_runs_finished_total", "Runs that ended, by outcome.", "outcome"),
 		workerEvents:    b.counter("snatcharr_worker_events_total", "Events workers reported, by event type.", "type"),
+		unconfirmed:     b.counter("snatcharr_worker_events_unconfirmed_total", "Events workers emitted for a completed run that ReportEvents did not confirm."),
 		budgetRequests:  b.counter("snatcharr_budget_requests_total", "Budget requests of workers, by result.", "result"),
 	}
 	if b.err != nil {
@@ -68,6 +70,7 @@ func New(reg prometheus.Registerer) (*Metrics, error) {
 	}
 	// Series an alert watches for an increase exist at zero from the start.
 	m.runsQueued.WithLabelValues()
+	m.unconfirmed.WithLabelValues()
 	for _, outcome := range []string{string(domain.RunDone), string(domain.RunFailed), string(domain.RunCancelled), OutcomeLeaseExhausted} {
 		m.runsFinished.WithLabelValues(outcome)
 	}
@@ -164,6 +167,11 @@ func (m *Metrics) WorkerEventTypes(eventTypes ...string) {
 	for _, t := range eventTypes {
 		m.workerEvents.WithLabelValues(t)
 	}
+}
+
+// EventsUnconfirmed records n events a worker emitted for a run but could not confirm.
+func (m *Metrics) EventsUnconfirmed(n uint32) {
+	m.unconfirmed.WithLabelValues().Add(float64(n))
 }
 
 // BudgetRequested records a budget request that ended with result (BudgetGranted, ...).

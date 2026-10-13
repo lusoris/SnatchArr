@@ -240,6 +240,10 @@ message CompleteRunRequest {
   repeated SearchedItem searched = 4;
   string cursor = 5;
   string error = 6;
+  // Events the worker emitted for this run that ReportEvents did not confirm as accepted:
+  // dropped on a closed channel, or sent on a stream the API refused or the reporter lost.
+  // Non-zero means the run's event history may be incomplete.
+  uint32 events_unconfirmed = 7;
 }
 
 message CompleteRunResponse {}

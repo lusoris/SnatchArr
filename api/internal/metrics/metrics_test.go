@@ -163,6 +163,7 @@ func TestNew_CreatesTheAlertSeriesAtZero(t *testing.T) {
 	_, reg := metricstest.New(t)
 	zero := map[string][2]string{
 		"queued":          {"snatcharr_runs_queued_total", ""},
+		"unconfirmed":     {"snatcharr_worker_events_unconfirmed_total", ""},
 		"done":            {"snatcharr_runs_finished_total", "done"},
 		"failed":          {"snatcharr_runs_finished_total", "failed"},
 		"cancelled":       {"snatcharr_runs_finished_total", "cancelled"},
@@ -193,6 +194,8 @@ func TestRunAndWorkerSeries(t *testing.T) {
 	m.WorkerEventTypes("search_failed", "run_started")
 	m.WorkerEvent("search_failed")
 	m.BudgetRequested(metrics.BudgetDenied)
+	m.EventsUnconfirmed(3)
+	m.EventsUnconfirmed(0)
 	cases := []struct {
 		name, series, label, value string
 		want                       float64
@@ -204,6 +207,7 @@ func TestRunAndWorkerSeries(t *testing.T) {
 		{"finished failed", "snatcharr_runs_finished_total", "outcome", "failed", 1},
 		{"event search_failed", "snatcharr_worker_events_total", "type", "search_failed", 1},
 		{"budget denied", "snatcharr_budget_requests_total", "result", metrics.BudgetDenied, 1},
+		{"unconfirmed events, a zero adds nothing", "snatcharr_worker_events_unconfirmed_total", "", "", 3},
 		// Negative: another label of the same series is untouched.
 		{"finished done", "snatcharr_runs_finished_total", "outcome", "done", 0},
 		{"budget granted", "snatcharr_budget_requests_total", "result", metrics.BudgetGranted, 0},

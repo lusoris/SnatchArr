@@ -40,3 +40,11 @@ The first start has no users; `GET /api/v1/auth/setup/status` says so and
 Workers talk gRPC (`proto/snatcharr/v1/worker.proto`): `LeaseRun`, `Heartbeat`,
 `FilterCandidates`, `AcquireBudget`, `ReportEvents`, `CompleteRun`. The API is the only
 source of truth for stamina and afterglow; a worker never decides on its own.
+
+A worker retries a `CompleteRun` the API refused with `UNAVAILABLE`, `DEADLINE_EXCEEDED`,
+`RESOURCE_EXHAUSTED` or `ABORTED`: three calls at most, the n-th wait a random time
+between half and all of 1 s x 2^(n-1). Any other refusal ends the attempt; the run then
+fails once its lease expires `MaxLeases` times. `CompleteRun` carries `events_unconfirmed`,
+the events the worker emitted for the run that `ReportEvents` did not confirm as accepted.
+A non-zero value records an `events_unconfirmed` warning on the run: its history may be
+incomplete.

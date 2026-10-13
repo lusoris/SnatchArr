@@ -14,6 +14,7 @@ use tonic::transport::Server;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
+mod completion;
 mod readarr_forks;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -42,7 +43,12 @@ struct FakeApi {
     pub leased: Option<Run>,
     pub fail_heartbeat: bool,
     pub fail_report: bool,
-    pub fail_complete: bool,
+    /// Ends the event stream with an answer after this many events; later ones are dropped.
+    pub report_cut_after: Option<u32>,
+    /// The n-th CompleteRun call is refused with the n-th code; calls past the list succeed.
+    pub complete_refusals: Vec<tonic::Code>,
+    /// Every CompleteRun call, refused or not.
+    pub complete_calls: Arc<std::sync::atomic::AtomicU32>,
 }
 
 impl Default for FakeApi {
@@ -60,7 +66,9 @@ impl Default for FakeApi {
             leased: None,
             fail_heartbeat: false,
             fail_report: false,
-            fail_complete: false,
+            report_cut_after: None,
+            complete_refusals: Vec::new(),
+            complete_calls: Arc::new(std::sync::atomic::AtomicU32::new(0)),
         }
     }
 }
@@ -182,6 +190,9 @@ impl WorkerService for FakeApi {
                 self.reported_events.lock().await.push(ev);
                 accepted = accepted.saturating_add(1);
             }
+            if self.report_cut_after == Some(accepted) {
+                break;
+            }
         }
         if self.fail_report {
             return Err(Status::unavailable("planted ReportEvents failure"));
@@ -193,8 +204,14 @@ impl WorkerService for FakeApi {
         &self,
         request: tonic::Request<CompleteRunRequest>,
     ) -> Result<tonic::Response<CompleteRunResponse>, Status> {
-        if self.fail_complete {
-            return Err(Status::unavailable("planted CompleteRun failure"));
+        let call = self
+            .complete_calls
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        if let Some(code) = usize::try_from(call)
+            .ok()
+            .and_then(|n| self.complete_refusals.get(n))
+        {
+            return Err(Status::new(*code, "planted CompleteRun failure"));
         }
         self.completed_requests
             .lock()
@@ -307,19 +324,37 @@ fn queued_command() -> ResponseTemplate {
         .set_body_json(serde_json::json!({"id": 100, "name": "EpisodeSearch", "status": "queued"}))
 }
 
-/// Runs `run` with a short command-polling budget (3 polls, 10 ms apart); returns what the
-/// run recorded about its API calls.
+/// CompleteRun retry for tests: 3 attempts, 5 ms base wait.
+const SHORT_RETRY: crate::executor::Retry = crate::executor::Retry {
+    attempts: 3,
+    backoff: Duration::from_millis(5),
+};
+
+/// Runs `run` with a short command-polling budget (3 polls, 10 ms apart) and [`SHORT_RETRY`];
+/// returns what the run recorded about its API calls.
 async fn run_short_polling(client: Client, run: Run) -> crate::health::Health {
+    run_with_retry(client, run, SHORT_RETRY).await
+}
+
+/// [`run_short_polling`] with the CompleteRun retry `retry`.
+async fn run_with_retry(
+    client: Client,
+    run: Run,
+    retry: crate::executor::Retry,
+) -> crate::health::Health {
     let health = crate::health::Health::new(Duration::from_secs(180));
     crate::executor::execute_with(
         client,
         run,
         Duration::from_secs(1),
         "w-1",
-        crate::executor::Polling {
-            max: 3,
-            interval: Duration::from_millis(10),
-        },
+        (
+            crate::executor::Polling {
+                max: 3,
+                interval: Duration::from_millis(10),
+            },
+            retry,
+        ),
         &health,
     )
     .await;
@@ -985,12 +1020,13 @@ async fn completed_run_records_contact_and_no_failure() -> TestResult {
 async fn failed_complete_run_is_counted() -> TestResult {
     let sonarr = MockServer::start().await;
     let api = FakeApi {
-        fail_complete: true,
+        complete_refusals: vec![tonic::Code::Unavailable; 3],
         ..FakeApi::default()
     };
     let (client, _) = start_fake_api(api).await?;
     let health = run_short_polling(client, default_run(&sonarr.uri())).await;
-    assert_eq!(health.failures(crate::health::Call::CompleteRun), 1);
+    // Every attempt of SHORT_RETRY is refused and counted.
+    assert_eq!(health.failures(crate::health::Call::CompleteRun), 3);
     assert_eq!(health.failures(crate::health::Call::ReportEvents), 0);
     // The answered event stream is the only successful call of this run.
     assert!(health.contacted());

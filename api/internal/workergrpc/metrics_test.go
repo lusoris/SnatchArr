@@ -6,11 +6,15 @@ package workergrpc
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"io"
 	"log/slog"
+	"math"
 	"slices"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -28,6 +32,8 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/metrics/metricstest"
 	"github.com/lusoris/SnatchArr/api/internal/policies"
 	"github.com/lusoris/SnatchArr/api/internal/snatch"
+	"github.com/lusoris/SnatchArr/api/internal/store"
+	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
 	"github.com/lusoris/SnatchArr/api/internal/store/storetest"
 )
 
@@ -198,8 +204,23 @@ func TestLeaseRunIsCounted(t *testing.T) {
 	}
 }
 
-// completeServer is a Server with what CompleteRun and ReportEvents reach, and one leased run.
+// completeFixture is a Server with what CompleteRun and ReportEvents reach, its store and
+// registry, and one leased run.
+type completeFixture struct {
+	srv *Server
+	reg *prometheus.Registry
+	st  *store.Store
+	run domain.Run
+}
+
+// completeServer is completeFixture's server, registry and run id.
 func completeServer(t *testing.T) (*Server, *prometheus.Registry, string) {
+	t.Helper()
+	f := newCompleteFixture(t)
+	return f.srv, f.reg, f.run.ID.String()
+}
+
+func newCompleteFixture(t *testing.T) completeFixture {
 	t.Helper()
 	st := storetest.New(t)
 	clk := clock.NewFake()
@@ -217,7 +238,7 @@ func completeServer(t *testing.T) (*Server, *prometheus.Registry, string) {
 	if _, err = srv.runs.Lease(t.Context(), "worker"); err != nil {
 		t.Fatalf("Lease() = %v", err)
 	}
-	return srv, reg, run.ID.String()
+	return completeFixture{srv: srv, reg: reg, st: st, run: run}
 }
 
 // A completed run is counted by its outcome; a refused completion counts nothing.
@@ -257,6 +278,67 @@ func TestCompleteRunIsCounted(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A completion with unconfirmed events counts them and warns on the run before run_finished;
+// a completion without counts nothing and warns nothing.
+func TestCompleteRunCountsUnconfirmedEvents(t *testing.T) {
+	t.Parallel()
+	const series = "snatcharr_worker_events_unconfirmed_total"
+	cases := []struct {
+		name string
+		n    uint32
+	}{
+		// Positive.
+		{"three unconfirmed", 3},
+		// Boundary.
+		{"one unconfirmed", 1},
+		{"the largest count", math.MaxUint32},
+		// Negative: every event confirmed.
+		{"none unconfirmed", 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			f := newCompleteFixture(t)
+			req := &snatcharrv1.CompleteRunRequest{RunId: f.run.ID.String(), WorkerId: "worker", EventsUnconfirmed: tc.n}
+			if _, err := f.srv.CompleteRun(t.Context(), req); err != nil {
+				t.Fatalf("CompleteRun() = %v", err)
+			}
+			if got, ok := metricstest.Value(t, f.reg, series, "", ""); !ok || got != float64(tc.n) {
+				t.Errorf("%s = %v (present %t), want %d", series, got, ok, tc.n)
+			}
+			rows, err := f.st.Q().ListEvents(t.Context(), sqlcgen.ListEventsParams{InstanceID: &f.run.InstanceID, PageSize: 10})
+			if err != nil {
+				t.Fatalf("ListEvents() = %v", err)
+			}
+			want := unconfirmedHistory(tc.n)
+			if got := historyTypes(rows); !slices.Equal(got, want) {
+				t.Fatalf("history = %v, want %v", got, want)
+			}
+			if title := rows[0].Title; tc.n > 0 && !strings.HasPrefix(title, strconv.FormatUint(uint64(tc.n), 10)+" event(s)") {
+				t.Errorf("warning title = %q, want it to start with the count %d", title, tc.n)
+			}
+		})
+	}
+}
+
+// historyTypes sorts rows oldest first and lists the level and type of each.
+func historyTypes(rows []sqlcgen.SnatchEvent) []string {
+	slices.SortFunc(rows, func(a, b sqlcgen.SnatchEvent) int { return cmp.Compare(a.ID, b.ID) })
+	out := make([]string, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, r.Level+" "+r.Type)
+	}
+	return out
+}
+
+// unconfirmedHistory is the history a completed run with n unconfirmed events leaves.
+func unconfirmedHistory(n uint32) []string {
+	if n == 0 {
+		return []string{"info run_finished"}
+	}
+	return []string{"warn events_unconfirmed", "info run_finished"}
 }
 
 // uuidOther is a well-formed run id other than id.

@@ -1592,15 +1592,19 @@ func (x *SearchedItem) GetGroupId() int64 {
 }
 
 type CompleteRunRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RunId         string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	WorkerId      string                 `protobuf:"bytes,2,opt,name=worker_id,json=workerId,proto3" json:"worker_id,omitempty"`
-	Outcome       RunOutcome             `protobuf:"varint,3,opt,name=outcome,proto3,enum=snatcharr.v1.RunOutcome" json:"outcome,omitempty"`
-	Searched      []*SearchedItem        `protobuf:"bytes,4,rep,name=searched,proto3" json:"searched,omitempty"`
-	Cursor        string                 `protobuf:"bytes,5,opt,name=cursor,proto3" json:"cursor,omitempty"`
-	Error         string                 `protobuf:"bytes,6,opt,name=error,proto3" json:"error,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	RunId    string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	WorkerId string                 `protobuf:"bytes,2,opt,name=worker_id,json=workerId,proto3" json:"worker_id,omitempty"`
+	Outcome  RunOutcome             `protobuf:"varint,3,opt,name=outcome,proto3,enum=snatcharr.v1.RunOutcome" json:"outcome,omitempty"`
+	Searched []*SearchedItem        `protobuf:"bytes,4,rep,name=searched,proto3" json:"searched,omitempty"`
+	Cursor   string                 `protobuf:"bytes,5,opt,name=cursor,proto3" json:"cursor,omitempty"`
+	Error    string                 `protobuf:"bytes,6,opt,name=error,proto3" json:"error,omitempty"`
+	// Events the worker emitted for this run that ReportEvents did not confirm as accepted:
+	// dropped on a closed channel, or sent on a stream the API refused or the reporter lost.
+	// Non-zero means the run's event history may be incomplete.
+	EventsUnconfirmed uint32 `protobuf:"varint,7,opt,name=events_unconfirmed,json=eventsUnconfirmed,proto3" json:"events_unconfirmed,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *CompleteRunRequest) Reset() {
@@ -1673,6 +1677,13 @@ func (x *CompleteRunRequest) GetError() string {
 		return x.Error
 	}
 	return ""
+}
+
+func (x *CompleteRunRequest) GetEventsUnconfirmed() uint32 {
+	if x != nil {
+		return x.EventsUnconfirmed
+	}
+	return 0
 }
 
 type CompleteRunResponse struct {
@@ -1801,14 +1812,15 @@ const file_snatcharr_v1_worker_proto_rawDesc = "" +
 	"entityType\x12\x1b\n" +
 	"\tentity_id\x18\x02 \x01(\x03R\bentityId\x12\x14\n" +
 	"\x05title\x18\x03 \x01(\tR\x05title\x12\x19\n" +
-	"\bgroup_id\x18\x04 \x01(\x03R\agroupId\"\xe2\x01\n" +
+	"\bgroup_id\x18\x04 \x01(\x03R\agroupId\"\x91\x02\n" +
 	"\x12CompleteRunRequest\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12\x1b\n" +
 	"\tworker_id\x18\x02 \x01(\tR\bworkerId\x122\n" +
 	"\aoutcome\x18\x03 \x01(\x0e2\x18.snatcharr.v1.RunOutcomeR\aoutcome\x126\n" +
 	"\bsearched\x18\x04 \x03(\v2\x1a.snatcharr.v1.SearchedItemR\bsearched\x12\x16\n" +
 	"\x06cursor\x18\x05 \x01(\tR\x06cursor\x12\x14\n" +
-	"\x05error\x18\x06 \x01(\tR\x05error\"\x15\n" +
+	"\x05error\x18\x06 \x01(\tR\x05error\x12-\n" +
+	"\x12events_unconfirmed\x18\a \x01(\rR\x11eventsUnconfirmed\"\x15\n" +
 	"\x13CompleteRunResponse*\xac\x01\n" +
 	"\aAppKind\x12\x18\n" +
 	"\x14APP_KIND_UNSPECIFIED\x10\x00\x12\x13\n" +
