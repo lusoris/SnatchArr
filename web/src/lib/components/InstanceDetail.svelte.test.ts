@@ -13,7 +13,7 @@ import {
 	stubGet,
 	untestedInstance,
 	type Instance
-} from '$lib/testing/harness.js';
+} from '#lib/testing/harness.js';
 import InstanceDetail from './InstanceDetail.svelte';
 
 /** Renders the view for one instance and returns the line under its heading. */

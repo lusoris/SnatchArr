@@ -6,8 +6,8 @@ import { render as svelteRender } from '@testing-library/svelte';
 import { QueryClient, QueryClientProvider } from '@tanstack/svelte-query';
 import type { Component } from 'svelte';
 import { vi } from 'vitest';
-import { api } from '$lib/api/client.js';
-import type { components } from '$lib/api/schema.js';
+import { api } from '#lib/api/client.js';
+import type { components } from '#lib/api/schema.js';
 
 export type Instance = components['schemas']['Instance'];
 export type SnatchPolicy = components['schemas']['SnatchPolicy'];

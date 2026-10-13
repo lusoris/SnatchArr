@@ -11,10 +11,10 @@ SPDX-License-Identifier: EUPL-1.2
 	import { Toaster } from 'svelte-sonner';
 	import { toastPreset } from '@sveltesentio/ui/toast';
 	import { onMount } from 'svelte';
-	import { m } from '$lib/paraglide/messages.js';
-	import { getLocale, locales, setLocale, type Locale } from '$lib/paraglide/runtime.js';
-	import { queryClient } from '$lib/query.js';
-	import { session } from '$lib/session.svelte.js';
+	import { m } from '#lib/paraglide/messages.js';
+	import { getLocale, locales, setLocale, type Locale } from '#lib/paraglide/runtime.js';
+	import { queryClient } from '#lib/query.js';
+	import { session } from '#lib/session.svelte.js';
 
 	const { children } = $props();
 	const toast = toastPreset('dashboard');
@@ -29,8 +29,8 @@ SPDX-License-Identifier: EUPL-1.2
 	async function route(): Promise<void> {
 		const state = await session.refresh();
 		const here = page.url.pathname;
-		if (state === 'setup' && here !== '/setup') await goto(resolve('/setup'));
-		else if (state === 'anonymous' && !publicRoutes.has(here)) await goto(resolve('/login'));
+		if (state === 'setup' && here !== '/setup') await goto(resolve('setup'));
+		else if (state === 'anonymous' && !publicRoutes.has(here)) await goto(resolve('login'));
 		else if (state === 'authenticated' && publicRoutes.has(here)) await goto(resolve('/'));
 		ready = true;
 	}
@@ -53,7 +53,7 @@ SPDX-License-Identifier: EUPL-1.2
 
 	async function logout(): Promise<void> {
 		await session.logout();
-		await goto(resolve('/login'));
+		await goto(resolve('login'));
 	}
 
 	function changeLocale(event: Event): void {

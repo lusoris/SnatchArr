@@ -4,7 +4,7 @@ SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
 	import { useSSE } from '@sveltesentio/realtime/use-sse';
-	import { m } from '$lib/paraglide/messages.js';
+	import { m } from '#lib/paraglide/messages.js';
 
 	interface Frame {
 		ts?: string;

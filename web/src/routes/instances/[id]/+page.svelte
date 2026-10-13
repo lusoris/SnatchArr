@@ -4,7 +4,7 @@ SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
 	import { page } from '$app/state';
-	import InstanceDetail from '$lib/components/InstanceDetail.svelte';
+	import InstanceDetail from '#lib/components/InstanceDetail.svelte';
 </script>
 
 <!-- Remount per id so the queries never hold a stale key across navigations. -->

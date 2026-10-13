@@ -6,13 +6,13 @@ SPDX-License-Identifier: EUPL-1.2
 	import { untrack } from 'svelte';
 	import { createSentioQuery, createSentioMutation } from '@sveltesentio/query';
 	import { toast } from 'svelte-sonner';
-	import { api, describeError } from '$lib/api/client.js';
-	import type { components } from '$lib/api/schema.js';
-	import Field from '$lib/components/Field.svelte';
-	import ProblemNote from '$lib/components/ProblemNote.svelte';
-	import { m } from '$lib/paraglide/messages.js';
-	import { instanceKindLabel, probeMessage } from '$lib/products.js';
-	import { keys } from '$lib/query.js';
+	import { api, describeError } from '#lib/api/client.js';
+	import type { components } from '#lib/api/schema.js';
+	import Field from '#lib/components/Field.svelte';
+	import ProblemNote from '#lib/components/ProblemNote.svelte';
+	import { m } from '#lib/paraglide/messages.js';
+	import { instanceKindLabel, probeMessage } from '#lib/products.js';
+	import { keys } from '#lib/query.js';
 
 	type Policy = components['schemas']['SnatchPolicy'];
 	type Instance = components['schemas']['Instance'];
