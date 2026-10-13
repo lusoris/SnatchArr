@@ -44,6 +44,7 @@ func NewTicker(planner *Planner, clk clock.Clock, logger *slog.Logger, m *metric
 			logger.ErrorContext(ctx, "snatch: planner tick", slog.String("error", err.Error()))
 			return err
 		}
+		m.RunsQueued(n)
 		if n > 0 {
 			logger.InfoContext(ctx, "snatch: runs queued", slog.Int("count", n))
 		}

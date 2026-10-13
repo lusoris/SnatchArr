@@ -46,7 +46,7 @@ func budgetServerOn(t *testing.T) (*Server, *store.Store, uuid.UUID, string) {
 	m, _ := metricstest.New(t)
 	srv := &Server{
 		runs: runs, budget: snatch.NewBudget(st, clk), planner: snatch.NewPlanner(st, clk, runs, rec, logger, m),
-		policies: policies.New(st, clk), settings: settings.New(st, clk), clk: clk, logger: logger,
+		policies: policies.New(st, clk), settings: settings.New(st, clk), clk: clk, logger: logger, m: m,
 	}
 	instanceID := storetest.Instance(t, st, clk.Now())
 	run, _, err := runs.Enqueue(t.Context(), instanceID, domain.SnatchMissing)

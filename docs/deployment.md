@@ -94,8 +94,15 @@ rules; the cluster that scrapes the API owns them.
 | `snatcharr_loop_last_success_timestamp_seconds{loop}` | Unix time of the loop's last tick without error; absent until one succeeded |
 | `snatcharr_loop_interval_seconds{loop}` | the loop's interval, to compare the last success against |
 | `snatcharr_planner_instance_failures_total{instance}` | planner passes that skipped the instance because planning it failed, for example on a schedule the API cannot read |
+| `snatcharr_runs_queued_total` | runs the planner queued; exists at 0 |
+| `snatcharr_runs_leased_total{kind}` | runs a worker leased, by snatch kind (`missing`, `cutoff`, ...) |
+| `snatcharr_runs_finished_total{outcome}` | runs that ended: `done`, `failed` or `cancelled` as the worker reported, or `lease_exhausted` when the API failed a run whose lease expired too often; each exists at 0 |
+| `snatcharr_worker_events_total{type}` | events the workers reported, by SSE event name (`search_failed`, `instance_unreachable`, ...); a type this release does not define counts as `unknown`. Each defined type exists at 0 |
+| `snatcharr_budget_requests_total{result}` | budget requests of workers: `granted` (all asked for), `partial`, `denied` (cap spent) or `error`; each exists at 0 |
 
-A tick that a replica cuts short because it stopped leading counts as neither.
+A tick that a replica cuts short because it stopped leading counts as neither. The run,
+event and budget series move on whichever replica answers the worker, so an alert sums
+them over replicas.
 
 ### NetworkPolicy and in-cluster *arr apps
 

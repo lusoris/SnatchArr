@@ -34,7 +34,8 @@ func New(t *testing.T) (*metrics.Metrics, *prometheus.Registry) {
 	return m, reg
 }
 
-// Value returns the value of the series name{label=value} in reg and whether it exists.
+// Value returns the value of the series name{label=value} in reg and whether it exists; an
+// empty label reads the first series of name, the only one of a collector without labels.
 func Value(t *testing.T, reg prometheus.Gatherer, name, label, value string) (float64, bool) {
 	t.Helper()
 	families, err := reg.Gather()
@@ -46,7 +47,7 @@ func Value(t *testing.T, reg prometheus.Gatherer, name, label, value string) (fl
 			continue
 		}
 		for _, m := range f.GetMetric() {
-			if !hasLabel(m.GetLabel(), label, value) {
+			if label != "" && !hasLabel(m.GetLabel(), label, value) {
 				continue
 			}
 			switch {

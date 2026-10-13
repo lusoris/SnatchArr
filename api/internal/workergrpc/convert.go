@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/lusoris/SnatchArr/api/internal/domain"
+	"github.com/lusoris/SnatchArr/api/internal/events"
 	snatcharrv1 "github.com/lusoris/SnatchArr/api/internal/gen/snatcharr/v1"
 )
 
@@ -129,4 +130,22 @@ func outcome(o snatcharrv1.RunOutcome) domain.RunStatus {
 	default:
 		return domain.RunDone
 	}
+}
+
+// eventType is the label of an event type: its SSE event name, or "unknown" for a value
+// this release does not define, so a worker cannot grow the label set.
+func eventType(t snatcharrv1.EventType) string {
+	if _, ok := snatcharrv1.EventType_name[int32(t)]; !ok {
+		return "unknown"
+	}
+	return events.EventName(t.String())
+}
+
+// eventTypes lists the label of every defined event type.
+func eventTypes() []string {
+	names := make([]string, 0, len(snatcharrv1.EventType_name))
+	for _, name := range snatcharrv1.EventType_name {
+		names = append(names, events.EventName(name))
+	}
+	return names
 }

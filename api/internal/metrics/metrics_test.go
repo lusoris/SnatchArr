@@ -156,3 +156,66 @@ func TestNew_RefusesAConflictingCollector(t *testing.T) {
 		t.Errorf("New() error = %q, want the prefix \"metrics: register: \"", err)
 	}
 }
+
+// Positive: New creates every series an alert watches for an increase at zero.
+func TestNew_CreatesTheAlertSeriesAtZero(t *testing.T) {
+	t.Parallel()
+	_, reg := metricstest.New(t)
+	zero := map[string][2]string{
+		"queued":          {"snatcharr_runs_queued_total", ""},
+		"done":            {"snatcharr_runs_finished_total", "done"},
+		"failed":          {"snatcharr_runs_finished_total", "failed"},
+		"cancelled":       {"snatcharr_runs_finished_total", "cancelled"},
+		"lease exhausted": {"snatcharr_runs_finished_total", metrics.OutcomeLeaseExhausted},
+		"granted":         {"snatcharr_budget_requests_total", metrics.BudgetGranted},
+		"partial":         {"snatcharr_budget_requests_total", metrics.BudgetPartial},
+		"denied":          {"snatcharr_budget_requests_total", metrics.BudgetDenied},
+		"error":           {"snatcharr_budget_requests_total", metrics.BudgetError},
+	}
+	for name, series := range zero {
+		label := map[string]string{"snatcharr_runs_finished_total": "outcome", "snatcharr_budget_requests_total": "result"}[series[0]]
+		if got, ok := value(t, reg, series[0], label, series[1]); !ok || got != 0 {
+			t.Errorf("%s: %s{%s} = %v (present %t), want 0", name, series[0], series[1], got, ok)
+		}
+	}
+}
+
+// The worker-protocol series count what they are told, each label on its own.
+func TestRunAndWorkerSeries(t *testing.T) {
+	t.Parallel()
+	m, reg := metricstest.New(t)
+	m.RunsQueued(3)
+	m.RunsQueued(0)
+	m.RunLeased("missing")
+	m.RunLeased("missing")
+	m.RunLeased("cutoff")
+	m.RunFinished("failed")
+	m.WorkerEventTypes("search_failed", "run_started")
+	m.WorkerEvent("search_failed")
+	m.BudgetRequested(metrics.BudgetDenied)
+	cases := []struct {
+		name, series, label, value string
+		want                       float64
+	}{
+		// Positive.
+		{"queued", "snatcharr_runs_queued_total", "", "", 3},
+		{"leased missing", "snatcharr_runs_leased_total", "kind", "missing", 2},
+		{"leased cutoff", "snatcharr_runs_leased_total", "kind", "cutoff", 1},
+		{"finished failed", "snatcharr_runs_finished_total", "outcome", "failed", 1},
+		{"event search_failed", "snatcharr_worker_events_total", "type", "search_failed", 1},
+		{"budget denied", "snatcharr_budget_requests_total", "result", metrics.BudgetDenied, 1},
+		// Negative: another label of the same series is untouched.
+		{"finished done", "snatcharr_runs_finished_total", "outcome", "done", 0},
+		{"budget granted", "snatcharr_budget_requests_total", "result", metrics.BudgetGranted, 0},
+		// Boundary: an event type created at zero and never reported stays zero.
+		{"event run_started", "snatcharr_worker_events_total", "type", "run_started", 0},
+	}
+	for _, tc := range cases {
+		if got, ok := value(t, reg, tc.series, tc.label, tc.value); !ok || got != tc.want {
+			t.Errorf("%s: %s{%s} = %v (present %t), want %v", tc.name, tc.series, tc.value, got, ok, tc.want)
+		}
+	}
+	if got, ok := value(t, reg, "snatcharr_worker_events_total", "type", "run_finished"); ok {
+		t.Errorf("worker events{run_finished} = %v, want no series without WorkerEventTypes", got)
+	}
+}
