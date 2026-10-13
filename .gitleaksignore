@@ -1,6 +1,7 @@
 # Exceptions for tools/ci/secret_scan.py. One `# expires YYYY-MM-DD: reason` line
-# precedes each full commit:path:rule:line fingerprint. An entry stops applying on
-# its expiry date, and the finding then fails the scan like any unlisted finding.
+# precedes each entry: either a full commit:path:rule:line fingerprint or an exact
+# path:rule exception. An entry stops applying on its expiry date, and the finding
+# then fails the scan like any unlisted finding.
 
 # expires 2027-01-11: test fixture, not a credential; a counting byte pattern standing in for a deployment's own crypto key
 866fdacc5d5a16efaf8f64a6e488e3bd17888df4:api/internal/config/config_test.go:generic-api-key:74
@@ -12,3 +13,5 @@
 892fb08840a9dc9ae4fd097d6b43bf8021e0222e:deploy/kustomize/kind/values-kind.yaml:generic-api-key:16
 # expires 2027-01-11: test fixture, not a credential; a placeholder *arr key in a Configarr parse test
 2a1038558d4a51318faaffecd01cd80ceeefadf4:api/internal/configarr/parse_test.go:generic-api-key:64
+# expires 2027-02-11: category D, helm-unittest mock lookup Secrets in the chart's csrf-secret refusal suite; low-entropy placeholder values, no credential
+deploy/helm/snatcharr/tests/secret_test.yaml:kubernetes-secret-yaml
