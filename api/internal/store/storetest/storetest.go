@@ -46,7 +46,15 @@ const (
 	// Bounds (HISS-02): container boot including the image pull, and one database operation.
 	startTimeout = 3 * time.Minute
 	opTimeout    = 30 * time.Second
+	// ryukLinger is how long the reaper outlives its last client. go test ./... runs each package
+	// as its own process of one testcontainers session, so they share one reaper; with the 10s
+	// default it exits in a gap between packages, and the next package reuses the exited
+	// container and waits 60s on it (testcontainers/testcontainers-go#3867).
+	ryukLinger = 5 * time.Minute
 )
+
+// ryukLingerEnv are the names testcontainers reads the reaper's reconnection timeout from.
+var ryukLingerEnv = [...]string{"RYUK_RECONNECTION_TIMEOUT", "TESTCONTAINERS_RYUK_RECONNECTION_TIMEOUT"}
 
 // shared is the container one test binary uses.
 var shared struct {
@@ -74,7 +82,24 @@ func Main(m *testing.M) int {
 	return code
 }
 
+// lingerReaper sets ryukLinger unless the environment already chooses a reconnection timeout.
+// It must run before the first container: testcontainers reads its configuration once.
+func lingerReaper() error {
+	for _, name := range ryukLingerEnv {
+		if os.Getenv(name) != "" {
+			return nil
+		}
+	}
+	if err := os.Setenv(ryukLingerEnv[1], ryukLinger.String()); err != nil {
+		return fmt.Errorf("set reaper reconnection timeout: %w", err)
+	}
+	return nil
+}
+
 func start() (func() error, error) {
+	if err := lingerReaper(); err != nil {
+		return func() error { return nil }, err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), startTimeout)
 	defer cancel()
 	c, runErr := tcpostgres.Run(ctx, image, tcpostgres.WithDatabase(templateName),
