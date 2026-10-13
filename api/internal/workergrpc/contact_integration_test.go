@@ -10,10 +10,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jonboulle/clockwork"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	snatcharrv1 "github.com/lusoris/SnatchArr/api/internal/gen/snatcharr/v1"
+	"github.com/lusoris/SnatchArr/api/internal/snatch"
 )
 
 // LeaseRun and Heartbeat record the worker's contact for the system status (gap audit
@@ -60,5 +62,38 @@ func TestCallsRecordWorkerContact(t *testing.T) {
 				t.Fatalf("contact recorded at now = %v (%v), want %v", got, at, tc.wantSeen)
 			}
 		})
+	}
+}
+
+// Heartbeat extends the lease of a leased run when called by the right worker.
+func TestHeartbeatExtendsLease(t *testing.T) {
+	t.Parallel()
+	srv, _, runID := completeServer(t)
+	fakeClk, ok := srv.clk.(*clockwork.FakeClock)
+	if !ok {
+		t.Fatalf("clk is %T, want *clockwork.FakeClock", srv.clk)
+	}
+	fakeClk.Advance(2 * time.Minute)
+	resp, err := srv.Heartbeat(t.Context(), &snatcharrv1.HeartbeatRequest{
+		RunId:    runID,
+		WorkerId: "worker",
+	})
+	if err != nil {
+		t.Fatalf("Heartbeat() = %v", err)
+	}
+	if resp.GetDirective() != snatcharrv1.HeartbeatDirective_HEARTBEAT_DIRECTIVE_CONTINUE {
+		t.Errorf("directive = %v, want CONTINUE", resp.GetDirective())
+	}
+	wantExpires := srv.clk.Now().Add(snatch.LeaseTTL).Unix()
+	if resp.GetLeaseExpiresUnix() != wantExpires {
+		t.Errorf("lease_expires_unix = %v, want %v", resp.GetLeaseExpiresUnix(), wantExpires)
+	}
+	run, getErr := srv.runs.Get(t.Context(), uuid.MustParse(runID))
+	if getErr != nil {
+		t.Fatalf("runs.Get() = %v", getErr)
+	}
+	wantAt := srv.clk.Now().Add(snatch.LeaseTTL).Truncate(time.Microsecond)
+	if run.LeaseExpiresAt == nil || !run.LeaseExpiresAt.Equal(wantAt) {
+		t.Errorf("run lease_expires_at = %v, want %v", run.LeaseExpiresAt, wantAt)
 	}
 }

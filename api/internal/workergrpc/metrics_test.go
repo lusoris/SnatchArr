@@ -31,6 +31,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/metrics"
 	"github.com/lusoris/SnatchArr/api/internal/metrics/metricstest"
 	"github.com/lusoris/SnatchArr/api/internal/policies"
+	"github.com/lusoris/SnatchArr/api/internal/seerr"
 	"github.com/lusoris/SnatchArr/api/internal/snatch"
 	"github.com/lusoris/SnatchArr/api/internal/store"
 	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
@@ -204,7 +205,7 @@ func TestLeaseRunIsCounted(t *testing.T) {
 	}
 }
 
-// completeFixture is a Server with what CompleteRun and ReportEvents reach, its store and
+// completeFixture is a Server with what WorkerService reaches, its store and
 // registry, and one leased run.
 type completeFixture struct {
 	srv *Server
@@ -225,9 +226,17 @@ func newCompleteFixture(t *testing.T) completeFixture {
 	st := storetest.New(t)
 	clk := clock.NewFake()
 	logger := slog.New(slog.DiscardHandler)
+	runs := snatch.NewRuns(st, clk, id.New())
+	rec := snatch.NewRecorder(st, clk, events.New(logger))
+	enc, encErr := crypto.NewEncryptor(bytes.Repeat([]byte{0x42}, 32))
+	if encErr != nil {
+		t.Fatalf("encryptor: %v", encErr)
+	}
+	inst := instances.New(st, enc, clk, id.New(), nil, logger)
 	srv := &Server{
-		runs: snatch.NewRuns(st, clk, id.New()), memory: snatch.NewMemory(st, clk), rec: snatch.NewRecorder(st, clk, events.New(logger)),
-		policies: policies.New(st, clk), clk: clk, logger: logger,
+		runs: runs, workers: snatch.NewWorkers(st, clk), memory: snatch.NewMemory(st, clk), rec: rec,
+		instances: inst, policies: policies.New(st, clk), seerr: seerr.New(st, enc, clk, id.New(), nil, nil, inst, runs, rec, logger),
+		clk: clk, logger: logger, stopping: make(chan struct{}),
 	}
 	reg := withMetrics(t, srv)
 	instanceID := storetest.Instance(t, st, clk.Now())
