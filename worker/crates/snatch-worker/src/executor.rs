@@ -6,11 +6,12 @@
 //! unprocessed, select, group into search targets, acquire budget, dispatch, report.
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use arr_client::{ArrClient, CommandStatus, Kind, Options, RadarrRelease, Wanted, WantedPage};
-use rand::SeedableRng;
 use rand::rngs::SmallRng;
+use rand::{RngExt, SeedableRng};
 use snatch_core::{Candidate, Filter, LidarrMode, PagePlan, Selection, SonarrMode, Target};
 use snatch_proto::worker_service_client::WorkerServiceClient;
 use snatch_proto::{
@@ -21,7 +22,7 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::service::interceptor::InterceptedService;
 use tonic::transport::Channel;
-use tonic::{Request, Status};
+use tonic::{Code, Request, Status};
 
 use crate::auth::AuthInterceptor;
 use crate::health::{Call, Health};
@@ -33,6 +34,10 @@ pub type Client = WorkerServiceClient<InterceptedService<Channel, AuthIntercepto
 const MAX_COMMAND_POLLS: u32 = 150;
 const COMMAND_POLL_INTERVAL: Duration = Duration::from_secs(2);
 const MAX_EVENTS_BUFFER: usize = 512;
+const COMPLETE_RETRY: Retry = Retry {
+    attempts: 3,
+    backoff: Duration::from_secs(1),
+};
 
 /// How long a dispatched search command is polled for a terminal state: at most `max` polls,
 /// `interval` apart. Production is MAX_COMMAND_POLLS x COMMAND_POLL_INTERVAL (5 minutes); tests
@@ -41,6 +46,15 @@ const MAX_EVENTS_BUFFER: usize = 512;
 pub(crate) struct Polling {
     pub max: u32,
     pub interval: Duration,
+}
+
+/// How a refused `CompleteRun` is retried: `attempts` calls at most, the wait before the n-th
+/// retry a random time between half and all of `backoff` x 2^(n-1) (HISS-02). Production is
+/// COMPLETE_RETRY; tests pass a short one through [`execute_with`].
+#[derive(Clone, Copy)]
+pub(crate) struct Retry {
+    pub attempts: u32,
+    pub backoff: Duration,
 }
 
 /// Execution errors.
@@ -109,6 +123,9 @@ impl Ev {
 struct Events {
     tx: mpsc::Sender<ReportEventsRequest>,
     run_id: String,
+    /// Every event emitted, dropped ones included; CompleteRun reports those not accepted.
+    /// A u64 so the count cannot wrap within any run's lifetime.
+    emitted: AtomicU64,
 }
 
 impl Events {
@@ -123,6 +140,7 @@ impl Events {
             title: e.title,
             detail: e.detail,
         };
+        self.emitted.fetch_add(1, Ordering::Relaxed);
         if self
             .tx
             .send(ReportEventsRequest { event: Some(ev) })
@@ -286,16 +304,24 @@ pub async fn execute(
         max: MAX_COMMAND_POLLS,
         interval: COMMAND_POLL_INTERVAL,
     };
-    execute_with(client, run, arr_timeout, worker_id, polling, health).await
+    execute_with(
+        client,
+        run,
+        arr_timeout,
+        worker_id,
+        (polling, COMPLETE_RETRY),
+        health,
+    )
+    .await
 }
 
-/// [`execute`] with an explicit command-polling budget.
+/// [`execute`] with an explicit command-polling budget and `CompleteRun` retry.
 pub(crate) async fn execute_with(
     mut client: Client,
     run: Run,
     arr_timeout: Duration,
     worker_id: &str,
-    polling: Polling,
+    (polling, retry): (Polling, Retry),
     health: &Health,
 ) {
     let (tx, rx) = mpsc::channel::<ReportEventsRequest>(MAX_EVENTS_BUFFER);
@@ -308,6 +334,7 @@ pub(crate) async fn execute_with(
     let events = Events {
         tx,
         run_id: run.run_id.clone(),
+        emitted: AtomicU64::new(0),
     };
     let (outcome, searched, cursor, error) =
         match snatch(&mut client, &run, arr_timeout, &events, polling).await {
@@ -335,8 +362,12 @@ pub(crate) async fn execute_with(
                 (RunOutcome::Failed, Vec::new(), String::new(), e.to_string())
             }
         };
+    let emitted = u32::try_from(events.emitted.load(Ordering::Relaxed)).unwrap_or(u32::MAX);
     drop(events);
-    record_report(report.await, health);
+    let events_unconfirmed = emitted.saturating_sub(record_report(report.await, health));
+    if events_unconfirmed > 0 {
+        tracing::warn!(run = %run.run_id, emitted, events_unconfirmed, "events not confirmed; the run's history may be incomplete");
+    }
     let req = CompleteRunRequest {
         run_id: run.run_id.clone(),
         worker_id: worker_id.to_owned(),
@@ -344,36 +375,80 @@ pub(crate) async fn execute_with(
         searched,
         cursor,
         error,
+        events_unconfirmed,
     };
-    match client.complete_run(Request::new(req)).await {
-        Ok(_) => health.contact(),
-        Err(status) => {
-            health.failure(Call::CompleteRun);
-            tracing::error!(run = %run.run_id, %status, "CompleteRun failed; lease will expire");
+    complete(&mut client, &req, retry, health).await;
+}
+
+/// Calls `CompleteRun`, retrying a transient refusal within `retry`. Every refused call counts
+/// as a failure; a run that still is not completed is failed by the API once its lease expires.
+async fn complete(client: &mut Client, req: &CompleteRunRequest, retry: Retry, health: &Health) {
+    let attempts = retry.attempts.max(1);
+    for attempt in 1..=attempts {
+        let status = match client.complete_run(Request::new(req.clone())).await {
+            Ok(_) => {
+                health.contact();
+                return;
+            }
+            Err(status) => status,
+        };
+        health.failure(Call::CompleteRun);
+        if attempt == attempts || !transient(status.code()) {
+            tracing::error!(run = %req.run_id, attempt, %status, "CompleteRun failed; lease will expire");
+            return;
         }
+        tracing::warn!(run = %req.run_id, attempt, %status, "CompleteRun failed; retrying");
+        tokio::time::sleep(jitter(retry.wait(attempt))).await;
     }
 }
 
+impl Retry {
+    /// The longest wait after the failed attempt `attempt` (from 1): `backoff` x 2^(attempt-1).
+    fn wait(self, attempt: u32) -> Duration {
+        let factor = 2u32.saturating_pow(attempt.saturating_sub(1));
+        self.backoff.saturating_mul(factor)
+    }
+}
+
+/// Codes a later call may get past: the API, or the path to it, briefly could not answer.
+fn transient(code: Code) -> bool {
+    matches!(
+        code,
+        Code::Unavailable | Code::DeadlineExceeded | Code::ResourceExhausted | Code::Aborted
+    )
+}
+
+/// A random wait between half of `d` and `d`, so workers refused together do not retry together.
+fn jitter(d: Duration) -> Duration {
+    let half = d.checked_div(2).unwrap_or(Duration::ZERO);
+    rand::rng().random_range(half..=d)
+}
+
 /// Records the end of the event stream: an answer is contact, a refusal or a panic a failure.
+/// Returns the events the API accepted; none count as accepted when the stream failed.
 fn record_report(
     joined: Result<
         Result<tonic::Response<snatch_proto::ReportEventsResponse>, Status>,
         tokio::task::JoinError,
     >,
     health: &Health,
-) {
+) -> u32 {
     match joined {
         Ok(Ok(resp)) => {
             health.contact();
-            tracing::debug!(accepted = resp.into_inner().accepted, "events reported");
+            let accepted = resp.into_inner().accepted;
+            tracing::debug!(accepted, "events reported");
+            accepted
         }
         Ok(Err(status)) => {
             health.failure(Call::ReportEvents);
             tracing::warn!(%status, "event stream rejected");
+            0
         }
         Err(join) => {
             health.failure(Call::ReportEvents);
             tracing::warn!(error = %join, "event reporter panicked");
+            0
         }
     }
 }
