@@ -104,4 +104,6 @@ Everything above is recorded as events (`/api/v1/events`) and streamed over Serv
 Events (`/api/v1/events/stream`). Event names are lower snake case: `run_queued`,
 `run_started`, `page_fetched`, `candidates_filtered`, `budget_acquired`,
 `search_dispatched`, `search_completed`, `search_failed`, `run_finished`,
-`snatch_deferred`, `snatch_resumed`, `snatch_paced`, `snatch_backoff`.
+`snatch_deferred`, `snatch_resumed`, `snatch_paced`, `snatch_backoff`,
+`events_unconfirmed` (a warning that a finished run reported events the API never
+confirmed, so its history may be incomplete).

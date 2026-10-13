@@ -448,6 +448,7 @@ func (s *Server) CompleteRun(ctx context.Context, req *snatcharrv1.CompleteRunRe
 	if outcome(req.GetOutcome()) == domain.RunFailed {
 		s.recordBackoff(ctx, run, policy)
 	}
+	s.recordUnconfirmed(ctx, run, req.GetEventsUnconfirmed())
 	return &snatcharrv1.CompleteRunResponse{}, s.rec.Record(ctx, domain.Event{
 		RunID: &run.ID, InstanceID: run.InstanceID, Level: "info", Type: "run_finished",
 		Title: fmt.Sprintf("%s snatch %s: %d item(s) searched", run.Kind, outcome(req.GetOutcome()), len(searched)), Detail: req.GetError(),
@@ -477,6 +478,23 @@ func (s *Server) failExhausted(ctx context.Context) {
 			continue
 		}
 		s.recordBackoff(ctx, run, policy)
+	}
+}
+
+// recordUnconfirmed counts the n events the worker emitted for run but could not confirm and,
+// when there are any, warns on the run that its history may be incomplete. A recording
+// failure is logged, never surfaced to the worker.
+func (s *Server) recordUnconfirmed(ctx context.Context, run domain.Run, n uint32) {
+	if n == 0 {
+		return
+	}
+	s.m.EventsUnconfirmed(n)
+	err := s.rec.Record(ctx, domain.Event{
+		RunID: &run.ID, InstanceID: run.InstanceID, Level: "warn", Type: "events_unconfirmed",
+		Title: fmt.Sprintf("%d event(s) of this run were not confirmed; its history may be incomplete", n),
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "workergrpc: record unconfirmed events", slog.String("error", err.Error()))
 	}
 }
 
