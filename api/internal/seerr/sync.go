@@ -186,16 +186,18 @@ func (s *Service) recordSync(ctx context.Context, linkID uuid.UUID, syncErr erro
 	}
 }
 
-// SyncAll syncs every enabled link; errors are logged per link and never abort the loop.
-func (s *Service) SyncAll(ctx context.Context) {
+// SyncAll syncs every enabled link. A link that fails records its own last_error and does not
+// stop the others; only a failure to list the links fails the pass (gap audit A1-10).
+func (s *Service) SyncAll(ctx context.Context) error {
 	rows, err := s.st.Q().ListEnabledSeerrLinks(ctx)
 	if err != nil {
 		s.logger.WarnContext(ctx, "seerr: list links", slog.String("error", err.Error()))
-		return
+		return fmt.Errorf("seerr: list links: %w", store.MapError(err))
 	}
 	for _, row := range rows {
 		if _, err := s.Sync(ctx, row.ID); err != nil {
 			s.logger.WarnContext(ctx, "seerr: sync", slog.String("link", row.Name), slog.String("error", err.Error()))
 		}
 	}
+	return nil
 }

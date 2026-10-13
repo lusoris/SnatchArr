@@ -19,9 +19,11 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/events"
 	snatcharrv1 "github.com/lusoris/SnatchArr/api/internal/gen/snatcharr/v1"
+	"github.com/lusoris/SnatchArr/api/internal/metrics/metricstest"
 	"github.com/lusoris/SnatchArr/api/internal/policies"
 	"github.com/lusoris/SnatchArr/api/internal/settings"
 	"github.com/lusoris/SnatchArr/api/internal/snatch"
+	"github.com/lusoris/SnatchArr/api/internal/store"
 	"github.com/lusoris/SnatchArr/api/internal/store/storetest"
 )
 
@@ -29,13 +31,21 @@ import (
 // run on an instance whose policy is the default (hourly cap 20, no global cap).
 func budgetServer(t *testing.T) (*Server, uuid.UUID, string) {
 	t.Helper()
+	srv, _, instanceID, runID := budgetServerOn(t)
+	return srv, instanceID, runID
+}
+
+// budgetServerOn is budgetServer that also returns its store.
+func budgetServerOn(t *testing.T) (*Server, *store.Store, uuid.UUID, string) {
+	t.Helper()
 	st := storetest.New(t)
 	clk := clock.NewFake()
 	logger := slog.New(slog.DiscardHandler)
 	runs := snatch.NewRuns(st, clk, id.New())
 	rec := snatch.NewRecorder(st, clk, events.New(logger))
+	m, _ := metricstest.New(t)
 	srv := &Server{
-		runs: runs, budget: snatch.NewBudget(st, clk), planner: snatch.NewPlanner(st, clk, runs, rec, logger),
+		runs: runs, budget: snatch.NewBudget(st, clk), planner: snatch.NewPlanner(st, clk, runs, rec, logger, m),
 		policies: policies.New(st, clk), settings: settings.New(st, clk), clk: clk, logger: logger,
 	}
 	instanceID := storetest.Instance(t, st, clk.Now())
@@ -46,7 +56,7 @@ func budgetServer(t *testing.T) (*Server, uuid.UUID, string) {
 	if _, err = runs.Lease(t.Context(), "worker"); err != nil {
 		t.Fatalf("Lease() = %v", err)
 	}
-	return srv, instanceID, run.ID.String()
+	return srv, st, instanceID, run.ID.String()
 }
 
 func whole(cost uint32) *snatcharrv1.BudgetItem {
@@ -106,6 +116,27 @@ func TestAcquireBudgetBoundsItems(t *testing.T) {
 	resp, err := srv.AcquireBudget(t.Context(), &snatcharrv1.AcquireBudgetRequest{RunId: runID, Items: items[:maxBudgetItems]})
 	if err != nil || len(resp.GetGrantedItems()) != maxBudgetItems {
 		t.Fatalf("AcquireBudget(%d items) = %d grants, %v", maxBudgetItems, len(resp.GetGrantedItems()), err)
+	}
+	if used, _, usedErr := srv.budget.Used(t.Context(), instanceID); usedErr != nil || used != 0 {
+		t.Fatalf("Used() = %d, %v; want 0", used, usedErr)
+	}
+}
+
+// Negative: a schedule the planner cannot read denies the budget instead of granting the
+// policy cap, and debits nothing (gap audit A1-06).
+func TestAcquireBudgetFailsClosedOnAnUnreadableSchedule(t *testing.T) {
+	t.Parallel()
+	srv, st, instanceID, runID := budgetServerOn(t)
+	_, err := st.Pool().Exec(t.Context(), `INSERT INTO schedules
+		(id, instance_id, name, days_mask, start_time, end_time, tz, action, cap_value, enabled, created_at, updated_at)
+		VALUES ($1, $2, 'cap', 127, '00:00', '24:00', 'Mars/Olympus_Mons', 'cap_override', 5, TRUE, now(), now())`,
+		uuid.New(), instanceID)
+	if err != nil {
+		t.Fatalf("insert schedule: %v", err)
+	}
+	resp, err := srv.AcquireBudget(t.Context(), &snatcharrv1.AcquireBudgetRequest{RunId: runID, Requested: 5})
+	if status.Code(err) != codes.Internal || resp.GetGranted() != 0 {
+		t.Fatalf("AcquireBudget() = %v, %v; want Internal and nothing granted", resp, err)
 	}
 	if used, _, usedErr := srv.budget.Used(t.Context(), instanceID); usedErr != nil || used != 0 {
 		t.Fatalf("Used() = %d, %v; want 0", used, usedErr)

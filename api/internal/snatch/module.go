@@ -13,6 +13,7 @@ import (
 	"github.com/golusoris/golusoris/core/clock"
 
 	"github.com/lusoris/SnatchArr/api/internal/leaderx"
+	"github.com/lusoris/SnatchArr/api/internal/metrics"
 )
 
 // GateGroup is the fx value group other modules add Gate implementations to.
@@ -20,7 +21,8 @@ const GateGroup = `group:"snatch.gates"`
 
 type plannerParams struct {
 	fx.In
-	Gates []Gate `group:"snatch.gates"`
+	Metrics *metrics.Metrics
+	Gates   []Gate `group:"snatch.gates"`
 }
 
 func newPlanner(st storeParam, clk clock.Clock, runs *Runs, rec *Recorder, logger *slog.Logger, p plannerParams) *Planner {
@@ -28,23 +30,24 @@ func newPlanner(st storeParam, clk clock.Clock, runs *Runs, rec *Recorder, logge
 	if len(gates) == 0 {
 		gates = []Gate{AllowAll{}}
 	}
-	return NewPlanner(st.Store, clk, runs, rec, logger, gates...)
+	return NewPlanner(st.Store, clk, runs, rec, logger, p.Metrics, gates...)
 }
 
 // Ticker runs the planner once per TickInterval while this replica leads.
 type Ticker struct{ *leaderx.Periodic }
 
 // NewTicker builds the planner's leader loop.
-func NewTicker(planner *Planner, clk clock.Clock, logger *slog.Logger) *Ticker {
-	return &Ticker{leaderx.NewPeriodic("snatch: planner", TickInterval, clk, func(ctx context.Context) {
+func NewTicker(planner *Planner, clk clock.Clock, logger *slog.Logger, m *metrics.Metrics) *Ticker {
+	return &Ticker{leaderx.NewPeriodic("snatch: planner", TickInterval, clk, m, func(ctx context.Context) error {
 		n, err := planner.Tick(ctx)
 		if err != nil {
 			logger.ErrorContext(ctx, "snatch: planner tick", slog.String("error", err.Error()))
-			return
+			return err
 		}
 		if n > 0 {
 			logger.InfoContext(ctx, "snatch: runs queued", slog.Int("count", n))
 		}
+		return nil
 	})}
 }
 

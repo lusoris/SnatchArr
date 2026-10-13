@@ -16,6 +16,12 @@ import (
 // maxTicks bounds a periodic loop (HISS-02): 2^30 ticks at one a second is about 34 years.
 const maxTicks = 1 << 30
 
+// Observer receives the outcome of every tick, so that a failed tick reaches a metric and not
+// only the log (internal/metrics implements it).
+type Observer interface {
+	LoopTicked(name string, interval time.Duration, at time.Time, err error)
+}
+
 // Periodic is the Loop every timer-driven leader job uses: it calls tick at once and then
 // once per interval, each call under a deadline of one interval, until Stop. The gate may
 // start it again after a stop, as leadership comes and goes.
@@ -23,16 +29,19 @@ type Periodic struct {
 	name     string
 	interval time.Duration
 	clk      clock.Clock
-	tick     func(ctx context.Context)
+	obs      Observer
+	tick     func(ctx context.Context) error
 
 	mu     sync.Mutex
 	cancel context.CancelFunc
 	done   chan struct{}
 }
 
-// NewPeriodic builds a loop. name prefixes its errors; tick owns its own error handling.
-func NewPeriodic(name string, interval time.Duration, clk clock.Clock, tick func(ctx context.Context)) *Periodic {
-	return &Periodic{name: name, interval: interval, clk: clk, tick: tick}
+// NewPeriodic builds a loop. name prefixes its errors and names it to obs. tick logs the
+// detail of its own failure; obs receives the error tick returns and the time it ended,
+// except for a tick that Stop cut short.
+func NewPeriodic(name string, interval time.Duration, clk clock.Clock, obs Observer, tick func(ctx context.Context) error) *Periodic {
+	return &Periodic{name: name, interval: interval, clk: clk, obs: obs, tick: tick}
 }
 
 // Start launches the loop; the first tick runs at once. It refuses a second start while the
@@ -96,5 +105,10 @@ func (p *Periodic) loop(ctx context.Context, done chan<- struct{}) {
 func (p *Periodic) once(ctx context.Context) {
 	tctx, cancel := context.WithTimeout(ctx, p.interval)
 	defer cancel()
-	p.tick(tctx)
+	err := p.tick(tctx)
+	if ctx.Err() != nil {
+		// Stop ended the tick: the replica gave up leading, the tick did not fail.
+		return
+	}
+	p.obs.LoopTicked(p.name, p.interval, p.clk.Now(), err)
 }

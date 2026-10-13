@@ -93,6 +93,11 @@ quickie so nobody wonders why a snatch happened at 3 pm on a Tuesday.
 Weekly windows that either **pause** snatching or **override the cap** for one instance or
 for everyone. Windows may cross midnight and carry their own time zone.
 
+A window the API cannot read, for example one whose time zone the host's tzdata no longer
+holds, is never skipped: the instances it covers queue no snatches and get no search budget
+until it is fixed or removed. The planner logs each skip and counts it in
+`snatcharr_planner_instance_failures_total` (see [Metrics](deployment.md#metrics)).
+
 ## History and live events
 
 Everything above is recorded as events (`/api/v1/events`) and streamed over Server-Sent

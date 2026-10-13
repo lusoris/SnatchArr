@@ -64,7 +64,7 @@ func TestHealth_NotRunning(t *testing.T) {
 // Negative: a loop that failed to start makes the term unhealthy and is named.
 func TestHealth_LoopStartFailed(t *testing.T) {
 	t.Parallel()
-	broken := leaderx.NewPeriodic("snatch: planner", time.Minute, clock.NewFake(), func(context.Context) {})
+	broken := leaderx.NewPeriodic("snatch: planner", time.Minute, clock.NewFake(), &observed{}, func(context.Context) error { return nil })
 	if err := broken.Start(context.Background()); err != nil { // a second start fails
 		t.Fatalf("Start: %v", err)
 	}

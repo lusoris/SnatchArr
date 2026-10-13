@@ -7,6 +7,7 @@ package seerr
 import (
 	"bytes"
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/jonboulle/clockwork"
+	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/core/crypto"
@@ -25,6 +27,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/events"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
 	"github.com/lusoris/SnatchArr/api/internal/leaderx/leaderxtest"
+	"github.com/lusoris/SnatchArr/api/internal/metrics/metricstest"
 	"github.com/lusoris/SnatchArr/api/internal/seerrclient"
 	"github.com/lusoris/SnatchArr/api/internal/snatch"
 	"github.com/lusoris/SnatchArr/api/internal/store"
@@ -202,7 +205,11 @@ func (tc syncAllCase) run(t *testing.T) {
 	if tc.cancelled {
 		cancel()
 	}
-	f.svc.SyncAll(ctx)
+	err := f.svc.SyncAll(ctx)
+	// Only a failed listing fails the pass; a failing link records its own last_error.
+	if tc.cancelled != (err != nil) || (err != nil && (!errors.Is(err, context.Canceled) || !strings.HasPrefix(err.Error(), "seerr: list links: "))) {
+		t.Errorf("SyncAll() = %v, want an error with the prefix \"seerr: list links: \" only when the store fails", err)
+	}
 	for i, l := range tc.links {
 		l.check(t, f, links[i], fakes[i])
 	}
@@ -245,8 +252,18 @@ func TestNewTicker_SyncsPerInterval(t *testing.T) {
 	t.Parallel()
 	f := newSyncFixture(t, slog.New(slog.DiscardHandler))
 	_, fake := testLink{name: "a"}.create(t, f)
+	startTicker(t, f)
 
-	ticker := NewTicker(f.svc, f.clk)
+	leaderxtest.Await(t, fake.asked, "the first sync")
+	f.clk.Advance(SyncInterval)
+	leaderxtest.Await(t, fake.asked, "the sync after one interval")
+}
+
+// startTicker starts the sync's leader loop on fresh metrics and stops it when the test ends.
+func startTicker(t *testing.T, f syncFixture) *prometheus.Registry {
+	t.Helper()
+	m, reg := metricstest.New(t)
+	ticker := NewTicker(f.svc, f.clk, m)
 	if err := ticker.Start(t.Context()); err != nil {
 		t.Fatalf("Start() = %v", err)
 	}
@@ -257,8 +274,27 @@ func TestNewTicker_SyncsPerInterval(t *testing.T) {
 			t.Errorf("Stop() = %v", err)
 		}
 	})
+	return reg
+}
 
-	leaderxtest.Await(t, fake.asked, "the first sync")
-	f.clk.Advance(SyncInterval)
-	leaderxtest.Await(t, fake.asked, "the sync after one interval")
+// Positive: a pass with a failing link still succeeds as a pass; the link shows its own error.
+func TestNewTicker_RecordsTheLastSuccess(t *testing.T) {
+	t.Parallel()
+	f := newSyncFixture(t, slog.New(slog.DiscardHandler))
+	testLink{name: "a", fails: true}.create(t, f)
+	reg := startTicker(t, f)
+	metricstest.Await(t, reg, "snatcharr_loop_last_success_timestamp_seconds", "loop", "seerr_sync",
+		float64(f.clk.Now().UnixNano())/float64(time.Second))
+	metricstest.Await(t, reg, "snatcharr_loop_failures_total", "loop", "seerr_sync", 0)
+}
+
+// Negative: a pass that cannot list the links counts as a failed tick (gap audit A1-10).
+func TestNewTicker_CountsAFailedListing(t *testing.T) {
+	t.Parallel()
+	f := newSyncFixture(t, slog.New(slog.DiscardHandler))
+	if _, err := f.st.Pool().Exec(t.Context(), `DROP TABLE seerr_links CASCADE`); err != nil {
+		t.Fatalf("drop seerr_links: %v", err)
+	}
+	reg := startTicker(t, f)
+	metricstest.Await(t, reg, "snatcharr_loop_failures_total", "loop", "seerr_sync", 1)
 }

@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jonboulle/clockwork"
+	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/core/id"
@@ -20,6 +21,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/auth"
 	"github.com/lusoris/SnatchArr/api/internal/events"
 	"github.com/lusoris/SnatchArr/api/internal/leaderx"
+	"github.com/lusoris/SnatchArr/api/internal/metrics/metricstest"
 	"github.com/lusoris/SnatchArr/api/internal/settings"
 	"github.com/lusoris/SnatchArr/api/internal/snatch"
 	"github.com/lusoris/SnatchArr/api/internal/store"
@@ -42,6 +44,7 @@ type fixture struct {
 	clk      *clockwork.FakeClock
 	settings *settings.Service
 	instance uuid.UUID
+	reg      *prometheus.Registry
 }
 
 func newFixture(t *testing.T) fixture {
@@ -50,12 +53,13 @@ func newFixture(t *testing.T) fixture {
 	clk := clock.NewFake()
 	logger := slog.New(slog.DiscardHandler)
 	set := settings.New(st, clk)
+	m, reg := metricstest.New(t)
 	j := New(Deps{
 		Settings: set, Recorder: snatch.NewRecorder(st, clk, events.New(logger)), Runs: snatch.NewRuns(st, clk, id.New()),
 		Workers: snatch.NewWorkers(st, clk), Memory: snatch.NewMemory(st, clk), Budget: snatch.NewBudget(st, clk), Sessions: auth.NewPgSessionStore(st, clk),
-		Clock: clk, Logger: logger,
+		Clock: clk, Logger: logger, Metrics: m,
 	})
-	return fixture{j: j, st: st, clk: clk, settings: set, instance: storetest.Instance(t, st, clk.Now())}
+	return fixture{j: j, st: st, clk: clk, settings: set, instance: storetest.Instance(t, st, clk.Now()), reg: reg}
 }
 
 func (f fixture) exec(t *testing.T, sql string, args ...any) {
@@ -240,4 +244,51 @@ func startGate(t *testing.T, f fixture, elect leaderx.Elect) (context.Context, f
 		}
 	}()
 	return ctx, func() { cancel(); <-done }
+}
+
+// startJanitor runs the janitor's loop directly, without the gate, until the test ends.
+func startJanitor(t *testing.T, f fixture) {
+	t.Helper()
+	if err := f.j.Start(t.Context()); err != nil {
+		t.Fatalf("Start() = %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(t.Context()), time.Duration(pollTries)*pollEvery)
+		defer cancel()
+		if err := f.j.Stop(ctx); err != nil {
+			t.Errorf("Stop() = %v", err)
+		}
+	})
+}
+
+// Positive: a pass that purges every table reaches the loop metrics as the last success.
+func TestJanitorRecordsTheLastSuccess(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.seed(t)
+	startJanitor(t, f)
+	metricstest.Await(t, f.reg, "snatcharr_loop_last_success_timestamp_seconds", "loop", "retention",
+		float64(f.clk.Now().UnixNano())/float64(time.Second))
+	metricstest.Await(t, f.reg, "snatcharr_loop_failures_total", "loop", "retention", 0)
+}
+
+// Negative: a table that cannot be purged fails the pass and counts as a failed tick, while
+// the other tables are still purged (gap audit A1-07).
+func TestJanitorCountsAFailedPass(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.seed(t)
+	f.exec(t, `DROP TABLE snatch_events`)
+	startJanitor(t, f)
+	metricstest.Await(t, f.reg, "snatcharr_loop_failures_total", "loop", "retention", 1)
+	var sessions int
+	if err := f.st.Pool().QueryRow(t.Context(), `SELECT count(*) FROM sessions`).Scan(&sessions); err != nil {
+		t.Fatalf("count sessions: %v", err)
+	}
+	if sessions != 1 {
+		t.Errorf("sessions left %d after the failed pass, want 1: the other tables are still purged", sessions)
+	}
+	if got, ok := metricstest.Value(t, f.reg, "snatcharr_loop_last_success_timestamp_seconds", "loop", "retention"); ok {
+		t.Errorf("last success = %v after a failed pass only, want no series", got)
+	}
 }

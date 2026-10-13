@@ -36,6 +36,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/httpapi"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
 	"github.com/lusoris/SnatchArr/api/internal/leaderx"
+	"github.com/lusoris/SnatchArr/api/internal/metrics"
 	"github.com/lusoris/SnatchArr/api/internal/policies"
 	"github.com/lusoris/SnatchArr/api/internal/retention"
 	"github.com/lusoris/SnatchArr/api/internal/seerr"
@@ -61,6 +62,7 @@ var Module = fx.Options(
 	fx.Decorate(newEncryptor),
 	config.Module,
 	store.Module,
+	metrics.Module,
 	arrclient.Module,
 	instances.Module,
 	policies.Module,

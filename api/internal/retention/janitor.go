@@ -21,6 +21,7 @@ import (
 
 	"github.com/lusoris/SnatchArr/api/internal/auth"
 	"github.com/lusoris/SnatchArr/api/internal/leaderx"
+	"github.com/lusoris/SnatchArr/api/internal/metrics"
 	"github.com/lusoris/SnatchArr/api/internal/settings"
 	"github.com/lusoris/SnatchArr/api/internal/snatch"
 )
@@ -60,6 +61,7 @@ type Deps struct {
 	Sessions *auth.PgSessionStore
 	Clock    clock.Clock
 	Logger   *slog.Logger
+	Metrics  *metrics.Metrics
 }
 
 // Janitor runs a retention pass once per Interval while this replica leads; the first pass
@@ -74,7 +76,7 @@ type Janitor struct {
 // New builds a janitor with the default interval and batch size.
 func New(d Deps) *Janitor {
 	j := &Janitor{deps: d, batch: Batch}
-	j.Periodic = leaderx.NewPeriodic("retention", Interval, d.Clock, j.tick)
+	j.Periodic = leaderx.NewPeriodic("retention", Interval, d.Clock, d.Metrics, j.tick)
 	return j
 }
 
@@ -140,8 +142,9 @@ func drain(ctx context.Context, batch int32, purge func(context.Context, int32) 
 	return total, nil
 }
 
-// tick runs one pass and logs one summary line with the row counts.
-func (j *Janitor) tick(ctx context.Context) {
+// tick runs one pass and logs one summary line with the row counts. The pass's error goes on
+// to leaderx.Periodic, which counts it per loop (gap audit A1-07).
+func (j *Janitor) tick(ctx context.Context) error {
 	c, err := j.Pass(ctx)
 	attrs := []any{
 		slog.Int64("events", c.Events), slog.Int64("runs", c.Runs), slog.Int64("afterglow", c.Afterglow),
@@ -155,6 +158,7 @@ func (j *Janitor) tick(ctx context.Context) {
 	default:
 		j.deps.Logger.DebugContext(ctx, "retention: purge pass", attrs...)
 	}
+	return err
 }
 
 // Module provides the janitor and registers it as a leader-gated loop.
