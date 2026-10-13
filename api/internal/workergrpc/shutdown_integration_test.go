@@ -37,7 +37,7 @@ func leaseServer(t *testing.T) (*Server, *clockwork.FakeClock, *store.Store) {
 	clk := clock.NewFake()
 	logger := slog.New(slog.DiscardHandler)
 	srv := &Server{
-		runs: snatch.NewRuns(st, clk, id.New()), rec: snatch.NewRecorder(st, clk, events.New(logger)),
+		runs: snatch.NewRuns(st, clk, id.New()), workers: snatch.NewWorkers(st, clk), rec: snatch.NewRecorder(st, clk, events.New(logger)),
 		policies: policies.New(st, clk), clk: clk, logger: logger, stopping: make(chan struct{}),
 	}
 	return srv, clk, st

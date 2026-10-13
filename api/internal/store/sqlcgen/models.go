@@ -219,3 +219,8 @@ type User struct {
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }
+
+type Worker struct {
+	ID            string
+	LastContactAt time.Time
+}

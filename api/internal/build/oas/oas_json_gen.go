@@ -8254,15 +8254,22 @@ func (s *SystemStatus) encodeFields(e *jx.Encoder) {
 		e.FieldStart("setup_complete")
 		e.Bool(s.SetupComplete)
 	}
+	{
+		if s.WorkerLastContactAt.Set {
+			e.FieldStart("worker_last_contact_at")
+			s.WorkerLastContactAt.Encode(e, json.EncodeDateTime)
+		}
+	}
 }
 
-var jsonFieldsNameOfSystemStatus = [6]string{
+var jsonFieldsNameOfSystemStatus = [7]string{
 	0: "name",
 	1: "version",
 	2: "commit",
 	3: "build_date",
 	4: "profile",
 	5: "setup_complete",
+	6: "worker_last_contact_at",
 }
 
 // Decode decodes SystemStatus from json.
@@ -8343,6 +8350,16 @@ func (s *SystemStatus) Decode(d *jx.Decoder) error {
 				return nil
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"setup_complete\"")
+			}
+		case "worker_last_contact_at":
+			if err := func() error {
+				s.WorkerLastContactAt.Reset()
+				if err := s.WorkerLastContactAt.Decode(d, json.DecodeDateTime); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"worker_last_contact_at\"")
 			}
 		default:
 			return d.Skip()

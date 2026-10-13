@@ -58,6 +58,7 @@ type Options struct {
 type Server struct {
 	snatcharrv1.UnimplementedWorkerServiceServer
 	runs      *snatch.Runs
+	workers   *snatch.Workers
 	budget    *snatch.Budget
 	memory    *snatch.Memory
 	rec       *snatch.Recorder
@@ -75,11 +76,11 @@ type Server struct {
 }
 
 // New wires the server.
-func New(runs *snatch.Runs, budget *snatch.Budget, memory *snatch.Memory, rec *snatch.Recorder, planner *snatch.Planner,
+func New(runs *snatch.Runs, workers *snatch.Workers, budget *snatch.Budget, memory *snatch.Memory, rec *snatch.Recorder, planner *snatch.Planner,
 	inst *instances.Service, pol *policies.Service, cfg *settings.Service, requests *seerr.Service, clk clock.Clock, logger *slog.Logger, opts Options,
 ) *Server {
 	return &Server{
-		runs: runs, budget: budget, memory: memory, rec: rec, planner: planner, instances: inst, policies: pol,
+		runs: runs, workers: workers, budget: budget, memory: memory, rec: rec, planner: planner, instances: inst, policies: pol,
 		settings: cfg, seerr: requests, pacer: opts.Pacer, clk: clk, logger: logger,
 		stopping: make(chan struct{}),
 	}
@@ -113,11 +114,20 @@ func (s *Server) pause(ctx context.Context) error {
 	}
 }
 
+// touch records the worker's contact for the system status. A failed write is logged and
+// does not fail the call: the status would read stale, the run itself is unaffected.
+func (s *Server) touch(ctx context.Context, workerID string) {
+	if err := s.workers.Seen(ctx, workerID); err != nil {
+		s.logger.WarnContext(ctx, "workergrpc: record worker contact", slog.String("worker_id", workerID), slog.String("error", err.Error()))
+	}
+}
+
 // LeaseRun long-polls for a queued run and returns it with credentials and policy.
 func (s *Server) LeaseRun(ctx context.Context, req *snatcharrv1.LeaseRunRequest) (*snatcharrv1.LeaseRunResponse, error) {
 	if req.GetWorkerId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "worker_id is required")
 	}
+	s.touch(ctx, req.GetWorkerId())
 	s.failExhausted(ctx)
 	wait := min(time.Duration(req.GetWaitSeconds())*time.Second, maxLeaseWait)
 	deadline := s.clk.Now().Add(wait)
@@ -214,6 +224,9 @@ func (s *Server) Heartbeat(ctx context.Context, req *snatcharrv1.HeartbeatReques
 	runID, err := parseRun(req.GetRunId())
 	if err != nil {
 		return nil, err
+	}
+	if req.GetWorkerId() != "" {
+		s.touch(ctx, req.GetWorkerId())
 	}
 	run, err := s.runs.Heartbeat(ctx, runID, req.GetWorkerId())
 	if err != nil {

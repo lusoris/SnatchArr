@@ -39,7 +39,7 @@ func TestExhaustedRunIsRecorded(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 	bus := events.New(logger)
 	runs := snatch.NewRuns(st, clk, id.New())
-	s := &Server{runs: runs, rec: snatch.NewRecorder(st, clk, bus), policies: policies.New(st, clk), clk: clk, logger: logger}
+	s := &Server{runs: runs, workers: snatch.NewWorkers(st, clk), rec: snatch.NewRecorder(st, clk, bus), policies: policies.New(st, clk), clk: clk, logger: logger}
 	instanceID := storetest.Instance(t, st, clk.Now())
 	run, _, err := runs.Enqueue(t.Context(), instanceID, domain.SnatchMissing)
 	if err != nil {

@@ -1184,6 +1184,12 @@ components:
           enum: [prod, dev]
         setup_complete:
           type: boolean
+        worker_last_contact_at:
+          type: string
+          format: date-time
+          description: >-
+            When a worker last reached the control plane (LeaseRun or Heartbeat), newest over all
+            workers. Absent when no worker has called since the retention window began.
 
     SetupStatus:
       type: object

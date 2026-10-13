@@ -86,6 +86,7 @@ type Querier interface {
 	// SPDX-License-Identifier: EUPL-1.2
 	InsertEvent(ctx context.Context, arg InsertEventParams) (int64, error)
 	LastFinishedAt(ctx context.Context, arg LastFinishedAtParams) (time.Time, error)
+	LastWorkerContact(ctx context.Context) (time.Time, error)
 	// An expired lease is handed out again only while the run has been leased fewer than
 	// max_leases times; FailExhaustedLeases ends the others.
 	LeaseRun(ctx context.Context, arg LeaseRunParams) (SnatchRun, error)
@@ -126,6 +127,7 @@ type Querier interface {
 	PurgeExpiredSessions(ctx context.Context, arg PurgeExpiredSessionsParams) (int64, error)
 	PurgeGlobalBucketsBefore(ctx context.Context, arg PurgeGlobalBucketsBeforeParams) (int64, error)
 	PurgeRunsBefore(ctx context.Context, arg PurgeRunsBeforeParams) (int64, error)
+	PurgeWorkersBefore(ctx context.Context, arg PurgeWorkersBeforeParams) (int64, error)
 	RecentRunStatuses(ctx context.Context, arg RecentRunStatusesParams) ([]string, error)
 	RecordCleanuparrCheck(ctx context.Context, arg RecordCleanuparrCheckParams) error
 	RecordDownloadClientCheck(ctx context.Context, arg RecordDownloadClientCheckParams) error
@@ -137,6 +139,10 @@ type Querier interface {
 	SaveAPIKey(ctx context.Context, arg SaveAPIKeyParams) error
 	SavePolicyCursor(ctx context.Context, arg SavePolicyCursorParams) error
 	SaveSession(ctx context.Context, arg SaveSessionParams) error
+	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+	// SPDX-License-Identifier: EUPL-1.2
+	// A late write from a slower replica never moves the contact back.
+	TouchWorker(ctx context.Context, arg TouchWorkerParams) error
 	UpdateCleanuparrLink(ctx context.Context, arg UpdateCleanuparrLinkParams) (CleanuparrLink, error)
 	UpdateDownloadClient(ctx context.Context, arg UpdateDownloadClientParams) (DownloadClient, error)
 	UpdateInstance(ctx context.Context, arg UpdateInstanceParams) (Instance, error)

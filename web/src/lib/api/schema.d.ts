@@ -794,6 +794,11 @@ export interface components {
             /** @enum {string} */
             profile: "prod" | "dev";
             setup_complete: boolean;
+            /**
+             * Format: date-time
+             * @description When a worker last reached the control plane (LeaseRun or Heartbeat), newest over all workers. Absent when no worker has called since the retention window began.
+             */
+            worker_last_contact_at?: string;
         };
         SetupStatus: {
             setup_complete: boolean;

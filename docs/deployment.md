@@ -73,7 +73,7 @@ no Ingress or HTTPRoute is enabled.
 | Resource | Notes |
 | --- | --- |
 | Deployment `-api` | probes on `/startupz`, `/livez`, `/readyz` (readiness: Postgres and the leader gate, which is down while the election fails or a periodic loop failed to start); `/tmp` is a memory-backed emptyDir; `replicaCount` may exceed 1, periodic work runs on the elected replica |
-| Deployment `-worker` | dials `<release>-api:9090`; optional HPA 1..4 on CPU |
+| Deployment `-worker` | dials `<release>-api:9090`; liveness probe on `/livez` (port `worker.httpPort`, 8081), which fails once no API call succeeded for `worker.staleSecs` (180 s); `/metrics` there counts failed API calls per call in `snatcharr_worker_api_failures_total`; optional HPA 1..4 on CPU |
 | Service `-api` | `http` 8080, `grpc` 9090 (h2c) |
 | Ingress or HTTPRoute | `api.ingress.*` or `api.httpRoute.*` |
 | CNPG `Cluster` `-db` | `postgres.cnpg.*`; the API reads the DSN from the operator's `-db-app` Secret |

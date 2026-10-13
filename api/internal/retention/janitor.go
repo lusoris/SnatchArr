@@ -4,8 +4,8 @@
 
 // Package retention trims the tables that grow with every snatch: events and finished runs
 // past history_retention_days, afterglow rows past snatch.PurgeGrace, spent rate buckets
-// past snatch.BucketKeep and expired sessions. The janitor runs on the elected replica only
-// (internal/leaderx).
+// past snatch.BucketKeep, expired sessions and workers silent past history_retention_days.
+// The janitor runs on the elected replica only (internal/leaderx).
 package retention
 
 import (
@@ -39,11 +39,13 @@ const (
 
 // Counts are the rows one pass deleted, per table.
 type Counts struct {
-	Events, Runs, Afterglow, Buckets, Sessions int64
+	Events, Runs, Afterglow, Buckets, Sessions, Workers int64
 }
 
 // Total is the sum over every table.
-func (c Counts) Total() int64 { return c.Events + c.Runs + c.Afterglow + c.Buckets + c.Sessions }
+func (c Counts) Total() int64 {
+	return c.Events + c.Runs + c.Afterglow + c.Buckets + c.Sessions + c.Workers
+}
 
 // Deps are the janitor's collaborators; each owns the purge of its table.
 type Deps struct {
@@ -52,6 +54,7 @@ type Deps struct {
 	Settings *settings.Service
 	Recorder *snatch.Recorder
 	Runs     *snatch.Runs
+	Workers  *snatch.Workers
 	Memory   *snatch.Memory
 	Budget   *snatch.Budget
 	Sessions *auth.PgSessionStore
@@ -104,6 +107,9 @@ func (j *Janitor) Pass(ctx context.Context) (Counts, error) {
 		{"afterglow", &c.Afterglow, j.deps.Memory.Purge},
 		{"buckets", &c.Buckets, j.deps.Budget.Purge},
 		{"sessions", &c.Sessions, j.deps.Sessions.PurgeExpired},
+		{"workers", &c.Workers, func(ctx context.Context, n int32) (int64, error) {
+			return j.deps.Workers.Purge(ctx, before, n)
+		}},
 	}
 	var errs []error
 	for _, s := range steps {
@@ -139,7 +145,7 @@ func (j *Janitor) tick(ctx context.Context) {
 	c, err := j.Pass(ctx)
 	attrs := []any{
 		slog.Int64("events", c.Events), slog.Int64("runs", c.Runs), slog.Int64("afterglow", c.Afterglow),
-		slog.Int64("buckets", c.Buckets), slog.Int64("sessions", c.Sessions),
+		slog.Int64("buckets", c.Buckets), slog.Int64("sessions", c.Sessions), slog.Int64("workers", c.Workers),
 	}
 	switch {
 	case err != nil:

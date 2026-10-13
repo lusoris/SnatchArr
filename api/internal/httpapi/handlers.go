@@ -42,6 +42,7 @@ type Handlers struct {
 	instances  *instances.Service
 	policies   *policies.Service
 	runs       *snatch.Runs
+	workers    *snatch.Workers
 	rec        *snatch.Recorder
 	budget     *snatch.Budget
 	memory     *snatch.Memory
@@ -59,6 +60,7 @@ type Handlers struct {
 type Deps struct {
 	fx.In
 	Runs       *snatch.Runs
+	Workers    *snatch.Workers
 	Rec        *snatch.Recorder
 	Budget     *snatch.Budget
 	Memory     *snatch.Memory
@@ -77,7 +79,7 @@ func NewHandlers(build buildinfo.Info, cfg config.Options, clk clock.Clock, auth
 ) *Handlers {
 	return &Handlers{
 		build: build, cfg: cfg, clk: clk, auth: authSvc, sessions: sessions, instances: inst, policies: pol,
-		runs: d.Runs, rec: d.Rec, budget: d.Budget, memory: d.Memory, planner: d.Planner, schedules: d.Schedules, clients: d.Clients, settings: d.Settings, seerr: d.Seerr, cleanuparr: d.Cleanuparr, configarr: d.Configarr, logger: logger,
+		runs: d.Runs, workers: d.Workers, rec: d.Rec, budget: d.Budget, memory: d.Memory, planner: d.Planner, schedules: d.Schedules, clients: d.Clients, settings: d.Settings, seerr: d.Seerr, cleanuparr: d.Cleanuparr, configarr: d.Configarr, logger: logger,
 	}
 }
 
@@ -108,10 +110,18 @@ func (h *Handlers) GetSystemStatus(ctx context.Context) (*oas.SystemStatus, erro
 	if err != nil {
 		return nil, err
 	}
-	return &oas.SystemStatus{
+	contact, seen, err := h.workers.LastContact(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := &oas.SystemStatus{
 		Name: buildinfo.Name, Version: h.build.Version, Commit: h.build.Commit, BuildDate: h.build.Date,
 		Profile: oas.SystemStatusProfile(h.cfg.Profile), SetupComplete: done,
-	}, nil
+	}
+	if seen {
+		out.WorkerLastContactAt = oas.NewOptDateTime(contact)
+	}
+	return out, nil
 }
 
 // GetSetupStatus reports whether the first user exists.
