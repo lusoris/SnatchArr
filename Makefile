@@ -48,9 +48,8 @@ api-verify: ## golangci-lint + go fix + gosec + govulncheck + go test -race + ge
 	go run ./tools/gennosec check
 	$(MAKE) tools-verify
 	$(MAKE) api-cover
-	if [ -f api/openapi/openapi.yaml ]; then
-	  npx --yes @stoplight/spectral-cli@6.15.0 lint api/openapi/openapi.yaml --ruleset tools/spectral.yaml --fail-severity warn
-	fi
+	sh tools/spectral/lint_test.sh
+	sh tools/spectral/lint.sh api/openapi/openapi.yaml
 
 api-gen: ## ogen + sqlc generation inside api/
 	cd api && go generate ./...
@@ -91,15 +90,17 @@ gosec-install: ## Install gosec built against an x/tools that reads Go 1.27.2 ex
 	go install github.com/securego/gosec/v2/cmd/gosec
 
 # Ratchet: raise as store/handler integration tests land (target 70, HISS-15). Never lower.
-API_COVER_MIN ?= 28
+# 41.8 % measured on main at #198.
+API_COVER_MIN ?= 41
 api-cover: ## Coverage gate on hand-written packages (generated code excluded)
+	sh tools/cover/floor_test.sh
 	cd api
 	mkdir -p tmp
 	go test -count=1 -covermode=atomic -coverprofile=tmp/cover.out ./... >/dev/null
 	grep -vE 'internal/(build|gen)/|internal/store/sqlcgen/' tmp/cover.out > tmp/cover.filtered.out
 	pct=$$(go tool cover -func=tmp/cover.filtered.out | awk '/^total:/ {gsub("%","",$$3); print $$3}')
 	echo "coverage (non-generated): $${pct}% (min $(API_COVER_MIN)%)"
-	awk -v p="$$pct" -v m="$(API_COVER_MIN)" 'BEGIN { exit (p+0 < m+0) ? 1 : 0 }'
+	sh ../tools/cover/floor.sh "$$pct" "$(API_COVER_MIN)"
 
 # ── tools/ (Go, root module) ─────────────────────────────────────────────────
 # The gate code under tools/ gets the gate it applies to api/: the same .golangci.yml, go vet,
@@ -141,12 +142,18 @@ worker-verify: ## cargo fmt/clippy(-D warnings)/audit/deny/test
 	cargo deny check
 	cargo test --workspace --locked
 
-# Worker line coverage floor; ratchet up as tests land (84.9 % measured at #18). CI runs it;
+# Worker line coverage floor; ratchet up as tests land (89.83 % measured on main at #198). CI runs it;
 # locally it needs cargo-llvm-cov and the llvm-tools rustup component (or LLVM_COV and
 # LLVM_PROFDATA pointing at a system LLVM matching rustc's).
-WORKER_COVER_MIN ?= 83
+WORKER_COVER_MIN ?= 89
+# The floor goes through tools/cover/floor.sh, as api-cover's does: --fail-under-lines exits 1
+# without a message, the same status as a report over missing data.
 worker-cover: ## cargo-llvm-cov line coverage gate for the Rust workspace
-	cargo llvm-cov --workspace --locked --summary-only --fail-under-lines $(WORKER_COVER_MIN)
+	sh tools/cover/floor_test.sh
+	cargo llvm-cov --workspace --locked --summary-only
+	pct=$$(cargo llvm-cov report --json --summary-only | jq -r '.data[0].totals.lines.percent')
+	echo "worker line coverage: $${pct}% (min $(WORKER_COVER_MIN)%)"
+	sh tools/cover/floor.sh "$$pct" "$(WORKER_COVER_MIN)"
 
 # ── end-to-end smoke (#19) ────────────────────────────────────────────────────
 E2E_BIN := api/tmp/e2e
@@ -207,6 +214,8 @@ proto-gen: ## buf generate (Go stubs; Rust stubs build via tonic-build)
 	cd proto && buf generate
 	cd ..
 	# HISS-09 wants a SAFETY proof before every unsafe call; protoc-gen-go emits two. Deterministic post-pass.
+	# If protoc-gen-go changes shape and the sed matches nothing, the CI job semgrep fails on the
+	# regenerated file (rule unsafe-requires-safety-proof in .semgrep.yml; gap audit A3-04).
 	for f in $$(find api/internal/gen -name '*.pb.go'); do
 	  sed -i -E 's|^([[:space:]]*)(.*unsafe\.Slice\(unsafe\.StringData\(.*)$$|\1// SAFETY: protoc-gen-go reads immutable string bytes of the raw descriptor; never written or retained past the call.\n\1\2|' "$$f"
 	  sed -i -E 's|^([[:space:]]*)(unsafe "unsafe")$$|\1// SAFETY: imported only for the raw-descriptor views proved below.\n\1\2|' "$$f"
@@ -217,7 +226,7 @@ proto-gen: ## buf generate (Go stubs; Rust stubs build via tonic-build)
 # ── deploy/ ───────────────────────────────────────────────────────────────────
 # kubeconform binary if installed, else the same pinned image CI uses.
 KUBECONFORM ?= $(shell command -v kubeconform >/dev/null 2>&1 && echo kubeconform || echo "docker run --rm -i ghcr.io/yannh/kubeconform:v0.7.0")
-deploy-verify: ## render.sh planted cases + helm lint --strict + kubeconform (default and all-features renders) + kustomize build
+deploy-verify: ## render.sh + chart_checks.sh planted cases + helm lint --strict + kubeconform (default and all-features renders) + kustomize build
 	sh tools/deploy/render_test.sh
 	helm lint --strict deploy/helm/snatcharr
 	render=$$(mktemp -d)
@@ -232,38 +241,22 @@ deploy-verify: ## render.sh planted cases + helm lint --strict + kubeconform (de
 	  --set-json 'networkPolicy.arrPeers=[{"namespaceSelector":{"matchLabels":{"kubernetes.io/metadata.name":"media"}}},{"podSelector":{"matchLabels":{"app.kubernetes.io/name":"lidarr"}},"ports":[{"port":8686,"protocol":"TCP"}]}]'
 	$(KUBECONFORM) -strict -ignore-missing-schemas -summary <"$$render/all.yaml"
 	kustomize build --enable-helm deploy/kustomize/kind >/dev/null
-	# No egress rule may have an empty `to`, which allows every destination (#120).
-	netpol=$$(helm template snatcharr deploy/helm/snatcharr --set networkPolicy.enabled=true --set-json 'networkPolicy.arrCidrs=[]')
-	if printf '%s\n' "$$netpol" | grep -A1 -E '^ *- to:( *\[\])?$$' | grep -qE '^ *(- to: *)?\[\]$$'; then
-	  echo "networkPolicy: an egress rule with an empty 'to' allows every destination" >&2; exit 1
-	fi
-	# An arrPeers entry with `ports` is reachable on those ports only (#145). With that entry as the
-	# only *arr peer, both policies hold two egress rules with a `to` (database or API, and the
-	# peer), and each of the four carries `ports`.
-	netpol=$$(helm template snatcharr deploy/helm/snatcharr --set networkPolicy.enabled=true --set-json 'networkPolicy.arrCidrs=[]' \
-	  --set-json 'networkPolicy.arrPeers=[{"podSelector":{"matchLabels":{"app.kubernetes.io/name":"lidarr"}},"ports":[{"port":8686,"protocol":"TCP"}]}]')
-	scoped=$$(printf '%s\n' "$$netpol" | awk '
-	  function rule_end() { if (to) { rules++; if (!ports) open++ }; to = 0; ports = 0 }
-	  /^    - / || /^---/ { rule_end() }
-	  /^    (- |  )to:/ { to = 1 }
-	  /^    (- |  )ports:/ { ports = 1 }
-	  END { rule_end(); printf "%d with a to, %d of them without ports", rules, open }')
-	if [ "$$scoped" != "4 with a to, 0 of them without ports" ]; then
-	  echo "networkPolicy: an arrPeers entry with ports must be reachable on those ports only; egress rules: $$scoped" >&2; exit 1
-	fi
-	# The Artifact Hub image annotation names the appVersion images (#122), and the four
-	# release-please markers that keep it so are still in the file (a yaml updater drops them).
-	chart=deploy/helm/snatcharr/Chart.yaml
+	# Chart checks with their planted cases first (A3-01): no egress rule with an empty `to`
+	# (#120), an arrPeers entry with `ports` reachable on those ports only (#145), Chart.yaml
+	# release-please markers and image annotation (#122).
+	sh tools/deploy/chart_checks_test.sh
+	sh tools/deploy/chart_checks.sh netpol "$$render/all.yaml"
+	tools/deploy/render.sh "$$render/no-peers.yaml" snatcharr deploy/helm/snatcharr \
+	  --set networkPolicy.enabled=true --set-json 'networkPolicy.arrCidrs=[]'
+	sh tools/deploy/chart_checks.sh netpol "$$render/no-peers.yaml" "2 with a to, 0 of them without ports, 0 with an empty to"
+	# With one arrPeers entry that has `ports` as the only *arr peer, both policies hold two egress
+	# rules with a `to` (database or API, and the peer), and each of the four carries `ports`.
+	tools/deploy/render.sh "$$render/peer.yaml" snatcharr deploy/helm/snatcharr \
+	  --set networkPolicy.enabled=true --set-json 'networkPolicy.arrCidrs=[]' \
+	  --set-json 'networkPolicy.arrPeers=[{"podSelector":{"matchLabels":{"app.kubernetes.io/name":"lidarr"}},"ports":[{"port":8686,"protocol":"TCP"}]}]'
+	sh tools/deploy/chart_checks.sh netpol "$$render/peer.yaml" "4 with a to, 0 of them without ports, 0 with an empty to"
 	app=$$(helm show chart deploy/helm/snatcharr | sed -n 's/^appVersion: *//p' | tr -d "\"'")
-	markers=$$(grep -c 'x-release-please' "$$chart" || true)
-	if [ -z "$$app" ] || [ "$$markers" -ne 4 ]; then
-	  echo "Chart.yaml: appVersion '$$app', $$markers of 4 x-release-please markers" >&2; exit 1
-	fi
-	images=$$(grep -cE '^ +image: ghcr\.io/lusoris/snatcharr-(api|worker):' "$$chart")
-	stale=$$(grep -E '^ +image: ghcr\.io/lusoris/snatcharr-(api|worker):' "$$chart" | grep -cv ":$$app$$" || true)
-	if [ "$$images" -ne 2 ] || [ "$$stale" -ne 0 ]; then
-	  echo "Chart.yaml: artifacthub.io/images must list both images at appVersion $$app ($$images found, $$stale stale)" >&2; exit 1
-	fi
+	sh tools/deploy/chart_checks.sh chart deploy/helm/snatcharr/Chart.yaml "$$app"
 
 images: ## Build both images locally (tag dev)
 	docker build -t snatcharr-api:dev -f Dockerfile .

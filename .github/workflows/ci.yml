@@ -171,6 +171,8 @@ jobs:
               - '.golangci.yml'
               - '.gosec.json'
               - 'tools/spectral.yaml'
+              - 'tools/spectral/**'
+              - 'tools/cover/**'
               - 'tools/e2e/**'
               - 'tools/**/*.go'
               - 'exceptions.yaml'
@@ -185,6 +187,9 @@ jobs:
               - 'rustfmt.toml'
               - 'deny.toml'
               - 'proto/**'
+              # The coverage floor: worker-cover and tools/cover.
+              - 'Makefile'
+              - 'tools/cover/**'
               - '.github/workflows/ci.yml'
             web:
               - 'web/**'
@@ -344,7 +349,10 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
-      - run: npx --yes @stoplight/spectral-cli@6.15.0 lint api/openapi/openapi.yaml --ruleset tools/spectral.yaml --fail-severity warn
+      - name: Planted cases (each bad spec fails on its rule)
+        run: sh tools/spectral/lint_test.sh
+      - name: Spectral
+        run: sh tools/spectral/lint.sh api/openapi/openapi.yaml
 
   worker:
     name: worker (Rust)
