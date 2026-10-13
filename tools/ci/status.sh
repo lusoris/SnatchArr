@@ -16,6 +16,9 @@ set -eu
 # One job per line with what selects it: "always", "commits" (COMMITS_EXPECTED), or the outputs
 # of the changes job, any of which selects the job. The mirror form holds ci.yml to this table.
 RULES='workflows always
+secret-scan always
+semgrep always
+trivy always
 changes always
 commits commits
 api-lint api

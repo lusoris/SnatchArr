@@ -17,7 +17,7 @@ trap 'rm -rf "$WORK"' EXIT
 
 # Every job ran and succeeded; the change filter selected every component.
 ALL="$(jq -n '
-  [ "workflows", "changes", "commits", "api-lint", "api-test", "api-security", "api-openapi",
+  [ "workflows", "secret-scan", "semgrep", "trivy", "changes", "commits", "api-lint", "api-test", "api-security", "api-openapi",
     "worker", "e2e", "web", "proto", "deploy", "contracts", "governance" ]
   | map({key: ., value: {result: "success", outputs: {}}}) | from_entries
   | .changes.outputs = ( [ "api", "worker", "web", "proto", "deploy", "governance", "contracts" ]

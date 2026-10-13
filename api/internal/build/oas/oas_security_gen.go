@@ -231,32 +231,3 @@ func (s *Server) securityCookieAuth(ctx context.Context, operationName Operation
 	}
 	return rctx, true, err
 }
-
-// SecuritySource is provider of security values (tokens, passwords, etc.).
-type SecuritySource interface {
-	// BearerAuth provides bearerAuth security value.
-	BearerAuth(ctx context.Context, operationName OperationName) (BearerAuth, error)
-	// CookieAuth provides cookieAuth security value.
-	CookieAuth(ctx context.Context, operationName OperationName) (CookieAuth, error)
-}
-
-func (s *Client) securityBearerAuth(ctx context.Context, operationName OperationName, req *http.Request) error {
-	t, err := s.sec.BearerAuth(ctx, operationName)
-	if err != nil {
-		return errors.Wrap(err, "security source \"BearerAuth\"")
-	}
-	req.Header.Set("Authorization", "Bearer "+t.Token)
-	return nil
-}
-func (s *Client) securityCookieAuth(ctx context.Context, operationName OperationName, req *http.Request) error {
-	t, err := s.sec.CookieAuth(ctx, operationName)
-	if err != nil {
-		return errors.Wrap(err, "security source \"CookieAuth\"")
-	}
-	// #nosec G124 -- ogen client adds the session cookie to an outgoing request; Secure, HttpOnly and SameSite are response attributes
-	req.AddCookie(&http.Cookie{
-		Name:  "snatcharr_session",
-		Value: t.APIKey,
-	})
-	return nil
-}

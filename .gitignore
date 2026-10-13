@@ -41,6 +41,8 @@ Thumbs.db
 # (docs/upstream-contracts.md); `upstreamspec guard` fails when this rule is missing.
 /.cache/
 
+__pycache__/
+
 # BEGIN praetor private artifacts (praetorctl adopt)
 /.workingdir/
 /.workingdir2/
