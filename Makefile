@@ -226,7 +226,11 @@ proto-gen: ## buf generate (Go stubs; Rust stubs build via tonic-build)
 # ── deploy/ ───────────────────────────────────────────────────────────────────
 # kubeconform binary if installed, else the same pinned image CI uses.
 KUBECONFORM ?= $(shell command -v kubeconform >/dev/null 2>&1 && echo kubeconform || echo "docker run --rm -i ghcr.io/yannh/kubeconform:v0.7.0")
-deploy-verify: ## render.sh + chart_checks.sh planted cases + helm lint --strict + kubeconform (default and all-features renders) + kustomize build
+deploy-verify: ## helm unittest + render.sh + chart_checks.sh planted cases + helm lint --strict + kubeconform (default and all-features renders) + kustomize build
+	if ! helm plugin list 2>/dev/null | grep -E -q '^unittest[[:space:]]'; then \
+	  echo "deploy-verify: helm plugin 'unittest' is missing; install helm-unittest (https://github.com/helm-unittest/helm-unittest)" >&2; exit 1; \
+	fi
+	helm unittest deploy/helm/snatcharr
 	sh tools/deploy/render_test.sh
 	helm lint --strict deploy/helm/snatcharr
 	render=$$(mktemp -d)
