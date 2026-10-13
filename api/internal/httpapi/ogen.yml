@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+# ogen options for the server in ../build/oas. Nothing in this module calls the API through a
+# generated Go client, and that client fell back to http.DefaultClient, which has no timeout
+# (semgrep rule no-http-default-client in .semgrep.yml), so it is not generated.
+generator:
+  features:
+    disable:
+      - paths/client

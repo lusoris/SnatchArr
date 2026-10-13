@@ -39,8 +39,9 @@ func TestAnnotate(t *testing.T) {
 
 func TestAnnotateKeepsIndentation(t *testing.T) {
 	t.Parallel()
-	r := rule{id: "G103", match: regexp.MustCompile(`unsafe\.Slice`), reason: "r"}
-	got := annotate([]string{"\t\tx := unsafe.Slice(p, n)"}, r)
+	// Only the indentation is under test, so the matched call is neutral text.
+	r := rule{id: "G103", match: regexp.MustCompile(`convert\(`), reason: "r"}
+	got := annotate([]string{"\t\tx := convert(p, n)"}, r)
 	if want := "\t\t// #nosec G103 -- r"; got[0] != want {
 		t.Errorf("annotation = %q, want %q", got[0], want)
 	}

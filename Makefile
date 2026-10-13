@@ -209,6 +209,7 @@ proto-gen: ## buf generate (Go stubs; Rust stubs build via tonic-build)
 	# HISS-09 wants a SAFETY proof before every unsafe call; protoc-gen-go emits two. Deterministic post-pass.
 	for f in $$(find api/internal/gen -name '*.pb.go'); do
 	  sed -i -E 's|^([[:space:]]*)(.*unsafe\.Slice\(unsafe\.StringData\(.*)$$|\1// SAFETY: protoc-gen-go reads immutable string bytes of the raw descriptor; never written or retained past the call.\n\1\2|' "$$f"
+	  sed -i -E 's|^([[:space:]]*)(unsafe "unsafe")$$|\1// SAFETY: imported only for the raw-descriptor views proved below.\n\1\2|' "$$f"
 	done
 	# gosec findings of generated code carry one `#nosec <rule> -- <reason>` each (tools/gennosec).
 	go run ./tools/gennosec apply

@@ -47,7 +47,16 @@
             "context": "Detect changed components"
           },
           {
+            "context": "Secrets (gitleaks, full history)"
+          },
+          {
+            "context": "Semgrep (own rules, .semgrep.yml)"
+          },
+          {
             "context": "CI success"
+          },
+          {
+            "context": "Trivy (lockfiles, secrets, Dockerfiles, Helm chart)"
           },
           {
             "context": "Workflows (actionlint, pinned actions)"

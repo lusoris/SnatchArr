@@ -14,6 +14,7 @@ import (
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
+	// SAFETY: imported only for the raw-descriptor views proved below.
 	unsafe "unsafe"
 )
 

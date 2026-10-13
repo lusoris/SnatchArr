@@ -6,5 +6,5 @@
 // the ogen-generated server in internal/oas. Every error is rendered as RFC 9457.
 package httpapi
 
-//go:generate go run github.com/ogen-go/ogen/cmd/ogen@v1.20.2 --target ../build/oas --package oas --clean ../../openapi/openapi.yaml
+//go:generate go run github.com/ogen-go/ogen/cmd/ogen@v1.20.2 --config ogen.yml --target ../build/oas --package oas --clean ../../openapi/openapi.yaml
 //go:generate go run github.com/lusoris/SnatchArr/tools/gennosec apply
