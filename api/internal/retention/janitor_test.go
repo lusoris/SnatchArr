@@ -75,7 +75,7 @@ func TestModuleRegistersLeaderLoop(t *testing.T) {
 	t.Parallel()
 	var loops []leaderx.Loop
 	app := fxtest.New(t,
-		fx.Supply((*settings.Service)(nil), (*snatch.Recorder)(nil), (*snatch.Runs)(nil), (*snatch.Memory)(nil),
+		fx.Supply((*settings.Service)(nil), (*snatch.Recorder)(nil), (*snatch.Runs)(nil), (*snatch.Workers)(nil), (*snatch.Memory)(nil),
 			(*snatch.Budget)(nil), (*auth.PgSessionStore)(nil), slog.New(slog.DiscardHandler)),
 		fx.Provide(func() clock.Clock { return clock.NewFake() }),
 		Module,

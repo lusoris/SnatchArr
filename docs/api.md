@@ -33,7 +33,7 @@ The first start has no users; `GET /api/v1/auth/setup/status` says so and
 | `/state/reset` | End every afterglow |
 | `/schedules` | Pause and cap-override windows |
 | `/download-clients`, `/download-clients/status`, `/instances/{id}/download-clients/discover` | Download clients |
-| `/system/status` | Version and build info |
+| `/system/status` | Version and build info; `worker_last_contact_at`, the newest LeaseRun or Heartbeat of any worker (absent before the first) |
 
 ## Worker contract
 

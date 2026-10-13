@@ -4407,6 +4407,9 @@ type SystemStatus struct {
 	BuildDate     string              `json:"build_date"`
 	Profile       SystemStatusProfile `json:"profile"`
 	SetupComplete bool                `json:"setup_complete"`
+	// When a worker last reached the control plane (LeaseRun or Heartbeat), newest over all workers.
+	// Absent when no worker has called since the retention window began.
+	WorkerLastContactAt OptDateTime `json:"worker_last_contact_at"`
 }
 
 // GetName returns the value of Name.
@@ -4439,6 +4442,11 @@ func (s *SystemStatus) GetSetupComplete() bool {
 	return s.SetupComplete
 }
 
+// GetWorkerLastContactAt returns the value of WorkerLastContactAt.
+func (s *SystemStatus) GetWorkerLastContactAt() OptDateTime {
+	return s.WorkerLastContactAt
+}
+
 // SetName sets the value of Name.
 func (s *SystemStatus) SetName(val string) {
 	s.Name = val
@@ -4467,6 +4475,11 @@ func (s *SystemStatus) SetProfile(val SystemStatusProfile) {
 // SetSetupComplete sets the value of SetupComplete.
 func (s *SystemStatus) SetSetupComplete(val bool) {
 	s.SetupComplete = val
+}
+
+// SetWorkerLastContactAt sets the value of WorkerLastContactAt.
+func (s *SystemStatus) SetWorkerLastContactAt(val OptDateTime) {
+	s.WorkerLastContactAt = val
 }
 
 type SystemStatusProfile string

@@ -84,7 +84,8 @@ Every instance has one policy (`GET/PUT /api/v1/instances/{id}/policy`).
 | `global_hourly_cap` | 0 | Stamina shared by every instance (0 = off) |
 
 The same hourly pass also forgets afterglow entries 90 days after they expired, spent
-stamina buckets after two hours and expired login sessions. It deletes at most 100,000 rows
+stamina buckets after two hours, expired login sessions and workers that have not called
+for `history_retention_days`. It deletes at most 100,000 rows
 per table per pass and logs one `retention: purge pass` line with the counts. A larger
 backlog shrinks over the following hours.
 

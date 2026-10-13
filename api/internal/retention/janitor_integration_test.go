@@ -52,7 +52,7 @@ func newFixture(t *testing.T) fixture {
 	set := settings.New(st, clk)
 	j := New(Deps{
 		Settings: set, Recorder: snatch.NewRecorder(st, clk, events.New(logger)), Runs: snatch.NewRuns(st, clk, id.New()),
-		Memory: snatch.NewMemory(st, clk), Budget: snatch.NewBudget(st, clk), Sessions: auth.NewPgSessionStore(st, clk),
+		Workers: snatch.NewWorkers(st, clk), Memory: snatch.NewMemory(st, clk), Budget: snatch.NewBudget(st, clk), Sessions: auth.NewPgSessionStore(st, clk),
 		Clock: clk, Logger: logger,
 	})
 	return fixture{j: j, st: st, clk: clk, settings: set, instance: storetest.Instance(t, st, clk.Now())}
@@ -85,8 +85,8 @@ func (f fixture) remaining(t *testing.T) Counts {
 	var c Counts
 	err := f.st.Pool().QueryRow(t.Context(), `SELECT
 		(SELECT count(*) FROM snatch_events), (SELECT count(*) FROM snatch_runs), (SELECT count(*) FROM processed_items),
-		(SELECT count(*) FROM rate_buckets) + (SELECT count(*) FROM global_rate_buckets), (SELECT count(*) FROM sessions)`,
-	).Scan(&c.Events, &c.Runs, &c.Afterglow, &c.Buckets, &c.Sessions)
+		(SELECT count(*) FROM rate_buckets) + (SELECT count(*) FROM global_rate_buckets), (SELECT count(*) FROM sessions), (SELECT count(*) FROM workers)`,
+	).Scan(&c.Events, &c.Runs, &c.Afterglow, &c.Buckets, &c.Sessions, &c.Workers)
 	if err != nil {
 		t.Fatalf("count rows: %v", err)
 	}
@@ -94,7 +94,7 @@ func (f fixture) remaining(t *testing.T) Counts {
 }
 
 // seed puts one row just past and one row exactly at (or just inside) each cutoff. The
-// cutoffs are strict (<) for events, runs and buckets, inclusive (<=) for afterglow and
+// cutoffs are strict (<) for events, runs, buckets and workers, inclusive (<=) for afterglow and
 // sessions, matching the queries.
 func (f fixture) seed(t *testing.T) {
 	t.Helper()
@@ -126,6 +126,7 @@ func (f fixture) seed(t *testing.T) {
 			t.Fatalf("seed session %d: %v", i, err)
 		}
 	}
+	f.exec(t, `INSERT INTO workers (id, last_contact_at) VALUES ('gone', $1), ('at-cutoff', $2)`, old, atCutoff)
 }
 
 // Rows past retention go, rows at or inside it stay, and a second pass finds nothing.
@@ -134,11 +135,11 @@ func TestPassDeletesOnlyPastRetention(t *testing.T) {
 	f := newFixture(t)
 	f.seed(t)
 	got, err := f.j.Pass(t.Context())
-	want := Counts{Events: 1, Runs: 1, Afterglow: 1, Buckets: 2, Sessions: 1}
+	want := Counts{Events: 1, Runs: 1, Afterglow: 1, Buckets: 2, Sessions: 1, Workers: 1}
 	if err != nil || got != want {
 		t.Fatalf("Pass() = %+v, %v; want %+v", got, err, want)
 	}
-	if left := f.remaining(t); left != (Counts{Events: 2, Runs: 2, Afterglow: 1, Buckets: 2, Sessions: 1}) {
+	if left := f.remaining(t); left != (Counts{Events: 2, Runs: 2, Afterglow: 1, Buckets: 2, Sessions: 1, Workers: 1}) {
 		t.Fatalf("rows left = %+v", left)
 	}
 	if again, err := f.j.Pass(t.Context()); err != nil || again != (Counts{}) {
@@ -163,7 +164,7 @@ func TestRetentionSettingChangesNextPass(t *testing.T) {
 		t.Fatalf("settings.Update() = %v", updateErr)
 	}
 	got, err := f.j.Pass(t.Context())
-	if want := (Counts{Events: 1, Runs: 1}); err != nil || got != want {
+	if want := (Counts{Events: 1, Runs: 1, Workers: 1}); err != nil || got != want {
 		t.Fatalf("Pass() after retention 1 day = %+v, %v; want %+v", got, err, want)
 	}
 }

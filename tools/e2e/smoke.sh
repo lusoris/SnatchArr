@@ -13,7 +13,7 @@
 #   f. a whole-series search that does not fit the cap is not sent and costs no stamina; once
 #      the cap fits it, it is sent once and costs exactly its seasons (#142);
 #   g. each worker's health listener answers /livez with 200 and /metrics with the API failure
-#      counter (A1-01).
+#      counter, and /system/status reports the workers' last contact (A1-01).
 # `make e2e-smoke` builds the binaries and provides Postgres. Needs curl and jq.
 set -euo pipefail
 
@@ -247,4 +247,7 @@ for port in "$W1_HTTP_PORT" "$W2_HTTP_PORT"; do
     esac
     echo "smoke: worker on $port: $live"
 done
+contact=$(api GET /system/status | jq -r '.worker_last_contact_at // empty')
+[ -n "$contact" ] || fail "g. /system/status has no worker_last_contact_at"
+echo "smoke: last worker contact $contact"
 echo "smoke: passed"
