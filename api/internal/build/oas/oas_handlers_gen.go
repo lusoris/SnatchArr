@@ -1941,7 +1941,8 @@ func (s *Server) handleDeleteDownloadClientRequest(args [1]string, argsEscaped b
 
 // handleDeleteInstanceRequest handles deleteInstance operation.
 //
-// Delete an instance and everything it owns.
+// An instance that the Configarr configuration still declares cannot be deleted (403); one that was
+// removed from it can.
 //
 // DELETE /instances/{instanceId}
 func (s *Server) handleDeleteInstanceRequest(args [1]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
@@ -2093,7 +2094,7 @@ func (s *Server) handleDeleteInstanceRequest(args [1]string, argsEscaped bool, w
 
 	var rawBody []byte
 
-	var response *DeleteInstanceNoContent
+	var response DeleteInstanceRes
 	if m := s.cfg.Middleware; m != nil {
 		mreq := middleware.Request{
 			Context:          ctx,
@@ -2114,7 +2115,7 @@ func (s *Server) handleDeleteInstanceRequest(args [1]string, argsEscaped bool, w
 		type (
 			Request  = struct{}
 			Params   = DeleteInstanceParams
-			Response = *DeleteInstanceNoContent
+			Response = DeleteInstanceRes
 		)
 		response, err = middleware.HookMiddleware[
 			Request,
@@ -2125,12 +2126,12 @@ func (s *Server) handleDeleteInstanceRequest(args [1]string, argsEscaped bool, w
 			mreq,
 			unpackDeleteInstanceParams,
 			func(ctx context.Context, request Request, params Params) (response Response, err error) {
-				err = s.h.DeleteInstance(ctx, params)
+				response, err = s.h.DeleteInstance(ctx, params)
 				return response, err
 			},
 		)
 	} else {
-		err = s.h.DeleteInstance(ctx, params)
+		response, err = s.h.DeleteInstance(ctx, params)
 	}
 	if err != nil {
 		if errRes, ok := errors.Into[*ProblemStatusCode](err); ok {

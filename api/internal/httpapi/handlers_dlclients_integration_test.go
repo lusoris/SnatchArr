@@ -7,6 +7,7 @@ package httpapi
 import (
 	"context"
 	"errors"
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
@@ -512,6 +513,73 @@ func testConfigarrImportRefused(t *testing.T, f *integrationFixture, ctx context
 	}
 }
 
+func importSingleConfigarrInstance(t *testing.T, f *integrationFixture, adminCtx context.Context) uuid.UUID {
+	t.Helper()
+	dir := t.TempDir()
+	configPath := writeConfigarrYAML(t, dir, "config.yml", `
+sonarr:
+  series:
+    base_url: http://sonarr:8989
+    api_key: sonarr-key-1
+`)
+	req := oas.NewOptConfigarrImportRequest(oas.ConfigarrImportRequest{
+		ConfigPath: oas.NewOptString(configPath),
+	})
+	res, err := f.h.ImportConfigarr(adminCtx, req)
+	if err != nil || res.Imported != 1 {
+		t.Fatalf("ImportConfigarr() = %+v, %v; want 1 imported", res, err)
+	}
+	instList, err := f.h.instances.List(adminCtx)
+	if err != nil || len(instList) != 1 {
+		t.Fatalf("instances after import: len=%d, %v", len(instList), err)
+	}
+	return instList[0].ID
+}
+
+func testConfigarrUpdateRefused(t *testing.T, f *integrationFixture, adminCtx context.Context) {
+	t.Helper()
+	instID := importSingleConfigarrInstance(t, f, adminCtx)
+	upReq := &oas.InstanceUpdate{
+		Kind:    oas.AppKindSonarr,
+		Name:    "renamed-series",
+		BaseURL: "http://sonarr-renamed.invalid:8989",
+	}
+	_, err := f.h.UpdateInstance(adminCtx, upReq, oas.UpdateInstanceParams{InstanceId: instID})
+	if !errors.Is(err, domain.ErrForbidden) {
+		t.Fatalf("UpdateInstance() err = %v, want ErrForbidden", err)
+	}
+	status, _, _ := statusOf(err)
+	if status != http.StatusForbidden {
+		t.Fatalf("statusOf(err) = %d, want %d", status, http.StatusForbidden)
+	}
+	got, err := f.h.instances.Get(adminCtx, instID)
+	if err != nil {
+		t.Fatalf("instances.Get() = %v", err)
+	}
+	if got.Name != "series" || got.BaseURL != "http://sonarr:8989" {
+		t.Fatalf("instance changed after refused update: name=%q, baseURL=%q", got.Name, got.BaseURL)
+	}
+}
+
+func testConfigarrPolicyUpdate(t *testing.T, f *integrationFixture, adminCtx context.Context) {
+	t.Helper()
+	instID := importSingleConfigarrInstance(t, f, adminCtx)
+	policy, err := f.h.GetPolicy(adminCtx, oas.GetPolicyParams{InstanceId: instID})
+	if err != nil {
+		t.Fatalf("GetPolicy() = %v", err)
+	}
+	policy.HourlyCap = 300
+	policy.PageSize = 25
+	got, err := f.h.UpdatePolicy(adminCtx, policy, oas.UpdatePolicyParams{InstanceId: instID})
+	if err != nil || got.HourlyCap != 300 || got.PageSize != 25 {
+		t.Fatalf("UpdatePolicy() = %+v, %v; want cap 300, page 25", got, err)
+	}
+	readBack, err := f.h.GetPolicy(adminCtx, oas.GetPolicyParams{InstanceId: instID})
+	if err != nil || readBack.HourlyCap != 300 || readBack.PageSize != 25 {
+		t.Fatalf("readBack GetPolicy() = %+v, %v; want cap 300, page 25", readBack, err)
+	}
+}
+
 func TestConfigarrOperations(t *testing.T) {
 	t.Parallel()
 	t.Run("positive import and status", func(t *testing.T) {
@@ -519,6 +587,18 @@ func TestConfigarrOperations(t *testing.T) {
 		f := newIntegrationFixture(t)
 		adminCtx := withUser(t.Context(), f.admin)
 		testConfigarrImportPositiveAndStatus(t, f, adminCtx)
+	})
+	t.Run("negative update configarr instance refused", func(t *testing.T) {
+		t.Parallel()
+		f := newIntegrationFixture(t)
+		adminCtx := withUser(t.Context(), f.admin)
+		testConfigarrUpdateRefused(t, f, adminCtx)
+	})
+	t.Run("positive update configarr policy allowed", func(t *testing.T) {
+		t.Parallel()
+		f := newIntegrationFixture(t)
+		adminCtx := withUser(t.Context(), f.admin)
+		testConfigarrPolicyUpdate(t, f, adminCtx)
 	})
 	t.Run("negative import no user", func(t *testing.T) {
 		t.Parallel()

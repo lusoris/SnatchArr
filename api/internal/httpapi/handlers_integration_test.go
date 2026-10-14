@@ -979,7 +979,7 @@ func TestInstanceUpdateAndDelete(t *testing.T) {
 func testInstanceUpdateDeleteCase(t *testing.T, f *integrationFixture, isDel bool, targetID, originalID uuid.UUID, in oas.InstanceUpdate, ctx context.Context, wantErr error) {
 	t.Helper()
 	if isDel {
-		err := f.h.DeleteInstance(ctx, oas.DeleteInstanceParams{InstanceId: targetID})
+		_, err := f.h.DeleteInstance(ctx, oas.DeleteInstanceParams{InstanceId: targetID})
 		if wantErr != nil {
 			if !errors.Is(err, wantErr) {
 				t.Fatalf("DeleteInstance() err = %v, want %v", err, wantErr)

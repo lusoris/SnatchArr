@@ -48,7 +48,7 @@ const createInstance = `-- name: CreateInstance :one
 
 INSERT INTO instances (id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, created_at, updated_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
-RETURNING id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product
+RETURNING id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product, configarr_orphaned_at
 `
 
 type CreateInstanceParams struct {
@@ -93,16 +93,17 @@ func (q *Queries) CreateInstance(ctx context.Context, arg CreateInstanceParams) 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.LastSeenProduct,
+		&i.ConfigarrOrphanedAt,
 	)
 	return i, err
 }
 
-const deleteInstance = `-- name: DeleteInstance :execrows
-DELETE FROM instances WHERE id = $1
+const deleteInstanceUnlessDeclared = `-- name: DeleteInstanceUnlessDeclared :execrows
+DELETE FROM instances WHERE id = $1 AND (source <> 'configarr' OR configarr_orphaned_at IS NOT NULL)
 `
 
-func (q *Queries) DeleteInstance(ctx context.Context, id uuid.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteInstance, id)
+func (q *Queries) DeleteInstanceUnlessDeclared(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteInstanceUnlessDeclared, id)
 	if err != nil {
 		return 0, err
 	}
@@ -111,8 +112,9 @@ func (q *Queries) DeleteInstance(ctx context.Context, id uuid.UUID) (int64, erro
 
 const disableConfigarrInstancesNotIn = `-- name: DisableConfigarrInstancesNotIn :execrows
 UPDATE instances
-SET enabled = FALSE, last_error = 'removed from the Configarr configuration', updated_at = $1
-WHERE source = 'configarr' AND enabled AND NOT (configarr_key = ANY($2::text[]))
+SET enabled = FALSE, last_error = 'removed from the Configarr configuration',
+    updated_at = $1, configarr_orphaned_at = $1
+WHERE source = 'configarr' AND configarr_orphaned_at IS NULL AND NOT (configarr_key = ANY($2::text[]))
 `
 
 type DisableConfigarrInstancesNotInParams struct {
@@ -129,7 +131,7 @@ func (q *Queries) DisableConfigarrInstancesNotIn(ctx context.Context, arg Disabl
 }
 
 const getInstance = `-- name: GetInstance :one
-SELECT id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product FROM instances WHERE id = $1
+SELECT id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product, configarr_orphaned_at FROM instances WHERE id = $1
 `
 
 func (q *Queries) GetInstance(ctx context.Context, id uuid.UUID) (Instance, error) {
@@ -150,12 +152,13 @@ func (q *Queries) GetInstance(ctx context.Context, id uuid.UUID) (Instance, erro
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.LastSeenProduct,
+		&i.ConfigarrOrphanedAt,
 	)
 	return i, err
 }
 
 const getInstanceByConfigarrKey = `-- name: GetInstanceByConfigarrKey :one
-SELECT id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product FROM instances WHERE configarr_key = $1
+SELECT id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product, configarr_orphaned_at FROM instances WHERE configarr_key = $1
 `
 
 func (q *Queries) GetInstanceByConfigarrKey(ctx context.Context, configarrKey *string) (Instance, error) {
@@ -176,12 +179,13 @@ func (q *Queries) GetInstanceByConfigarrKey(ctx context.Context, configarrKey *s
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.LastSeenProduct,
+		&i.ConfigarrOrphanedAt,
 	)
 	return i, err
 }
 
 const listEnabledInstances = `-- name: ListEnabledInstances :many
-SELECT id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product FROM instances WHERE enabled ORDER BY kind, name
+SELECT id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product, configarr_orphaned_at FROM instances WHERE enabled ORDER BY kind, name
 `
 
 func (q *Queries) ListEnabledInstances(ctx context.Context) ([]Instance, error) {
@@ -208,6 +212,7 @@ func (q *Queries) ListEnabledInstances(ctx context.Context) ([]Instance, error) 
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.LastSeenProduct,
+			&i.ConfigarrOrphanedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -220,7 +225,7 @@ func (q *Queries) ListEnabledInstances(ctx context.Context) ([]Instance, error) 
 }
 
 const listInstances = `-- name: ListInstances :many
-SELECT id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product FROM instances ORDER BY kind, name
+SELECT id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product, configarr_orphaned_at FROM instances ORDER BY kind, name
 `
 
 func (q *Queries) ListInstances(ctx context.Context) ([]Instance, error) {
@@ -247,6 +252,7 @@ func (q *Queries) ListInstances(ctx context.Context) ([]Instance, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.LastSeenProduct,
+			&i.ConfigarrOrphanedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -295,7 +301,7 @@ SET kind = $2, name = $3, base_url = $4, api_key_enc = $5, enabled = $6, updated
     -- The product was seen at the old kind and address: a change of either forgets it.
     last_seen_product = CASE WHEN kind = $2 AND base_url = $4 THEN last_seen_product END
 WHERE id = $1
-RETURNING id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product
+RETURNING id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product, configarr_orphaned_at
 `
 
 type UpdateInstanceParams struct {
@@ -334,6 +340,7 @@ func (q *Queries) UpdateInstance(ctx context.Context, arg UpdateInstanceParams) 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.LastSeenProduct,
+		&i.ConfigarrOrphanedAt,
 	)
 	return i, err
 }
@@ -344,11 +351,12 @@ VALUES ($1, $2, $3, $4, $5, $6, 'configarr', $7, $8, $8)
 ON CONFLICT (configarr_key) DO UPDATE
 SET kind = EXCLUDED.kind, name = EXCLUDED.name, base_url = EXCLUDED.base_url,
     api_key_enc = EXCLUDED.api_key_enc, enabled = EXCLUDED.enabled, updated_at = EXCLUDED.updated_at,
+    configarr_orphaned_at = NULL,
     -- As in UpdateInstance: a change of kind or address forgets the product.
     last_seen_product = CASE
         WHEN instances.kind = EXCLUDED.kind AND instances.base_url = EXCLUDED.base_url THEN instances.last_seen_product
     END
-RETURNING id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product, (xmax = 0) AS inserted
+RETURNING id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product, configarr_orphaned_at, (xmax = 0) AS inserted
 `
 
 type UpsertConfigarrInstanceParams struct {
@@ -363,21 +371,22 @@ type UpsertConfigarrInstanceParams struct {
 }
 
 type UpsertConfigarrInstanceRow struct {
-	ID              uuid.UUID
-	Kind            string
-	Name            string
-	BaseUrl         string
-	ApiKeyEnc       []byte
-	Enabled         bool
-	Source          string
-	ConfigarrKey    *string
-	LastSeenVersion *string
-	LastCheckAt     *time.Time
-	LastError       *string
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
-	LastSeenProduct *string
-	Inserted        bool
+	ID                  uuid.UUID
+	Kind                string
+	Name                string
+	BaseUrl             string
+	ApiKeyEnc           []byte
+	Enabled             bool
+	Source              string
+	ConfigarrKey        *string
+	LastSeenVersion     *string
+	LastCheckAt         *time.Time
+	LastError           *string
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+	LastSeenProduct     *string
+	ConfigarrOrphanedAt *time.Time
+	Inserted            bool
 }
 
 func (q *Queries) UpsertConfigarrInstance(ctx context.Context, arg UpsertConfigarrInstanceParams) (UpsertConfigarrInstanceRow, error) {
@@ -407,6 +416,7 @@ func (q *Queries) UpsertConfigarrInstance(ctx context.Context, arg UpsertConfiga
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.LastSeenProduct,
+		&i.ConfigarrOrphanedAt,
 		&i.Inserted,
 	)
 	return i, err

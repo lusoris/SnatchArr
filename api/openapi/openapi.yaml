@@ -239,9 +239,12 @@ paths:
       tags: [instances]
       operationId: deleteInstance
       summary: Delete an instance and everything it owns
+      description: An instance that the Configarr configuration still declares cannot be deleted (403); one that was removed from it can.
       responses:
         "204":
           description: Deleted
+        "403":
+          $ref: "#/components/responses/Problem"
         default:
           $ref: "#/components/responses/Problem"
 

@@ -96,11 +96,12 @@ func (UnimplementedHandler) DeleteDownloadClient(ctx context.Context, params Del
 
 // DeleteInstance implements deleteInstance operation.
 //
-// Delete an instance and everything it owns.
+// An instance that the Configarr configuration still declares cannot be deleted (403); one that was
+// removed from it can.
 //
 // DELETE /instances/{instanceId}
-func (UnimplementedHandler) DeleteInstance(ctx context.Context, params DeleteInstanceParams) error {
-	return ht.ErrNotImplemented
+func (UnimplementedHandler) DeleteInstance(ctx context.Context, params DeleteInstanceParams) (r DeleteInstanceRes, _ error) {
+	return r, ht.ErrNotImplemented
 }
 
 // DeleteInstanceEvents implements deleteInstanceEvents operation.

@@ -869,6 +869,8 @@ type DeleteInstanceEventsNoContent struct{}
 // DeleteInstanceNoContent is response for DeleteInstance operation.
 type DeleteInstanceNoContent struct{}
 
+func (*DeleteInstanceNoContent) deleteInstanceRes() {}
+
 // DeleteScheduleNoContent is response for DeleteSchedule operation.
 type DeleteScheduleNoContent struct{}
 
@@ -2628,6 +2630,8 @@ func (s *ProblemStatusCode) SetStatusCode(val int) {
 func (s *ProblemStatusCode) SetResponse(val Problem) {
 	s.Response = val
 }
+
+func (*ProblemStatusCode) deleteInstanceRes() {}
 
 // Ref: #/components/schemas/Run
 type Run struct {

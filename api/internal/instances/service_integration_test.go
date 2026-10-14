@@ -10,6 +10,7 @@ import (
 	"errors"
 	"log/slog"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -268,6 +269,193 @@ func TestService_UpsertConfigarr_Product(t *testing.T) {
 			if got.LastSeenProduct != tc.want {
 				t.Errorf("stored product = %q, want %q", got.LastSeenProduct, tc.want)
 			}
+		})
+	}
+}
+
+type deleteTestCase struct {
+	name    string
+	setup   func(t *testing.T, f fixture) uuid.UUID
+	wantErr error
+	check   func(t *testing.T, f fixture, id uuid.UUID)
+}
+
+func (tc deleteTestCase) run(t *testing.T) {
+	t.Helper()
+	f := newFixture(t)
+	instID := tc.setup(t, f)
+	err := f.svc.Delete(t.Context(), instID)
+	if tc.wantErr == nil {
+		if err != nil {
+			t.Fatalf("Delete() = %v, want nil", err)
+		}
+	} else {
+		if !errors.Is(err, tc.wantErr) {
+			t.Fatalf("Delete() = %v, want %v", err, tc.wantErr)
+		}
+	}
+	if tc.check != nil {
+		tc.check(t, f, instID)
+	}
+}
+
+func casesPositive() []deleteTestCase {
+	return []deleteTestCase{
+		{
+			name: "positive: manual row is deleted",
+			setup: func(t *testing.T, f fixture) uuid.UUID {
+				t.Helper()
+				created, err := f.svc.Create(t.Context(), readarrInput(booksURL))
+				if err != nil {
+					t.Fatalf("Create() = %v", err)
+				}
+				return created.ID
+			},
+			wantErr: nil,
+			check: func(t *testing.T, f fixture, id uuid.UUID) {
+				t.Helper()
+				if _, err := f.svc.Get(t.Context(), id); !instances.IsNotFound(err) {
+					t.Fatalf("Get() = %v, want ErrNotFound", err)
+				}
+			},
+		},
+		{
+			name: "positive: configarr row orphaned can be deleted",
+			setup: func(t *testing.T, f fixture) uuid.UUID {
+				t.Helper()
+				out, err := f.svc.UpsertConfigarr(t.Context(), configKey, readarrInput(booksURL))
+				if err != nil {
+					t.Fatalf("UpsertConfigarr() = %v", err)
+				}
+				n, err := f.svc.DisableConfigarrNotIn(t.Context(), []string{"other.key"})
+				if err != nil || n != 1 {
+					t.Fatalf("DisableConfigarrNotIn() = %d, %v, want 1", n, err)
+				}
+				return out.Instance.ID
+			},
+			wantErr: nil,
+			check: func(t *testing.T, f fixture, id uuid.UUID) {
+				t.Helper()
+				if _, err := f.svc.Get(t.Context(), id); !instances.IsNotFound(err) {
+					t.Fatalf("Get() = %v, want ErrNotFound", err)
+				}
+			},
+		},
+	}
+}
+
+func casesNegative() []deleteTestCase {
+	return []deleteTestCase{
+		{
+			name: "negative: configarr row declared enabled refuses delete",
+			setup: func(t *testing.T, f fixture) uuid.UUID {
+				t.Helper()
+				out, err := f.svc.UpsertConfigarr(t.Context(), configKey, readarrInput(booksURL))
+				if err != nil {
+					t.Fatalf("UpsertConfigarr() = %v", err)
+				}
+				return out.Instance.ID
+			},
+			wantErr: domain.ErrForbidden,
+			check: func(t *testing.T, f fixture, id uuid.UUID) {
+				t.Helper()
+				if _, err := f.svc.Get(t.Context(), id); err != nil {
+					t.Fatalf("Get() = %v, want row still there", err)
+				}
+			},
+		},
+		{
+			name: "negative: configarr row declared enabled:false refuses delete",
+			setup: func(t *testing.T, f fixture) uuid.UUID {
+				t.Helper()
+				in := readarrInput(booksURL)
+				in.Enabled = false
+				out, err := f.svc.UpsertConfigarr(t.Context(), configKey, in)
+				if err != nil {
+					t.Fatalf("UpsertConfigarr() = %v", err)
+				}
+				return out.Instance.ID
+			},
+			wantErr: domain.ErrForbidden,
+			check: func(t *testing.T, f fixture, id uuid.UUID) {
+				t.Helper()
+				if _, err := f.svc.Get(t.Context(), id); err != nil {
+					t.Fatalf("Get() = %v, want row still there", err)
+				}
+			},
+		},
+		{
+			name: "negative: unknown id returns not found",
+			setup: func(t *testing.T, _ fixture) uuid.UUID {
+				t.Helper()
+				return uuid.New()
+			},
+			wantErr: domain.ErrNotFound,
+			check:   nil,
+		},
+	}
+}
+
+func casesBoundary() []deleteTestCase {
+	return []deleteTestCase{
+		{
+			name: "boundary: orphaned then declared again refuses delete",
+			setup: func(t *testing.T, f fixture) uuid.UUID {
+				t.Helper()
+				out, err := f.svc.UpsertConfigarr(t.Context(), configKey, readarrInput(booksURL))
+				if err != nil {
+					t.Fatalf("UpsertConfigarr() = %v", err)
+				}
+				if _, err := f.svc.DisableConfigarrNotIn(t.Context(), nil); err != nil {
+					t.Fatalf("DisableConfigarrNotIn() = %v", err)
+				}
+				if _, err := f.svc.UpsertConfigarr(t.Context(), configKey, readarrInput(booksURL)); err != nil {
+					t.Fatalf("second UpsertConfigarr() = %v", err)
+				}
+				return out.Instance.ID
+			},
+			wantErr: domain.ErrForbidden,
+			check: func(t *testing.T, f fixture, id uuid.UUID) {
+				t.Helper()
+				if _, err := f.svc.Get(t.Context(), id); err != nil {
+					t.Fatalf("Get() = %v, want row still there", err)
+				}
+			},
+		},
+		{
+			name: "boundary: declared enabled:false then orphaned can be deleted",
+			setup: func(t *testing.T, f fixture) uuid.UUID {
+				t.Helper()
+				in := readarrInput(booksURL)
+				in.Enabled = false
+				out, err := f.svc.UpsertConfigarr(t.Context(), configKey, in)
+				if err != nil {
+					t.Fatalf("UpsertConfigarr() = %v", err)
+				}
+				n, err := f.svc.DisableConfigarrNotIn(t.Context(), nil)
+				if err != nil || n != 1 {
+					t.Fatalf("DisableConfigarrNotIn() = %d, %v, want 1", n, err)
+				}
+				return out.Instance.ID
+			},
+			wantErr: nil,
+			check: func(t *testing.T, f fixture, id uuid.UUID) {
+				t.Helper()
+				if _, err := f.svc.Get(t.Context(), id); !instances.IsNotFound(err) {
+					t.Fatalf("Get() = %v, want ErrNotFound", err)
+				}
+			},
+		},
+	}
+}
+
+func TestService_Delete_ConfigarrRule(t *testing.T) {
+	t.Parallel()
+	cases := slices.Concat(casesPositive(), casesNegative(), casesBoundary())
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			tc.run(t)
 		})
 	}
 }
