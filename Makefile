@@ -21,7 +21,7 @@ GOMODCACHE       = $(subst \,/,$(shell go env GOMODCACHE))
 GOLUSORIS_VER    = $(shell go list -m -f '{{.Version}}' github.com/golusoris/golusoris)
 GOLUSORIS_SHARED = $(GOMODCACHE)/github.com/golusoris/golusoris@$(GOLUSORIS_VER)/tools/Makefile.shared
 
-.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke web-verify web-e2e proto-verify deploy-verify governance-verify hooks-verify contracts-verify workflows-verify workflows-lint secret-scan \
+.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke web-verify web-e2e web-e2e-api proto-verify deploy-verify governance-verify hooks-verify contracts-verify workflows-verify workflows-lint secret-scan \
 	images kind-up kind-deploy kind-down \
         api-gen api-gosec gosec-install tools-verify tools-lint tools-test tools-gosec web-gen proto-gen dev hooks setup
 
@@ -197,6 +197,15 @@ web-gen: ## OpenAPI -> src/lib/api/schema.d.ts
 
 web-e2e: ## Playwright + axe-core (zero violations; never suppressed)
 	cd web && pnpm test:e2e
+
+web-e2e-api: ## Postgres + api + fakearr + web e2e Playwright axe sweep (needs Docker unless SMOKE_DSN is set)
+	mkdir -p $(E2E_BIN)
+	go build -o $(E2E_BIN)/snatcharr ./api/cmd/snatcharr
+	go build -o $(E2E_BIN)/fakearr ./api/cmd/fakearr
+	(cd web && pnpm install --frozen-lockfile && pnpm exec playwright install chromium)
+	E2E_POSTGRES=$(E2E_POSTGRES) tools/e2e/postgres.sh \
+	  env SMOKE_API_BIN=$(E2E_BIN)/snatcharr SMOKE_FAKEARR_BIN=$(E2E_BIN)/fakearr \
+	  tools/e2e/web-e2e-api.sh
 
 # ── proto/ ────────────────────────────────────────────────────────────────────
 proto-verify: ## buf lint + breaking (vs main) + generation drift
