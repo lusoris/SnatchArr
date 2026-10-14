@@ -22,7 +22,7 @@ require (
 	github.com/golusoris/goenvoy/downloadclient/sabnzbd/v2 v2.0.0
 	github.com/golusoris/goenvoy/downloadclient/transmission/v2 v2.0.0
 	github.com/golusoris/golusoris v0.16.4
-	github.com/golusoris/golusoris/core v0.10.1
+	github.com/golusoris/golusoris/core v0.10.2
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/jonboulle/clockwork v0.5.0
