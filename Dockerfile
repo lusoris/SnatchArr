@@ -21,8 +21,8 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY api/ ./api/
 COPY --from=web /src/web/build ./api/internal/webui/dist
-ARG TARGETOS=linux
-ARG TARGETARCH=amd64
+ARG TARGETOS
+ARG TARGETARCH
 ARG VERSION=dev
 ARG COMMIT=unknown
 ARG DATE=unknown
