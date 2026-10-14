@@ -11,6 +11,10 @@ import tailwindcss from '@tailwindcss/vite';
 import { svelteTesting } from '@testing-library/svelte/vite';
 import { defineConfig } from 'vitest/config';
 
+const apiProxy = {
+	'/api': { target: process.env.SNATCHARR_API ?? 'http://127.0.0.1:8080', changeOrigin: false }
+};
+
 export default defineConfig({
 	plugins: [
 		tailwindcss(),
@@ -32,9 +36,10 @@ export default defineConfig({
 	],
 	server: {
 		// Same-origin in dev too: Vite proxies the API so cookies and CSRF behave like prod.
-		proxy: {
-			'/api': { target: process.env.SNATCHARR_API ?? 'http://127.0.0.1:8080', changeOrigin: false }
-		}
+		proxy: apiProxy
+	},
+	preview: {
+		proxy: apiProxy
 	},
 	test: {
 		expect: { requireAssertions: true },
