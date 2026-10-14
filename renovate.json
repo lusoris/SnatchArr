@@ -59,6 +59,17 @@
       ],
       "datasourceTemplate": "docker",
       "versioningTemplate": "docker"
+    },
+    {
+      "description": "Go tools installed in workflows, pinned to semver (tools/ci/workflow-check.sh)",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/[^/]+\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "go install (?<depName>\\S+)/cmd/[^@\\s]+@(?<currentValue>v[0-9]+(?:\\.[0-9]+)*)"
+      ],
+      "datasourceTemplate": "go"
     }
   ],
   "postUpdateOptions": [

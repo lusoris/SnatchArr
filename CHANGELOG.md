@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.7](https://github.com/lusoris/SnatchArr/compare/v0.1.6...v0.1.7) (2026-10-14)
+
+
+### Features
+
+* report unconfirmed worker events and retry CompleteRun ([#207](https://github.com/lusoris/SnatchArr/issues/207)) ([6a1002d](https://github.com/lusoris/SnatchArr/commit/6a1002dada8e84296493c9236b08c8527e270597))
+
+
+### Bug Fixes
+
+* **api:** keep the test reaper alive between package processes ([#209](https://github.com/lusoris/SnatchArr/issues/209)) ([32a6840](https://github.com/lusoris/SnatchArr/commit/32a6840a10d8a3d94d70570adbfde9ca9ebaee95))
+
 ## [0.1.6](https://github.com/lusoris/SnatchArr/compare/v0.1.5...v0.1.6) (2026-10-13)
 
 
