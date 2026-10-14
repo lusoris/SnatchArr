@@ -76,11 +76,14 @@ func (h *Handlers) UpdateInstance(ctx context.Context, req *oas.InstanceUpdate, 
 }
 
 // DeleteInstance removes an instance.
-func (h *Handlers) DeleteInstance(ctx context.Context, params oas.DeleteInstanceParams) error {
+func (h *Handlers) DeleteInstance(ctx context.Context, params oas.DeleteInstanceParams) (oas.DeleteInstanceRes, error) {
 	if err := requireAdmin(ctx); err != nil {
-		return err
+		return nil, err
 	}
-	return h.instances.Delete(ctx, params.InstanceId)
+	if err := h.instances.Delete(ctx, params.InstanceId); err != nil {
+		return nil, err
+	}
+	return &oas.DeleteInstanceNoContent{}, nil
 }
 
 // TestInstance probes a stored instance.

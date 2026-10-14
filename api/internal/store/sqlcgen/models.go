@@ -59,20 +59,21 @@ type GlobalRateBucket struct {
 }
 
 type Instance struct {
-	ID              uuid.UUID
-	Kind            string
-	Name            string
-	BaseUrl         string
-	ApiKeyEnc       []byte
-	Enabled         bool
-	Source          string
-	ConfigarrKey    *string
-	LastSeenVersion *string
-	LastCheckAt     *time.Time
-	LastError       *string
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
-	LastSeenProduct *string
+	ID                  uuid.UUID
+	Kind                string
+	Name                string
+	BaseUrl             string
+	ApiKeyEnc           []byte
+	Enabled             bool
+	Source              string
+	ConfigarrKey        *string
+	LastSeenVersion     *string
+	LastCheckAt         *time.Time
+	LastError           *string
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+	LastSeenProduct     *string
+	ConfigarrOrphanedAt *time.Time
 }
 
 type ProcessedItem struct {
