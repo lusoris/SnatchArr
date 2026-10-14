@@ -155,7 +155,10 @@ export interface paths {
         /** Update a manual instance (omit api_key to keep it) */
         put: operations["updateInstance"];
         post?: never;
-        /** Delete an instance and everything it owns */
+        /**
+         * Delete an instance and everything it owns
+         * @description An instance that the Configarr configuration still declares cannot be deleted (403); one that was removed from it can.
+         */
         delete: operations["deleteInstance"];
         options?: never;
         head?: never;
@@ -1567,6 +1570,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            403: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };

@@ -97,7 +97,9 @@ imported on start and kept in sync: the files are polled every 30 seconds (inoti
 swaps, polling does not). Only `base_url`, `api_key` and the `enabled` flags are read;
 `!secret`, `!env` and `!file` values are resolved like Configarr does. Whisparr entries are
 probed to tell v2 from v3. An instance that disappears from the file is switched off, not
-deleted. Imported instances are read-only in SnatchArr except for their snatch policy.
+deleted. Imported instances are read-only in SnatchArr except for their snatch policy. Deleting
+one that the file still declares, enabled or not, is refused with 403; once it is gone from the
+file and switched off, it can be deleted.
 
 `POST /api/v1/configarr/import` runs a one-shot import (with `config_path` and
 `secrets_path` in the body, or the linked files); `GET /api/v1/configarr/status` shows

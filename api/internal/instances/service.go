@@ -170,13 +170,17 @@ func (s *Service) sealUnlessUnchanged(apiKey string, current []byte) ([]byte, er
 }
 
 // Delete removes an instance and, by cascade, its policy, runs, memory and history.
+// An instance that the Configarr configuration still declares cannot be deleted.
 func (s *Service) Delete(ctx context.Context, instID uuid.UUID) error {
-	n, err := s.st.Q().DeleteInstance(ctx, instID)
+	n, err := s.st.Q().DeleteInstanceUnlessDeclared(ctx, instID)
 	if err != nil {
 		return fmt.Errorf("instances: delete: %w", store.MapError(err))
 	}
 	if n == 0 {
-		return fmt.Errorf("instances: delete: %w", domain.ErrNotFound)
+		if _, getErr := s.st.Q().GetInstance(ctx, instID); getErr != nil {
+			return fmt.Errorf("instances: delete: %w", store.MapError(getErr))
+		}
+		return fmt.Errorf("%w: instance is declared in the Configarr configuration; remove it from config.yml first", domain.ErrForbidden)
 	}
 	return nil
 }
@@ -319,6 +323,7 @@ func (s *Service) UpsertConfigarr(ctx context.Context, key string, in Input) (Up
 			ConfigarrKey: row.ConfigarrKey, LastSeenVersion: row.LastSeenVersion, LastSeenProduct: row.LastSeenProduct,
 			LastCheckAt: row.LastCheckAt, LastError: row.LastError,
 			CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
+			ConfigarrOrphanedAt: row.ConfigarrOrphanedAt,
 		}), Inserted: row.Inserted}
 		return nil
 	})

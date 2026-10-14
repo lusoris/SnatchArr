@@ -64,10 +64,11 @@ type Handler interface {
 	DeleteDownloadClient(ctx context.Context, params DeleteDownloadClientParams) error
 	// DeleteInstance implements deleteInstance operation.
 	//
-	// Delete an instance and everything it owns.
+	// An instance that the Configarr configuration still declares cannot be deleted (403); one that was
+	// removed from it can.
 	//
 	// DELETE /instances/{instanceId}
-	DeleteInstance(ctx context.Context, params DeleteInstanceParams) error
+	DeleteInstance(ctx context.Context, params DeleteInstanceParams) (DeleteInstanceRes, error)
 	// DeleteInstanceEvents implements deleteInstanceEvents operation.
 	//
 	// Clear the history of one instance.

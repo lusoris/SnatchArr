@@ -32,6 +32,7 @@ VALUES ($1, $2, $3, $4, $5, $6, 'configarr', $7, $8, $8)
 ON CONFLICT (configarr_key) DO UPDATE
 SET kind = EXCLUDED.kind, name = EXCLUDED.name, base_url = EXCLUDED.base_url,
     api_key_enc = EXCLUDED.api_key_enc, enabled = EXCLUDED.enabled, updated_at = EXCLUDED.updated_at,
+    configarr_orphaned_at = NULL,
     -- As in UpdateInstance: a change of kind or address forgets the product.
     last_seen_product = CASE
         WHEN instances.kind = EXCLUDED.kind AND instances.base_url = EXCLUDED.base_url THEN instances.last_seen_product
@@ -40,8 +41,9 @@ RETURNING *, (xmax = 0) AS inserted;
 
 -- name: DisableConfigarrInstancesNotIn :execrows
 UPDATE instances
-SET enabled = FALSE, last_error = 'removed from the Configarr configuration', updated_at = sqlc.arg(updated_at)
-WHERE source = 'configarr' AND enabled AND NOT (configarr_key = ANY(sqlc.arg(keep_keys)::text[]));
+SET enabled = FALSE, last_error = 'removed from the Configarr configuration',
+    updated_at = sqlc.arg(updated_at), configarr_orphaned_at = sqlc.arg(updated_at)
+WHERE source = 'configarr' AND configarr_orphaned_at IS NULL AND NOT (configarr_key = ANY(sqlc.arg(keep_keys)::text[]));
 
 -- name: CountInstancesByBaseURLAndNotSource :one
 SELECT count(*) FROM instances WHERE lower(base_url) = lower($1) AND source <> $2;
@@ -57,8 +59,8 @@ SET last_seen_version = sqlc.narg(last_seen_version), last_check_at = sqlc.narg(
     END
 WHERE id = sqlc.arg(id);
 
--- name: DeleteInstance :execrows
-DELETE FROM instances WHERE id = $1;
+-- name: DeleteInstanceUnlessDeclared :execrows
+DELETE FROM instances WHERE id = $1 AND (source <> 'configarr' OR configarr_orphaned_at IS NOT NULL);
 
 -- name: CountInstancesByBaseURL :one
 SELECT count(*) FROM instances WHERE lower(base_url) = lower($1) AND id <> $2;

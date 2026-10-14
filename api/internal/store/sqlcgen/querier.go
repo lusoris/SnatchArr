@@ -43,7 +43,7 @@ type Querier interface {
 	DeleteCleanuparrLink(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteDownloadClient(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteEventsForInstance(ctx context.Context, instanceID uuid.UUID) (int64, error)
-	DeleteInstance(ctx context.Context, id uuid.UUID) (int64, error)
+	DeleteInstanceUnlessDeclared(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteSchedule(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteSeerrLink(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteSession(ctx context.Context, id string) error
