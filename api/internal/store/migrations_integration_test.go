@@ -5,12 +5,19 @@
 package store_test
 
 import (
+	"context"
 	"os"
+	"regexp"
+	"strings"
 	"testing"
+	"time"
+
+	"github.com/google/uuid"
 
 	dbmigrate "github.com/golusoris/golusoris/db/migrate"
 
 	"github.com/lusoris/SnatchArr/api/internal/store"
+	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
 	"github.com/lusoris/SnatchArr/api/internal/store/storetest"
 )
 
@@ -92,5 +99,290 @@ func TestEachMigrationStepsDownAndUp(t *testing.T) {
 	}
 	if n := leftoverCount(t, st); n != 0 {
 		t.Fatalf("%d schema objects survive stepping every migration down", n)
+	}
+}
+
+// previousRelease is the schema version shipped by the last tagged release (v0.1.8).
+// When cutting a release that ships new migrations, bump this to the new release's latest
+// schema version, add any new tables to testdata/upgrade/v<version>.sql, and update the
+// queries in TestMigrationsUpgradePopulated.
+const (
+	previousRelease = 9
+	fixturePath     = "testdata/upgrade/v0.1.8.sql"
+)
+
+var (
+	fixtureSonarrID      = uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	fixtureRunID         = uuid.MustParse("a1111111-1111-1111-1111-111111111111")
+	fixtureScheduleID    = uuid.MustParse("b1111111-1111-1111-1111-111111111111")
+	fixtureUserID        = uuid.MustParse("c1111111-1111-1111-1111-111111111111")
+	fixtureClientID      = uuid.MustParse("d1111111-1111-1111-1111-111111111111")
+	fixtureSeerrLinkID   = uuid.MustParse("e1111111-1111-1111-1111-111111111111")
+	fixtureCleanupLinkID = uuid.MustParse("f1111111-1111-1111-1111-111111111111")
+	reInsertTable        = regexp.MustCompile(`(?i)\bINSERT\s+INTO\s+([a-zA-Z0-9_]+)`)
+)
+
+func stepDownToVersion(t *testing.T, m *dbmigrate.Migrator, target uint) {
+	t.Helper()
+	for v := version(t, m); v > target; v = version(t, m) {
+		if err := m.Steps(-1); err != nil {
+			t.Fatalf("step down from %d: %v", v, err)
+		}
+	}
+	if got := version(t, m); got != target {
+		t.Fatalf("version after step down = %d, want %d", got, target)
+	}
+}
+
+func applyFixture(t *testing.T, st *store.Store, path string) {
+	t.Helper()
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read fixture %s: %v", path, err)
+	}
+	if _, err := st.Pool().Exec(t.Context(), string(content)); err != nil {
+		t.Fatalf("exec fixture %s: %v", path, err)
+	}
+}
+
+func parseFixtureTables(t *testing.T, path string) map[string]bool {
+	t.Helper()
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read fixture %s: %v", path, err)
+	}
+	matches := reInsertTable.FindAllStringSubmatch(string(content), -1)
+	tables := make(map[string]bool, len(matches))
+	for _, m := range matches {
+		tables[strings.ToLower(m[1])] = true
+	}
+	return tables
+}
+
+// TestMigrationsUpgradeFixtureCoversAllTables guards against unmigrated new tables by verifying
+// that the upgrade fixture inserts into every table present in the latest database schema.
+func TestMigrationsUpgradeFixtureCoversAllTables(t *testing.T) {
+	t.Parallel()
+	st := storetest.New(t)
+	fixtureTables := parseFixtureTables(t, fixturePath)
+
+	const query = `SELECT table_name FROM information_schema.tables ` +
+		`WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ` +
+		`AND table_name <> 'schema_migrations' ORDER BY table_name`
+
+	rows, err := st.Pool().Query(t.Context(), query)
+	if err != nil {
+		t.Fatalf("query tables: %v", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var tbl string
+		if err := rows.Scan(&tbl); err != nil {
+			t.Fatalf("scan table: %v", err)
+		}
+		if !fixtureTables[tbl] {
+			t.Errorf("fixture missing table: %s", tbl)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("rows err: %v", err)
+	}
+}
+
+// TestMigrationsUpgradePopulated steps down to the previous release, inserts a full v9 dataset,
+// migrates up to latest, and confirms all rows are intact and queryable via sqlc queries.
+func TestMigrationsUpgradePopulated(t *testing.T) {
+	t.Parallel()
+	st := storetest.New(t)
+	m := storetest.Migrator(t, st)
+
+	latest := version(t, m)
+	if latest < previousRelease {
+		t.Fatalf("current version %d is below previousRelease %d", latest, previousRelease)
+	}
+
+	stepDownToVersion(t, m, previousRelease)
+	applyFixture(t, st, fixturePath)
+
+	if err := m.Up(); err != nil {
+		t.Fatalf("Up() after fixture: %v", err)
+	}
+	if v := version(t, m); v != latest {
+		t.Fatalf("version after Up() = %d, want %d", v, latest)
+	}
+
+	ctx := t.Context()
+	q := sqlcgen.New(st.Pool())
+
+	assertInstancesAndPolicies(t, q, ctx)
+	assertRuns(t, q, ctx, fixtureRunID)
+	assertEventsAndProcessed(t, q, ctx, fixtureSonarrID)
+	assertBuckets(t, q, ctx, fixtureSonarrID)
+	assertSchedulesAndSettings(t, q, ctx, fixtureScheduleID)
+	assertUsersAndSessions(t, q, ctx, fixtureUserID)
+	assertKeysAndWorkers(t, q, ctx, fixtureUserID)
+	assertClientsAndCleanup(t, q, ctx, fixtureClientID, fixtureCleanupLinkID)
+	assertSeerr(t, q, ctx, fixtureSeerrLinkID)
+}
+
+func checkInstances(t *testing.T, insts []sqlcgen.Instance) {
+	t.Helper()
+	byKind := make(map[string]sqlcgen.Instance, len(insts))
+	for _, inst := range insts {
+		byKind[inst.Kind] = inst
+	}
+	checkInstanceFields(t, byKind["sonarr"], byKind["radarr"], byKind["readarr"])
+}
+
+func checkInstanceFields(t *testing.T, sonarr, radarr, readarr sqlcgen.Instance) {
+	t.Helper()
+	if sonarr.Name != "sonarr-main" || sonarr.ConfigarrOrphanedAt != nil {
+		t.Errorf("unexpected sonarr: %+v", sonarr)
+	}
+	if radarr.Source != "configarr" || radarr.ConfigarrOrphanedAt != nil {
+		t.Errorf("unexpected radarr: %+v", radarr)
+	}
+	if radarr.ConfigarrKey == nil || *radarr.ConfigarrKey != "radarr_4k" {
+		t.Errorf("unexpected radarr configarr_key: %+v", radarr.ConfigarrKey)
+	}
+	if readarr.LastSeenProduct == nil || *readarr.LastSeenProduct != "readarr" {
+		t.Errorf("unexpected readarr last_seen_product: %+v", readarr.LastSeenProduct)
+	}
+}
+
+func checkPolicy(t *testing.T, q *sqlcgen.Queries, ctx context.Context, id uuid.UUID) {
+	t.Helper()
+	pol, err := q.GetPolicy(ctx, id)
+	if err != nil {
+		t.Fatalf("GetPolicy: %v", err)
+	}
+	if pol.MissingPerCycle != 5 || pol.HourlyCap != 25 {
+		t.Errorf("unexpected policy rates: %+v", pol)
+	}
+	if pol.Selection != "recent" || pol.RecentGrabWindowH != 24 || pol.AfterglowMaxH != 720 {
+		t.Errorf("unexpected policy refinements: %+v", pol)
+	}
+}
+
+func assertInstancesAndPolicies(t *testing.T, q *sqlcgen.Queries, ctx context.Context) {
+	t.Helper()
+	insts, err := q.ListInstances(ctx)
+	if err != nil {
+		t.Fatalf("ListInstances: %v", err)
+	}
+	if len(insts) != 6 {
+		t.Fatalf("ListInstances count = %d, want 6", len(insts))
+	}
+	checkInstances(t, insts)
+	checkPolicy(t, q, ctx, fixtureSonarrID)
+}
+
+func assertRuns(t *testing.T, q *sqlcgen.Queries, ctx context.Context, runID uuid.UUID) {
+	t.Helper()
+	run, err := q.GetRun(ctx, runID)
+	if err != nil {
+		t.Fatalf("GetRun: %v", err)
+	}
+	if run.Kind != "missing" || run.Status != "queued" || run.LeaseCount != 0 {
+		t.Errorf("unexpected run state: %+v", run)
+	}
+	if run.FocusEntityID == nil || *run.FocusEntityID != 42 {
+		t.Errorf("unexpected run focus_entity_id: %+v", run.FocusEntityID)
+	}
+}
+
+func assertEventsAndProcessed(t *testing.T, q *sqlcgen.Queries, ctx context.Context, instID uuid.UUID) {
+	t.Helper()
+	events, err := q.ListEvents(ctx, sqlcgen.ListEventsParams{InstanceID: &instID, PageSize: 10})
+	if err != nil || len(events) != 1 || events[0].Title != "Test Series S01E01" {
+		t.Errorf("unexpected events: %+v, err %v", events, err)
+	}
+
+	attempts, err := q.ProcessedAttempts(ctx, sqlcgen.ProcessedAttemptsParams{
+		InstanceID: instID, Kind: "missing", EntityType: "episode", EntityID: 1001,
+	})
+	if err != nil || attempts != 1 {
+		t.Errorf("ProcessedAttempts = %d, err %v", attempts, err)
+	}
+}
+
+func assertBuckets(t *testing.T, q *sqlcgen.Queries, ctx context.Context, instID uuid.UUID) {
+	t.Helper()
+	since := time.Date(2026, 10, 14, 9, 0, 0, 0, time.UTC)
+	usage, err := q.BucketUsage(ctx, sqlcgen.BucketUsageParams{InstanceID: instID, Since: since})
+	if err != nil || usage.Used != 5 {
+		t.Errorf("BucketUsage used = %d, err %v", usage.Used, err)
+	}
+
+	globalUsage, err := q.GlobalBucketUsage(ctx, since)
+	if err != nil || globalUsage.Used != 12 {
+		t.Errorf("GlobalBucketUsage used = %d, err %v", globalUsage.Used, err)
+	}
+}
+
+func assertSchedulesAndSettings(t *testing.T, q *sqlcgen.Queries, ctx context.Context, schedID uuid.UUID) {
+	t.Helper()
+	sched, err := q.GetSchedule(ctx, schedID)
+	if err != nil || sched.Name != "Nightly Pause" || sched.Action != "pause" {
+		t.Errorf("GetSchedule = %+v, err %v", sched, err)
+	}
+
+	settings, err := q.GetSettings(ctx)
+	if err != nil || settings.HistoryRetentionDays != 90 || settings.GlobalHourlyCap != 100 {
+		t.Errorf("GetSettings = %+v, err %v", settings, err)
+	}
+}
+
+func assertUsersAndSessions(t *testing.T, q *sqlcgen.Queries, ctx context.Context, userID uuid.UUID) {
+	t.Helper()
+	user, err := q.GetUser(ctx, userID)
+	if err != nil || user.Username != "admin" || user.Role != "admin" {
+		t.Errorf("GetUser = %+v, err %v", user, err)
+	}
+
+	now := time.Date(2026, 10, 14, 10, 0, 0, 0, time.UTC)
+	data, err := q.LoadSession(ctx, sqlcgen.LoadSessionParams{ID: "sess-token-12345", ExpiresAt: now})
+	if err != nil || !strings.Contains(string(data), userID.String()) {
+		t.Errorf("LoadSession data = %s, err %v", string(data), err)
+	}
+}
+
+func assertKeysAndWorkers(t *testing.T, q *sqlcgen.Queries, ctx context.Context, userID uuid.UUID) {
+	t.Helper()
+	key, err := q.GetAPIKey(ctx, "snatcharr_key_abc123")
+	if err != nil || key.OwnerID != userID || len(key.Scopes) != 2 {
+		t.Errorf("GetAPIKey = %+v, err %v", key, err)
+	}
+
+	workerContact, err := q.LastWorkerContact(ctx)
+	if err != nil || workerContact.IsZero() {
+		t.Errorf("LastWorkerContact = %v, err %v", workerContact, err)
+	}
+}
+
+func assertClientsAndCleanup(t *testing.T, q *sqlcgen.Queries, ctx context.Context, clientID, cleanupID uuid.UUID) {
+	t.Helper()
+	client, err := q.GetDownloadClient(ctx, clientID)
+	if err != nil || client.Name != "qbit-local" || client.Kind != "qbittorrent" {
+		t.Errorf("GetDownloadClient = %+v, err %v", client, err)
+	}
+
+	cleanup, err := q.GetCleanuparrLink(ctx, cleanupID)
+	if err != nil || cleanup.Name != "cleanuparr-main" || !cleanup.Enabled {
+		t.Errorf("GetCleanuparrLink = %+v, err %v", cleanup, err)
+	}
+}
+
+func assertSeerr(t *testing.T, q *sqlcgen.Queries, ctx context.Context, seerrID uuid.UUID) {
+	t.Helper()
+	seerr, err := q.GetSeerrLink(ctx, seerrID)
+	if err != nil || seerr.Name != "overseerr-main" || !seerr.Enabled {
+		t.Errorf("GetSeerrLink = %+v, err %v", seerr, err)
+	}
+
+	req, err := q.GetSeerrRequest(ctx, sqlcgen.GetSeerrRequestParams{LinkID: seerrID, RequestID: 101})
+	if err != nil || req.Title != "Game of Thrones" || req.MediaType != "tv" {
+		t.Errorf("GetSeerrRequest = %+v, err %v", req, err)
 	}
 }
