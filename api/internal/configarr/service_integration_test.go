@@ -313,6 +313,7 @@ func testWatchPositive(t *testing.T, f fixture, dir string) {
 	if len(list) != 1 || list[0].Name != "series" {
 		t.Fatalf("initial import: %+v", list)
 	}
+	initialAt := waitImportAfter(t, f.svc, time.Time{})
 
 	// Rewrite file with different size and additional instance.
 	writeConfig(t, dir, `
@@ -332,12 +333,13 @@ radarr:
 		t.Fatalf("after advance: want 2 instances, got %d", len(list))
 	}
 
+	// The rows commit before Import records its time: wait for the record, not the rows.
+	lastAt := waitImportAfter(t, f.svc, initialAt)
+
 	// Advance clock again with no file change -> no extra import.
-	lastAt := f.svc.Status().LastImportAt
 	f.clk.Advance(configarr.PollInterval)
 	time.Sleep(50 * time.Millisecond)
-	st := f.svc.Status()
-	if st.LastImportAt != lastAt {
+	if st := f.svc.Status(); st.LastImportAt == nil || !st.LastImportAt.Equal(lastAt) {
 		t.Fatalf("unexpected import without file change: at=%v, was=%v", st.LastImportAt, lastAt)
 	}
 	list = waitInstancesCount(t, ctx, f.instSvc, 2)
@@ -387,6 +389,19 @@ radarr:
 	if st.Watching {
 		t.Fatalf("Status().Watching = true, want false")
 	}
+}
+
+// waitImportAfter polls until the service records an import later than prev and returns its time.
+func waitImportAfter(t *testing.T, svc *configarr.Service, prev time.Time) time.Time {
+	t.Helper()
+	for range 100 {
+		if at := svc.Status().LastImportAt; at != nil && at.After(prev) {
+			return *at
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("no import recorded after %v", prev)
+	return time.Time{}
 }
 
 func waitInstancesCount(t *testing.T, ctx context.Context, instSvc *instances.Service, want int) []domain.Instance {
