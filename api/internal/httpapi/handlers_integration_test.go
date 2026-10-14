@@ -7,15 +7,18 @@ package httpapi
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/golusoris/goenvoy/arr/v2"
 	"github.com/google/uuid"
 	"github.com/jonboulle/clockwork"
 
@@ -28,30 +31,220 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/auth"
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/buildinfo"
+	"github.com/lusoris/SnatchArr/api/internal/cleanuparr"
+	"github.com/lusoris/SnatchArr/api/internal/cleanuparrclient"
 	"github.com/lusoris/SnatchArr/api/internal/config"
+	"github.com/lusoris/SnatchArr/api/internal/configarr"
+	"github.com/lusoris/SnatchArr/api/internal/dlclients"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/events"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
 	"github.com/lusoris/SnatchArr/api/internal/metrics"
 	"github.com/lusoris/SnatchArr/api/internal/metrics/metricstest"
 	"github.com/lusoris/SnatchArr/api/internal/policies"
+	"github.com/lusoris/SnatchArr/api/internal/seerr"
+	"github.com/lusoris/SnatchArr/api/internal/seerrclient"
 	"github.com/lusoris/SnatchArr/api/internal/settings"
 	"github.com/lusoris/SnatchArr/api/internal/snatch"
 	"github.com/lusoris/SnatchArr/api/internal/store"
+	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
 	"github.com/lusoris/SnatchArr/api/internal/store/storetest"
 )
 
-type integrationFixture struct {
-	h       *Handlers
-	st      *store.Store
-	clk     *clockwork.FakeClock
-	probe   *stubProber
-	sessMgr *session.Manager
-	admin   domain.User
-	viewer  domain.User
+type stubSnapshotter struct {
+	snap dlclients.Snapshot
+	clk  clock.Clock
 }
 
-func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Generator, authSvc *auth.Service, sessMgr *session.Manager, probe *stubProber, m *metrics.Metrics, logger *slog.Logger) *Handlers {
+func (s *stubSnapshotter) Snapshot(_ context.Context, c domain.DownloadClient, _ string) dlclients.Snapshot {
+	out := s.snap
+	if out.Name == "" {
+		out.Name = c.Name
+	}
+	if out.Kind == "" {
+		out.Kind = c.Kind
+	}
+	out.ClientID = c.ID
+	if out.CheckedAt.IsZero() && s.clk != nil {
+		out.CheckedAt = s.clk.Now()
+	}
+	return out
+}
+
+type stubDiscoverer struct {
+	res []arr.ProviderResource
+	err error
+}
+
+func (d *stubDiscoverer) DownloadClients(context.Context, domain.AppKind, string, string) ([]arr.ProviderResource, error) {
+	return d.res, d.err
+}
+
+type stubSeerrClient struct {
+	status    seerrclient.Status
+	statusErr error
+	reqs      []seerrclient.Request
+	reqsErr   error
+	servers   []seerrclient.Server
+	srvErr    error
+	title     string
+	titleErr  error
+}
+
+func (s *stubSeerrClient) Status(context.Context, string, string) (seerrclient.Status, error) {
+	return s.status, s.statusErr
+}
+
+func (s *stubSeerrClient) ProcessingRequests(context.Context, string, string) ([]seerrclient.Request, error) {
+	return s.reqs, s.reqsErr
+}
+
+func (s *stubSeerrClient) Servers(context.Context, string, string) ([]seerrclient.Server, error) {
+	return s.servers, s.srvErr
+}
+
+func (s *stubSeerrClient) Title(context.Context, string, string, domain.SeerrMediaType, int) (string, error) {
+	if s.title != "" {
+		return s.title, s.titleErr
+	}
+	return "Test Title", s.titleErr
+}
+
+type stubResolver struct {
+	entityID int64
+	found    bool
+	err      error
+}
+
+func (r stubResolver) EntityByExternalID(context.Context, domain.AppKind, string, string, int, int) (int64, bool, error) {
+	return r.entityID, r.found, r.err
+}
+
+type fakeCleanuparrServer struct {
+	srv    *httptest.Server
+	URL    string
+	writes atomic.Int64
+	fail   atomic.Bool
+}
+
+func (s *fakeCleanuparrServer) setFail(fail bool) {
+	s.fail.Store(fail)
+}
+
+func (s *fakeCleanuparrServer) setUnreachable() {
+	s.fail.Store(true)
+	s.srv.Close()
+}
+
+func (s *fakeCleanuparrServer) assertNoWrites(t *testing.T) {
+	t.Helper()
+	if n := s.writes.Load(); n > 0 {
+		t.Fatalf("ADR-0007 violation: expected 0 writes to cleanuparr, got %d", n)
+	}
+}
+
+func newFakeCleanuparrServer(t *testing.T) *fakeCleanuparrServer {
+	t.Helper()
+	s := &fakeCleanuparrServer{}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/status", s.handleStatus(t))
+	mux.HandleFunc("/api/strikes/recent", s.handleRecent(t))
+	mux.HandleFunc("/api/strikes", s.handleStrikes(t))
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			s.writes.Add(1)
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		if s.fail.Load() {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		mux.ServeHTTP(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	s.srv = srv
+	s.URL = srv.URL
+	return s
+}
+
+func (s *fakeCleanuparrServer) handleStatus(t *testing.T) http.HandlerFunc {
+	t.Helper()
+	return func(w http.ResponseWriter, _ *http.Request) {
+		writeCleanupJSON(t, w, map[string]any{
+			"application": map[string]any{
+				"version":   "1.4.0",
+				"startTime": "2026-09-20T08:00:00.1234567+00:00",
+				"upTime":    "1.02:03:04",
+			},
+			"mediaManagers": map[string]any{
+				"Sonarr": map[string]any{"instanceCount": 1},
+			},
+		})
+	}
+}
+
+func (s *fakeCleanuparrServer) handleRecent(t *testing.T) http.HandlerFunc {
+	t.Helper()
+	return func(w http.ResponseWriter, _ *http.Request) {
+		writeCleanupJSON(t, w, []map[string]any{
+			{
+				"id":         "s1",
+				"type":       "Stalled",
+				"createdAt":  "2026-09-21T10:00:00Z",
+				"downloadId": "d1",
+				"title":      "Sample Strike",
+				"isDryRun":   false,
+			},
+		})
+	}
+}
+
+func (s *fakeCleanuparrServer) handleStrikes(t *testing.T) http.HandlerFunc {
+	t.Helper()
+	return func(w http.ResponseWriter, r *http.Request) {
+		items := []map[string]any{
+			{"isMarkedForRemoval": true, "isRemoved": false, "isReturning": false},
+			{"isMarkedForRemoval": true, "isRemoved": false, "isReturning": false},
+			{"isMarkedForRemoval": false, "isRemoved": true, "isReturning": false},
+			{"isMarkedForRemoval": false, "isRemoved": true, "isReturning": false},
+			{"isMarkedForRemoval": false, "isRemoved": true, "isReturning": false},
+		}
+		writeCleanupJSON(t, w, map[string]any{
+			"items":      items,
+			"page":       r.URL.Query().Get("page"),
+			"pageSize":   500,
+			"totalCount": 5,
+			"totalPages": 1,
+		})
+	}
+}
+
+func writeCleanupJSON(t *testing.T, w http.ResponseWriter, v any) {
+	t.Helper()
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		t.Errorf("writeCleanupJSON: %v", err)
+	}
+}
+
+type integrationFixture struct {
+	h             *Handlers
+	st            *store.Store
+	clk           *clockwork.FakeClock
+	probe         *stubProber
+	sessMgr       *session.Manager
+	admin         domain.User
+	viewer        domain.User
+	dlSnap        *stubSnapshotter
+	dlDisc        *stubDiscoverer
+	seerrClient   *stubSeerrClient
+	cleanupServer *fakeCleanuparrServer
+	seerrResolver *stubResolver
+}
+
+func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Generator, authSvc *auth.Service, sessMgr *session.Manager, probe *stubProber, dlSnap dlclients.Snapshotter, dlDisc arrclient.Discoverer, m *metrics.Metrics, logger *slog.Logger, seerrClient *stubSeerrClient, cleanupClient cleanuparrclient.Client, res *stubResolver) *Handlers {
 	t.Helper()
 	enc, err := crypto.NewEncryptor(bytes.Repeat([]byte{0x42}, 32))
 	if err != nil {
@@ -68,28 +261,36 @@ func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Genera
 	planner := snatch.NewPlanner(st, clk, runs, rec, logger, m, snatch.AllowAll{})
 	schedules := snatch.NewSchedules(st, clk, ids)
 	settingsSvc := settings.New(st, clk)
+	clients := dlclients.New(st, enc, clk, ids, dlSnap, dlDisc, instSvc, logger)
+	seerrSvc := seerr.New(st, enc, clk, ids, seerrClient, res, instSvc, runs, rec, logger)
+	cleanupSvc := cleanuparr.New(st, enc, clk, ids, cleanupClient, logger)
 	cfg := config.Options{
 		Profile: config.ProfileDev,
 		Session: config.SessionOptions{TTL: 8 * time.Hour, Secure: false},
 	}
+	configarrSvc := configarr.New(cfg, instSvc, probe, clk, logger)
 	build := buildinfo.Info{Version: "test-ver", Commit: "test-commit", Date: "2026-10-14"}
 	return &Handlers{
-		build:     build,
-		cfg:       cfg,
-		clk:       clk,
-		auth:      authSvc,
-		sessions:  sessMgr,
-		instances: instSvc,
-		policies:  polSvc,
-		runs:      runs,
-		workers:   workers,
-		rec:       rec,
-		budget:    budget,
-		memory:    memory,
-		planner:   planner,
-		schedules: schedules,
-		settings:  settingsSvc,
-		logger:    logger,
+		build:      build,
+		cfg:        cfg,
+		clk:        clk,
+		auth:       authSvc,
+		sessions:   sessMgr,
+		instances:  instSvc,
+		policies:   polSvc,
+		runs:       runs,
+		workers:    workers,
+		rec:        rec,
+		budget:     budget,
+		memory:     memory,
+		planner:    planner,
+		schedules:  schedules,
+		clients:    clients,
+		settings:   settingsSvc,
+		configarr:  configarrSvc,
+		seerr:      seerrSvc,
+		cleanuparr: cleanupSvc,
+		logger:     logger,
 	}
 }
 
@@ -114,16 +315,35 @@ func newIntegrationFixture(t *testing.T) *integrationFixture {
 		t.Fatalf("newIntegrationFixture: session.NewManager: %v", err)
 	}
 	probe := &stubProber{res: arrclient.Result{AppName: "Sonarr", Version: "4.0.10.2544"}}
+	dlSnap := &stubSnapshotter{
+		snap: dlclients.Snapshot{
+			Reachable: true,
+			Version:   "4.5.2",
+			Active:    1,
+			Queued:    2,
+		},
+		clk: clk,
+	}
+	dlDisc := &stubDiscoverer{}
 	m, _ := metricstest.New(t)
-	h := buildHandlers(t, st, clk, ids, authSvc, sessMgr, probe, m, logger)
+	seerrClient := &stubSeerrClient{status: seerrclient.Status{Version: "2.1.0"}}
+	cleanupServer := newFakeCleanuparrServer(t)
+	cleanupClient := cleanuparrclient.New(5*time.Second, "snatcharr-test")
+	res := &stubResolver{entityID: 42, found: true}
+	h := buildHandlers(t, st, clk, ids, authSvc, sessMgr, probe, dlSnap, dlDisc, m, logger, seerrClient, cleanupClient, res)
 	return &integrationFixture{
-		h:       h,
-		st:      st,
-		clk:     clk,
-		probe:   probe,
-		sessMgr: sessMgr,
-		admin:   domain.User{ID: uuid.New(), Username: "admin", Role: domain.RoleAdmin},
-		viewer:  domain.User{ID: uuid.New(), Username: "viewer", Role: domain.RoleViewer},
+		h:             h,
+		st:            st,
+		clk:           clk,
+		probe:         probe,
+		sessMgr:       sessMgr,
+		admin:         domain.User{ID: uuid.New(), Username: "admin", Role: domain.RoleAdmin},
+		viewer:        domain.User{ID: uuid.New(), Username: "viewer", Role: domain.RoleViewer},
+		dlSnap:        dlSnap,
+		dlDisc:        dlDisc,
+		seerrClient:   seerrClient,
+		cleanupServer: cleanupServer,
+		seerrResolver: res,
 	}
 }
 
@@ -167,6 +387,81 @@ func validScheduleInput() oas.ScheduleInput {
 		Action:   oas.ScheduleInputActionCapOverride,
 		CapValue: oas.NewOptInt(15),
 		Enabled:  true,
+	}
+}
+
+var testRequestSeq atomic.Int32
+
+func seedTestSeerrLink(t *testing.T, f *integrationFixture) domain.SeerrLink {
+	t.Helper()
+	link, err := f.h.seerr.Create(t.Context(), seerr.Input{
+		Name:    "storetest-seerr-" + uuid.NewString(),
+		BaseURL: "http://" + uuid.NewString() + ".invalid:5055",
+		APIKey:  "secret-seerr-key",
+		Enabled: true,
+	})
+	if err != nil {
+		t.Fatalf("seedTestSeerrLink: %v", err)
+	}
+	return link
+}
+
+func seedTestCleanuparrLink(t *testing.T, f *integrationFixture) domain.CleanuparrLink {
+	t.Helper()
+	link, err := f.h.cleanuparr.Create(t.Context(), cleanuparr.Input{
+		Name:    "storetest-cleanuparr-" + uuid.NewString(),
+		BaseURL: f.cleanupServer.URL,
+		APIKey:  "secret-cleanup-key",
+		Enabled: true,
+	})
+	if err != nil {
+		t.Fatalf("seedTestCleanuparrLink: %v", err)
+	}
+	return link
+}
+
+func seedTestSeerrRequest(t *testing.T, f *integrationFixture, linkID uuid.UUID, instID *uuid.UUID, entityID *int64) int {
+	t.Helper()
+	reqID := int(testRequestSeq.Add(1))
+	now := f.clk.Now()
+	err := f.st.Q().UpsertSeerrRequest(t.Context(), sqlcgen.UpsertSeerrRequestParams{
+		LinkID:        linkID,
+		RequestID:     int32(reqID),
+		MediaType:     string(domain.SeerrMovie),
+		TmdbID:        int32(1000 + reqID),
+		TvdbID:        0,
+		Title:         fmt.Sprintf("Movie %d", reqID),
+		RequestStatus: 2,
+		MediaStatus:   3,
+		Is4k:          false,
+		RequestedBy:   "alice",
+		Seasons:       []int32{},
+		InstanceID:    instID,
+		EntityID:      entityID,
+		RequestedAt:   &now,
+		LastSeenAt:    now,
+	})
+	if err != nil {
+		t.Fatalf("seedTestSeerrRequest: %v", err)
+	}
+	return reqID
+}
+
+func validSeerrLinkInput() oas.SeerrLinkInput {
+	return oas.SeerrLinkInput{
+		Name:    "overseerr-main",
+		BaseURL: "http://seerr.invalid:5055",
+		APIKey:  oas.NewOptString("valid-seerr-key"),
+		Enabled: oas.NewOptBool(true),
+	}
+}
+
+func validCleanuparrLinkInput() oas.CleanuparrLinkInput {
+	return oas.CleanuparrLinkInput{
+		Name:    "cleanuparr-main",
+		BaseURL: "http://cleanuparr.invalid:5060",
+		APIKey:  oas.NewOptString("valid-cleanup-key"),
+		Enabled: oas.NewOptBool(true),
 	}
 }
 
