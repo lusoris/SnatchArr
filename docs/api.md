@@ -17,6 +17,9 @@ types are generated from the same file. Errors are RFC 9457 problem details
   Unsafe methods need the `X-CSRF-Token` header, which `GET /api/v1/auth/session` returns.
 - **API keys**: `Authorization: Bearer sk_...` on any request; no CSRF token needed.
 
+The Server-Sent Events stream `GET /api/v1/events/stream` is served outside the generated
+router and takes the same session cookie or API key; without either it answers 401.
+
 The first start has no users; `GET /api/v1/auth/setup/status` says so and
 `POST /api/v1/auth/setup` creates the admin.
 

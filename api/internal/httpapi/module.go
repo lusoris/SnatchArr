@@ -7,6 +7,7 @@ package httpapi
 import (
 	"fmt"
 	"log/slog"
+	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/fx"
@@ -41,6 +42,15 @@ func Mount(r chi.Router, p MountParams) error {
 	}
 	r.With(withHTTP, csrfUnlessBearer(p.CSRF)).Handle(PathPrefix+"/*", srv)
 	return nil
+}
+
+// StreamPath serves the Server-Sent Events stream. It lives outside the generated router.
+const StreamPath = PathPrefix + "/events/stream"
+
+// MountStream serves the event stream behind the session or API-key check of the
+// OpenAPI operations.
+func MountStream(r chi.Router, p MountParams, stream http.Handler) {
+	r.With(p.Security.RequireUser(p.Logger)).Handle(StreamPath, stream)
 }
 
 // Module provides the handlers and security resolver. Mounting is the app's job.
