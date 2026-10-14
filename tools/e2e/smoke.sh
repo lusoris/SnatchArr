@@ -96,8 +96,19 @@ check_image_user() {
     esac
     echo "smoke: $role image user is $user"
 }
+# check_image_ca IMAGE: the api's Go TLS stack reads the image's CA bundle for outbound
+# HTTPS (*arr, Seerr, Cleanuparr); the worker embeds webpki roots and needs none.
+check_image_ca() {
+    local image=$1 c="smoke-api-ca-$$" bundle=/etc/ssl/certs/ca-certificates.crt count
+    CONTAINERS+=("$c")
+    docker create --name "$c" "$image" >/dev/null 2>&1 || fail "cannot create container from api image $image"
+    docker cp "$c:$bundle" "$LOG_DIR/ca.crt" >/dev/null 2>&1 || fail "api image $image has no CA bundle at $bundle"
+    count=$(grep -c 'BEGIN CERTIFICATE' "$LOG_DIR/ca.crt") || fail "api image $image CA bundle $bundle holds no certificate"
+    echo "smoke: api image CA bundle holds $count certificates"
+}
 if [ -n "${SMOKE_API_IMAGE:-}" ]; then
     check_image_user api "$SMOKE_API_IMAGE"
+    check_image_ca "$SMOKE_API_IMAGE"
 fi
 if [ -n "${SMOKE_WORKER_IMAGE:-}" ]; then
     check_image_user worker "$SMOKE_WORKER_IMAGE"

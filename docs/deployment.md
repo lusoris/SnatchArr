@@ -255,6 +255,7 @@ processes on the host.
 - Builds `snatcharr-api:e2e` (with embedded SvelteKit SPA) and `snatcharr-worker:e2e` (Rust musl binary).
 - Runs `tools/e2e/smoke.sh` in image mode against a temporary Postgres container (`tools/e2e/postgres.sh`).
 - Proves distroless non-root execution (user `65532:65532`, `--read-only`, `--cap-drop ALL`, `no-new-privileges`).
+- Proves the api image carries the CA bundle (`/etc/ssl/certs/ca-certificates.crt`) its outbound HTTPS calls read; the worker embeds its root certificates.
 - Proves the embedded SvelteKit SPA serves `index.html` (text/html with SvelteKit markers) and hashed static assets (`/_app/immutable/...`).
 - Proves runtime IANA time zone database availability by creating a disabled schedule window in `Europe/Berlin`: the API validates the zone with the image's zone data, since the binary embeds none.
 - Proves multi-worker run leasing, stamina caps, afterglow deduplication, and liveness probes.
