@@ -27,6 +27,7 @@ api-security api
 api-openapi api
 worker worker
 e2e api,worker,proto
+image-smoke api,worker,proto,web
 web web
 proto proto
 deploy deploy

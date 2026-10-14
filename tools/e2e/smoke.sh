@@ -18,9 +18,13 @@
 set -euo pipefail
 
 : "${SMOKE_DSN:?set SMOKE_DSN to a Postgres DSN (make e2e-smoke does)}"
-: "${SMOKE_API_BIN:?path to the snatcharr binary}"
-: "${SMOKE_WORKER_BIN:?path to the snatch-worker binary}"
 : "${SMOKE_FAKEARR_BIN:?path to the fakearr binary}"
+if [ -z "${SMOKE_API_IMAGE:-}" ]; then
+    : "${SMOKE_API_BIN:?path to the snatcharr binary}"
+fi
+if [ -z "${SMOKE_WORKER_IMAGE:-}" ]; then
+    : "${SMOKE_WORKER_BIN:?path to the snatch-worker binary}"
+fi
 
 # free_port START: the first port from START on which nothing listens (at most 50 tried).
 free_port() {
@@ -38,7 +42,7 @@ RADARR_PORT=$(free_port "${SMOKE_RADARR_PORT:-17878}")
 API_PORT=$(free_port "${SMOKE_API_PORT:-18080}")
 GRPC_PORT=$(free_port "${SMOKE_GRPC_PORT:-19090}")
 # Two workers on one host: each needs its own health listener port.
-W1_HTTP_PORT=$(free_port "${SMOKE_WORKER_HTTP_PORT:-18081}")
+W1_HTTP_PORT=$(free_port "${SMOKE_WORKER_HTTP_PORT:-$((API_PORT + 1))}")
 W2_HTTP_PORT=$(free_port "$((W1_HTTP_PORT + 1))")
 CAP=3       # hourly cap per instance
 PER_CYCLE=5 # items one snatch wants: more than the cap, so the cap binds
@@ -50,9 +54,16 @@ TOKEN=smoke-worker-token
 
 LOG_DIR=$(mktemp -d)
 PIDS=()
+CONTAINERS=()
 
 cleanup() {
-    local code=$? pid
+    local code=$? pid c
+    for c in "${CONTAINERS[@]}"; do
+        # --rm containers may already be gone after a stop.
+        if docker inspect "$c" >/dev/null 2>&1 && ! docker rm -f "$c" >/dev/null 2>&1; then
+            echo "smoke: could not remove container $c" >&2
+        fi
+    done
     for pid in "${PIDS[@]}"; do
         # A service that already exited cannot be signalled; a signalled one exits non-zero.
         if kill "$pid" 2>/dev/null && ! wait "$pid" 2>/dev/null; then
@@ -74,6 +85,23 @@ fail() {
     echo "smoke: assertion failed: $*" >&2
     exit 1
 }
+
+# check_image_user ROLE IMAGE: verify the distroless image user is 65532.
+check_image_user() {
+    local role=$1 image=$2 user
+    user=$(docker inspect -f '{{.Config.User}}' "$image" 2>/dev/null) || fail "cannot inspect user of $role image $image"
+    case "$user" in
+        65532 | 65532:65532) ;;
+        *) fail "$role image $image user is '$user', want 65532 or 65532:65532" ;;
+    esac
+    echo "smoke: $role image user is $user"
+}
+if [ -n "${SMOKE_API_IMAGE:-}" ]; then
+    check_image_user api "$SMOKE_API_IMAGE"
+fi
+if [ -n "${SMOKE_WORKER_IMAGE:-}" ]; then
+    check_image_user worker "$SMOKE_WORKER_IMAGE"
+fi
 
 # start NAME COMMAND...: run a service in the background, logging to $LOG_DIR/NAME.log.
 start() {
@@ -116,23 +144,95 @@ start radarr "$SMOKE_FAKEARR_BIN" -addr "127.0.0.1:$RADARR_PORT" -kind radarr -a
 # Five missing episodes: all of one series, spread over SERIES_COST seasons.
 start sonarr_series "$SMOKE_FAKEARR_BIN" -addr "127.0.0.1:$SONARR_SERIES_PORT" -kind sonarr -api-key "$FAKE_KEY" -missing 5
 # No APP_CRYPTO_KEY: the dev profile must start on its development key (#138).
-start api env APP_SNATCHARR_PROFILE=dev APP_DB_DSN="$SMOKE_DSN" APP_SNATCHARR_WORKER_TOKEN="$TOKEN" \
-    APP_HTTP_ADDR="127.0.0.1:$API_PORT" APP_GRPC_LISTEN="127.0.0.1:$GRPC_PORT" "$SMOKE_API_BIN"
+if [ -n "${SMOKE_API_IMAGE:-}" ]; then
+    cname_api="smoke-api-$$"
+    CONTAINERS+=("$cname_api")
+    start api docker run --rm --init --network host --read-only \
+        --user 65532:65532 --cap-drop ALL --security-opt no-new-privileges \
+        --name "$cname_api" \
+        -e APP_SNATCHARR_PROFILE=dev \
+        -e APP_DB_DSN="$SMOKE_DSN" \
+        -e APP_SNATCHARR_WORKER_TOKEN="$TOKEN" \
+        -e APP_HTTP_ADDR="127.0.0.1:$API_PORT" \
+        -e APP_GRPC_LISTEN="127.0.0.1:$GRPC_PORT" \
+        "$SMOKE_API_IMAGE"
+else
+    start api env APP_SNATCHARR_PROFILE=dev APP_DB_DSN="$SMOKE_DSN" APP_SNATCHARR_WORKER_TOKEN="$TOKEN" \
+        APP_HTTP_ADDR="127.0.0.1:$API_PORT" APP_GRPC_LISTEN="127.0.0.1:$GRPC_PORT" "$SMOKE_API_BIN"
+fi
 wait_http "http://127.0.0.1:$SONARR_PORT/healthz"
 wait_http "http://127.0.0.1:$RADARR_PORT/healthz"
 wait_http "http://127.0.0.1:$SONARR_SERIES_PORT/healthz"
 wait_http "$API/system/status"
-start w1 env SNATCH_WORKER_ID=w1 SNATCH_API_GRPC="http://127.0.0.1:$GRPC_PORT" \
-    SNATCH_WORKER_TOKEN="$TOKEN" SNATCH_CONCURRENCY=1 SNATCH_LEASE_WAIT_SECS=5 \
-    SNATCH_HTTP_ADDR="127.0.0.1:$W1_HTTP_PORT" "$SMOKE_WORKER_BIN"
-start w2 env SNATCH_WORKER_ID=w2 SNATCH_API_GRPC="http://127.0.0.1:$GRPC_PORT" \
-    SNATCH_WORKER_TOKEN="$TOKEN" SNATCH_CONCURRENCY=1 SNATCH_LEASE_WAIT_SECS=5 \
-    SNATCH_HTTP_ADDR="127.0.0.1:$W2_HTTP_PORT" "$SMOKE_WORKER_BIN"
+
+if [ -n "${SMOKE_API_IMAGE:-}" ]; then
+    spa_headers="$LOG_DIR/spa_headers.txt"
+    spa_body="$LOG_DIR/spa_body.html"
+    status=$(curl -sS --max-time 10 -D "$spa_headers" -o "$spa_body" -w "%{http_code}" "http://127.0.0.1:$API_PORT/") ||
+        fail "SPA root GET failed"
+    [ "$status" = "200" ] || fail "SPA root returned HTTP $status, want 200"
+    grep -qi '^content-type:[[:space:]]*text/html' "$spa_headers" ||
+        fail "SPA root Content-Type is not text/html"
+    grep -q 'data-sveltekit-preload-data="hover"' "$spa_body" ||
+        fail "SPA root does not contain SvelteKit marker data-sveltekit-preload-data=\"hover\""
+    asset_path=$(grep -oE '/_app/immutable/[^"'\'' >]+' "$spa_body" | head -n 1)
+    [ -n "$asset_path" ] || fail "SPA root body references no /_app/immutable/ hashed asset"
+    asset_status=$(curl -sS --max-time 10 -o /dev/null -w "%{http_code}" "http://127.0.0.1:$API_PORT$asset_path") ||
+        fail "failed to GET SPA hashed asset $asset_path"
+    [ "$asset_status" = "200" ] || fail "SPA hashed asset $asset_path returned HTTP $asset_status, want 200"
+    echo "smoke: SPA root (200, text/html) and hashed asset $asset_path (200) verified"
+fi
+
+if [ -n "${SMOKE_WORKER_IMAGE:-}" ]; then
+    cname_w1="smoke-w1-$$"
+    CONTAINERS+=("$cname_w1")
+    start w1 docker run --rm --init --network host --read-only \
+        --user 65532:65532 --cap-drop ALL --security-opt no-new-privileges \
+        --name "$cname_w1" \
+        -e SNATCH_WORKER_ID=w1 \
+        -e SNATCH_API_GRPC="http://127.0.0.1:$GRPC_PORT" \
+        -e SNATCH_WORKER_TOKEN="$TOKEN" \
+        -e SNATCH_CONCURRENCY=1 \
+        -e SNATCH_LEASE_WAIT_SECS=5 \
+        -e SNATCH_HTTP_ADDR="127.0.0.1:$W1_HTTP_PORT" \
+        "$SMOKE_WORKER_IMAGE"
+
+    cname_w2="smoke-w2-$$"
+    CONTAINERS+=("$cname_w2")
+    start w2 docker run --rm --init --network host --read-only \
+        --user 65532:65532 --cap-drop ALL --security-opt no-new-privileges \
+        --name "$cname_w2" \
+        -e SNATCH_WORKER_ID=w2 \
+        -e SNATCH_API_GRPC="http://127.0.0.1:$GRPC_PORT" \
+        -e SNATCH_WORKER_TOKEN="$TOKEN" \
+        -e SNATCH_CONCURRENCY=1 \
+        -e SNATCH_LEASE_WAIT_SECS=5 \
+        -e SNATCH_HTTP_ADDR="127.0.0.1:$W2_HTTP_PORT" \
+        "$SMOKE_WORKER_IMAGE"
+else
+    start w1 env SNATCH_WORKER_ID=w1 SNATCH_API_GRPC="http://127.0.0.1:$GRPC_PORT" \
+        SNATCH_WORKER_TOKEN="$TOKEN" SNATCH_CONCURRENCY=1 SNATCH_LEASE_WAIT_SECS=5 \
+        SNATCH_HTTP_ADDR="127.0.0.1:$W1_HTTP_PORT" "$SMOKE_WORKER_BIN"
+    start w2 env SNATCH_WORKER_ID=w2 SNATCH_API_GRPC="http://127.0.0.1:$GRPC_PORT" \
+        SNATCH_WORKER_TOKEN="$TOKEN" SNATCH_CONCURRENCY=1 SNATCH_LEASE_WAIT_SECS=5 \
+        SNATCH_HTTP_ADDR="127.0.0.1:$W2_HTTP_PORT" "$SMOKE_WORKER_BIN"
+fi
 
 # Setup wizard, then every call carries the session cookie and the CSRF token.
 token=$(api POST /auth/setup '{"username":"admin","password":"smoke-password-1234"}' | jq -r '.csrf_token // empty')
 [ -n "$token" ] || fail "setup returned no csrf_token"
 CSRF=(-H "X-CSRF-Token: $token")
+
+if [ -n "${SMOKE_API_IMAGE:-}" ]; then
+    # Create validates tz with time.LoadLocation and the binary embeds no tzdata, so this
+    # proves the runtime image's zone data. Disabled: a live pause window would make the
+    # snatch steps below depend on the clock.
+    sched_payload='{"name":"smoke-berlin","days":[1,2,3,4,5],"start":"08:00","end":"17:00","tz":"Europe/Berlin","action":"pause","enabled":false}'
+    if ! sched_id=$(api POST /schedules "$sched_payload" | jq -r '.id // empty') || [ -z "$sched_id" ]; then
+        fail "failed to create schedule with tz Europe/Berlin"
+    fi
+    echo "smoke: schedule created with tz Europe/Berlin (id: $sched_id)"
+fi
 
 # instance KIND PORT [NAME [POLICY]]: create an instance on fakearr and change its policy with
 # the jq filter POLICY (default: the smoke cap and per-cycle count); prints its id.

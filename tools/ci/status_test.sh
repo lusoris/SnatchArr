@@ -18,7 +18,7 @@ trap 'rm -rf "$WORK"' EXIT
 # Every job ran and succeeded; the change filter selected every component.
 ALL="$(jq -n '
   [ "workflows", "secret-scan", "semgrep", "trivy", "changes", "commits", "api-lint", "api-test", "api-security", "api-openapi",
-    "worker", "e2e", "web", "proto", "deploy", "contracts", "governance", "docs" ]
+    "worker", "e2e", "image-smoke", "web", "proto", "deploy", "contracts", "governance", "docs" ]
   | map({key: ., value: {result: "success", outputs: {}}}) | from_entries
   | .changes.outputs = ( [ "api", "worker", "web", "proto", "deploy", "governance", "contracts", "docs" ]
                          | map({key: ., value: "true"}) | from_entries )
@@ -26,7 +26,7 @@ ALL="$(jq -n '
 # No component selected: every filtered job is skipped.
 NONE="$(printf '%s' "$ALL" | jq '
   .changes.outputs |= map_values("false")
-  | (.["api-lint"], .["api-test"], .["api-security"], .["api-openapi"], .worker, .e2e, .web,
+  | (.["api-lint"], .["api-test"], .["api-security"], .["api-openapi"], .worker, .e2e, .["image-smoke"], .web,
      .proto, .deploy, .contracts, .governance, .docs).result = "skipped"
 ')"
 
@@ -58,7 +58,7 @@ expect 0 "every job ran" true "$ALL"
 expect 0 "no component changed" true "$NONE"
 expect 0 "bot pull request or push: commits skipped" false "$NONE" '.commits.result = "skipped"'
 expect 0 "only proto changed: e2e ran, the api jobs did not" true "$NONE" \
-  '.changes.outputs.proto = "true" | (.proto, .e2e).result = "success"'
+  '.changes.outputs.proto = "true" | (.proto, .e2e, .["image-smoke"]).result = "success"'
 
 expect 1 "workflows failed" true "$ALL" '.workflows.result = "failure"' "job workflows: failure, must succeed"
 expect 1 "workflows skipped" true "$NONE" '.workflows.result = "skipped"' "job workflows: skipped, must succeed"
@@ -67,7 +67,7 @@ expect 1 "changes failed, the rest skipped" true "$NONE" \
 expect 1 "api selected, api-test skipped" true "$ALL" \
   '.["api-test"].result = "skipped"' "job api-test: skipped, must succeed"
 expect 1 "only proto changed, e2e skipped" true "$NONE" \
-  '.changes.outputs.proto = "true" | .proto.result = "success"' "job e2e: skipped, must succeed"
+  '.changes.outputs.proto = "true" | (.proto, .["image-smoke"]).result = "success"' "job e2e: skipped, must succeed"
 expect 1 "docs changed, docs skipped" true "$NONE" \
   '.changes.outputs.docs = "true"' "job docs: skipped, must succeed"
 expect 1 "web cancelled" true "$ALL" '.web.result = "cancelled"' "job web: cancelled, must succeed"
