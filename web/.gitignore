@@ -23,6 +23,7 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 # Playwright
 test-results
+e2e/.auth/
 
 # Generated (paraglide messages, coverage, e2e reports)
 src/lib/paraglide/
