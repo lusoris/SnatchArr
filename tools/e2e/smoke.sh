@@ -2,9 +2,9 @@
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
 #
-# End-to-end smoke test (#19): Postgres, the API, two workers and three fakearr instances
-# (Sonarr, Radarr and a Sonarr searched by whole series). It drives the API like a user and
-# proves that lease, stamina and dispatch work together:
+# End-to-end smoke test (#19): Postgres, the API, two workers and four fakearr instances
+# (Sonarr, Radarr, a Sonarr searched by whole series, and a Radarr for cutoff upgrades). It
+# drives the API like a user and proves that lease, stamina and dispatch work together:
 #   a. each instance searches exactly its hourly cap, although every snatch wants more;
 #   b. /hourly-caps reports what fakearr actually received, per instance;
 #   c. both workers leased runs;
@@ -13,7 +13,9 @@
 #   f. a whole-series search that does not fit the cap is not sent and costs no stamina; once
 #      the cap fits it, it is sent once and costs exactly its seasons (#142);
 #   g. each worker's health listener answers /livez with 200 and /metrics with the API failure
-#      counter, and /system/status reports the workers' last contact (A1-01).
+#      counter, and /system/status reports the workers' last contact (A1-01);
+#   h. an upgrade snatch searches only cutoff-unmet items up to its cap, records stamina,
+#      avoids repeats, and records kind upgrade on completed runs (C10-01).
 # `make e2e-smoke` builds the binaries and provides Postgres. Needs curl and jq.
 set -euo pipefail
 
@@ -39,6 +41,7 @@ free_port() {
 SONARR_PORT=$(free_port "${SMOKE_SONARR_PORT:-18989}")
 SONARR_SERIES_PORT=$(free_port "${SMOKE_SONARR_SERIES_PORT:-18990}")
 RADARR_PORT=$(free_port "${SMOKE_RADARR_PORT:-17878}")
+RADARR_UPGRADE_PORT=$(free_port "${SMOKE_RADARR_UPGRADE_PORT:-$((RADARR_PORT + 1))}")
 API_PORT=$(free_port "${SMOKE_API_PORT:-18080}")
 GRPC_PORT=$(free_port "${SMOKE_GRPC_PORT:-19090}")
 # Two workers on one host: each needs its own health listener port.
@@ -152,6 +155,7 @@ searched() {
 
 start sonarr "$SMOKE_FAKEARR_BIN" -addr "127.0.0.1:$SONARR_PORT" -kind sonarr -api-key "$FAKE_KEY"
 start radarr "$SMOKE_FAKEARR_BIN" -addr "127.0.0.1:$RADARR_PORT" -kind radarr -api-key "$FAKE_KEY"
+start radarr_upgrade "$SMOKE_FAKEARR_BIN" -addr "127.0.0.1:$RADARR_UPGRADE_PORT" -kind radarr -api-key "$FAKE_KEY" -missing 8 -cutoff 8
 # Five missing episodes: all of one series, spread over SERIES_COST seasons.
 start sonarr_series "$SMOKE_FAKEARR_BIN" -addr "127.0.0.1:$SONARR_SERIES_PORT" -kind sonarr -api-key "$FAKE_KEY" -missing 5
 # No APP_CRYPTO_KEY: the dev profile must start on its development key (#138).
@@ -173,6 +177,7 @@ else
 fi
 wait_http "http://127.0.0.1:$SONARR_PORT/healthz"
 wait_http "http://127.0.0.1:$RADARR_PORT/healthz"
+wait_http "http://127.0.0.1:$RADARR_UPGRADE_PORT/healthz"
 wait_http "http://127.0.0.1:$SONARR_SERIES_PORT/healthz"
 wait_http "$API/system/status"
 
@@ -287,6 +292,8 @@ instance() {
 }
 sonarr_id=$(instance sonarr "$SONARR_PORT")
 radarr_id=$(instance radarr "$RADARR_PORT")
+radarr_upgrade_id=$(instance radarr "$RADARR_UPGRADE_PORT" smoke-radarr-upgrade \
+    ".hourly_cap = $CAP | .missing_per_cycle = 0 | .upgrade_per_cycle = $PER_CYCLE")
 # One stamina short of the series, so its search has to wait.
 series_id=$(instance sonarr "$SONARR_SERIES_PORT" smoke-sonarr-series \
     ".hourly_cap = $((SERIES_COST - 1)) | .missing_per_cycle = $PER_CYCLE | .sonarr_missing_mode = \"shows\"")
@@ -315,7 +322,8 @@ for _ in $(seq 1 "$ROUNDS"); do
     api POST "/instances/$sonarr_id/runs" '{"kind":"missing"}' >/dev/null
     api POST "/instances/$radarr_id/runs" '{"kind":"missing"}' >/dev/null
     api POST "/instances/$series_id/runs" '{"kind":"missing"}' >/dev/null
-    settle "$sonarr_id" "$radarr_id" "$series_id"
+    api POST "/instances/$radarr_upgrade_id/runs" '{"kind":"upgrade"}' >/dev/null
+    settle "$sonarr_id" "$radarr_id" "$series_id" "$radarr_upgrade_id"
 done
 
 caps=$(api GET /hourly-caps)
@@ -333,6 +341,28 @@ check_instance() {
 }
 check_instance sonarr "$sonarr_id" "$SONARR_PORT"
 check_instance radarr "$radarr_id" "$RADARR_PORT"
+
+check_upgrade() {
+    local ids count unique used runs_json runs_count bad_runs
+    ids=$(searched "$RADARR_UPGRADE_PORT")
+    count=$(printf '%s\n' "$ids" | sed '/^$/d' | wc -l)
+    unique=$(printf '%s\n' "$ids" | sed '/^$/d' | sort -u | wc -l)
+    used=$(printf '%s' "$caps" | jq --arg id "$radarr_upgrade_id" '[(. // [])[] | select(.instance_id == $id) | .used] | add // 0')
+    runs_json=$(api GET "/runs?instance_id=$radarr_upgrade_id")
+    runs_count=$(printf '%s' "$runs_json" | jq '[(. // [])[]] | length')
+    [ "$runs_count" -ge "$ROUNDS" ] || fail "h. smoke-radarr-upgrade has $runs_count run(s), want at least $ROUNDS"
+    bad_runs=$(printf '%s' "$runs_json" | jq '[(. // [])[] | select(.kind != "upgrade" or .status != "done")] | length')
+    [ "$bad_runs" -eq 0 ] || fail "h. smoke-radarr-upgrade has $bad_runs run(s) not kind=upgrade and status=done"
+    for id in $(printf '%s\n' "$ids" | sed '/^$/d'); do
+        [ "$id" -ge 5000 ] || fail "h. smoke-radarr-upgrade searched item $id in missing range (< 5000)"
+        [ "$id" -lt 6000 ] || fail "h. smoke-radarr-upgrade searched item $id outside cutoff range"
+    done
+    [ "$count" -eq "$CAP" ] || fail "h. smoke-radarr-upgrade searched $count items, want exactly the cap $CAP"
+    [ "$unique" -eq "$count" ] || fail "h. smoke-radarr-upgrade searched an item twice ($count searches, $unique distinct)"
+    [ "$used" -eq "$count" ] || fail "h. /hourly-caps reports $used used for smoke-radarr-upgrade, fakearr received $count"
+    echo "smoke: smoke-radarr-upgrade searched $count cutoff items of cap $CAP; API reports $used used; kind upgrade and status done verified"
+}
+check_upgrade
 
 # used ID: stamina /hourly-caps reports as spent by the instance, read now.
 used() {
@@ -368,7 +398,7 @@ for _ in 1 2; do
 done
 check_series 1 "$SERIES_COST" "a cap of $SERIES_COST fits the series exactly once"
 
-runs=$(api GET "/runs?instance_id=$sonarr_id")$(api GET "/runs?instance_id=$radarr_id")$(api GET "/runs?instance_id=$series_id")
+runs=$(api GET "/runs?instance_id=$sonarr_id")$(api GET "/runs?instance_id=$radarr_id")$(api GET "/runs?instance_id=$series_id")$(api GET "/runs?instance_id=$radarr_upgrade_id")
 for worker in w1 w2; do
     leases=$(printf '%s' "$runs" | jq -s --arg w "$worker" '[.[][] | select(.leased_by == $w)] | length')
     [ "$leases" -gt 0 ] || fail "c. worker $worker leased no run"
