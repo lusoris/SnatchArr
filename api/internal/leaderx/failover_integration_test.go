@@ -29,6 +29,14 @@ func TestMain(m *testing.M) { os.Exit(storetest.Main(m)) }
 
 const defaultTestRetry = 200 * time.Millisecond
 
+// electionBound covers the first election, which also opens the pool connections; a loaded
+// race run (the pre-push gate runs every package at once) needs seconds, not one retry.
+const electionBound = 10 * time.Second
+
+// failoverBound caps a takeover or a loop stop at ten retry periods. The measured takeover is
+// logged; the bound only has to separate "bounded failover" from "no failover" under load.
+const failoverBound = 10 * defaultTestRetry
+
 // maxSamples bounds the sampler loop: 2000 ticks of 10 ms = 20 s, far above every test bound.
 const maxSamples = 2000
 
@@ -171,7 +179,6 @@ func TestLeaderFailover_MutualExclusionAndHealth(t *testing.T) {
 	poolB := openTestPool(t, poolA)
 
 	clk := clockwork.NewRealClock()
-	retry := defaultTestRetry
 	lockName := fmt.Sprintf("lock-%d-%s", os.Getpid(), t.Name())
 
 	loopA := newFakeLoop(nil)
@@ -185,7 +192,7 @@ func TestLeaderFailover_MutualExclusionAndHealth(t *testing.T) {
 
 	pollUntil(t, clk, func() bool {
 		return gateA.Running() || gateB.Running()
-	}, 3*retry, "one gate to become leader")
+	}, electionBound, "one gate to become leader")
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -211,7 +218,6 @@ func TestLeaderFailover_CleanShutdown(t *testing.T) {
 	poolB := openTestPool(t, poolA)
 
 	clk := clockwork.NewRealClock()
-	retry := defaultTestRetry
 	lockName := fmt.Sprintf("lock-%d-%s", os.Getpid(), t.Name())
 
 	loopA, loopB := newFakeLoop(nil), newFakeLoop(nil)
@@ -223,7 +229,7 @@ func TestLeaderFailover_CleanShutdown(t *testing.T) {
 
 	pollUntil(t, clk, func() bool {
 		return gateA.Running() || gateB.Running()
-	}, 3*retry, "initial leader election")
+	}, electionBound, "initial leader election")
 
 	leaderGate, followerGate := gateA, gateB
 	leaderLoop, followerLoop := loopA, loopB
@@ -239,9 +245,9 @@ func TestLeaderFailover_CleanShutdown(t *testing.T) {
 	pollUntil(t, clk, func() bool {
 		starts, stops := leaderLoop.counts()
 		return starts > 0 && starts == stops && !leaderGate.Running()
-	}, 3*retry, "leader loops to stop")
+	}, failoverBound, "leader loops to stop")
 
-	takeover := pollUntil(t, clk, followerGate.Running, 3*retry, "follower loops to start")
+	takeover := pollUntil(t, clk, followerGate.Running, failoverBound, "follower loops to start")
 	t.Logf("clean shutdown failover takeover: %v", takeover)
 
 	fStarts, fStops := followerLoop.counts()
@@ -270,7 +276,6 @@ func TestLeaderFailover_SessionLoss(t *testing.T) {
 	adminPool := openTestPool(t, poolA)
 
 	clk := clockwork.NewRealClock()
-	retry := defaultTestRetry
 	lockName := fmt.Sprintf("lock-%d-%s", os.Getpid(), t.Name())
 
 	loopA, loopB := newFakeLoop(nil), newFakeLoop(nil)
@@ -282,7 +287,7 @@ func TestLeaderFailover_SessionLoss(t *testing.T) {
 
 	pollUntil(t, clk, func() bool {
 		return gateA.Running() || gateB.Running()
-	}, 3*retry, "initial leader election")
+	}, electionBound, "initial leader election")
 
 	leaderGate, followerGate := gateA, gateB
 	cancelLeader := cancelA
@@ -307,19 +312,19 @@ func TestLeaderFailover_SessionLoss(t *testing.T) {
 		t.Fatalf("terminate advisory lock backend: terminated=%v, err=%v", terminated, err)
 	}
 
-	takeover := pollUntil(t, clk, followerGate.Running, 3*retry, "follower takeover")
+	takeover := pollUntil(t, clk, followerGate.Running, failoverBound, "follower takeover")
 	t.Logf("session loss failover takeover: %v", takeover)
 
 	// Old leader does not learn of server-side session termination on an idle socket. Hold for
 	// two retry periods so the sampler records the overlap, then cancel its context to simulate
 	// watchdog/supervisor termination of the severed replica.
-	time.Sleep(2 * retry)
+	time.Sleep(2 * defaultTestRetry)
 	cancelLeader()
 	lossObservedAt := clk.Now()
 
 	pollUntil(t, clk, func() bool {
 		return !leaderGate.Running()
-	}, 3*retry, "old leader to stop loops after loss observation")
+	}, failoverBound, "old leader to stop loops after loss observation")
 
 	samples := sampler.stopSampling()
 	overlap := overlapWindow(samples, terminatedAt)
@@ -363,7 +368,6 @@ func TestLeaderFailover_DistinctLockNames(t *testing.T) {
 	poolB := openTestPool(t, poolA)
 
 	clk := clockwork.NewRealClock()
-	retry := defaultTestRetry
 
 	nameA := fmt.Sprintf("distinct-lock-a-%d-%s", os.Getpid(), t.Name())
 	nameB := fmt.Sprintf("distinct-lock-b-%d-%s", os.Getpid(), t.Name())
@@ -377,7 +381,7 @@ func TestLeaderFailover_DistinctLockNames(t *testing.T) {
 
 	pollUntil(t, clk, func() bool {
 		return gateA.Running() && gateB.Running()
-	}, 3*retry, "both gates to run on distinct lock names")
+	}, electionBound, "both gates to run on distinct lock names")
 
 	sA, _ := loopA.counts()
 	sB, _ := loopB.counts()
