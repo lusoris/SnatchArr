@@ -29,6 +29,7 @@ worker worker
 e2e api,worker,proto
 image-smoke api,worker,proto,web
 web web
+web-e2e-api api,web
 proto proto
 deploy deploy
 contracts contracts
