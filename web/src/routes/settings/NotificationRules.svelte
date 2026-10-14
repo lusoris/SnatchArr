@@ -117,7 +117,7 @@ SPDX-License-Identifier: EUPL-1.2
 				<th scope="col">{m.rule_event_kind()}</th>
 				<th scope="col">{m.rule_threshold()}</th>
 				<th scope="col">{m.rule_channels()}</th>
-				<th scope="col"><span class="sr-only">Actions</span></th>
+				<th scope="col"><span class="sr-only">{m.action_actions()}</span></th>
 			</tr>
 		</thead>
 		<tbody>

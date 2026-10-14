@@ -81,7 +81,7 @@ SPDX-License-Identifier: EUPL-1.2
 				<th scope="col">{m.instance_source()}</th>
 				<th scope="col">{m.instance_enabled()}</th>
 				<th scope="col">{m.instance_last_check()}</th>
-				<th scope="col"><span class="sr-only">Actions</span></th>
+				<th scope="col"><span class="sr-only">{m.action_actions()}</span></th>
 			</tr>
 		</thead>
 		<tbody>
@@ -91,7 +91,13 @@ SPDX-License-Identifier: EUPL-1.2
 					<td>{instanceKindLabel(inst.kind, inst.last_seen_product)}</td>
 					<td class="break-all">{inst.base_url}</td>
 					<td>{inst.source}</td>
-					<td>{inst.enabled ? '✓' : '–'}</td>
+					<td>
+						{#if inst.enabled}
+							<span aria-hidden="true">✓</span><span class="sr-only">{m.instance_enabled()}</span>
+						{:else}
+							<span aria-hidden="true">–</span><span class="sr-only">{m.instance_disabled()}</span>
+						{/if}
+					</td>
 					<td><CheckState instance={inst} /></td>
 					<td>
 						<button

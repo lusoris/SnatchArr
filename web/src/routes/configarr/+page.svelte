@@ -106,14 +106,14 @@ SPDX-License-Identifier: EUPL-1.2
 	<TextField
 		id="configarr-config-path"
 		label={m.configarr_config_path()}
-		placeholder="/config/config.yml"
+		placeholder={m.configarr_config_path_placeholder()}
 		error={errors.config_path}
 		bind:value={configPath}
 	/>
 	<TextField
 		id="configarr-secrets-path"
 		label={m.configarr_secrets_path()}
-		placeholder="/config/secrets.yml"
+		placeholder={m.configarr_secrets_path_placeholder()}
 		error={errors.secrets_path}
 		bind:value={secretsPath}
 	/>
