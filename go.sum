@@ -222,8 +222,8 @@ github.com/golusoris/goenvoy/downloadclient/transmission/v2 v2.0.0 h1:JF0dwbzSZf
 github.com/golusoris/goenvoy/downloadclient/transmission/v2 v2.0.0/go.mod h1:MW8n/BIRh9ZaCTIiNdRsBfI6hnFAPQwNq3Vx7wzWrBk=
 github.com/golusoris/golusoris v0.16.4 h1:OQC8l5+XfAs+rlTxOczTh7drMpaYJT6LUDNoj1A+56c=
 github.com/golusoris/golusoris v0.16.4/go.mod h1:+NRGOJn29GYZrQhjZc48Rxm/Ge9K/JH1UhHRwNoYoaU=
-github.com/golusoris/golusoris/core v0.10.1 h1:p2GDNXmqBEThmEOioiWOcTyGCq++dmgCSfIOUNghYvg=
-github.com/golusoris/golusoris/core v0.10.1/go.mod h1:Hsh9HUjLr4zFtNwGy9Q8TmlhvL0Qd9P+RNuriocKJ+0=
+github.com/golusoris/golusoris/core v0.10.2 h1:oAPB/rVwBxr0BNzFuSvd5rGvcxOqijwZuPeKyrAVVoM=
+github.com/golusoris/golusoris/core v0.10.2/go.mod h1:uhsMs9H6YP5LS2JRVCuKrKP+c29SGqaZdZKBhwge3nA=
 github.com/google/brotli/go/cbrotli v0.0.0-20230829110029-ed738e842d2f h1:jopqB+UTSdJGEJT8tEqYyE29zN91fi2827oLET8tl7k=
 github.com/google/brotli/go/cbrotli v0.0.0-20230829110029-ed738e842d2f/go.mod h1:nOPhAkwVliJdNTkj3gXpljmWhjc4wCaVqbMJcPKWP4s=
 github.com/google/gnostic-models v0.7.1 h1:SisTfuFKJSKM5CPZkffwi6coztzzeYUhc3v4yxLWH8c=
