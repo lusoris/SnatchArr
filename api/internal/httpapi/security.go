@@ -82,22 +82,32 @@ func (s *Security) RequireUser(logger *slog.Logger) func(http.Handler) http.Hand
 	onErr := ErrorHandler(logger)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx, err := s.authenticate(r)
+			u, err := s.authenticate(r)
 			if err != nil {
 				onErr(r.Context(), w, r, err)
 				return
 			}
-			next.ServeHTTP(w, r.WithContext(ctx))
+			next.ServeHTTP(w, r.WithContext(withUser(r.Context(), u)))
 		})
 	}
 }
 
-// authenticate resolves a bearer API key when the request carries one, else the session
-// cookie. The scheme match is case-insensitive, as in the generated router.
-func (s *Security) authenticate(r *http.Request) (context.Context, error) {
+// authenticate resolves the user of a bearer API key when the request carries one, else
+// of the session cookie. The scheme match is case-insensitive, as in the generated router.
+func (s *Security) authenticate(r *http.Request) (domain.User, error) {
 	ctx := context.WithValue(r.Context(), ctxKeyRequest, r)
+	var err error
 	if scheme, token, ok := strings.Cut(r.Header.Get("Authorization"), " "); ok && strings.EqualFold(scheme, "Bearer") {
-		return s.HandleBearerAuth(ctx, "", oas.BearerAuth{Token: token})
+		ctx, err = s.HandleBearerAuth(ctx, "", oas.BearerAuth{Token: token})
+	} else {
+		ctx, err = s.HandleCookieAuth(ctx, "", oas.CookieAuth{})
 	}
-	return s.HandleCookieAuth(ctx, "", oas.CookieAuth{})
+	if err != nil {
+		return domain.User{}, err
+	}
+	u, ok := UserFrom(ctx)
+	if !ok {
+		return domain.User{}, fmt.Errorf("%w: no user attached", domain.ErrUnauthorized)
+	}
+	return u, nil
 }
