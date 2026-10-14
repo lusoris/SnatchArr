@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.8](https://github.com/lusoris/SnatchArr/compare/v0.1.7...v0.1.8) (2026-10-14)
+
+
+### Bug Fixes
+
+* **api:** check credentials on the event stream route ([#222](https://github.com/lusoris/SnatchArr/issues/222)) ([d3a9119](https://github.com/lusoris/SnatchArr/commit/d3a9119b7c0539a4e67235f60c65b22e96f5e08a))
+* **docker:** build the arm64 api binary for arm64 and smoke-test the images ([#220](https://github.com/lusoris/SnatchArr/issues/220)) ([52205ed](https://github.com/lusoris/SnatchArr/commit/52205ed02730f7178aaadccb700b2d985bf47b6e))
+
 ## [0.1.7](https://github.com/lusoris/SnatchArr/compare/v0.1.6...v0.1.7) (2026-10-14)
 
 
