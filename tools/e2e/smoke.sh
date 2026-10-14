@@ -245,6 +245,35 @@ if [ -n "${SMOKE_API_IMAGE:-}" ]; then
     echo "smoke: schedule created with tz Europe/Berlin (id: $sched_id)"
 fi
 
+# stream_probe [CURL_ARGS...]: status and media type of GET /events/stream. An open stream
+# never ends, so curl stops at its timeout (exit 28) after the headers.
+stream_probe() {
+    local out rc
+    if out=$(curl -sS --max-time 3 -o /dev/null -w '%{http_code} %{content_type}' "$@" "$API/events/stream" 2>/dev/null); then
+        rc=0
+    else
+        rc=$?
+    fi
+    case $rc in
+    0 | 28) printf '%s\n' "$out" ;;
+    *) fail "events stream probe: curl exit $rc" ;;
+    esac
+}
+
+# The event stream is served outside the generated router; it must refuse a caller
+# without a session as every other operation does.
+probe=$(stream_probe)
+case "$probe" in
+"401 application/problem+json"*) ;;
+*) fail "unauthenticated events stream answered '$probe', want 401 application/problem+json" ;;
+esac
+probe=$(stream_probe --cookie "$JAR")
+case "$probe" in
+"200 text/event-stream"*) ;;
+*) fail "authenticated events stream answered '$probe', want 200 text/event-stream" ;;
+esac
+echo "smoke: events stream answers 401 without a session and 200 with one"
+
 # instance KIND PORT [NAME [POLICY]]: create an instance on fakearr and change its policy with
 # the jq filter POLICY (default: the smoke cap and per-cycle count); prints its id.
 instance() {

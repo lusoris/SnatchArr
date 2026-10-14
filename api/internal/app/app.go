@@ -139,7 +139,7 @@ func mountHTTP(d httpDeps, api httpapi.MountParams) error {
 	if err := prom.Mount(d.Router, d.Reg); err != nil {
 		return fmt.Errorf("app: mount metrics: %w", err)
 	}
-	d.Router.Handle("/api/v1/events/stream", d.Events.Hub().Handler())
+	httpapi.MountStream(d.Router, api, d.Events.Hub().Handler())
 	if err := httpapi.Mount(d.Router, api); err != nil {
 		return err
 	}

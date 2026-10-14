@@ -7,6 +7,9 @@ package httpapi
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -70,4 +73,31 @@ func (s *Security) HandleBearerAuth(ctx context.Context, _ oas.OperationName, t 
 		return ctx, fmt.Errorf("%w: %w", domain.ErrUnauthorized, err)
 	}
 	return withUser(ctx, u), nil
+}
+
+// RequireUser guards a route served outside the generated router with the same session
+// or API-key check the OpenAPI operations get. A request without valid credentials gets a
+// 401 problem+json and never reaches next.
+func (s *Security) RequireUser(logger *slog.Logger) func(http.Handler) http.Handler {
+	onErr := ErrorHandler(logger)
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx, err := s.authenticate(r)
+			if err != nil {
+				onErr(r.Context(), w, r, err)
+				return
+			}
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+// authenticate resolves a bearer API key when the request carries one, else the session
+// cookie. The scheme match is case-insensitive, as in the generated router.
+func (s *Security) authenticate(r *http.Request) (context.Context, error) {
+	ctx := context.WithValue(r.Context(), ctxKeyRequest, r)
+	if scheme, token, ok := strings.Cut(r.Header.Get("Authorization"), " "); ok && strings.EqualFold(scheme, "Bearer") {
+		return s.HandleBearerAuth(ctx, "", oas.BearerAuth{Token: token})
+	}
+	return s.HandleCookieAuth(ctx, "", oas.CookieAuth{})
 }
