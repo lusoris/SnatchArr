@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golusoris/goenvoy/arr/v2"
 	"github.com/google/uuid"
 	"github.com/jonboulle/clockwork"
 
@@ -29,6 +30,8 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/buildinfo"
 	"github.com/lusoris/SnatchArr/api/internal/config"
+	"github.com/lusoris/SnatchArr/api/internal/configarr"
+	"github.com/lusoris/SnatchArr/api/internal/dlclients"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/events"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
@@ -41,6 +44,35 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/store/storetest"
 )
 
+type stubSnapshotter struct {
+	snap dlclients.Snapshot
+	clk  clock.Clock
+}
+
+func (s *stubSnapshotter) Snapshot(_ context.Context, c domain.DownloadClient, _ string) dlclients.Snapshot {
+	out := s.snap
+	if out.Name == "" {
+		out.Name = c.Name
+	}
+	if out.Kind == "" {
+		out.Kind = c.Kind
+	}
+	out.ClientID = c.ID
+	if out.CheckedAt.IsZero() && s.clk != nil {
+		out.CheckedAt = s.clk.Now()
+	}
+	return out
+}
+
+type stubDiscoverer struct {
+	res []arr.ProviderResource
+	err error
+}
+
+func (d *stubDiscoverer) DownloadClients(context.Context, domain.AppKind, string, string) ([]arr.ProviderResource, error) {
+	return d.res, d.err
+}
+
 type integrationFixture struct {
 	h       *Handlers
 	st      *store.Store
@@ -49,9 +81,11 @@ type integrationFixture struct {
 	sessMgr *session.Manager
 	admin   domain.User
 	viewer  domain.User
+	dlSnap  *stubSnapshotter
+	dlDisc  *stubDiscoverer
 }
 
-func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Generator, authSvc *auth.Service, sessMgr *session.Manager, probe *stubProber, m *metrics.Metrics, logger *slog.Logger) *Handlers {
+func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Generator, authSvc *auth.Service, sessMgr *session.Manager, probe *stubProber, dlSnap dlclients.Snapshotter, dlDisc arrclient.Discoverer, m *metrics.Metrics, logger *slog.Logger) *Handlers {
 	t.Helper()
 	enc, err := crypto.NewEncryptor(bytes.Repeat([]byte{0x42}, 32))
 	if err != nil {
@@ -68,10 +102,12 @@ func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Genera
 	planner := snatch.NewPlanner(st, clk, runs, rec, logger, m, snatch.AllowAll{})
 	schedules := snatch.NewSchedules(st, clk, ids)
 	settingsSvc := settings.New(st, clk)
+	clients := dlclients.New(st, enc, clk, ids, dlSnap, dlDisc, instSvc, logger)
 	cfg := config.Options{
 		Profile: config.ProfileDev,
 		Session: config.SessionOptions{TTL: 8 * time.Hour, Secure: false},
 	}
+	configarrSvc := configarr.New(cfg, instSvc, probe, clk, logger)
 	build := buildinfo.Info{Version: "test-ver", Commit: "test-commit", Date: "2026-10-14"}
 	return &Handlers{
 		build:     build,
@@ -88,7 +124,9 @@ func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Genera
 		memory:    memory,
 		planner:   planner,
 		schedules: schedules,
+		clients:   clients,
 		settings:  settingsSvc,
+		configarr: configarrSvc,
 		logger:    logger,
 	}
 }
@@ -114,8 +152,18 @@ func newIntegrationFixture(t *testing.T) *integrationFixture {
 		t.Fatalf("newIntegrationFixture: session.NewManager: %v", err)
 	}
 	probe := &stubProber{res: arrclient.Result{AppName: "Sonarr", Version: "4.0.10.2544"}}
+	dlSnap := &stubSnapshotter{
+		snap: dlclients.Snapshot{
+			Reachable: true,
+			Version:   "4.5.2",
+			Active:    1,
+			Queued:    2,
+		},
+		clk: clk,
+	}
+	dlDisc := &stubDiscoverer{}
 	m, _ := metricstest.New(t)
-	h := buildHandlers(t, st, clk, ids, authSvc, sessMgr, probe, m, logger)
+	h := buildHandlers(t, st, clk, ids, authSvc, sessMgr, probe, dlSnap, dlDisc, m, logger)
 	return &integrationFixture{
 		h:       h,
 		st:      st,
@@ -124,6 +172,8 @@ func newIntegrationFixture(t *testing.T) *integrationFixture {
 		sessMgr: sessMgr,
 		admin:   domain.User{ID: uuid.New(), Username: "admin", Role: domain.RoleAdmin},
 		viewer:  domain.User{ID: uuid.New(), Username: "viewer", Role: domain.RoleViewer},
+		dlSnap:  dlSnap,
+		dlDisc:  dlDisc,
 	}
 }
 
