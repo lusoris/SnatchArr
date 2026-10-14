@@ -2,11 +2,14 @@
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
 #
-# Planted cases for workflow-check.sh. Accepted: a commit pin whose comment names its tag, and
-# a commit pin whose comment names a branch (printed as a note). Refused: a tag pin, a comment
-# that names another tag, a missing comment, a broken workflow, a missing token, a repository
-# without workflow files, a zizmor run that fails or writes no report, and a gate image without
-# a digest. Last: Renovate reads both image pins. Adapted from github.com/golusoris/goenvoy.
+# Planted cases for workflow-check.sh. Accepted: a commit pin whose comment names its tag,
+# a commit pin whose comment names a branch (printed as a note), a go install pinned to a
+# release, and a go install pinned by a variable. Refused: a tag pin, a comment that names
+# another tag, a missing comment, a broken workflow, a missing token, a repository without
+# workflow files, a zizmor run that fails or writes no report, a gate image without a digest,
+# and a go install at @latest, at @main or without a package. Last: Renovate reads both image
+# pins and every go install pin in the workflows, and neither @latest nor a variable.
+# Adapted from github.com/golusoris/goenvoy.
 #
 #   tools/ci/workflow-check_test.sh
 #
@@ -14,6 +17,7 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -36,6 +40,27 @@ jobs:
       - uses: $2
         with:
           persist-credentials: false
+YAML
+}
+
+# plant_install CASE CMD: one workflow that checks out clean and runs CMD.
+plant_install() {
+  mkdir -p "$WORK/$1/.github/workflows"
+  cat > "$WORK/$1/.github/workflows/planted.yml" <<YAML
+name: planted
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  planted:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: $CHECKOUT # v7.0.1
+        with:
+          persist-credentials: false
+      - name: install
+        run: $2
 YAML
 }
 
@@ -93,6 +118,21 @@ expect_refusal no-comment "refused .github/workflows/planted.yml:10: ref-version
 plant broken "$CHECKOUT # v7.0.1" runs-in
 expect_refusal broken "syntax-check"
 
+plant_install go-install-latest "go install golang.org/x/vuln/cmd/govulncheck@latest"
+expect_refusal go-install-latest "refused .github/workflows/planted.yml:14: go install not pinned to a version"
+
+plant_install go-install-main "go install golang.org/x/vuln/cmd/govulncheck@main"
+expect_refusal go-install-main "refused .github/workflows/planted.yml:14: go install not pinned to a version"
+
+plant_install go-install-bare "go install -v"
+expect_refusal go-install-bare "refused .github/workflows/planted.yml:14: go install not pinned to a version"
+
+plant_install go-install-pinned "go install golang.org/x/vuln/cmd/govulncheck@v1.9.0"
+expect_accepted go-install-pinned "no version comment names another tag"
+
+plant_install go-install-variable "go install \"github.com/cordanaLLM/praetor/cmd/standardsctl@\${PRAETOR_REF}\""
+expect_accepted go-install-variable "no version comment names another tag"
+
 expect_refusal clean "is required" env -u GH_TOKEN -u GITHUB_TOKEN
 
 mkdir -p "$WORK/empty"
@@ -136,4 +176,27 @@ if [ "$(renovate_reads "$WORK/copy/tools/ci/tool-versions.env")" != 1 ]; then
 fi
 echo "ok   renovate: a pin without a digest is not read"
 
-echo "workflow check: 2 accepted, 10 refused; Renovate reads 2 pins"
+# renovate_go_reads FILE...: matches of the Renovate manager for workflow go installs, summed.
+renovate_go_reads() {
+  jq -r -n --slurpfile cfg "$REPO_ROOT/renovate.json" '
+    [ $cfg[0].customManagers[]
+      | select(.managerFilePatterns == ["/^\\.github/workflows/[^/]+\\.ya?ml$/"])
+      | .matchStrings[] ] as $patterns
+    | [ $ARGS.positional[] as $text | $patterns[] as $p | $text | match($p; "g") ] | length
+  ' --args "$(cat "$@")"
+}
+# Every go install pinned to a release in this repository's workflows must be read: a pattern that
+# matches nothing stops the updates without an error.
+pinned=$(cat "$REPO_ROOT"/.github/workflows/*.yml | grep -cE 'go install [^ ]+@v[0-9]')
+if [ "$pinned" -lt 1 ] || [ "$(renovate_go_reads "$REPO_ROOT"/.github/workflows/*.yml)" != "$pinned" ]; then
+  echo "FAIL renovate: renovate.json does not read all $pinned go install pins in the workflows" >&2
+  exit 1
+fi
+echo "ok   renovate: all $pinned go install pins in the workflows are read"
+if [ "$(renovate_go_reads "$WORK/go-install-latest/.github/workflows/planted.yml" "$WORK/go-install-variable/.github/workflows/planted.yml")" != 0 ]; then
+  echo "FAIL renovate: a go install at @latest or at a variable is read" >&2
+  exit 1
+fi
+echo "ok   renovate: a go install at @latest or at a variable is not read"
+
+echo "workflow check: 4 accepted, 13 refused; Renovate reads 2 image pins and $pinned go install pins"
