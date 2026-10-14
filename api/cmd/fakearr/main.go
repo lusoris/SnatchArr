@@ -57,11 +57,16 @@ func main() {
 	}
 }
 
+const (
+	missingBaseID = 1000
+	cutoffBaseID  = 5000
+)
+
 func (f *fake) routes(mux *http.ServeMux) {
 	prefix := "/api/v3"
 	mux.HandleFunc("GET "+prefix+"/system/status", f.auth(f.status))
-	mux.HandleFunc("GET "+prefix+"/wanted/missing", f.auth(func(w http.ResponseWriter, r *http.Request) { f.wanted(w, r, f.missing) }))
-	mux.HandleFunc("GET "+prefix+"/wanted/cutoff", f.auth(func(w http.ResponseWriter, r *http.Request) { f.wanted(w, r, f.cutoff) }))
+	mux.HandleFunc("GET "+prefix+"/wanted/missing", f.auth(func(w http.ResponseWriter, r *http.Request) { f.wanted(w, r, f.missing, missingBaseID) }))
+	mux.HandleFunc("GET "+prefix+"/wanted/cutoff", f.auth(func(w http.ResponseWriter, r *http.Request) { f.wanted(w, r, f.cutoff, cutoffBaseID) }))
 	mux.HandleFunc("GET "+prefix+"/queue", f.auth(f.queue))
 	mux.HandleFunc("GET "+prefix+"/history/since", f.auth(func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, []any{}) }))
 	mux.HandleFunc("POST "+prefix+"/command", f.auth(f.postCommand))
@@ -90,7 +95,7 @@ func (f *fake) status(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, map[string]any{"appName": name, "version": version, "instanceName": "fakearr"})
 }
 
-func (f *fake) wanted(w http.ResponseWriter, r *http.Request, total int) {
+func (f *fake) wanted(w http.ResponseWriter, r *http.Request, total int, baseID int64) {
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	size, _ := strconv.Atoi(r.URL.Query().Get("pageSize"))
 	page = max(page, 1)
@@ -98,13 +103,12 @@ func (f *fake) wanted(w http.ResponseWriter, r *http.Request, total int) {
 	start := (page - 1) * size
 	records := make([]map[string]any, 0, size)
 	for i := start; i < min(start+size, total); i++ {
-		records = append(records, f.item(i))
+		records = append(records, f.item(baseID+int64(i), i))
 	}
 	writeJSON(w, map[string]any{"page": page, "pageSize": size, "totalRecords": total, "records": records})
 }
 
-func (f *fake) item(i int) map[string]any {
-	id := int64(1000 + i)
+func (f *fake) item(id int64, i int) map[string]any {
 	if f.kind == "radarr" {
 		return map[string]any{
 			"id": id, "title": fmt.Sprintf("Movie %d", i), "year": 2000 + i%25, "monitored": i%7 != 0,
