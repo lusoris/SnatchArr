@@ -50,6 +50,45 @@ if [ ${#FILES[@]} -eq 0 ]; then
   exit 1
 fi
 
+# go_install_pinned ARGS: whether every package after `go install` names a release (v + semver)
+# or a workflow variable (${...}). @latest, a branch, or no version at all floats.
+go_install_pinned() {
+  local word ver seen=0 words
+  read -r -a words <<< "$1"
+  for word in "${words[@]}"; do
+    case "$word" in
+      '&&' | '||' | ';' | '|' | '#'*) break ;;
+      -*) continue ;;
+    esac
+    word="${word//[\"\']/}"
+    seen=1
+    [[ "$word" == *@* ]] || return 1
+    ver="${word##*@}"
+    [[ "$ver" =~ ^\$\{[^}]+\}$ ]] && continue
+    [[ "$ver" =~ ^v[0-9]+(\.[0-9]+)+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]] || return 1
+  done
+  [ "$seen" -eq 1 ]
+}
+
+# A Go tool installed at a floating version changes under an unchanged workflow; Renovate moves
+# the pinned ones (renovate.json, manager for go install in workflows).
+floating=0
+for file in "${FILES[@]}"; do
+  lineno=0
+  while IFS= read -r line || [ -n "$line" ]; do
+    lineno=$((lineno + 1))
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+    [[ "$line" =~ (^|[;\&|[:space:]])go[[:space:]]+install([[:space:]]+(.*)|$) ]] || continue
+    if ! go_install_pinned "${BASH_REMATCH[3]}"; then
+      echo "refused $file:$lineno: go install not pinned to a version" >&2
+      floating=1
+    fi
+  done < "$ROOT/$file"
+done
+if [ "$floating" -ne 0 ]; then
+  exit 1
+fi
+
 "$DOCKER" run --rm -v "$ROOT:/repo:ro" -w /repo \
   -v "$REPO_ROOT/.github/actionlint.yaml:/actionlint.yaml:ro" \
   "$ACTIONLINT_IMAGE" -no-color -config-file /actionlint.yaml "${FILES[@]}"
