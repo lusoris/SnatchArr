@@ -198,6 +198,17 @@ kubectl -n snatcharr create secret generic snatcharr-secrets \
 and set `secrets.existingSecret=snatcharr-secrets`. The crypto key encrypts every *arr
 API key and download-client password at rest; losing it means re-entering them.
 
+The Helm chart generates a random bootstrap secret (`setup-secret`) into the Secret by default,
+locking `POST /auth/setup` on new clusters. Retrieve it for the first-run setup wizard:
+
+```sh
+kubectl -n snatcharr get secret snatcharr-secrets -o jsonpath="{.data.setup-secret}" | base64 -d; echo
+```
+
+If supplying an `existingSecret`, add `--from-literal=setup-secret="$(openssl rand -base64 36)"`
+(or set `secrets.setupSecret`). When `existingSecret` is used without `setup-secret`, the deployment marks
+the environment variable optional so existing clusters continue running without breaking.
+
 ### Postgres
 
 `postgres.cnpg.enabled=true` (default) renders a CloudNativePG `Cluster` with

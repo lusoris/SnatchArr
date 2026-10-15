@@ -18,6 +18,7 @@
 //	snatcharr.session.secure     APP_SNATCHARR_SESSION_SECURE     Secure cookie flag (default true)
 //	snatcharr.apikey.secret      APP_SNATCHARR_APIKEY_SECRET      HMAC secret for API keys (required in prod)
 //	snatcharr.proxy.trusted      APP_SNATCHARR_PROXY_TRUSTED      comma-separated trusted reverse proxy CIDRs
+//	snatcharr.setup.secret       APP_SNATCHARR_SETUP_SECRET       bootstrap secret for first-run setup
 package config
 
 import (
@@ -51,6 +52,13 @@ type Options struct {
 	Session   SessionOptions   `koanf:"session"`
 	APIKey    APIKeyOptions    `koanf:"apikey"`
 	Proxy     ProxyOptions     `koanf:"proxy"`
+	Setup     SetupOptions     `koanf:"setup"`
+}
+
+// SetupOptions configure the first-run setup wizard.
+type SetupOptions struct {
+	// Secret is an optional bootstrap secret required to create the first admin user.
+	Secret string `koanf:"secret"`
 }
 
 // ProxyOptions configures reverse proxy ingress trust.

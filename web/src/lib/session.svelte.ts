@@ -14,6 +14,7 @@ class Session {
 	state = $state<SessionState>('unknown');
 	user = $state<User | null>(null);
 	error = $state<string>('');
+	secretRequired = $state(false);
 
 	get isAdmin(): boolean {
 		return this.user?.role === 'admin';
@@ -26,14 +27,17 @@ class Session {
 			if (setup.data && !setup.data.setup_complete) {
 				this.state = 'setup';
 				this.user = null;
+				this.secretRequired = Boolean(setup.data.secret_required);
 				return this.state;
 			}
+			this.secretRequired = false;
 			const me = await api.GET('/auth/session');
 			this.user = me.data?.user ?? null;
 			this.state = this.user ? 'authenticated' : 'anonymous';
 		} catch (err) {
 			this.user = null;
 			this.state = 'anonymous';
+			this.secretRequired = false;
 			this.error = problemStatus(err) === 401 ? '' : String(err);
 		}
 		return this.state;
@@ -44,9 +48,24 @@ class Session {
 		await this.refresh();
 	}
 
-	async setup(username: string, password: string): Promise<void> {
-		await api.POST('/auth/setup', { body: { username, password } });
+	async setup(username: string, password: string, setupSecret?: string): Promise<void> {
+		await api.POST('/auth/setup', {
+			body: {
+				username,
+				password,
+				...(setupSecret ? { setup_secret: setupSecret } : {})
+			}
+		});
 		await this.login(username, password);
+	}
+
+	async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+		await api.POST('/auth/password', {
+			body: {
+				current_password: currentPassword,
+				new_password: newPassword
+			}
+		});
 	}
 
 	async logout(): Promise<void> {

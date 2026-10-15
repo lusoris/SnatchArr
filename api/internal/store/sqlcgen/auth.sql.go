@@ -79,6 +79,26 @@ func (q *Queries) DeleteSession(ctx context.Context, id string) error {
 	return err
 }
 
+const deleteUserSessionsExcept = `-- name: DeleteUserSessionsExcept :execrows
+DELETE FROM sessions
+WHERE data->>'user_id' = $1::text
+  AND id != $2::text
+`
+
+type DeleteUserSessionsExceptParams struct {
+	UserID           string
+	CurrentSessionID string
+}
+
+// data->>'user_id' couples to sessionUserKey in api/internal/httpapi/security.go.
+func (q *Queries) DeleteUserSessionsExcept(ctx context.Context, arg DeleteUserSessionsExceptParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteUserSessionsExcept, arg.UserID, arg.CurrentSessionID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 // #nosec G101 -- sqlc query constant named after a table; the value is SQL, not a credential
 const getAPIKey = `-- name: GetAPIKey :one
 SELECT id, owner_id, scopes, hash, created_at, expires_at, revoked_at FROM api_keys WHERE id = $1
@@ -387,5 +407,23 @@ type SaveSessionParams struct {
 
 func (q *Queries) SaveSession(ctx context.Context, arg SaveSessionParams) error {
 	_, err := q.db.Exec(ctx, saveSession, arg.ID, arg.Data, arg.ExpiresAt)
+	return err
+}
+
+// #nosec G101 -- sqlc query constant named after a table; the value is SQL, not a credential
+const updateUserPassword = `-- name: UpdateUserPassword :exec
+UPDATE users
+SET password_hash = $2, updated_at = $3
+WHERE id = $1
+`
+
+type UpdateUserPasswordParams struct {
+	ID           uuid.UUID
+	PasswordHash string
+	UpdatedAt    time.Time
+}
+
+func (q *Queries) UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error {
+	_, err := q.db.Exec(ctx, updateUserPassword, arg.ID, arg.PasswordHash, arg.UpdatedAt)
 	return err
 }

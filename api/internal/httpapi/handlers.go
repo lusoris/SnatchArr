@@ -6,6 +6,7 @@ package httpapi
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -127,22 +128,63 @@ func (h *Handlers) GetSystemStatus(ctx context.Context) (*oas.SystemStatus, erro
 	return out, nil
 }
 
-// GetSetupStatus reports whether the first user exists.
+// GetSetupStatus reports whether the first user exists and whether a setup secret is required.
 func (h *Handlers) GetSetupStatus(ctx context.Context) (*oas.SetupStatus, error) {
 	done, err := h.auth.SetupComplete(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return &oas.SetupStatus{SetupComplete: done}, nil
+	return &oas.SetupStatus{
+		SetupComplete:  done,
+		SecretRequired: h.cfg.Setup.Secret != "",
+	}, nil
 }
 
 // CompleteSetup creates the first admin and logs them in.
-func (h *Handlers) CompleteSetup(ctx context.Context, req *oas.SetupRequest) (*oas.Session, error) {
+func (h *Handlers) CompleteSetup(ctx context.Context, req *oas.SetupRequest) (oas.CompleteSetupRes, error) {
+	done, err := h.auth.SetupComplete(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if done {
+		return nil, fmt.Errorf("%w: setup already completed", domain.ErrConflict)
+	}
+	if h.cfg.Setup.Secret != "" {
+		secret, ok := req.SetupSecret.Get()
+		if !ok || subtle.ConstantTimeCompare([]byte(secret), []byte(h.cfg.Setup.Secret)) != 1 {
+			return nil, fmt.Errorf("%w: invalid or missing setup secret", domain.ErrUnauthorized)
+		}
+	}
 	u, err := h.auth.Setup(ctx, req.Username, req.Password)
 	if err != nil {
 		return nil, err
 	}
 	return h.startSession(ctx, u)
+}
+
+// ChangePassword changes the current user's password and ends all other sessions.
+func (h *Handlers) ChangePassword(ctx context.Context, req *oas.ChangePasswordRequest) (oas.ChangePasswordRes, error) {
+	u, ok := UserFrom(ctx)
+	if !ok {
+		return nil, domain.ErrUnauthorized
+	}
+	r, ok := requestFrom(ctx)
+	if !ok {
+		return nil, fmt.Errorf("%w: no http context", domain.ErrUnauthorized)
+	}
+	sess, err := h.sessions.Load(r)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", domain.ErrUnauthorized, err)
+	}
+	if err := h.auth.ChangePassword(ctx, u.ID, req.CurrentPassword, req.NewPassword, sess.ID); err != nil {
+		if errors.Is(err, domain.ErrTooManyRequests) {
+			if w, okW := writerFrom(ctx); okW {
+				w.Header().Set("Retry-After", strconv.Itoa(int(auth.LockoutCooldown.Seconds())))
+			}
+		}
+		return nil, err
+	}
+	return &oas.ChangePasswordNoContent{}, nil
 }
 
 // Login verifies credentials and starts a session.

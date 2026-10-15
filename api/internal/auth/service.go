@@ -43,6 +43,8 @@ type Service struct {
 	logger    *slog.Logger
 	lockout   *lockout.Service
 	dummyHash string
+
+	testHookPostPasswordUpdate func(ctx context.Context)
 }
 
 // NewService wires the service. A dummy hash is precomputed so a login against an
@@ -200,6 +202,78 @@ func (s *Service) User(ctx context.Context, userID uuid.UUID) (domain.User, erro
 		return domain.User{}, fmt.Errorf("auth: get user: %w", store.MapError(err))
 	}
 	return userFromRow(row), nil
+}
+
+// ChangePassword verifies current password, updates it to newPassword, and ends every other session.
+// API keys are left untouched. Wrong current password counts against user lockout.
+func (s *Service) ChangePassword(ctx context.Context, userID uuid.UUID, currentPassword, newPassword, currentSessionID string) error {
+	row, err := s.st.Q().GetUser(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("auth: get user: %w", store.MapError(err))
+	}
+	userKey, err := s.verifyCurrentPassword(ctx, row.Username, currentPassword, row.PasswordHash)
+	if err != nil {
+		return err
+	}
+	hash, err := s.hashNewPassword(ctx, newPassword)
+	if err != nil {
+		return err
+	}
+	if err := s.commitPasswordChange(ctx, userID, hash, currentSessionID); err != nil {
+		return fmt.Errorf("auth: %w", err)
+	}
+	if rstErr := s.lockout.Reset(ctx, userKey); rstErr != nil {
+		s.logger.WarnContext(ctx, "auth: reset lockout failed", slog.String("key", userKey), slog.String("error", rstErr.Error()))
+	}
+	return nil
+}
+
+func (s *Service) verifyCurrentPassword(ctx context.Context, username, currentPassword, passwordHash string) (string, error) {
+	userKey := "user:" + strings.ToLower(username)
+	if checkErr := s.checkKey(ctx, userKey); checkErr != nil {
+		return "", checkErr
+	}
+	match, _, verr := crypto.VerifyPassword(currentPassword, passwordHash)
+	if verr != nil {
+		return "", fmt.Errorf("auth: verify password: %w", verr)
+	}
+	if !match {
+		s.recordFailures(ctx, userKey, "")
+		s.logger.InfoContext(ctx, "auth: password change rejected", slog.String("username", username))
+		return "", fmt.Errorf("%w: invalid current password", domain.ErrUnauthorized)
+	}
+	return userKey, nil
+}
+
+func (s *Service) hashNewPassword(ctx context.Context, newPassword string) (string, error) {
+	if valErr := domain.ValidatePassword(newPassword); valErr != nil {
+		return "", fmt.Errorf("auth: %w", valErr)
+	}
+	hash, hashErr := s.hasher.Hash(ctx, newPassword)
+	if hashErr != nil {
+		return "", fmt.Errorf("auth: hash password: %w", hashErr)
+	}
+	return hash, nil
+}
+
+func (s *Service) commitPasswordChange(ctx context.Context, userID uuid.UUID, hash, currentSessionID string) error {
+	now := s.clk.Now()
+	return s.st.Tx(ctx, func(q *sqlcgen.Queries) error {
+		if updErr := q.UpdateUserPassword(ctx, sqlcgen.UpdateUserPasswordParams{
+			ID: userID, PasswordHash: hash, UpdatedAt: now,
+		}); updErr != nil {
+			return fmt.Errorf("update password: %w", store.MapError(updErr))
+		}
+		if s.testHookPostPasswordUpdate != nil {
+			s.testHookPostPasswordUpdate(ctx)
+		}
+		if _, delErr := q.DeleteUserSessionsExcept(ctx, sqlcgen.DeleteUserSessionsExceptParams{
+			UserID: userID.String(), CurrentSessionID: currentSessionID,
+		}); delErr != nil {
+			return fmt.Errorf("delete other sessions: %w", store.MapError(delErr))
+		}
+		return nil
+	})
 }
 
 func userFromRow(r sqlcgen.User) domain.User {

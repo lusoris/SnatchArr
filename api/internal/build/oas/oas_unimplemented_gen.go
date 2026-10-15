@@ -22,12 +22,21 @@ func (UnimplementedHandler) CancelRun(ctx context.Context, params CancelRunParam
 	return ht.ErrNotImplemented
 }
 
+// ChangePassword implements changePassword operation.
+//
+// Change the current user's password and end all other sessions.
+//
+// POST /auth/password
+func (UnimplementedHandler) ChangePassword(ctx context.Context, req *ChangePasswordRequest) (r ChangePasswordRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // CompleteSetup implements completeSetup operation.
 //
 // Create the first admin user and start a session.
 //
 // POST /auth/setup
-func (UnimplementedHandler) CompleteSetup(ctx context.Context, req *SetupRequest) (r *Session, _ error) {
+func (UnimplementedHandler) CompleteSetup(ctx context.Context, req *SetupRequest) (r CompleteSetupRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

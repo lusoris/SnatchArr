@@ -15,6 +15,11 @@ SELECT * FROM users WHERE username = $1;
 -- name: GetUser :one
 SELECT * FROM users WHERE id = $1;
 
+-- name: UpdateUserPassword :exec
+UPDATE users
+SET password_hash = $2, updated_at = $3
+WHERE id = $1;
+
 -- name: ListUsers :many
 SELECT * FROM users ORDER BY username;
 
@@ -27,6 +32,12 @@ ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, expires_at = EXCLUDED.expir
 
 -- name: DeleteSession :exec
 DELETE FROM sessions WHERE id = $1;
+
+-- data->>'user_id' couples to sessionUserKey in api/internal/httpapi/security.go.
+-- name: DeleteUserSessionsExcept :execrows
+DELETE FROM sessions
+WHERE data->>'user_id' = sqlc.arg(user_id)::text
+  AND id != sqlc.arg(current_session_id)::text;
 
 -- name: PurgeExpiredSessions :execrows
 DELETE FROM sessions

@@ -207,3 +207,41 @@ func TestLoadTrustedProxies(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadSetupSecret(t *testing.T) {
+	cases := []struct {
+		name       string
+		envVal     string
+		wantSecret string
+	}{
+		{
+			name:       "positive secret configured",
+			envVal:     "super-secret-bootstrap-token",
+			wantSecret: "super-secret-bootstrap-token",
+		},
+		{
+			name:       "boundary empty default has no secret",
+			envVal:     "",
+			wantSecret: "",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.envVal != "" {
+				t.Setenv("APP_SNATCHARR_SETUP_SECRET", tc.envVal)
+			}
+			t.Setenv("APP_SNATCHARR_PROFILE", "dev")
+			cfg, err := gconfig.New(gconfig.Options{EnvPrefix: "APP_"})
+			if err != nil {
+				t.Fatalf("gconfig.New: %v", err)
+			}
+			opts, err := config.Load(cfg)
+			if err != nil {
+				t.Fatalf("config.Load: %v", err)
+			}
+			if opts.Setup.Secret != tc.wantSecret {
+				t.Fatalf("Setup.Secret = %q, want %q", opts.Setup.Secret, tc.wantSecret)
+			}
+		})
+	}
+}
