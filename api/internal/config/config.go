@@ -17,12 +17,13 @@
 //	snatcharr.session.ttl        APP_SNATCHARR_SESSION_TTL        cookie session lifetime (default 8h)
 //	snatcharr.session.secure     APP_SNATCHARR_SESSION_SECURE     Secure cookie flag (default true)
 //	snatcharr.apikey.secret      APP_SNATCHARR_APIKEY_SECRET      HMAC secret for API keys (required in prod)
-//	snatcharr.http.trusted_proxies APP_HTTP_TRUSTED_PROXIES       trusted reverse proxy CIDRs
+//	snatcharr.proxy.trusted      APP_SNATCHARR_PROXY_TRUSTED      comma-separated trusted reverse proxy CIDRs
 package config
 
 import (
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"time"
 
@@ -49,14 +50,28 @@ type Options struct {
 	Configarr ConfigarrOptions `koanf:"configarr"`
 	Session   SessionOptions   `koanf:"session"`
 	APIKey    APIKeyOptions    `koanf:"apikey"`
-	HTTP      HTTPOptions      `koanf:"http"`
+	Proxy     ProxyOptions     `koanf:"proxy"`
 }
 
-// HTTPOptions configures HTTP ingress trust.
-type HTTPOptions struct {
-	// TrustedProxies is a list of CIDR ranges (e.g. "10.0.0.0/8") trusted to supply
+// ProxyOptions configures reverse proxy ingress trust.
+type ProxyOptions struct {
+	// Trusted is a list of CIDR ranges (e.g. "10.0.0.0/8") trusted to supply
 	// X-Forwarded-For headers. An empty slice trusts nothing.
-	TrustedProxies []string `koanf:"trusted_proxies"`
+	Trusted []string `koanf:"trusted"`
+}
+
+// Validate checks that each configured trusted proxy parses as a CIDR.
+func (p ProxyOptions) Validate() error {
+	for _, entry := range p.Trusted {
+		trimmed := strings.TrimSpace(entry)
+		if trimmed == "" {
+			continue
+		}
+		if _, _, err := net.ParseCIDR(trimmed); err != nil {
+			return fmt.Errorf("config: invalid trusted proxy CIDR %q: %w", entry, err)
+		}
+	}
+	return nil
 }
 
 // PublicOptions describe how the service is reached from outside.
@@ -114,7 +129,7 @@ func Load(cfg *config.Config) (Options, error) {
 	if err := cfg.Unmarshal("snatcharr", &o); err != nil {
 		return Options{}, fmt.Errorf("config: unmarshal snatcharr: %w", err)
 	}
-	loadTrustedProxies(cfg, &o)
+	o.Proxy.Trusted = cleanTrusted(o.Proxy.Trusted)
 	if err := o.Validate(); err != nil {
 		return Options{}, err
 	}
@@ -124,40 +139,21 @@ func Load(cfg *config.Config) (Options, error) {
 	return o, nil
 }
 
-func loadTrustedProxies(cfg *config.Config, o *Options) {
-	if len(o.HTTP.TrustedProxies) > 0 {
-		return
+func cleanTrusted(raw []string) []string {
+	if len(raw) == 0 {
+		return nil
 	}
-	var httpOpts HTTPOptions
-	if err := cfg.Unmarshal("http", &httpOpts); err == nil && len(httpOpts.TrustedProxies) > 0 {
-		o.HTTP = httpOpts
-		return
-	}
-	for _, key := range []string{
-		"http.trusted_proxies",
-		"http.trusted.proxies",
-		"snatcharr.http.trusted.proxies",
-		"snatcharr.http.trusted_proxies",
-	} {
-		if v := cfg.Strings(key); len(v) > 0 {
-			o.HTTP.TrustedProxies = v
-			return
-		}
-		if raw := cfg.String(key); raw != "" {
-			o.HTTP.TrustedProxies = splitComma(raw)
-			return
+	out := make([]string, 0, len(raw))
+	for _, item := range raw {
+		for part := range strings.SplitSeq(item, ",") {
+			trimmed := strings.TrimSpace(part)
+			if trimmed != "" {
+				out = append(out, trimmed)
+			}
 		}
 	}
-}
-
-func splitComma(s string) []string {
-	parts := strings.Split(s, ",")
-	out := make([]string, 0, len(parts))
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		if p != "" {
-			out = append(out, p)
-		}
+	if len(out) == 0 {
+		return nil
 	}
 	return out
 }
@@ -211,7 +207,7 @@ func (o Options) Validate() error {
 	if (o.Configarr.Config == "") != (o.Configarr.Secrets == "") && o.Configarr.Secrets != "" {
 		return errors.New("config: configarr.secrets requires configarr.config")
 	}
-	return nil
+	return o.Proxy.Validate()
 }
 
 // Module provides Options to the fx graph.

@@ -38,12 +38,13 @@ func proxyTestConfig(t *testing.T, trustedCIDRs []string) *gconfig.Config {
 		Host: net.JoinHostPort(cc.Host, strconv.Itoa(int(cc.Port))), Path: "/" + cc.Database, RawQuery: "sslmode=disable",
 	}
 	cfgMap := map[string]any{
-		"snatcharr": map[string]any{"profile": "dev", "worker": map[string]any{"token": "proxy-test-token"}},
-		"db":        map[string]any{"dsn": dsn.String()},
-		"http": map[string]any{
-			"addr":            freeAddr(t),
-			"trusted_proxies": trustedCIDRs,
+		"snatcharr": map[string]any{
+			"profile": "dev",
+			"worker":  map[string]any{"token": "proxy-test-token"},
+			"proxy":   map[string]any{"trusted": trustedCIDRs},
 		},
+		"db":   map[string]any{"dsn": dsn.String()},
+		"http": map[string]any{"addr": freeAddr(t)},
 		"grpc": map[string]any{"listen": freeAddr(t)},
 	}
 	raw, err := json.Marshal(cfgMap)

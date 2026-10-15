@@ -8,15 +8,15 @@ release:
   name: snatcharr
   namespace: snatcharr
 tests:
-  - it: default - trustedProxies empty renders no APP_HTTP_TRUSTED_PROXIES env var
+  - it: default - trustedProxies empty renders no APP_SNATCHARR_PROXY_TRUSTED env var
     template: api-deployment.yaml
     asserts:
       - notContains:
           path: spec.template.spec.containers[0].env
           content:
-            name: APP_HTTP_TRUSTED_PROXIES
+            name: APP_SNATCHARR_PROXY_TRUSTED
 
-  - it: positive - trustedProxies renders APP_HTTP_TRUSTED_PROXIES joined with commas
+  - it: positive - trustedProxies renders APP_SNATCHARR_PROXY_TRUSTED joined with commas
     template: api-deployment.yaml
     set:
       config:
@@ -27,5 +27,5 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: APP_HTTP_TRUSTED_PROXIES
+            name: APP_SNATCHARR_PROXY_TRUSTED
             value: "10.0.0.0/8,172.16.0.0/12"

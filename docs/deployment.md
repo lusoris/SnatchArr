@@ -100,7 +100,7 @@ The first visit runs the setup wizard. `helm status` prints the port-forward com
 no Ingress or HTTPRoute is enabled.
 
 When exposing the API behind an Ingress or reverse proxy, configure `config.trustedProxies`
-(or `APP_HTTP_TRUSTED_PROXIES`) with the proxy or ingress controller CIDRs. The API uses
+(or `APP_SNATCHARR_PROXY_TRUSTED`) with the proxy or ingress controller CIDRs. The API uses
 this list to trust `X-Forwarded-For` and resolve the client IP. Without trusted proxies,
 all forwarded requests appear to arrive from the proxy's IP address, so 5 failed login
 attempts by any client will lock out the proxy IP and block all users from logging in.
