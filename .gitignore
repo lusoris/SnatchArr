@@ -1,5 +1,4 @@
 # --- praetor / agents ---
-.workingdir/
 .standards-receipt*
 # --- secrets / local ---
 .env
@@ -44,8 +43,8 @@ Thumbs.db
 __pycache__/
 
 # BEGIN praetor private artifacts (praetorctl adopt)
-/.workingdir/
-/.workingdir2/
+.workingdir/
+.workingdir2/
 /.standards/worktrees/
 /.agents/mcp_config.json
 /.standards/cache/
