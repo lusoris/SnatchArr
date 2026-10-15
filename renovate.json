@@ -289,6 +289,17 @@
         "typescript"
       ],
       "allowedVersions": "<7"
+    },
+    {
+      "description": "The upgrade test moves a database from the previous Postgres major to the current one (storetest.PreviousMajorImage, #252): that pin takes digest and minor updates but stays on major 17. Move it with the current major when Postgres 19 is adopted",
+      "matchFileNames": [
+        "api/internal/store/storetest/storetest.go"
+      ],
+      "matchDepNames": [
+        "postgres"
+      ],
+      "matchCurrentValue": "/^17-/",
+      "allowedVersions": "/^17-/"
     }
   ],
   "minimumReleaseAge": "3 days",

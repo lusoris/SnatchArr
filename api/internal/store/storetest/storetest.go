@@ -40,9 +40,16 @@ import (
 )
 
 const (
-	// image is the Postgres golusoris testutil/pg pins.
-	image        = "postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873"
-	templateName = "snatcharr_template"
+	// Image is the Postgres golusoris testutil/pg pins, of major Major.
+	Image = "postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873"
+	// Major is the server major version of Image.
+	Major = 18
+	// PreviousMajorImage is the major before it, which installed databases may still run;
+	// the upgrade test moves a database from it to Image (renovate.json holds it on 17).
+	PreviousMajorImage = "postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24"
+	// PreviousMajor is the server major version of PreviousMajorImage.
+	PreviousMajor = 17
+	templateName  = "snatcharr_template"
 	// Bounds (HISS-02): container boot including the image pull, and one database operation.
 	startTimeout = 3 * time.Minute
 	opTimeout    = 30 * time.Second
@@ -102,7 +109,7 @@ func start() (func() error, error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), startTimeout)
 	defer cancel()
-	c, runErr := tcpostgres.Run(ctx, image, tcpostgres.WithDatabase(templateName),
+	c, runErr := tcpostgres.Run(ctx, Image, tcpostgres.WithDatabase(templateName),
 		tcpostgres.WithUsername("test"), tcpostgres.WithPassword("test"), tcpostgres.BasicWaitStrategies())
 	stop := func() error {
 		if shared.admin != nil {
