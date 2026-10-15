@@ -2,41 +2,90 @@
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
 #
-# Verifies one published artifact (an image or the Helm chart) the way a consumer does: its
-# cosign signature and its build provenance attestation must both come from the release
-# workflow of the given repository, run on the given git ref.
+# Verifies one published artifact the way a consumer does, with cosign alone and no forge
+# login. The signing certificate must name the release workflow of the given repository, run
+# on the given git ref at the given commit; an artifact built from any other commit is refused.
 #
-#   tools/release/verify.sh <oci reference> <owner/repository> <git ref>
-#   tools/release/verify.sh ghcr.io/lusoris/charts/snatcharr:0.1.5 lusoris/SnatchArr refs/tags/v0.1.5
+#   tools/release/verify.sh <oci reference> <owner/repository> <git ref> <commit>
+#   tools/release/verify.sh --bundle <bundle> <file> <owner/repository> <git ref> <commit>
 #
-# Both checks always run, so one call reports everything that is missing. Exit status:
-# 0 verified, 2 usage, 3 signature refused, 4 attestation refused, 5 both refused.
-# Needs cosign and gh on the PATH; POSIX sh (on Windows: Git Bash or WSL).
+# An image or the Helm chart in the registry needs a cosign signature and a build provenance
+# attestation; both checks always run, so one call reports everything that is missing. A file
+# from the release page needs the provenance bundle published next to it, which must name the
+# file's digest as one of its subjects.
+#
+#   tools/release/verify.sh ghcr.io/lusoris/charts/snatcharr:0.1.10 lusoris/SnatchArr \
+#     refs/tags/v0.1.10 <commit of v0.1.10>
+#
+# Exit status: 0 verified, 2 usage, 3 signature refused, 4 attestation refused, 5 both refused.
+# Needs cosign 2.4 or later on the PATH; POSIX sh (on Windows: Git Bash or WSL).
 set -eu
 
-if [ "$#" -ne 3 ] || [ -z "$1" ] || [ -z "$2" ] || [ -z "$3" ]; then
-  echo "usage: $0 <oci reference> <owner/repository> <git ref>" >&2
+usage() {
+  echo "usage: $0 <oci reference> <owner/repository> <git ref> <commit>" >&2
+  echo "       $0 --bundle <bundle> <file> <owner/repository> <git ref> <commit>" >&2
   exit 2
+}
+
+bundle=
+if [ "${1:-}" = --bundle ]; then
+  [ "$#" -eq 6 ] || usage
+  bundle=$2
+  shift 2
 fi
-reference=$1
+[ "$#" -eq 4 ] || usage
+subject=$1
 repository=$2
 git_ref=$3
-workflow="$repository/.github/workflows/release.yml"
-issuer=https://token.actions.githubusercontent.com
+commit=$4
+for argument in "$subject" "$repository" "$git_ref"; do
+  [ -n "$argument" ] || usage
+done
+case "$commit" in
+  *[!0-9a-f]*) usage ;;
+esac
+[ "${#commit}" -eq 40 ] || usage
+
+identity="https://github.com/$repository/.github/workflows/release.yml@$git_ref"
+provenance=https://slsa.dev/provenance/v1
+log=$(mktemp)
+trap 'rm -f "$log"' EXIT
+
+# refuse <what>: reports one refused check with the last line cosign printed.
+refuse() {
+  echo "$subject: $1 refused for $identity at commit $commit: $(tail -n 1 "$log")" >&2
+}
+
+# cosign_check <subcommand> <arguments...>: runs one cosign check against the identity and commit.
+cosign_check() {
+  subcommand=$1
+  shift
+  cosign "$subcommand" "$@" \
+    --certificate-identity "$identity" \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+    --certificate-github-workflow-sha "$commit" >/dev/null 2>"$log"
+}
 
 refused=0
-if ! cosign verify "$reference" \
-  --certificate-identity "https://github.com/$workflow@$git_ref" \
-  --certificate-oidc-issuer "$issuer" >/dev/null; then
-  echo "$reference: no cosign signature from $workflow@$git_ref" >&2
+if [ -n "$bundle" ]; then
+  if ! cosign_check verify-blob-attestation --new-bundle-format --bundle "$bundle" \
+    --type "$provenance" "$subject"; then
+    refuse "build provenance in $bundle"
+    exit 4
+  fi
+  echo "$subject: build provenance verified ($identity, commit $commit)"
+  exit 0
+fi
+
+if ! cosign_check verify "$subject"; then
+  refuse "cosign signature"
   refused=3
 fi
-if ! gh attestation verify "oci://$reference" --repo "$repository" \
-  --signer-workflow "$workflow" --source-ref "$git_ref" >/dev/null; then
-  echo "$reference: no build provenance attestation from $workflow@$git_ref" >&2
+if ! cosign_check verify-attestation --new-bundle-format --type "$provenance" "$subject"; then
+  refuse "build provenance attestation"
   if [ "$refused" -eq 3 ]; then refused=5; else refused=4; fi
 fi
 if [ "$refused" -ne 0 ]; then
   exit "$refused"
 fi
-echo "$reference: signature and build provenance verified ($workflow@$git_ref)"
+echo "$subject: signature and build provenance verified ($identity, commit $commit)"
