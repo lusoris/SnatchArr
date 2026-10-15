@@ -70,6 +70,20 @@
         "go install (?<depName>\\S+)/cmd/[^@\\s]+@(?<currentValue>v[0-9]+(?:\\.[0-9]+)*)"
       ],
       "datasourceTemplate": "go"
+    },
+    {
+      "description": "The Postgres of the integration tests and the end-to-end smoke, pinned by version and digest outside a workflow or Dockerfile (storetest, tools/e2e/postgres.sh, Makefile); same image as the CI service containers",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "api/internal/store/storetest/storetest.go",
+        "tools/e2e/postgres.sh",
+        "Makefile"
+      ],
+      "matchStrings": [
+        "(?<depName>(?:mirror\\.gcr\\.io/library/)?postgres):(?<currentValue>[0-9]+-alpine)@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
     }
   ],
   "postUpdateOptions": [
