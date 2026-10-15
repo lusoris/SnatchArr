@@ -3,9 +3,14 @@
 #
 # Runs when release-please publishes a GitHub release (tag vX.Y.Z). Builds and pushes both
 # images (multi-arch, SBOM + provenance attestations, cosign keyless), pushes the Helm chart
-# as an OCI artifact (cosign keyless + provenance attestation) and attaches chart + SBOMs to
-# the release. The last job verifies signature and attestation of all three artifacts and
-# fails the release when one is missing. Every `uses:` is SHA-pinned.
+# as an OCI artifact (cosign keyless + provenance attestation) and attaches chart, SBOMs, a
+# checksum file and one provenance bundle covering all of them to the release. The last job
+# verifies every artifact against the commit of the tag and fails the release when one is
+# not covered. Every `uses:` is SHA-pinned.
+#
+# A rebuild by workflow_dispatch runs on the tag itself (gh workflow run release.yml
+# --ref vX.Y.Z -f tag=vX.Y.Z): the signing certificates name the commit the workflow ran on,
+# and the verify job requires that commit to be the commit of the tag.
 name: release
 
 on:
@@ -37,6 +42,10 @@ jobs:
         run: |
           TAG="${{ github.event.inputs.tag || github.event.release.tag_name }}"
           case "$TAG" in v[0-9]*) ;; *) echo "::error::tag must look like vX.Y.Z, got '$TAG'"; exit 1 ;; esac
+          if [ "$GITHUB_REF" != "refs/tags/$TAG" ]; then
+            echo "::error::run the release workflow on the tag it builds (--ref $TAG), not on $GITHUB_REF"
+            exit 1
+          fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
 
@@ -319,40 +328,93 @@ jobs:
           pattern: snatcharr-*-${{ needs.meta.outputs.version }}.spdx.json
           merge-multiple: true
           path: sbom
+      # Every file of the release page is a subject of one provenance attestation, the
+      # checksum file included; the bundle travels with the files, so a consumer verifies them
+      # with cosign and no forge login (tools/release/verify.sh --bundle).
+      - name: stage the release files and their checksums
+        env:
+          VERSION: ${{ needs.meta.outputs.version }}
+        run: |
+          mkdir release
+          cp "dist/snatcharr-${VERSION}.tgz" sbom/*.spdx.json release/
+          cd release
+          sha256sum -- *.tgz *.spdx.json > "snatcharr-${VERSION}-SHA256SUMS"
+          cat "snatcharr-${VERSION}-SHA256SUMS"
+      - id: files
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: release/*
+      - name: add the provenance bundle
+        env:
+          BUNDLE: ${{ steps.files.outputs.bundle-path }}
+          VERSION: ${{ needs.meta.outputs.version }}
+        run: cp "$BUNDLE" "release/snatcharr-${VERSION}-provenance.sigstore.json"
       # Runs on workflow_dispatch too: a rebuild of an existing tag re-attaches its assets.
-      - name: attach chart and SBOMs to the release
+      - name: attach chart, SBOMs, checksums and provenance to the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           TAG: ${{ needs.meta.outputs.tag }}
-        run: gh release upload "$TAG" dist/snatcharr-*.tgz sbom/*.spdx.json --clobber
+        run: gh release upload "$TAG" release/* --clobber
 
-  # Reads the registry without a login, as a consumer does. tools/release/verify.sh exits 3 on
-  # a missing signature, 4 on a missing attestation and 5 on both; the selftest proves each
-  # refusal on the published 0.1.4 artifacts before the new ones are checked.
+  # Reads the registry and the release page with cosign and no login, as a consumer does, and
+  # pins every artifact to the commit of the tag. tools/release/verify.sh exits 3 on a refused
+  # signature, 4 on a refused attestation and 5 on both; the selftest proves each refusal on
+  # the published 0.1.4 artifacts before the new ones are checked, and the page check proves
+  # its refusals on a tampered copy and a wrong commit.
   verify:
     name: verify signatures and provenance
-    needs: [image, chart]
+    needs: [meta, image, chart]
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     permissions:
       contents: read
-      attestations: read
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
-      - name: the check refuses an unsigned or unattested artifact
+      - name: the check refuses an unsigned, unattested or foreign artifact
         run: tools/release/verify-selftest.sh
+      - name: resolve the commit of the tag
+        id: tag
+        env:
+          TAG: ${{ needs.meta.outputs.tag }}
+        run: |
+          COMMIT=$(git ls-remote "https://github.com/$GITHUB_REPOSITORY" "refs/tags/$TAG^{}" "refs/tags/$TAG" \
+            | awk 'NR == 1 || /\^\{\}$/ { commit = $1 } END { print commit }')
+          case "$COMMIT" in [0-9a-f]*) ;; *) echo "::error::tag $TAG has no commit"; exit 1 ;; esac
+          echo "$TAG is commit $COMMIT"
+          echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
       - name: verify both images and the chart
         env:
           API: ${{ env.IMAGE_API }}@${{ needs.image.outputs.digest-api }}
           WORKER: ${{ env.IMAGE_WORKER }}@${{ needs.image.outputs.digest-worker }}
           CHART: ${{ env.REGISTRY }}/lusoris/charts/snatcharr@${{ needs.chart.outputs.digest }}
+          COMMIT: ${{ steps.tag.outputs.commit }}
         run: |
           for reference in "$API" "$WORKER" "$CHART"; do
-            tools/release/verify.sh "$reference" "$GITHUB_REPOSITORY" "$GITHUB_REF"
+            tools/release/verify.sh "$reference" "$GITHUB_REPOSITORY" "$GITHUB_REF" "$COMMIT"
           done
+      - name: verify the release page
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.meta.outputs.tag }}
+          VERSION: ${{ needs.meta.outputs.version }}
+          COMMIT: ${{ steps.tag.outputs.commit }}
+        run: |
+          gh release download "$TAG" --dir page
+          tools/release/verify-page.sh page "$VERSION" "$GITHUB_REPOSITORY" "$GITHUB_REF" "$COMMIT"
+          # expect <status> <case> <directory> <commit>: one refusal the page check must make.
+          expect() {
+            got=0
+            tools/release/verify-page.sh "$3" "$VERSION" "$GITHUB_REPOSITORY" "$GITHUB_REF" "$4" || got=$?
+            if [ "$got" -ne "$1" ]; then echo "::error::$2: exit $got, want $1"; exit 1; fi
+            echo "ok   $2: exit $got"
+          }
+          expect 4 "files of another commit are refused" page 0000000000000000000000000000000000000000
+          cp -R page tampered
+          printf 'x' >> "tampered/snatcharr-${VERSION}.tgz"
+          sha256sum -- tampered/*.tgz tampered/*.spdx.json | sed 's| tampered/| |' > "tampered/snatcharr-${VERSION}-SHA256SUMS"
+          expect 4 "a changed chart with a rewritten checksum file is refused" tampered "$COMMIT"

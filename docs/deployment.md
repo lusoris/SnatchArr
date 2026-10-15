@@ -16,38 +16,69 @@ Pod Security Standard.
 | `oci://ghcr.io/lusoris/charts/snatcharr` | Helm chart |
 
 Every image and the chart are signed with cosign (keyless, GitHub OIDC) and carry a SLSA
-build provenance attestation. Each image also has an SPDX SBOM, attached to the GitHub
-release. Tags are semver only: there is no `latest`.
+build provenance attestation in the registry. The GitHub release holds the chart archive, an
+SPDX SBOM per image, a checksum file `snatcharr-<version>-SHA256SUMS` over those files, and
+`snatcharr-<version>-provenance.sigstore.json`: one provenance attestation that names every
+file of the page, the checksum file included, as its subject. Tags are semver only: there is
+no `latest`.
 
-Verify an artifact before you deploy it. The script checks that signature and attestation
-both come from this repository's release workflow, run on the release tag (it needs `cosign`
-and `gh`):
-
-```sh
-tools/release/verify.sh ghcr.io/lusoris/snatcharr-api:0.1.5 lusoris/SnatchArr refs/tags/v0.1.5
-tools/release/verify.sh ghcr.io/lusoris/snatcharr-worker:0.1.5 lusoris/SnatchArr refs/tags/v0.1.5
-tools/release/verify.sh ghcr.io/lusoris/charts/snatcharr:0.1.5 lusoris/SnatchArr refs/tags/v0.1.5
-```
-
-It runs these two commands, which also work without a checkout:
+Verify an artifact before you deploy it. The check needs only `cosign` (2.4 or later) and no
+forge login. It requires the signing certificate to name this repository's release workflow,
+run on the release tag at the commit of that tag, so an artifact built from any other commit
+is refused. Look the commit up once:
 
 ```sh
-cosign verify ghcr.io/lusoris/charts/snatcharr:0.1.5 \
-  --certificate-identity https://github.com/lusoris/SnatchArr/.github/workflows/release.yml@refs/tags/v0.1.5 \
-  --certificate-oidc-issuer https://token.actions.githubusercontent.com
-gh attestation verify oci://ghcr.io/lusoris/charts/snatcharr:0.1.5 --repo lusoris/SnatchArr \
-  --signer-workflow lusoris/SnatchArr/.github/workflows/release.yml --source-ref refs/tags/v0.1.5
+git ls-remote https://github.com/lusoris/SnatchArr 'refs/tags/v0.1.10^{}' refs/tags/v0.1.10
 ```
 
-The release workflow (`.github/workflows/release.yml`, job `verify`) runs the same check on
-both images and the chart and fails the release when a signature or an attestation is
-missing. The chart carries an attestation from 0.1.5 on; the charts up to 0.1.4 are signed
-only.
+The last line is the commit (an annotated tag prints two lines; the `^{}` one is the commit).
+Then check both images and the chart in the registry:
 
-The git ref is the one the release workflow ran on. That is the tag for every release
-except 0.1.1, which was rebuilt by hand from `main`: verify it with `refs/heads/main`. A
-rebuild started with `gh workflow run release.yml --ref v0.1.5 -f tag=v0.1.5` keeps the tag
-as the ref.
+```sh
+COMMIT=<commit of the tag>
+tools/release/verify.sh ghcr.io/lusoris/snatcharr-api:0.1.10 lusoris/SnatchArr refs/tags/v0.1.10 "$COMMIT"
+tools/release/verify.sh ghcr.io/lusoris/snatcharr-worker:0.1.10 lusoris/SnatchArr refs/tags/v0.1.10 "$COMMIT"
+tools/release/verify.sh ghcr.io/lusoris/charts/snatcharr:0.1.10 lusoris/SnatchArr refs/tags/v0.1.10 "$COMMIT"
+```
+
+and the files of the release page, downloaded from the web page or with `gh release download`
+into one directory:
+
+```sh
+tools/release/verify-page.sh page 0.1.10 lusoris/SnatchArr refs/tags/v0.1.10 "$COMMIT"
+```
+
+`verify.sh` prints the identity and commit it verified and runs these commands, which also
+work without a checkout:
+
+```sh
+cosign verify ghcr.io/lusoris/charts/snatcharr:0.1.10 \
+  --certificate-identity https://github.com/lusoris/SnatchArr/.github/workflows/release.yml@refs/tags/v0.1.10 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-github-workflow-sha "$COMMIT"
+cosign verify-attestation --new-bundle-format --type https://slsa.dev/provenance/v1 \
+  ghcr.io/lusoris/charts/snatcharr:0.1.10 \
+  --certificate-identity https://github.com/lusoris/SnatchArr/.github/workflows/release.yml@refs/tags/v0.1.10 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-github-workflow-sha "$COMMIT"
+```
+
+For a file of the page, `verify-page.sh` checks the checksum file, refuses a file it does not
+list, and runs `cosign verify-blob-attestation --new-bundle-format --bundle
+snatcharr-<version>-provenance.sigstore.json` with the same identity flags on each file.
+
+The release workflow (`.github/workflows/release.yml`, job `verify`) runs the same checks on
+both images, the chart and the page, and fails the release when one is not covered. Before
+that it proves the refusals: an unattested chart, another commit, another git ref and another
+repository (`tools/release/verify-selftest.sh`), and for the page a wrong commit and a changed
+chart with a rewritten checksum file.
+
+Older releases: the release page carries checksum file and provenance bundle from the release
+after 0.1.9 on; earlier pages are not covered. The chart carries an attestation from 0.1.5 on;
+the charts up to 0.1.4 are signed only. 0.1.1 was rebuilt by hand from `main`: verify it with
+`refs/heads/main` and commit `e0b3e17b1fd0cc81ed8756e43da2bb690fe3e53e`. A rebuild runs on the
+tag it builds (`gh workflow run release.yml --ref v0.1.10 -f tag=v0.1.10`); the workflow
+refuses to start on any other ref.
 
 ## Helm
 
