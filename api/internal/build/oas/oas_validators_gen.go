@@ -79,6 +79,73 @@ func (s CapStatusScope) Validate() error {
 	}
 }
 
+func (s *ChangePasswordBadRequest) Validate() error {
+	alias := (*ProblemStatusCode)(s)
+	if err := alias.Validate(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *ChangePasswordRequest) Validate() error {
+	if s == nil {
+		return validate.ErrNilPointer
+	}
+
+	var failures []validate.FieldError
+	if err := func() error {
+		if err := (validate.String{
+			MinLength:     12,
+			MinLengthSet:  true,
+			MaxLength:     256,
+			MaxLengthSet:  true,
+			Email:         false,
+			Hostname:      false,
+			Regex:         nil,
+			MinNumeric:    0,
+			MinNumericSet: false,
+			MaxNumeric:    0,
+			MaxNumericSet: false,
+		}).Validate(string(s.NewPassword)); err != nil {
+			return errors.Wrap(err, "string")
+		}
+		return nil
+	}(); err != nil {
+		failures = append(failures, validate.FieldError{
+			Name:  "new_password",
+			Error: err,
+		})
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+	return nil
+}
+
+func (s *ChangePasswordTooManyRequests) Validate() error {
+	alias := (*ProblemStatusCode)(s)
+	if err := alias.Validate(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *ChangePasswordUnauthorized) Validate() error {
+	alias := (*ProblemStatusCode)(s)
+	if err := alias.Validate(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *ChangePasswordUnprocessableEntity) Validate() error {
+	alias := (*ProblemStatusCode)(s)
+	if err := alias.Validate(); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (s *CleanuparrLinkInput) Validate() error {
 	if s == nil {
 		return validate.ErrNilPointer
@@ -133,6 +200,22 @@ func (s *CleanuparrStatus) Validate() error {
 	}
 	if len(failures) > 0 {
 		return &validate.Error{Fields: failures}
+	}
+	return nil
+}
+
+func (s *CompleteSetupConflict) Validate() error {
+	alias := (*ProblemStatusCode)(s)
+	if err := alias.Validate(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *CompleteSetupUnauthorized) Validate() error {
+	alias := (*ProblemStatusCode)(s)
+	if err := alias.Validate(); err != nil {
+		return err
 	}
 	return nil
 }

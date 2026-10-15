@@ -91,4 +91,47 @@ describe('settings', () => {
 		await fireEvent.click(button);
 		expect(putSpy).not.toHaveBeenCalled();
 	});
+
+	it('renders change password form and submits password change', async () => {
+		stubGet({ '/settings': sampleSettings });
+		const postSpy = vi.spyOn(api, 'POST').mockResolvedValue({ data: undefined } as never);
+		renderWithQuery(SettingsPage);
+
+		expect(
+			await screen.findByRole('heading', { level: 2, name: m.change_password_title() })
+		).toBeTruthy();
+		const currentPass = screen.getByLabelText(m.current_password());
+		const newPass = screen.getByLabelText(m.new_password());
+		const submitBtn = screen.getByRole('button', { name: m.change_password_submit() });
+
+		await fireEvent.input(currentPass, { target: { value: 'current-valid-password' } });
+		await fireEvent.input(newPass, { target: { value: 'new-valid-password-123' } });
+		await fireEvent.click(submitBtn);
+
+		expect(postSpy).toHaveBeenCalledWith('/auth/password', {
+			body: {
+				current_password: 'current-valid-password',
+				new_password: 'new-valid-password-123'
+			}
+		});
+	});
+
+	it('displays error when change password fails', async () => {
+		stubGet({ '/settings': sampleSettings });
+		vi.spyOn(api, 'POST').mockRejectedValue(
+			new ProblemError({ type: 'about:blank', status: 401, detail: 'invalid current password' })
+		);
+		renderWithQuery(SettingsPage);
+
+		const currentPass = await screen.findByLabelText(m.current_password());
+		const newPass = screen.getByLabelText(m.new_password());
+		const submitBtn = screen.getByRole('button', { name: m.change_password_submit() });
+
+		await fireEvent.input(currentPass, { target: { value: 'wrong-password' } });
+		await fireEvent.input(newPass, { target: { value: 'new-valid-password-123' } });
+		await fireEvent.click(submitBtn);
+
+		const alert = await screen.findByRole('alert');
+		expect(alert.textContent).toContain('invalid current password');
+	});
 });
