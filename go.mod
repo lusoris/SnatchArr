@@ -6,7 +6,7 @@ go 1.27.2
 ignore ./web/node_modules
 
 require (
-	github.com/go-chi/chi/v5 v5.3.2
+	github.com/go-chi/chi/v5 v5.4.0
 	github.com/go-faster/errors v0.8.0
 	github.com/go-faster/jx v1.2.0
 	github.com/golusoris/goenvoy/arr/lidarr v1.3.1
@@ -21,7 +21,7 @@ require (
 	github.com/golusoris/goenvoy/downloadclient/rtorrent/v2 v2.0.1
 	github.com/golusoris/goenvoy/downloadclient/sabnzbd/v2 v2.0.0
 	github.com/golusoris/goenvoy/downloadclient/transmission/v2 v2.0.0
-	github.com/golusoris/golusoris v0.16.4
+	github.com/golusoris/golusoris v0.16.5
 	github.com/golusoris/golusoris/core v0.10.2
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.11.0

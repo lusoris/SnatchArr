@@ -65,18 +65,33 @@ func readManifest(file string) ([]pin, error) {
 	if len(manifest.Specs) == 0 {
 		return nil, fmt.Errorf("%s: no \"specs\" entry", file)
 	}
-	seen := map[string]bool{}
+	names, commits := map[string]bool{}, map[string]string{}
 	for index, p := range manifest.Specs {
 		problem := p.problem()
-		if problem == "" && seen[p.Name] {
-			problem = "repeats the name of an earlier entry"
+		if problem == "" {
+			problem = p.repeatProblem(names, commits)
 		}
-		seen[p.Name] = true
 		if problem != "" {
 			return nil, fmt.Errorf("%s: specs[%d] (%s): %s", file, index, p.Name, problem)
 		}
 	}
 	return manifest.Specs, nil
+}
+
+// repeatProblem refuses an entry that repeats the name of an earlier one, or its commit under
+// another repository. A repository can carry tags of another project: Sonarr/Sonarr holds the
+// v6 release tags of Radarr, so a tag lookup proposes a commit of the other project. Two
+// projects never share a commit, so the second entry names the wrong one.
+func (p pin) repeatProblem(names map[string]bool, commits map[string]string) string {
+	owner, shared := commits[p.Commit]
+	switch {
+	case names[p.Name]:
+		return "repeats the name of an earlier entry"
+	case shared && owner != p.Repository:
+		return fmt.Sprintf("repeats the commit of %s; a commit belongs to one repository, so this tag or branch names another project", owner)
+	}
+	names[p.Name], commits[p.Commit] = true, p.Repository
+	return ""
 }
 
 func (p pin) problem() string {

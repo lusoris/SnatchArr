@@ -70,6 +70,20 @@
         "go install (?<depName>\\S+)/cmd/[^@\\s]+@(?<currentValue>v[0-9]+(?:\\.[0-9]+)*)"
       ],
       "datasourceTemplate": "go"
+    },
+    {
+      "description": "The Postgres of the integration tests and the end-to-end smoke, pinned by version and digest outside a workflow or Dockerfile (storetest, tools/e2e/postgres.sh, Makefile); same image as the CI service containers",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "api/internal/store/storetest/storetest.go",
+        "tools/e2e/postgres.sh",
+        "Makefile"
+      ],
+      "matchStrings": [
+        "(?<depName>(?:mirror\\.gcr\\.io/library/)?postgres):(?<currentValue>[0-9]+-alpine)@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
     }
   ],
   "postUpdateOptions": [
@@ -236,6 +250,16 @@
       "automerge": false
     },
     {
+      "description": "Sonarr/Sonarr also holds the release tags of Radarr from v4.1 to v6, which point at Radarr commits (#231 proposed v6.4.4, #249 v4.7.5). Its published releases are Sonarr's own, so Sonarr resolves through github-releases; the digest stays the commit of the tag, and prereleases count as unstable (docs/upstream-contracts.md)",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchPackageNames": [
+        "Sonarr/Sonarr"
+      ],
+      "overrideDatasource": "github-releases"
+    },
+    {
       "description": "The two images of the workflow gate move in a pull request of their own",
       "matchManagers": [
         "custom.regex"
@@ -255,6 +279,16 @@
         ".devcontainer/Dockerfile.praetor"
       ],
       "enabled": false
+    },
+    {
+      "description": "TypeScript 7 drops the JavaScript compiler API that @sveltejs/kit reads tsconfig through (svelte-kit sync fails with \"Cannot read properties of undefined (reading 'readFile')\"), and @sveltejs/kit 3.1.0 declares the peer range typescript ^6.0.0. Revisit when a released @sveltejs/kit peer range admits typescript 7 (#149)",
+      "matchManagers": [
+        "npm"
+      ],
+      "matchPackageNames": [
+        "typescript"
+      ],
+      "allowedVersions": "<7"
     }
   ],
   "minimumReleaseAge": "3 days",

@@ -41,7 +41,7 @@ import (
 
 const (
 	// image is the Postgres golusoris testutil/pg pins.
-	image        = "postgres:17-alpine@sha256:f02121de6f74d30d8a94cd1d9584125e2178d7e6c377d8130112d4e52d867995"
+	image        = "postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873"
 	templateName = "snatcharr_template"
 	// Bounds (HISS-02): container boot including the image pull, and one database operation.
 	startTimeout = 3 * time.Minute
