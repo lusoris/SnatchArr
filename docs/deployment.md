@@ -240,6 +240,56 @@ the DSN itself. An explicit `APP_DB_MIGRATE_DSN` is used exactly as given: it ca
 password and TLS parameters. `TestMigratorConnection` in `api/internal/app` checks both rules
 against a real server.
 
+#### Postgres major upgrade
+
+CI, the release checks and the dev compose run Postgres 18. An installed database keeps the
+major it was initialised with until you move it; SnatchArr itself needs no change for the
+move, only a restart onto the upgraded database, after which its migrations bring the schema
+to the current version.
+
+**CloudNativePG** (`postgres.cnpg.*`): the operator upgrades in place from CloudNativePG 1.26.0
+on (upstream `docs/src/postgres_upgrades.md`, "Offline In-Place Major Upgrades"). Set
+`postgres.cnpg.imageName` to a Postgres 18 operand image built on the same OS distribution as
+the running one and apply the chart. The operator then:
+
+- stops every instance, replicas included, so the database is down for the whole upgrade;
+- runs a job named after the primary with the suffix `-major-upgrade`, which calls
+  `pg_upgrade --link`;
+- restarts the primary and clones the replicas again, which takes long on a large database.
+
+If the job fails, set `imageName` back to the previous image: the operator removes the failed
+job and starts the old major again, with the data unchanged. With an empty `imageName` the
+operator's default image applies, and a new operator release can change its major; pin
+`imageName` to control when the upgrade happens. Afterwards run `ANALYZE` (statistics are not
+carried over) and take a new base backup: point-in-time recovery does not cross the major
+upgrade. With the Barman Cloud plugin, change `serverName` together with `imageName` so the
+new timeline does not write into the old archive. Postgres 17.0 to 17.5 refuse the upgrade
+while `max_slot_wal_keep_size` is set to anything but `-1`: upgrade to 17.6 or later first.
+
+**External Postgres** (`postgres.external.dsnSecretRef`): dump and restore with the client
+tools of the new major. Stop the API first, so nothing writes during the dump (`kubectl scale deployment
+<fullname>-api --replicas=0`; the full name is the release name when it
+contains `snatcharr`, else `<release>-snatcharr`), then run against the old and the new
+server:
+
+```sh
+pg_dump --format=custom --dbname="$OLD_DSN" \
+  | pg_restore --no-owner --exit-on-error --dbname="$NEW_DSN"
+```
+
+Point the DSN Secret at the new server and scale the API up again. The new database must
+exist and be owned by the role in `NEW_DSN`. `TestPostgresMajorUpgradeByDumpRestore` in
+`api/internal/store` runs exactly this command from a Postgres 17 database holding a full
+0.1.8 dataset into Postgres 18, then migrates and reads every row back.
+
+**Dev compose** (`deploy/compose/docker-compose.yml`): the volume is mounted at
+`/var/lib/postgresql`, where the 18 image keeps its data in a per-major directory. A volume
+first initialised by a 17 image does not start on 18: the container exits with `Error: in
+18+, these Docker images are configured to store database data in a format which is
+compatible with "pg_ctlcluster"` and points at the old data it found. Dev data is
+disposable: `docker compose -f deploy/compose/docker-compose.yml down --volumes` removes
+the volume, and the next `make dev` initialises it on 18.
+
 ### Configarr
 
 Already running [Configarr](https://github.com/raydak-labs/configarr)? Mount the same
