@@ -706,7 +706,11 @@ func testLoginCase(t *testing.T, f *integrationFixture, user, pass string, httpC
 	if err != nil {
 		t.Fatalf("Login() err = %v", err)
 	}
-	assertLoginSessionResult(t, f, got, user, adminSess.User.ID, rec.Result().Cookies())
+	sess, ok := got.(*oas.Session)
+	if !ok {
+		t.Fatalf("Login() returned %T, want *oas.Session", got)
+	}
+	assertLoginSessionResult(t, f, sess, user, adminSess.User.ID, rec.Result().Cookies())
 }
 
 func assertLoginSessionResult(t *testing.T, f *integrationFixture, got *oas.Session, wantUser string, wantID uuid.UUID, cookies []*http.Cookie) {
@@ -722,6 +726,39 @@ func assertLoginSessionResult(t *testing.T, f *integrationFixture, got *oas.Sess
 		t.Fatalf("Login() ExpiresAt = %v, want %v", got.ExpiresAt, wantExpiry)
 	}
 	assertSessionUserAndCsrf(t, f, cookies, domain.User{ID: wantID, Username: wantUser, Role: domain.RoleAdmin})
+}
+
+func TestLoginThrottleAndRetryAfterHeader(t *testing.T) {
+	t.Parallel()
+	f := newIntegrationFixture(t)
+	seedCtx := withHTTPTest(t.Context(), httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/auth/setup", nil))
+	_, err := f.h.CompleteSetup(seedCtx, &oas.SetupRequest{Username: "first-admin", Password: "correct-horse-battery-staple"})
+	if err != nil {
+		t.Fatalf("CompleteSetup() = %v", err)
+	}
+
+	for i := 1; i <= auth.LockoutMaxFails; i++ {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/auth/login", nil)
+		req.RemoteAddr = "192.0.2.55:1234"
+		ctx := withHTTPTest(t.Context(), rec, req)
+		_, err = f.h.Login(ctx, &oas.LoginRequest{Username: "first-admin", Password: "wrong-password"})
+		if !errors.Is(err, domain.ErrUnauthorized) {
+			t.Fatalf("fail %d = %v, want ErrUnauthorized", i, err)
+		}
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/auth/login", nil)
+	req.RemoteAddr = "192.0.2.55:1234"
+	ctx := withHTTPTest(t.Context(), rec, req)
+	_, err = f.h.Login(ctx, &oas.LoginRequest{Username: "first-admin", Password: "correct-horse-battery-staple"})
+	if !errors.Is(err, domain.ErrTooManyRequests) {
+		t.Fatalf("Login() when locked = %v, want ErrTooManyRequests", err)
+	}
+	if retryAfter := rec.Header().Get("Retry-After"); retryAfter != "900" {
+		t.Errorf("Retry-After header = %q, want 900", retryAfter)
+	}
 }
 
 func TestLogout(t *testing.T) {

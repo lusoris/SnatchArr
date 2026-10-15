@@ -44,3 +44,47 @@ UPDATE api_keys SET revoked_at = $2 WHERE id = $1 AND revoked_at IS NULL;
 
 -- name: ListAPIKeysByOwner :many
 SELECT * FROM api_keys WHERE owner_id = $1 AND revoked_at IS NULL ORDER BY created_at;
+
+-- name: RecordLoginLockoutFailure :exec
+INSERT INTO login_lockouts (key, fails, first_fail_at, locked_until)
+VALUES (
+    sqlc.arg(key),
+    1,
+    sqlc.arg(now)::timestamptz,
+    CASE WHEN 1 >= sqlc.arg(max_fails)::int
+         THEN sqlc.arg(now)::timestamptz + make_interval(secs => sqlc.arg(cooldown_s)::double precision)
+         ELSE NULL
+    END
+)
+ON CONFLICT (key) DO UPDATE SET
+    fails = CASE
+        WHEN login_lockouts.first_fail_at < sqlc.arg(now)::timestamptz - make_interval(secs => sqlc.arg(window_s)::double precision)
+        THEN 1
+        ELSE login_lockouts.fails + 1
+    END,
+    first_fail_at = CASE
+        WHEN login_lockouts.first_fail_at < sqlc.arg(now)::timestamptz - make_interval(secs => sqlc.arg(window_s)::double precision)
+        THEN sqlc.arg(now)::timestamptz
+        ELSE login_lockouts.first_fail_at
+    END,
+    locked_until = CASE
+        WHEN (
+            CASE
+                WHEN login_lockouts.first_fail_at < sqlc.arg(now)::timestamptz - make_interval(secs => sqlc.arg(window_s)::double precision)
+                THEN 1
+                ELSE login_lockouts.fails + 1
+            END
+        ) >= sqlc.arg(max_fails)::int
+        THEN sqlc.arg(now)::timestamptz + make_interval(secs => sqlc.arg(cooldown_s)::double precision)
+        ELSE NULL
+    END;
+
+-- name: GetLoginLockout :one
+SELECT key, fails, first_fail_at, locked_until
+FROM login_lockouts
+WHERE key = $1;
+
+-- name: DeleteLoginLockout :exec
+DELETE FROM login_lockouts
+WHERE key = $1;
+

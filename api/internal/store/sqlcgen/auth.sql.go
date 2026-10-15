@@ -60,6 +60,16 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 	return i, err
 }
 
+const deleteLoginLockout = `-- name: DeleteLoginLockout :exec
+DELETE FROM login_lockouts
+WHERE key = $1
+`
+
+func (q *Queries) DeleteLoginLockout(ctx context.Context, key string) error {
+	_, err := q.db.Exec(ctx, deleteLoginLockout, key)
+	return err
+}
+
 const deleteSession = `-- name: DeleteSession :exec
 DELETE FROM sessions WHERE id = $1
 `
@@ -85,6 +95,24 @@ func (q *Queries) GetAPIKey(ctx context.Context, id string) (ApiKey, error) {
 		&i.CreatedAt,
 		&i.ExpiresAt,
 		&i.RevokedAt,
+	)
+	return i, err
+}
+
+const getLoginLockout = `-- name: GetLoginLockout :one
+SELECT key, fails, first_fail_at, locked_until
+FROM login_lockouts
+WHERE key = $1
+`
+
+func (q *Queries) GetLoginLockout(ctx context.Context, key string) (LoginLockout, error) {
+	row := q.db.QueryRow(ctx, getLoginLockout, key)
+	var i LoginLockout
+	err := row.Scan(
+		&i.Key,
+		&i.Fails,
+		&i.FirstFailAt,
+		&i.LockedUntil,
 	)
 	return i, err
 }
@@ -221,6 +249,60 @@ func (q *Queries) PurgeExpiredSessions(ctx context.Context, arg PurgeExpiredSess
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const recordLoginLockoutFailure = `-- name: RecordLoginLockoutFailure :exec
+INSERT INTO login_lockouts (key, fails, first_fail_at, locked_until)
+VALUES (
+    $1,
+    1,
+    $2::timestamptz,
+    CASE WHEN 1 >= $3::int
+         THEN $2::timestamptz + make_interval(secs => $4::double precision)
+         ELSE NULL
+    END
+)
+ON CONFLICT (key) DO UPDATE SET
+    fails = CASE
+        WHEN login_lockouts.first_fail_at < $2::timestamptz - make_interval(secs => $5::double precision)
+        THEN 1
+        ELSE login_lockouts.fails + 1
+    END,
+    first_fail_at = CASE
+        WHEN login_lockouts.first_fail_at < $2::timestamptz - make_interval(secs => $5::double precision)
+        THEN $2::timestamptz
+        ELSE login_lockouts.first_fail_at
+    END,
+    locked_until = CASE
+        WHEN (
+            CASE
+                WHEN login_lockouts.first_fail_at < $2::timestamptz - make_interval(secs => $5::double precision)
+                THEN 1
+                ELSE login_lockouts.fails + 1
+            END
+        ) >= $3::int
+        THEN $2::timestamptz + make_interval(secs => $4::double precision)
+        ELSE NULL
+    END
+`
+
+type RecordLoginLockoutFailureParams struct {
+	Key       string
+	Now       time.Time
+	MaxFails  int32
+	CooldownS float64
+	WindowS   float64
+}
+
+func (q *Queries) RecordLoginLockoutFailure(ctx context.Context, arg RecordLoginLockoutFailureParams) error {
+	_, err := q.db.Exec(ctx, recordLoginLockoutFailure,
+		arg.Key,
+		arg.Now,
+		arg.MaxFails,
+		arg.CooldownS,
+		arg.WindowS,
+	)
+	return err
 }
 
 // #nosec G101 -- sqlc query constant named after a table; the value is SQL, not a credential

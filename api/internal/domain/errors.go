@@ -20,4 +20,6 @@ var (
 	ErrForbidden = errors.New("forbidden")
 	// ErrUnreachable marks an *arr instance that could not be contacted (HTTP 502).
 	ErrUnreachable = errors.New("instance unreachable")
+	// ErrTooManyRequests marks a rate-limited or locked client (HTTP 429).
+	ErrTooManyRequests = errors.New("too many requests")
 )

@@ -109,6 +109,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Session"
+        "429":
+          $ref: "#/components/responses/Problem"
         default:
           $ref: "#/components/responses/Problem"
 

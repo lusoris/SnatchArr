@@ -1386,6 +1386,7 @@ export interface operations {
                     "application/json": components["schemas"]["Session"];
                 };
             };
+            429: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };

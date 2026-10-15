@@ -352,7 +352,7 @@ func (UnimplementedHandler) ListSeerrRequests(ctx context.Context) (r []SeerrReq
 // Start a session with username and password.
 //
 // POST /auth/login
-func (UnimplementedHandler) Login(ctx context.Context, req *LoginRequest) (r *Session, _ error) {
+func (UnimplementedHandler) Login(ctx context.Context, req *LoginRequest) (r LoginRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

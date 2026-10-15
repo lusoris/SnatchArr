@@ -9,7 +9,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/url"
+	"strconv"
+	"strings"
 
 	"go.uber.org/fx"
 
@@ -143,12 +146,30 @@ func (h *Handlers) CompleteSetup(ctx context.Context, req *oas.SetupRequest) (*o
 }
 
 // Login verifies credentials and starts a session.
-func (h *Handlers) Login(ctx context.Context, req *oas.LoginRequest) (*oas.Session, error) {
-	u, err := h.auth.Login(ctx, req.Username, req.Password)
+func (h *Handlers) Login(ctx context.Context, req *oas.LoginRequest) (oas.LoginRes, error) {
+	ip := remoteIP(ctx)
+	u, err := h.auth.Login(ctx, req.Username, req.Password, ip)
 	if err != nil {
+		if errors.Is(err, domain.ErrTooManyRequests) {
+			if w, ok := writerFrom(ctx); ok {
+				w.Header().Set("Retry-After", strconv.Itoa(int(auth.LockoutCooldown.Seconds())))
+			}
+		}
 		return nil, err
 	}
 	return h.startSession(ctx, u)
+}
+
+func remoteIP(ctx context.Context) string {
+	r, ok := requestFrom(ctx)
+	if !ok || r == nil {
+		return ""
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return strings.TrimSpace(r.RemoteAddr)
+	}
+	return host
 }
 
 // Logout destroys the session cookie and row.

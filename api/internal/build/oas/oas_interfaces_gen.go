@@ -5,6 +5,10 @@ type DeleteInstanceRes interface {
 	deleteInstanceRes()
 }
 
+type LoginRes interface {
+	loginRes()
+}
+
 type TriggerRunRes interface {
 	triggerRunRes()
 }

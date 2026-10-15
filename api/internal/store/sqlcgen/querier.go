@@ -44,6 +44,7 @@ type Querier interface {
 	DeleteDownloadClient(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteEventsForInstance(ctx context.Context, instanceID uuid.UUID) (int64, error)
 	DeleteInstanceUnlessDeclared(ctx context.Context, id uuid.UUID) (int64, error)
+	DeleteLoginLockout(ctx context.Context, key string) error
 	DeleteSchedule(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteSeerrLink(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteSession(ctx context.Context, id string) error
@@ -66,6 +67,7 @@ type Querier interface {
 	GetDownloadClient(ctx context.Context, id uuid.UUID) (DownloadClient, error)
 	GetInstance(ctx context.Context, id uuid.UUID) (Instance, error)
 	GetInstanceByConfigarrKey(ctx context.Context, configarrKey *string) (Instance, error)
+	GetLoginLockout(ctx context.Context, key string) (LoginLockout, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
 	GetPolicy(ctx context.Context, instanceID uuid.UUID) (SnatchPolicy, error)
@@ -132,6 +134,7 @@ type Querier interface {
 	RecordCleanuparrCheck(ctx context.Context, arg RecordCleanuparrCheckParams) error
 	RecordDownloadClientCheck(ctx context.Context, arg RecordDownloadClientCheckParams) error
 	RecordInstanceCheck(ctx context.Context, arg RecordInstanceCheckParams) error
+	RecordLoginLockoutFailure(ctx context.Context, arg RecordLoginLockoutFailureParams) error
 	RecordSeerrCheck(ctx context.Context, arg RecordSeerrCheckParams) error
 	RecordSeerrSync(ctx context.Context, arg RecordSeerrSyncParams) error
 	ResetProcessed(ctx context.Context, instanceID *uuid.UUID) (int64, error)
