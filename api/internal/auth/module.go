@@ -56,5 +56,5 @@ func newAPIKeyService(st *PgAPIKeyStore, cfg config.Options, clk clock.Clock, lo
 // Module provides the auth service, the Postgres-backed session manager and the API-key
 // service.
 var Module = fx.Module("snatcharr.auth",
-	fx.Provide(NewService, NewPgSessionStore, NewPgAPIKeyStore, newSessionManager, newAPIKeyService),
+	fx.Provide(NewService, NewPgSessionStore, NewPgAPIKeyStore, NewPgLockoutStore, newSessionManager, newAPIKeyService),
 )

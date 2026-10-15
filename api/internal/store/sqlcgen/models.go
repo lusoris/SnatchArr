@@ -76,6 +76,13 @@ type Instance struct {
 	ConfigarrOrphanedAt *time.Time
 }
 
+type LoginLockout struct {
+	Key         string
+	Fails       int32
+	FirstFailAt time.Time
+	LockedUntil *time.Time
+}
+
 type ProcessedItem struct {
 	InstanceID     uuid.UUID
 	Kind           string

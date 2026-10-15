@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	gconfig "github.com/golusoris/golusoris/core/config"
+
 	"github.com/lusoris/SnatchArr/api/internal/config"
 )
 
@@ -42,6 +44,18 @@ func TestValidate(t *testing.T) {
 		{"positive configarr linked", func(o *config.Options) {
 			o.Configarr.Config = "/c.yml"
 			o.Configarr.Secrets = "/s.yml"
+		}, nil, false},
+		{"positive trusted proxy valid list", func(o *config.Options) {
+			o.Proxy.Trusted = []string{"10.0.0.0/8", "172.16.0.0/12"}
+		}, nil, false},
+		{"negative trusted proxy malformed entry refused", func(o *config.Options) {
+			o.Proxy.Trusted = []string{"10.0.0.0/8", "invalid-cidr"}
+		}, nil, true},
+		{"boundary trusted proxy empty trusts nothing", func(o *config.Options) {
+			o.Proxy.Trusted = nil
+		}, nil, false},
+		{"positive trusted proxy whitespace and empty items around commas", func(o *config.Options) {
+			o.Proxy.Trusted = []string{" 10.0.0.0/8 ", " ", "192.168.0.0/16"}
 		}, nil, false},
 	}
 	for _, tc := range tests {
@@ -112,5 +126,84 @@ func TestDevCryptoKeyIsAES256(t *testing.T) {
 	raw, err := hex.DecodeString(config.DevCryptoKey)
 	if err != nil || len(raw) != 32 {
 		t.Fatalf("DevCryptoKey decodes to %d bytes, %v; want 32", len(raw), err)
+	}
+}
+
+func TestValidate_MalformedTrustedProxyNamesBadEntry(t *testing.T) {
+	t.Parallel()
+	o := config.Default()
+	o.Profile = config.ProfileDev
+	o.Proxy.Trusted = []string{"10.0.0.0/8", "malformed-cidr"}
+	err := o.Validate()
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "malformed-cidr") {
+		t.Fatalf("expected error to name malformed-cidr, got: %v", err)
+	}
+}
+
+func TestLoadTrustedProxies(t *testing.T) {
+	cases := []struct {
+		name      string
+		envVal    string
+		wantCIDRs []string
+		wantErr   bool
+		badEntry  string
+	}{
+		{
+			name:      "positive valid list",
+			envVal:    "10.0.0.0/8, 172.16.0.0/12",
+			wantCIDRs: []string{"10.0.0.0/8", "172.16.0.0/12"},
+		},
+		{
+			name:      "positive whitespace and empty items around commas",
+			envVal:    " 10.0.0.0/8 , , 192.168.0.0/16 ",
+			wantCIDRs: []string{"10.0.0.0/8", "192.168.0.0/16"},
+		},
+		{
+			name:      "boundary empty default trusts nothing",
+			envVal:    "",
+			wantCIDRs: nil,
+		},
+		{
+			name:     "negative malformed entry refused names bad entry",
+			envVal:   "10.0.0.0/8, not-a-cidr",
+			wantErr:  true,
+			badEntry: "not-a-cidr",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.envVal != "" {
+				t.Setenv("APP_SNATCHARR_PROXY_TRUSTED", tc.envVal)
+			}
+			t.Setenv("APP_SNATCHARR_PROFILE", "dev")
+			cfg, err := gconfig.New(gconfig.Options{EnvPrefix: "APP_"})
+			if err != nil {
+				t.Fatalf("gconfig.New: %v", err)
+			}
+			opts, err := config.Load(cfg)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("config.Load expected error, got nil")
+				}
+				if tc.badEntry != "" && !strings.Contains(err.Error(), tc.badEntry) {
+					t.Fatalf("config.Load error %q does not contain bad entry %q", err.Error(), tc.badEntry)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("config.Load: %v", err)
+			}
+			if len(opts.Proxy.Trusted) != len(tc.wantCIDRs) {
+				t.Fatalf("Proxy.Trusted = %v, want %v", opts.Proxy.Trusted, tc.wantCIDRs)
+			}
+			for i, cidr := range tc.wantCIDRs {
+				if opts.Proxy.Trusted[i] != cidr {
+					t.Fatalf("Proxy.Trusted[%d] = %q, want %q", i, opts.Proxy.Trusted[i], cidr)
+				}
+			}
+		})
 	}
 }

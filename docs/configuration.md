@@ -34,6 +34,7 @@ UI.
 | `APP_SNATCHARR_CONFIGARR_SECRETS` | | Path to Configarr `secrets.yml` |
 | `APP_SNATCHARR_CONFIGARR_WATCH` | `true` | Re-import on file change |
 | `APP_SNATCHARR_WEB_DEV` | `false` | Disable the embedded SPA (Vite dev server proxies instead) |
+| `APP_SNATCHARR_PROXY_TRUSTED` | | Comma-separated CIDRs of trusted reverse proxies (e.g. `10.0.0.0/8`). Enables client IP resolution from `X-Forwarded-For` for login throttling |
 | `APP_OTEL_ENABLED` | `true` | OpenTelemetry export (no-op without an endpoint) |
 | `APP_LOG_FORMAT` | `json` | `json` or `text` |
 

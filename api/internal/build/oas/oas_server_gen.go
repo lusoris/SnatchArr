@@ -236,7 +236,7 @@ type Handler interface {
 	// Start a session with username and password.
 	//
 	// POST /auth/login
-	Login(ctx context.Context, req *LoginRequest) (*Session, error)
+	Login(ctx context.Context, req *LoginRequest) (LoginRes, error)
 	// Logout implements logout operation.
 	//
 	// End the current session.

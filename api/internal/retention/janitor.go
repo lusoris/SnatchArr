@@ -40,12 +40,12 @@ const (
 
 // Counts are the rows one pass deleted, per table.
 type Counts struct {
-	Events, Runs, Afterglow, Buckets, Sessions, Workers int64
+	Events, Runs, Afterglow, Buckets, Sessions, Workers, Lockouts int64
 }
 
 // Total is the sum over every table.
 func (c Counts) Total() int64 {
-	return c.Events + c.Runs + c.Afterglow + c.Buckets + c.Sessions + c.Workers
+	return c.Events + c.Runs + c.Afterglow + c.Buckets + c.Sessions + c.Workers + c.Lockouts
 }
 
 // Deps are the janitor's collaborators; each owns the purge of its table.
@@ -59,6 +59,7 @@ type Deps struct {
 	Memory   *snatch.Memory
 	Budget   *snatch.Budget
 	Sessions *auth.PgSessionStore
+	Lockouts *auth.PgLockoutStore
 	Clock    clock.Clock
 	Logger   *slog.Logger
 	Metrics  *metrics.Metrics
@@ -112,6 +113,9 @@ func (j *Janitor) Pass(ctx context.Context) (Counts, error) {
 		{"workers", &c.Workers, func(ctx context.Context, n int32) (int64, error) {
 			return j.deps.Workers.Purge(ctx, before, n)
 		}},
+		{"lockouts", &c.Lockouts, func(ctx context.Context, n int32) (int64, error) {
+			return j.deps.Lockouts.PurgeExpired(ctx, j.deps.Clock.Now(), auth.LockoutWindow, n)
+		}},
 	}
 	var errs []error
 	for _, s := range steps {
@@ -149,6 +153,7 @@ func (j *Janitor) tick(ctx context.Context) error {
 	attrs := []any{
 		slog.Int64("events", c.Events), slog.Int64("runs", c.Runs), slog.Int64("afterglow", c.Afterglow),
 		slog.Int64("buckets", c.Buckets), slog.Int64("sessions", c.Sessions), slog.Int64("workers", c.Workers),
+		slog.Int64("lockouts", c.Lockouts),
 	}
 	switch {
 	case err != nil:

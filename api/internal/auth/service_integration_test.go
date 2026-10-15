@@ -9,8 +9,10 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jonboulle/clockwork"
 
 	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/core/crypto"
@@ -28,11 +30,18 @@ const (
 
 func newService(t *testing.T) *auth.Service {
 	t.Helper()
-	svc, err := auth.NewService(storetest.New(t), crypto.NewPasswordHasher(2), clock.NewFake(), id.New(), slog.New(slog.DiscardHandler))
+	svc, _ := newServiceWithClock(t)
+	return svc
+}
+
+func newServiceWithClock(t *testing.T) (*auth.Service, *clockwork.FakeClock) {
+	t.Helper()
+	clk := clock.NewFake()
+	svc, err := auth.NewService(storetest.New(t), crypto.NewPasswordHasher(2), clk, id.New(), slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
 	}
-	return svc
+	return svc, clk
 }
 
 func TestSetupCreatesTheFirstAdminOnce(t *testing.T) {
@@ -113,7 +122,7 @@ func TestLogin(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			user, err := svc.Login(t.Context(), tc.username, tc.password)
+			user, err := svc.Login(t.Context(), tc.username, tc.password, "192.0.2.1")
 			if !errors.Is(err, tc.want) || (tc.want == nil) != (err == nil) {
 				t.Fatalf("Login() = %v, want %v", err, tc.want)
 			}
@@ -128,5 +137,78 @@ func TestUnknownUserIsNotFound(t *testing.T) {
 	t.Parallel()
 	if _, err := newService(t).User(t.Context(), uuid.New()); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("User() = %v, want %v", err, domain.ErrNotFound)
+	}
+}
+
+func TestLoginThrottlingBoundary(t *testing.T) {
+	t.Parallel()
+	svc, clk := newServiceWithClock(t)
+	ctx := t.Context()
+	_, err := svc.Setup(ctx, adminName, adminPass)
+	if err != nil {
+		t.Fatalf("Setup() = %v", err)
+	}
+
+	clientIP := "192.0.2.1"
+
+	// Boundary 1: MaxFails-1 (4) failures -> next login with right password succeeds
+	for i := 1; i < auth.LockoutMaxFails; i++ {
+		if _, err := svc.Login(ctx, adminName, "wrong-pass", clientIP); !errors.Is(err, domain.ErrUnauthorized) {
+			t.Fatalf("fail attempt %d: err = %v, want ErrUnauthorized", i, err)
+		}
+	}
+	if _, err := svc.Login(ctx, adminName, adminPass, clientIP); err != nil {
+		t.Fatalf("login after %d fails = %v, want success", auth.LockoutMaxFails-1, err)
+	}
+
+	// Boundary 2: exactly MaxFails (5) failures from a new IP -> locks both user and IP
+	clientIP2 := "192.0.2.2"
+	for i := 1; i <= auth.LockoutMaxFails; i++ {
+		if _, err := svc.Login(ctx, adminName, "wrong-pass", clientIP2); !errors.Is(err, domain.ErrUnauthorized) {
+			t.Fatalf("fail attempt %d: err = %v, want ErrUnauthorized", i, err)
+		}
+	}
+	// Right password refused with domain.ErrTooManyRequests from same IP and from clean IP (user key locked)
+	if _, err := svc.Login(ctx, adminName, adminPass, clientIP2); !errors.Is(err, domain.ErrTooManyRequests) {
+		t.Fatalf("Login() with right password when locked = %v, want ErrTooManyRequests", err)
+	}
+	if _, err := svc.Login(ctx, adminName, adminPass, "192.0.2.99"); !errors.Is(err, domain.ErrTooManyRequests) {
+		t.Fatalf("Login() from clean IP when user locked = %v, want ErrTooManyRequests", err)
+	}
+
+	// Boundary 3: Cooldown expires -> right password succeeds
+	clk.Advance(auth.LockoutCooldown - time.Second)
+	if _, err := svc.Login(ctx, adminName, adminPass, clientIP2); !errors.Is(err, domain.ErrTooManyRequests) {
+		t.Fatalf("Login() just before cooldown expiry = %v, want ErrTooManyRequests", err)
+	}
+	clk.Advance(2 * time.Second)
+	if _, err := svc.Login(ctx, adminName, adminPass, clientIP2); err != nil {
+		t.Fatalf("Login() after cooldown = %v, want success", err)
+	}
+
+	// Boundary 4: IP key locks a second username from the same IP
+	testIPLockoutAcrossUsers(t, svc, clientIP)
+}
+
+func testIPLockoutAcrossUsers(t *testing.T, svc *auth.Service, clientIP string) {
+	t.Helper()
+	ctx := t.Context()
+	otherIP := "192.0.2.3"
+
+	// 5 failed logins for non-existent user from otherIP locks otherIP
+	for i := 1; i <= auth.LockoutMaxFails; i++ {
+		if _, err := svc.Login(ctx, "attacker-random-user", "bad-pass", otherIP); !errors.Is(err, domain.ErrUnauthorized) {
+			t.Fatalf("attacker attempt %d: err = %v, want ErrUnauthorized", i, err)
+		}
+	}
+
+	// admin login from locked otherIP is refused even with correct password
+	if _, err := svc.Login(ctx, adminName, adminPass, otherIP); !errors.Is(err, domain.ErrTooManyRequests) {
+		t.Fatalf("admin login from locked IP = %v, want ErrTooManyRequests", err)
+	}
+
+	// admin login from clean clientIP succeeds
+	if _, err := svc.Login(ctx, adminName, adminPass, clientIP); err != nil {
+		t.Fatalf("admin login from clean IP = %v, want success", err)
 	}
 }

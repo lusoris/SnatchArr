@@ -2632,6 +2632,7 @@ func (s *ProblemStatusCode) SetResponse(val Problem) {
 }
 
 func (*ProblemStatusCode) deleteInstanceRes() {}
+func (*ProblemStatusCode) loginRes()          {}
 
 // Ref: #/components/schemas/Run
 type Run struct {
@@ -3773,6 +3774,8 @@ func (s *Session) SetCsrfToken(val string) {
 func (s *Session) SetExpiresAt(val time.Time) {
 	s.ExpiresAt = val
 }
+
+func (*Session) loginRes() {}
 
 // SessionHeaders wraps Session with response headers.
 type SessionHeaders struct {

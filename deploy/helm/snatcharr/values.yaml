@@ -26,6 +26,10 @@ config:
   # External base URL, used for cookies and links (APP_SNATCHARR_PUBLIC_URL).
   publicUrl: ""
   sessionTtl: 8h
+  # CIDRs of reverse proxies whose X-Forwarded-For header the API trusts to resolve the
+  # client IP for login throttling (APP_SNATCHARR_PROXY_TRUSTED). Empty trusts no proxy and
+  # reads RemoteAddr directly.
+  trustedProxies: []
   otel:
     enabled: false
     endpoint: ""
