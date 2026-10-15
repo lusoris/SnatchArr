@@ -255,6 +255,16 @@
         ".devcontainer/Dockerfile.praetor"
       ],
       "enabled": false
+    },
+    {
+      "description": "TypeScript 7 drops the JavaScript compiler API that @sveltejs/kit reads tsconfig through (svelte-kit sync fails with \"Cannot read properties of undefined (reading 'readFile')\"), and @sveltejs/kit 3.1.0 declares the peer range typescript ^6.0.0. Revisit when a released @sveltejs/kit peer range admits typescript 7 (#149)",
+      "matchManagers": [
+        "npm"
+      ],
+      "matchPackageNames": [
+        "typescript"
+      ],
+      "allowedVersions": "<7"
     }
   ],
   "minimumReleaseAge": "3 days",
