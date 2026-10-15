@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	gconfig "github.com/golusoris/golusoris/core/config"
+
 	"github.com/lusoris/SnatchArr/api/internal/config"
 )
 
@@ -112,5 +114,42 @@ func TestDevCryptoKeyIsAES256(t *testing.T) {
 	raw, err := hex.DecodeString(config.DevCryptoKey)
 	if err != nil || len(raw) != 32 {
 		t.Fatalf("DevCryptoKey decodes to %d bytes, %v; want 32", len(raw), err)
+	}
+}
+
+func TestLoadTrustedProxies(t *testing.T) {
+	cases := []struct {
+		name      string
+		envKey    string
+		envVal    string
+		wantCIDRs []string
+	}{
+		{"positive APP_HTTP_TRUSTED_PROXIES comma separated", "APP_HTTP_TRUSTED_PROXIES", "10.0.0.0/8, 172.16.0.0/12", []string{"10.0.0.0/8", "172.16.0.0/12"}},
+		{"positive APP_SNATCHARR_HTTP_TRUSTED_PROXIES", "APP_SNATCHARR_HTTP_TRUSTED_PROXIES", "192.168.0.0/16", []string{"192.168.0.0/16"}},
+		{"boundary empty default", "", "", nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.envKey != "" {
+				t.Setenv(tc.envKey, tc.envVal)
+			}
+			t.Setenv("APP_SNATCHARR_PROFILE", "dev")
+			cfg, err := gconfig.New(gconfig.Options{EnvPrefix: "APP_"})
+			if err != nil {
+				t.Fatalf("gconfig.New: %v", err)
+			}
+			opts, err := config.Load(cfg)
+			if err != nil {
+				t.Fatalf("config.Load: %v", err)
+			}
+			if len(opts.HTTP.TrustedProxies) != len(tc.wantCIDRs) {
+				t.Fatalf("TrustedProxies = %v, want %v", opts.HTTP.TrustedProxies, tc.wantCIDRs)
+			}
+			for i, cidr := range tc.wantCIDRs {
+				if opts.HTTP.TrustedProxies[i] != cidr {
+					t.Fatalf("TrustedProxies[%d] = %q, want %q", i, opts.HTTP.TrustedProxies[i], cidr)
+				}
+			}
+		})
 	}
 }

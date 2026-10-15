@@ -88,3 +88,12 @@ WHERE key = $1;
 DELETE FROM login_lockouts
 WHERE key = $1;
 
+-- name: PurgeExpiredLoginLockouts :execrows
+DELETE FROM login_lockouts
+WHERE key IN (
+    SELECT key FROM login_lockouts
+    WHERE (locked_until IS NULL OR locked_until < sqlc.arg(now)::timestamptz)
+      AND first_fail_at < sqlc.arg(now)::timestamptz - make_interval(secs => sqlc.arg(window_s)::double precision)
+    LIMIT sqlc.arg(batch)::int
+);
+

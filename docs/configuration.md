@@ -15,6 +15,7 @@ UI.
 | --- | --- | --- |
 | `APP_DB_DSN` | required | Postgres DSN, e.g. `postgres://snatcharr:secret@postgres:5432/snatcharr?sslmode=disable` |
 | `APP_HTTP_ADDR` | `:8080` | HTTP listen address (API, SSE, embedded UI) |
+| `APP_HTTP_TRUSTED_PROXIES` | | Comma-separated CIDRs of trusted reverse proxies (e.g. `10.0.0.0/8`). Enables client IP resolution from `X-Forwarded-For` for login throttling |
 | `APP_GRPC_LISTEN` | `:9090` | gRPC listen address for workers |
 | `APP_GRPC_KEEPALIVE_MAX_CONNECTION_AGE` | `2m` | After this age a worker connection takes no new RPCs and new ones move to a fresh connection; negative = never |
 | `APP_GRPC_KEEPALIVE_MAX_CONNECTION_AGE_GRACE` | unlimited | How long RPCs already running on an aged connection may finish. A finite value must be at least `35s` (the 30 s `LeaseRun` long-poll plus margin) or the API refuses to start; note that a finite value can still cut a run's `ReportEvents` stream |

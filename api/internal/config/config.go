@@ -17,6 +17,7 @@
 //	snatcharr.session.ttl        APP_SNATCHARR_SESSION_TTL        cookie session lifetime (default 8h)
 //	snatcharr.session.secure     APP_SNATCHARR_SESSION_SECURE     Secure cookie flag (default true)
 //	snatcharr.apikey.secret      APP_SNATCHARR_APIKEY_SECRET      HMAC secret for API keys (required in prod)
+//	snatcharr.http.trusted_proxies APP_HTTP_TRUSTED_PROXIES       trusted reverse proxy CIDRs
 package config
 
 import (
@@ -48,6 +49,14 @@ type Options struct {
 	Configarr ConfigarrOptions `koanf:"configarr"`
 	Session   SessionOptions   `koanf:"session"`
 	APIKey    APIKeyOptions    `koanf:"apikey"`
+	HTTP      HTTPOptions      `koanf:"http"`
+}
+
+// HTTPOptions configures HTTP ingress trust.
+type HTTPOptions struct {
+	// TrustedProxies is a list of CIDR ranges (e.g. "10.0.0.0/8") trusted to supply
+	// X-Forwarded-For headers. An empty slice trusts nothing.
+	TrustedProxies []string `koanf:"trusted_proxies"`
 }
 
 // PublicOptions describe how the service is reached from outside.
@@ -105,6 +114,7 @@ func Load(cfg *config.Config) (Options, error) {
 	if err := cfg.Unmarshal("snatcharr", &o); err != nil {
 		return Options{}, fmt.Errorf("config: unmarshal snatcharr: %w", err)
 	}
+	loadTrustedProxies(cfg, &o)
 	if err := o.Validate(); err != nil {
 		return Options{}, err
 	}
@@ -112,6 +122,44 @@ func Load(cfg *config.Config) (Options, error) {
 		return Options{}, err
 	}
 	return o, nil
+}
+
+func loadTrustedProxies(cfg *config.Config, o *Options) {
+	if len(o.HTTP.TrustedProxies) > 0 {
+		return
+	}
+	var httpOpts HTTPOptions
+	if err := cfg.Unmarshal("http", &httpOpts); err == nil && len(httpOpts.TrustedProxies) > 0 {
+		o.HTTP = httpOpts
+		return
+	}
+	for _, key := range []string{
+		"http.trusted_proxies",
+		"http.trusted.proxies",
+		"snatcharr.http.trusted.proxies",
+		"snatcharr.http.trusted_proxies",
+	} {
+		if v := cfg.Strings(key); len(v) > 0 {
+			o.HTTP.TrustedProxies = v
+			return
+		}
+		if raw := cfg.String(key); raw != "" {
+			o.HTTP.TrustedProxies = splitComma(raw)
+			return
+		}
+	}
+}
+
+func splitComma(s string) []string {
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // DevCryptoKey is the development key the dev profile falls back to when crypto.key is

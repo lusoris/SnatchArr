@@ -233,6 +233,30 @@ func (q *Queries) LoadSession(ctx context.Context, arg LoadSessionParams) ([]byt
 	return data, err
 }
 
+const purgeExpiredLoginLockouts = `-- name: PurgeExpiredLoginLockouts :execrows
+DELETE FROM login_lockouts
+WHERE key IN (
+    SELECT key FROM login_lockouts
+    WHERE (locked_until IS NULL OR locked_until < $1::timestamptz)
+      AND first_fail_at < $1::timestamptz - make_interval(secs => $2::double precision)
+    LIMIT $3::int
+)
+`
+
+type PurgeExpiredLoginLockoutsParams struct {
+	Now     time.Time
+	WindowS float64
+	Batch   int32
+}
+
+func (q *Queries) PurgeExpiredLoginLockouts(ctx context.Context, arg PurgeExpiredLoginLockoutsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, purgeExpiredLoginLockouts, arg.Now, arg.WindowS, arg.Batch)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const purgeExpiredSessions = `-- name: PurgeExpiredSessions :execrows
 DELETE FROM sessions
 WHERE id IN (SELECT id FROM sessions WHERE expires_at <= $1::timestamptz LIMIT $2::int)

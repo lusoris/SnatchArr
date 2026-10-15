@@ -72,3 +72,16 @@ func (p *PgLockoutStore) Delete(ctx context.Context, key string) error {
 	}
 	return nil
 }
+
+// PurgeExpired removes up to limit rows whose lock has expired and whose window has passed.
+func (p *PgLockoutStore) PurgeExpired(ctx context.Context, now time.Time, window time.Duration, limit int32) (int64, error) {
+	n, err := p.st.Q().PurgeExpiredLoginLockouts(ctx, sqlcgen.PurgeExpiredLoginLockoutsParams{
+		Now:     now,
+		WindowS: window.Seconds(),
+		Batch:   limit,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("auth: purge login lockouts: %w", err)
+	}
+	return n, nil
+}

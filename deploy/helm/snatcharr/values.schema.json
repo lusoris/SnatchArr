@@ -10,6 +10,17 @@
         "worker": { "$ref": "#/$defs/image" }
       }
     },
+    "config": {
+      "type": "object",
+      "properties": {
+        "publicUrl": { "type": "string" },
+        "sessionTtl": { "type": "string" },
+        "trustedProxies": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
     "secrets": {
       "type": "object",
       "properties": {

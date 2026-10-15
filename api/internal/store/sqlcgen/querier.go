@@ -123,6 +123,7 @@ type Querier interface {
 	ProcessedAttempts(ctx context.Context, arg ProcessedAttemptsParams) (int32, error)
 	PurgeBucketsBefore(ctx context.Context, arg PurgeBucketsBeforeParams) (int64, error)
 	PurgeEventsBefore(ctx context.Context, arg PurgeEventsBeforeParams) (int64, error)
+	PurgeExpiredLoginLockouts(ctx context.Context, arg PurgeExpiredLoginLockoutsParams) (int64, error)
 	// The outer expires_at condition is repeated on purpose: Postgres re-checks it on a row a
 	// concurrent snatch extended meanwhile, so that row is kept.
 	PurgeExpiredProcessed(ctx context.Context, arg PurgeExpiredProcessedParams) (int64, error)
