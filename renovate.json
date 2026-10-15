@@ -250,6 +250,16 @@
       "automerge": false
     },
     {
+      "description": "Sonarr/Sonarr also holds the release tags of Radarr from v4.1 to v6, which point at Radarr commits (#231 proposed v6.4.4, #249 v4.7.5). Its published releases are Sonarr's own, so Sonarr resolves through github-releases; the digest stays the commit of the tag, and prereleases count as unstable (docs/upstream-contracts.md)",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchPackageNames": [
+        "Sonarr/Sonarr"
+      ],
+      "overrideDatasource": "github-releases"
+    },
+    {
       "description": "The two images of the workflow gate move in a pull request of their own",
       "matchManagers": [
         "custom.regex"

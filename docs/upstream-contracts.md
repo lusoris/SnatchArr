@@ -107,6 +107,13 @@ Renovate cannot renew the sha256, so these pull requests are never merged automa
 4. A difference the contract tests report now is the finding this gate exists for: fix
    the client in the same pull request.
 
+A repository can hold release tags of another project: `Sonarr/Sonarr` carries the Radarr
+tags from v4.1 to v6, which point at Radarr commits. A package rule in `renovate.json` reads
+Sonarr through its published releases (`github-releases`) instead of its tags, so those tags
+are never proposed. The manifest refuses one commit under two repositories, so a Radarr tag
+that still gets in at the commit of the Radarr pin fails the `contracts` job with a message
+that names it; any other foreign commit fails the spec download.
+
 `TestRenovateKeepsEveryPinCurrent` in `tools/upstreamspec/renovate_test.go` applies the
 two patterns of `renovate.json` to the manifest and fails when they no longer capture
 every pin, for example after the fields of an entry are reordered. `make contracts-verify` runs
