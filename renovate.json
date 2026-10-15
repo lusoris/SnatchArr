@@ -236,6 +236,16 @@
       "automerge": false
     },
     {
+      "description": "Sonarr/Sonarr also holds the v6 release tags of Radarr, which point at Radarr commits; Sonarr itself releases v4 and v5. Revisit when Sonarr publishes a v6 release of its own (docs/upstream-contracts.md)",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchPackageNames": [
+        "Sonarr/Sonarr"
+      ],
+      "allowedVersions": "!/^v6\\./"
+    },
+    {
       "description": "The two images of the workflow gate move in a pull request of their own",
       "matchManagers": [
         "custom.regex"
