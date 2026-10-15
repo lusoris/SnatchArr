@@ -220,8 +220,8 @@ github.com/golusoris/goenvoy/downloadclient/sabnzbd/v2 v2.0.0 h1:ni1msrra8pTYE0W
 github.com/golusoris/goenvoy/downloadclient/sabnzbd/v2 v2.0.0/go.mod h1:Ec0oZoIT0Cbzthncd9P3qOBMk0klrVW2TgWv0WGtyvg=
 github.com/golusoris/goenvoy/downloadclient/transmission/v2 v2.0.0 h1:JF0dwbzSZfXAyowUopdSiMx3mxtC0/t0mzAsAIdzroA=
 github.com/golusoris/goenvoy/downloadclient/transmission/v2 v2.0.0/go.mod h1:MW8n/BIRh9ZaCTIiNdRsBfI6hnFAPQwNq3Vx7wzWrBk=
-github.com/golusoris/golusoris v0.16.4 h1:OQC8l5+XfAs+rlTxOczTh7drMpaYJT6LUDNoj1A+56c=
-github.com/golusoris/golusoris v0.16.4/go.mod h1:+NRGOJn29GYZrQhjZc48Rxm/Ge9K/JH1UhHRwNoYoaU=
+github.com/golusoris/golusoris v0.16.5 h1:1GOiB6oqNng5JBLScqCr9R6yoffp6H+fnxCAhmi5G0w=
+github.com/golusoris/golusoris v0.16.5/go.mod h1:+NRGOJn29GYZrQhjZc48Rxm/Ge9K/JH1UhHRwNoYoaU=
 github.com/golusoris/golusoris/core v0.10.2 h1:oAPB/rVwBxr0BNzFuSvd5rGvcxOqijwZuPeKyrAVVoM=
 github.com/golusoris/golusoris/core v0.10.2/go.mod h1:uhsMs9H6YP5LS2JRVCuKrKP+c29SGqaZdZKBhwge3nA=
 github.com/google/brotli/go/cbrotli v0.0.0-20230829110029-ed738e842d2f h1:jopqB+UTSdJGEJT8tEqYyE29zN91fi2827oLET8tl7k=
