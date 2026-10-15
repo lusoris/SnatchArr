@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.1.9](https://github.com/lusoris/SnatchArr/compare/v0.1.8...v0.1.9) (2026-10-15)
+
+
+### Bug Fixes
+
+* **api:** refuse deleting a Configarr instance that config.yml declares ([#224](https://github.com/lusoris/SnatchArr/issues/224)) ([2e2c6d2](https://github.com/lusoris/SnatchArr/commit/2e2c6d2029f2aed4197acd000d7391c00316b002))
+* **contracts:** keep Radarr tags out of the Sonarr pin ([#244](https://github.com/lusoris/SnatchArr/issues/244)) ([7343f41](https://github.com/lusoris/SnatchArr/commit/7343f410e98f93f99dc17c9bc598ef3d3be4cab9))
+* **deps:** update module github.com/go-chi/chi/v5 to v5.4.0 ([#232](https://github.com/lusoris/SnatchArr/issues/232)) ([5c86d3e](https://github.com/lusoris/SnatchArr/commit/5c86d3ef06ade5f835abe67361c915908db78573))
+* **deps:** update module github.com/golusoris/golusoris to v0.16.5 ([#247](https://github.com/lusoris/SnatchArr/issues/247)) ([6e5397a](https://github.com/lusoris/SnatchArr/commit/6e5397ad73a3660729aee3338292fd7e081c11d3))
+* **deps:** update module github.com/golusoris/golusoris/core to v0.10.2 ([#228](https://github.com/lusoris/SnatchArr/issues/228)) ([717aaa0](https://github.com/lusoris/SnatchArr/commit/717aaa06b319354ca0680aeffae355205da013b0))
+* **deps:** update rustls to 0.23.46 for RUSTSEC-2026-0346..0349 ([#241](https://github.com/lusoris/SnatchArr/issues/241)) ([9c63653](https://github.com/lusoris/SnatchArr/commit/9c63653747f3f5789dc40480dc7eb0f6f9578b42))
+* **deps:** update sveltesentio ([#233](https://github.com/lusoris/SnatchArr/issues/233)) ([d0f3921](https://github.com/lusoris/SnatchArr/commit/d0f39216115b6f55484158a91528631927d03a7e))
+
 ## [0.1.8](https://github.com/lusoris/SnatchArr/compare/v0.1.7...v0.1.8) (2026-10-14)
 
 
