@@ -62,6 +62,7 @@ func writeFile(t *testing.T, file, content string) {
 func TestReadManifest(t *testing.T) {
 	t.Parallel()
 	with := func(key, line string) string { return entry(map[string]string{key: line}) }
+	otherProject := map[string]string{"name": "name: other", "repository": "repository: Other/Project"}
 	tests := []struct {
 		name     string
 		manifest string
@@ -98,6 +99,7 @@ func TestReadManifest(t *testing.T) {
 		{"an operation outside the prefix", with("operations", "operations: [GET /api/v3/status]"), `does not start with the prefix "/api/v1"`},
 		{"an operation listed twice", with("operations", "operations: [GET /api/v1/status, GET /api/v1/status]"), "is listed twice"},
 		{"a name used twice", entry(nil) + strings.TrimPrefix(entry(nil), "specs:\n"), "specs[1] (sample): repeats the name"},
+		{"one commit under two repositories", entry(nil) + strings.TrimPrefix(entry(otherProject), "specs:\n"), "specs[1] (other): repeats the commit of Owner/Project"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -117,6 +119,12 @@ func TestReadManifest(t *testing.T) {
 	}
 	if _, err := readManifest(filepath.Join(t.TempDir(), "absent.yaml")); err == nil {
 		t.Error("an absent manifest was accepted")
+	}
+	// Two spec files of one repository at one commit are two entries with one commit.
+	file := filepath.Join(t.TempDir(), "specs.yaml")
+	writeFile(t, file, entry(nil)+strings.TrimPrefix(entry(map[string]string{"name": "name: second", "path": "path: src/other.json"}), "specs:\n"))
+	if pins, err := readManifest(file); err != nil || len(pins) != 2 {
+		t.Errorf("readManifest of two files of one repository at one commit = %d pin(s), %v; want 2, nil", len(pins), err)
 	}
 }
 
