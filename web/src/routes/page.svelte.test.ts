@@ -40,14 +40,16 @@ describe('dashboard', () => {
 		renderWithQuery(Dashboard);
 
 		const failed = await screen.findByRole('status');
-		expect(failed.textContent).toBe('Connection refused (ECONNREFUSED)');
+		expect(failed.textContent?.replace(/\s+/g, ' ').trim()).toBe(
+			`${m.instance_check_failed()}: Connection refused (ECONNREFUSED)`
+		);
 		expect(screen.queryByText(lastCheck)).toBeNull();
 		expect(screen.getByText(/^\s*sonarr · /).textContent?.trim()).toBe(
 			'sonarr · http://sonarr.local:8989'
 		);
 	});
 
-	it('shows neither state for an instance no connection test has reached', async () => {
+	it('shows never tested state for an instance no connection test has reached', async () => {
 		stubGet({ '/instances': [untestedInstance], '/hourly-caps': [] });
 		renderWithQuery(Dashboard);
 
@@ -55,6 +57,7 @@ describe('dashboard', () => {
 		expect(screen.getByText(/^\s*radarr · /).textContent?.trim()).toBe(
 			'radarr · http://radarr.local:7878'
 		);
+		expect(screen.getByText(m.instance_never_tested())).toBeTruthy();
 		expect(screen.queryByRole('status')).toBeNull();
 		expect(screen.queryByText(lastCheck)).toBeNull();
 	});

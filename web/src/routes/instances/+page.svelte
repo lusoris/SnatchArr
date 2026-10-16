@@ -7,6 +7,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { createSentioQuery, createSentioMutation } from '@sveltesentio/query';
 	import { toast } from 'svelte-sonner';
 	import { api, describeError } from '#lib/api/client.js';
+	import CheckState from '#lib/components/CheckState.svelte';
 	import Field from '#lib/components/Field.svelte';
 	import KindSelect from '#lib/components/KindSelect.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
@@ -78,6 +79,7 @@ SPDX-License-Identifier: EUPL-1.2
 				<th scope="col">{m.instance_url()}</th>
 				<th scope="col">{m.instance_source()}</th>
 				<th scope="col">{m.instance_enabled()}</th>
+				<th scope="col">{m.instance_last_check()}</th>
 				<th scope="col"><span class="sr-only">Actions</span></th>
 			</tr>
 		</thead>
@@ -89,6 +91,7 @@ SPDX-License-Identifier: EUPL-1.2
 					<td class="break-all">{inst.base_url}</td>
 					<td>{inst.source}</td>
 					<td>{inst.enabled ? '✓' : '–'}</td>
+					<td><CheckState instance={inst} /></td>
 					<td>
 						<button
 							type="button"

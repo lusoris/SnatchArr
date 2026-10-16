@@ -8,13 +8,12 @@ SPDX-License-Identifier: EUPL-1.2
 	import { toast } from 'svelte-sonner';
 	import { api, describeError } from '#lib/api/client.js';
 	import type { components } from '#lib/api/schema.js';
+	import CheckState from '#lib/components/CheckState.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import StaminaGauge from '#lib/components/StaminaGauge.svelte';
 	import { m } from '#lib/paraglide/messages.js';
-	import { getLocale } from '#lib/paraglide/runtime.js';
 	import { instanceKindLabel } from '#lib/products.js';
 	import { keys } from '#lib/query.js';
-	import { formatWhen } from '#lib/stamina.js';
 
 	type Instance = components['schemas']['Instance'];
 	type Cap = components['schemas']['CapStatus'];
@@ -84,14 +83,7 @@ SPDX-License-Identifier: EUPL-1.2
 				{#if cap}
 					<StaminaGauge label={m.stamina()} used={cap.used} cap={cap.cap} />
 				{/if}
-				{#if inst.last_error}
-					<p role="status" class="text-sm text-danger">{inst.last_error}</p>
-				{:else if inst.last_check_at}
-					<p class="text-xs text-subtle">
-						{m.instance_last_check()}: {formatWhen(inst.last_check_at, getLocale())} · {inst.last_seen_version ??
-							''}
-					</p>
-				{/if}
+				<CheckState instance={inst} />
 				<div class="flex flex-wrap gap-2">
 					<button
 						type="button"

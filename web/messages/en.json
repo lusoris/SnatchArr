@@ -44,6 +44,8 @@
 	"instance_enabled": "Enabled",
 	"instance_source": "Source",
 	"instance_last_check": "Last check",
+	"instance_never_tested": "Never tested",
+	"instance_check_failed": "Connection test failed",
 	"instance_add": "Add instance",
 	"instance_api_key": "API key",
 	"instance_test": "Test",
