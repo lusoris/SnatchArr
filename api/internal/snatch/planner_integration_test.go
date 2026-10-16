@@ -291,3 +291,37 @@ func TestPlanner_ClientNamedCapsulePausedUnreachableRecordsClientUnreachable(t *
 		t.Errorf("deferrals{client_unreachable} = %v (present %t), want 1", got, ok)
 	}
 }
+
+// Positive: an instance whose policy has dry_run = true gets a queued run with dry_run = true and seed = 0.
+func TestPlanner_DryRunPolicyCreatesDryRunRun(t *testing.T) {
+	t.Parallel()
+	f := newPlannerFixture(t, AllowAll{})
+	ctx := t.Context()
+	instanceID := storetest.Instance(t, f.st, f.clk.Now())
+
+	_, err := f.st.Pool().Exec(ctx, `
+		INSERT INTO snatch_policies (instance_id, dry_run, updated_at)
+		VALUES ($1, true, now())
+		ON CONFLICT (instance_id) DO UPDATE SET dry_run = true`, instanceID)
+	if err != nil {
+		t.Fatalf("set dry_run policy: %v", err)
+	}
+
+	queued, err := f.planner.Tick(ctx)
+	if err != nil || queued != 1 {
+		t.Fatalf("Tick() = %d, %v; want 1 queued", queued, err)
+	}
+
+	var dryRun bool
+	var seed int64
+	row := f.st.Pool().QueryRow(ctx, `SELECT dry_run, seed FROM snatch_runs WHERE instance_id = $1`, instanceID)
+	if err := row.Scan(&dryRun, &seed); err != nil {
+		t.Fatalf("query snatch_runs: %v", err)
+	}
+	if !dryRun {
+		t.Errorf("queued run dry_run = %v, want true", dryRun)
+	}
+	if seed != 0 {
+		t.Errorf("queued run seed = %d, want 0", seed)
+	}
+}

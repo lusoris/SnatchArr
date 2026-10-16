@@ -334,6 +334,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/instances/{instanceId}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instanceId: components["parameters"]["InstanceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start a dry-run / preview snatch run */
+        post: operations["previewRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/instances/{instanceId}/events": {
         parameters: {
             query?: never;
@@ -362,6 +381,23 @@ export interface paths {
         };
         /** Recent snatch runs, newest first */
         get: operations["listRuns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runs/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Load a single snatch run by ID */
+        get: operations["getRun"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1263,6 +1299,11 @@ export interface components {
             exclude_quality_profiles?: number[];
             /** @description Skip items released less than this many hours ago; 0 (or absent) turns the delay off. The release date is the one of the app kind: air date (Sonarr, Whisparr v2), the date of radarr_release_type (Radarr, Whisparr v3), the album or book release date. Items without a date are kept. */
             release_delay_h?: number;
+            /**
+             * @description When true, planner creates preview / dry-run runs that do not dispatch searches.
+             * @default false
+             */
+            dry_run: boolean;
             /** Format: date-time */
             readonly updated_at?: string;
         };
@@ -1300,6 +1341,29 @@ export interface components {
              * @description Set for a quickie limited to one series (Seerr request)
              */
             focus_group_id?: number;
+            /** @description Set when the run is a dry-run / preview */
+            readonly dry_run?: boolean;
+            /**
+             * Format: int64
+             * @description RNG seed used for the run (0 = OS entropy). A preview seed has at most 53 bits.
+             */
+            readonly seed?: number;
+            /** @description Previewed search targets when dry_run is true */
+            readonly previewed_targets?: components["schemas"]["PreviewTarget"][];
+        };
+        PreviewResult: {
+            /** Format: uuid */
+            run_id: string;
+            /** Format: int64 */
+            seed: number;
+        };
+        PreviewTarget: {
+            entity_type: string;
+            /** Format: int64 */
+            id: number;
+            title: string;
+            /** @description Stamina this item adds to the run. An atomic search (season pack, series, artist, author) is charged on its first item and 0 on the rest, so the costs sum to what a real run spends. */
+            cost: number;
         };
         Event: {
             /** Format: int64 */
@@ -2403,6 +2467,31 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    previewRun: {
+        parameters: {
+            query: {
+                kind: string;
+            };
+            header?: never;
+            path: {
+                instanceId: components["parameters"]["InstanceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Preview run enqueued */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreviewResult"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     deleteInstanceEvents: {
         parameters: {
             query?: never;
@@ -2444,6 +2533,29 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Run"][];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Run */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Run"];
                 };
             };
             default: components["responses"]["Problem"];

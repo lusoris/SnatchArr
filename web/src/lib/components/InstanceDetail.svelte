@@ -13,6 +13,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import Field from '#lib/components/Field.svelte';
 	import InstanceEditForm from '#lib/components/InstanceEditForm.svelte';
 	import PolicyFilters from '#lib/components/PolicyFilters.svelte';
+	import PreviewPanel from '#lib/components/PreviewPanel.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import ResetMemory from '#lib/components/ResetMemory.svelte';
 	import RunList from '#lib/components/RunList.svelte';
@@ -45,7 +46,8 @@ SPDX-License-Identifier: EUPL-1.2
 		exclude_tags: [],
 		include_quality_profiles: [],
 		exclude_quality_profiles: [],
-		release_delay_h: 0
+		release_delay_h: 0,
+		dry_run: false
 	} satisfies Partial<Policy>;
 	let draft = $state<Policy | null>(null);
 	$effect(() => {
@@ -232,6 +234,13 @@ SPDX-License-Identifier: EUPL-1.2
 			><input type="checkbox" bind:checked={draft.await_command} />
 			{m.policy_await_command()}</label
 		>
+		<div class="flex flex-col gap-0.5 md:col-span-2">
+			<label class="flex items-center gap-2">
+				<input type="checkbox" bind:checked={draft.dry_run} />
+				{m.policy_dry_run()}
+			</label>
+			<p class="text-xs text-subtle">{m.policy_dry_run_hint()}</p>
+		</div>
 		<PolicyFilters {instanceId} bind:policy={draft} />
 		<div class="md:col-span-2">
 			<button type="submit" class="btn btn-primary" disabled={save.isPending}
@@ -241,6 +250,7 @@ SPDX-License-Identifier: EUPL-1.2
 	</form>
 
 	<div class="mt-6">
+		<PreviewPanel {instanceId} />
 		<RunList {instanceId} />
 		<ResetMemory instance={{ id: instanceId, name: instance.data.name }} />
 	</div>

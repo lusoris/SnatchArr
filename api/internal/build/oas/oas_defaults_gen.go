@@ -122,3 +122,11 @@ func (s *SeerrLinkInput) setDefaults() {
 		s.Enabled.SetTo(val)
 	}
 }
+
+// setDefaults set default value of fields.
+func (s *SnatchPolicy) setDefaults() {
+	{
+		val := bool(false)
+		s.DryRun.SetTo(val)
+	}
+}

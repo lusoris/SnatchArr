@@ -583,13 +583,50 @@ func stepsPoliciesAndRuns() []routerStep {
 			},
 		},
 		{
+			op:     "getRun",
+			method: http.MethodGet,
+			path:   func(ids *idsState) string { return "/runs/" + ids.runID },
+			want:   http.StatusOK,
+			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
+				t.Helper()
+				if decoded["id"] != ids.runID {
+					t.Fatalf("getRun id = %v, want %s", decoded["id"], ids.runID)
+				}
+			},
+		},
+		{
 			op:     "cancelRun",
 			method: http.MethodPost,
 			path:   func(ids *idsState) string { return "/runs/" + ids.runID + "/cancel" },
 			want:   http.StatusNoContent,
 		},
 		{
-			op:     "listEvents",
+			op:     "previewRun",
+			method: http.MethodPost,
+			path:   func(ids *idsState) string { return "/instances/" + ids.instanceID + "/preview?kind=missing" },
+			want:   http.StatusAccepted,
+			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
+				t.Helper()
+				runID, ok := decoded["run_id"].(string)
+				if !ok || runID == "" {
+					t.Fatalf("previewRun missing run_id: %v", decoded)
+				}
+				seed, ok := decoded["seed"].(float64)
+				if !ok || int64(seed) == 0 {
+					t.Fatalf("previewRun seed = %v, want non-zero", decoded["seed"])
+				}
+				ids.runID = runID
+			},
+		},
+		{
+			op:     "cancelRun",
+			method: http.MethodPost,
+			path:   func(ids *idsState) string { return "/runs/" + ids.runID + "/cancel" },
+			want:   http.StatusNoContent,
+		},
+		{
+			op: "listEvents",
+
 			method: http.MethodGet,
 			path:   func(_ *idsState) string { return "/events" },
 			want:   http.StatusOK,

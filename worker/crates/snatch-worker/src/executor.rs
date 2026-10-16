@@ -83,6 +83,16 @@ pub struct Outcome {
     pub error: Option<String>,
 }
 
+impl Outcome {
+    /// An outcome with nothing searched yet that persists `cursor`.
+    fn at(cursor: String) -> Self {
+        Self {
+            cursor,
+            ..Self::default()
+        }
+    }
+}
+
 /// Consecutive search-command failures that open the circuit (HISS-02 bound on retries).
 const MAX_CONSECUTIVE_FAILURES: u32 = 3;
 
@@ -525,7 +535,7 @@ async fn snatch(
             format!("{:?} snatch started{focused}", p.wanted),
         ))
         .await;
-    let mut rng = SmallRng::from_rng(&mut rand::rng());
+    let mut rng = seeded_rng(run.seed);
     let (plan, first) = plan_pages(&p, &mut rng).await?;
     let msg = format!(
         "{} wanted item(s), fetching {} page(s)",
@@ -557,13 +567,62 @@ async fn snatch(
     let targets = group(p.kind, &p.policy, &selected);
     let dispatch = acquire(client, run, targets, events).await?;
     let by_id: HashMap<i64, Candidate> = selected.iter().map(|c| (c.id, c.clone())).collect();
-    let mut outcome = Outcome {
-        searched: Vec::new(),
-        cursor: plan.next_cursor.to_string(),
-        error: None,
-    };
+    if run.dry_run {
+        preview_all(&p, &dispatch, &by_id, events).await;
+        return Ok(Outcome::at(p.policy.cursor.clone()));
+    }
+    let mut outcome = Outcome::at(plan.next_cursor.to_string());
     dispatch_all(&p, &dispatch, &by_id, events, &mut outcome, health).await;
     Ok(outcome)
+}
+
+/// A run's RNG: seeded when the run carries a seed, so a preview and the real run it previews
+/// pick the same targets; from OS entropy when the seed is 0.
+fn seeded_rng(seed: u64) -> SmallRng {
+    if seed != 0 {
+        SmallRng::seed_from_u64(seed)
+    } else {
+        SmallRng::from_rng(&mut rand::rng())
+    }
+}
+
+/// Emits SEARCH_PREVIEWED events for each target granted in a dry-run / preview run.
+async fn preview_all(
+    p: &Prepared,
+    dispatch: &[Target],
+    by_id: &HashMap<i64, Candidate>,
+    events: &Events,
+) {
+    let entity_type = p.kind.entity_type();
+    for target in dispatch {
+        for (id, cost) in preview_costs(target) {
+            let title = by_id.get(&id).map(|c| c.title.clone()).unwrap_or_default();
+            let ev = Ev::run(Level::Info, EventType::SearchPreviewed, title)
+                .entity(entity_type, id)
+                .detail(cost.to_string());
+            events.emit(ev).await;
+        }
+    }
+}
+
+/// Pairs each item of a target with the stamina it adds. An atomic target is one search for
+/// the whole parent, so its first item carries the charge and the rest 0: the previewed costs
+/// sum to what a real run would spend.
+fn preview_costs(target: &Target) -> Vec<(i64, u32)> {
+    let atomic = target.atomic();
+    target
+        .items()
+        .iter()
+        .enumerate()
+        .map(|(i, id)| {
+            let cost = match (atomic, i) {
+                (true, 0) => target.query_cost(),
+                (true, _) => 0,
+                (false, _) => 1,
+            };
+            (*id, cost)
+        })
+        .collect()
 }
 
 /// Dispatches every target, opening the circuit after MAX_CONSECUTIVE_FAILURES failed

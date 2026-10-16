@@ -16,6 +16,7 @@ export const keys = {
 	caps: ['hourly-caps'] as const,
 	runs: ['runs'] as const,
 	instanceRuns: (id: string) => ['runs', id] as const,
+	run: (id: string) => ['runs', 'single', id] as const,
 	events: ['events'] as const,
 	schedules: ['schedules'] as const,
 	dlclients: ['download-clients'] as const,

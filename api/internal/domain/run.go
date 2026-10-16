@@ -38,6 +38,8 @@ type Run struct {
 	// FocusEntityID / FocusGroupID narrow a quickie to one Seerr request (nil = unfocused).
 	FocusEntityID *int64
 	FocusGroupID  *int64
+	DryRun        bool
+	Seed          int64
 }
 
 // Event is one history entry, also streamed live over SSE.

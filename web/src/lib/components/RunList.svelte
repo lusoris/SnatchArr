@@ -67,7 +67,14 @@ SPDX-License-Identifier: EUPL-1.2
 			<tbody>
 				{#each runs.data ?? [] as run (run.id)}
 					<tr>
-						<td>{snatchKindLabel(run.kind)}</td>
+						<td>
+							{snatchKindLabel(run.kind)}
+							{#if run.dry_run}
+								<span class="ml-1.5 rounded-full border border-line px-2 py-0.5 text-xs">
+									{m.run_preview_badge()}
+								</span>
+							{/if}
+						</td>
 						<td>{runStatusLabel(run.status)}{run.error ? ` · ${run.error}` : ''}</td>
 						<td>{formatWhen(run.started_at ?? run.queued_at, getLocale())}</td>
 						<td>{formatWhen(run.finished_at, getLocale()) || '–'}</td>

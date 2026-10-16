@@ -166,7 +166,12 @@ func (p *Planner) maybeEnqueue(ctx context.Context, inst domain.Instance, policy
 			return false, nil
 		}
 	}
-	run, created, err := p.runs.Enqueue(ctx, inst.ID, kind)
+	run, created, err := p.runs.EnqueueWithOptions(ctx, EnqueueOptions{
+		InstanceID: inst.ID,
+		Kind:       kind,
+		DryRun:     policy.DryRun,
+		Seed:       0,
+	})
 	if err != nil {
 		return false, err
 	}

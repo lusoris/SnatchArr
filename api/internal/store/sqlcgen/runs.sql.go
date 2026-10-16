@@ -34,7 +34,7 @@ const completeRun = `-- name: CompleteRun :one
 UPDATE snatch_runs
 SET status = $3, finished_at = $4, searched_count = $5, error = $6, lease_expires_at = NULL
 WHERE id = $1 AND leased_by = $2 AND status IN ('leased', 'cancelled')
-RETURNING id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error, focus_entity_id, focus_group_id, lease_count
+RETURNING id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error, focus_entity_id, focus_group_id, lease_count, dry_run, seed
 `
 
 type CompleteRunParams struct {
@@ -71,6 +71,8 @@ func (q *Queries) CompleteRun(ctx context.Context, arg CompleteRunParams) (Snatc
 		&i.FocusEntityID,
 		&i.FocusGroupID,
 		&i.LeaseCount,
+		&i.DryRun,
+		&i.Seed,
 	)
 	return i, err
 }
@@ -108,9 +110,9 @@ func (q *Queries) CountRunsByStatus(ctx context.Context) ([]CountRunsByStatusRow
 
 const enqueueRun = `-- name: EnqueueRun :one
 
-INSERT INTO snatch_runs (id, instance_id, kind, status, queued_at, focus_entity_id, focus_group_id)
-VALUES ($1, $2, $3, 'queued', $4, $5, $6)
-RETURNING id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error, focus_entity_id, focus_group_id, lease_count
+INSERT INTO snatch_runs (id, instance_id, kind, status, queued_at, focus_entity_id, focus_group_id, dry_run, seed)
+VALUES ($1, $2, $3, 'queued', $4, $5, $6, $7, $8)
+RETURNING id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error, focus_entity_id, focus_group_id, lease_count, dry_run, seed
 `
 
 type EnqueueRunParams struct {
@@ -120,6 +122,8 @@ type EnqueueRunParams struct {
 	QueuedAt      time.Time
 	FocusEntityID *int64
 	FocusGroupID  *int64
+	DryRun        bool
+	Seed          int64
 }
 
 // SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
@@ -132,6 +136,8 @@ func (q *Queries) EnqueueRun(ctx context.Context, arg EnqueueRunParams) (SnatchR
 		arg.QueuedAt,
 		arg.FocusEntityID,
 		arg.FocusGroupID,
+		arg.DryRun,
+		arg.Seed,
 	)
 	var i SnatchRun
 	err := row.Scan(
@@ -149,6 +155,8 @@ func (q *Queries) EnqueueRun(ctx context.Context, arg EnqueueRunParams) (SnatchR
 		&i.FocusEntityID,
 		&i.FocusGroupID,
 		&i.LeaseCount,
+		&i.DryRun,
+		&i.Seed,
 	)
 	return i, err
 }
@@ -163,7 +171,7 @@ WHERE id IN (
     LIMIT $4::int
     FOR UPDATE SKIP LOCKED
 )
-RETURNING id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error, focus_entity_id, focus_group_id, lease_count
+RETURNING id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error, focus_entity_id, focus_group_id, lease_count, dry_run, seed
 `
 
 type FailExhaustedLeasesParams struct {
@@ -204,6 +212,8 @@ func (q *Queries) FailExhaustedLeases(ctx context.Context, arg FailExhaustedLeas
 			&i.FocusEntityID,
 			&i.FocusGroupID,
 			&i.LeaseCount,
+			&i.DryRun,
+			&i.Seed,
 		); err != nil {
 			return nil, err
 		}
@@ -216,7 +226,7 @@ func (q *Queries) FailExhaustedLeases(ctx context.Context, arg FailExhaustedLeas
 }
 
 const getRun = `-- name: GetRun :one
-SELECT id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error, focus_entity_id, focus_group_id, lease_count FROM snatch_runs WHERE id = $1
+SELECT id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error, focus_entity_id, focus_group_id, lease_count, dry_run, seed FROM snatch_runs WHERE id = $1
 `
 
 func (q *Queries) GetRun(ctx context.Context, id uuid.UUID) (SnatchRun, error) {
@@ -237,6 +247,8 @@ func (q *Queries) GetRun(ctx context.Context, id uuid.UUID) (SnatchRun, error) {
 		&i.FocusEntityID,
 		&i.FocusGroupID,
 		&i.LeaseCount,
+		&i.DryRun,
+		&i.Seed,
 	)
 	return i, err
 }
@@ -264,7 +276,7 @@ const heartbeatRun = `-- name: HeartbeatRun :one
 UPDATE snatch_runs
 SET lease_expires_at = $3
 WHERE id = $1 AND leased_by = $2 AND status = 'leased'
-RETURNING id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error, focus_entity_id, focus_group_id, lease_count
+RETURNING id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error, focus_entity_id, focus_group_id, lease_count, dry_run, seed
 `
 
 type HeartbeatRunParams struct {
@@ -291,6 +303,8 @@ func (q *Queries) HeartbeatRun(ctx context.Context, arg HeartbeatRunParams) (Sna
 		&i.FocusEntityID,
 		&i.FocusGroupID,
 		&i.LeaseCount,
+		&i.DryRun,
+		&i.Seed,
 	)
 	return i, err
 }
@@ -325,7 +339,7 @@ WHERE id = (
     LIMIT 1
     FOR UPDATE SKIP LOCKED
 )
-RETURNING id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error, focus_entity_id, focus_group_id, lease_count
+RETURNING id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error, focus_entity_id, focus_group_id, lease_count, dry_run, seed
 `
 
 type LeaseRunParams struct {
@@ -360,12 +374,14 @@ func (q *Queries) LeaseRun(ctx context.Context, arg LeaseRunParams) (SnatchRun, 
 		&i.FocusEntityID,
 		&i.FocusGroupID,
 		&i.LeaseCount,
+		&i.DryRun,
+		&i.Seed,
 	)
 	return i, err
 }
 
 const listRuns = `-- name: ListRuns :many
-SELECT id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error, focus_entity_id, focus_group_id, lease_count FROM snatch_runs
+SELECT id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error, focus_entity_id, focus_group_id, lease_count, dry_run, seed FROM snatch_runs
 WHERE ($3::uuid IS NULL OR instance_id = $3::uuid)
 ORDER BY queued_at DESC
 LIMIT $1 OFFSET $2
@@ -401,6 +417,8 @@ func (q *Queries) ListRuns(ctx context.Context, arg ListRunsParams) ([]SnatchRun
 			&i.FocusEntityID,
 			&i.FocusGroupID,
 			&i.LeaseCount,
+			&i.DryRun,
+			&i.Seed,
 		); err != nil {
 			return nil, err
 		}

@@ -102,6 +102,22 @@ func (r *Recorder) List(ctx context.Context, p ListParams) ([]domain.Event, erro
 	return out, nil
 }
 
+// ListForRun returns every event recorded for a run, oldest first.
+func (r *Recorder) ListForRun(ctx context.Context, runID uuid.UUID) ([]domain.Event, error) {
+	rows, err := r.st.Q().ListEventsForRun(ctx, &runID)
+	if err != nil {
+		return nil, fmt.Errorf("snatch: list events for run: %w", store.MapError(err))
+	}
+	out := make([]domain.Event, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, domain.Event{
+			ID: row.ID, RunID: row.RunID, InstanceID: row.InstanceID, Timestamp: row.Ts, Level: row.Level, Type: row.Type,
+			EntityType: row.EntityType, EntityID: row.EntityID, Title: row.Title, Detail: row.Detail,
+		})
+	}
+	return out, nil
+}
+
 // DeleteForInstance clears one instance's history.
 func (r *Recorder) DeleteForInstance(ctx context.Context, instanceID uuid.UUID) (int64, error) {
 	n, err := r.st.Q().DeleteEventsForInstance(ctx, instanceID)

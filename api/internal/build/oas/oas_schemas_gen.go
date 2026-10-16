@@ -3792,6 +3792,82 @@ func (s *PolicyFilterOptions) SetQualityProfiles(val []PolicyFilterOption) {
 	s.QualityProfiles = val
 }
 
+// Ref: #/components/schemas/PreviewResult
+type PreviewResult struct {
+	RunID uuid.UUID `json:"run_id"`
+	Seed  int64     `json:"seed"`
+}
+
+// GetRunID returns the value of RunID.
+func (s *PreviewResult) GetRunID() uuid.UUID {
+	return s.RunID
+}
+
+// GetSeed returns the value of Seed.
+func (s *PreviewResult) GetSeed() int64 {
+	return s.Seed
+}
+
+// SetRunID sets the value of RunID.
+func (s *PreviewResult) SetRunID(val uuid.UUID) {
+	s.RunID = val
+}
+
+// SetSeed sets the value of Seed.
+func (s *PreviewResult) SetSeed(val int64) {
+	s.Seed = val
+}
+
+// Ref: #/components/schemas/PreviewTarget
+type PreviewTarget struct {
+	EntityType string `json:"entity_type"`
+	ID         int64  `json:"id"`
+	Title      string `json:"title"`
+	// Stamina this item adds to the run. An atomic search (season pack, series, artist, author) is
+	// charged on its first item and 0 on the rest, so the costs sum to what a real run spends.
+	Cost int `json:"cost"`
+}
+
+// GetEntityType returns the value of EntityType.
+func (s *PreviewTarget) GetEntityType() string {
+	return s.EntityType
+}
+
+// GetID returns the value of ID.
+func (s *PreviewTarget) GetID() int64 {
+	return s.ID
+}
+
+// GetTitle returns the value of Title.
+func (s *PreviewTarget) GetTitle() string {
+	return s.Title
+}
+
+// GetCost returns the value of Cost.
+func (s *PreviewTarget) GetCost() int {
+	return s.Cost
+}
+
+// SetEntityType sets the value of EntityType.
+func (s *PreviewTarget) SetEntityType(val string) {
+	s.EntityType = val
+}
+
+// SetID sets the value of ID.
+func (s *PreviewTarget) SetID(val int64) {
+	s.ID = val
+}
+
+// SetTitle sets the value of Title.
+func (s *PreviewTarget) SetTitle(val string) {
+	s.Title = val
+}
+
+// SetCost sets the value of Cost.
+func (s *PreviewTarget) SetCost(val int) {
+	s.Cost = val
+}
+
 // Ref: #/components/schemas/ProbeResult
 type ProbeResult struct {
 	AppName string        `json:"app_name"`
@@ -4321,6 +4397,12 @@ type Run struct {
 	FocusEntityID OptInt64 `json:"focus_entity_id"`
 	// Set for a quickie limited to one series (Seerr request).
 	FocusGroupID OptInt64 `json:"focus_group_id"`
+	// Set when the run is a dry-run / preview.
+	DryRun OptBool `json:"dry_run"`
+	// RNG seed used for the run (0 = OS entropy). A preview seed has at most 53 bits.
+	Seed OptInt64 `json:"seed"`
+	// Previewed search targets when dry_run is true.
+	PreviewedTargets []PreviewTarget `json:"previewed_targets"`
 }
 
 // GetID returns the value of ID.
@@ -4388,6 +4470,21 @@ func (s *Run) GetFocusGroupID() OptInt64 {
 	return s.FocusGroupID
 }
 
+// GetDryRun returns the value of DryRun.
+func (s *Run) GetDryRun() OptBool {
+	return s.DryRun
+}
+
+// GetSeed returns the value of Seed.
+func (s *Run) GetSeed() OptInt64 {
+	return s.Seed
+}
+
+// GetPreviewedTargets returns the value of PreviewedTargets.
+func (s *Run) GetPreviewedTargets() []PreviewTarget {
+	return s.PreviewedTargets
+}
+
 // SetID sets the value of ID.
 func (s *Run) SetID(val uuid.UUID) {
 	s.ID = val
@@ -4451,6 +4548,21 @@ func (s *Run) SetFocusEntityID(val OptInt64) {
 // SetFocusGroupID sets the value of FocusGroupID.
 func (s *Run) SetFocusGroupID(val OptInt64) {
 	s.FocusGroupID = val
+}
+
+// SetDryRun sets the value of DryRun.
+func (s *Run) SetDryRun(val OptBool) {
+	s.DryRun = val
+}
+
+// SetSeed sets the value of Seed.
+func (s *Run) SetSeed(val OptInt64) {
+	s.Seed = val
+}
+
+// SetPreviewedTargets sets the value of PreviewedTargets.
+func (s *Run) SetPreviewedTargets(val []PreviewTarget) {
+	s.PreviewedTargets = val
 }
 
 type RunStatus string
@@ -5716,8 +5828,10 @@ type SnatchPolicy struct {
 	// Skip items released less than this many hours ago; 0 (or absent) turns the delay off. The release
 	// date is the one of the app kind: air date (Sonarr, Whisparr v2), the date of radarr_release_type
 	// (Radarr, Whisparr v3), the album or book release date. Items without a date are kept.
-	ReleaseDelayH OptInt      `json:"release_delay_h"`
-	UpdatedAt     OptDateTime `json:"updated_at"`
+	ReleaseDelayH OptInt `json:"release_delay_h"`
+	// When true, planner creates preview / dry-run runs that do not dispatch searches.
+	DryRun    OptBool     `json:"dry_run"`
+	UpdatedAt OptDateTime `json:"updated_at"`
 }
 
 // GetMissingPerCycle returns the value of MissingPerCycle.
@@ -5828,6 +5942,11 @@ func (s *SnatchPolicy) GetExcludeQualityProfiles() []int32 {
 // GetReleaseDelayH returns the value of ReleaseDelayH.
 func (s *SnatchPolicy) GetReleaseDelayH() OptInt {
 	return s.ReleaseDelayH
+}
+
+// GetDryRun returns the value of DryRun.
+func (s *SnatchPolicy) GetDryRun() OptBool {
+	return s.DryRun
 }
 
 // GetUpdatedAt returns the value of UpdatedAt.
@@ -5943,6 +6062,11 @@ func (s *SnatchPolicy) SetExcludeQualityProfiles(val []int32) {
 // SetReleaseDelayH sets the value of ReleaseDelayH.
 func (s *SnatchPolicy) SetReleaseDelayH(val OptInt) {
 	s.ReleaseDelayH = val
+}
+
+// SetDryRun sets the value of DryRun.
+func (s *SnatchPolicy) SetDryRun(val OptBool) {
+	s.DryRun = val
 }
 
 // SetUpdatedAt sets the value of UpdatedAt.

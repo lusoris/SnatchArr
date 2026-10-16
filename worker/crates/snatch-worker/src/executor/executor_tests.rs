@@ -255,6 +255,8 @@ fn default_run(api_url: &str) -> Run {
         user_agent: "test".to_owned(),
         focus_entity_id: 0,
         focus_group_id: 0,
+        dry_run: false,
+        seed: 0,
         policy: Some(Policy {
             per_cycle: 10,
             page_size: 10,
@@ -1210,4 +1212,164 @@ async fn heartbeat_failure_is_counted_and_success_is_contact() -> TestResult {
         assert_eq!(handle.health.contacted(), want_contact, "fail={fail}");
     }
     Ok(())
+}
+
+fn many_episodes(count: i64) -> serde_json::Value {
+    let rows: Vec<serde_json::Value> = (1..=count)
+        .map(|id| {
+            serde_json::json!({
+                "id": id, "seriesId": id, "seasonNumber": 1, "episodeNumber": 1,
+                "title": format!("Episode {id}"), "monitored": true, "airDateUtc": "2020-01-01T00:00:00Z",
+                "series": { "monitored": true, "tags": [], "qualityProfileId": 1 }
+            })
+        })
+        .collect();
+    serde_json::Value::Array(rows)
+}
+
+/// One run over `count` wanted episodes with random selection; returns the fake api and the
+/// *arr mock so the test can read what was reported and requested.
+async fn seeded_run(
+    count: i64,
+    seed: u64,
+    dry_run: bool,
+    per_cycle: u32,
+) -> Result<(FakeApi, MockServer), Box<dyn std::error::Error>> {
+    let api = FakeApi {
+        filter_unprocessed: (1..=count).collect(),
+        budget_granted: 100,
+        ..FakeApi::default()
+    };
+    let (client, _) = start_fake_api(api.clone()).await?;
+    let mock_server = MockServer::start().await;
+    mount_sonarr_default(&mock_server, many_episodes(count)).await;
+    let mut run = default_run(&mock_server.uri());
+    run.dry_run = dry_run;
+    run.seed = seed;
+    let pol = some(run.policy.as_mut(), "policy")?;
+    pol.selection = snatch_proto::Selection::Random as i32;
+    pol.per_cycle = per_cycle;
+    pol.cursor = "incoming_cursor_42".to_owned();
+    run_short_polling(client, run).await;
+    Ok((api, mock_server))
+}
+
+/// Entity ids of the reported events of type `ty`, in report order.
+async fn ids_of(api: &FakeApi, ty: EventType) -> Vec<i64> {
+    let events = api.reported_events.lock().await;
+    events
+        .iter()
+        .filter(|e| e.r#type == ty as i32)
+        .map(|e| e.entity_id)
+        .collect()
+}
+
+#[tokio::test]
+async fn dry_run_preview_matches_real_run_targets_with_same_seed_and_never_calls_search()
+-> TestResult {
+    let (api_real, _) = seeded_run(10, 4242, false, 4).await?;
+    let dispatched_ids = ids_of(&api_real, EventType::SearchDispatched).await;
+    assert_eq!(dispatched_ids.len(), 4);
+
+    let (api_dry, mock_dry) = seeded_run(10, 4242, true, 4).await?;
+    let previewed_ids = ids_of(&api_dry, EventType::SearchPreviewed).await;
+    assert_eq!(
+        previewed_ids, dispatched_ids,
+        "same seed must yield exact same targets in order"
+    );
+    let dry_requests = some(mock_dry.received_requests().await, "dry requests")?;
+    assert_eq!(
+        search_posts(&dry_requests),
+        0,
+        "dry run must never call search endpoint"
+    );
+
+    let completed = api_dry.completed_requests.lock().await;
+    assert_eq!(completed.len(), 1);
+    let comp = some(completed.first(), "completed request")?;
+    assert_eq!(comp.outcome, RunOutcome::Done as i32);
+    assert!(
+        comp.searched.is_empty(),
+        "dry run searched list must be empty"
+    );
+    assert_eq!(
+        comp.cursor, "incoming_cursor_42",
+        "dry run must return incoming cursor unchanged"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn different_seed_differs_under_random_selection() -> TestResult {
+    let (api_1, _) = seeded_run(20, 101, true, 5).await?;
+    let (api_2, _) = seeded_run(20, 999, true, 5).await?;
+    let ids_1 = ids_of(&api_1, EventType::SearchPreviewed).await;
+    let ids_2 = ids_of(&api_2, EventType::SearchPreviewed).await;
+    assert_eq!(ids_1.len(), 5);
+    assert_eq!(ids_2.len(), 5);
+    assert_ne!(
+        ids_1, ids_2,
+        "different seeds must produce different random selections"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn seed_zero_uses_os_entropy_and_completes_dry_run() -> TestResult {
+    let (api, mock_server) = seeded_run(5, 0, true, 3).await?;
+    let previewed_ids = ids_of(&api, EventType::SearchPreviewed).await;
+    assert_eq!(
+        previewed_ids.len(),
+        3,
+        "should preview 3 targets with seed 0"
+    );
+    let dry_requests = some(mock_server.received_requests().await, "dry requests")?;
+    assert_eq!(
+        search_posts(&dry_requests),
+        0,
+        "seed 0 dry run must never call search endpoint"
+    );
+    let completed = api.completed_requests.lock().await;
+    assert_eq!(completed.len(), 1);
+    assert_eq!(
+        some(completed.first(), "completed request")?.outcome,
+        RunOutcome::Done as i32
+    );
+    Ok(())
+}
+
+/// Positive, negative and boundary: previewed costs sum to the target's stamina charge.
+#[test]
+fn preview_costs_sum_to_the_query_cost() {
+    let cases = [
+        (
+            Target::Series {
+                series_id: 1,
+                seasons: 3,
+                items: vec![1, 2, 3, 4],
+            },
+            vec![(1, 3), (2, 0), (3, 0), (4, 0)],
+        ),
+        (
+            Target::Episodes {
+                series_id: 1,
+                items: vec![5, 6],
+            },
+            vec![(5, 1), (6, 1)],
+        ),
+        (
+            Target::Season {
+                series_id: 2,
+                season: 1,
+                items: vec![7],
+            },
+            vec![(7, 1)],
+        ),
+    ];
+    for (target, want) in cases {
+        let got = preview_costs(&target);
+        assert_eq!(got, want, "{target:?}");
+        let sum: u32 = got.iter().map(|(_, c)| c).sum();
+        assert_eq!(sum, target.query_cost(), "{target:?}");
+    }
 }

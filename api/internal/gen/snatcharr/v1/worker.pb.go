@@ -461,6 +461,7 @@ const (
 	EventType_EVENT_TYPE_INSTANCE_UNREACHABLE EventType = 8
 	EventType_EVENT_TYPE_RUN_FINISHED         EventType = 9
 	EventType_EVENT_TYPE_CIRCUIT_OPENED       EventType = 10
+	EventType_EVENT_TYPE_SEARCH_PREVIEWED     EventType = 11
 )
 
 // Enum value maps for EventType.
@@ -477,6 +478,7 @@ var (
 		8:  "EVENT_TYPE_INSTANCE_UNREACHABLE",
 		9:  "EVENT_TYPE_RUN_FINISHED",
 		10: "EVENT_TYPE_CIRCUIT_OPENED",
+		11: "EVENT_TYPE_SEARCH_PREVIEWED",
 	}
 	EventType_value = map[string]int32{
 		"EVENT_TYPE_UNSPECIFIED":          0,
@@ -490,6 +492,7 @@ var (
 		"EVENT_TYPE_INSTANCE_UNREACHABLE": 8,
 		"EVENT_TYPE_RUN_FINISHED":         9,
 		"EVENT_TYPE_CIRCUIT_OPENED":       10,
+		"EVENT_TYPE_SEARCH_PREVIEWED":     11,
 	}
 )
 
@@ -855,7 +858,9 @@ type Run struct {
 	// A focused run (quickie for one Seerr request) only considers this movie/album/book id...
 	FocusEntityId int64 `protobuf:"varint,10,opt,name=focus_entity_id,json=focusEntityId,proto3" json:"focus_entity_id,omitempty"`
 	// ...or every item of this series/artist/author id. Zero means unfocused.
-	FocusGroupId  int64 `protobuf:"varint,11,opt,name=focus_group_id,json=focusGroupId,proto3" json:"focus_group_id,omitempty"`
+	FocusGroupId  int64  `protobuf:"varint,11,opt,name=focus_group_id,json=focusGroupId,proto3" json:"focus_group_id,omitempty"`
+	DryRun        bool   `protobuf:"varint,12,opt,name=dry_run,json=dryRun,proto3" json:"dry_run,omitempty"`
+	Seed          uint64 `protobuf:"varint,13,opt,name=seed,proto3" json:"seed,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -963,6 +968,20 @@ func (x *Run) GetFocusEntityId() int64 {
 func (x *Run) GetFocusGroupId() int64 {
 	if x != nil {
 		return x.FocusGroupId
+	}
+	return 0
+}
+
+func (x *Run) GetDryRun() bool {
+	if x != nil {
+		return x.DryRun
+	}
+	return false
+}
+
+func (x *Run) GetSeed() uint64 {
+	if x != nil {
+		return x.Seed
 	}
 	return 0
 }
@@ -1800,7 +1819,7 @@ const file_snatcharr_v1_worker_proto_rawDesc = "" +
 	"\fwait_seconds\x18\x02 \x01(\rR\vwaitSeconds\"D\n" +
 	"\x10LeaseRunResponse\x12(\n" +
 	"\x03run\x18\x01 \x01(\v2\x11.snatcharr.v1.RunH\x00R\x03run\x88\x01\x01B\x06\n" +
-	"\x04_run\"\x95\x03\n" +
+	"\x04_run\"\xc2\x03\n" +
 	"\x03Run\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12\x1f\n" +
 	"\vinstance_id\x18\x02 \x01(\tR\n" +
@@ -1815,7 +1834,9 @@ const file_snatcharr_v1_worker_proto_rawDesc = "" +
 	"user_agent\x18\t \x01(\tR\tuserAgent\x12&\n" +
 	"\x0ffocus_entity_id\x18\n" +
 	" \x01(\x03R\rfocusEntityId\x12$\n" +
-	"\x0efocus_group_id\x18\v \x01(\x03R\ffocusGroupId\"F\n" +
+	"\x0efocus_group_id\x18\v \x01(\x03R\ffocusGroupId\x12\x17\n" +
+	"\adry_run\x18\f \x01(\bR\x06dryRun\x12\x12\n" +
+	"\x04seed\x18\r \x01(\x04R\x04seed\"F\n" +
 	"\x10HeartbeatRequest\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12\x1b\n" +
 	"\tworker_id\x18\x02 \x01(\tR\bworkerId\"\x81\x01\n" +
@@ -1920,7 +1941,7 @@ const file_snatcharr_v1_worker_proto_rawDesc = "" +
 	"LEVEL_INFO\x10\x02\x12\x0e\n" +
 	"\n" +
 	"LEVEL_WARN\x10\x03\x12\x0f\n" +
-	"\vLEVEL_ERROR\x10\x04*\xe6\x02\n" +
+	"\vLEVEL_ERROR\x10\x04*\x87\x03\n" +
 	"\tEventType\x12\x1a\n" +
 	"\x16EVENT_TYPE_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16EVENT_TYPE_RUN_STARTED\x10\x01\x12\x1b\n" +
@@ -1933,7 +1954,8 @@ const file_snatcharr_v1_worker_proto_rawDesc = "" +
 	"\x1fEVENT_TYPE_INSTANCE_UNREACHABLE\x10\b\x12\x1b\n" +
 	"\x17EVENT_TYPE_RUN_FINISHED\x10\t\x12\x1d\n" +
 	"\x19EVENT_TYPE_CIRCUIT_OPENED\x10\n" +
-	"*r\n" +
+	"\x12\x1f\n" +
+	"\x1bEVENT_TYPE_SEARCH_PREVIEWED\x10\v*r\n" +
 	"\n" +
 	"RunOutcome\x12\x1b\n" +
 	"\x17RUN_OUTCOME_UNSPECIFIED\x10\x00\x12\x14\n" +

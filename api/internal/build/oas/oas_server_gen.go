@@ -226,6 +226,12 @@ type Handler interface {
 	//
 	// GET /prowlarr/status
 	GetProwlarrStatus(ctx context.Context) ([]ProwlarrStatus, error)
+	// GetRun implements getRun operation.
+	//
+	// Load a single snatch run by ID.
+	//
+	// GET /runs/{runId}
+	GetRun(ctx context.Context, params GetRunParams) (*Run, error)
 	// GetSSO implements getSSO operation.
 	//
 	// SSO configuration status.
@@ -358,6 +364,12 @@ type Handler interface {
 	//
 	// POST /auth/logout
 	Logout(ctx context.Context) error
+	// PreviewRun implements previewRun operation.
+	//
+	// Start a dry-run / preview snatch run.
+	//
+	// POST /instances/{instanceId}/preview
+	PreviewRun(ctx context.Context, params PreviewRunParams) (*PreviewResult, error)
 	// ResetState implements resetState operation.
 	//
 	// Forget processed items (one instance or all).

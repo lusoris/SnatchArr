@@ -114,6 +114,43 @@ func (q *Queries) ListEvents(ctx context.Context, arg ListEventsParams) ([]Snatc
 	return items, nil
 }
 
+const listEventsForRun = `-- name: ListEventsForRun :many
+SELECT id, run_id, instance_id, ts, level, type, entity_type, entity_id, title, detail FROM snatch_events
+WHERE run_id = $1
+ORDER BY id ASC
+`
+
+func (q *Queries) ListEventsForRun(ctx context.Context, runID *uuid.UUID) ([]SnatchEvent, error) {
+	rows, err := q.db.Query(ctx, listEventsForRun, runID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SnatchEvent{}
+	for rows.Next() {
+		var i SnatchEvent
+		if err := rows.Scan(
+			&i.ID,
+			&i.RunID,
+			&i.InstanceID,
+			&i.Ts,
+			&i.Level,
+			&i.Type,
+			&i.EntityType,
+			&i.EntityID,
+			&i.Title,
+			&i.Detail,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const purgeEventsBefore = `-- name: PurgeEventsBefore :execrows
 DELETE FROM snatch_events
 WHERE id IN (SELECT id FROM snatch_events WHERE ts < $1::timestamptz LIMIT $2::int)

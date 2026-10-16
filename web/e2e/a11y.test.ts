@@ -86,6 +86,138 @@ if (!process.env.SNATCHARR_E2E_API) {
 			expect(results.violations).toEqual([]);
 		});
 	}
+
+	test('/instances/[id] with preview result has no axe violations', async ({ page }) => {
+		const instanceId = '00000000-0000-0000-0000-000000000001';
+		await page.route('**/api/v1/auth/setup/status', (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ setup_complete: true })
+			})
+		);
+		await page.route('**/api/v1/auth/session', (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					user: {
+						id: '00000000-0000-0000-0000-000000000099',
+						username: 'admin',
+						role: 'admin'
+					},
+					csrf_token: 'test-token',
+					expires_at: '2099-01-01T00:00:00Z'
+				})
+			})
+		);
+		await page.route('**/api/v1/auth/sso', (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ oidc: false, proxy: false })
+			})
+		);
+		await page.route(`**/api/v1/instances/${instanceId}`, (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					id: instanceId,
+					name: 'Library Sonarr',
+					kind: 'sonarr',
+					base_url: 'http://sonarr.local:8989',
+					source: 'manual',
+					enabled: true,
+					created_at: '2026-01-01T00:00:00Z',
+					updated_at: '2026-01-01T00:00:00Z'
+				})
+			})
+		);
+		await page.route(`**/api/v1/instances/${instanceId}/policy`, (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					missing_per_cycle: 10,
+					upgrade_per_cycle: 5,
+					cycle_interval_s: 300,
+					hourly_cap: 50,
+					selection: 'recent',
+					monitored_only: true,
+					skip_future_releases: true,
+					radarr_release_type: 'physical',
+					sonarr_missing_mode: 'episodes',
+					sonarr_upgrade_mode: 'episodes',
+					lidarr_missing_mode: 'album',
+					processed_ttl_h: 24,
+					max_queue_size: 100,
+					await_command: false,
+					page_size: 50,
+					recent_grab_window_h: 48,
+					afterglow_max_h: 168,
+					dry_run: false
+				})
+			})
+		);
+		await page.route(`**/api/v1/instances/${instanceId}/policy/filter-options`, (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ tags: [], quality_profiles: [] })
+			})
+		);
+		await page.route('**/api/v1/runs?**', (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify([])
+			})
+		);
+		await page.route(`**/api/v1/instances/${instanceId}/preview?**`, (route) =>
+			route.fulfill({
+				status: 202,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					run_id: 'preview-run-001',
+					seed: 42
+				})
+			})
+		);
+		await page.route('**/api/v1/runs/preview-run-001', (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					id: 'preview-run-001',
+					instance_id: instanceId,
+					kind: 'missing',
+					status: 'done',
+					queued_at: '2026-09-01T12:00:00Z',
+					started_at: '2026-09-01T12:00:01Z',
+					finished_at: '2026-09-01T12:00:05Z',
+					searched_count: 0,
+					dry_run: true,
+					seed: 42,
+					previewed_targets: [
+						{ entity_type: 'movie', id: 101, title: 'Inception', cost: 1 },
+						{ entity_type: 'series', id: 202, title: 'Breaking Bad', cost: 3 }
+					]
+				})
+			})
+		);
+
+		await page.goto(`/instances/${instanceId}`);
+		await expect(page.getByRole('heading', { level: 1, name: 'Library Sonarr' })).toBeVisible();
+
+		await page.getByRole('button', { name: /preview missing|fehlende vorschauen/i }).click();
+
+		await expect(page.getByRole('table')).toBeVisible();
+		await expect(page.getByText('Inception')).toBeVisible();
+
+		const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
+		expect(results.violations).toEqual([]);
+	});
 } else {
 	test.describe('public', () => {
 		test('public: /setup has no axe violations', async ({ page }) => {

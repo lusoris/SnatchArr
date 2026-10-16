@@ -129,6 +129,8 @@ message Run {
   int64 focus_entity_id = 10;
   // ...or every item of this series/artist/author id. Zero means unfocused.
   int64 focus_group_id = 11;
+  bool dry_run = 12;
+  uint64 seed = 13;
 }
 
 message HeartbeatRequest {
@@ -208,6 +210,7 @@ enum EventType {
   EVENT_TYPE_INSTANCE_UNREACHABLE = 8;
   EVENT_TYPE_RUN_FINISHED = 9;
   EVENT_TYPE_CIRCUIT_OPENED = 10;
+  EVENT_TYPE_SEARCH_PREVIEWED = 11;
 }
 
 message SnatchEvent {

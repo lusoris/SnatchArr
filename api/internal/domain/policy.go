@@ -59,6 +59,7 @@ type Policy struct {
 	// ReleaseDelay skips items released more recently than this (0 = no delay). The release
 	// date is the one the app kind uses; for Radarr it is the date of RadarrReleaseType.
 	ReleaseDelay time.Duration
+	DryRun       bool
 	UpdatedAt    time.Time
 }
 
@@ -87,6 +88,7 @@ func DefaultPolicy(instanceID uuid.UUID) Policy {
 		ExcludeTags:            []int32{},
 		IncludeQualityProfiles: []int32{},
 		ExcludeQualityProfiles: []int32{},
+		DryRun:                 false,
 	}
 }
 

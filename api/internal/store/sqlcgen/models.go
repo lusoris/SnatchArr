@@ -242,6 +242,7 @@ type SnatchPolicy struct {
 	IncludeQualityProfiles []int32
 	ExcludeQualityProfiles []int32
 	ReleaseDelayH          int32
+	DryRun                 bool
 }
 
 type SnatchRun struct {
@@ -259,6 +260,8 @@ type SnatchRun struct {
 	FocusEntityID  *int64
 	FocusGroupID   *int64
 	LeaseCount     int32
+	DryRun         bool
+	Seed           int64
 }
 
 type User struct {

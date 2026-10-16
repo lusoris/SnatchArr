@@ -198,6 +198,8 @@ func (s *Server) leaseResponse(ctx context.Context, run domain.Run) (*snatcharrv
 		UserAgent:        userAgent,
 		FocusEntityId:    deref64(run.FocusEntityID),
 		FocusGroupId:     deref64(run.FocusGroupID),
+		DryRun:           run.DryRun,
+		Seed:             uint64(run.Seed), // #nosec G115 -- non-negative seed
 	}}, nil
 }
 
@@ -352,11 +354,13 @@ func (s *Server) acquireBudget(ctx context.Context, req *snatcharrv1.AcquireBudg
 	if err != nil {
 		return nil, toStatus(err)
 	}
-	g, err := s.grantBudget(ctx, run.InstanceID, capacity, cfg.GlobalHourlyCap, req)
+	g, err := s.grantBudget(ctx, run.InstanceID, capacity, cfg.GlobalHourlyCap, req, run.DryRun)
 	if err != nil {
 		return nil, toStatus(err)
 	}
-	s.checkBudgetWarning(ctx, run, g)
+	if !run.DryRun {
+		s.checkBudgetWarning(ctx, run, g)
+	}
 	grantedItems := make([]uint32, len(g.GrantedItems))
 	for i, granted := range g.GrantedItems {
 		grantedItems[i] = uint32(granted) // #nosec G115 -- non-negative, <= 500
@@ -387,8 +391,12 @@ func (s *Server) checkBudgetWarning(ctx context.Context, run domain.Run, g snatc
 
 // grantBudget asks the budget item by item when the worker named its items, and for the
 // plain total when it did not (a worker from before #142).
-func (s *Server) grantBudget(ctx context.Context, instanceID uuid.UUID, capacity, globalCap int, req *snatcharrv1.AcquireBudgetRequest) (snatch.ItemsGrant, error) {
+func (s *Server) grantBudget(ctx context.Context, instanceID uuid.UUID, capacity, globalCap int, req *snatcharrv1.AcquireBudgetRequest, quote bool) (snatch.ItemsGrant, error) {
 	if len(req.GetItems()) == 0 {
+		if quote {
+			g, err := s.budget.Quote(ctx, instanceID, capacity, globalCap, int(min(req.GetRequested(), maxSearchedPerRun)))
+			return snatch.ItemsGrant{Grant: g}, err
+		}
 		g, err := s.budget.Acquire(ctx, instanceID, capacity, globalCap, int(min(req.GetRequested(), maxSearchedPerRun)))
 		return snatch.ItemsGrant{Grant: g}, err
 	}
@@ -396,6 +404,9 @@ func (s *Server) grantBudget(ctx context.Context, instanceID uuid.UUID, capacity
 	for i, item := range req.GetItems() {
 		// No cap reaches maxSearchedPerRun, so a larger cost is granted the same way.
 		items[i] = snatch.BudgetItem{Cost: int(min(item.GetCost(), maxSearchedPerRun)), Atomic: item.GetAtomic()}
+	}
+	if quote {
+		return s.budget.QuoteItems(ctx, instanceID, capacity, globalCap, items)
 	}
 	return s.budget.AcquireItems(ctx, instanceID, capacity, globalCap, items)
 }
@@ -528,18 +539,15 @@ func (s *Server) CompleteRun(ctx context.Context, req *snatcharrv1.CompleteRunRe
 	if len(searched) > maxSearchedPerRun {
 		searched = searched[:maxSearchedPerRun]
 	}
-	if err := s.remember(ctx, run, policy, searched); err != nil {
+	if err := s.persistRunProgress(ctx, run, policy, req, searched); err != nil {
 		return nil, toStatus(err)
-	}
-	if req.GetCursor() != "" {
-		if err := s.policies.SaveCursor(ctx, run.InstanceID, run.Kind, req.GetCursor()); err != nil {
-			return nil, toStatus(err)
-		}
 	}
 	if _, err := s.runs.Complete(ctx, run.ID, req.GetWorkerId(), outcome(req.GetOutcome()), len(searched), req.GetError()); err != nil {
 		return nil, toStatus(err)
 	}
-	s.m.RunFinished(string(outcome(req.GetOutcome())))
+	if !run.DryRun {
+		s.m.RunFinished(string(outcome(req.GetOutcome())))
+	}
 	if outcome(req.GetOutcome()) == domain.RunFailed {
 		s.recordBackoff(ctx, run, policy)
 	}
@@ -550,6 +558,19 @@ func (s *Server) CompleteRun(ctx context.Context, req *snatcharrv1.CompleteRunRe
 		RunID: &run.ID, InstanceID: run.InstanceID, Level: level, Type: "run_finished",
 		Title: fmt.Sprintf("%s snatch %s: %d item(s) searched", run.Kind, outcome(req.GetOutcome()), len(searched)), Detail: req.GetError(),
 	})
+}
+
+func (s *Server) persistRunProgress(ctx context.Context, run domain.Run, policy domain.Policy, req *snatcharrv1.CompleteRunRequest, searched []*snatcharrv1.SearchedItem) error {
+	if run.DryRun {
+		return nil
+	}
+	if err := s.remember(ctx, run, policy, searched); err != nil {
+		return err
+	}
+	if req.GetCursor() != "" {
+		return s.policies.SaveCursor(ctx, run.InstanceID, run.Kind, req.GetCursor())
+	}
+	return nil
 }
 
 func runOutcomeLevel(status domain.RunStatus) string {

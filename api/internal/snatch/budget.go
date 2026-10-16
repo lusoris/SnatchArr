@@ -151,11 +151,26 @@ func (b *Budget) Acquire(ctx context.Context, instanceID uuid.UUID, capacity, gl
 	return ig.Grant, err
 }
 
+// Quote grants up to `requested` items without debiting the stamina buckets.
+func (b *Budget) Quote(ctx context.Context, instanceID uuid.UUID, capacity, globalCap, requested int) (Grant, error) {
+	ig, err := b.QuoteItems(ctx, instanceID, capacity, globalCap, []BudgetItem{{Cost: requested}})
+	return ig.Grant, err
+}
+
 // AcquireItems grants stamina item by item, in order, and debits only what it grants, so a
 // target that has to wait costs nothing (#142). An item that fits gets its cost; one that
 // does not gets what is left when it is divisible and nothing when it is atomic, and a
 // later, smaller item may still fit.
 func (b *Budget) AcquireItems(ctx context.Context, instanceID uuid.UUID, capacity, globalCap int, items []BudgetItem) (ItemsGrant, error) {
+	return b.acquireItemsInternal(ctx, instanceID, capacity, globalCap, items, false)
+}
+
+// QuoteItems computes the items grant without debiting the stamina buckets.
+func (b *Budget) QuoteItems(ctx context.Context, instanceID uuid.UUID, capacity, globalCap int, items []BudgetItem) (ItemsGrant, error) {
+	return b.acquireItemsInternal(ctx, instanceID, capacity, globalCap, items, true)
+}
+
+func (b *Budget) acquireItemsInternal(ctx context.Context, instanceID uuid.UUID, capacity, globalCap int, items []BudgetItem, quote bool) (ItemsGrant, error) {
 	now := b.clk.Now()
 	if capacity <= 0 || globalCap < 0 {
 		return ItemsGrant{}, fmt.Errorf("snatch: budget: invalid request (capacity %d, global %d)", capacity, globalCap)
@@ -168,7 +183,7 @@ func (b *Budget) AcquireItems(ctx context.Context, instanceID uuid.UUID, capacit
 	var ig ItemsGrant
 	err := b.st.Tx(ctx, func(q *sqlcgen.Queries) error {
 		var txErr error
-		ig, txErr = acquireTx(ctx, q, instanceID, capacity, globalCap, items, now)
+		ig, txErr = acquireTx(ctx, q, instanceID, capacity, globalCap, items, quote, now)
 		return txErr
 	})
 	if err != nil {
@@ -180,7 +195,7 @@ func (b *Budget) AcquireItems(ctx context.Context, instanceID uuid.UUID, capacit
 // acquireTx takes the instance lock and, when a global cap applies, the global lock (always
 // after the instance lock), sums both spans, grants the items and debits the current
 // minute, all inside the caller's transaction.
-func acquireTx(ctx context.Context, q *sqlcgen.Queries, instanceID uuid.UUID, capacity, globalCap int, items []BudgetItem, now time.Time) (ItemsGrant, error) {
+func acquireTx(ctx context.Context, q *sqlcgen.Queries, instanceID uuid.UUID, capacity, globalCap int, items []BudgetItem, quote bool, now time.Time) (ItemsGrant, error) {
 	if err := q.LockInstanceBudget(ctx, instanceID); err != nil {
 		return ItemsGrant{}, fmt.Errorf("lock instance budget: %w", err)
 	}
@@ -195,7 +210,7 @@ func acquireTx(ctx context.Context, q *sqlcgen.Queries, instanceID uuid.UUID, ca
 		}
 	}
 	ig := grantItems(usage{used: int(row.Used), oldest: row.Oldest}, global, capacity, globalCap, items, now)
-	if ig.Granted > 0 {
+	if ig.Granted > 0 && !quote {
 		if err = debit(ctx, q, instanceID, globalCap, ig.Granted, now); err != nil {
 			return ItemsGrant{}, err
 		}
