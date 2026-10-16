@@ -17,8 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golusoris/goenvoy/arr/v2"
-
+	"github.com/lusoris/SnatchArr/api/internal/arrclient"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 )
 
@@ -93,21 +92,12 @@ type Client interface {
 
 // HTTP implements Client over goenvoy's base client.
 type HTTP struct {
-	timeout   time.Duration
-	userAgent string
+	arrclient.BaseFactory
 }
 
 // New builds the client.
 func New(timeout time.Duration, userAgent string) *HTTP {
-	return &HTTP{timeout: timeout, userAgent: userAgent}
-}
-
-func (h *HTTP) base(baseURL, apiKey string) (*arr.BaseClient, error) {
-	c, err := arr.NewBaseClient(baseURL, apiKey, arr.WithTimeout(h.timeout), arr.WithUserAgent(h.userAgent))
-	if err != nil {
-		return nil, fmt.Errorf("seerr: client: %w", err)
-	}
-	return c, nil
+	return &HTTP{Timeout: timeout, UserAgent: userAgent}
 }
 
 // statusJSON is what Status reads from `GET /api/v1/status`.
@@ -117,9 +107,9 @@ type statusJSON struct {
 
 // Status implements Client.
 func (h *HTTP) Status(ctx context.Context, baseURL, apiKey string) (Status, error) {
-	c, err := h.base(baseURL, apiKey)
+	c, err := h.Base(baseURL, apiKey)
 	if err != nil {
-		return Status{}, err
+		return Status{}, fmt.Errorf("seerr: client: %w", err)
 	}
 	var out statusJSON
 	if err := c.Get(ctx, "/api/v1/status", &out); err != nil {
@@ -140,9 +130,9 @@ type pagedRequests struct {
 // ProcessingRequests implements Client: approved requests whose media is not available
 // yet (`filter=processing`), every page up to the bound.
 func (h *HTTP) ProcessingRequests(ctx context.Context, baseURL, apiKey string) ([]Request, error) {
-	c, err := h.base(baseURL, apiKey)
+	c, err := h.Base(baseURL, apiKey)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("seerr: client: %w", err)
 	}
 	var all []Request
 	for page := range maxPages {
@@ -174,9 +164,9 @@ type serverJSON struct {
 
 // Servers implements Client: Seerr's Sonarr and Radarr settings, API keys included.
 func (h *HTTP) Servers(ctx context.Context, baseURL, apiKey string) ([]Server, error) {
-	c, err := h.base(baseURL, apiKey)
+	c, err := h.Base(baseURL, apiKey)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("seerr: client: %w", err)
 	}
 	var out []Server
 	for _, kind := range []domain.AppKind{domain.KindSonarr, domain.KindRadarr} {
@@ -219,9 +209,9 @@ type titleJSON struct {
 
 // Title implements Client: the TMDB title Seerr knows for a movie or show.
 func (h *HTTP) Title(ctx context.Context, baseURL, apiKey string, mediaType domain.SeerrMediaType, tmdbID int) (string, error) {
-	c, err := h.base(baseURL, apiKey)
+	c, err := h.Base(baseURL, apiKey)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("seerr: client: %w", err)
 	}
 	var out titleJSON
 	if err := c.Get(ctx, fmt.Sprintf("/api/v1/%s/%d", mediaType, tmdbID), &out); err != nil {

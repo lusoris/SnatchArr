@@ -42,10 +42,7 @@ type Discoverer interface {
 }
 
 // Options tune the probe.
-type Options struct {
-	Timeout   time.Duration
-	UserAgent string
-}
+type Options = BaseFactory
 
 // DefaultOptions returns a 15 s timeout and the product User-Agent.
 func DefaultOptions() Options {
@@ -85,7 +82,7 @@ func (p *GoenvoyProber) Probe(ctx context.Context, kind domain.AppKind, baseURL,
 }
 
 func (p *GoenvoyProber) clientOptions() []arr.Option {
-	return []arr.Option{arr.WithTimeout(p.opts.Timeout), arr.WithUserAgent(p.opts.UserAgent)}
+	return p.opts.Options()
 }
 
 // arrClient is the slice of every goenvoy *arr client the control plane uses.

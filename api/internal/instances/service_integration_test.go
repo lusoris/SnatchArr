@@ -314,7 +314,7 @@ func casesPositive() []deleteTestCase {
 			wantErr: nil,
 			check: func(t *testing.T, f fixture, id uuid.UUID) {
 				t.Helper()
-				if _, err := f.svc.Get(t.Context(), id); !instances.IsNotFound(err) {
+				if _, err := f.svc.Get(t.Context(), id); !errors.Is(err, domain.ErrNotFound) {
 					t.Fatalf("Get() = %v, want ErrNotFound", err)
 				}
 			},
@@ -336,7 +336,7 @@ func casesPositive() []deleteTestCase {
 			wantErr: nil,
 			check: func(t *testing.T, f fixture, id uuid.UUID) {
 				t.Helper()
-				if _, err := f.svc.Get(t.Context(), id); !instances.IsNotFound(err) {
+				if _, err := f.svc.Get(t.Context(), id); !errors.Is(err, domain.ErrNotFound) {
 					t.Fatalf("Get() = %v, want ErrNotFound", err)
 				}
 			},
@@ -441,7 +441,7 @@ func casesBoundary() []deleteTestCase {
 			wantErr: nil,
 			check: func(t *testing.T, f fixture, id uuid.UUID) {
 				t.Helper()
-				if _, err := f.svc.Get(t.Context(), id); !instances.IsNotFound(err) {
+				if _, err := f.svc.Get(t.Context(), id); !errors.Is(err, domain.ErrNotFound) {
 					t.Fatalf("Get() = %v, want ErrNotFound", err)
 				}
 			},

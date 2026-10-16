@@ -11,8 +11,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/golusoris/goenvoy/arr/v2"
-
+	"github.com/lusoris/SnatchArr/api/internal/arrclient"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 )
 
@@ -57,21 +56,12 @@ const (
 
 // HTTP implements Client over goenvoy's base client (same X-Api-Key convention).
 type HTTP struct {
-	timeout   time.Duration
-	userAgent string
+	arrclient.BaseFactory
 }
 
 // New builds the client.
 func New(timeout time.Duration, userAgent string) *HTTP {
-	return &HTTP{timeout: timeout, userAgent: userAgent}
-}
-
-func (h *HTTP) base(baseURL, apiKey string) (*arr.BaseClient, error) {
-	c, err := arr.NewBaseClient(baseURL, apiKey, arr.WithTimeout(h.timeout), arr.WithUserAgent(h.userAgent))
-	if err != nil {
-		return nil, fmt.Errorf("cleanuparr: client: %w", err)
-	}
-	return c, nil
+	return &HTTP{Timeout: timeout, UserAgent: userAgent}
 }
 
 //nolint:tagliatelle // Cleanuparr speaks camelCase
@@ -87,9 +77,9 @@ type statusJSON struct {
 
 // Status implements Client.
 func (h *HTTP) Status(ctx context.Context, baseURL, apiKey string) (Status, error) {
-	c, err := h.base(baseURL, apiKey)
+	c, err := h.Base(baseURL, apiKey)
 	if err != nil {
-		return Status{}, err
+		return Status{}, fmt.Errorf("cleanuparr: client: %w", err)
 	}
 	var out statusJSON
 	if err := c.Get(ctx, "/api/status", &out); err != nil {
@@ -118,9 +108,9 @@ type recentJSON struct {
 
 // RecentStrikes implements Client: the newest strikes, at most MaxRecent.
 func (h *HTTP) RecentStrikes(ctx context.Context, baseURL, apiKey string, count int) ([]Strike, error) {
-	c, err := h.base(baseURL, apiKey)
+	c, err := h.Base(baseURL, apiKey)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("cleanuparr: client: %w", err)
 	}
 	var list []recentJSON
 	if err := c.Get(ctx, fmt.Sprintf("/api/strikes/recent?count=%d", min(max(count, 1), MaxRecent)), &list); err != nil {
@@ -147,9 +137,9 @@ type strikesPage struct {
 
 // Summary implements Client: counts over the struck downloads (bounded pages).
 func (h *HTTP) Summary(ctx context.Context, baseURL, apiKey string) (StrikeSummary, error) {
-	c, err := h.base(baseURL, apiKey)
+	c, err := h.Base(baseURL, apiKey)
 	if err != nil {
-		return StrikeSummary{}, err
+		return StrikeSummary{}, fmt.Errorf("cleanuparr: client: %w", err)
 	}
 	var sum StrikeSummary
 	for page := 1; page <= maxSummaryPage; page++ {
