@@ -83,3 +83,9 @@ DELETE FROM snatch_runs
 WHERE id IN (SELECT id FROM snatch_runs
     WHERE status IN ('done', 'failed', 'cancelled') AND finished_at < sqlc.arg(before)::timestamptz
     LIMIT sqlc.arg(batch)::int);
+
+-- name: CountRunsByStatus :many
+SELECT status, count(*) AS count
+FROM snatch_runs
+GROUP BY status;
+

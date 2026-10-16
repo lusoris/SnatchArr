@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
 
 	"github.com/lusoris/SnatchArr/api/internal/metrics"
 )
@@ -50,15 +51,53 @@ func Value(t *testing.T, reg prometheus.Gatherer, name, label, value string) (fl
 			if label != "" && !hasLabel(m.GetLabel(), label, value) {
 				continue
 			}
-			switch {
-			case m.GetCounter() != nil:
-				return m.GetCounter().GetValue(), true
-			case m.GetGauge() != nil:
-				return m.GetGauge().GetValue(), true
-			}
+			return metricValue(m)
 		}
 	}
 	return 0, false
+}
+
+// ValueLabels returns the value of the series name with matching labels in reg and whether it exists.
+func ValueLabels(t *testing.T, reg prometheus.Gatherer, name string, labels map[string]string) (float64, bool) {
+	t.Helper()
+	families, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("Gather() = %v", err)
+	}
+	for _, f := range families {
+		if f.GetName() != name {
+			continue
+		}
+		for _, m := range f.GetMetric() {
+			if !matchesLabels(m.GetLabel(), labels) {
+				continue
+			}
+			return metricValue(m)
+		}
+	}
+	return 0, false
+}
+
+func metricValue(m *dto.Metric) (float64, bool) {
+	switch {
+	case m.GetCounter() != nil:
+		return m.GetCounter().GetValue(), true
+	case m.GetGauge() != nil:
+		return m.GetGauge().GetValue(), true
+	case m.GetHistogram() != nil:
+		return float64(m.GetHistogram().GetSampleCount()), true
+	default:
+		return 0, false
+	}
+}
+
+func matchesLabels(pairs []*dto.LabelPair, expected map[string]string) bool {
+	for k, v := range expected {
+		if !hasLabel(pairs, k, v) {
+			return false
+		}
+	}
+	return true
 }
 
 // Await waits until the series name{label=value} in reg holds want, for a loop that records

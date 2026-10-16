@@ -54,7 +54,7 @@ func NewTicker(planner *Planner, clk clock.Clock, logger *slog.Logger, m *metric
 
 // Module provides the snatch services and registers the planner ticker.
 var Module = fx.Module("snatcharr.snatch",
-	fx.Provide(NewBudget, NewMemory, NewRuns, NewWorkers, NewRecorder, NewSchedules, newPlanner, NewTicker),
-	// The planner runs on the leader only (internal/leaderx).
-	fx.Provide(leaderx.Provide[*Ticker]()),
+	fx.Provide(NewBudget, NewMemory, NewRuns, NewWorkers, NewRecorder, NewSchedules, newPlanner, NewTicker, NewStateTicker),
+	// The planner and state metrics loops run on the leader only (internal/leaderx).
+	fx.Provide(leaderx.Provide[*Ticker](), leaderx.Provide[*StateTicker]()),
 )

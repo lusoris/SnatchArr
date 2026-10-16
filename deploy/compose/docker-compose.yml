@@ -12,7 +12,7 @@ name: snatcharr
 
 services:
   postgres:
-    image: postgres:18-alpine
+    image: postgres:18.6-alpine
     environment:
       POSTGRES_USER: snatcharr
       POSTGRES_PASSWORD: snatcharr
@@ -28,7 +28,7 @@ services:
       retries: 20
 
   sonarr:
-    image: lscr.io/linuxserver/sonarr:latest
+    image: lscr.io/linuxserver/sonarr:4.0.20.3014-ls329
     profiles: [arr]
     environment:
       PUID: "1000"
@@ -40,7 +40,7 @@ services:
       - sonarr-config:/config
 
   radarr:
-    image: lscr.io/linuxserver/radarr:latest
+    image: lscr.io/linuxserver/radarr:6.4.4.10685-ls321
     profiles: [arr]
     environment:
       PUID: "1000"
@@ -52,7 +52,7 @@ services:
       - radarr-config:/config
 
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:latest
+    image: otel/opentelemetry-collector-contrib:0.162.0
     profiles: [observability]
     command: ["--config=/etc/otelcol/config.yaml"]
     volumes:
@@ -61,19 +61,24 @@ services:
       - "127.0.0.1:4317:4317"
 
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v3.15.0
     profiles: [observability]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
       - "127.0.0.1:9091:9090"
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:13.2.4
     profiles: [observability]
     environment:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../helm/snatcharr/dashboards:/var/lib/grafana/dashboards:ro
     ports:
       - "127.0.0.1:3000:3000"
 

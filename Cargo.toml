@@ -41,6 +41,7 @@ hyper-util = { version = "0.1.20", default-features = false, features = ["tokio"
 http-body-util = "0.1.5"
 bytes = "1.12"
 humantime = "2.4"
+prometheus-client = "0.25.1"
 
 # build
 tonic-prost-build = "0.14"

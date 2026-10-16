@@ -18,7 +18,7 @@
     )
 )]
 
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
@@ -63,6 +63,31 @@ impl Kind {
             Self::Readarr => "book",
         }
     }
+
+    /// Metrics label for this application kind.
+    #[must_use]
+    pub const fn app_label(self) -> &'static str {
+        match self {
+            Self::Sonarr => "sonarr",
+            Self::Radarr => "radarr",
+            Self::Lidarr => "lidarr",
+            Self::Readarr => "readarr",
+            Self::WhisparrV2 => "whisparr_v2",
+            Self::WhisparrV3 => "whisparr_v3",
+        }
+    }
+}
+
+/// Receives metrics observations for *arr HTTP requests.
+pub trait RequestObserver: std::fmt::Debug + Send + Sync + 'static {
+    /// Called when an HTTP request finishes or fails.
+    fn on_request(
+        &self,
+        app: Kind,
+        operation: &'static str,
+        duration: Duration,
+        error: Option<&Error>,
+    );
 }
 
 /// Which wanted list to walk.
@@ -126,6 +151,32 @@ pub enum Error {
     BaseUrl(#[from] url::ParseError),
 }
 
+impl Error {
+    /// Maps the error to a fixed metrics class label:
+    /// timeout, connect, status_4xx, status_5xx, decode.
+    #[must_use]
+    pub fn error_class(&self) -> &'static str {
+        match self {
+            Self::Transport(e) => {
+                if e.is_timeout() {
+                    "timeout"
+                } else {
+                    "connect"
+                }
+            }
+            Self::Status { status, .. } => {
+                if (400..=499).contains(status) {
+                    "status_4xx"
+                } else {
+                    "status_5xx"
+                }
+            }
+            Self::Decode { .. } => "decode",
+            Self::BaseUrl(_) => "connect",
+        }
+    }
+}
+
 /// Client options.
 #[derive(Debug, Clone)]
 pub struct Options {
@@ -137,6 +188,8 @@ pub struct Options {
     pub backoff: Duration,
     /// User-Agent header.
     pub user_agent: String,
+    /// Optional metrics observer.
+    pub observer: Option<Arc<dyn RequestObserver>>,
 }
 
 impl Default for Options {
@@ -146,6 +199,7 @@ impl Default for Options {
             attempts: 3,
             backoff: Duration::from_millis(500),
             user_agent: "SnatchArr/1.0 (https://github.com/lusoris/SnatchArr)".to_owned(),
+            observer: None,
         }
     }
 }
@@ -496,28 +550,46 @@ impl ArrClient {
         }))
     }
 
+    async fn request<T, Fut>(&self, operation: &'static str, fut: Fut) -> Result<T, Error>
+    where
+        Fut: std::future::Future<Output = Result<T, Error>>,
+    {
+        let start = std::time::Instant::now();
+        let res = fut.await;
+        let duration = start.elapsed();
+        if let Some(obs) = &self.opts.observer {
+            obs.on_request(self.kind, operation, duration, res.as_ref().err());
+        }
+        res
+    }
+
     async fn get_json<T: serde::de::DeserializeOwned>(
         &self,
+        operation: &'static str,
         path: &str,
         query: &[(&str, String)],
     ) -> Result<T, Error> {
-        let url = self.url(path, query)?;
-        let body = self.send(self.http.get(url), "GET", path).await?;
-        serde_json::from_str(&body).map_err(|source| Error::Decode {
-            path: path.to_owned(),
-            source,
+        self.request(operation, async {
+            let url = self.url(path, query)?;
+            let body = self.send(self.http.get(url), "GET", path).await?;
+            serde_json::from_str(&body).map_err(|source| Error::Decode {
+                path: path.to_owned(),
+                source,
+            })
         })
+        .await
     }
 
     /// `GET system/status`.
     pub async fn system_status(&self) -> Result<SystemStatus, Error> {
-        self.get_json("system/status", &[]).await
+        self.get_json("system_status", "system/status", &[]).await
     }
 
     /// Total items in the download queue (`GET queue?page=1&pageSize=1`).
     pub async fn queue_total(&self) -> Result<u32, Error> {
         let p: Paged<serde_json::Value> = self
             .get_json(
+                "queue",
                 "queue",
                 &[("page", "1".to_owned()), ("pageSize", "1".to_owned())],
             )
@@ -545,7 +617,7 @@ impl ArrClient {
                 ("page", page.to_string()),
                 ("pageSize", QUEUE_PAGE_SIZE.to_string()),
             ];
-            let p: Paged<BusyLike> = self.get_json("queue", &query).await?;
+            let p: Paged<BusyLike> = self.get_json("queue", "queue", &query).await?;
             let fetched = p.records.len();
             ids.extend(p.records.iter().filter_map(|r| self.busy_id(r)));
             if fetched < QUEUE_PAGE_SIZE as usize {
@@ -562,7 +634,7 @@ impl ArrClient {
             .unwrap_or_else(Utc::now)
             .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
         let query = [("date", since), ("eventType", "1".to_owned())];
-        let records: Vec<BusyLike> = self.get_json("history/since", &query).await?;
+        let records: Vec<BusyLike> = self.get_json("history", "history/since", &query).await?;
         Ok(records.iter().filter_map(|r| self.busy_id(r)).collect())
     }
 
@@ -599,15 +671,15 @@ impl ArrClient {
         let path = wanted.path();
         match self.kind {
             Kind::Sonarr | Kind::WhisparrV2 => {
-                let p: Paged<EpisodeLike> = self.get_json(path, &query).await?;
+                let p: Paged<EpisodeLike> = self.get_json("wanted", path, &query).await?;
                 Ok(page_of(p, episode_candidate))
             }
             Kind::Radarr | Kind::WhisparrV3 => {
-                let p: Paged<MovieLike> = self.get_json(path, &query).await?;
+                let p: Paged<MovieLike> = self.get_json("wanted", path, &query).await?;
                 Ok(page_of(p, |m| movie_candidate(m, release)))
             }
             Kind::Lidarr | Kind::Readarr => {
-                let p: Paged<ChildLike> = self.get_json(path, &query).await?;
+                let p: Paged<ChildLike> = self.get_json("wanted", path, &query).await?;
                 Ok(page_of(p, child_candidate))
             }
         }
@@ -615,20 +687,24 @@ impl ArrClient {
 
     /// Dispatches the search command for a target (`POST command`).
     pub async fn search(&self, target: &Target) -> Result<CommandStatus, Error> {
-        let body = CommandBody::for_target(self.kind, target);
-        let url = self.url("command", &[])?;
-        let text = self
-            .send(self.http.post(url).json(&body), "POST", "command")
-            .await?;
-        serde_json::from_str(&text).map_err(|source| Error::Decode {
-            path: "command".to_owned(),
-            source,
+        self.request("command", async {
+            let body = CommandBody::for_target(self.kind, target);
+            let url = self.url("command", &[])?;
+            let text = self
+                .send(self.http.post(url).json(&body), "POST", "command")
+                .await?;
+            serde_json::from_str(&text).map_err(|source| Error::Decode {
+                path: "command".to_owned(),
+                source,
+            })
         })
+        .await
     }
 
     /// Polls a command (`GET command/{id}`).
     pub async fn command_status(&self, id: i64) -> Result<CommandStatus, Error> {
-        self.get_json(&format!("command/{id}"), &[]).await
+        self.get_json("command_status", &format!("command/{id}"), &[])
+            .await
     }
 }
 
@@ -1055,5 +1131,116 @@ mod tests {
             "error should not be client builder error: {msg}"
         );
         std::fs::write(child_ran, "ok").expect("write child sentinel");
+    }
+
+    #[test]
+    fn app_label_maps_all_kinds() {
+        assert_eq!(Kind::Sonarr.app_label(), "sonarr");
+        assert_eq!(Kind::Radarr.app_label(), "radarr");
+        assert_eq!(Kind::Lidarr.app_label(), "lidarr");
+        assert_eq!(Kind::Readarr.app_label(), "readarr");
+        assert_eq!(Kind::WhisparrV2.app_label(), "whisparr_v2");
+        assert_eq!(Kind::WhisparrV3.app_label(), "whisparr_v3");
+    }
+
+    #[test]
+    fn error_class_maps_all_classes() {
+        let e_404 = Error::Status {
+            method: "GET",
+            path: "test".to_owned(),
+            status: 404,
+            body: String::new(),
+        };
+        assert_eq!(e_404.error_class(), "status_4xx");
+
+        let e_500 = Error::Status {
+            method: "POST",
+            path: "test".to_owned(),
+            status: 503,
+            body: String::new(),
+        };
+        assert_eq!(e_500.error_class(), "status_5xx");
+
+        let decode_err: Result<serde_json::Value, _> = serde_json::from_str("invalid json");
+        let e_decode = Error::Decode {
+            path: "test".to_owned(),
+            source: decode_err.unwrap_err(),
+        };
+        assert_eq!(e_decode.error_class(), "decode");
+
+        let url_err = Url::parse("invalid-url").unwrap_err();
+        let e_base = Error::BaseUrl(url_err);
+        assert_eq!(e_base.error_class(), "connect");
+    }
+
+    type RecordedCall = (Kind, &'static str, Duration, Option<String>);
+
+    #[derive(Debug, Default)]
+    struct TestObserver {
+        calls: std::sync::Mutex<Vec<RecordedCall>>,
+    }
+
+    impl RequestObserver for TestObserver {
+        fn on_request(
+            &self,
+            app: Kind,
+            operation: &'static str,
+            duration: Duration,
+            error: Option<&Error>,
+        ) {
+            self.calls.lock().unwrap().push((
+                app,
+                operation,
+                duration,
+                error.map(|e| e.error_class().to_owned()),
+            ));
+        }
+    }
+
+    #[tokio::test]
+    async fn observer_notified_on_success_and_error() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/v3/system/status"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "appName": "Sonarr",
+                "version": "4.0.0"
+            })))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/v3/queue"))
+            .respond_with(ResponseTemplate::new(500).set_body_string("Internal Error"))
+            .mount(&server)
+            .await;
+
+        let observer = Arc::new(TestObserver::default());
+        let mut client_opts = opts();
+        client_opts.attempts = 1;
+        client_opts.observer = Some(observer.clone());
+
+        let client = ArrClient::new(Kind::Sonarr, &server.uri(), "k", client_opts).unwrap();
+
+        // 1. Success call
+        let status = client.system_status().await.unwrap();
+        assert_eq!(status.app_name, "Sonarr");
+
+        // 2. Error call
+        let queue_res = client.queue_total().await;
+        assert!(queue_res.is_err());
+
+        let calls = observer.calls.lock().unwrap().clone();
+        assert_eq!(calls.len(), 2);
+
+        // First call: system_status, success
+        assert_eq!(calls[0].0, Kind::Sonarr);
+        assert_eq!(calls[0].1, "system_status");
+        assert_eq!(calls[0].3, None);
+
+        // Second call: queue, status_5xx
+        assert_eq!(calls[1].0, Kind::Sonarr);
+        assert_eq!(calls[1].1, "queue");
+        assert_eq!(calls[1].3, Some("status_5xx".to_owned()));
     }
 }
