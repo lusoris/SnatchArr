@@ -190,3 +190,26 @@ func DownloadClientsFromRows(rows []sqlcgen.DownloadClient) []domain.DownloadCli
 	}
 	return out
 }
+
+// NotificationRuleFromRow converts a notification rule row.
+func NotificationRuleFromRow(r sqlcgen.NotificationRule) domain.NotificationRule {
+	return domain.NotificationRule{
+		ID:         r.ID,
+		Name:       r.Name,
+		EventKind:  domain.RuleEventKind(r.EventKind),
+		Threshold:  int(r.Threshold),
+		Enabled:    r.Enabled,
+		ChannelIDs: r.ChannelIds,
+		CreatedAt:  r.CreatedAt,
+		UpdatedAt:  r.UpdatedAt,
+	}
+}
+
+// NotificationRulesFromRows converts a slice of rule rows.
+func NotificationRulesFromRows(rows []sqlcgen.NotificationRule) []domain.NotificationRule {
+	out := make([]domain.NotificationRule, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, NotificationRuleFromRow(r))
+	}
+	return out
+}

@@ -1108,6 +1108,12 @@ type DeleteInstanceNoContent struct{}
 
 func (*DeleteInstanceNoContent) deleteInstanceRes() {}
 
+// DeleteNotificationChannelNoContent is response for DeleteNotificationChannel operation.
+type DeleteNotificationChannelNoContent struct{}
+
+// DeleteNotificationRuleNoContent is response for DeleteNotificationRule operation.
+type DeleteNotificationRuleNoContent struct{}
+
 // DeleteScheduleNoContent is response for DeleteSchedule operation.
 type DeleteScheduleNoContent struct{}
 
@@ -2254,6 +2260,790 @@ func (s *LoginRequest) SetPassword(val string) {
 // LogoutNoContent is response for Logout operation.
 type LogoutNoContent struct{}
 
+// Ref: #/components/schemas/NotificationChannel
+type NotificationChannel struct {
+	ID      uuid.UUID               `json:"id"`
+	Name    string                  `json:"name"`
+	Kind    NotificationChannelKind `json:"kind"`
+	Enabled bool                    `json:"enabled"`
+	// Whether a secret is stored for this channel.
+	HasSecret bool                      `json:"has_secret"`
+	Config    NotificationChannelConfig `json:"config"`
+	CreatedAt time.Time                 `json:"created_at"`
+	UpdatedAt time.Time                 `json:"updated_at"`
+}
+
+// GetID returns the value of ID.
+func (s *NotificationChannel) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetName returns the value of Name.
+func (s *NotificationChannel) GetName() string {
+	return s.Name
+}
+
+// GetKind returns the value of Kind.
+func (s *NotificationChannel) GetKind() NotificationChannelKind {
+	return s.Kind
+}
+
+// GetEnabled returns the value of Enabled.
+func (s *NotificationChannel) GetEnabled() bool {
+	return s.Enabled
+}
+
+// GetHasSecret returns the value of HasSecret.
+func (s *NotificationChannel) GetHasSecret() bool {
+	return s.HasSecret
+}
+
+// GetConfig returns the value of Config.
+func (s *NotificationChannel) GetConfig() NotificationChannelConfig {
+	return s.Config
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *NotificationChannel) GetCreatedAt() time.Time {
+	return s.CreatedAt
+}
+
+// GetUpdatedAt returns the value of UpdatedAt.
+func (s *NotificationChannel) GetUpdatedAt() time.Time {
+	return s.UpdatedAt
+}
+
+// SetID sets the value of ID.
+func (s *NotificationChannel) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetName sets the value of Name.
+func (s *NotificationChannel) SetName(val string) {
+	s.Name = val
+}
+
+// SetKind sets the value of Kind.
+func (s *NotificationChannel) SetKind(val NotificationChannelKind) {
+	s.Kind = val
+}
+
+// SetEnabled sets the value of Enabled.
+func (s *NotificationChannel) SetEnabled(val bool) {
+	s.Enabled = val
+}
+
+// SetHasSecret sets the value of HasSecret.
+func (s *NotificationChannel) SetHasSecret(val bool) {
+	s.HasSecret = val
+}
+
+// SetConfig sets the value of Config.
+func (s *NotificationChannel) SetConfig(val NotificationChannelConfig) {
+	s.Config = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *NotificationChannel) SetCreatedAt(val time.Time) {
+	s.CreatedAt = val
+}
+
+// SetUpdatedAt sets the value of UpdatedAt.
+func (s *NotificationChannel) SetUpdatedAt(val time.Time) {
+	s.UpdatedAt = val
+}
+
+// Ref: #/components/schemas/NotificationChannelConfig
+type NotificationChannelConfig struct {
+	// Webhook URL (write-only, never returned in responses).
+	WebhookURL OptString `json:"webhook_url"`
+	// Bearer token (write-only, never returned in responses).
+	Token OptString `json:"token"`
+	// Telegram Bot token (write-only, never returned in responses).
+	BotToken OptString `json:"bot_token"`
+	// Gotify App token (write-only, never returned in responses).
+	AppToken OptString `json:"app_token"`
+	// Password (write-only, never returned in responses).
+	Password OptString `json:"password"`
+	// HMAC signing secret (write-only, never returned in responses).
+	Secret OptString `json:"secret"`
+	// Base URL for ntfy or Gotify.
+	ServerURL OptString `json:"server_url"`
+	// Ntfy topic name.
+	Topic OptString `json:"topic"`
+	// Telegram chat ID (e.g. -1001234567890 or @channel).
+	ChatID OptString `json:"chat_id"`
+	// Slack channel override.
+	Channel OptString `json:"channel"`
+	// Display username override.
+	Username OptString `json:"username"`
+	// Discord avatar URL override.
+	AvatarURL OptString `json:"avatar_url"`
+	// Slack icon emoji override.
+	IconEmoji OptString `json:"icon_emoji"`
+	// Telegram parse mode (e.g. HTML, MarkdownV2).
+	ParseMode OptString `json:"parse_mode"`
+	// Teams theme color hex without '#' (e.g. 0076D7).
+	ThemeColor OptString `json:"theme_color"`
+	// Priority for ntfy (1-5) or Gotify (0-10).
+	Priority OptInt `json:"priority"`
+	// Tags / emoji shortcodes for ntfy.
+	Tags []string `json:"tags"`
+	// Target endpoint URL for signed outgoing webhooks.
+	URL OptString `json:"url"`
+	// Allow webhooks to connect to loopback/private/internal IP addresses.
+	AllowPrivateNetwork OptBool `json:"allow_private_network"`
+	// Allow webhooks to connect over cleartext http://.
+	AllowInsecureHTTP OptBool `json:"allow_insecure_http"`
+}
+
+// GetWebhookURL returns the value of WebhookURL.
+func (s *NotificationChannelConfig) GetWebhookURL() OptString {
+	return s.WebhookURL
+}
+
+// GetToken returns the value of Token.
+func (s *NotificationChannelConfig) GetToken() OptString {
+	return s.Token
+}
+
+// GetBotToken returns the value of BotToken.
+func (s *NotificationChannelConfig) GetBotToken() OptString {
+	return s.BotToken
+}
+
+// GetAppToken returns the value of AppToken.
+func (s *NotificationChannelConfig) GetAppToken() OptString {
+	return s.AppToken
+}
+
+// GetPassword returns the value of Password.
+func (s *NotificationChannelConfig) GetPassword() OptString {
+	return s.Password
+}
+
+// GetSecret returns the value of Secret.
+func (s *NotificationChannelConfig) GetSecret() OptString {
+	return s.Secret
+}
+
+// GetServerURL returns the value of ServerURL.
+func (s *NotificationChannelConfig) GetServerURL() OptString {
+	return s.ServerURL
+}
+
+// GetTopic returns the value of Topic.
+func (s *NotificationChannelConfig) GetTopic() OptString {
+	return s.Topic
+}
+
+// GetChatID returns the value of ChatID.
+func (s *NotificationChannelConfig) GetChatID() OptString {
+	return s.ChatID
+}
+
+// GetChannel returns the value of Channel.
+func (s *NotificationChannelConfig) GetChannel() OptString {
+	return s.Channel
+}
+
+// GetUsername returns the value of Username.
+func (s *NotificationChannelConfig) GetUsername() OptString {
+	return s.Username
+}
+
+// GetAvatarURL returns the value of AvatarURL.
+func (s *NotificationChannelConfig) GetAvatarURL() OptString {
+	return s.AvatarURL
+}
+
+// GetIconEmoji returns the value of IconEmoji.
+func (s *NotificationChannelConfig) GetIconEmoji() OptString {
+	return s.IconEmoji
+}
+
+// GetParseMode returns the value of ParseMode.
+func (s *NotificationChannelConfig) GetParseMode() OptString {
+	return s.ParseMode
+}
+
+// GetThemeColor returns the value of ThemeColor.
+func (s *NotificationChannelConfig) GetThemeColor() OptString {
+	return s.ThemeColor
+}
+
+// GetPriority returns the value of Priority.
+func (s *NotificationChannelConfig) GetPriority() OptInt {
+	return s.Priority
+}
+
+// GetTags returns the value of Tags.
+func (s *NotificationChannelConfig) GetTags() []string {
+	return s.Tags
+}
+
+// GetURL returns the value of URL.
+func (s *NotificationChannelConfig) GetURL() OptString {
+	return s.URL
+}
+
+// GetAllowPrivateNetwork returns the value of AllowPrivateNetwork.
+func (s *NotificationChannelConfig) GetAllowPrivateNetwork() OptBool {
+	return s.AllowPrivateNetwork
+}
+
+// GetAllowInsecureHTTP returns the value of AllowInsecureHTTP.
+func (s *NotificationChannelConfig) GetAllowInsecureHTTP() OptBool {
+	return s.AllowInsecureHTTP
+}
+
+// SetWebhookURL sets the value of WebhookURL.
+func (s *NotificationChannelConfig) SetWebhookURL(val OptString) {
+	s.WebhookURL = val
+}
+
+// SetToken sets the value of Token.
+func (s *NotificationChannelConfig) SetToken(val OptString) {
+	s.Token = val
+}
+
+// SetBotToken sets the value of BotToken.
+func (s *NotificationChannelConfig) SetBotToken(val OptString) {
+	s.BotToken = val
+}
+
+// SetAppToken sets the value of AppToken.
+func (s *NotificationChannelConfig) SetAppToken(val OptString) {
+	s.AppToken = val
+}
+
+// SetPassword sets the value of Password.
+func (s *NotificationChannelConfig) SetPassword(val OptString) {
+	s.Password = val
+}
+
+// SetSecret sets the value of Secret.
+func (s *NotificationChannelConfig) SetSecret(val OptString) {
+	s.Secret = val
+}
+
+// SetServerURL sets the value of ServerURL.
+func (s *NotificationChannelConfig) SetServerURL(val OptString) {
+	s.ServerURL = val
+}
+
+// SetTopic sets the value of Topic.
+func (s *NotificationChannelConfig) SetTopic(val OptString) {
+	s.Topic = val
+}
+
+// SetChatID sets the value of ChatID.
+func (s *NotificationChannelConfig) SetChatID(val OptString) {
+	s.ChatID = val
+}
+
+// SetChannel sets the value of Channel.
+func (s *NotificationChannelConfig) SetChannel(val OptString) {
+	s.Channel = val
+}
+
+// SetUsername sets the value of Username.
+func (s *NotificationChannelConfig) SetUsername(val OptString) {
+	s.Username = val
+}
+
+// SetAvatarURL sets the value of AvatarURL.
+func (s *NotificationChannelConfig) SetAvatarURL(val OptString) {
+	s.AvatarURL = val
+}
+
+// SetIconEmoji sets the value of IconEmoji.
+func (s *NotificationChannelConfig) SetIconEmoji(val OptString) {
+	s.IconEmoji = val
+}
+
+// SetParseMode sets the value of ParseMode.
+func (s *NotificationChannelConfig) SetParseMode(val OptString) {
+	s.ParseMode = val
+}
+
+// SetThemeColor sets the value of ThemeColor.
+func (s *NotificationChannelConfig) SetThemeColor(val OptString) {
+	s.ThemeColor = val
+}
+
+// SetPriority sets the value of Priority.
+func (s *NotificationChannelConfig) SetPriority(val OptInt) {
+	s.Priority = val
+}
+
+// SetTags sets the value of Tags.
+func (s *NotificationChannelConfig) SetTags(val []string) {
+	s.Tags = val
+}
+
+// SetURL sets the value of URL.
+func (s *NotificationChannelConfig) SetURL(val OptString) {
+	s.URL = val
+}
+
+// SetAllowPrivateNetwork sets the value of AllowPrivateNetwork.
+func (s *NotificationChannelConfig) SetAllowPrivateNetwork(val OptBool) {
+	s.AllowPrivateNetwork = val
+}
+
+// SetAllowInsecureHTTP sets the value of AllowInsecureHTTP.
+func (s *NotificationChannelConfig) SetAllowInsecureHTTP(val OptBool) {
+	s.AllowInsecureHTTP = val
+}
+
+// Ref: #/components/schemas/NotificationChannelInput
+type NotificationChannelInput struct {
+	Name    string                    `json:"name"`
+	Kind    NotificationChannelKind   `json:"kind"`
+	Enabled OptBool                   `json:"enabled"`
+	Config  NotificationChannelConfig `json:"config"`
+}
+
+// GetName returns the value of Name.
+func (s *NotificationChannelInput) GetName() string {
+	return s.Name
+}
+
+// GetKind returns the value of Kind.
+func (s *NotificationChannelInput) GetKind() NotificationChannelKind {
+	return s.Kind
+}
+
+// GetEnabled returns the value of Enabled.
+func (s *NotificationChannelInput) GetEnabled() OptBool {
+	return s.Enabled
+}
+
+// GetConfig returns the value of Config.
+func (s *NotificationChannelInput) GetConfig() NotificationChannelConfig {
+	return s.Config
+}
+
+// SetName sets the value of Name.
+func (s *NotificationChannelInput) SetName(val string) {
+	s.Name = val
+}
+
+// SetKind sets the value of Kind.
+func (s *NotificationChannelInput) SetKind(val NotificationChannelKind) {
+	s.Kind = val
+}
+
+// SetEnabled sets the value of Enabled.
+func (s *NotificationChannelInput) SetEnabled(val OptBool) {
+	s.Enabled = val
+}
+
+// SetConfig sets the value of Config.
+func (s *NotificationChannelInput) SetConfig(val NotificationChannelConfig) {
+	s.Config = val
+}
+
+// Ref: #/components/schemas/NotificationChannelKind
+type NotificationChannelKind string
+
+const (
+	NotificationChannelKindDiscord  NotificationChannelKind = "discord"
+	NotificationChannelKindSlack    NotificationChannelKind = "slack"
+	NotificationChannelKindTelegram NotificationChannelKind = "telegram"
+	NotificationChannelKindNtfy     NotificationChannelKind = "ntfy"
+	NotificationChannelKindGotify   NotificationChannelKind = "gotify"
+	NotificationChannelKindTeams    NotificationChannelKind = "teams"
+	NotificationChannelKindWebhook  NotificationChannelKind = "webhook"
+)
+
+// AllValues returns all NotificationChannelKind values.
+func (NotificationChannelKind) AllValues() []NotificationChannelKind {
+	return []NotificationChannelKind{
+		NotificationChannelKindDiscord,
+		NotificationChannelKindSlack,
+		NotificationChannelKindTelegram,
+		NotificationChannelKindNtfy,
+		NotificationChannelKindGotify,
+		NotificationChannelKindTeams,
+		NotificationChannelKindWebhook,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s NotificationChannelKind) MarshalText() ([]byte, error) {
+	switch s {
+	case NotificationChannelKindDiscord:
+		return []byte(s), nil
+	case NotificationChannelKindSlack:
+		return []byte(s), nil
+	case NotificationChannelKindTelegram:
+		return []byte(s), nil
+	case NotificationChannelKindNtfy:
+		return []byte(s), nil
+	case NotificationChannelKindGotify:
+		return []byte(s), nil
+	case NotificationChannelKindTeams:
+		return []byte(s), nil
+	case NotificationChannelKindWebhook:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *NotificationChannelKind) UnmarshalText(data []byte) error {
+	switch NotificationChannelKind(data) {
+	case NotificationChannelKindDiscord:
+		*s = NotificationChannelKindDiscord
+		return nil
+	case NotificationChannelKindSlack:
+		*s = NotificationChannelKindSlack
+		return nil
+	case NotificationChannelKindTelegram:
+		*s = NotificationChannelKindTelegram
+		return nil
+	case NotificationChannelKindNtfy:
+		*s = NotificationChannelKindNtfy
+		return nil
+	case NotificationChannelKindGotify:
+		*s = NotificationChannelKindGotify
+		return nil
+	case NotificationChannelKindTeams:
+		*s = NotificationChannelKindTeams
+		return nil
+	case NotificationChannelKindWebhook:
+		*s = NotificationChannelKindWebhook
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/NotificationChannelUpdate
+type NotificationChannelUpdate struct {
+	Name    string                       `json:"name"`
+	Kind    NotificationChannelKind      `json:"kind"`
+	Enabled OptBool                      `json:"enabled"`
+	Config  OptNotificationChannelConfig `json:"config"`
+}
+
+// GetName returns the value of Name.
+func (s *NotificationChannelUpdate) GetName() string {
+	return s.Name
+}
+
+// GetKind returns the value of Kind.
+func (s *NotificationChannelUpdate) GetKind() NotificationChannelKind {
+	return s.Kind
+}
+
+// GetEnabled returns the value of Enabled.
+func (s *NotificationChannelUpdate) GetEnabled() OptBool {
+	return s.Enabled
+}
+
+// GetConfig returns the value of Config.
+func (s *NotificationChannelUpdate) GetConfig() OptNotificationChannelConfig {
+	return s.Config
+}
+
+// SetName sets the value of Name.
+func (s *NotificationChannelUpdate) SetName(val string) {
+	s.Name = val
+}
+
+// SetKind sets the value of Kind.
+func (s *NotificationChannelUpdate) SetKind(val NotificationChannelKind) {
+	s.Kind = val
+}
+
+// SetEnabled sets the value of Enabled.
+func (s *NotificationChannelUpdate) SetEnabled(val OptBool) {
+	s.Enabled = val
+}
+
+// SetConfig sets the value of Config.
+func (s *NotificationChannelUpdate) SetConfig(val OptNotificationChannelConfig) {
+	s.Config = val
+}
+
+// Ref: #/components/schemas/NotificationRule
+type NotificationRule struct {
+	ID         uuid.UUID                 `json:"id"`
+	Name       string                    `json:"name"`
+	EventKind  NotificationRuleEventKind `json:"event_kind"`
+	Threshold  int                       `json:"threshold"`
+	Enabled    bool                      `json:"enabled"`
+	ChannelIds []uuid.UUID               `json:"channel_ids"`
+	CreatedAt  time.Time                 `json:"created_at"`
+	UpdatedAt  time.Time                 `json:"updated_at"`
+}
+
+// GetID returns the value of ID.
+func (s *NotificationRule) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetName returns the value of Name.
+func (s *NotificationRule) GetName() string {
+	return s.Name
+}
+
+// GetEventKind returns the value of EventKind.
+func (s *NotificationRule) GetEventKind() NotificationRuleEventKind {
+	return s.EventKind
+}
+
+// GetThreshold returns the value of Threshold.
+func (s *NotificationRule) GetThreshold() int {
+	return s.Threshold
+}
+
+// GetEnabled returns the value of Enabled.
+func (s *NotificationRule) GetEnabled() bool {
+	return s.Enabled
+}
+
+// GetChannelIds returns the value of ChannelIds.
+func (s *NotificationRule) GetChannelIds() []uuid.UUID {
+	return s.ChannelIds
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *NotificationRule) GetCreatedAt() time.Time {
+	return s.CreatedAt
+}
+
+// GetUpdatedAt returns the value of UpdatedAt.
+func (s *NotificationRule) GetUpdatedAt() time.Time {
+	return s.UpdatedAt
+}
+
+// SetID sets the value of ID.
+func (s *NotificationRule) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetName sets the value of Name.
+func (s *NotificationRule) SetName(val string) {
+	s.Name = val
+}
+
+// SetEventKind sets the value of EventKind.
+func (s *NotificationRule) SetEventKind(val NotificationRuleEventKind) {
+	s.EventKind = val
+}
+
+// SetThreshold sets the value of Threshold.
+func (s *NotificationRule) SetThreshold(val int) {
+	s.Threshold = val
+}
+
+// SetEnabled sets the value of Enabled.
+func (s *NotificationRule) SetEnabled(val bool) {
+	s.Enabled = val
+}
+
+// SetChannelIds sets the value of ChannelIds.
+func (s *NotificationRule) SetChannelIds(val []uuid.UUID) {
+	s.ChannelIds = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *NotificationRule) SetCreatedAt(val time.Time) {
+	s.CreatedAt = val
+}
+
+// SetUpdatedAt sets the value of UpdatedAt.
+func (s *NotificationRule) SetUpdatedAt(val time.Time) {
+	s.UpdatedAt = val
+}
+
+// Ref: #/components/schemas/NotificationRuleEventKind
+type NotificationRuleEventKind string
+
+const (
+	NotificationRuleEventKindRunFailureStreak     NotificationRuleEventKind = "run_failure_streak"
+	NotificationRuleEventKindCircuitOpened        NotificationRuleEventKind = "circuit_opened"
+	NotificationRuleEventKindInstanceUnreachable  NotificationRuleEventKind = "instance_unreachable"
+	NotificationRuleEventKindStaminaExhausted     NotificationRuleEventKind = "stamina_exhausted"
+	NotificationRuleEventKindSeerrRequestSnatched NotificationRuleEventKind = "seerr_request_snatched"
+)
+
+// AllValues returns all NotificationRuleEventKind values.
+func (NotificationRuleEventKind) AllValues() []NotificationRuleEventKind {
+	return []NotificationRuleEventKind{
+		NotificationRuleEventKindRunFailureStreak,
+		NotificationRuleEventKindCircuitOpened,
+		NotificationRuleEventKindInstanceUnreachable,
+		NotificationRuleEventKindStaminaExhausted,
+		NotificationRuleEventKindSeerrRequestSnatched,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s NotificationRuleEventKind) MarshalText() ([]byte, error) {
+	switch s {
+	case NotificationRuleEventKindRunFailureStreak:
+		return []byte(s), nil
+	case NotificationRuleEventKindCircuitOpened:
+		return []byte(s), nil
+	case NotificationRuleEventKindInstanceUnreachable:
+		return []byte(s), nil
+	case NotificationRuleEventKindStaminaExhausted:
+		return []byte(s), nil
+	case NotificationRuleEventKindSeerrRequestSnatched:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *NotificationRuleEventKind) UnmarshalText(data []byte) error {
+	switch NotificationRuleEventKind(data) {
+	case NotificationRuleEventKindRunFailureStreak:
+		*s = NotificationRuleEventKindRunFailureStreak
+		return nil
+	case NotificationRuleEventKindCircuitOpened:
+		*s = NotificationRuleEventKindCircuitOpened
+		return nil
+	case NotificationRuleEventKindInstanceUnreachable:
+		*s = NotificationRuleEventKindInstanceUnreachable
+		return nil
+	case NotificationRuleEventKindStaminaExhausted:
+		*s = NotificationRuleEventKindStaminaExhausted
+		return nil
+	case NotificationRuleEventKindSeerrRequestSnatched:
+		*s = NotificationRuleEventKindSeerrRequestSnatched
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/NotificationRuleInput
+type NotificationRuleInput struct {
+	Name      string                    `json:"name"`
+	EventKind NotificationRuleEventKind `json:"event_kind"`
+	// Trigger threshold (e.g. N consecutive failures for run_failure_streak).
+	Threshold  int         `json:"threshold"`
+	Enabled    OptBool     `json:"enabled"`
+	ChannelIds []uuid.UUID `json:"channel_ids"`
+}
+
+// GetName returns the value of Name.
+func (s *NotificationRuleInput) GetName() string {
+	return s.Name
+}
+
+// GetEventKind returns the value of EventKind.
+func (s *NotificationRuleInput) GetEventKind() NotificationRuleEventKind {
+	return s.EventKind
+}
+
+// GetThreshold returns the value of Threshold.
+func (s *NotificationRuleInput) GetThreshold() int {
+	return s.Threshold
+}
+
+// GetEnabled returns the value of Enabled.
+func (s *NotificationRuleInput) GetEnabled() OptBool {
+	return s.Enabled
+}
+
+// GetChannelIds returns the value of ChannelIds.
+func (s *NotificationRuleInput) GetChannelIds() []uuid.UUID {
+	return s.ChannelIds
+}
+
+// SetName sets the value of Name.
+func (s *NotificationRuleInput) SetName(val string) {
+	s.Name = val
+}
+
+// SetEventKind sets the value of EventKind.
+func (s *NotificationRuleInput) SetEventKind(val NotificationRuleEventKind) {
+	s.EventKind = val
+}
+
+// SetThreshold sets the value of Threshold.
+func (s *NotificationRuleInput) SetThreshold(val int) {
+	s.Threshold = val
+}
+
+// SetEnabled sets the value of Enabled.
+func (s *NotificationRuleInput) SetEnabled(val OptBool) {
+	s.Enabled = val
+}
+
+// SetChannelIds sets the value of ChannelIds.
+func (s *NotificationRuleInput) SetChannelIds(val []uuid.UUID) {
+	s.ChannelIds = val
+}
+
+// Ref: #/components/schemas/NotificationRuleUpdate
+type NotificationRuleUpdate struct {
+	Name       string                    `json:"name"`
+	EventKind  NotificationRuleEventKind `json:"event_kind"`
+	Threshold  int                       `json:"threshold"`
+	Enabled    OptBool                   `json:"enabled"`
+	ChannelIds []uuid.UUID               `json:"channel_ids"`
+}
+
+// GetName returns the value of Name.
+func (s *NotificationRuleUpdate) GetName() string {
+	return s.Name
+}
+
+// GetEventKind returns the value of EventKind.
+func (s *NotificationRuleUpdate) GetEventKind() NotificationRuleEventKind {
+	return s.EventKind
+}
+
+// GetThreshold returns the value of Threshold.
+func (s *NotificationRuleUpdate) GetThreshold() int {
+	return s.Threshold
+}
+
+// GetEnabled returns the value of Enabled.
+func (s *NotificationRuleUpdate) GetEnabled() OptBool {
+	return s.Enabled
+}
+
+// GetChannelIds returns the value of ChannelIds.
+func (s *NotificationRuleUpdate) GetChannelIds() []uuid.UUID {
+	return s.ChannelIds
+}
+
+// SetName sets the value of Name.
+func (s *NotificationRuleUpdate) SetName(val string) {
+	s.Name = val
+}
+
+// SetEventKind sets the value of EventKind.
+func (s *NotificationRuleUpdate) SetEventKind(val NotificationRuleEventKind) {
+	s.EventKind = val
+}
+
+// SetThreshold sets the value of Threshold.
+func (s *NotificationRuleUpdate) SetThreshold(val int) {
+	s.Threshold = val
+}
+
+// SetEnabled sets the value of Enabled.
+func (s *NotificationRuleUpdate) SetEnabled(val OptBool) {
+	s.Enabled = val
+}
+
+// SetChannelIds sets the value of ChannelIds.
+func (s *NotificationRuleUpdate) SetChannelIds(val []uuid.UUID) {
+	s.ChannelIds = val
+}
+
 // NewOptArrProduct returns new OptArrProduct with value set to v.
 func NewOptArrProduct(v ArrProduct) OptArrProduct {
 	return OptArrProduct{
@@ -2570,6 +3360,52 @@ func (o OptInt64) Get() (v int64, ok bool) {
 
 // Or returns value if set, or given parameter if does not.
 func (o OptInt64) Or(d int64) int64 {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptNotificationChannelConfig returns new OptNotificationChannelConfig with value set to v.
+func NewOptNotificationChannelConfig(v NotificationChannelConfig) OptNotificationChannelConfig {
+	return OptNotificationChannelConfig{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptNotificationChannelConfig is optional NotificationChannelConfig.
+type OptNotificationChannelConfig struct {
+	Value NotificationChannelConfig
+	Set   bool
+}
+
+// IsSet returns true if OptNotificationChannelConfig was set.
+func (o OptNotificationChannelConfig) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptNotificationChannelConfig) Reset() {
+	var v NotificationChannelConfig
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptNotificationChannelConfig) SetTo(v NotificationChannelConfig) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptNotificationChannelConfig) Get() (v NotificationChannelConfig, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptNotificationChannelConfig) Or(d NotificationChannelConfig) NotificationChannelConfig {
 	if v, ok := o.Get(); ok {
 		return v
 	}
@@ -4836,6 +5672,9 @@ func (s *SystemStatusProfile) UnmarshalText(data []byte) error {
 		return errors.Errorf("invalid value: %q", data)
 	}
 }
+
+// TestNotificationChannelNoContent is response for TestNotificationChannel operation.
+type TestNotificationChannelNoContent struct{}
 
 type TriggerRunCreated Run
 

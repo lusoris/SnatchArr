@@ -679,6 +679,12 @@ async fn circuit_opens_after_consecutive_failures() -> TestResult {
         has_circuit_open_event(&events),
         "Should report circuit open event"
     );
+    assert!(
+        events
+            .iter()
+            .any(|e| e.r#type == EventType::CircuitOpened as i32),
+        "Should report CircuitOpened event type"
+    );
 
     assert_single_completed_outcome(&api, RunOutcome::Failed).await?;
     Ok(())

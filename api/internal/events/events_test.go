@@ -15,6 +15,7 @@ func TestEventName(t *testing.T) {
 	tests := []struct{ in, want string }{
 		{"EVENT_TYPE_SEARCH_DISPATCHED", "search_dispatched"},
 		{"EVENT_TYPE_RUN_FINISHED", "run_finished"},
+		{"EVENT_TYPE_CIRCUIT_OPENED", "circuit_opened"},
 		{"already_lower", "already_lower"},
 		{"", ""},
 	}

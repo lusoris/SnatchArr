@@ -85,6 +85,28 @@ type LoginLockout struct {
 	LockedUntil *time.Time
 }
 
+type NotificationChannel struct {
+	ID        uuid.UUID
+	Name      string
+	Kind      string
+	Enabled   bool
+	ConfigEnc []byte
+	HasSecret bool
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+type NotificationRule struct {
+	ID         uuid.UUID
+	Name       string
+	EventKind  string
+	Threshold  int32
+	Enabled    bool
+	ChannelIds []uuid.UUID
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}
+
 type ProcessedItem struct {
 	InstanceID     uuid.UUID
 	Kind           string
@@ -228,6 +250,29 @@ type User struct {
 	Role         string
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
+}
+
+type WebhookDelivery struct {
+	ID         string
+	EndpointID string
+	Event      string
+	Payload    []byte
+	Attempts   int32
+	Status     string
+	StatusCode int32
+	Error      string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}
+
+type WebhookEndpoint struct {
+	ID        string
+	Url       string
+	SecretEnc []byte
+	Events    []string
+	Active    bool
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 type Worker struct {

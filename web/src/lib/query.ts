@@ -20,5 +20,7 @@ export const keys = {
 	dlstatus: ['download-clients', 'status'] as const,
 	seerrRequests: ['seerr', 'requests'] as const,
 	cleanuparr: ['cleanuparr', 'status'] as const,
-	settings: ['settings'] as const
+	settings: ['settings'] as const,
+	channels: ['notification-channels'] as const,
+	rules: ['notification-rules'] as const
 };

@@ -31,6 +31,8 @@ tags:
     description: Cleanuparr status and strikes (read-only; complementary to snatching)
   - name: configarr
     description: Instances imported from a Configarr config.yml (ADR-0003)
+  - name: notifications
+    description: Channels and rules for dispatching failure, circuit, stamina and Seerr notifications
 security:
   - cookieAuth: []
   - bearerAuth: []
@@ -1237,6 +1239,181 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
 
+  /notifications/channels:
+    get:
+      tags: [notifications]
+      operationId: listNotificationChannels
+      summary: List all configured notification channels
+      responses:
+        "200":
+          description: List of notification channels
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/NotificationChannel"
+        default:
+          $ref: "#/components/responses/Problem"
+    post:
+      tags: [notifications]
+      operationId: createNotificationChannel
+      summary: Create a notification channel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationChannelInput"
+      responses:
+        "201":
+          description: Channel created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationChannel"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /notifications/channels/{channelId}:
+    parameters:
+      - $ref: "#/components/parameters/NotificationChannelId"
+    get:
+      tags: [notifications]
+      operationId: getNotificationChannel
+      summary: Get one notification channel
+      responses:
+        "200":
+          description: Notification channel
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationChannel"
+        default:
+          $ref: "#/components/responses/Problem"
+    put:
+      tags: [notifications]
+      operationId: updateNotificationChannel
+      summary: Update a notification channel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationChannelUpdate"
+      responses:
+        "200":
+          description: Channel updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationChannel"
+        default:
+          $ref: "#/components/responses/Problem"
+    delete:
+      tags: [notifications]
+      operationId: deleteNotificationChannel
+      summary: Delete a notification channel
+      responses:
+        "204":
+          description: Channel deleted
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /notifications/channels/{channelId}/test:
+    parameters:
+      - $ref: "#/components/parameters/NotificationChannelId"
+    post:
+      tags: [notifications]
+      operationId: testNotificationChannel
+      summary: Send a synchronous test notification to a channel
+      responses:
+        "204":
+          description: Test notification delivered successfully
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /notifications/rules:
+    get:
+      tags: [notifications]
+      operationId: listNotificationRules
+      summary: List all configured notification rules
+      responses:
+        "200":
+          description: List of notification rules
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/NotificationRule"
+        default:
+          $ref: "#/components/responses/Problem"
+    post:
+      tags: [notifications]
+      operationId: createNotificationRule
+      summary: Create a notification rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationRuleInput"
+      responses:
+        "201":
+          description: Rule created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationRule"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /notifications/rules/{ruleId}:
+    parameters:
+      - $ref: "#/components/parameters/NotificationRuleId"
+    get:
+      tags: [notifications]
+      operationId: getNotificationRule
+      summary: Get one notification rule
+      responses:
+        "200":
+          description: Notification rule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationRule"
+        default:
+          $ref: "#/components/responses/Problem"
+    put:
+      tags: [notifications]
+      operationId: updateNotificationRule
+      summary: Update a notification rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationRuleUpdate"
+      responses:
+        "200":
+          description: Rule updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationRule"
+        default:
+          $ref: "#/components/responses/Problem"
+    delete:
+      tags: [notifications]
+      operationId: deleteNotificationRule
+      summary: Delete a notification rule
+      responses:
+        "204":
+          description: Rule deleted
+        default:
+          $ref: "#/components/responses/Problem"
+
 components:
   securitySchemes:
     cookieAuth:
@@ -1276,6 +1453,20 @@ components:
       required: true
       schema:
         type: string
+    NotificationChannelId:
+      name: channelId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    NotificationRuleId:
+      name: ruleId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
   responses:
     Problem:
       description: RFC 9457 problem details
@@ -2280,3 +2471,210 @@ components:
           $ref: "#/components/schemas/ConfigarrImportResult"
         last_error:
           type: string
+
+    NotificationChannelKind:
+      type: string
+      enum: [discord, slack, telegram, ntfy, gotify, teams, webhook]
+
+    NotificationChannelConfig:
+      type: object
+      properties:
+        webhook_url:
+          type: string
+          description: Webhook URL (write-only, never returned in responses)
+        token:
+          type: string
+          description: Bearer token (write-only, never returned in responses)
+        bot_token:
+          type: string
+          description: Telegram Bot token (write-only, never returned in responses)
+        app_token:
+          type: string
+          description: Gotify App token (write-only, never returned in responses)
+        password:
+          type: string
+          description: Password (write-only, never returned in responses)
+        secret:
+          type: string
+          description: HMAC signing secret (write-only, never returned in responses)
+        server_url:
+          type: string
+          description: Base URL for ntfy or Gotify
+        topic:
+          type: string
+          description: ntfy topic name
+        chat_id:
+          type: string
+          description: Telegram chat ID (e.g. -1001234567890 or @channel)
+        channel:
+          type: string
+          description: Slack channel override
+        username:
+          type: string
+          description: Display username override
+        avatar_url:
+          type: string
+          description: Discord avatar URL override
+        icon_emoji:
+          type: string
+          description: Slack icon emoji override
+        parse_mode:
+          type: string
+          description: Telegram parse mode (e.g. HTML, MarkdownV2)
+        theme_color:
+          type: string
+          description: Teams theme color hex without '#' (e.g. 0076D7)
+        priority:
+          type: integer
+          description: Priority for ntfy (1-5) or Gotify (0-10)
+        tags:
+          type: array
+          items:
+            type: string
+          description: Tags / emoji shortcodes for ntfy
+        url:
+          type: string
+          description: Target endpoint URL for signed outgoing webhooks
+        allow_private_network:
+          type: boolean
+          description: Allow webhooks to connect to loopback/private/internal IP addresses
+          default: false
+        allow_insecure_http:
+          type: boolean
+          description: Allow webhooks to connect over cleartext http://
+          default: false
+
+    NotificationChannelInput:
+      type: object
+      required: [name, kind, config]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        kind:
+          $ref: "#/components/schemas/NotificationChannelKind"
+        enabled:
+          type: boolean
+          default: true
+        config:
+          $ref: "#/components/schemas/NotificationChannelConfig"
+
+    NotificationChannelUpdate:
+      type: object
+      required: [name, kind]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        kind:
+          $ref: "#/components/schemas/NotificationChannelKind"
+        enabled:
+          type: boolean
+          default: true
+        config:
+          $ref: "#/components/schemas/NotificationChannelConfig"
+
+    NotificationChannel:
+      type: object
+      required: [id, name, kind, enabled, has_secret, config, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        kind:
+          $ref: "#/components/schemas/NotificationChannelKind"
+        enabled:
+          type: boolean
+        has_secret:
+          type: boolean
+          description: Whether a secret is stored for this channel
+        config:
+          $ref: "#/components/schemas/NotificationChannelConfig"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    NotificationRuleEventKind:
+      type: string
+      enum: [run_failure_streak, circuit_opened, instance_unreachable, stamina_exhausted, seerr_request_snatched]
+
+    NotificationRuleInput:
+      type: object
+      required: [name, event_kind, threshold, channel_ids]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        event_kind:
+          $ref: "#/components/schemas/NotificationRuleEventKind"
+        threshold:
+          type: integer
+          minimum: 1
+          default: 1
+          description: "Trigger threshold (e.g. N consecutive failures for run_failure_streak)"
+        enabled:
+          type: boolean
+          default: true
+        channel_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    NotificationRuleUpdate:
+      type: object
+      required: [name, event_kind, threshold, channel_ids]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        event_kind:
+          $ref: "#/components/schemas/NotificationRuleEventKind"
+        threshold:
+          type: integer
+          minimum: 1
+          default: 1
+        enabled:
+          type: boolean
+          default: true
+        channel_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    NotificationRule:
+      type: object
+      required: [id, name, event_kind, threshold, enabled, channel_ids, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        event_kind:
+          $ref: "#/components/schemas/NotificationRuleEventKind"
+        threshold:
+          type: integer
+        enabled:
+          type: boolean
+        channel_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time

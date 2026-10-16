@@ -41,10 +41,11 @@ import (
 
 type routerFixture struct {
 	*integrationFixture
-	srv    *httptest.Server
-	client *http.Client
-	jar    http.CookieJar
-	keys   *apikey.Service
+	srv          *httptest.Server
+	client       *http.Client
+	jar          http.CookieJar
+	keys         *apikey.Service
+	notifySrvURL string
 }
 
 func newRouterFixture(t *testing.T) *routerFixture {
@@ -78,6 +79,11 @@ func newRouterFixture(t *testing.T) *routerFixture {
 	srv := httptest.NewServer(r)
 	t.Cleanup(srv.Close)
 
+	notifySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(notifySrv.Close)
+
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		t.Fatalf("cookiejar.New: %v", err)
@@ -92,6 +98,7 @@ func newRouterFixture(t *testing.T) *routerFixture {
 		client:             client,
 		jar:                jar,
 		keys:               keys,
+		notifySrvURL:       notifySrv.URL,
 	}
 }
 
@@ -177,6 +184,8 @@ type idsState struct {
 	configarrPath string
 	policy        map[string]any
 	settings      map[string]any
+	channelID     string
+	ruleID        string
 }
 
 func newIDsState(t *testing.T) *idsState {
@@ -1178,6 +1187,18 @@ func stepsDeletesAndAuth() []routerStep {
 			want:   http.StatusNoContent,
 		},
 		{
+			op:     "deleteNotificationRule",
+			method: http.MethodDelete,
+			path:   func(ids *idsState) string { return "/notifications/rules/" + ids.ruleID },
+			want:   http.StatusNoContent,
+		},
+		{
+			op:     "deleteNotificationChannel",
+			method: http.MethodDelete,
+			path:   func(ids *idsState) string { return "/notifications/channels/" + ids.channelID },
+			want:   http.StatusNoContent,
+		},
+		{
 			op:     "deleteInstance",
 			method: http.MethodDelete,
 			path:   func(ids *idsState) string { return "/instances/" + ids.instanceID },
@@ -1232,8 +1253,155 @@ func stepsDeletesAndAuth() []routerStep {
 	}
 }
 
+func stepsNotificationChannels(f *routerFixture) []routerStep {
+	return []routerStep{
+		{
+			op:     "listNotificationChannels",
+			method: http.MethodGet,
+			path:   func(_ *idsState) string { return "/notifications/channels" },
+			want:   http.StatusOK,
+		},
+		{
+			op:     "createNotificationChannel",
+			method: http.MethodPost,
+			path:   func(_ *idsState) string { return "/notifications/channels" },
+			body: func(_ *idsState) any {
+				return map[string]any{
+					"name":    "router-webhook",
+					"kind":    "webhook",
+					"enabled": true,
+					"config": map[string]any{
+						"url":                   f.notifySrvURL,
+						"secret":                "32-bytes-test-secret-for-webhook",
+						"allow_insecure_http":   true,
+						"allow_private_network": true,
+					},
+				}
+			},
+			want: http.StatusCreated,
+			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
+				t.Helper()
+				id, ok := decoded["id"].(string)
+				if !ok || id == "" {
+					t.Fatalf("createNotificationChannel id = %v, want non-empty", decoded["id"])
+				}
+				ids.channelID = id
+			},
+		},
+		{
+			op:     "getNotificationChannel",
+			method: http.MethodGet,
+			path:   func(ids *idsState) string { return "/notifications/channels/" + ids.channelID },
+			want:   http.StatusOK,
+			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
+				t.Helper()
+				if decoded["id"] != ids.channelID {
+					t.Fatalf("getNotificationChannel id = %v, want %s", decoded["id"], ids.channelID)
+				}
+			},
+		},
+		{
+			op:     "updateNotificationChannel",
+			method: http.MethodPut,
+			path:   func(ids *idsState) string { return "/notifications/channels/" + ids.channelID },
+			body: func(_ *idsState) any {
+				return map[string]any{
+					"name":    "router-webhook-updated",
+					"kind":    "webhook",
+					"enabled": true,
+					"config": map[string]any{
+						"url":                   f.notifySrvURL,
+						"allow_insecure_http":   true,
+						"allow_private_network": true,
+					},
+				}
+			},
+			want: http.StatusOK,
+			capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
+				t.Helper()
+				if decoded["name"] != "router-webhook-updated" {
+					t.Fatalf("updateNotificationChannel name = %v, want router-webhook-updated", decoded["name"])
+				}
+			},
+		},
+		{
+			op:     "testNotificationChannel",
+			method: http.MethodPost,
+			path:   func(ids *idsState) string { return "/notifications/channels/" + ids.channelID + "/test" },
+			want:   http.StatusNoContent,
+		},
+	}
+}
+
+func stepsNotificationRules() []routerStep {
+	return []routerStep{
+		{
+			op:     "listNotificationRules",
+			method: http.MethodGet,
+			path:   func(_ *idsState) string { return "/notifications/rules" },
+			want:   http.StatusOK,
+		},
+		{
+			op:     "createNotificationRule",
+			method: http.MethodPost,
+			path:   func(_ *idsState) string { return "/notifications/rules" },
+			body: func(ids *idsState) any {
+				return map[string]any{
+					"name":        "router-streak-rule",
+					"event_kind":  "run_failure_streak",
+					"threshold":   3,
+					"enabled":     true,
+					"channel_ids": []string{ids.channelID},
+				}
+			},
+			want: http.StatusCreated,
+			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
+				t.Helper()
+				id, ok := decoded["id"].(string)
+				if !ok || id == "" {
+					t.Fatalf("createNotificationRule id = %v, want non-empty", decoded["id"])
+				}
+				ids.ruleID = id
+			},
+		},
+		{
+			op:     "getNotificationRule",
+			method: http.MethodGet,
+			path:   func(ids *idsState) string { return "/notifications/rules/" + ids.ruleID },
+			want:   http.StatusOK,
+			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
+				t.Helper()
+				if decoded["id"] != ids.ruleID {
+					t.Fatalf("getNotificationRule id = %v, want %s", decoded["id"], ids.ruleID)
+				}
+			},
+		},
+		{
+			op:     "updateNotificationRule",
+			method: http.MethodPut,
+			path:   func(ids *idsState) string { return "/notifications/rules/" + ids.ruleID },
+			body: func(ids *idsState) any {
+				return map[string]any{
+					"name":        "router-streak-rule-updated",
+					"event_kind":  "run_failure_streak",
+					"threshold":   5,
+					"enabled":     true,
+					"channel_ids": []string{ids.channelID},
+				}
+			},
+			want: http.StatusOK,
+			capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
+				t.Helper()
+				if decoded["name"] != "router-streak-rule-updated" {
+					t.Fatalf("updateNotificationRule name = %v, want router-streak-rule-updated", decoded["name"])
+				}
+			},
+		},
+	}
+}
+
 func buildRouterSteps(f *routerFixture) []routerStep {
-	steps := make([]routerStep, 0, 60)
+	steps := make([]routerStep, 0, 75)
 	steps = append(steps, stepsAuth()...)
 	steps = append(steps, stepsAPIKeys()...)
 	steps = append(steps, stepsInstances()...)
@@ -1242,6 +1410,8 @@ func buildRouterSteps(f *routerFixture) []routerStep {
 	steps = append(steps, stepsDownloadClients()...)
 	steps = append(steps, stepsSeerr(f)...)
 	steps = append(steps, stepsCleanuparrAndConfigarr(f)...)
+	steps = append(steps, stepsNotificationChannels(f)...)
+	steps = append(steps, stepsNotificationRules()...)
 	steps = append(steps, stepsDeletesAndAuth()...)
 	return steps
 }

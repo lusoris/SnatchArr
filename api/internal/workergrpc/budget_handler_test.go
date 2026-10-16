@@ -47,6 +47,7 @@ func budgetServerOn(t *testing.T) (*Server, *store.Store, uuid.UUID, string) {
 	srv := &Server{
 		runs: runs, budget: snatch.NewBudget(st, clk), planner: snatch.NewPlanner(st, clk, runs, rec, logger, m),
 		policies: policies.New(st, clk), settings: settings.New(st, clk), clk: clk, logger: logger, m: m,
+		rec: rec,
 	}
 	instanceID := storetest.Instance(t, st, clk.Now())
 	run, _, err := runs.Enqueue(t.Context(), instanceID, domain.SnatchMissing)
@@ -140,5 +141,39 @@ func TestAcquireBudgetFailsClosedOnAnUnreadableSchedule(t *testing.T) {
 	}
 	if used, _, usedErr := srv.budget.Used(t.Context(), instanceID); usedErr != nil || used != 0 {
 		t.Fatalf("Used() = %d, %v; want 0", used, usedErr)
+	}
+}
+
+// Three AcquireBudget calls at exhaustion must record exactly one stamina_exhausted event row.
+func TestAcquireBudgetStaminaExhaustedRecordedOnceAtTransition(t *testing.T) {
+	t.Parallel()
+	srv, st, instanceID, runID := budgetServerOn(t)
+	ctx := t.Context()
+
+	// Call 1: exhausts remaining capacity (policy default is 20).
+	resp1, err := srv.AcquireBudget(ctx, &snatcharrv1.AcquireBudgetRequest{RunId: runID, Requested: 20})
+	if err != nil || resp1.GetGranted() != 20 || resp1.GetRemainingInWindow() != 0 {
+		t.Fatalf("call 1 = %v, granted=%d, remaining=%d", err, resp1.GetGranted(), resp1.GetRemainingInWindow())
+	}
+
+	// Call 2: already exhausted, grants 0 items, remaining 0.
+	resp2, err := srv.AcquireBudget(ctx, &snatcharrv1.AcquireBudgetRequest{RunId: runID, Requested: 5})
+	if err != nil || resp2.GetGranted() != 0 || resp2.GetRemainingInWindow() != 0 {
+		t.Fatalf("call 2 = %v, granted=%d, remaining=%d", err, resp2.GetGranted(), resp2.GetRemainingInWindow())
+	}
+
+	// Call 3: already exhausted, grants 0 items, remaining 0.
+	resp3, err := srv.AcquireBudget(ctx, &snatcharrv1.AcquireBudgetRequest{RunId: runID, Requested: 5})
+	if err != nil || resp3.GetGranted() != 0 || resp3.GetRemainingInWindow() != 0 {
+		t.Fatalf("call 3 = %v, granted=%d, remaining=%d", err, resp3.GetGranted(), resp3.GetRemainingInWindow())
+	}
+
+	var count int
+	row := st.Pool().QueryRow(ctx, "SELECT COUNT(*) FROM snatch_events WHERE instance_id = $1 AND type = 'stamina_exhausted'", instanceID)
+	if err := row.Scan(&count); err != nil {
+		t.Fatalf("count events: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("stamina_exhausted events count = %d, want 1", count)
 	}
 }

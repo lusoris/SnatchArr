@@ -48,6 +48,58 @@ func (s *InstanceUpdate) setDefaults() {
 }
 
 // setDefaults set default value of fields.
+func (s *NotificationChannelConfig) setDefaults() {
+	{
+		val := bool(false)
+		s.AllowPrivateNetwork.SetTo(val)
+	}
+	{
+		val := bool(false)
+		s.AllowInsecureHTTP.SetTo(val)
+	}
+}
+
+// setDefaults set default value of fields.
+func (s *NotificationChannelInput) setDefaults() {
+	{
+		val := bool(true)
+		s.Enabled.SetTo(val)
+	}
+}
+
+// setDefaults set default value of fields.
+func (s *NotificationChannelUpdate) setDefaults() {
+	{
+		val := bool(true)
+		s.Enabled.SetTo(val)
+	}
+}
+
+// setDefaults set default value of fields.
+func (s *NotificationRuleInput) setDefaults() {
+	{
+		val := int(1)
+		s.Threshold = val
+	}
+	{
+		val := bool(true)
+		s.Enabled.SetTo(val)
+	}
+}
+
+// setDefaults set default value of fields.
+func (s *NotificationRuleUpdate) setDefaults() {
+	{
+		val := int(1)
+		s.Threshold = val
+	}
+	{
+		val := bool(true)
+		s.Enabled.SetTo(val)
+	}
+}
+
+// setDefaults set default value of fields.
 func (s *Problem) setDefaults() {
 	{
 		val, _ := json.DecodeURI(jx.DecodeStr("\"about:blank\""))

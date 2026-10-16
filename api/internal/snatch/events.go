@@ -20,16 +20,25 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
 )
 
+// EventObserver receives events recorded by the Recorder.
+type EventObserver interface {
+	OnEvent(ctx context.Context, e domain.Event)
+}
+
+// ObserverGroup is the fx group name for event observers.
+const ObserverGroup = `group:"snatch.observers"`
+
 // Recorder persists snatch events and fans them out over SSE.
 type Recorder struct {
-	st  *store.Store
-	clk clock.Clock
-	bus *events.Bus
+	st        *store.Store
+	clk       clock.Clock
+	bus       *events.Bus
+	observers []EventObserver
 }
 
 // NewRecorder wires the recorder.
-func NewRecorder(st *store.Store, clk clock.Clock, bus *events.Bus) *Recorder {
-	return &Recorder{st: st, clk: clk, bus: bus}
+func NewRecorder(st *store.Store, clk clock.Clock, bus *events.Bus, observers ...EventObserver) *Recorder {
+	return &Recorder{st: st, clk: clk, bus: bus, observers: observers}
 }
 
 // Record stores one event (timestamp defaults to now) and publishes it live.
@@ -56,6 +65,9 @@ func (r *Recorder) Record(ctx context.Context, e domain.Event) error {
 		RunID: runID, InstanceID: e.InstanceID, Timestamp: e.Timestamp, Level: e.Level, Type: e.Type,
 		EntityType: e.EntityType, EntityID: e.EntityID, Title: e.Title, Detail: e.Detail,
 	})
+	for _, obs := range r.observers {
+		obs.OnEvent(ctx, e)
+	}
 	return nil
 }
 

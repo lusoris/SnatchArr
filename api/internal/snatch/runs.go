@@ -185,13 +185,8 @@ func (r *Runs) List(ctx context.Context, instanceID *uuid.UUID, limit, offset in
 	return out, nil
 }
 
-// TrailingFailures counts how many of the most recent finished runs of a kind failed in a
-// row; the planner and the worker use it to back off a broken instance or indexer.
-func (r *Runs) TrailingFailures(ctx context.Context, instanceID uuid.UUID, kind domain.SnatchKind) (int, error) {
-	statuses, err := r.st.Q().RecentRunStatuses(ctx, sqlcgen.RecentRunStatusesParams{InstanceID: instanceID, Kind: string(kind)})
-	if err != nil {
-		return 0, fmt.Errorf("snatch: recent runs: %w", store.MapError(err))
-	}
+// CountTrailingFailures returns how many leading statuses are domain.RunFailed.
+func CountTrailingFailures(statuses []string) int {
 	n := 0
 	for _, st := range statuses {
 		if st != string(domain.RunFailed) {
@@ -199,7 +194,17 @@ func (r *Runs) TrailingFailures(ctx context.Context, instanceID uuid.UUID, kind 
 		}
 		n++
 	}
-	return n, nil
+	return n
+}
+
+// TrailingFailures counts how many of the most recent finished runs of a kind failed in a
+// row; the planner and the worker use it to back off a broken instance or indexer.
+func (r *Runs) TrailingFailures(ctx context.Context, instanceID uuid.UUID, kind domain.SnatchKind) (int, error) {
+	statuses, err := r.st.Q().RecentRunStatuses(ctx, sqlcgen.RecentRunStatusesParams{InstanceID: instanceID, Kind: string(kind)})
+	if err != nil {
+		return 0, fmt.Errorf("snatch: recent runs: %w", store.MapError(err))
+	}
+	return CountTrailingFailures(statuses), nil
 }
 
 // LastFinished returns when the last run of a kind finished, or zero when never.

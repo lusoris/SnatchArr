@@ -858,6 +858,103 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/notifications/channels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List all configured notification channels */
+        get: operations["listNotificationChannels"];
+        put?: never;
+        /** Create a notification channel */
+        post: operations["createNotificationChannel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/channels/{channelId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                channelId: components["parameters"]["NotificationChannelId"];
+            };
+            cookie?: never;
+        };
+        /** Get one notification channel */
+        get: operations["getNotificationChannel"];
+        /** Update a notification channel */
+        put: operations["updateNotificationChannel"];
+        post?: never;
+        /** Delete a notification channel */
+        delete: operations["deleteNotificationChannel"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/channels/{channelId}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                channelId: components["parameters"]["NotificationChannelId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Send a synchronous test notification to a channel */
+        post: operations["testNotificationChannel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List all configured notification rules */
+        get: operations["listNotificationRules"];
+        put?: never;
+        /** Create a notification rule */
+        post: operations["createNotificationRule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/rules/{ruleId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ruleId: components["parameters"]["NotificationRuleId"];
+            };
+            cookie?: never;
+        };
+        /** Get one notification rule */
+        get: operations["getNotificationRule"];
+        /** Update a notification rule */
+        put: operations["updateNotificationRule"];
+        post?: never;
+        /** Delete a notification rule */
+        delete: operations["deleteNotificationRule"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1392,6 +1489,120 @@ export interface components {
             last_result?: components["schemas"]["ConfigarrImportResult"];
             last_error?: string;
         };
+        /** @enum {string} */
+        NotificationChannelKind: "discord" | "slack" | "telegram" | "ntfy" | "gotify" | "teams" | "webhook";
+        NotificationChannelConfig: {
+            /** @description Webhook URL (write-only, never returned in responses) */
+            webhook_url?: string;
+            /** @description Bearer token (write-only, never returned in responses) */
+            token?: string;
+            /** @description Telegram Bot token (write-only, never returned in responses) */
+            bot_token?: string;
+            /** @description Gotify App token (write-only, never returned in responses) */
+            app_token?: string;
+            /** @description Password (write-only, never returned in responses) */
+            password?: string;
+            /** @description HMAC signing secret (write-only, never returned in responses) */
+            secret?: string;
+            /** @description Base URL for ntfy or Gotify */
+            server_url?: string;
+            /** @description ntfy topic name */
+            topic?: string;
+            /** @description Telegram chat ID (e.g. -1001234567890 or @channel) */
+            chat_id?: string;
+            /** @description Slack channel override */
+            channel?: string;
+            /** @description Display username override */
+            username?: string;
+            /** @description Discord avatar URL override */
+            avatar_url?: string;
+            /** @description Slack icon emoji override */
+            icon_emoji?: string;
+            /** @description Telegram parse mode (e.g. HTML, MarkdownV2) */
+            parse_mode?: string;
+            /** @description Teams theme color hex without '#' (e.g. 0076D7) */
+            theme_color?: string;
+            /** @description Priority for ntfy (1-5) or Gotify (0-10) */
+            priority?: number;
+            /** @description Tags / emoji shortcodes for ntfy */
+            tags?: string[];
+            /** @description Target endpoint URL for signed outgoing webhooks */
+            url?: string;
+            /**
+             * @description Allow webhooks to connect to loopback/private/internal IP addresses
+             * @default false
+             */
+            allow_private_network: boolean;
+            /**
+             * @description Allow webhooks to connect over cleartext http://
+             * @default false
+             */
+            allow_insecure_http: boolean;
+        };
+        NotificationChannelInput: {
+            name: string;
+            kind: components["schemas"]["NotificationChannelKind"];
+            /** @default true */
+            enabled: boolean;
+            config: components["schemas"]["NotificationChannelConfig"];
+        };
+        NotificationChannelUpdate: {
+            name: string;
+            kind: components["schemas"]["NotificationChannelKind"];
+            /** @default true */
+            enabled: boolean;
+            config?: components["schemas"]["NotificationChannelConfig"];
+        };
+        NotificationChannel: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            kind: components["schemas"]["NotificationChannelKind"];
+            enabled: boolean;
+            /** @description Whether a secret is stored for this channel */
+            has_secret: boolean;
+            config: components["schemas"]["NotificationChannelConfig"];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        /** @enum {string} */
+        NotificationRuleEventKind: "run_failure_streak" | "circuit_opened" | "instance_unreachable" | "stamina_exhausted" | "seerr_request_snatched";
+        NotificationRuleInput: {
+            name: string;
+            event_kind: components["schemas"]["NotificationRuleEventKind"];
+            /**
+             * @description Trigger threshold (e.g. N consecutive failures for run_failure_streak)
+             * @default 1
+             */
+            threshold: number;
+            /** @default true */
+            enabled: boolean;
+            channel_ids: string[];
+        };
+        NotificationRuleUpdate: {
+            name: string;
+            event_kind: components["schemas"]["NotificationRuleEventKind"];
+            /** @default 1 */
+            threshold: number;
+            /** @default true */
+            enabled: boolean;
+            channel_ids: string[];
+        };
+        NotificationRule: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            event_kind: components["schemas"]["NotificationRuleEventKind"];
+            threshold: number;
+            enabled: boolean;
+            channel_ids: string[];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
     };
     responses: {
         /** @description RFC 9457 problem details */
@@ -1409,6 +1620,8 @@ export interface components {
         ClientId: string;
         LinkId: string;
         ApiKeyId: string;
+        NotificationChannelId: string;
+        NotificationRuleId: string;
     };
     requestBodies: never;
     headers: never;
@@ -2922,6 +3135,261 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ConfigarrStatus"];
                 };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listNotificationChannels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description List of notification channels */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationChannel"][];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createNotificationChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationChannelInput"];
+            };
+        };
+        responses: {
+            /** @description Channel created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationChannel"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getNotificationChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                channelId: components["parameters"]["NotificationChannelId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Notification channel */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationChannel"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    updateNotificationChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                channelId: components["parameters"]["NotificationChannelId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationChannelUpdate"];
+            };
+        };
+        responses: {
+            /** @description Channel updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationChannel"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteNotificationChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                channelId: components["parameters"]["NotificationChannelId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Channel deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    testNotificationChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                channelId: components["parameters"]["NotificationChannelId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Test notification delivered successfully */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listNotificationRules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description List of notification rules */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationRule"][];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createNotificationRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationRuleInput"];
+            };
+        };
+        responses: {
+            /** @description Rule created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationRule"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getNotificationRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ruleId: components["parameters"]["NotificationRuleId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Notification rule */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationRule"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    updateNotificationRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ruleId: components["parameters"]["NotificationRuleId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationRuleUpdate"];
+            };
+        };
+        responses: {
+            /** @description Rule updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationRule"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteNotificationRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ruleId: components["parameters"]["NotificationRuleId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rule deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             default: components["responses"]["Problem"];
         };

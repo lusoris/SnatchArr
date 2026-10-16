@@ -42,6 +42,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/instances"
 	"github.com/lusoris/SnatchArr/api/internal/metrics"
 	"github.com/lusoris/SnatchArr/api/internal/metrics/metricstest"
+	"github.com/lusoris/SnatchArr/api/internal/notify"
 	"github.com/lusoris/SnatchArr/api/internal/policies"
 	"github.com/lusoris/SnatchArr/api/internal/seerr"
 	"github.com/lusoris/SnatchArr/api/internal/seerrclient"
@@ -245,9 +246,14 @@ type integrationFixture struct {
 	seerrClient   *stubSeerrClient
 	cleanupServer *fakeCleanuparrServer
 	seerrResolver *stubResolver
+	notifySvc     *notify.Service
+	webhookStore  *notify.WebhookStore
+	notifyEngine  *notify.Engine
+	rec           *snatch.Recorder
+	enc           *crypto.Encryptor
 }
 
-func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Generator, authSvc *auth.Service, apiKeys *auth.APIKeys, sessMgr *session.Manager, probe *stubProber, dlSnap dlclients.Snapshotter, dlDisc arrclient.Discoverer, m *metrics.Metrics, logger *slog.Logger, seerrClient *stubSeerrClient, cleanupClient cleanuparrclient.Client, res *stubResolver) *Handlers {
+func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Generator, authSvc *auth.Service, apiKeys *auth.APIKeys, sessMgr *session.Manager, probe *stubProber, dlSnap dlclients.Snapshotter, dlDisc arrclient.Discoverer, m *metrics.Metrics, logger *slog.Logger, seerrClient *stubSeerrClient, cleanupClient cleanuparrclient.Client, res *stubResolver) (*Handlers, *notify.Service, *notify.WebhookStore, *notify.Engine, *snatch.Recorder, *crypto.Encryptor) {
 	t.Helper()
 	enc, err := crypto.NewEncryptor(bytes.Repeat([]byte{0x42}, 32))
 	if err != nil {
@@ -256,7 +262,11 @@ func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Genera
 	instSvc := instances.New(st, enc, clk, ids, probe, logger)
 	polSvc := policies.New(st, clk)
 	bus := events.New(logger)
-	rec := snatch.NewRecorder(st, clk, bus)
+	webhookStore := notify.NewWebhookStore(st, enc)
+	notifySvc := notify.NewService(st, webhookStore, enc, clk, ids, logger)
+	notifyEngine := notify.NewEngine(st, webhookStore, notifySvc, enc, clk, logger)
+	rec := snatch.NewRecorder(st, clk, bus, notifyEngine)
+	notifyEngine.SetRecorder(rec)
 	runs := snatch.NewRuns(st, clk, ids)
 	workers := snatch.NewWorkers(st, clk)
 	budget := snatch.NewBudget(st, clk)
@@ -273,7 +283,7 @@ func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Genera
 	}
 	configarrSvc := configarr.New(cfg, instSvc, probe, clk, logger)
 	build := buildinfo.Info{Version: "test-ver", Commit: "test-commit", Date: "2026-10-14"}
-	return &Handlers{
+	h := &Handlers{
 		build:      build,
 		cfg:        cfg,
 		clk:        clk,
@@ -294,8 +304,10 @@ func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Genera
 		configarr:  configarrSvc,
 		seerr:      seerrSvc,
 		cleanuparr: cleanupSvc,
+		notify:     notifySvc,
 		logger:     logger,
 	}
+	return h, notifySvc, webhookStore, notifyEngine, rec, enc
 }
 
 func newIntegrationFixture(t *testing.T) *integrationFixture {
@@ -343,7 +355,7 @@ func newIntegrationFixture(t *testing.T) *integrationFixture {
 	cleanupServer := newFakeCleanuparrServer(t)
 	cleanupClient := cleanuparrclient.New(5*time.Second, "snatcharr-test")
 	res := &stubResolver{entityID: 42, found: true}
-	h := buildHandlers(t, st, clk, ids, authSvc, apiKeys, sessMgr, probe, dlSnap, dlDisc, m, logger, seerrClient, cleanupClient, res)
+	h, nSvc, ws, nEngine, rec, enc := buildHandlers(t, st, clk, ids, authSvc, apiKeys, sessMgr, probe, dlSnap, dlDisc, m, logger, seerrClient, cleanupClient, res)
 	return &integrationFixture{
 		h:             h,
 		st:            st,
@@ -359,6 +371,11 @@ func newIntegrationFixture(t *testing.T) *integrationFixture {
 		seerrClient:   seerrClient,
 		cleanupServer: cleanupServer,
 		seerrResolver: res,
+		notifySvc:     nSvc,
+		webhookStore:  ws,
+		notifyEngine:  nEngine,
+		rec:           rec,
+		enc:           enc,
 	}
 }
 
