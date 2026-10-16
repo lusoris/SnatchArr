@@ -64,7 +64,7 @@ func TestBaseFactory_Base(t *testing.T) {
 func TestBaseFactory_Options(t *testing.T) {
 	t.Parallel()
 
-	f := arrclient.BaseFactory{Timeout: 50 * time.Millisecond, UserAgent: "CustomUA/2.0"}
+	f := arrclient.BaseFactory{Timeout: 5 * time.Second, UserAgent: "CustomUA/2.0"}
 	if opts := f.Options(); len(opts) != 2 {
 		t.Fatalf("Options() len = %d, want 2", len(opts))
 	}
