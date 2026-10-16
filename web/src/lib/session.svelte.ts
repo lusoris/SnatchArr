@@ -5,10 +5,10 @@
 import { api, problemStatus } from './api/client.js';
 import type { components } from './api/schema.js';
 
-export type User = components['schemas']['User'];
+type User = components['schemas']['User'];
 
 /** What the layout needs to route: nobody yet, logged out, or logged in. */
-export type SessionState = 'unknown' | 'setup' | 'anonymous' | 'authenticated';
+type SessionState = 'unknown' | 'setup' | 'anonymous' | 'authenticated';
 
 class Session {
 	state = $state<SessionState>('unknown');
