@@ -37,9 +37,13 @@ func newStreamFixture(t *testing.T) streamFixture {
 	f := newIntegrationFixture(t)
 	rec := httptest.NewRecorder()
 	ctx := withHTTPTest(t.Context(), rec, httptest.NewRequest(http.MethodPost, "/auth/setup", nil))
-	sess, err := f.h.CompleteSetup(ctx, &oas.SetupRequest{Username: "stream-admin", Password: "correct-horse-battery-staple"})
+	res, err := f.h.CompleteSetup(ctx, &oas.SetupRequest{Username: "stream-admin", Password: "correct-horse-battery-staple"})
 	if err != nil {
 		t.Fatalf("CompleteSetup() = %v", err)
+	}
+	sess, ok := res.(*oas.Session)
+	if !ok {
+		t.Fatalf("CompleteSetup() returned %T, want *oas.Session", res)
 	}
 	keys, err := apikey.New(auth.NewPgAPIKeyStore(f.st, f.clk), apikey.Options{Prefix: "sk", HMACSecret: []byte("test-secret-of-at-least-32-bytes"), Clock: f.clk})
 	if err != nil {

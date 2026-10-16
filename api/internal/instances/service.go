@@ -8,7 +8,6 @@ package instances
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -353,9 +352,6 @@ func (s *Service) KindByConfigarrKey(ctx context.Context, key string) (domain.Ap
 	}
 	return domain.AppKind(row.Kind), true
 }
-
-// IsNotFound reports whether err is the not-found sentinel.
-func IsNotFound(err error) bool { return errors.Is(err, domain.ErrNotFound) }
 
 // Module provides the Service.
 var Module = fx.Module("snatcharr.instances", fx.Provide(New))

@@ -44,6 +44,8 @@ func statusOf(err error) (status int, detail string, params []invalidParam) {
 		return http.StatusUnauthorized, "authentication required", nil
 	case errors.Is(err, domain.ErrForbidden):
 		return http.StatusForbidden, err.Error(), nil
+	case errors.Is(err, domain.ErrTooManyRequests):
+		return http.StatusTooManyRequests, "too many requests", nil
 	case errors.Is(err, domain.ErrNotFound):
 		return http.StatusNotFound, err.Error(), nil
 	case errors.Is(err, domain.ErrConflict):

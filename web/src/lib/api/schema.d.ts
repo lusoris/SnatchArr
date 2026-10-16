@@ -55,6 +55,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Change the current user's password and end all other sessions */
+        post: operations["changePassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/login": {
         parameters: {
             query?: never;
@@ -805,10 +822,18 @@ export interface components {
         };
         SetupStatus: {
             setup_complete: boolean;
+            /** @description Whether a bootstrap secret is required to complete setup */
+            secret_required: boolean;
         };
         SetupRequest: {
             username: string;
             password: string;
+            /** @description Optional bootstrap secret when APP_SNATCHARR_SETUP_SECRET is configured */
+            setup_secret?: string;
+        };
+        ChangePasswordRequest: {
+            current_password: string;
+            new_password: string;
         };
         LoginRequest: {
             username: string;
@@ -1361,6 +1386,35 @@ export interface operations {
                     "application/json": components["schemas"]["Session"];
                 };
             };
+            401: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    changePassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Password changed and other sessions ended */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };
@@ -1386,6 +1440,7 @@ export interface operations {
                     "application/json": components["schemas"]["Session"];
                 };
             };
+            429: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };

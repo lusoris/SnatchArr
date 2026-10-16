@@ -160,10 +160,12 @@ func parseFixtureTables(t *testing.T, path string) map[string]bool {
 }
 
 // TestMigrationsUpgradeFixtureCoversAllTables guards against unmigrated new tables by verifying
-// that the upgrade fixture inserts into every table present in the latest database schema.
+// that the upgrade fixture inserts into every table present in the previous release database schema.
 func TestMigrationsUpgradeFixtureCoversAllTables(t *testing.T) {
 	t.Parallel()
 	st := storetest.New(t)
+	m := storetest.Migrator(t, st)
+	stepDownToVersion(t, m, previousRelease)
 	fixtureTables := parseFixtureTables(t, fixturePath)
 
 	const query = `SELECT table_name FROM information_schema.tables ` +

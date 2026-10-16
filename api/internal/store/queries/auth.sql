@@ -15,6 +15,11 @@ SELECT * FROM users WHERE username = $1;
 -- name: GetUser :one
 SELECT * FROM users WHERE id = $1;
 
+-- name: UpdateUserPassword :exec
+UPDATE users
+SET password_hash = $2, updated_at = $3
+WHERE id = $1;
+
 -- name: ListUsers :many
 SELECT * FROM users ORDER BY username;
 
@@ -27,6 +32,12 @@ ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, expires_at = EXCLUDED.expir
 
 -- name: DeleteSession :exec
 DELETE FROM sessions WHERE id = $1;
+
+-- data->>'user_id' couples to sessionUserKey in api/internal/httpapi/security.go.
+-- name: DeleteUserSessionsExcept :execrows
+DELETE FROM sessions
+WHERE data->>'user_id' = sqlc.arg(user_id)::text
+  AND id != sqlc.arg(current_session_id)::text;
 
 -- name: PurgeExpiredSessions :execrows
 DELETE FROM sessions
@@ -44,3 +55,56 @@ UPDATE api_keys SET revoked_at = $2 WHERE id = $1 AND revoked_at IS NULL;
 
 -- name: ListAPIKeysByOwner :many
 SELECT * FROM api_keys WHERE owner_id = $1 AND revoked_at IS NULL ORDER BY created_at;
+
+-- name: RecordLoginLockoutFailure :exec
+INSERT INTO login_lockouts (key, fails, first_fail_at, locked_until)
+VALUES (
+    sqlc.arg(key),
+    1,
+    sqlc.arg(now)::timestamptz,
+    CASE WHEN 1 >= sqlc.arg(max_fails)::int
+         THEN sqlc.arg(now)::timestamptz + make_interval(secs => sqlc.arg(cooldown_s)::double precision)
+         ELSE NULL
+    END
+)
+ON CONFLICT (key) DO UPDATE SET
+    fails = CASE
+        WHEN login_lockouts.first_fail_at < sqlc.arg(now)::timestamptz - make_interval(secs => sqlc.arg(window_s)::double precision)
+        THEN 1
+        ELSE login_lockouts.fails + 1
+    END,
+    first_fail_at = CASE
+        WHEN login_lockouts.first_fail_at < sqlc.arg(now)::timestamptz - make_interval(secs => sqlc.arg(window_s)::double precision)
+        THEN sqlc.arg(now)::timestamptz
+        ELSE login_lockouts.first_fail_at
+    END,
+    locked_until = CASE
+        WHEN (
+            CASE
+                WHEN login_lockouts.first_fail_at < sqlc.arg(now)::timestamptz - make_interval(secs => sqlc.arg(window_s)::double precision)
+                THEN 1
+                ELSE login_lockouts.fails + 1
+            END
+        ) >= sqlc.arg(max_fails)::int
+        THEN sqlc.arg(now)::timestamptz + make_interval(secs => sqlc.arg(cooldown_s)::double precision)
+        ELSE NULL
+    END;
+
+-- name: GetLoginLockout :one
+SELECT key, fails, first_fail_at, locked_until
+FROM login_lockouts
+WHERE key = $1;
+
+-- name: DeleteLoginLockout :exec
+DELETE FROM login_lockouts
+WHERE key = $1;
+
+-- name: PurgeExpiredLoginLockouts :execrows
+DELETE FROM login_lockouts
+WHERE key IN (
+    SELECT key FROM login_lockouts
+    WHERE (locked_until IS NULL OR locked_until < sqlc.arg(now)::timestamptz)
+      AND first_fail_at < sqlc.arg(now)::timestamptz - make_interval(secs => sqlc.arg(window_s)::double precision)
+    LIMIT sqlc.arg(batch)::int
+);
+

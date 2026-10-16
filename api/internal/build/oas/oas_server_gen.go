@@ -14,12 +14,18 @@ type Handler interface {
 	//
 	// POST /runs/{runId}/cancel
 	CancelRun(ctx context.Context, params CancelRunParams) error
+	// ChangePassword implements changePassword operation.
+	//
+	// Change the current user's password and end all other sessions.
+	//
+	// POST /auth/password
+	ChangePassword(ctx context.Context, req *ChangePasswordRequest) (ChangePasswordRes, error)
 	// CompleteSetup implements completeSetup operation.
 	//
 	// Create the first admin user and start a session.
 	//
 	// POST /auth/setup
-	CompleteSetup(ctx context.Context, req *SetupRequest) (*Session, error)
+	CompleteSetup(ctx context.Context, req *SetupRequest) (CompleteSetupRes, error)
 	// CreateCleanuparrLink implements createCleanuparrLink operation.
 	//
 	// Add a Cleanuparr link.
@@ -236,7 +242,7 @@ type Handler interface {
 	// Start a session with username and password.
 	//
 	// POST /auth/login
-	Login(ctx context.Context, req *LoginRequest) (*Session, error)
+	Login(ctx context.Context, req *LoginRequest) (LoginRes, error)
 	// Logout implements logout operation.
 	//
 	// End the current session.

@@ -83,6 +83,18 @@ spec:
                 secretKeyRef:
                   name: {{ include "snatcharr.secretName" . }}
                   key: worker-token
+            - name: APP_SNATCHARR_SETUP_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "snatcharr.secretName" . }}
+                  key: setup-secret
+                  {{- if .Values.secrets.existingSecret }}
+                  optional: true
+                  {{- end }}
+            {{- if .Values.config.trustedProxies }}
+            - name: APP_SNATCHARR_PROXY_TRUSTED
+              value: {{ join "," .Values.config.trustedProxies | quote }}
+            {{- end }}
             {{- with .Values.config.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

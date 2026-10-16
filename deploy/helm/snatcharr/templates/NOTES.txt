@@ -19,6 +19,11 @@ SnatchArr {{ .Chart.AppVersion }} is on its way.
      open http://localhost:8080
 {{- end }}
    The first visit runs the setup wizard and creates the admin account.
+{{- if .Release.IsInstall }}
+   Read the initial setup secret to complete the wizard:
+
+     kubectl -n {{ .Release.Namespace }} get secret {{ include "snatcharr.secretName" . }} -o jsonpath="{.data.setup-secret}" | base64 -d; echo
+{{- end }}
 
 3. Database:
 {{- if .Values.postgres.cnpg.enabled }}
