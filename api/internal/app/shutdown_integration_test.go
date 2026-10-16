@@ -7,6 +7,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/url"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -40,6 +42,11 @@ const (
 	shutdownTestTimeout = 2 * time.Minute
 	stopTimeout         = 5 * time.Second
 	workerToken         = "shutdown-test-token"
+	// Starts on a fresh gRPC port before a taken one fails the test.
+	bindAttempts = 5
+	// A server given this address binds a free loopback port itself: the kernel picks and holds
+	// it in one step, so no other process can take it in between (#296).
+	anyLoopback = "127.0.0.1:0"
 	// Package paths of the golusoris constructors whose stop hooks the test orders.
 	grpcHooks = "github.com/golusoris/golusoris/grpc."
 	poolHooks = "github.com/golusoris/golusoris/db/pgx."
@@ -69,7 +76,8 @@ func (o *stopOrder) index(pkg string) int {
 	return slices.IndexFunc(o.callers, func(caller string) bool { return strings.HasPrefix(caller, pkg) })
 }
 
-// freeAddr is a loopback address nothing listens on.
+// freeAddr is a loopback address nothing listened on a moment ago. Another process can bind it
+// before the server does (#296), so a server reached on it starts through startOnFreePort.
 func freeAddr(t *testing.T) string {
 	t.Helper()
 	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
@@ -81,6 +89,27 @@ func freeAddr(t *testing.T) string {
 		t.Fatalf("close listener: %v", err)
 	}
 	return addr
+}
+
+// startOnFreePort starts the app newApp builds for a gRPC address from pick and returns the
+// address it serves on. The gRPC server reports no bound port, so the address is chosen before
+// the bind; a start that finds it taken tries another, at most bindAttempts times.
+func startOnFreePort(ctx context.Context, t *testing.T, pick func(*testing.T) string, newApp func(grpcAddr string) *fx.App) (*fx.App, string) {
+	t.Helper()
+	var err error
+	for range bindAttempts {
+		addr := pick(t)
+		app := newApp(addr)
+		if err = app.Start(ctx); err == nil {
+			return app, addr
+		}
+		if !errors.Is(err, syscall.EADDRINUSE) {
+			break
+		}
+		t.Logf("start on %s: %v; trying another port", addr, err)
+	}
+	t.Fatalf("start: %v", err)
+	return nil, ""
 }
 
 // controlPlaneConfig is the configuration of one control plane on the test's own database,
@@ -95,7 +124,7 @@ func controlPlaneConfig(t *testing.T, grpcAddr string) *gconfig.Config {
 	raw, err := json.Marshal(map[string]any{
 		"snatcharr": map[string]any{"profile": "dev", "worker": map[string]any{"token": workerToken}},
 		"db":        map[string]any{"dsn": dsn.String()},
-		"http":      map[string]any{"addr": freeAddr(t)},
+		"http":      map[string]any{"addr": anyLoopback},
 		"grpc":      map[string]any{"listen": grpcAddr},
 	})
 	if err != nil {
@@ -134,9 +163,7 @@ func TestStopWithAWaitingLease(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithTimeout(t.Context(), shutdownTestTimeout)
 	defer cancel()
-	grpcAddr := freeAddr(t)
-	cfg := controlPlaneConfig(t, grpcAddr)
-	order := &stopOrder{}
+	var order *stopOrder
 	// Closed once the server has handed a long-poll to the handler.
 	waiting, once := make(chan struct{}), sync.Once{}
 	seen := func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
@@ -145,15 +172,18 @@ func TestStopWithAWaitingLease(t *testing.T) {
 		}
 		return handler(ctx, req)
 	}
-	app := fx.New(
-		fx.Supply(buildinfo.Info{Version: "test"}), Module,
-		fx.Decorate(func(*gconfig.Config) *gconfig.Config { return cfg }),
-		grpcx.ProvideServerOption(grpc.ChainUnaryInterceptor(seen)),
-		fx.WithLogger(func() fxevent.Logger { return order }),
-	)
-	if err := app.Start(ctx); err != nil {
-		t.Fatalf("start: %v", err)
-	}
+	app, grpcAddr := startOnFreePort(ctx, t, freeAddr, func(grpcAddr string) *fx.App {
+		cfg := controlPlaneConfig(t, grpcAddr)
+		// A failed start stops what it started; only the last attempt's stops count.
+		rec := &stopOrder{}
+		order = rec
+		return fx.New(
+			fx.Supply(buildinfo.Info{Version: "test"}), Module,
+			fx.Decorate(func(*gconfig.Config) *gconfig.Config { return cfg }),
+			grpcx.ProvideServerOption(grpc.ChainUnaryInterceptor(seen)),
+			fx.WithLogger(func() fxevent.Logger { return rec }),
+		)
+	})
 	client, authed := workerClient(ctx, t, grpcAddr)
 	if resp, err := client.LeaseRun(authed, &snatcharrv1.LeaseRunRequest{WorkerId: "worker"}, grpc.WaitForReady(true)); err != nil || resp.GetRun() != nil {
 		t.Fatalf("serving, empty queue: LeaseRun() = %v, %v; want an empty answer", resp, err)
@@ -186,5 +216,51 @@ func TestStopWithAWaitingLease(t *testing.T) {
 	if grpcStop < 0 || poolStop < 0 || grpcStop > poolStop {
 		t.Errorf("stop order %v: want the gRPC server (index %d) stopped before the database pool (index %d), both present",
 			order.callers, grpcStop, poolStop)
+	}
+}
+
+// A gRPC port another process binds between the pick and the server's own bind costs one
+// attempt, not the test (#296): the first pick is a port the test holds open.
+func TestStartOnFreePortTriesAnotherPort(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(t.Context(), shutdownTestTimeout)
+	defer cancel()
+	taken, err := (&net.ListenConfig{}).Listen(ctx, "tcp", anyLoopback)
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() {
+		if closeErr := taken.Close(); closeErr != nil {
+			t.Errorf("close listener: %v", closeErr)
+		}
+	})
+	var picked []string
+	pick := func(t *testing.T) string {
+		t.Helper()
+		addr := freeAddr(t)
+		if len(picked) == 0 {
+			addr = taken.Addr().String()
+		}
+		picked = append(picked, addr)
+		return addr
+	}
+	app, addr := startOnFreePort(ctx, t, pick, func(grpcAddr string) *fx.App {
+		cfg := controlPlaneConfig(t, grpcAddr)
+		return fx.New(
+			fx.Supply(buildinfo.Info{Version: "test"}), Module,
+			fx.Decorate(func(*gconfig.Config) *gconfig.Config { return cfg }),
+			fx.NopLogger,
+		)
+	})
+	t.Cleanup(func() {
+		stopCtx, stopCancel := context.WithTimeout(context.WithoutCancel(t.Context()), stopTimeout)
+		defer stopCancel()
+		if stopErr := app.Stop(stopCtx); stopErr != nil {
+			t.Errorf("stop: %v", stopErr)
+		}
+	})
+	// Other processes may take later picks too; the server must run on the last one.
+	if len(picked) < 2 || addr != picked[len(picked)-1] {
+		t.Errorf("picked %v, serving on %s; want the taken %s skipped and the last pick served", picked, addr, taken.Addr())
 	}
 }

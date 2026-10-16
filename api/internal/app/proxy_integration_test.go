@@ -44,8 +44,8 @@ func proxyTestConfig(t *testing.T, trustedCIDRs []string) *gconfig.Config {
 			"proxy":   map[string]any{"trusted": trustedCIDRs},
 		},
 		"db":   map[string]any{"dsn": dsn.String()},
-		"http": map[string]any{"addr": freeAddr(t)},
-		"grpc": map[string]any{"listen": freeAddr(t)},
+		"http": map[string]any{"addr": anyLoopback},
+		"grpc": map[string]any{"listen": anyLoopback},
 	}
 	raw, err := json.Marshal(cfgMap)
 	if err != nil {
