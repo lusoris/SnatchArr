@@ -59,7 +59,7 @@
 	"policy_missing_per_cycle": "Missing items per snatch",
 	"policy_upgrade_per_cycle": "Upgrades per snatch",
 	"policy_cycle_interval": "Refractory period (seconds)",
-	"policy_hourly_cap": "Stamina (indexer queries per hour)",
+	"policy_hourly_cap": "Stamina (indexer searches per hour)",
 	"policy_selection": "Selection",
 	"policy_processed_ttl": "Afterglow (hours)",
 	"policy_afterglow_max": "Afterglow cap (hours)",

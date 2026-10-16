@@ -1832,7 +1832,7 @@ components:
           maximum: 604800
         hourly_cap:
           type: integer
-          description: "Stamina: items an instance may search per hour before it needs a rest (1-500)."
+          description: "Stamina: searches an instance may send to its indexers per hour before it needs a rest (1-500). One per episode, season, movie, album or book; one for a whole artist or author search."
           minimum: 1
           maximum: 500
         selection:
