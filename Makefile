@@ -94,9 +94,10 @@ govulncheck-install: ## Install govulncheck at the tools/go/go.mod pin
 API_COVER_MIN ?= 41
 api-cover: ## Coverage gate on hand-written packages (generated code excluded)
 	sh tools/cover/floor_test.sh
+	sh tools/cover/gotest_test.sh
 	cd api
 	mkdir -p tmp
-	go test -count=1 -covermode=atomic -coverprofile=tmp/cover.out ./... >/dev/null
+	sh ../tools/cover/gotest.sh tmp/cover-test.log -- go test -count=1 -covermode=atomic -coverprofile=tmp/cover.out ./...
 	grep -vE 'internal/(build|gen)/|internal/store/sqlcgen/' tmp/cover.out > tmp/cover.filtered.out
 	pct=$$(go tool cover -func=tmp/cover.filtered.out | awk '/^total:/ {gsub("%","",$$3); print $$3}')
 	echo "coverage (non-generated): $${pct}% (min $(API_COVER_MIN)%)"

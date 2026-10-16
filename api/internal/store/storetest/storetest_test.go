@@ -52,3 +52,43 @@ func TestLingerReaper(t *testing.T) {
 		})
 	}
 }
+
+// execLocked bounds the statement, not the wait for the admin lock: a queue of parallel tests
+// longer than the bound must not time out the statement at its head. Holding the lock only
+// makes the package's other tests wait, which is what the bound must survive.
+func TestExecLockedBoundsTheStatementNotTheQueue(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration test: needs Docker; run without -short")
+	}
+	// The bound leaves SELECT 1 room at load 60; the held lock outlasts it.
+	const bound = 3 * time.Second
+	tests := []struct {
+		name    string
+		sql     string
+		held    time.Duration
+		wantErr bool
+	}{
+		{"positive: a lock held past the bound leaves the statement its bound", "SELECT 1", bound + 2*time.Second, false},
+		{"negative: a statement longer than the bound times out", "SELECT pg_sleep(6)", 0, true},
+		{"boundary: no wait, quick statement", "SELECT 1", 0, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			shared.mu.Lock()
+			done := make(chan error, 1)
+			go func() { done <- execLocked(tt.sql, bound) }()
+			time.Sleep(tt.held)
+			shared.mu.Unlock()
+			select {
+			case err := <-done:
+				if (err != nil) != tt.wantErr {
+					t.Errorf("execLocked(%q) = %v, want error %v", tt.sql, err, tt.wantErr)
+				}
+			case <-time.After(30 * time.Second):
+				t.Fatalf("execLocked(%q) did not return in 30s", tt.sql)
+			}
+		})
+	}
+}

@@ -700,7 +700,7 @@ async fn acquire(
     };
     let grant = client.acquire_budget(Request::new(req)).await?.into_inner();
     let msg = format!(
-        "stamina: {} of {} indexer queries granted ({} left in the last 60 minutes)",
+        "stamina: {} of {} indexer searches granted ({} left in the last 60 minutes)",
         grant.granted, requested, grant.remaining_in_window
     );
     events
