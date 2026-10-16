@@ -238,7 +238,7 @@ proto-gen: ## buf generate (Go stubs; Rust stubs build via tonic-build)
 # ── deploy/ ───────────────────────────────────────────────────────────────────
 # kubeconform binary if installed, else the same pinned image CI uses.
 KUBECONFORM ?= $(shell command -v kubeconform >/dev/null 2>&1 && echo kubeconform || echo "docker run --rm -i ghcr.io/yannh/kubeconform:v0.7.0")
-deploy-verify: ## helm unittest + render.sh + chart_checks.sh planted cases + helm lint --strict + kubeconform (default and all-features renders) + kustomize build
+deploy-verify: ## helm unittest + render.sh + chart_checks.sh planted cases + helm lint --strict + kubeconform (default and all-features renders) + kustomize build + compose image pins
 	if ! helm plugin list 2>/dev/null | grep -E -q '^unittest[[:space:]]'; then \
 	  echo "deploy-verify: helm plugin 'unittest' is missing; install helm-unittest (https://github.com/helm-unittest/helm-unittest)" >&2; exit 1; \
 	fi
@@ -257,6 +257,9 @@ deploy-verify: ## helm unittest + render.sh + chart_checks.sh planted cases + he
 	  --set-json 'networkPolicy.arrPeers=[{"namespaceSelector":{"matchLabels":{"kubernetes.io/metadata.name":"media"}}},{"podSelector":{"matchLabels":{"app.kubernetes.io/name":"lidarr"}},"ports":[{"port":8686,"protocol":"TCP"}]}]'
 	$(KUBECONFORM) -strict -ignore-missing-schemas -summary <"$$render/all.yaml"
 	kustomize build --enable-helm deploy/kustomize/kind >/dev/null
+	# Every compose image pinned by tag and digest, never latest (#140); planted cases first.
+	sh tools/deploy/compose_pins_test.sh
+	sh tools/deploy/compose_pins.sh deploy/compose/docker-compose.yml
 	# Chart checks with their planted cases first (A3-01): no egress rule with an empty `to`
 	# (#120), an arrPeers entry with `ports` reachable on those ports only (#145), Chart.yaml
 	# release-please markers and image annotation (#122).
