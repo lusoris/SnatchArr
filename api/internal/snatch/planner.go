@@ -34,6 +34,7 @@ const (
 	GateClientActiveLimit  = metrics.DeferralClientActiveLimit
 	GateBandwidthSaturated = metrics.DeferralBandwidthSaturated
 	GateGenericRefusal     = metrics.DeferralGateRefusal
+	GateIndexerLimit       = metrics.DeferralIndexerLimit
 )
 
 // GateRefusal describes why a gate vetoed a snatch.
@@ -157,7 +158,7 @@ func (p *Planner) maybeEnqueue(ctx context.Context, inst domain.Instance, policy
 			p.logger.InfoContext(ctx, "snatch: gated", slog.String("instance", inst.Name), slog.String("kind", string(kind)), slog.String("reason", refusal.Message))
 			code := refusal.Code
 			switch code {
-			case GateClientUnreachable, GateClientPaused, GateClientActiveLimit, GateBandwidthSaturated:
+			case GateClientUnreachable, GateClientPaused, GateClientActiveLimit, GateBandwidthSaturated, GateIndexerLimit:
 			default:
 				code = GateGenericRefusal
 			}

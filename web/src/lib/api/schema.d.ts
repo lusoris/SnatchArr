@@ -883,6 +883,98 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/prowlarr": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Prowlarr links (API keys are never returned) */
+        get: operations["listProwlarrLinks"];
+        put?: never;
+        /** Add a Prowlarr link */
+        post: operations["createProwlarrLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/prowlarr/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Probe Prowlarr credentials that are not stored yet */
+        post: operations["testProwlarrLinkInput"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/prowlarr/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Live view of every enabled Prowlarr link (cached 30 s) */
+        get: operations["getProwlarrStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/prowlarr/{linkId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                linkId: components["parameters"]["LinkId"];
+            };
+            cookie?: never;
+        };
+        /** Get one Prowlarr link */
+        get: operations["getProwlarrLink"];
+        /** Update a Prowlarr link (omit api_key to keep it) */
+        put: operations["updateProwlarrLink"];
+        post?: never;
+        /** Delete a Prowlarr link */
+        delete: operations["deleteProwlarrLink"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/prowlarr/{linkId}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                linkId: components["parameters"]["LinkId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Probe a stored Prowlarr link and record the outcome */
+        post: operations["testProwlarrLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/configarr/import": {
         parameters: {
             query?: never;
@@ -1251,7 +1343,7 @@ export interface components {
             readonly dry_run?: boolean;
             /**
              * Format: int64
-             * @description RNG seed used for the run (0 = OS entropy)
+             * @description RNG seed used for the run (0 = OS entropy). A preview seed has at most 53 bits.
              */
             readonly seed?: number;
             /** @description Previewed search targets when dry_run is true */
@@ -1268,7 +1360,7 @@ export interface components {
             /** Format: int64 */
             id: number;
             title: string;
-            /** @description Granted cost / stamina */
+            /** @description Stamina this item adds to the run. An atomic search (season pack, series, artist, author) is charged on its first item and 0 on the rest, so the costs sum to what a real run spends. */
             cost: number;
         };
         Event: {
@@ -1571,6 +1663,53 @@ export interface components {
                 [key: string]: number;
             };
             recent_strikes: components["schemas"]["CleanuparrStrike"][];
+        };
+        ProwlarrLink: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            base_url: string;
+            enabled: boolean;
+            last_seen_version?: string;
+            /** Format: date-time */
+            last_check_at?: string;
+            last_error?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ProwlarrLinkInput: {
+            name: string;
+            base_url: string;
+            /** @description Required on create; omit on update to keep the stored key */
+            api_key?: string;
+            /** @default true */
+            enabled: boolean;
+        };
+        ProwlarrStatus: {
+            /** Format: uuid */
+            link_id: string;
+            name: string;
+            reachable: boolean;
+            error?: string;
+            version?: string;
+            /** Format: date-time */
+            checked_at: string;
+            indexers: components["schemas"]["ProwlarrIndexerStatus"][];
+        };
+        ProwlarrIndexerStatus: {
+            id: number;
+            name: string;
+            query_limit?: number;
+            grab_limit?: number;
+            /** @description 0=day, 1=hour */
+            limits_unit: number;
+            used_queries: number;
+            used_grabs: number;
+            /** Format: date-time */
+            disabled_till?: string;
+            exhausted: boolean;
         };
         ConfigarrImportRequest: {
             /** @description Path to config.yml on the API host; omit to use the linked configuration */
@@ -3252,6 +3391,192 @@ export interface operations {
         };
     };
     testCleanuparrLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                linkId: components["parameters"]["LinkId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Probe result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProbeResult"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listProwlarrLinks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Links */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProwlarrLink"][];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createProwlarrLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProwlarrLinkInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProwlarrLink"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    testProwlarrLinkInput: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProwlarrLinkInput"];
+            };
+        };
+        responses: {
+            /** @description Probe result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProbeResult"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getProwlarrStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Status per link */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProwlarrStatus"][];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getProwlarrLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                linkId: components["parameters"]["LinkId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Link */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProwlarrLink"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    updateProwlarrLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                linkId: components["parameters"]["LinkId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProwlarrLinkInput"];
+            };
+        };
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProwlarrLink"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteProwlarrLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                linkId: components["parameters"]["LinkId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    testProwlarrLink: {
         parameters: {
             query?: never;
             header?: never;

@@ -62,6 +62,12 @@ type Handler interface {
 	//
 	// POST /notifications/rules
 	CreateNotificationRule(ctx context.Context, req *NotificationRuleInput) (*NotificationRule, error)
+	// CreateProwlarrLink implements createProwlarrLink operation.
+	//
+	// Add a Prowlarr link.
+	//
+	// POST /prowlarr
+	CreateProwlarrLink(ctx context.Context, req *ProwlarrLinkInput) (*ProwlarrLink, error)
 	// CreateProxySession implements createProxySession operation.
 	//
 	// Start a session via trusted proxy authentication.
@@ -117,6 +123,12 @@ type Handler interface {
 	//
 	// DELETE /notifications/rules/{ruleId}
 	DeleteNotificationRule(ctx context.Context, params DeleteNotificationRuleParams) error
+	// DeleteProwlarrLink implements deleteProwlarrLink operation.
+	//
+	// Delete a Prowlarr link.
+	//
+	// DELETE /prowlarr/{linkId}
+	DeleteProwlarrLink(ctx context.Context, params DeleteProwlarrLinkParams) error
 	// DeleteSchedule implements deleteSchedule operation.
 	//
 	// Delete a schedule window.
@@ -202,6 +214,18 @@ type Handler interface {
 	//
 	// GET /instances/{instanceId}/policy/filter-options
 	GetPolicyFilterOptions(ctx context.Context, params GetPolicyFilterOptionsParams) (*PolicyFilterOptions, error)
+	// GetProwlarrLink implements getProwlarrLink operation.
+	//
+	// Get one Prowlarr link.
+	//
+	// GET /prowlarr/{linkId}
+	GetProwlarrLink(ctx context.Context, params GetProwlarrLinkParams) (*ProwlarrLink, error)
+	// GetProwlarrStatus implements getProwlarrStatus operation.
+	//
+	// Live view of every enabled Prowlarr link (cached 30 s).
+	//
+	// GET /prowlarr/status
+	GetProwlarrStatus(ctx context.Context) ([]ProwlarrStatus, error)
 	// GetRun implements getRun operation.
 	//
 	// Load a single snatch run by ID.
@@ -298,6 +322,12 @@ type Handler interface {
 	//
 	// GET /notifications/rules
 	ListNotificationRules(ctx context.Context) ([]NotificationRule, error)
+	// ListProwlarrLinks implements listProwlarrLinks operation.
+	//
+	// List Prowlarr links (API keys are never returned).
+	//
+	// GET /prowlarr
+	ListProwlarrLinks(ctx context.Context) ([]ProwlarrLink, error)
 	// ListRuns implements listRuns operation.
 	//
 	// Recent snatch runs, newest first.
@@ -406,6 +436,18 @@ type Handler interface {
 	//
 	// POST /notifications/channels/{channelId}/test
 	TestNotificationChannel(ctx context.Context, params TestNotificationChannelParams) error
+	// TestProwlarrLink implements testProwlarrLink operation.
+	//
+	// Probe a stored Prowlarr link and record the outcome.
+	//
+	// POST /prowlarr/{linkId}/test
+	TestProwlarrLink(ctx context.Context, params TestProwlarrLinkParams) (*ProbeResult, error)
+	// TestProwlarrLinkInput implements testProwlarrLinkInput operation.
+	//
+	// Probe Prowlarr credentials that are not stored yet.
+	//
+	// POST /prowlarr/test
+	TestProwlarrLinkInput(ctx context.Context, req *ProwlarrLinkInput) (*ProbeResult, error)
 	// TestSeerrLink implements testSeerrLink operation.
 	//
 	// Probe a stored Seerr link and record the outcome.
@@ -460,6 +502,12 @@ type Handler interface {
 	//
 	// PUT /instances/{instanceId}/policy
 	UpdatePolicy(ctx context.Context, req *SnatchPolicy, params UpdatePolicyParams) (*SnatchPolicy, error)
+	// UpdateProwlarrLink implements updateProwlarrLink operation.
+	//
+	// Update a Prowlarr link (omit api_key to keep it).
+	//
+	// PUT /prowlarr/{linkId}
+	UpdateProwlarrLink(ctx context.Context, req *ProwlarrLinkInput, params UpdateProwlarrLinkParams) (*ProwlarrLink, error)
 	// UpdateSchedule implements updateSchedule operation.
 	//
 	// Replace a schedule window.

@@ -17,6 +17,7 @@ SPDX-License-Identifier: EUPL-1.2
 
 	type Instance = components['schemas']['Instance'];
 	type Cap = components['schemas']['CapStatus'];
+	type ProwlarrIndexerStatus = components['schemas']['ProwlarrIndexerStatus'];
 
 	const instances = createSentioQuery({
 		queryKey: keys.instances,
@@ -25,6 +26,11 @@ SPDX-License-Identifier: EUPL-1.2
 	const caps = createSentioQuery({
 		queryKey: keys.caps,
 		queryFn: async () => (await api.GET('/hourly-caps')).data ?? [],
+		refetchInterval: 30_000
+	});
+	const prowlarr = createSentioQuery({
+		queryKey: keys.prowlarr,
+		queryFn: async () => (await api.GET('/prowlarr/status')).data ?? [],
 		refetchInterval: 30_000
 	});
 	const quickie = createSentioMutation({
@@ -44,6 +50,14 @@ SPDX-License-Identifier: EUPL-1.2
 		return list?.find((c) => c.scope === 'instance' && c.instance_id === inst.id);
 	}
 	const globalCap = $derived(caps.data?.find((c) => c.scope === 'global'));
+
+	function countExhausted(indexers: ProwlarrIndexerStatus[]): number {
+		return indexers.filter((i) => i.exhausted).length;
+	}
+
+	function countHeadroom(indexers: ProwlarrIndexerStatus[]): number {
+		return indexers.length - countExhausted(indexers);
+	}
 </script>
 
 <h1 class="mb-4 text-2xl font-semibold">{m.dashboard_title()}</h1>
@@ -61,6 +75,47 @@ SPDX-License-Identifier: EUPL-1.2
 		<section class="card mb-4" aria-labelledby="global-stamina">
 			<h2 id="global-stamina" class="sr-only">{m.stamina_global()}</h2>
 			<StaminaGauge label={m.stamina_global()} used={globalCap.used} cap={globalCap.cap} />
+		</section>
+	{/if}
+	{#if (prowlarr.data ?? []).length > 0}
+		<section class="card mb-4" aria-labelledby="dashboard-prowlarr-title">
+			<h2 id="dashboard-prowlarr-title" class="mb-2 text-base font-semibold">
+				<a href={resolve('prowlarr')} class="hover:underline">{m.prowlarr_dashboard_title()}</a>
+			</h2>
+			<ul class="flex flex-col gap-3">
+				{#each prowlarr.data ?? [] as link (link.link_id)}
+					{@const total = link.indexers.length}
+					{@const exhausted = countExhausted(link.indexers)}
+					{@const headroom = countHeadroom(link.indexers)}
+					<li class="flex flex-col gap-1">
+						<div class="flex items-baseline justify-between text-sm">
+							<span class="font-medium">{link.name}</span>
+							<span class="text-subtle">
+								{m.prowlarr_headroom_count({ count: headroom, total })} · {m.prowlarr_exhausted_count(
+									{
+										count: exhausted
+									}
+								)}
+							</span>
+						</div>
+						<div
+							role="meter"
+							aria-label={m.prowlarr_headroom_label({ name: link.name })}
+							aria-valuemin={0}
+							aria-valuemax={total}
+							aria-valuenow={headroom}
+							aria-valuetext={`${headroom} / ${total}`}
+							class="h-2 w-full overflow-hidden rounded-full border border-line bg-surface"
+						>
+							<div
+								class="h-full rounded-full"
+								style:background="var(--color-brand)"
+								style:width={`${total > 0 ? Math.round((headroom / total) * 100) : 0}%`}
+							></div>
+						</div>
+					</li>
+				{/each}
+			</ul>
 		</section>
 	{/if}
 	<ul class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

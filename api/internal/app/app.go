@@ -40,6 +40,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/metrics"
 	"github.com/lusoris/SnatchArr/api/internal/notify"
 	"github.com/lusoris/SnatchArr/api/internal/policies"
+	"github.com/lusoris/SnatchArr/api/internal/prowlarr"
 	"github.com/lusoris/SnatchArr/api/internal/retention"
 	"github.com/lusoris/SnatchArr/api/internal/seerr"
 	"github.com/lusoris/SnatchArr/api/internal/settings"
@@ -83,6 +84,7 @@ var Module = fx.Options(
 	dlclients.Module,
 	seerr.Module,
 	cleanuparr.Module,
+	prowlarr.Module,
 	configarr.Module,
 	notify.Module,
 	retention.Module,

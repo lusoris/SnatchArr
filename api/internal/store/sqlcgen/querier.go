@@ -41,6 +41,9 @@ type Querier interface {
 	CreateNotificationRule(ctx context.Context, arg CreateNotificationRuleParams) (NotificationRule, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
+	CreateProwlarrLink(ctx context.Context, arg CreateProwlarrLinkParams) (ProwlarrLink, error)
+	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+	// SPDX-License-Identifier: EUPL-1.2
 	CreateSchedule(ctx context.Context, arg CreateScheduleParams) (Schedule, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
@@ -53,6 +56,7 @@ type Querier interface {
 	DeleteLoginLockout(ctx context.Context, key string) error
 	DeleteNotificationChannel(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteNotificationRule(ctx context.Context, id uuid.UUID) (int64, error)
+	DeleteProwlarrLink(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteSchedule(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteSeerrLink(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteSession(ctx context.Context, id string) error
@@ -88,6 +92,7 @@ type Querier interface {
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
 	GetPolicy(ctx context.Context, instanceID uuid.UUID) (SnatchPolicy, error)
+	GetProwlarrLink(ctx context.Context, id uuid.UUID) (ProwlarrLink, error)
 	GetRun(ctx context.Context, id uuid.UUID) (SnatchRun, error)
 	GetSchedule(ctx context.Context, id uuid.UUID) (Schedule, error)
 	GetSeerrLink(ctx context.Context, id uuid.UUID) (SeerrLink, error)
@@ -120,6 +125,7 @@ type Querier interface {
 	ListEnabledInstances(ctx context.Context) ([]Instance, error)
 	ListEnabledNotificationChannels(ctx context.Context) ([]NotificationChannel, error)
 	ListEnabledNotificationRules(ctx context.Context) ([]NotificationRule, error)
+	ListEnabledProwlarrLinks(ctx context.Context) ([]ProwlarrLink, error)
 	ListEnabledSchedulesFor(ctx context.Context, instanceID *uuid.UUID) ([]Schedule, error)
 	ListEnabledSeerrLinks(ctx context.Context) ([]SeerrLink, error)
 	ListEvents(ctx context.Context, arg ListEventsParams) ([]SnatchEvent, error)
@@ -129,6 +135,7 @@ type Querier interface {
 	ListNotificationChannelsByIDs(ctx context.Context, ids []uuid.UUID) ([]NotificationChannel, error)
 	ListNotificationRules(ctx context.Context) ([]NotificationRule, error)
 	ListNotificationRulesByEvent(ctx context.Context, eventKind string) ([]NotificationRule, error)
+	ListProwlarrLinks(ctx context.Context) ([]ProwlarrLink, error)
 	ListRuns(ctx context.Context, arg ListRunsParams) ([]SnatchRun, error)
 	ListSchedules(ctx context.Context) ([]Schedule, error)
 	ListSeerrLinks(ctx context.Context) ([]SeerrLink, error)
@@ -164,6 +171,7 @@ type Querier interface {
 	RecordDownloadClientCheck(ctx context.Context, arg RecordDownloadClientCheckParams) error
 	RecordInstanceCheck(ctx context.Context, arg RecordInstanceCheckParams) error
 	RecordLoginLockoutFailure(ctx context.Context, arg RecordLoginLockoutFailureParams) error
+	RecordProwlarrCheck(ctx context.Context, arg RecordProwlarrCheckParams) error
 	RecordSeerrCheck(ctx context.Context, arg RecordSeerrCheckParams) error
 	RecordSeerrSync(ctx context.Context, arg RecordSeerrSyncParams) error
 	ResetProcessed(ctx context.Context, instanceID *uuid.UUID) (int64, error)
@@ -187,6 +195,7 @@ type Querier interface {
 	UpdateInstance(ctx context.Context, arg UpdateInstanceParams) (Instance, error)
 	UpdateNotificationChannel(ctx context.Context, arg UpdateNotificationChannelParams) (NotificationChannel, error)
 	UpdateNotificationRule(ctx context.Context, arg UpdateNotificationRuleParams) (NotificationRule, error)
+	UpdateProwlarrLink(ctx context.Context, arg UpdateProwlarrLinkParams) (ProwlarrLink, error)
 	UpdateSchedule(ctx context.Context, arg UpdateScheduleParams) (Schedule, error)
 	UpdateSeerrLink(ctx context.Context, arg UpdateSeerrLinkParams) (SeerrLink, error)
 	UpdateSettings(ctx context.Context, arg UpdateSettingsParams) (Setting, error)

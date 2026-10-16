@@ -81,4 +81,73 @@ describe('dashboard', () => {
 		expect((await screen.findByRole('alert')).textContent).toContain('store down');
 		expect(screen.queryByRole('list')).toBeNull();
 	});
+
+	it('shows Prowlarr card with headroom and exhausted counts when links are present', async () => {
+		stubGet({
+			'/instances': [forkInstance],
+			'/hourly-caps': [],
+			'/prowlarr/status': [
+				{
+					link_id: '00000000-0000-0000-0000-000000000020',
+					name: 'Primary Prowlarr',
+					reachable: true,
+					checked_at: '2026-09-01T12:00:00Z',
+					indexers: [
+						{
+							id: 1,
+							name: 'Fast Indexer',
+							query_limit: 1000,
+							grab_limit: 100,
+							limits_unit: 0,
+							used_queries: 250,
+							used_grabs: 10,
+							exhausted: false
+						},
+						{
+							id: 2,
+							name: 'Capped Indexer',
+							query_limit: 100,
+							grab_limit: 50,
+							limits_unit: 1,
+							used_queries: 100,
+							used_grabs: 20,
+							exhausted: true
+						}
+					]
+				}
+			]
+		});
+		renderWithQuery(Dashboard);
+
+		expect(
+			await screen.findByRole('heading', { level: 2, name: m.prowlarr_dashboard_title() })
+		).toBeTruthy();
+		expect(screen.getByText('Primary Prowlarr')).toBeTruthy();
+		expect(
+			screen.getByText(
+				new RegExp(
+					`${m.prowlarr_headroom_count({ count: 1, total: 2 })} · ${m.prowlarr_exhausted_count({ count: 1 })}`
+				)
+			)
+		).toBeTruthy();
+		const meter = screen.getByRole('meter', {
+			name: m.prowlarr_headroom_label({ name: 'Primary Prowlarr' })
+		});
+		expect(meter.getAttribute('aria-valuenow')).toBe('1');
+		expect(meter.getAttribute('aria-valuemax')).toBe('2');
+	});
+
+	it('hides Prowlarr card when no Prowlarr links are configured', async () => {
+		stubGet({
+			'/instances': [forkInstance],
+			'/hourly-caps': [],
+			'/prowlarr/status': []
+		});
+		renderWithQuery(Dashboard);
+
+		await screen.findByRole('link', { name: 'Library Readarr' });
+		expect(
+			screen.queryByRole('heading', { level: 2, name: m.prowlarr_dashboard_title() })
+		).toBeNull();
+	});
 });
