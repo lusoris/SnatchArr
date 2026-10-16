@@ -22,5 +22,6 @@ export const keys = {
 	cleanuparr: ['cleanuparr', 'status'] as const,
 	settings: ['settings'] as const,
 	channels: ['notification-channels'] as const,
-	rules: ['notification-rules'] as const
+	rules: ['notification-rules'] as const,
+	apiKeys: ['api-keys'] as const
 };

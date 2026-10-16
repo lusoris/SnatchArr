@@ -10,6 +10,7 @@ describe('query keys', () => {
 		expect(keys.instance('a')).toEqual([...keys.instances, 'a']);
 		expect(keys.policy('a').slice(0, 2)).toEqual(keys.instance('a'));
 		expect(keys.dlstatus.slice(0, 1)).toEqual(keys.dlclients);
+		expect(keys.apiKeys).toEqual(['api-keys']);
 	});
 
 	it('keeps server state fresh for 15 seconds', () => {
