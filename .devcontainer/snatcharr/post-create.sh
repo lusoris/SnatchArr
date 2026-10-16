@@ -5,8 +5,9 @@ set -euo pipefail
 
 # Go toolchain
 go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
-go install github.com/securego/gosec/v2/cmd/gosec@latest
-go install golang.org/x/vuln/cmd/govulncheck@latest
+# gosec and govulncheck at the tools/go/go.mod pins: gosec@latest resolves an x/tools that
+# cannot load Go 1.27.2 packages.
+make gosec-install govulncheck-install
 go install github.com/air-verse/air@latest
 go install github.com/bufbuild/buf/cmd/buf@latest
 go install github.com/evilmartians/lefthook/v2@latest
