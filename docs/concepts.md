@@ -47,9 +47,16 @@ are tracked separately, so an upgrade search never blocks a missing one.
 
 ## Stamina
 
-`hourly_cap` (default 20, range 1 to 500) is how many **indexer queries** an instance may
-spend in any 60 minutes: one per episode in an episode search, one per season pack, one per
-season of a series search, one per movie, album or book. It is debited atomically at
+`hourly_cap` (default 20, range 1 to 500) is how many **searches** an instance may send
+to its indexers in any 60 minutes, counted the way the *arr runs them: one per episode in
+an episode search, one per season pack, one per season of a series search, one per movie,
+album or book, and one for a whole artist or author search. Lidarr and the Readarr forks
+run an artist or author search as a single search over every monitored album or book of
+that parent, not only the wanted ones, so it costs 1 however many items it covers. A series
+search is charged one per season that holds a wanted episode. Sonarr itself searches every
+monitored season of the series, or every monitored aired episode without a file when no
+season is monitored, so a series search can send more searches than it is charged. It is
+debited atomically at
 dispatch time, so two workers can never overspend it together. The window rolls: spent
 stamina comes back 60 to 61 minutes after it was spent, never at the top of the clock hour,
 so no 60 minutes ever see more than the cap. At 80 % the dashboard shows the instance

@@ -390,19 +390,17 @@ impl Target {
         !matches!(self, Self::Items { .. } | Self::Episodes { .. })
     }
 
-    /// Indexer queries the target costs, which is what stamina charges: one per episode in
-    /// an `EpisodeSearch`, one per season pack, one per season of a `SeriesSearch`, one
-    /// per movie, album (also inside an `ArtistSearch`) or book (also inside an
-    /// `AuthorSearch`).
+    /// Searches the *arr sends to each indexer for the target, which is what stamina charges
+    /// (#180): one per episode in an `EpisodeSearch`, one per season pack, one per season of
+    /// a `SeriesSearch`, one per movie, album or book, and one for a whole `ArtistSearch` or
+    /// `AuthorSearch`, which Lidarr and the Readarr forks send as a single search over the
+    /// parent's monitored albums or books.
     #[must_use]
     pub fn query_cost(&self) -> u32 {
         match self {
-            Self::Season { .. } => 1,
+            Self::Season { .. } | Self::Artist { .. } | Self::Author { .. } => 1,
             Self::Series { seasons, .. } => (*seasons).max(1),
-            Self::Episodes { .. }
-            | Self::Items { .. }
-            | Self::Artist { .. }
-            | Self::Author { .. } => self.item_count().max(1),
+            Self::Episodes { .. } | Self::Items { .. } => self.item_count().max(1),
         }
     }
 
@@ -1049,6 +1047,46 @@ mod tests {
         );
         assert_eq!(shows[0].item_count(), 3);
     }
+    /// An `ArtistSearch` or `AuthorSearch` is one search per indexer however many wanted
+    /// albums or books it covers (Lidarr `ReleaseSearchService.ArtistSearch`, the Readarr
+    /// forks' `AuthorSearch`: one dispatch each), so stamina charges it 1 (#180).
+    #[test]
+    fn query_cost_charges_parent_searches_once() {
+        let cands = vec![
+            cand(1, 7, 0, None, true),
+            cand(2, 7, 0, None, true),
+            cand(3, 7, 0, None, true),
+            cand(4, 9, 0, None, true),
+        ];
+        let artists = group_lidarr(&cands, LidarrMode::Artist);
+        assert_eq!(artists.len(), 2);
+        assert_eq!(artists[0].item_count(), 3);
+        assert_eq!(
+            artists[0].query_cost(),
+            1,
+            "one artist search for three albums"
+        );
+        assert_eq!(artists.iter().map(Target::query_cost).sum::<u32>(), 2);
+        let authors = group_readarr(&cands);
+        assert_eq!(
+            authors[0].query_cost(),
+            1,
+            "one author search for three books"
+        );
+        assert_eq!(authors.iter().map(Target::query_cost).sum::<u32>(), 2);
+        // Album mode still searches each album on its own.
+        let albums = group_lidarr(&cands, LidarrMode::Album);
+        assert_eq!(albums.iter().map(Target::query_cost).sum::<u32>(), 4);
+        // Boundary: an author with one book and one with none both cost one search.
+        let one = group_readarr(&cands[3..]);
+        assert_eq!(one.iter().map(Target::query_cost).sum::<u32>(), 1);
+        let empty = Target::Author {
+            author_id: 1,
+            items: Vec::new(),
+        };
+        assert_eq!(empty.query_cost(), 1);
+    }
+
     fn series(series_id: i64, seasons: u32, items: Vec<i64>) -> Target {
         Target::Series {
             series_id,

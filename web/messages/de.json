@@ -60,7 +60,7 @@
 	"policy_missing_per_cycle": "Fehlende Titel pro Snatch",
 	"policy_upgrade_per_cycle": "Upgrades pro Snatch",
 	"policy_cycle_interval": "Erholungsphase (Sekunden)",
-	"policy_hourly_cap": "Ausdauer (Indexer-Anfragen pro Stunde)",
+	"policy_hourly_cap": "Ausdauer (Indexer-Suchen pro Stunde)",
 	"policy_selection": "Auswahl",
 	"policy_selection_random": "Zufällig",
 	"policy_selection_sequential": "Sequenziell",
