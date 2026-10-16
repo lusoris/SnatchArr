@@ -141,7 +141,7 @@ func (s *Server) LeaseRun(ctx context.Context, req *snatcharrv1.LeaseRunRequest)
 		}
 		run, err := s.runs.Lease(ctx, req.GetWorkerId())
 		if err == nil {
-			s.m.RunLeased(string(run.Kind))
+			s.recordLeased(run)
 			return s.leaseResponse(ctx, run)
 		}
 		if !errors.Is(err, snatch.ErrNoRun) {
@@ -155,6 +155,16 @@ func (s *Server) LeaseRun(ctx context.Context, req *snatcharrv1.LeaseRunRequest)
 		}
 	}
 	return &snatcharrv1.LeaseRunResponse{}, nil
+}
+
+func (s *Server) recordLeased(run domain.Run) {
+	s.m.RunLeased(string(run.Kind))
+	if !run.QueuedAt.IsZero() {
+		wait := s.clk.Now().Sub(run.QueuedAt).Seconds()
+		if wait >= 0 {
+			s.m.RunLeaseWait(string(run.Kind), wait)
+		}
+	}
 }
 
 func (s *Server) leaseResponse(ctx context.Context, run domain.Run) (*snatcharrv1.LeaseRunResponse, error) {
@@ -378,45 +388,91 @@ func (s *Server) grantBudget(ctx context.Context, instanceID uuid.UUID, capacity
 func (s *Server) ReportEvents(stream snatcharrv1.WorkerService_ReportEventsServer) error {
 	ctx := stream.Context()
 	accepted := uint32(0)
+	names := make(map[uuid.UUID]string)
 	for range maxEventsPerStream {
-		req, err := stream.Recv()
-		if errors.Is(err, errEOF) || (err != nil && errors.Is(err, context.Canceled)) {
+		req, done, err := recvReportEvent(stream)
+		if done || err != nil {
+			if err != nil {
+				return toStatus(err)
+			}
 			break
 		}
-		if err != nil {
-			if isEOF(err) {
-				break
-			}
+		if err := s.handleReportEvent(ctx, req.GetEvent(), names); err != nil {
 			return toStatus(err)
-		}
-		if err := s.recordProto(ctx, req.GetEvent()); err != nil {
-			return toStatus(err)
-		}
-		if req.GetEvent() != nil {
-			s.m.WorkerEvent(eventType(req.GetEvent().GetType()))
 		}
 		accepted++
 	}
 	return stream.SendAndClose(&snatcharrv1.ReportEventsResponse{Accepted: accepted})
 }
 
-func (s *Server) recordProto(ctx context.Context, ev *snatcharrv1.SnatchEvent) error {
+func recvReportEvent(stream snatcharrv1.WorkerService_ReportEventsServer) (*snatcharrv1.ReportEventsRequest, bool, error) {
+	req, err := stream.Recv()
+	if errors.Is(err, errEOF) || (err != nil && errors.Is(err, context.Canceled)) || isEOF(err) {
+		return nil, true, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	return req, false, nil
+}
+
+func (s *Server) handleReportEvent(ctx context.Context, ev *snatcharrv1.SnatchEvent, names map[uuid.UUID]string) error {
+	run, err := s.recordProto(ctx, ev)
+	if err != nil {
+		return err
+	}
 	if ev == nil {
 		return nil
 	}
+	s.m.WorkerEvent(eventType(ev.GetType()))
+	if ev.GetType() == snatcharrv1.EventType_EVENT_TYPE_SEARCH_DISPATCHED && run.InstanceID != uuid.Nil {
+		name := s.instanceName(ctx, names, run.InstanceID)
+		s.m.SearchesDispatched(name, string(run.Kind), 1)
+	}
+	return nil
+}
+
+func (s *Server) instanceName(ctx context.Context, names map[uuid.UUID]string, id uuid.UUID) string {
+	if name, ok := names[id]; ok {
+		return name
+	}
+	inst, err := s.instances.Get(ctx, id)
+	if err != nil {
+		s.logger.WarnContext(ctx, "workergrpc: resolve instance name",
+			slog.String("instance_id", id.String()),
+			slog.String("error", fmt.Errorf("instances get: %w", err).Error()),
+		)
+		names[id] = "unknown"
+		return "unknown"
+	}
+	if inst.Name == "" {
+		names[id] = "unknown"
+		return "unknown"
+	}
+	names[id] = inst.Name
+	return inst.Name
+}
+
+func (s *Server) recordProto(ctx context.Context, ev *snatcharrv1.SnatchEvent) (domain.Run, error) {
+	if ev == nil {
+		return domain.Run{}, nil
+	}
 	run, err := s.leasedRunDomain(ctx, ev.GetRunId())
 	if err != nil {
-		return err
+		return domain.Run{}, err
 	}
 	ts := s.clk.Now()
 	if ev.GetTsUnixMs() > 0 {
 		ts = time.UnixMilli(ev.GetTsUnixMs())
 	}
-	return s.rec.Record(ctx, domain.Event{
+	if err := s.rec.Record(ctx, domain.Event{
 		RunID: &run.ID, InstanceID: run.InstanceID, Timestamp: ts,
 		Level: levelName(ev.GetLevel()), Type: ev.GetType().String(),
 		EntityType: ev.GetEntityType(), EntityID: ev.GetEntityId(), Title: ev.GetTitle(), Detail: ev.GetDetail(),
-	})
+	}); err != nil {
+		return domain.Run{}, err
+	}
+	return run, nil
 }
 
 // CompleteRun closes the run, records searched items into memory and saves the cursor.

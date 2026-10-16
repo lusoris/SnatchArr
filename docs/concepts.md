@@ -96,7 +96,7 @@ for everyone. Windows may cross midnight and carry their own time zone.
 A window the API cannot read, for example one whose time zone the host's tzdata no longer
 holds, is never skipped: the instances it covers queue no snatches and get no search budget
 until it is fixed or removed. The planner logs each skip and counts it in
-`snatcharr_planner_instance_failures_total` (see [Metrics](deployment.md#metrics)).
+`snatcharr_planner_instance_failures_total` (see [Metrics](metrics.md)).
 
 ## History and live events
 

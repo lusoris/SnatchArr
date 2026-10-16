@@ -162,19 +162,41 @@ func TestNew_CreatesTheAlertSeriesAtZero(t *testing.T) {
 	t.Parallel()
 	_, reg := metricstest.New(t)
 	zero := map[string][2]string{
-		"queued":          {"snatcharr_runs_queued_total", ""},
-		"unconfirmed":     {"snatcharr_worker_events_unconfirmed_total", ""},
-		"done":            {"snatcharr_runs_finished_total", "done"},
-		"failed":          {"snatcharr_runs_finished_total", "failed"},
-		"cancelled":       {"snatcharr_runs_finished_total", "cancelled"},
-		"lease exhausted": {"snatcharr_runs_finished_total", metrics.OutcomeLeaseExhausted},
-		"granted":         {"snatcharr_budget_requests_total", metrics.BudgetGranted},
-		"partial":         {"snatcharr_budget_requests_total", metrics.BudgetPartial},
-		"denied":          {"snatcharr_budget_requests_total", metrics.BudgetDenied},
-		"error":           {"snatcharr_budget_requests_total", metrics.BudgetError},
+		"queued":             {"snatcharr_runs_queued_total", ""},
+		"unconfirmed":        {"snatcharr_worker_events_unconfirmed_total", ""},
+		"done":               {"snatcharr_runs_finished_total", "done"},
+		"failed":             {"snatcharr_runs_finished_total", "failed"},
+		"cancelled":          {"snatcharr_runs_finished_total", "cancelled"},
+		"lease exhausted":    {"snatcharr_runs_finished_total", metrics.OutcomeLeaseExhausted},
+		"granted":            {"snatcharr_budget_requests_total", metrics.BudgetGranted},
+		"partial":            {"snatcharr_budget_requests_total", metrics.BudgetPartial},
+		"denied":             {"snatcharr_budget_requests_total", metrics.BudgetDenied},
+		"error":              {"snatcharr_budget_requests_total", metrics.BudgetError},
+		"seerr pending":      {"snatcharr_seerr_requests_pending", ""},
+		"deferral schedule":  {"snatcharr_planner_deferrals_total", metrics.DeferralScheduleClosed},
+		"deferral running":   {"snatcharr_planner_deferrals_total", metrics.DeferralAlreadyRunning},
+		"deferral unreach":   {"snatcharr_planner_deferrals_total", metrics.DeferralClientUnreachable},
+		"deferral paused":    {"snatcharr_planner_deferrals_total", metrics.DeferralClientPaused},
+		"deferral limit":     {"snatcharr_planner_deferrals_total", metrics.DeferralClientActiveLimit},
+		"deferral bandwidth": {"snatcharr_planner_deferrals_total", metrics.DeferralBandwidthSaturated},
+		"deferral gate":      {"snatcharr_planner_deferrals_total", metrics.DeferralGateRefusal},
+		"runs queued":        {"snatcharr_runs", "queued"},
+		"runs leased":        {"snatcharr_runs", "leased"},
+		"runs done":          {"snatcharr_runs", "done"},
+		"runs failed":        {"snatcharr_runs", "failed"},
+		"runs cancelled":     {"snatcharr_runs", "cancelled"},
+		"lease wait missing": {"snatcharr_run_lease_wait_seconds", "missing"},
+		"lease wait upgrade": {"snatcharr_run_lease_wait_seconds", "upgrade"},
+	}
+	labelFor := map[string]string{
+		"snatcharr_runs_finished_total":     "outcome",
+		"snatcharr_budget_requests_total":   "result",
+		"snatcharr_planner_deferrals_total": "reason",
+		"snatcharr_runs":                    "status",
+		"snatcharr_run_lease_wait_seconds":  "kind",
 	}
 	for name, series := range zero {
-		label := map[string]string{"snatcharr_runs_finished_total": "outcome", "snatcharr_budget_requests_total": "result"}[series[0]]
+		label := labelFor[series[0]]
 		if got, ok := value(t, reg, series[0], label, series[1]); !ok || got != 0 {
 			t.Errorf("%s: %s{%s} = %v (present %t), want 0", name, series[0], series[1], got, ok)
 		}
@@ -221,5 +243,146 @@ func TestRunAndWorkerSeries(t *testing.T) {
 	}
 	if got, ok := value(t, reg, "snatcharr_worker_events_total", "type", "run_finished"); ok {
 		t.Errorf("worker events{run_finished} = %v, want no series without WorkerEventTypes", got)
+	}
+}
+
+func TestSearchesDispatched(t *testing.T) {
+	t.Parallel()
+	m, reg := metricstest.New(t)
+	m.SearchesDispatched("sonarr-4k", "missing", 5)
+	m.SearchesDispatched("sonarr-4k", "missing", 0) // boundary <= 0 defaults to 1
+	m.SearchesDispatched("radarr", "upgrade", 2)
+
+	cases := []struct {
+		name     string
+		labels   map[string]string
+		want     float64
+		expected bool
+	}{
+		{"positive sonarr missing", map[string]string{"instance": "sonarr-4k", "kind": "missing"}, 6, true},
+		{"positive radarr upgrade", map[string]string{"instance": "radarr", "kind": "upgrade"}, 2, true},
+		{"negative lidarr missing", map[string]string{"instance": "lidarr", "kind": "missing"}, 0, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, ok := metricstest.ValueLabels(t, reg, "snatcharr_searches_dispatched_total", tc.labels)
+			if ok != tc.expected {
+				t.Fatalf("ValueLabels() present = %t, want %t", ok, tc.expected)
+			}
+			if ok && got != tc.want {
+				t.Errorf("searches dispatched = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestStaminaGauges(t *testing.T) {
+	t.Parallel()
+	m, reg := metricstest.New(t)
+	m.SetStaminaUsed("sonarr", 15)
+	m.SetStaminaRemaining("sonarr", 5)
+	m.SetStaminaUsed("_global", 50)
+	m.SetStaminaRemaining("_global", 50)
+
+	cases := []struct {
+		name, series, label, value string
+		want                       float64
+	}{
+		{"positive used sonarr", "snatcharr_stamina_used_items", "instance", "sonarr", 15},
+		{"positive remaining sonarr", "snatcharr_stamina_remaining_items", "instance", "sonarr", 5},
+		{"positive used global", "snatcharr_stamina_used_items", "instance", "_global", 50},
+		{"positive remaining global", "snatcharr_stamina_remaining_items", "instance", "_global", 50},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, ok := value(t, reg, tc.series, tc.label, tc.value)
+			if !ok || got != tc.want {
+				t.Errorf("%s = %v (present %t), want %v", tc.series, got, ok, tc.want)
+			}
+		})
+	}
+}
+
+func TestRunsGauge(t *testing.T) {
+	t.Parallel()
+	m, reg := metricstest.New(t)
+	m.SetRuns("queued", 3)
+	m.SetRuns("leased", 1)
+	m.SetRuns("done", 10)
+
+	cases := []struct {
+		name, status string
+		want         float64
+	}{
+		{"queued", "queued", 3},
+		{"leased", "leased", 1},
+		{"done", "done", 10},
+		{"failed zero-filled", "failed", 0},
+		{"cancelled zero-filled", "cancelled", 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, ok := value(t, reg, "snatcharr_runs", "status", tc.status)
+			if !ok || got != tc.want {
+				t.Errorf("runs{%s} = %v (present %t), want %v", tc.status, got, ok, tc.want)
+			}
+		})
+	}
+}
+
+func TestSeerrRequestsPending(t *testing.T) {
+	t.Parallel()
+	m, reg := metricstest.New(t)
+	if got, ok := value(t, reg, "snatcharr_seerr_requests_pending", "", ""); !ok || got != 0 {
+		t.Fatalf("initial seerr pending = %v (present %t), want 0", got, ok)
+	}
+	m.SetSeerrRequestsPending(42)
+	if got, ok := value(t, reg, "snatcharr_seerr_requests_pending", "", ""); !ok || got != 42 {
+		t.Errorf("seerr pending = %v (present %t), want 42", got, ok)
+	}
+}
+
+func TestRunLeaseWait(t *testing.T) {
+	t.Parallel()
+	m, reg := metricstest.New(t)
+	m.RunLeaseWait("missing", 2.5)
+	m.RunLeaseWait("missing", 10.0)
+	m.RunLeaseWait("upgrade", -1.0) // negative clamped to 0
+
+	if got, ok := value(t, reg, "snatcharr_run_lease_wait_seconds", "kind", "missing"); !ok || got != 2 {
+		t.Errorf("missing wait count = %v (present %t), want 2", got, ok)
+	}
+	if got, ok := value(t, reg, "snatcharr_run_lease_wait_seconds", "kind", "upgrade"); !ok || got != 1 {
+		t.Errorf("upgrade wait count = %v (present %t), want 1", got, ok)
+	}
+}
+
+func TestPlannerDeferred(t *testing.T) {
+	t.Parallel()
+	m, reg := metricstest.New(t)
+	m.PlannerDeferred(metrics.DeferralScheduleClosed)
+	m.PlannerDeferred(metrics.DeferralScheduleClosed)
+	m.PlannerDeferred(metrics.DeferralClientPaused)
+
+	cases := []struct {
+		reason string
+		want   float64
+	}{
+		{metrics.DeferralScheduleClosed, 2},
+		{metrics.DeferralClientPaused, 1},
+		{metrics.DeferralAlreadyRunning, 0},
+		{metrics.DeferralClientUnreachable, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.reason, func(t *testing.T) {
+			t.Parallel()
+			got, ok := value(t, reg, "snatcharr_planner_deferrals_total", "reason", tc.reason)
+			if !ok || got != tc.want {
+				t.Errorf("deferral{%s} = %v (present %t), want %v", tc.reason, got, ok, tc.want)
+			}
+		})
 	}
 }

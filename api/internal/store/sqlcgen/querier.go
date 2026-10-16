@@ -21,6 +21,7 @@ type Querier interface {
 	CountInstancesByBaseURL(ctx context.Context, arg CountInstancesByBaseURLParams) (int64, error)
 	CountInstancesByBaseURLAndNotSource(ctx context.Context, arg CountInstancesByBaseURLAndNotSourceParams) (int64, error)
 	CountProcessed(ctx context.Context, arg CountProcessedParams) (int64, error)
+	CountRunsByStatus(ctx context.Context) ([]CountRunsByStatusRow, error)
 	CountSeerrRequests(ctx context.Context, linkID uuid.UUID) (int64, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2

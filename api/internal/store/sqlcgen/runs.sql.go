@@ -75,6 +75,37 @@ func (q *Queries) CompleteRun(ctx context.Context, arg CompleteRunParams) (Snatc
 	return i, err
 }
 
+const countRunsByStatus = `-- name: CountRunsByStatus :many
+SELECT status, count(*) AS count
+FROM snatch_runs
+GROUP BY status
+`
+
+type CountRunsByStatusRow struct {
+	Status string
+	Count  int64
+}
+
+func (q *Queries) CountRunsByStatus(ctx context.Context) ([]CountRunsByStatusRow, error) {
+	rows, err := q.db.Query(ctx, countRunsByStatus)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CountRunsByStatusRow{}
+	for rows.Next() {
+		var i CountRunsByStatusRow
+		if err := rows.Scan(&i.Status, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const enqueueRun = `-- name: EnqueueRun :one
 
 INSERT INTO snatch_runs (id, instance_id, kind, status, queued_at, focus_entity_id, focus_group_id)

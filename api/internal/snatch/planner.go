@@ -26,18 +26,34 @@ const TickInterval = 60 * time.Second
 // MaxInstancesPerTick bounds one tick (HISS-02).
 const MaxInstancesPerTick = 500
 
+// Gate refusal codes. They double as the planner deferral reasons in package metrics,
+// so one name space serves the log, the refusal and the metric label.
+const (
+	GateClientUnreachable  = metrics.DeferralClientUnreachable
+	GateClientPaused       = metrics.DeferralClientPaused
+	GateClientActiveLimit  = metrics.DeferralClientActiveLimit
+	GateBandwidthSaturated = metrics.DeferralBandwidthSaturated
+	GateGenericRefusal     = metrics.DeferralGateRefusal
+)
+
+// GateRefusal describes why a gate vetoed a snatch.
+type GateRefusal struct {
+	Code    string
+	Message string
+}
+
 // Gate lets other subsystems veto a snatch for an instance (download-client backpressure,
-// Cleanuparr signals). A nil reason means "allowed".
+// Cleanuparr signals).
 type Gate interface {
-	Allow(ctx context.Context, inst domain.Instance, kind domain.SnatchKind) (allowed bool, reason string, err error)
+	Allow(ctx context.Context, inst domain.Instance, kind domain.SnatchKind) (allowed bool, refusal GateRefusal, err error)
 }
 
 // AllowAll is the gate used until download-client backpressure lands.
 type AllowAll struct{}
 
 // Allow always allows.
-func (AllowAll) Allow(context.Context, domain.Instance, domain.SnatchKind) (bool, string, error) {
-	return true, "", nil
+func (AllowAll) Allow(context.Context, domain.Instance, domain.SnatchKind) (bool, GateRefusal, error) {
+	return true, GateRefusal{}, nil
 }
 
 // Planner decides when runs are due and enqueues them.
@@ -91,6 +107,9 @@ func (p *Planner) planInstance(ctx context.Context, inst domain.Instance) (int, 
 		return 0, err
 	}
 	if decision.Paused {
+		for range dueKinds(policy) {
+			p.m.PlannerDeferred(metrics.DeferralScheduleClosed)
+		}
 		return 0, nil
 	}
 	queued := 0
@@ -130,18 +149,29 @@ func (p *Planner) maybeEnqueue(ctx context.Context, inst domain.Instance, policy
 		return false, nil
 	}
 	for _, g := range p.gates {
-		allowed, reason, gateErr := g.Allow(ctx, inst, kind)
+		allowed, refusal, gateErr := g.Allow(ctx, inst, kind)
 		if gateErr != nil {
 			return false, fmt.Errorf("gate: %w", gateErr)
 		}
 		if !allowed {
-			p.logger.InfoContext(ctx, "snatch: gated", slog.String("instance", inst.Name), slog.String("kind", string(kind)), slog.String("reason", reason))
+			p.logger.InfoContext(ctx, "snatch: gated", slog.String("instance", inst.Name), slog.String("kind", string(kind)), slog.String("reason", refusal.Message))
+			code := refusal.Code
+			switch code {
+			case GateClientUnreachable, GateClientPaused, GateClientActiveLimit, GateBandwidthSaturated:
+			default:
+				code = GateGenericRefusal
+			}
+			p.m.PlannerDeferred(code)
 			return false, nil
 		}
 	}
 	run, created, err := p.runs.Enqueue(ctx, inst.ID, kind)
-	if err != nil || !created {
+	if err != nil {
 		return false, err
+	}
+	if !created {
+		p.m.PlannerDeferred(metrics.DeferralAlreadyRunning)
+		return false, nil
 	}
 	return true, p.rec.Record(ctx, domain.Event{
 		RunID: &run.ID, InstanceID: inst.ID, Level: "debug", Type: "run_queued",

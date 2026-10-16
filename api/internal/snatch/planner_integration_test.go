@@ -43,20 +43,20 @@ const (
 // refuse is a gate that vetoes every snatch.
 type refuse struct{}
 
-func (refuse) Allow(context.Context, domain.Instance, domain.SnatchKind) (bool, string, error) {
-	return false, "refused by the test", nil
+func (refuse) Allow(context.Context, domain.Instance, domain.SnatchKind) (bool, GateRefusal, error) {
+	return false, GateRefusal{Code: GateGenericRefusal, Message: "refused by the test"}, nil
 }
 
 // signalGate reports each time the planner asks it and vetoes the snatch, so that every tick
 // asks again.
 type signalGate struct{ asked chan struct{} }
 
-func (g signalGate) Allow(context.Context, domain.Instance, domain.SnatchKind) (bool, string, error) {
+func (g signalGate) Allow(context.Context, domain.Instance, domain.SnatchKind) (bool, GateRefusal, error) {
 	select {
 	case g.asked <- struct{}{}:
 	default:
 	}
-	return false, "refused by the test", nil
+	return false, GateRefusal{Code: GateGenericRefusal, Message: "refused by the test"}, nil
 }
 
 type plannerFixture struct {
@@ -262,5 +262,32 @@ func TestNewTicker_CountsAFailedTick(t *testing.T) {
 	}
 	if got, ok := metricstest.Value(t, f.reg, runsQueued, "", ""); !ok || got != 0 {
 		t.Errorf("%s = %v (present %t) after a failed tick only, want 0", runsQueued, got, ok)
+	}
+}
+
+type fakeEvaluateGate struct {
+	code    string
+	message string
+}
+
+func (g fakeEvaluateGate) Allow(context.Context, domain.Instance, domain.SnatchKind) (bool, GateRefusal, error) {
+	return false, GateRefusal{Code: g.code, Message: g.message}, nil
+}
+
+// Positive: a client named "capsule paused" that is unreachable records client_unreachable.
+func TestPlanner_ClientNamedCapsulePausedUnreachableRecordsClientUnreachable(t *testing.T) {
+	t.Parallel()
+	f := newPlannerFixture(t, fakeEvaluateGate{
+		code:    GateClientUnreachable,
+		message: "download client capsule paused is unreachable: dial tcp: connection paused",
+	})
+	storetest.Instance(t, f.st, f.clk.Now())
+
+	if _, err := f.planner.Tick(t.Context()); err != nil {
+		t.Fatalf("Tick() = %v", err)
+	}
+
+	if got, ok := metricstest.Value(t, f.reg, "snatcharr_planner_deferrals_total", "reason", GateClientUnreachable); !ok || got != 1 {
+		t.Errorf("deferrals{client_unreachable} = %v (present %t), want 1", got, ok)
 	}
 }

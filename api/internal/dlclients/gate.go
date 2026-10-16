@@ -41,6 +41,7 @@ type Snapshot struct {
 // Verdict is the backpressure decision for one instance.
 type Verdict struct {
 	Allowed    bool
+	Code       string
 	Reason     string
 	PaceFactor float64 // share (0..1) of per_cycle that the bandwidth budgets leave free
 }
@@ -54,28 +55,31 @@ func Evaluate(clients []domain.DownloadClient, snaps map[uuid.UUID]Snapshot) Ver
 		if !c.Enabled || !ok {
 			continue
 		}
-		if reason := blockReason(c, s); reason != "" {
-			return Verdict{Reason: reason}
+		if code, reason := blockReason(c, s); code != "" {
+			return Verdict{Code: code, Reason: reason}
 		}
 		f := paceFactor(c, s)
 		if f <= 0 {
-			return Verdict{Reason: fmt.Sprintf("download client %s is saturating its bandwidth budget", c.Name)}
+			return Verdict{
+				Code:   snatch.GateBandwidthSaturated,
+				Reason: fmt.Sprintf("download client %s is saturating its bandwidth budget", c.Name),
+			}
 		}
 		v.PaceFactor = min(v.PaceFactor, f)
 	}
 	return v
 }
 
-func blockReason(c domain.DownloadClient, s Snapshot) string {
+func blockReason(c domain.DownloadClient, s Snapshot) (string, string) {
 	switch {
 	case !s.Reachable:
-		return fmt.Sprintf("download client %s is unreachable: %s", c.Name, s.Error)
+		return snatch.GateClientUnreachable, fmt.Sprintf("download client %s is unreachable: %s", c.Name, s.Error)
 	case s.Paused:
-		return fmt.Sprintf("download client %s is paused", c.Name)
+		return snatch.GateClientPaused, fmt.Sprintf("download client %s is paused", c.Name)
 	case c.MaxActive > 0 && s.Active >= c.MaxActive:
-		return fmt.Sprintf("download client %s has %d active downloads (limit %d)", c.Name, s.Active, c.MaxActive)
+		return snatch.GateClientActiveLimit, fmt.Sprintf("download client %s has %d active downloads (limit %d)", c.Name, s.Active, c.MaxActive)
 	default:
-		return ""
+		return "", ""
 	}
 }
 
@@ -118,13 +122,13 @@ func NewPlannerGate(svc *Service, rec *snatch.Recorder, logger *slog.Logger) *Pl
 }
 
 // Allow implements snatch.Gate.
-func (g *PlannerGate) Allow(ctx context.Context, inst domain.Instance, _ domain.SnatchKind) (bool, string, error) {
+func (g *PlannerGate) Allow(ctx context.Context, inst domain.Instance, _ domain.SnatchKind) (bool, snatch.GateRefusal, error) {
 	v, err := g.svc.Verdict(ctx, inst.ID)
 	if err != nil {
-		return false, "", err
+		return false, snatch.GateRefusal{}, err
 	}
 	g.transition(ctx, inst, v)
-	return v.Allowed, v.Reason, nil
+	return v.Allowed, snatch.GateRefusal{Code: v.Code, Message: v.Reason}, nil
 }
 
 func (g *PlannerGate) transition(ctx context.Context, inst domain.Instance, v Verdict) {

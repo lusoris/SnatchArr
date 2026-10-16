@@ -72,6 +72,7 @@ nav:
   - API: api.md
   - Upstream contracts: upstream-contracts.md
   - Deployment: deployment.md
+  - Metrics: metrics.md
   - Architecture Decisions:
       - Overview: adr/README.md
       - "ADR-0001: Go control plane, Rust snatch-worker": adr/0001-go-control-plane-rust-snatch-worker.md

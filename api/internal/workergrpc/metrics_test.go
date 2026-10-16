@@ -16,7 +16,10 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
+	"github.com/jonboulle/clockwork"
 	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/grpc"
 
@@ -211,6 +214,7 @@ type completeFixture struct {
 	srv *Server
 	reg *prometheus.Registry
 	st  *store.Store
+	clk *clockwork.FakeClock
 	run domain.Run
 }
 
@@ -247,7 +251,7 @@ func newCompleteFixture(t *testing.T) completeFixture {
 	if _, err = srv.runs.Lease(t.Context(), "worker"); err != nil {
 		t.Fatalf("Lease() = %v", err)
 	}
-	return completeFixture{srv: srv, reg: reg, st: st, run: run}
+	return completeFixture{srv: srv, reg: reg, st: st, clk: clk, run: run}
 }
 
 // A completed run is counted by its outcome; a refused completion counts nothing.
@@ -407,5 +411,68 @@ func TestReportEventsIsCounted(t *testing.T) {
 		if got, _ := metricstest.Value(t, reg, workerEvents, "type", name); got != want {
 			t.Errorf("%s{%s} = %v, want %v", workerEvents, name, got, want)
 		}
+	}
+}
+
+func TestLeaseRun_RecordsWaitTime(t *testing.T) {
+	t.Parallel()
+	f := newCompleteFixture(t)
+	inst, err := f.srv.instances.Create(t.Context(), instances.Input{
+		Kind: domain.KindSonarr, Name: "sonarr-wait", BaseURL: "http://sonarr.invalid:8989", APIKey: "a-key-for-the-wait-test", Enabled: true,
+	})
+	if err != nil {
+		t.Fatalf("instances.Create() = %v", err)
+	}
+	if _, _, err := f.srv.runs.Enqueue(t.Context(), inst.ID, domain.SnatchUpgrade); err != nil {
+		t.Fatalf("Enqueue() = %v", err)
+	}
+	f.clk.Advance(42 * time.Second)
+	if _, err := f.srv.LeaseRun(t.Context(), &snatcharrv1.LeaseRunRequest{WorkerId: "worker-wait"}); err != nil {
+		t.Fatalf("LeaseRun() = %v", err)
+	}
+	if got, ok := metricstest.Value(t, f.reg, "snatcharr_run_lease_wait_seconds", "kind", string(domain.SnatchUpgrade)); !ok || got != 1 {
+		t.Errorf("snatcharr_run_lease_wait_seconds{upgrade} = %v (present %t), want 1", got, ok)
+	}
+}
+
+func TestReportEvents_RecordsSearchesDispatched(t *testing.T) {
+	t.Parallel()
+	f := newCompleteFixture(t)
+	inst, err := f.srv.instances.Get(t.Context(), f.run.InstanceID)
+	if err != nil {
+		t.Fatalf("instances.Get() = %v", err)
+	}
+	event := func(typ snatcharrv1.EventType) *snatcharrv1.ReportEventsRequest {
+		return &snatcharrv1.ReportEventsRequest{Event: &snatcharrv1.SnatchEvent{
+			RunId: f.run.ID.String(), Type: typ, Title: "Item 1", EntityType: "movie", EntityId: 101,
+		}}
+	}
+	stream := &eventStream{ctx: t.Context(), reqs: []*snatcharrv1.ReportEventsRequest{
+		event(snatcharrv1.EventType_EVENT_TYPE_SEARCH_DISPATCHED),
+		event(snatcharrv1.EventType_EVENT_TYPE_SEARCH_DISPATCHED),
+	}}
+	if err := f.srv.ReportEvents(stream); err != nil || stream.resp.GetAccepted() != 2 {
+		t.Fatalf("ReportEvents() = %v, accepted %d; want nil, 2", err, stream.resp.GetAccepted())
+	}
+	const series = "snatcharr_searches_dispatched_total"
+	if got, ok := metricstest.ValueLabels(t, f.reg, series, map[string]string{
+		"instance": inst.Name,
+		"kind":     string(f.run.Kind),
+	}); !ok || got != 2 {
+		t.Errorf("%s{instance=%s,kind=%s} = %v (present %t), want 2", series, inst.Name, f.run.Kind, got, ok)
+	}
+}
+
+func TestInstanceName_FallbackUnknown(t *testing.T) {
+	t.Parallel()
+	f := newCompleteFixture(t)
+	names := make(map[uuid.UUID]string)
+	unknownID := uuid.New()
+	got := f.srv.instanceName(t.Context(), names, unknownID)
+	if got != "unknown" {
+		t.Errorf("instanceName(%s) = %q, want %q", unknownID, got, "unknown")
+	}
+	if cached, ok := names[unknownID]; !ok || cached != "unknown" {
+		t.Errorf("names[%s] = %q (present %t), want %q", unknownID, cached, ok, "unknown")
 	}
 }

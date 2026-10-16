@@ -238,6 +238,13 @@ serviceMonitor:
   scrapeTimeout: 10s
   labels: {}
 
+grafana:
+  dashboards:
+    enabled: false
+    labels:
+      grafana_dashboard: "1"
+    annotations: {}
+
 # Restricted Pod Security Standard. Both images run as 65532 on distroless static.
 podSecurityContext:
   runAsNonRoot: true

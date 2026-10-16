@@ -262,7 +262,12 @@ fn group(kind: Kind, p: &Policy, selected: &[Candidate]) -> Vec<Target> {
     }
 }
 
-fn prepare(run: &Run, arr_timeout: Duration, polling: Polling) -> Result<Prepared, ExecError> {
+fn prepare(
+    run: &Run,
+    arr_timeout: Duration,
+    polling: Polling,
+    health: &Health,
+) -> Result<Prepared, ExecError> {
     let kind = kind_of(run.app)?;
     let wanted = wanted_of(run.snatch)?;
     let policy = run
@@ -272,6 +277,7 @@ fn prepare(run: &Run, arr_timeout: Duration, polling: Polling) -> Result<Prepare
     let opts = Options {
         timeout: arr_timeout,
         user_agent: run.user_agent.clone(),
+        observer: Some(std::sync::Arc::new(health.clone())),
         ..Options::default()
     };
     let arr = ArrClient::new(kind, &run.base_url, &run.api_key, opts)?;
@@ -336,32 +342,10 @@ pub(crate) async fn execute_with(
         run_id: run.run_id.clone(),
         emitted: AtomicU64::new(0),
     };
+    let run_start = std::time::Instant::now();
     let (outcome, searched, cursor, error) =
-        match snatch(&mut client, &run, arr_timeout, &events, polling).await {
-            Ok(Outcome {
-                searched,
-                cursor,
-                error: None,
-            }) => (RunOutcome::Done, searched, cursor, String::new()),
-            Ok(Outcome {
-                searched,
-                cursor,
-                error: Some(e),
-            }) => {
-                tracing::warn!(run = %run.run_id, error = %e, "run cut short");
-                (RunOutcome::Failed, searched, cursor, e)
-            }
-            Err(e) => {
-                tracing::warn!(run = %run.run_id, error = %e, "run failed");
-                events
-                    .emit(
-                        Ev::run(Level::Error, EventType::RunFinished, "snatch failed")
-                            .detail(e.to_string()),
-                    )
-                    .await;
-                (RunOutcome::Failed, Vec::new(), String::new(), e.to_string())
-            }
-        };
+        handle_snatch(&mut client, &run, arr_timeout, &events, polling, health).await;
+    record_run_metrics(health, run.snatch, outcome, run_start.elapsed());
     let emitted = u32::try_from(events.emitted.load(Ordering::Relaxed)).unwrap_or(u32::MAX);
     drop(events);
     let events_unconfirmed = emitted.saturating_sub(record_report(report.await, health));
@@ -378,6 +362,55 @@ pub(crate) async fn execute_with(
         events_unconfirmed,
     };
     complete(&mut client, &req, retry, health).await;
+}
+
+fn record_run_metrics(health: &Health, snatch_kind: i32, outcome: RunOutcome, duration: Duration) {
+    let outcome_str = match outcome {
+        RunOutcome::Done => "done",
+        RunOutcome::Failed => "failed",
+        RunOutcome::Cancelled => "cancelled",
+        RunOutcome::Unspecified => "unspecified",
+    };
+    let kind_str = match snatch_proto::SnatchKind::try_from(snatch_kind) {
+        Ok(snatch_proto::SnatchKind::Upgrade) => "upgrade",
+        _ => "missing",
+    };
+    health.record_run_duration(kind_str, outcome_str, duration);
+}
+
+async fn handle_snatch(
+    client: &mut Client,
+    run: &Run,
+    arr_timeout: Duration,
+    events: &Events,
+    polling: Polling,
+    health: &Health,
+) -> (RunOutcome, Vec<SearchedItem>, String, String) {
+    match snatch(client, run, arr_timeout, events, polling, health).await {
+        Ok(Outcome {
+            searched,
+            cursor,
+            error: None,
+        }) => (RunOutcome::Done, searched, cursor, String::new()),
+        Ok(Outcome {
+            searched,
+            cursor,
+            error: Some(e),
+        }) => {
+            tracing::warn!(run = %run.run_id, error = %e, "run cut short");
+            (RunOutcome::Failed, searched, cursor, e)
+        }
+        Err(e) => {
+            tracing::warn!(run = %run.run_id, error = %e, "run failed");
+            events
+                .emit(
+                    Ev::run(Level::Error, EventType::RunFinished, "snatch failed")
+                        .detail(e.to_string()),
+                )
+                .await;
+            (RunOutcome::Failed, Vec::new(), String::new(), e.to_string())
+        }
+    }
 }
 
 /// Calls `CompleteRun`, retrying a transient refusal within `retry`. Every refused call counts
@@ -459,8 +492,9 @@ async fn snatch(
     arr_timeout: Duration,
     events: &Events,
     polling: Polling,
+    health: &Health,
 ) -> Result<Outcome, ExecError> {
-    let p = prepare(run, arr_timeout, polling)?;
+    let p = prepare(run, arr_timeout, polling, health)?;
     let focused = if p.focus.is_some() {
         " (focused on one Seerr request)"
     } else {
@@ -510,7 +544,7 @@ async fn snatch(
         cursor: plan.next_cursor.to_string(),
         error: None,
     };
-    dispatch_all(&p, &dispatch, &by_id, events, &mut outcome).await;
+    dispatch_all(&p, &dispatch, &by_id, events, &mut outcome, health).await;
     Ok(outcome)
 }
 
@@ -522,6 +556,7 @@ async fn dispatch_all(
     by_id: &HashMap<i64, Candidate>,
     events: &Events,
     outcome: &mut Outcome,
+    health: &Health,
 ) {
     let mut failures: u32 = 0;
     for target in dispatch {
@@ -536,6 +571,11 @@ async fn dispatch_all(
                 .emit(Ev::run(Level::Error, EventType::RunFinished, msg.clone()))
                 .await;
             outcome.error = Some(msg);
+            let kind_str = match p.wanted {
+                Wanted::Missing => "missing",
+                Wanted::Cutoff => "upgrade",
+            };
+            health.circuit_opened(kind_str);
             return;
         }
     }

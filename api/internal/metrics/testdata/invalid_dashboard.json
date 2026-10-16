@@ -1,0 +1,14 @@
+{
+  "panels": [
+    {
+      "id": 1,
+      "title": "Invalid Panel",
+      "targets": [
+        {
+          "expr": "sum(rate(snatcharr_nonexistent_planted_defect_total[5m]))",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}

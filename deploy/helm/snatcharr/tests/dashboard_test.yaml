@@ -1,0 +1,55 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+suite: grafana dashboard
+templates:
+  - grafana-dashboard.yaml
+release:
+  name: snatcharr
+  namespace: snatcharr
+tests:
+  - it: default - disabled renders nothing
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: positive - enabled renders the ConfigMap with the label and valid JSON key
+    set:
+      grafana:
+        dashboards:
+          enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.name
+          value: snatcharr-dashboard
+      - equal:
+          path: metadata.labels["grafana_dashboard"]
+          value: "1"
+      - isNotEmpty:
+          path: data["snatcharr.json"]
+
+  - it: positive - custom labels and annotations applied
+    set:
+      grafana:
+        dashboards:
+          enabled: true
+          labels:
+            custom_label: "custom-value"
+            grafana_dashboard: "operations"
+          annotations:
+            dashboard-version: "1.0.0"
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.labels["custom_label"]
+          value: "custom-value"
+      - equal:
+          path: metadata.labels["grafana_dashboard"]
+          value: "operations"
+      - equal:
+          path: metadata.annotations["dashboard-version"]
+          value: "1.0.0"
