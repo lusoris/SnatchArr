@@ -50,7 +50,8 @@ const (
 	// PreviousMajor is the server major version of PreviousMajorImage.
 	PreviousMajor = 17
 	templateName  = "snatcharr_template"
-	// Bounds (HISS-02): container boot including the image pull, and one database operation.
+	// Bounds (HISS-02): container boot including the image pull (and its teardown, which took
+	// 30s at load 60), and one database operation once the admin lock is held.
 	startTimeout = 3 * time.Minute
 	opTimeout    = 30 * time.Second
 	// ryukLinger is how long the reaper outlives its last client. go test ./... runs each package
@@ -118,7 +119,7 @@ func start() (func() error, error) {
 		if c == nil {
 			return nil
 		}
-		stopCtx, stopCancel := context.WithTimeout(context.Background(), opTimeout)
+		stopCtx, stopCancel := context.WithTimeout(context.Background(), startTimeout)
 		defer stopCancel()
 		return c.Terminate(stopCtx)
 	}
@@ -222,16 +223,27 @@ func New(t *testing.T) *store.Store {
 }
 
 // adminExec runs one statement on the admin connection. It also runs from t.Cleanup, after
-// t.Context is cancelled, hence WithoutCancel.
+// t.Context is cancelled, so it takes no context from t.
 func adminExec(t *testing.T, sql string) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(t.Context()), opTimeout)
-	defer cancel()
-	shared.mu.Lock()
-	defer shared.mu.Unlock()
-	if _, err := shared.admin.Exec(ctx, sql); err != nil {
+	if err := execLocked(sql, opTimeout); err != nil {
 		t.Fatalf("storetest: %s: %v", sql, err)
 	}
+}
+
+// execLocked runs one statement on the admin connection once it holds the admin lock. The
+// bound starts after the lock is taken: parallel tests queue on it, and a deadline started
+// before the wait ran out in the queue under load, not in the statement.
+func execLocked(sql string, bound time.Duration) error {
+	shared.mu.Lock()
+	defer shared.mu.Unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), bound)
+	defer cancel()
+	_, err := shared.admin.Exec(ctx, sql)
+	if err != nil {
+		return fmt.Errorf("admin exec: %w", err)
+	}
+	return nil
 }
 
 // Instance inserts an enabled Sonarr instance and returns its id. The API key is a
