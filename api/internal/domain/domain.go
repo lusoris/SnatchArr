@@ -8,6 +8,7 @@ package domain
 
 import (
 	"fmt"
+	"net"
 	"net/url"
 	"strings"
 	"time"
@@ -85,8 +86,23 @@ type Instance struct {
 	LastSeenProduct Product
 	LastCheckAt     *time.Time
 	LastError       string
+	SeekerOverlap   bool
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
+}
+
+func stripDefaultPort(scheme, host string) string {
+	h, p, err := net.SplitHostPort(host)
+	if err != nil {
+		return host
+	}
+	if (scheme == "http" && p == "80") || (scheme == "https" && p == "443") {
+		if strings.Contains(h, ":") {
+			return "[" + h + "]"
+		}
+		return h
+	}
+	return host
 }
 
 // NormalizeBaseURL trims, lower-cases the scheme/host, and strips a trailing slash so
@@ -107,7 +123,7 @@ func NormalizeBaseURL(raw string) (string, error) {
 		return "", fmt.Errorf("%w: base_url scheme must be http or https", ErrInvalid)
 	}
 	u.Scheme = strings.ToLower(u.Scheme)
-	u.Host = strings.ToLower(u.Host)
+	u.Host = stripDefaultPort(u.Scheme, strings.ToLower(u.Host))
 	u.Path = strings.TrimRight(u.Path, "/")
 	u.RawQuery, u.Fragment = "", ""
 	return u.String(), nil

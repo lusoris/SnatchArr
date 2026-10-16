@@ -85,4 +85,5 @@ nav:
       - "ADR-0006: Download-client backpressure": adr/0006-download-client-backpressure.md
       - "ADR-0007: Read-only Cleanuparr link": adr/0007-read-only-cleanuparr-link.md
       - "ADR-0008: Readarr frozen as a legacy target": adr/0008-readarr-frozen-legacy-target.md
+      - "ADR-0009: Detect Cleanuparr Seeker": adr/0009-detect-cleanuparr-seeker.md
       - Template: adr/0000-template.md

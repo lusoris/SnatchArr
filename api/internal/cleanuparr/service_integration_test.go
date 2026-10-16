@@ -42,10 +42,11 @@ var errRefused = errors.New("connection refused by the test")
 
 // stubClient answers like Cleanuparr and records the key of every call.
 type stubClient struct {
-	mu    sync.Mutex
-	keys  []string
-	calls int
-	err   error
+	mu     sync.Mutex
+	keys   []string
+	calls  int
+	err    error
+	arrErr error // fails only the Sonarr/Radarr configuration lookup
 }
 
 func (c *stubClient) seen(key string) error {
@@ -66,6 +67,23 @@ func (c *stubClient) Summary(_ context.Context, _, key string) (cleanuparrclient
 
 func (c *stubClient) RecentStrikes(_ context.Context, _, key string, _ int) ([]cleanuparrclient.Strike, error) {
 	return []cleanuparrclient.Strike{{ID: "s1", Type: "Stalled"}}, c.seen(key)
+}
+
+func (c *stubClient) SeekerConfig(_ context.Context, _, key string) (cleanuparrclient.SeekerConfig, error) {
+	return cleanuparrclient.SeekerConfig{SearchEnabled: true, ProactiveSearchEnabled: true}, c.seen(key)
+}
+
+func (c *stubClient) GeneralDryRun(_ context.Context, _, key string) (bool, error) {
+	return false, c.seen(key)
+}
+
+func (c *stubClient) ArrInstances(_ context.Context, _, key string, _ string) ([]cleanuparrclient.ArrInstanceRef, error) {
+	if err := c.seen(key); err != nil {
+		return nil, err
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return nil, c.arrErr
 }
 
 func (c *stubClient) lastKey() (string, int) {
@@ -262,6 +280,39 @@ func TestStatusReusesTheViewForItsTTL(t *testing.T) {
 	}
 	if got, err := f.svc.Get(t.Context(), link.ID); err != nil || !strings.Contains(got.LastError, errRefused.Error()) {
 		t.Errorf("Get() = %+v, %v; want the failed check recorded", got, err)
+	}
+}
+
+func TestSeekerReasonNamesAFailedArrLookup(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name       string
+		arrErr     error
+		wantReason string
+	}{
+		{name: "lookups succeed", wantReason: ""},
+		{name: "sonarr and radarr lookups fail", arrErr: errRefused, wantReason: errRefused.Error()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			f := newFixture(t)
+			f.client.arrErr = tc.arrErr
+			f.create(t)
+			views, err := f.svc.Status(t.Context())
+			if err != nil || len(views) != 1 || !views[0].Reachable {
+				t.Fatalf("Status() = %+v, %v; want one reachable link", views, err)
+			}
+			seeker := views[0].Seeker
+			if seeker.State != domain.SeekerStateActive {
+				t.Errorf("Seeker.State = %q, want %q", seeker.State, domain.SeekerStateActive)
+			}
+			if tc.wantReason == "" && seeker.Reason != "" {
+				t.Errorf("Seeker.Reason = %q, want empty", seeker.Reason)
+			}
+			if tc.wantReason != "" && !strings.Contains(seeker.Reason, tc.wantReason) {
+				t.Errorf("Seeker.Reason = %q, want it to name %q", seeker.Reason, tc.wantReason)
+			}
+		})
 	}
 }
 

@@ -28,3 +28,30 @@ type CleanuparrLink struct {
 func ValidateCleanuparrLinkInput(name, baseURL, apiKey string) error {
 	return ValidateSeerrLinkInput(name, baseURL, apiKey)
 }
+
+// CleanuparrSeekerState describes the overall state of Cleanuparr Seeker.
+type CleanuparrSeekerState string
+
+// Seeker states.
+const (
+	SeekerStateActive   CleanuparrSeekerState = "active"
+	SeekerStateInactive CleanuparrSeekerState = "inactive"
+	SeekerStateDryRun   CleanuparrSeekerState = "dry_run"
+	SeekerStateUnknown  CleanuparrSeekerState = "unknown"
+)
+
+// CleanuparrSeekerInstance is one *arr instance observed in Cleanuparr Seeker.
+type CleanuparrSeekerInstance struct {
+	SnatcharrInstanceID *uuid.UUID
+	Name                string
+	Type                string
+	Active              bool
+	Matched             bool
+}
+
+// CleanuparrSeeker represents the Seeker status for a Cleanuparr link.
+type CleanuparrSeeker struct {
+	State     CleanuparrSeekerState
+	Reason    string
+	Instances []CleanuparrSeekerInstance
+}

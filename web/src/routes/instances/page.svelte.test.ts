@@ -85,6 +85,15 @@ describe('instance list', () => {
 		expect(screen.getByRole('button', { name: m.memory_reset_all() })).toBeTruthy();
 	});
 
+	it('shows seeker overlap badge when seeker is searching the same library', async () => {
+		const overlappingInstance = { ...forkInstance, seeker_overlap: true };
+		stubGet({ '/instances': [overlappingInstance] });
+		renderWithQuery(InstancesPage);
+
+		await bodyRows();
+		expect(screen.getByText(m.instance_seeker_badge())).toBeTruthy();
+	});
+
 	it('announces the problem document when the instance list is refused', async () => {
 		stubGet({
 			'/instances': new ProblemError({ type: 'about:blank', status: 503, detail: 'store down' })

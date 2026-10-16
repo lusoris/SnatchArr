@@ -14,6 +14,7 @@ import (
 
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
+	"github.com/lusoris/SnatchArr/api/internal/instances"
 )
 
 func TestCleanuparrLinkRead(t *testing.T) {
@@ -337,4 +338,111 @@ func TestCleanuparrADR0007NoWrites(t *testing.T) {
 		_, _ = f.h.TestCleanuparrLink(t.Context(), oas.TestCleanuparrLinkParams{LinkId: link.ID})
 		f.cleanupServer.assertNoWrites(t)
 	})
+}
+
+func TestCleanuparrSeekerStatus(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name      string
+		seeker404 bool
+		dryRun    bool
+		wantState oas.CleanuparrSeekerState
+	}{
+		{"positive seeker active", false, false, oas.CleanuparrSeekerStateActive},
+		{"negative seeker dry run", false, true, oas.CleanuparrSeekerStateDryRun},
+		{"boundary seeker 404 unknown", true, false, oas.CleanuparrSeekerStateUnknown},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			f := newIntegrationFixture(t)
+			f.cleanupServer.seeker404.Store(tc.seeker404)
+			f.cleanupServer.dryRun.Store(tc.dryRun)
+			_ = seedTestCleanuparrLink(t, f)
+
+			_, err := f.h.instances.Create(t.Context(), instances.Input{
+				Kind:    domain.KindSonarr,
+				Name:    "Sonarr Matching",
+				BaseURL: "http://sonarr.local:8989/",
+				APIKey:  "secret-test-key",
+				Enabled: true,
+			})
+			if err != nil {
+				t.Fatalf("create instance: %v", err)
+			}
+
+			list, err := f.h.GetCleanuparrStatus(t.Context())
+			if err != nil {
+				t.Fatalf("GetCleanuparrStatus: %v", err)
+			}
+			if len(list) != 1 {
+				t.Fatalf("len = %d, want 1", len(list))
+			}
+			st := list[0].Seeker
+			if st.State != tc.wantState {
+				t.Fatalf("seeker state = %v, want %v", st.State, tc.wantState)
+			}
+			if tc.wantState == oas.CleanuparrSeekerStateActive {
+				if len(st.Instances) != 1 || !st.Instances[0].Matched {
+					t.Fatalf("instances = %+v, want 1 matched", st.Instances)
+				}
+			}
+		})
+	}
+}
+
+func TestInstanceSeekerOverlapFlag(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name        string
+		kind        domain.AppKind
+		url         string
+		wantOverlap bool
+	}{
+		{"positive sonarr matching seeker url", domain.KindSonarr, "http://sonarr.local:8989", true},
+		{"positive sonarr trailing slash matching", domain.KindSonarr, "http://sonarr.local:8989/", true},
+		{"negative sonarr different url", domain.KindSonarr, "http://different.local:8989", false},
+		{"negative radarr not configured in seeker", domain.KindRadarr, "http://radarr.local:7878", false},
+		{"negative lidarr not supported by seeker", domain.KindLidarr, "http://sonarr.local:8989", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			f := newIntegrationFixture(t)
+			_ = seedTestCleanuparrLink(t, f)
+
+			inst, err := f.h.instances.Create(t.Context(), instances.Input{
+				Kind:    tc.kind,
+				Name:    "test-" + uuid.NewString(),
+				BaseURL: tc.url,
+				APIKey:  "secret-test-key",
+				Enabled: true,
+			})
+			if err != nil {
+				t.Fatalf("create instance: %v", err)
+			}
+
+			got, err := f.h.GetInstance(t.Context(), oas.GetInstanceParams{InstanceId: inst.ID})
+			if err != nil {
+				t.Fatalf("GetInstance: %v", err)
+			}
+			overlap, _ := got.SeekerOverlap.Get()
+			if overlap != tc.wantOverlap {
+				t.Fatalf("GetInstance SeekerOverlap = %v, want %v", overlap, tc.wantOverlap)
+			}
+
+			all, err := f.h.ListInstances(t.Context())
+			if err != nil {
+				t.Fatalf("ListInstances: %v", err)
+			}
+			for _, item := range all {
+				if item.ID == inst.ID {
+					ov, _ := item.SeekerOverlap.Get()
+					if ov != tc.wantOverlap {
+						t.Fatalf("ListInstances SeekerOverlap = %v, want %v", ov, tc.wantOverlap)
+					}
+				}
+			}
+		})
+	}
 }

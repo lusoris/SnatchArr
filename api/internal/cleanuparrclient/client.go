@@ -40,11 +40,39 @@ type StrikeSummary struct {
 	ReturningDownload int
 }
 
+// SeekerConfig is the configuration returned by /api/configuration/seeker.
+type SeekerConfig struct {
+	SearchEnabled          bool
+	ProactiveSearchEnabled bool
+	Instances              []SeekerInstance
+}
+
+// SeekerInstance is one *arr instance configured in Seeker.
+type SeekerInstance struct {
+	ArrInstanceID      string
+	InstanceName       string
+	InstanceType       string
+	Enabled            bool
+	ArrInstanceEnabled bool
+}
+
+// ArrInstanceRef is an *arr instance from /api/configuration/{sonarr,radarr}.
+// ALLOW-LIST: read ONLY ID, Name, URL, Enabled. Never read, store, log or return apiKey.
+type ArrInstanceRef struct {
+	ID      string
+	Name    string
+	URL     string
+	Enabled bool
+}
+
 // Client is the subset of the Cleanuparr API SnatchArr reads.
 type Client interface {
 	Status(ctx context.Context, baseURL, apiKey string) (Status, error)
 	RecentStrikes(ctx context.Context, baseURL, apiKey string, count int) ([]Strike, error)
 	Summary(ctx context.Context, baseURL, apiKey string) (StrikeSummary, error)
+	SeekerConfig(ctx context.Context, baseURL, apiKey string) (SeekerConfig, error)
+	GeneralDryRun(ctx context.Context, baseURL, apiKey string) (bool, error)
+	ArrInstances(ctx context.Context, baseURL, apiKey string, appType string) ([]ArrInstanceRef, error)
 }
 
 // Bounds (HISS-02).
@@ -168,4 +196,94 @@ func tally(sum *StrikeSummary, page strikesPage) {
 			sum.ReturningDownload++
 		}
 	}
+}
+
+//nolint:tagliatelle // Cleanuparr speaks camelCase
+type seekerConfigJSON struct {
+	SearchEnabled          bool `json:"searchEnabled"`
+	ProactiveSearchEnabled bool `json:"proactiveSearchEnabled"`
+	Instances              []struct {
+		ArrInstanceID      string `json:"arrInstanceId"`
+		InstanceName       string `json:"instanceName"`
+		InstanceType       string `json:"instanceType"`
+		Enabled            bool   `json:"enabled"`
+		ArrInstanceEnabled bool   `json:"arrInstanceEnabled"`
+	} `json:"instances"`
+}
+
+// SeekerConfig implements Client: returns Seeker configuration.
+func (h *HTTP) SeekerConfig(ctx context.Context, baseURL, apiKey string) (SeekerConfig, error) {
+	c, err := h.Base(baseURL, apiKey)
+	if err != nil {
+		return SeekerConfig{}, fmt.Errorf("cleanuparr: client: %w", err)
+	}
+	var out seekerConfigJSON
+	if err := c.Get(ctx, "/api/configuration/seeker", &out); err != nil {
+		return SeekerConfig{}, fmt.Errorf("cleanuparr seeker config: %w", err)
+	}
+	cfg := SeekerConfig{
+		SearchEnabled:          out.SearchEnabled,
+		ProactiveSearchEnabled: out.ProactiveSearchEnabled,
+		Instances:              make([]SeekerInstance, 0, len(out.Instances)),
+	}
+	for _, inst := range out.Instances {
+		cfg.Instances = append(cfg.Instances, SeekerInstance{
+			ArrInstanceID:      inst.ArrInstanceID,
+			InstanceName:       inst.InstanceName,
+			InstanceType:       inst.InstanceType,
+			Enabled:            inst.Enabled,
+			ArrInstanceEnabled: inst.ArrInstanceEnabled,
+		})
+	}
+	return cfg, nil
+}
+
+//nolint:tagliatelle // Cleanuparr speaks camelCase
+type generalConfigJSON struct {
+	DryRun bool `json:"dryRun"`
+}
+
+// GeneralDryRun implements Client: checks if Cleanuparr is in global dry-run mode.
+func (h *HTTP) GeneralDryRun(ctx context.Context, baseURL, apiKey string) (bool, error) {
+	c, err := h.Base(baseURL, apiKey)
+	if err != nil {
+		return false, fmt.Errorf("cleanuparr: client: %w", err)
+	}
+	var out generalConfigJSON
+	if err := c.Get(ctx, "/api/configuration/general", &out); err != nil {
+		return false, fmt.Errorf("cleanuparr general config: %w", err)
+	}
+	return out.DryRun, nil
+}
+
+// ALLOW-LIST: read ONLY id, name, url, enabled. Never read, store, log or return apiKey.
+type arrConfigJSON struct {
+	Instances []struct {
+		ID      string `json:"id"`
+		Name    string `json:"name"`
+		URL     string `json:"url"`
+		Enabled bool   `json:"enabled"`
+	} `json:"instances"`
+}
+
+// ArrInstances implements Client: reads configured instances for an app type (sonarr or radarr).
+func (h *HTTP) ArrInstances(ctx context.Context, baseURL, apiKey string, appType string) ([]ArrInstanceRef, error) {
+	c, err := h.Base(baseURL, apiKey)
+	if err != nil {
+		return nil, fmt.Errorf("cleanuparr: client: %w", err)
+	}
+	var out arrConfigJSON
+	if err := c.Get(ctx, "/api/configuration/"+appType, &out); err != nil {
+		return nil, fmt.Errorf("cleanuparr %s config: %w", appType, err)
+	}
+	refs := make([]ArrInstanceRef, 0, len(out.Instances))
+	for _, inst := range out.Instances {
+		refs = append(refs, ArrInstanceRef{
+			ID:      inst.ID,
+			Name:    inst.Name,
+			URL:     inst.URL,
+			Enabled: inst.Enabled,
+		})
+	}
+	return refs, nil
 }

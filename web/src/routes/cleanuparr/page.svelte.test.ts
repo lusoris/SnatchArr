@@ -31,7 +31,26 @@ const sampleLink = {
 			title: 'Sample Movie 2026',
 			dry_run: false
 		}
-	]
+	],
+	seeker: {
+		state: 'active' as const,
+		reason: 'proactive search active',
+		instances: [
+			{
+				name: 'Sonarr Main',
+				type: 'Sonarr',
+				active: true,
+				matched: true,
+				snatcharr_instance_id: '00000000-0000-0000-0000-000000000001'
+			},
+			{
+				name: 'Radarr 4K',
+				type: 'Radarr',
+				active: false,
+				matched: false
+			}
+		]
+	}
 };
 
 describe('cleanuparr', () => {
@@ -39,7 +58,7 @@ describe('cleanuparr', () => {
 		vi.restoreAllMocks();
 	});
 
-	it('renders heading, link details, status and recent strikes', async () => {
+	it('renders heading, link details, status, recent strikes, and seeker info', async () => {
 		stubGet({ '/cleanuparr': [], '/cleanuparr/status': [sampleLink] });
 		renderWithQuery(CleanuparrPage);
 
@@ -60,6 +79,15 @@ describe('cleanuparr', () => {
 
 		const list = screen.getByRole('list');
 		expect(within(list).getByText(/Stalled · Sample Movie 2026/)).toBeTruthy();
+
+		expect(
+			screen.getByRole('heading', { level: 4, name: m.cleanuparr_seeker_title() })
+		).toBeTruthy();
+		expect(screen.getByText(/proactive search active/)).toBeTruthy();
+		expect(screen.getByText('Sonarr Main')).toBeTruthy();
+		expect(screen.getByText('Radarr 4K')).toBeTruthy();
+		expect(screen.getByText(m.cleanuparr_seeker_matched())).toBeTruthy();
+		expect(screen.getByText(m.cleanuparr_seeker_unmatched())).toBeTruthy();
 	});
 
 	it('announces the problem document when the status query fails', async () => {
