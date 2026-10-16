@@ -1458,6 +1458,9 @@ func assertScheduleRoundTrip(t *testing.T, s oas.Schedule, wantID uuid.UUID) {
 	if !ok || capVal != 15 {
 		t.Fatalf("ListSchedules() CapValue = %v (ok=%v), want 15", capVal, ok)
 	}
+	if s.Active {
+		t.Fatalf("ListSchedules() Active = true, want false (daytime outside 22:00-06:00)")
+	}
 }
 
 func testScheduleCreateCase(t *testing.T, f *integrationFixture, in oas.ScheduleInput, ctx context.Context, wantErr error) {
@@ -1559,6 +1562,115 @@ func testScheduleUpdateDeleteCase(t *testing.T, f *integrationFixture, isDel boo
 	}
 	if err != nil || got.Name != in.Name {
 		t.Fatalf("UpdateSchedule() = %+v, %v; want %s", got, err, in.Name)
+	}
+}
+
+type activeScheduleCase struct {
+	name       string
+	sched      oas.ScheduleInput
+	advanceTo  time.Time
+	wantActive bool
+}
+
+func activeScheduleCases() []activeScheduleCase {
+	return []activeScheduleCase{
+		{
+			name: "positive midnight cross evening active",
+			sched: oas.ScheduleInput{
+				Name: "night-pause", Days: []int{0, 1, 2, 3, 4, 5, 6}, Start: "22:00", End: "06:00",
+				Tz: "UTC", Action: oas.ScheduleInputActionPause, Enabled: true,
+			},
+			advanceTo:  time.Date(2026, 10, 19, 23, 30, 0, 0, time.UTC),
+			wantActive: true,
+		},
+		{
+			name: "positive midnight cross morning active",
+			sched: oas.ScheduleInput{
+				Name: "night-pause", Days: []int{0, 1, 2, 3, 4, 5, 6}, Start: "22:00", End: "06:00",
+				Tz: "UTC", Action: oas.ScheduleInputActionPause, Enabled: true,
+			},
+			advanceTo:  time.Date(2026, 10, 20, 2, 0, 0, 0, time.UTC),
+			wantActive: true,
+		},
+		{
+			name: "boundary start time inclusive active",
+			sched: oas.ScheduleInput{
+				Name: "night-pause", Days: []int{0, 1, 2, 3, 4, 5, 6}, Start: "22:00", End: "06:00",
+				Tz: "UTC", Action: oas.ScheduleInputActionPause, Enabled: true,
+			},
+			advanceTo:  time.Date(2026, 10, 19, 22, 0, 0, 0, time.UTC),
+			wantActive: true,
+		},
+		{
+			name: "boundary end time exclusive inactive",
+			sched: oas.ScheduleInput{
+				Name: "night-pause", Days: []int{0, 1, 2, 3, 4, 5, 6}, Start: "22:00", End: "06:00",
+				Tz: "UTC", Action: oas.ScheduleInputActionPause, Enabled: true,
+			},
+			advanceTo:  time.Date(2026, 10, 20, 6, 0, 0, 0, time.UTC),
+			wantActive: false,
+		},
+		{
+			name: "negative daytime inactive",
+			sched: oas.ScheduleInput{
+				Name: "night-pause", Days: []int{0, 1, 2, 3, 4, 5, 6}, Start: "22:00", End: "06:00",
+				Tz: "UTC", Action: oas.ScheduleInputActionPause, Enabled: true,
+			},
+			advanceTo:  time.Date(2026, 10, 19, 14, 0, 0, 0, time.UTC),
+			wantActive: false,
+		},
+		{
+			name: "negative disabled schedule inactive",
+			sched: oas.ScheduleInput{
+				Name: "night-pause", Days: []int{0, 1, 2, 3, 4, 5, 6}, Start: "22:00", End: "06:00",
+				Tz: "UTC", Action: oas.ScheduleInputActionPause, Enabled: false,
+			},
+			advanceTo:  time.Date(2026, 10, 19, 23, 30, 0, 0, time.UTC),
+			wantActive: false,
+		},
+		{
+			name: "negative unselected day inactive",
+			sched: oas.ScheduleInput{
+				Name: "weekday-pause", Days: []int{1, 2, 3, 4, 5}, Start: "09:00", End: "17:00",
+				Tz: "UTC", Action: oas.ScheduleInputActionPause, Enabled: true,
+			},
+			advanceTo:  time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC),
+			wantActive: false,
+		},
+	}
+}
+
+func runActiveScheduleCase(t *testing.T, tc activeScheduleCase) {
+	t.Helper()
+	f := newIntegrationFixture(t)
+	ctx := withUser(t.Context(), f.admin)
+	if diff := tc.advanceTo.Sub(f.clk.Now()); diff > 0 {
+		f.clk.Advance(diff)
+	}
+	created, err := f.h.CreateSchedule(ctx, &tc.sched)
+	if err != nil {
+		t.Fatalf("CreateSchedule() err = %v", err)
+	}
+	if created.Active != tc.wantActive {
+		t.Errorf("CreateSchedule().Active = %v, want %v", created.Active, tc.wantActive)
+	}
+	list, err := f.h.ListSchedules(ctx)
+	if err != nil {
+		t.Fatalf("ListSchedules() err = %v", err)
+	}
+	if len(list) != 1 || list[0].Active != tc.wantActive {
+		t.Errorf("ListSchedules()[0].Active = %v, want %v", list[0].Active, tc.wantActive)
+	}
+}
+
+func TestScheduleActiveState(t *testing.T) {
+	t.Parallel()
+	cases := activeScheduleCases()
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			runActiveScheduleCase(t, tc)
+		})
 	}
 }
 

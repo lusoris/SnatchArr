@@ -5,15 +5,26 @@ SPDX-License-Identifier: EUPL-1.2
 <script lang="ts">
 	import { createSentioQuery } from '@sveltesentio/query';
 	import { api } from '#lib/api/client.js';
+	import type { components } from '#lib/api/schema.js';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
+	import ScheduleForm from '#lib/components/ScheduleForm.svelte';
+	import ScheduleTable from '#lib/components/ScheduleTable.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { keys } from '#lib/query.js';
+
+	type Schedule = components['schemas']['Schedule'];
 
 	const schedules = createSentioQuery({
 		queryKey: keys.schedules,
 		queryFn: async () => (await api.GET('/schedules')).data ?? []
 	});
-	const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+	const instances = createSentioQuery({
+		queryKey: keys.instances,
+		queryFn: async () => (await api.GET('/instances')).data ?? []
+	});
+
+	let editingSchedule = $state<Schedule | null>(null);
 </script>
 
 <h1 class="mb-4 text-2xl font-semibold">{m.schedules_title()}</h1>
@@ -22,32 +33,23 @@ SPDX-License-Identifier: EUPL-1.2
 	<p aria-live="polite">{m.loading()}</p>
 {:else if schedules.isError}
 	<ProblemNote error={schedules.error} />
-{:else if (schedules.data ?? []).length === 0}
-	<p class="card">{m.schedules_empty()}</p>
 {:else}
-	<table class="table">
-		<caption class="sr-only">{m.schedules_title()}</caption>
-		<thead>
-			<tr>
-				<th scope="col">{m.schedule_name()}</th>
-				<th scope="col">{m.schedule_days()}</th>
-				<th scope="col">{m.schedule_window()}</th>
-				<th scope="col">{m.schedule_action()}</th>
-			</tr>
-		</thead>
-		<tbody>
-			{#each schedules.data ?? [] as s (s.id)}
-				<tr>
-					<td>{s.name}</td>
-					<td>{s.days.map((d) => dayNames[d] ?? d).join(', ')}</td>
-					<td>{s.start}–{s.end} {s.tz}</td>
-					<td
-						>{s.action === 'pause'
-							? m.schedule_pause()
-							: `${m.schedule_cap_override()} ${s.cap_value ?? ''}`}</td
-					>
-				</tr>
-			{/each}
-		</tbody>
-	</table>
+	{#if (schedules.data ?? []).length === 0}
+		<p class="card mb-6">{m.schedules_empty()}</p>
+	{:else}
+		<div class="mb-6">
+			<ScheduleTable
+				schedules={schedules.data ?? []}
+				instances={instances.data ?? []}
+				onedit={(s) => (editingSchedule = s)}
+			/>
+		</div>
+	{/if}
+
+	<ScheduleForm
+		instances={instances.data ?? []}
+		editing={editingSchedule}
+		oncancel={() => (editingSchedule = null)}
+		onsuccess={() => (editingSchedule = null)}
+	/>
 {/if}

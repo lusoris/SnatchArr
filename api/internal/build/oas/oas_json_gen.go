@@ -7522,9 +7522,13 @@ func (s *Schedule) encodeFields(e *jx.Encoder) {
 		e.FieldStart("updated_at")
 		json.EncodeDateTime(e, s.UpdatedAt)
 	}
+	{
+		e.FieldStart("active")
+		e.Bool(s.Active)
+	}
 }
 
-var jsonFieldsNameOfSchedule = [12]string{
+var jsonFieldsNameOfSchedule = [13]string{
 	0:  "instance_id",
 	1:  "name",
 	2:  "days",
@@ -7537,6 +7541,7 @@ var jsonFieldsNameOfSchedule = [12]string{
 	9:  "id",
 	10: "created_at",
 	11: "updated_at",
+	12: "active",
 }
 
 // Decode decodes Schedule from json.
@@ -7694,6 +7699,18 @@ func (s *Schedule) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"updated_at\"")
 			}
+		case "active":
+			requiredBitSet[1] |= 1 << 4
+			if err := func() error {
+				v, err := d.Bool()
+				s.Active = bool(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"active\"")
+			}
 		default:
 			return d.Skip()
 		}
@@ -7705,7 +7722,7 @@ func (s *Schedule) Decode(d *jx.Decoder) error {
 	var failures []validate.FieldError
 	for i, mask := range [2]uint8{
 		0b01111110,
-		0b00001111,
+		0b00011111,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.

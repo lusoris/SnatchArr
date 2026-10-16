@@ -5,7 +5,10 @@
 package snatch
 
 import (
+	"fmt"
 	"time"
+
+	"github.com/lusoris/SnatchArr/api/internal/domain"
 )
 
 // ScheduleAction is what a matching schedule window does.
@@ -38,7 +41,7 @@ type Decision struct {
 func Evaluate(windows []ScheduleWindow, now time.Time) Decision {
 	var d Decision
 	for _, w := range windows {
-		if !w.matches(now) {
+		if !w.Matches(now) {
 			continue
 		}
 		switch w.Action {
@@ -53,9 +56,9 @@ func Evaluate(windows []ScheduleWindow, now time.Time) Decision {
 	return d
 }
 
-// matches reports whether now falls inside the window, handling ranges that cross
+// Matches reports whether now falls inside the window, handling ranges that cross
 // midnight (e.g. 22:00–06:00 matches 23:30 on an enabled day and 02:00 on the next day).
-func (w ScheduleWindow) matches(now time.Time) bool {
+func (w ScheduleWindow) Matches(now time.Time) bool {
 	loc := w.Location
 	if loc == nil {
 		loc = time.UTC
@@ -74,6 +77,42 @@ func (w ScheduleWindow) matches(now time.Time) bool {
 		return w.dayEnabled((local.Weekday() + 6) % 7)
 	}
 	return false
+}
+
+// WindowFromSchedule converts a domain.Schedule into a ScheduleWindow for evaluation.
+func WindowFromSchedule(s domain.Schedule) (ScheduleWindow, error) {
+	loc, err := time.LoadLocation(s.TZ)
+	if err != nil {
+		return ScheduleWindow{}, fmt.Errorf("timezone %q: %w", s.TZ, err)
+	}
+	startMin, err := domain.ParseClock(s.Start)
+	if err != nil {
+		return ScheduleWindow{}, fmt.Errorf("start clock: %w", err)
+	}
+	endMin, err := domain.ParseClock(s.End)
+	if err != nil {
+		return ScheduleWindow{}, fmt.Errorf("end clock: %w", err)
+	}
+	return ScheduleWindow{
+		DaysMask: s.DaysMask(),
+		StartMin: startMin,
+		EndMin:   endMin,
+		Location: loc,
+		Action:   ScheduleAction(s.Action),
+		CapValue: s.CapValue,
+	}, nil
+}
+
+// IsScheduleActive reports whether the given schedule is enabled and matches now.
+func IsScheduleActive(s domain.Schedule, now time.Time) bool {
+	if !s.Enabled {
+		return false
+	}
+	w, err := WindowFromSchedule(s)
+	if err != nil {
+		return false
+	}
+	return w.Matches(now)
 }
 
 func (w ScheduleWindow) dayEnabled(day time.Weekday) bool {

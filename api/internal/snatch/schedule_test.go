@@ -7,6 +7,8 @@ package snatch
 import (
 	"testing"
 	"time"
+
+	"github.com/lusoris/SnatchArr/api/internal/domain"
 )
 
 func at(t *testing.T, s string, loc *time.Location) time.Time {
@@ -69,5 +71,51 @@ func TestMatchesRespectsLocation(t *testing.T) {
 	}
 	if Evaluate([]ScheduleWindow{w}, utc.Add(2*time.Hour)).Paused {
 		t.Fatal("11:30 Tokyo is outside the window")
+	}
+}
+
+func TestIsScheduleActive(t *testing.T) {
+	t.Parallel()
+	berlin, err := time.LoadLocation("Europe/Berlin")
+	if err != nil {
+		t.Fatalf("load location: %v", err)
+	}
+	midnightCross := domain.Schedule{
+		Name: "night", Days: []int{0, 1, 2, 3, 4, 5, 6}, Start: "22:00", End: "06:00",
+		TZ: "Europe/Berlin", Action: domain.SchedulePause, Enabled: true,
+	}
+	disabled := midnightCross
+	disabled.Enabled = false
+
+	weekdayOnly := domain.Schedule{
+		Name: "weekday", Days: []int{1, 2, 3, 4, 5}, Start: "09:00", End: "17:00",
+		TZ: "Europe/Berlin", Action: domain.SchedulePause, Enabled: true,
+	}
+
+	tests := []struct {
+		name string
+		s    domain.Schedule
+		now  string
+		want bool
+	}{
+		{"positive evening in midnight cross", midnightCross, "2026-09-21 23:30", true},
+		{"positive morning in midnight cross", midnightCross, "2026-09-22 02:00", true},
+		{"boundary start minute inclusive", midnightCross, "2026-09-21 22:00", true},
+		{"boundary end minute exclusive", midnightCross, "2026-09-22 06:00", false},
+		{"negative daytime outside midnight cross", midnightCross, "2026-09-21 12:00", false},
+		{"negative disabled schedule", disabled, "2026-09-21 23:30", false},
+		{"positive weekday active", weekdayOnly, "2026-09-21 10:00", true},
+		{"negative weekend inactive", weekdayOnly, "2026-09-20 10:00", false},
+		{"negative invalid timezone", domain.Schedule{Name: "bad", Days: []int{1}, Start: "09:00", End: "17:00", TZ: "Mars/Invalid", Enabled: true}, "2026-09-21 10:00", false},
+		{"negative invalid start clock", domain.Schedule{Name: "bad", Days: []int{1}, Start: "25:00", End: "17:00", TZ: "Europe/Berlin", Enabled: true}, "2026-09-21 10:00", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := IsScheduleActive(tc.s, at(t, tc.now, berlin))
+			if got != tc.want {
+				t.Fatalf("IsScheduleActive = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }

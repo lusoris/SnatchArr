@@ -4,7 +4,10 @@
 
 import http from 'node:http';
 import type net from 'node:net';
+import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
+
+const WCAG_22_AA = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 
 test('C9-04: create instance through UI, read back from API, logout and login', async ({
 	page
@@ -116,4 +119,67 @@ test('notifications: create channel, test delivery, create rule, read back from 
 	} finally {
 		await new Promise<void>((resolve) => server.close(() => resolve()));
 	}
+});
+
+test('schedules: create, edit, delete through UI and verify axe clean', async ({ page }) => {
+	await page.context().clearCookies();
+	const login = await page.request.post('/api/v1/auth/login', {
+		data: { username: 'admin', password: 'smoke-password-1234' }
+	});
+	expect(login.ok()).toBeTruthy();
+
+	await page.goto('/schedules');
+	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+
+	const axe = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
+	expect(axe.violations).toEqual([]);
+
+	// 1. Create schedule
+	const scheduleName = 'e2e-quiet-hours';
+	await page.locator('#schedule-name').fill(scheduleName);
+	await page.locator('#schedule-start').fill('23:00');
+	await page.locator('#schedule-end').fill('07:00');
+	await page.locator('#schedule-tz').fill('UTC');
+	await page.getByRole('button', { name: /add schedule|zeitplan hinzufügen/i }).click();
+
+	await expect(page.getByRole('table')).toContainText(scheduleName);
+
+	const getRes = await page.request.get('/api/v1/schedules');
+	expect(getRes.ok()).toBeTruthy();
+	const schedules = (await getRes.json()) as Array<{ id: string; name: string }>;
+	const created = schedules.find((s) => s.name === scheduleName);
+	expect(created).toBeDefined();
+
+	// 2. Edit schedule
+	const updatedName = 'e2e-quiet-hours-updated';
+	await page
+		.getByRole('button', { name: /^(edit|bearbeiten)$/i })
+		.first()
+		.click();
+	await page.locator('#schedule-name').fill(updatedName);
+	await page.getByRole('button', { name: /save schedule|zeitplan speichern/i }).click();
+
+	await expect(page.getByRole('table')).toContainText(updatedName);
+
+	const getRes2 = await page.request.get('/api/v1/schedules');
+	expect(getRes2.ok()).toBeTruthy();
+	const schedules2 = (await getRes2.json()) as Array<{ id: string; name: string }>;
+	expect(schedules2.some((s) => s.name === updatedName)).toBeTruthy();
+
+	// 3. Delete schedule with explicit in-page confirmation
+	await page
+		.getByRole('button', { name: /^(delete|löschen)$/i })
+		.first()
+		.click();
+	await expect(
+		page.getByRole('button', { name: /confirm delete|löschen bestätigen/i })
+	).toBeVisible();
+	await page.getByRole('button', { name: /confirm delete|löschen bestätigen/i }).click();
+
+	await expect(page.locator('main')).not.toContainText(updatedName);
+
+	const getRes3 = await page.request.get('/api/v1/schedules');
+	expect(getRes3.ok()).toBeTruthy();
+	const schedules3 = (await getRes3.json()) as Array<{ id: string; name: string }>;
+	expect(schedules3.some((s) => s.name === updatedName)).toBeFalsy();
 });

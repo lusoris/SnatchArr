@@ -3994,6 +3994,8 @@ type Schedule struct {
 	ID        uuid.UUID      `json:"id"`
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
+	// Whether this schedule window matches the current evaluation time.
+	Active bool `json:"active"`
 }
 
 // GetInstanceID returns the value of InstanceID.
@@ -4056,6 +4058,11 @@ func (s *Schedule) GetUpdatedAt() time.Time {
 	return s.UpdatedAt
 }
 
+// GetActive returns the value of Active.
+func (s *Schedule) GetActive() bool {
+	return s.Active
+}
+
 // SetInstanceID sets the value of InstanceID.
 func (s *Schedule) SetInstanceID(val OptUUID) {
 	s.InstanceID = val
@@ -4114,6 +4121,11 @@ func (s *Schedule) SetCreatedAt(val time.Time) {
 // SetUpdatedAt sets the value of UpdatedAt.
 func (s *Schedule) SetUpdatedAt(val time.Time) {
 	s.UpdatedAt = val
+}
+
+// SetActive sets the value of Active.
+func (s *Schedule) SetActive(val bool) {
+	s.Active = val
 }
 
 type ScheduleAction string

@@ -2,12 +2,13 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-import { screen, within } from '@testing-library/svelte';
+import { fireEvent, screen, within } from '@testing-library/svelte';
 import { ProblemError } from '@sveltesentio/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { api } from '#lib/api/client.js';
 import type { components } from '#lib/api/schema.js';
 import { m } from '#lib/paraglide/messages.js';
-import { renderWithQuery, stubGet } from '#lib/testing/harness.js';
+import { forkInstance, renderWithQuery, stubGet } from '#lib/testing/harness.js';
 import SchedulesPage from './+page.svelte';
 
 type Schedule = components['schemas']['Schedule'];
@@ -21,6 +22,7 @@ const sampleSchedule: Schedule = {
 	tz: 'UTC',
 	action: 'pause',
 	enabled: true,
+	active: false,
 	created_at: '2026-01-01T00:00:00Z',
 	updated_at: '2026-01-01T00:00:00Z'
 };
@@ -35,8 +37,14 @@ const capSchedule: Schedule = {
 	action: 'cap_override',
 	cap_value: 50,
 	enabled: true,
+	active: false,
 	created_at: '2026-01-01T00:00:00Z',
 	updated_at: '2026-01-01T00:00:00Z'
+};
+
+const baseStubs = {
+	'/schedules': [sampleSchedule, capSchedule],
+	'/instances': []
 };
 
 describe('schedules', () => {
@@ -45,7 +53,7 @@ describe('schedules', () => {
 	});
 
 	it('renders heading, table headers and schedule rows', async () => {
-		stubGet({ '/schedules': [sampleSchedule, capSchedule] });
+		stubGet(baseStubs);
 		renderWithQuery(SchedulesPage);
 
 		expect(
@@ -68,13 +76,40 @@ describe('schedules', () => {
 		expect(capCell.textContent).toBe(`${m.schedule_cap_override()} 50`);
 	});
 
+	it('shows active pause indicator with target name or all instances', async () => {
+		const activeGlobal: Schedule = {
+			...sampleSchedule,
+			id: '00000000-0000-0000-0000-000000000022',
+			name: 'Global Pause Active',
+			active: true,
+			action: 'pause'
+		};
+		const activeInstance: Schedule = {
+			...sampleSchedule,
+			id: '00000000-0000-0000-0000-000000000023',
+			name: 'Readarr Pause Active',
+			instance_id: forkInstance.id,
+			active: true,
+			action: 'pause'
+		};
+		stubGet({
+			'/schedules': [activeGlobal, activeInstance],
+			'/instances': [forkInstance]
+		});
+		renderWithQuery(SchedulesPage);
+
+		expect(await screen.findByText('Pausing: all instances')).toBeTruthy();
+		expect(screen.getByText('Pausing: Library Readarr')).toBeTruthy();
+	});
+
 	it('announces the problem document when the schedules query fails', async () => {
 		stubGet({
 			'/schedules': new ProblemError({
 				type: 'about:blank',
 				status: 500,
 				detail: 'schedules query failed'
-			})
+			}),
+			'/instances': []
 		});
 		renderWithQuery(SchedulesPage);
 
@@ -83,10 +118,187 @@ describe('schedules', () => {
 	});
 
 	it('renders the empty state card when there are no schedules', async () => {
-		stubGet({ '/schedules': [] });
+		stubGet({ '/schedules': [], '/instances': [] });
 		renderWithQuery(SchedulesPage);
 
 		expect(await screen.findByText(m.schedules_empty())).toBeTruthy();
 		expect(screen.queryByRole('table')).toBeNull();
+	});
+
+	it('creates a new schedule on form submit', async () => {
+		stubGet({ '/schedules': [], '/instances': [] });
+		const postSpy = vi.spyOn(api, 'POST').mockResolvedValue({
+			data: { ...sampleSchedule, id: '00000000-0000-0000-0000-000000000024' }
+		} as never);
+		renderWithQuery(SchedulesPage);
+
+		const nameInput = await screen.findByLabelText(m.schedule_name());
+		const startInput = screen.getByLabelText(m.schedule_start());
+		const endInput = screen.getByLabelText(m.schedule_end());
+		const tzInput = screen.getByLabelText(m.schedule_tz());
+		const submitBtn = screen.getByRole('button', { name: m.schedule_add() });
+
+		await fireEvent.input(nameInput, { target: { value: 'New Test Schedule' } });
+		await fireEvent.input(startInput, { target: { value: '01:00' } });
+		await fireEvent.input(endInput, { target: { value: '05:00' } });
+		await fireEvent.input(tzInput, { target: { value: 'UTC' } });
+		await fireEvent.click(submitBtn);
+
+		expect(postSpy).toHaveBeenCalledWith('/schedules', {
+			body: {
+				name: 'New Test Schedule',
+				days: [0, 1, 2, 3, 4, 5, 6],
+				start: '01:00',
+				end: '05:00',
+				tz: 'UTC',
+				action: 'pause',
+				enabled: true
+			}
+		});
+	});
+
+	it('edits an existing schedule and submits updates', async () => {
+		stubGet(baseStubs);
+		const putSpy = vi.spyOn(api, 'PUT').mockResolvedValue({
+			data: { ...sampleSchedule, name: 'Renamed Night Hours' }
+		} as never);
+		renderWithQuery(SchedulesPage);
+
+		const editButtons = await screen.findAllByRole('button', { name: m.schedule_edit() });
+		const firstEdit = editButtons[0];
+		if (!firstEdit) throw new Error('missing edit button');
+		await fireEvent.click(firstEdit);
+
+		expect(
+			await screen.findByRole('heading', { level: 2, name: m.schedule_edit_title() })
+		).toBeTruthy();
+
+		const nameInput = screen.getByLabelText(m.schedule_name());
+		expect((nameInput as HTMLInputElement).value).toBe('Night Quiet Hours');
+		await fireEvent.input(nameInput, { target: { value: 'Renamed Night Hours' } });
+
+		const saveBtn = screen.getByRole('button', { name: m.schedule_save() });
+		await fireEvent.click(saveBtn);
+
+		expect(putSpy).toHaveBeenCalledWith('/schedules/{scheduleId}', {
+			params: { path: { scheduleId: sampleSchedule.id } },
+			body: {
+				name: 'Renamed Night Hours',
+				days: [1, 2, 3, 4, 5],
+				start: '23:00',
+				end: '07:00',
+				tz: 'UTC',
+				action: 'pause',
+				enabled: true
+			}
+		});
+	});
+
+	it('cancels editing and resets form to add mode', async () => {
+		stubGet(baseStubs);
+		renderWithQuery(SchedulesPage);
+
+		const editButtons = await screen.findAllByRole('button', { name: m.schedule_edit() });
+		const firstEdit = editButtons[0];
+		if (!firstEdit) throw new Error('missing edit button');
+		await fireEvent.click(firstEdit);
+
+		expect(
+			await screen.findByRole('heading', { level: 2, name: m.schedule_edit_title() })
+		).toBeTruthy();
+
+		const cancelBtn = screen.getByRole('button', { name: m.schedule_cancel() });
+		await fireEvent.click(cancelBtn);
+
+		expect(await screen.findByRole('heading', { level: 2, name: m.schedule_add() })).toBeTruthy();
+	});
+
+	it('deletes a schedule with explicit in-page confirmation', async () => {
+		stubGet(baseStubs);
+		const deleteSpy = vi.spyOn(api, 'DELETE').mockResolvedValue({ data: undefined } as never);
+		renderWithQuery(SchedulesPage);
+
+		const deleteButtons = await screen.findAllByRole('button', { name: m.schedule_delete() });
+		const firstDelete = deleteButtons[0];
+		if (!firstDelete) throw new Error('missing delete button');
+		await fireEvent.click(firstDelete);
+
+		expect(screen.getByText(m.schedule_delete_confirm({ name: sampleSchedule.name }))).toBeTruthy();
+
+		const confirmBtn = screen.getByRole('button', { name: m.schedule_confirm_delete() });
+		await fireEvent.click(confirmBtn);
+
+		expect(deleteSpy).toHaveBeenCalledWith('/schedules/{scheduleId}', {
+			params: { path: { scheduleId: sampleSchedule.id } }
+		});
+	});
+
+	it('cancels delete confirmation without dispatching DELETE', async () => {
+		stubGet(baseStubs);
+		const deleteSpy = vi.spyOn(api, 'DELETE');
+		renderWithQuery(SchedulesPage);
+
+		const deleteButtons = await screen.findAllByRole('button', { name: m.schedule_delete() });
+		const firstDelete = deleteButtons[0];
+		if (!firstDelete) throw new Error('missing delete button');
+		await fireEvent.click(firstDelete);
+
+		expect(screen.getByText(m.schedule_delete_confirm({ name: sampleSchedule.name }))).toBeTruthy();
+
+		const cancelBtn = screen.getByRole('button', { name: m.schedule_cancel() });
+		await fireEvent.click(cancelBtn);
+
+		expect(screen.queryByText(m.schedule_delete_confirm({ name: sampleSchedule.name }))).toBeNull();
+		expect(deleteSpy).not.toHaveBeenCalled();
+	});
+
+	it('shows cap_value input only when action is cap_override', async () => {
+		stubGet({ '/schedules': [], '/instances': [] });
+		renderWithQuery(SchedulesPage);
+
+		expect(screen.queryByLabelText(m.schedule_cap_value())).toBeNull();
+
+		const actionSelect = await screen.findByLabelText(m.schedule_action());
+		await fireEvent.change(actionSelect, { target: { value: 'cap_override' } });
+
+		expect(screen.getByLabelText(m.schedule_cap_value())).toBeTruthy();
+
+		await fireEvent.change(actionSelect, { target: { value: 'pause' } });
+		expect(screen.queryByLabelText(m.schedule_cap_value())).toBeNull();
+	});
+
+	it('enforces validation boundaries for start/end pattern and cap_value', async () => {
+		stubGet({ '/schedules': [], '/instances': [] });
+		renderWithQuery(SchedulesPage);
+
+		const startInput = (await screen.findByLabelText(m.schedule_start())) as HTMLInputElement;
+		await fireEvent.input(startInput, { target: { value: '25:00' } });
+		expect(startInput.checkValidity()).toBe(false);
+		expect(startInput.validity.patternMismatch).toBe(true);
+
+		await fireEvent.input(startInput, { target: { value: '08:30' } });
+		expect(startInput.checkValidity()).toBe(true);
+
+		const endInput = screen.getByLabelText(m.schedule_end()) as HTMLInputElement;
+		await fireEvent.input(endInput, { target: { value: 'invalid' } });
+		expect(endInput.checkValidity()).toBe(false);
+
+		const actionSelect = screen.getByLabelText(m.schedule_action());
+		await fireEvent.change(actionSelect, { target: { value: 'cap_override' } });
+
+		const capInput = screen.getByLabelText(m.schedule_cap_value()) as HTMLInputElement;
+		await fireEvent.input(capInput, { target: { value: '1' } });
+		expect(capInput.checkValidity()).toBe(true);
+
+		await fireEvent.input(capInput, { target: { value: '500' } });
+		expect(capInput.checkValidity()).toBe(true);
+
+		await fireEvent.input(capInput, { target: { value: '0' } });
+		expect(capInput.checkValidity()).toBe(false);
+		expect(capInput.validity.rangeUnderflow).toBe(true);
+
+		await fireEvent.input(capInput, { target: { value: '501' } });
+		expect(capInput.checkValidity()).toBe(false);
+		expect(capInput.validity.rangeOverflow).toBe(true);
 	});
 });
