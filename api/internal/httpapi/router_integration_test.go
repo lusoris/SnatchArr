@@ -173,20 +173,21 @@ func specOperations(t *testing.T) []specOp {
 }
 
 type idsState struct {
-	csrfToken     string
-	apiKeyID      string
-	instanceID    string
-	runID         string
-	scheduleID    string
-	clientID      string
-	seerrLinkID   string
-	seerrReqID    int
-	cleanupLinkID string
-	configarrPath string
-	policy        map[string]any
-	settings      map[string]any
-	channelID     string
-	ruleID        string
+	csrfToken      string
+	apiKeyID       string
+	instanceID     string
+	runID          string
+	scheduleID     string
+	clientID       string
+	seerrLinkID    string
+	seerrReqID     int
+	cleanupLinkID  string
+	prowlarrLinkID string
+	configarrPath  string
+	policy         map[string]any
+	settings       map[string]any
+	channelID      string
+	ruleID         string
 }
 
 func newIDsState(t *testing.T) *idsState {
@@ -1179,6 +1180,118 @@ func stepsCleanuparrAndConfigarr(f *routerFixture) []routerStep {
 	}
 }
 
+func stepsProwlarr(f *routerFixture) []routerStep {
+	return []routerStep{
+		{
+			op:     "createProwlarrLink",
+			method: http.MethodPost,
+			path:   func(_ *idsState) string { return "/prowlarr" },
+			body: func(_ *idsState) any {
+				return map[string]any{
+					"name":     "prowlarr-test",
+					"base_url": f.prowlarrServer.URL,
+					"api_key":  "secret-prowlarr-key",
+					"enabled":  true,
+				}
+			},
+			want: http.StatusCreated,
+			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
+				t.Helper()
+				id, ok := decoded["id"].(string)
+				if !ok || id == "" {
+					t.Fatalf("createProwlarrLink id = %v, want valid uuid", decoded["id"])
+				}
+				ids.prowlarrLinkID = id
+				if decoded["name"] != "prowlarr-test" {
+					t.Fatalf("createProwlarrLink name = %v, want prowlarr-test", decoded["name"])
+				}
+			},
+		},
+		{
+			op:     "listProwlarrLinks",
+			method: http.MethodGet,
+			path:   func(_ *idsState) string { return "/prowlarr" },
+			want:   http.StatusOK,
+			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
+				t.Helper()
+				if !containsID(decoded["items"], ids.prowlarrLinkID) {
+					t.Fatalf("listProwlarrLinks missing link %s", ids.prowlarrLinkID)
+				}
+			},
+		},
+		{
+			op:     "getProwlarrLink",
+			method: http.MethodGet,
+			path:   func(ids *idsState) string { return "/prowlarr/" + ids.prowlarrLinkID },
+			want:   http.StatusOK,
+			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
+				t.Helper()
+				if decoded["id"] != ids.prowlarrLinkID {
+					t.Fatalf("getProwlarrLink id = %v, want %s", decoded["id"], ids.prowlarrLinkID)
+				}
+			},
+		},
+		{
+			op:     "updateProwlarrLink",
+			method: http.MethodPut,
+			path:   func(ids *idsState) string { return "/prowlarr/" + ids.prowlarrLinkID },
+			body: func(_ *idsState) any {
+				return map[string]any{
+					"name":     "prowlarr-updated",
+					"base_url": f.prowlarrServer.URL,
+					"api_key":  "secret-prowlarr-key",
+					"enabled":  true,
+				}
+			},
+			want: http.StatusOK,
+			capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
+				t.Helper()
+				if decoded["name"] != "prowlarr-updated" {
+					t.Fatalf("updateProwlarrLink name = %v, want prowlarr-updated", decoded["name"])
+				}
+			},
+		},
+		{
+			op:     "testProwlarrLinkInput",
+			method: http.MethodPost,
+			path:   func(_ *idsState) string { return "/prowlarr/test" },
+			body: func(_ *idsState) any {
+				return map[string]any{
+					"name":     "prowlarr-test",
+					"base_url": f.prowlarrServer.URL,
+					"api_key":  "secret-prowlarr-key",
+					"enabled":  true,
+				}
+			},
+			want: http.StatusOK,
+			capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
+				t.Helper()
+				if decoded["version"] != "1.15.0" {
+					t.Fatalf("testProwlarrLinkInput version = %v, want 1.15.0", decoded["version"])
+				}
+			},
+		},
+		{
+			op:     "testProwlarrLink",
+			method: http.MethodPost,
+			path:   func(ids *idsState) string { return "/prowlarr/" + ids.prowlarrLinkID + "/test" },
+			want:   http.StatusOK,
+			capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
+				t.Helper()
+				if decoded["version"] != "1.15.0" {
+					t.Fatalf("testProwlarrLink version = %v, want 1.15.0", decoded["version"])
+				}
+			},
+		},
+		{
+			op:     "getProwlarrStatus",
+			method: http.MethodGet,
+			path:   func(_ *idsState) string { return "/prowlarr/status" },
+			want:   http.StatusOK,
+		},
+	}
+}
+
 func stepsDeletesAndAuth() []routerStep {
 	return []routerStep{
 		{
@@ -1203,6 +1316,12 @@ func stepsDeletesAndAuth() []routerStep {
 			op:     "deleteCleanuparrLink",
 			method: http.MethodDelete,
 			path:   func(ids *idsState) string { return "/cleanuparr/" + ids.cleanupLinkID },
+			want:   http.StatusNoContent,
+		},
+		{
+			op:     "deleteProwlarrLink",
+			method: http.MethodDelete,
+			path:   func(ids *idsState) string { return "/prowlarr/" + ids.prowlarrLinkID },
 			want:   http.StatusNoContent,
 		},
 		{
@@ -1429,6 +1548,7 @@ func buildRouterSteps(f *routerFixture) []routerStep {
 	steps = append(steps, stepsDownloadClients()...)
 	steps = append(steps, stepsSeerr(f)...)
 	steps = append(steps, stepsCleanuparrAndConfigarr(f)...)
+	steps = append(steps, stepsProwlarr(f)...)
 	steps = append(steps, stepsNotificationChannels(f)...)
 	steps = append(steps, stepsNotificationRules()...)
 	steps = append(steps, stepsDeletesAndAuth()...)

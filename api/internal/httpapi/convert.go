@@ -30,6 +30,13 @@ func optTime(t *time.Time) oas.OptDateTime {
 	return oas.NewOptDateTime(*t)
 }
 
+func optInt(p *int) oas.OptInt {
+	if p == nil {
+		return oas.OptInt{}
+	}
+	return oas.NewOptInt(*p)
+}
+
 func userToOAS(u domain.User) oas.User {
 	return oas.User{ID: u.ID, Username: u.Username, Role: oas.UserRole(u.Role)}
 }

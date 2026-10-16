@@ -44,6 +44,8 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/metrics/metricstest"
 	"github.com/lusoris/SnatchArr/api/internal/notify"
 	"github.com/lusoris/SnatchArr/api/internal/policies"
+	"github.com/lusoris/SnatchArr/api/internal/prowlarr"
+	"github.com/lusoris/SnatchArr/api/internal/prowlarrclient"
 	"github.com/lusoris/SnatchArr/api/internal/seerr"
 	"github.com/lusoris/SnatchArr/api/internal/seerrclient"
 	"github.com/lusoris/SnatchArr/api/internal/settings"
@@ -81,6 +83,10 @@ type stubDiscoverer struct {
 }
 
 func (d *stubDiscoverer) DownloadClients(context.Context, domain.AppKind, string, string) ([]arr.ProviderResource, error) {
+	return d.res, d.err
+}
+
+func (d *stubDiscoverer) Indexers(context.Context, domain.AppKind, string, string) ([]arr.ProviderResource, error) {
 	return d.res, d.err
 }
 
@@ -300,29 +306,112 @@ func writeCleanupJSON(t *testing.T, w http.ResponseWriter, v any) {
 	}
 }
 
-type integrationFixture struct {
-	h             *Handlers
-	st            *store.Store
-	clk           *clockwork.FakeClock
-	probe         *stubProber
-	sessMgr       *session.Manager
-	keys          *apikey.Service
-	apiKeys       *auth.APIKeys
-	admin         domain.User
-	viewer        domain.User
-	dlSnap        *stubSnapshotter
-	dlDisc        *stubDiscoverer
-	seerrClient   *stubSeerrClient
-	cleanupServer *fakeCleanuparrServer
-	seerrResolver *stubResolver
-	notifySvc     *notify.Service
-	webhookStore  *notify.WebhookStore
-	notifyEngine  *notify.Engine
-	rec           *snatch.Recorder
-	enc           *crypto.Encryptor
+type fakeProwlarrServer struct {
+	srv    *httptest.Server
+	URL    string
+	writes atomic.Int64
+	fail   atomic.Bool
 }
 
-func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Generator, authSvc *auth.Service, apiKeys *auth.APIKeys, sessMgr *session.Manager, probe *stubProber, dlSnap dlclients.Snapshotter, dlDisc arrclient.Discoverer, m *metrics.Metrics, logger *slog.Logger, seerrClient *stubSeerrClient, cleanupClient cleanuparrclient.Client, res *stubResolver) (*Handlers, *notify.Service, *notify.WebhookStore, *notify.Engine, *snatch.Recorder, *crypto.Encryptor) {
+func (s *fakeProwlarrServer) setFail(fail bool) {
+	s.fail.Store(fail)
+}
+
+func (s *fakeProwlarrServer) setUnreachable() {
+	s.fail.Store(true)
+	s.srv.Close()
+}
+
+func (s *fakeProwlarrServer) assertNoWrites(t *testing.T) {
+	t.Helper()
+	if n := s.writes.Load(); n > 0 {
+		t.Fatalf("expected 0 writes to prowlarr, got %d", n)
+	}
+}
+
+func newFakeProwlarrServer(t *testing.T) *fakeProwlarrServer {
+	t.Helper()
+	s := &fakeProwlarrServer{}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/system/status", func(w http.ResponseWriter, _ *http.Request) {
+		writeCleanupJSON(t, w, map[string]any{"version": "1.15.0"})
+	})
+	mux.HandleFunc("/api/v1/indexer", func(w http.ResponseWriter, _ *http.Request) {
+		writeCleanupJSON(t, w, []map[string]any{
+			{
+				"id":     1,
+				"name":   "Prowlarr Idx 1",
+				"enable": true,
+				"fields": []map[string]any{
+					{"name": "baseSettings.queryLimit", "value": 100},
+					{"name": "baseSettings.grabLimit", "value": 50},
+					{"name": "baseSettings.limitsUnit", "value": 0},
+				},
+			},
+		})
+	})
+	mux.HandleFunc("/api/v1/indexerstats", func(w http.ResponseWriter, _ *http.Request) {
+		writeCleanupJSON(t, w, map[string]any{
+			"indexers": []map[string]any{
+				{
+					"indexerId":          1,
+					"numberOfQueries":    20,
+					"numberOfRssQueries": 5,
+					"numberOfGrabs":      2,
+				},
+			},
+		})
+	})
+	mux.HandleFunc("/api/v1/indexerstatus", func(w http.ResponseWriter, _ *http.Request) {
+		writeCleanupJSON(t, w, []map[string]any{})
+	})
+	mux.HandleFunc("/api/v1/applications", func(w http.ResponseWriter, _ *http.Request) {
+		writeCleanupJSON(t, w, []map[string]any{})
+	})
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			s.writes.Add(1)
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		if s.fail.Load() {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		mux.ServeHTTP(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	s.srv = srv
+	s.URL = srv.URL
+	return s
+}
+
+type integrationFixture struct {
+	h              *Handlers
+	st             *store.Store
+	clk            *clockwork.FakeClock
+	probe          *stubProber
+	sessMgr        *session.Manager
+	keys           *apikey.Service
+	apiKeys        *auth.APIKeys
+	admin          domain.User
+	viewer         domain.User
+	dlSnap         *stubSnapshotter
+	dlDisc         *stubDiscoverer
+	seerrClient    *stubSeerrClient
+	cleanupServer  *fakeCleanuparrServer
+	prowlarrServer *fakeProwlarrServer
+	prowlarrSvc    *prowlarr.Service
+	seerrResolver  *stubResolver
+	notifySvc      *notify.Service
+	webhookStore   *notify.WebhookStore
+	notifyEngine   *notify.Engine
+	rec            *snatch.Recorder
+	enc            *crypto.Encryptor
+}
+
+func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Generator, authSvc *auth.Service, apiKeys *auth.APIKeys, sessMgr *session.Manager, probe *stubProber, dlSnap dlclients.Snapshotter, dlDisc arrclient.Discoverer, m *metrics.Metrics, logger *slog.Logger, seerrClient *stubSeerrClient, cleanupClient cleanuparrclient.Client, res *stubResolver) (*Handlers, *notify.Service, *notify.WebhookStore, *notify.Engine, *snatch.Recorder, *crypto.Encryptor, *prowlarr.Service) {
 	t.Helper()
 	enc, err := crypto.NewEncryptor(bytes.Repeat([]byte{0x42}, 32))
 	if err != nil {
@@ -348,6 +437,9 @@ func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Genera
 	clients := dlclients.New(st, enc, clk, ids, dlSnap, dlDisc, instSvc, logger)
 	seerrSvc := seerr.New(st, enc, clk, ids, seerrClient, res, instSvc, runs, rec, logger)
 	cleanupSvc := cleanuparr.New(st, enc, clk, ids, cleanupClient, logger)
+	prowlarrClient := prowlarrclient.New(5*time.Second, "snatcharr-test")
+	disc, _ := dlDisc.(arrclient.IndexerDiscoverer)
+	prowlarrSvc := prowlarr.New(st, enc, clk, ids, prowlarrClient, disc, instSvc, logger, config.Options{Prowlarr: config.ProwlarrOptions{LimitThreshold: 0.9}})
 	cfg := config.Options{
 		Profile: config.ProfileDev,
 		Session: config.SessionOptions{TTL: 8 * time.Hour, Secure: false},
@@ -376,10 +468,11 @@ func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Genera
 		configarr:  configarrSvc,
 		seerr:      seerrSvc,
 		cleanuparr: cleanupSvc,
+		prowlarr:   prowlarrSvc,
 		notify:     notifySvc,
 		logger:     logger,
 	}
-	return h, notifySvc, webhookStore, notifyEngine, rec, enc
+	return h, notifySvc, webhookStore, notifyEngine, rec, enc, prowlarrSvc
 }
 
 func newIntegrationFixture(t *testing.T) *integrationFixture {
@@ -426,28 +519,31 @@ func newIntegrationFixture(t *testing.T) *integrationFixture {
 	seerrClient := &stubSeerrClient{status: seerrclient.Status{Version: "2.1.0"}}
 	cleanupServer := newFakeCleanuparrServer(t)
 	cleanupClient := cleanuparrclient.New(5*time.Second, "snatcharr-test")
+	prowlarrServer := newFakeProwlarrServer(t)
 	res := &stubResolver{entityID: 42, found: true}
-	h, nSvc, ws, nEngine, rec, enc := buildHandlers(t, st, clk, ids, authSvc, apiKeys, sessMgr, probe, dlSnap, dlDisc, m, logger, seerrClient, cleanupClient, res)
+	h, nSvc, ws, nEngine, rec, enc, pSvc := buildHandlers(t, st, clk, ids, authSvc, apiKeys, sessMgr, probe, dlSnap, dlDisc, m, logger, seerrClient, cleanupClient, res)
 	return &integrationFixture{
-		h:             h,
-		st:            st,
-		clk:           clk,
-		probe:         probe,
-		sessMgr:       sessMgr,
-		keys:          keys,
-		apiKeys:       apiKeys,
-		admin:         domain.User{ID: uuid.New(), Username: "admin", Role: domain.RoleAdmin},
-		viewer:        domain.User{ID: uuid.New(), Username: "viewer", Role: domain.RoleViewer},
-		dlSnap:        dlSnap,
-		dlDisc:        dlDisc,
-		seerrClient:   seerrClient,
-		cleanupServer: cleanupServer,
-		seerrResolver: res,
-		notifySvc:     nSvc,
-		webhookStore:  ws,
-		notifyEngine:  nEngine,
-		rec:           rec,
-		enc:           enc,
+		h:              h,
+		st:             st,
+		clk:            clk,
+		probe:          probe,
+		sessMgr:        sessMgr,
+		keys:           keys,
+		apiKeys:        apiKeys,
+		admin:          domain.User{ID: uuid.New(), Username: "admin", Role: domain.RoleAdmin},
+		viewer:         domain.User{ID: uuid.New(), Username: "viewer", Role: domain.RoleViewer},
+		dlSnap:         dlSnap,
+		dlDisc:         dlDisc,
+		seerrClient:    seerrClient,
+		cleanupServer:  cleanupServer,
+		prowlarrServer: prowlarrServer,
+		prowlarrSvc:    pSvc,
+		seerrResolver:  res,
+		notifySvc:      nSvc,
+		webhookStore:   ws,
+		notifyEngine:   nEngine,
+		rec:            rec,
+		enc:            enc,
 	}
 }
 
