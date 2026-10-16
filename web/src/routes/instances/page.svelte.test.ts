@@ -5,6 +5,7 @@
 import { screen, within } from '@testing-library/svelte';
 import { ProblemError } from '@sveltesentio/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { m } from '#lib/paraglide/messages.js';
 import {
 	failedInstance,
 	forkInstance,
@@ -32,7 +33,7 @@ describe('instance list', () => {
 		vi.restoreAllMocks();
 	});
 
-	it('shows name, kind with the fork and address of an instance', async () => {
+	it('shows name, kind with the fork, address and passed connection test of an instance', async () => {
 		stubGet({ '/instances': [forkInstance] });
 		renderWithQuery(InstancesPage);
 
@@ -43,21 +44,30 @@ describe('instance list', () => {
 			'readarr · Bookshelf',
 			'http://readarr.local:8787'
 		]);
+		expect(rows[0]?.[5]).toContain('0.4.21.182');
+		expect(screen.getByRole('columnheader', { name: m.instance_last_check() })).toBeTruthy();
 		const link = screen.getByRole('link', { name: 'Library Readarr' });
 		expect(link.getAttribute('href')).toBe(`/instances/${forkInstance.id}`);
 	});
 
-	// The list does not show the state of the last connection test yet (#186), so these two rows
-	// are held to what it shows today.
-	it('lists an instance whose connection test failed and one never tested', async () => {
-		stubGet({ '/instances': [failedInstance, untestedInstance] });
+	it('shows failed connection test error in the table', async () => {
+		stubGet({ '/instances': [failedInstance] });
 		renderWithQuery(InstancesPage);
 
 		const rows = await bodyRows();
-		expect(rows.map((row) => row.slice(0, 3))).toEqual([
-			['Broken Sonarr', 'sonarr', 'http://sonarr.local:8989'],
-			['Fresh Radarr', 'radarr', 'http://radarr.local:7878']
-		]);
+		expect(rows).toHaveLength(1);
+		expect(rows[0]?.[5]).toContain('Connection refused (ECONNREFUSED)');
+		expect(screen.getByRole('status').textContent).toContain('Connection refused (ECONNREFUSED)');
+	});
+
+	it('shows never tested state in the table', async () => {
+		stubGet({ '/instances': [untestedInstance] });
+		renderWithQuery(InstancesPage);
+
+		const rows = await bodyRows();
+		expect(rows).toHaveLength(1);
+		expect(rows[0]?.[5]).toBe(m.instance_never_tested());
+		expect(screen.getByText(m.instance_never_tested())).toBeTruthy();
 	});
 
 	it('shows the table without a body row when there is no instance', async () => {

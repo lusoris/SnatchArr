@@ -44,6 +44,8 @@
 	"instance_enabled": "Aktiv",
 	"instance_source": "Quelle",
 	"instance_last_check": "Letzte Prüfung",
+	"instance_never_tested": "Noch nie geprüft",
+	"instance_check_failed": "Verbindungstest fehlgeschlagen",
 	"instance_add": "Instanz hinzufügen",
 	"instance_api_key": "API-Schlüssel",
 	"instance_test": "Testen",

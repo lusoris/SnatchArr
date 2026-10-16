@@ -4,10 +4,11 @@ SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { createSentioQuery, createSentioMutation } from '@sveltesentio/query';
+	import { createSentioQuery, createSentioMutation, useQueryClient } from '@sveltesentio/query';
 	import { toast } from 'svelte-sonner';
 	import { api, describeError } from '#lib/api/client.js';
 	import type { components } from '#lib/api/schema.js';
+	import CheckState from '#lib/components/CheckState.svelte';
 	import Field from '#lib/components/Field.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import { m } from '#lib/paraglide/messages.js';
@@ -19,6 +20,7 @@ SPDX-License-Identifier: EUPL-1.2
 	const { id }: { id: string } = $props();
 	// The route remounts this component per id ({#key}), so the initial value is the value.
 	const instanceId = untrack(() => id);
+	const queryClient = useQueryClient();
 
 	const instance = createSentioQuery<Instance | undefined>({
 		queryKey: keys.instance(instanceId),
@@ -52,9 +54,12 @@ SPDX-License-Identifier: EUPL-1.2
 	const probe = createSentioMutation({
 		mutationFn: async () =>
 			(await api.POST('/instances/{instanceId}/test', { params: { path: { instanceId } } })).data,
-		invalidates: [keys.instances],
+		invalidates: [keys.instances, keys.instance(instanceId)],
 		onSuccess: (r) => toast.success(probeMessage(r)),
-		onError: (err) => toast.error(describeError(err))
+		onError: (err) => {
+			void queryClient.invalidateQueries({ queryKey: keys.instance(instanceId) });
+			toast.error(describeError(err));
+		}
 	});
 </script>
 
@@ -70,6 +75,9 @@ SPDX-License-Identifier: EUPL-1.2
 		{instanceKindLabel(instance.data.kind, instance.data.last_seen_product)} · {instance.data
 			.base_url}
 	</p>
+	<div class="mb-4">
+		<CheckState instance={instance.data} />
+	</div>
 	<button type="button" class="btn mb-6" onclick={() => probe.mutate()} disabled={probe.isPending}
 		>{m.instance_test()}</button
 	>
