@@ -76,6 +76,24 @@ func (UnimplementedHandler) CreateInstance(ctx context.Context, req *InstanceInp
 	return r, ht.ErrNotImplemented
 }
 
+// CreateNotificationChannel implements createNotificationChannel operation.
+//
+// Create a notification channel.
+//
+// POST /notifications/channels
+func (UnimplementedHandler) CreateNotificationChannel(ctx context.Context, req *NotificationChannelInput) (r *NotificationChannel, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// CreateNotificationRule implements createNotificationRule operation.
+//
+// Create a notification rule.
+//
+// POST /notifications/rules
+func (UnimplementedHandler) CreateNotificationRule(ctx context.Context, req *NotificationRuleInput) (r *NotificationRule, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // CreateProxySession implements createProxySession operation.
 //
 // Start a session via trusted proxy authentication.
@@ -137,6 +155,24 @@ func (UnimplementedHandler) DeleteInstance(ctx context.Context, params DeleteIns
 //
 // DELETE /instances/{instanceId}/events
 func (UnimplementedHandler) DeleteInstanceEvents(ctx context.Context, params DeleteInstanceEventsParams) error {
+	return ht.ErrNotImplemented
+}
+
+// DeleteNotificationChannel implements deleteNotificationChannel operation.
+//
+// Delete a notification channel.
+//
+// DELETE /notifications/channels/{channelId}
+func (UnimplementedHandler) DeleteNotificationChannel(ctx context.Context, params DeleteNotificationChannelParams) error {
+	return ht.ErrNotImplemented
+}
+
+// DeleteNotificationRule implements deleteNotificationRule operation.
+//
+// Delete a notification rule.
+//
+// DELETE /notifications/rules/{ruleId}
+func (UnimplementedHandler) DeleteNotificationRule(ctx context.Context, params DeleteNotificationRuleParams) error {
 	return ht.ErrNotImplemented
 }
 
@@ -227,6 +263,24 @@ func (UnimplementedHandler) GetHourlyCaps(ctx context.Context) (r []CapStatus, _
 //
 // GET /instances/{instanceId}
 func (UnimplementedHandler) GetInstance(ctx context.Context, params GetInstanceParams) (r *Instance, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// GetNotificationChannel implements getNotificationChannel operation.
+//
+// Get one notification channel.
+//
+// GET /notifications/channels/{channelId}
+func (UnimplementedHandler) GetNotificationChannel(ctx context.Context, params GetNotificationChannelParams) (r *NotificationChannel, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// GetNotificationRule implements getNotificationRule operation.
+//
+// Get one notification rule.
+//
+// GET /notifications/rules/{ruleId}
+func (UnimplementedHandler) GetNotificationRule(ctx context.Context, params GetNotificationRuleParams) (r *NotificationRule, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -353,6 +407,24 @@ func (UnimplementedHandler) ListEvents(ctx context.Context, params ListEventsPar
 //
 // GET /instances
 func (UnimplementedHandler) ListInstances(ctx context.Context) (r []Instance, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ListNotificationChannels implements listNotificationChannels operation.
+//
+// List all configured notification channels.
+//
+// GET /notifications/channels
+func (UnimplementedHandler) ListNotificationChannels(ctx context.Context) (r []NotificationChannel, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ListNotificationRules implements listNotificationRules operation.
+//
+// List all configured notification rules.
+//
+// GET /notifications/rules
+func (UnimplementedHandler) ListNotificationRules(ctx context.Context) (r []NotificationRule, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -500,6 +572,15 @@ func (UnimplementedHandler) TestInstanceInput(ctx context.Context, req *Instance
 	return r, ht.ErrNotImplemented
 }
 
+// TestNotificationChannel implements testNotificationChannel operation.
+//
+// Send a synchronous test notification to a channel.
+//
+// POST /notifications/channels/{channelId}/test
+func (UnimplementedHandler) TestNotificationChannel(ctx context.Context, params TestNotificationChannelParams) error {
+	return ht.ErrNotImplemented
+}
+
 // TestSeerrLink implements testSeerrLink operation.
 //
 // Probe a stored Seerr link and record the outcome.
@@ -551,6 +632,24 @@ func (UnimplementedHandler) UpdateDownloadClient(ctx context.Context, req *Downl
 //
 // PUT /instances/{instanceId}
 func (UnimplementedHandler) UpdateInstance(ctx context.Context, req *InstanceUpdate, params UpdateInstanceParams) (r *Instance, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UpdateNotificationChannel implements updateNotificationChannel operation.
+//
+// Update a notification channel.
+//
+// PUT /notifications/channels/{channelId}
+func (UnimplementedHandler) UpdateNotificationChannel(ctx context.Context, req *NotificationChannelUpdate, params UpdateNotificationChannelParams) (r *NotificationChannel, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UpdateNotificationRule implements updateNotificationRule operation.
+//
+// Update a notification rule.
+//
+// PUT /notifications/rules/{ruleId}
+func (UnimplementedHandler) UpdateNotificationRule(ctx context.Context, req *NotificationRuleUpdate, params UpdateNotificationRuleParams) (r *NotificationRule, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

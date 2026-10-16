@@ -568,6 +568,9 @@ async fn dispatch_all(
         if failures >= MAX_CONSECUTIVE_FAILURES {
             let msg = format!("circuit open after {failures} consecutive search failures");
             events
+                .emit(Ev::run(Level::Warn, EventType::CircuitOpened, msg.clone()))
+                .await;
+            events
                 .emit(Ev::run(Level::Error, EventType::RunFinished, msg.clone()))
                 .await;
             outcome.error = Some(msg);

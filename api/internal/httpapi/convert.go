@@ -189,3 +189,79 @@ func settingsToOAS(s domain.Settings) *oas.Settings {
 func settingsFromOAS(in *oas.Settings) domain.Settings {
 	return domain.Settings{HistoryRetentionDays: in.HistoryRetentionDays, UserAgent: in.UserAgent, GlobalHourlyCap: in.GlobalHourlyCap}
 }
+
+func notificationChannelToOAS(c domain.NotificationChannel) oas.NotificationChannel {
+	return oas.NotificationChannel{
+		ID:        c.ID,
+		Name:      c.Name,
+		Kind:      oas.NotificationChannelKind(c.Kind),
+		Enabled:   c.Enabled,
+		HasSecret: c.HasSecret,
+		Config:    notificationConfigToOAS(c.Config),
+		CreatedAt: c.CreatedAt,
+		UpdatedAt: c.UpdatedAt,
+	}
+}
+
+func notificationConfigToOAS(c domain.ChannelConfig) oas.NotificationChannelConfig {
+	return oas.NotificationChannelConfig{
+		WebhookURL:          optString(c.WebhookURL),
+		Token:               optString(c.Token),
+		BotToken:            optString(c.BotToken),
+		AppToken:            optString(c.AppToken),
+		Password:            optString(c.Password),
+		Secret:              optString(c.Secret),
+		ServerURL:           optString(c.ServerURL),
+		Topic:               optString(c.Topic),
+		ChatID:              optString(c.ChatID),
+		Channel:             optString(c.Channel),
+		Username:            optString(c.Username),
+		AvatarURL:           optString(c.AvatarURL),
+		IconEmoji:           optString(c.IconEmoji),
+		ParseMode:           optString(c.ParseMode),
+		ThemeColor:          optString(c.ThemeColor),
+		Priority:            oas.NewOptInt(c.Priority),
+		Tags:                c.Tags,
+		URL:                 optString(c.URL),
+		AllowPrivateNetwork: oas.NewOptBool(c.AllowPrivateNetwork),
+		AllowInsecureHTTP:   oas.NewOptBool(c.AllowInsecureHTTP),
+	}
+}
+
+func notificationConfigFromOAS(c oas.NotificationChannelConfig) domain.ChannelConfig {
+	return domain.ChannelConfig{
+		WebhookURL:          c.WebhookURL.Value,
+		Token:               c.Token.Value,
+		BotToken:            c.BotToken.Value,
+		AppToken:            c.AppToken.Value,
+		Password:            c.Password.Value,
+		Secret:              c.Secret.Value,
+		ServerURL:           c.ServerURL.Value,
+		Topic:               c.Topic.Value,
+		ChatID:              c.ChatID.Value,
+		Channel:             c.Channel.Value,
+		Username:            c.Username.Value,
+		AvatarURL:           c.AvatarURL.Value,
+		IconEmoji:           c.IconEmoji.Value,
+		ParseMode:           c.ParseMode.Value,
+		ThemeColor:          c.ThemeColor.Value,
+		Priority:            c.Priority.Value,
+		Tags:                c.Tags,
+		URL:                 c.URL.Value,
+		AllowPrivateNetwork: c.AllowPrivateNetwork.Value,
+		AllowInsecureHTTP:   c.AllowInsecureHTTP.Value,
+	}
+}
+
+func notificationRuleToOAS(r domain.NotificationRule) oas.NotificationRule {
+	return oas.NotificationRule{
+		ID:         r.ID,
+		Name:       r.Name,
+		EventKind:  oas.NotificationRuleEventKind(r.EventKind),
+		Threshold:  r.Threshold,
+		Enabled:    r.Enabled,
+		ChannelIds: r.ChannelIDs,
+		CreatedAt:  r.CreatedAt,
+		UpdatedAt:  r.UpdatedAt,
+	}
+}

@@ -11,6 +11,8 @@ SPDX-License-Identifier: EUPL-1.2
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { keys } from '#lib/query.js';
+	import NotificationChannels from './NotificationChannels.svelte';
+	import NotificationRules from './NotificationRules.svelte';
 
 	type Settings = components['schemas']['Settings'];
 
@@ -132,4 +134,8 @@ SPDX-License-Identifier: EUPL-1.2
 			</button>
 		</div>
 	</form>
+
+	<h2 class="mt-8 mb-4 text-xl font-semibold">{m.notifications_title()}</h2>
+	<NotificationChannels />
+	<NotificationRules />
 {/if}

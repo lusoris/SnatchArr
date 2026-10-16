@@ -340,6 +340,136 @@ func decodeDeleteInstanceEventsParams(args [1]string, argsEscaped bool, r *http.
 	return params, nil
 }
 
+// DeleteNotificationChannelParams is parameters of deleteNotificationChannel operation.
+type DeleteNotificationChannelParams struct {
+	ChannelId uuid.UUID
+}
+
+func unpackDeleteNotificationChannelParams(packed middleware.Parameters) (params DeleteNotificationChannelParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "channelId",
+			In:   "path",
+		}
+		params.ChannelId = packed[key].(uuid.UUID)
+	}
+	return params
+}
+
+func decodeDeleteNotificationChannelParams(args [1]string, argsEscaped bool, r *http.Request) (params DeleteNotificationChannelParams, _ error) {
+	// Decode path: channelId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "channelId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.ChannelId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "channelId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
+// DeleteNotificationRuleParams is parameters of deleteNotificationRule operation.
+type DeleteNotificationRuleParams struct {
+	RuleId uuid.UUID
+}
+
+func unpackDeleteNotificationRuleParams(packed middleware.Parameters) (params DeleteNotificationRuleParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "ruleId",
+			In:   "path",
+		}
+		params.RuleId = packed[key].(uuid.UUID)
+	}
+	return params
+}
+
+func decodeDeleteNotificationRuleParams(args [1]string, argsEscaped bool, r *http.Request) (params DeleteNotificationRuleParams, _ error) {
+	// Decode path: ruleId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "ruleId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.RuleId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "ruleId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
 // DeleteScheduleParams is parameters of deleteSchedule operation.
 type DeleteScheduleParams struct {
 	ScheduleId uuid.UUID
@@ -723,6 +853,136 @@ func decodeGetInstanceParams(args [1]string, argsEscaped bool, r *http.Request) 
 	}(); err != nil {
 		return params, &ogenerrors.DecodeParamError{
 			Name: "instanceId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
+// GetNotificationChannelParams is parameters of getNotificationChannel operation.
+type GetNotificationChannelParams struct {
+	ChannelId uuid.UUID
+}
+
+func unpackGetNotificationChannelParams(packed middleware.Parameters) (params GetNotificationChannelParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "channelId",
+			In:   "path",
+		}
+		params.ChannelId = packed[key].(uuid.UUID)
+	}
+	return params
+}
+
+func decodeGetNotificationChannelParams(args [1]string, argsEscaped bool, r *http.Request) (params GetNotificationChannelParams, _ error) {
+	// Decode path: channelId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "channelId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.ChannelId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "channelId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
+// GetNotificationRuleParams is parameters of getNotificationRule operation.
+type GetNotificationRuleParams struct {
+	RuleId uuid.UUID
+}
+
+func unpackGetNotificationRuleParams(packed middleware.Parameters) (params GetNotificationRuleParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "ruleId",
+			In:   "path",
+		}
+		params.RuleId = packed[key].(uuid.UUID)
+	}
+	return params
+}
+
+func decodeGetNotificationRuleParams(args [1]string, argsEscaped bool, r *http.Request) (params GetNotificationRuleParams, _ error) {
+	// Decode path: ruleId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "ruleId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.RuleId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "ruleId",
 			In:   "path",
 			Err:  err,
 		}
@@ -1859,6 +2119,71 @@ func decodeTestInstanceParams(args [1]string, argsEscaped bool, r *http.Request)
 	return params, nil
 }
 
+// TestNotificationChannelParams is parameters of testNotificationChannel operation.
+type TestNotificationChannelParams struct {
+	ChannelId uuid.UUID
+}
+
+func unpackTestNotificationChannelParams(packed middleware.Parameters) (params TestNotificationChannelParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "channelId",
+			In:   "path",
+		}
+		params.ChannelId = packed[key].(uuid.UUID)
+	}
+	return params
+}
+
+func decodeTestNotificationChannelParams(args [1]string, argsEscaped bool, r *http.Request) (params TestNotificationChannelParams, _ error) {
+	// Decode path: channelId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "channelId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.ChannelId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "channelId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
 // TestSeerrLinkParams is parameters of testSeerrLink operation.
 type TestSeerrLinkParams struct {
 	LinkId uuid.UUID
@@ -2177,6 +2502,136 @@ func decodeUpdateInstanceParams(args [1]string, argsEscaped bool, r *http.Reques
 	}(); err != nil {
 		return params, &ogenerrors.DecodeParamError{
 			Name: "instanceId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
+// UpdateNotificationChannelParams is parameters of updateNotificationChannel operation.
+type UpdateNotificationChannelParams struct {
+	ChannelId uuid.UUID
+}
+
+func unpackUpdateNotificationChannelParams(packed middleware.Parameters) (params UpdateNotificationChannelParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "channelId",
+			In:   "path",
+		}
+		params.ChannelId = packed[key].(uuid.UUID)
+	}
+	return params
+}
+
+func decodeUpdateNotificationChannelParams(args [1]string, argsEscaped bool, r *http.Request) (params UpdateNotificationChannelParams, _ error) {
+	// Decode path: channelId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "channelId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.ChannelId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "channelId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
+// UpdateNotificationRuleParams is parameters of updateNotificationRule operation.
+type UpdateNotificationRuleParams struct {
+	RuleId uuid.UUID
+}
+
+func unpackUpdateNotificationRuleParams(packed middleware.Parameters) (params UpdateNotificationRuleParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "ruleId",
+			In:   "path",
+		}
+		params.RuleId = packed[key].(uuid.UUID)
+	}
+	return params
+}
+
+func decodeUpdateNotificationRuleParams(args [1]string, argsEscaped bool, r *http.Request) (params UpdateNotificationRuleParams, _ error) {
+	// Decode path: ruleId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "ruleId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.RuleId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "ruleId",
 			In:   "path",
 			Err:  err,
 		}

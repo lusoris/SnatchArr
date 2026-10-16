@@ -356,9 +356,7 @@ func (s *Server) acquireBudget(ctx context.Context, req *snatcharrv1.AcquireBudg
 	if err != nil {
 		return nil, toStatus(err)
 	}
-	if g.Used >= int(float64(g.Cap)*snatch.WarnRatio) {
-		s.logger.WarnContext(ctx, "snatch: hourly cap nearly exhausted", slog.String("instance", run.InstanceID.String()), slog.Int("used", g.Used), slog.Int("cap", g.Cap))
-	}
+	s.checkBudgetWarning(ctx, run, g)
 	grantedItems := make([]uint32, len(g.GrantedItems))
 	for i, granted := range g.GrantedItems {
 		grantedItems[i] = uint32(granted) // #nosec G115 -- non-negative, <= 500
@@ -367,6 +365,24 @@ func (s *Server) acquireBudget(ctx context.Context, req *snatcharrv1.AcquireBudg
 		Granted: uint32(g.Granted), RemainingInWindow: uint32(g.Remaining), WindowResetsUnix: g.ResetsAt.Unix(), // #nosec G115 -- non-negative, <= 500
 		GrantedItems: grantedItems,
 	}, nil
+}
+
+func (s *Server) checkBudgetWarning(ctx context.Context, run domain.Run, g snatch.ItemsGrant) {
+	if g.Used >= int(float64(g.Cap)*snatch.WarnRatio) {
+		s.logger.WarnContext(ctx, "snatch: hourly cap nearly exhausted", slog.String("instance", run.InstanceID.String()), slog.Int("used", g.Used), slog.Int("cap", g.Cap))
+	}
+	if g.Granted > 0 && g.Remaining == 0 && s.rec != nil {
+		if rErr := s.rec.Record(ctx, domain.Event{
+			InstanceID: run.InstanceID,
+			RunID:      &run.ID,
+			Level:      "warn",
+			Type:       "stamina_exhausted",
+			Title:      "Stamina exhausted",
+			Detail:     fmt.Sprintf("hourly cap (%d) exhausted", g.Cap),
+		}); rErr != nil {
+			s.logger.WarnContext(ctx, "workergrpc: record stamina exhausted error", slog.String("error", rErr.Error()))
+		}
+	}
 }
 
 // grantBudget asks the budget item by item when the worker named its items, and for the
@@ -428,8 +444,31 @@ func (s *Server) handleReportEvent(ctx context.Context, ev *snatcharrv1.SnatchEv
 	if ev.GetType() == snatcharrv1.EventType_EVENT_TYPE_SEARCH_DISPATCHED && run.InstanceID != uuid.Nil {
 		name := s.instanceName(ctx, names, run.InstanceID)
 		s.m.SearchesDispatched(name, string(run.Kind), 1)
+		if s.seerr != nil && s.rec != nil {
+			s.recordSeerrSnatched(ctx, run, ev)
+		}
 	}
 	return nil
+}
+
+func (s *Server) recordSeerrSnatched(ctx context.Context, run domain.Run, ev *snatcharrv1.SnatchEvent) {
+	seerrReq, err := s.seerr.FindByEntity(ctx, run.InstanceID, ev.GetEntityId())
+	if err != nil {
+		return
+	}
+	if rErr := s.rec.Record(ctx, domain.Event{
+		RunID:      &run.ID,
+		InstanceID: run.InstanceID,
+		Timestamp:  s.clk.Now(),
+		Level:      "info",
+		Type:       "seerr_request_snatched",
+		EntityType: ev.GetEntityType(),
+		EntityID:   ev.GetEntityId(),
+		Title:      "Seerr request snatched: " + seerrReq.Title,
+		Detail:     "Requested by " + seerrReq.RequestedBy,
+	}); rErr != nil {
+		s.logger.WarnContext(ctx, "workergrpc: record seerr snatched error", slog.String("error", rErr.Error()))
+	}
 }
 
 func (s *Server) instanceName(ctx context.Context, names map[uuid.UUID]string, id uuid.UUID) string {
@@ -505,10 +544,24 @@ func (s *Server) CompleteRun(ctx context.Context, req *snatcharrv1.CompleteRunRe
 		s.recordBackoff(ctx, run, policy)
 	}
 	s.recordUnconfirmed(ctx, run, req.GetEventsUnconfirmed())
+	level := runOutcomeLevel(outcome(req.GetOutcome()))
+	// Event is recorded after runs.Complete so trailing status queries see the updated run state.
 	return &snatcharrv1.CompleteRunResponse{}, s.rec.Record(ctx, domain.Event{
-		RunID: &run.ID, InstanceID: run.InstanceID, Level: "info", Type: "run_finished",
+		RunID: &run.ID, InstanceID: run.InstanceID, Level: level, Type: "run_finished",
 		Title: fmt.Sprintf("%s snatch %s: %d item(s) searched", run.Kind, outcome(req.GetOutcome()), len(searched)), Detail: req.GetError(),
 	})
+}
+
+func runOutcomeLevel(status domain.RunStatus) string {
+	switch status {
+	case domain.RunFailed:
+		return "error"
+	case domain.RunCancelled:
+		return "warn"
+	case domain.RunDone, domain.RunQueued, domain.RunLeased:
+		return "info"
+	}
+	return "info"
 }
 
 // failExhausted ends the runs whose lease expired snatch.MaxLeases times and records each

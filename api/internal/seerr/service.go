@@ -319,6 +319,21 @@ func (s *Service) MarkSnatched(ctx context.Context, instanceID uuid.UUID, entity
 	return nil
 }
 
+// FindByEntity returns the stored Seerr request for the instance and entity.
+func (s *Service) FindByEntity(ctx context.Context, instanceID uuid.UUID, entityID int64) (domain.SeerrRequest, error) {
+	if entityID <= 0 {
+		return domain.SeerrRequest{}, domain.ErrNotFound
+	}
+	row, err := s.st.Q().FindSeerrRequestForEntity(ctx, sqlcgen.FindSeerrRequestForEntityParams{
+		InstanceID: &instanceID,
+		EntityID:   &entityID,
+	})
+	if err != nil {
+		return domain.SeerrRequest{}, fmt.Errorf("seerr: find by entity: %w", store.MapError(err))
+	}
+	return store.SeerrRequestFromRow(row), nil
+}
+
 // ImportInstances creates a SnatchArr instance for every Sonarr/Radarr server Seerr has
 // configured, skipping URLs that already exist.
 func (s *Service) ImportInstances(ctx context.Context, linkID uuid.UUID) (ImportResult, error) {

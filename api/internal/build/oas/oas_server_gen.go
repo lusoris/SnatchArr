@@ -50,6 +50,18 @@ type Handler interface {
 	//
 	// POST /instances
 	CreateInstance(ctx context.Context, req *InstanceInput) (*Instance, error)
+	// CreateNotificationChannel implements createNotificationChannel operation.
+	//
+	// Create a notification channel.
+	//
+	// POST /notifications/channels
+	CreateNotificationChannel(ctx context.Context, req *NotificationChannelInput) (*NotificationChannel, error)
+	// CreateNotificationRule implements createNotificationRule operation.
+	//
+	// Create a notification rule.
+	//
+	// POST /notifications/rules
+	CreateNotificationRule(ctx context.Context, req *NotificationRuleInput) (*NotificationRule, error)
 	// CreateProxySession implements createProxySession operation.
 	//
 	// Start a session via trusted proxy authentication.
@@ -93,6 +105,18 @@ type Handler interface {
 	//
 	// DELETE /instances/{instanceId}/events
 	DeleteInstanceEvents(ctx context.Context, params DeleteInstanceEventsParams) error
+	// DeleteNotificationChannel implements deleteNotificationChannel operation.
+	//
+	// Delete a notification channel.
+	//
+	// DELETE /notifications/channels/{channelId}
+	DeleteNotificationChannel(ctx context.Context, params DeleteNotificationChannelParams) error
+	// DeleteNotificationRule implements deleteNotificationRule operation.
+	//
+	// Delete a notification rule.
+	//
+	// DELETE /notifications/rules/{ruleId}
+	DeleteNotificationRule(ctx context.Context, params DeleteNotificationRuleParams) error
 	// DeleteSchedule implements deleteSchedule operation.
 	//
 	// Delete a schedule window.
@@ -153,6 +177,18 @@ type Handler interface {
 	//
 	// GET /instances/{instanceId}
 	GetInstance(ctx context.Context, params GetInstanceParams) (*Instance, error)
+	// GetNotificationChannel implements getNotificationChannel operation.
+	//
+	// Get one notification channel.
+	//
+	// GET /notifications/channels/{channelId}
+	GetNotificationChannel(ctx context.Context, params GetNotificationChannelParams) (*NotificationChannel, error)
+	// GetNotificationRule implements getNotificationRule operation.
+	//
+	// Get one notification rule.
+	//
+	// GET /notifications/rules/{ruleId}
+	GetNotificationRule(ctx context.Context, params GetNotificationRuleParams) (*NotificationRule, error)
 	// GetPolicy implements getPolicy operation.
 	//
 	// Snatch policy of an instance.
@@ -237,6 +273,18 @@ type Handler interface {
 	//
 	// GET /instances
 	ListInstances(ctx context.Context) ([]Instance, error)
+	// ListNotificationChannels implements listNotificationChannels operation.
+	//
+	// List all configured notification channels.
+	//
+	// GET /notifications/channels
+	ListNotificationChannels(ctx context.Context) ([]NotificationChannel, error)
+	// ListNotificationRules implements listNotificationRules operation.
+	//
+	// List all configured notification rules.
+	//
+	// GET /notifications/rules
+	ListNotificationRules(ctx context.Context) ([]NotificationRule, error)
 	// ListRuns implements listRuns operation.
 	//
 	// Recent snatch runs, newest first.
@@ -333,6 +381,12 @@ type Handler interface {
 	//
 	// POST /instances/test
 	TestInstanceInput(ctx context.Context, req *InstanceInput) (*ProbeResult, error)
+	// TestNotificationChannel implements testNotificationChannel operation.
+	//
+	// Send a synchronous test notification to a channel.
+	//
+	// POST /notifications/channels/{channelId}/test
+	TestNotificationChannel(ctx context.Context, params TestNotificationChannelParams) error
 	// TestSeerrLink implements testSeerrLink operation.
 	//
 	// Probe a stored Seerr link and record the outcome.
@@ -369,6 +423,18 @@ type Handler interface {
 	//
 	// PUT /instances/{instanceId}
 	UpdateInstance(ctx context.Context, req *InstanceUpdate, params UpdateInstanceParams) (*Instance, error)
+	// UpdateNotificationChannel implements updateNotificationChannel operation.
+	//
+	// Update a notification channel.
+	//
+	// PUT /notifications/channels/{channelId}
+	UpdateNotificationChannel(ctx context.Context, req *NotificationChannelUpdate, params UpdateNotificationChannelParams) (*NotificationChannel, error)
+	// UpdateNotificationRule implements updateNotificationRule operation.
+	//
+	// Update a notification rule.
+	//
+	// PUT /notifications/rules/{ruleId}
+	UpdateNotificationRule(ctx context.Context, req *NotificationRuleUpdate, params UpdateNotificationRuleParams) (*NotificationRule, error)
 	// UpdatePolicy implements updatePolicy operation.
 	//
 	// Replace the snatch policy of an instance.

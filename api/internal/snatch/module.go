@@ -12,8 +12,10 @@ import (
 
 	"github.com/golusoris/golusoris/core/clock"
 
+	"github.com/lusoris/SnatchArr/api/internal/events"
 	"github.com/lusoris/SnatchArr/api/internal/leaderx"
 	"github.com/lusoris/SnatchArr/api/internal/metrics"
+	"github.com/lusoris/SnatchArr/api/internal/store"
 )
 
 // GateGroup is the fx value group other modules add Gate implementations to.
@@ -52,9 +54,21 @@ func NewTicker(planner *Planner, clk clock.Clock, logger *slog.Logger, m *metric
 	})}
 }
 
+type recorderParams struct {
+	fx.In
+	Store     *store.Store
+	Clock     clock.Clock
+	Bus       *events.Bus
+	Observers []EventObserver `group:"snatch.observers"`
+}
+
+func newRecorder(p recorderParams) *Recorder {
+	return NewRecorder(p.Store, p.Clock, p.Bus, p.Observers...)
+}
+
 // Module provides the snatch services and registers the planner ticker.
 var Module = fx.Module("snatcharr.snatch",
-	fx.Provide(NewBudget, NewMemory, NewRuns, NewWorkers, NewRecorder, NewSchedules, newPlanner, NewTicker, NewStateTicker),
+	fx.Provide(NewBudget, NewMemory, NewRuns, NewWorkers, newRecorder, NewSchedules, newPlanner, NewTicker, NewStateTicker),
 	// The planner and state metrics loops run on the leader only (internal/leaderx).
 	fx.Provide(leaderx.Provide[*Ticker](), leaderx.Provide[*StateTicker]()),
 )

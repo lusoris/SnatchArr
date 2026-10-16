@@ -12,11 +12,44 @@ import { renderWithQuery, stubGet } from '#lib/testing/harness.js';
 import SettingsPage from './+page.svelte';
 
 type Settings = components['schemas']['Settings'];
+type NotificationChannel = components['schemas']['NotificationChannel'];
+type NotificationRule = components['schemas']['NotificationRule'];
 
 const sampleSettings: Settings = {
 	history_retention_days: 30,
 	user_agent: 'SnatchArr/1.0',
 	global_hourly_cap: 100
+};
+
+const sampleChannel: NotificationChannel = {
+	id: '018f2651-3472-749e-8c38-5188bf287c80',
+	name: 'Discord Alerts',
+	kind: 'discord',
+	enabled: true,
+	has_secret: true,
+	config: {
+		allow_private_network: false,
+		allow_insecure_http: false
+	},
+	created_at: '2026-10-16T10:00:00Z',
+	updated_at: '2026-10-16T10:00:00Z'
+};
+
+const sampleRule: NotificationRule = {
+	id: '018f2651-3472-749e-8c38-5188bf287c81',
+	name: 'Streak Rule',
+	event_kind: 'run_failure_streak',
+	threshold: 3,
+	enabled: true,
+	channel_ids: ['018f2651-3472-749e-8c38-5188bf287c80'],
+	created_at: '2026-10-16T10:00:00Z',
+	updated_at: '2026-10-16T10:00:00Z'
+};
+
+const baseStubs = {
+	'/settings': sampleSettings,
+	'/notifications/channels': [],
+	'/notifications/rules': []
 };
 
 describe('settings', () => {
@@ -25,7 +58,7 @@ describe('settings', () => {
 	});
 
 	it('renders heading and form with settings from API', async () => {
-		stubGet({ '/settings': sampleSettings });
+		stubGet(baseStubs);
 		renderWithQuery(SettingsPage);
 
 		expect(await screen.findByRole('heading', { level: 1, name: m.settings_title() })).toBeTruthy();
@@ -42,6 +75,7 @@ describe('settings', () => {
 
 	it('announces the problem document when the settings query fails', async () => {
 		stubGet({
+			...baseStubs,
 			'/settings': new ProblemError({
 				type: 'about:blank',
 				status: 500,
@@ -55,7 +89,7 @@ describe('settings', () => {
 	});
 
 	it('submits updated settings when save button is clicked', async () => {
-		stubGet({ '/settings': sampleSettings });
+		stubGet(baseStubs);
 		const putSpy = vi.spyOn(api, 'PUT').mockResolvedValue({
 			data: { ...sampleSettings, history_retention_days: 60 }
 		} as never);
@@ -77,7 +111,7 @@ describe('settings', () => {
 	});
 
 	it('prevents submission when retention is outside allowed bounds', async () => {
-		stubGet({ '/settings': sampleSettings });
+		stubGet(baseStubs);
 		const putSpy = vi.spyOn(api, 'PUT');
 		renderWithQuery(SettingsPage);
 
@@ -93,7 +127,7 @@ describe('settings', () => {
 	});
 
 	it('renders change password form and submits password change', async () => {
-		stubGet({ '/settings': sampleSettings });
+		stubGet(baseStubs);
 		const postSpy = vi.spyOn(api, 'POST').mockResolvedValue({ data: undefined } as never);
 		renderWithQuery(SettingsPage);
 
@@ -117,7 +151,7 @@ describe('settings', () => {
 	});
 
 	it('displays error when change password fails', async () => {
-		stubGet({ '/settings': sampleSettings });
+		stubGet(baseStubs);
 		vi.spyOn(api, 'POST').mockRejectedValue(
 			new ProblemError({ type: 'about:blank', status: 401, detail: 'invalid current password' })
 		);
@@ -133,5 +167,38 @@ describe('settings', () => {
 
 		const alert = await screen.findByRole('alert');
 		expect(alert.textContent).toContain('invalid current password');
+	});
+
+	it('renders notification channels and rules', async () => {
+		stubGet({
+			'/settings': sampleSettings,
+			'/notifications/channels': [sampleChannel],
+			'/notifications/rules': [sampleRule]
+		});
+		renderWithQuery(SettingsPage);
+
+		expect(
+			await screen.findByRole('heading', { level: 2, name: m.notifications_title() })
+		).toBeTruthy();
+		expect(screen.getAllByText('Discord Alerts').length).toBeGreaterThanOrEqual(1);
+		expect(screen.getByText('Streak Rule')).toBeTruthy();
+		expect(screen.getByRole('button', { name: m.channel_test() })).toBeTruthy();
+	});
+
+	it('tests notification channel when test button clicked', async () => {
+		stubGet({
+			'/settings': sampleSettings,
+			'/notifications/channels': [sampleChannel],
+			'/notifications/rules': []
+		});
+		const postSpy = vi.spyOn(api, 'POST').mockResolvedValue({ data: undefined } as never);
+		renderWithQuery(SettingsPage);
+
+		const testBtn = await screen.findByRole('button', { name: m.channel_test() });
+		await fireEvent.click(testBtn);
+
+		expect(postSpy).toHaveBeenCalledWith('/notifications/channels/{channelId}/test', {
+			params: { path: { channelId: sampleChannel.id } }
+		});
 	});
 });

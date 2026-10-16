@@ -37,6 +37,10 @@ type Querier interface {
 	CreateInstance(ctx context.Context, arg CreateInstanceParams) (Instance, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
+	CreateNotificationChannel(ctx context.Context, arg CreateNotificationChannelParams) (NotificationChannel, error)
+	CreateNotificationRule(ctx context.Context, arg CreateNotificationRuleParams) (NotificationRule, error)
+	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+	// SPDX-License-Identifier: EUPL-1.2
 	CreateSchedule(ctx context.Context, arg CreateScheduleParams) (Schedule, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
@@ -47,6 +51,8 @@ type Querier interface {
 	DeleteEventsForInstance(ctx context.Context, instanceID uuid.UUID) (int64, error)
 	DeleteInstanceUnlessDeclared(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteLoginLockout(ctx context.Context, key string) error
+	DeleteNotificationChannel(ctx context.Context, id uuid.UUID) (int64, error)
+	DeleteNotificationRule(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteSchedule(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteSeerrLink(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteSession(ctx context.Context, id string) error
@@ -54,6 +60,7 @@ type Querier interface {
 	DeleteUnseenSeerrRequests(ctx context.Context, arg DeleteUnseenSeerrRequestsParams) (int64, error)
 	// data->>'user_id' couples to auth.SessionUserKey in api/internal/auth/service.go.
 	DeleteUserSessionsExcept(ctx context.Context, arg DeleteUserSessionsExceptParams) (int64, error)
+	DeleteWebhookEndpoint(ctx context.Context, id string) (int64, error)
 	DisableConfigarrInstancesNotIn(ctx context.Context, arg DisableConfigarrInstancesNotInParams) (int64, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
@@ -66,6 +73,9 @@ type Querier interface {
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
 	FilterUnprocessed(ctx context.Context, arg FilterUnprocessedParams) ([]int64, error)
+	FindSeerrRequestForEntity(ctx context.Context, arg FindSeerrRequestForEntityParams) (SeerrRequest, error)
+	FindWebhookDelivery(ctx context.Context, id string) (WebhookDelivery, error)
+	FindWebhookEndpoint(ctx context.Context, id string) (WebhookEndpoint, error)
 	GetAPIKey(ctx context.Context, id string) (ApiKey, error)
 	GetCleanuparrLink(ctx context.Context, id uuid.UUID) (CleanuparrLink, error)
 	GetDownloadClient(ctx context.Context, id uuid.UUID) (DownloadClient, error)
@@ -73,6 +83,8 @@ type Querier interface {
 	GetInstance(ctx context.Context, id uuid.UUID) (Instance, error)
 	GetInstanceByConfigarrKey(ctx context.Context, configarrKey *string) (Instance, error)
 	GetLoginLockout(ctx context.Context, key string) (LoginLockout, error)
+	GetNotificationChannel(ctx context.Context, id uuid.UUID) (NotificationChannel, error)
+	GetNotificationRule(ctx context.Context, id uuid.UUID) (NotificationRule, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
 	GetPolicy(ctx context.Context, instanceID uuid.UUID) (SnatchPolicy, error)
@@ -100,20 +112,28 @@ type Querier interface {
 	ListAPIKeysByOwner(ctx context.Context, ownerID uuid.UUID) ([]ApiKey, error)
 	ListAPIKeysForOwner(ctx context.Context, ownerID uuid.UUID) ([]ListAPIKeysForOwnerRow, error)
 	ListCleanuparrLinks(ctx context.Context) ([]CleanuparrLink, error)
+	ListDeadLetterDeliveries(ctx context.Context) ([]WebhookDelivery, error)
 	ListDownloadClients(ctx context.Context) ([]DownloadClient, error)
 	ListDownloadClientsForInstance(ctx context.Context, instanceID *uuid.UUID) ([]DownloadClient, error)
 	ListEnabledCleanuparrLinks(ctx context.Context) ([]CleanuparrLink, error)
 	ListEnabledDownloadClients(ctx context.Context) ([]DownloadClient, error)
 	ListEnabledInstances(ctx context.Context) ([]Instance, error)
+	ListEnabledNotificationChannels(ctx context.Context) ([]NotificationChannel, error)
+	ListEnabledNotificationRules(ctx context.Context) ([]NotificationRule, error)
 	ListEnabledSchedulesFor(ctx context.Context, instanceID *uuid.UUID) ([]Schedule, error)
 	ListEnabledSeerrLinks(ctx context.Context) ([]SeerrLink, error)
 	ListEvents(ctx context.Context, arg ListEventsParams) ([]SnatchEvent, error)
 	ListInstances(ctx context.Context) ([]Instance, error)
+	ListNotificationChannels(ctx context.Context) ([]NotificationChannel, error)
+	ListNotificationChannelsByIDs(ctx context.Context, ids []uuid.UUID) ([]NotificationChannel, error)
+	ListNotificationRules(ctx context.Context) ([]NotificationRule, error)
+	ListNotificationRulesByEvent(ctx context.Context, eventKind string) ([]NotificationRule, error)
 	ListRuns(ctx context.Context, arg ListRunsParams) ([]SnatchRun, error)
 	ListSchedules(ctx context.Context) ([]Schedule, error)
 	ListSeerrLinks(ctx context.Context) ([]SeerrLink, error)
 	ListSeerrRequests(ctx context.Context, limit int32) ([]ListSeerrRequestsRow, error)
 	ListUsers(ctx context.Context) ([]User, error)
+	ListWebhookEndpoints(ctx context.Context, dollar_1 string) ([]WebhookEndpoint, error)
 	LoadSession(ctx context.Context, arg LoadSessionParams) ([]byte, error)
 	// Taken after LockInstanceBudget, never before, so the two locks cannot deadlock.
 	LockGlobalBudget(ctx context.Context) error
@@ -137,6 +157,7 @@ type Querier interface {
 	PurgeGlobalBucketsBefore(ctx context.Context, arg PurgeGlobalBucketsBeforeParams) (int64, error)
 	PurgeRunsBefore(ctx context.Context, arg PurgeRunsBeforeParams) (int64, error)
 	PurgeWorkersBefore(ctx context.Context, arg PurgeWorkersBeforeParams) (int64, error)
+	RecentInstanceRunStatuses(ctx context.Context, arg RecentInstanceRunStatusesParams) ([]string, error)
 	RecentRunStatuses(ctx context.Context, arg RecentRunStatusesParams) ([]string, error)
 	RecordCleanuparrCheck(ctx context.Context, arg RecordCleanuparrCheckParams) error
 	RecordDownloadClientCheck(ctx context.Context, arg RecordDownloadClientCheckParams) error
@@ -150,6 +171,10 @@ type Querier interface {
 	SaveAPIKey(ctx context.Context, arg SaveAPIKeyParams) error
 	SavePolicyCursor(ctx context.Context, arg SavePolicyCursorParams) error
 	SaveSession(ctx context.Context, arg SaveSessionParams) error
+	SaveWebhookDelivery(ctx context.Context, arg SaveWebhookDeliveryParams) (WebhookDelivery, error)
+	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+	// SPDX-License-Identifier: EUPL-1.2
+	SaveWebhookEndpoint(ctx context.Context, arg SaveWebhookEndpointParams) (WebhookEndpoint, error)
 	SetAPIKeyMeta(ctx context.Context, arg SetAPIKeyMetaParams) (int64, error)
 	TouchAPIKey(ctx context.Context, arg TouchAPIKeyParams) error
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
@@ -159,6 +184,8 @@ type Querier interface {
 	UpdateCleanuparrLink(ctx context.Context, arg UpdateCleanuparrLinkParams) (CleanuparrLink, error)
 	UpdateDownloadClient(ctx context.Context, arg UpdateDownloadClientParams) (DownloadClient, error)
 	UpdateInstance(ctx context.Context, arg UpdateInstanceParams) (Instance, error)
+	UpdateNotificationChannel(ctx context.Context, arg UpdateNotificationChannelParams) (NotificationChannel, error)
+	UpdateNotificationRule(ctx context.Context, arg UpdateNotificationRuleParams) (NotificationRule, error)
 	UpdateSchedule(ctx context.Context, arg UpdateScheduleParams) (Schedule, error)
 	UpdateSeerrLink(ctx context.Context, arg UpdateSeerrLinkParams) (SeerrLink, error)
 	UpdateSettings(ctx context.Context, arg UpdateSettingsParams) (Setting, error)
