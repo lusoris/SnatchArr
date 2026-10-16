@@ -227,8 +227,22 @@ SPDX-License-Identifier: EUPL-1.2
 				<tr>
 					<td>{r.title || `${r.media_type} #${r.request_id}`} {r.is_4k ? '4K' : ''}</td>
 					<td>{r.requested_by}</td>
-					<td>{r.instance_name ?? '–'}</td>
-					<td>{r.resolved ? '✓' : (r.unresolved_reason ?? m.seerr_unresolved())}</td>
+					<td>
+						{#if r.instance_name}
+							{r.instance_name}
+						{:else}
+							<span aria-hidden="true">–</span><span class="sr-only">{m.seerr_no_instance()}</span>
+						{/if}
+					</td>
+					<td>
+						{#if r.resolved}
+							<span aria-hidden="true">✓</span><span class="sr-only"
+								>{m.seerr_resolved_status()}</span
+							>
+						{:else}
+							{r.unresolved_reason ?? m.seerr_unresolved()}
+						{/if}
+					</td>
 					<td>{formatWhen(r.last_snatched_at, getLocale())}</td>
 					<td>
 						<button

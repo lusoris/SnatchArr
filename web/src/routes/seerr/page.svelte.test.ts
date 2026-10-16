@@ -81,7 +81,7 @@ describe('seerr', () => {
 		expect(within(table).getByText('Inception')).toBeTruthy();
 		expect(within(table).getByText('alice')).toBeTruthy();
 		expect(within(table).getByText('Library Radarr')).toBeTruthy();
-		expect(within(table).getByText('✓')).toBeTruthy();
+		expect(within(table).getByText(m.seerr_resolved_status())).toBeTruthy();
 
 		expect(within(table).getByText('Interstellar')).toBeTruthy();
 		expect(within(table).getByText('bob')).toBeTruthy();

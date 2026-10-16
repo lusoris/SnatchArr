@@ -68,7 +68,7 @@ SPDX-License-Identifier: EUPL-1.2
 			<th scope="col">{m.schedule_days()}</th>
 			<th scope="col">{m.schedule_window()}</th>
 			<th scope="col">{m.schedule_action()}</th>
-			<th scope="col"><span class="sr-only">Actions</span></th>
+			<th scope="col"><span class="sr-only">{m.action_actions()}</span></th>
 		</tr>
 	</thead>
 	<tbody>

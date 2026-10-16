@@ -140,9 +140,9 @@ SPDX-License-Identifier: EUPL-1.2
 		</Field>
 		<Field id="selection" label={m.policy_selection()}>
 			<select id="selection" class="select" bind:value={draft.selection}>
-				<option value="random">random</option>
-				<option value="sequential">sequential</option>
-				<option value="recent">recent</option>
+				<option value="random">{m.policy_selection_random()}</option>
+				<option value="sequential">{m.policy_selection_sequential()}</option>
+				<option value="recent">{m.policy_selection_recent()}</option>
 			</select>
 		</Field>
 		<Field id="ttl" label={m.policy_processed_ttl()}>
