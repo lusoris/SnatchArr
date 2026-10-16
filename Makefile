@@ -23,7 +23,7 @@ GOLUSORIS_SHARED = $(GOMODCACHE)/github.com/golusoris/golusoris@$(GOLUSORIS_VER)
 
 .PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke web-verify web-e2e web-e2e-api proto-verify deploy-verify governance-verify hooks-verify contracts-verify workflows-verify workflows-lint secret-scan \
 	images kind-up kind-deploy kind-down \
-        api-gen api-gosec gosec-install tools-verify tools-lint tools-test tools-gosec web-gen proto-gen dev hooks setup
+        api-gen api-gosec gosec-install govulncheck-install tools-verify tools-lint tools-test tools-gosec web-gen proto-gen dev hooks setup
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-18s %s\n", $$1, $$2}'
@@ -77,17 +77,17 @@ api-gosec: ## gosec over the whole module (zero exclusions); fails on a finding 
 
 # gosec v2.29.0, the latest release, pins golang.org/x/tools v0.49.0, which cannot read the export
 # data Go 1.27.2 writes (version 5; x/tools reads it from v0.50.0), so it fails to load every
-# package. Build the release against a newer x/tools in a throwaway module until a gosec release
-# carries one. CI (ci.yml, security.yml) installs gosec through this target.
-GOSEC_VERSION ?= v2.29.0
-GOSEC_XTOOLS  ?= v0.50.0
-gosec-install: ## Install gosec built against an x/tools that reads Go 1.27.2 export data
-	tmp=$$(mktemp -d)
-	trap 'rm -rf "$$tmp"' EXIT
-	cd "$$tmp"
-	go mod init gosec-build
-	go get github.com/securego/gosec/v2/cmd/gosec@$(GOSEC_VERSION) golang.org/x/tools@$(GOSEC_XTOOLS)
+# package. tools/go/go.mod builds it against a newer x/tools and pins govulncheck beside it; CI
+# (ci.yml, security.yml) and the devcontainer install both through these targets, never @latest.
+# SECURITY_TOOLS_MOD names another module directory, for the planted old x/tools case only.
+SECURITY_TOOLS_MOD ?= tools/go
+gosec-install: ## Install gosec at the tools/go/go.mod pins (x/tools reads Go 1.27.2 export data)
+	cd "$(SECURITY_TOOLS_MOD)"
 	go install github.com/securego/gosec/v2/cmd/gosec
+
+govulncheck-install: ## Install govulncheck at the tools/go/go.mod pin
+	cd "$(SECURITY_TOOLS_MOD)"
+	go install golang.org/x/vuln/cmd/govulncheck
 
 # Ratchet: raise as store/handler integration tests land (target 70, HISS-15). Never lower.
 # 41.8 % measured on main at #198.
