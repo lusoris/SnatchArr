@@ -44,6 +44,11 @@ type Discoverer interface {
 	DownloadClients(ctx context.Context, kind domain.AppKind, baseURL, apiKey string) ([]arr.ProviderResource, error)
 }
 
+// IndexerDiscoverer lists the indexers an *arr instance has configured.
+type IndexerDiscoverer interface {
+	Indexers(ctx context.Context, kind domain.AppKind, baseURL, apiKey string) ([]arr.ProviderResource, error)
+}
+
 // Label is one tag or quality profile of an *arr instance.
 type Label struct {
 	ID   int32
@@ -109,6 +114,7 @@ func (p *GoenvoyProber) clientOptions() []arr.Option {
 type arrClient interface {
 	GetSystemStatus(ctx context.Context) (*arr.StatusResponse, error)
 	GetDownloadClients(ctx context.Context) ([]arr.ProviderResource, error)
+	GetIndexers(ctx context.Context) ([]arr.ProviderResource, error)
 	GetTags(ctx context.Context) ([]arr.Tag, error)
 	GetQualityProfiles(ctx context.Context) ([]arr.QualityProfile, error)
 }
@@ -161,6 +167,21 @@ func (p *GoenvoyProber) DownloadClients(ctx context.Context, kind domain.AppKind
 		return nil, err
 	}
 	list, err := c.GetDownloadClients(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", domain.ErrUnreachable, err)
+	}
+	return list, nil
+}
+
+// Indexers implements IndexerDiscoverer: GET /api/v{1,3}/indexer.
+func (p *GoenvoyProber) Indexers(ctx context.Context, kind domain.AppKind, baseURL, apiKey string) ([]arr.ProviderResource, error) {
+	ctx, cancel := context.WithTimeout(ctx, p.opts.Timeout)
+	defer cancel()
+	c, err := p.newClient(kind, baseURL, apiKey)
+	if err != nil {
+		return nil, err
+	}
+	list, err := c.GetIndexers(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", domain.ErrUnreachable, err)
 	}
@@ -230,12 +251,13 @@ func checkWhisparrGeneration(kind domain.AppKind, version string) error {
 	return nil
 }
 
-// Module provides the goenvoy-backed Prober, Discoverer and Labeler.
+// Module provides the goenvoy-backed Prober, Discoverer, IndexerDiscoverer and Labeler.
 var Module = fx.Module("snatcharr.arrclient",
 	fx.Provide(
 		func() *GoenvoyProber { return NewGoenvoyProber(DefaultOptions()) },
 		func(p *GoenvoyProber) Prober { return p },
 		func(p *GoenvoyProber) Discoverer { return p },
+		func(p *GoenvoyProber) IndexerDiscoverer { return p },
 		func(p *GoenvoyProber) Labeler { return p },
 	),
 )

@@ -29,6 +29,8 @@ tags:
     description: Seerr requests snatched first (read-only; nothing is written to Seerr)
   - name: cleanuparr
     description: Cleanuparr status and strikes (read-only; complementary to snatching)
+  - name: prowlarr
+    description: Prowlarr indexer stamina and limits (read-only; nothing is written to Prowlarr)
   - name: configarr
     description: Instances imported from a Configarr config.yml (ADR-0003)
   - name: notifications
@@ -1213,6 +1215,142 @@ paths:
       tags: [cleanuparr]
       operationId: testCleanuparrLink
       summary: Probe a stored Cleanuparr link and record the outcome
+      responses:
+        "200":
+          description: Probe result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProbeResult"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /prowlarr:
+    get:
+      tags: [prowlarr]
+      operationId: listProwlarrLinks
+      summary: List Prowlarr links (API keys are never returned)
+      responses:
+        "200":
+          description: Links
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProwlarrLink"
+        default:
+          $ref: "#/components/responses/Problem"
+    post:
+      tags: [prowlarr]
+      operationId: createProwlarrLink
+      summary: Add a Prowlarr link
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProwlarrLinkInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProwlarrLink"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /prowlarr/test:
+    post:
+      tags: [prowlarr]
+      operationId: testProwlarrLinkInput
+      summary: Probe Prowlarr credentials that are not stored yet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProwlarrLinkInput"
+      responses:
+        "200":
+          description: Probe result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProbeResult"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /prowlarr/status:
+    get:
+      tags: [prowlarr]
+      operationId: getProwlarrStatus
+      summary: Live view of every enabled Prowlarr link (cached 30 s)
+      responses:
+        "200":
+          description: Status per link
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProwlarrStatus"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /prowlarr/{linkId}:
+    parameters:
+      - $ref: "#/components/parameters/LinkId"
+    get:
+      tags: [prowlarr]
+      operationId: getProwlarrLink
+      summary: Get one Prowlarr link
+      responses:
+        "200":
+          description: Link
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProwlarrLink"
+        default:
+          $ref: "#/components/responses/Problem"
+    put:
+      tags: [prowlarr]
+      operationId: updateProwlarrLink
+      summary: Update a Prowlarr link (omit api_key to keep it)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProwlarrLinkInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProwlarrLink"
+        default:
+          $ref: "#/components/responses/Problem"
+    delete:
+      tags: [prowlarr]
+      operationId: deleteProwlarrLink
+      summary: Delete a Prowlarr link
+      responses:
+        "204":
+          description: Deleted
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /prowlarr/{linkId}/test:
+    parameters:
+      - $ref: "#/components/parameters/LinkId"
+    post:
+      tags: [prowlarr]
+      operationId: testProwlarrLink
+      summary: Probe a stored Prowlarr link and record the outcome
       responses:
         "200":
           description: Probe result
@@ -2510,6 +2648,98 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/CleanuparrStrike"
+
+    ProwlarrLink:
+      type: object
+      required: [id, name, base_url, enabled, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        base_url:
+          type: string
+        enabled:
+          type: boolean
+        last_seen_version:
+          type: string
+        last_check_at:
+          type: string
+          format: date-time
+        last_error:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ProwlarrLinkInput:
+      type: object
+      required: [name, base_url]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+        base_url:
+          type: string
+        api_key:
+          type: string
+          description: Required on create; omit on update to keep the stored key
+        enabled:
+          type: boolean
+          default: true
+
+    ProwlarrStatus:
+      type: object
+      required: [link_id, name, reachable, checked_at, indexers]
+      properties:
+        link_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        reachable:
+          type: boolean
+        error:
+          type: string
+        version:
+          type: string
+        checked_at:
+          type: string
+          format: date-time
+        indexers:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProwlarrIndexerStatus"
+
+    ProwlarrIndexerStatus:
+      type: object
+      required: [id, name, limits_unit, used_queries, used_grabs, exhausted]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        query_limit:
+          type: integer
+        grab_limit:
+          type: integer
+        limits_unit:
+          type: integer
+          description: "0=day, 1=hour"
+        used_queries:
+          type: integer
+        used_grabs:
+          type: integer
+        disabled_till:
+          type: string
+          format: date-time
+        exhausted:
+          type: boolean
 
     ConfigarrImportRequest:
       type: object

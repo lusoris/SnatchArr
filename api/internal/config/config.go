@@ -70,6 +70,20 @@ type Options struct {
 	Setup     SetupOptions     `koanf:"setup"`
 	OIDC      OIDCOptions      `koanf:"oidc"`
 	ProxyAuth ProxyAuthOptions `koanf:"proxy_auth"`
+	Prowlarr  ProwlarrOptions  `koanf:"prowlarr"`
+}
+
+// ProwlarrOptions configures the Prowlarr link and planner gate.
+type ProwlarrOptions struct {
+	LimitThreshold float64 `koanf:"limit_threshold"`
+}
+
+// Validate checks that the limit threshold is within (0, 1].
+func (p ProwlarrOptions) Validate() error {
+	if p.LimitThreshold <= 0 || p.LimitThreshold > 1 {
+		return fmt.Errorf("config: prowlarr.limit_threshold must be between 0 (exclusive) and 1 (inclusive), got %v", p.LimitThreshold)
+	}
+	return nil
 }
 
 // SetupOptions configure the first-run setup wizard.
@@ -286,6 +300,9 @@ func Default() Options {
 		ProxyAuth: ProxyAuthOptions{
 			Header: "Remote-User",
 		},
+		Prowlarr: ProwlarrOptions{
+			LimitThreshold: 0.9,
+		},
 	}
 }
 
@@ -383,6 +400,9 @@ func (o Options) Validate() error {
 	if err := o.ProxyAuth.Validate(); err != nil {
 		return err
 	}
+	if err := o.Prowlarr.Validate(); err != nil {
+		return err
+	}
 	return o.Proxy.Validate()
 }
 
@@ -424,6 +444,7 @@ func CompoundKeys() []string {
 		"snatcharr.proxy_auth.header",
 		"snatcharr.proxy_auth.trusted_cidrs",
 		"snatcharr.proxy_auth.allowed_users",
+		"snatcharr.prowlarr.limit_threshold",
 	}
 }
 

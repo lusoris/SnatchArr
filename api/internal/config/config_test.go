@@ -58,6 +58,24 @@ func TestValidate(t *testing.T) {
 		{"positive trusted proxy whitespace and empty items around commas", func(o *config.Options) {
 			o.Proxy.Trusted = []string{" 10.0.0.0/8 ", " ", "192.168.0.0/16"}
 		}, nil, false},
+		{"positive prowlarr default threshold", func(o *config.Options) {
+			o.Prowlarr.LimitThreshold = 0.9
+		}, nil, false},
+		{"boundary prowlarr threshold 1.0", func(o *config.Options) {
+			o.Prowlarr.LimitThreshold = 1.0
+		}, nil, false},
+		{"boundary prowlarr threshold 0.001", func(o *config.Options) {
+			o.Prowlarr.LimitThreshold = 0.001
+		}, nil, false},
+		{"negative prowlarr threshold 0 refused", func(o *config.Options) {
+			o.Prowlarr.LimitThreshold = 0.0
+		}, nil, true},
+		{"negative prowlarr threshold negative refused", func(o *config.Options) {
+			o.Prowlarr.LimitThreshold = -0.1
+		}, nil, true},
+		{"negative prowlarr threshold greater than 1 refused", func(o *config.Options) {
+			o.Prowlarr.LimitThreshold = 1.01
+		}, nil, true},
 		{"positive oidc valid prod", func(o *config.Options) {
 			o.OIDC.Enabled = true
 			o.OIDC.IssuerURL = "https://idp.example.com"
