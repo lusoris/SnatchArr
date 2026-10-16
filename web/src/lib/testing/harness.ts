@@ -12,6 +12,7 @@ import type { components } from '#lib/api/schema.js';
 export type Instance = components['schemas']['Instance'];
 export type SnatchPolicy = components['schemas']['SnatchPolicy'];
 export type Run = components['schemas']['Run'];
+export type PolicyFilterOptions = components['schemas']['PolicyFilterOptions'];
 
 /** A query client per test: no retry, so a refused request shows at once; nothing cached. */
 function createTestQueryClient(): QueryClient {
@@ -111,6 +112,15 @@ export const samplePolicy: SnatchPolicy = {
 	page_size: 50,
 	recent_grab_window_h: 48,
 	afterglow_max_h: 168
+};
+
+/** The tags and quality profiles an instance offers to the policy filters, sorted by name. */
+export const sampleFilterOptions: PolicyFilterOptions = {
+	tags: [
+		{ id: 2, name: 'anime' },
+		{ id: 5, name: 'kids' }
+	],
+	quality_profiles: [{ id: 4, name: 'HD-1080p' }]
 };
 
 /** An instance the Configarr import owns: only its policy is editable in the UI. */
