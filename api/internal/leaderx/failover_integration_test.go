@@ -320,26 +320,43 @@ func TestLeaderFailover_SessionLoss(t *testing.T) {
 	// watchdog/supervisor termination of the severed replica.
 	time.Sleep(2 * defaultTestRetry)
 	cancelLeader()
-	lossObservedAt := clk.Now()
 
-	pollUntil(t, clk, func() bool {
+	// The old gate stops its loops after the cancel, not at it: the window from cancel to stop is
+	// logged, and the "never both" rule holds from the moment the stop is seen. Sampling goes on
+	// for two retry periods, so the rule is checked on samples taken after the stop.
+	stopping := pollUntil(t, clk, func() bool {
 		return !leaderGate.Running()
 	}, failoverBound, "old leader to stop loops after loss observation")
+	stoppedAt := clk.Now()
+	t.Logf("old leader stopped its loops %v after the cancel", stopping)
+	time.Sleep(2 * defaultTestRetry)
 
 	samples := sampler.stopSampling()
 	overlap := overlapWindow(samples, terminatedAt)
 	t.Logf("split-brain window after backend kill (old leader not yet cancelled): %v", overlap)
+	assertNeverBothAfter(t, samples, stoppedAt, leaderIsA)
+}
+
+// assertNeverBothAfter fails when a sample taken after from shows both gates running, and when no
+// sample was taken after from, so the rule is never passed without being checked.
+func assertNeverBothAfter(t *testing.T, samples []gateSample, from time.Time, leaderIsA bool) {
+	t.Helper()
+	checked := 0
 	for _, s := range samples {
-		if s.at.After(lossObservedAt) {
-			leaderRunning := s.runningA
-			followerRunning := s.runningB
-			if !leaderIsA {
-				leaderRunning, followerRunning = s.runningB, s.runningA
-			}
-			if leaderRunning && followerRunning {
-				t.Fatalf("both gates running after loss observed at sample %v", s.at)
-			}
+		if !s.at.After(from) {
+			continue
 		}
+		checked++
+		leaderRunning, followerRunning := s.runningA, s.runningB
+		if !leaderIsA {
+			leaderRunning, followerRunning = s.runningB, s.runningA
+		}
+		if leaderRunning && followerRunning {
+			t.Fatalf("both gates running after the old leader stopped, at sample %v", s.at)
+		}
+	}
+	if checked == 0 {
+		t.Fatalf("no sample taken after the old leader stopped at %v", from)
 	}
 }
 
