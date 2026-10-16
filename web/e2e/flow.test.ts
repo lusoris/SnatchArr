@@ -5,7 +5,7 @@
 import http from 'node:http';
 import type net from 'node:net';
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test } from '@playwright/test';
+import { expect, request, test } from '@playwright/test';
 
 const WCAG_22_AA = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 
@@ -182,4 +182,78 @@ test('schedules: create, edit, delete through UI and verify axe clean', async ({
 	expect(getRes3.ok()).toBeTruthy();
 	const schedules3 = (await getRes3.json()) as Array<{ id: string; name: string }>;
 	expect(schedules3.some((s) => s.name === updatedName)).toBeFalsy();
+});
+
+test('account: create API key, read back with Bearer token, revoke key, check 401 and axe clean', async ({
+	page
+}) => {
+	await page.context().clearCookies();
+	const login = await page.request.post('/api/v1/auth/login', {
+		data: { username: 'admin', password: 'smoke-password-1234' }
+	});
+	expect(login.ok()).toBeTruthy();
+
+	await page.goto('/account');
+	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+
+	const axeResults = await new AxeBuilder({ page })
+		.withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+		.analyze();
+	expect(axeResults.violations).toEqual([]);
+
+	// 1. Create API key through UI
+	const keyName = 'e2e-api-key';
+	await page.locator('#key-name').fill(keyName);
+	await page.getByRole('button', { name: /create api key|api-schlüssel erstellen/i }).click();
+
+	// Dialog should display secret
+	const dialog = page.getByRole('dialog');
+	await expect(dialog).toBeVisible();
+	const secretInput = dialog.locator('#created-secret-input');
+	await expect(secretInput).toBeVisible();
+	const secret = await secretInput.inputValue();
+	expect(secret).toBeTruthy();
+
+	// The modal dialog holds focus and passes axe; Escape closes it and drops the secret
+	expect(await dialog.evaluate((el) => el.contains(document.activeElement))).toBe(true);
+	const dialogAxe = await new AxeBuilder({ page })
+		.withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+		.analyze();
+	expect(dialogAxe.violations).toEqual([]);
+	await page.keyboard.press('Escape');
+	await expect(dialog).not.toBeVisible();
+	await expect(page.locator('#created-secret-input')).toHaveCount(0);
+
+	// Key appears in the table
+	await expect(page.getByRole('table')).toContainText(keyName);
+
+	// 2. Read back from API using Bearer token per OpenAPI security scheme
+	const unauthedRequest = await request.newContext({
+		baseURL: 'http://127.0.0.1:4173',
+		storageState: { cookies: [], origins: [] }
+	});
+	const sessionRes = await unauthedRequest.get('/api/v1/auth/session', {
+		headers: {
+			Authorization: `Bearer ${secret}`
+		}
+	});
+	expect(sessionRes.ok()).toBeTruthy();
+	const sessionData = (await sessionRes.json()) as { user?: { username?: string } };
+	expect(sessionData.user?.username).toBe('admin');
+
+	// 3. Revoke key through UI with in-page confirmation
+	const row = page.getByRole('row').filter({ hasText: keyName });
+	await row.getByRole('button', { name: /revoke|widerrufen/i }).click();
+	await row.getByRole('button', { name: /revoke key|schlüssel widerrufen/i }).click();
+
+	// Verify key is removed
+	await expect(page.getByRole('cell', { name: keyName, exact: true })).not.toBeVisible();
+
+	// 4. Request using the revoked key now gets 401
+	const revokedRes = await unauthedRequest.get('/api/v1/auth/session', {
+		headers: {
+			Authorization: `Bearer ${secret}`
+		}
+	});
+	expect(revokedRes.status()).toBe(401);
 });
