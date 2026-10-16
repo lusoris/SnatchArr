@@ -165,6 +165,7 @@ jobs:
               - 'tools/cover/**'
               - 'tools/e2e/**'
               - 'tools/**/*.go'
+              - 'tools/go/**'
               - 'exceptions.yaml'
               - 'Makefile'
               - 'Dockerfile'
@@ -330,7 +331,7 @@ jobs:
         run: go run ../tools/gennosec check
       - name: govulncheck
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
+          make -C .. govulncheck-install
           govulncheck ./...
 
   api-openapi:
