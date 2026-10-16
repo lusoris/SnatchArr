@@ -1588,6 +1588,8 @@ func TestScheduleReadAndCreate(t *testing.T) {
 
 func testScheduleListCase(t *testing.T, f *integrationFixture, seed bool, ctx context.Context) {
 	t.Helper()
+	// Monday 12:00 UTC: daytime in Europe/Berlin, outside the 22:00-06:00 window.
+	advanceClockTo(f, time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC))
 	var createdID uuid.UUID
 	if seed {
 		adminCtx := withUser(ctx, f.admin)
@@ -1808,13 +1810,24 @@ func activeScheduleCases() []activeScheduleCase {
 	}
 }
 
+// advanceClockTo moves the fixture clock forward to at, shifted by whole
+// weeks past the clock's start (the real time) when at already lies behind
+// it. Weekday and UTC time of day stay those of at, so a case keeps its
+// meaning on whatever day and hour the suite runs.
+func advanceClockTo(f *integrationFixture, at time.Time) {
+	const week = 7 * 24 * time.Hour
+	now := f.clk.Now()
+	if at.Before(now) {
+		at = at.Add((now.Sub(at)/week + 1) * week)
+	}
+	f.clk.Advance(at.Sub(now))
+}
+
 func runActiveScheduleCase(t *testing.T, tc activeScheduleCase) {
 	t.Helper()
 	f := newIntegrationFixture(t)
 	ctx := withUser(t.Context(), f.admin)
-	if diff := tc.advanceTo.Sub(f.clk.Now()); diff > 0 {
-		f.clk.Advance(diff)
-	}
+	advanceClockTo(f, tc.advanceTo)
 	created, err := f.h.CreateSchedule(ctx, &tc.sched)
 	if err != nil {
 		t.Fatalf("CreateSchedule() err = %v", err)
