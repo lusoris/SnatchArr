@@ -7,8 +7,11 @@
 package arrclient
 
 import (
+	"cmp"
 	"context"
 	"fmt"
+	"math"
+	"slices"
 	"strings"
 	"time"
 
@@ -39,6 +42,23 @@ type Prober interface {
 // Discoverer lists the download clients an *arr instance has configured.
 type Discoverer interface {
 	DownloadClients(ctx context.Context, kind domain.AppKind, baseURL, apiKey string) ([]arr.ProviderResource, error)
+}
+
+// Label is one tag or quality profile of an *arr instance.
+type Label struct {
+	ID   int32
+	Name string
+}
+
+// Labels are the tags and quality profiles an *arr instance offers, each sorted by name.
+type Labels struct {
+	Tags     []Label
+	Profiles []Label
+}
+
+// Labeler reads the tags and quality profiles of an *arr instance.
+type Labeler interface {
+	Labels(ctx context.Context, kind domain.AppKind, baseURL, apiKey string) (Labels, error)
 }
 
 // Options tune the probe.
@@ -89,6 +109,8 @@ func (p *GoenvoyProber) clientOptions() []arr.Option {
 type arrClient interface {
 	GetSystemStatus(ctx context.Context) (*arr.StatusResponse, error)
 	GetDownloadClients(ctx context.Context) ([]arr.ProviderResource, error)
+	GetTags(ctx context.Context) ([]arr.Tag, error)
+	GetQualityProfiles(ctx context.Context) ([]arr.QualityProfile, error)
 }
 
 // newClient builds the goenvoy client for a kind. Kept non-generic on purpose: govulncheck
@@ -145,6 +167,52 @@ func (p *GoenvoyProber) DownloadClients(ctx context.Context, kind domain.AppKind
 	return list, nil
 }
 
+// Labels implements Labeler: GET /api/v{1,3}/tag and /api/v{1,3}/qualityprofile.
+func (p *GoenvoyProber) Labels(ctx context.Context, kind domain.AppKind, baseURL, apiKey string) (Labels, error) {
+	ctx, cancel := context.WithTimeout(ctx, p.opts.Timeout)
+	defer cancel()
+	c, err := p.newClient(kind, baseURL, apiKey)
+	if err != nil {
+		return Labels{}, err
+	}
+	tags, err := c.GetTags(ctx)
+	if err != nil {
+		return Labels{}, fmt.Errorf("%w: tags: %w", domain.ErrUnreachable, err)
+	}
+	profiles, err := c.GetQualityProfiles(ctx)
+	if err != nil {
+		return Labels{}, fmt.Errorf("%w: quality profiles: %w", domain.ErrUnreachable, err)
+	}
+	out := Labels{Tags: make([]Label, 0, len(tags)), Profiles: make([]Label, 0, len(profiles))}
+	for _, t := range tags {
+		out.Tags = appendLabel(out.Tags, t.ID, t.Label)
+	}
+	for _, q := range profiles {
+		out.Profiles = appendLabel(out.Profiles, q.ID, q.Name)
+	}
+	sortLabels(out.Tags)
+	sortLabels(out.Profiles)
+	return out, nil
+}
+
+// appendLabel keeps the ids a policy can store (1..MaxInt32) and drops the rest.
+func appendLabel(list []Label, id int, name string) []Label {
+	if id < 1 || id > math.MaxInt32 {
+		return list
+	}
+	return append(list, Label{ID: int32(id), Name: name}) // #nosec G115 -- bounded to 1..MaxInt32 above
+}
+
+// sortLabels orders labels by name, then id, so the form lists them stably.
+func sortLabels(list []Label) {
+	slices.SortFunc(list, func(a, b Label) int {
+		if c := strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name)); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.ID, b.ID)
+	})
+}
+
 func checkWhisparrGeneration(kind domain.AppKind, version string) error {
 	major, _, _ := strings.Cut(version, ".")
 	switch kind {
@@ -162,11 +230,12 @@ func checkWhisparrGeneration(kind domain.AppKind, version string) error {
 	return nil
 }
 
-// Module provides the goenvoy-backed Prober and Discoverer.
+// Module provides the goenvoy-backed Prober, Discoverer and Labeler.
 var Module = fx.Module("snatcharr.arrclient",
 	fx.Provide(
 		func() *GoenvoyProber { return NewGoenvoyProber(DefaultOptions()) },
 		func(p *GoenvoyProber) Prober { return p },
 		func(p *GoenvoyProber) Discoverer { return p },
+		func(p *GoenvoyProber) Labeler { return p },
 	),
 )

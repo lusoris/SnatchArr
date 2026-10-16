@@ -32,6 +32,7 @@ import (
 	"github.com/golusoris/golusoris/core/crypto"
 	"github.com/golusoris/golusoris/httpx/csrf"
 
+	"github.com/lusoris/SnatchArr/api/internal/arrclient"
 	"github.com/lusoris/SnatchArr/api/internal/auth"
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
@@ -234,6 +235,7 @@ func containsID(items any, wantID string) bool {
 
 func setupFixtureStubs(f *routerFixture) {
 	enabled := true
+	f.dlDisc.labels = arrclient.Labels{Tags: []arrclient.Label{{ID: 3, Name: "anime"}}, Profiles: []arrclient.Label{}}
 	f.dlDisc.res = []arr.ProviderResource{
 		{
 			ID: 101, Name: "qbit-disc", Implementation: "QBittorrent", ImplementationName: "qBittorrent", Enable: &enabled,
@@ -519,6 +521,8 @@ func stepsPoliciesAndRuns() []routerStep {
 			body: func(ids *idsState) any {
 				p := copyMap(ids.policy)
 				p["hourly_cap"] = 25
+				p["include_tags"] = []int{3}
+				p["release_delay_h"] = 12
 				delete(p, "updated_at")
 				return p
 			},
@@ -527,6 +531,21 @@ func stepsPoliciesAndRuns() []routerStep {
 				t.Helper()
 				if capVal, ok := decoded["hourly_cap"].(float64); !ok || int(capVal) != 25 {
 					t.Fatalf("updatePolicy hourly_cap = %v, want 25", decoded["hourly_cap"])
+				}
+				if tags, ok := decoded["include_tags"].([]any); !ok || len(tags) != 1 || decoded["release_delay_h"] != float64(12) {
+					t.Fatalf("updatePolicy filters = %v, %v; want [3], 12", decoded["include_tags"], decoded["release_delay_h"])
+				}
+			},
+		},
+		{
+			op:     "getPolicyFilterOptions",
+			method: http.MethodGet,
+			path:   func(ids *idsState) string { return "/instances/" + ids.instanceID + "/policy/filter-options" },
+			want:   http.StatusOK,
+			capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
+				t.Helper()
+				if tags, ok := decoded["tags"].([]any); !ok || len(tags) != 1 || decoded["quality_profiles"] == nil {
+					t.Fatalf("getPolicyFilterOptions = %v; want one tag and a profile list", decoded)
 				}
 			},
 		},

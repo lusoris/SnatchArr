@@ -441,6 +441,26 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
 
+  /instances/{instanceId}/policy/filter-options:
+    parameters:
+      - $ref: "#/components/parameters/InstanceId"
+    get:
+      tags: [instances]
+      operationId: getPolicyFilterOptions
+      summary: Tags and quality profiles the instance offers for the policy filters
+      description: |
+        Reads the tags and quality profiles from the *arr instance itself, so the policy form
+        can offer them by name. Nothing is stored; an unreachable instance answers 502.
+      responses:
+        "200":
+          description: Filter options
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PolicyFilterOptions"
+        default:
+          $ref: "#/components/responses/Problem"
+
   /instances/{instanceId}/runs:
     parameters:
       - $ref: "#/components/parameters/InstanceId"
@@ -1747,6 +1767,32 @@ components:
           type: string
         product:
           $ref: "#/components/schemas/ArrProduct"
+
+    PolicyFilterOption:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: integer
+          format: int32
+          minimum: 1
+        name:
+          type: string
+
+    PolicyFilterOptions:
+      type: object
+      required: [tags, quality_profiles]
+      properties:
+        tags:
+          type: array
+          description: Tags of the instance, sorted by name.
+          items:
+            $ref: "#/components/schemas/PolicyFilterOption"
+        quality_profiles:
+          type: array
+          description: Quality profiles of the instance, sorted by name.
+          items:
+            $ref: "#/components/schemas/PolicyFilterOption"
 
     SnatchPolicy:
       type: object

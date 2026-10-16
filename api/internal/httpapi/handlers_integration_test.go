@@ -74,12 +74,18 @@ func (s *stubSnapshotter) Snapshot(_ context.Context, c domain.DownloadClient, _
 }
 
 type stubDiscoverer struct {
-	res []arr.ProviderResource
-	err error
+	res       []arr.ProviderResource
+	err       error
+	labels    arrclient.Labels
+	labelsErr error
 }
 
 func (d *stubDiscoverer) DownloadClients(context.Context, domain.AppKind, string, string) ([]arr.ProviderResource, error) {
 	return d.res, d.err
+}
+
+func (d *stubDiscoverer) Labels(context.Context, domain.AppKind, string, string) (arrclient.Labels, error) {
+	return d.labels, d.labelsErr
 }
 
 type stubSeerrClient struct {
@@ -261,6 +267,8 @@ func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Genera
 	}
 	instSvc := instances.New(st, enc, clk, ids, probe, logger)
 	polSvc := policies.New(st, clk)
+	// The stub discoverer also answers the filter options; a fixture without one has none.
+	labeler, _ := dlDisc.(arrclient.Labeler)
 	bus := events.New(logger)
 	webhookStore := notify.NewWebhookStore(st, enc)
 	notifySvc := notify.NewService(st, webhookStore, enc, clk, ids, logger)
@@ -292,6 +300,7 @@ func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Genera
 		sessions:   sessMgr,
 		instances:  instSvc,
 		policies:   polSvc,
+		options:    policies.NewOptions(instSvc, labeler),
 		runs:       runs,
 		workers:    workers,
 		rec:        rec,

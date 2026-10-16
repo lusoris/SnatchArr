@@ -3550,6 +3550,60 @@ func (o OptUUID) Or(d uuid.UUID) uuid.UUID {
 	return d
 }
 
+// Ref: #/components/schemas/PolicyFilterOption
+type PolicyFilterOption struct {
+	ID   int32  `json:"id"`
+	Name string `json:"name"`
+}
+
+// GetID returns the value of ID.
+func (s *PolicyFilterOption) GetID() int32 {
+	return s.ID
+}
+
+// GetName returns the value of Name.
+func (s *PolicyFilterOption) GetName() string {
+	return s.Name
+}
+
+// SetID sets the value of ID.
+func (s *PolicyFilterOption) SetID(val int32) {
+	s.ID = val
+}
+
+// SetName sets the value of Name.
+func (s *PolicyFilterOption) SetName(val string) {
+	s.Name = val
+}
+
+// Ref: #/components/schemas/PolicyFilterOptions
+type PolicyFilterOptions struct {
+	// Tags of the instance, sorted by name.
+	Tags []PolicyFilterOption `json:"tags"`
+	// Quality profiles of the instance, sorted by name.
+	QualityProfiles []PolicyFilterOption `json:"quality_profiles"`
+}
+
+// GetTags returns the value of Tags.
+func (s *PolicyFilterOptions) GetTags() []PolicyFilterOption {
+	return s.Tags
+}
+
+// GetQualityProfiles returns the value of QualityProfiles.
+func (s *PolicyFilterOptions) GetQualityProfiles() []PolicyFilterOption {
+	return s.QualityProfiles
+}
+
+// SetTags sets the value of Tags.
+func (s *PolicyFilterOptions) SetTags(val []PolicyFilterOption) {
+	s.Tags = val
+}
+
+// SetQualityProfiles sets the value of QualityProfiles.
+func (s *PolicyFilterOptions) SetQualityProfiles(val []PolicyFilterOption) {
+	s.QualityProfiles = val
+}
+
 // Ref: #/components/schemas/ProbeResult
 type ProbeResult struct {
 	AppName string        `json:"app_name"`

@@ -37,6 +37,7 @@ const (
 	GetNotificationChannelOperation    OperationName = "GetNotificationChannel"
 	GetNotificationRuleOperation       OperationName = "GetNotificationRule"
 	GetPolicyOperation                 OperationName = "GetPolicy"
+	GetPolicyFilterOptionsOperation    OperationName = "GetPolicyFilterOptions"
 	GetSSOOperation                    OperationName = "GetSSO"
 	GetSeerrLinkOperation              OperationName = "GetSeerrLink"
 	GetSessionOperation                OperationName = "GetSession"

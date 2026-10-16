@@ -195,6 +195,13 @@ type Handler interface {
 	//
 	// GET /instances/{instanceId}/policy
 	GetPolicy(ctx context.Context, params GetPolicyParams) (*SnatchPolicy, error)
+	// GetPolicyFilterOptions implements getPolicyFilterOptions operation.
+	//
+	// Reads the tags and quality profiles from the *arr instance itself, so the policy form
+	// can offer them by name. Nothing is stored; an unreachable instance answers 502.
+	//
+	// GET /instances/{instanceId}/policy/filter-options
+	GetPolicyFilterOptions(ctx context.Context, params GetPolicyFilterOptionsParams) (*PolicyFilterOptions, error)
 	// GetSSO implements getSSO operation.
 	//
 	// SSO configuration status.
