@@ -29,7 +29,8 @@ schedule, no download client is holding things back, and the circuit is closed (
 
 `missing_per_cycle` (default 1) and `upgrade_per_cycle` (default 0) say how many items a
 single snatch goes after. Candidates are filtered **first** (monitored, released, not in
-afterglow, not already in the download queue, not grabbed within `recent_grab_window_h`)
+afterglow, not already in the download queue, not grabbed within `recent_grab_window_h`,
+matching the tag and quality profile filters, released at least `release_delay_h` ago)
 and selected **after**, so a snatch is never short because it drew an unlucky page.
 Selection is `random` (a random page, then random items), `sequential` (a cursor that
 walks the whole backlog) or `recent` (newest releases first, with one pick in five drawn

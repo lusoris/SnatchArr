@@ -8,6 +8,7 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/lusoris/SnatchArr/api/internal/arrclient"
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 )
@@ -114,6 +115,26 @@ func (h *Handlers) GetPolicy(ctx context.Context, params oas.GetPolicyParams) (*
 		return nil, err
 	}
 	return policyToOAS(p), nil
+}
+
+// GetPolicyFilterOptions lists the tags and quality profiles an instance offers.
+func (h *Handlers) GetPolicyFilterOptions(ctx context.Context, params oas.GetPolicyFilterOptionsParams) (*oas.PolicyFilterOptions, error) {
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
+	}
+	labels, err := h.options.FilterOptions(ctx, params.InstanceId)
+	if err != nil {
+		return nil, err
+	}
+	return &oas.PolicyFilterOptions{Tags: labelsToOAS(labels.Tags), QualityProfiles: labelsToOAS(labels.Profiles)}, nil
+}
+
+func labelsToOAS(list []arrclient.Label) []oas.PolicyFilterOption {
+	out := make([]oas.PolicyFilterOption, 0, len(list))
+	for _, l := range list {
+		out = append(out, oas.PolicyFilterOption{ID: l.ID, Name: l.Name})
+	}
+	return out
 }
 
 // UpdatePolicy replaces an instance's snatch policy.

@@ -11,6 +11,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import CheckState from '#lib/components/CheckState.svelte';
 	import Field from '#lib/components/Field.svelte';
 	import InstanceEditForm from '#lib/components/InstanceEditForm.svelte';
+	import PolicyFilters from '#lib/components/PolicyFilters.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import ResetMemory from '#lib/components/ResetMemory.svelte';
 	import RunList from '#lib/components/RunList.svelte';
@@ -36,9 +37,17 @@ SPDX-License-Identifier: EUPL-1.2
 			(await api.GET('/instances/{instanceId}/policy', { params: { path: { instanceId } } })).data
 	});
 
+	// A policy stored before the filters existed has no lists; the form edits empty ones.
+	const noFilters = {
+		include_tags: [],
+		exclude_tags: [],
+		include_quality_profiles: [],
+		exclude_quality_profiles: [],
+		release_delay_h: 0
+	} satisfies Partial<Policy>;
 	let draft = $state<Policy | null>(null);
 	$effect(() => {
-		if (policy.data && !draft) draft = { ...policy.data };
+		if (policy.data && !draft) draft = { ...noFilters, ...policy.data };
 	});
 
 	const save = createSentioMutation({
@@ -178,6 +187,7 @@ SPDX-License-Identifier: EUPL-1.2
 			><input type="checkbox" bind:checked={draft.await_command} />
 			{m.policy_await_command()}</label
 		>
+		<PolicyFilters {instanceId} bind:policy={draft} />
 		<div class="md:col-span-2">
 			<button type="submit" class="btn btn-primary" disabled={save.isPending}
 				>{m.instance_save()}</button

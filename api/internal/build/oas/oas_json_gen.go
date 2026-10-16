@@ -6472,6 +6472,252 @@ func (s *OptUUID) UnmarshalJSON(data []byte) error {
 }
 
 // Encode implements json.Marshaler.
+func (s *PolicyFilterOption) Encode(e *jx.Encoder) {
+	e.ObjStart()
+	s.encodeFields(e)
+	e.ObjEnd()
+}
+
+// encodeFields encodes fields.
+func (s *PolicyFilterOption) encodeFields(e *jx.Encoder) {
+	{
+		e.FieldStart("id")
+		e.Int32(s.ID)
+	}
+	{
+		e.FieldStart("name")
+		e.Str(s.Name)
+	}
+}
+
+var jsonFieldsNameOfPolicyFilterOption = [2]string{
+	0: "id",
+	1: "name",
+}
+
+// Decode decodes PolicyFilterOption from json.
+func (s *PolicyFilterOption) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode PolicyFilterOption to nil")
+	}
+	var requiredBitSet [1]uint8
+
+	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
+		switch string(k) {
+		case "id":
+			requiredBitSet[0] |= 1 << 0
+			if err := func() error {
+				v, err := d.Int32()
+				s.ID = int32(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"id\"")
+			}
+		case "name":
+			requiredBitSet[0] |= 1 << 1
+			if err := func() error {
+				v, err := d.Str()
+				s.Name = string(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"name\"")
+			}
+		default:
+			return d.Skip()
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "decode PolicyFilterOption")
+	}
+	// Validate required fields.
+	var failures []validate.FieldError
+	for i, mask := range [1]uint8{
+		0b00000011,
+	} {
+		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
+			// Mask only required fields and check equality to mask using XOR.
+			//
+			// If XOR result is not zero, result is not equal to expected, so some fields are missed.
+			// Bits of fields which would be set are actually bits of missed fields.
+			missed := bits.OnesCount8(result)
+			for bitN := 0; bitN < missed; bitN++ {
+				bitIdx := bits.TrailingZeros8(result)
+				fieldIdx := i*8 + bitIdx
+				var name string
+				if fieldIdx < len(jsonFieldsNameOfPolicyFilterOption) {
+					name = jsonFieldsNameOfPolicyFilterOption[fieldIdx]
+				} else {
+					name = strconv.Itoa(fieldIdx)
+				}
+				failures = append(failures, validate.FieldError{
+					Name:  name,
+					Error: validate.ErrFieldRequired,
+				})
+				// Reset bit.
+				result &^= 1 << bitIdx
+			}
+		}
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *PolicyFilterOption) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *PolicyFilterOption) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode implements json.Marshaler.
+func (s *PolicyFilterOptions) Encode(e *jx.Encoder) {
+	e.ObjStart()
+	s.encodeFields(e)
+	e.ObjEnd()
+}
+
+// encodeFields encodes fields.
+func (s *PolicyFilterOptions) encodeFields(e *jx.Encoder) {
+	{
+		e.FieldStart("tags")
+		e.ArrStart()
+		for _, elem := range s.Tags {
+			elem.Encode(e)
+		}
+		e.ArrEnd()
+	}
+	{
+		e.FieldStart("quality_profiles")
+		e.ArrStart()
+		for _, elem := range s.QualityProfiles {
+			elem.Encode(e)
+		}
+		e.ArrEnd()
+	}
+}
+
+var jsonFieldsNameOfPolicyFilterOptions = [2]string{
+	0: "tags",
+	1: "quality_profiles",
+}
+
+// Decode decodes PolicyFilterOptions from json.
+func (s *PolicyFilterOptions) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode PolicyFilterOptions to nil")
+	}
+	var requiredBitSet [1]uint8
+
+	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
+		switch string(k) {
+		case "tags":
+			requiredBitSet[0] |= 1 << 0
+			if err := func() error {
+				s.Tags = make([]PolicyFilterOption, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem PolicyFilterOption
+					if err := elem.Decode(d); err != nil {
+						return err
+					}
+					s.Tags = append(s.Tags, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"tags\"")
+			}
+		case "quality_profiles":
+			requiredBitSet[0] |= 1 << 1
+			if err := func() error {
+				s.QualityProfiles = make([]PolicyFilterOption, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem PolicyFilterOption
+					if err := elem.Decode(d); err != nil {
+						return err
+					}
+					s.QualityProfiles = append(s.QualityProfiles, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"quality_profiles\"")
+			}
+		default:
+			return d.Skip()
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "decode PolicyFilterOptions")
+	}
+	// Validate required fields.
+	var failures []validate.FieldError
+	for i, mask := range [1]uint8{
+		0b00000011,
+	} {
+		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
+			// Mask only required fields and check equality to mask using XOR.
+			//
+			// If XOR result is not zero, result is not equal to expected, so some fields are missed.
+			// Bits of fields which would be set are actually bits of missed fields.
+			missed := bits.OnesCount8(result)
+			for bitN := 0; bitN < missed; bitN++ {
+				bitIdx := bits.TrailingZeros8(result)
+				fieldIdx := i*8 + bitIdx
+				var name string
+				if fieldIdx < len(jsonFieldsNameOfPolicyFilterOptions) {
+					name = jsonFieldsNameOfPolicyFilterOptions[fieldIdx]
+				} else {
+					name = strconv.Itoa(fieldIdx)
+				}
+				failures = append(failures, validate.FieldError{
+					Name:  name,
+					Error: validate.ErrFieldRequired,
+				})
+				// Reset bit.
+				result &^= 1 << bitIdx
+			}
+		}
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *PolicyFilterOptions) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *PolicyFilterOptions) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode implements json.Marshaler.
 func (s *ProbeResult) Encode(e *jx.Encoder) {
 	e.ObjStart()
 	s.encodeFields(e)
@@ -9948,6 +10194,52 @@ func (s *SnatchPolicy) encodeFields(e *jx.Encoder) {
 		e.Int(s.AfterglowMaxH)
 	}
 	{
+		if s.IncludeTags != nil {
+			e.FieldStart("include_tags")
+			e.ArrStart()
+			for _, elem := range s.IncludeTags {
+				e.Int32(elem)
+			}
+			e.ArrEnd()
+		}
+	}
+	{
+		if s.ExcludeTags != nil {
+			e.FieldStart("exclude_tags")
+			e.ArrStart()
+			for _, elem := range s.ExcludeTags {
+				e.Int32(elem)
+			}
+			e.ArrEnd()
+		}
+	}
+	{
+		if s.IncludeQualityProfiles != nil {
+			e.FieldStart("include_quality_profiles")
+			e.ArrStart()
+			for _, elem := range s.IncludeQualityProfiles {
+				e.Int32(elem)
+			}
+			e.ArrEnd()
+		}
+	}
+	{
+		if s.ExcludeQualityProfiles != nil {
+			e.FieldStart("exclude_quality_profiles")
+			e.ArrStart()
+			for _, elem := range s.ExcludeQualityProfiles {
+				e.Int32(elem)
+			}
+			e.ArrEnd()
+		}
+	}
+	{
+		if s.ReleaseDelayH.Set {
+			e.FieldStart("release_delay_h")
+			s.ReleaseDelayH.Encode(e)
+		}
+	}
+	{
 		if s.UpdatedAt.Set {
 			e.FieldStart("updated_at")
 			s.UpdatedAt.Encode(e, json.EncodeDateTime)
@@ -9955,7 +10247,7 @@ func (s *SnatchPolicy) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfSnatchPolicy = [18]string{
+var jsonFieldsNameOfSnatchPolicy = [23]string{
 	0:  "missing_per_cycle",
 	1:  "upgrade_per_cycle",
 	2:  "cycle_interval_s",
@@ -9973,7 +10265,12 @@ var jsonFieldsNameOfSnatchPolicy = [18]string{
 	14: "page_size",
 	15: "recent_grab_window_h",
 	16: "afterglow_max_h",
-	17: "updated_at",
+	17: "include_tags",
+	18: "exclude_tags",
+	19: "include_quality_profiles",
+	20: "exclude_quality_profiles",
+	21: "release_delay_h",
+	22: "updated_at",
 }
 
 // Decode decodes SnatchPolicy from json.
@@ -10178,6 +10475,92 @@ func (s *SnatchPolicy) Decode(d *jx.Decoder) error {
 				return nil
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"afterglow_max_h\"")
+			}
+		case "include_tags":
+			if err := func() error {
+				s.IncludeTags = make([]int32, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem int32
+					v, err := d.Int32()
+					elem = int32(v)
+					if err != nil {
+						return err
+					}
+					s.IncludeTags = append(s.IncludeTags, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"include_tags\"")
+			}
+		case "exclude_tags":
+			if err := func() error {
+				s.ExcludeTags = make([]int32, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem int32
+					v, err := d.Int32()
+					elem = int32(v)
+					if err != nil {
+						return err
+					}
+					s.ExcludeTags = append(s.ExcludeTags, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"exclude_tags\"")
+			}
+		case "include_quality_profiles":
+			if err := func() error {
+				s.IncludeQualityProfiles = make([]int32, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem int32
+					v, err := d.Int32()
+					elem = int32(v)
+					if err != nil {
+						return err
+					}
+					s.IncludeQualityProfiles = append(s.IncludeQualityProfiles, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"include_quality_profiles\"")
+			}
+		case "exclude_quality_profiles":
+			if err := func() error {
+				s.ExcludeQualityProfiles = make([]int32, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem int32
+					v, err := d.Int32()
+					elem = int32(v)
+					if err != nil {
+						return err
+					}
+					s.ExcludeQualityProfiles = append(s.ExcludeQualityProfiles, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"exclude_quality_profiles\"")
+			}
+		case "release_delay_h":
+			if err := func() error {
+				s.ReleaseDelayH.Reset()
+				if err := s.ReleaseDelayH.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"release_delay_h\"")
 			}
 		case "updated_at":
 			if err := func() error {

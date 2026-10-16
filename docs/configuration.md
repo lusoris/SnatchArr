@@ -87,6 +87,15 @@ Every instance has one policy (`GET/PUT /api/v1/instances/{id}/policy`).
 | `page_size` | 100 | 10 to 1000 |
 | `recent_grab_window_h` | 24 | 0 to 720; items grabbed this recently (and everything queued) are skipped |
 | `afterglow_max_h` | 720 | 1 to 8760; cap for the doubling afterglow |
+| `include_tags` | empty | up to 100 *arr tag ids; when not empty, only items with one of these tags |
+| `exclude_tags` | empty | up to 100 *arr tag ids; items with any of these tags are skipped; an id may not be in both tag lists |
+| `include_quality_profiles` | empty | up to 100 *arr quality profile ids; when not empty, only items using one of these profiles |
+| `exclude_quality_profiles` | empty | up to 100 *arr quality profile ids; items using any of these are skipped; an id may not be in both profile lists |
+| `release_delay_h` | 0 | 0 to 8760; skip items released less than this many hours ago (0 = off; items without a date are kept) |
+
+An episode, album or book has the tags and quality profile of its series, artist or author.
+`GET /api/v1/instances/{id}/policy/filter-options` lists the tags and quality profiles the
+instance offers (admins only); the policy form picks from that list.
 
 ## Runtime settings
 

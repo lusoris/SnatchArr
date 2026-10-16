@@ -588,8 +588,18 @@ type Policy struct {
 	Cursor string `protobuf:"bytes,10,opt,name=cursor,proto3" json:"cursor,omitempty"`
 	// Skip items the *arr grabbed within this many hours (0 = only skip the download queue).
 	RecentGrabHours uint32 `protobuf:"varint,11,opt,name=recent_grab_hours,json=recentGrabHours,proto3" json:"recent_grab_hours,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// *arr tag ids: when include_tags is not empty an item must carry one of them; an item that
+	// carries any of exclude_tags is skipped. Tags of an episode, album or book are its parent's.
+	IncludeTags []int32 `protobuf:"varint,12,rep,packed,name=include_tags,json=includeTags,proto3" json:"include_tags,omitempty"`
+	ExcludeTags []int32 `protobuf:"varint,13,rep,packed,name=exclude_tags,json=excludeTags,proto3" json:"exclude_tags,omitempty"`
+	// *arr quality profile ids, applied the same way as the tag lists.
+	IncludeQualityProfiles []int32 `protobuf:"varint,14,rep,packed,name=include_quality_profiles,json=includeQualityProfiles,proto3" json:"include_quality_profiles,omitempty"`
+	ExcludeQualityProfiles []int32 `protobuf:"varint,15,rep,packed,name=exclude_quality_profiles,json=excludeQualityProfiles,proto3" json:"exclude_quality_profiles,omitempty"`
+	// Skip items released less than this many hours ago (0 = no delay). The release date is the
+	// one the app kind uses: air date, the Radarr release type's date, album or book release.
+	ReleaseDelayHours uint32 `protobuf:"varint,16,opt,name=release_delay_hours,json=releaseDelayHours,proto3" json:"release_delay_hours,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *Policy) Reset() {
@@ -695,6 +705,41 @@ func (x *Policy) GetCursor() string {
 func (x *Policy) GetRecentGrabHours() uint32 {
 	if x != nil {
 		return x.RecentGrabHours
+	}
+	return 0
+}
+
+func (x *Policy) GetIncludeTags() []int32 {
+	if x != nil {
+		return x.IncludeTags
+	}
+	return nil
+}
+
+func (x *Policy) GetExcludeTags() []int32 {
+	if x != nil {
+		return x.ExcludeTags
+	}
+	return nil
+}
+
+func (x *Policy) GetIncludeQualityProfiles() []int32 {
+	if x != nil {
+		return x.IncludeQualityProfiles
+	}
+	return nil
+}
+
+func (x *Policy) GetExcludeQualityProfiles() []int32 {
+	if x != nil {
+		return x.ExcludeQualityProfiles
+	}
+	return nil
+}
+
+func (x *Policy) GetReleaseDelayHours() uint32 {
+	if x != nil {
+		return x.ReleaseDelayHours
 	}
 	return 0
 }
@@ -1729,7 +1774,7 @@ var File_snatcharr_v1_worker_proto protoreflect.FileDescriptor
 
 const file_snatcharr_v1_worker_proto_rawDesc = "" +
 	"\n" +
-	"\x19snatcharr/v1/worker.proto\x12\fsnatcharr.v1\"\x82\x04\n" +
+	"\x19snatcharr/v1/worker.proto\x12\fsnatcharr.v1\"\xec\x05\n" +
 	"\x06Policy\x12\x1b\n" +
 	"\tper_cycle\x18\x01 \x01(\rR\bperCycle\x125\n" +
 	"\tselection\x18\x02 \x01(\x0e2\x17.snatcharr.v1.SelectionR\tselection\x12%\n" +
@@ -1744,7 +1789,12 @@ const file_snatcharr_v1_worker_proto_rawDesc = "" +
 	"\tpage_size\x18\t \x01(\rR\bpageSize\x12\x16\n" +
 	"\x06cursor\x18\n" +
 	" \x01(\tR\x06cursor\x12*\n" +
-	"\x11recent_grab_hours\x18\v \x01(\rR\x0frecentGrabHours\"Q\n" +
+	"\x11recent_grab_hours\x18\v \x01(\rR\x0frecentGrabHours\x12!\n" +
+	"\finclude_tags\x18\f \x03(\x05R\vincludeTags\x12!\n" +
+	"\fexclude_tags\x18\r \x03(\x05R\vexcludeTags\x128\n" +
+	"\x18include_quality_profiles\x18\x0e \x03(\x05R\x16includeQualityProfiles\x128\n" +
+	"\x18exclude_quality_profiles\x18\x0f \x03(\x05R\x16excludeQualityProfiles\x12.\n" +
+	"\x13release_delay_hours\x18\x10 \x01(\rR\x11releaseDelayHours\"Q\n" +
 	"\x0fLeaseRunRequest\x12\x1b\n" +
 	"\tworker_id\x18\x01 \x01(\tR\bworkerId\x12!\n" +
 	"\fwait_seconds\x18\x02 \x01(\rR\vwaitSeconds\"D\n" +

@@ -68,6 +68,12 @@ func (f *fake) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET "+prefix+"/wanted/missing", f.auth(func(w http.ResponseWriter, r *http.Request) { f.wanted(w, r, f.missing, missingBaseID) }))
 	mux.HandleFunc("GET "+prefix+"/wanted/cutoff", f.auth(func(w http.ResponseWriter, r *http.Request) { f.wanted(w, r, f.cutoff, cutoffBaseID) }))
 	mux.HandleFunc("GET "+prefix+"/queue", f.auth(f.queue))
+	mux.HandleFunc("GET "+prefix+"/tag", f.auth(func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, []map[string]any{{"id": 1, "label": "anime"}})
+	}))
+	mux.HandleFunc("GET "+prefix+"/qualityprofile", f.auth(func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, []map[string]any{{"id": 1, "name": "Any"}})
+	}))
 	mux.HandleFunc("GET "+prefix+"/history/since", f.auth(func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, []any{}) }))
 	mux.HandleFunc("POST "+prefix+"/command", f.auth(f.postCommand))
 	mux.HandleFunc("GET "+prefix+"/command/{id}", f.auth(f.getCommand))
