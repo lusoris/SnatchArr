@@ -71,5 +71,5 @@ func (s *Service) SaveCursor(ctx context.Context, instanceID uuid.UUID, kind dom
 	return nil
 }
 
-// Module provides the Service.
-var Module = fx.Module("snatcharr.policies", fx.Provide(New))
+// Module provides the Service and the filter Options.
+var Module = fx.Module("snatcharr.policies", fx.Provide(New, NewOptions))

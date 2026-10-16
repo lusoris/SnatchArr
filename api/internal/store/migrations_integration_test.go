@@ -265,6 +265,11 @@ func checkPolicy(t *testing.T, q *sqlcgen.Queries, ctx context.Context, id uuid.
 	if pol.Selection != "recent" || pol.RecentGrabWindowH != 24 || pol.AfterglowMaxH != 720 {
 		t.Errorf("unexpected policy refinements: %+v", pol)
 	}
+	// A policy from before the filters keeps every item: empty lists and no release delay.
+	if len(pol.IncludeTags)+len(pol.ExcludeTags)+len(pol.IncludeQualityProfiles)+len(pol.ExcludeQualityProfiles) != 0 ||
+		pol.IncludeTags == nil || pol.ReleaseDelayH != 0 {
+		t.Errorf("unexpected policy filters after the upgrade: %+v", pol)
+	}
 }
 
 func assertInstancesAndPolicies(t *testing.T, q *sqlcgen.Queries, ctx context.Context) {

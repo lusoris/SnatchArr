@@ -5,6 +5,7 @@
 package workergrpc
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -48,6 +49,8 @@ func TestPolicyProtoPicksTheSnatchKindsFields(t *testing.T) {
 		MissingPerCycle: 3, UpgradePerCycle: 2, Selection: domain.SelectionRandom, MonitoredOnly: true, SkipFutureReleases: true,
 		SonarrMissingMode: "shows", SonarrUpgradeMode: "season_packs", LidarrMissingMode: "album", RadarrReleaseType: "digital",
 		AwaitCommand: true, PageSize: 250, CycleInterval: time.Minute,
+		IncludeTags: []int32{1}, ExcludeTags: []int32{2}, IncludeQualityProfiles: []int32{3},
+		ExcludeQualityProfiles: []int32{4}, ReleaseDelay: 48 * time.Hour,
 	}
 	missing := policyProto(p, domain.SnatchMissing)
 	if missing.GetPerCycle() != 3 || missing.GetSonarrMode() != snatcharrv1.SonarrMode_SONARR_MODE_SHOWS || !missing.GetMonitoredOnly() || missing.GetPageSize() != 250 {
@@ -59,6 +62,14 @@ func TestPolicyProtoPicksTheSnatchKindsFields(t *testing.T) {
 	}
 	if upgrade.GetLidarrMode() != snatcharrv1.LidarrMode_LIDARR_MODE_ALBUM || upgrade.GetRadarrReleaseType() != snatcharrv1.RadarrReleaseType_RADARR_RELEASE_TYPE_DIGITAL {
 		t.Fatalf("upgrade modes: %+v", upgrade)
+	}
+	// Both snatch kinds carry the same filters.
+	for _, got := range []*snatcharrv1.Policy{missing, upgrade} {
+		if !slices.Equal(got.GetIncludeTags(), []int32{1}) || !slices.Equal(got.GetExcludeTags(), []int32{2}) ||
+			!slices.Equal(got.GetIncludeQualityProfiles(), []int32{3}) || !slices.Equal(got.GetExcludeQualityProfiles(), []int32{4}) ||
+			got.GetReleaseDelayHours() != 48 {
+			t.Fatalf("filters: %+v", got)
+		}
 	}
 }
 

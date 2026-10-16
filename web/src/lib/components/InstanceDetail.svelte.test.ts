@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-import { fireEvent, screen } from '@testing-library/svelte';
+import { fireEvent, screen, within } from '@testing-library/svelte';
 import { ProblemError } from '@sveltesentio/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api } from '#lib/api/client.js';
@@ -11,10 +11,12 @@ import {
 	failedInstance,
 	forkInstance,
 	renderWithQuery,
+	sampleFilterOptions,
 	samplePolicy,
 	stubGet,
 	untestedInstance,
-	type Instance
+	type Instance,
+	type SnatchPolicy
 } from '#lib/testing/harness.js';
 import InstanceDetail from './InstanceDetail.svelte';
 
@@ -23,11 +25,18 @@ async function subtitleOf(instance: Instance): Promise<string | undefined> {
 	stubGet({
 		'/instances/{instanceId}': instance,
 		'/instances/{instanceId}/policy': samplePolicy,
+		'/instances/{instanceId}/policy/filter-options': sampleFilterOptions,
 		'/runs': []
 	});
 	renderWithQuery(InstanceDetail, { id: instance.id });
 	const heading = await screen.findByRole('heading', { level: 1, name: instance.name });
 	return heading.nextElementSibling?.textContent?.trim();
+}
+
+/** The save button of the policy form; the edit form above it has one too. */
+function savePolicyButton(): HTMLElement {
+	const form = screen.getByRole('form', { name: m.policy_title() });
+	return within(form).getByRole('button', { name: m.instance_save() });
 }
 
 describe('InstanceDetail', () => {
@@ -62,6 +71,9 @@ describe('InstanceDetail', () => {
 			}
 			if (path === '/instances/{instanceId}/policy') {
 				return { data: samplePolicy } as never;
+			}
+			if (path === '/instances/{instanceId}/policy/filter-options') {
+				return { data: sampleFilterOptions } as never;
 			}
 			if (path === '/runs') {
 				return { data: [] } as never;
@@ -136,5 +148,69 @@ describe('InstanceDetail', () => {
 
 		expect((await screen.findByRole('alert')).textContent).toContain('store down');
 		expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
+	});
+
+	it('saves the picked filters and the release delay with the policy', async () => {
+		const put = vi.spyOn(api, 'PUT').mockResolvedValue({ data: samplePolicy } as never);
+		await subtitleOf(forkInstance);
+
+		const include = (await screen.findByLabelText(m.policy_include_tags())) as HTMLSelectElement;
+		const kids = [...include.options].find((o) => o.textContent === 'kids');
+		if (!kids) throw new Error('tag kids is not offered');
+		kids.selected = true;
+		await fireEvent.change(include);
+		const profiles = screen.getByLabelText(m.policy_exclude_profiles()) as HTMLSelectElement;
+		profiles.options[0]!.selected = true;
+		await fireEvent.change(profiles);
+		await fireEvent.input(screen.getByLabelText(m.policy_release_delay()), {
+			target: { value: '12' }
+		});
+		await fireEvent.click(savePolicyButton());
+
+		expect(put).toHaveBeenCalledOnce();
+		const body = (put.mock.calls[0]![1] as { body: SnatchPolicy }).body;
+		expect(body.include_tags).toEqual([5]);
+		expect(body.exclude_tags).toEqual([]);
+		expect(body.include_quality_profiles).toEqual([]);
+		expect(body.exclude_quality_profiles).toEqual([4]);
+		expect(body.release_delay_h).toBe(12);
+	});
+
+	it('keeps the stored filters when the instance cannot list its tags', async () => {
+		const put = vi.spyOn(api, 'PUT').mockResolvedValue({ data: samplePolicy } as never);
+		stubGet({
+			'/instances/{instanceId}': forkInstance,
+			'/instances/{instanceId}/policy': { ...samplePolicy, exclude_tags: [9], release_delay_h: 6 },
+			'/instances/{instanceId}/policy/filter-options': new ProblemError({
+				type: 'about:blank',
+				status: 502,
+				detail: 'instance unreachable'
+			}),
+			'/runs': []
+		});
+		renderWithQuery(InstanceDetail, { id: forkInstance.id });
+
+		expect((await screen.findByRole('alert')).textContent).toContain('instance unreachable');
+		expect(screen.queryByLabelText(m.policy_include_tags())).toBeNull();
+		await fireEvent.click(savePolicyButton());
+
+		const body = (put.mock.calls[0]![1] as { body: SnatchPolicy }).body;
+		expect(body.exclude_tags).toEqual([9]);
+		expect(body.include_tags).toEqual([]);
+		expect(body.release_delay_h).toBe(6);
+	});
+
+	it('says so when the instance has no tags or quality profiles', async () => {
+		stubGet({
+			'/instances/{instanceId}': forkInstance,
+			'/instances/{instanceId}/policy': samplePolicy,
+			'/instances/{instanceId}/policy/filter-options': { tags: [], quality_profiles: [] },
+			'/runs': []
+		});
+		renderWithQuery(InstanceDetail, { id: forkInstance.id });
+
+		expect(await screen.findAllByText(m.policy_filters_none())).toHaveLength(4);
+		expect(screen.queryByRole('listbox')).toBeNull();
+		expect(screen.getByLabelText(m.policy_release_delay())).toBeTruthy();
 	});
 });

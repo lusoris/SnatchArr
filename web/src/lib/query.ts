@@ -12,6 +12,7 @@ export const keys = {
 	instances: ['instances'] as const,
 	instance: (id: string) => ['instances', id] as const,
 	policy: (id: string) => ['instances', id, 'policy'] as const,
+	policyFilterOptions: (id: string) => ['instances', id, 'policy', 'filter-options'] as const,
 	caps: ['hourly-caps'] as const,
 	runs: ['runs'] as const,
 	instanceRuns: (id: string) => ['runs', id] as const,

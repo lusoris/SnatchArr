@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -51,7 +52,7 @@ func TestGetCreatesTheDefaultPolicy(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Get() = %v", err)
 		}
-		if want := domain.DefaultPolicy(f.instanceID); withoutStamp(got) != want {
+		if want := domain.DefaultPolicy(f.instanceID); !reflect.DeepEqual(withoutStamp(got), want) {
 			t.Fatalf("Get() = %+v, want the defaults %+v", got, want)
 		}
 	}
@@ -67,12 +68,15 @@ func TestUpdateReplacesThePolicy(t *testing.T) {
 	p.CycleInterval = 7 * 24 * time.Hour
 	p.MaxQueueSize = 100000
 	p.MonitoredOnly = false
+	p.IncludeTags, p.ExcludeTags = []int32{1, 2}, []int32{3}
+	p.IncludeQualityProfiles, p.ExcludeQualityProfiles = []int32{4}, []int32{5}
+	p.ReleaseDelay = 8760 * time.Hour
 	updated, err := f.svc.Update(t.Context(), p)
 	if err != nil {
 		t.Fatalf("Update() = %v", err)
 	}
 	got, err := f.svc.Get(t.Context(), f.instanceID)
-	if err != nil || withoutStamp(got) != p || withoutStamp(updated) != p {
+	if err != nil || !reflect.DeepEqual(withoutStamp(got), p) || !reflect.DeepEqual(withoutStamp(updated), p) {
 		t.Errorf("Update() = %+v, then Get() = %+v, %v; want %+v", updated, got, err, p)
 	}
 }
@@ -105,6 +109,8 @@ func TestPolicyRefusals(t *testing.T) {
 		// The database has no upper bound on these two; only Validate refuses them.
 		{"boundary cycle interval one second above a week", update(f.instanceID, func(p *domain.Policy) { p.CycleInterval = 7*24*time.Hour + time.Second }), domain.ErrInvalid},
 		{"boundary queue size one above the limit", update(f.instanceID, func(p *domain.Policy) { p.MaxQueueSize = 100001 }), domain.ErrInvalid},
+		{"negative tag both included and excluded", update(f.instanceID, func(p *domain.Policy) { p.IncludeTags, p.ExcludeTags = []int32{1}, []int32{1} }), domain.ErrInvalid},
+		{"boundary release delay one hour above a year", update(f.instanceID, func(p *domain.Policy) { p.ReleaseDelay = 8761 * time.Hour }), domain.ErrInvalid},
 		{"negative invalid policy of an unknown instance is refused before the lookup", update(uuid.New(), func(p *domain.Policy) { p.PageSize = 9 }), domain.ErrInvalid},
 	}
 	for _, tc := range cases {
@@ -114,7 +120,7 @@ func TestPolicyRefusals(t *testing.T) {
 				t.Errorf("err = %v, want %v", err, tc.want)
 			}
 			got, err := f.svc.Get(t.Context(), f.instanceID)
-			if want := domain.DefaultPolicy(f.instanceID); err != nil || withoutStamp(got) != want {
+			if want := domain.DefaultPolicy(f.instanceID); err != nil || !reflect.DeepEqual(withoutStamp(got), want) {
 				t.Errorf("Get() after the refused update = %+v, %v; want the defaults %+v", got, err, want)
 			}
 		})

@@ -203,27 +203,32 @@ type SnatchEvent struct {
 }
 
 type SnatchPolicy struct {
-	InstanceID         uuid.UUID
-	MissingPerCycle    int32
-	UpgradePerCycle    int32
-	CycleIntervalS     int32
-	HourlyCap          int32
-	Selection          string
-	MonitoredOnly      bool
-	SkipFutureReleases bool
-	RadarrReleaseType  string
-	SonarrMissingMode  string
-	SonarrUpgradeMode  string
-	LidarrMissingMode  string
-	ProcessedTtlH      int32
-	MaxQueueSize       int32
-	AwaitCommand       bool
-	PageSize           int32
-	CursorMissing      string
-	CursorUpgrade      string
-	UpdatedAt          time.Time
-	RecentGrabWindowH  int32
-	AfterglowMaxH      int32
+	InstanceID             uuid.UUID
+	MissingPerCycle        int32
+	UpgradePerCycle        int32
+	CycleIntervalS         int32
+	HourlyCap              int32
+	Selection              string
+	MonitoredOnly          bool
+	SkipFutureReleases     bool
+	RadarrReleaseType      string
+	SonarrMissingMode      string
+	SonarrUpgradeMode      string
+	LidarrMissingMode      string
+	ProcessedTtlH          int32
+	MaxQueueSize           int32
+	AwaitCommand           bool
+	PageSize               int32
+	CursorMissing          string
+	CursorUpgrade          string
+	UpdatedAt              time.Time
+	RecentGrabWindowH      int32
+	AfterglowMaxH          int32
+	IncludeTags            []int32
+	ExcludeTags            []int32
+	IncludeQualityProfiles []int32
+	ExcludeQualityProfiles []int32
+	ReleaseDelayH          int32
 }
 
 type SnatchRun struct {

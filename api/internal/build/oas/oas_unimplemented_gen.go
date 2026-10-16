@@ -293,6 +293,16 @@ func (UnimplementedHandler) GetPolicy(ctx context.Context, params GetPolicyParam
 	return r, ht.ErrNotImplemented
 }
 
+// GetPolicyFilterOptions implements getPolicyFilterOptions operation.
+//
+// Reads the tags and quality profiles from the *arr instance itself, so the policy form
+// can offer them by name. Nothing is stored; an unreachable instance answers 502.
+//
+// GET /instances/{instanceId}/policy/filter-options
+func (UnimplementedHandler) GetPolicyFilterOptions(ctx context.Context, params GetPolicyFilterOptionsParams) (r *PolicyFilterOptions, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // GetSSO implements getSSO operation.
 //
 // SSO configuration status.

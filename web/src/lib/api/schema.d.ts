@@ -292,6 +292,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/instances/{instanceId}/policy/filter-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instanceId: components["parameters"]["InstanceId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Tags and quality profiles the instance offers for the policy filters
+         * @description Reads the tags and quality profiles from the *arr instance itself, so the policy form
+         *     can offer them by name. Nothing is stored; an unreachable instance answers 502.
+         */
+        get: operations["getPolicyFilterOptions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/instances/{instanceId}/runs": {
         parameters: {
             query?: never;
@@ -1092,6 +1115,17 @@ export interface components {
             version: string;
             product?: components["schemas"]["ArrProduct"];
         };
+        PolicyFilterOption: {
+            /** Format: int32 */
+            id: number;
+            name: string;
+        };
+        PolicyFilterOptions: {
+            /** @description Tags of the instance, sorted by name. */
+            tags: components["schemas"]["PolicyFilterOption"][];
+            /** @description Quality profiles of the instance, sorted by name. */
+            quality_profiles: components["schemas"]["PolicyFilterOption"][];
+        };
         SnatchPolicy: {
             /** @description How many missing items one snatch goes after (0 disables missing snatches). */
             missing_per_cycle: number;
@@ -1125,6 +1159,16 @@ export interface components {
             recent_grab_window_h: number;
             /** @description Afterglow doubles after every fruitless snatch of the same item, up to this many hours. */
             afterglow_max_h: number;
+            /** @description *arr tag ids: when not empty, only items carrying one of these tags are searched. An episode, album or book has the tags of its series, artist or author. Absent = empty. */
+            include_tags?: number[];
+            /** @description *arr tag ids: items carrying any of these tags are never searched. An id may not be in both tag lists. Absent = empty. */
+            exclude_tags?: number[];
+            /** @description *arr quality profile ids: when not empty, only items using one of these profiles are searched. An episode, album or book uses the profile of its series, artist or author; a Chaptarr author counts its audiobook and ebook profiles too. Absent = empty. */
+            include_quality_profiles?: number[];
+            /** @description *arr quality profile ids: items using any of these profiles are never searched. An id may not be in both profile lists. Absent = empty. */
+            exclude_quality_profiles?: number[];
+            /** @description Skip items released less than this many hours ago; 0 (or absent) turns the delay off. The release date is the one of the app kind: air date (Sonarr, Whisparr v2), the date of radarr_release_type (Radarr, Whisparr v3), the album or book release date. Items without a date are kept. */
+            release_delay_h?: number;
             /** Format: date-time */
             readonly updated_at?: string;
         };
@@ -2124,6 +2168,29 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SnatchPolicy"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getPolicyFilterOptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instanceId: components["parameters"]["InstanceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Filter options */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PolicyFilterOptions"];
                 };
             };
             default: components["responses"]["Problem"];

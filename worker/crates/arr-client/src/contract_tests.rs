@@ -262,9 +262,10 @@ fn readers(kind: Kind) -> [(&'static str, &'static str, Reader); 7] {
 }
 
 /// What the wire types read for another *arr family. `BusyLike` and `ChildLike` serve several
-/// families, so the spec of one family does not document the id fields of the others. An entry
-/// the spec does document fails the check: the list cannot go stale.
-fn foreign(kind: Kind) -> BTreeSet<String> {
+/// families, so the spec of one family does not document the id fields of the others, and
+/// `AuthorParent` reads Chaptarr's per-format tags and profiles, which the other forks lack. An
+/// entry the spec does document fails the check: the list cannot go stale.
+fn foreign(kind: Kind, spec: &str) -> BTreeSet<String> {
     let prefix = kind.api_prefix();
     let own = match kind {
         Kind::Sonarr | Kind::WhisparrV2 => "episodeId",
@@ -284,7 +285,17 @@ fn foreign(kind: Kind) -> BTreeSet<String> {
         Kind::Readarr => &["artistId", "artist"],
         Kind::Sonarr | Kind::Radarr | Kind::WhisparrV2 | Kind::WhisparrV3 => &[],
     };
-    for field in other_parent {
+    let per_format: &[&str] = if kind == Kind::Readarr && spec != "chaptarr" {
+        &[
+            "author.audiobookTags",
+            "author.ebookTags",
+            "author.audiobookQualityProfileId",
+            "author.ebookQualityProfileId",
+        ]
+    } else {
+        &[]
+    };
+    for field in other_parent.iter().chain(per_format) {
         for list in ["missing", "cutoff"] {
             absent.insert(format!("GET {prefix}/wanted/{list}: records[].{field}"));
         }
@@ -309,7 +320,7 @@ fn shapes(kind: Kind, contract: &Contract) -> Vec<String> {
             None => problems.push(format!("{key}: the contract lacks the operation")),
         }
     }
-    let absent = foreign(kind);
+    let absent = foreign(kind, &contract.spec);
     problems.extend(
         found
             .difference(&absent)
@@ -461,25 +472,27 @@ fn shape(kind: Kind) -> (&'static str, Value, Option<&'static str>) {
         Kind::Sonarr | Kind::WhisparrV2 => (
             "episodeId",
             json!({"id": 1, "seriesId": 1, "seasonNumber": 1, "episodeNumber": 1, "title": "string",
-                   "airDateUtc": date, "monitored": true, "series": {"monitored": true}}),
+                   "airDateUtc": date, "monitored": true,
+                   "series": {"monitored": true, "tags": [1], "qualityProfileId": 1}}),
             Some("includeSeries"),
         ),
         Kind::Radarr | Kind::WhisparrV3 => (
             "movieId",
             json!({"id": 1, "title": "string", "year": 1, "monitored": true,
-                   "physicalRelease": date, "digitalRelease": date, "inCinemas": date}),
+                   "physicalRelease": date, "digitalRelease": date, "inCinemas": date,
+                   "tags": [1], "qualityProfileId": 1}),
             None,
         ),
         Kind::Lidarr => (
             "albumId",
             json!({"id": 1, "title": "string", "monitored": true, "releaseDate": date,
-                   "artistId": 1, "artist": {"monitored": true}}),
+                   "artistId": 1, "artist": {"monitored": true, "tags": [1], "qualityProfileId": 1}}),
             Some("includeArtist"),
         ),
         Kind::Readarr => (
             "bookId",
             json!({"id": 1, "title": "string", "monitored": true, "releaseDate": date,
-                   "authorId": 1, "author": {"monitored": true}}),
+                   "authorId": 1, "author": {"monitored": true, "tags": [1], "qualityProfileId": 1}}),
             Some("includeAuthor"),
         ),
     }
@@ -588,6 +601,8 @@ async fn a_field_that_leaves_the_spec_is_reported() {
         [
             "GET /api/v3/wanted/missing: records[].airDateUtc: the client reads it and the spec does not document it",
             "GET /api/v3/wanted/missing: records[].series.monitored: the client reads it and the spec does not document it",
+            "GET /api/v3/wanted/missing: records[].series.qualityProfileId: the client reads it and the spec does not document it",
+            "GET /api/v3/wanted/missing: records[].series.tags: the client reads it and the spec does not document it",
         ]
     );
 }
@@ -800,4 +815,36 @@ async fn upstream_contract_chaptarr() -> Result<(), Failure> {
 #[ignore = "needs the spec cache; run `make contracts-verify`"]
 async fn upstream_contract_readarr_faustvii() -> Result<(), Failure> {
     upstream(Kind::Readarr, "readarr-faustvii").await
+}
+
+/// Chaptarr's per-format author fields are read only from the Chaptarr spec: another fork that
+/// documents them fails as a stale absence, and Chaptarr without them fails as a missing field.
+#[tokio::test]
+async fn per_format_author_fields_are_expected_only_from_chaptarr() {
+    let per_format = json!({"monitored": true, "tags": [1], "qualityProfileId": 1,
+        "audiobookTags": [1], "ebookTags": [1],
+        "audiobookQualityProfileId": 1, "ebookQualityProfileId": 1});
+    let mut chaptarr = sample(Kind::Readarr);
+    chaptarr.spec = "chaptarr".to_owned();
+    for list in ["missing", "cutoff"] {
+        response(&mut chaptarr, &format!("GET /api/v1/wanted/{list}"))["records"][0]["author"] =
+            per_format.clone();
+    }
+    let problems = check(Kind::Readarr, &chaptarr).await;
+    assert!(problems.is_empty(), "{problems:#?}");
+
+    let mut bare = sample(Kind::Readarr);
+    bare.spec = "chaptarr".to_owned();
+    assert_reports(
+        &check(Kind::Readarr, &bare).await,
+        &["records[].author.audiobookTags: the client reads it and the spec does not document it"],
+    );
+
+    let mut bookshelf = sample(Kind::Readarr);
+    bookshelf.spec = "bookshelf".to_owned();
+    response(&mut bookshelf, "GET /api/v1/wanted/missing")["records"][0]["author"] = per_format;
+    assert_reports(
+        &check(Kind::Readarr, &bookshelf).await,
+        &["records[].author.ebookTags: listed as absent and the spec documents it"],
+    );
 }

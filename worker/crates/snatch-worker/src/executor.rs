@@ -12,7 +12,7 @@ use std::time::Duration;
 use arr_client::{ArrClient, CommandStatus, Kind, Options, RadarrRelease, Wanted, WantedPage};
 use rand::rngs::SmallRng;
 use rand::{RngExt, SeedableRng};
-use snatch_core::{Candidate, Filter, LidarrMode, PagePlan, Selection, SonarrMode, Target};
+use snatch_core::{Candidate, Filter, IdRule, LidarrMode, PagePlan, Selection, SonarrMode, Target};
 use snatch_proto::worker_service_client::WorkerServiceClient;
 use snatch_proto::{
     AcquireBudgetRequest, AppKind, CompleteRunRequest, EventType, FilterCandidatesRequest, Level,
@@ -231,6 +231,24 @@ fn release_of(p: &Policy) -> RadarrRelease {
         snatch_proto::RadarrReleaseType::Cinema => RadarrRelease::Cinema,
         snatch_proto::RadarrReleaseType::Physical
         | snatch_proto::RadarrReleaseType::Unspecified => RadarrRelease::Physical,
+    }
+}
+
+/// The candidate filter of a policy at `now_unix`.
+fn filter_of(p: &Policy, now_unix: i64) -> Filter {
+    Filter {
+        monitored_only: p.monitored_only,
+        skip_future: p.skip_future_releases,
+        release_delay_secs: i64::from(p.release_delay_hours).saturating_mul(3600),
+        now_unix,
+        tags: IdRule {
+            include: p.include_tags.clone(),
+            exclude: p.exclude_tags.clone(),
+        },
+        profiles: IdRule {
+            include: p.include_quality_profiles.clone(),
+            exclude: p.exclude_quality_profiles.clone(),
+        },
     }
 }
 
@@ -629,11 +647,7 @@ async fn collect_candidates(
     if let Some(focus) = p.focus {
         candidates.retain(|c| focus.matches(c));
     }
-    let filter = Filter {
-        monitored_only: p.policy.monitored_only,
-        skip_future: p.policy.skip_future_releases,
-        now_unix: chrono::Utc::now().timestamp(),
-    };
+    let filter = filter_of(&p.policy, chrono::Utc::now().timestamp());
     let filtered = snatch_core::filter(&candidates, &filter);
     let busy = p.arr.busy_ids(p.policy.recent_grab_hours).await?;
     let before = filtered.len();
