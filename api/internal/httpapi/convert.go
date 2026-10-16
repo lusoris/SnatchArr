@@ -109,6 +109,7 @@ func runToOAS(r domain.Run) oas.Run {
 		LeasedBy: optString(r.LeasedBy), LeaseExpiresAt: optTime(r.LeaseExpiresAt), QueuedAt: r.QueuedAt,
 		StartedAt: optTime(r.StartedAt), FinishedAt: optTime(r.FinishedAt), SearchedCount: r.SearchedCount,
 		Error: optString(r.Error), FocusEntityID: optInt64(r.FocusEntityID), FocusGroupID: optInt64(r.FocusGroupID),
+		DryRun: oas.NewOptBool(r.DryRun), Seed: oas.NewOptInt64(r.Seed),
 	}
 }
 
@@ -157,6 +158,7 @@ func policyToOAS(p domain.Policy) *oas.SnatchPolicy {
 		IncludeQualityProfiles: domain.FilterIDs(p.IncludeQualityProfiles),
 		ExcludeQualityProfiles: domain.FilterIDs(p.ExcludeQualityProfiles),
 		ReleaseDelayH:          oas.NewOptInt(int(p.ReleaseDelay / time.Hour)),
+		DryRun:                 oas.NewOptBool(p.DryRun),
 		UpdatedAt:              oas.NewOptDateTime(p.UpdatedAt),
 	}
 }
@@ -186,6 +188,7 @@ func policyFromOAS(instanceID uuid.UUID, in *oas.SnatchPolicy) domain.Policy {
 		IncludeQualityProfiles: domain.FilterIDs(in.IncludeQualityProfiles),
 		ExcludeQualityProfiles: domain.FilterIDs(in.ExcludeQualityProfiles),
 		ReleaseDelay:           time.Duration(in.ReleaseDelayH.Or(0)) * time.Hour,
+		DryRun:                 in.DryRun.Or(false),
 	}
 }
 

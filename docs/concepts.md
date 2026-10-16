@@ -106,12 +106,34 @@ holds, is never skipped: the instances it covers queue no snatches and get no se
 until it is fixed or removed. The planner logs each skip and counts it in
 `snatcharr_planner_instance_failures_total` (see [Metrics](metrics.md)).
 
+## Preview and dry run
+
+A dry run preview evaluates what a snatch would do without executing any actions.
+It can be enqueued for an instance on demand (`POST /api/v1/instances/{id}/preview?kind=missing|upgrade`)
+or scheduled per policy (`dry_run: true`).
+
+A preview run passes through identical candidate discovery, filtering, selection, and budget
+calculations as a live run, but enforces strict safety guarantees:
+
+- **Zero indexer searches:** The worker never calls `arr.search`.
+- **Zero stamina debited:** `AcquireBudget` computes what would be granted (a quote) but writes
+  no debits to the hourly rolling window.
+- **Zero processed memory written:** `CompleteRun` skips recording items into afterglow memory,
+  so subsequent live runs still target them.
+- **Cursor unchanged:** The sequential backlog cursor does not advance during a dry run.
+- **Reproducibility:** A non-zero seed produces deterministic pseudo-random candidate ordering
+  between preview and real runs with matching state.
+
+Previewed targets (entity type, ID, title, and granted cost) are reported as `search_previewed`
+events and retrieved with `GET /api/v1/runs/{id}`.
+
 ## History and live events
 
 Everything above is recorded as events (`/api/v1/events`) and streamed over Server-Sent
 Events (`/api/v1/events/stream`). Event names are lower snake case: `run_queued`,
 `run_started`, `page_fetched`, `candidates_filtered`, `budget_acquired`,
-`search_dispatched`, `search_completed`, `search_failed`, `run_finished`,
+`search_dispatched`, `search_completed`, `search_failed`, `search_previewed`, `run_finished`,
 `snatch_deferred`, `snatch_resumed`, `snatch_paced`, `snatch_backoff`,
 `events_unconfirmed` (a warning that a finished run reported events the API never
 confirmed, so its history may be incomplete).
+

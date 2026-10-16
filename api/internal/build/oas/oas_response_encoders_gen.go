@@ -759,6 +759,20 @@ func encodeGetPolicyFilterOptionsResponse(response *PolicyFilterOptions, w http.
 	return nil
 }
 
+func encodeGetRunResponse(response *Run, w http.ResponseWriter, span trace.Span) error {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(200)
+	span.SetStatus(codes.Ok, http.StatusText(200))
+
+	e := new(jx.Encoder)
+	response.Encode(e)
+	if _, err := e.WriteTo(w); err != nil {
+		return errors.Wrap(err, "write")
+	}
+
+	return nil
+}
+
 func encodeGetSSOResponse(response *SSOStatus, w http.ResponseWriter, span trace.Span) error {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(200)
@@ -1164,6 +1178,20 @@ func encodeLoginResponse(response LoginRes, w http.ResponseWriter, span trace.Sp
 func encodeLogoutResponse(response *LogoutNoContent, w http.ResponseWriter, span trace.Span) error {
 	w.WriteHeader(204)
 	span.SetStatus(codes.Ok, http.StatusText(204))
+
+	return nil
+}
+
+func encodePreviewRunResponse(response *PreviewResult, w http.ResponseWriter, span trace.Span) error {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(202)
+	span.SetStatus(codes.Ok, http.StatusText(202))
+
+	e := new(jx.Encoder)
+	response.Encode(e)
+	if _, err := e.WriteTo(w); err != nil {
+		return errors.Wrap(err, "write")
+	}
 
 	return nil
 }

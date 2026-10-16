@@ -1120,6 +1120,71 @@ func decodeGetPolicyFilterOptionsParams(args [1]string, argsEscaped bool, r *htt
 	return params, nil
 }
 
+// GetRunParams is parameters of getRun operation.
+type GetRunParams struct {
+	RunId uuid.UUID
+}
+
+func unpackGetRunParams(packed middleware.Parameters) (params GetRunParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "runId",
+			In:   "path",
+		}
+		params.RunId = packed[key].(uuid.UUID)
+	}
+	return params
+}
+
+func decodeGetRunParams(args [1]string, argsEscaped bool, r *http.Request) (params GetRunParams, _ error) {
+	// Decode path: runId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "runId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.RunId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "runId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
 // GetSeerrLinkParams is parameters of getSeerrLink operation.
 type GetSeerrLinkParams struct {
 	LinkId uuid.UUID
@@ -1717,6 +1782,116 @@ func decodeListRunsParams(args [0]string, argsEscaped bool, r *http.Request) (pa
 		return params, &ogenerrors.DecodeParamError{
 			Name: "offset",
 			In:   "query",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
+// PreviewRunParams is parameters of previewRun operation.
+type PreviewRunParams struct {
+	Kind       string
+	InstanceId uuid.UUID
+}
+
+func unpackPreviewRunParams(packed middleware.Parameters) (params PreviewRunParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "kind",
+			In:   "query",
+		}
+		params.Kind = packed[key].(string)
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "instanceId",
+			In:   "path",
+		}
+		params.InstanceId = packed[key].(uuid.UUID)
+	}
+	return params
+}
+
+func decodePreviewRunParams(args [1]string, argsEscaped bool, r *http.Request) (params PreviewRunParams, _ error) {
+	q := uri.NewQueryDecoder(r.URL.Query())
+	// Decode query: kind.
+	if err := func() error {
+		cfg := uri.QueryParameterDecodingConfig{
+			Name:    "kind",
+			Style:   uri.QueryStyleForm,
+			Explode: true,
+		}
+
+		if err := q.HasParam(cfg); err == nil {
+			if err := q.DecodeParam(cfg, func(d uri.Decoder) error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToString(val)
+				if err != nil {
+					return err
+				}
+
+				params.Kind = c
+				return nil
+			}); err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "kind",
+			In:   "query",
+			Err:  err,
+		}
+	}
+	// Decode path: instanceId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "instanceId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.InstanceId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "instanceId",
+			In:   "path",
 			Err:  err,
 		}
 	}

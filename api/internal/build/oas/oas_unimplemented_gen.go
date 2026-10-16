@@ -303,6 +303,15 @@ func (UnimplementedHandler) GetPolicyFilterOptions(ctx context.Context, params G
 	return r, ht.ErrNotImplemented
 }
 
+// GetRun implements getRun operation.
+//
+// Load a single snatch run by ID.
+//
+// GET /runs/{runId}
+func (UnimplementedHandler) GetRun(ctx context.Context, params GetRunParams) (r *Run, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // GetSSO implements getSSO operation.
 //
 // SSO configuration status.
@@ -490,6 +499,15 @@ func (UnimplementedHandler) Login(ctx context.Context, req *LoginRequest) (r Log
 // POST /auth/logout
 func (UnimplementedHandler) Logout(ctx context.Context) error {
 	return ht.ErrNotImplemented
+}
+
+// PreviewRun implements previewRun operation.
+//
+// Start a dry-run / preview snatch run.
+//
+// POST /instances/{instanceId}/preview
+func (UnimplementedHandler) PreviewRun(ctx context.Context, params PreviewRunParams) (r *PreviewResult, _ error) {
+	return r, ht.ErrNotImplemented
 }
 
 // ResetState implements resetState operation.

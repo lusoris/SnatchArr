@@ -14,6 +14,11 @@ WHERE (sqlc.narg(instance_id)::uuid IS NULL OR instance_id = sqlc.narg(instance_
 ORDER BY id DESC
 LIMIT sqlc.arg(page_size);
 
+-- name: ListEventsForRun :many
+SELECT * FROM snatch_events
+WHERE run_id = $1
+ORDER BY id ASC;
+
 -- name: DeleteEventsForInstance :execrows
 DELETE FROM snatch_events WHERE instance_id = $1;
 

@@ -490,6 +490,30 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
 
+  /instances/{instanceId}/preview:
+    parameters:
+      - $ref: "#/components/parameters/InstanceId"
+    post:
+      tags: [snatches]
+      operationId: previewRun
+      summary: Start a dry-run / preview snatch run
+      parameters:
+        - name: kind
+          in: query
+          required: true
+          schema:
+            type: string
+            description: "Snatch kind: missing or upgrade"
+      responses:
+        "202":
+          description: Preview run enqueued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PreviewResult"
+        default:
+          $ref: "#/components/responses/Problem"
+
   /instances/{instanceId}/events:
     parameters:
       - $ref: "#/components/parameters/InstanceId"
@@ -536,6 +560,28 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Run"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /runs/{runId}:
+    get:
+      tags: [snatches]
+      operationId: getRun
+      summary: Load a single snatch run by ID
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Run
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Run"
         default:
           $ref: "#/components/responses/Problem"
 
@@ -1921,6 +1967,10 @@ components:
           minimum: 0
           maximum: 8760
           description: "Skip items released less than this many hours ago; 0 (or absent) turns the delay off. The release date is the one of the app kind: air date (Sonarr, Whisparr v2), the date of radarr_release_type (Radarr, Whisparr v3), the album or book release date. Items without a date are kept."
+        dry_run:
+          type: boolean
+          default: false
+          description: "When true, planner creates preview / dry-run runs that do not dispatch searches."
         updated_at:
           type: string
           format: date-time
@@ -1978,6 +2028,47 @@ components:
           type: integer
           format: int64
           description: Set for a quickie limited to one series (Seerr request)
+        dry_run:
+          type: boolean
+          readOnly: true
+          description: Set when the run is a dry-run / preview
+        seed:
+          type: integer
+          format: int64
+          readOnly: true
+          description: RNG seed used for the run (0 = OS entropy). A preview seed has at most 53 bits.
+        previewed_targets:
+          type: array
+          readOnly: true
+          description: Previewed search targets when dry_run is true
+          items:
+            $ref: "#/components/schemas/PreviewTarget"
+
+    PreviewResult:
+      type: object
+      required: [run_id, seed]
+      properties:
+        run_id:
+          type: string
+          format: uuid
+        seed:
+          type: integer
+          format: int64
+
+    PreviewTarget:
+      type: object
+      required: [entity_type, id, title, cost]
+      properties:
+        entity_type:
+          type: string
+        id:
+          type: integer
+          format: int64
+        title:
+          type: string
+        cost:
+          type: integer
+          description: Stamina this item adds to the run. An atomic search (season pack, series, artist, author) is charged on its first item and 0 on the rest, so the costs sum to what a real run spends.
 
     Event:
       type: object

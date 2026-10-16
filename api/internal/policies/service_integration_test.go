@@ -71,6 +71,7 @@ func TestUpdateReplacesThePolicy(t *testing.T) {
 	p.IncludeTags, p.ExcludeTags = []int32{1, 2}, []int32{3}
 	p.IncludeQualityProfiles, p.ExcludeQualityProfiles = []int32{4}, []int32{5}
 	p.ReleaseDelay = 8760 * time.Hour
+	p.DryRun = true
 	updated, err := f.svc.Update(t.Context(), p)
 	if err != nil {
 		t.Fatalf("Update() = %v", err)
@@ -81,8 +82,40 @@ func TestUpdateReplacesThePolicy(t *testing.T) {
 	}
 }
 
+// TestPolicyDryRunRoundTrip verifies dry_run round-trips false->true->false through policies.Service.
+func TestPolicyDryRunRoundTrip(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	ctx := t.Context()
+
+	cases := []struct {
+		name    string
+		dryRun  bool
+		wantVal bool
+	}{
+		{"positive toggle dry_run on", true, true},
+		{"positive toggle dry_run off", false, false},
+	}
+	for _, tc := range cases {
+		p, err := f.svc.Get(ctx, f.instanceID)
+		if err != nil {
+			t.Fatalf("Get(): %v", err)
+		}
+		p.DryRun = tc.dryRun
+		updated, err := f.svc.Update(ctx, p)
+		if err != nil || updated.DryRun != tc.wantVal {
+			t.Fatalf("Update(dry_run=%v) = %v, err=%v", tc.dryRun, updated.DryRun, err)
+		}
+		after, err := f.svc.Get(ctx, f.instanceID)
+		if err != nil || after.DryRun != tc.wantVal {
+			t.Fatalf("Get() after update = %v, err=%v", after.DryRun, err)
+		}
+	}
+}
+
 func TestPolicyRefusals(t *testing.T) {
 	t.Parallel()
+
 	f := newFixture(t)
 	// The defaults exist before the refusals run, so each can compare against them.
 	if _, err := f.svc.Get(t.Context(), f.instanceID); err != nil {

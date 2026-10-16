@@ -123,6 +123,7 @@ type Querier interface {
 	ListEnabledSchedulesFor(ctx context.Context, instanceID *uuid.UUID) ([]Schedule, error)
 	ListEnabledSeerrLinks(ctx context.Context) ([]SeerrLink, error)
 	ListEvents(ctx context.Context, arg ListEventsParams) ([]SnatchEvent, error)
+	ListEventsForRun(ctx context.Context, runID *uuid.UUID) ([]SnatchEvent, error)
 	ListInstances(ctx context.Context) ([]Instance, error)
 	ListNotificationChannels(ctx context.Context) ([]NotificationChannel, error)
 	ListNotificationChannelsByIDs(ctx context.Context, ids []uuid.UUID) ([]NotificationChannel, error)

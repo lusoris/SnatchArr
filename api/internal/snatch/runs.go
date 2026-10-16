@@ -49,6 +49,16 @@ func NewRuns(st *store.Store, clk clock.Clock, ids id.Generator) *Runs {
 	return &Runs{st: st, clk: clk, ids: ids}
 }
 
+// EnqueueOptions configures a newly queued run.
+type EnqueueOptions struct {
+	InstanceID    uuid.UUID
+	Kind          domain.SnatchKind
+	FocusEntityID *int64
+	FocusGroupID  *int64
+	DryRun        bool
+	Seed          int64
+}
+
 // Enqueue creates a queued run unless one is already queued or leased for the pair.
 func (r *Runs) Enqueue(ctx context.Context, instanceID uuid.UUID, kind domain.SnatchKind) (domain.Run, bool, error) {
 	return r.EnqueueFocused(ctx, instanceID, kind, nil, nil)
@@ -57,7 +67,17 @@ func (r *Runs) Enqueue(ctx context.Context, instanceID uuid.UUID, kind domain.Sn
 // EnqueueFocused queues a run limited to one entity (movie) or group (series), for a
 // quickie on a single Seerr request. Like Enqueue it refuses while a run is active.
 func (r *Runs) EnqueueFocused(ctx context.Context, instanceID uuid.UUID, kind domain.SnatchKind, focusEntity, focusGroup *int64) (domain.Run, bool, error) {
-	active, err := r.st.Q().HasActiveRun(ctx, sqlcgen.HasActiveRunParams{InstanceID: instanceID, Kind: string(kind)})
+	return r.EnqueueWithOptions(ctx, EnqueueOptions{
+		InstanceID:    instanceID,
+		Kind:          kind,
+		FocusEntityID: focusEntity,
+		FocusGroupID:  focusGroup,
+	})
+}
+
+// EnqueueWithOptions queues a run with custom dry_run and seed settings.
+func (r *Runs) EnqueueWithOptions(ctx context.Context, opts EnqueueOptions) (domain.Run, bool, error) {
+	active, err := r.st.Q().HasActiveRun(ctx, sqlcgen.HasActiveRunParams{InstanceID: opts.InstanceID, Kind: string(opts.Kind)})
 	if err != nil {
 		return domain.Run{}, false, fmt.Errorf("snatch: active run check: %w", store.MapError(err))
 	}
@@ -69,7 +89,14 @@ func (r *Runs) EnqueueFocused(ctx context.Context, instanceID uuid.UUID, kind do
 		return domain.Run{}, false, fmt.Errorf("snatch: new run id: %w", err)
 	}
 	row, err := r.st.Q().EnqueueRun(ctx, sqlcgen.EnqueueRunParams{
-		ID: runID, InstanceID: instanceID, Kind: string(kind), QueuedAt: r.clk.Now(), FocusEntityID: focusEntity, FocusGroupID: focusGroup,
+		ID:            runID,
+		InstanceID:    opts.InstanceID,
+		Kind:          string(opts.Kind),
+		QueuedAt:      r.clk.Now(),
+		FocusEntityID: opts.FocusEntityID,
+		FocusGroupID:  opts.FocusGroupID,
+		DryRun:        opts.DryRun,
+		Seed:          opts.Seed,
 	})
 	if err != nil {
 		return domain.Run{}, false, fmt.Errorf("snatch: enqueue: %w", store.MapError(err))
@@ -232,5 +259,6 @@ func runFromRow(row sqlcgen.SnatchRun) domain.Run {
 		LeasedBy: leasedBy, LeaseExpiresAt: row.LeaseExpiresAt, QueuedAt: row.QueuedAt, StartedAt: row.StartedAt,
 		FinishedAt: row.FinishedAt, SearchedCount: int(row.SearchedCount), Error: errMsg,
 		FocusEntityID: row.FocusEntityID, FocusGroupID: row.FocusGroupID,
+		DryRun: row.DryRun, Seed: row.Seed,
 	}
 }
