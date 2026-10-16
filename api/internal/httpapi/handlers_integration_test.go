@@ -129,10 +129,12 @@ func (r stubResolver) EntityByExternalID(context.Context, domain.AppKind, string
 }
 
 type fakeCleanuparrServer struct {
-	srv    *httptest.Server
-	URL    string
-	writes atomic.Int64
-	fail   atomic.Bool
+	srv       *httptest.Server
+	URL       string
+	writes    atomic.Int64
+	fail      atomic.Bool
+	seeker404 atomic.Bool
+	dryRun    atomic.Bool
 }
 
 func (s *fakeCleanuparrServer) setFail(fail bool) {
@@ -158,6 +160,10 @@ func newFakeCleanuparrServer(t *testing.T) *fakeCleanuparrServer {
 	mux.HandleFunc("/api/status", s.handleStatus(t))
 	mux.HandleFunc("/api/strikes/recent", s.handleRecent(t))
 	mux.HandleFunc("/api/strikes", s.handleStrikes(t))
+	mux.HandleFunc("/api/configuration/general", s.handleGeneral(t))
+	mux.HandleFunc("/api/configuration/seeker", s.handleSeeker(t))
+	mux.HandleFunc("/api/configuration/sonarr", s.handleSonarr(t))
+	mux.HandleFunc("/api/configuration/radarr", s.handleRadarr(t))
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
@@ -225,6 +231,63 @@ func (s *fakeCleanuparrServer) handleStrikes(t *testing.T) http.HandlerFunc {
 			"pageSize":   500,
 			"totalCount": 5,
 			"totalPages": 1,
+		})
+	}
+}
+
+func (s *fakeCleanuparrServer) handleGeneral(t *testing.T) http.HandlerFunc {
+	t.Helper()
+	return func(w http.ResponseWriter, _ *http.Request) {
+		writeCleanupJSON(t, w, map[string]any{
+			"dryRun": s.dryRun.Load(),
+		})
+	}
+}
+
+func (s *fakeCleanuparrServer) handleSeeker(t *testing.T) http.HandlerFunc {
+	t.Helper()
+	return func(w http.ResponseWriter, _ *http.Request) {
+		if s.seeker404.Load() {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		writeCleanupJSON(t, w, map[string]any{
+			"searchEnabled":          true,
+			"proactiveSearchEnabled": true,
+			"instances": []map[string]any{
+				{
+					"arrInstanceId":      "c1111111-1111-1111-1111-111111111111",
+					"instanceName":       "Sonarr 1",
+					"instanceType":       "Sonarr",
+					"enabled":            true,
+					"arrInstanceEnabled": true,
+				},
+			},
+		})
+	}
+}
+
+func (s *fakeCleanuparrServer) handleSonarr(t *testing.T) http.HandlerFunc {
+	t.Helper()
+	return func(w http.ResponseWriter, _ *http.Request) {
+		writeCleanupJSON(t, w, map[string]any{
+			"instances": []map[string]any{
+				{
+					"id":      "c1111111-1111-1111-1111-111111111111",
+					"name":    "Sonarr 1",
+					"url":     "http://sonarr.local:8989",
+					"enabled": true,
+				},
+			},
+		})
+	}
+}
+
+func (s *fakeCleanuparrServer) handleRadarr(t *testing.T) http.HandlerFunc {
+	t.Helper()
+	return func(w http.ResponseWriter, _ *http.Request) {
+		writeCleanupJSON(t, w, map[string]any{
+			"instances": []map[string]any{},
 		})
 	}
 }

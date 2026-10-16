@@ -90,6 +90,20 @@ SPDX-License-Identifier: EUPL-1.2
 		await tick();
 		document.getElementById('cleanuparr-name')?.focus();
 	}
+
+	function seekerStateLabel(state: components['schemas']['CleanuparrSeekerState']): string {
+		switch (state) {
+			case 'active':
+				return m.cleanuparr_seeker_state_active();
+			case 'inactive':
+				return m.cleanuparr_seeker_state_inactive();
+			case 'dry_run':
+				return m.cleanuparr_seeker_state_dry_run();
+			case 'unknown':
+			default:
+				return m.cleanuparr_seeker_state_unknown();
+		}
+	}
 </script>
 
 <h1 class="mb-2 text-2xl font-semibold">{m.cleanuparr_title()}</h1>
@@ -179,6 +193,56 @@ SPDX-License-Identifier: EUPL-1.2
 						</li>
 					{/each}
 				</ul>
+			{/if}
+			{#if link.seeker}
+				<div class="mt-4 border-t border-line pt-3">
+					<h4 class="text-sm font-semibold">{m.cleanuparr_seeker_title()}</h4>
+					<p class="text-sm text-subtle">
+						{#if link.seeker.reason}
+							{m.cleanuparr_seeker_status_reason({
+								state: seekerStateLabel(link.seeker.state),
+								reason: link.seeker.reason
+							})}
+						{:else}
+							{m.cleanuparr_seeker_status({ state: seekerStateLabel(link.seeker.state) })}
+						{/if}
+					</p>
+					{#if link.seeker.instances && link.seeker.instances.length > 0}
+						<table class="mt-2 table">
+							<caption class="sr-only">{m.cleanuparr_seeker_instances_title()}</caption>
+							<thead>
+								<tr>
+									<th scope="col">{m.cleanuparr_seeker_col_instance()}</th>
+									<th scope="col">{m.cleanuparr_seeker_col_type()}</th>
+									<th scope="col">{m.cleanuparr_seeker_col_status()}</th>
+									<th scope="col">{m.cleanuparr_seeker_col_overlap()}</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each link.seeker.instances as inst (inst.name)}
+									<tr>
+										<td>{inst.name}</td>
+										<td>{inst.type}</td>
+										<td>
+											{#if inst.active}
+												<span>{m.cleanuparr_seeker_state_active()}</span>
+											{:else}
+												<span class="text-subtle">{m.cleanuparr_seeker_state_inactive()}</span>
+											{/if}
+										</td>
+										<td>
+											{#if inst.matched}
+												<span class="font-medium text-danger">{m.cleanuparr_seeker_matched()}</span>
+											{:else}
+												<span class="text-subtle">{m.cleanuparr_seeker_unmatched()}</span>
+											{/if}
+										</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					{/if}
+				</div>
 			{/if}
 		</section>
 	{/each}

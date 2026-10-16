@@ -1702,6 +1702,9 @@ components:
           format: date-time
         last_error:
           type: string
+        seeker_overlap:
+          type: boolean
+          description: Whether an active Cleanuparr Seeker instance targets the same library URL
         created_at:
           type: string
           format: date-time
@@ -2475,7 +2478,7 @@ components:
 
     CleanuparrStatus:
       type: object
-      required: [link_id, name, reachable, checked_at, struck_downloads, marked_for_removal, removed_downloads, media_managers, recent_strikes]
+      required: [link_id, name, reachable, checked_at, struck_downloads, marked_for_removal, removed_downloads, media_managers, recent_strikes, seeker]
       properties:
         link_id:
           type: string
@@ -2510,6 +2513,51 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/CleanuparrStrike"
+        seeker:
+          $ref: "#/components/schemas/CleanuparrSeeker"
+
+    CleanuparrSeekerState:
+      type: string
+      description: Overall state of Cleanuparr Seeker on the link
+      enum: [active, inactive, dry_run, unknown]
+
+    CleanuparrSeekerInstance:
+      type: object
+      description: One *arr instance observed in Cleanuparr Seeker
+      required: [name, type, active, matched]
+      properties:
+        snatcharr_instance_id:
+          type: string
+          format: uuid
+          description: Matched SnatchArr instance id, if any
+        name:
+          type: string
+          description: Instance name in Cleanuparr
+        type:
+          type: string
+          description: "*arr application type (Sonarr, Radarr)"
+        active:
+          type: boolean
+          description: Whether Seeker is currently active for this instance
+        matched:
+          type: boolean
+          description: Whether this instance matched a configured SnatchArr instance
+
+    CleanuparrSeeker:
+      type: object
+      description: Seeker configuration and instance overlap status for a Cleanuparr link
+      required: [state, instances]
+      properties:
+        state:
+          $ref: "#/components/schemas/CleanuparrSeekerState"
+        reason:
+          type: string
+          description: Human-readable explanation of why Seeker is inactive, in dry-run, or unknown
+        instances:
+          type: array
+          description: Observed Seeker instances and their overlap with SnatchArr
+          items:
+            $ref: "#/components/schemas/CleanuparrSeekerInstance"
 
     ConfigarrImportRequest:
       type: object

@@ -545,6 +545,168 @@ func (s *CleanuparrLinkInput) SetEnabled(val OptBool) {
 	s.Enabled = val
 }
 
+// Seeker configuration and instance overlap status for a Cleanuparr link.
+// Ref: #/components/schemas/CleanuparrSeeker
+type CleanuparrSeeker struct {
+	State CleanuparrSeekerState `json:"state"`
+	// Human-readable explanation of why Seeker is inactive, in dry-run, or unknown.
+	Reason OptString `json:"reason"`
+	// Observed Seeker instances and their overlap with SnatchArr.
+	Instances []CleanuparrSeekerInstance `json:"instances"`
+}
+
+// GetState returns the value of State.
+func (s *CleanuparrSeeker) GetState() CleanuparrSeekerState {
+	return s.State
+}
+
+// GetReason returns the value of Reason.
+func (s *CleanuparrSeeker) GetReason() OptString {
+	return s.Reason
+}
+
+// GetInstances returns the value of Instances.
+func (s *CleanuparrSeeker) GetInstances() []CleanuparrSeekerInstance {
+	return s.Instances
+}
+
+// SetState sets the value of State.
+func (s *CleanuparrSeeker) SetState(val CleanuparrSeekerState) {
+	s.State = val
+}
+
+// SetReason sets the value of Reason.
+func (s *CleanuparrSeeker) SetReason(val OptString) {
+	s.Reason = val
+}
+
+// SetInstances sets the value of Instances.
+func (s *CleanuparrSeeker) SetInstances(val []CleanuparrSeekerInstance) {
+	s.Instances = val
+}
+
+// One *arr instance observed in Cleanuparr Seeker.
+// Ref: #/components/schemas/CleanuparrSeekerInstance
+type CleanuparrSeekerInstance struct {
+	// Matched SnatchArr instance id, if any.
+	SnatcharrInstanceID OptUUID `json:"snatcharr_instance_id"`
+	// Instance name in Cleanuparr.
+	Name string `json:"name"`
+	// *arr application type (Sonarr, Radarr).
+	Type string `json:"type"`
+	// Whether Seeker is currently active for this instance.
+	Active bool `json:"active"`
+	// Whether this instance matched a configured SnatchArr instance.
+	Matched bool `json:"matched"`
+}
+
+// GetSnatcharrInstanceID returns the value of SnatcharrInstanceID.
+func (s *CleanuparrSeekerInstance) GetSnatcharrInstanceID() OptUUID {
+	return s.SnatcharrInstanceID
+}
+
+// GetName returns the value of Name.
+func (s *CleanuparrSeekerInstance) GetName() string {
+	return s.Name
+}
+
+// GetType returns the value of Type.
+func (s *CleanuparrSeekerInstance) GetType() string {
+	return s.Type
+}
+
+// GetActive returns the value of Active.
+func (s *CleanuparrSeekerInstance) GetActive() bool {
+	return s.Active
+}
+
+// GetMatched returns the value of Matched.
+func (s *CleanuparrSeekerInstance) GetMatched() bool {
+	return s.Matched
+}
+
+// SetSnatcharrInstanceID sets the value of SnatcharrInstanceID.
+func (s *CleanuparrSeekerInstance) SetSnatcharrInstanceID(val OptUUID) {
+	s.SnatcharrInstanceID = val
+}
+
+// SetName sets the value of Name.
+func (s *CleanuparrSeekerInstance) SetName(val string) {
+	s.Name = val
+}
+
+// SetType sets the value of Type.
+func (s *CleanuparrSeekerInstance) SetType(val string) {
+	s.Type = val
+}
+
+// SetActive sets the value of Active.
+func (s *CleanuparrSeekerInstance) SetActive(val bool) {
+	s.Active = val
+}
+
+// SetMatched sets the value of Matched.
+func (s *CleanuparrSeekerInstance) SetMatched(val bool) {
+	s.Matched = val
+}
+
+// Overall state of Cleanuparr Seeker on the link.
+// Ref: #/components/schemas/CleanuparrSeekerState
+type CleanuparrSeekerState string
+
+const (
+	CleanuparrSeekerStateActive   CleanuparrSeekerState = "active"
+	CleanuparrSeekerStateInactive CleanuparrSeekerState = "inactive"
+	CleanuparrSeekerStateDryRun   CleanuparrSeekerState = "dry_run"
+	CleanuparrSeekerStateUnknown  CleanuparrSeekerState = "unknown"
+)
+
+// AllValues returns all CleanuparrSeekerState values.
+func (CleanuparrSeekerState) AllValues() []CleanuparrSeekerState {
+	return []CleanuparrSeekerState{
+		CleanuparrSeekerStateActive,
+		CleanuparrSeekerStateInactive,
+		CleanuparrSeekerStateDryRun,
+		CleanuparrSeekerStateUnknown,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s CleanuparrSeekerState) MarshalText() ([]byte, error) {
+	switch s {
+	case CleanuparrSeekerStateActive:
+		return []byte(s), nil
+	case CleanuparrSeekerStateInactive:
+		return []byte(s), nil
+	case CleanuparrSeekerStateDryRun:
+		return []byte(s), nil
+	case CleanuparrSeekerStateUnknown:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *CleanuparrSeekerState) UnmarshalText(data []byte) error {
+	switch CleanuparrSeekerState(data) {
+	case CleanuparrSeekerStateActive:
+		*s = CleanuparrSeekerStateActive
+		return nil
+	case CleanuparrSeekerStateInactive:
+		*s = CleanuparrSeekerStateInactive
+		return nil
+	case CleanuparrSeekerStateDryRun:
+		*s = CleanuparrSeekerStateDryRun
+		return nil
+	case CleanuparrSeekerStateUnknown:
+		*s = CleanuparrSeekerStateUnknown
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
 // Ref: #/components/schemas/CleanuparrStatus
 type CleanuparrStatus struct {
 	LinkID    uuid.UUID   `json:"link_id"`
@@ -561,6 +723,7 @@ type CleanuparrStatus struct {
 	// Instance count per *arr type as Cleanuparr names them.
 	MediaManagers CleanuparrStatusMediaManagers `json:"media_managers"`
 	RecentStrikes []CleanuparrStrike            `json:"recent_strikes"`
+	Seeker        CleanuparrSeeker              `json:"seeker"`
 }
 
 // GetLinkID returns the value of LinkID.
@@ -623,6 +786,11 @@ func (s *CleanuparrStatus) GetRecentStrikes() []CleanuparrStrike {
 	return s.RecentStrikes
 }
 
+// GetSeeker returns the value of Seeker.
+func (s *CleanuparrStatus) GetSeeker() CleanuparrSeeker {
+	return s.Seeker
+}
+
 // SetLinkID sets the value of LinkID.
 func (s *CleanuparrStatus) SetLinkID(val uuid.UUID) {
 	s.LinkID = val
@@ -681,6 +849,11 @@ func (s *CleanuparrStatus) SetMediaManagers(val CleanuparrStatusMediaManagers) {
 // SetRecentStrikes sets the value of RecentStrikes.
 func (s *CleanuparrStatus) SetRecentStrikes(val []CleanuparrStrike) {
 	s.RecentStrikes = val
+}
+
+// SetSeeker sets the value of Seeker.
+func (s *CleanuparrStatus) SetSeeker(val CleanuparrSeeker) {
+	s.Seeker = val
 }
 
 // Instance count per *arr type as Cleanuparr names them.
@@ -1926,8 +2099,10 @@ type Instance struct {
 	LastSeenProduct OptArrProduct  `json:"last_seen_product"`
 	LastCheckAt     OptDateTime    `json:"last_check_at"`
 	LastError       OptString      `json:"last_error"`
-	CreatedAt       time.Time      `json:"created_at"`
-	UpdatedAt       time.Time      `json:"updated_at"`
+	// Whether an active Cleanuparr Seeker instance targets the same library URL.
+	SeekerOverlap OptBool   `json:"seeker_overlap"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 // GetID returns the value of ID.
@@ -1983,6 +2158,11 @@ func (s *Instance) GetLastCheckAt() OptDateTime {
 // GetLastError returns the value of LastError.
 func (s *Instance) GetLastError() OptString {
 	return s.LastError
+}
+
+// GetSeekerOverlap returns the value of SeekerOverlap.
+func (s *Instance) GetSeekerOverlap() OptBool {
+	return s.SeekerOverlap
 }
 
 // GetCreatedAt returns the value of CreatedAt.
@@ -2048,6 +2228,11 @@ func (s *Instance) SetLastCheckAt(val OptDateTime) {
 // SetLastError sets the value of LastError.
 func (s *Instance) SetLastError(val OptString) {
 	s.LastError = val
+}
+
+// SetSeekerOverlap sets the value of SeekerOverlap.
+func (s *Instance) SetSeekerOverlap(val OptBool) {
+	s.SeekerOverlap = val
 }
 
 // SetCreatedAt sets the value of CreatedAt.

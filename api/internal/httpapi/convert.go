@@ -70,6 +70,7 @@ func instanceToOAS(i domain.Instance) oas.Instance {
 		LastSeenProduct: productToOAS(i.LastSeenProduct),
 		LastCheckAt:     optTime(i.LastCheckAt),
 		LastError:       optString(i.LastError),
+		SeekerOverlap:   oas.NewOptBool(i.SeekerOverlap),
 		CreatedAt:       i.CreatedAt,
 		UpdatedAt:       i.UpdatedAt,
 	}

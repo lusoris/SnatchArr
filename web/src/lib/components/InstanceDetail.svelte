@@ -9,6 +9,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { api, describeError } from '#lib/api/client.js';
 	import type { components } from '#lib/api/schema.js';
 	import CheckState from '#lib/components/CheckState.svelte';
+	import ConfirmAction from '#lib/components/ConfirmAction.svelte';
 	import Field from '#lib/components/Field.svelte';
 	import InstanceEditForm from '#lib/components/InstanceEditForm.svelte';
 	import PolicyFilters from '#lib/components/PolicyFilters.svelte';
@@ -21,6 +22,7 @@ SPDX-License-Identifier: EUPL-1.2
 
 	type Policy = components['schemas']['SnatchPolicy'];
 	type Instance = components['schemas']['Instance'];
+	type InstanceUpdate = components['schemas']['InstanceUpdate'];
 	const { id }: { id: string } = $props();
 	// The route remounts this component per id ({#key}), so the initial value is the value.
 	const instanceId = untrack(() => id);
@@ -73,6 +75,27 @@ SPDX-License-Identifier: EUPL-1.2
 			toast.error(describeError(err));
 		}
 	});
+
+	const pause = createSentioMutation({
+		mutationFn: async () => {
+			if (!instance.data) return;
+			const update: InstanceUpdate = {
+				kind: instance.data.kind,
+				name: instance.data.name,
+				base_url: instance.data.base_url,
+				enabled: false
+			};
+			return (
+				await api.PUT('/instances/{instanceId}', {
+					params: { path: { instanceId } },
+					body: update
+				})
+			).data;
+		},
+		invalidates: [keys.instances, keys.instance(instanceId), keys.caps],
+		onSuccess: () => toast.success(m.instance_seeker_paused({ name: instance.data?.name ?? '' })),
+		onError: (err) => toast.error(describeError(err))
+	});
 </script>
 
 {#if instance.isPending || policy.isPending}
@@ -93,6 +116,28 @@ SPDX-License-Identifier: EUPL-1.2
 	<button type="button" class="btn mb-6" onclick={() => probe.mutate()} disabled={probe.isPending}
 		>{m.instance_test()}</button
 	>
+
+	{#if instance.data.seeker_overlap}
+		<div role="alert" class="card mb-6 flex max-w-xl flex-col gap-3 border-line">
+			<div>
+				<h2 class="text-base font-semibold">{m.instance_seeker_warning_title()}</h2>
+				<p class="mt-1 text-sm text-subtle">
+					{m.instance_seeker_warning_body()}
+				</p>
+			</div>
+			{#if instance.data.enabled}
+				<div>
+					<ConfirmAction
+						label={m.instance_seeker_pause_btn()}
+						message={m.instance_seeker_pause_confirm({ name: instance.data.name })}
+						pending={pause.isPending}
+						onconfirm={() => pause.mutate()}
+					/>
+				</div>
+			{/if}
+			<ProblemNote error={pause.error} />
+		</div>
+	{/if}
 
 	<InstanceEditForm instance={instance.data} />
 
