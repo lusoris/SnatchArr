@@ -17,6 +17,7 @@
     "npm",
     "github-actions",
     "dockerfile",
+    "docker-compose",
     "helm-values",
     "helmv3",
     "devcontainer",
@@ -160,6 +161,20 @@
         "pinDigest"
       ],
       "groupName": "dockerfile non-major"
+    },
+    {
+      "description": "One weekly pull request per manager for non-major updates, so the strict up-to-date rule reruns CI once per group (HISS-18)",
+      "matchManagers": [
+        "docker-compose"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest",
+        "pin",
+        "pinDigest"
+      ],
+      "groupName": "docker-compose non-major"
     },
     {
       "description": "One weekly pull request per manager for non-major updates, so the strict up-to-date rule reruns CI once per group (HISS-18)",
