@@ -21,7 +21,7 @@ GOMODCACHE       = $(subst \,/,$(shell go env GOMODCACHE))
 GOLUSORIS_VER    = $(shell go list -m -f '{{.Version}}' github.com/golusoris/golusoris)
 GOLUSORIS_SHARED = $(GOMODCACHE)/github.com/golusoris/golusoris@$(GOLUSORIS_VER)/tools/Makefile.shared
 
-.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-compose-smoke web-verify web-e2e web-e2e-api proto-verify deploy-verify governance-verify hooks-verify contracts-verify workflows-verify workflows-lint secret-scan \
+.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-compose-smoke e2e-compose-pg-upgrade e2e-cnpg-pg-upgrade web-verify web-e2e web-e2e-api proto-verify deploy-verify governance-verify hooks-verify contracts-verify workflows-verify workflows-lint secret-scan \
 	images kind-up kind-deploy kind-down \
         api-gen api-gosec gosec-install govulncheck-install tools-verify tools-lint tools-test tools-gosec web-gen proto-gen dev hooks setup
 
@@ -191,17 +191,29 @@ e2e-compose-smoke: ## Homelab compose bundle up from the docs: healthy services 
 	  docker build -t $(E2E_API_IMAGE) -f Dockerfile . ; \
 	  docker build -t $(E2E_WORKER_IMAGE) -f worker/Dockerfile . ; \
 	fi
-	for case in "unhealthy:did not turn healthy" "setup-done:want setup_complete false"; do \
-	  plant=$${case%%:*}; want=$${case#*:}; \
-	  if out=$$(SMOKE_PLANT=$$plant SMOKE_API_IMAGE=$(E2E_API_IMAGE) SMOKE_WORKER_IMAGE=$(E2E_WORKER_IMAGE) \
-	    bash tools/e2e/compose_smoke.sh 2>&1); then \
-	    echo "e2e-compose-smoke: planted case $$plant passed; the smoke checks nothing" >&2; exit 1; \
-	  fi; \
-	  case "$$out" in *"$$want"*) echo "ok   planted case $$plant refused: $$want" ;; \
-	    *) printf '%s\n' "$$out" | tail -20 >&2; \
-	       echo "e2e-compose-smoke: planted case $$plant failed without '$$want'" >&2; exit 1 ;; esac; \
-	done
-	SMOKE_API_IMAGE=$(E2E_API_IMAGE) SMOKE_WORKER_IMAGE=$(E2E_WORKER_IMAGE) bash tools/e2e/compose_smoke.sh
+	SMOKE_API_IMAGE=$(E2E_API_IMAGE) SMOKE_WORKER_IMAGE=$(E2E_WORKER_IMAGE) \
+	  bash tools/e2e/planted.sh SMOKE_PLANT tools/e2e/compose_smoke.sh \
+	  "unhealthy:did not turn healthy" "setup-done:want setup_complete false"
+
+# A homelab install on the previous Postgres major moved to the pinned one by the steps of
+# docs/install-compose.md, on the images built here: data read back table by table, setup
+# still complete, the admin logs in. The planted cases skip one step each (moving the old data
+# aside, the restore); the test must refuse both. Not in verify-all (slow, needs Docker).
+e2e-compose-pg-upgrade: ## Homelab compose bundle: Postgres previous major -> pinned major upgrade with data read-back (needs Docker)
+	if [ "$${SMOKE_SKIP_BUILD:-0}" != "1" ]; then \
+	  docker build -t $(E2E_API_IMAGE) -f Dockerfile . ; \
+	  docker build -t $(E2E_WORKER_IMAGE) -f worker/Dockerfile . ; \
+	fi
+	SMOKE_API_IMAGE=$(E2E_API_IMAGE) SMOKE_WORKER_IMAGE=$(E2E_WORKER_IMAGE) \
+	  bash tools/e2e/planted.sh UPGRADE_PLANT tools/e2e/compose_pg_upgrade.sh \
+	  "skip-move:the new postgres" "skip-restore:data read-back differs"
+
+# The chart on CloudNativePG moved from the previous Postgres major to the current one by the
+# imageName change of docs/deployment.md, with data read-back and a planted upgrade without the
+# image change. Needs a cluster with the operator: CI runs it in the deploy job on kind; on a
+# workstation only inside a VM (no kind on the host). Not in verify-all.
+e2e-cnpg-pg-upgrade: ## Chart on CloudNativePG: Postgres previous major -> current major upgrade with data read-back (needs a cluster with the operator)
+	bash tools/e2e/cnpg_pg_upgrade.sh
 
 # ── web/ (SvelteKit + sveltesentio) ───────────────────────────────────────────
 web-verify: ## pnpm lint/typecheck/test(+coverage)/build + OpenAPI type drift
