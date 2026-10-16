@@ -56,6 +56,33 @@ UPDATE api_keys SET revoked_at = $2 WHERE id = $1 AND revoked_at IS NULL;
 -- name: ListAPIKeysByOwner :many
 SELECT * FROM api_keys WHERE owner_id = $1 AND revoked_at IS NULL ORDER BY created_at;
 
+-- name: SetAPIKeyMeta :execrows
+UPDATE api_keys
+SET name = $3, expires_at = $4
+WHERE id = $1 AND owner_id = $2;
+
+-- name: CountActiveAPIKeysByOwner :one
+SELECT count(*)
+FROM api_keys
+WHERE owner_id = $1 AND revoked_at IS NULL;
+
+-- name: ListAPIKeysForOwner :many
+SELECT id, owner_id, name, created_at, expires_at, last_used_at
+FROM api_keys
+WHERE owner_id = $1 AND revoked_at IS NULL
+ORDER BY created_at;
+
+-- name: RevokeAPIKeyForOwner :execrows
+UPDATE api_keys
+SET revoked_at = $3
+WHERE id = $1 AND owner_id = $2 AND revoked_at IS NULL;
+
+-- name: TouchAPIKey :exec
+UPDATE api_keys
+SET last_used_at = sqlc.arg(now)::timestamptz
+WHERE id = sqlc.arg(id)
+  AND (last_used_at IS NULL OR last_used_at < sqlc.arg(now)::timestamptz - interval '1 minute');
+
 -- name: RecordLoginLockoutFailure :exec
 INSERT INTO login_lockouts (key, fails, first_fail_at, locked_until)
 VALUES (

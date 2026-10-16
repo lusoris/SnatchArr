@@ -12,13 +12,15 @@ import (
 )
 
 type ApiKey struct {
-	ID        string
-	OwnerID   uuid.UUID
-	Scopes    []string
-	Hash      []byte
-	CreatedAt time.Time
-	ExpiresAt *time.Time
-	RevokedAt *time.Time
+	ID         string
+	OwnerID    uuid.UUID
+	Scopes     []string
+	Hash       []byte
+	CreatedAt  time.Time
+	ExpiresAt  *time.Time
+	RevokedAt  *time.Time
+	Name       string
+	LastUsedAt *time.Time
 }
 
 type CleanuparrLink struct {

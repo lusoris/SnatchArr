@@ -9,12 +9,24 @@ type CompleteSetupRes interface {
 	completeSetupRes()
 }
 
+type CreateAPIKeyRes interface {
+	createAPIKeyRes()
+}
+
 type DeleteInstanceRes interface {
 	deleteInstanceRes()
 }
 
+type ListAPIKeysRes interface {
+	listAPIKeysRes()
+}
+
 type LoginRes interface {
 	loginRes()
+}
+
+type RevokeAPIKeyRes interface {
+	revokeAPIKeyRes()
 }
 
 type TriggerRunRes interface {

@@ -33,12 +33,34 @@ type invalidParam struct {
 	Reason string `json:"reason"`
 }
 
-// statusOf maps errors from every layer to an HTTP status and a public detail.
-func statusOf(err error) (status int, detail string, params []invalidParam) {
-	var secErr *ogenerrors.SecurityError
+func decodeErrorStatus(err error) (int, string, bool) {
 	var decErr *ogenerrors.DecodeRequestError
 	var paramErr *ogenerrors.DecodeParamsError
-	var valErr *validate.Error
+	if errors.As(err, &decErr) || errors.As(err, &paramErr) {
+		return http.StatusBadRequest, "malformed request", true
+	}
+	return 0, "", false
+}
+
+func validationErrorStatus(err error) (int, string, []invalidParam, bool) {
+	if valErr, ok := errors.AsType[*validate.Error](err); ok {
+		return http.StatusUnprocessableEntity, "request validation failed", validationParams(valErr), true
+	}
+	if errors.Is(err, domain.ErrInvalid) {
+		return http.StatusUnprocessableEntity, err.Error(), nil, true
+	}
+	return 0, "", nil, false
+}
+
+// statusOf maps errors from every layer to an HTTP status and a public detail.
+func statusOf(err error) (status int, detail string, params []invalidParam) {
+	if st, msg, ok := decodeErrorStatus(err); ok {
+		return st, msg, nil
+	}
+	if st, msg, p, ok := validationErrorStatus(err); ok {
+		return st, msg, p
+	}
+	var secErr *ogenerrors.SecurityError
 	switch {
 	case errors.As(err, &secErr), errors.Is(err, domain.ErrUnauthorized):
 		return http.StatusUnauthorized, "authentication required", nil
@@ -50,12 +72,8 @@ func statusOf(err error) (status int, detail string, params []invalidParam) {
 		return http.StatusNotFound, err.Error(), nil
 	case errors.Is(err, domain.ErrConflict):
 		return http.StatusConflict, err.Error(), nil
-	case errors.As(err, &valErr):
-		return http.StatusUnprocessableEntity, "request validation failed", validationParams(valErr)
-	case errors.Is(err, domain.ErrInvalid):
-		return http.StatusUnprocessableEntity, err.Error(), nil
-	case errors.As(err, &decErr), errors.As(err, &paramErr):
-		return http.StatusBadRequest, "malformed request", nil
+	case errors.Is(err, domain.ErrBadRequest):
+		return http.StatusBadRequest, err.Error(), nil
 	case errors.Is(err, domain.ErrUnreachable):
 		return http.StatusBadGateway, err.Error(), nil
 	default:

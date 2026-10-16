@@ -53,8 +53,9 @@ func newStreamFixture(t *testing.T) streamFixture {
 	if err != nil {
 		t.Fatalf("Issue() = %v", err)
 	}
+	apiKeys := auth.NewAPIKeys(f.st, keys, f.clk, slog.New(slog.DiscardHandler))
 	r := chi.NewRouter()
-	MountStream(r, MountParams{Logger: slog.New(slog.DiscardHandler), Security: NewSecurity(f.sessMgr, keys, f.h.auth)},
+	MountStream(r, MountParams{Logger: slog.New(slog.DiscardHandler), Security: NewSecurity(f.sessMgr, keys, f.h.auth, apiKeys, f.clk, slog.New(slog.DiscardHandler))},
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if _, ok := UserFrom(r.Context()); !ok {
 				w.WriteHeader(http.StatusInternalServerError)

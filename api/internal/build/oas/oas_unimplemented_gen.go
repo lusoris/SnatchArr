@@ -40,6 +40,15 @@ func (UnimplementedHandler) CompleteSetup(ctx context.Context, req *SetupRequest
 	return r, ht.ErrNotImplemented
 }
 
+// CreateAPIKey implements createAPIKey operation.
+//
+// Create a new API key for the current user.
+//
+// POST /auth/api-keys
+func (UnimplementedHandler) CreateAPIKey(ctx context.Context, req *CreateApiKeyRequest) (r CreateAPIKeyRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // CreateCleanuparrLink implements createCleanuparrLink operation.
 //
 // Add a Cleanuparr link.
@@ -284,6 +293,15 @@ func (UnimplementedHandler) ImportSeerrInstances(ctx context.Context, params Imp
 	return r, ht.ErrNotImplemented
 }
 
+// ListAPIKeys implements listAPIKeys operation.
+//
+// List the current user's active API keys.
+//
+// GET /auth/api-keys
+func (UnimplementedHandler) ListAPIKeys(ctx context.Context) (r ListAPIKeysRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // ListCleanuparrLinks implements listCleanuparrLinks operation.
 //
 // List Cleanuparr links (API keys are never returned).
@@ -380,6 +398,15 @@ func (UnimplementedHandler) Logout(ctx context.Context) error {
 //
 // POST /state/reset
 func (UnimplementedHandler) ResetState(ctx context.Context, req OptStateReset) (r *StateResetResult, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// RevokeAPIKey implements revokeAPIKey operation.
+//
+// Revoke an API key.
+//
+// DELETE /auth/api-keys/{id}
+func (UnimplementedHandler) RevokeAPIKey(ctx context.Context, params RevokeAPIKeyParams) (r RevokeAPIKeyRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

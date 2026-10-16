@@ -10,11 +10,13 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/golusoris/golusoris/auth/apikey"
 	"github.com/golusoris/golusoris/auth/session"
+	"github.com/golusoris/golusoris/core/clock"
 
 	"github.com/lusoris/SnatchArr/api/internal/auth"
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
@@ -29,11 +31,21 @@ type Security struct {
 	sessions *session.Manager
 	keys     *apikey.Service
 	users    *auth.Service
+	apiKeys  *auth.APIKeys
+	clk      clock.Clock
+	logger   *slog.Logger
 }
 
 // NewSecurity wires the handler.
-func NewSecurity(sessions *session.Manager, keys *apikey.Service, users *auth.Service) *Security {
-	return &Security{sessions: sessions, keys: keys, users: users}
+func NewSecurity(sessions *session.Manager, keys *apikey.Service, users *auth.Service, apiKeys *auth.APIKeys, clk clock.Clock, logger *slog.Logger) *Security {
+	return &Security{
+		sessions: sessions,
+		keys:     keys,
+		users:    users,
+		apiKeys:  apiKeys,
+		clk:      clk,
+		logger:   logger,
+	}
 }
 
 // HandleCookieAuth loads the session named by the cookie and attaches its user.
@@ -72,7 +84,25 @@ func (s *Security) HandleBearerAuth(ctx context.Context, _ oas.OperationName, t 
 	if err != nil {
 		return ctx, fmt.Errorf("%w: %w", domain.ErrUnauthorized, err)
 	}
+	s.touchAPIKey(ctx, key.ID)
 	return withUser(ctx, u), nil
+}
+
+func (s *Security) touchAPIKey(ctx context.Context, id string) {
+	if s.apiKeys == nil || s.clk == nil {
+		return
+	}
+	now := s.clk.Now()
+	touchCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+	defer cancel()
+	if err := s.apiKeys.Touch(touchCtx, id, now); err != nil {
+		if s.logger != nil {
+			s.logger.WarnContext(touchCtx, "httpapi: touch api key failed",
+				slog.String("id", id),
+				slog.String("error", err.Error()),
+			)
+		}
+	}
 }
 
 // RequireUser guards a route served outside the generated router with the same session
