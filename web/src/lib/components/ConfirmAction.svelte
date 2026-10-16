@@ -12,9 +12,24 @@ SPDX-License-Identifier: EUPL-1.2
 		message: string;
 		onconfirm: () => void;
 		pending?: boolean;
+		/** Accessible name of the question; the trigger's label when not given. */
+		groupLabel?: string;
+		confirmLabel?: string;
+		backLabel?: string;
+		/** Lays the question out on one line, for a table row or a card's action bar. */
+		inline?: boolean;
 	}
 
-	const { label, message, onconfirm, pending = false }: Props = $props();
+	const {
+		label,
+		message,
+		onconfirm,
+		pending = false,
+		groupLabel,
+		confirmLabel,
+		backLabel,
+		inline = false
+	}: Props = $props();
 	let asking = $state(false);
 	let trigger = $state<HTMLButtonElement>();
 	let back = $state<HTMLButtonElement>();
@@ -31,8 +46,12 @@ SPDX-License-Identifier: EUPL-1.2
 
 <!-- An in-page confirmation step: the action runs only after a second, explicit press. -->
 {#if asking}
-	<div role="group" aria-label={label} class="flex flex-col gap-2">
-		<p class="text-sm">{message}</p>
+	<div
+		role="group"
+		aria-label={groupLabel ?? label}
+		class={inline ? 'flex flex-wrap items-center gap-2' : 'flex flex-col gap-2'}
+	>
+		<p class={inline ? 'text-sm font-medium' : 'text-sm'}>{message}</p>
 		<div class="flex gap-2">
 			<button
 				type="button"
@@ -41,10 +60,10 @@ SPDX-License-Identifier: EUPL-1.2
 				onclick={() => {
 					asking = false;
 					onconfirm();
-				}}>{m.confirm_yes()}</button
+				}}>{confirmLabel ?? m.confirm_yes()}</button
 			>
 			<button type="button" class="btn" bind:this={back} onclick={() => (asking = false)}
-				>{m.confirm_back()}</button
+				>{backLabel ?? m.confirm_back()}</button
 			>
 		</div>
 	</div>

@@ -3,12 +3,20 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
+	import { tick } from 'svelte';
 	import { createSentioQuery, createSentioMutation } from '@sveltesentio/query';
 	import { toast } from 'svelte-sonner';
 	import { api, describeError } from '#lib/api/client.js';
+	import type { components } from '#lib/api/schema.js';
+	import ConfirmDelete from '#lib/components/ConfirmDelete.svelte';
+	import DownloadClientForm from '#lib/components/DownloadClientForm.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { keys } from '#lib/query.js';
+
+	type DownloadClient = components['schemas']['DownloadClient'];
+	type DownloadClientInput = components['schemas']['DownloadClientInput'];
+	type DownloadClientStatus = components['schemas']['DownloadClientStatus'];
 
 	const clients = createSentioQuery({
 		queryKey: keys.dlclients,
@@ -36,8 +44,96 @@ SPDX-License-Identifier: EUPL-1.2
 			toast.success(`+${r?.imported ?? 0} / ~${r?.updated ?? 0} / -${r?.removed ?? 0}`),
 		onError: (err) => toast.error(describeError(err))
 	});
+
+	/** The client in the form; null adds a new one. */
+	let editing = $state<DownloadClient | null>(null);
+	/** Bumped to remount an emptied create form after a save. */
+	let formGeneration = $state(0);
+
+	const save = createSentioMutation({
+		mutationFn: async (body: DownloadClientInput) => {
+			const target = editing;
+			const res = target
+				? await api.PUT('/download-clients/{clientId}', {
+						params: { path: { clientId: target.id } },
+						body
+					})
+				: await api.POST('/download-clients', { body });
+			return res.data;
+		},
+		invalidates: [keys.dlclients, keys.dlstatus],
+		onSuccess: (c) => {
+			toast.success(m.form_saved({ name: c?.name ?? '' }));
+			closeForm();
+		}
+	});
+
+	const remove = createSentioMutation({
+		mutationFn: async (c: DownloadClient) => {
+			await api.DELETE('/download-clients/{clientId}', { params: { path: { clientId: c.id } } });
+			return c;
+		},
+		invalidates: [keys.dlclients, keys.dlstatus],
+		onSuccess: (c) => {
+			toast.success(m.form_deleted({ name: c.name }));
+			if (editing?.id === c.id) closeForm();
+		},
+		onError: (err) => toast.error(describeError(err))
+	});
+
+	const probe = createSentioMutation({
+		mutationFn: async (c: DownloadClient) => {
+			const res = await api.POST('/download-clients/{clientId}/test', {
+				params: { path: { clientId: c.id } }
+			});
+			return { name: c.name, observed: res.data };
+		},
+		invalidates: [keys.dlclients, keys.dlstatus],
+		onSuccess: reportObservation,
+		onError: (err) => toast.error(m.probe_failed({ detail: describeError(err) }))
+	});
+
+	const probeInput = createSentioMutation({
+		mutationFn: async (body: DownloadClientInput) => {
+			const res = await api.POST('/download-clients/test', { body });
+			return { name: body.name, observed: res.data };
+		},
+		onSuccess: reportObservation,
+		onError: (err) => toast.error(m.probe_failed({ detail: describeError(err) }))
+	});
+
+	function reportObservation({
+		name,
+		observed
+	}: {
+		name: string;
+		observed: DownloadClientStatus | undefined;
+	}): void {
+		if (observed?.reachable) toast.success(m.dlclients_test_ok({ name }));
+		else toast.error(m.dlclients_test_unreachable({ name, detail: observed?.error ?? '' }));
+	}
+
+	function closeForm(): void {
+		editing = null;
+		formGeneration += 1;
+		save.reset();
+	}
+
+	async function edit(c: DownloadClient): Promise<void> {
+		save.reset();
+		editing = c;
+		await tick();
+		document.getElementById('dlclient-name')?.focus();
+	}
+
 	function statusFor(id: string) {
 		return status.data?.find((s) => s.client_id === id);
+	}
+
+	function instanceName(id: string | undefined): string {
+		if (!id) return m.dlclients_all_instances();
+		const name = instances.data?.find((i) => i.id === id)?.name ?? id;
+		return m.dlclients_pinned({ name });
 	}
 </script>
 
@@ -69,9 +165,9 @@ SPDX-License-Identifier: EUPL-1.2
 {:else if clients.isError}
 	<ProblemNote error={clients.error} />
 {:else if (clients.data ?? []).length === 0}
-	<p class="card">{m.dlclients_empty()}</p>
+	<p class="card mb-6">{m.dlclients_empty()}</p>
 {:else}
-	<ul class="grid gap-3 md:grid-cols-2">
+	<ul class="mb-6 grid gap-3 md:grid-cols-2">
 		{#each clients.data ?? [] as c (c.id)}
 			{@const st = statusFor(c.id)}
 			<li class="card">
@@ -79,6 +175,7 @@ SPDX-License-Identifier: EUPL-1.2
 					{c.name} <span class="text-sm text-subtle">{c.kind} · {c.protocol}</span>
 				</h2>
 				<p class="text-sm break-all text-subtle">{c.base_url}</p>
+				<p class="text-sm text-subtle">{instanceName(c.instance_id)}</p>
 				{#if st}
 					<p class="mt-1 text-sm" role="status">
 						{st.reachable ? m.dlclients_reachable() : m.dlclients_unreachable()}
@@ -88,7 +185,34 @@ SPDX-License-Identifier: EUPL-1.2
 						{#if st.error}<span class="text-danger"> {st.error}</span>{/if}
 					</p>
 				{/if}
+				<div class="mt-3 flex flex-wrap gap-2">
+					<button type="button" class="btn" onclick={() => edit(c)}>{m.action_edit()}</button>
+					<button
+						type="button"
+						class="btn"
+						disabled={probe.isPending}
+						onclick={() => probe.mutate(c)}>{m.action_test()}</button
+					>
+					<ConfirmDelete
+						name={c.name}
+						disabled={remove.isPending}
+						onconfirm={() => remove.mutate(c)}
+					/>
+				</div>
 			</li>
 		{/each}
 	</ul>
 {/if}
+
+{#key `${editing?.id ?? 'new'}-${formGeneration}`}
+	<DownloadClientForm
+		client={editing}
+		instances={instances.data ?? []}
+		pending={save.isPending}
+		error={save.error}
+		onsave={(body) => save.mutate(body)}
+		oncancel={closeForm}
+		ontest={(body) => probeInput.mutate(body)}
+		testing={probeInput.isPending}
+	/>
+{/key}
