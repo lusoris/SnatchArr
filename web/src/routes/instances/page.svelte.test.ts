@@ -77,6 +77,14 @@ describe('instance list', () => {
 		expect(await bodyRows()).toEqual([]);
 	});
 
+	it('offers to reset the processed memory of every instance', async () => {
+		stubGet({ '/instances': [forkInstance] });
+		renderWithQuery(InstancesPage);
+
+		await bodyRows();
+		expect(screen.getByRole('button', { name: m.memory_reset_all() })).toBeTruthy();
+	});
+
 	it('announces the problem document when the instance list is refused', async () => {
 		stubGet({
 			'/instances': new ProblemError({ type: 'about:blank', status: 503, detail: 'store down' })

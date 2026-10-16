@@ -11,6 +11,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import Field from '#lib/components/Field.svelte';
 	import KindSelect from '#lib/components/KindSelect.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
+	import ResetMemory from '#lib/components/ResetMemory.svelte';
 	import type { AppKind } from '#lib/kinds.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { instanceKindLabel, probeMessage } from '#lib/products.js';
@@ -150,3 +151,7 @@ SPDX-License-Identifier: EUPL-1.2
 		</div>
 	</form>
 </section>
+
+<div class="mt-6">
+	<ResetMemory />
+</div>

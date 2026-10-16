@@ -11,6 +11,7 @@ import type { components } from '#lib/api/schema.js';
 
 export type Instance = components['schemas']['Instance'];
 export type SnatchPolicy = components['schemas']['SnatchPolicy'];
+export type Run = components['schemas']['Run'];
 
 /** A query client per test: no retry, so a refused request shows at once; nothing cached. */
 function createTestQueryClient(): QueryClient {
@@ -111,3 +112,47 @@ export const samplePolicy: SnatchPolicy = {
 	recent_grab_window_h: 48,
 	afterglow_max_h: 168
 };
+
+/** An instance the Configarr import owns: only its policy is editable in the UI. */
+export const configarrInstance: Instance = {
+	id: '00000000-0000-0000-0000-000000000004',
+	name: 'Configarr Sonarr',
+	kind: 'sonarr',
+	base_url: 'http://sonarr-cfg.local:8989',
+	source: 'configarr',
+	configarr_key: 'sonarr-main',
+	enabled: true,
+	created_at: '2026-01-01T00:00:00Z',
+	updated_at: '2026-01-01T00:00:00Z'
+};
+
+/** Runs of one instance, newest first: one waiting, one at the worker, one finished. */
+export const sampleRuns: Run[] = [
+	{
+		id: '10000000-0000-0000-0000-000000000001',
+		instance_id: forkInstance.id,
+		kind: 'missing',
+		status: 'queued',
+		queued_at: '2026-09-01T12:10:00Z',
+		searched_count: 0
+	},
+	{
+		id: '10000000-0000-0000-0000-000000000002',
+		instance_id: forkInstance.id,
+		kind: 'upgrade',
+		status: 'leased',
+		queued_at: '2026-09-01T12:00:00Z',
+		started_at: '2026-09-01T12:01:00Z',
+		searched_count: 3
+	},
+	{
+		id: '10000000-0000-0000-0000-000000000003',
+		instance_id: forkInstance.id,
+		kind: 'missing',
+		status: 'done',
+		queued_at: '2026-09-01T11:00:00Z',
+		started_at: '2026-09-01T11:01:00Z',
+		finished_at: '2026-09-01T11:05:00Z',
+		searched_count: 12
+	}
+];

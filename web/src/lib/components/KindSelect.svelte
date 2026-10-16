@@ -9,14 +9,21 @@ SPDX-License-Identifier: EUPL-1.2
 
 	interface Props {
 		value: AppKind;
+		disabled?: boolean;
 	}
 
-	let { value = $bindable() }: Props = $props();
+	let { value = $bindable(), disabled = false }: Props = $props();
 	const hint = $derived(isLegacyKind(value) ? m.instance_legacy_hint() : undefined);
 </script>
 
 <Field id="kind" label={m.instance_kind()} {hint}>
-	<select id="kind" class="select" bind:value aria-describedby={hint ? 'kind-hint' : undefined}>
+	<select
+		id="kind"
+		class="select"
+		bind:value
+		{disabled}
+		aria-describedby={hint ? 'kind-hint' : undefined}
+	>
 		{#each APP_KINDS as k (k)}
 			<option value={k}>{kindLabel(k)}</option>
 		{/each}

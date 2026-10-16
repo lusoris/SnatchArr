@@ -14,6 +14,7 @@ export const keys = {
 	policy: (id: string) => ['instances', id, 'policy'] as const,
 	caps: ['hourly-caps'] as const,
 	runs: ['runs'] as const,
+	instanceRuns: (id: string) => ['runs', id] as const,
 	events: ['events'] as const,
 	schedules: ['schedules'] as const,
 	dlclients: ['download-clients'] as const,
