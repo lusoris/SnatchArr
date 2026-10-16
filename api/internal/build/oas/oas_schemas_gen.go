@@ -5119,7 +5119,24 @@ type SnatchPolicy struct {
 	// queue; 0 keeps only the queue check.
 	RecentGrabWindowH int `json:"recent_grab_window_h"`
 	// Afterglow doubles after every fruitless snatch of the same item, up to this many hours.
-	AfterglowMaxH int         `json:"afterglow_max_h"`
+	AfterglowMaxH int `json:"afterglow_max_h"`
+	// *arr tag ids: when not empty, only items carrying one of these tags are searched. An episode,
+	// album or book has the tags of its series, artist or author. Absent = empty.
+	IncludeTags []int32 `json:"include_tags"`
+	// *arr tag ids: items carrying any of these tags are never searched. An id may not be in both tag
+	// lists. Absent = empty.
+	ExcludeTags []int32 `json:"exclude_tags"`
+	// *arr quality profile ids: when not empty, only items using one of these profiles are searched. An
+	// episode, album or book uses the profile of its series, artist or author; a Chaptarr author counts
+	// its audiobook and ebook profiles too. Absent = empty.
+	IncludeQualityProfiles []int32 `json:"include_quality_profiles"`
+	// *arr quality profile ids: items using any of these profiles are never searched. An id may not be
+	// in both profile lists. Absent = empty.
+	ExcludeQualityProfiles []int32 `json:"exclude_quality_profiles"`
+	// Skip items released less than this many hours ago; 0 (or absent) turns the delay off. The release
+	// date is the one of the app kind: air date (Sonarr, Whisparr v2), the date of radarr_release_type
+	// (Radarr, Whisparr v3), the album or book release date. Items without a date are kept.
+	ReleaseDelayH OptInt      `json:"release_delay_h"`
 	UpdatedAt     OptDateTime `json:"updated_at"`
 }
 
@@ -5206,6 +5223,31 @@ func (s *SnatchPolicy) GetRecentGrabWindowH() int {
 // GetAfterglowMaxH returns the value of AfterglowMaxH.
 func (s *SnatchPolicy) GetAfterglowMaxH() int {
 	return s.AfterglowMaxH
+}
+
+// GetIncludeTags returns the value of IncludeTags.
+func (s *SnatchPolicy) GetIncludeTags() []int32 {
+	return s.IncludeTags
+}
+
+// GetExcludeTags returns the value of ExcludeTags.
+func (s *SnatchPolicy) GetExcludeTags() []int32 {
+	return s.ExcludeTags
+}
+
+// GetIncludeQualityProfiles returns the value of IncludeQualityProfiles.
+func (s *SnatchPolicy) GetIncludeQualityProfiles() []int32 {
+	return s.IncludeQualityProfiles
+}
+
+// GetExcludeQualityProfiles returns the value of ExcludeQualityProfiles.
+func (s *SnatchPolicy) GetExcludeQualityProfiles() []int32 {
+	return s.ExcludeQualityProfiles
+}
+
+// GetReleaseDelayH returns the value of ReleaseDelayH.
+func (s *SnatchPolicy) GetReleaseDelayH() OptInt {
+	return s.ReleaseDelayH
 }
 
 // GetUpdatedAt returns the value of UpdatedAt.
@@ -5296,6 +5338,31 @@ func (s *SnatchPolicy) SetRecentGrabWindowH(val int) {
 // SetAfterglowMaxH sets the value of AfterglowMaxH.
 func (s *SnatchPolicy) SetAfterglowMaxH(val int) {
 	s.AfterglowMaxH = val
+}
+
+// SetIncludeTags sets the value of IncludeTags.
+func (s *SnatchPolicy) SetIncludeTags(val []int32) {
+	s.IncludeTags = val
+}
+
+// SetExcludeTags sets the value of ExcludeTags.
+func (s *SnatchPolicy) SetExcludeTags(val []int32) {
+	s.ExcludeTags = val
+}
+
+// SetIncludeQualityProfiles sets the value of IncludeQualityProfiles.
+func (s *SnatchPolicy) SetIncludeQualityProfiles(val []int32) {
+	s.IncludeQualityProfiles = val
+}
+
+// SetExcludeQualityProfiles sets the value of ExcludeQualityProfiles.
+func (s *SnatchPolicy) SetExcludeQualityProfiles(val []int32) {
+	s.ExcludeQualityProfiles = val
+}
+
+// SetReleaseDelayH sets the value of ReleaseDelayH.
+func (s *SnatchPolicy) SetReleaseDelayH(val OptInt) {
+	s.ReleaseDelayH = val
 }
 
 // SetUpdatedAt sets the value of UpdatedAt.

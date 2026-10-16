@@ -16,7 +16,7 @@ const ensureDefaultPolicy = `-- name: EnsureDefaultPolicy :one
 INSERT INTO snatch_policies (instance_id, updated_at)
 VALUES ($1, $2)
 ON CONFLICT (instance_id) DO UPDATE SET instance_id = EXCLUDED.instance_id
-RETURNING instance_id, missing_per_cycle, upgrade_per_cycle, cycle_interval_s, hourly_cap, selection, monitored_only, skip_future_releases, radarr_release_type, sonarr_missing_mode, sonarr_upgrade_mode, lidarr_missing_mode, processed_ttl_h, max_queue_size, await_command, page_size, cursor_missing, cursor_upgrade, updated_at, recent_grab_window_h, afterglow_max_h
+RETURNING instance_id, missing_per_cycle, upgrade_per_cycle, cycle_interval_s, hourly_cap, selection, monitored_only, skip_future_releases, radarr_release_type, sonarr_missing_mode, sonarr_upgrade_mode, lidarr_missing_mode, processed_ttl_h, max_queue_size, await_command, page_size, cursor_missing, cursor_upgrade, updated_at, recent_grab_window_h, afterglow_max_h, include_tags, exclude_tags, include_quality_profiles, exclude_quality_profiles, release_delay_h
 `
 
 type EnsureDefaultPolicyParams struct {
@@ -49,13 +49,18 @@ func (q *Queries) EnsureDefaultPolicy(ctx context.Context, arg EnsureDefaultPoli
 		&i.UpdatedAt,
 		&i.RecentGrabWindowH,
 		&i.AfterglowMaxH,
+		&i.IncludeTags,
+		&i.ExcludeTags,
+		&i.IncludeQualityProfiles,
+		&i.ExcludeQualityProfiles,
+		&i.ReleaseDelayH,
 	)
 	return i, err
 }
 
 const getPolicy = `-- name: GetPolicy :one
 
-SELECT instance_id, missing_per_cycle, upgrade_per_cycle, cycle_interval_s, hourly_cap, selection, monitored_only, skip_future_releases, radarr_release_type, sonarr_missing_mode, sonarr_upgrade_mode, lidarr_missing_mode, processed_ttl_h, max_queue_size, await_command, page_size, cursor_missing, cursor_upgrade, updated_at, recent_grab_window_h, afterglow_max_h FROM snatch_policies WHERE instance_id = $1
+SELECT instance_id, missing_per_cycle, upgrade_per_cycle, cycle_interval_s, hourly_cap, selection, monitored_only, skip_future_releases, radarr_release_type, sonarr_missing_mode, sonarr_upgrade_mode, lidarr_missing_mode, processed_ttl_h, max_queue_size, await_command, page_size, cursor_missing, cursor_upgrade, updated_at, recent_grab_window_h, afterglow_max_h, include_tags, exclude_tags, include_quality_profiles, exclude_quality_profiles, release_delay_h FROM snatch_policies WHERE instance_id = $1
 `
 
 // SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
@@ -85,6 +90,11 @@ func (q *Queries) GetPolicy(ctx context.Context, instanceID uuid.UUID) (SnatchPo
 		&i.UpdatedAt,
 		&i.RecentGrabWindowH,
 		&i.AfterglowMaxH,
+		&i.IncludeTags,
+		&i.ExcludeTags,
+		&i.IncludeQualityProfiles,
+		&i.ExcludeQualityProfiles,
+		&i.ReleaseDelayH,
 	)
 	return i, err
 }
@@ -119,12 +129,14 @@ INSERT INTO snatch_policies (
     instance_id, missing_per_cycle, upgrade_per_cycle, cycle_interval_s, hourly_cap, selection,
     monitored_only, skip_future_releases, radarr_release_type, sonarr_missing_mode, sonarr_upgrade_mode,
     lidarr_missing_mode, processed_ttl_h, max_queue_size, await_command, page_size, updated_at,
-    recent_grab_window_h, afterglow_max_h
+    recent_grab_window_h, afterglow_max_h, include_tags, exclude_tags, include_quality_profiles,
+    exclude_quality_profiles, release_delay_h
 ) VALUES (
     $1, $2, $3, $4, $5, $6,
     $7, $8, $9, $10, $11,
     $12, $13, $14, $15, $16, $17,
-    $18, $19
+    $18, $19, $20, $21, $22,
+    $23, $24
 )
 ON CONFLICT (instance_id) DO UPDATE SET
     missing_per_cycle = EXCLUDED.missing_per_cycle,
@@ -144,30 +156,40 @@ ON CONFLICT (instance_id) DO UPDATE SET
     page_size = EXCLUDED.page_size,
     recent_grab_window_h = EXCLUDED.recent_grab_window_h,
     afterglow_max_h = EXCLUDED.afterglow_max_h,
+    include_tags = EXCLUDED.include_tags,
+    exclude_tags = EXCLUDED.exclude_tags,
+    include_quality_profiles = EXCLUDED.include_quality_profiles,
+    exclude_quality_profiles = EXCLUDED.exclude_quality_profiles,
+    release_delay_h = EXCLUDED.release_delay_h,
     updated_at = EXCLUDED.updated_at
-RETURNING instance_id, missing_per_cycle, upgrade_per_cycle, cycle_interval_s, hourly_cap, selection, monitored_only, skip_future_releases, radarr_release_type, sonarr_missing_mode, sonarr_upgrade_mode, lidarr_missing_mode, processed_ttl_h, max_queue_size, await_command, page_size, cursor_missing, cursor_upgrade, updated_at, recent_grab_window_h, afterglow_max_h
+RETURNING instance_id, missing_per_cycle, upgrade_per_cycle, cycle_interval_s, hourly_cap, selection, monitored_only, skip_future_releases, radarr_release_type, sonarr_missing_mode, sonarr_upgrade_mode, lidarr_missing_mode, processed_ttl_h, max_queue_size, await_command, page_size, cursor_missing, cursor_upgrade, updated_at, recent_grab_window_h, afterglow_max_h, include_tags, exclude_tags, include_quality_profiles, exclude_quality_profiles, release_delay_h
 `
 
 type UpsertPolicyParams struct {
-	InstanceID         uuid.UUID
-	MissingPerCycle    int32
-	UpgradePerCycle    int32
-	CycleIntervalS     int32
-	HourlyCap          int32
-	Selection          string
-	MonitoredOnly      bool
-	SkipFutureReleases bool
-	RadarrReleaseType  string
-	SonarrMissingMode  string
-	SonarrUpgradeMode  string
-	LidarrMissingMode  string
-	ProcessedTtlH      int32
-	MaxQueueSize       int32
-	AwaitCommand       bool
-	PageSize           int32
-	UpdatedAt          time.Time
-	RecentGrabWindowH  int32
-	AfterglowMaxH      int32
+	InstanceID             uuid.UUID
+	MissingPerCycle        int32
+	UpgradePerCycle        int32
+	CycleIntervalS         int32
+	HourlyCap              int32
+	Selection              string
+	MonitoredOnly          bool
+	SkipFutureReleases     bool
+	RadarrReleaseType      string
+	SonarrMissingMode      string
+	SonarrUpgradeMode      string
+	LidarrMissingMode      string
+	ProcessedTtlH          int32
+	MaxQueueSize           int32
+	AwaitCommand           bool
+	PageSize               int32
+	UpdatedAt              time.Time
+	RecentGrabWindowH      int32
+	AfterglowMaxH          int32
+	IncludeTags            []int32
+	ExcludeTags            []int32
+	IncludeQualityProfiles []int32
+	ExcludeQualityProfiles []int32
+	ReleaseDelayH          int32
 }
 
 func (q *Queries) UpsertPolicy(ctx context.Context, arg UpsertPolicyParams) (SnatchPolicy, error) {
@@ -191,6 +213,11 @@ func (q *Queries) UpsertPolicy(ctx context.Context, arg UpsertPolicyParams) (Sna
 		arg.UpdatedAt,
 		arg.RecentGrabWindowH,
 		arg.AfterglowMaxH,
+		arg.IncludeTags,
+		arg.ExcludeTags,
+		arg.IncludeQualityProfiles,
+		arg.ExcludeQualityProfiles,
+		arg.ReleaseDelayH,
 	)
 	var i SnatchPolicy
 	err := row.Scan(
@@ -215,6 +242,11 @@ func (q *Queries) UpsertPolicy(ctx context.Context, arg UpsertPolicyParams) (Sna
 		&i.UpdatedAt,
 		&i.RecentGrabWindowH,
 		&i.AfterglowMaxH,
+		&i.IncludeTags,
+		&i.ExcludeTags,
+		&i.IncludeQualityProfiles,
+		&i.ExcludeQualityProfiles,
+		&i.ReleaseDelayH,
 	)
 	return i, err
 }

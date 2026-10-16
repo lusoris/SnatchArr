@@ -9948,6 +9948,52 @@ func (s *SnatchPolicy) encodeFields(e *jx.Encoder) {
 		e.Int(s.AfterglowMaxH)
 	}
 	{
+		if s.IncludeTags != nil {
+			e.FieldStart("include_tags")
+			e.ArrStart()
+			for _, elem := range s.IncludeTags {
+				e.Int32(elem)
+			}
+			e.ArrEnd()
+		}
+	}
+	{
+		if s.ExcludeTags != nil {
+			e.FieldStart("exclude_tags")
+			e.ArrStart()
+			for _, elem := range s.ExcludeTags {
+				e.Int32(elem)
+			}
+			e.ArrEnd()
+		}
+	}
+	{
+		if s.IncludeQualityProfiles != nil {
+			e.FieldStart("include_quality_profiles")
+			e.ArrStart()
+			for _, elem := range s.IncludeQualityProfiles {
+				e.Int32(elem)
+			}
+			e.ArrEnd()
+		}
+	}
+	{
+		if s.ExcludeQualityProfiles != nil {
+			e.FieldStart("exclude_quality_profiles")
+			e.ArrStart()
+			for _, elem := range s.ExcludeQualityProfiles {
+				e.Int32(elem)
+			}
+			e.ArrEnd()
+		}
+	}
+	{
+		if s.ReleaseDelayH.Set {
+			e.FieldStart("release_delay_h")
+			s.ReleaseDelayH.Encode(e)
+		}
+	}
+	{
 		if s.UpdatedAt.Set {
 			e.FieldStart("updated_at")
 			s.UpdatedAt.Encode(e, json.EncodeDateTime)
@@ -9955,7 +10001,7 @@ func (s *SnatchPolicy) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfSnatchPolicy = [18]string{
+var jsonFieldsNameOfSnatchPolicy = [23]string{
 	0:  "missing_per_cycle",
 	1:  "upgrade_per_cycle",
 	2:  "cycle_interval_s",
@@ -9973,7 +10019,12 @@ var jsonFieldsNameOfSnatchPolicy = [18]string{
 	14: "page_size",
 	15: "recent_grab_window_h",
 	16: "afterglow_max_h",
-	17: "updated_at",
+	17: "include_tags",
+	18: "exclude_tags",
+	19: "include_quality_profiles",
+	20: "exclude_quality_profiles",
+	21: "release_delay_h",
+	22: "updated_at",
 }
 
 // Decode decodes SnatchPolicy from json.
@@ -10178,6 +10229,92 @@ func (s *SnatchPolicy) Decode(d *jx.Decoder) error {
 				return nil
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"afterglow_max_h\"")
+			}
+		case "include_tags":
+			if err := func() error {
+				s.IncludeTags = make([]int32, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem int32
+					v, err := d.Int32()
+					elem = int32(v)
+					if err != nil {
+						return err
+					}
+					s.IncludeTags = append(s.IncludeTags, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"include_tags\"")
+			}
+		case "exclude_tags":
+			if err := func() error {
+				s.ExcludeTags = make([]int32, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem int32
+					v, err := d.Int32()
+					elem = int32(v)
+					if err != nil {
+						return err
+					}
+					s.ExcludeTags = append(s.ExcludeTags, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"exclude_tags\"")
+			}
+		case "include_quality_profiles":
+			if err := func() error {
+				s.IncludeQualityProfiles = make([]int32, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem int32
+					v, err := d.Int32()
+					elem = int32(v)
+					if err != nil {
+						return err
+					}
+					s.IncludeQualityProfiles = append(s.IncludeQualityProfiles, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"include_quality_profiles\"")
+			}
+		case "exclude_quality_profiles":
+			if err := func() error {
+				s.ExcludeQualityProfiles = make([]int32, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem int32
+					v, err := d.Int32()
+					elem = int32(v)
+					if err != nil {
+						return err
+					}
+					s.ExcludeQualityProfiles = append(s.ExcludeQualityProfiles, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"exclude_quality_profiles\"")
+			}
+		case "release_delay_h":
+			if err := func() error {
+				s.ReleaseDelayH.Reset()
+				if err := s.ReleaseDelayH.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"release_delay_h\"")
 			}
 		case "updated_at":
 			if err := func() error {

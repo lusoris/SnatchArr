@@ -1834,6 +1834,47 @@ components:
           minimum: 1
           maximum: 8760
           description: "Afterglow doubles after every fruitless snatch of the same item, up to this many hours."
+        include_tags:
+          type: array
+          maxItems: 100
+          uniqueItems: true
+          items:
+            type: integer
+            format: int32
+            minimum: 1
+          description: "*arr tag ids: when not empty, only items carrying one of these tags are searched. An episode, album or book has the tags of its series, artist or author. Absent = empty."
+        exclude_tags:
+          type: array
+          maxItems: 100
+          uniqueItems: true
+          items:
+            type: integer
+            format: int32
+            minimum: 1
+          description: "*arr tag ids: items carrying any of these tags are never searched. An id may not be in both tag lists. Absent = empty."
+        include_quality_profiles:
+          type: array
+          maxItems: 100
+          uniqueItems: true
+          items:
+            type: integer
+            format: int32
+            minimum: 1
+          description: "*arr quality profile ids: when not empty, only items using one of these profiles are searched. An episode, album or book uses the profile of its series, artist or author; a Chaptarr author counts its audiobook and ebook profiles too. Absent = empty."
+        exclude_quality_profiles:
+          type: array
+          maxItems: 100
+          uniqueItems: true
+          items:
+            type: integer
+            format: int32
+            minimum: 1
+          description: "*arr quality profile ids: items using any of these profiles are never searched. An id may not be in both profile lists. Absent = empty."
+        release_delay_h:
+          type: integer
+          minimum: 0
+          maximum: 8760
+          description: "Skip items released less than this many hours ago; 0 (or absent) turns the delay off. The release date is the one of the app kind: air date (Sonarr, Whisparr v2), the date of radarr_release_type (Radarr, Whisparr v3), the album or book release date. Items without a date are kept."
         updated_at:
           type: string
           format: date-time

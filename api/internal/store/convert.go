@@ -51,50 +51,60 @@ func InstancesFromRows(rows []sqlcgen.Instance) []domain.Instance {
 // PolicyFromRow converts a policy row.
 func PolicyFromRow(r sqlcgen.SnatchPolicy) domain.Policy {
 	return domain.Policy{
-		InstanceID:         r.InstanceID,
-		MissingPerCycle:    int(r.MissingPerCycle),
-		UpgradePerCycle:    int(r.UpgradePerCycle),
-		CycleInterval:      time.Duration(r.CycleIntervalS) * time.Second,
-		HourlyCap:          int(r.HourlyCap),
-		Selection:          domain.Selection(r.Selection),
-		MonitoredOnly:      r.MonitoredOnly,
-		SkipFutureReleases: r.SkipFutureReleases,
-		RadarrReleaseType:  r.RadarrReleaseType,
-		SonarrMissingMode:  r.SonarrMissingMode,
-		SonarrUpgradeMode:  r.SonarrUpgradeMode,
-		LidarrMissingMode:  r.LidarrMissingMode,
-		ProcessedTTL:       time.Duration(r.ProcessedTtlH) * time.Hour,
-		MaxQueueSize:       int(r.MaxQueueSize),
-		AwaitCommand:       r.AwaitCommand,
-		PageSize:           int(r.PageSize),
-		RecentGrabWindow:   time.Duration(r.RecentGrabWindowH) * time.Hour,
-		AfterglowMax:       time.Duration(r.AfterglowMaxH) * time.Hour,
-		UpdatedAt:          r.UpdatedAt,
+		InstanceID:             r.InstanceID,
+		MissingPerCycle:        int(r.MissingPerCycle),
+		UpgradePerCycle:        int(r.UpgradePerCycle),
+		CycleInterval:          time.Duration(r.CycleIntervalS) * time.Second,
+		HourlyCap:              int(r.HourlyCap),
+		Selection:              domain.Selection(r.Selection),
+		MonitoredOnly:          r.MonitoredOnly,
+		SkipFutureReleases:     r.SkipFutureReleases,
+		RadarrReleaseType:      r.RadarrReleaseType,
+		SonarrMissingMode:      r.SonarrMissingMode,
+		SonarrUpgradeMode:      r.SonarrUpgradeMode,
+		LidarrMissingMode:      r.LidarrMissingMode,
+		ProcessedTTL:           time.Duration(r.ProcessedTtlH) * time.Hour,
+		MaxQueueSize:           int(r.MaxQueueSize),
+		AwaitCommand:           r.AwaitCommand,
+		PageSize:               int(r.PageSize),
+		RecentGrabWindow:       time.Duration(r.RecentGrabWindowH) * time.Hour,
+		AfterglowMax:           time.Duration(r.AfterglowMaxH) * time.Hour,
+		IncludeTags:            r.IncludeTags,
+		ExcludeTags:            r.ExcludeTags,
+		IncludeQualityProfiles: r.IncludeQualityProfiles,
+		ExcludeQualityProfiles: r.ExcludeQualityProfiles,
+		ReleaseDelay:           time.Duration(r.ReleaseDelayH) * time.Hour,
+		UpdatedAt:              r.UpdatedAt,
 	}
 }
 
 // PolicyParams builds the upsert parameters from a validated policy.
 func PolicyParams(p domain.Policy, now time.Time) sqlcgen.UpsertPolicyParams {
 	return sqlcgen.UpsertPolicyParams{
-		InstanceID:         p.InstanceID,
-		MissingPerCycle:    int32(p.MissingPerCycle),             // #nosec G115 -- validated 0..100
-		UpgradePerCycle:    int32(p.UpgradePerCycle),             // #nosec G115 -- validated 0..100
-		CycleIntervalS:     int32(p.CycleInterval / time.Second), // #nosec G115 -- validated <= 7 days
-		HourlyCap:          int32(p.HourlyCap),                   // #nosec G115 -- validated 1..500
-		Selection:          string(p.Selection),
-		MonitoredOnly:      p.MonitoredOnly,
-		SkipFutureReleases: p.SkipFutureReleases,
-		RadarrReleaseType:  p.RadarrReleaseType,
-		SonarrMissingMode:  p.SonarrMissingMode,
-		SonarrUpgradeMode:  p.SonarrUpgradeMode,
-		LidarrMissingMode:  p.LidarrMissingMode,
-		ProcessedTtlH:      int32(p.ProcessedTTL / time.Hour), // #nosec G115 -- validated 1..8760
-		MaxQueueSize:       int32(p.MaxQueueSize),             // #nosec G115 -- validated -1..100000
-		AwaitCommand:       p.AwaitCommand,
-		PageSize:           int32(p.PageSize),                     // #nosec G115 -- validated 10..1000
-		RecentGrabWindowH:  int32(p.RecentGrabWindow / time.Hour), // #nosec G115 -- validated 0..720
-		AfterglowMaxH:      int32(p.AfterglowMax / time.Hour),     // #nosec G115 -- validated 1..8760
-		UpdatedAt:          now,
+		InstanceID:             p.InstanceID,
+		MissingPerCycle:        int32(p.MissingPerCycle),             // #nosec G115 -- validated 0..100
+		UpgradePerCycle:        int32(p.UpgradePerCycle),             // #nosec G115 -- validated 0..100
+		CycleIntervalS:         int32(p.CycleInterval / time.Second), // #nosec G115 -- validated <= 7 days
+		HourlyCap:              int32(p.HourlyCap),                   // #nosec G115 -- validated 1..500
+		Selection:              string(p.Selection),
+		MonitoredOnly:          p.MonitoredOnly,
+		SkipFutureReleases:     p.SkipFutureReleases,
+		RadarrReleaseType:      p.RadarrReleaseType,
+		SonarrMissingMode:      p.SonarrMissingMode,
+		SonarrUpgradeMode:      p.SonarrUpgradeMode,
+		LidarrMissingMode:      p.LidarrMissingMode,
+		ProcessedTtlH:          int32(p.ProcessedTTL / time.Hour), // #nosec G115 -- validated 1..8760
+		MaxQueueSize:           int32(p.MaxQueueSize),             // #nosec G115 -- validated -1..100000
+		AwaitCommand:           p.AwaitCommand,
+		PageSize:               int32(p.PageSize),                     // #nosec G115 -- validated 10..1000
+		RecentGrabWindowH:      int32(p.RecentGrabWindow / time.Hour), // #nosec G115 -- validated 0..720
+		AfterglowMaxH:          int32(p.AfterglowMax / time.Hour),     // #nosec G115 -- validated 1..8760
+		IncludeTags:            domain.FilterIDs(p.IncludeTags),
+		ExcludeTags:            domain.FilterIDs(p.ExcludeTags),
+		IncludeQualityProfiles: domain.FilterIDs(p.IncludeQualityProfiles),
+		ExcludeQualityProfiles: domain.FilterIDs(p.ExcludeQualityProfiles),
+		ReleaseDelayH:          int32(p.ReleaseDelay / time.Hour), // #nosec G115 -- validated 0..8760
+		UpdatedAt:              now,
 	}
 }
 

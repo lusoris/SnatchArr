@@ -5,6 +5,7 @@
 package httpapi
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
@@ -24,14 +25,27 @@ func TestPolicyRoundTrip(t *testing.T) {
 		Selection: domain.SelectionSequential, MonitoredOnly: true, SkipFutureReleases: false, RadarrReleaseType: "digital",
 		SonarrMissingMode: "shows", SonarrUpgradeMode: "season_packs", LidarrMissingMode: "album", ProcessedTTL: 48 * time.Hour,
 		MaxQueueSize: 5, AwaitCommand: true, PageSize: 200, UpdatedAt: time.Unix(1_700_000_000, 0).UTC(),
+		IncludeTags: []int32{1, 2}, ExcludeTags: []int32{3}, IncludeQualityProfiles: []int32{4},
+		ExcludeQualityProfiles: []int32{}, ReleaseDelay: 36 * time.Hour,
 	}
 	out := policyFromOAS(instID, policyToOAS(in))
 	in.UpdatedAt = time.Time{}
-	if out != in {
+	if !reflect.DeepEqual(out, in) {
 		t.Fatalf("round trip changed the policy:\n got %+v\nwant %+v", out, in)
 	}
 	if got := policyToOAS(in); got.CycleIntervalS != 900 || got.ProcessedTTLH != 48 || got.Selection != oas.SnatchPolicySelectionSequential {
 		t.Fatalf("policyToOAS: %+v", got)
+	}
+	// Boundary: a request without the filter fields means no filter, never null lists.
+	bare := policyToOAS(in)
+	bare.IncludeTags, bare.ExcludeTags, bare.IncludeQualityProfiles, bare.ExcludeQualityProfiles = nil, nil, nil, nil
+	bare.ReleaseDelayH = oas.OptInt{}
+	if got := policyFromOAS(instID, bare); got.IncludeTags == nil || len(got.ExcludeQualityProfiles) != 0 || got.ReleaseDelay != 0 {
+		t.Fatalf("policyFromOAS without filters: %+v", got)
+	}
+	// Boundary: a policy without lists shows empty lists, not absent ones.
+	if got := policyToOAS(domain.Policy{}); got.IncludeTags == nil || got.ExcludeQualityProfiles == nil {
+		t.Fatalf("policyToOAS of empty lists: %+v", got)
 	}
 }
 

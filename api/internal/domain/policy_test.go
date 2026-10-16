@@ -58,6 +58,28 @@ func TestPolicyValidate(t *testing.T) {
 		{"negative lidarr mode", func(p *domain.Policy) { p.LidarrMissingMode = "track" }, true},
 		{"boundary page size 10 ok", func(p *domain.Policy) { p.PageSize = 10 }, false},
 		{"boundary page size 9", func(p *domain.Policy) { p.PageSize = 9 }, true},
+		{"positive tag and profile filters", func(p *domain.Policy) {
+			p.IncludeTags, p.ExcludeTags = []int32{1, 2}, []int32{3}
+			p.IncludeQualityProfiles, p.ExcludeQualityProfiles = []int32{4}, []int32{5, 6}
+		}, false},
+		{"boundary release delay 8760h ok", func(p *domain.Policy) { p.ReleaseDelay = 8760 * time.Hour }, false},
+		{"boundary release delay 8761h", func(p *domain.Policy) { p.ReleaseDelay = 8761 * time.Hour }, true},
+		{"negative release delay", func(p *domain.Policy) { p.ReleaseDelay = -time.Hour }, true},
+		{"boundary 100 tags ok", func(p *domain.Policy) { p.IncludeTags = seq(100) }, false},
+		{"boundary 101 tags", func(p *domain.Policy) { p.ExcludeTags = seq(101) }, true},
+		{"boundary 101 profiles", func(p *domain.Policy) { p.IncludeQualityProfiles = seq(101) }, true},
+		{"negative tag id 0", func(p *domain.Policy) { p.IncludeTags = []int32{0} }, true},
+		{"negative profile id -1", func(p *domain.Policy) { p.ExcludeQualityProfiles = []int32{-1} }, true},
+		{"negative repeated tag", func(p *domain.Policy) { p.ExcludeTags = []int32{2, 2} }, true},
+		{"negative tag both included and excluded", func(p *domain.Policy) {
+			p.IncludeTags, p.ExcludeTags = []int32{1, 2}, []int32{2}
+		}, true},
+		{"negative profile both included and excluded", func(p *domain.Policy) {
+			p.IncludeQualityProfiles, p.ExcludeQualityProfiles = []int32{7}, []int32{7}
+		}, true},
+		{"positive same id as tag and as profile", func(p *domain.Policy) {
+			p.IncludeTags, p.ExcludeQualityProfiles = []int32{1}, []int32{1}
+		}, false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -94,4 +116,13 @@ func TestPolicyRefinementFields(t *testing.T) {
 	if err := p.Validate(); !errors.Is(err, domain.ErrInvalid) {
 		t.Fatalf("afterglow_max_h 0 must fail, got %v", err)
 	}
+}
+
+// seq returns the ids 1..n.
+func seq(n int) []int32 {
+	out := make([]int32, n)
+	for i := range out {
+		out[i] = int32(i + 1) // #nosec G115 -- test sizes stay far below the int32 range
+	}
+	return out
 }
