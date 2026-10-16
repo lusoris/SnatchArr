@@ -123,6 +123,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/api-keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the current user's active API keys */
+        get: operations["listAPIKeys"];
+        put?: never;
+        /** Create a new API key for the current user */
+        post: operations["createAPIKey"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/api-keys/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ApiKeyId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revoke an API key */
+        delete: operations["revokeAPIKey"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/instances": {
         parameters: {
             query?: never;
@@ -852,6 +889,24 @@ export interface components {
             /** Format: date-time */
             expires_at: string;
         };
+        ApiKey: {
+            id: string;
+            name: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            expires_at?: string;
+            /** Format: date-time */
+            last_used_at?: string;
+        };
+        CreatedApiKey: components["schemas"]["ApiKey"] & {
+            secret: string;
+        };
+        CreateApiKeyRequest: {
+            name: string;
+            /** Format: date-time */
+            expires_at?: string;
+        };
         /** @enum {string} */
         AppKind: "sonarr" | "radarr" | "lidarr" | "readarr" | "whisparr_v2" | "whisparr_v3";
         Instance: {
@@ -1315,6 +1370,7 @@ export interface components {
         InstanceId: string;
         ClientId: string;
         LinkId: string;
+        ApiKeyId: string;
     };
     requestBodies: never;
     headers: never;
@@ -1483,6 +1539,79 @@ export interface operations {
                     "application/json": components["schemas"]["Session"];
                 };
             };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listAPIKeys: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description API keys */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiKey"][];
+                };
+            };
+            401: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    createAPIKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateApiKeyRequest"];
+            };
+        };
+        responses: {
+            /** @description API key created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedApiKey"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    revokeAPIKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ApiKeyId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description API key revoked */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };

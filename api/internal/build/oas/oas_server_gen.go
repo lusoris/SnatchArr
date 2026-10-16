@@ -26,6 +26,12 @@ type Handler interface {
 	//
 	// POST /auth/setup
 	CompleteSetup(ctx context.Context, req *SetupRequest) (CompleteSetupRes, error)
+	// CreateAPIKey implements createAPIKey operation.
+	//
+	// Create a new API key for the current user.
+	//
+	// POST /auth/api-keys
+	CreateAPIKey(ctx context.Context, req *CreateApiKeyRequest) (CreateAPIKeyRes, error)
 	// CreateCleanuparrLink implements createCleanuparrLink operation.
 	//
 	// Add a Cleanuparr link.
@@ -189,6 +195,12 @@ type Handler interface {
 	//
 	// POST /seerr/{linkId}/import-instances
 	ImportSeerrInstances(ctx context.Context, params ImportSeerrInstancesParams) (*SeerrImportResult, error)
+	// ListAPIKeys implements listAPIKeys operation.
+	//
+	// List the current user's active API keys.
+	//
+	// GET /auth/api-keys
+	ListAPIKeys(ctx context.Context) (ListAPIKeysRes, error)
 	// ListCleanuparrLinks implements listCleanuparrLinks operation.
 	//
 	// List Cleanuparr links (API keys are never returned).
@@ -255,6 +267,12 @@ type Handler interface {
 	//
 	// POST /state/reset
 	ResetState(ctx context.Context, req OptStateReset) (*StateResetResult, error)
+	// RevokeAPIKey implements revokeAPIKey operation.
+	//
+	// Revoke an API key.
+	//
+	// DELETE /auth/api-keys/{id}
+	RevokeAPIKey(ctx context.Context, params RevokeAPIKeyParams) (RevokeAPIKeyRes, error)
 	// SnatchSeerrRequest implements snatchSeerrRequest operation.
 	//
 	// Quickie focused on one request (missing snatch of its instance, limited to that movie or series).

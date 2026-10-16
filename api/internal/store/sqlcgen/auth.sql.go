@@ -12,6 +12,20 @@ import (
 	"github.com/google/uuid"
 )
 
+// #nosec G101 -- sqlc query constant named after a table; the value is SQL, not a credential
+const countActiveAPIKeysByOwner = `-- name: CountActiveAPIKeysByOwner :one
+SELECT count(*)
+FROM api_keys
+WHERE owner_id = $1 AND revoked_at IS NULL
+`
+
+func (q *Queries) CountActiveAPIKeysByOwner(ctx context.Context, ownerID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveAPIKeysByOwner, ownerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countUsers = `-- name: CountUsers :one
 
 SELECT count(*) FROM users
@@ -101,7 +115,7 @@ func (q *Queries) DeleteUserSessionsExcept(ctx context.Context, arg DeleteUserSe
 
 // #nosec G101 -- sqlc query constant named after a table; the value is SQL, not a credential
 const getAPIKey = `-- name: GetAPIKey :one
-SELECT id, owner_id, scopes, hash, created_at, expires_at, revoked_at FROM api_keys WHERE id = $1
+SELECT id, owner_id, scopes, hash, created_at, expires_at, revoked_at, name, last_used_at FROM api_keys WHERE id = $1
 `
 
 func (q *Queries) GetAPIKey(ctx context.Context, id string) (ApiKey, error) {
@@ -115,6 +129,8 @@ func (q *Queries) GetAPIKey(ctx context.Context, id string) (ApiKey, error) {
 		&i.CreatedAt,
 		&i.ExpiresAt,
 		&i.RevokedAt,
+		&i.Name,
+		&i.LastUsedAt,
 	)
 	return i, err
 }
@@ -175,7 +191,7 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 
 // #nosec G101 -- sqlc query constant named after a table; the value is SQL, not a credential
 const listAPIKeysByOwner = `-- name: ListAPIKeysByOwner :many
-SELECT id, owner_id, scopes, hash, created_at, expires_at, revoked_at FROM api_keys WHERE owner_id = $1 AND revoked_at IS NULL ORDER BY created_at
+SELECT id, owner_id, scopes, hash, created_at, expires_at, revoked_at, name, last_used_at FROM api_keys WHERE owner_id = $1 AND revoked_at IS NULL ORDER BY created_at
 `
 
 func (q *Queries) ListAPIKeysByOwner(ctx context.Context, ownerID uuid.UUID) ([]ApiKey, error) {
@@ -195,6 +211,52 @@ func (q *Queries) ListAPIKeysByOwner(ctx context.Context, ownerID uuid.UUID) ([]
 			&i.CreatedAt,
 			&i.ExpiresAt,
 			&i.RevokedAt,
+			&i.Name,
+			&i.LastUsedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+// #nosec G101 -- sqlc query constant named after a table; the value is SQL, not a credential
+const listAPIKeysForOwner = `-- name: ListAPIKeysForOwner :many
+SELECT id, owner_id, name, created_at, expires_at, last_used_at
+FROM api_keys
+WHERE owner_id = $1 AND revoked_at IS NULL
+ORDER BY created_at
+`
+
+type ListAPIKeysForOwnerRow struct {
+	ID         string
+	OwnerID    uuid.UUID
+	Name       string
+	CreatedAt  time.Time
+	ExpiresAt  *time.Time
+	LastUsedAt *time.Time
+}
+
+func (q *Queries) ListAPIKeysForOwner(ctx context.Context, ownerID uuid.UUID) ([]ListAPIKeysForOwnerRow, error) {
+	rows, err := q.db.Query(ctx, listAPIKeysForOwner, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAPIKeysForOwnerRow{}
+	for rows.Next() {
+		var i ListAPIKeysForOwnerRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.Name,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+			&i.LastUsedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -368,6 +430,27 @@ func (q *Queries) RevokeAPIKey(ctx context.Context, arg RevokeAPIKeyParams) (int
 }
 
 // #nosec G101 -- sqlc query constant named after a table; the value is SQL, not a credential
+const revokeAPIKeyForOwner = `-- name: RevokeAPIKeyForOwner :execrows
+UPDATE api_keys
+SET revoked_at = $3
+WHERE id = $1 AND owner_id = $2 AND revoked_at IS NULL
+`
+
+type RevokeAPIKeyForOwnerParams struct {
+	ID        string
+	OwnerID   uuid.UUID
+	RevokedAt *time.Time
+}
+
+func (q *Queries) RevokeAPIKeyForOwner(ctx context.Context, arg RevokeAPIKeyForOwnerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeAPIKeyForOwner, arg.ID, arg.OwnerID, arg.RevokedAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+// #nosec G101 -- sqlc query constant named after a table; the value is SQL, not a credential
 const saveAPIKey = `-- name: SaveAPIKey :exec
 INSERT INTO api_keys (id, owner_id, scopes, hash, created_at, expires_at)
 VALUES ($1, $2, $3, $4, $5, $6)
@@ -407,6 +490,51 @@ type SaveSessionParams struct {
 
 func (q *Queries) SaveSession(ctx context.Context, arg SaveSessionParams) error {
 	_, err := q.db.Exec(ctx, saveSession, arg.ID, arg.Data, arg.ExpiresAt)
+	return err
+}
+
+// #nosec G101 -- sqlc query constant named after a table; the value is SQL, not a credential
+const setAPIKeyMeta = `-- name: SetAPIKeyMeta :execrows
+UPDATE api_keys
+SET name = $3, expires_at = $4
+WHERE id = $1 AND owner_id = $2
+`
+
+type SetAPIKeyMetaParams struct {
+	ID        string
+	OwnerID   uuid.UUID
+	Name      string
+	ExpiresAt *time.Time
+}
+
+func (q *Queries) SetAPIKeyMeta(ctx context.Context, arg SetAPIKeyMetaParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setAPIKeyMeta,
+		arg.ID,
+		arg.OwnerID,
+		arg.Name,
+		arg.ExpiresAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+// #nosec G101 -- sqlc query constant named after a table; the value is SQL, not a credential
+const touchAPIKey = `-- name: TouchAPIKey :exec
+UPDATE api_keys
+SET last_used_at = $1::timestamptz
+WHERE id = $2
+  AND (last_used_at IS NULL OR last_used_at < $1::timestamptz - interval '1 minute')
+`
+
+type TouchAPIKeyParams struct {
+	Now time.Time
+	ID  string
+}
+
+func (q *Queries) TouchAPIKey(ctx context.Context, arg TouchAPIKeyParams) error {
+	_, err := q.db.Exec(ctx, touchAPIKey, arg.Now, arg.ID)
 	return err
 }
 

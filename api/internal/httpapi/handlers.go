@@ -42,6 +42,7 @@ type Handlers struct {
 	cfg        config.Options
 	clk        clock.Clock
 	auth       *auth.Service
+	apiKeys    *auth.APIKeys
 	sessions   *session.Manager
 	instances  *instances.Service
 	policies   *policies.Service
@@ -79,10 +80,10 @@ type Deps struct {
 
 // NewHandlers wires the operation handlers.
 func NewHandlers(build buildinfo.Info, cfg config.Options, clk clock.Clock, authSvc *auth.Service,
-	sessions *session.Manager, inst *instances.Service, pol *policies.Service, logger *slog.Logger, d Deps,
+	apiKeys *auth.APIKeys, sessions *session.Manager, inst *instances.Service, pol *policies.Service, logger *slog.Logger, d Deps,
 ) *Handlers {
 	return &Handlers{
-		build: build, cfg: cfg, clk: clk, auth: authSvc, sessions: sessions, instances: inst, policies: pol,
+		build: build, cfg: cfg, clk: clk, auth: authSvc, apiKeys: apiKeys, sessions: sessions, instances: inst, policies: pol,
 		runs: d.Runs, workers: d.Workers, rec: d.Rec, budget: d.Budget, memory: d.Memory, planner: d.Planner, schedules: d.Schedules, clients: d.Clients, settings: d.Settings, seerr: d.Seerr, cleanuparr: d.Cleanuparr, configarr: d.Configarr, logger: logger,
 	}
 }

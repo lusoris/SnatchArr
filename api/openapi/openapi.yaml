@@ -176,6 +176,73 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
 
+  /auth/api-keys:
+    get:
+      tags: [auth]
+      operationId: listAPIKeys
+      summary: List the current user's active API keys
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: API keys
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiKey"
+        "401":
+          $ref: "#/components/responses/Problem"
+        default:
+          $ref: "#/components/responses/Problem"
+    post:
+      tags: [auth]
+      operationId: createAPIKey
+      summary: Create a new API key for the current user
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateApiKeyRequest"
+      responses:
+        "201":
+          description: API key created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatedApiKey"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "409":
+          $ref: "#/components/responses/Problem"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /auth/api-keys/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ApiKeyId"
+    delete:
+      tags: [auth]
+      operationId: revokeAPIKey
+      summary: Revoke an API key
+      security:
+        - cookieAuth: []
+      responses:
+        "204":
+          description: API key revoked
+        "401":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        default:
+          $ref: "#/components/responses/Problem"
+
   /instances:
     get:
       tags: [instances]
@@ -1165,6 +1232,12 @@ components:
       schema:
         type: string
         format: uuid
+    ApiKeyId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
   responses:
     Problem:
       description: RFC 9457 problem details
@@ -1294,6 +1367,45 @@ components:
           $ref: "#/components/schemas/User"
         csrf_token:
           type: string
+        expires_at:
+          type: string
+          format: date-time
+
+    ApiKey:
+      type: object
+      required: [id, name, created_at]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        last_used_at:
+          type: string
+          format: date-time
+
+    CreatedApiKey:
+      allOf:
+        - $ref: "#/components/schemas/ApiKey"
+        - type: object
+          required: [secret]
+          properties:
+            secret:
+              type: string
+
+    CreateApiKeyRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
         expires_at:
           type: string
           format: date-time

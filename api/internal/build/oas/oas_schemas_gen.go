@@ -15,6 +15,65 @@ func (s *ProblemStatusCode) Error() string {
 	return fmt.Sprintf("code %d: %+v", s.StatusCode, s.Response)
 }
 
+// Ref: #/components/schemas/ApiKey
+type ApiKey struct {
+	ID         string      `json:"id"`
+	Name       string      `json:"name"`
+	CreatedAt  time.Time   `json:"created_at"`
+	ExpiresAt  OptDateTime `json:"expires_at"`
+	LastUsedAt OptDateTime `json:"last_used_at"`
+}
+
+// GetID returns the value of ID.
+func (s *ApiKey) GetID() string {
+	return s.ID
+}
+
+// GetName returns the value of Name.
+func (s *ApiKey) GetName() string {
+	return s.Name
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *ApiKey) GetCreatedAt() time.Time {
+	return s.CreatedAt
+}
+
+// GetExpiresAt returns the value of ExpiresAt.
+func (s *ApiKey) GetExpiresAt() OptDateTime {
+	return s.ExpiresAt
+}
+
+// GetLastUsedAt returns the value of LastUsedAt.
+func (s *ApiKey) GetLastUsedAt() OptDateTime {
+	return s.LastUsedAt
+}
+
+// SetID sets the value of ID.
+func (s *ApiKey) SetID(val string) {
+	s.ID = val
+}
+
+// SetName sets the value of Name.
+func (s *ApiKey) SetName(val string) {
+	s.Name = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *ApiKey) SetCreatedAt(val time.Time) {
+	s.CreatedAt = val
+}
+
+// SetExpiresAt sets the value of ExpiresAt.
+func (s *ApiKey) SetExpiresAt(val OptDateTime) {
+	s.ExpiresAt = val
+}
+
+// SetLastUsedAt sets the value of LastUsedAt.
+func (s *ApiKey) SetLastUsedAt(val OptDateTime) {
+	s.LastUsedAt = val
+}
+
 // Ref: #/components/schemas/AppKind
 type AppKind string
 
@@ -911,6 +970,117 @@ func (s *CookieAuth) SetAPIKey(val string) {
 func (s *CookieAuth) SetRoles(val []string) {
 	s.Roles = val
 }
+
+type CreateAPIKeyBadRequest ProblemStatusCode
+
+func (*CreateAPIKeyBadRequest) createAPIKeyRes() {}
+
+type CreateAPIKeyConflict ProblemStatusCode
+
+func (*CreateAPIKeyConflict) createAPIKeyRes() {}
+
+type CreateAPIKeyUnauthorized ProblemStatusCode
+
+func (*CreateAPIKeyUnauthorized) createAPIKeyRes() {}
+
+// Ref: #/components/schemas/CreateApiKeyRequest
+type CreateApiKeyRequest struct {
+	Name      string      `json:"name"`
+	ExpiresAt OptDateTime `json:"expires_at"`
+}
+
+// GetName returns the value of Name.
+func (s *CreateApiKeyRequest) GetName() string {
+	return s.Name
+}
+
+// GetExpiresAt returns the value of ExpiresAt.
+func (s *CreateApiKeyRequest) GetExpiresAt() OptDateTime {
+	return s.ExpiresAt
+}
+
+// SetName sets the value of Name.
+func (s *CreateApiKeyRequest) SetName(val string) {
+	s.Name = val
+}
+
+// SetExpiresAt sets the value of ExpiresAt.
+func (s *CreateApiKeyRequest) SetExpiresAt(val OptDateTime) {
+	s.ExpiresAt = val
+}
+
+// Merged schema.
+// Ref: #/components/schemas/CreatedApiKey
+type CreatedApiKey struct {
+	ID         string      `json:"id"`
+	Name       string      `json:"name"`
+	CreatedAt  time.Time   `json:"created_at"`
+	ExpiresAt  OptDateTime `json:"expires_at"`
+	LastUsedAt OptDateTime `json:"last_used_at"`
+	Secret     string      `json:"secret"`
+}
+
+// GetID returns the value of ID.
+func (s *CreatedApiKey) GetID() string {
+	return s.ID
+}
+
+// GetName returns the value of Name.
+func (s *CreatedApiKey) GetName() string {
+	return s.Name
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *CreatedApiKey) GetCreatedAt() time.Time {
+	return s.CreatedAt
+}
+
+// GetExpiresAt returns the value of ExpiresAt.
+func (s *CreatedApiKey) GetExpiresAt() OptDateTime {
+	return s.ExpiresAt
+}
+
+// GetLastUsedAt returns the value of LastUsedAt.
+func (s *CreatedApiKey) GetLastUsedAt() OptDateTime {
+	return s.LastUsedAt
+}
+
+// GetSecret returns the value of Secret.
+func (s *CreatedApiKey) GetSecret() string {
+	return s.Secret
+}
+
+// SetID sets the value of ID.
+func (s *CreatedApiKey) SetID(val string) {
+	s.ID = val
+}
+
+// SetName sets the value of Name.
+func (s *CreatedApiKey) SetName(val string) {
+	s.Name = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *CreatedApiKey) SetCreatedAt(val time.Time) {
+	s.CreatedAt = val
+}
+
+// SetExpiresAt sets the value of ExpiresAt.
+func (s *CreatedApiKey) SetExpiresAt(val OptDateTime) {
+	s.ExpiresAt = val
+}
+
+// SetLastUsedAt sets the value of LastUsedAt.
+func (s *CreatedApiKey) SetLastUsedAt(val OptDateTime) {
+	s.LastUsedAt = val
+}
+
+// SetSecret sets the value of Secret.
+func (s *CreatedApiKey) SetSecret(val string) {
+	s.Secret = val
+}
+
+func (*CreatedApiKey) createAPIKeyRes() {}
 
 // DeleteCleanuparrLinkNoContent is response for DeleteCleanuparrLink operation.
 type DeleteCleanuparrLinkNoContent struct{}
@@ -2039,6 +2209,10 @@ func (s *InstanceUpdate) SetEnabled(val OptBool) {
 	s.Enabled = val
 }
 
+type ListAPIKeysOKApplicationJSON []ApiKey
+
+func (*ListAPIKeysOKApplicationJSON) listAPIKeysRes() {}
+
 // Ref: #/components/schemas/LoginRequest
 type LoginRequest struct {
 	Username string `json:"username"`
@@ -2687,7 +2861,21 @@ func (s *ProblemStatusCode) SetResponse(val Problem) {
 }
 
 func (*ProblemStatusCode) deleteInstanceRes() {}
+func (*ProblemStatusCode) listAPIKeysRes()    {}
 func (*ProblemStatusCode) loginRes()          {}
+
+// RevokeAPIKeyNoContent is response for RevokeAPIKey operation.
+type RevokeAPIKeyNoContent struct{}
+
+func (*RevokeAPIKeyNoContent) revokeAPIKeyRes() {}
+
+type RevokeAPIKeyNotFound ProblemStatusCode
+
+func (*RevokeAPIKeyNotFound) revokeAPIKeyRes() {}
+
+type RevokeAPIKeyUnauthorized ProblemStatusCode
+
+func (*RevokeAPIKeyUnauthorized) revokeAPIKeyRes() {}
 
 // Ref: #/components/schemas/Run
 type Run struct {

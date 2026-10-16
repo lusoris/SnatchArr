@@ -63,11 +63,13 @@ func newRouterFixture(t *testing.T) *routerFixture {
 	if err != nil {
 		t.Fatalf("apikey.New: %v", err)
 	}
+	apiKeys := auth.NewAPIKeys(f.st, keys, f.clk, slog.New(slog.DiscardHandler))
+	f.h.apiKeys = apiKeys
 	r := chi.NewRouter()
 	err = Mount(r, MountParams{
 		Logger:   slog.New(slog.DiscardHandler),
 		Handlers: f.h,
-		Security: NewSecurity(f.sessMgr, keys, f.h.auth),
+		Security: NewSecurity(f.sessMgr, keys, f.h.auth, apiKeys, f.clk, slog.New(slog.DiscardHandler)),
 		CSRF:     csrfMW,
 	})
 	if err != nil {
@@ -164,6 +166,7 @@ func specOperations(t *testing.T) []specOp {
 
 type idsState struct {
 	csrfToken     string
+	apiKeyID      string
 	instanceID    string
 	runID         string
 	scheduleID    string
@@ -302,6 +305,55 @@ func stepsAuth() []routerStep {
 					t.Fatalf("getSession user = %v, want admin", decoded["user"])
 				}
 			},
+		},
+	}
+}
+
+func stepsAPIKeys() []routerStep {
+	return []routerStep{
+		{
+			op:     "createAPIKey",
+			method: http.MethodPost,
+			path:   func(_ *idsState) string { return "/auth/api-keys" },
+			body: func(_ *idsState) any {
+				return map[string]any{
+					"name": "router-test-key",
+				}
+			},
+			want: http.StatusCreated,
+			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
+				t.Helper()
+				id, ok := decoded["id"].(string)
+				if !ok || id == "" {
+					t.Fatalf("createAPIKey id = %v, want non-empty", decoded["id"])
+				}
+				ids.apiKeyID = id
+				secret, ok := decoded["secret"].(string)
+				if !ok || secret == "" {
+					t.Fatalf("createAPIKey secret = %v, want non-empty", decoded["secret"])
+				}
+				if decoded["name"] != "router-test-key" {
+					t.Fatalf("createAPIKey name = %v, want router-test-key", decoded["name"])
+				}
+			},
+		},
+		{
+			op:     "listAPIKeys",
+			method: http.MethodGet,
+			path:   func(_ *idsState) string { return "/auth/api-keys" },
+			want:   http.StatusOK,
+			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
+				t.Helper()
+				if !containsID(decoded["items"], ids.apiKeyID) {
+					t.Fatalf("listAPIKeys missing key %s", ids.apiKeyID)
+				}
+			},
+		},
+		{
+			op:     "revokeAPIKey",
+			method: http.MethodDelete,
+			path:   func(ids *idsState) string { return "/auth/api-keys/" + ids.apiKeyID },
+			want:   http.StatusNoContent,
 		},
 	}
 }
@@ -1162,6 +1214,7 @@ func stepsDeletesAndAuth() []routerStep {
 func buildRouterSteps(f *routerFixture) []routerStep {
 	steps := make([]routerStep, 0, 60)
 	steps = append(steps, stepsAuth()...)
+	steps = append(steps, stepsAPIKeys()...)
 	steps = append(steps, stepsInstances()...)
 	steps = append(steps, stepsPoliciesAndRuns()...)
 	steps = append(steps, stepsSettingsAndSchedules()...)

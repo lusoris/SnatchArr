@@ -22,6 +22,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jonboulle/clockwork"
 
+	"github.com/golusoris/golusoris/auth/apikey"
 	"github.com/golusoris/golusoris/auth/session"
 	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/core/crypto"
@@ -235,6 +236,8 @@ type integrationFixture struct {
 	clk           *clockwork.FakeClock
 	probe         *stubProber
 	sessMgr       *session.Manager
+	keys          *apikey.Service
+	apiKeys       *auth.APIKeys
 	admin         domain.User
 	viewer        domain.User
 	dlSnap        *stubSnapshotter
@@ -244,7 +247,7 @@ type integrationFixture struct {
 	seerrResolver *stubResolver
 }
 
-func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Generator, authSvc *auth.Service, sessMgr *session.Manager, probe *stubProber, dlSnap dlclients.Snapshotter, dlDisc arrclient.Discoverer, m *metrics.Metrics, logger *slog.Logger, seerrClient *stubSeerrClient, cleanupClient cleanuparrclient.Client, res *stubResolver) *Handlers {
+func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Generator, authSvc *auth.Service, apiKeys *auth.APIKeys, sessMgr *session.Manager, probe *stubProber, dlSnap dlclients.Snapshotter, dlDisc arrclient.Discoverer, m *metrics.Metrics, logger *slog.Logger, seerrClient *stubSeerrClient, cleanupClient cleanuparrclient.Client, res *stubResolver) *Handlers {
 	t.Helper()
 	enc, err := crypto.NewEncryptor(bytes.Repeat([]byte{0x42}, 32))
 	if err != nil {
@@ -275,6 +278,7 @@ func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Genera
 		cfg:        cfg,
 		clk:        clk,
 		auth:       authSvc,
+		apiKeys:    apiKeys,
 		sessions:   sessMgr,
 		instances:  instSvc,
 		policies:   polSvc,
@@ -314,6 +318,15 @@ func newIntegrationFixture(t *testing.T) *integrationFixture {
 	if err != nil {
 		t.Fatalf("newIntegrationFixture: session.NewManager: %v", err)
 	}
+	keyStore := auth.NewPgAPIKeyStore(st, clk)
+	keys, err := apikey.New(keyStore, apikey.Options{
+		HMACSecret: []byte("test-secret-of-at-least-32-bytes"),
+		Clock:      clk,
+	})
+	if err != nil {
+		t.Fatalf("newIntegrationFixture: apikey.New: %v", err)
+	}
+	apiKeys := auth.NewAPIKeys(st, keys, clk, logger)
 	probe := &stubProber{res: arrclient.Result{AppName: "Sonarr", Version: "4.0.10.2544"}}
 	dlSnap := &stubSnapshotter{
 		snap: dlclients.Snapshot{
@@ -330,13 +343,15 @@ func newIntegrationFixture(t *testing.T) *integrationFixture {
 	cleanupServer := newFakeCleanuparrServer(t)
 	cleanupClient := cleanuparrclient.New(5*time.Second, "snatcharr-test")
 	res := &stubResolver{entityID: 42, found: true}
-	h := buildHandlers(t, st, clk, ids, authSvc, sessMgr, probe, dlSnap, dlDisc, m, logger, seerrClient, cleanupClient, res)
+	h := buildHandlers(t, st, clk, ids, authSvc, apiKeys, sessMgr, probe, dlSnap, dlDisc, m, logger, seerrClient, cleanupClient, res)
 	return &integrationFixture{
 		h:             h,
 		st:            st,
 		clk:           clk,
 		probe:         probe,
 		sessMgr:       sessMgr,
+		keys:          keys,
+		apiKeys:       apiKeys,
 		admin:         domain.User{ID: uuid.New(), Username: "admin", Role: domain.RoleAdmin},
 		viewer:        domain.User{ID: uuid.New(), Username: "viewer", Role: domain.RoleViewer},
 		dlSnap:        dlSnap,
@@ -472,7 +487,7 @@ func assertSessionUserAndCsrf(t *testing.T, f *integrationFixture, cookies []*ht
 		req.AddCookie(c)
 	}
 	ctx := withHTTPTest(t.Context(), httptest.NewRecorder(), req)
-	sec := NewSecurity(f.sessMgr, nil, f.h.auth)
+	sec := NewSecurity(f.sessMgr, f.keys, f.h.auth, f.h.apiKeys, f.clk, slog.New(slog.DiscardHandler))
 	authCtx, err := sec.HandleCookieAuth(ctx, "GetSession", oas.CookieAuth{})
 	if err != nil {
 		t.Fatalf("HandleCookieAuth() = %v", err)
@@ -501,7 +516,7 @@ func assertSessionDestroyed(t *testing.T, f *integrationFixture, cookies []*http
 		req.AddCookie(c)
 	}
 	ctx := withHTTPTest(t.Context(), httptest.NewRecorder(), req)
-	sec := NewSecurity(f.sessMgr, nil, f.h.auth)
+	sec := NewSecurity(f.sessMgr, f.keys, f.h.auth, f.h.apiKeys, f.clk, slog.New(slog.DiscardHandler))
 	if _, err := sec.HandleCookieAuth(ctx, "GetSession", oas.CookieAuth{}); err == nil {
 		t.Fatal("expected session to be destroyed after logout, but old cookie was valid")
 	}
@@ -804,7 +819,7 @@ func TestHandlersChangePassword(t *testing.T) {
 	s3Cookies := login3Rec.Result().Cookies()
 
 	// Verify all 3 sessions are valid
-	sec := NewSecurity(f.sessMgr, nil, f.h.auth)
+	sec := NewSecurity(f.sessMgr, f.keys, f.h.auth, f.h.apiKeys, f.clk, slog.New(slog.DiscardHandler))
 	for i, c := range [][]*http.Cookie{s1Cookies, s2Cookies, s3Cookies} {
 		req := httptest.NewRequest(http.MethodGet, "/auth/session", nil)
 		for _, cookie := range c {

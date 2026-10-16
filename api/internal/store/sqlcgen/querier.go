@@ -17,6 +17,7 @@ type Querier interface {
 	BucketUsage(ctx context.Context, arg BucketUsageParams) (BucketUsageRow, error)
 	CancelRun(ctx context.Context, arg CancelRunParams) (int64, error)
 	CompleteRun(ctx context.Context, arg CompleteRunParams) (SnatchRun, error)
+	CountActiveAPIKeysByOwner(ctx context.Context, ownerID uuid.UUID) (int64, error)
 	CountInstancesByBaseURL(ctx context.Context, arg CountInstancesByBaseURLParams) (int64, error)
 	CountInstancesByBaseURLAndNotSource(ctx context.Context, arg CountInstancesByBaseURLAndNotSourceParams) (int64, error)
 	CountProcessed(ctx context.Context, arg CountProcessedParams) (int64, error)
@@ -95,6 +96,7 @@ type Querier interface {
 	// max_leases times; FailExhaustedLeases ends the others.
 	LeaseRun(ctx context.Context, arg LeaseRunParams) (SnatchRun, error)
 	ListAPIKeysByOwner(ctx context.Context, ownerID uuid.UUID) ([]ApiKey, error)
+	ListAPIKeysForOwner(ctx context.Context, ownerID uuid.UUID) ([]ListAPIKeysForOwnerRow, error)
 	ListCleanuparrLinks(ctx context.Context) ([]CleanuparrLink, error)
 	ListDownloadClients(ctx context.Context) ([]DownloadClient, error)
 	ListDownloadClientsForInstance(ctx context.Context, instanceID *uuid.UUID) ([]DownloadClient, error)
@@ -142,9 +144,12 @@ type Querier interface {
 	RecordSeerrSync(ctx context.Context, arg RecordSeerrSyncParams) error
 	ResetProcessed(ctx context.Context, instanceID *uuid.UUID) (int64, error)
 	RevokeAPIKey(ctx context.Context, arg RevokeAPIKeyParams) (int64, error)
+	RevokeAPIKeyForOwner(ctx context.Context, arg RevokeAPIKeyForOwnerParams) (int64, error)
 	SaveAPIKey(ctx context.Context, arg SaveAPIKeyParams) error
 	SavePolicyCursor(ctx context.Context, arg SavePolicyCursorParams) error
 	SaveSession(ctx context.Context, arg SaveSessionParams) error
+	SetAPIKeyMeta(ctx context.Context, arg SetAPIKeyMetaParams) (int64, error)
+	TouchAPIKey(ctx context.Context, arg TouchAPIKeyParams) error
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
 	// A late write from a slower replica never moves the contact back.
