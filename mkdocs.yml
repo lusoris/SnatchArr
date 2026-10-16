@@ -73,6 +73,7 @@ nav:
   - Readarr (legacy): readarr.md
   - API: api.md
   - Upstream contracts: upstream-contracts.md
+  - Install with Docker Compose: install-compose.md
   - Deployment: deployment.md
   - Metrics: metrics.md
   - Architecture Decisions:

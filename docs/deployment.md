@@ -5,14 +5,15 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Deployment
 
-Two images, one chart. The API image carries the UI; the worker only dials the API.
+Two images, one chart. The API image carries the UI; the worker only dials the API. For a
+single Docker host see [Install with Docker Compose](install-compose.md).
 Both are distroless static, non-root (65532), read-only, and satisfy the *restricted*
 Pod Security Standard.
 
 | Artifact | Where |
 | --- | --- |
 | `ghcr.io/lusoris/snatcharr-api` | Go control plane + embedded SPA (HTTP 8080, gRPC 9090) |
-| `ghcr.io/lusoris/snatcharr-worker` | Rust snatch-worker (no listener) |
+| `ghcr.io/lusoris/snatcharr-worker` | Rust snatch-worker (HTTP 8081: `/livez`, `/metrics`) |
 | `oci://ghcr.io/lusoris/charts/snatcharr` | Helm chart |
 
 Every image and the chart are signed with cosign (keyless, GitHub OIDC) and carry a SLSA

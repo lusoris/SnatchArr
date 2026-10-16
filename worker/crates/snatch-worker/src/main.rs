@@ -11,6 +11,7 @@ mod auth;
 mod config;
 mod executor;
 mod health;
+mod probe;
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -181,6 +182,17 @@ async fn lease_loop(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    // `snatch-worker healthcheck` probes a running worker instead of starting one (container
+    // health check in a distroless image).
+    if std::env::args().nth(1).as_deref() == Some(probe::COMMAND) {
+        init_tracing();
+        let cfg = Config::from_env()?;
+        if let Err(e) = probe::check(probe::target(cfg.http_addr), probe::TIMEOUT).await {
+            tracing::error!(error = %e, "healthcheck failed");
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
     init_tracing();
     let cfg = Arc::new(Config::from_env()?);
     tracing::info!(api = %cfg.api_grpc, worker = %cfg.worker_id, concurrency = cfg.concurrency, "snatch-worker starting");

@@ -21,7 +21,7 @@ GOMODCACHE       = $(subst \,/,$(shell go env GOMODCACHE))
 GOLUSORIS_VER    = $(shell go list -m -f '{{.Version}}' github.com/golusoris/golusoris)
 GOLUSORIS_SHARED = $(GOMODCACHE)/github.com/golusoris/golusoris@$(GOLUSORIS_VER)/tools/Makefile.shared
 
-.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke web-verify web-e2e web-e2e-api proto-verify deploy-verify governance-verify hooks-verify contracts-verify workflows-verify workflows-lint secret-scan \
+.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-compose-smoke web-verify web-e2e web-e2e-api proto-verify deploy-verify governance-verify hooks-verify contracts-verify workflows-verify workflows-lint secret-scan \
 	images kind-up kind-deploy kind-down \
         api-gen api-gosec gosec-install govulncheck-install tools-verify tools-lint tools-test tools-gosec web-gen proto-gen dev hooks setup
 
@@ -182,6 +182,27 @@ e2e-image-smoke: ## Postgres + api image + worker image + fakearr end to end; no
 	  env SMOKE_API_IMAGE=$(E2E_API_IMAGE) SMOKE_WORKER_IMAGE=$(E2E_WORKER_IMAGE) \
 	  SMOKE_FAKEARR_BIN=$(E2E_BIN)/fakearr tools/e2e/smoke.sh
 
+# The homelab bundle (#41) started as docs/install-compose.md says, on the images built here
+# (the API and worker health checks need the `healthcheck` subcommand they carry). The planted
+# cases first: an API health check that cannot pass, and a setup already completed; the smoke
+# must refuse both. Not in verify-all (slow, needs Docker).
+e2e-compose-smoke: ## Homelab compose bundle up from the docs: healthy services + first-run setup screen (needs Docker)
+	if [ "$${SMOKE_SKIP_BUILD:-0}" != "1" ]; then \
+	  docker build -t $(E2E_API_IMAGE) -f Dockerfile . ; \
+	  docker build -t $(E2E_WORKER_IMAGE) -f worker/Dockerfile . ; \
+	fi
+	for case in "unhealthy:did not turn healthy" "setup-done:want setup_complete false"; do \
+	  plant=$${case%%:*}; want=$${case#*:}; \
+	  if out=$$(SMOKE_PLANT=$$plant SMOKE_API_IMAGE=$(E2E_API_IMAGE) SMOKE_WORKER_IMAGE=$(E2E_WORKER_IMAGE) \
+	    bash tools/e2e/compose_smoke.sh 2>&1); then \
+	    echo "e2e-compose-smoke: planted case $$plant passed; the smoke checks nothing" >&2; exit 1; \
+	  fi; \
+	  case "$$out" in *"$$want"*) echo "ok   planted case $$plant refused: $$want" ;; \
+	    *) printf '%s\n' "$$out" | tail -20 >&2; \
+	       echo "e2e-compose-smoke: planted case $$plant failed without '$$want'" >&2; exit 1 ;; esac; \
+	done
+	SMOKE_API_IMAGE=$(E2E_API_IMAGE) SMOKE_WORKER_IMAGE=$(E2E_WORKER_IMAGE) bash tools/e2e/compose_smoke.sh
+
 # ── web/ (SvelteKit + sveltesentio) ───────────────────────────────────────────
 web-verify: ## pnpm lint/typecheck/test(+coverage)/build + OpenAPI type drift
 	cd web
@@ -259,7 +280,7 @@ deploy-verify: ## helm unittest + render.sh + chart_checks.sh planted cases + he
 	kustomize build --enable-helm deploy/kustomize/kind >/dev/null
 	# Every compose image pinned by tag and digest, never latest (#140); planted cases first.
 	sh tools/deploy/compose_pins_test.sh
-	sh tools/deploy/compose_pins.sh deploy/compose/docker-compose.yml
+	sh tools/deploy/compose_pins.sh deploy/compose/docker-compose.yml deploy/homelab/compose.yaml
 	# Chart checks with their planted cases first (A3-01): no egress rule with an empty `to`
 	# (#120), an arrPeers entry with `ports` reachable on those ports only (#145), Chart.yaml
 	# release-please markers and image annotation (#122).
