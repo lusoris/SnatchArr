@@ -213,4 +213,23 @@ describe('InstanceDetail', () => {
 		expect(screen.queryByRole('listbox')).toBeNull();
 		expect(screen.getByLabelText(m.policy_release_delay())).toBeTruthy();
 	});
+
+	it('toggles and saves the dry_run policy setting', async () => {
+		const put = vi.spyOn(api, 'PUT').mockResolvedValue({ data: samplePolicy } as never);
+		await subtitleOf(forkInstance);
+
+		const checkbox = (await screen.findByRole('checkbox', {
+			name: m.policy_dry_run()
+		})) as HTMLInputElement;
+		expect(checkbox.checked).toBe(false);
+
+		await fireEvent.click(checkbox);
+		expect(checkbox.checked).toBe(true);
+
+		await fireEvent.click(savePolicyButton());
+
+		expect(put).toHaveBeenCalledOnce();
+		const body = (put.mock.calls[0]![1] as { body: SnatchPolicy }).body;
+		expect(body.dry_run).toBe(true);
+	});
 });

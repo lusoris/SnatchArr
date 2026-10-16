@@ -111,7 +111,8 @@ export const samplePolicy: SnatchPolicy = {
 	await_command: false,
 	page_size: 50,
 	recent_grab_window_h: 48,
-	afterglow_max_h: 168
+	afterglow_max_h: 168,
+	dry_run: false
 };
 
 /** The tags and quality profiles an instance offers to the policy filters, sorted by name. */

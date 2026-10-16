@@ -127,6 +127,8 @@ calculations as a live run, but enforces strict safety guarantees:
 Previewed targets (entity type, ID, title, and granted cost) are reported as `search_previewed`
 events and retrieved with `GET /api/v1/runs/{id}`.
 
+On the instance page in the web UI, the "Preview missing" and "Preview upgrade" buttons run an on-demand preview, while the snatch policy's `dry_run` toggle configures scheduled snatches to only preview without dispatching searches. A preview run with an empty stamina bucket shows no search targets because it matches what a real run would do now.
+
 ## History and live events
 
 Everything above is recorded as events (`/api/v1/events`) and streamed over Server-Sent

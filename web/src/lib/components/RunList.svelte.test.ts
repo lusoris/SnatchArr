@@ -119,4 +119,26 @@ describe('RunList', () => {
 		expect((await screen.findByRole('alert')).textContent).toContain('store down');
 		expect(screen.queryByRole('table')).toBeNull();
 	});
+
+	it('renders preview badge only for runs where dry_run is true', async () => {
+		const mixedRuns = [
+			{
+				...sampleRuns[0]!,
+				id: '10000000-0000-0000-0000-000000000010',
+				dry_run: true
+			},
+			{
+				...sampleRuns[1]!,
+				id: '10000000-0000-0000-0000-000000000011',
+				dry_run: false
+			},
+			{
+				...sampleRuns[2]!,
+				id: '10000000-0000-0000-0000-000000000012'
+			}
+		];
+		const body = await rows(mixedRuns);
+		const badges = body.map((r) => within(r).queryByText(m.run_preview_badge()) !== null);
+		expect(badges).toEqual([true, false, false]);
+	});
 });
