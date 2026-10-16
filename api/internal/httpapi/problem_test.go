@@ -32,6 +32,7 @@ func TestStatusOf(t *testing.T) {
 		{"positive invalid", fmt.Errorf("%w: bad", domain.ErrInvalid), http.StatusUnprocessableEntity},
 		{"positive unauthorized", domain.ErrUnauthorized, http.StatusUnauthorized},
 		{"positive forbidden", domain.ErrForbidden, http.StatusForbidden},
+		{"positive too many requests", fmt.Errorf("wrap: %w", domain.ErrTooManyRequests), http.StatusTooManyRequests},
 		{"positive unreachable", domain.ErrUnreachable, http.StatusBadGateway},
 		{"positive ogen security", &ogenerrors.SecurityError{Security: "cookieAuth", Err: errors.New("no")}, http.StatusUnauthorized},
 		{"positive ogen validation", &validate.Error{Fields: []validate.FieldError{{Name: "hourly_cap", Error: errors.New("too big")}}}, http.StatusUnprocessableEntity},

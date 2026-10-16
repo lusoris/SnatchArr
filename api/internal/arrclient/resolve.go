@@ -8,8 +8,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/golusoris/goenvoy/arr/v2"
-
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 )
 
@@ -32,9 +30,9 @@ func (p *GoenvoyProber) EntityByExternalID(ctx context.Context, kind domain.AppK
 	if err != nil {
 		return 0, false, err
 	}
-	c, err := arr.NewBaseClient(baseURL, apiKey, p.clientOptions()...)
+	c, err := p.opts.Base(baseURL, apiKey)
 	if err != nil {
-		return 0, false, fmt.Errorf("arrclient: base client: %w", err)
+		return 0, false, fmt.Errorf("arrclient: %w", err)
 	}
 	var list []idOnly
 	if err := c.Get(ctx, path, &list); err != nil {

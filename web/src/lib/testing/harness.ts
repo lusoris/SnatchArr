@@ -11,10 +11,9 @@ import type { components } from '#lib/api/schema.js';
 
 export type Instance = components['schemas']['Instance'];
 export type SnatchPolicy = components['schemas']['SnatchPolicy'];
-export type CapStatus = components['schemas']['CapStatus'];
 
 /** A query client per test: no retry, so a refused request shows at once; nothing cached. */
-export function createTestQueryClient(): QueryClient {
+function createTestQueryClient(): QueryClient {
 	return new QueryClient({
 		defaultOptions: {
 			queries: {

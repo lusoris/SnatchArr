@@ -17,11 +17,14 @@
 //	snatcharr.session.ttl        APP_SNATCHARR_SESSION_TTL        cookie session lifetime (default 8h)
 //	snatcharr.session.secure     APP_SNATCHARR_SESSION_SECURE     Secure cookie flag (default true)
 //	snatcharr.apikey.secret      APP_SNATCHARR_APIKEY_SECRET      HMAC secret for API keys (required in prod)
+//	snatcharr.proxy.trusted      APP_SNATCHARR_PROXY_TRUSTED      comma-separated trusted reverse proxy CIDRs
+//	snatcharr.setup.secret       APP_SNATCHARR_SETUP_SECRET       bootstrap secret for first-run setup
 package config
 
 import (
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"time"
 
@@ -48,6 +51,35 @@ type Options struct {
 	Configarr ConfigarrOptions `koanf:"configarr"`
 	Session   SessionOptions   `koanf:"session"`
 	APIKey    APIKeyOptions    `koanf:"apikey"`
+	Proxy     ProxyOptions     `koanf:"proxy"`
+	Setup     SetupOptions     `koanf:"setup"`
+}
+
+// SetupOptions configure the first-run setup wizard.
+type SetupOptions struct {
+	// Secret is an optional bootstrap secret required to create the first admin user.
+	Secret string `koanf:"secret"`
+}
+
+// ProxyOptions configures reverse proxy ingress trust.
+type ProxyOptions struct {
+	// Trusted is a list of CIDR ranges (e.g. "10.0.0.0/8") trusted to supply
+	// X-Forwarded-For headers. An empty slice trusts nothing.
+	Trusted []string `koanf:"trusted"`
+}
+
+// Validate checks that each configured trusted proxy parses as a CIDR.
+func (p ProxyOptions) Validate() error {
+	for _, entry := range p.Trusted {
+		trimmed := strings.TrimSpace(entry)
+		if trimmed == "" {
+			continue
+		}
+		if _, _, err := net.ParseCIDR(trimmed); err != nil {
+			return fmt.Errorf("config: invalid trusted proxy CIDR %q: %w", entry, err)
+		}
+	}
+	return nil
 }
 
 // PublicOptions describe how the service is reached from outside.
@@ -105,6 +137,7 @@ func Load(cfg *config.Config) (Options, error) {
 	if err := cfg.Unmarshal("snatcharr", &o); err != nil {
 		return Options{}, fmt.Errorf("config: unmarshal snatcharr: %w", err)
 	}
+	o.Proxy.Trusted = cleanTrusted(o.Proxy.Trusted)
 	if err := o.Validate(); err != nil {
 		return Options{}, err
 	}
@@ -112,6 +145,25 @@ func Load(cfg *config.Config) (Options, error) {
 		return Options{}, err
 	}
 	return o, nil
+}
+
+func cleanTrusted(raw []string) []string {
+	if len(raw) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(raw))
+	for _, item := range raw {
+		for part := range strings.SplitSeq(item, ",") {
+			trimmed := strings.TrimSpace(part)
+			if trimmed != "" {
+				out = append(out, trimmed)
+			}
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // DevCryptoKey is the development key the dev profile falls back to when crypto.key is
@@ -163,7 +215,7 @@ func (o Options) Validate() error {
 	if (o.Configarr.Config == "") != (o.Configarr.Secrets == "") && o.Configarr.Secrets != "" {
 		return errors.New("config: configarr.secrets requires configarr.config")
 	}
-	return nil
+	return o.Proxy.Validate()
 }
 
 // Module provides Options to the fx graph.

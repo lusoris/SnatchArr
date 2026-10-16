@@ -5,7 +5,7 @@
 /** Matches {name} placeholders, including formatters like {count: number}. */
 const PLACEHOLDER_PATTERN = /\{\s*([a-zA-Z0-9_]+)(?::[^}]*)?\s*\}/g;
 
-export interface PlaceholderMismatch {
+interface PlaceholderMismatch {
 	key: string;
 	expected: string[];
 	actual: string[];

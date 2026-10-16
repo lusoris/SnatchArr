@@ -640,8 +640,12 @@ func handleSetupRefused(t *testing.T, f *integrationFixture, err, wantErr error,
 	}
 }
 
-func assertSetupSessionResult(t *testing.T, f *integrationFixture, got *oas.Session, wantUser string, cookies []*http.Cookie) {
+func assertSetupSessionResult(t *testing.T, f *integrationFixture, res oas.CompleteSetupRes, wantUser string, cookies []*http.Cookie) {
 	t.Helper()
+	got, ok := res.(*oas.Session)
+	if !ok {
+		t.Fatalf("CompleteSetup() returned %T, want *oas.Session", res)
+	}
 	if got.User.Username != wantUser || got.User.ID == uuid.Nil || got.User.Role != oas.UserRoleAdmin {
 		t.Fatalf("CompleteSetup() user = %+v, want %s (admin)", got.User, wantUser)
 	}
@@ -653,6 +657,225 @@ func assertSetupSessionResult(t *testing.T, f *integrationFixture, got *oas.Sess
 		t.Fatalf("CompleteSetup() ExpiresAt = %v, want %v", got.ExpiresAt, wantExpiry)
 	}
 	assertSessionUserAndCsrf(t, f, cookies, domain.User{ID: got.User.ID, Username: wantUser, Role: domain.RoleAdmin})
+}
+
+func TestSetupSecret(t *testing.T) {
+	t.Parallel()
+
+	t.Run("secret required reported in status", func(t *testing.T) {
+		t.Parallel()
+		f := newIntegrationFixture(t)
+		f.h.cfg.Setup.Secret = "expected-bootstrap-secret"
+
+		status, err := f.h.GetSetupStatus(t.Context())
+		if err != nil {
+			t.Fatalf("GetSetupStatus: %v", err)
+		}
+		if !status.SecretRequired {
+			t.Fatal("GetSetupStatus SecretRequired = false, want true")
+		}
+		if status.SetupComplete {
+			t.Fatal("GetSetupStatus SetupComplete = true, want false")
+		}
+	})
+
+	t.Run("no secret configured allows setup without secret", func(t *testing.T) {
+		t.Parallel()
+		f := newIntegrationFixture(t)
+		f.h.cfg.Setup.Secret = ""
+
+		status, err := f.h.GetSetupStatus(t.Context())
+		if err != nil {
+			t.Fatalf("GetSetupStatus: %v", err)
+		}
+		if status.SecretRequired {
+			t.Fatal("GetSetupStatus SecretRequired = true, want false")
+		}
+
+		rec := httptest.NewRecorder()
+		ctx := withHTTPTest(t.Context(), rec, httptest.NewRequest(http.MethodPost, "/auth/setup", nil))
+		req := oas.SetupRequest{Username: "admin", Password: "correct-horse-battery-staple"}
+		got, err := f.h.CompleteSetup(ctx, &req)
+		if err != nil {
+			t.Fatalf("CompleteSetup: %v", err)
+		}
+		assertSetupSessionResult(t, f, got, "admin", rec.Result().Cookies())
+	})
+
+	t.Run("secret configured missing secret refused", func(t *testing.T) {
+		t.Parallel()
+		f := newIntegrationFixture(t)
+		f.h.cfg.Setup.Secret = "expected-bootstrap-secret"
+
+		rec := httptest.NewRecorder()
+		ctx := withHTTPTest(t.Context(), rec, httptest.NewRequest(http.MethodPost, "/auth/setup", nil))
+		req := oas.SetupRequest{Username: "admin", Password: "correct-horse-battery-staple"}
+		_, err := f.h.CompleteSetup(ctx, &req)
+		if !errors.Is(err, domain.ErrUnauthorized) {
+			t.Fatalf("CompleteSetup missing secret = %v, want ErrUnauthorized", err)
+		}
+	})
+
+	t.Run("secret configured wrong secret refused", func(t *testing.T) {
+		t.Parallel()
+		f := newIntegrationFixture(t)
+		f.h.cfg.Setup.Secret = "expected-bootstrap-secret"
+
+		rec := httptest.NewRecorder()
+		ctx := withHTTPTest(t.Context(), rec, httptest.NewRequest(http.MethodPost, "/auth/setup", nil))
+		req := oas.SetupRequest{
+			Username:    "admin",
+			Password:    "correct-horse-battery-staple",
+			SetupSecret: oas.NewOptString("wrong-secret"),
+		}
+		_, err := f.h.CompleteSetup(ctx, &req)
+		if !errors.Is(err, domain.ErrUnauthorized) {
+			t.Fatalf("CompleteSetup wrong secret = %v, want ErrUnauthorized", err)
+		}
+	})
+
+	t.Run("secret configured correct secret succeeds and stays closed after", func(t *testing.T) {
+		t.Parallel()
+		f := newIntegrationFixture(t)
+		f.h.cfg.Setup.Secret = "expected-bootstrap-secret"
+
+		rec := httptest.NewRecorder()
+		ctx := withHTTPTest(t.Context(), rec, httptest.NewRequest(http.MethodPost, "/auth/setup", nil))
+		req := oas.SetupRequest{
+			Username:    "admin",
+			Password:    "correct-horse-battery-staple",
+			SetupSecret: oas.NewOptString("expected-bootstrap-secret"),
+		}
+		got, err := f.h.CompleteSetup(ctx, &req)
+		if err != nil {
+			t.Fatalf("CompleteSetup with correct secret: %v", err)
+		}
+		assertSetupSessionResult(t, f, got, "admin", rec.Result().Cookies())
+
+		// after first admin exists setup stays closed regardless
+		secondRec := httptest.NewRecorder()
+		secondCtx := withHTTPTest(t.Context(), secondRec, httptest.NewRequest(http.MethodPost, "/auth/setup", nil))
+		_, err = f.h.CompleteSetup(secondCtx, &req)
+		if !errors.Is(err, domain.ErrConflict) {
+			t.Fatalf("second CompleteSetup after completion = %v, want ErrConflict", err)
+		}
+	})
+}
+
+func TestHandlersChangePassword(t *testing.T) {
+	t.Parallel()
+	f := newIntegrationFixture(t)
+
+	// Setup first admin
+	setupRec := httptest.NewRecorder()
+	setupCtx := withHTTPTest(t.Context(), setupRec, httptest.NewRequest(http.MethodPost, "/auth/setup", nil))
+	setupRes, err := f.h.CompleteSetup(setupCtx, &oas.SetupRequest{Username: "admin", Password: "correct-horse-battery-staple"})
+	if err != nil {
+		t.Fatalf("CompleteSetup: %v", err)
+	}
+	setupSess, ok := setupRes.(*oas.Session)
+	if !ok {
+		t.Fatalf("expected *oas.Session, got %T", setupRes)
+	}
+	s1Cookies := setupRec.Result().Cookies()
+
+	// Login 2nd session
+	login2Rec := httptest.NewRecorder()
+	login2Ctx := withHTTPTest(t.Context(), login2Rec, httptest.NewRequest(http.MethodPost, "/auth/login", nil))
+	login2Res, err := f.h.Login(login2Ctx, &oas.LoginRequest{Username: "admin", Password: "correct-horse-battery-staple"})
+	if err != nil {
+		t.Fatalf("Login session 2: %v", err)
+	}
+	if _, ok := login2Res.(*oas.Session); !ok {
+		t.Fatalf("expected *oas.Session, got %T", login2Res)
+	}
+	s2Cookies := login2Rec.Result().Cookies()
+
+	// Login 3rd session
+	login3Rec := httptest.NewRecorder()
+	login3Ctx := withHTTPTest(t.Context(), login3Rec, httptest.NewRequest(http.MethodPost, "/auth/login", nil))
+	login3Res, err := f.h.Login(login3Ctx, &oas.LoginRequest{Username: "admin", Password: "correct-horse-battery-staple"})
+	if err != nil {
+		t.Fatalf("Login session 3: %v", err)
+	}
+	if _, ok := login3Res.(*oas.Session); !ok {
+		t.Fatalf("expected *oas.Session, got %T", login3Res)
+	}
+	s3Cookies := login3Rec.Result().Cookies()
+
+	// Verify all 3 sessions are valid
+	sec := NewSecurity(f.sessMgr, nil, f.h.auth)
+	for i, c := range [][]*http.Cookie{s1Cookies, s2Cookies, s3Cookies} {
+		req := httptest.NewRequest(http.MethodGet, "/auth/session", nil)
+		for _, cookie := range c {
+			req.AddCookie(cookie)
+		}
+		authCtx := withHTTPTest(t.Context(), httptest.NewRecorder(), req)
+		if _, authErr := sec.HandleCookieAuth(authCtx, "GetSession", oas.CookieAuth{}); authErr != nil {
+			t.Fatalf("session %d invalid before change password: %v", i+1, authErr)
+		}
+	}
+
+	// Change password using session 1
+	changeReq := httptest.NewRequest(http.MethodPost, "/auth/password", nil)
+	for _, cookie := range s1Cookies {
+		changeReq.AddCookie(cookie)
+	}
+	changeRec := httptest.NewRecorder()
+	changeCtx := withHTTPTest(t.Context(), changeRec, changeReq)
+	changeCtx = withUser(changeCtx, domain.User{ID: setupSess.User.ID, Username: "admin", Role: domain.RoleAdmin})
+
+	// Negative 1: wrong current password
+	_, err = f.h.ChangePassword(changeCtx, &oas.ChangePasswordRequest{
+		CurrentPassword: "wrong-current-password",
+		NewPassword:     "new-secret-password-123",
+	})
+	if !errors.Is(err, domain.ErrUnauthorized) {
+		t.Fatalf("ChangePassword with wrong current password = %v, want ErrUnauthorized", err)
+	}
+
+	// Negative 2: invalid new password (< 12 chars)
+	_, err = f.h.ChangePassword(changeCtx, &oas.ChangePasswordRequest{
+		CurrentPassword: "correct-horse-battery-staple",
+		NewPassword:     "short",
+	})
+	if !errors.Is(err, domain.ErrInvalid) {
+		t.Fatalf("ChangePassword with short password = %v, want ErrInvalid", err)
+	}
+
+	// Positive: correct current password + valid new password
+	res, err := f.h.ChangePassword(changeCtx, &oas.ChangePasswordRequest{
+		CurrentPassword: "correct-horse-battery-staple",
+		NewPassword:     "new-secret-password-123",
+	})
+	if err != nil {
+		t.Fatalf("ChangePassword failed: %v", err)
+	}
+	if _, ok := res.(*oas.ChangePasswordNoContent); !ok {
+		t.Fatalf("ChangePassword returned %T, want *oas.ChangePasswordNoContent", res)
+	}
+
+	// Session 1 remains valid
+	req1 := httptest.NewRequest(http.MethodGet, "/auth/session", nil)
+	for _, cookie := range s1Cookies {
+		req1.AddCookie(cookie)
+	}
+	authCtx1 := withHTTPTest(t.Context(), httptest.NewRecorder(), req1)
+	if _, err := sec.HandleCookieAuth(authCtx1, "GetSession", oas.CookieAuth{}); err != nil {
+		t.Fatalf("session 1 invalid after change password: %v", err)
+	}
+
+	// Sessions 2 and 3 are destroyed
+	for i, c := range [][]*http.Cookie{s2Cookies, s3Cookies} {
+		req := httptest.NewRequest(http.MethodGet, "/auth/session", nil)
+		for _, cookie := range c {
+			req.AddCookie(cookie)
+		}
+		authCtx := withHTTPTest(t.Context(), httptest.NewRecorder(), req)
+		if _, err := sec.HandleCookieAuth(authCtx, "GetSession", oas.CookieAuth{}); !errors.Is(err, domain.ErrUnauthorized) {
+			t.Fatalf("session %d still valid after change password, want ErrUnauthorized", i+2)
+		}
+	}
 }
 
 func TestLogin(t *testing.T) {
@@ -681,9 +904,13 @@ func TestLogin(t *testing.T) {
 func testLoginCase(t *testing.T, f *integrationFixture, user, pass string, httpCtx bool, wantErr error) {
 	t.Helper()
 	seedCtx := withHTTPTest(t.Context(), httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/auth/setup", nil))
-	adminSess, err := f.h.CompleteSetup(seedCtx, &oas.SetupRequest{Username: "first-admin", Password: "correct-horse-battery-staple"})
+	adminRes, err := f.h.CompleteSetup(seedCtx, &oas.SetupRequest{Username: "first-admin", Password: "correct-horse-battery-staple"})
 	if err != nil {
 		t.Fatalf("CompleteSetup() = %v", err)
+	}
+	adminSess, ok := adminRes.(*oas.Session)
+	if !ok {
+		t.Fatalf("expected *oas.Session, got %T", adminRes)
 	}
 	rec := httptest.NewRecorder()
 	ctx := t.Context()
@@ -706,7 +933,11 @@ func testLoginCase(t *testing.T, f *integrationFixture, user, pass string, httpC
 	if err != nil {
 		t.Fatalf("Login() err = %v", err)
 	}
-	assertLoginSessionResult(t, f, got, user, adminSess.User.ID, rec.Result().Cookies())
+	sess, ok := got.(*oas.Session)
+	if !ok {
+		t.Fatalf("Login() returned %T, want *oas.Session", got)
+	}
+	assertLoginSessionResult(t, f, sess, user, adminSess.User.ID, rec.Result().Cookies())
 }
 
 func assertLoginSessionResult(t *testing.T, f *integrationFixture, got *oas.Session, wantUser string, wantID uuid.UUID, cookies []*http.Cookie) {
@@ -722,6 +953,39 @@ func assertLoginSessionResult(t *testing.T, f *integrationFixture, got *oas.Sess
 		t.Fatalf("Login() ExpiresAt = %v, want %v", got.ExpiresAt, wantExpiry)
 	}
 	assertSessionUserAndCsrf(t, f, cookies, domain.User{ID: wantID, Username: wantUser, Role: domain.RoleAdmin})
+}
+
+func TestLoginThrottleAndRetryAfterHeader(t *testing.T) {
+	t.Parallel()
+	f := newIntegrationFixture(t)
+	seedCtx := withHTTPTest(t.Context(), httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/auth/setup", nil))
+	_, err := f.h.CompleteSetup(seedCtx, &oas.SetupRequest{Username: "first-admin", Password: "correct-horse-battery-staple"})
+	if err != nil {
+		t.Fatalf("CompleteSetup() = %v", err)
+	}
+
+	for i := 1; i <= auth.LockoutMaxFails; i++ {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/auth/login", nil)
+		req.RemoteAddr = "192.0.2.55:1234"
+		ctx := withHTTPTest(t.Context(), rec, req)
+		_, err = f.h.Login(ctx, &oas.LoginRequest{Username: "first-admin", Password: "wrong-password"})
+		if !errors.Is(err, domain.ErrUnauthorized) {
+			t.Fatalf("fail %d = %v, want ErrUnauthorized", i, err)
+		}
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/auth/login", nil)
+	req.RemoteAddr = "192.0.2.55:1234"
+	ctx := withHTTPTest(t.Context(), rec, req)
+	_, err = f.h.Login(ctx, &oas.LoginRequest{Username: "first-admin", Password: "correct-horse-battery-staple"})
+	if !errors.Is(err, domain.ErrTooManyRequests) {
+		t.Fatalf("Login() when locked = %v, want ErrTooManyRequests", err)
+	}
+	if retryAfter := rec.Header().Get("Retry-After"); retryAfter != "900" {
+		t.Errorf("Retry-After header = %q, want 900", retryAfter)
+	}
 }
 
 func TestLogout(t *testing.T) {

@@ -1,0 +1,31 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+suite: api deployment trusted proxies
+templates:
+  - configmap.yaml
+  - api-deployment.yaml
+release:
+  name: snatcharr
+  namespace: snatcharr
+tests:
+  - it: default - trustedProxies empty renders no APP_SNATCHARR_PROXY_TRUSTED env var
+    template: api-deployment.yaml
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: APP_SNATCHARR_PROXY_TRUSTED
+
+  - it: positive - trustedProxies renders APP_SNATCHARR_PROXY_TRUSTED joined with commas
+    template: api-deployment.yaml
+    set:
+      config:
+        trustedProxies:
+          - "10.0.0.0/8"
+          - "172.16.0.0/12"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: APP_SNATCHARR_PROXY_TRUSTED
+            value: "10.0.0.0/8,172.16.0.0/12"

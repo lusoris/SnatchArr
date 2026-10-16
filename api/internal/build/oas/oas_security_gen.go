@@ -116,6 +116,7 @@ func GetRolesForBearerAuth(operation string) []string {
 // operationRolesCookieAuth is a private map storing roles per operation.
 var operationRolesCookieAuth = map[string][]string{
 	CancelRunOperation:               []string{},
+	ChangePasswordOperation:          []string{},
 	CreateCleanuparrLinkOperation:    []string{},
 	CreateDownloadClientOperation:    []string{},
 	CreateInstanceOperation:          []string{},

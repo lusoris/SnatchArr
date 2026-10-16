@@ -57,7 +57,8 @@ func newFixture(t *testing.T) fixture {
 	j := New(Deps{
 		Settings: set, Recorder: snatch.NewRecorder(st, clk, events.New(logger)), Runs: snatch.NewRuns(st, clk, id.New()),
 		Workers: snatch.NewWorkers(st, clk), Memory: snatch.NewMemory(st, clk), Budget: snatch.NewBudget(st, clk), Sessions: auth.NewPgSessionStore(st, clk),
-		Clock: clk, Logger: logger, Metrics: m,
+		Lockouts: auth.NewPgLockoutStore(st),
+		Clock:    clk, Logger: logger, Metrics: m,
 	})
 	return fixture{j: j, st: st, clk: clk, settings: set, instance: storetest.Instance(t, st, clk.Now()), reg: reg}
 }
@@ -83,14 +84,21 @@ func (f fixture) run(t *testing.T, status string, queued time.Time, finished *ti
 		uuid.New(), f.instance, status, queued, finished)
 }
 
+func (f fixture) lockout(t *testing.T, key string, fails int32, firstFailAt time.Time, lockedUntil *time.Time) {
+	t.Helper()
+	f.exec(t, `INSERT INTO login_lockouts (key, fails, first_fail_at, locked_until) VALUES ($1, $2, $3, $4)`,
+		key, fails, firstFailAt, lockedUntil)
+}
+
 // remaining counts the rows left in every table the janitor trims.
 func (f fixture) remaining(t *testing.T) Counts {
 	t.Helper()
 	var c Counts
 	err := f.st.Pool().QueryRow(t.Context(), `SELECT
 		(SELECT count(*) FROM snatch_events), (SELECT count(*) FROM snatch_runs), (SELECT count(*) FROM processed_items),
-		(SELECT count(*) FROM rate_buckets) + (SELECT count(*) FROM global_rate_buckets), (SELECT count(*) FROM sessions), (SELECT count(*) FROM workers)`,
-	).Scan(&c.Events, &c.Runs, &c.Afterglow, &c.Buckets, &c.Sessions, &c.Workers)
+		(SELECT count(*) FROM rate_buckets) + (SELECT count(*) FROM global_rate_buckets), (SELECT count(*) FROM sessions), (SELECT count(*) FROM workers),
+		(SELECT count(*) FROM login_lockouts)`,
+	).Scan(&c.Events, &c.Runs, &c.Afterglow, &c.Buckets, &c.Sessions, &c.Workers, &c.Lockouts)
 	if err != nil {
 		t.Fatalf("count rows: %v", err)
 	}
@@ -290,5 +298,85 @@ func TestJanitorCountsAFailedPass(t *testing.T) {
 	}
 	if got, ok := metricstest.Value(t, f.reg, "snatcharr_loop_last_success_timestamp_seconds", "loop", "retention"); ok {
 		t.Errorf("last success = %v after a failed pass only, want no series", got)
+	}
+}
+
+// Positive, negative and boundary cases for pruning stale login lockouts:
+// - Positive: stale unlocked row (first_fail_at < now - window) purged.
+// - Positive: stale row whose lock expired (locked_until < now and first_fail_at < now - window) purged.
+// - Negative: row inside window (first_fail_at >= now - window) kept.
+// - Negative: row still locked in the future (locked_until > now) kept.
+// - Boundary: row exactly at window edge (first_fail_at == now - window) kept (strict < window).
+// - Boundary: row just past window edge (first_fail_at == now - window - 1ms) purged.
+// - Boundary: row with locked_until == now kept (strict < now).
+// - Boundary: row with locked_until == now - 1ms purged (strict < now).
+func TestPassPrunesStaleLoginLockouts(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	now := f.clk.Now()
+	window := auth.LockoutWindow
+
+	// Positive: stale unlocked row
+	old := now.Add(-window - time.Minute)
+	f.lockout(t, "stale-unlocked", 2, old, nil)
+
+	// Positive: stale row with expired lock
+	lockExpired := now.Add(-time.Minute)
+	f.lockout(t, "stale-locked-expired", 5, old, &lockExpired)
+
+	// Negative 1: row inside window
+	insideWindow := now.Add(-5 * time.Minute)
+	f.lockout(t, "active-inside-window", 1, insideWindow, nil)
+
+	// Negative 2: row still locked in future
+	lockedFuture := now.Add(5 * time.Minute)
+	f.lockout(t, "active-still-locked", 5, old, &lockedFuture)
+
+	// Boundary 1: row exactly at window edge (kept)
+	atEdge := now.Add(-window)
+	f.lockout(t, "boundary-at-edge", 1, atEdge, nil)
+
+	// Boundary 2: row just past window edge (purged)
+	justPastEdge := now.Add(-window - time.Millisecond)
+	f.lockout(t, "boundary-just-past", 1, justPastEdge, nil)
+
+	// Boundary 3: row whose locked_until == now (kept)
+	atLockNow := now
+	f.lockout(t, "boundary-lock-at-now", 5, old, &atLockNow)
+
+	// Boundary 4: row whose locked_until == now - 1ms (purged)
+	justExpiredLock := now.Add(-time.Millisecond)
+	f.lockout(t, "boundary-lock-just-expired", 5, old, &justExpiredLock)
+
+	if _, err := f.j.Pass(t.Context()); err != nil {
+		t.Fatalf("Pass() err = %v", err)
+	}
+
+	surviving := []string{
+		"active-inside-window",
+		"active-still-locked",
+		"boundary-at-edge",
+		"boundary-lock-at-now",
+	}
+	for _, key := range surviving {
+		var count int
+		err := f.st.Pool().QueryRow(t.Context(), `SELECT count(*) FROM login_lockouts WHERE key = $1`, key).Scan(&count)
+		if err != nil || count != 1 {
+			t.Errorf("expected row %q to survive, count=%d, err=%v", key, count, err)
+		}
+	}
+
+	purged := []string{
+		"stale-unlocked",
+		"stale-locked-expired",
+		"boundary-just-past",
+		"boundary-lock-just-expired",
+	}
+	for _, key := range purged {
+		var count int
+		err := f.st.Pool().QueryRow(t.Context(), `SELECT count(*) FROM login_lockouts WHERE key = $1`, key).Scan(&count)
+		if err != nil || count != 0 {
+			t.Errorf("expected row %q to be purged, count=%d, err=%v", key, count, err)
+		}
 	}
 }

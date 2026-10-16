@@ -103,6 +103,14 @@
 	"settings_user_agent": "User-Agent",
 	"settings_global_cap": "Globale Ausdauer (0 = aus)",
 	"settings_saved": "Einstellungen gespeichert",
+	"setup_secret": "Setup-Geheimnis",
+	"setup_secret_help": "Für diese SnatchArr-Instanz erforderliches Bootstrap-Geheimnis.",
+	"change_password_title": "Passwort ändern",
+	"current_password": "Aktuelles Passwort",
+	"new_password": "Neues Passwort",
+	"change_password_submit": "Passwort aktualisieren",
+	"password_changed": "Passwort aktualisiert",
+	"password_min_hint": "Mindestens 12 Zeichen",
 	"theme_toggle": "Design umschalten",
 	"language": "Sprache"
 }

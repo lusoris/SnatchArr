@@ -10,6 +10,17 @@
         "worker": { "$ref": "#/$defs/image" }
       }
     },
+    "config": {
+      "type": "object",
+      "properties": {
+        "publicUrl": { "type": "string" },
+        "sessionTtl": { "type": "string" },
+        "trustedProxies": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
     "secrets": {
       "type": "object",
       "properties": {
@@ -17,7 +28,8 @@
         "cryptoKey": { "type": "string", "pattern": "^([0-9a-fA-F]{32}|[0-9a-fA-F]{48}|[0-9a-fA-F]{64})?$" },
         "csrfSecret": { "type": "string", "pattern": "^([0-9a-fA-F]{64}|[A-Za-z0-9+/]{43}=|[A-Za-z0-9_-]{43}=)?$" },
         "apiKeySecret": { "type": "string" },
-        "workerToken": { "type": "string" }
+        "workerToken": { "type": "string" },
+        "setupSecret": { "type": "string" }
       }
     },
     "postgres": {

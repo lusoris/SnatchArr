@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/golusoris/golusoris/auth/apikey"
+	"github.com/golusoris/golusoris/auth/lockout"
 	"github.com/golusoris/golusoris/auth/session"
 	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/core/crypto"
@@ -270,5 +271,69 @@ func TestAPIKeyStoreRefusals(t *testing.T) {
 	}
 	if _, err := f.store.ListByOwner(t.Context(), "not-a-uuid"); err == nil {
 		t.Error("ListByOwner() with a malformed owner id = nil, want an error")
+	}
+}
+
+func TestLockoutStoreLifecycle(t *testing.T) {
+	t.Parallel()
+	st := storetest.New(t)
+	store := auth.NewPgLockoutStore(st)
+	opts := lockout.Options{MaxFails: 5, Window: 15 * time.Minute, Cooldown: 30 * time.Minute}
+	ctx := t.Context()
+	key := "user:tester"
+	now := time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)
+
+	// Negative: initially not found
+	if _, err := store.Get(ctx, key); !isCode(err, gerr.CodeNotFound) {
+		t.Fatalf("Get() initially = %v, want NotFound", err)
+	}
+
+	// Positive: RecordFailure increments counter up to MaxFails - 1
+	for i := 1; i < opts.MaxFails; i++ {
+		assertFailureCount(t, store, key, now.Add(time.Duration(i-1)*time.Minute), opts, i, now)
+	}
+
+	// Boundary: exactly MaxFails locks until now + Cooldown
+	lockTime := now.Add(4 * time.Minute)
+	if err := store.RecordFailure(ctx, key, lockTime, opts); err != nil {
+		t.Fatalf("RecordFailure(5) = %v", err)
+	}
+	got, err := store.Get(ctx, key)
+	if err != nil || got.Fails != opts.MaxFails || !got.LockedUntil.Equal(lockTime.Add(opts.Cooldown)) {
+		t.Fatalf("Get() at boundary = %+v, %v; want fails 5 and lock until %v", got, err, lockTime.Add(opts.Cooldown))
+	}
+
+	// Boundary: next failure after Window resets counter and clears old lock
+	afterWindow := now.Add(opts.Window + time.Minute)
+	err = store.RecordFailure(ctx, key, afterWindow, opts)
+	if err != nil {
+		t.Fatalf("RecordFailure after window = %v", err)
+	}
+	got, err = store.Get(ctx, key)
+	if err != nil || got.Fails != 1 || !got.FirstFailAt.Equal(afterWindow) || !got.LockedUntil.IsZero() {
+		t.Fatalf("Get() after window reset = %+v, %v; want fails 1, first %v, unlocked", got, err, afterWindow)
+	}
+
+	// Positive: Delete removes the record
+	err = store.Delete(ctx, key)
+	if err != nil {
+		t.Fatalf("Delete() = %v", err)
+	}
+	if _, err := store.Get(ctx, key); !isCode(err, gerr.CodeNotFound) {
+		t.Errorf("Get() after Delete() = %v, want NotFound", err)
+	}
+}
+
+func assertFailureCount(t *testing.T, s *auth.PgLockoutStore, key string, at time.Time, opts lockout.Options, wantFails int, wantFirst time.Time) {
+	t.Helper()
+	if err := s.RecordFailure(t.Context(), key, at, opts); err != nil {
+		t.Fatalf("RecordFailure(%d) = %v", wantFails, err)
+	}
+	got, err := s.Get(t.Context(), key)
+	if err != nil {
+		t.Fatalf("Get() after fail %d = %v", wantFails, err)
+	}
+	if got.Fails != wantFails || !got.FirstFailAt.Equal(wantFirst) || !got.LockedUntil.IsZero() {
+		t.Fatalf("Get() after fail %d = %+v; want fails %d, first %v, unlocked", wantFails, got, wantFails, wantFirst)
 	}
 }

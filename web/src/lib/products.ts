@@ -6,7 +6,7 @@ import type { components } from './api/schema.js';
 import { kindLabel } from './kinds.js';
 import { m } from './paraglide/messages.js';
 
-export type ArrProduct = components['schemas']['ArrProduct'];
+type ArrProduct = components['schemas']['ArrProduct'];
 type ProbeResult = components['schemas']['ProbeResult'];
 
 // Every product the probe can name, and its name in the UI. `unknown` has none: the probe

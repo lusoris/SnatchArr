@@ -87,6 +87,37 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Session"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "409":
+          $ref: "#/components/responses/Problem"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /auth/password:
+    post:
+      tags: [auth]
+      operationId: changePassword
+      summary: Change the current user's password and end all other sessions
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordRequest"
+      responses:
+        "204":
+          description: Password changed and other sessions ended
+        "400":
+          $ref: "#/components/responses/Problem"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "422":
+          $ref: "#/components/responses/Problem"
+        "429":
+          $ref: "#/components/responses/Problem"
         default:
           $ref: "#/components/responses/Problem"
 
@@ -109,6 +140,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Session"
+        "429":
+          $ref: "#/components/responses/Problem"
         default:
           $ref: "#/components/responses/Problem"
 
@@ -1196,10 +1229,13 @@ components:
 
     SetupStatus:
       type: object
-      required: [setup_complete]
+      required: [setup_complete, secret_required]
       properties:
         setup_complete:
           type: boolean
+        secret_required:
+          type: boolean
+          description: Whether a bootstrap secret is required to complete setup
 
     SetupRequest:
       type: object
@@ -1210,6 +1246,20 @@ components:
           minLength: 3
           maxLength: 64
         password:
+          type: string
+          minLength: 12
+          maxLength: 256
+        setup_secret:
+          type: string
+          description: Optional bootstrap secret when APP_SNATCHARR_SETUP_SECRET is configured
+
+    ChangePasswordRequest:
+      type: object
+      required: [current_password, new_password]
+      properties:
+        current_password:
+          type: string
+        new_password:
           type: string
           minLength: 12
           maxLength: 256
