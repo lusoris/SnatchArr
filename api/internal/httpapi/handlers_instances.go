@@ -8,6 +8,8 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/google/uuid"
+
 	"github.com/lusoris/SnatchArr/api/internal/arrclient"
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
@@ -37,6 +39,10 @@ func (h *Handlers) ListInstances(ctx context.Context) ([]oas.Instance, error) {
 	if err != nil {
 		return nil, err
 	}
+	overlaps := h.overlappingInstanceIDs(ctx)
+	for i := range list {
+		list[i].SeekerOverlap = overlaps[list[i].ID]
+	}
 	return instancesToOAS(list), nil
 }
 
@@ -46,6 +52,8 @@ func (h *Handlers) GetInstance(ctx context.Context, params oas.GetInstanceParams
 	if err != nil {
 		return nil, err
 	}
+	overlaps := h.overlappingInstanceIDs(ctx)
+	inst.SeekerOverlap = overlaps[inst.ID]
 	out := instanceToOAS(inst)
 	return &out, nil
 }
@@ -72,8 +80,17 @@ func (h *Handlers) UpdateInstance(ctx context.Context, req *oas.InstanceUpdate, 
 	if err != nil {
 		return nil, err
 	}
+	overlaps := h.overlappingInstanceIDs(ctx)
+	inst.SeekerOverlap = overlaps[inst.ID]
 	out := instanceToOAS(inst)
 	return &out, nil
+}
+
+func (h *Handlers) overlappingInstanceIDs(ctx context.Context) map[uuid.UUID]bool {
+	if h.cleanuparr == nil {
+		return nil
+	}
+	return h.cleanuparr.OverlappingInstances(ctx)
 }
 
 // DeleteInstance removes an instance.

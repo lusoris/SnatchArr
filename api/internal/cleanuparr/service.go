@@ -10,6 +10,7 @@ package cleanuparr
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -46,6 +47,7 @@ type LinkStatus struct {
 	Status    cleanuparrclient.Status
 	Summary   cleanuparrclient.StrikeSummary
 	Recent    []cleanuparrclient.Strike
+	Seeker    domain.CleanuparrSeeker
 	CheckedAt time.Time
 }
 
@@ -205,6 +207,26 @@ func (s *Service) Status(ctx context.Context) ([]LinkStatus, error) {
 	return out, nil
 }
 
+// OverlappingInstances returns the set of SnatchArr instance IDs that have an active Seeker overlap.
+func (s *Service) OverlappingInstances(ctx context.Context) map[uuid.UUID]bool {
+	views, err := s.Status(ctx)
+	if err != nil {
+		return nil
+	}
+	out := make(map[uuid.UUID]bool)
+	for _, v := range views {
+		if !v.Reachable {
+			continue
+		}
+		for _, inst := range v.Seeker.Instances {
+			if inst.Active && inst.Matched && inst.SnatcharrInstanceID != nil {
+				out[*inst.SnatcharrInstanceID] = true
+			}
+		}
+	}
+	return out
+}
+
 // observe asks Cleanuparr for status, summary and recent strikes; a failure anywhere
 // marks the link unreachable with the cause.
 func (s *Service) observe(ctx context.Context, row sqlcgen.CleanuparrLink) LinkStatus {
@@ -212,22 +234,141 @@ func (s *Service) observe(ctx context.Context, row sqlcgen.CleanuparrLink) LinkS
 	key, err := s.enc.Open(row.ApiKeyEnc)
 	if err != nil {
 		view.Error = "stored api key cannot be decrypted"
+		view.Seeker = domain.CleanuparrSeeker{State: domain.SeekerStateUnknown, Reason: view.Error}
 		return s.remember(ctx, view)
 	}
 	if view.Status, err = s.client.Status(ctx, row.BaseUrl, string(key)); err != nil {
 		view.Error = err.Error()
+		view.Seeker = domain.CleanuparrSeeker{State: domain.SeekerStateUnknown, Reason: view.Error}
 		return s.remember(ctx, view)
 	}
 	if view.Summary, err = s.client.Summary(ctx, row.BaseUrl, string(key)); err != nil {
 		view.Error = err.Error()
+		view.Seeker = domain.CleanuparrSeeker{State: domain.SeekerStateUnknown, Reason: view.Error}
 		return s.remember(ctx, view)
 	}
 	if view.Recent, err = s.client.RecentStrikes(ctx, row.BaseUrl, string(key), RecentShown); err != nil {
 		view.Error = err.Error()
+		view.Seeker = domain.CleanuparrSeeker{State: domain.SeekerStateUnknown, Reason: view.Error}
 		return s.remember(ctx, view)
 	}
 	view.Reachable = true
+	view.Seeker = s.detectSeeker(ctx, row.BaseUrl, string(key))
 	return s.remember(ctx, view)
+}
+
+func (s *Service) detectSeeker(ctx context.Context, baseURL, apiKey string) domain.CleanuparrSeeker {
+	cfg, dryRun, err := s.fetchSeekerData(ctx, baseURL, apiKey)
+	if err != nil {
+		return domain.CleanuparrSeeker{State: domain.SeekerStateUnknown, Reason: err.Error()}
+	}
+	state, reason := computeSeekerState(cfg, dryRun)
+	instances, err := s.matchSeekerInstances(ctx, baseURL, apiKey, cfg, dryRun)
+	if err != nil {
+		reason = strings.TrimPrefix(reason+"; "+err.Error(), "; ")
+	}
+	return domain.CleanuparrSeeker{
+		State:     state,
+		Reason:    reason,
+		Instances: instances,
+	}
+}
+
+func (s *Service) fetchSeekerData(ctx context.Context, baseURL, apiKey string) (cleanuparrclient.SeekerConfig, bool, error) {
+	cfg, err := s.client.SeekerConfig(ctx, baseURL, apiKey)
+	if err != nil {
+		return cleanuparrclient.SeekerConfig{}, false, err
+	}
+	dryRun, err := s.client.GeneralDryRun(ctx, baseURL, apiKey)
+	if err != nil {
+		return cleanuparrclient.SeekerConfig{}, false, err
+	}
+	return cfg, dryRun, nil
+}
+
+func computeSeekerState(cfg cleanuparrclient.SeekerConfig, dryRun bool) (domain.CleanuparrSeekerState, string) {
+	if dryRun {
+		return domain.SeekerStateDryRun, "Cleanuparr dry run is enabled"
+	}
+	if !cfg.SearchEnabled {
+		return domain.SeekerStateInactive, "Seeker search is disabled"
+	}
+	if !cfg.ProactiveSearchEnabled {
+		return domain.SeekerStateInactive, "Seeker proactive search is disabled"
+	}
+	return domain.SeekerStateActive, ""
+}
+
+type instKey struct {
+	kind string
+	url  string
+}
+
+// matchSeekerInstances maps every Seeker instance to a SnatchArr instance by normalised URL.
+// A failed lookup leaves the affected instances unmatched and is returned for the reason.
+func (s *Service) matchSeekerInstances(ctx context.Context, baseURL, apiKey string, cfg cleanuparrclient.SeekerConfig, dryRun bool) ([]domain.CleanuparrSeekerInstance, error) {
+	urls, urlErr := s.fetchCleanuparrURLs(ctx, baseURL, apiKey)
+	snatchMap, mapErr := s.snatcharrInstanceMap(ctx)
+	out := make([]domain.CleanuparrSeekerInstance, 0, len(cfg.Instances))
+	for _, inst := range cfg.Instances {
+		active := cfg.SearchEnabled && cfg.ProactiveSearchEnabled && inst.Enabled && inst.ArrInstanceEnabled && !dryRun
+		var matchedID *uuid.UUID
+		matched := false
+		if cleanURL, ok := urls[inst.ArrInstanceID]; ok {
+			k := instKey{kind: strings.ToLower(inst.InstanceType), url: cleanURL}
+			if sid, found := snatchMap[k]; found {
+				idCopy := sid
+				matchedID = &idCopy
+				matched = true
+			}
+		}
+		out = append(out, domain.CleanuparrSeekerInstance{
+			SnatcharrInstanceID: matchedID,
+			Name:                inst.InstanceName,
+			Type:                inst.InstanceType,
+			Active:              active,
+			Matched:             matched,
+		})
+	}
+	return out, errors.Join(urlErr, mapErr)
+}
+
+// fetchCleanuparrURLs maps Cleanuparr's Sonarr and Radarr instance ids to normalised URLs.
+// An unparsable URL is skipped: that instance stays unmatched.
+func (s *Service) fetchCleanuparrURLs(ctx context.Context, baseURL, apiKey string) (map[string]string, error) {
+	urls := make(map[string]string)
+	var errs []error
+	for _, app := range []string{"sonarr", "radarr"} {
+		refs, err := s.client.ArrInstances(ctx, baseURL, apiKey, app)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		for _, inst := range refs {
+			if u, normErr := domain.NormalizeBaseURL(inst.URL); normErr == nil {
+				urls[inst.ID] = u
+			}
+		}
+	}
+	return urls, errors.Join(errs...)
+}
+
+func (s *Service) snatcharrInstanceMap(ctx context.Context) (map[instKey]uuid.UUID, error) {
+	out := make(map[instKey]uuid.UUID)
+	rows, err := s.st.Q().ListInstances(ctx)
+	if err != nil {
+		return out, fmt.Errorf("list snatcharr instances: %w", err)
+	}
+	for _, r := range rows {
+		kind := strings.ToLower(r.Kind)
+		if kind != string(domain.KindSonarr) && kind != string(domain.KindRadarr) {
+			continue
+		}
+		if u, normErr := domain.NormalizeBaseURL(r.BaseUrl); normErr == nil {
+			out[instKey{kind: kind, url: u}] = r.ID
+		}
+	}
+	return out, nil
 }
 
 func (s *Service) remember(ctx context.Context, view LinkStatus) LinkStatus {

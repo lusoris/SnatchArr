@@ -1175,6 +1175,8 @@ export interface components {
             /** Format: date-time */
             last_check_at?: string;
             last_error?: string;
+            /** @description Whether an active Cleanuparr Seeker instance targets the same library URL */
+            seeker_overlap?: boolean;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -1599,6 +1601,36 @@ export interface components {
                 [key: string]: number;
             };
             recent_strikes: components["schemas"]["CleanuparrStrike"][];
+            seeker: components["schemas"]["CleanuparrSeeker"];
+        };
+        /**
+         * @description Overall state of Cleanuparr Seeker on the link
+         * @enum {string}
+         */
+        CleanuparrSeekerState: "active" | "inactive" | "dry_run" | "unknown";
+        /** @description One *arr instance observed in Cleanuparr Seeker */
+        CleanuparrSeekerInstance: {
+            /**
+             * Format: uuid
+             * @description Matched SnatchArr instance id, if any
+             */
+            snatcharr_instance_id?: string;
+            /** @description Instance name in Cleanuparr */
+            name: string;
+            /** @description *arr application type (Sonarr, Radarr) */
+            type: string;
+            /** @description Whether Seeker is currently active for this instance */
+            active: boolean;
+            /** @description Whether this instance matched a configured SnatchArr instance */
+            matched: boolean;
+        };
+        /** @description Seeker configuration and instance overlap status for a Cleanuparr link */
+        CleanuparrSeeker: {
+            state: components["schemas"]["CleanuparrSeekerState"];
+            /** @description Human-readable explanation of why Seeker is inactive, in dry-run, or unknown */
+            reason?: string;
+            /** @description Observed Seeker instances and their overlap with SnatchArr */
+            instances: components["schemas"]["CleanuparrSeekerInstance"][];
         };
         ProwlarrLink: {
             /** Format: uuid */

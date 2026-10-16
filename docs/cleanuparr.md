@@ -34,3 +34,34 @@ skips its item (see [Concepts](concepts.md#per-cycle)). When Cleanuparr removes 
 the item becomes missing again; Cleanuparr can trigger a search itself and SnatchArr's
 afterglow keeps its own next attempt from piling on. Strikes are keyed by download, not
 by *arr item, so SnatchArr does not try to map them back to episodes or movies.
+
+## Seeker and double-search warnings
+
+Cleanuparr includes a subsystem called **Seeker** that can periodically search Sonarr and Radarr libraries for missing and cutoff-unmet items.
+
+When Cleanuparr Seeker's proactive search is enabled for an instance that SnatchArr is also searching, both services query indexers for the same library simultaneously. This duplicates indexer load, consumes stamina rapidly, and risks rate-limit bans from indexers ([ADR-0009](adr/0009-detect-cleanuparr-seeker.md)).
+
+### Detection
+
+SnatchArr inspects Seeker's configuration via the read-only Cleanuparr link. A library is flagged for **Seeker overlap** when:
+
+1. Seeker search and proactive search are enabled in Cleanuparr.
+2. The specific *arr instance is enabled in both Cleanuparr and Seeker.
+3. Cleanuparr is not running in global dry-run mode.
+4. The instance base URL matches an active SnatchArr instance (normalised URL matching).
+
+When overlap is detected:
+
+- A warning badge appears in the **Instances** list.
+- An alert banner appears on the **Instance Detail** page explaining that both tools are actively searching the library.
+- The **Cleanuparr** status page displays the observed Seeker state and individual instance matches.
+
+*(Note: Replacement-only searches triggered by item removals do not trigger a warning, as SnatchArr's afterglow already accommodates them.)*
+
+### How to resolve
+
+To eliminate double searching, you have two options:
+
+1. **Pause SnatchArr for this instance**: Click the **Pause SnatchArr for this instance** button on the instance warning banner. SnatchArr disables snatch cycles for this library while keeping its configuration, history, and monitoring intact until you re-enable it.
+2. **Disable Seeker in Cleanuparr**: In Cleanuparr, navigate to **Settings → Seeker** and either turn off **Proactive Search** or uncheck the specific Sonarr/Radarr instance. Cleanuparr will continue managing stalled downloads and strike replacements while SnatchArr handles library searches.
+

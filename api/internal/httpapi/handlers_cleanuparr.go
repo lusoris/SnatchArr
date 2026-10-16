@@ -123,6 +123,7 @@ func cleanuparrStatusToOAS(v cleanuparr.LinkStatus) oas.CleanuparrStatus {
 		StruckDownloads: v.Summary.StruckDownloads, MarkedForRemoval: v.Summary.MarkedForRemoval,
 		RemovedDownloads: v.Summary.RemovedDownloads, MediaManagers: oas.CleanuparrStatusMediaManagers{},
 		RecentStrikes: make([]oas.CleanuparrStrike, 0, len(v.Recent)),
+		Seeker:        seekerToOAS(v.Seeker),
 	}
 	maps.Copy(out.MediaManagers, v.Status.MediaManagers)
 	for _, s := range v.Recent {
@@ -131,4 +132,25 @@ func cleanuparrStatusToOAS(v cleanuparr.LinkStatus) oas.CleanuparrStatus {
 		})
 	}
 	return out
+}
+
+func seekerToOAS(s domain.CleanuparrSeeker) oas.CleanuparrSeeker {
+	instances := make([]oas.CleanuparrSeekerInstance, 0, len(s.Instances))
+	for _, inst := range s.Instances {
+		oasInst := oas.CleanuparrSeekerInstance{
+			Name:    inst.Name,
+			Type:    inst.Type,
+			Active:  inst.Active,
+			Matched: inst.Matched,
+		}
+		if inst.SnatcharrInstanceID != nil {
+			oasInst.SnatcharrInstanceID = oas.NewOptUUID(*inst.SnatcharrInstanceID)
+		}
+		instances = append(instances, oasInst)
+	}
+	return oas.CleanuparrSeeker{
+		State:     oas.CleanuparrSeekerState(s.State),
+		Reason:    optString(s.Reason),
+		Instances: instances,
+	}
 }

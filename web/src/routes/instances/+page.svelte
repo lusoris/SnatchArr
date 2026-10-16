@@ -87,7 +87,18 @@ SPDX-License-Identifier: EUPL-1.2
 		<tbody>
 			{#each instances.data ?? [] as inst (inst.id)}
 				<tr>
-					<td><a class="underline" href={resolve(`instances/${inst.id}`)}>{inst.name}</a></td>
+					<td>
+						<div class="flex items-center gap-2">
+							<a class="underline" href={resolve(`instances/${inst.id}`)}>{inst.name}</a>
+							{#if inst.seeker_overlap}
+								<span
+									class="rounded border border-line bg-surface px-1.5 py-0.5 text-xs font-medium text-subtle"
+								>
+									{m.instance_seeker_badge()}
+								</span>
+							{/if}
+						</div>
+					</td>
 					<td>{instanceKindLabel(inst.kind, inst.last_seen_product)}</td>
 					<td class="break-all">{inst.base_url}</td>
 					<td>{inst.source}</td>

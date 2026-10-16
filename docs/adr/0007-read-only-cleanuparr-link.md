@@ -33,7 +33,7 @@ Cleanuparr also accepts an API key (Settings → General), and a read-only link 
 - Strikes are not mapped back to *arr items, and there is no `respect_cleanuparr_strikes`
   flag. A download Cleanuparr is striking is still in the *arr queue, and SnatchArr already
   skips queued items.
-- There is no Seeker detection. When Cleanuparr removes a download and searches again
+- There is no Seeker detection. *(Note: superseded for proactive search by [ADR-0009](0009-detect-cleanuparr-seeker.md); SnatchArr detects active Seeker instances and warns about double searching.)* When Cleanuparr removes a download and searches again
   itself, the item's [afterglow](../concepts.md#afterglow) keeps SnatchArr's next attempt from
   piling on.
 
