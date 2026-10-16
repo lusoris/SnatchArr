@@ -9,6 +9,7 @@ import (
 
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
+	"github.com/lusoris/SnatchArr/api/internal/snatch"
 )
 
 // ListSchedules returns every window.
@@ -19,7 +20,7 @@ func (h *Handlers) ListSchedules(ctx context.Context) ([]oas.Schedule, error) {
 	}
 	out := make([]oas.Schedule, 0, len(list))
 	for _, s := range list {
-		out = append(out, scheduleToOAS(s))
+		out = append(out, h.scheduleToOAS(s))
 	}
 	return out, nil
 }
@@ -33,7 +34,7 @@ func (h *Handlers) CreateSchedule(ctx context.Context, req *oas.ScheduleInput) (
 	if err != nil {
 		return nil, err
 	}
-	out := scheduleToOAS(s)
+	out := h.scheduleToOAS(s)
 	return &out, nil
 }
 
@@ -46,7 +47,7 @@ func (h *Handlers) UpdateSchedule(ctx context.Context, req *oas.ScheduleInput, p
 	if err != nil {
 		return nil, err
 	}
-	out := scheduleToOAS(s)
+	out := h.scheduleToOAS(s)
 	return &out, nil
 }
 
@@ -69,10 +70,11 @@ func scheduleFromOAS(in *oas.ScheduleInput) domain.Schedule {
 	return s
 }
 
-func scheduleToOAS(s domain.Schedule) oas.Schedule {
+func (h *Handlers) scheduleToOAS(s domain.Schedule) oas.Schedule {
 	out := oas.Schedule{
 		ID: s.ID, Name: s.Name, Days: s.Days, Start: s.Start, End: s.End, Tz: s.TZ,
 		Action: oas.ScheduleAction(s.Action), Enabled: s.Enabled, CreatedAt: s.CreatedAt, UpdatedAt: s.UpdatedAt,
+		Active: snatch.IsScheduleActive(s, h.clk.Now()),
 	}
 	if s.InstanceID != nil {
 		out.InstanceID = oas.NewOptUUID(*s.InstanceID)

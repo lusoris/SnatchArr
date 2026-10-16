@@ -2025,7 +2025,7 @@ components:
       allOf:
         - $ref: "#/components/schemas/ScheduleInput"
         - type: object
-          required: [id, created_at, updated_at]
+          required: [id, created_at, updated_at, active]
           properties:
             id:
               type: string
@@ -2036,6 +2036,9 @@ components:
             updated_at:
               type: string
               format: date-time
+            active:
+              type: boolean
+              description: Whether this schedule window matches the current evaluation time.
 
     DownloadClientKind:
       type: string

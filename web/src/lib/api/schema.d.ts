@@ -1241,6 +1241,8 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+            /** @description Whether this schedule window matches the current evaluation time. */
+            active: boolean;
         };
         /** @enum {string} */
         DownloadClientKind: "qbittorrent" | "transmission" | "deluge" | "rtorrent" | "sabnzbd" | "nzbget";
