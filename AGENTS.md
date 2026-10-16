@@ -123,7 +123,7 @@ Purpose: snatch missing + cutoff-unmet media across *arr instances; respect per-
 - Generated Go lives under `api/internal/build/` on purpose: praetor HISS scanner has no `// Code generated` exemption but skips any `build` directory segment. `api/internal/gen` (protobuf) stays put; `make proto-gen` adds `// SAFETY:` lines there.
 - RFC 9457 everywhere. Every non-2xx HTTP response = `application/problem+json`. SPA `problemMiddleware` depends on that media type.
 - gRPC lease model. Worker PULLS: `LeaseRun` -> `Heartbeat` -> `FilterCandidates` -> `AcquireBudget` -> `ReportEvents` -> `CompleteRun`. Api = only writer of processed memory + rate buckets; worker never exceeds granted budget.
-- Hourly cap counts items searched, not HTTP requests. Debit per dispatch; warn at 80 %.
+- Hourly cap counts searches *arr sends per indexer, not HTTP requests, not items: 1 per episode / season / movie / album / book; artist or author search = 1 (#180). Debit per dispatch; warn at 80 %.
 - Processed memory: per instance x snatch kind x entity, per-row `expires_at`.
 - SSE event names = `snatcharr.v1.EventType` names, lower snake case (`search_dispatched`, ...).
 - Periodic loops (planner tick, Seerr sync, Configarr poll) never start from their own module: register in fx group `leader_loops` via `leaderx.Provide[*T]()`; `internal/leaderx` runs them on the elected replica (`APP_LEADER_ENABLED`, pg advisory lock).

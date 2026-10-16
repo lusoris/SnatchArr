@@ -71,7 +71,8 @@ type Grant struct {
 }
 
 // Budget debits per-instance stamina in one-minute buckets summed over a rolling Span. The
-// cap counts items searched (newtarr's meaning), not HTTP requests, and is enforced
+// cap counts searches the *arr sends to its indexers (one per episode, season, movie, album
+// or book, one per artist or author search; #180), not HTTP requests, and is enforced
 // atomically so N workers share one budget.
 type Budget struct {
 	st  *store.Store

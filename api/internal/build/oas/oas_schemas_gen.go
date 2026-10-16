@@ -5153,7 +5153,8 @@ type SnatchPolicy struct {
 	UpgradePerCycle int `json:"upgrade_per_cycle"`
 	// Refractory period: seconds between two snatches of the same kind.
 	CycleIntervalS int `json:"cycle_interval_s"`
-	// Stamina: items an instance may search per hour before it needs a rest (1-500).
+	// Stamina: searches an instance may send to its indexers per hour before it needs a rest (1-500).
+	// One per episode, season, movie, album or book; one for a whole artist or author search.
 	HourlyCap int `json:"hourly_cap"`
 	// Random spreads searches over the library, sequential walks it with a cursor, recent prefers the
 	// newest releases with a slice reserved for the backlog.
