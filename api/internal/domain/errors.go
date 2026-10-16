@@ -8,6 +8,8 @@ import "errors"
 
 // Sentinel errors every layer maps onto HTTP problem details or gRPC codes.
 var (
+	// ErrBadRequest marks a malformed or invalid request that fails precondition checks (HTTP 400).
+	ErrBadRequest = errors.New("bad request")
 	// ErrInvalid marks a validation failure (HTTP 422).
 	ErrInvalid = errors.New("invalid")
 	// ErrNotFound marks a missing entity (HTTP 404).
@@ -20,4 +22,6 @@ var (
 	ErrForbidden = errors.New("forbidden")
 	// ErrUnreachable marks an *arr instance that could not be contacted (HTTP 502).
 	ErrUnreachable = errors.New("instance unreachable")
+	// ErrTooManyRequests marks a rate-limited or locked client (HTTP 429).
+	ErrTooManyRequests = errors.New("too many requests")
 )

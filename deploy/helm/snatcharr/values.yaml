@@ -26,6 +26,10 @@ config:
   # External base URL, used for cookies and links (APP_SNATCHARR_PUBLIC_URL).
   publicUrl: ""
   sessionTtl: 8h
+  # CIDRs of reverse proxies whose X-Forwarded-For header the API trusts to resolve the
+  # client IP for login throttling (APP_SNATCHARR_PROXY_TRUSTED). Empty trusts no proxy and
+  # reads RemoteAddr directly.
+  trustedProxies: []
   otel:
     enabled: false
     endpoint: ""
@@ -34,15 +38,17 @@ config:
   extraEnv: []
 
 # Secrets the control plane needs. Either point at an existing Secret with the keys
-# crypto-key (hex, 16/24/32 bytes), csrf-secret, apikey-secret and worker-token, or set
-# the values here. Empty values are generated once and reused across upgrades via lookup;
-# ArgoCD renders without cluster access, so give it existingSecret.
+# crypto-key (hex, 16/24/32 bytes), csrf-secret, apikey-secret, worker-token, and setup-secret
+# (optional in existingSecret), or set the values here. Empty values are generated once and
+# reused across upgrades via lookup; ArgoCD renders without cluster access, so give it existingSecret.
 secrets:
   existingSecret: ""
   cryptoKey: ""
   csrfSecret: ""
   apiKeySecret: ""
   workerToken: ""
+  # Bootstrap secret required by POST /auth/setup. Empty value is generated on first install.
+  setupSecret: ""
 
 postgres:
   # CloudNativePG Cluster managed by this chart (operator must be installed).

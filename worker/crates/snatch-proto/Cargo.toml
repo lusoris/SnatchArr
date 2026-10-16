@@ -24,3 +24,7 @@ protox = { workspace = true }
 
 [lints]
 workspace = true
+
+# Used by code generated into OUT_DIR.
+[package.metadata.cargo-machete]
+ignored = ["prost", "prost-types", "tonic-prost"]

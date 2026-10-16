@@ -5,7 +5,7 @@
 /** How a stamina gauge reads: fresh below 75 %, getting tired below 100 %, spent after. */
 export type StaminaLevel = 'fresh' | 'tired' | 'spent';
 
-export const TIRED_RATIO = 0.75;
+const TIRED_RATIO = 0.75;
 
 export function staminaLevel(used: number, cap: number): StaminaLevel {
 	if (cap <= 0) return 'spent';

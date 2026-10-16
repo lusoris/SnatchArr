@@ -5,12 +5,16 @@
 package auth_test
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jonboulle/clockwork"
 
 	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/core/crypto"
@@ -18,6 +22,8 @@ import (
 
 	"github.com/lusoris/SnatchArr/api/internal/auth"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
+	"github.com/lusoris/SnatchArr/api/internal/store"
+	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
 	"github.com/lusoris/SnatchArr/api/internal/store/storetest"
 )
 
@@ -28,11 +34,25 @@ const (
 
 func newService(t *testing.T) *auth.Service {
 	t.Helper()
-	svc, err := auth.NewService(storetest.New(t), crypto.NewPasswordHasher(2), clock.NewFake(), id.New(), slog.New(slog.DiscardHandler))
+	svc, _ := newServiceWithClock(t)
+	return svc
+}
+
+func newServiceWithClock(t *testing.T) (*auth.Service, *clockwork.FakeClock) {
+	t.Helper()
+	svc, clk, _ := newServiceWithStore(t)
+	return svc, clk
+}
+
+func newServiceWithStore(t *testing.T) (*auth.Service, *clockwork.FakeClock, *store.Store) {
+	t.Helper()
+	clk := clock.NewFake()
+	st := storetest.New(t)
+	svc, err := auth.NewService(st, crypto.NewPasswordHasher(2), clk, id.New(), slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
 	}
-	return svc
+	return svc, clk, st
 }
 
 func TestSetupCreatesTheFirstAdminOnce(t *testing.T) {
@@ -113,7 +133,7 @@ func TestLogin(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			user, err := svc.Login(t.Context(), tc.username, tc.password)
+			user, err := svc.Login(t.Context(), tc.username, tc.password, "192.0.2.1")
 			if !errors.Is(err, tc.want) || (tc.want == nil) != (err == nil) {
 				t.Fatalf("Login() = %v, want %v", err, tc.want)
 			}
@@ -128,5 +148,212 @@ func TestUnknownUserIsNotFound(t *testing.T) {
 	t.Parallel()
 	if _, err := newService(t).User(t.Context(), uuid.New()); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("User() = %v, want %v", err, domain.ErrNotFound)
+	}
+}
+
+func TestLoginThrottlingBoundary(t *testing.T) {
+	t.Parallel()
+	svc, clk := newServiceWithClock(t)
+	ctx := t.Context()
+	_, err := svc.Setup(ctx, adminName, adminPass)
+	if err != nil {
+		t.Fatalf("Setup() = %v", err)
+	}
+
+	clientIP := "192.0.2.1"
+
+	// Boundary 1: MaxFails-1 (4) failures -> next login with right password succeeds
+	for i := 1; i < auth.LockoutMaxFails; i++ {
+		if _, err := svc.Login(ctx, adminName, "wrong-pass", clientIP); !errors.Is(err, domain.ErrUnauthorized) {
+			t.Fatalf("fail attempt %d: err = %v, want ErrUnauthorized", i, err)
+		}
+	}
+	if _, err := svc.Login(ctx, adminName, adminPass, clientIP); err != nil {
+		t.Fatalf("login after %d fails = %v, want success", auth.LockoutMaxFails-1, err)
+	}
+
+	// Boundary 2: exactly MaxFails (5) failures from a new IP -> locks both user and IP
+	clientIP2 := "192.0.2.2"
+	for i := 1; i <= auth.LockoutMaxFails; i++ {
+		if _, err := svc.Login(ctx, adminName, "wrong-pass", clientIP2); !errors.Is(err, domain.ErrUnauthorized) {
+			t.Fatalf("fail attempt %d: err = %v, want ErrUnauthorized", i, err)
+		}
+	}
+	// Right password refused with domain.ErrTooManyRequests from same IP and from clean IP (user key locked)
+	if _, err := svc.Login(ctx, adminName, adminPass, clientIP2); !errors.Is(err, domain.ErrTooManyRequests) {
+		t.Fatalf("Login() with right password when locked = %v, want ErrTooManyRequests", err)
+	}
+	if _, err := svc.Login(ctx, adminName, adminPass, "192.0.2.99"); !errors.Is(err, domain.ErrTooManyRequests) {
+		t.Fatalf("Login() from clean IP when user locked = %v, want ErrTooManyRequests", err)
+	}
+
+	// Boundary 3: Cooldown expires -> right password succeeds
+	clk.Advance(auth.LockoutCooldown - time.Second)
+	if _, err := svc.Login(ctx, adminName, adminPass, clientIP2); !errors.Is(err, domain.ErrTooManyRequests) {
+		t.Fatalf("Login() just before cooldown expiry = %v, want ErrTooManyRequests", err)
+	}
+	clk.Advance(2 * time.Second)
+	if _, err := svc.Login(ctx, adminName, adminPass, clientIP2); err != nil {
+		t.Fatalf("Login() after cooldown = %v, want success", err)
+	}
+
+	// Boundary 4: IP key locks a second username from the same IP
+	testIPLockoutAcrossUsers(t, svc, clientIP)
+}
+
+func testIPLockoutAcrossUsers(t *testing.T, svc *auth.Service, clientIP string) {
+	t.Helper()
+	ctx := t.Context()
+	otherIP := "192.0.2.3"
+
+	// 5 failed logins for non-existent user from otherIP locks otherIP
+	for i := 1; i <= auth.LockoutMaxFails; i++ {
+		if _, err := svc.Login(ctx, "attacker-random-user", "bad-pass", otherIP); !errors.Is(err, domain.ErrUnauthorized) {
+			t.Fatalf("attacker attempt %d: err = %v, want ErrUnauthorized", i, err)
+		}
+	}
+
+	// admin login from locked otherIP is refused even with correct password
+	if _, err := svc.Login(ctx, adminName, adminPass, otherIP); !errors.Is(err, domain.ErrTooManyRequests) {
+		t.Fatalf("admin login from locked IP = %v, want ErrTooManyRequests", err)
+	}
+
+	// admin login from clean clientIP succeeds
+	if _, err := svc.Login(ctx, adminName, adminPass, clientIP); err != nil {
+		t.Fatalf("admin login from clean IP = %v, want success", err)
+	}
+}
+
+func TestChangePassword(t *testing.T) {
+	t.Parallel()
+	svc, clk, st := newServiceWithStore(t)
+	ctx := t.Context()
+
+	// Seed first admin
+	user, err := svc.Setup(ctx, adminName, adminPass)
+	if err != nil {
+		t.Fatalf("Setup: %v", err)
+	}
+
+	// Seed 3 sessions for admin
+	sessionTTL := 8 * time.Hour
+	s1 := "sess-1"
+	s2 := "sess-2"
+	s3 := "sess-3"
+	adminData := []byte(`{"user_id": "` + user.ID.String() + `"}`)
+	for _, sid := range []string{s1, s2, s3} {
+		if saveErr := st.Q().SaveSession(ctx, sqlcgen.SaveSessionParams{ID: sid, Data: adminData, ExpiresAt: clk.Now().Add(sessionTTL)}); saveErr != nil {
+			t.Fatalf("SaveSession(%s): %v", sid, saveErr)
+		}
+	}
+
+	// Seed another user session
+	otherID := uuid.New()
+	sOther := "sess-other"
+	otherData := []byte(`{"user_id": "` + otherID.String() + `"}`)
+	if saveErr := st.Q().SaveSession(ctx, sqlcgen.SaveSessionParams{ID: sOther, Data: otherData, ExpiresAt: clk.Now().Add(sessionTTL)}); saveErr != nil {
+		t.Fatalf("SaveSession(%s): %v", sOther, saveErr)
+	}
+
+	// Negative 1: wrong current password -> refused, nothing changes
+	err = svc.ChangePassword(ctx, user.ID, "wrong-password", "new-valid-password-123", s1)
+	if !errors.Is(err, domain.ErrUnauthorized) {
+		t.Fatalf("ChangePassword wrong pass = %v, want ErrUnauthorized", err)
+	}
+	for _, sid := range []string{s1, s2, s3, sOther} {
+		if _, loadErr := st.Q().LoadSession(ctx, sqlcgen.LoadSessionParams{ID: sid, ExpiresAt: clk.Now()}); loadErr != nil {
+			t.Fatalf("session %s unexpectedly missing after failed password change: %v", sid, loadErr)
+		}
+	}
+
+	// Negative 2: invalid new password -> refused, nothing changes
+	err = svc.ChangePassword(ctx, user.ID, adminPass, "short", s1)
+	if !errors.Is(err, domain.ErrInvalid) {
+		t.Fatalf("ChangePassword short pass = %v, want ErrInvalid", err)
+	}
+	for _, sid := range []string{s1, s2, s3, sOther} {
+		if _, loadErr := st.Q().LoadSession(ctx, sqlcgen.LoadSessionParams{ID: sid, ExpiresAt: clk.Now()}); loadErr != nil {
+			t.Fatalf("session %s unexpectedly missing after failed password change: %v", sid, loadErr)
+		}
+	}
+
+	// Positive: correct current password + valid new password while on s1
+	newPass := "brand-new-secret-password-123"
+	if err := svc.ChangePassword(ctx, user.ID, adminPass, newPass, s1); err != nil {
+		t.Fatalf("ChangePassword success err = %v", err)
+	}
+
+	// Current session s1 still valid
+	if _, err := st.Q().LoadSession(ctx, sqlcgen.LoadSessionParams{ID: s1, ExpiresAt: clk.Now()}); err != nil {
+		t.Fatalf("current session s1 was deleted: %v", err)
+	}
+
+	// Other sessions s2, s3 for user are gone
+	for _, sid := range []string{s2, s3} {
+		if _, err := st.Q().LoadSession(ctx, sqlcgen.LoadSessionParams{ID: sid, ExpiresAt: clk.Now()}); !errors.Is(err, pgx.ErrNoRows) {
+			t.Fatalf("session %s should be deleted, got err = %v", sid, err)
+		}
+	}
+
+	// Other user session sOther is untouched
+	if _, err := st.Q().LoadSession(ctx, sqlcgen.LoadSessionParams{ID: sOther, ExpiresAt: clk.Now()}); err != nil {
+		t.Fatalf("other user's session was deleted: %v", err)
+	}
+
+	// User can log in with new password
+	if _, err := svc.Login(ctx, adminName, newPass, "127.0.0.1"); err != nil {
+		t.Fatalf("Login with new password failed: %v", err)
+	}
+
+	// User cannot log in with old password
+	if _, err := svc.Login(ctx, adminName, adminPass, "127.0.0.1"); !errors.Is(err, domain.ErrUnauthorized) {
+		t.Fatalf("Login with old password = %v, want ErrUnauthorized", err)
+	}
+}
+
+func TestChangePasswordRollbackOnDeleteFailure(t *testing.T) {
+	t.Parallel()
+	svc, clk, st := newServiceWithStore(t)
+	ctx := t.Context()
+
+	user, err := svc.Setup(ctx, adminName, adminPass)
+	if err != nil {
+		t.Fatalf("Setup: %v", err)
+	}
+
+	sessionTTL := 8 * time.Hour
+	s1 := "sess-1"
+	s2 := "sess-2"
+	adminData := []byte(`{"user_id": "` + user.ID.String() + `"}`)
+	for _, sid := range []string{s1, s2} {
+		if saveErr := st.Q().SaveSession(ctx, sqlcgen.SaveSessionParams{ID: sid, Data: adminData, ExpiresAt: clk.Now().Add(sessionTTL)}); saveErr != nil {
+			t.Fatalf("SaveSession(%s): %v", sid, saveErr)
+		}
+	}
+
+	cancCtx, cancel := context.WithCancel(t.Context())
+	svc.SetPostPasswordUpdateHook(func(_ context.Context) {
+		cancel()
+	})
+
+	newPass := "brand-new-secret-password-123"
+	err = svc.ChangePassword(cancCtx, user.ID, adminPass, newPass, s1)
+	if err == nil {
+		t.Fatal("ChangePassword with cancelled context after update should have failed, got nil")
+	}
+
+	// Verify password was rolled back: old password still works, new password does not
+	if _, err := svc.Login(ctx, adminName, adminPass, "127.0.0.1"); err != nil {
+		t.Fatalf("Login with old password failed after rollback: %v", err)
+	}
+	if _, err := svc.Login(ctx, adminName, newPass, "127.0.0.1"); !errors.Is(err, domain.ErrUnauthorized) {
+		t.Fatalf("Login with new password succeeded after rollback, got %v; want ErrUnauthorized", err)
+	}
+
+	// Both sessions still exist
+	for _, sid := range []string{s1, s2} {
+		if _, loadErr := st.Q().LoadSession(ctx, sqlcgen.LoadSessionParams{ID: sid, ExpiresAt: clk.Now()}); loadErr != nil {
+			t.Fatalf("session %s missing after rollback: %v", sid, loadErr)
+		}
 	}
 }

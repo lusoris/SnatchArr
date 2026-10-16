@@ -15,6 +15,65 @@ func (s *ProblemStatusCode) Error() string {
 	return fmt.Sprintf("code %d: %+v", s.StatusCode, s.Response)
 }
 
+// Ref: #/components/schemas/ApiKey
+type ApiKey struct {
+	ID         string      `json:"id"`
+	Name       string      `json:"name"`
+	CreatedAt  time.Time   `json:"created_at"`
+	ExpiresAt  OptDateTime `json:"expires_at"`
+	LastUsedAt OptDateTime `json:"last_used_at"`
+}
+
+// GetID returns the value of ID.
+func (s *ApiKey) GetID() string {
+	return s.ID
+}
+
+// GetName returns the value of Name.
+func (s *ApiKey) GetName() string {
+	return s.Name
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *ApiKey) GetCreatedAt() time.Time {
+	return s.CreatedAt
+}
+
+// GetExpiresAt returns the value of ExpiresAt.
+func (s *ApiKey) GetExpiresAt() OptDateTime {
+	return s.ExpiresAt
+}
+
+// GetLastUsedAt returns the value of LastUsedAt.
+func (s *ApiKey) GetLastUsedAt() OptDateTime {
+	return s.LastUsedAt
+}
+
+// SetID sets the value of ID.
+func (s *ApiKey) SetID(val string) {
+	s.ID = val
+}
+
+// SetName sets the value of Name.
+func (s *ApiKey) SetName(val string) {
+	s.Name = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *ApiKey) SetCreatedAt(val time.Time) {
+	s.CreatedAt = val
+}
+
+// SetExpiresAt sets the value of ExpiresAt.
+func (s *ApiKey) SetExpiresAt(val OptDateTime) {
+	s.ExpiresAt = val
+}
+
+// SetLastUsedAt sets the value of LastUsedAt.
+func (s *ApiKey) SetLastUsedAt(val OptDateTime) {
+	s.LastUsedAt = val
+}
+
 // Ref: #/components/schemas/AppKind
 type AppKind string
 
@@ -286,6 +345,53 @@ func (s *CapStatusScope) UnmarshalText(data []byte) error {
 		return errors.Errorf("invalid value: %q", data)
 	}
 }
+
+type ChangePasswordBadRequest ProblemStatusCode
+
+func (*ChangePasswordBadRequest) changePasswordRes() {}
+
+// ChangePasswordNoContent is response for ChangePassword operation.
+type ChangePasswordNoContent struct{}
+
+func (*ChangePasswordNoContent) changePasswordRes() {}
+
+// Ref: #/components/schemas/ChangePasswordRequest
+type ChangePasswordRequest struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
+}
+
+// GetCurrentPassword returns the value of CurrentPassword.
+func (s *ChangePasswordRequest) GetCurrentPassword() string {
+	return s.CurrentPassword
+}
+
+// GetNewPassword returns the value of NewPassword.
+func (s *ChangePasswordRequest) GetNewPassword() string {
+	return s.NewPassword
+}
+
+// SetCurrentPassword sets the value of CurrentPassword.
+func (s *ChangePasswordRequest) SetCurrentPassword(val string) {
+	s.CurrentPassword = val
+}
+
+// SetNewPassword sets the value of NewPassword.
+func (s *ChangePasswordRequest) SetNewPassword(val string) {
+	s.NewPassword = val
+}
+
+type ChangePasswordTooManyRequests ProblemStatusCode
+
+func (*ChangePasswordTooManyRequests) changePasswordRes() {}
+
+type ChangePasswordUnauthorized ProblemStatusCode
+
+func (*ChangePasswordUnauthorized) changePasswordRes() {}
+
+type ChangePasswordUnprocessableEntity ProblemStatusCode
+
+func (*ChangePasswordUnprocessableEntity) changePasswordRes() {}
 
 // Ref: #/components/schemas/CleanuparrLink
 type CleanuparrLink struct {
@@ -661,6 +767,14 @@ func (s *CleanuparrStrike) SetDryRun(val bool) {
 	s.DryRun = val
 }
 
+type CompleteSetupConflict ProblemStatusCode
+
+func (*CompleteSetupConflict) completeSetupRes() {}
+
+type CompleteSetupUnauthorized ProblemStatusCode
+
+func (*CompleteSetupUnauthorized) completeSetupRes() {}
+
 // Ref: #/components/schemas/ConfigarrImportRequest
 type ConfigarrImportRequest struct {
 	// Path to config.yml on the API host; omit to use the linked configuration.
@@ -856,6 +970,117 @@ func (s *CookieAuth) SetAPIKey(val string) {
 func (s *CookieAuth) SetRoles(val []string) {
 	s.Roles = val
 }
+
+type CreateAPIKeyBadRequest ProblemStatusCode
+
+func (*CreateAPIKeyBadRequest) createAPIKeyRes() {}
+
+type CreateAPIKeyConflict ProblemStatusCode
+
+func (*CreateAPIKeyConflict) createAPIKeyRes() {}
+
+type CreateAPIKeyUnauthorized ProblemStatusCode
+
+func (*CreateAPIKeyUnauthorized) createAPIKeyRes() {}
+
+// Ref: #/components/schemas/CreateApiKeyRequest
+type CreateApiKeyRequest struct {
+	Name      string      `json:"name"`
+	ExpiresAt OptDateTime `json:"expires_at"`
+}
+
+// GetName returns the value of Name.
+func (s *CreateApiKeyRequest) GetName() string {
+	return s.Name
+}
+
+// GetExpiresAt returns the value of ExpiresAt.
+func (s *CreateApiKeyRequest) GetExpiresAt() OptDateTime {
+	return s.ExpiresAt
+}
+
+// SetName sets the value of Name.
+func (s *CreateApiKeyRequest) SetName(val string) {
+	s.Name = val
+}
+
+// SetExpiresAt sets the value of ExpiresAt.
+func (s *CreateApiKeyRequest) SetExpiresAt(val OptDateTime) {
+	s.ExpiresAt = val
+}
+
+// Merged schema.
+// Ref: #/components/schemas/CreatedApiKey
+type CreatedApiKey struct {
+	ID         string      `json:"id"`
+	Name       string      `json:"name"`
+	CreatedAt  time.Time   `json:"created_at"`
+	ExpiresAt  OptDateTime `json:"expires_at"`
+	LastUsedAt OptDateTime `json:"last_used_at"`
+	Secret     string      `json:"secret"`
+}
+
+// GetID returns the value of ID.
+func (s *CreatedApiKey) GetID() string {
+	return s.ID
+}
+
+// GetName returns the value of Name.
+func (s *CreatedApiKey) GetName() string {
+	return s.Name
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *CreatedApiKey) GetCreatedAt() time.Time {
+	return s.CreatedAt
+}
+
+// GetExpiresAt returns the value of ExpiresAt.
+func (s *CreatedApiKey) GetExpiresAt() OptDateTime {
+	return s.ExpiresAt
+}
+
+// GetLastUsedAt returns the value of LastUsedAt.
+func (s *CreatedApiKey) GetLastUsedAt() OptDateTime {
+	return s.LastUsedAt
+}
+
+// GetSecret returns the value of Secret.
+func (s *CreatedApiKey) GetSecret() string {
+	return s.Secret
+}
+
+// SetID sets the value of ID.
+func (s *CreatedApiKey) SetID(val string) {
+	s.ID = val
+}
+
+// SetName sets the value of Name.
+func (s *CreatedApiKey) SetName(val string) {
+	s.Name = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *CreatedApiKey) SetCreatedAt(val time.Time) {
+	s.CreatedAt = val
+}
+
+// SetExpiresAt sets the value of ExpiresAt.
+func (s *CreatedApiKey) SetExpiresAt(val OptDateTime) {
+	s.ExpiresAt = val
+}
+
+// SetLastUsedAt sets the value of LastUsedAt.
+func (s *CreatedApiKey) SetLastUsedAt(val OptDateTime) {
+	s.LastUsedAt = val
+}
+
+// SetSecret sets the value of Secret.
+func (s *CreatedApiKey) SetSecret(val string) {
+	s.Secret = val
+}
+
+func (*CreatedApiKey) createAPIKeyRes() {}
 
 // DeleteCleanuparrLinkNoContent is response for DeleteCleanuparrLink operation.
 type DeleteCleanuparrLinkNoContent struct{}
@@ -1984,6 +2209,10 @@ func (s *InstanceUpdate) SetEnabled(val OptBool) {
 	s.Enabled = val
 }
 
+type ListAPIKeysOKApplicationJSON []ApiKey
+
+func (*ListAPIKeysOKApplicationJSON) listAPIKeysRes() {}
+
 // Ref: #/components/schemas/LoginRequest
 type LoginRequest struct {
 	Username string `json:"username"`
@@ -2632,6 +2861,21 @@ func (s *ProblemStatusCode) SetResponse(val Problem) {
 }
 
 func (*ProblemStatusCode) deleteInstanceRes() {}
+func (*ProblemStatusCode) listAPIKeysRes()    {}
+func (*ProblemStatusCode) loginRes()          {}
+
+// RevokeAPIKeyNoContent is response for RevokeAPIKey operation.
+type RevokeAPIKeyNoContent struct{}
+
+func (*RevokeAPIKeyNoContent) revokeAPIKeyRes() {}
+
+type RevokeAPIKeyNotFound ProblemStatusCode
+
+func (*RevokeAPIKeyNotFound) revokeAPIKeyRes() {}
+
+type RevokeAPIKeyUnauthorized ProblemStatusCode
+
+func (*RevokeAPIKeyUnauthorized) revokeAPIKeyRes() {}
 
 // Ref: #/components/schemas/Run
 type Run struct {
@@ -3774,6 +4018,9 @@ func (s *Session) SetExpiresAt(val time.Time) {
 	s.ExpiresAt = val
 }
 
+func (*Session) completeSetupRes() {}
+func (*Session) loginRes()         {}
+
 // SessionHeaders wraps Session with response headers.
 type SessionHeaders struct {
 	XCSRFToken OptString
@@ -3854,6 +4101,8 @@ func (s *Settings) SetUpdatedAt(val OptDateTime) {
 type SetupRequest struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
+	// Optional bootstrap secret when APP_SNATCHARR_SETUP_SECRET is configured.
+	SetupSecret OptString `json:"setup_secret"`
 }
 
 // GetUsername returns the value of Username.
@@ -3866,6 +4115,11 @@ func (s *SetupRequest) GetPassword() string {
 	return s.Password
 }
 
+// GetSetupSecret returns the value of SetupSecret.
+func (s *SetupRequest) GetSetupSecret() OptString {
+	return s.SetupSecret
+}
+
 // SetUsername sets the value of Username.
 func (s *SetupRequest) SetUsername(val string) {
 	s.Username = val
@@ -3876,9 +4130,16 @@ func (s *SetupRequest) SetPassword(val string) {
 	s.Password = val
 }
 
+// SetSetupSecret sets the value of SetupSecret.
+func (s *SetupRequest) SetSetupSecret(val OptString) {
+	s.SetupSecret = val
+}
+
 // Ref: #/components/schemas/SetupStatus
 type SetupStatus struct {
 	SetupComplete bool `json:"setup_complete"`
+	// Whether a bootstrap secret is required to complete setup.
+	SecretRequired bool `json:"secret_required"`
 }
 
 // GetSetupComplete returns the value of SetupComplete.
@@ -3886,9 +4147,19 @@ func (s *SetupStatus) GetSetupComplete() bool {
 	return s.SetupComplete
 }
 
+// GetSecretRequired returns the value of SecretRequired.
+func (s *SetupStatus) GetSecretRequired() bool {
+	return s.SecretRequired
+}
+
 // SetSetupComplete sets the value of SetupComplete.
 func (s *SetupStatus) SetSetupComplete(val bool) {
 	s.SetupComplete = val
+}
+
+// SetSecretRequired sets the value of SecretRequired.
+func (s *SetupStatus) SetSecretRequired(val bool) {
+	s.SecretRequired = val
 }
 
 // Ref: #/components/schemas/SnatchKind

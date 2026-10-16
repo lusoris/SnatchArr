@@ -5,6 +5,7 @@
 package httpapi
 
 import (
+	"errors"
 	"net/http"
 	"testing"
 	"time"
@@ -98,7 +99,7 @@ func assertDeleted(t *testing.T, f *routerFixture, resp *http.Response, instID u
 	if resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("deleteInstance status = %d, want 204", resp.StatusCode)
 	}
-	if _, err := f.h.instances.Get(t.Context(), instID); !instances.IsNotFound(err) {
+	if _, err := f.h.instances.Get(t.Context(), instID); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("instance after delete: %v, want not found", err)
 	}
 }

@@ -17,6 +17,7 @@ type Querier interface {
 	BucketUsage(ctx context.Context, arg BucketUsageParams) (BucketUsageRow, error)
 	CancelRun(ctx context.Context, arg CancelRunParams) (int64, error)
 	CompleteRun(ctx context.Context, arg CompleteRunParams) (SnatchRun, error)
+	CountActiveAPIKeysByOwner(ctx context.Context, ownerID uuid.UUID) (int64, error)
 	CountInstancesByBaseURL(ctx context.Context, arg CountInstancesByBaseURLParams) (int64, error)
 	CountInstancesByBaseURLAndNotSource(ctx context.Context, arg CountInstancesByBaseURLAndNotSourceParams) (int64, error)
 	CountProcessed(ctx context.Context, arg CountProcessedParams) (int64, error)
@@ -44,11 +45,14 @@ type Querier interface {
 	DeleteDownloadClient(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteEventsForInstance(ctx context.Context, instanceID uuid.UUID) (int64, error)
 	DeleteInstanceUnlessDeclared(ctx context.Context, id uuid.UUID) (int64, error)
+	DeleteLoginLockout(ctx context.Context, key string) error
 	DeleteSchedule(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteSeerrLink(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteSession(ctx context.Context, id string) error
 	DeleteStaleDiscoveredDownloadClients(ctx context.Context, arg DeleteStaleDiscoveredDownloadClientsParams) (int64, error)
 	DeleteUnseenSeerrRequests(ctx context.Context, arg DeleteUnseenSeerrRequestsParams) (int64, error)
+	// data->>'user_id' couples to sessionUserKey in api/internal/httpapi/security.go.
+	DeleteUserSessionsExcept(ctx context.Context, arg DeleteUserSessionsExceptParams) (int64, error)
 	DisableConfigarrInstancesNotIn(ctx context.Context, arg DisableConfigarrInstancesNotInParams) (int64, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
@@ -66,6 +70,7 @@ type Querier interface {
 	GetDownloadClient(ctx context.Context, id uuid.UUID) (DownloadClient, error)
 	GetInstance(ctx context.Context, id uuid.UUID) (Instance, error)
 	GetInstanceByConfigarrKey(ctx context.Context, configarrKey *string) (Instance, error)
+	GetLoginLockout(ctx context.Context, key string) (LoginLockout, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
 	GetPolicy(ctx context.Context, instanceID uuid.UUID) (SnatchPolicy, error)
@@ -91,6 +96,7 @@ type Querier interface {
 	// max_leases times; FailExhaustedLeases ends the others.
 	LeaseRun(ctx context.Context, arg LeaseRunParams) (SnatchRun, error)
 	ListAPIKeysByOwner(ctx context.Context, ownerID uuid.UUID) ([]ApiKey, error)
+	ListAPIKeysForOwner(ctx context.Context, ownerID uuid.UUID) ([]ListAPIKeysForOwnerRow, error)
 	ListCleanuparrLinks(ctx context.Context) ([]CleanuparrLink, error)
 	ListDownloadClients(ctx context.Context) ([]DownloadClient, error)
 	ListDownloadClientsForInstance(ctx context.Context, instanceID *uuid.UUID) ([]DownloadClient, error)
@@ -121,6 +127,7 @@ type Querier interface {
 	ProcessedAttempts(ctx context.Context, arg ProcessedAttemptsParams) (int32, error)
 	PurgeBucketsBefore(ctx context.Context, arg PurgeBucketsBeforeParams) (int64, error)
 	PurgeEventsBefore(ctx context.Context, arg PurgeEventsBeforeParams) (int64, error)
+	PurgeExpiredLoginLockouts(ctx context.Context, arg PurgeExpiredLoginLockoutsParams) (int64, error)
 	// The outer expires_at condition is repeated on purpose: Postgres re-checks it on a row a
 	// concurrent snatch extended meanwhile, so that row is kept.
 	PurgeExpiredProcessed(ctx context.Context, arg PurgeExpiredProcessedParams) (int64, error)
@@ -132,13 +139,17 @@ type Querier interface {
 	RecordCleanuparrCheck(ctx context.Context, arg RecordCleanuparrCheckParams) error
 	RecordDownloadClientCheck(ctx context.Context, arg RecordDownloadClientCheckParams) error
 	RecordInstanceCheck(ctx context.Context, arg RecordInstanceCheckParams) error
+	RecordLoginLockoutFailure(ctx context.Context, arg RecordLoginLockoutFailureParams) error
 	RecordSeerrCheck(ctx context.Context, arg RecordSeerrCheckParams) error
 	RecordSeerrSync(ctx context.Context, arg RecordSeerrSyncParams) error
 	ResetProcessed(ctx context.Context, instanceID *uuid.UUID) (int64, error)
 	RevokeAPIKey(ctx context.Context, arg RevokeAPIKeyParams) (int64, error)
+	RevokeAPIKeyForOwner(ctx context.Context, arg RevokeAPIKeyForOwnerParams) (int64, error)
 	SaveAPIKey(ctx context.Context, arg SaveAPIKeyParams) error
 	SavePolicyCursor(ctx context.Context, arg SavePolicyCursorParams) error
 	SaveSession(ctx context.Context, arg SaveSessionParams) error
+	SetAPIKeyMeta(ctx context.Context, arg SetAPIKeyMetaParams) (int64, error)
+	TouchAPIKey(ctx context.Context, arg TouchAPIKeyParams) error
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
 	// A late write from a slower replica never moves the contact back.
@@ -149,6 +160,7 @@ type Querier interface {
 	UpdateSchedule(ctx context.Context, arg UpdateScheduleParams) (Schedule, error)
 	UpdateSeerrLink(ctx context.Context, arg UpdateSeerrLinkParams) (SeerrLink, error)
 	UpdateSettings(ctx context.Context, arg UpdateSettingsParams) (Setting, error)
+	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
 	UpsertConfigarrInstance(ctx context.Context, arg UpsertConfigarrInstanceParams) (UpsertConfigarrInstanceRow, error)
 	UpsertDiscoveredDownloadClient(ctx context.Context, arg UpsertDiscoveredDownloadClientParams) (UpsertDiscoveredDownloadClientRow, error)
 	UpsertPolicy(ctx context.Context, arg UpsertPolicyParams) (SnatchPolicy, error)

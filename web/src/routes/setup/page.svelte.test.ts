@@ -84,4 +84,47 @@ describe('setup', () => {
 		await fireEvent.click(screen.getByRole('button', { name: m.setup_submit() }));
 		expect(postSpy).not.toHaveBeenCalled();
 	});
+
+	it('renders setup secret field when secret_required is true and submits with setup_secret', async () => {
+		stubGet({
+			'/auth/setup/status': { setup_complete: false, secret_required: true },
+			'/auth/session': { user: null }
+		});
+		const { session } = await import('#lib/session.svelte.js');
+		await session.refresh();
+		const postSpy = vi.spyOn(api, 'POST').mockResolvedValue({ data: {} } as never);
+		renderWithQuery(SetupPage);
+
+		const secretInput = screen.getByLabelText(m.setup_secret()) as HTMLInputElement;
+		expect(secretInput).toBeTruthy();
+		await fireEvent.input(screen.getByLabelText(m.password()), {
+			target: { value: 'correct-horse-battery-staple' }
+		});
+		await fireEvent.input(secretInput, {
+			target: { value: 'my-bootstrap-secret' }
+		});
+		await fireEvent.click(screen.getByRole('button', { name: m.setup_submit() }));
+
+		await waitFor(() => {
+			expect(postSpy).toHaveBeenCalledWith('/auth/setup', {
+				body: {
+					username: 'admin',
+					password: 'correct-horse-battery-staple',
+					setup_secret: 'my-bootstrap-secret'
+				}
+			});
+		});
+	});
+
+	it('does not render setup secret field when secret_required is false', async () => {
+		stubGet({
+			'/auth/setup/status': { setup_complete: false, secret_required: false },
+			'/auth/session': { user: null }
+		});
+		const { session } = await import('#lib/session.svelte.js');
+		await session.refresh();
+		renderWithQuery(SetupPage);
+
+		expect(screen.queryByLabelText(m.setup_secret())).toBeNull();
+	});
 });

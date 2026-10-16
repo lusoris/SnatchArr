@@ -324,6 +324,77 @@ fn queued_command() -> ResponseTemplate {
         .set_body_json(serde_json::json!({"id": 100, "name": "EpisodeSearch", "status": "queued"}))
 }
 
+/// Mounts standard Sonarr mock endpoints (wanted, empty queue, empty history).
+async fn mount_sonarr_wanted(server: &MockServer, wanted_records: serde_json::Value) {
+    mount_sonarr(
+        server,
+        wanted_page(wanted_records),
+        queue_page(),
+        serde_json::json!([]),
+    )
+    .await;
+}
+
+/// Mounts standard Sonarr mock endpoints (wanted, empty queue, empty history) and the queued command.
+async fn mount_sonarr_default(server: &MockServer, wanted_records: serde_json::Value) {
+    mount_sonarr_wanted(server, wanted_records).await;
+    mount_command(server, queued_command()).await;
+}
+
+struct SonarrRun {
+    // Kept to hold the mock server alive for the duration of the test.
+    _server: MockServer,
+    requests: Vec<wiremock::Request>,
+}
+
+async fn run_sonarr_cycle(
+    api: &FakeApi,
+    wanted: serde_json::Value,
+    per_cycle: Option<u32>,
+) -> Result<SonarrRun, Box<dyn std::error::Error>> {
+    let (client, _) = start_fake_api(api.clone()).await?;
+    let mock_server = MockServer::start().await;
+    mount_sonarr_default(&mock_server, wanted).await;
+
+    let mut run = default_run(&mock_server.uri());
+    if let Some(pc) = per_cycle {
+        some(run.policy.as_mut(), "run policy")?.per_cycle = pc;
+    }
+    run_short_polling(client, run).await;
+
+    let requests = some(mock_server.received_requests().await, "recorded requests")?;
+    Ok(SonarrRun {
+        _server: mock_server,
+        requests,
+    })
+}
+
+fn command_posts(requests: &[wiremock::Request]) -> Vec<&wiremock::Request> {
+    requests
+        .iter()
+        .filter(|r| r.method == "POST" && r.url.path() == "/api/v3/command")
+        .collect()
+}
+
+fn has_circuit_open_event(events: &[SnatchEvent]) -> bool {
+    events
+        .iter()
+        .any(|e| e.level == Level::Error as i32 && e.title.contains("circuit open"))
+}
+
+async fn assert_single_completed_outcome(
+    api: &FakeApi,
+    outcome: RunOutcome,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let complete = api.completed_requests.lock().await;
+    assert_eq!(complete.len(), 1);
+    assert_eq!(
+        some(complete.first(), "a CompleteRun call")?.outcome,
+        outcome as i32
+    );
+    Ok(())
+}
+
 /// CompleteRun retry for tests: 3 attempts, 5 ms base wait.
 const SHORT_RETRY: crate::executor::Retry = crate::executor::Retry {
     attempts: 3,
@@ -400,24 +471,9 @@ async fn cap_defers_over_budget() -> TestResult {
         filter_unprocessed: vec![1, 2],
         ..Default::default()
     };
-    let (client, _) = start_fake_api(api.clone()).await?;
+    let run = run_sonarr_cycle(&api, episodes(&[(1, 10), (2, 11)]), None).await?;
 
-    let mock_server = MockServer::start().await;
-    mount_sonarr(
-        &mock_server,
-        wanted_page(episodes(&[(1, 10), (2, 11)])),
-        queue_page(),
-        serde_json::json!([]),
-    )
-    .await;
-
-    mount_command(&mock_server, queued_command()).await;
-
-    let run = default_run(&mock_server.uri());
-    run_short_polling(client, run).await;
-
-    let requests = some(mock_server.received_requests().await, "recorded requests")?;
-    let commands = search_posts(&requests);
+    let commands = search_posts(&run.requests);
     let events = api.reported_events.lock().await;
     assert_eq!(commands, 1, "Only 1 target should be dispatched");
     let warn_ev = events
@@ -436,31 +492,15 @@ async fn cap_splits_one_series_to_the_grant() -> TestResult {
         filter_unprocessed: vec![1, 2, 3],
         ..Default::default()
     };
-    let (client, _) = start_fake_api(api.clone()).await?;
-    let mock_server = MockServer::start().await;
-    mount_sonarr(
-        &mock_server,
-        wanted_page(episodes(&[(1, 10), (2, 10), (3, 10)])),
-        queue_page(),
-        serde_json::json!([]),
-    )
-    .await;
-    mount_command(&mock_server, queued_command()).await;
+    let run = run_sonarr_cycle(&api, episodes(&[(1, 10), (2, 10), (3, 10)]), Some(3)).await?;
 
-    let mut run = default_run(&mock_server.uri());
-    some(run.policy.as_mut(), "run policy")?.per_cycle = 3;
-    run_short_polling(client, run).await;
-
-    let requests = some(mock_server.received_requests().await, "recorded requests")?;
     assert_eq!(
-        search_posts(&requests),
+        search_posts(&run.requests),
         1,
         "one EpisodeSearch for the part that fits"
     );
     let post = some(
-        requests
-            .iter()
-            .find(|r| r.method == "POST" && r.url.path() == "/api/v3/command"),
+        command_posts(&run.requests).into_iter().next(),
         "a search POST",
     )?;
     let body: serde_json::Value = serde_json::from_slice(&post.body)?;
@@ -490,13 +530,7 @@ async fn heartbeat_cancel_terminates_run() -> TestResult {
     let (client, _) = start_fake_api(api.clone()).await?;
 
     let mock_server = MockServer::start().await;
-    mount_sonarr(
-        &mock_server,
-        wanted_page(episodes(&[(1, 10)])),
-        queue_page(),
-        serde_json::json!([]),
-    )
-    .await;
+    mount_sonarr_wanted(&mock_server, episodes(&[(1, 10)])).await;
 
     mount_command(
         &mock_server,
@@ -562,13 +596,10 @@ async fn skips_queued_and_recently_grabbed() -> TestResult {
     run_short_polling(client, run).await;
 
     let requests = some(mock_server.received_requests().await, "recorded requests")?;
-    let posts: Vec<_> = requests
-        .iter()
-        .filter(|r| r.method == "POST" && r.url.path() == "/api/v3/command")
-        .collect();
+    let posts = command_posts(&requests);
     assert_eq!(posts.len(), 1, "Only ID 3 should be dispatched");
 
-    let body = std::str::from_utf8(&some(posts.first(), "a search POST")?.body)?;
+    let body = std::str::from_utf8(&some(posts.first().copied(), "a search POST")?.body)?;
     assert!(
         body.contains("\"episodeIds\":[3]"),
         "Dispatch should be for episode 3 only"
@@ -585,15 +616,7 @@ async fn await_command_exits_after_bound() -> TestResult {
     let (client, _) = start_fake_api(api.clone()).await?;
 
     let mock_server = MockServer::start().await;
-    mount_sonarr(
-        &mock_server,
-        wanted_page(episodes(&[(1, 10)])),
-        queue_page(),
-        serde_json::json!([]),
-    )
-    .await;
-
-    mount_command(&mock_server, queued_command()).await;
+    mount_sonarr_default(&mock_server, episodes(&[(1, 10)])).await;
 
     mount_command_status(&mock_server, 100, queued_command()).await;
     mount_command_status(&mock_server, 100, queued_command()).await;
@@ -630,11 +653,9 @@ async fn circuit_opens_after_consecutive_failures() -> TestResult {
     let (client, _) = start_fake_api(api.clone()).await?;
 
     let mock_server = MockServer::start().await;
-    mount_sonarr(
+    mount_sonarr_wanted(
         &mock_server,
-        wanted_page(episodes(&[(1, 10), (2, 10), (3, 10), (4, 10)])),
-        queue_page(),
-        serde_json::json!([]),
+        episodes(&[(1, 10), (2, 11), (3, 12), (4, 13)]),
     )
     .await;
 
@@ -642,26 +663,11 @@ async fn circuit_opens_after_consecutive_failures() -> TestResult {
 
     let mut run = default_run(&mock_server.uri());
     some(run.policy.as_mut(), "run policy")?.per_cycle = 4;
-    // The policy will group them individually if SonarrMode is Episodes and they are from the same series...
-    // Actually snatch_core groups episodes of the same series. We want individual POSTs, so let's give them different seriesId.
-    mock_server.reset().await;
-    mount_sonarr(
-        &mock_server,
-        wanted_page(episodes(&[(1, 10), (2, 11), (3, 12), (4, 13)])),
-        queue_page(),
-        serde_json::json!([]),
-    )
-    .await;
-
-    mount_command(&mock_server, ResponseTemplate::new(500)).await;
 
     run_short_polling(client, run).await;
 
     let requests = some(mock_server.received_requests().await, "recorded requests")?;
-    let posts: Vec<_> = requests
-        .iter()
-        .filter(|r| r.method == "POST" && r.url.path() == "/api/v3/command")
-        .collect();
+    let posts = command_posts(&requests);
     assert_eq!(
         posts.len(),
         9,
@@ -669,17 +675,12 @@ async fn circuit_opens_after_consecutive_failures() -> TestResult {
     );
 
     let events = api.reported_events.lock().await;
-    let circuit_ev = events
-        .iter()
-        .find(|e| e.level == Level::Error as i32 && e.title.contains("circuit open"));
-    assert!(circuit_ev.is_some(), "Should report circuit open event");
-
-    let complete = api.completed_requests.lock().await;
-    assert_eq!(complete.len(), 1, "CompleteRun should still be called");
-    assert_eq!(
-        some(complete.first(), "a CompleteRun call")?.outcome,
-        RunOutcome::Failed as i32
+    assert!(
+        has_circuit_open_event(&events),
+        "Should report circuit open event"
     );
+
+    assert_single_completed_outcome(&api, RunOutcome::Failed).await?;
     Ok(())
 }
 
@@ -698,23 +699,7 @@ async fn cap_boundary_exact() -> TestResult {
         filter_unprocessed: vec![1, 2],
         ..Default::default()
     };
-    let (client, _) = start_fake_api(api.clone()).await?;
-
-    let mock_server = MockServer::start().await;
-    mount_sonarr(
-        &mock_server,
-        wanted_page(episodes(&[(1, 10), (2, 11)])),
-        queue_page(),
-        serde_json::json!([]),
-    )
-    .await;
-
-    mount_command(&mock_server, queued_command()).await;
-
-    let mut run = default_run(&mock_server.uri());
-    some(run.policy.as_mut(), "run policy")?.per_cycle = 2;
-
-    run_short_polling(client, run).await;
+    let _run = run_sonarr_cycle(&api, episodes(&[(1, 10), (2, 11)]), Some(2)).await?;
 
     let events = api.reported_events.lock().await;
     let deferred = events
@@ -724,12 +709,7 @@ async fn cap_boundary_exact() -> TestResult {
         deferred.is_none(),
         "Should not warn about deferred targets if grant == requested"
     );
-    let complete = api.completed_requests.lock().await;
-    assert_eq!(complete.len(), 1);
-    assert_eq!(
-        some(complete.first(), "a CompleteRun call")?.outcome,
-        RunOutcome::Done as i32
-    );
+    assert_single_completed_outcome(&api, RunOutcome::Done).await?;
     Ok(())
 }
 
@@ -761,27 +741,11 @@ async fn circuit_boundary_recovers() -> TestResult {
     let (client, _) = start_fake_api(api.clone()).await?;
 
     let mock_server = MockServer::start().await;
-    Mock::given(method("GET"))
-        .and(path("/api/v3/wanted/missing"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(wanted_page(serde_json::json!([
-            { "id": 1, "seriesId": 10, "seasonNumber": 1, "episodeNumber": 1, "title": "Ep 1", "monitored": true, "series": { "monitored": true } },
-            { "id": 2, "seriesId": 11, "seasonNumber": 1, "episodeNumber": 2, "title": "Ep 2", "monitored": true, "series": { "monitored": true } },
-            { "id": 3, "seriesId": 12, "seasonNumber": 1, "episodeNumber": 3, "title": "Ep 3", "monitored": true, "series": { "monitored": true } },
-            { "id": 4, "seriesId": 13, "seasonNumber": 1, "episodeNumber": 4, "title": "Ep 4", "monitored": true, "series": { "monitored": true } }
-        ]))))
-        .mount(&mock_server).await;
-
-    Mock::given(method("GET"))
-        .and(path("/api/v3/queue"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(queue_page()))
-        .mount(&mock_server)
-        .await;
-
-    Mock::given(method("GET"))
-        .and(path("/api/v3/history/since"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
-        .mount(&mock_server)
-        .await;
+    mount_sonarr_wanted(
+        &mock_server,
+        episodes(&[(1, 10), (2, 11), (3, 12), (4, 13)]),
+    )
+    .await;
 
     Mock::given(method("POST"))
         .and(path("/api/v3/command"))
@@ -797,19 +761,11 @@ async fn circuit_boundary_recovers() -> TestResult {
     run_short_polling(client, run).await;
 
     let events = api.reported_events.lock().await;
-    let circuit_ev = events
-        .iter()
-        .find(|e| e.level == Level::Error as i32 && e.title.contains("circuit open"));
     assert!(
-        circuit_ev.is_none(),
+        !has_circuit_open_event(&events),
         "Circuit should stay closed because 3rd attempt succeeded"
     );
-    let complete = api.completed_requests.lock().await;
-    assert_eq!(complete.len(), 1);
-    assert_eq!(
-        some(complete.first(), "a CompleteRun call")?.outcome,
-        RunOutcome::Done as i32
-    );
+    assert_single_completed_outcome(&api, RunOutcome::Done).await?;
     Ok(())
 }
 
@@ -821,23 +777,7 @@ async fn heartbeat_negative_without_cancel() -> TestResult {
         cancel_heartbeat: false, // Heartbeat continues
         ..Default::default()
     };
-    let (client, _) = start_fake_api(api.clone()).await?;
-
-    let mock_server = MockServer::start().await;
-    mount_sonarr(
-        &mock_server,
-        wanted_page(episodes(&[(1, 10), (2, 11)])),
-        queue_page(),
-        serde_json::json!([]),
-    )
-    .await;
-
-    mount_command(&mock_server, queued_command()).await;
-
-    let mut run = default_run(&mock_server.uri());
-    some(run.policy.as_mut(), "run policy")?.per_cycle = 2;
-
-    run_short_polling(client, run).await;
+    let _run = run_sonarr_cycle(&api, episodes(&[(1, 10), (2, 11)]), Some(2)).await?;
 
     let complete = api.completed_requests.lock().await;
     assert_eq!(complete.len(), 1, "Run should complete");
@@ -848,8 +788,7 @@ async fn heartbeat_negative_without_cancel() -> TestResult {
     );
     assert_eq!(
         some(complete.first(), "a CompleteRun call")?.searched.len(),
-        2,
-        "All granted targets should be dispatched"
+        2
     );
     Ok(())
 }
@@ -878,14 +817,7 @@ async fn series_run(budget: u32) -> Result<(usize, Vec<BudgetCall>), Box<dyn std
     };
     let (client, _) = start_fake_api(api.clone()).await?;
     let mock_server = MockServer::start().await;
-    mount_sonarr(
-        &mock_server,
-        wanted_page(two_season_series()),
-        queue_page(),
-        serde_json::json!([]),
-    )
-    .await;
-    mount_command(&mock_server, queued_command()).await;
+    mount_sonarr_default(&mock_server, two_season_series()).await;
 
     let mut run = default_run(&mock_server.uri());
     some(run.policy.as_mut(), "run policy")?.sonarr_mode = snatch_proto::SonarrMode::Shows as i32;
@@ -935,20 +867,7 @@ async fn per_target_grants_decide_what_is_searched() -> TestResult {
         filter_unprocessed: vec![1, 2, 3],
         ..Default::default()
     };
-    let (client, _) = start_fake_api(api.clone()).await?;
-    let mock_server = MockServer::start().await;
-    mount_sonarr(
-        &mock_server,
-        wanted_page(episodes(&[(1, 10), (2, 10), (3, 11)])),
-        queue_page(),
-        serde_json::json!([]),
-    )
-    .await;
-    mount_command(&mock_server, queued_command()).await;
-
-    let mut run = default_run(&mock_server.uri());
-    some(run.policy.as_mut(), "run policy")?.per_cycle = 3;
-    run_short_polling(client, run).await;
+    let _run = run_sonarr_cycle(&api, episodes(&[(1, 10), (2, 10), (3, 11)]), Some(3)).await?;
 
     let complete = api.completed_requests.lock().await;
     let searched: Vec<i64> = some(complete.first(), "a CompleteRun call")?
@@ -974,20 +893,7 @@ async fn api_without_per_target_grants_is_capped_by_the_total() -> TestResult {
         filter_unprocessed: vec![1, 2, 3],
         ..Default::default()
     };
-    let (client, _) = start_fake_api(api.clone()).await?;
-    let mock_server = MockServer::start().await;
-    mount_sonarr(
-        &mock_server,
-        wanted_page(episodes(&[(1, 10), (2, 10), (3, 10)])),
-        queue_page(),
-        serde_json::json!([]),
-    )
-    .await;
-    mount_command(&mock_server, queued_command()).await;
-
-    let mut run = default_run(&mock_server.uri());
-    some(run.policy.as_mut(), "run policy")?.per_cycle = 3;
-    run_short_polling(client, run).await;
+    let _run = run_sonarr_cycle(&api, episodes(&[(1, 10), (2, 10), (3, 10)]), Some(3)).await?;
 
     let complete = api.completed_requests.lock().await;
     assert_eq!(
@@ -1061,15 +967,17 @@ fn loop_config() -> Arc<crate::config::Config> {
     })
 }
 
-/// Waits up to 5 s for `done`, then stops the task behind `stop`.
-async fn until(
-    health: &crate::health::Health,
-    done: impl Fn(&crate::health::Health) -> bool,
+async fn wait_until<F, Fut>(
     stop: &CancellationToken,
     task: tokio::task::JoinHandle<()>,
-) -> TestResult {
+    mut check: F,
+) -> TestResult
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = bool>,
+{
     for _ in 0..500 {
-        if done(health) {
+        if check().await {
             break;
         }
         tokio::time::sleep(Duration::from_millis(10)).await;
@@ -1079,38 +987,25 @@ async fn until(
     Ok(())
 }
 
-#[tokio::test]
-async fn refused_lease_is_counted_and_is_no_contact() -> TestResult {
-    let (client, _) = start_fake_api(FakeApi::default()).await?;
-    let health = Arc::new(crate::health::Health::new(Duration::from_secs(180)));
-    let stop = CancellationToken::new();
-    let task = tokio::spawn(crate::lease_loop(
-        loop_config(),
-        client,
-        health.clone(),
-        stop.clone(),
-    ));
-    until(
-        &health,
-        |h| h.failures(crate::health::Call::LeaseRun) > 0,
-        &stop,
-        task,
-    )
-    .await?;
-    assert!(health.failures(crate::health::Call::LeaseRun) >= 1);
-    assert!(
-        !health.contacted(),
-        "a refused lease must not refresh /livez"
-    );
-    Ok(())
+/// Waits up to 5 s for `done`, then stops the task behind `stop`.
+async fn until(
+    health: &crate::health::Health,
+    done: impl Fn(&crate::health::Health) -> bool,
+    stop: &CancellationToken,
+    task: tokio::task::JoinHandle<()>,
+) -> TestResult {
+    wait_until(stop, task, || std::future::ready(done(health))).await
 }
 
-#[tokio::test]
-async fn answered_lease_records_contact() -> TestResult {
-    let api = FakeApi {
-        lease_empty: true,
-        ..FakeApi::default()
-    };
+struct LeaseLoopHandle {
+    health: Arc<crate::health::Health>,
+    stop: CancellationToken,
+    task: tokio::task::JoinHandle<()>,
+}
+
+async fn spawn_test_lease_loop(
+    api: FakeApi,
+) -> Result<LeaseLoopHandle, Box<dyn std::error::Error>> {
     let (client, _) = start_fake_api(api).await?;
     let health = Arc::new(crate::health::Health::new(Duration::from_secs(180)));
     let stop = CancellationToken::new();
@@ -1120,9 +1015,58 @@ async fn answered_lease_records_contact() -> TestResult {
         health.clone(),
         stop.clone(),
     ));
-    until(&health, crate::health::Health::contacted, &stop, task).await?;
-    assert!(health.contacted());
-    assert_eq!(health.failures(crate::health::Call::LeaseRun), 0);
+    Ok(LeaseLoopHandle { health, stop, task })
+}
+
+async fn spawn_test_heartbeat(api: FakeApi) -> Result<LeaseLoopHandle, Box<dyn std::error::Error>> {
+    let (client, _) = start_fake_api(api).await?;
+    let health = Arc::new(crate::health::Health::new(Duration::from_secs(180)));
+    let stop = CancellationToken::new();
+    let task = tokio::spawn(crate::heartbeat(
+        client,
+        "run-1".to_owned(),
+        "w-1".to_owned(),
+        Duration::from_millis(10),
+        health.clone(),
+        stop.clone(),
+    ));
+    Ok(LeaseLoopHandle { health, stop, task })
+}
+
+#[tokio::test]
+async fn refused_lease_is_counted_and_is_no_contact() -> TestResult {
+    let handle = spawn_test_lease_loop(FakeApi::default()).await?;
+    until(
+        &handle.health,
+        |h| h.failures(crate::health::Call::LeaseRun) > 0,
+        &handle.stop,
+        handle.task,
+    )
+    .await?;
+    assert!(handle.health.failures(crate::health::Call::LeaseRun) >= 1);
+    assert!(
+        !handle.health.contacted(),
+        "a refused lease must not refresh /livez"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn answered_lease_records_contact() -> TestResult {
+    let handle = spawn_test_lease_loop(FakeApi {
+        lease_empty: true,
+        ..FakeApi::default()
+    })
+    .await?;
+    until(
+        &handle.health,
+        crate::health::Health::contacted,
+        &handle.stop,
+        handle.task,
+    )
+    .await?;
+    assert!(handle.health.contacted());
+    assert_eq!(handle.health.failures(crate::health::Call::LeaseRun), 0);
     Ok(())
 }
 
@@ -1134,31 +1078,15 @@ async fn leased_run_is_executed_and_completed() -> TestResult {
         ..FakeApi::default()
     };
     let completed = api.completed_requests.clone();
-    let (client, _) = start_fake_api(api).await?;
-    let health = Arc::new(crate::health::Health::new(Duration::from_secs(180)));
-    let stop = CancellationToken::new();
-    let task = tokio::spawn(crate::lease_loop(
-        loop_config(),
-        client,
-        health.clone(),
-        stop.clone(),
-    ));
-    let mut done = false;
-    for _ in 0..500 {
-        if !completed.lock().await.is_empty() {
-            done = true;
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
-    stop.cancel();
-    tokio::time::timeout(Duration::from_secs(5), task).await??;
-    assert!(done, "the leased run was never completed");
-    assert_eq!(
-        completed.lock().await.first().map(|c| c.run_id.as_str()),
-        Some("test_run")
-    );
-    assert_eq!(health.failures(crate::health::Call::CompleteRun), 0);
+    let handle = spawn_test_lease_loop(api).await?;
+    wait_until(&handle.stop, handle.task, || {
+        let comp = completed.clone();
+        async move { !comp.lock().await.is_empty() }
+    })
+    .await?;
+    let guard = completed.lock().await;
+    assert_eq!(guard.first().map(|c| c.run_id.as_str()), Some("test_run"));
+    assert_eq!(handle.health.failures(crate::health::Call::CompleteRun), 0);
     Ok(())
 }
 
@@ -1169,30 +1097,20 @@ async fn heartbeat_failure_is_counted_and_success_is_contact() -> TestResult {
             fail_heartbeat: fail,
             ..FakeApi::default()
         };
-        let (client, _) = start_fake_api(api).await?;
-        let health = Arc::new(crate::health::Health::new(Duration::from_secs(180)));
-        let stop = CancellationToken::new();
-        let task = tokio::spawn(crate::heartbeat(
-            client,
-            "run-1".to_owned(),
-            "w-1".to_owned(),
-            Duration::from_millis(10),
-            health.clone(),
-            stop.clone(),
-        ));
+        let handle = spawn_test_heartbeat(api).await?;
         until(
-            &health,
+            &handle.health,
             |h| h.contacted() || h.failures(crate::health::Call::Heartbeat) > 0,
-            &stop,
-            task,
+            &handle.stop,
+            handle.task,
         )
         .await?;
         assert_eq!(
-            health.failures(crate::health::Call::Heartbeat) > 0,
+            handle.health.failures(crate::health::Call::Heartbeat) > 0,
             want_failures,
             "fail={fail}"
         );
-        assert_eq!(health.contacted(), want_contact, "fail={fail}");
+        assert_eq!(handle.health.contacted(), want_contact, "fail={fail}");
     }
     Ok(())
 }

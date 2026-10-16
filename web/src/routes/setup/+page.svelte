@@ -12,6 +12,7 @@ SPDX-License-Identifier: EUPL-1.2
 
 	let username = $state('admin');
 	let password = $state('');
+	let setupSecret = $state('');
 	let error = $state('');
 	let busy = $state(false);
 
@@ -20,7 +21,7 @@ SPDX-License-Identifier: EUPL-1.2
 		busy = true;
 		error = '';
 		try {
-			await session.setup(username, password);
+			await session.setup(username, password, session.secretRequired ? setupSecret : undefined);
 			await goto(resolve('/'));
 		} catch (err) {
 			error = describeError(err);
@@ -55,6 +56,18 @@ SPDX-License-Identifier: EUPL-1.2
 				bind:value={password}
 			/>
 		</Field>
+		{#if session.secretRequired}
+			<Field id="setup-secret" label={m.setup_secret()} hint={m.setup_secret_help()}>
+				<input
+					id="setup-secret"
+					class="input"
+					type="password"
+					autocomplete="one-time-code"
+					required
+					bind:value={setupSecret}
+				/>
+			</Field>
+		{/if}
 		{#if error}
 			<p role="alert" class="text-sm text-danger">{error}</p>
 		{/if}

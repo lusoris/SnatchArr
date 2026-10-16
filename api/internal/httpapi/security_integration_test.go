@@ -37,9 +37,13 @@ func newStreamFixture(t *testing.T) streamFixture {
 	f := newIntegrationFixture(t)
 	rec := httptest.NewRecorder()
 	ctx := withHTTPTest(t.Context(), rec, httptest.NewRequest(http.MethodPost, "/auth/setup", nil))
-	sess, err := f.h.CompleteSetup(ctx, &oas.SetupRequest{Username: "stream-admin", Password: "correct-horse-battery-staple"})
+	res, err := f.h.CompleteSetup(ctx, &oas.SetupRequest{Username: "stream-admin", Password: "correct-horse-battery-staple"})
 	if err != nil {
 		t.Fatalf("CompleteSetup() = %v", err)
+	}
+	sess, ok := res.(*oas.Session)
+	if !ok {
+		t.Fatalf("CompleteSetup() returned %T, want *oas.Session", res)
 	}
 	keys, err := apikey.New(auth.NewPgAPIKeyStore(f.st, f.clk), apikey.Options{Prefix: "sk", HMACSecret: []byte("test-secret-of-at-least-32-bytes"), Clock: f.clk})
 	if err != nil {
@@ -49,8 +53,9 @@ func newStreamFixture(t *testing.T) streamFixture {
 	if err != nil {
 		t.Fatalf("Issue() = %v", err)
 	}
+	apiKeys := auth.NewAPIKeys(f.st, keys, f.clk, slog.New(slog.DiscardHandler))
 	r := chi.NewRouter()
-	MountStream(r, MountParams{Logger: slog.New(slog.DiscardHandler), Security: NewSecurity(f.sessMgr, keys, f.h.auth)},
+	MountStream(r, MountParams{Logger: slog.New(slog.DiscardHandler), Security: NewSecurity(f.sessMgr, keys, f.h.auth, apiKeys, f.clk, slog.New(slog.DiscardHandler))},
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if _, ok := UserFrom(r.Context()); !ok {
 				w.WriteHeader(http.StatusInternalServerError)

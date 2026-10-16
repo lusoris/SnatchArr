@@ -453,7 +453,7 @@ trashGuideUrl: https://github.com/TRaSH-Guides/Guides
 	if err = f.instSvc.Delete(ctx, idA); err != nil {
 		t.Fatalf("Delete(idA) = %v, want nil", err)
 	}
-	if _, getErr := f.instSvc.Get(ctx, idA); !instances.IsNotFound(getErr) {
+	if _, getErr := f.instSvc.Get(ctx, idA); !errors.Is(getErr, domain.ErrNotFound) {
 		t.Fatalf("Get(idA) = %v, want ErrNotFound", getErr)
 	}
 

@@ -63,11 +63,13 @@ func newRouterFixture(t *testing.T) *routerFixture {
 	if err != nil {
 		t.Fatalf("apikey.New: %v", err)
 	}
+	apiKeys := auth.NewAPIKeys(f.st, keys, f.clk, slog.New(slog.DiscardHandler))
+	f.h.apiKeys = apiKeys
 	r := chi.NewRouter()
 	err = Mount(r, MountParams{
 		Logger:   slog.New(slog.DiscardHandler),
 		Handlers: f.h,
-		Security: NewSecurity(f.sessMgr, keys, f.h.auth),
+		Security: NewSecurity(f.sessMgr, keys, f.h.auth, apiKeys, f.clk, slog.New(slog.DiscardHandler)),
 		CSRF:     csrfMW,
 	})
 	if err != nil {
@@ -164,6 +166,7 @@ func specOperations(t *testing.T) []specOp {
 
 type idsState struct {
 	csrfToken     string
+	apiKeyID      string
 	instanceID    string
 	runID         string
 	scheduleID    string
@@ -302,6 +305,55 @@ func stepsAuth() []routerStep {
 					t.Fatalf("getSession user = %v, want admin", decoded["user"])
 				}
 			},
+		},
+	}
+}
+
+func stepsAPIKeys() []routerStep {
+	return []routerStep{
+		{
+			op:     "createAPIKey",
+			method: http.MethodPost,
+			path:   func(_ *idsState) string { return "/auth/api-keys" },
+			body: func(_ *idsState) any {
+				return map[string]any{
+					"name": "router-test-key",
+				}
+			},
+			want: http.StatusCreated,
+			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
+				t.Helper()
+				id, ok := decoded["id"].(string)
+				if !ok || id == "" {
+					t.Fatalf("createAPIKey id = %v, want non-empty", decoded["id"])
+				}
+				ids.apiKeyID = id
+				secret, ok := decoded["secret"].(string)
+				if !ok || secret == "" {
+					t.Fatalf("createAPIKey secret = %v, want non-empty", decoded["secret"])
+				}
+				if decoded["name"] != "router-test-key" {
+					t.Fatalf("createAPIKey name = %v, want router-test-key", decoded["name"])
+				}
+			},
+		},
+		{
+			op:     "listAPIKeys",
+			method: http.MethodGet,
+			path:   func(_ *idsState) string { return "/auth/api-keys" },
+			want:   http.StatusOK,
+			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
+				t.Helper()
+				if !containsID(decoded["items"], ids.apiKeyID) {
+					t.Fatalf("listAPIKeys missing key %s", ids.apiKeyID)
+				}
+			},
+		},
+		{
+			op:     "revokeAPIKey",
+			method: http.MethodDelete,
+			path:   func(ids *idsState) string { return "/auth/api-keys/" + ids.apiKeyID },
+			want:   http.StatusNoContent,
 		},
 	}
 }
@@ -1139,6 +1191,18 @@ func stepsDeletesAndAuth() []routerStep {
 			},
 		},
 		{
+			op:     "changePassword",
+			method: http.MethodPost,
+			path:   func(_ *idsState) string { return "/auth/password" },
+			body: func(_ *idsState) any {
+				return map[string]any{
+					"current_password": "correct-horse-battery-staple",
+					"new_password":     "changed-horse-battery-staple",
+				}
+			},
+			want: http.StatusNoContent,
+		},
+		{
 			op:     "logout",
 			method: http.MethodPost,
 			path:   func(_ *idsState) string { return "/auth/logout" },
@@ -1148,8 +1212,9 @@ func stepsDeletesAndAuth() []routerStep {
 }
 
 func buildRouterSteps(f *routerFixture) []routerStep {
-	steps := make([]routerStep, 0, 59)
+	steps := make([]routerStep, 0, 60)
 	steps = append(steps, stepsAuth()...)
+	steps = append(steps, stepsAPIKeys()...)
 	steps = append(steps, stepsInstances()...)
 	steps = append(steps, stepsPoliciesAndRuns()...)
 	steps = append(steps, stepsSettingsAndSchedules()...)
@@ -1598,4 +1663,167 @@ func TestRouterProblemResponses(t *testing.T) {
 	testProblemNotFound(t, f)
 	testProblemInvalidParamsAndAuth(t, f)
 	testProblemViewerAndAPIKeys(t, f, adminUser)
+}
+
+func TestChangePasswordSessionTermination(t *testing.T) {
+	t.Parallel()
+	f := newRouterFixture(t)
+	_ = completeInitialSetup(t, f)
+	ctx := t.Context()
+
+	// 1. Session A: f.client (jar A) is already logged in as "admin" ("password-admin-1234") from completeInitialSetup.
+	// Get CSRF token for Session A.
+	sessReq, err := http.NewRequestWithContext(ctx, http.MethodGet, f.srv.URL+PathPrefix+"/auth/session", nil)
+	if err != nil {
+		t.Fatalf("session A request: %v", err)
+	}
+	sessResp, err := f.client.Do(sessReq)
+	if err != nil {
+		t.Fatalf("session A Do: %v", err)
+	}
+	defer func() { _ = sessResp.Body.Close() }()
+	if sessResp.StatusCode != http.StatusOK {
+		t.Fatalf("session A status = %d, want 200", sessResp.StatusCode)
+	}
+	var sessA oas.Session
+	if err = json.NewDecoder(sessResp.Body).Decode(&sessA); err != nil {
+		t.Fatalf("decode session A: %v", err)
+	}
+	csrfTokenA := sessA.CsrfToken
+
+	// 2. Session B: second login as admin with a separate cookie jar
+	jarB, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatalf("cookiejar B: %v", err)
+	}
+	clientB := &http.Client{Timeout: 10 * time.Second, Jar: jarB}
+	loginBodyB := strings.NewReader(`{"username":"admin","password":"password-admin-1234"}`)
+	loginReqB, err := http.NewRequestWithContext(ctx, http.MethodPost, f.srv.URL+PathPrefix+"/auth/login", loginBodyB)
+	if err != nil {
+		t.Fatalf("loginReqB: %v", err)
+	}
+	loginReqB.Header.Set("Content-Type", "application/json")
+	loginRespB, err := clientB.Do(loginReqB)
+	if err != nil {
+		t.Fatalf("clientB login: %v", err)
+	}
+	_ = loginRespB.Body.Close()
+	if loginRespB.StatusCode != http.StatusOK {
+		t.Fatalf("clientB login status = %d, want 200", loginRespB.StatusCode)
+	}
+
+	// 3. Other user session: viewer user with its own cookie jar
+	viewerUser, viewerPass := createViewerUser(t, f)
+	jarOther, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatalf("cookiejar Other: %v", err)
+	}
+	clientOther := &http.Client{Timeout: 10 * time.Second, Jar: jarOther}
+	loginBodyOther := bytes.NewReader([]byte(fmt.Sprintf(`{"username":%q,"password":%q}`, viewerUser, viewerPass)))
+	loginReqOther, err := http.NewRequestWithContext(ctx, http.MethodPost, f.srv.URL+PathPrefix+"/auth/login", loginBodyOther)
+	if err != nil {
+		t.Fatalf("loginReqOther: %v", err)
+	}
+	loginReqOther.Header.Set("Content-Type", "application/json")
+	loginRespOther, err := clientOther.Do(loginReqOther)
+	if err != nil {
+		t.Fatalf("clientOther login: %v", err)
+	}
+	_ = loginRespOther.Body.Close()
+	if loginRespOther.StatusCode != http.StatusOK {
+		t.Fatalf("clientOther login status = %d, want 200", loginRespOther.StatusCode)
+	}
+
+	// 4. POST /auth/password from session A with CSRF
+	newAdminPass := "new-password-admin-5678"
+	changeBody := bytes.NewReader([]byte(fmt.Sprintf(`{"current_password":"password-admin-1234","new_password":%q}`, newAdminPass)))
+	changeReq, err := http.NewRequestWithContext(ctx, http.MethodPost, f.srv.URL+PathPrefix+"/auth/password", changeBody)
+	if err != nil {
+		t.Fatalf("changeReq: %v", err)
+	}
+	changeReq.Header.Set("Content-Type", "application/json")
+	changeReq.Header.Set("X-Csrf-Token", csrfTokenA)
+	changeResp, err := f.client.Do(changeReq)
+	if err != nil {
+		t.Fatalf("changePassword Do: %v", err)
+	}
+	_ = changeResp.Body.Close()
+	if changeResp.StatusCode != http.StatusNoContent {
+		t.Fatalf("changePassword status = %d, want 204", changeResp.StatusCode)
+	}
+
+	// 5. Verification:
+	// A still reaches /auth/session (200)
+	checkReqA, err := http.NewRequestWithContext(ctx, http.MethodGet, f.srv.URL+PathPrefix+"/auth/session", nil)
+	if err != nil {
+		t.Fatalf("checkReqA: %v", err)
+	}
+	checkRespA, err := f.client.Do(checkReqA)
+	if err != nil {
+		t.Fatalf("checkRespA: %v", err)
+	}
+	_ = checkRespA.Body.Close()
+	if checkRespA.StatusCode != http.StatusOK {
+		t.Fatalf("session A /auth/session status = %d, want 200", checkRespA.StatusCode)
+	}
+
+	// B gets 401
+	checkReqB, err := http.NewRequestWithContext(ctx, http.MethodGet, f.srv.URL+PathPrefix+"/auth/session", nil)
+	if err != nil {
+		t.Fatalf("checkReqB: %v", err)
+	}
+	checkRespB, err := clientB.Do(checkReqB)
+	if err != nil {
+		t.Fatalf("checkRespB: %v", err)
+	}
+	_ = checkRespB.Body.Close()
+	if checkRespB.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("session B /auth/session status = %d, want 401", checkRespB.StatusCode)
+	}
+
+	// other user's session still 200
+	checkReqOther, err := http.NewRequestWithContext(ctx, http.MethodGet, f.srv.URL+PathPrefix+"/auth/session", nil)
+	if err != nil {
+		t.Fatalf("checkReqOther: %v", err)
+	}
+	checkRespOther, err := clientOther.Do(checkReqOther)
+	if err != nil {
+		t.Fatalf("checkRespOther: %v", err)
+	}
+	_ = checkRespOther.Body.Close()
+	if checkRespOther.StatusCode != http.StatusOK {
+		t.Fatalf("other user /auth/session status = %d, want 200", checkRespOther.StatusCode)
+	}
+
+	// old password login fails
+	oldLoginBody := strings.NewReader(`{"username":"admin","password":"password-admin-1234"}`)
+	oldLoginReq, err := http.NewRequestWithContext(ctx, http.MethodPost, f.srv.URL+PathPrefix+"/auth/login", oldLoginBody)
+	if err != nil {
+		t.Fatalf("oldLoginReq: %v", err)
+	}
+	oldLoginReq.Header.Set("Content-Type", "application/json")
+	oldLoginResp, err := (&http.Client{Timeout: 10 * time.Second}).Do(oldLoginReq)
+	if err != nil {
+		t.Fatalf("oldLogin: %v", err)
+	}
+	_ = oldLoginResp.Body.Close()
+	if oldLoginResp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("login with old password status = %d, want 401", oldLoginResp.StatusCode)
+	}
+
+	// new password login works
+	newLoginBody := bytes.NewReader([]byte(fmt.Sprintf(`{"username":"admin","password":%q}`, newAdminPass)))
+	newLoginReq, err := http.NewRequestWithContext(ctx, http.MethodPost, f.srv.URL+PathPrefix+"/auth/login", newLoginBody)
+	if err != nil {
+		t.Fatalf("newLoginReq: %v", err)
+	}
+	newLoginReq.Header.Set("Content-Type", "application/json")
+	newLoginResp, err := (&http.Client{Timeout: 10 * time.Second}).Do(newLoginReq)
+	if err != nil {
+		t.Fatalf("newLogin: %v", err)
+	}
+	_ = newLoginResp.Body.Close()
+	if newLoginResp.StatusCode != http.StatusOK {
+		t.Fatalf("login with new password status = %d, want 200", newLoginResp.StatusCode)
+	}
 }

@@ -103,6 +103,14 @@
 	"settings_user_agent": "User agent",
 	"settings_global_cap": "Global stamina (0 = off)",
 	"settings_saved": "Settings saved",
+	"setup_secret": "Setup secret",
+	"setup_secret_help": "Bootstrap secret required by this SnatchArr instance.",
+	"change_password_title": "Change password",
+	"current_password": "Current password",
+	"new_password": "New password",
+	"change_password_submit": "Update password",
+	"password_changed": "Password updated",
+	"password_min_hint": "At least 12 characters",
 	"theme_toggle": "Toggle theme",
 	"language": "Language"
 }

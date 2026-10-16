@@ -12,13 +12,15 @@ import (
 )
 
 type ApiKey struct {
-	ID        string
-	OwnerID   uuid.UUID
-	Scopes    []string
-	Hash      []byte
-	CreatedAt time.Time
-	ExpiresAt *time.Time
-	RevokedAt *time.Time
+	ID         string
+	OwnerID    uuid.UUID
+	Scopes     []string
+	Hash       []byte
+	CreatedAt  time.Time
+	ExpiresAt  *time.Time
+	RevokedAt  *time.Time
+	Name       string
+	LastUsedAt *time.Time
 }
 
 type CleanuparrLink struct {
@@ -74,6 +76,13 @@ type Instance struct {
 	UpdatedAt           time.Time
 	LastSeenProduct     *string
 	ConfigarrOrphanedAt *time.Time
+}
+
+type LoginLockout struct {
+	Key         string
+	Fails       int32
+	FirstFailAt time.Time
+	LockedUntil *time.Time
 }
 
 type ProcessedItem struct {

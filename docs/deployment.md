@@ -99,6 +99,12 @@ helm install snatcharr oci://ghcr.io/lusoris/charts/snatcharr \
 The first visit runs the setup wizard. `helm status` prints the port-forward command when
 no Ingress or HTTPRoute is enabled.
 
+When exposing the API behind an Ingress or reverse proxy, configure `config.trustedProxies`
+(or `APP_SNATCHARR_PROXY_TRUSTED`) with the proxy or ingress controller CIDRs. The API uses
+this list to trust `X-Forwarded-For` and resolve the client IP. Without trusted proxies,
+all forwarded requests appear to arrive from the proxy's IP address, so 5 failed login
+attempts by any client will lock out the proxy IP and block all users from logging in.
+
 ### What the chart renders
 
 | Resource | Notes |
@@ -191,6 +197,17 @@ kubectl -n snatcharr create secret generic snatcharr-secrets \
 
 and set `secrets.existingSecret=snatcharr-secrets`. The crypto key encrypts every *arr
 API key and download-client password at rest; losing it means re-entering them.
+
+The Helm chart generates a random bootstrap secret (`setup-secret`) into the Secret by default,
+locking `POST /auth/setup` on new clusters. Retrieve it for the first-run setup wizard:
+
+```sh
+kubectl -n snatcharr get secret snatcharr-secrets -o jsonpath="{.data.setup-secret}" | base64 -d; echo
+```
+
+If supplying an `existingSecret`, add `--from-literal=setup-secret="$(openssl rand -base64 36)"`
+(or set `secrets.setupSecret`). When `existingSecret` is used without `setup-secret`, the deployment marks
+the environment variable optional so existing clusters continue running without breaking.
 
 ### Postgres
 

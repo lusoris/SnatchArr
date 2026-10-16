@@ -19,6 +19,11 @@ SPDX-License-Identifier: EUPL-1.2
 		queryFn: async () => (await api.GET('/settings')).data
 	});
 	let draft = $state<Settings | null>(null);
+	let currentPassword = $state('');
+	let newPassword = $state('');
+	let passwordError = $state('');
+	let changingPassword = $state(false);
+
 	$effect(() => {
 		if (settings.data && !draft) draft = { ...settings.data };
 	});
@@ -28,6 +33,27 @@ SPDX-License-Identifier: EUPL-1.2
 		onSuccess: () => toast.success(m.settings_saved()),
 		onError: (err) => toast.error(describeError(err))
 	});
+
+	async function changePassword(e: SubmitEvent): Promise<void> {
+		e.preventDefault();
+		changingPassword = true;
+		passwordError = '';
+		try {
+			await api.POST('/auth/password', {
+				body: {
+					current_password: currentPassword,
+					new_password: newPassword
+				}
+			});
+			toast.success(m.password_changed());
+			currentPassword = '';
+			newPassword = '';
+		} catch (err) {
+			passwordError = describeError(err);
+		} finally {
+			changingPassword = false;
+		}
+	}
 </script>
 
 <h1 class="mb-4 text-2xl font-semibold">{m.settings_title()}</h1>
@@ -71,6 +97,39 @@ SPDX-License-Identifier: EUPL-1.2
 			<button type="submit" class="btn btn-primary" disabled={save.isPending}
 				>{m.instance_save()}</button
 			>
+		</div>
+	</form>
+
+	<h2 class="mt-8 mb-4 text-xl font-semibold">{m.change_password_title()}</h2>
+	<form class="card flex max-w-xl flex-col gap-4" onsubmit={changePassword}>
+		<Field id="current-password" label={m.current_password()}>
+			<input
+				id="current-password"
+				class="input"
+				type="password"
+				autocomplete="current-password"
+				required
+				bind:value={currentPassword}
+			/>
+		</Field>
+		<Field id="new-password" label={m.new_password()} hint={m.password_min_hint()}>
+			<input
+				id="new-password"
+				class="input"
+				type="password"
+				autocomplete="new-password"
+				required
+				minlength="12"
+				bind:value={newPassword}
+			/>
+		</Field>
+		{#if passwordError}
+			<p role="alert" class="text-sm text-danger">{passwordError}</p>
+		{/if}
+		<div>
+			<button type="submit" class="btn btn-primary" disabled={changingPassword}>
+				{m.change_password_submit()}
+			</button>
 		</div>
 	</form>
 {/if}

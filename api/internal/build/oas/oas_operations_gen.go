@@ -7,7 +7,9 @@ type OperationName = string
 
 const (
 	CancelRunOperation               OperationName = "CancelRun"
+	ChangePasswordOperation          OperationName = "ChangePassword"
 	CompleteSetupOperation           OperationName = "CompleteSetup"
+	CreateAPIKeyOperation            OperationName = "CreateAPIKey"
 	CreateCleanuparrLinkOperation    OperationName = "CreateCleanuparrLink"
 	CreateDownloadClientOperation    OperationName = "CreateDownloadClient"
 	CreateInstanceOperation          OperationName = "CreateInstance"
@@ -35,6 +37,7 @@ const (
 	GetSystemStatusOperation         OperationName = "GetSystemStatus"
 	ImportConfigarrOperation         OperationName = "ImportConfigarr"
 	ImportSeerrInstancesOperation    OperationName = "ImportSeerrInstances"
+	ListAPIKeysOperation             OperationName = "ListAPIKeys"
 	ListCleanuparrLinksOperation     OperationName = "ListCleanuparrLinks"
 	ListDownloadClientsOperation     OperationName = "ListDownloadClients"
 	ListEventsOperation              OperationName = "ListEvents"
@@ -46,6 +49,7 @@ const (
 	LoginOperation                   OperationName = "Login"
 	LogoutOperation                  OperationName = "Logout"
 	ResetStateOperation              OperationName = "ResetState"
+	RevokeAPIKeyOperation            OperationName = "RevokeAPIKey"
 	SnatchSeerrRequestOperation      OperationName = "SnatchSeerrRequest"
 	SyncSeerrLinkOperation           OperationName = "SyncSeerrLink"
 	TestCleanuparrLinkOperation      OperationName = "TestCleanuparrLink"

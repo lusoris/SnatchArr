@@ -52,7 +52,7 @@ api-verify: ## golangci-lint + go fix + gosec + govulncheck + go test -race + ge
 	sh tools/spectral/lint.sh api/openapi/openapi.yaml
 
 api-gen: ## ogen + sqlc generation inside api/
-	cd api && go generate ./...
+	cd api && sqlc generate && go generate ./...
 
 # gosec loads packages only when it starts in the directory that holds go.mod. Started in api/ it
 # lists the directories, checks no file, prints "Files  : 0" and exits 0. This target is the one
