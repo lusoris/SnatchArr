@@ -58,9 +58,11 @@ Each fork passes two kinds of test.
   are in `tools/upstreamspec/specs.yaml`.
 - **Worker run.** `worker/crates/snatch-worker/src/executor/executor_tests/readarr_forks.rs`
   runs a whole snatch, for missing books and for upgrades, against what each fork answered
-  on 2026-10-11. Run it with `cargo test -p snatch-worker readarr_forks`.
+  on 2026-10-16. Run it with `cargo test -p snatch-worker readarr_forks`.
 
-The answers were recorded from these images, each started with an empty library:
+The answers were recorded from these images. On 2026-10-11 each library was empty; on
+2026-10-16 each held one author, added through the fork's own metadata source, with wanted
+books and no file:
 
 - Bookshelf: `ghcr.io/pennydreadful/bookshelf@sha256:67498dd5ece516867d72ee642abd6c1a66b36a135c8f7da0127109564372beb1`.
   Its status answer names the pinned commit as the package version.
@@ -82,12 +84,19 @@ the author). Stamina is debited per selected book all the same
 
 ### Limits of the tests
 
-- The libraries were empty, so no fork returned a wanted book. The paging envelopes of the
-  lists, the history and the command answers in the worker test are the forks' own; the
-  two book records are written by hand from the fields the worker reads.
-- The recorded author search named an author the forks did not have. Each fork accepted
-  it and then ended the command as `failed`. No search of a real author, and no grab, has
-  been observed ([#181](https://github.com/lusoris/SnatchArr/issues/181)).
+- The missing lists in the worker test are the forks' answers of 2026-10-16. A book record
+  keeps only the fields the worker reads; the covers, links and descriptions the forks
+  return are left out.
+- Each fork ran the `AuthorSearch` of its author and ended it as `completed`, with
+  "0 reports downloaded": no indexer was configured, so no search reached an indexer and
+  nothing was grabbed. The search of an author the library did not have, recorded on
+  2026-10-11, ended as `failed` on every fork; the test keeps it as its negative case.
+- No book had a file, so every cutoff list was empty. The upgrade run in the worker test
+  reads the books of the missing list from the fork's cutoff envelope.
+- Bookshelf could not look up an author by name on 2026-10-16: its metadata source
+  (`hardcover.bookinfo.pro`) did not answer the search within 100 seconds. Adding the
+  author by its Hardcover id worked. Chaptarr and the Faustvii fork found the author by
+  name.
 - The contract tests compare what the client reads and which requests it sends. They do
   not compare the body of the search command with the spec
   ([Limits](upstream-contracts.md#limits)).
