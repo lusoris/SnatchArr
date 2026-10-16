@@ -639,10 +639,44 @@ jobs:
             --set 'networkPolicy.arrCidrs={10.0.0.0/8,0.0.0.0/0}' \
             --set-json 'networkPolicy.arrPeers=[{"namespaceSelector":{"matchLabels":{"kubernetes.io/metadata.name":"media"}}},{"podSelector":{"matchLabels":{"app.kubernetes.io/name":"lidarr"}},"ports":[{"port":8686,"protocol":"TCP"}]}]' \
             | kubectl apply --dry-run=server --namespace snatcharr -f -
+      # The upgrade test runs the chart on the images of this checkout: on a release pull request
+      # the chart already pins the new appVersion, whose images are not published yet. Read-only
+      # use of the image-smoke build cache.
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          driver-opts: image=mirror.gcr.io/moby/buildkit:v0.33.1@sha256:cec9f139f45e93c5c69c60f8b07cfad9f43f4ef6b6a6cd917527fea5ff2e3dea
+          buildkitd-config-inline: |
+            [registry."docker.io"]
+              mirrors = ["mirror.gcr.io"]
+      - name: Build api image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: snatcharr-api:e2e
+          cache-from: type=gha,scope=api
+      - name: Build worker image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: worker/Dockerfile
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: snatcharr-worker:e2e
+          cache-from: type=gha,scope=worker
+      - name: Load the images into kind
+        run: kind load docker-image snatcharr-api:e2e snatcharr-worker:e2e --name chart-check
       # The chart installed on CloudNativePG with the previous Postgres major and upgraded by
       # the documented imageName change: data read-back, API back up, and a planted upgrade
       # without the image change that must be refused (#252).
       - name: make e2e-cnpg-pg-upgrade
+        env:
+          UPGRADE_API_IMAGE: snatcharr-api:e2e
+          UPGRADE_WORKER_IMAGE: snatcharr-worker:e2e
         run: make e2e-cnpg-pg-upgrade
 
   # The hand-written clients against the OpenAPI specs their upstream projects publish. The specs

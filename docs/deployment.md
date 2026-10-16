@@ -279,7 +279,10 @@ the chart on `17.10-system-trixie`, completes the setup and changes the image to
 `18.6-system-trixie`. It then checks that the operator reports major 18, that every table
 reads back unchanged, that the migration version is at least 7, and that the API starts with
 the setup complete and the old password. A planted chart upgrade without the image change
-must be refused first (`tools/e2e/cnpg_pg_upgrade.sh`).
+must be refused first (`tools/e2e/cnpg_pg_upgrade.sh`). CI runs it on the API and worker
+images built from the checkout (`UPGRADE_API_IMAGE`, `UPGRADE_WORKER_IMAGE`), because a release
+pull request pins an appVersion whose images are not published yet; without them the test runs
+the released images of the chart's appVersion.
 
 **External Postgres** (`postgres.external.dsnSecretRef`): dump and restore with the client
 tools of the new major. Stop the API first, so nothing writes during the dump (`kubectl scale deployment
