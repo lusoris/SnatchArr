@@ -13,6 +13,16 @@ SPDX-License-Identifier: EUPL-1.2
 	import { keys } from '#lib/query.js';
 
 	type ChannelKind = components['schemas']['NotificationChannelKind'];
+	// Product names, the same in every locale.
+	const channelKinds: readonly { value: ChannelKind; label: string }[] = [
+		{ value: 'webhook', label: 'Webhook' },
+		{ value: 'discord', label: 'Discord' },
+		{ value: 'slack', label: 'Slack' },
+		{ value: 'telegram', label: 'Telegram' },
+		{ value: 'ntfy', label: 'ntfy' },
+		{ value: 'gotify', label: 'Gotify' },
+		{ value: 'teams', label: 'Microsoft Teams' }
+	];
 
 	const channels = createSentioQuery({
 		queryKey: keys.channels,
@@ -120,7 +130,7 @@ SPDX-License-Identifier: EUPL-1.2
 				<th scope="col">{m.channel_kind()}</th>
 				<th scope="col">{m.channel_enabled()}</th>
 				<th scope="col">{m.channel_has_secret()}</th>
-				<th scope="col"><span class="sr-only">Actions</span></th>
+				<th scope="col"><span class="sr-only">{m.action_actions()}</span></th>
 			</tr>
 		</thead>
 		<tbody>
@@ -167,13 +177,9 @@ SPDX-License-Identifier: EUPL-1.2
 	</Field>
 	<Field id="channel-kind" label={m.channel_kind()}>
 		<select id="channel-kind" class="select" bind:value={kind}>
-			<option value="webhook">Webhook</option>
-			<option value="discord">Discord</option>
-			<option value="slack">Slack</option>
-			<option value="telegram">Telegram</option>
-			<option value="ntfy">ntfy</option>
-			<option value="gotify">Gotify</option>
-			<option value="teams">Microsoft Teams</option>
+			{#each channelKinds as k (k.value)}
+				<option value={k.value}>{k.label}</option>
+			{/each}
 		</select>
 	</Field>
 

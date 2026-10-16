@@ -77,7 +77,7 @@ SPDX-License-Identifier: EUPL-1.2
 						</p>
 					</div>
 					<span class="rounded-full border border-line px-2 py-0.5 text-xs"
-						>{inst.enabled ? m.instance_enabled() : 'off'}</span
+						>{inst.enabled ? m.instance_enabled() : m.instance_disabled()}</span
 					>
 				</div>
 				{#if cap}

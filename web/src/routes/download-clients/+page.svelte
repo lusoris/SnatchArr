@@ -149,7 +149,7 @@ SPDX-License-Identifier: EUPL-1.2
 	<label class="flex flex-col gap-1 text-sm">
 		<span>{m.dlclients_discover()}</span>
 		<select class="select" bind:value={discoverFrom} required>
-			<option value="" disabled>–</option>
+			<option value="" disabled>{m.dlclients_select_instance()}</option>
 			{#each instances.data ?? [] as inst (inst.id)}
 				<option value={inst.id}>{inst.name}</option>
 			{/each}
