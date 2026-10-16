@@ -48,6 +48,7 @@ SPDX-License-Identifier: EUPL-1.2
 		{ href: '/download-clients', label: m.nav_download_clients() },
 		{ href: '/seerr', label: m.nav_seerr() },
 		{ href: '/cleanuparr', label: m.nav_cleanuparr() },
+		{ href: '/configarr', label: m.nav_configarr() },
 		{ href: '/settings', label: m.nav_settings() },
 		{ href: '/account', label: m.nav_account() }
 	] as const);

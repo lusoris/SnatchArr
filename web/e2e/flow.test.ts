@@ -319,3 +319,67 @@ test('instance actions: edit the name, read it back, reset processed memory with
 		page.getByText(/\d+ (processed items forgotten|verarbeitete Einträge vergessen)/i)
 	).toBeVisible();
 });
+
+test('download clients: create, edit and delete one through the UI', async ({ page }) => {
+	// C9-04 runs in parallel and logs out; start a session of this test's own.
+	await page.context().clearCookies();
+	const login = await page.request.post('/api/v1/auth/login', {
+		data: { username: 'admin', password: 'smoke-password-1234' }
+	});
+	expect(login.ok()).toBeTruthy();
+
+	const name = 'e2e-qbittorrent';
+	const renamed = 'e2e-qbittorrent-renamed';
+	const save = page.getByRole('button', { name: /^(save|speichern)$/i });
+	const card = (title: string) =>
+		page
+			.getByRole('listitem')
+			.filter({ has: page.getByRole('heading', { level: 2, name: title }) });
+	type Stored = { id: string; name: string; username: string; secret?: string };
+	async function stored(): Promise<Stored[]> {
+		const res = await page.request.get('/api/v1/download-clients');
+		expect(res.ok()).toBeTruthy();
+		return (await res.json()) as Stored[];
+	}
+
+	await page.goto('/download-clients');
+	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+
+	// 1. Create
+	await page.locator('#dlclient-kind').selectOption('qbittorrent');
+	await page.locator('#dlclient-name').fill(name);
+	await page.locator('#dlclient-base-url').fill('http://127.0.0.1:9');
+	await page.locator('#dlclient-username').fill('admin');
+	await page.locator('#dlclient-secret').fill('e2e-password-1234');
+	// Disabled, so the status poll never dials the made-up address.
+	await page.getByRole('checkbox', { name: /^(enabled|aktiv)$/i }).uncheck();
+	await save.click();
+	await expect(card(name)).toBeVisible();
+	const created = (await stored()).find((c) => c.name === name);
+	expect(created?.username).toBe('admin');
+	expect(created && 'secret' in created).toBe(false);
+
+	// 2. Edit: the stored secret is never shown, and an empty field keeps it.
+	await card(name)
+		.getByRole('button', { name: /^(edit|bearbeiten)$/i })
+		.click();
+	await expect(page.locator('#dlclient-name')).toHaveValue(name);
+	await expect(page.locator('#dlclient-secret')).toHaveValue('');
+	await page.locator('#dlclient-name').fill(renamed);
+	await save.click();
+	await expect(card(renamed)).toBeVisible();
+	expect((await stored()).find((c) => c.id === created?.id)?.name).toBe(renamed);
+
+	// 3. Delete, through the in-page confirmation; the open question is axe-clean too.
+	await card(renamed)
+		.getByRole('button', { name: /^(delete|löschen)$/i })
+		.click();
+	await expect(card(renamed).getByRole('group')).toBeVisible();
+	const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
+	expect(results.violations).toEqual([]);
+	await card(renamed)
+		.getByRole('button', { name: /yes, delete|ja, löschen/i })
+		.click();
+	await expect(card(renamed)).toHaveCount(0);
+	expect((await stored()).some((c) => c.id === created?.id)).toBe(false);
+});

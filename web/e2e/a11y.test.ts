@@ -18,6 +18,7 @@ const ALL_ROUTES = [
 	'/',
 	'/account',
 	'/cleanuparr',
+	'/configarr',
 	'/download-clients',
 	'/history',
 	'/instances',
