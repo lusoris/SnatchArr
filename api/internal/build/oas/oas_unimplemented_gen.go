@@ -76,6 +76,15 @@ func (UnimplementedHandler) CreateInstance(ctx context.Context, req *InstanceInp
 	return r, ht.ErrNotImplemented
 }
 
+// CreateProxySession implements createProxySession operation.
+//
+// Start a session via trusted proxy authentication.
+//
+// POST /auth/proxy-session
+func (UnimplementedHandler) CreateProxySession(ctx context.Context) (r CreateProxySessionRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // CreateSchedule implements createSchedule operation.
 //
 // Add a schedule window.
@@ -227,6 +236,15 @@ func (UnimplementedHandler) GetInstance(ctx context.Context, params GetInstanceP
 //
 // GET /instances/{instanceId}/policy
 func (UnimplementedHandler) GetPolicy(ctx context.Context, params GetPolicyParams) (r *SnatchPolicy, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// GetSSO implements getSSO operation.
+//
+// SSO configuration status.
+//
+// GET /auth/sso
+func (UnimplementedHandler) GetSSO(ctx context.Context) (r *SSOStatus, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

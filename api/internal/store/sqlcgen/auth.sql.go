@@ -104,7 +104,7 @@ type DeleteUserSessionsExceptParams struct {
 	CurrentSessionID string
 }
 
-// data->>'user_id' couples to sessionUserKey in api/internal/httpapi/security.go.
+// data->>'user_id' couples to auth.SessionUserKey in api/internal/auth/service.go.
 func (q *Queries) DeleteUserSessionsExcept(ctx context.Context, arg DeleteUserSessionsExceptParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteUserSessionsExcept, arg.UserID, arg.CurrentSessionID)
 	if err != nil {
@@ -131,6 +131,27 @@ func (q *Queries) GetAPIKey(ctx context.Context, id string) (ApiKey, error) {
 		&i.RevokedAt,
 		&i.Name,
 		&i.LastUsedAt,
+	)
+	return i, err
+}
+
+const getFirstAdmin = `-- name: GetFirstAdmin :one
+SELECT id, username, password_hash, role, created_at, updated_at FROM users
+WHERE role = 'admin'
+ORDER BY created_at, id
+LIMIT 1
+`
+
+func (q *Queries) GetFirstAdmin(ctx context.Context) (User, error) {
+	row := q.db.QueryRow(ctx, getFirstAdmin)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.PasswordHash,
+		&i.Role,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }

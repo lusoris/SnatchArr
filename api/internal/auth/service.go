@@ -34,6 +34,9 @@ const (
 	LockoutCooldown = 15 * time.Minute
 )
 
+// SessionUserKey is the session data key holding the authenticated user's ID.
+const SessionUserKey = "user_id"
+
 // Service handles setup and login.
 type Service struct {
 	st        *store.Store
@@ -200,6 +203,15 @@ func (s *Service) User(ctx context.Context, userID uuid.UUID) (domain.User, erro
 	row, err := s.st.Q().GetUser(ctx, userID)
 	if err != nil {
 		return domain.User{}, fmt.Errorf("auth: get user: %w", store.MapError(err))
+	}
+	return userFromRow(row), nil
+}
+
+// FirstAdmin returns the first admin user ordered by created_at, id.
+func (s *Service) FirstAdmin(ctx context.Context) (domain.User, error) {
+	row, err := s.st.Q().GetFirstAdmin(ctx)
+	if err != nil {
+		return domain.User{}, fmt.Errorf("auth: get first admin: %w", store.MapError(err))
 	}
 	return userFromRow(row), nil
 }

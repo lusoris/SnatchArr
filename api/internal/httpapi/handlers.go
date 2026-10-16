@@ -34,6 +34,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/seerr"
 	"github.com/lusoris/SnatchArr/api/internal/settings"
 	"github.com/lusoris/SnatchArr/api/internal/snatch"
+	"github.com/lusoris/SnatchArr/api/internal/sso"
 )
 
 // Handlers implements oas.Handler.
@@ -253,7 +254,7 @@ func (h *Handlers) startSession(ctx context.Context, u domain.User) (*oas.Sessio
 	if err != nil {
 		return nil, fmt.Errorf("httpapi: load session: %w", err)
 	}
-	sess.Set(sessionUserKey, u.ID.String())
+	sess.Set(auth.SessionUserKey, u.ID.String())
 	if err := h.sessions.SaveContext(ctx, w, sess); err != nil {
 		return nil, fmt.Errorf("httpapi: save session: %w", err)
 	}
@@ -268,4 +269,43 @@ func (h *Handlers) csrfToken(ctx context.Context) string {
 		return ""
 	}
 	return csrf.Token(r)
+}
+
+// GetSSO reports whether OIDC or proxy authentication is enabled.
+func (h *Handlers) GetSSO(_ context.Context) (*oas.SSOStatus, error) {
+	return &oas.SSOStatus{
+		Oidc:  h.cfg.OIDC.Enabled,
+		Proxy: h.cfg.ProxyAuth.Enabled,
+	}, nil
+}
+
+// CreateProxySession starts a session for the admin when proxy auth is enabled and verified.
+func (h *Handlers) CreateProxySession(ctx context.Context) (oas.CreateProxySessionRes, error) {
+	if !h.cfg.ProxyAuth.Enabled {
+		return nil, domain.ErrNotFound
+	}
+	user, ok := sso.ProxyUserFromContext(ctx)
+	if !ok || user == "" {
+		return nil, domain.ErrUnauthorized
+	}
+	if !isAllowedProxyUser(user, h.cfg.ProxyAuth.AllowedUsers) {
+		return nil, domain.ErrUnauthorized
+	}
+	admin, err := h.auth.FirstAdmin(ctx)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return nil, fmt.Errorf("%w: no admin user configured", domain.ErrConflict)
+		}
+		return nil, err
+	}
+	return h.startSession(ctx, admin)
+}
+
+func isAllowedProxyUser(user string, allowed []string) bool {
+	for _, u := range allowed {
+		if strings.EqualFold(user, u) {
+			return true
+		}
+	}
+	return false
 }

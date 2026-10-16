@@ -33,7 +33,7 @@ ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, expires_at = EXCLUDED.expir
 -- name: DeleteSession :exec
 DELETE FROM sessions WHERE id = $1;
 
--- data->>'user_id' couples to sessionUserKey in api/internal/httpapi/security.go.
+-- data->>'user_id' couples to auth.SessionUserKey in api/internal/auth/service.go.
 -- name: DeleteUserSessionsExcept :execrows
 DELETE FROM sessions
 WHERE data->>'user_id' = sqlc.arg(user_id)::text
@@ -134,4 +134,10 @@ WHERE key IN (
       AND first_fail_at < sqlc.arg(now)::timestamptz - make_interval(secs => sqlc.arg(window_s)::double precision)
     LIMIT sqlc.arg(batch)::int
 );
+
+-- name: GetFirstAdmin :one
+SELECT * FROM users
+WHERE role = 'admin'
+ORDER BY created_at, id
+LIMIT 1;
 

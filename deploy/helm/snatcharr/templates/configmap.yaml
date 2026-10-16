@@ -31,3 +31,35 @@ data:
   {{- end }}
   APP_SNATCHARR_CONFIGARR_WATCH: {{ .Values.configarr.watch | quote }}
   {{- end }}
+  {{- if and .Values.auth .Values.auth.oidc .Values.auth.oidc.enabled }}
+  APP_SNATCHARR_OIDC_ENABLED: "true"
+  APP_SNATCHARR_OIDC_ISSUER_URL: {{ required "auth.oidc.issuerUrl is required when auth.oidc.enabled is true" .Values.auth.oidc.issuerUrl | quote }}
+  APP_SNATCHARR_OIDC_CLIENT_ID: {{ required "auth.oidc.clientId is required when auth.oidc.enabled is true" .Values.auth.oidc.clientId | quote }}
+  {{- with .Values.auth.oidc.redirectUrl }}
+  APP_SNATCHARR_OIDC_REDIRECT_URL: {{ . | quote }}
+  {{- end }}
+  {{- if .Values.auth.oidc.scopes }}
+  APP_SNATCHARR_OIDC_SCOPES: {{ join "," .Values.auth.oidc.scopes | quote }}
+  {{- end }}
+  {{- if .Values.auth.oidc.allowedSubjects }}
+  APP_SNATCHARR_OIDC_ALLOWED_SUBJECTS: {{ join "," .Values.auth.oidc.allowedSubjects | quote }}
+  {{- end }}
+  {{- if .Values.auth.oidc.allowedEmails }}
+  APP_SNATCHARR_OIDC_ALLOWED_EMAILS: {{ join "," .Values.auth.oidc.allowedEmails | quote }}
+  {{- end }}
+  {{- with .Values.auth.oidc.discoveryTimeout }}
+  APP_SNATCHARR_OIDC_DISCOVERY_TIMEOUT: {{ . | quote }}
+  {{- end }}
+  {{- end }}
+  {{- if and .Values.auth .Values.auth.proxyAuth .Values.auth.proxyAuth.enabled }}
+  APP_SNATCHARR_PROXY_AUTH_ENABLED: "true"
+  {{- with .Values.auth.proxyAuth.header }}
+  APP_SNATCHARR_PROXY_AUTH_HEADER: {{ . | quote }}
+  {{- end }}
+  {{- if .Values.auth.proxyAuth.trustedCidrs }}
+  APP_SNATCHARR_PROXY_AUTH_TRUSTED_CIDRS: {{ join "," .Values.auth.proxyAuth.trustedCidrs | quote }}
+  {{- end }}
+  {{- if .Values.auth.proxyAuth.allowedUsers }}
+  APP_SNATCHARR_PROXY_AUTH_ALLOWED_USERS: {{ join "," .Values.auth.proxyAuth.allowedUsers | quote }}
+  {{- end }}
+  {{- end }}

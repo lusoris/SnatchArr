@@ -6,9 +6,11 @@ go 1.27.2
 ignore ./web/node_modules
 
 require (
+	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/go-chi/chi/v5 v5.5.0
 	github.com/go-faster/errors v0.8.0
 	github.com/go-faster/jx v1.2.0
+	github.com/go-jose/go-jose/v4 v4.1.5
 	github.com/golusoris/goenvoy/arr/lidarr v1.3.1
 	github.com/golusoris/goenvoy/arr/radarr v1.3.1
 	github.com/golusoris/goenvoy/arr/readarr v1.3.1
@@ -34,6 +36,7 @@ require (
 	go.opentelemetry.io/otel/metric v1.47.0
 	go.opentelemetry.io/otel/trace v1.47.0
 	go.uber.org/fx v1.24.0
+	golang.org/x/oauth2 v0.37.0
 	google.golang.org/grpc v1.84.0
 	google.golang.org/protobuf v1.36.12
 	gopkg.in/yaml.v3 v3.0.1

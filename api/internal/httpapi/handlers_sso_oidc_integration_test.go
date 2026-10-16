@@ -1,0 +1,475 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
+package httpapi
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"log/slog"
+	"net/http"
+	"net/http/cookiejar"
+	"net/http/httptest"
+	"net/url"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+
+	"github.com/golusoris/golusoris/httpx/csrf"
+	"github.com/golusoris/golusoris/httpx/middleware"
+
+	"github.com/lusoris/SnatchArr/api/internal/build/oas"
+	"github.com/lusoris/SnatchArr/api/internal/config"
+	"github.com/lusoris/SnatchArr/api/internal/sso"
+)
+
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+type ssoFixture struct {
+	*integrationFixture
+	srv    *httptest.Server
+	client *http.Client
+	jar    http.CookieJar
+	ssoSvc *sso.Service
+	logBuf *syncBuffer
+	router chi.Router
+}
+
+func newSSOFixture(t *testing.T, oidcCfg config.OIDCOptions, proxyCfg config.ProxyAuthOptions) *ssoFixture {
+	t.Helper()
+	f := newIntegrationFixture(t)
+	logBuf := &syncBuffer{}
+	logger := slog.New(slog.NewTextHandler(logBuf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	f.h.cfg.OIDC = oidcCfg
+	f.h.cfg.ProxyAuth = proxyCfg
+	f.h.logger = logger
+
+	ssoSvc := sso.NewService(f.h.cfg, f.h.auth, f.sessMgr, f.clk, logger)
+	csrfMW, cErr := csrf.New(csrf.Options{})
+	if cErr != nil {
+		t.Fatalf("newSSOFixture: csrf.New: %v", cErr)
+	}
+
+	r := chi.NewRouter()
+	r.Use(
+		middleware.RequestID,
+		sso.ProxyHeaderMiddleware(proxyCfg, logger),
+		middleware.TrustProxy(middleware.TrustProxyOptions{TrustedCIDRs: f.h.cfg.Proxy.Trusted}),
+		middleware.Recover(logger),
+		middleware.Logger(logger, f.clk),
+		middleware.SecureHeaders(middleware.SecureHeadersDefaults()),
+	)
+	sso.Mount(r, PathPrefix, ssoSvc, ErrorHandler(logger))
+	sec := NewSecurity(f.sessMgr, f.keys, f.h.auth, f.apiKeys, f.clk, logger)
+	if mErr := Mount(r, MountParams{Logger: logger, Handlers: f.h, Security: sec, CSRF: csrfMW}); mErr != nil {
+		t.Fatalf("newSSOFixture: Mount: %v", mErr)
+	}
+
+	srv := httptest.NewServer(r)
+	t.Cleanup(srv.Close)
+
+	jar, jErr := cookiejar.New(nil)
+	if jErr != nil {
+		t.Fatalf("newSSOFixture: cookiejar.New: %v", jErr)
+	}
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+		Jar:     jar,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	return &ssoFixture{
+		integrationFixture: f,
+		srv:                srv,
+		client:             client,
+		jar:                jar,
+		ssoSvc:             ssoSvc,
+		logBuf:             logBuf,
+		router:             r,
+	}
+}
+
+func extractAuthParams(t *testing.T, resp *http.Response) (state, nonce string) {
+	t.Helper()
+	loc := resp.Header.Get("Location")
+	if loc == "" {
+		t.Fatalf("extractAuthParams: missing Location header in login response")
+	}
+	u, err := url.Parse(loc)
+	if err != nil {
+		t.Fatalf("extractAuthParams: parse Location URL: %v", err)
+	}
+	q := u.Query()
+	return q.Get("state"), q.Get("nonce")
+}
+
+func checkSessionUser(t *testing.T, f *ssoFixture, wantOK bool) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, f.srv.URL+PathPrefix+"/auth/session", nil)
+	if err != nil {
+		t.Fatalf("checkSessionUser: NewRequest: %v", err)
+	}
+	resp, err := f.client.Do(req)
+	if err != nil {
+		t.Fatalf("checkSessionUser: Do: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if !wantOK {
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("checkSessionUser status = %d, want 401", resp.StatusCode)
+		}
+		return
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("checkSessionUser status = %d, want 200", resp.StatusCode)
+	}
+	var sess oas.Session
+	if err := json.NewDecoder(resp.Body).Decode(&sess); err != nil {
+		t.Fatalf("checkSessionUser: decode session: %v", err)
+	}
+	if sess.User.Role != oas.UserRoleAdmin {
+		t.Errorf("checkSessionUser role = %q, want admin", sess.User.Role)
+	}
+}
+
+type oidcTestCase struct {
+	name         string
+	claimMod     func(idpClaims) idpClaims
+	clockAdvance time.Duration
+	rejectCode   bool
+	tamperState  string
+	errorParam   string
+	replay       bool
+	wantRedirect string
+	wantSession  bool
+}
+
+func buildOIDCCases() []oidcTestCase {
+	return []oidcTestCase{
+		{
+			name:         "positive full flow",
+			wantRedirect: "/",
+			wantSession:  true,
+		},
+		{
+			name:         "boundary flow 10m-1s",
+			clockAdvance: 10*time.Minute - time.Second,
+			wantRedirect: "/",
+			wantSession:  true,
+		},
+		{
+			name:         "negative missing state",
+			tamperState:  "missing",
+			wantRedirect: "/login?sso=failed",
+			wantSession:  false,
+		},
+		{
+			name:         "negative wrong state",
+			tamperState:  "bogus-state-value",
+			wantRedirect: "/login?sso=failed",
+			wantSession:  false,
+		},
+		{
+			name:         "negative replayed callback",
+			replay:       true,
+			wantRedirect: "/login?sso=failed",
+			wantSession:  false,
+		},
+		{
+			name:         "negative expired flow 10m+1s",
+			clockAdvance: 10*time.Minute + time.Second,
+			wantRedirect: "/login?sso=failed",
+			wantSession:  false,
+		},
+		{
+			name: "negative wrong nonce",
+			claimMod: func(c idpClaims) idpClaims {
+				c.Nonce = "wrong-nonce"
+				return c
+			},
+			wantRedirect: "/login?sso=failed",
+			wantSession:  false,
+		},
+		{
+			name: "negative missing nonce",
+			claimMod: func(c idpClaims) idpClaims {
+				c.Nonce = ""
+				return c
+			},
+			wantRedirect: "/login?sso=failed",
+			wantSession:  false,
+		},
+		{
+			name:         "negative wrong code verifier",
+			rejectCode:   true,
+			wantRedirect: "/login?sso=failed",
+			wantSession:  false,
+		},
+		{
+			name: "negative id_token signed by other key",
+			claimMod: func(c idpClaims) idpClaims {
+				c.UseOtherKey = true
+				return c
+			},
+			wantRedirect: "/login?sso=failed",
+			wantSession:  false,
+		},
+		{
+			name: "negative wrong audience",
+			claimMod: func(c idpClaims) idpClaims {
+				c.Audience = "different-client-id"
+				return c
+			},
+			wantRedirect: "/login?sso=failed",
+			wantSession:  false,
+		},
+		{
+			name: "negative wrong issuer",
+			claimMod: func(c idpClaims) idpClaims {
+				c.Issuer = "https://untrusted.issuer.example.com"
+				return c
+			},
+			wantRedirect: "/login?sso=failed",
+			wantSession:  false,
+		},
+		{
+			name: "negative expired id_token",
+			claimMod: func(c idpClaims) idpClaims {
+				c.Expiry = time.Now().Add(-1 * time.Hour)
+				return c
+			},
+			wantRedirect: "/login?sso=failed",
+			wantSession:  false,
+		},
+		{
+			name: "negative subject and email not allowed",
+			claimMod: func(c idpClaims) idpClaims {
+				c.Subject = "unauthorized-subject"
+				c.Email = "stranger@example.com"
+				return c
+			},
+			wantRedirect: "/login?sso=failed",
+			wantSession:  false,
+		},
+		{
+			name: "negative allowed email unverified",
+			claimMod: func(c idpClaims) idpClaims {
+				c.Subject = "unauthorized-subject"
+				f := false
+				c.EmailVerified = &f
+				return c
+			},
+			wantRedirect: "/login?sso=failed",
+			wantSession:  false,
+		},
+		{
+			name:         "negative idp error param",
+			errorParam:   "access_denied",
+			wantRedirect: "/login?sso=failed",
+			wantSession:  false,
+		},
+	}
+}
+
+func runOIDCLogin(t *testing.T, f *ssoFixture) (state, nonce string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+
+	loginReq, err := http.NewRequestWithContext(ctx, http.MethodGet, f.srv.URL+PathPrefix+"/auth/oidc/login", nil)
+	if err != nil {
+		t.Fatalf("runOIDCLogin: NewRequest: %v", err)
+	}
+	loginResp, err := f.client.Do(loginReq)
+	if err != nil {
+		t.Fatalf("runOIDCLogin: Do: %v", err)
+	}
+	defer func() { _ = loginResp.Body.Close() }()
+
+	if loginResp.StatusCode != http.StatusFound {
+		t.Fatalf("runOIDCLogin: status = %d, want 302", loginResp.StatusCode)
+	}
+	return extractAuthParams(t, loginResp)
+}
+
+func runOIDCCallback(t *testing.T, f *ssoFixture, cbURL string) *http.Response {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+
+	cbReq, err := http.NewRequestWithContext(ctx, http.MethodGet, cbURL, nil)
+	if err != nil {
+		t.Fatalf("runOIDCCallback: NewRequest: %v", err)
+	}
+	cbResp, err := f.client.Do(cbReq)
+	if err != nil {
+		t.Fatalf("runOIDCCallback: Do: %v", err)
+	}
+	return cbResp
+}
+
+func buildCallbackURL(srvURL, state, code, errParam string) string {
+	u := srvURL + PathPrefix + "/auth/oidc/callback?"
+	params := url.Values{}
+	if errParam != "" {
+		params.Set("error", errParam)
+	}
+	if state != "missing" {
+		params.Set("state", state)
+	}
+	if code != "" {
+		params.Set("code", code)
+	}
+	return u + params.Encode()
+}
+
+func executeOIDCTest(t *testing.T, tc oidcTestCase) {
+	t.Helper()
+	idp := newFakeIDP(t)
+	oidcCfg := config.OIDCOptions{
+		Enabled:          true,
+		IssuerURL:        idp.srv.URL,
+		ClientID:         "test-client-id",
+		ClientSecret:     "test-client-secret",
+		RedirectURL:      "http://127.0.0.1:8080/api/v1/auth/oidc/callback",
+		Scopes:           []string{"openid", "email", "profile"},
+		AllowedSubjects:  []string{"admin-sub"},
+		AllowedEmails:    []string{"admin@example.com"},
+		DiscoveryTimeout: 5 * time.Second,
+	}
+	f := newSSOFixture(t, oidcCfg, config.ProxyAuthOptions{})
+	f.ssoSvc.SetHTTPClient(idp.srv.Client())
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	if _, err := f.h.auth.Setup(ctx, "admin", "password-admin-1234"); err != nil {
+		t.Fatalf("auth.Setup: %v", err)
+	}
+
+	state, nonce := runOIDCLogin(t, f)
+	idp.setClaimsModifier(func(c idpClaims) idpClaims {
+		c.Nonce = nonce
+		if tc.claimMod != nil {
+			c = tc.claimMod(c)
+		}
+		return c
+	})
+	idp.setRejectVerifier(tc.rejectCode)
+
+	if tc.clockAdvance > 0 {
+		f.clk.Advance(tc.clockAdvance)
+	}
+
+	cbState := state
+	if tc.tamperState != "" {
+		cbState = tc.tamperState
+	}
+
+	cbURL := buildCallbackURL(f.srv.URL, cbState, "mock-auth-code", tc.errorParam)
+	resp := runOIDCCallback(t, f, cbURL)
+	defer func() { _ = resp.Body.Close() }()
+
+	if tc.replay {
+		// First callback succeeds.
+		if resp.Header.Get("Location") != "/" {
+			t.Fatalf("first callback location = %q, want /", resp.Header.Get("Location"))
+		}
+		// Replayed callback (second use of same state) must be refused.
+		resp2 := runOIDCCallback(t, f, cbURL)
+		defer func() { _ = resp2.Body.Close() }()
+		if loc := resp2.Header.Get("Location"); loc != "/login?sso=failed" {
+			t.Errorf("replayed callback Location = %q, want /login?sso=failed", loc)
+		}
+		return
+	}
+
+	loc := resp.Header.Get("Location")
+	if loc != tc.wantRedirect {
+		t.Errorf("Location = %q, want %q", loc, tc.wantRedirect)
+	}
+	checkSessionUser(t, f, tc.wantSession)
+}
+
+func TestOIDC_Flow(t *testing.T) {
+	t.Parallel()
+	for _, tc := range buildOIDCCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			executeOIDCTest(t, tc)
+		})
+	}
+}
+
+func TestOIDC_DiscoveryFailure(t *testing.T) {
+	t.Parallel()
+	oidcCfg := config.OIDCOptions{
+		Enabled:          true,
+		IssuerURL:        "http://127.0.0.1:59999/unreachable",
+		ClientID:         "test-client-id",
+		ClientSecret:     "test-client-secret",
+		RedirectURL:      "http://127.0.0.1:8080/api/v1/auth/oidc/callback",
+		Scopes:           []string{"openid", "email"},
+		AllowedSubjects:  []string{"admin-sub"},
+		DiscoveryTimeout: 500 * time.Millisecond,
+	}
+	f := newSSOFixture(t, oidcCfg, config.ProxyAuthOptions{})
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+
+	loginReq, err := http.NewRequestWithContext(ctx, http.MethodGet, f.srv.URL+PathPrefix+"/auth/oidc/login", nil)
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	loginResp, err := f.client.Do(loginReq)
+	if err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	defer func() { _ = loginResp.Body.Close() }()
+
+	if loginResp.StatusCode != http.StatusFound {
+		t.Errorf("status = %d, want 302", loginResp.StatusCode)
+	}
+	if loc := loginResp.Header.Get("Location"); loc != "/login?sso=failed" {
+		t.Errorf("Location = %q, want /login?sso=failed", loc)
+	}
+
+	// Verify server is alive and other routes respond.
+	statusReq, err := http.NewRequestWithContext(ctx, http.MethodGet, f.srv.URL+PathPrefix+"/auth/sso", nil)
+	if err != nil {
+		t.Fatalf("NewRequest /auth/sso: %v", err)
+	}
+	statusResp, err := f.client.Do(statusReq)
+	if err != nil {
+		t.Fatalf("Do /auth/sso: %v", err)
+	}
+	defer func() { _ = statusResp.Body.Close() }()
+	if statusResp.StatusCode != http.StatusOK {
+		t.Errorf("status = %d, want 200", statusResp.StatusCode)
+	}
+}

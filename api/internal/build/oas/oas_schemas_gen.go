@@ -1009,6 +1009,18 @@ func (s *CreateApiKeyRequest) SetExpiresAt(val OptDateTime) {
 	s.ExpiresAt = val
 }
 
+type CreateProxySessionConflict ProblemStatusCode
+
+func (*CreateProxySessionConflict) createProxySessionRes() {}
+
+type CreateProxySessionNotFound ProblemStatusCode
+
+func (*CreateProxySessionNotFound) createProxySessionRes() {}
+
+type CreateProxySessionUnauthorized ProblemStatusCode
+
+func (*CreateProxySessionUnauthorized) createProxySessionRes() {}
+
 // Merged schema.
 // Ref: #/components/schemas/CreatedApiKey
 type CreatedApiKey struct {
@@ -3103,6 +3115,32 @@ func (s *RunTrigger) SetKind(val SnatchKind) {
 	s.Kind = val
 }
 
+// Ref: #/components/schemas/SSOStatus
+type SSOStatus struct {
+	Oidc  bool `json:"oidc"`
+	Proxy bool `json:"proxy"`
+}
+
+// GetOidc returns the value of Oidc.
+func (s *SSOStatus) GetOidc() bool {
+	return s.Oidc
+}
+
+// GetProxy returns the value of Proxy.
+func (s *SSOStatus) GetProxy() bool {
+	return s.Proxy
+}
+
+// SetOidc sets the value of Oidc.
+func (s *SSOStatus) SetOidc(val bool) {
+	s.Oidc = val
+}
+
+// SetProxy sets the value of Proxy.
+func (s *SSOStatus) SetProxy(val bool) {
+	s.Proxy = val
+}
+
 // Merged schema.
 // Ref: #/components/schemas/Schedule
 type Schedule struct {
@@ -4018,8 +4056,9 @@ func (s *Session) SetExpiresAt(val time.Time) {
 	s.ExpiresAt = val
 }
 
-func (*Session) completeSetupRes() {}
-func (*Session) loginRes()         {}
+func (*Session) completeSetupRes()      {}
+func (*Session) createProxySessionRes() {}
+func (*Session) loginRes()              {}
 
 // SessionHeaders wraps Session with response headers.
 type SessionHeaders struct {

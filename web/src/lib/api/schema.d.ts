@@ -123,6 +123,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/sso": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** SSO configuration status */
+        get: operations["getSSO"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/proxy-session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start a session via trusted proxy authentication */
+        post: operations["createProxySession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/api-keys": {
         parameters: {
             query?: never;
@@ -889,6 +923,10 @@ export interface components {
             /** Format: date-time */
             expires_at: string;
         };
+        SSOStatus: {
+            oidc: boolean;
+            proxy: boolean;
+        };
         ApiKey: {
             id: string;
             name: string;
@@ -1539,6 +1577,51 @@ export interface operations {
                     "application/json": components["schemas"]["Session"];
                 };
             };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getSSO: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description SSO status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SSOStatus"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createProxySession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Session started */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };

@@ -37,6 +37,35 @@ config:
   # Extra environment for the API container (list of EnvVar).
   extraEnv: []
 
+# Single Sign-On (OIDC) and trusted reverse proxy authentication.
+# Both map verified identities to the local admin user (single-admin model).
+# Both are disabled by default.
+auth:
+  oidc:
+    enabled: false
+    issuerUrl: ""
+    clientId: ""
+    # clientSecret is NEVER stored directly in values.yaml. Reference an existing secret
+    # or specify a secretKeyRef.
+    existingSecret: ""
+    secretKey: oidc-client-secret
+    secretKeyRef:
+      name: ""
+      key: ""
+    redirectUrl: ""
+    scopes:
+      - openid
+      - email
+      - profile
+    allowedSubjects: []
+    allowedEmails: []
+    discoveryTimeout: 10s
+  proxyAuth:
+    enabled: false
+    header: "Remote-User"
+    trustedCidrs: []
+    allowedUsers: []
+
 # Secrets the control plane needs. Either point at an existing Secret with the keys
 # crypto-key (hex, 16/24/32 bytes), csrf-secret, apikey-secret, worker-token, and setup-secret
 # (optional in existingSecret), or set the values here. Empty values are generated once and

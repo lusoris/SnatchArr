@@ -7,6 +7,7 @@ package config_test
 import (
 	"encoding/hex"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -57,6 +58,118 @@ func TestValidate(t *testing.T) {
 		{"positive trusted proxy whitespace and empty items around commas", func(o *config.Options) {
 			o.Proxy.Trusted = []string{" 10.0.0.0/8 ", " ", "192.168.0.0/16"}
 		}, nil, false},
+		{"positive oidc valid prod", func(o *config.Options) {
+			o.OIDC.Enabled = true
+			o.OIDC.IssuerURL = "https://idp.example.com"
+			o.OIDC.ClientID = "client-id"
+			o.OIDC.RedirectURL = "https://snatcharr.example.com/api/v1/auth/oidc/callback"
+			o.OIDC.AllowedSubjects = []string{"sub-1"}
+		}, nil, false},
+		{"boundary oidc dev allows http issuer", func(o *config.Options) {
+			o.Profile = config.ProfileDev
+			o.Worker.Token = ""
+			o.APIKey.Secret = ""
+			o.OIDC.Enabled = true
+			o.OIDC.IssuerURL = "http://localhost:8080"
+			o.OIDC.ClientID = "client-id"
+			o.OIDC.RedirectURL = "http://localhost:8080/api/v1/auth/oidc/callback"
+			o.OIDC.AllowedEmails = []string{"admin@example.com"}
+		}, nil, false},
+		{"negative oidc prod refuses http issuer", func(o *config.Options) {
+			o.OIDC.Enabled = true
+			o.OIDC.IssuerURL = "http://idp.example.com"
+			o.OIDC.ClientID = "client-id"
+			o.OIDC.RedirectURL = "https://snatcharr.example.com/api/v1/auth/oidc/callback"
+			o.OIDC.AllowedSubjects = []string{"sub-1"}
+		}, nil, true},
+		{"negative oidc missing issuer", func(o *config.Options) {
+			o.OIDC.Enabled = true
+			o.OIDC.IssuerURL = ""
+			o.OIDC.ClientID = "client-id"
+			o.OIDC.RedirectURL = "https://snatcharr.example.com/api/v1/auth/oidc/callback"
+			o.OIDC.AllowedSubjects = []string{"sub-1"}
+		}, nil, true},
+		{"negative oidc malformed issuer", func(o *config.Options) {
+			o.OIDC.Enabled = true
+			o.OIDC.IssuerURL = "://invalid"
+			o.OIDC.ClientID = "client-id"
+			o.OIDC.RedirectURL = "https://snatcharr.example.com/api/v1/auth/oidc/callback"
+			o.OIDC.AllowedSubjects = []string{"sub-1"}
+		}, nil, true},
+		{"negative oidc missing client_id", func(o *config.Options) {
+			o.OIDC.Enabled = true
+			o.OIDC.IssuerURL = "https://idp.example.com"
+			o.OIDC.ClientID = ""
+			o.OIDC.RedirectURL = "https://snatcharr.example.com/api/v1/auth/oidc/callback"
+			o.OIDC.AllowedSubjects = []string{"sub-1"}
+		}, nil, true},
+		{"negative oidc missing redirect_url", func(o *config.Options) {
+			o.OIDC.Enabled = true
+			o.OIDC.IssuerURL = "https://idp.example.com"
+			o.OIDC.ClientID = "client-id"
+			o.OIDC.RedirectURL = ""
+			o.OIDC.AllowedSubjects = []string{"sub-1"}
+		}, nil, true},
+		{"negative oidc missing both allowed subjects and emails", func(o *config.Options) {
+			o.OIDC.Enabled = true
+			o.OIDC.IssuerURL = "https://idp.example.com"
+			o.OIDC.ClientID = "client-id"
+			o.OIDC.RedirectURL = "https://snatcharr.example.com/api/v1/auth/oidc/callback"
+		}, nil, true},
+		{"positive proxy auth valid", func(o *config.Options) {
+			o.ProxyAuth.Enabled = true
+			o.ProxyAuth.Header = "Remote-User"
+			o.ProxyAuth.TrustedCIDRs = []string{"10.0.0.0/8"}
+			o.ProxyAuth.AllowedUsers = []string{"admin"}
+		}, nil, false},
+		{"negative proxy auth empty header", func(o *config.Options) {
+			o.ProxyAuth.Enabled = true
+			o.ProxyAuth.Header = ""
+			o.ProxyAuth.TrustedCIDRs = []string{"10.0.0.0/8"}
+			o.ProxyAuth.AllowedUsers = []string{"admin"}
+		}, nil, true},
+		{"negative proxy auth invalid header token", func(o *config.Options) {
+			o.ProxyAuth.Enabled = true
+			o.ProxyAuth.Header = "Remote User Header"
+			o.ProxyAuth.TrustedCIDRs = []string{"10.0.0.0/8"}
+			o.ProxyAuth.AllowedUsers = []string{"admin"}
+		}, nil, true},
+		{"negative proxy auth empty trusted cidrs", func(o *config.Options) {
+			o.ProxyAuth.Enabled = true
+			o.ProxyAuth.Header = "Remote-User"
+			o.ProxyAuth.TrustedCIDRs = nil
+			o.ProxyAuth.AllowedUsers = []string{"admin"}
+		}, nil, true},
+		{"negative proxy auth catch-all ipv4 cidr refused", func(o *config.Options) {
+			o.ProxyAuth.Enabled = true
+			o.ProxyAuth.Header = "Remote-User"
+			o.ProxyAuth.TrustedCIDRs = []string{"0.0.0.0/0"}
+			o.ProxyAuth.AllowedUsers = []string{"admin"}
+		}, nil, true},
+		{"negative proxy auth catch-all ipv6 cidr refused", func(o *config.Options) {
+			o.ProxyAuth.Enabled = true
+			o.ProxyAuth.Header = "Remote-User"
+			o.ProxyAuth.TrustedCIDRs = []string{"::/0"}
+			o.ProxyAuth.AllowedUsers = []string{"admin"}
+		}, nil, true},
+		{"negative proxy auth invalid cidr format", func(o *config.Options) {
+			o.ProxyAuth.Enabled = true
+			o.ProxyAuth.Header = "Remote-User"
+			o.ProxyAuth.TrustedCIDRs = []string{"not-a-cidr"}
+			o.ProxyAuth.AllowedUsers = []string{"admin"}
+		}, nil, true},
+		{"negative proxy auth empty allowed users", func(o *config.Options) {
+			o.ProxyAuth.Enabled = true
+			o.ProxyAuth.Header = "Remote-User"
+			o.ProxyAuth.TrustedCIDRs = []string{"10.0.0.0/8"}
+			o.ProxyAuth.AllowedUsers = nil
+		}, nil, true},
+		{"negative proxy auth blank user in allowed users", func(o *config.Options) {
+			o.ProxyAuth.Enabled = true
+			o.ProxyAuth.Header = "Remote-User"
+			o.ProxyAuth.TrustedCIDRs = []string{"10.0.0.0/8"}
+			o.ProxyAuth.AllowedUsers = []string{" "}
+		}, nil, true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -243,5 +356,171 @@ func TestLoadSetupSecret(t *testing.T) {
 				t.Fatalf("Setup.Secret = %q, want %q", opts.Setup.Secret, tc.wantSecret)
 			}
 		})
+	}
+}
+
+func TestLoadCompoundKeysFromEnv(t *testing.T) {
+	cases := []struct {
+		name     string
+		env      map[string]string
+		assertFn func(t *testing.T, opts config.Options)
+	}{
+		{
+			name: "oidc issuer_url",
+			env:  map[string]string{"APP_SNATCHARR_OIDC_ISSUER_URL": "https://auth.example.com"},
+			assertFn: func(t *testing.T, opts config.Options) {
+				t.Helper()
+				if opts.OIDC.IssuerURL != "https://auth.example.com" {
+					t.Fatalf("OIDC.IssuerURL = %q, want %q", opts.OIDC.IssuerURL, "https://auth.example.com")
+				}
+			},
+		},
+		{
+			name: "oidc client_id",
+			env:  map[string]string{"APP_SNATCHARR_OIDC_CLIENT_ID": "snatcharr-client"},
+			assertFn: func(t *testing.T, opts config.Options) {
+				t.Helper()
+				if opts.OIDC.ClientID != "snatcharr-client" {
+					t.Fatalf("OIDC.ClientID = %q, want %q", opts.OIDC.ClientID, "snatcharr-client")
+				}
+			},
+		},
+		{
+			name: "oidc client_secret",
+			env:  map[string]string{"APP_SNATCHARR_OIDC_CLIENT_SECRET": "secret-xyz"},
+			assertFn: func(t *testing.T, opts config.Options) {
+				t.Helper()
+				if opts.OIDC.ClientSecret != "secret-xyz" {
+					t.Fatalf("OIDC.ClientSecret = %q, want %q", opts.OIDC.ClientSecret, "secret-xyz")
+				}
+			},
+		},
+		{
+			name: "oidc redirect_url",
+			env:  map[string]string{"APP_SNATCHARR_OIDC_REDIRECT_URL": "https://snatcharr.example.com/callback"},
+			assertFn: func(t *testing.T, opts config.Options) {
+				t.Helper()
+				if opts.OIDC.RedirectURL != "https://snatcharr.example.com/callback" {
+					t.Fatalf("OIDC.RedirectURL = %q, want %q", opts.OIDC.RedirectURL, "https://snatcharr.example.com/callback")
+				}
+			},
+		},
+		{
+			name: "oidc allowed_subjects comma-split",
+			env:  map[string]string{"APP_SNATCHARR_OIDC_ALLOWED_SUBJECTS": "sub1, sub2"},
+			assertFn: func(t *testing.T, opts config.Options) {
+				t.Helper()
+				want := []string{"sub1", "sub2"}
+				if !slices.Equal(opts.OIDC.AllowedSubjects, want) {
+					t.Fatalf("OIDC.AllowedSubjects = %v, want %v", opts.OIDC.AllowedSubjects, want)
+				}
+			},
+		},
+		{
+			name: "oidc allowed_emails comma-split",
+			env:  map[string]string{"APP_SNATCHARR_OIDC_ALLOWED_EMAILS": "admin@example.com, test@example.com"},
+			assertFn: func(t *testing.T, opts config.Options) {
+				t.Helper()
+				want := []string{"admin@example.com", "test@example.com"}
+				if !slices.Equal(opts.OIDC.AllowedEmails, want) {
+					t.Fatalf("OIDC.AllowedEmails = %v, want %v", opts.OIDC.AllowedEmails, want)
+				}
+			},
+		},
+		{
+			name: "oidc discovery_timeout parsed duration",
+			env:  map[string]string{"APP_SNATCHARR_OIDC_DISCOVERY_TIMEOUT": "15s"},
+			assertFn: func(t *testing.T, opts config.Options) {
+				t.Helper()
+				if opts.OIDC.DiscoveryTimeout != 15*time.Second {
+					t.Fatalf("OIDC.DiscoveryTimeout = %v, want 15s", opts.OIDC.DiscoveryTimeout)
+				}
+			},
+		},
+		{
+			name: "proxy_auth enabled",
+			env: map[string]string{
+				"APP_SNATCHARR_PROXY_AUTH_ENABLED":       "true",
+				"APP_SNATCHARR_PROXY_AUTH_TRUSTED_CIDRS": "10.0.0.0/8",
+				"APP_SNATCHARR_PROXY_AUTH_ALLOWED_USERS": "admin",
+			},
+			assertFn: func(t *testing.T, opts config.Options) {
+				t.Helper()
+				if !opts.ProxyAuth.Enabled {
+					t.Fatalf("ProxyAuth.Enabled = false, want true")
+				}
+			},
+		},
+		{
+			name: "proxy_auth header",
+			env:  map[string]string{"APP_SNATCHARR_PROXY_AUTH_HEADER": "X-Forwarded-User"},
+			assertFn: func(t *testing.T, opts config.Options) {
+				t.Helper()
+				if opts.ProxyAuth.Header != "X-Forwarded-User" {
+					t.Fatalf("ProxyAuth.Header = %q, want %q", opts.ProxyAuth.Header, "X-Forwarded-User")
+				}
+			},
+		},
+		{
+			name: "proxy_auth trusted_cidrs comma-split",
+			env:  map[string]string{"APP_SNATCHARR_PROXY_AUTH_TRUSTED_CIDRS": "10.0.0.0/8, 172.16.0.0/12"},
+			assertFn: func(t *testing.T, opts config.Options) {
+				t.Helper()
+				want := []string{"10.0.0.0/8", "172.16.0.0/12"}
+				if !slices.Equal(opts.ProxyAuth.TrustedCIDRs, want) {
+					t.Fatalf("ProxyAuth.TrustedCIDRs = %v, want %v", opts.ProxyAuth.TrustedCIDRs, want)
+				}
+			},
+		},
+		{
+			name: "proxy_auth allowed_users comma-split",
+			env:  map[string]string{"APP_SNATCHARR_PROXY_AUTH_ALLOWED_USERS": "admin, operator"},
+			assertFn: func(t *testing.T, opts config.Options) {
+				t.Helper()
+				want := []string{"admin", "operator"}
+				if !slices.Equal(opts.ProxyAuth.AllowedUsers, want) {
+					t.Fatalf("ProxyAuth.AllowedUsers = %v, want %v", opts.ProxyAuth.AllowedUsers, want)
+				}
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("APP_SNATCHARR_PROFILE", "dev")
+			for k, v := range tc.env {
+				t.Setenv(k, v)
+			}
+			cfg, err := gconfig.New(gconfig.Options{
+				EnvPrefix:    "APP_",
+				CompoundKeys: config.CompoundKeys(),
+			})
+			if err != nil {
+				t.Fatalf("gconfig.New: %v", err)
+			}
+			opts, err := config.Load(cfg)
+			if err != nil {
+				t.Fatalf("config.Load: %v", err)
+			}
+			tc.assertFn(t, opts)
+		})
+	}
+}
+
+func TestLoadWithoutCompoundKeys_Fails(t *testing.T) {
+	t.Setenv("APP_SNATCHARR_PROFILE", "dev")
+	t.Setenv("APP_SNATCHARR_PROXY_AUTH_ENABLED", "true")
+	t.Setenv("APP_SNATCHARR_PROXY_AUTH_TRUSTED_CIDRS", "10.0.0.0/8")
+	t.Setenv("APP_SNATCHARR_PROXY_AUTH_ALLOWED_USERS", "admin")
+
+	cfg, err := gconfig.New(gconfig.Options{EnvPrefix: "APP_"})
+	if err != nil {
+		t.Fatalf("gconfig.New: %v", err)
+	}
+	opts, err := config.Load(cfg)
+	if err != nil {
+		t.Fatalf("config.Load: %v", err)
+	}
+	if opts.ProxyAuth.Enabled {
+		t.Fatalf("ProxyAuth.Enabled = true without CompoundKeys; expected false because env was split into snatcharr.proxy.auth.enabled")
 	}
 }
