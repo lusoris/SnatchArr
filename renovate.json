@@ -73,6 +73,54 @@
       "datasourceTemplate": "go"
     },
     {
+      "description": "Go tools of the devcontainer, pinned to semver; the module path ends before /cmd/ (.devcontainer/snatcharr/post-create.sh)",
+      "customType": "regex",
+      "managerFilePatterns": [
+        ".devcontainer/snatcharr/post-create.sh"
+      ],
+      "matchStrings": [
+        "go install (?<depName>[^@\\s]+?)(?:/cmd/[^@\\s]+)?@(?<currentValue>v[0-9]+(?:\\.[0-9]+)*)\\n"
+      ],
+      "datasourceTemplate": "go"
+    },
+    {
+      "description": "Cargo tools of the devcontainer (.devcontainer/snatcharr/post-create.sh)",
+      "customType": "regex",
+      "managerFilePatterns": [
+        ".devcontainer/snatcharr/post-create.sh"
+      ],
+      "matchStrings": [
+        "cargo install --locked (?<depName>[a-z0-9_-]+)@(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)\\n"
+      ],
+      "datasourceTemplate": "crate"
+    },
+    {
+      "description": "kubectl and helm of the devcontainer feature, which Renovate's devcontainer manager does not version",
+      "customType": "regex",
+      "managerFilePatterns": [
+        ".devcontainer/snatcharr/devcontainer.json"
+      ],
+      "matchStrings": [
+        "kubectl-helm-minikube:1\": \\{ \"version\": \"(?<currentValue>[0-9.]+)\""
+      ],
+      "depNameTemplate": "kubernetes/kubernetes",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.*)$"
+    },
+    {
+      "description": "helm of the devcontainer feature",
+      "customType": "regex",
+      "managerFilePatterns": [
+        ".devcontainer/snatcharr/devcontainer.json"
+      ],
+      "matchStrings": [
+        "\"helm\": \"(?<currentValue>[0-9.]+)\""
+      ],
+      "depNameTemplate": "helm/helm",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.*)$"
+    },
+    {
       "description": "The Postgres of the integration tests and the end-to-end smoke, pinned by version and digest outside a workflow or Dockerfile (storetest, tools/e2e/postgres.sh, Makefile); same image as the CI service containers",
       "customType": "regex",
       "managerFilePatterns": [
