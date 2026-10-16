@@ -260,6 +260,27 @@ func stepsAuth() []routerStep {
 			},
 		},
 		{
+			op:     "getSSO",
+			method: http.MethodGet,
+			path:   func(_ *idsState) string { return "/auth/sso" },
+			want:   http.StatusOK,
+			capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
+				t.Helper()
+				if _, ok := decoded["oidc"].(bool); !ok {
+					t.Fatalf("getSSO oidc field = %v, want bool", decoded["oidc"])
+				}
+				if _, ok := decoded["proxy"].(bool); !ok {
+					t.Fatalf("getSSO proxy field = %v, want bool", decoded["proxy"])
+				}
+			},
+		},
+		{
+			op:     "createProxySession",
+			method: http.MethodPost,
+			path:   func(_ *idsState) string { return "/auth/proxy-session" },
+			want:   http.StatusNotFound,
+		},
+		{
 			op:     "completeSetup",
 			method: http.MethodPost,
 			path:   func(_ *idsState) string { return "/auth/setup" },
@@ -1305,6 +1326,12 @@ func assertResponseContentType(t *testing.T, step routerStep, reqPath, ct string
 	if step.want == http.StatusNoContent {
 		if ct != "" {
 			t.Errorf("%s %s: 204 response has Content-Type %q, want empty", step.method, reqPath, ct)
+		}
+		return
+	}
+	if step.want >= 400 {
+		if !strings.Contains(ct, "application/problem+json") {
+			t.Errorf("%s %s: Content-Type = %q, want application/problem+json", step.method, reqPath, ct)
 		}
 		return
 	}

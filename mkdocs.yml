@@ -64,6 +64,7 @@ nav:
   - Home: index.md
   - Concepts: concepts.md
   - Configuration: configuration.md
+  - Single Sign-On: sso.md
   - Download clients: download-clients.md
   - Seerr: seerr.md
   - Cleanuparr: cleanuparr.md

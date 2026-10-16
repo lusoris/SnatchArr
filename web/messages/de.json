@@ -22,6 +22,8 @@
 	"username": "Benutzername",
 	"password": "Passwort",
 	"login_submit": "Anmelden",
+	"login_sso": "Mit SSO anmelden",
+	"login_sso_failed": "Single Sign-on fehlgeschlagen. Bitte erneut versuchen oder mit Benutzername und Passwort anmelden.",
 	"setup_submit": "Admin anlegen",
 	"dashboard_title": "Übersicht",
 	"stamina": "Ausdauer",

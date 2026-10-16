@@ -95,6 +95,20 @@ spec:
             - name: APP_SNATCHARR_PROXY_TRUSTED
               value: {{ join "," .Values.config.trustedProxies | quote }}
             {{- end }}
+            {{- if and .Values.auth .Values.auth.oidc .Values.auth.oidc.enabled }}
+            - name: APP_SNATCHARR_OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.auth.oidc.existingSecret }}
+                  name: {{ .Values.auth.oidc.existingSecret }}
+                  key: {{ default "oidc-client-secret" .Values.auth.oidc.secretKey }}
+                  {{- else if and .Values.auth.oidc.secretKeyRef .Values.auth.oidc.secretKeyRef.name }}
+                  name: {{ .Values.auth.oidc.secretKeyRef.name }}
+                  key: {{ required "auth.oidc.secretKeyRef.key is required" .Values.auth.oidc.secretKeyRef.key }}
+                  {{- else }}
+                  {{- fail "auth.oidc is enabled: configure either auth.oidc.existingSecret or auth.oidc.secretKeyRef" }}
+                  {{- end }}
+            {{- end }}
             {{- with .Values.config.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

@@ -23,9 +23,6 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 )
 
-// sessionUserKey is the session entry holding the user id.
-const sessionUserKey = "user_id"
-
 // Security resolves cookie sessions and bearer API keys to users.
 type Security struct {
 	sessions *session.Manager
@@ -58,7 +55,7 @@ func (s *Security) HandleCookieAuth(ctx context.Context, _ oas.OperationName, _ 
 	if err != nil {
 		return ctx, fmt.Errorf("%w: %w", domain.ErrUnauthorized, err)
 	}
-	raw, _ := sess.Get(sessionUserKey).(string)
+	raw, _ := sess.Get(auth.SessionUserKey).(string)
 	userID, err := uuid.Parse(raw)
 	if err != nil {
 		return ctx, fmt.Errorf("%w: no user in session", domain.ErrUnauthorized)

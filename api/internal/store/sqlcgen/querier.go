@@ -51,7 +51,7 @@ type Querier interface {
 	DeleteSession(ctx context.Context, id string) error
 	DeleteStaleDiscoveredDownloadClients(ctx context.Context, arg DeleteStaleDiscoveredDownloadClientsParams) (int64, error)
 	DeleteUnseenSeerrRequests(ctx context.Context, arg DeleteUnseenSeerrRequestsParams) (int64, error)
-	// data->>'user_id' couples to sessionUserKey in api/internal/httpapi/security.go.
+	// data->>'user_id' couples to auth.SessionUserKey in api/internal/auth/service.go.
 	DeleteUserSessionsExcept(ctx context.Context, arg DeleteUserSessionsExceptParams) (int64, error)
 	DisableConfigarrInstancesNotIn(ctx context.Context, arg DisableConfigarrInstancesNotInParams) (int64, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
@@ -68,6 +68,7 @@ type Querier interface {
 	GetAPIKey(ctx context.Context, id string) (ApiKey, error)
 	GetCleanuparrLink(ctx context.Context, id uuid.UUID) (CleanuparrLink, error)
 	GetDownloadClient(ctx context.Context, id uuid.UUID) (DownloadClient, error)
+	GetFirstAdmin(ctx context.Context) (User, error)
 	GetInstance(ctx context.Context, id uuid.UUID) (Instance, error)
 	GetInstanceByConfigarrKey(ctx context.Context, configarrKey *string) (Instance, error)
 	GetLoginLockout(ctx context.Context, key string) (LoginLockout, error)

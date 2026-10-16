@@ -13,6 +13,10 @@ type CreateAPIKeyRes interface {
 	createAPIKeyRes()
 }
 
+type CreateProxySessionRes interface {
+	createProxySessionRes()
+}
+
 type DeleteInstanceRes interface {
 	deleteInstanceRes()
 }

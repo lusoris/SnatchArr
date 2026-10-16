@@ -1,0 +1,100 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+suite: auth configuration
+templates:
+  - configmap.yaml
+  - api-deployment.yaml
+release:
+  name: snatcharr
+  namespace: snatcharr
+tests:
+  - it: default - auth disabled renders no SSO or proxy auth env vars
+    template: configmap.yaml
+    asserts:
+      - isNull:
+          path: data.APP_SNATCHARR_OIDC_ENABLED
+      - isNull:
+          path: data.APP_SNATCHARR_PROXY_AUTH_ENABLED
+
+  - it: positive - oidc enabled with existingSecret renders configmap and secretKeyRef
+    set:
+      auth:
+        oidc:
+          enabled: true
+          issuerUrl: "https://auth.example.com"
+          clientId: "snatcharr-client"
+          existingSecret: "my-oidc-secret"
+          scopes:
+            - openid
+            - email
+            - profile
+          allowedSubjects:
+            - "sub-123"
+          allowedEmails:
+            - "admin@example.com"
+    asserts:
+      - template: configmap.yaml
+        hasDocuments:
+          count: 1
+      - template: configmap.yaml
+        isSubset:
+          path: data
+          content:
+            APP_SNATCHARR_OIDC_ENABLED: "true"
+            APP_SNATCHARR_OIDC_ISSUER_URL: "https://auth.example.com"
+            APP_SNATCHARR_OIDC_CLIENT_ID: "snatcharr-client"
+            APP_SNATCHARR_OIDC_SCOPES: "openid,email,profile"
+            APP_SNATCHARR_OIDC_ALLOWED_SUBJECTS: "sub-123"
+            APP_SNATCHARR_OIDC_ALLOWED_EMAILS: "admin@example.com"
+      - template: api-deployment.yaml
+        contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: APP_SNATCHARR_OIDC_CLIENT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: "my-oidc-secret"
+                key: "oidc-client-secret"
+
+  - it: positive - oidc enabled with secretKeyRef renders deployment secretKeyRef
+    set:
+      auth:
+        oidc:
+          enabled: true
+          issuerUrl: "https://auth.example.com"
+          clientId: "snatcharr-client"
+          secretKeyRef:
+            name: "custom-secret"
+            key: "custom-key"
+    asserts:
+      - template: api-deployment.yaml
+        contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: APP_SNATCHARR_OIDC_CLIENT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: "custom-secret"
+                key: "custom-key"
+
+  - it: positive - proxyAuth enabled renders configmap entries
+    set:
+      auth:
+        proxyAuth:
+          enabled: true
+          header: "Remote-User"
+          trustedCidrs:
+            - "10.0.0.0/8"
+            - "172.16.0.0/12"
+          allowedUsers:
+            - "admin"
+            - "lead"
+    asserts:
+      - template: configmap.yaml
+        isSubset:
+          path: data
+          content:
+            APP_SNATCHARR_PROXY_AUTH_ENABLED: "true"
+            APP_SNATCHARR_PROXY_AUTH_HEADER: "Remote-User"
+            APP_SNATCHARR_PROXY_AUTH_TRUSTED_CIDRS: "10.0.0.0/8,172.16.0.0/12"
+            APP_SNATCHARR_PROXY_AUTH_ALLOWED_USERS: "admin,lead"

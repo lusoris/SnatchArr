@@ -57,14 +57,20 @@ func TestGRPCKeepaliveFromEnv(t *testing.T) {
 }
 
 // The decorator keeps compound keys the app already declares.
-func TestWithGRPCCompoundKeysKeepsExisting(t *testing.T) {
+func TestWithCompoundKeysKeepsExisting(t *testing.T) {
 	t.Parallel()
-	got := withGRPCCompoundKeys(gconfig.Options{EnvPrefix: "APP_", CompoundKeys: []string{"search.api_key"}})
+	got := withCompoundKeys(gconfig.Options{EnvPrefix: "APP_", CompoundKeys: []string{"search.api_key"}})
 	if !slices.Contains(got.CompoundKeys, "search.api_key") {
 		t.Errorf("existing key dropped: %v", got.CompoundKeys)
 	}
 	if !slices.Contains(got.CompoundKeys, "grpc.keepalive.max_connection_age_grace") {
 		t.Errorf("grpc grace key missing: %v", got.CompoundKeys)
+	}
+	if !slices.Contains(got.CompoundKeys, "snatcharr.proxy_auth.enabled") {
+		t.Errorf("snatcharr proxy auth key missing: %v", got.CompoundKeys)
+	}
+	if !slices.Contains(got.CompoundKeys, "snatcharr.oidc.issuer_url") {
+		t.Errorf("snatcharr oidc issuer key missing: %v", got.CompoundKeys)
 	}
 	if got.EnvPrefix != "APP_" {
 		t.Errorf("EnvPrefix = %q, want APP_", got.EnvPrefix)

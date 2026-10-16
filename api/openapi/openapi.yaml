@@ -176,6 +176,44 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
 
+  /auth/sso:
+    get:
+      tags: [auth]
+      operationId: getSSO
+      summary: SSO configuration status
+      security: []
+      responses:
+        "200":
+          description: SSO status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SSOStatus"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /auth/proxy-session:
+    post:
+      tags: [auth]
+      operationId: createProxySession
+      summary: Start a session via trusted proxy authentication
+      security: []
+      responses:
+        "200":
+          description: Session started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "409":
+          $ref: "#/components/responses/Problem"
+        default:
+          $ref: "#/components/responses/Problem"
+
   /auth/api-keys:
     get:
       tags: [auth]
@@ -1370,6 +1408,15 @@ components:
         expires_at:
           type: string
           format: date-time
+
+    SSOStatus:
+      type: object
+      required: [oidc, proxy]
+      properties:
+        oidc:
+          type: boolean
+        proxy:
+          type: boolean
 
     ApiKey:
       type: object

@@ -332,6 +332,30 @@ func (s *CreateApiKeyRequest) Validate() error {
 	return nil
 }
 
+func (s *CreateProxySessionConflict) Validate() error {
+	alias := (*ProblemStatusCode)(s)
+	if err := alias.Validate(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *CreateProxySessionNotFound) Validate() error {
+	alias := (*ProblemStatusCode)(s)
+	if err := alias.Validate(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *CreateProxySessionUnauthorized) Validate() error {
+	alias := (*ProblemStatusCode)(s)
+	if err := alias.Validate(); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (s *DiscoveryResult) Validate() error {
 	if s == nil {
 		return validate.ErrNilPointer

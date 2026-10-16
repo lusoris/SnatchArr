@@ -50,6 +50,12 @@ type Handler interface {
 	//
 	// POST /instances
 	CreateInstance(ctx context.Context, req *InstanceInput) (*Instance, error)
+	// CreateProxySession implements createProxySession operation.
+	//
+	// Start a session via trusted proxy authentication.
+	//
+	// POST /auth/proxy-session
+	CreateProxySession(ctx context.Context) (CreateProxySessionRes, error)
 	// CreateSchedule implements createSchedule operation.
 	//
 	// Add a schedule window.
@@ -153,6 +159,12 @@ type Handler interface {
 	//
 	// GET /instances/{instanceId}/policy
 	GetPolicy(ctx context.Context, params GetPolicyParams) (*SnatchPolicy, error)
+	// GetSSO implements getSSO operation.
+	//
+	// SSO configuration status.
+	//
+	// GET /auth/sso
+	GetSSO(ctx context.Context) (*SSOStatus, error)
 	// GetSeerrLink implements getSeerrLink operation.
 	//
 	// Get one Seerr link.

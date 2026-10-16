@@ -43,6 +43,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/seerr"
 	"github.com/lusoris/SnatchArr/api/internal/settings"
 	"github.com/lusoris/SnatchArr/api/internal/snatch"
+	"github.com/lusoris/SnatchArr/api/internal/sso"
 	"github.com/lusoris/SnatchArr/api/internal/store"
 	"github.com/lusoris/SnatchArr/api/internal/webui"
 	"github.com/lusoris/SnatchArr/api/internal/workergrpc"
@@ -85,6 +86,7 @@ var Module = fx.Options(
 	retention.Module,
 	fx.Provide(func(s *dlclients.Service) workergrpc.Pacer { return s }),
 	workergrpc.Module,
+	sso.Module,
 	httpapi.Module,
 	// After every module that registers a loop: the gate collects the leader_loops group.
 	leaderx.Module,
@@ -134,11 +136,13 @@ type httpDeps struct {
 	Reg    *statuspage.Registry
 	Events *events.Bus
 	Cfg    config.Options
+	SSO    *sso.Service
 }
 
 func mountHTTP(d httpDeps, api httpapi.MountParams) error {
 	d.Router.Use(
 		middleware.RequestID,
+		sso.ProxyHeaderMiddleware(d.Cfg.ProxyAuth, d.Logger),
 		middleware.TrustProxy(middleware.TrustProxyOptions{TrustedCIDRs: d.Cfg.Proxy.Trusted}),
 		middleware.Recover(d.Logger),
 		middleware.Logger(d.Logger, d.Clock),
@@ -149,6 +153,7 @@ func mountHTTP(d httpDeps, api httpapi.MountParams) error {
 		return fmt.Errorf("app: mount metrics: %w", err)
 	}
 	httpapi.MountStream(d.Router, api, d.Events.Hub().Handler())
+	sso.Mount(d.Router, httpapi.PathPrefix, d.SSO, httpapi.ErrorHandler(d.Logger))
 	if err := httpapi.Mount(d.Router, api); err != nil {
 		return err
 	}
