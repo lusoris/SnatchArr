@@ -12,3 +12,6 @@ SPDX-License-Identifier: EUPL-1.2
 <button type="button" aria-label={m.instance_delete()}>✕</button>
 <code>const x = "literal in code allowed";</code>
 <p>· 50 KiB/s</p>
+<p>{mode === 'random' ? m.dashboard_title() : m.empty_instances()}</p>
+<p>{format(value, 'en')}</p>
+<p title={`${done} / ${total}`}>{count ?? '–'}</p>
