@@ -20,7 +20,11 @@ import InstanceDetail from './InstanceDetail.svelte';
 
 /** Renders the view for one instance and returns the line under its heading. */
 async function subtitleOf(instance: Instance): Promise<string | undefined> {
-	stubGet({ '/instances/{instanceId}': instance, '/instances/{instanceId}/policy': samplePolicy });
+	stubGet({
+		'/instances/{instanceId}': instance,
+		'/instances/{instanceId}/policy': samplePolicy,
+		'/runs': []
+	});
 	renderWithQuery(InstanceDetail, { id: instance.id });
 	const heading = await screen.findByRole('heading', { level: 1, name: instance.name });
 	return heading.nextElementSibling?.textContent?.trim();
@@ -59,6 +63,9 @@ describe('InstanceDetail', () => {
 			if (path === '/instances/{instanceId}/policy') {
 				return { data: samplePolicy } as never;
 			}
+			if (path === '/runs') {
+				return { data: [] } as never;
+			}
 			throw new Error(`GET ${path} has no stubbed answer`);
 		});
 		vi.spyOn(api, 'POST').mockImplementation(async (path: string) => {
@@ -88,6 +95,17 @@ describe('InstanceDetail', () => {
 
 		const failed = await screen.findByRole('status');
 		expect(failed.textContent).toContain('Connection refused (ECONNREFUSED)');
+	});
+
+	it('shows the edit form, the run list and the memory reset of the instance', async () => {
+		await subtitleOf(forkInstance);
+
+		expect(screen.getByRole('form', { name: m.instance_edit_title() })).toBeTruthy();
+		expect((screen.getByLabelText(m.instance_name()) as HTMLInputElement).value).toBe(
+			'Library Readarr'
+		);
+		expect(await screen.findByText(m.runs_empty())).toBeTruthy();
+		expect(screen.getByRole('button', { name: m.memory_reset_one() })).toBeTruthy();
 	});
 
 	it('announces the problem document when the instance does not exist', async () => {

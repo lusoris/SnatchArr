@@ -2,10 +2,12 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
+import fs from 'node:fs';
 import http from 'node:http';
 import type net from 'node:net';
+import path from 'node:path';
 import AxeBuilder from '@axe-core/playwright';
-import { expect, request, test } from '@playwright/test';
+import { expect, request, test, type Page } from '@playwright/test';
 
 const WCAG_22_AA = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 
@@ -256,4 +258,64 @@ test('account: create API key, read back with Bearer token, revoke key, check 40
 		}
 	});
 	expect(revokedRes.status()).toBe(401);
+});
+
+/** The instance the auth setup seeded; a11y.test.ts reads the same file. */
+function seededInstanceId(): string {
+	const seedFile = path.resolve(import.meta.dirname, '.auth/seed.json');
+	const data = JSON.parse(fs.readFileSync(seedFile, 'utf-8')) as { instanceId?: string };
+	if (!data.instanceId) throw new Error(`missing instanceId in seed file ${seedFile}`);
+	return data.instanceId;
+}
+
+/** C9-04 runs in parallel and logs out, ending the shared session: start one of this test's own. */
+async function freshSession(page: Page): Promise<void> {
+	await page.context().clearCookies();
+	const login = await page.request.post('/api/v1/auth/login', {
+		data: { username: 'admin', password: 'smoke-password-1234' }
+	});
+	expect(login.ok()).toBeTruthy();
+}
+
+test('instance actions: edit the name, read it back, reset processed memory with confirm', async ({
+	page
+}) => {
+	await freshSession(page);
+	const instanceId = seededInstanceId();
+	const newName = 'e2e-renamed-sonarr';
+
+	await page.goto(`/instances/${instanceId}`);
+	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+
+	// 1. Edit the name; the API key stays empty, so the stored key is kept.
+	const form = page.getByRole('form', { name: /edit instance|instanz bearbeiten/i });
+	await expect(form.locator('#edit-api_key')).toHaveValue('');
+	await form.locator('#edit-name').fill(newName);
+	await form.getByRole('button', { name: /^(save|speichern)$/i }).click();
+	await expect(page.getByRole('heading', { level: 1 })).toHaveText(newName);
+
+	const res = await page.request.get(`/api/v1/instances/${instanceId}`);
+	expect(res.ok()).toBeTruthy();
+	expect(((await res.json()) as { name: string }).name).toBe(newName);
+
+	// 2. Reset this instance's processed memory: nothing happens before the confirm step.
+	const resetLabel = /^(reset processed memory|verarbeitungsgedächtnis zurücksetzen)$/i;
+	await page.getByRole('button', { name: resetLabel }).click();
+	const ask = page.getByRole('group', { name: resetLabel });
+	await expect(ask).toContainText(newName);
+	await ask.getByRole('button', { name: /^(confirm|bestätigen)$/i }).click();
+	await expect(
+		page.getByText(/\d+ (processed items forgotten|verarbeitete Einträge vergessen)/i)
+	).toBeVisible();
+
+	// 3. Reset every instance's memory from the instance list, again behind a confirm.
+	await page.goto('/instances');
+	const resetAll = /reset processed memory of all instances|aller instanzen zurücksetzen/i;
+	await page.getByRole('button', { name: resetAll }).click();
+	const askAll = page.getByRole('group', { name: resetAll });
+	await expect(askAll).toContainText(/every instance|allen instanzen/i);
+	await askAll.getByRole('button', { name: /^(confirm|bestätigen)$/i }).click();
+	await expect(
+		page.getByText(/\d+ (processed items forgotten|verarbeitete Einträge vergessen)/i)
+	).toBeVisible();
 });

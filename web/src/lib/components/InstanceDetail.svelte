@@ -10,7 +10,10 @@ SPDX-License-Identifier: EUPL-1.2
 	import type { components } from '#lib/api/schema.js';
 	import CheckState from '#lib/components/CheckState.svelte';
 	import Field from '#lib/components/Field.svelte';
+	import InstanceEditForm from '#lib/components/InstanceEditForm.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
+	import ResetMemory from '#lib/components/ResetMemory.svelte';
+	import RunList from '#lib/components/RunList.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { instanceKindLabel, probeMessage } from '#lib/products.js';
 	import { keys } from '#lib/query.js';
@@ -81,6 +84,8 @@ SPDX-License-Identifier: EUPL-1.2
 	<button type="button" class="btn mb-6" onclick={() => probe.mutate()} disabled={probe.isPending}
 		>{m.instance_test()}</button
 	>
+
+	<InstanceEditForm instance={instance.data} />
 
 	<form
 		class="card grid max-w-3xl gap-4 md:grid-cols-2"
@@ -179,4 +184,9 @@ SPDX-License-Identifier: EUPL-1.2
 			>
 		</div>
 	</form>
+
+	<div class="mt-6">
+		<RunList {instanceId} />
+		<ResetMemory instance={{ id: instanceId, name: instance.data.name }} />
+	</div>
 {/if}
