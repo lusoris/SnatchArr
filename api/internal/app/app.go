@@ -15,9 +15,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/fx"
 
-	"github.com/golusoris/golusoris"
+	"github.com/golusoris/golusoris/bootstrap"
 	"github.com/golusoris/golusoris/core/clock"
 	dbmigrate "github.com/golusoris/golusoris/db/migrate"
+	dbpgx "github.com/golusoris/golusoris/db/pgx"
 	grpcx "github.com/golusoris/golusoris/grpc"
 	"github.com/golusoris/golusoris/httpx/csrf"
 	"github.com/golusoris/golusoris/httpx/middleware"
@@ -47,12 +48,19 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/workergrpc"
 )
 
+// golusorisDB mirrors golusoris.DB from github.com/golusoris/golusoris v0.16.5 without importing the umbrella package.
+var golusorisDB = fx.Module(
+	"golusoris.db",
+	dbpgx.Module,
+	dbmigrate.Module,
+)
+
 // Module is the complete SnatchArr control plane. Order matters for fx.Invoke: the base
 // middleware and probes mount first, then the OpenAPI server, then the SPA catch-all.
 var Module = fx.Options(
-	golusoris.Core,
-	golusoris.DB,
-	golusoris.HTTP,
+	bootstrap.Core,
+	golusorisDB,
+	bootstrap.HTTP,
 	otel.Module,
 	csrf.Module,
 	grpcx.Module,

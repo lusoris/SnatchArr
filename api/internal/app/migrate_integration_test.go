@@ -19,7 +19,7 @@ import (
 
 	"go.uber.org/fx"
 
-	"github.com/golusoris/golusoris"
+	"github.com/golusoris/golusoris/bootstrap"
 	gconfig "github.com/golusoris/golusoris/core/config"
 	dbmigrate "github.com/golusoris/golusoris/db/migrate"
 
@@ -82,7 +82,7 @@ func runMigrator(t *testing.T, db map[string]any) (uint, error) {
 	}
 	var migrator *dbmigrate.Migrator
 	app := fx.New(
-		golusoris.Core, golusoris.DB, fx.NopLogger,
+		bootstrap.Core, golusorisDB, fx.NopLogger,
 		fx.Decorate(func(*gconfig.Config) *gconfig.Config { return cfg }),
 		fx.Decorate(embedMigrations),
 		fx.Populate(&migrator),
