@@ -94,6 +94,15 @@ func (UnimplementedHandler) CreateNotificationRule(ctx context.Context, req *Not
 	return r, ht.ErrNotImplemented
 }
 
+// CreateProwlarrLink implements createProwlarrLink operation.
+//
+// Add a Prowlarr link.
+//
+// POST /prowlarr
+func (UnimplementedHandler) CreateProwlarrLink(ctx context.Context, req *ProwlarrLinkInput) (r *ProwlarrLink, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // CreateProxySession implements createProxySession operation.
 //
 // Start a session via trusted proxy authentication.
@@ -173,6 +182,15 @@ func (UnimplementedHandler) DeleteNotificationChannel(ctx context.Context, param
 //
 // DELETE /notifications/rules/{ruleId}
 func (UnimplementedHandler) DeleteNotificationRule(ctx context.Context, params DeleteNotificationRuleParams) error {
+	return ht.ErrNotImplemented
+}
+
+// DeleteProwlarrLink implements deleteProwlarrLink operation.
+//
+// Delete a Prowlarr link.
+//
+// DELETE /prowlarr/{linkId}
+func (UnimplementedHandler) DeleteProwlarrLink(ctx context.Context, params DeleteProwlarrLinkParams) error {
 	return ht.ErrNotImplemented
 }
 
@@ -300,6 +318,24 @@ func (UnimplementedHandler) GetPolicy(ctx context.Context, params GetPolicyParam
 //
 // GET /instances/{instanceId}/policy/filter-options
 func (UnimplementedHandler) GetPolicyFilterOptions(ctx context.Context, params GetPolicyFilterOptionsParams) (r *PolicyFilterOptions, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// GetProwlarrLink implements getProwlarrLink operation.
+//
+// Get one Prowlarr link.
+//
+// GET /prowlarr/{linkId}
+func (UnimplementedHandler) GetProwlarrLink(ctx context.Context, params GetProwlarrLinkParams) (r *ProwlarrLink, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// GetProwlarrStatus implements getProwlarrStatus operation.
+//
+// Live view of every enabled Prowlarr link (cached 30 s).
+//
+// GET /prowlarr/status
+func (UnimplementedHandler) GetProwlarrStatus(ctx context.Context) (r []ProwlarrStatus, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -435,6 +471,15 @@ func (UnimplementedHandler) ListNotificationChannels(ctx context.Context) (r []N
 //
 // GET /notifications/rules
 func (UnimplementedHandler) ListNotificationRules(ctx context.Context) (r []NotificationRule, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ListProwlarrLinks implements listProwlarrLinks operation.
+//
+// List Prowlarr links (API keys are never returned).
+//
+// GET /prowlarr
+func (UnimplementedHandler) ListProwlarrLinks(ctx context.Context) (r []ProwlarrLink, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -591,6 +636,24 @@ func (UnimplementedHandler) TestNotificationChannel(ctx context.Context, params 
 	return ht.ErrNotImplemented
 }
 
+// TestProwlarrLink implements testProwlarrLink operation.
+//
+// Probe a stored Prowlarr link and record the outcome.
+//
+// POST /prowlarr/{linkId}/test
+func (UnimplementedHandler) TestProwlarrLink(ctx context.Context, params TestProwlarrLinkParams) (r *ProbeResult, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// TestProwlarrLinkInput implements testProwlarrLinkInput operation.
+//
+// Probe Prowlarr credentials that are not stored yet.
+//
+// POST /prowlarr/test
+func (UnimplementedHandler) TestProwlarrLinkInput(ctx context.Context, req *ProwlarrLinkInput) (r *ProbeResult, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // TestSeerrLink implements testSeerrLink operation.
 //
 // Probe a stored Seerr link and record the outcome.
@@ -669,6 +732,15 @@ func (UnimplementedHandler) UpdateNotificationRule(ctx context.Context, req *Not
 //
 // PUT /instances/{instanceId}/policy
 func (UnimplementedHandler) UpdatePolicy(ctx context.Context, req *SnatchPolicy, params UpdatePolicyParams) (r *SnatchPolicy, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UpdateProwlarrLink implements updateProwlarrLink operation.
+//
+// Update a Prowlarr link (omit api_key to keep it).
+//
+// PUT /prowlarr/{linkId}
+func (UnimplementedHandler) UpdateProwlarrLink(ctx context.Context, req *ProwlarrLinkInput, params UpdateProwlarrLinkParams) (r *ProwlarrLink, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

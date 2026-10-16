@@ -10,6 +10,8 @@ describe('query keys', () => {
 		expect(keys.instance('a')).toEqual([...keys.instances, 'a']);
 		expect(keys.policy('a').slice(0, 2)).toEqual(keys.instance('a'));
 		expect(keys.dlstatus.slice(0, 1)).toEqual(keys.dlclients);
+		expect(keys.prowlarrLinks).toEqual(['prowlarr', 'links']);
+		expect(keys.prowlarr).toEqual(['prowlarr', 'status']);
 		expect(keys.apiKeys).toEqual(['api-keys']);
 	});
 

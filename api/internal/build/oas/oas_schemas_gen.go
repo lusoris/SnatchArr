@@ -1114,6 +1114,9 @@ type DeleteNotificationChannelNoContent struct{}
 // DeleteNotificationRuleNoContent is response for DeleteNotificationRule operation.
 type DeleteNotificationRuleNoContent struct{}
 
+// DeleteProwlarrLinkNoContent is response for DeleteProwlarrLink operation.
+type DeleteProwlarrLinkNoContent struct{}
+
 // DeleteScheduleNoContent is response for DeleteSchedule operation.
 type DeleteScheduleNoContent struct{}
 
@@ -3765,6 +3768,343 @@ func (s *ProblemStatusCode) SetResponse(val Problem) {
 func (*ProblemStatusCode) deleteInstanceRes() {}
 func (*ProblemStatusCode) listAPIKeysRes()    {}
 func (*ProblemStatusCode) loginRes()          {}
+
+// Ref: #/components/schemas/ProwlarrIndexerStatus
+type ProwlarrIndexerStatus struct {
+	ID         int    `json:"id"`
+	Name       string `json:"name"`
+	QueryLimit OptInt `json:"query_limit"`
+	GrabLimit  OptInt `json:"grab_limit"`
+	// 0=day, 1=hour.
+	LimitsUnit   int         `json:"limits_unit"`
+	UsedQueries  int         `json:"used_queries"`
+	UsedGrabs    int         `json:"used_grabs"`
+	DisabledTill OptDateTime `json:"disabled_till"`
+	Exhausted    bool        `json:"exhausted"`
+}
+
+// GetID returns the value of ID.
+func (s *ProwlarrIndexerStatus) GetID() int {
+	return s.ID
+}
+
+// GetName returns the value of Name.
+func (s *ProwlarrIndexerStatus) GetName() string {
+	return s.Name
+}
+
+// GetQueryLimit returns the value of QueryLimit.
+func (s *ProwlarrIndexerStatus) GetQueryLimit() OptInt {
+	return s.QueryLimit
+}
+
+// GetGrabLimit returns the value of GrabLimit.
+func (s *ProwlarrIndexerStatus) GetGrabLimit() OptInt {
+	return s.GrabLimit
+}
+
+// GetLimitsUnit returns the value of LimitsUnit.
+func (s *ProwlarrIndexerStatus) GetLimitsUnit() int {
+	return s.LimitsUnit
+}
+
+// GetUsedQueries returns the value of UsedQueries.
+func (s *ProwlarrIndexerStatus) GetUsedQueries() int {
+	return s.UsedQueries
+}
+
+// GetUsedGrabs returns the value of UsedGrabs.
+func (s *ProwlarrIndexerStatus) GetUsedGrabs() int {
+	return s.UsedGrabs
+}
+
+// GetDisabledTill returns the value of DisabledTill.
+func (s *ProwlarrIndexerStatus) GetDisabledTill() OptDateTime {
+	return s.DisabledTill
+}
+
+// GetExhausted returns the value of Exhausted.
+func (s *ProwlarrIndexerStatus) GetExhausted() bool {
+	return s.Exhausted
+}
+
+// SetID sets the value of ID.
+func (s *ProwlarrIndexerStatus) SetID(val int) {
+	s.ID = val
+}
+
+// SetName sets the value of Name.
+func (s *ProwlarrIndexerStatus) SetName(val string) {
+	s.Name = val
+}
+
+// SetQueryLimit sets the value of QueryLimit.
+func (s *ProwlarrIndexerStatus) SetQueryLimit(val OptInt) {
+	s.QueryLimit = val
+}
+
+// SetGrabLimit sets the value of GrabLimit.
+func (s *ProwlarrIndexerStatus) SetGrabLimit(val OptInt) {
+	s.GrabLimit = val
+}
+
+// SetLimitsUnit sets the value of LimitsUnit.
+func (s *ProwlarrIndexerStatus) SetLimitsUnit(val int) {
+	s.LimitsUnit = val
+}
+
+// SetUsedQueries sets the value of UsedQueries.
+func (s *ProwlarrIndexerStatus) SetUsedQueries(val int) {
+	s.UsedQueries = val
+}
+
+// SetUsedGrabs sets the value of UsedGrabs.
+func (s *ProwlarrIndexerStatus) SetUsedGrabs(val int) {
+	s.UsedGrabs = val
+}
+
+// SetDisabledTill sets the value of DisabledTill.
+func (s *ProwlarrIndexerStatus) SetDisabledTill(val OptDateTime) {
+	s.DisabledTill = val
+}
+
+// SetExhausted sets the value of Exhausted.
+func (s *ProwlarrIndexerStatus) SetExhausted(val bool) {
+	s.Exhausted = val
+}
+
+// Ref: #/components/schemas/ProwlarrLink
+type ProwlarrLink struct {
+	ID              uuid.UUID   `json:"id"`
+	Name            string      `json:"name"`
+	BaseURL         string      `json:"base_url"`
+	Enabled         bool        `json:"enabled"`
+	LastSeenVersion OptString   `json:"last_seen_version"`
+	LastCheckAt     OptDateTime `json:"last_check_at"`
+	LastError       OptString   `json:"last_error"`
+	CreatedAt       time.Time   `json:"created_at"`
+	UpdatedAt       time.Time   `json:"updated_at"`
+}
+
+// GetID returns the value of ID.
+func (s *ProwlarrLink) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetName returns the value of Name.
+func (s *ProwlarrLink) GetName() string {
+	return s.Name
+}
+
+// GetBaseURL returns the value of BaseURL.
+func (s *ProwlarrLink) GetBaseURL() string {
+	return s.BaseURL
+}
+
+// GetEnabled returns the value of Enabled.
+func (s *ProwlarrLink) GetEnabled() bool {
+	return s.Enabled
+}
+
+// GetLastSeenVersion returns the value of LastSeenVersion.
+func (s *ProwlarrLink) GetLastSeenVersion() OptString {
+	return s.LastSeenVersion
+}
+
+// GetLastCheckAt returns the value of LastCheckAt.
+func (s *ProwlarrLink) GetLastCheckAt() OptDateTime {
+	return s.LastCheckAt
+}
+
+// GetLastError returns the value of LastError.
+func (s *ProwlarrLink) GetLastError() OptString {
+	return s.LastError
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *ProwlarrLink) GetCreatedAt() time.Time {
+	return s.CreatedAt
+}
+
+// GetUpdatedAt returns the value of UpdatedAt.
+func (s *ProwlarrLink) GetUpdatedAt() time.Time {
+	return s.UpdatedAt
+}
+
+// SetID sets the value of ID.
+func (s *ProwlarrLink) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetName sets the value of Name.
+func (s *ProwlarrLink) SetName(val string) {
+	s.Name = val
+}
+
+// SetBaseURL sets the value of BaseURL.
+func (s *ProwlarrLink) SetBaseURL(val string) {
+	s.BaseURL = val
+}
+
+// SetEnabled sets the value of Enabled.
+func (s *ProwlarrLink) SetEnabled(val bool) {
+	s.Enabled = val
+}
+
+// SetLastSeenVersion sets the value of LastSeenVersion.
+func (s *ProwlarrLink) SetLastSeenVersion(val OptString) {
+	s.LastSeenVersion = val
+}
+
+// SetLastCheckAt sets the value of LastCheckAt.
+func (s *ProwlarrLink) SetLastCheckAt(val OptDateTime) {
+	s.LastCheckAt = val
+}
+
+// SetLastError sets the value of LastError.
+func (s *ProwlarrLink) SetLastError(val OptString) {
+	s.LastError = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *ProwlarrLink) SetCreatedAt(val time.Time) {
+	s.CreatedAt = val
+}
+
+// SetUpdatedAt sets the value of UpdatedAt.
+func (s *ProwlarrLink) SetUpdatedAt(val time.Time) {
+	s.UpdatedAt = val
+}
+
+// Ref: #/components/schemas/ProwlarrLinkInput
+type ProwlarrLinkInput struct {
+	Name    string `json:"name"`
+	BaseURL string `json:"base_url"`
+	// Required on create; omit on update to keep the stored key.
+	APIKey  OptString `json:"api_key"`
+	Enabled OptBool   `json:"enabled"`
+}
+
+// GetName returns the value of Name.
+func (s *ProwlarrLinkInput) GetName() string {
+	return s.Name
+}
+
+// GetBaseURL returns the value of BaseURL.
+func (s *ProwlarrLinkInput) GetBaseURL() string {
+	return s.BaseURL
+}
+
+// GetAPIKey returns the value of APIKey.
+func (s *ProwlarrLinkInput) GetAPIKey() OptString {
+	return s.APIKey
+}
+
+// GetEnabled returns the value of Enabled.
+func (s *ProwlarrLinkInput) GetEnabled() OptBool {
+	return s.Enabled
+}
+
+// SetName sets the value of Name.
+func (s *ProwlarrLinkInput) SetName(val string) {
+	s.Name = val
+}
+
+// SetBaseURL sets the value of BaseURL.
+func (s *ProwlarrLinkInput) SetBaseURL(val string) {
+	s.BaseURL = val
+}
+
+// SetAPIKey sets the value of APIKey.
+func (s *ProwlarrLinkInput) SetAPIKey(val OptString) {
+	s.APIKey = val
+}
+
+// SetEnabled sets the value of Enabled.
+func (s *ProwlarrLinkInput) SetEnabled(val OptBool) {
+	s.Enabled = val
+}
+
+// Ref: #/components/schemas/ProwlarrStatus
+type ProwlarrStatus struct {
+	LinkID    uuid.UUID               `json:"link_id"`
+	Name      string                  `json:"name"`
+	Reachable bool                    `json:"reachable"`
+	Error     OptString               `json:"error"`
+	Version   OptString               `json:"version"`
+	CheckedAt time.Time               `json:"checked_at"`
+	Indexers  []ProwlarrIndexerStatus `json:"indexers"`
+}
+
+// GetLinkID returns the value of LinkID.
+func (s *ProwlarrStatus) GetLinkID() uuid.UUID {
+	return s.LinkID
+}
+
+// GetName returns the value of Name.
+func (s *ProwlarrStatus) GetName() string {
+	return s.Name
+}
+
+// GetReachable returns the value of Reachable.
+func (s *ProwlarrStatus) GetReachable() bool {
+	return s.Reachable
+}
+
+// GetError returns the value of Error.
+func (s *ProwlarrStatus) GetError() OptString {
+	return s.Error
+}
+
+// GetVersion returns the value of Version.
+func (s *ProwlarrStatus) GetVersion() OptString {
+	return s.Version
+}
+
+// GetCheckedAt returns the value of CheckedAt.
+func (s *ProwlarrStatus) GetCheckedAt() time.Time {
+	return s.CheckedAt
+}
+
+// GetIndexers returns the value of Indexers.
+func (s *ProwlarrStatus) GetIndexers() []ProwlarrIndexerStatus {
+	return s.Indexers
+}
+
+// SetLinkID sets the value of LinkID.
+func (s *ProwlarrStatus) SetLinkID(val uuid.UUID) {
+	s.LinkID = val
+}
+
+// SetName sets the value of Name.
+func (s *ProwlarrStatus) SetName(val string) {
+	s.Name = val
+}
+
+// SetReachable sets the value of Reachable.
+func (s *ProwlarrStatus) SetReachable(val bool) {
+	s.Reachable = val
+}
+
+// SetError sets the value of Error.
+func (s *ProwlarrStatus) SetError(val OptString) {
+	s.Error = val
+}
+
+// SetVersion sets the value of Version.
+func (s *ProwlarrStatus) SetVersion(val OptString) {
+	s.Version = val
+}
+
+// SetCheckedAt sets the value of CheckedAt.
+func (s *ProwlarrStatus) SetCheckedAt(val time.Time) {
+	s.CheckedAt = val
+}
+
+// SetIndexers sets the value of Indexers.
+func (s *ProwlarrStatus) SetIndexers(val []ProwlarrIndexerStatus) {
+	s.Indexers = val
+}
 
 // RevokeAPIKeyNoContent is response for RevokeAPIKey operation.
 type RevokeAPIKeyNoContent struct{}
