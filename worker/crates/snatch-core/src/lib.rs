@@ -160,28 +160,67 @@ pub struct Candidate {
     pub release_unix: Option<i64>,
     /// Whether the item (and its parent) is monitored.
     pub monitored: bool,
+    /// *arr tag ids of the item, or of its parent where the tags live there.
+    pub tags: Vec<i32>,
+    /// Quality profile ids that apply to the item; more than one where an app keeps one per
+    /// format (Chaptarr's audiobook and ebook profiles).
+    pub profiles: Vec<i32>,
+}
+
+/// An include and an exclude list of *arr ids (tags or quality profiles).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct IdRule {
+    /// When not empty, an item must carry at least one of these ids.
+    pub include: Vec<i32>,
+    /// An item that carries any of these ids is dropped; exclude wins over include.
+    pub exclude: Vec<i32>,
+}
+
+impl IdRule {
+    /// Whether an item carrying `ids` passes the rule.
+    #[must_use]
+    pub fn admits(&self, ids: &[i32]) -> bool {
+        let hit = |list: &[i32]| ids.iter().any(|i| list.contains(i));
+        (self.include.is_empty() || hit(&self.include)) && !hit(&self.exclude)
+    }
 }
 
 /// Filter rules applied before selection.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Default)]
 pub struct Filter {
     /// Drop unmonitored items.
     pub monitored_only: bool,
     /// Drop items whose release is in the future (unknown release dates are kept).
     pub skip_future: bool,
+    /// Drop items released less than this many seconds ago; 0 turns the delay off. Future
+    /// releases fall under the delay too; unknown release dates are kept.
+    pub release_delay_secs: i64,
     /// Current time as Unix seconds.
     pub now_unix: i64,
+    /// Tag ids an item must or must not carry.
+    pub tags: IdRule,
+    /// Quality profile ids an item must or must not use.
+    pub profiles: IdRule,
+}
+
+impl Filter {
+    /// Whether one candidate passes every rule.
+    #[must_use]
+    pub fn admits(&self, c: &Candidate) -> bool {
+        let released_by = |at: i64| c.release_unix.is_none_or(|r| r <= at);
+        (!self.monitored_only || c.monitored)
+            && (!self.skip_future || released_by(self.now_unix))
+            && (self.release_delay_secs <= 0
+                || released_by(self.now_unix.saturating_sub(self.release_delay_secs)))
+            && self.tags.admits(&c.tags)
+            && self.profiles.admits(&c.profiles)
+    }
 }
 
 /// Applies [`Filter`], preserving order.
 #[must_use]
 pub fn filter(candidates: &[Candidate], f: &Filter) -> Vec<Candidate> {
-    candidates
-        .iter()
-        .filter(|c| !(f.monitored_only && !c.monitored))
-        .filter(|c| !(f.skip_future && c.release_unix.is_some_and(|r| r > f.now_unix)))
-        .cloned()
-        .collect()
+    candidates.iter().filter(|c| f.admits(c)).cloned().collect()
 }
 
 /// Picks up to `want` candidates. Random selection is a partial Fisher-Yates shuffle so the
@@ -565,7 +604,32 @@ mod tests {
             title: format!("t{id}"),
             release_unix: release,
             monitored,
+            tags: Vec::new(),
+            profiles: Vec::new(),
         }
+    }
+
+    // Small id ranges so include and exclude lists hit the candidates' ids often.
+    fn arb_ids() -> impl Strategy<Value = Vec<i32>> {
+        prop::collection::vec(1i32..6, 0..3)
+    }
+
+    fn arb_rule() -> impl Strategy<Value = IdRule> {
+        (arb_ids(), arb_ids()).prop_map(|(include, exclude)| IdRule { include, exclude })
+    }
+
+    fn arb_tagged() -> impl Strategy<Value = Vec<Candidate>> {
+        (
+            arb_candidates(),
+            prop::collection::vec((arb_ids(), arb_ids()), 64),
+        )
+            .prop_map(|(mut cands, ids)| {
+                for (c, (tags, profiles)) in cands.iter_mut().zip(ids) {
+                    c.tags = tags;
+                    c.profiles = profiles;
+                }
+                cands
+            })
     }
 
     fn arb_candidates() -> impl Strategy<Value = Vec<Candidate>> {
@@ -636,11 +700,70 @@ mod tests {
 
         #[test]
         fn filter_never_keeps_future_or_unmonitored(cands in arb_candidates(), now in -1000i64..1000) {
-            let f = Filter { monitored_only: true, skip_future: true, now_unix: now };
+            let f = Filter { monitored_only: true, skip_future: true, now_unix: now, ..Filter::default() };
             let kept = filter(&cands, &f);
             prop_assert!(kept.iter().all(|c| c.monitored));
             prop_assert!(kept.iter().all(|c| c.release_unix.is_none_or(|r| r <= now)));
             prop_assert!(kept.len() <= cands.len());
+        }
+
+        // Every kept item carries an included tag (when tags are included) and no excluded one.
+        #[test]
+        fn tag_filter_keeps_only_included_and_never_excluded(cands in arb_tagged(), tags in arb_rule()) {
+            let f = Filter { tags: tags.clone(), ..Filter::default() };
+            for c in filter(&cands, &f) {
+                prop_assert!(tags.include.is_empty() || c.tags.iter().any(|t| tags.include.contains(t)));
+                prop_assert!(!c.tags.iter().any(|t| tags.exclude.contains(t)));
+            }
+        }
+
+        #[test]
+        fn profile_filter_keeps_only_included_and_never_excluded(cands in arb_tagged(), profiles in arb_rule()) {
+            let f = Filter { profiles: profiles.clone(), ..Filter::default() };
+            for c in filter(&cands, &f) {
+                prop_assert!(profiles.include.is_empty() || c.profiles.iter().any(|p| profiles.include.contains(p)));
+                prop_assert!(!c.profiles.iter().any(|p| profiles.exclude.contains(p)));
+            }
+        }
+
+        // Nothing is kept that was released less than the delay ago, future releases included;
+        // an unknown release date is kept.
+        #[test]
+        fn release_delay_keeps_only_items_released_long_enough_ago(cands in arb_candidates(), now in -1000i64..1000, delay in 1i64..500) {
+            let f = Filter { release_delay_secs: delay, now_unix: now, ..Filter::default() };
+            let kept = filter(&cands, &f);
+            prop_assert!(kept.iter().all(|c| c.release_unix.is_none_or(|r| r + delay <= now)));
+            let unknown = cands.iter().filter(|c| c.release_unix.is_none()).count();
+            prop_assert!(kept.iter().filter(|c| c.release_unix.is_none()).count() == unknown);
+        }
+
+        // The filter drops no more than its rules ask for: an item that passes every rule,
+        // restated here independently, is kept, in its original order.
+        #[test]
+        fn filter_keeps_every_item_that_passes_all_rules(
+            cands in arb_tagged(), now in -1000i64..1000, delay in 0i64..500,
+            monitored_only in any::<bool>(), skip_future in any::<bool>(),
+            tags in arb_rule(), profiles in arb_rule(),
+        ) {
+            let f = Filter { monitored_only, skip_future, release_delay_secs: delay, now_unix: now, tags: tags.clone(), profiles: profiles.clone() };
+            let hit = |ids: &[i32], list: &[i32]| ids.iter().any(|i| list.contains(i));
+            let expected: Vec<Candidate> = cands.iter().filter(|c| {
+                (!monitored_only || c.monitored)
+                    && !(skip_future && c.release_unix.is_some_and(|r| r > now))
+                    && !(delay > 0 && c.release_unix.is_some_and(|r| r + delay > now))
+                    && (tags.include.is_empty() || hit(&c.tags, &tags.include))
+                    && !hit(&c.tags, &tags.exclude)
+                    && (profiles.include.is_empty() || hit(&c.profiles, &profiles.include))
+                    && !hit(&c.profiles, &profiles.exclude)
+            }).cloned().collect();
+            prop_assert_eq!(filter(&cands, &f), expected);
+        }
+
+        // Boundary: rules left empty keep every candidate.
+        #[test]
+        fn empty_rules_keep_everything(cands in arb_tagged(), now in -1000i64..1000) {
+            let f = Filter { now_unix: now, ..Filter::default() };
+            prop_assert_eq!(filter(&cands, &f), cands);
         }
 
         #[test]

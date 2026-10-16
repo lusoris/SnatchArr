@@ -267,6 +267,7 @@ fn default_run(api_url: &str) -> Run {
             lidarr_mode: snatch_proto::LidarrMode::Album as i32,
             await_command: false,
             cursor: "1".to_owned(),
+            ..Policy::default()
         }),
     }
 }
@@ -605,6 +606,96 @@ async fn skips_queued_and_recently_grabbed() -> TestResult {
         "Dispatch should be for episode 3 only"
     );
     Ok(())
+}
+
+/// Episodes of series 10 (tag 1, profile 4), 20 (tag 2, profile 5) and 30 (no tag, profile 4).
+fn labelled_episodes() -> serde_json::Value {
+    let row = |id: i64, series: i64, tags: serde_json::Value, profile: i32| {
+        serde_json::json!({
+            "id": id, "seriesId": series, "seasonNumber": 1, "episodeNumber": id,
+            "title": format!("Ep {id}"), "monitored": true, "airDateUtc": "2001-01-01T00:00:00Z",
+            "series": { "monitored": true, "tags": tags, "qualityProfileId": profile }
+        })
+    };
+    serde_json::json!([
+        row(1, 10, serde_json::json!([1]), 4),
+        row(2, 20, serde_json::json!([2]), 5),
+        row(3, 30, serde_json::json!([]), 4),
+    ])
+}
+
+/// Runs a policy change against `labelled_episodes` and returns the searched episode ids, sorted.
+async fn dispatched_with(
+    change: impl FnOnce(&mut Policy),
+) -> Result<Vec<i64>, Box<dyn std::error::Error>> {
+    let api = FakeApi {
+        filter_unprocessed: vec![1, 2, 3],
+        ..Default::default()
+    };
+    let (client, _) = start_fake_api(api).await?;
+    let mock_server = MockServer::start().await;
+    mount_sonarr_wanted(&mock_server, labelled_episodes()).await;
+    mount_command(&mock_server, queued_command()).await;
+    let mut run = default_run(&mock_server.uri());
+    change(some(run.policy.as_mut(), "policy")?);
+    run_short_polling(client, run).await;
+    let requests = some(mock_server.received_requests().await, "recorded requests")?;
+    let mut ids = Vec::new();
+    for post in command_posts(&requests) {
+        let body: serde_json::Value = serde_json::from_slice(&post.body)?;
+        let searched = some(
+            body.get("episodeIds").and_then(|v| v.as_array()),
+            "episodeIds",
+        )?;
+        ids.extend(searched.iter().filter_map(serde_json::Value::as_i64));
+    }
+    ids.sort_unstable();
+    Ok(ids)
+}
+
+#[tokio::test]
+async fn policy_tag_and_profile_rules_reach_the_filter() -> TestResult {
+    assert_eq!(
+        dispatched_with(|_| {}).await?,
+        [1, 2, 3],
+        "no rule keeps all"
+    );
+    assert_eq!(dispatched_with(|p| p.include_tags = vec![1]).await?, [1]);
+    assert_eq!(dispatched_with(|p| p.exclude_tags = vec![2]).await?, [1, 3]);
+    let profile = |p: &mut Policy| p.include_quality_profiles = vec![4];
+    assert_eq!(dispatched_with(profile).await?, [1, 3]);
+    let profile = |p: &mut Policy| p.exclude_quality_profiles = vec![4];
+    assert_eq!(dispatched_with(profile).await?, [2]);
+    // Aired in 2001: a delay of a year has passed, one of a century has not.
+    let delay = |p: &mut Policy| p.release_delay_hours = 24 * 365;
+    assert_eq!(dispatched_with(delay).await?, [1, 2, 3]);
+    let delay = |p: &mut Policy| p.release_delay_hours = 24 * 365 * 100;
+    assert_eq!(dispatched_with(delay).await?, Vec::<i64>::new());
+    Ok(())
+}
+
+#[test]
+fn filter_of_converts_the_release_delay_to_seconds() {
+    let policy = Policy {
+        release_delay_hours: 2,
+        include_tags: vec![7],
+        exclude_quality_profiles: vec![9],
+        ..Policy::default()
+    };
+    let f = filter_of(&policy, 100_000);
+    assert_eq!(f.release_delay_secs, 7200);
+    assert_eq!(f.now_unix, 100_000);
+    assert_eq!(f.tags.include, vec![7]);
+    assert_eq!(f.profiles.exclude, vec![9]);
+    // Boundary: the largest hour count does not overflow.
+    let max = Policy {
+        release_delay_hours: u32::MAX,
+        ..Policy::default()
+    };
+    assert_eq!(
+        filter_of(&max, 0).release_delay_secs,
+        i64::from(u32::MAX) * 3600
+    );
 }
 
 #[tokio::test]

@@ -292,6 +292,70 @@ struct BusyLike {
 struct MonitoredParent {
     #[serde(default)]
     monitored: bool,
+    #[serde(default)]
+    tags: Vec<i32>,
+    quality_profile_id: Option<i32>,
+}
+
+/// The author of a book. Chaptarr keeps a tag list and a quality profile per format beside the
+/// general ones; the other forks document only the general ones (contract tests: `foreign`).
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AuthorParent {
+    #[serde(default)]
+    monitored: bool,
+    #[serde(default)]
+    tags: Vec<i32>,
+    quality_profile_id: Option<i32>,
+    #[serde(default)]
+    audiobook_tags: Vec<i32>,
+    #[serde(default)]
+    ebook_tags: Vec<i32>,
+    audiobook_quality_profile_id: Option<i32>,
+    ebook_quality_profile_id: Option<i32>,
+}
+
+/// The tag ids and quality profile ids of a parent record, for the policy filter.
+#[derive(Default)]
+struct Labels {
+    tags: Vec<i32>,
+    profiles: Vec<i32>,
+}
+
+impl Labels {
+    fn of(tags: Vec<i32>, profiles: impl IntoIterator<Item = Option<i32>>) -> Self {
+        let mut tags = tags;
+        tags.sort_unstable();
+        tags.dedup();
+        let mut profiles: Vec<i32> = profiles.into_iter().flatten().collect();
+        profiles.sort_unstable();
+        profiles.dedup();
+        Self { tags, profiles }
+    }
+}
+
+impl From<&MonitoredParent> for Labels {
+    fn from(p: &MonitoredParent) -> Self {
+        Self::of(p.tags.clone(), [p.quality_profile_id])
+    }
+}
+
+impl From<&AuthorParent> for Labels {
+    fn from(a: &AuthorParent) -> Self {
+        let tags = [&a.tags, &a.audiobook_tags, &a.ebook_tags]
+            .into_iter()
+            .flatten()
+            .copied()
+            .collect();
+        Self::of(
+            tags,
+            [
+                a.quality_profile_id,
+                a.audiobook_quality_profile_id,
+                a.ebook_quality_profile_id,
+            ],
+        )
+    }
 }
 
 #[derive(Deserialize)]
@@ -322,6 +386,9 @@ struct MovieLike {
     physical_release: Option<DateTime<Utc>>,
     digital_release: Option<DateTime<Utc>>,
     in_cinemas: Option<DateTime<Utc>>,
+    #[serde(default)]
+    tags: Vec<i32>,
+    quality_profile_id: Option<i32>,
 }
 
 #[derive(Deserialize)]
@@ -336,7 +403,7 @@ struct ChildLike {
     artist_id: Option<i64>,
     author_id: Option<i64>,
     artist: Option<MonitoredParent>,
-    author: Option<MonitoredParent>,
+    author: Option<AuthorParent>,
 }
 
 #[derive(Serialize)]
@@ -719,6 +786,7 @@ fn page_of<T>(p: Paged<T>, map: impl Fn(T) -> Candidate) -> WantedPage {
 
 fn episode_candidate(e: EpisodeLike) -> Candidate {
     let parent_monitored = e.series.as_ref().is_none_or(|s| s.monitored);
+    let labels = e.series.as_ref().map(Labels::from).unwrap_or_default();
     Candidate {
         id: e.id,
         group: e.series_id,
@@ -729,6 +797,8 @@ fn episode_candidate(e: EpisodeLike) -> Candidate {
         ),
         release_unix: e.air_date_utc.map(|d| d.timestamp()),
         monitored: e.monitored && parent_monitored,
+        tags: labels.tags,
+        profiles: labels.profiles,
     }
 }
 
@@ -738,6 +808,7 @@ fn movie_candidate(m: MovieLike, release: RadarrRelease) -> Candidate {
         RadarrRelease::Digital => m.digital_release,
         RadarrRelease::Cinema => m.in_cinemas,
     };
+    let labels = Labels::of(m.tags, [m.quality_profile_id]);
     Candidate {
         id: m.id,
         group: m.id,
@@ -749,15 +820,22 @@ fn movie_candidate(m: MovieLike, release: RadarrRelease) -> Candidate {
         },
         release_unix: date.map(|d| d.timestamp()),
         monitored: m.monitored,
+        tags: labels.tags,
+        profiles: labels.profiles,
     }
 }
 
 fn child_candidate(c: ChildLike) -> Candidate {
-    let parent_monitored = c
-        .artist
-        .as_ref()
-        .or(c.author.as_ref())
-        .is_none_or(|p| p.monitored);
+    let parent_monitored = match (&c.artist, &c.author) {
+        (Some(artist), _) => artist.monitored,
+        (None, Some(author)) => author.monitored,
+        (None, None) => true,
+    };
+    let labels = match (&c.artist, &c.author) {
+        (Some(artist), _) => Labels::from(artist),
+        (None, Some(author)) => Labels::from(author),
+        (None, None) => Labels::default(),
+    };
     Candidate {
         id: c.id,
         group: c.artist_id.or(c.author_id).unwrap_or(c.id),
@@ -765,6 +843,8 @@ fn child_candidate(c: ChildLike) -> Candidate {
         title: c.title,
         release_unix: c.release_date.map(|d| d.timestamp()),
         monitored: c.monitored && parent_monitored,
+        tags: labels.tags,
+        profiles: labels.profiles,
     }
 }
 
@@ -1131,6 +1211,56 @@ mod tests {
             "error should not be client builder error: {msg}"
         );
         std::fs::write(child_ran, "ok").expect("write child sentinel");
+    }
+
+    type TestResult = Result<(), serde_json::Error>;
+
+    #[test]
+    fn candidates_carry_the_parent_tags_and_profiles() -> TestResult {
+        let episode: EpisodeLike =
+            serde_json::from_value(serde_json::json!({"id": 1, "seriesId": 2,
+            "seasonNumber": 1, "episodeNumber": 1,
+            "series": {"monitored": true, "tags": [3, 1, 3], "qualityProfileId": 7}}))?;
+        let c = episode_candidate(episode);
+        assert_eq!((c.tags, c.profiles), (vec![1, 3], vec![7]));
+
+        let movie: MovieLike = serde_json::from_value(
+            serde_json::json!({"id": 1, "tags": [5], "qualityProfileId": 2}),
+        )?;
+        let c = movie_candidate(movie, RadarrRelease::Physical);
+        assert_eq!((c.tags, c.profiles), (vec![5], vec![2]));
+
+        let album: ChildLike = serde_json::from_value(serde_json::json!({"id": 1, "artistId": 2,
+            "artist": {"monitored": true, "tags": [4], "qualityProfileId": 6}}))?;
+        let c = child_candidate(album);
+        assert_eq!((c.tags, c.profiles), (vec![4], vec![6]));
+        Ok(())
+    }
+
+    // Chaptarr: the general and the per-format tags and profiles of the author, as one set each.
+    #[test]
+    fn a_chaptarr_author_contributes_every_format() -> TestResult {
+        let book: ChildLike = serde_json::from_value(serde_json::json!({"id": 1, "authorId": 2,
+            "author": {"monitored": true, "tags": [1], "qualityProfileId": 1,
+                "audiobookTags": [2, 1], "ebookTags": [3],
+                "audiobookQualityProfileId": 4, "ebookQualityProfileId": 1}}))?;
+        let c = child_candidate(book);
+        assert_eq!((c.tags, c.profiles), (vec![1, 2, 3], vec![1, 4]));
+        Ok(())
+    }
+
+    // Boundary: a record without a parent or labels yields empty sets, so include rules drop it.
+    #[test]
+    fn a_record_without_labels_has_empty_sets() -> TestResult {
+        let episode: EpisodeLike =
+            serde_json::from_value(serde_json::json!({"id": 1, "seriesId": 2,
+            "seasonNumber": 1, "episodeNumber": 1}))?;
+        let c = episode_candidate(episode);
+        assert!(c.tags.is_empty() && c.profiles.is_empty());
+        let book: ChildLike = serde_json::from_value(serde_json::json!({"id": 1}))?;
+        let c = child_candidate(book);
+        assert!(c.tags.is_empty() && c.profiles.is_empty());
+        Ok(())
     }
 
     #[test]
