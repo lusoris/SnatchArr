@@ -71,9 +71,59 @@ docker compose up -d --wait
 The API applies its database migrations on start. Do not skip the backup: migrations only
 move forward, and a downgrade needs the backup taken before the upgrade.
 
-A new Postgres major (the `postgres` image moving from 18 to 19) does not start on a data
-volume of the previous major. Dump the database with the old image, move the volume aside,
-start the new image on an empty volume and restore, as below.
+A new Postgres major does not start on a data volume of the previous major. Move the database
+across as below.
+
+### Postgres major upgrade
+
+This bundle ships Postgres 18 and mounts its volume at `/var/lib/postgresql`. An install that
+runs Postgres 17, or any earlier major, keeps its data at `/var/lib/postgresql/data`. The
+official image refuses to start 18 on that volume ("in 18+, these Docker images are configured
+to store database data in a format which is compatible with pg_ctlcluster"), so nothing
+starts empty by accident. The same steps move a later install from 18 to 19; replace 17 with
+the major you leave.
+
+1. With the old `compose.yaml` still in place, stop the API and worker and dump the database:
+
+   ```sh
+   docker compose stop api worker
+   docker compose exec -T postgres pg_dump -U snatcharr --format=custom snatcharr > snatcharr.dump
+   docker compose down
+   ```
+
+2. Put the new `compose.yaml` in place, then move the old data directory aside inside the
+   volume. It stays there until you remove it, so you can go back:
+
+   ```sh
+   docker compose run --rm --no-deps --entrypoint sh postgres -c "cd /var/lib/postgresql &&
+     mkdir data-pg17 &&
+     find . -mindepth 1 -maxdepth 1 ! -name data-pg17 -exec mv {} data-pg17/ ';'"
+   ```
+
+3. Start the new Postgres on the emptied volume, restore the dump and start the rest:
+
+   ```sh
+   docker compose up -d --wait postgres
+   docker compose exec -T postgres pg_restore -U snatcharr --no-owner --exit-on-error \
+     --dbname=snatcharr < snatcharr.dump
+   docker compose up -d --wait
+   ```
+
+4. Once SnatchArr runs and shows your data, remove the old data directory:
+
+   ```sh
+   docker compose exec -T postgres rm -rf /var/lib/postgresql/data-pg17
+   ```
+
+To go back before step 4, put the old `compose.yaml` back, start it on a fresh volume and
+restore `snatcharr.dump` as in [Backup and restore](#backup-and-restore).
+
+`make e2e-compose-pg-upgrade` runs these steps on an install created on the previous major
+(the image `api/internal/store/storetest` pins as `PreviousMajorImage`). It compares every
+table of the database before and after, checks that setup stays complete and that the admin
+logs in with the old password. It also runs twice with a step skipped, once without the move
+in step 2 and once without the restore in step 3, and must refuse both. CI runs it on every
+pull request.
 
 ## Backup and restore
 

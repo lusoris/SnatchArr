@@ -265,6 +265,22 @@ upgrade. With the Barman Cloud plugin, change `serverName` together with `imageN
 new timeline does not write into the old archive. Postgres 17.0 to 17.5 refuse the upgrade
 while `max_slot_wal_keep_size` is set to anything but `-1`: upgrade to 17.6 or later first.
 
+With the chart the whole upgrade is one value change:
+
+```sh
+helm upgrade snatcharr oci://ghcr.io/lusoris/charts/snatcharr --reuse-values \
+  --set postgres.cnpg.imageName=ghcr.io/cloudnative-pg/postgresql:18.6-system-trixie
+kubectl wait cluster/snatcharr-db --timeout=30m \
+  --for=jsonpath='{.status.pgDataImageInfo.majorVersion}'=18
+```
+
+`make e2e-cnpg-pg-upgrade` runs this in CI on a kind cluster with the operator. It installs
+the chart on `17.10-system-trixie`, completes the setup and changes the image to
+`18.6-system-trixie`. It then checks that the operator reports major 18, that every table
+reads back unchanged, that the migration version is at least 7, and that the API starts with
+the setup complete and the old password. A planted chart upgrade without the image change
+must be refused first (`tools/e2e/cnpg_pg_upgrade.sh`).
+
 **External Postgres** (`postgres.external.dsnSecretRef`): dump and restore with the client
 tools of the new major. Stop the API first, so nothing writes during the dump (`kubectl scale deployment
 <fullname>-api --replicas=0`; the full name is the release name when it
@@ -280,6 +296,11 @@ Point the DSN Secret at the new server and scale the API up again. The new datab
 exist and be owned by the role in `NEW_DSN`. `TestPostgresMajorUpgradeByDumpRestore` in
 `api/internal/store` runs exactly this command from a Postgres 17 database holding a full
 0.1.8 dataset into Postgres 18, then migrates and reads every row back.
+
+**Homelab compose** (`deploy/homelab/compose.yaml`): dump with the old image, move the old data
+directory aside inside the volume, start the new image and restore. The commands are in
+[install-compose.md](install-compose.md#postgres-major-upgrade), and
+`make e2e-compose-pg-upgrade` runs them from a Postgres 17 install with a data read-back.
 
 **Dev compose** (`deploy/compose/docker-compose.yml`): the volume is mounted at
 `/var/lib/postgresql`, where the 18 image keeps its data in a per-major directory. A volume

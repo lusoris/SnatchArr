@@ -192,6 +192,8 @@ jobs:
             deploy:
               - 'deploy/**'
               - 'tools/deploy/**'
+              - 'tools/e2e/cnpg_pg_upgrade.sh'
+              - 'tools/e2e/fingerprint.sql'
               - 'Makefile'
               - '.github/workflows/ci.yml'
             governance:
@@ -496,6 +498,13 @@ jobs:
           SMOKE_SKIP_BUILD: '1'
           SMOKE_POSTGRES_MIRROR: mirror.gcr.io/library
         run: make e2e-compose-smoke
+      # The same bundle installed on the previous Postgres major and upgraded by the documented
+      # steps, with data read-back and two planted skipped steps (#252).
+      - name: make e2e-compose-pg-upgrade
+        env:
+          SMOKE_SKIP_BUILD: '1'
+          SMOKE_POSTGRES_MIRROR: mirror.gcr.io/library
+        run: make e2e-compose-pg-upgrade
 
   web:
     name: web (SvelteKit)
@@ -574,7 +583,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.deploy == 'true'
     runs-on: ubuntu-26.04
-    timeout-minutes: 20
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
@@ -630,6 +639,11 @@ jobs:
             --set 'networkPolicy.arrCidrs={10.0.0.0/8,0.0.0.0/0}' \
             --set-json 'networkPolicy.arrPeers=[{"namespaceSelector":{"matchLabels":{"kubernetes.io/metadata.name":"media"}}},{"podSelector":{"matchLabels":{"app.kubernetes.io/name":"lidarr"}},"ports":[{"port":8686,"protocol":"TCP"}]}]' \
             | kubectl apply --dry-run=server --namespace snatcharr -f -
+      # The chart installed on CloudNativePG with the previous Postgres major and upgraded by
+      # the documented imageName change: data read-back, API back up, and a planted upgrade
+      # without the image change that must be refused (#252).
+      - name: make e2e-cnpg-pg-upgrade
+        run: make e2e-cnpg-pg-upgrade
 
   # The hand-written clients against the OpenAPI specs their upstream projects publish. The specs
   # are downloaded at the commits pinned in tools/upstreamspec/specs.yaml and checked against their

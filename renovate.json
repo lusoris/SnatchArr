@@ -133,6 +133,18 @@
       ],
       "datasourceTemplate": "docker",
       "versioningTemplate": "docker"
+    },
+    {
+      "description": "The CloudNativePG operand images of the chart upgrade test, pinned by version and digest (tools/e2e/cnpg_pg_upgrade.sh, #252)",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "tools/e2e/cnpg_pg_upgrade.sh"
+      ],
+      "matchStrings": [
+        "(?:OLD|NEW)_IMAGE=(?<depName>ghcr\\.io/cloudnative-pg/postgresql):(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})\\n"
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
     }
   ],
   "postUpdateOptions": [
@@ -363,6 +375,28 @@
       ],
       "matchCurrentValue": "/^17-/",
       "allowedVersions": "/^17-/"
+    },
+    {
+      "description": "The chart upgrade test moves a CloudNativePG cluster from the previous Postgres major to the current one (tools/e2e/cnpg_pg_upgrade.sh, #252): each operand pin takes digest and minor updates on its own major. Move both, with old_major and new_major, when Postgres 19 is adopted",
+      "matchFileNames": [
+        "tools/e2e/cnpg_pg_upgrade.sh"
+      ],
+      "matchDepNames": [
+        "ghcr.io/cloudnative-pg/postgresql"
+      ],
+      "matchCurrentValue": "/^17\\./",
+      "allowedVersions": "/^17\\./"
+    },
+    {
+      "description": "See the rule above: the current-major operand pin of the chart upgrade test stays on 18",
+      "matchFileNames": [
+        "tools/e2e/cnpg_pg_upgrade.sh"
+      ],
+      "matchDepNames": [
+        "ghcr.io/cloudnative-pg/postgresql"
+      ],
+      "matchCurrentValue": "/^18\\./",
+      "allowedVersions": "/^18\\./"
     }
   ],
   "minimumReleaseAge": "3 days",
