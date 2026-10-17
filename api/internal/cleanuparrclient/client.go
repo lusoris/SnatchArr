@@ -2,14 +2,18 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-// Package cleanuparrclient reads status and strikes from a Cleanuparr server
-// (`X-Api-Key` auth, `/api/status`, `/api/strikes`). Nothing is ever written.
+// Package cleanuparrclient reads status, strikes and Seeker configuration from
+// a Cleanuparr server (`X-Api-Key` auth). Status and strikes go through
+// goenvoy's arr/cleanuparr module; the Seeker configuration endpoints are not
+// in goenvoy yet (golusoris/goenvoy#102) and stay here. Nothing is ever written.
 package cleanuparrclient
 
 import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/golusoris/goenvoy/arr/cleanuparr"
 
 	"github.com/lusoris/SnatchArr/api/internal/arrclient"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
@@ -75,12 +79,8 @@ type Client interface {
 	ArrInstances(ctx context.Context, baseURL, apiKey string, appType string) ([]ArrInstanceRef, error)
 }
 
-// Bounds (HISS-02).
-const (
-	MaxRecent      = 50
-	summaryPage    = 500
-	maxSummaryPage = 4
-)
+// MaxRecent bounds RecentStrikes (HISS-02); goenvoy clamps to the same value.
+const MaxRecent = cleanuparr.MaxRecentStrikes
 
 // HTTP implements Client over goenvoy's base client (same X-Api-Key convention).
 type HTTP struct {
@@ -92,29 +92,27 @@ func New(timeout time.Duration, userAgent string) *HTTP {
 	return &HTTP{Timeout: timeout, UserAgent: userAgent}
 }
 
-//nolint:tagliatelle // Cleanuparr speaks camelCase
-type statusJSON struct {
-	Application struct {
-		Version   string `json:"version"`
-		StartTime string `json:"startTime"`
-	} `json:"application"`
-	MediaManagers map[string]struct {
-		InstanceCount int `json:"instanceCount"`
-	} `json:"mediaManagers"`
+// goenvoy builds the goenvoy Cleanuparr client with the factory's timeout and user agent.
+func (h *HTTP) goenvoy(baseURL, apiKey string) (*cleanuparr.Client, error) {
+	c, err := cleanuparr.New(baseURL, apiKey, h.Options()...)
+	if err != nil {
+		return nil, fmt.Errorf("cleanuparr: client: %w", err)
+	}
+	return c, nil
 }
 
 // Status implements Client.
 func (h *HTTP) Status(ctx context.Context, baseURL, apiKey string) (Status, error) {
-	c, err := h.Base(baseURL, apiKey)
+	c, err := h.goenvoy(baseURL, apiKey)
 	if err != nil {
-		return Status{}, fmt.Errorf("cleanuparr: client: %w", err)
+		return Status{}, err
 	}
-	var out statusJSON
-	if err := c.Get(ctx, "/api/status", &out); err != nil {
+	out, err := c.GetStatus(ctx)
+	if err != nil {
 		return Status{}, fmt.Errorf("%w: cleanuparr status: %w", domain.ErrUnreachable, err)
 	}
 	st := Status{Version: out.Application.Version, MediaManagers: make(map[string]int, len(out.MediaManagers))}
-	if t, err := time.Parse(time.RFC3339Nano, out.Application.StartTime); err == nil {
+	if t, err := out.Application.StartTimeParsed(); err == nil {
 		t = t.UTC()
 		st.StartedAt = &t
 	}
@@ -124,78 +122,40 @@ func (h *HTTP) Status(ctx context.Context, baseURL, apiKey string) (Status, erro
 	return st, nil
 }
 
-//nolint:tagliatelle // Cleanuparr speaks camelCase
-type recentJSON struct {
-	ID         string `json:"id"`
-	Type       string `json:"type"`
-	CreatedAt  string `json:"createdAt"`
-	DownloadID string `json:"downloadId"`
-	Title      string `json:"title"`
-	IsDryRun   bool   `json:"isDryRun"`
-}
-
 // RecentStrikes implements Client: the newest strikes, at most MaxRecent.
 func (h *HTTP) RecentStrikes(ctx context.Context, baseURL, apiKey string, count int) ([]Strike, error) {
-	c, err := h.Base(baseURL, apiKey)
+	c, err := h.goenvoy(baseURL, apiKey)
 	if err != nil {
-		return nil, fmt.Errorf("cleanuparr: client: %w", err)
+		return nil, err
 	}
-	var list []recentJSON
-	if err := c.Get(ctx, fmt.Sprintf("/api/strikes/recent?count=%d", min(max(count, 1), MaxRecent)), &list); err != nil {
+	list, err := c.GetRecentStrikes(ctx, count)
+	if err != nil {
 		return nil, fmt.Errorf("%w: cleanuparr strikes: %w", domain.ErrUnreachable, err)
 	}
 	out := make([]Strike, 0, len(list))
 	for _, s := range list {
-		created, _ := time.Parse(time.RFC3339Nano, s.CreatedAt)
-		out = append(out, Strike{ID: s.ID, Type: s.Type, CreatedAt: created.UTC(), DownloadID: s.DownloadID, Title: s.Title, DryRun: s.IsDryRun})
+		out = append(out, Strike{ID: s.ID, Type: s.Type, CreatedAt: s.CreatedAt.UTC(), DownloadID: s.DownloadID, Title: s.Title, DryRun: s.IsDryRun})
 	}
 	return out, nil
 }
 
-//nolint:tagliatelle // Cleanuparr speaks camelCase
-type strikesPage struct {
-	Items []struct {
-		IsMarkedForRemoval bool `json:"isMarkedForRemoval"`
-		IsRemoved          bool `json:"isRemoved"`
-		IsReturning        bool `json:"isReturning"`
-	} `json:"items"`
-	TotalCount int `json:"totalCount"`
-	TotalPages int `json:"totalPages"`
-}
-
-// Summary implements Client: counts over the struck downloads (bounded pages).
+// Summary implements Client: counts over the struck downloads (goenvoy reads at
+// most 4 pages of 500).
 func (h *HTTP) Summary(ctx context.Context, baseURL, apiKey string) (StrikeSummary, error) {
-	c, err := h.Base(baseURL, apiKey)
+	c, err := h.goenvoy(baseURL, apiKey)
 	if err != nil {
-		return StrikeSummary{}, fmt.Errorf("cleanuparr: client: %w", err)
+		return StrikeSummary{}, err
 	}
-	var sum StrikeSummary
-	for page := 1; page <= maxSummaryPage; page++ {
-		var out strikesPage
-		if err := c.Get(ctx, fmt.Sprintf("/api/strikes?page=%d&pageSize=%d", page, summaryPage), &out); err != nil {
-			return StrikeSummary{}, fmt.Errorf("%w: cleanuparr strikes: %w", domain.ErrUnreachable, err)
-		}
-		sum.StruckDownloads = out.TotalCount
-		tally(&sum, out)
-		if page >= out.TotalPages {
-			break
-		}
+	out, err := c.SummarizeStrikes(ctx)
+	if err != nil {
+		return StrikeSummary{}, fmt.Errorf("%w: cleanuparr strikes: %w", domain.ErrUnreachable, err)
 	}
-	return sum, nil
-}
-
-func tally(sum *StrikeSummary, page strikesPage) {
-	for _, item := range page.Items {
-		if item.IsMarkedForRemoval {
-			sum.MarkedForRemoval++
-		}
-		if item.IsRemoved {
-			sum.RemovedDownloads++
-		}
-		if item.IsReturning {
-			sum.ReturningDownload++
-		}
-	}
+	return StrikeSummary{
+		StruckDownloads:   out.StruckDownloads,
+		MarkedForRemoval:  out.MarkedForRemoval,
+		RemovedDownloads:  out.RemovedDownloads,
+		ReturningDownload: out.ReturningDownloads,
+	}, nil
 }
 
 //nolint:tagliatelle // Cleanuparr speaks camelCase

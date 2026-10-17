@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -51,9 +52,12 @@ func fakeCleanuparr(t *testing.T) *httptest.Server {
 		})
 	}))
 	mux.HandleFunc("GET /api/strikes", auth(func(w http.ResponseWriter, r *http.Request) {
-		page := r.URL.Query().Get("page")
+		page, err := strconv.Atoi(r.URL.Query().Get("page"))
+		if err != nil {
+			t.Errorf("page: %v", err)
+		}
 		items := []map[string]any{{"isMarkedForRemoval": true, "isRemoved": false, "isReturning": false}}
-		if page == "2" {
+		if page == 2 {
 			items = []map[string]any{{"isMarkedForRemoval": false, "isRemoved": true, "isReturning": true}}
 		}
 		write(w, map[string]any{"items": items, "page": page, "pageSize": 500, "totalCount": 2, "totalPages": 2})
@@ -83,6 +87,44 @@ func TestHTTPClient(t *testing.T) {
 	sum, err := c.Summary(ctx, srv.URL, "clean-key")
 	if err != nil || sum.StruckDownloads != 2 || sum.MarkedForRemoval != 1 || sum.RemovedDownloads != 1 || sum.ReturningDownload != 1 {
 		t.Fatalf("summary: %+v %v", sum, err)
+	}
+}
+
+func TestStatusStartTime(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name      string
+		startTime string
+		want      time.Time
+		wantNil   bool
+	}{
+		{name: "with offset", startTime: "2026-09-20T10:00:00+02:00", want: time.Date(2026, 9, 20, 8, 0, 0, 0, time.UTC)},
+		{name: "zone-less .NET", startTime: "2026-09-20T08:00:00.1234567", want: time.Date(2026, 9, 20, 8, 0, 0, 123456700, time.UTC)},
+		{name: "unparsable", startTime: "yesterday", wantNil: true},
+		{name: "empty", startTime: "", wantNil: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				fmt.Fprintf(w, `{"application":{"version":"2.10.11","startTime":%q},"mediaManagers":{}}`, tc.startTime)
+			}))
+			t.Cleanup(srv.Close)
+			st, err := cleanuparrclient.New(5*time.Second, "SnatchArr-test").Status(context.Background(), srv.URL, "k")
+			if err != nil {
+				t.Fatalf("status: %v", err)
+			}
+			if tc.wantNil {
+				if st.StartedAt != nil {
+					t.Fatalf("StartedAt = %v, want nil", st.StartedAt)
+				}
+				return
+			}
+			if st.StartedAt == nil || !st.StartedAt.Equal(tc.want) || st.StartedAt.Location() != time.UTC {
+				t.Fatalf("StartedAt = %v, want %v UTC", st.StartedAt, tc.want)
+			}
+		})
 	}
 }
 

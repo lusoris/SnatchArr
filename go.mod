@@ -11,6 +11,7 @@ require (
 	github.com/go-faster/errors v0.8.0
 	github.com/go-faster/jx v1.2.0
 	github.com/go-jose/go-jose/v4 v4.1.5
+	github.com/golusoris/goenvoy/arr/cleanuparr v1.0.0
 	github.com/golusoris/goenvoy/arr/lidarr v1.3.1
 	github.com/golusoris/goenvoy/arr/radarr v1.3.1
 	github.com/golusoris/goenvoy/arr/readarr v1.3.1
