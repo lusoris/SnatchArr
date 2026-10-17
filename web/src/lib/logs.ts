@@ -32,13 +32,23 @@ export function logLevelLabel(level: LogLevel): string {
 	return levelLabels[level]();
 }
 
+/** The source filter that selects every worker; one worker's records carry `worker:<id>`. */
+export const workersSource = 'worker';
+
+/** Whether a record comes from the filtered source, with the API's rules. */
+export function fromSource(rec: LogRecord, source: string): boolean {
+	if (source === '' || rec.source === source) return true;
+	return source === workersSource && rec.source.startsWith(`${workersSource}:`);
+}
+
 /**
- * Whether a record passes the filter, with the API's rules: level at or above the minimum, exact
- * source, and the text anywhere in the message or an attribute key or value, ignoring case.
+ * Whether a record passes the filter, with the API's rules: level at or above the minimum, the
+ * source (exact, or every worker for `worker`), and the text anywhere in the message or an
+ * attribute key or value, ignoring case.
  */
 export function matchesLog(rec: LogRecord, f: LogFilter): boolean {
 	if (rank[rec.level] < rank[f.level]) return false;
-	if (f.source !== '' && rec.source !== f.source) return false;
+	if (!fromSource(rec, f.source)) return false;
 	const q = f.q.toLowerCase();
 	if (q === '') return true;
 	if (rec.message.toLowerCase().includes(q)) return true;
@@ -75,4 +85,9 @@ export function mergeLogs(
 	);
 	const fresh = [...bySeq.values()].sort((a, b) => b.seq - a.seq);
 	return [...fresh, ...page].slice(0, limit);
+}
+
+/** Sources to suggest in the filter: api, every worker, then each source the records show. */
+export function logSources(records: readonly LogRecord[]): string[] {
+	return [...new Set(['api', workersSource, ...records.map((r) => r.source)])];
 }

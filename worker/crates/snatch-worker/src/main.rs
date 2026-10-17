@@ -11,6 +11,7 @@ mod auth;
 mod config;
 mod executor;
 mod health;
+mod logship;
 mod probe;
 mod resend;
 
@@ -18,12 +19,17 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use snatch_proto::worker_service_client::WorkerServiceClient;
-use snatch_proto::{HeartbeatDirective, HeartbeatRequest, LeaseRunRequest, LeaseRunResponse};
-use tokio::sync::Semaphore;
+use snatch_proto::{
+    HeartbeatDirective, HeartbeatRequest, LeaseRunRequest, LeaseRunResponse, LogRecord,
+    ReportLogsRequest,
+};
+use tokio::sync::{Semaphore, mpsc};
 use tokio_util::sync::CancellationToken;
 use tonic::transport::Channel;
 use tonic::{Code, Request, Status};
 use tracing_subscriber::EnvFilter;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 
 use crate::auth::AuthInterceptor;
 use crate::config::Config;
@@ -37,13 +43,56 @@ const MAX_HEARTBEATS: u32 = 1 << 20;
 const MIN_BACKOFF: Duration = Duration::from_secs(1);
 const MAX_BACKOFF: Duration = Duration::from_secs(30);
 
+/// Longest wait at shutdown for the last log records to reach the API.
+const LOG_DRAIN: Duration = Duration::from_secs(10);
+
+fn env_filter() -> EnvFilter {
+    EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"))
+}
+
 fn init_tracing() {
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
     tracing_subscriber::fmt()
         .json()
-        .with_env_filter(filter)
+        .with_env_filter(env_filter())
         .with_target(false)
         .init();
+}
+
+/// Logs to stdout as `init_tracing` does and copies every record into the log shipper's
+/// channel (#349).
+fn init_shipped_tracing() -> (mpsc::Receiver<LogRecord>, Arc<logship::Dropped>) {
+    let (layer, rx, dropped) = logship::channel(logship::CAPACITY);
+    tracing_subscriber::registry()
+        .with(env_filter())
+        .with(tracing_subscriber::fmt::layer().json().with_target(false))
+        .with(layer)
+        .init();
+    (rx, dropped)
+}
+
+/// Ships the worker's log records to the API until `stop`, each call within its deadline.
+fn spawn_shipper(
+    client: &Client,
+    worker_id: String,
+    rx: mpsc::Receiver<LogRecord>,
+    dropped: Arc<logship::Dropped>,
+    stop: CancellationToken,
+) -> tokio::task::JoinHandle<()> {
+    let client = client.clone();
+    let send = move |req: ReportLogsRequest| {
+        let client = client.clone();
+        async move {
+            resend::once_more(|| {
+                let mut c = client.clone();
+                let mut r = Request::new(req.clone());
+                r.set_timeout(logship::CALL_TIMEOUT);
+                async move { c.report_logs(r).await }
+            })
+            .await
+            .map(|_| ())
+        }
+    };
+    tokio::spawn(logship::ship(send, worker_id, rx, dropped, stop))
 }
 
 async fn connect(cfg: &Config) -> Result<Client, Box<dyn std::error::Error + Send + Sync>> {
@@ -230,10 +279,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         }
         return Ok(());
     }
-    init_tracing();
+    let (log_rx, log_dropped) = init_shipped_tracing();
     let cfg = Arc::new(Config::from_env()?);
     tracing::info!(api = %cfg.api_grpc, worker = %cfg.worker_id, concurrency = cfg.concurrency, "snatch-worker starting");
     let client = connect(&cfg).await?;
+    let ship_stop = CancellationToken::new();
+    let shipper = spawn_shipper(
+        &client,
+        cfg.worker_id.clone(),
+        log_rx,
+        log_dropped,
+        ship_stop.clone(),
+    );
     let health = Arc::new(Health::new(cfg.stale));
     let listener = health::bind(cfg.http_addr).await?;
     tracing::info!(addr = %listener.local_addr()?, stale_secs = cfg.stale.as_secs(), "health listener on /livez, /readyz and /metrics");
@@ -253,6 +310,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         tracing::warn!(error = %e, "health listener ended abnormally");
     }
     tracing::info!("snatch-worker stopped");
+    ship_stop.cancel();
+    if tokio::time::timeout(LOG_DRAIN, shipper).await.is_err() {
+        tracing::warn!("last log records not sent before the drain deadline");
+    }
     Ok(())
 }
 

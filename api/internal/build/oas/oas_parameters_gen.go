@@ -1698,7 +1698,7 @@ type ListLogsParams struct {
 	Level OptLogLevel `json:",omitempty,omitzero"`
 	// Case-insensitive substring of the message, an attribute key or value.
 	Q OptString `json:",omitempty,omitzero"`
-	// Exact source, e.g. api.
+	// Source: api, worker for every worker, or worker:<id> for one worker.
 	Source OptString `json:",omitempty,omitzero"`
 	Limit  OptInt    `json:",omitempty,omitzero"`
 }
@@ -1907,7 +1907,7 @@ func decodeListLogsParams(args [0]string, argsEscaped bool, r *http.Request) (pa
 						if err := (validate.String{
 							MinLength:     0,
 							MinLengthSet:  false,
-							MaxLength:     64,
+							MaxLength:     160,
 							MaxLengthSet:  true,
 							Email:         false,
 							Hostname:      false,

@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	logLevelLabel,
 	logLevels,
+	logSources,
 	matchesLog,
 	mergeLogs,
 	parseLogFrame,
@@ -49,6 +50,24 @@ describe('matchesLog', () => {
 			true
 		],
 		['negative other source', rec(1, { source: 'api' }), { ...all, source: 'worker:w1' }, false],
+		[
+			'positive worker selects every worker',
+			rec(1, { source: 'worker:w2' }),
+			{ ...all, source: 'worker' },
+			true
+		],
+		[
+			'negative worker leaves out the api',
+			rec(1, { source: 'api' }),
+			{ ...all, source: 'worker' },
+			false
+		],
+		[
+			'boundary worker needs the separator',
+			rec(1, { source: 'workers-elsewhere' }),
+			{ ...all, source: 'worker' },
+			false
+		],
 		[
 			'positive text in message ignores case',
 			rec(1, { message: 'Sonarr down' }),
@@ -106,6 +125,16 @@ describe('mergeLogs', () => {
 
 	it('boundary empty page keeps every streamed record', () => {
 		expect(mergeLogs([], [rec(1), rec(2)], all, 10).map((r) => r.seq)).toEqual([2, 1]);
+	});
+});
+
+describe('logSources', () => {
+	it('positive suggests api, every worker, then each source seen once', () => {
+		const records = [rec(3, { source: 'worker:w1' }), rec(2), rec(1, { source: 'worker:w1' })];
+		expect(logSources(records)).toEqual(['api', 'worker', 'worker:w1']);
+	});
+	it('boundary no records still suggests api and every worker', () => {
+		expect(logSources([])).toEqual(['api', 'worker']);
 	});
 });
 

@@ -1799,6 +1799,243 @@ func (*CompleteRunResponse) Descriptor() ([]byte, []int) {
 	return file_snatcharr_v1_worker_proto_rawDescGZIP(), []int{16}
 }
 
+// LogField is one structured field of a worker log record.
+type LogField struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Value         string                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LogField) Reset() {
+	*x = LogField{}
+	mi := &file_snatcharr_v1_worker_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LogField) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LogField) ProtoMessage() {}
+
+func (x *LogField) ProtoReflect() protoreflect.Message {
+	mi := &file_snatcharr_v1_worker_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LogField.ProtoReflect.Descriptor instead.
+func (*LogField) Descriptor() ([]byte, []int) {
+	return file_snatcharr_v1_worker_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *LogField) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *LogField) GetValue() string {
+	if x != nil {
+		return x.Value
+	}
+	return ""
+}
+
+// LogRecord is one worker log record, not yet redacted.
+type LogRecord struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	TsUnixMs int64                  `protobuf:"varint,1,opt,name=ts_unix_ms,json=tsUnixMs,proto3" json:"ts_unix_ms,omitempty"`
+	Level    Level                  `protobuf:"varint,2,opt,name=level,proto3,enum=snatcharr.v1.Level" json:"level,omitempty"`
+	// The tracing target, usually the Rust module path.
+	Target        string      `protobuf:"bytes,3,opt,name=target,proto3" json:"target,omitempty"`
+	Message       string      `protobuf:"bytes,4,opt,name=message,proto3" json:"message,omitempty"`
+	Fields        []*LogField `protobuf:"bytes,5,rep,name=fields,proto3" json:"fields,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LogRecord) Reset() {
+	*x = LogRecord{}
+	mi := &file_snatcharr_v1_worker_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LogRecord) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LogRecord) ProtoMessage() {}
+
+func (x *LogRecord) ProtoReflect() protoreflect.Message {
+	mi := &file_snatcharr_v1_worker_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LogRecord.ProtoReflect.Descriptor instead.
+func (*LogRecord) Descriptor() ([]byte, []int) {
+	return file_snatcharr_v1_worker_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *LogRecord) GetTsUnixMs() int64 {
+	if x != nil {
+		return x.TsUnixMs
+	}
+	return 0
+}
+
+func (x *LogRecord) GetLevel() Level {
+	if x != nil {
+		return x.Level
+	}
+	return Level_LEVEL_UNSPECIFIED
+}
+
+func (x *LogRecord) GetTarget() string {
+	if x != nil {
+		return x.Target
+	}
+	return ""
+}
+
+func (x *LogRecord) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *LogRecord) GetFields() []*LogField {
+	if x != nil {
+		return x.Fields
+	}
+	return nil
+}
+
+type ReportLogsRequest struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	WorkerId string                 `protobuf:"bytes,1,opt,name=worker_id,json=workerId,proto3" json:"worker_id,omitempty"`
+	Records  []*LogRecord           `protobuf:"bytes,2,rep,name=records,proto3" json:"records,omitempty"`
+	// Records the worker dropped since its previous accepted batch because its buffer was full.
+	Dropped       uint64 `protobuf:"varint,3,opt,name=dropped,proto3" json:"dropped,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReportLogsRequest) Reset() {
+	*x = ReportLogsRequest{}
+	mi := &file_snatcharr_v1_worker_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReportLogsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReportLogsRequest) ProtoMessage() {}
+
+func (x *ReportLogsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_snatcharr_v1_worker_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReportLogsRequest.ProtoReflect.Descriptor instead.
+func (*ReportLogsRequest) Descriptor() ([]byte, []int) {
+	return file_snatcharr_v1_worker_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *ReportLogsRequest) GetWorkerId() string {
+	if x != nil {
+		return x.WorkerId
+	}
+	return ""
+}
+
+func (x *ReportLogsRequest) GetRecords() []*LogRecord {
+	if x != nil {
+		return x.Records
+	}
+	return nil
+}
+
+func (x *ReportLogsRequest) GetDropped() uint64 {
+	if x != nil {
+		return x.Dropped
+	}
+	return 0
+}
+
+type ReportLogsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Records the API stored; the rest of the batch was over its per-batch limit.
+	Accepted      uint32 `protobuf:"varint,1,opt,name=accepted,proto3" json:"accepted,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReportLogsResponse) Reset() {
+	*x = ReportLogsResponse{}
+	mi := &file_snatcharr_v1_worker_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReportLogsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReportLogsResponse) ProtoMessage() {}
+
+func (x *ReportLogsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_snatcharr_v1_worker_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReportLogsResponse.ProtoReflect.Descriptor instead.
+func (*ReportLogsResponse) Descriptor() ([]byte, []int) {
+	return file_snatcharr_v1_worker_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *ReportLogsResponse) GetAccepted() uint32 {
+	if x != nil {
+		return x.Accepted
+	}
+	return 0
+}
+
 var File_snatcharr_v1_worker_proto protoreflect.FileDescriptor
 
 const file_snatcharr_v1_worker_proto_rawDesc = "" +
@@ -1906,7 +2143,23 @@ const file_snatcharr_v1_worker_proto_rawDesc = "" +
 	"\x06cursor\x18\x05 \x01(\tR\x06cursor\x12\x14\n" +
 	"\x05error\x18\x06 \x01(\tR\x05error\x12-\n" +
 	"\x12events_unconfirmed\x18\a \x01(\rR\x11eventsUnconfirmed\"\x15\n" +
-	"\x13CompleteRunResponse*\xac\x01\n" +
+	"\x13CompleteRunResponse\"2\n" +
+	"\bLogField\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value\"\xb6\x01\n" +
+	"\tLogRecord\x12\x1c\n" +
+	"\n" +
+	"ts_unix_ms\x18\x01 \x01(\x03R\btsUnixMs\x12)\n" +
+	"\x05level\x18\x02 \x01(\x0e2\x13.snatcharr.v1.LevelR\x05level\x12\x16\n" +
+	"\x06target\x18\x03 \x01(\tR\x06target\x12\x18\n" +
+	"\amessage\x18\x04 \x01(\tR\amessage\x12.\n" +
+	"\x06fields\x18\x05 \x03(\v2\x16.snatcharr.v1.LogFieldR\x06fields\"}\n" +
+	"\x11ReportLogsRequest\x12\x1b\n" +
+	"\tworker_id\x18\x01 \x01(\tR\bworkerId\x121\n" +
+	"\arecords\x18\x02 \x03(\v2\x17.snatcharr.v1.LogRecordR\arecords\x12\x18\n" +
+	"\adropped\x18\x03 \x01(\x04R\adropped\"0\n" +
+	"\x12ReportLogsResponse\x12\x1a\n" +
+	"\baccepted\x18\x01 \x01(\rR\baccepted*\xac\x01\n" +
 	"\aAppKind\x12\x18\n" +
 	"\x14APP_KIND_UNSPECIFIED\x10\x00\x12\x13\n" +
 	"\x0fAPP_KIND_SONARR\x10\x01\x12\x13\n" +
@@ -1972,14 +2225,16 @@ const file_snatcharr_v1_worker_proto_rawDesc = "" +
 	"\x17RUN_OUTCOME_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10RUN_OUTCOME_DONE\x10\x01\x12\x16\n" +
 	"\x12RUN_OUTCOME_FAILED\x10\x02\x12\x19\n" +
-	"\x15RUN_OUTCOME_CANCELLED\x10\x032\x92\x04\n" +
+	"\x15RUN_OUTCOME_CANCELLED\x10\x032\xe3\x04\n" +
 	"\rWorkerService\x12I\n" +
 	"\bLeaseRun\x12\x1d.snatcharr.v1.LeaseRunRequest\x1a\x1e.snatcharr.v1.LeaseRunResponse\x12L\n" +
 	"\tHeartbeat\x12\x1e.snatcharr.v1.HeartbeatRequest\x1a\x1f.snatcharr.v1.HeartbeatResponse\x12a\n" +
 	"\x10FilterCandidates\x12%.snatcharr.v1.FilterCandidatesRequest\x1a&.snatcharr.v1.FilterCandidatesResponse\x12X\n" +
 	"\rAcquireBudget\x12\".snatcharr.v1.AcquireBudgetRequest\x1a#.snatcharr.v1.AcquireBudgetResponse\x12W\n" +
 	"\fReportEvents\x12!.snatcharr.v1.ReportEventsRequest\x1a\".snatcharr.v1.ReportEventsResponse(\x01\x12R\n" +
-	"\vCompleteRun\x12 .snatcharr.v1.CompleteRunRequest\x1a!.snatcharr.v1.CompleteRunResponseB\xb8\x01\n" +
+	"\vCompleteRun\x12 .snatcharr.v1.CompleteRunRequest\x1a!.snatcharr.v1.CompleteRunResponse\x12O\n" +
+	"\n" +
+	"ReportLogs\x12\x1f.snatcharr.v1.ReportLogsRequest\x1a .snatcharr.v1.ReportLogsResponseB\xb8\x01\n" +
 	"\x10com.snatcharr.v1B\vWorkerProtoP\x01ZFgithub.com/lusoris/SnatchArr/api/internal/gen/snatcharr/v1;snatcharrv1\xa2\x02\x03SXX\xaa\x02\fSnatcharr.V1\xca\x02\fSnatcharr\\V1\xe2\x02\x18Snatcharr\\V1\\GPBMetadata\xea\x02\rSnatcharr::V1b\x06proto3"
 
 var (
@@ -1997,7 +2252,7 @@ func file_snatcharr_v1_worker_proto_rawDescGZIP() []byte {
 }
 
 var file_snatcharr_v1_worker_proto_enumTypes = make([]protoimpl.EnumInfo, 10)
-var file_snatcharr_v1_worker_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
+var file_snatcharr_v1_worker_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_snatcharr_v1_worker_proto_goTypes = []any{
 	(AppKind)(0),                     // 0: snatcharr.v1.AppKind
 	(SnatchKind)(0),                  // 1: snatcharr.v1.SnatchKind
@@ -2026,6 +2281,10 @@ var file_snatcharr_v1_worker_proto_goTypes = []any{
 	(*SearchedItem)(nil),             // 24: snatcharr.v1.SearchedItem
 	(*CompleteRunRequest)(nil),       // 25: snatcharr.v1.CompleteRunRequest
 	(*CompleteRunResponse)(nil),      // 26: snatcharr.v1.CompleteRunResponse
+	(*LogField)(nil),                 // 27: snatcharr.v1.LogField
+	(*LogRecord)(nil),                // 28: snatcharr.v1.LogRecord
+	(*ReportLogsRequest)(nil),        // 29: snatcharr.v1.ReportLogsRequest
+	(*ReportLogsResponse)(nil),       // 30: snatcharr.v1.ReportLogsResponse
 }
 var file_snatcharr_v1_worker_proto_depIdxs = []int32{
 	2,  // 0: snatcharr.v1.Policy.selection:type_name -> snatcharr.v1.Selection
@@ -2043,23 +2302,28 @@ var file_snatcharr_v1_worker_proto_depIdxs = []int32{
 	21, // 12: snatcharr.v1.ReportEventsRequest.event:type_name -> snatcharr.v1.SnatchEvent
 	9,  // 13: snatcharr.v1.CompleteRunRequest.outcome:type_name -> snatcharr.v1.RunOutcome
 	24, // 14: snatcharr.v1.CompleteRunRequest.searched:type_name -> snatcharr.v1.SearchedItem
-	11, // 15: snatcharr.v1.WorkerService.LeaseRun:input_type -> snatcharr.v1.LeaseRunRequest
-	14, // 16: snatcharr.v1.WorkerService.Heartbeat:input_type -> snatcharr.v1.HeartbeatRequest
-	16, // 17: snatcharr.v1.WorkerService.FilterCandidates:input_type -> snatcharr.v1.FilterCandidatesRequest
-	19, // 18: snatcharr.v1.WorkerService.AcquireBudget:input_type -> snatcharr.v1.AcquireBudgetRequest
-	22, // 19: snatcharr.v1.WorkerService.ReportEvents:input_type -> snatcharr.v1.ReportEventsRequest
-	25, // 20: snatcharr.v1.WorkerService.CompleteRun:input_type -> snatcharr.v1.CompleteRunRequest
-	12, // 21: snatcharr.v1.WorkerService.LeaseRun:output_type -> snatcharr.v1.LeaseRunResponse
-	15, // 22: snatcharr.v1.WorkerService.Heartbeat:output_type -> snatcharr.v1.HeartbeatResponse
-	17, // 23: snatcharr.v1.WorkerService.FilterCandidates:output_type -> snatcharr.v1.FilterCandidatesResponse
-	20, // 24: snatcharr.v1.WorkerService.AcquireBudget:output_type -> snatcharr.v1.AcquireBudgetResponse
-	23, // 25: snatcharr.v1.WorkerService.ReportEvents:output_type -> snatcharr.v1.ReportEventsResponse
-	26, // 26: snatcharr.v1.WorkerService.CompleteRun:output_type -> snatcharr.v1.CompleteRunResponse
-	21, // [21:27] is the sub-list for method output_type
-	15, // [15:21] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	7,  // 15: snatcharr.v1.LogRecord.level:type_name -> snatcharr.v1.Level
+	27, // 16: snatcharr.v1.LogRecord.fields:type_name -> snatcharr.v1.LogField
+	28, // 17: snatcharr.v1.ReportLogsRequest.records:type_name -> snatcharr.v1.LogRecord
+	11, // 18: snatcharr.v1.WorkerService.LeaseRun:input_type -> snatcharr.v1.LeaseRunRequest
+	14, // 19: snatcharr.v1.WorkerService.Heartbeat:input_type -> snatcharr.v1.HeartbeatRequest
+	16, // 20: snatcharr.v1.WorkerService.FilterCandidates:input_type -> snatcharr.v1.FilterCandidatesRequest
+	19, // 21: snatcharr.v1.WorkerService.AcquireBudget:input_type -> snatcharr.v1.AcquireBudgetRequest
+	22, // 22: snatcharr.v1.WorkerService.ReportEvents:input_type -> snatcharr.v1.ReportEventsRequest
+	25, // 23: snatcharr.v1.WorkerService.CompleteRun:input_type -> snatcharr.v1.CompleteRunRequest
+	29, // 24: snatcharr.v1.WorkerService.ReportLogs:input_type -> snatcharr.v1.ReportLogsRequest
+	12, // 25: snatcharr.v1.WorkerService.LeaseRun:output_type -> snatcharr.v1.LeaseRunResponse
+	15, // 26: snatcharr.v1.WorkerService.Heartbeat:output_type -> snatcharr.v1.HeartbeatResponse
+	17, // 27: snatcharr.v1.WorkerService.FilterCandidates:output_type -> snatcharr.v1.FilterCandidatesResponse
+	20, // 28: snatcharr.v1.WorkerService.AcquireBudget:output_type -> snatcharr.v1.AcquireBudgetResponse
+	23, // 29: snatcharr.v1.WorkerService.ReportEvents:output_type -> snatcharr.v1.ReportEventsResponse
+	26, // 30: snatcharr.v1.WorkerService.CompleteRun:output_type -> snatcharr.v1.CompleteRunResponse
+	30, // 31: snatcharr.v1.WorkerService.ReportLogs:output_type -> snatcharr.v1.ReportLogsResponse
+	25, // [25:32] is the sub-list for method output_type
+	18, // [18:25] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_snatcharr_v1_worker_proto_init() }
@@ -2076,7 +2340,7 @@ func file_snatcharr_v1_worker_proto_init() {
 			// #nosec G103 -- protoc-gen-go views the immutable raw descriptor read-only; see the SAFETY proof above
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_snatcharr_v1_worker_proto_rawDesc), len(file_snatcharr_v1_worker_proto_rawDesc)),
 			NumEnums:      10,
-			NumMessages:   17,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

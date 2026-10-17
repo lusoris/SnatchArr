@@ -682,7 +682,7 @@ paths:
     get:
       tags: [system]
       operationId: listLogs
-      summary: Recent log records of this api process, newest first (admin only)
+      summary: Recent log records of this api process and its workers, newest first (admin only)
       description: >-
         Records come from a fixed-size in-memory ring (snatcharr.logs.ring_size). Secret
         attributes, credential query parameters, bearer tokens, URL userinfo and 32-character
@@ -703,10 +703,10 @@ paths:
             maxLength: 200
         - name: source
           in: query
-          description: Exact source, e.g. api.
+          description: "Source: api, worker for every worker, or worker:<id> for one worker."
           schema:
             type: string
-            maxLength: 64
+            maxLength: 160
         - name: limit
           in: query
           schema:
@@ -2341,7 +2341,7 @@ components:
           $ref: "#/components/schemas/LogLevel"
         source:
           type: string
-          description: Process that emitted the record (api).
+          description: "Process that emitted the record: api, or worker:<id> for a worker."
         message:
           type: string
         attrs:

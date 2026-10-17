@@ -3544,7 +3544,7 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 					switch method {
 					case "GET":
 						r.name = ListLogsOperation
-						r.summary = "Recent log records of this api process, newest first (admin only)"
+						r.summary = "Recent log records of this api process and its workers, newest first (admin only)"
 						r.operationID = "listLogs"
 						r.operationGroup = ""
 						r.pathPattern = "/logs"
