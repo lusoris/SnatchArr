@@ -134,6 +134,11 @@ func (r stubResolver) EntityByExternalID(context.Context, domain.AppKind, string
 	return r.entityID, r.found, r.err
 }
 
+// unreachableURL is where a link seeded after setUnreachable points: a closed fake's own port
+// may be bound again by a parallel test's server, which would answer, while port 1 is privileged
+// and no test can listen on it, so every connection is refused.
+const unreachableURL = "http://127.0.0.1:1"
+
 type fakeCleanuparrServer struct {
 	srv       *httptest.Server
 	URL       string
@@ -150,6 +155,7 @@ func (s *fakeCleanuparrServer) setFail(fail bool) {
 func (s *fakeCleanuparrServer) setUnreachable() {
 	s.fail.Store(true)
 	s.srv.Close()
+	s.URL = unreachableURL
 }
 
 func (s *fakeCleanuparrServer) assertNoWrites(t *testing.T) {
@@ -320,6 +326,7 @@ func (s *fakeProwlarrServer) setFail(fail bool) {
 func (s *fakeProwlarrServer) setUnreachable() {
 	s.fail.Store(true)
 	s.srv.Close()
+	s.URL = unreachableURL
 }
 
 func (s *fakeProwlarrServer) assertNoWrites(t *testing.T) {
