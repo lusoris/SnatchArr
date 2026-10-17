@@ -21,7 +21,7 @@ GOMODCACHE       = $(subst \,/,$(shell go env GOMODCACHE))
 GOLUSORIS_VER    = $(shell go list -m -f '{{.Version}}' github.com/golusoris/golusoris)
 GOLUSORIS_SHARED = $(GOMODCACHE)/github.com/golusoris/golusoris@$(GOLUSORIS_VER)/tools/Makefile.shared
 
-.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-compose-smoke e2e-compose-pg-upgrade e2e-cnpg-pg-upgrade web-verify web-e2e web-e2e-api proto-verify deploy-verify governance-verify hooks-verify contracts-verify workflows-verify workflows-lint secret-scan \
+.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-compose-smoke e2e-compose-pg-upgrade e2e-cnpg-pg-upgrade e2e-chart-install web-verify web-e2e web-e2e-api proto-verify deploy-verify governance-verify hooks-verify contracts-verify workflows-verify workflows-lint secret-scan \
 	images kind-up kind-deploy kind-down \
         api-gen api-gosec gosec-install govulncheck-install tools-verify tools-lint tools-test tools-gosec web-gen proto-gen dev hooks setup
 
@@ -214,6 +214,12 @@ e2e-compose-pg-upgrade: ## Homelab compose bundle: Postgres previous major -> pi
 # workstation only inside a VM (no kind on the host). Not in verify-all.
 e2e-cnpg-pg-upgrade: ## Chart on CloudNativePG: Postgres previous major -> current major upgrade with data read-back (needs a cluster with the operator)
 	bash tools/e2e/cnpg_pg_upgrade.sh
+
+# The chart installed with its defaults and upgraded from the last published chart, each waited
+# on until the API and worker are Available and /readyz answers, after a planted install the API
+# refuses (#144). Needs a cluster with the CloudNativePG operator, like e2e-cnpg-pg-upgrade.
+e2e-chart-install: ## Chart install + upgrade from the last published chart until Ready (needs a cluster with the operator)
+	bash tools/e2e/chart_install.sh
 
 # ── web/ (SvelteKit + sveltesentio) ───────────────────────────────────────────
 web-verify: ## pnpm lint/typecheck/test(+coverage)/build + OpenAPI type drift
