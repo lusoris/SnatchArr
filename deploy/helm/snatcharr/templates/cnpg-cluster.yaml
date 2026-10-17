@@ -17,10 +17,17 @@ spec:
     {{- with $c.storage.storageClass }}
     storageClass: {{ . }}
     {{- end }}
+  {{- if hasKey ($c.extraSpec | default dict) "bootstrap" }}
+  {{- fail "postgres.cnpg.extraSpec.bootstrap would repeat the bootstrap key: set postgres.cnpg.bootstrap instead" }}
+  {{- end }}
   bootstrap:
+  {{- with $c.bootstrap }}
+    {{- toYaml . | nindent 4 }}
+  {{- else }}
     initdb:
       database: {{ $c.database }}
       owner: {{ $c.owner }}
+  {{- end }}
   {{- with $c.resources }}
   resources:
     {{- toYaml . | nindent 4 }}
