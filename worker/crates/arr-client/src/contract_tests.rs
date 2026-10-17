@@ -14,7 +14,15 @@
 //! - a field a wire type reads that the documented response lacks,
 //! - a request the client sends that the spec does not describe (path or query parameter),
 //! - a client method that fails on the documented example response,
-//! - an operation of the contract the client does not request.
+//! - an operation of the contract the client does not request,
+//! - a command body that differs from the upstream C# command class (a field the class lacks, a
+//!   property of the class the body lacks, a command without a class) and a pinned class whose
+//!   command the client never sends.
+//!
+//! The specs cannot describe command bodies: `CommandResource` lists the generic properties of a
+//! command and forbids others. `upstreamspec fetch` therefore reads the public properties of the
+//! pinned command classes into the contract (`commands`, keyed by command name) and the local
+//! server compares every body it receives with them.
 //!
 //! The tests named `upstream_contract_*` read the real contracts and are ignored by default;
 //! `make contracts-verify` runs them and fails when one left no receipt. Every other test runs
@@ -48,6 +56,10 @@ struct Contract {
     commit: String,
     /// Keyed by `<METHOD> <path>`, path parameters in braces.
     operations: BTreeMap<String, Operation>,
+    /// The properties of each upstream command class, by command name (`EpisodeSearch`), as the
+    /// upstream serializer writes them (camel case). A body has `name` and exactly these.
+    #[serde(default)]
+    commands: BTreeMap<String, Vec<String>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -369,8 +381,44 @@ fn note<T>(problems: &mut Vec<String>, call: &str, result: Result<T, Error>) -> 
     }
 }
 
+/// Every target the worker sends a search command for to a client of `kind`, one per command.
+fn targets(kind: Kind) -> Vec<Target> {
+    let items = vec![1];
+    let mut targets = vec![Target::Items {
+        items: items.clone(),
+    }];
+    match kind {
+        Kind::Sonarr | Kind::WhisparrV2 => targets.extend([
+            Target::Episodes {
+                series_id: 1,
+                items: items.clone(),
+            },
+            Target::Season {
+                series_id: 1,
+                season: 1,
+                items: items.clone(),
+            },
+            Target::Series {
+                series_id: 1,
+                seasons: 1,
+                items,
+            },
+        ]),
+        Kind::Lidarr => targets.push(Target::Artist {
+            artist_id: 1,
+            items,
+        }),
+        Kind::Readarr => targets.push(Target::Author {
+            author_id: 1,
+            items,
+        }),
+        Kind::Radarr | Kind::WhisparrV3 => {}
+    }
+    targets
+}
+
 /// Runs every client method against `server` and reports the ones that fail or read nothing.
-async fn calls(client: &ArrClient) -> Vec<String> {
+async fn calls(client: &ArrClient, kind: Kind) -> Vec<String> {
     let mut problems = Vec::new();
     note(&mut problems, "system_status", client.system_status().await);
     note(&mut problems, "queue_total", client.queue_total().await);
@@ -387,8 +435,9 @@ async fn calls(client: &ArrClient) -> Vec<String> {
             ));
         }
     }
-    let target = Target::Items { items: vec![1] };
-    note(&mut problems, "search", client.search(&target).await);
+    for target in targets(kind) {
+        note(&mut problems, "search", client.search(&target).await);
+    }
     note(
         &mut problems,
         "command_status",
@@ -397,10 +446,44 @@ async fn calls(client: &ArrClient) -> Vec<String> {
     problems
 }
 
+/// The differences between the body of a command request and the upstream class of its command.
+/// `sent` collects the names of the commands the client sent.
+fn body_problems(contract: &Contract, body: &[u8], sent: &mut BTreeSet<String>) -> Vec<String> {
+    let Ok(Value::Object(fields)) = serde_json::from_slice::<Value>(body) else {
+        return vec!["POST command: the body is not a JSON object".to_owned()];
+    };
+    let Some(name) = fields.get("name").and_then(Value::as_str) else {
+        return vec!["POST command: the body has no string \"name\"".to_owned()];
+    };
+    sent.insert(name.to_owned());
+    let Some(properties) = contract.commands.get(name) else {
+        return vec![format!(
+            "command {name}: the contract pins no upstream class for it"
+        )];
+    };
+    let mut problems = Vec::new();
+    for field in fields.keys().filter(|field| *field != "name") {
+        if !properties.contains(field) {
+            problems.push(format!(
+                "command {name}: field \"{field}\" is not a property of the upstream class"
+            ));
+        }
+    }
+    for property in properties {
+        if !fields.contains_key(property) {
+            problems.push(format!(
+                "command {name}: the upstream class has the property \"{property}\" and the body lacks it"
+            ));
+        }
+    }
+    problems
+}
+
 /// The requests the spec does not describe and the operations no request reached.
 fn traffic(contract: &Contract, received: &[Request]) -> Vec<String> {
     let mut problems = Vec::new();
     let mut requested = BTreeSet::new();
+    let mut sent = BTreeSet::new();
     for request in received {
         let Some((key, operation)) = operation_of(&contract.operations, request) else {
             problems.push(format!(
@@ -411,6 +494,9 @@ fn traffic(contract: &Contract, received: &[Request]) -> Vec<String> {
             continue;
         };
         requested.insert(key);
+        if request.method.as_str() == "POST" && key.ends_with("/command") {
+            problems.extend(body_problems(contract, &request.body, &mut sent));
+        }
         for (name, _) in request.url.query_pairs() {
             if !operation.parameters.iter().any(|known| *known == name) {
                 problems.push(format!(
@@ -419,6 +505,15 @@ fn traffic(contract: &Contract, received: &[Request]) -> Vec<String> {
             }
         }
     }
+    problems.extend(
+        contract
+            .commands
+            .keys()
+            .filter(|name| !sent.contains(*name))
+            .map(|name| {
+                format!("command {name}: the contract pins its upstream class and the client never sends it")
+            }),
+    );
     problems.extend(
         contract
             .operations
@@ -455,7 +550,7 @@ async fn check(kind: Kind, contract: &Contract) -> Vec<String> {
         ..Options::default()
     };
     match ArrClient::new(kind, &server.uri(), "key", options) {
-        Ok(client) => problems.extend(calls(&client).await),
+        Ok(client) => problems.extend(calls(&client, kind).await),
         Err(err) => problems.push(format!("client: {err}")),
     }
     let received = server.received_requests().await.unwrap_or_default();
@@ -513,6 +608,35 @@ fn shape(kind: Kind) -> (&'static str, Value, Option<&'static str>) {
     }
 }
 
+/// The commands the client sends for `kind` and the properties of their upstream classes, written
+/// by hand: nothing of a class is copied.
+fn commands(kind: Kind) -> BTreeMap<String, Vec<String>> {
+    let list: &[(&str, &[&str])] = match kind {
+        Kind::Sonarr | Kind::WhisparrV2 => &[
+            ("EpisodeSearch", &["episodeIds"]),
+            ("SeasonSearch", &["seasonNumber", "seriesId"]),
+            ("SeriesSearch", &["seriesId"]),
+        ],
+        Kind::Radarr | Kind::WhisparrV3 => &[("MoviesSearch", &["movieIds"])],
+        Kind::Lidarr => &[
+            ("AlbumSearch", &["albumIds"]),
+            ("ArtistSearch", &["artistId"]),
+        ],
+        Kind::Readarr => &[
+            ("AuthorSearch", &["authorId"]),
+            ("BookSearch", &["bookIds"]),
+        ],
+    };
+    list.iter()
+        .map(|(name, properties)| {
+            (
+                (*name).to_owned(),
+                properties.iter().map(|&p| p.to_owned()).collect(),
+            )
+        })
+        .collect()
+}
+
 fn operation(parameters: &[&str], response: Value) -> Operation {
     Operation {
         parameters: parameters.iter().map(|&name| name.to_owned()).collect(),
@@ -553,6 +677,7 @@ fn sample(kind: Kind) -> Contract {
         spec: "sample".to_owned(),
         commit: "0123abc".to_owned(),
         operations,
+        commands: commands(kind),
     }
 }
 
@@ -727,6 +852,99 @@ async fn an_example_that_proves_nothing_is_reported() {
     );
 }
 
+#[tokio::test]
+async fn a_renamed_body_field_is_reported() {
+    // The planted rename seen from the contract: upstream calls the property `episodeId`, the
+    // client still sends `episodeIds`.
+    let problems = planted(|contract| {
+        contract
+            .commands
+            .insert("EpisodeSearch".to_owned(), vec!["episodeId".to_owned()]);
+    })
+    .await;
+    assert_eq!(
+        problems,
+        [
+            "command EpisodeSearch: field \"episodeIds\" is not a property of the upstream class",
+            "command EpisodeSearch: the upstream class has the property \"episodeId\" and the body lacks it",
+        ]
+    );
+}
+
+#[tokio::test]
+async fn a_property_the_body_lacks_is_reported() {
+    let problems = planted(|contract| {
+        contract
+            .commands
+            .get_mut("SeasonSearch")
+            .unwrap()
+            .push("monitored".to_owned());
+    })
+    .await;
+    assert_eq!(
+        problems,
+        [
+            "command SeasonSearch: the upstream class has the property \"monitored\" and the body lacks it"
+        ]
+    );
+}
+
+#[tokio::test]
+async fn a_command_without_a_pinned_class_is_reported() {
+    let problems = planted(|contract| {
+        contract.commands.remove("SeriesSearch");
+    })
+    .await;
+    assert_eq!(
+        problems,
+        ["command SeriesSearch: the contract pins no upstream class for it"]
+    );
+}
+
+#[tokio::test]
+async fn a_pinned_class_the_client_never_sends_is_reported() {
+    let problems = planted(|contract| {
+        contract
+            .commands
+            .insert("RefreshSeries".to_owned(), vec!["seriesId".to_owned()]);
+    })
+    .await;
+    assert_eq!(
+        problems,
+        [
+            "command RefreshSeries: the contract pins its upstream class and the client never sends it"
+        ]
+    );
+}
+
+#[test]
+fn a_body_that_is_no_command_is_reported() {
+    let contract = sample(Kind::Sonarr);
+    let mut sent = BTreeSet::new();
+    for (body, want) in [
+        (&b"[]"[..], "the body is not a JSON object"),
+        (&b"not json"[..], "the body is not a JSON object"),
+        (
+            &b"{\"episodeIds\":[1]}"[..],
+            "the body has no string \"name\"",
+        ),
+        (&b"{\"name\":7}"[..], "the body has no string \"name\""),
+    ] {
+        let problems = body_problems(&contract, body, &mut sent);
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(problems[0].contains(want), "{problems:?} lacks {want:?}");
+    }
+    assert!(sent.is_empty(), "{sent:?}");
+    // Boundary: the name alone is a body whose class has properties.
+    let problems = body_problems(&contract, b"{\"name\":\"SeriesSearch\"}", &mut sent);
+    assert_eq!(
+        problems,
+        [
+            "command SeriesSearch: the upstream class has the property \"seriesId\" and the body lacks it"
+        ]
+    );
+}
+
 #[test]
 fn matches_compares_segment_by_segment() {
     for (template, path, want) in [
@@ -779,6 +997,11 @@ async fn upstream(kind: Kind, spec: &str) -> Result<(), Failure> {
     if contract.operations.is_empty() {
         return Err(Failure(format!(
             "the contract of {spec} lists no operation"
+        )));
+    }
+    if contract.commands.is_empty() {
+        return Err(Failure(format!(
+            "the contract of {spec} pins no command class, so no body would be compared"
         )));
     }
     let problems = check(kind, &contract).await;
