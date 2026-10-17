@@ -145,6 +145,17 @@ mirror_refuses "status no longer runs always" 'status: must run with "if: always
 mirror_refuses "commits condition differs from the expectation" \
   "job commits: the workflow does not carry the condition of its rule (commits)" \
   '/^    if: github.event_name == / { print "    if: github.event_name == \047pull_request\047"; next } { print }'
+# Planted draft cases (#147): the changes job stops a draft for every component job it feeds.
+mirror_refuses "draft step dropped from the changes job" \
+  'job changes: the first step is not "Stop on a draft pull request"' \
+  '/^  changes:$/ { in_changes = 1 } /^  [a-z-]+:$/ && !/^  changes:$/ { in_changes = 0 }
+   in_changes && /^      - name: Stop on a draft pull request$/ { skip = 1; next }
+   skip && /^      - / { skip = 0 } !skip { print }'
+mirror_refuses "draft step dropped from the semgrep job" \
+  'job semgrep: the first step is not "Stop on a draft pull request"' \
+  '/^  semgrep:$/ { in_job = 1 } /^  [a-z-]+:$/ && !/^  semgrep:$/ { in_job = 0 }
+   in_job && /^      - name: Stop on a draft pull request$/ { skip = 1; next }
+   skip && /^      - / { skip = 0 } !skip { print }'
 mirror_refuses "expectation of the commits job removed" "status: no COMMITS_EXPECTED expression" \
   '!/^ *COMMITS_EXPECTED: /'
 

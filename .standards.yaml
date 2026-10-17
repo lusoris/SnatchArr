@@ -77,5 +77,5 @@ register:
 exceptions:
     - rule: HISS-18
       path: .github/workflows/ci.yml
-      reason: "every component job needs the changes job, a fan-out praetor has no accepted draft shape for (cordanaLLM/praetor#1108); the web job calls the sveltesentio reusable workflow, whose jobs carry no draft step (golusoris/sveltesentio#279)"
+      reason: "category A, until cordanaLLM/praetor#1108 ships: every component job needs the changes job, which stops a draft in its first step, so GitHub skips them there; the CI success aggregate fails on the failed changes job (tools/ci/status.sh, planted cases in tools/ci/status_test.sh), but the engine has no accepted shape for dependents behind such a job yet"
       expires: "2027-01-06"
