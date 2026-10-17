@@ -649,6 +649,19 @@ jobs:
       - name: server-side dry run (default and all-features renders)
         run: |
           kubectl create namespace snatcharr
+          # Planted first (C11-04): the NetworkPolicies of the published 0.1.0 chart put an
+          # except outside its cidr (#90); the dry run must refuse them for that reason.
+          helm template snatcharr oci://ghcr.io/lusoris/charts/snatcharr --version 0.1.0 \
+            --namespace snatcharr --set networkPolicy.enabled=true \
+            --show-only templates/networkpolicy.yaml >"$RUNNER_TEMP/planted-netpol.yaml"
+          if kubectl apply --dry-run=server --namespace snatcharr -f "$RUNNER_TEMP/planted-netpol.yaml" \
+            >"$RUNNER_TEMP/planted.log" 2>&1; then
+            echo "planted: the 0.1.0 NetworkPolicies passed the server-side dry run" >&2
+            exit 1
+          fi
+          cat "$RUNNER_TEMP/planted.log"
+          grep -q 'strict subset' "$RUNNER_TEMP/planted.log"
+          echo "ok   planted 0.1.0 NetworkPolicies refused"
           helm template snatcharr deploy/helm/snatcharr --namespace snatcharr \
             | kubectl apply --dry-run=server --namespace snatcharr -f -
           helm template snatcharr deploy/helm/snatcharr --namespace snatcharr \
