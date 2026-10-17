@@ -5,7 +5,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # ADR-0007: Read-only Cleanuparr link in v1
 
-- Status: accepted
+- Status: superseded by [ADR-0012](0012-queue-management-replaces-cleanuparr-link.md) (2026-10-17)
 - Date: 2026-10-09
 - Supersedes: [ADR-0004](0004-no-swaparr-cleanuparr-deferred.md), its Cleanuparr part. The
   decision to ship no Swaparr-style download handling stands.

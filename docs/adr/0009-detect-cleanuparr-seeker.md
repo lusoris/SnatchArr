@@ -5,7 +5,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # ADR-0009: Detect Cleanuparr Seeker and warn about double searching
 
-- Status: accepted
+- Status: superseded by [ADR-0012](0012-queue-management-replaces-cleanuparr-link.md) (2026-10-17)
 - Date: 2026-10-16
 - Supersedes: [ADR-0007](0007-read-only-cleanuparr-link.md), its "There is no Seeker detection" bullet only. The read-only link and strike handling stand.
 
