@@ -92,7 +92,11 @@ postgres:
     database: snatcharr
     owner: snatcharr
     resources: {}
-    # Extra Cluster spec merged verbatim (backup, affinity, postgresql.parameters, ...).
+    # Cluster bootstrap section verbatim instead of the default initdb of database/owner, for
+    # example a recovery from a backup (docs/deployment.md, "Backup and restore").
+    bootstrap: {}
+    # Extra Cluster spec merged verbatim (plugins, externalClusters, affinity,
+    # postgresql.parameters, ...). A bootstrap key here is refused: use bootstrap above.
     extraSpec: {}
   # External Postgres instead: a Secret holding the DSN.
   external:

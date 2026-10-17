@@ -21,7 +21,7 @@ GOMODCACHE       = $(subst \,/,$(shell go env GOMODCACHE))
 GOLUSORIS_VER    = $(shell go list -m -f '{{.Version}}' github.com/golusoris/golusoris)
 GOLUSORIS_SHARED = $(GOMODCACHE)/github.com/golusoris/golusoris@$(GOLUSORIS_VER)/tools/Makefile.shared
 
-.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-compose-smoke e2e-compose-pg-upgrade e2e-dev-compose-smoke dlclients-live cleanuparr-live e2e-cnpg-pg-upgrade e2e-chart-install web-verify web-e2e web-e2e-api web-visual web-visual-update proto-verify deploy-verify governance-verify hooks-verify contracts-verify workflows-verify workflows-lint secret-scan \
+.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-compose-smoke e2e-compose-pg-upgrade e2e-dev-compose-smoke dlclients-live cleanuparr-live e2e-cnpg-pg-upgrade e2e-cnpg-backup-restore e2e-chart-install web-verify web-e2e web-e2e-api web-visual web-visual-update proto-verify deploy-verify governance-verify hooks-verify contracts-verify workflows-verify workflows-lint secret-scan \
 	images kind-up kind-deploy kind-down \
         api-gen api-gosec gosec-install govulncheck-install tools-verify tools-lint tools-test tools-gosec web-gen proto-gen dev hooks setup
 
@@ -242,6 +242,14 @@ cleanuparr-live: ## Real Cleanuparr read by the client production uses (needs Do
 # workstation only inside a VM (no kind on the host). Not in verify-all.
 e2e-cnpg-pg-upgrade: ## Chart on CloudNativePG: Postgres previous major -> current major upgrade with data read-back (needs a cluster with the operator)
 	bash tools/e2e/cnpg_pg_upgrade.sh
+
+# The chart on CloudNativePG backed up with the Barman Cloud plugin to an S3 store, removed and
+# restored with postgres.cnpg.bootstrap.recovery as docs/deployment.md describes, with data
+# read-back and a planted reinstall without the recovery (gap audit C14-04). Needs a cluster with
+# the operator, cert-manager and the plugin: CI runs it in the deploy job on kind; on a workstation
+# only inside a VM. Not in verify-all.
+e2e-cnpg-backup-restore: ## Chart on CloudNativePG: base backup, database lost, restore from the backup with data read-back (needs the operator and the Barman Cloud plugin)
+	bash tools/e2e/cnpg_backup_restore.sh
 
 # The chart installed with its defaults and upgraded from the last published chart, each waited
 # on until the API and worker are Available and /readyz answers, after a planted install the API

@@ -43,7 +43,9 @@
             "storage": {
               "type": "object",
               "properties": { "size": { "type": "string" }, "storageClass": { "type": "string" } }
-            }
+            },
+            "bootstrap": { "type": "object", "maxProperties": 1 },
+            "extraSpec": { "type": "object", "not": { "required": ["bootstrap"] } }
           }
         },
         "external": {
