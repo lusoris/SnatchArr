@@ -34,8 +34,11 @@ import (
 
 // Bounds (HISS-02).
 const (
-	maxLeaseWait       = 30 * time.Second
-	leasePollInterval  = time.Second
+	maxLeaseWait      = 30 * time.Second
+	leasePollInterval = time.Second
+	// maxLeaseAttempts bounds one LeaseRun: a poll per interval of the longest wait, and as many
+	// again for the wake-ups a call behind others in the line gets.
+	maxLeaseAttempts   = 2 * (int(maxLeaseWait/leasePollInterval) + 1)
 	maxEventsPerStream = 10_000
 	maxSearchedPerRun  = 5_000
 	maxBudgetItems     = 512
@@ -72,6 +75,8 @@ type Server struct {
 	clk       clock.Clock
 	logger    *slog.Logger
 	m         *metrics.Metrics
+	// line orders the LeaseRun calls that wait for a run.
+	line leaseLine
 	// stopping is closed by Shutdown.
 	stopping chan struct{}
 	stopOnce sync.Once
@@ -106,14 +111,28 @@ func (s *Server) isStopping() bool {
 	}
 }
 
-// pause waits one poll interval; the caller's context or a shutdown ends it early.
-func (s *Server) pause(ctx context.Context) error {
+// await waits for the call's next chance to ask for a run: one poll interval for the head of
+// the line, the rest of the wait for a call behind it, which the head's departure wakes. The
+// caller's context or a shutdown ends it early.
+func (s *Server) await(ctx context.Context, turn *leaseTurn, deadline time.Time) error {
+	d := leasePollInterval
+	var wake <-chan struct{}
+	if turn != nil {
+		wake = turn.wake
+		if !s.line.isHead(turn) {
+			d = deadline.Sub(s.clk.Now())
+		}
+	}
+	timer := s.clk.NewTimer(d)
+	defer timer.Stop()
 	select {
 	case <-ctx.Done():
 		return status.FromContextError(ctx.Err()).Err()
 	case <-s.stopping:
 		return status.Error(codes.Unavailable, stoppingMessage)
-	case <-s.clk.After(leasePollInterval):
+	case <-wake:
+		return nil
+	case <-timer.Chan():
 		return nil
 	}
 }
@@ -126,7 +145,8 @@ func (s *Server) touch(ctx context.Context, workerID string) {
 	}
 }
 
-// LeaseRun long-polls for a queued run and returns it with credentials and policy.
+// LeaseRun long-polls for a queued run and returns it with credentials and policy. Calls that
+// wait are served in the order they arrived (leaseLine).
 func (s *Server) LeaseRun(ctx context.Context, req *snatcharrv1.LeaseRunRequest) (*snatcharrv1.LeaseRunResponse, error) {
 	if req.GetWorkerId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "worker_id is required")
@@ -135,26 +155,44 @@ func (s *Server) LeaseRun(ctx context.Context, req *snatcharrv1.LeaseRunRequest)
 	s.failExhausted(ctx)
 	wait := min(time.Duration(req.GetWaitSeconds())*time.Second, maxLeaseWait)
 	deadline := s.clk.Now().Add(wait)
-	for attempt := 0; attempt <= int(maxLeaseWait/leasePollInterval); attempt++ {
+	var turn *leaseTurn // a call that does not wait asks at once and stays out of the line
+	if wait > 0 {
+		turn = s.line.join()
+		defer s.line.leave(turn)
+	}
+	for range maxLeaseAttempts {
 		if s.isStopping() {
 			return nil, status.Error(codes.Unavailable, stoppingMessage)
 		}
-		run, err := s.runs.Lease(ctx, req.GetWorkerId())
-		if err == nil {
-			s.recordLeased(run)
-			return s.leaseResponse(ctx, run)
-		}
-		if !errors.Is(err, snatch.ErrNoRun) {
-			return nil, toStatus(err)
+		if turn == nil || s.line.isHead(turn) {
+			if resp, done, err := s.tryLease(ctx, req.GetWorkerId(), turn); done {
+				return resp, err
+			}
 		}
 		if !s.clk.Now().Before(deadline) {
 			break
 		}
-		if pauseErr := s.pause(ctx); pauseErr != nil {
-			return nil, pauseErr
+		if err := s.await(ctx, turn, deadline); err != nil {
+			return nil, err
 		}
 	}
 	return &snatcharrv1.LeaseRunResponse{}, nil
+}
+
+// tryLease asks for the oldest queued run. done reports that the call has its answer; then
+// the call has left the line, so that the next one asks while this one builds its response.
+func (s *Server) tryLease(ctx context.Context, workerID string, turn *leaseTurn) (resp *snatcharrv1.LeaseRunResponse, done bool, err error) {
+	run, err := s.runs.Lease(ctx, workerID)
+	if errors.Is(err, snatch.ErrNoRun) {
+		return nil, false, nil
+	}
+	s.line.leave(turn)
+	if err != nil {
+		return nil, true, toStatus(err)
+	}
+	s.recordLeased(run)
+	resp, err = s.leaseResponse(ctx, run)
+	return resp, true, err
 }
 
 func (s *Server) recordLeased(run domain.Run) {
