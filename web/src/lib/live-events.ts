@@ -19,6 +19,8 @@ export const LIVE_EVENTS = [
 	'run_finished',
 	'circuit_opened',
 	'search_previewed',
+	'queue_item_struck',
+	'queue_item_removed',
 	// recorded by the API itself
 	'run_queued',
 	'snatch_deferred',

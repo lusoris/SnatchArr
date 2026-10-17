@@ -119,6 +119,9 @@ type Decision struct {
 // ErrInvalid indicates that queue settings violate bounds or constraints.
 var ErrInvalid = errors.New("invalid queue settings")
 
+// ErrQueueUnsupported indicates an *arr kind does not support queue operations.
+var ErrQueueUnsupported = errors.New("queue management is not supported for this *arr kind")
+
 // DefaultSettings returns safe queue defaults: disabled, observe mode for every
 // rule, standard thresholds (6, 6, 2, 6, 1, 1), 15m grace, and 10 removals per sweep.
 func DefaultSettings() Settings {

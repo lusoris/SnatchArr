@@ -462,6 +462,8 @@ const (
 	EventType_EVENT_TYPE_RUN_FINISHED         EventType = 9
 	EventType_EVENT_TYPE_CIRCUIT_OPENED       EventType = 10
 	EventType_EVENT_TYPE_SEARCH_PREVIEWED     EventType = 11
+	EventType_EVENT_TYPE_QUEUE_ITEM_STRUCK    EventType = 12
+	EventType_EVENT_TYPE_QUEUE_ITEM_REMOVED   EventType = 13
 )
 
 // Enum value maps for EventType.
@@ -479,6 +481,8 @@ var (
 		9:  "EVENT_TYPE_RUN_FINISHED",
 		10: "EVENT_TYPE_CIRCUIT_OPENED",
 		11: "EVENT_TYPE_SEARCH_PREVIEWED",
+		12: "EVENT_TYPE_QUEUE_ITEM_STRUCK",
+		13: "EVENT_TYPE_QUEUE_ITEM_REMOVED",
 	}
 	EventType_value = map[string]int32{
 		"EVENT_TYPE_UNSPECIFIED":          0,
@@ -493,6 +497,8 @@ var (
 		"EVENT_TYPE_RUN_FINISHED":         9,
 		"EVENT_TYPE_CIRCUIT_OPENED":       10,
 		"EVENT_TYPE_SEARCH_PREVIEWED":     11,
+		"EVENT_TYPE_QUEUE_ITEM_STRUCK":    12,
+		"EVENT_TYPE_QUEUE_ITEM_REMOVED":   13,
 	}
 )
 
@@ -2205,7 +2211,7 @@ const file_snatcharr_v1_worker_proto_rawDesc = "" +
 	"LEVEL_INFO\x10\x02\x12\x0e\n" +
 	"\n" +
 	"LEVEL_WARN\x10\x03\x12\x0f\n" +
-	"\vLEVEL_ERROR\x10\x04*\x87\x03\n" +
+	"\vLEVEL_ERROR\x10\x04*\xcc\x03\n" +
 	"\tEventType\x12\x1a\n" +
 	"\x16EVENT_TYPE_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16EVENT_TYPE_RUN_STARTED\x10\x01\x12\x1b\n" +
@@ -2219,7 +2225,9 @@ const file_snatcharr_v1_worker_proto_rawDesc = "" +
 	"\x17EVENT_TYPE_RUN_FINISHED\x10\t\x12\x1d\n" +
 	"\x19EVENT_TYPE_CIRCUIT_OPENED\x10\n" +
 	"\x12\x1f\n" +
-	"\x1bEVENT_TYPE_SEARCH_PREVIEWED\x10\v*r\n" +
+	"\x1bEVENT_TYPE_SEARCH_PREVIEWED\x10\v\x12 \n" +
+	"\x1cEVENT_TYPE_QUEUE_ITEM_STRUCK\x10\f\x12!\n" +
+	"\x1dEVENT_TYPE_QUEUE_ITEM_REMOVED\x10\r*r\n" +
 	"\n" +
 	"RunOutcome\x12\x1b\n" +
 	"\x17RUN_OUTCOME_UNSPECIFIED\x10\x00\x12\x14\n" +

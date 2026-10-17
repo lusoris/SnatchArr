@@ -38,6 +38,9 @@ type Metrics struct {
 	seerrPending       prometheus.Gauge
 	runLeaseWait       *prometheus.HistogramVec
 	plannerDeferrals   *prometheus.CounterVec
+	queueStrikes       *prometheus.CounterVec
+	queueRemovals      *prometheus.CounterVec
+	queueSkipped       *prometheus.CounterVec
 }
 
 // Run outcomes the finished-runs counter carries next to the worker's own (done, failed,
@@ -107,6 +110,9 @@ func New(reg prometheus.Registerer) (*Metrics, error) {
 		seerrPending:       b.gaugeScalar("snatcharr_seerr_requests_pending", "Current count of active/pending processing Seerr requests across enabled links."),
 		runLeaseWait:       b.histogram("snatcharr_run_lease_wait_seconds", "Wait time between run enqueued and leased by worker, by snatch kind.", leaseWaitBuckets, "kind"),
 		plannerDeferrals:   b.counter("snatcharr_planner_deferrals_total", "Planner passes that decided not to enqueue a run, by reason.", "reason"),
+		queueStrikes:       b.counter("snatcharr_queue_strikes_total", "Queue items struck, by instance name, rule and evaluation mode.", "instance", "rule", "mode"),
+		queueRemovals:      b.counter("snatcharr_queue_removals_total", "Queue items removed from *arr instances, by instance name, rule and result.", "instance", "rule", "result"),
+		queueSkipped:       b.counter("snatcharr_queue_skipped_total", "Queue sweeps skipped, by instance name and reason.", "instance", "reason"),
 	}
 	if b.err != nil {
 		return nil, b.err
@@ -294,6 +300,21 @@ func (m *Metrics) RunLeaseWait(kind string, seconds float64) {
 // PlannerDeferred records a planner pass that did not enqueue a run for reason.
 func (m *Metrics) PlannerDeferred(reason string) {
 	m.plannerDeferrals.WithLabelValues(reason).Inc()
+}
+
+// QueueStruck records one strike against an item.
+func (m *Metrics) QueueStruck(instance, rule, mode string) {
+	m.queueStrikes.WithLabelValues(instance, rule, mode).Inc()
+}
+
+// QueueRemoval records one removal attempt outcome (result="ok" or "error").
+func (m *Metrics) QueueRemoval(instance, rule, result string) {
+	m.queueRemovals.WithLabelValues(instance, rule, result).Inc()
+}
+
+// QueueSkipped records a sweep pass skipped for instance for reason.
+func (m *Metrics) QueueSkipped(instance, reason string) {
+	m.queueSkipped.WithLabelValues(instance, reason).Inc()
 }
 
 // LoopLabel turns a loop name such as "snatch: planner" into the label value
