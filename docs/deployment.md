@@ -364,7 +364,7 @@ processes on the host.
 - Proves runtime IANA time zone database availability by creating a disabled schedule window in `Europe/Berlin`: the API validates the zone with the image's zone data, since the binary embeds none.
 - Proves multi-worker run leasing, stamina caps, afterglow deduplication, and liveness probes.
 
-The release workflow runs the same smoke on amd64 before it pushes images, then builds both images for arm64 and runs `tools/e2e/arm64-check.sh`. The check reads the ELF header of each entrypoint and refuses a binary that is not aarch64, because both Dockerfiles cross-compile on the build platform and an image labelled arm64 can carry an amd64 binary. It then runs each binary under QEMU.
+The release workflow runs the same smoke on amd64 before it pushes images, then builds both images for arm64 and runs `tools/e2e/arm64-check.sh`. The check reads the ELF header of each entrypoint and refuses a binary that is not aarch64, because both Dockerfiles cross-compile on the build platform and an image labelled arm64 can carry an amd64 binary. It then runs each binary under QEMU: the API must stop on one of the config errors the check lists, the worker must log its start. CI's image smoke runs the same check on the amd64 images (`CHECK_ARCH=amd64`), so a changed startup error fails the pull request, not the release; `tools/e2e/arm64-check_test.sh` holds the cases of the list.
 
 To run the image smoke locally:
 
