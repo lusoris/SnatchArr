@@ -44,6 +44,17 @@ const (
 	leaseSlack = 3 * time.Second
 )
 
+// skipLatencyUnderRace skips a wall-clock latency test in a race-detector build. The detector
+// slows every goroutine several times over, and on a loaded host the bounds then measure the
+// detector and the host, not LeaseRun: idle polls answered 2.8 s late while the whole test ran
+// 40 s instead of 3 to 7. The plain suite, run before every push and in CI, keeps the bounds.
+func skipLatencyUnderRace(t *testing.T) {
+	t.Helper()
+	if raceDetector {
+		t.Skip("wall-clock latency bounds are checked in the plain suite, not under the race detector")
+	}
+}
+
 // poll is what one long-poll returned and when.
 type poll struct {
 	runID string
@@ -96,6 +107,7 @@ func pollAll(t *testing.T, srv *Server, wait time.Duration) []poll {
 // 35 s connection grace (APP_GRPC_KEEPALIVE_MAX_CONNECTION_AGE_GRACE).
 func TestIdleLongPollLatencyUnderLoad(t *testing.T) {
 	t.Parallel()
+	skipLatencyUnderRace(t)
 	srv := latencyServer(t)
 	for i, p := range pollAll(t, srv, idleWait) {
 		if p.err != nil || p.runID != "" {
@@ -111,6 +123,7 @@ func TestIdleLongPollLatencyUnderLoad(t *testing.T) {
 // leaseSlack after they were queued.
 func TestLeaseLatencyUnderLoad(t *testing.T) {
 	t.Parallel()
+	skipLatencyUnderRace(t)
 	srv := latencyServer(t)
 	ids := make([]uuid.UUID, loadRuns)
 	for i := range ids {
