@@ -1,0 +1,55 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+#
+# The six download clients SnatchArr observes, each a real release pinned by digest, for
+# tools/e2e/dlclients_live.sh. Every port is published on loopback only. Renovate's
+# docker-compose manager keeps the pins current.
+
+x-linuxserver: &linuxserver
+  environment: &env
+    PUID: "1000"
+    PGID: "1000"
+    TZ: Etc/UTC
+
+services:
+  qbittorrent:
+    <<: *linuxserver
+    image: lscr.io/linuxserver/qbittorrent:5.2.4@sha256:97333cc1ccf903e0bbcd8eb67e3332e4970e9c1ecabe145e499e9c0847ebcaed
+    # The WebUI refuses a Host header whose port is not its own (HTTP 401), so it listens on
+    # the published port.
+    environment:
+      <<: *env
+      WEBUI_PORT: ${QBITTORRENT_PORT:-18101}
+    ports: ["127.0.0.1:${QBITTORRENT_PORT:-18101}:${QBITTORRENT_PORT:-18101}"]
+
+  transmission:
+    <<: *linuxserver
+    image: lscr.io/linuxserver/transmission:4.1.3@sha256:d6caecad406774a18511be7bfa99ba5070c17a3bdd7a5d73091651841603273c
+    environment:
+      <<: *env
+      USER: snatch
+      PASS: ${TRANSMISSION_PASS:?set by dlclients_live.sh}
+    ports: ["127.0.0.1:${TRANSMISSION_PORT:-18102}:9091"]
+
+  deluge:
+    <<: *linuxserver
+    image: lscr.io/linuxserver/deluge:2.2.0@sha256:bf306ddd5e6d4a85d3d05ce1b947ab6e344e7fca1b7740b77c58ce170118c7ff
+    ports: ["127.0.0.1:${DELUGE_PORT:-18103}:8112"]
+
+  rtorrent:
+    image: crazymax/rtorrent-rutorrent:5.3.16-0.16.25@sha256:07c8b8ed5c27aca95ebb0e438e799c7cc2cef99e04fc1ba6de43ac69020b649b
+    ports: ["127.0.0.1:${RTORRENT_PORT:-18104}:8000"]
+
+  sabnzbd:
+    <<: *linuxserver
+    image: lscr.io/linuxserver/sabnzbd:5.1.3@sha256:7a13af91cf296399e302d2fb6fc709d6e2ea15e3094f220684611fbe1dd43625
+    ports: ["127.0.0.1:${SABNZBD_PORT:-18105}:8080"]
+
+  nzbget:
+    <<: *linuxserver
+    image: lscr.io/linuxserver/nzbget:26.3.20261016@sha256:ab18af1d16027fdf870fc58a39bbc764043b16e9220e06b9d0413e8b56bd622b
+    environment:
+      <<: *env
+      NZBGET_USER: snatch
+      NZBGET_PASS: ${NZBGET_PASS:?set by dlclients_live.sh}
+    ports: ["127.0.0.1:${NZBGET_PORT:-18106}:6789"]
