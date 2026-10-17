@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"regexp"
+	"slices"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -22,16 +23,25 @@ import (
 // changed with it. An upstream project that tags no release is pinned with Branch in the place of
 // Tag: the commit is then one of that branch, and Renovate proposes the newest one.
 type pin struct {
-	Name       string   `yaml:"name"`
-	Repository string   `yaml:"repository"`
-	Tag        string   `yaml:"tag"`
-	Branch     string   `yaml:"branch"`
-	Commit     string   `yaml:"commit"`
-	Path       string   `yaml:"path"`
-	SHA256     string   `yaml:"sha256"`
-	License    string   `yaml:"license"`
-	Prefix     string   `yaml:"prefix"`
-	Operations []string `yaml:"operations"`
+	Name       string    `yaml:"name"`
+	Repository string    `yaml:"repository"`
+	Tag        string    `yaml:"tag"`
+	Branch     string    `yaml:"branch"`
+	Commit     string    `yaml:"commit"`
+	Path       string    `yaml:"path"`
+	SHA256     string    `yaml:"sha256"`
+	License    string    `yaml:"license"`
+	Prefix     string    `yaml:"prefix"`
+	Operations []string  `yaml:"operations"`
+	Commands   []command `yaml:"commands"`
+}
+
+// command is one upstream C# command class the client sends a body for, pinned to the bytes of
+// one file at the commit of its spec. The spec cannot describe the body: CommandResource lists the
+// generic properties only, and the fields of a command live in its class.
+type command struct {
+	Path   string `yaml:"path"`
+	SHA256 string `yaml:"sha256"`
 }
 
 var (
@@ -116,7 +126,10 @@ func (p pin) problem() string {
 			return check.text
 		}
 	}
-	return p.operationProblem()
+	if problem := p.operationProblem(); problem != "" {
+		return problem
+	}
+	return p.commandProblem()
 }
 
 func (p pin) operationProblem() string {
@@ -136,6 +149,27 @@ func (p pin) operationProblem() string {
 	return ""
 }
 
+// commandProblem refuses a command class that is not pinned like a file, and an entry that sends
+// commands (POST <prefix>/command) without pinning any class to compare the body with.
+func (p pin) commandProblem() string {
+	seen := map[string]bool{}
+	for _, c := range p.Commands {
+		switch {
+		case !cleanRelative(c.Path) || !strings.HasSuffix(c.Path, ".cs"):
+			return fmt.Sprintf("command %q must be one clean path of a .cs file", c.Path)
+		case !sha256Hex.MatchString(c.SHA256):
+			return fmt.Sprintf("command %q: sha256 must be 64 lower-case hex digits", c.Path)
+		case seen[path.Base(c.Path)]:
+			return fmt.Sprintf("command %q repeats the file name of an earlier command", c.Path)
+		}
+		seen[path.Base(c.Path)] = true
+	}
+	if len(p.Commands) == 0 && slices.Contains(p.Operations, "POST "+p.Prefix+"/command") {
+		return "operations lists POST " + p.Prefix + "/command and commands pins no class, so the body would be checked against nothing"
+	}
+	return ""
+}
+
 // cleanRelative reports whether file names one path below a root: not absolute, no "..", no
 // trailing slash, no "." segment.
 func cleanRelative(file string) bool {
@@ -145,9 +179,13 @@ func cleanRelative(file string) bool {
 	return path.Clean(file) == file && file != "." && file != ".." && !strings.HasPrefix(file, "../")
 }
 
-// source is where the pinned file is read from below base.
-func (p pin) source(base string) string {
-	return strings.TrimSuffix(base, "/") + "/" + p.Repository + "/" + p.Commit + "/" + p.Path
+// source is where the pinned spec is read from below base.
+func (p pin) source(base string) string { return p.sourceOf(base, p.Path) }
+
+// sourceOf is where the file at path, in the repository and at the commit of the pin, is read
+// from below base.
+func (p pin) sourceOf(base, file string) string {
+	return strings.TrimSuffix(base, "/") + "/" + p.Repository + "/" + p.Commit + "/" + file
 }
 
 // ref is the tag or the branch the commit belongs to, as the summary of a fetch names it.
@@ -160,3 +198,6 @@ func (p pin) ref() string {
 
 // specFile is the name of the cached spec inside the cache directory.
 func (p pin) specFile() string { return p.Name + ".spec" }
+
+// commandFile is the name of the cached class file of c inside the cache directory.
+func (p pin) commandFile(c command) string { return p.Name + ".command." + path.Base(c.Path) }

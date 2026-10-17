@@ -90,7 +90,7 @@ func insideRepo(repo, cache string) (string, error) {
 	return inside, nil
 }
 
-// cacheFiles returns the absolute paths of the spec and the contract of every pin and refuses a
+// cacheFiles returns the absolute paths of the spec, the command classes and the contract of every pin and refuses a
 // cache that lacks one of them.
 func cacheFiles(cache string, pins []pin) ([]string, error) {
 	directory, err := filepath.Abs(cache)
@@ -100,6 +100,9 @@ func cacheFiles(cache string, pins []pin) ([]string, error) {
 	files := make([]string, 0, 2*len(pins))
 	for _, p := range pins {
 		files = append(files, filepath.Join(directory, p.specFile()), filepath.Join(directory, contract.FileName(p.Name)))
+		for _, c := range p.Commands {
+			files = append(files, filepath.Join(directory, p.commandFile(c)))
+		}
 	}
 	for _, file := range files {
 		if info, statErr := os.Stat(file); statErr != nil || !info.Mode().IsRegular() {
