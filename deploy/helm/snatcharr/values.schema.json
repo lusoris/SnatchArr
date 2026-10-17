@@ -70,7 +70,26 @@
             "leaseWaitSecs": { "type": "integer", "minimum": 1, "maximum": 60 },
             "arrTimeoutSecs": { "type": "integer", "minimum": 5 },
             "httpPort": { "type": "integer", "minimum": 1024, "maximum": 65535 },
-            "staleSecs": { "type": "integer", "minimum": 60, "maximum": 3600 }
+            "staleSecs": { "type": "integer", "minimum": 60, "maximum": 3600 },
+            "autoscaling": {
+              "type": "object",
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "minReplicas": { "type": "integer", "minimum": 1 },
+                "maxReplicas": { "type": "integer", "minimum": 1 },
+                "targetCPUUtilizationPercentage": { "type": "integer", "minimum": 1, "maximum": 100 },
+                "keda": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": { "type": "boolean" },
+                    "serverAddress": { "type": "string" },
+                    "query": { "type": "string" },
+                    "threshold": { "type": ["string", "number"] }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
           }
         }
       ]
