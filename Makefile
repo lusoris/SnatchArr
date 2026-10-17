@@ -171,7 +171,10 @@ e2e-smoke: ## Postgres + api + two workers + fakearr end to end (needs Docker un
 	  env SMOKE_API_BIN=$(E2E_BIN)/snatcharr SMOKE_FAKEARR_BIN=$(E2E_BIN)/fakearr \
 	  SMOKE_WORKER_BIN=target/debug/snatch-worker tools/e2e/smoke.sh
 
-e2e-image-smoke: ## Postgres + api image + worker image + fakearr end to end; not in verify-all (slow)
+e2e-image-smoke: ## Postgres + api image + worker image + fakearr end to end, under the chart memory limits; not in verify-all (slow)
+	# The memory check's cases first (C12-01): a limit it cannot read and a peak above 80 %
+	# of the limit must be refused.
+	bash tools/e2e/mem_limits_test.sh
 	mkdir -p $(E2E_BIN)
 	go build -o $(E2E_BIN)/fakearr ./api/cmd/fakearr
 	if [ "$${SMOKE_SKIP_BUILD:-0}" != "1" ]; then \
