@@ -145,7 +145,7 @@ Purpose: snatch missing + cutoff-unmet media across *arr instances; respect per-
 - No `latest` image tags; no unpinned `uses:` in workflows.
 - Never edit generated code (`api/internal/build/oas`, `api/internal/gen`, `api/internal/store/sqlcgen`, `web/src/lib/api/schema.d.ts`, `worker/crates/snatch-proto/src/gen`) or compiled vendor context (`CLAUDE.md`, `.gemini/**`, `.codex/**`). Edit `AGENTS.md`, run `praetorctl compile-context`.
 - Never store or return *arr API keys in plaintext: encrypt at rest (`core/crypto` AES-GCM); write-only in API.
-- No Swaparr / stalled-download handling: Cleanuparr owns that. Cleanuparr link = read-only (ADR-0007); never write to Cleanuparr.
+- Queue management (stalled, slow, failed, import-blocked, unwanted) acts only through the *arr queue API, observe mode first (ADR-0012, #362); never call a download client directly (ADR-0006).
 
 ## Local development
 

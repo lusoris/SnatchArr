@@ -3,7 +3,7 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts" module>
-	/** The fields a Seerr link and a Cleanuparr link share. */
+	/** The fields a Seerr link and a Prowlarr link share. */
 	export interface LinkBody {
 		name: string;
 		base_url: string;

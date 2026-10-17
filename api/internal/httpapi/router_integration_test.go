@@ -181,7 +181,6 @@ type idsState struct {
 	clientID       string
 	seerrLinkID    string
 	seerrReqID     int
-	cleanupLinkID  string
 	prowlarrLinkID string
 	configarrPath  string
 	policy         map[string]any
@@ -1069,121 +1068,8 @@ func stepsSeerr(f *routerFixture) []routerStep {
 	}
 }
 
-func stepsCleanuparrAndConfigarr(f *routerFixture) []routerStep {
+func stepsConfigarr() []routerStep {
 	return []routerStep{
-		{
-			op:     "createCleanuparrLink",
-			method: http.MethodPost,
-			path:   func(_ *idsState) string { return "/cleanuparr" },
-			body: func(_ *idsState) any {
-				return map[string]any{
-					"name":     "cleanup-test",
-					"base_url": f.cleanupServer.URL,
-					"api_key":  "secret-cleanup-key",
-					"enabled":  true,
-				}
-			},
-			want: http.StatusCreated,
-			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
-				t.Helper()
-				id, ok := decoded["id"].(string)
-				if !ok || id == "" {
-					t.Fatalf("createCleanuparrLink id = %v, want valid uuid", decoded["id"])
-				}
-				ids.cleanupLinkID = id
-				if decoded["name"] != "cleanup-test" {
-					t.Fatalf("createCleanuparrLink name = %v, want cleanup-test", decoded["name"])
-				}
-			},
-		},
-		{
-			op:     "listCleanuparrLinks",
-			method: http.MethodGet,
-			path:   func(_ *idsState) string { return "/cleanuparr" },
-			want:   http.StatusOK,
-			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
-				t.Helper()
-				if !containsID(decoded["items"], ids.cleanupLinkID) {
-					t.Fatalf("listCleanuparrLinks missing link %s", ids.cleanupLinkID)
-				}
-			},
-		},
-		{
-			op:     "getCleanuparrLink",
-			method: http.MethodGet,
-			path:   func(ids *idsState) string { return "/cleanuparr/" + ids.cleanupLinkID },
-			want:   http.StatusOK,
-			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
-				t.Helper()
-				if decoded["id"] != ids.cleanupLinkID {
-					t.Fatalf("getCleanuparrLink id = %v, want %s", decoded["id"], ids.cleanupLinkID)
-				}
-			},
-		},
-		{
-			op:     "updateCleanuparrLink",
-			method: http.MethodPut,
-			path:   func(ids *idsState) string { return "/cleanuparr/" + ids.cleanupLinkID },
-			body: func(_ *idsState) any {
-				return map[string]any{
-					"name":     "cleanup-updated",
-					"base_url": f.cleanupServer.URL,
-					"api_key":  "secret-cleanup-key",
-					"enabled":  true,
-				}
-			},
-			want: http.StatusOK,
-			capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
-				t.Helper()
-				if decoded["name"] != "cleanup-updated" {
-					t.Fatalf("updateCleanuparrLink name = %v, want cleanup-updated", decoded["name"])
-				}
-			},
-		},
-		{
-			op:     "testCleanuparrLinkInput",
-			method: http.MethodPost,
-			path:   func(_ *idsState) string { return "/cleanuparr/test" },
-			body: func(_ *idsState) any {
-				return map[string]any{
-					"name":     "cleanup-test",
-					"base_url": f.cleanupServer.URL,
-					"api_key":  "secret-cleanup-key",
-					"enabled":  true,
-				}
-			},
-			want: http.StatusOK,
-			capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
-				t.Helper()
-				if v, ok := decoded["app_name"].(string); !ok || v == "" {
-					t.Fatalf("testCleanuparrLinkInput app_name = %v, want non-empty", decoded["app_name"])
-				}
-			},
-		},
-		{
-			op:     "testCleanuparrLink",
-			method: http.MethodPost,
-			path:   func(ids *idsState) string { return "/cleanuparr/" + ids.cleanupLinkID + "/test" },
-			want:   http.StatusOK,
-			capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
-				t.Helper()
-				if v, ok := decoded["app_name"].(string); !ok || v == "" {
-					t.Fatalf("testCleanuparrLink app_name = %v, want non-empty", decoded["app_name"])
-				}
-			},
-		},
-		{
-			op:     "getCleanuparrStatus",
-			method: http.MethodGet,
-			path:   func(_ *idsState) string { return "/cleanuparr/status" },
-			want:   http.StatusOK,
-			capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
-				t.Helper()
-				if decoded["items"] == nil {
-					t.Fatalf("getCleanuparrStatus missing items: %v", decoded)
-				}
-			},
-		},
 		{
 			op:     "importConfigarr",
 			method: http.MethodPost,
@@ -1359,12 +1245,6 @@ func stepsDeletesAndAuth() []routerStep {
 			op:     "deleteSeerrLink",
 			method: http.MethodDelete,
 			path:   func(ids *idsState) string { return "/seerr/" + ids.seerrLinkID },
-			want:   http.StatusNoContent,
-		},
-		{
-			op:     "deleteCleanuparrLink",
-			method: http.MethodDelete,
-			path:   func(ids *idsState) string { return "/cleanuparr/" + ids.cleanupLinkID },
 			want:   http.StatusNoContent,
 		},
 		{
@@ -1596,7 +1476,7 @@ func buildRouterSteps(f *routerFixture) []routerStep {
 	steps = append(steps, stepsSettingsAndSchedules()...)
 	steps = append(steps, stepsDownloadClients()...)
 	steps = append(steps, stepsSeerr(f)...)
-	steps = append(steps, stepsCleanuparrAndConfigarr(f)...)
+	steps = append(steps, stepsConfigarr()...)
 	steps = append(steps, stepsProwlarr(f)...)
 	steps = append(steps, stepsNotificationChannels(f)...)
 	steps = append(steps, stepsNotificationRules()...)
@@ -1889,7 +1769,6 @@ func testProblemNotFound(t *testing.T, f *routerFixture) {
 		{http.MethodGet, "/instances/" + unknownUUID},
 		{http.MethodGet, "/download-clients/" + unknownUUID},
 		{http.MethodGet, "/seerr/" + unknownUUID},
-		{http.MethodGet, "/cleanuparr/" + unknownUUID},
 		{http.MethodPost, "/runs/" + unknownUUID + "/cancel"},
 	}
 	for _, tc := range cases {

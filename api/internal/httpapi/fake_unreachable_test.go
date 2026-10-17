@@ -22,13 +22,6 @@ func TestFakeServerUnreachableSurvivesPortReuse(t *testing.T) {
 		name        string
 		unreachable func(t *testing.T) (closedURL, linkURL string)
 	}{
-		{"cleanuparr", func(t *testing.T) (string, string) {
-			t.Helper()
-			s := newFakeCleanuparrServer(t)
-			closed := s.URL
-			s.setUnreachable()
-			return closed, s.URL
-		}},
 		{"prowlarr", func(t *testing.T) (string, string) {
 			t.Helper()
 			s := newFakeProwlarrServer(t)

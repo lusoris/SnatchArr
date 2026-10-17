@@ -49,15 +49,6 @@ func (UnimplementedHandler) CreateAPIKey(ctx context.Context, req *CreateApiKeyR
 	return r, ht.ErrNotImplemented
 }
 
-// CreateCleanuparrLink implements createCleanuparrLink operation.
-//
-// Add a Cleanuparr link.
-//
-// POST /cleanuparr
-func (UnimplementedHandler) CreateCleanuparrLink(ctx context.Context, req *CleanuparrLinkInput) (r *CleanuparrLink, _ error) {
-	return r, ht.ErrNotImplemented
-}
-
 // CreateDownloadClient implements createDownloadClient operation.
 //
 // Add a download client by hand.
@@ -128,15 +119,6 @@ func (UnimplementedHandler) CreateSchedule(ctx context.Context, req *ScheduleInp
 // POST /seerr
 func (UnimplementedHandler) CreateSeerrLink(ctx context.Context, req *SeerrLinkInput) (r *SeerrLink, _ error) {
 	return r, ht.ErrNotImplemented
-}
-
-// DeleteCleanuparrLink implements deleteCleanuparrLink operation.
-//
-// Delete a Cleanuparr link.
-//
-// DELETE /cleanuparr/{linkId}
-func (UnimplementedHandler) DeleteCleanuparrLink(ctx context.Context, params DeleteCleanuparrLinkParams) error {
-	return ht.ErrNotImplemented
 }
 
 // DeleteDownloadClient implements deleteDownloadClient operation.
@@ -218,24 +200,6 @@ func (UnimplementedHandler) DeleteSeerrLink(ctx context.Context, params DeleteSe
 //
 // POST /instances/{instanceId}/download-clients/discover
 func (UnimplementedHandler) DiscoverDownloadClients(ctx context.Context, params DiscoverDownloadClientsParams) (r *DiscoveryResult, _ error) {
-	return r, ht.ErrNotImplemented
-}
-
-// GetCleanuparrLink implements getCleanuparrLink operation.
-//
-// Get one Cleanuparr link.
-//
-// GET /cleanuparr/{linkId}
-func (UnimplementedHandler) GetCleanuparrLink(ctx context.Context, params GetCleanuparrLinkParams) (r *CleanuparrLink, _ error) {
-	return r, ht.ErrNotImplemented
-}
-
-// GetCleanuparrStatus implements getCleanuparrStatus operation.
-//
-// Live view of every enabled Cleanuparr link (cached 30 s).
-//
-// GET /cleanuparr/status
-func (UnimplementedHandler) GetCleanuparrStatus(ctx context.Context) (r []CleanuparrStatus, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -429,15 +393,6 @@ func (UnimplementedHandler) ListAPIKeys(ctx context.Context) (r ListAPIKeysRes, 
 	return r, ht.ErrNotImplemented
 }
 
-// ListCleanuparrLinks implements listCleanuparrLinks operation.
-//
-// List Cleanuparr links (API keys are never returned).
-//
-// GET /cleanuparr
-func (UnimplementedHandler) ListCleanuparrLinks(ctx context.Context) (r []CleanuparrLink, _ error) {
-	return r, ht.ErrNotImplemented
-}
-
 // ListDownloadClients implements listDownloadClients operation.
 //
 // List download clients (secrets are never returned).
@@ -603,24 +558,6 @@ func (UnimplementedHandler) SyncSeerrLink(ctx context.Context, params SyncSeerrL
 	return r, ht.ErrNotImplemented
 }
 
-// TestCleanuparrLink implements testCleanuparrLink operation.
-//
-// Probe a stored Cleanuparr link and record the outcome.
-//
-// POST /cleanuparr/{linkId}/test
-func (UnimplementedHandler) TestCleanuparrLink(ctx context.Context, params TestCleanuparrLinkParams) (r *ProbeResult, _ error) {
-	return r, ht.ErrNotImplemented
-}
-
-// TestCleanuparrLinkInput implements testCleanuparrLinkInput operation.
-//
-// Probe Cleanuparr credentials that are not stored yet.
-//
-// POST /cleanuparr/test
-func (UnimplementedHandler) TestCleanuparrLinkInput(ctx context.Context, req *CleanuparrLinkInput) (r *ProbeResult, _ error) {
-	return r, ht.ErrNotImplemented
-}
-
 // TestDownloadClient implements testDownloadClient operation.
 //
 // Observe a stored download client now and record the outcome.
@@ -708,15 +645,6 @@ func (UnimplementedHandler) TestSeerrLinkInput(ctx context.Context, req *SeerrLi
 //
 // POST /instances/{instanceId}/runs
 func (UnimplementedHandler) TriggerRun(ctx context.Context, req *RunTrigger, params TriggerRunParams) (r TriggerRunRes, _ error) {
-	return r, ht.ErrNotImplemented
-}
-
-// UpdateCleanuparrLink implements updateCleanuparrLink operation.
-//
-// Update a Cleanuparr link (omit api_key to keep it).
-//
-// PUT /cleanuparr/{linkId}
-func (UnimplementedHandler) UpdateCleanuparrLink(ctx context.Context, req *CleanuparrLinkInput, params UpdateCleanuparrLinkParams) (r *CleanuparrLink, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

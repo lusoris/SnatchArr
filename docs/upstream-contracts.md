@@ -182,28 +182,6 @@ Real clients behave in ways a fake did not show:
 | Deluge 2 | Serves no `daemon.info`, which goenvoy asks for the version ([golusoris/goenvoy#101](https://github.com/golusoris/goenvoy/issues/101)). | The version stays empty; `unknownVersion` in `live_test.go` fails once a fixed release reports it. |
 | NZBGet | Starts with downloads paused. | `tools/e2e/dlclients_live.sh` resumes it before the first run. |
 
-## Cleanuparr
-
-Cleanuparr publishes no spec either, so `make cleanuparr-live` reads a real release. It starts
-the Cleanuparr of `tools/e2e/cleanuparr/compose.yaml` (pinned by digest, kept current by
-Renovate) and sets it up as a user would: the admin account, the API key from the account page,
-and one Sonarr instance. `TestLiveCleanuparr` (`api/internal/cleanuparrclient/live_test.go`)
-then reads it through the client production uses: the version and instance count from the
-status, no strikes, the dry-run switch, the Sonarr instance and its Seeker entry, and a wrong
-API key refused. The run repeats with dry run switched on. Two planted cases, a wrong API key
-and a dry run that was never switched on, must fail first. CI runs it as the job
-`cleanuparr-live`; it needs Docker and is not part of `make verify-all`.
-
-| Behaviour of Cleanuparr 2.10 | Where it is handled |
-| --- | --- |
-| Stores an instance URL with a trailing slash (`http://sonarr:8989/`). | Matching against SnatchArr instances normalises both URLs (`domain.NormalizeBaseURL`). |
-| Masks the API key of an *arr instance in the instance list and in the response that creates it. | The client reads only id, name, URL and enabled state of an instance. |
-| A new Seeker entry is disabled while its *arr instance is enabled. | The client reads both flags separately. |
-
-Strikes are only read empty: a strike needs a download that stalls in a real download client,
-which this run does not set up. Their shape stays covered by the fixture tests in
-`client_test.go`.
-
 ## Limits
 
 The check says "the spec documents what the client uses". It does not say more than that.
@@ -223,6 +201,5 @@ The check says "the spec documents what the client uses". It does not say more t
 
 | Client | State |
 | --- | --- |
-| `api/internal/cleanuparrclient` | No spec contract test: the Cleanuparr repository holds no OpenAPI file (checked at commit `520dde2c`, 2026-10-11). `make cleanuparr-live` reads a real release instead (see [Cleanuparr](#cleanuparr)); strike entries stay covered by the fixture tests in `client_test.go` only. |
 | `worker/crates/arr-client`, the retired Readarr | No pinned spec. Its wire types are the ones the Readarr forks use, and the hand-written contracts in `contract_tests.rs` cover all six kinds. The spec of Faustvii/Readarr at `v0.10.0` is byte for byte the one Readarr published at `v0.4.18.2805`. |
 | `api/internal/arrclient` | Not in scope: it has no wire types of its own and calls the typed clients of [goenvoy](https://github.com/golusoris/goenvoy). |

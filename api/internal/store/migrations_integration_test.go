@@ -112,14 +112,13 @@ const (
 )
 
 var (
-	fixtureSonarrID      = uuid.MustParse("11111111-1111-1111-1111-111111111111")
-	fixtureRunID         = uuid.MustParse("a1111111-1111-1111-1111-111111111111")
-	fixtureScheduleID    = uuid.MustParse("b1111111-1111-1111-1111-111111111111")
-	fixtureUserID        = uuid.MustParse("c1111111-1111-1111-1111-111111111111")
-	fixtureClientID      = uuid.MustParse("d1111111-1111-1111-1111-111111111111")
-	fixtureSeerrLinkID   = uuid.MustParse("e1111111-1111-1111-1111-111111111111")
-	fixtureCleanupLinkID = uuid.MustParse("f1111111-1111-1111-1111-111111111111")
-	reInsertTable        = regexp.MustCompile(`(?i)\bINSERT\s+INTO\s+([a-zA-Z0-9_]+)`)
+	fixtureSonarrID    = uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	fixtureRunID       = uuid.MustParse("a1111111-1111-1111-1111-111111111111")
+	fixtureScheduleID  = uuid.MustParse("b1111111-1111-1111-1111-111111111111")
+	fixtureUserID      = uuid.MustParse("c1111111-1111-1111-1111-111111111111")
+	fixtureClientID    = uuid.MustParse("d1111111-1111-1111-1111-111111111111")
+	fixtureSeerrLinkID = uuid.MustParse("e1111111-1111-1111-1111-111111111111")
+	reInsertTable      = regexp.MustCompile(`(?i)\bINSERT\s+INTO\s+([a-zA-Z0-9_]+)`)
 )
 
 func stepDownToVersion(t *testing.T, m *dbmigrate.Migrator, target uint) {
@@ -224,7 +223,7 @@ func TestMigrationsUpgradePopulated(t *testing.T) {
 	assertSchedulesAndSettings(t, q, ctx, fixtureScheduleID)
 	assertUsersAndSessions(t, q, ctx, fixtureUserID)
 	assertKeysAndWorkers(t, q, ctx, fixtureUserID)
-	assertClientsAndCleanup(t, q, ctx, fixtureClientID, fixtureCleanupLinkID)
+	assertClients(t, q, ctx, fixtureClientID)
 	assertSeerr(t, q, ctx, fixtureSeerrLinkID)
 }
 
@@ -368,16 +367,11 @@ func assertKeysAndWorkers(t *testing.T, q *sqlcgen.Queries, ctx context.Context,
 	}
 }
 
-func assertClientsAndCleanup(t *testing.T, q *sqlcgen.Queries, ctx context.Context, clientID, cleanupID uuid.UUID) {
+func assertClients(t *testing.T, q *sqlcgen.Queries, ctx context.Context, clientID uuid.UUID) {
 	t.Helper()
 	client, err := q.GetDownloadClient(ctx, clientID)
 	if err != nil || client.Name != "qbit-local" || client.Kind != "qbittorrent" {
 		t.Errorf("GetDownloadClient = %+v, err %v", client, err)
-	}
-
-	cleanup, err := q.GetCleanuparrLink(ctx, cleanupID)
-	if err != nil || cleanup.Name != "cleanuparr-main" || !cleanup.Enabled {
-		t.Errorf("GetCleanuparrLink = %+v, err %v", cleanup, err)
 	}
 }
 

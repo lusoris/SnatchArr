@@ -230,7 +230,7 @@ networkPolicy:
   enabled: false
   # Peers allowed to reach the API on 8080 (NetworkPolicyPeer list). Empty allows any.
   ingressFrom: []
-  # Where your *arr apps, Seerr, Cleanuparr and download clients live. The cloud metadata
+  # Where your *arr apps, Seerr, Prowlarr and download clients live. The cloud metadata
   # address is always excluded. Every port of these ranges is allowed; a rule for one port of a
   # range belongs in extraEgress.
   arrCidrs:

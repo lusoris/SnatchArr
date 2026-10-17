@@ -28,9 +28,6 @@ type Querier interface {
 	CountUsers(ctx context.Context) (int64, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
-	CreateCleanuparrLink(ctx context.Context, arg CreateCleanuparrLinkParams) (CleanuparrLink, error)
-	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
-	// SPDX-License-Identifier: EUPL-1.2
 	CreateDownloadClient(ctx context.Context, arg CreateDownloadClientParams) (DownloadClient, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
@@ -49,7 +46,6 @@ type Querier interface {
 	// SPDX-License-Identifier: EUPL-1.2
 	CreateSeerrLink(ctx context.Context, arg CreateSeerrLinkParams) (SeerrLink, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
-	DeleteCleanuparrLink(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteDownloadClient(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteEventsForInstance(ctx context.Context, instanceID uuid.UUID) (int64, error)
 	DeleteInstanceUnlessDeclared(ctx context.Context, id uuid.UUID) (int64, error)
@@ -81,7 +77,6 @@ type Querier interface {
 	FindWebhookDelivery(ctx context.Context, id string) (WebhookDelivery, error)
 	FindWebhookEndpoint(ctx context.Context, id string) (WebhookEndpoint, error)
 	GetAPIKey(ctx context.Context, id string) (ApiKey, error)
-	GetCleanuparrLink(ctx context.Context, id uuid.UUID) (CleanuparrLink, error)
 	GetDownloadClient(ctx context.Context, id uuid.UUID) (DownloadClient, error)
 	GetFirstAdmin(ctx context.Context) (User, error)
 	GetInstance(ctx context.Context, id uuid.UUID) (Instance, error)
@@ -116,11 +111,9 @@ type Querier interface {
 	LeaseRun(ctx context.Context, arg LeaseRunParams) (SnatchRun, error)
 	ListAPIKeysByOwner(ctx context.Context, ownerID uuid.UUID) ([]ApiKey, error)
 	ListAPIKeysForOwner(ctx context.Context, ownerID uuid.UUID) ([]ListAPIKeysForOwnerRow, error)
-	ListCleanuparrLinks(ctx context.Context) ([]CleanuparrLink, error)
 	ListDeadLetterDeliveries(ctx context.Context) ([]WebhookDelivery, error)
 	ListDownloadClients(ctx context.Context) ([]DownloadClient, error)
 	ListDownloadClientsForInstance(ctx context.Context, instanceID *uuid.UUID) ([]DownloadClient, error)
-	ListEnabledCleanuparrLinks(ctx context.Context) ([]CleanuparrLink, error)
 	ListEnabledDownloadClients(ctx context.Context) ([]DownloadClient, error)
 	ListEnabledInstances(ctx context.Context) ([]Instance, error)
 	ListEnabledNotificationChannels(ctx context.Context) ([]NotificationChannel, error)
@@ -170,7 +163,6 @@ type Querier interface {
 	PurgeWorkersBefore(ctx context.Context, arg PurgeWorkersBeforeParams) (int64, error)
 	RecentInstanceRunStatuses(ctx context.Context, arg RecentInstanceRunStatusesParams) ([]string, error)
 	RecentRunStatuses(ctx context.Context, arg RecentRunStatusesParams) ([]string, error)
-	RecordCleanuparrCheck(ctx context.Context, arg RecordCleanuparrCheckParams) error
 	RecordDownloadClientCheck(ctx context.Context, arg RecordDownloadClientCheckParams) error
 	RecordInstanceCheck(ctx context.Context, arg RecordInstanceCheckParams) error
 	RecordLoginLockoutFailure(ctx context.Context, arg RecordLoginLockoutFailureParams) error
@@ -193,7 +185,6 @@ type Querier interface {
 	// SPDX-License-Identifier: EUPL-1.2
 	// A late write from a slower replica never moves the contact back.
 	TouchWorker(ctx context.Context, arg TouchWorkerParams) error
-	UpdateCleanuparrLink(ctx context.Context, arg UpdateCleanuparrLinkParams) (CleanuparrLink, error)
 	UpdateDownloadClient(ctx context.Context, arg UpdateDownloadClientParams) (DownloadClient, error)
 	UpdateInstance(ctx context.Context, arg UpdateInstanceParams) (Instance, error)
 	UpdateNotificationChannel(ctx context.Context, arg UpdateNotificationChannelParams) (NotificationChannel, error)

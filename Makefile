@@ -21,7 +21,7 @@ GOMODCACHE       = $(subst \,/,$(shell go env GOMODCACHE))
 GOLUSORIS_VER    = $(shell go list -m -f '{{.Version}}' github.com/golusoris/golusoris)
 GOLUSORIS_SHARED = $(GOMODCACHE)/github.com/golusoris/golusoris@$(GOLUSORIS_VER)/tools/Makefile.shared
 
-.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-soak e2e-compose-smoke e2e-compose-pg-upgrade e2e-dev-compose-smoke dlclients-live cleanuparr-live e2e-cnpg-pg-upgrade e2e-cnpg-backup-restore e2e-chart-install web-verify web-e2e web-e2e-api web-visual web-visual-update proto-verify deploy-verify chart-package governance-verify hooks-verify contracts-verify workflows-verify workflows-lint secret-scan \
+.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-soak e2e-compose-smoke e2e-compose-pg-upgrade e2e-dev-compose-smoke dlclients-live e2e-cnpg-pg-upgrade e2e-cnpg-backup-restore e2e-chart-install web-verify web-e2e web-e2e-api web-visual web-visual-update proto-verify deploy-verify chart-package governance-verify hooks-verify contracts-verify workflows-verify workflows-lint secret-scan \
 	images kind-up kind-deploy kind-keda-proof kind-down \
         api-gen api-gosec api-vuln gosec-install govulncheck-install sqlc-install tools-verify tools-lint tools-test tools-gosec web-gen proto-gen dev hooks setup
 
@@ -260,15 +260,6 @@ dlclients-live: ## Real qBittorrent, Transmission, Deluge, rTorrent, SABnzbd, NZ
 	bash tools/e2e/pull_retry_test.sh
 	bash tools/e2e/planted.sh SNATCHARR_DLCLIENTS_PLANT tools/e2e/dlclients_live.sh \
 	  "secret:not reachable with the right secret" "pause:paused = false; the client was left with paused = true"
-
-# The Cleanuparr release SnatchArr reads (tools/e2e/cleanuparr), set up as a user would and read
-# through the client production uses: status, strikes, dry run, the Sonarr instance and Seeker.
-# The planted cases hand the test a wrong API key and claim a dry run that was never switched
-# on; the test must refuse both (gap audit C9-07). Not in verify-all (slow, needs Docker).
-cleanuparr-live: ## Real Cleanuparr read by the client production uses (needs Docker)
-	bash tools/e2e/pull_retry_test.sh
-	bash tools/e2e/planted.sh SNATCHARR_CLEANUPARR_PLANT tools/e2e/cleanuparr_live.sh \
-	  "key:status with the right key" "dryrun:dry run = false; Cleanuparr was left with dry run = true"
 
 # The chart on CloudNativePG moved from the previous Postgres major to the current one by the
 # imageName change of docs/deployment.md, with data read-back and a planted upgrade without the

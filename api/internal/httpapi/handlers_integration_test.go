@@ -32,8 +32,6 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/auth"
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/buildinfo"
-	"github.com/lusoris/SnatchArr/api/internal/cleanuparr"
-	"github.com/lusoris/SnatchArr/api/internal/cleanuparrclient"
 	"github.com/lusoris/SnatchArr/api/internal/config"
 	"github.com/lusoris/SnatchArr/api/internal/configarr"
 	"github.com/lusoris/SnatchArr/api/internal/dlclients"
@@ -140,176 +138,11 @@ func (r stubResolver) EntityByExternalID(context.Context, domain.AppKind, string
 // and no test can listen on it, so every connection is refused.
 const unreachableURL = "http://127.0.0.1:1"
 
-type fakeCleanuparrServer struct {
-	srv       *httptest.Server
-	URL       string
-	writes    atomic.Int64
-	fail      atomic.Bool
-	seeker404 atomic.Bool
-	dryRun    atomic.Bool
-}
-
-func (s *fakeCleanuparrServer) setFail(fail bool) {
-	s.fail.Store(fail)
-}
-
-func (s *fakeCleanuparrServer) setUnreachable() {
-	s.fail.Store(true)
-	s.srv.Close()
-	s.URL = unreachableURL
-}
-
-func (s *fakeCleanuparrServer) assertNoWrites(t *testing.T) {
-	t.Helper()
-	if n := s.writes.Load(); n > 0 {
-		t.Fatalf("ADR-0007 violation: expected 0 writes to cleanuparr, got %d", n)
-	}
-}
-
-func newFakeCleanuparrServer(t *testing.T) *fakeCleanuparrServer {
-	t.Helper()
-	s := &fakeCleanuparrServer{}
-	mux := http.NewServeMux()
-	mux.HandleFunc("/api/status", s.handleStatus(t))
-	mux.HandleFunc("/api/strikes/recent", s.handleRecent(t))
-	mux.HandleFunc("/api/strikes", s.handleStrikes(t))
-	mux.HandleFunc("/api/configuration/general", s.handleGeneral(t))
-	mux.HandleFunc("/api/configuration/seeker", s.handleSeeker(t))
-	mux.HandleFunc("/api/configuration/sonarr", s.handleSonarr(t))
-	mux.HandleFunc("/api/configuration/radarr", s.handleRadarr(t))
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet && r.Method != http.MethodHead {
-			s.writes.Add(1)
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-		if s.fail.Load() {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		mux.ServeHTTP(w, r)
-	}))
-	t.Cleanup(srv.Close)
-	s.srv = srv
-	s.URL = srv.URL
-	return s
-}
-
-func (s *fakeCleanuparrServer) handleStatus(t *testing.T) http.HandlerFunc {
-	t.Helper()
-	return func(w http.ResponseWriter, _ *http.Request) {
-		writeCleanupJSON(t, w, map[string]any{
-			"application": map[string]any{
-				"version":   "1.4.0",
-				"startTime": "2026-09-20T08:00:00.1234567+00:00",
-				"upTime":    "1.02:03:04",
-			},
-			"mediaManagers": map[string]any{
-				"Sonarr": map[string]any{"instanceCount": 1},
-			},
-		})
-	}
-}
-
-func (s *fakeCleanuparrServer) handleRecent(t *testing.T) http.HandlerFunc {
-	t.Helper()
-	return func(w http.ResponseWriter, _ *http.Request) {
-		writeCleanupJSON(t, w, []map[string]any{
-			{
-				"id":         "s1",
-				"type":       "Stalled",
-				"createdAt":  "2026-09-21T10:00:00Z",
-				"downloadId": "d1",
-				"title":      "Sample Strike",
-				"isDryRun":   false,
-			},
-		})
-	}
-}
-
-func (s *fakeCleanuparrServer) handleStrikes(t *testing.T) http.HandlerFunc {
-	t.Helper()
-	return func(w http.ResponseWriter, _ *http.Request) {
-		items := []map[string]any{
-			{"isMarkedForRemoval": true, "isRemoved": false, "isReturning": false},
-			{"isMarkedForRemoval": true, "isRemoved": false, "isReturning": false},
-			{"isMarkedForRemoval": false, "isRemoved": true, "isReturning": false},
-			{"isMarkedForRemoval": false, "isRemoved": true, "isReturning": false},
-			{"isMarkedForRemoval": false, "isRemoved": true, "isReturning": false},
-		}
-		writeCleanupJSON(t, w, map[string]any{
-			"items":      items,
-			"page":       1, // Cleanuparr PaginatedResult.Page is an int; one page here
-			"pageSize":   500,
-			"totalCount": 5,
-			"totalPages": 1,
-		})
-	}
-}
-
-func (s *fakeCleanuparrServer) handleGeneral(t *testing.T) http.HandlerFunc {
-	t.Helper()
-	return func(w http.ResponseWriter, _ *http.Request) {
-		writeCleanupJSON(t, w, map[string]any{
-			"dryRun": s.dryRun.Load(),
-		})
-	}
-}
-
-func (s *fakeCleanuparrServer) handleSeeker(t *testing.T) http.HandlerFunc {
-	t.Helper()
-	return func(w http.ResponseWriter, _ *http.Request) {
-		if s.seeker404.Load() {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		writeCleanupJSON(t, w, map[string]any{
-			"searchEnabled":          true,
-			"proactiveSearchEnabled": true,
-			"instances": []map[string]any{
-				{
-					"arrInstanceId":      "c1111111-1111-1111-1111-111111111111",
-					"instanceName":       "Sonarr 1",
-					"instanceType":       "Sonarr",
-					"enabled":            true,
-					"arrInstanceEnabled": true,
-				},
-			},
-		})
-	}
-}
-
-func (s *fakeCleanuparrServer) handleSonarr(t *testing.T) http.HandlerFunc {
-	t.Helper()
-	return func(w http.ResponseWriter, _ *http.Request) {
-		writeCleanupJSON(t, w, map[string]any{
-			"instances": []map[string]any{
-				{
-					"id":      "c1111111-1111-1111-1111-111111111111",
-					"name":    "Sonarr 1",
-					"url":     "http://sonarr.local:8989",
-					"enabled": true,
-				},
-			},
-		})
-	}
-}
-
-func (s *fakeCleanuparrServer) handleRadarr(t *testing.T) http.HandlerFunc {
-	t.Helper()
-	return func(w http.ResponseWriter, _ *http.Request) {
-		writeCleanupJSON(t, w, map[string]any{
-			"instances": []map[string]any{},
-		})
-	}
-}
-
-func writeCleanupJSON(t *testing.T, w http.ResponseWriter, v any) {
+func writeTestJSON(t *testing.T, w http.ResponseWriter, v any) {
 	t.Helper()
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(v); err != nil {
-		t.Errorf("writeCleanupJSON: %v", err)
+		t.Errorf("writeTestJSON: %v", err)
 	}
 }
 
@@ -342,10 +175,10 @@ func newFakeProwlarrServer(t *testing.T) *fakeProwlarrServer {
 	s := &fakeProwlarrServer{}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/system/status", func(w http.ResponseWriter, _ *http.Request) {
-		writeCleanupJSON(t, w, map[string]any{"version": "1.15.0"})
+		writeTestJSON(t, w, map[string]any{"version": "1.15.0"})
 	})
 	mux.HandleFunc("/api/v1/indexer", func(w http.ResponseWriter, _ *http.Request) {
-		writeCleanupJSON(t, w, []map[string]any{
+		writeTestJSON(t, w, []map[string]any{
 			{
 				"id":     1,
 				"name":   "Prowlarr Idx 1",
@@ -359,7 +192,7 @@ func newFakeProwlarrServer(t *testing.T) *fakeProwlarrServer {
 		})
 	})
 	mux.HandleFunc("/api/v1/indexerstats", func(w http.ResponseWriter, _ *http.Request) {
-		writeCleanupJSON(t, w, map[string]any{
+		writeTestJSON(t, w, map[string]any{
 			"indexers": []map[string]any{
 				{
 					"indexerId":          1,
@@ -371,10 +204,10 @@ func newFakeProwlarrServer(t *testing.T) *fakeProwlarrServer {
 		})
 	})
 	mux.HandleFunc("/api/v1/indexerstatus", func(w http.ResponseWriter, _ *http.Request) {
-		writeCleanupJSON(t, w, []map[string]any{})
+		writeTestJSON(t, w, []map[string]any{})
 	})
 	mux.HandleFunc("/api/v1/applications", func(w http.ResponseWriter, _ *http.Request) {
-		writeCleanupJSON(t, w, []map[string]any{})
+		writeTestJSON(t, w, []map[string]any{})
 	})
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -408,7 +241,6 @@ type integrationFixture struct {
 	dlSnap         *stubSnapshotter
 	dlDisc         *stubDiscoverer
 	seerrClient    *stubSeerrClient
-	cleanupServer  *fakeCleanuparrServer
 	prowlarrServer *fakeProwlarrServer
 	prowlarrSvc    *prowlarr.Service
 	seerrResolver  *stubResolver
@@ -419,7 +251,7 @@ type integrationFixture struct {
 	enc            *crypto.Encryptor
 }
 
-func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Generator, authSvc *auth.Service, apiKeys *auth.APIKeys, sessMgr *session.Manager, probe *stubProber, dlSnap dlclients.Snapshotter, dlDisc arrclient.Discoverer, m *metrics.Metrics, logger *slog.Logger, seerrClient *stubSeerrClient, cleanupClient cleanuparrclient.Client, res *stubResolver) (*Handlers, *notify.Service, *notify.WebhookStore, *notify.Engine, *snatch.Recorder, *crypto.Encryptor, *prowlarr.Service) {
+func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Generator, authSvc *auth.Service, apiKeys *auth.APIKeys, sessMgr *session.Manager, probe *stubProber, dlSnap dlclients.Snapshotter, dlDisc arrclient.Discoverer, m *metrics.Metrics, logger *slog.Logger, seerrClient *stubSeerrClient, res *stubResolver) (*Handlers, *notify.Service, *notify.WebhookStore, *notify.Engine, *snatch.Recorder, *crypto.Encryptor, *prowlarr.Service) {
 	t.Helper()
 	enc, err := crypto.NewEncryptor(bytes.Repeat([]byte{0x42}, 32))
 	if err != nil {
@@ -444,7 +276,6 @@ func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Genera
 	settingsSvc := settings.New(st, clk)
 	clients := dlclients.New(st, enc, clk, ids, dlSnap, dlDisc, instSvc, logger)
 	seerrSvc := seerr.New(st, enc, clk, ids, seerrClient, res, instSvc, runs, rec, logger)
-	cleanupSvc := cleanuparr.New(st, enc, clk, ids, cleanupClient, logger)
 	prowlarrClient := prowlarrclient.New(5*time.Second, "snatcharr-test")
 	disc, _ := dlDisc.(arrclient.IndexerDiscoverer)
 	prowlarrSvc := prowlarr.New(st, enc, clk, ids, prowlarrClient, disc, instSvc, logger, config.Options{Prowlarr: config.ProwlarrOptions{LimitThreshold: 0.9}})
@@ -455,31 +286,30 @@ func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Genera
 	configarrSvc := configarr.New(cfg, instSvc, probe, clk, logger)
 	build := buildinfo.Info{Version: "test-ver", Commit: "test-commit", Date: "2026-10-14"}
 	h := &Handlers{
-		build:      build,
-		cfg:        cfg,
-		clk:        clk,
-		auth:       authSvc,
-		apiKeys:    apiKeys,
-		sessions:   sessMgr,
-		instances:  instSvc,
-		policies:   polSvc,
-		options:    policies.NewOptions(instSvc, labeler),
-		runs:       runs,
-		workers:    workers,
-		rec:        rec,
-		budget:     budget,
-		memory:     memory,
-		planner:    planner,
-		schedules:  schedules,
-		clients:    clients,
-		settings:   settingsSvc,
-		configarr:  configarrSvc,
-		seerr:      seerrSvc,
-		cleanuparr: cleanupSvc,
-		prowlarr:   prowlarrSvc,
-		notify:     notifySvc,
-		logs:       logring.New(logring.MinSize),
-		logger:     logger,
+		build:     build,
+		cfg:       cfg,
+		clk:       clk,
+		auth:      authSvc,
+		apiKeys:   apiKeys,
+		sessions:  sessMgr,
+		instances: instSvc,
+		policies:  polSvc,
+		options:   policies.NewOptions(instSvc, labeler),
+		runs:      runs,
+		workers:   workers,
+		rec:       rec,
+		budget:    budget,
+		memory:    memory,
+		planner:   planner,
+		schedules: schedules,
+		clients:   clients,
+		settings:  settingsSvc,
+		configarr: configarrSvc,
+		seerr:     seerrSvc,
+		prowlarr:  prowlarrSvc,
+		notify:    notifySvc,
+		logs:      logring.New(logring.MinSize),
+		logger:    logger,
 	}
 	return h, notifySvc, webhookStore, notifyEngine, rec, enc, prowlarrSvc
 }
@@ -526,11 +356,9 @@ func newIntegrationFixture(t *testing.T) *integrationFixture {
 	dlDisc := &stubDiscoverer{}
 	m, _ := metricstest.New(t)
 	seerrClient := &stubSeerrClient{status: seerrclient.Status{Version: "2.1.0"}}
-	cleanupServer := newFakeCleanuparrServer(t)
-	cleanupClient := cleanuparrclient.New(5*time.Second, "snatcharr-test")
 	prowlarrServer := newFakeProwlarrServer(t)
 	res := &stubResolver{entityID: 42, found: true}
-	h, nSvc, ws, nEngine, rec, enc, pSvc := buildHandlers(t, st, clk, ids, authSvc, apiKeys, sessMgr, probe, dlSnap, dlDisc, m, logger, seerrClient, cleanupClient, res)
+	h, nSvc, ws, nEngine, rec, enc, pSvc := buildHandlers(t, st, clk, ids, authSvc, apiKeys, sessMgr, probe, dlSnap, dlDisc, m, logger, seerrClient, res)
 	return &integrationFixture{
 		h:              h,
 		st:             st,
@@ -544,7 +372,6 @@ func newIntegrationFixture(t *testing.T) *integrationFixture {
 		dlSnap:         dlSnap,
 		dlDisc:         dlDisc,
 		seerrClient:    seerrClient,
-		cleanupServer:  cleanupServer,
 		prowlarrServer: prowlarrServer,
 		prowlarrSvc:    pSvc,
 		seerrResolver:  res,
@@ -615,20 +442,6 @@ func seedTestSeerrLink(t *testing.T, f *integrationFixture) domain.SeerrLink {
 	return link
 }
 
-func seedTestCleanuparrLink(t *testing.T, f *integrationFixture) domain.CleanuparrLink {
-	t.Helper()
-	link, err := f.h.cleanuparr.Create(t.Context(), cleanuparr.Input{
-		Name:    "storetest-cleanuparr-" + uuid.NewString(),
-		BaseURL: f.cleanupServer.URL,
-		APIKey:  "secret-cleanup-key",
-		Enabled: true,
-	})
-	if err != nil {
-		t.Fatalf("seedTestCleanuparrLink: %v", err)
-	}
-	return link
-}
-
 func seedTestSeerrRequest(t *testing.T, f *integrationFixture, linkID uuid.UUID, instID *uuid.UUID, entityID *int64) int {
 	t.Helper()
 	reqID := int(testRequestSeq.Add(1))
@@ -661,15 +474,6 @@ func validSeerrLinkInput() oas.SeerrLinkInput {
 		Name:    "overseerr-main",
 		BaseURL: "http://seerr.invalid:5055",
 		APIKey:  oas.NewOptString("valid-seerr-key"),
-		Enabled: oas.NewOptBool(true),
-	}
-}
-
-func validCleanuparrLinkInput() oas.CleanuparrLinkInput {
-	return oas.CleanuparrLinkInput{
-		Name:    "cleanuparr-main",
-		BaseURL: "http://cleanuparr.invalid:5060",
-		APIKey:  oas.NewOptString("valid-cleanup-key"),
 		Enabled: oas.NewOptBool(true),
 	}
 }

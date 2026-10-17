@@ -43,8 +43,7 @@ type GateRefusal struct {
 	Message string
 }
 
-// Gate lets other subsystems veto a snatch for an instance (download-client backpressure,
-// Cleanuparr signals).
+// Gate lets other subsystems veto a snatch for an instance (e.g. download-client backpressure).
 type Gate interface {
 	Allow(ctx context.Context, inst domain.Instance, kind domain.SnatchKind) (allowed bool, refusal GateRefusal, err error)
 }

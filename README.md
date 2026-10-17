@@ -43,10 +43,6 @@ recipe: [Deployment](https://lusoris.github.io/SnatchArr/deployment/).
 
 If you already run [Configarr](https://github.com/raydak-labs/configarr), point SnatchArr at its `config.yml` and `secrets.yml` and every instance is imported (and kept in sync) instead of being configured twice.
 
-## Running Cleanuparr too?
-
-[Cleanuparr](https://github.com/Cleanuparr/Cleanuparr) cleans up what your download clients choke on; SnatchArr only decides what to search for next. They complement each other. v1 links Cleanuparr read-only and shows its status and recent strikes next to your snatches ([ADR-0007](docs/adr/0007-read-only-cleanuparr-link.md)). A download Cleanuparr is striking is still in the *arr queue, so SnatchArr already skips its item.
-
 ## License
 
 Code: [EUPL-1.2](LICENSES/EUPL-1.2.txt). Documentation: [CC BY-SA 4.0](LICENSES/CC-BY-SA-4.0.txt). REUSE-compliant.

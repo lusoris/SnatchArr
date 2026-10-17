@@ -2,8 +2,8 @@
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
 #
-# Sourced by the live tests that start real releases from a registry (dlclients_live.sh,
-# cleanuparr_live.sh). A registry answers a burst of pulls with a rate limit now and then
+# Sourced by the live tests that start real releases from a registry (dlclients_live.sh).
+# A registry answers a burst of pulls with a rate limit now and then
 # ("error from registry: retry-after ..."), which failed a whole CI job on 2026-10-17. The
 # images are pulled before `up`, a bounded number of times with a jittered wait between tries.
 #

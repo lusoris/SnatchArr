@@ -32,12 +32,6 @@ type Handler interface {
 	//
 	// POST /auth/api-keys
 	CreateAPIKey(ctx context.Context, req *CreateApiKeyRequest) (CreateAPIKeyRes, error)
-	// CreateCleanuparrLink implements createCleanuparrLink operation.
-	//
-	// Add a Cleanuparr link.
-	//
-	// POST /cleanuparr
-	CreateCleanuparrLink(ctx context.Context, req *CleanuparrLinkInput) (*CleanuparrLink, error)
 	// CreateDownloadClient implements createDownloadClient operation.
 	//
 	// Add a download client by hand.
@@ -86,12 +80,6 @@ type Handler interface {
 	//
 	// POST /seerr
 	CreateSeerrLink(ctx context.Context, req *SeerrLinkInput) (*SeerrLink, error)
-	// DeleteCleanuparrLink implements deleteCleanuparrLink operation.
-	//
-	// Delete a Cleanuparr link.
-	//
-	// DELETE /cleanuparr/{linkId}
-	DeleteCleanuparrLink(ctx context.Context, params DeleteCleanuparrLinkParams) error
 	// DeleteDownloadClient implements deleteDownloadClient operation.
 	//
 	// Delete a download client.
@@ -147,18 +135,6 @@ type Handler interface {
 	//
 	// POST /instances/{instanceId}/download-clients/discover
 	DiscoverDownloadClients(ctx context.Context, params DiscoverDownloadClientsParams) (*DiscoveryResult, error)
-	// GetCleanuparrLink implements getCleanuparrLink operation.
-	//
-	// Get one Cleanuparr link.
-	//
-	// GET /cleanuparr/{linkId}
-	GetCleanuparrLink(ctx context.Context, params GetCleanuparrLinkParams) (*CleanuparrLink, error)
-	// GetCleanuparrStatus implements getCleanuparrStatus operation.
-	//
-	// Live view of every enabled Cleanuparr link (cached 30 s).
-	//
-	// GET /cleanuparr/status
-	GetCleanuparrStatus(ctx context.Context) ([]CleanuparrStatus, error)
 	// GetConfigarrStatus implements getConfigarrStatus operation.
 	//
 	// Linked-mode state and the last import.
@@ -286,12 +262,6 @@ type Handler interface {
 	//
 	// GET /auth/api-keys
 	ListAPIKeys(ctx context.Context) (ListAPIKeysRes, error)
-	// ListCleanuparrLinks implements listCleanuparrLinks operation.
-	//
-	// List Cleanuparr links (API keys are never returned).
-	//
-	// GET /cleanuparr
-	ListCleanuparrLinks(ctx context.Context) ([]CleanuparrLink, error)
 	// ListDownloadClients implements listDownloadClients operation.
 	//
 	// List download clients (secrets are never returned).
@@ -403,18 +373,6 @@ type Handler interface {
 	//
 	// POST /seerr/{linkId}/sync
 	SyncSeerrLink(ctx context.Context, params SyncSeerrLinkParams) (*SeerrSyncResult, error)
-	// TestCleanuparrLink implements testCleanuparrLink operation.
-	//
-	// Probe a stored Cleanuparr link and record the outcome.
-	//
-	// POST /cleanuparr/{linkId}/test
-	TestCleanuparrLink(ctx context.Context, params TestCleanuparrLinkParams) (*ProbeResult, error)
-	// TestCleanuparrLinkInput implements testCleanuparrLinkInput operation.
-	//
-	// Probe Cleanuparr credentials that are not stored yet.
-	//
-	// POST /cleanuparr/test
-	TestCleanuparrLinkInput(ctx context.Context, req *CleanuparrLinkInput) (*ProbeResult, error)
 	// TestDownloadClient implements testDownloadClient operation.
 	//
 	// Observe a stored download client now and record the outcome.
@@ -475,12 +433,6 @@ type Handler interface {
 	//
 	// POST /instances/{instanceId}/runs
 	TriggerRun(ctx context.Context, req *RunTrigger, params TriggerRunParams) (TriggerRunRes, error)
-	// UpdateCleanuparrLink implements updateCleanuparrLink operation.
-	//
-	// Update a Cleanuparr link (omit api_key to keep it).
-	//
-	// PUT /cleanuparr/{linkId}
-	UpdateCleanuparrLink(ctx context.Context, req *CleanuparrLinkInput, params UpdateCleanuparrLinkParams) (*CleanuparrLink, error)
 	// UpdateDownloadClient implements updateDownloadClient operation.
 	//
 	// Update a download client (omit secret to keep it).

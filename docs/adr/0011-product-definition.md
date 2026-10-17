@@ -60,7 +60,7 @@ Covered already, as listed in #321:
 
 Out of scope by design, as already recorded:
 
-- **Swaparr (stalled downloads):** [ADR-0004](0004-no-swaparr-cleanuparr-deferred.md). Cleanuparr owns it ([ADR-0007](0007-read-only-cleanuparr-link.md)).
+- **Swaparr (stalled downloads):** [ADR-0004](0004-no-swaparr-cleanuparr-deferred.md). Cleanuparr owns it ([ADR-0007](0007-read-only-cleanuparr-link.md)). *(Note: ADR-0012 supersedes the Cleanuparr link; see #362.)*
 - **Movie Hunt, TV Hunt, Index Master, NZB Hunt, Requestarr:** these replace Radarr, Sonarr, Prowlarr, SABnzbd and Seerr. SnatchArr drives the *arr apps and links Seerr and Prowlarr; it does not replace them.
 
 ## Consequences
