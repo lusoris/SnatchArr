@@ -216,9 +216,10 @@ func (s *Service) FirstAdmin(ctx context.Context) (domain.User, error) {
 	return userFromRow(row), nil
 }
 
-// ChangePassword verifies current password, updates it to newPassword, and ends every other session.
+// ChangePassword verifies current password, updates it to newPassword, and ends every session of
+// the user, the calling one included; the caller signs the user in again with RenewSession (#268).
 // API keys are left untouched. Wrong current password counts against user lockout.
-func (s *Service) ChangePassword(ctx context.Context, userID uuid.UUID, currentPassword, newPassword, currentSessionID string) error {
+func (s *Service) ChangePassword(ctx context.Context, userID uuid.UUID, currentPassword, newPassword string) error {
 	row, err := s.st.Q().GetUser(ctx, userID)
 	if err != nil {
 		return fmt.Errorf("auth: get user: %w", store.MapError(err))
@@ -231,7 +232,7 @@ func (s *Service) ChangePassword(ctx context.Context, userID uuid.UUID, currentP
 	if err != nil {
 		return err
 	}
-	if err := s.commitPasswordChange(ctx, userID, hash, currentSessionID); err != nil {
+	if err := s.commitPasswordChange(ctx, userID, hash); err != nil {
 		return fmt.Errorf("auth: %w", err)
 	}
 	if rstErr := s.lockout.Reset(ctx, userKey); rstErr != nil {
@@ -268,7 +269,7 @@ func (s *Service) hashNewPassword(ctx context.Context, newPassword string) (stri
 	return hash, nil
 }
 
-func (s *Service) commitPasswordChange(ctx context.Context, userID uuid.UUID, hash, currentSessionID string) error {
+func (s *Service) commitPasswordChange(ctx context.Context, userID uuid.UUID, hash string) error {
 	now := s.clk.Now()
 	return s.st.Tx(ctx, func(q *sqlcgen.Queries) error {
 		if updErr := q.UpdateUserPassword(ctx, sqlcgen.UpdateUserPasswordParams{
@@ -279,10 +280,11 @@ func (s *Service) commitPasswordChange(ctx context.Context, userID uuid.UUID, ha
 		if s.testHookPostPasswordUpdate != nil {
 			s.testHookPostPasswordUpdate(ctx)
 		}
+		// No session id is empty, so every session of the user goes.
 		if _, delErr := q.DeleteUserSessionsExcept(ctx, sqlcgen.DeleteUserSessionsExceptParams{
-			UserID: userID.String(), CurrentSessionID: currentSessionID,
+			UserID: userID.String(), CurrentSessionID: "",
 		}); delErr != nil {
-			return fmt.Errorf("delete other sessions: %w", store.MapError(delErr))
+			return fmt.Errorf("delete sessions: %w", store.MapError(delErr))
 		}
 		return nil
 	})

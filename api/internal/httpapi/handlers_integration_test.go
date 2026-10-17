@@ -1062,25 +1062,25 @@ func TestHandlersChangePassword(t *testing.T) {
 		t.Fatalf("ChangePassword returned %T, want *oas.ChangePasswordNoContent", res)
 	}
 
-	// Session 1 remains valid
+	// The caller continues under the fresh id from the response (#268).
 	req1 := httptest.NewRequest(http.MethodGet, "/auth/session", nil)
-	for _, cookie := range s1Cookies {
+	for _, cookie := range changeRec.Result().Cookies() {
 		req1.AddCookie(cookie)
 	}
 	authCtx1 := withHTTPTest(t.Context(), httptest.NewRecorder(), req1)
 	if _, err := sec.HandleCookieAuth(authCtx1, "GetSession", oas.CookieAuth{}); err != nil {
-		t.Fatalf("session 1 invalid after change password: %v", err)
+		t.Fatalf("renewed session invalid after change password: %v", err)
 	}
 
-	// Sessions 2 and 3 are destroyed
-	for i, c := range [][]*http.Cookie{s2Cookies, s3Cookies} {
+	// Sessions 1 (the caller's old id), 2 and 3 are destroyed
+	for i, c := range [][]*http.Cookie{s1Cookies, s2Cookies, s3Cookies} {
 		req := httptest.NewRequest(http.MethodGet, "/auth/session", nil)
 		for _, cookie := range c {
 			req.AddCookie(cookie)
 		}
 		authCtx := withHTTPTest(t.Context(), httptest.NewRecorder(), req)
 		if _, err := sec.HandleCookieAuth(authCtx, "GetSession", oas.CookieAuth{}); !errors.Is(err, domain.ErrUnauthorized) {
-			t.Fatalf("session %d still valid after change password, want ErrUnauthorized", i+2)
+			t.Fatalf("session %d still valid after change password, want ErrUnauthorized", i+1)
 		}
 	}
 }
