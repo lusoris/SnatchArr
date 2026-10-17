@@ -6,6 +6,7 @@ package dlclients
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"net/url"
@@ -41,6 +42,10 @@ type observation struct {
 	UploadRate   int64
 	Version      string
 }
+
+// ErrDelugeNoDaemon reports a Deluge web UI that is not connected to a daemon. SnatchArr only
+// observes, so it does not connect one; the connection manager of the web UI does.
+var ErrDelugeNoDaemon = errors.New("deluge: the web UI is not connected to a daemon; connect one in its connection manager")
 
 // Goenvoy observes clients through goenvoy's typed download-client packages.
 type Goenvoy struct {
@@ -186,21 +191,41 @@ func (g *Goenvoy) transmission(ctx context.Context, c domain.DownloadClient, sec
 	return obs, nil
 }
 
-func (g *Goenvoy) deluge(ctx context.Context, c domain.DownloadClient, secret string) (observation, error) {
+// delugeSession logs in to the web UI and checks that it is connected to a daemon.
+func (g *Goenvoy) delugeSession(ctx context.Context, c domain.DownloadClient, secret string) (*deluge.Client, error) {
 	cl, err := deluge.New(c.BaseURL, deluge.WithTimeout(g.timeout), deluge.WithUserAgent(g.userAgent))
 	if err != nil {
-		return observation{}, fmt.Errorf("deluge client: %w", err)
+		return nil, fmt.Errorf("deluge client: %w", err)
 	}
 	if err = cl.Login(ctx, secret); err != nil {
-		return observation{}, fmt.Errorf("deluge login: %w", err)
+		return nil, fmt.Errorf("deluge login: %w", err)
 	}
-	version, err := cl.GetVersion(ctx)
+	// Without a daemon the web UI answers every daemon and core method with "Unknown method".
+	connected, err := cl.Connected(ctx)
 	if err != nil {
-		return observation{}, fmt.Errorf("deluge version: %w", err)
+		return nil, fmt.Errorf("deluge connection state: %w", err)
+	}
+	if !connected {
+		return nil, ErrDelugeNoDaemon
+	}
+	return cl, nil
+}
+
+func (g *Goenvoy) deluge(ctx context.Context, c domain.DownloadClient, secret string) (observation, error) {
+	cl, err := g.delugeSession(ctx, c, secret)
+	if err != nil {
+		return observation{}, err
 	}
 	torrents, err := cl.GetTorrentsStatus(ctx, map[string]string{})
 	if err != nil {
 		return observation{}, fmt.Errorf("deluge torrents: %w", err)
+	}
+	// goenvoy asks for the version with daemon.info, which Deluge 2 does not serve
+	// (golusoris/goenvoy#101). The version is informational, so a daemon that answers the
+	// torrent list is reachable and its version stays unknown.
+	version, err := cl.GetVersion(ctx)
+	if err != nil {
+		version = ""
 	}
 	obs := observation{Version: version}
 	for _, t := range torrents {
