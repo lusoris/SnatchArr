@@ -66,6 +66,8 @@ const (
 	DeferralBandwidthSaturated = "bandwidth_saturated"
 	DeferralGateRefusal        = "gate_refusal"
 	DeferralIndexerLimit       = "indexer_limit"
+	// DeferralTickBound counts the instances a tick left for the next one (#176).
+	DeferralTickBound = "tick_bound"
 )
 
 // AllDeferralReasons lists every fixed deferral reason.
@@ -78,6 +80,7 @@ var AllDeferralReasons = []string{
 	DeferralBandwidthSaturated,
 	DeferralGateRefusal,
 	DeferralIndexerLimit,
+	DeferralTickBound,
 }
 
 var leaseWaitBuckets = []float64{1, 5, 15, 30, 60, 120, 300, 600, 1800, 3600}

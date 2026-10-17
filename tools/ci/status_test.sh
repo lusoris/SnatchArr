@@ -18,7 +18,7 @@ trap 'rm -rf "$WORK"' EXIT
 # Every job ran and succeeded; the change filter selected every component.
 ALL="$(jq -n '
   [ "workflows", "secret-scan", "semgrep", "trivy", "changes", "commits", "api-lint", "api-test", "api-security", "api-openapi",
-    "worker", "e2e", "image-smoke", "dev-compose", "web", "web-e2e-api", "proto", "deploy", "contracts", "governance", "docs" ]
+    "worker", "e2e", "image-smoke", "dev-compose", "web", "web-e2e-api", "web-visual", "proto", "deploy", "contracts", "governance", "docs" ]
   | map({key: ., value: {result: "success", outputs: {}}}) | from_entries
   | .changes.outputs = ( [ "api", "worker", "web", "proto", "deploy", "governance", "contracts", "docs" ]
                          | map({key: ., value: "true"}) | from_entries )
@@ -26,7 +26,7 @@ ALL="$(jq -n '
 # No component selected: every filtered job is skipped.
 NONE="$(printf '%s' "$ALL" | jq '
   .changes.outputs |= map_values("false")
-  | (.["api-lint"], .["api-test"], .["api-security"], .["api-openapi"], .worker, .e2e, .["image-smoke"], .["dev-compose"], .web, .["web-e2e-api"],
+  | (.["api-lint"], .["api-test"], .["api-security"], .["api-openapi"], .worker, .e2e, .["image-smoke"], .["dev-compose"], .web, .["web-e2e-api"], .["web-visual"],
      .proto, .deploy, .contracts, .governance, .docs).result = "skipped"
 ')"
 

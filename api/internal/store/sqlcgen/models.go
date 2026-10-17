@@ -76,6 +76,7 @@ type Instance struct {
 	UpdatedAt           time.Time
 	LastSeenProduct     *string
 	ConfigarrOrphanedAt *time.Time
+	PlannedAt           *time.Time
 }
 
 type LoginLockout struct {

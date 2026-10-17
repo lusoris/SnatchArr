@@ -192,7 +192,7 @@ func TestPlanner_Tick(t *testing.T) {
 		// Boundary.
 		{name: "no instance", gate: AllowAll{}, want: 0},
 		{name: "exactly the bound", instances: MaxInstancesPerTick, gate: AllowAll{}, want: MaxInstancesPerTick},
-		{name: "more than the bound", instances: MaxInstancesPerTick + 5, gate: AllowAll{}, want: MaxInstancesPerTick},
+		// More than the bound: TestPlanner_TickPastTheBoundPlansTheRestNext.
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
