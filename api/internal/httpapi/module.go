@@ -53,6 +53,30 @@ func MountStream(r chi.Router, p MountParams, stream http.Handler) {
 	r.With(p.Security.RequireUser(p.Logger)).Handle(StreamPath, stream)
 }
 
+// LogStreamPath serves the live log tail. It lives outside the generated router.
+const LogStreamPath = PathPrefix + "/logs/stream"
+
+// MountLogStream serves the log tail to administrators only: the session or API-key
+// check of MountStream, then the admin check of listLogs.
+func MountLogStream(r chi.Router, p MountParams, stream http.Handler) {
+	r.With(p.Security.RequireUser(p.Logger), adminOnly(p.Logger)).Handle(LogStreamPath, stream)
+}
+
+// adminOnly answers a request whose attached user is not an administrator with the
+// problem+json error of requireAdmin.
+func adminOnly(logger *slog.Logger) func(http.Handler) http.Handler {
+	onErr := ErrorHandler(logger)
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			if err := requireAdmin(req.Context()); err != nil {
+				onErr(req.Context(), w, req, err)
+				return
+			}
+			next.ServeHTTP(w, req)
+		})
+	}
+}
+
 // Module provides the handlers and security resolver. Mounting is the app's job.
 var Module = fx.Module("snatcharr.httpapi",
 	fx.Provide(NewHandlers, NewSecurity),

@@ -56,6 +56,7 @@ const (
 	ListDownloadClientsOperation       OperationName = "ListDownloadClients"
 	ListEventsOperation                OperationName = "ListEvents"
 	ListInstancesOperation             OperationName = "ListInstances"
+	ListLogsOperation                  OperationName = "ListLogs"
 	ListNotificationChannelsOperation  OperationName = "ListNotificationChannels"
 	ListNotificationRulesOperation     OperationName = "ListNotificationRules"
 	ListProwlarrLinksOperation         OperationName = "ListProwlarrLinks"

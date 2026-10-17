@@ -37,6 +37,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/httpapi"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
 	"github.com/lusoris/SnatchArr/api/internal/leaderx"
+	"github.com/lusoris/SnatchArr/api/internal/logring"
 	"github.com/lusoris/SnatchArr/api/internal/metrics"
 	"github.com/lusoris/SnatchArr/api/internal/notify"
 	"github.com/lusoris/SnatchArr/api/internal/policies"
@@ -72,6 +73,7 @@ var Module = fx.Options(
 	// The dev profile may start without APP_CRYPTO_KEY (crypto.go).
 	fx.Decorate(newEncryptor),
 	config.Module,
+	logring.Module,
 	store.Module,
 	metrics.Module,
 	arrclient.Module,
@@ -139,6 +141,7 @@ type httpDeps struct {
 	Clock  clock.Clock
 	Reg    *statuspage.Registry
 	Events *events.Bus
+	Logs   *logring.Ring
 	Cfg    config.Options
 	SSO    *sso.Service
 }
@@ -157,6 +160,7 @@ func mountHTTP(d httpDeps, api httpapi.MountParams) error {
 		return fmt.Errorf("app: mount metrics: %w", err)
 	}
 	httpapi.MountStream(d.Router, api, d.Events.Hub().Handler())
+	httpapi.MountLogStream(d.Router, api, d.Logs.StreamHandler())
 	sso.Mount(d.Router, httpapi.PathPrefix, d.SSO, httpapi.ErrorHandler(d.Logger))
 	if err := httpapi.Mount(d.Router, api); err != nil {
 		return err

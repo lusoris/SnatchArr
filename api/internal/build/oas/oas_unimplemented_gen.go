@@ -465,6 +465,18 @@ func (UnimplementedHandler) ListInstances(ctx context.Context) (r []Instance, _ 
 	return r, ht.ErrNotImplemented
 }
 
+// ListLogs implements listLogs operation.
+//
+// Records come from a fixed-size in-memory ring (snatcharr.logs.ring_size). Secret attributes,
+// credential query parameters, bearer tokens, URL userinfo and 32-character hex keys are replaced
+// with [REDACTED] before a record is stored. The live tail is the Server-Sent Events stream at
+// /api/v1/logs/stream (default event type message, same record shape), outside this router.
+//
+// GET /logs
+func (UnimplementedHandler) ListLogs(ctx context.Context, params ListLogsParams) (r *LogPage, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // ListNotificationChannels implements listNotificationChannels operation.
 //
 // List all configured notification channels.

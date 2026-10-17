@@ -458,6 +458,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Recent log records of this api process, newest first (admin only)
+         * @description Records come from a fixed-size in-memory ring (snatcharr.logs.ring_size). Secret attributes, credential query parameters, bearer tokens, URL userinfo and 32-character hex keys are replaced with [REDACTED] before a record is stored. The live tail is the Server-Sent Events stream at /api/v1/logs/stream (default event type message, same record shape), outside this router.
+         */
+        get: operations["listLogs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/hourly-caps": {
         parameters: {
             query?: never;
@@ -1407,6 +1427,37 @@ export interface components {
              * @description When stamina next frees up (the oldest spend still counted leaves the window); now when nothing is spent
              */
             resets_at: string;
+        };
+        /** @enum {string} */
+        LogLevel: "debug" | "info" | "warn" | "error";
+        LogAttr: {
+            /** @description Attribute key; group names are joined with dots. */
+            key: string;
+            value: string;
+        };
+        LogRecord: {
+            /**
+             * Format: int64
+             * @description Position in the ring since process start; increases by one per record.
+             */
+            seq: number;
+            /** Format: date-time */
+            time: string;
+            level: components["schemas"]["LogLevel"];
+            /** @description Process that emitted the record (api). */
+            source: string;
+            message: string;
+            attrs: components["schemas"]["LogAttr"][];
+        };
+        LogPage: {
+            records: components["schemas"]["LogRecord"][];
+            /** @description Number of records the ring holds. */
+            capacity: number;
+            /**
+             * Format: int64
+             * @description Records overwritten since process start because the ring was full.
+             */
+            dropped: number;
         };
         Settings: {
             history_retention_days: number;
@@ -2654,6 +2705,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Settings"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listLogs: {
+        parameters: {
+            query?: {
+                /** @description Minimum level; records below it are left out. */
+                level?: components["schemas"]["LogLevel"];
+                /** @description Case-insensitive substring of the message, an attribute key or value. */
+                q?: string;
+                /** @description Exact source, e.g. api. */
+                source?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Log records */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LogPage"];
                 };
             };
             default: components["responses"]["Problem"];

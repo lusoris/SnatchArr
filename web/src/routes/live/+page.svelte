@@ -46,18 +46,15 @@ SPDX-License-Identifier: EUPL-1.2
 	</p>
 </div>
 
-<ol
-	role="log"
-	aria-live="polite"
-	aria-relevant="additions"
-	class="flex flex-col gap-1 font-mono text-sm"
->
-	{#each frames as f, i (i)}
-		<li class="card px-3 py-1" data-level={f.level}>
-			<span class="text-subtle">{f.ts?.slice(11, 19) ?? ''}</span>
-			<span class="ml-2 font-semibold">{f.event}</span>
-			<span class="ml-2">{f.title ?? ''}</span>
-			{#if f.detail}<span class="ml-2 text-subtle">{f.detail}</span>{/if}
-		</li>
-	{/each}
-</ol>
+<div role="log" aria-live="polite" aria-relevant="additions">
+	<ol class="flex flex-col gap-1 font-mono text-sm">
+		{#each frames as f, i (i)}
+			<li class="card px-3 py-1" data-level={f.level}>
+				<span class="text-subtle">{f.ts?.slice(11, 19) ?? ''}</span>
+				<span class="ml-2 font-semibold">{f.event}</span>
+				<span class="ml-2">{f.title ?? ''}</span>
+				{#if f.detail}<span class="ml-2 text-subtle">{f.detail}</span>{/if}
+			</li>
+		{/each}
+	</ol>
+</div>

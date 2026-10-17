@@ -44,6 +44,7 @@ SPDX-License-Identifier: EUPL-1.2
 		{ href: '/instances', label: m.nav_instances() },
 		{ href: '/history', label: m.nav_history() },
 		{ href: '/live', label: m.nav_live() },
+		...(session.isAdmin ? [{ href: '/logs' as const, label: m.nav_logs() }] : []),
 		{ href: '/schedules', label: m.nav_schedules() },
 		{ href: '/download-clients', label: m.nav_download_clients() },
 		{ href: '/seerr', label: m.nav_seerr() },

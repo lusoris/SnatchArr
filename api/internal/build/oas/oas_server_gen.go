@@ -310,6 +310,15 @@ type Handler interface {
 	//
 	// GET /instances
 	ListInstances(ctx context.Context) ([]Instance, error)
+	// ListLogs implements listLogs operation.
+	//
+	// Records come from a fixed-size in-memory ring (snatcharr.logs.ring_size). Secret attributes,
+	// credential query parameters, bearer tokens, URL userinfo and 32-character hex keys are replaced
+	// with [REDACTED] before a record is stored. The live tail is the Server-Sent Events stream at
+	// /api/v1/logs/stream (default event type message, same record shape), outside this router.
+	//
+	// GET /logs
+	ListLogs(ctx context.Context, params ListLogsParams) (*LogPage, error)
 	// ListNotificationChannels implements listNotificationChannels operation.
 	//
 	// List all configured notification channels.

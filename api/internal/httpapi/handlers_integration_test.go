@@ -40,6 +40,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/events"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
+	"github.com/lusoris/SnatchArr/api/internal/logring"
 	"github.com/lusoris/SnatchArr/api/internal/metrics"
 	"github.com/lusoris/SnatchArr/api/internal/metrics/metricstest"
 	"github.com/lusoris/SnatchArr/api/internal/notify"
@@ -477,6 +478,7 @@ func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Genera
 		cleanuparr: cleanupSvc,
 		prowlarr:   prowlarrSvc,
 		notify:     notifySvc,
+		logs:       logring.New(logring.MinSize),
 		logger:     logger,
 	}
 	return h, notifySvc, webhookStore, notifyEngine, rec, enc, prowlarrSvc

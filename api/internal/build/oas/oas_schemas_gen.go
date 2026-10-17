@@ -2419,6 +2419,200 @@ type ListAPIKeysOKApplicationJSON []ApiKey
 
 func (*ListAPIKeysOKApplicationJSON) listAPIKeysRes() {}
 
+// Ref: #/components/schemas/LogAttr
+type LogAttr struct {
+	// Attribute key; group names are joined with dots.
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
+// GetKey returns the value of Key.
+func (s *LogAttr) GetKey() string {
+	return s.Key
+}
+
+// GetValue returns the value of Value.
+func (s *LogAttr) GetValue() string {
+	return s.Value
+}
+
+// SetKey sets the value of Key.
+func (s *LogAttr) SetKey(val string) {
+	s.Key = val
+}
+
+// SetValue sets the value of Value.
+func (s *LogAttr) SetValue(val string) {
+	s.Value = val
+}
+
+// Ref: #/components/schemas/LogLevel
+type LogLevel string
+
+const (
+	LogLevelDebug LogLevel = "debug"
+	LogLevelInfo  LogLevel = "info"
+	LogLevelWarn  LogLevel = "warn"
+	LogLevelError LogLevel = "error"
+)
+
+// AllValues returns all LogLevel values.
+func (LogLevel) AllValues() []LogLevel {
+	return []LogLevel{
+		LogLevelDebug,
+		LogLevelInfo,
+		LogLevelWarn,
+		LogLevelError,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s LogLevel) MarshalText() ([]byte, error) {
+	switch s {
+	case LogLevelDebug:
+		return []byte(s), nil
+	case LogLevelInfo:
+		return []byte(s), nil
+	case LogLevelWarn:
+		return []byte(s), nil
+	case LogLevelError:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *LogLevel) UnmarshalText(data []byte) error {
+	switch LogLevel(data) {
+	case LogLevelDebug:
+		*s = LogLevelDebug
+		return nil
+	case LogLevelInfo:
+		*s = LogLevelInfo
+		return nil
+	case LogLevelWarn:
+		*s = LogLevelWarn
+		return nil
+	case LogLevelError:
+		*s = LogLevelError
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/LogPage
+type LogPage struct {
+	Records []LogRecord `json:"records"`
+	// Number of records the ring holds.
+	Capacity int `json:"capacity"`
+	// Records overwritten since process start because the ring was full.
+	Dropped int64 `json:"dropped"`
+}
+
+// GetRecords returns the value of Records.
+func (s *LogPage) GetRecords() []LogRecord {
+	return s.Records
+}
+
+// GetCapacity returns the value of Capacity.
+func (s *LogPage) GetCapacity() int {
+	return s.Capacity
+}
+
+// GetDropped returns the value of Dropped.
+func (s *LogPage) GetDropped() int64 {
+	return s.Dropped
+}
+
+// SetRecords sets the value of Records.
+func (s *LogPage) SetRecords(val []LogRecord) {
+	s.Records = val
+}
+
+// SetCapacity sets the value of Capacity.
+func (s *LogPage) SetCapacity(val int) {
+	s.Capacity = val
+}
+
+// SetDropped sets the value of Dropped.
+func (s *LogPage) SetDropped(val int64) {
+	s.Dropped = val
+}
+
+// Ref: #/components/schemas/LogRecord
+type LogRecord struct {
+	// Position in the ring since process start; increases by one per record.
+	Seq   int64     `json:"seq"`
+	Time  time.Time `json:"time"`
+	Level LogLevel  `json:"level"`
+	// Process that emitted the record (api).
+	Source  string    `json:"source"`
+	Message string    `json:"message"`
+	Attrs   []LogAttr `json:"attrs"`
+}
+
+// GetSeq returns the value of Seq.
+func (s *LogRecord) GetSeq() int64 {
+	return s.Seq
+}
+
+// GetTime returns the value of Time.
+func (s *LogRecord) GetTime() time.Time {
+	return s.Time
+}
+
+// GetLevel returns the value of Level.
+func (s *LogRecord) GetLevel() LogLevel {
+	return s.Level
+}
+
+// GetSource returns the value of Source.
+func (s *LogRecord) GetSource() string {
+	return s.Source
+}
+
+// GetMessage returns the value of Message.
+func (s *LogRecord) GetMessage() string {
+	return s.Message
+}
+
+// GetAttrs returns the value of Attrs.
+func (s *LogRecord) GetAttrs() []LogAttr {
+	return s.Attrs
+}
+
+// SetSeq sets the value of Seq.
+func (s *LogRecord) SetSeq(val int64) {
+	s.Seq = val
+}
+
+// SetTime sets the value of Time.
+func (s *LogRecord) SetTime(val time.Time) {
+	s.Time = val
+}
+
+// SetLevel sets the value of Level.
+func (s *LogRecord) SetLevel(val LogLevel) {
+	s.Level = val
+}
+
+// SetSource sets the value of Source.
+func (s *LogRecord) SetSource(val string) {
+	s.Source = val
+}
+
+// SetMessage sets the value of Message.
+func (s *LogRecord) SetMessage(val string) {
+	s.Message = val
+}
+
+// SetAttrs sets the value of Attrs.
+func (s *LogRecord) SetAttrs(val []LogAttr) {
+	s.Attrs = val
+}
+
 // Ref: #/components/schemas/LoginRequest
 type LoginRequest struct {
 	Username string `json:"username"`
@@ -3557,6 +3751,52 @@ func (o OptInt64) Get() (v int64, ok bool) {
 
 // Or returns value if set, or given parameter if does not.
 func (o OptInt64) Or(d int64) int64 {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptLogLevel returns new OptLogLevel with value set to v.
+func NewOptLogLevel(v LogLevel) OptLogLevel {
+	return OptLogLevel{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptLogLevel is optional LogLevel.
+type OptLogLevel struct {
+	Value LogLevel
+	Set   bool
+}
+
+// IsSet returns true if OptLogLevel was set.
+func (o OptLogLevel) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptLogLevel) Reset() {
+	var v LogLevel
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptLogLevel) SetTo(v LogLevel) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptLogLevel) Get() (v LogLevel, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptLogLevel) Or(d LogLevel) LogLevel {
 	if v, ok := o.Get(); ok {
 		return v
 	}
