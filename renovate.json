@@ -157,6 +157,18 @@
       ],
       "datasourceTemplate": "docker",
       "versioningTemplate": "docker"
+    },
+    {
+      "description": "The Playwright image of the visual baseline, pinned by version and digest (web/e2e/visual-image.env, tools/e2e/web_visual.sh); its version must equal @playwright/test",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "web/e2e/visual-image.env"
+      ],
+      "matchStrings": [
+        "PLAYWRIGHT_IMAGE=(?<depName>mcr\\.microsoft\\.com/playwright):(?<currentValue>v[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})\\n"
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-(?<compatibility>.+)$"
     }
   ],
   "postUpdateOptions": [
@@ -409,6 +421,14 @@
       ],
       "matchCurrentValue": "/^18\\./",
       "allowedVersions": "/^18\\./"
+    },
+    {
+      "description": "@playwright/test and the Playwright image of the visual baseline move together: tools/e2e/web_visual.sh refuses an image whose version differs from the lockfile",
+      "matchDepNames": [
+        "@playwright/test",
+        "mcr.microsoft.com/playwright"
+      ],
+      "groupName": "playwright"
     }
   ],
   "minimumReleaseAge": "3 days",
