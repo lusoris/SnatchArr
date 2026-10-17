@@ -31,6 +31,7 @@ The target downloads the pinned specs on the first run (about 2.9 MB in total, i
 | `<operation>: ... <field> ... the spec does not document ...` | The client reads a field the pinned spec does not have. | Fix the wire type, or the code that depends on the field. |
 | `... query parameter "<name>" is not in the spec` or `no such operation in the contract` | The client sends a request the spec does not describe. | Fix the request. |
 | `... listed as absent and the spec documents it` | An entry of a known-gap list is out of date. | Remove the entry. |
+| `command <Name>: field "<x>" is not a property of the upstream class` or `command <Name>: the upstream class has the property "<x>" and the body lacks it` | A command body the worker sends has a field the pinned C# class lacks, or lacks one it has. | Fix the body; see [Command bodies](#command-bodies). |
 | `no contract test left a receipt` | A contract test was skipped, renamed or deleted. | Restore the test; see [Receipts](#receipts). |
 | `... is in the git index`, `.gitignore does not ignore ...` or `.dockerignore has no rule ...` | A spec or a file built from one is about to be committed, or could enter an image build. | Unstage the file or restore the rule; see [Licence rule](#licence-rule). |
 
@@ -40,11 +41,15 @@ The target downloads the pinned specs on the first run (about 2.9 MB in total, i
    the commit of that tag, the path of the spec file and its sha256. A project that tags no
    release is pinned with a branch in the place of the tag (Bookshelf, branch `develop`);
    so is a project whose tags carry an outdated spec (Whisparr, see [below](#whisparr));
-   an entry has exactly one of the two. It also lists the operations the client calls.
+   an entry has exactly one of the two. It also lists the operations the client calls and,
+   for an entry with `POST .../command`, the upstream C# command classes (path and sha256 at
+   the same commit).
 2. `upstreamspec fetch` downloads each file at its commit and refuses one whose checksum
    differs. For each spec it writes a contract file: per listed operation the documented
    query parameter names and one example response in which every documented property is
-   present (`tools/upstreamspec/openapi.go`).
+   present (`tools/upstreamspec/openapi.go`). It downloads each pinned command class the
+   same way and writes the camel-cased names of its public properties into the contract file
+   (`tools/upstreamspec/commands.go`).
 3. `upstreamspec guard` checks that nothing of the cache is committed or can enter an
    image build context.
 4. The contract tests run the real client against a local server that answers with the
@@ -58,8 +63,23 @@ The target downloads the pinned specs on the first run (about 2.9 MB in total, i
 
 A contract test reports four kinds of difference: a field a wire type reads that the
 documented response lacks, a request the spec does not describe (path or query
-parameter), a client method that fails on the documented example, and a listed
-operation the client never requests.
+parameter), a client method that fails on the documented example, a listed
+operation the client never requests, and a command body that differs from its upstream class.
+
+### Command bodies
+
+The OpenAPI schema of `POST .../command` lists only the generic properties of a command and
+forbids others, so it cannot describe the body of a search. Those fields live in one C# class
+per command (`EpisodeSearchCommand`, `MoviesSearchCommand`, `AuthorSearchCommand`, ...), and
+the command name is the class name without `Command`. The manifest pins each class the worker
+sends. The local server of the Rust test compares every command body it receives with the
+properties of the class of its `name`: an unknown field fails, and so does a missing one. A
+renamed field in `CommandBody` (`worker/crates/arr-client/src/lib.rs`) therefore fails the
+`contracts` job. A class with no public get/set property fails `fetch`, so an extractor that
+matches nothing cannot let every body pass.
+
+The class files are GPL-3.0 sources like the specs: they stay in the cache and are covered by
+the [licence rule](#licence-rule).
 
 ### Whisparr
 
@@ -191,8 +211,9 @@ The check says "the spec documents what the client uses". It does not say more t
 - The example of an array has one element, an enumeration its first value, `anyOf` and
   `oneOf` their first alternative. `required` and `nullable` are not read, so a field the
   spec documents as optional counts as present.
-- Request bodies are not compared. This concerns `POST /api/v3/command` and
-  `POST /api/v1/command`.
+- A command body is checked for field names only, not for value types or ranges. The class
+  properties are read as text, not compiled: a property with `[JsonIgnore]`, a computed one,
+  an override, a static one and one without a public setter are skipped.
 - A spec can be wrong about its own server. Five fields of the Seerr request list are
   returned by the server and missing from the spec; they are listed with their source in
   `decodes` in `api/internal/seerrclient/contract_test.go` and stay covered by the
