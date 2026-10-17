@@ -15,7 +15,9 @@
 #   g. each worker's health listener answers /livez and /readyz with 200 and /metrics with the
 #      API failure counter, and /system/status reports the workers' last contact (A1-01);
 #   h. an upgrade snatch searches only cutoff-unmet items up to its cap, records stamina,
-#      avoids repeats, and records kind upgrade on completed runs (C10-01).
+#      avoids repeats, and records kind upgrade on completed runs (C10-01);
+#   i. with images: each container runs under the memory limit of the chart, and its peak
+#      stays at or below 80 % of that limit (C12-01, tools/e2e/mem_limits.sh).
 # `make e2e-smoke` builds the binaries and provides Postgres. Needs curl and jq.
 set -euo pipefail
 
@@ -116,6 +118,13 @@ fi
 if [ -n "${SMOKE_WORKER_IMAGE:-}" ]; then
     check_image_user worker "$SMOKE_WORKER_IMAGE"
 fi
+MEM="$(dirname "$0")/mem_limits.sh"
+if [ -n "${SMOKE_API_IMAGE:-}" ]; then
+    API_MEM=$(bash "$MEM" limit api) || fail "i. no memory limit for the api in the chart"
+fi
+if [ -n "${SMOKE_WORKER_IMAGE:-}" ]; then
+    WORKER_MEM=$(bash "$MEM" limit worker) || fail "i. no memory limit for the worker in the chart"
+fi
 
 # start NAME COMMAND...: run a service in the background, logging to $LOG_DIR/NAME.log.
 start() {
@@ -164,6 +173,7 @@ if [ -n "${SMOKE_API_IMAGE:-}" ]; then
     CONTAINERS+=("$cname_api")
     start api docker run --rm --init --network host --read-only \
         --user 65532:65532 --cap-drop ALL --security-opt no-new-privileges \
+        --memory "$API_MEM" --memory-swap "$API_MEM" \
         --name "$cname_api" \
         -e APP_SNATCHARR_PROFILE=dev \
         -e APP_DB_DSN="$SMOKE_DSN" \
@@ -204,6 +214,7 @@ if [ -n "${SMOKE_WORKER_IMAGE:-}" ]; then
     CONTAINERS+=("$cname_w1")
     start w1 docker run --rm --init --network host --read-only \
         --user 65532:65532 --cap-drop ALL --security-opt no-new-privileges \
+        --memory "$WORKER_MEM" --memory-swap "$WORKER_MEM" \
         --name "$cname_w1" \
         -e SNATCH_WORKER_ID=w1 \
         -e SNATCH_API_GRPC="http://127.0.0.1:$GRPC_PORT" \
@@ -217,6 +228,7 @@ if [ -n "${SMOKE_WORKER_IMAGE:-}" ]; then
     CONTAINERS+=("$cname_w2")
     start w2 docker run --rm --init --network host --read-only \
         --user 65532:65532 --cap-drop ALL --security-opt no-new-privileges \
+        --memory "$WORKER_MEM" --memory-swap "$WORKER_MEM" \
         --name "$cname_w2" \
         -e SNATCH_WORKER_ID=w2 \
         -e SNATCH_API_GRPC="http://127.0.0.1:$GRPC_PORT" \
@@ -425,4 +437,19 @@ done
 contact=$(api GET /system/status | jq -r '.worker_last_contact_at // empty')
 [ -n "$contact" ] || fail "g. /system/status has no worker_last_contact_at"
 echo "smoke: last worker contact $contact"
+
+# mem_peak NAME CONTAINER LIMIT: the container's peak against the chart limit it ran under.
+mem_peak() {
+    local id peak
+    id=$(docker inspect -f '{{.Id}}' "$2") || fail "i. cannot inspect container $2"
+    peak=$(bash "$MEM" peak "$id") || fail "i. no memory peak for $1"
+    bash "$MEM" check "$1" "$peak" "$3" || fail "i. $1 outgrew its memory budget"
+}
+if [ -n "${SMOKE_API_IMAGE:-}" ]; then
+    mem_peak api "$cname_api" "$API_MEM"
+fi
+if [ -n "${SMOKE_WORKER_IMAGE:-}" ]; then
+    mem_peak w1 "$cname_w1" "$WORKER_MEM"
+    mem_peak w2 "$cname_w2" "$WORKER_MEM"
+fi
 echo "smoke: passed"

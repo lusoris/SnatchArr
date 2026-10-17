@@ -15,3 +15,5 @@
 2a1038558d4a51318faaffecd01cd80ceeefadf4:api/internal/configarr/parse_test.go:generic-api-key:64
 # expires 2027-02-11: category D, helm-unittest mock lookup Secrets in the chart's csrf-secret refusal suite; low-entropy placeholder values, no credential
 deploy/helm/snatcharr/tests/secret_test.yaml:kubernetes-secret-yaml
+# expires 2026-10-20: category B, an earlier commit of the unmerged test/cleanuparr-live branch held a placeholder Sonarr key for the Cleanuparr live test; the tip builds a random key instead, and the commit leaves the history when the branch is deleted
+ac9d7a3487d4535e3514e665638a32b40ab153bd:tools/e2e/cleanuparr_live.sh:generic-api-key:83

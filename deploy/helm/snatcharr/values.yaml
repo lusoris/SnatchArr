@@ -112,6 +112,8 @@ configarr:
 api:
   # Safe above 1: periodic work runs on the replica holding the Postgres advisory lock.
   replicaCount: 1
+  # make e2e-image-smoke runs the image under limits.memory and fails when its peak passes
+  # 80 % of it (tools/e2e/mem_limits.sh).
   resources:
     requests:
       cpu: 50m
@@ -179,6 +181,7 @@ worker:
   staleSecs: 180
   # RUST_LOG filter.
   logFilter: info
+  # Checked against the measured peak like api.resources.
   resources:
     requests:
       cpu: 20m
