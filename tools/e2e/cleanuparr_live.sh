@@ -79,8 +79,10 @@ setup() {
     [ -n "$token" ] || fail "Cleanuparr returned no access token"
     api_key=$(call GET /api/account/api-key | jq -r '.apiKey // empty')
     [ -n "$api_key" ] || fail "Cleanuparr returned no API key"
-    call POST /api/configuration/sonarr/instances "$(jq -cn --arg n "$sonarr_name" --arg u "$sonarr_url" \
-        '{name: $n, url: $u, apiKey: "0123456789abcdef0123456789abcdef", enabled: true, version: 4}')" >/dev/null ||
+    # Cleanuparr only stores this key; a fresh random one keeps a key-shaped literal out of the tree.
+    sonarr_key=$(od -An -tx1 -N16 /dev/urandom | tr -d ' \n')
+    call POST /api/configuration/sonarr/instances "$(jq -cn --arg n "$sonarr_name" --arg u "$sonarr_url" --arg k "$sonarr_key" \
+        '{name: $n, url: $u, apiKey: $k, enabled: true, version: 4}')" >/dev/null ||
         fail "Cleanuparr refused the Sonarr instance"
 }
 
