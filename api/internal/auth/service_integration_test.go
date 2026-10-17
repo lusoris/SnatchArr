@@ -256,7 +256,7 @@ func TestChangePassword(t *testing.T) {
 	}
 
 	// Negative 1: wrong current password -> refused, nothing changes
-	err = svc.ChangePassword(ctx, user.ID, "wrong-password", "new-valid-password-123", s1)
+	err = svc.ChangePassword(ctx, user.ID, "wrong-password", "new-valid-password-123")
 	if !errors.Is(err, domain.ErrUnauthorized) {
 		t.Fatalf("ChangePassword wrong pass = %v, want ErrUnauthorized", err)
 	}
@@ -267,7 +267,7 @@ func TestChangePassword(t *testing.T) {
 	}
 
 	// Negative 2: invalid new password -> refused, nothing changes
-	err = svc.ChangePassword(ctx, user.ID, adminPass, "short", s1)
+	err = svc.ChangePassword(ctx, user.ID, adminPass, "short")
 	if !errors.Is(err, domain.ErrInvalid) {
 		t.Fatalf("ChangePassword short pass = %v, want ErrInvalid", err)
 	}
@@ -279,17 +279,12 @@ func TestChangePassword(t *testing.T) {
 
 	// Positive: correct current password + valid new password while on s1
 	newPass := "brand-new-secret-password-123"
-	if err := svc.ChangePassword(ctx, user.ID, adminPass, newPass, s1); err != nil {
+	if err := svc.ChangePassword(ctx, user.ID, adminPass, newPass); err != nil {
 		t.Fatalf("ChangePassword success err = %v", err)
 	}
 
-	// Current session s1 still valid
-	if _, err := st.Q().LoadSession(ctx, sqlcgen.LoadSessionParams{ID: s1, ExpiresAt: clk.Now()}); err != nil {
-		t.Fatalf("current session s1 was deleted: %v", err)
-	}
-
-	// Other sessions s2, s3 for user are gone
-	for _, sid := range []string{s2, s3} {
+	// Every session of the user is gone, the calling s1 included (#268); the handler issues a new id.
+	for _, sid := range []string{s1, s2, s3} {
 		if _, err := st.Q().LoadSession(ctx, sqlcgen.LoadSessionParams{ID: sid, ExpiresAt: clk.Now()}); !errors.Is(err, pgx.ErrNoRows) {
 			t.Fatalf("session %s should be deleted, got err = %v", sid, err)
 		}
@@ -337,7 +332,7 @@ func TestChangePasswordRollbackOnDeleteFailure(t *testing.T) {
 	})
 
 	newPass := "brand-new-secret-password-123"
-	err = svc.ChangePassword(cancCtx, user.ID, adminPass, newPass, s1)
+	err = svc.ChangePassword(cancCtx, user.ID, adminPass, newPass)
 	if err == nil {
 		t.Fatal("ChangePassword with cancelled context after update should have failed, got nil")
 	}

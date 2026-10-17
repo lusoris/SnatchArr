@@ -325,13 +325,9 @@ func (s *Service) verifyClaims(idToken *gooidc.IDToken) bool {
 }
 
 func (s *Service) loginAdmin(ctx context.Context, w http.ResponseWriter, r *http.Request, admin domain.User) error {
-	sess, err := s.sessions.Load(r)
-	if err != nil {
-		return fmt.Errorf("sso: load session: %w", err)
-	}
-	sess.Set(auth.SessionUserKey, admin.ID.String())
-	if err := s.sessions.SaveContext(ctx, w, sess); err != nil {
-		return fmt.Errorf("sso: save session: %w", err)
+	// The pre-login session held the OIDC state; the admin gets a fresh id (#268).
+	if err := s.auth.RenewSession(ctx, s.sessions, w, r, admin.ID); err != nil {
+		return fmt.Errorf("sso: %w", err)
 	}
 	return nil
 }
