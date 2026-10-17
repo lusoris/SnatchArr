@@ -56,7 +56,7 @@
 		"@sveltesentio/api": "0.6.0",
 		"@sveltesentio/core": "0.5.0",
 		"@sveltesentio/query": "0.5.0",
-		"@sveltesentio/realtime": "0.6.0",
+		"@sveltesentio/realtime": "0.7.0",
 		"@sveltesentio/ui": "0.7.0",
 		"@tanstack/svelte-query": "^6.2.1",
 		"openapi-fetch": "^0.17.0",

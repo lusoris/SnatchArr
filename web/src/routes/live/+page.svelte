@@ -4,6 +4,7 @@ SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
 	import { useSSE } from '@sveltesentio/realtime/use-sse';
+	import { LIVE_EVENTS } from '#lib/live-events.js';
 	import { m } from '#lib/paraglide/messages.js';
 
 	interface Frame {
@@ -17,6 +18,7 @@ SPDX-License-Identifier: EUPL-1.2
 	const sse = useSSE({
 		url: '/api/v1/events/stream',
 		withCredentials: true,
+		events: LIVE_EVENTS,
 		bufferMs: 100,
 		historyLimit: 500
 	});

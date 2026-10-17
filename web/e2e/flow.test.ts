@@ -390,3 +390,26 @@ test('live: the event stream opens through the API proxy', async ({ page }) => {
 	// Node holds proxied headers until the first body byte; without the flush the stream never opens.
 	await expect(page.getByRole('status')).toHaveText(/^\s*(connected|verbunden)\s*$/i);
 });
+
+test('live: a named event published by the API appears on /live over a real EventSource', async ({
+	page
+}) => {
+	await freshSession(page);
+	const session = await page.request.get('/api/v1/auth/session');
+	expect(session.ok()).toBeTruthy();
+	const headers = {
+		'X-CSRF-Token': ((await session.json()) as { csrf_token: string }).csrf_token
+	};
+	// No worker leases the preview run, so it stays active: a retry previews the other kind.
+	const kind = test.info().retry === 0 ? 'missing' : 'upgrade';
+	await page.goto('/live');
+	await expect(page.getByRole('status')).toHaveText(/^\s*(connected|verbunden)\s*$/i);
+	// The API records run_queued itself and streams it as the named SSE event run_queued.
+	const preview = await page.request.post(
+		`/api/v1/instances/${seededInstanceId()}/preview?kind=${kind}`,
+		{ headers }
+	);
+	expect(preview.status(), await preview.text()).toBe(202);
+	const rows = page.getByRole('log').getByRole('listitem').filter({ hasText: 'run_queued' });
+	await expect(rows.filter({ hasText: `Preview: ${kind} snatch queued by hand` })).toHaveCount(1);
+});

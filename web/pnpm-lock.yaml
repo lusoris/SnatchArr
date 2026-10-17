@@ -179,8 +179,8 @@ importers:
         specifier: 0.5.0
         version: 0.5.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.16.0))(@sveltejs/kit@3.0.1(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(@typescript-eslint/types@8.71.2))(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(svelte@5.57.2(@typescript-eslint/types@8.71.2))(typescript@6.0.3)(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(@tanstack/svelte-query@6.3.2(svelte@5.57.2(@typescript-eslint/types@8.71.2)))(esm-env@1.2.2)(openapi-fetch@0.17.0)(svelte@5.57.2(@typescript-eslint/types@8.71.2))(typescript@6.0.3)(uuid@14.0.2)(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))(zod@4.6.7)
       '@sveltesentio/realtime':
-        specifier: 0.6.0
-        version: 0.6.0(0943472565b0a632c0358c7ef3c08e2c)
+        specifier: 0.7.0
+        version: 0.7.0(0943472565b0a632c0358c7ef3c08e2c)
       '@sveltesentio/ui':
         specifier: 0.7.0
         version: 0.7.0(svelte-sonner@1.2.1(svelte@5.57.2(@typescript-eslint/types@8.71.2)))(svelte@5.57.2(@typescript-eslint/types@8.71.2))(tailwindcss@4.3.3)(typescript@6.0.3)
@@ -1077,8 +1077,8 @@ packages:
       '@connectrpc/connect':
         optional: true
 
-  '@sveltesentio/realtime@0.6.0':
-    resolution: {integrity: sha512-fDQ26ju64Q0blU0E7F+QvfzEWOR6ioGeAGxP17pthzpXRUWpGm4ZuoqRnaFEIhSADLgwaB9xwvNZD4p4i2EYcg==}
+  '@sveltesentio/realtime@0.7.0':
+    resolution: {integrity: sha512-rjmh/Dw4rDJf6KfaMT6ySvtBgm/zzYHaGt7Wk5mShmnjO3rL8YLdS6RUIOskLBWb0IY4VHuso0WIFnJw5qC7iQ==}
     engines: {node: '>=24'}
     peerDependencies:
       '@bufbuild/protobuf': '>=2.0.0'
@@ -3182,7 +3182,7 @@ snapshots:
       - vite
       - zod
 
-  '@sveltesentio/realtime@0.6.0(0943472565b0a632c0358c7ef3c08e2c)':
+  '@sveltesentio/realtime@0.7.0(0943472565b0a632c0358c7ef3c08e2c)':
     dependencies:
       '@sveltejs/kit': 3.0.1(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(@typescript-eslint/types@8.71.2))(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(svelte@5.57.2(@typescript-eslint/types@8.71.2))(typescript@6.0.3)(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
       svelte: 5.57.2(@typescript-eslint/types@8.71.2)
