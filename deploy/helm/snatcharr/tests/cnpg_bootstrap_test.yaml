@@ -1,0 +1,80 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+suite: CloudNativePG Cluster bootstrap (initdb by default, recovery when set)
+templates:
+  - cnpg-cluster.yaml
+release:
+  name: snatcharr
+  namespace: snatcharr
+tests:
+  - it: positive - the default bootstrap is initdb of the configured database and owner
+    asserts:
+      - equal:
+          path: spec.bootstrap
+          value:
+            initdb:
+              database: snatcharr
+              owner: snatcharr
+
+  - it: positive - postgres.cnpg.bootstrap replaces initdb with a recovery from a backup
+    set:
+      postgres:
+        cnpg:
+          bootstrap:
+            recovery:
+              source: backup
+              database: snatcharr
+              owner: snatcharr
+          extraSpec:
+            externalClusters:
+              - name: backup
+                plugin:
+                  name: barman-cloud.cloudnative-pg.io
+                  parameters:
+                    barmanObjectName: snatcharr-backups
+                    serverName: snatcharr-db
+    asserts:
+      - equal:
+          path: spec.bootstrap
+          value:
+            recovery:
+              source: backup
+              database: snatcharr
+              owner: snatcharr
+      - equal:
+          path: spec.externalClusters[0].plugin.parameters.serverName
+          value: snatcharr-db
+
+  - it: negative - a bootstrap key in extraSpec is refused, it would repeat the bootstrap key
+    set:
+      postgres:
+        cnpg:
+          extraSpec:
+            bootstrap:
+              recovery:
+                source: backup
+    asserts:
+      - failedTemplate: {}
+
+  - it: negative - two bootstrap methods at once are refused
+    set:
+      postgres:
+        cnpg:
+          bootstrap:
+            initdb:
+              database: snatcharr
+            recovery:
+              source: backup
+    asserts:
+      - failedTemplate: {}
+
+  - it: boundary - an empty bootstrap map keeps initdb
+    set:
+      postgres:
+        cnpg:
+          bootstrap: {}
+    asserts:
+      - exists:
+          path: spec.bootstrap.initdb
+      - notExists:
+          path: spec.bootstrap.recovery
