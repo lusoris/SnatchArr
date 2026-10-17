@@ -197,6 +197,8 @@ jobs:
               - 'deploy/**'
               - 'tools/deploy/**'
               - 'tools/e2e/cnpg_pg_upgrade.sh'
+              - 'tools/e2e/cnpg_backup_restore.sh'
+              - 'tools/e2e/cnpg_lib.sh'
               - 'tools/e2e/chart_install.sh'
               - 'tools/e2e/fingerprint.sql'
               - 'tools/e2e/dev_compose_smoke.sh'
@@ -735,7 +737,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.deploy == 'true'
     runs-on: ubuntu-26.04
-    timeout-minutes: 35
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
@@ -851,6 +853,28 @@ jobs:
           UPGRADE_API_IMAGE: snatcharr-api:e2e
           UPGRADE_WORKER_IMAGE: snatcharr-worker:e2e
         run: make e2e-cnpg-pg-upgrade
+      # The Barman Cloud plugin needs cert-manager for its TLS between operator and sidecar, and
+      # runs in the operator's namespace (the plugin's installation docs). Renovate moves both.
+      - name: cert-manager and the Barman Cloud plugin
+        run: |
+          kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.21.2/cert-manager.yaml
+          kubectl -n cert-manager wait deploy --all --for=condition=Available --timeout=180s
+          curl -fsSL --max-time 60 -o "$RUNNER_TEMP/barman-cloud.yaml" \
+            https://github.com/cloudnative-pg/plugin-barman-cloud/releases/download/v0.15.1/manifest.yaml
+          # The webhook answers a few seconds after it turns Available; its Certificates need it.
+          for i in 1 2 3 4 5 6; do
+            kubectl apply -f "$RUNNER_TEMP/barman-cloud.yaml" && break
+            [ "$i" -lt 6 ] || exit 1
+            sleep 10
+          done
+          kubectl -n cnpg-system rollout status deploy/barman-cloud --timeout=180s
+      # A base backup to an S3 store in the cluster, the database lost, and the documented
+      # restore with data read-back, after a planted reinstall without the recovery (C14-04).
+      - name: make e2e-cnpg-backup-restore
+        env:
+          RESTORE_API_IMAGE: snatcharr-api:e2e
+          RESTORE_WORKER_IMAGE: snatcharr-worker:e2e
+        run: make e2e-cnpg-backup-restore
 
   # The hand-written clients against the OpenAPI specs their upstream projects publish. The specs
   # are downloaded at the commits pinned in tools/upstreamspec/specs.yaml and checked against their

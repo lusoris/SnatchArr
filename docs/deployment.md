@@ -210,7 +210,9 @@ the environment variable optional so existing clusters continue running without 
 
 `postgres.cnpg.enabled=true` (default) renders a CloudNativePG `Cluster` with
 `postgres.cnpg.instances` replicas and `postgres.cnpg.storage.size` per instance;
-`postgres.cnpg.extraSpec` is merged verbatim for backups, affinity or parameters.
+`postgres.cnpg.extraSpec` is merged verbatim for backups, affinity or parameters, and
+`postgres.cnpg.bootstrap` replaces the default `initdb` bootstrap, for a restore (see
+[Backup and restore](#backup-and-restore)).
 For an external database set `postgres.cnpg.enabled=false` and point
 `postgres.external.dsnSecretRef` at a Secret holding the DSN. Only the API connects to
 Postgres.
@@ -253,6 +255,64 @@ the migrator ignored these settings and the API crash-looped on
 the DSN itself. An explicit `APP_DB_MIGRATE_DSN` is used exactly as given: it carries its own
 password and TLS parameters. `TestMigratorConnection` in `api/internal/app` checks both rules
 against a real server.
+
+#### Backup and restore
+
+With CloudNativePG, back up through the Barman Cloud plugin (the operator's in-tree
+`barmanObjectStore` is deprecated). Install cert-manager and the plugin in the operator's
+namespace as the plugin's installation docs describe, create an `ObjectStore` for your S3
+bucket, and turn on WAL archiving in the chart:
+
+```yaml
+postgres:
+  cnpg:
+    extraSpec:
+      plugins:
+        - name: barman-cloud.cloudnative-pg.io
+          isWALArchiver: true
+          parameters:
+            barmanObjectName: snatcharr-backups
+```
+
+Take base backups with a `ScheduledBackup` or an on-demand `Backup` of `method: plugin`. Keep
+a copy of the `<release>-secrets` Secret with the backups: its crypto key decrypts the *arr API
+keys and download-client passwords in the database, and a restored database without it means
+re-entering them. The chart keeps this Secret when the release is uninstalled.
+
+To restore, install the chart with a recovery bootstrap instead of `initdb`, pointing an
+external cluster at the store and at the `serverName` of the lost cluster (by default its name,
+`<release>-db`):
+
+```yaml
+postgres:
+  cnpg:
+    bootstrap:
+      recovery:
+        source: backup
+        database: snatcharr
+        owner: snatcharr
+    extraSpec:
+      externalClusters:
+        - name: backup
+          plugin:
+            name: barman-cloud.cloudnative-pg.io
+            parameters:
+              barmanObjectName: snatcharr-backups
+              serverName: snatcharr-db
+```
+
+`database` and `owner` make the operator create the `<release>-db-app` Secret the API reads its
+DSN from. The recovered cluster archives nothing until you add the `plugins` entry again; give it
+a new `serverName` parameter (for example `snatcharr-db-restored`) so it does not write into the
+archive it was restored from. A bootstrap key inside `extraSpec` is refused, since it would
+repeat the chart's own.
+
+`make e2e-cnpg-backup-restore` runs these steps in CI on a kind cluster with the operator,
+cert-manager, the plugin and a RustFS store (`tools/e2e/cnpg_backup_restore.sh`). It completes
+the setup, takes a base backup, uninstalls the release and its database, and restores. It then
+checks that every table reads back unchanged, that archiving runs again under the new
+`serverName`, and that the API starts with the setup complete and the old password. A planted
+reinstall without the recovery bootstrap must be refused first.
 
 #### Postgres major upgrade
 
