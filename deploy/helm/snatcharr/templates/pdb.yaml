@@ -6,6 +6,7 @@ apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: {{ include "snatcharr.fullname" $ }}-{{ $component }}
+  namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "snatcharr.labels" $ | nindent 4 }}
     app.kubernetes.io/component: {{ $component }}

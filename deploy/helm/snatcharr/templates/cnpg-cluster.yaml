@@ -4,6 +4,7 @@ apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
   name: {{ include "snatcharr.dbClusterName" . }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "snatcharr.labels" . | nindent 4 }}
     app.kubernetes.io/component: postgres

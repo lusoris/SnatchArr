@@ -7,6 +7,7 @@
 #
 #   tools/deploy/chart_checks.sh netpol RENDER [WANT]
 #   tools/deploy/chart_checks.sh chart CHART_YAML APP_VERSION
+#   tools/deploy/chart_checks.sh namespace RENDER NAMESPACE
 #
 # netpol reads the egress rules of every NetworkPolicy in a rendered file and prints
 # "<n> with a to, <m> of them without ports, <k> with an empty to". An egress rule whose `to` is
@@ -17,11 +18,17 @@
 # chart checks Chart.yaml: the four x-release-please markers are still there (a yaml updater
 # drops them), and artifacthub.io/images lists the api and worker image at APP_VERSION (#122).
 #
+# namespace reads every object of a rendered file and refuses one whose top-level
+# metadata.namespace is missing or other than NAMESPACE. Kustomize 5.8 no longer moves helmCharts
+# objects without a namespace into the overlay namespace (kubernetes-sigs/kustomize#6058), so the
+# chart sets it on every object itself (#346). Namespace objects are the only kind exempt; a file
+# with no object is refused.
+#
 # Exit status: 0 holds, 1 refused, 2 usage.
 set -eu
 
 usage() {
-  echo "usage: ${0##*/} netpol RENDER [WANT] | chart CHART_YAML APP_VERSION" >&2
+  echo "usage: ${0##*/} netpol RENDER [WANT] | chart CHART_YAML APP_VERSION | namespace RENDER NAMESPACE" >&2
   exit 2
 }
 
@@ -100,11 +107,44 @@ chart() {
   echo "Chart.yaml: appVersion $app, 4 markers, both images current"
 }
 
+# Only the top-level `metadata:` block counts: a pod template's metadata or a ServiceMonitor's
+# namespaceSelector sits deeper. Each object out of place goes to stderr by kind and name.
+namespace() {
+  [ -r "$1" ] || { echo "namespace: cannot read $1" >&2; exit 1; }
+  summary=$(awk -v want="$2" '
+    function unquote(v) { gsub(/^["\047]|["\047]$/, "", v); return v }
+    function doc_end() {
+      if (kind != "" && kind != "Namespace") {
+        objects++
+        if (ns != want) {
+          bad++
+          printf "%s/%s: namespace %s\n", kind, name, (ns == "" ? "(none)" : ns) > "/dev/stderr"
+        }
+      }
+      kind = ""; name = ""; ns = ""; meta = 0
+    }
+    /^---/ { doc_end(); next }
+    /^kind:/ { kind = unquote($2); next }
+    /^metadata:/ { meta = 1; next }
+    /^[^ #]/ { meta = 0 }
+    meta && /^  name:/ { name = unquote($2) }
+    meta && /^  namespace:/ { ns = unquote($2) }
+    END { doc_end(); printf "%d objects, %d outside namespace %s\n", objects, bad, want }
+  ' "$1")
+  echo "namespace: $summary"
+  case "$summary" in
+    "0 objects"*) echo "namespace: no object in $1" >&2; exit 1 ;;
+    *", 0 outside namespace $2") ;;
+    *) exit 1 ;;
+  esac
+}
+
 [ "$#" -ge 1 ] || usage
 cmd="$1"
 shift
 case "$cmd" in
   netpol) { [ "$#" -eq 1 ] || [ "$#" -eq 2 ]; } || usage; netpol "$@" ;;
   chart) [ "$#" -eq 2 ] || usage; chart "$@" ;;
+  namespace) { [ "$#" -eq 2 ] && [ -n "$2" ]; } || usage; namespace "$@" ;;
   *) usage ;;
 esac
