@@ -11,7 +11,8 @@ make gosec-install govulncheck-install
 go install github.com/air-verse/air@v1.67.4
 go install github.com/bufbuild/buf/cmd/buf@v1.74.0
 go install github.com/evilmartians/lefthook/v2@v2.2.2
-go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1
+# sqlc at the tools/go/go.mod pin, the version go generate runs (#178).
+make sqlc-install
 # ogen at the go.mod version: inside the module, go install without @version resolves it there.
 go install github.com/ogen-go/ogen/cmd/ogen
 # The engine pin of CI (PRAETOR_REF in .github/workflows/ci.yml); move both together.

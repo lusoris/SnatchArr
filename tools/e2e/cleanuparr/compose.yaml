@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+#
+# The Cleanuparr release SnatchArr reads, pinned by digest, for tools/e2e/cleanuparr_live.sh.
+# The port is published on loopback only. Renovate's docker-compose manager keeps the pin
+# current.
+
+services:
+  cleanuparr:
+    image: ghcr.io/cleanuparr/cleanuparr:2.10.11@sha256:c51af6957780ad2719e97a2131fe668f61da28e43363719c7b557577fc39ebaf
+    ports: ["127.0.0.1:${CLEANUPARR_PORT:-18111}:11011"]

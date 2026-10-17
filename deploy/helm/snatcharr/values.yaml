@@ -92,7 +92,11 @@ postgres:
     database: snatcharr
     owner: snatcharr
     resources: {}
-    # Extra Cluster spec merged verbatim (backup, affinity, postgresql.parameters, ...).
+    # Cluster bootstrap section verbatim instead of the default initdb of database/owner, for
+    # example a recovery from a backup (docs/deployment.md, "Backup and restore").
+    bootstrap: {}
+    # Extra Cluster spec merged verbatim (plugins, externalClusters, affinity,
+    # postgresql.parameters, ...). A bootstrap key here is refused: use bootstrap above.
     extraSpec: {}
   # External Postgres instead: a Secret holding the DSN.
   external:
@@ -112,6 +116,8 @@ configarr:
 api:
   # Safe above 1: periodic work runs on the replica holding the Postgres advisory lock.
   replicaCount: 1
+  # make e2e-image-smoke runs the image under limits.memory and fails when its peak passes
+  # 80 % of it (tools/e2e/mem_limits.sh).
   resources:
     requests:
       cpu: 50m
@@ -170,7 +176,8 @@ worker:
   heartbeatSecs: 30
   leaseWaitSecs: 30
   arrTimeoutSecs: 30
-  # Health listener (SNATCH_HTTP_ADDR): /livez for the liveness probe, /metrics for Prometheus.
+  # Health listener (SNATCH_HTTP_ADDR): /livez for the liveness probe, /readyz for the readiness
+  # probe (also fails before the first successful API call), /metrics for Prometheus.
   httpPort: 8081
   # /livez fails once the last successful API call is older than this (SNATCH_STALE_SECS,
   # 60..3600, at least twice the longer of heartbeatSecs and leaseWaitSecs): a worker that can no
@@ -178,6 +185,7 @@ worker:
   staleSecs: 180
   # RUST_LOG filter.
   logFilter: info
+  # Checked against the measured peak like api.resources.
   resources:
     requests:
       cpu: 20m

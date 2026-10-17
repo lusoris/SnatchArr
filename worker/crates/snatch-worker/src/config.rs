@@ -24,7 +24,7 @@ pub struct Config {
     pub heartbeat: Duration,
     /// Per-request *arr timeout.
     pub arr_timeout: Duration,
-    /// Address of the health listener (`/livez`, `/metrics`).
+    /// Address of the health listener (`/livez`, `/readyz`, `/metrics`).
     pub http_addr: SocketAddr,
     /// Age of the last successful API call after which `/livez` fails.
     pub stale: Duration,

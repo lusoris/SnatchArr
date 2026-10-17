@@ -16,12 +16,8 @@
 # must be refused as "Postgres 17 ... want 18".
 #
 # Needs a cluster with the CloudNativePG operator (CI: the kind cluster of the deploy job; on a
-# workstation only inside a VM), helm, kubectl, curl, jq and openssl.
-# UPGRADE_API_IMAGE and UPGRADE_WORKER_IMAGE (repository:tag, already present on the nodes, for
-# example through kind load) run the chart on those images with pullPolicy Never. CI sets them to
-# the images built from the checkout: on a release pull request the chart already pins the new
-# appVersion, whose images are not published yet. Unset, the chart runs the released images of
-# its appVersion.
+# workstation only inside a VM), helm, kubectl, curl, jq and openssl. UPGRADE_API_IMAGE,
+# UPGRADE_WORKER_IMAGE, UPGRADE_NAMESPACE, UPGRADE_PORT and UPGRADE_KEEP: cnpg_lib.sh.
 set -euo pipefail
 
 # Operand images of the same OS distribution, by version and digest; Renovate moves them and
@@ -31,47 +27,13 @@ NEW_IMAGE=ghcr.io/cloudnative-pg/postgresql:18.6-system-trixie@sha256:5efb669938
 old_major=17
 new_major=18
 
-root=$(cd "$(dirname "$0")/../.." && pwd)
-ns="${UPGRADE_NAMESPACE:-snatcharr-pgup}"
-release=snatcharr
-cluster="$release-db"
-port="${UPGRADE_PORT:-18282}"
-api="http://127.0.0.1:$port"
-work=$(mktemp -d)
-pf=""
-
-fail() {
-    echo "cnpg-pg-upgrade: $*" >&2
-    exit 1
-}
-
-cleanup() {
-    status=$?
-    if [ -n "$pf" ]; then
-        kill "$pf" 2>/dev/null || echo "cnpg-pg-upgrade: port-forward already gone" >&2
-    fi
-    if [ "$status" -ne 0 ]; then
-        kubectl -n "$ns" get cluster,pods,jobs -o wide >&2 || echo "cnpg-pg-upgrade: no state" >&2
-        kubectl -n "$ns" logs "deploy/$release-api" --tail 40 >&2 || echo "cnpg-pg-upgrade: no API log" >&2
-    fi
-    if [ "${UPGRADE_KEEP:-0}" != 1 ]; then
-        kubectl delete namespace "$ns" --wait=false >/dev/null 2>&1 ||
-            echo "cnpg-pg-upgrade: could not delete namespace $ns" >&2
-    fi
-    rm -rf "$work"
-    exit "$status"
-}
-trap cleanup EXIT
-
-primary() { kubectl -n "$ns" get cluster "$cluster" -o jsonpath='{.status.currentPrimary}'; }
-
-psql_at() {
-    kubectl -n "$ns" exec -i "$(primary)" -c postgres -- psql -d snatcharr -v ON_ERROR_STOP=1 -At "$@"
-}
+label=cnpg-pg-upgrade
+prefix=UPGRADE
+default_ns=snatcharr-pgup
+# shellcheck source=tools/e2e/cnpg_lib.sh
+. "$(dirname "$0")/cnpg_lib.sh"
 
 server_major() { psql_at -c 'SHOW server_version_num' | awk '{ print int($1 / 10000) }'; }
-
-fingerprint() { psql_at <"$root/tools/e2e/fingerprint.sql"; }
 
 # wait_major waits up to $2 seconds for the operator to report data directory major $1 on a
 # healthy cluster, then checks that the server answers with that major.
@@ -90,35 +52,6 @@ wait_major() {
     [ "$got" = "$want" ] || fail "the server answers as Postgres $got, want $want"
 }
 
-scale_app() {
-    kubectl -n "$ns" scale "deploy/$release-api" "deploy/$release-worker" --replicas="$1" >/dev/null
-    if [ "$1" -gt 0 ]; then
-        kubectl -n "$ns" rollout status "deploy/$release-api" --timeout=300s >/dev/null
-    else
-        kubectl -n "$ns" wait pod -l app.kubernetes.io/component=api --for=delete --timeout=120s
-    fi
-}
-
-port_forward() {
-    if [ -n "$pf" ]; then
-        kill "$pf" 2>/dev/null || echo "cnpg-pg-upgrade: previous port-forward already gone" >&2
-    fi
-    kubectl -n "$ns" port-forward "deploy/$release-api" "$port:8080" >"$work/pf.log" 2>&1 &
-    pf=$!
-    for _ in $(seq 30); do
-        if curl -fsS --max-time 2 -o /dev/null "$api/readyz"; then
-            return 0
-        fi
-        sleep 1
-    done
-    fail "the API did not answer through the port-forward"
-}
-
-login() {
-    curl -fsS --max-time 10 -o /dev/null -H 'Content-Type: application/json' \
-        -d "{\"username\":\"admin\",\"password\":\"$password\"}" "$api/api/v1/auth/login"
-}
-
 # chart_upgrade sets imageName and keeps the API and worker scaled to zero, so nothing writes
 # between the two fingerprints.
 chart_upgrade() {
@@ -127,20 +60,6 @@ chart_upgrade() {
         >/dev/null
 }
 
-# add_image adds the --set arguments for an UPGRADE_<component>_IMAGE of repository:tag.
-images=()
-add_image() {
-    local component=$1 ref=$2
-    [ -n "$ref" ] || return 0
-    [[ "$ref" == *:* && "${ref##*:}" != */* && "$ref" != *@* ]] ||
-        fail "$component image $ref is not repository:tag"
-    images+=(--set "image.$component.repository=${ref%:*}" --set "image.$component.tag=${ref##*:}"
-        --set "image.$component.pullPolicy=Never")
-}
-add_image api "${UPGRADE_API_IMAGE:-}"
-add_image worker "${UPGRADE_WORKER_IMAGE:-}"
-echo "cnpg-pg-upgrade: api image ${UPGRADE_API_IMAGE:-released appVersion}, worker image ${UPGRADE_WORKER_IMAGE:-released appVersion}"
-
 # 1. A chart install on the previous major with a completed setup and one login.
 kubectl create namespace "$ns" >/dev/null
 helm install "$release" "$root/deploy/helm/snatcharr" -n "$ns" "${images[@]}" \
@@ -148,12 +67,7 @@ helm install "$release" "$root/deploy/helm/snatcharr" -n "$ns" "${images[@]}" \
     --wait --timeout 10m >/dev/null || fail "chart install on Postgres $old_major failed"
 wait_major "$old_major" 300
 port_forward
-password="upgrade-$(openssl rand -hex 32)"
-setup_secret=$(kubectl -n "$ns" get secret "$release-secrets" -o jsonpath='{.data.setup-secret}' | base64 -d)
-curl -fsS --max-time 10 -H 'Content-Type: application/json' \
-    -d "{\"username\":\"admin\",\"password\":\"$password\",\"setup_secret\":\"$setup_secret\"}" \
-    "$api/api/v1/auth/setup" >/dev/null || fail "setup on Postgres $old_major failed"
-login || fail "login on Postgres $old_major failed"
+setup_admin
 scale_app 0
 fingerprint >"$work/before.txt"
 grep -q '^users 1 ' "$work/before.txt" || fail "no user row before the upgrade"
@@ -184,11 +98,6 @@ version=$(psql_at -c 'SELECT version FROM schema_migrations WHERE NOT dirty')
 [ -n "$version" ] && [ "$version" -ge 7 ] || fail "migration version is '$version', want at least 7"
 echo "ok   migration version $version, not dirty"
 psql_at -c 'ANALYZE' >/dev/null
-scale_app 1
-port_forward
-status=$(curl -fsS --max-time 10 "$api/api/v1/auth/setup/status") || fail "GET setup/status failed"
-jq -e '.setup_complete == true' >/dev/null <<<"$status" ||
-    fail "setup/status after the upgrade is $status, want setup_complete true"
-login || fail "login with the password set on Postgres $old_major failed"
+check_app
 echo "ok   API on Postgres $new_major: setup complete, admin logs in"
 echo "chart CloudNativePG Postgres $old_major -> $new_major upgrade passed"

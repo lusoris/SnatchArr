@@ -236,7 +236,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = connect(&cfg).await?;
     let health = Arc::new(Health::new(cfg.stale));
     let listener = health::bind(cfg.http_addr).await?;
-    tracing::info!(addr = %listener.local_addr()?, stale_secs = cfg.stale.as_secs(), "health listener on /livez and /metrics");
+    tracing::info!(addr = %listener.local_addr()?, stale_secs = cfg.stale.as_secs(), "health listener on /livez, /readyz and /metrics");
     // The listener outlives the drain below: a terminating worker still answers its probe.
     let http_stop = CancellationToken::new();
     let http = tokio::spawn(health::serve(listener, health.clone(), http_stop.clone()));

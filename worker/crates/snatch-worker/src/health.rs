@@ -9,6 +9,8 @@
 //! and 503 once it is older, so the liveness probe restarts a worker that can no longer lease or
 //! heartbeat instead of it looking healthy. Before the first successful call the age counts from
 //! the start of the process, which gives a fresh worker the stale limit to reach the API.
+//! `GET /readyz` answers like `/livez` but also 503 until the first successful API call (#144), so
+//! a Deployment is Available only once its workers have reached the API with their token.
 //! `GET /metrics` serves the counters in the Prometheus text format.
 
 use std::convert::Infallible;
@@ -375,7 +377,7 @@ fn text(status: StatusCode, content_type: &'static str, body: String) -> Respons
 /// The answer to one request.
 pub(crate) fn respond(method: &Method, path: &str, health: &Health) -> Response<Full<Bytes>> {
     const PLAIN: &str = "text/plain; charset=utf-8";
-    if path != "/livez" && path != "/metrics" {
+    if !["/livez", "/readyz", "/metrics"].contains(&path) {
         return text(StatusCode::NOT_FOUND, PLAIN, "not found\n".to_owned());
     }
     if method != Method::GET {
@@ -405,6 +407,12 @@ pub(crate) fn respond(method: &Method, path: &str, health: &Health) -> Response<
             }
         };
     }
+    probe(path == "/readyz", health)
+}
+
+/// The answer to `/livez`, or to `/readyz` when `ready` is set.
+fn probe(ready: bool, health: &Health) -> Response<Full<Bytes>> {
+    const PLAIN: &str = "text/plain; charset=utf-8";
     let age = health.contact_age().as_secs();
     let seen = if health.contacted() {
         format!("last successful API call {age} s ago")
@@ -417,6 +425,12 @@ pub(crate) fn respond(method: &Method, path: &str, health: &Health) -> Response<
             PLAIN,
             format!("stale: {seen}\n"),
         )
+    } else if ready && !health.contacted() {
+        text(
+            StatusCode::SERVICE_UNAVAILABLE,
+            PLAIN,
+            format!("not ready: {seen}\n"),
+        )
     } else {
         text(StatusCode::OK, PLAIN, format!("ok: {seen}\n"))
     }
@@ -427,7 +441,7 @@ pub async fn bind(addr: SocketAddr) -> std::io::Result<TcpListener> {
     TcpListener::bind(addr).await
 }
 
-/// Serves `/livez` and `/metrics` until `stop` is cancelled.
+/// Serves `/livez`, `/readyz` and `/metrics` until `stop` is cancelled.
 pub async fn serve(listener: TcpListener, health: Arc<Health>, stop: CancellationToken) {
     let slots = Arc::new(Semaphore::new(MAX_CONNECTIONS));
     let mut conns = JoinSet::new();
@@ -562,6 +576,35 @@ mod tests {
     }
 
     #[tokio::test(start_paused = true)]
+    async fn readyz_waits_for_the_first_contact() {
+        let h = Health::new(STALE);
+        tokio::time::advance(Duration::from_secs(3)).await;
+        let (status, text) = body(respond(&Method::GET, "/readyz", &h)).await;
+        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(
+            text,
+            "not ready: no successful API call in the 3 s since start\n"
+        );
+        // The same worker is live: it still has the stale limit to reach the API.
+        let (status, _) = body(respond(&Method::GET, "/livez", &h)).await;
+        assert_eq!(status, StatusCode::OK);
+        h.contact();
+        let (status, text) = body(respond(&Method::GET, "/readyz", &h)).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(text, "ok: last successful API call 0 s ago\n");
+        // Exactly the stale limit is still ready; past it, /readyz fails with /livez.
+        tokio::time::advance(STALE).await;
+        assert_eq!(
+            body(respond(&Method::GET, "/readyz", &h)).await.0,
+            StatusCode::OK
+        );
+        tokio::time::advance(Duration::from_secs(1)).await;
+        let (status, text) = body(respond(&Method::GET, "/readyz", &h)).await;
+        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(text, "stale: last successful API call 181 s ago\n");
+    }
+
+    #[tokio::test(start_paused = true)]
     async fn unknown_paths_and_methods_are_refused() {
         let h = Health::new(STALE);
         assert_eq!(
@@ -570,6 +613,10 @@ mod tests {
         );
         assert_eq!(
             body(respond(&Method::GET, "/livez/", &h)).await.0,
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            body(respond(&Method::GET, "/readyz/", &h)).await.0,
             StatusCode::NOT_FOUND
         );
         let post = respond(&Method::POST, "/livez", &h);
