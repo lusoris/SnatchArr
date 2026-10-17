@@ -16,6 +16,8 @@ func TestEventName(t *testing.T) {
 		{"EVENT_TYPE_SEARCH_DISPATCHED", "search_dispatched"},
 		{"EVENT_TYPE_RUN_FINISHED", "run_finished"},
 		{"EVENT_TYPE_CIRCUIT_OPENED", "circuit_opened"},
+		{"EVENT_TYPE_QUEUE_ITEM_STRUCK", "queue_item_struck"},
+		{"EVENT_TYPE_QUEUE_ITEM_REMOVED", "queue_item_removed"},
 		{"already_lower", "already_lower"},
 		{"", ""},
 	}

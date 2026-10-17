@@ -24,6 +24,7 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/lusoris/SnatchArr/api/internal/domain"
+	"github.com/lusoris/SnatchArr/api/internal/queue"
 )
 
 // Result is what a successful probe learns about an instance.
@@ -259,5 +260,6 @@ var Module = fx.Module("snatcharr.arrclient",
 		func(p *GoenvoyProber) Discoverer { return p },
 		func(p *GoenvoyProber) IndexerDiscoverer { return p },
 		func(p *GoenvoyProber) Labeler { return p },
+		func(p *GoenvoyProber) queue.ArrClient { return p },
 	),
 )
