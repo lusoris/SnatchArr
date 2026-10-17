@@ -172,27 +172,26 @@ func (h *Handlers) CompleteSetup(ctx context.Context, req *oas.SetupRequest) (oa
 	return h.startSession(ctx, u)
 }
 
-// ChangePassword changes the current user's password and ends all other sessions.
+// ChangePassword changes the current user's password, ends every session of the user and
+// signs the caller in again under a fresh session id (#268).
 func (h *Handlers) ChangePassword(ctx context.Context, req *oas.ChangePasswordRequest) (oas.ChangePasswordRes, error) {
 	u, ok := UserFrom(ctx)
 	if !ok {
 		return nil, domain.ErrUnauthorized
 	}
-	r, ok := requestFrom(ctx)
-	if !ok {
+	w, okW := writerFrom(ctx)
+	r, okR := requestFrom(ctx)
+	if !okW || !okR {
 		return nil, fmt.Errorf("%w: no http context", domain.ErrUnauthorized)
 	}
-	sess, err := h.sessions.Load(r)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", domain.ErrUnauthorized, err)
-	}
-	if err := h.auth.ChangePassword(ctx, u.ID, req.CurrentPassword, req.NewPassword, sess.ID); err != nil {
+	if err := h.auth.ChangePassword(ctx, u.ID, req.CurrentPassword, req.NewPassword); err != nil {
 		if errors.Is(err, domain.ErrTooManyRequests) {
-			if w, okW := writerFrom(ctx); okW {
-				w.Header().Set("Retry-After", strconv.Itoa(int(auth.LockoutCooldown.Seconds())))
-			}
+			w.Header().Set("Retry-After", strconv.Itoa(int(auth.LockoutCooldown.Seconds())))
 		}
 		return nil, err
+	}
+	if err := h.auth.RenewSession(ctx, h.sessions, w, r, u.ID); err != nil {
+		return nil, fmt.Errorf("httpapi: %w", err)
 	}
 	return &oas.ChangePasswordNoContent{}, nil
 }
@@ -258,13 +257,8 @@ func (h *Handlers) startSession(ctx context.Context, u domain.User) (*oas.Sessio
 	if !okW || !okR {
 		return nil, errors.New("httpapi: no http context for session")
 	}
-	sess, err := h.sessions.Load(r)
-	if err != nil {
-		return nil, fmt.Errorf("httpapi: load session: %w", err)
-	}
-	sess.Set(auth.SessionUserKey, u.ID.String())
-	if err := h.sessions.SaveContext(ctx, w, sess); err != nil {
-		return nil, fmt.Errorf("httpapi: save session: %w", err)
+	if err := h.auth.RenewSession(ctx, h.sessions, w, r, u.ID); err != nil {
+		return nil, fmt.Errorf("httpapi: %w", err)
 	}
 	return &oas.Session{
 		User: userToOAS(u), CsrfToken: h.csrfToken(ctx), ExpiresAt: h.clk.Now().Add(h.cfg.Session.TTL),
