@@ -1,0 +1,97 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+suite: image tag defaults to appVersion and refuses releases older than the templates need
+templates:
+  - configmap.yaml
+  - secret.yaml
+  - worker-deployment.yaml
+  - api-deployment.yaml
+release:
+  name: snatcharr
+  namespace: snatcharr
+tests:
+  # Positive: no pinned tag takes appVersion.
+  - it: positive - empty tags render the chart's appVersion
+    chart:
+      appVersion: 9.9.9
+    asserts:
+      - template: worker-deployment.yaml
+        equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/lusoris/snatcharr-worker:9.9.9
+      - template: api-deployment.yaml
+        equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/lusoris/snatcharr-api:9.9.9
+
+  # Negative, planted: the 2026-10-17 cluster outage, chart 0.1.8 probing /livez on worker 0.1.5.
+  - it: negative - chart 0.1.8 with worker image 0.1.5 fails the render
+    template: worker-deployment.yaml
+    chart:
+      version: 0.1.8
+      appVersion: 0.1.8
+    set:
+      image.worker.tag: 0.1.5
+    asserts:
+      - failedTemplate:
+          errorPattern: "image.worker.tag: 0.1.5 is older than this chart supports"
+
+  - it: negative - worker 0.2.1 lacks /readyz and fails the render
+    template: worker-deployment.yaml
+    set:
+      image.worker.tag: 0.2.1
+    asserts:
+      - failedTemplate:
+          errorPattern: "image.worker.tag: 0.2.1 is older"
+
+  - it: negative - a v prefix, a digest suffix or a major.minor tag is still compared
+    template: worker-deployment.yaml
+    set:
+      image.worker.tag: v0.1.5@sha256:0000000000000000000000000000000000000000000000000000000000000000
+    asserts:
+      - failedTemplate:
+          errorPattern: "is older than this chart supports"
+
+  - it: negative - a floating major.minor tag below the minimum fails
+    template: worker-deployment.yaml
+    set:
+      image.worker.tag: "0.2"
+    asserts:
+      - failedTemplate:
+          errorPattern: "image.worker.tag: 0.2 is older"
+
+  # Boundary: the first release after the minimum, and its pre-release, render.
+  - it: boundary - worker 0.2.2 renders
+    template: worker-deployment.yaml
+    set:
+      image.worker.tag: 0.2.2
+    asserts:
+      - notFailedTemplate: {}
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/lusoris/snatcharr-worker:0.2.2
+
+  - it: boundary - worker 0.2.2-rc.1 renders
+    template: worker-deployment.yaml
+    set:
+      image.worker.tag: 0.2.2-rc.1
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: boundary - api 0.1.0 renders
+    template: api-deployment.yaml
+    set:
+      image.api.tag: 0.1.0
+    asserts:
+      - notFailedTemplate: {}
+
+  # Positive: a tag that is not a release (branch or commit build) is not compared.
+  - it: positive - a non-release worker tag renders unchanged
+    template: worker-deployment.yaml
+    set:
+      image.worker.tag: sha-1a2b3c4
+    asserts:
+      - notFailedTemplate: {}
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/lusoris/snatcharr-worker:sha-1a2b3c4
