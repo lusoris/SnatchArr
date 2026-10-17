@@ -1,5 +1,53 @@
 # Changelog
 
+## [0.2.0](https://github.com/lusoris/SnatchArr/compare/v0.1.9...v0.2.0) (2026-10-17)
+
+
+### Features
+
+* **api:** add API key management endpoints ([#272](https://github.com/lusoris/SnatchArr/issues/272)) ([aa109f7](https://github.com/lusoris/SnatchArr/commit/aa109f7523f18cb04868a4f514ae5f6dfabbb441))
+* **auth:** add OIDC login and trusted proxy-header auth ([#273](https://github.com/lusoris/SnatchArr/issues/273)) ([129f1b2](https://github.com/lusoris/SnatchArr/commit/129f1b22b9d4a497b78b5d1a69d3ff951bfee2bd))
+* **auth:** require a setup secret when set and end sessions on password change ([#267](https://github.com/lusoris/SnatchArr/issues/267)) ([8a2aa0d](https://github.com/lusoris/SnatchArr/commit/8a2aa0d321944c00abd221d49f65a3471f531bea))
+* **auth:** throttle failed logins per user and per client address ([#266](https://github.com/lusoris/SnatchArr/issues/266)) ([f237d45](https://github.com/lusoris/SnatchArr/commit/f237d454ffea66903a0ea71eb5425cf575e86b09))
+* **cleanuparr:** warn when Cleanuparr Seeker searches the same instance ([#287](https://github.com/lusoris/SnatchArr/issues/287)) ([ce3632f](https://github.com/lusoris/SnatchArr/commit/ce3632f421e6ebde0eb147b4a984bbdb77471b76)), closes [#39](https://github.com/lusoris/SnatchArr/issues/39)
+* **deploy:** add the homelab compose bundle and health subcommands ([#294](https://github.com/lusoris/SnatchArr/issues/294)) ([c0da2af](https://github.com/lusoris/SnatchArr/commit/c0da2afb95a1593c5bf29501dabd02fd77e495b7))
+* filter snatches by tag, quality profile and release delay ([#282](https://github.com/lusoris/SnatchArr/issues/282)) ([4a226a8](https://github.com/lusoris/SnatchArr/commit/4a226a89f3244c8c3dc7a0204ac3af8f123dedb5))
+* **metrics:** export snatch metrics and ship a Grafana dashboard ([#274](https://github.com/lusoris/SnatchArr/issues/274)) ([1df24a5](https://github.com/lusoris/SnatchArr/commit/1df24a55c26025e92a56d80963adb0946e447d31))
+* **notify:** notify on failures, open circuits and exhausted stamina ([#275](https://github.com/lusoris/SnatchArr/issues/275)) ([7d0d88e](https://github.com/lusoris/SnatchArr/commit/7d0d88e3a9f43f4070db394bf8339fb57d20cc13))
+* **prowlarr:** defer snatches when every indexer is out of queries ([#286](https://github.com/lusoris/SnatchArr/issues/286)) ([dccf197](https://github.com/lusoris/SnatchArr/commit/dccf1971e7c9cf4ddf9f01005e3e059f769488a9)), closes [#38](https://github.com/lusoris/SnatchArr/issues/38)
+* **runs:** preview a run without searching (dry run) ([#290](https://github.com/lusoris/SnatchArr/issues/290)) ([dd71d0e](https://github.com/lusoris/SnatchArr/commit/dd71d0e561e2b0dbc45fcba7b47344931ea20d91))
+* **web:** account page with API keys and password change ([#280](https://github.com/lusoris/SnatchArr/issues/280)) ([0f5e0d6](https://github.com/lusoris/SnatchArr/commit/0f5e0d6800877a0810bac88771b47d75a9b0d21e))
+* **web:** create, edit and delete schedule windows ([#277](https://github.com/lusoris/SnatchArr/issues/277)) ([74c254b](https://github.com/lusoris/SnatchArr/commit/74c254bf8a0b014d52af599c82d733a31a40d752))
+* **web:** edit instances, list and cancel runs, reset memory ([#278](https://github.com/lusoris/SnatchArr/issues/278)) ([3a597ac](https://github.com/lusoris/SnatchArr/commit/3a597acd04e9c544da13790e5369c7e715d30c55)), closes [#30](https://github.com/lusoris/SnatchArr/issues/30)
+* **web:** manage download clients and integration links ([#279](https://github.com/lusoris/SnatchArr/issues/279)) ([4aae3a8](https://github.com/lusoris/SnatchArr/commit/4aae3a87e89e43772f45b5ceed040fa27ddc0fc0)), closes [#31](https://github.com/lusoris/SnatchArr/issues/31)
+* **web:** show the last connection test on every instance view ([#276](https://github.com/lusoris/SnatchArr/issues/276)) ([9f3e3a4](https://github.com/lusoris/SnatchArr/commit/9f3e3a4804b3bc05122b03f3df7147ff7c01e246))
+
+
+### Bug Fixes
+
+* **ci:** run the CNPG upgrade test on the images of the checkout ([#299](https://github.com/lusoris/SnatchArr/issues/299)) ([f7b5d5d](https://github.com/lusoris/SnatchArr/commit/f7b5d5dbe47df9628760b188341a62d9961ca78f))
+* **ci:** show failing tests in api-cover and bound the admin statement ([#284](https://github.com/lusoris/SnatchArr/issues/284)) ([d94b466](https://github.com/lusoris/SnatchArr/commit/d94b46689859330629ef6424328ed2c0bcd64143))
+* **deploy:** pin the development compose images by digest ([#293](https://github.com/lusoris/SnatchArr/issues/293)) ([2c2ce3f](https://github.com/lusoris/SnatchArr/commit/2c2ce3f6197cd2bab3df86fd7f6182565869708f))
+* **deps:** update module github.com/go-chi/chi/v5 to v5.5.0 ([#262](https://github.com/lusoris/SnatchArr/issues/262)) ([2c9f6c4](https://github.com/lusoris/SnatchArr/commit/2c9f6c4120ee0d62af391a5e99beaacf5afc09d5))
+* **release:** attest the release page and pin verification to the tag commit ([#255](https://github.com/lusoris/SnatchArr/issues/255)) ([6111de5](https://github.com/lusoris/SnatchArr/commit/6111de5a7bc656f1d3b4b73695ac2396a8399eae))
+* **web:** route remaining markup literals through Paraglide ([#281](https://github.com/lusoris/SnatchArr/issues/281)) ([c6ce6fd](https://github.com/lusoris/SnatchArr/commit/c6ce6fd3053f1591ee4726bba80337869b12b7b6))
+* **worker:** charge an artist or author search as one search ([#283](https://github.com/lusoris/SnatchArr/issues/283)) ([48ec730](https://github.com/lusoris/SnatchArr/commit/48ec7306c15979cfc74a035795c894f720da094a)), closes [#180](https://github.com/lusoris/SnatchArr/issues/180)
+
+
+### Refactoring
+
+* move test-only helpers out of production code ([#270](https://github.com/lusoris/SnatchArr/issues/270)) ([fca9d40](https://github.com/lusoris/SnatchArr/commit/fca9d40d31b9bce4a2bbcce9fd57116703861d7b))
+
+
+### Documentation
+
+* **deploy:** document and test the Postgres 18 upgrade of an installed database ([#257](https://github.com/lusoris/SnatchArr/issues/257)) ([c580a7b](https://github.com/lusoris/SnatchArr/commit/c580a7b59d6c838571023602f9c45bd08bb39c63)), closes [#252](https://github.com/lusoris/SnatchArr/issues/252)
+
+
+### Chores
+
+* **release:** release 0.2.0 ([#297](https://github.com/lusoris/SnatchArr/issues/297)) ([e340637](https://github.com/lusoris/SnatchArr/commit/e340637f91c7a5e172b49665d72552e0af36a4b3))
+
 ## [0.1.9](https://github.com/lusoris/SnatchArr/compare/v0.1.8...v0.1.9) (2026-10-15)
 
 
