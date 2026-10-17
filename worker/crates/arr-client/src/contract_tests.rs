@@ -35,7 +35,7 @@ use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
 use super::{
     ArrClient, BusyLike, ChildLike, CommandStatus, EpisodeLike, Error, Kind, MovieLike, Options,
-    Paged, RadarrRelease, SystemStatus, Wanted,
+    Paged, RadarrRelease, SceneLike, SystemStatus, Wanted, WhisparrMovieLike,
 };
 
 /// The environment variable that names the cache directory.
@@ -246,8 +246,10 @@ type Reader = fn(&Value) -> Vec<String>;
 /// Every operation the client requests, with the wire type its response is decoded into.
 fn readers(kind: Kind) -> [(&'static str, &'static str, Reader); 7] {
     let wanted: Reader = match kind {
-        Kind::Sonarr | Kind::WhisparrV2 => missing::<Paged<EpisodeLike>>,
-        Kind::Radarr | Kind::WhisparrV3 => missing::<Paged<MovieLike>>,
+        Kind::Sonarr => missing::<Paged<EpisodeLike>>,
+        Kind::WhisparrV2 => missing::<Paged<SceneLike>>,
+        Kind::Radarr => missing::<Paged<MovieLike>>,
+        Kind::WhisparrV3 => missing::<Paged<WhisparrMovieLike>>,
         Kind::Lidarr | Kind::Readarr => missing::<Paged<ChildLike>>,
     };
     [
@@ -469,17 +471,30 @@ async fn check(kind: Kind, contract: &Contract) -> Vec<String> {
 fn shape(kind: Kind) -> (&'static str, Value, Option<&'static str>) {
     let date = "2020-01-02T03:04:05Z";
     match kind {
-        Kind::Sonarr | Kind::WhisparrV2 => (
+        Kind::Sonarr => (
             "episodeId",
             json!({"id": 1, "seriesId": 1, "seasonNumber": 1, "episodeNumber": 1, "title": "string",
                    "airDateUtc": date, "monitored": true,
                    "series": {"monitored": true, "tags": [1], "qualityProfileId": 1}}),
             Some("includeSeries"),
         ),
-        Kind::Radarr | Kind::WhisparrV3 => (
+        Kind::WhisparrV2 => (
+            "episodeId",
+            json!({"id": 1, "seriesId": 1, "seasonNumber": 1, "title": "string",
+                   "releaseDate": {"year": 2020, "month": 1, "day": 2}, "monitored": true,
+                   "series": {"monitored": true, "tags": [1], "qualityProfileId": 1}}),
+            Some("includeSeries"),
+        ),
+        Kind::Radarr => (
             "movieId",
             json!({"id": 1, "title": "string", "year": 1, "monitored": true,
                    "physicalRelease": date, "digitalRelease": date, "inCinemas": date,
+                   "tags": [1], "qualityProfileId": 1}),
+            None,
+        ),
+        Kind::WhisparrV3 => (
+            "movieId",
+            json!({"id": 1, "title": "string", "year": 1, "monitored": true, "releaseDate": date,
                    "tags": [1], "qualityProfileId": 1}),
             None,
         ),
@@ -815,6 +830,18 @@ async fn upstream_contract_chaptarr() -> Result<(), Failure> {
 #[ignore = "needs the spec cache; run `make contracts-verify`"]
 async fn upstream_contract_readarr_faustvii() -> Result<(), Failure> {
     upstream(Kind::Readarr, "readarr-faustvii").await
+}
+
+#[tokio::test]
+#[ignore = "needs the spec cache; run `make contracts-verify`"]
+async fn upstream_contract_whisparr_v2() -> Result<(), Failure> {
+    upstream(Kind::WhisparrV2, "whisparr-v2").await
+}
+
+#[tokio::test]
+#[ignore = "needs the spec cache; run `make contracts-verify`"]
+async fn upstream_contract_whisparr_v3() -> Result<(), Failure> {
+    upstream(Kind::WhisparrV3, "whisparr-v3").await
 }
 
 /// Chaptarr's per-format author fields are read only from the Chaptarr spec: another fork that

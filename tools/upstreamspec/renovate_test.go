@@ -235,7 +235,14 @@ type renovateCase struct {
 }
 
 // managerDefects returns the defects of one of the two managers.
-func managerDefects() []renovateCase {
+func managerDefects(pins []pin) []renovateCase {
+	// A manager for branch pins that asks the tags misreads every branch pin, in manifest order.
+	misread := make([]string, 0, len(pins))
+	for _, p := range pins {
+		if p.Branch != "" {
+			misread = append(misread, p.Name+": Renovate reads {datasource:github-tags")
+		}
+	}
 	return []renovateCase{
 		{
 			name:   "the manager for tag pins reads another file",
@@ -278,7 +285,7 @@ func managerDefects() []renovateCase {
 		},
 		{
 			name: "branch pins asked of the tags",
-			want: []string{": Renovate reads {datasource:github-tags"},
+			want: misread,
 			change: func(_ *renovateConfig, _, branches *customManager) {
 				branches.DatasourceTemplate, branches.VersioningTemplate = tagSource, "loose"
 			},
@@ -390,7 +397,7 @@ func managers(t *testing.T, config *renovateConfig) (tags, branches *customManag
 func TestRenovateKeepsEveryPinCurrent(t *testing.T) {
 	t.Parallel()
 	raw, manifest, pins := committed(t)
-	cases := slices.Concat([]renovateCase{{name: "the committed files"}}, configurationDefects(), managerDefects(), manifestDefects(t, manifest, pins))
+	cases := slices.Concat([]renovateCase{{name: "the committed files"}}, configurationDefects(), managerDefects(pins), manifestDefects(t, manifest, pins))
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()

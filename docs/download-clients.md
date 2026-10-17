@@ -11,6 +11,23 @@ grabs would only pile up. It never adds, pauses, resumes, removes or reorders a 
 Supported out of the box: **qBittorrent**, **Transmission**, **Deluge**, **rTorrent**,
 **SABnzbd** and **NZBGet**.
 
+Each adapter speaks the client's own API through the typed clients of
+[goenvoy](https://github.com/golusoris/goenvoy) (`downloadclient/*/v2`):
+
+| Client | API |
+| --- | --- |
+| qBittorrent | WebUI API v2 at `/api/v2` |
+| Transmission | JSON-RPC at `/transmission/rpc`, or the path the stored URL names |
+| Deluge | Web UI JSON-RPC at `/json` |
+| rTorrent | XML-RPC behind an HTTP proxy |
+| SABnzbd | `/api` with an API key |
+| NZBGet | JSON-RPC at `/jsonrpc` |
+
+No client version is named because none is tested: the adapters are checked against local
+stand-ins that answer like the clients (`api/internal/dlclients/adapters_test.go`), not
+against a running client, and none of the six publishes an OpenAPI spec for the contract
+tests ([upstream contracts](upstream-contracts.md)).
+
 ## Getting them in
 
 - **Discover**: `POST /api/v1/instances/{id}/download-clients/discover` reads the

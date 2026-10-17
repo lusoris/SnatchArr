@@ -21,7 +21,7 @@
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use serde::{Deserialize, Serialize};
 use snatch_core::{Candidate, Target};
 use url::Url;
@@ -371,6 +371,59 @@ struct EpisodeLike {
     #[serde(default)]
     monitored: bool,
     series: Option<MonitoredParent>,
+}
+
+/// A Whisparr v2 scene. Whisparr numbers no episodes and sends no air time: a scene carries the
+/// day it was released (`releaseDate`, a `DateOnly`).
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SceneLike {
+    id: i64,
+    series_id: i64,
+    season_number: i32,
+    #[serde(default)]
+    title: String,
+    release_date: Option<DateOnly>,
+    #[serde(default)]
+    monitored: bool,
+    series: Option<MonitoredParent>,
+}
+
+/// A `DateOnly` as Whisparr v2 writes it (`"2020-01-02"`, its `STJDateOnlyConverter`) and as
+/// its spec documents it (an object with `year`, `month` and `day`).
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum DateOnly {
+    Text(NaiveDate),
+    Parts { year: i32, month: u32, day: u32 },
+}
+
+impl DateOnly {
+    /// Midnight UTC of the day; `None` for a day that does not exist.
+    fn unix(&self) -> Option<i64> {
+        let day = match *self {
+            Self::Text(day) => day,
+            Self::Parts { year, month, day } => NaiveDate::from_ymd_opt(year, month, day)?,
+        };
+        Some(day.and_time(NaiveTime::MIN).and_utc().timestamp())
+    }
+}
+
+/// A Whisparr v3 movie or scene: one `releaseDate` instead of Radarr's three release dates.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WhisparrMovieLike {
+    id: i64,
+    #[serde(default)]
+    title: String,
+    #[serde(default)]
+    year: i32,
+    #[serde(default)]
+    monitored: bool,
+    release_date: Option<DateTime<Utc>>,
+    #[serde(default)]
+    tags: Vec<i32>,
+    quality_profile_id: Option<i32>,
 }
 
 #[derive(Deserialize)]
@@ -737,13 +790,21 @@ impl ArrClient {
         }
         let path = wanted.path();
         match self.kind {
-            Kind::Sonarr | Kind::WhisparrV2 => {
+            Kind::Sonarr => {
                 let p: Paged<EpisodeLike> = self.get_json("wanted", path, &query).await?;
                 Ok(page_of(p, episode_candidate))
             }
-            Kind::Radarr | Kind::WhisparrV3 => {
+            Kind::WhisparrV2 => {
+                let p: Paged<SceneLike> = self.get_json("wanted", path, &query).await?;
+                Ok(page_of(p, scene_candidate))
+            }
+            Kind::Radarr => {
                 let p: Paged<MovieLike> = self.get_json("wanted", path, &query).await?;
                 Ok(page_of(p, |m| movie_candidate(m, release)))
+            }
+            Kind::WhisparrV3 => {
+                let p: Paged<WhisparrMovieLike> = self.get_json("wanted", path, &query).await?;
+                Ok(page_of(p, whisparr_movie_candidate))
             }
             Kind::Lidarr | Kind::Readarr => {
                 let p: Paged<ChildLike> = self.get_json("wanted", path, &query).await?;
@@ -802,24 +863,61 @@ fn episode_candidate(e: EpisodeLike) -> Candidate {
     }
 }
 
+fn scene_candidate(s: SceneLike) -> Candidate {
+    let parent_monitored = s.series.as_ref().is_none_or(|p| p.monitored);
+    let labels = s.series.as_ref().map(Labels::from).unwrap_or_default();
+    Candidate {
+        id: s.id,
+        group: s.series_id,
+        season: Some(s.season_number),
+        title: s.title,
+        release_unix: s.release_date.as_ref().and_then(DateOnly::unix),
+        monitored: s.monitored && parent_monitored,
+        tags: labels.tags,
+        profiles: labels.profiles,
+    }
+}
+
 fn movie_candidate(m: MovieLike, release: RadarrRelease) -> Candidate {
     let date = match release {
         RadarrRelease::Physical => m.physical_release,
         RadarrRelease::Digital => m.digital_release,
         RadarrRelease::Cinema => m.in_cinemas,
     };
+    titled_movie(
+        m.id,
+        m.title,
+        m.year,
+        date,
+        m.monitored,
+        Labels::of(m.tags, [m.quality_profile_id]),
+    )
+}
+
+fn whisparr_movie_candidate(m: WhisparrMovieLike) -> Candidate {
     let labels = Labels::of(m.tags, [m.quality_profile_id]);
+    titled_movie(m.id, m.title, m.year, m.release_date, m.monitored, labels)
+}
+
+fn titled_movie(
+    id: i64,
+    title: String,
+    year: i32,
+    date: Option<DateTime<Utc>>,
+    monitored: bool,
+    labels: Labels,
+) -> Candidate {
     Candidate {
-        id: m.id,
-        group: m.id,
+        id,
+        group: id,
         season: None,
-        title: if m.year > 0 {
-            format!("{} ({})", m.title, m.year)
+        title: if year > 0 {
+            format!("{title} ({year})")
         } else {
-            m.title
+            title
         },
         release_unix: date.map(|d| d.timestamp()),
-        monitored: m.monitored,
+        monitored,
         tags: labels.tags,
         profiles: labels.profiles,
     }
@@ -1260,6 +1358,65 @@ mod tests {
         let book: ChildLike = serde_json::from_value(serde_json::json!({"id": 1}))?;
         let c = child_candidate(book);
         assert!(c.tags.is_empty() && c.profiles.is_empty());
+        Ok(())
+    }
+
+    // Whisparr v2 sends a scene without an episode number and with the day of its release, as
+    // `"2020-01-02"`; its spec documents that day as an object.
+    #[test]
+    fn a_whisparr_scene_decodes_without_an_episode_number() -> TestResult {
+        let day = 1_577_923_200; // 2020-01-02T00:00:00Z
+        for release in [
+            serde_json::json!("2020-01-02"),
+            serde_json::json!({"year": 2020, "month": 1, "day": 2, "dayOfWeek": "thursday"}),
+        ] {
+            let scene: SceneLike = serde_json::from_value(serde_json::json!({"id": 1,
+                "seriesId": 2, "seasonNumber": 2020, "title": "A scene", "releaseDate": release,
+                "monitored": true, "series": {"monitored": true, "tags": [3], "qualityProfileId": 7}}))?;
+            let c = scene_candidate(scene);
+            assert_eq!(
+                (c.group, c.season, c.title.as_str()),
+                (2, Some(2020), "A scene")
+            );
+            assert_eq!(c.release_unix, Some(day));
+            assert!(c.monitored);
+            assert_eq!((c.tags, c.profiles), (vec![3], vec![7]));
+        }
+        Ok(())
+    }
+
+    // Boundary: no release day, or a day that does not exist, leaves the release time unknown.
+    #[test]
+    fn a_whisparr_scene_without_a_valid_day_has_no_release_time() -> TestResult {
+        for release in [
+            serde_json::Value::Null,
+            serde_json::json!({"year": 2021, "month": 2, "day": 30}),
+        ] {
+            let scene: SceneLike = serde_json::from_value(serde_json::json!({"id": 1,
+                "seriesId": 2, "seasonNumber": 1, "releaseDate": release}))?;
+            assert_eq!(scene_candidate(scene).release_unix, None);
+        }
+        Ok(())
+    }
+
+    // Negative: a Sonarr episode still needs its episode number; a scene is no episode.
+    #[test]
+    fn an_episode_without_a_number_does_not_decode() {
+        let scene = serde_json::json!({"id": 1, "seriesId": 2, "seasonNumber": 1});
+        assert!(serde_json::from_value::<EpisodeLike>(scene).is_err());
+    }
+
+    // Whisparr v3 has one release date, whichever date Radarr's setting would pick.
+    #[test]
+    fn a_whisparr_movie_uses_its_single_release_date() -> TestResult {
+        let movie: WhisparrMovieLike = serde_json::from_value(serde_json::json!({"id": 4,
+            "title": "A movie", "year": 2020, "monitored": true,
+            "releaseDate": "2020-01-02T03:04:05Z", "inCinemas": "1999-01-01T00:00:00Z",
+            "tags": [2], "qualityProfileId": 1}))?;
+        let c = whisparr_movie_candidate(movie);
+        assert_eq!(c.title, "A movie (2020)");
+        assert_eq!(c.release_unix, Some(1_577_934_245));
+        assert_eq!((c.tags, c.profiles), (vec![2], vec![1]));
         Ok(())
     }
 
