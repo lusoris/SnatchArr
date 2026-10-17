@@ -40,6 +40,8 @@ contracts contracts
 governance governance
 docs docs'
 
+DRAFT_STEP='Stop on a draft pull request'
+
 decide() {
   case "${COMMITS_EXPECTED:-}" in
     true | false) ;;
@@ -98,6 +100,18 @@ status_needs() {
   ' "$1"
 }
 
+# first_steps FILE: "<job>|<name of its first step>" per job of the workflow.
+first_steps() {
+  awk '
+    /^jobs:$/ { in_jobs = 1; next }
+    in_jobs && /^  [A-Za-z0-9_-]+:$/ { job = substr($0, 3, length($0) - 3); in_steps = 0; seen = 0; next }
+    in_jobs && job != "" && /^    steps:$/ { in_steps = 1; next }
+    in_steps && !seen && /^      - / {
+      step = $0; sub(/^      - (name: )?/, "", step); print job "|" step; seen = 1
+    }
+  ' "$1"
+}
+
 # expected_if ON COMMITS_EXPRESSION: the job-level condition a rule stands for.
 expected_if() {
   case "$1" in
@@ -126,7 +140,18 @@ mirror() {
     echo "status: must run with \"if: always()\"" >&2
     status=1
   fi
+  steps="$(first_steps "$file")"
   while read -r job on; do
+    # A draft runs no gate: a job the change filter decides needs the changes job, which stops
+    # the draft in its first step, so GitHub skips it; every other job stops the draft itself.
+    case "$on" in
+      always | commits)
+        if ! printf '%s\n' "$steps" | grep -qxF "$job|$DRAFT_STEP"; then
+          echo "job $job: the first step is not \"$DRAFT_STEP\"" >&2
+          status=1
+        fi
+        ;;
+    esac
     want="$(expected_if "$on" "$commits_expr")"
     if ! printf '%s\n' "$jobs" | grep -qxF "$job|$want"; then
       echo "job $job: the workflow does not carry the condition of its rule ($on)" >&2
