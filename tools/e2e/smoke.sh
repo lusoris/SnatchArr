@@ -12,8 +12,8 @@
 #   e. searches happened at all (the checks above are not vacuous);
 #   f. a whole-series search that does not fit the cap is not sent and costs no stamina; once
 #      the cap fits it, it is sent once and costs exactly its seasons (#142);
-#   g. each worker's health listener answers /livez with 200 and /metrics with the API failure
-#      counter, and /system/status reports the workers' last contact (A1-01);
+#   g. each worker's health listener answers /livez and /readyz with 200 and /metrics with the
+#      API failure counter, and /system/status reports the workers' last contact (A1-01);
 #   h. an upgrade snatch searches only cutoff-unmet items up to its cap, records stamina,
 #      avoids repeats, and records kind upgrade on completed runs (C10-01);
 #   i. with images: each container runs under the memory limit of the chart, and its peak
@@ -421,6 +421,11 @@ for port in "$W1_HTTP_PORT" "$W2_HTTP_PORT"; do
     case "$live" in
         "ok: last successful API call "*) ;;
         *) fail "g. worker on $port: /livez says '$live'" ;;
+    esac
+    ready=$(curl -fsS --max-time 5 "http://127.0.0.1:$port/readyz") || fail "g. worker on $port: /readyz did not answer 200"
+    case "$ready" in
+        "ok: last successful API call "*) ;;
+        *) fail "g. worker on $port: /readyz says '$ready'" ;;
     esac
     metrics=$(curl -fsS --max-time 5 "http://127.0.0.1:$port/metrics") || fail "g. worker on $port: /metrics failed"
     case "$metrics" in

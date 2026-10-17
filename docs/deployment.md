@@ -13,7 +13,7 @@ Pod Security Standard.
 | Artifact | Where |
 | --- | --- |
 | `ghcr.io/lusoris/snatcharr-api` | Go control plane + embedded SPA (HTTP 8080, gRPC 9090) |
-| `ghcr.io/lusoris/snatcharr-worker` | Rust snatch-worker (HTTP 8081: `/livez`, `/metrics`) |
+| `ghcr.io/lusoris/snatcharr-worker` | Rust snatch-worker (HTTP 8081: `/livez`, `/readyz`, `/metrics`) |
 | `oci://ghcr.io/lusoris/charts/snatcharr` | Helm chart |
 
 Every image and the chart are signed with cosign (keyless, GitHub OIDC) and carry a SLSA
@@ -119,7 +119,7 @@ error named.
 | Resource | Notes |
 | --- | --- |
 | Deployment `-api` | probes on `/startupz`, `/livez`, `/readyz` (readiness: Postgres and the leader gate, which is down while the election fails or a periodic loop failed to start); `/tmp` is a memory-backed emptyDir; `replicaCount` may exceed 1, periodic work runs on the elected replica |
-| Deployment `-worker` | dials `<release>-api:9090`; liveness probe on `/livez` (port `worker.httpPort`, 8081), which fails once no API call succeeded for `worker.staleSecs` (180 s); `/metrics` there counts failed API calls per call in `snatcharr_worker_api_failures_total`; optional HPA 1..4 on CPU |
+| Deployment `-worker` | dials `<release>-api:9090`; liveness probe on `/livez` (port `worker.httpPort`, 8081), which fails once no API call succeeded for `worker.staleSecs` (180 s); readiness probe on `/readyz`, which also fails until the first successful API call (a lease long-poll returns within `worker.leaseWaitSecs`), so the Deployment is Available only once its workers reached the API; `/metrics` there counts failed API calls per call in `snatcharr_worker_api_failures_total`; optional HPA 1..4 on CPU |
 | Service `-api` | `http` 8080, `grpc` 9090 (h2c) |
 | Ingress or HTTPRoute | `api.ingress.*` or `api.httpRoute.*` |
 | CNPG `Cluster` `-db` | `postgres.cnpg.*`; the API reads the DSN from the operator's `-db-app` Secret |
