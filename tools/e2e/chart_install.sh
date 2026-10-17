@@ -73,15 +73,29 @@ new_namespace() {
     kubectl create namespace "$ns" >/dev/null
 }
 
+# api_log prints the last API log lines, with the kubectl logs flags $@. It fails when there is no
+# log to read: an error, an empty log, or the kubelet's "unable to retrieve container logs"
+# placeholder, which kubectl prints as the log itself with exit status 0.
+api_log() {
+    local out
+    out=$(kubectl -n "$ns" logs "deploy/$release-api" "$@" --tail 20 2>/dev/null) || return 1
+    case "$out" in
+    "" | "unable to retrieve container logs"*) return 1 ;;
+    esac
+    printf '%s\n' "$out"
+}
+
 # crashing names an API container that restarted at least three times, with its last log lines.
+# While the kubelet replaces the container, neither log can be read; that is no verdict yet, and
+# the next poll asks again.
 crashing() {
-    local restarts
+    local restarts log
     restarts=$(kubectl -n "$ns" get pods -l app.kubernetes.io/component=api \
         -o jsonpath='{range .items[*]}{.status.containerStatuses[0].restartCount}{"\n"}{end}')
     for r in $restarts; do
         if [ "${r:-0}" -ge 3 ]; then
-            kubectl -n "$ns" logs "deploy/$release-api" --previous --tail 20 2>&1 ||
-                kubectl -n "$ns" logs "deploy/$release-api" --tail 20 2>&1
+            log=$(api_log --previous) || log=$(api_log) || return 1
+            printf '%s\n' "$log"
             return 0
         fi
     done

@@ -22,9 +22,21 @@
     "helmv3",
     "devcontainer",
     "pip_requirements",
-    "custom.regex"
+    "custom.regex",
+    "rust-toolchain"
   ],
   "customManagers": [
+    {
+      "description": "cargo-zigbuild in the worker image (cargo install <crate>@<version>)",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "worker/Dockerfile"
+      ],
+      "matchStrings": [
+        "cargo install (?<depName>cargo-zigbuild)@(?<currentValue>\\S+) "
+      ],
+      "datasourceTemplate": "crate"
+    },
     {
       "description": "Upstream OpenAPI spec pins on a release: repository, release tag and commit of each entry, in this order (docs/upstream-contracts.md)",
       "customType": "regex",
