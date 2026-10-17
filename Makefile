@@ -21,7 +21,7 @@ GOMODCACHE       = $(subst \,/,$(shell go env GOMODCACHE))
 GOLUSORIS_VER    = $(shell go list -m -f '{{.Version}}' github.com/golusoris/golusoris)
 GOLUSORIS_SHARED = $(GOMODCACHE)/github.com/golusoris/golusoris@$(GOLUSORIS_VER)/tools/Makefile.shared
 
-.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-compose-smoke e2e-compose-pg-upgrade e2e-dev-compose-smoke e2e-cnpg-pg-upgrade e2e-chart-install web-verify web-e2e web-e2e-api proto-verify deploy-verify governance-verify hooks-verify contracts-verify workflows-verify workflows-lint secret-scan \
+.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-compose-smoke e2e-compose-pg-upgrade e2e-dev-compose-smoke e2e-cnpg-pg-upgrade e2e-chart-install web-verify web-e2e web-e2e-api web-visual web-visual-update proto-verify deploy-verify governance-verify hooks-verify contracts-verify workflows-verify workflows-lint secret-scan \
 	images kind-up kind-deploy kind-down \
         api-gen api-gosec gosec-install govulncheck-install tools-verify tools-lint tools-test tools-gosec web-gen proto-gen dev hooks setup
 
@@ -257,6 +257,17 @@ web-e2e-api: ## Postgres + api + fakearr + web e2e Playwright axe sweep (needs D
 	E2E_POSTGRES=$(E2E_POSTGRES) tools/e2e/postgres.sh \
 	  env SMOKE_API_BIN=$(E2E_BIN)/snatcharr SMOKE_FAKEARR_BIN=$(E2E_BIN)/fakearr \
 	  tools/e2e/web-e2e-api.sh
+
+# Visual baseline of the public pages (/login, /setup; en and de; light and dark) inside the
+# Playwright image pinned in web/e2e/visual-image.env, compared with web/e2e/visual (gap audit
+# C15-03). The planted cases shift the layout and recolour the primary button; the comparison
+# must refuse both. Not in verify-all (needs Docker).
+web-visual: ## Visual baseline of the public pages in the pinned Playwright image, after two planted diffs (needs Docker)
+	bash tools/e2e/planted.sh SNATCHARR_VISUAL_PLANT tools/e2e/web_visual.sh \
+	  "shift:of all image pixels) are different" "brand:of all image pixels) are different"
+
+web-visual-update: ## Rewrite the visual baseline in the pinned Playwright image; review the image diff before committing (needs Docker)
+	bash tools/e2e/web_visual.sh --update
 
 # ── proto/ ────────────────────────────────────────────────────────────────────
 proto-verify: ## buf lint + breaking (vs main) + generation drift
