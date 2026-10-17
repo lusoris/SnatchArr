@@ -53,6 +53,7 @@ type Querier interface {
 	DeleteNotificationChannel(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteNotificationRule(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteProwlarrLink(ctx context.Context, id uuid.UUID) (int64, error)
+	DeleteQueueStrike(ctx context.Context, arg DeleteQueueStrikeParams) error
 	DeleteSchedule(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteSeerrLink(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteSession(ctx context.Context, id string) error
@@ -88,6 +89,9 @@ type Querier interface {
 	// SPDX-License-Identifier: EUPL-1.2
 	GetPolicy(ctx context.Context, instanceID uuid.UUID) (SnatchPolicy, error)
 	GetProwlarrLink(ctx context.Context, id uuid.UUID) (ProwlarrLink, error)
+	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+	// SPDX-License-Identifier: EUPL-1.2
+	GetQueuePolicy(ctx context.Context, instanceID uuid.UUID) (QueuePolicy, error)
 	GetRun(ctx context.Context, id uuid.UUID) (SnatchRun, error)
 	GetSchedule(ctx context.Context, id uuid.UUID) (Schedule, error)
 	GetSeerrLink(ctx context.Context, id uuid.UUID) (SeerrLink, error)
@@ -131,6 +135,7 @@ type Querier interface {
 	ListNotificationRules(ctx context.Context) ([]NotificationRule, error)
 	ListNotificationRulesByEvent(ctx context.Context, eventKind string) ([]NotificationRule, error)
 	ListProwlarrLinks(ctx context.Context) ([]ProwlarrLink, error)
+	ListQueueStrikes(ctx context.Context, instanceID uuid.UUID) ([]QueueStrike, error)
 	ListRuns(ctx context.Context, arg ListRunsParams) ([]SnatchRun, error)
 	ListSchedules(ctx context.Context) ([]Schedule, error)
 	ListSeerrLinks(ctx context.Context) ([]SeerrLink, error)
@@ -157,6 +162,9 @@ type Querier interface {
 	// The outer expires_at condition is repeated on purpose: Postgres re-checks it on a row a
 	// concurrent snatch extended meanwhile, so that row is kept.
 	PurgeExpiredProcessed(ctx context.Context, arg PurgeExpiredProcessedParams) (int64, error)
+	// The outer expires_at condition is repeated on purpose: Postgres re-checks it on a row a
+	// concurrent sweep extended meanwhile, so that row is kept.
+	PurgeExpiredQueueStrikes(ctx context.Context, arg PurgeExpiredQueueStrikesParams) (int64, error)
 	PurgeExpiredSessions(ctx context.Context, arg PurgeExpiredSessionsParams) (int64, error)
 	PurgeGlobalBucketsBefore(ctx context.Context, arg PurgeGlobalBucketsBeforeParams) (int64, error)
 	PurgeRunsBefore(ctx context.Context, arg PurgeRunsBeforeParams) (int64, error)
@@ -199,6 +207,8 @@ type Querier interface {
 	// The caller reads the row back with GetPolicy in the same transaction: scanning RETURNING *
 	// here would push the generated function past the HISS-04 length limit.
 	UpsertPolicy(ctx context.Context, arg UpsertPolicyParams) error
+	UpsertQueuePolicy(ctx context.Context, arg UpsertQueuePolicyParams) error
+	UpsertQueueStrikes(ctx context.Context, arg UpsertQueueStrikesParams) error
 	UpsertSeerrRequest(ctx context.Context, arg UpsertSeerrRequestParams) error
 }
 

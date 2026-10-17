@@ -118,6 +118,28 @@ type ProwlarrLink struct {
 	UpdatedAt       time.Time
 }
 
+type QueuePolicy struct {
+	InstanceID           uuid.UUID
+	Enabled              bool
+	Rules                []byte
+	GraceS               int32
+	MinBytesPerSecond    int64
+	MinCustomFormatScore *int32
+	MaxRemovalsPerSweep  int32
+	UpdatedAt            time.Time
+}
+
+type QueueStrike struct {
+	InstanceID   uuid.UUID
+	DownloadID   string
+	QueueID      int32
+	Rule         string
+	Count        int32
+	LastSizeLeft int64
+	LastSeen     time.Time
+	ExpiresAt    time.Time
+}
+
 type RateBucket struct {
 	InstanceID  uuid.UUID
 	WindowStart time.Time
