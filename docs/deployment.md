@@ -106,6 +106,13 @@ this list to trust `X-Forwarded-For` and resolve the client IP. Without trusted 
 all forwarded requests appear to arrive from the proxy's IP address, so 5 failed login
 attempts by any client will lock out the proxy IP and block all users from logging in.
 
+CI installs the chart on every pull request that touches `deploy/` or a Dockerfile
+(`make e2e-chart-install`, `tools/e2e/chart_install.sh`): the defaults on CloudNativePG and an
+upgrade from the last published chart, each until the API and worker Deployments are Available
+and `/readyz` answers 200, and the upgrade must keep the generated Secret. A planted install
+whose Secret holds the published development crypto key must be refused first, with the API's
+error named.
+
 ### What the chart renders
 
 | Resource | Notes |

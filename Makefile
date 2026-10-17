@@ -21,7 +21,7 @@ GOMODCACHE       = $(subst \,/,$(shell go env GOMODCACHE))
 GOLUSORIS_VER    = $(shell go list -m -f '{{.Version}}' github.com/golusoris/golusoris)
 GOLUSORIS_SHARED = $(GOMODCACHE)/github.com/golusoris/golusoris@$(GOLUSORIS_VER)/tools/Makefile.shared
 
-.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-compose-smoke e2e-compose-pg-upgrade e2e-cnpg-pg-upgrade web-verify web-e2e web-e2e-api proto-verify deploy-verify governance-verify hooks-verify contracts-verify workflows-verify workflows-lint secret-scan \
+.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-compose-smoke e2e-compose-pg-upgrade e2e-cnpg-pg-upgrade e2e-chart-install web-verify web-e2e web-e2e-api proto-verify deploy-verify governance-verify hooks-verify contracts-verify workflows-verify workflows-lint secret-scan \
 	images kind-up kind-deploy kind-down \
         api-gen api-gosec gosec-install govulncheck-install tools-verify tools-lint tools-test tools-gosec web-gen proto-gen dev hooks setup
 
@@ -215,6 +215,12 @@ e2e-compose-pg-upgrade: ## Homelab compose bundle: Postgres previous major -> pi
 e2e-cnpg-pg-upgrade: ## Chart on CloudNativePG: Postgres previous major -> current major upgrade with data read-back (needs a cluster with the operator)
 	bash tools/e2e/cnpg_pg_upgrade.sh
 
+# The chart installed with its defaults and upgraded from the last published chart, each waited
+# on until the API and worker are Available and /readyz answers, after a planted install the API
+# refuses (#144). Needs a cluster with the CloudNativePG operator, like e2e-cnpg-pg-upgrade.
+e2e-chart-install: ## Chart install + upgrade from the last published chart until Ready (needs a cluster with the operator)
+	bash tools/e2e/chart_install.sh
+
 # ── web/ (SvelteKit + sveltesentio) ───────────────────────────────────────────
 web-verify: ## pnpm lint/typecheck/test(+coverage)/build + OpenAPI type drift
 	cd web
@@ -270,9 +276,7 @@ proto-gen: ## buf generate (Go stubs; Rust stubs build via tonic-build)
 	go run ./tools/gennosec apply
 
 # ── deploy/ ───────────────────────────────────────────────────────────────────
-# kubeconform binary if installed, else the same pinned image CI uses.
-KUBECONFORM ?= $(shell command -v kubeconform >/dev/null 2>&1 && echo kubeconform || echo "docker run --rm -i ghcr.io/yannh/kubeconform:v0.7.0")
-deploy-verify: ## helm unittest + render.sh + chart_checks.sh planted cases + helm lint --strict + kubeconform (default and all-features renders) + kustomize build + compose image pins
+deploy-verify: ## helm unittest + render.sh + chart_checks.sh planted cases + helm lint --strict + kubeconform (default and all-features renders, oldest claimed and newest Kubernetes) + kustomize build + compose image pins
 	if ! helm plugin list 2>/dev/null | grep -E -q '^unittest[[:space:]]'; then \
 	  echo "deploy-verify: helm plugin 'unittest' is missing; install helm-unittest (https://github.com/helm-unittest/helm-unittest)" >&2; exit 1; \
 	fi
@@ -283,13 +287,15 @@ deploy-verify: ## helm unittest + render.sh + chart_checks.sh planted cases + he
 	trap 'rm -rf "$$render"' EXIT
 	# Rendered to a file first: a pipe into kubeconform passed a failing render (A2-01).
 	tools/deploy/render.sh "$$render/default.yaml" snatcharr deploy/helm/snatcharr
-	$(KUBECONFORM) -strict -ignore-missing-schemas -summary <"$$render/default.yaml"
 	tools/deploy/render.sh "$$render/all.yaml" snatcharr deploy/helm/snatcharr \
 	  --set networkPolicy.enabled=true --set api.ingress.enabled=true --set serviceMonitor.enabled=true \
 	  --set worker.autoscaling.enabled=true --set api.pdb.enabled=true --set worker.pdb.enabled=true \
 	  --set configarr.enabled=true --set configarr.existingConfigMap=cfg --set configarr.existingSecret=sec \
 	  --set-json 'networkPolicy.arrPeers=[{"namespaceSelector":{"matchLabels":{"kubernetes.io/metadata.name":"media"}}},{"podSelector":{"matchLabels":{"app.kubernetes.io/name":"lidarr"}},"ports":[{"port":8686,"protocol":"TCP"}]}]'
-	$(KUBECONFORM) -strict -ignore-missing-schemas -summary <"$$render/all.yaml"
+	# kubeconform on the kubeVersion minimum of Chart.yaml and on the newest schemas (C13-01),
+	# planted cases first. The kubeconform binary if installed, else the pinned image CI uses.
+	sh tools/deploy/kubeconform_test.sh
+	sh tools/deploy/kubeconform.sh deploy/helm/snatcharr/Chart.yaml "$$render/default.yaml" "$$render/all.yaml"
 	kustomize build --enable-helm deploy/kustomize/kind >/dev/null
 	# Every compose image pinned by tag and digest, never latest (#140); planted cases first.
 	sh tools/deploy/compose_pins_test.sh
