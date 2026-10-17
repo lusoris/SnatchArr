@@ -8,6 +8,22 @@
 # Rule ids read from this file:
 #   golangci-lint/<linter>   checked by `make tools-lint` (tools/lintexcept)
 exceptions:
+  - rule: golangci-lint/exhaustive
+    path: tools/apicompat/gate/main.go
+    reason: "Locked praetor asset, not edited here; tracked upstream in cordanaLLM/praetor#1226 (category A: expiry shared with the other entries of this file)."
+    expires: "2027-01-06"
+  - rule: golangci-lint/gocyclo
+    path: tools/apicompat/gate/main.go
+    reason: "Locked praetor asset, not edited here; tracked upstream in cordanaLLM/praetor#1226 (category A: expiry shared with the other entries of this file)."
+    expires: "2027-01-06"
+  - rule: golangci-lint/revive
+    path: tools/apicompat/gate/main.go
+    reason: "Locked praetor asset, not edited here; tracked upstream in cordanaLLM/praetor#1226 (category A: expiry shared with the other entries of this file)."
+    expires: "2027-01-06"
+  - rule: golangci-lint/staticcheck
+    path: tools/apicompat/gate/main.go
+    reason: "Locked praetor asset, not edited here; tracked upstream in cordanaLLM/praetor#1226 (category A: expiry shared with the other entries of this file)."
+    expires: "2027-01-06"
   - rule: golangci-lint/forbidigo
     path: tools/apicompat/gate/main.go
     reason: "Locked praetor asset, not edited here; tracked upstream in cordanaLLM/praetor#1226."
