@@ -5,7 +5,8 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Upstream contracts
 
-SnatchArr talks to Sonarr, Radarr, Lidarr, three Readarr forks and Seerr through clients
+SnatchArr talks to Sonarr, Radarr, Lidarr, Whisparr v2 and v3, three Readarr forks and Seerr
+through clients
 whose wire types are written by hand. When one of those projects renames or drops a field,
 a hand-written type keeps compiling and the value is silently empty. The contract tests catch that before a
 release: they compare each client with the OpenAPI spec its upstream project publishes.
@@ -18,7 +19,7 @@ This page is for contributors. Running SnatchArr needs none of it.
 make contracts-verify
 ```
 
-The target downloads the pinned specs on the first run (about 2.3 MB in total, into
+The target downloads the pinned specs on the first run (about 2.9 MB in total, into
 `.cache/upstream-specs/`), so a cold cache needs network access. It is part of
 `make verify-all` and runs in CI as the job `contracts` (`.github/workflows/ci.yml`).
 
@@ -38,6 +39,7 @@ The target downloads the pinned specs on the first run (about 2.3 MB in total, i
 1. `tools/upstreamspec/specs.yaml` pins each spec: the upstream repository, a release tag,
    the commit of that tag, the path of the spec file and its sha256. A project that tags no
    release is pinned with a branch in the place of the tag (Bookshelf, branch `develop`);
+   so is a project whose tags carry an outdated spec (Whisparr, see [below](#whisparr));
    an entry has exactly one of the two. It also lists the operations the client calls.
 2. `upstreamspec fetch` downloads each file at its commit and refuses one whose checksum
    differs. For each spec it writes a contract file: per listed operation the documented
@@ -48,8 +50,8 @@ The target downloads the pinned specs on the first run (about 2.3 MB in total, i
 4. The contract tests run the real client against a local server that answers with the
    example responses:
     - Go, Seerr: `TestUpstreamContract` in `api/internal/seerrclient/contract_test.go`.
-    - Rust, Sonarr, Radarr, Lidarr and the Readarr forks Bookshelf, Chaptarr and
-      Faustvii/Readarr: `upstream_contract_*` in
+    - Rust, Sonarr, Radarr, Lidarr, Whisparr v2 and v3 and the Readarr forks Bookshelf,
+      Chaptarr and Faustvii/Readarr: `upstream_contract_*` in
       `worker/crates/arr-client/src/contract_tests.rs`. [Readarr](readarr.md#forks) lists
       the fork versions.
 5. `upstreamspec receipts` checks that each of those tests passed.
@@ -58,6 +60,25 @@ A contract test reports four kinds of difference: a field a wire type reads that
 documented response lacks, a request the spec does not describe (path or query
 parameter), a client method that fails on the documented example, and a listed
 operation the client never requests.
+
+### Whisparr
+
+Whisparr tags its v3 (Eros) releases, but the spec committed with them was last generated on
+2025-06-08 and lacks `wanted/missing` and `wanted/cutoff`, which the v3 API has served since
+2025-11-17 (`src/Whisparr.Api.V3/Wanted/`, checked at tag `v3.1.0.2116`). Whisparr
+publishes a generated spec per generation on its own branch instead: `api-docs` for v2 and
+`eros-api-docs` for v3. Both are pinned with `branch`.
+
+Whisparr's wanted records are not Sonarr's episodes or Radarr's movies, so the client reads them
+with their own wire types (`SceneLike` and `WhisparrMovieLike` in
+`worker/crates/arr-client/src/lib.rs`):
+
+- A v2 scene has no `episodeNumber` and no `airDateUtc`; it carries the day of its release as
+  `releaseDate`. The spec documents that `DateOnly` as an object with `year`, `month` and
+  `day`, while the server writes a string such as `"2020-01-02"`
+  (`STJDateOnlyConverter`); the client reads both.
+- A v3 movie has one `releaseDate` in the place of Radarr's `inCinemas`, `digitalRelease` and
+  `physicalRelease`, so the Radarr release-date setting does not apply to it.
 
 ### Receipts
 
@@ -139,5 +160,5 @@ The check says "the spec documents what the client uses". It does not say more t
 | Client | State |
 | --- | --- |
 | `api/internal/cleanuparrclient` | No contract test. The Cleanuparr repository holds no OpenAPI file (checked at commit `520dde2c`, 2026-10-11). The fixture tests in `client_test.go` remain the only check. |
-| `worker/crates/arr-client`, the retired Readarr and Whisparr | No pinned spec. Their wire types are the ones the Readarr forks, Lidarr, Sonarr and Radarr use, and the hand-written contracts in `contract_tests.rs` cover all six kinds. The spec of Faustvii/Readarr at `v0.10.0` is byte for byte the one Readarr published at `v0.4.18.2805`. |
+| `worker/crates/arr-client`, the retired Readarr | No pinned spec. Its wire types are the ones the Readarr forks use, and the hand-written contracts in `contract_tests.rs` cover all six kinds. The spec of Faustvii/Readarr at `v0.10.0` is byte for byte the one Readarr published at `v0.4.18.2805`. |
 | `api/internal/arrclient` | Not in scope: it has no wire types of its own and calls the typed clients of [goenvoy](https://github.com/golusoris/goenvoy). |
