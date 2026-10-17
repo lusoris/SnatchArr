@@ -1,5 +1,49 @@
 # Changelog
 
+## [0.2.2](https://github.com/lusoris/SnatchArr/compare/v0.2.1...v0.2.2) (2026-10-17)
+
+
+### Features
+
+* **chart:** scale the worker on queued runs with an optional KEDA ScaledObject ([#331](https://github.com/lusoris/SnatchArr/issues/331)) ([62b7bcb](https://github.com/lusoris/SnatchArr/commit/62b7bcbb2c9f800a2689fb87bf6d754c4efecfe8))
+* **logs:** admin log viewer over a redacted in-memory ring ([#356](https://github.com/lusoris/SnatchArr/issues/356)) ([d0c08db](https://github.com/lusoris/SnatchArr/commit/d0c08db759435d5fc05380c548166fc071ab6d03))
+* **notify:** add an Apprise API notification channel ([#354](https://github.com/lusoris/SnatchArr/issues/354)) ([2249c5f](https://github.com/lusoris/SnatchArr/commit/2249c5f6d947819322545540baed574e9e563277))
+* ship worker log records to the in-app log viewer ([#357](https://github.com/lusoris/SnatchArr/issues/357)) ([b50f16f](https://github.com/lusoris/SnatchArr/commit/b50f16f0585fd16e2a514ad73a8e336e75af0a4d))
+* skip Radarr movies that are not yet available ([#353](https://github.com/lusoris/SnatchArr/issues/353)) ([67a1db2](https://github.com/lusoris/SnatchArr/commit/67a1db227fa4cd7102211af3b57ca51b465a1a9d))
+* **web:** show named API events on the live page ([#360](https://github.com/lusoris/SnatchArr/issues/360)) ([f2302b3](https://github.com/lusoris/SnatchArr/commit/f2302b303678f277d831d3ae3fe41e832481814d))
+
+
+### Bug Fixes
+
+* **api:** end idle LeaseRun calls on time and steady four flaky tests ([#355](https://github.com/lusoris/SnatchArr/issues/355)) ([9dabd4f](https://github.com/lusoris/SnatchArr/commit/9dabd4fa70274d7fcbf148a6e4e3cd84f3a35553))
+* **api:** issue a fresh session id at sign-in and password change ([#336](https://github.com/lusoris/SnatchArr/issues/336)) ([f2babc3](https://github.com/lusoris/SnatchArr/commit/f2babc35d0d91b0eb4bcbc960762bb014d0475f4)), closes [#268](https://github.com/lusoris/SnatchArr/issues/268)
+* **api:** observe real Deluge 2 web UIs and test every download client live ([#322](https://github.com/lusoris/SnatchArr/issues/322)) ([173e9a1](https://github.com/lusoris/SnatchArr/commit/173e9a1304fd54f7f4e619c139e1a0293b83adff))
+* **api:** regenerate the sqlc queries in go generate ([#326](https://github.com/lusoris/SnatchArr/issues/326)) ([8d38bfe](https://github.com/lusoris/SnatchArr/commit/8d38bfeb3b709e524d79be38ba1e75cc561c6424))
+* **api:** serve waiting LeaseRun calls in the order they arrived ([#344](https://github.com/lusoris/SnatchArr/issues/344)) ([8a8e688](https://github.com/lusoris/SnatchArr/commit/8a8e688713ae53a295d59c877a3751a874105bbf))
+* **ci:** run the pinned govulncheck in make api-verify and CI ([#337](https://github.com/lusoris/SnatchArr/issues/337)) ([9e2b82d](https://github.com/lusoris/SnatchArr/commit/9e2b82db5079845de66a3848e610050daaaa560b))
+* **deploy:** place every chart object in the release namespace ([#347](https://github.com/lusoris/SnatchArr/issues/347)) ([3942238](https://github.com/lusoris/SnatchArr/commit/394223854cc7c1b42a34786770b0def14c868a3d))
+* **deploy:** refuse pinned images older than the chart's probes ([#332](https://github.com/lusoris/SnatchArr/issues/332)) ([b488e2d](https://github.com/lusoris/SnatchArr/commit/b488e2dcc6e6043ac2a89473e881c1647282249f))
+* **e2e:** retry the crash-loop verdict while the API log is unreadable ([#307](https://github.com/lusoris/SnatchArr/issues/307)) ([ed8e118](https://github.com/lusoris/SnatchArr/commit/ed8e11864a02c03095bf243ef1acd3d783ef6940))
+* **planner:** plan the instances past the tick bound in the next tick ([#316](https://github.com/lusoris/SnatchArr/issues/316)) ([e239ab0](https://github.com/lusoris/SnatchArr/commit/e239ab03472869f03c0fa82e230cbd5fc0137ab1))
+* **web:** flush event-stream headers through the dev and preview proxy ([#359](https://github.com/lusoris/SnatchArr/issues/359)) ([b8878c5](https://github.com/lusoris/SnatchArr/commit/b8878c53f47499a41e08acb9be6a98a17d746522))
+* **web:** follow the system colour scheme with the dark theme ([#340](https://github.com/lusoris/SnatchArr/issues/340)) ([f4b17e9](https://github.com/lusoris/SnatchArr/commit/f4b17e97bd9a48776182bc89381dba2e2307621a))
+* **web:** give input borders 3:1 contrast in both themes ([#345](https://github.com/lusoris/SnatchArr/issues/345)) ([8e294a7](https://github.com/lusoris/SnatchArr/commit/8e294a7733d1474a2043055e414243733224ac70))
+* **worker:** log the first refused lease of a series at info ([#335](https://github.com/lusoris/SnatchArr/issues/335)) ([b554479](https://github.com/lusoris/SnatchArr/commit/b554479378c94bd1ac118decc28ccc4cf9b1718c))
+* **worker:** read Whisparr wanted records with their own wire types ([#308](https://github.com/lusoris/SnatchArr/issues/308)) ([1f16e81](https://github.com/lusoris/SnatchArr/commit/1f16e816998f88d0be8d6d7bcfe410eef4b7a2f8))
+* **worker:** send a call again that a closing connection never sent ([#327](https://github.com/lusoris/SnatchArr/issues/327)) ([bce0f32](https://github.com/lusoris/SnatchArr/commit/bce0f327499da47582cb8ccfca2c6c7437f41d9a))
+* **worker:** serve /readyz and probe it from the chart ([#329](https://github.com/lusoris/SnatchArr/issues/329)) ([dc8a212](https://github.com/lusoris/SnatchArr/commit/dc8a2121f47baad44bf5c851b79433685d3e5583))
+
+
+### Refactoring
+
+* **api:** read Cleanuparr status and strikes through goenvoy ([#352](https://github.com/lusoris/SnatchArr/issues/352)) ([32c42f2](https://github.com/lusoris/SnatchArr/commit/32c42f2e66e9038b2599d8071d086f6f745a4886)), closes [#47](https://github.com/lusoris/SnatchArr/issues/47)
+
+
+### Documentation
+
+* **adr:** keep the api and worker split, record the product definition ([#351](https://github.com/lusoris/SnatchArr/issues/351)) ([17f69b6](https://github.com/lusoris/SnatchArr/commit/17f69b604c8ade3afd483bd78b65ba200b674e2b))
+* **deploy:** verify releases with 0.2.1, a version that exists ([#312](https://github.com/lusoris/SnatchArr/issues/312)) ([0010c11](https://github.com/lusoris/SnatchArr/commit/0010c1156365ece8cc71cdaf852dc48c528bacbc))
+
 ## [0.2.1](https://github.com/lusoris/SnatchArr/compare/v0.2.0...v0.2.1) (2026-10-17)
 
 
