@@ -16,8 +16,12 @@
 # must be refused as "Postgres 17 ... want 18".
 #
 # Needs a cluster with the CloudNativePG operator (CI: the kind cluster of the deploy job; on a
-# workstation only inside a VM), helm, kubectl, curl, jq and openssl. The chart's API and worker
-# images are the released ones it pins (appVersion).
+# workstation only inside a VM), helm, kubectl, curl, jq and openssl.
+# UPGRADE_API_IMAGE and UPGRADE_WORKER_IMAGE (repository:tag, already present on the nodes, for
+# example through kind load) run the chart on those images with pullPolicy Never. CI sets them to
+# the images built from the checkout: on a release pull request the chart already pins the new
+# appVersion, whose images are not published yet. Unset, the chart runs the released images of
+# its appVersion.
 set -euo pipefail
 
 # Operand images of the same OS distribution, by version and digest; Renovate moves them and
@@ -123,9 +127,23 @@ chart_upgrade() {
         >/dev/null
 }
 
+# add_image adds the --set arguments for an UPGRADE_<component>_IMAGE of repository:tag.
+images=()
+add_image() {
+    local component=$1 ref=$2
+    [ -n "$ref" ] || return 0
+    [[ "$ref" == *:* && "${ref##*:}" != */* && "$ref" != *@* ]] ||
+        fail "$component image $ref is not repository:tag"
+    images+=(--set "image.$component.repository=${ref%:*}" --set "image.$component.tag=${ref##*:}"
+        --set "image.$component.pullPolicy=Never")
+}
+add_image api "${UPGRADE_API_IMAGE:-}"
+add_image worker "${UPGRADE_WORKER_IMAGE:-}"
+echo "cnpg-pg-upgrade: api image ${UPGRADE_API_IMAGE:-released appVersion}, worker image ${UPGRADE_WORKER_IMAGE:-released appVersion}"
+
 # 1. A chart install on the previous major with a completed setup and one login.
 kubectl create namespace "$ns" >/dev/null
-helm install "$release" "$root/deploy/helm/snatcharr" -n "$ns" \
+helm install "$release" "$root/deploy/helm/snatcharr" -n "$ns" "${images[@]}" \
     --set "postgres.cnpg.imageName=$OLD_IMAGE" --set postgres.cnpg.storage.size=1Gi \
     --wait --timeout 10m >/dev/null || fail "chart install on Postgres $old_major failed"
 wait_major "$old_major" 300
