@@ -21,7 +21,7 @@ GOMODCACHE       = $(subst \,/,$(shell go env GOMODCACHE))
 GOLUSORIS_VER    = $(shell go list -m -f '{{.Version}}' github.com/golusoris/golusoris)
 GOLUSORIS_SHARED = $(GOMODCACHE)/github.com/golusoris/golusoris@$(GOLUSORIS_VER)/tools/Makefile.shared
 
-.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-compose-smoke e2e-compose-pg-upgrade e2e-dev-compose-smoke dlclients-live cleanuparr-live e2e-cnpg-pg-upgrade e2e-cnpg-backup-restore e2e-chart-install web-verify web-e2e web-e2e-api web-visual web-visual-update proto-verify deploy-verify governance-verify hooks-verify contracts-verify workflows-verify workflows-lint secret-scan \
+.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-soak e2e-compose-smoke e2e-compose-pg-upgrade e2e-dev-compose-smoke dlclients-live cleanuparr-live e2e-cnpg-pg-upgrade e2e-cnpg-backup-restore e2e-chart-install web-verify web-e2e web-e2e-api web-visual web-visual-update proto-verify deploy-verify governance-verify hooks-verify contracts-verify workflows-verify workflows-lint secret-scan \
 	images kind-up kind-deploy kind-keda-proof kind-down \
         api-gen api-gosec gosec-install govulncheck-install sqlc-install tools-verify tools-lint tools-test tools-gosec web-gen proto-gen dev hooks setup
 
@@ -194,6 +194,15 @@ e2e-image-smoke: ## Postgres + api image + worker image + fakearr end to end, un
 	E2E_POSTGRES=$(E2E_POSTGRES) tools/e2e/postgres.sh \
 	  env SMOKE_API_IMAGE=$(E2E_API_IMAGE) SMOKE_WORKER_IMAGE=$(E2E_WORKER_IMAGE) \
 	  SMOKE_FAKEARR_BIN=$(E2E_BIN)/fakearr tools/e2e/smoke.sh
+
+# The image smoke kept running for SOAK_SECONDS (C14-01): a missing run on sonarr and radarr
+# every SOAK_ROUND_SECONDS, the gRPC connection rotated every SOAK_CONNECTION_AGE so the lease
+# long-polls cross many rotations. Any failed worker API call, failed run or stale worker
+# contact fails it (tools/e2e/smoke.sh, step j). Nightly in CI; not in verify-all (slow).
+SOAK_SECONDS ?= 600
+SOAK_CONNECTION_AGE ?= 15s
+e2e-soak: ## Image smoke held for SOAK_SECONDS with frequent gRPC connection rotation (needs Docker)
+	$(MAKE) e2e-image-smoke SOAK_SECONDS=$(SOAK_SECONDS) SMOKE_GRPC_MAX_CONNECTION_AGE=$(SOAK_CONNECTION_AGE) SMOKE_LEASE_WAIT_SECS=30
 
 # The homelab bundle (#41) started as docs/install-compose.md says, on the images built here
 # (the API and worker health checks need the `healthcheck` subcommand they carry). The planted

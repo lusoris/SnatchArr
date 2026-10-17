@@ -4,7 +4,8 @@
 #
 # Planted cases for security_issue.sh against a stub gh that records its calls: no open issue,
 # the issue open, an issue whose title only contains the title, a failed listing, a failed
-# create, a failed comment, and no run address.
+# create, a failed comment, no run address, and a named workflow (the soak) beside the scan's
+# issue.
 #
 #   tools/ci/security_issue_test.sh
 #
@@ -64,6 +65,11 @@ expect list_fails 1 "list --state open" '[]' STUB_FAIL_list=1 sh "$SCRIPT" "$URL
 expect create_fails 1 "$LIST_CREATE" '[]' STUB_FAIL_create=1 sh "$SCRIPT" "$URL"
 expect comment_fails 1 "list --state open; comment 7 --body" \
   '[{"number":7,"title":"Security Scan fails on main"}]' STUB_FAIL_comment=1 sh "$SCRIPT" "$URL"
+expect named 0 "list --state open; create --title Soak fails on main" \
+  '[{"number":7,"title":"Security Scan fails on main"}]' sh "$SCRIPT" "$URL" Soak
+expect named_open 0 "list --state open; comment 8 --body" \
+  '[{"number":7,"title":"Security Scan fails on main"},{"number":8,"title":"Soak fails on main"}]' sh "$SCRIPT" "$URL" Soak
+expect too_many_args 2 "" '[]' sh "$SCRIPT" "$URL" Soak extra
 expect no_url 2 "" '[]' sh "$SCRIPT" ""
 expect no_args 2 "" '[]' sh "$SCRIPT"
 exit "$failed"

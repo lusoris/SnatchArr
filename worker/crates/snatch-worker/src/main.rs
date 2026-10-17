@@ -21,8 +21,8 @@ use snatch_proto::worker_service_client::WorkerServiceClient;
 use snatch_proto::{HeartbeatDirective, HeartbeatRequest, LeaseRunRequest, LeaseRunResponse};
 use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;
-use tonic::Request;
 use tonic::transport::Channel;
+use tonic::{Code, Request, Status};
 use tracing_subscriber::EnvFilter;
 
 use crate::auth::AuthInterceptor;
@@ -138,6 +138,23 @@ async fn lease(
     .await
 }
 
+/// Whether a failed lease is logged as a warning (#177). A stopping API answers `Unavailable`
+/// and the next call reaches the new replica, so the first `Unavailable` of a series (the backoff
+/// still at its minimum) is logged at info. A second failure in a row, which follows after
+/// `MIN_BACKOFF`, warns; so does every other code from the first failure.
+fn lease_failure_warns(code: Code, backoff: Duration) -> bool {
+    code != Code::Unavailable || backoff > MIN_BACKOFF
+}
+
+fn log_lease_failure(status: &Status, backoff: Duration) {
+    let backoff_ms = u64::try_from(backoff.as_millis()).unwrap_or(u64::MAX);
+    if lease_failure_warns(status.code(), backoff) {
+        tracing::warn!(%status, backoff_ms, "lease failed");
+    } else {
+        tracing::info!(%status, backoff_ms, "lease refused, API stopping or unreachable; retrying");
+    }
+}
+
 async fn lease_loop(
     cfg: Arc<Config>,
     client: Client,
@@ -187,7 +204,7 @@ async fn lease_loop(
             }
             Err(status) => {
                 health.failure(Call::LeaseRun);
-                tracing::warn!(%status, backoff_ms = u64::try_from(backoff.as_millis()).unwrap_or(u64::MAX), "lease failed");
+                log_lease_failure(&status, backoff);
                 tokio::select! {
                     _ = tokio::time::sleep(backoff) => {},
                     _ = stop.cancelled() => break,
@@ -237,4 +254,48 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
     tracing::info!("snatch-worker stopped");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lease_failure_warns_after_the_first_unavailable() {
+        let cases = [
+            // A replica going away: one Unavailable at the minimum backoff stays below warn.
+            ("first unavailable", Code::Unavailable, MIN_BACKOFF, false),
+            // The API is still away one backoff later: warn.
+            (
+                "second unavailable",
+                Code::Unavailable,
+                MIN_BACKOFF * 2,
+                true,
+            ),
+            (
+                "unavailable at the ceiling",
+                Code::Unavailable,
+                MAX_BACKOFF,
+                true,
+            ),
+            // Every other code warns from the first failure.
+            ("first internal", Code::Internal, MIN_BACKOFF, true),
+            (
+                "first unauthenticated",
+                Code::Unauthenticated,
+                MIN_BACKOFF,
+                true,
+            ),
+            (
+                "first permission denied",
+                Code::PermissionDenied,
+                MIN_BACKOFF,
+                true,
+            ),
+            ("first cancelled", Code::Cancelled, MIN_BACKOFF, true),
+        ];
+        for (name, code, backoff, want) in cases {
+            assert_eq!(lease_failure_warns(code, backoff), want, "{name}");
+        }
+    }
 }

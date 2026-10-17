@@ -128,6 +128,13 @@ error named.
 | ServiceMonitor | `serviceMonitor.enabled` scrapes `/metrics` on the API |
 | PodDisruptionBudget | per component, opt-in |
 
+The image tags default to the chart's `appVersion`, so chart and images move together. A pinned
+release tag (`image.api.tag`, `image.worker.tag`) older than the templates need fails the render:
+the worker probes need a worker image newer than 0.2.1. The minimum per component lives in
+`snatcharr.minImageVersion` (`templates/_helpers.tpl`); `tests/image_test.yaml` holds the planted
+case, chart 0.1.8 with worker image 0.1.5. A tag that is no release, such as a commit build, is
+not compared.
+
 ### Worker autoscaling
 
 The worker runs `worker.replicaCount` replicas unless one of two autoscalers owns the count,
@@ -475,4 +482,18 @@ To run against pre-built images without re-building:
 
 ```sh
 SMOKE_SKIP_BUILD=1 E2E_API_IMAGE=<api-image> E2E_WORKER_IMAGE=<worker-image> make e2e-image-smoke
+```
+
+### Soak
+
+`make e2e-soak` keeps the image smoke running for `SOAK_SECONDS` (default 600) after its checks. The API rotates every gRPC connection after `SOAK_CONNECTION_AGE` (default `15s`, instead of the production 2 minutes), so the workers' lease long-polls (30 s, the production default) cross many rotations. Every `SOAK_ROUND_SECONDS` (default 20) the soak starts a missing run on Sonarr and Radarr, then fails the round on:
+
+- any failed worker API call (`snatcharr_worker_api_failures_total` on either worker grew);
+- any failed run;
+- a last worker contact (`worker_last_contact_at` in `/api/v1/system/status`) older than `SOAK_MAX_CONTACT_AGE` seconds (default 45: the long-poll plus 15).
+
+At the end, at least two runs per round must be done. The workflow `.github/workflows/soak.yml` runs it nightly and on demand; a failure on main opens or comments on the issue "Soak fails on main". The soak catches lease calls cut at a connection rotation and calls a closing connection refused before sending them, which a shorter smoke run does not reach.
+
+```sh
+SOAK_SECONDS=1800 make e2e-soak
 ```
