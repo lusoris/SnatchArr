@@ -31,6 +31,7 @@ image-smoke api,worker,proto,web,deploy
 dev-compose deploy
 web web
 web-e2e-api api,web
+web-visual web
 proto proto
 deploy deploy
 contracts contracts
