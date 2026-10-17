@@ -112,7 +112,7 @@ func sonarrQueue(baseURL, apiKey string, o []arr.Option) (queueOps, error) {
 	page := func(ctx context.Context, page, size int) ([]queue.Item, int, int, error) {
 		resp, err := c.GetQueueWithOptions(ctx, sonarr.QueueOptions{Page: page, PageSize: size, IncludeItem: true})
 		if err != nil {
-			return nil, 0, 0, err
+			return nil, 0, 0, fmt.Errorf("sonarr queue: %w", err)
 		}
 		items := make([]queue.Item, 0, len(resp.Records))
 		for _, r := range resp.Records {
@@ -134,7 +134,7 @@ func radarrQueue(baseURL, apiKey string, o []arr.Option) (queueOps, error) {
 	page := func(ctx context.Context, page, size int) ([]queue.Item, int, int, error) {
 		resp, err := c.GetQueueWithOptions(ctx, radarr.QueueOptions{Page: page, PageSize: size, IncludeItem: true})
 		if err != nil {
-			return nil, 0, 0, err
+			return nil, 0, 0, fmt.Errorf("radarr queue: %w", err)
 		}
 		items := make([]queue.Item, 0, len(resp.Records))
 		for _, r := range resp.Records {
@@ -156,7 +156,7 @@ func lidarrQueue(baseURL, apiKey string, o []arr.Option) (queueOps, error) {
 	page := func(ctx context.Context, page, size int) ([]queue.Item, int, int, error) {
 		resp, err := c.GetQueueWithOptions(ctx, lidarr.QueueOptions{Page: page, PageSize: size, IncludeItem: true})
 		if err != nil {
-			return nil, 0, 0, err
+			return nil, 0, 0, fmt.Errorf("lidarr queue: %w", err)
 		}
 		items := make([]queue.Item, 0, len(resp.Records))
 		for _, r := range resp.Records {
@@ -178,7 +178,7 @@ func readarrQueue(baseURL, apiKey string, o []arr.Option) (queueOps, error) {
 	page := func(ctx context.Context, page, size int) ([]queue.Item, int, int, error) {
 		resp, err := c.GetQueueWithOptions(ctx, readarr.QueueOptions{Page: page, PageSize: size, IncludeItem: true})
 		if err != nil {
-			return nil, 0, 0, err
+			return nil, 0, 0, fmt.Errorf("readarr queue: %w", err)
 		}
 		items := make([]queue.Item, 0, len(resp.Records))
 		for _, r := range resp.Records {
