@@ -48,6 +48,10 @@ type File struct {
 	Branch     string               `json:"branch,omitempty"`
 	Commit     string               `json:"commit"`
 	Operations map[string]Operation `json:"operations"`
+	// Commands maps the name of each command the client sends ("EpisodeSearch") to the sorted
+	// JSON names of the properties its upstream class has. A body carries "name" and exactly
+	// these.
+	Commands map[string][]string `json:"commands,omitempty"`
 }
 
 // FileName is the name of the contract file of spec inside the cache directory.

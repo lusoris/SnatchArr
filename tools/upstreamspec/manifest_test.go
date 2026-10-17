@@ -98,6 +98,12 @@ func TestReadManifest(t *testing.T) {
 		{"an operation with a query", with("operations", "operations: ['GET /api/v1/status?x=1']"), `must be "GET <path>" or "POST <path>"`},
 		{"an operation outside the prefix", with("operations", "operations: [GET /api/v3/status]"), `does not start with the prefix "/api/v1"`},
 		{"an operation listed twice", with("operations", "operations: [GET /api/v1/status, GET /api/v1/status]"), "is listed twice"},
+		{"a command class", with("operations", "operations: [POST /api/v1/command]\n    commands: [{path: src/A.cs, sha256: "+someSHA256+"}]"), ""},
+		{"a command class that is no C# file", with("operations", "operations: [GET /api/v1/status]\n    commands: [{path: src/A.json, sha256: "+someSHA256+"}]"), "one clean path of a .cs file"},
+		{"a command class outside the repository", with("operations", "operations: [GET /api/v1/status]\n    commands: [{path: ../A.cs, sha256: "+someSHA256+"}]"), "one clean path of a .cs file"},
+		{"a command class without a checksum", with("operations", "operations: [GET /api/v1/status]\n    commands: [{path: src/A.cs}]"), "sha256 must be 64"},
+		{"two command classes with one file name", with("operations", "operations: [GET /api/v1/status]\n    commands: [{path: a/A.cs, sha256: "+someSHA256+"}, {path: b/A.cs, sha256: "+someSHA256+"}]"), "repeats the file name"},
+		{"commands sent and no class pinned", with("operations", "operations: [POST /api/v1/command]"), "commands pins no class"},
 		{"a name used twice", entry(nil) + strings.TrimPrefix(entry(nil), "specs:\n"), "specs[1] (sample): repeats the name"},
 		{"one commit under two repositories", entry(nil) + strings.TrimPrefix(entry(otherProject), "specs:\n"), "specs[1] (other): repeats the commit of Owner/Project"},
 	}
