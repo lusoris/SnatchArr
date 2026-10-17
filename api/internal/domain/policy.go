@@ -60,7 +60,10 @@ type Policy struct {
 	// date is the one the app kind uses; for Radarr it is the date of RadarrReleaseType.
 	ReleaseDelay time.Duration
 	DryRun       bool
-	UpdatedAt    time.Time
+	// SkipUnavailableMovies skips Radarr movies whose minimum availability is not reached
+	// (isAvailable false); records without the flag are searched.
+	SkipUnavailableMovies bool
+	UpdatedAt             time.Time
 }
 
 // DefaultPolicy returns the gentle defaults for a new instance.
@@ -89,6 +92,7 @@ func DefaultPolicy(instanceID uuid.UUID) Policy {
 		IncludeQualityProfiles: []int32{},
 		ExcludeQualityProfiles: []int32{},
 		DryRun:                 false,
+		SkipUnavailableMovies:  true,
 	}
 }
 

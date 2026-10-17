@@ -439,6 +439,8 @@ struct MovieLike {
     physical_release: Option<DateTime<Utc>>,
     digital_release: Option<DateTime<Utc>>,
     in_cinemas: Option<DateTime<Utc>>,
+    /// Whether the movie has reached its minimum availability (#350).
+    is_available: Option<bool>,
     #[serde(default)]
     tags: Vec<i32>,
     quality_profile_id: Option<i32>,
@@ -858,6 +860,7 @@ fn episode_candidate(e: EpisodeLike) -> Candidate {
         ),
         release_unix: e.air_date_utc.map(|d| d.timestamp()),
         monitored: e.monitored && parent_monitored,
+        available: None,
         tags: labels.tags,
         profiles: labels.profiles,
     }
@@ -873,6 +876,7 @@ fn scene_candidate(s: SceneLike) -> Candidate {
         title: s.title,
         release_unix: s.release_date.as_ref().and_then(DateOnly::unix),
         monitored: s.monitored && parent_monitored,
+        available: None,
         tags: labels.tags,
         profiles: labels.profiles,
     }
@@ -884,14 +888,17 @@ fn movie_candidate(m: MovieLike, release: RadarrRelease) -> Candidate {
         RadarrRelease::Digital => m.digital_release,
         RadarrRelease::Cinema => m.in_cinemas,
     };
-    titled_movie(
+    let available = m.is_available;
+    let mut c = titled_movie(
         m.id,
         m.title,
         m.year,
         date,
         m.monitored,
         Labels::of(m.tags, [m.quality_profile_id]),
-    )
+    );
+    c.available = available;
+    c
 }
 
 fn whisparr_movie_candidate(m: WhisparrMovieLike) -> Candidate {
@@ -918,6 +925,7 @@ fn titled_movie(
         },
         release_unix: date.map(|d| d.timestamp()),
         monitored,
+        available: None,
         tags: labels.tags,
         profiles: labels.profiles,
     }
@@ -941,6 +949,7 @@ fn child_candidate(c: ChildLike) -> Candidate {
         title: c.title,
         release_unix: c.release_date.map(|d| d.timestamp()),
         monitored: c.monitored && parent_monitored,
+        available: None,
         tags: labels.tags,
         profiles: labels.profiles,
     }
@@ -1404,6 +1413,31 @@ mod tests {
     fn an_episode_without_a_number_does_not_decode() {
         let scene = serde_json::json!({"id": 1, "seriesId": 2, "seasonNumber": 1});
         assert!(serde_json::from_value::<EpisodeLike>(scene).is_err());
+    }
+
+    // Radarr's minimum availability (#350): `isAvailable` true and false are read, a record
+    // without it stays unknown, and a Whisparr v3 movie never carries it.
+    #[test]
+    fn a_radarr_movie_carries_its_availability() -> TestResult {
+        let read = |extra: serde_json::Value| -> Result<Option<bool>, serde_json::Error> {
+            let mut movie = serde_json::json!({"id": 4, "title": "A movie", "monitored": true});
+            if let (Some(m), Some(e)) = (movie.as_object_mut(), extra.as_object()) {
+                m.extend(e.clone());
+            }
+            let m: MovieLike = serde_json::from_value(movie)?;
+            Ok(movie_candidate(m, RadarrRelease::Physical).available)
+        };
+        assert_eq!(read(serde_json::json!({"isAvailable": true}))?, Some(true));
+        assert_eq!(
+            read(serde_json::json!({"isAvailable": false}))?,
+            Some(false)
+        );
+        assert_eq!(read(serde_json::json!({}))?, None);
+        let w: WhisparrMovieLike = serde_json::from_value(
+            serde_json::json!({"id": 4, "monitored": true, "isAvailable": false}),
+        )?;
+        assert_eq!(whisparr_movie_candidate(w).available, None);
+        Ok(())
     }
 
     // Whisparr v3 has one release date, whichever date Radarr's setting would pick.

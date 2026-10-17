@@ -47,6 +47,7 @@ SPDX-License-Identifier: EUPL-1.2
 		include_quality_profiles: [],
 		exclude_quality_profiles: [],
 		release_delay_h: 0,
+		skip_unavailable_movies: true,
 		dry_run: false
 	} satisfies Partial<Policy>;
 	let draft = $state<Policy | null>(null);
@@ -234,6 +235,15 @@ SPDX-License-Identifier: EUPL-1.2
 			><input type="checkbox" bind:checked={draft.await_command} />
 			{m.policy_await_command()}</label
 		>
+		{#if instance.data?.kind === 'radarr'}
+			<div class="flex flex-col gap-0.5 md:col-span-2">
+				<label class="flex items-center gap-2">
+					<input type="checkbox" bind:checked={draft.skip_unavailable_movies} />
+					{m.policy_skip_unavailable()}
+				</label>
+				<p class="text-xs text-subtle">{m.policy_skip_unavailable_hint()}</p>
+			</div>
+		{/if}
 		<div class="flex flex-col gap-0.5 md:col-span-2">
 			<label class="flex items-center gap-2">
 				<input type="checkbox" bind:checked={draft.dry_run} />

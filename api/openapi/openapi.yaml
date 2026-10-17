@@ -2112,6 +2112,10 @@ components:
           type: boolean
           default: false
           description: "When true, planner creates preview / dry-run runs that do not dispatch searches."
+        skip_unavailable_movies:
+          type: boolean
+          default: true
+          description: "Radarr only: skip movies Radarr reports as not yet available (isAvailable false, the movie's minimum availability is not reached). They are not searched and cost no stamina. Movies without the flag are searched. Absent = true."
         updated_at:
           type: string
           format: date-time

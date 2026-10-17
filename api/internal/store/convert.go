@@ -75,6 +75,7 @@ func PolicyFromRow(r sqlcgen.SnatchPolicy) domain.Policy {
 		ExcludeQualityProfiles: r.ExcludeQualityProfiles,
 		ReleaseDelay:           time.Duration(r.ReleaseDelayH) * time.Hour,
 		DryRun:                 r.DryRun,
+		SkipUnavailableMovies:  r.SkipUnavailableMovies,
 		UpdatedAt:              r.UpdatedAt,
 	}
 }
@@ -106,6 +107,7 @@ func PolicyParams(p domain.Policy, now time.Time) sqlcgen.UpsertPolicyParams {
 		ExcludeQualityProfiles: domain.FilterIDs(p.ExcludeQualityProfiles),
 		ReleaseDelayH:          int32(p.ReleaseDelay / time.Hour), // #nosec G115 -- validated 0..8760
 		DryRun:                 p.DryRun,
+		SkipUnavailableMovies:  p.SkipUnavailableMovies,
 		UpdatedAt:              now,
 	}
 }

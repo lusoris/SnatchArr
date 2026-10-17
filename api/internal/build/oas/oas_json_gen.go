@@ -11770,6 +11770,12 @@ func (s *SnatchPolicy) encodeFields(e *jx.Encoder) {
 		}
 	}
 	{
+		if s.SkipUnavailableMovies.Set {
+			e.FieldStart("skip_unavailable_movies")
+			s.SkipUnavailableMovies.Encode(e)
+		}
+	}
+	{
 		if s.UpdatedAt.Set {
 			e.FieldStart("updated_at")
 			s.UpdatedAt.Encode(e, json.EncodeDateTime)
@@ -11777,7 +11783,7 @@ func (s *SnatchPolicy) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfSnatchPolicy = [24]string{
+var jsonFieldsNameOfSnatchPolicy = [25]string{
 	0:  "missing_per_cycle",
 	1:  "upgrade_per_cycle",
 	2:  "cycle_interval_s",
@@ -11801,7 +11807,8 @@ var jsonFieldsNameOfSnatchPolicy = [24]string{
 	20: "exclude_quality_profiles",
 	21: "release_delay_h",
 	22: "dry_run",
-	23: "updated_at",
+	23: "skip_unavailable_movies",
+	24: "updated_at",
 }
 
 // Decode decodes SnatchPolicy from json.
@@ -11809,7 +11816,7 @@ func (s *SnatchPolicy) Decode(d *jx.Decoder) error {
 	if s == nil {
 		return errors.New("invalid: unable to decode SnatchPolicy to nil")
 	}
-	var requiredBitSet [3]uint8
+	var requiredBitSet [4]uint8
 	s.setDefaults()
 
 	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
@@ -12104,6 +12111,16 @@ func (s *SnatchPolicy) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"dry_run\"")
 			}
+		case "skip_unavailable_movies":
+			if err := func() error {
+				s.SkipUnavailableMovies.Reset()
+				if err := s.SkipUnavailableMovies.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"skip_unavailable_movies\"")
+			}
 		case "updated_at":
 			if err := func() error {
 				s.UpdatedAt.Reset()
@@ -12123,10 +12140,11 @@ func (s *SnatchPolicy) Decode(d *jx.Decoder) error {
 	}
 	// Validate required fields.
 	var failures []validate.FieldError
-	for i, mask := range [3]uint8{
+	for i, mask := range [4]uint8{
 		0b11111111,
 		0b11111111,
 		0b00000001,
+		0b00000000,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.

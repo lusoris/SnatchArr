@@ -167,6 +167,7 @@ func policyToOAS(p domain.Policy) *oas.SnatchPolicy {
 		ExcludeQualityProfiles: domain.FilterIDs(p.ExcludeQualityProfiles),
 		ReleaseDelayH:          oas.NewOptInt(int(p.ReleaseDelay / time.Hour)),
 		DryRun:                 oas.NewOptBool(p.DryRun),
+		SkipUnavailableMovies:  oas.NewOptBool(p.SkipUnavailableMovies),
 		UpdatedAt:              oas.NewOptDateTime(p.UpdatedAt),
 	}
 }
@@ -197,6 +198,7 @@ func policyFromOAS(instanceID uuid.UUID, in *oas.SnatchPolicy) domain.Policy {
 		ExcludeQualityProfiles: domain.FilterIDs(in.ExcludeQualityProfiles),
 		ReleaseDelay:           time.Duration(in.ReleaseDelayH.Or(0)) * time.Hour,
 		DryRun:                 in.DryRun.Or(false),
+		SkipUnavailableMovies:  in.SkipUnavailableMovies.Or(true),
 	}
 }
 

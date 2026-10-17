@@ -189,6 +189,8 @@ const FOCUS_PAGE_SIZE: u32 = 500;
 struct Collected {
     keep: Vec<Candidate>,
     busy: usize,
+    /// Dropped only because the app reports them as not yet available (#350).
+    unavailable: usize,
     priority_ids: Vec<i64>,
     priority_groups: Vec<i64>,
 }
@@ -260,6 +262,7 @@ fn filter_of(p: &Policy, now_unix: i64) -> Filter {
             include: p.include_quality_profiles.clone(),
             exclude: p.exclude_quality_profiles.clone(),
         },
+        skip_unavailable: p.skip_unavailable_movies,
     }
 }
 
@@ -554,10 +557,11 @@ async fn snatch(
         .await;
     let c = collect_candidates(client, &p, run, &plan.pages, first).await?;
     let msg = format!(
-        "{} candidate(s) after filters and afterglow; {} skipped as queued or grabbed within {} h; {} requested via Seerr",
+        "{} candidate(s) after filters and afterglow; {} skipped as queued or grabbed within {} h; {} skipped as not yet available; {} requested via Seerr",
         c.keep.len(),
         c.busy,
         p.policy.recent_grab_hours,
+        c.unavailable,
         c.priority_ids.len().saturating_add(c.priority_groups.len())
     );
     events
@@ -715,6 +719,7 @@ async fn collect_candidates(
     }
     let filter = filter_of(&p.policy, chrono::Utc::now().timestamp());
     let filtered = snatch_core::filter(&candidates, &filter);
+    let unavailable = snatch_core::unavailable_count(&candidates, &filter);
     let busy = p.arr.busy_ids(p.policy.recent_grab_hours).await?;
     let before = filtered.len();
     let filtered: Vec<Candidate> = filtered
@@ -741,6 +746,7 @@ async fn collect_candidates(
     Ok(Collected {
         keep,
         busy: skipped,
+        unavailable,
         priority_ids: resp.priority_ids,
         priority_groups: resp.priority_group_ids,
     })

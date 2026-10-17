@@ -129,4 +129,8 @@ func (s *SnatchPolicy) setDefaults() {
 		val := bool(false)
 		s.DryRun.SetTo(val)
 	}
+	{
+		val := bool(true)
+		s.SkipUnavailableMovies.SetTo(val)
+	}
 }

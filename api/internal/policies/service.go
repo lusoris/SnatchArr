@@ -50,7 +50,17 @@ func (s *Service) Update(ctx context.Context, p domain.Policy) (domain.Policy, e
 	if _, err := s.st.Q().GetInstance(ctx, p.InstanceID); err != nil {
 		return domain.Policy{}, fmt.Errorf("policies: instance: %w", store.MapError(err))
 	}
-	row, err := s.st.Q().UpsertPolicy(ctx, store.PolicyParams(p, s.clk.Now()))
+	var row sqlcgen.SnatchPolicy
+	err := s.st.Tx(ctx, func(q *sqlcgen.Queries) error {
+		if txErr := q.UpsertPolicy(ctx, store.PolicyParams(p, s.clk.Now())); txErr != nil {
+			return fmt.Errorf("write: %w", txErr)
+		}
+		var txErr error
+		if row, txErr = q.GetPolicy(ctx, p.InstanceID); txErr != nil {
+			return fmt.Errorf("read back: %w", txErr)
+		}
+		return nil
+	})
 	if err != nil {
 		return domain.Policy{}, fmt.Errorf("policies: upsert: %w", store.MapError(err))
 	}

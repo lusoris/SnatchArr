@@ -689,6 +689,15 @@ fn filter_of_converts_the_release_delay_to_seconds() {
     assert_eq!(f.now_unix, 100_000);
     assert_eq!(f.tags.include, vec![7]);
     assert_eq!(f.profiles.exclude, vec![9]);
+    assert!(
+        !f.skip_unavailable,
+        "an API that never sets the field skips nothing"
+    );
+    let on = Policy {
+        skip_unavailable_movies: true,
+        ..Policy::default()
+    };
+    assert!(filter_of(&on, 0).skip_unavailable);
     // Boundary: the largest hour count does not overflow.
     let max = Policy {
         release_delay_hours: u32::MAX,
@@ -698,6 +707,79 @@ fn filter_of_converts_the_release_delay_to_seconds() {
         filter_of(&max, 0).release_delay_secs,
         i64::from(u32::MAX) * 3600
     );
+}
+
+/// A Radarr missing run over movie 1 (available), 2 (not yet available) and 3 (no flag): the
+/// searched movie ids, the budget asked for, and the candidates_filtered title.
+async fn radarr_availability_run(
+    skip_unavailable: bool,
+) -> Result<(Vec<i64>, usize, String), Box<dyn std::error::Error>> {
+    let api = FakeApi {
+        filter_unprocessed: vec![1, 2, 3],
+        ..Default::default()
+    };
+    let (client, _) = start_fake_api(api.clone()).await?;
+    let mock_server = MockServer::start().await;
+    let movie = |id: i64, available: Option<bool>| {
+        let mut m = serde_json::json!({"id": id, "title": format!("Film {id}"), "monitored": true});
+        if let (Some(m), Some(a)) = (m.as_object_mut(), available) {
+            m.insert("isAvailable".to_owned(), serde_json::Value::Bool(a));
+        }
+        m
+    };
+    let records = serde_json::json!([movie(1, Some(true)), movie(2, Some(false)), movie(3, None)]);
+    mount_sonarr_wanted(&mock_server, records).await;
+    mount_command(&mock_server, queued_command()).await;
+    let mut run = default_run(&mock_server.uri());
+    run.app = AppKind::Radarr as i32;
+    some(run.policy.as_mut(), "policy")?.skip_unavailable_movies = skip_unavailable;
+    run_short_polling(client, run).await;
+    let requests = some(mock_server.received_requests().await, "recorded requests")?;
+    let mut ids = Vec::new();
+    for post in command_posts(&requests) {
+        let body: serde_json::Value = serde_json::from_slice(&post.body)?;
+        let searched = some(body.get("movieIds").and_then(|v| v.as_array()), "movieIds")?;
+        ids.extend(searched.iter().filter_map(serde_json::Value::as_i64));
+    }
+    ids.sort_unstable();
+    let asked = api
+        .budget_calls
+        .lock()
+        .await
+        .iter()
+        .flat_map(|(items, _)| items.iter().map(|i| i.cost as usize))
+        .sum();
+    let detail = api
+        .reported_events
+        .lock()
+        .await
+        .iter()
+        .find(|e| e.r#type == EventType::CandidatesFiltered as i32)
+        .map(|e| e.title.clone())
+        .unwrap_or_default();
+    Ok((ids, asked, detail))
+}
+
+// Radarr minimum availability (#350): a movie Radarr reports as not yet available is neither
+// searched nor charged, a movie without the flag is kept, and the skip is named in the run's
+// events. Negative: with the switch off every movie is searched.
+#[tokio::test]
+async fn unavailable_movies_are_skipped_before_budget() -> TestResult {
+    let (ids, asked, detail) = radarr_availability_run(true).await?;
+    assert_eq!(ids, [1, 3]);
+    assert_eq!(asked, 2, "the unavailable movie asks for no budget");
+    assert!(
+        detail.contains("1 skipped as not yet available"),
+        "title: {detail}"
+    );
+    let (ids, asked, detail) = radarr_availability_run(false).await?;
+    assert_eq!(ids, [1, 2, 3]);
+    assert_eq!(asked, 3);
+    assert!(
+        detail.contains("0 skipped as not yet available"),
+        "title: {detail}"
+    );
+    Ok(())
 }
 
 #[tokio::test]

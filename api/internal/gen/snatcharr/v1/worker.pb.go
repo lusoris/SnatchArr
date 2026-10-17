@@ -601,8 +601,11 @@ type Policy struct {
 	// Skip items released less than this many hours ago (0 = no delay). The release date is the
 	// one the app kind uses: air date, the Radarr release type's date, album or book release.
 	ReleaseDelayHours uint32 `protobuf:"varint,16,opt,name=release_delay_hours,json=releaseDelayHours,proto3" json:"release_delay_hours,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Skip movies Radarr reports as not yet available (isAvailable false: the minimum availability
+	// of the movie is not reached). Records without the flag are kept. Radarr only.
+	SkipUnavailableMovies bool `protobuf:"varint,17,opt,name=skip_unavailable_movies,json=skipUnavailableMovies,proto3" json:"skip_unavailable_movies,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *Policy) Reset() {
@@ -745,6 +748,13 @@ func (x *Policy) GetReleaseDelayHours() uint32 {
 		return x.ReleaseDelayHours
 	}
 	return 0
+}
+
+func (x *Policy) GetSkipUnavailableMovies() bool {
+	if x != nil {
+		return x.SkipUnavailableMovies
+	}
+	return false
 }
 
 type LeaseRunRequest struct {
@@ -1793,7 +1803,7 @@ var File_snatcharr_v1_worker_proto protoreflect.FileDescriptor
 
 const file_snatcharr_v1_worker_proto_rawDesc = "" +
 	"\n" +
-	"\x19snatcharr/v1/worker.proto\x12\fsnatcharr.v1\"\xec\x05\n" +
+	"\x19snatcharr/v1/worker.proto\x12\fsnatcharr.v1\"\xa4\x06\n" +
 	"\x06Policy\x12\x1b\n" +
 	"\tper_cycle\x18\x01 \x01(\rR\bperCycle\x125\n" +
 	"\tselection\x18\x02 \x01(\x0e2\x17.snatcharr.v1.SelectionR\tselection\x12%\n" +
@@ -1813,7 +1823,8 @@ const file_snatcharr_v1_worker_proto_rawDesc = "" +
 	"\fexclude_tags\x18\r \x03(\x05R\vexcludeTags\x128\n" +
 	"\x18include_quality_profiles\x18\x0e \x03(\x05R\x16includeQualityProfiles\x128\n" +
 	"\x18exclude_quality_profiles\x18\x0f \x03(\x05R\x16excludeQualityProfiles\x12.\n" +
-	"\x13release_delay_hours\x18\x10 \x01(\rR\x11releaseDelayHours\"Q\n" +
+	"\x13release_delay_hours\x18\x10 \x01(\rR\x11releaseDelayHours\x126\n" +
+	"\x17skip_unavailable_movies\x18\x11 \x01(\bR\x15skipUnavailableMovies\"Q\n" +
 	"\x0fLeaseRunRequest\x12\x1b\n" +
 	"\tworker_id\x18\x01 \x01(\tR\bworkerId\x12!\n" +
 	"\fwait_seconds\x18\x02 \x01(\rR\vwaitSeconds\"D\n" +

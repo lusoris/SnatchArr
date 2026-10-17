@@ -80,6 +80,8 @@
 	"policy_include_profiles": "Nur Einträge mit einem dieser Qualitätsprofile",
 	"policy_exclude_profiles": "Nie Einträge mit diesen Qualitätsprofilen",
 	"policy_release_delay": "Wartezeit nach Veröffentlichung (Stunden)",
+	"policy_skip_unavailable": "Noch nicht verfügbare Filme überspringen",
+	"policy_skip_unavailable_hint": "Lässt Filme aus, die Radarr nach ihrer Mindestverfügbarkeit noch nicht als verfügbar führt.",
 	"policy_dry_run": "Nur Vorschau / Probelauf",
 	"policy_dry_run_hint": "Geplante Läufe dieser Instanz zeigen ihre Ziele nur in der Vorschau und suchen nie.",
 	"policy_saved": "Regeln gespeichert",

@@ -5839,8 +5839,12 @@ type SnatchPolicy struct {
 	// (Radarr, Whisparr v3), the album or book release date. Items without a date are kept.
 	ReleaseDelayH OptInt `json:"release_delay_h"`
 	// When true, planner creates preview / dry-run runs that do not dispatch searches.
-	DryRun    OptBool     `json:"dry_run"`
-	UpdatedAt OptDateTime `json:"updated_at"`
+	DryRun OptBool `json:"dry_run"`
+	// Radarr only: skip movies Radarr reports as not yet available (isAvailable false, the movie's
+	// minimum availability is not reached). They are not searched and cost no stamina. Movies without
+	// the flag are searched. Absent = true.
+	SkipUnavailableMovies OptBool     `json:"skip_unavailable_movies"`
+	UpdatedAt             OptDateTime `json:"updated_at"`
 }
 
 // GetMissingPerCycle returns the value of MissingPerCycle.
@@ -5956,6 +5960,11 @@ func (s *SnatchPolicy) GetReleaseDelayH() OptInt {
 // GetDryRun returns the value of DryRun.
 func (s *SnatchPolicy) GetDryRun() OptBool {
 	return s.DryRun
+}
+
+// GetSkipUnavailableMovies returns the value of SkipUnavailableMovies.
+func (s *SnatchPolicy) GetSkipUnavailableMovies() OptBool {
+	return s.SkipUnavailableMovies
 }
 
 // GetUpdatedAt returns the value of UpdatedAt.
@@ -6076,6 +6085,11 @@ func (s *SnatchPolicy) SetReleaseDelayH(val OptInt) {
 // SetDryRun sets the value of DryRun.
 func (s *SnatchPolicy) SetDryRun(val OptBool) {
 	s.DryRun = val
+}
+
+// SetSkipUnavailableMovies sets the value of SkipUnavailableMovies.
+func (s *SnatchPolicy) SetSkipUnavailableMovies(val OptBool) {
+	s.SkipUnavailableMovies = val
 }
 
 // SetUpdatedAt sets the value of UpdatedAt.
