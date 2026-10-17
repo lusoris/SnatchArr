@@ -37,3 +37,5 @@ tokio = { workspace = true, features = ["test-util"] }
 wiremock.workspace = true
 tonic = { workspace = true, features = ["router", "server"] }
 snatch-proto = { workspace = true, features = ["server"] }
+# resend.rs builds a real unsent-request refusal on an HTTP/2 client connection.
+hyper = { workspace = true, features = ["client", "http2"] }
