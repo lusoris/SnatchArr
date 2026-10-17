@@ -40,3 +40,14 @@ npm run build
 You can preview the production build with `npm run preview`.
 
 > To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+
+## Visual baseline
+
+`make web-visual` compares `/login` and `/setup` (en and de, light and dark) with the PNGs in
+`e2e/visual`. It runs `e2e/visual.test.ts` inside the Playwright image pinned by version and
+digest in `e2e/visual-image.env`, so the pixels never depend on the host's fonts, browsers or
+GPU; it needs Docker. Two planted visual changes run first and must fail the comparison.
+
+After an intended change to these pages, run `make web-visual-update`, look at the changed PNGs
+in the diff, and commit them with the change. The image version must equal `@playwright/test`
+in `pnpm-lock.yaml`; Renovate moves both in one pull request (group `playwright`).
