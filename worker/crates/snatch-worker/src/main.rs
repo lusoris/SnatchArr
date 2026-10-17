@@ -12,12 +12,13 @@ mod config;
 mod executor;
 mod health;
 mod probe;
+mod resend;
 
 use std::sync::Arc;
 use std::time::Duration;
 
 use snatch_proto::worker_service_client::WorkerServiceClient;
-use snatch_proto::{HeartbeatDirective, HeartbeatRequest, LeaseRunRequest};
+use snatch_proto::{HeartbeatDirective, HeartbeatRequest, LeaseRunRequest, LeaseRunResponse};
 use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;
 use tonic::Request;
@@ -81,7 +82,7 @@ async fn shutdown_signal() {
 
 /// Heartbeats a run until the run finishes or the API asks for cancellation.
 async fn heartbeat(
-    mut client: Client,
+    client: Client,
     run_id: String,
     worker_id: String,
     every: Duration,
@@ -95,7 +96,13 @@ async fn heartbeat(
             _ = cancel.cancelled() => return,
             _ = ticker.tick() => {
                 let req = HeartbeatRequest { run_id: run_id.clone(), worker_id: worker_id.clone() };
-                let resp = match client.heartbeat(Request::new(req)).await {
+                let resp = match resend::once_more(|| {
+                    let mut c = client.clone();
+                    let req = req.clone();
+                    async move { c.heartbeat(Request::new(req)).await }
+                })
+                .await
+                {
                     Ok(resp) => resp,
                     Err(status) => {
                         health.failure(Call::Heartbeat);
@@ -114,9 +121,26 @@ async fn heartbeat(
     }
 }
 
+/// One `LeaseRun` long-poll, sent once more when a closing connection refused it unsent.
+async fn lease(
+    client: &Client,
+    cfg: &Config,
+) -> Result<tonic::Response<LeaseRunResponse>, tonic::Status> {
+    let req = LeaseRunRequest {
+        worker_id: cfg.worker_id.clone(),
+        wait_seconds: cfg.lease_wait_secs,
+    };
+    resend::once_more(|| {
+        let mut c = client.clone();
+        let req = req.clone();
+        async move { c.lease_run(Request::new(req)).await }
+    })
+    .await
+}
+
 async fn lease_loop(
     cfg: Arc<Config>,
-    mut client: Client,
+    client: Client,
     health: Arc<Health>,
     stop: CancellationToken,
 ) {
@@ -127,12 +151,8 @@ async fn lease_loop(
         let Ok(permit) = permits.clone().acquire_owned().await else {
             break;
         };
-        let req = LeaseRunRequest {
-            worker_id: cfg.worker_id.clone(),
-            wait_seconds: cfg.lease_wait_secs,
-        };
         let lease = tokio::select! {
-            r = client.lease_run(Request::new(req)) => r,
+            r = lease(&client, &cfg) => r,
             _ = stop.cancelled() => break,
         };
         match lease {
@@ -199,7 +219,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client = connect(&cfg).await?;
     let health = Arc::new(Health::new(cfg.stale));
     let listener = health::bind(cfg.http_addr).await?;
-    tracing::info!(addr = %listener.local_addr()?, stale_secs = cfg.stale.as_secs(), "health listener on /livez and /metrics");
+    tracing::info!(addr = %listener.local_addr()?, stale_secs = cfg.stale.as_secs(), "health listener on /livez, /readyz and /metrics");
     // The listener outlives the drain below: a terminating worker still answers its probe.
     let http_stop = CancellationToken::new();
     let http = tokio::spawn(health::serve(listener, health.clone(), http_stop.clone()));

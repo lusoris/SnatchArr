@@ -13,7 +13,7 @@ Pod Security Standard.
 | Artifact | Where |
 | --- | --- |
 | `ghcr.io/lusoris/snatcharr-api` | Go control plane + embedded SPA (HTTP 8080, gRPC 9090) |
-| `ghcr.io/lusoris/snatcharr-worker` | Rust snatch-worker (HTTP 8081: `/livez`, `/metrics`) |
+| `ghcr.io/lusoris/snatcharr-worker` | Rust snatch-worker (HTTP 8081: `/livez`, `/readyz`, `/metrics`) |
 | `oci://ghcr.io/lusoris/charts/snatcharr` | Helm chart |
 
 Every image and the chart are signed with cosign (keyless, GitHub OIDC) and carry a SLSA
@@ -119,7 +119,7 @@ error named.
 | Resource | Notes |
 | --- | --- |
 | Deployment `-api` | probes on `/startupz`, `/livez`, `/readyz` (readiness: Postgres and the leader gate, which is down while the election fails or a periodic loop failed to start); `/tmp` is a memory-backed emptyDir; `replicaCount` may exceed 1, periodic work runs on the elected replica |
-| Deployment `-worker` | dials `<release>-api:9090`; liveness probe on `/livez` (port `worker.httpPort`, 8081), which fails once no API call succeeded for `worker.staleSecs` (180 s); `/metrics` there counts failed API calls per call in `snatcharr_worker_api_failures_total`; optional HPA 1..4 on CPU, or a KEDA ScaledObject on queued runs (below) |
+| Deployment `-worker` | dials `<release>-api:9090`; liveness probe on `/livez` (port `worker.httpPort`, 8081), which fails once no API call succeeded for `worker.staleSecs` (180 s); readiness probe on `/readyz`, which also fails until the first successful API call (a lease long-poll returns within `worker.leaseWaitSecs`), so the Deployment is Available only once its workers reached the API; `/metrics` there counts failed API calls per call in `snatcharr_worker_api_failures_total`; optional HPA 1..4 on CPU, or a KEDA ScaledObject on queued runs (below) |
 | Service `-api` | `http` 8080, `grpc` 9090 (h2c) |
 | Ingress or HTTPRoute | `api.ingress.*` or `api.httpRoute.*` |
 | CNPG `Cluster` `-db` | `postgres.cnpg.*`; the API reads the DSN from the operator's `-db-app` Secret |
@@ -233,7 +233,9 @@ the environment variable optional so existing clusters continue running without 
 
 `postgres.cnpg.enabled=true` (default) renders a CloudNativePG `Cluster` with
 `postgres.cnpg.instances` replicas and `postgres.cnpg.storage.size` per instance;
-`postgres.cnpg.extraSpec` is merged verbatim for backups, affinity or parameters.
+`postgres.cnpg.extraSpec` is merged verbatim for backups, affinity or parameters, and
+`postgres.cnpg.bootstrap` replaces the default `initdb` bootstrap, for a restore (see
+[Backup and restore](#backup-and-restore)).
 For an external database set `postgres.cnpg.enabled=false` and point
 `postgres.external.dsnSecretRef` at a Secret holding the DSN. Only the API connects to
 Postgres.
@@ -276,6 +278,64 @@ the migrator ignored these settings and the API crash-looped on
 the DSN itself. An explicit `APP_DB_MIGRATE_DSN` is used exactly as given: it carries its own
 password and TLS parameters. `TestMigratorConnection` in `api/internal/app` checks both rules
 against a real server.
+
+#### Backup and restore
+
+With CloudNativePG, back up through the Barman Cloud plugin (the operator's in-tree
+`barmanObjectStore` is deprecated). Install cert-manager and the plugin in the operator's
+namespace as the plugin's installation docs describe, create an `ObjectStore` for your S3
+bucket, and turn on WAL archiving in the chart:
+
+```yaml
+postgres:
+  cnpg:
+    extraSpec:
+      plugins:
+        - name: barman-cloud.cloudnative-pg.io
+          isWALArchiver: true
+          parameters:
+            barmanObjectName: snatcharr-backups
+```
+
+Take base backups with a `ScheduledBackup` or an on-demand `Backup` of `method: plugin`. Keep
+a copy of the `<release>-secrets` Secret with the backups: its crypto key decrypts the *arr API
+keys and download-client passwords in the database, and a restored database without it means
+re-entering them. The chart keeps this Secret when the release is uninstalled.
+
+To restore, install the chart with a recovery bootstrap instead of `initdb`, pointing an
+external cluster at the store and at the `serverName` of the lost cluster (by default its name,
+`<release>-db`):
+
+```yaml
+postgres:
+  cnpg:
+    bootstrap:
+      recovery:
+        source: backup
+        database: snatcharr
+        owner: snatcharr
+    extraSpec:
+      externalClusters:
+        - name: backup
+          plugin:
+            name: barman-cloud.cloudnative-pg.io
+            parameters:
+              barmanObjectName: snatcharr-backups
+              serverName: snatcharr-db
+```
+
+`database` and `owner` make the operator create the `<release>-db-app` Secret the API reads its
+DSN from. The recovered cluster archives nothing until you add the `plugins` entry again; give it
+a new `serverName` parameter (for example `snatcharr-db-restored`) so it does not write into the
+archive it was restored from. A bootstrap key inside `extraSpec` is refused, since it would
+repeat the chart's own.
+
+`make e2e-cnpg-backup-restore` runs these steps in CI on a kind cluster with the operator,
+cert-manager, the plugin and a RustFS store (`tools/e2e/cnpg_backup_restore.sh`). It completes
+the setup, takes a base backup, uninstalls the release and its database, and restores. It then
+checks that every table reads back unchanged, that archiving runs again under the new
+`serverName`, and that the API starts with the setup complete and the old password. A planted
+reinstall without the recovery bootstrap must be refused first.
 
 #### Postgres major upgrade
 
@@ -401,6 +461,7 @@ processes on the host.
 - Proves the embedded SvelteKit SPA serves `index.html` (text/html with SvelteKit markers) and hashed static assets (`/_app/immutable/...`).
 - Proves runtime IANA time zone database availability by creating a disabled schedule window in `Europe/Berlin`: the API validates the zone with the image's zone data, since the binary embeds none.
 - Proves multi-worker run leasing, stamina caps, afterglow deduplication, and liveness probes.
+- Runs the api and both workers under the chart's `resources.limits.memory` (`docker run --memory`, no swap) and fails when a container's peak (cgroup `memory.peak`) passes 80 % of that limit (`MEM_SHARE`, `tools/e2e/mem_limits.sh`, cases in `tools/e2e/mem_limits_test.sh`). Measured on 2026-10-17: api 171 MiB of 256 MiB (67 %), each worker 8 MiB of 128 MiB. Raise a limit in `values.yaml` before the smoke fails, not after a pod is killed.
 
 The release workflow runs the same smoke on amd64 before it pushes images, then builds both images for arm64 and runs `tools/e2e/arm64-check.sh`. The check reads the ELF header of each entrypoint and refuses a binary that is not aarch64, because both Dockerfiles cross-compile on the build platform and an image labelled arm64 can carry an amd64 binary. It then runs each binary under QEMU: the API must stop on one of the config errors the check lists, the worker must log its start. CI's image smoke runs the same check on the amd64 images (`CHECK_ARCH=amd64`), so a changed startup error fails the pull request, not the release; `tools/e2e/arm64-check_test.sh` holds the cases of the list.
 

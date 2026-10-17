@@ -26,6 +26,7 @@ use tonic::{Code, Request, Status};
 
 use crate::auth::AuthInterceptor;
 use crate::health::{Call, Health};
+use crate::resend;
 
 /// Client type with the auth interceptor applied.
 pub type Client = WorkerServiceClient<InterceptedService<Channel, AuthInterceptor>>;
@@ -446,7 +447,13 @@ async fn handle_snatch(
 async fn complete(client: &mut Client, req: &CompleteRunRequest, retry: Retry, health: &Health) {
     let attempts = retry.attempts.max(1);
     for attempt in 1..=attempts {
-        let status = match client.complete_run(Request::new(req.clone())).await {
+        let sent = resend::once_more(|| {
+            let mut c = client.clone();
+            let req = req.clone();
+            async move { c.complete_run(Request::new(req)).await }
+        })
+        .await;
+        let status = match sent {
             Ok(_) => {
                 health.contact();
                 return;
@@ -720,10 +727,13 @@ async fn collect_candidates(
         entity_type: p.kind.entity_type().to_owned(),
         entity_ids: filtered.iter().map(|c| c.id).collect(),
     };
-    let resp = client
-        .filter_candidates(Request::new(req))
-        .await?
-        .into_inner();
+    let resp = resend::once_more(|| {
+        let mut c = client.clone();
+        let req = req.clone();
+        async move { c.filter_candidates(Request::new(req)).await }
+    })
+    .await?
+    .into_inner();
     let keep = filtered
         .into_iter()
         .filter(|c| resp.unprocessed_ids.contains(&c.id))
@@ -757,7 +767,13 @@ async fn acquire(
         requested,
         items,
     };
-    let grant = client.acquire_budget(Request::new(req)).await?.into_inner();
+    let grant = resend::once_more(|| {
+        let mut c = client.clone();
+        let req = req.clone();
+        async move { c.acquire_budget(Request::new(req)).await }
+    })
+    .await?
+    .into_inner();
     let msg = format!(
         "stamina: {} of {} indexer searches granted ({} left in the last 60 minutes)",
         grant.granted, requested, grant.remaining_in_window
