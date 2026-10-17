@@ -21,7 +21,7 @@ GOMODCACHE       = $(subst \,/,$(shell go env GOMODCACHE))
 GOLUSORIS_VER    = $(shell go list -m -f '{{.Version}}' github.com/golusoris/golusoris)
 GOLUSORIS_SHARED = $(GOMODCACHE)/github.com/golusoris/golusoris@$(GOLUSORIS_VER)/tools/Makefile.shared
 
-.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-compose-smoke e2e-compose-pg-upgrade e2e-cnpg-pg-upgrade e2e-chart-install web-verify web-e2e web-e2e-api proto-verify deploy-verify governance-verify hooks-verify contracts-verify workflows-verify workflows-lint secret-scan \
+.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-compose-smoke e2e-compose-pg-upgrade e2e-dev-compose-smoke e2e-cnpg-pg-upgrade e2e-chart-install web-verify web-e2e web-e2e-api proto-verify deploy-verify governance-verify hooks-verify contracts-verify workflows-verify workflows-lint secret-scan \
 	images kind-up kind-deploy kind-down \
         api-gen api-gosec gosec-install govulncheck-install tools-verify tools-lint tools-test tools-gosec web-gen proto-gen dev hooks setup
 
@@ -208,6 +208,15 @@ e2e-compose-pg-upgrade: ## Homelab compose bundle: Postgres previous major -> pi
 	  bash tools/e2e/planted.sh UPGRADE_PLANT tools/e2e/compose_pg_upgrade.sh \
 	  "skip-move:the new postgres" "skip-restore:data read-back differs"
 
+# The development stack of deploy/compose (`make dev` with the arr and observability profiles,
+# docs/metrics.md): Postgres healthy, Sonarr and Radarr answer, Prometheus scrapes the collector,
+# Grafana has its data source and the provisioned dashboard. The planted cases mount an empty
+# dashboard folder and point Prometheus at a closed port; the smoke must refuse both (gap audit
+# C9-08). Not in verify-all (slow, needs Docker).
+e2e-dev-compose-smoke: ## Dev compose stack with both profiles: services up, Prometheus target up, Grafana dashboard provisioned (needs Docker)
+	bash tools/e2e/planted.sh DEV_PLANT tools/e2e/dev_compose_smoke.sh \
+	  "no-dashboards:grafana provisioned 0 dashboards" "bad-target:the otel-collector target is not up"
+
 # The chart on CloudNativePG moved from the previous Postgres major to the current one by the
 # imageName change of docs/deployment.md, with data read-back and a planted upgrade without the
 # image change. Needs a cluster with the operator: CI runs it in the deploy job on kind; on a
@@ -227,6 +236,7 @@ web-verify: ## pnpm lint/typecheck/test(+coverage)/build + OpenAPI type drift
 	pnpm install --frozen-lockfile
 	pnpm gen:api
 	git diff --exit-code -- src/lib/api/schema.d.ts
+	sh ../tools/ci/prettier_ignore_test.sh
 	pnpm lint
 	pnpm typecheck
 	pnpm test -- --coverage

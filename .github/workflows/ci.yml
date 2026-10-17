@@ -185,6 +185,8 @@ jobs:
             web:
               - 'web/**'
               - 'api/openapi/**'
+              - 'tools/ci/prettier_ignore_test.sh'
+              - 'tools/ci/web_strings_scan.py'
               - '.github/workflows/ci.yml'
             proto:
               - 'proto/**'
@@ -195,6 +197,8 @@ jobs:
               - 'tools/e2e/cnpg_pg_upgrade.sh'
               - 'tools/e2e/chart_install.sh'
               - 'tools/e2e/fingerprint.sql'
+              - 'tools/e2e/dev_compose_smoke.sh'
+              - 'tools/e2e/planted.sh'
               # The deploy job installs the chart on images built from these (#144).
               - 'Dockerfile'
               - 'worker/Dockerfile'
@@ -525,6 +529,33 @@ jobs:
           SMOKE_POSTGRES_MIRROR: mirror.gcr.io/library
         run: make e2e-compose-pg-upgrade
 
+  dev-compose:
+    name: dev compose (make dev stack)
+    needs: changes
+    if: needs.changes.outputs.deploy == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    steps:
+      - name: Stop on a draft pull request
+        if: github.event.pull_request.draft == true
+        shell: bash
+        env:
+          TITLE: Gate not run on a draft
+          MESSAGE: >-
+            The gate did not run because the pull request is a draft.
+            It runs when the pull request is marked ready for review.
+        run: |
+          echo "::error title=$TITLE::$MESSAGE"
+          echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # deploy/compose with the arr and observability profiles, as `make dev` and docs/metrics.md
+      # start it, after two planted defects the smoke must refuse (gap audit C9-08).
+      - name: make e2e-dev-compose-smoke
+        run: make e2e-dev-compose-smoke
+
   web:
     name: web (SvelteKit)
     needs: changes
@@ -569,6 +600,14 @@ jobs:
           node-version: '24'
       - name: Install Playwright browsers
         run: cd web && pnpm install --frozen-lockfile && pnpm exec playwright install --with-deps chromium
+      # The repository's own web checks of make web-verify, which the shared sveltesentio
+      # workflow of the web job does not run: the Prettier ignore cases (C11-05) and the
+      # untranslated-string scan with its planted fixtures (B6-03).
+      - name: web checks (Prettier ignore, untranslated strings)
+        working-directory: web
+        run: |
+          sh ../tools/ci/prettier_ignore_test.sh
+          python3 ../tools/ci/web_strings_scan.py
       - name: make web-e2e-api
         env:
           SMOKE_DSN: postgres://postgres:smoke@127.0.0.1:5432/postgres?sslmode=disable
@@ -812,6 +851,7 @@ jobs:
       - worker
       - e2e
       - image-smoke
+      - dev-compose
       - web
       - web-e2e-api
       - proto
