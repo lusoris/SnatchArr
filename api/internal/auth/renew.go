@@ -19,7 +19,9 @@ import (
 // RenewSession signs userID in under a fresh session id and deletes the
 // request's previous session row, so an id known before the sign-in is
 // never authenticated (session fixation, #268). The new id replaces the
-// old one in the response cookie.
+// old one in the response cookie. golusoris auth/session gains
+// Manager.Renew for this (golusoris/golusoris#931, after v0.17.0); this
+// body moves onto it once a golusoris release carries it.
 func (s *Service) RenewSession(ctx context.Context, m *session.Manager, w http.ResponseWriter, r *http.Request, userID uuid.UUID) error {
 	old, err := m.Load(r)
 	if err != nil {
