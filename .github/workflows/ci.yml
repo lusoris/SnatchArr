@@ -270,10 +270,15 @@ jobs:
         run: make tools-lint
       - name: go fix (modernizers) leaves no diff
         run: go fix -diff ./...
+      # go generate rewrites the ogen server and the sqlc queries (#178); the proto job compares
+      # internal/gen. Untracked generated files fail as well: git diff does not see them.
       - name: Generated code is committed
         run: |
           go generate ./...
-          git diff --exit-code -- internal/build internal/gen internal/store/sqlcgen
+          git diff --exit-code -- internal/build internal/store/sqlcgen
+          if git ls-files --others --exclude-standard -- internal/build internal/store/sqlcgen | grep .; then
+            echo "::error::generated files above are not committed"; exit 1
+          fi
 
   api-test:
     name: api / test (race + coverage)
