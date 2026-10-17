@@ -184,6 +184,7 @@ type idsState struct {
 	prowlarrLinkID string
 	configarrPath  string
 	policy         map[string]any
+	queuePolicy    map[string]any
 	settings       map[string]any
 	channelID      string
 	ruleID         string
@@ -546,6 +547,49 @@ func stepsPoliciesAndRuns() []routerStep {
 				t.Helper()
 				if tags, ok := decoded["tags"].([]any); !ok || len(tags) != 1 || decoded["quality_profiles"] == nil {
 					t.Fatalf("getPolicyFilterOptions = %v; want one tag and a profile list", decoded)
+				}
+			},
+		},
+		{
+			op:     "getQueuePolicy",
+			method: http.MethodGet,
+			path:   func(ids *idsState) string { return "/instances/" + ids.instanceID + "/queue-policy" },
+			want:   http.StatusOK,
+			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
+				t.Helper()
+				if decoded["rules"] == nil {
+					t.Fatalf("getQueuePolicy missing rules: %v", decoded)
+				}
+				ids.queuePolicy = decoded
+			},
+		},
+		{
+			op:     "updateQueuePolicy",
+			method: http.MethodPut,
+			path:   func(ids *idsState) string { return "/instances/" + ids.instanceID + "/queue-policy" },
+			body: func(ids *idsState) any {
+				qp := copyMap(ids.queuePolicy)
+				qp["enabled"] = true
+				qp["grace_seconds"] = 1800
+				return qp
+			},
+			want: http.StatusOK,
+			capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
+				t.Helper()
+				if enabled, ok := decoded["enabled"].(bool); !ok || !enabled {
+					t.Fatalf("updateQueuePolicy enabled = %v, want true", decoded["enabled"])
+				}
+			},
+		},
+		{
+			op:     "listQueueStrikes",
+			method: http.MethodGet,
+			path:   func(ids *idsState) string { return "/instances/" + ids.instanceID + "/queue-strikes" },
+			want:   http.StatusOK,
+			capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
+				t.Helper()
+				if _, ok := decoded["items"].([]any); !ok {
+					t.Fatalf("listQueueStrikes = %v; want items array", decoded)
 				}
 			},
 		},

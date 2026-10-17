@@ -3149,6 +3149,52 @@ func (o OptInt) Or(d int) int {
 	return d
 }
 
+// NewOptInt32 returns new OptInt32 with value set to v.
+func NewOptInt32(v int32) OptInt32 {
+	return OptInt32{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptInt32 is optional int32.
+type OptInt32 struct {
+	Value int32
+	Set   bool
+}
+
+// IsSet returns true if OptInt32 was set.
+func (o OptInt32) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptInt32) Reset() {
+	var v int32
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptInt32) SetTo(v int32) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptInt32) Get() (v int32, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptInt32) Or(d int32) int32 {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
 // NewOptInt64 returns new OptInt64 with value set to v.
 func NewOptInt64(v int64) OptInt64 {
 	return OptInt64{
@@ -4052,6 +4098,355 @@ func (s *ProwlarrStatus) SetCheckedAt(val time.Time) {
 // SetIndexers sets the value of Indexers.
 func (s *ProwlarrStatus) SetIndexers(val []ProwlarrIndexerStatus) {
 	s.Indexers = val
+}
+
+// Ref: #/components/schemas/QueuePolicy
+type QueuePolicy struct {
+	Enabled           bool       `json:"enabled"`
+	Rules             QueueRules `json:"rules"`
+	GraceSeconds      int        `json:"grace_seconds"`
+	MinBytesPerSecond int64      `json:"min_bytes_per_second"`
+	// Lowest custom format score an item may have; left out, the unwanted_score rule is off.
+	MinCustomFormatScore OptInt32 `json:"min_custom_format_score"`
+	MaxRemovalsPerSweep  int      `json:"max_removals_per_sweep"`
+}
+
+// GetEnabled returns the value of Enabled.
+func (s *QueuePolicy) GetEnabled() bool {
+	return s.Enabled
+}
+
+// GetRules returns the value of Rules.
+func (s *QueuePolicy) GetRules() QueueRules {
+	return s.Rules
+}
+
+// GetGraceSeconds returns the value of GraceSeconds.
+func (s *QueuePolicy) GetGraceSeconds() int {
+	return s.GraceSeconds
+}
+
+// GetMinBytesPerSecond returns the value of MinBytesPerSecond.
+func (s *QueuePolicy) GetMinBytesPerSecond() int64 {
+	return s.MinBytesPerSecond
+}
+
+// GetMinCustomFormatScore returns the value of MinCustomFormatScore.
+func (s *QueuePolicy) GetMinCustomFormatScore() OptInt32 {
+	return s.MinCustomFormatScore
+}
+
+// GetMaxRemovalsPerSweep returns the value of MaxRemovalsPerSweep.
+func (s *QueuePolicy) GetMaxRemovalsPerSweep() int {
+	return s.MaxRemovalsPerSweep
+}
+
+// SetEnabled sets the value of Enabled.
+func (s *QueuePolicy) SetEnabled(val bool) {
+	s.Enabled = val
+}
+
+// SetRules sets the value of Rules.
+func (s *QueuePolicy) SetRules(val QueueRules) {
+	s.Rules = val
+}
+
+// SetGraceSeconds sets the value of GraceSeconds.
+func (s *QueuePolicy) SetGraceSeconds(val int) {
+	s.GraceSeconds = val
+}
+
+// SetMinBytesPerSecond sets the value of MinBytesPerSecond.
+func (s *QueuePolicy) SetMinBytesPerSecond(val int64) {
+	s.MinBytesPerSecond = val
+}
+
+// SetMinCustomFormatScore sets the value of MinCustomFormatScore.
+func (s *QueuePolicy) SetMinCustomFormatScore(val OptInt32) {
+	s.MinCustomFormatScore = val
+}
+
+// SetMaxRemovalsPerSweep sets the value of MaxRemovalsPerSweep.
+func (s *QueuePolicy) SetMaxRemovalsPerSweep(val int) {
+	s.MaxRemovalsPerSweep = val
+}
+
+// Ref: #/components/schemas/QueueRule
+type QueueRule string
+
+const (
+	QueueRuleStalled             QueueRule = "stalled"
+	QueueRuleSlow                QueueRule = "slow"
+	QueueRuleFailed              QueueRule = "failed"
+	QueueRuleImportBlocked       QueueRule = "import_blocked"
+	QueueRuleUnwantedScore       QueueRule = "unwanted_score"
+	QueueRuleUnwantedUnmonitored QueueRule = "unwanted_unmonitored"
+)
+
+// AllValues returns all QueueRule values.
+func (QueueRule) AllValues() []QueueRule {
+	return []QueueRule{
+		QueueRuleStalled,
+		QueueRuleSlow,
+		QueueRuleFailed,
+		QueueRuleImportBlocked,
+		QueueRuleUnwantedScore,
+		QueueRuleUnwantedUnmonitored,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s QueueRule) MarshalText() ([]byte, error) {
+	switch s {
+	case QueueRuleStalled:
+		return []byte(s), nil
+	case QueueRuleSlow:
+		return []byte(s), nil
+	case QueueRuleFailed:
+		return []byte(s), nil
+	case QueueRuleImportBlocked:
+		return []byte(s), nil
+	case QueueRuleUnwantedScore:
+		return []byte(s), nil
+	case QueueRuleUnwantedUnmonitored:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *QueueRule) UnmarshalText(data []byte) error {
+	switch QueueRule(data) {
+	case QueueRuleStalled:
+		*s = QueueRuleStalled
+		return nil
+	case QueueRuleSlow:
+		*s = QueueRuleSlow
+		return nil
+	case QueueRuleFailed:
+		*s = QueueRuleFailed
+		return nil
+	case QueueRuleImportBlocked:
+		*s = QueueRuleImportBlocked
+		return nil
+	case QueueRuleUnwantedScore:
+		*s = QueueRuleUnwantedScore
+		return nil
+	case QueueRuleUnwantedUnmonitored:
+		*s = QueueRuleUnwantedUnmonitored
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/QueueRuleMode
+type QueueRuleMode string
+
+const (
+	QueueRuleModeObserve QueueRuleMode = "observe"
+	QueueRuleModeAct     QueueRuleMode = "act"
+)
+
+// AllValues returns all QueueRuleMode values.
+func (QueueRuleMode) AllValues() []QueueRuleMode {
+	return []QueueRuleMode{
+		QueueRuleModeObserve,
+		QueueRuleModeAct,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s QueueRuleMode) MarshalText() ([]byte, error) {
+	switch s {
+	case QueueRuleModeObserve:
+		return []byte(s), nil
+	case QueueRuleModeAct:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *QueueRuleMode) UnmarshalText(data []byte) error {
+	switch QueueRuleMode(data) {
+	case QueueRuleModeObserve:
+		*s = QueueRuleModeObserve
+		return nil
+	case QueueRuleModeAct:
+		*s = QueueRuleModeAct
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/QueueRuleSettings
+type QueueRuleSettings struct {
+	Mode      QueueRuleMode `json:"mode"`
+	Threshold int           `json:"threshold"`
+}
+
+// GetMode returns the value of Mode.
+func (s *QueueRuleSettings) GetMode() QueueRuleMode {
+	return s.Mode
+}
+
+// GetThreshold returns the value of Threshold.
+func (s *QueueRuleSettings) GetThreshold() int {
+	return s.Threshold
+}
+
+// SetMode sets the value of Mode.
+func (s *QueueRuleSettings) SetMode(val QueueRuleMode) {
+	s.Mode = val
+}
+
+// SetThreshold sets the value of Threshold.
+func (s *QueueRuleSettings) SetThreshold(val int) {
+	s.Threshold = val
+}
+
+// Ref: #/components/schemas/QueueRules
+type QueueRules struct {
+	Stalled             QueueRuleSettings `json:"stalled"`
+	Slow                QueueRuleSettings `json:"slow"`
+	Failed              QueueRuleSettings `json:"failed"`
+	ImportBlocked       QueueRuleSettings `json:"import_blocked"`
+	UnwantedScore       QueueRuleSettings `json:"unwanted_score"`
+	UnwantedUnmonitored QueueRuleSettings `json:"unwanted_unmonitored"`
+}
+
+// GetStalled returns the value of Stalled.
+func (s *QueueRules) GetStalled() QueueRuleSettings {
+	return s.Stalled
+}
+
+// GetSlow returns the value of Slow.
+func (s *QueueRules) GetSlow() QueueRuleSettings {
+	return s.Slow
+}
+
+// GetFailed returns the value of Failed.
+func (s *QueueRules) GetFailed() QueueRuleSettings {
+	return s.Failed
+}
+
+// GetImportBlocked returns the value of ImportBlocked.
+func (s *QueueRules) GetImportBlocked() QueueRuleSettings {
+	return s.ImportBlocked
+}
+
+// GetUnwantedScore returns the value of UnwantedScore.
+func (s *QueueRules) GetUnwantedScore() QueueRuleSettings {
+	return s.UnwantedScore
+}
+
+// GetUnwantedUnmonitored returns the value of UnwantedUnmonitored.
+func (s *QueueRules) GetUnwantedUnmonitored() QueueRuleSettings {
+	return s.UnwantedUnmonitored
+}
+
+// SetStalled sets the value of Stalled.
+func (s *QueueRules) SetStalled(val QueueRuleSettings) {
+	s.Stalled = val
+}
+
+// SetSlow sets the value of Slow.
+func (s *QueueRules) SetSlow(val QueueRuleSettings) {
+	s.Slow = val
+}
+
+// SetFailed sets the value of Failed.
+func (s *QueueRules) SetFailed(val QueueRuleSettings) {
+	s.Failed = val
+}
+
+// SetImportBlocked sets the value of ImportBlocked.
+func (s *QueueRules) SetImportBlocked(val QueueRuleSettings) {
+	s.ImportBlocked = val
+}
+
+// SetUnwantedScore sets the value of UnwantedScore.
+func (s *QueueRules) SetUnwantedScore(val QueueRuleSettings) {
+	s.UnwantedScore = val
+}
+
+// SetUnwantedUnmonitored sets the value of UnwantedUnmonitored.
+func (s *QueueRules) SetUnwantedUnmonitored(val QueueRuleSettings) {
+	s.UnwantedUnmonitored = val
+}
+
+// Ref: #/components/schemas/QueueStrike
+type QueueStrike struct {
+	DownloadID string    `json:"download_id"`
+	QueueID    int32     `json:"queue_id"`
+	Rule       QueueRule `json:"rule"`
+	Count      int       `json:"count"`
+	Threshold  int       `json:"threshold"`
+	LastSeen   time.Time `json:"last_seen"`
+}
+
+// GetDownloadID returns the value of DownloadID.
+func (s *QueueStrike) GetDownloadID() string {
+	return s.DownloadID
+}
+
+// GetQueueID returns the value of QueueID.
+func (s *QueueStrike) GetQueueID() int32 {
+	return s.QueueID
+}
+
+// GetRule returns the value of Rule.
+func (s *QueueStrike) GetRule() QueueRule {
+	return s.Rule
+}
+
+// GetCount returns the value of Count.
+func (s *QueueStrike) GetCount() int {
+	return s.Count
+}
+
+// GetThreshold returns the value of Threshold.
+func (s *QueueStrike) GetThreshold() int {
+	return s.Threshold
+}
+
+// GetLastSeen returns the value of LastSeen.
+func (s *QueueStrike) GetLastSeen() time.Time {
+	return s.LastSeen
+}
+
+// SetDownloadID sets the value of DownloadID.
+func (s *QueueStrike) SetDownloadID(val string) {
+	s.DownloadID = val
+}
+
+// SetQueueID sets the value of QueueID.
+func (s *QueueStrike) SetQueueID(val int32) {
+	s.QueueID = val
+}
+
+// SetRule sets the value of Rule.
+func (s *QueueStrike) SetRule(val QueueRule) {
+	s.Rule = val
+}
+
+// SetCount sets the value of Count.
+func (s *QueueStrike) SetCount(val int) {
+	s.Count = val
+}
+
+// SetThreshold sets the value of Threshold.
+func (s *QueueStrike) SetThreshold(val int) {
+	s.Threshold = val
+}
+
+// SetLastSeen sets the value of LastSeen.
+func (s *QueueStrike) SetLastSeen(val time.Time) {
+	s.LastSeen = val
 }
 
 // RevokeAPIKeyNoContent is response for RevokeAPIKey operation.

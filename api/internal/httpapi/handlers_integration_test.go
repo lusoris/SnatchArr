@@ -45,6 +45,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/policies"
 	"github.com/lusoris/SnatchArr/api/internal/prowlarr"
 	"github.com/lusoris/SnatchArr/api/internal/prowlarrclient"
+	"github.com/lusoris/SnatchArr/api/internal/queue"
 	"github.com/lusoris/SnatchArr/api/internal/seerr"
 	"github.com/lusoris/SnatchArr/api/internal/seerrclient"
 	"github.com/lusoris/SnatchArr/api/internal/settings"
@@ -294,6 +295,7 @@ func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Genera
 		sessions:  sessMgr,
 		instances: instSvc,
 		policies:  polSvc,
+		queue:     queue.NewStore(st, clk),
 		options:   policies.NewOptions(instSvc, labeler),
 		runs:      runs,
 		workers:   workers,

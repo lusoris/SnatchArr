@@ -315,6 +315,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/instances/{instanceId}/queue-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instanceId: components["parameters"]["InstanceId"];
+            };
+            cookie?: never;
+        };
+        /** Queue management policy of an instance */
+        get: operations["getQueuePolicy"];
+        /** Replace the queue management policy of an instance */
+        put: operations["updateQueuePolicy"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/instances/{instanceId}/queue-strikes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instanceId: components["parameters"]["InstanceId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Active queue strikes of an instance
+         * @description Items with at least one strike; items the last sweep found clean are left out.
+         */
+        get: operations["listQueueStrikes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/instances/{instanceId}/runs": {
         parameters: {
             query?: never;
@@ -1761,6 +1803,45 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        /** @enum {string} */
+        QueueRule: "stalled" | "slow" | "failed" | "import_blocked" | "unwanted_score" | "unwanted_unmonitored";
+        /** @enum {string} */
+        QueueRuleMode: "observe" | "act";
+        QueueRuleSettings: {
+            mode: components["schemas"]["QueueRuleMode"];
+            threshold: number;
+        };
+        QueueRules: {
+            stalled: components["schemas"]["QueueRuleSettings"];
+            slow: components["schemas"]["QueueRuleSettings"];
+            failed: components["schemas"]["QueueRuleSettings"];
+            import_blocked: components["schemas"]["QueueRuleSettings"];
+            unwanted_score: components["schemas"]["QueueRuleSettings"];
+            unwanted_unmonitored: components["schemas"]["QueueRuleSettings"];
+        };
+        QueuePolicy: {
+            enabled: boolean;
+            rules: components["schemas"]["QueueRules"];
+            grace_seconds: number;
+            /** Format: int64 */
+            min_bytes_per_second: number;
+            /**
+             * Format: int32
+             * @description Lowest custom format score an item may have; left out, the unwanted_score rule is off.
+             */
+            min_custom_format_score?: number;
+            max_removals_per_sweep: number;
+        };
+        QueueStrike: {
+            download_id: string;
+            /** Format: int32 */
+            queue_id: number;
+            rule: components["schemas"]["QueueRule"];
+            count: number;
+            threshold: number;
+            /** Format: date-time */
+            last_seen: string;
+        };
     };
     responses: {
         /** @description RFC 9457 problem details */
@@ -2303,6 +2384,79 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PolicyFilterOptions"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getQueuePolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instanceId: components["parameters"]["InstanceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Queue policy */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueuePolicy"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    updateQueuePolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instanceId: components["parameters"]["InstanceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QueuePolicy"];
+            };
+        };
+        responses: {
+            /** @description Queue policy */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueuePolicy"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listQueueStrikes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instanceId: components["parameters"]["InstanceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Queue strikes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueueStrike"][];
                 };
             };
             default: components["responses"]["Problem"];

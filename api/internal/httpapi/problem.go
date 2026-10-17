@@ -15,6 +15,7 @@ import (
 	"github.com/ogen-go/ogen/validate"
 
 	"github.com/lusoris/SnatchArr/api/internal/domain"
+	"github.com/lusoris/SnatchArr/api/internal/queue"
 )
 
 // problem is the RFC 9457 body. `invalid-params` follows the common extension used by
@@ -46,7 +47,7 @@ func validationErrorStatus(err error) (int, string, []invalidParam, bool) {
 	if valErr, ok := errors.AsType[*validate.Error](err); ok {
 		return http.StatusUnprocessableEntity, "request validation failed", validationParams(valErr), true
 	}
-	if errors.Is(err, domain.ErrInvalid) {
+	if errors.Is(err, domain.ErrInvalid) || errors.Is(err, queue.ErrInvalid) {
 		return http.StatusUnprocessableEntity, err.Error(), nil, true
 	}
 	return 0, "", nil, false

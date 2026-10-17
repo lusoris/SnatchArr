@@ -135,18 +135,13 @@ func marshalRulesJSON(rules map[Rule]RuleSettings) ([]byte, error) {
 
 // Strikes returns all active strikes for an instance, keyed by download ID.
 func (s *Store) Strikes(ctx context.Context, instanceID uuid.UUID) (map[string]Strike, error) {
-	rows, err := s.st.Q().ListQueueStrikes(ctx, instanceID)
+	rows, err := s.strikeRows(ctx, instanceID)
 	if err != nil {
-		return nil, fmt.Errorf("queue: list strikes: %w", store.MapError(err))
+		return nil, err
 	}
 	strikes := make(map[string]Strike, len(rows))
 	for _, row := range rows {
-		strikes[row.DownloadID] = Strike{
-			Rule:         Rule(row.Rule),
-			Count:        int(row.Count),
-			LastSizeLeft: row.LastSizeLeft,
-			LastSeen:     row.LastSeen,
-		}
+		strikes[row.DownloadID] = row.Strike
 	}
 	return strikes, nil
 }
@@ -227,4 +222,46 @@ func (s *Store) Purge(ctx context.Context, batch int) (int64, error) {
 		return 0, fmt.Errorf("queue: purge expired strikes: %w", store.MapError(err))
 	}
 	return n, nil
+}
+
+// StrikeItem is one stored strike state with the queue identifiers of its item.
+type StrikeItem struct {
+	DownloadID string
+	QueueID    int32
+	Strike
+}
+
+// ListStrikes returns the items of an instance that hold at least one
+// strike, ordered by download id. Rows the last sweep found clean are left out.
+func (s *Store) ListStrikes(ctx context.Context, instanceID uuid.UUID) ([]StrikeItem, error) {
+	rows, err := s.strikeRows(ctx, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	active := rows[:0]
+	for _, row := range rows {
+		if row.Rule != "" && row.Count > 0 {
+			active = append(active, row)
+		}
+	}
+	return active, nil
+}
+
+func (s *Store) strikeRows(ctx context.Context, instanceID uuid.UUID) ([]StrikeItem, error) {
+	rows, err := s.st.Q().ListQueueStrikes(ctx, instanceID)
+	if err != nil {
+		return nil, fmt.Errorf("queue: list strikes: %w", store.MapError(err))
+	}
+	items := make([]StrikeItem, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, StrikeItem{
+			DownloadID:   row.DownloadID,
+			QueueID:      row.QueueID,
+			Rule:         Rule(row.Rule),
+			Count:        int(row.Count),
+			LastSizeLeft: row.LastSizeLeft,
+			LastSeen:     row.LastSeen,
+		})
+	}
+	return items, nil
 }
