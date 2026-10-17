@@ -131,6 +131,8 @@ type Querier interface {
 	ListEvents(ctx context.Context, arg ListEventsParams) ([]SnatchEvent, error)
 	ListEventsForRun(ctx context.Context, runID *uuid.UUID) ([]SnatchEvent, error)
 	ListInstances(ctx context.Context) ([]Instance, error)
+	// Instances never evaluated come first, then the one evaluated longest ago (#176).
+	ListInstancesToPlan(ctx context.Context) ([]Instance, error)
 	ListNotificationChannels(ctx context.Context) ([]NotificationChannel, error)
 	ListNotificationChannelsByIDs(ctx context.Context, ids []uuid.UUID) ([]NotificationChannel, error)
 	ListNotificationRules(ctx context.Context) ([]NotificationRule, error)
@@ -149,6 +151,7 @@ type Querier interface {
 	// runs under this transaction-scoped lock, so two grants on either side of a minute
 	// boundary (different bucket rows) still see each other.
 	LockInstanceBudget(ctx context.Context, instanceID uuid.UUID) error
+	MarkInstancesPlanned(ctx context.Context, arg MarkInstancesPlannedParams) error
 	// Afterglow backoff: the first snatch rests base_s seconds, every further snatch of the
 	// same item doubles the rest, capped at max_s.
 	MarkProcessed(ctx context.Context, arg MarkProcessedParams) error
