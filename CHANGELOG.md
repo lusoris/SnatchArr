@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/lusoris/SnatchArr/compare/v0.2.0...v0.2.1) (2026-10-17)
+
+
+### Bug Fixes
+
+* **e2e:** accept the API's current config error in the image check ([#300](https://github.com/lusoris/SnatchArr/issues/300)) ([187f024](https://github.com/lusoris/SnatchArr/commit/187f024805ce9bd727f54cda72cc66d2aab9b874))
+
 ## [0.2.0](https://github.com/lusoris/SnatchArr/compare/v0.1.9...v0.2.0) (2026-10-17)
 
 
