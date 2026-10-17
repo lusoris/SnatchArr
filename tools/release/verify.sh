@@ -3,8 +3,10 @@
 # SPDX-License-Identifier: EUPL-1.2
 #
 # Verifies one published artifact the way a consumer does, with cosign alone and no forge
-# login. The signing certificate must name the release workflow of the given repository, run
-# on the given git ref at the given commit; an artifact built from any other commit is refused.
+# login. The signing certificate must name a release workflow of the given repository, run on
+# the given git ref at the given commit; an artifact built from any other commit is refused.
+# Images and the chart are signed by release-build.yml after 0.2.1 (#42) and by release.yml
+# before; the files of the release page by release.yml. Both are accepted, no other workflow.
 #
 #   tools/release/verify.sh <oci reference> <owner/repository> <git ref> <commit>
 #   tools/release/verify.sh --bundle <bundle> <file> <owner/repository> <git ref> <commit>
@@ -46,7 +48,13 @@ case "$commit" in
 esac
 [ "${#commit}" -eq 40 ] || usage
 
-identity="https://github.com/$repository/.github/workflows/release.yml@$git_ref"
+# quote <text>: <text> with every character a regular expression reads as syntax escaped.
+quote() {
+  printf '%s' "$1" | sed 's/[][\\.*+?^$(){}|]/\\&/g'
+}
+
+identity="https://github.com/$repository/.github/workflows/release(-build)?.yml@$git_ref"
+identity_regexp="^https://github\\.com/$(quote "$repository")/\\.github/workflows/release(-build)?\\.yml@$(quote "$git_ref")\$"
 provenance=https://slsa.dev/provenance/v1
 log=$(mktemp)
 trap 'rm -f "$log"' EXIT
@@ -61,7 +69,7 @@ cosign_check() {
   subcommand=$1
   shift
   cosign "$subcommand" "$@" \
-    --certificate-identity "$identity" \
+    --certificate-identity-regexp "$identity_regexp" \
     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
     --certificate-github-workflow-sha "$commit" >/dev/null 2>"$log"
 }

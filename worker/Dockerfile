@@ -37,7 +37,7 @@ RUN case "${TARGETARCH}" in \
  && cargo zigbuild --release --locked --target "$T" -p snatch-worker \
  && cp "target/$T/release/snatch-worker" /out-snatch-worker
 
-FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
+FROM gcr.io/distroless/static-debian13:nonroot@sha256:e2e927ec666bae08560abb3c55d0659eceabb657f56b6782ab500a9fc7f555e3
 COPY --from=build /out-snatch-worker /snatch-worker
 USER 65532:65532
 EXPOSE 8081

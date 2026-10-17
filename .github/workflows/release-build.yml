@@ -1,0 +1,214 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+#
+# Builds, pushes, signs and attests both images and the Helm chart of one release. It is called
+# by release.yml and by nothing else, so the identity in every signature and attestation it
+# makes is this file, which only builds (SLSA Build Level 3, #42): each job builds what it signs
+# and attests, restores no build cache and downloads no artifact of another job. The caller
+# stages the release page from the SBOMs and the chart archive this workflow uploads, and
+# verifies everything against the commit of the tag. Every `uses:` is SHA-pinned.
+name: release build
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag being built, e.g. v0.2.1
+        required: true
+        type: string
+      version:
+        description: The tag without its leading v, e.g. 0.2.1
+        required: true
+        type: string
+    secrets:
+      DOCKERHUB_USERNAME:
+        required: false
+      DOCKERHUB_TOKEN:
+        required: false
+    outputs:
+      digest-api:
+        description: Digest of the pushed api image
+        value: ${{ jobs.image.outputs.digest-api }}
+      digest-worker:
+        description: Digest of the pushed worker image
+        value: ${{ jobs.image.outputs.digest-worker }}
+      digest-chart:
+        description: Digest of the pushed Helm chart
+        value: ${{ jobs.chart.outputs.digest }}
+
+permissions: {}
+
+env:
+  REGISTRY: ghcr.io
+  CHART_REPO: oci://ghcr.io/lusoris/charts
+
+jobs:
+  image:
+    name: image (${{ matrix.component }})
+    runs-on: ubuntu-26.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: api
+            context: .
+            dockerfile: Dockerfile
+          - component: worker
+            context: .
+            dockerfile: worker/Dockerfile
+    outputs:
+      digest-api: ${{ steps.out.outputs.digest-api }}
+      digest-worker: ${{ steps.out.outputs.digest-worker }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag }}
+          persist-credentials: false
+      # Build date for -X main.date: the release's publish time, or on a workflow_dispatch
+      # rebuild the tagged commit's date (the github context has no run start time).
+      - id: date
+        run: echo "commit=$(git log -1 --format=%cI)" >> "$GITHUB_OUTPUT"
+      # Docker Hub's anonymous pull limit (shared runner IPs) failed the v0.1.1 build. binfmt,
+      # BuildKit and the docker.io base images come through mirror.gcr.io instead; a Docker Hub
+      # login is optional (fleet default, cordanaLLM/praetor#1129).
+      - name: Docker Hub login (optional)
+        id: hub
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          if [ -n "$DOCKERHUB_USERNAME" ] && [ -n "$DOCKERHUB_TOKEN" ]; then
+            echo "login=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Docker Hub login skipped: DOCKERHUB_USERNAME/DOCKERHUB_TOKEN not set; docker.io pulls go through mirror.gcr.io"
+          fi
+      - if: steps.hub.outputs.login == 'true'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          image: mirror.gcr.io/tonistiigi/binfmt:qemu-v10.2.3@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          driver-opts: image=mirror.gcr.io/moby/buildkit:v0.33.1@sha256:cec9f139f45e93c5c69c60f8b07cfad9f43f4ef6b6a6cd917527fea5ff2e3dea
+          buildkitd-config-inline: |
+            [registry."docker.io"]
+              mirrors = ["mirror.gcr.io"]
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: tags
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.REGISTRY }}/lusoris/snatcharr-${{ matrix.component }}
+          # Semver only: no floating `latest`, so every deployment pins what it runs.
+          tags: |
+            type=semver,pattern={{version}},value=${{ inputs.tag }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ inputs.tag }}
+          labels: |
+            org.opencontainers.image.title=snatcharr-${{ matrix.component }}
+            org.opencontainers.image.licenses=EUPL-1.2
+            org.opencontainers.image.documentation=https://lusoris.github.io/SnatchArr/
+      # No cache-from: a build cache written by other runs would feed this build files it did
+      # not make. Both Dockerfiles cross-compile on the build platform, so a cold build fits.
+      - id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          labels: ${{ steps.tags.outputs.labels }}
+          build-args: |
+            VERSION=${{ inputs.version }}
+            COMMIT=${{ github.sha }}
+            DATE=${{ github.event.release.published_at || steps.date.outputs.commit }}
+          sbom: true
+          provenance: mode=max
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: cosign sign (keyless)
+        env:
+          IMAGE: ${{ env.REGISTRY }}/lusoris/snatcharr-${{ matrix.component }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "${IMAGE}@${DIGEST}"
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.REGISTRY }}/lusoris/snatcharr-${{ matrix.component }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+      # The SBOM leaves as a workflow artifact; the caller's release-files job, which holds
+      # contents: write, attaches it to the release, so this job keeps contents: read.
+      - name: SBOM (SPDX)
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          image: ${{ env.REGISTRY }}/lusoris/snatcharr-${{ matrix.component }}@${{ steps.build.outputs.digest }}
+          artifact-name: snatcharr-${{ matrix.component }}-${{ inputs.version }}.spdx.json
+          output-file: snatcharr-${{ matrix.component }}-${{ inputs.version }}.spdx.json
+          upload-release-assets: false
+      - id: out
+        run: echo "digest-${{ matrix.component }}=${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT"
+
+  chart:
+    name: helm chart
+    needs: image
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag }}
+          persist-credentials: false
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      # cosign reads registry credentials from the Docker config, not from helm's registry
+      # login, so the chart signature needs this login too.
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: make chart-package
+        run: make chart-package CHART_VERSION="${{ inputs.version }}"
+      - name: push to ${{ env.CHART_REPO }}
+        id: push
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login "$REGISTRY" -u "${{ github.actor }}" --password-stdin
+          helm push "dist/snatcharr-${VERSION}.tgz" "$CHART_REPO" 2>&1 | tee push.log
+          DIGEST=$(sed -n 's/^Digest: //p' push.log)
+          case "$DIGEST" in sha256:?*) ;; *) echo "::error::helm push printed no digest"; exit 1 ;; esac
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+      - name: cosign sign chart
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: cosign sign --yes "ghcr.io/lusoris/charts/snatcharr@${DIGEST}"
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.REGISTRY }}/lusoris/charts/snatcharr
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+      # The archive the registry holds goes to the caller for the release page.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: snatcharr-${{ inputs.version }}.tgz
+          path: dist/snatcharr-${{ inputs.version }}.tgz
+          if-no-files-found: error
