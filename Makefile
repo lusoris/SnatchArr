@@ -257,6 +257,7 @@ e2e-dev-compose-smoke: ## Dev compose stack with both profiles: services up, Pro
 # secret refused. The planted cases hand every client a wrong secret and claim a pause that never
 # happened; the test must refuse both (gap audit C9-05). Not in verify-all (slow, needs Docker).
 dlclients-live: ## Real qBittorrent, Transmission, Deluge, rTorrent, SABnzbd, NZBGet observed by the adapters (needs Docker)
+	bash tools/e2e/pull_retry_test.sh
 	bash tools/e2e/planted.sh SNATCHARR_DLCLIENTS_PLANT tools/e2e/dlclients_live.sh \
 	  "secret:not reachable with the right secret" "pause:paused = false; the client was left with paused = true"
 
@@ -265,6 +266,7 @@ dlclients-live: ## Real qBittorrent, Transmission, Deluge, rTorrent, SABnzbd, NZ
 # The planted cases hand the test a wrong API key and claim a dry run that was never switched
 # on; the test must refuse both (gap audit C9-07). Not in verify-all (slow, needs Docker).
 cleanuparr-live: ## Real Cleanuparr read by the client production uses (needs Docker)
+	bash tools/e2e/pull_retry_test.sh
 	bash tools/e2e/planted.sh SNATCHARR_CLEANUPARR_PLANT tools/e2e/cleanuparr_live.sh \
 	  "key:status with the right key" "dryrun:dry run = false; Cleanuparr was left with dry run = true"
 
