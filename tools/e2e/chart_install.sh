@@ -74,14 +74,18 @@ new_namespace() {
 }
 
 # crashing names an API container that restarted at least three times, with its last log lines.
+# While the kubelet replaces the container, neither log can be read; that is no verdict yet, and
+# the next poll asks again.
 crashing() {
-    local restarts
+    local restarts log
     restarts=$(kubectl -n "$ns" get pods -l app.kubernetes.io/component=api \
         -o jsonpath='{range .items[*]}{.status.containerStatuses[0].restartCount}{"\n"}{end}')
     for r in $restarts; do
         if [ "${r:-0}" -ge 3 ]; then
-            kubectl -n "$ns" logs "deploy/$release-api" --previous --tail 20 2>&1 ||
-                kubectl -n "$ns" logs "deploy/$release-api" --tail 20 2>&1
+            log=$(kubectl -n "$ns" logs "deploy/$release-api" --previous --tail 20 2>/dev/null) ||
+                log=$(kubectl -n "$ns" logs "deploy/$release-api" --tail 20 2>/dev/null) || log=
+            [ -n "$log" ] || return 1
+            printf '%s\n' "$log"
             return 0
         fi
     done
