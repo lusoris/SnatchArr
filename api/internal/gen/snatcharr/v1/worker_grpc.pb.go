@@ -28,6 +28,7 @@ const (
 	WorkerService_AcquireBudget_FullMethodName    = "/snatcharr.v1.WorkerService/AcquireBudget"
 	WorkerService_ReportEvents_FullMethodName     = "/snatcharr.v1.WorkerService/ReportEvents"
 	WorkerService_CompleteRun_FullMethodName      = "/snatcharr.v1.WorkerService/CompleteRun"
+	WorkerService_ReportLogs_FullMethodName       = "/snatcharr.v1.WorkerService/ReportLogs"
 )
 
 // WorkerServiceClient is the client API for WorkerService service.
@@ -59,6 +60,9 @@ type WorkerServiceClient interface {
 	ReportEvents(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[ReportEventsRequest, ReportEventsResponse], error)
 	// CompleteRun closes the run and records searched items into processed memory.
 	CompleteRun(ctx context.Context, in *CompleteRunRequest, opts ...grpc.CallOption) (*CompleteRunResponse, error)
+	// ReportLogs sends a batch of the worker's own log records to the API's in-app log
+	// viewer (#349). The API redacts them like its own records and keeps them in memory only.
+	ReportLogs(ctx context.Context, in *ReportLogsRequest, opts ...grpc.CallOption) (*ReportLogsResponse, error)
 }
 
 type workerServiceClient struct {
@@ -132,6 +136,16 @@ func (c *workerServiceClient) CompleteRun(ctx context.Context, in *CompleteRunRe
 	return out, nil
 }
 
+func (c *workerServiceClient) ReportLogs(ctx context.Context, in *ReportLogsRequest, opts ...grpc.CallOption) (*ReportLogsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReportLogsResponse)
+	err := c.cc.Invoke(ctx, WorkerService_ReportLogs_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // WorkerServiceServer is the server API for WorkerService service.
 // All implementations must embed UnimplementedWorkerServiceServer
 // for forward compatibility.
@@ -161,6 +175,9 @@ type WorkerServiceServer interface {
 	ReportEvents(grpc.ClientStreamingServer[ReportEventsRequest, ReportEventsResponse]) error
 	// CompleteRun closes the run and records searched items into processed memory.
 	CompleteRun(context.Context, *CompleteRunRequest) (*CompleteRunResponse, error)
+	// ReportLogs sends a batch of the worker's own log records to the API's in-app log
+	// viewer (#349). The API redacts them like its own records and keeps them in memory only.
+	ReportLogs(context.Context, *ReportLogsRequest) (*ReportLogsResponse, error)
 	mustEmbedUnimplementedWorkerServiceServer()
 }
 
@@ -188,6 +205,9 @@ func (UnimplementedWorkerServiceServer) ReportEvents(grpc.ClientStreamingServer[
 }
 func (UnimplementedWorkerServiceServer) CompleteRun(context.Context, *CompleteRunRequest) (*CompleteRunResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CompleteRun not implemented")
+}
+func (UnimplementedWorkerServiceServer) ReportLogs(context.Context, *ReportLogsRequest) (*ReportLogsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ReportLogs not implemented")
 }
 func (UnimplementedWorkerServiceServer) mustEmbedUnimplementedWorkerServiceServer() {}
 func (UnimplementedWorkerServiceServer) testEmbeddedByValue()                       {}
@@ -307,6 +327,24 @@ func _WorkerService_CompleteRun_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _WorkerService_ReportLogs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReportLogsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkerServiceServer).ReportLogs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkerService_ReportLogs_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkerServiceServer).ReportLogs(ctx, req.(*ReportLogsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // WorkerService_ServiceDesc is the grpc.ServiceDesc for WorkerService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -333,6 +371,10 @@ var WorkerService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CompleteRun",
 			Handler:    _WorkerService_CompleteRun_Handler,
+		},
+		{
+			MethodName: "ReportLogs",
+			Handler:    _WorkerService_ReportLogs_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

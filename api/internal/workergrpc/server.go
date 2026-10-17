@@ -25,6 +25,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	snatcharrv1 "github.com/lusoris/SnatchArr/api/internal/gen/snatcharr/v1"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
+	"github.com/lusoris/SnatchArr/api/internal/logring"
 	"github.com/lusoris/SnatchArr/api/internal/metrics"
 	"github.com/lusoris/SnatchArr/api/internal/policies"
 	"github.com/lusoris/SnatchArr/api/internal/seerr"
@@ -56,6 +57,8 @@ type Pacer interface {
 type Options struct {
 	fx.In
 	Pacer Pacer `optional:"true"`
+	// Logs takes the records workers send with ReportLogs; without it they are discarded.
+	Logs *logring.Ring `optional:"true"`
 }
 
 // Server implements snatcharrv1.WorkerServiceServer.
@@ -72,6 +75,7 @@ type Server struct {
 	settings  *settings.Service
 	seerr     *seerr.Service
 	pacer     Pacer
+	logs      *logring.Ring
 	clk       clock.Clock
 	logger    *slog.Logger
 	m         *metrics.Metrics
@@ -90,7 +94,7 @@ func New(runs *snatch.Runs, workers *snatch.Workers, budget *snatch.Budget, memo
 	m.WorkerEventTypes(eventTypes()...)
 	return &Server{
 		runs: runs, workers: workers, budget: budget, memory: memory, rec: rec, planner: planner, instances: inst, policies: pol,
-		settings: cfg, seerr: requests, pacer: opts.Pacer, clk: clk, logger: logger, m: m,
+		settings: cfg, seerr: requests, pacer: opts.Pacer, logs: opts.Logs, clk: clk, logger: logger, m: m,
 		stopping: make(chan struct{}),
 	}
 }

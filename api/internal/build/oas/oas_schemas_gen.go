@@ -2547,7 +2547,7 @@ type LogRecord struct {
 	Seq   int64     `json:"seq"`
 	Time  time.Time `json:"time"`
 	Level LogLevel  `json:"level"`
-	// Process that emitted the record (api).
+	// Process that emitted the record: api, or worker:<id> for a worker.
 	Source  string    `json:"source"`
 	Message string    `json:"message"`
 	Attrs   []LogAttr `json:"attrs"`

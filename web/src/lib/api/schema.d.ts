@@ -466,7 +466,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Recent log records of this api process, newest first (admin only)
+         * Recent log records of this api process and its workers, newest first (admin only)
          * @description Records come from a fixed-size in-memory ring (snatcharr.logs.ring_size). Secret attributes, credential query parameters, bearer tokens, URL userinfo and 32-character hex keys are replaced with [REDACTED] before a record is stored. The live tail is the Server-Sent Events stream at /api/v1/logs/stream (default event type message, same record shape), outside this router.
          */
         get: operations["listLogs"];
@@ -1444,7 +1444,7 @@ export interface components {
             /** Format: date-time */
             time: string;
             level: components["schemas"]["LogLevel"];
-            /** @description Process that emitted the record (api). */
+            /** @description Process that emitted the record: api, or worker:<id> for a worker. */
             source: string;
             message: string;
             attrs: components["schemas"]["LogAttr"][];
@@ -2717,7 +2717,7 @@ export interface operations {
                 level?: components["schemas"]["LogLevel"];
                 /** @description Case-insensitive substring of the message, an attribute key or value. */
                 q?: string;
-                /** @description Exact source, e.g. api. */
+                /** @description Source: api, worker for every worker, or worker:<id> for one worker. */
                 source?: string;
                 limit?: number;
             };

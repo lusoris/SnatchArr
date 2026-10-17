@@ -30,6 +30,9 @@ service WorkerService {
   rpc ReportEvents(stream ReportEventsRequest) returns (ReportEventsResponse);
   // CompleteRun closes the run and records searched items into processed memory.
   rpc CompleteRun(CompleteRunRequest) returns (CompleteRunResponse);
+  // ReportLogs sends a batch of the worker's own log records to the API's in-app log
+  // viewer (#349). The API redacts them like its own records and keeps them in memory only.
+  rpc ReportLogs(ReportLogsRequest) returns (ReportLogsResponse);
 }
 
 // AppKind identifies the *arr application family and API generation.
@@ -264,3 +267,31 @@ message CompleteRunRequest {
 }
 
 message CompleteRunResponse {}
+
+// LogField is one structured field of a worker log record.
+message LogField {
+  string key = 1;
+  string value = 2;
+}
+
+// LogRecord is one worker log record, not yet redacted.
+message LogRecord {
+  int64 ts_unix_ms = 1;
+  Level level = 2;
+  // The tracing target, usually the Rust module path.
+  string target = 3;
+  string message = 4;
+  repeated LogField fields = 5;
+}
+
+message ReportLogsRequest {
+  string worker_id = 1;
+  repeated LogRecord records = 2;
+  // Records the worker dropped since its previous accepted batch because its buffer was full.
+  uint64 dropped = 3;
+}
+
+message ReportLogsResponse {
+  // Records the API stored; the rest of the batch was over its per-batch limit.
+  uint32 accepted = 1;
+}

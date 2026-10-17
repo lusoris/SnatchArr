@@ -11,6 +11,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import {
 		logLevelLabel,
 		logLevels,
+		logSources,
 		mergeLogs,
 		parseLogFrame,
 		type LogFilter,
@@ -61,6 +62,7 @@ SPDX-License-Identifier: EUPL-1.2
 	const records: LogRecord[] = $derived(
 		mergeLogs(page.data?.records ?? [], streamed, filter, limit)
 	);
+	const sources = $derived(logSources(records));
 </script>
 
 <div class="mb-4 flex items-center justify-between">
@@ -96,10 +98,16 @@ SPDX-License-Identifier: EUPL-1.2
 			<input
 				id="logs-source"
 				class="input"
-				maxlength="64"
+				maxlength="160"
+				list="logs-sources"
 				placeholder={m.logs_source_all()}
 				bind:value={filter.source}
 			/>
+			<datalist id="logs-sources">
+				{#each sources as s (s)}
+					<option value={s}></option>
+				{/each}
+			</datalist>
 		</Field>
 	</form>
 	<p class="mb-2 text-sm text-subtle">{m.logs_redacted_note()}</p>
