@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.3.0](https://github.com/lusoris/SnatchArr/compare/v0.2.2...v0.3.0) (2026-10-17)
+
+
+### ⚠ BREAKING CHANGES
+
+* **api:** remove the Cleanuparr link ([#366](https://github.com/lusoris/SnatchArr/issues/366))
+
+### Features
+
+* **api:** persist queue settings and strike state ([#369](https://github.com/lusoris/SnatchArr/issues/369)) ([b81841f](https://github.com/lusoris/SnatchArr/commit/b81841ff7f7c603827729cf6036add43fa9e33fb)), closes [#48](https://github.com/lusoris/SnatchArr/issues/48)
+* **api:** remove the Cleanuparr link ([#366](https://github.com/lusoris/SnatchArr/issues/366)) ([3ce16b6](https://github.com/lusoris/SnatchArr/commit/3ce16b66794d3b03cf3d4a5fc783c67fc7f0ebbb))
+* **api:** sweep *arr download queues on the leader ([08fb25b](https://github.com/lusoris/SnatchArr/commit/08fb25bc2a7f73812dd154323a664aaeb9c80a30))
+* **contracts:** read the upstream spec pins from goenvoy ([#365](https://github.com/lusoris/SnatchArr/issues/365)) ([d29067f](https://github.com/lusoris/SnatchArr/commit/d29067f5f3e96d2cc1d3509fb461906260dd4882)), closes [#50](https://github.com/lusoris/SnatchArr/issues/50)
+* **queue:** add the queue management rule engine ([#368](https://github.com/lusoris/SnatchArr/issues/368)) ([80e888b](https://github.com/lusoris/SnatchArr/commit/80e888b4c812d47a70e52222a4fb6c0062caf261)), closes [#48](https://github.com/lusoris/SnatchArr/issues/48)
+* **queue:** edit queue policy and list strikes per instance ([#371](https://github.com/lusoris/SnatchArr/issues/371)) ([0b41d6e](https://github.com/lusoris/SnatchArr/commit/0b41d6e372df19ec76a1d76970842d7c71a8e86a)), closes [#48](https://github.com/lusoris/SnatchArr/issues/48)
+
 ## [0.2.2](https://github.com/lusoris/SnatchArr/compare/v0.2.1...v0.2.2) (2026-10-17)
 
 
