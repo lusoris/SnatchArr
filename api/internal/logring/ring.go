@@ -137,7 +137,7 @@ func (r *Ring) List(q Query) (records []Record, dropped int64) {
 }
 
 func (rec Record) matches(q Query, lowerText string) bool {
-	if rec.Level < q.MinLevel || (q.Source != "" && rec.Source != q.Source) {
+	if rec.Level < q.MinLevel || !rec.fromSource(q.Source) {
 		return false
 	}
 	if lowerText == "" || strings.Contains(strings.ToLower(rec.Message), lowerText) {
@@ -149,6 +149,19 @@ func (rec Record) matches(q Query, lowerText string) bool {
 		}
 	}
 	return false
+}
+
+// fromSource reports whether rec matches the source filter: empty matches everything,
+// SourceWorkers every worker, any other value exactly one source.
+func (rec Record) fromSource(source string) bool {
+	switch source {
+	case "", rec.Source:
+		return true
+	case SourceWorkers:
+		return strings.HasPrefix(rec.Source, sourceWorkerPrefix)
+	default:
+		return false
+	}
 }
 
 // StreamHandler serves new records as Server-Sent Events (default event type message, id = seq).

@@ -19,7 +19,9 @@
 #   i. with images: each container runs under the memory limit of the chart, and its peak
 #      stays at or below 80 % of that limit (C12-01, tools/e2e/mem_limits.sh);
 #   j. with SOAK_SECONDS: rounds of runs for that long, with no failed worker API call, no
-#      failed run and fresh worker contact in any round (C14-01, `make e2e-soak`).
+#      failed run and fresh worker contact in any round (C14-01, `make e2e-soak`);
+#   k. each worker's own log records reach the in-app log viewer under worker:<id>; the
+#      source worker selects them all and the source api none of them (#349).
 # `make e2e-smoke` builds the binaries and provides Postgres. Needs curl and jq.
 set -euo pipefail
 
@@ -448,6 +450,22 @@ done
 contact=$(api GET /system/status | jq -r '.worker_last_contact_at // empty')
 [ -n "$contact" ] || fail "g. /system/status has no worker_last_contact_at"
 echo "smoke: last worker contact $contact"
+
+# worker_log_sources SOURCE: distinct sources of the records /logs returns for SOURCE.
+worker_log_sources() {
+    api GET "/logs?source=$1&limit=1000" | jq -r '[(.records // [])[] | .source] | unique | .[]'
+}
+# Workers ship every 2 s: wait for both, at most 20 times, 0.5 s apart.
+for _ in $(seq 1 20); do
+    shipped=$(worker_log_sources worker | tr '\n' ' ')
+    [ "$shipped" = "worker:w1 worker:w2 " ] && break
+    sleep 0.5
+done
+[ "$shipped" = "worker:w1 worker:w2 " ] || fail "k. /logs?source=worker returned sources '$shipped', want worker:w1 and worker:w2"
+[ -n "$(api GET '/logs?source=worker:w1&limit=1' | jq -r '.records[0].message // empty')" ] ||
+    fail "k. /logs?source=worker:w1 returned no record"
+[ "$(worker_log_sources api | tr '\n' ' ')" = "api " ] || fail "k. /logs?source=api returned records of another source"
+echo "smoke: worker log records reach /logs as ${shipped% }"
 
 # worker_failures: failed API calls both workers counted so far, all calls summed.
 worker_failures() {

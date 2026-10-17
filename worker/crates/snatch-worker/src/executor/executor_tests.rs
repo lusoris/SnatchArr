@@ -15,6 +15,7 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 mod completion;
+mod logship_grpc;
 mod readarr_forks;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -49,6 +50,8 @@ struct FakeApi {
     pub complete_refusals: Vec<tonic::Code>,
     /// Every CompleteRun call, refused or not.
     pub complete_calls: Arc<std::sync::atomic::AtomicU32>,
+    /// Every ReportLogs batch.
+    pub reported_logs: Arc<Mutex<Vec<ReportLogsRequest>>>,
 }
 
 impl Default for FakeApi {
@@ -69,6 +72,7 @@ impl Default for FakeApi {
             report_cut_after: None,
             complete_refusals: Vec::new(),
             complete_calls: Arc::new(std::sync::atomic::AtomicU32::new(0)),
+            reported_logs: Arc::new(Mutex::new(Vec::new())),
         }
     }
 }
@@ -218,6 +222,16 @@ impl WorkerService for FakeApi {
             .await
             .push(request.into_inner());
         Ok(tonic::Response::new(CompleteRunResponse {}))
+    }
+
+    async fn report_logs(
+        &self,
+        request: tonic::Request<ReportLogsRequest>,
+    ) -> Result<tonic::Response<ReportLogsResponse>, Status> {
+        let req = request.into_inner();
+        let accepted = u32::try_from(req.records.len()).unwrap_or(u32::MAX);
+        self.reported_logs.lock().await.push(req);
+        Ok(tonic::Response::new(ReportLogsResponse { accepted }))
     }
 }
 

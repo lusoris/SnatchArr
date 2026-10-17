@@ -10536,7 +10536,7 @@ func (s *Server) handleListLogsRequest(args [0]string, argsEscaped bool, w http.
 		mreq := middleware.Request{
 			Context:          ctx,
 			OperationName:    ListLogsOperation,
-			OperationSummary: "Recent log records of this api process, newest first (admin only)",
+			OperationSummary: "Recent log records of this api process and its workers, newest first (admin only)",
 			OperationID:      "listLogs",
 			Body:             nil,
 			RawBody:          rawBody,
