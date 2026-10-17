@@ -185,6 +185,8 @@ jobs:
             web:
               - 'web/**'
               - 'api/openapi/**'
+              - 'tools/ci/prettier_ignore_test.sh'
+              - 'tools/ci/web_strings_scan.py'
               - '.github/workflows/ci.yml'
             proto:
               - 'proto/**'
@@ -598,6 +600,14 @@ jobs:
           node-version: '24'
       - name: Install Playwright browsers
         run: cd web && pnpm install --frozen-lockfile && pnpm exec playwright install --with-deps chromium
+      # The repository's own web checks of make web-verify, which the shared sveltesentio
+      # workflow of the web job does not run: the Prettier ignore cases (C11-05) and the
+      # untranslated-string scan with its planted fixtures (B6-03).
+      - name: web checks (Prettier ignore, untranslated strings)
+        working-directory: web
+        run: |
+          sh ../tools/ci/prettier_ignore_test.sh
+          python3 ../tools/ci/web_strings_scan.py
       - name: make web-e2e-api
         env:
           SMOKE_DSN: postgres://postgres:smoke@127.0.0.1:5432/postgres?sslmode=disable
