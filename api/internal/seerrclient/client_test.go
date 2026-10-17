@@ -132,3 +132,104 @@ func TestServerURL(t *testing.T) {
 		}
 	}
 }
+
+type processingTestCase struct {
+	name         string
+	responseJSON string
+	wantServerID *int
+	check        func(t *testing.T, req seerrclient.Request)
+}
+
+func processingCases() []processingTestCase {
+	zero := 0
+	return []processingTestCase{
+		{
+			name: "serverId 0 -> *0",
+			responseJSON: `{"pageInfo":{"pages":1,"results":1},"results":[{
+				"id":1,"type":"movie","status":2,"is4k":false,"serverId":0,
+				"requestedBy":{"displayName":"Alice"},
+				"media":{"id":5,"mediaType":"movie","tmdbId":603,"status":3}
+			}]}`,
+			wantServerID: &zero,
+		},
+		{
+			name: "serverId null -> nil",
+			responseJSON: `{"pageInfo":{"pages":1,"results":1},"results":[{
+				"id":2,"type":"movie","status":2,"is4k":false,"serverId":null,
+				"requestedBy":{"displayName":"Alice"},
+				"media":{"id":5,"mediaType":"movie","tmdbId":603,"status":3}
+			}]}`,
+			wantServerID: nil,
+		},
+		{
+			name: "serverId absent -> nil",
+			responseJSON: `{"pageInfo":{"pages":1,"results":1},"results":[{
+				"id":3,"type":"movie","status":2,"is4k":false,
+				"requestedBy":{"displayName":"Alice"},
+				"media":{"id":5,"mediaType":"movie","tmdbId":603,"status":3}
+			}]}`,
+			wantServerID: nil,
+		},
+		{
+			name: "request without media/requestedBy -> no panic",
+			responseJSON: `{"pageInfo":{"pages":1,"results":1},"results":[{
+				"id":4,"type":"movie","status":2,"is4k":false
+			}]}`,
+			wantServerID: nil,
+			check: func(t *testing.T, req seerrclient.Request) {
+				t.Helper()
+				if req.Requester() != "" {
+					t.Errorf("Requester() = %q, want empty", req.Requester())
+				}
+				if req.Media.ID != 0 || req.Media.TmdbID != 0 {
+					t.Errorf("Media = %+v, want zero value", req.Media)
+				}
+				if len(req.Seasons) != 0 {
+					t.Errorf("Seasons = %+v, want empty", req.Seasons)
+				}
+			},
+		},
+	}
+}
+
+func TestProcessingRequests_Table(t *testing.T) {
+	t.Parallel()
+	for _, tc := range processingCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(tc.responseJSON))
+			}))
+			t.Cleanup(srv.Close)
+
+			c := seerrclient.New(5*time.Second, "SnatchArr-test")
+			reqs, err := c.ProcessingRequests(context.Background(), srv.URL, "key")
+			if err != nil {
+				t.Fatalf("ProcessingRequests: %v", err)
+			}
+			if len(reqs) != 1 {
+				t.Fatalf("got %d requests, want 1", len(reqs))
+			}
+			checkServerID(t, reqs[0].ServerID, tc.wantServerID)
+			if tc.check != nil {
+				tc.check(t, reqs[0])
+			}
+		})
+	}
+}
+
+func checkServerID(t *testing.T, got, want *int) {
+	t.Helper()
+	if want == nil {
+		if got != nil {
+			t.Errorf("ServerID = %v, want nil", *got)
+		}
+		return
+	}
+	if got == nil {
+		t.Errorf("ServerID = nil, want %d", *want)
+	} else if *got != *want {
+		t.Errorf("ServerID = %d, want %d", *got, *want)
+	}
+}

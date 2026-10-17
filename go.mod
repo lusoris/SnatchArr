@@ -14,6 +14,7 @@ require (
 	github.com/golusoris/goenvoy/arr/lidarr v1.3.1
 	github.com/golusoris/goenvoy/arr/radarr v1.3.1
 	github.com/golusoris/goenvoy/arr/readarr v1.3.1
+	github.com/golusoris/goenvoy/arr/seerr v1.5.0
 	github.com/golusoris/goenvoy/arr/sonarr v1.3.1
 	github.com/golusoris/goenvoy/arr/v2 v2.1.0
 	github.com/golusoris/goenvoy/arr/whisparr v1.3.1
