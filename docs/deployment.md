@@ -13,7 +13,7 @@ Pod Security Standard.
 | Artifact | Where |
 | --- | --- |
 | `ghcr.io/lusoris/snatcharr-api` | Go control plane + embedded SPA (HTTP 8080, gRPC 9090) |
-| `ghcr.io/lusoris/snatcharr-worker` | Rust snatch-worker (HTTP 8081: `/livez`, `/metrics`) |
+| `ghcr.io/lusoris/snatcharr-worker` | Rust snatch-worker (HTTP 8081: `/livez`, `/readyz`, `/metrics`) |
 | `oci://ghcr.io/lusoris/charts/snatcharr` | Helm chart |
 
 Every image and the chart are signed with cosign (keyless, GitHub OIDC) and carry a SLSA
@@ -119,7 +119,7 @@ error named.
 | Resource | Notes |
 | --- | --- |
 | Deployment `-api` | probes on `/startupz`, `/livez`, `/readyz` (readiness: Postgres and the leader gate, which is down while the election fails or a periodic loop failed to start); `/tmp` is a memory-backed emptyDir; `replicaCount` may exceed 1, periodic work runs on the elected replica |
-| Deployment `-worker` | dials `<release>-api:9090`; liveness probe on `/livez` (port `worker.httpPort`, 8081), which fails once no API call succeeded for `worker.staleSecs` (180 s); `/metrics` there counts failed API calls per call in `snatcharr_worker_api_failures_total`; optional HPA 1..4 on CPU |
+| Deployment `-worker` | dials `<release>-api:9090`; liveness probe on `/livez` (port `worker.httpPort`, 8081), which fails once no API call succeeded for `worker.staleSecs` (180 s); readiness probe on `/readyz`, which also fails until the first successful API call (a lease long-poll returns within `worker.leaseWaitSecs`), so the Deployment is Available only once its workers reached the API; `/metrics` there counts failed API calls per call in `snatcharr_worker_api_failures_total`; optional HPA 1..4 on CPU |
 | Service `-api` | `http` 8080, `grpc` 9090 (h2c) |
 | Ingress or HTTPRoute | `api.ingress.*` or `api.httpRoute.*` |
 | CNPG `Cluster` `-db` | `postgres.cnpg.*`; the API reads the DSN from the operator's `-db-app` Secret |
@@ -371,6 +371,7 @@ processes on the host.
 - Proves the embedded SvelteKit SPA serves `index.html` (text/html with SvelteKit markers) and hashed static assets (`/_app/immutable/...`).
 - Proves runtime IANA time zone database availability by creating a disabled schedule window in `Europe/Berlin`: the API validates the zone with the image's zone data, since the binary embeds none.
 - Proves multi-worker run leasing, stamina caps, afterglow deduplication, and liveness probes.
+- Runs the api and both workers under the chart's `resources.limits.memory` (`docker run --memory`, no swap) and fails when a container's peak (cgroup `memory.peak`) passes 80 % of that limit (`MEM_SHARE`, `tools/e2e/mem_limits.sh`, cases in `tools/e2e/mem_limits_test.sh`). Measured on 2026-10-17: api 171 MiB of 256 MiB (67 %), each worker 8 MiB of 128 MiB. Raise a limit in `values.yaml` before the smoke fails, not after a pod is killed.
 
 The release workflow runs the same smoke on amd64 before it pushes images, then builds both images for arm64 and runs `tools/e2e/arm64-check.sh`. The check reads the ELF header of each entrypoint and refuses a binary that is not aarch64, because both Dockerfiles cross-compile on the build platform and an image labelled arm64 can carry an amd64 binary. It then runs each binary under QEMU: the API must stop on one of the config errors the check lists, the worker must log its start. CI's image smoke runs the same check on the amd64 images (`CHECK_ARCH=amd64`), so a changed startup error fails the pull request, not the release; `tools/e2e/arm64-check_test.sh` holds the cases of the list.
 
