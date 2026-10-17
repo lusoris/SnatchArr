@@ -116,6 +116,32 @@ func TestTransmissionSnapshot(t *testing.T) {
 
 func TestDelugeSnapshot(t *testing.T) {
 	t.Parallel()
+	srv := delugeServer(t, true)
+	defer srv.Close()
+
+	// The version stays unknown until goenvoy asks Deluge 2 for it (golusoris/goenvoy#101); a
+	// fixed release turns this red, and the expectation becomes "2.2.0".
+	s := observe(t, domain.ClientDeluge, srv.URL, "", "pw")
+	if !s.Reachable || s.Active != 1 || s.Queued != 1 || s.DownloadRate != 300 || s.UploadRate != 50 || s.Version != "" {
+		t.Fatalf("got %+v", s)
+	}
+}
+
+// A web UI without a daemon answers daemon.info with "Unknown method"; the snapshot names the
+// cause instead (found against a real Deluge 2.2.0, tools/e2e/dlclients_live.sh).
+func TestDelugeSnapshotWithoutDaemon(t *testing.T) {
+	t.Parallel()
+	srv := delugeServer(t, false)
+	defer srv.Close()
+
+	s := observe(t, domain.ClientDeluge, srv.URL, "", "pw")
+	if s.Reachable || s.Error != dlclients.ErrDelugeNoDaemon.Error() {
+		t.Fatalf("got %+v; want unreachable with %q", s, dlclients.ErrDelugeNoDaemon)
+	}
+}
+
+func delugeServer(t *testing.T, connected bool) *httptest.Server {
+	t.Helper()
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /json", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
@@ -130,8 +156,11 @@ func TestDelugeSnapshot(t *testing.T) {
 		switch body.Method {
 		case "auth.login":
 			reply(len(body.Params) == 1 && body.Params[0] == "pw")
-		case "daemon.info":
-			reply("2.1.1")
+		case "web.connected":
+			reply(connected)
+		case "daemon.get_version":
+			// Deluge 2 serves this; daemon.info (Deluge 1) falls to "Unknown method" below.
+			reply("2.2.0")
 		case "core.get_torrents_status":
 			reply(map[string]any{
 				"a": map[string]any{"state": "Downloading", "download_payload_rate": 300, "upload_payload_rate": 30},
@@ -139,16 +168,10 @@ func TestDelugeSnapshot(t *testing.T) {
 				"c": map[string]any{"state": "Seeding", "upload_payload_rate": 20},
 			})
 		default:
-			writeJSON(t, w, map[string]any{"result": nil, "error": map[string]any{"code": 1, "message": "unknown"}, "id": body.ID})
+			writeJSON(t, w, map[string]any{"result": nil, "error": map[string]any{"code": 2, "message": "Unknown method"}, "id": body.ID})
 		}
 	})
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
-
-	s := observe(t, domain.ClientDeluge, srv.URL, "", "pw")
-	if !s.Reachable || s.Active != 1 || s.Queued != 1 || s.DownloadRate != 300 || s.UploadRate != 50 || s.Version != "2.1.1" {
-		t.Fatalf("got %+v", s)
-	}
+	return httptest.NewServer(mux)
 }
 
 func TestSABnzbdSnapshot(t *testing.T) {
