@@ -491,6 +491,21 @@ jobs:
           SMOKE_DSN: postgres://postgres:smoke@127.0.0.1:5432/postgres?sslmode=disable
           SMOKE_SKIP_BUILD: '1'
         run: make e2e-image-smoke
+      # The release's arm64 image check, run here on the amd64 images: a changed startup error
+      # of the API then fails this pull request, not the release (0.2.0 did). Its allow-list
+      # cases first; then an architecture mismatch that must be refused.
+      - name: Image check (release arm64 check on amd64)
+        run: |
+          bash tools/e2e/arm64-check_test.sh
+          CHECK_ARCH=amd64 tools/e2e/arm64-check.sh snatcharr-api:e2e snatcharr-worker:e2e
+          if out=$(tools/e2e/arm64-check.sh api snatcharr-api:e2e 2>&1); then
+            echo "::error::planted: an amd64 image passed the arm64 check"
+            exit 1
+          fi
+          case "$out" in
+            *"architecture is 'amd64', want arm64"*) echo "ok   planted architecture mismatch refused" ;;
+            *) echo "::error::planted: refused for another reason: $out"; exit 1 ;;
+          esac
       # The homelab bundle (deploy/homelab) on the images built above, with the API and worker
       # health checks the pinned release images cannot run yet (#41).
       - name: make e2e-compose-smoke
