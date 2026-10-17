@@ -38,26 +38,15 @@
       "datasourceTemplate": "crate"
     },
     {
-      "description": "Upstream OpenAPI spec pins on a release: repository, release tag and commit of each entry, in this order (docs/upstream-contracts.md)",
+      "description": "Upstream OpenAPI spec pin manifest from golusoris/goenvoy: repository and commit of the source manifest on branch main (docs/upstream-contracts.md)",
       "customType": "regex",
       "managerFilePatterns": [
         "tools/upstreamspec/specs.yaml"
       ],
       "matchStrings": [
-        "- name: (?<depName>\\S+)\\n +repository: (?<packageName>\\S+)\\n +tag: (?<currentValue>\\S+)\\n +commit: (?<currentDigest>[0-9a-f]{40})\\n"
+        "source:\\n +repository: (?<depName>\\S+)\\n +commit: (?<currentDigest>[0-9a-f]{40})\\n"
       ],
-      "datasourceTemplate": "github-tags",
-      "versioningTemplate": "loose"
-    },
-    {
-      "description": "Upstream OpenAPI spec pins on a branch, for a project that tags no release: repository, branch and commit of each entry, in this order. github-digest resolves the branch to its newest commit and dates it, so minimumReleaseAge applies (docs/upstream-contracts.md)",
-      "customType": "regex",
-      "managerFilePatterns": [
-        "tools/upstreamspec/specs.yaml"
-      ],
-      "matchStrings": [
-        "- name: (?<depName>\\S+)\\n +repository: (?<packageName>\\S+)\\n +branch: (?<currentValue>\\S+)\\n +commit: (?<currentDigest>[0-9a-f]{40})\\n"
-      ],
+      "currentValueTemplate": "main",
       "datasourceTemplate": "github-digest"
     },
     {
@@ -370,16 +359,6 @@
       ],
       "groupName": "upstream specs",
       "automerge": false
-    },
-    {
-      "description": "Sonarr/Sonarr also holds the release tags of Radarr from v4.1 to v6, which point at Radarr commits (#231 proposed v6.4.4, #249 v4.7.5). Its published releases are Sonarr's own, so Sonarr resolves through github-releases; the digest stays the commit of the tag, and prereleases count as unstable (docs/upstream-contracts.md)",
-      "matchManagers": [
-        "custom.regex"
-      ],
-      "matchPackageNames": [
-        "Sonarr/Sonarr"
-      ],
-      "overrideDatasource": "github-releases"
     },
     {
       "description": "The two images of the workflow gate move in a pull request of their own",

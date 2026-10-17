@@ -5,11 +5,16 @@
 package main
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 const (
@@ -17,19 +22,9 @@ const (
 	someSHA256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 )
 
-// entry is a well-formed manifest entry; change replaces "<key>: <value>" lines by key.
-func entry(change map[string]string) string {
-	lines := []string{
-		"name: sample",
-		"repository: Owner/Project",
-		"tag: v1.2.3",
-		"commit: " + someCommit,
-		"path: src/openapi.json",
-		"sha256: " + someSHA256,
-		"license: GPL-3.0",
-		"prefix: /api/v1",
-		"operations: [GET /api/v1/status, 'POST /api/v1/command/{id}']",
-	}
+// entryLines writes lines as the first list entry under "specs:" and replaces "<key>: <value>"
+// lines by key from change; an empty replacement drops the line.
+func entryLines(lines []string, change map[string]string) string {
 	var out strings.Builder
 	out.WriteString("specs:\n")
 	for i, line := range lines {
@@ -49,6 +44,36 @@ func entry(change map[string]string) string {
 	return out.String()
 }
 
+// defaultUpstreamSpec is a well-formed goenvoy manifest with one entry; change replaces lines by
+// key.
+func defaultUpstreamSpec(change map[string]string) string {
+	return entryLines([]string{
+		"name: sample",
+		"repository: Owner/Project",
+		"tag: v1.2.3",
+		"commit: " + someCommit,
+		"path: src/openapi.json",
+		"sha256: " + someSHA256,
+		"license: GPL-3.0",
+		"prefix: /api/v1",
+	}, change)
+}
+
+// defaultLocalSpec is a well-formed specs.yaml that pins a goenvoy manifest of sha256 sourceSha
+// and lists one entry; change replaces lines of the entry by key.
+func defaultLocalSpec(sourceSha string, change map[string]string) string {
+	return "source:\n" +
+		"  repository: golusoris/goenvoy\n" +
+		"  commit: " + someCommit + "\n" +
+		"  path: upstream/specs.yaml\n" +
+		"  sha256: " + sourceSha + "\n" +
+		entryLines([]string{
+			"name: sample",
+			"operations: [GET /api/v1/status, 'POST /api/v1/command/{id}']",
+		}, change)
+}
+
+// writeFile writes content to file, creating its directory.
 func writeFile(t *testing.T, file, content string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(file), 0o750); err != nil {
@@ -59,60 +84,386 @@ func writeFile(t *testing.T, file, content string) {
 	}
 }
 
+// mockServer serves a goenvoy manifest at the pinned commit and counts the requests it answers.
+type mockServer struct {
+	*httptest.Server
+	requests atomic.Int32
+}
+
+// serveManifest serves upstreamBody at the address of the source pin of defaultLocalSpec.
+func serveManifest(t *testing.T, upstreamBody []byte) *mockServer {
+	t.Helper()
+	var ms mockServer
+	ms.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ms.requests.Add(1)
+		expectedPath := "/golusoris/goenvoy/" + someCommit + "/upstream/specs.yaml"
+		if r.URL.Path != expectedPath {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write(upstreamBody)
+	}))
+	t.Cleanup(ms.Close)
+	return &ms
+}
+
 func TestReadManifest(t *testing.T) {
 	t.Parallel()
-	with := func(key, line string) string { return entry(map[string]string{key: line}) }
 	otherProject := map[string]string{"name": "name: other", "repository": "repository: Other/Project"}
+
 	tests := []struct {
-		name     string
-		manifest string
-		want     string // part of the error; empty for none
+		name       string
+		upstream   string
+		local      func(sourceSha string) string
+		serveEmpty bool
+		want       string
 	}{
-		{"well formed", entry(nil), ""},
-		{"no prefix", entry(map[string]string{"prefix": "", "operations": "operations: [GET /status]"}), ""},
-		{"a tag with four numbers", with("tag", "tag: v4.0.20.3014"), ""},
-		{"a branch in the place of the tag", with("tag", "branch: develop"), ""},
-		{"a branch with a slash", with("tag", "branch: release/v1"), ""},
-		{"no entry", "specs: []\n", `no "specs" entry`},
-		{"an empty file", "", "EOF"},
-		{"a misspelled key", with("sha256", "sha265: "+someSHA256), "field sha265 not found"},
-		{"a name with a path", with("name", "name: ../sample"), "name must be"},
-		{"a repository with a host", with("repository", "repository: github.com/Owner/Project"), "repository must be <owner>/<name>"},
-		{"a tag with a space", with("tag", "tag: v1 beta"), "tag must name one release tag"},
-		{"neither tag nor branch", with("tag", ""), "exactly one of tag and branch"},
-		{"a tag and a branch", with("tag", "tag: v1.2.3\n    branch: develop"), "exactly one of tag and branch"},
-		{"a branch with a space", with("tag", "branch: my branch"), "branch must name one branch"},
-		{"a branch that ends with a slash", with("tag", "branch: release/"), "branch must name one branch"},
-		{"a short commit id", with("commit", "commit: 0123456"), "full 40-digit commit id"},
-		{"a branch for a commit", with("commit", "commit: main"), "full 40-digit commit id"},
-		{"an upper-case commit id", with("commit", "commit: "+strings.ToUpper(someCommit)), "full 40-digit commit id"},
-		{"a path leaving the repository", with("path", "path: ../openapi.json"), "one clean file path"},
-		{"an absolute path", with("path", "path: /etc/passwd"), "one clean file path"},
-		{"no checksum", with("sha256", ""), "sha256 must be 64"},
-		{"a checksum one digit short", with("sha256", "sha256: "+someSHA256[1:]), "sha256 must be 64"},
-		{"no license", with("license", ""), "license must be the SPDX id"},
-		{"a prefix without a slash", with("prefix", "prefix: api/v1"), "prefix must be empty or a path"},
-		{"no operation", with("operations", "operations: []"), "operations lists nothing"},
-		{"an operation without a method", with("operations", "operations: [/api/v1/status]"), `must be "GET <path>" or "POST <path>"`},
-		{"an operation with another method", with("operations", "operations: [DELETE /api/v1/status]"), `must be "GET <path>" or "POST <path>"`},
-		{"an operation with a query", with("operations", "operations: ['GET /api/v1/status?x=1']"), `must be "GET <path>" or "POST <path>"`},
-		{"an operation outside the prefix", with("operations", "operations: [GET /api/v3/status]"), `does not start with the prefix "/api/v1"`},
-		{"an operation listed twice", with("operations", "operations: [GET /api/v1/status, GET /api/v1/status]"), "is listed twice"},
-		{"a command class", with("operations", "operations: [POST /api/v1/command]\n    commands: [{path: src/A.cs, sha256: "+someSHA256+"}]"), ""},
-		{"a command class that is no C# file", with("operations", "operations: [GET /api/v1/status]\n    commands: [{path: src/A.json, sha256: "+someSHA256+"}]"), "one clean path of a .cs file"},
-		{"a command class outside the repository", with("operations", "operations: [GET /api/v1/status]\n    commands: [{path: ../A.cs, sha256: "+someSHA256+"}]"), "one clean path of a .cs file"},
-		{"a command class without a checksum", with("operations", "operations: [GET /api/v1/status]\n    commands: [{path: src/A.cs}]"), "sha256 must be 64"},
-		{"two command classes with one file name", with("operations", "operations: [GET /api/v1/status]\n    commands: [{path: a/A.cs, sha256: "+someSHA256+"}, {path: b/A.cs, sha256: "+someSHA256+"}]"), "repeats the file name"},
-		{"commands sent and no class pinned", with("operations", "operations: [POST /api/v1/command]"), "commands pins no class"},
-		{"a name used twice", entry(nil) + strings.TrimPrefix(entry(nil), "specs:\n"), "specs[1] (sample): repeats the name"},
-		{"one commit under two repositories", entry(nil) + strings.TrimPrefix(entry(otherProject), "specs:\n"), "specs[1] (other): repeats the commit of Owner/Project"},
+		// Positive cases
+		{
+			name:     "well formed",
+			upstream: defaultUpstreamSpec(nil),
+			local:    func(sha string) string { return defaultLocalSpec(sha, nil) },
+		},
+		{
+			name:     "no prefix",
+			upstream: defaultUpstreamSpec(map[string]string{"prefix": ""}),
+			local: func(sha string) string {
+				return defaultLocalSpec(sha, map[string]string{"operations": "operations: [GET /status]"})
+			},
+		},
+		{
+			name:     "a tag with four numbers",
+			upstream: defaultUpstreamSpec(map[string]string{"tag": "tag: v4.0.20.3014"}),
+			local:    func(sha string) string { return defaultLocalSpec(sha, nil) },
+		},
+		{
+			name:     "a branch in the place of the tag",
+			upstream: defaultUpstreamSpec(map[string]string{"tag": "branch: develop"}),
+			local:    func(sha string) string { return defaultLocalSpec(sha, nil) },
+		},
+		{
+			name:     "a branch with a slash",
+			upstream: defaultUpstreamSpec(map[string]string{"tag": "branch: release/v1"}),
+			local:    func(sha string) string { return defaultLocalSpec(sha, nil) },
+		},
+		{
+			name:     "a command class",
+			upstream: defaultUpstreamSpec(nil),
+			local: func(sha string) string {
+				return defaultLocalSpec(sha, map[string]string{
+					"operations": "operations: [POST /api/v1/command]\n    commands: [{path: src/A.cs, sha256: " + someSHA256 + "}]",
+				})
+			},
+		},
+
+		// Planted cases (a, b, d, e, f)
+		{
+			name:     "source sha256 drift (a)",
+			upstream: defaultUpstreamSpec(nil),
+			local: func(_ string) string {
+				wrong := "0000000000000000000000000000000000000000000000000000000000000000"
+				return defaultLocalSpec(wrong, nil)
+			},
+			want: "goenvoy manifest at " + someCommit[:12] + " has sha256 " + digest([]byte(defaultUpstreamSpec(nil))) + ", specs.yaml pins 0000000000000000000000000000000000000000000000000000000000000000",
+		},
+		{
+			name:     "goenvoy commit serves 404 (b)",
+			upstream: defaultUpstreamSpec(nil),
+			local: func(sha string) string {
+				return strings.Replace(defaultLocalSpec(sha, nil), "commit: "+someCommit, "commit: ffffffffffffffffffffffffffffffffffffffff", 1)
+			},
+			want: "HTTP 404",
+		},
+		{
+			name:     "local name missing upstream (d)",
+			upstream: defaultUpstreamSpec(nil),
+			local: func(sha string) string {
+				return defaultLocalSpec(sha, map[string]string{"name": "name: absent"})
+			},
+			want: "local name missing upstream in goenvoy manifest",
+		},
+		{
+			name:     "unknown field in goenvoy manifest (e)",
+			upstream: defaultUpstreamSpec(nil) + "    unknown_field: true\n",
+			local:    func(sha string) string { return defaultLocalSpec(sha, nil) },
+			want:     "field unknown_field not found",
+		},
+		{
+			name:     "old-shape local file with repository and commit (f)",
+			upstream: defaultUpstreamSpec(nil),
+			local: func(sha string) string {
+				return defaultLocalSpec(sha, map[string]string{"name": "name: sample\n    repository: Owner/Project\n    commit: " + someCommit})
+			},
+			want: "field repository not found",
+		},
+
+		// Local manifest defects
+		{
+			name:     "no entry in local manifest",
+			upstream: defaultUpstreamSpec(nil),
+			local: func(sha string) string {
+				return "source:\n  repository: golusoris/goenvoy\n  commit: " + someCommit + "\n  path: upstream/specs.yaml\n  sha256: " + sha + "\nspecs: []\n"
+			},
+			want: `no "specs" entry`,
+		},
+		{
+			name:       "an empty local file",
+			upstream:   defaultUpstreamSpec(nil),
+			local:      func(string) string { return "" },
+			serveEmpty: true,
+			want:       "EOF",
+		},
+		{
+			name:     "no source entry in local file",
+			upstream: defaultUpstreamSpec(nil),
+			local: func(string) string {
+				return "specs:\n  - name: sample\n    operations: [GET /api/v1/status]\n"
+			},
+			want: `no "source" entry`,
+		},
+		{
+			name:     "source repository invalid",
+			upstream: defaultUpstreamSpec(nil),
+			local: func(sha string) string {
+				return strings.Replace(defaultLocalSpec(sha, nil), "repository: golusoris/goenvoy", "repository: github.com/golusoris/goenvoy", 1)
+			},
+			want: "source repository must be <owner>/<name>",
+		},
+		{
+			name:     "source commit short",
+			upstream: defaultUpstreamSpec(nil),
+			local: func(sha string) string {
+				return strings.Replace(defaultLocalSpec(sha, nil), "commit: "+someCommit, "commit: 12345", 1)
+			},
+			want: "source commit must be a full 40-digit commit id",
+		},
+		{
+			name:     "source path invalid",
+			upstream: defaultUpstreamSpec(nil),
+			local: func(sha string) string {
+				return strings.Replace(defaultLocalSpec(sha, nil), "path: upstream/specs.yaml", "path: ../specs.yaml", 1)
+			},
+			want: "source path must be one clean file path",
+		},
+		{
+			name:     "source sha256 short",
+			upstream: defaultUpstreamSpec(nil),
+			local: func(sha string) string {
+				return strings.Replace(defaultLocalSpec(sha, nil), "sha256: "+sha, "sha256: 1234", 1)
+			},
+			want: "source sha256 must be 64 lower-case hex digits",
+		},
+		{
+			name:     "local duplicate name",
+			upstream: defaultUpstreamSpec(nil),
+			local: func(sha string) string {
+				base := defaultLocalSpec(sha, nil)
+				return base + "  - name: sample\n    operations: [GET /api/v1/status]\n"
+			},
+			want: `repeats the name "sample"`,
+		},
+		{
+			name:     "no operations in local spec",
+			upstream: defaultUpstreamSpec(nil),
+			local: func(sha string) string {
+				return defaultLocalSpec(sha, map[string]string{"operations": "operations: []"})
+			},
+			want: "operations lists nothing",
+		},
+		{
+			name:     "operation without method",
+			upstream: defaultUpstreamSpec(nil),
+			local: func(sha string) string {
+				return defaultLocalSpec(sha, map[string]string{"operations": "operations: [/api/v1/status]"})
+			},
+			want: `must be "GET <path>" or "POST <path>"`,
+		},
+		{
+			name:     "operation with another method",
+			upstream: defaultUpstreamSpec(nil),
+			local: func(sha string) string {
+				return defaultLocalSpec(sha, map[string]string{"operations": "operations: [DELETE /api/v1/status]"})
+			},
+			want: `must be "GET <path>" or "POST <path>"`,
+		},
+		{
+			name:     "operation with query",
+			upstream: defaultUpstreamSpec(nil),
+			local: func(sha string) string {
+				return defaultLocalSpec(sha, map[string]string{"operations": "operations: ['GET /api/v1/status?x=1']"})
+			},
+			want: `must be "GET <path>" or "POST <path>"`,
+		},
+		{
+			name:     "operation outside prefix",
+			upstream: defaultUpstreamSpec(nil),
+			local: func(sha string) string {
+				return defaultLocalSpec(sha, map[string]string{"operations": "operations: [GET /api/v3/status]"})
+			},
+			want: `does not start with the prefix "/api/v1"`,
+		},
+		{
+			name:     "operation listed twice",
+			upstream: defaultUpstreamSpec(nil),
+			local: func(sha string) string {
+				return defaultLocalSpec(sha, map[string]string{"operations": "operations: [GET /api/v1/status, GET /api/v1/status]"})
+			},
+			want: "is listed twice",
+		},
+		{
+			name:     "command class not cs",
+			upstream: defaultUpstreamSpec(nil),
+			local: func(sha string) string {
+				return defaultLocalSpec(sha, map[string]string{"operations": "operations: [GET /api/v1/status]\n    commands: [{path: src/A.json, sha256: " + someSHA256 + "}]"})
+			},
+			want: "one clean path of a .cs file",
+		},
+		{
+			name:     "command class outside repository",
+			upstream: defaultUpstreamSpec(nil),
+			local: func(sha string) string {
+				return defaultLocalSpec(sha, map[string]string{"operations": "operations: [GET /api/v1/status]\n    commands: [{path: ../A.cs, sha256: " + someSHA256 + "}]"})
+			},
+			want: "one clean path of a .cs file",
+		},
+		{
+			name:     "command class without checksum",
+			upstream: defaultUpstreamSpec(nil),
+			local: func(sha string) string {
+				return defaultLocalSpec(sha, map[string]string{"operations": "operations: [GET /api/v1/status]\n    commands: [{path: src/A.cs}]"})
+			},
+			want: "sha256 must be 64",
+		},
+		{
+			name:     "two command classes with same filename",
+			upstream: defaultUpstreamSpec(nil),
+			local: func(sha string) string {
+				return defaultLocalSpec(sha, map[string]string{"operations": "operations: [GET /api/v1/status]\n    commands: [{path: a/A.cs, sha256: " + someSHA256 + "}, {path: b/A.cs, sha256: " + someSHA256 + "}]"})
+			},
+			want: "repeats the file name",
+		},
+		{
+			name:     "commands sent and no class pinned",
+			upstream: defaultUpstreamSpec(nil),
+			local: func(sha string) string {
+				return defaultLocalSpec(sha, map[string]string{"operations": "operations: [POST /api/v1/command]"})
+			},
+			want: "commands pins no class",
+		},
+
+		// Upstream manifest defects
+		{
+			name: "upstream duplicate name",
+			upstream: defaultUpstreamSpec(nil) +
+				"  - name: sample\n    repository: Owner/Project\n    tag: v2.0\n    commit: " + someCommit + "\n    path: src/openapi.json\n    sha256: " + someSHA256 + "\n    license: GPL-3.0\n",
+			local: func(sha string) string { return defaultLocalSpec(sha, nil) },
+			want:  `upstream manifest repeats the name "sample"`,
+		},
+		{
+			name:     "upstream repository with host",
+			upstream: defaultUpstreamSpec(map[string]string{"repository": "repository: github.com/Owner/Project"}),
+			local:    func(sha string) string { return defaultLocalSpec(sha, nil) },
+			want:     "repository must be <owner>/<name>",
+		},
+		{
+			name:     "upstream tag with space",
+			upstream: defaultUpstreamSpec(map[string]string{"tag": "tag: v1 beta"}),
+			local:    func(sha string) string { return defaultLocalSpec(sha, nil) },
+			want:     "tag must name one release tag",
+		},
+		{
+			name:     "neither tag nor branch in upstream",
+			upstream: defaultUpstreamSpec(map[string]string{"tag": ""}),
+			local:    func(sha string) string { return defaultLocalSpec(sha, nil) },
+			want:     "exactly one of tag and branch",
+		},
+		{
+			name:     "tag and branch in upstream",
+			upstream: defaultUpstreamSpec(map[string]string{"tag": "tag: v1.2.3\n    branch: develop"}),
+			local:    func(sha string) string { return defaultLocalSpec(sha, nil) },
+			want:     "exactly one of tag and branch",
+		},
+		{
+			name:     "branch with space in upstream",
+			upstream: defaultUpstreamSpec(map[string]string{"tag": "branch: my branch"}),
+			local:    func(sha string) string { return defaultLocalSpec(sha, nil) },
+			want:     "branch must name one branch",
+		},
+		{
+			name:     "branch ends with slash in upstream",
+			upstream: defaultUpstreamSpec(map[string]string{"tag": "branch: release/"}),
+			local:    func(sha string) string { return defaultLocalSpec(sha, nil) },
+			want:     "branch must name one branch",
+		},
+		{
+			name:     "commit id short in upstream",
+			upstream: defaultUpstreamSpec(map[string]string{"commit": "commit: 0123456"}),
+			local:    func(sha string) string { return defaultLocalSpec(sha, nil) },
+			want:     "full 40-digit commit id",
+		},
+		{
+			name:     "commit id uppercase in upstream",
+			upstream: defaultUpstreamSpec(map[string]string{"commit": "commit: " + strings.ToUpper(someCommit)}),
+			local:    func(sha string) string { return defaultLocalSpec(sha, nil) },
+			want:     "full 40-digit commit id",
+		},
+		{
+			name:     "path leaving repository in upstream",
+			upstream: defaultUpstreamSpec(map[string]string{"path": "path: ../openapi.json"}),
+			local:    func(sha string) string { return defaultLocalSpec(sha, nil) },
+			want:     "one clean file path",
+		},
+		{
+			name:     "sha256 short in upstream",
+			upstream: defaultUpstreamSpec(map[string]string{"sha256": "sha256: " + someSHA256[1:]}),
+			local:    func(sha string) string { return defaultLocalSpec(sha, nil) },
+			want:     "sha256 must be 64",
+		},
+		{
+			name:     "license missing in upstream",
+			upstream: defaultUpstreamSpec(map[string]string{"license": ""}),
+			local:    func(sha string) string { return defaultLocalSpec(sha, nil) },
+			want:     "license must be the SPDX id",
+		},
+		{
+			name:     "prefix without slash in upstream",
+			upstream: defaultUpstreamSpec(map[string]string{"prefix": "prefix: api/v1"}),
+			local:    func(sha string) string { return defaultLocalSpec(sha, nil) },
+			want:     "prefix must be empty or a path",
+		},
+		{
+			name: "one commit under two repositories",
+			upstream: defaultUpstreamSpec(nil) +
+				strings.TrimPrefix(defaultUpstreamSpec(otherProject), "specs:\n"),
+			local: func(sha string) string {
+				base := defaultLocalSpec(sha, nil)
+				return base + "  - name: other\n    operations: [GET /api/v1/status]\n"
+			},
+			want: "repeats the commit of Owner/Project",
+		},
 	}
+
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			file := filepath.Join(t.TempDir(), "specs.yaml")
-			writeFile(t, file, test.manifest)
-			pins, err := readManifest(file)
+			upData := []byte(test.upstream)
+			var server *mockServer
+			if !test.serveEmpty {
+				server = serveManifest(t, upData)
+			} else {
+				server = serveManifest(t, nil)
+			}
+			sha := digest(upData)
+			localContent := test.local(sha)
+
+			dir := t.TempDir()
+			manifestFile := filepath.Join(dir, "specs.yaml")
+			writeFile(t, manifestFile, localContent)
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			pins, err := readManifest(ctx, manifestFile, filepath.Join(dir, "cache"), server.URL, server.Client())
 			switch {
 			case test.want == "" && err != nil:
 				t.Fatalf("readManifest: %v", err)
@@ -123,28 +474,87 @@ func TestReadManifest(t *testing.T) {
 			}
 		})
 	}
-	if _, err := readManifest(filepath.Join(t.TempDir(), "absent.yaml")); err == nil {
+
+	// Absent local file is refused.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	t.Cleanup(cancel)
+	if _, err := readManifest(ctx, filepath.Join(t.TempDir(), "absent.yaml"), "", "https://example.test", nil); err == nil {
 		t.Error("an absent manifest was accepted")
 	}
-	// Two spec files of one repository at one commit are two entries with one commit.
-	file := filepath.Join(t.TempDir(), "specs.yaml")
-	writeFile(t, file, entry(nil)+strings.TrimPrefix(entry(map[string]string{"name": "name: second", "path": "path: src/other.json"}), "specs:\n"))
-	if pins, err := readManifest(file); err != nil || len(pins) != 2 {
-		t.Errorf("readManifest of two files of one repository at one commit = %d pin(s), %v; want 2, nil", len(pins), err)
+}
+
+func TestManifestCaching(t *testing.T) {
+	t.Parallel()
+	upData := []byte(defaultUpstreamSpec(nil))
+	server := serveManifest(t, upData)
+	sha := digest(upData)
+	localContent := defaultLocalSpec(sha, nil)
+
+	dir := t.TempDir()
+	manifestFile := filepath.Join(dir, "specs.yaml")
+	writeFile(t, manifestFile, localContent)
+	cacheDir := filepath.Join(dir, "cache")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// First read: downloads from server into cache.
+	pins, err := readManifest(ctx, manifestFile, cacheDir, server.URL, server.Client())
+	if err != nil {
+		t.Fatalf("first readManifest: %v", err)
+	}
+	if len(pins) != 1 {
+		t.Fatalf("pins = %d, want 1", len(pins))
+	}
+	if got := server.requests.Load(); got != 1 {
+		t.Fatalf("server requests = %d, want 1", got)
+	}
+
+	cachedFile := filepath.Join(cacheDir, "source.manifest")
+	if data, readErr := os.ReadFile(cachedFile); readErr != nil || string(data) != string(upData) {
+		t.Fatalf("cached file differs from upstream: %v", readErr)
+	}
+
+	// Second read: cache has matching sha, zero new server requests.
+	server.requests.Store(0)
+	pins, err = readManifest(ctx, manifestFile, cacheDir, server.URL, server.Client())
+	if err != nil {
+		t.Fatalf("second readManifest: %v", err)
+	}
+	if len(pins) != 1 {
+		t.Fatalf("pins = %d, want 1", len(pins))
+	}
+	if got := server.requests.Load(); got != 0 {
+		t.Fatalf("second readManifest made %d request(s); want 0 (cached)", got)
+	}
+
+	// Corrupted cache re-downloads.
+	writeFile(t, cachedFile, "corrupted content")
+	server.requests.Store(0)
+	pins, err = readManifest(ctx, manifestFile, cacheDir, server.URL, server.Client())
+	if err != nil {
+		t.Fatalf("readManifest after corrupted cache: %v", err)
+	}
+	if len(pins) != 1 {
+		t.Fatalf("pins = %d, want 1", len(pins))
+	}
+	if got := server.requests.Load(); got != 1 {
+		t.Fatalf("readManifest after corrupted cache made %d request(s); want 1", got)
 	}
 }
 
 // TestCommittedManifest binds the manifest of this repository: it must be well formed and name
-// the specs the contract tests load.
+// the specs the contract tests load. The goenvoy manifest it pins is read and joined by
+// `make contracts-verify`, which has the network; this test stays offline.
 func TestCommittedManifest(t *testing.T) {
 	t.Parallel()
-	pins, err := readManifest("specs.yaml")
+	local, err := readLocal("specs.yaml")
 	if err != nil {
-		t.Fatalf("readManifest: %v", err)
+		t.Fatalf("readLocal: %v", err)
 	}
-	names := make([]string, 0, len(pins))
-	for _, p := range pins {
-		names = append(names, p.Name)
+	names := make([]string, 0, len(local.Specs))
+	for _, s := range local.Specs {
+		names = append(names, s.Name)
 	}
 	want := []string{"sonarr", "radarr", "lidarr", "seerr", "bookshelf", "chaptarr", "readarr-faustvii", "whisparr-v2", "whisparr-v3"}
 	if !slices.Equal(names, want) {
