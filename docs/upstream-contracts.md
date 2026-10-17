@@ -141,6 +141,27 @@ every pin, for example after the fields of an entry are reordered. `make contrac
 the tests of `tools/upstreamspec` first, so the `contracts` job covers a change to
 `renovate.json` as well.
 
+## Download clients
+
+The download clients publish no specs, so `make dlclients-live` checks them against real
+releases instead. It starts qBittorrent, Transmission, Deluge, rTorrent, SABnzbd and NZBGet from
+`tools/e2e/dlclients/compose.yaml` (pinned by digest, kept current by Renovate), sets each up as
+a user would, and runs `TestLiveDownloadClients` (`api/internal/dlclients/live_test.go`)
+through the adapters production uses. Each client must be reachable with its secret, report an
+empty queue and the right paused state, and refuse a wrong secret; the run repeats with SABnzbd
+and NZBGet paused. Two planted cases, a wrong secret for every client and a pause that never
+happened, must fail first. CI runs it as the job `dlclients-live`; it needs Docker and is not
+part of `make verify-all`.
+
+Real clients behave in ways a fake did not show:
+
+| Client | Behaviour | Where it is handled |
+| --- | --- | --- |
+| qBittorrent 5 | Answers HTTP 401 when the port in the `Host` header is not the port the WebUI listens on. | The compose file publishes the WebUI on the port it listens on. |
+| Deluge 2 | The web UI starts without a daemon connection and answers every daemon call with "Unknown method". | The snapshot reports `ErrDelugeNoDaemon`; the user connects a daemon in the web UI's connection manager. |
+| Deluge 2 | Serves no `daemon.info`, which goenvoy asks for the version ([golusoris/goenvoy#101](https://github.com/golusoris/goenvoy/issues/101)). | The version stays empty; `unknownVersion` in `live_test.go` fails once a fixed release reports it. |
+| NZBGet | Starts with downloads paused. | `tools/e2e/dlclients_live.sh` resumes it before the first run. |
+
 ## Limits
 
 The check says "the spec documents what the client uses". It does not say more than that.
