@@ -94,6 +94,7 @@ Every instance has one policy (`GET/PUT /api/v1/instances/{id}/policy`).
 | `exclude_quality_profiles` | empty | up to 100 *arr quality profile ids; items using any of these are skipped; an id may not be in both profile lists |
 | `release_delay_h` | 0 | 0 to 8760; skip items released less than this many hours ago (0 = off; items without a date are kept) |
 | `dry_run` | false | When true, scheduled and periodic runs only preview without dispatching searches |
+| `skip_unavailable_movies` | true | Radarr only: skip movies whose minimum availability is not reached (`isAvailable` false); they cost no stamina, and the run's `candidates_filtered` event counts them. Movies without the flag are searched |
 
 An episode, album or book has the tags and quality profile of its series, artist or author.
 `GET /api/v1/instances/{id}/policy/filter-options` lists the tags and quality profiles the

@@ -244,6 +244,7 @@ type SnatchPolicy struct {
 	ExcludeQualityProfiles []int32
 	ReleaseDelayH          int32
 	DryRun                 bool
+	SkipUnavailableMovies  bool
 }
 
 type SnatchRun struct {

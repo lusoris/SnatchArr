@@ -80,6 +80,8 @@
 	"policy_include_profiles": "Only items with one of these quality profiles",
 	"policy_exclude_profiles": "Never items with these quality profiles",
 	"policy_release_delay": "Wait after release (hours)",
+	"policy_skip_unavailable": "Skip movies not yet available",
+	"policy_skip_unavailable_hint": "Leaves out movies Radarr does not yet count as available under their minimum availability.",
 	"policy_dry_run": "Preview / dry-run only",
 	"policy_dry_run_hint": "Scheduled runs for this instance only preview their targets and never search.",
 	"policy_saved": "Policy saved",

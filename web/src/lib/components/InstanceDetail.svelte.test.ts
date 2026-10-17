@@ -233,6 +233,29 @@ describe('InstanceDetail', () => {
 		expect(body.dry_run).toBe(true);
 	});
 
+	it('offers the availability switch on a Radarr instance and saves it off', async () => {
+		const put = vi.spyOn(api, 'PUT').mockResolvedValue({ data: samplePolicy } as never);
+		await subtitleOf(untestedInstance);
+
+		const checkbox = (await screen.findByRole('checkbox', {
+			name: m.policy_skip_unavailable()
+		})) as HTMLInputElement;
+		expect(checkbox.checked).toBe(true);
+
+		await fireEvent.click(checkbox);
+		await fireEvent.click(savePolicyButton());
+
+		expect(put).toHaveBeenCalledOnce();
+		const body = (put.mock.calls[0]![1] as { body: SnatchPolicy }).body;
+		expect(body.skip_unavailable_movies).toBe(false);
+	});
+
+	it('hides the availability switch on other kinds', async () => {
+		await subtitleOf(forkInstance);
+		await screen.findByRole('checkbox', { name: m.policy_dry_run() });
+		expect(screen.queryByRole('checkbox', { name: m.policy_skip_unavailable() })).toBeNull();
+	});
+
 	it('renders seeker warning banner and allows pausing instance when seeker overlap is detected', async () => {
 		const put = vi
 			.spyOn(api, 'PUT')

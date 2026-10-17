@@ -10,19 +10,21 @@ VALUES ($1, $2)
 ON CONFLICT (instance_id) DO UPDATE SET instance_id = EXCLUDED.instance_id
 RETURNING *;
 
--- name: UpsertPolicy :one
+-- name: UpsertPolicy :exec
+-- The caller reads the row back with GetPolicy in the same transaction: scanning RETURNING *
+-- here would push the generated function past the HISS-04 length limit.
 INSERT INTO snatch_policies (
     instance_id, missing_per_cycle, upgrade_per_cycle, cycle_interval_s, hourly_cap, selection,
     monitored_only, skip_future_releases, radarr_release_type, sonarr_missing_mode, sonarr_upgrade_mode,
     lidarr_missing_mode, processed_ttl_h, max_queue_size, await_command, page_size, updated_at,
     recent_grab_window_h, afterglow_max_h, include_tags, exclude_tags, include_quality_profiles,
-    exclude_quality_profiles, release_delay_h, dry_run
+    exclude_quality_profiles, release_delay_h, dry_run, skip_unavailable_movies
 ) VALUES (
     $1, $2, $3, $4, $5, $6,
     $7, $8, $9, $10, $11,
     $12, $13, $14, $15, $16, $17,
     $18, $19, $20, $21, $22,
-    $23, $24, $25
+    $23, $24, $25, $26
 )
 ON CONFLICT (instance_id) DO UPDATE SET
     missing_per_cycle = EXCLUDED.missing_per_cycle,
@@ -48,8 +50,8 @@ ON CONFLICT (instance_id) DO UPDATE SET
     exclude_quality_profiles = EXCLUDED.exclude_quality_profiles,
     release_delay_h = EXCLUDED.release_delay_h,
     dry_run = EXCLUDED.dry_run,
-    updated_at = EXCLUDED.updated_at
-RETURNING *;
+    skip_unavailable_movies = EXCLUDED.skip_unavailable_movies,
+    updated_at = EXCLUDED.updated_at;
 
 -- name: SavePolicyCursor :exec
 UPDATE snatch_policies
