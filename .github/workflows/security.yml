@@ -27,9 +27,10 @@ jobs:
           cache: false
       - name: Install tools
         run: |
-          make -C .. govulncheck-install gosec-install
+          make -C .. gosec-install
       - name: govulncheck
-        run: govulncheck ./...
+        # The target make api-verify runs: the tools/go/go.mod pin, its version printed first (#161).
+        run: make -C .. api-vuln
       - name: gosec (zero exclusions)
         # From the module root: started in api/, gosec loads no package and passes on zero files.
         working-directory: ${{ github.workspace }}
