@@ -386,3 +386,17 @@ To run against pre-built images without re-building:
 ```sh
 SMOKE_SKIP_BUILD=1 E2E_API_IMAGE=<api-image> E2E_WORKER_IMAGE=<worker-image> make e2e-image-smoke
 ```
+
+### Soak
+
+`make e2e-soak` keeps the image smoke running for `SOAK_SECONDS` (default 600) after its checks. The API rotates every gRPC connection after `SOAK_CONNECTION_AGE` (default `15s`, instead of the production 2 minutes), so the workers' lease long-polls (30 s, the production default) cross many rotations. Every `SOAK_ROUND_SECONDS` (default 20) the soak starts a missing run on Sonarr and Radarr, then fails the round on:
+
+- any failed worker API call (`snatcharr_worker_api_failures_total` on either worker grew);
+- any failed run;
+- a last worker contact (`worker_last_contact_at` in `/api/v1/system/status`) older than `SOAK_MAX_CONTACT_AGE` seconds (default 45: the long-poll plus 15).
+
+At the end, at least two runs per round must be done. The workflow `.github/workflows/soak.yml` runs it nightly and on demand; a failure on main opens or comments on the issue "Soak fails on main". The soak catches lease calls cut at a connection rotation and calls a closing connection refused before sending them, which a shorter smoke run does not reach.
+
+```sh
+SOAK_SECONDS=1800 make e2e-soak
+```

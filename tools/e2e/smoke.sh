@@ -17,7 +17,9 @@
 #   h. an upgrade snatch searches only cutoff-unmet items up to its cap, records stamina,
 #      avoids repeats, and records kind upgrade on completed runs (C10-01);
 #   i. with images: each container runs under the memory limit of the chart, and its peak
-#      stays at or below 80 % of that limit (C12-01, tools/e2e/mem_limits.sh).
+#      stays at or below 80 % of that limit (C12-01, tools/e2e/mem_limits.sh);
+#   j. with SOAK_SECONDS: rounds of runs for that long, with no failed worker API call, no
+#      failed run and fresh worker contact in any round (C14-01, `make e2e-soak`).
 # `make e2e-smoke` builds the binaries and provides Postgres. Needs curl and jq.
 set -euo pipefail
 
@@ -167,23 +169,32 @@ start radarr "$SMOKE_FAKEARR_BIN" -addr "127.0.0.1:$RADARR_PORT" -kind radarr -a
 start radarr_upgrade "$SMOKE_FAKEARR_BIN" -addr "127.0.0.1:$RADARR_UPGRADE_PORT" -kind radarr -api-key "$FAKE_KEY" -missing 8 -cutoff 8
 # Five missing episodes: all of one series, spread over SERIES_COST seasons.
 start sonarr_series "$SMOKE_FAKEARR_BIN" -addr "127.0.0.1:$SONARR_SERIES_PORT" -kind sonarr -api-key "$FAKE_KEY" -missing 5
+# SMOKE_GRPC_MAX_CONNECTION_AGE shortens the API's gRPC connection age, so the soak (j) sees
+# many connection rotations instead of one every 2 minutes. SMOKE_LEASE_WAIT_SECS is the
+# workers' lease long-poll: 5 s keeps the checks quick; the soak runs the production 30 s, so
+# a long-poll outlives a connection's grace unless the API keeps it to the end.
+SMOKE_LEASE_WAIT_SECS=${SMOKE_LEASE_WAIT_SECS:-5}
+API_ENV=(APP_SNATCHARR_PROFILE=dev APP_DB_DSN="$SMOKE_DSN" APP_SNATCHARR_WORKER_TOKEN="$TOKEN"
+    APP_HTTP_ADDR="127.0.0.1:$API_PORT" APP_GRPC_LISTEN="127.0.0.1:$GRPC_PORT")
+if [ -n "${SMOKE_GRPC_MAX_CONNECTION_AGE:-}" ]; then
+    API_ENV+=(APP_GRPC_KEEPALIVE_MAX_CONNECTION_AGE="$SMOKE_GRPC_MAX_CONNECTION_AGE")
+fi
 # No APP_CRYPTO_KEY: the dev profile must start on its development key (#138).
 if [ -n "${SMOKE_API_IMAGE:-}" ]; then
     cname_api="smoke-api-$$"
     CONTAINERS+=("$cname_api")
+    api_docker_env=()
+    for kv in "${API_ENV[@]}"; do
+        api_docker_env+=(-e "$kv")
+    done
     start api docker run --rm --init --network host --read-only \
         --user 65532:65532 --cap-drop ALL --security-opt no-new-privileges \
         --memory "$API_MEM" --memory-swap "$API_MEM" \
         --name "$cname_api" \
-        -e APP_SNATCHARR_PROFILE=dev \
-        -e APP_DB_DSN="$SMOKE_DSN" \
-        -e APP_SNATCHARR_WORKER_TOKEN="$TOKEN" \
-        -e APP_HTTP_ADDR="127.0.0.1:$API_PORT" \
-        -e APP_GRPC_LISTEN="127.0.0.1:$GRPC_PORT" \
+        "${api_docker_env[@]}" \
         "$SMOKE_API_IMAGE"
 else
-    start api env APP_SNATCHARR_PROFILE=dev APP_DB_DSN="$SMOKE_DSN" APP_SNATCHARR_WORKER_TOKEN="$TOKEN" \
-        APP_HTTP_ADDR="127.0.0.1:$API_PORT" APP_GRPC_LISTEN="127.0.0.1:$GRPC_PORT" "$SMOKE_API_BIN"
+    start api env "${API_ENV[@]}" "$SMOKE_API_BIN"
 fi
 wait_http "http://127.0.0.1:$SONARR_PORT/healthz"
 wait_http "http://127.0.0.1:$RADARR_PORT/healthz"
@@ -220,7 +231,7 @@ if [ -n "${SMOKE_WORKER_IMAGE:-}" ]; then
         -e SNATCH_API_GRPC="http://127.0.0.1:$GRPC_PORT" \
         -e SNATCH_WORKER_TOKEN="$TOKEN" \
         -e SNATCH_CONCURRENCY=1 \
-        -e SNATCH_LEASE_WAIT_SECS=5 \
+        -e SNATCH_LEASE_WAIT_SECS="$SMOKE_LEASE_WAIT_SECS" \
         -e SNATCH_HTTP_ADDR="127.0.0.1:$W1_HTTP_PORT" \
         "$SMOKE_WORKER_IMAGE"
 
@@ -234,15 +245,15 @@ if [ -n "${SMOKE_WORKER_IMAGE:-}" ]; then
         -e SNATCH_API_GRPC="http://127.0.0.1:$GRPC_PORT" \
         -e SNATCH_WORKER_TOKEN="$TOKEN" \
         -e SNATCH_CONCURRENCY=1 \
-        -e SNATCH_LEASE_WAIT_SECS=5 \
+        -e SNATCH_LEASE_WAIT_SECS="$SMOKE_LEASE_WAIT_SECS" \
         -e SNATCH_HTTP_ADDR="127.0.0.1:$W2_HTTP_PORT" \
         "$SMOKE_WORKER_IMAGE"
 else
     start w1 env SNATCH_WORKER_ID=w1 SNATCH_API_GRPC="http://127.0.0.1:$GRPC_PORT" \
-        SNATCH_WORKER_TOKEN="$TOKEN" SNATCH_CONCURRENCY=1 SNATCH_LEASE_WAIT_SECS=5 \
+        SNATCH_WORKER_TOKEN="$TOKEN" SNATCH_CONCURRENCY=1 SNATCH_LEASE_WAIT_SECS="$SMOKE_LEASE_WAIT_SECS" \
         SNATCH_HTTP_ADDR="127.0.0.1:$W1_HTTP_PORT" "$SMOKE_WORKER_BIN"
     start w2 env SNATCH_WORKER_ID=w2 SNATCH_API_GRPC="http://127.0.0.1:$GRPC_PORT" \
-        SNATCH_WORKER_TOKEN="$TOKEN" SNATCH_CONCURRENCY=1 SNATCH_LEASE_WAIT_SECS=5 \
+        SNATCH_WORKER_TOKEN="$TOKEN" SNATCH_CONCURRENCY=1 SNATCH_LEASE_WAIT_SECS="$SMOKE_LEASE_WAIT_SECS" \
         SNATCH_HTTP_ADDR="127.0.0.1:$W2_HTTP_PORT" "$SMOKE_WORKER_BIN"
 fi
 
@@ -432,6 +443,87 @@ done
 contact=$(api GET /system/status | jq -r '.worker_last_contact_at // empty')
 [ -n "$contact" ] || fail "g. /system/status has no worker_last_contact_at"
 echo "smoke: last worker contact $contact"
+
+# worker_failures: failed API calls both workers counted so far, all calls summed.
+worker_failures() {
+    local port n total=0
+    for port in "$W1_HTTP_PORT" "$W2_HTTP_PORT"; do
+        n=$(curl -fsS --max-time 5 "http://127.0.0.1:$port/metrics" |
+            awk '/^snatcharr_worker_api_failures_total\{/ { n += $2 } END { print n + 0 }') ||
+            fail "j. worker on $port: /metrics failed"
+        total=$((total + n))
+    done
+    echo "$total"
+}
+
+# runs_in STATUS ID...: runs of the instances in STATUS.
+runs_in() {
+    local status=$1 id n total=0
+    shift
+    for id in "$@"; do
+        n=$(api GET "/runs?instance_id=$id&limit=500" | jq --arg s "$status" '[(. // [])[] | select(.status == $s)] | length')
+        total=$((total + n))
+    done
+    echo "$total"
+}
+
+# contact_age: seconds since the newest LeaseRun or Heartbeat of any worker.
+contact_age() {
+    local at at_s now
+    at=$(api GET /system/status | jq -r '.worker_last_contact_at // empty')
+    [ -n "$at" ] || fail "j. /system/status lost worker_last_contact_at"
+    at_s=$(date -d "$at" +%s) || fail "j. worker_last_contact_at '$at' is no time"
+    now=$(date +%s)
+    echo $((now - at_s))
+}
+
+# soak_round N: one soak round; fails on any failed API call, failed run or stale contact
+# since the soak started.
+soak_round() {
+    local failures failed age
+    api POST "/instances/$sonarr_id/runs" '{"kind":"missing"}' >/dev/null
+    api POST "/instances/$radarr_id/runs" '{"kind":"missing"}' >/dev/null
+    settle "$sonarr_id" "$radarr_id"
+    sleep "$SOAK_ROUND_SECONDS"
+    failures=$(worker_failures)
+    failures=$((failures - soak_failures))
+    [ "$failures" -eq 0 ] || fail "j. round $1: the workers counted $failures failed API calls since the soak started"
+    failed=$(runs_in failed "$sonarr_id" "$radarr_id")
+    failed=$((failed - soak_failed))
+    [ "$failed" -eq 0 ] || fail "j. round $1: $failed runs failed since the soak started"
+    age=$(contact_age)
+    [ "$age" -le "$SOAK_MAX_CONTACT_AGE" ] || fail "j. round $1: last worker contact $age s ago, want at most $SOAK_MAX_CONTACT_AGE s"
+}
+
+# j. Soak (C14-01): with SOAK_SECONDS set, keep the system running and trigger a missing run on
+# sonarr and radarr every SOAK_ROUND_SECONDS. Each round, no worker API call may have failed,
+# no run may have failed and a worker must have reached the API within SOAK_MAX_CONTACT_AGE.
+# This is the class of the lease failures that went unseen for 26 h: a long-poll cut at
+# connection rotation, or a call refused unsent by the closing connection, counts as a
+# failed API call.
+SOAK_SECONDS=${SOAK_SECONDS:-0}
+SOAK_ROUND_SECONDS=${SOAK_ROUND_SECONDS:-20}
+# A worker reaches the API at least once per long-poll; 15 s on top covers a resend.
+SOAK_MAX_CONTACT_AGE=${SOAK_MAX_CONTACT_AGE:-$((SMOKE_LEASE_WAIT_SECS + 15))}
+if [ "$SOAK_SECONDS" -gt 0 ]; then
+    soak_rounds=$((SOAK_SECONDS / SOAK_ROUND_SECONDS))
+    # 2 runs per round per 500-run page of /runs: at most 450 rounds keeps every run counted.
+    if [ "$soak_rounds" -lt 1 ] || [ "$soak_rounds" -gt 450 ]; then
+        fail "j. SOAK_SECONDS / SOAK_ROUND_SECONDS gives $soak_rounds rounds, want 1 to 450"
+    fi
+    soak_failures=$(worker_failures)
+    soak_failed=$(runs_in failed "$sonarr_id" "$radarr_id")
+    soak_done=$(runs_in "done" "$sonarr_id" "$radarr_id")
+    soak_start=$(date +%s)
+    for round in $(seq 1 "$soak_rounds"); do
+        soak_round "$round"
+    done
+    done_runs=$(runs_in "done" "$sonarr_id" "$radarr_id")
+    done_runs=$((done_runs - soak_done))
+    [ "$done_runs" -ge $((2 * soak_rounds)) ] || fail "j. $done_runs runs done in $soak_rounds rounds, want at least $((2 * soak_rounds))"
+    soak_end=$(date +%s)
+    echo "smoke: soak passed: $soak_rounds rounds in $((soak_end - soak_start)) s, $done_runs runs done, no failed API call or run"
+fi
 
 # mem_peak NAME CONTAINER LIMIT: the container's peak against the chart limit it ran under.
 mem_peak() {
