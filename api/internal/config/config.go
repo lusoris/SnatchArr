@@ -71,6 +71,7 @@ type Options struct {
 	OIDC      OIDCOptions      `koanf:"oidc"`
 	ProxyAuth ProxyAuthOptions `koanf:"proxy_auth"`
 	Prowlarr  ProwlarrOptions  `koanf:"prowlarr"`
+	Logs      LogsOptions      `koanf:"logs"`
 }
 
 // ProwlarrOptions configures the Prowlarr link and planner gate.
@@ -279,6 +280,12 @@ type SessionOptions struct {
 	Secure bool          `koanf:"secure"`
 }
 
+// LogsOptions size the in-memory log ring the log viewer reads.
+type LogsOptions struct {
+	// RingSize is the number of records kept; logring.New clamps it to 100..20000.
+	RingSize int `koanf:"ring_size"`
+}
+
 // APIKeyOptions tune API-key issuance.
 type APIKeyOptions struct {
 	Secret string `koanf:"secret"`
@@ -303,6 +310,7 @@ func Default() Options {
 		Prowlarr: ProwlarrOptions{
 			LimitThreshold: 0.9,
 		},
+		Logs: LogsOptions{RingSize: 2000},
 	}
 }
 
@@ -445,6 +453,7 @@ func CompoundKeys() []string {
 		"snatcharr.proxy_auth.trusted_cidrs",
 		"snatcharr.proxy_auth.allowed_users",
 		"snatcharr.prowlarr.limit_threshold",
+		"snatcharr.logs.ring_size",
 	}
 }
 

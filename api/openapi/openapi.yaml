@@ -678,6 +678,52 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
 
+  /logs:
+    get:
+      tags: [system]
+      operationId: listLogs
+      summary: Recent log records of this api process, newest first (admin only)
+      description: >-
+        Records come from a fixed-size in-memory ring (snatcharr.logs.ring_size). Secret
+        attributes, credential query parameters, bearer tokens, URL userinfo and 32-character
+        hex keys are replaced with [REDACTED] before a record is stored. The live tail is the
+        Server-Sent Events stream at /api/v1/logs/stream (default event type message, same record
+        shape), outside this router.
+      parameters:
+        - name: level
+          in: query
+          description: Minimum level; records below it are left out.
+          schema:
+            $ref: "#/components/schemas/LogLevel"
+        - name: q
+          in: query
+          description: Case-insensitive substring of the message, an attribute key or value.
+          schema:
+            type: string
+            maxLength: 200
+        - name: source
+          in: query
+          description: Exact source, e.g. api.
+          schema:
+            type: string
+            maxLength: 64
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 200
+      responses:
+        "200":
+          description: Log records
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LogPage"
+        default:
+          $ref: "#/components/responses/Problem"
+
   /hourly-caps:
     get:
       tags: [snatches]
@@ -2268,6 +2314,55 @@ components:
           format: date-time
           description: When stamina next frees up (the oldest spend still counted leaves the window); now when nothing is spent
 
+    LogLevel:
+      type: string
+      enum: [debug, info, warn, error]
+    LogAttr:
+      type: object
+      required: [key, value]
+      properties:
+        key:
+          type: string
+          description: Attribute key; group names are joined with dots.
+        value:
+          type: string
+    LogRecord:
+      type: object
+      required: [seq, time, level, source, message, attrs]
+      properties:
+        seq:
+          type: integer
+          format: int64
+          description: Position in the ring since process start; increases by one per record.
+        time:
+          type: string
+          format: date-time
+        level:
+          $ref: "#/components/schemas/LogLevel"
+        source:
+          type: string
+          description: Process that emitted the record (api).
+        message:
+          type: string
+        attrs:
+          type: array
+          items:
+            $ref: "#/components/schemas/LogAttr"
+    LogPage:
+      type: object
+      required: [records, capacity, dropped]
+      properties:
+        records:
+          type: array
+          items:
+            $ref: "#/components/schemas/LogRecord"
+        capacity:
+          type: integer
+          description: Number of records the ring holds.
+        dropped:
+          type: integer
+          format: int64
+          description: Records overwritten since process start because the ring was full.
     Settings:
       type: object
       required: [history_retention_days, user_agent, global_hourly_cap]

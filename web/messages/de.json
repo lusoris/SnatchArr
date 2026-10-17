@@ -383,5 +383,19 @@
 	"cleanuparr_seeker_col_status": "Status",
 	"cleanuparr_seeker_col_overlap": "SnatchArr-Treffer",
 	"cleanuparr_seeker_matched": "Zugeordnet (Doppelsuche)",
-	"cleanuparr_seeker_unmatched": "Nicht zugeordnet"
+	"cleanuparr_seeker_unmatched": "Nicht zugeordnet",
+	"nav_logs": "Protokolle",
+	"logs_title": "Protokolle",
+	"logs_level": "Mindeststufe",
+	"logs_search": "Suche",
+	"logs_source": "Quelle",
+	"logs_source_all": "Alle Quellen",
+	"logs_level_debug": "Debug",
+	"logs_level_info": "Info",
+	"logs_level_warn": "Warnung",
+	"logs_level_error": "Fehler",
+	"logs_redacted_note": "Geheimnisse werden durch [REDACTED] ersetzt, bevor ein Eintrag gespeichert wird.",
+	"logs_window": "Die neuesten {shown} Einträge; der Server hält {capacity}, {dropped} ältere wurden überschrieben.",
+	"logs_empty": "Kein Eintrag passt zu den Filtern.",
+	"logs_admin_only": "Nur Administratoren können die Protokolle lesen."
 }

@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-import { screen, waitFor } from '@testing-library/svelte';
+import { screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { m } from '#lib/paraglide/messages.js';
 import { renderWithQuery } from '#lib/testing/harness.js';
@@ -94,6 +94,6 @@ describe('live events', () => {
 	it('renders empty log before any events arrive', async () => {
 		renderWithQuery(LivePage);
 		const log = await screen.findByRole('log');
-		expect(log.children).toHaveLength(0);
+		expect(within(log).queryAllByRole('listitem')).toHaveLength(0);
 	});
 });

@@ -638,6 +638,18 @@ func stepsPoliciesAndRuns() []routerStep {
 			},
 		},
 		{
+			op:     "listLogs",
+			method: http.MethodGet,
+			path:   func(_ *idsState) string { return "/logs?level=warn&limit=10" },
+			want:   http.StatusOK,
+			capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
+				t.Helper()
+				if decoded["records"] == nil || decoded["capacity"] == nil {
+					t.Fatalf("listLogs missing records or capacity: %v", decoded)
+				}
+			},
+		},
+		{
 			op:     "deleteInstanceEvents",
 			method: http.MethodDelete,
 			path:   func(ids *idsState) string { return "/instances/" + ids.instanceID + "/events" },

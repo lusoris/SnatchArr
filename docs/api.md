@@ -17,8 +17,9 @@ types are generated from the same file. Errors are RFC 9457 problem details
   Unsafe methods need the `X-CSRF-Token` header, which `GET /api/v1/auth/session` returns.
 - **API keys**: `Authorization: Bearer sk_...` on any request; no CSRF token needed.
 
-The Server-Sent Events stream `GET /api/v1/events/stream` is served outside the generated
-router and takes the same session cookie or API key; without either it answers 401.
+The Server-Sent Events streams `GET /api/v1/events/stream` and `GET /api/v1/logs/stream` are
+served outside the generated router and take the same session cookie or API key; without either
+they answer 401, and the log stream answers 403 to a non-admin.
 
 The first start has no users; `GET /api/v1/auth/setup/status` says so and
 `POST /api/v1/auth/setup` creates the admin.
@@ -32,6 +33,7 @@ The first start has no users; `GET /api/v1/auth/setup/status` says so and
 | `/instances/{id}/runs` | Quickie (manual snatch) |
 | `/runs`, `/runs/{id}/cancel` | Snatch runs |
 | `/events`, `/events/stream` | History and Server-Sent Events |
+| `/logs`, `/logs/stream` | Recent redacted log records and their live tail, admin only ([Logs](logs.md)) |
 | `/hourly-caps` | Stamina per instance |
 | `/state/reset` | End every afterglow |
 | `/schedules` | Pause and cap-override windows |

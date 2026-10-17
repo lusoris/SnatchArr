@@ -18,6 +18,7 @@ export const keys = {
 	instanceRuns: (id: string) => ['runs', id] as const,
 	run: (id: string) => ['runs', 'single', id] as const,
 	events: ['events'] as const,
+	logs: (level: string, q: string, source: string) => ['logs', level, q, source] as const,
 	schedules: ['schedules'] as const,
 	dlclients: ['download-clients'] as const,
 	dlstatus: ['download-clients', 'status'] as const,

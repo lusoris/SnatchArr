@@ -25,6 +25,7 @@ const ALL_ROUTES = [
 	'/instances/[id]',
 	'/live',
 	'/login',
+	'/logs',
 	'/prowlarr',
 	'/schedules',
 	'/seerr',

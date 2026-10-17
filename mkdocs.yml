@@ -76,6 +76,7 @@ nav:
   - Install with Docker Compose: install-compose.md
   - Deployment: deployment.md
   - Metrics: metrics.md
+  - Logs: logs.md
   - Architecture Decisions:
       - Overview: adr/README.md
       - "ADR-0001: Go control plane, Rust snatch-worker": adr/0001-go-control-plane-rust-snatch-worker.md
