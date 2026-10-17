@@ -12,6 +12,7 @@ apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
   name: {{ include "snatcharr.fullname" . }}-worker
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "snatcharr.labels" . | nindent 4 }}
     app.kubernetes.io/component: worker

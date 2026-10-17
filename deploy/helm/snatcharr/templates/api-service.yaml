@@ -3,6 +3,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{ include "snatcharr.apiServiceName" . }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "snatcharr.labels" . | nindent 4 }}
     app.kubernetes.io/component: api
