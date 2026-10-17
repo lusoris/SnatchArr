@@ -23,7 +23,7 @@ GOLUSORIS_SHARED = $(GOMODCACHE)/github.com/golusoris/golusoris@$(GOLUSORIS_VER)
 
 .PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-soak e2e-compose-smoke e2e-compose-pg-upgrade e2e-dev-compose-smoke dlclients-live cleanuparr-live e2e-cnpg-pg-upgrade e2e-cnpg-backup-restore e2e-chart-install web-verify web-e2e web-e2e-api web-visual web-visual-update proto-verify deploy-verify chart-package governance-verify hooks-verify contracts-verify workflows-verify workflows-lint secret-scan \
 	images kind-up kind-deploy kind-keda-proof kind-down \
-        api-gen api-gosec gosec-install govulncheck-install sqlc-install tools-verify tools-lint tools-test tools-gosec web-gen proto-gen dev hooks setup
+        api-gen api-gosec api-vuln gosec-install govulncheck-install sqlc-install tools-verify tools-lint tools-test tools-gosec web-gen proto-gen dev hooks setup
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-18s %s\n", $$1, $$2}'
@@ -37,7 +37,11 @@ api-verify: ## golangci-lint + go fix + gosec + govulncheck + go test -race + ge
 	go mod tidy -diff
 	# The shared `ci` goal is `lint sec test`; its gosec step runs inside api/, where gosec loads no
 	# package (see api-gosec), so the three other goals run here and gosec runs from the module root.
-	$(MAKE) -C api -f "$(GOLUSORIS_SHARED)" lint vuln test GOLANGCI_CONFIG=../.golangci.yml
+	# The shared `vuln` goal runs whatever govulncheck the PATH holds; api-vuln runs the pinned one
+	# that CI runs, and the scanners are installed at their pins first (#161).
+	$(MAKE) -C api -f "$(GOLUSORIS_SHARED)" lint test GOLANGCI_CONFIG=../.golangci.yml
+	$(MAKE) api-vuln
+	$(MAKE) gosec-install
 	$(MAKE) api-gosec
 	cd api
 	go fix -diff ./...
@@ -94,6 +98,15 @@ gosec-install: ## Install gosec at the tools/go/go.mod pins (x/tools reads Go 1.
 govulncheck-install: ## Install govulncheck at the tools/go/go.mod pin
 	cd "$(SECURITY_TOOLS_MOD)"
 	go install golang.org/x/vuln/cmd/govulncheck
+
+# api-verify, ci.yml and security.yml scan through this target, so all three run the same pinned
+# scanner and print its version (#161). It calls the binary govulncheck-install wrote, never the
+# PATH lookup: a developer's older govulncheck earlier on the PATH does not take its place.
+GO_INSTALL_DIR = $(or $(shell go env GOBIN),$(firstword $(subst :, ,$(shell go env GOPATH)))/bin)
+api-vuln: govulncheck-install ## govulncheck at the tools/go/go.mod pin over api/, version printed first
+	cd api
+	"$(GO_INSTALL_DIR)/govulncheck" -version
+	"$(GO_INSTALL_DIR)/govulncheck" ./...
 
 sqlc-install: ## Install sqlc at the tools/go/go.mod pin, the version go generate runs
 	cd tools/go
