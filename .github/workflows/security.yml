@@ -51,7 +51,9 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+      # The runner's rustup installs the release pinned in rust-toolchain.toml.
+      - name: Rust toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
       # Prebuilt, checksum-verified binaries; no Docker Hub pull (cargo-deny-action hit 429s).
       - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
         with:
