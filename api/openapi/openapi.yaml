@@ -2937,14 +2937,14 @@ components:
 
     NotificationChannelKind:
       type: string
-      enum: [discord, slack, telegram, ntfy, gotify, teams, webhook]
+      enum: [discord, slack, telegram, ntfy, gotify, teams, webhook, apprise]
 
     NotificationChannelConfig:
       type: object
       properties:
         webhook_url:
           type: string
-          description: Webhook URL (write-only, never returned in responses)
+          description: Webhook URL for Discord, Slack and Teams, or the Apprise API notify URL ({server}/notify/{config key}) (write-only, never returned in responses)
         token:
           type: string
           description: Bearer token (write-only, never returned in responses)
@@ -2956,7 +2956,7 @@ components:
           description: Gotify App token (write-only, never returned in responses)
         password:
           type: string
-          description: Password (write-only, never returned in responses)
+          description: Password, sent as HTTP Basic Auth to an Apprise API server (write-only, never returned in responses)
         secret:
           type: string
           description: HMAC signing secret (write-only, never returned in responses)
@@ -2974,7 +2974,7 @@ components:
           description: Slack channel override
         username:
           type: string
-          description: Display username override
+          description: Display username override, or the HTTP Basic Auth user for an Apprise API server
         avatar_url:
           type: string
           description: Discord avatar URL override
@@ -2994,7 +2994,7 @@ components:
           type: array
           items:
             type: string
-          description: Tags / emoji shortcodes for ntfy
+          description: Tags / emoji shortcodes for ntfy; for Apprise, the configuration tags to notify (any one matches)
         url:
           type: string
           description: Target endpoint URL for signed outgoing webhooks

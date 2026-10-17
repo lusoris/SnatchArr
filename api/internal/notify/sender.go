@@ -71,9 +71,10 @@ func Deliver(ctx context.Context, ch domain.NotificationChannel, p Payload, ws o
 		body = p.Title
 	}
 	msg := notify.Message{
-		Subject: p.Title,
-		Body:    body,
-		Text:    body,
+		Subject:  p.Title,
+		Body:     body,
+		Text:     body,
+		Metadata: map[string]string{"level": p.Level},
 	}
 	if err := sender.Send(ctx, msg); err != nil {
 		return fmt.Errorf("send to %s: %w", ch.Name, err)
@@ -95,6 +96,13 @@ func buildChatSender(ch domain.NotificationChannel) (notify.Sender, error) {
 		return buildGotify(ch.Config)
 	case domain.ChannelTeams:
 		return buildTeams(ch.Config)
+	case domain.ChannelApprise:
+		return NewAppriseSender(AppriseOptions{
+			NotifyURL: ch.Config.WebhookURL,
+			Username:  ch.Config.Username,
+			Password:  ch.Config.Password,
+			Tags:      ch.Config.Tags,
+		})
 	case domain.ChannelWebhook:
 		return nil, fmt.Errorf("%w: webhook channel is not a chat sender", domain.ErrInvalid)
 	default:

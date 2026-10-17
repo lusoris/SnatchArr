@@ -972,6 +972,8 @@ func (s NotificationChannelKind) Validate() error {
 		return nil
 	case "webhook":
 		return nil
+	case "apprise":
+		return nil
 	default:
 		return errors.Errorf("invalid value: %v", s)
 	}

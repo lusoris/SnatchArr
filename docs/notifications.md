@@ -24,6 +24,19 @@ SnatchArr supports both chat communication channels and signed outgoing webhooks
 | `gotify` | Gotify Server | `server_url`, `app_token`, optional `priority` | Sends push notifications via a self-hosted Gotify server. |
 | `teams` | Microsoft Teams | `webhook_url`, optional `theme_color` | Sends connector cards to a Microsoft Teams channel webhook. |
 | `webhook` | Outgoing Webhook | `url`, optional `secret`, `allow_private_network`, `allow_insecure_http` | Sends HTTP POST JSON payloads signed with HMAC-SHA256. |
+| `apprise` | Apprise API | `webhook_url` (the notify URL), optional `username`, `password`, `tags` | Hands the message to an Apprise API server, which fans it out to every service its configuration lists. |
+
+### Apprise API
+
+[Apprise](https://github.com/caronc/apprise-api) is a notification gateway that speaks to more than a hundred services. SnatchArr posts to its stateful endpoint, so the destinations live in the Apprise configuration, not in SnatchArr:
+
+- `webhook_url`: the full notify URL, `http(s)://<apprise-server>/notify/<config-key>`. The configuration key alone grants sending when the server runs without authentication, so the URL is stored as a secret, is never returned by the API, and is removed from every logged or recorded error.
+- `username` and `password`: sent as HTTP Basic Auth when the server sets `APPRISE_AUTH_REQUIRED`.
+- `tags`: limits delivery to the destinations of the configuration that carry one of the tags (sent comma-separated, which Apprise reads as "any of").
+
+The event level picks the Apprise message type: `error` becomes `failure`, `warn` becomes `warning`, everything else `info`. A transport error, HTTP 429 or a 5xx response is retried twice with backoff. HTTP 424 (Apprise could not reach at least one destination) and any other 4xx is not retried, because a repeat would send the message again to the destinations that already received it. The sender code is `api/internal/notify/apprise.go`, its tests `api/internal/notify/apprise_test.go`.
+
+The Apprise channel does not pass through the outgoing-webhook network policy below; like ntfy and Gotify it may point at a server on the local network.
 
 ### Private Network & Insecure HTTP Opt-in
 

@@ -2543,7 +2543,8 @@ func (s *NotificationChannel) SetUpdatedAt(val time.Time) {
 
 // Ref: #/components/schemas/NotificationChannelConfig
 type NotificationChannelConfig struct {
-	// Webhook URL (write-only, never returned in responses).
+	// Webhook URL for Discord, Slack and Teams, or the Apprise API notify URL ({server}/notify/{config
+	// key}) (write-only, never returned in responses).
 	WebhookURL OptString `json:"webhook_url"`
 	// Bearer token (write-only, never returned in responses).
 	Token OptString `json:"token"`
@@ -2551,7 +2552,8 @@ type NotificationChannelConfig struct {
 	BotToken OptString `json:"bot_token"`
 	// Gotify App token (write-only, never returned in responses).
 	AppToken OptString `json:"app_token"`
-	// Password (write-only, never returned in responses).
+	// Password, sent as HTTP Basic Auth to an Apprise API server (write-only, never returned in
+	// responses).
 	Password OptString `json:"password"`
 	// HMAC signing secret (write-only, never returned in responses).
 	Secret OptString `json:"secret"`
@@ -2563,7 +2565,7 @@ type NotificationChannelConfig struct {
 	ChatID OptString `json:"chat_id"`
 	// Slack channel override.
 	Channel OptString `json:"channel"`
-	// Display username override.
+	// Display username override, or the HTTP Basic Auth user for an Apprise API server.
 	Username OptString `json:"username"`
 	// Discord avatar URL override.
 	AvatarURL OptString `json:"avatar_url"`
@@ -2575,7 +2577,7 @@ type NotificationChannelConfig struct {
 	ThemeColor OptString `json:"theme_color"`
 	// Priority for ntfy (1-5) or Gotify (0-10).
 	Priority OptInt `json:"priority"`
-	// Tags / emoji shortcodes for ntfy.
+	// Tags / emoji shortcodes for ntfy; for Apprise, the configuration tags to notify (any one matches).
 	Tags []string `json:"tags"`
 	// Target endpoint URL for signed outgoing webhooks.
 	URL OptString `json:"url"`
@@ -2844,6 +2846,7 @@ const (
 	NotificationChannelKindGotify   NotificationChannelKind = "gotify"
 	NotificationChannelKindTeams    NotificationChannelKind = "teams"
 	NotificationChannelKindWebhook  NotificationChannelKind = "webhook"
+	NotificationChannelKindApprise  NotificationChannelKind = "apprise"
 )
 
 // AllValues returns all NotificationChannelKind values.
@@ -2856,6 +2859,7 @@ func (NotificationChannelKind) AllValues() []NotificationChannelKind {
 		NotificationChannelKindGotify,
 		NotificationChannelKindTeams,
 		NotificationChannelKindWebhook,
+		NotificationChannelKindApprise,
 	}
 }
 
@@ -2875,6 +2879,8 @@ func (s NotificationChannelKind) MarshalText() ([]byte, error) {
 	case NotificationChannelKindTeams:
 		return []byte(s), nil
 	case NotificationChannelKindWebhook:
+		return []byte(s), nil
+	case NotificationChannelKindApprise:
 		return []byte(s), nil
 	default:
 		return nil, errors.Errorf("invalid value: %q", s)
@@ -2904,6 +2910,9 @@ func (s *NotificationChannelKind) UnmarshalText(data []byte) error {
 		return nil
 	case NotificationChannelKindWebhook:
 		*s = NotificationChannelKindWebhook
+		return nil
+	case NotificationChannelKindApprise:
+		*s = NotificationChannelKindApprise
 		return nil
 	default:
 		return errors.Errorf("invalid value: %q", data)

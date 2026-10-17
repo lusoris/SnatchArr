@@ -21,7 +21,8 @@ SPDX-License-Identifier: EUPL-1.2
 		{ value: 'telegram', label: 'Telegram' },
 		{ value: 'ntfy', label: 'ntfy' },
 		{ value: 'gotify', label: 'Gotify' },
-		{ value: 'teams', label: 'Microsoft Teams' }
+		{ value: 'teams', label: 'Microsoft Teams' },
+		{ value: 'apprise', label: 'Apprise' }
 	];
 
 	const channels = createSentioQuery({
@@ -40,6 +41,23 @@ SPDX-License-Identifier: EUPL-1.2
 	let slackChannel = $state('');
 	let allowPrivate = $state(false);
 	let allowInsecure = $state(false);
+	let username = $state('');
+	let tags = $state('');
+
+	// Apprise sends to {server}/notify/{key}; username and password are its optional Basic Auth.
+	function appriseConfig() {
+		if (kind !== 'apprise') return {};
+		const tagList = tags
+			.split(',')
+			.map((t) => t.trim())
+			.filter(Boolean);
+		return {
+			webhook_url: webhookUrl,
+			username: username || undefined,
+			password: secret || undefined,
+			tags: tagList.length > 0 ? tagList : undefined
+		};
+	}
 
 	function buildConfig() {
 		return {
@@ -54,7 +72,8 @@ SPDX-License-Identifier: EUPL-1.2
 			chat_id: kind === 'telegram' ? chatId : undefined,
 			channel: kind === 'slack' ? slackChannel || undefined : undefined,
 			allow_private_network: allowPrivate,
-			allow_insecure_http: allowInsecure
+			allow_insecure_http: allowInsecure,
+			...appriseConfig()
 		};
 	}
 
@@ -69,6 +88,8 @@ SPDX-License-Identifier: EUPL-1.2
 		slackChannel = '';
 		allowPrivate = false;
 		allowInsecure = false;
+		username = '';
+		tags = '';
 	}
 
 	const create = createSentioMutation({
@@ -186,6 +207,44 @@ SPDX-License-Identifier: EUPL-1.2
 	{#if ['webhook', 'discord', 'slack', 'teams'].includes(kind)}
 		<Field id="channel-url" label={m.channel_webhook_url()}>
 			<input id="channel-url" class="input" type="url" required bind:value={webhookUrl} />
+		</Field>
+	{/if}
+
+	{#if kind === 'apprise'}
+		<Field
+			id="channel-apprise-url"
+			label={m.channel_apprise_url()}
+			hint={m.channel_apprise_url_hint()}
+		>
+			<input
+				id="channel-apprise-url"
+				class="input"
+				type="url"
+				required
+				autocomplete="off"
+				aria-describedby="channel-apprise-url-hint"
+				bind:value={webhookUrl}
+			/>
+		</Field>
+		<Field id="channel-username" label={m.channel_username()}>
+			<input id="channel-username" class="input" autocomplete="off" bind:value={username} />
+		</Field>
+		<Field id="channel-password" label={m.channel_password()}>
+			<input
+				id="channel-password"
+				class="input"
+				type="password"
+				autocomplete="new-password"
+				bind:value={secret}
+			/>
+		</Field>
+		<Field id="channel-tags" label={m.channel_tags()} hint={m.channel_tags_hint()}>
+			<input
+				id="channel-tags"
+				class="input"
+				aria-describedby="channel-tags-hint"
+				bind:value={tags}
+			/>
 		</Field>
 	{/if}
 

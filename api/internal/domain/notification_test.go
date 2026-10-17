@@ -24,6 +24,7 @@ func TestChannelKindValid(t *testing.T) {
 		{"ntfy", domain.ChannelNtfy, true},
 		{"gotify", domain.ChannelGotify, true},
 		{"teams", domain.ChannelTeams, true},
+		{"apprise", domain.ChannelApprise, true},
 		{"webhook", domain.ChannelWebhook, true},
 		// Negative.
 		{"unknown kind", domain.ChannelKind("email"), false},
