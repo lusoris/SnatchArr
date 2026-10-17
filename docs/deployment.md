@@ -29,7 +29,7 @@ run on the release tag at the commit of that tag, so an artifact built from any 
 is refused. Look the commit up once:
 
 ```sh
-git ls-remote https://github.com/lusoris/SnatchArr 'refs/tags/v0.1.10^{}' refs/tags/v0.1.10
+git ls-remote https://github.com/lusoris/SnatchArr 'refs/tags/v0.2.1^{}' refs/tags/v0.2.1
 ```
 
 The last line is the commit (an annotated tag prints two lines; the `^{}` one is the commit).
@@ -37,29 +37,29 @@ Then check both images and the chart in the registry:
 
 ```sh
 COMMIT=<commit of the tag>
-tools/release/verify.sh ghcr.io/lusoris/snatcharr-api:0.1.10 lusoris/SnatchArr refs/tags/v0.1.10 "$COMMIT"
-tools/release/verify.sh ghcr.io/lusoris/snatcharr-worker:0.1.10 lusoris/SnatchArr refs/tags/v0.1.10 "$COMMIT"
-tools/release/verify.sh ghcr.io/lusoris/charts/snatcharr:0.1.10 lusoris/SnatchArr refs/tags/v0.1.10 "$COMMIT"
+tools/release/verify.sh ghcr.io/lusoris/snatcharr-api:0.2.1 lusoris/SnatchArr refs/tags/v0.2.1 "$COMMIT"
+tools/release/verify.sh ghcr.io/lusoris/snatcharr-worker:0.2.1 lusoris/SnatchArr refs/tags/v0.2.1 "$COMMIT"
+tools/release/verify.sh ghcr.io/lusoris/charts/snatcharr:0.2.1 lusoris/SnatchArr refs/tags/v0.2.1 "$COMMIT"
 ```
 
 and the files of the release page, downloaded from the web page or with `gh release download`
 into one directory:
 
 ```sh
-tools/release/verify-page.sh page 0.1.10 lusoris/SnatchArr refs/tags/v0.1.10 "$COMMIT"
+tools/release/verify-page.sh page 0.2.1 lusoris/SnatchArr refs/tags/v0.2.1 "$COMMIT"
 ```
 
 `verify.sh` prints the identity and commit it verified and runs these commands, which also
 work without a checkout:
 
 ```sh
-cosign verify ghcr.io/lusoris/charts/snatcharr:0.1.10 \
-  --certificate-identity https://github.com/lusoris/SnatchArr/.github/workflows/release.yml@refs/tags/v0.1.10 \
+cosign verify ghcr.io/lusoris/charts/snatcharr:0.2.1 \
+  --certificate-identity https://github.com/lusoris/SnatchArr/.github/workflows/release.yml@refs/tags/v0.2.1 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   --certificate-github-workflow-sha "$COMMIT"
 cosign verify-attestation --new-bundle-format --type https://slsa.dev/provenance/v1 \
-  ghcr.io/lusoris/charts/snatcharr:0.1.10 \
-  --certificate-identity https://github.com/lusoris/SnatchArr/.github/workflows/release.yml@refs/tags/v0.1.10 \
+  ghcr.io/lusoris/charts/snatcharr:0.2.1 \
+  --certificate-identity https://github.com/lusoris/SnatchArr/.github/workflows/release.yml@refs/tags/v0.2.1 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   --certificate-github-workflow-sha "$COMMIT"
 ```
@@ -74,11 +74,12 @@ that it proves the refusals: an unattested chart, another commit, another git re
 repository (`tools/release/verify-selftest.sh`), and for the page a wrong commit and a changed
 chart with a rewritten checksum file.
 
-Older releases: the release page carries checksum file and provenance bundle from the release
-after 0.1.9 on; earlier pages are not covered. The chart carries an attestation from 0.1.5 on;
+Older releases: the release page carries checksum file and provenance bundle from 0.2.1 on;
+earlier pages are not covered. 0.2.0 published nothing (no images, chart or page files; its
+release notes say so): use 0.2.1, which carries the same changes. The chart carries an attestation from 0.1.5 on;
 the charts up to 0.1.4 are signed only. 0.1.1 was rebuilt by hand from `main`: verify it with
 `refs/heads/main` and commit `e0b3e17b1fd0cc81ed8756e43da2bb690fe3e53e`. A rebuild runs on the
-tag it builds (`gh workflow run release.yml --ref v0.1.10 -f tag=v0.1.10`); the workflow
+tag it builds (`gh workflow run release.yml --ref v0.2.1 -f tag=v0.2.1`); the workflow
 refuses to start on any other ref.
 
 ## Helm

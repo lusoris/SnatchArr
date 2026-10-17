@@ -43,7 +43,8 @@ same intent, none of the code.
 
 ## Status
 
-Pre-alpha. The first cut will be **0.1.0**.
+Pre-alpha, released: versions and their notes are on the
+[releases page](https://github.com/lusoris/SnatchArr/releases).
 
 Code is [EUPL-1.2](https://github.com/lusoris/SnatchArr/blob/main/LICENSES/EUPL-1.2.txt),
 documentation is CC BY-SA 4.0.
