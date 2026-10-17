@@ -28,6 +28,7 @@ The target downloads the pinned specs on the first run (about 2.9 MB in total, i
 | Message | Meaning | What to do |
 | --- | --- | --- |
 | `<path> at commit <commit> has sha256 <new>, the manifest pins <old>` | The spec file changed between two pinned commits, or the pin is wrong. | [Renew the pin](#renewing-a-pin). |
+| `goenvoy manifest at <commit12> has sha256 <new>, specs.yaml pins <old>` | The source manifest changed between two commits, or the pin is wrong. | [Renew the pin](#renewing-a-pin). |
 | `<operation>: ... <field> ... the spec does not document ...` | The client reads a field the pinned spec does not have. | Fix the wire type, or the code that depends on the field. |
 | `... query parameter "<name>" is not in the spec` or `no such operation in the contract` | The client sends a request the spec does not describe. | Fix the request. |
 | `... listed as absent and the spec documents it` | An entry of a known-gap list is out of date. | Remove the entry. |
@@ -37,13 +38,13 @@ The target downloads the pinned specs on the first run (about 2.9 MB in total, i
 
 ## How it works
 
-1. `tools/upstreamspec/specs.yaml` pins each spec: the upstream repository, a release tag,
-   the commit of that tag, the path of the spec file and its sha256. A project that tags no
-   release is pinned with a branch in the place of the tag (Bookshelf, branch `develop`);
-   so is a project whose tags carry an outdated spec (Whisparr, see [below](#whisparr));
-   an entry has exactly one of the two. It also lists the operations the client calls and,
-   for an entry with `POST .../command`, the upstream C# command classes (path and sha256 at
-   the same commit).
+1. `tools/upstreamspec/specs.yaml` pins the source manifest from `golusoris/goenvoy` (`source`
+   with repository, commit, path `upstream/specs.yaml` and sha256). Goenvoy owns the upstream spec
+   pins (repository, release tag or branch, commit, path, sha256, license, prefix). SnatchArr
+   lists only its consumer operations and, for an entry with `POST .../command`, the upstream C#
+   command classes (path and sha256 at the commit of its spec).
+   A new upstream release is pinned in goenvoy, whose Renovate configuration reads
+   `upstream/specs.yaml` there; SnatchArr follows when its source pin moves to that commit.
 2. `upstreamspec fetch` downloads each file at its commit and refuses one whose checksum
    differs. For each spec it writes a contract file: per listed operation the documented
    query parameter names and one example response in which every documented property is
@@ -132,34 +133,25 @@ that there is one mechanism.
 
 ## Renewing a pin
 
-Renovate reads repository, tag and commit of each manifest entry (`customManagers` in
-`renovate.json`) and opens one pull request, `upstream specs`, when an upstream project
-has a newer tag. For an entry pinned on a branch a second pattern reads repository, branch
-and commit, and Renovate proposes the newest commit of that branch (datasource
-`github-digest`, which dates the commit, so the waiting time for new releases applies).
-Renovate cannot renew the sha256, so these pull requests are never merged automatically.
+Renovate reads `source.repository` and `source.commit` (`customManagers` in `renovate.json`)
+and opens one pull request, `upstream specs`, when `golusoris/goenvoy` has a newer commit on branch
+`main` (datasource `github-digest`, which dates the commit, so the waiting time for new releases
+applies). Renovate cannot renew the sha256, so these pull requests are never merged automatically.
 
-1. If the `contracts` job is green, the spec file is unchanged between the two commits.
-   Merge.
-2. If `fetch` fails on the checksum, the spec changed. Read the upstream diff of the spec
-   file between the old and the new commit.
-3. Put the sha256 from the failure message into `tools/upstreamspec/specs.yaml` and run
-   `make contracts-verify`.
-4. A difference the contract tests report now is the finding this gate exists for: fix
-   the client in the same pull request.
+1. Run `go run ./tools/upstreamspec fetch` (or `make contracts-verify`).
+2. If `source.sha256` differs, `fetch` fails and prints the new checksum:
+   `goenvoy manifest at <commit12> has sha256 <new>, specs.yaml pins <old>`.
+3. Put the new sha256 into `tools/upstreamspec/specs.yaml` under `source.sha256`.
+4. If an upstream spec's commit moved and a C# command class changed at that commit, `fetch` will
+   report the new checksum for the class; put the new sha256 into `commands` in
+   `tools/upstreamspec/specs.yaml`.
+5. Run `make contracts-verify`. A difference the contract tests report now is the finding this gate
+   exists for: fix the client in the same pull request.
 
-A repository can hold release tags of another project: `Sonarr/Sonarr` carries the Radarr
-tags from v4.1 to v6, which point at Radarr commits. A package rule in `renovate.json` reads
-Sonarr through its published releases (`github-releases`) instead of its tags, so those tags
-are never proposed. The manifest refuses one commit under two repositories, so a Radarr tag
-that still gets in at the commit of the Radarr pin fails the `contracts` job with a message
-that names it; any other foreign commit fails the spec download.
-
-`TestRenovateKeepsEveryPinCurrent` in `tools/upstreamspec/renovate_test.go` applies the
-two patterns of `renovate.json` to the manifest and fails when they no longer capture
-every pin, for example after the fields of an entry are reordered. `make contracts-verify` runs
-the tests of `tools/upstreamspec` first, so the `contracts` job covers a change to
-`renovate.json` as well.
+`TestRenovateKeepsEveryPinCurrent` in `tools/upstreamspec/renovate_test.go` checks that the pattern
+in `renovate.json` captures `source.repository` and `source.commit` exactly as in `specs.yaml`.
+`make contracts-verify` runs the tests of `tools/upstreamspec` first, so the `contracts` job covers
+a change to `renovate.json` as well.
 
 ## Download clients
 

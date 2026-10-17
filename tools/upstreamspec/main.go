@@ -5,8 +5,8 @@
 // Command upstreamspec lets the contract tests check the hand-written API clients against the
 // OpenAPI specs their upstream projects publish, without a spec entering this repository.
 //
-// The manifest `tools/upstreamspec/specs.yaml` pins each spec to one file at one commit of an
-// upstream release, with the sha256 of that file.
+// The manifest `tools/upstreamspec/specs.yaml` pins the source manifest from golusoris/goenvoy,
+// which pins each spec to one file at one commit of an upstream release with its sha256.
 //
 //   - `upstreamspec fetch` downloads each pinned file into the cache directory, refuses a file
 //     whose checksum differs from the manifest and names it, and writes one contract file per
@@ -31,7 +31,8 @@ import (
 	"time"
 )
 
-// deadline bounds one run: four downloads of about 300 kB each.
+// deadline bounds one run: the goenvoy manifest and the pinned spec and class files, about 300 kB
+// per spec.
 const deadline = 2 * time.Minute
 
 func main() {
@@ -59,13 +60,19 @@ func run(ctx context.Context, args []string, out io.Writer, base string) error {
 	if flags.NArg() != 0 {
 		return errUsage
 	}
-	pins, err := readManifest(*manifest)
+	switch args[0] {
+	case "fetch", "guard", "receipts":
+	default:
+		return errUsage
+	}
+	client := &http.Client{Timeout: deadline}
+	pins, err := readManifest(ctx, *manifest, *cache, base, client)
 	if err != nil {
 		return err
 	}
 	switch args[0] {
 	case "fetch":
-		return fetcher{client: &http.Client{Timeout: deadline}, base: base, cache: *cache, out: out}.all(ctx, pins)
+		return fetcher{client: client, base: base, cache: *cache, out: out}.all(ctx, pins)
 	case "guard":
 		return guard(ctx, *repo, *cache, pins, out)
 	case "receipts":

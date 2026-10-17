@@ -5,30 +5,30 @@
 # (docs/upstream-contracts.md). `make contracts-verify` downloads each file at its commit and
 # refuses it when its sha256 differs. Nothing listed here is committed or copied into an image.
 #
-# Renovate reads repository, tag and commit, in this order (customManagers in renovate.json), and
-# proposes the next stable upstream release. A project that tags no release is pinned with
-# `branch` in the place of `tag`; Renovate then proposes the newest commit of that branch. When
-# the spec file changed with the proposed commit, the sha256 no longer fits and the gate fails
-# until the pin is renewed by hand:
+# Upstream OpenAPI spec pins (repository, release tag or branch, commit, path, sha256, license,
+# prefix) are owned by golusoris/goenvoy and pinned below in `source`. SnatchArr lists only its
+# consumer operations and C# command classes.
+#
+# Renovate reads source.repository and source.commit (customManagers in renovate.json) and proposes
+# the newest commit of goenvoy's main branch. When the goenvoy manifest changed with the proposed
+# commit, the sha256 no longer fits and the gate fails until the pin is renewed by hand:
 #
 #   go run ./tools/upstreamspec fetch    # prints the sha256 of the new file
 #
-# operations: "<METHOD> <path>" as the client requests it. `prefix` is the part of the path the
-# spec leaves to its `servers` entry.
+# operations: "<METHOD> <path>" as the client requests it. `prefix` comes from goenvoy's entry.
 #
 # commands: the upstream C# command classes whose bodies the worker sends to `POST .../command`,
 # each by path and sha256 at the commit of its spec. The OpenAPI spec cannot describe those bodies
 # (CommandResource lists the generic properties and forbids others), so `fetch` reads the public
 # properties of each class into the contract file and the Rust contract test compares every body
 # it receives with them. An entry with a `POST .../command` operation must list its classes.
+source:
+  repository: golusoris/goenvoy
+  commit: d81c0c1874df545e7f9b83a76e34ae5eb96fda44
+  path: upstream/specs.yaml
+  sha256: 683252ee1d4386e520540a13cf1d8a6fe24ad20f4184c89cafcba0f073e73b68
 specs:
   - name: sonarr
-    repository: Sonarr/Sonarr
-    tag: v4.0.20.3014
-    commit: cab419ade8ac7fcab5bf80394ee492abd35d5f5a
-    path: src/Sonarr.Api.V3/openapi.json
-    sha256: 03108f7f6b20300b84af879392ac44947cd3d3c19c073184e5fbf94e127165f9
-    license: GPL-3.0
     operations:
       - GET /api/v3/system/status
       - GET /api/v3/queue
@@ -45,12 +45,6 @@ specs:
       - path: src/NzbDrone.Core/IndexerSearch/SeriesSearchCommand.cs
         sha256: 29cbcbe440473368a374ac34d29bbacf4d9b6a0091a37455360b165cac97f766
   - name: radarr
-    repository: Radarr/Radarr
-    tag: v6.4.4.10685
-    commit: a96bf7c3ecb23cb76993770727285dc17a613fbc
-    path: src/Radarr.Api.V3/openapi.json
-    sha256: 95ea9062485118d6a8abed8250b9bfbf94e4de0f55e9c5611da6805864f9a26e
-    license: GPL-3.0
     operations:
       - GET /api/v3/system/status
       - GET /api/v3/queue
@@ -63,12 +57,6 @@ specs:
       - path: src/NzbDrone.Core/IndexerSearch/MoviesSearchCommand.cs
         sha256: 56f893b628c50083e8b1fc700b9d07eac53ae42489a8fe67b806ee46f4a7b930
   - name: lidarr
-    repository: Lidarr/Lidarr
-    tag: v3.1.0.4875
-    commit: 350860e524029b7fb4165ed14fbcabb11217ada2
-    path: src/Lidarr.Api.V1/openapi.json
-    sha256: 4ae9e79e9662898ed4704ce80f091161587a9f0d664f9e518b11a038616e491f
-    license: GPL-3.0
     operations:
       - GET /api/v1/system/status
       - GET /api/v1/queue
@@ -83,13 +71,6 @@ specs:
       - path: src/NzbDrone.Core/IndexerSearch/ArtistSearchCommand.cs
         sha256: b3e68e0e601eee6d40ce451974e3e05ad615125cf959461d65034531d2089b44
   - name: seerr
-    repository: seerr-team/seerr
-    tag: v3.5.0
-    commit: e2f24cb46079746936516c723b09820360f95113
-    path: seerr-api.yml
-    sha256: 9533fc4ce04a5e68ef3d7c2deef5a25c43b560dbde07c361eb0f736fce66bf56
-    license: MIT
-    prefix: /api/v1
     operations:
       - GET /api/v1/status
       - GET /api/v1/request
@@ -98,12 +79,6 @@ specs:
       - GET /api/v1/movie/{movieId}
       - GET /api/v1/tv/{tvId}
   - name: bookshelf
-    repository: pennydreadful/bookshelf
-    branch: develop
-    commit: 3ac41f7e31427684a37138e8e539b7e6c7b73869
-    path: src/Readarr.Api.V1/openapi.json
-    sha256: 4c4704911b1e65fe8cdf55fd69b717c75a2c5cbb21ee2db387ef55db691680e8
-    license: GPL-3.0
     operations:
       - GET /api/v1/system/status
       - GET /api/v1/queue
@@ -118,12 +93,6 @@ specs:
       - path: src/NzbDrone.Core/IndexerSearch/BookSearchCommand.cs
         sha256: 922be8be4cb9646f80c46cc979a7db02aa076737977209d0def31852fd3286e2
   - name: chaptarr
-    repository: Chaptarr/chaptarr
-    tag: v0.9.965
-    commit: e67374f4b3fed01bbf08f18672add944062fcb49
-    path: src/Chaptarr.Api.V1/openapi.json
-    sha256: 1444bc8e56f39a741070b4434a63dea7a18b9ef7e6f0f2fb105a2882a2a352d6
-    license: GPL-3.0
     operations:
       - GET /api/v1/system/status
       - GET /api/v1/queue
@@ -138,12 +107,6 @@ specs:
       - path: src/NzbDrone.Core/IndexerSearch/BookSearchCommand.cs
         sha256: 9181253bc3903cef9a9d8e4268dc82676dbd0a4e865dbcc2055c4ed0084aea47
   - name: readarr-faustvii
-    repository: Faustvii/Readarr
-    tag: v0.10.0
-    commit: 7f02ffa52997c92165c541a38be154054debc285
-    path: src/Readarr.Api.V1/openapi.json
-    sha256: 67816240e90b225d897fa713bd3f842f90d26d4c73cb522d8a8b59d32391cad8
-    license: GPL-3.0
     operations:
       - GET /api/v1/system/status
       - GET /api/v1/queue
@@ -158,12 +121,6 @@ specs:
       - path: src/NzbDrone.Core/IndexerSearch/BookSearchCommand.cs
         sha256: 922be8be4cb9646f80c46cc979a7db02aa076737977209d0def31852fd3286e2
   - name: whisparr-v2
-    repository: Whisparr/Whisparr
-    branch: api-docs
-    commit: dff667ed86dbf6d29fa9bb93b2eaa5b3d790e78f
-    path: src/Whisparr.Api.V3/openapi.json
-    sha256: 3e0fe9411588f7394f289f1047d270de6808414f3c4e936b67ff52605a676cbd
-    license: GPL-3.0
     operations:
       - GET /api/v3/system/status
       - GET /api/v3/queue
@@ -180,12 +137,6 @@ specs:
       - path: src/NzbDrone.Core/IndexerSearch/SeriesSearchCommand.cs
         sha256: 29cbcbe440473368a374ac34d29bbacf4d9b6a0091a37455360b165cac97f766
   - name: whisparr-v3
-    repository: Whisparr/Whisparr
-    branch: eros-api-docs
-    commit: 0f81d8d0787bbd283de5bef33c94ef314b6ab3d8
-    path: src/Whisparr.Api.V3/openapi.json
-    sha256: 07b95c7e4f87184a9a876587f1da25e5cbfbffce79f08262407f2ebad03d60a1
-    license: GPL-3.0
     operations:
       - GET /api/v3/system/status
       - GET /api/v3/queue
