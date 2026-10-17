@@ -229,7 +229,7 @@ func (s *fakeCleanuparrServer) handleRecent(t *testing.T) http.HandlerFunc {
 
 func (s *fakeCleanuparrServer) handleStrikes(t *testing.T) http.HandlerFunc {
 	t.Helper()
-	return func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, _ *http.Request) {
 		items := []map[string]any{
 			{"isMarkedForRemoval": true, "isRemoved": false, "isReturning": false},
 			{"isMarkedForRemoval": true, "isRemoved": false, "isReturning": false},
@@ -239,7 +239,7 @@ func (s *fakeCleanuparrServer) handleStrikes(t *testing.T) http.HandlerFunc {
 		}
 		writeCleanupJSON(t, w, map[string]any{
 			"items":      items,
-			"page":       r.URL.Query().Get("page"),
+			"page":       1, // Cleanuparr PaginatedResult.Page is an int; one page here
 			"pageSize":   500,
 			"totalCount": 5,
 			"totalPages": 1,
