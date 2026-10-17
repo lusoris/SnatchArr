@@ -9,10 +9,24 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import { paraglideVitePlugin } from '@inlang/paraglide-js';
 import tailwindcss from '@tailwindcss/vite';
 import { svelteTesting } from '@testing-library/svelte/vite';
+import type { ProxyOptions } from 'vite';
 import { defineConfig } from 'vitest/config';
 
-const apiProxy = {
-	'/api': { target: process.env.SNATCHARR_API ?? 'http://127.0.0.1:8080', changeOrigin: false }
+const apiProxy: Record<string, ProxyOptions> = {
+	'/api': {
+		target: process.env.SNATCHARR_API ?? 'http://127.0.0.1:8080',
+		changeOrigin: false,
+		// Node holds response headers back until the first body byte. An event stream sends no
+		// byte until the first event, so the browser's EventSource would never see it open.
+		// The proxy copies the headers right after this event; flush them once it has.
+		configure: (proxy) => {
+			proxy.on('proxyRes', (proxyRes, _req, res) => {
+				if (String(proxyRes.headers['content-type']).startsWith('text/event-stream')) {
+					queueMicrotask(() => res.flushHeaders());
+				}
+			});
+		}
+	}
 };
 
 export default defineConfig({
