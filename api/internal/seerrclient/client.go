@@ -4,8 +4,7 @@
 
 // Package seerrclient reads what SnatchArr needs from a Seerr server: status, the
 // approved-but-unavailable requests, the Sonarr/Radarr servers Seerr sends them to, and
-// titles. It uses goenvoy's shared base client with SnatchArr's own wire types because
-// the typed goenvoy seerr package drops the request/media type fields.
+// titles. It uses goenvoy's typed seerr client.
 package seerrclient
 
 import (
@@ -16,6 +15,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/golusoris/goenvoy/arr/seerr"
 
 	"github.com/lusoris/SnatchArr/api/internal/arrclient"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
@@ -34,31 +35,29 @@ type Status struct {
 }
 
 // Request is one Seerr media request with the fields SnatchArr maps.
-//
-//nolint:tagliatelle // Seerr speaks camelCase
 type Request struct {
-	ID          int    `json:"id"`
-	Type        string `json:"type"`
-	Status      int    `json:"status"`
-	Is4K        bool   `json:"is4k"`
-	ServerID    *int   `json:"serverId"`
-	CreatedAt   string `json:"createdAt"`
+	ID          int
+	Type        string
+	Status      int
+	Is4K        bool
+	ServerID    *int
+	CreatedAt   string
 	RequestedBy struct {
-		DisplayName string `json:"displayName"`
-		Username    string `json:"username"`
-		Email       string `json:"email"`
-	} `json:"requestedBy"`
+		DisplayName string
+		Username    string
+		Email       string
+	}
 	Seasons []struct {
-		SeasonNumber int `json:"seasonNumber"`
-	} `json:"seasons"`
+		SeasonNumber int
+	}
 	Media struct {
-		ID        int    `json:"id"`
-		MediaType string `json:"mediaType"`
-		TmdbID    int    `json:"tmdbId"`
-		TvdbID    *int   `json:"tvdbId"`
-		Status    int    `json:"status"`
-		Status4K  int    `json:"status4k"`
-	} `json:"media"`
+		ID        int
+		MediaType string
+		TmdbID    int
+		TvdbID    *int
+		Status    int
+		Status4K  int
+	}
 }
 
 // Requester renders the requesting user.
@@ -90,7 +89,7 @@ type Client interface {
 	Title(ctx context.Context, baseURL, apiKey string, mediaType domain.SeerrMediaType, tmdbID int) (string, error)
 }
 
-// HTTP implements Client over goenvoy's base client.
+// HTTP implements Client over goenvoy's typed seerr client.
 type HTTP struct {
 	arrclient.BaseFactory
 }
@@ -100,87 +99,109 @@ func New(timeout time.Duration, userAgent string) *HTTP {
 	return &HTTP{Timeout: timeout, UserAgent: userAgent}
 }
 
-// statusJSON is what Status reads from `GET /api/v1/status`.
-type statusJSON struct {
-	Version string `json:"version"`
-}
-
 // Status implements Client.
 func (h *HTTP) Status(ctx context.Context, baseURL, apiKey string) (Status, error) {
-	c, err := h.Base(baseURL, apiKey)
+	c, err := seerr.New(baseURL, apiKey, h.Options()...)
 	if err != nil {
 		return Status{}, fmt.Errorf("seerr: client: %w", err)
 	}
-	var out statusJSON
-	if err := c.Get(ctx, "/api/v1/status", &out); err != nil {
+	st, err := c.GetStatus(ctx)
+	if err != nil {
 		return Status{}, fmt.Errorf("%w: seerr status: %w", domain.ErrUnreachable, err)
 	}
-	return Status(out), nil
+	return Status{Version: st.Version}, nil
 }
 
-//nolint:tagliatelle // Seerr speaks camelCase
-type pagedRequests struct {
-	PageInfo struct {
-		Pages   int `json:"pages"`
-		Results int `json:"results"`
-	} `json:"pageInfo"`
-	Results []Request `json:"results"`
+func mapRequest(mr seerr.MediaRequest) Request {
+	var serverID *int
+	if mr.ServerAssigned {
+		sid := mr.ServerID
+		serverID = &sid
+	}
+	r := Request{
+		ID:        mr.ID,
+		Type:      mr.Type,
+		Status:    mr.Status,
+		Is4K:      mr.Is4k,
+		ServerID:  serverID,
+		CreatedAt: mr.CreatedAt,
+	}
+	if mr.RequestedBy != nil {
+		r.RequestedBy.DisplayName = mr.RequestedBy.DisplayName
+		r.RequestedBy.Username = mr.RequestedBy.Username
+		r.RequestedBy.Email = mr.RequestedBy.Email
+	}
+	if mr.Seasons != nil {
+		r.Seasons = make([]struct{ SeasonNumber int }, len(*mr.Seasons))
+		for i, s := range *mr.Seasons {
+			r.Seasons[i].SeasonNumber = s.SeasonNumber
+		}
+	}
+	if mr.Media != nil {
+		r.Media.ID = mr.Media.ID
+		r.Media.MediaType = mr.Media.MediaType
+		r.Media.TmdbID = mr.Media.TmdbID
+		r.Media.TvdbID = mr.Media.TvdbID
+		r.Media.Status = mr.Media.Status
+		r.Media.Status4K = mr.Media.Status4k
+	}
+	return r
 }
 
 // ProcessingRequests implements Client: approved requests whose media is not available
 // yet (`filter=processing`), every page up to the bound.
 func (h *HTTP) ProcessingRequests(ctx context.Context, baseURL, apiKey string) ([]Request, error) {
-	c, err := h.Base(baseURL, apiKey)
+	c, err := seerr.New(baseURL, apiKey, h.Options()...)
 	if err != nil {
 		return nil, fmt.Errorf("seerr: client: %w", err)
 	}
 	var all []Request
 	for page := range maxPages {
-		var out pagedRequests
-		path := fmt.Sprintf("/api/v1/request?filter=processing&take=%d&skip=%d&sort=added", pageSize, page*pageSize)
-		if err := c.Get(ctx, path, &out); err != nil {
+		results, pageInfo, err := c.GetRequests(ctx, pageSize, page*pageSize, "processing")
+		if err != nil {
 			return nil, fmt.Errorf("%w: seerr requests: %w", domain.ErrUnreachable, err)
 		}
-		all = append(all, out.Results...)
-		if len(out.Results) < pageSize || page+1 >= out.PageInfo.Pages {
+		for _, mr := range results {
+			all = append(all, mapRequest(mr))
+		}
+		if len(results) < pageSize || pageInfo == nil || page+1 >= pageInfo.Pages {
 			break
 		}
 	}
 	return all, nil
 }
 
-//nolint:tagliatelle // Seerr speaks camelCase
-type serverJSON struct {
-	ID        int    `json:"id"`
-	Name      string `json:"name"`
-	Hostname  string `json:"hostname"`
-	Port      int    `json:"port"`
-	APIKey    string `json:"apiKey"`
-	UseSSL    bool   `json:"useSsl"`
-	BaseURL   string `json:"baseUrl"`
-	Is4K      bool   `json:"is4k"`
-	IsDefault bool   `json:"isDefault"`
+func mapServers(kind domain.AppKind, list []seerr.ServiceSettings) []Server {
+	out := make([]Server, len(list))
+	for i, s := range list {
+		out[i] = Server{
+			Kind:      kind,
+			ID:        s.ID,
+			Name:      s.Name,
+			BaseURL:   ServerURL(s.Hostname, s.Port, s.UseSSL, s.BaseURL),
+			APIKey:    s.APIKey,
+			Is4K:      s.Is4k,
+			IsDefault: s.IsDefault,
+		}
+	}
+	return out
 }
 
 // Servers implements Client: Seerr's Sonarr and Radarr settings, API keys included.
 func (h *HTTP) Servers(ctx context.Context, baseURL, apiKey string) ([]Server, error) {
-	c, err := h.Base(baseURL, apiKey)
+	c, err := seerr.New(baseURL, apiKey, h.Options()...)
 	if err != nil {
 		return nil, fmt.Errorf("seerr: client: %w", err)
 	}
-	var out []Server
-	for _, kind := range []domain.AppKind{domain.KindSonarr, domain.KindRadarr} {
-		var list []serverJSON
-		if err := c.Get(ctx, "/api/v1/settings/"+string(kind), &list); err != nil {
-			return nil, fmt.Errorf("%w: seerr %s settings: %w", domain.ErrUnreachable, kind, err)
-		}
-		for _, s := range list {
-			out = append(out, Server{
-				Kind: kind, ID: s.ID, Name: s.Name, BaseURL: ServerURL(s.Hostname, s.Port, s.UseSSL, s.BaseURL),
-				APIKey: s.APIKey, Is4K: s.Is4K, IsDefault: s.IsDefault,
-			})
-		}
+	sonarr, err := c.GetSonarrSettings(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("%w: seerr sonarr settings: %w", domain.ErrUnreachable, err)
 	}
+	radarr, err := c.GetRadarrSettings(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("%w: seerr radarr settings: %w", domain.ErrUnreachable, err)
+	}
+	out := append(mapServers(domain.KindSonarr, sonarr), mapServers(domain.KindRadarr, radarr)...)
 	return out, nil
 }
 
@@ -201,26 +222,28 @@ func ServerURL(hostname string, port int, useSSL bool, base string) string {
 	return u.String()
 }
 
-// titleJSON is what Title reads: a movie has `title`, a show has `name`.
-type titleJSON struct {
-	Title string `json:"title"`
-	Name  string `json:"name"`
-}
-
 // Title implements Client: the TMDB title Seerr knows for a movie or show.
 func (h *HTTP) Title(ctx context.Context, baseURL, apiKey string, mediaType domain.SeerrMediaType, tmdbID int) (string, error) {
-	c, err := h.Base(baseURL, apiKey)
+	c, err := seerr.New(baseURL, apiKey, h.Options()...)
 	if err != nil {
 		return "", fmt.Errorf("seerr: client: %w", err)
 	}
-	var out titleJSON
-	if err := c.Get(ctx, fmt.Sprintf("/api/v1/%s/%d", mediaType, tmdbID), &out); err != nil {
-		return "", fmt.Errorf("%w: seerr title: %w", domain.ErrUnreachable, err)
+	switch mediaType {
+	case domain.SeerrMovie:
+		m, err := c.GetMovie(ctx, tmdbID)
+		if err != nil {
+			return "", fmt.Errorf("%w: seerr title: %w", domain.ErrUnreachable, err)
+		}
+		return m.Title, nil
+	case domain.SeerrTV:
+		tv, err := c.GetTV(ctx, tmdbID)
+		if err != nil {
+			return "", fmt.Errorf("%w: seerr title: %w", domain.ErrUnreachable, err)
+		}
+		return tv.Name, nil
+	default:
+		return "", fmt.Errorf("seerr: title: unknown media type %q", mediaType)
 	}
-	if out.Title != "" {
-		return out.Title, nil
-	}
-	return out.Name, nil
 }
 
 // MaxTitleLookups bounds title fetches per sync so a big backlog never stalls it.
