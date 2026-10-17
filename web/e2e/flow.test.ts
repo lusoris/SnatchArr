@@ -383,3 +383,10 @@ test('download clients: create, edit and delete one through the UI', async ({ pa
 	await expect(card(renamed)).toHaveCount(0);
 	expect((await stored()).some((c) => c.id === created?.id)).toBe(false);
 });
+
+test('live: the event stream opens through the API proxy', async ({ page }) => {
+	await freshSession(page);
+	await page.goto('/live');
+	// Node holds proxied headers until the first body byte; without the flush the stream never opens.
+	await expect(page.getByRole('status')).toHaveText(/^\s*(connected|verbunden)\s*$/i);
+});
