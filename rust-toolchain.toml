@@ -1,5 +1,7 @@
 [toolchain]
-channel = "stable"
+# A fixed release, not the floating stable channel: CI, the worker image and a checkout build
+# with the same compiler. Renovate's rust-toolchain manager proposes each new release.
+channel = "1.99.1"
 components = ["clippy", "rustfmt"]
 # musl targets for the static images (worker/Dockerfile cross-links them with zig).
 targets = ["x86_64-unknown-linux-musl", "aarch64-unknown-linux-musl"]

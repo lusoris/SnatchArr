@@ -18,8 +18,8 @@ go install github.com/ogen-go/ogen/cmd/ogen
 go install github.com/cordanaLLM/praetor/cmd/standardsctl@7057d9957b3a7b98d60899aad55bbee406e0e96c
 ln -sf "$(go env GOPATH)/bin/standardsctl" "$(go env GOPATH)/bin/praetorctl"
 
-# Rust toolchain
-rustup component add clippy rustfmt
+# Rust toolchain: the release, components and targets pinned in rust-toolchain.toml
+rustup toolchain install
 cargo install --locked cargo-audit@0.22.2
 cargo install --locked cargo-deny@0.20.2
 cargo install --locked cargo-watch@8.5.3

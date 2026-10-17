@@ -364,9 +364,9 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
-        with:
-          components: clippy, rustfmt, llvm-tools-preview
+      # The runner's rustup installs the release pinned in rust-toolchain.toml.
+      - name: Rust toolchain (rust-toolchain.toml)
+        run: rustup toolchain install --component llvm-tools-preview
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - name: Format
         run: cargo fmt --all --check
@@ -414,7 +414,9 @@ jobs:
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
-      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+      # The runner's rustup installs the release pinned in rust-toolchain.toml.
+      - name: Rust toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       # Postgres, the API, two workers and two fakearr instances: lease, stamina and dispatch
       # together (#19). The same target runs locally.
@@ -734,7 +736,9 @@ jobs:
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
-      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+      # The runner's rustup installs the release pinned in rust-toolchain.toml.
+      - name: Rust toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - name: Clients against the pinned upstream specs
         run: make contracts-verify
