@@ -391,10 +391,15 @@ radarr:
 	}
 }
 
+// waitPolls bounds the 10 ms polls of the waiters below to 10 s: they wait for an import to
+// land, not for it to be fast, and under the race detector on a loaded host a first import
+// into a fresh database has taken longer than 1 s.
+const waitPolls = 1000
+
 // waitImportAfter polls until the service records an import later than prev and returns its time.
 func waitImportAfter(t *testing.T, svc *configarr.Service, prev time.Time) time.Time {
 	t.Helper()
-	for range 100 {
+	for range waitPolls {
 		if at := svc.Status().LastImportAt; at != nil && at.After(prev) {
 			return *at
 		}
@@ -407,7 +412,7 @@ func waitImportAfter(t *testing.T, svc *configarr.Service, prev time.Time) time.
 func waitInstancesCount(t *testing.T, ctx context.Context, instSvc *instances.Service, want int) []domain.Instance {
 	t.Helper()
 	var list []domain.Instance
-	for range 100 {
+	for range waitPolls {
 		var err error
 		list, err = instSvc.List(ctx)
 		if err == nil && len(list) == want {

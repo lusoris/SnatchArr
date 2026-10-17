@@ -112,15 +112,17 @@ func (s *Server) isStopping() bool {
 }
 
 // await waits for the call's next chance to ask for a run: one poll interval for the head of
-// the line, the rest of the wait for a call behind it, which the head's departure wakes. The
+// the line, cut short at the deadline, the rest of the wait for a call behind it, which the
+// head's departure wakes. The
 // caller's context or a shutdown ends it early.
 func (s *Server) await(ctx context.Context, turn *leaseTurn, deadline time.Time) error {
-	d := leasePollInterval
+	left := deadline.Sub(s.clk.Now())
+	d := min(leasePollInterval, left) // the head polls again, but never past the deadline
 	var wake <-chan struct{}
 	if turn != nil {
 		wake = turn.wake
 		if !s.line.isHead(turn) {
-			d = deadline.Sub(s.clk.Now())
+			d = left
 		}
 	}
 	timer := s.clk.NewTimer(d)
@@ -151,10 +153,12 @@ func (s *Server) LeaseRun(ctx context.Context, req *snatcharrv1.LeaseRunRequest)
 	if req.GetWorkerId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "worker_id is required")
 	}
-	s.touch(ctx, req.GetWorkerId())
-	s.failExhausted(ctx)
+	// The wait counts from the call's arrival: the bookkeeping below can take a while under load
+	// and must not stretch the answer past the wait the worker asked for.
 	wait := min(time.Duration(req.GetWaitSeconds())*time.Second, maxLeaseWait)
 	deadline := s.clk.Now().Add(wait)
+	s.touch(ctx, req.GetWorkerId())
+	s.failExhausted(ctx)
 	var turn *leaseTurn // a call that does not wait asks at once and stays out of the line
 	if wait > 0 {
 		turn = s.line.join()

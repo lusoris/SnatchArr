@@ -33,9 +33,10 @@ const defaultTestRetry = 200 * time.Millisecond
 // race run (the pre-push gate runs every package at once) needs seconds, not one retry.
 const electionBound = 10 * time.Second
 
-// failoverBound caps a takeover or a loop stop at ten retry periods. The measured takeover is
-// logged; the bound only has to separate "bounded failover" from "no failover" under load.
-const failoverBound = 10 * defaultTestRetry
+// failoverBound caps a takeover or a loop stop at failoverRetries retry periods: ten in the plain
+// build, fifty under the race detector. The measured takeover is logged; the bound only has to
+// separate "bounded failover" from "no failover" under load.
+const failoverBound = failoverRetries * defaultTestRetry
 
 // maxSamples bounds the sampler loop: 2000 ticks of 10 ms = 20 s, far above every test bound.
 const maxSamples = 2000

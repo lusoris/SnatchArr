@@ -141,14 +141,21 @@ func TestAppriseSend_Retries(t *testing.T) {
 
 func TestAppriseSend_UnreachableHidesSecrets(t *testing.T) {
 	t.Parallel()
-	srv := newAppriseServer(t, http.StatusOK)
+	// The server stays open and drops every connection unanswered: a closed server's port can be
+	// taken by a test server started meanwhile, which would answer the send.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		conn, _, err := http.NewResponseController(w).Hijack()
+		if err == nil {
+			_ = conn.Close()
+		}
+	}))
+	t.Cleanup(srv.Close)
 	target := strings.Replace(srv.URL, "http://", "http://snatch:url-secret-pw@", 1) + "/notify/" + appriseKey
-	srv.Close()
 	s := newApprise(t, notify.AppriseOptions{NotifyURL: target, Password: "opt-secret-pw"})
 
 	err := sendApprise(t, s, "error")
 	if err == nil {
-		t.Fatal("Send to a closed server succeeded")
+		t.Fatal("Send to a server that drops the connection succeeded")
 	}
 	for _, secret := range []string{appriseKey, "url-secret-pw", "opt-secret-pw"} {
 		if strings.Contains(err.Error(), secret) {
