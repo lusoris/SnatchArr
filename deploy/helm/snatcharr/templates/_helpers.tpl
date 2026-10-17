@@ -69,12 +69,41 @@ app.kubernetes.io/component: {{ .component }}
 {{- if .Values.postgres.cnpg.enabled -}}uri{{- else -}}{{ .Values.postgres.external.dsnSecretRef.key }}{{- end -}}
 {{- end -}}
 
+{{/*
+Oldest image release the templates work with, per component, as a semver constraint. Raise it
+in the same change that makes a template depend on something an image did not always have.
+Worker: /livez from 0.1.6 (#201), /readyz after 0.2.1 (#329). A chart with the worker probes
+and a worker image older than that restarts or never turns ready.
+*/}}
+{{- define "snatcharr.minImageVersion" -}}
+{{- get (dict "api" ">=0.1.0" "worker" ">0.2.1") . -}}
+{{- end -}}
+
+{{/*
+snatcharr.image renders repository:tag for one component: pass (dict "root" . "component" "api").
+An empty tag takes the chart's appVersion. A pinned release tag (0.2.1, v0.2.1, 0.2, with or
+without a pre-release, build or @digest suffix) older than snatcharr.minImageVersion fails the
+render; any other pinned tag (a branch or commit build) is not a release and is not compared.
+*/}}
+{{- define "snatcharr.image" -}}
+{{- $image := get .root.Values.image .component -}}
+{{- $tag := $image.tag | default "" | toString -}}
+{{- if $tag -}}
+{{- $core := regexFind "^v?[0-9]+(\\.[0-9]+){1,2}" (first (splitList "@" $tag)) -}}
+{{- $min := include "snatcharr.minImageVersion" .component -}}
+{{- if and $core (not (semverCompare $min (trimPrefix "v" $core))) -}}
+{{- fail (printf "image.%s.tag: %s is older than this chart supports (%s); use a newer image or leave the tag empty for appVersion %s" .component $tag $min .root.Chart.AppVersion) -}}
+{{- end -}}
+{{- end -}}
+{{- printf "%s:%s" $image.repository (default .root.Chart.AppVersion $tag) -}}
+{{- end -}}
+
 {{- define "snatcharr.apiImage" -}}
-{{- printf "%s:%s" .Values.image.api.repository (default .Chart.AppVersion .Values.image.api.tag) -}}
+{{- include "snatcharr.image" (dict "root" . "component" "api") -}}
 {{- end -}}
 
 {{- define "snatcharr.workerImage" -}}
-{{- printf "%s:%s" .Values.image.worker.repository (default .Chart.AppVersion .Values.image.worker.tag) -}}
+{{- include "snatcharr.image" (dict "root" . "component" "worker") -}}
 {{- end -}}
 
 {{- define "snatcharr.apiServiceName" -}}
