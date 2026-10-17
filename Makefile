@@ -221,6 +221,7 @@ web-verify: ## pnpm lint/typecheck/test(+coverage)/build + OpenAPI type drift
 	pnpm install --frozen-lockfile
 	pnpm gen:api
 	git diff --exit-code -- src/lib/api/schema.d.ts
+	sh ../tools/ci/prettier_ignore_test.sh
 	pnpm lint
 	pnpm typecheck
 	pnpm test -- --coverage
