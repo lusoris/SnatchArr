@@ -41,6 +41,10 @@ expect 4 "signed chart without an attestation is refused" "$chart" "$repository"
 expect 5 "signature and attestation of another commit are refused" "$api" "$repository" refs/tags/v0.1.4 "$other_commit"
 expect 5 "signature and attestation of another git ref are refused" "$api" "$repository" refs/tags/v0.1.3 "$commit"
 expect 5 "signature and attestation of another repository are refused" "$api" lusoris/other refs/tags/v0.1.4 "$commit"
+# The identity is a regular expression (release.yml or release-build.yml): it must be anchored
+# at the end, and a dot in the given git ref must match only a dot (v0.1.. would match v0.1.4).
+expect 5 "a prefix of the signed git ref is refused" "$api" "$repository" refs/tags/v0.1 "$commit"
+expect 5 "a git ref whose dots would match any character is refused" "$api" "$repository" refs/tags/v0.1.. "$commit"
 expect 2 "missing commit is a usage error" "$api" "$repository" refs/tags/v0.1.4
 expect 2 "abbreviated commit is a usage error" "$api" "$repository" refs/tags/v0.1.4 4dada773
 exit "$failed"

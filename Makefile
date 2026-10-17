@@ -21,7 +21,7 @@ GOMODCACHE       = $(subst \,/,$(shell go env GOMODCACHE))
 GOLUSORIS_VER    = $(shell go list -m -f '{{.Version}}' github.com/golusoris/golusoris)
 GOLUSORIS_SHARED = $(GOMODCACHE)/github.com/golusoris/golusoris@$(GOLUSORIS_VER)/tools/Makefile.shared
 
-.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-soak e2e-compose-smoke e2e-compose-pg-upgrade e2e-dev-compose-smoke dlclients-live cleanuparr-live e2e-cnpg-pg-upgrade e2e-cnpg-backup-restore e2e-chart-install web-verify web-e2e web-e2e-api web-visual web-visual-update proto-verify deploy-verify governance-verify hooks-verify contracts-verify workflows-verify workflows-lint secret-scan \
+.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-soak e2e-compose-smoke e2e-compose-pg-upgrade e2e-dev-compose-smoke dlclients-live cleanuparr-live e2e-cnpg-pg-upgrade e2e-cnpg-backup-restore e2e-chart-install web-verify web-e2e web-e2e-api web-visual web-visual-update proto-verify deploy-verify chart-package governance-verify hooks-verify contracts-verify workflows-verify workflows-lint secret-scan \
 	images kind-up kind-deploy kind-keda-proof kind-down \
         api-gen api-gosec gosec-install govulncheck-install sqlc-install tools-verify tools-lint tools-test tools-gosec web-gen proto-gen dev hooks setup
 
@@ -342,6 +342,11 @@ proto-gen: ## buf generate (Go stubs; Rust stubs build via tonic-build)
 	go run ./tools/gennosec apply
 
 # ── deploy/ ───────────────────────────────────────────────────────────────────
+chart-package: ## helm lint + package deploy/helm/snatcharr as dist/snatcharr-$(CHART_VERSION).tgz (release-build.yml)
+	case "$(CHART_VERSION)" in [0-9]*.[0-9]*.[0-9]*) ;; *) echo "chart-package: set CHART_VERSION=X.Y.Z, got '$(CHART_VERSION)'" >&2; exit 2 ;; esac
+	helm lint deploy/helm/snatcharr
+	helm package deploy/helm/snatcharr --version "$(CHART_VERSION)" --app-version "$(CHART_VERSION)" -d dist
+
 deploy-verify: ## helm unittest + render.sh + chart_checks.sh planted cases + helm lint --strict + kubeconform (default and all-features renders, oldest claimed and newest Kubernetes) + kustomize build + compose image pins
 	if ! helm plugin list 2>/dev/null | grep -E -q '^unittest[[:space:]]'; then \
 	  echo "deploy-verify: helm plugin 'unittest' is missing; install helm-unittest (https://github.com/helm-unittest/helm-unittest)" >&2; exit 1; \

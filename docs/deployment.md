@@ -24,9 +24,13 @@ file of the page, the checksum file included, as its subject. Tags are semver on
 no `latest`.
 
 Verify an artifact before you deploy it. The check needs only `cosign` (2.4 or later) and no
-forge login. It requires the signing certificate to name this repository's release workflow,
-run on the release tag at the commit of that tag, so an artifact built from any other commit
-is refused. Look the commit up once:
+forge login. It requires the signing certificate to name one of this repository's release
+workflows, run on the release tag at the commit of that tag, so an artifact built from any
+other commit is refused. After 0.2.1 the images and the chart are built, signed and attested
+in `.github/workflows/release-build.yml`, a reusable workflow that only builds and restores no
+cache (SLSA Build Level 3); the files of the release page and every earlier release are signed
+by `.github/workflows/release.yml`. The check accepts these two workflows and no other. Look
+the commit up once:
 
 ```sh
 git ls-remote https://github.com/lusoris/SnatchArr 'refs/tags/v0.2.1^{}' refs/tags/v0.2.1
@@ -54,12 +58,12 @@ work without a checkout:
 
 ```sh
 cosign verify ghcr.io/lusoris/charts/snatcharr:0.2.1 \
-  --certificate-identity https://github.com/lusoris/SnatchArr/.github/workflows/release.yml@refs/tags/v0.2.1 \
+  --certificate-identity-regexp '^https://github\.com/lusoris/SnatchArr/\.github/workflows/release(-build)?\.yml@refs/tags/v0\.2\.1$' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   --certificate-github-workflow-sha "$COMMIT"
 cosign verify-attestation --new-bundle-format --type https://slsa.dev/provenance/v1 \
   ghcr.io/lusoris/charts/snatcharr:0.2.1 \
-  --certificate-identity https://github.com/lusoris/SnatchArr/.github/workflows/release.yml@refs/tags/v0.2.1 \
+  --certificate-identity-regexp '^https://github\.com/lusoris/SnatchArr/\.github/workflows/release(-build)?\.yml@refs/tags/v0\.2\.1$' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   --certificate-github-workflow-sha "$COMMIT"
 ```
@@ -71,7 +75,8 @@ snatcharr-<version>-provenance.sigstore.json` with the same identity flags on ea
 The release workflow (`.github/workflows/release.yml`, job `verify`) runs the same checks on
 both images, the chart and the page, and fails the release when one is not covered. Before
 that it proves the refusals: an unattested chart, another commit, another git ref and another
-repository (`tools/release/verify-selftest.sh`), and for the page a wrong commit and a changed
+repository, and a prefix of the git ref or a ref whose dots would match any character
+(`tools/release/verify-selftest.sh`), and for the page a wrong commit and a changed
 chart with a rewritten checksum file.
 
 Older releases: the release page carries checksum file and provenance bundle from 0.2.1 on;
