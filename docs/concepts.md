@@ -106,6 +106,14 @@ holds, is never skipped: the instances it covers queue no snatches and get no se
 until it is fixed or removed. The planner logs each skip and counts it in
 `snatcharr_planner_instance_failures_total` (see [Metrics](metrics.md)).
 
+## More than 500 instances
+
+One planner pass evaluates at most 500 enabled instances. It starts with the instances it
+has never evaluated, then takes the ones it evaluated longest ago, so the instances past
+500 come first in the next pass, a minute later. A pass that leaves instances out logs one
+warning with the count and adds it to
+`snatcharr_planner_deferrals_total{reason="tick_bound"}`.
+
 ## Preview and dry run
 
 A dry run preview evaluates what a snatch would do without executing any actions.

@@ -76,25 +76,44 @@ func NewPlanner(st *store.Store, clk clock.Clock, runs *Runs, rec *Recorder, log
 // Tick evaluates every enabled instance once. It never returns early on a single
 // instance's failure; errors are logged and the instance is skipped.
 func (p *Planner) Tick(ctx context.Context) (int, error) {
-	rows, err := p.st.Q().ListEnabledInstances(ctx)
+	rows, err := p.st.Q().ListInstancesToPlan(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("snatch: planner list instances: %w", store.MapError(err))
 	}
-	if len(rows) > MaxInstancesPerTick {
-		rows = rows[:MaxInstancesPerTick]
-	}
+	rows = p.bound(ctx, rows)
 	queued := 0
+	ids := make([]uuid.UUID, 0, len(rows))
 	for _, row := range rows {
+		ids = append(ids, row.ID)
 		inst := store.InstanceFromRow(row)
-		n, err := p.planInstance(ctx, inst)
-		if err != nil {
-			p.logger.WarnContext(ctx, "snatch: planner skipped instance", slog.String("instance", inst.Name), slog.String("error", err.Error()))
+		n, planErr := p.planInstance(ctx, inst)
+		if planErr != nil {
+			p.logger.WarnContext(ctx, "snatch: planner skipped instance", slog.String("instance", inst.Name), slog.String("error", planErr.Error()))
 			p.m.PlanFailed(inst.Name)
 			continue
 		}
 		queued += n
 	}
+	err = p.st.Q().MarkInstancesPlanned(ctx, sqlcgen.MarkInstancesPlannedParams{PlannedAt: p.clk.Now(), Ids: ids})
+	if err != nil {
+		return queued, fmt.Errorf("snatch: planner mark instances: %w", store.MapError(err))
+	}
 	return queued, nil
+}
+
+// bound keeps the first MaxInstancesPerTick instances. The ones past it wait for the next
+// tick, which lists them first because it evaluated them longest ago (#176).
+func (p *Planner) bound(ctx context.Context, rows []sqlcgen.Instance) []sqlcgen.Instance {
+	if len(rows) <= MaxInstancesPerTick {
+		return rows
+	}
+	deferred := len(rows) - MaxInstancesPerTick
+	p.logger.WarnContext(ctx, "snatch: planner deferred instances past the tick bound",
+		slog.Int("deferred", deferred), slog.Int("bound", MaxInstancesPerTick))
+	for range deferred {
+		p.m.PlannerDeferred(metrics.DeferralTickBound)
+	}
+	return rows[:MaxInstancesPerTick]
 }
 
 func (p *Planner) planInstance(ctx context.Context, inst domain.Instance) (int, error) {
