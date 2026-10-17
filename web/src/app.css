@@ -4,13 +4,15 @@
 @import './lib/theme.css';
 
 /* Aliases over sveltesentio's tokens. Names deliberately differ from the token names
-   (--color-muted, --color-card, ...) so no custom property references itself. */
+   (--color-muted, --color-card, ...) so no custom property references itself. --color-control
+   is the boundary of a control (3:1, WCAG 2.2 SC 1.4.11); --color-line only draws dividers. */
 @theme {
 	--color-bg: var(--color-background);
 	--color-fg: var(--color-foreground);
 	--color-subtle: var(--color-muted-foreground);
-	--color-surface: var(--color-surface);
-	--color-line: var(--color-line);
+	--color-surface: var(--color-card);
+	--color-line: var(--color-border);
+	--color-control: var(--color-input);
 	--color-brand: var(--color-primary);
 	--color-brand-fg: var(--color-primary-foreground);
 	--color-danger: var(--color-destructive);
@@ -49,7 +51,7 @@ body {
 	min-height: 44px;
 	padding: 0.5rem 1rem;
 	border-radius: 0.5rem;
-	border: 1px solid var(--color-line);
+	border: 1px solid var(--color-control);
 	background: var(--color-surface);
 	color: var(--color-fg);
 	font-weight: 500;
@@ -72,7 +74,7 @@ body {
 	min-height: 44px;
 	padding: 0.5rem 0.75rem;
 	border-radius: 0.5rem;
-	border: 1px solid var(--color-line);
+	border: 1px solid var(--color-control);
 	background: var(--color-bg);
 	color: var(--color-fg);
 	width: 100%;
