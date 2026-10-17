@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-import { fireEvent, screen } from '@testing-library/svelte';
+import { fireEvent, screen, within } from '@testing-library/svelte';
 import { ProblemError } from '@sveltesentio/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api } from '#lib/api/client.js';
@@ -200,5 +200,53 @@ describe('settings', () => {
 		expect(postSpy).toHaveBeenCalledWith('/notifications/channels/{channelId}/test', {
 			params: { path: { channelId: sampleChannel.id } }
 		});
+	});
+	it('sends an Apprise channel with its notify URL, Basic Auth and trimmed tags', async () => {
+		stubGet({
+			'/settings': sampleSettings,
+			'/notifications/channels': [],
+			'/notifications/rules': []
+		});
+		const postSpy = vi.spyOn(api, 'POST').mockResolvedValue({ data: sampleChannel } as never);
+		renderWithQuery(SettingsPage);
+
+		const heading = await screen.findByRole('heading', { name: m.channel_add() });
+		const form = within(heading.closest('form') as HTMLElement);
+		await fireEvent.input(form.getByLabelText(m.channel_name()), { target: { value: 'Apprise' } });
+		await fireEvent.change(form.getByLabelText(m.channel_kind()), {
+			target: { value: 'apprise' }
+		});
+		const set = async (label: string, value: string) =>
+			fireEvent.input(await form.findByLabelText(label), { target: { value } });
+		await set(m.channel_apprise_url(), 'http://apprise:8000/notify/snatch-key');
+		await set(m.channel_username(), 'snatch');
+		await set(m.channel_password(), 'pw');
+		await set(m.channel_tags(), ' ops, ,home ');
+		await fireEvent.click(form.getByRole('button', { name: m.channel_add() }));
+
+		expect(postSpy).toHaveBeenCalledWith('/notifications/channels', {
+			body: expect.objectContaining({
+				kind: 'apprise',
+				config: expect.objectContaining({
+					webhook_url: 'http://apprise:8000/notify/snatch-key',
+					username: 'snatch',
+					password: 'pw',
+					tags: ['ops', 'home']
+				})
+			})
+		});
+	});
+
+	it('shows the Apprise fields only for the Apprise kind', async () => {
+		stubGet({
+			'/settings': sampleSettings,
+			'/notifications/channels': [],
+			'/notifications/rules': []
+		});
+		renderWithQuery(SettingsPage);
+
+		await screen.findByRole('heading', { name: m.channel_add() });
+		expect(screen.queryByLabelText(m.channel_apprise_url())).toBeNull();
+		expect(screen.queryByLabelText(m.channel_tags())).toBeNull();
 	});
 });

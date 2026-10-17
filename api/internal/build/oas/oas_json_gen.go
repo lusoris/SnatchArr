@@ -5687,6 +5687,8 @@ func (s *NotificationChannelKind) Decode(d *jx.Decoder) error {
 		*s = NotificationChannelKindTeams
 	case NotificationChannelKindWebhook:
 		*s = NotificationChannelKindWebhook
+	case NotificationChannelKindApprise:
+		*s = NotificationChannelKindApprise
 	default:
 		*s = NotificationChannelKind(v)
 	}

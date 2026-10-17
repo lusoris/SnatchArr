@@ -1771,9 +1771,9 @@ export interface components {
             last_error?: string;
         };
         /** @enum {string} */
-        NotificationChannelKind: "discord" | "slack" | "telegram" | "ntfy" | "gotify" | "teams" | "webhook";
+        NotificationChannelKind: "discord" | "slack" | "telegram" | "ntfy" | "gotify" | "teams" | "webhook" | "apprise";
         NotificationChannelConfig: {
-            /** @description Webhook URL (write-only, never returned in responses) */
+            /** @description Webhook URL for Discord, Slack and Teams, or the Apprise API notify URL ({server}/notify/{config key}) (write-only, never returned in responses) */
             webhook_url?: string;
             /** @description Bearer token (write-only, never returned in responses) */
             token?: string;
@@ -1781,7 +1781,7 @@ export interface components {
             bot_token?: string;
             /** @description Gotify App token (write-only, never returned in responses) */
             app_token?: string;
-            /** @description Password (write-only, never returned in responses) */
+            /** @description Password, sent as HTTP Basic Auth to an Apprise API server (write-only, never returned in responses) */
             password?: string;
             /** @description HMAC signing secret (write-only, never returned in responses) */
             secret?: string;
@@ -1793,7 +1793,7 @@ export interface components {
             chat_id?: string;
             /** @description Slack channel override */
             channel?: string;
-            /** @description Display username override */
+            /** @description Display username override, or the HTTP Basic Auth user for an Apprise API server */
             username?: string;
             /** @description Discord avatar URL override */
             avatar_url?: string;
@@ -1805,7 +1805,7 @@ export interface components {
             theme_color?: string;
             /** @description Priority for ntfy (1-5) or Gotify (0-10) */
             priority?: number;
-            /** @description Tags / emoji shortcodes for ntfy */
+            /** @description Tags / emoji shortcodes for ntfy; for Apprise, the configuration tags to notify (any one matches) */
             tags?: string[];
             /** @description Target endpoint URL for signed outgoing webhooks */
             url?: string;

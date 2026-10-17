@@ -22,6 +22,7 @@ const (
 	ChannelGotify   ChannelKind = "gotify"
 	ChannelTeams    ChannelKind = "teams"
 	ChannelWebhook  ChannelKind = "webhook"
+	ChannelApprise  ChannelKind = "apprise"
 )
 
 // RuleEventKind names the event that triggers a notification rule.
@@ -90,7 +91,7 @@ type NotificationRule struct {
 // Valid reports whether the channel kind is recognized.
 func (k ChannelKind) Valid() bool {
 	switch k {
-	case ChannelDiscord, ChannelSlack, ChannelTelegram, ChannelNtfy, ChannelGotify, ChannelTeams, ChannelWebhook:
+	case ChannelDiscord, ChannelSlack, ChannelTelegram, ChannelNtfy, ChannelGotify, ChannelTeams, ChannelWebhook, ChannelApprise:
 		return true
 	default:
 		return false
