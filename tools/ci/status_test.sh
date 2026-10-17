@@ -18,7 +18,7 @@ trap 'rm -rf "$WORK"' EXIT
 # Every job ran and succeeded; the change filter selected every component.
 ALL="$(jq -n '
   [ "workflows", "secret-scan", "semgrep", "trivy", "changes", "commits", "api-lint", "api-test", "api-security", "api-openapi",
-    "worker", "e2e", "image-smoke", "dev-compose", "web", "web-e2e-api", "proto", "deploy", "contracts", "governance", "docs" ]
+    "worker", "e2e", "image-smoke", "dev-compose", "dlclients-live", "web", "web-e2e-api", "proto", "deploy", "contracts", "governance", "docs" ]
   | map({key: ., value: {result: "success", outputs: {}}}) | from_entries
   | .changes.outputs = ( [ "api", "worker", "web", "proto", "deploy", "governance", "contracts", "docs" ]
                          | map({key: ., value: "true"}) | from_entries )
@@ -26,7 +26,7 @@ ALL="$(jq -n '
 # No component selected: every filtered job is skipped.
 NONE="$(printf '%s' "$ALL" | jq '
   .changes.outputs |= map_values("false")
-  | (.["api-lint"], .["api-test"], .["api-security"], .["api-openapi"], .worker, .e2e, .["image-smoke"], .["dev-compose"], .web, .["web-e2e-api"],
+  | (.["api-lint"], .["api-test"], .["api-security"], .["api-openapi"], .worker, .e2e, .["image-smoke"], .["dev-compose"], .["dlclients-live"], .web, .["web-e2e-api"],
      .proto, .deploy, .contracts, .governance, .docs).result = "skipped"
 ')"
 
@@ -66,6 +66,8 @@ expect 1 "changes failed, the rest skipped" true "$NONE" \
   '.changes = {result: "failure", outputs: {}}' "job changes: failure, must succeed"
 expect 1 "api selected, api-test skipped" true "$ALL" \
   '.["api-test"].result = "skipped"' "job api-test: skipped, must succeed"
+expect 1 "api selected, the live download clients skipped" true "$ALL" \
+  '.["dlclients-live"].result = "skipped"' "job dlclients-live: skipped, must succeed"
 expect 1 "only proto changed, e2e skipped" true "$NONE" \
   '.changes.outputs.proto = "true" | (.proto, .["image-smoke"]).result = "success"' "job e2e: skipped, must succeed"
 expect 1 "docs changed, docs skipped" true "$NONE" \

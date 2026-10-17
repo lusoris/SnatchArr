@@ -21,7 +21,7 @@ GOMODCACHE       = $(subst \,/,$(shell go env GOMODCACHE))
 GOLUSORIS_VER    = $(shell go list -m -f '{{.Version}}' github.com/golusoris/golusoris)
 GOLUSORIS_SHARED = $(GOMODCACHE)/github.com/golusoris/golusoris@$(GOLUSORIS_VER)/tools/Makefile.shared
 
-.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-compose-smoke e2e-compose-pg-upgrade e2e-dev-compose-smoke e2e-cnpg-pg-upgrade e2e-chart-install web-verify web-e2e web-e2e-api proto-verify deploy-verify governance-verify hooks-verify contracts-verify workflows-verify workflows-lint secret-scan \
+.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-compose-smoke e2e-compose-pg-upgrade e2e-dev-compose-smoke dlclients-live e2e-cnpg-pg-upgrade e2e-chart-install web-verify web-e2e web-e2e-api proto-verify deploy-verify governance-verify hooks-verify contracts-verify workflows-verify workflows-lint secret-scan \
 	images kind-up kind-deploy kind-down \
         api-gen api-gosec gosec-install govulncheck-install tools-verify tools-lint tools-test tools-gosec web-gen proto-gen dev hooks setup
 
@@ -216,6 +216,14 @@ e2e-compose-pg-upgrade: ## Homelab compose bundle: Postgres previous major -> pi
 e2e-dev-compose-smoke: ## Dev compose stack with both profiles: services up, Prometheus target up, Grafana dashboard provisioned (needs Docker)
 	bash tools/e2e/planted.sh DEV_PLANT tools/e2e/dev_compose_smoke.sh \
 	  "no-dashboards:grafana provisioned 0 dashboards" "bad-target:the otel-collector target is not up"
+
+# The six download clients SnatchArr observes, each a real release (tools/e2e/dlclients),
+# through the adapters production uses: reachable, version, empty queue, paused state, a wrong
+# secret refused. The planted cases hand every client a wrong secret and claim a pause that never
+# happened; the test must refuse both (gap audit C9-05). Not in verify-all (slow, needs Docker).
+dlclients-live: ## Real qBittorrent, Transmission, Deluge, rTorrent, SABnzbd, NZBGet observed by the adapters (needs Docker)
+	bash tools/e2e/planted.sh SNATCHARR_DLCLIENTS_PLANT tools/e2e/dlclients_live.sh \
+	  "secret:not reachable with the right secret" "pause:paused = false; the client was left with paused = true"
 
 # The chart on CloudNativePG moved from the previous Postgres major to the current one by the
 # imageName change of docs/deployment.md, with data read-back and a planted upgrade without the
