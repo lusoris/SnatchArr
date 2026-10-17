@@ -362,7 +362,7 @@ chart-package: ## helm lint + package deploy/helm/snatcharr as dist/snatcharr-$(
 	helm lint deploy/helm/snatcharr
 	helm package deploy/helm/snatcharr --version "$(CHART_VERSION)" --app-version "$(CHART_VERSION)" -d dist
 
-deploy-verify: ## helm unittest + render.sh + chart_checks.sh planted cases + helm lint --strict + kubeconform (default and all-features renders, oldest claimed and newest Kubernetes) + kustomize build + compose image pins
+deploy-verify: ## helm unittest + render.sh + chart_checks.sh planted cases + helm lint --strict + kubeconform (default and all-features renders, oldest claimed and newest Kubernetes) + kustomize build + compose image pins + every object in the release namespace
 	if ! helm plugin list 2>/dev/null | grep -E -q '^unittest[[:space:]]'; then \
 	  echo "deploy-verify: helm plugin 'unittest' is missing; install helm-unittest (https://github.com/helm-unittest/helm-unittest)" >&2; exit 1; \
 	fi
@@ -372,20 +372,20 @@ deploy-verify: ## helm unittest + render.sh + chart_checks.sh planted cases + he
 	render=$$(mktemp -d)
 	trap 'rm -rf "$$render"' EXIT
 	# Rendered to a file first: a pipe into kubeconform passed a failing render (A2-01).
-	tools/deploy/render.sh "$$render/default.yaml" snatcharr deploy/helm/snatcharr
-	tools/deploy/render.sh "$$render/all.yaml" snatcharr deploy/helm/snatcharr \
+	tools/deploy/render.sh "$$render/default.yaml" snatcharr deploy/helm/snatcharr --namespace snatcharr
+	tools/deploy/render.sh "$$render/all.yaml" snatcharr deploy/helm/snatcharr --namespace snatcharr \
 	  --set networkPolicy.enabled=true --set api.ingress.enabled=true --set serviceMonitor.enabled=true \
 	  --set worker.autoscaling.enabled=true --set api.pdb.enabled=true --set worker.pdb.enabled=true \
 	  --set configarr.enabled=true --set configarr.existingConfigMap=cfg --set configarr.existingSecret=sec \
 	  --set-json 'networkPolicy.arrPeers=[{"namespaceSelector":{"matchLabels":{"kubernetes.io/metadata.name":"media"}}},{"podSelector":{"matchLabels":{"app.kubernetes.io/name":"lidarr"}},"ports":[{"port":8686,"protocol":"TCP"}]}]'
 	# The KEDA ScaledObject excludes the CPU HPA (#43), so it gets its own render.
-	tools/deploy/render.sh "$$render/keda.yaml" snatcharr deploy/helm/snatcharr \
+	tools/deploy/render.sh "$$render/keda.yaml" snatcharr deploy/helm/snatcharr --namespace snatcharr \
 	  --set worker.autoscaling.keda.enabled=true --set worker.autoscaling.keda.serverAddress=http://prometheus:9090
 	# kubeconform on the kubeVersion minimum of Chart.yaml and on the newest schemas (C13-01),
 	# planted cases first. The kubeconform binary if installed, else the pinned image CI uses.
 	sh tools/deploy/kubeconform_test.sh
 	sh tools/deploy/kubeconform.sh deploy/helm/snatcharr/Chart.yaml "$$render/default.yaml" "$$render/all.yaml" "$$render/keda.yaml"
-	kustomize build --enable-helm deploy/kustomize/kind >/dev/null
+	kustomize build --enable-helm deploy/kustomize/kind >"$$render/kind.yaml"
 	# Every compose image pinned by tag and digest, never latest (#140); planted cases first.
 	sh tools/deploy/compose_pins_test.sh
 	sh tools/deploy/compose_pins.sh deploy/compose/docker-compose.yml deploy/homelab/compose.yaml
@@ -405,6 +405,9 @@ deploy-verify: ## helm unittest + render.sh + chart_checks.sh planted cases + he
 	sh tools/deploy/chart_checks.sh netpol "$$render/peer.yaml" "4 with a to, 0 of them without ports, 0 with an empty to"
 	app=$$(helm show chart deploy/helm/snatcharr | sed -n 's/^appVersion: *//p' | tr -d "\"'")
 	sh tools/deploy/chart_checks.sh chart deploy/helm/snatcharr/Chart.yaml "$$app"
+	# Every object in the release namespace, also through the kind overlay: kustomize 5.8 no
+	# longer places helmCharts objects that carry no namespace (#346).
+	for f in default all keda kind; do sh tools/deploy/chart_checks.sh namespace "$$render/$$f.yaml" snatcharr; done
 
 images: ## Build both images locally (tag dev)
 	docker build -t snatcharr-api:dev -f Dockerfile .
@@ -437,8 +440,7 @@ kind-deploy: ## Load dev images into the VM's kind cluster and apply the kind ov
 	  docker save $$img | incus exec $(KIND_VM) -- docker load
 	  incus exec $(KIND_VM) -- kind load docker-image $$img --name $(KIND_CLUSTER)
 	done
-	# -n: kustomize 5.8.3 with helm 4 drops the overlay namespace from inflated chart objects
-	kustomize build --enable-helm deploy/kustomize/kind | $(KIND_KUBECTL) -n snatcharr apply --server-side -f -
+	kustomize build --enable-helm deploy/kustomize/kind | $(KIND_KUBECTL) apply --server-side -f -
 	$(KIND_KUBECTL) -n snatcharr rollout status deploy/snatcharr-api --timeout=300s
 	@echo "UI: $(KIND_KUBECTL) -n snatcharr port-forward svc/snatcharr-api 8080:8080"
 

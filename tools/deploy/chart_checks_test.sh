@@ -5,8 +5,10 @@
 # Planted cases for chart_checks.sh. Refused: an egress `to: []` on the rule line, `to: []` and
 # `to: null` after `ports`, a `to:` with no entry (also as the file's last line), a summary
 # other than WANT, a chart with three markers, a stale image, two api images and no worker
-# image, a version or registry host that only matches as a pattern. Accepted: the rule shapes
-# the chart renders, an empty ingress `from`, `to: []` inside a ConfigMap, a good chart.
+# image, a version or registry host that only matches as a pattern, an object without a
+# top-level namespace (also when one sits below spec), an object in another namespace, a render
+# with no object. Accepted: the rule shapes the chart renders, an empty ingress `from`,
+# `to: []` inside a ConfigMap, a good chart, a render whose objects all sit in the namespace.
 #
 #   tools/deploy/chart_checks_test.sh
 #
@@ -139,5 +141,65 @@ expect 1 chart_pattern_only chart "$WORK/pattern_only.yaml" 0.1.5
 expect 1 chart_host_pattern chart "$WORK/host_pattern.yaml" 0.1.5
 expect 1 chart_no_app chart "$WORK/good.yaml" ""
 expect 2 chart_usage chart "$WORK/good.yaml"
+# objects NAME DOCS...: a rendered file of the given documents, each led by `---`.
+objects() {
+  name="$1"
+  shift
+  for doc in "$@"; do printf '%s\n' '---' "$doc"; done >"$WORK/$name.yaml"
+}
+
+placed='apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: a
+  namespace: snatcharr'
+quoted='apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: b
+  name: b
+  namespace: "snatcharr"
+spec:
+  template:
+    metadata:
+      namespace: other'
+ns_object='apiVersion: v1
+kind: Namespace
+metadata:
+  name: snatcharr'
+# The namespace sits only below spec, as a ServiceMonitor's namespaceSelector does.
+nested='apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: c
+spec:
+  namespaceSelector:
+    matchNames:
+      - snatcharr
+  selector:
+    metadata:
+      namespace: snatcharr'
+elsewhere='apiVersion: v1
+kind: Secret
+metadata:
+  name: d
+  namespace: default'
+
+objects ns_good "$ns_object" "$placed" "$quoted"
+objects ns_missing "$placed" "$nested"
+objects ns_other "$placed" "$elsewhere"
+objects ns_only_namespace "$ns_object"
+: >"$WORK/ns_empty.yaml"
+
+expect 0 ns_good namespace "$WORK/ns_good.yaml" snatcharr
+expect 1 ns_good_other_want namespace "$WORK/ns_good.yaml" media
+expect 1 ns_missing namespace "$WORK/ns_missing.yaml" snatcharr
+expect 1 ns_other namespace "$WORK/ns_other.yaml" snatcharr
+expect 1 ns_only_namespace namespace "$WORK/ns_only_namespace.yaml" snatcharr
+expect 1 ns_empty namespace "$WORK/ns_empty.yaml" snatcharr
+expect 1 ns_unreadable namespace "$WORK/absent.yaml" snatcharr
+expect 2 ns_usage namespace "$WORK/ns_good.yaml"
+expect 2 ns_empty_want namespace "$WORK/ns_good.yaml" ""
 expect 2 unknown_command nonsense
 exit "$failed"
