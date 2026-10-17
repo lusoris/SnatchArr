@@ -25,6 +25,13 @@ default 900 s, jittered by ±20 % per instance so several instances never hit th
 indexers in lockstep) has passed since the last one of that kind, nothing is paused by a
 schedule, no download client is holding things back, and the circuit is closed (below).
 
+The planner checks every enabled instance once a minute, up to 500 instances per check.
+A check must finish within half that minute, and
+`api/internal/snatch/planner_scale_test.go` fails when it does not. Measured on
+2026-10-17 against the test Postgres container on a 16-core desktop, with every instance
+due: 10 instances took 28 ms, 100 took 189 ms and 500 took 815 ms. These are times for
+the planner alone; leasing and the searches the workers send are not part of them.
+
 ## Per cycle
 
 `missing_per_cycle` (default 1) and `upgrade_per_cycle` (default 0) say how many items a
@@ -105,6 +112,14 @@ A window the API cannot read, for example one whose time zone the host's tzdata 
 holds, is never skipped: the instances it covers queue no snatches and get no search budget
 until it is fixed or removed. The planner logs each skip and counts it in
 `snatcharr_planner_instance_failures_total` (see [Metrics](metrics.md)).
+
+## More than 500 instances
+
+One planner pass evaluates at most 500 enabled instances. It starts with the instances it
+has never evaluated, then takes the ones it evaluated longest ago, so the instances past
+500 come first in the next pass, a minute later. A pass that leaves instances out logs one
+warning with the count and adds it to
+`snatcharr_planner_deferrals_total{reason="tick_bound"}`.
 
 ## Preview and dry run
 
