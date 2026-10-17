@@ -269,9 +269,7 @@ proto-gen: ## buf generate (Go stubs; Rust stubs build via tonic-build)
 	go run ./tools/gennosec apply
 
 # ── deploy/ ───────────────────────────────────────────────────────────────────
-# kubeconform binary if installed, else the same pinned image CI uses.
-KUBECONFORM ?= $(shell command -v kubeconform >/dev/null 2>&1 && echo kubeconform || echo "docker run --rm -i ghcr.io/yannh/kubeconform:v0.7.0")
-deploy-verify: ## helm unittest + render.sh + chart_checks.sh planted cases + helm lint --strict + kubeconform (default and all-features renders) + kustomize build + compose image pins
+deploy-verify: ## helm unittest + render.sh + chart_checks.sh planted cases + helm lint --strict + kubeconform (default and all-features renders, oldest claimed and newest Kubernetes) + kustomize build + compose image pins
 	if ! helm plugin list 2>/dev/null | grep -E -q '^unittest[[:space:]]'; then \
 	  echo "deploy-verify: helm plugin 'unittest' is missing; install helm-unittest (https://github.com/helm-unittest/helm-unittest)" >&2; exit 1; \
 	fi
@@ -282,13 +280,15 @@ deploy-verify: ## helm unittest + render.sh + chart_checks.sh planted cases + he
 	trap 'rm -rf "$$render"' EXIT
 	# Rendered to a file first: a pipe into kubeconform passed a failing render (A2-01).
 	tools/deploy/render.sh "$$render/default.yaml" snatcharr deploy/helm/snatcharr
-	$(KUBECONFORM) -strict -ignore-missing-schemas -summary <"$$render/default.yaml"
 	tools/deploy/render.sh "$$render/all.yaml" snatcharr deploy/helm/snatcharr \
 	  --set networkPolicy.enabled=true --set api.ingress.enabled=true --set serviceMonitor.enabled=true \
 	  --set worker.autoscaling.enabled=true --set api.pdb.enabled=true --set worker.pdb.enabled=true \
 	  --set configarr.enabled=true --set configarr.existingConfigMap=cfg --set configarr.existingSecret=sec \
 	  --set-json 'networkPolicy.arrPeers=[{"namespaceSelector":{"matchLabels":{"kubernetes.io/metadata.name":"media"}}},{"podSelector":{"matchLabels":{"app.kubernetes.io/name":"lidarr"}},"ports":[{"port":8686,"protocol":"TCP"}]}]'
-	$(KUBECONFORM) -strict -ignore-missing-schemas -summary <"$$render/all.yaml"
+	# kubeconform on the kubeVersion minimum of Chart.yaml and on the newest schemas (C13-01),
+	# planted cases first. The kubeconform binary if installed, else the pinned image CI uses.
+	sh tools/deploy/kubeconform_test.sh
+	sh tools/deploy/kubeconform.sh deploy/helm/snatcharr/Chart.yaml "$$render/default.yaml" "$$render/all.yaml"
 	kustomize build --enable-helm deploy/kustomize/kind >/dev/null
 	# Every compose image pinned by tag and digest, never latest (#140); planted cases first.
 	sh tools/deploy/compose_pins_test.sh
