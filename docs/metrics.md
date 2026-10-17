@@ -120,7 +120,7 @@ The API serves these metrics on `/metrics`:
 - `outcome`: `done`, `failed`, `cancelled`, `lease_exhausted`
 - `result`: `granted`, `partial`, `denied`, `error`
 - `status`: `queued`, `leased`, `done`, `failed`, `cancelled`
-- `reason`: `schedule_closed`, `already_running`, `client_unreachable`, `client_paused`, `client_active_limit`, `bandwidth_saturated`, `gate_refusal`, `indexer_limit`
+- `reason`: `schedule_closed`, `already_running`, `client_unreachable`, `client_paused`, `client_active_limit`, `bandwidth_saturated`, `gate_refusal`, `indexer_limit`, `tick_bound`
 
 ---
 

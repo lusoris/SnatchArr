@@ -18,6 +18,13 @@ SELECT * FROM instances ORDER BY kind, name;
 -- name: ListEnabledInstances :many
 SELECT * FROM instances WHERE enabled ORDER BY kind, name;
 
+-- name: ListInstancesToPlan :many
+-- Instances never evaluated come first, then the one evaluated longest ago (#176).
+SELECT * FROM instances WHERE enabled ORDER BY planned_at NULLS FIRST, kind, name;
+
+-- name: MarkInstancesPlanned :exec
+UPDATE instances SET planned_at = sqlc.arg(planned_at)::timestamptz WHERE id = ANY(sqlc.arg(ids)::uuid[]);
+
 -- name: UpdateInstance :one
 UPDATE instances
 SET kind = $2, name = $3, base_url = $4, api_key_enc = $5, enabled = $6, updated_at = $7,
