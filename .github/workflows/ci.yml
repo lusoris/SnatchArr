@@ -193,7 +193,11 @@ jobs:
               - 'deploy/**'
               - 'tools/deploy/**'
               - 'tools/e2e/cnpg_pg_upgrade.sh'
+              - 'tools/e2e/chart_install.sh'
               - 'tools/e2e/fingerprint.sql'
+              # The deploy job installs the chart on images built from these (#144).
+              - 'Dockerfile'
+              - 'worker/Dockerfile'
               - 'Makefile'
               - '.github/workflows/ci.yml'
             governance:
@@ -685,6 +689,14 @@ jobs:
           cache-from: type=gha,scope=worker
       - name: Load the images into kind
         run: kind load docker-image snatcharr-api:e2e snatcharr-worker:e2e --name chart-check
+      # A dry run cannot see a pod that never becomes Ready (0.1.0 shipped one). The chart of this
+      # checkout installed with its defaults and upgraded from the last published chart, both
+      # waited on until Available with /readyz 200, after a planted install the API refuses (#144).
+      - name: make e2e-chart-install
+        env:
+          CHART_API_IMAGE: snatcharr-api:e2e
+          CHART_WORKER_IMAGE: snatcharr-worker:e2e
+        run: make e2e-chart-install
       # The chart installed on CloudNativePG with the previous Postgres major and upgraded by
       # the documented imageName change: data read-back, API back up, and a planted upgrade
       # without the image change that must be refused (#252).
