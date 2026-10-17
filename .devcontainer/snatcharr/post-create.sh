@@ -16,7 +16,7 @@ make sqlc-install
 # ogen at the go.mod version: inside the module, go install without @version resolves it there.
 go install github.com/ogen-go/ogen/cmd/ogen
 # The engine pin of CI (PRAETOR_REF in .github/workflows/ci.yml); move both together.
-go install github.com/cordanaLLM/praetor/cmd/standardsctl@5d4acfb4e38d6d0e67704e8fb31f007d8e23ce3b
+go install github.com/cordanaLLM/praetor/cmd/standardsctl@21bf5366356b29878cd1bbdd43168bc9fa421707
 ln -sf "$(go env GOPATH)/bin/standardsctl" "$(go env GOPATH)/bin/praetorctl"
 
 # Rust toolchain: the release, components and targets pinned in rust-toolchain.toml
