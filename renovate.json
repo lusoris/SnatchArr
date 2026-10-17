@@ -428,8 +428,7 @@
         "@playwright/test",
         "mcr.microsoft.com/playwright"
       ],
-      "groupName": "playwright",
-      "automerge": false
+      "groupName": "playwright"
     }
   ],
   "minimumReleaseAge": "3 days",
