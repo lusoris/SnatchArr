@@ -1,0 +1,98 @@
+name: Soak
+
+# The image smoke held for ten minutes with the gRPC connection rotated every 15 s (make e2e-soak,
+# gap audit C14-01): lease long-polls must survive many connection rotations with no failed
+# worker API call, no failed run and fresh worker contact in every round. Too slow for every pull
+# request; runs nightly and on demand.
+on:
+  schedule:
+    - cron: '30 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: soak
+  cancel-in-progress: false
+
+jobs:
+  soak:
+    name: soak (image smoke, 10 min)
+    runs-on: ubuntu-26.04
+    timeout-minutes: 40
+    services:
+      # The Postgres the integration tests pin, through the Docker Hub mirror.
+      postgres:
+        image: mirror.gcr.io/library/postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
+        env:
+          POSTGRES_PASSWORD: smoke
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+        ports:
+          - 5432:5432
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          driver-opts: image=mirror.gcr.io/moby/buildkit:v0.33.1@sha256:cec9f139f45e93c5c69c60f8b07cfad9f43f4ef6b6a6cd917527fea5ff2e3dea
+          buildkitd-config-inline: |
+            [registry."docker.io"]
+              mirrors = ["mirror.gcr.io"]
+      # Reads the image-smoke build cache of CI; writes none, so the nightly run cannot evict it.
+      - name: Build api image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: snatcharr-api:e2e
+          cache-from: type=gha,scope=api
+      - name: Build worker image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: worker/Dockerfile
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: snatcharr-worker:e2e
+          cache-from: type=gha,scope=worker
+      - name: make e2e-soak
+        env:
+          SMOKE_DSN: postgres://postgres:smoke@127.0.0.1:5432/postgres?sslmode=disable
+          SMOKE_SKIP_BUILD: '1'
+        run: make e2e-soak
+
+  # A failed soak on main opens the issue "Soak fails on main", or comments on it while it is open,
+  # the way the Security Scan reports (tools/ci/security_issue.sh).
+  report:
+    name: Open an issue on a failure on main
+    needs: [soak]
+    if: ${{ failure() && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Open or update the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: sh tools/ci/security_issue.sh "$RUN_URL" Soak
