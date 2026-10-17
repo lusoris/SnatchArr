@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+# Layered over values-kind.yaml by `make kind-keda-proof` (tools/e2e/keda_scale.sh): the worker
+# scales on queued runs through KEDA, which reads the gauge from prometheus.yaml.
+worker:
+  autoscaling:
+    minReplicas: 1
+    maxReplicas: 4
+    keda:
+      enabled: true
+      serverAddress: http://prometheus.monitoring.svc:9090

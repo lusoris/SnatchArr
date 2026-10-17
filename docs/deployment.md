@@ -119,7 +119,7 @@ error named.
 | Resource | Notes |
 | --- | --- |
 | Deployment `-api` | probes on `/startupz`, `/livez`, `/readyz` (readiness: Postgres and the leader gate, which is down while the election fails or a periodic loop failed to start); `/tmp` is a memory-backed emptyDir; `replicaCount` may exceed 1, periodic work runs on the elected replica |
-| Deployment `-worker` | dials `<release>-api:9090`; liveness probe on `/livez` (port `worker.httpPort`, 8081), which fails once no API call succeeded for `worker.staleSecs` (180 s); `/metrics` there counts failed API calls per call in `snatcharr_worker_api_failures_total`; optional HPA 1..4 on CPU |
+| Deployment `-worker` | dials `<release>-api:9090`; liveness probe on `/livez` (port `worker.httpPort`, 8081), which fails once no API call succeeded for `worker.staleSecs` (180 s); `/metrics` there counts failed API calls per call in `snatcharr_worker_api_failures_total`; optional HPA 1..4 on CPU, or a KEDA ScaledObject on queued runs (below) |
 | Service `-api` | `http` 8080, `grpc` 9090 (h2c) |
 | Ingress or HTTPRoute | `api.ingress.*` or `api.httpRoute.*` |
 | CNPG `Cluster` `-db` | `postgres.cnpg.*`; the API reads the DSN from the operator's `-db-app` Secret |
@@ -127,6 +127,36 @@ error named.
 | NetworkPolicy | worker may only reach the API, `networkPolicy.arrCidrs` and `networkPolicy.arrPeers` (both empty allow no *arr egress, never all of it); gRPC only from the worker |
 | ServiceMonitor | `serviceMonitor.enabled` scrapes `/metrics` on the API |
 | PodDisruptionBudget | per component, opt-in |
+
+### Worker autoscaling
+
+The worker runs `worker.replicaCount` replicas unless one of two autoscalers owns the count,
+between `worker.autoscaling.minReplicas` and `maxReplicas` (1..4):
+
+- `worker.autoscaling.enabled=true`: a HorizontalPodAutoscaler on CPU
+  (`targetCPUUtilizationPercentage`, 70). A worker waits on *arr most of the time, so CPU rises
+  late.
+- `worker.autoscaling.keda.enabled=true`: a KEDA `ScaledObject`
+  (`templates/worker-scaledobject.yaml`) on queued runs. Prerequisites: [KEDA](https://keda.sh) in
+  the cluster and a Prometheus that scrapes the API `/metrics` (for example
+  `serviceMonitor.enabled=true` with the Prometheus Operator). Set
+  `worker.autoscaling.keda.serverAddress` to that Prometheus. The default query is
+  `max(snatcharr_runs{status="queued",namespace="<release namespace>"})`: the elected API replica
+  exports the gauge every 30 seconds, and `max` keeps a stale series of a former leader from being
+  added. `keda.query` replaces it, for example when your Prometheus labels the namespace
+  differently. The worker count targets `keda.threshold` queued runs per replica, by default
+  `worker.concurrency`. KEDA reads Prometheus, never the database, so it needs no database
+  credentials.
+
+The two are exclusive: KEDA creates its own HorizontalPodAutoscaler, and the chart refuses to
+render both. With either one the Deployment leaves `replicas` to the autoscaler.
+
+`make kind-keda-proof` (`tools/e2e/keda_scale.sh`, after `make kind-up`, inside the incus VM only)
+installs KEDA and a minimal Prometheus (`deploy/kustomize/kind/prometheus.yaml`) and applies the
+chart with `deploy/kustomize/kind/values-keda.yaml`. With 50 runs queued it first requires the
+worker to stay at one replica while the query is planted to read 0, then to scale up within 120
+seconds on the chart's query, and back to one replica within 600 seconds after every run is
+cancelled.
 
 ### Metrics
 

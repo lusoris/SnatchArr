@@ -1,0 +1,120 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+suite: worker autoscaling
+templates:
+  - worker-scaledobject.yaml
+  - worker-hpa.yaml
+  - worker-deployment.yaml
+release:
+  name: snatcharr
+  namespace: media
+tests:
+  - it: default - no ScaledObject, no HPA, fixed replicas
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: worker-scaledobject.yaml
+      - hasDocuments:
+          count: 0
+        template: worker-hpa.yaml
+      - equal:
+          path: spec.replicas
+          value: 1
+        template: worker-deployment.yaml
+
+  - it: positive - KEDA scales the worker on queued runs of the release namespace
+    set:
+      worker.autoscaling.keda.enabled: true
+      worker.autoscaling.keda.serverAddress: http://prometheus.monitoring.svc:9090
+    asserts:
+      - isKind:
+          of: ScaledObject
+        template: worker-scaledobject.yaml
+      - equal:
+          path: spec.scaleTargetRef.name
+          value: snatcharr-worker
+        template: worker-scaledobject.yaml
+      - equal:
+          path: spec.minReplicaCount
+          value: 1
+        template: worker-scaledobject.yaml
+      - equal:
+          path: spec.maxReplicaCount
+          value: 4
+        template: worker-scaledobject.yaml
+      - equal:
+          path: spec.triggers[0].type
+          value: prometheus
+        template: worker-scaledobject.yaml
+      - equal:
+          path: spec.triggers[0].metadata.query
+          value: max(snatcharr_runs{status="queued",namespace="media"})
+        template: worker-scaledobject.yaml
+      - equal:
+          path: spec.triggers[0].metadata.threshold
+          value: "2"
+        template: worker-scaledobject.yaml
+      - hasDocuments:
+          count: 0
+        template: worker-hpa.yaml
+      - notExists:
+          path: spec.replicas
+        template: worker-deployment.yaml
+
+  - it: positive - query and threshold overrides are passed through
+    set:
+      worker.autoscaling.keda.enabled: true
+      worker.autoscaling.keda.serverAddress: http://prometheus.monitoring.svc:9090
+      worker.autoscaling.keda.query: sum(snatcharr_runs{status="queued"})
+      worker.autoscaling.keda.threshold: 5
+    template: worker-scaledobject.yaml
+    asserts:
+      - equal:
+          path: spec.triggers[0].metadata.query
+          value: sum(snatcharr_runs{status="queued"})
+      - equal:
+          path: spec.triggers[0].metadata.threshold
+          value: "5"
+
+  - it: boundary - threshold follows worker.concurrency at its upper limit
+    set:
+      worker.concurrency: 32
+      worker.autoscaling.keda.enabled: true
+      worker.autoscaling.keda.serverAddress: http://prometheus.monitoring.svc:9090
+      worker.autoscaling.minReplicas: 1
+      worker.autoscaling.maxReplicas: 1
+    template: worker-scaledobject.yaml
+    asserts:
+      - equal:
+          path: spec.triggers[0].metadata.threshold
+          value: "32"
+      - equal:
+          path: spec.maxReplicaCount
+          value: 1
+
+  - it: negative - KEDA without a Prometheus address fails the render
+    set:
+      worker.autoscaling.keda.enabled: true
+    template: worker-scaledobject.yaml
+    asserts:
+      - failedTemplate:
+          errorMessage: worker.autoscaling.keda.serverAddress is required when worker.autoscaling.keda.enabled=true
+
+  - it: negative - KEDA and the CPU HPA together fail the render
+    set:
+      worker.autoscaling.enabled: true
+      worker.autoscaling.keda.enabled: true
+      worker.autoscaling.keda.serverAddress: http://prometheus.monitoring.svc:9090
+    template: worker-scaledobject.yaml
+    asserts:
+      - failedTemplate:
+          errorMessage: "worker.autoscaling.enabled and worker.autoscaling.keda.enabled are exclusive: KEDA creates its own HorizontalPodAutoscaler for the worker"
+
+  - it: negative - an unknown KEDA key is refused by the schema
+    set:
+      worker.autoscaling.keda.enabled: true
+      worker.autoscaling.keda.serverAddress: http://prometheus.monitoring.svc:9090
+      worker.autoscaling.keda.minReplicas: 0
+    template: worker-scaledobject.yaml
+    asserts:
+      - failedTemplate: {}

@@ -20,3 +20,7 @@ helm install snatcharr oci://ghcr.io/lusoris/charts/snatcharr \
 
 Values are documented inline in [values.yaml](values.yaml); the full guide lives at
 <https://lusoris.github.io/SnatchArr/deployment/>.
+
+Optional worker autoscaling on queued runs (`worker.autoscaling.keda`) needs
+[KEDA](https://keda.sh) and a Prometheus that scrapes the API; see "Worker
+autoscaling" in the deployment guide.

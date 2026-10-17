@@ -1,0 +1,30 @@
+{{- $as := .Values.worker.autoscaling }}
+{{- if $as.keda.enabled }}
+{{- if $as.enabled }}
+{{- fail "worker.autoscaling.enabled and worker.autoscaling.keda.enabled are exclusive: KEDA creates its own HorizontalPodAutoscaler for the worker" }}
+{{- end }}
+{{- $server := required "worker.autoscaling.keda.serverAddress is required when worker.autoscaling.keda.enabled=true" $as.keda.serverAddress }}
+{{- /* The api leader exports the gauge; max, not sum, so a stale series from a former leader is never added to it. */}}
+{{- $query := $as.keda.query | default (printf "max(snatcharr_runs{status=\"queued\",namespace=\"%s\"})" .Release.Namespace) }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "snatcharr.fullname" . }}-worker
+  labels:
+    {{- include "snatcharr.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "snatcharr.fullname" . }}-worker
+  minReplicaCount: {{ $as.minReplicas }}
+  maxReplicaCount: {{ $as.maxReplicas }}
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: {{ $server | quote }}
+        query: {{ $query | quote }}
+        # Queued runs per worker replica; defaults to worker.concurrency (runs one replica takes at once).
+        threshold: {{ $as.keda.threshold | default .Values.worker.concurrency | toString | quote }}
+{{- end }}

@@ -184,11 +184,25 @@ worker:
       memory: 32Mi
     limits:
       memory: 128Mi
+  # Worker replicas between minReplicas and maxReplicas. Either the CPU HPA (enabled) or a KEDA
+  # ScaledObject on queued runs (keda.enabled), never both.
   autoscaling:
     enabled: false
     minReplicas: 1
     maxReplicas: 4
     targetCPUUtilizationPercentage: 70
+    # Needs KEDA (keda.sh) in the cluster and a Prometheus that scrapes the api /metrics (for
+    # example serviceMonitor.enabled=true). Scales on the api gauge snatcharr_runs{status="queued"}.
+    keda:
+      enabled: false
+      # Prometheus HTTP API, e.g. http://prometheus-operated.monitoring.svc:9090. Required when enabled.
+      serverAddress: ""
+      # PromQL returning one value; empty = max(snatcharr_runs{status="queued",namespace="<release namespace>"}).
+      query: ""
+      # Queued runs per worker replica; empty = worker.concurrency.
+      threshold: ""
+      # minReplicas >= 1, so the HorizontalPodAutoscaler KEDA creates does the scaling: it scales
+      # down after its 300 s stabilization window; KEDA cooldownPeriod applies only at 0 replicas.
   pdb:
     enabled: false
     minAvailable: 1

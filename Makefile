@@ -22,7 +22,7 @@ GOLUSORIS_VER    = $(shell go list -m -f '{{.Version}}' github.com/golusoris/gol
 GOLUSORIS_SHARED = $(GOMODCACHE)/github.com/golusoris/golusoris@$(GOLUSORIS_VER)/tools/Makefile.shared
 
 .PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-compose-smoke e2e-compose-pg-upgrade e2e-dev-compose-smoke dlclients-live cleanuparr-live e2e-cnpg-pg-upgrade e2e-chart-install web-verify web-e2e web-e2e-api web-visual web-visual-update proto-verify deploy-verify governance-verify hooks-verify contracts-verify workflows-verify workflows-lint secret-scan \
-	images kind-up kind-deploy kind-down \
+	images kind-up kind-deploy kind-keda-proof kind-down \
         api-gen api-gosec gosec-install govulncheck-install tools-verify tools-lint tools-test tools-gosec web-gen proto-gen dev hooks setup
 
 help: ## Show this help
@@ -328,10 +328,13 @@ deploy-verify: ## helm unittest + render.sh + chart_checks.sh planted cases + he
 	  --set worker.autoscaling.enabled=true --set api.pdb.enabled=true --set worker.pdb.enabled=true \
 	  --set configarr.enabled=true --set configarr.existingConfigMap=cfg --set configarr.existingSecret=sec \
 	  --set-json 'networkPolicy.arrPeers=[{"namespaceSelector":{"matchLabels":{"kubernetes.io/metadata.name":"media"}}},{"podSelector":{"matchLabels":{"app.kubernetes.io/name":"lidarr"}},"ports":[{"port":8686,"protocol":"TCP"}]}]'
+	# The KEDA ScaledObject excludes the CPU HPA (#43), so it gets its own render.
+	tools/deploy/render.sh "$$render/keda.yaml" snatcharr deploy/helm/snatcharr \
+	  --set worker.autoscaling.keda.enabled=true --set worker.autoscaling.keda.serverAddress=http://prometheus:9090
 	# kubeconform on the kubeVersion minimum of Chart.yaml and on the newest schemas (C13-01),
 	# planted cases first. The kubeconform binary if installed, else the pinned image CI uses.
 	sh tools/deploy/kubeconform_test.sh
-	sh tools/deploy/kubeconform.sh deploy/helm/snatcharr/Chart.yaml "$$render/default.yaml" "$$render/all.yaml"
+	sh tools/deploy/kubeconform.sh deploy/helm/snatcharr/Chart.yaml "$$render/default.yaml" "$$render/all.yaml" "$$render/keda.yaml"
 	kustomize build --enable-helm deploy/kustomize/kind >/dev/null
 	# Every compose image pinned by tag and digest, never latest (#140); planted cases first.
 	sh tools/deploy/compose_pins_test.sh
@@ -384,9 +387,13 @@ kind-deploy: ## Load dev images into the VM's kind cluster and apply the kind ov
 	  docker save $$img | incus exec $(KIND_VM) -- docker load
 	  incus exec $(KIND_VM) -- kind load docker-image $$img --name $(KIND_CLUSTER)
 	done
-	kustomize build --enable-helm deploy/kustomize/kind | $(KIND_KUBECTL) apply --server-side -f -
+	# -n: kustomize 5.8.3 with helm 4 drops the overlay namespace from inflated chart objects
+	kustomize build --enable-helm deploy/kustomize/kind | $(KIND_KUBECTL) -n snatcharr apply --server-side -f -
 	$(KIND_KUBECTL) -n snatcharr rollout status deploy/snatcharr-api --timeout=300s
 	@echo "UI: $(KIND_KUBECTL) -n snatcharr port-forward svc/snatcharr-api 8080:8080"
+
+kind-keda-proof: ## KEDA scales the worker on queued runs, in the VM's kind cluster after kind-up (#43)
+	KUBECONFIG=$(KIND_KUBECONFIG) tools/e2e/keda_scale.sh
 
 kind-down: ## Delete the kind VM, its profile and the kubeconfig
 	$(KIND_VM_SCRIPT) destroy
