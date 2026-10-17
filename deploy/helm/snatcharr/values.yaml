@@ -5,7 +5,9 @@
 image:
   api:
     repository: ghcr.io/lusoris/snatcharr-api
-    # Defaults to the chart's appVersion.
+    # Defaults to the chart's appVersion. A pinned release tag older than the chart supports
+    # fails the render (snatcharr.minImageVersion in templates/_helpers.tpl); leave the tags
+    # empty to keep chart and images in step.
     tag: ""
     pullPolicy: IfNotPresent
   worker:

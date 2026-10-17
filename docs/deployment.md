@@ -128,6 +128,13 @@ error named.
 | ServiceMonitor | `serviceMonitor.enabled` scrapes `/metrics` on the API |
 | PodDisruptionBudget | per component, opt-in |
 
+The image tags default to the chart's `appVersion`, so chart and images move together. A pinned
+release tag (`image.api.tag`, `image.worker.tag`) older than the templates need fails the render:
+the worker probes need a worker image newer than 0.2.1. The minimum per component lives in
+`snatcharr.minImageVersion` (`templates/_helpers.tpl`); `tests/image_test.yaml` holds the planted
+case, chart 0.1.8 with worker image 0.1.5. A tag that is no release, such as a commit build, is
+not compared.
+
 ### Metrics
 
 The API and worker both serve Prometheus metrics on `/metrics`. See the comprehensive [Metrics and Observability](metrics.md) reference for metric names, types, labels, scrape configuration (ServiceMonitor and PodMonitor), Grafana dashboard setup, and leader-only domain state gauge behaviors.
