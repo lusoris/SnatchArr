@@ -170,7 +170,8 @@ worker:
   heartbeatSecs: 30
   leaseWaitSecs: 30
   arrTimeoutSecs: 30
-  # Health listener (SNATCH_HTTP_ADDR): /livez for the liveness probe, /metrics for Prometheus.
+  # Health listener (SNATCH_HTTP_ADDR): /livez for the liveness probe, /readyz for the readiness
+  # probe (also fails before the first successful API call), /metrics for Prometheus.
   httpPort: 8081
   # /livez fails once the last successful API call is older than this (SNATCH_STALE_SECS,
   # 60..3600, at least twice the longer of heartbeatSecs and leaseWaitSecs): a worker that can no
