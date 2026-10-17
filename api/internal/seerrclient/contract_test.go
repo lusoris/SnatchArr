@@ -16,9 +16,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golusoris/goenvoy/arr/seerr"
+
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/tools/upstreamspec/contract"
 )
+
+// pagedRequests is the list-requests response shape.
+//
+//nolint:tagliatelle // Seerr speaks camelCase
+type pagedRequests struct {
+	PageInfo seerr.PageInfo       `json:"pageInfo"`
+	Results  []seerr.MediaRequest `json:"results"`
+}
 
 // decoded is one operation of the Seerr spec with the wire type the client decodes its response
 // into. absent lists what the type reads and the spec does not document for this operation; an
@@ -31,19 +41,20 @@ type decoded struct {
 
 // decodes lists every operation the client requests.
 var decodes = []decoded{
-	{operation: "GET /api/v1/status", wire: reflect.TypeFor[statusJSON]()},
-	// The Seerr server returns these five fields (server/entity/MediaRequest.ts, Media.ts and
-	// User.ts at the pinned commit) and its spec leaves them out of MediaRequest, MediaInfo and
-	// User. The spec cannot vouch for them; the fixture tests in client_test.go cover them.
-	{operation: "GET /api/v1/request", wire: reflect.TypeFor[pagedRequests](), absent: []string{
-		"results[].media.mediaType", "results[].media.status4k", "results[].requestedBy.displayName",
-		"results[].seasons", "results[].type",
+	{operation: "GET /api/v1/status", wire: reflect.TypeFor[seerr.StatusResponse]()},
+	// The Seerr server returns type, seasons, media.mediaType and requestedBy.displayName
+	// (server/entity/MediaRequest.ts, Media.ts and User.ts at the pinned commit) and its spec
+	// leaves them out. goenvoy marks them omitempty, which contract.Missing does not check; the
+	// fixture tests in client_test.go cover them. The default sort of the operation is `added`.
+	{operation: "GET /api/v1/request", wire: reflect.TypeFor[pagedRequests]()},
+	{operation: "GET /api/v1/settings/sonarr", wire: reflect.TypeFor[[]seerr.ServiceSettings]()},
+	{operation: "GET /api/v1/settings/radarr", wire: reflect.TypeFor[[]seerr.ServiceSettings]()},
+	{operation: "GET /api/v1/movie/{movieId}", wire: reflect.TypeFor[seerr.MovieDetails](), absent: []string{
+		"mediaInfo.mediaType", "mediaInfo.status4k",
 	}},
-	{operation: "GET /api/v1/settings/sonarr", wire: reflect.TypeFor[[]serverJSON]()},
-	{operation: "GET /api/v1/settings/radarr", wire: reflect.TypeFor[[]serverJSON]()},
-	// One wire type reads both title operations: a movie has no `name`, a show has no `title`.
-	{operation: "GET /api/v1/movie/{movieId}", wire: reflect.TypeFor[titleJSON](), absent: []string{"name"}},
-	{operation: "GET /api/v1/tv/{tvId}", wire: reflect.TypeFor[titleJSON](), absent: []string{"title"}},
+	{operation: "GET /api/v1/tv/{tvId}", wire: reflect.TypeFor[seerr.TvDetails](), absent: []string{
+		"mediaInfo.mediaType", "mediaInfo.status4k",
+	}},
 }
 
 // contractProblems checks the client against the contract of a Seerr spec and returns one line
@@ -146,22 +157,27 @@ func TestUpstreamContract(t *testing.T) {
 	}
 }
 
+const (
+	sampleMovie = `{"id":1,"adult":true,"backdropPath":"string","budget":1,"genres":[{"id":1,"name":"string"}],"homepage":"string","imdbId":"string","originalLanguage":"string","originalTitle":"string","overview":"string","popularity":1,"posterPath":"string","productionCompanies":[{"id":1,"name":"string","logoPath":"string","originCountry":"string"}],"releaseDate":"string","revenue":1,"runtime":1,"status":"string","tagline":"string","title":"string","video":true,"voteAverage":1,"voteCount":1,"mediaInfo":{"id":1,"status":1,"createdAt":"string","updatedAt":"string","requests":[{"id":1}],"tmdbId":1,"tvdbId":1}}`
+	sampleTV    = `{"id":1,"backdropPath":"string","createdBy":[{"id":1,"name":"string","gender":1,"profilePath":"string"}],"firstAirDate":"string","genres":[{"id":1,"name":"string"}],"homepage":"string","inProduction":false,"lastAirDate":"string","mediaInfo":{"id":1,"status":1,"createdAt":"string","updatedAt":"string","requests":[{"id":1}],"tmdbId":1,"tvdbId":1},"name":"string","networks":[{"id":1,"name":"string","logoPath":"string","originCountry":"string"}],"numberOfEpisodes":1,"numberOfSeason":1,"originalLanguage":"string","originalName":"string","overview":"string","popularity":1,"posterPath":"string","seasons":[{"id":1,"seasonNumber":1,"airDate":"string","episodeCount":1,"episodes":[{"id":1,"name":"string","airDate":"string","episodeNumber":1,"overview":"string","seasonNumber":1,"stillPath":"string","voteAverage":1,"voteCount":1}],"name":"string","overview":"string","posterPath":"string"}],"status":"string","tagline":"string","type":"string","voteAverage":1,"voteCount":1}`
+)
+
 // sampleContract is a contract with the shape the pinned Seerr spec has for the operations of
 // the client. It is written by hand: nothing of the spec is copied.
 func sampleContract() contract.File {
-	server := `[{"id":1,"name":"string","hostname":"string","port":1,"apiKey":"string","useSsl":true,"baseUrl":"string","is4k":true,"isDefault":true}]`
+	server := `[{"id":1,"name":"string","hostname":"string","port":1,"apiKey":"string","useSsl":true,"baseUrl":"string","is4k":true,"isDefault":true,"activeProfileId":1,"activeProfileName":"string","activeDirectory":"string","externalUrl":"string","syncEnabled":true,"preventSearch":false}]`
 	operation := func(response string, parameters ...string) contract.Operation {
 		return contract.Operation{Parameters: parameters, Response: json.RawMessage(response)}
 	}
 	return contract.File{Spec: "seerr", Tag: "v0", Commit: "0123abc", Operations: map[string]contract.Operation{
-		"GET /api/v1/status": operation(`{"version":"string"}`),
-		"GET /api/v1/request": operation(`{"pageInfo":{"pages":1,"results":1},"results":[{"id":1,"status":1,"is4k":true,"serverId":1,
+		"GET /api/v1/status": operation(`{"version":"string","commitTag":"string","updateAvailable":true,"commitsBehind":0,"restartRequired":false}`),
+		"GET /api/v1/request": operation(`{"pageInfo":{"page":1,"pages":1,"results":1},"results":[{"id":1,"status":1,"is4k":true,"serverId":1,
 			"createdAt":"2020-01-02T03:04:05Z","requestedBy":{"username":"string","email":"string"},
 			"media":{"id":1,"tmdbId":1,"tvdbId":1,"status":1}}]}`, "filter", "skip", "sort", "take"),
 		"GET /api/v1/settings/sonarr": operation(server),
 		"GET /api/v1/settings/radarr": operation(server),
-		"GET /api/v1/movie/{movieId}": operation(`{"title":"string"}`),
-		"GET /api/v1/tv/{tvId}":       operation(`{"name":"string"}`),
+		"GET /api/v1/movie/{movieId}": operation(sampleMovie),
+		"GET /api/v1/tv/{tvId}":       operation(sampleTV),
 	}}
 }
 
@@ -181,14 +197,14 @@ func TestContractProblems(t *testing.T) {
 	}{
 		{"the documented shape", func(*contract.File) {}, nil},
 		{"a field the client reads leaves the spec", respond("GET /api/v1/status", `{"commitTag":"string"}`), []string{
-			`GET /api/v1/status: seerrclient.statusJSON reads "version", which the spec does not document`,
+			`GET /api/v1/status: seerr.StatusResponse reads "version", which the spec does not document`,
 			"Status read no version from the documented response",
 		}},
-		{"a nested field leaves the spec", respond("GET /api/v1/settings/radarr", `[{"id":1,"name":"string","hostname":"string","port":1,"useSsl":true,"baseUrl":"string","is4k":true,"isDefault":true}]`), []string{
-			`GET /api/v1/settings/radarr: []seerrclient.serverJSON reads "[].apiKey", which the spec does not document`,
+		{"a nested field leaves the spec", respond("GET /api/v1/settings/radarr", `[{"id":1,"name":"string","hostname":"string","port":1,"useSsl":true,"baseUrl":"string","is4k":true,"isDefault":true,"activeProfileId":1,"activeDirectory":"string","syncEnabled":true,"preventSearch":false}]`), []string{
+			`GET /api/v1/settings/radarr: []seerr.ServiceSettings reads "[].apiKey", which the spec does not document`,
 		}},
-		{"the spec starts to document a field listed as absent", respond("GET /api/v1/movie/{movieId}", `{"title":"string","name":"string"}`), []string{
-			`GET /api/v1/movie/{movieId}: "name" is listed as absent and the spec documents it`,
+		{"the spec starts to document a field listed as absent", respond("GET /api/v1/movie/{movieId}", strings.Replace(sampleMovie, `"mediaInfo":{`, `"mediaInfo":{"mediaType":"movie",`, 1)), []string{
+			`GET /api/v1/movie/{movieId}: "mediaInfo.mediaType" is listed as absent and the spec documents it`,
 		}},
 		{"a query parameter leaves the spec", func(file *contract.File) {
 			changed := file.Operations["GET /api/v1/request"]
