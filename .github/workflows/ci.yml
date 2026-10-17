@@ -349,9 +349,8 @@ jobs:
         # from tools/gennosec, and no annotation outlives its finding.
         run: go run ../tools/gennosec check
       - name: govulncheck
-        run: |
-          make -C .. govulncheck-install
-          govulncheck ./...
+        # The target make api-verify runs: the tools/go/go.mod pin, its version printed first (#161).
+        run: make -C .. api-vuln
 
   api-openapi:
     name: api / OpenAPI lint (spectral)
