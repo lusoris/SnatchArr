@@ -21,7 +21,7 @@ GOMODCACHE       = $(subst \,/,$(shell go env GOMODCACHE))
 GOLUSORIS_VER    = $(shell go list -m -f '{{.Version}}' github.com/golusoris/golusoris)
 GOLUSORIS_SHARED = $(GOMODCACHE)/github.com/golusoris/golusoris@$(GOLUSORIS_VER)/tools/Makefile.shared
 
-.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-compose-smoke e2e-compose-pg-upgrade e2e-dev-compose-smoke dlclients-live e2e-cnpg-pg-upgrade e2e-chart-install web-verify web-e2e web-e2e-api web-visual web-visual-update proto-verify deploy-verify governance-verify hooks-verify contracts-verify workflows-verify workflows-lint secret-scan \
+.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-compose-smoke e2e-compose-pg-upgrade e2e-dev-compose-smoke dlclients-live cleanuparr-live e2e-cnpg-pg-upgrade e2e-cnpg-backup-restore e2e-chart-install web-verify web-e2e web-e2e-api web-visual web-visual-update proto-verify deploy-verify governance-verify hooks-verify contracts-verify workflows-verify workflows-lint secret-scan \
 	images kind-up kind-deploy kind-down \
         api-gen api-gosec gosec-install govulncheck-install sqlc-install tools-verify tools-lint tools-test tools-gosec web-gen proto-gen dev hooks setup
 
@@ -181,7 +181,10 @@ e2e-smoke: ## Postgres + api + two workers + fakearr end to end (needs Docker un
 	  env SMOKE_API_BIN=$(E2E_BIN)/snatcharr SMOKE_FAKEARR_BIN=$(E2E_BIN)/fakearr \
 	  SMOKE_WORKER_BIN=target/debug/snatch-worker tools/e2e/smoke.sh
 
-e2e-image-smoke: ## Postgres + api image + worker image + fakearr end to end; not in verify-all (slow)
+e2e-image-smoke: ## Postgres + api image + worker image + fakearr end to end, under the chart memory limits; not in verify-all (slow)
+	# The memory check's cases first (C12-01): a limit it cannot read and a peak above 80 %
+	# of the limit must be refused.
+	bash tools/e2e/mem_limits_test.sh
 	mkdir -p $(E2E_BIN)
 	go build -o $(E2E_BIN)/fakearr ./api/cmd/fakearr
 	if [ "$${SMOKE_SKIP_BUILD:-0}" != "1" ]; then \
@@ -235,12 +238,28 @@ dlclients-live: ## Real qBittorrent, Transmission, Deluge, rTorrent, SABnzbd, NZ
 	bash tools/e2e/planted.sh SNATCHARR_DLCLIENTS_PLANT tools/e2e/dlclients_live.sh \
 	  "secret:not reachable with the right secret" "pause:paused = false; the client was left with paused = true"
 
+# The Cleanuparr release SnatchArr reads (tools/e2e/cleanuparr), set up as a user would and read
+# through the client production uses: status, strikes, dry run, the Sonarr instance and Seeker.
+# The planted cases hand the test a wrong API key and claim a dry run that was never switched
+# on; the test must refuse both (gap audit C9-07). Not in verify-all (slow, needs Docker).
+cleanuparr-live: ## Real Cleanuparr read by the client production uses (needs Docker)
+	bash tools/e2e/planted.sh SNATCHARR_CLEANUPARR_PLANT tools/e2e/cleanuparr_live.sh \
+	  "key:status with the right key" "dryrun:dry run = false; Cleanuparr was left with dry run = true"
+
 # The chart on CloudNativePG moved from the previous Postgres major to the current one by the
 # imageName change of docs/deployment.md, with data read-back and a planted upgrade without the
 # image change. Needs a cluster with the operator: CI runs it in the deploy job on kind; on a
 # workstation only inside a VM (no kind on the host). Not in verify-all.
 e2e-cnpg-pg-upgrade: ## Chart on CloudNativePG: Postgres previous major -> current major upgrade with data read-back (needs a cluster with the operator)
 	bash tools/e2e/cnpg_pg_upgrade.sh
+
+# The chart on CloudNativePG backed up with the Barman Cloud plugin to an S3 store, removed and
+# restored with postgres.cnpg.bootstrap.recovery as docs/deployment.md describes, with data
+# read-back and a planted reinstall without the recovery (gap audit C14-04). Needs a cluster with
+# the operator, cert-manager and the plugin: CI runs it in the deploy job on kind; on a workstation
+# only inside a VM. Not in verify-all.
+e2e-cnpg-backup-restore: ## Chart on CloudNativePG: base backup, database lost, restore from the backup with data read-back (needs the operator and the Barman Cloud plugin)
+	bash tools/e2e/cnpg_backup_restore.sh
 
 # The chart installed with its defaults and upgraded from the last published chart, each waited
 # on until the API and worker are Available and /readyz answers, after a planted install the API

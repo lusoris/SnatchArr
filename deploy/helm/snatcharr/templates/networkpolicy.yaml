@@ -74,7 +74,7 @@ spec:
       {{- include "snatcharr.selectorLabels" $worker | nindent 6 }}
   policyTypes: [Ingress, Egress]
   {{- if .Values.serviceMonitor.enabled }}
-  # /metrics for the PodMonitor; the kubelet's /livez probe comes from the node, which a
+  # /metrics for the PodMonitor; the kubelet's /livez and /readyz probes come from the node, which a
   # NetworkPolicy always allows.
   ingress:
     - ports:

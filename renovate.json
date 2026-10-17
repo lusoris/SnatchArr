@@ -159,6 +159,29 @@
       "versioningTemplate": "docker"
     },
     {
+      "description": "The S3 store of the chart backup and restore test, pinned by version and digest (tools/e2e/cnpg_backup_restore.sh, C14-04)",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "tools/e2e/cnpg_backup_restore.sh"
+      ],
+      "matchStrings": [
+        "RUSTFS_IMAGE=(?<depName>mirror\\.gcr\\.io/rustfs/rustfs):(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})\\n"
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
+    },
+    {
+      "description": "cert-manager and the Barman Cloud plugin the deploy job installs for the backup and restore test, pinned by release (.github/workflows/ci.yml)",
+      "customType": "regex",
+      "managerFilePatterns": [
+        ".github/workflows/ci.yml"
+      ],
+      "matchStrings": [
+        "https://github\\.com/(?<depName>cert-manager/cert-manager|cloudnative-pg/plugin-barman-cloud)/releases/download/(?<currentValue>v[0-9.]+)/"
+      ],
+      "datasourceTemplate": "github-releases"
+    },
+    {
       "description": "The Playwright image of the visual baseline, pinned by version and digest (web/e2e/visual-image.env, tools/e2e/web_visual.sh); its version must equal @playwright/test",
       "customType": "regex",
       "managerFilePatterns": [
