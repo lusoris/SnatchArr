@@ -44,6 +44,13 @@ Workers talk gRPC (`proto/snatcharr/v1/worker.proto`): `LeaseRun`, `Heartbeat`,
 `FilterCandidates`, `AcquireBudget`, `ReportEvents`, `CompleteRun`. The API is the only
 source of truth for stamina and afterglow; a worker never decides on its own.
 
+`LeaseRun` is a long-poll: with no run queued, the API checks the queue once a second until the
+wait the worker asked for (at most 30 s) has passed, then answers empty. A run queued meanwhile
+reaches a waiting worker within about a second, and each run reaches exactly one worker.
+`api/internal/workergrpc/latency_integration_test.go` holds both against 64 concurrent
+long-polls on one Postgres: an empty poll answers within 2 s after its wait, and a queued run
+reaches a worker within 3 s.
+
 A worker retries a `CompleteRun` the API refused with `UNAVAILABLE`, `DEADLINE_EXCEEDED`,
 `RESOURCE_EXHAUSTED` or `ABORTED`: three calls at most, the n-th wait a random time
 between half and all of 1 s x 2^(n-1). Any other refusal ends the attempt; the run then
