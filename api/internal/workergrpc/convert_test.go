@@ -50,7 +50,7 @@ func TestPolicyProtoPicksTheSnatchKindsFields(t *testing.T) {
 		SonarrMissingMode: "shows", SonarrUpgradeMode: "season_packs", LidarrMissingMode: "album", RadarrReleaseType: "digital",
 		AwaitCommand: true, PageSize: 250, CycleInterval: time.Minute,
 		IncludeTags: []int32{1}, ExcludeTags: []int32{2}, IncludeQualityProfiles: []int32{3},
-		ExcludeQualityProfiles: []int32{4}, ReleaseDelay: 48 * time.Hour,
+		ExcludeQualityProfiles: []int32{4}, ReleaseDelay: 48 * time.Hour, SkipUnavailableMovies: true,
 	}
 	missing := policyProto(p, domain.SnatchMissing)
 	if missing.GetPerCycle() != 3 || missing.GetSonarrMode() != snatcharrv1.SonarrMode_SONARR_MODE_SHOWS || !missing.GetMonitoredOnly() || missing.GetPageSize() != 250 {
@@ -67,7 +67,7 @@ func TestPolicyProtoPicksTheSnatchKindsFields(t *testing.T) {
 	for _, got := range []*snatcharrv1.Policy{missing, upgrade} {
 		if !slices.Equal(got.GetIncludeTags(), []int32{1}) || !slices.Equal(got.GetExcludeTags(), []int32{2}) ||
 			!slices.Equal(got.GetIncludeQualityProfiles(), []int32{3}) || !slices.Equal(got.GetExcludeQualityProfiles(), []int32{4}) ||
-			got.GetReleaseDelayHours() != 48 {
+			got.GetReleaseDelayHours() != 48 || !got.GetSkipUnavailableMovies() {
 			t.Fatalf("filters: %+v", got)
 		}
 	}

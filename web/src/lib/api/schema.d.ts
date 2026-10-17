@@ -1304,6 +1304,11 @@ export interface components {
              * @default false
              */
             dry_run: boolean;
+            /**
+             * @description Radarr only: skip movies Radarr reports as not yet available (isAvailable false, the movie's minimum availability is not reached). They are not searched and cost no stamina. Movies without the flag are searched. Absent = true.
+             * @default true
+             */
+            skip_unavailable_movies: boolean;
             /** Format: date-time */
             readonly updated_at?: string;
         };

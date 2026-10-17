@@ -40,8 +40,14 @@ func TestPolicyRoundTrip(t *testing.T) {
 	bare := policyToOAS(in)
 	bare.IncludeTags, bare.ExcludeTags, bare.IncludeQualityProfiles, bare.ExcludeQualityProfiles = nil, nil, nil, nil
 	bare.ReleaseDelayH = oas.OptInt{}
-	if got := policyFromOAS(instID, bare); got.IncludeTags == nil || len(got.ExcludeQualityProfiles) != 0 || got.ReleaseDelay != 0 {
+	bare.SkipUnavailableMovies = oas.OptBool{}
+	got := policyFromOAS(instID, bare)
+	if got.IncludeTags == nil || len(got.ExcludeQualityProfiles) != 0 || got.ReleaseDelay != 0 {
 		t.Fatalf("policyFromOAS without filters: %+v", got)
+	}
+	// Boundary: a client that predates skip_unavailable_movies keeps the default, true.
+	if !got.SkipUnavailableMovies {
+		t.Fatal("policyFromOAS without skip_unavailable_movies must skip unavailable movies")
 	}
 	// Boundary: a policy without lists shows empty lists, not absent ones.
 	if got := policyToOAS(domain.Policy{}); got.IncludeTags == nil || got.ExcludeQualityProfiles == nil {

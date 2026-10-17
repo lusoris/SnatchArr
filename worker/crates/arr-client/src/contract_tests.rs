@@ -584,7 +584,7 @@ fn shape(kind: Kind) -> (&'static str, Value, Option<&'static str>) {
             "movieId",
             json!({"id": 1, "title": "string", "year": 1, "monitored": true,
                    "physicalRelease": date, "digitalRelease": date, "inCinemas": date,
-                   "tags": [1], "qualityProfileId": 1}),
+                   "isAvailable": true, "tags": [1], "qualityProfileId": 1}),
             None,
         ),
         Kind::WhisparrV3 => (

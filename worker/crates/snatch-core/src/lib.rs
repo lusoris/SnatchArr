@@ -160,6 +160,9 @@ pub struct Candidate {
     pub release_unix: Option<i64>,
     /// Whether the item (and its parent) is monitored.
     pub monitored: bool,
+    /// Whether the app counts the item as available to search (Radarr's minimum availability);
+    /// `None` where the app or the record does not say.
+    pub available: Option<bool>,
     /// *arr tag ids of the item, or of its parent where the tags live there.
     pub tags: Vec<i32>,
     /// Quality profile ids that apply to the item; more than one where an app keeps one per
@@ -201,6 +204,8 @@ pub struct Filter {
     pub tags: IdRule,
     /// Quality profile ids an item must or must not use.
     pub profiles: IdRule,
+    /// Drop items the app reports as not yet available; items without the flag are kept.
+    pub skip_unavailable: bool,
 }
 
 impl Filter {
@@ -214,7 +219,25 @@ impl Filter {
                 || released_by(self.now_unix.saturating_sub(self.release_delay_secs)))
             && self.tags.admits(&c.tags)
             && self.profiles.admits(&c.profiles)
+            && !(self.skip_unavailable && c.available == Some(false))
     }
+}
+
+/// How many of `candidates` [`Filter`] drops only because they are not yet available: they
+/// pass every other rule. 0 when the filter does not skip unavailable items.
+#[must_use]
+pub fn unavailable_count(candidates: &[Candidate], f: &Filter) -> usize {
+    if !f.skip_unavailable {
+        return 0;
+    }
+    let others = Filter {
+        skip_unavailable: false,
+        ..f.clone()
+    };
+    candidates
+        .iter()
+        .filter(|c| c.available == Some(false) && others.admits(c))
+        .count()
 }
 
 /// Applies [`Filter`], preserving order.
@@ -602,9 +625,15 @@ mod tests {
             title: format!("t{id}"),
             release_unix: release,
             monitored,
+            available: None,
             tags: Vec::new(),
             profiles: Vec::new(),
         }
+    }
+
+    fn with_available(mut c: Candidate, available: Option<bool>) -> Candidate {
+        c.available = available;
+        c
     }
 
     // Small id ranges so include and exclude lists hit the candidates' ids often.
@@ -619,12 +648,13 @@ mod tests {
     fn arb_tagged() -> impl Strategy<Value = Vec<Candidate>> {
         (
             arb_candidates(),
-            prop::collection::vec((arb_ids(), arb_ids()), 64),
+            prop::collection::vec((arb_ids(), arb_ids(), prop::option::of(any::<bool>())), 64),
         )
             .prop_map(|(mut cands, ids)| {
-                for (c, (tags, profiles)) in cands.iter_mut().zip(ids) {
+                for (c, (tags, profiles, available)) in cands.iter_mut().zip(ids) {
                     c.tags = tags;
                     c.profiles = profiles;
+                    c.available = available;
                 }
                 cands
             })
@@ -741,9 +771,9 @@ mod tests {
         fn filter_keeps_every_item_that_passes_all_rules(
             cands in arb_tagged(), now in -1000i64..1000, delay in 0i64..500,
             monitored_only in any::<bool>(), skip_future in any::<bool>(),
-            tags in arb_rule(), profiles in arb_rule(),
+            tags in arb_rule(), profiles in arb_rule(), skip_unavailable in any::<bool>(),
         ) {
-            let f = Filter { monitored_only, skip_future, release_delay_secs: delay, now_unix: now, tags: tags.clone(), profiles: profiles.clone() };
+            let f = Filter { monitored_only, skip_future, release_delay_secs: delay, now_unix: now, tags: tags.clone(), profiles: profiles.clone(), skip_unavailable };
             let hit = |ids: &[i32], list: &[i32]| ids.iter().any(|i| list.contains(i));
             let expected: Vec<Candidate> = cands.iter().filter(|c| {
                 (!monitored_only || c.monitored)
@@ -753,8 +783,20 @@ mod tests {
                     && !hit(&c.tags, &tags.exclude)
                     && (profiles.include.is_empty() || hit(&c.profiles, &profiles.include))
                     && !hit(&c.profiles, &profiles.exclude)
+                    && !(skip_unavailable && c.available == Some(false))
             }).cloned().collect();
             prop_assert_eq!(filter(&cands, &f), expected);
+        }
+
+        // The unavailable count is exactly the gap between the filter with and without the
+        // availability rule.
+        #[test]
+        fn unavailable_count_is_what_the_availability_rule_alone_drops(cands in arb_tagged(), now in -1000i64..1000, monitored_only in any::<bool>()) {
+            let off = Filter { monitored_only, now_unix: now, ..Filter::default() };
+            let on = Filter { skip_unavailable: true, ..off.clone() };
+            let gap = filter(&cands, &off).len() - filter(&cands, &on).len();
+            prop_assert_eq!(unavailable_count(&cands, &on), gap);
+            prop_assert_eq!(unavailable_count(&cands, &off), 0);
         }
 
         // Boundary: rules left empty keep every candidate.
@@ -855,6 +897,65 @@ mod tests {
             after.sort_unstable();
             prop_assert_eq!(before, after);
         }
+    }
+
+    // Radarr minimum availability (#350): positive (all available), negative (none available),
+    // boundary (the flag missing is kept, and the switch off keeps everything).
+    /// Name, candidates, filter, ids kept, count skipped as unavailable.
+    type Case<'f> = (&'static str, Vec<Candidate>, &'f Filter, Vec<i64>, usize);
+
+    #[test]
+    fn availability_rule_drops_only_items_reported_unavailable() {
+        let of = |flags: &[Option<bool>]| -> Vec<Candidate> {
+            flags
+                .iter()
+                .zip(1..)
+                .map(|(&a, i)| with_available(cand(i, i, 1, None, true), a))
+                .collect()
+        };
+        let on = Filter {
+            skip_unavailable: true,
+            ..Filter::default()
+        };
+        let ids = |kept: Vec<Candidate>| kept.iter().map(|c| c.id).collect::<Vec<_>>();
+        let cases: [Case<'_>; 5] = [
+            ("all available", of(&[Some(true); 3]), &on, vec![1, 2, 3], 0),
+            ("none available", of(&[Some(false); 3]), &on, vec![], 3),
+            ("flag missing", of(&[None, None]), &on, vec![1, 2], 0),
+            (
+                "mixed",
+                of(&[Some(true), Some(false), None]),
+                &on,
+                vec![1, 3],
+                1,
+            ),
+            (
+                "switch off",
+                of(&[Some(false), Some(false)]),
+                &Filter::default(),
+                vec![1, 2],
+                0,
+            ),
+        ];
+        for (name, cands, f, want, skipped) in cases {
+            assert_eq!(ids(filter(&cands, f)), want, "{name}");
+            assert_eq!(unavailable_count(&cands, f), skipped, "{name}");
+        }
+    }
+
+    // An unavailable item that another rule drops already is not counted as unavailable.
+    #[test]
+    fn unavailable_count_leaves_out_items_other_rules_drop() {
+        let cands = vec![
+            with_available(cand(1, 1, 1, None, false), Some(false)),
+            with_available(cand(2, 2, 1, None, true), Some(false)),
+        ];
+        let f = Filter {
+            monitored_only: true,
+            skip_unavailable: true,
+            ..Filter::default()
+        };
+        assert_eq!(unavailable_count(&cands, &f), 1);
     }
 
     // A grant smaller than one multi-item target still searches as many items as granted:

@@ -72,6 +72,7 @@ func TestUpdateReplacesThePolicy(t *testing.T) {
 	p.IncludeQualityProfiles, p.ExcludeQualityProfiles = []int32{4}, []int32{5}
 	p.ReleaseDelay = 8760 * time.Hour
 	p.DryRun = true
+	p.SkipUnavailableMovies = false
 	updated, err := f.svc.Update(t.Context(), p)
 	if err != nil {
 		t.Fatalf("Update() = %v", err)

@@ -103,6 +103,9 @@ message Policy {
   // Skip items released less than this many hours ago (0 = no delay). The release date is the
   // one the app kind uses: air date, the Radarr release type's date, album or book release.
   uint32 release_delay_hours = 16;
+  // Skip movies Radarr reports as not yet available (isAvailable false: the minimum availability
+  // of the movie is not reached). Records without the flag are kept. Radarr only.
+  bool skip_unavailable_movies = 17;
 }
 
 message LeaseRunRequest {

@@ -112,6 +112,7 @@ export const samplePolicy: SnatchPolicy = {
 	page_size: 50,
 	recent_grab_window_h: 48,
 	afterglow_max_h: 168,
+	skip_unavailable_movies: true,
 	dry_run: false
 };
 

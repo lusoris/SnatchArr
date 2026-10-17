@@ -23,8 +23,8 @@ func TestDefaultPolicyIsGentleAndValid(t *testing.T) {
 	if p.CycleInterval != 15*time.Minute || p.ProcessedTTL != 168*time.Hour {
 		t.Fatalf("interval/ttl defaults drifted: %+v", p)
 	}
-	if !p.MonitoredOnly || !p.SkipFutureReleases {
-		t.Fatal("monitored_only and skip_future_releases must default to true")
+	if !p.MonitoredOnly || !p.SkipFutureReleases || !p.SkipUnavailableMovies {
+		t.Fatal("monitored_only, skip_future_releases and skip_unavailable_movies must default to true")
 	}
 	if err := p.Validate(); err != nil {
 		t.Fatalf("default policy must validate: %v", err)

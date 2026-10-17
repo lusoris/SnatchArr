@@ -113,6 +113,7 @@ func policyProto(p domain.Policy, kind domain.SnatchKind) *snatcharrv1.Policy {
 		IncludeQualityProfiles: p.IncludeQualityProfiles,
 		ExcludeQualityProfiles: p.ExcludeQualityProfiles,
 		ReleaseDelayHours:      uint32(max(p.ReleaseDelay/time.Hour, 0)), // #nosec G115 -- validated 0..8760
+		SkipUnavailableMovies:  p.SkipUnavailableMovies,
 	}
 }
 
