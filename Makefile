@@ -23,7 +23,7 @@ GOLUSORIS_SHARED = $(GOMODCACHE)/github.com/golusoris/golusoris@$(GOLUSORIS_VER)
 
 .PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-compose-smoke e2e-compose-pg-upgrade e2e-dev-compose-smoke dlclients-live cleanuparr-live e2e-cnpg-pg-upgrade e2e-cnpg-backup-restore e2e-chart-install web-verify web-e2e web-e2e-api web-visual web-visual-update proto-verify deploy-verify governance-verify hooks-verify contracts-verify workflows-verify workflows-lint secret-scan \
 	images kind-up kind-deploy kind-down \
-        api-gen api-gosec gosec-install govulncheck-install tools-verify tools-lint tools-test tools-gosec web-gen proto-gen dev hooks setup
+        api-gen api-gosec gosec-install govulncheck-install sqlc-install tools-verify tools-lint tools-test tools-gosec web-gen proto-gen dev hooks setup
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-18s %s\n", $$1, $$2}'
@@ -41,8 +41,14 @@ api-verify: ## golangci-lint + go fix + gosec + govulncheck + go test -race + ge
 	$(MAKE) api-gosec
 	cd api
 	go fix -diff ./...
+	# go generate rewrites the ogen server (internal/build) and the sqlc queries
+	# (internal/store/sqlcgen); proto-verify compares internal/gen. A generated file not yet
+	# committed is drift as well: git diff does not see it.
 	go generate ./...
-	git diff --exit-code -- internal/build internal/gen internal/store/sqlcgen
+	git diff --exit-code -- internal/build internal/store/sqlcgen
+	if git ls-files --others --exclude-standard -- internal/build internal/store/sqlcgen | grep .; then
+	  echo "api-verify: generated files above are not committed" >&2; exit 1
+	fi
 	cd ..
 	# Every gosec finding in generated code is annotated, and every annotation still has its finding.
 	go run ./tools/gennosec check
@@ -51,8 +57,8 @@ api-verify: ## golangci-lint + go fix + gosec + govulncheck + go test -race + ge
 	sh tools/spectral/lint_test.sh
 	sh tools/spectral/lint.sh api/openapi/openapi.yaml
 
-api-gen: ## ogen + sqlc generation inside api/
-	cd api && sqlc generate && go generate ./...
+api-gen: ## Regenerate the ogen server and the sqlc queries (go generate in api/, pinned versions)
+	cd api && go generate ./...
 
 # gosec loads packages only when it starts in the directory that holds go.mod. Started in api/ it
 # lists the directories, checks no file, prints "Files  : 0" and exits 0. This target is the one
@@ -88,6 +94,10 @@ gosec-install: ## Install gosec at the tools/go/go.mod pins (x/tools reads Go 1.
 govulncheck-install: ## Install govulncheck at the tools/go/go.mod pin
 	cd "$(SECURITY_TOOLS_MOD)"
 	go install golang.org/x/vuln/cmd/govulncheck
+
+sqlc-install: ## Install sqlc at the tools/go/go.mod pin, the version go generate runs
+	cd tools/go
+	go install github.com/sqlc-dev/sqlc/cmd/sqlc
 
 # Ratchet: raise as store/handler integration tests land (target 70, HISS-15). Never lower.
 # 41.8 % measured on main at #198.
