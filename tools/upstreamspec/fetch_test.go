@@ -29,13 +29,20 @@ type upstream struct {
 func serve(t *testing.T, body []byte) *upstream {
 	t.Helper()
 	var up upstream
+	upYAML := []byte(defaultUpstreamSpec(map[string]string{
+		"path":   "path: src/openapi.yaml",
+		"sha256": "sha256: " + digest(body),
+	}))
 	up.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		up.requests.Add(1)
-		if r.URL.Path != "/Owner/Project/"+someCommit+"/src/openapi.yaml" {
+		switch r.URL.Path {
+		case "/Owner/Project/" + someCommit + "/src/openapi.yaml":
+			_, _ = w.Write(body)
+		case "/golusoris/goenvoy/" + someCommit + "/upstream/specs.yaml":
+			_, _ = w.Write(upYAML)
+		default:
 			http.NotFound(w, r)
-			return
 		}
-		_, _ = w.Write(body)
 	}))
 	t.Cleanup(up.Close)
 	return &up
@@ -205,6 +212,56 @@ func TestFetchRefuses(t *testing.T) {
 	}
 }
 
+// Planted case 3(c): goenvoy entry commit changed while local commands pin old class sha.
+func TestFetchRefusesWhenUpstreamCommitMovedAndLocalCommandClassSHAOutdated(t *testing.T) {
+	t.Parallel()
+	newCommit := "1111222233334444555566667777888899990000"
+	specBody := []byte(sampleSpec)
+	newClassBody := []byte("namespace N\n{\n    public class EpisodeSearchCommand : Command\n    {\n        public int Id { get; set; }\n    }\n}\n")
+	oldClassSHA := someSHA256
+	newClassSHA := digest(newClassBody)
+
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/Owner/Project/" + newCommit + "/src/openapi.yaml":
+			_, _ = w.Write(specBody)
+		case "/Owner/Project/" + newCommit + "/src/EpisodeSearchCommand.cs":
+			_, _ = w.Write(newClassBody)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(up.Close)
+
+	p := pin{
+		Name:       "sample",
+		Repository: "Owner/Project",
+		Tag:        "v2",
+		Commit:     newCommit,
+		Path:       "src/openapi.yaml",
+		SHA256:     digest(specBody),
+		License:    "MIT",
+		Prefix:     "/api/v1",
+		Operations: []string{"GET /api/v1/status"},
+		Commands: []command{
+			{
+				Path:   "src/EpisodeSearchCommand.cs",
+				SHA256: oldClassSHA,
+			},
+		},
+	}
+
+	cache := filepath.Join(t.TempDir(), "cache")
+	_, err := fetchInto(t, up.URL, cache, p)
+	if err == nil {
+		t.Fatal("fetch succeeded but expected command class checksum failure")
+	}
+	want := "src/EpisodeSearchCommand.cs at commit " + newCommit + " has sha256 " + newClassSHA + ", the manifest pins " + oldClassSHA
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("fetch error = %q, want it to contain %q", err.Error(), want)
+	}
+}
+
 func TestFetchBounds(t *testing.T) {
 	t.Parallel()
 	// Boundary: a file of exactly the size bound is read in full and judged by its checksum.
@@ -229,9 +286,11 @@ func TestRun(t *testing.T) {
 	up := serve(t, body)
 	dir := t.TempDir()
 	manifest := filepath.Join(dir, "specs.yaml")
-	writeFile(t, manifest, entry(map[string]string{
-		"path":       "path: src/openapi.yaml",
-		"sha256":     "sha256: " + digest(body),
+	upYAML := defaultUpstreamSpec(map[string]string{
+		"path":   "path: src/openapi.yaml",
+		"sha256": "sha256: " + digest(body),
+	})
+	writeFile(t, manifest, defaultLocalSpec(digest([]byte(upYAML)), map[string]string{
 		"operations": "operations: [GET /api/v1/status]",
 	}))
 	cache := filepath.Join(dir, "cache")
