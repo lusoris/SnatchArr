@@ -87,4 +87,6 @@ nav:
       - "ADR-0007: Read-only Cleanuparr link": adr/0007-read-only-cleanuparr-link.md
       - "ADR-0008: Readarr frozen as a legacy target": adr/0008-readarr-frozen-legacy-target.md
       - "ADR-0009: Detect Cleanuparr Seeker": adr/0009-detect-cleanuparr-seeker.md
+      - "ADR-0010: Keep the api and worker split": adr/0010-keep-api-worker-split.md
+      - "ADR-0011: Product definition": adr/0011-product-definition.md
       - Template: adr/0000-template.md
