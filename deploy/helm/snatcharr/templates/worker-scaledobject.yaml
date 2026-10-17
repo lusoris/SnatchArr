@@ -1,11 +1,13 @@
 {{- $as := .Values.worker.autoscaling }}
-{{- if $as.keda.enabled }}
+{{- /* Values reused from chart 0.2.1 or older (helm upgrade --reuse-values) have no keda key. */}}
+{{- $keda := $as.keda | default dict }}
+{{- if $keda.enabled }}
 {{- if $as.enabled }}
 {{- fail "worker.autoscaling.enabled and worker.autoscaling.keda.enabled are exclusive: KEDA creates its own HorizontalPodAutoscaler for the worker" }}
 {{- end }}
-{{- $server := required "worker.autoscaling.keda.serverAddress is required when worker.autoscaling.keda.enabled=true" $as.keda.serverAddress }}
+{{- $server := required "worker.autoscaling.keda.serverAddress is required when worker.autoscaling.keda.enabled=true" $keda.serverAddress }}
 {{- /* The api leader exports the gauge; max, not sum, so a stale series from a former leader is never added to it. */}}
-{{- $query := $as.keda.query | default (printf "max(snatcharr_runs{status=\"queued\",namespace=\"%s\"})" .Release.Namespace) }}
+{{- $query := $keda.query | default (printf "max(snatcharr_runs{status=\"queued\",namespace=\"%s\"})" .Release.Namespace) }}
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
@@ -26,5 +28,5 @@ spec:
         serverAddress: {{ $server | quote }}
         query: {{ $query | quote }}
         # Queued runs per worker replica; defaults to worker.concurrency (runs one replica takes at once).
-        threshold: {{ $as.keda.threshold | default .Values.worker.concurrency | toString | quote }}
+        threshold: {{ $keda.threshold | default .Values.worker.concurrency | toString | quote }}
 {{- end }}

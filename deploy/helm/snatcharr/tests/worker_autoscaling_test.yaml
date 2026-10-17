@@ -22,6 +22,20 @@ tests:
           value: 1
         template: worker-deployment.yaml
 
+  # `helm upgrade --reuse-values` from chart 0.2.1 or older keeps values without a keda key.
+  - it: boundary - values without worker.autoscaling.keda render fixed replicas
+    set:
+      worker.autoscaling.keda: null
+    asserts:
+      - notFailedTemplate: {}
+      - hasDocuments:
+          count: 0
+        template: worker-scaledobject.yaml
+      - equal:
+          path: spec.replicas
+          value: 1
+        template: worker-deployment.yaml
+
   - it: positive - KEDA scales the worker on queued runs of the release namespace
     set:
       worker.autoscaling.keda.enabled: true

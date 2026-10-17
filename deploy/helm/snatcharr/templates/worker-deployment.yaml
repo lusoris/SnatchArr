@@ -7,7 +7,7 @@ metadata:
     {{- include "snatcharr.labels" . | nindent 4 }}
     app.kubernetes.io/component: worker
 spec:
-  {{- if not (or .Values.worker.autoscaling.enabled .Values.worker.autoscaling.keda.enabled) }}
+  {{- if not (or .Values.worker.autoscaling.enabled (dig "keda" "enabled" false .Values.worker.autoscaling)) }}
   replicas: {{ .Values.worker.replicaCount }}
   {{- end }}
   revisionHistoryLimit: 3
