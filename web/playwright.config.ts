@@ -38,11 +38,17 @@ export default defineConfig({
 	projects: visual
 		? [visualProject]
 		: !e2eApi
-			? [{ name: 'chromium', testMatch: /a11y\.test\.ts/, use: { browserName: 'chromium' } }]
+			? [
+					{
+						name: 'chromium',
+						testMatch: /(a11y|theme)\.test\.ts/,
+						use: { browserName: 'chromium' }
+					}
+				]
 			: [
 					{
 						name: 'public',
-						testMatch: /a11y\.test\.ts/,
+						testMatch: /(a11y|theme)\.test\.ts/,
 						grep: /public:|routes:/,
 						use: { browserName: 'chromium' }
 					},
