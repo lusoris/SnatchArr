@@ -27,6 +27,8 @@ case "$plant" in
 *) echo "cleanuparr-live: unknown SNATCHARR_CLEANUPARR_PLANT '$plant'" >&2; exit 1 ;;
 esac
 
+# shellcheck source=tools/e2e/pull_retry.sh
+. "$root/tools/e2e/pull_retry.sh"
 dc() { docker compose -p "$project" -f "$root/tools/e2e/cleanuparr/compose.yaml" "$@"; }
 
 cleanup() {
@@ -114,7 +116,8 @@ observe() {
 }
 
 [ -n "$version" ] || fail "no Cleanuparr release tag in tools/e2e/cleanuparr/compose.yaml"
-dc up -d --quiet-pull
+pull_retry dc pull --quiet
+dc up -d --pull never
 answers "$url/api/auth/status"
 setup
 
