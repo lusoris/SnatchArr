@@ -1,0 +1,82 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
+import { fireEvent, screen } from '@testing-library/svelte';
+import { ProblemError } from '@sveltesentio/core';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { api } from '#lib/api/client.js';
+import { m } from '#lib/paraglide/messages.js';
+import {
+	forkInstance,
+	renderWithQuery,
+	sampleQueuePolicy,
+	stubGet,
+	type QueuePolicy as QueuePolicyType
+} from '#lib/testing/harness.js';
+import QueuePolicy from './QueuePolicy.svelte';
+
+describe('QueuePolicy', () => {
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it('renders default queue policy settings', async () => {
+		stubGet({
+			'/instances/{instanceId}/queue-policy': sampleQueuePolicy
+		});
+		renderWithQuery(QueuePolicy, { instanceId: forkInstance.id });
+
+		expect(
+			await screen.findByRole('heading', { level: 2, name: m.queue_policy_title() })
+		).toBeTruthy();
+		const graceInput = screen.getByLabelText(m.queue_policy_grace()) as HTMLInputElement;
+		expect(graceInput.value).toBe('60');
+		const minBpsInput = screen.getByLabelText(m.queue_policy_min_bps()) as HTMLInputElement;
+		expect(minBpsInput.value).toBe('1024');
+		const maxRemovalsInput = screen.getByLabelText(
+			m.queue_policy_max_removals()
+		) as HTMLInputElement;
+		expect(maxRemovalsInput.value).toBe('5');
+	});
+
+	it('saves the edited payload converting grace minutes to seconds', async () => {
+		const put = vi.spyOn(api, 'PUT').mockResolvedValue({ data: sampleQueuePolicy } as never);
+		stubGet({
+			'/instances/{instanceId}/queue-policy': sampleQueuePolicy
+		});
+		renderWithQuery(QueuePolicy, { instanceId: forkInstance.id });
+
+		await screen.findByRole('heading', { level: 2, name: m.queue_policy_title() });
+		const graceInput = screen.getByLabelText(m.queue_policy_grace()) as HTMLInputElement;
+		await fireEvent.input(graceInput, { target: { value: '120' } });
+
+		const saveButton = screen.getByRole('button', { name: m.queue_policy_save() });
+		await fireEvent.click(saveButton);
+
+		expect(put).toHaveBeenCalledOnce();
+		const body = (put.mock.calls[0]![1] as { body: QueuePolicyType }).body;
+		expect(body.grace_seconds).toBe(7200);
+	});
+
+	it('shows a problem error when saving fails with 422', async () => {
+		vi.spyOn(api, 'PUT').mockRejectedValue(
+			new ProblemError({
+				type: 'about:blank',
+				status: 422,
+				detail: 'grace_seconds must be between 0 and 86400'
+			})
+		);
+		stubGet({
+			'/instances/{instanceId}/queue-policy': sampleQueuePolicy
+		});
+		renderWithQuery(QueuePolicy, { instanceId: forkInstance.id });
+
+		await screen.findByRole('heading', { level: 2, name: m.queue_policy_title() });
+		const saveButton = screen.getByRole('button', { name: m.queue_policy_save() });
+		await fireEvent.click(saveButton);
+
+		const alert = await screen.findByRole('alert');
+		expect(alert.textContent).toContain('grace_seconds must be between 0 and 86400');
+	});
+});

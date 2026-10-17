@@ -461,6 +461,62 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
 
+  /instances/{instanceId}/queue-policy:
+    parameters:
+      - $ref: "#/components/parameters/InstanceId"
+    get:
+      tags: [instances]
+      operationId: getQueuePolicy
+      summary: Queue management policy of an instance
+      responses:
+        "200":
+          description: Queue policy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueuePolicy"
+        default:
+          $ref: "#/components/responses/Problem"
+    put:
+      tags: [instances]
+      operationId: updateQueuePolicy
+      summary: Replace the queue management policy of an instance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QueuePolicy"
+      responses:
+        "200":
+          description: Queue policy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueuePolicy"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /instances/{instanceId}/queue-strikes:
+    parameters:
+      - $ref: "#/components/parameters/InstanceId"
+    get:
+      tags: [instances]
+      operationId: listQueueStrikes
+      summary: Active queue strikes of an instance
+      description: Items with at least one strike; items the last sweep found clean are left out.
+      responses:
+        "200":
+          description: Queue strikes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/QueueStrike"
+        default:
+          $ref: "#/components/responses/Problem"
+
   /instances/{instanceId}/runs:
     parameters:
       - $ref: "#/components/parameters/InstanceId"
@@ -2948,3 +3004,107 @@ components:
         updated_at:
           type: string
           format: date-time
+
+    QueueRule:
+      type: string
+      enum:
+        - stalled
+        - slow
+        - failed
+        - import_blocked
+        - unwanted_score
+        - unwanted_unmonitored
+
+    QueueRuleMode:
+      type: string
+      enum: [observe, act]
+
+    QueueRuleSettings:
+      type: object
+      required: [mode, threshold]
+      properties:
+        mode:
+          $ref: "#/components/schemas/QueueRuleMode"
+        threshold:
+          type: integer
+          minimum: 1
+          maximum: 100
+
+    QueueRules:
+      type: object
+      required:
+        - stalled
+        - slow
+        - failed
+        - import_blocked
+        - unwanted_score
+        - unwanted_unmonitored
+      properties:
+        stalled:
+          $ref: "#/components/schemas/QueueRuleSettings"
+        slow:
+          $ref: "#/components/schemas/QueueRuleSettings"
+        failed:
+          $ref: "#/components/schemas/QueueRuleSettings"
+        import_blocked:
+          $ref: "#/components/schemas/QueueRuleSettings"
+        unwanted_score:
+          $ref: "#/components/schemas/QueueRuleSettings"
+        unwanted_unmonitored:
+          $ref: "#/components/schemas/QueueRuleSettings"
+
+    QueuePolicy:
+      type: object
+      required:
+        - enabled
+        - rules
+        - grace_seconds
+        - min_bytes_per_second
+        - max_removals_per_sweep
+      properties:
+        enabled:
+          type: boolean
+        rules:
+          $ref: "#/components/schemas/QueueRules"
+        grace_seconds:
+          type: integer
+          minimum: 0
+          maximum: 86400
+        min_bytes_per_second:
+          type: integer
+          format: int64
+          minimum: 0
+        min_custom_format_score:
+          description: Lowest custom format score an item may have; left out, the unwanted_score rule is off.
+          type: integer
+          format: int32
+        max_removals_per_sweep:
+          type: integer
+          minimum: 1
+          maximum: 100
+
+    QueueStrike:
+      type: object
+      required:
+        - download_id
+        - queue_id
+        - rule
+        - count
+        - threshold
+        - last_seen
+      properties:
+        download_id:
+          type: string
+        queue_id:
+          type: integer
+          format: int32
+        rule:
+          $ref: "#/components/schemas/QueueRule"
+        count:
+          type: integer
+        threshold:
+          type: integer
+        last_seen:
+          type: string
+          format: date-time
+

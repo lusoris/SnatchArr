@@ -303,6 +303,15 @@ func (UnimplementedHandler) GetProwlarrStatus(ctx context.Context) (r []Prowlarr
 	return r, ht.ErrNotImplemented
 }
 
+// GetQueuePolicy implements getQueuePolicy operation.
+//
+// Queue management policy of an instance.
+//
+// GET /instances/{instanceId}/queue-policy
+func (UnimplementedHandler) GetQueuePolicy(ctx context.Context, params GetQueuePolicyParams) (r *QueuePolicy, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // GetRun implements getRun operation.
 //
 // Load a single snatch run by ID.
@@ -456,6 +465,15 @@ func (UnimplementedHandler) ListNotificationRules(ctx context.Context) (r []Noti
 //
 // GET /prowlarr
 func (UnimplementedHandler) ListProwlarrLinks(ctx context.Context) (r []ProwlarrLink, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ListQueueStrikes implements listQueueStrikes operation.
+//
+// Items with at least one strike; items the last sweep found clean are left out.
+//
+// GET /instances/{instanceId}/queue-strikes
+func (UnimplementedHandler) ListQueueStrikes(ctx context.Context, params ListQueueStrikesParams) (r []QueueStrike, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -699,6 +717,15 @@ func (UnimplementedHandler) UpdatePolicy(ctx context.Context, req *SnatchPolicy,
 //
 // PUT /prowlarr/{linkId}
 func (UnimplementedHandler) UpdateProwlarrLink(ctx context.Context, req *ProwlarrLinkInput, params UpdateProwlarrLinkParams) (r *ProwlarrLink, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UpdateQueuePolicy implements updateQueuePolicy operation.
+//
+// Replace the queue management policy of an instance.
+//
+// PUT /instances/{instanceId}/queue-policy
+func (UnimplementedHandler) UpdateQueuePolicy(ctx context.Context, req *QueuePolicy, params UpdateQueuePolicyParams) (r *QueuePolicy, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

@@ -167,6 +167,34 @@ if (!process.env.SNATCHARR_E2E_API) {
 				body: JSON.stringify({ tags: [], quality_profiles: [] })
 			})
 		);
+		await page.route(`**/api/v1/instances/${instanceId}/queue-policy`, (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					enabled: true,
+					rules: {
+						stalled: { mode: 'observe', threshold: 3 },
+						slow: { mode: 'observe', threshold: 5 },
+						failed: { mode: 'act', threshold: 1 },
+						import_blocked: { mode: 'act', threshold: 2 },
+						unwanted_score: { mode: 'observe', threshold: 3 },
+						unwanted_unmonitored: { mode: 'observe', threshold: 3 }
+					},
+					grace_seconds: 3600,
+					min_bytes_per_second: 1024,
+					min_custom_format_score: null,
+					max_removals_per_sweep: 5
+				})
+			})
+		);
+		await page.route(`**/api/v1/instances/${instanceId}/queue-strikes`, (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify([])
+			})
+		);
 		await page.route('**/api/v1/runs?**', (route) =>
 			route.fulfill({
 				status: 200,

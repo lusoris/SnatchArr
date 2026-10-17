@@ -202,6 +202,12 @@ type Handler interface {
 	//
 	// GET /prowlarr/status
 	GetProwlarrStatus(ctx context.Context) ([]ProwlarrStatus, error)
+	// GetQueuePolicy implements getQueuePolicy operation.
+	//
+	// Queue management policy of an instance.
+	//
+	// GET /instances/{instanceId}/queue-policy
+	GetQueuePolicy(ctx context.Context, params GetQueuePolicyParams) (*QueuePolicy, error)
 	// GetRun implements getRun operation.
 	//
 	// Load a single snatch run by ID.
@@ -307,6 +313,12 @@ type Handler interface {
 	//
 	// GET /prowlarr
 	ListProwlarrLinks(ctx context.Context) ([]ProwlarrLink, error)
+	// ListQueueStrikes implements listQueueStrikes operation.
+	//
+	// Items with at least one strike; items the last sweep found clean are left out.
+	//
+	// GET /instances/{instanceId}/queue-strikes
+	ListQueueStrikes(ctx context.Context, params ListQueueStrikesParams) ([]QueueStrike, error)
 	// ListRuns implements listRuns operation.
 	//
 	// Recent snatch runs, newest first.
@@ -469,6 +481,12 @@ type Handler interface {
 	//
 	// PUT /prowlarr/{linkId}
 	UpdateProwlarrLink(ctx context.Context, req *ProwlarrLinkInput, params UpdateProwlarrLinkParams) (*ProwlarrLink, error)
+	// UpdateQueuePolicy implements updateQueuePolicy operation.
+	//
+	// Replace the queue management policy of an instance.
+	//
+	// PUT /instances/{instanceId}/queue-policy
+	UpdateQueuePolicy(ctx context.Context, req *QueuePolicy, params UpdateQueuePolicyParams) (*QueuePolicy, error)
 	// UpdateSchedule implements updateSchedule operation.
 	//
 	// Replace a schedule window.

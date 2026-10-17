@@ -13,6 +13,8 @@ export type Instance = components['schemas']['Instance'];
 export type SnatchPolicy = components['schemas']['SnatchPolicy'];
 export type Run = components['schemas']['Run'];
 export type PolicyFilterOptions = components['schemas']['PolicyFilterOptions'];
+export type QueuePolicy = components['schemas']['QueuePolicy'];
+export type QueueStrike = components['schemas']['QueueStrike'];
 
 /** A query client per test: no retry, so a refused request shows at once; nothing cached. */
 function createTestQueryClient(): QueryClient {
@@ -166,5 +168,33 @@ export const sampleRuns: Run[] = [
 		started_at: '2026-09-01T11:01:00Z',
 		finished_at: '2026-09-01T11:05:00Z',
 		searched_count: 12
+	}
+];
+
+/** The queue policy the instance detail view loads next to the snatch policy. */
+export const sampleQueuePolicy: QueuePolicy = {
+	enabled: true,
+	rules: {
+		stalled: { mode: 'observe', threshold: 3 },
+		slow: { mode: 'observe', threshold: 5 },
+		failed: { mode: 'act', threshold: 1 },
+		import_blocked: { mode: 'act', threshold: 2 },
+		unwanted_score: { mode: 'observe', threshold: 3 },
+		unwanted_unmonitored: { mode: 'observe', threshold: 3 }
+	},
+	grace_seconds: 3600,
+	min_bytes_per_second: 1024,
+	max_removals_per_sweep: 5
+};
+
+/** Active queue strikes for an instance. */
+export const sampleQueueStrikes: QueueStrike[] = [
+	{
+		download_id: 'nzb-test-123',
+		queue_id: 42,
+		rule: 'stalled',
+		count: 2,
+		threshold: 3,
+		last_seen: '2026-09-01T12:00:00Z'
 	}
 ];

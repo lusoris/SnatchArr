@@ -13,6 +13,8 @@ export const keys = {
 	instance: (id: string) => ['instances', id] as const,
 	policy: (id: string) => ['instances', id, 'policy'] as const,
 	policyFilterOptions: (id: string) => ['instances', id, 'policy', 'filter-options'] as const,
+	queuePolicy: (id: string) => ['instances', id, 'queue-policy'] as const,
+	queueStrikes: (id: string) => ['instances', id, 'queue-strikes'] as const,
 	caps: ['hourly-caps'] as const,
 	runs: ['runs'] as const,
 	instanceRuns: (id: string) => ['runs', id] as const,

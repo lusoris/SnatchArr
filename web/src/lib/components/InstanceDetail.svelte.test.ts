@@ -13,6 +13,7 @@ import {
 	renderWithQuery,
 	sampleFilterOptions,
 	samplePolicy,
+	sampleQueuePolicy,
 	stubGet,
 	untestedInstance,
 	type Instance,
@@ -26,6 +27,8 @@ async function subtitleOf(instance: Instance): Promise<string | undefined> {
 		'/instances/{instanceId}': instance,
 		'/instances/{instanceId}/policy': samplePolicy,
 		'/instances/{instanceId}/policy/filter-options': sampleFilterOptions,
+		'/instances/{instanceId}/queue-policy': sampleQueuePolicy,
+		'/instances/{instanceId}/queue-strikes': [],
 		'/runs': []
 	});
 	renderWithQuery(InstanceDetail, { id: instance.id });
@@ -74,6 +77,12 @@ describe('InstanceDetail', () => {
 			}
 			if (path === '/instances/{instanceId}/policy/filter-options') {
 				return { data: sampleFilterOptions } as never;
+			}
+			if (path === '/instances/{instanceId}/queue-policy') {
+				return { data: sampleQueuePolicy } as never;
+			}
+			if (path === '/instances/{instanceId}/queue-strikes') {
+				return { data: [] } as never;
 			}
 			if (path === '/runs') {
 				return { data: [] } as never;
@@ -186,6 +195,8 @@ describe('InstanceDetail', () => {
 				status: 502,
 				detail: 'instance unreachable'
 			}),
+			'/instances/{instanceId}/queue-policy': sampleQueuePolicy,
+			'/instances/{instanceId}/queue-strikes': [],
 			'/runs': []
 		});
 		renderWithQuery(InstanceDetail, { id: forkInstance.id });
@@ -205,6 +216,8 @@ describe('InstanceDetail', () => {
 			'/instances/{instanceId}': forkInstance,
 			'/instances/{instanceId}/policy': samplePolicy,
 			'/instances/{instanceId}/policy/filter-options': { tags: [], quality_profiles: [] },
+			'/instances/{instanceId}/queue-policy': sampleQueuePolicy,
+			'/instances/{instanceId}/queue-strikes': [],
 			'/runs': []
 		});
 		renderWithQuery(InstanceDetail, { id: forkInstance.id });

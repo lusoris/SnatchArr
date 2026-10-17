@@ -101,6 +101,43 @@ An episode, album or book has the tags and quality profile of its series, artist
 `GET /api/v1/instances/{id}/policy/filter-options` lists the tags and quality profiles the
 instance offers (admins only); the policy form picks from that list.
 
+## Queue policy
+
+Each instance has a queue policy (`GET/PUT /api/v1/instances/{id}/queue-policy`; `PUT` is
+admin-only). When `enabled` is true, the elected replica sweeps the instance's *arr download
+queue and counts consecutive strikes per download. `GET /api/v1/instances/{id}/queue-strikes`
+lists the downloads that hold a strike now; downloads the last sweep found clean are left out.
+The rules and their order are described in [ADR-0012](adr/0012-queue-management-replaces-cleanuparr-link.md).
+
+Every rule starts in `observe` mode: a strike is recorded and shown, and the queue is left
+alone. A rule in `act` mode removes the download once its strike count reaches the threshold;
+every rule except `unwanted_unmonitored` also blocklists the release so the *arr searches again.
+Whisparr has no queue API in goenvoy and is skipped.
+
+### Rules
+
+| Rule | Matches when | Default threshold |
+| --- | --- | --- |
+| `stalled` | Downloading, and the remaining size did not shrink since the last sweep | 6 |
+| `slow` | Downloading slower than `min_bytes_per_second` since the last sweep | 6 |
+| `failed` | Queue status or tracked state is failed | 2 |
+| `import_blocked` | The *arr cannot import the finished download | 6 |
+| `unwanted_score` | Custom format score below `min_custom_format_score` | 1 |
+| `unwanted_unmonitored` | The episode, movie, album or book is no longer monitored | 1 |
+
+Queued, paused and delayed downloads, downloads being imported, and downloads younger than
+the grace period are never evaluated.
+
+### Policy fields
+
+| Field | Default | Range | Meaning |
+| --- | --- | --- | --- |
+| `enabled` | `false` | bool | Sweep this instance's queue |
+| `grace_seconds` | 900 | 0 to 86400 | Minimum age before any rule looks at a download (the UI edits it in minutes) |
+| `min_bytes_per_second` | 0 | >= 0 | Floor for `slow`; 0 turns `slow` off |
+| `min_custom_format_score` | unset | integer | Floor for `unwanted_score`; unset turns `unwanted_score` off |
+| `max_removals_per_sweep` | 10 | 1 to 100 | Most downloads one sweep may remove |
+
 ## Runtime settings
 
 `GET/PUT /api/v1/settings`:

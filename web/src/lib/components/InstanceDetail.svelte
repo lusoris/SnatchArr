@@ -14,6 +14,8 @@ SPDX-License-Identifier: EUPL-1.2
 	import PolicyFilters from '#lib/components/PolicyFilters.svelte';
 	import PreviewPanel from '#lib/components/PreviewPanel.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
+	import QueuePolicy from '#lib/components/QueuePolicy.svelte';
+	import QueueStrikes from '#lib/components/QueueStrikes.svelte';
 	import ResetMemory from '#lib/components/ResetMemory.svelte';
 	import RunList from '#lib/components/RunList.svelte';
 	import { m } from '#lib/paraglide/messages.js';
@@ -213,6 +215,9 @@ SPDX-License-Identifier: EUPL-1.2
 			>
 		</div>
 	</form>
+
+	<QueuePolicy {instanceId} />
+	<QueueStrikes {instanceId} />
 
 	<div class="mt-6">
 		<PreviewPanel {instanceId} />
