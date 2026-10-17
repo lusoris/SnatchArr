@@ -45,7 +45,27 @@ export default defineConfig({
 			},
 			// SPA embedded in the API image (ADR-0005): every unknown path serves index.html and
 			// the Go server owns sessions and CSRF, so there is no SvelteKit server runtime.
-			adapter: adapter({ fallback: 'index.html', precompress: true, strict: false })
+			adapter: adapter({ fallback: 'index.html', precompress: true, strict: false }),
+			// Hashes cover SvelteKit's inline bootstrap script; the static fallback page carries the
+			// policy as a meta tag (e2e/security.test.ts). style-src-attr admits exactly the inline
+			// style of SvelteKit's route announcer (runtime/components/root.svelte) by hash.
+			csp: {
+				mode: 'hash',
+				directives: {
+					'default-src': ['self'],
+					'script-src': ['self'],
+					'style-src': ['self'],
+					'style-src-attr': [
+						'unsafe-hashes',
+						'sha256-S8qMpvofolR8Mpjy4kQvEm7m1q8clzU4dfDH0AmvZjo='
+					],
+					'img-src': ['self', 'data:'],
+					'connect-src': ['self'],
+					'object-src': ['none'],
+					'base-uri': ['none'],
+					'form-action': ['self']
+				}
+			}
 		})
 	],
 	server: {

@@ -20,7 +20,6 @@ import (
 	dbmigrate "github.com/golusoris/golusoris/db/migrate"
 	dbpgx "github.com/golusoris/golusoris/db/pgx"
 	grpcx "github.com/golusoris/golusoris/grpc"
-	"github.com/golusoris/golusoris/httpx/csrf"
 	"github.com/golusoris/golusoris/httpx/middleware"
 	"github.com/golusoris/golusoris/k8s/health"
 	"github.com/golusoris/golusoris/k8s/metrics/prom"
@@ -66,7 +65,8 @@ var Module = fx.Options(
 	golusorisDB,
 	bootstrap.HTTP,
 	otel.Module,
-	csrf.Module,
+	// CSRF protection of cookie traffic that stays on without http.csrf.secret.
+	fx.Provide(httpapi.CrossOrigin),
 	grpcx.Module,
 	grpcConfig,
 	fx.Decorate(embedMigrations),
@@ -153,7 +153,7 @@ func mountHTTP(d httpDeps, api httpapi.MountParams) error {
 		middleware.TrustProxy(middleware.TrustProxyOptions{TrustedCIDRs: d.Cfg.Proxy.Trusted}),
 		middleware.Recover(d.Logger),
 		middleware.Logger(d.Logger, d.Clock),
-		middleware.SecureHeaders(middleware.SecureHeadersDefaults()),
+		middleware.SecureHeaders(securityHeaders(d.Cfg.Session.Secure)),
 	)
 	health.Mount(d.Router, d.Reg)
 	if err := prom.Mount(d.Router, d.Reg); err != nil {

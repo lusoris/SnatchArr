@@ -19,7 +19,7 @@ UI.
 | `APP_GRPC_KEEPALIVE_MAX_CONNECTION_AGE` | `2m` | After this age a worker connection takes no new RPCs and new ones move to a fresh connection; negative = never |
 | `APP_GRPC_KEEPALIVE_MAX_CONNECTION_AGE_GRACE` | unlimited | How long RPCs already running on an aged connection may finish. A finite value must be at least `35s` (the 30 s `LeaseRun` long-poll plus margin) or the API refuses to start; note that a finite value can still cut a run's `ReportEvents` stream |
 | `APP_CRYPTO_KEY` | required in prod | Key that encrypts *arr API keys and download-client secrets at rest (`openssl rand -hex 32`). The dev profile without it runs on a development key published in the source and warns that stored secrets are unprotected; prod refuses to start on that key |
-| `APP_HTTP_CSRF_SECRET` | required in prod | Secret behind the double-submit CSRF token; set it so tokens survive restarts and replicas |
+| `APP_HTTP_CSRF_SECRET` | not read | No longer used: the API refuses cross-site requests from the browser's `Sec-Fetch-Site` and `Origin` headers, which needs no secret and cannot be switched off. A value that is still set is ignored |
 | `APP_LEADER_ENABLED` | `false` | Elect one replica (Postgres advisory lock) to run the planner, Seerr sync and Configarr poll; leave off for a single replica |
 | `APP_LEADER_NAME` | `snatcharr` | Lock name; one per deployment |
 | `APP_LEADER_IDENTITY` | hostname | This replica's name in logs |
@@ -28,7 +28,7 @@ UI.
 | `APP_SNATCHARR_PUBLIC_URL` | | External base URL (cookies, links) |
 | `APP_SNATCHARR_WORKER_TOKEN` | | Shared bearer the worker presents over gRPC |
 | `APP_SNATCHARR_SESSION_TTL` | `8h` | Cookie session lifetime |
-| `APP_SNATCHARR_SESSION_SECURE` | `true` | `Secure` flag on the session cookie |
+| `APP_SNATCHARR_SESSION_SECURE` | `true` | `Secure` flag on the session cookie; while it is on, responses also carry `Strict-Transport-Security` (one year), so leave it on only when browsers reach SnatchArr over HTTPS |
 | `APP_SNATCHARR_APIKEY_SECRET` | required in prod | HMAC secret for API keys |
 | `APP_SNATCHARR_CONFIGARR_CONFIG` | | Path to Configarr `config.yml` (linked mode) |
 | `APP_SNATCHARR_CONFIGARR_SECRETS` | | Path to Configarr `secrets.yml` |

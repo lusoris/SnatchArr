@@ -11,7 +11,13 @@ const visual = !!process.env.SNATCHARR_VISUAL;
 const visualProject = {
 	name: 'visual',
 	testMatch: /visual\.test\.ts/,
-	use: { browserName: 'chromium' as const, viewport: { width: 1280, height: 800 } }
+	// The comparison freezes animations and plants its diffs with inline style tags, which the
+	// page CSP refuses; e2e/security.test.ts holds the policy itself.
+	use: {
+		browserName: 'chromium' as const,
+		viewport: { width: 1280, height: 800 },
+		bypassCSP: true
+	}
 };
 
 export default defineConfig({
@@ -41,11 +47,16 @@ export default defineConfig({
 			? [
 					{
 						name: 'chromium',
-						testMatch: /(a11y|theme)\.test\.ts/,
+						testMatch: /(a11y|theme|security)\.test\.ts/,
 						use: { browserName: 'chromium' }
 					}
 				]
 			: [
+					{
+						name: 'security',
+						testMatch: /security\.test\.ts/,
+						use: { browserName: 'chromium' }
+					},
 					{
 						name: 'public',
 						testMatch: /(a11y|theme)\.test\.ts/,

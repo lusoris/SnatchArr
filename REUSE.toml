@@ -14,3 +14,11 @@ path = ["**/*.md", "docs/**", "web/messages/**"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 lusoris <lusoris@pm.me>"
 SPDX-License-Identifier = "CC-BY-SA-4.0"
+
+# Case lists ported from s4ntrx/Cybersecurity-Threats-Guide (MIT), commit
+# 34c9097f8d40f573b8ff10612813424c6711d574, 02-web-application-security.
+[[annotations]]
+path = ["api/internal/app/websecurity_integration_test.go", "web/e2e/security.test.ts"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 s4ntrx"
+SPDX-License-Identifier = "MIT"
