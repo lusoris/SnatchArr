@@ -31,6 +31,8 @@ case "$plant" in
 *) echo "dlclients-live: unknown SNATCHARR_DLCLIENTS_PLANT '$plant'" >&2; exit 1 ;;
 esac
 
+# shellcheck source=tools/e2e/pull_retry.sh
+. "$root/tools/e2e/pull_retry.sh"
 dc() { docker compose -p "$project" -f "$root/tools/e2e/dlclients/compose.yaml" "$@"; }
 
 cleanup() {
@@ -142,7 +144,8 @@ observe() {
     esac
 }
 
-dc up -d --quiet-pull
+pull_retry dc pull --quiet
+dc up -d --pull never
 for url in "$qbit" "$transmission/transmission/rpc" "$deluge/json" "$rtorrent/RPC2" "$sab/api" "$nzbget/jsonrpc"; do
     answers "$url"
 done
