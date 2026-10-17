@@ -175,8 +175,6 @@ github.com/golang-migrate/migrate/v4 v4.20.1 h1:2N/ToVTKrKl58ynBpgeVJ4In7VcLCjWT
 github.com/golang-migrate/migrate/v4 v4.20.1/go.mod h1:DDPgKVb4ovSWc4FwSPfV2Uz1160f4XBiTHTrAJtljmM=
 github.com/golang/protobuf v1.5.4 h1:i7eJL8qZTpSEXOPTxNKhASYpMn+8e5Q6AdndVa1dWek=
 github.com/golang/protobuf v1.5.4/go.mod h1:lnTiLA8Wa4RWRcIUkrtSVa5nRhsEGBg48fD6rSs7xps=
-github.com/golusoris/goenvoy/arr/cleanuparr v1.0.0 h1:frqHyk0tml8z/MCkx5En0bK0WBKb5NVL2lBwMP9Wtvw=
-github.com/golusoris/goenvoy/arr/cleanuparr v1.0.0/go.mod h1:2AVjSygoLjCNFkQEq1tlR01Z02Tbym0sFygzYYG+6ng=
 github.com/golusoris/goenvoy/arr/lidarr v1.3.1 h1:dXR+NQdcyUPCiejkO8JVU3XLlSETINORlOCg/a+Ybr0=
 github.com/golusoris/goenvoy/arr/lidarr v1.3.1/go.mod h1:nz94hmYkf707ju8WtiRYGhJ9A3/Lf3quSR6hisSOQec=
 github.com/golusoris/goenvoy/arr/radarr v1.3.1 h1:t/WrIorUu3IvGN5/x7MVCH/+i5nQamHKvNKQEnWb+vk=

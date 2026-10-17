@@ -106,7 +106,7 @@ check_image_user() {
     echo "smoke: $role image user is $user"
 }
 # check_image_ca IMAGE: the api's Go TLS stack reads the image's CA bundle for outbound
-# HTTPS (*arr, Seerr, Cleanuparr); the worker embeds webpki roots and needs none.
+# HTTPS (*arr, Seerr, Prowlarr); the worker embeds webpki roots and needs none.
 check_image_ca() {
     local image=$1 c="smoke-api-ca-$$" bundle=/etc/ssl/certs/ca-certificates.crt count
     CONTAINERS+=("$c")

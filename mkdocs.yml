@@ -68,7 +68,6 @@ nav:
   - Single Sign-On: sso.md
   - Download clients: download-clients.md
   - Seerr: seerr.md
-  - Cleanuparr: cleanuparr.md
   - Prowlarr: prowlarr.md
   - Readarr (legacy): readarr.md
   - API: api.md

@@ -179,7 +179,7 @@ The API and worker both serve Prometheus metrics on `/metrics`. See the comprehe
 `networkPolicy.arrCidrs` allows egress by IP range. That reaches *arr apps outside the
 cluster, but some CNIs never apply CIDR rules to traffic between pods they manage: Cilium
 states that "CIDR rules do not apply to traffic where both sides of the connection are
-either managed by Cilium" (its layer 3 policy docs). If your *arr apps, Seerr, Cleanuparr
+either managed by Cilium" (its layer 3 policy docs). If your *arr apps, Seerr, Prowlarr
 or download clients run as pods in the same cluster, select them in `networkPolicy.arrPeers`:
 
 ```yaml
@@ -434,6 +434,10 @@ configarr:
   existingConfigMap: configarr-config   # key config.yml
   existingSecret: configarr-secrets     # key secrets.yml (optional)
 ```
+
+### Coexistence with Cleanuparr
+
+SnatchArr no longer integrates Cleanuparr: operators who keep Cleanuparr must not let it act on the same queues as SnatchArr's queue management.
 
 ## ArgoCD
 

@@ -86,7 +86,6 @@ type Instance struct {
 	LastSeenProduct Product
 	LastCheckAt     *time.Time
 	LastError       string
-	SeekerOverlap   bool
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 }

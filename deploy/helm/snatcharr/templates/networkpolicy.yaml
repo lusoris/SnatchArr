@@ -53,7 +53,7 @@ spec:
           protocol: TCP
     {{- end }}
     {{- with $arr }}
-    # *arr apps, Seerr, Cleanuparr, download clients (the API probes and discovers them).
+    # *arr apps, Seerr, Prowlarr, download clients (the API probes and discovers them).
     # No arrCidrs and no arrPeers renders no rule: an empty `to` would allow every destination
     # (#120). A peer with `ports` has its own rule (#145).
     {{- . | nindent 4 }}
