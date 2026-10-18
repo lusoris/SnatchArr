@@ -227,6 +227,7 @@ func (s *Service) processDecisions(ctx context.Context, inst Instance, cfg Setti
 	for _, d := range ds {
 		if d.Strike {
 			s.emitStrikeEvent(ctx, inst, cfg, d, now)
+			s.logShadow(ctx, inst, d)
 		}
 	}
 	return nil

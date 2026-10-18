@@ -320,7 +320,8 @@ func (m *Metrics) QueueSkipped(instance, reason string) {
 }
 
 // QueueImport records one force-import outcome (result="ok", "error",
-// "no_clean_candidate" or "still_id_matched" for a failed read-back).
+// "no_clean_candidate" or "still_id_matched" for a failed read-back), or
+// result="would_import" once per download the observe mode would import.
 func (m *Metrics) QueueImport(instance, result string) {
 	m.queueImports.WithLabelValues(instance, result).Inc()
 }

@@ -138,17 +138,27 @@ func applyRuleMatch(s Settings, item Item, prev Strike, r Rule, now time.Time, s
 		ImportedAt:    prev.ImportedAt,
 		ImportRefused: prev.ImportRefused,
 	}
+	var d Decision
 	if r == RuleIDMatched {
-		return applyImportMatch(s, item, prev, rs, next, now, spent)
+		d = applyImportMatch(s, item, prev, rs, next, now, spent)
+	} else {
+		d = applyRemovalMatch(s, item, rs, next, spent)
 	}
+	d.NewStrike = prev.Rule != r || prev.Count == 0
+	d.Reached = count >= rs.Threshold && (prev.Rule != r || prev.Count < rs.Threshold)
+	d.Title = item.Title
+	return d
+}
+
+func applyRemovalMatch(s Settings, item Item, rs RuleSettings, next Strike, spent *budget) Decision {
 	var remove, wouldRemove, deferred bool
-	if count >= rs.Threshold {
+	if next.Count >= rs.Threshold {
 		remove, wouldRemove, deferred = resolveThresholdAction(rs.Mode, s.MaxRemovalsPerSweep, &spent.removals)
 	}
 	return Decision{
 		ItemID:      item.ID,
 		DownloadID:  item.DownloadID,
-		Rule:        r,
+		Rule:        next.Rule,
 		Next:        next,
 		Strike:      true,
 		Threshold:   rs.Threshold,
