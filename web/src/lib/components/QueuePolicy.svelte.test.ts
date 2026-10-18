@@ -38,6 +38,34 @@ describe('QueuePolicy', () => {
 			m.queue_policy_max_removals()
 		) as HTMLInputElement;
 		expect(maxRemovalsInput.value).toBe('5');
+		const maxImportsInput = screen.getByLabelText(m.queue_policy_max_imports()) as HTMLInputElement;
+		expect(maxImportsInput.value).toBe('10');
+	});
+
+	it('sends the id-matched rule and the import bound, without a blocklist switch', async () => {
+		const put = vi.spyOn(api, 'PUT').mockResolvedValue({ data: sampleQueuePolicy } as never);
+		stubGet({
+			'/instances/{instanceId}/queue-policy': sampleQueuePolicy
+		});
+		renderWithQuery(QueuePolicy, { instanceId: forkInstance.id });
+
+		await screen.findByRole('heading', { level: 2, name: m.queue_policy_title() });
+		expect(
+			screen.queryByLabelText(`${m.queue_rule_id_matched()} ${m.queue_rule_blocklist()}`)
+		).toBeNull();
+		const mode = screen.getByLabelText(
+			`${m.queue_rule_id_matched()} ${m.queue_rule_mode()}`
+		) as HTMLSelectElement;
+		await fireEvent.change(mode, { target: { value: 'act' } });
+		await fireEvent.input(screen.getByLabelText(m.queue_policy_max_imports()), {
+			target: { value: '100' }
+		});
+
+		await fireEvent.click(screen.getByRole('button', { name: m.queue_policy_save() }));
+
+		const body = (put.mock.calls[0]![1] as { body: QueuePolicyType }).body;
+		expect(body.rules.id_matched).toEqual({ mode: 'act', threshold: 1, blocklist: false });
+		expect(body.max_imports_per_sweep).toBe(100);
 	});
 
 	it('saves the edited payload converting grace minutes to seconds', async () => {
@@ -135,8 +163,11 @@ describe('QueuePolicy', () => {
 		const olderRules = { ...sampleQueuePolicy.rules };
 		delete olderRules.not_an_upgrade;
 		delete olderRules.duplicate;
+		delete olderRules.id_matched;
+		const older = { ...sampleQueuePolicy, rules: olderRules };
+		delete older.max_imports_per_sweep;
 		stubGet({
-			'/instances/{instanceId}/queue-policy': { ...sampleQueuePolicy, rules: olderRules }
+			'/instances/{instanceId}/queue-policy': older
 		});
 		renderWithQuery(QueuePolicy, { instanceId: forkInstance.id });
 
@@ -147,6 +178,8 @@ describe('QueuePolicy', () => {
 		const fallback = { mode: 'observe', threshold: 1, blocklist: false };
 		expect(body.rules.not_an_upgrade).toEqual(fallback);
 		expect(body.rules.duplicate).toEqual(fallback);
+		expect(body.rules.id_matched).toEqual(fallback);
+		expect(body.max_imports_per_sweep).toBe(25);
 	});
 
 	it('shows a problem error when saving fails with 422', async () => {

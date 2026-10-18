@@ -17,8 +17,8 @@ SPDX-License-Identifier: EUPL-1.2
 	type QueueRules = Required<components['schemas']['QueueRules']>;
 	type RuleKey = keyof QueueRules;
 
-	// The API always returns not_an_upgrade and duplicate; this mirrors their
-	// shared default for the type.
+	// The API always returns not_an_upgrade, duplicate and id_matched; this
+	// mirrors their shared default for the type.
 	const optionalRuleDefault: components['schemas']['QueueRuleSettings'] = {
 		mode: 'observe',
 		threshold: 1,
@@ -45,6 +45,7 @@ SPDX-License-Identifier: EUPL-1.2
 		min_bytes_per_second: number;
 		min_custom_format_score: number | null;
 		max_removals_per_sweep: number;
+		max_imports_per_sweep: number;
 	}
 
 	let draft = $state<FormState | null>(null);
@@ -58,6 +59,7 @@ SPDX-License-Identifier: EUPL-1.2
 					slow: { ...query.data.rules.slow },
 					failed: { ...query.data.rules.failed },
 					import_blocked: { ...query.data.rules.import_blocked },
+					id_matched: { ...(query.data.rules.id_matched ?? optionalRuleDefault) },
 					unwanted_score: { ...query.data.rules.unwanted_score },
 					not_an_upgrade: { ...(query.data.rules.not_an_upgrade ?? optionalRuleDefault) },
 					duplicate: { ...(query.data.rules.duplicate ?? optionalRuleDefault) },
@@ -66,7 +68,8 @@ SPDX-License-Identifier: EUPL-1.2
 				grace_minutes: Math.round(query.data.grace_seconds / 60),
 				min_bytes_per_second: query.data.min_bytes_per_second,
 				min_custom_format_score: query.data.min_custom_format_score ?? null,
-				max_removals_per_sweep: query.data.max_removals_per_sweep
+				max_removals_per_sweep: query.data.max_removals_per_sweep,
+				max_imports_per_sweep: query.data.max_imports_per_sweep ?? 25
 			};
 		}
 	});
@@ -96,7 +99,8 @@ SPDX-License-Identifier: EUPL-1.2
 				draft.min_custom_format_score === null || Number.isNaN(draft.min_custom_format_score)
 					? undefined
 					: draft.min_custom_format_score,
-			max_removals_per_sweep: draft.max_removals_per_sweep
+			max_removals_per_sweep: draft.max_removals_per_sweep,
+			max_imports_per_sweep: draft.max_imports_per_sweep
 		};
 		save.mutate(payload);
 	}
@@ -106,6 +110,7 @@ SPDX-License-Identifier: EUPL-1.2
 		{ key: 'slow', label: m.queue_rule_slow },
 		{ key: 'failed', label: m.queue_rule_failed },
 		{ key: 'import_blocked', label: m.queue_rule_import_blocked },
+		{ key: 'id_matched', label: m.queue_rule_id_matched },
 		{ key: 'unwanted_score', label: m.queue_rule_unwanted_score },
 		{ key: 'not_an_upgrade', label: m.queue_rule_not_an_upgrade },
 		{ key: 'duplicate', label: m.queue_rule_duplicate },
@@ -178,11 +183,14 @@ SPDX-License-Identifier: EUPL-1.2
 										/>
 									</td>
 									<td class="py-2">
-										<input
-											type="checkbox"
-											aria-label={`${r.label()} ${m.queue_rule_blocklist()}`}
-											bind:checked={draft.rules[r.key].blocklist}
-										/>
+										<!-- id_matched imports and never removes, so it has nothing to blocklist. -->
+										{#if r.key !== 'id_matched'}
+											<input
+												type="checkbox"
+												aria-label={`${r.label()} ${m.queue_rule_blocklist()}`}
+												bind:checked={draft.rules[r.key].blocklist}
+											/>
+										{/if}
 									</td>
 								</tr>
 							{/each}
@@ -237,6 +245,17 @@ SPDX-License-Identifier: EUPL-1.2
 					min="1"
 					max="100"
 					bind:value={draft.max_removals_per_sweep}
+				/>
+			</Field>
+
+			<Field id="queue-max-imports" label={m.queue_policy_max_imports()}>
+				<input
+					id="queue-max-imports"
+					class="input"
+					type="number"
+					min="1"
+					max="100"
+					bind:value={draft.max_imports_per_sweep}
 				/>
 			</Field>
 

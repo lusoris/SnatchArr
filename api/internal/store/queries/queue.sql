@@ -8,10 +8,10 @@ WHERE instance_id = $1;
 -- name: UpsertQueuePolicy :exec
 INSERT INTO queue_policies (
     instance_id, enabled, rules, grace_s, min_bytes_per_second,
-    min_custom_format_score, max_removals_per_sweep, updated_at
+    min_custom_format_score, max_removals_per_sweep, max_imports_per_sweep, updated_at
 ) VALUES (
     $1, $2, $3, $4, $5,
-    $6, $7, $8
+    $6, $7, $8, $9
 )
 ON CONFLICT (instance_id) DO UPDATE SET
     enabled = EXCLUDED.enabled,
@@ -20,6 +20,7 @@ ON CONFLICT (instance_id) DO UPDATE SET
     min_bytes_per_second = EXCLUDED.min_bytes_per_second,
     min_custom_format_score = EXCLUDED.min_custom_format_score,
     max_removals_per_sweep = EXCLUDED.max_removals_per_sweep,
+    max_imports_per_sweep = EXCLUDED.max_imports_per_sweep,
     updated_at = EXCLUDED.updated_at;
 
 -- name: ListQueueStrikes :many
@@ -29,7 +30,8 @@ ORDER BY download_id;
 
 -- name: UpsertQueueStrikes :exec
 INSERT INTO queue_strikes (
-    instance_id, download_id, queue_id, rule, count, last_size_left, last_seen, expires_at
+    instance_id, download_id, queue_id, rule, count, last_size_left, last_seen, imported_at,
+    import_refused, expires_at
 )
 SELECT
     sub.instance_id,
@@ -39,6 +41,8 @@ SELECT
     sub.count,
     sub.last_size_left,
     sub.last_seen,
+    NULLIF(sub.imported_at, 'epoch'::timestamptz),
+    sub.import_refused,
     sub.last_seen + make_interval(secs => sqlc.arg(ttl_s)::bigint)
 FROM (
     SELECT
@@ -48,7 +52,9 @@ FROM (
         unnest(sqlc.arg(rules)::text[]) AS rule,
         unnest(sqlc.arg(counts)::int[]) AS count,
         unnest(sqlc.arg(last_size_lefts)::bigint[]) AS last_size_left,
-        unnest(sqlc.arg(last_seens)::timestamptz[]) AS last_seen
+        unnest(sqlc.arg(last_seens)::timestamptz[]) AS last_seen,
+        unnest(sqlc.arg(imported_ats)::timestamptz[]) AS imported_at,
+        unnest(sqlc.arg(import_refuseds)::boolean[]) AS import_refused
 ) AS sub
 ON CONFLICT (instance_id, download_id) DO UPDATE SET
     queue_id = EXCLUDED.queue_id,
@@ -56,6 +62,8 @@ ON CONFLICT (instance_id, download_id) DO UPDATE SET
     count = EXCLUDED.count,
     last_size_left = EXCLUDED.last_size_left,
     last_seen = EXCLUDED.last_seen,
+    imported_at = EXCLUDED.imported_at,
+    import_refused = EXCLUDED.import_refused,
     expires_at = EXCLUDED.expires_at;
 
 -- name: DeleteQueueStrike :exec

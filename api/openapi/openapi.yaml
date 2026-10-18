@@ -3012,6 +3012,7 @@ components:
         - slow
         - failed
         - import_blocked
+        - id_matched
         - unwanted_score
         - not_an_upgrade
         - duplicate
@@ -3053,6 +3054,9 @@ components:
           $ref: "#/components/schemas/QueueRuleSettings"
         import_blocked:
           $ref: "#/components/schemas/QueueRuleSettings"
+        id_matched:
+          description: Force-imports a Sonarr or Radarr download the *arr matched to its series or movie by ID only, through a ManualImport of its clean, mapped candidates; it never removes or blocklists (ADR-0013). Optional on write so older clients keep working; left out, the rule takes its default settings. Reads always return it.
+          $ref: "#/components/schemas/QueueRuleSettings"
         unwanted_score:
           $ref: "#/components/schemas/QueueRuleSettings"
         not_an_upgrade:
@@ -3093,6 +3097,11 @@ components:
           type: integer
           minimum: 1
           maximum: 100
+        max_imports_per_sweep:
+          description: Most id_matched imports one sweep sends per instance. Optional on write so older clients keep working; left out, it takes the default of 25. Reads always return it.
+          type: integer
+          minimum: 1
+          maximum: 100
 
     QueueStrike:
       type: object
@@ -3118,4 +3127,11 @@ components:
         last_seen:
           type: string
           format: date-time
+        imported_at:
+          description: When the id_matched rule last sent a force import for this download; left out when it never did.
+          type: string
+          format: date-time
+        import_refused:
+          description: True when the last force import found no clean, mapped candidate and sent nothing.
+          type: boolean
 

@@ -21,6 +21,8 @@ export const LIVE_EVENTS = [
 	'search_previewed',
 	'queue_item_struck',
 	'queue_item_removed',
+	'queue_item_imported',
+	'queue_item_import_failed',
 	// recorded by the API itself
 	'run_queued',
 	'snatch_deferred',

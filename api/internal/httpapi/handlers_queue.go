@@ -74,6 +74,7 @@ func queuePolicyToOAS(s queue.Settings) *oas.QueuePolicy {
 	}
 	rules.NotAnUpgrade.SetTo(queueRuleToOAS(queue.ResolveRule(s, queue.RuleNotAnUpgrade)))
 	rules.Duplicate.SetTo(queueRuleToOAS(queue.ResolveRule(s, queue.RuleDuplicate)))
+	rules.IDMatched.SetTo(queueRuleToOAS(queue.ResolveRule(s, queue.RuleIDMatched)))
 	return &oas.QueuePolicy{
 		Enabled:              s.Enabled,
 		Rules:                rules,
@@ -81,6 +82,7 @@ func queuePolicyToOAS(s queue.Settings) *oas.QueuePolicy {
 		MinBytesPerSecond:    s.MinBytesPerSecond,
 		MinCustomFormatScore: minCFS,
 		MaxRemovalsPerSweep:  s.MaxRemovalsPerSweep,
+		MaxImportsPerSweep:   oas.NewOptInt(s.MaxImportsPerSweep),
 	}
 }
 
@@ -115,6 +117,9 @@ func queuePolicyFromOAS(req *oas.QueuePolicy) queue.Settings {
 	if v, ok := req.Rules.Duplicate.Get(); ok {
 		rules[queue.RuleDuplicate] = queueRuleFromOAS(v)
 	}
+	if v, ok := req.Rules.IDMatched.Get(); ok {
+		rules[queue.RuleIDMatched] = queueRuleFromOAS(v)
+	}
 	return queue.Settings{
 		Enabled:              req.Enabled,
 		Rules:                rules,
@@ -122,6 +127,7 @@ func queuePolicyFromOAS(req *oas.QueuePolicy) queue.Settings {
 		MinBytesPerSecond:    req.MinBytesPerSecond,
 		MinCustomFormatScore: minCFS,
 		MaxRemovalsPerSweep:  req.MaxRemovalsPerSweep,
+		MaxImportsPerSweep:   req.MaxImportsPerSweep.Or(queue.DefaultSettings().MaxImportsPerSweep),
 	}
 }
 
@@ -137,7 +143,7 @@ func queueRuleFromOAS(s oas.QueueRuleSettings) queue.RuleSettings {
 }
 
 func queueStrikeToOAS(item queue.StrikeItem, threshold int) oas.QueueStrike {
-	return oas.QueueStrike{
+	out := oas.QueueStrike{
 		DownloadID: item.DownloadID,
 		QueueID:    item.QueueID,
 		Rule:       oas.QueueRule(item.Rule),
@@ -145,4 +151,9 @@ func queueStrikeToOAS(item queue.StrikeItem, threshold int) oas.QueueStrike {
 		Threshold:  threshold,
 		LastSeen:   item.LastSeen,
 	}
+	if !item.ImportedAt.IsZero() {
+		out.ImportedAt.SetTo(item.ImportedAt)
+		out.ImportRefused.SetTo(item.ImportRefused)
+	}
+	return out
 }

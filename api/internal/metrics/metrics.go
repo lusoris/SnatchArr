@@ -41,6 +41,7 @@ type Metrics struct {
 	queueStrikes       *prometheus.CounterVec
 	queueRemovals      *prometheus.CounterVec
 	queueSkipped       *prometheus.CounterVec
+	queueImports       *prometheus.CounterVec
 }
 
 // Run outcomes the finished-runs counter carries next to the worker's own (done, failed,
@@ -113,6 +114,7 @@ func New(reg prometheus.Registerer) (*Metrics, error) {
 		queueStrikes:       b.counter("snatcharr_queue_strikes_total", "Queue items struck, by instance name, rule and evaluation mode.", "instance", "rule", "mode"),
 		queueRemovals:      b.counter("snatcharr_queue_removals_total", "Queue items removed from *arr instances, by instance name, rule and result.", "instance", "rule", "result"),
 		queueSkipped:       b.counter("snatcharr_queue_skipped_total", "Queue sweeps skipped, by instance name and reason.", "instance", "reason"),
+		queueImports:       b.counter("snatcharr_queue_imports_total", "Force imports of ID-matched queue items and their read-back, by instance name and result.", "instance", "result"),
 	}
 	if b.err != nil {
 		return nil, b.err
@@ -315,6 +317,12 @@ func (m *Metrics) QueueRemoval(instance, rule, result string) {
 // QueueSkipped records a sweep pass skipped for instance for reason.
 func (m *Metrics) QueueSkipped(instance, reason string) {
 	m.queueSkipped.WithLabelValues(instance, reason).Inc()
+}
+
+// QueueImport records one force-import outcome (result="ok", "error",
+// "no_clean_candidate" or "still_id_matched" for a failed read-back).
+func (m *Metrics) QueueImport(instance, result string) {
+	m.queueImports.WithLabelValues(instance, result).Inc()
 }
 
 // LoopLabel turns a loop name such as "snatch: planner" into the label value

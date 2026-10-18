@@ -29,7 +29,7 @@ func (q *Queries) DeleteQueueStrike(ctx context.Context, arg DeleteQueueStrikePa
 
 const getQueuePolicy = `-- name: GetQueuePolicy :one
 
-SELECT instance_id, enabled, rules, grace_s, min_bytes_per_second, min_custom_format_score, max_removals_per_sweep, updated_at FROM queue_policies
+SELECT instance_id, enabled, rules, grace_s, min_bytes_per_second, min_custom_format_score, max_removals_per_sweep, updated_at, max_imports_per_sweep FROM queue_policies
 WHERE instance_id = $1
 `
 
@@ -47,12 +47,13 @@ func (q *Queries) GetQueuePolicy(ctx context.Context, instanceID uuid.UUID) (Que
 		&i.MinCustomFormatScore,
 		&i.MaxRemovalsPerSweep,
 		&i.UpdatedAt,
+		&i.MaxImportsPerSweep,
 	)
 	return i, err
 }
 
 const listQueueStrikes = `-- name: ListQueueStrikes :many
-SELECT instance_id, download_id, queue_id, rule, count, last_size_left, last_seen, expires_at FROM queue_strikes
+SELECT instance_id, download_id, queue_id, rule, count, last_size_left, last_seen, expires_at, imported_at, import_refused FROM queue_strikes
 WHERE instance_id = $1
 ORDER BY download_id
 `
@@ -75,6 +76,8 @@ func (q *Queries) ListQueueStrikes(ctx context.Context, instanceID uuid.UUID) ([
 			&i.LastSizeLeft,
 			&i.LastSeen,
 			&i.ExpiresAt,
+			&i.ImportedAt,
+			&i.ImportRefused,
 		); err != nil {
 			return nil, err
 		}
@@ -113,10 +116,10 @@ func (q *Queries) PurgeExpiredQueueStrikes(ctx context.Context, arg PurgeExpired
 const upsertQueuePolicy = `-- name: UpsertQueuePolicy :exec
 INSERT INTO queue_policies (
     instance_id, enabled, rules, grace_s, min_bytes_per_second,
-    min_custom_format_score, max_removals_per_sweep, updated_at
+    min_custom_format_score, max_removals_per_sweep, max_imports_per_sweep, updated_at
 ) VALUES (
     $1, $2, $3, $4, $5,
-    $6, $7, $8
+    $6, $7, $8, $9
 )
 ON CONFLICT (instance_id) DO UPDATE SET
     enabled = EXCLUDED.enabled,
@@ -125,6 +128,7 @@ ON CONFLICT (instance_id) DO UPDATE SET
     min_bytes_per_second = EXCLUDED.min_bytes_per_second,
     min_custom_format_score = EXCLUDED.min_custom_format_score,
     max_removals_per_sweep = EXCLUDED.max_removals_per_sweep,
+    max_imports_per_sweep = EXCLUDED.max_imports_per_sweep,
     updated_at = EXCLUDED.updated_at
 `
 
@@ -136,6 +140,7 @@ type UpsertQueuePolicyParams struct {
 	MinBytesPerSecond    int64
 	MinCustomFormatScore *int32
 	MaxRemovalsPerSweep  int32
+	MaxImportsPerSweep   int32
 	UpdatedAt            time.Time
 }
 
@@ -148,6 +153,7 @@ func (q *Queries) UpsertQueuePolicy(ctx context.Context, arg UpsertQueuePolicyPa
 		arg.MinBytesPerSecond,
 		arg.MinCustomFormatScore,
 		arg.MaxRemovalsPerSweep,
+		arg.MaxImportsPerSweep,
 		arg.UpdatedAt,
 	)
 	return err
@@ -155,7 +161,8 @@ func (q *Queries) UpsertQueuePolicy(ctx context.Context, arg UpsertQueuePolicyPa
 
 const upsertQueueStrikes = `-- name: UpsertQueueStrikes :exec
 INSERT INTO queue_strikes (
-    instance_id, download_id, queue_id, rule, count, last_size_left, last_seen, expires_at
+    instance_id, download_id, queue_id, rule, count, last_size_left, last_seen, imported_at,
+    import_refused, expires_at
 )
 SELECT
     sub.instance_id,
@@ -165,6 +172,8 @@ SELECT
     sub.count,
     sub.last_size_left,
     sub.last_seen,
+    NULLIF(sub.imported_at, 'epoch'::timestamptz),
+    sub.import_refused,
     sub.last_seen + make_interval(secs => $1::bigint)
 FROM (
     SELECT
@@ -174,7 +183,9 @@ FROM (
         unnest($5::text[]) AS rule,
         unnest($6::int[]) AS count,
         unnest($7::bigint[]) AS last_size_left,
-        unnest($8::timestamptz[]) AS last_seen
+        unnest($8::timestamptz[]) AS last_seen,
+        unnest($9::timestamptz[]) AS imported_at,
+        unnest($10::boolean[]) AS import_refused
 ) AS sub
 ON CONFLICT (instance_id, download_id) DO UPDATE SET
     queue_id = EXCLUDED.queue_id,
@@ -182,18 +193,22 @@ ON CONFLICT (instance_id, download_id) DO UPDATE SET
     count = EXCLUDED.count,
     last_size_left = EXCLUDED.last_size_left,
     last_seen = EXCLUDED.last_seen,
+    imported_at = EXCLUDED.imported_at,
+    import_refused = EXCLUDED.import_refused,
     expires_at = EXCLUDED.expires_at
 `
 
 type UpsertQueueStrikesParams struct {
-	TtlS          int64
-	InstanceID    uuid.UUID
-	DownloadIds   []string
-	QueueIds      []int32
-	Rules         []string
-	Counts        []int32
-	LastSizeLefts []int64
-	LastSeens     []time.Time
+	TtlS           int64
+	InstanceID     uuid.UUID
+	DownloadIds    []string
+	QueueIds       []int32
+	Rules          []string
+	Counts         []int32
+	LastSizeLefts  []int64
+	LastSeens      []time.Time
+	ImportedAts    []time.Time
+	ImportRefuseds []bool
 }
 
 func (q *Queries) UpsertQueueStrikes(ctx context.Context, arg UpsertQueueStrikesParams) error {
@@ -206,6 +221,8 @@ func (q *Queries) UpsertQueueStrikes(ctx context.Context, arg UpsertQueueStrikes
 		arg.Counts,
 		arg.LastSizeLefts,
 		arg.LastSeens,
+		arg.ImportedAts,
+		arg.ImportRefuseds,
 	)
 	return err
 }

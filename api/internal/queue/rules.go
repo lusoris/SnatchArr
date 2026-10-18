@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"slices"
 	"time"
+
+	"github.com/lusoris/SnatchArr/api/internal/domain"
 )
 
 // Rule identifies a queue condition that can incur strikes.
@@ -20,6 +22,7 @@ const (
 	RuleStalled             Rule = "stalled"
 	RuleSlow                Rule = "slow"
 	RuleFailed              Rule = "failed"
+	RuleIDMatched           Rule = "id_matched"
 	RuleImportBlocked       Rule = "import_blocked"
 	RuleUnwantedScore       Rule = "unwanted_score"
 	RuleNotAnUpgrade        Rule = "not_an_upgrade"
@@ -32,6 +35,7 @@ var RuleOrder = []Rule{
 	RuleStalled,
 	RuleSlow,
 	RuleFailed,
+	RuleIDMatched,
 	RuleImportBlocked,
 	RuleUnwantedScore,
 	RuleNotAnUpgrade,
@@ -70,6 +74,11 @@ type Settings struct {
 	MinCustomFormatScore *int32
 	// MaxRemovalsPerSweep bounds the removals of one sweep; later hits wait for the next.
 	MaxRemovalsPerSweep int
+	// MaxImportsPerSweep bounds the force imports of one sweep; later hits wait for the next.
+	MaxImportsPerSweep int
+	// ForceImport is set by the service for kinds whose manual-import candidates carry
+	// the grab-history mapping (Sonarr, Radarr); without it id_matched never matches.
+	ForceImport bool
 }
 
 // Item represents a download queue record from an upstream *arr instance.
@@ -109,6 +118,10 @@ type Strike struct {
 	LastSizeLeft int64
 	// LastSeen is the time of the sweep that stored this state; zero means never seen.
 	LastSeen time.Time
+	// ImportedAt is the time of the last force import of the item; zero means none.
+	ImportedAt time.Time
+	// ImportRefused marks an import at ImportedAt that found no clean, mapped candidate.
+	ImportRefused bool
 }
 
 // Decision represents the evaluation outcome for one queue item in a sweep.
@@ -132,8 +145,14 @@ type Decision struct {
 	WouldRemove bool
 	// Blocklist asks the removal to blocklist the release.
 	Blocklist bool
-	// Deferred reports a removal held back by MaxRemovalsPerSweep; the next sweep retries.
+	// Deferred reports a removal or import held back by its per-sweep bound; the next sweep retries.
 	Deferred bool
+	// Import asks the caller to force-import the item: id_matched, act mode, within bound.
+	Import bool
+	// WouldImport reports an id_matched threshold reached in observe mode; nothing is imported.
+	WouldImport bool
+	// ImportFailed reports that the item is still ID-matched one sweep after its import.
+	ImportFailed bool
 }
 
 // ErrInvalid indicates that queue settings violate bounds or constraints.
@@ -142,8 +161,19 @@ var ErrInvalid = errors.New("invalid queue settings")
 // ErrQueueUnsupported indicates an *arr kind does not support queue operations.
 var ErrQueueUnsupported = errors.New("queue management is not supported for this *arr kind")
 
+// ErrNoCleanCandidate indicates a force import found no candidate without a
+// rejection and with a mapping; nothing was imported.
+var ErrNoCleanCandidate = errors.New("no clean, mapped manual-import candidate")
+
+// SupportsForceImport reports the kinds whose manual-import candidates carry the
+// grab-history mapping rule id_matched needs (ADR-0013).
+func SupportsForceImport(kind domain.AppKind) bool {
+	return kind == domain.KindSonarr || kind == domain.KindRadarr
+}
+
 // DefaultSettings returns safe queue defaults: disabled, observe mode for every
-// rule, standard thresholds (6, 6, 2, 6, 1, 1, 1, 1), 15m grace, and 10 removals per sweep.
+// rule, standard thresholds (6, 6, 2, 1, 6, 1, 1, 1, 1), 15m grace, 10 removals and 25
+// imports per sweep.
 func DefaultSettings() Settings {
 	rules := make(map[Rule]RuleSettings, len(RuleOrder))
 	for _, r := range RuleOrder {
@@ -156,6 +186,7 @@ func DefaultSettings() Settings {
 		MinBytesPerSecond:    0,
 		MinCustomFormatScore: nil,
 		MaxRemovalsPerSweep:  10,
+		MaxImportsPerSweep:   25,
 	}
 }
 
@@ -173,6 +204,9 @@ func validateBounds(s Settings) error {
 	}
 	if s.MaxRemovalsPerSweep < 1 || s.MaxRemovalsPerSweep > 100 {
 		return fmt.Errorf("%w: max removals per sweep must be between 1 and 100, got %d", ErrInvalid, s.MaxRemovalsPerSweep)
+	}
+	if s.MaxImportsPerSweep < 1 || s.MaxImportsPerSweep > 100 {
+		return fmt.Errorf("%w: max imports per sweep must be between 1 and 100, got %d", ErrInvalid, s.MaxImportsPerSweep)
 	}
 	if s.MinBytesPerSecond < 0 {
 		return fmt.Errorf("%w: min bytes per second must be non-negative, got %d", ErrInvalid, s.MinBytesPerSecond)

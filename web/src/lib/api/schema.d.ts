@@ -1804,7 +1804,7 @@ export interface components {
             updated_at: string;
         };
         /** @enum {string} */
-        QueueRule: "stalled" | "slow" | "failed" | "import_blocked" | "unwanted_score" | "not_an_upgrade" | "duplicate" | "unwanted_unmonitored";
+        QueueRule: "stalled" | "slow" | "failed" | "import_blocked" | "id_matched" | "unwanted_score" | "not_an_upgrade" | "duplicate" | "unwanted_unmonitored";
         /** @enum {string} */
         QueueRuleMode: "observe" | "act";
         QueueRuleSettings: {
@@ -1818,6 +1818,8 @@ export interface components {
             slow: components["schemas"]["QueueRuleSettings"];
             failed: components["schemas"]["QueueRuleSettings"];
             import_blocked: components["schemas"]["QueueRuleSettings"];
+            /** @description Force-imports a Sonarr or Radarr download the *arr matched to its series or movie by ID only, through a ManualImport of its clean, mapped candidates; it never removes or blocklists (ADR-0013). Optional on write so older clients keep working; left out, the rule takes its default settings. Reads always return it. */
+            id_matched?: components["schemas"]["QueueRuleSettings"];
             unwanted_score: components["schemas"]["QueueRuleSettings"];
             /** @description Strikes a download whose custom-format score does not beat the file already on disk (Sonarr and Radarr). Optional on write so older clients keep working; left out, the rule takes its default settings. Reads always return it. */
             not_an_upgrade?: components["schemas"]["QueueRuleSettings"];
@@ -1837,6 +1839,8 @@ export interface components {
              */
             min_custom_format_score?: number;
             max_removals_per_sweep: number;
+            /** @description Most id_matched imports one sweep sends per instance. Optional on write so older clients keep working; left out, it takes the default of 25. Reads always return it. */
+            max_imports_per_sweep?: number;
         };
         QueueStrike: {
             download_id: string;
@@ -1847,6 +1851,13 @@ export interface components {
             threshold: number;
             /** Format: date-time */
             last_seen: string;
+            /**
+             * Format: date-time
+             * @description When the id_matched rule last sent a force import for this download; left out when it never did.
+             */
+            imported_at?: string;
+            /** @description True when the last force import found no clean, mapped candidate and sent nothing. */
+            import_refused?: boolean;
         };
     };
     responses: {

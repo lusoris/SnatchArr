@@ -281,6 +281,59 @@ var optionalRules = []struct {
 }{
 	{queue.RuleNotAnUpgrade, func(r *oas.QueueRules) *oas.OptQueueRuleSettings { return &r.NotAnUpgrade }},
 	{queue.RuleDuplicate, func(r *oas.QueueRules) *oas.OptQueueRuleSettings { return &r.Duplicate }},
+	{queue.RuleIDMatched, func(r *oas.QueueRules) *oas.OptQueueRuleSettings { return &r.IDMatched }},
+}
+
+func TestQueueMaxImportsMapping(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		in   oas.OptInt
+		want int
+	}{
+		{"positive/stored value survives the write", oas.NewOptInt(40), 40},
+		{"negative/left out takes the default", oas.OptInt{}, 25},
+		{"boundary/one is kept", oas.NewOptInt(1), 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			req := validQueuePolicyOAS()
+			req.MaxImportsPerSweep = tt.in
+			s := queuePolicyFromOAS(req)
+			if s.MaxImportsPerSweep != tt.want {
+				t.Fatalf("queuePolicyFromOAS() MaxImportsPerSweep = %d, want %d", s.MaxImportsPerSweep, tt.want)
+			}
+			if got, ok := queuePolicyToOAS(s).MaxImportsPerSweep.Get(); !ok || got != tt.want {
+				t.Fatalf("queuePolicyToOAS() max_imports_per_sweep = %d (set %v), want %d", got, ok, tt.want)
+			}
+		})
+	}
+}
+
+func TestQueueStrikeImportMapping(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name        string
+		strike      queue.Strike
+		wantSet     bool
+		wantRefused bool
+	}{
+		{"positive/import stamp is returned", queue.Strike{Rule: queue.RuleIDMatched, ImportedAt: at}, true, false},
+		{"positive/refusal is returned", queue.Strike{Rule: queue.RuleIDMatched, ImportedAt: at, ImportRefused: true}, true, true},
+		{"negative/no import leaves both out", queue.Strike{Rule: queue.RuleStalled}, false, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			out := queueStrikeToOAS(queue.StrikeItem{DownloadID: "dl", Strike: tt.strike}, 1)
+			got, ok := out.ImportedAt.Get()
+			if ok != tt.wantSet || (ok && !got.Equal(at)) || out.ImportRefused.Or(false) != tt.wantRefused || out.ImportRefused.IsSet() != tt.wantSet {
+				t.Fatalf("queueStrikeToOAS() imported_at = %v (set %v) refused = %+v, want set %v refused %v", got, ok, out.ImportRefused, tt.wantSet, tt.wantRefused)
+			}
+		})
+	}
 }
 
 func TestQueueOptionalRuleMapping(t *testing.T) {

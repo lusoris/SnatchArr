@@ -36,6 +36,7 @@ Each sweep checks an item against the rules in this order and gives it at most o
 | slow | `downloading`, `sizeleft` dropped, but the rate since the previous sweep is below `min_bytes_per_second` | 6 | yes | `TestStateSlow` |
 | failed | `trackedDownloadState` is `failed`, `failedPending`, `downloadFailed`, `downloadFailedPending` or `importFailed`, or `status=failed` | 2 | yes | `TestStateFailed` |
 | import-blocked | `trackedDownloadState=importBlocked`, or `importPending` with `trackedDownloadStatus=warning` | 6 | yes | `TestStateImportBlocked` |
+| id-matched | the ID-match note is the item's only problem (see [ID-matched](#id-matched)); force-imports instead of removing (Sonarr, Radarr) | 1 | never removes | `TestIDMatchedSweepDecisions` |
 | unwanted (score) | `customFormatScore` below `min_custom_format_score` | 1 | yes | `TestStateUnwantedScore` |
 | not an upgrade | the media item already has a file on disk and `customFormatScore` is not above that file's score (Sonarr, Radarr) | 1 | no | `TestStateNotAnUpgrade` |
 | duplicate | another download in the queue for the same episode, movie, album or book scores higher | 1 | no | `TestStateDuplicate` |
@@ -65,7 +66,18 @@ Sonarr and Radarr call the states `failed` and `failedPending`. Lidarr and the R
 
 `importPending` with status `ok` is an import in progress and gets no strike.
 
-An item is also left alone when its only problem is the note "Automatic import is not possible": status `warning`, state `importBlocked` or `importPending`, and every status message line is either that note or the item's own release title. The *arr matched such a release by grab history but cannot parse its title, and a manual import fixes it; an import unblocker job can do that on a schedule, and the sweep must not remove the release first. Any other line, no lines at all, or a status other than `warning` strikes as usual (`TestStateImportBlocked`, `unblocker_` cases). Lidarr and Readarr items with the same note are left alone too and need a manual import.
+The import-blocked rule never strikes an item whose only problem is the ID-match note, "release was matched to series by ID" on Sonarr or "release was matched to movie by ID" on Radarr: status `warning`, state `importBlocked` or `importPending`, and every status message line is either that note or the item's own release title. Such an item belongs to the id-matched rule below. Any other line, no lines at all, or a status other than `warning` strikes as usual (`TestStateImportBlocked`, `id_match_` cases). Lidarr, Readarr and Whisparr items with the same note are left alone and need a manual import.
+
+### ID-matched
+
+The *arr matched such a release to its series or movie by grab history but cannot parse its title, for example a release named after the episode title. A manual import clears it, and the id-matched rule sends that import itself ([ADR-0013](adr/0013-force-import-id-matched-releases.md)). It covers Sonarr and Radarr, whose manual-import candidates carry the mapping, and needs a `downloadId`.
+
+- The rule reads `GET /api/v3/manualimport?downloadId=…&filterExistingFiles=true` and keeps only candidates without a rejection that are mapped: a series and at least one episode on Sonarr, a movie on Radarr. It sends those with `POST /api/v3/command` (`name=ManualImport`, `importMode=auto`), each call under the client timeout (`api/internal/arrclient/forceimport.go`, `TestForceImport`).
+- A download without such a candidate is refused: nothing is sent, the item stays for you, and SnatchArr reports `queue_item_import_failed` with `no_clean_candidate`. The rule never removes or blocklists.
+- In observe mode, the default, the strike event carries `would_import=true` and nothing is sent. In act mode each sweep imports at most `max_imports_per_sweep` downloads (default 25); further items wait for the next sweep. A season pack lists one item per episode under one `downloadId` and costs one import (`TestIDMatchedImportBound`, `TestIDMatchedSeasonPackImportsOnce`).
+- The command runs asynchronously, so the next sweep checks the result. A download still ID-matched one sweep after its import is reported once as `queue_item_import_failed` with `still_id_matched`. No download is imported again until 24 hours after its last import, when its strike row would expire (`TestIDMatchedReadBack`, `TestServiceForceImportSent`).
+- A failed command call (`error`) leaves no import stamp, so the next sweep tries again (`TestServiceForceImportSendErrorRetries`).
+- `make arr-forceimport-live` proves the path on real Sonarr and Radarr started for the test, never on a live stack: each grabs a release by ID under a title it cannot parse, and the production client imports it and reads the queue back (`TestLiveForceImport` in `api/internal/arrclient/forceimport_live_test.go`, harness `tools/e2e/forceimport_live.sh`). A file the *arr rejects, such as one without an audio track or, in a download of several files, one it maps to an episode the series lacks, is never sent. CI runs it as the job `arr-forceimport-live`.
 
 ### Unwanted
 
@@ -83,10 +95,10 @@ The sweep groups the instance's queue items by media item: the episode for Sonar
 
 ## Strikes, bounds and events
 
-- Strike rows live in the `queue_strikes` table, one per instance and `downloadId`, with the rule, count, last `sizeleft`, last seen time and `expires_at` (last seen plus 24 hours). The API is their only writer; rows of items that left the queue expire.
+- Strike rows live in the `queue_strikes` table, one per instance and `downloadId`, with the rule, count, last `sizeleft`, last seen time, the last force import (`imported_at`, `import_refused`) and `expires_at` (last seen plus 24 hours). The API is their only writer; rows of items that left the queue expire.
 - The sweep runs every 10 minutes on the elected leader (`leader_loops`). Per instance it reads at most 10 pages of 200 items plus at most 50 file scores, and removes at most `max_removals_per_sweep` items (default 10); the rest wait for the next sweep without an extra strike (`TestRemovalBoundExhaustion`, `TestMaxRemovalsBound`).
 - A removal that fails keeps the row and is retried next sweep without counting twice (`TestFailedDeleteKeepsRowAndRetries`).
-- Events on the SSE stream: `queue_item_struck` (`rule`, `count`, `threshold`, `mode`, `would_remove`) and `queue_item_removed` (`rule`, `blocklist`).
+- Events on the SSE stream: `queue_item_struck` (`rule`, `count`, `threshold`, `mode`, `would_remove`, `would_import`), `queue_item_removed` (`rule`, `blocklist`), `queue_item_imported` and `queue_item_import_failed` (detail `no_clean_candidate`, `still_id_matched` or `error`). The metric `snatcharr_queue_imports_total{instance,result}` counts the same import results, with `ok` for a sent import.
 
 ## Settings
 
@@ -101,6 +113,7 @@ Per instance, in the snatch policy (`QueuePolicy` in `api/openapi/openapi.yaml`,
 | `min_bytes_per_second` | 0 (slow rule off) | 0 or more |
 | `min_custom_format_score` | unset (score rule off) | any integer |
 | `max_removals_per_sweep` | 10 | 1 to 100 |
+| `max_imports_per_sweep` | 25 | 1 to 100 |
 
 ## Cleanuparr
 

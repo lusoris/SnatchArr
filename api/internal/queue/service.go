@@ -86,6 +86,7 @@ func (s *DBInstanceSource) ListEnabledInstances(ctx context.Context) ([]Instance
 type ArrClient interface {
 	Queue(ctx context.Context, kind domain.AppKind, baseURL, apiKey string, maxPages, pageSize int) ([]Item, error)
 	RemoveQueueItem(ctx context.Context, kind domain.AppKind, baseURL, apiKey string, id int32, blocklist bool) error
+	ForceImport(ctx context.Context, kind domain.AppKind, baseURL, apiKey, downloadID string) (int, error)
 }
 
 // EventPublisher publishes events on the bus.
@@ -98,6 +99,7 @@ type MetricsRecorder interface {
 	QueueStruck(instance, rule, mode string)
 	QueueRemoval(instance, rule, result string)
 	QueueSkipped(instance, reason string)
+	QueueImport(instance, result string)
 }
 
 // Service manages download queues across *arr instances.
@@ -178,6 +180,7 @@ func (s *Service) sweepInstance(ctx context.Context, inst Instance) error {
 		s.metrics.QueueSkipped(inst.Name, "disabled")
 		return nil
 	}
+	cfg.ForceImport = SupportsForceImport(inst.Kind)
 	now := s.clk.Now()
 	decisions, err := s.fetchAndEvaluate(ctx, inst, cfg, now)
 	if err != nil {
@@ -214,6 +217,7 @@ func (s *Service) processDecisions(ctx context.Context, inst Instance, cfg Setti
 		}
 		toRecord = append(toRecord, d)
 	}
+	s.processImports(ctx, inst, toRecord, now)
 
 	if err := s.store.Record(ctx, inst.ID, toRecord); err != nil {
 		s.logger.WarnContext(ctx, "queue: record strikes failed", slog.String("instance", inst.Name), slog.String("error", err.Error()))
@@ -250,6 +254,7 @@ type strikePayload struct {
 	Threshold   int    `json:"threshold"`
 	Mode        string `json:"mode"`
 	WouldRemove bool   `json:"would_remove"`
+	WouldImport bool   `json:"would_import"`
 }
 
 func (s *Service) emitStrikeEvent(ctx context.Context, inst Instance, cfg Settings, d Decision, now time.Time) {
@@ -265,6 +270,7 @@ func (s *Service) emitStrikeEvent(ctx context.Context, inst Instance, cfg Settin
 		Threshold:   d.Threshold,
 		Mode:        mode,
 		WouldRemove: d.WouldRemove,
+		WouldImport: d.WouldImport,
 	})
 	if err != nil {
 		s.logger.WarnContext(ctx, "queue: encode strike payload failed", slog.String("error", err.Error()))

@@ -53,6 +53,11 @@ func itemFor(rule queue.Rule, added time.Time) queue.Item {
 	case queue.RuleImportBlocked:
 		base.TrackedDownloadState = "importBlocked"
 		return base
+	case queue.RuleIDMatched:
+		base.TrackedDownloadStatus = "warning"
+		base.TrackedDownloadState = "importBlocked"
+		base.StatusLines = []string{idMatchNote}
+		return base
 	case queue.RuleUnwantedScore:
 		base.CustomFormatScore = 10
 		return base
@@ -85,6 +90,7 @@ func TestDefaultSettingsFollowSpec(t *testing.T) {
 		queue.RuleStalled:             6,
 		queue.RuleSlow:                6,
 		queue.RuleFailed:              2,
+		queue.RuleIDMatched:           1,
 		queue.RuleImportBlocked:       6,
 		queue.RuleUnwantedScore:       1,
 		queue.RuleNotAnUpgrade:        1,
@@ -92,9 +98,9 @@ func TestDefaultSettingsFollowSpec(t *testing.T) {
 		queue.RuleUnwantedUnmonitored: 1,
 	}
 	s := queue.DefaultSettings()
-	if s.Enabled || s.Grace != 15*time.Minute || s.MaxRemovalsPerSweep != 10 ||
+	if s.Enabled || s.Grace != 15*time.Minute || s.MaxRemovalsPerSweep != 10 || s.MaxImportsPerSweep != 25 || s.ForceImport ||
 		s.MinBytesPerSecond != 0 || s.MinCustomFormatScore != nil {
-		t.Fatalf("defaults = %+v, want off, 15m grace, 10 removals, slow and score rules off", s)
+		t.Fatalf("defaults = %+v, want off, 15m grace, 10 removals, 25 imports, slow and score rules off", s)
 	}
 	if len(s.Rules) != len(want) {
 		t.Fatalf("default rules = %d, want %d", len(s.Rules), len(want))
@@ -116,6 +122,7 @@ func TestRuleOrderDefinitions(t *testing.T) {
 		queue.RuleStalled,
 		queue.RuleSlow,
 		queue.RuleFailed,
+		queue.RuleIDMatched,
 		queue.RuleImportBlocked,
 		queue.RuleUnwantedScore,
 		queue.RuleNotAnUpgrade,
@@ -449,7 +456,7 @@ func TestEveryRuleBoundary(t *testing.T) {
 				retryItem.SizeLeft = cleanItem.SizeLeft - 10
 			case queue.RuleStalled:
 				retryItem.SizeLeft = cleanItem.SizeLeft
-			case queue.RuleFailed, queue.RuleImportBlocked, queue.RuleUnwantedScore, queue.RuleNotAnUpgrade, queue.RuleDuplicate, queue.RuleUnwantedUnmonitored:
+			case queue.RuleFailed, queue.RuleIDMatched, queue.RuleImportBlocked, queue.RuleUnwantedScore, queue.RuleNotAnUpgrade, queue.RuleDuplicate, queue.RuleUnwantedUnmonitored:
 				// item already has rule-triggering fields set.
 			}
 			retryD := queue.Sweep(s, []queue.Item{retryItem}, prev, retryNow)[0]

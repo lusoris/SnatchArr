@@ -21,8 +21,9 @@ episode or to the movie. It refuses the automatic import, though, and the queue 
 
 - `trackedDownloadStatus` = `warning`;
 - `trackedDownloadState` = `importBlocked` (or `importPending` before it gives up);
-- the status message "… matched to series by ID. Automatic import is not possible."
-  (Radarr says "movie").
+- the status message "… release was matched to series by ID. Automatic import is not
+  possible." on Sonarr, "… release was matched to movie by ID. Manual Import required." on
+  Radarr.
 
 A manual import clears such an item, because the manual-import candidate already carries
 the mapping from grab history. On the reference stack a separate job, the cluster's import
