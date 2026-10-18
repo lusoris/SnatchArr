@@ -23,6 +23,7 @@ const (
 	RuleImportBlocked       Rule = "import_blocked"
 	RuleUnwantedScore       Rule = "unwanted_score"
 	RuleNotAnUpgrade        Rule = "not_an_upgrade"
+	RuleDuplicate           Rule = "duplicate"
 	RuleUnwantedUnmonitored Rule = "unwanted_unmonitored"
 )
 
@@ -34,6 +35,7 @@ var RuleOrder = []Rule{
 	RuleImportBlocked,
 	RuleUnwantedScore,
 	RuleNotAnUpgrade,
+	RuleDuplicate,
 	RuleUnwantedUnmonitored,
 }
 
@@ -83,11 +85,18 @@ type Item struct {
 	// ExistingScore is the custom-format score of the file already on disk;
 	// nil when there is no file or its score is unknown.
 	ExistingScore *int32
-	Monitored     bool
+	// MediaID is the episode, movie, album or book the download is for;
+	// 0 when unknown. Items of one instance sharing it are duplicates.
+	MediaID   int32
+	Monitored bool
 	// Title is the release title the *arr shows for the download.
 	Title string
 	// StatusLines flattens statusMessages: each message's title, then its messages.
 	StatusLines []string
+
+	// duplicate is set by Sweep when another download for the same media
+	// item scores higher.
+	duplicate bool
 }
 
 // Strike records the persistent state of one queue item across sweeps.
@@ -134,7 +143,7 @@ var ErrInvalid = errors.New("invalid queue settings")
 var ErrQueueUnsupported = errors.New("queue management is not supported for this *arr kind")
 
 // DefaultSettings returns safe queue defaults: disabled, observe mode for every
-// rule, standard thresholds (6, 6, 2, 6, 1, 1, 1), 15m grace, and 10 removals per sweep.
+// rule, standard thresholds (6, 6, 2, 6, 1, 1, 1, 1), 15m grace, and 10 removals per sweep.
 func DefaultSettings() Settings {
 	rules := make(map[Rule]RuleSettings, len(RuleOrder))
 	for _, r := range RuleOrder {

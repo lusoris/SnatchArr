@@ -6,6 +6,7 @@ package arrclient_test
 
 import (
 	"encoding/json"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -177,4 +178,38 @@ func deref(p *int32) any {
 		return nil
 	}
 	return *p
+}
+
+// TestQueueMediaID pins the media item each kind groups duplicates by.
+func TestQueueMediaID(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		kind   domain.AppKind
+		record map[string]any
+		want   int32
+	}{
+		{"positive sonarr episode", domain.KindSonarr, map[string]any{"episodeId": 11}, 11},
+		{"positive radarr movie", domain.KindRadarr, map[string]any{"movieId": 12}, 12},
+		{"positive lidarr album", domain.KindLidarr, map[string]any{"albumId": 13}, 13},
+		{"positive readarr book", domain.KindReadarr, map[string]any{"bookId": 14}, 14},
+		{"negative sonarr without episode id", domain.KindSonarr, map[string]any{"seriesId": 3}, 0},
+		{"boundary radarr ignores a foreign field", domain.KindRadarr, map[string]any{"episodeId": 11}, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			record := queueRecord(1, "unused", map[string]any{})
+			maps.Copy(record, tt.record)
+			server, _ := fileScoreServer(t, []map[string]any{record}, "/unused/", nil)
+			prober := arrclient.NewGoenvoyProber(arrclient.Options{Timeout: 2 * time.Second})
+			items, err := prober.Queue(t.Context(), tt.kind, server.URL, "key", 1, 1)
+			if err != nil {
+				t.Fatalf("Queue() error: %v", err)
+			}
+			if len(items) != 1 || items[0].MediaID != tt.want {
+				t.Fatalf("items = %+v, want one item with MediaID %d", items, tt.want)
+			}
+		})
+	}
 }

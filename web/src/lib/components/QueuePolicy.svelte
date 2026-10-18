@@ -17,8 +17,9 @@ SPDX-License-Identifier: EUPL-1.2
 	type QueueRules = Required<components['schemas']['QueueRules']>;
 	type RuleKey = keyof QueueRules;
 
-	// The API always returns not_an_upgrade; this mirrors its default for the type.
-	const notAnUpgradeDefault: components['schemas']['QueueRuleSettings'] = {
+	// The API always returns not_an_upgrade and duplicate; this mirrors their
+	// shared default for the type.
+	const optionalRuleDefault: components['schemas']['QueueRuleSettings'] = {
 		mode: 'observe',
 		threshold: 1,
 		blocklist: false
@@ -58,7 +59,8 @@ SPDX-License-Identifier: EUPL-1.2
 					failed: { ...query.data.rules.failed },
 					import_blocked: { ...query.data.rules.import_blocked },
 					unwanted_score: { ...query.data.rules.unwanted_score },
-					not_an_upgrade: { ...(query.data.rules.not_an_upgrade ?? notAnUpgradeDefault) },
+					not_an_upgrade: { ...(query.data.rules.not_an_upgrade ?? optionalRuleDefault) },
+					duplicate: { ...(query.data.rules.duplicate ?? optionalRuleDefault) },
 					unwanted_unmonitored: { ...query.data.rules.unwanted_unmonitored }
 				},
 				grace_minutes: Math.round(query.data.grace_seconds / 60),
@@ -106,6 +108,7 @@ SPDX-License-Identifier: EUPL-1.2
 		{ key: 'import_blocked', label: m.queue_rule_import_blocked },
 		{ key: 'unwanted_score', label: m.queue_rule_unwanted_score },
 		{ key: 'not_an_upgrade', label: m.queue_rule_not_an_upgrade },
+		{ key: 'duplicate', label: m.queue_rule_duplicate },
 		{ key: 'unwanted_unmonitored', label: m.queue_rule_unwanted_unmonitored }
 	];
 </script>

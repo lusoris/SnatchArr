@@ -35,6 +35,7 @@ SPDX-License-Identifier: EUPL-1.2
 		import_blocked: m.queue_rule_import_blocked,
 		unwanted_score: m.queue_rule_unwanted_score,
 		not_an_upgrade: m.queue_rule_not_an_upgrade,
+		duplicate: m.queue_rule_duplicate,
 		unwanted_unmonitored: m.queue_rule_unwanted_unmonitored
 	};
 </script>

@@ -110,10 +110,31 @@ describe('QueuePolicy', () => {
 		expect(body.rules.not_an_upgrade).toEqual({ mode: 'observe', threshold: 4, blocklist: false });
 	});
 
-	it('falls back to the not-an-upgrade default when the policy lacks it', async () => {
+	it('sends the duplicate rule with the policy', async () => {
+		const put = vi.spyOn(api, 'PUT').mockResolvedValue({ data: sampleQueuePolicy } as never);
+		stubGet({
+			'/instances/{instanceId}/queue-policy': sampleQueuePolicy
+		});
+		renderWithQuery(QueuePolicy, { instanceId: forkInstance.id });
+
+		await screen.findByRole('heading', { level: 2, name: m.queue_policy_title() });
+		const blocklist = screen.getByLabelText(
+			`${m.queue_rule_duplicate()} ${m.queue_rule_blocklist()}`
+		) as HTMLInputElement;
+		expect(blocklist.checked).toBe(false);
+		await fireEvent.click(blocklist);
+
+		await fireEvent.click(screen.getByRole('button', { name: m.queue_policy_save() }));
+
+		const body = (put.mock.calls[0]![1] as { body: QueuePolicyType }).body;
+		expect(body.rules.duplicate).toEqual({ mode: 'observe', threshold: 1, blocklist: true });
+	});
+
+	it('falls back to the default for optional rules the policy lacks', async () => {
 		const put = vi.spyOn(api, 'PUT').mockResolvedValue({ data: sampleQueuePolicy } as never);
 		const olderRules = { ...sampleQueuePolicy.rules };
 		delete olderRules.not_an_upgrade;
+		delete olderRules.duplicate;
 		stubGet({
 			'/instances/{instanceId}/queue-policy': { ...sampleQueuePolicy, rules: olderRules }
 		});
@@ -123,7 +144,9 @@ describe('QueuePolicy', () => {
 		await fireEvent.click(screen.getByRole('button', { name: m.queue_policy_save() }));
 
 		const body = (put.mock.calls[0]![1] as { body: QueuePolicyType }).body;
-		expect(body.rules.not_an_upgrade).toEqual({ mode: 'observe', threshold: 1, blocklist: false });
+		const fallback = { mode: 'observe', threshold: 1, blocklist: false };
+		expect(body.rules.not_an_upgrade).toEqual(fallback);
+		expect(body.rules.duplicate).toEqual(fallback);
 	});
 
 	it('shows a problem error when saving fails with 422', async () => {

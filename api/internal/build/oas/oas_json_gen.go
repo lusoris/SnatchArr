@@ -8088,6 +8088,8 @@ func (s *QueueRule) Decode(d *jx.Decoder) error {
 		*s = QueueRuleUnwantedScore
 	case QueueRuleNotAnUpgrade:
 		*s = QueueRuleNotAnUpgrade
+	case QueueRuleDuplicate:
+		*s = QueueRuleDuplicate
 	case QueueRuleUnwantedUnmonitored:
 		*s = QueueRuleUnwantedUnmonitored
 	default:
@@ -8314,19 +8316,26 @@ func (s *QueueRules) encodeFields(e *jx.Encoder) {
 		}
 	}
 	{
+		if s.Duplicate.Set {
+			e.FieldStart("duplicate")
+			s.Duplicate.Encode(e)
+		}
+	}
+	{
 		e.FieldStart("unwanted_unmonitored")
 		s.UnwantedUnmonitored.Encode(e)
 	}
 }
 
-var jsonFieldsNameOfQueueRules = [7]string{
+var jsonFieldsNameOfQueueRules = [8]string{
 	0: "stalled",
 	1: "slow",
 	2: "failed",
 	3: "import_blocked",
 	4: "unwanted_score",
 	5: "not_an_upgrade",
-	6: "unwanted_unmonitored",
+	6: "duplicate",
+	7: "unwanted_unmonitored",
 }
 
 // Decode decodes QueueRules from json.
@@ -8398,8 +8407,18 @@ func (s *QueueRules) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"not_an_upgrade\"")
 			}
+		case "duplicate":
+			if err := func() error {
+				s.Duplicate.Reset()
+				if err := s.Duplicate.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"duplicate\"")
+			}
 		case "unwanted_unmonitored":
-			requiredBitSet[0] |= 1 << 6
+			requiredBitSet[0] |= 1 << 7
 			if err := func() error {
 				if err := s.UnwantedUnmonitored.Decode(d); err != nil {
 					return err
@@ -8418,7 +8437,7 @@ func (s *QueueRules) Decode(d *jx.Decoder) error {
 	// Validate required fields.
 	var failures []validate.FieldError
 	for i, mask := range [1]uint8{
-		0b01011111,
+		0b10011111,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
