@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.4.0](https://github.com/lusoris/SnatchArr/compare/v0.3.0...v0.4.0) (2026-10-18)
+
+
+### Features
+
+* **queue:** make blocklisting a per-rule setting ([#385](https://github.com/lusoris/SnatchArr/issues/385)) ([22ed247](https://github.com/lusoris/SnatchArr/commit/22ed2470a4bea14e76cfa5d13c9a1c462873885e)), closes [#379](https://github.com/lusoris/SnatchArr/issues/379)
+* **queue:** strike downloads that are no upgrade over the file on disk ([#386](https://github.com/lusoris/SnatchArr/issues/386)) ([cc555f8](https://github.com/lusoris/SnatchArr/commit/cc555f836f0c9d6e646fb2659e8a233f3384d57a)), closes [#377](https://github.com/lusoris/SnatchArr/issues/377)
+* **queue:** strike duplicate downloads for one media item ([#388](https://github.com/lusoris/SnatchArr/issues/388)) ([658e149](https://github.com/lusoris/SnatchArr/commit/658e1498603b0f43bf4656ecf62f341b16e97dd7)), closes [#378](https://github.com/lusoris/SnatchArr/issues/378)
+
+
+### Bug Fixes
+
+* **deps:** update golusoris to v0.17.0 and core to v0.11.0 ([#389](https://github.com/lusoris/SnatchArr/issues/389)) ([34e9bdf](https://github.com/lusoris/SnatchArr/commit/34e9bdf4c8d1d3dba3d620a4fc3f06285f1642df))
+* **queue:** leave ID-matched import blocks to the import unblocker ([#383](https://github.com/lusoris/SnatchArr/issues/383)) ([a7191b3](https://github.com/lusoris/SnatchArr/commit/a7191b3cc8d32d92fe249eab034dea843374060f)), closes [#380](https://github.com/lusoris/SnatchArr/issues/380)
+* **queue:** match the Lidarr and Readarr failure states ([#382](https://github.com/lusoris/SnatchArr/issues/382)) ([736a3b4](https://github.com/lusoris/SnatchArr/commit/736a3b4dfad9e7c7f99afb806549d187e5c697e3)), closes [#376](https://github.com/lusoris/SnatchArr/issues/376)
+* **security:** keep CSRF protection on and add web security tests ([#372](https://github.com/lusoris/SnatchArr/issues/372)) ([20852f8](https://github.com/lusoris/SnatchArr/commit/20852f8dbeb347e07857c4404b9fa2bf74784fda))
+
+
+### Refactoring
+
+* **seerr:** read Seerr through goenvoy's typed client ([#374](https://github.com/lusoris/SnatchArr/issues/374)) ([1225d24](https://github.com/lusoris/SnatchArr/commit/1225d24dbfcb3e51f7f4d87f3628d1d9ac79fede))
+
+
+### Documentation
+
+* **queue:** document queue management per state and test each state ([#375](https://github.com/lusoris/SnatchArr/issues/375)) ([853b97a](https://github.com/lusoris/SnatchArr/commit/853b97a919f95c4555614f7f4916dfa187619548)), closes [#362](https://github.com/lusoris/SnatchArr/issues/362)
+
+
+### Chores
+
+* **release:** release 0.4.0 ([#391](https://github.com/lusoris/SnatchArr/issues/391)) ([8032688](https://github.com/lusoris/SnatchArr/commit/8032688d5eaef4c60c363b286a327f46b27b5792))
+
 ## [0.3.0](https://github.com/lusoris/SnatchArr/compare/v0.2.2...v0.3.0) (2026-10-17)
 
 
