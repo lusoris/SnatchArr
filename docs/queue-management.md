@@ -61,6 +61,8 @@ Sonarr and Radarr call the states `failed` and `failedPending`. Lidarr and the R
 
 `importPending` with status `ok` is an import in progress and gets no strike.
 
+An item is also left alone when its only problem is the note "Automatic import is not possible": status `warning`, state `importBlocked` or `importPending`, and every status message line is either that note or the item's own release title. The *arr matched such a release by grab history but cannot parse its title, and a manual import fixes it; an import unblocker job can do that on a schedule, and the sweep must not remove the release first. Any other line, no lines at all, or a status other than `warning` strikes as usual (`TestStateImportBlocked`, `unblocker_` cases). Lidarr and Readarr items with the same note are left alone too and need a manual import.
+
 ### Unwanted
 
 A score equal to `min_custom_format_score` is wanted; it has to be below. Leaving `min_custom_format_score` unset, the default, turns the score rule off. An unmonitored item is removed without a blocklist entry, so the release stays available if the item is monitored again. When an item breaks an earlier rule as well, that rule wins: a failed, unmonitored download is struck as failed.

@@ -210,5 +210,24 @@ func appendItem(items []queue.Item, r arr.QueueRecord, score int, monitored bool
 		SizeLeft:              int64(max(r.SizeLeft, 0)),
 		CustomFormatScore:     int32(score), // #nosec G115 -- score fits in int32
 		Monitored:             monitored,
+		Title:                 r.Title,
+		StatusLines:           statusLines(r.StatusMessages),
 	})
+}
+
+// statusLines flattens status messages in the order the *arr returns them,
+// dropping empty strings.
+func statusLines(msgs []arr.StatusMessage) []string {
+	var lines []string
+	for _, m := range msgs {
+		if m.Title != "" {
+			lines = append(lines, m.Title)
+		}
+		for _, l := range m.Messages {
+			if l != "" {
+				lines = append(lines, l)
+			}
+		}
+	}
+	return lines
 }

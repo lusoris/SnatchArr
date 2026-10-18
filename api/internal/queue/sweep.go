@@ -248,11 +248,45 @@ func checkFailed(item Item) bool {
 }
 
 func checkImportBlocked(item Item) bool {
+	if isUnblockerCase(item) {
+		return false
+	}
 	if strings.EqualFold(item.TrackedDownloadState, "importBlocked") {
 		return true
 	}
 	return strings.EqualFold(item.TrackedDownloadState, "importPending") &&
 		strings.EqualFold(item.TrackedDownloadStatus, "warning")
+}
+
+// idMatchNeedle marks a release the *arr matched by grab history but whose
+// title it cannot parse. A manual import fixes it, which is what the
+// cluster's import unblocker does, so the sweep leaves such items alone.
+const idMatchNeedle = "automatic import is not possible"
+
+// isUnblockerCase reports whether the ID-match note is the item's only
+// problem: status warning, state importBlocked or importPending, and every
+// status line is either the note or the item's own release title. It
+// mirrors the allow-list of the import unblocker.
+func isUnblockerCase(item Item) bool {
+	if !strings.EqualFold(item.TrackedDownloadStatus, "warning") {
+		return false
+	}
+	state := strings.ToLower(item.TrackedDownloadState)
+	if state != "importblocked" && state != "importpending" {
+		return false
+	}
+	title := strings.TrimSpace(item.Title)
+	sawNeedle := false
+	for _, line := range item.StatusLines {
+		switch {
+		case strings.Contains(strings.ToLower(line), idMatchNeedle):
+			sawNeedle = true
+		case strings.TrimSpace(line) == title:
+		default:
+			return false
+		}
+	}
+	return sawNeedle
 }
 
 func checkUnwantedScore(item Item, minScore *int32) bool {

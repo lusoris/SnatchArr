@@ -77,6 +77,10 @@ type Item struct {
 	SizeLeft              int64
 	CustomFormatScore     int32
 	Monitored             bool
+	// Title is the release title the *arr shows for the download.
+	Title string
+	// StatusLines flattens statusMessages: each message's title, then its messages.
+	StatusLines []string
 }
 
 // Strike records the persistent state of one queue item across sweeps.
