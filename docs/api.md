@@ -14,8 +14,11 @@ types are generated from the same file. Errors are RFC 9457 problem details
 ## Authentication
 
 - **Browser sessions**: `POST /api/v1/auth/login` sets the `snatcharr_session` cookie.
-  Unsafe methods need the `X-CSRF-Token` header, which `GET /api/v1/auth/session` returns.
-- **API keys**: `Authorization: Bearer sk_...` on any request; no CSRF token needed.
+  Unsafe methods from a browser must be same-origin: a request whose `Sec-Fetch-Site` or
+  `Origin` header names another site gets `403` problem+json. The `csrf_token` that
+  `GET /api/v1/auth/session` returns is kept for clients that send `X-CSRF-Token`; the API does
+  not check it.
+- **API keys**: `Authorization: Bearer sk_...` on any request; the origin check does not apply.
 
 The Server-Sent Events streams `GET /api/v1/events/stream` and `GET /api/v1/logs/stream` are
 served outside the generated router and take the same session cookie or API key; without either

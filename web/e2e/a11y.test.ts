@@ -240,7 +240,12 @@ if (!process.env.SNATCHARR_E2E_API) {
 
 		await page.getByRole('button', { name: /preview missing|fehlende vorschauen/i }).click();
 
-		await expect(page.getByRole('table')).toBeVisible();
+		// By name: the queue policy table on the same page may render first.
+		await expect(
+			page.getByRole('table', {
+				name: /previewed search targets|in der vorschau gefundene suchziele/i
+			})
+		).toBeVisible();
 		await expect(page.getByText('Inception')).toBeVisible();
 
 		const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();

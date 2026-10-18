@@ -30,7 +30,6 @@ import (
 
 	"github.com/golusoris/golusoris/auth/apikey"
 	"github.com/golusoris/golusoris/core/crypto"
-	"github.com/golusoris/golusoris/httpx/csrf"
 
 	"github.com/lusoris/SnatchArr/api/internal/arrclient"
 	"github.com/lusoris/SnatchArr/api/internal/auth"
@@ -52,10 +51,6 @@ type routerFixture struct {
 func newRouterFixture(t *testing.T) *routerFixture {
 	t.Helper()
 	f := newIntegrationFixture(t)
-	csrfMW, err := csrf.New(csrf.Options{})
-	if err != nil {
-		t.Fatalf("csrf.New: %v", err)
-	}
 	keyStore := auth.NewPgAPIKeyStore(f.st, f.clk)
 	keys, err := apikey.New(keyStore, apikey.Options{
 		Prefix:     "sk",
@@ -72,7 +67,7 @@ func newRouterFixture(t *testing.T) *routerFixture {
 		Logger:   slog.New(slog.DiscardHandler),
 		Handlers: f.h,
 		Security: NewSecurity(f.sessMgr, keys, f.h.auth, apiKeys, f.clk, slog.New(slog.DiscardHandler)),
-		CSRF:     csrfMW,
+		CSRF:     CrossOrigin(slog.New(slog.DiscardHandler)),
 	})
 	if err != nil {
 		t.Fatalf("Mount: %v", err)
