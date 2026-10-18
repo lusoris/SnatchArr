@@ -71,6 +71,7 @@ func policyFromRow(row sqlcgen.QueuePolicy) (Settings, error) {
 		MinBytesPerSecond:    row.MinBytesPerSecond,
 		MinCustomFormatScore: row.MinCustomFormatScore,
 		MaxRemovalsPerSweep:  int(row.MaxRemovalsPerSweep),
+		MaxImportsPerSweep:   int(row.MaxImportsPerSweep),
 	}, nil
 }
 
@@ -111,6 +112,7 @@ func (s *Store) SaveSettings(ctx context.Context, instanceID uuid.UUID, cfg Sett
 		MinBytesPerSecond:    cfg.MinBytesPerSecond,
 		MinCustomFormatScore: cfg.MinCustomFormatScore,
 		MaxRemovalsPerSweep:  int32(cfg.MaxRemovalsPerSweep), // #nosec G115 -- validated 1..100
+		MaxImportsPerSweep:   int32(cfg.MaxImportsPerSweep),  // #nosec G115 -- validated 1..100
 		UpdatedAt:            s.clk.Now(),
 	})
 	if err != nil {
@@ -178,14 +180,16 @@ func buildUpsertParams(instanceID uuid.UUID, decisions []Decision) sqlcgen.Upser
 		dedup[d.DownloadID] = d
 	}
 	p := sqlcgen.UpsertQueueStrikesParams{
-		TtlS:          strikeTTLSeconds,
-		InstanceID:    instanceID,
-		DownloadIds:   make([]string, 0, len(order)),
-		QueueIds:      make([]int32, 0, len(order)),
-		Rules:         make([]string, 0, len(order)),
-		Counts:        make([]int32, 0, len(order)),
-		LastSizeLefts: make([]int64, 0, len(order)),
-		LastSeens:     make([]time.Time, 0, len(order)),
+		TtlS:           strikeTTLSeconds,
+		InstanceID:     instanceID,
+		DownloadIds:    make([]string, 0, len(order)),
+		QueueIds:       make([]int32, 0, len(order)),
+		Rules:          make([]string, 0, len(order)),
+		Counts:         make([]int32, 0, len(order)),
+		LastSizeLefts:  make([]int64, 0, len(order)),
+		LastSeens:      make([]time.Time, 0, len(order)),
+		ImportedAts:    make([]time.Time, 0, len(order)),
+		ImportRefuseds: make([]bool, 0, len(order)),
 	}
 	for _, id := range order {
 		d := dedup[id]
@@ -195,8 +199,21 @@ func buildUpsertParams(instanceID uuid.UUID, decisions []Decision) sqlcgen.Upser
 		p.Counts = append(p.Counts, int32(d.Next.Count)) // #nosec G115 -- strike count capped at threshold <= 100
 		p.LastSizeLefts = append(p.LastSizeLefts, d.Next.LastSizeLeft)
 		p.LastSeens = append(p.LastSeens, d.Next.LastSeen)
+		p.ImportedAts = append(p.ImportedAts, importedAtParam(d.Next.ImportedAt))
+		p.ImportRefuseds = append(p.ImportRefuseds, d.Next.ImportRefused)
 	}
 	return p
+}
+
+// noImport is the array sentinel for "never imported": the query turns it into NULL,
+// because a timestamptz array element cannot be NULL through sqlc's []time.Time.
+var noImport = time.Unix(0, 0).UTC()
+
+func importedAtParam(t time.Time) time.Time {
+	if t.IsZero() {
+		return noImport
+	}
+	return t
 }
 
 // Forget removes the strike record for a download ID after a successful removal.
@@ -256,13 +273,22 @@ func (s *Store) strikeRows(ctx context.Context, instanceID uuid.UUID) ([]StrikeI
 	items := make([]StrikeItem, 0, len(rows))
 	for _, row := range rows {
 		items = append(items, StrikeItem{
-			DownloadID:   row.DownloadID,
-			QueueID:      row.QueueID,
-			Rule:         Rule(row.Rule),
-			Count:        int(row.Count),
-			LastSizeLeft: row.LastSizeLeft,
-			LastSeen:     row.LastSeen,
+			DownloadID:    row.DownloadID,
+			QueueID:       row.QueueID,
+			Rule:          Rule(row.Rule),
+			Count:         int(row.Count),
+			LastSizeLeft:  row.LastSizeLeft,
+			LastSeen:      row.LastSeen,
+			ImportedAt:    derefTime(row.ImportedAt),
+			ImportRefused: row.ImportRefused,
 		})
 	}
 	return items, nil
+}
+
+func derefTime(t *time.Time) time.Time {
+	if t == nil {
+		return time.Time{}
+	}
+	return *t
 }

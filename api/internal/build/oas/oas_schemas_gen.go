@@ -4155,6 +4155,9 @@ type QueuePolicy struct {
 	// Lowest custom format score an item may have; left out, the unwanted_score rule is off.
 	MinCustomFormatScore OptInt32 `json:"min_custom_format_score"`
 	MaxRemovalsPerSweep  int      `json:"max_removals_per_sweep"`
+	// Most id_matched imports one sweep sends per instance. Optional on write so older clients keep
+	// working; left out, it takes the default of 25. Reads always return it.
+	MaxImportsPerSweep OptInt `json:"max_imports_per_sweep"`
 }
 
 // GetEnabled returns the value of Enabled.
@@ -4187,6 +4190,11 @@ func (s *QueuePolicy) GetMaxRemovalsPerSweep() int {
 	return s.MaxRemovalsPerSweep
 }
 
+// GetMaxImportsPerSweep returns the value of MaxImportsPerSweep.
+func (s *QueuePolicy) GetMaxImportsPerSweep() OptInt {
+	return s.MaxImportsPerSweep
+}
+
 // SetEnabled sets the value of Enabled.
 func (s *QueuePolicy) SetEnabled(val bool) {
 	s.Enabled = val
@@ -4217,6 +4225,11 @@ func (s *QueuePolicy) SetMaxRemovalsPerSweep(val int) {
 	s.MaxRemovalsPerSweep = val
 }
 
+// SetMaxImportsPerSweep sets the value of MaxImportsPerSweep.
+func (s *QueuePolicy) SetMaxImportsPerSweep(val OptInt) {
+	s.MaxImportsPerSweep = val
+}
+
 // Ref: #/components/schemas/QueueRule
 type QueueRule string
 
@@ -4225,6 +4238,7 @@ const (
 	QueueRuleSlow                QueueRule = "slow"
 	QueueRuleFailed              QueueRule = "failed"
 	QueueRuleImportBlocked       QueueRule = "import_blocked"
+	QueueRuleIDMatched           QueueRule = "id_matched"
 	QueueRuleUnwantedScore       QueueRule = "unwanted_score"
 	QueueRuleNotAnUpgrade        QueueRule = "not_an_upgrade"
 	QueueRuleDuplicate           QueueRule = "duplicate"
@@ -4238,6 +4252,7 @@ func (QueueRule) AllValues() []QueueRule {
 		QueueRuleSlow,
 		QueueRuleFailed,
 		QueueRuleImportBlocked,
+		QueueRuleIDMatched,
 		QueueRuleUnwantedScore,
 		QueueRuleNotAnUpgrade,
 		QueueRuleDuplicate,
@@ -4255,6 +4270,8 @@ func (s QueueRule) MarshalText() ([]byte, error) {
 	case QueueRuleFailed:
 		return []byte(s), nil
 	case QueueRuleImportBlocked:
+		return []byte(s), nil
+	case QueueRuleIDMatched:
 		return []byte(s), nil
 	case QueueRuleUnwantedScore:
 		return []byte(s), nil
@@ -4283,6 +4300,9 @@ func (s *QueueRule) UnmarshalText(data []byte) error {
 		return nil
 	case QueueRuleImportBlocked:
 		*s = QueueRuleImportBlocked
+		return nil
+	case QueueRuleIDMatched:
+		*s = QueueRuleIDMatched
 		return nil
 	case QueueRuleUnwantedScore:
 		*s = QueueRuleUnwantedScore
@@ -4389,7 +4409,12 @@ type QueueRules struct {
 	Slow          QueueRuleSettings `json:"slow"`
 	Failed        QueueRuleSettings `json:"failed"`
 	ImportBlocked QueueRuleSettings `json:"import_blocked"`
-	UnwantedScore QueueRuleSettings `json:"unwanted_score"`
+	// Force-imports a Sonarr or Radarr download the *arr matched to its series or movie by ID only,
+	// through a ManualImport of its clean, mapped candidates; it never removes or blocklists (ADR-0013).
+	// Optional on write so older clients keep working; left out, the rule takes its default settings.
+	// Reads always return it.
+	IDMatched     OptQueueRuleSettings `json:"id_matched"`
+	UnwantedScore QueueRuleSettings    `json:"unwanted_score"`
 	// Strikes a download whose custom-format score does not beat the file already on disk (Sonarr and
 	// Radarr). Optional on write so older clients keep working; left out, the rule takes its default
 	// settings. Reads always return it.
@@ -4419,6 +4444,11 @@ func (s *QueueRules) GetFailed() QueueRuleSettings {
 // GetImportBlocked returns the value of ImportBlocked.
 func (s *QueueRules) GetImportBlocked() QueueRuleSettings {
 	return s.ImportBlocked
+}
+
+// GetIDMatched returns the value of IDMatched.
+func (s *QueueRules) GetIDMatched() OptQueueRuleSettings {
+	return s.IDMatched
 }
 
 // GetUnwantedScore returns the value of UnwantedScore.
@@ -4461,6 +4491,11 @@ func (s *QueueRules) SetImportBlocked(val QueueRuleSettings) {
 	s.ImportBlocked = val
 }
 
+// SetIDMatched sets the value of IDMatched.
+func (s *QueueRules) SetIDMatched(val OptQueueRuleSettings) {
+	s.IDMatched = val
+}
+
 // SetUnwantedScore sets the value of UnwantedScore.
 func (s *QueueRules) SetUnwantedScore(val QueueRuleSettings) {
 	s.UnwantedScore = val
@@ -4489,6 +4524,10 @@ type QueueStrike struct {
 	Count      int       `json:"count"`
 	Threshold  int       `json:"threshold"`
 	LastSeen   time.Time `json:"last_seen"`
+	// When the id_matched rule last sent a force import for this download; left out when it never did.
+	ImportedAt OptDateTime `json:"imported_at"`
+	// True when the last force import found no clean, mapped candidate and sent nothing.
+	ImportRefused OptBool `json:"import_refused"`
 }
 
 // GetDownloadID returns the value of DownloadID.
@@ -4521,6 +4560,16 @@ func (s *QueueStrike) GetLastSeen() time.Time {
 	return s.LastSeen
 }
 
+// GetImportedAt returns the value of ImportedAt.
+func (s *QueueStrike) GetImportedAt() OptDateTime {
+	return s.ImportedAt
+}
+
+// GetImportRefused returns the value of ImportRefused.
+func (s *QueueStrike) GetImportRefused() OptBool {
+	return s.ImportRefused
+}
+
 // SetDownloadID sets the value of DownloadID.
 func (s *QueueStrike) SetDownloadID(val string) {
 	s.DownloadID = val
@@ -4549,6 +4598,16 @@ func (s *QueueStrike) SetThreshold(val int) {
 // SetLastSeen sets the value of LastSeen.
 func (s *QueueStrike) SetLastSeen(val time.Time) {
 	s.LastSeen = val
+}
+
+// SetImportedAt sets the value of ImportedAt.
+func (s *QueueStrike) SetImportedAt(val OptDateTime) {
+	s.ImportedAt = val
+}
+
+// SetImportRefused sets the value of ImportRefused.
+func (s *QueueStrike) SetImportRefused(val OptBool) {
+	s.ImportRefused = val
 }
 
 // RevokeAPIKeyNoContent is response for RevokeAPIKey operation.

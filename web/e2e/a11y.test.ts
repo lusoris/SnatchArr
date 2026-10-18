@@ -178,13 +178,15 @@ if (!process.env.SNATCHARR_E2E_API) {
 						slow: { mode: 'observe', threshold: 5 },
 						failed: { mode: 'act', threshold: 1 },
 						import_blocked: { mode: 'act', threshold: 2 },
+						id_matched: { mode: 'observe', threshold: 1 },
 						unwanted_score: { mode: 'observe', threshold: 3 },
 						unwanted_unmonitored: { mode: 'observe', threshold: 3 }
 					},
 					grace_seconds: 3600,
 					min_bytes_per_second: 1024,
 					min_custom_format_score: null,
-					max_removals_per_sweep: 5
+					max_removals_per_sweep: 5,
+					max_imports_per_sweep: 10
 				})
 			})
 		);

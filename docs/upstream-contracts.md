@@ -174,6 +174,20 @@ Real clients behave in ways a fake did not show:
 | Deluge 2 | Serves no `daemon.info`, which goenvoy asks for the version ([golusoris/goenvoy#101](https://github.com/golusoris/goenvoy/issues/101)). | The version stays empty; `unknownVersion` in `live_test.go` fails once a fixed release reports it. |
 | NZBGet | Starts with downloads paused. | `tools/e2e/dlclients_live.sh` resumes it before the first run. |
 
+
+## Force import on Sonarr and Radarr
+
+The ManualImport write path of rule id_matched ([ADR-0013](adr/0013-force-import-id-matched-releases.md)) is checked against real releases by `make arr-forceimport-live`. It starts Sonarr, Radarr and qBittorrent from `tools/e2e/forceimport/compose.yaml` (pinned by digest, kept current by Renovate), adds one series and one movie, and pushes a release for each by tvdb or tmdb id under a title the parser cannot match (`tools/e2e/forceimport/arr_setup.py`). qBittorrent seeds the prepared files, so grab history is the only link and the queue item blocks with the ID-match note. `TestLiveForceImport` then runs the production queue read, sweep and `ManualImport` and waits until the download has left the queue. Four planted cases must fail first: videos without an audio track, a torrent whose two files map to no episode, a second status line and no import sent. The metadata lookups of both apps need internet access. CI runs it as the job `arr-forceimport-live`; it is not part of `make verify-all`.
+
+What the real releases showed:
+
+| Behaviour | Where it is handled |
+| :--- | :--- |
+| Radarr words the note "matched to movie by ID. Manual Import required.", not "Automatic import is not possible". | `idMatchNeedles` in `api/internal/queue/sweep.go`, case `negative/id_match_radarr_note` |
+| `GET /manualimport` matches `downloadId` case-sensitively; the queue lists the info hash in upper case. | The service passes the queue's own `downloadId`. |
+| Radarr maps a pushed release by tmdb id only when the title's year matches the movie. | `RADARR_TITLE` in `arr_setup.py` |
+| A file without an audio track is rejected ("No audio tracks detected"). | Planted case `audio` |
+| Sonarr maps the only video file of a download through grab history, whatever its name; a file it maps to an episode the series lacks is rejected ("Invalid season or episode") only when the download holds more than one. | Planted case `unmapped` puts two such files in the torrent. |
 ## Limits
 
 The check says "the spec documents what the client uses". It does not say more than that.

@@ -450,20 +450,22 @@ func (Level) EnumDescriptor() ([]byte, []int) {
 type EventType int32
 
 const (
-	EventType_EVENT_TYPE_UNSPECIFIED          EventType = 0
-	EventType_EVENT_TYPE_RUN_STARTED          EventType = 1
-	EventType_EVENT_TYPE_PAGE_FETCHED         EventType = 2
-	EventType_EVENT_TYPE_CANDIDATES_FILTERED  EventType = 3
-	EventType_EVENT_TYPE_BUDGET_ACQUIRED      EventType = 4
-	EventType_EVENT_TYPE_SEARCH_DISPATCHED    EventType = 5
-	EventType_EVENT_TYPE_SEARCH_COMPLETED     EventType = 6
-	EventType_EVENT_TYPE_SEARCH_FAILED        EventType = 7
-	EventType_EVENT_TYPE_INSTANCE_UNREACHABLE EventType = 8
-	EventType_EVENT_TYPE_RUN_FINISHED         EventType = 9
-	EventType_EVENT_TYPE_CIRCUIT_OPENED       EventType = 10
-	EventType_EVENT_TYPE_SEARCH_PREVIEWED     EventType = 11
-	EventType_EVENT_TYPE_QUEUE_ITEM_STRUCK    EventType = 12
-	EventType_EVENT_TYPE_QUEUE_ITEM_REMOVED   EventType = 13
+	EventType_EVENT_TYPE_UNSPECIFIED              EventType = 0
+	EventType_EVENT_TYPE_RUN_STARTED              EventType = 1
+	EventType_EVENT_TYPE_PAGE_FETCHED             EventType = 2
+	EventType_EVENT_TYPE_CANDIDATES_FILTERED      EventType = 3
+	EventType_EVENT_TYPE_BUDGET_ACQUIRED          EventType = 4
+	EventType_EVENT_TYPE_SEARCH_DISPATCHED        EventType = 5
+	EventType_EVENT_TYPE_SEARCH_COMPLETED         EventType = 6
+	EventType_EVENT_TYPE_SEARCH_FAILED            EventType = 7
+	EventType_EVENT_TYPE_INSTANCE_UNREACHABLE     EventType = 8
+	EventType_EVENT_TYPE_RUN_FINISHED             EventType = 9
+	EventType_EVENT_TYPE_CIRCUIT_OPENED           EventType = 10
+	EventType_EVENT_TYPE_SEARCH_PREVIEWED         EventType = 11
+	EventType_EVENT_TYPE_QUEUE_ITEM_STRUCK        EventType = 12
+	EventType_EVENT_TYPE_QUEUE_ITEM_REMOVED       EventType = 13
+	EventType_EVENT_TYPE_QUEUE_ITEM_IMPORTED      EventType = 14
+	EventType_EVENT_TYPE_QUEUE_ITEM_IMPORT_FAILED EventType = 15
 )
 
 // Enum value maps for EventType.
@@ -483,22 +485,26 @@ var (
 		11: "EVENT_TYPE_SEARCH_PREVIEWED",
 		12: "EVENT_TYPE_QUEUE_ITEM_STRUCK",
 		13: "EVENT_TYPE_QUEUE_ITEM_REMOVED",
+		14: "EVENT_TYPE_QUEUE_ITEM_IMPORTED",
+		15: "EVENT_TYPE_QUEUE_ITEM_IMPORT_FAILED",
 	}
 	EventType_value = map[string]int32{
-		"EVENT_TYPE_UNSPECIFIED":          0,
-		"EVENT_TYPE_RUN_STARTED":          1,
-		"EVENT_TYPE_PAGE_FETCHED":         2,
-		"EVENT_TYPE_CANDIDATES_FILTERED":  3,
-		"EVENT_TYPE_BUDGET_ACQUIRED":      4,
-		"EVENT_TYPE_SEARCH_DISPATCHED":    5,
-		"EVENT_TYPE_SEARCH_COMPLETED":     6,
-		"EVENT_TYPE_SEARCH_FAILED":        7,
-		"EVENT_TYPE_INSTANCE_UNREACHABLE": 8,
-		"EVENT_TYPE_RUN_FINISHED":         9,
-		"EVENT_TYPE_CIRCUIT_OPENED":       10,
-		"EVENT_TYPE_SEARCH_PREVIEWED":     11,
-		"EVENT_TYPE_QUEUE_ITEM_STRUCK":    12,
-		"EVENT_TYPE_QUEUE_ITEM_REMOVED":   13,
+		"EVENT_TYPE_UNSPECIFIED":              0,
+		"EVENT_TYPE_RUN_STARTED":              1,
+		"EVENT_TYPE_PAGE_FETCHED":             2,
+		"EVENT_TYPE_CANDIDATES_FILTERED":      3,
+		"EVENT_TYPE_BUDGET_ACQUIRED":          4,
+		"EVENT_TYPE_SEARCH_DISPATCHED":        5,
+		"EVENT_TYPE_SEARCH_COMPLETED":         6,
+		"EVENT_TYPE_SEARCH_FAILED":            7,
+		"EVENT_TYPE_INSTANCE_UNREACHABLE":     8,
+		"EVENT_TYPE_RUN_FINISHED":             9,
+		"EVENT_TYPE_CIRCUIT_OPENED":           10,
+		"EVENT_TYPE_SEARCH_PREVIEWED":         11,
+		"EVENT_TYPE_QUEUE_ITEM_STRUCK":        12,
+		"EVENT_TYPE_QUEUE_ITEM_REMOVED":       13,
+		"EVENT_TYPE_QUEUE_ITEM_IMPORTED":      14,
+		"EVENT_TYPE_QUEUE_ITEM_IMPORT_FAILED": 15,
 	}
 )
 
@@ -2211,7 +2217,7 @@ const file_snatcharr_v1_worker_proto_rawDesc = "" +
 	"LEVEL_INFO\x10\x02\x12\x0e\n" +
 	"\n" +
 	"LEVEL_WARN\x10\x03\x12\x0f\n" +
-	"\vLEVEL_ERROR\x10\x04*\xcc\x03\n" +
+	"\vLEVEL_ERROR\x10\x04*\x99\x04\n" +
 	"\tEventType\x12\x1a\n" +
 	"\x16EVENT_TYPE_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16EVENT_TYPE_RUN_STARTED\x10\x01\x12\x1b\n" +
@@ -2227,7 +2233,9 @@ const file_snatcharr_v1_worker_proto_rawDesc = "" +
 	"\x12\x1f\n" +
 	"\x1bEVENT_TYPE_SEARCH_PREVIEWED\x10\v\x12 \n" +
 	"\x1cEVENT_TYPE_QUEUE_ITEM_STRUCK\x10\f\x12!\n" +
-	"\x1dEVENT_TYPE_QUEUE_ITEM_REMOVED\x10\r*r\n" +
+	"\x1dEVENT_TYPE_QUEUE_ITEM_REMOVED\x10\r\x12\"\n" +
+	"\x1eEVENT_TYPE_QUEUE_ITEM_IMPORTED\x10\x0e\x12'\n" +
+	"#EVENT_TYPE_QUEUE_ITEM_IMPORT_FAILED\x10\x0f*r\n" +
 	"\n" +
 	"RunOutcome\x12\x1b\n" +
 	"\x17RUN_OUTCOME_UNSPECIFIED\x10\x00\x12\x14\n" +

@@ -63,6 +63,7 @@ func TestSettingsSaveLoadRoundTrip(t *testing.T) {
 	s1.MinBytesPerSecond = 1048576
 	s1.MinCustomFormatScore = nil
 	s1.MaxRemovalsPerSweep = 25
+	s1.MaxImportsPerSweep = 40
 	s1.Rules[queue.RuleStalled] = queue.RuleSettings{Mode: queue.ModeAct, Threshold: 5}
 	noBlocklist, blocklist := false, true
 	s1.Rules[queue.RuleFailed] = queue.RuleSettings{Mode: queue.ModeObserve, Threshold: 2, Blocklist: &noBlocklist}
@@ -232,6 +233,38 @@ func TestRecordAndStrikesRoundTrip(t *testing.T) {
 	}
 	if updated["dl-101"].Count != 4 || !updated["dl-101"].LastSeen.Equal(later) {
 		t.Fatalf("strike dl-101 after update = %+v, want count 4 time %v", updated["dl-101"], later)
+	}
+}
+
+// TestRecordImportStampRoundTrip pins the id_matched read-back columns: an
+// unstamped row reads back zero, a stamp and a refusal survive, and a later
+// unstamped write clears them again (the epoch sentinel becomes NULL).
+func TestRecordImportStampRoundTrip(t *testing.T) {
+	t.Parallel()
+	f := newQueueFixture(t)
+	now := f.clk.Now().UTC().Truncate(time.Microsecond)
+	d := queue.Decision{ItemID: 7, DownloadID: "dl-7", Rule: queue.RuleIDMatched, Next: queue.Strike{Rule: queue.RuleIDMatched, Count: 1, LastSeen: now}}
+	read := func(step string) queue.Strike {
+		t.Helper()
+		if err := f.q.Record(t.Context(), f.instance, []queue.Decision{d}); err != nil {
+			t.Fatalf("%s: Record() = %v", step, err)
+		}
+		strikes, err := f.q.Strikes(t.Context(), f.instance)
+		if err != nil {
+			t.Fatalf("%s: Strikes() = %v", step, err)
+		}
+		return strikes["dl-7"]
+	}
+	if got := read("unstamped"); !got.ImportedAt.IsZero() || got.ImportRefused {
+		t.Fatalf("unstamped = %+v, want zero ImportedAt", got)
+	}
+	d.Next.ImportedAt, d.Next.ImportRefused = now, true
+	if got := read("stamped"); !got.ImportedAt.Equal(now) || !got.ImportRefused {
+		t.Fatalf("stamped = %+v, want ImportedAt %v refused", got, now)
+	}
+	d.Next.ImportedAt, d.Next.ImportRefused = time.Time{}, false
+	if got := read("cleared"); !got.ImportedAt.IsZero() || got.ImportRefused {
+		t.Fatalf("cleared = %+v, want zero ImportedAt", got)
 	}
 }
 

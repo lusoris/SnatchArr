@@ -100,13 +100,25 @@ type fakeArrClient struct {
 	removals    []fakeRemoval
 	queueCalls  int
 	removeCalls int
+	// importErr is the ForceImport result per download id; imports lists the calls.
+	importErr map[string]error
+	imports   []string
 }
 
 func newFakeArrClient() *fakeArrClient {
 	return &fakeArrClient{
-		items:    make(map[string][]queue.Item),
-		queueErr: make(map[string]error),
+		items:     make(map[string][]queue.Item),
+		queueErr:  make(map[string]error),
+		importErr: make(map[string]error),
 	}
+}
+
+func (f *fakeArrClient) ForceImport(_ context.Context, kind domain.AppKind, _, _, downloadID string) (int, error) {
+	f.imports = append(f.imports, string(kind)+":"+downloadID)
+	if err := f.importErr[downloadID]; err != nil {
+		return 0, err
+	}
+	return 1, nil
 }
 
 func (f *fakeArrClient) Queue(_ context.Context, kind domain.AppKind, baseURL, _ string, _, _ int) ([]queue.Item, error) {
@@ -136,6 +148,11 @@ type fakeMetricsRecorder struct {
 	strikes  []string
 	removals []string
 	skipped  []string
+	imports  []string
+}
+
+func (f *fakeMetricsRecorder) QueueImport(instance, result string) {
+	f.imports = append(f.imports, instance+":"+result)
 }
 
 func (f *fakeMetricsRecorder) QueueStruck(instance, rule, mode string) {

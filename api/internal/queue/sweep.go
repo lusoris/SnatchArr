@@ -18,7 +18,7 @@ func Sweep(s Settings, items []Item, prev map[string]Strike, now time.Time) []De
 		return nil
 	}
 	decisions := make([]Decision, 0, len(items))
-	removalsCount := 0
+	var spent budget
 	losers := duplicateLosers(items)
 	for _, item := range items {
 		item.duplicate = losers[itemKey(item)]
@@ -27,7 +27,7 @@ func Sweep(s Settings, items []Item, prev map[string]Strike, now time.Time) []De
 		if prev != nil {
 			prevStrike = prev[key]
 		}
-		dec := evaluateItem(s, item, prevStrike, now, &removalsCount)
+		dec := evaluateItem(s, item, prevStrike, now, &spent)
 		decisions = append(decisions, dec)
 	}
 	return decisions
@@ -77,6 +77,15 @@ func beats(a, b download) bool {
 	return a.id < b.id
 }
 
+// budget counts the removals and imports one sweep has spent. importKeys holds
+// the downloads that already got an id_matched action, so a season pack, one
+// queue item per episode under one download id, is imported and reported once.
+type budget struct {
+	removals   int
+	imports    int
+	importKeys map[string]bool
+}
+
 func itemKey(item Item) string {
 	if item.DownloadID != "" {
 		return item.DownloadID
@@ -84,7 +93,7 @@ func itemKey(item Item) string {
 	return strconv.FormatInt(int64(item.ID), 10)
 }
 
-func evaluateItem(s Settings, item Item, prev Strike, now time.Time, removalsCount *int) Decision {
+func evaluateItem(s Settings, item Item, prev Strike, now time.Time, spent *budget) Decision {
 	if isNeverTouched(item, s.Grace, now) {
 		return Decision{
 			ItemID:     item.ID,
@@ -100,17 +109,19 @@ func evaluateItem(s Settings, item Item, prev Strike, now time.Time, removalsCou
 			DownloadID: item.DownloadID,
 			Rule:       "",
 			Next: Strike{
-				Rule:         "",
-				Count:        0,
-				LastSizeLeft: item.SizeLeft,
-				LastSeen:     now,
+				Rule:          "",
+				Count:         0,
+				LastSizeLeft:  item.SizeLeft,
+				LastSeen:      now,
+				ImportedAt:    prev.ImportedAt,
+				ImportRefused: prev.ImportRefused,
 			},
 		}
 	}
-	return applyRuleMatch(s, item, prev, rule, now, removalsCount)
+	return applyRuleMatch(s, item, prev, rule, now, spent)
 }
 
-func applyRuleMatch(s Settings, item Item, prev Strike, r Rule, now time.Time, removalsCount *int) Decision {
+func applyRuleMatch(s Settings, item Item, prev Strike, r Rule, now time.Time, spent *budget) Decision {
 	rs := ResolveRule(s, r)
 	count := 1
 	if prev.Rule == r && prev.Count > 0 {
@@ -120,14 +131,19 @@ func applyRuleMatch(s Settings, item Item, prev Strike, r Rule, now time.Time, r
 		count = rs.Threshold
 	}
 	next := Strike{
-		Rule:         r,
-		Count:        count,
-		LastSizeLeft: item.SizeLeft,
-		LastSeen:     now,
+		Rule:          r,
+		Count:         count,
+		LastSizeLeft:  item.SizeLeft,
+		LastSeen:      now,
+		ImportedAt:    prev.ImportedAt,
+		ImportRefused: prev.ImportRefused,
+	}
+	if r == RuleIDMatched {
+		return applyImportMatch(s, item, prev, rs, next, now, spent)
 	}
 	var remove, wouldRemove, deferred bool
 	if count >= rs.Threshold {
-		remove, wouldRemove, deferred = resolveThresholdAction(rs.Mode, s.MaxRemovalsPerSweep, removalsCount)
+		remove, wouldRemove, deferred = resolveThresholdAction(rs.Mode, s.MaxRemovalsPerSweep, &spent.removals)
 	}
 	return Decision{
 		ItemID:      item.ID,
@@ -141,6 +157,58 @@ func applyRuleMatch(s Settings, item Item, prev Strike, r Rule, now time.Time, r
 		Blocklist:   *rs.Blocklist,
 		Deferred:    deferred,
 	}
+}
+
+// applyImportMatch decides the id_matched action. An item imported or refused
+// less than strikeTTL ago is not tried again; the first sweep after an import
+// reports the item as a failed import, because a cleared item leaves the queue.
+func applyImportMatch(s Settings, item Item, prev Strike, rs RuleSettings, next Strike, now time.Time, spent *budget) Decision {
+	d := Decision{
+		ItemID:     item.ID,
+		DownloadID: item.DownloadID,
+		Rule:       RuleIDMatched,
+		Next:       next,
+		Strike:     true,
+		Threshold:  rs.Threshold,
+	}
+	key := itemKey(item)
+	if spent.importKeys[key] {
+		return d
+	}
+	if !prev.ImportedAt.IsZero() && now.Sub(prev.ImportedAt) < strikeTTL {
+		d.ImportFailed = !prev.ImportRefused && prev.LastSeen.Equal(prev.ImportedAt)
+		markImportKey(spent, key, d.ImportFailed)
+		return d
+	}
+	if next.Count < rs.Threshold {
+		return d
+	}
+	d.WouldImport, d.Import, d.Deferred = resolveImportAction(rs.Mode, s.MaxImportsPerSweep, spent)
+	markImportKey(spent, key, true)
+	return d
+}
+
+func markImportKey(spent *budget, key string, acted bool) {
+	if !acted {
+		return
+	}
+	if spent.importKeys == nil {
+		spent.importKeys = make(map[string]bool)
+	}
+	spent.importKeys[key] = true
+}
+
+// resolveImportAction returns wouldImport, doImport and deferred for an id_matched
+// item at its threshold.
+func resolveImportAction(mode Mode, maxImports int, spent *budget) (bool, bool, bool) {
+	if mode == ModeObserve {
+		return true, false, false
+	}
+	if spent.imports < maxImports {
+		spent.imports++
+		return false, true, false
+	}
+	return false, false, true
 }
 
 func resolveThresholdAction(mode Mode, maxRemovals int, removalsCount *int) (bool, bool, bool) {
@@ -161,7 +229,7 @@ func defaultRuleSettings(r Rule) RuleSettings {
 		return RuleSettings{Mode: ModeObserve, Threshold: 6, Blocklist: &blocklist}
 	case RuleFailed:
 		return RuleSettings{Mode: ModeObserve, Threshold: 2, Blocklist: &blocklist}
-	case RuleUnwantedScore, RuleNotAnUpgrade, RuleDuplicate, RuleUnwantedUnmonitored:
+	case RuleIDMatched, RuleUnwantedScore, RuleNotAnUpgrade, RuleDuplicate, RuleUnwantedUnmonitored:
 		return RuleSettings{Mode: ModeObserve, Threshold: 1, Blocklist: &blocklist}
 	default:
 		return RuleSettings{Mode: ModeObserve, Threshold: 1, Blocklist: &blocklist}
@@ -193,9 +261,9 @@ func ResolveRule(s Settings, r Rule) RuleSettings {
 
 // isBlocklistRule reports the blocklist default: a release that is no
 // upgrade, a duplicate or belongs to an unmonitored item is not defective,
-// so those rules remove it without a blocklist entry.
+// so those rules remove it without a blocklist entry; id_matched removes nothing.
 func isBlocklistRule(r Rule) bool {
-	return r != RuleNotAnUpgrade && r != RuleDuplicate && r != RuleUnwantedUnmonitored
+	return r != RuleNotAnUpgrade && r != RuleDuplicate && r != RuleUnwantedUnmonitored && r != RuleIDMatched
 }
 
 func isNeverTouched(item Item, grace time.Duration, now time.Time) bool {
@@ -246,6 +314,8 @@ func ruleMatches(rule Rule, s Settings, item Item, prev Strike, now time.Time) b
 		return checkSlow(item, prev, s.MinBytesPerSecond, now)
 	case RuleFailed:
 		return checkFailed(item)
+	case RuleIDMatched:
+		return checkIDMatched(s, item)
 	case RuleImportBlocked:
 		return checkImportBlocked(item)
 	case RuleUnwantedScore:
@@ -307,7 +377,7 @@ func checkFailed(item Item) bool {
 }
 
 func checkImportBlocked(item Item) bool {
-	if isUnblockerCase(item) {
+	if isIDMatchBlock(item) {
 		return false
 	}
 	if strings.EqualFold(item.TrackedDownloadState, "importBlocked") {
@@ -317,16 +387,38 @@ func checkImportBlocked(item Item) bool {
 		strings.EqualFold(item.TrackedDownloadStatus, "warning")
 }
 
-// idMatchNeedle marks a release the *arr matched by grab history but whose
-// title it cannot parse. A manual import fixes it, which is what the
-// cluster's import unblocker does, so the sweep leaves such items alone.
-const idMatchNeedle = "automatic import is not possible"
+// idMatchNeedles mark a release the *arr matched by grab history but whose
+// title it cannot parse, in the wording of Sonarr and Radarr
+// (CompletedDownloadService, checked against both releases by
+// make arr-forceimport-live). A manual import fixes it (rule id_matched,
+// ADR-0013), so import_blocked never removes such an item.
+var idMatchNeedles = []string{
+	"release was matched to series by id",
+	"release was matched to movie by id",
+}
 
-// isUnblockerCase reports whether the ID-match note is the item's only
+func isIDMatchNote(line string) bool {
+	line = strings.ToLower(line)
+	for _, needle := range idMatchNeedles {
+		if strings.Contains(line, needle) {
+			return true
+		}
+	}
+	return false
+}
+
+// isIDMatchBlock reports whether the ID-match note is the item's only
 // problem: status warning, state importBlocked or importPending, and every
-// status line is either the note or the item's own release title. It
-// mirrors the allow-list of the import unblocker.
-func isUnblockerCase(item Item) bool {
+// status line is either the note or the item's own release title. It keeps
+// the allow-list of the cluster's import unblocker, which id_matched
+// replaces (ADR-0013).
+// checkIDMatched is rule id_matched: force import on, a download to import, and the
+// ID-match note as the only problem.
+func checkIDMatched(s Settings, item Item) bool {
+	return s.ForceImport && item.DownloadID != "" && isIDMatchBlock(item)
+}
+
+func isIDMatchBlock(item Item) bool {
 	if !strings.EqualFold(item.TrackedDownloadStatus, "warning") {
 		return false
 	}
@@ -338,7 +430,7 @@ func isUnblockerCase(item Item) bool {
 	sawNeedle := false
 	for _, line := range item.StatusLines {
 		switch {
-		case strings.Contains(strings.ToLower(line), idMatchNeedle):
+		case isIDMatchNote(line):
 			sawNeedle = true
 		case strings.TrimSpace(line) == title:
 		default:

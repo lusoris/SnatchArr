@@ -179,6 +179,7 @@ export const sampleQueuePolicy: QueuePolicy = {
 		slow: { mode: 'observe', threshold: 5, blocklist: true },
 		failed: { mode: 'act', threshold: 1, blocklist: true },
 		import_blocked: { mode: 'act', threshold: 2, blocklist: true },
+		id_matched: { mode: 'observe', threshold: 1, blocklist: false },
 		unwanted_score: { mode: 'observe', threshold: 3, blocklist: true },
 		not_an_upgrade: { mode: 'observe', threshold: 1, blocklist: false },
 		duplicate: { mode: 'observe', threshold: 1, blocklist: false },
@@ -186,7 +187,8 @@ export const sampleQueuePolicy: QueuePolicy = {
 	},
 	grace_seconds: 3600,
 	min_bytes_per_second: 1024,
-	max_removals_per_sweep: 5
+	max_removals_per_sweep: 5,
+	max_imports_per_sweep: 10
 };
 
 /** Active queue strikes for an instance. */

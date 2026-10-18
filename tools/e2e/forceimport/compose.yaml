@@ -1,0 +1,47 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+#
+# Real Sonarr, Radarr and qBittorrent, each pinned by digest, for
+# tools/e2e/forceimport_live.sh. All three mount the harness's downloads folder at
+# /downloads, so the *arr sees the files qBittorrent seeds and imports them into
+# /downloads/library. files serves the .torrent files the release push names; ffmpeg
+# writes the test videos. Every port is published on loopback only. Renovate's
+# docker-compose manager keeps the pins current.
+
+x-linuxserver: &linuxserver
+  environment: &env
+    PUID: ${FORCEIMPORT_UID:-1000}
+    PGID: ${FORCEIMPORT_GID:-1000}
+    TZ: Etc/UTC
+  volumes: &downloads ["${FORCEIMPORT_DOWNLOADS:?set by forceimport_live.sh}:/downloads"]
+
+services:
+  sonarr:
+    <<: *linuxserver
+    image: lscr.io/linuxserver/sonarr:4.0.20.3014-ls329@sha256:44b06045a98bc1f237b9ffefc4b28dab64cb29305e4a2a94875ae93b5224e4cc
+    ports: ["127.0.0.1:${SONARR_PORT:-18201}:8989"]
+
+  radarr:
+    <<: *linuxserver
+    image: lscr.io/linuxserver/radarr:6.4.4.10685-ls321@sha256:ea6822c956d26db648b237919f41340318f32e5b7dcc4ba702cf256a0f5f3c12
+    ports: ["127.0.0.1:${RADARR_PORT:-18202}:7878"]
+
+  qbittorrent:
+    <<: *linuxserver
+    image: lscr.io/linuxserver/qbittorrent:5.2.4@sha256:97333cc1ccf903e0bbcd8eb67e3332e4970e9c1ecabe145e499e9c0847ebcaed
+    # The WebUI refuses a Host header whose port is not its own (HTTP 401). The *arr apps
+    # reach it inside the network on that port too.
+    environment:
+      <<: *env
+      WEBUI_PORT: ${QBITTORRENT_PORT:-18203}
+    ports: ["127.0.0.1:${QBITTORRENT_PORT:-18203}:${QBITTORRENT_PORT:-18203}"]
+
+  files:
+    image: busybox:1.37.0@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+    command: ["httpd", "-f", "-p", "8080", "-h", "/downloads"]
+    volumes: *downloads
+
+  ffmpeg:
+    image: lscr.io/linuxserver/ffmpeg:9.0.2-cli-ls86@sha256:742e17516dd4d7b76b939d774bd08f0f6b7cab8bce1c014b95ab2fb992fd0a1f
+    profiles: [tools]
+    volumes: *downloads

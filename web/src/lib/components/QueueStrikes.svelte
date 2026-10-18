@@ -33,6 +33,7 @@ SPDX-License-Identifier: EUPL-1.2
 		slow: m.queue_rule_slow,
 		failed: m.queue_rule_failed,
 		import_blocked: m.queue_rule_import_blocked,
+		id_matched: m.queue_rule_id_matched,
 		unwanted_score: m.queue_rule_unwanted_score,
 		not_an_upgrade: m.queue_rule_not_an_upgrade,
 		duplicate: m.queue_rule_duplicate,

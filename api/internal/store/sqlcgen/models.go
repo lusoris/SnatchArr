@@ -127,17 +127,20 @@ type QueuePolicy struct {
 	MinCustomFormatScore *int32
 	MaxRemovalsPerSweep  int32
 	UpdatedAt            time.Time
+	MaxImportsPerSweep   int32
 }
 
 type QueueStrike struct {
-	InstanceID   uuid.UUID
-	DownloadID   string
-	QueueID      int32
-	Rule         string
-	Count        int32
-	LastSizeLeft int64
-	LastSeen     time.Time
-	ExpiresAt    time.Time
+	InstanceID    uuid.UUID
+	DownloadID    string
+	QueueID       int32
+	Rule          string
+	Count         int32
+	LastSizeLeft  int64
+	LastSeen      time.Time
+	ExpiresAt     time.Time
+	ImportedAt    *time.Time
+	ImportRefused bool
 }
 
 type RateBucket struct {

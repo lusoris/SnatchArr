@@ -18,6 +18,8 @@ func TestEventName(t *testing.T) {
 		{"EVENT_TYPE_CIRCUIT_OPENED", "circuit_opened"},
 		{"EVENT_TYPE_QUEUE_ITEM_STRUCK", "queue_item_struck"},
 		{"EVENT_TYPE_QUEUE_ITEM_REMOVED", "queue_item_removed"},
+		{"EVENT_TYPE_QUEUE_ITEM_IMPORTED", "queue_item_imported"},
+		{"EVENT_TYPE_QUEUE_ITEM_IMPORT_FAILED", "queue_item_import_failed"},
 		{"already_lower", "already_lower"},
 		{"", ""},
 	}

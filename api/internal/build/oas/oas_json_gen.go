@@ -7916,15 +7916,22 @@ func (s *QueuePolicy) encodeFields(e *jx.Encoder) {
 		e.FieldStart("max_removals_per_sweep")
 		e.Int(s.MaxRemovalsPerSweep)
 	}
+	{
+		if s.MaxImportsPerSweep.Set {
+			e.FieldStart("max_imports_per_sweep")
+			s.MaxImportsPerSweep.Encode(e)
+		}
+	}
 }
 
-var jsonFieldsNameOfQueuePolicy = [6]string{
+var jsonFieldsNameOfQueuePolicy = [7]string{
 	0: "enabled",
 	1: "rules",
 	2: "grace_seconds",
 	3: "min_bytes_per_second",
 	4: "min_custom_format_score",
 	5: "max_removals_per_sweep",
+	6: "max_imports_per_sweep",
 }
 
 // Decode decodes QueuePolicy from json.
@@ -8003,6 +8010,16 @@ func (s *QueuePolicy) Decode(d *jx.Decoder) error {
 				return nil
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"max_removals_per_sweep\"")
+			}
+		case "max_imports_per_sweep":
+			if err := func() error {
+				s.MaxImportsPerSweep.Reset()
+				if err := s.MaxImportsPerSweep.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"max_imports_per_sweep\"")
 			}
 		default:
 			return d.Skip()
@@ -8084,6 +8101,8 @@ func (s *QueueRule) Decode(d *jx.Decoder) error {
 		*s = QueueRuleFailed
 	case QueueRuleImportBlocked:
 		*s = QueueRuleImportBlocked
+	case QueueRuleIDMatched:
+		*s = QueueRuleIDMatched
 	case QueueRuleUnwantedScore:
 		*s = QueueRuleUnwantedScore
 	case QueueRuleNotAnUpgrade:
@@ -8306,6 +8325,12 @@ func (s *QueueRules) encodeFields(e *jx.Encoder) {
 		s.ImportBlocked.Encode(e)
 	}
 	{
+		if s.IDMatched.Set {
+			e.FieldStart("id_matched")
+			s.IDMatched.Encode(e)
+		}
+	}
+	{
 		e.FieldStart("unwanted_score")
 		s.UnwantedScore.Encode(e)
 	}
@@ -8327,15 +8352,16 @@ func (s *QueueRules) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfQueueRules = [8]string{
+var jsonFieldsNameOfQueueRules = [9]string{
 	0: "stalled",
 	1: "slow",
 	2: "failed",
 	3: "import_blocked",
-	4: "unwanted_score",
-	5: "not_an_upgrade",
-	6: "duplicate",
-	7: "unwanted_unmonitored",
+	4: "id_matched",
+	5: "unwanted_score",
+	6: "not_an_upgrade",
+	7: "duplicate",
+	8: "unwanted_unmonitored",
 }
 
 // Decode decodes QueueRules from json.
@@ -8343,7 +8369,7 @@ func (s *QueueRules) Decode(d *jx.Decoder) error {
 	if s == nil {
 		return errors.New("invalid: unable to decode QueueRules to nil")
 	}
-	var requiredBitSet [1]uint8
+	var requiredBitSet [2]uint8
 
 	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
 		switch string(k) {
@@ -8387,8 +8413,18 @@ func (s *QueueRules) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"import_blocked\"")
 			}
+		case "id_matched":
+			if err := func() error {
+				s.IDMatched.Reset()
+				if err := s.IDMatched.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"id_matched\"")
+			}
 		case "unwanted_score":
-			requiredBitSet[0] |= 1 << 4
+			requiredBitSet[0] |= 1 << 5
 			if err := func() error {
 				if err := s.UnwantedScore.Decode(d); err != nil {
 					return err
@@ -8418,7 +8454,7 @@ func (s *QueueRules) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"duplicate\"")
 			}
 		case "unwanted_unmonitored":
-			requiredBitSet[0] |= 1 << 7
+			requiredBitSet[1] |= 1 << 0
 			if err := func() error {
 				if err := s.UnwantedUnmonitored.Decode(d); err != nil {
 					return err
@@ -8436,8 +8472,9 @@ func (s *QueueRules) Decode(d *jx.Decoder) error {
 	}
 	// Validate required fields.
 	var failures []validate.FieldError
-	for i, mask := range [1]uint8{
-		0b10011111,
+	for i, mask := range [2]uint8{
+		0b00101111,
+		0b00000001,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -8516,15 +8553,29 @@ func (s *QueueStrike) encodeFields(e *jx.Encoder) {
 		e.FieldStart("last_seen")
 		json.EncodeDateTime(e, s.LastSeen)
 	}
+	{
+		if s.ImportedAt.Set {
+			e.FieldStart("imported_at")
+			s.ImportedAt.Encode(e, json.EncodeDateTime)
+		}
+	}
+	{
+		if s.ImportRefused.Set {
+			e.FieldStart("import_refused")
+			s.ImportRefused.Encode(e)
+		}
+	}
 }
 
-var jsonFieldsNameOfQueueStrike = [6]string{
+var jsonFieldsNameOfQueueStrike = [8]string{
 	0: "download_id",
 	1: "queue_id",
 	2: "rule",
 	3: "count",
 	4: "threshold",
 	5: "last_seen",
+	6: "imported_at",
+	7: "import_refused",
 }
 
 // Decode decodes QueueStrike from json.
@@ -8605,6 +8656,26 @@ func (s *QueueStrike) Decode(d *jx.Decoder) error {
 				return nil
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"last_seen\"")
+			}
+		case "imported_at":
+			if err := func() error {
+				s.ImportedAt.Reset()
+				if err := s.ImportedAt.Decode(d, json.DecodeDateTime); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"imported_at\"")
+			}
+		case "import_refused":
+			if err := func() error {
+				s.ImportRefused.Reset()
+				if err := s.ImportRefused.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"import_refused\"")
 			}
 		default:
 			return d.Skip()
