@@ -77,7 +77,9 @@ register:
 exceptions:
     - rule: HISS-18
       path: .github/workflows/ci.yml
-      reason: "category A, until cordanaLLM/praetor#1108 ships: every component job needs the changes job, which stops a draft in its first step, so GitHub skips them there; the CI success aggregate fails on the failed changes job (tools/ci/status.sh, planted cases in tools/ci/status_test.sh), but the engine has no accepted shape for dependents behind such a job yet"
+      category: A
+      entered: "2026-10-09"
+      reason: "category A, until cordanaLLM/praetor#1108 ships (re-reviewed 2026-10-18, issue open, no fix in flight): every component job needs the changes job, which stops a draft in its first step, so GitHub skips them there; the CI success aggregate fails on the failed changes job (tools/ci/status.sh, planted cases in tools/ci/status_test.sh), but the engine has no accepted shape for dependents behind such a job yet"
       expires: "2027-01-06"
     - rule: HISS-19
       path: api/internal/build/oas/oas_json_gen.go
