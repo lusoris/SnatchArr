@@ -57,19 +57,47 @@ func TestResolveInstance(t *testing.T) {
 	}
 }
 
+// Positive, negative, boundary: only the exact Seerr values "movie" and "tv" map, the request
+// type wins over the media record, and an unknown request type falls back to the record.
 func TestMediaTypeOf(t *testing.T) {
 	t.Parallel()
-	var r seerrclient.Request
-	if _, ok := mediaTypeOf(r); ok {
-		t.Fatal("empty request has no media type")
+	cases := []struct {
+		name    string
+		reqType string
+		media   *seerrclient.Media
+		want    domain.SeerrMediaType
+		wantOK  bool
+	}{
+		{name: "movie request", reqType: "movie", want: domain.SeerrMovie, wantOK: true},
+		{name: "tv from the media record", media: &seerrclient.Media{MediaType: "tv"}, want: domain.SeerrTV, wantOK: true},
+		{name: "request type wins", reqType: "movie", media: &seerrclient.Media{MediaType: "tv"}, want: domain.SeerrMovie, wantOK: true},
+		{name: "unknown request type falls back", reqType: "anime", media: &seerrclient.Media{MediaType: "movie"}, want: domain.SeerrMovie, wantOK: true},
+		// Negative.
+		{name: "empty request"},
+		{name: "unknown type", reqType: "anime", media: &seerrclient.Media{MediaType: "music"}},
+		// Boundary: the match is exact, not case- or space-folded.
+		{name: "upper case", reqType: "Movie"},
+		{name: "padded", reqType: " tv"},
 	}
-	r.Media = &seerrclient.Media{MediaType: "tv"}
-	if mt, ok := mediaTypeOf(r); !ok || mt != domain.SeerrTV {
-		t.Fatalf("got %q %v", mt, ok)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			mt, ok := mediaTypeOf(seerrclient.Request{Type: tc.reqType, Media: tc.media})
+			if mt != tc.want || ok != tc.wantOK {
+				t.Fatalf("mediaTypeOf = %q %v, want %q %v", mt, ok, tc.want, tc.wantOK)
+			}
+		})
 	}
-	r.Type = "movie"
-	if mt, _ := mediaTypeOf(r); mt != domain.SeerrMovie {
-		t.Fatal("the request type wins over the media record")
+}
+
+// A movie request goes to the Radarr family, a tv request to the Sonarr family.
+func TestKindFor(t *testing.T) {
+	t.Parallel()
+	if got := kindFor(domain.SeerrMovie); got != domain.KindRadarr {
+		t.Fatalf("kindFor(movie) = %q, want radarr", got)
+	}
+	if got := kindFor(domain.SeerrTV); got != domain.KindSonarr {
+		t.Fatalf("kindFor(tv) = %q, want sonarr", got)
 	}
 }
 
