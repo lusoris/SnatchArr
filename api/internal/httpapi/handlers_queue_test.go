@@ -56,6 +56,10 @@ func TestGetQueuePolicy(t *testing.T) {
 		if v, ok := got.Rules.UnwantedUnmonitored.Blocklist.Get(); !ok || v {
 			t.Errorf("GetQueuePolicy() unwanted_unmonitored blocklist = %v (set %v), want false", v, ok)
 		}
+		nau, ok := got.Rules.NotAnUpgrade.Get()
+		if !ok || nau.Mode != oas.QueueRuleModeObserve || nau.Threshold != 1 || nau.Blocklist.Or(true) {
+			t.Errorf("GetQueuePolicy() not_an_upgrade = %+v (set %v), want observe, 1, no blocklist", nau, ok)
+		}
 	})
 
 	t.Run("negative unknown instance answers not found", func(t *testing.T) {
@@ -263,6 +267,48 @@ func TestQueueRuleBlocklistMapping(t *testing.T) {
 			want := tt.want != nil && *tt.want // unset resolves to the unmonitored default, false
 			if v, ok := back.Blocklist.Get(); !ok || v != want {
 				t.Errorf("queueRuleToOAS() blocklist = %v (set %v), want %v", v, ok, want)
+			}
+		})
+	}
+}
+
+func TestQueueNotAnUpgradeMapping(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		set  *oas.QueueRuleSettings
+		want queue.RuleSettings
+	}{
+		{
+			name: "positive stored settings survive the write",
+			set:  &oas.QueueRuleSettings{Mode: oas.QueueRuleModeAct, Threshold: 3},
+			want: queue.RuleSettings{Mode: queue.ModeAct, Threshold: 3, Blocklist: new(false)},
+		},
+		{
+			name: "negative left out of the write takes the default",
+			want: queue.RuleSettings{Mode: queue.ModeObserve, Threshold: 1, Blocklist: new(false)},
+		},
+		{
+			name: "boundary threshold one with blocklist on",
+			set:  &oas.QueueRuleSettings{Mode: oas.QueueRuleModeObserve, Threshold: 1, Blocklist: oas.NewOptBool(true)},
+			want: queue.RuleSettings{Mode: queue.ModeObserve, Threshold: 1, Blocklist: new(true)},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			req := validQueuePolicyOAS()
+			if tt.set != nil {
+				req.Rules.NotAnUpgrade.SetTo(*tt.set)
+			}
+			s := queuePolicyFromOAS(req)
+			got := queue.ResolveRule(s, queue.RuleNotAnUpgrade)
+			if got.Mode != tt.want.Mode || got.Threshold != tt.want.Threshold || *got.Blocklist != *tt.want.Blocklist {
+				t.Fatalf("ResolveRule(not_an_upgrade) = %+v blocklist %v, want %+v blocklist %v", got, *got.Blocklist, tt.want, *tt.want.Blocklist)
+			}
+			back, ok := queuePolicyToOAS(s).Rules.NotAnUpgrade.Get()
+			if !ok || back.Threshold != tt.want.Threshold || back.Blocklist.Or(!*tt.want.Blocklist) != *tt.want.Blocklist {
+				t.Fatalf("queuePolicyToOAS() not_an_upgrade = %+v (set %v), want threshold %d", back, ok, tt.want.Threshold)
 			}
 		})
 	}

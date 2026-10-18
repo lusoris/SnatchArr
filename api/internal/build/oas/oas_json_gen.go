@@ -5981,6 +5981,39 @@ func (s *OptNotificationChannelConfig) UnmarshalJSON(data []byte) error {
 	return s.Decode(d)
 }
 
+// Encode encodes QueueRuleSettings as json.
+func (o OptQueueRuleSettings) Encode(e *jx.Encoder) {
+	if !o.Set {
+		return
+	}
+	o.Value.Encode(e)
+}
+
+// Decode decodes QueueRuleSettings from json.
+func (o *OptQueueRuleSettings) Decode(d *jx.Decoder) error {
+	if o == nil {
+		return errors.New("invalid: unable to decode OptQueueRuleSettings to nil")
+	}
+	o.Set = true
+	if err := o.Value.Decode(d); err != nil {
+		return err
+	}
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s OptQueueRuleSettings) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *OptQueueRuleSettings) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
 // Encode encodes StateReset as json.
 func (o OptStateReset) Encode(e *jx.Encoder) {
 	if !o.Set {
@@ -8053,6 +8086,8 @@ func (s *QueueRule) Decode(d *jx.Decoder) error {
 		*s = QueueRuleImportBlocked
 	case QueueRuleUnwantedScore:
 		*s = QueueRuleUnwantedScore
+	case QueueRuleNotAnUpgrade:
+		*s = QueueRuleNotAnUpgrade
 	case QueueRuleUnwantedUnmonitored:
 		*s = QueueRuleUnwantedUnmonitored
 	default:
@@ -8273,18 +8308,25 @@ func (s *QueueRules) encodeFields(e *jx.Encoder) {
 		s.UnwantedScore.Encode(e)
 	}
 	{
+		if s.NotAnUpgrade.Set {
+			e.FieldStart("not_an_upgrade")
+			s.NotAnUpgrade.Encode(e)
+		}
+	}
+	{
 		e.FieldStart("unwanted_unmonitored")
 		s.UnwantedUnmonitored.Encode(e)
 	}
 }
 
-var jsonFieldsNameOfQueueRules = [6]string{
+var jsonFieldsNameOfQueueRules = [7]string{
 	0: "stalled",
 	1: "slow",
 	2: "failed",
 	3: "import_blocked",
 	4: "unwanted_score",
-	5: "unwanted_unmonitored",
+	5: "not_an_upgrade",
+	6: "unwanted_unmonitored",
 }
 
 // Decode decodes QueueRules from json.
@@ -8346,8 +8388,18 @@ func (s *QueueRules) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"unwanted_score\"")
 			}
+		case "not_an_upgrade":
+			if err := func() error {
+				s.NotAnUpgrade.Reset()
+				if err := s.NotAnUpgrade.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"not_an_upgrade\"")
+			}
 		case "unwanted_unmonitored":
-			requiredBitSet[0] |= 1 << 5
+			requiredBitSet[0] |= 1 << 6
 			if err := func() error {
 				if err := s.UnwantedUnmonitored.Decode(d); err != nil {
 					return err
@@ -8366,7 +8418,7 @@ func (s *QueueRules) Decode(d *jx.Decoder) error {
 	// Validate required fields.
 	var failures []validate.FieldError
 	for i, mask := range [1]uint8{
-		0b00111111,
+		0b01011111,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.

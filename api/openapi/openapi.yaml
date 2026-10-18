@@ -3013,6 +3013,7 @@ components:
         - failed
         - import_blocked
         - unwanted_score
+        - not_an_upgrade
         - unwanted_unmonitored
 
     QueueRuleMode:
@@ -3030,7 +3031,7 @@ components:
           minimum: 1
           maximum: 100
         blocklist:
-          description: Blocklist the release when the rule removes the item. Left out on write, the rule keeps its default (every rule except unwanted_unmonitored blocklists); reads always return the effective value.
+          description: Blocklist the release when the rule removes the item. Left out on write, the rule keeps its default (every rule except not_an_upgrade and unwanted_unmonitored blocklists); reads always return the effective value.
           type: boolean
 
     QueueRules:
@@ -3052,6 +3053,9 @@ components:
         import_blocked:
           $ref: "#/components/schemas/QueueRuleSettings"
         unwanted_score:
+          $ref: "#/components/schemas/QueueRuleSettings"
+        not_an_upgrade:
+          description: Strikes a download whose custom-format score does not beat the file already on disk (Sonarr and Radarr). Optional on write so older clients keep working; left out, the rule takes its default settings. Reads always return it.
           $ref: "#/components/schemas/QueueRuleSettings"
         unwanted_unmonitored:
           $ref: "#/components/schemas/QueueRuleSettings"

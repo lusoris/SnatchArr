@@ -1546,6 +1546,8 @@ func (s QueueRule) Validate() error {
 		return nil
 	case "unwanted_score":
 		return nil
+	case "not_an_upgrade":
+		return nil
 	case "unwanted_unmonitored":
 		return nil
 	default:
@@ -1666,6 +1668,24 @@ func (s *QueueRules) Validate() error {
 	}(); err != nil {
 		failures = append(failures, validate.FieldError{
 			Name:  "unwanted_score",
+			Error: err,
+		})
+	}
+	if err := func() error {
+		if value, ok := s.NotAnUpgrade.Get(); ok {
+			if err := func() error {
+				if err := value.Validate(); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		failures = append(failures, validate.FieldError{
+			Name:  "not_an_upgrade",
 			Error: err,
 		})
 	}

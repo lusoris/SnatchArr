@@ -72,6 +72,7 @@ func queuePolicyToOAS(s queue.Settings) *oas.QueuePolicy {
 		UnwantedScore:       queueRuleToOAS(queue.ResolveRule(s, queue.RuleUnwantedScore)),
 		UnwantedUnmonitored: queueRuleToOAS(queue.ResolveRule(s, queue.RuleUnwantedUnmonitored)),
 	}
+	rules.NotAnUpgrade.SetTo(queueRuleToOAS(queue.ResolveRule(s, queue.RuleNotAnUpgrade)))
 	return &oas.QueuePolicy{
 		Enabled:              s.Enabled,
 		Rules:                rules,
@@ -106,6 +107,9 @@ func queuePolicyFromOAS(req *oas.QueuePolicy) queue.Settings {
 		queue.RuleImportBlocked:       queueRuleFromOAS(req.Rules.ImportBlocked),
 		queue.RuleUnwantedScore:       queueRuleFromOAS(req.Rules.UnwantedScore),
 		queue.RuleUnwantedUnmonitored: queueRuleFromOAS(req.Rules.UnwantedUnmonitored),
+	}
+	if v, ok := req.Rules.NotAnUpgrade.Get(); ok {
+		rules[queue.RuleNotAnUpgrade] = queueRuleFromOAS(v)
 	}
 	return queue.Settings{
 		Enabled:              req.Enabled,

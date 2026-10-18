@@ -37,9 +37,10 @@ Each sweep checks an item against the rules in this order and gives it at most o
 | failed | `trackedDownloadState` is `failed`, `failedPending`, `downloadFailed`, `downloadFailedPending` or `importFailed`, or `status=failed` | 2 | yes | `TestStateFailed` |
 | import-blocked | `trackedDownloadState=importBlocked`, or `importPending` with `trackedDownloadStatus=warning` | 6 | yes | `TestStateImportBlocked` |
 | unwanted (score) | `customFormatScore` below `min_custom_format_score` | 1 | yes | `TestStateUnwantedScore` |
+| not an upgrade | the media item already has a file on disk and `customFormatScore` is not above that file's score (Sonarr, Radarr) | 1 | no | `TestStateNotAnUpgrade` |
 | unwanted (unmonitored) | the item is not monitored | 1 | no | `TestStateUnwantedUnmonitored` |
 
-Each rule carries its own `blocklist` switch next to `mode` and `threshold` (the Blocklist column in the instance view). Left out of a write, the rule keeps the default from the table; reads always return the effective value. Switching it off removes the item without a blocklist entry, so the release may be grabbed again; switching it on for unwanted (unmonitored) blocklists the release as well. Tests: `TestRuleBlocklistSetting` and `TestRuleBlocklistDefaultsMatchTable` in `api/internal/queue/rules_test.go`.
+Each rule carries its own `blocklist` switch next to `mode` and `threshold` (the Blocklist column in the instance view). Left out of a write, the rule keeps the default from the table; reads always return the effective value. Switching it off removes the item without a blocklist entry, so the release may be grabbed again; switching it on for not an upgrade or unwanted (unmonitored) blocklists the release as well. Tests: `TestRuleBlocklistSetting` and `TestRuleBlocklistDefaultsMatchTable` in `api/internal/queue/rules_test.go`.
 
 The state tests live in `api/internal/queue/states_test.go`. Each has `positive/`, `negative/` and `boundary/` subtests: the threshold minus one strike removes nothing, the threshold strike removes, and a clean sweep resets the count.
 
@@ -69,10 +70,16 @@ An item is also left alone when its only problem is the note "Automatic import i
 
 A score equal to `min_custom_format_score` is wanted; it has to be below. Leaving `min_custom_format_score` unset, the default, turns the score rule off. An unmonitored item is removed without a blocklist entry, so the release stays available if the item is monitored again. When an item breaks an earlier rule as well, that rule wins: a failed, unmonitored download is struck as failed.
 
+### Not an upgrade
+
+The rule compares the download's `customFormatScore` with the score of the file already on disk for the same episode or movie. A score equal to the file's score is no upgrade; it has to be above. The comparison covers custom-format scores only, the way the cron script it replaces did: a download the *arr grabbed for a better quality but a lower custom-format score is struck too, so watch the rule in observe mode before you set it to act. It removes without a blocklist entry by default, because the release itself is not defective.
+
+The file score comes from extra reads during the queue read (`api/internal/arrclient/queue.go`, `withFileScores`): Sonarr's `/api/v3/episodefile/{id}` for the queue item's `episode.episodeFileId`, and Radarr's `/api/v3/moviefile/{id}` for `movie.movieFileId`, because the movie the queue embeds carries no custom-format score. One queue read makes at most 50 file reads, each with the client timeout, and reads each file once. A file past that bound, a failed read and a file without a score leave the score unknown, and an unknown score gives no strike. Lidarr and Readarr have no single file per queue item; the rule never strikes there. Tests: `TestQueueFileScores`, `TestQueueFileScoreLookupBound`.
+
 ## Strikes, bounds and events
 
 - Strike rows live in the `queue_strikes` table, one per instance and `downloadId`, with the rule, count, last `sizeleft`, last seen time and `expires_at` (last seen plus 24 hours). The API is their only writer; rows of items that left the queue expire.
-- The sweep runs every 10 minutes on the elected leader (`leader_loops`). Per instance it reads at most 10 pages of 200 items and removes at most `max_removals_per_sweep` items (default 10); the rest wait for the next sweep without an extra strike (`TestRemovalBoundExhaustion`, `TestMaxRemovalsBound`).
+- The sweep runs every 10 minutes on the elected leader (`leader_loops`). Per instance it reads at most 10 pages of 200 items plus at most 50 file scores, and removes at most `max_removals_per_sweep` items (default 10); the rest wait for the next sweep without an extra strike (`TestRemovalBoundExhaustion`, `TestMaxRemovalsBound`).
 - A removal that fails keeps the row and is retried next sweep without counting twice (`TestFailedDeleteKeepsRowAndRetries`).
 - Events on the SSE stream: `queue_item_struck` (`rule`, `count`, `threshold`, `mode`, `would_remove`) and `queue_item_removed` (`rule`, `blocklist`).
 

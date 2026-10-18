@@ -56,6 +56,9 @@ func itemFor(rule queue.Rule, added time.Time) queue.Item {
 	case queue.RuleUnwantedScore:
 		base.CustomFormatScore = 10
 		return base
+	case queue.RuleNotAnUpgrade:
+		base.ExistingScore = new(int32(100))
+		return base
 	case queue.RuleUnwantedUnmonitored:
 		base.Monitored = false
 		return base
@@ -81,6 +84,7 @@ func TestDefaultSettingsFollowSpec(t *testing.T) {
 		queue.RuleFailed:              2,
 		queue.RuleImportBlocked:       6,
 		queue.RuleUnwantedScore:       1,
+		queue.RuleNotAnUpgrade:        1,
 		queue.RuleUnwantedUnmonitored: 1,
 	}
 	s := queue.DefaultSettings()
@@ -110,6 +114,7 @@ func TestRuleOrderDefinitions(t *testing.T) {
 		queue.RuleFailed,
 		queue.RuleImportBlocked,
 		queue.RuleUnwantedScore,
+		queue.RuleNotAnUpgrade,
 		queue.RuleUnwantedUnmonitored,
 	}
 	if len(queue.RuleOrder) != len(expected) {
@@ -135,6 +140,7 @@ func TestEveryRulePositive(t *testing.T) {
 		{"failed", queue.RuleFailed, 2, true},
 		{"import_blocked", queue.RuleImportBlocked, 6, true},
 		{"unwanted_score", queue.RuleUnwantedScore, 1, true},
+		{"not_an_upgrade", queue.RuleNotAnUpgrade, 1, false},
 		{"unwanted_unmonitored", queue.RuleUnwantedUnmonitored, 1, false},
 	}
 	for _, tt := range tests {
@@ -438,7 +444,7 @@ func TestEveryRuleBoundary(t *testing.T) {
 				retryItem.SizeLeft = cleanItem.SizeLeft - 10
 			case queue.RuleStalled:
 				retryItem.SizeLeft = cleanItem.SizeLeft
-			case queue.RuleFailed, queue.RuleImportBlocked, queue.RuleUnwantedScore, queue.RuleUnwantedUnmonitored:
+			case queue.RuleFailed, queue.RuleImportBlocked, queue.RuleUnwantedScore, queue.RuleNotAnUpgrade, queue.RuleUnwantedUnmonitored:
 				// item already has rule-triggering fields set.
 			}
 			retryD := queue.Sweep(s, []queue.Item{retryItem}, prev, retryNow)[0]
@@ -734,6 +740,7 @@ func TestRuleBlocklistDefaultsMatchTable(t *testing.T) {
 		queue.RuleFailed:              true,
 		queue.RuleImportBlocked:       true,
 		queue.RuleUnwantedScore:       true,
+		queue.RuleNotAnUpgrade:        false,
 		queue.RuleUnwantedUnmonitored: false,
 	}
 	s := queue.DefaultSettings()

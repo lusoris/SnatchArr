@@ -14,7 +14,15 @@ SPDX-License-Identifier: EUPL-1.2
 	import { keys } from '#lib/query.js';
 
 	type QueuePolicyType = components['schemas']['QueuePolicy'];
-	type RuleKey = keyof components['schemas']['QueueRules'];
+	type QueueRules = Required<components['schemas']['QueueRules']>;
+	type RuleKey = keyof QueueRules;
+
+	// The API always returns not_an_upgrade; this mirrors its default for the type.
+	const notAnUpgradeDefault: components['schemas']['QueueRuleSettings'] = {
+		mode: 'observe',
+		threshold: 1,
+		blocklist: false
+	};
 
 	const { instanceId: id }: { instanceId: string } = $props();
 	const instanceId = untrack(() => id);
@@ -31,7 +39,7 @@ SPDX-License-Identifier: EUPL-1.2
 
 	interface FormState {
 		enabled: boolean;
-		rules: components['schemas']['QueueRules'];
+		rules: QueueRules;
 		grace_minutes: number;
 		min_bytes_per_second: number;
 		min_custom_format_score: number | null;
@@ -50,6 +58,7 @@ SPDX-License-Identifier: EUPL-1.2
 					failed: { ...query.data.rules.failed },
 					import_blocked: { ...query.data.rules.import_blocked },
 					unwanted_score: { ...query.data.rules.unwanted_score },
+					not_an_upgrade: { ...(query.data.rules.not_an_upgrade ?? notAnUpgradeDefault) },
 					unwanted_unmonitored: { ...query.data.rules.unwanted_unmonitored }
 				},
 				grace_minutes: Math.round(query.data.grace_seconds / 60),
@@ -96,6 +105,7 @@ SPDX-License-Identifier: EUPL-1.2
 		{ key: 'failed', label: m.queue_rule_failed },
 		{ key: 'import_blocked', label: m.queue_rule_import_blocked },
 		{ key: 'unwanted_score', label: m.queue_rule_unwanted_score },
+		{ key: 'not_an_upgrade', label: m.queue_rule_not_an_upgrade },
 		{ key: 'unwanted_unmonitored', label: m.queue_rule_unwanted_unmonitored }
 	];
 </script>
