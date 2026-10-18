@@ -45,7 +45,8 @@ var decodes = []decoded{
 	// The Seerr server returns type, seasons, media.mediaType and requestedBy.displayName
 	// (server/entity/MediaRequest.ts, Media.ts and User.ts at the pinned commit) and its spec
 	// leaves them out. goenvoy marks them omitempty, which contract.Missing does not check; the
-	// fixture tests in client_test.go cover them. The default sort of the operation is `added`.
+	// fixture tests in client_test.go cover them. The client sends no sort; the server then orders
+	// by request id.
 	{operation: "GET /api/v1/request", wire: reflect.TypeFor[pagedRequests]()},
 	{operation: "GET /api/v1/settings/sonarr", wire: reflect.TypeFor[[]seerr.ServiceSettings]()},
 	{operation: "GET /api/v1/settings/radarr", wire: reflect.TypeFor[[]seerr.ServiceSettings]()},

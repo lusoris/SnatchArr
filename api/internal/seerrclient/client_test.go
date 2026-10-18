@@ -87,10 +87,10 @@ func TestHTTPClient(t *testing.T) {
 	if err != nil || len(reqs) != 2 {
 		t.Fatalf("requests: %d %v", len(reqs), err)
 	}
-	if reqs[0].Type != "movie" || reqs[0].Media.TmdbID != 603 || reqs[0].Requester() != "Alice" || reqs[0].ServerID == nil {
+	if reqs[0].Type != "movie" || reqs[0].Media.TmdbID != 603 || reqs[0].RequestedBy.Name() != "Alice" || !reqs[0].ServerAssigned || reqs[0].ServerID != 0 {
 		t.Fatalf("movie request: %+v", reqs[0])
 	}
-	if reqs[1].Type != "tv" || reqs[1].Media.TvdbID == nil || *reqs[1].Media.TvdbID != 81189 || len(reqs[1].Seasons) != 2 || !reqs[1].Is4K || reqs[1].Requester() != "bob" {
+	if reqs[1].Type != "tv" || reqs[1].Media.TvdbID == nil || *reqs[1].Media.TvdbID != 81189 || reqs[1].Seasons == nil || len(*reqs[1].Seasons) != 2 || !reqs[1].Is4k || reqs[1].RequestedBy.Name() != "bob" {
 		t.Fatalf("tv request: %+v", reqs[1])
 	}
 
@@ -113,22 +113,20 @@ func TestHTTPClient(t *testing.T) {
 	}
 }
 
-func TestServerURL(t *testing.T) {
+func TestMediaOf(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
-		host string
-		port int
-		ssl  bool
-		base string
-		want string
+		name string
+		req  seerrclient.Request
+		want int
 	}{
-		{"sonarr", 8989, false, "", "http://sonarr:8989"},
-		{"sonarr", 8989, true, "/sonarr/", "https://sonarr:8989/sonarr"},
-		{"10.0.0.5", 0, false, "arr", "http://10.0.0.5/arr"},
+		{"media present", seerrclient.Request{Media: &seerrclient.Media{TmdbID: 603}}, 603},
+		{"media absent reads the zero record", seerrclient.Request{}, 0},
+		{"zero tmdb id stays zero", seerrclient.Request{Media: &seerrclient.Media{}}, 0},
 	}
 	for _, tc := range cases {
-		if got := seerrclient.ServerURL(tc.host, tc.port, tc.ssl, tc.base); got != tc.want {
-			t.Errorf("ServerURL(%q,%d,%v,%q) = %q, want %q", tc.host, tc.port, tc.ssl, tc.base, got, tc.want)
+		if got := seerrclient.MediaOf(tc.req).TmdbID; got != tc.want {
+			t.Errorf("%s: MediaOf().TmdbID = %d, want %d", tc.name, got, tc.want)
 		}
 	}
 }
@@ -178,14 +176,14 @@ func processingCases() []processingTestCase {
 			wantServerID: nil,
 			check: func(t *testing.T, req seerrclient.Request) {
 				t.Helper()
-				if req.Requester() != "" {
-					t.Errorf("Requester() = %q, want empty", req.Requester())
+				if req.RequestedBy.Name() != "" {
+					t.Errorf("RequestedBy.Name() = %q, want empty", req.RequestedBy.Name())
 				}
-				if req.Media.ID != 0 || req.Media.TmdbID != 0 {
-					t.Errorf("Media = %+v, want zero value", req.Media)
+				if media := seerrclient.MediaOf(req); media.ID != 0 || media.TmdbID != 0 {
+					t.Errorf("Media = %+v, want zero value", media)
 				}
-				if len(req.Seasons) != 0 {
-					t.Errorf("Seasons = %+v, want empty", req.Seasons)
+				if req.Seasons != nil {
+					t.Errorf("Seasons = %+v, want nil", *req.Seasons)
 				}
 			},
 		},
@@ -211,12 +209,20 @@ func TestProcessingRequests_Table(t *testing.T) {
 			if len(reqs) != 1 {
 				t.Fatalf("got %d requests, want 1", len(reqs))
 			}
-			checkServerID(t, reqs[0].ServerID, tc.wantServerID)
+			checkServerID(t, serverIDOf(reqs[0]), tc.wantServerID)
 			if tc.check != nil {
 				tc.check(t, reqs[0])
 			}
 		})
 	}
+}
+
+// serverIDOf reads the server a request names, nil when it names none.
+func serverIDOf(r seerrclient.Request) *int {
+	if !r.ServerAssigned {
+		return nil
+	}
+	return &r.ServerID
 }
 
 func checkServerID(t *testing.T, got, want *int) {
