@@ -492,11 +492,42 @@ func TestStateImportBlocked(t *testing.T) {
 	t.Parallel()
 	cases := append(importBlockedPositiveCases(), importBlockedNegativeCases()...)
 	cases = append(cases, importBlockedBoundaryCases()...)
+	cases = append(cases, importBlockedUnblockerCases()...)
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			runSingleCase(t, tc)
 		})
+	}
+}
+
+// idMatchNote is the Sonarr wording of the note the cluster's import
+// unblocker fixes with a manual import.
+const idMatchNote = "Found matching series via grab history, but release was matched to series by ID. Automatic import is not possible. See the FAQ for details."
+
+// importBlockedUnblockerCases pins the import unblocker's allow-list: an
+// item whose only problem is the ID-match note is left to the unblocker.
+func importBlockedUnblockerCases() []stateTestCase {
+	act6 := testSettings(queue.ModeAct, map[queue.Rule]int{queue.RuleImportBlocked: 6})
+	withLines := func(state string, lines ...string) queue.Item {
+		it := itemFor(queue.RuleImportBlocked, fixedNow.Add(-1*time.Hour))
+		it.TrackedDownloadState, it.TrackedDownloadStatus = state, "warning"
+		it.Title, it.StatusLines = "Show.S01E01.1080p.WEB-GRP", lines
+		return it
+	}
+	struck := wantDecision{rule: queue.RuleImportBlocked, strike: true, remove: false, blocklist: true, count: 1}
+	skipped := wantDecision{rule: "", strike: false, remove: false, blocklist: false, count: 0}
+	okStatus := withLines("importBlocked", idMatchNote)
+	okStatus.TrackedDownloadStatus = "ok"
+	return []stateTestCase{
+		{name: "negative/unblocker_only_needle", settings: act6, item: withLines("importBlocked", idMatchNote), want: skipped},
+		{name: "negative/unblocker_needle_and_title", settings: act6, item: withLines("importBlocked", "Show.S01E01.1080p.WEB-GRP", idMatchNote), want: skipped},
+		{name: "negative/unblocker_import_pending", settings: act6, item: withLines("importPending", idMatchNote), want: skipped},
+		{name: "positive/unblocker_needle_and_other_problem", settings: act6, item: withLines("importBlocked", idMatchNote, "Not an upgrade for existing episode file(s)"), want: struck},
+		{name: "positive/unblocker_no_status_lines", settings: act6, item: withLines("importBlocked"), want: struck},
+		{name: "positive/unblocker_title_only", settings: act6, item: withLines("importBlocked", "Show.S01E01.1080p.WEB-GRP"), want: struck},
+		{name: "positive/unblocker_needs_warning_status", settings: act6, item: okStatus, want: struck},
+		{name: "boundary/unblocker_needle_case_and_padding", settings: act6, item: withLines("ImportBlocked", "  AUTOMATIC IMPORT IS NOT POSSIBLE.", " Show.S01E01.1080p.WEB-GRP "), want: skipped},
 	}
 }
 

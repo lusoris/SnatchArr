@@ -9,6 +9,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -53,6 +54,11 @@ func TestQueuePagingAndMapping(t *testing.T) {
 						"records": [
 							{
 								"id": 10,
+								"title": "Release.10",
+								"statusMessages": [
+									{"title": "Release.10", "messages": ["Automatic import is not possible.", ""]},
+									{"title": "", "messages": ["second"]}
+								],
 								"downloadId": "dl-10",
 								"added": "2026-10-17T20:00:00Z",
 								"status": "warning",
@@ -125,6 +131,14 @@ func TestQueuePagingAndMapping(t *testing.T) {
 			// Item 1: monitored=true, sizeLeft=500
 			if items[0].ID != 10 || !items[0].Monitored || items[0].SizeLeft != 500 || items[0].CustomFormatScore != 12 {
 				t.Errorf("item 0 unexpected: %+v", items[0])
+			}
+			// Status messages flatten to title then messages, empty strings dropped.
+			wantLines := []string{"Release.10", "Automatic import is not possible.", "second"}
+			if items[0].Title != "Release.10" || !slices.Equal(items[0].StatusLines, wantLines) {
+				t.Errorf("item 0 title/lines = %q %q, want Release.10 %q", items[0].Title, items[0].StatusLines, wantLines)
+			}
+			if len(items[1].StatusLines) != 0 {
+				t.Errorf("item 1 lines = %q, want none", items[1].StatusLines)
 			}
 			// Item 2: nil entity -> monitored=true, negative size clamped to 0
 			if items[1].ID != 11 || !items[1].Monitored || items[1].SizeLeft != 0 {
