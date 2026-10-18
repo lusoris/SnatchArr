@@ -47,9 +47,18 @@ var gosecFlags = []string{"-quiet", "-fmt=json", "-track-suppressions", "-conf",
 // checkAll runs gosec over every generated directory and compares findings with annotations.
 // It writes one summary line to out when they agree.
 func checkAll(ctx context.Context, root string, out io.Writer) error {
-	issues, err := runGosec(ctx, root)
+	report, err := runGosec(ctx, root)
 	if err != nil {
 		return err
+	}
+	return compare(root, report, out)
+}
+
+// compare decodes gosec's JSON report and checks its findings against the annotations under root.
+func compare(root string, gosecReport []byte, out io.Writer) error {
+	issues, err := findings.Decode[issue](gosecReport)
+	if err != nil {
+		return fmt.Errorf("gosec output: %w", err)
 	}
 	found, unannotated, err := classify(root, issues)
 	if err != nil {
@@ -69,7 +78,8 @@ func checkAll(ctx context.Context, root string, out io.Writer) error {
 	return nil
 }
 
-func runGosec(ctx context.Context, root string) ([]issue, error) {
+// runGosec returns gosec's JSON report over every generated directory of the rule table.
+func runGosec(ctx context.Context, root string) ([]byte, error) {
 	args := append(make([]string, 0, len(gosecFlags)+len(rules)), gosecFlags...)
 	for _, r := range rules {
 		args = append(args, "./"+r.dir+"/...")
@@ -80,11 +90,10 @@ func runGosec(ctx context.Context, root string) ([]issue, error) {
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	runErr := cmd.Run() // gosec exits 1 when it finds anything; the JSON decides
-	issues, err := findings.Decode[issue](stdout.Bytes())
-	if err != nil {
+	if _, err := findings.Decode[issue](stdout.Bytes()); err != nil {
 		return nil, fmt.Errorf("gosec output (stderr %q): %w", stderr.String(), errors.Join(err, runErr))
 	}
-	return issues, nil
+	return stdout.Bytes(), nil
 }
 
 // classify splits gosec's issues into the suppressed sites and the unannotated ones.
