@@ -55,6 +55,8 @@ Either field alone is enough, compared without regard to case. A failed item tha
 
 Sonarr and Radarr call the states `failed` and `failedPending`. Lidarr and the Readarr family call them `downloadFailed` and `downloadFailedPending`, and add `importFailed`, which marks an import the app gave up on and never retries; all five count as failed. An item in `importBlocked` is still import-blocked on every kind.
 
+`trackedDownloadStatus=error` on its own is not a failure. Sonarr and Radarr set it only when they fail a download, together with the state `failedPending`, which the rule already matches; Lidarr and Readarr never set it (`failedErrorStatusCases`).
+
 ### Import-blocked
 
 `importPending` with status `ok` is an import in progress and gets no strike.

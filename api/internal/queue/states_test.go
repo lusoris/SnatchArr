@@ -298,6 +298,7 @@ func TestStateFailed(t *testing.T) {
 	cases := append(failedPositiveCases(), failedNegativeCases()...)
 	cases = append(cases, failedBoundaryCases()...)
 	cases = append(cases, failedLidarrReadarrCases()...)
+	cases = append(cases, failedErrorStatusCases()...)
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -420,6 +421,34 @@ func failedBoundaryCases() []stateTestCase {
 			item:     itemFor(queue.RuleFailed, fixedNow.Add(-1*time.Hour)),
 			prev:     map[string]queue.Strike{"dl-42": {Rule: "", Count: 0, LastSeen: fixedNow.Add(-10 * time.Minute)}},
 			want:     wantDecision{rule: queue.RuleFailed, strike: true, remove: false, blocklist: true, count: 1},
+		},
+	}
+}
+
+// failedErrorStatusCases pins how trackedDownloadStatus=error is read.
+// Sonarr and Radarr set it only in TrackedDownload.Fail(), together with
+// state failedPending; Lidarr and Readarr never set it. The failed rule
+// therefore keys on the state, and error alone is no failure.
+func failedErrorStatusCases() []stateTestCase {
+	act2 := testSettings(queue.ModeAct, map[queue.Rule]int{queue.RuleFailed: 2})
+	withError := func(state string) queue.Item {
+		it := itemFor(queue.RuleFailed, fixedNow.Add(-1*time.Hour))
+		it.Status, it.TrackedDownloadStatus, it.TrackedDownloadState = "completed", "error", state
+		return it
+	}
+	return []stateTestCase{
+		{
+			name: "positive/error_with_failed_pending", settings: act2, item: withError("failedPending"),
+			want: wantDecision{rule: queue.RuleFailed, strike: true, remove: false, blocklist: true, count: 1},
+		},
+		{
+			name: "negative/error_status_alone_is_not_failed", settings: act2, item: withError("downloading"),
+			want: wantDecision{rule: "", strike: false, remove: false, blocklist: false, count: 0},
+		},
+		{
+			name: "boundary/error_with_failed_pending_threshold_reached_removes", settings: act2, item: withError("failedPending"),
+			prev: map[string]queue.Strike{"dl-42": prevFor(queue.RuleFailed, fixedNow.Add(-10*time.Minute), 1)},
+			want: wantDecision{rule: queue.RuleFailed, strike: true, remove: true, blocklist: true, count: 2},
 		},
 	}
 }
