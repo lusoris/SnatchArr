@@ -16,9 +16,13 @@ import (
 func TestMain(m *testing.M) { os.Exit(Main(m)) }
 
 // Main leaves the shared reaper running long enough to bridge the gaps between the package
-// processes of one go test ./... run, and the database it starts serves New.
+// processes of one go test ./... run, and the database it starts serves New. Under -short
+// Main starts neither, so there is nothing to check.
 func TestMainLingersReaper(t *testing.T) {
 	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration test: needs Docker; run without -short")
+	}
 	if got := testcontainers.ReadConfig().Config.RyukReconnectionTimeout; got < time.Minute {
 		t.Errorf("reaper reconnection timeout = %s, want at least 1m", got)
 	}
