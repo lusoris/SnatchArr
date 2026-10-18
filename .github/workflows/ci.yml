@@ -141,6 +141,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: The scan script refuses its planted cases
+        run: sh tools/ci/semgrep_scan_test.sh
       - name: Replay the rule fixtures, then scan the tracked Go files
         # No rule pack is fetched from the registry; the fixtures sit in tools/ci/semgrep/testdata.
         env:
