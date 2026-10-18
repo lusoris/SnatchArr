@@ -79,3 +79,27 @@ exceptions:
       path: .github/workflows/ci.yml
       reason: "category A, until cordanaLLM/praetor#1108 ships: every component job needs the changes job, which stops a draft in its first step, so GitHub skips them there; the CI success aggregate fails on the failed changes job (tools/ci/status.sh, planted cases in tools/ci/status_test.sh), but the engine has no accepted shape for dependents behind such a job yet"
       expires: "2027-01-06"
+    - rule: HISS-19
+      path: api/internal/build/oas/oas_json_gen.go
+      category: A
+      entered: "2026-10-18"
+      reason: "category A, until cordanaLLM/praetor#1164 ships: ogen output (make api-gen), regenerated and diff-checked by make api-verify, never edited by hand; its per-operation encoders, decoders and validators repeat by design, and folding them would mean patching the generator; the HISS scanner already skips this build directory, the dedupe scan does not"
+      expires: "2027-01-06"
+    - rule: HISS-19
+      path: api/internal/build/oas/oas_request_decoders_gen.go
+      category: A
+      entered: "2026-10-18"
+      reason: "category A, until cordanaLLM/praetor#1164 ships: ogen output (make api-gen), regenerated and diff-checked by make api-verify, never edited by hand; its per-operation encoders, decoders and validators repeat by design, and folding them would mean patching the generator; the HISS scanner already skips this build directory, the dedupe scan does not"
+      expires: "2027-01-06"
+    - rule: HISS-19
+      path: api/internal/build/oas/oas_response_encoders_gen.go
+      category: A
+      entered: "2026-10-18"
+      reason: "category A, until cordanaLLM/praetor#1164 ships: ogen output (make api-gen), regenerated and diff-checked by make api-verify, never edited by hand; its per-operation encoders, decoders and validators repeat by design, and folding them would mean patching the generator; the HISS scanner already skips this build directory, the dedupe scan does not"
+      expires: "2027-01-06"
+    - rule: HISS-19
+      path: api/internal/build/oas/oas_validators_gen.go
+      category: A
+      entered: "2026-10-18"
+      reason: "category A, until cordanaLLM/praetor#1164 ships: ogen output (make api-gen), regenerated and diff-checked by make api-verify, never edited by hand; its per-operation encoders, decoders and validators repeat by design, and folding them would mean patching the generator; the HISS scanner already skips this build directory, the dedupe scan does not"
+      expires: "2027-01-06"

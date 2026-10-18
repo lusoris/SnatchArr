@@ -48,3 +48,11 @@ exceptions:
     path: tools/apicompat/gate/main.go
     reason: "Locked praetor asset, not edited here; tracked upstream in cordanaLLM/praetor#1226."
     expires: "2027-01-06"
+  - rule: golangci-lint/gocognit
+    path: tools/apicompat/gate/main.go
+    reason: "Locked praetor asset, not edited here; the engine 32a35c8fb947 refresh added the finding; tracked upstream in cordanaLLM/praetor#1226."
+    expires: "2027-01-06"
+  - rule: golangci-lint/unparam
+    path: tools/apicompat/gate/main.go
+    reason: "Locked praetor asset, not edited here; the engine 32a35c8fb947 refresh added the finding; tracked upstream in cordanaLLM/praetor#1226."
+    expires: "2027-01-06"
