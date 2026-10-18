@@ -76,7 +76,7 @@ func runMigrator(t *testing.T, db map[string]any) (uint, error) {
 	if err = os.WriteFile(file, raw, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := gconfig.New(gconfig.Options{Files: []string{file}, EnvPrefix: "SNATCHARR_MIGRATOR_TEST_UNSET_"})
+	cfg, err := gconfig.New(gconfig.Options{Files: []string{file}, DisableEnv: true})
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}

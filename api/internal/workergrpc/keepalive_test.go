@@ -25,7 +25,7 @@ func keepaliveFrom(t *testing.T, yaml string) (grpcx.KeepaliveConfig, error) {
 	if err := os.WriteFile(file, []byte(yaml), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
-	cfg, err := gconfig.New(gconfig.Options{Files: []string{file}, EnvPrefix: "SNATCHARR_KEEPALIVE_TEST_UNSET_"})
+	cfg, err := gconfig.New(gconfig.Options{Files: []string{file}, DisableEnv: true})
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}

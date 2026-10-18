@@ -24,8 +24,8 @@ require (
 	github.com/golusoris/goenvoy/downloadclient/rtorrent/v2 v2.0.1
 	github.com/golusoris/goenvoy/downloadclient/sabnzbd/v2 v2.0.0
 	github.com/golusoris/goenvoy/downloadclient/transmission/v2 v2.0.0
-	github.com/golusoris/golusoris v0.16.5
-	github.com/golusoris/golusoris/core v0.10.2
+	github.com/golusoris/golusoris v0.17.0
+	github.com/golusoris/golusoris/core v0.11.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/jonboulle/clockwork v0.5.0
@@ -69,7 +69,7 @@ require (
 	github.com/fatih/color v1.19.0 // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
-	github.com/gabriel-vasile/mimetype v1.4.15 // indirect
+	github.com/gabriel-vasile/mimetype v1.4.16 // indirect
 	github.com/ghodss/yaml v1.0.0 // indirect
 	github.com/go-faster/yaml v0.4.6 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
@@ -117,7 +117,7 @@ require (
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/power-devops/perfstat v0.0.0-20260805114148-88456608a4f6 // indirect
-	github.com/prometheus/common v0.72.0 // indirect
+	github.com/prometheus/common v0.72.1 // indirect
 	github.com/prometheus/otlptranslator v1.0.0 // indirect
 	github.com/prometheus/procfs v0.22.0 // indirect
 	github.com/segmentio/asm v1.2.1 // indirect
