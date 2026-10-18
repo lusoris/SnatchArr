@@ -257,18 +257,11 @@ func TestLeaderFailover_CleanShutdown(t *testing.T) {
 	}
 }
 
-// Failover B Note on overlap window and session loss:
-// In golusoris leader/pg (v0.16.4), pgleader.Run acquires an advisory lock on a single
-// dedicated session and delegates to hook.Lead, which blocks solely on <-ctx.Done(). There
-// is no active heartbeat / ping query on the session connection while leading.
-// When the lock session is terminated from outside via pg_terminate_backend, PostgreSQL drops
-// the advisory lock immediately. The follower retries acquisition and takes over within 3*Retry.
-// However, the old leader does not perform I/O on the dead session, so it cannot observe
-// server-side session termination until its Run context is canceled (e.g. by watchdog,
-// health probe failure, or container teardown). Strict "never both" on backend kill without
-// context cancel is therefore impossible by design with session-scoped advisory locks without
-// in-session heartbeats. Follower takeover succeeds within the 3*Retry bound; once the old
-// leader context is canceled to signal loss, it stops its loops and never runs concurrently.
+// Positive: killing the lock session ends the old leader's term without a context cancel
+// (golusoris leader/pg probes the session every retry period since v0.17.0), and one replica leads
+// again within the bound. Either replica may win the new term: the old leader re-campaigns on a
+// fresh connection at once and can take the lock before the follower's next retry. From the moment
+// the old leader's stop is seen, the two never run together.
 func TestLeaderFailover_SessionLoss(t *testing.T) {
 	t.Parallel()
 	st := storetest.New(t)
@@ -283,64 +276,63 @@ func TestLeaderFailover_SessionLoss(t *testing.T) {
 	gateA, gateB := leaderx.New(clk, quiet(), loopA), leaderx.New(clk, quiet(), loopB)
 
 	electA, electB := makeElectPair(poolA, poolB, lockName, lockName, clk)
-	cancelA := startGateRunner(t, gateA, electA)
-	cancelB := startGateRunner(t, gateB, electB)
+	startGateRunner(t, gateA, electA)
+	startGateRunner(t, gateB, electB)
 
 	pollUntil(t, clk, func() bool {
 		return gateA.Running() || gateB.Running()
 	}, electionBound, "initial leader election")
 
-	leaderGate, followerGate := gateA, gateB
-	cancelLeader := cancelA
-	leaderIsA := true
+	leaderLoop := loopA
 	if gateB.Running() {
-		leaderGate, followerGate = gateB, gateA
-		cancelLeader = cancelB
-		leaderIsA = false
+		leaderLoop = loopB
 	}
 
 	sampler := startSampler(clk, gateA, gateB)
 	terminatedAt := clk.Now()
+	terminateLockSession(t, adminPool)
 
-	terminateCtx, terminateCancel := context.WithTimeout(t.Context(), 5*time.Second)
-	defer terminateCancel()
+	stopping := pollUntil(t, clk, func() bool {
+		_, stops := leaderLoop.counts()
+		return stops > 0
+	}, failoverBound, "old leader to observe the session loss")
+	stoppedAt := clk.Now()
+	t.Logf("old leader stopped its loops %v after the backend kill", stopping)
+
+	takeover := pollUntil(t, clk, func() bool {
+		return gateA.Running() != gateB.Running()
+	}, failoverBound, "one replica to lead the new term")
+	t.Logf("new term %v after the old leader stopped (replica-a leads: %v)", takeover, gateA.Running())
+	time.Sleep(2 * defaultTestRetry)
+
+	samples := sampler.stopSampling()
+	t.Logf("split-brain window before the old leader observed the loss: %v", overlapWindow(samples, terminatedAt))
+	assertNeverBothAfter(t, samples, stoppedAt)
+}
+
+// terminateLockSession kills the backend holding the advisory lock in the test database.
+func terminateLockSession(t *testing.T, adminPool *pgxpool.Pool) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
 
 	var terminated bool
-	err := adminPool.QueryRow(terminateCtx,
+	err := adminPool.QueryRow(ctx,
 		"SELECT pg_terminate_backend(pid) FROM pg_locks WHERE locktype='advisory' AND granted AND database = (SELECT oid FROM pg_database WHERE datname = current_database())",
 	).Scan(&terminated)
 	if err != nil || !terminated {
 		t.Fatalf("terminate advisory lock backend: terminated=%v, err=%v", terminated, err)
 	}
-
-	takeover := pollUntil(t, clk, followerGate.Running, failoverBound, "follower takeover")
-	t.Logf("session loss failover takeover: %v", takeover)
-
-	// Old leader does not learn of server-side session termination on an idle socket. Hold for
-	// two retry periods so the sampler records the overlap, then cancel its context to simulate
-	// watchdog/supervisor termination of the severed replica.
-	time.Sleep(2 * defaultTestRetry)
-	cancelLeader()
-
-	// The old gate stops its loops after the cancel, not at it: the window from cancel to stop is
-	// logged, and the "never both" rule holds from the moment the stop is seen. Sampling goes on
-	// for two retry periods, so the rule is checked on samples taken after the stop.
-	stopping := pollUntil(t, clk, func() bool {
-		return !leaderGate.Running()
-	}, failoverBound, "old leader to stop loops after loss observation")
-	stoppedAt := clk.Now()
-	t.Logf("old leader stopped its loops %v after the cancel", stopping)
-	time.Sleep(2 * defaultTestRetry)
-
-	samples := sampler.stopSampling()
-	overlap := overlapWindow(samples, terminatedAt)
-	t.Logf("split-brain window after backend kill (old leader not yet cancelled): %v", overlap)
-	assertNeverBothAfter(t, samples, stoppedAt, leaderIsA)
 }
+
+// Failover B note on the overlap window: a backend kill drops the advisory lock at once, but the
+// old leader only learns of it at its next session probe, up to one retry period later. The
+// follower can win the lock in that window, so a short overlap after the kill is expected and
+// logged, not asserted. The "never both" rule holds from the old leader's stop on.
 
 // assertNeverBothAfter fails when a sample taken after from shows both gates running, and when no
 // sample was taken after from, so the rule is never passed without being checked.
-func assertNeverBothAfter(t *testing.T, samples []gateSample, from time.Time, leaderIsA bool) {
+func assertNeverBothAfter(t *testing.T, samples []gateSample, from time.Time) {
 	t.Helper()
 	checked := 0
 	for _, s := range samples {
@@ -348,11 +340,7 @@ func assertNeverBothAfter(t *testing.T, samples []gateSample, from time.Time, le
 			continue
 		}
 		checked++
-		leaderRunning, followerRunning := s.runningA, s.runningB
-		if !leaderIsA {
-			leaderRunning, followerRunning = s.runningB, s.runningA
-		}
-		if leaderRunning && followerRunning {
+		if s.runningA && s.runningB {
 			t.Fatalf("both gates running after the old leader stopped, at sample %v", s.at)
 		}
 	}
@@ -363,7 +351,7 @@ func assertNeverBothAfter(t *testing.T, samples []gateSample, from time.Time, le
 
 // overlapWindow measures how long both gates reported running after the backend kill. A non-zero
 // value is the known gap documented above, not a test failure: it is logged so the window is
-// visible in every run and the test can turn strict once the upstream elector notices session loss.
+// visible in every run.
 func overlapWindow(samples []gateSample, from time.Time) time.Duration {
 	var first, last time.Time
 	for _, s := range samples {
