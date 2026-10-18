@@ -41,7 +41,7 @@ func runPostgres(t *testing.T, nw *testcontainers.DockerNetwork, image, alias st
 	defer cancel()
 	c, err := tcpostgres.Run(ctx, image, tcpostgres.WithDatabase("snatcharr"),
 		tcpostgres.WithUsername("test"), tcpostgres.WithPassword("test"),
-		tcpostgres.BasicWaitStrategies(), network.WithNetwork([]string{alias}, nw))
+		tcpostgres.BasicWaitStrategies(), storetest.QuickInit(), network.WithNetwork([]string{alias}, nw))
 	testcontainers.CleanupContainer(t, c)
 	if err != nil {
 		t.Fatalf("run %s: %v", image, err)

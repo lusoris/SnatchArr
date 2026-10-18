@@ -31,6 +31,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/testcontainers/testcontainers-go"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 
 	dbmigrate "github.com/golusoris/golusoris/db/migrate"
@@ -104,6 +105,13 @@ func lingerReaper() error {
 	return nil
 }
 
+// QuickInit makes initdb skip its final sync of the new data directory. A test database needs
+// no crash durability, and that sync took about 9 of the 10.5 s of a container boot on a btrfs
+// Docker root (1.3 s without it; measured 2026-10-18), once per test package.
+func QuickInit() testcontainers.CustomizeRequestOption {
+	return testcontainers.WithEnv(map[string]string{"POSTGRES_INITDB_ARGS": "--no-sync"})
+}
+
 func start() (func() error, error) {
 	if err := lingerReaper(); err != nil {
 		return func() error { return nil }, err
@@ -111,7 +119,7 @@ func start() (func() error, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), startTimeout)
 	defer cancel()
 	c, runErr := tcpostgres.Run(ctx, Image, tcpostgres.WithDatabase(templateName),
-		tcpostgres.WithUsername("test"), tcpostgres.WithPassword("test"), tcpostgres.BasicWaitStrategies())
+		tcpostgres.WithUsername("test"), tcpostgres.WithPassword("test"), tcpostgres.BasicWaitStrategies(), QuickInit())
 	stop := func() error {
 		if shared.admin != nil {
 			shared.admin.Close()
