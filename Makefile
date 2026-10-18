@@ -258,6 +258,7 @@ e2e-dev-compose-smoke: ## Dev compose stack with both profiles: services up, Pro
 # happened; the test must refuse both (gap audit C9-05). Not in verify-all (slow, needs Docker).
 dlclients-live: ## Real qBittorrent, Transmission, Deluge, rTorrent, SABnzbd, NZBGet observed by the adapters (needs Docker)
 	bash tools/e2e/pull_retry_test.sh
+	bash tools/e2e/planted_test.sh
 	bash tools/e2e/planted.sh SNATCHARR_DLCLIENTS_PLANT tools/e2e/dlclients_live.sh \
 	  "secret:not reachable with the right secret" "pause:paused = false; the client was left with paused = true"
 
@@ -268,6 +269,7 @@ dlclients-live: ## Real qBittorrent, Transmission, Deluge, rTorrent, SABnzbd, NZ
 # metadata lookups of both apps).
 arr-forceimport-live: ## Real Sonarr and Radarr: ID-matched release force-imported, planted cases refused (needs Docker)
 	bash tools/e2e/pull_retry_test.sh
+	bash tools/e2e/planted_test.sh
 	bash tools/e2e/planted.sh SNATCHARR_FORCEIMPORT_PLANT tools/e2e/forceimport_live.sh \
 	  "audio:no clean, mapped manual-import candidate" "unmapped:no clean, mapped manual-import candidate" \
 	  "second-line:is not id-matched" "skip:is still in the queue"
@@ -484,10 +486,11 @@ hooks-verify: ## The commit-message policy against its accepted and refused case
 secret-scan: ## gitleaks over every local ref, as CI job secret-scan (pinned release, cached in .cache/)
 	sh tools/ci/gitleaks_scan.sh .cache/gitleaks
 
-workflows-verify: ## The rule of "CI success", the Security Scan issue step and the Semgrep scan, against their cases
+workflows-verify: ## The rule of "CI success", the Security Scan issue step, the Semgrep scan and the planted-case runner, against their cases
 	sh tools/ci/status_test.sh
 	sh tools/ci/security_issue_test.sh
 	sh tools/ci/semgrep_scan_test.sh
+	bash tools/e2e/planted_test.sh
 
 # Not part of verify-all: needs Docker, the network and a forge token (GH_TOKEN, read access).
 # The CI job "workflows" runs it on every pull request.
