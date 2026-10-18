@@ -1,9 +1,8 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended",
+    "github>plurano/horistes",
     ":semanticCommits",
-    ":dependencyDashboard",
     "helpers:pinGitHubActionDigests",
     "docker:pinDigests"
   ],
@@ -336,12 +335,6 @@
       "groupName": "tonic"
     },
     {
-      "matchUpdateTypes": [
-        "major"
-      ],
-      "automerge": false
-    },
-    {
       "description": "Automerge non-major updates once the required checks pass; majors stay manual",
       "matchUpdateTypes": [
         "minor",
@@ -433,7 +426,6 @@
       "groupName": "playwright"
     }
   ],
-  "minimumReleaseAge": "3 days",
   "platformCommit": "enabled",
   "vulnerabilityAlerts": {
     "groupName": null,
