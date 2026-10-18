@@ -153,6 +153,12 @@ type Decision struct {
 	WouldImport bool
 	// ImportFailed reports that the item is still ID-matched one sweep after its import.
 	ImportFailed bool
+	// NewStrike reports the first sweep in which Rule strikes the item.
+	NewStrike bool
+	// Reached reports the first sweep in which the strike count reaches Threshold.
+	Reached bool
+	// Title is the item's release title, logged for the id_matched parity check.
+	Title string
 }
 
 // ErrInvalid indicates that queue settings violate bounds or constraints.

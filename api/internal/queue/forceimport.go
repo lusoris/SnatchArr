@@ -21,6 +21,7 @@ const (
 	importError      = "error"
 	importRefused    = "no_clean_candidate"
 	importNotCleared = "still_id_matched"
+	importWould      = "would_import"
 )
 
 // processImports sends the force imports of one sweep and reports the
@@ -88,4 +89,17 @@ func (s *Service) emitImportFailed(ctx context.Context, inst Instance, d Decisio
 		Title:      d.DownloadID,
 		Detail:     reason,
 	})
+}
+
+// logShadow writes the lines the id_matched parity check reads (ADR-0014): each
+// rule's first strike of an item, and each download the observe mode would import,
+// once per download when the threshold is first reached.
+func (s *Service) logShadow(ctx context.Context, inst Instance, d Decision) {
+	if d.NewStrike {
+		s.logger.InfoContext(ctx, "queue: item struck", slog.String("instance", inst.Name), slog.String("rule", string(d.Rule)), slog.String("download_id", d.DownloadID), slog.String("title", d.Title))
+	}
+	if d.WouldImport && d.Reached {
+		s.logger.InfoContext(ctx, "queue: would force import", slog.String("instance", inst.Name), slog.String("download_id", d.DownloadID), slog.String("title", d.Title))
+		s.metrics.QueueImport(inst.Name, importWould)
+	}
 }
