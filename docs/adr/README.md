@@ -18,3 +18,4 @@ This directory documents key architectural decisions following the HISS-14 immut
 | [0010](0010-keep-api-worker-split.md) | 2026-10-17 | Keep the api and worker split; no single-container mode | Accepted |
 | [0011](0011-product-definition.md) | 2026-10-17 | Product definition: parity with Huntarr and newtarr | Accepted |
 | [0012](0012-queue-management-replaces-cleanuparr-link.md) | 2026-10-17 | SnatchArr manages the download queue; the Cleanuparr link goes | Accepted |
+| [0013](0013-force-import-id-matched-releases.md) | 2026-10-18 | SnatchArr force-imports ID-matched releases and owns the queue alone | Accepted |
