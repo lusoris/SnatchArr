@@ -37,7 +37,7 @@ esac
 
 # shellcheck source=tools/e2e/pull_retry.sh
 . "$root/tools/e2e/pull_retry.sh"
-dc() { docker compose -p "$project" -f "$root/tools/e2e/forceimport/compose.yaml" "$@"; }
+dc() { compose -p "$project" -f "$root/tools/e2e/forceimport/compose.yaml" "$@"; }
 
 cleanup() {
     status=$?
