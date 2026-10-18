@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.4.1](https://github.com/lusoris/SnatchArr/compare/v0.4.0...v0.4.1) (2026-10-18)
+
+
+### Features
+
+* **queue:** force-import ID-matched releases (ADR-0013) ([#394](https://github.com/lusoris/SnatchArr/issues/394)) ([9c4a08e](https://github.com/lusoris/SnatchArr/commit/9c4a08e23acfea660e406cb0d3499bdbc19acfbf))
+* **queue:** shadow the id_matched parity week (ADR-0014) ([#395](https://github.com/lusoris/SnatchArr/issues/395)) ([e9dd2d2](https://github.com/lusoris/SnatchArr/commit/e9dd2d29e6074498d3255a8709ead06e04aa5f86))
+
+
+### Documentation
+
+* **adr:** record force import of ID-matched releases ([#392](https://github.com/lusoris/SnatchArr/issues/392)) ([6665e77](https://github.com/lusoris/SnatchArr/commit/6665e770482f07427062058606b75c56a8b4344b))
+
 ## [0.4.0](https://github.com/lusoris/SnatchArr/compare/v0.3.0...v0.4.0) (2026-10-18)
 
 
