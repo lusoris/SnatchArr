@@ -54,8 +54,9 @@ func (s *Store) Settings(ctx context.Context, instanceID uuid.UUID) (Settings, e
 }
 
 type ruleConfigJSON struct {
-	Mode      Mode `json:"mode"`
-	Threshold int  `json:"threshold"`
+	Mode      Mode  `json:"mode"`
+	Threshold int   `json:"threshold"`
+	Blocklist *bool `json:"blocklist,omitempty"`
 }
 
 func policyFromRow(row sqlcgen.QueuePolicy) (Settings, error) {

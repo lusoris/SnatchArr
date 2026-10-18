@@ -44,10 +44,12 @@ const (
 	ModeAct     Mode = "act"
 )
 
-// RuleSettings configures execution mode and strike threshold for one rule.
+// RuleSettings configures execution mode, strike threshold and blocklisting for one rule.
 type RuleSettings struct {
 	Mode      Mode
 	Threshold int
+	// Blocklist asks a removal by this rule to blocklist the release; nil keeps the rule's default.
+	Blocklist *bool
 }
 
 // Settings configures queue sweep evaluation.

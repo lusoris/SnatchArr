@@ -64,6 +64,9 @@ func TestSettingsSaveLoadRoundTrip(t *testing.T) {
 	s1.MinCustomFormatScore = nil
 	s1.MaxRemovalsPerSweep = 25
 	s1.Rules[queue.RuleStalled] = queue.RuleSettings{Mode: queue.ModeAct, Threshold: 5}
+	noBlocklist, blocklist := false, true
+	s1.Rules[queue.RuleFailed] = queue.RuleSettings{Mode: queue.ModeObserve, Threshold: 2, Blocklist: &noBlocklist}
+	s1.Rules[queue.RuleUnwantedUnmonitored] = queue.RuleSettings{Mode: queue.ModeObserve, Threshold: 1, Blocklist: &blocklist}
 
 	if err := f.q.SaveSettings(t.Context(), f.instance, s1); err != nil {
 		t.Fatalf("SaveSettings(s1) = %v", err)
@@ -114,10 +117,14 @@ func TestSettingsDropsUnknownRuleKeys(t *testing.T) {
 	if _, ok := got.Rules[queue.Rule("unknown_alien")]; ok {
 		t.Fatalf("Settings() kept unknown rule: %+v", got.Rules)
 	}
-	if got.Rules[queue.RuleStalled] != (queue.RuleSettings{Mode: queue.ModeAct, Threshold: 4}) {
+	if !reflect.DeepEqual(got.Rules[queue.RuleStalled], queue.RuleSettings{Mode: queue.ModeAct, Threshold: 4}) {
 		t.Fatalf("Settings() stalled rule = %+v, want mode act threshold 4", got.Rules[queue.RuleStalled])
 	}
-	if want := queue.DefaultSettings().Rules[queue.RuleFailed]; got.Rules[queue.RuleFailed] != want {
+	// A row written before the blocklist field existed keeps the rule's default.
+	if rs := queue.ResolveRule(got, queue.RuleStalled); rs.Blocklist == nil || !*rs.Blocklist {
+		t.Fatalf("ResolveRule(stalled) blocklist = %v, want default true", rs.Blocklist)
+	}
+	if want := queue.DefaultSettings().Rules[queue.RuleFailed]; !reflect.DeepEqual(got.Rules[queue.RuleFailed], want) {
 		t.Fatalf("Settings() failed rule = %+v, want default %+v", got.Rules[queue.RuleFailed], want)
 	}
 }

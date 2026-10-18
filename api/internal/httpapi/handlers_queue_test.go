@@ -50,6 +50,12 @@ func TestGetQueuePolicy(t *testing.T) {
 		if got.GraceSeconds != 900 {
 			t.Errorf("GetQueuePolicy() grace = %d, want 900", got.GraceSeconds)
 		}
+		if v, ok := got.Rules.Failed.Blocklist.Get(); !ok || !v {
+			t.Errorf("GetQueuePolicy() failed blocklist = %v (set %v), want true", v, ok)
+		}
+		if v, ok := got.Rules.UnwantedUnmonitored.Blocklist.Get(); !ok || v {
+			t.Errorf("GetQueuePolicy() unwanted_unmonitored blocklist = %v (set %v), want false", v, ok)
+		}
 	})
 
 	t.Run("negative unknown instance answers not found", func(t *testing.T) {
@@ -233,4 +239,31 @@ func TestListQueueStrikes(t *testing.T) {
 			t.Fatalf("ListQueueStrikes() err = %v, want %v", err, domain.ErrNotFound)
 		}
 	})
+}
+
+func TestQueueRuleBlocklistMapping(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		in   oas.OptBool
+		want *bool
+	}{
+		{"positive/true is kept", oas.NewOptBool(true), new(true)},
+		{"negative/false is kept, not dropped as zero", oas.NewOptBool(false), new(false)},
+		{"boundary/left out stays unset", oas.OptBool{}, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			rs := queueRuleFromOAS(oas.QueueRuleSettings{Mode: oas.QueueRuleModeAct, Threshold: 3, Blocklist: tt.in})
+			if (rs.Blocklist == nil) != (tt.want == nil) || (rs.Blocklist != nil && *rs.Blocklist != *tt.want) {
+				t.Fatalf("queueRuleFromOAS() blocklist = %v, want %v", rs.Blocklist, tt.want)
+			}
+			back := queueRuleToOAS(queue.ResolveRule(queue.Settings{Rules: map[queue.Rule]queue.RuleSettings{queue.RuleUnwantedUnmonitored: rs}}, queue.RuleUnwantedUnmonitored))
+			want := tt.want != nil && *tt.want // unset resolves to the unmonitored default, false
+			if v, ok := back.Blocklist.Get(); !ok || v != want {
+				t.Errorf("queueRuleToOAS() blocklist = %v (set %v), want %v", v, ok, want)
+			}
+		})
+	}
 }

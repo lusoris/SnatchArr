@@ -688,3 +688,62 @@ func TestValidateSettingsBoundaries(t *testing.T) {
 		})
 	}
 }
+
+func TestRuleBlocklistSetting(t *testing.T) {
+	t.Parallel()
+	on, off := true, false
+	tests := []struct {
+		name      string
+		rule      queue.Rule
+		blocklist *bool
+		want      bool
+	}{
+		{"positive/unmonitored switched on", queue.RuleUnwantedUnmonitored, &on, true},
+		{"negative/failed switched off", queue.RuleFailed, &off, false},
+		{"negative/stalled switched off", queue.RuleStalled, &off, false},
+		{"boundary/unset keeps failed default", queue.RuleFailed, nil, true},
+		{"boundary/unset keeps unmonitored default", queue.RuleUnwantedUnmonitored, nil, false},
+		{"boundary/explicit value equal to default", queue.RuleFailed, &on, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			s := testSettings(queue.ModeAct, nil)
+			s.Rules[tt.rule] = queue.RuleSettings{Mode: queue.ModeAct, Threshold: 1, Blocklist: tt.blocklist}
+			prev := map[string]queue.Strike{}
+			item := itemFor(tt.rule, fixedNow.Add(-1*time.Hour))
+			if tt.rule == queue.RuleStalled {
+				prev[item.DownloadID] = prevFor(tt.rule, fixedNow.Add(-10*time.Minute), 0)
+			}
+			decisions := queue.Sweep(s, []queue.Item{item}, prev, fixedNow)
+			if len(decisions) != 1 || decisions[0].Rule != tt.rule || !decisions[0].Remove {
+				t.Fatalf("Sweep() = %+v, want one %s removal", decisions, tt.rule)
+			}
+			if decisions[0].Blocklist != tt.want {
+				t.Errorf("Blocklist = %v, want %v", decisions[0].Blocklist, tt.want)
+			}
+		})
+	}
+}
+
+func TestRuleBlocklistDefaultsMatchTable(t *testing.T) {
+	t.Parallel()
+	want := map[queue.Rule]bool{
+		queue.RuleStalled:             true,
+		queue.RuleSlow:                true,
+		queue.RuleFailed:              true,
+		queue.RuleImportBlocked:       true,
+		queue.RuleUnwantedScore:       true,
+		queue.RuleUnwantedUnmonitored: false,
+	}
+	s := queue.DefaultSettings()
+	for r, blocklist := range want {
+		got := s.Rules[r].Blocklist
+		if got == nil || *got != blocklist {
+			t.Errorf("default %s blocklist = %v, want %v", r, got, blocklist)
+		}
+		if rs := queue.ResolveRule(queue.Settings{}, r); rs.Blocklist == nil || *rs.Blocklist != blocklist {
+			t.Errorf("ResolveRule(empty, %s) blocklist = %v, want %v", r, rs.Blocklist, blocklist)
+		}
+	}
+}

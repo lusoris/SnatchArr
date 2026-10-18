@@ -136,7 +136,8 @@ SPDX-License-Identifier: EUPL-1.2
 							<tr class="border-border border-b">
 								<th scope="col" class="py-2 pr-4">{m.queue_strike_rule()}</th>
 								<th scope="col" class="py-2 pr-4">{m.queue_rule_mode()}</th>
-								<th scope="col" class="py-2">{m.queue_rule_threshold()}</th>
+								<th scope="col" class="py-2 pr-4">{m.queue_rule_threshold()}</th>
+								<th scope="col" class="py-2">{m.queue_rule_blocklist()}</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -153,7 +154,7 @@ SPDX-License-Identifier: EUPL-1.2
 											<option value="act">{m.queue_rule_mode_act()}</option>
 										</select>
 									</td>
-									<td class="py-2">
+									<td class="py-2 pr-4">
 										<input
 											class="input w-24"
 											type="number"
@@ -161,6 +162,13 @@ SPDX-License-Identifier: EUPL-1.2
 											max="100"
 											aria-label={`${r.label()} ${m.queue_rule_threshold()}`}
 											bind:value={draft.rules[r.key].threshold}
+										/>
+									</td>
+									<td class="py-2">
+										<input
+											type="checkbox"
+											aria-label={`${r.label()} ${m.queue_rule_blocklist()}`}
+											bind:checked={draft.rules[r.key].blocklist}
 										/>
 									</td>
 								</tr>
