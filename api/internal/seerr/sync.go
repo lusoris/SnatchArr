@@ -101,19 +101,20 @@ func (s *Service) syncOne(ctx context.Context, sc *syncContext, r seerrclient.Re
 	entityID := s.resolveEntity(ctx, sc, instID, mt, r)
 	title := s.titleFor(ctx, sc, mt, r)
 	var serverID *int32
-	if r.ServerID != nil {
-		v := int32(min(max(*r.ServerID, 0), 1<<30)) // #nosec G115 -- clamped
+	if r.ServerAssigned {
+		v := int32(min(max(r.ServerID, 0), 1<<30)) // #nosec G115 -- clamped
 		serverID = &v
 	}
+	media := seerrclient.MediaOf(r)
 	tvdb := 0
-	if r.Media.TvdbID != nil {
-		tvdb = *r.Media.TvdbID
+	if media.TvdbID != nil {
+		tvdb = *media.TvdbID
 	}
 	err := s.st.Q().UpsertSeerrRequest(ctx, sqlcgen.UpsertSeerrRequestParams{
 		LinkID: sc.link.ID, RequestID: int32(min(max(r.ID, 0), 1<<30)), MediaType: string(mt), // #nosec G115 -- clamped
-		TmdbID: int32(min(max(r.Media.TmdbID, 0), 1<<30)), TvdbID: int32(min(max(tvdb, 0), 1<<30)), // #nosec G115 -- clamped
-		Title: title, RequestStatus: int32(min(max(r.Status, 0), 100)), MediaStatus: int32(min(max(r.Media.Status, 0), 100)), // #nosec G115 -- clamped
-		Is4k: r.Is4K, RequestedBy: r.Requester(), Seasons: seasonsOf(r), SeerrServerID: serverID,
+		TmdbID: int32(min(max(media.TmdbID, 0), 1<<30)), TvdbID: int32(min(max(tvdb, 0), 1<<30)), // #nosec G115 -- clamped
+		Title: title, RequestStatus: int32(min(max(r.Status, 0), 100)), MediaStatus: int32(min(max(media.Status, 0), 100)), // #nosec G115 -- clamped
+		Is4k: r.Is4k, RequestedBy: r.RequestedBy.Name(), Seasons: seasonsOf(r), SeerrServerID: serverID,
 		InstanceID: instID, EntityID: entityID, RequestedAt: parseSeerrTime(r.CreatedAt), LastSeenAt: s.clk.Now(),
 	})
 	if err != nil {
@@ -142,11 +143,12 @@ func (s *Service) resolveEntity(ctx context.Context, sc *syncContext, instID *uu
 		creds = instanceCreds{kind: inst.Kind, baseURL: c.BaseURL, apiKey: c.APIKey}
 		sc.credentials[*instID] = creds
 	}
+	media := seerrclient.MediaOf(r)
 	tvdb := 0
-	if r.Media.TvdbID != nil {
-		tvdb = *r.Media.TvdbID
+	if media.TvdbID != nil {
+		tvdb = *media.TvdbID
 	}
-	entity, found, err := s.resolver.EntityByExternalID(ctx, creds.kind, creds.baseURL, creds.apiKey, r.Media.TmdbID, tvdb)
+	entity, found, err := s.resolver.EntityByExternalID(ctx, creds.kind, creds.baseURL, creds.apiKey, media.TmdbID, tvdb)
 	if err != nil {
 		s.logger.WarnContext(ctx, "seerr: entity lookup", slog.String("media", string(mt)), slog.Int("request", r.ID), slog.String("error", err.Error()))
 		return nil
@@ -163,13 +165,14 @@ func (s *Service) titleFor(ctx context.Context, sc *syncContext, mt domain.Seerr
 	if err == nil && existing != "" {
 		return existing
 	}
-	if sc.titleBudget <= 0 || r.Media.TmdbID <= 0 {
+	tmdbID := seerrclient.MediaOf(r).TmdbID
+	if sc.titleBudget <= 0 || tmdbID <= 0 {
 		return ""
 	}
 	sc.titleBudget--
-	title, err := s.client.Title(ctx, sc.link.BaseURL, sc.key, mt, r.Media.TmdbID)
+	title, err := s.client.Title(ctx, sc.link.BaseURL, sc.key, mt, tmdbID)
 	if err != nil {
-		s.logger.DebugContext(ctx, "seerr: title lookup", slog.Int("tmdb", r.Media.TmdbID), slog.String("error", err.Error()))
+		s.logger.DebugContext(ctx, "seerr: title lookup", slog.Int("tmdb", tmdbID), slog.String("error", err.Error()))
 		return ""
 	}
 	return title

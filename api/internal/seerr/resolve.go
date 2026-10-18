@@ -18,7 +18,7 @@ import (
 
 // mediaTypeOf reads the media type from the request, falling back to the media record.
 func mediaTypeOf(r seerrclient.Request) (domain.SeerrMediaType, bool) {
-	for _, t := range []string{r.Type, r.Media.MediaType} {
+	for _, t := range []string{r.Type, seerrclient.MediaOf(r).MediaType} {
 		switch t {
 		case string(domain.SeerrMovie):
 			return domain.SeerrMovie, true
@@ -82,14 +82,14 @@ func sameFamily(have, want domain.AppKind) bool {
 // 4K flag, else the link's fallback instance.
 func resolveInstance(mt domain.SeerrMediaType, r seerrclient.Request, servers []seerrclient.Server, idx instanceIndex, link domain.SeerrLink) *uuid.UUID {
 	kind := kindFor(mt)
-	if r.ServerID != nil {
-		named := func(s seerrclient.Server) bool { return s.ID == *r.ServerID }
-		if id := matchServer(servers, idx, kind, r.Is4K, named); id != nil {
+	if r.ServerAssigned {
+		named := func(s seerrclient.Server) bool { return s.ID == r.ServerID }
+		if id := matchServer(servers, idx, kind, r.Is4k, named); id != nil {
 			return id
 		}
 	}
 	isDefault := func(s seerrclient.Server) bool { return s.IsDefault }
-	if id := matchServer(servers, idx, kind, r.Is4K, isDefault); id != nil {
+	if id := matchServer(servers, idx, kind, r.Is4k, isDefault); id != nil {
 		return id
 	}
 	if kind == domain.KindRadarr {
@@ -127,8 +127,11 @@ func parseSeerrTime(s string) *time.Time {
 }
 
 func seasonsOf(r seerrclient.Request) []int32 {
-	out := make([]int32, 0, len(r.Seasons))
-	for _, s := range r.Seasons {
+	if r.Seasons == nil {
+		return []int32{}
+	}
+	out := make([]int32, 0, len(*r.Seasons))
+	for _, s := range *r.Seasons {
 		out = append(out, int32(min(max(s.SeasonNumber, 0), 1<<20))) // #nosec G115 -- clamped
 	}
 	return out

@@ -18,27 +18,30 @@ func TestResolveInstance(t *testing.T) {
 	t.Parallel()
 	radarr := domain.Instance{ID: uuid.New(), Kind: domain.KindRadarr, BaseURL: "http://radarr.lan:7878"}
 	radarr4k := domain.Instance{ID: uuid.New(), Kind: domain.KindRadarr, BaseURL: "http://radarr4k.lan:7878"}
+	radarrDefault := domain.Instance{ID: uuid.New(), Kind: domain.KindRadarr, BaseURL: "http://radarr-main.lan:7878"}
 	sonarr := domain.Instance{ID: uuid.New(), Kind: domain.KindSonarr, BaseURL: "http://sonarr.lan:8989/sonarr"}
-	idx := indexInstances([]domain.Instance{radarr, radarr4k, sonarr})
+	idx := indexInstances([]domain.Instance{radarr, radarr4k, radarrDefault, sonarr})
 	servers := []seerrclient.Server{
-		{Kind: domain.KindRadarr, ID: 0, BaseURL: "http://RADARR.lan:7878/", IsDefault: true},
+		// Server 0 is not the default, so a request naming it only resolves through its id.
+		{Kind: domain.KindRadarr, ID: 0, BaseURL: "http://RADARR.lan:7878/"},
+		{Kind: domain.KindRadarr, ID: 2, BaseURL: "http://radarr-main.lan:7878", IsDefault: true},
 		{Kind: domain.KindRadarr, ID: 1, BaseURL: "http://radarr4k.lan:7878", Is4K: true, IsDefault: true},
 		{Kind: domain.KindSonarr, ID: 0, BaseURL: "http://sonarr.lan:8989/sonarr/", IsDefault: true},
 	}
 	fallback := domain.Instance{ID: uuid.New()}
 	link := domain.SeerrLink{SonarrInstanceID: &fallback.ID, RadarrInstanceID: &fallback.ID}
-	one := 1
 	cases := []struct {
 		name string
 		mt   domain.SeerrMediaType
 		req  seerrclient.Request
 		want uuid.UUID
 	}{
-		{"movie by server id, case-insensitive url", domain.SeerrMovie, seerrclient.Request{ServerID: new(0)}, radarr.ID},
-		{"4k movie by server id", domain.SeerrMovie, seerrclient.Request{ServerID: &one, Is4K: true}, radarr4k.ID},
-		{"movie without server id uses the default", domain.SeerrMovie, seerrclient.Request{}, radarr.ID},
+		{"movie by server id, case-insensitive url", domain.SeerrMovie, seerrclient.Request{ServerAssigned: true}, radarr.ID},
+		{"4k movie by server id", domain.SeerrMovie, seerrclient.Request{ServerID: 1, ServerAssigned: true, Is4k: true}, radarr4k.ID},
+		{"movie without server id uses the default", domain.SeerrMovie, seerrclient.Request{}, radarrDefault.ID},
+		{"server id 0 without the assigned flag uses the default", domain.SeerrMovie, seerrclient.Request{ServerID: 0}, radarrDefault.ID},
 		{"tv default server with base path", domain.SeerrTV, seerrclient.Request{}, sonarr.ID},
-		{"unknown 4k tv falls back to the link", domain.SeerrTV, seerrclient.Request{Is4K: true}, fallback.ID},
+		{"unknown 4k tv falls back to the link", domain.SeerrTV, seerrclient.Request{Is4k: true}, fallback.ID},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -60,7 +63,7 @@ func TestMediaTypeOf(t *testing.T) {
 	if _, ok := mediaTypeOf(r); ok {
 		t.Fatal("empty request has no media type")
 	}
-	r.Media.MediaType = "tv"
+	r.Media = &seerrclient.Media{MediaType: "tv"}
 	if mt, ok := mediaTypeOf(r); !ok || mt != domain.SeerrTV {
 		t.Fatalf("got %q %v", mt, ok)
 	}
@@ -84,5 +87,8 @@ func TestParseSeerrTimeAndSeasons(t *testing.T) {
 	}
 	if got := seasonsOf(r); len(got) != 2 || got[0] != 2 || got[1] != 0 {
 		t.Fatalf("got %v", got)
+	}
+	if got := seasonsOf(seerrclient.Request{}); got == nil || len(got) != 0 {
+		t.Fatalf("a request without seasons must give an empty list, got %#v", got)
 	}
 }
