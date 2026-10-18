@@ -10,9 +10,12 @@ on:
 permissions:
   contents: read
 
+# A pull request push supersedes its previous run. A main push or a rerun is never
+# cancelled and never waits: each main run gets its own group, since a shared group
+# would still cancel a pending run when a third one queues.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   commits:
