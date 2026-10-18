@@ -3333,6 +3333,52 @@ func (o OptNotificationChannelConfig) Or(d NotificationChannelConfig) Notificati
 	return d
 }
 
+// NewOptQueueRuleSettings returns new OptQueueRuleSettings with value set to v.
+func NewOptQueueRuleSettings(v QueueRuleSettings) OptQueueRuleSettings {
+	return OptQueueRuleSettings{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptQueueRuleSettings is optional QueueRuleSettings.
+type OptQueueRuleSettings struct {
+	Value QueueRuleSettings
+	Set   bool
+}
+
+// IsSet returns true if OptQueueRuleSettings was set.
+func (o OptQueueRuleSettings) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptQueueRuleSettings) Reset() {
+	var v QueueRuleSettings
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptQueueRuleSettings) SetTo(v QueueRuleSettings) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptQueueRuleSettings) Get() (v QueueRuleSettings, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptQueueRuleSettings) Or(d QueueRuleSettings) QueueRuleSettings {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
 // NewOptStateReset returns new OptStateReset with value set to v.
 func NewOptStateReset(v StateReset) OptStateReset {
 	return OptStateReset{
@@ -4180,6 +4226,7 @@ const (
 	QueueRuleFailed              QueueRule = "failed"
 	QueueRuleImportBlocked       QueueRule = "import_blocked"
 	QueueRuleUnwantedScore       QueueRule = "unwanted_score"
+	QueueRuleNotAnUpgrade        QueueRule = "not_an_upgrade"
 	QueueRuleUnwantedUnmonitored QueueRule = "unwanted_unmonitored"
 )
 
@@ -4191,6 +4238,7 @@ func (QueueRule) AllValues() []QueueRule {
 		QueueRuleFailed,
 		QueueRuleImportBlocked,
 		QueueRuleUnwantedScore,
+		QueueRuleNotAnUpgrade,
 		QueueRuleUnwantedUnmonitored,
 	}
 }
@@ -4207,6 +4255,8 @@ func (s QueueRule) MarshalText() ([]byte, error) {
 	case QueueRuleImportBlocked:
 		return []byte(s), nil
 	case QueueRuleUnwantedScore:
+		return []byte(s), nil
+	case QueueRuleNotAnUpgrade:
 		return []byte(s), nil
 	case QueueRuleUnwantedUnmonitored:
 		return []byte(s), nil
@@ -4232,6 +4282,9 @@ func (s *QueueRule) UnmarshalText(data []byte) error {
 		return nil
 	case QueueRuleUnwantedScore:
 		*s = QueueRuleUnwantedScore
+		return nil
+	case QueueRuleNotAnUpgrade:
+		*s = QueueRuleNotAnUpgrade
 		return nil
 	case QueueRuleUnwantedUnmonitored:
 		*s = QueueRuleUnwantedUnmonitored
@@ -4288,8 +4341,8 @@ type QueueRuleSettings struct {
 	Mode      QueueRuleMode `json:"mode"`
 	Threshold int           `json:"threshold"`
 	// Blocklist the release when the rule removes the item. Left out on write, the rule keeps its
-	// default (every rule except unwanted_unmonitored blocklists); reads always return the effective
-	// value.
+	// default (every rule except not_an_upgrade and unwanted_unmonitored blocklists); reads always
+	// return the effective value.
 	Blocklist OptBool `json:"blocklist"`
 }
 
@@ -4325,12 +4378,16 @@ func (s *QueueRuleSettings) SetBlocklist(val OptBool) {
 
 // Ref: #/components/schemas/QueueRules
 type QueueRules struct {
-	Stalled             QueueRuleSettings `json:"stalled"`
-	Slow                QueueRuleSettings `json:"slow"`
-	Failed              QueueRuleSettings `json:"failed"`
-	ImportBlocked       QueueRuleSettings `json:"import_blocked"`
-	UnwantedScore       QueueRuleSettings `json:"unwanted_score"`
-	UnwantedUnmonitored QueueRuleSettings `json:"unwanted_unmonitored"`
+	Stalled       QueueRuleSettings `json:"stalled"`
+	Slow          QueueRuleSettings `json:"slow"`
+	Failed        QueueRuleSettings `json:"failed"`
+	ImportBlocked QueueRuleSettings `json:"import_blocked"`
+	UnwantedScore QueueRuleSettings `json:"unwanted_score"`
+	// Strikes a download whose custom-format score does not beat the file already on disk (Sonarr and
+	// Radarr). Optional on write so older clients keep working; left out, the rule takes its default
+	// settings. Reads always return it.
+	NotAnUpgrade        OptQueueRuleSettings `json:"not_an_upgrade"`
+	UnwantedUnmonitored QueueRuleSettings    `json:"unwanted_unmonitored"`
 }
 
 // GetStalled returns the value of Stalled.
@@ -4356,6 +4413,11 @@ func (s *QueueRules) GetImportBlocked() QueueRuleSettings {
 // GetUnwantedScore returns the value of UnwantedScore.
 func (s *QueueRules) GetUnwantedScore() QueueRuleSettings {
 	return s.UnwantedScore
+}
+
+// GetNotAnUpgrade returns the value of NotAnUpgrade.
+func (s *QueueRules) GetNotAnUpgrade() OptQueueRuleSettings {
+	return s.NotAnUpgrade
 }
 
 // GetUnwantedUnmonitored returns the value of UnwantedUnmonitored.
@@ -4386,6 +4448,11 @@ func (s *QueueRules) SetImportBlocked(val QueueRuleSettings) {
 // SetUnwantedScore sets the value of UnwantedScore.
 func (s *QueueRules) SetUnwantedScore(val QueueRuleSettings) {
 	s.UnwantedScore = val
+}
+
+// SetNotAnUpgrade sets the value of NotAnUpgrade.
+func (s *QueueRules) SetNotAnUpgrade(val OptQueueRuleSettings) {
+	s.NotAnUpgrade = val
 }
 
 // SetUnwantedUnmonitored sets the value of UnwantedUnmonitored.

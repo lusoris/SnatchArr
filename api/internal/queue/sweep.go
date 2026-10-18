@@ -115,7 +115,7 @@ func defaultRuleSettings(r Rule) RuleSettings {
 		return RuleSettings{Mode: ModeObserve, Threshold: 6, Blocklist: &blocklist}
 	case RuleFailed:
 		return RuleSettings{Mode: ModeObserve, Threshold: 2, Blocklist: &blocklist}
-	case RuleUnwantedScore, RuleUnwantedUnmonitored:
+	case RuleUnwantedScore, RuleNotAnUpgrade, RuleUnwantedUnmonitored:
 		return RuleSettings{Mode: ModeObserve, Threshold: 1, Blocklist: &blocklist}
 	default:
 		return RuleSettings{Mode: ModeObserve, Threshold: 1, Blocklist: &blocklist}
@@ -145,8 +145,11 @@ func ResolveRule(s Settings, r Rule) RuleSettings {
 	return rs
 }
 
+// isBlocklistRule reports the blocklist default: a release that is no
+// upgrade or belongs to an unmonitored item is not defective, so those two
+// rules remove it without a blocklist entry.
 func isBlocklistRule(r Rule) bool {
-	return r != RuleUnwantedUnmonitored
+	return r != RuleUnwantedUnmonitored && r != RuleNotAnUpgrade
 }
 
 func isNeverTouched(item Item, grace time.Duration, now time.Time) bool {
@@ -201,6 +204,8 @@ func ruleMatches(rule Rule, s Settings, item Item, prev Strike, now time.Time) b
 		return checkImportBlocked(item)
 	case RuleUnwantedScore:
 		return checkUnwantedScore(item, s.MinCustomFormatScore)
+	case RuleNotAnUpgrade:
+		return checkNotAnUpgrade(item)
 	case RuleUnwantedUnmonitored:
 		return checkUnwantedUnmonitored(item)
 	default:
@@ -300,6 +305,15 @@ func checkUnwantedScore(item Item, minScore *int32) bool {
 		return false
 	}
 	return item.CustomFormatScore < *minScore
+}
+
+// checkNotAnUpgrade matches a download whose score does not beat the file
+// on disk; with no file, or an unknown file score, it never matches.
+func checkNotAnUpgrade(item Item) bool {
+	if item.ExistingScore == nil {
+		return false
+	}
+	return item.CustomFormatScore <= *item.ExistingScore
 }
 
 func checkUnwantedUnmonitored(item Item) bool {

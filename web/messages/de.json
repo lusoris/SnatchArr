@@ -92,6 +92,7 @@
 	"queue_rule_failed": "Fehlgeschlagener Download",
 	"queue_rule_import_blocked": "Import blockiert",
 	"queue_rule_unwanted_score": "Formatbewertung zu niedrig",
+	"queue_rule_not_an_upgrade": "Keine Verbesserung gegenüber der vorhandenen Datei",
 	"queue_rule_unwanted_unmonitored": "Nicht überwachte Veröffentlichung",
 	"queue_rule_mode": "Modus",
 	"queue_rule_mode_observe": "Beobachten",

@@ -835,3 +835,92 @@ func unwantedUnmonitoredBoundaryCases() []stateTestCase {
 		},
 	}
 }
+
+func TestStateNotAnUpgrade(t *testing.T) {
+	t.Parallel()
+	cases := append(notAnUpgradePositiveCases(), notAnUpgradeNegativeCases()...)
+	cases = append(cases, notAnUpgradeBoundaryCases()...)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			runSingleCase(t, tc)
+		})
+	}
+}
+
+// notAnUpgradeItem is a healthy download scoring 100 against a file on disk
+// scoring existing; nil means no file.
+func notAnUpgradeItem(existing *int32) queue.Item {
+	item := cleanProgressItem(queue.RuleNotAnUpgrade, fixedNow.Add(-1*time.Hour))
+	item.ExistingScore = existing
+	return item
+}
+
+func notAnUpgradePositiveCases() []stateTestCase {
+	act1 := testSettings(queue.ModeAct, map[queue.Rule]int{queue.RuleNotAnUpgrade: 1})
+	unmonitored := notAnUpgradeItem(new(int32(150)))
+	unmonitored.Monitored = false
+	return []stateTestCase{
+		{
+			name:     "positive/file_scores_higher_no_blocklist",
+			settings: act1,
+			item:     notAnUpgradeItem(new(int32(150))),
+			prev:     map[string]queue.Strike{"dl-42": prevFor(queue.RuleNotAnUpgrade, fixedNow.Add(-10*time.Minute), 0)},
+			want:     wantDecision{rule: queue.RuleNotAnUpgrade, strike: true, remove: true, blocklist: false, count: 1},
+		},
+		{
+			name:     "positive/wins_over_unmonitored",
+			settings: act1,
+			item:     unmonitored,
+			prev:     map[string]queue.Strike{"dl-42": prevFor(queue.RuleNotAnUpgrade, fixedNow.Add(-10*time.Minute), 0)},
+			want:     wantDecision{rule: queue.RuleNotAnUpgrade, strike: true, remove: true, blocklist: false, count: 1},
+		},
+	}
+}
+
+func notAnUpgradeNegativeCases() []stateTestCase {
+	act1 := testSettings(queue.ModeAct, map[queue.Rule]int{queue.RuleNotAnUpgrade: 1})
+	prev := map[string]queue.Strike{"dl-42": prevFor(queue.RuleNotAnUpgrade, fixedNow.Add(-10*time.Minute), 0)}
+	clean := wantDecision{rule: "", strike: false, remove: false, blocklist: false, count: 0}
+	return []stateTestCase{
+		{name: "negative/no_file_on_disk", settings: act1, item: notAnUpgradeItem(nil), prev: prev, want: clean},
+		{name: "negative/real_upgrade", settings: act1, item: notAnUpgradeItem(new(int32(99))), prev: prev, want: clean},
+		{name: "negative/negative_file_score_upgrade", settings: act1, item: notAnUpgradeItem(new(int32(-50))), prev: prev, want: clean},
+	}
+}
+
+func notAnUpgradeBoundaryCases() []stateTestCase {
+	act1 := testSettings(queue.ModeAct, map[queue.Rule]int{queue.RuleNotAnUpgrade: 1})
+	act2 := testSettings(queue.ModeAct, map[queue.Rule]int{queue.RuleNotAnUpgrade: 2})
+	equal := notAnUpgradeItem(new(int32(100)))
+	return []stateTestCase{
+		{
+			name:     "boundary/equal_score_is_no_upgrade",
+			settings: act1,
+			item:     equal,
+			prev:     map[string]queue.Strike{"dl-42": prevFor(queue.RuleNotAnUpgrade, fixedNow.Add(-10*time.Minute), 0)},
+			want:     wantDecision{rule: queue.RuleNotAnUpgrade, strike: true, remove: true, blocklist: false, count: 1},
+		},
+		{
+			name:     "boundary/one_point_above_is_upgrade",
+			settings: act1,
+			item:     notAnUpgradeItem(new(int32(99))),
+			prev:     map[string]queue.Strike{"dl-42": prevFor(queue.RuleNotAnUpgrade, fixedNow.Add(-10*time.Minute), 0)},
+			want:     wantDecision{rule: "", strike: false, remove: false, blocklist: false, count: 0},
+		},
+		{
+			name:     "boundary/threshold_minus_one_no_remove",
+			settings: act2,
+			item:     equal,
+			prev:     map[string]queue.Strike{"dl-42": prevFor(queue.RuleNotAnUpgrade, fixedNow.Add(-10*time.Minute), 0)},
+			want:     wantDecision{rule: queue.RuleNotAnUpgrade, strike: true, remove: false, blocklist: false, count: 1},
+		},
+		{
+			name:     "boundary/threshold_reached_removes",
+			settings: act2,
+			item:     equal,
+			prev:     map[string]queue.Strike{"dl-42": prevFor(queue.RuleNotAnUpgrade, fixedNow.Add(-10*time.Minute), 1)},
+			want:     wantDecision{rule: queue.RuleNotAnUpgrade, strike: true, remove: true, blocklist: false, count: 2},
+		},
+	}
+}

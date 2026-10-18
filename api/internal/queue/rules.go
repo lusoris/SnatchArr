@@ -22,6 +22,7 @@ const (
 	RuleFailed              Rule = "failed"
 	RuleImportBlocked       Rule = "import_blocked"
 	RuleUnwantedScore       Rule = "unwanted_score"
+	RuleNotAnUpgrade        Rule = "not_an_upgrade"
 	RuleUnwantedUnmonitored Rule = "unwanted_unmonitored"
 )
 
@@ -32,6 +33,7 @@ var RuleOrder = []Rule{
 	RuleFailed,
 	RuleImportBlocked,
 	RuleUnwantedScore,
+	RuleNotAnUpgrade,
 	RuleUnwantedUnmonitored,
 }
 
@@ -78,7 +80,10 @@ type Item struct {
 	TrackedDownloadState  string
 	SizeLeft              int64
 	CustomFormatScore     int32
-	Monitored             bool
+	// ExistingScore is the custom-format score of the file already on disk;
+	// nil when there is no file or its score is unknown.
+	ExistingScore *int32
+	Monitored     bool
 	// Title is the release title the *arr shows for the download.
 	Title string
 	// StatusLines flattens statusMessages: each message's title, then its messages.
@@ -129,7 +134,7 @@ var ErrInvalid = errors.New("invalid queue settings")
 var ErrQueueUnsupported = errors.New("queue management is not supported for this *arr kind")
 
 // DefaultSettings returns safe queue defaults: disabled, observe mode for every
-// rule, standard thresholds (6, 6, 2, 6, 1, 1), 15m grace, and 10 removals per sweep.
+// rule, standard thresholds (6, 6, 2, 6, 1, 1, 1), 15m grace, and 10 removals per sweep.
 func DefaultSettings() Settings {
 	rules := make(map[Rule]RuleSettings, len(RuleOrder))
 	for _, r := range RuleOrder {

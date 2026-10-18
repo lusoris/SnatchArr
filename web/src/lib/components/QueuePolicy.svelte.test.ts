@@ -86,6 +86,46 @@ describe('QueuePolicy', () => {
 		expect(body.rules.stalled.blocklist).toBe(true);
 	});
 
+	it('sends the not-an-upgrade rule with the policy', async () => {
+		const put = vi.spyOn(api, 'PUT').mockResolvedValue({ data: sampleQueuePolicy } as never);
+		stubGet({
+			'/instances/{instanceId}/queue-policy': sampleQueuePolicy
+		});
+		renderWithQuery(QueuePolicy, { instanceId: forkInstance.id });
+
+		await screen.findByRole('heading', { level: 2, name: m.queue_policy_title() });
+		const threshold = screen.getByLabelText(
+			`${m.queue_rule_not_an_upgrade()} ${m.queue_rule_threshold()}`
+		) as HTMLInputElement;
+		const blocklist = screen.getByLabelText(
+			`${m.queue_rule_not_an_upgrade()} ${m.queue_rule_blocklist()}`
+		) as HTMLInputElement;
+		expect(threshold.value).toBe('1');
+		expect(blocklist.checked).toBe(false);
+		await fireEvent.input(threshold, { target: { value: '4' } });
+
+		await fireEvent.click(screen.getByRole('button', { name: m.queue_policy_save() }));
+
+		const body = (put.mock.calls[0]![1] as { body: QueuePolicyType }).body;
+		expect(body.rules.not_an_upgrade).toEqual({ mode: 'observe', threshold: 4, blocklist: false });
+	});
+
+	it('falls back to the not-an-upgrade default when the policy lacks it', async () => {
+		const put = vi.spyOn(api, 'PUT').mockResolvedValue({ data: sampleQueuePolicy } as never);
+		const olderRules = { ...sampleQueuePolicy.rules };
+		delete olderRules.not_an_upgrade;
+		stubGet({
+			'/instances/{instanceId}/queue-policy': { ...sampleQueuePolicy, rules: olderRules }
+		});
+		renderWithQuery(QueuePolicy, { instanceId: forkInstance.id });
+
+		await screen.findByRole('heading', { level: 2, name: m.queue_policy_title() });
+		await fireEvent.click(screen.getByRole('button', { name: m.queue_policy_save() }));
+
+		const body = (put.mock.calls[0]![1] as { body: QueuePolicyType }).body;
+		expect(body.rules.not_an_upgrade).toEqual({ mode: 'observe', threshold: 1, blocklist: false });
+	});
+
 	it('shows a problem error when saving fails with 422', async () => {
 		vi.spyOn(api, 'PUT').mockRejectedValue(
 			new ProblemError({
