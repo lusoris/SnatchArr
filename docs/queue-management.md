@@ -34,7 +34,7 @@ Each sweep checks an item against the rules in this order and gives it at most o
 | :--- | :--- | :--- | :--- | :--- |
 | stalled | `trackedDownloadState=downloading`, `sizeleft > 0`, and `sizeleft` did not drop since the previous sweep | 6 | yes | `TestStateStalled` |
 | slow | `downloading`, `sizeleft` dropped, but the rate since the previous sweep is below `min_bytes_per_second` | 6 | yes | `TestStateSlow` |
-| failed | `trackedDownloadState` is `failed` or `failedPending`, or `status=failed` | 2 | yes | `TestStateFailed` |
+| failed | `trackedDownloadState` is `failed`, `failedPending`, `downloadFailed`, `downloadFailedPending` or `importFailed`, or `status=failed` | 2 | yes | `TestStateFailed` |
 | import-blocked | `trackedDownloadState=importBlocked`, or `importPending` with `trackedDownloadStatus=warning` | 6 | yes | `TestStateImportBlocked` |
 | unwanted (score) | `customFormatScore` below `min_custom_format_score` | 1 | yes | `TestStateUnwantedScore` |
 | unwanted (unmonitored) | the item is not monitored | 1 | no | `TestStateUnwantedUnmonitored` |
@@ -52,6 +52,8 @@ The rate is `(previous sizeleft - sizeleft) / seconds since the previous sweep`.
 ### Failed
 
 Either field alone is enough, compared without regard to case. A failed item that is also `queued` or `paused` stays untouched.
+
+Sonarr and Radarr call the states `failed` and `failedPending`. Lidarr and the Readarr family call them `downloadFailed` and `downloadFailedPending`, and add `importFailed`, which marks an import the app gave up on and never retries; all five count as failed. An item in `importBlocked` is still import-blocked on every kind.
 
 ### Import-blocked
 
