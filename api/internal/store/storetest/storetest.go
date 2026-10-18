@@ -137,15 +137,34 @@ func start() (func() error, error) {
 }
 
 // migrateTemplate applies every migration to the template database and disconnects from it,
-// since CREATE DATABASE ... TEMPLATE refuses a template that has open connections.
+// since CREATE DATABASE ... TEMPLATE refuses a template that has open connections. The
+// template must end at the latest migration file: a file golang-migrate skipped fails here.
 func migrateTemplate(dsn string) error {
+	fsys, err := store.MigrationsFS()
+	if err != nil {
+		return fmt.Errorf("migrations: %w", err)
+	}
+	latest, err := LatestMigration(fsys)
+	if err != nil {
+		return err
+	}
 	// golusoris registers golang-migrate's pgx/v5 driver under the pgx5:// scheme.
 	m, err := openMigrator("pgx5://" + strings.TrimPrefix(dsn, "postgres://"))
 	if err != nil {
 		return err
 	}
-	if upErr := errors.Join(m.Up(), m.Close()); upErr != nil {
-		return fmt.Errorf("migrate template: %w", upErr)
+	upErr := m.Up()
+	version, dirty, versionErr := m.Version()
+	if joined := errors.Join(upErr, versionErr, m.Close()); joined != nil {
+		return fmt.Errorf("migrate template: %w", joined)
+	}
+	return atLatest(version, dirty, latest)
+}
+
+// atLatest refuses a template that is dirty or at another version than the latest file.
+func atLatest(version uint, dirty bool, latest uint) error {
+	if dirty || version != latest {
+		return fmt.Errorf("migrate template: at version %d (dirty %v), the migration files end at %d", version, dirty, latest)
 	}
 	return nil
 }
