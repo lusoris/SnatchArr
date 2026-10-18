@@ -297,6 +297,7 @@ func TestStateFailed(t *testing.T) {
 	t.Parallel()
 	cases := append(failedPositiveCases(), failedNegativeCases()...)
 	cases = append(cases, failedBoundaryCases()...)
+	cases = append(cases, failedLidarrReadarrCases()...)
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -419,6 +420,41 @@ func failedBoundaryCases() []stateTestCase {
 			item:     itemFor(queue.RuleFailed, fixedNow.Add(-1*time.Hour)),
 			prev:     map[string]queue.Strike{"dl-42": {Rule: "", Count: 0, LastSeen: fixedNow.Add(-10 * time.Minute)}},
 			want:     wantDecision{rule: queue.RuleFailed, strike: true, remove: false, blocklist: true, count: 1},
+		},
+	}
+}
+
+// failedLidarrReadarrCases covers the state names Lidarr and the Readarr
+// family use for the same failures (upstream TrackedDownloadState enums).
+func failedLidarrReadarrCases() []stateTestCase {
+	act2 := testSettings(queue.ModeAct, map[queue.Rule]int{queue.RuleFailed: 2})
+	// Every live Lidarr failure carries trackedDownloadStatus=warning.
+	withState := func(status, state string) queue.Item {
+		it := itemFor(queue.RuleFailed, fixedNow.Add(-1*time.Hour))
+		it.Status, it.TrackedDownloadStatus, it.TrackedDownloadState = status, "warning", state
+		return it
+	}
+	struck := wantDecision{rule: queue.RuleFailed, strike: true, remove: false, blocklist: true, count: 1}
+	prevOne := map[string]queue.Strike{"dl-42": prevFor(queue.RuleFailed, fixedNow.Add(-10*time.Minute), 1)}
+	return []stateTestCase{
+		{name: "positive/lidarr_download_failed", settings: act2, item: withState("downloading", "downloadFailed"), want: struck},
+		{name: "positive/lidarr_download_failed_pending", settings: act2, item: withState("downloading", "downloadFailedPending"), want: struck},
+		{name: "positive/lidarr_import_failed_live_shape", settings: act2, item: withState("completed", "importFailed"), want: struck},
+		{name: "positive/readarr_import_failed_cased", settings: act2, item: withState("completed", "ImportFailed"), want: struck},
+		{
+			name: "negative/lidarr_import_blocked_is_not_failed", settings: act2,
+			item: withState("completed", "importBlocked"),
+			want: wantDecision{rule: queue.RuleImportBlocked, strike: true, remove: false, blocklist: true, count: 1},
+		},
+		{
+			name: "negative/import_failed_paused_never_touched", settings: act2,
+			item: withState("paused", "importFailed"),
+			want: wantDecision{rule: "", strike: false, remove: false, blocklist: false, count: 0},
+		},
+		{
+			name: "boundary/import_failed_threshold_reached_removes", settings: act2,
+			item: withState("completed", "importFailed"), prev: prevOne,
+			want: wantDecision{rule: queue.RuleFailed, strike: true, remove: true, blocklist: true, count: 2},
 		},
 	}
 }

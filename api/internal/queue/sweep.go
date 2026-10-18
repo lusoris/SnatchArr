@@ -235,8 +235,16 @@ func checkFailed(item Item) bool {
 	if strings.EqualFold(item.Status, "failed") {
 		return true
 	}
-	state := strings.ToLower(item.TrackedDownloadState)
-	return state == "failed" || state == "failedpending"
+	switch strings.ToLower(item.TrackedDownloadState) {
+	// Sonarr and Radarr name the states failed and failedPending; Lidarr
+	// and the Readarr family name them downloadFailed and
+	// downloadFailedPending, and importFailed marks a terminal import
+	// failure that the app never retries.
+	case "failed", "failedpending", "downloadfailed", "downloadfailedpending", "importfailed":
+		return true
+	default:
+		return false
+	}
 }
 
 func checkImportBlocked(item Item) bool {
