@@ -19,7 +19,9 @@ func Sweep(s Settings, items []Item, prev map[string]Strike, now time.Time) []De
 	}
 	decisions := make([]Decision, 0, len(items))
 	removalsCount := 0
+	losers := duplicateLosers(items)
 	for _, item := range items {
+		item.duplicate = losers[itemKey(item)]
 		key := itemKey(item)
 		var prevStrike Strike
 		if prev != nil {
@@ -29,6 +31,50 @@ func Sweep(s Settings, items []Item, prev map[string]Strike, now time.Time) []De
 		decisions = append(decisions, dec)
 	}
 	return decisions
+}
+
+// download is one queue item within a media group. A season pack lists one
+// item per episode under a single download id; items of one download never
+// strike each other, so the pack counts once.
+type download struct {
+	key   string
+	score int32
+	id    int32
+}
+
+// duplicateLosers groups items by MediaID and returns the keys of every
+// download that is not the best of its group: highest score wins, the
+// lowest queue id breaks a tie. A download that loses in any group loses.
+func duplicateLosers(items []Item) map[string]bool {
+	groups := make(map[int32][]download, len(items))
+	for _, item := range items {
+		if item.MediaID == 0 {
+			continue
+		}
+		groups[item.MediaID] = append(groups[item.MediaID], download{key: itemKey(item), score: item.CustomFormatScore, id: item.ID})
+	}
+	losers := make(map[string]bool)
+	for _, group := range groups {
+		best := group[0]
+		for _, d := range group[1:] {
+			if beats(d, best) {
+				best = d
+			}
+		}
+		for _, d := range group {
+			if d.key != best.key {
+				losers[d.key] = true
+			}
+		}
+	}
+	return losers
+}
+
+func beats(a, b download) bool {
+	if a.score != b.score {
+		return a.score > b.score
+	}
+	return a.id < b.id
 }
 
 func itemKey(item Item) string {
@@ -115,7 +161,7 @@ func defaultRuleSettings(r Rule) RuleSettings {
 		return RuleSettings{Mode: ModeObserve, Threshold: 6, Blocklist: &blocklist}
 	case RuleFailed:
 		return RuleSettings{Mode: ModeObserve, Threshold: 2, Blocklist: &blocklist}
-	case RuleUnwantedScore, RuleNotAnUpgrade, RuleUnwantedUnmonitored:
+	case RuleUnwantedScore, RuleNotAnUpgrade, RuleDuplicate, RuleUnwantedUnmonitored:
 		return RuleSettings{Mode: ModeObserve, Threshold: 1, Blocklist: &blocklist}
 	default:
 		return RuleSettings{Mode: ModeObserve, Threshold: 1, Blocklist: &blocklist}
@@ -146,10 +192,10 @@ func ResolveRule(s Settings, r Rule) RuleSettings {
 }
 
 // isBlocklistRule reports the blocklist default: a release that is no
-// upgrade or belongs to an unmonitored item is not defective, so those two
-// rules remove it without a blocklist entry.
+// upgrade, a duplicate or belongs to an unmonitored item is not defective,
+// so those rules remove it without a blocklist entry.
 func isBlocklistRule(r Rule) bool {
-	return r != RuleUnwantedUnmonitored && r != RuleNotAnUpgrade
+	return r != RuleNotAnUpgrade && r != RuleDuplicate && r != RuleUnwantedUnmonitored
 }
 
 func isNeverTouched(item Item, grace time.Duration, now time.Time) bool {
@@ -206,6 +252,8 @@ func ruleMatches(rule Rule, s Settings, item Item, prev Strike, now time.Time) b
 		return checkUnwantedScore(item, s.MinCustomFormatScore)
 	case RuleNotAnUpgrade:
 		return checkNotAnUpgrade(item)
+	case RuleDuplicate:
+		return item.duplicate
 	case RuleUnwantedUnmonitored:
 		return checkUnwantedUnmonitored(item)
 	default:

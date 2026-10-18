@@ -56,9 +56,11 @@ func TestGetQueuePolicy(t *testing.T) {
 		if v, ok := got.Rules.UnwantedUnmonitored.Blocklist.Get(); !ok || v {
 			t.Errorf("GetQueuePolicy() unwanted_unmonitored blocklist = %v (set %v), want false", v, ok)
 		}
-		nau, ok := got.Rules.NotAnUpgrade.Get()
-		if !ok || nau.Mode != oas.QueueRuleModeObserve || nau.Threshold != 1 || nau.Blocklist.Or(true) {
-			t.Errorf("GetQueuePolicy() not_an_upgrade = %+v (set %v), want observe, 1, no blocklist", nau, ok)
+		for _, opt := range optionalRules {
+			rs, ok := opt.field(&got.Rules).Get()
+			if !ok || rs.Mode != oas.QueueRuleModeObserve || rs.Threshold != 1 || rs.Blocklist.Or(true) {
+				t.Errorf("GetQueuePolicy() %s = %+v (set %v), want observe, 1, no blocklist", opt.rule, rs, ok)
+			}
 		}
 	})
 
@@ -272,7 +274,16 @@ func TestQueueRuleBlocklistMapping(t *testing.T) {
 	}
 }
 
-func TestQueueNotAnUpgradeMapping(t *testing.T) {
+// optionalRules are the rules older clients may leave out of a write.
+var optionalRules = []struct {
+	rule  queue.Rule
+	field func(*oas.QueueRules) *oas.OptQueueRuleSettings
+}{
+	{queue.RuleNotAnUpgrade, func(r *oas.QueueRules) *oas.OptQueueRuleSettings { return &r.NotAnUpgrade }},
+	{queue.RuleDuplicate, func(r *oas.QueueRules) *oas.OptQueueRuleSettings { return &r.Duplicate }},
+}
+
+func TestQueueOptionalRuleMapping(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name string
@@ -294,22 +305,24 @@ func TestQueueNotAnUpgradeMapping(t *testing.T) {
 			want: queue.RuleSettings{Mode: queue.ModeObserve, Threshold: 1, Blocklist: new(true)},
 		},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			req := validQueuePolicyOAS()
-			if tt.set != nil {
-				req.Rules.NotAnUpgrade.SetTo(*tt.set)
-			}
-			s := queuePolicyFromOAS(req)
-			got := queue.ResolveRule(s, queue.RuleNotAnUpgrade)
-			if got.Mode != tt.want.Mode || got.Threshold != tt.want.Threshold || *got.Blocklist != *tt.want.Blocklist {
-				t.Fatalf("ResolveRule(not_an_upgrade) = %+v blocklist %v, want %+v blocklist %v", got, *got.Blocklist, tt.want, *tt.want.Blocklist)
-			}
-			back, ok := queuePolicyToOAS(s).Rules.NotAnUpgrade.Get()
-			if !ok || back.Threshold != tt.want.Threshold || back.Blocklist.Or(!*tt.want.Blocklist) != *tt.want.Blocklist {
-				t.Fatalf("queuePolicyToOAS() not_an_upgrade = %+v (set %v), want threshold %d", back, ok, tt.want.Threshold)
-			}
-		})
+	for _, opt := range optionalRules {
+		for _, tt := range tests {
+			t.Run(string(opt.rule)+" "+tt.name, func(t *testing.T) {
+				t.Parallel()
+				req := validQueuePolicyOAS()
+				if tt.set != nil {
+					opt.field(&req.Rules).SetTo(*tt.set)
+				}
+				s := queuePolicyFromOAS(req)
+				got := queue.ResolveRule(s, opt.rule)
+				if got.Mode != tt.want.Mode || got.Threshold != tt.want.Threshold || *got.Blocklist != *tt.want.Blocklist {
+					t.Fatalf("ResolveRule(%s) = %+v blocklist %v, want %+v blocklist %v", opt.rule, got, *got.Blocklist, tt.want, *tt.want.Blocklist)
+				}
+				back, ok := opt.field(&queuePolicyToOAS(s).Rules).Get()
+				if !ok || back.Threshold != tt.want.Threshold || back.Blocklist.Or(!*tt.want.Blocklist) != *tt.want.Blocklist {
+					t.Fatalf("queuePolicyToOAS() %s = %+v (set %v), want threshold %d", opt.rule, back, ok, tt.want.Threshold)
+				}
+			})
+		}
 	}
 }

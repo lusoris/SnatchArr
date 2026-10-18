@@ -93,6 +93,7 @@
 	"queue_rule_import_blocked": "Import blocked",
 	"queue_rule_unwanted_score": "Custom format score too low",
 	"queue_rule_not_an_upgrade": "Not an upgrade over the file on disk",
+	"queue_rule_duplicate": "Duplicate of a better download",
 	"queue_rule_unwanted_unmonitored": "Unmonitored release",
 	"queue_rule_mode": "Mode",
 	"queue_rule_mode_observe": "Observe",

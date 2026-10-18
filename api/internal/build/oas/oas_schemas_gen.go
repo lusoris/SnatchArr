@@ -4227,6 +4227,7 @@ const (
 	QueueRuleImportBlocked       QueueRule = "import_blocked"
 	QueueRuleUnwantedScore       QueueRule = "unwanted_score"
 	QueueRuleNotAnUpgrade        QueueRule = "not_an_upgrade"
+	QueueRuleDuplicate           QueueRule = "duplicate"
 	QueueRuleUnwantedUnmonitored QueueRule = "unwanted_unmonitored"
 )
 
@@ -4239,6 +4240,7 @@ func (QueueRule) AllValues() []QueueRule {
 		QueueRuleImportBlocked,
 		QueueRuleUnwantedScore,
 		QueueRuleNotAnUpgrade,
+		QueueRuleDuplicate,
 		QueueRuleUnwantedUnmonitored,
 	}
 }
@@ -4257,6 +4259,8 @@ func (s QueueRule) MarshalText() ([]byte, error) {
 	case QueueRuleUnwantedScore:
 		return []byte(s), nil
 	case QueueRuleNotAnUpgrade:
+		return []byte(s), nil
+	case QueueRuleDuplicate:
 		return []byte(s), nil
 	case QueueRuleUnwantedUnmonitored:
 		return []byte(s), nil
@@ -4285,6 +4289,9 @@ func (s *QueueRule) UnmarshalText(data []byte) error {
 		return nil
 	case QueueRuleNotAnUpgrade:
 		*s = QueueRuleNotAnUpgrade
+		return nil
+	case QueueRuleDuplicate:
+		*s = QueueRuleDuplicate
 		return nil
 	case QueueRuleUnwantedUnmonitored:
 		*s = QueueRuleUnwantedUnmonitored
@@ -4341,8 +4348,8 @@ type QueueRuleSettings struct {
 	Mode      QueueRuleMode `json:"mode"`
 	Threshold int           `json:"threshold"`
 	// Blocklist the release when the rule removes the item. Left out on write, the rule keeps its
-	// default (every rule except not_an_upgrade and unwanted_unmonitored blocklists); reads always
-	// return the effective value.
+	// default (every rule except not_an_upgrade, duplicate and unwanted_unmonitored blocklists); reads
+	// always return the effective value.
 	Blocklist OptBool `json:"blocklist"`
 }
 
@@ -4386,7 +4393,11 @@ type QueueRules struct {
 	// Strikes a download whose custom-format score does not beat the file already on disk (Sonarr and
 	// Radarr). Optional on write so older clients keep working; left out, the rule takes its default
 	// settings. Reads always return it.
-	NotAnUpgrade        OptQueueRuleSettings `json:"not_an_upgrade"`
+	NotAnUpgrade OptQueueRuleSettings `json:"not_an_upgrade"`
+	// Strikes every download for an episode, movie, album or book except the one with the highest
+	// custom-format score; a tie keeps the lowest queue id. Optional on write so older clients keep
+	// working; left out, the rule takes its default settings. Reads always return it.
+	Duplicate           OptQueueRuleSettings `json:"duplicate"`
 	UnwantedUnmonitored QueueRuleSettings    `json:"unwanted_unmonitored"`
 }
 
@@ -4418,6 +4429,11 @@ func (s *QueueRules) GetUnwantedScore() QueueRuleSettings {
 // GetNotAnUpgrade returns the value of NotAnUpgrade.
 func (s *QueueRules) GetNotAnUpgrade() OptQueueRuleSettings {
 	return s.NotAnUpgrade
+}
+
+// GetDuplicate returns the value of Duplicate.
+func (s *QueueRules) GetDuplicate() OptQueueRuleSettings {
+	return s.Duplicate
 }
 
 // GetUnwantedUnmonitored returns the value of UnwantedUnmonitored.
@@ -4453,6 +4469,11 @@ func (s *QueueRules) SetUnwantedScore(val QueueRuleSettings) {
 // SetNotAnUpgrade sets the value of NotAnUpgrade.
 func (s *QueueRules) SetNotAnUpgrade(val OptQueueRuleSettings) {
 	s.NotAnUpgrade = val
+}
+
+// SetDuplicate sets the value of Duplicate.
+func (s *QueueRules) SetDuplicate(val OptQueueRuleSettings) {
+	s.Duplicate = val
 }
 
 // SetUnwantedUnmonitored sets the value of UnwantedUnmonitored.

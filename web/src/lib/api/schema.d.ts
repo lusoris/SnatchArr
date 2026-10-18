@@ -1804,13 +1804,13 @@ export interface components {
             updated_at: string;
         };
         /** @enum {string} */
-        QueueRule: "stalled" | "slow" | "failed" | "import_blocked" | "unwanted_score" | "not_an_upgrade" | "unwanted_unmonitored";
+        QueueRule: "stalled" | "slow" | "failed" | "import_blocked" | "unwanted_score" | "not_an_upgrade" | "duplicate" | "unwanted_unmonitored";
         /** @enum {string} */
         QueueRuleMode: "observe" | "act";
         QueueRuleSettings: {
             mode: components["schemas"]["QueueRuleMode"];
             threshold: number;
-            /** @description Blocklist the release when the rule removes the item. Left out on write, the rule keeps its default (every rule except not_an_upgrade and unwanted_unmonitored blocklists); reads always return the effective value. */
+            /** @description Blocklist the release when the rule removes the item. Left out on write, the rule keeps its default (every rule except not_an_upgrade, duplicate and unwanted_unmonitored blocklists); reads always return the effective value. */
             blocklist?: boolean;
         };
         QueueRules: {
@@ -1821,6 +1821,8 @@ export interface components {
             unwanted_score: components["schemas"]["QueueRuleSettings"];
             /** @description Strikes a download whose custom-format score does not beat the file already on disk (Sonarr and Radarr). Optional on write so older clients keep working; left out, the rule takes its default settings. Reads always return it. */
             not_an_upgrade?: components["schemas"]["QueueRuleSettings"];
+            /** @description Strikes every download for an episode, movie, album or book except the one with the highest custom-format score; a tie keeps the lowest queue id. Optional on write so older clients keep working; left out, the rule takes its default settings. Reads always return it. */
+            duplicate?: components["schemas"]["QueueRuleSettings"];
             unwanted_unmonitored: components["schemas"]["QueueRuleSettings"];
         };
         QueuePolicy: {

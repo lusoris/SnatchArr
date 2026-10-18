@@ -62,6 +62,9 @@ func itemFor(rule queue.Rule, added time.Time) queue.Item {
 	case queue.RuleUnwantedUnmonitored:
 		base.Monitored = false
 		return base
+	case queue.RuleDuplicate:
+		// A duplicate needs a second item; see duplicate_test.go.
+		return base
 	default:
 		return base
 	}
@@ -85,6 +88,7 @@ func TestDefaultSettingsFollowSpec(t *testing.T) {
 		queue.RuleImportBlocked:       6,
 		queue.RuleUnwantedScore:       1,
 		queue.RuleNotAnUpgrade:        1,
+		queue.RuleDuplicate:           1,
 		queue.RuleUnwantedUnmonitored: 1,
 	}
 	s := queue.DefaultSettings()
@@ -115,6 +119,7 @@ func TestRuleOrderDefinitions(t *testing.T) {
 		queue.RuleImportBlocked,
 		queue.RuleUnwantedScore,
 		queue.RuleNotAnUpgrade,
+		queue.RuleDuplicate,
 		queue.RuleUnwantedUnmonitored,
 	}
 	if len(queue.RuleOrder) != len(expected) {
@@ -444,7 +449,7 @@ func TestEveryRuleBoundary(t *testing.T) {
 				retryItem.SizeLeft = cleanItem.SizeLeft - 10
 			case queue.RuleStalled:
 				retryItem.SizeLeft = cleanItem.SizeLeft
-			case queue.RuleFailed, queue.RuleImportBlocked, queue.RuleUnwantedScore, queue.RuleNotAnUpgrade, queue.RuleUnwantedUnmonitored:
+			case queue.RuleFailed, queue.RuleImportBlocked, queue.RuleUnwantedScore, queue.RuleNotAnUpgrade, queue.RuleDuplicate, queue.RuleUnwantedUnmonitored:
 				// item already has rule-triggering fields set.
 			}
 			retryD := queue.Sweep(s, []queue.Item{retryItem}, prev, retryNow)[0]
@@ -741,6 +746,7 @@ func TestRuleBlocklistDefaultsMatchTable(t *testing.T) {
 		queue.RuleImportBlocked:       true,
 		queue.RuleUnwantedScore:       true,
 		queue.RuleNotAnUpgrade:        false,
+		queue.RuleDuplicate:           false,
 		queue.RuleUnwantedUnmonitored: false,
 	}
 	s := queue.DefaultSettings()

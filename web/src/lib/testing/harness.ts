@@ -181,6 +181,7 @@ export const sampleQueuePolicy: QueuePolicy = {
 		import_blocked: { mode: 'act', threshold: 2, blocklist: true },
 		unwanted_score: { mode: 'observe', threshold: 3, blocklist: true },
 		not_an_upgrade: { mode: 'observe', threshold: 1, blocklist: false },
+		duplicate: { mode: 'observe', threshold: 1, blocklist: false },
 		unwanted_unmonitored: { mode: 'observe', threshold: 3, blocklist: false }
 	},
 	grace_seconds: 3600,

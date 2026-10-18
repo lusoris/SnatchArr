@@ -73,6 +73,7 @@ func queuePolicyToOAS(s queue.Settings) *oas.QueuePolicy {
 		UnwantedUnmonitored: queueRuleToOAS(queue.ResolveRule(s, queue.RuleUnwantedUnmonitored)),
 	}
 	rules.NotAnUpgrade.SetTo(queueRuleToOAS(queue.ResolveRule(s, queue.RuleNotAnUpgrade)))
+	rules.Duplicate.SetTo(queueRuleToOAS(queue.ResolveRule(s, queue.RuleDuplicate)))
 	return &oas.QueuePolicy{
 		Enabled:              s.Enabled,
 		Rules:                rules,
@@ -110,6 +111,9 @@ func queuePolicyFromOAS(req *oas.QueuePolicy) queue.Settings {
 	}
 	if v, ok := req.Rules.NotAnUpgrade.Get(); ok {
 		rules[queue.RuleNotAnUpgrade] = queueRuleFromOAS(v)
+	}
+	if v, ok := req.Rules.Duplicate.Get(); ok {
+		rules[queue.RuleDuplicate] = queueRuleFromOAS(v)
 	}
 	return queue.Settings{
 		Enabled:              req.Enabled,

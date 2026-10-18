@@ -163,7 +163,7 @@ func sonarrQueue(baseURL, apiKey string, o []arr.Option) (queueOps, error) {
 		}
 		items := make([]mappedItem, 0, len(resp.Records))
 		for _, r := range resp.Records {
-			items = appendItem(items, r.QueueRecord, r.CustomFormatScore, r.Episode == nil || r.Episode.Monitored, sonarrFileID(r))
+			items = appendItem(items, r.QueueRecord, recordFacts{score: r.CustomFormatScore, monitored: r.Episode == nil || r.Episode.Monitored, fileID: sonarrFileID(r), mediaID: r.EpisodeID})
 		}
 		return items, len(resp.Records), resp.TotalRecords, nil
 	}
@@ -192,7 +192,7 @@ func radarrQueue(baseURL, apiKey string, o []arr.Option) (queueOps, error) {
 		}
 		items := make([]mappedItem, 0, len(resp.Records))
 		for _, r := range resp.Records {
-			items = appendItem(items, r.QueueRecord, r.CustomFormatScore, r.Movie == nil || r.Movie.Monitored, radarrFileID(r))
+			items = appendItem(items, r.QueueRecord, recordFacts{score: r.CustomFormatScore, monitored: r.Movie == nil || r.Movie.Monitored, fileID: radarrFileID(r), mediaID: r.MovieID})
 		}
 		return items, len(resp.Records), resp.TotalRecords, nil
 	}
@@ -224,7 +224,7 @@ func lidarrQueue(baseURL, apiKey string, o []arr.Option) (queueOps, error) {
 		}
 		items := make([]mappedItem, 0, len(resp.Records))
 		for _, r := range resp.Records {
-			items = appendItem(items, r.QueueRecord, r.CustomFormatScore, r.Album == nil || r.Album.Monitored, 0)
+			items = appendItem(items, r.QueueRecord, recordFacts{score: r.CustomFormatScore, monitored: r.Album == nil || r.Album.Monitored, mediaID: r.AlbumID})
 		}
 		return items, len(resp.Records), resp.TotalRecords, nil
 	}
@@ -246,7 +246,7 @@ func readarrQueue(baseURL, apiKey string, o []arr.Option) (queueOps, error) {
 		}
 		items := make([]mappedItem, 0, len(resp.Records))
 		for _, r := range resp.Records {
-			items = appendItem(items, r.QueueRecord, r.CustomFormatScore, r.Book == nil || r.Book.Monitored, 0)
+			items = appendItem(items, r.QueueRecord, recordFacts{score: r.CustomFormatScore, monitored: r.Book == nil || r.Book.Monitored, mediaID: r.BookID})
 		}
 		return items, len(resp.Records), resp.TotalRecords, nil
 	}
@@ -256,15 +256,23 @@ func readarrQueue(baseURL, apiKey string, o []arr.Option) (queueOps, error) {
 	return queueOps{page: page, remove: remove}, nil
 }
 
+// recordFacts carries what each *arr kind adds to the shared queue record.
+type recordFacts struct {
+	score     int
+	monitored bool
+	fileID    int
+	mediaID   int
+}
+
 // appendItem maps one record; a record whose added time does not parse is
 // dropped. A missing nested item counts as monitored: never remove on
 // missing data.
-func appendItem(items []mappedItem, r arr.QueueRecord, score int, monitored bool, fileID int) []mappedItem {
+func appendItem(items []mappedItem, r arr.QueueRecord, x recordFacts) []mappedItem {
 	added, err := time.Parse(time.RFC3339, r.Added)
 	if err != nil {
 		return items
 	}
-	return append(items, mappedItem{fileID: fileID, item: queue.Item{
+	return append(items, mappedItem{fileID: x.fileID, item: queue.Item{
 		ID:                    int32(r.ID), // #nosec G115 -- *arr ids are small integers
 		DownloadID:            r.DownloadID,
 		Added:                 added,
@@ -272,8 +280,9 @@ func appendItem(items []mappedItem, r arr.QueueRecord, score int, monitored bool
 		TrackedDownloadStatus: r.TrackedDownloadStatus,
 		TrackedDownloadState:  r.TrackedDownloadState,
 		SizeLeft:              int64(max(r.SizeLeft, 0)),
-		CustomFormatScore:     int32(score), // #nosec G115 -- score fits in int32
-		Monitored:             monitored,
+		CustomFormatScore:     int32(x.score),   // #nosec G115 -- score fits in int32
+		MediaID:               int32(x.mediaID), // #nosec G115 -- *arr ids are small integers
+		Monitored:             x.monitored,
 		Title:                 r.Title,
 		StatusLines:           statusLines(r.StatusMessages),
 	}})
