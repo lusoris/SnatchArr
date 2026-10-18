@@ -10,7 +10,7 @@ require (
 	github.com/go-chi/chi/v5 v5.5.0
 	github.com/go-faster/errors v0.8.0
 	github.com/go-faster/jx v1.2.0
-	github.com/go-jose/go-jose/v4 v4.1.5
+	github.com/go-jose/go-jose/v4 v4.1.6
 	github.com/golusoris/goenvoy/arr/lidarr v1.4.0
 	github.com/golusoris/goenvoy/arr/radarr v1.5.0
 	github.com/golusoris/goenvoy/arr/readarr v1.4.0
