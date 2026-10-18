@@ -21,9 +21,15 @@ type leaseLine struct {
 }
 
 // leaseTurn is one waiting call. wake carries at most one token: "you are the head, ask now".
+// timer is the wait the call is in, if any; leave stops it with the token, so a woken call
+// holds no timer from then on (a fake clock counts only the waits that can still end).
 type leaseTurn struct {
-	wake chan struct{}
+	wake  chan struct{}
+	timer stopper
 }
+
+// stopper is the part of a clock timer the line needs.
+type stopper interface{ Stop() bool }
 
 // join adds a call at the end of the line. A call that finds the line empty is the head
 // and asks without waiting for a token.
@@ -50,10 +56,34 @@ func (l *leaseLine) leave(turn *leaseTurn) {
 	if len(l.calls) == 0 {
 		return
 	}
+	head := l.calls[0]
 	select {
-	case l.calls[0].wake <- struct{}{}:
+	case head.wake <- struct{}{}:
 	default:
 	}
+	if head.timer != nil {
+		head.timer.Stop()
+		head.timer = nil
+	}
+}
+
+// arm records the timer of the wait the call starts. A call that already holds a token
+// returns from the wait at once, so its timer is stopped here.
+func (l *leaseLine) arm(turn *leaseTurn, timer stopper) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if len(turn.wake) > 0 {
+		timer.Stop()
+		return
+	}
+	turn.timer = timer
+}
+
+// disarm forgets the timer of the wait the call has ended.
+func (l *leaseLine) disarm(turn *leaseTurn) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	turn.timer = nil
 }
 
 // isHead reports whether the call is the first in the line.
