@@ -67,6 +67,7 @@ nav:
   - Notifications: notifications.md
   - Single Sign-On: sso.md
   - Download clients: download-clients.md
+  - Queue management: queue-management.md
   - Seerr: seerr.md
   - Prowlarr: prowlarr.md
   - Readarr (legacy): readarr.md
