@@ -174,3 +174,69 @@ func TestRun_RetriesAfterElectionError(t *testing.T) {
 		t.Fatalf("loops started %d times without leadership", starts)
 	}
 }
+
+// lossProbe is a Periodic whose tick hands its context to the test and holds it until it is
+// cancelled, so the test sees what a lost lease does to a loop in flight.
+type lossProbe struct {
+	loop  *leaderx.Periodic
+	ticks <-chan context.Context
+	left  chan struct{}
+}
+
+func newLossProbe() *lossProbe {
+	calls := make(chan context.Context, tickBuffer)
+	probe := &lossProbe{ticks: calls, left: make(chan struct{}, tickBuffer)}
+	probe.loop = leaderx.NewPeriodic("job", periodicInterval, clock.NewFake(), &observed{}, func(ctx context.Context) error {
+		calls <- ctx
+		<-ctx.Done()
+		probe.left <- struct{}{}
+		return ctx.Err()
+	})
+	return probe
+}
+
+// Positive, negative, boundary: losing the lease cancels the context of the loop in flight
+// and waits for it, even while the lease context itself is still live; a loss without a term
+// is a no-op; a new term runs the loop again under a fresh context.
+func TestCallbacks_LossCancelsTheLoopContext(t *testing.T) {
+	t.Parallel()
+	probe := newLossProbe()
+	g := leaderx.New(clock.NewFake(), quiet(), probe.loop)
+	cb := g.Callbacks(t.Context())
+
+	// Negative: a loss before any term stops nothing.
+	cb.OnStoppedLeading()
+	if g.Running() || probe.loop.Running() {
+		t.Fatal("a loss without a term started the loops")
+	}
+
+	lease, cancelLease := context.WithCancel(t.Context())
+	defer cancelLease()
+	cb.OnStartedLeading(lease)
+	first := nextTick(t, probe.ticks)
+	cb.OnStoppedLeading()
+	select {
+	case <-first.Done():
+	default:
+		t.Fatal("the loop context is still live after the lease was lost")
+	}
+	select {
+	case <-probe.left:
+	default:
+		t.Fatal("OnStoppedLeading returned before the loop in flight ended")
+	}
+	if g.Running() || probe.loop.Running() {
+		t.Fatalf("gate running=%v loop running=%v after the loss, want both stopped", g.Running(), probe.loop.Running())
+	}
+
+	// Boundary: the next term starts the loop again under a context that is live.
+	cb.OnStartedLeading(lease)
+	second := nextTick(t, probe.ticks)
+	if second.Err() != nil {
+		t.Fatalf("the new term's loop context is already done: %v", second.Err())
+	}
+	cb.OnStoppedLeading()
+	if second.Err() == nil {
+		t.Fatal("the second term's loop context outlived its loss")
+	}
+}
