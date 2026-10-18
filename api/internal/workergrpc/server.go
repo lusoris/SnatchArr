@@ -131,6 +131,10 @@ func (s *Server) await(ctx context.Context, turn *leaseTurn, deadline time.Time)
 	}
 	timer := s.clk.NewTimer(d)
 	defer timer.Stop()
+	if turn != nil {
+		s.line.arm(turn, timer)
+		defer s.line.disarm(turn)
+	}
 	select {
 	case <-ctx.Done():
 		return status.FromContextError(ctx.Err()).Err()

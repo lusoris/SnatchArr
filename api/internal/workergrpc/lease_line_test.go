@@ -68,3 +68,51 @@ func TestLeaseLineOrder(t *testing.T) {
 		})
 	}
 }
+
+// countingTimer counts the calls to Stop.
+type countingTimer struct{ stops int }
+
+func (c *countingTimer) Stop() bool { c.stops++; return true }
+
+// The wait of a woken call ends with its token: leave stops the new head's timer, arm stops the
+// timer of a call that already holds a token, and a call that is not woken keeps its timer.
+func TestLeaseLineStopsTheWokenWait(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name  string
+		run   func(l *leaseLine, timer *countingTimer)
+		stops int
+	}{
+		{"the head leaving stops the next call's wait", func(l *leaseLine, timer *countingTimer) {
+			a, b := l.join(), l.join()
+			l.arm(b, timer)
+			l.leave(a)
+		}, 1},
+		{"a call armed with a token pending stops at once", func(l *leaseLine, timer *countingTimer) {
+			a, b := l.join(), l.join()
+			l.leave(a)
+			l.arm(b, timer)
+		}, 1},
+		{"a call behind the next keeps its wait", func(l *leaseLine, timer *countingTimer) {
+			a, _, c := l.join(), l.join(), l.join()
+			l.arm(c, timer)
+			l.leave(a)
+		}, 0},
+		{"a disarmed call's ended wait is not stopped again", func(l *leaseLine, timer *countingTimer) {
+			a, b := l.join(), l.join()
+			l.arm(b, timer)
+			l.disarm(b)
+			l.leave(a)
+		}, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			timer := &countingTimer{}
+			tc.run(&leaseLine{}, timer)
+			if timer.stops != tc.stops {
+				t.Errorf("Stop() calls = %d, want %d", timer.stops, tc.stops)
+			}
+		})
+	}
+}
