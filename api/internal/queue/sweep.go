@@ -65,7 +65,7 @@ func evaluateItem(s Settings, item Item, prev Strike, now time.Time, removalsCou
 }
 
 func applyRuleMatch(s Settings, item Item, prev Strike, r Rule, now time.Time, removalsCount *int) Decision {
-	rs := getRuleSettings(s, r)
+	rs := ResolveRule(s, r)
 	count := 1
 	if prev.Rule == r && prev.Count > 0 {
 		count = prev.Count + 1
@@ -92,7 +92,7 @@ func applyRuleMatch(s Settings, item Item, prev Strike, r Rule, now time.Time, r
 		Threshold:   rs.Threshold,
 		Remove:      remove,
 		WouldRemove: wouldRemove,
-		Blocklist:   isBlocklistRule(r),
+		Blocklist:   *rs.Blocklist,
 		Deferred:    deferred,
 	}
 }
@@ -109,19 +109,22 @@ func resolveThresholdAction(mode Mode, maxRemovals int, removalsCount *int) (boo
 }
 
 func defaultRuleSettings(r Rule) RuleSettings {
+	blocklist := isBlocklistRule(r)
 	switch r {
 	case RuleStalled, RuleSlow, RuleImportBlocked:
-		return RuleSettings{Mode: ModeObserve, Threshold: 6}
+		return RuleSettings{Mode: ModeObserve, Threshold: 6, Blocklist: &blocklist}
 	case RuleFailed:
-		return RuleSettings{Mode: ModeObserve, Threshold: 2}
+		return RuleSettings{Mode: ModeObserve, Threshold: 2, Blocklist: &blocklist}
 	case RuleUnwantedScore, RuleUnwantedUnmonitored:
-		return RuleSettings{Mode: ModeObserve, Threshold: 1}
+		return RuleSettings{Mode: ModeObserve, Threshold: 1, Blocklist: &blocklist}
 	default:
-		return RuleSettings{Mode: ModeObserve, Threshold: 1}
+		return RuleSettings{Mode: ModeObserve, Threshold: 1, Blocklist: &blocklist}
 	}
 }
 
-func getRuleSettings(s Settings, r Rule) RuleSettings {
+// ResolveRule returns the effective settings for r: stored values, with the rule's
+// default for every unset field.
+func ResolveRule(s Settings, r Rule) RuleSettings {
 	def := defaultRuleSettings(r)
 	if s.Rules == nil {
 		return def
@@ -135,6 +138,9 @@ func getRuleSettings(s Settings, r Rule) RuleSettings {
 	}
 	if rs.Threshold <= 0 {
 		rs.Threshold = def.Threshold
+	}
+	if rs.Blocklist == nil {
+		rs.Blocklist = def.Blocklist
 	}
 	return rs
 }

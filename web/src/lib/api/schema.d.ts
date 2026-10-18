@@ -1810,6 +1810,8 @@ export interface components {
         QueueRuleSettings: {
             mode: components["schemas"]["QueueRuleMode"];
             threshold: number;
+            /** @description Blocklist the release when the rule removes the item. Left out on write, the rule keeps its default (every rule except unwanted_unmonitored blocklists); reads always return the effective value. */
+            blocklist?: boolean;
         };
         QueueRules: {
             stalled: components["schemas"]["QueueRuleSettings"];

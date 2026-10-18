@@ -97,6 +97,7 @@
 	"queue_rule_mode_observe": "Beobachten",
 	"queue_rule_mode_act": "Eingreifen",
 	"queue_rule_threshold": "Schwelle",
+	"queue_rule_blocklist": "Sperrliste",
 	"queue_policy_grace": "Schonfrist (Minuten)",
 	"queue_policy_min_bps": "Mindestgeschwindigkeit (Bytes/Sek.)",
 	"queue_policy_min_cfs": "Mindest-Formatbewertung",

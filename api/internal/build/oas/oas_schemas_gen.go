@@ -4287,6 +4287,10 @@ func (s *QueueRuleMode) UnmarshalText(data []byte) error {
 type QueueRuleSettings struct {
 	Mode      QueueRuleMode `json:"mode"`
 	Threshold int           `json:"threshold"`
+	// Blocklist the release when the rule removes the item. Left out on write, the rule keeps its
+	// default (every rule except unwanted_unmonitored blocklists); reads always return the effective
+	// value.
+	Blocklist OptBool `json:"blocklist"`
 }
 
 // GetMode returns the value of Mode.
@@ -4299,6 +4303,11 @@ func (s *QueueRuleSettings) GetThreshold() int {
 	return s.Threshold
 }
 
+// GetBlocklist returns the value of Blocklist.
+func (s *QueueRuleSettings) GetBlocklist() OptBool {
+	return s.Blocklist
+}
+
 // SetMode sets the value of Mode.
 func (s *QueueRuleSettings) SetMode(val QueueRuleMode) {
 	s.Mode = val
@@ -4307,6 +4316,11 @@ func (s *QueueRuleSettings) SetMode(val QueueRuleMode) {
 // SetThreshold sets the value of Threshold.
 func (s *QueueRuleSettings) SetThreshold(val int) {
 	s.Threshold = val
+}
+
+// SetBlocklist sets the value of Blocklist.
+func (s *QueueRuleSettings) SetBlocklist(val OptBool) {
+	s.Blocklist = val
 }
 
 // Ref: #/components/schemas/QueueRules

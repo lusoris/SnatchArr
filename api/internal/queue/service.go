@@ -253,7 +253,7 @@ type strikePayload struct {
 }
 
 func (s *Service) emitStrikeEvent(ctx context.Context, inst Instance, cfg Settings, d Decision, now time.Time) {
-	rs := getRuleSettings(cfg, d.Rule)
+	rs := ResolveRule(cfg, d.Rule)
 	mode := string(rs.Mode)
 	if mode == "" {
 		mode = string(ModeObserve)

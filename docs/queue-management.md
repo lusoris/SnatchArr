@@ -30,7 +30,7 @@ An instance kind whose queue lacks the fields the rules read (Whisparr today) is
 
 Each sweep checks an item against the rules in this order and gives it at most one strike, for the first rule it breaks. A sweep in which the item breaks no rule resets its count to zero.
 
-| State | Strike when (one sweep) | Default strikes | Blocklist | Test |
+| State | Strike when (one sweep) | Default strikes | Default blocklist | Test |
 | :--- | :--- | :--- | :--- | :--- |
 | stalled | `trackedDownloadState=downloading`, `sizeleft > 0`, and `sizeleft` did not drop since the previous sweep | 6 | yes | `TestStateStalled` |
 | slow | `downloading`, `sizeleft` dropped, but the rate since the previous sweep is below `min_bytes_per_second` | 6 | yes | `TestStateSlow` |
@@ -38,6 +38,8 @@ Each sweep checks an item against the rules in this order and gives it at most o
 | import-blocked | `trackedDownloadState=importBlocked`, or `importPending` with `trackedDownloadStatus=warning` | 6 | yes | `TestStateImportBlocked` |
 | unwanted (score) | `customFormatScore` below `min_custom_format_score` | 1 | yes | `TestStateUnwantedScore` |
 | unwanted (unmonitored) | the item is not monitored | 1 | no | `TestStateUnwantedUnmonitored` |
+
+Each rule carries its own `blocklist` switch next to `mode` and `threshold` (the Blocklist column in the instance view). Left out of a write, the rule keeps the default from the table; reads always return the effective value. Switching it off removes the item without a blocklist entry, so the release may be grabbed again; switching it on for unwanted (unmonitored) blocklists the release as well. Tests: `TestRuleBlocklistSetting` and `TestRuleBlocklistDefaultsMatchTable` in `api/internal/queue/rules_test.go`.
 
 The state tests live in `api/internal/queue/states_test.go`. Each has `positive/`, `negative/` and `boundary/` subtests: the threshold minus one strike removes nothing, the threshold strike removes, and a clean sweep resets the count.
 

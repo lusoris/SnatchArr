@@ -97,6 +97,7 @@
 	"queue_rule_mode_observe": "Observe",
 	"queue_rule_mode_act": "Act",
 	"queue_rule_threshold": "Threshold",
+	"queue_rule_blocklist": "Blocklist",
 	"queue_policy_grace": "Grace period (minutes)",
 	"queue_policy_min_bps": "Minimum download speed (bytes/sec)",
 	"queue_policy_min_cfs": "Minimum custom format score",

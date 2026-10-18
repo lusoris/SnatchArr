@@ -59,6 +59,33 @@ describe('QueuePolicy', () => {
 		expect(body.grace_seconds).toBe(7200);
 	});
 
+	it('sends the per-rule blocklist switch with the policy', async () => {
+		const put = vi.spyOn(api, 'PUT').mockResolvedValue({ data: sampleQueuePolicy } as never);
+		stubGet({
+			'/instances/{instanceId}/queue-policy': sampleQueuePolicy
+		});
+		renderWithQuery(QueuePolicy, { instanceId: forkInstance.id });
+
+		await screen.findByRole('heading', { level: 2, name: m.queue_policy_title() });
+		const failed = screen.getByLabelText(
+			`${m.queue_rule_failed()} ${m.queue_rule_blocklist()}`
+		) as HTMLInputElement;
+		const unmonitored = screen.getByLabelText(
+			`${m.queue_rule_unwanted_unmonitored()} ${m.queue_rule_blocklist()}`
+		) as HTMLInputElement;
+		expect(failed.checked).toBe(true);
+		expect(unmonitored.checked).toBe(false);
+		await fireEvent.click(failed);
+		await fireEvent.click(unmonitored);
+
+		await fireEvent.click(screen.getByRole('button', { name: m.queue_policy_save() }));
+
+		const body = (put.mock.calls[0]![1] as { body: QueuePolicyType }).body;
+		expect(body.rules.failed.blocklist).toBe(false);
+		expect(body.rules.unwanted_unmonitored.blocklist).toBe(true);
+		expect(body.rules.stalled.blocklist).toBe(true);
+	});
+
 	it('shows a problem error when saving fails with 422', async () => {
 		vi.spyOn(api, 'PUT').mockRejectedValue(
 			new ProblemError({

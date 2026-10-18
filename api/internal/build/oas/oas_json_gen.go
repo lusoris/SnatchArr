@@ -8132,11 +8132,18 @@ func (s *QueueRuleSettings) encodeFields(e *jx.Encoder) {
 		e.FieldStart("threshold")
 		e.Int(s.Threshold)
 	}
+	{
+		if s.Blocklist.Set {
+			e.FieldStart("blocklist")
+			s.Blocklist.Encode(e)
+		}
+	}
 }
 
-var jsonFieldsNameOfQueueRuleSettings = [2]string{
+var jsonFieldsNameOfQueueRuleSettings = [3]string{
 	0: "mode",
 	1: "threshold",
+	2: "blocklist",
 }
 
 // Decode decodes QueueRuleSettings from json.
@@ -8169,6 +8176,16 @@ func (s *QueueRuleSettings) Decode(d *jx.Decoder) error {
 				return nil
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"threshold\"")
+			}
+		case "blocklist":
+			if err := func() error {
+				s.Blocklist.Reset()
+				if err := s.Blocklist.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"blocklist\"")
 			}
 		default:
 			return d.Skip()

@@ -175,12 +175,12 @@ export const sampleRuns: Run[] = [
 export const sampleQueuePolicy: QueuePolicy = {
 	enabled: true,
 	rules: {
-		stalled: { mode: 'observe', threshold: 3 },
-		slow: { mode: 'observe', threshold: 5 },
-		failed: { mode: 'act', threshold: 1 },
-		import_blocked: { mode: 'act', threshold: 2 },
-		unwanted_score: { mode: 'observe', threshold: 3 },
-		unwanted_unmonitored: { mode: 'observe', threshold: 3 }
+		stalled: { mode: 'observe', threshold: 3, blocklist: true },
+		slow: { mode: 'observe', threshold: 5, blocklist: true },
+		failed: { mode: 'act', threshold: 1, blocklist: true },
+		import_blocked: { mode: 'act', threshold: 2, blocklist: true },
+		unwanted_score: { mode: 'observe', threshold: 3, blocklist: true },
+		unwanted_unmonitored: { mode: 'observe', threshold: 3, blocklist: false }
 	},
 	grace_seconds: 3600,
 	min_bytes_per_second: 1024,

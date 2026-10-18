@@ -54,7 +54,7 @@ func (h *Handlers) ListQueueStrikes(ctx context.Context, params oas.ListQueueStr
 	}
 	out := make([]oas.QueueStrike, 0, len(items))
 	for _, item := range items {
-		out = append(out, queueStrikeToOAS(item, cfg.Rules[item.Rule].Threshold))
+		out = append(out, queueStrikeToOAS(item, queue.ResolveRule(cfg, item.Rule).Threshold))
 	}
 	return out, nil
 }
@@ -65,12 +65,12 @@ func queuePolicyToOAS(s queue.Settings) *oas.QueuePolicy {
 		minCFS.SetTo(*s.MinCustomFormatScore)
 	}
 	rules := oas.QueueRules{
-		Stalled:             queueRuleToOAS(s.Rules[queue.RuleStalled]),
-		Slow:                queueRuleToOAS(s.Rules[queue.RuleSlow]),
-		Failed:              queueRuleToOAS(s.Rules[queue.RuleFailed]),
-		ImportBlocked:       queueRuleToOAS(s.Rules[queue.RuleImportBlocked]),
-		UnwantedScore:       queueRuleToOAS(s.Rules[queue.RuleUnwantedScore]),
-		UnwantedUnmonitored: queueRuleToOAS(s.Rules[queue.RuleUnwantedUnmonitored]),
+		Stalled:             queueRuleToOAS(queue.ResolveRule(s, queue.RuleStalled)),
+		Slow:                queueRuleToOAS(queue.ResolveRule(s, queue.RuleSlow)),
+		Failed:              queueRuleToOAS(queue.ResolveRule(s, queue.RuleFailed)),
+		ImportBlocked:       queueRuleToOAS(queue.ResolveRule(s, queue.RuleImportBlocked)),
+		UnwantedScore:       queueRuleToOAS(queue.ResolveRule(s, queue.RuleUnwantedScore)),
+		UnwantedUnmonitored: queueRuleToOAS(queue.ResolveRule(s, queue.RuleUnwantedUnmonitored)),
 	}
 	return &oas.QueuePolicy{
 		Enabled:              s.Enabled,
@@ -83,10 +83,14 @@ func queuePolicyToOAS(s queue.Settings) *oas.QueuePolicy {
 }
 
 func queueRuleToOAS(rs queue.RuleSettings) oas.QueueRuleSettings {
-	return oas.QueueRuleSettings{
+	out := oas.QueueRuleSettings{
 		Mode:      oas.QueueRuleMode(rs.Mode),
 		Threshold: rs.Threshold,
 	}
+	if rs.Blocklist != nil {
+		out.Blocklist.SetTo(*rs.Blocklist)
+	}
+	return out
 }
 
 func queuePolicyFromOAS(req *oas.QueuePolicy) queue.Settings {
@@ -114,10 +118,14 @@ func queuePolicyFromOAS(req *oas.QueuePolicy) queue.Settings {
 }
 
 func queueRuleFromOAS(s oas.QueueRuleSettings) queue.RuleSettings {
-	return queue.RuleSettings{
+	rs := queue.RuleSettings{
 		Mode:      queue.Mode(s.Mode),
 		Threshold: s.Threshold,
 	}
+	if v, ok := s.Blocklist.Get(); ok {
+		rs.Blocklist = &v
+	}
+	return rs
 }
 
 func queueStrikeToOAS(item queue.StrikeItem, threshold int) oas.QueueStrike {
