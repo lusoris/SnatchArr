@@ -484,9 +484,10 @@ hooks-verify: ## The commit-message policy against its accepted and refused case
 secret-scan: ## gitleaks over every local ref, as CI job secret-scan (pinned release, cached in .cache/)
 	sh tools/ci/gitleaks_scan.sh .cache/gitleaks
 
-workflows-verify: ## The rule of "CI success" and the Security Scan issue step, against their cases
+workflows-verify: ## The rule of "CI success", the Security Scan issue step and the Semgrep scan, against their cases
 	sh tools/ci/status_test.sh
 	sh tools/ci/security_issue_test.sh
+	sh tools/ci/semgrep_scan_test.sh
 
 # Not part of verify-all: needs Docker, the network and a forge token (GH_TOKEN, read access).
 # The CI job "workflows" runs it on every pull request.
