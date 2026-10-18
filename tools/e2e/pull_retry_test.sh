@@ -3,7 +3,8 @@
 # SPDX-License-Identifier: EUPL-1.2
 #
 # Cases for pull_retry.sh: a pull that succeeds at once, one that succeeds on the last allowed
-# try, and one that never succeeds (refused after exactly PULL_TRIES tries, not more).
+# try, one that never succeeds (refused after exactly PULL_TRIES tries, not more), and a
+# docker compose call that hangs, ended by compose at DC_SECONDS.
 set -euo pipefail
 
 # shellcheck source=tools/e2e/pull_retry.sh
@@ -39,4 +40,17 @@ expect "first try succeeds" 0 1 4 1
 expect "last allowed try succeeds" 0 4 4 4
 expect "never succeeds: refused after the bound" 1 4 4 99
 expect "one try allowed, it fails" 1 1 1 2
+# A docker compose call that hangs ends at DC_SECONDS with status 124 (a fake docker sleeps).
+mkdir "$work/bin"
+printf '#!/bin/sh\nexec sleep 30\n' >"$work/bin/docker"
+chmod +x "$work/bin/docker"
+start=$SECONDS
+status=0
+PATH="$work/bin:$PATH" DC_SECONDS=1 compose pull --quiet || status=$?
+if [ "$status" = 124 ] && [ $((SECONDS - start)) -lt 10 ]; then
+    echo "ok   a hung compose call ends at the bound"
+else
+    echo "FAIL a hung compose call: status $status after $((SECONDS - start))s, want 124 within 10s" >&2
+    failed=1
+fi
 exit "$failed"

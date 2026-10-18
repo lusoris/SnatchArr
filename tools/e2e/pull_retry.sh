@@ -7,6 +7,9 @@
 # ("error from registry: retry-after ..."), which failed a whole CI job on 2026-10-17. The
 # images are pulled before `up`, a bounded number of times with a jittered wait between tries.
 #
+# compose bounds the time of each docker compose call, so a pull try that hangs fails and is
+# tried again: one hung try took a CI job to its 15 min timeout on 2026-10-18.
+#
 # PULL_TRIES (default 4) bounds the tries; PULL_WAIT (default 15) is the first wait in seconds,
 # doubled after each failed try, plus up to half of it at random.
 
@@ -26,4 +29,9 @@ pull_retry() {
     done
     echo "pull_retry: pull failed $tries times" >&2
     return 1
+}
+
+# compose ARGS...: one docker compose call, ended after DC_SECONDS (default 300) seconds.
+compose() {
+    timeout --foreground --kill-after=10 "${DC_SECONDS:-300}" docker compose "$@"
 }
