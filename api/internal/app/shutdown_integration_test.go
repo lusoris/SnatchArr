@@ -113,7 +113,7 @@ func startOnFreePort(ctx context.Context, t *testing.T, pick func(*testing.T) st
 }
 
 // controlPlaneConfig is the configuration of one control plane on the test's own database,
-// read from a file only: the prefix matches no variable.
+// read from a file only, with the environment layer disabled.
 func controlPlaneConfig(t *testing.T, grpcAddr string) *gconfig.Config {
 	t.Helper()
 	cc := storetest.New(t).Pool().Config().ConnConfig
@@ -134,7 +134,7 @@ func controlPlaneConfig(t *testing.T, grpcAddr string) *gconfig.Config {
 	if err = os.WriteFile(file, raw, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := gconfig.New(gconfig.Options{Files: []string{file}, EnvPrefix: "SNATCHARR_SHUTDOWN_TEST_UNSET_"})
+	cfg, err := gconfig.New(gconfig.Options{Files: []string{file}, DisableEnv: true})
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}

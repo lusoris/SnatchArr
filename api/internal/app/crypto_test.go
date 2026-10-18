@@ -34,8 +34,7 @@ func cryptoGraph(t *testing.T, configJSON string, bare bool) (*crypto.Encryptor,
 	if err := os.WriteFile(file, []byte(configJSON), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	// The prefix matches no variable, so the test reads the file only.
-	cfg, err := gconfig.New(gconfig.Options{Files: []string{file}, EnvPrefix: "SNATCHARR_CRYPTO_TEST_UNSET_"})
+	cfg, err := gconfig.New(gconfig.Options{Files: []string{file}, DisableEnv: true})
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
