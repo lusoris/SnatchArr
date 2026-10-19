@@ -134,7 +134,7 @@ SPDX-License-Identifier: EUPL-1.2
 						<span class="text-subtle">{formatWhen(r.time, getLocale())}</span>
 						<span class="ml-2 font-semibold">{logLevelLabel(r.level)}</span>
 						<span class="ml-2 text-subtle">{r.source}</span>
-						<span class="ml-2">{r.message}</span>
+						<span class="ml-2 [overflow-wrap:anywhere] break-all">{r.message}</span>
 						{#each r.attrs as a, i (i)}
 							<span class="ml-2 text-subtle">{a.key}={a.value}</span>
 						{/each}

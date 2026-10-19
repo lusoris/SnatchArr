@@ -210,52 +210,55 @@ SPDX-License-Identifier: EUPL-1.2
 {:else if (requests.data ?? []).length === 0}
 	<p class="card">{m.seerr_empty()}</p>
 {:else}
-	<table class="table">
-		<caption class="sr-only">{m.seerr_requests_title()}</caption>
-		<thead>
-			<tr>
-				<th scope="col">{m.history_title_col()}</th>
-				<th scope="col">{m.seerr_requested_by()}</th>
-				<th scope="col">{m.instance_name()}</th>
-				<th scope="col">{m.seerr_resolved()}</th>
-				<th scope="col">{m.seerr_last_snatched()}</th>
-				<th scope="col"><span class="sr-only">{m.action_actions()}</span></th>
-			</tr>
-		</thead>
-		<tbody>
-			{#each requests.data ?? [] as r (`${r.link_id}/${r.request_id}`)}
+	<div class="relative overflow-x-auto">
+		<table class="table">
+			<caption class="sr-only">{m.seerr_requests_title()}</caption>
+			<thead>
 				<tr>
-					<td>{r.title || `${r.media_type} #${r.request_id}`} {r.is_4k ? '4K' : ''}</td>
-					<td>{r.requested_by}</td>
-					<td>
-						{#if r.instance_name}
-							{r.instance_name}
-						{:else}
-							<span aria-hidden="true">–</span><span class="sr-only">{m.seerr_no_instance()}</span>
-						{/if}
-					</td>
-					<td>
-						{#if r.resolved}
-							<span aria-hidden="true">✓</span><span class="sr-only"
-								>{m.seerr_resolved_status()}</span
-							>
-						{:else}
-							{r.unresolved_reason ?? m.seerr_unresolved()}
-						{/if}
-					</td>
-					<td>{formatWhen(r.last_snatched_at, getLocale())}</td>
-					<td>
-						<button
-							type="button"
-							class="btn"
-							disabled={!r.resolved || snatch.isPending}
-							onclick={() =>
-								snatch.mutate({ linkId: r.link_id, requestId: r.request_id, title: r.title })}
-							>{m.seerr_snatch_now()}</button
-						>
-					</td>
+					<th scope="col">{m.history_title_col()}</th>
+					<th scope="col">{m.seerr_requested_by()}</th>
+					<th scope="col">{m.instance_name()}</th>
+					<th scope="col">{m.seerr_resolved()}</th>
+					<th scope="col">{m.seerr_last_snatched()}</th>
+					<th scope="col"><span class="sr-only">{m.action_actions()}</span></th>
 				</tr>
-			{/each}
-		</tbody>
-	</table>
+			</thead>
+			<tbody>
+				{#each requests.data ?? [] as r (`${r.link_id}/${r.request_id}`)}
+					<tr>
+						<td>{r.title || `${r.media_type} #${r.request_id}`} {r.is_4k ? '4K' : ''}</td>
+						<td>{r.requested_by}</td>
+						<td>
+							{#if r.instance_name}
+								{r.instance_name}
+							{:else}
+								<span aria-hidden="true">–</span><span class="sr-only">{m.seerr_no_instance()}</span
+								>
+							{/if}
+						</td>
+						<td>
+							{#if r.resolved}
+								<span aria-hidden="true">✓</span><span class="sr-only"
+									>{m.seerr_resolved_status()}</span
+								>
+							{:else}
+								{r.unresolved_reason ?? m.seerr_unresolved()}
+							{/if}
+						</td>
+						<td>{formatWhen(r.last_snatched_at, getLocale())}</td>
+						<td>
+							<button
+								type="button"
+								class="btn"
+								disabled={!r.resolved || snatch.isPending}
+								onclick={() =>
+									snatch.mutate({ linkId: r.link_id, requestId: r.request_id, title: r.title })}
+								>{m.seerr_snatch_now()}</button
+							>
+						</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
+	</div>
 {/if}

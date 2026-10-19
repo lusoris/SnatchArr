@@ -78,14 +78,14 @@ export default defineConfig({
 					},
 					{
 						name: 'authenticated',
-						testMatch: /a11y\.test\.ts/,
+						testMatch: /(a11y|phone-overflow)\.test\.ts/,
 						grep: /authenticated:/,
 						dependencies: ['auth-setup'],
 						use: { browserName: 'chromium', storageState: authFile }
 					},
 					{
 						name: 'flow',
-						testMatch: /flow\.test\.ts/,
+						testMatch: /(^|\/)flow\.test\.ts/,
 						dependencies: ['authenticated'],
 						use: { browserName: 'chromium', storageState: authFile }
 					}

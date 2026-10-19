@@ -109,38 +109,40 @@ SPDX-License-Identifier: EUPL-1.2
 {:else if (rules.data ?? []).length === 0}
 	<p class="card mb-4">{m.notifications_empty_rules()}</p>
 {:else}
-	<table class="mb-6 table">
-		<caption class="sr-only">{m.notifications_rules_title()}</caption>
-		<thead>
-			<tr>
-				<th scope="col">{m.rule_name()}</th>
-				<th scope="col">{m.rule_event_kind()}</th>
-				<th scope="col">{m.rule_threshold()}</th>
-				<th scope="col">{m.rule_channels()}</th>
-				<th scope="col"><span class="sr-only">{m.action_actions()}</span></th>
-			</tr>
-		</thead>
-		<tbody>
-			{#each rules.data ?? [] as r (r.id)}
+	<div class="relative overflow-x-auto">
+		<table class="mb-6 table">
+			<caption class="sr-only">{m.notifications_rules_title()}</caption>
+			<thead>
 				<tr>
-					<td>{r.name}</td>
-					<td>{eventLabel(r.event_kind)}</td>
-					<td>{r.threshold}</td>
-					<td>{formatChannels(r.channel_ids)}</td>
-					<td>
-						<button
-							type="button"
-							class="btn"
-							disabled={remove.isPending}
-							onclick={() => remove.mutate(r.id)}
-						>
-							{m.rule_delete()}
-						</button>
-					</td>
+					<th scope="col">{m.rule_name()}</th>
+					<th scope="col">{m.rule_event_kind()}</th>
+					<th scope="col">{m.rule_threshold()}</th>
+					<th scope="col">{m.rule_channels()}</th>
+					<th scope="col"><span class="sr-only">{m.action_actions()}</span></th>
 				</tr>
-			{/each}
-		</tbody>
-	</table>
+			</thead>
+			<tbody>
+				{#each rules.data ?? [] as r (r.id)}
+					<tr>
+						<td>{r.name}</td>
+						<td>{eventLabel(r.event_kind)}</td>
+						<td>{r.threshold}</td>
+						<td>{formatChannels(r.channel_ids)}</td>
+						<td>
+							<button
+								type="button"
+								class="btn"
+								disabled={remove.isPending}
+								onclick={() => remove.mutate(r.id)}
+							>
+								{m.rule_delete()}
+							</button>
+						</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
+	</div>
 {/if}
 
 <form
