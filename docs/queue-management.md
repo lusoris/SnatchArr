@@ -24,7 +24,7 @@ A queue item gets no strike while any of these hold (`api/internal/queue/sweep.g
 - the item was `added` less than `grace_seconds` ago (default 15 minutes, at most 24 hours);
 - queue management is off for the instance.
 
-An instance kind whose queue lacks the fields the rules read (Whisparr today) is skipped, and the skip is counted in the queue metrics (`api/internal/queue/service.go`). Tests: `TestEveryRuleNegative` (its "never touched" cases), `TestGraceProtectsNewItem`, `TestWhisparrSkipped`.
+An instance kind whose adapter returns `ErrQueueUnsupported` for the queue is skipped, and the skip is counted in the queue metrics (`api/internal/queue/service.go`). No kind is skipped today: Whisparr v2 and v3 queues are read through goenvoy whisparr 1.5.0 (`api/internal/arrclient/queue.go`). Tests: `TestEveryRuleNegative` (its "never touched" cases), `TestGraceProtectsNewItem`, `TestUnsupportedKindSkipped`.
 
 ## States
 
@@ -99,7 +99,7 @@ Removals triggered by `failed` (and `import_broken`) set `skipRedownload=false` 
 
 ### Import-fixable, import-broken, import-not-wanted, import-blocked
 
-- `import_fixable`: class `fixable`. Attempts manual import via `ForceImport` (subject to `max_imports_per_sweep` bound). On Sonarr and Radarr, candidates qualify if mapped and all rejections classify as `fixable`. On Lidarr, Readarr, and Whisparr, `ForceImport` returns `ErrQueueUnsupported` and the item is reported as `WouldImport` with `import_refused`, never removed.
+- `import_fixable`: class `fixable`. Attempts manual import via `ForceImport` (subject to `max_imports_per_sweep` bound). On Sonarr, Radarr, Lidarr, and Readarr, candidates qualify if mapped and all rejections classify as `fixable`. On Whisparr, `ForceImport` returns `ErrQueueUnsupported` and the item is reported as `WouldImport` with `import_refused`, never removed.
 - `import_broken`: class `broken`. Removes the item with `blocklist=true` and `skipRedownload=false` (re-search).
 - `import_not_wanted`: class `not_wanted`. Removes the item with `blocklist=true` and `skipRedownload=true` (no re-search).
 - `import_blocked`: class `unknown`. Strikes the item for reporting (records `Decision.Unknown = true` and `Pattern`), but **never removes** or blocklists, even when configured in `act` mode.

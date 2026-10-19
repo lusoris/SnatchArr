@@ -15,6 +15,7 @@ import (
 	"github.com/golusoris/goenvoy/arr/readarr"
 	"github.com/golusoris/goenvoy/arr/sonarr"
 	"github.com/golusoris/goenvoy/arr/v2"
+	"github.com/golusoris/goenvoy/arr/whisparr"
 
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/queue"
@@ -143,9 +144,10 @@ func (p *GoenvoyProber) queueOps(kind domain.AppKind, baseURL, apiKey string) (q
 		return lidarrQueue(baseURL, apiKey, o)
 	case domain.KindReadarr:
 		return readarrQueue(baseURL, apiKey, o)
-	case domain.KindWhisparrV2, domain.KindWhisparrV3:
-		// goenvoy arr/whisparr has no queue options, score or skipRedownload.
-		return queueOps{}, queue.ErrQueueUnsupported
+	case domain.KindWhisparrV2:
+		return whisparrQueue(baseURL, apiKey, o)
+	case domain.KindWhisparrV3:
+		return whisparrV3Queue(baseURL, apiKey, o)
 	default:
 		return queueOps{}, fmt.Errorf("%w: unsupported kind %q", domain.ErrInvalid, kind)
 	}
@@ -256,6 +258,56 @@ func readarrQueue(baseURL, apiKey string, o []arr.Option) (queueOps, error) {
 	return queueOps{page: page, remove: remove}, nil
 }
 
+func whisparrQueue(baseURL, apiKey string, o []arr.Option) (queueOps, error) {
+	c, err := whisparr.New(baseURL, apiKey, o...)
+	if err != nil {
+		return queueOps{}, fmt.Errorf("arrclient: whisparr: %w", err)
+	}
+	page := func(ctx context.Context, page, size int) ([]mappedItem, int, int, error) {
+		resp, err := c.GetQueueWithOptions(ctx, whisparr.QueueOptions{Page: page, PageSize: size, IncludeItem: true})
+		if err != nil {
+			return nil, 0, 0, fmt.Errorf("whisparr queue: %w", err)
+		}
+		items := make([]mappedItem, 0, len(resp.Records))
+		for _, r := range resp.Records {
+			items = appendItem(items, r.QueueRecord, recordFacts{score: r.CustomFormatScore, monitored: r.Episode == nil || r.Episode.Monitored, fileID: whisparrV2FileID(r), mediaID: r.EpisodeID})
+		}
+		return items, len(resp.Records), resp.TotalRecords, nil
+	}
+	remove := func(ctx context.Context, id int, blocklist, research bool) error {
+		return c.DeleteQueueItemWithOptions(ctx, id, whisparr.QueueDeleteOptions{RemoveFromClient: true, SkipRedownload: !research, Blocklist: blocklist})
+	}
+	fileScore := func(ctx context.Context, id int) (*int32, error) {
+		return nil, fmt.Errorf("whisparr episode file %d: %w", id, errNoFileScore)
+	}
+	return queueOps{page: page, remove: remove, fileScore: fileScore}, nil
+}
+
+func whisparrV3Queue(baseURL, apiKey string, o []arr.Option) (queueOps, error) {
+	c, err := whisparr.NewV3(baseURL, apiKey, o...)
+	if err != nil {
+		return queueOps{}, fmt.Errorf("arrclient: whisparr v3: %w", err)
+	}
+	page := func(ctx context.Context, page, size int) ([]mappedItem, int, int, error) {
+		resp, err := c.GetQueueWithOptions(ctx, whisparr.QueueOptions{Page: page, PageSize: size, IncludeItem: true})
+		if err != nil {
+			return nil, 0, 0, fmt.Errorf("whisparr v3 queue: %w", err)
+		}
+		items := make([]mappedItem, 0, len(resp.Records))
+		for _, r := range resp.Records {
+			items = appendItem(items, r.QueueRecord, recordFacts{score: r.CustomFormatScore, monitored: r.Movie == nil || r.Movie.Monitored, fileID: whisparrV3FileID(r), mediaID: r.MovieID})
+		}
+		return items, len(resp.Records), resp.TotalRecords, nil
+	}
+	remove := func(ctx context.Context, id int, blocklist, research bool) error {
+		return c.DeleteQueueItemWithOptions(ctx, id, whisparr.QueueDeleteOptions{RemoveFromClient: true, SkipRedownload: !research, Blocklist: blocklist})
+	}
+	fileScore := func(ctx context.Context, id int) (*int32, error) {
+		return nil, fmt.Errorf("whisparr movie file %d: %w", id, errNoFileScore)
+	}
+	return queueOps{page: page, remove: remove, fileScore: fileScore}, nil
+}
+
 // recordFacts carries what each *arr kind adds to the shared queue record.
 type recordFacts struct {
 	score     int
@@ -299,6 +351,24 @@ func sonarrFileID(r sonarr.QueueRecord) int {
 // radarrFileID returns the movie file on disk. The queue embeds the movie
 // without custom formats, so its score is read from /moviefile.
 func radarrFileID(r radarr.QueueRecord) int {
+	if r.Movie == nil {
+		return 0
+	}
+	return r.Movie.MovieFileID
+}
+
+// whisparrV2FileID returns the episode file on disk for the queue item's episode,
+// or 0 if the record carries no episode or no episode file id.
+func whisparrV2FileID(r whisparr.QueueRecord) int {
+	if r.Episode == nil {
+		return 0
+	}
+	return r.Episode.EpisodeFileID
+}
+
+// whisparrV3FileID returns the movie file on disk for the queue item's movie,
+// or 0 if the record carries no movie or no movie file id.
+func whisparrV3FileID(r whisparr.QueueRecord) int {
 	if r.Movie == nil {
 		return 0
 	}

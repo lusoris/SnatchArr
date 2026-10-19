@@ -114,7 +114,8 @@ The rules and their order are described in [ADR-0012](adr/0012-queue-management-
 Every rule starts in `observe` mode: a strike is recorded and shown, and the queue is left
 alone. A rule in `act` mode removes the download once its strike count reaches the threshold;
 every rule except `unwanted_unmonitored` also blocklists the release so the *arr searches again.
-Whisparr has no queue API in goenvoy and is skipped.
+Whisparr v2 and v3 queues are swept like the others; Whisparr items are never force-imported,
+so `import_fixable` reports them as refused.
 
 ### Rules
 
