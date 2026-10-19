@@ -511,6 +511,16 @@ func TestLoadCompoundKeysFromEnv(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "configarr policies",
+			env:  map[string]string{"APP_SNATCHARR_CONFIGARR_POLICIES": "/etc/snatcharr/policies.yml"},
+			assertFn: func(t *testing.T, opts config.Options) {
+				t.Helper()
+				if opts.Configarr.Policies != "/etc/snatcharr/policies.yml" {
+					t.Fatalf("Configarr.Policies = %q, want %q", opts.Configarr.Policies, "/etc/snatcharr/policies.yml")
+				}
+			},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

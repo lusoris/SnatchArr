@@ -24,6 +24,8 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
 	"github.com/lusoris/SnatchArr/api/internal/leaderx"
+	"github.com/lusoris/SnatchArr/api/internal/policies"
+	"github.com/lusoris/SnatchArr/api/internal/queue"
 )
 
 // Result summarises one import.
@@ -62,6 +64,8 @@ type Service struct {
 	cfg       config.ConfigarrOptions
 	instances *instances.Service
 	dlclients *dlclients.Service
+	policies  *policies.Service
+	queue     *queue.Store
 	probe     arrclient.Prober
 	clk       clock.Clock
 	logger    *slog.Logger
@@ -77,8 +81,26 @@ type Service struct {
 }
 
 // New wires the service.
-func New(cfg config.Options, inst *instances.Service, dl *dlclients.Service, probe arrclient.Prober, clk clock.Clock, logger *slog.Logger) *Service {
-	return &Service{cfg: cfg.Configarr, instances: inst, dlclients: dl, probe: probe, clk: clk, logger: logger}
+func New(
+	cfg config.Options,
+	inst *instances.Service,
+	dl *dlclients.Service,
+	pol *policies.Service,
+	q *queue.Store,
+	probe arrclient.Prober,
+	clk clock.Clock,
+	logger *slog.Logger,
+) *Service {
+	return &Service{
+		cfg:       cfg.Configarr,
+		instances: inst,
+		dlclients: dl,
+		policies:  pol,
+		queue:     q,
+		probe:     probe,
+		clk:       clk,
+		logger:    logger,
+	}
 }
 
 // Status reports the linked-mode state.
@@ -114,12 +136,34 @@ func (s *Service) Import(ctx context.Context, configPath, secretsPath string) (R
 	return res, err
 }
 
-func (s *Service) importFiles(ctx context.Context, configPath, secretsPath string) (Result, error) {
+func parseConfig(configPath, secretsPath string) (Parsed, error) {
 	parsed, err := Parse(configPath, secretsPath)
 	if err != nil {
 		if errors.Is(err, ErrParse) {
-			return Result{}, fmt.Errorf("%w: %w", domain.ErrInvalid, err)
+			return Parsed{}, fmt.Errorf("%w: %w", domain.ErrInvalid, err)
 		}
+		return Parsed{}, err
+	}
+	return parsed, nil
+}
+
+func (s *Service) importOptionalComponents(ctx context.Context, secretsPath string, res *Result) error {
+	if s.cfg.DownloadClients != "" && s.dlclients != nil {
+		if err := s.importDownloadClients(ctx, secretsPath, res); err != nil {
+			return err
+		}
+	}
+	if s.cfg.Policies != "" && s.policies != nil && s.queue != nil {
+		if err := s.importPolicies(ctx, secretsPath, res); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Service) importFiles(ctx context.Context, configPath, secretsPath string) (Result, error) {
+	parsed, err := parseConfig(configPath, secretsPath)
+	if err != nil {
 		return Result{}, err
 	}
 	res := Result{Warnings: parsed.Warnings, At: s.clk.Now()}
@@ -132,10 +176,8 @@ func (s *Service) importFiles(ctx context.Context, configPath, secretsPath strin
 		return res, err
 	}
 	res.Disabled = disabled
-	if s.cfg.DownloadClients != "" && s.dlclients != nil {
-		if err := s.importDownloadClients(ctx, secretsPath, &res); err != nil {
-			return res, err
-		}
+	if err := s.importOptionalComponents(ctx, secretsPath, &res); err != nil {
+		return res, err
 	}
 	return res, nil
 }
@@ -335,7 +377,7 @@ func (s *Service) loop(ctx context.Context) {
 
 // importIfChanged re-imports when the files' size or modification time moved.
 func (s *Service) importIfChanged(ctx context.Context, force bool) {
-	state := fileFingerprint(s.cfg.Config) + "|" + fileFingerprint(s.cfg.Secrets) + "|" + fileFingerprint(s.cfg.DownloadClients)
+	state := fileFingerprint(s.cfg.Config) + "|" + fileFingerprint(s.cfg.Secrets) + "|" + fileFingerprint(s.cfg.DownloadClients) + "|" + fileFingerprint(s.cfg.Policies)
 	s.mu.Lock()
 	changed := state != s.fileState
 	s.fileState = state

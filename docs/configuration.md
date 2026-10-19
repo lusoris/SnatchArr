@@ -32,6 +32,7 @@ UI.
 | `APP_SNATCHARR_APIKEY_SECRET` | required in prod | HMAC secret for API keys |
 | `APP_SNATCHARR_CONFIGARR_CONFIG` | | Path to Configarr `config.yml` (linked mode) |
 | `APP_SNATCHARR_CONFIGARR_DOWNLOAD_CLIENTS` | | Path to download clients YAML file (linked mode) |
+| `APP_SNATCHARR_CONFIGARR_POLICIES` | | Path to declarative snatch and queue policies YAML file (linked mode) |
 | `APP_SNATCHARR_CONFIGARR_SECRETS` | | Path to Configarr `secrets.yml` |
 | `APP_SNATCHARR_CONFIGARR_WATCH` | `true` | Re-import on file change |
 | `APP_SNATCHARR_PROWLARR_LIMIT_THRESHOLD` | `0.9` | Fraction (0, 1] of an indexer's Prowlarr query limit at which SnatchArr treats the indexer as exhausted ([Prowlarr](prowlarr.md)) |
@@ -192,3 +193,26 @@ sabnzbd:
 ```
 
 `!secret` (resolved from `APP_SNATCHARR_CONFIGARR_SECRETS`), `!env` and `!file` tags work identically to instance secrets. When an entry disappears from the file, it is pruned. Provisioned clients are marked with source `configarr`; mutating or deleting them via the UI or API is rejected with 403 Forbidden.
+
+### Declarative Policies
+
+When `APP_SNATCHARR_CONFIGARR_POLICIES` points to a YAML file, snatch policies and queue policies are declaratively applied to Configarr instances:
+
+```yaml
+defaults:            # optional, applied to every Configarr instance first
+  queue:
+    enabled: true
+instances:
+  sonarr/series:     # Configarr key <app>/<name>, as Definition.Key
+    snatch:
+      missing_per_cycle: 2
+      hourly_cap: 30
+    queue:
+      enabled: true
+      rules:
+        failed: { mode: observe, threshold: 2 }
+```
+
+Field names match the API JSON field names of `SnatchPolicy` and `QueuePolicy` in the OpenAPI specification. Policies are partial: only listed fields change, while unlisted fields keep their current stored value (merging instance entries over defaults, over stored values). The UI keeps editing policies; a later import overwrites the fields the file lists ("the file wins for the fields it names").
+
+`!secret` (resolved from `APP_SNATCHARR_CONFIGARR_SECRETS`), `!env` and `!file` tags work identically to instance secrets. Declarative policies apply only to `source=configarr` instances; manual instances are untouched. Unknown instance keys, unknown fields, or values rejected by the service are reported as warnings in the import status while remaining instances apply.

@@ -110,7 +110,10 @@ func readBounded(path string, limit int64) ([]byte, error) {
 }
 
 func documentRoot(doc *yaml.Node) *yaml.Node {
-	if doc.Kind == yaml.DocumentNode && len(doc.Content) > 0 {
+	if doc.Kind == yaml.DocumentNode {
+		if len(doc.Content) == 0 {
+			return nil
+		}
 		return doc.Content[0]
 	}
 	return doc

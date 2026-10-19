@@ -284,7 +284,7 @@ func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Genera
 		Profile: config.ProfileDev,
 		Session: config.SessionOptions{TTL: 8 * time.Hour, Secure: false},
 	}
-	configarrSvc := configarr.New(cfg, instSvc, clients, probe, clk, logger)
+	configarrSvc := configarr.New(cfg, instSvc, clients, polSvc, queue.NewStore(st, clk), probe, clk, logger)
 	build := buildinfo.Info{Version: "test-ver", Commit: "test-commit", Date: "2026-10-14"}
 	h := &Handlers{
 		build:     build,
