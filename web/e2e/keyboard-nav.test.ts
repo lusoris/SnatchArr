@@ -141,8 +141,8 @@ test.describe('keyboard navigation', () => {
 		await page.goto('/');
 		const links = page.locator('nav a.nav-link');
 		await expect(links.first()).toBeVisible();
-		const count = await links.count();
-		expect(count).toBeGreaterThan(0);
-		await expect(page.locator('nav a.nav-link svg')).toHaveCount(count);
+		// The admin entries join the nav once the session loads, so a link
+		// count read up front can be stale; assert that no link lacks an icon.
+		await expect(page.locator('nav a.nav-link:not(:has(svg))')).toHaveCount(0);
 	});
 });
