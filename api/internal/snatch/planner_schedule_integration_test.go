@@ -83,7 +83,7 @@ func (tc unreadableCase) run(t *testing.T) {
 	}
 	assertQueued(t, f.st, tc.wantQueued)
 	for id, want := range map[uuid.UUID]float64{a: tc.wantFailedA, b: tc.wantFailedB} {
-		got, ok := metricstest.Value(t, f.reg, planFailures, "instance", instanceName(id))
+		got, ok := metricstest.Value(t, f.reg, planFailures, "arr_instance", instanceName(id))
 		if got != want || (want == 0 && ok) {
 			t.Errorf("%s{%s} = %v (present %t), want %v", planFailures, instanceName(id), got, ok, want)
 		}

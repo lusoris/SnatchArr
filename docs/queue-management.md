@@ -100,7 +100,7 @@ The sweep groups the instance's queue items by media item: the episode for Sonar
 - Strike rows live in the `queue_strikes` table, one per instance and `downloadId`, with the rule, count, last `sizeleft`, last seen time, the last force import (`imported_at`, `import_refused`) and `expires_at` (last seen plus 24 hours). The API is their only writer; rows of items that left the queue expire.
 - The sweep runs every 10 minutes on the elected leader (`leader_loops`). Per instance it reads at most 10 pages of 200 items plus at most 50 file scores, and removes at most `max_removals_per_sweep` items (default 10); the rest wait for the next sweep without an extra strike (`TestRemovalBoundExhaustion`, `TestMaxRemovalsBound`).
 - A removal that fails keeps the row and is retried next sweep without counting twice (`TestFailedDeleteKeepsRowAndRetries`).
-- Events on the SSE stream: `queue_item_struck` (`rule`, `count`, `threshold`, `mode`, `would_remove`, `would_import`), `queue_item_removed` (`rule`, `blocklist`), `queue_item_imported` and `queue_item_import_failed` (detail `no_clean_candidate`, `still_id_matched` or `error`). The metric `snatcharr_queue_imports_total{instance,result}` counts the same import results, with `ok` for a sent import and `would_import` for an observed one.
+- Events on the SSE stream: `queue_item_struck` (`rule`, `count`, `threshold`, `mode`, `would_remove`, `would_import`), `queue_item_removed` (`rule`, `blocklist`), `queue_item_imported` and `queue_item_import_failed` (detail `no_clean_candidate`, `still_id_matched` or `error`). The metric `snatcharr_queue_imports_total{arr_instance,result}` counts the same import results, with `ok` for a sent import and `would_import` for an observed one.
 
 ## Settings
 

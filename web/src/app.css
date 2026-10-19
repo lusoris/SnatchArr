@@ -60,8 +60,7 @@ body {
 		color 150ms ease,
 		border-color 150ms ease;
 }
-.nav-link[aria-current='page'],
-.subtab-link[aria-current='page'] {
+.nav-link[aria-current='page'] {
 	background-color: var(--color-nav-active);
 	color: var(--color-nav-active-foreground);
 	border-left: 3px solid var(--color-brand);
@@ -70,6 +69,41 @@ body {
 }
 .nav-link:hover:not([aria-current='page']) {
 	background-color: var(--color-secondary);
+}
+
+/* Instance subtabs: ADR-0015 section 4. */
+.subtab-bar {
+	display: flex;
+	gap: 0.5rem;
+	overflow-x: auto;
+	max-width: 100%;
+	border-bottom: 1px solid var(--color-line);
+	padding-bottom: 1px;
+}
+.subtab-link {
+	display: inline-flex;
+	align-items: center;
+	padding: 0.5rem 0.875rem;
+	border-radius: 0.5rem 0.5rem 0 0;
+	font-size: 0.875rem;
+	font-weight: 500;
+	white-space: nowrap;
+	color: var(--color-subtle);
+	border-bottom: 3px solid transparent;
+	transition:
+		background-color 150ms ease,
+		color 150ms ease,
+		border-color 150ms ease;
+}
+.subtab-link:hover:not([aria-current='page']) {
+	background-color: var(--color-secondary);
+	color: var(--color-fg);
+}
+.subtab-link[aria-current='page'] {
+	background-color: var(--color-nav-active);
+	color: var(--color-nav-active-foreground);
+	border-bottom: 3px solid var(--color-brand);
+	font-weight: 600;
 }
 
 .btn {
