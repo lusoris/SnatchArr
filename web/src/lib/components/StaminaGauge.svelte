@@ -44,17 +44,17 @@ SPDX-License-Identifier: EUPL-1.2
 
 <style>
 	.bar {
-		background: var(--color-muted, oklch(0.9 0.01 260));
+		background: var(--color-muted);
 	}
 	.fill {
 		background: var(--stamina-color, oklch(0.62 0.16 160));
 		transition: width 300ms ease;
 	}
 	.stamina[data-level='tired'] {
-		--stamina-color: oklch(0.75 0.16 80);
+		--stamina-color: var(--color-warning);
 	}
 	.stamina[data-level='spent'] {
-		--stamina-color: oklch(0.6 0.2 25);
+		--stamina-color: var(--color-danger);
 	}
 	@media (prefers-reduced-motion: reduce) {
 		.fill {
