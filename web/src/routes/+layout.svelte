@@ -54,8 +54,11 @@ SPDX-License-Identifier: EUPL-1.2
 		}
 	}
 
-	onMount(() => {
-		void checkSession();
+	// PLANTED DEFECT (UIF1): the shell waits for the session request before it renders.
+	let shellReady = $state(false);
+	onMount(async () => {
+		await checkSession();
+		shellReady = true;
 	});
 
 	$effect(() => {
@@ -84,7 +87,7 @@ SPDX-License-Identifier: EUPL-1.2
 		<main id="main" class="flex min-h-screen items-center justify-center p-4" tabindex="-1">
 			{@render children()}
 		</main>
-	{:else}
+	{:else if shellReady}
 		<div class="min-h-screen bg-bg text-fg">
 			<TopBar {drawerOpen} onOpenDrawer={openDrawer} bind:menuButtonEl />
 
