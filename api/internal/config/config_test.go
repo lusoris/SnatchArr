@@ -501,6 +501,16 @@ func TestLoadCompoundKeysFromEnv(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "configarr download_clients",
+			env:  map[string]string{"APP_SNATCHARR_CONFIGARR_DOWNLOAD_CLIENTS": "/etc/snatcharr/download-clients.yml"},
+			assertFn: func(t *testing.T, opts config.Options) {
+				t.Helper()
+				if opts.Configarr.DownloadClients != "/etc/snatcharr/download-clients.yml" {
+					t.Fatalf("Configarr.DownloadClients = %q, want %q", opts.Configarr.DownloadClients, "/etc/snatcharr/download-clients.yml")
+				}
+			},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

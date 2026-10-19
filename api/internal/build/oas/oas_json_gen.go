@@ -689,6 +689,18 @@ func (s *ConfigarrImportResult) encodeFields(e *jx.Encoder) {
 		e.Int(s.Disabled)
 	}
 	{
+		e.FieldStart("clients_imported")
+		e.Int(s.ClientsImported)
+	}
+	{
+		e.FieldStart("clients_updated")
+		e.Int(s.ClientsUpdated)
+	}
+	{
+		e.FieldStart("clients_removed")
+		e.Int(s.ClientsRemoved)
+	}
+	{
 		e.FieldStart("warnings")
 		e.ArrStart()
 		for _, elem := range s.Warnings {
@@ -702,12 +714,15 @@ func (s *ConfigarrImportResult) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfConfigarrImportResult = [5]string{
+var jsonFieldsNameOfConfigarrImportResult = [8]string{
 	0: "imported",
 	1: "updated",
 	2: "disabled",
-	3: "warnings",
-	4: "at",
+	3: "clients_imported",
+	4: "clients_updated",
+	5: "clients_removed",
+	6: "warnings",
+	7: "at",
 }
 
 // Decode decodes ConfigarrImportResult from json.
@@ -755,8 +770,44 @@ func (s *ConfigarrImportResult) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"disabled\"")
 			}
-		case "warnings":
+		case "clients_imported":
 			requiredBitSet[0] |= 1 << 3
+			if err := func() error {
+				v, err := d.Int()
+				s.ClientsImported = int(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"clients_imported\"")
+			}
+		case "clients_updated":
+			requiredBitSet[0] |= 1 << 4
+			if err := func() error {
+				v, err := d.Int()
+				s.ClientsUpdated = int(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"clients_updated\"")
+			}
+		case "clients_removed":
+			requiredBitSet[0] |= 1 << 5
+			if err := func() error {
+				v, err := d.Int()
+				s.ClientsRemoved = int(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"clients_removed\"")
+			}
+		case "warnings":
+			requiredBitSet[0] |= 1 << 6
 			if err := func() error {
 				s.Warnings = make([]string, 0)
 				if err := d.Arr(func(d *jx.Decoder) error {
@@ -776,7 +827,7 @@ func (s *ConfigarrImportResult) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"warnings\"")
 			}
 		case "at":
-			requiredBitSet[0] |= 1 << 4
+			requiredBitSet[0] |= 1 << 7
 			if err := func() error {
 				v, err := json.DecodeDateTime(d)
 				s.At = v
@@ -797,7 +848,7 @@ func (s *ConfigarrImportResult) Decode(d *jx.Decoder) error {
 	// Validate required fields.
 	var failures []validate.FieldError
 	for i, mask := range [1]uint8{
-		0b00011111,
+		0b11111111,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -2192,6 +2243,8 @@ func (s *DownloadClientSource) Decode(d *jx.Decoder) error {
 		*s = DownloadClientSourceManual
 	case DownloadClientSourceDiscovered:
 		*s = DownloadClientSourceDiscovered
+	case DownloadClientSourceConfigarr:
+		*s = DownloadClientSourceConfigarr
 	default:
 		*s = DownloadClientSource(v)
 	}

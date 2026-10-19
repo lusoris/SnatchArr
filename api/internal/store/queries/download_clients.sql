@@ -55,3 +55,24 @@ WHERE id = $1;
 
 -- name: DeleteDownloadClient :execrows
 DELETE FROM download_clients WHERE id = $1;
+
+-- name: UpsertConfigarrDownloadClient :one
+INSERT INTO download_clients (
+    id, instance_id, kind, name, base_url, username, secret_enc, enabled, source, configarr_key,
+    max_active, bandwidth_budget_bps, created_at, updated_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, 'configarr', $9,
+    $10, $11, $12, $12
+)
+ON CONFLICT (configarr_key) WHERE configarr_key IS NOT NULL DO UPDATE
+SET instance_id = EXCLUDED.instance_id, kind = EXCLUDED.kind, name = EXCLUDED.name,
+    base_url = EXCLUDED.base_url, username = EXCLUDED.username, secret_enc = EXCLUDED.secret_enc,
+    enabled = EXCLUDED.enabled, max_active = EXCLUDED.max_active,
+    bandwidth_budget_bps = EXCLUDED.bandwidth_budget_bps, updated_at = EXCLUDED.updated_at
+RETURNING *, (xmax = 0) AS inserted;
+
+-- name: DeleteConfigarrDownloadClientsNotIn :execrows
+DELETE FROM download_clients
+WHERE source = 'configarr' AND configarr_key IS NOT NULL
+  AND NOT (configarr_key = ANY(@keys::text[]));
+

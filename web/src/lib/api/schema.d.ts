@@ -1468,7 +1468,7 @@ export interface components {
             username: string;
             enabled: boolean;
             /** @enum {string} */
-            source: "manual" | "discovered";
+            source: "manual" | "discovered" | "configarr";
             /** @description Foreplay - defer snatches once this many downloads are active (0 = no limit) */
             max_active: number;
             /**
@@ -1673,6 +1673,12 @@ export interface components {
             updated: number;
             /** @description Configarr-owned instances no longer defined, switched off */
             disabled: number;
+            /** @description Download clients created */
+            clients_imported: number;
+            /** @description Download clients updated */
+            clients_updated: number;
+            /** @description Download clients removed because no longer defined */
+            clients_removed: number;
             warnings: string[];
             /** Format: date-time */
             at: string;

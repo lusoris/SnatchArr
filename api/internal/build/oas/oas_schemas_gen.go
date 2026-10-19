@@ -434,9 +434,15 @@ type ConfigarrImportResult struct {
 	Imported int `json:"imported"`
 	Updated  int `json:"updated"`
 	// Configarr-owned instances no longer defined, switched off.
-	Disabled int       `json:"disabled"`
-	Warnings []string  `json:"warnings"`
-	At       time.Time `json:"at"`
+	Disabled int `json:"disabled"`
+	// Download clients created.
+	ClientsImported int `json:"clients_imported"`
+	// Download clients updated.
+	ClientsUpdated int `json:"clients_updated"`
+	// Download clients removed because no longer defined.
+	ClientsRemoved int       `json:"clients_removed"`
+	Warnings       []string  `json:"warnings"`
+	At             time.Time `json:"at"`
 }
 
 // GetImported returns the value of Imported.
@@ -452,6 +458,21 @@ func (s *ConfigarrImportResult) GetUpdated() int {
 // GetDisabled returns the value of Disabled.
 func (s *ConfigarrImportResult) GetDisabled() int {
 	return s.Disabled
+}
+
+// GetClientsImported returns the value of ClientsImported.
+func (s *ConfigarrImportResult) GetClientsImported() int {
+	return s.ClientsImported
+}
+
+// GetClientsUpdated returns the value of ClientsUpdated.
+func (s *ConfigarrImportResult) GetClientsUpdated() int {
+	return s.ClientsUpdated
+}
+
+// GetClientsRemoved returns the value of ClientsRemoved.
+func (s *ConfigarrImportResult) GetClientsRemoved() int {
+	return s.ClientsRemoved
 }
 
 // GetWarnings returns the value of Warnings.
@@ -477,6 +498,21 @@ func (s *ConfigarrImportResult) SetUpdated(val int) {
 // SetDisabled sets the value of Disabled.
 func (s *ConfigarrImportResult) SetDisabled(val int) {
 	s.Disabled = val
+}
+
+// SetClientsImported sets the value of ClientsImported.
+func (s *ConfigarrImportResult) SetClientsImported(val int) {
+	s.ClientsImported = val
+}
+
+// SetClientsUpdated sets the value of ClientsUpdated.
+func (s *ConfigarrImportResult) SetClientsUpdated(val int) {
+	s.ClientsUpdated = val
+}
+
+// SetClientsRemoved sets the value of ClientsRemoved.
+func (s *ConfigarrImportResult) SetClientsRemoved(val int) {
+	s.ClientsRemoved = val
 }
 
 // SetWarnings sets the value of Warnings.
@@ -1198,6 +1234,7 @@ type DownloadClientSource string
 const (
 	DownloadClientSourceManual     DownloadClientSource = "manual"
 	DownloadClientSourceDiscovered DownloadClientSource = "discovered"
+	DownloadClientSourceConfigarr  DownloadClientSource = "configarr"
 )
 
 // AllValues returns all DownloadClientSource values.
@@ -1205,6 +1242,7 @@ func (DownloadClientSource) AllValues() []DownloadClientSource {
 	return []DownloadClientSource{
 		DownloadClientSourceManual,
 		DownloadClientSourceDiscovered,
+		DownloadClientSourceConfigarr,
 	}
 }
 
@@ -1214,6 +1252,8 @@ func (s DownloadClientSource) MarshalText() ([]byte, error) {
 	case DownloadClientSourceManual:
 		return []byte(s), nil
 	case DownloadClientSourceDiscovered:
+		return []byte(s), nil
+	case DownloadClientSourceConfigarr:
 		return []byte(s), nil
 	default:
 		return nil, errors.Errorf("invalid value: %q", s)
@@ -1228,6 +1268,9 @@ func (s *DownloadClientSource) UnmarshalText(data []byte) error {
 		return nil
 	case DownloadClientSourceDiscovered:
 		*s = DownloadClientSourceDiscovered
+		return nil
+	case DownloadClientSourceConfigarr:
+		*s = DownloadClientSourceConfigarr
 		return nil
 	default:
 		return errors.Errorf("invalid value: %q", data)

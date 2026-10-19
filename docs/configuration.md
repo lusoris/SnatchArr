@@ -31,6 +31,7 @@ UI.
 | `APP_SNATCHARR_SESSION_SECURE` | `true` | `Secure` flag on the session cookie; while it is on, responses also carry `Strict-Transport-Security` (one year), so leave it on only when browsers reach SnatchArr over HTTPS |
 | `APP_SNATCHARR_APIKEY_SECRET` | required in prod | HMAC secret for API keys |
 | `APP_SNATCHARR_CONFIGARR_CONFIG` | | Path to Configarr `config.yml` (linked mode) |
+| `APP_SNATCHARR_CONFIGARR_DOWNLOAD_CLIENTS` | | Path to download clients YAML file (linked mode) |
 | `APP_SNATCHARR_CONFIGARR_SECRETS` | | Path to Configarr `secrets.yml` |
 | `APP_SNATCHARR_CONFIGARR_WATCH` | `true` | Re-import on file change |
 | `APP_SNATCHARR_PROWLARR_LIMIT_THRESHOLD` | `0.9` | Fraction (0, 1] of an indexer's Prowlarr query limit at which SnatchArr treats the indexer as exhausted ([Prowlarr](prowlarr.md)) |
@@ -169,3 +170,25 @@ file and switched off, it can be deleted.
 `POST /api/v1/configarr/import` runs a one-shot import (with `config_path` and
 `secrets_path` in the body, or the linked files); `GET /api/v1/configarr/status` shows
 linked mode and the last result.
+
+### Declarative Download Clients
+
+When `APP_SNATCHARR_CONFIGARR_DOWNLOAD_CLIENTS` points to a YAML file, download clients are declaratively provisioned and kept in sync alongside instances:
+
+```yaml
+qbittorrent:            # section = domain.DownloadClientKind value; accept every kind ParseDownloadClientKind accepts
+  main:                 # entry name -> key "qbittorrent/main", Name "main"
+    base_url: http://qbittorrent.media.svc:8080
+    username: !env QBIT_USER
+    password: !file /etc/snatcharr/configarr-secrets/qbit-password
+    instance: sonarr/main   # optional Configarr instance key; omitted = applies to every instance
+    max_active: 0           # optional int
+    bandwidth_budget_bps: 0 # optional int64
+    enabled: true           # optional, default true
+sabnzbd:
+  main:
+    base_url: http://sabnzbd.media.svc:8080
+    api_key: !secret sabnzbd_api_key   # secret = api_key or password, exactly one, both -> parse error
+```
+
+`!secret` (resolved from `APP_SNATCHARR_CONFIGARR_SECRETS`), `!env` and `!file` tags work identically to instance secrets. When an entry disappears from the file, it is pruned. Provisioned clients are marked with source `configarr`; mutating or deleting them via the UI or API is rejected with 403 Forbidden.

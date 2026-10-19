@@ -515,6 +515,8 @@ func (s DownloadClientSource) Validate() error {
 		return nil
 	case "discovered":
 		return nil
+	case "configarr":
+		return nil
 	default:
 		return errors.Errorf("invalid value: %v", s)
 	}

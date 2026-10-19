@@ -120,6 +120,7 @@ SPDX-License-Identifier: EUPL-1.2
 	}
 
 	async function edit(c: DownloadClient): Promise<void> {
+		if (c.source === 'configarr') return;
 		save.reset();
 		editing = c;
 		await tick();
@@ -186,7 +187,12 @@ SPDX-License-Identifier: EUPL-1.2
 					</p>
 				{/if}
 				<div class="mt-3 flex flex-wrap gap-2">
-					<button type="button" class="btn" onclick={() => edit(c)}>{m.action_edit()}</button>
+					<button
+						type="button"
+						class="btn"
+						disabled={c.source === 'configarr'}
+						onclick={() => edit(c)}>{m.action_edit()}</button
+					>
 					<button
 						type="button"
 						class="btn"
@@ -195,7 +201,7 @@ SPDX-License-Identifier: EUPL-1.2
 					>
 					<ConfirmDelete
 						name={c.name}
-						disabled={remove.isPending}
+						disabled={remove.isPending || c.source === 'configarr'}
 						onconfirm={() => remove.mutate(c)}
 					/>
 				</div>

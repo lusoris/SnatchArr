@@ -27,6 +27,9 @@ data:
   {{- end }}
   {{- if .Values.configarr.enabled }}
   APP_SNATCHARR_CONFIGARR_CONFIG: /etc/snatcharr/configarr/{{ .Values.configarr.configKey }}
+  {{- if .Values.configarr.downloadClientsKey }}
+  APP_SNATCHARR_CONFIGARR_DOWNLOAD_CLIENTS: /etc/snatcharr/configarr/{{ .Values.configarr.downloadClientsKey }}
+  {{- end }}
   {{- if .Values.configarr.existingSecret }}
   APP_SNATCHARR_CONFIGARR_SECRETS: /etc/snatcharr/configarr-secrets/{{ .Values.configarr.secretsKey }}
   {{- end }}
