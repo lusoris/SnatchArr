@@ -112,13 +112,13 @@ func TestPlanFailed(t *testing.T) {
 	m.PlanFailed("sonarr-4k")
 	m.PlanFailed("sonarr-4k")
 	m.PlanFailed("radarr")
-	if got, _ := value(t, reg, planFailed, "instance", "sonarr-4k"); got != 2 {
+	if got, _ := value(t, reg, planFailed, "arr_instance", "sonarr-4k"); got != 2 {
 		t.Errorf("%s{sonarr-4k} = %v, want 2", planFailed, got)
 	}
-	if got, _ := value(t, reg, planFailed, "instance", "radarr"); got != 1 {
+	if got, _ := value(t, reg, planFailed, "arr_instance", "radarr"); got != 1 {
 		t.Errorf("%s{radarr} = %v, want 1", planFailed, got)
 	}
-	if got, ok := value(t, reg, planFailed, "instance", "lidarr"); ok {
+	if got, ok := value(t, reg, planFailed, "arr_instance", "lidarr"); ok {
 		t.Errorf("%s{lidarr} = %v, want no series", planFailed, got)
 	}
 }
@@ -138,7 +138,7 @@ func TestNew_ReusesRegisteredCollectors(t *testing.T) {
 	}
 	first.PlanFailed("sonarr")
 	second.PlanFailed("sonarr")
-	if got, _ := value(t, reg, planFailed, "instance", "sonarr"); got != 2 {
+	if got, _ := value(t, reg, planFailed, "arr_instance", "sonarr"); got != 2 {
 		t.Errorf("%s{sonarr} = %v, want 2 from both instances", planFailed, got)
 	}
 }
@@ -260,9 +260,9 @@ func TestSearchesDispatched(t *testing.T) {
 		want     float64
 		expected bool
 	}{
-		{"positive sonarr missing", map[string]string{"instance": "sonarr-4k", "kind": "missing"}, 6, true},
-		{"positive radarr upgrade", map[string]string{"instance": "radarr", "kind": "upgrade"}, 2, true},
-		{"negative lidarr missing", map[string]string{"instance": "lidarr", "kind": "missing"}, 0, false},
+		{"positive sonarr missing", map[string]string{"arr_instance": "sonarr-4k", "kind": "missing"}, 6, true},
+		{"positive radarr upgrade", map[string]string{"arr_instance": "radarr", "kind": "upgrade"}, 2, true},
+		{"negative lidarr missing", map[string]string{"arr_instance": "lidarr", "kind": "missing"}, 0, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -290,10 +290,10 @@ func TestStaminaGauges(t *testing.T) {
 		name, series, label, value string
 		want                       float64
 	}{
-		{"positive used sonarr", "snatcharr_stamina_used_items", "instance", "sonarr", 15},
-		{"positive remaining sonarr", "snatcharr_stamina_remaining_items", "instance", "sonarr", 5},
-		{"positive used global", "snatcharr_stamina_used_items", "instance", "_global", 50},
-		{"positive remaining global", "snatcharr_stamina_remaining_items", "instance", "_global", 50},
+		{"positive used sonarr", "snatcharr_stamina_used_items", "arr_instance", "sonarr", 15},
+		{"positive remaining sonarr", "snatcharr_stamina_remaining_items", "arr_instance", "sonarr", 5},
+		{"positive used global", "snatcharr_stamina_used_items", "arr_instance", "_global", 50},
+		{"positive remaining global", "snatcharr_stamina_remaining_items", "arr_instance", "_global", 50},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -407,7 +407,7 @@ func TestSearchDispatchedAt(t *testing.T) {
 	}
 	for _, tc := range cases {
 		m.SearchDispatchedAt(tc.instance, tc.at)
-		got, ok := value(t, reg, metric, "instance", tc.instance)
+		got, ok := value(t, reg, metric, "arr_instance", tc.instance)
 		if !ok || got != tc.want {
 			t.Errorf("%s{%s} = %v (present %t), want %v", metric, tc.instance, got, ok, tc.want)
 		}
