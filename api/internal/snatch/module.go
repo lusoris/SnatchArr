@@ -11,9 +11,9 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/clock"
+	"github.com/golusoris/golusoris/leader/gate"
 
 	"github.com/lusoris/SnatchArr/api/internal/events"
-	"github.com/lusoris/SnatchArr/api/internal/leaderx"
 	"github.com/lusoris/SnatchArr/api/internal/metrics"
 	"github.com/lusoris/SnatchArr/api/internal/store"
 )
@@ -36,11 +36,11 @@ func newPlanner(st storeParam, clk clock.Clock, runs *Runs, rec *Recorder, logge
 }
 
 // Ticker runs the planner once per TickInterval while this replica leads.
-type Ticker struct{ *leaderx.Periodic }
+type Ticker struct{ *gate.Periodic }
 
 // NewTicker builds the planner's leader loop.
 func NewTicker(planner *Planner, clk clock.Clock, logger *slog.Logger, m *metrics.Metrics) *Ticker {
-	return &Ticker{leaderx.NewPeriodic("snatch: planner", TickInterval, clk, m, func(ctx context.Context) error {
+	return &Ticker{gate.NewPeriodic("snatch: planner", TickInterval, clk, m, func(ctx context.Context) error {
 		n, err := planner.Tick(ctx)
 		if err != nil {
 			logger.ErrorContext(ctx, "snatch: planner tick", slog.String("error", err.Error()))
@@ -69,6 +69,6 @@ func newRecorder(p recorderParams) *Recorder {
 // Module provides the snatch services and registers the planner ticker.
 var Module = fx.Module("snatcharr.snatch",
 	fx.Provide(NewBudget, NewMemory, NewRuns, NewWorkers, newRecorder, NewSchedules, newPlanner, NewTicker, NewStateTicker),
-	// The planner and state metrics loops run on the leader only (internal/leaderx).
-	fx.Provide(leaderx.Provide[*Ticker](), leaderx.Provide[*StateTicker]()),
+	// The planner and state metrics loops run on the leader only (leader/gate).
+	fx.Provide(gate.Provide[*Ticker](), gate.Provide[*StateTicker]()),
 )

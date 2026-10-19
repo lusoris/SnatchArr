@@ -23,6 +23,7 @@ import (
 	"github.com/golusoris/golusoris/httpx/middleware"
 	"github.com/golusoris/golusoris/k8s/health"
 	"github.com/golusoris/golusoris/k8s/metrics/prom"
+	"github.com/golusoris/golusoris/leader/gate"
 	"github.com/golusoris/golusoris/observability/statuspage"
 	"github.com/golusoris/golusoris/otel"
 
@@ -34,7 +35,6 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/events"
 	"github.com/lusoris/SnatchArr/api/internal/httpapi"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
-	"github.com/lusoris/SnatchArr/api/internal/leaderx"
 	"github.com/lusoris/SnatchArr/api/internal/logring"
 	"github.com/lusoris/SnatchArr/api/internal/metrics"
 	"github.com/lusoris/SnatchArr/api/internal/notify"
@@ -95,7 +95,8 @@ var Module = fx.Options(
 	sso.Module,
 	httpapi.Module,
 	// After every module that registers a loop: the gate collects the leader_loops group.
-	leaderx.Module,
+	gate.Module,
+	fx.Decorate(defaultLeaderName),
 	fx.Provide(statuspage.NewRegistry, health.NewStartupGate),
 	fx.Invoke(registerHealthChecks),
 	// fx constructs providers lazily: the HTTP server and the migrator only exist (and run
@@ -107,11 +108,20 @@ var Module = fx.Options(
 	fx.Invoke(mountHTTP),
 )
 
+// defaultLeaderName keeps the Postgres advisory-lock name "snatcharr" when APP_LEADER_NAME is
+// empty: golusoris leader/gate has no default name, the former leaderx package had this one.
+func defaultLeaderName(o gate.Options) gate.Options {
+	if o.Name == "" {
+		o.Name = "snatcharr"
+	}
+	return o
+}
+
 // registerHealthChecks registers the probe checks. Readiness covers Postgres and the leader
 // gate: a replica whose periodic loops cannot run (gate stopped, a loop failed to start,
 // election failing) reports not ready instead of serving as if the planner ran.
-func registerHealthChecks(reg *statuspage.Registry, pool *pgxpool.Pool, gate *health.StartupGate,
-	loops *leaderx.Gate, lc fx.Lifecycle,
+func registerHealthChecks(reg *statuspage.Registry, pool *pgxpool.Pool, startup *health.StartupGate,
+	loops *gate.Gate, lc fx.Lifecycle,
 ) {
 	reg.Register(statuspage.Check{
 		Name: "process", Tags: []string{health.TagLiveness},
@@ -127,9 +137,9 @@ func registerHealthChecks(reg *statuspage.Registry, pool *pgxpool.Pool, gate *he
 		},
 	})
 	reg.Register(loops.Check("leader"))
-	reg.Register(gate.Check("startup"))
+	reg.Register(startup.Check("startup"))
 	lc.Append(fx.Hook{OnStart: func(context.Context) error {
-		gate.MarkComplete()
+		startup.MarkComplete()
 		return nil
 	}})
 }

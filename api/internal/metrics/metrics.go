@@ -202,7 +202,7 @@ func register[C prometheus.Collector](reg prometheus.Registerer, c C) (C, error)
 	return zero, fmt.Errorf("metrics: register: %w", err)
 }
 
-// LoopTicked records one tick of the leader loop called name (internal/leaderx.Periodic).
+// LoopTicked records one tick of the leader loop called name (leader/gate.Periodic).
 // The failure series exists from the first tick on (WithLabelValues creates it at zero), so
 // an alert on its increase sees a zero before the first failure.
 func (m *Metrics) LoopTicked(name string, interval time.Duration, at time.Time, err error) {
