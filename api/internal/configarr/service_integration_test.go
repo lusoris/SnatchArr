@@ -29,6 +29,8 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/dlclients"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
+	"github.com/lusoris/SnatchArr/api/internal/policies"
+	"github.com/lusoris/SnatchArr/api/internal/queue"
 	"github.com/lusoris/SnatchArr/api/internal/store"
 	"github.com/lusoris/SnatchArr/api/internal/store/storetest"
 )
@@ -60,6 +62,8 @@ type fixture struct {
 	svc     *configarr.Service
 	instSvc *instances.Service
 	dlSvc   *dlclients.Service
+	polSvc  *policies.Service
+	qStore  *queue.Store
 	st      *store.Store
 	clk     *clockwork.FakeClock
 	probe   *stubProber
@@ -77,17 +81,21 @@ func newFixture(t *testing.T, opts ...func(*config.Options)) fixture {
 	logger := slog.New(slog.DiscardHandler)
 	instSvc := instances.New(st, enc, clk, id.New(), probe, logger)
 	dlSvc := dlclients.New(st, enc, clk, id.New(), &stubSnapshotter{}, &stubDiscoverer{}, instSvc, logger)
+	polSvc := policies.New(st, clk)
+	qStore := queue.NewStore(st, clk)
 	cfg := config.Options{
 		Profile: config.ProfileDev,
 	}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
-	svc := configarr.New(cfg, instSvc, dlSvc, probe, clk, logger)
+	svc := configarr.New(cfg, instSvc, dlSvc, polSvc, qStore, probe, clk, logger)
 	return fixture{
 		svc:     svc,
 		instSvc: instSvc,
 		dlSvc:   dlSvc,
+		polSvc:  polSvc,
+		qStore:  qStore,
 		st:      st,
 		clk:     clk,
 		probe:   probe,
@@ -706,5 +714,209 @@ qbittorrent:
 	list, err := f.dlSvc.List(ctx)
 	if err != nil || len(list) != 0 {
 		t.Fatalf("dlSvc.List() = len %d, %v; want 0", len(list), err)
+	}
+}
+
+func TestImport_Policies(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	configPath := writeConfig(t, dir, `
+sonarr:
+  series:
+    base_url: http://sonarr:8989
+    api_key: sonarr-key-series
+radarr:
+  movies:
+    base_url: http://radarr:7878
+    api_key: radarr-key-movies
+`)
+	policiesPath := writeFile(t, dir, "policies.yml", `
+defaults:
+  queue:
+    enabled: true
+  snatch:
+    hourly_cap: 25
+instances:
+  sonarr/series:
+    snatch:
+      missing_per_cycle: 2
+      hourly_cap: 30
+    queue:
+      rules:
+        failed:
+          mode: observe
+          threshold: 2
+`)
+
+	f := newFixture(t, func(o *config.Options) {
+		o.Configarr.Config = configPath
+		o.Configarr.Policies = policiesPath
+	})
+	ctx := t.Context()
+
+	// 1. Initial import with policy file -> GET policy / queue-policy return file values
+	res, err := f.svc.Import(ctx, configPath, "")
+	if err != nil {
+		t.Fatalf("Import() err = %v", err)
+	}
+	if len(res.Warnings) != 0 {
+		t.Fatalf("unexpected warnings: %v", res.Warnings)
+	}
+
+	idSonarr, ok := f.instSvc.IDByConfigarrKey(ctx, "sonarr/series")
+	if !ok {
+		t.Fatal("sonarr/series not found")
+	}
+	idRadarr, ok := f.instSvc.IDByConfigarrKey(ctx, "radarr/movies")
+	if !ok {
+		t.Fatal("radarr/movies not found")
+	}
+
+	polSonarr, err := f.polSvc.Get(ctx, idSonarr)
+	if err != nil {
+		t.Fatalf("polSvc.Get(idSonarr) = %v", err)
+	}
+	if polSonarr.MissingPerCycle != 2 || polSonarr.HourlyCap != 30 {
+		t.Fatalf("polSonarr = %+v, want missing_per_cycle=2, hourly_cap=30", polSonarr)
+	}
+
+	qSonarr, err := f.qStore.Settings(ctx, idSonarr)
+	if err != nil {
+		t.Fatalf("qStore.Settings(idSonarr) = %v", err)
+	}
+	if !qSonarr.Enabled {
+		t.Fatal("qSonarr.Enabled = false, want true")
+	}
+	if rule := queue.ResolveRule(qSonarr, queue.RuleFailed); rule.Threshold != 2 || rule.Mode != queue.ModeObserve {
+		t.Fatalf("qSonarr failed rule = %+v, want threshold=2, mode=observe", rule)
+	}
+
+	polRadarr, err := f.polSvc.Get(ctx, idRadarr)
+	if err != nil {
+		t.Fatalf("polSvc.Get(idRadarr) = %v", err)
+	}
+	if polRadarr.HourlyCap != 25 {
+		t.Fatalf("polRadarr.HourlyCap = %d, want 25 (from defaults)", polRadarr.HourlyCap)
+	}
+	qRadarr, err := f.qStore.Settings(ctx, idRadarr)
+	if err != nil {
+		t.Fatalf("qStore.Settings(idRadarr) = %v", err)
+	}
+	if !qRadarr.Enabled {
+		t.Fatal("qRadarr.Enabled = false, want true (from defaults)")
+	}
+
+	// 2. Unlisted field keeps prior value (the file wins for the fields it names)
+	polSonarr.Selection = domain.SelectionSequential
+	polSonarr.MaxQueueSize = 42
+	if _, updateErr := f.polSvc.Update(ctx, polSonarr); updateErr != nil {
+		t.Fatalf("Update() polSonarr = %v", updateErr)
+	}
+	if _, importErr := f.svc.Import(ctx, configPath, ""); importErr != nil {
+		t.Fatalf("re-Import() err = %v", importErr)
+	}
+	polSonarrAfter, err := f.polSvc.Get(ctx, idSonarr)
+	if err != nil {
+		t.Fatalf("polSvc.Get(idSonarr) = %v", err)
+	}
+	if polSonarrAfter.Selection != domain.SelectionSequential || polSonarrAfter.MaxQueueSize != 42 {
+		t.Fatalf("unlisted fields changed: selection=%v max_queue=%d", polSonarrAfter.Selection, polSonarrAfter.MaxQueueSize)
+	}
+	if polSonarrAfter.HourlyCap != 30 || polSonarrAfter.MissingPerCycle != 2 {
+		t.Fatalf("listed fields altered: hourly_cap=%d missing_per_cycle=%d", polSonarrAfter.HourlyCap, polSonarrAfter.MissingPerCycle)
+	}
+
+	// 3. Invalid value -> warning, other instance applied
+	writeFile(t, dir, "policies.yml", `
+instances:
+  sonarr/series:
+    snatch:
+      hourly_cap: 9999
+  radarr/movies:
+    snatch:
+      hourly_cap: 45
+`)
+	resInvalid, err := f.svc.Import(ctx, configPath, "")
+	if err != nil {
+		t.Fatalf("Import() with invalid value err = %v, want nil", err)
+	}
+	if len(resInvalid.Warnings) == 0 {
+		t.Fatal("expected warning for invalid hourly_cap 9999, got none")
+	}
+	foundWarning := false
+	for _, w := range resInvalid.Warnings {
+		if strings.Contains(w, "sonarr/series") && strings.Contains(w, "hourly_cap") {
+			foundWarning = true
+			break
+		}
+	}
+	if !foundWarning {
+		t.Fatalf("expected warning naming sonarr/series and hourly_cap, got: %v", resInvalid.Warnings)
+	}
+	polSonarrRetained, err := f.polSvc.Get(ctx, idSonarr)
+	if err != nil {
+		t.Fatalf("polSvc.Get(idSonarr) = %v", err)
+	}
+	if polSonarrRetained.HourlyCap != 30 {
+		t.Fatalf("sonarr/series HourlyCap = %d, want retained 30", polSonarrRetained.HourlyCap)
+	}
+	polRadarrApplied, err := f.polSvc.Get(ctx, idRadarr)
+	if err != nil {
+		t.Fatalf("polSvc.Get(idRadarr) = %v", err)
+	}
+	if polRadarrApplied.HourlyCap != 45 {
+		t.Fatalf("radarr/movies HourlyCap = %d, want applied 45", polRadarrApplied.HourlyCap)
+	}
+}
+
+func TestImport_PoliciesWatchReapply(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	configPath := writeConfig(t, dir, `
+sonarr:
+  series:
+    base_url: http://sonarr:8989
+    api_key: sonarr-key-series
+`)
+	policiesPath := writeFile(t, dir, "policies.yml", `
+instances:
+  sonarr/series:
+    snatch:
+      missing_per_cycle: 1
+`)
+	f := newFixture(t, func(o *config.Options) {
+		o.Configarr.Config = configPath
+		o.Configarr.Policies = policiesPath
+		o.Configarr.Watch = true
+	})
+	ctx := t.Context()
+	if err := f.svc.Start(ctx); err != nil {
+		t.Fatalf("Start() = %v", err)
+	}
+	defer func() { _ = f.svc.Stop(ctx) }()
+
+	initialAt := waitImportAfter(t, f.svc, time.Time{})
+	idSonarr, ok := f.instSvc.IDByConfigarrKey(ctx, "sonarr/series")
+	if !ok {
+		t.Fatal("sonarr/series not found")
+	}
+	pol, err := f.polSvc.Get(ctx, idSonarr)
+	if err != nil || pol.MissingPerCycle != 1 {
+		t.Fatalf("initial MissingPerCycle = %d, %v, want 1", pol.MissingPerCycle, err)
+	}
+
+	// 4. File change -> re-applied
+	writeFile(t, dir, "policies.yml", `
+instances:
+  sonarr/series:
+    snatch:
+      missing_per_cycle: 7
+`)
+	f.clk.Advance(configarr.PollInterval)
+	waitImportAfter(t, f.svc, initialAt)
+
+	polAfter, err := f.polSvc.Get(ctx, idSonarr)
+	if err != nil || polAfter.MissingPerCycle != 7 {
+		t.Fatalf("after watch re-apply: MissingPerCycle = %d, want 7", polAfter.MissingPerCycle)
 	}
 }

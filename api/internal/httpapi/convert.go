@@ -14,6 +14,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
+	"github.com/lusoris/SnatchArr/api/internal/policyoas"
 )
 
 func optString(s string) oas.OptString {
@@ -142,63 +143,11 @@ func eventToOAS(e domain.Event) oas.Event {
 }
 
 func policyToOAS(p domain.Policy) *oas.SnatchPolicy {
-	return &oas.SnatchPolicy{
-		MissingPerCycle:        p.MissingPerCycle,
-		UpgradePerCycle:        p.UpgradePerCycle,
-		CycleIntervalS:         int(p.CycleInterval / time.Second),
-		HourlyCap:              p.HourlyCap,
-		Selection:              oas.SnatchPolicySelection(p.Selection),
-		MonitoredOnly:          p.MonitoredOnly,
-		SkipFutureReleases:     p.SkipFutureReleases,
-		RadarrReleaseType:      oas.SnatchPolicyRadarrReleaseType(p.RadarrReleaseType),
-		SonarrMissingMode:      oas.SnatchPolicySonarrMissingMode(p.SonarrMissingMode),
-		SonarrUpgradeMode:      oas.SnatchPolicySonarrUpgradeMode(p.SonarrUpgradeMode),
-		LidarrMissingMode:      oas.SnatchPolicyLidarrMissingMode(p.LidarrMissingMode),
-		ProcessedTTLH:          int(p.ProcessedTTL / time.Hour),
-		MaxQueueSize:           p.MaxQueueSize,
-		AwaitCommand:           p.AwaitCommand,
-		PageSize:               p.PageSize,
-		RecentGrabWindowH:      int(p.RecentGrabWindow / time.Hour),
-		AfterglowMaxH:          int(p.AfterglowMax / time.Hour),
-		IncludeTags:            domain.FilterIDs(p.IncludeTags),
-		ExcludeTags:            domain.FilterIDs(p.ExcludeTags),
-		IncludeQualityProfiles: domain.FilterIDs(p.IncludeQualityProfiles),
-		ExcludeQualityProfiles: domain.FilterIDs(p.ExcludeQualityProfiles),
-		ReleaseDelayH:          oas.NewOptInt(int(p.ReleaseDelay / time.Hour)),
-		DryRun:                 oas.NewOptBool(p.DryRun),
-		SkipUnavailableMovies:  oas.NewOptBool(p.SkipUnavailableMovies),
-		UpdatedAt:              oas.NewOptDateTime(p.UpdatedAt),
-	}
+	return policyoas.PolicyToOAS(p)
 }
 
 func policyFromOAS(instanceID uuid.UUID, in *oas.SnatchPolicy) domain.Policy {
-	return domain.Policy{
-		InstanceID:             instanceID,
-		MissingPerCycle:        in.MissingPerCycle,
-		UpgradePerCycle:        in.UpgradePerCycle,
-		CycleInterval:          time.Duration(in.CycleIntervalS) * time.Second,
-		HourlyCap:              in.HourlyCap,
-		Selection:              domain.Selection(in.Selection),
-		MonitoredOnly:          in.MonitoredOnly,
-		SkipFutureReleases:     in.SkipFutureReleases,
-		RadarrReleaseType:      string(in.RadarrReleaseType),
-		SonarrMissingMode:      string(in.SonarrMissingMode),
-		SonarrUpgradeMode:      string(in.SonarrUpgradeMode),
-		LidarrMissingMode:      string(in.LidarrMissingMode),
-		ProcessedTTL:           time.Duration(in.ProcessedTTLH) * time.Hour,
-		MaxQueueSize:           in.MaxQueueSize,
-		AwaitCommand:           in.AwaitCommand,
-		PageSize:               in.PageSize,
-		RecentGrabWindow:       time.Duration(in.RecentGrabWindowH) * time.Hour,
-		AfterglowMax:           time.Duration(in.AfterglowMaxH) * time.Hour,
-		IncludeTags:            domain.FilterIDs(in.IncludeTags),
-		ExcludeTags:            domain.FilterIDs(in.ExcludeTags),
-		IncludeQualityProfiles: domain.FilterIDs(in.IncludeQualityProfiles),
-		ExcludeQualityProfiles: domain.FilterIDs(in.ExcludeQualityProfiles),
-		ReleaseDelay:           time.Duration(in.ReleaseDelayH.Or(0)) * time.Hour,
-		DryRun:                 in.DryRun.Or(false),
-		SkipUnavailableMovies:  in.SkipUnavailableMovies.Or(true),
-	}
+	return policyoas.PolicyFromOAS(instanceID, in)
 }
 
 func settingsToOAS(s domain.Settings) *oas.Settings {

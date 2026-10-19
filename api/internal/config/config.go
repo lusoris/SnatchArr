@@ -14,6 +14,7 @@
 //	snatcharr.configarr.config   APP_SNATCHARR_CONFIGARR_CONFIG   path to Configarr config.yml (linked mode)
 //	snatcharr.configarr.secrets  APP_SNATCHARR_CONFIGARR_SECRETS  path to Configarr secrets.yml
 //	snatcharr.configarr.download_clients APP_SNATCHARR_CONFIGARR_DOWNLOAD_CLIENTS path to download clients YAML file
+//	snatcharr.configarr.policies APP_SNATCHARR_CONFIGARR_POLICIES path to declarative policies YAML file
 //	snatcharr.configarr.watch    APP_SNATCHARR_CONFIGARR_WATCH    re-import on file change (default true)
 //	snatcharr.session.ttl        APP_SNATCHARR_SESSION_TTL        cookie session lifetime (default 8h)
 //	snatcharr.session.secure     APP_SNATCHARR_SESSION_SECURE     Secure cookie flag (default true)
@@ -270,6 +271,7 @@ type ConfigarrOptions struct {
 	Config          string `koanf:"config"`
 	Secrets         string `koanf:"secrets"`
 	DownloadClients string `koanf:"download_clients"`
+	Policies        string `koanf:"policies"`
 	Watch           bool   `koanf:"watch"`
 }
 
