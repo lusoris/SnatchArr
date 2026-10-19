@@ -28,6 +28,8 @@ SPDX-License-Identifier: EUPL-1.2
 </script>
 
 <h1 class="mb-4 text-2xl font-semibold">{m.schedules_title()}</h1>
+<!-- PLANTED DEFECT (A11Y1): a button with no accessible name (axe button-name). -->
+<button type="button" class="btn"><span aria-hidden="true">+</span></button>
 
 {#if schedules.isPending}
 	<p aria-live="polite">{m.loading()}</p>
