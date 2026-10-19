@@ -47,7 +47,7 @@ export default defineConfig({
 			? [
 					{
 						name: 'chromium',
-						testMatch: /(a11y|theme|security)\.test\.ts/,
+						testMatch: /(a11y|theme|security|nonblocking|keyboard-nav|inp)\.test\.ts/,
 						use: { browserName: 'chromium' }
 					}
 				]
@@ -78,8 +78,8 @@ export default defineConfig({
 					},
 					{
 						name: 'authenticated',
-						testMatch: /(a11y|phone-overflow)\.test\.ts/,
-						grep: /authenticated:/,
+						testMatch: /(a11y|phone-overflow|nonblocking|keyboard-nav|inp)\.test\.ts/,
+						grep: /authenticated:|nonblocking:/,
 						dependencies: ['auth-setup'],
 						use: { browserName: 'chromium', storageState: authFile }
 					},

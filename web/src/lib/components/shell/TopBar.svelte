@@ -1,0 +1,45 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+SPDX-License-Identifier: EUPL-1.2
+-->
+<script lang="ts">
+	import { resolve } from '$app/paths';
+	import BrandMark from '#lib/components/BrandMark.svelte';
+	import { m } from '#lib/paraglide/messages.js';
+	import NavIcon from './NavIcon.svelte';
+
+	interface Props {
+		drawerOpen: boolean;
+		onOpenDrawer: () => void;
+		menuButtonEl?: HTMLButtonElement | null;
+	}
+
+	let { drawerOpen, onOpenDrawer, menuButtonEl = $bindable(null) }: Props = $props();
+</script>
+
+<header
+	class="header-band sticky top-0 z-30 flex h-14 w-full items-center justify-between border-b border-line bg-surface/95 px-4 backdrop-blur-md lg:hidden"
+	data-testid="header-band"
+>
+	<a
+		href={resolve('/')}
+		class="flex items-center gap-2.5 font-sans text-base font-semibold tracking-[-0.01em] text-fg"
+		aria-label={m.app_name()}
+	>
+		<span class="flex items-center text-brand">
+			<BrandMark size={24} />
+		</span>
+		<span>{m.app_name()}</span>
+	</a>
+	<button
+		bind:this={menuButtonEl}
+		type="button"
+		class="btn inline-flex h-9 min-h-0 w-9 items-center justify-center rounded-md border border-control p-0"
+		onclick={onOpenDrawer}
+		aria-label={m.nav_open_menu()}
+		aria-expanded={drawerOpen}
+		aria-controls="mobile-nav-dialog"
+	>
+		<NavIcon name="menu" size={20} />
+	</button>
+</header>

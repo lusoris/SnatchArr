@@ -44,6 +44,24 @@ body {
 	padding: 1rem;
 }
 
+/* Navigation entries (sidebar, drawer, footer): ADR-0015 section 3. */
+.nav-link {
+	transition:
+		background-color 150ms ease,
+		color 150ms ease,
+		border-color 150ms ease;
+}
+.nav-link[aria-current='page'] {
+	background-color: var(--color-accent);
+	color: var(--color-fg);
+	border-left: 3px solid var(--color-brand);
+	padding-left: calc(0.75rem - 3px);
+	font-weight: 600;
+}
+.nav-link:hover:not([aria-current='page']) {
+	background-color: var(--color-secondary);
+}
+
 .btn {
 	display: inline-flex;
 	align-items: center;
