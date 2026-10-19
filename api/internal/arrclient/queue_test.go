@@ -238,7 +238,7 @@ func TestQueueWhisparrUnsupported(t *testing.T) {
 			t.Errorf("kind %v got err %v, want ErrQueueUnsupported", kind, err)
 		}
 
-		err = prober.RemoveQueueItem(t.Context(), kind, "http://localhost", "key", 1, true)
+		err = prober.RemoveQueueItem(t.Context(), kind, "http://localhost", "key", 1, true, false)
 		if !errors.Is(err, queue.ErrQueueUnsupported) {
 			t.Errorf("kind %v RemoveQueueItem got err %v, want ErrQueueUnsupported", kind, err)
 		}
@@ -260,41 +260,44 @@ func TestRemoveQueueItem(t *testing.T) {
 
 	for _, tc := range kinds {
 		for _, blocklist := range []bool{true, false} {
-			t.Run(string(tc.kind)+"_blocklist_"+strconv.FormatBool(blocklist), func(t *testing.T) {
-				t.Parallel()
-				deleted := false
-				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					if r.Method != http.MethodDelete {
-						t.Errorf("got method %q, want DELETE", r.Method)
-					}
-					if r.URL.Path != tc.path {
-						t.Errorf("got path %q, want %q", r.URL.Path, tc.path)
-					}
-					q := r.URL.Query()
-					if q.Get("removeFromClient") != "true" {
-						t.Errorf("removeFromClient query param = %q, want true", q.Get("removeFromClient"))
-					}
-					if q.Get("skipRedownload") != "true" {
-						t.Errorf("skipRedownload query param = %q, want true", q.Get("skipRedownload"))
-					}
-					wantBlocklist := strconv.FormatBool(blocklist)
-					if q.Get("blocklist") != wantBlocklist {
-						t.Errorf("blocklist query param = %q, want %q", q.Get("blocklist"), wantBlocklist)
-					}
-					deleted = true
-					w.WriteHeader(http.StatusOK)
-				}))
-				defer server.Close()
+			for _, research := range []bool{true, false} {
+				t.Run(string(tc.kind)+"_blocklist_"+strconv.FormatBool(blocklist)+"_research_"+strconv.FormatBool(research), func(t *testing.T) {
+					t.Parallel()
+					deleted := false
+					server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						if r.Method != http.MethodDelete {
+							t.Errorf("got method %q, want DELETE", r.Method)
+						}
+						if r.URL.Path != tc.path {
+							t.Errorf("got path %q, want %q", r.URL.Path, tc.path)
+						}
+						q := r.URL.Query()
+						if q.Get("removeFromClient") != "true" {
+							t.Errorf("removeFromClient query param = %q, want true", q.Get("removeFromClient"))
+						}
+						wantSkipRedownload := strconv.FormatBool(!research)
+						if q.Get("skipRedownload") != wantSkipRedownload {
+							t.Errorf("skipRedownload query param = %q, want %q", q.Get("skipRedownload"), wantSkipRedownload)
+						}
+						wantBlocklist := strconv.FormatBool(blocklist)
+						if q.Get("blocklist") != wantBlocklist {
+							t.Errorf("blocklist query param = %q, want %q", q.Get("blocklist"), wantBlocklist)
+						}
+						deleted = true
+						w.WriteHeader(http.StatusOK)
+					}))
+					defer server.Close()
 
-				prober := arrclient.NewGoenvoyProber(arrclient.Options{Timeout: 2 * time.Second})
-				err := prober.RemoveQueueItem(t.Context(), tc.kind, server.URL, "key", 42, blocklist)
-				if err != nil {
-					t.Fatalf("RemoveQueueItem error: %v", err)
-				}
-				if !deleted {
-					t.Errorf("DELETE request was not received")
-				}
-			})
+					prober := arrclient.NewGoenvoyProber(arrclient.Options{Timeout: 2 * time.Second})
+					err := prober.RemoveQueueItem(t.Context(), tc.kind, server.URL, "key", 42, blocklist, research)
+					if err != nil {
+						t.Fatalf("RemoveQueueItem error: %v", err)
+					}
+					if !deleted {
+						t.Errorf("DELETE request was not received")
+					}
+				})
+			}
 		}
 	}
 }

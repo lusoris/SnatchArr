@@ -1810,7 +1810,7 @@ export interface components {
             updated_at: string;
         };
         /** @enum {string} */
-        QueueRule: "stalled" | "slow" | "failed" | "import_blocked" | "id_matched" | "unwanted_score" | "not_an_upgrade" | "duplicate" | "unwanted_unmonitored";
+        QueueRule: "stalled" | "slow" | "failed" | "import_blocked" | "id_matched" | "import_fixable" | "import_broken" | "import_not_wanted" | "unwanted_score" | "not_an_upgrade" | "duplicate" | "unwanted_unmonitored";
         /** @enum {string} */
         QueueRuleMode: "observe" | "act";
         QueueRuleSettings: {
@@ -1826,6 +1826,12 @@ export interface components {
             import_blocked: components["schemas"]["QueueRuleSettings"];
             /** @description Force-imports a Sonarr or Radarr download the *arr matched to its series or movie by ID only, through a ManualImport of its clean, mapped candidates; it never removes or blocklists (ADR-0013). Optional on write so older clients keep working; left out, the rule takes its default settings. Reads always return it. */
             id_matched?: components["schemas"]["QueueRuleSettings"];
+            /** @description Force-imports a download whose import rejections are fixable (e.g. Lidarr/Readarr track/album match above floor, scene numbering mismatch); never removes or blocklists. Optional on write; left out, the rule takes its default settings. Reads always return it. */
+            import_fixable?: components["schemas"]["QueueRuleSettings"];
+            /** @description Strikes and removes a download whose release is broken (e.g. no tracks matched, corrupt container, parser error) with blocklist and re-search. Optional on write; left out, the rule takes its default settings. Reads always return it. */
+            import_broken?: components["schemas"]["QueueRuleSettings"];
+            /** @description Strikes and removes a download that is not wanted (e.g. release not requested, fewer tracks than existing release) with blocklist, without re-search. Optional on write; left out, the rule takes its default settings. Reads always return it. */
+            import_not_wanted?: components["schemas"]["QueueRuleSettings"];
             unwanted_score: components["schemas"]["QueueRuleSettings"];
             /** @description Strikes a download whose custom-format score does not beat the file already on disk (Sonarr and Radarr). Optional on write so older clients keep working; left out, the rule takes its default settings. Reads always return it. */
             not_an_upgrade?: components["schemas"]["QueueRuleSettings"];
@@ -1847,6 +1853,26 @@ export interface components {
             max_removals_per_sweep: number;
             /** @description Most id_matched imports one sweep sends per instance. Optional on write so older clients keep working; left out, it takes the default of 25. Reads always return it. */
             max_imports_per_sweep?: number;
+            /**
+             * Format: double
+             * @description Minimum album or book match percentage for fixable manual import (default 75).
+             */
+            match_fixable_min_percent?: number;
+            /**
+             * Format: double
+             * @description Album or book match percentage below which a release is considered broken (default 40; used by rematch fallback).
+             */
+            match_broken_below_percent?: number;
+            /**
+             * Format: double
+             * @description Minimum track match percentage for fixable manual import (default 50).
+             */
+            track_fixable_min_percent?: number;
+            /**
+             * Format: double
+             * @description Track match percentage below which a release is considered broken (default 40; used by rematch fallback).
+             */
+            track_broken_below_percent?: number;
         };
         QueueStrike: {
             download_id: string;

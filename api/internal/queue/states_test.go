@@ -468,8 +468,16 @@ func failedLidarrReadarrCases() []stateTestCase {
 	return []stateTestCase{
 		{name: "positive/lidarr_download_failed", settings: act2, item: withState("downloading", "downloadFailed"), want: struck},
 		{name: "positive/lidarr_download_failed_pending", settings: act2, item: withState("downloading", "downloadFailedPending"), want: struck},
-		{name: "positive/lidarr_import_failed_live_shape", settings: act2, item: withState("completed", "importFailed"), want: struck},
-		{name: "positive/readarr_import_failed_cased", settings: act2, item: withState("completed", "ImportFailed"), want: struck},
+		{
+			name: "negative/lidarr_import_failed_is_not_failed", settings: act2,
+			item: withState("completed", "importFailed"),
+			want: wantDecision{rule: queue.RuleImportBlocked, strike: true, remove: false, blocklist: true, count: 1},
+		},
+		{
+			name: "negative/readarr_import_failed_cased_is_not_failed", settings: act2,
+			item: withState("completed", "ImportFailed"),
+			want: wantDecision{rule: queue.RuleImportBlocked, strike: true, remove: false, blocklist: true, count: 1},
+		},
 		{
 			name: "negative/lidarr_import_blocked_is_not_failed", settings: act2,
 			item: withState("completed", "importBlocked"),
@@ -481,8 +489,8 @@ func failedLidarrReadarrCases() []stateTestCase {
 			want: wantDecision{rule: "", strike: false, remove: false, blocklist: false, count: 0},
 		},
 		{
-			name: "boundary/import_failed_threshold_reached_removes", settings: act2,
-			item: withState("completed", "importFailed"), prev: prevOne,
+			name: "boundary/download_failed_threshold_reached_removes", settings: act2,
+			item: withState("downloading", "downloadFailed"), prev: prevOne,
 			want: wantDecision{rule: queue.RuleFailed, strike: true, remove: true, blocklist: true, count: 2},
 		},
 	}
@@ -533,11 +541,11 @@ func importBlockedIDMatchCases() []stateTestCase {
 		{name: "negative/id_match_needle_and_title", settings: act6, item: withLines("importBlocked", "Show.S01E01.1080p.WEB-GRP", idMatchNote), want: skipped},
 		{name: "negative/id_match_import_pending", settings: act6, item: withLines("importPending", idMatchNote), want: skipped},
 		{name: "negative/id_match_radarr_note", settings: act6, item: withLines("importBlocked", "Show.S01E01.1080p.WEB-GRP", idMatchNoteRadarr), want: skipped},
-		{name: "positive/id_match_title_mismatch_is_no_id_match", settings: act6, item: withLines("importBlocked", titleMismatchNote), want: struck},
-		{name: "positive/id_match_needle_and_other_problem", settings: act6, item: withLines("importBlocked", idMatchNote, "Not an upgrade for existing episode file(s)"), want: struck},
+		{name: "positive/id_match_title_mismatch_is_no_id_match", settings: act6, item: withLines("importBlocked", titleMismatchNote), want: wantDecision{rule: queue.RuleImportFixable, strike: true, remove: false, blocklist: false, count: 1}},
+		{name: "positive/id_match_needle_and_other_problem", settings: act6, item: withLines("importBlocked", idMatchNote, "Not an upgrade for existing episode file(s)"), want: wantDecision{rule: queue.RuleImportNotWanted, strike: true, remove: false, blocklist: true, count: 1}},
 		{name: "positive/id_match_no_status_lines", settings: act6, item: withLines("importBlocked"), want: struck},
 		{name: "positive/id_match_title_only", settings: act6, item: withLines("importBlocked", "Show.S01E01.1080p.WEB-GRP"), want: struck},
-		{name: "positive/id_match_needs_warning_status", settings: act6, item: okStatus, want: struck},
+		{name: "positive/id_match_needs_warning_status", settings: act6, item: okStatus, want: wantDecision{rule: queue.RuleImportFixable, strike: true, remove: false, blocklist: false, count: 1}},
 		{name: "boundary/id_match_needle_case_and_padding", settings: act6, item: withLines("ImportBlocked", "  RELEASE WAS MATCHED TO SERIES BY ID.", " Show.S01E01.1080p.WEB-GRP "), want: skipped},
 	}
 }
@@ -630,11 +638,11 @@ func importBlockedBoundaryCases() []stateTestCase {
 			want:     wantDecision{rule: queue.RuleImportBlocked, strike: true, remove: false, blocklist: true, count: 5},
 		},
 		{
-			name:     "boundary/threshold_reached_removes",
+			name:     "boundary/threshold_reached_never_removes",
 			settings: act6,
 			item:     itemFor(queue.RuleImportBlocked, fixedNow.Add(-1*time.Hour)),
 			prev:     map[string]queue.Strike{"dl-42": prevFor(queue.RuleImportBlocked, fixedNow.Add(-10*time.Minute), 5)},
-			want:     wantDecision{rule: queue.RuleImportBlocked, strike: true, remove: true, blocklist: true, count: 6},
+			want:     wantDecision{rule: queue.RuleImportBlocked, strike: true, remove: false, blocklist: true, count: 6},
 		},
 		{
 			name:     "boundary/clean_sweep_resets",

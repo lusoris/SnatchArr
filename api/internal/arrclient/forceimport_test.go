@@ -104,8 +104,74 @@ func TestForceImport(t *testing.T) {
 			srv := httptest.NewServer(arr)
 			t.Cleanup(srv.Close)
 			p := arrclient.NewGoenvoyProber(arrclient.Options{Timeout: 2 * time.Second})
-			n, err := p.ForceImport(t.Context(), tt.kind, srv.URL, "k", "dl-1")
+			n, err := p.ForceImport(t.Context(), tt.kind, srv.URL, "k", "dl-1", queue.ImportModeClean)
 			checkForceImportErr(t, err, tt.wantErr, tt.wantAnyErr)
+			if err == nil && n != tt.wantN {
+				t.Fatalf("n = %d, want %d", n, tt.wantN)
+			}
+			checkCommands(t, arr, tt.wantPaths)
+		})
+	}
+}
+
+func TestForceImportFixableMode(t *testing.T) {
+	t.Parallel()
+
+	sonarrFixable := `{"path":"/dl/fix.mkv","series":{"id":5},"episodes":[{"id":51}],"quality":{"quality":{"id":3}},"downloadId":"dl-1","rejections":[{"reason":"Single episode split into multiple files","type":"permanent"}]}`
+	sonarrUnknownRejection := `{"path":"/dl/unk.mkv","series":{"id":5},"episodes":[{"id":52}],"quality":{"quality":{"id":3}},"downloadId":"dl-1","rejections":[{"reason":"Unknown weird rejection reason","type":"permanent"}]}`
+	sonarrBrokenRejection := `{"path":"/dl/brk.mkv","series":{"id":5},"episodes":[{"id":53}],"quality":{"quality":{"id":3}},"downloadId":"dl-1","rejections":[{"reason":"Sample","type":"permanent"}]}`
+
+	tests := []struct {
+		name       string
+		kind       domain.AppKind
+		candidates string
+		wantN      int
+		wantPaths  []string
+		wantErr    error
+	}{
+		{
+			name:       "positive/sonarr_fixable_qualifies",
+			kind:       domain.KindSonarr,
+			candidates: sonarrFixable,
+			wantN:      1,
+			wantPaths:  []string{"/dl/fix.mkv"},
+		},
+		{
+			name:       "negative/sonarr_unknown_rejection_skipped",
+			kind:       domain.KindSonarr,
+			candidates: sonarrUnknownRejection,
+			wantErr:    queue.ErrNoCleanCandidate,
+		},
+		{
+			name:       "negative/sonarr_broken_rejection_skipped",
+			kind:       domain.KindSonarr,
+			candidates: sonarrBrokenRejection,
+			wantErr:    queue.ErrNoCleanCandidate,
+		},
+		{
+			name:       "positive/mixed_fixable_and_unknown_picks_only_fixable",
+			kind:       domain.KindSonarr,
+			candidates: sonarrUnknownRejection + "," + sonarrFixable,
+			wantN:      1,
+			wantPaths:  []string{"/dl/fix.mkv"},
+		},
+		{
+			name:       "negative/lidarr_unsupported_in_fixable_mode",
+			kind:       domain.KindLidarr,
+			candidates: sonarrFixable,
+			wantErr:    queue.ErrQueueUnsupported,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			arr := &fakeImportArr{candidates: tt.candidates}
+			srv := httptest.NewServer(arr)
+			t.Cleanup(srv.Close)
+			p := arrclient.NewGoenvoyProber(arrclient.Options{Timeout: 2 * time.Second})
+			n, err := p.ForceImport(t.Context(), tt.kind, srv.URL, "k", "dl-1", queue.ImportModeFixable)
+			checkForceImportErr(t, err, tt.wantErr, false)
 			if err == nil && n != tt.wantN {
 				t.Fatalf("n = %d, want %d", n, tt.wantN)
 			}

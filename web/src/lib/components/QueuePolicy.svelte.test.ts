@@ -202,4 +202,22 @@ describe('QueuePolicy', () => {
 		const alert = await screen.findByRole('alert');
 		expect(alert.textContent).toContain('grace_seconds must be between 0 and 86400');
 	});
+
+	it('edits and sends the match percentage floor fields', async () => {
+		const put = vi.spyOn(api, 'PUT').mockResolvedValue({ data: sampleQueuePolicy } as never);
+		stubGet({
+			'/instances/{instanceId}/queue-policy': sampleQueuePolicy
+		});
+		renderWithQuery(QueuePolicy, { instanceId: forkInstance.id });
+
+		await screen.findByRole('heading', { level: 2, name: m.queue_policy_title() });
+		const matchFixable = screen.getByLabelText(m.queue_policy_match_fixable()) as HTMLInputElement;
+		expect(matchFixable.value).toBe('75');
+		await fireEvent.input(matchFixable, { target: { value: '80' } });
+
+		await fireEvent.click(screen.getByRole('button', { name: m.queue_policy_save() }));
+
+		const body = (put.mock.calls[0]![1] as { body: QueuePolicyType }).body;
+		expect(body.match_fixable_min_percent).toBe(80);
+	});
 });
