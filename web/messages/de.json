@@ -407,5 +407,15 @@
 	"logs_redacted_note": "Geheimnisse werden durch [REDACTED] ersetzt, bevor ein Eintrag gespeichert wird.",
 	"logs_window": "Die neuesten {shown} Einträge; der Server hält {capacity}, {dropped} ältere wurden überschrieben.",
 	"logs_empty": "Kein Eintrag passt zu den Filtern.",
-	"logs_admin_only": "Nur Administratoren können die Protokolle lesen."
+	"logs_admin_only": "Nur Administratoren können die Protokolle lesen.",
+	"instance_tabs_label": "Instanzbereiche",
+	"instance_tab_overview": "Übersicht",
+	"instance_tab_policy": "Richtlinie",
+	"instance_tab_queue": "Warteschlange",
+	"instance_tab_activity": "Aktivität",
+	"instance_tab_memory": "Speicher",
+	"instance_not_found_title": "Instanz nicht gefunden",
+	"instance_not_found_text": "Diese Instanz existiert nicht oder wurde gelöscht.",
+	"instance_not_found_back": "Zurück zu Instanzen",
+	"instance_loading": "Instanz wird geladen…"
 }
