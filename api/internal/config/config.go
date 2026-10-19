@@ -13,6 +13,7 @@
 //	snatcharr.worker.token       APP_SNATCHARR_WORKER_TOKEN       shared bearer the snatch-worker presents over gRPC
 //	snatcharr.configarr.config   APP_SNATCHARR_CONFIGARR_CONFIG   path to Configarr config.yml (linked mode)
 //	snatcharr.configarr.secrets  APP_SNATCHARR_CONFIGARR_SECRETS  path to Configarr secrets.yml
+//	snatcharr.configarr.download_clients APP_SNATCHARR_CONFIGARR_DOWNLOAD_CLIENTS path to download clients YAML file
 //	snatcharr.configarr.watch    APP_SNATCHARR_CONFIGARR_WATCH    re-import on file change (default true)
 //	snatcharr.session.ttl        APP_SNATCHARR_SESSION_TTL        cookie session lifetime (default 8h)
 //	snatcharr.session.secure     APP_SNATCHARR_SESSION_SECURE     Secure cookie flag (default true)
@@ -266,9 +267,10 @@ type WorkerOptions struct {
 
 // ConfigarrOptions link SnatchArr to a Configarr configuration.
 type ConfigarrOptions struct {
-	Config  string `koanf:"config"`
-	Secrets string `koanf:"secrets"`
-	Watch   bool   `koanf:"watch"`
+	Config          string `koanf:"config"`
+	Secrets         string `koanf:"secrets"`
+	DownloadClients string `koanf:"download_clients"`
+	Watch           bool   `koanf:"watch"`
 }
 
 // Linked reports whether linked mode is on.
@@ -454,6 +456,7 @@ func CompoundKeys() []string {
 		"snatcharr.proxy_auth.allowed_users",
 		"snatcharr.prowlarr.limit_threshold",
 		"snatcharr.logs.ring_size",
+		"snatcharr.configarr.download_clients",
 	}
 }
 

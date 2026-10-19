@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golusoris/goenvoy/arr/v2"
 	"github.com/google/uuid"
 	"github.com/jonboulle/clockwork"
 
@@ -25,6 +26,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/arrclient"
 	"github.com/lusoris/SnatchArr/api/internal/config"
 	"github.com/lusoris/SnatchArr/api/internal/configarr"
+	"github.com/lusoris/SnatchArr/api/internal/dlclients"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
 	"github.com/lusoris/SnatchArr/api/internal/store"
@@ -42,9 +44,22 @@ func (p *stubProber) Probe(context.Context, domain.AppKind, string, string) (arr
 	return p.res, p.err
 }
 
+type stubSnapshotter struct{}
+
+func (s *stubSnapshotter) Snapshot(context.Context, domain.DownloadClient, string) dlclients.Snapshot {
+	return dlclients.Snapshot{Reachable: true}
+}
+
+type stubDiscoverer struct{}
+
+func (d *stubDiscoverer) DownloadClients(context.Context, domain.AppKind, string, string) ([]arr.ProviderResource, error) {
+	return nil, nil
+}
+
 type fixture struct {
 	svc     *configarr.Service
 	instSvc *instances.Service
+	dlSvc   *dlclients.Service
 	st      *store.Store
 	clk     *clockwork.FakeClock
 	probe   *stubProber
@@ -61,16 +76,18 @@ func newFixture(t *testing.T, opts ...func(*config.Options)) fixture {
 	probe := &stubProber{res: arrclient.Result{AppName: "Sonarr", Version: "4.0.10.2544"}}
 	logger := slog.New(slog.DiscardHandler)
 	instSvc := instances.New(st, enc, clk, id.New(), probe, logger)
+	dlSvc := dlclients.New(st, enc, clk, id.New(), &stubSnapshotter{}, &stubDiscoverer{}, instSvc, logger)
 	cfg := config.Options{
 		Profile: config.ProfileDev,
 	}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
-	svc := configarr.New(cfg, instSvc, probe, clk, logger)
+	svc := configarr.New(cfg, instSvc, dlSvc, probe, clk, logger)
 	return fixture{
 		svc:     svc,
 		instSvc: instSvc,
+		dlSvc:   dlSvc,
 		st:      st,
 		clk:     clk,
 		probe:   probe,
@@ -501,5 +518,193 @@ sonarr:
 	}
 	if _, getErr := f.instSvc.Get(ctx, idRow); getErr != nil {
 		t.Fatalf("Get(idRow) after refused delete = %v, want row to survive", getErr)
+	}
+}
+
+func TestImport_DownloadClients(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	configPath := writeConfig(t, dir, `
+sonarr:
+  main:
+    base_url: http://sonarr-main.invalid:8989
+    api_key: sonarr-key-main
+`)
+	dlClientsPath := writeFile(t, dir, "download-clients.yml", `
+qbittorrent:
+  main:
+    base_url: http://qbit.media.svc:8080
+    password: qbit-secret-pass
+    instance: sonarr/main
+    max_active: 5
+    bandwidth_budget_bps: 10485760
+    enabled: true
+sabnzbd:
+  main:
+    base_url: http://sabnzbd.media.svc:8080
+    api_key: sab-api-key
+`)
+
+	f := newFixture(t, func(o *config.Options) {
+		o.Configarr.Config = configPath
+		o.Configarr.DownloadClients = dlClientsPath
+	})
+
+	qbitID, sabID := testDownloadClientsInitial(t, f, configPath)
+	testDownloadClientsSecondImport(t, f, configPath, dir, qbitID)
+	testDownloadClientsPrune(t, f, configPath, dir, qbitID, sabID)
+	testDownloadClientsForbidden(t, f, qbitID)
+	testDownloadClientsInvalidWarning(t, f, configPath, dir)
+}
+
+func testDownloadClientsInitial(t *testing.T, f fixture, configPath string) (uuid.UUID, uuid.UUID) {
+	t.Helper()
+	ctx := t.Context()
+	res, err := f.svc.Import(ctx, configPath, "")
+	if err != nil || res.ClientsImported != 2 || res.ClientsUpdated != 0 || res.ClientsRemoved != 0 {
+		t.Fatalf("initial Import() clients = %+v, %v; want ClientsImported=2", res, err)
+	}
+	list, err := f.dlSvc.List(ctx)
+	if err != nil || len(list) != 2 {
+		t.Fatalf("dlSvc.List() = len %d, %v; want 2", len(list), err)
+	}
+	var qbitID, sabID uuid.UUID
+	for _, c := range list {
+		if c.Source != domain.ClientSourceConfigarr {
+			t.Fatalf("client %+v source = %q, want configarr", c, c.Source)
+		}
+		if c.Name == "main" && c.Kind == domain.ClientQBittorrent {
+			qbitID = c.ID
+			if c.InstanceID == nil {
+				t.Fatalf("expected qbit to link to sonarr instance")
+			}
+			if c.MaxActive != 5 || c.BandwidthBudgetBPS != 10485760 {
+				t.Fatalf("qbit limits mismatch: %+v", c)
+			}
+		}
+		if c.Name == "main" && c.Kind == domain.ClientSABnzbd {
+			sabID = c.ID
+			if c.InstanceID != nil {
+				t.Fatalf("expected sabnzbd to have nil instanceID")
+			}
+		}
+	}
+	if qbitID == uuid.Nil || sabID == uuid.Nil {
+		t.Fatalf("missing qbitID (%v) or sabID (%v)", qbitID, sabID)
+	}
+	return qbitID, sabID
+}
+
+func testDownloadClientsSecondImport(t *testing.T, f fixture, configPath, dir string, qbitID uuid.UUID) {
+	t.Helper()
+	ctx := t.Context()
+	res, err := f.svc.Import(ctx, configPath, "")
+	if err != nil || res.ClientsImported != 0 || res.ClientsUpdated != 2 || res.ClientsRemoved != 0 {
+		t.Fatalf("second Import() = %+v, %v; want ClientsUpdated=2", res, err)
+	}
+	writeFile(t, dir, "download-clients.yml", `
+qbittorrent:
+  main:
+    base_url: http://qbit.media.svc:8080
+    password: qbit-secret-pass
+    instance: sonarr/main
+    max_active: 10
+sabnzbd:
+  main:
+    base_url: http://sabnzbd.media.svc:8080
+    api_key: sab-api-key
+`)
+	res, err = f.svc.Import(ctx, configPath, "")
+	if err != nil || res.ClientsUpdated != 2 {
+		t.Fatalf("third Import() after update = %+v, %v; want ClientsUpdated=2", res, err)
+	}
+	qbit, err := f.dlSvc.Get(ctx, qbitID)
+	if err != nil || qbit.MaxActive != 10 {
+		t.Fatalf("qbit MaxActive = %d, %v; want 10", qbit.MaxActive, err)
+	}
+}
+
+func testDownloadClientsPrune(t *testing.T, f fixture, configPath, dir string, qbitID, sabID uuid.UUID) {
+	t.Helper()
+	ctx := t.Context()
+	writeFile(t, dir, "download-clients.yml", `
+qbittorrent:
+  main:
+    base_url: http://qbit.media.svc:8080
+    password: qbit-secret-pass
+    instance: sonarr/main
+`)
+	res, err := f.svc.Import(ctx, configPath, "")
+	if err != nil || res.ClientsRemoved != 1 {
+		t.Fatalf("import after drop = %+v, %v; want ClientsRemoved=1", res, err)
+	}
+	list, err := f.dlSvc.List(ctx)
+	if err != nil || len(list) != 1 {
+		t.Fatalf("List() after drop = len %d, %v; want 1", len(list), err)
+	}
+	if list[0].ID != qbitID {
+		t.Fatalf("surviving client ID = %v, want %v", list[0].ID, qbitID)
+	}
+	if _, getErr := f.dlSvc.Get(ctx, sabID); !errors.Is(getErr, domain.ErrNotFound) {
+		t.Fatalf("Get(sabID) = %v, want ErrNotFound", getErr)
+	}
+}
+
+func testDownloadClientsForbidden(t *testing.T, f fixture, qbitID uuid.UUID) {
+	t.Helper()
+	ctx := t.Context()
+	_, upErr := f.dlSvc.Update(ctx, qbitID, dlclients.Input{
+		Kind:    domain.ClientQBittorrent,
+		Name:    "new-name",
+		BaseURL: "http://qbit-new:8080",
+	})
+	if !errors.Is(upErr, domain.ErrForbidden) {
+		t.Fatalf("Update configarr client err = %v, want ErrForbidden", upErr)
+	}
+	if !strings.Contains(upErr.Error(), "download client is managed by Configarr; edit the download clients file instead") {
+		t.Fatalf("Update err text = %q, want managed by Configarr", upErr.Error())
+	}
+
+	delErr := f.dlSvc.Delete(ctx, qbitID)
+	if !errors.Is(delErr, domain.ErrForbidden) {
+		t.Fatalf("Delete configarr client err = %v, want ErrForbidden", delErr)
+	}
+	if !strings.Contains(delErr.Error(), "download client is managed by Configarr; edit the download clients file instead") {
+		t.Fatalf("Delete err text = %q, want managed by Configarr", delErr.Error())
+	}
+}
+
+func testDownloadClientsInvalidWarning(t *testing.T, f fixture, configPath, dir string) {
+	t.Helper()
+	ctx := t.Context()
+	writeFile(t, dir, "download-clients.yml", `
+qbittorrent:
+  "   ":
+    base_url: http://qbit.media.svc:8080
+    password: qbit-secret-pass
+`)
+	res, err := f.svc.Import(ctx, configPath, "")
+	if err != nil {
+		t.Fatalf("Import with invalid client err = %v, want nil", err)
+	}
+	if res.ClientsImported != 0 {
+		t.Fatalf("ClientsImported = %d, want 0", res.ClientsImported)
+	}
+	if len(res.Warnings) == 0 {
+		t.Fatalf("want warning for empty-after-trim name, got none")
+	}
+	var found bool
+	for _, w := range res.Warnings {
+		if strings.Contains(w, "name must be 1-64 characters") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected warning about name, got %v", res.Warnings)
+	}
+	list, err := f.dlSvc.List(ctx)
+	if err != nil || len(list) != 0 {
+		t.Fatalf("dlSvc.List() = len %d, %v; want 0", len(list), err)
 	}
 }

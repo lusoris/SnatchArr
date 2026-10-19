@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.4.2](https://github.com/lusoris/SnatchArr/compare/v0.4.1...v0.4.2) (2026-10-19)
+
+
+### Features
+
+* **configarr:** provision download clients from a file ([#416](https://github.com/lusoris/SnatchArr/issues/416)) ([0f500fa](https://github.com/lusoris/SnatchArr/commit/0f500faab3d8d0695b7fd626da1ac9f5ba47f193))
+
+
+### Bug Fixes
+
+* **deps:** update module github.com/go-jose/go-jose/v4 to v4.1.6 ([#412](https://github.com/lusoris/SnatchArr/issues/412)) ([4b17d5d](https://github.com/lusoris/SnatchArr/commit/4b17d5dbf3dfbb30cfa793da5b49452f278608e3))
+* **e2e:** bound every planted run and every live compose call ([#408](https://github.com/lusoris/SnatchArr/issues/408)) ([7389816](https://github.com/lusoris/SnatchArr/commit/73898161f511c69b62ec2c9a15f2a86f32888003))
+* **workergrpc:** stop a woken lease call's wait with its token ([#405](https://github.com/lusoris/SnatchArr/issues/405)) ([5bb3a49](https://github.com/lusoris/SnatchArr/commit/5bb3a49997f1fcdcd0bc5dd7844f614920614fbb))
+
 ## [0.4.1](https://github.com/lusoris/SnatchArr/compare/v0.4.0...v0.4.1) (2026-10-18)
 
 

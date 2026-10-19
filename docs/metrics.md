@@ -107,6 +107,7 @@ The API serves these metrics on `/metrics`:
 | `snatcharr_worker_events_unconfirmed_total` | counter | none | no | Events emitted for completed runs that were not confirmed. |
 | `snatcharr_budget_requests_total` | counter | `result` | no | Worker budget requests by outcome (`granted`, `partial`, `denied`, `error`). |
 | `snatcharr_searches_dispatched_total` | counter | `instance`, `kind` | no | Total items dispatched to *arr instances by instance name and kind. |
+| `snatcharr_search_last_dispatched_timestamp_seconds` | gauge | `instance` | no | Unix time of the last search dispatched to an *arr instance, by instance name. |
 | `snatcharr_stamina_used_items` | gauge | `instance` | yes | Hourly stamina spent in current rolling window by instance and `_global`. |
 | `snatcharr_stamina_remaining_items` | gauge | `instance` | yes | Hourly stamina remaining under effective cap by instance and `_global`. |
 | `snatcharr_runs` | gauge | `status` | yes | Current count of runs by lifecycle status (`queued`, `leased`, `done`, `failed`, `cancelled`). |

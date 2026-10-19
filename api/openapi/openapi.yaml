@@ -2403,7 +2403,7 @@ components:
           type: boolean
         source:
           type: string
-          enum: [manual, discovered]
+          enum: [manual, discovered, configarr]
         max_active:
           type: integer
           description: Foreplay - defer snatches once this many downloads are active (0 = no limit)
@@ -2759,7 +2759,7 @@ components:
 
     ConfigarrImportResult:
       type: object
-      required: [imported, updated, disabled, warnings, at]
+      required: [imported, updated, disabled, clients_imported, clients_updated, clients_removed, warnings, at]
       properties:
         imported:
           type: integer
@@ -2768,6 +2768,15 @@ components:
         disabled:
           type: integer
           description: Configarr-owned instances no longer defined, switched off
+        clients_imported:
+          type: integer
+          description: Download clients created
+        clients_updated:
+          type: integer
+          description: Download clients updated
+        clients_removed:
+          type: integer
+          description: Download clients removed because no longer defined
         warnings:
           type: array
           items:

@@ -21,7 +21,7 @@ INSERT INTO download_clients (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
     $11, $12, $13, $13
 )
-RETURNING id, instance_id, kind, name, base_url, username, secret_enc, enabled, source, remote_id, max_active, bandwidth_budget_bps, last_check_at, last_error, created_at, updated_at
+RETURNING id, instance_id, kind, name, base_url, username, secret_enc, enabled, source, remote_id, max_active, bandwidth_budget_bps, last_check_at, last_error, created_at, updated_at, configarr_key
 `
 
 type CreateDownloadClientParams struct {
@@ -76,8 +76,23 @@ func (q *Queries) CreateDownloadClient(ctx context.Context, arg CreateDownloadCl
 		&i.LastError,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ConfigarrKey,
 	)
 	return i, err
+}
+
+const deleteConfigarrDownloadClientsNotIn = `-- name: DeleteConfigarrDownloadClientsNotIn :execrows
+DELETE FROM download_clients
+WHERE source = 'configarr' AND configarr_key IS NOT NULL
+  AND NOT (configarr_key = ANY($1::text[]))
+`
+
+func (q *Queries) DeleteConfigarrDownloadClientsNotIn(ctx context.Context, keys []string) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteConfigarrDownloadClientsNotIn, keys)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const deleteDownloadClient = `-- name: DeleteDownloadClient :execrows
@@ -112,7 +127,7 @@ func (q *Queries) DeleteStaleDiscoveredDownloadClients(ctx context.Context, arg 
 }
 
 const getDownloadClient = `-- name: GetDownloadClient :one
-SELECT id, instance_id, kind, name, base_url, username, secret_enc, enabled, source, remote_id, max_active, bandwidth_budget_bps, last_check_at, last_error, created_at, updated_at FROM download_clients WHERE id = $1
+SELECT id, instance_id, kind, name, base_url, username, secret_enc, enabled, source, remote_id, max_active, bandwidth_budget_bps, last_check_at, last_error, created_at, updated_at, configarr_key FROM download_clients WHERE id = $1
 `
 
 func (q *Queries) GetDownloadClient(ctx context.Context, id uuid.UUID) (DownloadClient, error) {
@@ -135,12 +150,13 @@ func (q *Queries) GetDownloadClient(ctx context.Context, id uuid.UUID) (Download
 		&i.LastError,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ConfigarrKey,
 	)
 	return i, err
 }
 
 const listDownloadClients = `-- name: ListDownloadClients :many
-SELECT id, instance_id, kind, name, base_url, username, secret_enc, enabled, source, remote_id, max_active, bandwidth_budget_bps, last_check_at, last_error, created_at, updated_at FROM download_clients ORDER BY name, created_at
+SELECT id, instance_id, kind, name, base_url, username, secret_enc, enabled, source, remote_id, max_active, bandwidth_budget_bps, last_check_at, last_error, created_at, updated_at, configarr_key FROM download_clients ORDER BY name, created_at
 `
 
 func (q *Queries) ListDownloadClients(ctx context.Context) ([]DownloadClient, error) {
@@ -169,6 +185,7 @@ func (q *Queries) ListDownloadClients(ctx context.Context) ([]DownloadClient, er
 			&i.LastError,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ConfigarrKey,
 		); err != nil {
 			return nil, err
 		}
@@ -181,7 +198,7 @@ func (q *Queries) ListDownloadClients(ctx context.Context) ([]DownloadClient, er
 }
 
 const listDownloadClientsForInstance = `-- name: ListDownloadClientsForInstance :many
-SELECT id, instance_id, kind, name, base_url, username, secret_enc, enabled, source, remote_id, max_active, bandwidth_budget_bps, last_check_at, last_error, created_at, updated_at FROM download_clients
+SELECT id, instance_id, kind, name, base_url, username, secret_enc, enabled, source, remote_id, max_active, bandwidth_budget_bps, last_check_at, last_error, created_at, updated_at, configarr_key FROM download_clients
 WHERE enabled AND (instance_id IS NULL OR instance_id = $1)
 ORDER BY name, created_at
 `
@@ -212,6 +229,7 @@ func (q *Queries) ListDownloadClientsForInstance(ctx context.Context, instanceID
 			&i.LastError,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ConfigarrKey,
 		); err != nil {
 			return nil, err
 		}
@@ -224,7 +242,7 @@ func (q *Queries) ListDownloadClientsForInstance(ctx context.Context, instanceID
 }
 
 const listEnabledDownloadClients = `-- name: ListEnabledDownloadClients :many
-SELECT id, instance_id, kind, name, base_url, username, secret_enc, enabled, source, remote_id, max_active, bandwidth_budget_bps, last_check_at, last_error, created_at, updated_at FROM download_clients WHERE enabled ORDER BY name, created_at
+SELECT id, instance_id, kind, name, base_url, username, secret_enc, enabled, source, remote_id, max_active, bandwidth_budget_bps, last_check_at, last_error, created_at, updated_at, configarr_key FROM download_clients WHERE enabled ORDER BY name, created_at
 `
 
 func (q *Queries) ListEnabledDownloadClients(ctx context.Context) ([]DownloadClient, error) {
@@ -253,6 +271,7 @@ func (q *Queries) ListEnabledDownloadClients(ctx context.Context) ([]DownloadCli
 			&i.LastError,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ConfigarrKey,
 		); err != nil {
 			return nil, err
 		}
@@ -286,7 +305,7 @@ UPDATE download_clients
 SET instance_id = $2, kind = $3, name = $4, base_url = $5, username = $6, secret_enc = $7,
     enabled = $8, max_active = $9, bandwidth_budget_bps = $10, updated_at = $11
 WHERE id = $1
-RETURNING id, instance_id, kind, name, base_url, username, secret_enc, enabled, source, remote_id, max_active, bandwidth_budget_bps, last_check_at, last_error, created_at, updated_at
+RETURNING id, instance_id, kind, name, base_url, username, secret_enc, enabled, source, remote_id, max_active, bandwidth_budget_bps, last_check_at, last_error, created_at, updated_at, configarr_key
 `
 
 type UpdateDownloadClientParams struct {
@@ -335,6 +354,98 @@ func (q *Queries) UpdateDownloadClient(ctx context.Context, arg UpdateDownloadCl
 		&i.LastError,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ConfigarrKey,
+	)
+	return i, err
+}
+
+const upsertConfigarrDownloadClient = `-- name: UpsertConfigarrDownloadClient :one
+INSERT INTO download_clients (
+    id, instance_id, kind, name, base_url, username, secret_enc, enabled, source, configarr_key,
+    max_active, bandwidth_budget_bps, created_at, updated_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, 'configarr', $9,
+    $10, $11, $12, $12
+)
+ON CONFLICT (configarr_key) WHERE configarr_key IS NOT NULL DO UPDATE
+SET instance_id = EXCLUDED.instance_id, kind = EXCLUDED.kind, name = EXCLUDED.name,
+    base_url = EXCLUDED.base_url, username = EXCLUDED.username, secret_enc = EXCLUDED.secret_enc,
+    enabled = EXCLUDED.enabled, max_active = EXCLUDED.max_active,
+    bandwidth_budget_bps = EXCLUDED.bandwidth_budget_bps, updated_at = EXCLUDED.updated_at
+RETURNING id, instance_id, kind, name, base_url, username, secret_enc, enabled, source, remote_id, max_active, bandwidth_budget_bps, last_check_at, last_error, created_at, updated_at, configarr_key, (xmax = 0) AS inserted
+`
+
+type UpsertConfigarrDownloadClientParams struct {
+	ID                 uuid.UUID
+	InstanceID         *uuid.UUID
+	Kind               string
+	Name               string
+	BaseUrl            string
+	Username           string
+	SecretEnc          []byte
+	Enabled            bool
+	ConfigarrKey       *string
+	MaxActive          int32
+	BandwidthBudgetBps int64
+	CreatedAt          time.Time
+}
+
+type UpsertConfigarrDownloadClientRow struct {
+	ID                 uuid.UUID
+	InstanceID         *uuid.UUID
+	Kind               string
+	Name               string
+	BaseUrl            string
+	Username           string
+	SecretEnc          []byte
+	Enabled            bool
+	Source             string
+	RemoteID           *int32
+	MaxActive          int32
+	BandwidthBudgetBps int64
+	LastCheckAt        *time.Time
+	LastError          *string
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+	ConfigarrKey       *string
+	Inserted           bool
+}
+
+func (q *Queries) UpsertConfigarrDownloadClient(ctx context.Context, arg UpsertConfigarrDownloadClientParams) (UpsertConfigarrDownloadClientRow, error) {
+	row := q.db.QueryRow(ctx, upsertConfigarrDownloadClient,
+		arg.ID,
+		arg.InstanceID,
+		arg.Kind,
+		arg.Name,
+		arg.BaseUrl,
+		arg.Username,
+		arg.SecretEnc,
+		arg.Enabled,
+		arg.ConfigarrKey,
+		arg.MaxActive,
+		arg.BandwidthBudgetBps,
+		arg.CreatedAt,
+	)
+	var i UpsertConfigarrDownloadClientRow
+	err := row.Scan(
+		&i.ID,
+		&i.InstanceID,
+		&i.Kind,
+		&i.Name,
+		&i.BaseUrl,
+		&i.Username,
+		&i.SecretEnc,
+		&i.Enabled,
+		&i.Source,
+		&i.RemoteID,
+		&i.MaxActive,
+		&i.BandwidthBudgetBps,
+		&i.LastCheckAt,
+		&i.LastError,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ConfigarrKey,
+		&i.Inserted,
 	)
 	return i, err
 }
@@ -348,7 +459,7 @@ INSERT INTO download_clients (
 ON CONFLICT (instance_id, remote_id) WHERE remote_id IS NOT NULL DO UPDATE
 SET kind = EXCLUDED.kind, name = EXCLUDED.name, base_url = EXCLUDED.base_url, username = EXCLUDED.username,
     secret_enc = EXCLUDED.secret_enc, enabled = EXCLUDED.enabled, updated_at = EXCLUDED.updated_at
-RETURNING id, instance_id, kind, name, base_url, username, secret_enc, enabled, source, remote_id, max_active, bandwidth_budget_bps, last_check_at, last_error, created_at, updated_at, (xmax = 0) AS inserted
+RETURNING id, instance_id, kind, name, base_url, username, secret_enc, enabled, source, remote_id, max_active, bandwidth_budget_bps, last_check_at, last_error, created_at, updated_at, configarr_key, (xmax = 0) AS inserted
 `
 
 type UpsertDiscoveredDownloadClientParams struct {
@@ -381,6 +492,7 @@ type UpsertDiscoveredDownloadClientRow struct {
 	LastError          *string
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
+	ConfigarrKey       *string
 	Inserted           bool
 }
 
@@ -415,6 +527,7 @@ func (q *Queries) UpsertDiscoveredDownloadClient(ctx context.Context, arg Upsert
 		&i.LastError,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ConfigarrKey,
 		&i.Inserted,
 	)
 	return i, err

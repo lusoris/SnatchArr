@@ -127,6 +127,9 @@ func (s *Service) Update(ctx context.Context, clientID uuid.UUID, in Input) (dom
 	if err != nil {
 		return domain.DownloadClient{}, fmt.Errorf("dlclients: get: %w", store.MapError(err))
 	}
+	if current.Source == string(domain.ClientSourceConfigarr) {
+		return domain.DownloadClient{}, fmt.Errorf("%w: download client is managed by Configarr; edit the download clients file instead", domain.ErrForbidden)
+	}
 	if in.Secret == "" {
 		in.Secret = unchangedSecret
 	}
@@ -156,6 +159,13 @@ func (s *Service) Update(ctx context.Context, clientID uuid.UUID, in Input) (dom
 
 // Delete removes a download client.
 func (s *Service) Delete(ctx context.Context, clientID uuid.UUID) error {
+	current, err := s.st.Q().GetDownloadClient(ctx, clientID)
+	if err != nil {
+		return fmt.Errorf("dlclients: get: %w", store.MapError(err))
+	}
+	if current.Source == string(domain.ClientSourceConfigarr) {
+		return fmt.Errorf("%w: download client is managed by Configarr; edit the download clients file instead", domain.ErrForbidden)
+	}
 	n, err := s.st.Q().DeleteDownloadClient(ctx, clientID)
 	if err != nil {
 		return fmt.Errorf("dlclients: delete: %w", store.MapError(err))
@@ -350,4 +360,51 @@ func (s *Service) upsertDiscovered(ctx context.Context, d Discovered, res *Disco
 	}
 	s.cache.Forget(row.ID)
 	return nil
+}
+
+// UpsertConfigarr creates or updates a Configarr-owned download client definition.
+func (s *Service) UpsertConfigarr(ctx context.Context, key string, in Input) (bool, error) {
+	in, err := s.normalize(ctx, in)
+	if err != nil {
+		return false, err
+	}
+	clientID, err := s.ids.NewUUID()
+	if err != nil {
+		return false, fmt.Errorf("dlclients: new id: %w", err)
+	}
+	sealed, err := s.enc.Seal([]byte(in.Secret))
+	if err != nil {
+		return false, fmt.Errorf("dlclients: seal secret: %w", err)
+	}
+	row, err := s.st.Q().UpsertConfigarrDownloadClient(ctx, sqlcgen.UpsertConfigarrDownloadClientParams{
+		ID:                 clientID,
+		InstanceID:         in.InstanceID,
+		Kind:               string(in.Kind),
+		Name:               in.Name,
+		BaseUrl:            in.BaseURL,
+		Username:           in.Username,
+		SecretEnc:          sealed,
+		Enabled:            in.Enabled,
+		ConfigarrKey:       &key,
+		MaxActive:          int32(in.MaxActive), // #nosec G115 -- validated 0..1000
+		BandwidthBudgetBps: in.BandwidthBudgetBPS,
+		CreatedAt:          s.clk.Now(),
+	})
+	if err != nil {
+		return false, fmt.Errorf("dlclients: upsert configarr: %w", store.MapError(err))
+	}
+	s.cache.Forget(row.ID)
+	return row.Inserted, nil
+}
+
+// PruneConfigarr removes Configarr-owned download clients whose key is no longer defined.
+func (s *Service) PruneConfigarr(ctx context.Context, keep []string) (int, error) {
+	if keep == nil {
+		keep = []string{}
+	}
+	n, err := s.st.Q().DeleteConfigarrDownloadClientsNotIn(ctx, keep)
+	if err != nil {
+		return 0, fmt.Errorf("dlclients: prune configarr: %w", store.MapError(err))
+	}
+	return int(n), nil
 }

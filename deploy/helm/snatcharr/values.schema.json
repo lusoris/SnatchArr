@@ -21,6 +21,18 @@
         }
       }
     },
+    "configarr": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "existingConfigMap": { "type": "string" },
+        "configKey": { "type": "string" },
+        "downloadClientsKey": { "type": "string" },
+        "existingSecret": { "type": "string" },
+        "secretsKey": { "type": "string" },
+        "watch": { "type": "boolean" }
+      }
+    },
     "secrets": {
       "type": "object",
       "properties": {

@@ -147,6 +147,7 @@ func populateRegistry(m *metrics.Metrics) {
 	m.EventsUnconfirmed(1)
 	m.BudgetRequested(metrics.BudgetGranted)
 	m.SearchesDispatched("sonarr-main", "missing", 1)
+	m.SearchDispatchedAt("sonarr-main", time.Now())
 	m.SetStaminaUsed("sonarr-main", 10)
 	m.SetStaminaRemaining("sonarr-main", 40)
 	m.SetRuns("queued", 1)
