@@ -6,6 +6,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { describeError } from '#lib/api/client.js';
+	import BrandMark from '#lib/components/BrandMark.svelte';
 	import Field from '#lib/components/Field.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { session } from '#lib/session.svelte.js';
@@ -31,9 +32,12 @@ SPDX-License-Identifier: EUPL-1.2
 	}
 </script>
 
-<div class="mx-auto max-w-sm">
-	<h1 class="mb-2 text-2xl font-semibold">{m.setup_title()}</h1>
-	<p class="mb-4 text-sm text-subtle">{m.setup_intro()}</p>
+<div class="mx-auto w-full max-w-sm">
+	<div class="mb-6 flex justify-center text-brand">
+		<BrandMark size={56} />
+	</div>
+	<h1 class="mb-2 text-center text-2xl font-semibold">{m.setup_title()}</h1>
+	<p class="mb-4 text-center text-sm text-subtle">{m.setup_intro()}</p>
 	<form class="card flex flex-col gap-4" onsubmit={submit}>
 		<Field id="username" label={m.username()}>
 			<input

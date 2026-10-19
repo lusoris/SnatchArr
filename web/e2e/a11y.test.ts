@@ -253,6 +253,72 @@ if (!process.env.SNATCHARR_E2E_API) {
 		const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
 		expect(results.violations).toEqual([]);
 	});
+
+	test('mobile navigation drawer open has no axe violations', async ({ page }) => {
+		await page.setViewportSize({ width: 390, height: 844 });
+		await page.route('**/api/v1/auth/setup/status', (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ setup_complete: true })
+			})
+		);
+		await page.route('**/api/v1/auth/session', (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					user: {
+						id: '00000000-0000-0000-0000-000000000099',
+						username: 'admin',
+						role: 'admin'
+					},
+					csrf_token: 'test-token',
+					expires_at: '2099-01-01T00:00:00Z'
+				})
+			})
+		);
+		await page.route('**/api/v1/auth/sso', (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ oidc: false, proxy: false })
+			})
+		);
+		await page.route('**/api/v1/instances', (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify([])
+			})
+		);
+		await page.route('**/api/v1/hourly-caps', (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify([])
+			})
+		);
+		await page.route('**/api/v1/prowlarr/status', (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify([])
+			})
+		);
+
+		await page.goto('/');
+		await page.waitForLoadState('networkidle');
+
+		const menuButton = page.getByRole('button', { name: /Open menu|Menü öffnen/i });
+		await menuButton.click();
+
+		const dialog = page.locator('dialog#mobile-nav-dialog');
+		await expect(dialog).toBeVisible();
+
+		const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
+		expect(results.violations).toEqual([]);
+	});
 } else {
 	test.describe('public', () => {
 		test('public: /setup has no axe violations', async ({ page }) => {

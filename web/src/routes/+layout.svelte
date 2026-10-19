@@ -11,8 +11,12 @@ SPDX-License-Identifier: EUPL-1.2
 	import { Toaster } from 'svelte-sonner';
 	import { toastPreset } from '@sveltesentio/ui/toast';
 	import { onMount } from 'svelte';
+	import ProblemNote from '#lib/components/ProblemNote.svelte';
+	import { getNavGroups } from '#lib/components/shell/nav.js';
+	import NavDrawer from '#lib/components/shell/NavDrawer.svelte';
+	import Sidebar from '#lib/components/shell/Sidebar.svelte';
+	import TopBar from '#lib/components/shell/TopBar.svelte';
 	import { m } from '#lib/paraglide/messages.js';
-	import { getLocale, locales, setLocale, type Locale } from '#lib/paraglide/runtime.js';
 	import { queryClient } from '#lib/query.js';
 	import { session } from '#lib/session.svelte.js';
 
@@ -23,45 +27,45 @@ SPDX-License-Identifier: EUPL-1.2
 		.join(';');
 
 	const publicRoutes = new Set(['/login', '/setup']);
-	let ready = $state(false);
+	const isPublic = $derived(publicRoutes.has(page.url.pathname));
 
-	/** Sends the visitor where the session state says they belong. */
-	async function route(): Promise<void> {
+	let drawerOpen = $state(false);
+	let menuButtonEl = $state<HTMLButtonElement | null>(null);
+
+	const navGroups = $derived(getNavGroups(session.isAdmin));
+
+	function openDrawer(): void {
+		drawerOpen = true;
+	}
+
+	function closeDrawer(): void {
+		drawerOpen = false;
+	}
+
+	async function checkSession(): Promise<void> {
 		const state = await session.refresh();
 		const here = page.url.pathname;
-		if (state === 'setup' && here !== '/setup') await goto(resolve('setup'));
-		else if (state === 'anonymous' && !publicRoutes.has(here)) await goto(resolve('login'));
-		else if (state === 'authenticated' && publicRoutes.has(here)) await goto(resolve('/'));
-		ready = true;
+		if (state === 'setup' && here !== '/setup') {
+			await goto(resolve('setup'));
+		} else if (state === 'anonymous' && !session.error && !publicRoutes.has(here)) {
+			await goto(resolve('login'));
+		} else if (state === 'authenticated' && publicRoutes.has(here)) {
+			await goto(resolve('/'));
+		}
 	}
 
 	onMount(() => {
-		void route();
+		void checkSession();
 	});
 
-	const nav = $derived([
-		{ href: '/', label: m.nav_dashboard() },
-		{ href: '/instances', label: m.nav_instances() },
-		{ href: '/history', label: m.nav_history() },
-		{ href: '/live', label: m.nav_live() },
-		...(session.isAdmin ? [{ href: '/logs' as const, label: m.nav_logs() }] : []),
-		{ href: '/schedules', label: m.nav_schedules() },
-		{ href: '/download-clients', label: m.nav_download_clients() },
-		{ href: '/seerr', label: m.nav_seerr() },
-		{ href: '/prowlarr', label: m.nav_prowlarr() },
-		{ href: '/configarr', label: m.nav_configarr() },
-		{ href: '/settings', label: m.nav_settings() },
-		{ href: '/account', label: m.nav_account() }
-	] as const);
+	$effect(() => {
+		void page.url.pathname;
+		drawerOpen = false;
+	});
 
 	async function logout(): Promise<void> {
 		await session.logout();
 		await goto(resolve('login'));
-	}
-
-	function changeLocale(event: Event): void {
-		const value = (event.currentTarget as HTMLSelectElement).value as Locale;
-		setLocale(value);
 	}
 </script>
 
@@ -72,51 +76,55 @@ SPDX-License-Identifier: EUPL-1.2
 <QueryClientProvider client={queryClient}>
 	<a
 		href="#main"
-		class="btn sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50"
+		class="btn sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50"
 		>{m.skip_to_content()}</a
 	>
-	<div class="flex min-h-screen flex-col md:flex-row">
-		{#if session.state === 'authenticated'}
-			<nav
-				aria-label={m.app_name()}
-				class="border-b border-line p-4 md:w-56 md:border-r md:border-b-0"
-			>
-				<a href={resolve('/')} class="mb-4 flex items-center gap-2 text-lg font-semibold">
-					<img src="/brand/mark.svg" alt="" width="28" height="28" />
-					{m.app_name()}
-				</a>
-				<ul class="flex flex-wrap gap-1 md:flex-col">
-					{#each nav as item (item.href)}
-						<li>
-							<a
-								href={resolve(item.href)}
-								aria-current={page.url.pathname === item.href ? 'page' : undefined}
-								class="block rounded-md px-3 py-2 hover:bg-surface aria-[current=page]:bg-surface aria-[current=page]:font-semibold"
-								>{item.label}</a
-							>
-						</li>
-					{/each}
-				</ul>
-				<div class="mt-6 flex flex-col gap-2 text-sm">
-					<label class="flex flex-col gap-1">
-						<span>{m.language()}</span>
-						<select class="select" value={getLocale()} onchange={changeLocale}>
-							{#each locales as loc (loc)}
-								<option value={loc}>{loc}</option>
-							{/each}
-						</select>
-					</label>
-					<button type="button" class="btn" onclick={logout}>{m.nav_logout()}</button>
-				</div>
-			</nav>
-		{/if}
-		<main id="main" class="flex-1 p-4 md:p-6" tabindex="-1">
-			{#if ready}
-				{@render children()}
-			{:else}
-				<p aria-live="polite">{m.loading()}</p>
-			{/if}
+
+	{#if isPublic}
+		<main id="main" class="flex min-h-screen items-center justify-center p-4" tabindex="-1">
+			{@render children()}
 		</main>
-	</div>
+	{:else}
+		<div class="min-h-screen bg-bg text-fg">
+			<TopBar {drawerOpen} onOpenDrawer={openDrawer} bind:menuButtonEl />
+
+			<Sidebar {navGroups} onLogout={logout} />
+
+			<NavDrawer
+				open={drawerOpen}
+				{navGroups}
+				onClose={closeDrawer}
+				onLogout={logout}
+				{menuButtonEl}
+			/>
+
+			<main id="main" class="min-h-screen p-4 md:p-6 lg:pl-[16.5rem]" tabindex="-1">
+				<div class="mx-auto max-w-[80rem]">
+					<svelte:boundary>
+						{#if session.state === 'unknown'}
+							<div
+								data-testid="skeleton"
+								class="flex animate-pulse flex-col gap-4"
+								role="status"
+								aria-busy="true"
+								aria-label={m.loading()}
+							>
+								<div data-testid="header-band" class="header-band h-8 w-48 rounded bg-line"></div>
+								<div class="h-32 w-full rounded bg-line"></div>
+								<div class="h-64 w-full rounded bg-line"></div>
+							</div>
+						{:else if session.error}
+							<ProblemNote error={session.error} />
+						{:else}
+							{@render children()}
+						{/if}
+						{#snippet failed(error)}
+							<ProblemNote {error} />
+						{/snippet}
+					</svelte:boundary>
+				</div>
+			</main>
+		</div>
+	{/if}
 	<Toaster position={toast.position} toastOptions={{ style: toastStyle }} richColors />
 </QueryClientProvider>

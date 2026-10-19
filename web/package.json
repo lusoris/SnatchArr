@@ -53,6 +53,7 @@
 	},
 	"dependencies": {
 		"@inlang/paraglide-js": "^2.25.4",
+		"@lucide/svelte": "1.59.0",
 		"@sveltesentio/api": "0.6.0",
 		"@sveltesentio/core": "0.5.0",
 		"@sveltesentio/query": "0.5.0",
