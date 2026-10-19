@@ -1,0 +1,108 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+SPDX-License-Identifier: EUPL-1.2
+-->
+<script lang="ts">
+	import type { Snippet } from 'svelte';
+	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
+	import { createSentioQuery } from '@sveltesentio/query';
+	import { api, problemStatus } from '#lib/api/client.js';
+	import type { components } from '#lib/api/schema.js';
+	import ProblemNote from '#lib/components/ProblemNote.svelte';
+	import { getInstanceTabs, isTabActive } from '#lib/components/instance/tabs.js';
+	import { m } from '#lib/paraglide/messages.js';
+	import { instanceKindLabel } from '#lib/products.js';
+	import { keys } from '#lib/query.js';
+
+	type Instance = components['schemas']['Instance'];
+
+	const { children }: { children: Snippet } = $props();
+
+	const instanceId = $derived(page.params.id ?? '');
+	const instance = createSentioQuery<Instance | undefined>(() => ({
+		queryKey: keys.instance(instanceId),
+		queryFn: async () =>
+			(await api.GET('/instances/{instanceId}', { params: { path: { instanceId } } })).data
+	}));
+
+	const isNotFound = $derived(
+		(instance.isError && problemStatus(instance.error) === 404) ||
+			(instance.isSuccess && !instance.data)
+	);
+
+	const tabs = $derived(getInstanceTabs(instanceId));
+</script>
+
+{#key page.params.id}
+	{#if instance.isPending}
+		<div role="status" aria-label={m.instance_loading()} class="flex animate-pulse flex-col gap-4">
+			<div class="h-8 w-64 rounded bg-subtle/20"></div>
+			<div class="h-4 w-96 rounded bg-subtle/20"></div>
+			<span class="sr-only">{m.instance_loading()}</span>
+		</div>
+	{:else if isNotFound}
+		<div class="card max-w-xl">
+			<h1 class="mb-2 text-2xl font-semibold">{m.instance_not_found_title()}</h1>
+			<p class="mb-4 text-sm text-subtle">{m.instance_not_found_text()}</p>
+			<a href={resolve('/instances')} class="btn btn-primary">{m.instance_not_found_back()}</a>
+		</div>
+	{:else if instance.isError}
+		<ProblemNote error={instance.error} />
+	{:else if instance.data}
+		<h1 class="mb-1 text-2xl font-semibold">{instance.data.name}</h1>
+		<p class="mb-4 text-sm text-subtle">
+			{instanceKindLabel(instance.data.kind, instance.data.last_seen_product)} · {instance.data
+				.base_url}
+		</p>
+
+		<nav aria-label={m.instance_tabs_label()} class="subtab-bar mb-6">
+			{#each tabs as tab (tab.key)}
+				{@const active = isTabActive(page.url.pathname, tab.href, tab.key === 'overview')}
+				{#if tab.key === 'overview'}
+					<a
+						href={resolve('/instances/[id]', { id: instanceId })}
+						class="subtab-link"
+						aria-current={active ? 'page' : undefined}
+					>
+						{tab.label}
+					</a>
+				{:else if tab.key === 'policy'}
+					<a
+						href={resolve('/instances/[id]/policy', { id: instanceId })}
+						class="subtab-link"
+						aria-current={active ? 'page' : undefined}
+					>
+						{tab.label}
+					</a>
+				{:else if tab.key === 'queue'}
+					<a
+						href={resolve('/instances/[id]/queue', { id: instanceId })}
+						class="subtab-link"
+						aria-current={active ? 'page' : undefined}
+					>
+						{tab.label}
+					</a>
+				{:else if tab.key === 'activity'}
+					<a
+						href={resolve('/instances/[id]/activity', { id: instanceId })}
+						class="subtab-link"
+						aria-current={active ? 'page' : undefined}
+					>
+						{tab.label}
+					</a>
+				{:else}
+					<a
+						href={resolve('/instances/[id]/memory', { id: instanceId })}
+						class="subtab-link"
+						aria-current={active ? 'page' : undefined}
+					>
+						{tab.label}
+					</a>
+				{/if}
+			{/each}
+		</nav>
+
+		{@render children()}
+	{/if}
+{/key}
