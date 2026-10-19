@@ -20,3 +20,4 @@ This directory documents key architectural decisions following the HISS-14 immut
 | [0012](0012-queue-management-replaces-cleanuparr-link.md) | 2026-10-17 | SnatchArr manages the download queue; the Cleanuparr link goes | Accepted |
 | [0013](0013-force-import-id-matched-releases.md) | 2026-10-18 | SnatchArr force-imports ID-matched releases and owns the queue alone | Accepted; amended by 0014 |
 | [0014](0014-shadow-parity-week-for-id-matched.md) | 2026-10-18 | The id_matched parity week runs in shadow beside the live unblocker | Accepted |
+| [0015](0015-ui-design-system-and-layout.md) | 2026-10-19 | SnatchArr's own UI: palette A, the M3 mark, a task-flow navigation and a UI that never blocks | Accepted |
