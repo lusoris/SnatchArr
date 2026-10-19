@@ -37,7 +37,7 @@ type queueOps struct {
 	// page fetches one queue page and returns the mapped items, the raw
 	// record count of the page and the total record count of the queue.
 	page   func(ctx context.Context, page, size int) (items []mappedItem, n, total int, err error)
-	remove func(ctx context.Context, id int, blocklist bool) error
+	remove func(ctx context.Context, id int, blocklist, research bool) error
 	// fileScore reads the custom-format score of the file on disk; nil for
 	// kinds without a single file per queue item (Lidarr, Readarr).
 	fileScore func(ctx context.Context, fileID int) (*int32, error)
@@ -111,15 +111,15 @@ func (p *GoenvoyProber) fileScore(ctx context.Context, ops queueOps, fileID int)
 	return score
 }
 
-// RemoveQueueItem deletes a single item from the *arr queue, removing it from client and skipping redownload.
-func (p *GoenvoyProber) RemoveQueueItem(ctx context.Context, kind domain.AppKind, baseURL, apiKey string, id int32, blocklist bool) error {
+// RemoveQueueItem deletes a single item from the *arr queue, removing it from client and setting skipRedownload = !research.
+func (p *GoenvoyProber) RemoveQueueItem(ctx context.Context, kind domain.AppKind, baseURL, apiKey string, id int32, blocklist, research bool) error {
 	ops, err := p.queueOps(kind, baseURL, apiKey)
 	if err != nil {
 		return err
 	}
 	ctx, cancel := context.WithTimeout(ctx, p.opts.Timeout)
 	defer cancel()
-	if err := ops.remove(ctx, int(id), blocklist); err != nil {
+	if err := ops.remove(ctx, int(id), blocklist, research); err != nil {
 		return fmt.Errorf("arrclient: %s delete queue item %d: %w", kind, id, err)
 	}
 	return nil
@@ -167,8 +167,8 @@ func sonarrQueue(baseURL, apiKey string, o []arr.Option) (queueOps, error) {
 		}
 		return items, len(resp.Records), resp.TotalRecords, nil
 	}
-	remove := func(ctx context.Context, id int, blocklist bool) error {
-		return c.DeleteQueueItemWithOptions(ctx, id, sonarr.QueueDeleteOptions{RemoveFromClient: true, SkipRedownload: true, Blocklist: blocklist})
+	remove := func(ctx context.Context, id int, blocklist, research bool) error {
+		return c.DeleteQueueItemWithOptions(ctx, id, sonarr.QueueDeleteOptions{RemoveFromClient: true, SkipRedownload: !research, Blocklist: blocklist})
 	}
 	fileScore := func(ctx context.Context, id int) (*int32, error) {
 		f, err := c.GetEpisodeFile(ctx, id)
@@ -196,8 +196,8 @@ func radarrQueue(baseURL, apiKey string, o []arr.Option) (queueOps, error) {
 		}
 		return items, len(resp.Records), resp.TotalRecords, nil
 	}
-	remove := func(ctx context.Context, id int, blocklist bool) error {
-		return c.DeleteQueueItemWithOptions(ctx, id, radarr.QueueDeleteOptions{RemoveFromClient: true, SkipRedownload: true, Blocklist: blocklist})
+	remove := func(ctx context.Context, id int, blocklist, research bool) error {
+		return c.DeleteQueueItemWithOptions(ctx, id, radarr.QueueDeleteOptions{RemoveFromClient: true, SkipRedownload: !research, Blocklist: blocklist})
 	}
 	fileScore := func(ctx context.Context, id int) (*int32, error) {
 		f, err := c.GetMovieFile(ctx, id)
@@ -228,8 +228,8 @@ func lidarrQueue(baseURL, apiKey string, o []arr.Option) (queueOps, error) {
 		}
 		return items, len(resp.Records), resp.TotalRecords, nil
 	}
-	remove := func(ctx context.Context, id int, blocklist bool) error {
-		return c.DeleteQueueItemWithOptions(ctx, id, lidarr.QueueDeleteOptions{RemoveFromClient: true, SkipRedownload: true, Blocklist: blocklist})
+	remove := func(ctx context.Context, id int, blocklist, research bool) error {
+		return c.DeleteQueueItemWithOptions(ctx, id, lidarr.QueueDeleteOptions{RemoveFromClient: true, SkipRedownload: !research, Blocklist: blocklist})
 	}
 	return queueOps{page: page, remove: remove}, nil
 }
@@ -250,8 +250,8 @@ func readarrQueue(baseURL, apiKey string, o []arr.Option) (queueOps, error) {
 		}
 		return items, len(resp.Records), resp.TotalRecords, nil
 	}
-	remove := func(ctx context.Context, id int, blocklist bool) error {
-		return c.DeleteQueueItemWithOptions(ctx, id, readarr.QueueDeleteOptions{RemoveFromClient: true, SkipRedownload: true, Blocklist: blocklist})
+	remove := func(ctx context.Context, id int, blocklist, research bool) error {
+		return c.DeleteQueueItemWithOptions(ctx, id, readarr.QueueDeleteOptions{RemoveFromClient: true, SkipRedownload: !research, Blocklist: blocklist})
 	}
 	return queueOps{page: page, remove: remove}, nil
 }

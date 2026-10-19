@@ -85,8 +85,8 @@ func (s *DBInstanceSource) ListEnabledInstances(ctx context.Context) ([]Instance
 // ArrClient defines the *arr queue operations needed by the sweep.
 type ArrClient interface {
 	Queue(ctx context.Context, kind domain.AppKind, baseURL, apiKey string, maxPages, pageSize int) ([]Item, error)
-	RemoveQueueItem(ctx context.Context, kind domain.AppKind, baseURL, apiKey string, id int32, blocklist bool) error
-	ForceImport(ctx context.Context, kind domain.AppKind, baseURL, apiKey, downloadID string) (int, error)
+	RemoveQueueItem(ctx context.Context, kind domain.AppKind, baseURL, apiKey string, id int32, blocklist, research bool) error
+	ForceImport(ctx context.Context, kind domain.AppKind, baseURL, apiKey, downloadID string, mode ImportMode) (int, error)
 }
 
 // EventPublisher publishes events on the bus.
@@ -234,7 +234,7 @@ func (s *Service) processDecisions(ctx context.Context, inst Instance, cfg Setti
 }
 
 func (s *Service) handleRemoval(ctx context.Context, inst Instance, d Decision, now time.Time) bool {
-	err := s.arr.RemoveQueueItem(ctx, inst.Kind, inst.BaseURL, inst.APIKey, d.ItemID, d.Blocklist)
+	err := s.arr.RemoveQueueItem(ctx, inst.Kind, inst.BaseURL, inst.APIKey, d.ItemID, d.Blocklist, d.Research)
 	if err != nil {
 		s.logger.WarnContext(ctx, "queue: remove item failed", slog.String("instance", inst.Name), slog.Int("item_id", int(d.ItemID)), slog.String("download_id", d.DownloadID), slog.String("error", err.Error()))
 		s.metrics.QueueRemoval(inst.Name, string(d.Rule), "error")
@@ -250,12 +250,15 @@ func (s *Service) handleRemoval(ctx context.Context, inst Instance, d Decision, 
 }
 
 type strikePayload struct {
-	Rule        string `json:"rule"`
-	Count       int    `json:"count"`
-	Threshold   int    `json:"threshold"`
-	Mode        string `json:"mode"`
-	WouldRemove bool   `json:"would_remove"`
-	WouldImport bool   `json:"would_import"`
+	Rule         string   `json:"rule"`
+	Class        string   `json:"class,omitempty"`
+	Pattern      string   `json:"pattern,omitempty"`
+	MatchPercent *float64 `json:"match_percent,omitempty"`
+	Count        int      `json:"count"`
+	Threshold    int      `json:"threshold"`
+	Mode         string   `json:"mode"`
+	WouldRemove  bool     `json:"would_remove"`
+	WouldImport  bool     `json:"would_import"`
 }
 
 func (s *Service) emitStrikeEvent(ctx context.Context, inst Instance, cfg Settings, d Decision, now time.Time) {
@@ -266,12 +269,15 @@ func (s *Service) emitStrikeEvent(ctx context.Context, inst Instance, cfg Settin
 	}
 
 	raw, err := json.Marshal(strikePayload{
-		Rule:        string(d.Rule),
-		Count:       d.Next.Count,
-		Threshold:   d.Threshold,
-		Mode:        mode,
-		WouldRemove: d.WouldRemove,
-		WouldImport: d.WouldImport,
+		Rule:         string(d.Rule),
+		Class:        string(d.Class),
+		Pattern:      d.Pattern,
+		MatchPercent: d.MatchPercent,
+		Count:        d.Next.Count,
+		Threshold:    d.Threshold,
+		Mode:         mode,
+		WouldRemove:  d.WouldRemove,
+		WouldImport:  d.WouldImport,
 	})
 	if err != nil {
 		s.logger.WarnContext(ctx, "queue: encode strike payload failed", slog.String("error", err.Error()))
@@ -291,6 +297,10 @@ func (s *Service) emitStrikeEvent(ctx context.Context, inst Instance, cfg Settin
 }
 
 func (s *Service) emitRemovalEvent(ctx context.Context, inst Instance, d Decision, now time.Time) {
+	detail := fmt.Sprintf("removed by rule %s", d.Rule)
+	if d.Class != "" {
+		detail = fmt.Sprintf("removed by rule %s (class: %s, pattern: %s)", d.Rule, d.Class, d.Pattern)
+	}
 	s.events.Publish(ctx, events.Frame{
 		InstanceID: inst.ID,
 		Timestamp:  now,
@@ -298,6 +308,6 @@ func (s *Service) emitRemovalEvent(ctx context.Context, inst Instance, d Decisio
 		Type:       "queue_item_removed",
 		EntityID:   int64(d.ItemID),
 		Title:      d.DownloadID,
-		Detail:     fmt.Sprintf("removed by rule %s", d.Rule),
+		Detail:     detail,
 	})
 }

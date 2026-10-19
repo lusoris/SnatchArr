@@ -55,7 +55,7 @@ func TestIDMatchedSweepDecisions(t *testing.T) {
 	noKind := act
 	noKind.ForceImport = false
 	secondLine := idMatchedItem(1, "dl-1")
-	secondLine.StatusLines = append(secondLine.StatusLines, "Not an upgrade for existing episode file(s)")
+	secondLine.StatusLines = append(secondLine.StatusLines, "Some unknown error line")
 	noDownload := idMatchedItem(1, "")
 	pending := idMatchedItem(1, "dl-1")
 	pending.TrackedDownloadState = "importPending"

@@ -24,6 +24,21 @@ SPDX-License-Identifier: EUPL-1.2
 		threshold: 1,
 		blocklist: false
 	};
+	const optionalImportFixableDefault: components['schemas']['QueueRuleSettings'] = {
+		mode: 'observe',
+		threshold: 1,
+		blocklist: false
+	};
+	const optionalImportBrokenDefault: components['schemas']['QueueRuleSettings'] = {
+		mode: 'observe',
+		threshold: 2,
+		blocklist: true
+	};
+	const optionalImportNotWantedDefault: components['schemas']['QueueRuleSettings'] = {
+		mode: 'observe',
+		threshold: 1,
+		blocklist: true
+	};
 
 	const { instanceId: id }: { instanceId: string } = $props();
 	const instanceId = untrack(() => id);
@@ -46,6 +61,10 @@ SPDX-License-Identifier: EUPL-1.2
 		min_custom_format_score: number | null;
 		max_removals_per_sweep: number;
 		max_imports_per_sweep: number;
+		match_fixable_min_percent: number;
+		match_broken_below_percent: number;
+		track_fixable_min_percent: number;
+		track_broken_below_percent: number;
 	}
 
 	let draft = $state<FormState | null>(null);
@@ -58,8 +77,13 @@ SPDX-License-Identifier: EUPL-1.2
 					stalled: { ...query.data.rules.stalled },
 					slow: { ...query.data.rules.slow },
 					failed: { ...query.data.rules.failed },
-					import_blocked: { ...query.data.rules.import_blocked },
 					id_matched: { ...(query.data.rules.id_matched ?? optionalRuleDefault) },
+					import_fixable: { ...(query.data.rules.import_fixable ?? optionalImportFixableDefault) },
+					import_broken: { ...(query.data.rules.import_broken ?? optionalImportBrokenDefault) },
+					import_not_wanted: {
+						...(query.data.rules.import_not_wanted ?? optionalImportNotWantedDefault)
+					},
+					import_blocked: { ...query.data.rules.import_blocked },
 					unwanted_score: { ...query.data.rules.unwanted_score },
 					not_an_upgrade: { ...(query.data.rules.not_an_upgrade ?? optionalRuleDefault) },
 					duplicate: { ...(query.data.rules.duplicate ?? optionalRuleDefault) },
@@ -69,7 +93,11 @@ SPDX-License-Identifier: EUPL-1.2
 				min_bytes_per_second: query.data.min_bytes_per_second,
 				min_custom_format_score: query.data.min_custom_format_score ?? null,
 				max_removals_per_sweep: query.data.max_removals_per_sweep,
-				max_imports_per_sweep: query.data.max_imports_per_sweep ?? 25
+				max_imports_per_sweep: query.data.max_imports_per_sweep ?? 25,
+				match_fixable_min_percent: query.data.match_fixable_min_percent ?? 75,
+				match_broken_below_percent: query.data.match_broken_below_percent ?? 40,
+				track_fixable_min_percent: query.data.track_fixable_min_percent ?? 50,
+				track_broken_below_percent: query.data.track_broken_below_percent ?? 40
 			};
 		}
 	});
@@ -100,7 +128,11 @@ SPDX-License-Identifier: EUPL-1.2
 					? undefined
 					: draft.min_custom_format_score,
 			max_removals_per_sweep: draft.max_removals_per_sweep,
-			max_imports_per_sweep: draft.max_imports_per_sweep
+			max_imports_per_sweep: draft.max_imports_per_sweep,
+			match_fixable_min_percent: draft.match_fixable_min_percent,
+			match_broken_below_percent: draft.match_broken_below_percent,
+			track_fixable_min_percent: draft.track_fixable_min_percent,
+			track_broken_below_percent: draft.track_broken_below_percent
 		};
 		save.mutate(payload);
 	}
@@ -109,8 +141,11 @@ SPDX-License-Identifier: EUPL-1.2
 		{ key: 'stalled', label: m.queue_rule_stalled },
 		{ key: 'slow', label: m.queue_rule_slow },
 		{ key: 'failed', label: m.queue_rule_failed },
-		{ key: 'import_blocked', label: m.queue_rule_import_blocked },
 		{ key: 'id_matched', label: m.queue_rule_id_matched },
+		{ key: 'import_fixable', label: m.queue_rule_import_fixable },
+		{ key: 'import_broken', label: m.queue_rule_import_broken },
+		{ key: 'import_not_wanted', label: m.queue_rule_import_not_wanted },
+		{ key: 'import_blocked', label: m.queue_rule_import_blocked },
 		{ key: 'unwanted_score', label: m.queue_rule_unwanted_score },
 		{ key: 'not_an_upgrade', label: m.queue_rule_not_an_upgrade },
 		{ key: 'duplicate', label: m.queue_rule_duplicate },
@@ -183,8 +218,8 @@ SPDX-License-Identifier: EUPL-1.2
 										/>
 									</td>
 									<td class="py-2">
-										<!-- id_matched imports and never removes, so it has nothing to blocklist. -->
-										{#if r.key !== 'id_matched'}
+										<!-- id_matched and import_fixable import and never remove, so they have nothing to blocklist. -->
+										{#if r.key !== 'id_matched' && r.key !== 'import_fixable'}
 											<input
 												type="checkbox"
 												aria-label={`${r.label()} ${m.queue_rule_blocklist()}`}
@@ -256,6 +291,54 @@ SPDX-License-Identifier: EUPL-1.2
 					min="1"
 					max="100"
 					bind:value={draft.max_imports_per_sweep}
+				/>
+			</Field>
+
+			<Field id="queue-match-fixable" label={m.queue_policy_match_fixable()}>
+				<input
+					id="queue-match-fixable"
+					class="input"
+					type="number"
+					min="0"
+					max="100"
+					step="any"
+					bind:value={draft.match_fixable_min_percent}
+				/>
+			</Field>
+
+			<Field id="queue-match-broken" label={m.queue_policy_match_broken()}>
+				<input
+					id="queue-match-broken"
+					class="input"
+					type="number"
+					min="0"
+					max="100"
+					step="any"
+					bind:value={draft.match_broken_below_percent}
+				/>
+			</Field>
+
+			<Field id="queue-track-fixable" label={m.queue_policy_track_fixable()}>
+				<input
+					id="queue-track-fixable"
+					class="input"
+					type="number"
+					min="0"
+					max="100"
+					step="any"
+					bind:value={draft.track_fixable_min_percent}
+				/>
+			</Field>
+
+			<Field id="queue-track-broken" label={m.queue_policy_track_broken()}>
+				<input
+					id="queue-track-broken"
+					class="input"
+					type="number"
+					min="0"
+					max="100"
+					step="any"
+					bind:value={draft.track_broken_below_percent}
 				/>
 			</Field>
 

@@ -23,6 +23,9 @@ const (
 	RuleSlow                Rule = "slow"
 	RuleFailed              Rule = "failed"
 	RuleIDMatched           Rule = "id_matched"
+	RuleImportFixable       Rule = "import_fixable"
+	RuleImportBroken        Rule = "import_broken"
+	RuleImportNotWanted     Rule = "import_not_wanted"
 	RuleImportBlocked       Rule = "import_blocked"
 	RuleUnwantedScore       Rule = "unwanted_score"
 	RuleNotAnUpgrade        Rule = "not_an_upgrade"
@@ -36,12 +39,24 @@ var RuleOrder = []Rule{
 	RuleSlow,
 	RuleFailed,
 	RuleIDMatched,
+	RuleImportFixable,
+	RuleImportBroken,
+	RuleImportNotWanted,
 	RuleImportBlocked,
 	RuleUnwantedScore,
 	RuleNotAnUpgrade,
 	RuleDuplicate,
 	RuleUnwantedUnmonitored,
 }
+
+// ImportMode defines candidate qualification criteria for a manual import.
+type ImportMode string
+
+// Import candidate qualification modes.
+const (
+	ImportModeClean   ImportMode = "clean"
+	ImportModeFixable ImportMode = "fixable"
+)
 
 // Mode defines how a rule reacts when its strike threshold is met.
 type Mode string
@@ -79,6 +94,14 @@ type Settings struct {
 	// ForceImport is set by the service for kinds whose manual-import candidates carry
 	// the grab-history mapping (Sonarr, Radarr); without it id_matched never matches.
 	ForceImport bool
+	// MatchFixableMinPercent is the album/book match percentage floor for manual import (default 75).
+	MatchFixableMinPercent float64
+	// MatchBrokenBelowPercent is the album/book match fallback threshold (default 40, used by rematch fallback).
+	MatchBrokenBelowPercent float64
+	// TrackFixableMinPercent is the track match percentage floor for manual import (default 50).
+	TrackFixableMinPercent float64
+	// TrackBrokenBelowPercent is the track match fallback threshold (default 40, used by rematch fallback).
+	TrackBrokenBelowPercent float64
 }
 
 // Item represents a download queue record from an upstream *arr instance.
@@ -91,6 +114,8 @@ type Item struct {
 	TrackedDownloadState  string
 	SizeLeft              int64
 	CustomFormatScore     int32
+	// QualityRank is the relative quality rank from quality profiles; higher = better, 0 = unknown.
+	QualityRank int
 	// ExistingScore is the custom-format score of the file already on disk;
 	// nil when there is no file or its score is unknown.
 	ExistingScore *int32
@@ -147,9 +172,9 @@ type Decision struct {
 	Blocklist bool
 	// Deferred reports a removal or import held back by its per-sweep bound; the next sweep retries.
 	Deferred bool
-	// Import asks the caller to force-import the item: id_matched, act mode, within bound.
+	// Import asks the caller to force-import the item: id_matched or import_fixable, act mode, within bound.
 	Import bool
-	// WouldImport reports an id_matched threshold reached in observe mode; nothing is imported.
+	// WouldImport reports an import threshold reached in observe mode; nothing is imported.
 	WouldImport bool
 	// ImportFailed reports that the item is still ID-matched one sweep after its import.
 	ImportFailed bool
@@ -159,6 +184,16 @@ type Decision struct {
 	Reached bool
 	// Title is the item's release title, logged for the id_matched parity check.
 	Title string
+	// Class is the categorized import failure class (fixable, not_wanted, broken, unknown).
+	Class Class
+	// Pattern is the matching pattern string or subreason; empty for unknown.
+	Pattern string
+	// Unknown reports that the item carries an unknown or operational failure reason.
+	Unknown bool
+	// Research reports that the removed release should be re-downloaded/re-searched.
+	Research bool
+	// MatchPercent is the parsed percentage for distance messages (worst of album/track lines).
+	MatchPercent *float64
 }
 
 // ErrInvalid indicates that queue settings violate bounds or constraints.
@@ -177,22 +212,34 @@ func SupportsForceImport(kind domain.AppKind) bool {
 	return kind == domain.KindSonarr || kind == domain.KindRadarr
 }
 
+// Default match percentage floors.
+const (
+	DefaultMatchFixableMinPercent  = 75.0
+	DefaultMatchBrokenBelowPercent = 40.0
+	DefaultTrackFixableMinPercent  = 50.0
+	DefaultTrackBrokenBelowPercent = 40.0
+)
+
 // DefaultSettings returns safe queue defaults: disabled, observe mode for every
-// rule, standard thresholds (6, 6, 2, 1, 6, 1, 1, 1, 1), 15m grace, 10 removals and 25
-// imports per sweep.
+// rule, standard thresholds, 15m grace, 10 removals and 25 imports per sweep,
+// and default distance match floors.
 func DefaultSettings() Settings {
 	rules := make(map[Rule]RuleSettings, len(RuleOrder))
 	for _, r := range RuleOrder {
 		rules[r] = defaultRuleSettings(r)
 	}
 	return Settings{
-		Enabled:              false,
-		Rules:                rules,
-		Grace:                15 * time.Minute,
-		MinBytesPerSecond:    0,
-		MinCustomFormatScore: nil,
-		MaxRemovalsPerSweep:  10,
-		MaxImportsPerSweep:   25,
+		Enabled:                 false,
+		Rules:                   rules,
+		Grace:                   15 * time.Minute,
+		MinBytesPerSecond:       0,
+		MinCustomFormatScore:    nil,
+		MaxRemovalsPerSweep:     10,
+		MaxImportsPerSweep:      25,
+		MatchFixableMinPercent:  DefaultMatchFixableMinPercent,
+		MatchBrokenBelowPercent: DefaultMatchBrokenBelowPercent,
+		TrackFixableMinPercent:  DefaultTrackFixableMinPercent,
+		TrackBrokenBelowPercent: DefaultTrackBrokenBelowPercent,
 	}
 }
 
@@ -216,6 +263,37 @@ func validateBounds(s Settings) error {
 	}
 	if s.MinBytesPerSecond < 0 {
 		return fmt.Errorf("%w: min bytes per second must be non-negative, got %d", ErrInvalid, s.MinBytesPerSecond)
+	}
+	return validateMatchFloors(s)
+}
+
+func validateMatchFloors(s Settings) error {
+	if err := validateFloorRanges(s); err != nil {
+		return err
+	}
+	if s.MatchFixableMinPercent <= s.MatchBrokenBelowPercent {
+		return fmt.Errorf("%w: match fixable min percent (%v) must be greater than match broken below percent (%v)", ErrInvalid, s.MatchFixableMinPercent, s.MatchBrokenBelowPercent)
+	}
+	if s.TrackFixableMinPercent <= s.TrackBrokenBelowPercent {
+		return fmt.Errorf("%w: track fixable min percent (%v) must be greater than track broken below percent (%v)", ErrInvalid, s.TrackFixableMinPercent, s.TrackBrokenBelowPercent)
+	}
+	return nil
+}
+
+func validateFloorRanges(s Settings) error {
+	floors := []struct {
+		name string
+		val  float64
+	}{
+		{"match fixable min percent", s.MatchFixableMinPercent},
+		{"match broken below percent", s.MatchBrokenBelowPercent},
+		{"track fixable min percent", s.TrackFixableMinPercent},
+		{"track broken below percent", s.TrackBrokenBelowPercent},
+	}
+	for _, f := range floors {
+		if f.val < 0 || f.val > 100 {
+			return fmt.Errorf("%w: %s must be between 0 and 100, got %v", ErrInvalid, f.name, f.val)
+		}
 	}
 	return nil
 }

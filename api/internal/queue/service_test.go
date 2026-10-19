@@ -91,6 +91,7 @@ type fakeRemoval struct {
 	kind      domain.AppKind
 	id        int32
 	blocklist bool
+	research  bool
 }
 
 type fakeArrClient struct {
@@ -113,7 +114,7 @@ func newFakeArrClient() *fakeArrClient {
 	}
 }
 
-func (f *fakeArrClient) ForceImport(_ context.Context, kind domain.AppKind, _, _, downloadID string) (int, error) {
+func (f *fakeArrClient) ForceImport(_ context.Context, kind domain.AppKind, _, _, downloadID string, _ queue.ImportMode) (int, error) {
 	f.imports = append(f.imports, string(kind)+":"+downloadID)
 	if err := f.importErr[downloadID]; err != nil {
 		return 0, err
@@ -130,9 +131,9 @@ func (f *fakeArrClient) Queue(_ context.Context, kind domain.AppKind, baseURL, _
 	return f.items[key], nil
 }
 
-func (f *fakeArrClient) RemoveQueueItem(_ context.Context, kind domain.AppKind, _, _ string, id int32, blocklist bool) error {
+func (f *fakeArrClient) RemoveQueueItem(_ context.Context, kind domain.AppKind, _, _ string, id int32, blocklist, research bool) error {
 	f.removeCalls++
-	f.removals = append(f.removals, fakeRemoval{kind: kind, id: id, blocklist: blocklist})
+	f.removals = append(f.removals, fakeRemoval{kind: kind, id: id, blocklist: blocklist, research: research})
 	return f.removeErr
 }
 

@@ -37,21 +37,30 @@ func Sweep(s Settings, items []Item, prev map[string]Strike, now time.Time) []De
 // item per episode under a single download id; items of one download never
 // strike each other, so the pack counts once.
 type download struct {
-	key   string
-	score int32
-	id    int32
+	key         string
+	score       int32
+	qualityRank int
+	added       time.Time
+	id          int32
 }
 
 // duplicateLosers groups items by MediaID and returns the keys of every
-// download that is not the best of its group: highest score wins, the
-// lowest queue id breaks a tie. A download that loses in any group loses.
+// download that is not the best of its group: highest score wins, then higher
+// quality rank, then older grab (earlier Added), then lowest queue id breaks
+// a tie. A download that loses in any group loses.
 func duplicateLosers(items []Item) map[string]bool {
 	groups := make(map[int32][]download, len(items))
 	for _, item := range items {
 		if item.MediaID == 0 {
 			continue
 		}
-		groups[item.MediaID] = append(groups[item.MediaID], download{key: itemKey(item), score: item.CustomFormatScore, id: item.ID})
+		groups[item.MediaID] = append(groups[item.MediaID], download{
+			key:         itemKey(item),
+			score:       item.CustomFormatScore,
+			qualityRank: item.QualityRank,
+			added:       item.Added,
+			id:          item.ID,
+		})
 	}
 	losers := make(map[string]bool)
 	for _, group := range groups {
@@ -73,6 +82,18 @@ func duplicateLosers(items []Item) map[string]bool {
 func beats(a, b download) bool {
 	if a.score != b.score {
 		return a.score > b.score
+	}
+	if a.qualityRank != b.qualityRank {
+		return a.qualityRank > b.qualityRank
+	}
+	if !a.added.Equal(b.added) {
+		if a.added.IsZero() {
+			return false
+		}
+		if b.added.IsZero() {
+			return true
+		}
+		return a.added.Before(b.added)
 	}
 	return a.id < b.id
 }
@@ -102,7 +123,7 @@ func evaluateItem(s Settings, item Item, prev Strike, now time.Time, spent *budg
 			Next:       prev,
 		}
 	}
-	rule := matchRule(s, item, prev, now)
+	rule, class, pattern, pct := matchRule(s, item, prev, now)
 	if rule == "" {
 		return Decision{
 			ItemID:     item.ID,
@@ -118,18 +139,26 @@ func evaluateItem(s Settings, item Item, prev Strike, now time.Time, spent *budg
 			},
 		}
 	}
-	return applyRuleMatch(s, item, prev, rule, now, spent)
+	d := applyRuleMatch(s, item, prev, rule, now, spent)
+	d.Class = class
+	d.Pattern = pattern
+	d.MatchPercent = pct
+	return d
+}
+
+func nextStrikeCount(prev Strike, r Rule, threshold int) int {
+	if prev.Rule == r && prev.Count > 0 {
+		if prev.Count+1 > threshold {
+			return threshold
+		}
+		return prev.Count + 1
+	}
+	return 1
 }
 
 func applyRuleMatch(s Settings, item Item, prev Strike, r Rule, now time.Time, spent *budget) Decision {
 	rs := ResolveRule(s, r)
-	count := 1
-	if prev.Rule == r && prev.Count > 0 {
-		count = prev.Count + 1
-	}
-	if count > rs.Threshold {
-		count = rs.Threshold
-	}
+	count := nextStrikeCount(prev, r, rs.Threshold)
 	next := Strike{
 		Rule:          r,
 		Count:         count,
@@ -139,10 +168,13 @@ func applyRuleMatch(s Settings, item Item, prev Strike, r Rule, now time.Time, s
 		ImportRefused: prev.ImportRefused,
 	}
 	var d Decision
-	if r == RuleIDMatched {
+	if r == RuleIDMatched || r == RuleImportFixable {
 		d = applyImportMatch(s, item, prev, rs, next, now, spent)
 	} else {
 		d = applyRemovalMatch(s, item, rs, next, spent)
+	}
+	if r == RuleFailed || r == RuleImportBroken {
+		d.Research = true
 	}
 	d.NewStrike = prev.Rule != r || prev.Count == 0
 	d.Reached = count >= rs.Threshold && (prev.Rule != r || prev.Count < rs.Threshold)
@@ -152,6 +184,21 @@ func applyRuleMatch(s Settings, item Item, prev Strike, r Rule, now time.Time, s
 
 func applyRemovalMatch(s Settings, item Item, rs RuleSettings, next Strike, spent *budget) Decision {
 	var remove, wouldRemove, deferred bool
+	if next.Rule == RuleImportBlocked {
+		return Decision{
+			ItemID:      item.ID,
+			DownloadID:  item.DownloadID,
+			Rule:        next.Rule,
+			Next:        next,
+			Strike:      true,
+			Threshold:   rs.Threshold,
+			Remove:      false,
+			WouldRemove: false,
+			Blocklist:   *rs.Blocklist,
+			Deferred:    false,
+			Unknown:     true,
+		}
+	}
 	if next.Count >= rs.Threshold {
 		remove, wouldRemove, deferred = resolveThresholdAction(rs.Mode, s.MaxRemovalsPerSweep, &spent.removals)
 	}
@@ -176,7 +223,7 @@ func applyImportMatch(s Settings, item Item, prev Strike, rs RuleSettings, next 
 	d := Decision{
 		ItemID:     item.ID,
 		DownloadID: item.DownloadID,
-		Rule:       RuleIDMatched,
+		Rule:       next.Rule,
 		Next:       next,
 		Strike:     true,
 		Threshold:  rs.Threshold,
@@ -237,9 +284,9 @@ func defaultRuleSettings(r Rule) RuleSettings {
 	switch r {
 	case RuleStalled, RuleSlow, RuleImportBlocked:
 		return RuleSettings{Mode: ModeObserve, Threshold: 6, Blocklist: &blocklist}
-	case RuleFailed:
+	case RuleFailed, RuleImportBroken:
 		return RuleSettings{Mode: ModeObserve, Threshold: 2, Blocklist: &blocklist}
-	case RuleIDMatched, RuleUnwantedScore, RuleNotAnUpgrade, RuleDuplicate, RuleUnwantedUnmonitored:
+	case RuleIDMatched, RuleImportFixable, RuleImportNotWanted, RuleUnwantedScore, RuleNotAnUpgrade, RuleDuplicate, RuleUnwantedUnmonitored:
 		return RuleSettings{Mode: ModeObserve, Threshold: 1, Blocklist: &blocklist}
 	default:
 		return RuleSettings{Mode: ModeObserve, Threshold: 1, Blocklist: &blocklist}
@@ -271,9 +318,10 @@ func ResolveRule(s Settings, r Rule) RuleSettings {
 
 // isBlocklistRule reports the blocklist default: a release that is no
 // upgrade, a duplicate or belongs to an unmonitored item is not defective,
-// so those rules remove it without a blocklist entry; id_matched removes nothing.
+// so those rules remove it without a blocklist entry; id_matched and
+// import_fixable import and never remove.
 func isBlocklistRule(r Rule) bool {
-	return r != RuleNotAnUpgrade && r != RuleDuplicate && r != RuleUnwantedUnmonitored && r != RuleIDMatched
+	return r != RuleNotAnUpgrade && r != RuleDuplicate && r != RuleUnwantedUnmonitored && r != RuleIDMatched && r != RuleImportFixable
 }
 
 func isNeverTouched(item Item, grace time.Duration, now time.Time) bool {
@@ -307,27 +355,53 @@ func isNeverTouchedState(state string) bool {
 	}
 }
 
-func matchRule(s Settings, item Item, prev Strike, now time.Time) Rule {
-	for _, rule := range RuleOrder {
-		if ruleMatches(rule, s, item, prev, now) {
-			return rule
-		}
-	}
-	return ""
+type itemClassifier struct {
+	item        Item
+	s           Settings
+	now         time.Time
+	classified  bool
+	itemClass   Class
+	itemPattern string
+	itemPct     *float64
 }
 
-func ruleMatches(rule Rule, s Settings, item Item, prev Strike, now time.Time) bool {
+func (c *itemClassifier) ensure() {
+	if !c.classified {
+		c.itemClass, c.itemPattern, c.itemPct = ClassifyImportItem(c.item, c.s, c.now)
+		c.classified = true
+	}
+}
+
+func (c *itemClassifier) getClass() Class {
+	c.ensure()
+	return c.itemClass
+}
+
+func matchRule(s Settings, item Item, prev Strike, now time.Time) (Rule, Class, string, *float64) {
+	c := &itemClassifier{item: item, s: s, now: now}
+	for _, rule := range RuleOrder {
+		if checkRuleMatch(rule, s, item, prev, c) {
+			if c.classified {
+				return rule, c.itemClass, c.itemPattern, c.itemPct
+			}
+			return rule, "", "", nil
+		}
+	}
+	return "", "", "", nil
+}
+
+func checkRuleMatch(rule Rule, s Settings, item Item, prev Strike, c *itemClassifier) bool {
 	switch rule {
 	case RuleStalled:
 		return checkStalled(item, prev)
 	case RuleSlow:
-		return checkSlow(item, prev, s.MinBytesPerSecond, now)
+		return checkSlow(item, prev, s.MinBytesPerSecond, c.now)
 	case RuleFailed:
 		return checkFailed(item)
 	case RuleIDMatched:
-		return checkIDMatched(s, item)
-	case RuleImportBlocked:
-		return checkImportBlocked(item)
+		return checkIDMatchedWithClass(s, item, c)
+	case RuleImportFixable, RuleImportBroken, RuleImportNotWanted, RuleImportBlocked:
+		return checkImportRule(rule, item, c)
 	case RuleUnwantedScore:
 		return checkUnwantedScore(item, s.MinCustomFormatScore)
 	case RuleNotAnUpgrade:
@@ -336,6 +410,40 @@ func ruleMatches(rule Rule, s Settings, item Item, prev Strike, now time.Time) b
 		return item.duplicate
 	case RuleUnwantedUnmonitored:
 		return checkUnwantedUnmonitored(item)
+	default:
+		return false
+	}
+}
+
+func checkIDMatchedWithClass(s Settings, item Item, c *itemClassifier) bool {
+	matched := checkIDMatched(s, item)
+	if matched && isImportProblem(item) {
+		c.ensure()
+	}
+	return matched
+}
+
+func checkImportRule(rule Rule, item Item, c *itemClassifier) bool {
+	if !isImportProblem(item) {
+		return false
+	}
+	switch rule {
+	case RuleImportFixable:
+		if isIDMatchBlock(item) {
+			return false
+		}
+		return c.getClass() == ClassFixable
+	case RuleImportBroken:
+		return c.getClass() == ClassBroken
+	case RuleImportNotWanted:
+		return c.getClass() == ClassNotWanted
+	case RuleImportBlocked:
+		if isIDMatchBlock(item) {
+			return false
+		}
+		return c.getClass() == ClassUnknown
+	case RuleStalled, RuleSlow, RuleFailed, RuleIDMatched, RuleUnwantedScore, RuleNotAnUpgrade, RuleDuplicate, RuleUnwantedUnmonitored:
+		return false
 	default:
 		return false
 	}
@@ -377,24 +485,20 @@ func checkFailed(item Item) bool {
 	switch strings.ToLower(item.TrackedDownloadState) {
 	// Sonarr and Radarr name the states failed and failedPending; Lidarr
 	// and the Readarr family name them downloadFailed and
-	// downloadFailedPending, and importFailed marks a terminal import
-	// failure that the app never retries.
-	case "failed", "failedpending", "downloadfailed", "downloadfailedpending", "importfailed":
+	// downloadFailedPending.
+	case "failed", "failedpending", "downloadfailed", "downloadfailedpending":
 		return true
 	default:
 		return false
 	}
 }
 
-func checkImportBlocked(item Item) bool {
-	if isIDMatchBlock(item) {
-		return false
-	}
-	if strings.EqualFold(item.TrackedDownloadState, "importBlocked") {
+func isImportProblem(item Item) bool {
+	state := strings.ToLower(item.TrackedDownloadState)
+	if state == "importblocked" || state == "importfailed" {
 		return true
 	}
-	return strings.EqualFold(item.TrackedDownloadState, "importPending") &&
-		strings.EqualFold(item.TrackedDownloadStatus, "warning")
+	return state == "importpending" && strings.EqualFold(item.TrackedDownloadStatus, "warning")
 }
 
 // idMatchNeedles mark a release the *arr matched by grab history but whose

@@ -59,40 +59,87 @@ type ruleConfigJSON struct {
 	Blocklist *bool `json:"blocklist,omitempty"`
 }
 
+type matchFloors struct {
+	matchFixable float64
+	matchBroken  float64
+	trackFixable float64
+	trackBroken  float64
+}
+
 func policyFromRow(row sqlcgen.QueuePolicy) (Settings, error) {
-	rules, err := parseRulesJSON(row.Rules)
+	rules, floors, err := parseRulesAndFloorsJSON(row.Rules)
 	if err != nil {
 		return Settings{}, fmt.Errorf("queue: parse rules: %w", err)
 	}
 	return Settings{
-		Enabled:              row.Enabled,
-		Rules:                rules,
-		Grace:                time.Duration(row.GraceS) * time.Second,
-		MinBytesPerSecond:    row.MinBytesPerSecond,
-		MinCustomFormatScore: row.MinCustomFormatScore,
-		MaxRemovalsPerSweep:  int(row.MaxRemovalsPerSweep),
-		MaxImportsPerSweep:   int(row.MaxImportsPerSweep),
+		Enabled:                 row.Enabled,
+		Rules:                   rules,
+		Grace:                   time.Duration(row.GraceS) * time.Second,
+		MinBytesPerSecond:       row.MinBytesPerSecond,
+		MinCustomFormatScore:    row.MinCustomFormatScore,
+		MaxRemovalsPerSweep:     int(row.MaxRemovalsPerSweep),
+		MaxImportsPerSweep:      int(row.MaxImportsPerSweep),
+		MatchFixableMinPercent:  floors.matchFixable,
+		MatchBrokenBelowPercent: floors.matchBroken,
+		TrackFixableMinPercent:  floors.trackFixable,
+		TrackBrokenBelowPercent: floors.trackBroken,
 	}, nil
 }
 
-// parseRulesJSON overlays the stored rules on the defaults, so a rule missing from the row
-// keeps its default instead of silently switching off. Unknown keys are dropped.
-func parseRulesJSON(data []byte) (map[Rule]RuleSettings, error) {
-	rules := DefaultSettings().Rules
-	if len(data) == 0 {
-		return rules, nil
+func parseRulesAndFloorsJSON(data []byte) (map[Rule]RuleSettings, matchFloors, error) {
+	defs := DefaultSettings()
+	rules := defs.Rules
+	floors := matchFloors{
+		matchFixable: defs.MatchFixableMinPercent,
+		matchBroken:  defs.MatchBrokenBelowPercent,
+		trackFixable: defs.TrackFixableMinPercent,
+		trackBroken:  defs.TrackBrokenBelowPercent,
 	}
-	var raw map[string]ruleConfigJSON
+	if len(data) == 0 {
+		return rules, floors, nil
+	}
+	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return nil, fmt.Errorf("queue: unmarshal rules: %w", err)
+		return nil, floors, fmt.Errorf("queue: unmarshal rules: %w", err)
 	}
 	for k, v := range raw {
-		r := Rule(k)
-		if slices.Contains(RuleOrder, r) {
-			rules[r] = RuleSettings(v)
+		parseRuleOrFloorEntry(k, v, rules, &floors)
+	}
+	return rules, floors, nil
+}
+
+func parseRuleOrFloorEntry(k string, v json.RawMessage, rules map[Rule]RuleSettings, floors *matchFloors) {
+	if parseFloorKey(k, v, floors) {
+		return
+	}
+	r := Rule(k)
+	if slices.Contains(RuleOrder, r) {
+		var cfg ruleConfigJSON
+		if err := json.Unmarshal(v, &cfg); err == nil {
+			rules[r] = RuleSettings(cfg)
 		}
 	}
-	return rules, nil
+}
+
+func parseFloorKey(k string, v json.RawMessage, floors *matchFloors) bool {
+	var target *float64
+	switch k {
+	case "match_fixable_min_percent":
+		target = &floors.matchFixable
+	case "match_broken_below_percent":
+		target = &floors.matchBroken
+	case "track_fixable_min_percent":
+		target = &floors.trackFixable
+	case "track_broken_below_percent":
+		target = &floors.trackBroken
+	default:
+		return false
+	}
+	var val float64
+	if err := json.Unmarshal(v, &val); err == nil && val > 0 {
+		*target = val
+	}
+	return true
 }
 
 // SaveSettings validates and persists queue settings for an instance.
@@ -100,7 +147,7 @@ func (s *Store) SaveSettings(ctx context.Context, instanceID uuid.UUID, cfg Sett
 	if err := cfg.Validate(); err != nil {
 		return fmt.Errorf("queue: %w", err)
 	}
-	rulesBytes, err := marshalRulesJSON(cfg.Rules)
+	rulesBytes, err := marshalRulesAndFloorsJSON(cfg)
 	if err != nil {
 		return fmt.Errorf("queue: marshal rules: %w", err)
 	}
@@ -121,14 +168,15 @@ func (s *Store) SaveSettings(ctx context.Context, instanceID uuid.UUID, cfg Sett
 	return nil
 }
 
-func marshalRulesJSON(rules map[Rule]RuleSettings) ([]byte, error) {
-	if len(rules) == 0 {
-		return []byte("{}"), nil
-	}
-	raw := make(map[string]ruleConfigJSON, len(rules))
-	for r, rs := range rules {
+func marshalRulesAndFloorsJSON(cfg Settings) ([]byte, error) {
+	raw := make(map[string]any, len(cfg.Rules)+4)
+	for r, rs := range cfg.Rules {
 		raw[string(r)] = ruleConfigJSON(rs)
 	}
+	raw["match_fixable_min_percent"] = cfg.MatchFixableMinPercent
+	raw["match_broken_below_percent"] = cfg.MatchBrokenBelowPercent
+	raw["track_fixable_min_percent"] = cfg.TrackFixableMinPercent
+	raw["track_broken_below_percent"] = cfg.TrackBrokenBelowPercent
 	data, err := json.Marshal(raw)
 	if err != nil {
 		return nil, fmt.Errorf("queue: marshal rules: %w", err)
