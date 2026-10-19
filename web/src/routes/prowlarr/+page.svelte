@@ -261,8 +261,8 @@ SPDX-License-Identifier: EUPL-1.2
 		color: var(--color-subtle);
 	}
 	.chip-near {
-		border-color: oklch(0.75 0.16 80);
-		color: oklch(0.75 0.16 80);
+		border-color: var(--color-warning);
+		color: var(--color-warning);
 	}
 	.chip-exhausted {
 		border-color: var(--color-danger);

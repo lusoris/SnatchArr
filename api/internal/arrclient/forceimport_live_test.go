@@ -92,7 +92,7 @@ func checkLiveImport(t *testing.T, p *arrclient.GoenvoyProber, c liveImport) {
 	if !c.SkipImport {
 		// The queue's own downloadId, as the service sends it: the *arr matches it
 		// case-sensitively and lists the hash in upper case.
-		n, err := p.ForceImport(ctx, c.Kind, c.URL, c.APIKey, ds[0].DownloadID)
+		n, err := p.ForceImport(ctx, c.Kind, c.URL, c.APIKey, ds[0].DownloadID, queue.ImportModeClean)
 		if err != nil {
 			t.Fatalf("force import %s: %v", ds[0].DownloadID, err)
 		}

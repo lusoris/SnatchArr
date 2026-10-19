@@ -15,22 +15,25 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/queue"
 )
 
-// ForceImport imports the clean, mapped manual-import candidates of one
-// download (rule id_matched, ADR-0013) and returns the number of files sent.
-// A candidate qualifies with no rejection and a mapping from grab history: a
-// series and at least one episode on Sonarr, a movie on Radarr. Without a
-// qualifying candidate it sends nothing and returns queue.ErrNoCleanCandidate.
+// ForceImport imports the clean or fixable, mapped manual-import candidates of one
+// download (rules id_matched and import_fixable) and returns the number of files sent.
+// In ImportModeClean (id_matched), a candidate qualifies with no rejection.
+// In ImportModeFixable (import_fixable), a candidate qualifies when every rejection
+// classifies as fixable via queue.ClassifyRejection.
+// Both modes require a mapping from grab history: a series and at least one episode
+// on Sonarr, a movie on Radarr. Without a qualifying candidate it sends nothing and
+// returns queue.ErrNoCleanCandidate.
 // The command runs asynchronously; the next sweep reads the result back.
-func (p *GoenvoyProber) ForceImport(ctx context.Context, kind domain.AppKind, baseURL, apiKey, downloadID string) (int, error) {
+func (p *GoenvoyProber) ForceImport(ctx context.Context, kind domain.AppKind, baseURL, apiKey, downloadID string, mode queue.ImportMode) (int, error) {
 	var (
 		n   int
 		err error
 	)
 	switch kind {
 	case domain.KindSonarr:
-		n, err = p.sonarrForceImport(ctx, baseURL, apiKey, downloadID)
+		n, err = p.sonarrForceImport(ctx, baseURL, apiKey, downloadID, mode)
 	case domain.KindRadarr:
-		n, err = p.radarrForceImport(ctx, baseURL, apiKey, downloadID)
+		n, err = p.radarrForceImport(ctx, baseURL, apiKey, downloadID, mode)
 	case domain.KindLidarr, domain.KindReadarr, domain.KindWhisparrV2, domain.KindWhisparrV3:
 		return 0, fmt.Errorf("arrclient: %s force import: %w", kind, queue.ErrQueueUnsupported)
 	default:
@@ -42,7 +45,7 @@ func (p *GoenvoyProber) ForceImport(ctx context.Context, kind domain.AppKind, ba
 	return n, nil
 }
 
-func (p *GoenvoyProber) sonarrForceImport(ctx context.Context, baseURL, apiKey, downloadID string) (int, error) {
+func (p *GoenvoyProber) sonarrForceImport(ctx context.Context, baseURL, apiKey, downloadID string, mode queue.ImportMode) (int, error) {
 	c, err := sonarr.New(baseURL, apiKey, p.clientOptions()...)
 	if err != nil {
 		return 0, fmt.Errorf("new client: %w", err)
@@ -55,7 +58,7 @@ func (p *GoenvoyProber) sonarrForceImport(ctx context.Context, baseURL, apiKey, 
 	}
 	files := make([]sonarr.ManualImportFile, 0, len(cands))
 	for i := range cands {
-		if len(cands[i].Rejections) > 0 {
+		if !qualifies(cands[i].Rejections, sonarrReason, mode) {
 			continue
 		}
 		if f, ok := cands[i].ImportFile(); ok {
@@ -73,7 +76,29 @@ func (p *GoenvoyProber) sonarrForceImport(ctx context.Context, baseURL, apiKey, 
 	return len(files), nil
 }
 
-func (p *GoenvoyProber) radarrForceImport(ctx context.Context, baseURL, apiKey, downloadID string) (int, error) {
+// qualifies reports whether a candidate may be imported: a clean candidate
+// always, a rejected one only in fixable mode when every rejection classifies
+// fixable through the shared queue table.
+func qualifies[R any](rejections []R, reason func(R) string, mode queue.ImportMode) bool {
+	if len(rejections) == 0 {
+		return true
+	}
+	if mode != queue.ImportModeFixable {
+		return false
+	}
+	for _, r := range rejections {
+		if queue.ClassifyRejection(reason(r)) != queue.ClassFixable {
+			return false
+		}
+	}
+	return true
+}
+
+func sonarrReason(r sonarr.ImportRejection) string { return r.Reason }
+
+func radarrReason(r radarr.ImportRejection) string { return r.Reason }
+
+func (p *GoenvoyProber) radarrForceImport(ctx context.Context, baseURL, apiKey, downloadID string, mode queue.ImportMode) (int, error) {
 	c, err := radarr.New(baseURL, apiKey, p.clientOptions()...)
 	if err != nil {
 		return 0, fmt.Errorf("new client: %w", err)
@@ -86,7 +111,7 @@ func (p *GoenvoyProber) radarrForceImport(ctx context.Context, baseURL, apiKey, 
 	}
 	files := make([]radarr.ManualImportFile, 0, len(cands))
 	for i := range cands {
-		if len(cands[i].Rejections) > 0 {
+		if !qualifies(cands[i].Rejections, radarrReason, mode) {
 			continue
 		}
 		if f, ok := cands[i].ImportFile(); ok {

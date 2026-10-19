@@ -53,6 +53,18 @@ func itemFor(rule queue.Rule, added time.Time) queue.Item {
 	case queue.RuleImportBlocked:
 		base.TrackedDownloadState = "importBlocked"
 		return base
+	case queue.RuleImportFixable:
+		base.TrackedDownloadState = "importBlocked"
+		base.StatusLines = []string{"Single episode file contains all episodes in seasons. Review file name or manually import"}
+		return base
+	case queue.RuleImportBroken:
+		base.TrackedDownloadState = "importBlocked"
+		base.StatusLines = []string{"Couldn't find similar album for Artist - Album"}
+		return base
+	case queue.RuleImportNotWanted:
+		base.TrackedDownloadState = "importBlocked"
+		base.StatusLines = []string{"Has fewer tracks than existing release"}
+		return base
 	case queue.RuleIDMatched:
 		base.TrackedDownloadStatus = "warning"
 		base.TrackedDownloadState = "importBlocked"
@@ -91,6 +103,9 @@ func TestDefaultSettingsFollowSpec(t *testing.T) {
 		queue.RuleSlow:                6,
 		queue.RuleFailed:              2,
 		queue.RuleIDMatched:           1,
+		queue.RuleImportFixable:       1,
+		queue.RuleImportBroken:        2,
+		queue.RuleImportNotWanted:     1,
 		queue.RuleImportBlocked:       6,
 		queue.RuleUnwantedScore:       1,
 		queue.RuleNotAnUpgrade:        1,
@@ -123,6 +138,9 @@ func TestRuleOrderDefinitions(t *testing.T) {
 		queue.RuleSlow,
 		queue.RuleFailed,
 		queue.RuleIDMatched,
+		queue.RuleImportFixable,
+		queue.RuleImportBroken,
+		queue.RuleImportNotWanted,
 		queue.RuleImportBlocked,
 		queue.RuleUnwantedScore,
 		queue.RuleNotAnUpgrade,
@@ -150,6 +168,8 @@ func TestEveryRulePositive(t *testing.T) {
 		{"stalled", queue.RuleStalled, 6, true},
 		{"slow", queue.RuleSlow, 6, true},
 		{"failed", queue.RuleFailed, 2, true},
+		{"import_broken", queue.RuleImportBroken, 2, true},
+		{"import_not_wanted", queue.RuleImportNotWanted, 1, true},
 		{"import_blocked", queue.RuleImportBlocked, 6, true},
 		{"unwanted_score", queue.RuleUnwantedScore, 1, true},
 		{"not_an_upgrade", queue.RuleNotAnUpgrade, 1, false},
@@ -187,11 +207,16 @@ func TestEveryRulePositive(t *testing.T) {
 				if d.Next.Count != sweep {
 					t.Fatalf("sweep %d Next.Count = %d, want %d", sweep, d.Next.Count, sweep)
 				}
-				if sweep < tt.threshold {
+				switch {
+				case tt.rule == queue.RuleImportBlocked:
+					if d.Remove || d.WouldRemove || !d.Unknown {
+						t.Fatalf("sweep %d: import_blocked must never remove and must be unknown: %+v", sweep, d)
+					}
+				case sweep < tt.threshold:
 					if d.Remove {
 						t.Fatalf("sweep %d: premature remove before threshold", sweep)
 					}
-				} else {
+				default:
 					if !d.Remove {
 						t.Fatalf("sweep %d: expected remove at threshold", sweep)
 					}
@@ -456,7 +481,7 @@ func TestEveryRuleBoundary(t *testing.T) {
 				retryItem.SizeLeft = cleanItem.SizeLeft - 10
 			case queue.RuleStalled:
 				retryItem.SizeLeft = cleanItem.SizeLeft
-			case queue.RuleFailed, queue.RuleIDMatched, queue.RuleImportBlocked, queue.RuleUnwantedScore, queue.RuleNotAnUpgrade, queue.RuleDuplicate, queue.RuleUnwantedUnmonitored:
+			case queue.RuleFailed, queue.RuleIDMatched, queue.RuleImportFixable, queue.RuleImportBroken, queue.RuleImportNotWanted, queue.RuleImportBlocked, queue.RuleUnwantedScore, queue.RuleNotAnUpgrade, queue.RuleDuplicate, queue.RuleUnwantedUnmonitored:
 				// item already has rule-triggering fields set.
 			}
 			retryD := queue.Sweep(s, []queue.Item{retryItem}, prev, retryNow)[0]

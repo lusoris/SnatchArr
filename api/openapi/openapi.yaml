@@ -3022,6 +3022,9 @@ components:
         - failed
         - import_blocked
         - id_matched
+        - import_fixable
+        - import_broken
+        - import_not_wanted
         - unwanted_score
         - not_an_upgrade
         - duplicate
@@ -3065,6 +3068,15 @@ components:
           $ref: "#/components/schemas/QueueRuleSettings"
         id_matched:
           description: Force-imports a Sonarr or Radarr download the *arr matched to its series or movie by ID only, through a ManualImport of its clean, mapped candidates; it never removes or blocklists (ADR-0013). Optional on write so older clients keep working; left out, the rule takes its default settings. Reads always return it.
+          $ref: "#/components/schemas/QueueRuleSettings"
+        import_fixable:
+          description: Force-imports a download whose import rejections are fixable (e.g. Lidarr/Readarr track/album match above floor, scene numbering mismatch); never removes or blocklists. Optional on write; left out, the rule takes its default settings. Reads always return it.
+          $ref: "#/components/schemas/QueueRuleSettings"
+        import_broken:
+          description: Strikes and removes a download whose release is broken (e.g. no tracks matched, corrupt container, parser error) with blocklist and re-search. Optional on write; left out, the rule takes its default settings. Reads always return it.
+          $ref: "#/components/schemas/QueueRuleSettings"
+        import_not_wanted:
+          description: Strikes and removes a download that is not wanted (e.g. release not requested, fewer tracks than existing release) with blocklist, without re-search. Optional on write; left out, the rule takes its default settings. Reads always return it.
           $ref: "#/components/schemas/QueueRuleSettings"
         unwanted_score:
           $ref: "#/components/schemas/QueueRuleSettings"
@@ -3110,6 +3122,30 @@ components:
           description: Most id_matched imports one sweep sends per instance. Optional on write so older clients keep working; left out, it takes the default of 25. Reads always return it.
           type: integer
           minimum: 1
+          maximum: 100
+        match_fixable_min_percent:
+          description: Minimum album or book match percentage for fixable manual import (default 75).
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+        match_broken_below_percent:
+          description: Album or book match percentage below which a release is considered broken (default 40; used by rematch fallback).
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+        track_fixable_min_percent:
+          description: Minimum track match percentage for fixable manual import (default 50).
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+        track_broken_below_percent:
+          description: Track match percentage below which a release is considered broken (default 40; used by rematch fallback).
+          type: number
+          format: double
+          minimum: 0
           maximum: 100
 
     QueueStrike:

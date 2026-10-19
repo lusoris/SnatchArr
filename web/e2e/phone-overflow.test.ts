@@ -232,12 +232,15 @@ test('authenticated: phone overflow /instances/[id]', async ({ page }) => {
 
 	await page.goto(`/instances/${instanceId}`);
 	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+	await assertNoHorizontalOverflow(page, `/instances/${instanceId}`);
 
-	// Trigger preview so PreviewPanel table renders
+	// Activity tab: trigger preview so PreviewPanel table renders
+	await page.goto(`/instances/${instanceId}/activity`);
+	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 	const previewBtn = page.getByRole('button', { name: /preview missing|fehlende vorschauen/i });
 	await expect(previewBtn).toBeVisible();
 	await previewBtn.click();
 	await expect(page.getByRole('table').first()).toBeVisible();
 
-	await assertNoHorizontalOverflow(page, `/instances/${instanceId}`);
+	await assertNoHorizontalOverflow(page, `/instances/${instanceId}/activity`);
 });

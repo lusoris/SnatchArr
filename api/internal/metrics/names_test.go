@@ -27,7 +27,23 @@ func lintSnatcharrPrefix(mf *dto.MetricFamily) []error {
 	return nil
 }
 
-// lintRegistry runs Prometheus' own metric-name linter, plus the namespace rule, over every
+// lintReservedLabels refuses labels colliding with Prometheus target labels (instance, job).
+func lintReservedLabels(mf *dto.MetricFamily) []error {
+	var errs []error
+	seen := make(map[string]bool)
+	for _, m := range mf.GetMetric() {
+		for _, lp := range m.GetLabel() {
+			name := lp.GetName()
+			if (name == "instance" || name == "job") && !seen[name] {
+				seen[name] = true
+				errs = append(errs, fmt.Errorf("reserved target label %q", name))
+			}
+		}
+	}
+	return errs
+}
+
+// lintRegistry runs Prometheus' own metric-name linter, plus custom rules, over every
 // family reg gathers.
 func lintRegistry(reg *prometheus.Registry) ([]promlint.Problem, error) {
 	mfs, err := reg.Gather()
@@ -35,7 +51,7 @@ func lintRegistry(reg *prometheus.Registry) ([]promlint.Problem, error) {
 		return nil, fmt.Errorf("gather: %w", err)
 	}
 	l := promlint.NewWithMetricFamilies(mfs)
-	l.AddCustomValidations(lintSnatcharrPrefix)
+	l.AddCustomValidations(lintSnatcharrPrefix, lintReservedLabels)
 	problems, err := l.Lint()
 	if err != nil {
 		return nil, fmt.Errorf("lint: %w", err)
@@ -67,8 +83,8 @@ func TestNames_PlantedNegatives(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		name      string
-		collector func() prometheus.Collector
 		want      string
+		collector func() prometheus.Collector
 	}{
 		{name: "counter without _total", want: "counter metrics should have \"_total\" suffix", collector: func() prometheus.Collector {
 			c := prometheus.NewCounter(prometheus.CounterOpts{Name: "snatcharr_searches", Help: "h"})
@@ -91,6 +107,17 @@ func TestNames_PlantedNegatives(t *testing.T) {
 			g.Set(1)
 			return g
 		}},
+		{name: "reserved target label instance", want: `reserved target label "instance"`, collector: func() prometheus.Collector {
+			g := prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "snatcharr_test_reserved", Help: "h"}, []string{"instance"})
+			g.WithLabelValues("val").Set(1)
+			return g
+		}},
+		// Boundary: arr_instance contains instance as substring but is not reserved.
+		{name: "boundary arr_instance passes", want: "", collector: func() prometheus.Collector {
+			g := prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "snatcharr_test_arr_instance", Help: "h"}, []string{"arr_instance"})
+			g.WithLabelValues("val").Set(1)
+			return g
+		}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -101,12 +128,23 @@ func TestNames_PlantedNegatives(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			for _, p := range problems {
-				if strings.Contains(p.Text, tc.want) {
-					return
-				}
-			}
-			t.Fatalf("problems = %+v, want one containing %q", problems, tc.want)
+			assertLintProblems(t, problems, tc.want)
 		})
 	}
+}
+
+func assertLintProblems(t *testing.T, problems []promlint.Problem, want string) {
+	t.Helper()
+	if want == "" {
+		if len(problems) > 0 {
+			t.Fatalf("problems = %+v, want none", problems)
+		}
+		return
+	}
+	for _, p := range problems {
+		if strings.Contains(p.Text, want) {
+			return
+		}
+	}
+	t.Fatalf("problems = %+v, want one containing %q", problems, want)
 }

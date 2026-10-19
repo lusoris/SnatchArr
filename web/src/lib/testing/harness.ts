@@ -180,6 +180,9 @@ export const sampleQueuePolicy: QueuePolicy = {
 		failed: { mode: 'act', threshold: 1, blocklist: true },
 		import_blocked: { mode: 'act', threshold: 2, blocklist: true },
 		id_matched: { mode: 'observe', threshold: 1, blocklist: false },
+		import_fixable: { mode: 'observe', threshold: 1, blocklist: false },
+		import_broken: { mode: 'observe', threshold: 2, blocklist: true },
+		import_not_wanted: { mode: 'observe', threshold: 1, blocklist: true },
 		unwanted_score: { mode: 'observe', threshold: 3, blocklist: true },
 		not_an_upgrade: { mode: 'observe', threshold: 1, blocklist: false },
 		duplicate: { mode: 'observe', threshold: 1, blocklist: false },
@@ -188,7 +191,11 @@ export const sampleQueuePolicy: QueuePolicy = {
 	grace_seconds: 3600,
 	min_bytes_per_second: 1024,
 	max_removals_per_sweep: 5,
-	max_imports_per_sweep: 10
+	max_imports_per_sweep: 10,
+	match_fixable_min_percent: 75,
+	match_broken_below_percent: 40,
+	track_fixable_min_percent: 50,
+	track_broken_below_percent: 40
 };
 
 /** Active queue strikes for an instance. */

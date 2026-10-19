@@ -593,3 +593,52 @@ instances:
 		}
 	})
 }
+
+func TestPolicies_ReasonRulesAndMatchFloors(t *testing.T) {
+	t.Parallel()
+	f, configPath, policiesPath, idSonarr, _ := setupValidationFixture(t)
+	ctx := t.Context()
+
+	if err := os.WriteFile(policiesPath, []byte(`
+instances:
+  sonarr/series:
+    queue:
+      rules:
+        import_fixable:
+          mode: act
+        import_broken:
+          threshold: 2
+        import_not_wanted:
+          mode: observe
+      match_fixable_min_percent: 70
+      track_broken_below_percent: 30
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := f.svc.Import(ctx, configPath, "")
+	if err != nil {
+		t.Fatalf("Import() err = %v", err)
+	}
+	for _, w := range res.Warnings {
+		if strings.Contains(w, "policies.yml") {
+			t.Fatalf("unexpected policies warning: %s", w)
+		}
+	}
+	q, err := f.qStore.Settings(ctx, idSonarr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rule := queue.ResolveRule(q, queue.RuleImportFixable); rule.Mode != queue.ModeAct {
+		t.Fatalf("import_fixable mode = %q, want act", rule.Mode)
+	}
+	if rule := queue.ResolveRule(q, queue.RuleImportBroken); rule.Threshold != 2 {
+		t.Fatalf("import_broken threshold = %d, want 2", rule.Threshold)
+	}
+	if q.MatchFixableMinPercent != 70 || q.TrackBrokenBelowPercent != 30 {
+		t.Fatalf("floors = %v/%v, want 70/30", q.MatchFixableMinPercent, q.TrackBrokenBelowPercent)
+	}
+	if q.MatchBrokenBelowPercent != queue.DefaultMatchBrokenBelowPercent {
+		t.Fatalf("match_broken_below_percent = %v, want default %v", q.MatchBrokenBelowPercent, queue.DefaultMatchBrokenBelowPercent)
+	}
+}

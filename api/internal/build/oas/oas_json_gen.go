@@ -5896,6 +5896,41 @@ func (s *OptDateTime) UnmarshalJSON(data []byte) error {
 	return s.Decode(d, json.DecodeDateTime)
 }
 
+// Encode encodes float64 as json.
+func (o OptFloat64) Encode(e *jx.Encoder) {
+	if !o.Set {
+		return
+	}
+	e.Float64(float64(o.Value))
+}
+
+// Decode decodes float64 from json.
+func (o *OptFloat64) Decode(d *jx.Decoder) error {
+	if o == nil {
+		return errors.New("invalid: unable to decode OptFloat64 to nil")
+	}
+	o.Set = true
+	v, err := d.Float64()
+	if err != nil {
+		return err
+	}
+	o.Value = float64(v)
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s OptFloat64) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *OptFloat64) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
 // Encode encodes int as json.
 func (o OptInt) Encode(e *jx.Encoder) {
 	if !o.Set {
@@ -7975,16 +8010,44 @@ func (s *QueuePolicy) encodeFields(e *jx.Encoder) {
 			s.MaxImportsPerSweep.Encode(e)
 		}
 	}
+	{
+		if s.MatchFixableMinPercent.Set {
+			e.FieldStart("match_fixable_min_percent")
+			s.MatchFixableMinPercent.Encode(e)
+		}
+	}
+	{
+		if s.MatchBrokenBelowPercent.Set {
+			e.FieldStart("match_broken_below_percent")
+			s.MatchBrokenBelowPercent.Encode(e)
+		}
+	}
+	{
+		if s.TrackFixableMinPercent.Set {
+			e.FieldStart("track_fixable_min_percent")
+			s.TrackFixableMinPercent.Encode(e)
+		}
+	}
+	{
+		if s.TrackBrokenBelowPercent.Set {
+			e.FieldStart("track_broken_below_percent")
+			s.TrackBrokenBelowPercent.Encode(e)
+		}
+	}
 }
 
-var jsonFieldsNameOfQueuePolicy = [7]string{
-	0: "enabled",
-	1: "rules",
-	2: "grace_seconds",
-	3: "min_bytes_per_second",
-	4: "min_custom_format_score",
-	5: "max_removals_per_sweep",
-	6: "max_imports_per_sweep",
+var jsonFieldsNameOfQueuePolicy = [11]string{
+	0:  "enabled",
+	1:  "rules",
+	2:  "grace_seconds",
+	3:  "min_bytes_per_second",
+	4:  "min_custom_format_score",
+	5:  "max_removals_per_sweep",
+	6:  "max_imports_per_sweep",
+	7:  "match_fixable_min_percent",
+	8:  "match_broken_below_percent",
+	9:  "track_fixable_min_percent",
+	10: "track_broken_below_percent",
 }
 
 // Decode decodes QueuePolicy from json.
@@ -7992,7 +8055,7 @@ func (s *QueuePolicy) Decode(d *jx.Decoder) error {
 	if s == nil {
 		return errors.New("invalid: unable to decode QueuePolicy to nil")
 	}
-	var requiredBitSet [1]uint8
+	var requiredBitSet [2]uint8
 
 	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
 		switch string(k) {
@@ -8074,6 +8137,46 @@ func (s *QueuePolicy) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"max_imports_per_sweep\"")
 			}
+		case "match_fixable_min_percent":
+			if err := func() error {
+				s.MatchFixableMinPercent.Reset()
+				if err := s.MatchFixableMinPercent.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"match_fixable_min_percent\"")
+			}
+		case "match_broken_below_percent":
+			if err := func() error {
+				s.MatchBrokenBelowPercent.Reset()
+				if err := s.MatchBrokenBelowPercent.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"match_broken_below_percent\"")
+			}
+		case "track_fixable_min_percent":
+			if err := func() error {
+				s.TrackFixableMinPercent.Reset()
+				if err := s.TrackFixableMinPercent.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"track_fixable_min_percent\"")
+			}
+		case "track_broken_below_percent":
+			if err := func() error {
+				s.TrackBrokenBelowPercent.Reset()
+				if err := s.TrackBrokenBelowPercent.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"track_broken_below_percent\"")
+			}
 		default:
 			return d.Skip()
 		}
@@ -8083,8 +8186,9 @@ func (s *QueuePolicy) Decode(d *jx.Decoder) error {
 	}
 	// Validate required fields.
 	var failures []validate.FieldError
-	for i, mask := range [1]uint8{
+	for i, mask := range [2]uint8{
 		0b00101111,
+		0b00000000,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -8156,6 +8260,12 @@ func (s *QueueRule) Decode(d *jx.Decoder) error {
 		*s = QueueRuleImportBlocked
 	case QueueRuleIDMatched:
 		*s = QueueRuleIDMatched
+	case QueueRuleImportFixable:
+		*s = QueueRuleImportFixable
+	case QueueRuleImportBroken:
+		*s = QueueRuleImportBroken
+	case QueueRuleImportNotWanted:
+		*s = QueueRuleImportNotWanted
 	case QueueRuleUnwantedScore:
 		*s = QueueRuleUnwantedScore
 	case QueueRuleNotAnUpgrade:
@@ -8384,6 +8494,24 @@ func (s *QueueRules) encodeFields(e *jx.Encoder) {
 		}
 	}
 	{
+		if s.ImportFixable.Set {
+			e.FieldStart("import_fixable")
+			s.ImportFixable.Encode(e)
+		}
+	}
+	{
+		if s.ImportBroken.Set {
+			e.FieldStart("import_broken")
+			s.ImportBroken.Encode(e)
+		}
+	}
+	{
+		if s.ImportNotWanted.Set {
+			e.FieldStart("import_not_wanted")
+			s.ImportNotWanted.Encode(e)
+		}
+	}
+	{
 		e.FieldStart("unwanted_score")
 		s.UnwantedScore.Encode(e)
 	}
@@ -8405,16 +8533,19 @@ func (s *QueueRules) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfQueueRules = [9]string{
-	0: "stalled",
-	1: "slow",
-	2: "failed",
-	3: "import_blocked",
-	4: "id_matched",
-	5: "unwanted_score",
-	6: "not_an_upgrade",
-	7: "duplicate",
-	8: "unwanted_unmonitored",
+var jsonFieldsNameOfQueueRules = [12]string{
+	0:  "stalled",
+	1:  "slow",
+	2:  "failed",
+	3:  "import_blocked",
+	4:  "id_matched",
+	5:  "import_fixable",
+	6:  "import_broken",
+	7:  "import_not_wanted",
+	8:  "unwanted_score",
+	9:  "not_an_upgrade",
+	10: "duplicate",
+	11: "unwanted_unmonitored",
 }
 
 // Decode decodes QueueRules from json.
@@ -8476,8 +8607,38 @@ func (s *QueueRules) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"id_matched\"")
 			}
+		case "import_fixable":
+			if err := func() error {
+				s.ImportFixable.Reset()
+				if err := s.ImportFixable.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"import_fixable\"")
+			}
+		case "import_broken":
+			if err := func() error {
+				s.ImportBroken.Reset()
+				if err := s.ImportBroken.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"import_broken\"")
+			}
+		case "import_not_wanted":
+			if err := func() error {
+				s.ImportNotWanted.Reset()
+				if err := s.ImportNotWanted.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"import_not_wanted\"")
+			}
 		case "unwanted_score":
-			requiredBitSet[0] |= 1 << 5
+			requiredBitSet[1] |= 1 << 0
 			if err := func() error {
 				if err := s.UnwantedScore.Decode(d); err != nil {
 					return err
@@ -8507,7 +8668,7 @@ func (s *QueueRules) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"duplicate\"")
 			}
 		case "unwanted_unmonitored":
-			requiredBitSet[1] |= 1 << 0
+			requiredBitSet[1] |= 1 << 3
 			if err := func() error {
 				if err := s.UnwantedUnmonitored.Decode(d); err != nil {
 					return err
@@ -8526,8 +8687,8 @@ func (s *QueueRules) Decode(d *jx.Decoder) error {
 	// Validate required fields.
 	var failures []validate.FieldError
 	for i, mask := range [2]uint8{
-		0b00101111,
-		0b00000001,
+		0b00001111,
+		0b00001001,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.

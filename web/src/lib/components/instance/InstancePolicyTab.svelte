@@ -4,41 +4,34 @@ SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { createSentioQuery, createSentioMutation, useQueryClient } from '@sveltesentio/query';
+	import { createSentioMutation, createSentioQuery } from '@sveltesentio/query';
 	import { toast } from 'svelte-sonner';
 	import { api, describeError } from '#lib/api/client.js';
 	import type { components } from '#lib/api/schema.js';
-	import CheckState from '#lib/components/CheckState.svelte';
 	import Field from '#lib/components/Field.svelte';
-	import InstanceEditForm from '#lib/components/InstanceEditForm.svelte';
 	import PolicyFilters from '#lib/components/PolicyFilters.svelte';
-	import PreviewPanel from '#lib/components/PreviewPanel.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
-	import QueuePolicy from '#lib/components/QueuePolicy.svelte';
-	import QueueStrikes from '#lib/components/QueueStrikes.svelte';
-	import ResetMemory from '#lib/components/ResetMemory.svelte';
-	import RunList from '#lib/components/RunList.svelte';
 	import { m } from '#lib/paraglide/messages.js';
-	import { instanceKindLabel, probeMessage } from '#lib/products.js';
 	import { keys } from '#lib/query.js';
 
 	type Policy = components['schemas']['SnatchPolicy'];
 	type Instance = components['schemas']['Instance'];
-	const { id }: { id: string } = $props();
-	// The route remounts this component per id ({#key}), so the initial value is the value.
-	const instanceId = untrack(() => id);
-	const queryClient = useQueryClient();
 
-	const instance = createSentioQuery<Instance | undefined>({
+	const { id }: { id: string } = $props();
+	// The layout remounts each tab per id ({#key}), so the initial value is the value.
+	const instanceId = untrack(() => id);
+
+	const instance = createSentioQuery<Instance | undefined>(() => ({
 		queryKey: keys.instance(instanceId),
 		queryFn: async () =>
 			(await api.GET('/instances/{instanceId}', { params: { path: { instanceId } } })).data
-	});
-	const policy = createSentioQuery<Policy | undefined>({
+	}));
+
+	const policy = createSentioQuery<Policy | undefined>(() => ({
 		queryKey: keys.policy(instanceId),
 		queryFn: async () =>
 			(await api.GET('/instances/{instanceId}/policy', { params: { path: { instanceId } } })).data
-	});
+	}));
 
 	// A policy stored before the filters existed has no lists; the form edits empty ones.
 	const noFilters = {
@@ -50,6 +43,7 @@ SPDX-License-Identifier: EUPL-1.2
 		skip_unavailable_movies: true,
 		dry_run: false
 	} satisfies Partial<Policy>;
+
 	let draft = $state<Policy | null>(null);
 	$effect(() => {
 		if (policy.data && !draft) draft = { ...noFilters, ...policy.data };
@@ -68,46 +62,23 @@ SPDX-License-Identifier: EUPL-1.2
 		onError: (err) => toast.error(describeError(err))
 	});
 
-	const probe = createSentioMutation({
-		mutationFn: async () =>
-			(await api.POST('/instances/{instanceId}/test', { params: { path: { instanceId } } })).data,
-		invalidates: [keys.instances, keys.instance(instanceId)],
-		onSuccess: (r) => toast.success(probeMessage(r)),
-		onError: (err) => {
-			void queryClient.invalidateQueries({ queryKey: keys.instance(instanceId) });
-			toast.error(describeError(err));
-		}
-	});
+	function handleSubmit(e: SubmitEvent) {
+		e.preventDefault();
+		if (draft) save.mutate(draft);
+	}
 </script>
 
-{#if instance.isPending || policy.isPending}
+{#if policy.isPending || instance.isPending}
 	<p aria-live="polite">{m.loading()}</p>
-{:else if instance.isError}
-	<ProblemNote error={instance.error} />
 {:else if policy.isError}
 	<ProblemNote error={policy.error} />
-{:else if instance.data && draft}
-	<h1 class="mb-1 text-2xl font-semibold">{instance.data.name}</h1>
-	<p class="mb-4 text-sm text-subtle">
-		{instanceKindLabel(instance.data.kind, instance.data.last_seen_product)} · {instance.data
-			.base_url}
-	</p>
-	<div class="mb-4">
-		<CheckState instance={instance.data} />
-	</div>
-	<button type="button" class="btn mb-6" onclick={() => probe.mutate()} disabled={probe.isPending}
-		>{m.instance_test()}</button
-	>
-
-	<InstanceEditForm instance={instance.data} />
-
+{:else if instance.isError}
+	<ProblemNote error={instance.error} />
+{:else if draft}
 	<form
 		class="card grid max-w-3xl gap-4 md:grid-cols-2"
 		aria-labelledby="policy-title"
-		onsubmit={(e) => {
-			e.preventDefault();
-			if (draft) save.mutate(draft);
-		}}
+		onsubmit={handleSubmit}
 	>
 		<h2 id="policy-title" class="text-lg font-semibold md:col-span-2">{m.policy_title()}</h2>
 		<Field id="missing" label={m.policy_missing_per_cycle()}>
@@ -180,18 +151,18 @@ SPDX-License-Identifier: EUPL-1.2
 				bind:value={draft.recent_grab_window_h}
 			/>
 		</Field>
-		<label class="flex items-center gap-2"
-			><input type="checkbox" bind:checked={draft.monitored_only} />
-			{m.policy_monitored_only()}</label
-		>
-		<label class="flex items-center gap-2"
-			><input type="checkbox" bind:checked={draft.skip_future_releases} />
-			{m.policy_skip_future()}</label
-		>
-		<label class="flex items-center gap-2"
-			><input type="checkbox" bind:checked={draft.await_command} />
-			{m.policy_await_command()}</label
-		>
+		<label class="flex items-center gap-2">
+			<input type="checkbox" bind:checked={draft.monitored_only} />
+			{m.policy_monitored_only()}
+		</label>
+		<label class="flex items-center gap-2">
+			<input type="checkbox" bind:checked={draft.skip_future_releases} />
+			{m.policy_skip_future()}
+		</label>
+		<label class="flex items-center gap-2">
+			<input type="checkbox" bind:checked={draft.await_command} />
+			{m.policy_await_command()}
+		</label>
 		{#if instance.data?.kind === 'radarr'}
 			<div class="flex flex-col gap-0.5 md:col-span-2">
 				<label class="flex items-center gap-2">
@@ -210,18 +181,9 @@ SPDX-License-Identifier: EUPL-1.2
 		</div>
 		<PolicyFilters {instanceId} bind:policy={draft} />
 		<div class="md:col-span-2">
-			<button type="submit" class="btn btn-primary" disabled={save.isPending}
-				>{m.instance_save()}</button
-			>
+			<button type="submit" class="btn btn-primary" disabled={save.isPending}>
+				{m.instance_save()}
+			</button>
 		</div>
 	</form>
-
-	<QueuePolicy {instanceId} />
-	<QueueStrikes {instanceId} />
-
-	<div class="mt-6">
-		<PreviewPanel {instanceId} />
-		<RunList {instanceId} />
-		<ResetMemory instance={{ id: instanceId, name: instance.data.name }} />
-	</div>
 {/if}

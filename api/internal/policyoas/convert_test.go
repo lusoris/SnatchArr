@@ -71,12 +71,19 @@ func TestQueuePolicyRoundTrip(t *testing.T) {
 			queue.RuleNotAnUpgrade:        {Mode: queue.ModeObserve, Threshold: 4, Blocklist: &blocklist},
 			queue.RuleDuplicate:           {Mode: queue.ModeAct, Threshold: 1, Blocklist: &blocklist},
 			queue.RuleIDMatched:           {Mode: queue.ModeAct, Threshold: 1, Blocklist: &blocklist},
+			queue.RuleImportFixable:       {Mode: queue.ModeAct, Threshold: 1, Blocklist: &blocklist},
+			queue.RuleImportBroken:        {Mode: queue.ModeObserve, Threshold: 2, Blocklist: &blocklist},
+			queue.RuleImportNotWanted:     {Mode: queue.ModeAct, Threshold: 3, Blocklist: &blocklist},
 		},
-		Grace:                30 * time.Minute,
-		MinBytesPerSecond:    1024,
-		MinCustomFormatScore: &minCFS,
-		MaxRemovalsPerSweep:  12,
-		MaxImportsPerSweep:   20,
+		Grace:                   30 * time.Minute,
+		MinBytesPerSecond:       1024,
+		MinCustomFormatScore:    &minCFS,
+		MaxRemovalsPerSweep:     12,
+		MaxImportsPerSweep:      20,
+		MatchFixableMinPercent:  70,
+		MatchBrokenBelowPercent: 35,
+		TrackFixableMinPercent:  45,
+		TrackBrokenBelowPercent: 30,
 	}
 
 	oasReq := policyoas.QueuePolicyToOAS(in)
@@ -84,7 +91,9 @@ func TestQueuePolicyRoundTrip(t *testing.T) {
 
 	if out.Enabled != in.Enabled || out.Grace != in.Grace || out.MinBytesPerSecond != in.MinBytesPerSecond ||
 		*out.MinCustomFormatScore != *in.MinCustomFormatScore || out.MaxRemovalsPerSweep != in.MaxRemovalsPerSweep ||
-		out.MaxImportsPerSweep != in.MaxImportsPerSweep {
+		out.MaxImportsPerSweep != in.MaxImportsPerSweep ||
+		out.MatchFixableMinPercent != in.MatchFixableMinPercent || out.MatchBrokenBelowPercent != in.MatchBrokenBelowPercent ||
+		out.TrackFixableMinPercent != in.TrackFixableMinPercent || out.TrackBrokenBelowPercent != in.TrackBrokenBelowPercent {
 		t.Fatalf("QueuePolicy roundtrip mismatch: got %+v, want %+v", out, in)
 	}
 	for r, rs := range in.Rules {

@@ -134,3 +134,50 @@ func TestDuplicateObserveDefault(t *testing.T) {
 		t.Fatalf("decision = %+v, want observed duplicate that would be removed without blocklist", d)
 	}
 }
+
+func dupItemFull(id, score int32, quality int, added time.Time, download string) queue.Item {
+	item := dupItem(id, 7, score, download)
+	item.QualityRank = quality
+	item.Added = added
+	return item
+}
+
+func TestDuplicateTieHierarchy(t *testing.T) {
+	t.Parallel()
+	s := testSettings(queue.ModeAct, map[queue.Rule]int{queue.RuleDuplicate: 1})
+
+	t.Run("score_beats_quality", func(t *testing.T) {
+		t.Parallel()
+		t1 := fixedNow.Add(-2 * time.Hour)
+		t2 := fixedNow.Add(-1 * time.Hour)
+		item1 := dupItemFull(10, 200, 1, t2, "dl-a")
+		item2 := dupItemFull(2, 100, 10, t1, "dl-b")
+		assertDuplicates(t, queue.Sweep(s, []queue.Item{item1, item2}, nil, fixedNow), []int32{2})
+	})
+
+	t.Run("quality_beats_added_on_score_tie", func(t *testing.T) {
+		t.Parallel()
+		t1 := fixedNow.Add(-2 * time.Hour)
+		t2 := fixedNow.Add(-1 * time.Hour)
+		item1 := dupItemFull(10, 100, 5, t2, "dl-a")
+		item2 := dupItemFull(2, 100, 2, t1, "dl-b")
+		assertDuplicates(t, queue.Sweep(s, []queue.Item{item1, item2}, nil, fixedNow), []int32{2})
+	})
+
+	t.Run("added_beats_id_on_score_and_quality_tie", func(t *testing.T) {
+		t.Parallel()
+		t1 := fixedNow.Add(-2 * time.Hour)
+		t2 := fixedNow.Add(-1 * time.Hour)
+		item1 := dupItemFull(10, 100, 5, t1, "dl-a")
+		item2 := dupItemFull(2, 100, 5, t2, "dl-b")
+		assertDuplicates(t, queue.Sweep(s, []queue.Item{item1, item2}, nil, fixedNow), []int32{2})
+	})
+
+	t.Run("lower_id_wins_on_full_tie", func(t *testing.T) {
+		t.Parallel()
+		t1 := fixedNow.Add(-1 * time.Hour)
+		item1 := dupItemFull(2, 100, 5, t1, "dl-a")
+		item2 := dupItemFull(10, 100, 5, t1, "dl-b")
+		assertDuplicates(t, queue.Sweep(s, []queue.Item{item1, item2}, nil, fixedNow), []int32{10})
+	})
+}

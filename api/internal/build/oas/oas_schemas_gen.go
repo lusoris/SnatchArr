@@ -3146,6 +3146,52 @@ func (o OptDateTime) Or(d time.Time) time.Time {
 	return d
 }
 
+// NewOptFloat64 returns new OptFloat64 with value set to v.
+func NewOptFloat64(v float64) OptFloat64 {
+	return OptFloat64{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptFloat64 is optional float64.
+type OptFloat64 struct {
+	Value float64
+	Set   bool
+}
+
+// IsSet returns true if OptFloat64 was set.
+func (o OptFloat64) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptFloat64) Reset() {
+	var v float64
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptFloat64) SetTo(v float64) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptFloat64) Get() (v float64, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptFloat64) Or(d float64) float64 {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
 // NewOptInt returns new OptInt with value set to v.
 func NewOptInt(v int) OptInt {
 	return OptInt{
@@ -4201,6 +4247,16 @@ type QueuePolicy struct {
 	// Most id_matched imports one sweep sends per instance. Optional on write so older clients keep
 	// working; left out, it takes the default of 25. Reads always return it.
 	MaxImportsPerSweep OptInt `json:"max_imports_per_sweep"`
+	// Minimum album or book match percentage for fixable manual import (default 75).
+	MatchFixableMinPercent OptFloat64 `json:"match_fixable_min_percent"`
+	// Album or book match percentage below which a release is considered broken (default 40; used by
+	// rematch fallback).
+	MatchBrokenBelowPercent OptFloat64 `json:"match_broken_below_percent"`
+	// Minimum track match percentage for fixable manual import (default 50).
+	TrackFixableMinPercent OptFloat64 `json:"track_fixable_min_percent"`
+	// Track match percentage below which a release is considered broken (default 40; used by rematch
+	// fallback).
+	TrackBrokenBelowPercent OptFloat64 `json:"track_broken_below_percent"`
 }
 
 // GetEnabled returns the value of Enabled.
@@ -4238,6 +4294,26 @@ func (s *QueuePolicy) GetMaxImportsPerSweep() OptInt {
 	return s.MaxImportsPerSweep
 }
 
+// GetMatchFixableMinPercent returns the value of MatchFixableMinPercent.
+func (s *QueuePolicy) GetMatchFixableMinPercent() OptFloat64 {
+	return s.MatchFixableMinPercent
+}
+
+// GetMatchBrokenBelowPercent returns the value of MatchBrokenBelowPercent.
+func (s *QueuePolicy) GetMatchBrokenBelowPercent() OptFloat64 {
+	return s.MatchBrokenBelowPercent
+}
+
+// GetTrackFixableMinPercent returns the value of TrackFixableMinPercent.
+func (s *QueuePolicy) GetTrackFixableMinPercent() OptFloat64 {
+	return s.TrackFixableMinPercent
+}
+
+// GetTrackBrokenBelowPercent returns the value of TrackBrokenBelowPercent.
+func (s *QueuePolicy) GetTrackBrokenBelowPercent() OptFloat64 {
+	return s.TrackBrokenBelowPercent
+}
+
 // SetEnabled sets the value of Enabled.
 func (s *QueuePolicy) SetEnabled(val bool) {
 	s.Enabled = val
@@ -4273,6 +4349,26 @@ func (s *QueuePolicy) SetMaxImportsPerSweep(val OptInt) {
 	s.MaxImportsPerSweep = val
 }
 
+// SetMatchFixableMinPercent sets the value of MatchFixableMinPercent.
+func (s *QueuePolicy) SetMatchFixableMinPercent(val OptFloat64) {
+	s.MatchFixableMinPercent = val
+}
+
+// SetMatchBrokenBelowPercent sets the value of MatchBrokenBelowPercent.
+func (s *QueuePolicy) SetMatchBrokenBelowPercent(val OptFloat64) {
+	s.MatchBrokenBelowPercent = val
+}
+
+// SetTrackFixableMinPercent sets the value of TrackFixableMinPercent.
+func (s *QueuePolicy) SetTrackFixableMinPercent(val OptFloat64) {
+	s.TrackFixableMinPercent = val
+}
+
+// SetTrackBrokenBelowPercent sets the value of TrackBrokenBelowPercent.
+func (s *QueuePolicy) SetTrackBrokenBelowPercent(val OptFloat64) {
+	s.TrackBrokenBelowPercent = val
+}
+
 // Ref: #/components/schemas/QueueRule
 type QueueRule string
 
@@ -4282,6 +4378,9 @@ const (
 	QueueRuleFailed              QueueRule = "failed"
 	QueueRuleImportBlocked       QueueRule = "import_blocked"
 	QueueRuleIDMatched           QueueRule = "id_matched"
+	QueueRuleImportFixable       QueueRule = "import_fixable"
+	QueueRuleImportBroken        QueueRule = "import_broken"
+	QueueRuleImportNotWanted     QueueRule = "import_not_wanted"
 	QueueRuleUnwantedScore       QueueRule = "unwanted_score"
 	QueueRuleNotAnUpgrade        QueueRule = "not_an_upgrade"
 	QueueRuleDuplicate           QueueRule = "duplicate"
@@ -4296,6 +4395,9 @@ func (QueueRule) AllValues() []QueueRule {
 		QueueRuleFailed,
 		QueueRuleImportBlocked,
 		QueueRuleIDMatched,
+		QueueRuleImportFixable,
+		QueueRuleImportBroken,
+		QueueRuleImportNotWanted,
 		QueueRuleUnwantedScore,
 		QueueRuleNotAnUpgrade,
 		QueueRuleDuplicate,
@@ -4315,6 +4417,12 @@ func (s QueueRule) MarshalText() ([]byte, error) {
 	case QueueRuleImportBlocked:
 		return []byte(s), nil
 	case QueueRuleIDMatched:
+		return []byte(s), nil
+	case QueueRuleImportFixable:
+		return []byte(s), nil
+	case QueueRuleImportBroken:
+		return []byte(s), nil
+	case QueueRuleImportNotWanted:
 		return []byte(s), nil
 	case QueueRuleUnwantedScore:
 		return []byte(s), nil
@@ -4346,6 +4454,15 @@ func (s *QueueRule) UnmarshalText(data []byte) error {
 		return nil
 	case QueueRuleIDMatched:
 		*s = QueueRuleIDMatched
+		return nil
+	case QueueRuleImportFixable:
+		*s = QueueRuleImportFixable
+		return nil
+	case QueueRuleImportBroken:
+		*s = QueueRuleImportBroken
+		return nil
+	case QueueRuleImportNotWanted:
+		*s = QueueRuleImportNotWanted
 		return nil
 	case QueueRuleUnwantedScore:
 		*s = QueueRuleUnwantedScore
@@ -4456,8 +4573,20 @@ type QueueRules struct {
 	// through a ManualImport of its clean, mapped candidates; it never removes or blocklists (ADR-0013).
 	// Optional on write so older clients keep working; left out, the rule takes its default settings.
 	// Reads always return it.
-	IDMatched     OptQueueRuleSettings `json:"id_matched"`
-	UnwantedScore QueueRuleSettings    `json:"unwanted_score"`
+	IDMatched OptQueueRuleSettings `json:"id_matched"`
+	// Force-imports a download whose import rejections are fixable (e.g. Lidarr/Readarr track/album
+	// match above floor, scene numbering mismatch); never removes or blocklists. Optional on write; left
+	// out, the rule takes its default settings. Reads always return it.
+	ImportFixable OptQueueRuleSettings `json:"import_fixable"`
+	// Strikes and removes a download whose release is broken (e.g. no tracks matched, corrupt container,
+	// parser error) with blocklist and re-search. Optional on write; left out, the rule takes its
+	// default settings. Reads always return it.
+	ImportBroken OptQueueRuleSettings `json:"import_broken"`
+	// Strikes and removes a download that is not wanted (e.g. release not requested, fewer tracks than
+	// existing release) with blocklist, without re-search. Optional on write; left out, the rule takes
+	// its default settings. Reads always return it.
+	ImportNotWanted OptQueueRuleSettings `json:"import_not_wanted"`
+	UnwantedScore   QueueRuleSettings    `json:"unwanted_score"`
 	// Strikes a download whose custom-format score does not beat the file already on disk (Sonarr and
 	// Radarr). Optional on write so older clients keep working; left out, the rule takes its default
 	// settings. Reads always return it.
@@ -4492,6 +4621,21 @@ func (s *QueueRules) GetImportBlocked() QueueRuleSettings {
 // GetIDMatched returns the value of IDMatched.
 func (s *QueueRules) GetIDMatched() OptQueueRuleSettings {
 	return s.IDMatched
+}
+
+// GetImportFixable returns the value of ImportFixable.
+func (s *QueueRules) GetImportFixable() OptQueueRuleSettings {
+	return s.ImportFixable
+}
+
+// GetImportBroken returns the value of ImportBroken.
+func (s *QueueRules) GetImportBroken() OptQueueRuleSettings {
+	return s.ImportBroken
+}
+
+// GetImportNotWanted returns the value of ImportNotWanted.
+func (s *QueueRules) GetImportNotWanted() OptQueueRuleSettings {
+	return s.ImportNotWanted
 }
 
 // GetUnwantedScore returns the value of UnwantedScore.
@@ -4537,6 +4681,21 @@ func (s *QueueRules) SetImportBlocked(val QueueRuleSettings) {
 // SetIDMatched sets the value of IDMatched.
 func (s *QueueRules) SetIDMatched(val OptQueueRuleSettings) {
 	s.IDMatched = val
+}
+
+// SetImportFixable sets the value of ImportFixable.
+func (s *QueueRules) SetImportFixable(val OptQueueRuleSettings) {
+	s.ImportFixable = val
+}
+
+// SetImportBroken sets the value of ImportBroken.
+func (s *QueueRules) SetImportBroken(val OptQueueRuleSettings) {
+	s.ImportBroken = val
+}
+
+// SetImportNotWanted sets the value of ImportNotWanted.
+func (s *QueueRules) SetImportNotWanted(val OptQueueRuleSettings) {
+	s.ImportNotWanted = val
 }
 
 // SetUnwantedScore sets the value of UnwantedScore.

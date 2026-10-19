@@ -63,7 +63,7 @@ SPDX-License-Identifier: EUPL-1.2
 </script>
 
 <div class="mx-auto w-full max-w-sm">
-	<div class="mb-6 flex justify-center text-brand">
+	<div class="text-brand mb-6 flex justify-center">
 		<BrandMark size={56} />
 	</div>
 	<h1 class="mb-4 text-center text-2xl font-semibold">{m.login_title()}</h1>

@@ -35,6 +35,10 @@ func (s *Service) processImports(ctx context.Context, inst Instance, ds []Decisi
 		switch {
 		case d.Import:
 			if refused, ok := s.handleImport(ctx, inst, *d, now); ok {
+				if refused {
+					d.Import = false
+					d.WouldImport = true
+				}
 				stamps[d.DownloadID] = refused
 			}
 		case d.ImportFailed:
@@ -53,8 +57,17 @@ func (s *Service) processImports(ctx context.Context, inst Instance, ds []Decisi
 // handleImport sends one force import. It returns whether the *arr offered no
 // clean candidate, and whether the strike row is to be stamped.
 func (s *Service) handleImport(ctx context.Context, inst Instance, d Decision, now time.Time) (bool, bool) {
-	n, err := s.arr.ForceImport(ctx, inst.Kind, inst.BaseURL, inst.APIKey, d.DownloadID)
+	mode := ImportModeClean
+	if d.Rule == RuleImportFixable {
+		mode = ImportModeFixable
+	}
+	n, err := s.arr.ForceImport(ctx, inst.Kind, inst.BaseURL, inst.APIKey, d.DownloadID, mode)
 	switch {
+	case errors.Is(err, ErrQueueUnsupported):
+		s.logger.InfoContext(ctx, "queue: force import unsupported for kind", slog.String("instance", inst.Name), slog.String("kind", string(inst.Kind)), slog.String("download_id", d.DownloadID))
+		s.emitImportFailed(ctx, inst, d, now, importRefused)
+		s.metrics.QueueImport(inst.Name, importRefused)
+		return true, true
 	case errors.Is(err, ErrNoCleanCandidate):
 		s.logger.InfoContext(ctx, "queue: force import refused", slog.String("instance", inst.Name), slog.String("download_id", d.DownloadID))
 		s.emitImportFailed(ctx, inst, d, now, importRefused)

@@ -94,14 +94,21 @@ func QueuePolicyToOAS(s queue.Settings) *oas.QueuePolicy {
 	rules.NotAnUpgrade.SetTo(QueueRuleToOAS(queue.ResolveRule(s, queue.RuleNotAnUpgrade)))
 	rules.Duplicate.SetTo(QueueRuleToOAS(queue.ResolveRule(s, queue.RuleDuplicate)))
 	rules.IDMatched.SetTo(QueueRuleToOAS(queue.ResolveRule(s, queue.RuleIDMatched)))
+	rules.ImportFixable.SetTo(QueueRuleToOAS(queue.ResolveRule(s, queue.RuleImportFixable)))
+	rules.ImportBroken.SetTo(QueueRuleToOAS(queue.ResolveRule(s, queue.RuleImportBroken)))
+	rules.ImportNotWanted.SetTo(QueueRuleToOAS(queue.ResolveRule(s, queue.RuleImportNotWanted)))
 	return &oas.QueuePolicy{
-		Enabled:              s.Enabled,
-		Rules:                rules,
-		GraceSeconds:         int(s.Grace / time.Second), // #nosec G115 -- validated 0..86400
-		MinBytesPerSecond:    s.MinBytesPerSecond,
-		MinCustomFormatScore: minCFS,
-		MaxRemovalsPerSweep:  s.MaxRemovalsPerSweep,
-		MaxImportsPerSweep:   oas.NewOptInt(s.MaxImportsPerSweep),
+		Enabled:                 s.Enabled,
+		Rules:                   rules,
+		GraceSeconds:            int(s.Grace / time.Second), // #nosec G115 -- validated 0..86400
+		MinBytesPerSecond:       s.MinBytesPerSecond,
+		MinCustomFormatScore:    minCFS,
+		MaxRemovalsPerSweep:     s.MaxRemovalsPerSweep,
+		MaxImportsPerSweep:      oas.NewOptInt(s.MaxImportsPerSweep),
+		MatchFixableMinPercent:  oas.NewOptFloat64(s.MatchFixableMinPercent),
+		MatchBrokenBelowPercent: oas.NewOptFloat64(s.MatchBrokenBelowPercent),
+		TrackFixableMinPercent:  oas.NewOptFloat64(s.TrackFixableMinPercent),
+		TrackBrokenBelowPercent: oas.NewOptFloat64(s.TrackBrokenBelowPercent),
 	}
 }
 
@@ -132,23 +139,31 @@ func QueuePolicyFromOAS(req *oas.QueuePolicy) queue.Settings {
 		queue.RuleUnwantedScore:       QueueRuleFromOAS(req.Rules.UnwantedScore),
 		queue.RuleUnwantedUnmonitored: QueueRuleFromOAS(req.Rules.UnwantedUnmonitored),
 	}
-	if v, ok := req.Rules.NotAnUpgrade.Get(); ok {
-		rules[queue.RuleNotAnUpgrade] = QueueRuleFromOAS(v)
+	optional := map[queue.Rule]oas.OptQueueRuleSettings{
+		queue.RuleNotAnUpgrade:    req.Rules.NotAnUpgrade,
+		queue.RuleDuplicate:       req.Rules.Duplicate,
+		queue.RuleIDMatched:       req.Rules.IDMatched,
+		queue.RuleImportFixable:   req.Rules.ImportFixable,
+		queue.RuleImportBroken:    req.Rules.ImportBroken,
+		queue.RuleImportNotWanted: req.Rules.ImportNotWanted,
 	}
-	if v, ok := req.Rules.Duplicate.Get(); ok {
-		rules[queue.RuleDuplicate] = QueueRuleFromOAS(v)
-	}
-	if v, ok := req.Rules.IDMatched.Get(); ok {
-		rules[queue.RuleIDMatched] = QueueRuleFromOAS(v)
+	for rule, opt := range optional {
+		if v, ok := opt.Get(); ok {
+			rules[rule] = QueueRuleFromOAS(v)
+		}
 	}
 	return queue.Settings{
-		Enabled:              req.Enabled,
-		Rules:                rules,
-		Grace:                time.Duration(req.GraceSeconds) * time.Second,
-		MinBytesPerSecond:    req.MinBytesPerSecond,
-		MinCustomFormatScore: minCFS,
-		MaxRemovalsPerSweep:  req.MaxRemovalsPerSweep,
-		MaxImportsPerSweep:   req.MaxImportsPerSweep.Or(queue.DefaultSettings().MaxImportsPerSweep),
+		Enabled:                 req.Enabled,
+		Rules:                   rules,
+		Grace:                   time.Duration(req.GraceSeconds) * time.Second,
+		MinBytesPerSecond:       req.MinBytesPerSecond,
+		MinCustomFormatScore:    minCFS,
+		MaxRemovalsPerSweep:     req.MaxRemovalsPerSweep,
+		MaxImportsPerSweep:      req.MaxImportsPerSweep.Or(queue.DefaultSettings().MaxImportsPerSweep),
+		MatchFixableMinPercent:  req.MatchFixableMinPercent.Or(queue.DefaultMatchFixableMinPercent),
+		MatchBrokenBelowPercent: req.MatchBrokenBelowPercent.Or(queue.DefaultMatchBrokenBelowPercent),
+		TrackFixableMinPercent:  req.TrackFixableMinPercent.Or(queue.DefaultTrackFixableMinPercent),
+		TrackBrokenBelowPercent: req.TrackBrokenBelowPercent.Or(queue.DefaultTrackBrokenBelowPercent),
 	}
 }
 
