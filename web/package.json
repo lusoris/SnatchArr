@@ -27,7 +27,7 @@
 		"@sveltejs/adapter-static": "^4.0.0",
 		"@sveltejs/kit": "^3.0.1",
 		"@sveltejs/vite-plugin-svelte": "^7.1.2",
-		"@sveltesentio/testing": "0.3.0",
+		"@sveltesentio/testing": "0.4.0",
 		"@tailwindcss/vite": "^4.3.0",
 		"@testing-library/svelte": "^5.4.2",
 		"@types/node": "^24",
