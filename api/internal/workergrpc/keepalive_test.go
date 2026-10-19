@@ -52,8 +52,8 @@ func TestLeaseKeepalive(t *testing.T) {
 		{"negative grace (unlimited) kept", "{max_connection_age_grace: -1s}", -time.Second, nil},
 		{"short grace kept when age never rotates", "{max_connection_age: -1s, max_connection_age_grace: 5s}", 5 * time.Second, nil},
 		{"grace one ns below the minimum refused", "{max_connection_age_grace: " + belowMin + "}", 0, errGraceTooShort},
-		{"golusoris default grace refused", "{max_connection_age_grace: 5s}", 0, errGraceTooShort},
-		{"zero grace (golusoris default) refused", "{max_connection_age_grace: 0s}", 0, errGraceTooShort},
+		{"former golusoris default grace refused", "{max_connection_age_grace: 5s}", 0, errGraceTooShort},
+		{"zero grace means the default, unlimited", "{max_connection_age_grace: 0s}", grpcx.Infinite, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
