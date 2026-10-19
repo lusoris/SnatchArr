@@ -19,7 +19,7 @@ SPDX-License-Identifier: EUPL-1.2
 		'include_tags' | 'exclude_tags' | 'include_quality_profiles' | 'exclude_quality_profiles';
 
 	let { instanceId, policy = $bindable() }: { instanceId: string; policy: Policy } = $props();
-	// InstanceDetail remounts per instance, so the initial id is the id.
+	// The route layout remounts per instance, so the initial id is the id.
 	const id = untrack(() => instanceId);
 
 	const options = createSentioQuery<Options | undefined>({

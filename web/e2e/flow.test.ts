@@ -298,7 +298,11 @@ test('instance actions: edit the name, read it back, reset processed memory with
 	expect(res.ok()).toBeTruthy();
 	expect(((await res.json()) as { name: string }).name).toBe(newName);
 
-	// 2. Reset this instance's processed memory: nothing happens before the confirm step.
+	// 2. Reset this instance's processed memory on the memory subtab (ADR-0015 section 4):
+	// nothing happens before the confirm step.
+	const tabs = page.getByRole('navigation', { name: /^(instance sections|instanzbereiche)$/i });
+	await tabs.getByRole('link', { name: /^(memory|speicher)$/i }).click();
+	await expect(page).toHaveURL(new RegExp(`/instances/${instanceId}/memory$`));
 	const resetLabel = /^(reset processed memory|verarbeitungsgedächtnis zurücksetzen)$/i;
 	await page.getByRole('button', { name: resetLabel }).click();
 	const ask = page.getByRole('group', { name: resetLabel });

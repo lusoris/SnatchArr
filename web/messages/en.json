@@ -414,5 +414,15 @@
 	"logs_redacted_note": "Secrets are replaced with [REDACTED] before a record is kept.",
 	"logs_window": "Newest {shown} records; the server keeps {capacity}, {dropped} older ones were overwritten.",
 	"logs_empty": "No record matches the filters.",
-	"logs_admin_only": "Only administrators can read the logs."
+	"logs_admin_only": "Only administrators can read the logs.",
+	"instance_tabs_label": "Instance sections",
+	"instance_tab_overview": "Overview",
+	"instance_tab_policy": "Policy",
+	"instance_tab_queue": "Queue",
+	"instance_tab_activity": "Activity",
+	"instance_tab_memory": "Memory",
+	"instance_not_found_title": "Instance not found",
+	"instance_not_found_text": "This instance does not exist or has been deleted.",
+	"instance_not_found_back": "Back to instances",
+	"instance_loading": "Loading instance…"
 }
