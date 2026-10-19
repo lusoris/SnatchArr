@@ -71,50 +71,53 @@ SPDX-License-Identifier: EUPL-1.2
 {:else if instances.isError}
 	<ProblemNote error={instances.error} />
 {:else}
-	<table class="mb-6 table">
-		<caption class="sr-only">{m.nav_instances()}</caption>
-		<thead>
-			<tr>
-				<th scope="col">{m.instance_name()}</th>
-				<th scope="col">{m.instance_kind()}</th>
-				<th scope="col">{m.instance_url()}</th>
-				<th scope="col">{m.instance_source()}</th>
-				<th scope="col">{m.instance_enabled()}</th>
-				<th scope="col">{m.instance_last_check()}</th>
-				<th scope="col"><span class="sr-only">{m.action_actions()}</span></th>
-			</tr>
-		</thead>
-		<tbody>
-			{#each instances.data ?? [] as inst (inst.id)}
+	<div class="relative overflow-x-auto">
+		<table class="mb-6 table">
+			<caption class="sr-only">{m.nav_instances()}</caption>
+			<thead>
 				<tr>
-					<td>
-						<div class="flex items-center gap-2">
-							<a class="underline" href={resolve(`instances/${inst.id}`)}>{inst.name}</a>
-						</div>
-					</td>
-					<td>{instanceKindLabel(inst.kind, inst.last_seen_product)}</td>
-					<td class="break-all">{inst.base_url}</td>
-					<td>{inst.source}</td>
-					<td>
-						{#if inst.enabled}
-							<span aria-hidden="true">✓</span><span class="sr-only">{m.instance_enabled()}</span>
-						{:else}
-							<span aria-hidden="true">–</span><span class="sr-only">{m.instance_disabled()}</span>
-						{/if}
-					</td>
-					<td><CheckState instance={inst} /></td>
-					<td>
-						<button
-							type="button"
-							class="btn"
-							onclick={() => remove.mutate(inst.id)}
-							disabled={inst.source === 'configarr'}>{m.instance_delete()}</button
-						>
-					</td>
+					<th scope="col">{m.instance_name()}</th>
+					<th scope="col">{m.instance_kind()}</th>
+					<th scope="col">{m.instance_url()}</th>
+					<th scope="col">{m.instance_source()}</th>
+					<th scope="col">{m.instance_enabled()}</th>
+					<th scope="col">{m.instance_last_check()}</th>
+					<th scope="col"><span class="sr-only">{m.action_actions()}</span></th>
 				</tr>
-			{/each}
-		</tbody>
-	</table>
+			</thead>
+			<tbody>
+				{#each instances.data ?? [] as inst (inst.id)}
+					<tr>
+						<td>
+							<div class="flex items-center gap-2">
+								<a class="underline" href={resolve(`instances/${inst.id}`)}>{inst.name}</a>
+							</div>
+						</td>
+						<td>{instanceKindLabel(inst.kind, inst.last_seen_product)}</td>
+						<td class="break-all">{inst.base_url}</td>
+						<td>{inst.source}</td>
+						<td>
+							{#if inst.enabled}
+								<span aria-hidden="true">✓</span><span class="sr-only">{m.instance_enabled()}</span>
+							{:else}
+								<span aria-hidden="true">–</span><span class="sr-only">{m.instance_disabled()}</span
+								>
+							{/if}
+						</td>
+						<td><CheckState instance={inst} /></td>
+						<td>
+							<button
+								type="button"
+								class="btn"
+								onclick={() => remove.mutate(inst.id)}
+								disabled={inst.source === 'configarr'}>{m.instance_delete()}</button
+							>
+						</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
+	</div>
 {/if}
 
 <section class="card max-w-xl" aria-labelledby="add-instance">

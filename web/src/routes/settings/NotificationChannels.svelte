@@ -143,46 +143,48 @@ SPDX-License-Identifier: EUPL-1.2
 {:else if (channels.data ?? []).length === 0}
 	<p class="card mb-4">{m.notifications_empty_channels()}</p>
 {:else}
-	<table class="mb-6 table">
-		<caption class="sr-only">{m.notifications_channels_title()}</caption>
-		<thead>
-			<tr>
-				<th scope="col">{m.channel_name()}</th>
-				<th scope="col">{m.channel_kind()}</th>
-				<th scope="col">{m.channel_enabled()}</th>
-				<th scope="col">{m.channel_has_secret()}</th>
-				<th scope="col"><span class="sr-only">{m.action_actions()}</span></th>
-			</tr>
-		</thead>
-		<tbody>
-			{#each channels.data ?? [] as ch (ch.id)}
+	<div class="relative overflow-x-auto">
+		<table class="mb-6 table">
+			<caption class="sr-only">{m.notifications_channels_title()}</caption>
+			<thead>
 				<tr>
-					<td>{ch.name}</td>
-					<td>{ch.kind}</td>
-					<td>{ch.enabled ? '✓' : '–'}</td>
-					<td>{ch.has_secret ? '✓' : '–'}</td>
-					<td class="flex gap-2">
-						<button
-							type="button"
-							class="btn"
-							disabled={testChannel.isPending}
-							onclick={() => testChannel.mutate(ch.id)}
-						>
-							{m.channel_test()}
-						</button>
-						<button
-							type="button"
-							class="btn"
-							disabled={remove.isPending}
-							onclick={() => remove.mutate(ch.id)}
-						>
-							{m.channel_delete()}
-						</button>
-					</td>
+					<th scope="col">{m.channel_name()}</th>
+					<th scope="col">{m.channel_kind()}</th>
+					<th scope="col">{m.channel_enabled()}</th>
+					<th scope="col">{m.channel_has_secret()}</th>
+					<th scope="col"><span class="sr-only">{m.action_actions()}</span></th>
 				</tr>
-			{/each}
-		</tbody>
-	</table>
+			</thead>
+			<tbody>
+				{#each channels.data ?? [] as ch (ch.id)}
+					<tr>
+						<td>{ch.name}</td>
+						<td>{ch.kind}</td>
+						<td>{ch.enabled ? '✓' : '–'}</td>
+						<td>{ch.has_secret ? '✓' : '–'}</td>
+						<td class="flex gap-2">
+							<button
+								type="button"
+								class="btn"
+								disabled={testChannel.isPending}
+								onclick={() => testChannel.mutate(ch.id)}
+							>
+								{m.channel_test()}
+							</button>
+							<button
+								type="button"
+								class="btn"
+								disabled={remove.isPending}
+								onclick={() => remove.mutate(ch.id)}
+							>
+								{m.channel_delete()}
+							</button>
+						</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
+	</div>
 {/if}
 
 <form

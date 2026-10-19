@@ -52,46 +52,48 @@ SPDX-License-Identifier: EUPL-1.2
 	{:else if (runs.data ?? []).length === 0}
 		<p class="text-sm text-subtle">{m.runs_empty()}</p>
 	{:else}
-		<table class="table">
-			<caption class="sr-only">{m.runs_title()}</caption>
-			<thead>
-				<tr>
-					<th scope="col">{m.run_kind()}</th>
-					<th scope="col">{m.run_status()}</th>
-					<th scope="col">{m.run_started()}</th>
-					<th scope="col">{m.run_finished()}</th>
-					<th scope="col">{m.run_searched()}</th>
-					<th scope="col"><span class="sr-only">{m.run_actions()}</span></th>
-				</tr>
-			</thead>
-			<tbody>
-				{#each runs.data ?? [] as run (run.id)}
+		<div class="relative overflow-x-auto">
+			<table class="table">
+				<caption class="sr-only">{m.runs_title()}</caption>
+				<thead>
 					<tr>
-						<td>
-							{snatchKindLabel(run.kind)}
-							{#if run.dry_run}
-								<span class="ml-1.5 rounded-full border border-line px-2 py-0.5 text-xs">
-									{m.run_preview_badge()}
-								</span>
-							{/if}
-						</td>
-						<td>{runStatusLabel(run.status)}{run.error ? ` · ${run.error}` : ''}</td>
-						<td>{formatWhen(run.started_at ?? run.queued_at, getLocale())}</td>
-						<td>{formatWhen(run.finished_at, getLocale()) || '–'}</td>
-						<td>{run.searched_count}</td>
-						<td>
-							{#if cancellable(run)}
-								<ConfirmAction
-									label={m.run_cancel()}
-									message={m.run_cancel_confirm({ kind: snatchKindLabel(run.kind) })}
-									pending={cancel.isPending}
-									onconfirm={() => cancel.mutate(run.id)}
-								/>
-							{/if}
-						</td>
+						<th scope="col">{m.run_kind()}</th>
+						<th scope="col">{m.run_status()}</th>
+						<th scope="col">{m.run_started()}</th>
+						<th scope="col">{m.run_finished()}</th>
+						<th scope="col">{m.run_searched()}</th>
+						<th scope="col"><span class="sr-only">{m.run_actions()}</span></th>
 					</tr>
-				{/each}
-			</tbody>
-		</table>
+				</thead>
+				<tbody>
+					{#each runs.data ?? [] as run (run.id)}
+						<tr>
+							<td>
+								{snatchKindLabel(run.kind)}
+								{#if run.dry_run}
+									<span class="ml-1.5 rounded-full border border-line px-2 py-0.5 text-xs">
+										{m.run_preview_badge()}
+									</span>
+								{/if}
+							</td>
+							<td>{runStatusLabel(run.status)}{run.error ? ` · ${run.error}` : ''}</td>
+							<td>{formatWhen(run.started_at ?? run.queued_at, getLocale())}</td>
+							<td>{formatWhen(run.finished_at, getLocale()) || '–'}</td>
+							<td>{run.searched_count}</td>
+							<td>
+								{#if cancellable(run)}
+									<ConfirmAction
+										label={m.run_cancel()}
+										message={m.run_cancel_confirm({ kind: snatchKindLabel(run.kind) })}
+										pending={cancel.isPending}
+										onconfirm={() => cancel.mutate(run.id)}
+									/>
+								{/if}
+							</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		</div>
 	{/if}
 </section>
