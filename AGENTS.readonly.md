@@ -116,7 +116,7 @@ verification gate = all gates. Run before concluding any turn.
 - Hourly cap counts searches *arr sends per indexer, not HTTP requests, not items: 1 per episode / season / movie / album / book; artist or author search = 1 (#180). Debit per dispatch; warn at 80 %.
 - Processed memory: per instance x snatch kind x entity, per-row `expires_at`.
 - SSE event names = `snatcharr.v1.EventType` names, lower snake case (`search_dispatched`, ...).
-- Periodic loops (planner tick, Seerr sync, Configarr poll) never start from their own module: register in fx group `leader_loops` via `leaderx.Provide[*T]()`; `internal/leaderx` runs them on the elected replica (`APP_LEADER_ENABLED`, pg advisory lock).
+- Periodic loops (planner tick, Seerr sync, Configarr poll) never start from their own module: register in fx group `leader_loops` via `gate.Provide[*T]()`; golusoris leader/gate runs them on the elected replica (`APP_LEADER_ENABLED`, pg advisory lock).
 - Configarr instances: read-only in UI except snatch policy; `source=configarr` rows re-import on file change.
 
 ## Language rules

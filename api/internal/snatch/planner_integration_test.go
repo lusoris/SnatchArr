@@ -23,12 +23,12 @@ import (
 
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/events"
-	"github.com/lusoris/SnatchArr/api/internal/leaderx/leaderxtest"
 	"github.com/lusoris/SnatchArr/api/internal/metrics"
 	"github.com/lusoris/SnatchArr/api/internal/metrics/metricstest"
 	"github.com/lusoris/SnatchArr/api/internal/store"
 	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
 	"github.com/lusoris/SnatchArr/api/internal/store/storetest"
+	"github.com/lusoris/SnatchArr/api/internal/testkit/await"
 )
 
 const (
@@ -211,9 +211,9 @@ func TestNewTicker_RunsThePlannerPerInterval(t *testing.T) {
 	storetest.Instance(t, f.st, f.clk.Now())
 	startTicker(t, f)
 
-	leaderxtest.Await(t, gate.asked, "the first planner tick")
+	await.Await(t, gate.asked, "the first planner tick")
 	f.clk.Advance(TickInterval)
-	leaderxtest.Await(t, gate.asked, "the planner tick after one interval")
+	await.Await(t, gate.asked, "the planner tick after one interval")
 }
 
 // runsQueued counts the runs the planner queued (gap audit A1-02).

@@ -14,9 +14,9 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/clock"
+	"github.com/golusoris/golusoris/leader/gate"
 
 	"github.com/lusoris/SnatchArr/api/internal/domain"
-	"github.com/lusoris/SnatchArr/api/internal/leaderx"
 	"github.com/lusoris/SnatchArr/api/internal/metrics"
 	"github.com/lusoris/SnatchArr/api/internal/settings"
 	"github.com/lusoris/SnatchArr/api/internal/store"
@@ -42,7 +42,7 @@ type StateTickerParams struct {
 }
 
 // StateTicker runs the state refresh loop once per StateInterval while this replica leads.
-type StateTicker struct{ *leaderx.Periodic }
+type StateTicker struct{ *gate.Periodic }
 
 // StateLoop queries Postgres and sets domain state gauges.
 type StateLoop struct {
@@ -66,7 +66,7 @@ func NewStateTicker(p StateTickerParams) *StateTicker {
 		logger:   p.Logger,
 		m:        p.Metrics,
 	}
-	return &StateTicker{leaderx.NewPeriodic("metrics: state", StateInterval, p.Clk, p.Metrics, func(ctx context.Context) error {
+	return &StateTicker{gate.NewPeriodic("metrics: state", StateInterval, p.Clk, p.Metrics, func(ctx context.Context) error {
 		if err := loop.Tick(ctx); err != nil {
 			p.Logger.ErrorContext(ctx, "metrics: state tick", slog.String("error", err.Error()))
 			return err

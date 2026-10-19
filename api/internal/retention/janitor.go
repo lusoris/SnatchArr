@@ -5,7 +5,7 @@
 // Package retention trims the tables that grow with every snatch: events and finished runs
 // past history_retention_days, afterglow rows past snatch.PurgeGrace, spent rate buckets
 // past snatch.BucketKeep, expired sessions and workers silent past history_retention_days.
-// The janitor runs on the elected replica only (internal/leaderx).
+// The janitor runs on the elected replica only (leader/gate).
 package retention
 
 import (
@@ -18,9 +18,9 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/clock"
+	"github.com/golusoris/golusoris/leader/gate"
 
 	"github.com/lusoris/SnatchArr/api/internal/auth"
-	"github.com/lusoris/SnatchArr/api/internal/leaderx"
 	"github.com/lusoris/SnatchArr/api/internal/metrics"
 	"github.com/lusoris/SnatchArr/api/internal/settings"
 	"github.com/lusoris/SnatchArr/api/internal/snatch"
@@ -68,7 +68,7 @@ type Deps struct {
 // Janitor runs a retention pass once per Interval while this replica leads; the first pass
 // runs at once.
 type Janitor struct {
-	*leaderx.Periodic
+	*gate.Periodic
 
 	deps  Deps
 	batch int32
@@ -77,7 +77,7 @@ type Janitor struct {
 // New builds a janitor with the default interval and batch size.
 func New(d Deps) *Janitor {
 	j := &Janitor{deps: d, batch: Batch}
-	j.Periodic = leaderx.NewPeriodic("retention", Interval, d.Clock, d.Metrics, j.tick)
+	j.Periodic = gate.NewPeriodic("retention", Interval, d.Clock, d.Metrics, j.tick)
 	return j
 }
 
@@ -147,7 +147,7 @@ func drain(ctx context.Context, batch int32, purge func(context.Context, int32) 
 }
 
 // tick runs one pass and logs one summary line with the row counts. The pass's error goes on
-// to leaderx.Periodic, which counts it per loop (gap audit A1-07).
+// to leader/gate.Periodic, which counts it per loop (gap audit A1-07).
 func (j *Janitor) tick(ctx context.Context) error {
 	c, err := j.Pass(ctx)
 	attrs := []any{
@@ -169,6 +169,6 @@ func (j *Janitor) tick(ctx context.Context) error {
 // Module provides the janitor and registers it as a leader-gated loop.
 var Module = fx.Module("snatcharr.retention",
 	fx.Provide(New),
-	// The janitor runs on the leader only (internal/leaderx).
-	fx.Provide(leaderx.Provide[*Janitor]()),
+	// The janitor runs on the leader only (leader/gate).
+	fx.Provide(gate.Provide[*Janitor]()),
 )

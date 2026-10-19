@@ -17,10 +17,10 @@ import (
 	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/core/id"
 	"github.com/golusoris/golusoris/leader"
+	"github.com/golusoris/golusoris/leader/gate"
 
 	"github.com/lusoris/SnatchArr/api/internal/auth"
 	"github.com/lusoris/SnatchArr/api/internal/events"
-	"github.com/lusoris/SnatchArr/api/internal/leaderx"
 	"github.com/lusoris/SnatchArr/api/internal/metrics/metricstest"
 	"github.com/lusoris/SnatchArr/api/internal/settings"
 	"github.com/lusoris/SnatchArr/api/internal/snatch"
@@ -233,16 +233,16 @@ func TestJanitorRunsOnLeaderOnly(t *testing.T) {
 }
 
 // runGate runs the leader gate with elect for d, then stops it.
-func runGate(t *testing.T, f fixture, elect leaderx.Elect, d time.Duration) {
+func runGate(t *testing.T, f fixture, elect gate.Elect, d time.Duration) {
 	t.Helper()
 	_, stop := startGate(t, f, elect)
 	time.Sleep(d)
 	stop()
 }
 
-func startGate(t *testing.T, f fixture, elect leaderx.Elect) (context.Context, func()) {
+func startGate(t *testing.T, f fixture, elect gate.Elect) (context.Context, func()) {
 	t.Helper()
-	g := leaderx.New(f.clk, slog.New(slog.DiscardHandler), f.j)
+	g := gate.New(f.clk, slog.New(slog.DiscardHandler), f.j)
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan struct{})
 	go func() {

@@ -15,9 +15,8 @@ import (
 
 	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/k8s/health"
+	"github.com/golusoris/golusoris/leader/gate"
 	"github.com/golusoris/golusoris/observability/statuspage"
-
-	"github.com/lusoris/SnatchArr/api/internal/leaderx"
 )
 
 // Readiness includes the leader gate: with the gate not running, /readyz reports the
@@ -33,8 +32,8 @@ func TestReadinessIncludesLeaderGate(t *testing.T) {
 	t.Cleanup(pool.Close)
 	clk := clock.NewFake()
 	reg := statuspage.NewRegistry(clk)
-	gate := leaderx.New(clk, slog.New(slog.DiscardHandler))
-	registerHealthChecks(reg, pool, health.NewStartupGate(), gate, fxtest.NewLifecycle(t))
+	leaderGate := gate.New(clk, slog.New(slog.DiscardHandler))
+	registerHealthChecks(reg, pool, health.NewStartupGate(), leaderGate, fxtest.NewLifecycle(t))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -44,8 +43,8 @@ func TestReadinessIncludesLeaderGate(t *testing.T) {
 			continue
 		}
 		found = true
-		if r.Status != statuspage.StatusDown || r.Message != leaderx.ErrNotRunning.Error() {
-			t.Fatalf("leader check = %s %q, want down %q", r.Status, r.Message, leaderx.ErrNotRunning)
+		if r.Status != statuspage.StatusDown || r.Message != gate.ErrNotRunning.Error() {
+			t.Fatalf("leader check = %s %q, want down %q", r.Status, r.Message, gate.ErrNotRunning)
 		}
 	}
 	if !found {
