@@ -143,18 +143,18 @@ func TestStateLoop_Stamina(t *testing.T) {
 	}
 
 	// Instance stamina: 20 used, 30 remaining
-	if got, ok := metricstest.Value(t, f.reg, "snatcharr_stamina_used_items", "instance", instRow.Name); !ok || got != 20 {
+	if got, ok := metricstest.Value(t, f.reg, "snatcharr_stamina_used_items", "arr_instance", instRow.Name); !ok || got != 20 {
 		t.Errorf("stamina_used{%s} = %v (present %t), want 20", instRow.Name, got, ok)
 	}
-	if got, ok := metricstest.Value(t, f.reg, "snatcharr_stamina_remaining_items", "instance", instRow.Name); !ok || got != 30 {
+	if got, ok := metricstest.Value(t, f.reg, "snatcharr_stamina_remaining_items", "arr_instance", instRow.Name); !ok || got != 30 {
 		t.Errorf("stamina_remaining{%s} = %v (present %t), want 30", instRow.Name, got, ok)
 	}
 
 	// Global stamina: 20 used, 80 remaining
-	if got, ok := metricstest.Value(t, f.reg, "snatcharr_stamina_used_items", "instance", "_global"); !ok || got != 20 {
+	if got, ok := metricstest.Value(t, f.reg, "snatcharr_stamina_used_items", "arr_instance", "_global"); !ok || got != 20 {
 		t.Errorf("stamina_used{_global} = %v (present %t), want 20", got, ok)
 	}
-	if got, ok := metricstest.Value(t, f.reg, "snatcharr_stamina_remaining_items", "instance", "_global"); !ok || got != 80 {
+	if got, ok := metricstest.Value(t, f.reg, "snatcharr_stamina_remaining_items", "arr_instance", "_global"); !ok || got != 80 {
 		t.Errorf("stamina_remaining{_global} = %v (present %t), want 80", got, ok)
 	}
 }
@@ -291,7 +291,7 @@ func TestStateLoop_RefreshStamina_RemovesSeriesForDisabledInstance(t *testing.T)
 	if err = f.loop.Tick(t.Context()); err != nil {
 		t.Fatalf("Tick 1 = %v", err)
 	}
-	if _, ok := metricstest.Value(t, f.reg, "snatcharr_stamina_remaining_items", "instance", inst.Name); !ok {
+	if _, ok := metricstest.Value(t, f.reg, "snatcharr_stamina_remaining_items", "arr_instance", inst.Name); !ok {
 		t.Fatalf("snatcharr_stamina_remaining_items{%s} not found after tick 1", inst.Name)
 	}
 
@@ -311,10 +311,10 @@ func TestStateLoop_RefreshStamina_RemovesSeriesForDisabledInstance(t *testing.T)
 	if err := f.loop.Tick(t.Context()); err != nil {
 		t.Fatalf("Tick 2 = %v", err)
 	}
-	if _, ok := metricstest.Value(t, f.reg, "snatcharr_stamina_remaining_items", "instance", inst.Name); ok {
+	if _, ok := metricstest.Value(t, f.reg, "snatcharr_stamina_remaining_items", "arr_instance", inst.Name); ok {
 		t.Errorf("snatcharr_stamina_remaining_items{%s} still present after instance was disabled", inst.Name)
 	}
-	if _, ok := metricstest.Value(t, f.reg, "snatcharr_stamina_used_items", "instance", inst.Name); ok {
+	if _, ok := metricstest.Value(t, f.reg, "snatcharr_stamina_used_items", "arr_instance", inst.Name); ok {
 		t.Errorf("snatcharr_stamina_used_items{%s} still present after instance was disabled", inst.Name)
 	}
 }
