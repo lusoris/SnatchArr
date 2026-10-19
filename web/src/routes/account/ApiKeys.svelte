@@ -82,72 +82,76 @@ SPDX-License-Identifier: EUPL-1.2
 {:else if (apiKeys.data ?? []).length === 0}
 	<p class="card mb-4">{m.api_keys_empty()}</p>
 {:else}
-	<table class="mb-6 table">
-		<caption class="sr-only">{m.api_keys_title()}</caption>
-		<thead>
-			<tr>
-				<th scope="col">{m.api_key_name()}</th>
-				<th scope="col">{m.api_key_created()}</th>
-				<th scope="col">{m.api_key_last_used()}</th>
-				<th scope="col">{m.api_key_expires()}</th>
-				<th scope="col"><span class="sr-only">{m.api_key_actions()}</span></th>
-			</tr>
-		</thead>
-		<tbody>
-			{#each apiKeys.data ?? [] as key (key.id)}
+	<div class="relative overflow-x-auto">
+		<table class="mb-6 table">
+			<caption class="sr-only">{m.api_keys_title()}</caption>
+			<thead>
 				<tr>
-					<td>{key.name}</td>
-					<td>{formatWhen(key.created_at, getLocale())}</td>
-					<td>
-						{key.last_used_at ? formatWhen(key.last_used_at, getLocale()) : m.api_key_never_used()}
-					</td>
-					<td>
-						{key.expires_at ? formatWhen(key.expires_at, getLocale()) : m.api_key_never_expires()}
-					</td>
-					<td>
-						{#if revokingId === key.id}
-							<div class="flex flex-col gap-2">
-								<p class="text-sm font-medium text-danger">
-									{m.api_key_revoke_confirm_prompt({ name: key.name })}
-								</p>
-								<div class="flex gap-2">
-									<button
-										type="button"
-										class="btn text-danger hover:border-danger"
-										disabled={revokeKey.isPending}
-										onclick={() => revokeKey.mutate(key.id)}
-									>
-										{m.api_key_revoke_confirm_btn()}
-									</button>
-									<button
-										type="button"
-										class="btn"
-										disabled={revokeKey.isPending}
-										onclick={() => {
-											revokingId = null;
-										}}
-									>
-										{m.api_key_cancel()}
-									</button>
-								</div>
-							</div>
-						{:else}
-							<button
-								type="button"
-								class="btn"
-								disabled={revokeKey.isPending}
-								onclick={() => {
-									revokingId = key.id;
-								}}
-							>
-								{m.api_key_revoke()}
-							</button>
-						{/if}
-					</td>
+					<th scope="col">{m.api_key_name()}</th>
+					<th scope="col">{m.api_key_created()}</th>
+					<th scope="col">{m.api_key_last_used()}</th>
+					<th scope="col">{m.api_key_expires()}</th>
+					<th scope="col"><span class="sr-only">{m.api_key_actions()}</span></th>
 				</tr>
-			{/each}
-		</tbody>
-	</table>
+			</thead>
+			<tbody>
+				{#each apiKeys.data ?? [] as key (key.id)}
+					<tr>
+						<td>{key.name}</td>
+						<td>{formatWhen(key.created_at, getLocale())}</td>
+						<td>
+							{key.last_used_at
+								? formatWhen(key.last_used_at, getLocale())
+								: m.api_key_never_used()}
+						</td>
+						<td>
+							{key.expires_at ? formatWhen(key.expires_at, getLocale()) : m.api_key_never_expires()}
+						</td>
+						<td>
+							{#if revokingId === key.id}
+								<div class="flex flex-col gap-2">
+									<p class="text-sm font-medium text-danger">
+										{m.api_key_revoke_confirm_prompt({ name: key.name })}
+									</p>
+									<div class="flex gap-2">
+										<button
+											type="button"
+											class="btn text-danger hover:border-danger"
+											disabled={revokeKey.isPending}
+											onclick={() => revokeKey.mutate(key.id)}
+										>
+											{m.api_key_revoke_confirm_btn()}
+										</button>
+										<button
+											type="button"
+											class="btn"
+											disabled={revokeKey.isPending}
+											onclick={() => {
+												revokingId = null;
+											}}
+										>
+											{m.api_key_cancel()}
+										</button>
+									</div>
+								</div>
+							{:else}
+								<button
+									type="button"
+									class="btn"
+									disabled={revokeKey.isPending}
+									onclick={() => {
+										revokingId = key.id;
+									}}
+								>
+									{m.api_key_revoke()}
+								</button>
+							{/if}
+						</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
+	</div>
 {/if}
 
 <h3 class="mt-6 mb-3 text-lg font-semibold">{m.api_key_create()}</h3>

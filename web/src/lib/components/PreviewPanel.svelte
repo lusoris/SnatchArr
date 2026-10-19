@@ -104,27 +104,29 @@ SPDX-License-Identifier: EUPL-1.2
 			{:else if targets.length === 0}
 				<p class="text-sm text-subtle">{m.preview_empty()}</p>
 			{:else}
-				<table class="table">
-					<caption class="sr-only">{m.preview_targets_caption()}</caption>
-					<thead>
-						<tr>
-							<th scope="col">{m.preview_target_title()}</th>
-							<th scope="col">{m.preview_target_type()}</th>
-							<th scope="col">{m.preview_target_id()}</th>
-							<th scope="col">{m.preview_target_cost()}</th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each targets as target (target.id)}
+				<div class="relative overflow-x-auto">
+					<table class="table">
+						<caption class="sr-only">{m.preview_targets_caption()}</caption>
+						<thead>
 							<tr>
-								<td>{target.title}</td>
-								<td>{target.entity_type}</td>
-								<td>{target.id}</td>
-								<td>{target.cost}</td>
+								<th scope="col">{m.preview_target_title()}</th>
+								<th scope="col">{m.preview_target_type()}</th>
+								<th scope="col">{m.preview_target_id()}</th>
+								<th scope="col">{m.preview_target_cost()}</th>
 							</tr>
-						{/each}
-					</tbody>
-				</table>
+						</thead>
+						<tbody>
+							{#each targets as target (target.id)}
+								<tr>
+									<td>{target.title}</td>
+									<td>{target.entity_type}</td>
+									<td>{target.id}</td>
+									<td>{target.cost}</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
 				<p class="text-sm font-semibold">{m.preview_total_cost({ cost: totalCost(targets) })}</p>
 			{/if}
 		</div>
