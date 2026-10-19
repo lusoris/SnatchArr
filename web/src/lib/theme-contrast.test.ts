@@ -80,6 +80,51 @@ describe.each(Object.entries(themes))('%s theme input boundary (#342)', (_name, 
 	});
 });
 
+const TEXT_MIN = 4.5;
+const WARNING_SURFACES = ['card', 'background', 'muted'] as const;
+
+describe.each(Object.entries(themes))('%s theme destructive contrast (#419)', (_name, tokens) => {
+	it('--color-destructive-foreground on --color-destructive reaches 4.5:1', () => {
+		expect(
+			contrastRatio(tokens['destructive-foreground'], tokens.destructive)
+		).toBeGreaterThanOrEqual(TEXT_MIN);
+	});
+});
+
+describe.each(Object.entries(themes))('%s theme warning token (#417, #418)', (_name, tokens) => {
+	it.each(WARNING_SURFACES)('--color-warning reaches 3:1 on --color-%s', (surface) => {
+		expect(contrastRatio(tokens.warning, tokens[surface])).toBeGreaterThanOrEqual(MIN);
+	});
+});
+
+const FOREGROUND_PAIRS = [
+	['primary-foreground', 'primary'],
+	['brand-foreground', 'brand'],
+	['nav-active-foreground', 'nav-active']
+] as const;
+
+describe.each(Object.entries(themes))(
+	'%s theme key foreground on background pairs',
+	(_name, tokens) => {
+		it.each(FOREGROUND_PAIRS)('--color-%s on --color-%s reaches 4.5:1', (fg, bg) => {
+			expect(contrastRatio(tokens[fg], tokens[bg])).toBeGreaterThanOrEqual(TEXT_MIN);
+		});
+	}
+);
+
+const TEXT_SURFACE_PAIRS = [
+	['foreground', 'background'],
+	['foreground', 'card'],
+	['muted-foreground', 'background'],
+	['muted-foreground', 'card']
+] as const;
+
+describe.each(Object.entries(themes))('%s theme text on surface contrast', (_name, tokens) => {
+	it.each(TEXT_SURFACE_PAIRS)('--color-%s on --color-%s reaches 4.5:1', (fg, bg) => {
+		expect(contrastRatio(tokens[fg], tokens[bg])).toBeGreaterThanOrEqual(TEXT_MIN);
+	});
+});
+
 describe('the stylesheet draws the boundary from the control token', () => {
 	it.each(['.input', '.select', '.btn'])('%s border colour resolves to --color-input', (sel) => {
 		const m = /border(?:-color)?:\s*[^;]*var\(--color-([\w-]+)\)/.exec(rule(appCss, sel));
