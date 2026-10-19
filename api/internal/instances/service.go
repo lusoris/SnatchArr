@@ -353,5 +353,14 @@ func (s *Service) KindByConfigarrKey(ctx context.Context, key string) (domain.Ap
 	return domain.AppKind(row.Kind), true
 }
 
+// IDByConfigarrKey returns the stored ID of a Configarr-owned instance, if any.
+func (s *Service) IDByConfigarrKey(ctx context.Context, key string) (uuid.UUID, bool) {
+	row, err := s.st.Q().GetInstanceByConfigarrKey(ctx, &key)
+	if err != nil {
+		return uuid.Nil, false
+	}
+	return row.ID, true
+}
+
 // Module provides the Service.
 var Module = fx.Module("snatcharr.instances", fx.Provide(New))

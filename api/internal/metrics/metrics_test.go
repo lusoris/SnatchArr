@@ -387,3 +387,33 @@ func TestPlannerDeferred(t *testing.T) {
 		})
 	}
 }
+
+func TestSearchDispatchedAt(t *testing.T) {
+	t.Parallel()
+	m, reg := metricstest.New(t)
+	const metric = "snatcharr_search_last_dispatched_timestamp_seconds"
+	t1 := time.Date(2026, 10, 19, 10, 0, 0, 0, time.UTC)
+	t2 := time.Date(2026, 10, 19, 11, 30, 0, 0, time.UTC)
+
+	cases := []struct {
+		name     string
+		instance string
+		at       time.Time
+		want     float64
+	}{
+		{"positive first instance", "sonarr-main", t1, float64(t1.Unix())},
+		{"positive second instance", "radarr-4k", t2, float64(t2.Unix())},
+		{"update existing instance", "sonarr-main", t2, float64(t2.Unix())},
+	}
+	for _, tc := range cases {
+		m.SearchDispatchedAt(tc.instance, tc.at)
+		got, ok := value(t, reg, metric, "instance", tc.instance)
+		if !ok || got != tc.want {
+			t.Errorf("%s{%s} = %v (present %t), want %v", metric, tc.instance, got, ok, tc.want)
+		}
+	}
+
+	// Boundary: nil receiver does not panic.
+	var nilM *metrics.Metrics
+	nilM.SearchDispatchedAt("sonarr-main", t1)
+}

@@ -45,5 +45,14 @@ func (h *Handlers) GetConfigarrStatus(ctx context.Context) (*oas.ConfigarrStatus
 }
 
 func configarrResultToOAS(r configarr.Result) oas.ConfigarrImportResult {
-	return oas.ConfigarrImportResult{Imported: r.Imported, Updated: r.Updated, Disabled: r.Disabled, Warnings: emptyIfNil(r.Warnings), At: r.At}
+	return oas.ConfigarrImportResult{
+		Imported:        r.Imported,
+		Updated:         r.Updated,
+		Disabled:        r.Disabled,
+		ClientsImported: r.ClientsImported,
+		ClientsUpdated:  r.ClientsUpdated,
+		ClientsRemoved:  r.ClientsRemoved,
+		Warnings:        emptyIfNil(r.Warnings),
+		At:              r.At,
+	}
 }

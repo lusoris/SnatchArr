@@ -505,6 +505,7 @@ func (s *Server) handleReportEvent(ctx context.Context, ev *snatcharrv1.SnatchEv
 	if ev.GetType() == snatcharrv1.EventType_EVENT_TYPE_SEARCH_DISPATCHED && run.InstanceID != uuid.Nil {
 		name := s.instanceName(ctx, names, run.InstanceID)
 		s.m.SearchesDispatched(name, string(run.Kind), 1)
+		s.m.SearchDispatchedAt(name, s.clk.Now())
 		if s.seerr != nil && s.rec != nil {
 			s.recordSeerrSnatched(ctx, run, ev)
 		}

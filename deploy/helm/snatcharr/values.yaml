@@ -111,6 +111,8 @@ configarr:
   enabled: false
   existingConfigMap: ""
   configKey: config.yml
+  # Key in existingConfigMap holding the download clients file; empty = off.
+  downloadClientsKey: ""
   existingSecret: ""
   secretsKey: secrets.yml
   watch: true

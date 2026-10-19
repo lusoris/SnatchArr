@@ -40,6 +40,7 @@ type DownloadClient struct {
 	LastError          *string
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
+	ConfigarrKey       *string
 }
 
 type GlobalRateBucket struct {

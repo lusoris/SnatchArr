@@ -374,4 +374,29 @@ describe('download-clients management', () => {
 		expect(field.getAttribute('aria-describedby')).toBe('dlclient-max-active-error');
 		expect(screen.getByText('value 5000 greater than maximum 1000')).toBeTruthy();
 	});
+
+	it('disables edit and delete buttons for configarr download clients', async () => {
+		const configarrClient: DownloadClient = {
+			...sampleClient,
+			id: '00000000-0000-0000-0000-000000000099',
+			name: 'Configarr qBit',
+			source: 'configarr'
+		};
+		stubGet({
+			'/download-clients': [configarrClient],
+			'/download-clients/status': [],
+			'/instances': []
+		});
+		renderWithQuery(DownloadClientsPage);
+
+		const card = within(
+			(await screen.findByRole('heading', { level: 2, name: /Configarr qBit/ })).closest(
+				'li'
+			) as HTMLElement
+		);
+		const editBtn = card.getByRole('button', { name: m.action_edit() }) as HTMLButtonElement;
+		expect(editBtn.disabled).toBe(true);
+		const deleteBtn = card.getByRole('button', { name: m.action_delete() }) as HTMLButtonElement;
+		expect(deleteBtn.disabled).toBe(true);
+	});
 });

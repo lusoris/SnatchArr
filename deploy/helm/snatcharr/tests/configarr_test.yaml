@@ -1,0 +1,31 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+suite: configarr configuration
+templates:
+  - configmap.yaml
+release:
+  name: snatcharr
+  namespace: snatcharr
+tests:
+  - it: unset - downloadClientsKey empty renders no APP_SNATCHARR_CONFIGARR_DOWNLOAD_CLIENTS
+    template: configmap.yaml
+    set:
+      configarr:
+        enabled: true
+        existingConfigMap: "configarr-cm"
+        downloadClientsKey: ""
+    asserts:
+      - isNull:
+          path: data.APP_SNATCHARR_CONFIGARR_DOWNLOAD_CLIENTS
+
+  - it: set - downloadClientsKey renders APP_SNATCHARR_CONFIGARR_DOWNLOAD_CLIENTS
+    template: configmap.yaml
+    set:
+      configarr:
+        enabled: true
+        existingConfigMap: "configarr-cm"
+        downloadClientsKey: "download-clients.yaml"
+    asserts:
+      - equal:
+          path: data.APP_SNATCHARR_CONFIGARR_DOWNLOAD_CLIENTS
+          value: /etc/snatcharr/configarr/download-clients.yaml

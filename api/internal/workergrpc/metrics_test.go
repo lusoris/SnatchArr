@@ -461,6 +461,10 @@ func TestReportEvents_RecordsSearchesDispatched(t *testing.T) {
 	}); !ok || got != 2 {
 		t.Errorf("%s{instance=%s,kind=%s} = %v (present %t), want 2", series, inst.Name, f.run.Kind, got, ok)
 	}
+	const gauge = "snatcharr_search_last_dispatched_timestamp_seconds"
+	if got, ok := metricstest.Value(t, f.reg, gauge, "instance", inst.Name); !ok || got != float64(f.clk.Now().Unix()) {
+		t.Errorf("%s{instance=%s} = %v (present %t), want %d", gauge, inst.Name, got, ok, f.clk.Now().Unix())
+	}
 }
 
 func TestInstanceName_FallbackUnknown(t *testing.T) {

@@ -64,6 +64,7 @@ type DownloadClientSource string
 const (
 	ClientSourceManual     DownloadClientSource = "manual"
 	ClientSourceDiscovered DownloadClientSource = "discovered"
+	ClientSourceConfigarr  DownloadClientSource = "configarr"
 )
 
 // MaxActiveDownloadsLimit bounds max_active.
@@ -82,6 +83,7 @@ type DownloadClient struct {
 	Enabled            bool
 	Source             DownloadClientSource
 	RemoteID           int
+	ConfigarrKey       string
 	MaxActive          int   // 0 = no limit
 	BandwidthBudgetBPS int64 // 0 = no pacing
 	LastCheckAt        *time.Time

@@ -19,6 +19,9 @@ const lastResult: ConfigarrImportResult = {
 	imported: 2,
 	updated: 1,
 	disabled: 0,
+	clients_imported: 0,
+	clients_updated: 0,
+	clients_removed: 0,
 	warnings: ['sonarr4k: base_url missing, skipped'],
 	at: '2026-09-01T12:00:00Z'
 };

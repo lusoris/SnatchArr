@@ -13,12 +13,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/clock"
 
 	"github.com/lusoris/SnatchArr/api/internal/arrclient"
 	"github.com/lusoris/SnatchArr/api/internal/config"
+	"github.com/lusoris/SnatchArr/api/internal/dlclients"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
 	"github.com/lusoris/SnatchArr/api/internal/leaderx"
@@ -26,11 +28,14 @@ import (
 
 // Result summarises one import.
 type Result struct {
-	Imported int
-	Updated  int
-	Disabled int
-	Warnings []string
-	At       time.Time
+	Imported        int
+	Updated         int
+	Disabled        int
+	ClientsImported int
+	ClientsUpdated  int
+	ClientsRemoved  int
+	Warnings        []string
+	At              time.Time
 }
 
 // Status is the linked-mode state for the API.
@@ -56,6 +61,7 @@ const maxPolls = 1 << 26
 type Service struct {
 	cfg       config.ConfigarrOptions
 	instances *instances.Service
+	dlclients *dlclients.Service
 	probe     arrclient.Prober
 	clk       clock.Clock
 	logger    *slog.Logger
@@ -71,8 +77,8 @@ type Service struct {
 }
 
 // New wires the service.
-func New(cfg config.Options, inst *instances.Service, probe arrclient.Prober, clk clock.Clock, logger *slog.Logger) *Service {
-	return &Service{cfg: cfg.Configarr, instances: inst, probe: probe, clk: clk, logger: logger}
+func New(cfg config.Options, inst *instances.Service, dl *dlclients.Service, probe arrclient.Prober, clk clock.Clock, logger *slog.Logger) *Service {
+	return &Service{cfg: cfg.Configarr, instances: inst, dlclients: dl, probe: probe, clk: clk, logger: logger}
 }
 
 // Status reports the linked-mode state.
@@ -117,32 +123,140 @@ func (s *Service) importFiles(ctx context.Context, configPath, secretsPath strin
 		return Result{}, err
 	}
 	res := Result{Warnings: parsed.Warnings, At: s.clk.Now()}
-	keys := make([]string, 0, len(parsed.Instances))
-	for _, def := range parsed.Instances {
-		kind, warn := s.kindFor(ctx, def)
-		if warn != "" {
-			res.Warnings = append(res.Warnings, warn)
-		}
-		outcome, upErr := s.instances.UpsertConfigarr(ctx, def.Key, instances.Input{Kind: kind, Name: def.Name, BaseURL: def.BaseURL, APIKey: def.APIKey, Enabled: def.Enabled})
-		switch {
-		case upErr == nil && outcome.Inserted:
-			res.Imported++
-			keys = append(keys, def.Key)
-		case upErr == nil:
-			res.Updated++
-			keys = append(keys, def.Key)
-		case errors.Is(upErr, domain.ErrConflict), errors.Is(upErr, domain.ErrInvalid):
-			res.Warnings = append(res.Warnings, def.Key+": "+upErr.Error())
-		default:
-			return res, upErr
-		}
+	keys, err := s.importInstances(ctx, parsed.Instances, &res)
+	if err != nil {
+		return res, err
 	}
 	disabled, err := s.instances.DisableConfigarrNotIn(ctx, keys)
 	if err != nil {
 		return res, err
 	}
 	res.Disabled = disabled
+	if s.cfg.DownloadClients != "" && s.dlclients != nil {
+		if err := s.importDownloadClients(ctx, secretsPath, &res); err != nil {
+			return res, err
+		}
+	}
 	return res, nil
+}
+
+func (s *Service) importInstances(ctx context.Context, instances []Definition, res *Result) ([]string, error) {
+	keys := make([]string, 0, len(instances))
+	for _, def := range instances {
+		key, err := s.upsertOneInstance(ctx, def, res)
+		if err != nil {
+			return nil, err
+		}
+		if key != "" {
+			keys = append(keys, key)
+		}
+	}
+	return keys, nil
+}
+
+func (s *Service) upsertOneInstance(ctx context.Context, def Definition, res *Result) (string, error) {
+	kind, warn := s.kindFor(ctx, def)
+	if warn != "" {
+		res.Warnings = append(res.Warnings, warn)
+	}
+	outcome, upErr := s.instances.UpsertConfigarr(ctx, def.Key, instances.Input{
+		Kind:    kind,
+		Name:    def.Name,
+		BaseURL: def.BaseURL,
+		APIKey:  def.APIKey,
+		Enabled: def.Enabled,
+	})
+	switch {
+	case upErr == nil && outcome.Inserted:
+		res.Imported++
+		return def.Key, nil
+	case upErr == nil:
+		res.Updated++
+		return def.Key, nil
+	case errors.Is(upErr, domain.ErrConflict), errors.Is(upErr, domain.ErrInvalid):
+		res.Warnings = append(res.Warnings, def.Key+": "+upErr.Error())
+		return "", nil
+	default:
+		return "", upErr
+	}
+}
+
+func (s *Service) importDownloadClients(ctx context.Context, secretsPath string, res *Result) error {
+	parsed, err := ParseDownloadClients(s.cfg.DownloadClients, secretsPath, os.LookupEnv)
+	if err != nil {
+		if errors.Is(err, ErrParse) {
+			return fmt.Errorf("%w: %w", domain.ErrInvalid, err)
+		}
+		return err
+	}
+	res.Warnings = append(res.Warnings, parsed.Warnings...)
+	keys, err := s.upsertDownloadClients(ctx, parsed.Clients, res)
+	if err != nil {
+		return err
+	}
+	removed, pErr := s.dlclients.PruneConfigarr(ctx, keys)
+	if pErr != nil {
+		return pErr
+	}
+	res.ClientsRemoved = removed
+	return nil
+}
+
+func (s *Service) upsertDownloadClients(ctx context.Context, clients []ClientDefinition, res *Result) ([]string, error) {
+	keys := make([]string, 0, len(clients))
+	for _, def := range clients {
+		key, err := s.upsertOneDownloadClient(ctx, def, res)
+		if err != nil {
+			return nil, err
+		}
+		if key != "" {
+			keys = append(keys, key)
+		}
+	}
+	return keys, nil
+}
+
+func (s *Service) resolveClientInstanceID(ctx context.Context, def ClientDefinition, res *Result) (*uuid.UUID, bool) {
+	if def.InstanceKey == "" {
+		return nil, true
+	}
+	id, ok := s.instances.IDByConfigarrKey(ctx, def.InstanceKey)
+	if !ok {
+		res.Warnings = append(res.Warnings, fmt.Sprintf("%s: unknown instance %q; skipped", def.Key, def.InstanceKey))
+		return nil, false
+	}
+	return &id, true
+}
+
+func (s *Service) upsertOneDownloadClient(ctx context.Context, def ClientDefinition, res *Result) (string, error) {
+	instID, ok := s.resolveClientInstanceID(ctx, def, res)
+	if !ok {
+		return "", nil
+	}
+	inserted, upErr := s.dlclients.UpsertConfigarr(ctx, def.Key, dlclients.Input{
+		InstanceID:         instID,
+		Kind:               def.Kind,
+		Name:               def.Name,
+		BaseURL:            def.BaseURL,
+		Username:           def.Username,
+		Secret:             def.Secret,
+		Enabled:            def.Enabled,
+		MaxActive:          def.MaxActive,
+		BandwidthBudgetBPS: def.BandwidthBudgetBPS,
+	})
+	switch {
+	case upErr == nil && inserted:
+		res.ClientsImported++
+		return def.Key, nil
+	case upErr == nil:
+		res.ClientsUpdated++
+		return def.Key, nil
+	case errors.Is(upErr, domain.ErrConflict), errors.Is(upErr, domain.ErrInvalid):
+		res.Warnings = append(res.Warnings, def.Key+": "+upErr.Error())
+		return "", nil
+	default:
+		return "", upErr
+	}
 }
 
 // kindFor maps a Configarr section to an instance kind. Whisparr v2 and v3 share a
@@ -221,7 +335,7 @@ func (s *Service) loop(ctx context.Context) {
 
 // importIfChanged re-imports when the files' size or modification time moved.
 func (s *Service) importIfChanged(ctx context.Context, force bool) {
-	state := fileFingerprint(s.cfg.Config) + "|" + fileFingerprint(s.cfg.Secrets)
+	state := fileFingerprint(s.cfg.Config) + "|" + fileFingerprint(s.cfg.Secrets) + "|" + fileFingerprint(s.cfg.DownloadClients)
 	s.mu.Lock()
 	changed := state != s.fileState
 	s.fileState = state
@@ -236,7 +350,15 @@ func (s *Service) importIfChanged(ctx context.Context, force bool) {
 		s.logger.WarnContext(ctx, "configarr: import", slog.String("error", err.Error()))
 		return
 	}
-	s.logger.InfoContext(ctx, "configarr: imported", slog.Int("imported", res.Imported), slog.Int("updated", res.Updated), slog.Int("disabled", res.Disabled), slog.Int("warnings", len(res.Warnings)))
+	s.logger.InfoContext(ctx, "configarr: imported",
+		slog.Int("imported", res.Imported),
+		slog.Int("updated", res.Updated),
+		slog.Int("disabled", res.Disabled),
+		slog.Int("clients_imported", res.ClientsImported),
+		slog.Int("clients_updated", res.ClientsUpdated),
+		slog.Int("clients_removed", res.ClientsRemoved),
+		slog.Int("warnings", len(res.Warnings)),
+	)
 }
 
 func fileFingerprint(path string) string {

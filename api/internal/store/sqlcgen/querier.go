@@ -46,6 +46,7 @@ type Querier interface {
 	// SPDX-License-Identifier: EUPL-1.2
 	CreateSeerrLink(ctx context.Context, arg CreateSeerrLinkParams) (SeerrLink, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	DeleteConfigarrDownloadClientsNotIn(ctx context.Context, keys []string) (int64, error)
 	DeleteDownloadClient(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteEventsForInstance(ctx context.Context, instanceID uuid.UUID) (int64, error)
 	DeleteInstanceUnlessDeclared(ctx context.Context, id uuid.UUID) (int64, error)
@@ -202,6 +203,7 @@ type Querier interface {
 	UpdateSeerrLink(ctx context.Context, arg UpdateSeerrLinkParams) (SeerrLink, error)
 	UpdateSettings(ctx context.Context, arg UpdateSettingsParams) (Setting, error)
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
+	UpsertConfigarrDownloadClient(ctx context.Context, arg UpsertConfigarrDownloadClientParams) (UpsertConfigarrDownloadClientRow, error)
 	UpsertConfigarrInstance(ctx context.Context, arg UpsertConfigarrInstanceParams) (UpsertConfigarrInstanceRow, error)
 	UpsertDiscoveredDownloadClient(ctx context.Context, arg UpsertDiscoveredDownloadClientParams) (UpsertDiscoveredDownloadClientRow, error)
 	// The caller reads the row back with GetPolicy in the same transaction: scanning RETURNING *
