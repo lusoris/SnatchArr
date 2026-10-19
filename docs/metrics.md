@@ -73,7 +73,7 @@ The worker serves its own `/metrics` endpoint directly on port 8081 using the `p
 
 State gauges (`snatcharr_stamina_used_items`, `snatcharr_stamina_remaining_items`, `snatcharr_runs`, and `snatcharr_seerr_requests_pending`) are refreshed by an internal periodic leader loop (`metrics: state`, interval 30 seconds).
 - **Behavior**: Only the elected replica (`APP_LEADER_ENABLED=true`, Postgres advisory lock) queries the database to refresh these gauges. Non-leader replicas do not export these metrics.
-- **Aggregation**: Queries and dashboards must aggregate these metrics using `max()` (e.g. `max by (instance) (snatcharr_stamina_used_items)`).
+- **Aggregation**: Queries and dashboards must aggregate these metrics using `max()` (e.g. `max by (arr_instance) (snatcharr_stamina_used_items)`).
 - **Liveness**: Loop ticks feed `snatcharr_loop_last_success_timestamp_seconds{loop="metrics_state"}` and `snatcharr_loop_failures_total{loop="metrics_state"}`, making leader query health directly alertable.
 
 ### Seerr Pending Definition
@@ -99,17 +99,17 @@ The API serves these metrics on `/metrics`:
 | `snatcharr_loop_failures_total` | counter | `loop` | no | Ticks of a leader loop that returned an error, by loop name. |
 | `snatcharr_loop_last_success_timestamp_seconds` | gauge | `loop` | no | Unix timestamp of the last successful tick of a leader loop, by loop name. |
 | `snatcharr_loop_interval_seconds` | gauge | `loop` | no | Configured interval between ticks of a leader loop, by loop name. |
-| `snatcharr_planner_instance_failures_total` | counter | `instance` | no | Planner passes that skipped an instance because planning failed. |
+| `snatcharr_planner_instance_failures_total` | counter | `arr_instance` | no | Planner passes that skipped an instance because planning failed. |
 | `snatcharr_runs_queued_total` | counter | none | no | Total runs queued by the planner. |
 | `snatcharr_runs_leased_total` | counter | `kind` | no | Runs leased by a worker, by snatch kind (`missing`, `upgrade`). |
 | `snatcharr_runs_finished_total` | counter | `outcome` | no | Runs completed, by outcome (`done`, `failed`, `cancelled`, `lease_exhausted`). |
 | `snatcharr_worker_events_total` | counter | `type` | no | Events reported by workers, by SSE event type (`search_dispatched`, etc.). |
 | `snatcharr_worker_events_unconfirmed_total` | counter | none | no | Events emitted for completed runs that were not confirmed. |
 | `snatcharr_budget_requests_total` | counter | `result` | no | Worker budget requests by outcome (`granted`, `partial`, `denied`, `error`). |
-| `snatcharr_searches_dispatched_total` | counter | `instance`, `kind` | no | Total items dispatched to *arr instances by instance name and kind. |
-| `snatcharr_search_last_dispatched_timestamp_seconds` | gauge | `instance` | no | Unix time of the last search dispatched to an *arr instance, by instance name. |
-| `snatcharr_stamina_used_items` | gauge | `instance` | yes | Hourly stamina spent in current rolling window by instance and `_global`. |
-| `snatcharr_stamina_remaining_items` | gauge | `instance` | yes | Hourly stamina remaining under effective cap by instance and `_global`. |
+| `snatcharr_searches_dispatched_total` | counter | `arr_instance`, `kind` | no | Total items dispatched to *arr instances by instance name and kind. |
+| `snatcharr_search_last_dispatched_timestamp_seconds` | gauge | `arr_instance` | no | Unix time of the last search dispatched to an *arr instance, by instance name. |
+| `snatcharr_stamina_used_items` | gauge | `arr_instance` | yes | Hourly stamina spent in current rolling window by instance and `_global`. |
+| `snatcharr_stamina_remaining_items` | gauge | `arr_instance` | yes | Hourly stamina remaining under effective cap by instance and `_global`. |
 | `snatcharr_runs` | gauge | `status` | yes | Current count of runs by lifecycle status (`queued`, `leased`, `done`, `failed`, `cancelled`). |
 | `snatcharr_seerr_requests_pending` | gauge | none | yes | Current count of active/pending processing Seerr requests across enabled links. |
 | `snatcharr_run_lease_wait_seconds` | histogram | `kind` | no | Seconds elapsed between run enqueue and worker lease acquisition, by kind. |
@@ -122,6 +122,12 @@ The API serves these metrics on `/metrics`:
 - `result`: `granted`, `partial`, `denied`, `error`
 - `status`: `queued`, `leased`, `done`, `failed`, `cancelled`
 - `reason`: `schedule_closed`, `already_running`, `client_unreachable`, `client_paused`, `client_active_limit`, `bandwidth_saturated`, `gate_refusal`, `indexer_limit`, `tick_bound`
+
+### Upgrading from 0.4.x
+
+In SnatchArr 0.5.0+, the *arr instance metric label was renamed from `instance` to `arr_instance`. Prometheus scrape jobs attach a target label named `instance` (the scraped host:port); when target metrics also declare an `instance` label with default scrape settings (`honor_labels: false`), Prometheus renames the exported metric label to `exported_instance`. Renaming to `arr_instance` eliminates this collision.
+
+Update existing alert rules, recording rules, and Grafana dashboards by replacing `instance=` selectors, `by (instance)` groupings, and any workarounds referencing `exported_instance` with `arr_instance`.
 
 ---
 

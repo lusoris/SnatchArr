@@ -456,14 +456,14 @@ func TestReportEvents_RecordsSearchesDispatched(t *testing.T) {
 	}
 	const series = "snatcharr_searches_dispatched_total"
 	if got, ok := metricstest.ValueLabels(t, f.reg, series, map[string]string{
-		"instance": inst.Name,
-		"kind":     string(f.run.Kind),
+		"arr_instance": inst.Name,
+		"kind":         string(f.run.Kind),
 	}); !ok || got != 2 {
-		t.Errorf("%s{instance=%s,kind=%s} = %v (present %t), want 2", series, inst.Name, f.run.Kind, got, ok)
+		t.Errorf("%s{arr_instance=%s,kind=%s} = %v (present %t), want 2", series, inst.Name, f.run.Kind, got, ok)
 	}
 	const gauge = "snatcharr_search_last_dispatched_timestamp_seconds"
-	if got, ok := metricstest.Value(t, f.reg, gauge, "instance", inst.Name); !ok || got != float64(f.clk.Now().Unix()) {
-		t.Errorf("%s{instance=%s} = %v (present %t), want %d", gauge, inst.Name, got, ok, f.clk.Now().Unix())
+	if got, ok := metricstest.Value(t, f.reg, gauge, "arr_instance", inst.Name); !ok || got != float64(f.clk.Now().Unix()) {
+		t.Errorf("%s{arr_instance=%s} = %v (present %t), want %d", gauge, inst.Name, got, ok, f.clk.Now().Unix())
 	}
 }
 
