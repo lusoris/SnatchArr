@@ -72,7 +72,7 @@ SPDX-License-Identifier: EUPL-1.2
 			class="flex items-center gap-2.5 font-sans text-base font-semibold tracking-[-0.01em] text-fg"
 			onclick={onClose}
 		>
-			<span class="flex items-center text-brand">
+			<span class="text-brand flex items-center">
 				<BrandMark size={24} />
 			</span>
 			<span>{m.app_name()}</span>
