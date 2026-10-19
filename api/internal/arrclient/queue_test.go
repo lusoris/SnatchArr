@@ -16,7 +16,6 @@ import (
 
 	"github.com/lusoris/SnatchArr/api/internal/arrclient"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
-	"github.com/lusoris/SnatchArr/api/internal/queue"
 )
 
 func TestQueuePagingAndMapping(t *testing.T) {
@@ -30,6 +29,8 @@ func TestQueuePagingAndMapping(t *testing.T) {
 		{domain.KindRadarr, "/api/v3/queue"},
 		{domain.KindLidarr, "/api/v1/queue"},
 		{domain.KindReadarr, "/api/v1/queue"},
+		{domain.KindWhisparrV2, "/api/v3/queue"},
+		{domain.KindWhisparrV3, "/api/v3/queue"},
 	}
 
 	for _, tc := range kinds {
@@ -228,20 +229,18 @@ func TestQueueDropsUnparsableAdded(t *testing.T) {
 	}
 }
 
-func TestQueueWhisparrUnsupported(t *testing.T) {
+func TestQueueInvalidKind(t *testing.T) {
 	t.Parallel()
 
 	prober := arrclient.NewGoenvoyProber(arrclient.Options{Timeout: 2 * time.Second})
-	for _, kind := range []domain.AppKind{domain.KindWhisparrV2, domain.KindWhisparrV3} {
-		_, err := prober.Queue(t.Context(), kind, "http://localhost", "key", 5, 10)
-		if !errors.Is(err, queue.ErrQueueUnsupported) {
-			t.Errorf("kind %v got err %v, want ErrQueueUnsupported", kind, err)
-		}
+	_, err := prober.Queue(t.Context(), domain.AppKind("bogus"), "http://localhost", "key", 5, 10)
+	if !errors.Is(err, domain.ErrInvalid) {
+		t.Errorf("got err %v, want ErrInvalid", err)
+	}
 
-		err = prober.RemoveQueueItem(t.Context(), kind, "http://localhost", "key", 1, true, false)
-		if !errors.Is(err, queue.ErrQueueUnsupported) {
-			t.Errorf("kind %v RemoveQueueItem got err %v, want ErrQueueUnsupported", kind, err)
-		}
+	err = prober.RemoveQueueItem(t.Context(), domain.AppKind("bogus"), "http://localhost", "key", 1, true, false)
+	if !errors.Is(err, domain.ErrInvalid) {
+		t.Errorf("got err %v, want ErrInvalid", err)
 	}
 }
 
@@ -256,6 +255,8 @@ func TestRemoveQueueItem(t *testing.T) {
 		{domain.KindRadarr, "/api/v3/queue/42"},
 		{domain.KindLidarr, "/api/v1/queue/42"},
 		{domain.KindReadarr, "/api/v1/queue/42"},
+		{domain.KindWhisparrV2, "/api/v3/queue/42"},
+		{domain.KindWhisparrV3, "/api/v3/queue/42"},
 	}
 
 	for _, tc := range kinds {

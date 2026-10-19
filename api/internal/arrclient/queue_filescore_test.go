@@ -193,6 +193,8 @@ func TestQueueMediaID(t *testing.T) {
 		{"positive radarr movie", domain.KindRadarr, map[string]any{"movieId": 12}, 12},
 		{"positive lidarr album", domain.KindLidarr, map[string]any{"albumId": 13}, 13},
 		{"positive readarr book", domain.KindReadarr, map[string]any{"bookId": 14}, 14},
+		{"positive whisparr v2 episode", domain.KindWhisparrV2, map[string]any{"episodeId": 15}, 15},
+		{"positive whisparr v3 movie", domain.KindWhisparrV3, map[string]any{"movieId": 16}, 16},
 		{"negative sonarr without episode id", domain.KindSonarr, map[string]any{"seriesId": 3}, 0},
 		{"boundary radarr ignores a foreign field", domain.KindRadarr, map[string]any{"episodeId": 11}, 0},
 	}

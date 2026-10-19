@@ -471,7 +471,7 @@ func TestMaxRemovalsBound(t *testing.T) {
 	}
 }
 
-func TestWhisparrSkipped(t *testing.T) {
+func TestUnsupportedKindSkipped(t *testing.T) {
 	t.Parallel()
 
 	inst1 := queue.Instance{ID: uuid.New(), Name: "whisparr-v2", Kind: domain.KindWhisparrV2, BaseURL: "http://w2.local"}
