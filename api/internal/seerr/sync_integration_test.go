@@ -26,12 +26,12 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/events"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
-	"github.com/lusoris/SnatchArr/api/internal/leaderx/leaderxtest"
 	"github.com/lusoris/SnatchArr/api/internal/metrics/metricstest"
 	"github.com/lusoris/SnatchArr/api/internal/seerrclient"
 	"github.com/lusoris/SnatchArr/api/internal/snatch"
 	"github.com/lusoris/SnatchArr/api/internal/store"
 	"github.com/lusoris/SnatchArr/api/internal/store/storetest"
+	"github.com/lusoris/SnatchArr/api/internal/testkit/await"
 )
 
 const (
@@ -254,9 +254,9 @@ func TestNewTicker_SyncsPerInterval(t *testing.T) {
 	_, fake := testLink{name: "a"}.create(t, f)
 	startTicker(t, f)
 
-	leaderxtest.Await(t, fake.asked, "the first sync")
+	await.Await(t, fake.asked, "the first sync")
 	f.clk.Advance(SyncInterval)
-	leaderxtest.Await(t, fake.asked, "the sync after one interval")
+	await.Await(t, fake.asked, "the sync after one interval")
 }
 
 // startTicker starts the sync's leader loop on fresh metrics and stops it when the test ends.

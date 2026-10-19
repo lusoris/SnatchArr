@@ -2,8 +2,8 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-// Package leaderxtest holds what the tests of leader loops share.
-package leaderxtest
+// Package await provides bounded channel wait test helpers.
+package await
 
 import (
 	"testing"

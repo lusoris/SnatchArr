@@ -10,9 +10,9 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/clock"
+	"github.com/golusoris/golusoris/leader/gate"
 
 	"github.com/lusoris/SnatchArr/api/internal/arrclient"
-	"github.com/lusoris/SnatchArr/api/internal/leaderx"
 	"github.com/lusoris/SnatchArr/api/internal/metrics"
 	"github.com/lusoris/SnatchArr/api/internal/seerrclient"
 )
@@ -21,11 +21,11 @@ import (
 const SyncInterval = 5 * time.Minute
 
 // Ticker refreshes the request cache once per SyncInterval while this replica leads.
-type Ticker struct{ *leaderx.Periodic }
+type Ticker struct{ *gate.Periodic }
 
 // NewTicker builds the sync's leader loop; m counts the passes that could not list the links.
 func NewTicker(svc *Service, clk clock.Clock, m *metrics.Metrics) *Ticker {
-	return &Ticker{leaderx.NewPeriodic("seerr: sync", SyncInterval, clk, m, svc.SyncAll)}
+	return &Ticker{gate.NewPeriodic("seerr: sync", SyncInterval, clk, m, svc.SyncAll)}
 }
 
 // Module provides the Seerr service, its HTTP client and the sync ticker.
@@ -39,6 +39,6 @@ var Module = fx.Module("snatcharr.seerr",
 		},
 		func(p *arrclient.GoenvoyProber) arrclient.Resolver { return p },
 	),
-	// The sync runs on the leader only (internal/leaderx).
-	fx.Provide(leaderx.Provide[*Ticker]()),
+	// The sync runs on the leader only (leader/gate).
+	fx.Provide(gate.Provide[*Ticker]()),
 )

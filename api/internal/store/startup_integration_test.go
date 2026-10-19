@@ -18,7 +18,7 @@ import (
 )
 
 // On an empty database the schema exists before any store user starts (#124). The graph
-// mirrors the app: a child module appends a start hook that reads a table (as leaderx does
+// mirrors the app: a child module appends a start hook that reads a table (as leader/gate does
 // for the leader loops), and the migrator is first asked for by a root invoke, which fx runs
 // after every child module's invokes.
 func TestStoreUsersStartAfterMigrations(t *testing.T) {

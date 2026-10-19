@@ -10,9 +10,9 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/clock"
+	"github.com/golusoris/golusoris/leader/gate"
 
 	"github.com/lusoris/SnatchArr/api/internal/events"
-	"github.com/lusoris/SnatchArr/api/internal/leaderx"
 	"github.com/lusoris/SnatchArr/api/internal/metrics"
 )
 
@@ -20,11 +20,11 @@ import (
 const SweepInterval = 10 * time.Minute
 
 // Ticker runs the queue sweep leader loop once per SweepInterval while this replica leads.
-type Ticker struct{ *leaderx.Periodic }
+type Ticker struct{ *gate.Periodic }
 
 // NewTicker builds the queue sweep leader loop.
 func NewTicker(svc *Service, clk clock.Clock, m *metrics.Metrics) *Ticker {
-	return &Ticker{leaderx.NewPeriodic("queue_sweep", SweepInterval, clk, m, svc.SweepAll)}
+	return &Ticker{gate.NewPeriodic("queue_sweep", SweepInterval, clk, m, svc.SweepAll)}
 }
 
 // Module provides the queue store, service and the periodic sweep ticker.
@@ -39,5 +39,5 @@ var Module = fx.Module("snatcharr.queue",
 		func(b *events.Bus) EventPublisher { return b },
 		func(m *metrics.Metrics) MetricsRecorder { return m },
 	),
-	fx.Provide(leaderx.Provide[*Ticker]()),
+	fx.Provide(gate.Provide[*Ticker]()),
 )

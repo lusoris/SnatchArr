@@ -17,13 +17,13 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/clock"
+	"github.com/golusoris/golusoris/leader/gate"
 
 	"github.com/lusoris/SnatchArr/api/internal/arrclient"
 	"github.com/lusoris/SnatchArr/api/internal/config"
 	"github.com/lusoris/SnatchArr/api/internal/dlclients"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
-	"github.com/lusoris/SnatchArr/api/internal/leaderx"
 	"github.com/lusoris/SnatchArr/api/internal/policies"
 	"github.com/lusoris/SnatchArr/api/internal/queue"
 )
@@ -417,6 +417,6 @@ func fileFingerprint(path string) string {
 // Module provides the service and runs linked mode for the process lifetime.
 var Module = fx.Module("snatcharr.configarr",
 	fx.Provide(New),
-	// The poll runs on the leader only (internal/leaderx).
-	fx.Provide(leaderx.Provide[*Service]()),
+	// The poll runs on the leader only (leader/gate).
+	fx.Provide(gate.Provide[*Service]()),
 )

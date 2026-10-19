@@ -100,7 +100,7 @@ func MapError(err error) error {
 // Module provides *Store from the golusoris pool, and only once the migrator exists: fx runs
 // start hooks in the order they were appended, so every store user (leader loops, gRPC,
 // HTTP handlers) appends its hook after the migrator's Up and starts on a migrated schema.
-// Without this, leaderx's child-module invoke started the loops before the root invoke
+// Without this, leader/gate's child-module invoke started the loops before the root invoke
 // built the migrator (#124).
 var Module = fx.Module("snatcharr.store", fx.Provide(newAfterMigrations))
 
