@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.5.0](https://github.com/lusoris/SnatchArr/compare/v0.4.2...v0.5.0) (2026-10-19)
+
+
+### ⚠ BREAKING CHANGES
+
+* **metrics:** rename the instance label to arr_instance ([#455](https://github.com/lusoris/SnatchArr/issues/455))
+
+### Features
+
+* **configarr:** declarative snatch and queue policies from a file ([#458](https://github.com/lusoris/SnatchArr/issues/458)) ([15d0496](https://github.com/lusoris/SnatchArr/commit/15d0496f065c2fc81cdb87a2256fd90ca7a65d21))
+* **queue:** reason-based classification and rules ([#456](https://github.com/lusoris/SnatchArr/issues/456)) ([d175ae7](https://github.com/lusoris/SnatchArr/commit/d175ae76875390bde85266d24e570ecfbca97267))
+* **web:** adopt palette A and a semantic warning token ([#457](https://github.com/lusoris/SnatchArr/issues/457)) ([6e78588](https://github.com/lusoris/SnatchArr/commit/6e78588e3189d6240702660d7035f7e2b19c6c63))
+* **web:** grouped navigation shell, M3 brand mark, never-block layout ([#451](https://github.com/lusoris/SnatchArr/issues/451)) ([288d08f](https://github.com/lusoris/SnatchArr/commit/288d08f01f93dd496d2f2ce994c8c0609fecfdaa)), closes [#442](https://github.com/lusoris/SnatchArr/issues/442) [#443](https://github.com/lusoris/SnatchArr/issues/443) [#446](https://github.com/lusoris/SnatchArr/issues/446)
+* **web:** split instance detail into child-route subtabs ([#454](https://github.com/lusoris/SnatchArr/issues/454)) ([b9c5490](https://github.com/lusoris/SnatchArr/commit/b9c5490346e17872f4bbd521940cbd2340841bff)), closes [#444](https://github.com/lusoris/SnatchArr/issues/444) [#433](https://github.com/lusoris/SnatchArr/issues/433)
+
+
+### Bug Fixes
+
+* **metrics:** rename the instance label to arr_instance ([#455](https://github.com/lusoris/SnatchArr/issues/455)) ([5ced7db](https://github.com/lusoris/SnatchArr/commit/5ced7dbf69960de45800b78f4d066e686fe2c3ce))
+* **web:** keep every table inside the page at phone width ([#448](https://github.com/lusoris/SnatchArr/issues/448)) ([5749735](https://github.com/lusoris/SnatchArr/commit/5749735692ff39a74803f179c6c4b2e133806982))
+
+
+### Documentation
+
+* **adr:** record SnatchArr's own UI design and layout (ADR-0015) ([#450](https://github.com/lusoris/SnatchArr/issues/450)) ([798a985](https://github.com/lusoris/SnatchArr/commit/798a98508800aff76fb4cc0d051f38cc8400bc3c))
+
 ## [0.4.2](https://github.com/lusoris/SnatchArr/compare/v0.4.1...v0.4.2) (2026-10-19)
 
 
