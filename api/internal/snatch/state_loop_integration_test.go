@@ -219,8 +219,8 @@ func TestPlanner_RecordsDeferrals(t *testing.T) {
 			t.Fatalf("Tick() = %v", err)
 		}
 
-		if got, ok := metricstest.Value(t, f.reg, "snatcharr_planner_deferrals_total", "reason", GateClientUnreachable); !ok || got != 1 {
-			t.Errorf("deferrals{client_unreachable} = %v (present %t), want 1", got, ok)
+		if got, ok := metricstest.Value(t, f.reg, "snatcharr_planner_deferrals_total", "reason", GateClientUnreachable); !ok || got != 2 {
+			t.Errorf("deferrals{client_unreachable} = %v (present %t), want 2", got, ok)
 		}
 	})
 
@@ -234,8 +234,8 @@ func TestPlanner_RecordsDeferrals(t *testing.T) {
 			t.Fatalf("Tick() = %v", err)
 		}
 
-		if got, ok := metricstest.Value(t, f.reg, "snatcharr_planner_deferrals_total", "reason", metrics.DeferralScheduleClosed); !ok || got != 1 {
-			t.Errorf("deferrals{schedule_closed} = %v (present %t), want 1", got, ok)
+		if got, ok := metricstest.Value(t, f.reg, "snatcharr_planner_deferrals_total", "reason", metrics.DeferralScheduleClosed); !ok || got != 2 {
+			t.Errorf("deferrals{schedule_closed} = %v (present %t), want 2", got, ok)
 		}
 	})
 

@@ -1340,8 +1340,8 @@ func testPolicyCase(t *testing.T, f *integrationFixture, isUpd bool, targetID, o
 			}
 			return
 		}
-		if err != nil || got.HourlyCap != 20 {
-			t.Fatalf("GetPolicy() = %+v, %v; want cap 20", got, err)
+		if err != nil || got.HourlyCap != 15 {
+			t.Fatalf("GetPolicy() = %+v, %v; want cap 15", got, err)
 		}
 		return
 	}

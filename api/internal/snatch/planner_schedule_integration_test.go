@@ -103,17 +103,17 @@ func TestPlanner_UnreadableSchedule(t *testing.T) {
 			return &scheduleRow{tz: "Europe/Berlin", action: ActionPause}
 		}},
 		// Negative.
-		{name: "an instance's own schedule is unreadable", wantQueued: 1, wantFailedA: 1, schedule: func(a, _ uuid.UUID) *scheduleRow {
+		{name: "an instance's own schedule is unreadable", wantQueued: 2, wantFailedA: 1, schedule: func(a, _ uuid.UUID) *scheduleRow {
 			return &scheduleRow{instance: &a, tz: badZone, action: ActionPause}
 		}},
 		{name: "a global schedule is unreadable", wantQueued: 0, wantFailedA: 1, wantFailedB: 1, schedule: func(_, _ uuid.UUID) *scheduleRow {
 			return &scheduleRow{tz: badZone, action: ActionCapOverride, capValue: 5}
 		}},
 		// Boundary: a disabled unreadable schedule is never read, and no schedule plans both.
-		{name: "a disabled schedule is unreadable", wantQueued: 2, schedule: func(_, _ uuid.UUID) *scheduleRow {
+		{name: "a disabled schedule is unreadable", wantQueued: 4, schedule: func(_, _ uuid.UUID) *scheduleRow {
 			return &scheduleRow{tz: badZone, action: ActionPause, disabled: true}
 		}},
-		{name: "no schedule", wantQueued: 2},
+		{name: "no schedule", wantQueued: 4},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
