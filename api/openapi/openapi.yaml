@@ -2746,6 +2746,9 @@ components:
           format: date-time
         exhausted:
           type: boolean
+        exhausted_by:
+          type: string
+          enum: [query_limit, grab_limit, disabled]
 
     ConfigarrImportRequest:
       type: object
