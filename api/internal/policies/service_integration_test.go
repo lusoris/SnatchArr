@@ -52,8 +52,18 @@ func TestGetCreatesTheDefaultPolicy(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Get() = %v", err)
 		}
-		if want := domain.DefaultPolicy(f.instanceID); !reflect.DeepEqual(withoutStamp(got), want) {
+		want := domain.DefaultPolicy(f.instanceID)
+		if !reflect.DeepEqual(withoutStamp(got), want) {
 			t.Fatalf("Get() = %+v, want the defaults %+v", got, want)
+		}
+		if got.MissingPerCycle != want.MissingPerCycle || got.MissingPerCycle != 2 {
+			t.Fatalf("Get().MissingPerCycle = %d, want %d", got.MissingPerCycle, want.MissingPerCycle)
+		}
+		if got.UpgradePerCycle != want.UpgradePerCycle || got.UpgradePerCycle != 1 {
+			t.Fatalf("Get().UpgradePerCycle = %d, want %d", got.UpgradePerCycle, want.UpgradePerCycle)
+		}
+		if got.HourlyCap != want.HourlyCap || got.HourlyCap != 15 {
+			t.Fatalf("Get().HourlyCap = %d, want %d", got.HourlyCap, want.HourlyCap)
 		}
 	}
 }
@@ -140,6 +150,10 @@ func TestPolicyRefusals(t *testing.T) {
 		{"negative get of an unknown instance", func(ctx context.Context) error { _, err := f.svc.Get(ctx, uuid.New()); return err }, domain.ErrNotFound},
 		{"negative update of an unknown instance", update(uuid.New(), keep), domain.ErrNotFound},
 		{"boundary hourly cap one above the limit", update(f.instanceID, func(p *domain.Policy) { p.HourlyCap = 501 }), domain.ErrInvalid},
+		{"boundary missing per cycle one above limit", update(f.instanceID, func(p *domain.Policy) { p.MissingPerCycle = 101 }), domain.ErrInvalid},
+		{"boundary upgrade per cycle one above limit", update(f.instanceID, func(p *domain.Policy) { p.UpgradePerCycle = 101 }), domain.ErrInvalid},
+		{"negative missing per cycle below zero", update(f.instanceID, func(p *domain.Policy) { p.MissingPerCycle = -1 }), domain.ErrInvalid},
+		{"negative upgrade per cycle below zero", update(f.instanceID, func(p *domain.Policy) { p.UpgradePerCycle = -1 }), domain.ErrInvalid},
 		// The database has no upper bound on these two; only Validate refuses them.
 		{"boundary cycle interval one second above a week", update(f.instanceID, func(p *domain.Policy) { p.CycleInterval = 7*24*time.Hour + time.Second }), domain.ErrInvalid},
 		{"boundary queue size one above the limit", update(f.instanceID, func(p *domain.Policy) { p.MaxQueueSize = 100001 }), domain.ErrInvalid},

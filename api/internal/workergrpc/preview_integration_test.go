@@ -112,14 +112,14 @@ func TestAcquireBudgetDryRunQuotesWithoutDebit(t *testing.T) {
 	realRunID := leaseRun(t, f, false, 0)
 	realResp, err := f.srv.AcquireBudget(ctx, &snatcharrv1.AcquireBudgetRequest{
 		RunId:     realRunID,
-		Requested: 20,
+		Requested: 15,
 	})
-	if err != nil || realResp.GetGranted() != 20 {
-		t.Fatalf("real run AcquireBudget() = %v, granted=%d; want 20", err, realResp.GetGranted())
+	if err != nil || realResp.GetGranted() != 15 {
+		t.Fatalf("real run AcquireBudget() = %v, granted=%d; want 15", err, realResp.GetGranted())
 	}
 	usedAfterReal, _, _ := f.srv.budget.Used(ctx, f.instanceID)
-	if usedAfterReal != 20 {
-		t.Fatalf("budget Used() after real run = %d, want 20", usedAfterReal)
+	if usedAfterReal != 15 {
+		t.Fatalf("budget Used() after real run = %d, want 15", usedAfterReal)
 	}
 
 	testDryRunAtCapBoundary(t, f, realRunID)
@@ -154,8 +154,8 @@ func testDryRunAtCapBoundary(t *testing.T, f previewFixture, previousRunID strin
 			dryCapResp.GetGranted(), dryCapResp.GetRemainingInWindow())
 	}
 	used, _, _ := f.srv.budget.Used(t.Context(), f.instanceID)
-	if used != 20 {
-		t.Fatalf("budget Used() after dry run at cap = %d, want 20", used)
+	if used != 15 {
+		t.Fatalf("budget Used() after dry run at cap = %d, want 15", used)
 	}
 }
 

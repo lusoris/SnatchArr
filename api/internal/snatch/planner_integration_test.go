@@ -183,15 +183,15 @@ func firstLines(logged string) string {
 func TestPlanner_Tick(t *testing.T) {
 	t.Parallel()
 	cases := []tickCase{
-		// Positive: an instance that never ran is due; the default policy snatches missing only.
-		{name: "due instances queue one run each", instances: 2, gate: AllowAll{}, want: 2},
+		// Positive: an instance that never ran is due; with ADR-0020 defaults, both missing and upgrade are queued.
+		{name: "due instances queue runs each", instances: 2, gate: AllowAll{}, want: 4},
 		// Negative.
 		{name: "a gate refuses", instances: 2, gate: refuse{}, want: 0},
 		{name: "a pause window covers now", instances: 2, gate: AllowAll{}, paused: true, want: 0},
 		{name: "the store fails", instances: 2, gate: AllowAll{}, cancelled: true, want: 0, wantErr: context.Canceled},
 		// Boundary.
 		{name: "no instance", gate: AllowAll{}, want: 0},
-		{name: "exactly the bound", instances: MaxInstancesPerTick, gate: AllowAll{}, want: MaxInstancesPerTick},
+		{name: "exactly the bound", instances: MaxInstancesPerTick, gate: AllowAll{}, want: 2 * MaxInstancesPerTick},
 		// More than the bound: TestPlanner_TickPastTheBoundPlansTheRestNext.
 	}
 	for _, tc := range cases {
@@ -245,7 +245,7 @@ func TestNewTicker_RecordsTheLastSuccess(t *testing.T) {
 	metricstest.Await(t, f.reg, "snatcharr_loop_last_success_timestamp_seconds", "loop", "snatch_planner",
 		float64(f.clk.Now().UnixNano())/float64(time.Second))
 	metricstest.Await(t, f.reg, "snatcharr_loop_failures_total", "loop", "snatch_planner", 0)
-	metricstest.Await(t, f.reg, runsQueued, "", "", 1)
+	metricstest.Await(t, f.reg, runsQueued, "", "", 2)
 }
 
 // Negative: a planner tick that cannot list the instances counts as a failed tick.
@@ -287,8 +287,8 @@ func TestPlanner_ClientNamedCapsulePausedUnreachableRecordsClientUnreachable(t *
 		t.Fatalf("Tick() = %v", err)
 	}
 
-	if got, ok := metricstest.Value(t, f.reg, "snatcharr_planner_deferrals_total", "reason", GateClientUnreachable); !ok || got != 1 {
-		t.Errorf("deferrals{client_unreachable} = %v (present %t), want 1", got, ok)
+	if got, ok := metricstest.Value(t, f.reg, "snatcharr_planner_deferrals_total", "reason", GateClientUnreachable); !ok || got != 2 {
+		t.Errorf("deferrals{client_unreachable} = %v (present %t), want 2", got, ok)
 	}
 }
 
@@ -308,20 +308,31 @@ func TestPlanner_DryRunPolicyCreatesDryRunRun(t *testing.T) {
 	}
 
 	queued, err := f.planner.Tick(ctx)
-	if err != nil || queued != 1 {
-		t.Fatalf("Tick() = %d, %v; want 1 queued", queued, err)
+	if err != nil || queued != 2 {
+		t.Fatalf("Tick() = %d, %v; want 2 queued", queued, err)
 	}
 
-	var dryRun bool
-	var seed int64
-	row := f.st.Pool().QueryRow(ctx, `SELECT dry_run, seed FROM snatch_runs WHERE instance_id = $1`, instanceID)
-	if err := row.Scan(&dryRun, &seed); err != nil {
+	rows, err := f.st.Pool().Query(ctx, `SELECT dry_run, seed FROM snatch_runs WHERE instance_id = $1`, instanceID)
+	if err != nil {
 		t.Fatalf("query snatch_runs: %v", err)
 	}
-	if !dryRun {
-		t.Errorf("queued run dry_run = %v, want true", dryRun)
+	defer rows.Close()
+	count := 0
+	for rows.Next() {
+		count++
+		var dryRun bool
+		var seed int64
+		if err := rows.Scan(&dryRun, &seed); err != nil {
+			t.Fatalf("scan snatch_runs: %v", err)
+		}
+		if !dryRun {
+			t.Errorf("queued run dry_run = %v, want true", dryRun)
+		}
+		if seed != 0 {
+			t.Errorf("queued run seed = %d, want 0", seed)
+		}
 	}
-	if seed != 0 {
-		t.Errorf("queued run seed = %d, want 0", seed)
+	if count != 2 {
+		t.Fatalf("found %d runs, want 2", count)
 	}
 }

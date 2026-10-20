@@ -26,8 +26,8 @@ const (
 // AllSelections lists every selection strategy.
 var AllSelections = []Selection{SelectionRandom, SelectionSequential, SelectionRecent}
 
-// Policy is the per-instance snatch policy. Defaults mirror newtarr's gentle defaults:
-// one missing item per cycle, no upgrades, 15 minutes between cycles, 20 items per hour.
+// Policy is the per-instance snatch policy. Defaults follow balanced defaults (ADR-0020):
+// two missing items per cycle, one upgrade, 15 minutes between cycles, 15 items per hour.
 type Policy struct {
 	InstanceID         uuid.UUID
 	MissingPerCycle    int
@@ -66,14 +66,14 @@ type Policy struct {
 	UpdatedAt             time.Time
 }
 
-// DefaultPolicy returns the gentle defaults for a new instance.
+// DefaultPolicy returns the balanced defaults, ADR-0020, for a new instance.
 func DefaultPolicy(instanceID uuid.UUID) Policy {
 	return Policy{
 		InstanceID:             instanceID,
-		MissingPerCycle:        1,
-		UpgradePerCycle:        0,
+		MissingPerCycle:        2,
+		UpgradePerCycle:        1,
 		CycleInterval:          15 * time.Minute,
-		HourlyCap:              20,
+		HourlyCap:              15,
 		Selection:              SelectionRandom,
 		MonitoredOnly:          true,
 		SkipFutureReleases:     true,

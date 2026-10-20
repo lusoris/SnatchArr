@@ -74,10 +74,10 @@ Every instance has one policy (`GET/PUT /api/v1/instances/{id}/policy`).
 
 | Field | Default | Range |
 | --- | --- | --- |
-| `missing_per_cycle` | 1 | 0 to 100 (0 disables) |
-| `upgrade_per_cycle` | 0 | 0 to 100 |
+| `missing_per_cycle` | 2 | 0 to 100 (0 disables; [ADR-0020](adr/0020-snatch-policy-defaults-and-presets.md)) |
+| `upgrade_per_cycle` | 1 | 0 to 100 ([ADR-0020](adr/0020-snatch-policy-defaults-and-presets.md)) |
 | `cycle_interval_s` | 900 | at least 60 |
-| `hourly_cap` (stamina) | 20 | 1 to 500 |
+| `hourly_cap` (stamina) | 15 | 1 to 500 ([ADR-0020](adr/0020-snatch-policy-defaults-and-presets.md)) |
 | `selection` | `random` | `random`, `sequential`, `recent` |
 | `monitored_only` | true | |
 | `skip_future_releases` | true | |

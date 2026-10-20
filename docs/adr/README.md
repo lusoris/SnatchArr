@@ -23,3 +23,4 @@ This directory documents key architectural decisions following the HISS-14 immut
 | [0015](0015-ui-design-system-and-layout.md) | 2026-10-19 | SnatchArr's own UI: palette A, the M3 mark, a task-flow navigation and a UI that never blocks | Accepted; mark superseded by 0017 |
 | [0016](0016-ui-layout-and-page-redo.md) | 2026-10-20 | Modern operations layout: collapsible navigation, unified page headers, mobile bottom bar and dialog sheets | Accepted |
 | [0017](0017-anatomical-brand-mark.md) | 2026-10-20 | An anatomical vulva mark replaces the M3 vesica | Accepted |
+| [0020](0020-snatch-policy-defaults-and-presets.md) | 2026-10-20 | Snatch policy defaults and presets | Proposed |

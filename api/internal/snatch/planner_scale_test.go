@@ -49,8 +49,8 @@ func timeTick(t *testing.T, gate Gate, instances int) time.Duration {
 	start := time.Now()
 	queued, err := f.planner.Tick(t.Context())
 	elapsed := time.Since(start)
-	if err != nil || queued != instances {
-		t.Fatalf("Tick() = %d, %v, want %d, <nil>", queued, err, instances)
+	if err != nil || queued != 2*instances {
+		t.Fatalf("Tick() = %d, %v, want %d, <nil>", queued, err, 2*instances)
 	}
 	return elapsed
 }
