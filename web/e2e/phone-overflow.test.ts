@@ -244,3 +244,35 @@ test('authenticated: phone overflow /instances/[id]', async ({ page }) => {
 
 	await assertNoHorizontalOverflow(page, `/instances/${instanceId}/activity`);
 });
+
+test('authenticated: no control under bottom bar at 390px', async ({ page }) => {
+	await page.goto('/settings');
+	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+
+	const bottomBar = page
+		.locator('nav')
+		.filter({ has: page.getByRole('button', { name: /More|Mehr/i }) });
+	await expect(bottomBar).toBeVisible();
+	const bottomBarBox = await bottomBar.boundingBox();
+	expect(bottomBarBox).toBeTruthy();
+
+	// Scroll to bottom
+	await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+
+	const controls = page.locator('#main button, #main a, #main input, #main select');
+	const count = await controls.count();
+	expect(count).toBeGreaterThan(0);
+
+	for (let i = 0; i < count; i++) {
+		const control = controls.nth(i);
+		if (await control.isVisible()) {
+			const box = await control.boundingBox();
+			if (box && bottomBarBox && box.y >= 0 && box.y < 844) {
+				expect(
+					box.y + box.height,
+					`Control at index ${i} is obscured by bottom bar: bottom edge (${box.y + box.height}) > bar top (${bottomBarBox.y})`
+				).toBeLessThanOrEqual(bottomBarBox.y + 1);
+			}
+		}
+	}
+});

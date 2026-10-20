@@ -13,6 +13,8 @@ SPDX-License-Identifier: EUPL-1.2
 	import { onMount } from 'svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import { getNavGroups } from '#lib/components/shell/nav.js';
+	import BottomBar from '#lib/components/shell/BottomBar.svelte';
+	import CommandDialog from '#lib/components/shell/CommandDialog.svelte';
 	import NavDrawer from '#lib/components/shell/NavDrawer.svelte';
 	import Sidebar from '#lib/components/shell/Sidebar.svelte';
 	import TopBar from '#lib/components/shell/TopBar.svelte';
@@ -30,16 +32,24 @@ SPDX-License-Identifier: EUPL-1.2
 	const isPublic = $derived(publicRoutes.has(page.url.pathname));
 
 	let drawerOpen = $state(false);
+	let cmdOpen = $state(false);
 	let menuButtonEl = $state<HTMLButtonElement | null>(null);
 
 	const navGroups = $derived(getNavGroups(session.isAdmin));
 
-	function openDrawer(): void {
+	function openDrawer(opener?: HTMLButtonElement): void {
+		if (opener) {
+			menuButtonEl = opener;
+		}
 		drawerOpen = true;
 	}
 
 	function closeDrawer(): void {
 		drawerOpen = false;
+	}
+
+	function openSearch(): void {
+		cmdOpen = true;
 	}
 
 	async function checkSession(): Promise<void> {
@@ -86,9 +96,9 @@ SPDX-License-Identifier: EUPL-1.2
 		</main>
 	{:else}
 		<div class="min-h-screen bg-bg text-fg">
-			<TopBar {drawerOpen} onOpenDrawer={openDrawer} bind:menuButtonEl />
+			<TopBar {drawerOpen} onOpenDrawer={openDrawer} onOpenSearch={openSearch} bind:menuButtonEl />
 
-			<Sidebar {navGroups} onLogout={logout} />
+			<Sidebar {navGroups} onLogout={logout} onOpenSearch={openSearch} />
 
 			<NavDrawer
 				open={drawerOpen}
@@ -98,7 +108,15 @@ SPDX-License-Identifier: EUPL-1.2
 				{menuButtonEl}
 			/>
 
-			<main id="main" class="min-h-screen p-4 md:p-6 lg:pl-[16.5rem]" tabindex="-1">
+			<BottomBar onOpenDrawer={openDrawer} />
+
+			<CommandDialog {navGroups} bind:open={cmdOpen} />
+
+			<main
+				id="main"
+				class="min-h-screen p-4 pb-[calc(4rem+env(safe-area-inset-bottom,0px))] md:p-6 md:pb-6 lg:pl-[16.5rem]"
+				tabindex="-1"
+			>
 				<div class="mx-auto max-w-[80rem]">
 					<svelte:boundary>
 						{#if session.state === 'unknown'}

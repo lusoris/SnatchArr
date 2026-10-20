@@ -3,8 +3,9 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 import { createLucideLoader } from '@sveltesentio/ui/icons';
-import CloudDownload from '@lucide/svelte/icons/cloud-download';
 import Clock from '@lucide/svelte/icons/clock';
+import CloudDownload from '@lucide/svelte/icons/cloud-download';
+import Ellipsis from '@lucide/svelte/icons/ellipsis';
 import FileCode from '@lucide/svelte/icons/file-code';
 import Film from '@lucide/svelte/icons/film';
 import History from '@lucide/svelte/icons/history';
@@ -26,8 +27,9 @@ import X from '@lucide/svelte/icons/x';
  * icons never load in production.
  */
 export const shellIconLoader = createLucideLoader({
-	CloudDownload,
 	Clock,
+	CloudDownload,
+	Ellipsis,
 	FileCode,
 	Film,
 	History,
@@ -44,4 +46,4 @@ export const shellIconLoader = createLucideLoader({
 });
 
 /** Icon names the shell renders outside the nav groups. */
-export const shellChromeIcons = ['menu', 'x', 'user', 'log-out'] as const;
+export const shellChromeIcons = ['menu', 'x', 'user', 'log-out', 'search', 'ellipsis'] as const;

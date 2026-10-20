@@ -29,6 +29,10 @@
 
 :root {
 	color-scheme: light;
+	--ssentio-cmd-bg: var(--color-surface);
+	--ssentio-cmd-fg: var(--color-fg);
+	--ui-accent: var(--color-secondary);
+	--ui-border: var(--color-line);
 }
 .dark {
 	color-scheme: dark;
