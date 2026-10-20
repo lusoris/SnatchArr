@@ -164,7 +164,9 @@ Point `APP_SNATCHARR_CONFIGARR_CONFIG` (and `_SECRETS`) at your Configarr files 
 imported on start and kept in sync: the files are polled every 30 seconds (inotify misses Kubernetes ConfigMap
 swaps, polling does not). Only `base_url`, `api_key` and the `enabled` flags are read;
 `!secret`, `!env` and `!file` values are resolved like Configarr does. Whisparr entries are
-probed to tell v2 from v3. An instance that disappears from the file is switched off, not
+probed to tell v2 from v3: the reported major version decides (2.x is Whisparr v2, 3.x is Whisparr v3). A probe
+that fails keeps the kind already stored, with a warning; a Whisparr entry that was never imported, or one that
+reports another major version, is not imported and the import result names why. An instance that disappears from the file is switched off, not
 deleted. Imported instances are read-only in SnatchArr except for their snatch policy. Deleting
 one that the file still declares, enabled or not, is refused with 403; once it is gone from the
 file and switched off, it can be deleted.
