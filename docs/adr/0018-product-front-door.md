@@ -20,7 +20,7 @@ Under this product redefinition, ADR-0011 is superseded. Feature work beyond pul
 
 ## Decision
 
-SnatchArr (pronounced `/ˈsnætʃ.ɑːr/`: every search is a snatch, *-arr* is the \*arr family suffix, and the name is a deliberate pun ("the name means what you think it means" in [README.md](../../README.md))) is defined as the front door of the media stack (`snatcharr-product-job-20261020`). It provides a single application to view and steer what is missing, requested, and downloading, manage the adult media library and image sets, and expose structured LLM access (`snatcharr-product-job-20261020`).
+SnatchArr (pronounced `/ˈsnætʃ.ɑːr/`: every search is a snatch, *-arr* is the \*arr family suffix, and the name is a deliberate pun ("the name means what you think it means" in [README.md](https://github.com/lusoris/SnatchArr/blob/main/README.md))) is defined as the front door of the media stack (`snatcharr-product-job-20261020`). It provides a single application to view and steer what is missing, requested, and downloading, manage the adult media library and image sets, and expose structured LLM access (`snatcharr-product-job-20261020`).
 
 The underlying *arr applications (Sonarr, Radarr, Lidarr, Whisparr, Readarr) remain the specialized backend engines (`snatcharr-product-job-20261020`). Where an existing application already performs a specific domain task, SnatchArr connects to that deployed application and adds only the missing functional capabilities, never re-implementing existing working software (`snatcharr-product-overlap-20261020`, `snatcharr-product-seerr-20261020`, `snatcharr-product-more-media-20261020`).
 
