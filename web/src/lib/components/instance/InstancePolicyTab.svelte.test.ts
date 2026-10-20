@@ -167,4 +167,74 @@ describe('InstancePolicyTab', () => {
 		await screen.findByRole('checkbox', { name: m.policy_dry_run() });
 		expect(screen.queryByRole('checkbox', { name: m.policy_skip_unavailable() })).toBeNull();
 	});
+
+	it('fills draft from a chosen preset without saving until save button is clicked', async () => {
+		const put = vi.spyOn(api, 'PUT').mockResolvedValue({ data: samplePolicy } as never);
+		stubGet({
+			'/instances/{instanceId}': forkInstance,
+			'/instances/{instanceId}/policy': samplePolicy,
+			'/instances/{instanceId}/policy/filter-options': sampleFilterOptions
+		});
+		renderWithQuery(InstancePolicyTab, { id: forkInstance.id });
+
+		const gentleBtn = await screen.findByRole('button', {
+			name: new RegExp(m.preset_gentle_label())
+		});
+		await fireEvent.click(gentleBtn);
+
+		// Before clicking save, PUT has not been called
+		expect(put).not.toHaveBeenCalled();
+
+		// Check that form input reflects preset: missing=1
+		const missingInput = screen.getByLabelText(m.policy_missing_per_cycle()) as HTMLInputElement;
+		expect(missingInput.value).toBe('1');
+
+		await fireEvent.click(savePolicyButton());
+		expect(put).toHaveBeenCalledOnce();
+		const body = (put.mock.calls[0]![1] as { body: SnatchPolicy }).body;
+		expect(body.missing_per_cycle).toBe(1);
+		expect(body.upgrade_per_cycle).toBe(0);
+		expect(body.cycle_interval_s).toBe(900);
+		expect(body.hourly_cap).toBe(4);
+	});
+
+	it('shows app-specific options for Sonarr and Lidarr and saves them', async () => {
+		const sonarrInstance = { ...forkInstance, id: 'sonarr-1', kind: 'sonarr' as const };
+		const put = vi.spyOn(api, 'PUT').mockResolvedValue({ data: samplePolicy } as never);
+		stubGet({
+			'/instances/{instanceId}': sonarrInstance,
+			'/instances/{instanceId}/policy': samplePolicy,
+			'/instances/{instanceId}/policy/filter-options': sampleFilterOptions
+		});
+		const { unmount } = renderWithQuery(InstancePolicyTab, { id: sonarrInstance.id });
+
+		const missingSelect = (await screen.findByLabelText(
+			m.policy_sonarr_missing_mode()
+		)) as HTMLSelectElement;
+		await fireEvent.change(missingSelect, { target: { value: 'shows' } });
+		await fireEvent.click(savePolicyButton());
+
+		expect(put).toHaveBeenCalledOnce();
+		const sonarrBody = (put.mock.calls[0]![1] as { body: SnatchPolicy }).body;
+		expect(sonarrBody.sonarr_missing_mode).toBe('shows');
+		unmount();
+
+		const lidarrInstance = { ...forkInstance, id: 'lidarr-1', kind: 'lidarr' as const };
+		stubGet({
+			'/instances/{instanceId}': lidarrInstance,
+			'/instances/{instanceId}/policy': samplePolicy,
+			'/instances/{instanceId}/policy/filter-options': sampleFilterOptions
+		});
+		renderWithQuery(InstancePolicyTab, { id: lidarrInstance.id });
+
+		const lidarrSelect = (await screen.findByLabelText(
+			m.policy_lidarr_missing_mode()
+		)) as HTMLSelectElement;
+		await fireEvent.change(lidarrSelect, { target: { value: 'album' } });
+		await fireEvent.click(savePolicyButton());
+
+		expect(put).toHaveBeenCalledTimes(2);
+		const lidarrBody = (put.mock.calls[1]![1] as { body: SnatchPolicy }).body;
+		expect(lidarrBody.lidarr_missing_mode).toBe('album');
+	});
 });

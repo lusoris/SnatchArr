@@ -5,9 +5,66 @@
 // Signed-in admin over an empty fleet: the API state the mocked e2e suites share.
 import type { Page } from '@playwright/test';
 
-function json(body: unknown): { status: number; contentType: string; body: string } {
-	return { status: 200, contentType: 'application/json', body: JSON.stringify(body) };
+export function json(
+	body: unknown,
+	status = 200
+): { status: number; contentType: string; body: string } {
+	return { status, contentType: 'application/json', body: JSON.stringify(body) };
 }
+
+export function problemJson(
+	status: number,
+	detail: string,
+	title = 'Error'
+): {
+	status: number;
+	contentType: string;
+	body: string;
+} {
+	return {
+		status,
+		contentType: 'application/problem+json',
+		body: JSON.stringify({
+			type: 'https://tools.ietf.org/html/rfc9457',
+			title,
+			status,
+			detail
+		})
+	};
+}
+
+export const samplePolicyData = {
+	missing_per_cycle: 10,
+	upgrade_per_cycle: 5,
+	cycle_interval_s: 300,
+	hourly_cap: 50,
+	selection: 'recent',
+	monitored_only: true,
+	skip_future_releases: true,
+	radarr_release_type: 'physical',
+	sonarr_missing_mode: 'episodes',
+	sonarr_upgrade_mode: 'episodes',
+	lidarr_missing_mode: 'album',
+	processed_ttl_h: 24,
+	max_queue_size: 100,
+	await_command: false,
+	page_size: 50,
+	recent_grab_window_h: 48,
+	afterglow_max_h: 168,
+	release_delay_h: 0,
+	skip_unavailable_movies: true,
+	dry_run: false,
+	include_tags: [],
+	exclude_tags: [],
+	include_quality_profiles: [],
+	exclude_quality_profiles: []
+};
+
+export const sampleSettingsData = {
+	history_retention_days: 30,
+	user_agent: 'SnatchArr/1.0',
+	global_hourly_cap: 100
+};
 
 export async function mockSignedInApi(page: Page): Promise<void> {
 	await page.route('**/api/v1/auth/setup/status', (route) =>
@@ -28,4 +85,96 @@ export async function mockSignedInApi(page: Page): Promise<void> {
 	for (const path of ['instances', 'hourly-caps', 'prowlarr/status']) {
 		await page.route(`**/api/v1/${path}`, (route) => route.fulfill(json([])));
 	}
+}
+
+export async function mockInstancePolicyApi(
+	page: Page,
+	instanceId: string,
+	options?: {
+		instanceKind?: 'sonarr' | 'radarr' | 'lidarr';
+		policy?: typeof samplePolicyData;
+		delayMs?: number;
+		status?: number;
+		saveDelayMs?: number;
+		saveStatus?: number;
+	}
+): Promise<void> {
+	await mockSignedInApi(page);
+	const kind = options?.instanceKind ?? 'sonarr';
+	await page.route(`**/api/v1/instances/${instanceId}`, (route) =>
+		route.fulfill(
+			json({
+				id: instanceId,
+				name: `${kind} Instance`,
+				kind,
+				base_url: `http://${kind}.local:8989`,
+				source: 'manual',
+				enabled: true,
+				created_at: '2026-01-01T00:00:00Z',
+				updated_at: '2026-01-01T00:00:00Z'
+			})
+		)
+	);
+	await page.route(`**/api/v1/instances/${instanceId}/policy`, async (route) => {
+		if (route.request().method() === 'PUT') {
+			if (options?.saveDelayMs) {
+				await new Promise((r) => setTimeout(r, options.saveDelayMs));
+			}
+			if (options?.saveStatus && options.saveStatus >= 400) {
+				await route.fulfill(problemJson(options.saveStatus, 'Policy save failure'));
+				return;
+			}
+			const body = route.request().postDataJSON();
+			await route.fulfill(json(body ?? options?.policy ?? samplePolicyData));
+			return;
+		}
+		if (options?.delayMs) {
+			await new Promise((r) => setTimeout(r, options.delayMs));
+		}
+		if (options?.status && options.status >= 400) {
+			await route.fulfill(problemJson(options.status, 'Policy service failure'));
+			return;
+		}
+		await route.fulfill(json(options?.policy ?? samplePolicyData));
+	});
+	await page.route(`**/api/v1/instances/${instanceId}/policy/filter-options`, (route) =>
+		route.fulfill(json({ tags: [], quality_profiles: [] }))
+	);
+}
+
+export async function mockSettingsApi(
+	page: Page,
+	options?: {
+		settings?: typeof sampleSettingsData;
+		delayMs?: number;
+		status?: number;
+		saveDelayMs?: number;
+		saveStatus?: number;
+	}
+): Promise<void> {
+	await mockSignedInApi(page);
+	await page.route('**/api/v1/settings', async (route) => {
+		if (route.request().method() === 'PUT') {
+			if (options?.saveDelayMs) {
+				await new Promise((r) => setTimeout(r, options.saveDelayMs));
+			}
+			if (options?.saveStatus && options.saveStatus >= 400) {
+				await route.fulfill(problemJson(options.saveStatus, 'Settings save failure'));
+				return;
+			}
+			const body = route.request().postDataJSON();
+			await route.fulfill(json(body ?? options?.settings ?? sampleSettingsData));
+			return;
+		}
+		if (options?.delayMs) {
+			await new Promise((r) => setTimeout(r, options.delayMs));
+		}
+		if (options?.status && options.status >= 400) {
+			await route.fulfill(problemJson(options.status, 'Settings service failure'));
+			return;
+		}
+		await route.fulfill(json(options?.settings ?? sampleSettingsData));
+	});
+	await page.route('**/api/v1/notifications/channels', (route) => route.fulfill(json([])));
+	await page.route('**/api/v1/notifications/rules', (route) => route.fulfill(json([])));
 }
