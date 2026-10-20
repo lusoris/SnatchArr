@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -49,6 +50,9 @@ type DiscoveryResult struct {
 
 // SnapshotTTL is how long an observation is reused before the client is asked again.
 const SnapshotTTL = 20 * time.Second
+
+// maxConcurrentObserve bounds parallel client observations.
+const maxConcurrentObserve = 8
 
 // unchangedSecret marks "keep the stored secret" on update.
 const unchangedSecret = "<unchanged>"
@@ -202,11 +206,7 @@ func (s *Service) Status(ctx context.Context) ([]Snapshot, error) {
 	if err != nil {
 		return nil, fmt.Errorf("dlclients: status: %w", store.MapError(err))
 	}
-	out := make([]Snapshot, 0, len(rows))
-	for _, row := range rows {
-		out = append(out, s.cachedObserve(ctx, row))
-	}
-	return out, nil
+	return s.observeAll(ctx, rows), nil
 }
 
 // Verdict evaluates backpressure for one instance over its own and the global clients.
@@ -215,13 +215,32 @@ func (s *Service) Verdict(ctx context.Context, instanceID uuid.UUID) (Verdict, e
 	if err != nil {
 		return Verdict{}, fmt.Errorf("dlclients: verdict: %w", store.MapError(err))
 	}
+	snapsList := s.observeAll(ctx, rows)
 	clients := make([]domain.DownloadClient, 0, len(rows))
 	snaps := make(map[uuid.UUID]Snapshot, len(rows))
-	for _, row := range rows {
+	for i, row := range rows {
 		clients = append(clients, store.DownloadClientFromRow(row))
-		snaps[row.ID] = s.cachedObserve(ctx, row)
+		snaps[row.ID] = snapsList[i]
 	}
 	return Evaluate(clients, snaps), nil
+}
+
+// observeAll observes rows concurrently, at most maxConcurrentObserve at a time, so N slow
+// clients cost about ceil(N/maxConcurrentObserve) observation timeouts instead of N. The
+// snapshots come back in row order.
+func (s *Service) observeAll(ctx context.Context, rows []sqlcgen.DownloadClient) []Snapshot {
+	out := make([]Snapshot, len(rows))
+	sem := make(chan struct{}, maxConcurrentObserve)
+	var wg sync.WaitGroup
+	for i, row := range rows {
+		sem <- struct{}{}
+		wg.Go(func() {
+			defer func() { <-sem }()
+			out[i] = s.cachedObserve(ctx, row)
+		})
+	}
+	wg.Wait()
+	return out
 }
 
 // PaceFactor is the bandwidth share a leased run may use (workergrpc.Pacer).
