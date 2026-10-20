@@ -52,7 +52,7 @@ const StreamPath = PathPrefix + "/events/stream"
 // MountStream serves the event stream behind the session or API-key check of the
 // OpenAPI operations.
 func MountStream(r chi.Router, p MountParams, stream http.Handler) error {
-	h, err := KeepAlive(stream, p.Clock, StreamKeepAliveInterval)
+	h, err := KeepAlive(stream, p.Clock, StreamKeepAliveInterval, p.Logger)
 	if err != nil {
 		return fmt.Errorf("httpapi: mount event stream: %w", err)
 	}
@@ -66,7 +66,7 @@ const LogStreamPath = PathPrefix + "/logs/stream"
 // MountLogStream serves the log tail to administrators only: the session or API-key
 // check of MountStream, then the admin check of listLogs.
 func MountLogStream(r chi.Router, p MountParams, stream http.Handler) error {
-	h, err := KeepAlive(stream, p.Clock, StreamKeepAliveInterval)
+	h, err := KeepAlive(stream, p.Clock, StreamKeepAliveInterval, p.Logger)
 	if err != nil {
 		return fmt.Errorf("httpapi: mount log stream: %w", err)
 	}

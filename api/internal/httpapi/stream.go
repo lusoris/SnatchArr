@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
@@ -31,29 +32,40 @@ const (
 // flush and periodic heartbeat comments thereafter, preventing proxies that
 // buffer response headers until the first body byte from stalling the client.
 // The clock is the injected golusoris clock; a nil clock is a wiring error.
-func KeepAlive(next http.Handler, clk clock.Clock, every time.Duration) (http.Handler, error) {
+func KeepAlive(next http.Handler, clk clock.Clock, every time.Duration, logger *slog.Logger) (http.Handler, error) {
 	if clk == nil {
 		return nil, errNoStreamClock
 	}
 	if every <= 0 {
 		every = StreamKeepAliveInterval
 	}
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
 	return &keepAliveHandler{
-		next:  next,
-		clk:   clk,
-		every: every,
+		next:   next,
+		clk:    clk,
+		every:  every,
+		logger: logger,
 	}, nil
 }
 
 var errNoStreamClock = errors.New("httpapi: stream keep-alive needs a clock")
 
 type keepAliveHandler struct {
-	next  http.Handler
-	clk   clock.Clock
-	every time.Duration
+	next   http.Handler
+	clk    clock.Clock
+	every  time.Duration
+	logger *slog.Logger
 }
 
 func (k *keepAliveHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	// The server's WriteTimeout would cut a long-lived stream; clear it for
+	// this response only. A writer chain that cannot clear it is logged, since
+	// the stream would then end at the server's WriteTimeout.
+	if err := http.NewResponseController(w).SetWriteDeadline(time.Time{}); err != nil {
+		k.logger.WarnContext(req.Context(), "httpapi: clear stream write deadline", slog.String("error", err.Error()))
+	}
 	kw := &keepAliveWriter{
 		ResponseWriter: w,
 	}

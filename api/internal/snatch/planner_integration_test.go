@@ -5,10 +5,15 @@
 package snatch
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -63,6 +68,7 @@ type plannerFixture struct {
 	st      *store.Store
 	clk     *clockwork.FakeClock
 	planner *Planner
+	bus     *events.Bus
 	// logged is what the planner logged. Read it only while no tick runs.
 	logged *bytes.Buffer
 	// m and reg are the fixture's own metrics and the registry that holds them.
@@ -76,11 +82,12 @@ func newPlannerFixture(t *testing.T, gate Gate) plannerFixture {
 	clk := clock.NewFake()
 	logged := &bytes.Buffer{}
 	logger := slog.New(slog.NewTextHandler(logged, nil))
-	rec := NewRecorder(st, clk, events.New(logger))
+	bus := events.New(logger)
+	rec := NewRecorder(st, clk, bus)
 	m, reg := metricstest.New(t)
 	return plannerFixture{
 		st: st, clk: clk, planner: NewPlanner(st, clk, NewRuns(st, clk, id.New()), rec, logger, m, gate),
-		logged: logged, m: m, reg: reg,
+		bus: bus, logged: logged, m: m, reg: reg,
 	}
 }
 
@@ -335,4 +342,107 @@ func TestPlanner_DryRunPolicyCreatesDryRunRun(t *testing.T) {
 	if count != 2 {
 		t.Fatalf("found %d runs, want 2", count)
 	}
+}
+
+// TestPlannerQueuedRunSingleEventAndRow verifies that each planner-queued run
+// produces exactly one run_queued published frame and one stored row in
+// snatch_events, and that the frame carries the stored row id. One instance
+// queues one run per due kind (missing and upgrade), so one tick yields two.
+func TestPlannerQueuedRunSingleEventAndRow(t *testing.T) {
+	t.Parallel()
+	f := newPlannerFixture(t, AllowAll{})
+	instID := storetest.Instance(t, f.st, f.clk.Now())
+
+	srv := httptest.NewServer(f.bus.Hub().Handler())
+	t.Cleanup(srv.Close)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	t.Cleanup(cancel)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL, nil)
+	if err != nil {
+		t.Fatalf("NewRequestWithContext: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("client.Do: %v", err)
+	}
+	t.Cleanup(func() { _ = resp.Body.Close() })
+
+	for range 50 {
+		if f.bus.Hub().ClientCount() > 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	queued, err := f.planner.Tick(ctx)
+	if err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+	if queued != 2 {
+		t.Fatalf("queued = %d, want 2 (missing and upgrade)", queued)
+	}
+
+	// 1. One stored run_queued row per queued run.
+	assertQueued(t, f.st, queued)
+
+	// 2. Exactly one run_queued event frame published on the SSE stream
+	reader := bufio.NewReader(resp.Body)
+	var frameIDs []string
+	readDone := make(chan struct{})
+	go func() {
+		defer close(readDone)
+		lastID := ""
+		for range 1000 { // a 300 ms window carries far fewer lines
+			line, readErr := reader.ReadString('\n')
+			if readErr != nil {
+				return
+			}
+			line = strings.TrimSpace(line)
+			if id, ok := strings.CutPrefix(line, "id: "); ok {
+				lastID = id
+			}
+			if line == "event: run_queued" {
+				frameIDs = append(frameIDs, lastID)
+			}
+		}
+	}()
+
+	select {
+	case <-time.After(300 * time.Millisecond):
+		_ = resp.Body.Close()
+		<-readDone
+	case <-readDone:
+	}
+
+	rowIDs := storedEventIDs(t, f.st, "run_queued", instID)
+	slices.Sort(frameIDs)
+	if !slices.Equal(frameIDs, rowIDs) {
+		t.Fatalf("published run_queued frame ids %v, want the stored row ids %v", frameIDs, rowIDs)
+	}
+}
+
+// storedEventIDs returns the ids of the stored events of one type for one
+// instance, as decimal strings in ascending string order.
+func storedEventIDs(t *testing.T, st *store.Store, eventType string, instanceID uuid.UUID) []string {
+	t.Helper()
+	rows, err := st.Pool().Query(t.Context(), `SELECT id FROM snatch_events WHERE type = $1 AND instance_id = $2`, eventType, instanceID)
+	if err != nil {
+		t.Fatalf("query snatch_events ids: %v", err)
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			t.Fatalf("scan snatch_events id: %v", err)
+		}
+		ids = append(ids, strconv.FormatInt(id, 10))
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate snatch_events ids: %v", err)
+	}
+	slices.Sort(ids)
+	return ids
 }
