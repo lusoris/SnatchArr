@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -201,6 +202,9 @@ func (s *Service) upsertOneInstance(ctx context.Context, def Definition, res *Re
 	if warn != "" {
 		res.Warnings = append(res.Warnings, warn)
 	}
+	if kind == "" {
+		return "", nil
+	}
 	outcome, upErr := s.instances.UpsertConfigarr(ctx, def.Key, instances.Input{
 		Kind:    kind,
 		Name:    def.Name,
@@ -302,8 +306,8 @@ func (s *Service) upsertOneDownloadClient(ctx context.Context, def ClientDefinit
 }
 
 // kindFor maps a Configarr section to an instance kind. Whisparr v2 and v3 share a
-// section, so the instance is probed: a v3 answer wins, anything else keeps v2 (or the
-// kind already stored) with a warning when the probe failed.
+// section, so the instance is probed: major 3 -> Whisparr v3, major 2 -> Whisparr v2,
+// any other major or probe failure without stored kind is refused.
 func (s *Service) kindFor(ctx context.Context, def Definition) (domain.AppKind, string) {
 	switch def.App {
 	case "sonarr":
@@ -314,18 +318,33 @@ func (s *Service) kindFor(ctx context.Context, def Definition) (domain.AppKind, 
 		return domain.KindLidarr, ""
 	case "readarr":
 		return domain.KindReadarr, ""
+	case "whisparr":
+		return s.whisparrKind(ctx, def)
+	default:
+		return "", fmt.Sprintf("%s: unknown app %q; not imported", def.Key, def.App)
 	}
-	_, err := s.probe.Probe(ctx, domain.KindWhisparrV3, def.BaseURL, def.APIKey)
-	switch {
-	case err == nil:
+}
+
+func (s *Service) whisparrKind(ctx context.Context, def Definition) (domain.AppKind, string) {
+	res, err := s.probe.Probe(ctx, domain.KindWhisparrV3, def.BaseURL, def.APIKey)
+	major, _, _ := strings.Cut(res.Version, ".")
+	switch major {
+	case "3":
 		return domain.KindWhisparrV3, ""
-	case errors.Is(err, domain.ErrInvalid):
+	case "2":
 		return domain.KindWhisparrV2, ""
 	}
-	if existing, ok := s.instances.KindByConfigarrKey(ctx, def.Key); ok {
-		return existing, ""
+	if res.Version != "" {
+		return "", fmt.Sprintf("%s: Whisparr reports version %s, neither v2 nor v3; not imported", def.Key, res.Version)
 	}
-	return domain.KindWhisparrV2, fmt.Sprintf("%s: could not probe Whisparr to tell v2 from v3 (%v); assuming v2", def.Key, err)
+	probeErr := err
+	if probeErr == nil {
+		probeErr = errors.New("missing version")
+	}
+	if existing, ok := s.instances.KindByConfigarrKey(ctx, def.Key); ok {
+		return existing, fmt.Sprintf("%s: could not probe Whisparr to detect v2 or v3 (%v); keeping %s", def.Key, probeErr, existing)
+	}
+	return "", fmt.Sprintf("%s: could not probe Whisparr to detect v2 or v3 (%v); not imported", def.Key, probeErr)
 }
 
 // Start imports once and, when watching is on, polls the files for changes.
