@@ -59,6 +59,7 @@ type IndexerStatus struct {
 	UsedGrabs    int
 	DisabledTill *time.Time
 	Exhausted    bool
+	ExhaustedBy  string
 }
 
 // LinkStatus is one link's live view.
@@ -328,6 +329,23 @@ func (s *Service) buildIndexerStatuses(ctx context.Context, baseURL, apiKey stri
 	return out, nil
 }
 
+func isLimitExceeded(limit *int, used int, threshold float64) bool {
+	return limit != nil && *limit > 0 && float64(used) >= threshold*float64(*limit)
+}
+
+func determineExhaustion(idx prowlarrclient.Indexer, u prowlarrclient.Usage, disabledTill *time.Time, now time.Time, threshold float64) string {
+	switch {
+	case isLimitExceeded(idx.QueryLimit, u.Queries, threshold):
+		return "query_limit"
+	case isLimitExceeded(idx.GrabLimit, u.Grabs, threshold):
+		return "grab_limit"
+	case !idx.Enabled || (disabledTill != nil && disabledTill.After(now)):
+		return "disabled"
+	default:
+		return ""
+	}
+}
+
 func (s *Service) evalIndexerStatus(idx prowlarrclient.Indexer, statuses map[int]time.Time,
 	usageDay, usageHour map[int]prowlarrclient.Usage, now time.Time, threshold float64,
 ) IndexerStatus {
@@ -339,18 +357,7 @@ func (s *Service) evalIndexerStatus(idx prowlarrclient.Indexer, statuses map[int
 	if dt, ok := statuses[idx.ID]; ok && !dt.IsZero() {
 		disabledTill = &dt
 	}
-	exhausted := false
-	if idx.QueryLimit != nil && *idx.QueryLimit > 0 {
-		if float64(u.Queries) >= threshold*float64(*idx.QueryLimit) {
-			exhausted = true
-		}
-	}
-	if disabledTill != nil && disabledTill.After(now) {
-		exhausted = true
-	}
-	if !idx.Enabled {
-		exhausted = true
-	}
+	exhaustedBy := determineExhaustion(idx, u, disabledTill, now, threshold)
 	return IndexerStatus{
 		ID:           idx.ID,
 		Name:         idx.Name,
@@ -361,7 +368,8 @@ func (s *Service) evalIndexerStatus(idx prowlarrclient.Indexer, statuses map[int
 		UsedQueries:  u.Queries,
 		UsedGrabs:    u.Grabs,
 		DisabledTill: disabledTill,
-		Exhausted:    exhausted,
+		Exhausted:    exhaustedBy != "",
+		ExhaustedBy:  exhaustedBy,
 	}
 }
 
@@ -506,7 +514,8 @@ func matchIndexers(autoIndexers []arr.ProviderResource, links []sqlcgen.Prowlarr
 }
 
 func evalIndexerStamina(idx IndexerStatus, dead bool, allLimitedExhausted *bool, hasAliveUnlimited *bool) {
-	if idx.QueryLimit != nil && *idx.QueryLimit > 0 {
+	limited := (idx.QueryLimit != nil && *idx.QueryLimit > 0) || (idx.GrabLimit != nil && *idx.GrabLimit > 0)
+	if limited {
 		if !dead && !idx.Exhausted {
 			*allLimitedExhausted = false
 		}
@@ -520,6 +529,7 @@ func (s *Service) checkExhaustion(ctx context.Context, matched []matchedIndexer,
 	allLimitedExhaustedOrDead := true
 	hasAliveUnlimited := false
 	matchedKnownCount := 0
+	anyGrabExhausted := false
 
 	for _, m := range matched {
 		view := views[m.linkID]
@@ -532,12 +542,19 @@ func (s *Service) checkExhaustion(ctx context.Context, matched []matchedIndexer,
 			return true, snatch.GateRefusal{}, nil
 		}
 		matchedKnownCount++
+		if idx.Exhausted && idx.ExhaustedBy == "grab_limit" {
+			anyGrabExhausted = true
+		}
 		evalIndexerStamina(idx, isDead(idx, now), &allLimitedExhaustedOrDead, &hasAliveUnlimited)
 	}
 	if matchedKnownCount > 0 && allLimitedExhaustedOrDead && !hasAliveUnlimited {
+		msg := "all Prowlarr indexers exhausted"
+		if anyGrabExhausted {
+			msg = "all Prowlarr indexers exhausted (grab limit)"
+		}
 		return false, snatch.GateRefusal{
 			Code:    snatch.GateIndexerLimit,
-			Message: "all Prowlarr indexers exhausted",
+			Message: msg,
 		}, nil
 	}
 	return true, snatch.GateRefusal{}, nil

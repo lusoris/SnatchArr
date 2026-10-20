@@ -1661,6 +1661,8 @@ export interface components {
             /** Format: date-time */
             disabled_till?: string;
             exhausted: boolean;
+            /** @enum {string} */
+            exhausted_by?: "query_limit" | "grab_limit" | "disabled";
         };
         ConfigarrImportRequest: {
             /** @description Path to config.yml on the API host; omit to use the linked configuration */

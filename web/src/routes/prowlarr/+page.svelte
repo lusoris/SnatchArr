@@ -16,6 +16,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { probeMessage } from '#lib/products.js';
 	import { keys } from '#lib/query.js';
 	import { formatWhen } from '#lib/stamina.js';
+	import { evaluateLimit, isIndexerExhausted, isIndexerNearLimit } from '#lib/prowlarr.js';
 
 	type ProwlarrLink = components['schemas']['ProwlarrLink'];
 	type ProwlarrIndexerStatus = components['schemas']['ProwlarrIndexerStatus'];
@@ -77,19 +78,30 @@ SPDX-License-Identifier: EUPL-1.2
 		onError: (err) => toast.error(m.probe_failed({ detail: describeError(err) }))
 	});
 
-	function isExhausted(idx: ProwlarrIndexerStatus): boolean {
-		if (idx.exhausted) return true;
-		if (!idx.query_limit || idx.query_limit <= 0) return false;
-		return idx.used_queries >= idx.query_limit;
-	}
-
-	function isNearLimit(idx: ProwlarrIndexerStatus): boolean {
-		if (!idx.query_limit || idx.query_limit <= 0) return false;
-		return idx.used_queries / idx.query_limit >= 0.8;
+	function indexerReason(idx: ProwlarrIndexerStatus): string | undefined {
+		if (idx.exhausted_by === 'grab_limit') {
+			return m.prowlarr_exhausted_by_grab_limit();
+		}
+		if (idx.exhausted_by === 'query_limit') {
+			return m.prowlarr_exhausted_by_query_limit();
+		}
+		if (idx.exhausted_by === 'disabled') {
+			return m.prowlarr_exhausted_by_disabled();
+		}
+		const q = evaluateLimit(idx.used_queries, idx.query_limit);
+		const g = evaluateLimit(idx.used_grabs, idx.grab_limit);
+		if (q.level === 'exhausted') {
+			return m.prowlarr_exhausted_by_query_limit();
+		}
+		if (g.level === 'exhausted') {
+			return m.prowlarr_exhausted_by_grab_limit();
+		}
+		return undefined;
 	}
 
 	function indexerState(idx: ProwlarrIndexerStatus): {
 		label: string;
+		reason?: string;
 		level: 'ok' | 'near' | 'exhausted' | 'disabled';
 	} {
 		if (idx.disabled_till) {
@@ -100,10 +112,14 @@ SPDX-License-Identifier: EUPL-1.2
 				level: 'disabled'
 			};
 		}
-		if (isExhausted(idx)) {
-			return { label: m.prowlarr_state_exhausted(), level: 'exhausted' };
+		if (isIndexerExhausted(idx)) {
+			return {
+				label: m.prowlarr_state_exhausted(),
+				reason: indexerReason(idx),
+				level: 'exhausted'
+			};
 		}
-		if (isNearLimit(idx)) {
+		if (isIndexerNearLimit(idx)) {
 			return { label: m.prowlarr_state_near_limit(), level: 'near' };
 		}
 		return { label: m.prowlarr_state_ok(), level: 'ok' };
@@ -206,38 +222,56 @@ SPDX-License-Identifier: EUPL-1.2
 							<tr>
 								<th scope="col">{m.prowlarr_indexer_col()}</th>
 								<th scope="col">{m.prowlarr_queries_col()}</th>
-								<th scope="col">{m.prowlarr_percent_col()}</th>
+								<th scope="col">{m.prowlarr_grabs_col()}</th>
 								<th scope="col">{m.prowlarr_state_col()}</th>
 							</tr>
 						</thead>
 						<tbody>
 							{#each link.indexers as idx (idx.id)}
 								{@const st = indexerState(idx)}
-								{@const hasLimit = idx.query_limit !== undefined && idx.query_limit > 0}
+								{@const q = evaluateLimit(idx.used_queries, idx.query_limit)}
+								{@const g = evaluateLimit(idx.used_grabs, idx.grab_limit)}
+								{@const unit =
+									idx.limits_unit === 1 ? m.prowlarr_unit_hour() : m.prowlarr_unit_day()}
 								<tr>
 									<td class="font-medium">{idx.name}</td>
 									<td>
-										{#if hasLimit}
-											{idx.used_queries} / {idx.query_limit} ({idx.limits_unit === 1
-												? m.prowlarr_unit_hour()
-												: m.prowlarr_unit_day()})
+										{#if q.hasLimit}
+											<div class="flex items-baseline gap-2">
+												<span class="limit-{q.level}">
+													{idx.used_queries} / {idx.query_limit} ({unit})
+												</span>
+												<span class="limit-{q.level} text-xs">
+													{q.percent} %
+												</span>
+											</div>
 										{:else}
 											<span>{idx.used_queries}</span> / <span>{m.prowlarr_no_limit()}</span>
 										{/if}
 									</td>
 									<td>
-										{#if hasLimit}
-											{Math.round((idx.used_queries / (idx.query_limit ?? 1)) * 100)} %
+										{#if g.hasLimit}
+											<div class="flex items-baseline gap-2">
+												<span class="limit-{g.level}">
+													{idx.used_grabs} / {idx.grab_limit} ({unit})
+												</span>
+												<span class="limit-{g.level} text-xs">
+													{g.percent} %
+												</span>
+											</div>
 										{:else}
-											<span aria-hidden="true">–</span><span class="sr-only"
-												>{m.prowlarr_no_limit()}</span
-											>
+											<span>{idx.used_grabs}</span> / <span>{m.prowlarr_no_limit()}</span>
 										{/if}
 									</td>
 									<td>
-										<span class="chip chip-{st.level}">
-											{st.label}
-										</span>
+										<div class="flex flex-col items-start gap-1">
+											<span class="chip chip-{st.level}">
+												{st.label}
+											</span>
+											{#if st.reason}
+												<span class="text-xs text-subtle">{st.reason}</span>
+											{/if}
+										</div>
 									</td>
 								</tr>
 							{/each}
@@ -270,5 +304,12 @@ SPDX-License-Identifier: EUPL-1.2
 	}
 	.chip-disabled {
 		opacity: 0.75;
+	}
+	.limit-near {
+		color: var(--color-warning);
+	}
+	.limit-exhausted {
+		color: var(--color-danger);
+		font-weight: 600;
 	}
 </style>

@@ -6069,6 +6069,39 @@ func (s *OptNotificationChannelConfig) UnmarshalJSON(data []byte) error {
 	return s.Decode(d)
 }
 
+// Encode encodes ProwlarrIndexerStatusExhaustedBy as json.
+func (o OptProwlarrIndexerStatusExhaustedBy) Encode(e *jx.Encoder) {
+	if !o.Set {
+		return
+	}
+	e.Str(string(o.Value))
+}
+
+// Decode decodes ProwlarrIndexerStatusExhaustedBy from json.
+func (o *OptProwlarrIndexerStatusExhaustedBy) Decode(d *jx.Decoder) error {
+	if o == nil {
+		return errors.New("invalid: unable to decode OptProwlarrIndexerStatusExhaustedBy to nil")
+	}
+	o.Set = true
+	if err := o.Value.Decode(d); err != nil {
+		return err
+	}
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s OptProwlarrIndexerStatusExhaustedBy) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *OptProwlarrIndexerStatusExhaustedBy) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
 // Encode encodes QueueRuleSettings as json.
 func (o OptQueueRuleSettings) Encode(e *jx.Encoder) {
 	if !o.Set {
@@ -7198,9 +7231,15 @@ func (s *ProwlarrIndexerStatus) encodeFields(e *jx.Encoder) {
 		e.FieldStart("exhausted")
 		e.Bool(s.Exhausted)
 	}
+	{
+		if s.ExhaustedBy.Set {
+			e.FieldStart("exhausted_by")
+			s.ExhaustedBy.Encode(e)
+		}
+	}
 }
 
-var jsonFieldsNameOfProwlarrIndexerStatus = [9]string{
+var jsonFieldsNameOfProwlarrIndexerStatus = [10]string{
 	0: "id",
 	1: "name",
 	2: "query_limit",
@@ -7210,6 +7249,7 @@ var jsonFieldsNameOfProwlarrIndexerStatus = [9]string{
 	6: "used_grabs",
 	7: "disabled_till",
 	8: "exhausted",
+	9: "exhausted_by",
 }
 
 // Decode decodes ProwlarrIndexerStatus from json.
@@ -7323,6 +7363,16 @@ func (s *ProwlarrIndexerStatus) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"exhausted\"")
 			}
+		case "exhausted_by":
+			if err := func() error {
+				s.ExhaustedBy.Reset()
+				if err := s.ExhaustedBy.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"exhausted_by\"")
+			}
 		default:
 			return d.Skip()
 		}
@@ -7376,6 +7426,48 @@ func (s *ProwlarrIndexerStatus) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *ProwlarrIndexerStatus) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes ProwlarrIndexerStatusExhaustedBy as json.
+func (s ProwlarrIndexerStatusExhaustedBy) Encode(e *jx.Encoder) {
+	e.Str(string(s))
+}
+
+// Decode decodes ProwlarrIndexerStatusExhaustedBy from json.
+func (s *ProwlarrIndexerStatusExhaustedBy) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode ProwlarrIndexerStatusExhaustedBy to nil")
+	}
+	v, err := d.StrBytes()
+	if err != nil {
+		return err
+	}
+	// Try to use constant string.
+	switch ProwlarrIndexerStatusExhaustedBy(v) {
+	case ProwlarrIndexerStatusExhaustedByQueryLimit:
+		*s = ProwlarrIndexerStatusExhaustedByQueryLimit
+	case ProwlarrIndexerStatusExhaustedByGrabLimit:
+		*s = ProwlarrIndexerStatusExhaustedByGrabLimit
+	case ProwlarrIndexerStatusExhaustedByDisabled:
+		*s = ProwlarrIndexerStatusExhaustedByDisabled
+	default:
+		*s = ProwlarrIndexerStatusExhaustedBy(v)
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s ProwlarrIndexerStatusExhaustedBy) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *ProwlarrIndexerStatusExhaustedBy) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }
