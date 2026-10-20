@@ -69,7 +69,11 @@ func newStreamFixture(t *testing.T) streamFixture {
 	}
 	apiKeys := auth.NewAPIKeys(f.st, keys, f.clk, slog.New(slog.DiscardHandler))
 	r := chi.NewRouter()
-	p := MountParams{Logger: slog.New(slog.DiscardHandler), Security: NewSecurity(f.sessMgr, keys, f.h.auth, apiKeys, f.clk, slog.New(slog.DiscardHandler))}
+	p := MountParams{
+		Logger:   slog.New(slog.DiscardHandler),
+		Clock:    f.clk,
+		Security: NewSecurity(f.sessMgr, keys, f.h.auth, apiKeys, f.clk, slog.New(slog.DiscardHandler)),
+	}
 	stub := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := UserFrom(r.Context()); !ok {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -78,8 +82,12 @@ func newStreamFixture(t *testing.T) streamFixture {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 	})
-	MountStream(r, p, stub)
-	MountLogStream(r, p, stub)
+	if err := MountStream(r, p, stub); err != nil {
+		t.Fatalf("MountStream: %v", err)
+	}
+	if err := MountLogStream(r, p, stub); err != nil {
+		t.Fatalf("MountLogStream: %v", err)
+	}
 	return streamFixture{router: r, session: rec.Result().Cookies(), key: raw, viewerKey: viewerRaw}
 }
 

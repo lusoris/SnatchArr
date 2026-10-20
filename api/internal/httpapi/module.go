@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/fx"
 
+	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/httpx/middleware"
 
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
@@ -25,6 +26,7 @@ const PathPrefix = "/api/v1"
 type MountParams struct {
 	fx.In
 	Logger   *slog.Logger
+	Clock    clock.Clock
 	Handlers *Handlers
 	Security *Security
 	CSRF     middleware.Middleware
@@ -49,8 +51,13 @@ const StreamPath = PathPrefix + "/events/stream"
 
 // MountStream serves the event stream behind the session or API-key check of the
 // OpenAPI operations.
-func MountStream(r chi.Router, p MountParams, stream http.Handler) {
-	r.With(p.Security.RequireUser(p.Logger)).Handle(StreamPath, stream)
+func MountStream(r chi.Router, p MountParams, stream http.Handler) error {
+	h, err := KeepAlive(stream, p.Clock, StreamKeepAliveInterval)
+	if err != nil {
+		return fmt.Errorf("httpapi: mount event stream: %w", err)
+	}
+	r.With(p.Security.RequireUser(p.Logger)).Handle(StreamPath, h)
+	return nil
 }
 
 // LogStreamPath serves the live log tail. It lives outside the generated router.
@@ -58,8 +65,13 @@ const LogStreamPath = PathPrefix + "/logs/stream"
 
 // MountLogStream serves the log tail to administrators only: the session or API-key
 // check of MountStream, then the admin check of listLogs.
-func MountLogStream(r chi.Router, p MountParams, stream http.Handler) {
-	r.With(p.Security.RequireUser(p.Logger), adminOnly(p.Logger)).Handle(LogStreamPath, stream)
+func MountLogStream(r chi.Router, p MountParams, stream http.Handler) error {
+	h, err := KeepAlive(stream, p.Clock, StreamKeepAliveInterval)
+	if err != nil {
+		return fmt.Errorf("httpapi: mount log stream: %w", err)
+	}
+	r.With(p.Security.RequireUser(p.Logger), adminOnly(p.Logger)).Handle(LogStreamPath, h)
+	return nil
 }
 
 // adminOnly answers a request whose attached user is not an administrator with the
