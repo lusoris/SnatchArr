@@ -170,7 +170,7 @@ Every file under `web/src/routes` and `web/src/lib/components` is classified:
 | `web/src/lib/components/shell/NavIcon.svelte` | kept | Dynamic Lucide icon renderer. |
 | `web/src/lib/components/shell/nav.ts` | kept | Navigation hierarchy definition and active route matcher. |
 | `web/src/lib/components/shell/icons.ts` | modified | Added required icons (`ellipsis`, `command`, `plus`, `check`, `circle-alert`, `activity`). |
-| `web/src/lib/components/BrandMark.svelte` | kept | M3 vesica brand mark renderer. |
+| `web/src/lib/components/BrandMark.svelte` | kept | Brand mark renderer; the mark itself is ADR-0017. |
 | `web/src/lib/components/CheckState.svelte` | kept | State indicator for instance connectivity. |
 | `web/src/lib/components/ConfirmAction.svelte` | kept | Inline 2-step action confirmation wrapper. |
 | `web/src/lib/components/ConfirmDelete.svelte` | kept | In-place delete confirmation button. |

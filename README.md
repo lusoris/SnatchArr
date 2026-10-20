@@ -47,6 +47,8 @@ If you already run [Configarr](https://github.com/raydak-labs/configarr), point 
 
 Code: [EUPL-1.2](LICENSES/EUPL-1.2.txt). Documentation: [CC BY-SA 4.0](LICENSES/CC-BY-SA-4.0.txt). REUSE-compliant.
 
+The brand mark is derived from ["Female vulva.svg"](https://commons.wikimedia.org/wiki/File:Female_vulva.svg) by T. Kebert, Wikimedia Commons, [CC BY-SA 4.0](LICENSES/CC-BY-SA-4.0.txt), modified: cropped to the vulva, clitoral glans enlarged, vaginal opening shaded, recoloured ([ADR-0017](docs/adr/0017-anatomical-brand-mark.md)).
+
 <!-- praetor:readme-governance:start -->
 [![HISS Adopted][praetor-hiss-badge]][praetor-hiss-agents]
 
