@@ -2,8 +2,11 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-import { api, problemStatus } from './api/client.js';
+import { goto } from '$app/navigation';
+import { resolve } from '$app/paths';
+import { api, problemStatus, setExpiryHandler } from './api/client.js';
 import type { components } from './api/schema.js';
+import { queryClient } from './query.js';
 
 type User = components['schemas']['User'];
 
@@ -76,7 +79,22 @@ class Session {
 			this.state = 'anonymous';
 		}
 	}
+
+	/**
+	 * Called on a 401 from a data endpoint. A 401 can also mean a wrong credential in the request
+	 * (for example the current password), so the session is checked first and kept when alive.
+	 */
+	async expire(): Promise<void> {
+		if ((await this.refresh()) === 'authenticated') return;
+		this.user = null;
+		this.state = 'anonymous';
+		void queryClient.cancelQueries();
+		queryClient.clear();
+		await goto(resolve('login'));
+	}
 }
 
 /** The one session store the whole SPA shares. */
 export const session = new Session();
+
+setExpiryHandler(() => session.expire());

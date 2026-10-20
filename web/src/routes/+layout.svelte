@@ -19,6 +19,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import Sidebar from '#lib/components/shell/Sidebar.svelte';
 	import TopBar from '#lib/components/shell/TopBar.svelte';
 	import { m } from '#lib/paraglide/messages.js';
+	import { PUBLIC_ROUTES } from '#lib/api/client.js';
 	import { queryClient } from '#lib/query.js';
 	import { session } from '#lib/session.svelte.js';
 
@@ -28,8 +29,7 @@ SPDX-License-Identifier: EUPL-1.2
 		.map(([k, v]) => `${k}:${v}`)
 		.join(';');
 
-	const publicRoutes = new Set(['/login', '/setup']);
-	const isPublic = $derived(publicRoutes.has(page.url.pathname));
+	const isPublic = $derived(PUBLIC_ROUTES.has(page.url.pathname));
 
 	let drawerOpen = $state(false);
 	let cmdOpen = $state(false);
@@ -57,9 +57,9 @@ SPDX-License-Identifier: EUPL-1.2
 		const here = page.url.pathname;
 		if (state === 'setup' && here !== '/setup') {
 			await goto(resolve('setup'));
-		} else if (state === 'anonymous' && !session.error && !publicRoutes.has(here)) {
+		} else if (state === 'anonymous' && !session.error && !PUBLIC_ROUTES.has(here)) {
 			await goto(resolve('login'));
-		} else if (state === 'authenticated' && publicRoutes.has(here)) {
+		} else if (state === 'authenticated' && PUBLIC_ROUTES.has(here)) {
 			await goto(resolve('/'));
 		}
 	}
@@ -69,8 +69,11 @@ SPDX-License-Identifier: EUPL-1.2
 	});
 
 	$effect(() => {
-		void page.url.pathname;
+		const here = page.url.pathname;
 		drawerOpen = false;
+		if (session.state === 'anonymous' && !session.error && !PUBLIC_ROUTES.has(here)) {
+			void goto(resolve('login'));
+		}
 	});
 
 	async function logout(): Promise<void> {
@@ -119,7 +122,7 @@ SPDX-License-Identifier: EUPL-1.2
 			>
 				<div class="mx-auto max-w-[80rem]">
 					<svelte:boundary>
-						{#if session.state === 'unknown'}
+						{#if session.state === 'unknown' || session.state === 'anonymous'}
 							<div
 								data-testid="skeleton"
 								class="flex animate-pulse flex-col gap-4"

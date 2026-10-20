@@ -4,10 +4,22 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ GET: vi.fn(), POST: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+	GET: vi.fn(),
+	POST: vi.fn(),
+	setExpiryHandler: vi.fn(),
+	goto: vi.fn()
+}));
 vi.mock('./api/client.js', () => ({
 	api: { GET: mocks.GET, POST: mocks.POST },
-	problemStatus: (err: unknown) => (err as { status?: number } | undefined)?.status ?? 0
+	problemStatus: (err: unknown) => (err as { status?: number } | undefined)?.status ?? 0,
+	setExpiryHandler: mocks.setExpiryHandler
+}));
+vi.mock('$app/navigation', () => ({
+	goto: mocks.goto
+}));
+vi.mock('$app/paths', () => ({
+	resolve: (path: string) => path
 }));
 
 import { session } from './session.svelte.js';
@@ -18,6 +30,7 @@ describe('session', () => {
 	beforeEach(() => {
 		mocks.GET.mockReset();
 		mocks.POST.mockReset();
+		mocks.goto.mockReset();
 	});
 
 	it('routes to setup while no user exists', async () => {
@@ -65,5 +78,26 @@ describe('session', () => {
 		await expect(session.logout()).rejects.toThrow('offline');
 		expect(session.state).toBe('anonymous');
 		expect(session.user).toBeNull();
+	});
+
+	it('expires the session and routes to login', async () => {
+		session.state = 'authenticated';
+		mocks.GET.mockResolvedValueOnce({ data: { setup_complete: true } }).mockRejectedValueOnce({
+			status: 401
+		});
+		await session.expire();
+		expect(session.state).toBe('anonymous');
+		expect(session.user).toBeNull();
+		expect(mocks.goto).toHaveBeenCalledWith('login');
+	});
+
+	it('keeps a live session when a 401 was a wrong credential, not an expiry', async () => {
+		mocks.GET.mockResolvedValueOnce({ data: { setup_complete: true } }).mockResolvedValueOnce({
+			data: { user: admin }
+		});
+		await session.expire();
+		expect(session.state).toBe('authenticated');
+		expect(session.user).toEqual(admin);
+		expect(mocks.goto).not.toHaveBeenCalled();
 	});
 });
