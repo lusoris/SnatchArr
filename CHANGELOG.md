@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.5.2](https://github.com/lusoris/SnatchArr/compare/v0.5.1...v0.5.2) (2026-10-20)
+
+
+### Features
+
+* **prowlarr:** enforce indexer grab limits and show them per indexer ([#480](https://github.com/lusoris/SnatchArr/issues/480)) ([45b7b00](https://github.com/lusoris/SnatchArr/commit/45b7b0066e75b7204f66af4488ee96b400c17cf7))
+* **web:** own shell with command palette and phone bottom bar ([8a5456b](https://github.com/lusoris/SnatchArr/commit/8a5456bc093803279137629594eb108a4fe8f2ab))
+* **web:** replace the M3 vesica with an anatomical vulva mark ([#477](https://github.com/lusoris/SnatchArr/issues/477)) ([68739b7](https://github.com/lusoris/SnatchArr/commit/68739b72340093506239b3770e7811241c983053))
+
+
+### Bug Fixes
+
+* **arrclient:** explain auth proxy redirects and HTML responses ([#471](https://github.com/lusoris/SnatchArr/issues/471)) ([9e3307e](https://github.com/lusoris/SnatchArr/commit/9e3307e1c2f59af26fbf0781fd0aa37a5b0fd594))
+* **configarr:** detect the Whisparr kind from the reported version ([#467](https://github.com/lusoris/SnatchArr/issues/467)) ([02e1255](https://github.com/lusoris/SnatchArr/commit/02e125597ff3e7bc82fba954247e2b6ad4a32c8b))
+* **dlclients:** name qBittorrent login failures ([#473](https://github.com/lusoris/SnatchArr/issues/473)) ([4703dc0](https://github.com/lusoris/SnatchArr/commit/4703dc0677292e37c66e9377bc1ef71a0111a4e5))
+* **dlclients:** observe download clients concurrently, at most 8 ([3a6840a](https://github.com/lusoris/SnatchArr/commit/3a6840aec5c4080a7f041bbaea3f1010c85d5982))
+* **events:** open the event stream through header-holding hops ([#481](https://github.com/lusoris/SnatchArr/issues/481)) ([acfd398](https://github.com/lusoris/SnatchArr/commit/acfd398a4a300586d62f721716419db1cc390dce))
+* **seerr:** match Seerr servers to instances by API key when URLs differ ([#475](https://github.com/lusoris/SnatchArr/issues/475)) ([6ad29b4](https://github.com/lusoris/SnatchArr/commit/6ad29b4829c3e705ebe1587c730cc18f2f173a38))
+* **web:** page language follows the locale, no page overflow on logs and history ([#476](https://github.com/lusoris/SnatchArr/issues/476)) ([53b6f49](https://github.com/lusoris/SnatchArr/commit/53b6f49c4faf849f4dbf217231db6859e1b5a2ec))
+* **web:** send the user to login when the session expires ([#472](https://github.com/lusoris/SnatchArr/issues/472)) ([e89df93](https://github.com/lusoris/SnatchArr/commit/e89df939dac85f0cf4337f6a3ffe74fcb324299e))
+
+
+### Documentation
+
+* **adr:** ADR-0016 own layout and page redo for the web UI ([70344bd](https://github.com/lusoris/SnatchArr/commit/70344bdee7c0e2721fdb0a4594a056b666f859ba))
+
 ## [0.5.1](https://github.com/lusoris/SnatchArr/compare/v0.5.0...v0.5.1) (2026-10-20)
 
 
