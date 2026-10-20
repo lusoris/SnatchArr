@@ -5,7 +5,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # ADR-0011: Product definition: parity with Huntarr and newtarr
 
-- Status: accepted
+- Status: superseded by [ADR-0018](0018-product-front-door.md)
 - Date: 2026-10-17
 
 ## Context
