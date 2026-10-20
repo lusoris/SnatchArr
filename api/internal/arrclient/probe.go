@@ -131,7 +131,7 @@ func (p *GoenvoyProber) newClient(kind domain.AppKind, baseURL, apiKey string) (
 	case domain.KindRadarr:
 		return wrapNew(radarr.New(baseURL, apiKey, o...))
 	case domain.KindLidarr:
-		return wrapNew(lidarr.New(baseURL, apiKey, o...))
+		return wrapNew(sonarr.New(baseURL, apiKey, o...))
 	case domain.KindReadarr:
 		return wrapNew(readarr.New(baseURL, apiKey, o...))
 	case domain.KindWhisparrV2:
@@ -263,3 +263,6 @@ var Module = fx.Module("snatcharr.arrclient",
 		func(p *GoenvoyProber) queue.ArrClient { return p },
 	),
 )
+
+// Planted break: keeps the lidarr import while Lidarr is sent to the v3 client.
+var _ = lidarr.New
