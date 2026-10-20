@@ -40,6 +40,7 @@ type fakeProwlarrServer struct {
 	statusVer    string
 	indexers     []map[string]any
 	stats        []map[string]any
+	statsHour    []map[string]any
 	statuses     []map[string]any
 	applications []map[string]any
 	failRequests bool
@@ -69,15 +70,23 @@ func newFakeProwlarr(t *testing.T) (*fakeProwlarrServer, *httptest.Server) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(fps.indexers)
 	})
-	mux.HandleFunc("GET /api/v1/indexerstats", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("GET /api/v1/indexerstats", func(w http.ResponseWriter, r *http.Request) {
 		fps.mu.Lock()
 		defer fps.mu.Unlock()
 		if fps.failRequests {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
 		}
+		stats := fps.stats
+		if fps.statsHour != nil && r.URL.Query().Get("startDate") != "" {
+			start, _ := time.Parse(time.RFC3339, r.URL.Query().Get("startDate"))
+			end, _ := time.Parse(time.RFC3339, r.URL.Query().Get("endDate"))
+			if !start.IsZero() && !end.IsZero() && end.Sub(start) <= 2*time.Hour {
+				stats = fps.statsHour
+			}
+		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"indexers": fps.stats})
+		_ = json.NewEncoder(w).Encode(map[string]any{"indexers": stats})
 	})
 	mux.HandleFunc("GET /api/v1/indexerstatus", func(w http.ResponseWriter, _ *http.Request) {
 		fps.mu.Lock()
@@ -140,6 +149,7 @@ type gateTestCase struct {
 	killProwlarr bool
 	wantAllowed  bool
 	wantRefusal  string
+	wantMessage  string
 }
 
 func runGateTestCase(t *testing.T, tc gateTestCase) {
@@ -214,8 +224,11 @@ func runGateTestCase(t *testing.T, tc gateTestCase) {
 	if allowed != tc.wantAllowed {
 		t.Errorf("Allow() = %v, want %v (refusal: %+v)", allowed, tc.wantAllowed, refusal)
 	}
-	if !tc.wantAllowed && refusal.Code != tc.wantRefusal {
+	if !tc.wantAllowed && tc.wantRefusal != "" && refusal.Code != tc.wantRefusal {
 		t.Errorf("refusal.Code = %q, want %q", refusal.Code, tc.wantRefusal)
+	}
+	if !tc.wantAllowed && tc.wantMessage != "" && refusal.Message != tc.wantMessage {
+		t.Errorf("refusal.Message = %q, want %q", refusal.Message, tc.wantMessage)
 	}
 }
 
@@ -591,6 +604,193 @@ func TestGate_Integration(t *testing.T) {
 				}
 				fakeProwl.stats = []map[string]any{
 					{"indexerId": 1, "numberOfQueries": 95, "numberOfRssQueries": 0},
+				}
+				fakeProwl.statuses = []map[string]any{}
+			},
+			wantAllowed: true,
+		},
+		{
+			name: "positive grab at limit -> refuses with grab limit reason",
+			setupArr: func(fakeArr *fakeArrServer, prowlURL string) {
+				fakeArr.indexers = []map[string]any{
+					{"id": 10, "name": "Sonarr Idx 1", "fields": []map[string]any{{"name": "baseUrl", "value": prowlURL + "/1/"}}},
+				}
+			},
+			setupProwl: func(fakeProwl *fakeProwlarrServer, _ clock.Clock) {
+				fakeProwl.indexers = []map[string]any{
+					{
+						"id": 1, "name": "Prowl Idx 1", "enable": true,
+						"fields": []map[string]any{
+							{"name": "baseSettings.grabLimit", "value": 100},
+							{"name": "baseSettings.limitsUnit", "value": 0},
+						},
+					},
+				}
+				fakeProwl.stats = []map[string]any{
+					{"indexerId": 1, "numberOfQueries": 0, "numberOfRssQueries": 0, "numberOfGrabs": 90},
+				}
+				fakeProwl.statuses = []map[string]any{}
+			},
+			wantAllowed: false,
+			wantRefusal: snatch.GateIndexerLimit,
+			wantMessage: "all Prowlarr indexers exhausted (grab limit)",
+		},
+		{
+			name: "boundary grab one below threshold -> allow",
+			setupArr: func(fakeArr *fakeArrServer, prowlURL string) {
+				fakeArr.indexers = []map[string]any{
+					{"id": 10, "name": "Sonarr Idx 1", "fields": []map[string]any{{"name": "baseUrl", "value": prowlURL + "/1/"}}},
+				}
+			},
+			setupProwl: func(fakeProwl *fakeProwlarrServer, _ clock.Clock) {
+				fakeProwl.indexers = []map[string]any{
+					{
+						"id": 1, "name": "Prowl Idx 1", "enable": true,
+						"fields": []map[string]any{
+							{"name": "baseSettings.grabLimit", "value": 100},
+							{"name": "baseSettings.limitsUnit", "value": 0},
+						},
+					},
+				}
+				fakeProwl.stats = []map[string]any{
+					{"indexerId": 1, "numberOfQueries": 0, "numberOfRssQueries": 0, "numberOfGrabs": 89},
+				}
+				fakeProwl.statuses = []map[string]any{}
+			},
+			wantAllowed: true,
+		},
+		{
+			name: "positive query-only limit -> refuses with unchanged message",
+			setupArr: func(fakeArr *fakeArrServer, prowlURL string) {
+				fakeArr.indexers = []map[string]any{
+					{"id": 10, "name": "Sonarr Idx 1", "fields": []map[string]any{{"name": "baseUrl", "value": prowlURL + "/1/"}}},
+				}
+			},
+			setupProwl: func(fakeProwl *fakeProwlarrServer, _ clock.Clock) {
+				fakeProwl.indexers = []map[string]any{
+					{
+						"id": 1, "name": "Prowl Idx 1", "enable": true,
+						"fields": []map[string]any{
+							{"name": "baseSettings.queryLimit", "value": 100},
+							{"name": "baseSettings.limitsUnit", "value": 0},
+						},
+					},
+				}
+				fakeProwl.stats = []map[string]any{
+					{"indexerId": 1, "numberOfQueries": 90, "numberOfRssQueries": 0, "numberOfGrabs": 0},
+				}
+				fakeProwl.statuses = []map[string]any{}
+			},
+			wantAllowed: false,
+			wantRefusal: snatch.GateIndexerLimit,
+			wantMessage: "all Prowlarr indexers exhausted",
+		},
+		{
+			name: "negative grab limit absent is unlimited -> allows even if limited indexer exhausted",
+			setupArr: func(fakeArr *fakeArrServer, prowlURL string) {
+				fakeArr.indexers = []map[string]any{
+					{"id": 10, "name": "Sonarr Idx 1", "fields": []map[string]any{{"name": "baseUrl", "value": prowlURL + "/1/"}}},
+					{"id": 20, "name": "Sonarr Idx Unlimited", "fields": []map[string]any{{"name": "baseUrl", "value": prowlURL + "/2/"}}},
+				}
+			},
+			setupProwl: func(fakeProwl *fakeProwlarrServer, _ clock.Clock) {
+				fakeProwl.indexers = []map[string]any{
+					{
+						"id": 1, "name": "Prowl Idx 1", "enable": true,
+						"fields": []map[string]any{
+							{"name": "baseSettings.grabLimit", "value": 100},
+							{"name": "baseSettings.limitsUnit", "value": 0},
+						},
+					},
+					{
+						"id": 2, "name": "Prowl Idx Unlimited", "enable": true,
+						"fields": []map[string]any{},
+					},
+				}
+				fakeProwl.stats = []map[string]any{
+					{"indexerId": 1, "numberOfQueries": 0, "numberOfRssQueries": 0, "numberOfGrabs": 95},
+				}
+				fakeProwl.statuses = []map[string]any{}
+			},
+			wantAllowed: true,
+		},
+		{
+			name: "boundary grabLimit set but queryLimit nil -> limited, refuses when exhausted",
+			setupArr: func(fakeArr *fakeArrServer, prowlURL string) {
+				fakeArr.indexers = []map[string]any{
+					{"id": 10, "name": "Sonarr Idx 1", "fields": []map[string]any{{"name": "baseUrl", "value": prowlURL + "/1/"}}},
+				}
+			},
+			setupProwl: func(fakeProwl *fakeProwlarrServer, _ clock.Clock) {
+				fakeProwl.indexers = []map[string]any{
+					{
+						"id": 1, "name": "Prowl Idx 1", "enable": true,
+						"fields": []map[string]any{
+							{"name": "baseSettings.grabLimit", "value": 50},
+							{"name": "baseSettings.limitsUnit", "value": 0},
+						},
+					},
+				}
+				fakeProwl.stats = []map[string]any{
+					{"indexerId": 1, "numberOfQueries": 0, "numberOfRssQueries": 0, "numberOfGrabs": 45},
+				}
+				fakeProwl.statuses = []map[string]any{}
+			},
+			wantAllowed: false,
+			wantRefusal: snatch.GateIndexerLimit,
+			wantMessage: "all Prowlarr indexers exhausted (grab limit)",
+		},
+		{
+			name: "positive limitsUnit 1 uses hour usage for grabs -> refuses when hour exhausted",
+			setupArr: func(fakeArr *fakeArrServer, prowlURL string) {
+				fakeArr.indexers = []map[string]any{
+					{"id": 10, "name": "Sonarr Idx 1", "fields": []map[string]any{{"name": "baseUrl", "value": prowlURL + "/1/"}}},
+				}
+			},
+			setupProwl: func(fakeProwl *fakeProwlarrServer, _ clock.Clock) {
+				fakeProwl.indexers = []map[string]any{
+					{
+						"id": 1, "name": "Prowl Idx 1", "enable": true,
+						"fields": []map[string]any{
+							{"name": "baseSettings.grabLimit", "value": 10},
+							{"name": "baseSettings.limitsUnit", "value": 1},
+						},
+					},
+				}
+				fakeProwl.stats = []map[string]any{
+					{"indexerId": 1, "numberOfQueries": 0, "numberOfRssQueries": 0, "numberOfGrabs": 2},
+				}
+				fakeProwl.statsHour = []map[string]any{
+					{"indexerId": 1, "numberOfQueries": 0, "numberOfRssQueries": 0, "numberOfGrabs": 9},
+				}
+				fakeProwl.statuses = []map[string]any{}
+			},
+			wantAllowed: false,
+			wantRefusal: snatch.GateIndexerLimit,
+			wantMessage: "all Prowlarr indexers exhausted (grab limit)",
+		},
+		{
+			name: "boundary limitsUnit 1 uses hour usage for grabs -> allows when hour below limit despite day above",
+			setupArr: func(fakeArr *fakeArrServer, prowlURL string) {
+				fakeArr.indexers = []map[string]any{
+					{"id": 10, "name": "Sonarr Idx 1", "fields": []map[string]any{{"name": "baseUrl", "value": prowlURL + "/1/"}}},
+				}
+			},
+			setupProwl: func(fakeProwl *fakeProwlarrServer, _ clock.Clock) {
+				fakeProwl.indexers = []map[string]any{
+					{
+						"id": 1, "name": "Prowl Idx 1", "enable": true,
+						"fields": []map[string]any{
+							{"name": "baseSettings.grabLimit", "value": 10},
+							{"name": "baseSettings.limitsUnit", "value": 1},
+						},
+					},
+				}
+				fakeProwl.stats = []map[string]any{
+					{"indexerId": 1, "numberOfQueries": 0, "numberOfRssQueries": 0, "numberOfGrabs": 10},
+				}
+				fakeProwl.statsHour = []map[string]any{
+					{"indexerId": 1, "numberOfQueries": 0, "numberOfRssQueries": 0, "numberOfGrabs": 5},
 				}
 				fakeProwl.statuses = []map[string]any{}
 			},

@@ -13,11 +13,11 @@ SPDX-License-Identifier: EUPL-1.2
 	import StaminaGauge from '#lib/components/StaminaGauge.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { instanceKindLabel } from '#lib/products.js';
+	import { countExhausted, countHeadroom } from '#lib/prowlarr.js';
 	import { keys } from '#lib/query.js';
 
 	type Instance = components['schemas']['Instance'];
 	type Cap = components['schemas']['CapStatus'];
-	type ProwlarrIndexerStatus = components['schemas']['ProwlarrIndexerStatus'];
 
 	const instances = createSentioQuery({
 		queryKey: keys.instances,
@@ -50,14 +50,6 @@ SPDX-License-Identifier: EUPL-1.2
 		return list?.find((c) => c.scope === 'instance' && c.instance_id === inst.id);
 	}
 	const globalCap = $derived(caps.data?.find((c) => c.scope === 'global'));
-
-	function countExhausted(indexers: ProwlarrIndexerStatus[]): number {
-		return indexers.filter((i) => i.exhausted).length;
-	}
-
-	function countHeadroom(indexers: ProwlarrIndexerStatus[]): number {
-		return indexers.length - countExhausted(indexers);
-	}
 </script>
 
 <h1 class="mb-4 text-2xl font-semibold">{m.dashboard_title()}</h1>

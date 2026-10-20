@@ -3422,6 +3422,52 @@ func (o OptNotificationChannelConfig) Or(d NotificationChannelConfig) Notificati
 	return d
 }
 
+// NewOptProwlarrIndexerStatusExhaustedBy returns new OptProwlarrIndexerStatusExhaustedBy with value set to v.
+func NewOptProwlarrIndexerStatusExhaustedBy(v ProwlarrIndexerStatusExhaustedBy) OptProwlarrIndexerStatusExhaustedBy {
+	return OptProwlarrIndexerStatusExhaustedBy{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptProwlarrIndexerStatusExhaustedBy is optional ProwlarrIndexerStatusExhaustedBy.
+type OptProwlarrIndexerStatusExhaustedBy struct {
+	Value ProwlarrIndexerStatusExhaustedBy
+	Set   bool
+}
+
+// IsSet returns true if OptProwlarrIndexerStatusExhaustedBy was set.
+func (o OptProwlarrIndexerStatusExhaustedBy) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptProwlarrIndexerStatusExhaustedBy) Reset() {
+	var v ProwlarrIndexerStatusExhaustedBy
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptProwlarrIndexerStatusExhaustedBy) SetTo(v ProwlarrIndexerStatusExhaustedBy) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptProwlarrIndexerStatusExhaustedBy) Get() (v ProwlarrIndexerStatusExhaustedBy, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptProwlarrIndexerStatusExhaustedBy) Or(d ProwlarrIndexerStatusExhaustedBy) ProwlarrIndexerStatusExhaustedBy {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
 // NewOptQueueRuleSettings returns new OptQueueRuleSettings with value set to v.
 func NewOptQueueRuleSettings(v QueueRuleSettings) OptQueueRuleSettings {
 	return OptQueueRuleSettings{
@@ -3905,11 +3951,12 @@ type ProwlarrIndexerStatus struct {
 	QueryLimit OptInt `json:"query_limit"`
 	GrabLimit  OptInt `json:"grab_limit"`
 	// 0=day, 1=hour.
-	LimitsUnit   int         `json:"limits_unit"`
-	UsedQueries  int         `json:"used_queries"`
-	UsedGrabs    int         `json:"used_grabs"`
-	DisabledTill OptDateTime `json:"disabled_till"`
-	Exhausted    bool        `json:"exhausted"`
+	LimitsUnit   int                                 `json:"limits_unit"`
+	UsedQueries  int                                 `json:"used_queries"`
+	UsedGrabs    int                                 `json:"used_grabs"`
+	DisabledTill OptDateTime                         `json:"disabled_till"`
+	Exhausted    bool                                `json:"exhausted"`
+	ExhaustedBy  OptProwlarrIndexerStatusExhaustedBy `json:"exhausted_by"`
 }
 
 // GetID returns the value of ID.
@@ -3957,6 +4004,11 @@ func (s *ProwlarrIndexerStatus) GetExhausted() bool {
 	return s.Exhausted
 }
 
+// GetExhaustedBy returns the value of ExhaustedBy.
+func (s *ProwlarrIndexerStatus) GetExhaustedBy() OptProwlarrIndexerStatusExhaustedBy {
+	return s.ExhaustedBy
+}
+
 // SetID sets the value of ID.
 func (s *ProwlarrIndexerStatus) SetID(val int) {
 	s.ID = val
@@ -4000,6 +4052,59 @@ func (s *ProwlarrIndexerStatus) SetDisabledTill(val OptDateTime) {
 // SetExhausted sets the value of Exhausted.
 func (s *ProwlarrIndexerStatus) SetExhausted(val bool) {
 	s.Exhausted = val
+}
+
+// SetExhaustedBy sets the value of ExhaustedBy.
+func (s *ProwlarrIndexerStatus) SetExhaustedBy(val OptProwlarrIndexerStatusExhaustedBy) {
+	s.ExhaustedBy = val
+}
+
+type ProwlarrIndexerStatusExhaustedBy string
+
+const (
+	ProwlarrIndexerStatusExhaustedByQueryLimit ProwlarrIndexerStatusExhaustedBy = "query_limit"
+	ProwlarrIndexerStatusExhaustedByGrabLimit  ProwlarrIndexerStatusExhaustedBy = "grab_limit"
+	ProwlarrIndexerStatusExhaustedByDisabled   ProwlarrIndexerStatusExhaustedBy = "disabled"
+)
+
+// AllValues returns all ProwlarrIndexerStatusExhaustedBy values.
+func (ProwlarrIndexerStatusExhaustedBy) AllValues() []ProwlarrIndexerStatusExhaustedBy {
+	return []ProwlarrIndexerStatusExhaustedBy{
+		ProwlarrIndexerStatusExhaustedByQueryLimit,
+		ProwlarrIndexerStatusExhaustedByGrabLimit,
+		ProwlarrIndexerStatusExhaustedByDisabled,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s ProwlarrIndexerStatusExhaustedBy) MarshalText() ([]byte, error) {
+	switch s {
+	case ProwlarrIndexerStatusExhaustedByQueryLimit:
+		return []byte(s), nil
+	case ProwlarrIndexerStatusExhaustedByGrabLimit:
+		return []byte(s), nil
+	case ProwlarrIndexerStatusExhaustedByDisabled:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *ProwlarrIndexerStatusExhaustedBy) UnmarshalText(data []byte) error {
+	switch ProwlarrIndexerStatusExhaustedBy(data) {
+	case ProwlarrIndexerStatusExhaustedByQueryLimit:
+		*s = ProwlarrIndexerStatusExhaustedByQueryLimit
+		return nil
+	case ProwlarrIndexerStatusExhaustedByGrabLimit:
+		*s = ProwlarrIndexerStatusExhaustedByGrabLimit
+		return nil
+	case ProwlarrIndexerStatusExhaustedByDisabled:
+		*s = ProwlarrIndexerStatusExhaustedByDisabled
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
 }
 
 // Ref: #/components/schemas/ProwlarrLink

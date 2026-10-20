@@ -42,13 +42,14 @@ const (
 var errRefused = errors.New("connection refused by the test")
 
 type stubClient struct {
-	mu       sync.Mutex
-	keys     []string
-	calls    int
-	indexers []prowlarrclient.Indexer
-	statuses map[int]time.Time
-	usage    map[int]prowlarrclient.Usage
-	err      error
+	mu        sync.Mutex
+	keys      []string
+	calls     int
+	indexers  []prowlarrclient.Indexer
+	statuses  map[int]time.Time
+	usage     map[int]prowlarrclient.Usage
+	usageHour map[int]prowlarrclient.Usage
+	err       error
 }
 
 func (c *stubClient) seen(key string) error {
@@ -74,13 +75,16 @@ func (c *stubClient) Indexers(_ context.Context, _, key string) ([]prowlarrclien
 	return c.indexers, nil
 }
 
-func (c *stubClient) Usage(_ context.Context, _, key string, _, _ time.Time) (map[int]prowlarrclient.Usage, error) {
+func (c *stubClient) Usage(_ context.Context, _, key string, start, end time.Time) (map[int]prowlarrclient.Usage, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.calls++
 	c.keys = append(c.keys, key)
 	if c.err != nil {
 		return nil, c.err
+	}
+	if end.Sub(start) <= 2*time.Hour && c.usageHour != nil {
+		return c.usageHour, nil
 	}
 	return c.usage, nil
 }
@@ -313,5 +317,57 @@ func TestObserveFailsGracefullyWhenUnreachable(t *testing.T) {
 	}
 	if row.LastError == nil || *row.LastError == "" {
 		t.Error("recorded check must store last_error")
+	}
+}
+
+type statusGrabLimitCase struct {
+	name       string
+	queryLimit *int
+	grabLimit  *int
+	limitsUnit int
+	usageDay   prowlarrclient.Usage
+	usageHour  prowlarrclient.Usage
+	wantExh    bool
+	wantExhBy  string
+}
+
+func runStatusGrabLimitCase(t *testing.T, tc statusGrabLimitCase) {
+	t.Helper()
+	f := newFixture(t)
+	f.client.indexers = []prowlarrclient.Indexer{
+		{ID: 1, Name: "Idx1", Enabled: true, QueryLimit: tc.queryLimit, GrabLimit: tc.grabLimit, LimitsUnit: tc.limitsUnit},
+	}
+	f.client.usage = map[int]prowlarrclient.Usage{1: tc.usageDay}
+	f.client.usageHour = map[int]prowlarrclient.Usage{1: tc.usageHour}
+	_ = f.create(t)
+
+	views, err := f.svc.Status(t.Context())
+	if err != nil || len(views) != 1 || len(views[0].Indexers) != 1 {
+		t.Fatalf("Status() = %+v, %v", views, err)
+	}
+	idx := views[0].Indexers[0]
+	if idx.Exhausted != tc.wantExh || idx.ExhaustedBy != tc.wantExhBy {
+		t.Errorf("idx = %+v, want Exhausted=%v ExhaustedBy=%q", idx, tc.wantExh, tc.wantExhBy)
+	}
+}
+
+func TestStatus_GrabLimitsAndExhaustedBy(t *testing.T) {
+	t.Parallel()
+	q100, g100, g50, g10 := 100, 100, 50, 10
+	cases := []statusGrabLimitCase{
+		{"positive grab at limit -> exhausted by grab_limit", nil, &g100, 0, prowlarrclient.Usage{Grabs: 90}, prowlarrclient.Usage{}, true, "grab_limit"},
+		{"boundary grab one below threshold -> not exhausted", nil, &g100, 0, prowlarrclient.Usage{Grabs: 89}, prowlarrclient.Usage{}, false, ""},
+		{"positive query-only limit -> exhausted by query_limit", &q100, nil, 0, prowlarrclient.Usage{Queries: 90}, prowlarrclient.Usage{}, true, "query_limit"},
+		{"positive query checked first when both at limit", &q100, &g100, 0, prowlarrclient.Usage{Queries: 90, Grabs: 90}, prowlarrclient.Usage{}, true, "query_limit"},
+		{"negative grab limit absent nil -> not exhausted", nil, nil, 0, prowlarrclient.Usage{Grabs: 500}, prowlarrclient.Usage{}, false, ""},
+		{"boundary grabLimit set but queryLimit nil -> limited", nil, &g50, 0, prowlarrclient.Usage{Grabs: 45}, prowlarrclient.Usage{}, true, "grab_limit"},
+		{"positive limitsUnit 1 uses hour usage for grabs", nil, &g10, 1, prowlarrclient.Usage{Grabs: 2}, prowlarrclient.Usage{Grabs: 9}, true, "grab_limit"},
+		{"boundary limitsUnit 1 hour below threshold despite day above", nil, &g10, 1, prowlarrclient.Usage{Grabs: 10}, prowlarrclient.Usage{Grabs: 5}, false, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			runStatusGrabLimitCase(t, tc)
+		})
 	}
 }

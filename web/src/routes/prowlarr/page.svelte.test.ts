@@ -39,7 +39,7 @@ const sampleStatus: ProwlarrStatus = {
 			grab_limit: 20,
 			limits_unit: 1,
 			used_queries: 85,
-			used_grabs: 5,
+			used_grabs: 4,
 			exhausted: false
 		}
 	]
@@ -59,7 +59,8 @@ const boundaryStatus: ProwlarrStatus = {
 			limits_unit: 0,
 			used_queries: 100,
 			used_grabs: 0,
-			exhausted: true
+			exhausted: true,
+			exhausted_by: 'query_limit'
 		},
 		{
 			id: 11,
@@ -77,7 +78,19 @@ const boundaryStatus: ProwlarrStatus = {
 			used_queries: 10,
 			used_grabs: 0,
 			disabled_till: '2026-09-01T15:00:00Z',
-			exhausted: true
+			exhausted: true,
+			exhausted_by: 'disabled'
+		},
+		{
+			id: 13,
+			name: 'Grab Exhausted Indexer',
+			query_limit: 100,
+			grab_limit: 50,
+			limits_unit: 0,
+			used_queries: 10,
+			used_grabs: 50,
+			exhausted: true,
+			exhausted_by: 'grab_limit'
 		}
 	]
 };
@@ -125,12 +138,16 @@ describe('prowlarr', () => {
 		expect(
 			within(table).getByText(new RegExp(`250 / 1000.*${m.prowlarr_unit_day()}`))
 		).toBeTruthy();
+		expect(within(table).getByText(new RegExp(`10 / 100.*${m.prowlarr_unit_day()}`))).toBeTruthy();
 		expect(within(table).getByText('25 %')).toBeTruthy();
+		expect(within(table).getByText('10 %')).toBeTruthy();
 		expect(within(table).getByText(m.prowlarr_state_ok())).toBeTruthy();
 
 		expect(within(table).getByText('Hour Tracker')).toBeTruthy();
 		expect(within(table).getByText(new RegExp(`85 / 100.*${m.prowlarr_unit_hour()}`))).toBeTruthy();
+		expect(within(table).getByText(new RegExp(`4 / 20.*${m.prowlarr_unit_hour()}`))).toBeTruthy();
 		expect(within(table).getByText('85 %')).toBeTruthy();
+		expect(within(table).getByText('20 %')).toBeTruthy();
 		expect(within(table).getByText(m.prowlarr_state_near_limit())).toBeTruthy();
 	});
 
@@ -142,7 +159,13 @@ describe('prowlarr', () => {
 		const exactRow = within(table).getByText('Exact Limit Indexer').closest('tr');
 		expect(exactRow).toBeTruthy();
 		expect(within(exactRow as HTMLElement).getByText(m.prowlarr_state_exhausted())).toBeTruthy();
+		expect(
+			within(exactRow as HTMLElement).getByText(m.prowlarr_exhausted_by_query_limit())
+		).toBeTruthy();
 		expect(within(exactRow as HTMLElement).getByText('100 %')).toBeTruthy();
+		expect(
+			within(exactRow as HTMLElement).getAllByText(m.prowlarr_no_limit()).length
+		).toBeGreaterThan(0);
 
 		const unlimitedRow = within(table).getByText('Unlimited Indexer').closest('tr');
 		expect(unlimitedRow).toBeTruthy();
@@ -157,6 +180,16 @@ describe('prowlarr', () => {
 			within(disabledRow as HTMLElement).getByText(
 				new RegExp(m.prowlarr_state_disabled_until({ when: '.*' }).replace(/\{when\}|\.\*/g, '.*'))
 			)
+		).toBeTruthy();
+
+		const grabRow = within(table).getByText('Grab Exhausted Indexer').closest('tr');
+		expect(grabRow).toBeTruthy();
+		expect(within(grabRow as HTMLElement).getByText(m.prowlarr_state_exhausted())).toBeTruthy();
+		expect(
+			within(grabRow as HTMLElement).getByText(m.prowlarr_exhausted_by_grab_limit())
+		).toBeTruthy();
+		expect(
+			within(grabRow as HTMLElement).getByText(new RegExp(`50 / 50.*${m.prowlarr_unit_day()}`))
 		).toBeTruthy();
 	});
 

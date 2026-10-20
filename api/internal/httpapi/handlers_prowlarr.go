@@ -134,6 +134,7 @@ func prowlarrStatusToOAS(v prowlarr.LinkStatus) oas.ProwlarrStatus {
 			UsedGrabs:    idx.UsedGrabs,
 			DisabledTill: optTime(idx.DisabledTill),
 			Exhausted:    idx.Exhausted,
+			ExhaustedBy:  exhaustedByToOAS(idx.ExhaustedBy),
 		})
 	}
 	return oas.ProwlarrStatus{
@@ -144,5 +145,18 @@ func prowlarrStatusToOAS(v prowlarr.LinkStatus) oas.ProwlarrStatus {
 		Version:   optString(v.Status.Version),
 		CheckedAt: v.CheckedAt,
 		Indexers:  idxOut,
+	}
+}
+
+func exhaustedByToOAS(s string) oas.OptProwlarrIndexerStatusExhaustedBy {
+	switch s {
+	case "query_limit":
+		return oas.NewOptProwlarrIndexerStatusExhaustedBy(oas.ProwlarrIndexerStatusExhaustedByQueryLimit)
+	case "grab_limit":
+		return oas.NewOptProwlarrIndexerStatusExhaustedBy(oas.ProwlarrIndexerStatusExhaustedByGrabLimit)
+	case "disabled":
+		return oas.NewOptProwlarrIndexerStatusExhaustedBy(oas.ProwlarrIndexerStatusExhaustedByDisabled)
+	default:
+		return oas.OptProwlarrIndexerStatusExhaustedBy{}
 	}
 }
