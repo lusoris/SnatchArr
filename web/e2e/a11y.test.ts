@@ -456,6 +456,145 @@ if (!process.env.SNATCHARR_E2E_API) {
 		const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
 		expect(results.violations).toEqual([]);
 	});
+
+	test('/live empty state has no axe violations', async ({ page }) => {
+		await setupAuthRoutes(page);
+		await page.route('**/api/v1/instances', (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify([])
+			})
+		);
+		await page.route('**/api/v1/schedules', (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify([])
+			})
+		);
+		await page.route('**/api/v1/system/status', (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					name: 'SnatchArr',
+					version: '0.1.0',
+					commit: 'abc1234',
+					build_date: '2026-10-20',
+					profile: 'dev',
+					setup_complete: true
+				})
+			})
+		);
+		await page.route('**/api/v1/events?*', (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify([])
+			})
+		);
+		await page.route('**/api/v1/events/stream', (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'text/event-stream',
+				headers: {
+					'Cache-Control': 'no-cache',
+					Connection: 'keep-alive'
+				},
+				body: ': keepalive\n\n'
+			})
+		);
+
+		await page.goto('/live');
+		await expect(
+			page.getByRole('heading', {
+				level: 2,
+				name: /No live events yet|Noch keine Live-Ereignisse/i
+			})
+		).toBeVisible();
+
+		const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
+		expect(results.violations).toEqual([]);
+	});
+
+	test('/live with backlog rows has no axe violations', async ({ page }) => {
+		await setupAuthRoutes(page);
+		await page.route('**/api/v1/instances', (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify([
+					{
+						id: '00000000-0000-0000-0000-000000000001',
+						name: 'Library Sonarr',
+						kind: 'sonarr',
+						base_url: 'http://sonarr.local:8989',
+						source: 'manual',
+						enabled: true,
+						created_at: '2026-01-01T00:00:00Z',
+						updated_at: '2026-01-01T00:00:00Z'
+					}
+				])
+			})
+		);
+		await page.route('**/api/v1/schedules', (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify([])
+			})
+		);
+		await page.route('**/api/v1/system/status', (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					name: 'SnatchArr',
+					version: '0.1.0',
+					commit: 'abc1234',
+					build_date: '2026-10-20',
+					profile: 'dev',
+					setup_complete: true,
+					worker_last_contact_at: '2026-10-20T12:30:00Z'
+				})
+			})
+		);
+		await page.route('**/api/v1/events?*', (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify([
+					{
+						id: 101,
+						instance_id: '00000000-0000-0000-0000-000000000001',
+						ts: '2026-10-20T12:00:00Z',
+						level: 'info',
+						type: 'search_dispatched',
+						title: 'Searching Sonarr',
+						detail: '10 items'
+					}
+				])
+			})
+		);
+		await page.route('**/api/v1/events/stream', (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'text/event-stream',
+				headers: {
+					'Cache-Control': 'no-cache',
+					Connection: 'keep-alive'
+				},
+				body: ': keepalive\n\n'
+			})
+		);
+
+		await page.goto('/live');
+		await expect(page.getByRole('log')).toBeVisible();
+
+		const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
+		expect(results.violations).toEqual([]);
+	});
 } else {
 	test.describe('public', () => {
 		test('public: /setup has no axe violations', async ({ page }) => {

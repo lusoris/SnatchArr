@@ -5,10 +5,13 @@
 package snatch
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -63,6 +66,7 @@ type plannerFixture struct {
 	st      *store.Store
 	clk     *clockwork.FakeClock
 	planner *Planner
+	bus     *events.Bus
 	// logged is what the planner logged. Read it only while no tick runs.
 	logged *bytes.Buffer
 	// m and reg are the fixture's own metrics and the registry that holds them.
@@ -76,11 +80,12 @@ func newPlannerFixture(t *testing.T, gate Gate) plannerFixture {
 	clk := clock.NewFake()
 	logged := &bytes.Buffer{}
 	logger := slog.New(slog.NewTextHandler(logged, nil))
-	rec := NewRecorder(st, clk, events.New(logger))
+	bus := events.New(logger)
+	rec := NewRecorder(st, clk, bus)
 	m, reg := metricstest.New(t)
 	return plannerFixture{
 		st: st, clk: clk, planner: NewPlanner(st, clk, NewRuns(st, clk, id.New()), rec, logger, m, gate),
-		logged: logged, m: m, reg: reg,
+		bus: bus, logged: logged, m: m, reg: reg,
 	}
 }
 
@@ -323,5 +328,85 @@ func TestPlanner_DryRunPolicyCreatesDryRunRun(t *testing.T) {
 	}
 	if seed != 0 {
 		t.Errorf("queued run seed = %d, want 0", seed)
+	}
+}
+
+// TestPlannerQueuedRunSingleEventAndRow verifies that one planner-queued run
+// produces exactly one run_queued published frame and one stored row in snatch_events.
+func TestPlannerQueuedRunSingleEventAndRow(t *testing.T) {
+	t.Parallel()
+	f := newPlannerFixture(t, AllowAll{})
+	instID := storetest.Instance(t, f.st, f.clk.Now())
+
+	srv := httptest.NewServer(f.bus.Hub().Handler())
+	t.Cleanup(srv.Close)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	t.Cleanup(cancel)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL, nil)
+	if err != nil {
+		t.Fatalf("NewRequestWithContext: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("client.Do: %v", err)
+	}
+	t.Cleanup(func() { _ = resp.Body.Close() })
+
+	for range 50 {
+		if f.bus.Hub().ClientCount() > 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	queued, err := f.planner.Tick(ctx)
+	if err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+	if queued != 1 {
+		t.Fatalf("queued = %d, want 1", queued)
+	}
+
+	// 1. Exactly one stored row in snatch_events for run_queued
+	assertQueued(t, f.st, 1)
+
+	// 2. Exactly one run_queued event frame published on the SSE stream
+	reader := bufio.NewReader(resp.Body)
+	var runQueuedFrames []string
+	readDone := make(chan struct{})
+	go func() {
+		defer close(readDone)
+		for range 1000 { // a 300 ms window carries far fewer lines
+			line, readErr := reader.ReadString('\n')
+			if readErr != nil {
+				return
+			}
+			line = strings.TrimSpace(line)
+			if line == "event: run_queued" {
+				runQueuedFrames = append(runQueuedFrames, line)
+			}
+		}
+	}()
+
+	select {
+	case <-time.After(300 * time.Millisecond):
+		_ = resp.Body.Close()
+		<-readDone
+	case <-readDone:
+	}
+
+	var rowID int64
+	err = f.st.Pool().QueryRow(ctx, "SELECT id FROM snatch_events WHERE type = 'run_queued' AND instance_id = $1", instID).Scan(&rowID)
+	if err != nil {
+		t.Fatalf("query snatch_events row ID: %v", err)
+	}
+	if rowID <= 0 {
+		t.Errorf("stored row ID = %d, want > 0", rowID)
+	}
+
+	if len(runQueuedFrames) != 1 {
+		t.Fatalf("published %d run_queued SSE frames, want exactly 1", len(runQueuedFrames))
 	}
 }
