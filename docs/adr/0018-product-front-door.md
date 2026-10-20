@@ -47,8 +47,8 @@ SnatchArr never re-implements Seerr (`snatcharr-product-seerr-20261020`). For st
 SnatchArr provides native request handling only where Seerr has gaps (`snatcharr-product-seerr-20261020`):
 
 - Adult media requests dispatched into Whisparr (`snatcharr-product-seerr-20261020`, `snatcharr-product-adult-scope-20261020`).
-- Books and audiobooks dispatched into Readarr or audiobookshelf (`snatcharr-product-seerr-20261020`, `snatcharr-product-more-media-20261020`).
-- Comics dispatched into a designated comics engine (`snatcharr-product-seerr-20261020`, `snatcharr-product-more-media-20261020`).
+- Books dispatched into readarr-rresurrected (Readarr kind), audiobooks via audiobookshelf as library/player (`snatcharr-product-seerr-20261020`, `snatcharr-product-more-media-20261020`, `k8s-books-manager-20261020`).
+- Comics dispatched into Comicarr (`snatcharr-product-seerr-20261020`, `snatcharr-product-more-media-20261020`, `k8s-comics-manager-20261020`).
 - Video games dispatched into RomM (`snatcharr-product-seerr-20261020`, `snatcharr-product-more-media-20261020`).
 - Enforcement of SnatchArr's search rule set across all request fulfillments (`snatcharr-product-seerr-20261020`, `snatcharr-product-request-rules-20261020`).
 
@@ -107,8 +107,8 @@ The first stable release supports seven primary media domains (`snatcharr-produc
 - **TV shows**: Driven through Sonarr instances (`snatcharr-product-job-20261020`, `snatcharr-product-seerr-20261020`).
 - **Movies**: Driven through Radarr instances (`snatcharr-product-job-20261020`, `snatcharr-product-seerr-20261020`).
 - **Music**: Driven through Lidarr instances (`snatcharr-product-more-media-20261020`).
-- **Books and audiobooks**: Books driven through Readarr (supported as a frozen legacy target per [ADR-0008](0008-readarr-frozen-legacy-target.md)); audiobooks managed and streamed through audiobookshelf (`snatcharr-product-more-media-20261020`).
-- **Comics**: Supported in the front-door catalog; underlying management engine remains open and to be decided (`snatcharr-product-more-media-20261020`).
+- **Books and audiobooks**: Books driven through readarr-rresurrected, reusing the Readarr kind ([ADR-0008](0008-readarr-frozen-legacy-target.md) frozen Readarr support) once its v1 API is verified to match; audiobooks in audiobookshelf (`snatcharr-product-more-media-20261020`, `k8s-books-manager-20261020`).
+- **Comics**: Driven through Comicarr; needs a new SnatchArr adapter for its own REST API (`snatcharr-product-more-media-20261020`, `k8s-comics-manager-20261020`).
 - **Video games**: Managed and cataloged through RomM (`snatcharr-product-more-media-20261020`).
 - **Adult content**: Scenes and performers driven through Whisparr v2 and v3, with Stash-box discovery and native image sets (`snatcharr-product-adult-scope-20261020`, `snatcharr-product-more-media-20261020`).
 
@@ -120,7 +120,7 @@ To avoid duplicating existing solutions, SnatchArr establishes clear boundaries 
 
 | Job | Existing app or library first | What SnatchArr adds | Link-only |
 | :--- | :--- | :--- | :--- |
-| Missing and cutoff-unmet search | Sonarr, Radarr, Lidarr, Whisparr, Readarr | Automated cycle scheduler, per-instance stamina caps, afterglow memory | No |
+| Missing and cutoff-unmet search | Sonarr, Radarr, Lidarr, Whisparr, Readarr (readarr-rresurrected), Comicarr | Automated cycle scheduler, per-instance stamina caps, afterglow memory | No |
 | Queue cleanup and stalled release eviction | *arr queue APIs (`DELETE .../queue/{id}`) | Multi-strike rule sweep (stalled, slow, failed, import-blocked, unwanted), automatic blocklist ([ADR-0012](0012-queue-management-replaces-cleanuparr-link.md)) | No |
 | Download client backpressure observation | qBittorrent, Transmission, Deluge, rTorrent, SABnzbd, NZBGet | Read-only observation of queue depth and paused state to throttle searches ([ADR-0006](0006-download-client-backpressure.md)) | Yes |
 | Centralized search rate limiting | Prowlarr | Global and per-indexer hourly search limits across all connected *arr instances | No |
@@ -131,8 +131,8 @@ To avoid duplicating existing solutions, SnatchArr establishes clear boundaries 
 | :--- | :--- | :--- | :--- |
 | TV and movie request intake and approval | Seerr (Overseerr / Jellyseerr) | Connects directly to Seerr; imports its Sonarr and Radarr servers and reads requests read-only, never approving or declining ([docs/seerr.md](../seerr.md)) | No (connected, read-only) |
 | Adult media requests | Whisparr (v2 and v3) | Request interface backed by Stash-box discovery and Whisparr ingestion | No |
-| Book and audiobook requests | Readarr, audiobookshelf | Request interface for books and audiobooks with metadata resolution and target dispatch | No |
-| Comic requests | Open (upstream engine to be decided) | Request intake and dispatch once an engine is selected | No |
+| Book and audiobook requests | readarr-rresurrected (Readarr v1 API, to verify), audiobookshelf | Request interface for books and audiobooks with metadata resolution and target dispatch | No |
+| Comic requests | Comicarr (own REST API) | New Comicarr instance adapter, request intake and dispatch | No |
 | Game requests | RomM | Request intake and dispatch to RomM game library | No |
 | Request fulfillment search rules | SnatchArr search scheduler | Applies SnatchArr scheduler rules: Usenet first with BitTorrent fallback, hourly indexer caps | No |
 
@@ -155,9 +155,9 @@ To avoid duplicating existing solutions, SnatchArr establishes clear boundaries 
 | Agent integration skills | Agent Skills specification | Bundled `SKILL.md` skill definitions for Codex, Gemini CLI, Antigravity, opencode, Claude Code, and editors on equal footing | No |
 | Machine-readable documentation | llms.txt standard | Generates `llms.txt` and `llms-full.txt` from documentation site; client-specific connect guides | No |
 
-### Pending product rename
+### Name
 
-This document records decisions using the current project name SnatchArr (`snatcharr-product-rename-20261020`, `snatcharr-product-adr-20261020`). A formal product rename is pending and will be selected during the upcoming planning round prior to subsequent releases, following collision analysis across code forges, package registries, trademark databases, and the wider *-arr ecosystem naming field (`snatcharr-product-rename-20261020`).
+The product keeps the name SnatchArr; no rename is planned (`snatcharr-product-name-final-20261020`, superseding `snatcharr-product-rename-20261020`).
 
 ## Consequences
 
@@ -184,7 +184,6 @@ Implementation of this product architecture requires six dedicated follow-up dec
 3. **Adult module ADR**: Establish the direct descriptive name, Stash-box synchronization protocol, Whisparr mapping rules, and image-set storage schema (`napp3-folded-into-napp2-20261020`, `napp-shape-20261020`, `snatcharr-product-adult-scope-20261020`).
 4. **Jellyfin plugin ADR**: Specify the plugin architecture, API contract between Jellyfin and SnatchArr, gallery layout, and metadata delivery (`snatcharr-product-jellyfin-plugin-20261020`).
 5. **Accounts and roles ADR**: Detail Jellyfin authentication integration, session management, group-to-role mappings, and parental control enforcement (`snatcharr-product-users-20261020`, `snatcharr-product-accounts-20261020`).
-6. **Product rename decision**: Complete collision research across registries and forges, select the new project name, and plan migration steps before the next release (`snatcharr-product-rename-20261020`).
 
 ## References
 
@@ -197,7 +196,7 @@ Implementation of this product architecture requires six dedicated follow-up dec
 - `snatcharr-product-job-20261020` (2026-10-20T14:48:58) (paraphrased): SnatchArr defined as the front door of the media stack while *arr apps remain engines.
 - `snatcharr-product-overlap-20261020` (2026-10-20T14:48:58) (paraphrased): Add only what fixes real functional gaps; link and reuse existing applications.
 - `snatcharr-product-v1-modules-20261020` (2026-10-20T14:48:58) (paraphrased): Definition of the four initial modules for the first stable release.
-- `snatcharr-product-rename-20261020` (2026-10-20T14:48:58) (paraphrased): Product rename pending collision research and final selection before subsequent releases.
+- `snatcharr-product-rename-20261020` (2026-10-20T14:48:58) (paraphrased): Product rename pending collision research and final selection before subsequent releases. Superseded by snatcharr-product-name-final-20261020.
 - `snatcharr-product-users-20261020` (2026-10-20T14:51:45) (paraphrased): User accounts with admin, requester, and viewer roles.
 - `snatcharr-product-adult-scope-20261020` (2026-10-20T14:51:45) (paraphrased): Adult module encompasses Stash-box discovery, Whisparr requesting, and local library and image-set browsing.
 - `snatcharr-product-adult-visibility-20261020` (2026-10-20T14:51:45) (paraphrased): Adult content visibility governed by Jellyfin user groups, parental ratings, and age restrictions.
@@ -207,6 +206,9 @@ Implementation of this product architecture requires six dedicated follow-up dec
 - `snatcharr-product-seerr-20261020` (2026-10-20T14:55:08) (paraphrased): Direct connection to Seerr; zero re-implementation; adds only missing media types and snatch rule enforcement.
 - `snatcharr-product-more-media-20261020` (2026-10-20T14:55:08) (paraphrased): First stable version covers TV, movies, music, books, audiobooks, comics, games, and adult media.
 - `snatcharr-product-adr-20261020` (2026-10-20T14:58:12) (paraphrased): Direct order to draft ADR superseding ADR-0011 using the recorded decision rows.
+- `k8s-books-manager-20261020` (2026-10-20T15:16:09) (paraphrased): Books manager set to readarr-rresurrected; audiobookshelf retained as library and player; SnatchArr reuses Readarr support if v1 API matches.
+- `k8s-comics-manager-20261020` (2026-10-20T15:16:09) (paraphrased): Comics manager set to Comicarr in media namespace, Usenet first via Newznab/Torznab; Comicarr REST API requires new SnatchArr adapter.
+- `snatcharr-product-name-final-20261020` (2026-10-20T15:17:14) (paraphrased): Name stays SnatchArr; no rename.
 - [ADR-0006](0006-download-client-backpressure.md): Download clients observed for backpressure, never driven.
 - [ADR-0008](0008-readarr-frozen-legacy-target.md): Readarr stays a supported target, frozen.
 - [ADR-0011](0011-product-definition.md): Product definition: parity with Huntarr and newtarr (superseded).
