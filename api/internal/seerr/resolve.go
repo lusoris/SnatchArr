@@ -8,6 +8,7 @@
 package seerr
 
 import (
+	"crypto/subtle"
 	"time"
 
 	"github.com/google/uuid"
@@ -36,30 +37,57 @@ func kindFor(mt domain.SeerrMediaType) domain.AppKind {
 	return domain.KindSonarr
 }
 
-// instanceIndex maps normalised base URLs to instances of a kind family.
-type instanceIndex map[string]domain.Instance
-
-func indexInstances(list []domain.Instance) instanceIndex {
-	idx := make(instanceIndex, len(list))
-	for _, inst := range list {
-		if u, err := domain.NormalizeBaseURL(inst.BaseURL); err == nil {
-			idx[u] = inst
-		}
-	}
-	return idx
+// instanceIndex maps normalised base URLs and API keys to instances.
+type instanceIndex struct {
+	byURL     map[string]domain.Instance
+	instances []domain.Instance
 }
 
-// lookup returns the instance behind a Seerr server URL when it has the wanted family.
-func (idx instanceIndex) lookup(baseURL string, kind domain.AppKind) *uuid.UUID {
-	u, err := domain.NormalizeBaseURL(baseURL)
-	if err != nil {
+func indexInstances(list []domain.Instance) instanceIndex {
+	byURL := make(map[string]domain.Instance, len(list))
+	for _, inst := range list {
+		if u, err := domain.NormalizeBaseURL(inst.BaseURL); err == nil {
+			byURL[u] = inst
+		}
+	}
+	return instanceIndex{byURL: byURL, instances: list}
+}
+
+// lookup returns the instance behind a Seerr server: first by exact normalised base URL,
+// then by decrypted API key when URLs differ.
+func (idx instanceIndex) lookup(server seerrclient.Server, kind domain.AppKind) *uuid.UUID {
+	if u, err := domain.NormalizeBaseURL(server.BaseURL); err == nil && idx.byURL != nil {
+		if inst, ok := idx.byURL[u]; ok && sameFamily(inst.Kind, kind) {
+			id := inst.ID
+			return &id
+		}
+	}
+	return idx.lookupByKey(server.APIKey, kind)
+}
+
+// lookupByKey matches an instance whose decrypted API key equals serverKey. If multiple
+// instances share the key (misconfiguration), the match is ambiguous and yields nil.
+func (idx instanceIndex) lookupByKey(serverKey string, kind domain.AppKind) *uuid.UUID {
+	if serverKey == "" {
 		return nil
 	}
-	inst, ok := idx[u]
-	if !ok || !sameFamily(inst.Kind, kind) {
+	var matched *domain.Instance
+	for i := range idx.instances {
+		inst := &idx.instances[i]
+		if inst.APIKey == "" {
+			continue
+		}
+		if subtle.ConstantTimeCompare([]byte(inst.APIKey), []byte(serverKey)) == 1 {
+			if matched != nil {
+				return nil
+			}
+			matched = inst
+		}
+	}
+	if matched == nil || !sameFamily(matched.Kind, kind) {
 		return nil
 	}
-	id := inst.ID
+	id := matched.ID
 	return &id
 }
 
@@ -78,7 +106,7 @@ func sameFamily(have, want domain.AppKind) bool {
 }
 
 // resolveInstance picks the SnatchArr instance a request belongs to: the Seerr server
-// the request names (matched by URL), else Seerr's default server for that family and
+// the request names (matched by URL or API key), else Seerr's default server for that family and
 // 4K flag, else the link's fallback instance.
 func resolveInstance(mt domain.SeerrMediaType, r seerrclient.Request, servers []seerrclient.Server, idx instanceIndex, link domain.SeerrLink) *uuid.UUID {
 	kind := kindFor(mt)
@@ -99,13 +127,13 @@ func resolveInstance(mt domain.SeerrMediaType, r seerrclient.Request, servers []
 }
 
 // matchServer returns the instance behind the first server of the family and 4K flag that
-// satisfies pick and whose URL is a known instance.
+// satisfies pick and whose URL or API key matches a known instance.
 func matchServer(servers []seerrclient.Server, idx instanceIndex, kind domain.AppKind, is4k bool, pick func(seerrclient.Server) bool) *uuid.UUID {
 	for _, s := range servers {
 		if s.Kind != kind || s.Is4K != is4k || !pick(s) {
 			continue
 		}
-		if id := idx.lookup(s.BaseURL, kind); id != nil {
+		if id := idx.lookup(s, kind); id != nil {
 			return id
 		}
 	}

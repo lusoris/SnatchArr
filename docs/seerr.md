@@ -13,7 +13,7 @@ declines, retries or otherwise touches a request.
 
 `POST /api/v1/seerr` with the Seerr URL and an API key (Settings → General in Seerr).
 Several links are fine. Each link can name a **fallback** Sonarr and Radarr instance for
-requests whose Seerr server cannot be matched to a SnatchArr instance by URL.
+requests whose Seerr server cannot be matched to a SnatchArr instance by URL or API key.
 
 `POST /api/v1/seerr/{id}/import-instances` reads the Sonarr and Radarr servers Seerr is
 configured with (API keys included) and creates a SnatchArr instance for each one that
@@ -25,8 +25,9 @@ does not exist yet, so nothing has to be typed twice. Imported instances carry t
 Every five minutes (or on `POST /api/v1/seerr/{id}/sync`) SnatchArr fetches the
 **approved but not yet available** requests (`filter=processing`) and maps each one:
 
-1. **Instance**: the Seerr server the request names, matched by URL (4K servers to 4K
-   requests), else Seerr's default server for that media type, else the link's fallback.
+1. **Instance**: the Seerr server the request names, matched by URL or API key (4K
+   servers to 4K requests), else Seerr's default server for that media type, else the
+   link's fallback.
 2. **Entity**: the Radarr movie (by TMDB id) or Sonarr series (by TVDB id) in that
    instance's library. A request whose media Seerr has not added to the *arr yet stays
    unresolved and is retried on the next sync.
