@@ -27,6 +27,9 @@ SPDX-License-Identifier: EUPL-1.2
 		events: LIVE_EVENTS,
 		bufferMs: 100,
 		historyLimit: 500,
+		// The client calls its default timers with itself as receiver, which browsers
+		// refuse, so it never reconnects (golusoris/sveltesentio#424); bound wrappers
+		// avoid that until a fixed release is out.
 		setTimeoutImpl: ((cb: TimerHandler, ms?: number) =>
 			setTimeout(cb, ms)) as unknown as typeof setTimeout,
 		clearTimeoutImpl: ((id?: number | NodeJS.Timeout) =>
