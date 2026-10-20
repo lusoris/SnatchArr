@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.5.1](https://github.com/lusoris/SnatchArr/compare/v0.5.0...v0.5.1) (2026-10-20)
+
+
+### Features
+
+* **queue:** sweep Whisparr queues and force-import Lidarr and Readarr ([ceda19e](https://github.com/lusoris/SnatchArr/commit/ceda19e7af243d578a1856112b99b29759d62307))
+
+
+### Bug Fixes
+
+* **deps:** update @sveltesentio/ui to 0.8.1 ([#460](https://github.com/lusoris/SnatchArr/issues/460)) ([1dc3257](https://github.com/lusoris/SnatchArr/commit/1dc3257df1bffa8245f0dfe397b770e7cb414fcc))
+* **deps:** update goenvoy lidarr, readarr and whisparr modules ([ceda19e](https://github.com/lusoris/SnatchArr/commit/ceda19e7af243d578a1856112b99b29759d62307))
+* **e2e:** stop the nav icon test racing the admin entries ([#459](https://github.com/lusoris/SnatchArr/issues/459)) ([936ff0e](https://github.com/lusoris/SnatchArr/commit/936ff0e01f972361824f28c8a9a7cf1651112bae))
+* **workergrpc:** rely on the golusoris unlimited grace default ([#462](https://github.com/lusoris/SnatchArr/issues/462)) ([8699c25](https://github.com/lusoris/SnatchArr/commit/8699c258219ddd6a9cb7dc0c44021e9bea75ada9))
+
+
+### Refactoring
+
+* **leader:** run the periodic loops on golusoris leader/gate ([#463](https://github.com/lusoris/SnatchArr/issues/463)) ([04a246e](https://github.com/lusoris/SnatchArr/commit/04a246ea4d970eafb711c3d1ac6ec175a61b151d))
+* **storetest:** run the shared Postgres on golusoris testutil/pg ([#465](https://github.com/lusoris/SnatchArr/issues/465)) ([9f40d92](https://github.com/lusoris/SnatchArr/commit/9f40d92c6bf51e201716c84c20e29738466ba024))
+* **web:** check locale parity with @sveltesentio/testing 0.4.0 ([#466](https://github.com/lusoris/SnatchArr/issues/466)) ([a060889](https://github.com/lusoris/SnatchArr/commit/a0608894a5f7b370020478cbbbbcc6ce4dec1d71))
+
 ## [0.5.0](https://github.com/lusoris/SnatchArr/compare/v0.4.2...v0.5.0) (2026-10-19)
 
 
