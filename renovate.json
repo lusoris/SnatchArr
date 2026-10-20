@@ -424,6 +424,16 @@
         "mcr.microsoft.com/playwright"
       ],
       "groupName": "playwright"
+    },
+    {
+      "description": "The Docker datasource dates tags only on Docker Hub, so under minimumReleaseAge the Playwright image never counts as stable and the group above shipped @playwright/test alone (#411). The image needs no age gate of its own: tools/e2e/web_visual.sh refuses an image whose version differs from @playwright/test in the lockfile, and that npm package keeps the 3-day gate, so the image cannot land before its npm twin has aged",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchDepNames": [
+        "mcr.microsoft.com/playwright"
+      ],
+      "minimumReleaseAgeBehaviour": "timestamp-optional"
     }
   ],
   "platformCommit": "enabled",
