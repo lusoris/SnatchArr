@@ -21,7 +21,7 @@ GOMODCACHE       = $(subst \,/,$(shell go env GOMODCACHE))
 GOLUSORIS_VER    = $(shell go list -m -f '{{.Version}}' github.com/golusoris/golusoris)
 GOLUSORIS_SHARED = $(GOMODCACHE)/github.com/golusoris/golusoris@$(GOLUSORIS_VER)/tools/Makefile.shared
 
-.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-soak e2e-compose-smoke e2e-compose-pg-upgrade e2e-dev-compose-smoke dlclients-live arr-forceimport-live e2e-cnpg-pg-upgrade e2e-cnpg-backup-restore e2e-chart-install web-verify web-e2e web-e2e-api web-visual web-visual-update proto-verify deploy-verify chart-package governance-verify hooks-verify contracts-verify workflows-verify workflows-lint secret-scan \
+.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-soak e2e-compose-smoke e2e-compose-pg-upgrade e2e-dev-compose-smoke dlclients-live arr-forceimport-live integrations-live e2e-cnpg-pg-upgrade e2e-cnpg-backup-restore e2e-chart-install web-verify web-e2e web-e2e-api web-visual web-visual-update proto-verify deploy-verify chart-package governance-verify hooks-verify contracts-verify workflows-verify workflows-lint secret-scan \
 	images kind-up kind-deploy kind-keda-proof kind-down \
         api-gen api-gosec api-vuln gosec-install govulncheck-install sqlc-install tools-verify tools-lint tools-test tools-gosec web-gen proto-gen dev hooks setup
 
@@ -273,6 +273,17 @@ arr-forceimport-live: ## Real Sonarr and Radarr: ID-matched release force-import
 	bash tools/e2e/planted.sh SNATCHARR_FORCEIMPORT_PLANT tools/e2e/forceimport_live.sh \
 	  "audio:no clean, mapped manual-import candidate" "unmapped:no clean, mapped manual-import candidate" \
 	  "second-line:is not id-matched" "skip:is still in the queue"
+
+# All supported integrations driven end to end against real application containers
+# (tools/e2e/integrations): Sonarr, Radarr, Lidarr, Readarr, Whisparr v2, Whisparr v3,
+# Prowlarr, Seerr, SABnzbd and qBittorrent. The planted cases (bad key, bad path, bad client
+# credentials, bad instance credentials) must each fail. Not in verify-all (slow, needs Docker).
+integrations-live: ## Real app containers: every integration driven end to end (needs Docker)
+	bash tools/e2e/pull_retry_test.sh
+	bash tools/e2e/planted_test.sh
+	bash tools/e2e/planted.sh SNATCHARR_INTEGRATIONS_PLANT tools/e2e/integrations_live.sh \
+	  "badkey:prowlarr test failed" "seerrpath:seerr test failed" \
+	  "badclient:download client test failed" "badinstance:instance test failed"
 
 # The chart on CloudNativePG moved from the previous Postgres major to the current one by the
 # imageName change of docs/deployment.md, with data read-back and a planted upgrade without the
