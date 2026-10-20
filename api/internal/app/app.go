@@ -169,8 +169,12 @@ func mountHTTP(d httpDeps, api httpapi.MountParams) error {
 	if err := prom.Mount(d.Router, d.Reg); err != nil {
 		return fmt.Errorf("app: mount metrics: %w", err)
 	}
-	httpapi.MountStream(d.Router, api, d.Events.Hub().Handler())
-	httpapi.MountLogStream(d.Router, api, d.Logs.StreamHandler())
+	if err := httpapi.MountStream(d.Router, api, d.Events.Hub().Handler()); err != nil {
+		return fmt.Errorf("app: %w", err)
+	}
+	if err := httpapi.MountLogStream(d.Router, api, d.Logs.StreamHandler()); err != nil {
+		return fmt.Errorf("app: %w", err)
+	}
 	sso.Mount(d.Router, httpapi.PathPrefix, d.SSO, httpapi.ErrorHandler(d.Logger))
 	if err := httpapi.Mount(d.Router, api); err != nil {
 		return err
