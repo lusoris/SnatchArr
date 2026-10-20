@@ -15,6 +15,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jonboulle/clockwork"
+
 	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/realtime/sse"
 )
@@ -54,16 +56,21 @@ func TestKeepAlive(t *testing.T) {
 
 	t.Run("negative nil clock is a wiring error", func(t *testing.T) {
 		t.Parallel()
-		h, err := KeepAlive(http.NotFoundHandler(), nil, StreamKeepAliveInterval)
+		h, err := KeepAlive(http.NotFoundHandler(), nil, StreamKeepAliveInterval, nil)
 		if !errors.Is(err, errNoStreamClock) || h != nil {
 			t.Fatalf("KeepAlive(nil clock) = %v, %v; want nil, errNoStreamClock", h, err)
 		}
+	})
+
+	t.Run("boundary stream survives past server write timeout", func(t *testing.T) {
+		t.Parallel()
+		runWriteTimeoutBoundary(t)
 	})
 }
 
 func mustKeepAlive(t *testing.T, h http.Handler, clk clock.Clock) http.Handler {
 	t.Helper()
-	kh, err := KeepAlive(h, clk, StreamKeepAliveInterval)
+	kh, err := KeepAlive(h, clk, StreamKeepAliveInterval, nil)
 	if err != nil {
 		t.Fatalf("KeepAlive: %v", err)
 	}
@@ -517,5 +524,60 @@ func (h *headerHoldingHandler) ServeHTTP(w http.ResponseWriter, req *http.Reques
 	}
 	if readErr != nil && !errors.Is(readErr, io.EOF) {
 		return
+	}
+}
+
+func runWriteTimeoutBoundary(t *testing.T) {
+	t.Helper()
+	realClk := clockwork.NewRealClock()
+	const hbInterval = 40 * time.Millisecond
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", sseContentType)
+		if fl, ok := w.(http.Flusher); ok {
+			fl.Flush()
+		}
+		<-r.Context().Done()
+	})
+	kh, err := KeepAlive(h, realClk, hbInterval, nil)
+	if err != nil {
+		t.Fatalf("KeepAlive: %v", err)
+	}
+	srv := httptest.NewUnstartedServer(kh)
+	srv.Config.WriteTimeout = 200 * time.Millisecond
+	srv.Start()
+	t.Cleanup(srv.Close)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	t.Cleanup(cancel)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL, nil)
+	if err != nil {
+		t.Fatalf("NewRequestWithContext: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("client.Do: %v", err)
+	}
+	t.Cleanup(func() { _ = resp.Body.Close() })
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	deadline := realClk.Now().Add(1 * time.Second)
+	buf := make([]byte, 512)
+	totalRead := 0
+	for realClk.Now().Before(deadline) {
+		n, readErr := resp.Body.Read(buf)
+		totalRead += n
+		if readErr != nil {
+			if errors.Is(readErr, io.EOF) {
+				t.Fatalf("stream closed prematurely after %d bytes: %v", totalRead, readErr)
+			}
+			t.Fatalf("stream read error after %d bytes: %v", totalRead, readErr)
+		}
+	}
+	if totalRead == 0 {
+		t.Fatal("expected to read stream data, got 0 bytes")
 	}
 }

@@ -9,6 +9,7 @@ package events
 import (
 	"context"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 
 // Frame is the JSON payload of every SSE event.
 type Frame struct {
+	ID         int64     `json:"id,omitempty"`
 	RunID      string    `json:"run_id,omitempty"`
 	InstanceID uuid.UUID `json:"instance_id"`
 	Timestamp  time.Time `json:"ts"`
@@ -47,7 +49,11 @@ func (b *Bus) Hub() *sse.Hub { return b.hub }
 // Publish sends one frame to every connected client. The SSE event name is the
 // frame type, e.g. "search_dispatched".
 func (b *Bus) Publish(ctx context.Context, f Frame) {
-	b.hub.Publish(ctx, sse.Event{Event: EventName(f.Type), Data: f})
+	evt := sse.Event{Event: EventName(f.Type), Data: f}
+	if f.ID != 0 {
+		evt.ID = strconv.FormatInt(f.ID, 10)
+	}
+	b.hub.Publish(ctx, evt)
 }
 
 // EventName normalises a proto enum name such as EVENT_TYPE_SEARCH_DISPATCHED to

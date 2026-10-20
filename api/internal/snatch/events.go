@@ -51,18 +51,20 @@ func (r *Recorder) Record(ctx context.Context, e domain.Event) error {
 	if e.Level == "" {
 		e.Level = "info"
 	}
-	if _, err := r.st.Q().InsertEvent(ctx, sqlcgen.InsertEventParams{
+	rowID, err := r.st.Q().InsertEvent(ctx, sqlcgen.InsertEventParams{
 		RunID: e.RunID, InstanceID: e.InstanceID, Ts: e.Timestamp, Level: e.Level, Type: e.Type,
 		EntityType: e.EntityType, EntityID: e.EntityID, Title: e.Title, Detail: e.Detail,
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("snatch: record event: %w", store.MapError(err))
 	}
+	e.ID = rowID
 	runID := ""
 	if e.RunID != nil {
 		runID = e.RunID.String()
 	}
 	r.bus.Publish(ctx, events.Frame{
-		RunID: runID, InstanceID: e.InstanceID, Timestamp: e.Timestamp, Level: e.Level, Type: e.Type,
+		ID: rowID, RunID: runID, InstanceID: e.InstanceID, Timestamp: e.Timestamp, Level: e.Level, Type: e.Type,
 		EntityType: e.EntityType, EntityID: e.EntityID, Title: e.Title, Detail: e.Detail,
 	})
 	for _, obs := range r.observers {
