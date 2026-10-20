@@ -3,6 +3,9 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 import { expect, test } from '@playwright/test';
+import { mockInstancePolicyApi, mockSettingsApi } from './mocks.js';
+
+const testInstanceId = '00000000-0000-0000-0000-000000000001';
 
 test.describe('nonblocking', () => {
 	for (const initialPath of ['/instances', '/live']) {
@@ -58,4 +61,93 @@ test.describe('nonblocking', () => {
 			});
 		});
 	}
+
+	test('policy tab: delayed 10s API response shows loading and remains interactive', async ({
+		page
+	}) => {
+		await mockInstancePolicyApi(page, testInstanceId, { delayMs: 10_000 });
+		await page.goto(`/instances/${testInstanceId}/policy`);
+
+		// Loading indicator visible within 1000 ms
+		const loading = page.locator('[aria-live="polite"]').first();
+		await expect(loading).toBeVisible({ timeout: 1000 });
+
+		// Navigation stays interactive: click settings link within 1000 ms
+		const settingsLink = page.getByRole('link', { name: /Settings|Einstellungen/i }).first();
+		await settingsLink.click();
+		await expect(page).toHaveURL(/\/settings/, { timeout: 1000 });
+	});
+
+	test('policy tab: 503 renders problem note and form recovers', async ({ page }) => {
+		await mockInstancePolicyApi(page, testInstanceId, { status: 503 });
+		await page.goto(`/instances/${testInstanceId}/policy`);
+
+		// Problem note visible after retries exhaust
+		const problem = page.locator('.problem-note, [role="alert"]').first();
+		await expect(problem).toBeVisible({ timeout: 12_000 });
+
+		// API recovers, reload brings usable form
+		await mockInstancePolicyApi(page, testInstanceId);
+		await page.reload();
+		const field = page.locator('[data-field="missing_per_cycle"]');
+		await expect(field).toBeVisible({ timeout: 3000 });
+		await field.fill('25');
+		await expect(field).toHaveValue('25');
+	});
+
+	test('policy tab: save action shows pending state and recovers on 503', async ({ page }) => {
+		await mockInstancePolicyApi(page, testInstanceId, { saveDelayMs: 400, saveStatus: 503 });
+		await page.goto(`/instances/${testInstanceId}/policy`);
+
+		const saveBtn = page.getByRole('button', { name: /Save|Speichern/i }).first();
+		await expect(saveBtn).toBeVisible({ timeout: 3000 });
+
+		await saveBtn.click();
+		// Button shows pending state (disabled)
+		await expect(saveBtn).toBeDisabled({ timeout: 500 });
+		// Recovers after 503 response
+		await expect(saveBtn).toBeEnabled({ timeout: 3000 });
+	});
+
+	test('settings: delayed 10s API response shows loading and remains interactive', async ({
+		page
+	}) => {
+		await mockSettingsApi(page, { delayMs: 10_000 });
+		await page.goto('/settings');
+
+		const loading = page.locator('[aria-live="polite"]').first();
+		await expect(loading).toBeVisible({ timeout: 1000 });
+
+		const instancesLink = page.getByRole('link', { name: /Instances|Instanzen/i }).first();
+		await instancesLink.click();
+		await expect(page).toHaveURL(/\/instances/, { timeout: 1000 });
+	});
+
+	test('settings: 503 renders problem note and form recovers', async ({ page }) => {
+		await mockSettingsApi(page, { status: 503 });
+		await page.goto('/settings');
+
+		const problem = page.locator('.problem-note, [role="alert"]').first();
+		await expect(problem).toBeVisible({ timeout: 12_000 });
+
+		// API recovers, reload brings usable form
+		await mockSettingsApi(page);
+		await page.reload();
+		const field = page.locator('[data-field="global_hourly_cap"]');
+		await expect(field).toBeVisible({ timeout: 3000 });
+		await field.fill('75');
+		await expect(field).toHaveValue('75');
+	});
+
+	test('settings: save action shows pending state and recovers on 503', async ({ page }) => {
+		await mockSettingsApi(page, { saveDelayMs: 400, saveStatus: 503 });
+		await page.goto('/settings');
+
+		const saveBtn = page.getByRole('button', { name: /Save|Speichern/i }).first();
+		await expect(saveBtn).toBeVisible({ timeout: 3000 });
+
+		await saveBtn.click();
+		await expect(saveBtn).toBeDisabled({ timeout: 500 });
+		await expect(saveBtn).toBeEnabled({ timeout: 3000 });
+	});
 });

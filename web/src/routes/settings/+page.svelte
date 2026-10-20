@@ -58,84 +58,101 @@ SPDX-License-Identifier: EUPL-1.2
 	}
 </script>
 
-<h1 class="mb-4 text-2xl font-semibold">{m.settings_title()}</h1>
+<div class="mx-auto flex max-w-xl flex-col gap-6">
+	<h1 class="text-2xl font-semibold">{m.settings_title()}</h1>
 
-{#if settings.isPending}
-	<p aria-live="polite">{m.loading()}</p>
-{:else if settings.isError}
-	<ProblemNote error={settings.error} />
-{:else if draft}
-	<form
-		class="card flex max-w-xl flex-col gap-4"
-		onsubmit={(e) => {
-			e.preventDefault();
-			if (draft) save.mutate(draft);
-		}}
-	>
-		<Field id="retention" label={m.settings_retention()}>
-			<input
-				id="retention"
-				class="input"
-				type="number"
-				min="1"
-				max="3650"
-				bind:value={draft.history_retention_days}
-			/>
-		</Field>
-		<Field id="ua" label={m.settings_user_agent()}>
-			<input id="ua" class="input" maxlength="200" bind:value={draft.user_agent} />
-		</Field>
-		<Field id="global_cap" label={m.settings_global_cap()}>
-			<input
-				id="global_cap"
-				class="input"
-				type="number"
-				min="0"
-				max="5000"
-				bind:value={draft.global_hourly_cap}
-			/>
-		</Field>
-		<div>
-			<button type="submit" class="btn btn-primary" disabled={save.isPending}
-				>{m.instance_save()}</button
-			>
-		</div>
-	</form>
-
-	<h2 class="mt-8 mb-4 text-xl font-semibold">{m.change_password_title()}</h2>
-	<form class="card flex max-w-xl flex-col gap-4" onsubmit={changePassword}>
-		<Field id="current-password" label={m.current_password()}>
-			<input
-				id="current-password"
-				class="input"
-				type="password"
-				autocomplete="current-password"
-				required
-				bind:value={currentPassword}
-			/>
-		</Field>
-		<Field id="new-password" label={m.new_password()} hint={m.password_min_hint()}>
-			<input
-				id="new-password"
-				class="input"
-				type="password"
-				autocomplete="new-password"
-				required
-				minlength="12"
-				bind:value={newPassword}
-			/>
-		</Field>
-		{#if passwordError}
-			<p role="alert" class="text-sm text-danger">{passwordError}</p>
+	{#if settings.isPending}
+		<p aria-live="polite">{m.loading()}</p>
+	{:else if settings.isError}
+		<ProblemNote error={settings.error} />
+	{:else if draft}
+		{#if save.isError}
+			<ProblemNote error={save.error} />
 		{/if}
-		<div>
-			<button type="submit" class="btn btn-primary" disabled={changingPassword}>
-				{m.change_password_submit()}
-			</button>
-		</div>
-	</form>
 
-	<h2 class="mt-8 mb-4 text-xl font-semibold">{m.notifications_title()}</h2>
-	<NotificationChannels />
-	<NotificationRules />
-{/if}
+		<form
+			class="card flex flex-col gap-4"
+			onsubmit={(e) => {
+				e.preventDefault();
+				if (draft) save.mutate(draft);
+			}}
+		>
+			<Field id="retention" label={m.settings_retention()} hint={m.settings_retention_hint()}>
+				<input
+					id="retention"
+					data-field="history_retention_days"
+					class="input"
+					type="number"
+					min="1"
+					max="3650"
+					aria-describedby="retention-hint"
+					bind:value={draft.history_retention_days}
+				/>
+			</Field>
+			<Field id="ua" label={m.settings_user_agent()} hint={m.settings_user_agent_hint()}>
+				<input
+					id="ua"
+					data-field="user_agent"
+					class="input"
+					maxlength="200"
+					aria-describedby="ua-hint"
+					bind:value={draft.user_agent}
+				/>
+			</Field>
+			<Field id="global_cap" label={m.settings_global_cap()} hint={m.settings_global_cap_hint()}>
+				<input
+					id="global_cap"
+					data-field="global_hourly_cap"
+					class="input"
+					type="number"
+					min="0"
+					max="5000"
+					aria-describedby="global_cap-hint"
+					bind:value={draft.global_hourly_cap}
+				/>
+			</Field>
+			<div>
+				<button type="submit" class="btn btn-primary" disabled={save.isPending}
+					>{m.instance_save()}</button
+				>
+			</div>
+		</form>
+
+		<h2 class="mt-4 text-xl font-semibold">{m.change_password_title()}</h2>
+		<form class="card flex flex-col gap-4" onsubmit={changePassword}>
+			<Field id="current-password" label={m.current_password()}>
+				<input
+					id="current-password"
+					class="input"
+					type="password"
+					autocomplete="current-password"
+					required
+					bind:value={currentPassword}
+				/>
+			</Field>
+			<Field id="new-password" label={m.new_password()} hint={m.password_min_hint()}>
+				<input
+					id="new-password"
+					class="input"
+					type="password"
+					autocomplete="new-password"
+					required
+					minlength="12"
+					bind:value={newPassword}
+				/>
+			</Field>
+			{#if passwordError}
+				<p role="alert" class="text-sm text-danger">{passwordError}</p>
+			{/if}
+			<div>
+				<button type="submit" class="btn btn-primary" disabled={changingPassword}>
+					{m.change_password_submit()}
+				</button>
+			</div>
+		</form>
+
+		<h2 class="mt-4 text-xl font-semibold">{m.notifications_title()}</h2>
+		<NotificationChannels />
+		<NotificationRules />
+	{/if}
+</div>

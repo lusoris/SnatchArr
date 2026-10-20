@@ -28,7 +28,7 @@ import (
 )
 
 // budgetServer is a Server wired for AcquireBudget against a fresh database, with one leased
-// run on an instance whose policy is the default (hourly cap 20, no global cap).
+// run on an instance whose policy is the default (hourly cap 15, no global cap).
 func budgetServer(t *testing.T) (*Server, uuid.UUID, string) {
 	t.Helper()
 	srv, _, instanceID, runID := budgetServerOn(t)
@@ -80,9 +80,9 @@ func TestAcquireBudgetGrantsPerItem(t *testing.T) {
 	}{
 		{"positive all fit", 8, []*snatcharrv1.BudgetItem{whole(3), part(5)}, []uint32{3, 5}, 8},
 		{"negative atomic over the cap waits, later items are served", 36, []*snatcharrv1.BudgetItem{whole(21), part(12), whole(3)}, []uint32{0, 12, 3}, 15},
-		{"positive divisible takes what is left", 29, []*snatcharrv1.BudgetItem{whole(4), part(25)}, []uint32{4, 16}, 20},
-		{"boundary atomic exactly the cap", 21, []*snatcharrv1.BudgetItem{whole(20), part(1)}, []uint32{20, 0}, 20},
-		{"boundary no items: the plain total, no per-item grants", 25, nil, nil, 20},
+		{"positive divisible takes what is left", 29, []*snatcharrv1.BudgetItem{whole(4), part(25)}, []uint32{4, 11}, 15},
+		{"boundary atomic exactly the cap", 16, []*snatcharrv1.BudgetItem{whole(15), part(1)}, []uint32{15, 0}, 15},
+		{"boundary no items: the plain total, no per-item grants", 25, nil, nil, 15},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -92,7 +92,7 @@ func TestAcquireBudgetGrantsPerItem(t *testing.T) {
 			if err != nil {
 				t.Fatalf("AcquireBudget() = %v", err)
 			}
-			if !slices.Equal(resp.GetGrantedItems(), tc.want) || resp.GetGranted() != tc.granted || resp.GetRemainingInWindow() != 20-tc.granted {
+			if !slices.Equal(resp.GetGrantedItems(), tc.want) || resp.GetGranted() != tc.granted || resp.GetRemainingInWindow() != 15-tc.granted {
 				t.Fatalf("AcquireBudget() = %v; want items %v, granted %d", resp, tc.want, tc.granted)
 			}
 			if used, _, usedErr := srv.budget.Used(t.Context(), instanceID); usedErr != nil || used != int(tc.granted) {
@@ -150,9 +150,9 @@ func TestAcquireBudgetStaminaExhaustedRecordedOnceAtTransition(t *testing.T) {
 	srv, st, instanceID, runID := budgetServerOn(t)
 	ctx := t.Context()
 
-	// Call 1: exhausts remaining capacity (policy default is 20).
-	resp1, err := srv.AcquireBudget(ctx, &snatcharrv1.AcquireBudgetRequest{RunId: runID, Requested: 20})
-	if err != nil || resp1.GetGranted() != 20 || resp1.GetRemainingInWindow() != 0 {
+	// Call 1: exhausts remaining capacity (policy default is 15).
+	resp1, err := srv.AcquireBudget(ctx, &snatcharrv1.AcquireBudgetRequest{RunId: runID, Requested: 15})
+	if err != nil || resp1.GetGranted() != 15 || resp1.GetRemainingInWindow() != 0 {
 		t.Fatalf("call 1 = %v, granted=%d, remaining=%d", err, resp1.GetGranted(), resp1.GetRemainingInWindow())
 	}
 

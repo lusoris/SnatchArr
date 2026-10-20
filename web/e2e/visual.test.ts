@@ -8,7 +8,7 @@
 // image (tools/e2e/web_visual.sh), so the pixels never depend on the host's fonts or GPU.
 // The API is mocked: the pages show the state of a fresh install and of a signed-out visitor.
 import { expect, test, type Page } from '@playwright/test';
-import { mockSignedInApi } from './mocks.js';
+import { mockInstancePolicyApi, mockSettingsApi, mockSignedInApi } from './mocks.js';
 
 const PAGES = [
 	{ name: 'login', path: '/login', setupComplete: true },
@@ -97,6 +97,57 @@ for (const viewport of SHELL_VIEWPORTS) {
 				await mockSignedInApi(page);
 				await prep(page, '/');
 				await expect(page).toHaveScreenshot(`shell-${viewport.name}-${locale}-${scheme}.png`);
+			});
+		}
+	}
+}
+
+const POLICY_TARGETS = [
+	{ kind: 'sonarr' as const, id: '00000000-0000-0000-0000-000000000001' },
+	{ kind: 'radarr' as const, id: '00000000-0000-0000-0000-000000000002' }
+] as const;
+
+for (const target of POLICY_TARGETS) {
+	for (const viewport of SHELL_VIEWPORTS) {
+		for (const locale of LOCALES) {
+			for (const scheme of SCHEMES) {
+				test(`policy ${target.kind} ${viewport.name} ${locale} ${scheme}`, async ({
+					page,
+					baseURL
+				}) => {
+					await page
+						.context()
+						.addCookies([{ name: 'PARAGLIDE_LOCALE', value: locale, url: baseURL ?? '' }]);
+					await page.setViewportSize({ width: viewport.width, height: viewport.height });
+					await page.emulateMedia({ colorScheme: scheme, reducedMotion: 'reduce' });
+					await mockInstancePolicyApi(page, target.id, { instanceKind: target.kind });
+					await prep(page, `/instances/${target.id}/policy`);
+					await expect(page.locator('[data-field="missing_per_cycle"]')).toBeVisible();
+					await expect(page).toHaveScreenshot(
+						`policy-${target.kind}-${viewport.name}-${locale}-${scheme}.png`,
+						{ fullPage: true }
+					);
+				});
+			}
+		}
+	}
+}
+
+for (const viewport of SHELL_VIEWPORTS) {
+	for (const locale of LOCALES) {
+		for (const scheme of SCHEMES) {
+			test(`settings ${viewport.name} ${locale} ${scheme}`, async ({ page, baseURL }) => {
+				await page
+					.context()
+					.addCookies([{ name: 'PARAGLIDE_LOCALE', value: locale, url: baseURL ?? '' }]);
+				await page.setViewportSize({ width: viewport.width, height: viewport.height });
+				await page.emulateMedia({ colorScheme: scheme, reducedMotion: 'reduce' });
+				await mockSettingsApi(page);
+				await prep(page, '/settings');
+				await expect(page.locator('[data-field="global_hourly_cap"]')).toBeVisible();
+				await expect(page).toHaveScreenshot(`settings-${viewport.name}-${locale}-${scheme}.png`, {
+					fullPage: true
+				});
 			});
 		}
 	}

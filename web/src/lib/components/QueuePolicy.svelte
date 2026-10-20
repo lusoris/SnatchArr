@@ -176,12 +176,12 @@ SPDX-License-Identifier: EUPL-1.2
 
 			<div class="md:col-span-2">
 				<label class="flex items-center gap-2">
-					<input type="checkbox" bind:checked={draft.enabled} />
+					<input type="checkbox" data-field="enabled" bind:checked={draft.enabled} />
 					{m.queue_policy_enabled()}
 				</label>
 			</div>
 
-			<fieldset class="border-border rounded border p-4 md:col-span-2">
+			<fieldset class="border-border rounded border p-4 md:col-span-2" data-field="rules">
 				<legend class="px-2 text-sm font-semibold">{m.queue_policy_rules_title()}</legend>
 				<div class="overflow-x-auto">
 					<table class="w-full text-left text-sm">
@@ -234,23 +234,31 @@ SPDX-License-Identifier: EUPL-1.2
 				</div>
 			</fieldset>
 
-			<Field id="queue-grace" label={m.queue_policy_grace()}>
+			<Field id="queue-grace" label={m.queue_policy_grace()} hint={m.queue_policy_grace_hint()}>
 				<input
 					id="queue-grace"
+					data-field="grace_seconds"
 					class="input"
 					type="number"
 					min="0"
 					max="1440"
+					aria-describedby="queue-grace-hint"
 					bind:value={draft.grace_minutes}
 				/>
 			</Field>
 
-			<Field id="queue-min-bps" label={m.queue_policy_min_bps()}>
+			<Field
+				id="queue-min-bps"
+				label={m.queue_policy_min_bps()}
+				hint={m.queue_policy_min_bps_hint()}
+			>
 				<input
 					id="queue-min-bps"
+					data-field="min_bytes_per_second"
 					class="input"
 					type="number"
 					min="0"
+					aria-describedby="queue-min-bps-hint"
 					bind:value={draft.min_bytes_per_second}
 				/>
 			</Field>
@@ -262,8 +270,10 @@ SPDX-License-Identifier: EUPL-1.2
 			>
 				<input
 					id="queue-min-cfs"
+					data-field="min_custom_format_score"
 					class="input"
 					type="number"
+					aria-describedby="queue-min-cfs-hint"
 					value={draft.min_custom_format_score ?? ''}
 					oninput={(e) => {
 						const val = (e.currentTarget as HTMLInputElement).value.trim();
@@ -272,72 +282,108 @@ SPDX-License-Identifier: EUPL-1.2
 				/>
 			</Field>
 
-			<Field id="queue-max-removals" label={m.queue_policy_max_removals()}>
+			<Field
+				id="queue-max-removals"
+				label={m.queue_policy_max_removals()}
+				hint={m.queue_policy_max_removals_hint()}
+			>
 				<input
 					id="queue-max-removals"
+					data-field="max_removals_per_sweep"
 					class="input"
 					type="number"
 					min="1"
 					max="100"
+					aria-describedby="queue-max-removals-hint"
 					bind:value={draft.max_removals_per_sweep}
 				/>
 			</Field>
 
-			<Field id="queue-max-imports" label={m.queue_policy_max_imports()}>
+			<Field
+				id="queue-max-imports"
+				label={m.queue_policy_max_imports()}
+				hint={m.queue_policy_max_imports_hint()}
+			>
 				<input
 					id="queue-max-imports"
+					data-field="max_imports_per_sweep"
 					class="input"
 					type="number"
 					min="1"
 					max="100"
+					aria-describedby="queue-max-imports-hint"
 					bind:value={draft.max_imports_per_sweep}
 				/>
 			</Field>
 
-			<Field id="queue-match-fixable" label={m.queue_policy_match_fixable()}>
+			<Field
+				id="queue-match-fixable"
+				label={m.queue_policy_match_fixable()}
+				hint={m.queue_policy_match_fixable_hint()}
+			>
 				<input
 					id="queue-match-fixable"
+					data-field="match_fixable_min_percent"
 					class="input"
 					type="number"
 					min="0"
 					max="100"
 					step="any"
+					aria-describedby="queue-match-fixable-hint"
 					bind:value={draft.match_fixable_min_percent}
 				/>
 			</Field>
 
-			<Field id="queue-match-broken" label={m.queue_policy_match_broken()}>
+			<Field
+				id="queue-match-broken"
+				label={m.queue_policy_match_broken()}
+				hint={m.queue_policy_match_broken_hint()}
+			>
 				<input
 					id="queue-match-broken"
+					data-field="match_broken_below_percent"
 					class="input"
 					type="number"
 					min="0"
 					max="100"
 					step="any"
+					aria-describedby="queue-match-broken-hint"
 					bind:value={draft.match_broken_below_percent}
 				/>
 			</Field>
 
-			<Field id="queue-track-fixable" label={m.queue_policy_track_fixable()}>
+			<Field
+				id="queue-track-fixable"
+				label={m.queue_policy_track_fixable()}
+				hint={m.queue_policy_track_fixable_hint()}
+			>
 				<input
 					id="queue-track-fixable"
+					data-field="track_fixable_min_percent"
 					class="input"
 					type="number"
 					min="0"
 					max="100"
 					step="any"
+					aria-describedby="queue-track-fixable-hint"
 					bind:value={draft.track_fixable_min_percent}
 				/>
 			</Field>
 
-			<Field id="queue-track-broken" label={m.queue_policy_track_broken()}>
+			<Field
+				id="queue-track-broken"
+				label={m.queue_policy_track_broken()}
+				hint={m.queue_policy_track_broken_hint()}
+			>
 				<input
 					id="queue-track-broken"
+					data-field="track_broken_below_percent"
 					class="input"
 					type="number"
 					min="0"
 					max="100"
 					step="any"
+					aria-describedby="queue-track-broken-hint"
 					bind:value={draft.track_broken_below_percent}
 				/>
 			</Field>

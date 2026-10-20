@@ -3,7 +3,9 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 import { expect, test } from '@playwright/test';
-import { mockSignedInApi } from './mocks.js';
+import { mockInstancePolicyApi, mockSignedInApi } from './mocks.js';
+
+const testInstanceId = '00000000-0000-0000-0000-000000000001';
 
 interface EventTimingEntry {
 	name: string;
@@ -70,5 +72,37 @@ test.describe('INP measurements', () => {
 
 		// Assert worst interaction <= 200ms
 		expect(worstDuration).toBeLessThanOrEqual(200);
+	});
+	test('measure input latency on the policy form: preset click and field input (<= 200 ms)', async ({
+		page
+	}) => {
+		await mockInstancePolicyApi(page, testInstanceId);
+		await page.goto(`/instances/${testInstanceId}/policy`);
+		const field = page.locator('[data-field="hourly_cap"]');
+		await expect(field).toBeVisible({ timeout: 3000 });
+
+		await page.evaluate(() => {
+			window.__eventDurations = [];
+			const observer = new PerformanceObserver((list) => {
+				for (const entry of list.getEntries()) {
+					window.__eventDurations?.push({
+						name: entry.name,
+						duration: entry.duration,
+						startTime: entry.startTime
+					});
+				}
+			});
+			observer.observe({ type: 'event', durationThreshold: 16, buffered: true });
+		});
+
+		await page.getByRole('button', { name: /Catch up|Aufholen/i }).click();
+		await field.fill('30');
+		await expect(field).toHaveValue('30');
+		await page.waitForTimeout(200);
+
+		const entries = await page.evaluate(() => window.__eventDurations ?? []);
+		const worst = entries.length > 0 ? Math.max(...entries.map((e) => e.duration)) : 0;
+		console.log(`[INP] policy form: ${entries.length} interactions, worst ${worst.toFixed(1)}ms`);
+		expect(worst).toBeLessThanOrEqual(200);
 	});
 });
