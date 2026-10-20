@@ -8,10 +8,16 @@
 // image (tools/e2e/web_visual.sh), so the pixels never depend on the host's fonts or GPU.
 // The API is mocked: the pages show the state of a fresh install and of a signed-out visitor.
 import { expect, test, type Page } from '@playwright/test';
+import { mockSignedInApi } from './mocks.js';
 
 const PAGES = [
 	{ name: 'login', path: '/login', setupComplete: true },
 	{ name: 'setup', path: '/setup', setupComplete: false }
+] as const;
+// The signed-in shell (ADR-0016): sidebar on desktop, top bar and bottom bar on a phone.
+const SHELL_VIEWPORTS = [
+	{ name: 'desktop', width: 1280, height: 800 },
+	{ name: 'phone', width: 390, height: 844 }
 ] as const;
 const LOCALES = ['en', 'de'] as const;
 const SCHEMES = ['light', 'dark'] as const;
@@ -20,7 +26,9 @@ const SCHEMES = ['light', 'dark'] as const;
 // comparison, or the baseline proves nothing.
 const PLANTS: Record<string, string> = {
 	shift: 'body { padding-top: 24px !important; }',
-	brand: '.btn-primary { background: oklch(0.6 0.2 30) !important; }'
+	brand: '.btn-primary { background: oklch(0.6 0.2 30) !important; }',
+	// Only the signed-in shell marks a current page, so this case proves the shell shots.
+	nav: '[aria-current="page"] { background: oklch(0.6 0.2 30) !important; }'
 };
 
 function json(body: unknown): { status: number; contentType: string; body: string } {
@@ -72,6 +80,23 @@ for (const target of PAGES) {
 				await expect(page).toHaveScreenshot(`${target.name}-${locale}-${scheme}.png`, {
 					fullPage: true
 				});
+			});
+		}
+	}
+}
+
+for (const viewport of SHELL_VIEWPORTS) {
+	for (const locale of LOCALES) {
+		for (const scheme of SCHEMES) {
+			test(`shell ${viewport.name} ${locale} ${scheme}`, async ({ page, baseURL }) => {
+				await page
+					.context()
+					.addCookies([{ name: 'PARAGLIDE_LOCALE', value: locale, url: baseURL ?? '' }]);
+				await page.setViewportSize({ width: viewport.width, height: viewport.height });
+				await page.emulateMedia({ colorScheme: scheme, reducedMotion: 'reduce' });
+				await mockSignedInApi(page);
+				await prep(page, '/');
+				await expect(page).toHaveScreenshot(`shell-${viewport.name}-${locale}-${scheme}.png`);
 			});
 		}
 	}

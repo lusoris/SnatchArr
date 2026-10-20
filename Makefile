@@ -323,13 +323,15 @@ web-e2e-api: ## Postgres + api + fakearr + web e2e Playwright axe sweep (needs D
 	  env SMOKE_API_BIN=$(E2E_BIN)/snatcharr SMOKE_FAKEARR_BIN=$(E2E_BIN)/fakearr \
 	  tools/e2e/web-e2e-api.sh
 
-# Visual baseline of the public pages (/login, /setup; en and de; light and dark) inside the
-# Playwright image pinned in web/e2e/visual-image.env, compared with web/e2e/visual (gap audit
-# C15-03). The planted cases shift the layout and recolour the primary button; the comparison
-# must refuse both. Not in verify-all (needs Docker).
-web-visual: ## Visual baseline of the public pages in the pinned Playwright image, after two planted diffs (needs Docker)
+# Visual baseline of the public pages (/login, /setup) and the signed-in shell (desktop and
+# phone; ADR-0016), en and de, light and dark, inside the Playwright image pinned in
+# web/e2e/visual-image.env, compared with web/e2e/visual (gap audit C15-03). The planted cases
+# shift the layout, recolour the primary button and recolour the shell's current navigation
+# entry; the comparison must refuse all three. Not in verify-all (needs Docker).
+web-visual: ## Visual baseline of the public pages and the shell in the pinned Playwright image, after three planted diffs (needs Docker)
 	bash tools/e2e/planted.sh SNATCHARR_VISUAL_PLANT tools/e2e/web_visual.sh \
-	  "shift:of all image pixels) are different" "brand:of all image pixels) are different"
+	  "shift:of all image pixels) are different" "brand:of all image pixels) are different" \
+	  "nav:of all image pixels) are different"
 
 web-visual-update: ## Rewrite the visual baseline in the pinned Playwright image; review the image diff before committing (needs Docker)
 	bash tools/e2e/web_visual.sh --update

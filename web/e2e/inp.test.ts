@@ -2,7 +2,8 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { mockSignedInApi } from './mocks.js';
 
 interface EventTimingEntry {
 	name: string;
@@ -16,64 +17,11 @@ declare global {
 	}
 }
 
-async function setupMocks(page: Page) {
-	await page.route('**/api/v1/auth/setup/status', (route) =>
-		route.fulfill({
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify({ setup_complete: true })
-		})
-	);
-	await page.route('**/api/v1/auth/session', (route) =>
-		route.fulfill({
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify({
-				user: {
-					id: '00000000-0000-0000-0000-000000000099',
-					username: 'admin',
-					role: 'admin'
-				},
-				csrf_token: 'test-token',
-				expires_at: '2099-01-01T00:00:00Z'
-			})
-		})
-	);
-	await page.route('**/api/v1/auth/sso', (route) =>
-		route.fulfill({
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify({ oidc: false, proxy: false })
-		})
-	);
-	await page.route('**/api/v1/instances', (route) =>
-		route.fulfill({
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify([])
-		})
-	);
-	await page.route('**/api/v1/hourly-caps', (route) =>
-		route.fulfill({
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify([])
-		})
-	);
-	await page.route('**/api/v1/prowlarr/status', (route) =>
-		route.fulfill({
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify([])
-		})
-	);
-}
-
 test.describe('INP measurements', () => {
 	test('measure input latency via PerformanceObserver during nav click and drawer open (<= 200 ms)', async ({
 		page
 	}) => {
-		await setupMocks(page);
+		await mockSignedInApi(page);
 		await page.setViewportSize({ width: 390, height: 844 });
 		await page.goto('/');
 		await page.waitForLoadState('networkidle');
