@@ -15,7 +15,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 ADR-0015 established SnatchArr's visual identity: palette A ("Night Prowler" violet hue 285), the M3 vesica mark, WCAG 2.2 AA / EN 301 549 compliance gates (`A11Y1`), non-blocking UI guarantees (`UIF1`), and strict design tokens (`TOK1`). However, ADR-0015 preserved the fundamental layout structure inherited from the upstream `newtarr` template.
 
-A design audit conducted on 2026-10-20 across all 19 application routes captured visual baselines at desktop (1280x800) and mobile (390x844) viewports in both dark and light modes (100 screenshots, made with the capture suite that PR 1 adds under `web/e2e/capture/`). The visual evidence revealed several systemic architectural defects in the user interface:
+A design audit conducted on 2026-10-20 across all 19 application routes captured visual baselines at desktop (1280x800) and mobile (390x844) viewports in both dark and light modes (100 screenshots from a one-off local capture run; the run is not committed, and the gates in section 6 extend the existing e2e suites instead). The visual evidence revealed several systemic architectural defects in the user interface:
 
 1. **Cluttered flat navigation hierarchy**: The sidebar exposed 12 flat routes without logical domain grouping. Navigating between instances, monitoring runs, automation schedules, and external services required linear visual scanning rather than grouped mental models.
 2. **Absence of rapid command navigation**: The interface lacked global quick-search and command-palette mechanisms (`Cmd+K`). In multi-instance deployments, switching instances or finding specific tools required manual sidebar hunting.
@@ -36,7 +36,7 @@ This ADR defines a layout and information architecture of SnatchArr's own that r
 The navigation architecture shifts from a flat link list to a domain-grouped, multi-modal navigation system with three tiers:
 
 - **Desktop responsive sidebar (`Sidebar.svelte`)**: Grouped into five distinct operational domains (`Fleet`, `Activity`, `Automation`, `Integrations`, `System`). Carries a search trigger showing the platform keyboard shortcut (`⌘K` / `Ctrl+K`) and a footer with the language switcher, account link and log out.
-- **Global Command Dialog (`CommandDialog.svelte`)**: Activated via `Cmd+K` / `Ctrl+K` or the sidebar/topbar search triggers. Built on `@sveltesentio/ui/cmd/palette`; it navigates to every route and every configured instance. It never starts an action itself: a snatch run spends search budget, so it stays behind the explicit button on the dashboard or instance page, where `ConfirmAction` guards it.
+- **Global Command Dialog (`CommandDialog.svelte`)**: Activated via `Cmd+K` / `Ctrl+K` or the sidebar/topbar search triggers. A thin wrapper over `@sveltesentio/ui/cmd/palette` (no own palette, filtering or key handling); it navigates to every route and every configured instance. It never starts an action itself: a snatch run spends search budget, so it stays behind the explicit button on the dashboard or instance page, where `ConfirmAction` guards it.
 - **Mobile bottom navigation bar (`BottomBar.svelte`)**: A fixed bar at the bottom of the viewport below the `md` breakpoint with one-tap access to the four primary views (`Dashboard`, `Instances`, `History`, `Live`) plus a "More" item that opens the full drawer (`NavDrawer.svelte`) for the other routes. The content area reserves the bar's height plus `env(safe-area-inset-bottom)` as bottom padding, so the bar never covers the last row of a page or a focused control (WCAG 2.2 SC 2.4.11).
 
 ```text
@@ -98,7 +98,7 @@ Every route follows one of five layout templates:
    - Subpages load directly into the container without full page re-render.
    - Deep-linkable URLs with browser history support.
 4. **Modal Form Dialog / Sheet**:
-   - Resource creation and editing forms (`ScheduleForm`, `DownloadClientForm`, `SeerrLinkForm`, `InstanceEditForm`) move out of document flow into native modal dialogs (`<dialog>` with `.showModal()`).
+   - Resource creation and editing forms (`ScheduleForm`, `DownloadClientForm`, `SeerrLinkForm`, `InstanceEditForm`) move out of document flow into modal dialogs built on `@sveltesentio/ui/dialog` (native `<dialog>` with `.showModal()` underneath); SnatchArr adds no own dialog primitive.
    - Keyboard accessible: focus auto-placed on first field, `Escape` key cancels and restores focus to opener element, backdrop click dismisses.
 5. **Centered Card Layout (System / Auth)**:
    - Max-width constrained card layout (`max-w-xl` for settings; `max-w-sm` for login/setup) centered horizontally.
@@ -163,7 +163,7 @@ Every file under `web/src/routes` and `web/src/lib/components` is classified:
 | `web/src/routes/setup/+page.svelte` | kept | Initial admin setup card with secret token authentication. |
 | `web/src/lib/components/PageHeader.svelte` | new | Canonical header component for all routes (`title`, `description`, `badge`, `actions`). |
 | `web/src/lib/components/shell/BottomBar.svelte` | new | Mobile thumb-level bottom navigation rail for top 4 destinations + drawer trigger. |
-| `web/src/lib/components/shell/CommandDialog.svelte` | new | Global keyboard command palette (`Cmd+K`) using `@sveltesentio/ui/cmd/palette`. |
+| `web/src/lib/components/shell/CommandDialog.svelte` | new | Global keyboard command palette (`Cmd+K`): route and instance entries handed to `@sveltesentio/ui/cmd/palette`. |
 | `web/src/lib/components/shell/Sidebar.svelte` | modified | Enhanced with search trigger, grouped navigation categories, and badge counters. |
 | `web/src/lib/components/shell/TopBar.svelte` | modified | Added mobile search trigger and modernized layout. |
 | `web/src/lib/components/shell/NavDrawer.svelte` | kept | Accessible mobile sliding drawer for secondary destinations. |
@@ -209,7 +209,7 @@ The redesign is delivered across seven discrete, reviewable pull requests. Each 
    - Introduces `PageHeader.svelte`, `BottomBar.svelte`, `CommandDialog.svelte`.
    - Updates `Sidebar.svelte`, `TopBar.svelte`, and `+layout.svelte`.
    - Adds required Lucide icons in `icons.ts`.
-   - Verified by: `web/e2e/capture/capture.test.ts` (shell rendering), `icons.test.ts`, axe on shell.
+   - Verified by: existing `web/e2e/visual.test.ts`, `a11y.test.ts`, `keyboard-nav.test.ts` and `phone-overflow.test.ts` extended for the shell, plus a new unit test for `icons.ts`.
 2. **PR 2: Dashboard & Fleet Telemetry (`/`)**
    - Upgrades root dashboard with fleet health summary badge, global stamina metric, Prowlarr indexer headroom bar, and Quick Snatch triggers.
    - Replaces all inline styles and literal colors in `StaminaGauge.svelte`.
@@ -238,13 +238,13 @@ The redesign is delivered across seven discrete, reviewable pull requests. Each 
 
 ### 6. Verification gates
 
-Every implementation PR must supply the following proof before merging:
+Every implementation PR extends the existing Playwright suites under `web/e2e/` instead of adding parallel ones, and supplies this proof before merging:
 
-- **Screenshot capture suite**: Full test execution via `CAPTURE_STAGE=after pnpm exec playwright test --config e2e/capture/playwright.capture.config.ts e2e/capture/capture.test.ts`. Generates 100 PNGs across 19 routes at 1280x800 and 390x844 viewports in dark and light modes.
-- **Side-by-side comparison sheets**: before and after screenshots of the PR's route group (`dashboard`, `fleet`, `activity`, `automation`, `integrations`, `system`, `auth`) at both widths, attached to the PR.
-- **Axe-core accessibility audit**: Automated verification via `web/e2e/capture/axe.test.ts`. Every route must report zero violations against the WCAG 2.2 AA and EN 301 549 rule sets; the prototype measured zero on all 19 routes.
-- **Nonblocking UI contract**: `web/e2e/nonblocking.test.ts` must pass; any simulated 10s API delay with 503 must leave the UI shell responsive and interactive.
-- **Event Timing INP**: Interaction to Next Paint must remain $\le 200\text{ ms}$ on all tab switches, dialog invocations, and command palette keystrokes.
+- **Screenshots**: `web/e2e/visual.test.ts` (pinned Playwright image, mocked API, planted visual changes that must fail) grows from the public pages to the pages the PR touches, at 1280x800 and 390x844 in light and dark. The PR body carries before and after screenshots of its route group (`dashboard`, `fleet`, `activity`, `automation`, `integrations`, `system`, `auth`).
+- **Accessibility**: `web/e2e/a11y.test.ts` sweeps all 19 routes with axe-core against WCAG 2.2 AA and EN 301 549; zero violations, never suppressed. The prototype measured zero on all 19 routes.
+- **Nonblocking UI**: `web/e2e/nonblocking.test.ts` passes; a slow or failing API leaves the shell responsive.
+- **Keyboard and phone width**: `web/e2e/keyboard-nav.test.ts` covers the palette, the bottom bar, the More drawer and every dialog (open, focus on the first field, `Escape` closes and returns focus to the opener); `web/e2e/phone-overflow.test.ts` shows no horizontal overflow at 390 px and no control hidden under the bottom bar.
+- **INP**: `web/e2e/inp.test.ts` keeps Interaction to Next Paint at or below 200 ms on tab switches, dialog opening and palette keystrokes.
 
 ## Consequences
 
