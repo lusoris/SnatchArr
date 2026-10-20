@@ -35,6 +35,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/auth"
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
+	"github.com/lusoris/SnatchArr/api/internal/seerr"
 	"github.com/lusoris/SnatchArr/api/internal/seerrclient"
 	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
 )
@@ -2128,5 +2129,45 @@ func TestChangePasswordSessionTermination(t *testing.T) {
 	_ = newLoginResp.Body.Close()
 	if newLoginResp.StatusCode != http.StatusOK {
 		t.Fatalf("login with new password status = %d, want 200", newLoginResp.StatusCode)
+	}
+}
+
+func TestRouterProbeAuthProxyRedirect(t *testing.T) {
+	t.Parallel()
+	for _, path := range []string{"/seerr/test", "/prowlarr/test"} {
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/outpost.goauthentik.io/start" {
+					w.Header().Set("Content-Type", "text/html")
+					_, _ = w.Write([]byte("<html>login</html>"))
+					return
+				}
+				http.Redirect(w, r, "/outpost.goauthentik.io/start?rd=private-return", http.StatusFound)
+			}))
+			t.Cleanup(upstream.Close)
+			f := newRouterFixture(t)
+			f.h.seerr = seerr.New(nil, nil, nil, nil, seerrclient.New(time.Second, "test"), nil, nil, nil, nil, nil)
+			completeInitialSetup(t, f)
+			step := routerStep{
+				method: http.MethodPost,
+				path:   func(_ *idsState) string { return path },
+				body: func(_ *idsState) any {
+					return map[string]any{"name": "proxy-test", "base_url": upstream.URL, "api_key": "test-key", "enabled": true}
+				},
+				want: http.StatusBadGateway,
+				capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
+					t.Helper()
+					detail, _ := decoded["detail"].(string)
+					if !strings.Contains(detail, "redirects to "+upstream.URL+"/outpost.goauthentik.io/start") {
+						t.Fatalf("problem detail = %q, want redirect destination", detail)
+					}
+					if strings.Contains(detail, "private-return") {
+						t.Fatalf("redirect query leaked: %s", detail)
+					}
+				},
+			}
+			executeRouterStep(t, f, newIDsState(t), step)
+		})
 	}
 }
