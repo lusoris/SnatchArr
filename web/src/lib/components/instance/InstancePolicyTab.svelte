@@ -8,9 +8,14 @@ SPDX-License-Identifier: EUPL-1.2
 	import { toast } from 'svelte-sonner';
 	import { api, describeError } from '#lib/api/client.js';
 	import type { components } from '#lib/api/schema.js';
-	import Field from '#lib/components/Field.svelte';
 	import PolicyFilters from '#lib/components/PolicyFilters.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
+	import AppSpecificSection from '#lib/components/policy/AppSpecificSection.svelte';
+	import LimitsSection from '#lib/components/policy/LimitsSection.svelte';
+	import PresetPicker from '#lib/components/policy/PresetPicker.svelte';
+	import SafetySection from '#lib/components/policy/SafetySection.svelte';
+	import SearchSection from '#lib/components/policy/SearchSection.svelte';
+	import TimingSection from '#lib/components/policy/TimingSection.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { keys } from '#lib/query.js';
 
@@ -76,111 +81,31 @@ SPDX-License-Identifier: EUPL-1.2
 	<ProblemNote error={instance.error} />
 {:else if draft}
 	<form
-		class="card grid max-w-3xl gap-4 md:grid-cols-2"
+		class="mx-auto flex max-w-xl flex-col gap-6"
 		aria-labelledby="policy-title"
 		onsubmit={handleSubmit}
 	>
-		<h2 id="policy-title" class="text-lg font-semibold md:col-span-2">{m.policy_title()}</h2>
-		<Field id="missing" label={m.policy_missing_per_cycle()}>
-			<input
-				id="missing"
-				class="input"
-				type="number"
-				min="0"
-				max="100"
-				bind:value={draft.missing_per_cycle}
-			/>
-		</Field>
-		<Field id="upgrade" label={m.policy_upgrade_per_cycle()}>
-			<input
-				id="upgrade"
-				class="input"
-				type="number"
-				min="0"
-				max="100"
-				bind:value={draft.upgrade_per_cycle}
-			/>
-		</Field>
-		<Field id="interval" label={m.policy_cycle_interval()}>
-			<input
-				id="interval"
-				class="input"
-				type="number"
-				min="60"
-				step="60"
-				bind:value={draft.cycle_interval_s}
-			/>
-		</Field>
-		<Field id="cap" label={m.policy_hourly_cap()}>
-			<input id="cap" class="input" type="number" min="1" max="500" bind:value={draft.hourly_cap} />
-		</Field>
-		<Field id="selection" label={m.policy_selection()}>
-			<select id="selection" class="select" bind:value={draft.selection}>
-				<option value="random">{m.policy_selection_random()}</option>
-				<option value="sequential">{m.policy_selection_sequential()}</option>
-				<option value="recent">{m.policy_selection_recent()}</option>
-			</select>
-		</Field>
-		<Field id="ttl" label={m.policy_processed_ttl()}>
-			<input
-				id="ttl"
-				class="input"
-				type="number"
-				min="1"
-				max="8760"
-				bind:value={draft.processed_ttl_h}
-			/>
-		</Field>
-		<Field id="afterglow_max" label={m.policy_afterglow_max()}>
-			<input
-				id="afterglow_max"
-				class="input"
-				type="number"
-				min="1"
-				max="8760"
-				bind:value={draft.afterglow_max_h}
-			/>
-		</Field>
-		<Field id="grab_window" label={m.policy_recent_grab_window()}>
-			<input
-				id="grab_window"
-				class="input"
-				type="number"
-				min="0"
-				max="720"
-				bind:value={draft.recent_grab_window_h}
-			/>
-		</Field>
-		<label class="flex items-center gap-2">
-			<input type="checkbox" bind:checked={draft.monitored_only} />
-			{m.policy_monitored_only()}
-		</label>
-		<label class="flex items-center gap-2">
-			<input type="checkbox" bind:checked={draft.skip_future_releases} />
-			{m.policy_skip_future()}
-		</label>
-		<label class="flex items-center gap-2">
-			<input type="checkbox" bind:checked={draft.await_command} />
-			{m.policy_await_command()}
-		</label>
-		{#if instance.data?.kind === 'radarr'}
-			<div class="flex flex-col gap-0.5 md:col-span-2">
-				<label class="flex items-center gap-2">
-					<input type="checkbox" bind:checked={draft.skip_unavailable_movies} />
-					{m.policy_skip_unavailable()}
-				</label>
-				<p class="text-xs text-subtle">{m.policy_skip_unavailable_hint()}</p>
-			</div>
+		<h2 id="policy-title" class="text-lg font-semibold">{m.policy_title()}</h2>
+
+		{#if save.isError}
+			<ProblemNote error={save.error} />
 		{/if}
-		<div class="flex flex-col gap-0.5 md:col-span-2">
-			<label class="flex items-center gap-2">
-				<input type="checkbox" bind:checked={draft.dry_run} />
-				{m.policy_dry_run()}
-			</label>
-			<p class="text-xs text-subtle">{m.policy_dry_run_hint()}</p>
-		</div>
+
+		<PresetPicker
+			{draft}
+			onSelect={(vals) => {
+				if (draft) draft = { ...draft, ...vals };
+			}}
+		/>
+
+		<SearchSection bind:policy={draft} kind={instance.data?.kind} />
+		<TimingSection bind:policy={draft} />
+		<LimitsSection bind:policy={draft} />
 		<PolicyFilters {instanceId} bind:policy={draft} />
-		<div class="md:col-span-2">
+		<AppSpecificSection bind:policy={draft} kind={instance.data?.kind} />
+		<SafetySection bind:policy={draft} />
+
+		<div>
 			<button type="submit" class="btn btn-primary" disabled={save.isPending}>
 				{m.instance_save()}
 			</button>
