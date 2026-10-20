@@ -69,7 +69,7 @@ func (h *HTTP) Status(ctx context.Context, baseURL, apiKey string) (Status, erro
 	}
 	var out Status
 	if err := c.Get(ctx, "/api/v1/system/status", &out); err != nil {
-		return Status{}, fmt.Errorf("%w: prowlarr status: %w", domain.ErrUnreachable, err)
+		return Status{}, fmt.Errorf("%w: prowlarr status: %w", domain.ErrUnreachable, arrclient.HintAPIError(err, "Prowlarr"))
 	}
 	return out, nil
 }
@@ -94,7 +94,7 @@ func (h *HTTP) Indexers(ctx context.Context, baseURL, apiKey string) ([]Indexer,
 	}
 	var list []indexerJSON
 	if err := c.Get(ctx, "/api/v1/indexer", &list); err != nil {
-		return nil, fmt.Errorf("%w: prowlarr indexers: %w", domain.ErrUnreachable, err)
+		return nil, fmt.Errorf("%w: prowlarr indexers: %w", domain.ErrUnreachable, arrclient.HintAPIError(err, "Prowlarr"))
 	}
 	out := make([]Indexer, 0, len(list))
 	for _, idx := range list {
@@ -170,7 +170,7 @@ func (h *HTTP) Usage(ctx context.Context, baseURL, apiKey string, start, end tim
 	q.Set("endDate", end.UTC().Format(time.RFC3339))
 	var raw json.RawMessage
 	if getErr := c.Get(ctx, "/api/v1/indexerstats?"+q.Encode(), &raw); getErr != nil {
-		return nil, fmt.Errorf("%w: prowlarr stats: %w", domain.ErrUnreachable, getErr)
+		return nil, fmt.Errorf("%w: prowlarr stats: %w", domain.ErrUnreachable, arrclient.HintAPIError(getErr, "Prowlarr"))
 	}
 	items, err := parseStatsItems(raw)
 	if err != nil {
@@ -222,7 +222,7 @@ func (h *HTTP) Statuses(ctx context.Context, baseURL, apiKey string) (map[int]ti
 	}
 	var raw json.RawMessage
 	if getErr := c.Get(ctx, "/api/v1/indexerstatus", &raw); getErr != nil {
-		return nil, fmt.Errorf("%w: prowlarr indexerstatus: %w", domain.ErrUnreachable, getErr)
+		return nil, fmt.Errorf("%w: prowlarr indexerstatus: %w", domain.ErrUnreachable, arrclient.HintAPIError(getErr, "Prowlarr"))
 	}
 	items, err := parseStatusItems(raw)
 	if err != nil {
@@ -279,7 +279,7 @@ func (h *HTTP) ProwlarrURLs(ctx context.Context, baseURL, apiKey string) ([]stri
 	}
 	var list []applicationJSON
 	if err := c.Get(ctx, "/api/v1/applications", &list); err != nil {
-		return nil, fmt.Errorf("%w: prowlarr applications: %w", domain.ErrUnreachable, err)
+		return nil, fmt.Errorf("%w: prowlarr applications: %w", domain.ErrUnreachable, arrclient.HintAPIError(err, "Prowlarr"))
 	}
 	if len(list) > maxApplications {
 		list = list[:maxApplications]

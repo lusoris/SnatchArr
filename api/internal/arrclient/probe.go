@@ -98,7 +98,7 @@ func (p *GoenvoyProber) Probe(ctx context.Context, kind domain.AppKind, baseURL,
 	defer cancel()
 	st, err := p.status(ctx, kind, baseURL, apiKey)
 	if err != nil {
-		return Result{}, fmt.Errorf("%w: %w", domain.ErrUnreachable, err)
+		return Result{}, fmt.Errorf("%w: %w", domain.ErrUnreachable, HintAPIError(err, string(kind)))
 	}
 	res := Result{AppName: st.AppName, Version: st.Version, Product: detectProduct(kind, st)}
 	if err := checkWhisparrGeneration(kind, st.Version); err != nil {
@@ -169,7 +169,7 @@ func (p *GoenvoyProber) DownloadClients(ctx context.Context, kind domain.AppKind
 	}
 	list, err := c.GetDownloadClients(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", domain.ErrUnreachable, err)
+		return nil, fmt.Errorf("%w: %w", domain.ErrUnreachable, HintAPIError(err, string(kind)))
 	}
 	return list, nil
 }
@@ -184,7 +184,7 @@ func (p *GoenvoyProber) Indexers(ctx context.Context, kind domain.AppKind, baseU
 	}
 	list, err := c.GetIndexers(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", domain.ErrUnreachable, err)
+		return nil, fmt.Errorf("%w: %w", domain.ErrUnreachable, HintAPIError(err, string(kind)))
 	}
 	return list, nil
 }
@@ -199,11 +199,11 @@ func (p *GoenvoyProber) Labels(ctx context.Context, kind domain.AppKind, baseURL
 	}
 	tags, err := c.GetTags(ctx)
 	if err != nil {
-		return Labels{}, fmt.Errorf("%w: tags: %w", domain.ErrUnreachable, err)
+		return Labels{}, fmt.Errorf("%w: tags: %w", domain.ErrUnreachable, HintAPIError(err, string(kind)))
 	}
 	profiles, err := c.GetQualityProfiles(ctx)
 	if err != nil {
-		return Labels{}, fmt.Errorf("%w: quality profiles: %w", domain.ErrUnreachable, err)
+		return Labels{}, fmt.Errorf("%w: quality profiles: %w", domain.ErrUnreachable, HintAPIError(err, string(kind)))
 	}
 	out := Labels{Tags: make([]Label, 0, len(tags)), Profiles: make([]Label, 0, len(profiles))}
 	for _, t := range tags {

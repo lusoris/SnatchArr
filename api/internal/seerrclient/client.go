@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/golusoris/goenvoy/arr/seerr"
-	"github.com/golusoris/goenvoy/arr/v2"
 
+	"github.com/lusoris/SnatchArr/api/internal/arrclient"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 )
 
@@ -67,17 +67,16 @@ type Client interface {
 
 // HTTP implements Client over goenvoy's seerr client.
 type HTTP struct {
-	timeout   time.Duration
-	userAgent string
+	factory arrclient.BaseFactory
 }
 
 // New builds the client.
 func New(timeout time.Duration, userAgent string) *HTTP {
-	return &HTTP{timeout: timeout, userAgent: userAgent}
+	return &HTTP{factory: arrclient.BaseFactory{Timeout: timeout, UserAgent: userAgent}}
 }
 
 func (h *HTTP) client(baseURL, apiKey string) (*seerr.Client, error) {
-	c, err := seerr.New(baseURL, apiKey, arr.WithTimeout(h.timeout), arr.WithUserAgent(h.userAgent))
+	c, err := seerr.New(baseURL, apiKey, h.factory.Options()...)
 	if err != nil {
 		return nil, fmt.Errorf("seerr: client: %w", err)
 	}
@@ -92,7 +91,7 @@ func (h *HTTP) Status(ctx context.Context, baseURL, apiKey string) (Status, erro
 	}
 	out, err := c.GetStatus(ctx)
 	if err != nil {
-		return Status{}, fmt.Errorf("%w: seerr status: %w", domain.ErrUnreachable, err)
+		return Status{}, fmt.Errorf("%w: seerr status: %w", domain.ErrUnreachable, arrclient.HintAPIError(err, "Seerr"))
 	}
 	return Status{Version: out.Version}, nil
 }
@@ -109,7 +108,7 @@ func (h *HTTP) ProcessingRequests(ctx context.Context, baseURL, apiKey string) (
 	for page := range maxPages {
 		results, info, err := c.GetRequests(ctx, pageSize, page*pageSize, "processing")
 		if err != nil {
-			return nil, fmt.Errorf("%w: seerr requests: %w", domain.ErrUnreachable, err)
+			return nil, fmt.Errorf("%w: seerr requests: %w", domain.ErrUnreachable, arrclient.HintAPIError(err, "Seerr"))
 		}
 		all = append(all, results...)
 		if len(results) < pageSize || page+1 >= info.Pages {
@@ -133,7 +132,7 @@ func (h *HTTP) Servers(ctx context.Context, baseURL, apiKey string) ([]Server, e
 		}
 		list, err := get(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("%w: seerr %s settings: %w", domain.ErrUnreachable, kind, err)
+			return nil, fmt.Errorf("%w: seerr %s settings: %w", domain.ErrUnreachable, kind, arrclient.HintAPIError(err, "Seerr"))
 		}
 		for _, s := range list {
 			out = append(out, Server{
@@ -154,13 +153,13 @@ func (h *HTTP) Title(ctx context.Context, baseURL, apiKey string, mediaType doma
 	if mediaType == domain.SeerrTV {
 		show, tvErr := c.GetTV(ctx, tmdbID)
 		if tvErr != nil {
-			return "", fmt.Errorf("%w: seerr title: %w", domain.ErrUnreachable, tvErr)
+			return "", fmt.Errorf("%w: seerr title: %w", domain.ErrUnreachable, arrclient.HintAPIError(tvErr, "Seerr"))
 		}
 		return show.Name, nil
 	}
 	movie, err := c.GetMovie(ctx, tmdbID)
 	if err != nil {
-		return "", fmt.Errorf("%w: seerr title: %w", domain.ErrUnreachable, err)
+		return "", fmt.Errorf("%w: seerr title: %w", domain.ErrUnreachable, arrclient.HintAPIError(err, "Seerr"))
 	}
 	return movie.Title, nil
 }
