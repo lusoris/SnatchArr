@@ -28,4 +28,33 @@ describe('BrandMark', () => {
 		expect(svg?.getAttribute('width')).toBe('24');
 		expect(svg?.getAttribute('height')).toBe('24');
 	});
+
+	it('draws every part at full size: labia, hood, glans, urethra, shaded opening', () => {
+		const { container } = render(BrandMark, { props: { size: 40 } });
+		const svg = container.querySelector('svg');
+		expect(svg?.hasAttribute('data-cut')).toBe(false);
+		for (const part of ['ol', 'ln', 'gl', 'ur', 'op']) {
+			expect(container.querySelector(`.${part}`), part).toBeTruthy();
+		}
+	});
+
+	it('switches to the simplified cut below 40 px, without the urethra or the hood folds', () => {
+		const { container } = render(BrandMark, { props: { size: 39 } });
+		expect(container.querySelector('svg')?.hasAttribute('data-cut')).toBe(true);
+		expect(container.querySelector('.ur')).toBeNull();
+		expect(container.querySelectorAll('.ln')).toHaveLength(1);
+		expect(container.querySelector('.gl')).toBeTruthy();
+		expect(container.querySelector('.op')).toBeTruthy();
+	});
+
+	it('gives each instance its own gradient id, so two marks never share one fill', () => {
+		const { container } = render(BrandMark, { props: { size: 56 } });
+		const { container: other } = render(BrandMark, { props: { size: 24 } });
+		const ids = [container, other].map((c) => c.querySelector('radialGradient')?.id);
+		expect(ids[0]).toBeTruthy();
+		expect(ids[0]).not.toBe(ids[1]);
+		for (const [i, c] of [container, other].entries()) {
+			expect(c.querySelector('.op')?.getAttribute('fill')).toBe(`url(#${ids[i]})`);
+		}
+	});
 });
