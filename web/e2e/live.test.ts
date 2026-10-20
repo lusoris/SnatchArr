@@ -7,11 +7,49 @@ import type { AddressInfo } from 'node:net';
 import { expect, test } from '@playwright/test';
 import { mockSignedInApi } from './mocks.js';
 
+const instanceA = {
+	id: '00000000-0000-0000-0000-0000000000a1',
+	kind: 'sonarr',
+	name: 'Sonarr Main',
+	base_url: 'http://sonarr.local',
+	enabled: true,
+	source: 'manual',
+	created_at: '2026-10-20T00:00:00Z',
+	updated_at: '2026-10-20T00:00:00Z'
+};
+const instanceB = {
+	...instanceA,
+	id: '00000000-0000-0000-0000-0000000000b2',
+	name: 'Radarr 4K',
+	kind: 'radarr'
+};
+const pauseA = {
+	id: '00000000-0000-0000-0000-0000000000c3',
+	instance_id: instanceA.id,
+	name: 'Night pause',
+	days: [0, 1, 2, 3, 4, 5, 6],
+	start: '00:00',
+	end: '06:00',
+	tz: 'UTC',
+	action: 'pause',
+	enabled: true,
+	active: true,
+	created_at: '2026-10-20T00:00:00Z',
+	updated_at: '2026-10-20T00:00:00Z'
+};
+
 test.describe('live', () => {
 	test('live backlog: mocked /events returns rows -> rows visible before any SSE frame', async ({
 		page
 	}) => {
 		await mockSignedInApi(page);
+		await page.route('**/api/v1/instances', (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify([instanceA])
+			})
+		);
 
 		await page.route('**/api/v1/system/status', (route) =>
 			route.fulfill({
@@ -47,6 +85,7 @@ test.describe('live', () => {
 						ts: '2026-10-20T12:00:00Z',
 						level: 'info',
 						type: 'search_dispatched',
+						instance_id: instanceA.id,
 						title: 'Backlog Item Inception',
 						detail: 'Searched 1 item'
 					}
@@ -65,10 +104,20 @@ test.describe('live', () => {
 		await expect(log).toBeVisible({ timeout: 5000 });
 		await expect(page.getByText('Backlog Item Inception')).toBeVisible();
 		await expect(page.getByText('search_dispatched')).toBeVisible();
+		const instLink = log.getByRole('link', { name: 'Sonarr Main' });
+		await expect(instLink).toHaveAttribute('href', `/instances/${instanceA.id}`);
+		await page.screenshot({ path: test.info().outputPath('live-backlog.png'), fullPage: true });
 	});
 
 	test('live empty state visible with empty backlog', async ({ page }) => {
 		await mockSignedInApi(page);
+		await page.route('**/api/v1/instances', (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify([instanceA, instanceB])
+			})
+		);
 
 		await page.route('**/api/v1/system/status', (route) =>
 			route.fulfill({
@@ -89,7 +138,7 @@ test.describe('live', () => {
 			route.fulfill({
 				status: 200,
 				contentType: 'application/json',
-				body: JSON.stringify([])
+				body: JSON.stringify([pauseA])
 			})
 		);
 
@@ -116,9 +165,15 @@ test.describe('live', () => {
 		).toBeVisible();
 		await expect(page.getByText(/Worker status|Worker-Status/i)).toBeVisible();
 		await expect(page.getByText(/Scheduled cycles|Geplante Zyklen/i)).toBeVisible();
+		const cycles = page.getByRole('listitem').filter({ hasText: 'Sonarr Main' });
+		await expect(cycles).toContainText(/Paused by schedule/);
+		await expect(page.getByRole('listitem').filter({ hasText: 'Radarr 4K' })).toContainText(
+			/Continuous/
+		);
 		const main = page.locator('#main');
 		await expect(main.getByRole('link', { name: /Event history|Ereignisverlauf/i })).toBeVisible();
 		await expect(main.getByRole('link', { name: /Schedules|Zeitpläne/i })).toBeVisible();
+		await page.screenshot({ path: test.info().outputPath('live-empty.png'), fullPage: true });
 	});
 
 	test('reconnect: mocked stream that ends after 2 s -> client opens a second stream request within 10 s and status returns to connected', async ({

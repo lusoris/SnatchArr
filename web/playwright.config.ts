@@ -48,7 +48,7 @@ export default defineConfig({
 					{
 						name: 'chromium',
 						testMatch:
-							/(a11y|theme|security|nonblocking|keyboard-nav|inp|instance-tabs|session-expiry)\.test\.ts/,
+							/(a11y|theme|security|nonblocking|keyboard-nav|inp|instance-tabs|session-expiry|live)\.test\.ts/,
 						use: { browserName: 'chromium' }
 					}
 				]

@@ -12,6 +12,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -342,8 +344,10 @@ func TestPlanner_DryRunPolicyCreatesDryRunRun(t *testing.T) {
 	}
 }
 
-// TestPlannerQueuedRunSingleEventAndRow verifies that one planner-queued run
-// produces exactly one run_queued published frame and one stored row in snatch_events.
+// TestPlannerQueuedRunSingleEventAndRow verifies that each planner-queued run
+// produces exactly one run_queued published frame and one stored row in
+// snatch_events, and that the frame carries the stored row id. One instance
+// queues one run per due kind (missing and upgrade), so one tick yields two.
 func TestPlannerQueuedRunSingleEventAndRow(t *testing.T) {
 	t.Parallel()
 	f := newPlannerFixture(t, AllowAll{})
@@ -376,27 +380,31 @@ func TestPlannerQueuedRunSingleEventAndRow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Tick: %v", err)
 	}
-	if queued != 1 {
-		t.Fatalf("queued = %d, want 1", queued)
+	if queued != 2 {
+		t.Fatalf("queued = %d, want 2 (missing and upgrade)", queued)
 	}
 
-	// 1. Exactly one stored row in snatch_events for run_queued
-	assertQueued(t, f.st, 1)
+	// 1. One stored run_queued row per queued run.
+	assertQueued(t, f.st, queued)
 
 	// 2. Exactly one run_queued event frame published on the SSE stream
 	reader := bufio.NewReader(resp.Body)
-	var runQueuedFrames []string
+	var frameIDs []string
 	readDone := make(chan struct{})
 	go func() {
 		defer close(readDone)
+		lastID := ""
 		for range 1000 { // a 300 ms window carries far fewer lines
 			line, readErr := reader.ReadString('\n')
 			if readErr != nil {
 				return
 			}
 			line = strings.TrimSpace(line)
+			if id, ok := strings.CutPrefix(line, "id: "); ok {
+				lastID = id
+			}
 			if line == "event: run_queued" {
-				runQueuedFrames = append(runQueuedFrames, line)
+				frameIDs = append(frameIDs, lastID)
 			}
 		}
 	}()
@@ -408,16 +416,33 @@ func TestPlannerQueuedRunSingleEventAndRow(t *testing.T) {
 	case <-readDone:
 	}
 
-	var rowID int64
-	err = f.st.Pool().QueryRow(ctx, "SELECT id FROM snatch_events WHERE type = 'run_queued' AND instance_id = $1", instID).Scan(&rowID)
-	if err != nil {
-		t.Fatalf("query snatch_events row ID: %v", err)
+	rowIDs := storedEventIDs(t, f.st, "run_queued", instID)
+	slices.Sort(frameIDs)
+	if !slices.Equal(frameIDs, rowIDs) {
+		t.Fatalf("published run_queued frame ids %v, want the stored row ids %v", frameIDs, rowIDs)
 	}
-	if rowID <= 0 {
-		t.Errorf("stored row ID = %d, want > 0", rowID)
-	}
+}
 
-	if len(runQueuedFrames) != 1 {
-		t.Fatalf("published %d run_queued SSE frames, want exactly 1", len(runQueuedFrames))
+// storedEventIDs returns the ids of the stored events of one type for one
+// instance, as decimal strings in ascending string order.
+func storedEventIDs(t *testing.T, st *store.Store, eventType string, instanceID uuid.UUID) []string {
+	t.Helper()
+	rows, err := st.Pool().Query(t.Context(), `SELECT id FROM snatch_events WHERE type = $1 AND instance_id = $2`, eventType, instanceID)
+	if err != nil {
+		t.Fatalf("query snatch_events ids: %v", err)
 	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			t.Fatalf("scan snatch_events id: %v", err)
+		}
+		ids = append(ids, strconv.FormatInt(id, 10))
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate snatch_events ids: %v", err)
+	}
+	slices.Sort(ids)
+	return ids
 }
