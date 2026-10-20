@@ -39,11 +39,13 @@ SPDX-License-Identifier: EUPL-1.2
 {:else if events.isError}
 	<ProblemNote error={events.error} />
 {:else}
-	<DataTable
-		rows={events.data ?? []}
-		{columns}
-		label={m.history_title()}
-		rowKey={(e) => e.id}
-		initialState={{ pageSize: 50 }}
-	/>
+	<div class="relative overflow-x-auto">
+		<DataTable
+			rows={events.data ?? []}
+			{columns}
+			label={m.history_title()}
+			rowKey={(e) => e.id}
+			initialState={{ pageSize: 50 }}
+		/>
+	</div>
 {/if}

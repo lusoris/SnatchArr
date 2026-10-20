@@ -133,10 +133,12 @@ SPDX-License-Identifier: EUPL-1.2
 					<li class="card px-3 py-1" data-level={r.level}>
 						<span class="text-subtle">{formatWhen(r.time, getLocale())}</span>
 						<span class="ml-2 font-semibold">{logLevelLabel(r.level)}</span>
-						<span class="ml-2 text-subtle">{r.source}</span>
-						<span class="ml-2 [overflow-wrap:anywhere] break-all">{r.message}</span>
+						<span class="ml-2 [overflow-wrap:anywhere] break-words text-subtle">{r.source}</span>
+						<span class="ml-2 [overflow-wrap:anywhere] break-words">{r.message}</span>
 						{#each r.attrs as a, i (i)}
-							<span class="ml-2 text-subtle">{a.key}={a.value}</span>
+							<span class="ml-2 [overflow-wrap:anywhere] break-words text-subtle"
+								>{a.key}={a.value}</span
+							>
 						{/each}
 					</li>
 				{/each}

@@ -37,3 +37,33 @@ test('public: html.dark follows a live scheme change', async ({ page }) => {
 	await page.emulateMedia({ colorScheme: 'light' });
 	await expect(page.locator('html')).not.toHaveClass(/dark/);
 });
+
+test('public: html[lang] follows locale de and switches to en', async ({ page, baseURL }) => {
+	await page
+		.context()
+		.addCookies([
+			{ name: 'PARAGLIDE_LOCALE', value: 'de', url: baseURL ?? 'http://127.0.0.1:4173' }
+		]);
+	await page.goto('/login');
+	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+	await expect(page.locator('html')).toHaveAttribute('lang', 'de');
+
+	await page
+		.context()
+		.addCookies([
+			{ name: 'PARAGLIDE_LOCALE', value: 'en', url: baseURL ?? 'http://127.0.0.1:4173' }
+		]);
+	await page.reload();
+	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+	await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+});
+
+test.describe('locale context de-DE', () => {
+	test.use({ locale: 'de-DE' });
+
+	test('public: html[lang] follows context locale de-DE', async ({ page }) => {
+		await page.goto('/setup');
+		await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+		await expect(page.locator('html')).toHaveAttribute('lang', 'de');
+	});
+});
