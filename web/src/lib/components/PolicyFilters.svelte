@@ -32,62 +32,73 @@ SPDX-License-Identifier: EUPL-1.2
 			).data
 	});
 
-	const lists: { key: ListKey; label: () => string; source: (o: Options) => Option[] }[] = [
-		{ key: 'include_tags', label: m.policy_include_tags, source: (o) => o.tags },
-		{ key: 'exclude_tags', label: m.policy_exclude_tags, source: (o) => o.tags },
+	const lists: {
+		key: ListKey;
+		label: () => string;
+		hint: () => string;
+		source: (o: Options) => Option[];
+	}[] = [
+		{
+			key: 'include_tags',
+			label: m.policy_include_tags,
+			hint: m.policy_include_tags_hint,
+			source: (o) => o.tags
+		},
+		{
+			key: 'exclude_tags',
+			label: m.policy_exclude_tags,
+			hint: m.policy_exclude_tags_hint,
+			source: (o) => o.tags
+		},
 		{
 			key: 'include_quality_profiles',
 			label: m.policy_include_profiles,
+			hint: m.policy_include_profiles_hint,
 			source: (o) => o.quality_profiles
 		},
 		{
 			key: 'exclude_quality_profiles',
 			label: m.policy_exclude_profiles,
+			hint: m.policy_exclude_profiles_hint,
 			source: (o) => o.quality_profiles
 		}
 	];
 </script>
 
-<fieldset class="grid gap-4 md:col-span-2 md:grid-cols-2">
-	<legend class="mb-2 font-semibold">{m.policy_filters_title()}</legend>
-	<p class="text-sm text-subtle md:col-span-2">{m.policy_filters_hint()}</p>
+<fieldset class="card flex flex-col gap-4">
+	<legend class="px-1 text-sm font-semibold">{m.policy_filters_title()}</legend>
+	<p class="text-xs text-subtle">{m.policy_filters_hint()}</p>
 	{#if options.isPending}
-		<p class="md:col-span-2" aria-live="polite">{m.loading()}</p>
+		<p aria-live="polite">{m.loading()}</p>
 	{:else if options.isError}
-		<div class="md:col-span-2"><ProblemNote error={options.error} /></div>
+		<div><ProblemNote error={options.error} /></div>
 	{:else if options.data}
-		{#each lists as list (list.key)}
-			{@const choices = list.source(options.data)}
-			{#if choices.length === 0}
-				<div class="flex flex-col gap-1">
-					<span class="text-sm font-medium">{list.label()}</span>
-					<p class="text-sm text-subtle">{m.policy_filters_none()}</p>
-				</div>
-			{:else}
-				<Field id={list.key} label={list.label()}>
-					<select
-						id={list.key}
-						class="select"
-						multiple
-						size={Math.min(choices.length, 6)}
-						bind:value={policy[list.key]}
-					>
-						{#each choices as choice (choice.id)}
-							<option value={choice.id}>{choice.name}</option>
-						{/each}
-					</select>
-				</Field>
-			{/if}
-		{/each}
+		<div class="grid gap-4 sm:grid-cols-2">
+			{#each lists as list (list.key)}
+				{@const choices = list.source(options.data)}
+				{#if choices.length === 0}
+					<div class="flex flex-col gap-1" data-field={list.key}>
+						<span class="text-sm font-medium">{list.label()}</span>
+						<p class="text-xs text-subtle">{m.policy_filters_none()}</p>
+					</div>
+				{:else}
+					<Field id={list.key} label={list.label()} hint={list.hint()}>
+						<select
+							id={list.key}
+							data-field={list.key}
+							class="select"
+							multiple
+							size={Math.min(choices.length, 6)}
+							aria-describedby={`${list.key}-hint`}
+							bind:value={policy[list.key]}
+						>
+							{#each choices as choice (choice.id)}
+								<option value={choice.id}>{choice.name}</option>
+							{/each}
+						</select>
+					</Field>
+				{/if}
+			{/each}
+		</div>
 	{/if}
-	<Field id="release_delay" label={m.policy_release_delay()}>
-		<input
-			id="release_delay"
-			class="input"
-			type="number"
-			min="0"
-			max="8760"
-			bind:value={policy.release_delay_h}
-		/>
-	</Field>
 </fieldset>
