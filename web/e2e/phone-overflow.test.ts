@@ -161,10 +161,17 @@ test('authenticated: phone overflow /logs', async ({ page }) => {
 						seq: 1,
 						time: '2026-10-19T10:00:00Z',
 						level: 'info',
-						source: 'phone-test',
+						source:
+							'phone-test-long-source-without-spaces-that-must-wrap-properly-0123456789abcdefghijklmnopqrstuvwxyz',
 						message:
 							'long_unbroken_message_text_without_spaces_that_must_wrap_properly_at_phone_viewport_390px_0123456789_abcdefghijklmnopqrstuvwxyz',
-						attrs: []
+						attrs: [
+							{
+								key: 'url',
+								value:
+									'https://example.com/very/long/unbroken/path/that/exceeds/two/hundred/characters/without/any/spaces/012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789'
+							}
+						]
 					}
 				],
 				capacity: 500,
@@ -176,6 +183,88 @@ test('authenticated: phone overflow /logs', async ({ page }) => {
 	await page.goto('/logs');
 	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 	await assertNoHorizontalOverflow(page, '/logs');
+});
+
+test('authenticated: desktop overflow /logs', async ({ page }) => {
+	await page.setViewportSize({ width: 1280, height: 800 });
+	await page.route('**/api/v1/logs?*', async (route) => {
+		await route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				records: [
+					{
+						seq: 1,
+						time: '2026-10-19T10:00:00Z',
+						level: 'info',
+						source:
+							'desktop-test-long-source-without-spaces-that-must-wrap-properly-0123456789abcdefghijklmnopqrstuvwxyz',
+						message:
+							'long_unbroken_message_text_without_spaces_that_must_wrap_properly_at_desktop_viewport_1280px_0123456789_abcdefghijklmnopqrstuvwxyz',
+						attrs: [
+							{
+								key: 'url',
+								value:
+									'https://example.com/very/long/unbroken/path/that/exceeds/two/hundred/characters/without/any/spaces/012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789'
+							}
+						]
+					}
+				],
+				capacity: 500,
+				dropped: 0
+			})
+		});
+	});
+
+	await page.goto('/logs');
+	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+	await assertNoHorizontalOverflow(page, '/logs');
+});
+
+test('authenticated: phone overflow /history', async ({ page }) => {
+	await page.route('**/api/v1/events?*', async (route) => {
+		await route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify([
+				{
+					id: 101,
+					instance_id: '00000000-0000-0000-0000-000000000001',
+					ts: '2026-10-19T10:00:00Z',
+					level: 'info',
+					type: 'search_dispatched',
+					title:
+						'A Very Long Event Title For History Testing That Spans Multiple Words And Causes Horizontal Overflow If The Table Is Not Contained In A Scroll Region',
+					detail: 'Searched 42 items across all indexers for this instance'
+				}
+			])
+		});
+	});
+
+	await page.goto('/history');
+	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+	await expect(page.getByRole('grid')).toBeVisible();
+	await assertNoHorizontalOverflow(page, '/history');
+});
+
+test('authenticated: html[lang] follows app locale switch from de to en', async ({
+	page,
+	baseURL
+}) => {
+	await page
+		.context()
+		.addCookies([
+			{ name: 'PARAGLIDE_LOCALE', value: 'de', url: baseURL ?? 'http://127.0.0.1:4173' }
+		]);
+	await page.setViewportSize({ width: 1280, height: 800 });
+	await page.goto('/settings');
+	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+	await expect(page.locator('html')).toHaveAttribute('lang', 'de');
+
+	const langSelect = page.locator('#desktop-lang');
+	await expect(langSelect).toBeVisible();
+	await langSelect.selectOption('en');
+	await expect(page.locator('html')).toHaveAttribute('lang', 'en');
 });
 
 test('authenticated: phone overflow /instances/[id]', async ({ page }) => {

@@ -30,6 +30,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/seerrclient"
 	"github.com/lusoris/SnatchArr/api/internal/snatch"
 	"github.com/lusoris/SnatchArr/api/internal/store"
+	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
 	"github.com/lusoris/SnatchArr/api/internal/store/storetest"
 	"github.com/lusoris/SnatchArr/api/internal/testkit/await"
 )
@@ -89,9 +90,10 @@ func newFakeSeerr(t *testing.T, fails bool) *fakeSeerr {
 }
 
 type syncFixture struct {
-	svc *Service
-	st  *store.Store
-	clk *clockwork.FakeClock
+	svc  *Service
+	inst *instances.Service
+	st   *store.Store
+	clk  *clockwork.FakeClock
 }
 
 func newSyncFixture(t *testing.T, logger *slog.Logger) syncFixture {
@@ -106,7 +108,7 @@ func newSyncFixture(t *testing.T, logger *slog.Logger) syncFixture {
 	inst := instances.New(st, enc, clk, ids, nil, logger)
 	rec := snatch.NewRecorder(st, clk, events.New(logger))
 	svc := New(st, enc, clk, ids, seerrclient.New(clientTimeout, "SnatchArr-test"), noResolver{}, inst, snatch.NewRuns(st, clk, ids), rec, logger)
-	return syncFixture{svc: svc, st: st, clk: clk}
+	return syncFixture{svc: svc, inst: inst, st: st, clk: clk}
 }
 
 // linkState is what one SyncAll leaves behind for a link.
@@ -297,4 +299,66 @@ func TestNewTicker_CountsAFailedListing(t *testing.T) {
 	}
 	reg := startTicker(t, f)
 	metricstest.Await(t, reg, "snatcharr_loop_failures_total", "loop", "seerr_sync", 1)
+}
+
+// Positive: a request matching a Seerr server whose URL differs from the SnatchArr instance
+// resolves to that instance by matching its decrypted API key.
+func TestService_Sync_MatchesInstanceByKeyWhenURLsDiffer(t *testing.T) {
+	t.Parallel()
+	f := newSyncFixture(t, slog.New(slog.DiscardHandler))
+	inst, err := f.inst.Create(t.Context(), instances.Input{
+		Kind:    domain.KindRadarr,
+		Name:    "Radarr-Local",
+		BaseURL: "http://127.0.0.1:21001",
+		APIKey:  "arr-api-secret-key",
+		Enabled: true,
+	})
+	if err != nil {
+		t.Fatalf("create instance: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v1/settings/sonarr", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte("[]"))
+	})
+	mux.HandleFunc("GET /api/v1/settings/radarr", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{"id":1,"name":"Cluster-Radarr","hostname":"radarr.media.svc.cluster.local","port":7878,"apiKey":"arr-api-secret-key","is4k":false,"isDefault":true}]`))
+	})
+	mux.HandleFunc("GET /api/v1/request", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"pageInfo":{"pages":1,"results":1},"results":[{"id":42,"status":2,"type":"movie","createdAt":"2026-10-20T10:00:00.000Z","media":{"id":10,"mediaType":"movie","tmdbId":550,"status":3}}]}`))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	link, err := f.svc.Create(t.Context(), Input{
+		Name:    "seerr-link",
+		BaseURL: srv.URL,
+		APIKey:  "seerr-admin-key",
+		Enabled: true,
+	})
+	if err != nil {
+		t.Fatalf("create link: %v", err)
+	}
+
+	res, err := f.svc.Sync(t.Context(), link.ID)
+	if err != nil {
+		t.Fatalf("Sync() = %v", err)
+	}
+	if res.Seen != 1 {
+		t.Errorf("res.Seen = %d, want 1", res.Seen)
+	}
+
+	row, err := f.st.Q().GetSeerrRequest(t.Context(), sqlcgen.GetSeerrRequestParams{
+		LinkID:    link.ID,
+		RequestID: 42,
+	})
+	if err != nil {
+		t.Fatalf("GetSeerrRequest: %v", err)
+	}
+	if row.InstanceID == nil || *row.InstanceID != inst.ID {
+		t.Errorf("row.InstanceID = %v, want %s", row.InstanceID, inst.ID)
+	}
 }

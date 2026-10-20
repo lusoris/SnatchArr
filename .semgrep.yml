@@ -164,8 +164,9 @@ rules:
   # A spawn inside a loop over the input starts one goroutine per element, so
   # the caller's data sets the goroutine count. A `go` statement passes when a
   # semaphore send or Acquire comes before it in the same loop; a group's Go
-  # passes when SetLimit was called on the same group. Not decided: a counted
-  # loop whose bound is a variable holding len(x).
+  # (errgroup, sync.WaitGroup) passes when SetLimit was called on the same
+  # group or a semaphore send or Acquire comes before it in the same loop.
+  # Not decided: a counted loop whose bound is a variable holding len(x).
   - id: no-unbounded-goroutine-in-loop
     languages: [go]
     severity: ERROR
@@ -249,3 +250,19 @@ rules:
           - pattern-not-inside: |
               $G.SetLimit(...)
               ...
+          - pattern-not: |
+              for ... {
+                ...
+                $SEM <- $TOK
+                ...
+                $G.Go(...)
+                ...
+              }
+          - pattern-not: |
+              for ... {
+                ...
+                $SEM.Acquire(...)
+                ...
+                $G.Go(...)
+                ...
+              }

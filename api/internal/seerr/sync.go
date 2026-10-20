@@ -81,14 +81,39 @@ func (s *Service) prepareSync(ctx context.Context, link domain.SeerrLink, key st
 		// Settings need an admin key; without them the link's fallback instances still work.
 		s.logger.WarnContext(ctx, "seerr: servers unavailable; using fallbacks", slog.String("link", link.Name), slog.String("error", err.Error()))
 	}
-	list, err := s.instances.List(ctx)
+	list, err := s.listInstancesForSync(ctx)
 	if err != nil {
 		return nil, err
 	}
+	creds := make(map[uuid.UUID]instanceCreds, len(list))
+	for _, inst := range list {
+		if inst.APIKey != "" {
+			creds[inst.ID] = instanceCreds{kind: inst.Kind, baseURL: inst.BaseURL, apiKey: inst.APIKey}
+		}
+	}
 	return &syncContext{
 		link: link, key: key, servers: servers, idx: indexInstances(list),
-		titleBudget: seerrclient.MaxTitleLookups, credentials: make(map[uuid.UUID]instanceCreds),
+		titleBudget: seerrclient.MaxTitleLookups, credentials: creds,
 	}, nil
+}
+
+// listInstancesForSync lists the instances with their decrypted API keys, so a Seerr server
+// whose URL differs from the instance's (in-cluster name against public name) still matches
+// by key. An instance whose key cannot be opened stays matchable by URL only.
+func (s *Service) listInstancesForSync(ctx context.Context) ([]domain.Instance, error) {
+	list, err := s.instances.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("seerr: list instances: %w", err)
+	}
+	for i := range list {
+		c, credErr := s.instances.Credentials(ctx, list[i].ID)
+		if credErr != nil {
+			s.logger.WarnContext(ctx, "seerr: instance credentials", slog.String("instance", list[i].Name), slog.String("error", credErr.Error()))
+			continue
+		}
+		list[i].APIKey = c.APIKey
+	}
+	return list, nil
 }
 
 // syncOne upserts one request; the bool says whether it maps to an instance and entity.

@@ -4,6 +4,7 @@ package fixture
 
 import (
 	"context"
+	"sync"
 
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
@@ -68,6 +69,26 @@ func eachLimitedGroup(ctx context.Context, items []string, work func(string) err
 		g.Go(func() error { return work(it) })
 	}
 	return g.Wait()
+}
+
+func eachWaitGroup(items []string, work func(string)) {
+	var wg sync.WaitGroup
+	// ruleid: no-unbounded-goroutine-in-loop
+	for _, it := range items {
+		wg.Go(func() { work(it) })
+	}
+	wg.Wait()
+}
+
+func eachSemaphoreWaitGroup(items []string, work func(string)) {
+	slots := make(chan struct{}, 4)
+	var wg sync.WaitGroup
+	// ok: no-unbounded-goroutine-in-loop
+	for _, it := range items {
+		slots <- struct{}{}
+		wg.Go(func() { defer func() { <-slots }(); work(it) })
+	}
+	wg.Wait()
 }
 
 func workers(n int, work func()) {
