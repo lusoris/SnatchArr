@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
@@ -102,14 +103,9 @@ func (g *Goenvoy) qbittorrent(ctx context.Context, c domain.DownloadClient, secr
 	if err != nil {
 		return observation{}, fmt.Errorf("qbittorrent client: %w", err)
 	}
-	if c.Username != "" || secret != "" {
-		if err = cl.Login(ctx, c.Username, secret); err != nil {
-			return observation{}, fmt.Errorf("qbittorrent login: %w", err)
-		}
-	}
-	version, err := cl.Version(ctx)
+	version, err := qbittorrentVersion(ctx, cl, c.Username, secret)
 	if err != nil {
-		return observation{}, fmt.Errorf("qbittorrent version: %w", err)
+		return observation{}, err
 	}
 	torrents, err := cl.ListTorrents(ctx, &qbit.ListOptions{})
 	if err != nil {
@@ -127,6 +123,36 @@ func (g *Goenvoy) qbittorrent(ctx context.Context, c domain.DownloadClient, secr
 		}
 	}
 	return obs, nil
+}
+
+func qbittorrentVersion(ctx context.Context, cl *qbit.Client, username, secret string) (string, error) {
+	hasCredentials := username != "" || secret != ""
+	if hasCredentials {
+		if err := cl.Login(ctx, username, secret); err != nil {
+			return "", qbittorrentLoginError(err)
+		}
+	}
+	version, err := cl.Version(ctx)
+	if err != nil {
+		// goenvoy v2.0.0 ignores login's 200 Fails. body; the first authenticated call detects it.
+		if apiErr, ok := errors.AsType[*qbit.APIError](err); hasCredentials && ok && apiErr.StatusCode == http.StatusForbidden {
+			return "", fmt.Errorf("qbittorrent login failed: wrong username or password: %w", err)
+		}
+		return "", fmt.Errorf("qbittorrent version: %w", err)
+	}
+	return version, nil
+}
+
+func qbittorrentLoginError(err error) error {
+	if apiErr, ok := errors.AsType[*qbit.APIError](err); ok {
+		switch apiErr.StatusCode {
+		case http.StatusUnauthorized:
+			return fmt.Errorf("qBittorrent refused the request (HTTP 401): its WebUI Host header validation rejects this address; use the host and port qBittorrent serves on, or add this host to its WebUI server domains: %w", err)
+		case http.StatusForbidden:
+			return fmt.Errorf("qBittorrent banned this IP after too many failed logins: %w", err)
+		}
+	}
+	return fmt.Errorf("qbittorrent login: %w", err)
 }
 
 // transmissionTarget splits a stored URL into goenvoy's base URL and RPC path: the *arr

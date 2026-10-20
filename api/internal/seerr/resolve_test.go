@@ -120,3 +120,156 @@ func TestParseSeerrTimeAndSeasons(t *testing.T) {
 		t.Fatalf("a request without seasons must give an empty list, got %#v", got)
 	}
 }
+
+func TestResolveInstance_MatchByKey(t *testing.T) {
+	t.Parallel()
+	radarr := domain.Instance{ID: uuid.New(), Kind: domain.KindRadarr, BaseURL: "http://127.0.0.1:21001", APIKey: "radarr-key"}
+	radarr4k := domain.Instance{ID: uuid.New(), Kind: domain.KindRadarr, BaseURL: "http://127.0.0.1:21002", APIKey: "radarr-4k-key"}
+	sonarr := domain.Instance{ID: uuid.New(), Kind: domain.KindSonarr, BaseURL: "http://127.0.0.1:21003", APIKey: "sonarr-key"}
+	precURL := domain.Instance{ID: uuid.New(), Kind: domain.KindRadarr, BaseURL: "http://radarr-prec.lan:7878", APIKey: "key-url-prec"}
+	precKey := domain.Instance{ID: uuid.New(), Kind: domain.KindRadarr, BaseURL: "http://127.0.0.1:21005", APIKey: "key-target-prec"}
+	dup1 := domain.Instance{ID: uuid.New(), Kind: domain.KindRadarr, BaseURL: "http://127.0.0.1:21006", APIKey: "shared-key"}
+	dup2 := domain.Instance{ID: uuid.New(), Kind: domain.KindRadarr, BaseURL: "http://127.0.0.1:21007", APIKey: "shared-key"}
+
+	idx := indexInstances([]domain.Instance{radarr, radarr4k, sonarr, precURL, precKey, dup1, dup2})
+	fallback := domain.Instance{ID: uuid.New()}
+	link := domain.SeerrLink{SonarrInstanceID: &fallback.ID, RadarrInstanceID: &fallback.ID}
+
+	cases := []struct {
+		name    string
+		mt      domain.SeerrMediaType
+		req     seerrclient.Request
+		servers []seerrclient.Server
+		want    *uuid.UUID
+		useLink bool
+	}{
+		{
+			name:    "positive: URL differs, key matches",
+			mt:      domain.SeerrMovie,
+			req:     seerrclient.Request{ServerID: 10, ServerAssigned: true},
+			servers: []seerrclient.Server{{Kind: domain.KindRadarr, ID: 10, BaseURL: "http://radarr.media.svc.cluster.local:7878", APIKey: "radarr-key"}},
+			want:    &radarr.ID,
+			useLink: true,
+		},
+		{
+			name:    "positive 4k: 4K server matches 4K instance by key",
+			mt:      domain.SeerrMovie,
+			req:     seerrclient.Request{ServerID: 11, ServerAssigned: true, Is4k: true},
+			servers: []seerrclient.Server{{Kind: domain.KindRadarr, ID: 11, BaseURL: "http://radarr4k.media.svc.cluster.local:7878", APIKey: "radarr-4k-key", Is4K: true}},
+			want:    &radarr4k.ID,
+			useLink: true,
+		},
+		{
+			name:    "positive: default server matched by key",
+			mt:      domain.SeerrMovie,
+			req:     seerrclient.Request{},
+			servers: []seerrclient.Server{{Kind: domain.KindRadarr, ID: 20, BaseURL: "http://radarr-default.media.svc:7878", APIKey: "radarr-key", IsDefault: true}},
+			want:    &radarr.ID,
+			useLink: true,
+		},
+		{
+			name:    "positive 4k: default 4K server matched by key",
+			mt:      domain.SeerrMovie,
+			req:     seerrclient.Request{Is4k: true},
+			servers: []seerrclient.Server{{Kind: domain.KindRadarr, ID: 21, BaseURL: "http://radarr4k-default.media.svc:7878", APIKey: "radarr-4k-key", Is4K: true, IsDefault: true}},
+			want:    &radarr4k.ID,
+			useLink: true,
+		},
+		{
+			name:    "negative: URL differs, key differs with fallback",
+			mt:      domain.SeerrMovie,
+			req:     seerrclient.Request{ServerID: 12, ServerAssigned: true},
+			servers: []seerrclient.Server{{Kind: domain.KindRadarr, ID: 12, BaseURL: "http://radarr-unknown.lan:7878", APIKey: "wrong-key"}},
+			want:    &fallback.ID,
+			useLink: true,
+		},
+		{
+			name:    "negative: URL differs, key differs without fallback",
+			mt:      domain.SeerrMovie,
+			req:     seerrclient.Request{ServerID: 12, ServerAssigned: true},
+			servers: []seerrclient.Server{{Kind: domain.KindRadarr, ID: 12, BaseURL: "http://radarr-unknown.lan:7878", APIKey: "wrong-key"}},
+			want:    nil,
+			useLink: false,
+		},
+		{
+			name:    "boundary: empty server key",
+			mt:      domain.SeerrMovie,
+			req:     seerrclient.Request{ServerID: 13, ServerAssigned: true},
+			servers: []seerrclient.Server{{Kind: domain.KindRadarr, ID: 13, BaseURL: "http://radarr-emptykey.lan:7878", APIKey: ""}},
+			want:    &fallback.ID,
+			useLink: true,
+		},
+		{
+			name:    "boundary: two instances share same key yields no match",
+			mt:      domain.SeerrMovie,
+			req:     seerrclient.Request{ServerID: 14, ServerAssigned: true},
+			servers: []seerrclient.Server{{Kind: domain.KindRadarr, ID: 14, BaseURL: "http://radarr-dup.lan:7878", APIKey: "shared-key"}},
+			want:    &fallback.ID,
+			useLink: true,
+		},
+		{
+			name:    "boundary: two instances share same key without fallback stays unresolved",
+			mt:      domain.SeerrMovie,
+			req:     seerrclient.Request{ServerID: 14, ServerAssigned: true},
+			servers: []seerrclient.Server{{Kind: domain.KindRadarr, ID: 14, BaseURL: "http://radarr-dup.lan:7878", APIKey: "shared-key"}},
+			want:    nil,
+			useLink: false,
+		},
+		{
+			name:    "precedence: URL match wins over key match",
+			mt:      domain.SeerrMovie,
+			req:     seerrclient.Request{ServerID: 15, ServerAssigned: true},
+			servers: []seerrclient.Server{{Kind: domain.KindRadarr, ID: 15, BaseURL: "http://radarr-prec.lan:7878", APIKey: "key-target-prec"}},
+			want:    &precURL.ID,
+			useLink: true,
+		},
+		{
+			name:    "family mismatch: radarr key on sonarr server yields no match",
+			mt:      domain.SeerrTV,
+			req:     seerrclient.Request{ServerID: 16, ServerAssigned: true},
+			servers: []seerrclient.Server{{Kind: domain.KindSonarr, ID: 16, BaseURL: "http://sonarr-diff.lan:8989", APIKey: "radarr-key"}},
+			want:    &fallback.ID,
+			useLink: true,
+		},
+		{
+			name: "precedence: named server beats default server when both match",
+			mt:   domain.SeerrMovie,
+			req:  seerrclient.Request{ServerID: 10, ServerAssigned: true},
+			servers: []seerrclient.Server{
+				{Kind: domain.KindRadarr, ID: 10, BaseURL: "http://radarr.media.svc.cluster.local:7878", APIKey: "radarr-key"},
+				{Kind: domain.KindRadarr, ID: 20, BaseURL: "http://radarr4k.media.svc.cluster.local:7878", APIKey: "radarr-4k-key", IsDefault: true},
+			},
+			want:    &radarr.ID,
+			useLink: true,
+		},
+		{
+			name: "precedence: default server beats link fallback",
+			mt:   domain.SeerrMovie,
+			req:  seerrclient.Request{},
+			servers: []seerrclient.Server{
+				{Kind: domain.KindRadarr, ID: 20, BaseURL: "http://radarr.media.svc.cluster.local:7878", APIKey: "radarr-key", IsDefault: true},
+			},
+			want:    &radarr.ID,
+			useLink: true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			testLink := domain.SeerrLink{}
+			if tc.useLink {
+				testLink = link
+			}
+			got := resolveInstance(tc.mt, tc.req, tc.servers, idx, testLink)
+			if tc.want == nil {
+				if got != nil {
+					t.Fatalf("got %v, want nil", got)
+				}
+				return
+			}
+			if got == nil || *got != *tc.want {
+				t.Fatalf("got %v, want %s", got, *tc.want)
+			}
+		})
+	}
+}
