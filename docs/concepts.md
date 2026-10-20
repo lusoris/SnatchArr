@@ -34,7 +34,7 @@ the planner alone; leasing and the searches the workers send are not part of the
 
 ## Per cycle
 
-`missing_per_cycle` (default 1) and `upgrade_per_cycle` (default 0) say how many items a
+`missing_per_cycle` (default 2, [ADR-0020](adr/0020-snatch-policy-defaults-and-presets.md)) and `upgrade_per_cycle` (default 1, [ADR-0020](adr/0020-snatch-policy-defaults-and-presets.md)) say how many items a
 single snatch goes after. Candidates are filtered **first** (monitored, released, not in
 afterglow, not already in the download queue, not grabbed within `recent_grab_window_h`,
 matching the tag and quality profile filters, released at least `release_delay_h` ago)
@@ -54,7 +54,7 @@ are tracked separately, so an upgrade search never blocks a missing one.
 
 ## Stamina
 
-`hourly_cap` (default 20, range 1 to 500) is how many **searches** an instance may send
+`hourly_cap` (default 15, range 1 to 500; balanced defaults [ADR-0020](adr/0020-snatch-policy-defaults-and-presets.md)) is how many **searches** an instance may send
 to its indexers in any 60 minutes, counted the way the *arr runs them: one per episode in
 an episode search, one per season pack, one per season of a series search, one per movie,
 album or book, and one for a whole artist or author search. Lidarr and the Readarr forks

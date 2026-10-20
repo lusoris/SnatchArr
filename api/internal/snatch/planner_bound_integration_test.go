@@ -35,7 +35,7 @@ func TestPlanner_TickPastTheBoundPlansTheRestNext(t *testing.T) {
 		storetest.Instance(t, f.st, f.clk.Now())
 	}
 
-	tickWant(t, f, MaxInstancesPerTick)
+	tickWant(t, f, 2*MaxInstancesPerTick)
 	if got, _ := metricstest.Value(t, f.reg, "snatcharr_planner_deferrals_total", "reason", metrics.DeferralTickBound); got != pastTheBound {
 		t.Errorf("tick_bound deferrals after the first tick = %v, want %d", got, pastTheBound)
 	}
@@ -46,7 +46,7 @@ func TestPlanner_TickPastTheBoundPlansTheRestNext(t *testing.T) {
 
 	// The instances already queued have an active run, so the second tick queues only the
 	// ones the first tick left.
-	tickWant(t, f, pastTheBound)
+	tickWant(t, f, 2*pastTheBound)
 	planned := count(t, f.st, `SELECT count(DISTINCT instance_id) FROM snatch_runs WHERE status = 'queued'`)
 	if planned != MaxInstancesPerTick+pastTheBound {
 		t.Errorf("instances with a queued run after two ticks = %d, want %d", planned, MaxInstancesPerTick+pastTheBound)

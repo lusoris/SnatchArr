@@ -14,11 +14,11 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 )
 
-func TestDefaultPolicyIsGentleAndValid(t *testing.T) {
+func TestDefaultPolicyIsBalancedAndValid(t *testing.T) {
 	t.Parallel()
 	p := domain.DefaultPolicy(uuid.New())
-	if p.MissingPerCycle != 1 || p.UpgradePerCycle != 0 || p.HourlyCap != 20 {
-		t.Fatalf("defaults drifted from newtarr's gentle baseline: %+v", p)
+	if p.MissingPerCycle != 2 || p.UpgradePerCycle != 1 || p.HourlyCap != 15 {
+		t.Fatalf("defaults drifted from ADR-0020 balanced baseline: %+v", p)
 	}
 	if p.CycleInterval != 15*time.Minute || p.ProcessedTTL != 168*time.Hour {
 		t.Fatalf("interval/ttl defaults drifted: %+v", p)
@@ -40,13 +40,20 @@ func TestPolicyValidate(t *testing.T) {
 		wantErr bool
 	}{
 		{"positive untouched", func(*domain.Policy) {}, false},
+		{"boundary cap 1 ok", func(p *domain.Policy) { p.HourlyCap = 1 }, false},
 		{"boundary cap 500 ok", func(p *domain.Policy) { p.HourlyCap = 500 }, false},
 		{"boundary cap 501", func(p *domain.Policy) { p.HourlyCap = 501 }, true},
 		{"boundary cap 0", func(p *domain.Policy) { p.HourlyCap = 0 }, true},
 		{"boundary interval 60s ok", func(p *domain.Policy) { p.CycleInterval = 60 * time.Second }, false},
 		{"boundary interval 59s", func(p *domain.Policy) { p.CycleInterval = 59 * time.Second }, true},
+		{"boundary missing 0 ok", func(p *domain.Policy) { p.MissingPerCycle = 0 }, false},
 		{"boundary missing 100 ok", func(p *domain.Policy) { p.MissingPerCycle = 100 }, false},
 		{"boundary missing 101", func(p *domain.Policy) { p.MissingPerCycle = 101 }, true},
+		{"negative missing below zero", func(p *domain.Policy) { p.MissingPerCycle = -1 }, true},
+		{"boundary upgrade 0 ok", func(p *domain.Policy) { p.UpgradePerCycle = 0 }, false},
+		{"boundary upgrade 100 ok", func(p *domain.Policy) { p.UpgradePerCycle = 100 }, false},
+		{"boundary upgrade 101", func(p *domain.Policy) { p.UpgradePerCycle = 101 }, true},
+		{"negative upgrade below zero", func(p *domain.Policy) { p.UpgradePerCycle = -1 }, true},
 		{"boundary ttl 8760h ok", func(p *domain.Policy) { p.ProcessedTTL = 8760 * time.Hour }, false},
 		{"boundary ttl 8761h", func(p *domain.Policy) { p.ProcessedTTL = 8761 * time.Hour }, true},
 		{"boundary queue -1 ok", func(p *domain.Policy) { p.MaxQueueSize = -1 }, false},
