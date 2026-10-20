@@ -11,10 +11,11 @@ SPDX-License-Identifier: EUPL-1.2
 	interface Props {
 		drawerOpen: boolean;
 		onOpenDrawer: () => void;
+		onOpenSearch?: () => void;
 		menuButtonEl?: HTMLButtonElement | null;
 	}
 
-	let { drawerOpen, onOpenDrawer, menuButtonEl = $bindable(null) }: Props = $props();
+	let { drawerOpen, onOpenDrawer, onOpenSearch, menuButtonEl = $bindable(null) }: Props = $props();
 </script>
 
 <header
@@ -31,15 +32,28 @@ SPDX-License-Identifier: EUPL-1.2
 		</span>
 		<span>{m.app_name()}</span>
 	</a>
-	<button
-		bind:this={menuButtonEl}
-		type="button"
-		class="btn inline-flex h-9 min-h-0 w-9 items-center justify-center rounded-md border border-control p-0"
-		onclick={onOpenDrawer}
-		aria-label={m.nav_open_menu()}
-		aria-expanded={drawerOpen}
-		aria-controls="mobile-nav-dialog"
-	>
-		<NavIcon name="menu" size={20} />
-	</button>
+
+	<div class="flex items-center gap-1.5">
+		{#if onOpenSearch}
+			<button
+				type="button"
+				class="btn inline-flex h-9 min-h-0 w-9 items-center justify-center rounded-md border border-control p-0"
+				onclick={onOpenSearch}
+				aria-label={m.nav_search()}
+			>
+				<NavIcon name="search" size={18} />
+			</button>
+		{/if}
+		<button
+			bind:this={menuButtonEl}
+			type="button"
+			class="btn inline-flex h-9 min-h-0 w-9 items-center justify-center rounded-md border border-control p-0"
+			onclick={onOpenDrawer}
+			aria-label={m.nav_open_menu()}
+			aria-expanded={drawerOpen}
+			aria-controls="mobile-nav-dialog"
+		>
+			<NavIcon name="menu" size={20} />
+		</button>
+	</div>
 </header>
