@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.5.3](https://github.com/lusoris/SnatchArr/compare/v0.5.2...v0.5.3) (2026-10-20)
+
+
+### Features
+
+* **policy:** balanced snatch defaults and presets (ADR-0020) ([#485](https://github.com/lusoris/SnatchArr/issues/485)) ([c0a7df2](https://github.com/lusoris/SnatchArr/commit/c0a7df21b1d70d6c957ceea80880535a4bb942b0))
+* **web:** regroup the snatch policy form by task with presets ([#486](https://github.com/lusoris/SnatchArr/issues/486)) ([86f4208](https://github.com/lusoris/SnatchArr/commit/86f4208af4d0f7aa96a49a0fe948c1f96abe2df3))
+
+
+### Bug Fixes
+
+* **deps:** update rustls-webpki and webpki-root-certs for two advisories ([#487](https://github.com/lusoris/SnatchArr/issues/487)) ([c5cd991](https://github.com/lusoris/SnatchArr/commit/c5cd991b930ed3b3661be3795cbad8dcd523e08e))
+* **live:** keep the event stream open and fill the live page ([#488](https://github.com/lusoris/SnatchArr/issues/488)) ([650875b](https://github.com/lusoris/SnatchArr/commit/650875b2d4d7e83d0bf72be78c37cf3829283bcc))
+
+
+### Documentation
+
+* **adr:** ADR-0019 foreign-title search without proxy indexers ([#484](https://github.com/lusoris/SnatchArr/issues/484)) ([ade31e6](https://github.com/lusoris/SnatchArr/commit/ade31e612f805f1336371dfa5ae0a9e486418b64))
+* **adr:** ADR-0021 LLM access module ([#489](https://github.com/lusoris/SnatchArr/issues/489)) ([c7ee0b3](https://github.com/lusoris/SnatchArr/commit/c7ee0b31558997e867bc11022a61bff8df111952))
+* **adr:** link README by URL so mkdocs --strict resolves it ([#482](https://github.com/lusoris/SnatchArr/issues/482)) ([acad5fc](https://github.com/lusoris/SnatchArr/commit/acad5fc5d95180f3ab39be8c132dbcf2041b6ab5))
+
 ## [0.5.2](https://github.com/lusoris/SnatchArr/compare/v0.5.1...v0.5.2) (2026-10-20)
 
 
