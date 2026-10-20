@@ -24,3 +24,4 @@ This directory documents key architectural decisions following the HISS-14 immut
 | [0016](0016-ui-layout-and-page-redo.md) | 2026-10-20 | Modern operations layout: collapsible navigation, unified page headers, mobile bottom bar and dialog sheets | Accepted |
 | [0017](0017-anatomical-brand-mark.md) | 2026-10-20 | An anatomical vulva mark replaces the M3 vesica | Accepted |
 | [0018](0018-product-front-door.md) | 2026-10-20 | Product front door of the media stack | Proposed |
+| [0019](0019-foreign-title-search.md) | 2026-10-20 | Foreign-title search and release push without proxy indexers | Proposed |
