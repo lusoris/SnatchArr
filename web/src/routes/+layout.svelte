@@ -20,6 +20,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import TopBar from '#lib/components/shell/TopBar.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { PUBLIC_ROUTES } from '#lib/api/client.js';
+	import { getLocale } from '#lib/paraglide/runtime.js';
 	import { queryClient } from '#lib/query.js';
 	import { session } from '#lib/session.svelte.js';
 
@@ -65,6 +66,9 @@ SPDX-License-Identifier: EUPL-1.2
 	}
 
 	onMount(() => {
+		// app.html is built with lang="en"; setLocale reloads the page, so setting it once per
+		// load keeps html[lang] on the active locale (WCAG 3.1.1).
+		document.documentElement.lang = getLocale();
 		void checkSession();
 	});
 
