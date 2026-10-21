@@ -7,8 +7,9 @@
 # release, and a go install pinned by a variable. Refused: a tag pin, a comment that names
 # another tag, a missing comment, a broken workflow, a missing token, a repository without
 # workflow files, a zizmor run that fails or writes no report, a gate image without a digest,
-# and a go install at @latest, at @main or without a package. Last: Renovate reads both image
-# pins and every go install pin in the workflows, and neither @latest nor a variable.
+# a zizmor requirements file without hashes, and a go install at @latest, at @main or without
+# a package. Last: Renovate reads the actionlint image pin, zizmor-requirements.txt and every
+# go install pin in the workflows, and neither @latest nor a variable.
 # Adapted from github.com/golusoris/goenvoy.
 #
 #   tools/ci/workflow-check_test.sh
@@ -138,21 +139,29 @@ expect_refusal clean "is required" env -u GH_TOKEN -u GITHUB_TOKEN
 mkdir -p "$WORK/empty"
 expect_refusal empty "no workflow file"
 
-# A stand-in for docker: actionlint passes, zizmor ends with the given exit status, no report.
+# A fake zizmor binary: ends with the given exit status, no report.
 stub() {
-  printf '#!/bin/sh\ncase "$*" in *zizmor*) exit %s ;; esac\n' "$2" > "$WORK/$1"
+  printf '#!/bin/sh\nexit %s\n' "$2" > "$WORK/$1"
   chmod +x "$WORK/$1"
 }
-stub docker-zizmor-fails 3
-expect_refusal clean "zizmor exit 3" env DOCKER_BIN="$WORK/docker-zizmor-fails"
-stub docker-zizmor-silent 0
-expect_refusal clean "zizmor wrote no report" env DOCKER_BIN="$WORK/docker-zizmor-silent"
+stub zizmor-fails 3
+expect_refusal clean "zizmor exit 3" env ZIZMOR_BIN="$WORK/zizmor-fails"
+stub zizmor-silent 0
+expect_refusal clean "zizmor wrote no report" env ZIZMOR_BIN="$WORK/zizmor-silent"
 
-# A copy of the check whose zizmor image carries no digest.
+# A copy of the check whose actionlint image carries no digest.
 mkdir -p "$WORK/copy/tools/ci" "$WORK/copy/.github"
 cp "$HERE/workflow-check.sh" "$WORK/copy/tools/ci/"
-sed 's/^\(ZIZMOR_IMAGE=.*\)@sha256:.*$/\1/' "$HERE/tool-versions.env" > "$WORK/copy/tools/ci/tool-versions.env"
+cp "$HERE/zizmor-requirements.txt" "$WORK/copy/tools/ci/"
+sed 's/^\(ACTIONLINT_IMAGE=.*\)@sha256:.*$/\1/' "$HERE/tool-versions.env" > "$WORK/copy/tools/ci/tool-versions.env"
 HERE="$WORK/copy/tools/ci" expect_refusal clean "is not an image pinned by version and digest"
+
+# A copy of the check whose zizmor requirements carry no hashes.
+mkdir -p "$WORK/copy-nohash/tools/ci" "$WORK/copy-nohash/.github"
+cp "$HERE/workflow-check.sh" "$WORK/copy-nohash/tools/ci/"
+cp "$HERE/tool-versions.env" "$WORK/copy-nohash/tools/ci/"
+grep -v '^[[:space:]]*--hash=' "$HERE/zizmor-requirements.txt" > "$WORK/copy-nohash/tools/ci/zizmor-requirements.txt"
+HERE="$WORK/copy-nohash/tools/ci" expect_refusal clean "zizmor is not pinned by version and hash"
 
 # renovate_reads PINS: how many patterns of the Renovate manager for the pin file match PINS
 # exactly once. A pattern that matches nothing stops the updates without an error.
@@ -165,12 +174,12 @@ renovate_reads() {
     | length
   ' "$HERE/../../renovate.json"
 }
-if [ "$(renovate_reads "$HERE/tool-versions.env")" != 2 ]; then
-  echo "FAIL renovate: renovate.json does not read both image pins of tools/ci/tool-versions.env" >&2
+if [ "$(renovate_reads "$HERE/tool-versions.env")" != 1 ]; then
+  echo "FAIL renovate: renovate.json does not read the image pin of tools/ci/tool-versions.env" >&2
   exit 1
 fi
-echo "ok   renovate: both image pins are read"
-if [ "$(renovate_reads "$WORK/copy/tools/ci/tool-versions.env")" != 1 ]; then
+echo "ok   renovate: the image pin is read"
+if [ "$(renovate_reads "$WORK/copy/tools/ci/tool-versions.env")" != 0 ]; then
   echo "FAIL renovate: the pin without a digest is still read" >&2
   exit 1
 fi
@@ -199,4 +208,21 @@ if [ "$(renovate_go_reads "$WORK/go-install-latest/.github/workflows/planted.yml
 fi
 echo "ok   renovate: a go install at @latest or at a variable is not read"
 
-echo "workflow check: 4 accepted, 13 refused; Renovate reads 2 image pins and $pinned go install pins"
+# Renovate's pip_requirements manager must be enabled and its default file pattern must
+# match tools/ci/zizmor-requirements.txt; a file named zizmor.txt would be skipped.
+PIP_PATTERN='(^|/)[\w-]*requirements([-._]\w+)?\.(txt|pip)$'
+if ! jq -e '.enabledManagers | index("pip_requirements")' "$REPO_ROOT/renovate.json" > /dev/null; then
+  echo "FAIL renovate: pip_requirements is not in enabledManagers" >&2
+  exit 1
+fi
+if ! jq -e -n --arg file "tools/ci/zizmor-requirements.txt" --arg pat "$PIP_PATTERN" '$file | test($pat)' > /dev/null; then
+  echo "FAIL renovate: tools/ci/zizmor-requirements.txt does not match pip_requirements file pattern" >&2
+  exit 1
+fi
+if jq -e -n --arg file "tools/ci/zizmor.txt" --arg pat "$PIP_PATTERN" '$file | test($pat)' > /dev/null; then
+  echo "FAIL renovate: planted zizmor.txt unexpectedly matches pip_requirements file pattern" >&2
+  exit 1
+fi
+echo "ok   renovate: pip_requirements reads tools/ci/zizmor-requirements.txt and ignores zizmor.txt"
+
+echo "workflow check: 4 accepted, 14 refused; Renovate reads 1 image pin, zizmor-requirements.txt and $pinned go install pins"
