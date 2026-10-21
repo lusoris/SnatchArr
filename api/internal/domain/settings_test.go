@@ -75,10 +75,36 @@ func TestSettingsValidate(t *testing.T) {
 			domain.LLMWriteToolDeleteSchedule,
 			domain.LLMWriteToolImportConfigarr,
 			domain.LLMWriteToolUpdateSettings,
+			domain.LLMWriteToolCreateDownloadClient,
+			domain.LLMWriteToolTestDownloadClientInput,
+			domain.LLMWriteToolUpdateDownloadClient,
+			domain.LLMWriteToolDeleteDownloadClient,
+			domain.LLMWriteToolTestDownloadClient,
+			domain.LLMWriteToolDiscoverDownloadClients,
+			domain.LLMWriteToolCreateSeerrLink,
+			domain.LLMWriteToolTestSeerrLinkInput,
+			domain.LLMWriteToolSnatchSeerrRequest,
+			domain.LLMWriteToolUpdateSeerrLink,
+			domain.LLMWriteToolDeleteSeerrLink,
+			domain.LLMWriteToolTestSeerrLink,
+			domain.LLMWriteToolSyncSeerrLink,
+			domain.LLMWriteToolImportSeerrInstances,
+			domain.LLMWriteToolCreateProwlarrLink,
+			domain.LLMWriteToolTestProwlarrLinkInput,
+			domain.LLMWriteToolUpdateProwlarrLink,
+			domain.LLMWriteToolDeleteProwlarrLink,
+			domain.LLMWriteToolTestProwlarrLink,
+			domain.LLMWriteToolCreateNotificationChannel,
+			domain.LLMWriteToolUpdateNotificationChannel,
+			domain.LLMWriteToolDeleteNotificationChannel,
+			domain.LLMWriteToolTestNotificationChannel,
+			domain.LLMWriteToolCreateNotificationRule,
+			domain.LLMWriteToolUpdateNotificationRule,
+			domain.LLMWriteToolDeleteNotificationRule,
 		},
 	}
 	if err := allWriteTools.Validate(); err != nil {
-		t.Fatalf("all 17 llm_write_tools rejected: %v", err)
+		t.Fatalf("all 43 llm_write_tools rejected: %v", err)
 	}
 	badWriteTools := []domain.Settings{
 		{HistoryRetentionDays: 90, UserAgent: "x", SearchPriorityPreset: preset, DownloadPriorityPreset: preset, LLMWriteTools: []string{"not_a_tool"}},

@@ -6,7 +6,6 @@ package llm_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -36,13 +35,19 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/buildinfo"
 	"github.com/lusoris/SnatchArr/api/internal/config"
 	"github.com/lusoris/SnatchArr/api/internal/configarr"
+	"github.com/lusoris/SnatchArr/api/internal/dlclients"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/events"
 	"github.com/lusoris/SnatchArr/api/internal/httpapi"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
 	"github.com/lusoris/SnatchArr/api/internal/llm"
+	"github.com/lusoris/SnatchArr/api/internal/notify"
 	"github.com/lusoris/SnatchArr/api/internal/policies"
+	"github.com/lusoris/SnatchArr/api/internal/prowlarr"
+	"github.com/lusoris/SnatchArr/api/internal/prowlarrclient"
 	"github.com/lusoris/SnatchArr/api/internal/queue"
+	"github.com/lusoris/SnatchArr/api/internal/seerr"
+	"github.com/lusoris/SnatchArr/api/internal/seerrclient"
 	"github.com/lusoris/SnatchArr/api/internal/settings"
 	"github.com/lusoris/SnatchArr/api/internal/snatch"
 	"github.com/lusoris/SnatchArr/api/internal/store"
@@ -68,15 +73,6 @@ func (b *syncBuffer) String() string {
 	return b.buf.String()
 }
 
-type mcpStubProber struct {
-	res arrclient.Result
-	err error
-}
-
-func (p *mcpStubProber) Probe(context.Context, domain.AppKind, string, string) (arrclient.Result, error) {
-	return p.res, p.err
-}
-
 type mcpFixture struct {
 	st          *store.Store
 	clk         clock.Clock
@@ -86,23 +82,18 @@ type mcpFixture struct {
 	apiKeys     *auth.APIKeys
 	runs        *snatch.Runs
 	schedules   *snatch.Schedules
+	dlSvc       *dlclients.Service
+	seerrSvc    *seerr.Service
+	prowlarrSvc *prowlarr.Service
+	notifySvc   *notify.Service
 	admin       domain.User
 	srv         *httptest.Server
 	client      *http.Client
 	logBuf      *syncBuffer
 }
 
-func newMCPFixture(t *testing.T) *mcpFixture {
+func buildFixtureAuth(t *testing.T, st *store.Store, clk clock.Clock, ids id.Generator, logger *slog.Logger) (*auth.Service, *auth.APIKeys, *session.Manager, *apikey.Service, domain.User) {
 	t.Helper()
-	st := storetest.New(t)
-	clk := clock.NewFake()
-	ids := id.New()
-	logBuf := &syncBuffer{}
-	logger := slog.New(slog.NewTextHandler(logBuf, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	enc, err := crypto.NewEncryptor(bytes.Repeat([]byte{0x42}, 32))
-	if err != nil {
-		t.Fatalf("encryptor: %v", err)
-	}
 	authSvc, err := auth.NewService(st, crypto.NewPasswordHasher(1), clk, ids, logger)
 	if err != nil {
 		t.Fatalf("auth.NewService: %v", err)
@@ -124,25 +115,45 @@ func newMCPFixture(t *testing.T) *mcpFixture {
 	if err != nil {
 		t.Fatalf("session.NewManager: %v", err)
 	}
-	probe := &mcpStubProber{res: arrclient.Result{AppName: "Sonarr", Version: "4.0.10.2544"}}
+	return authSvc, apiKeys, sessMgr, keys, admin
+}
+
+func newMCPFixture(t *testing.T) *mcpFixture {
+	t.Helper()
+	st := storetest.New(t)
+	clk := clock.NewFake()
+	ids := id.New()
+	logBuf := &syncBuffer{}
+	logger := slog.New(slog.NewTextHandler(logBuf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	enc, err := crypto.NewEncryptor(bytes.Repeat([]byte{0x42}, 32))
+	if err != nil {
+		t.Fatalf("encryptor: %v", err)
+	}
+	authSvc, apiKeys, sessMgr, keys, admin := buildFixtureAuth(t, st, clk, ids, logger)
+	probe := arrclient.NewGoenvoyProber(arrclient.Options{Timeout: 5 * time.Second})
 	instSvc := instances.New(st, enc, clk, ids, probe, logger)
 	polSvc := policies.New(st, clk)
 	settingsSvc := settings.New(st, clk)
 	runs := snatch.NewRuns(st, clk, ids)
 	rec := snatch.NewRecorder(st, clk, events.New(logger))
-	workers := snatch.NewWorkers(st, clk)
 	schedules := snatch.NewSchedules(st, clk, ids)
-	memory := snatch.NewMemory(st, clk)
 	queueStore := queue.NewStore(st, clk)
+	dlSnap := dlclients.NewGoenvoy(clk)
+	dlSvc := dlclients.New(st, enc, clk, ids, dlSnap, probe, instSvc, logger)
+	seerrClient := seerrclient.New(5*time.Second, "SnatchArr-test")
+	seerrSvc := seerr.New(st, enc, clk, ids, seerrClient, probe, instSvc, runs, rec, logger)
+	prowlarrClient := prowlarrclient.New(5*time.Second, "SnatchArr-test")
+	prowlarrSvc := prowlarr.New(st, enc, clk, ids, prowlarrClient, probe, instSvc, logger, config.Options{Prowlarr: config.ProwlarrOptions{LimitThreshold: 0.9}})
+	notifySvc := notify.NewService(st, notify.NewWebhookStore(st, enc), enc, clk, ids, logger)
 	cfg := config.Options{Profile: config.ProfileDev}
-	configarrSvc := configarr.New(cfg, instSvc, nil, polSvc, queueStore, probe, clk, logger)
+	configarrSvc := configarr.New(cfg, instSvc, dlSvc, polSvc, queueStore, probe, clk, logger)
 	build := buildinfo.Info{Version: "0.1.0-test", Commit: "abc1234", Date: "2026-10-21"}
 	handlers := httpapi.NewHandlers(build, cfg, clk, authSvc, apiKeys, sessMgr, instSvc, polSvc, logger, httpapi.Deps{
-		Runs: runs, Rec: rec, Workers: workers, Settings: settingsSvc,
-		Schedules: schedules, Memory: memory, Queue: queueStore, Configarr: configarrSvc,
+		Runs: runs, Rec: rec, Workers: snatch.NewWorkers(st, clk), Settings: settingsSvc,
+		Schedules: schedules, Memory: snatch.NewMemory(st, clk), Queue: queueStore, Configarr: configarrSvc,
+		Clients: dlSvc, Seerr: seerrSvc, Prowlarr: prowlarrSvc, Notify: notifySvc,
 	})
-	sec := httpapi.NewSecurity(sessMgr, cfg, keys, authSvc, apiKeys, clk, logger)
-	llmSvc, err := llm.New(build, settingsSvc, sec, handlers, logger)
+	llmSvc, err := llm.New(build, settingsSvc, httpapi.NewSecurity(sessMgr, cfg, keys, authSvc, apiKeys, clk, logger), handlers, logger)
 	if err != nil {
 		t.Fatalf("llm.New: %v", err)
 	}
@@ -152,7 +163,8 @@ func newMCPFixture(t *testing.T) *mcpFixture {
 	t.Cleanup(srv.Close)
 	return &mcpFixture{
 		st: st, clk: clk, settingsSvc: settingsSvc, instSvc: instSvc, polSvc: polSvc, apiKeys: apiKeys,
-		runs: runs, schedules: schedules, admin: admin,
+		runs: runs, schedules: schedules, dlSvc: dlSvc, seerrSvc: seerrSvc,
+		prowlarrSvc: prowlarrSvc, notifySvc: notifySvc, admin: admin,
 		srv: srv, client: &http.Client{Timeout: 10 * time.Second}, logBuf: logBuf,
 	}
 }

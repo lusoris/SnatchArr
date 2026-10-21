@@ -2460,6 +2460,32 @@ components:
         - snatcharr_delete_schedule
         - snatcharr_import_configarr
         - snatcharr_update_settings
+        - snatcharr_create_download_client
+        - snatcharr_test_download_client_input
+        - snatcharr_update_download_client
+        - snatcharr_delete_download_client
+        - snatcharr_test_download_client
+        - snatcharr_discover_download_clients
+        - snatcharr_create_seerr_link
+        - snatcharr_test_seerr_link_input
+        - snatcharr_snatch_seerr_request
+        - snatcharr_update_seerr_link
+        - snatcharr_delete_seerr_link
+        - snatcharr_test_seerr_link
+        - snatcharr_sync_seerr_link
+        - snatcharr_import_seerr_instances
+        - snatcharr_create_prowlarr_link
+        - snatcharr_test_prowlarr_link_input
+        - snatcharr_update_prowlarr_link
+        - snatcharr_delete_prowlarr_link
+        - snatcharr_test_prowlarr_link
+        - snatcharr_create_notification_channel
+        - snatcharr_update_notification_channel
+        - snatcharr_delete_notification_channel
+        - snatcharr_test_notification_channel
+        - snatcharr_create_notification_rule
+        - snatcharr_update_notification_rule
+        - snatcharr_delete_notification_rule
     Settings:
       type: object
       required:

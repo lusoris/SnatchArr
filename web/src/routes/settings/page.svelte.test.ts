@@ -265,35 +265,47 @@ describe('settings', () => {
 		});
 	});
 
-	it('groups write tools into core and admin fieldsets with legends and allows toggling across scopes', async () => {
+	it('groups write tools into scope fieldsets with legends and allows toggling across scopes', async () => {
 		stubGet(baseStubs);
 		const putSpy = vi.spyOn(api, 'PUT').mockResolvedValue({
 			data: {
 				...sampleSettings,
 				llm_enabled: true,
-				llm_write_tools: ['snatcharr_create_instance', 'snatcharr_update_settings']
+				llm_write_tools: [
+					'snatcharr_create_instance',
+					'snatcharr_update_settings',
+					'snatcharr_create_download_client',
+					'snatcharr_snatch_seerr_request',
+					'snatcharr_create_prowlarr_link',
+					'snatcharr_create_notification_channel'
+				]
 			}
 		} as never);
 		renderWithQuery(SettingsPage);
 
 		expect(await screen.findByText(m.settings_llm_scope_core_write())).toBeTruthy();
 		expect(screen.getByText(m.settings_llm_scope_admin_write())).toBeTruthy();
+		expect(screen.getByText(m.settings_llm_scope_download_clients_write())).toBeTruthy();
+		expect(screen.getByText(m.settings_llm_scope_requests_write())).toBeTruthy();
+		expect(screen.getByText(m.settings_llm_scope_prowlarr_write())).toBeTruthy();
+		expect(screen.getByText(m.settings_llm_scope_notifications_write())).toBeTruthy();
 
 		const llmToggle = screen.getByLabelText(m.settings_llm_enabled()) as HTMLInputElement;
 		await fireEvent.click(llmToggle);
 
-		const createInstBox = screen.getByLabelText(
-			m.settings_llm_tool_create_instance()
-		) as HTMLInputElement;
-		const updateSettingsBox = screen.getByLabelText(
-			m.settings_llm_tool_update_settings()
-		) as HTMLInputElement;
+		const boxes = [
+			screen.getByLabelText(m.settings_llm_tool_create_instance()) as HTMLInputElement,
+			screen.getByLabelText(m.settings_llm_tool_update_settings()) as HTMLInputElement,
+			screen.getByLabelText(m.settings_llm_tool_create_download_client()) as HTMLInputElement,
+			screen.getByLabelText(m.settings_llm_tool_snatch_seerr_request()) as HTMLInputElement,
+			screen.getByLabelText(m.settings_llm_tool_create_prowlarr_link()) as HTMLInputElement,
+			screen.getByLabelText(m.settings_llm_tool_create_notification_channel()) as HTMLInputElement
+		];
 
-		expect(createInstBox.disabled).toBe(false);
-		expect(updateSettingsBox.disabled).toBe(false);
-
-		await fireEvent.click(createInstBox);
-		await fireEvent.click(updateSettingsBox);
+		for (const box of boxes) {
+			expect(box.disabled).toBe(false);
+			await fireEvent.click(box);
+		}
 		await fireEvent.click(screen.getByRole('button', { name: m.instance_save() }));
 
 		expect(putSpy).toHaveBeenCalledWith('/settings', {
@@ -304,7 +316,14 @@ describe('settings', () => {
 				search_priority_preset: mediaFirstRanks,
 				download_priority_preset: mediaFirstRanks,
 				llm_enabled: true,
-				llm_write_tools: ['snatcharr_create_instance', 'snatcharr_update_settings']
+				llm_write_tools: [
+					'snatcharr_create_instance',
+					'snatcharr_update_settings',
+					'snatcharr_create_download_client',
+					'snatcharr_snatch_seerr_request',
+					'snatcharr_create_prowlarr_link',
+					'snatcharr_create_notification_channel'
+				]
 			}
 		});
 	});

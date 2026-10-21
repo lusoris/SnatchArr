@@ -30,40 +30,207 @@ SPDX-License-Identifier: EUPL-1.2
 	const presetMapSchema = z.object(presetFields) satisfies z.ZodType<PriorityPresetMap>;
 	type LlmWriteTool = components['schemas']['LlmWriteTool'];
 
-	const coreWriteToolOptions: { value: LlmWriteTool; label: () => string }[] = [
-		{ value: 'snatcharr_create_instance', label: () => m.settings_llm_tool_create_instance() },
-		{ value: 'snatcharr_update_instance', label: () => m.settings_llm_tool_update_instance() },
-		{ value: 'snatcharr_delete_instance', label: () => m.settings_llm_tool_delete_instance() },
-		{ value: 'snatcharr_test_instance', label: () => m.settings_llm_tool_test_instance() },
-		{
-			value: 'snatcharr_test_instance_input',
-			label: () => m.settings_llm_tool_test_instance_input()
-		},
-		{
-			value: 'snatcharr_delete_instance_events',
-			label: () => m.settings_llm_tool_delete_instance_events()
-		},
-		{ value: 'snatcharr_update_policy', label: () => m.settings_llm_tool_update_policy() },
-		{
-			value: 'snatcharr_update_queue_policy',
-			label: () => m.settings_llm_tool_update_queue_policy()
-		},
-		{ value: 'snatcharr_trigger_run', label: () => m.settings_llm_tool_trigger_run() },
-		{ value: 'snatcharr_preview_run', label: () => m.settings_llm_tool_preview_run() },
-		{ value: 'snatcharr_cancel_run', label: () => m.settings_llm_tool_cancel_run() },
-		{ value: 'snatcharr_reset_state', label: () => m.settings_llm_tool_reset_state() },
-		{ value: 'snatcharr_create_schedule', label: () => m.settings_llm_tool_create_schedule() },
-		{ value: 'snatcharr_update_schedule', label: () => m.settings_llm_tool_update_schedule() },
-		{ value: 'snatcharr_delete_schedule', label: () => m.settings_llm_tool_delete_schedule() },
-		{ value: 'snatcharr_import_configarr', label: () => m.settings_llm_tool_import_configarr() }
-	];
+	type WriteToolGroup = {
+		field: string;
+		legend: () => string;
+		options: { value: LlmWriteTool; label: () => string }[];
+	};
 
-	const adminWriteToolOptions: { value: LlmWriteTool; label: () => string }[] = [
-		{ value: 'snatcharr_update_settings', label: () => m.settings_llm_tool_update_settings() }
+	const writeToolGroups: WriteToolGroup[] = [
+		{
+			field: 'llm_write_tools_core',
+			legend: () => m.settings_llm_scope_core_write(),
+			options: [
+				{
+					value: 'snatcharr_create_instance',
+					label: () => m.settings_llm_tool_create_instance()
+				},
+				{
+					value: 'snatcharr_update_instance',
+					label: () => m.settings_llm_tool_update_instance()
+				},
+				{
+					value: 'snatcharr_delete_instance',
+					label: () => m.settings_llm_tool_delete_instance()
+				},
+				{ value: 'snatcharr_test_instance', label: () => m.settings_llm_tool_test_instance() },
+				{
+					value: 'snatcharr_test_instance_input',
+					label: () => m.settings_llm_tool_test_instance_input()
+				},
+				{
+					value: 'snatcharr_delete_instance_events',
+					label: () => m.settings_llm_tool_delete_instance_events()
+				},
+				{ value: 'snatcharr_update_policy', label: () => m.settings_llm_tool_update_policy() },
+				{
+					value: 'snatcharr_update_queue_policy',
+					label: () => m.settings_llm_tool_update_queue_policy()
+				},
+				{ value: 'snatcharr_trigger_run', label: () => m.settings_llm_tool_trigger_run() },
+				{ value: 'snatcharr_preview_run', label: () => m.settings_llm_tool_preview_run() },
+				{ value: 'snatcharr_cancel_run', label: () => m.settings_llm_tool_cancel_run() },
+				{ value: 'snatcharr_reset_state', label: () => m.settings_llm_tool_reset_state() },
+				{
+					value: 'snatcharr_create_schedule',
+					label: () => m.settings_llm_tool_create_schedule()
+				},
+				{
+					value: 'snatcharr_update_schedule',
+					label: () => m.settings_llm_tool_update_schedule()
+				},
+				{
+					value: 'snatcharr_delete_schedule',
+					label: () => m.settings_llm_tool_delete_schedule()
+				},
+				{
+					value: 'snatcharr_import_configarr',
+					label: () => m.settings_llm_tool_import_configarr()
+				}
+			]
+		},
+		{
+			field: 'llm_write_tools_admin',
+			legend: () => m.settings_llm_scope_admin_write(),
+			options: [
+				{
+					value: 'snatcharr_update_settings',
+					label: () => m.settings_llm_tool_update_settings()
+				}
+			]
+		},
+		{
+			field: 'llm_write_tools_download_clients',
+			legend: () => m.settings_llm_scope_download_clients_write(),
+			options: [
+				{
+					value: 'snatcharr_create_download_client',
+					label: () => m.settings_llm_tool_create_download_client()
+				},
+				{
+					value: 'snatcharr_test_download_client_input',
+					label: () => m.settings_llm_tool_test_download_client_input()
+				},
+				{
+					value: 'snatcharr_update_download_client',
+					label: () => m.settings_llm_tool_update_download_client()
+				},
+				{
+					value: 'snatcharr_delete_download_client',
+					label: () => m.settings_llm_tool_delete_download_client()
+				},
+				{
+					value: 'snatcharr_test_download_client',
+					label: () => m.settings_llm_tool_test_download_client()
+				},
+				{
+					value: 'snatcharr_discover_download_clients',
+					label: () => m.settings_llm_tool_discover_download_clients()
+				}
+			]
+		},
+		{
+			field: 'llm_write_tools_requests',
+			legend: () => m.settings_llm_scope_requests_write(),
+			options: [
+				{
+					value: 'snatcharr_create_seerr_link',
+					label: () => m.settings_llm_tool_create_seerr_link()
+				},
+				{
+					value: 'snatcharr_test_seerr_link_input',
+					label: () => m.settings_llm_tool_test_seerr_link_input()
+				},
+				{
+					value: 'snatcharr_snatch_seerr_request',
+					label: () => m.settings_llm_tool_snatch_seerr_request()
+				},
+				{
+					value: 'snatcharr_update_seerr_link',
+					label: () => m.settings_llm_tool_update_seerr_link()
+				},
+				{
+					value: 'snatcharr_delete_seerr_link',
+					label: () => m.settings_llm_tool_delete_seerr_link()
+				},
+				{
+					value: 'snatcharr_test_seerr_link',
+					label: () => m.settings_llm_tool_test_seerr_link()
+				},
+				{
+					value: 'snatcharr_sync_seerr_link',
+					label: () => m.settings_llm_tool_sync_seerr_link()
+				},
+				{
+					value: 'snatcharr_import_seerr_instances',
+					label: () => m.settings_llm_tool_import_seerr_instances()
+				}
+			]
+		},
+		{
+			field: 'llm_write_tools_prowlarr',
+			legend: () => m.settings_llm_scope_prowlarr_write(),
+			options: [
+				{
+					value: 'snatcharr_create_prowlarr_link',
+					label: () => m.settings_llm_tool_create_prowlarr_link()
+				},
+				{
+					value: 'snatcharr_test_prowlarr_link_input',
+					label: () => m.settings_llm_tool_test_prowlarr_link_input()
+				},
+				{
+					value: 'snatcharr_update_prowlarr_link',
+					label: () => m.settings_llm_tool_update_prowlarr_link()
+				},
+				{
+					value: 'snatcharr_delete_prowlarr_link',
+					label: () => m.settings_llm_tool_delete_prowlarr_link()
+				},
+				{
+					value: 'snatcharr_test_prowlarr_link',
+					label: () => m.settings_llm_tool_test_prowlarr_link()
+				}
+			]
+		},
+		{
+			field: 'llm_write_tools_notifications',
+			legend: () => m.settings_llm_scope_notifications_write(),
+			options: [
+				{
+					value: 'snatcharr_create_notification_channel',
+					label: () => m.settings_llm_tool_create_notification_channel()
+				},
+				{
+					value: 'snatcharr_update_notification_channel',
+					label: () => m.settings_llm_tool_update_notification_channel()
+				},
+				{
+					value: 'snatcharr_delete_notification_channel',
+					label: () => m.settings_llm_tool_delete_notification_channel()
+				},
+				{
+					value: 'snatcharr_test_notification_channel',
+					label: () => m.settings_llm_tool_test_notification_channel()
+				},
+				{
+					value: 'snatcharr_create_notification_rule',
+					label: () => m.settings_llm_tool_create_notification_rule()
+				},
+				{
+					value: 'snatcharr_update_notification_rule',
+					label: () => m.settings_llm_tool_update_notification_rule()
+				},
+				{
+					value: 'snatcharr_delete_notification_rule',
+					label: () => m.settings_llm_tool_delete_notification_rule()
+				}
+			]
+		}
 	];
 
 	const knownWriteTools = new Set<string>(
-		[...coreWriteToolOptions, ...adminWriteToolOptions].map((o) => o.value)
+		writeToolGroups.flatMap((g) => g.options.map((o) => o.value))
 	);
 
 	const settingsSchema = z.object({
@@ -216,44 +383,27 @@ SPDX-License-Identifier: EUPL-1.2
 			</label>
 			<div class="flex flex-col gap-3" data-field="llm_write_tools">
 				<span class="text-sm font-medium">{m.settings_llm_write_tools()}</span>
-				<fieldset
-					data-field="llm_write_tools_core"
-					disabled={!draft.llm_enabled}
-					class="border-border flex flex-col gap-2 rounded border p-3"
-				>
-					<legend class="px-1 text-sm font-medium">{m.settings_llm_scope_core_write()}</legend>
-					{#each coreWriteToolOptions as opt (opt.value)}
-						<label class="flex items-center gap-2">
-							<input
-								type="checkbox"
-								value={opt.value}
-								disabled={!draft.llm_enabled}
-								checked={(draft.llm_write_tools ?? []).includes(opt.value)}
-								onchange={(e) => toggleWriteTool(opt.value, e.currentTarget.checked)}
-							/>
-							{opt.label()}
-						</label>
-					{/each}
-				</fieldset>
-				<fieldset
-					data-field="llm_write_tools_admin"
-					disabled={!draft.llm_enabled}
-					class="border-border flex flex-col gap-2 rounded border p-3"
-				>
-					<legend class="px-1 text-sm font-medium">{m.settings_llm_scope_admin_write()}</legend>
-					{#each adminWriteToolOptions as opt (opt.value)}
-						<label class="flex items-center gap-2">
-							<input
-								type="checkbox"
-								value={opt.value}
-								disabled={!draft.llm_enabled}
-								checked={(draft.llm_write_tools ?? []).includes(opt.value)}
-								onchange={(e) => toggleWriteTool(opt.value, e.currentTarget.checked)}
-							/>
-							{opt.label()}
-						</label>
-					{/each}
-				</fieldset>
+				{#each writeToolGroups as group (group.field)}
+					<fieldset
+						data-field={group.field}
+						disabled={!draft.llm_enabled}
+						class="border-border flex flex-col gap-2 rounded border p-3"
+					>
+						<legend class="px-1 text-sm font-medium">{group.legend()}</legend>
+						{#each group.options as opt (opt.value)}
+							<label class="flex items-center gap-2">
+								<input
+									type="checkbox"
+									value={opt.value}
+									disabled={!draft.llm_enabled}
+									checked={(draft.llm_write_tools ?? []).includes(opt.value)}
+									onchange={(e) => toggleWriteTool(opt.value, e.currentTarget.checked)}
+								/>
+								{opt.label()}
+							</label>
+						{/each}
+					</fieldset>
+				{/each}
 			</div>
 			{#if session.isAdmin}
 				<div>

@@ -53,6 +53,21 @@ func parseStringParam(in map[string]json.RawMessage, paramName string) (string, 
 	return val, nil
 }
 
+func parsePositiveIntParam(in map[string]json.RawMessage, paramName string) (int, error) {
+	raw, ok := in[paramName]
+	if !ok || len(raw) == 0 {
+		return 0, fmt.Errorf("%w: missing %s", domain.ErrBadRequest, paramName)
+	}
+	var val int
+	if err := json.Unmarshal(raw, &val); err != nil {
+		return 0, fmt.Errorf("%w: decode %s: %w", domain.ErrBadRequest, paramName, err)
+	}
+	if val < 1 {
+		return 0, fmt.Errorf("%w: %s must be at least 1", domain.ErrBadRequest, paramName)
+	}
+	return val, nil
+}
+
 func parseConfirmParam(in map[string]json.RawMessage) (bool, error) {
 	raw, ok := in["confirm"]
 	if !ok || len(raw) == 0 {
@@ -327,6 +342,26 @@ func registerWriteIDString(idParam, strParam string, call func(ctx context.Conte
 				return handleResult(callCtx, rc.h, nil, err)
 			}
 			val, err := parseStringParam(in, strParam)
+			if err != nil {
+				return handleResult(callCtx, rc.h, nil, err)
+			}
+			out, err := call(callCtx, rc.h, parsedID, val)
+			return handleResult(callCtx, rc.h, out, err)
+		})
+	}
+}
+
+func registerWriteIDInt(idParam, intParam string, call func(ctx context.Context, h *httpapi.Handlers, id uuid.UUID, val int) (any, error)) func(rc registerContext, tool *mcp.Tool) {
+	return func(rc registerContext, tool *mcp.Tool) {
+		mcp.AddTool[map[string]json.RawMessage, any](rc.srv, tool, func(ctx context.Context, _ *mcp.CallToolRequest, in map[string]json.RawMessage) (*mcp.CallToolResult, any, error) {
+			callCtx, cancel := context.WithTimeout(httpapi.WithUser(ctx, rc.user), callTimeout)
+			defer cancel()
+			logWriteToolCall(callCtx, rc, tool.Name)
+			parsedID, err := parseUUIDParam(in, idParam)
+			if err != nil {
+				return handleResult(callCtx, rc.h, nil, err)
+			}
+			val, err := parsePositiveIntParam(in, intParam)
 			if err != nil {
 				return handleResult(callCtx, rc.h, nil, err)
 			}
@@ -937,6 +972,292 @@ var toolRegistry = []toolSpec{
 			body.LlmEnabled = current.LlmEnabled
 			body.LlmWriteTools = current.LlmWriteTools
 			return h.UpdateSettings(ctx, body)
+		}),
+	},
+	{
+		Name:        domain.LLMWriteToolCreateDownloadClient,
+		OperationID: "createDownloadClient",
+		Scope:       domain.ScopeDownloadClientsWrite,
+		ReadOnly:    false,
+		Destructive: false,
+		Description: "Add a download client by hand.",
+		Register: registerWriteBody[oas.DownloadClientInput](func(ctx context.Context, h *httpapi.Handlers, body *oas.DownloadClientInput) (any, error) {
+			return h.CreateDownloadClient(ctx, body)
+		}),
+	},
+	{
+		Name:        domain.LLMWriteToolTestDownloadClientInput,
+		OperationID: "testDownloadClientInput",
+		Scope:       domain.ScopeDownloadClientsWrite,
+		ReadOnly:    false,
+		Destructive: false,
+		Description: "Observe a download client whose credentials are not stored yet.",
+		Register: registerWriteBody[oas.DownloadClientInput](func(ctx context.Context, h *httpapi.Handlers, body *oas.DownloadClientInput) (any, error) {
+			return h.TestDownloadClientInput(ctx, body)
+		}),
+	},
+	{
+		Name:        domain.LLMWriteToolUpdateDownloadClient,
+		OperationID: "updateDownloadClient",
+		Scope:       domain.ScopeDownloadClientsWrite,
+		ReadOnly:    false,
+		Destructive: false,
+		Description: "Update a download client (omit secret to keep it).",
+		Register: registerWriteIDBody[oas.DownloadClientInput]("clientId", func(ctx context.Context, h *httpapi.Handlers, id uuid.UUID, body *oas.DownloadClientInput) (any, error) {
+			return h.UpdateDownloadClient(ctx, body, oas.UpdateDownloadClientParams{ClientId: id})
+		}),
+	},
+	{
+		Name:        domain.LLMWriteToolDeleteDownloadClient,
+		OperationID: "deleteDownloadClient",
+		Scope:       domain.ScopeDownloadClientsWrite,
+		ReadOnly:    false,
+		Destructive: true,
+		Description: "Delete a download client.",
+		Register: registerDestructiveID("clientId", func(ctx context.Context, h *httpapi.Handlers, id uuid.UUID) (any, error) {
+			return struct{}{}, h.DeleteDownloadClient(ctx, oas.DeleteDownloadClientParams{ClientId: id})
+		}),
+	},
+	{
+		Name:        domain.LLMWriteToolTestDownloadClient,
+		OperationID: "testDownloadClient",
+		Scope:       domain.ScopeDownloadClientsWrite,
+		ReadOnly:    false,
+		Destructive: false,
+		Description: "Observe a stored download client now and record the outcome.",
+		Register: registerWriteID("clientId", func(ctx context.Context, h *httpapi.Handlers, id uuid.UUID) (any, error) {
+			return h.TestDownloadClient(ctx, oas.TestDownloadClientParams{ClientId: id})
+		}),
+	},
+	{
+		Name:        domain.LLMWriteToolDiscoverDownloadClients,
+		OperationID: "discoverDownloadClients",
+		Scope:       domain.ScopeDownloadClientsWrite,
+		ReadOnly:    false,
+		Destructive: false,
+		Description: "Import the download clients this instance has configured.",
+		Register: registerWriteID("instanceId", func(ctx context.Context, h *httpapi.Handlers, id uuid.UUID) (any, error) {
+			return h.DiscoverDownloadClients(ctx, oas.DiscoverDownloadClientsParams{InstanceId: id})
+		}),
+	},
+	{
+		Name:        domain.LLMWriteToolCreateSeerrLink,
+		OperationID: "createSeerrLink",
+		Scope:       domain.ScopeRequestsWrite,
+		ReadOnly:    false,
+		Destructive: false,
+		Description: "Add a Seerr link.",
+		Register: registerWriteBody[oas.SeerrLinkInput](func(ctx context.Context, h *httpapi.Handlers, body *oas.SeerrLinkInput) (any, error) {
+			return h.CreateSeerrLink(ctx, body)
+		}),
+	},
+	{
+		Name:        domain.LLMWriteToolTestSeerrLinkInput,
+		OperationID: "testSeerrLinkInput",
+		Scope:       domain.ScopeRequestsWrite,
+		ReadOnly:    false,
+		Destructive: false,
+		Description: "Probe Seerr credentials that are not stored yet.",
+		Register: registerWriteBody[oas.SeerrLinkInput](func(ctx context.Context, h *httpapi.Handlers, body *oas.SeerrLinkInput) (any, error) {
+			return h.TestSeerrLinkInput(ctx, body)
+		}),
+	},
+	{
+		Name:        domain.LLMWriteToolSnatchSeerrRequest,
+		OperationID: "snatchSeerrRequest",
+		Scope:       domain.ScopeRequestsWrite,
+		ReadOnly:    false,
+		Destructive: false,
+		Description: "Quickie focused on one request (missing snatch of its instance, limited to that movie or series).",
+		Register: registerWriteIDInt("linkId", "requestId", func(ctx context.Context, h *httpapi.Handlers, linkID uuid.UUID, reqID int) (any, error) {
+			return h.SnatchSeerrRequest(ctx, oas.SnatchSeerrRequestParams{LinkId: linkID, RequestId: reqID})
+		}),
+	},
+	{
+		Name:        domain.LLMWriteToolUpdateSeerrLink,
+		OperationID: "updateSeerrLink",
+		Scope:       domain.ScopeRequestsWrite,
+		ReadOnly:    false,
+		Destructive: false,
+		Description: "Update a Seerr link (omit api_key to keep it).",
+		Register: registerWriteIDBody[oas.SeerrLinkInput]("linkId", func(ctx context.Context, h *httpapi.Handlers, id uuid.UUID, body *oas.SeerrLinkInput) (any, error) {
+			return h.UpdateSeerrLink(ctx, body, oas.UpdateSeerrLinkParams{LinkId: id})
+		}),
+	},
+	{
+		Name:        domain.LLMWriteToolDeleteSeerrLink,
+		OperationID: "deleteSeerrLink",
+		Scope:       domain.ScopeRequestsWrite,
+		ReadOnly:    false,
+		Destructive: true,
+		Description: "Delete a Seerr link and its cached requests.",
+		Register: registerDestructiveID("linkId", func(ctx context.Context, h *httpapi.Handlers, id uuid.UUID) (any, error) {
+			return struct{}{}, h.DeleteSeerrLink(ctx, oas.DeleteSeerrLinkParams{LinkId: id})
+		}),
+	},
+	{
+		Name:        domain.LLMWriteToolTestSeerrLink,
+		OperationID: "testSeerrLink",
+		Scope:       domain.ScopeRequestsWrite,
+		ReadOnly:    false,
+		Destructive: false,
+		Description: "Probe a stored Seerr link and record the outcome.",
+		Register: registerWriteID("linkId", func(ctx context.Context, h *httpapi.Handlers, id uuid.UUID) (any, error) {
+			return h.TestSeerrLink(ctx, oas.TestSeerrLinkParams{LinkId: id})
+		}),
+	},
+	{
+		Name:        domain.LLMWriteToolSyncSeerrLink,
+		OperationID: "syncSeerrLink",
+		Scope:       domain.ScopeRequestsWrite,
+		ReadOnly:    false,
+		Destructive: false,
+		Description: "Refresh the request cache now (also runs every five minutes).",
+		Register: registerWriteID("linkId", func(ctx context.Context, h *httpapi.Handlers, id uuid.UUID) (any, error) {
+			return h.SyncSeerrLink(ctx, oas.SyncSeerrLinkParams{LinkId: id})
+		}),
+	},
+	{
+		Name:        domain.LLMWriteToolImportSeerrInstances,
+		OperationID: "importSeerrInstances",
+		Scope:       domain.ScopeRequestsWrite,
+		ReadOnly:    false,
+		Destructive: false,
+		Description: "Create instances from the Sonarr/Radarr servers configured in Seerr.",
+		Register: registerWriteID("linkId", func(ctx context.Context, h *httpapi.Handlers, id uuid.UUID) (any, error) {
+			return h.ImportSeerrInstances(ctx, oas.ImportSeerrInstancesParams{LinkId: id})
+		}),
+	},
+	{
+		Name:        domain.LLMWriteToolCreateProwlarrLink,
+		OperationID: "createProwlarrLink",
+		Scope:       domain.ScopeProwlarrWrite,
+		ReadOnly:    false,
+		Destructive: false,
+		Description: "Add a Prowlarr link.",
+		Register: registerWriteBody[oas.ProwlarrLinkInput](func(ctx context.Context, h *httpapi.Handlers, body *oas.ProwlarrLinkInput) (any, error) {
+			return h.CreateProwlarrLink(ctx, body)
+		}),
+	},
+	{
+		Name:        domain.LLMWriteToolTestProwlarrLinkInput,
+		OperationID: "testProwlarrLinkInput",
+		Scope:       domain.ScopeProwlarrWrite,
+		ReadOnly:    false,
+		Destructive: false,
+		Description: "Probe Prowlarr credentials that are not stored yet.",
+		Register: registerWriteBody[oas.ProwlarrLinkInput](func(ctx context.Context, h *httpapi.Handlers, body *oas.ProwlarrLinkInput) (any, error) {
+			return h.TestProwlarrLinkInput(ctx, body)
+		}),
+	},
+	{
+		Name:        domain.LLMWriteToolUpdateProwlarrLink,
+		OperationID: "updateProwlarrLink",
+		Scope:       domain.ScopeProwlarrWrite,
+		ReadOnly:    false,
+		Destructive: false,
+		Description: "Update a Prowlarr link (omit api_key to keep it).",
+		Register: registerWriteIDBody[oas.ProwlarrLinkInput]("linkId", func(ctx context.Context, h *httpapi.Handlers, id uuid.UUID, body *oas.ProwlarrLinkInput) (any, error) {
+			return h.UpdateProwlarrLink(ctx, body, oas.UpdateProwlarrLinkParams{LinkId: id})
+		}),
+	},
+	{
+		Name:        domain.LLMWriteToolDeleteProwlarrLink,
+		OperationID: "deleteProwlarrLink",
+		Scope:       domain.ScopeProwlarrWrite,
+		ReadOnly:    false,
+		Destructive: true,
+		Description: "Delete a Prowlarr link.",
+		Register: registerDestructiveID("linkId", func(ctx context.Context, h *httpapi.Handlers, id uuid.UUID) (any, error) {
+			return struct{}{}, h.DeleteProwlarrLink(ctx, oas.DeleteProwlarrLinkParams{LinkId: id})
+		}),
+	},
+	{
+		Name:        domain.LLMWriteToolTestProwlarrLink,
+		OperationID: "testProwlarrLink",
+		Scope:       domain.ScopeProwlarrWrite,
+		ReadOnly:    false,
+		Destructive: false,
+		Description: "Probe a stored Prowlarr link and record the outcome.",
+		Register: registerWriteID("linkId", func(ctx context.Context, h *httpapi.Handlers, id uuid.UUID) (any, error) {
+			return h.TestProwlarrLink(ctx, oas.TestProwlarrLinkParams{LinkId: id})
+		}),
+	},
+	{
+		Name:        domain.LLMWriteToolCreateNotificationChannel,
+		OperationID: "createNotificationChannel",
+		Scope:       domain.ScopeNotificationsWrite,
+		ReadOnly:    false,
+		Destructive: false,
+		Description: "Create a notification channel.",
+		Register: registerWriteBody[oas.NotificationChannelInput](func(ctx context.Context, h *httpapi.Handlers, body *oas.NotificationChannelInput) (any, error) {
+			return h.CreateNotificationChannel(ctx, body)
+		}),
+	},
+	{
+		Name:        domain.LLMWriteToolUpdateNotificationChannel,
+		OperationID: "updateNotificationChannel",
+		Scope:       domain.ScopeNotificationsWrite,
+		ReadOnly:    false,
+		Destructive: false,
+		Description: "Update a notification channel.",
+		Register: registerWriteIDBody[oas.NotificationChannelUpdate]("channelId", func(ctx context.Context, h *httpapi.Handlers, id uuid.UUID, body *oas.NotificationChannelUpdate) (any, error) {
+			return h.UpdateNotificationChannel(ctx, body, oas.UpdateNotificationChannelParams{ChannelId: id})
+		}),
+	},
+	{
+		Name:        domain.LLMWriteToolDeleteNotificationChannel,
+		OperationID: "deleteNotificationChannel",
+		Scope:       domain.ScopeNotificationsWrite,
+		ReadOnly:    false,
+		Destructive: true,
+		Description: "Delete a notification channel.",
+		Register: registerDestructiveID("channelId", func(ctx context.Context, h *httpapi.Handlers, id uuid.UUID) (any, error) {
+			return struct{}{}, h.DeleteNotificationChannel(ctx, oas.DeleteNotificationChannelParams{ChannelId: id})
+		}),
+	},
+	{
+		Name:        domain.LLMWriteToolTestNotificationChannel,
+		OperationID: "testNotificationChannel",
+		Scope:       domain.ScopeNotificationsWrite,
+		ReadOnly:    false,
+		Destructive: false,
+		Description: "Send a synchronous test notification to a channel.",
+		Register: registerWriteID("channelId", func(ctx context.Context, h *httpapi.Handlers, id uuid.UUID) (any, error) {
+			return struct{}{}, h.TestNotificationChannel(ctx, oas.TestNotificationChannelParams{ChannelId: id})
+		}),
+	},
+	{
+		Name:        domain.LLMWriteToolCreateNotificationRule,
+		OperationID: "createNotificationRule",
+		Scope:       domain.ScopeNotificationsWrite,
+		ReadOnly:    false,
+		Destructive: false,
+		Description: "Create a notification rule.",
+		Register: registerWriteBody[oas.NotificationRuleInput](func(ctx context.Context, h *httpapi.Handlers, body *oas.NotificationRuleInput) (any, error) {
+			return h.CreateNotificationRule(ctx, body)
+		}),
+	},
+	{
+		Name:        domain.LLMWriteToolUpdateNotificationRule,
+		OperationID: "updateNotificationRule",
+		Scope:       domain.ScopeNotificationsWrite,
+		ReadOnly:    false,
+		Destructive: false,
+		Description: "Update a notification rule.",
+		Register: registerWriteIDBody[oas.NotificationRuleUpdate]("ruleId", func(ctx context.Context, h *httpapi.Handlers, id uuid.UUID, body *oas.NotificationRuleUpdate) (any, error) {
+			return h.UpdateNotificationRule(ctx, body, oas.UpdateNotificationRuleParams{RuleId: id})
+		}),
+	},
+	{
+		Name:        domain.LLMWriteToolDeleteNotificationRule,
+		OperationID: "deleteNotificationRule",
+		Scope:       domain.ScopeNotificationsWrite,
+		ReadOnly:    false,
+		Destructive: true,
+		Description: "Delete a notification rule.",
+		Register: registerDestructiveID("ruleId", func(ctx context.Context, h *httpapi.Handlers, id uuid.UUID) (any, error) {
+			return struct{}{}, h.DeleteNotificationRule(ctx, oas.DeleteNotificationRuleParams{RuleId: id})
 		}),
 	},
 }
