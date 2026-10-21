@@ -18,7 +18,8 @@ type NotificationRule = components['schemas']['NotificationRule'];
 const sampleSettings: Settings = {
 	history_retention_days: 30,
 	user_agent: 'SnatchArr/1.0',
-	global_hourly_cap: 100
+	global_hourly_cap: 100,
+	llm_enabled: false
 };
 
 const sampleChannel: NotificationChannel = {
@@ -105,7 +106,8 @@ describe('settings', () => {
 			body: {
 				history_retention_days: 60,
 				user_agent: 'SnatchArr/1.0',
-				global_hourly_cap: 100
+				global_hourly_cap: 100,
+				llm_enabled: false
 			}
 		});
 	});

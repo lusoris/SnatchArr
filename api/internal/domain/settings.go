@@ -20,6 +20,7 @@ type Settings struct {
 	// GlobalHourlyCap is stamina shared by every instance (0 = off), for setups where
 	// several *arr apps hit the same indexers.
 	GlobalHourlyCap int
+	LLMEnabled      bool
 	UpdatedAt       time.Time
 }
 

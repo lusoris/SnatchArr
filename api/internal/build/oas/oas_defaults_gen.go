@@ -116,6 +116,14 @@ func (s *SeerrLinkInput) setDefaults() {
 }
 
 // setDefaults set default value of fields.
+func (s *Settings) setDefaults() {
+	{
+		val := bool(false)
+		s.LlmEnabled.SetTo(val)
+	}
+}
+
+// setDefaults set default value of fields.
 func (s *SnatchPolicy) setDefaults() {
 	{
 		val := bool(false)
