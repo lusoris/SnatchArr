@@ -3,16 +3,13 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
+	import PageHeader from '#lib/components/PageHeader.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import ApiKeys from './ApiKeys.svelte';
 	import ChangePassword from './ChangePassword.svelte';
 </script>
 
-<svelte:head>
-	<title>{m.account_title()} · {m.app_name()}</title>
-</svelte:head>
-
-<h1 class="mb-6 text-2xl font-semibold">{m.account_title()}</h1>
+<PageHeader title={m.account_title()} documentTitle />
 
 <div class="flex flex-col gap-8">
 	<section aria-labelledby="change-password-heading">

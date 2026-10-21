@@ -6,7 +6,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { describeError } from '#lib/api/client.js';
-	import BrandMark from '#lib/components/BrandMark.svelte';
+	import AuthCard from '#lib/components/AuthCard.svelte';
 	import Field from '#lib/components/Field.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { session } from '#lib/session.svelte.js';
@@ -32,12 +32,7 @@ SPDX-License-Identifier: EUPL-1.2
 	}
 </script>
 
-<div class="mx-auto w-full max-w-sm">
-	<div class="text-brand mb-6 flex justify-center">
-		<BrandMark size={56} />
-	</div>
-	<h1 class="mb-2 text-center text-2xl font-semibold">{m.setup_title()}</h1>
-	<p class="mb-4 text-center text-sm text-subtle">{m.setup_intro()}</p>
+<AuthCard title={m.setup_title()} intro={m.setup_intro()}>
 	<form class="card flex flex-col gap-4" onsubmit={submit}>
 		<Field id="username" label={m.username()}>
 			<input
@@ -77,4 +72,4 @@ SPDX-License-Identifier: EUPL-1.2
 		{/if}
 		<button type="submit" class="btn btn-primary" disabled={busy}>{m.setup_submit()}</button>
 	</form>
-</div>
+</AuthCard>
