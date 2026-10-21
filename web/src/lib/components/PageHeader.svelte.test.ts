@@ -7,6 +7,7 @@ import { WCAG_22_AA_TAGS } from '@sveltesentio/testing/a11y';
 import { createRawSnippet } from 'svelte';
 import { describe, expect, it } from 'vitest';
 import { axe } from 'vitest-axe';
+import { m } from '#lib/paraglide/messages.js';
 import PageHeader from './PageHeader.svelte';
 
 const statusSnippet = createRawSnippet(() => ({
@@ -62,5 +63,28 @@ describe('PageHeader', () => {
 
 		const heading = screen.getByRole('heading', { level: 1 });
 		expect(heading.textContent).toBe(specialTitle);
+	});
+
+	it('positive: updates document title when documentTitle is true', () => {
+		document.title = 'Previous Title';
+		render(PageHeader, {
+			props: {
+				title: 'Account Settings',
+				documentTitle: true
+			}
+		});
+
+		expect(document.title).toBe(`Account Settings · ${m.app_name()}`);
+	});
+
+	it('negative: does not update document title when documentTitle is false or omitted', () => {
+		document.title = 'Unchanged Title';
+		render(PageHeader, {
+			props: {
+				title: 'Account Settings'
+			}
+		});
+
+		expect(document.title).toBe('Unchanged Title');
 	});
 });
