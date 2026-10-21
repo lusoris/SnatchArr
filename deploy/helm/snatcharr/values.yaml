@@ -59,14 +59,18 @@ auth:
       - openid
       - email
       - profile
-    allowedSubjects: []
-    allowedEmails: []
+    # Groups whose members sign in as admin (required) or as viewers (ADR-0023).
+    adminGroups: []
+    viewerGroups: []
+    groupsClaim: groups
     discoveryTimeout: 10s
   proxyAuth:
     enabled: false
     header: "Remote-User"
+    groupsHeader: "X-authentik-groups"
     trustedCidrs: []
-    allowedUsers: []
+    adminGroups: []
+    viewerGroups: []
 
 # Secrets the control plane needs. Either point at an existing Secret with the keys
 # crypto-key (hex, 16/24/32 bytes), csrf-secret, apikey-secret, worker-token, and setup-secret

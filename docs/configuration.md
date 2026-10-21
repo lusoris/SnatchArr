@@ -46,13 +46,16 @@ UI.
 | `APP_SNATCHARR_OIDC_CLIENT_SECRET` | | OAuth2 client secret |
 | `APP_SNATCHARR_OIDC_REDIRECT_URL` | | OAuth2 callback URL (defaults to `public.url` + `/api/v1/auth/oidc/callback`) |
 | `APP_SNATCHARR_OIDC_SCOPES` | `openid,email,profile` | Comma-separated scopes (`openid` always present) |
-| `APP_SNATCHARR_OIDC_ALLOWED_SUBJECTS` | | Comma-separated allowed IdP `sub` claims |
-| `APP_SNATCHARR_OIDC_ALLOWED_EMAILS` | | Comma-separated allowed emails (`email_verified==true` required) |
+| `APP_SNATCHARR_OIDC_ADMIN_GROUPS` | | Comma-separated groups that sign in as admin (required) |
+| `APP_SNATCHARR_OIDC_VIEWER_GROUPS` | | Comma-separated groups that sign in as viewers |
+| `APP_SNATCHARR_OIDC_GROUPS_CLAIM` | `groups` | ID token claim holding the groups |
 | `APP_SNATCHARR_OIDC_DISCOVERY_TIMEOUT` | `10s` | IdP discovery timeout |
 | `APP_SNATCHARR_PROXY_AUTH_ENABLED` | `false` | Enable trusted proxy-header auth ([Single Sign-On](sso.md)) |
 | `APP_SNATCHARR_PROXY_AUTH_HEADER` | `Remote-User` | Name of header containing authenticated username |
 | `APP_SNATCHARR_PROXY_AUTH_TRUSTED_CIDRS` | | Comma-separated CIDRs of reverse proxies trusted for proxy-header auth |
-| `APP_SNATCHARR_PROXY_AUTH_ALLOWED_USERS` | | Comma-separated allowed usernames |
+| `APP_SNATCHARR_PROXY_AUTH_GROUPS_HEADER` | `X-authentik-groups` | Header containing `\|`-separated groups |
+| `APP_SNATCHARR_PROXY_AUTH_ADMIN_GROUPS` | | Comma-separated groups that sign in as admin (required) |
+| `APP_SNATCHARR_PROXY_AUTH_VIEWER_GROUPS` | | Comma-separated groups that sign in as viewers |
 | `APP_OTEL_ENABLED` | `true` | OpenTelemetry export (no-op without an endpoint) |
 | `APP_LOG_FORMAT` | `json` | `json` or `text` |
 
