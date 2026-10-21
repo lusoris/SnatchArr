@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.5.4](https://github.com/lusoris/SnatchArr/compare/v0.5.3...v0.5.4) (2026-10-21)
+
+
+### Features
+
+* **auth:** map single sign-on groups to admin and viewer roles ([#506](https://github.com/lusoris/SnatchArr/issues/506)) ([ac63990](https://github.com/lusoris/SnatchArr/commit/ac63990639ff45f31e5a5a3186250b9bfc6e366f))
+* **priority:** rank instances for leasing and queue sweeps ([#504](https://github.com/lusoris/SnatchArr/issues/504)) ([6a28c54](https://github.com/lusoris/SnatchArr/commit/6a28c54363696b7f3e896cd43b65b20047ded950))
+* **queue:** remove torrents stuck fetching magnet metadata ([#503](https://github.com/lusoris/SnatchArr/issues/503)) ([503d990](https://github.com/lusoris/SnatchArr/commit/503d99085b75907aab2003abdea3be7cfc042271))
+
+
+### Bug Fixes
+
+* **arrclient:** use an own transport instead of http.DefaultTransport ([#496](https://github.com/lusoris/SnatchArr/issues/496)) ([c82cae2](https://github.com/lusoris/SnatchArr/commit/c82cae2baf57fcbf7c8cecfb6066732e0edb2329))
+* **deps:** update Go to 1.27.3 for GO-2026-6809 ([#494](https://github.com/lusoris/SnatchArr/issues/494)) ([9ad7a16](https://github.com/lusoris/SnatchArr/commit/9ad7a160fb91362df64b6f1467bd60a06fc9a012))
+* **queue:** retry refused id-matched imports and keep their reasons ([#501](https://github.com/lusoris/SnatchArr/issues/501)) ([077f8e9](https://github.com/lusoris/SnatchArr/commit/077f8e9c10ae04520710f8915c90ab4e07b1ddf2))
+* **web:** give every History row the header's column template ([#499](https://github.com/lusoris/SnatchArr/issues/499)) ([4534443](https://github.com/lusoris/SnatchArr/commit/4534443198754e34852947b7663361ebfecec141))
+
+
+### Documentation
+
+* **adr:** map single sign-on groups to roles in ADR-0023 ([#500](https://github.com/lusoris/SnatchArr/issues/500)) ([2dd9ed3](https://github.com/lusoris/SnatchArr/commit/2dd9ed392db99a3d94f95768cf3519e66c87ea79))
+
 ## [0.5.3](https://github.com/lusoris/SnatchArr/compare/v0.5.2...v0.5.3) (2026-10-20)
 
 
