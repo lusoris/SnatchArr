@@ -1777,14 +1777,36 @@ components:
         proxy:
           type: boolean
 
+    ApiKeyScope:
+      type: string
+      enum:
+        - core:read
+        - core:write
+        - requests:read
+        - requests:write
+        - download_clients:read
+        - download_clients:write
+        - prowlarr:read
+        - prowlarr:write
+        - notifications:read
+        - notifications:write
+        - admin:read
+        - admin:write
+        - adult:read
+        - adult:write
+
     ApiKey:
       type: object
-      required: [id, name, created_at]
+      required: [id, name, scopes, created_at]
       properties:
         id:
           type: string
         name:
           type: string
+        scopes:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApiKeyScope"
         created_at:
           type: string
           format: date-time
@@ -1812,6 +1834,10 @@ components:
           type: string
           minLength: 1
           maxLength: 100
+        scopes:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApiKeyScope"
         expires_at:
           type: string
           format: date-time
@@ -2295,6 +2321,10 @@ components:
           minimum: 0
           maximum: 5000
           description: "Shared stamina across every instance for setups where several *arr apps hit the same indexers (0 = off)."
+        llm_enabled:
+          type: boolean
+          default: false
+          description: "Whether the Model Context Protocol (MCP) server at /api/v1/mcp is enabled."
         updated_at:
           type: string
           format: date-time
@@ -3021,6 +3051,7 @@ components:
       type: string
       enum:
         - stalled
+        - metadata_stuck
         - slow
         - failed
         - import_blocked
@@ -3046,7 +3077,7 @@ components:
         threshold:
           type: integer
           minimum: 1
-          maximum: 100
+          maximum: 1440
         blocklist:
           description: Blocklist the release when the rule removes the item. Left out on write, the rule keeps its default (every rule except not_an_upgrade, duplicate and unwanted_unmonitored blocklists); reads always return the effective value.
           type: boolean
@@ -3062,6 +3093,9 @@ components:
         - unwanted_unmonitored
       properties:
         stalled:
+          $ref: "#/components/schemas/QueueRuleSettings"
+        metadata_stuck:
+          description: Strikes and removes a torrent download stuck fetching metadata. Optional on write so older clients keep working; left out, the rule takes its default settings. Reads always return it.
           $ref: "#/components/schemas/QueueRuleSettings"
         slow:
           $ref: "#/components/schemas/QueueRuleSettings"

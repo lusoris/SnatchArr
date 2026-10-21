@@ -22,13 +22,17 @@ const visualProject = {
 // Served-site layout check (e2e/layout.test.ts): runs against a deployed SnatchArr with a
 // signed-in storage state the operator exports; no local server starts.
 const servedUrl = process.env.SNATCHARR_SERVED_URL;
+const servedState = process.env.SNATCHARR_SERVED_STATE;
+if (servedUrl && !servedState) {
+	throw new Error('SNATCHARR_SERVED_STATE is required with a served URL');
+}
 const servedProject = {
 	name: 'served-layout',
 	testMatch: /layout\.test\.ts/,
 	use: {
 		browserName: 'chromium' as const,
 		baseURL: servedUrl,
-		storageState: process.env.SNATCHARR_SERVED_STATE
+		storageState: servedState
 	}
 };
 

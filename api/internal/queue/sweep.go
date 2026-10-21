@@ -167,22 +167,54 @@ func applyRuleMatch(s Settings, item Item, prev Strike, r Rule, now time.Time, s
 		ImportedAt:    prev.ImportedAt,
 		ImportRefused: prev.ImportRefused,
 	}
+	thresholdMet := isThresholdMet(r, item, rs, next, now)
 	var d Decision
 	if r == RuleIDMatched || r == RuleImportFixable {
 		d = applyImportMatch(s, item, prev, rs, next, now, spent)
 	} else {
-		d = applyRemovalMatch(s, item, rs, next, spent)
+		d = applyRemovalMatch(s, item, rs, next, thresholdMet, spent)
 	}
 	if r == RuleFailed || r == RuleImportBroken {
 		d.Research = true
 	}
 	d.NewStrike = prev.Rule != r || prev.Count == 0
-	d.Reached = count >= rs.Threshold && (prev.Rule != r || prev.Count < rs.Threshold)
+	d.Reached = isThresholdReached(r, item, prev, rs, thresholdMet)
 	d.Title = item.Title
 	return d
 }
 
-func applyRemovalMatch(s Settings, item Item, rs RuleSettings, next Strike, spent *budget) Decision {
+func itemAge(item Item, now time.Time) time.Duration {
+	if item.Added.IsZero() {
+		return 0
+	}
+	return now.Sub(item.Added)
+}
+
+func isThresholdMet(r Rule, item Item, rs RuleSettings, next Strike, now time.Time) bool {
+	if r == RuleMetadataStuck {
+		if item.Added.IsZero() {
+			return false
+		}
+		return itemAge(item, now) >= time.Duration(rs.Threshold)*time.Minute
+	}
+	return next.Count >= rs.Threshold
+}
+
+func isThresholdReached(r Rule, item Item, prev Strike, rs RuleSettings, thresholdMet bool) bool {
+	if !thresholdMet {
+		return false
+	}
+	if r == RuleMetadataStuck {
+		if prev.Rule != r || prev.LastSeen.IsZero() {
+			return true
+		}
+		prevAge := itemAge(item, prev.LastSeen)
+		return prevAge < time.Duration(rs.Threshold)*time.Minute
+	}
+	return prev.Rule != r || prev.Count < rs.Threshold
+}
+
+func applyRemovalMatch(s Settings, item Item, rs RuleSettings, next Strike, thresholdMet bool, spent *budget) Decision {
 	var remove, wouldRemove, deferred bool
 	if next.Rule == RuleImportBlocked {
 		return Decision{
@@ -199,7 +231,7 @@ func applyRemovalMatch(s Settings, item Item, rs RuleSettings, next Strike, spen
 			Unknown:     true,
 		}
 	}
-	if next.Count >= rs.Threshold {
+	if thresholdMet {
 		remove, wouldRemove, deferred = resolveThresholdAction(rs.Mode, s.MaxRemovalsPerSweep, &spent.removals)
 	}
 	return Decision{
@@ -216,9 +248,10 @@ func applyRemovalMatch(s Settings, item Item, rs RuleSettings, next Strike, spen
 	}
 }
 
-// applyImportMatch decides the id_matched action. An item imported or refused
-// less than strikeTTL ago is not tried again; the first sweep after an import
-// reports the item as a failed import, because a cleared item leaves the queue.
+// applyImportMatch decides the id_matched action. An item imported less than
+// strikeTTL ago, or refused less than RefusedRetry ago, is not tried again;
+// the first sweep after an import reports the item as a failed import, because
+// a cleared item leaves the queue.
 func applyImportMatch(s Settings, item Item, prev Strike, rs RuleSettings, next Strike, now time.Time, spent *budget) Decision {
 	d := Decision{
 		ItemID:     item.ID,
@@ -232,7 +265,11 @@ func applyImportMatch(s Settings, item Item, prev Strike, rs RuleSettings, next 
 	if spent.importKeys[key] {
 		return d
 	}
-	if !prev.ImportedAt.IsZero() && now.Sub(prev.ImportedAt) < strikeTTL {
+	cooldown := strikeTTL
+	if prev.ImportRefused {
+		cooldown = RefusedRetry
+	}
+	if !prev.ImportedAt.IsZero() && now.Sub(prev.ImportedAt) < cooldown {
 		d.ImportFailed = !prev.ImportRefused && prev.LastSeen.Equal(prev.ImportedAt)
 		markImportKey(spent, key, d.ImportFailed)
 		return d
@@ -282,6 +319,9 @@ func resolveThresholdAction(mode Mode, maxRemovals int, removalsCount *int) (boo
 func defaultRuleSettings(r Rule) RuleSettings {
 	blocklist := isBlocklistRule(r)
 	switch r {
+	case RuleMetadataStuck:
+		// Default 180 min (measured: every successful torrent import over 30 days finished <= 140.2 min after grab; see comment).
+		return RuleSettings{Mode: ModeObserve, Threshold: 180, Blocklist: &blocklist}
 	case RuleStalled, RuleSlow, RuleImportBlocked:
 		return RuleSettings{Mode: ModeObserve, Threshold: 6, Blocklist: &blocklist}
 	case RuleFailed, RuleImportBroken:
@@ -325,6 +365,9 @@ func isBlocklistRule(r Rule) bool {
 }
 
 func isNeverTouched(item Item, grace time.Duration, now time.Time) bool {
+	if MatchMetadataStuck(item) {
+		return false
+	}
 	if isNeverTouchedStatus(item.Status) {
 		return true
 	}
@@ -392,12 +435,36 @@ func matchRule(s Settings, item Item, prev Strike, now time.Time) (Rule, Class, 
 
 func checkRuleMatch(rule Rule, s Settings, item Item, prev Strike, c *itemClassifier) bool {
 	switch rule {
+	case RuleStalled, RuleMetadataStuck, RuleSlow, RuleFailed:
+		return checkDownloadHealthRule(rule, s, item, prev, c.now)
+	case RuleIDMatched, RuleImportFixable, RuleImportBroken, RuleImportNotWanted,
+		RuleImportBlocked, RuleUnwantedScore, RuleNotAnUpgrade, RuleDuplicate,
+		RuleUnwantedUnmonitored:
+		return checkPolicyRule(rule, s, item, c)
+	default:
+		return false
+	}
+}
+
+func checkDownloadHealthRule(rule Rule, s Settings, item Item, prev Strike, now time.Time) bool {
+	//exhaustive:ignore
+	switch rule {
 	case RuleStalled:
 		return checkStalled(item, prev)
+	case RuleMetadataStuck:
+		return MatchMetadataStuck(item)
 	case RuleSlow:
-		return checkSlow(item, prev, s.MinBytesPerSecond, c.now)
+		return checkSlow(item, prev, s.MinBytesPerSecond, now)
 	case RuleFailed:
 		return checkFailed(item)
+	default:
+		return false
+	}
+}
+
+func checkPolicyRule(rule Rule, s Settings, item Item, c *itemClassifier) bool {
+	//exhaustive:ignore
+	switch rule {
 	case RuleIDMatched:
 		return checkIDMatchedWithClass(s, item, c)
 	case RuleImportFixable, RuleImportBroken, RuleImportNotWanted, RuleImportBlocked:
@@ -442,7 +509,7 @@ func checkImportRule(rule Rule, item Item, c *itemClassifier) bool {
 			return false
 		}
 		return c.getClass() == ClassUnknown
-	case RuleStalled, RuleSlow, RuleFailed, RuleIDMatched, RuleUnwantedScore, RuleNotAnUpgrade, RuleDuplicate, RuleUnwantedUnmonitored:
+	case RuleStalled, RuleMetadataStuck, RuleSlow, RuleFailed, RuleIDMatched, RuleUnwantedScore, RuleNotAnUpgrade, RuleDuplicate, RuleUnwantedUnmonitored:
 		return false
 	default:
 		return false
@@ -572,4 +639,57 @@ func checkNotAnUpgrade(item Item) bool {
 
 func checkUnwantedUnmonitored(item Item) bool {
 	return !item.Monitored
+}
+
+// MatchMetadataStuck reports whether item is a torrent stuck fetching metadata.
+// Signals (verified in Sonarr source QBittorrent.cs):
+// DHT on -> status "queued" with message "qBittorrent is downloading metadata"
+// DHT off -> status "warning" with message "qBittorrent cannot resolve magnet link with DHT disabled"
+// Message text may be localized: also match protocol torrent + size 0 (unknown total) + status queued/warning.
+// The size-0 fallback also matches a torrent queued by the client's active-torrent limit before
+// metadata; age threshold (default 180 min) and observe default bound the effect.
+func MatchMetadataStuck(item Item) bool {
+	if !isTorrentProtocol(item.Protocol) {
+		return false
+	}
+	isQueued, isWarning := isMetadataStuckStatus(item)
+	if hasMetadataMessage(item, isQueued, isWarning) {
+		return true
+	}
+	return isLocalizedMetadataStuck(item, isQueued, isWarning)
+}
+
+func isTorrentProtocol(protocol string) bool {
+	return protocol == "" || strings.EqualFold(protocol, "torrent")
+}
+
+func isMetadataStuckStatus(item Item) (isQueued bool, isWarning bool) {
+	status := strings.ToLower(item.Status)
+	isQueued = status == "queued"
+	isWarning = status == "warning" || strings.EqualFold(item.TrackedDownloadStatus, "warning")
+	return isQueued, isWarning
+}
+
+func hasMetadataMessage(item Item, isQueued, isWarning bool) bool {
+	if isQueued && hasStatusLine(item.StatusLines, "downloading metadata") {
+		return true
+	}
+	return isWarning && hasStatusLine(item.StatusLines, "cannot resolve magnet link")
+}
+
+func isLocalizedMetadataStuck(item Item, isQueued, isWarning bool) bool {
+	if !strings.EqualFold(item.Protocol, "torrent") || item.Size != 0 {
+		return false
+	}
+	return isQueued || isWarning
+}
+
+func hasStatusLine(lines []string, substr string) bool {
+	sub := strings.ToLower(substr)
+	for _, line := range lines {
+		if strings.Contains(strings.ToLower(line), sub) {
+			return true
+		}
+	}
+	return false
 }

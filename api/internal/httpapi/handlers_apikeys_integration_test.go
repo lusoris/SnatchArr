@@ -484,3 +484,62 @@ func TestAPIKeyLastUsedAtTouch(t *testing.T) {
 		t.Fatalf("last_used_at = %v, want %v", lu, touchTime)
 	}
 }
+
+func TestAPIKeyScopesAndSettingsLLMToggle(t *testing.T) {
+	t.Parallel()
+	f := newRouterFixture(t)
+	_ = completeInitialSetup(t, f)
+	csrfToken := getAdminCsrfToken(t, f)
+
+	resp, raw := postCreateAPIKey(t, f, f.client, csrfToken, map[string]any{
+		"name":   "scoped-key",
+		"scopes": []string{"core:read", "admin:read"},
+	})
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("create scoped key status = %d: %s", resp.StatusCode, string(raw))
+	}
+	var created oas.CreatedApiKey
+	if err := json.Unmarshal(raw, &created); err != nil {
+		t.Fatalf("unmarshal created: %v", err)
+	}
+	if len(created.Scopes) != 2 || created.Scopes[0] != oas.ApiKeyScopeCoreRead || created.Scopes[1] != oas.ApiKeyScopeAdminRead {
+		t.Fatalf("created scopes = %v, want [core:read admin:read]", created.Scopes)
+	}
+
+	keys := listAPIKeysViaCookie(t, f, f.client)
+	if len(keys) != 1 || len(keys[0].Scopes) != 2 || keys[0].Scopes[0] != oas.ApiKeyScopeCoreRead {
+		t.Fatalf("listed keys = %+v, want scopes round-trip", keys)
+	}
+
+	assertCreateAPIKeyBadRequest(t, f, csrfToken, map[string]any{"name": "bad-scope", "scopes": []string{"not:a:scope"}})
+	assertCreateAPIKeyBadRequest(t, f, csrfToken, map[string]any{"name": "dup-scope", "scopes": []string{"core:read", "core:read"}})
+	assertSettingsLLMRoundTrip(t, f)
+}
+
+func assertCreateAPIKeyBadRequest(t *testing.T, f *routerFixture, csrfToken string, body map[string]any) {
+	t.Helper()
+	resp, _ := postCreateAPIKey(t, f, f.client, csrfToken, body)
+	defer func() { _ = resp.Body.Close() }()
+	assertProblem(t, resp, http.StatusBadRequest)
+}
+
+func assertSettingsLLMRoundTrip(t *testing.T, f *routerFixture) {
+	t.Helper()
+	ctx := WithUser(t.Context(), f.admin)
+	got, err := f.h.GetSettings(ctx)
+	if err != nil {
+		t.Fatalf("GetSettings() = %v", err)
+	}
+	if got.LlmEnabled.Or(true) {
+		t.Fatalf("default llm_enabled = %v, want false", got.LlmEnabled)
+	}
+	got.LlmEnabled = oas.NewOptBool(true)
+	updated, err := f.h.UpdateSettings(ctx, got)
+	if err != nil {
+		t.Fatalf("UpdateSettings() = %v", err)
+	}
+	if !updated.LlmEnabled.Or(false) {
+		t.Fatalf("updated llm_enabled = %v, want true", updated.LlmEnabled)
+	}
+}

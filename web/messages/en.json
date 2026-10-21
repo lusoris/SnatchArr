@@ -157,6 +157,7 @@
 	"queue_policy_enabled": "Enable queue management",
 	"queue_policy_rules_title": "Rules",
 	"queue_rule_stalled": "Stalled download",
+	"queue_rule_metadata_stuck": "Metadata stuck",
 	"queue_rule_slow": "Slow download",
 	"queue_rule_failed": "Failed download",
 	"queue_rule_import_blocked": "Import blocked",
@@ -519,5 +520,6 @@
 	"nav_search_placeholder": "Search or jump to…",
 	"nav_search_shortcut": "Ctrl+K",
 	"nav_search_shortcut_apple": "⌘K",
-	"nav_bottom_label": "Quick navigation"
+	"nav_bottom_label": "Quick navigation",
+	"settings_llm_enabled": "Enable MCP server (/api/v1/mcp)"
 }

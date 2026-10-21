@@ -5,6 +5,9 @@
 package main
 
 import (
+	"go/format"
+	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -32,6 +35,50 @@ func TestAnnotate(t *testing.T) {
 			t.Parallel()
 			if got := annotate(tt.in, testRule); !slices.Equal(got, tt.want) {
 				t.Errorf("annotate() =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(tt.want, "\n"))
+			}
+		})
+	}
+}
+
+// TestApplyFileFormats pins that an annotation inside an aligned const block
+// leaves the file gofmt-clean, so go generate and the gofmt hook agree.
+func TestApplyFileFormats(t *testing.T) {
+	t.Parallel()
+	r := rule{id: "G101", match: regexp.MustCompile(`^\s*BToken\s`), reason: "r"}
+	src := "package p\n\nconst (\n\tA      = \"a\"\n\tBToken = \"b\"\n\tC      = \"c\"\n)\n"
+	tests := []struct {
+		name    string
+		src     string
+		changed bool
+		wantErr bool
+	}{
+		{"annotated and reformatted", src, true, false},
+		{"no match left untouched", strings.ReplaceAll(src, "BToken", "Bxxxxx"), false, false},
+		{"unparsable output refused", "package p\nconst (\n\tBToken = (\n", false, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, "f.go"), []byte(tt.src), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			err := applyFile(os.DirFS(dir), dir, "f.go", r)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("applyFile() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			got, err := os.ReadFile(filepath.Join(dir, "f.go"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if changed := string(got) != tt.src; changed != tt.changed && !tt.wantErr {
+				t.Fatalf("changed = %v, want %v:\n%s", changed, tt.changed, got)
+			}
+			if tt.wantErr {
+				return
+			}
+			if fmtd, err := format.Source(got); err != nil || string(fmtd) != string(got) {
+				t.Errorf("output not gofmt-clean (err %v):\n%s", err, got)
 			}
 		})
 	}

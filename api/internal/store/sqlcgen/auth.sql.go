@@ -251,7 +251,7 @@ func (q *Queries) ListAPIKeysByOwner(ctx context.Context, ownerID uuid.UUID) ([]
 
 // #nosec G101 -- sqlc query constant named after a table; the value is SQL, not a credential
 const listAPIKeysForOwner = `-- name: ListAPIKeysForOwner :many
-SELECT id, owner_id, name, created_at, expires_at, last_used_at
+SELECT id, owner_id, name, scopes, created_at, expires_at, last_used_at
 FROM api_keys
 WHERE owner_id = $1 AND revoked_at IS NULL
 ORDER BY created_at
@@ -261,6 +261,7 @@ type ListAPIKeysForOwnerRow struct {
 	ID         string
 	OwnerID    uuid.UUID
 	Name       string
+	Scopes     []string
 	CreatedAt  time.Time
 	ExpiresAt  *time.Time
 	LastUsedAt *time.Time
@@ -279,6 +280,7 @@ func (q *Queries) ListAPIKeysForOwner(ctx context.Context, ownerID uuid.UUID) ([
 			&i.ID,
 			&i.OwnerID,
 			&i.Name,
+			&i.Scopes,
 			&i.CreatedAt,
 			&i.ExpiresAt,
 			&i.LastUsedAt,

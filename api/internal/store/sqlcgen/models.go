@@ -214,6 +214,7 @@ type Setting struct {
 	UserAgent            string
 	UpdatedAt            time.Time
 	GlobalHourlyCap      int32
+	LlmEnabled           bool
 }
 
 type SnatchEvent struct {

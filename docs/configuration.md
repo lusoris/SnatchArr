@@ -125,6 +125,7 @@ so `import_fixable` reports them as refused.
 | Rule | Matches when | Default threshold |
 | --- | --- | --- |
 | `stalled` | Downloading, and the remaining size did not shrink since the last sweep | 6 |
+| `metadata_stuck` | A torrent still waiting for its magnet metadata; threshold in minutes since the item was added (30..1440) | 180 |
 | `slow` | Downloading slower than `min_bytes_per_second` since the last sweep | 6 |
 | `failed` | Queue status or tracked state is failed | 2 |
 | `import_blocked` | The *arr cannot import the finished download | 6 |

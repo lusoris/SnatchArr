@@ -17,11 +17,12 @@ func (s *ProblemStatusCode) Error() string {
 
 // Ref: #/components/schemas/ApiKey
 type ApiKey struct {
-	ID         string      `json:"id"`
-	Name       string      `json:"name"`
-	CreatedAt  time.Time   `json:"created_at"`
-	ExpiresAt  OptDateTime `json:"expires_at"`
-	LastUsedAt OptDateTime `json:"last_used_at"`
+	ID         string        `json:"id"`
+	Name       string        `json:"name"`
+	Scopes     []ApiKeyScope `json:"scopes"`
+	CreatedAt  time.Time     `json:"created_at"`
+	ExpiresAt  OptDateTime   `json:"expires_at"`
+	LastUsedAt OptDateTime   `json:"last_used_at"`
 }
 
 // GetID returns the value of ID.
@@ -32,6 +33,11 @@ func (s *ApiKey) GetID() string {
 // GetName returns the value of Name.
 func (s *ApiKey) GetName() string {
 	return s.Name
+}
+
+// GetScopes returns the value of Scopes.
+func (s *ApiKey) GetScopes() []ApiKeyScope {
+	return s.Scopes
 }
 
 // GetCreatedAt returns the value of CreatedAt.
@@ -59,6 +65,11 @@ func (s *ApiKey) SetName(val string) {
 	s.Name = val
 }
 
+// SetScopes sets the value of Scopes.
+func (s *ApiKey) SetScopes(val []ApiKeyScope) {
+	s.Scopes = val
+}
+
 // SetCreatedAt sets the value of CreatedAt.
 func (s *ApiKey) SetCreatedAt(val time.Time) {
 	s.CreatedAt = val
@@ -72,6 +83,134 @@ func (s *ApiKey) SetExpiresAt(val OptDateTime) {
 // SetLastUsedAt sets the value of LastUsedAt.
 func (s *ApiKey) SetLastUsedAt(val OptDateTime) {
 	s.LastUsedAt = val
+}
+
+// Ref: #/components/schemas/ApiKeyScope
+type ApiKeyScope string
+
+const (
+	ApiKeyScopeCoreRead             ApiKeyScope = "core:read"
+	ApiKeyScopeCoreWrite            ApiKeyScope = "core:write"
+	ApiKeyScopeRequestsRead         ApiKeyScope = "requests:read"
+	ApiKeyScopeRequestsWrite        ApiKeyScope = "requests:write"
+	ApiKeyScopeDownloadClientsRead  ApiKeyScope = "download_clients:read"
+	ApiKeyScopeDownloadClientsWrite ApiKeyScope = "download_clients:write"
+	// #nosec G101 -- ogen enum constant of the prowlarr API key scope; the value is a permission name, not a credential
+	ApiKeyScopeProwlarrRead ApiKeyScope = "prowlarr:read"
+	// #nosec G101 -- ogen enum constant of the prowlarr API key scope; the value is a permission name, not a credential
+	ApiKeyScopeProwlarrWrite      ApiKeyScope = "prowlarr:write"
+	ApiKeyScopeNotificationsRead  ApiKeyScope = "notifications:read"
+	ApiKeyScopeNotificationsWrite ApiKeyScope = "notifications:write"
+	ApiKeyScopeAdminRead          ApiKeyScope = "admin:read"
+	ApiKeyScopeAdminWrite         ApiKeyScope = "admin:write"
+	ApiKeyScopeAdultRead          ApiKeyScope = "adult:read"
+	ApiKeyScopeAdultWrite         ApiKeyScope = "adult:write"
+)
+
+// AllValues returns all ApiKeyScope values.
+func (ApiKeyScope) AllValues() []ApiKeyScope {
+	return []ApiKeyScope{
+		ApiKeyScopeCoreRead,
+		ApiKeyScopeCoreWrite,
+		ApiKeyScopeRequestsRead,
+		ApiKeyScopeRequestsWrite,
+		ApiKeyScopeDownloadClientsRead,
+		ApiKeyScopeDownloadClientsWrite,
+		ApiKeyScopeProwlarrRead,
+		ApiKeyScopeProwlarrWrite,
+		ApiKeyScopeNotificationsRead,
+		ApiKeyScopeNotificationsWrite,
+		ApiKeyScopeAdminRead,
+		ApiKeyScopeAdminWrite,
+		ApiKeyScopeAdultRead,
+		ApiKeyScopeAdultWrite,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s ApiKeyScope) MarshalText() ([]byte, error) {
+	switch s {
+	case ApiKeyScopeCoreRead:
+		return []byte(s), nil
+	case ApiKeyScopeCoreWrite:
+		return []byte(s), nil
+	case ApiKeyScopeRequestsRead:
+		return []byte(s), nil
+	case ApiKeyScopeRequestsWrite:
+		return []byte(s), nil
+	case ApiKeyScopeDownloadClientsRead:
+		return []byte(s), nil
+	case ApiKeyScopeDownloadClientsWrite:
+		return []byte(s), nil
+	case ApiKeyScopeProwlarrRead:
+		return []byte(s), nil
+	case ApiKeyScopeProwlarrWrite:
+		return []byte(s), nil
+	case ApiKeyScopeNotificationsRead:
+		return []byte(s), nil
+	case ApiKeyScopeNotificationsWrite:
+		return []byte(s), nil
+	case ApiKeyScopeAdminRead:
+		return []byte(s), nil
+	case ApiKeyScopeAdminWrite:
+		return []byte(s), nil
+	case ApiKeyScopeAdultRead:
+		return []byte(s), nil
+	case ApiKeyScopeAdultWrite:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *ApiKeyScope) UnmarshalText(data []byte) error {
+	switch ApiKeyScope(data) {
+	case ApiKeyScopeCoreRead:
+		*s = ApiKeyScopeCoreRead
+		return nil
+	case ApiKeyScopeCoreWrite:
+		*s = ApiKeyScopeCoreWrite
+		return nil
+	case ApiKeyScopeRequestsRead:
+		*s = ApiKeyScopeRequestsRead
+		return nil
+	case ApiKeyScopeRequestsWrite:
+		*s = ApiKeyScopeRequestsWrite
+		return nil
+	case ApiKeyScopeDownloadClientsRead:
+		*s = ApiKeyScopeDownloadClientsRead
+		return nil
+	case ApiKeyScopeDownloadClientsWrite:
+		*s = ApiKeyScopeDownloadClientsWrite
+		return nil
+	case ApiKeyScopeProwlarrRead:
+		*s = ApiKeyScopeProwlarrRead
+		return nil
+	case ApiKeyScopeProwlarrWrite:
+		*s = ApiKeyScopeProwlarrWrite
+		return nil
+	case ApiKeyScopeNotificationsRead:
+		*s = ApiKeyScopeNotificationsRead
+		return nil
+	case ApiKeyScopeNotificationsWrite:
+		*s = ApiKeyScopeNotificationsWrite
+		return nil
+	case ApiKeyScopeAdminRead:
+		*s = ApiKeyScopeAdminRead
+		return nil
+	case ApiKeyScopeAdminWrite:
+		*s = ApiKeyScopeAdminWrite
+		return nil
+	case ApiKeyScopeAdultRead:
+		*s = ApiKeyScopeAdultRead
+		return nil
+	case ApiKeyScopeAdultWrite:
+		*s = ApiKeyScopeAdultWrite
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
 }
 
 // Ref: #/components/schemas/AppKind
@@ -647,13 +786,19 @@ func (*CreateAPIKeyUnauthorized) createAPIKeyRes() {}
 
 // Ref: #/components/schemas/CreateApiKeyRequest
 type CreateApiKeyRequest struct {
-	Name      string      `json:"name"`
-	ExpiresAt OptDateTime `json:"expires_at"`
+	Name      string        `json:"name"`
+	Scopes    []ApiKeyScope `json:"scopes"`
+	ExpiresAt OptDateTime   `json:"expires_at"`
 }
 
 // GetName returns the value of Name.
 func (s *CreateApiKeyRequest) GetName() string {
 	return s.Name
+}
+
+// GetScopes returns the value of Scopes.
+func (s *CreateApiKeyRequest) GetScopes() []ApiKeyScope {
+	return s.Scopes
 }
 
 // GetExpiresAt returns the value of ExpiresAt.
@@ -664,6 +809,11 @@ func (s *CreateApiKeyRequest) GetExpiresAt() OptDateTime {
 // SetName sets the value of Name.
 func (s *CreateApiKeyRequest) SetName(val string) {
 	s.Name = val
+}
+
+// SetScopes sets the value of Scopes.
+func (s *CreateApiKeyRequest) SetScopes(val []ApiKeyScope) {
+	s.Scopes = val
 }
 
 // SetExpiresAt sets the value of ExpiresAt.
@@ -686,12 +836,13 @@ func (*CreateProxySessionUnauthorized) createProxySessionRes() {}
 // Merged schema.
 // Ref: #/components/schemas/CreatedApiKey
 type CreatedApiKey struct {
-	ID         string      `json:"id"`
-	Name       string      `json:"name"`
-	CreatedAt  time.Time   `json:"created_at"`
-	ExpiresAt  OptDateTime `json:"expires_at"`
-	LastUsedAt OptDateTime `json:"last_used_at"`
-	Secret     string      `json:"secret"`
+	ID         string        `json:"id"`
+	Name       string        `json:"name"`
+	Scopes     []ApiKeyScope `json:"scopes"`
+	CreatedAt  time.Time     `json:"created_at"`
+	ExpiresAt  OptDateTime   `json:"expires_at"`
+	LastUsedAt OptDateTime   `json:"last_used_at"`
+	Secret     string        `json:"secret"`
 }
 
 // GetID returns the value of ID.
@@ -702,6 +853,11 @@ func (s *CreatedApiKey) GetID() string {
 // GetName returns the value of Name.
 func (s *CreatedApiKey) GetName() string {
 	return s.Name
+}
+
+// GetScopes returns the value of Scopes.
+func (s *CreatedApiKey) GetScopes() []ApiKeyScope {
+	return s.Scopes
 }
 
 // GetCreatedAt returns the value of CreatedAt.
@@ -732,6 +888,11 @@ func (s *CreatedApiKey) SetID(val string) {
 // SetName sets the value of Name.
 func (s *CreatedApiKey) SetName(val string) {
 	s.Name = val
+}
+
+// SetScopes sets the value of Scopes.
+func (s *CreatedApiKey) SetScopes(val []ApiKeyScope) {
+	s.Scopes = val
 }
 
 // SetCreatedAt sets the value of CreatedAt.
@@ -4479,6 +4640,7 @@ type QueueRule string
 
 const (
 	QueueRuleStalled             QueueRule = "stalled"
+	QueueRuleMetadataStuck       QueueRule = "metadata_stuck"
 	QueueRuleSlow                QueueRule = "slow"
 	QueueRuleFailed              QueueRule = "failed"
 	QueueRuleImportBlocked       QueueRule = "import_blocked"
@@ -4496,6 +4658,7 @@ const (
 func (QueueRule) AllValues() []QueueRule {
 	return []QueueRule{
 		QueueRuleStalled,
+		QueueRuleMetadataStuck,
 		QueueRuleSlow,
 		QueueRuleFailed,
 		QueueRuleImportBlocked,
@@ -4514,6 +4677,8 @@ func (QueueRule) AllValues() []QueueRule {
 func (s QueueRule) MarshalText() ([]byte, error) {
 	switch s {
 	case QueueRuleStalled:
+		return []byte(s), nil
+	case QueueRuleMetadataStuck:
 		return []byte(s), nil
 	case QueueRuleSlow:
 		return []byte(s), nil
@@ -4547,6 +4712,9 @@ func (s *QueueRule) UnmarshalText(data []byte) error {
 	switch QueueRule(data) {
 	case QueueRuleStalled:
 		*s = QueueRuleStalled
+		return nil
+	case QueueRuleMetadataStuck:
+		*s = QueueRuleMetadataStuck
 		return nil
 	case QueueRuleSlow:
 		*s = QueueRuleSlow
@@ -4670,10 +4838,13 @@ func (s *QueueRuleSettings) SetBlocklist(val OptBool) {
 
 // Ref: #/components/schemas/QueueRules
 type QueueRules struct {
-	Stalled       QueueRuleSettings `json:"stalled"`
-	Slow          QueueRuleSettings `json:"slow"`
-	Failed        QueueRuleSettings `json:"failed"`
-	ImportBlocked QueueRuleSettings `json:"import_blocked"`
+	Stalled QueueRuleSettings `json:"stalled"`
+	// Strikes and removes a torrent download stuck fetching metadata. Optional on write so older clients
+	// keep working; left out, the rule takes its default settings. Reads always return it.
+	MetadataStuck OptQueueRuleSettings `json:"metadata_stuck"`
+	Slow          QueueRuleSettings    `json:"slow"`
+	Failed        QueueRuleSettings    `json:"failed"`
+	ImportBlocked QueueRuleSettings    `json:"import_blocked"`
 	// Force-imports a Sonarr or Radarr download the *arr matched to its series or movie by ID only,
 	// through a ManualImport of its clean, mapped candidates; it never removes or blocklists (ADR-0013).
 	// Optional on write so older clients keep working; left out, the rule takes its default settings.
@@ -4706,6 +4877,11 @@ type QueueRules struct {
 // GetStalled returns the value of Stalled.
 func (s *QueueRules) GetStalled() QueueRuleSettings {
 	return s.Stalled
+}
+
+// GetMetadataStuck returns the value of MetadataStuck.
+func (s *QueueRules) GetMetadataStuck() OptQueueRuleSettings {
+	return s.MetadataStuck
 }
 
 // GetSlow returns the value of Slow.
@@ -4766,6 +4942,11 @@ func (s *QueueRules) GetUnwantedUnmonitored() QueueRuleSettings {
 // SetStalled sets the value of Stalled.
 func (s *QueueRules) SetStalled(val QueueRuleSettings) {
 	s.Stalled = val
+}
+
+// SetMetadataStuck sets the value of MetadataStuck.
+func (s *QueueRules) SetMetadataStuck(val OptQueueRuleSettings) {
+	s.MetadataStuck = val
 }
 
 // SetSlow sets the value of Slow.
@@ -6181,8 +6362,10 @@ type Settings struct {
 	UserAgent            string `json:"user_agent"`
 	// Shared stamina across every instance for setups where several *arr apps hit the same indexers (0 =
 	// off).
-	GlobalHourlyCap int         `json:"global_hourly_cap"`
-	UpdatedAt       OptDateTime `json:"updated_at"`
+	GlobalHourlyCap int `json:"global_hourly_cap"`
+	// Whether the Model Context Protocol (MCP) server at /api/v1/mcp is enabled.
+	LlmEnabled OptBool     `json:"llm_enabled"`
+	UpdatedAt  OptDateTime `json:"updated_at"`
 }
 
 // GetHistoryRetentionDays returns the value of HistoryRetentionDays.
@@ -6198,6 +6381,11 @@ func (s *Settings) GetUserAgent() string {
 // GetGlobalHourlyCap returns the value of GlobalHourlyCap.
 func (s *Settings) GetGlobalHourlyCap() int {
 	return s.GlobalHourlyCap
+}
+
+// GetLlmEnabled returns the value of LlmEnabled.
+func (s *Settings) GetLlmEnabled() OptBool {
+	return s.LlmEnabled
 }
 
 // GetUpdatedAt returns the value of UpdatedAt.
@@ -6218,6 +6406,11 @@ func (s *Settings) SetUserAgent(val string) {
 // SetGlobalHourlyCap sets the value of GlobalHourlyCap.
 func (s *Settings) SetGlobalHourlyCap(val int) {
 	s.GlobalHourlyCap = val
+}
+
+// SetLlmEnabled sets the value of LlmEnabled.
+func (s *Settings) SetLlmEnabled(val OptBool) {
+	s.LlmEnabled = val
 }
 
 // SetUpdatedAt sets the value of UpdatedAt.

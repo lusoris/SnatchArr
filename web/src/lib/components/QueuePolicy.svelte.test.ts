@@ -158,9 +158,39 @@ describe('QueuePolicy', () => {
 		expect(body.rules.duplicate).toEqual({ mode: 'observe', threshold: 1, blocklist: true });
 	});
 
+	it('sends the metadata-stuck rule with the policy', async () => {
+		const put = vi.spyOn(api, 'PUT').mockResolvedValue({ data: sampleQueuePolicy } as never);
+		stubGet({
+			'/instances/{instanceId}/queue-policy': sampleQueuePolicy
+		});
+		renderWithQuery(QueuePolicy, { instanceId: forkInstance.id });
+
+		await screen.findByRole('heading', { level: 2, name: m.queue_policy_title() });
+		const mode = screen.getByLabelText(
+			`${m.queue_rule_metadata_stuck()} ${m.queue_rule_mode()}`
+		) as HTMLSelectElement;
+		const threshold = screen.getByLabelText(
+			`${m.queue_rule_metadata_stuck()} ${m.queue_rule_threshold()}`
+		) as HTMLInputElement;
+		const blocklist = screen.getByLabelText(
+			`${m.queue_rule_metadata_stuck()} ${m.queue_rule_blocklist()}`
+		) as HTMLInputElement;
+		expect(threshold.value).toBe('180');
+		expect(blocklist.checked).toBe(true);
+
+		await fireEvent.change(mode, { target: { value: 'act' } });
+		await fireEvent.input(threshold, { target: { value: '120' } });
+
+		await fireEvent.click(screen.getByRole('button', { name: m.queue_policy_save() }));
+
+		const body = (put.mock.calls[0]![1] as { body: QueuePolicyType }).body;
+		expect(body.rules.metadata_stuck).toEqual({ mode: 'act', threshold: 120, blocklist: true });
+	});
+
 	it('falls back to the default for optional rules the policy lacks', async () => {
 		const put = vi.spyOn(api, 'PUT').mockResolvedValue({ data: sampleQueuePolicy } as never);
 		const olderRules = { ...sampleQueuePolicy.rules };
+		delete olderRules.metadata_stuck;
 		delete olderRules.not_an_upgrade;
 		delete olderRules.duplicate;
 		delete olderRules.id_matched;
@@ -176,6 +206,7 @@ describe('QueuePolicy', () => {
 
 		const body = (put.mock.calls[0]![1] as { body: QueuePolicyType }).body;
 		const fallback = { mode: 'observe', threshold: 1, blocklist: false };
+		expect(body.rules.metadata_stuck).toEqual({ mode: 'observe', threshold: 180, blocklist: true });
 		expect(body.rules.not_an_upgrade).toEqual(fallback);
 		expect(body.rules.duplicate).toEqual(fallback);
 		expect(body.rules.id_matched).toEqual(fallback);

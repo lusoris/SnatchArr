@@ -1145,9 +1145,12 @@ export interface components {
             oidc: boolean;
             proxy: boolean;
         };
+        /** @enum {string} */
+        ApiKeyScope: "core:read" | "core:write" | "requests:read" | "requests:write" | "download_clients:read" | "download_clients:write" | "prowlarr:read" | "prowlarr:write" | "notifications:read" | "notifications:write" | "admin:read" | "admin:write" | "adult:read" | "adult:write";
         ApiKey: {
             id: string;
             name: string;
+            scopes: components["schemas"]["ApiKeyScope"][];
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -1160,6 +1163,7 @@ export interface components {
         };
         CreateApiKeyRequest: {
             name: string;
+            scopes?: components["schemas"]["ApiKeyScope"][];
             /** Format: date-time */
             expires_at?: string;
         };
@@ -1412,6 +1416,11 @@ export interface components {
             user_agent: string;
             /** @description Shared stamina across every instance for setups where several *arr apps hit the same indexers (0 = off). */
             global_hourly_cap: number;
+            /**
+             * @description Whether the Model Context Protocol (MCP) server at /api/v1/mcp is enabled.
+             * @default false
+             */
+            llm_enabled: boolean;
             /** Format: date-time */
             updated_at?: string;
         };
@@ -1812,7 +1821,7 @@ export interface components {
             updated_at: string;
         };
         /** @enum {string} */
-        QueueRule: "stalled" | "slow" | "failed" | "import_blocked" | "id_matched" | "import_fixable" | "import_broken" | "import_not_wanted" | "unwanted_score" | "not_an_upgrade" | "duplicate" | "unwanted_unmonitored";
+        QueueRule: "stalled" | "metadata_stuck" | "slow" | "failed" | "import_blocked" | "id_matched" | "import_fixable" | "import_broken" | "import_not_wanted" | "unwanted_score" | "not_an_upgrade" | "duplicate" | "unwanted_unmonitored";
         /** @enum {string} */
         QueueRuleMode: "observe" | "act";
         QueueRuleSettings: {
@@ -1823,6 +1832,8 @@ export interface components {
         };
         QueueRules: {
             stalled: components["schemas"]["QueueRuleSettings"];
+            /** @description Strikes and removes a torrent download stuck fetching metadata. Optional on write so older clients keep working; left out, the rule takes its default settings. Reads always return it. */
+            metadata_stuck?: components["schemas"]["QueueRuleSettings"];
             slow: components["schemas"]["QueueRuleSettings"];
             failed: components["schemas"]["QueueRuleSettings"];
             import_blocked: components["schemas"]["QueueRuleSettings"];
