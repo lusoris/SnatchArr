@@ -4003,6 +4003,58 @@ func (s *LlmWriteTool) Decode(d *jx.Decoder) error {
 		*s = LlmWriteToolSnatcharrImportConfigarr
 	case LlmWriteToolSnatcharrUpdateSettings:
 		*s = LlmWriteToolSnatcharrUpdateSettings
+	case LlmWriteToolSnatcharrCreateDownloadClient:
+		*s = LlmWriteToolSnatcharrCreateDownloadClient
+	case LlmWriteToolSnatcharrTestDownloadClientInput:
+		*s = LlmWriteToolSnatcharrTestDownloadClientInput
+	case LlmWriteToolSnatcharrUpdateDownloadClient:
+		*s = LlmWriteToolSnatcharrUpdateDownloadClient
+	case LlmWriteToolSnatcharrDeleteDownloadClient:
+		*s = LlmWriteToolSnatcharrDeleteDownloadClient
+	case LlmWriteToolSnatcharrTestDownloadClient:
+		*s = LlmWriteToolSnatcharrTestDownloadClient
+	case LlmWriteToolSnatcharrDiscoverDownloadClients:
+		*s = LlmWriteToolSnatcharrDiscoverDownloadClients
+	case LlmWriteToolSnatcharrCreateSeerrLink:
+		*s = LlmWriteToolSnatcharrCreateSeerrLink
+	case LlmWriteToolSnatcharrTestSeerrLinkInput:
+		*s = LlmWriteToolSnatcharrTestSeerrLinkInput
+	case LlmWriteToolSnatcharrSnatchSeerrRequest:
+		*s = LlmWriteToolSnatcharrSnatchSeerrRequest
+	case LlmWriteToolSnatcharrUpdateSeerrLink:
+		*s = LlmWriteToolSnatcharrUpdateSeerrLink
+	case LlmWriteToolSnatcharrDeleteSeerrLink:
+		*s = LlmWriteToolSnatcharrDeleteSeerrLink
+	case LlmWriteToolSnatcharrTestSeerrLink:
+		*s = LlmWriteToolSnatcharrTestSeerrLink
+	case LlmWriteToolSnatcharrSyncSeerrLink:
+		*s = LlmWriteToolSnatcharrSyncSeerrLink
+	case LlmWriteToolSnatcharrImportSeerrInstances:
+		*s = LlmWriteToolSnatcharrImportSeerrInstances
+	case LlmWriteToolSnatcharrCreateProwlarrLink:
+		*s = LlmWriteToolSnatcharrCreateProwlarrLink
+	case LlmWriteToolSnatcharrTestProwlarrLinkInput:
+		*s = LlmWriteToolSnatcharrTestProwlarrLinkInput
+	case LlmWriteToolSnatcharrUpdateProwlarrLink:
+		*s = LlmWriteToolSnatcharrUpdateProwlarrLink
+	case LlmWriteToolSnatcharrDeleteProwlarrLink:
+		*s = LlmWriteToolSnatcharrDeleteProwlarrLink
+	case LlmWriteToolSnatcharrTestProwlarrLink:
+		*s = LlmWriteToolSnatcharrTestProwlarrLink
+	case LlmWriteToolSnatcharrCreateNotificationChannel:
+		*s = LlmWriteToolSnatcharrCreateNotificationChannel
+	case LlmWriteToolSnatcharrUpdateNotificationChannel:
+		*s = LlmWriteToolSnatcharrUpdateNotificationChannel
+	case LlmWriteToolSnatcharrDeleteNotificationChannel:
+		*s = LlmWriteToolSnatcharrDeleteNotificationChannel
+	case LlmWriteToolSnatcharrTestNotificationChannel:
+		*s = LlmWriteToolSnatcharrTestNotificationChannel
+	case LlmWriteToolSnatcharrCreateNotificationRule:
+		*s = LlmWriteToolSnatcharrCreateNotificationRule
+	case LlmWriteToolSnatcharrUpdateNotificationRule:
+		*s = LlmWriteToolSnatcharrUpdateNotificationRule
+	case LlmWriteToolSnatcharrDeleteNotificationRule:
+		*s = LlmWriteToolSnatcharrDeleteNotificationRule
 	default:
 		*s = LlmWriteTool(v)
 	}

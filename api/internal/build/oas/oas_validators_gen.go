@@ -1164,6 +1164,58 @@ func (s LlmWriteTool) Validate() error {
 		return nil
 	case "snatcharr_update_settings":
 		return nil
+	case "snatcharr_create_download_client":
+		return nil
+	case "snatcharr_test_download_client_input":
+		return nil
+	case "snatcharr_update_download_client":
+		return nil
+	case "snatcharr_delete_download_client":
+		return nil
+	case "snatcharr_test_download_client":
+		return nil
+	case "snatcharr_discover_download_clients":
+		return nil
+	case "snatcharr_create_seerr_link":
+		return nil
+	case "snatcharr_test_seerr_link_input":
+		return nil
+	case "snatcharr_snatch_seerr_request":
+		return nil
+	case "snatcharr_update_seerr_link":
+		return nil
+	case "snatcharr_delete_seerr_link":
+		return nil
+	case "snatcharr_test_seerr_link":
+		return nil
+	case "snatcharr_sync_seerr_link":
+		return nil
+	case "snatcharr_import_seerr_instances":
+		return nil
+	case "snatcharr_create_prowlarr_link":
+		return nil
+	case "snatcharr_test_prowlarr_link_input":
+		return nil
+	case "snatcharr_update_prowlarr_link":
+		return nil
+	case "snatcharr_delete_prowlarr_link":
+		return nil
+	case "snatcharr_test_prowlarr_link":
+		return nil
+	case "snatcharr_create_notification_channel":
+		return nil
+	case "snatcharr_update_notification_channel":
+		return nil
+	case "snatcharr_delete_notification_channel":
+		return nil
+	case "snatcharr_test_notification_channel":
+		return nil
+	case "snatcharr_create_notification_rule":
+		return nil
+	case "snatcharr_update_notification_rule":
+		return nil
+	case "snatcharr_delete_notification_rule":
+		return nil
 	default:
 		return errors.Errorf("invalid value: %v", s)
 	}

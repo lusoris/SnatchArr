@@ -42,6 +42,41 @@ var testAllWriteTools = []string{
 	domain.LLMWriteToolDeleteSchedule,
 	domain.LLMWriteToolImportConfigarr,
 	domain.LLMWriteToolUpdateSettings,
+	domain.LLMWriteToolCreateDownloadClient,
+	domain.LLMWriteToolTestDownloadClientInput,
+	domain.LLMWriteToolUpdateDownloadClient,
+	domain.LLMWriteToolDeleteDownloadClient,
+	domain.LLMWriteToolTestDownloadClient,
+	domain.LLMWriteToolDiscoverDownloadClients,
+	domain.LLMWriteToolCreateSeerrLink,
+	domain.LLMWriteToolTestSeerrLinkInput,
+	domain.LLMWriteToolSnatchSeerrRequest,
+	domain.LLMWriteToolUpdateSeerrLink,
+	domain.LLMWriteToolDeleteSeerrLink,
+	domain.LLMWriteToolTestSeerrLink,
+	domain.LLMWriteToolSyncSeerrLink,
+	domain.LLMWriteToolImportSeerrInstances,
+	domain.LLMWriteToolCreateProwlarrLink,
+	domain.LLMWriteToolTestProwlarrLinkInput,
+	domain.LLMWriteToolUpdateProwlarrLink,
+	domain.LLMWriteToolDeleteProwlarrLink,
+	domain.LLMWriteToolTestProwlarrLink,
+	domain.LLMWriteToolCreateNotificationChannel,
+	domain.LLMWriteToolUpdateNotificationChannel,
+	domain.LLMWriteToolDeleteNotificationChannel,
+	domain.LLMWriteToolTestNotificationChannel,
+	domain.LLMWriteToolCreateNotificationRule,
+	domain.LLMWriteToolUpdateNotificationRule,
+	domain.LLMWriteToolDeleteNotificationRule,
+}
+
+var testAllScopes = []string{
+	domain.ScopeCoreRead, domain.ScopeCoreWrite,
+	domain.ScopeAdminRead, domain.ScopeAdminWrite,
+	domain.ScopeDownloadClientsRead, domain.ScopeDownloadClientsWrite,
+	domain.ScopeRequestsRead, domain.ScopeRequestsWrite,
+	domain.ScopeProwlarrRead, domain.ScopeProwlarrWrite,
+	domain.ScopeNotificationsRead, domain.ScopeNotificationsWrite,
 }
 
 func callToolsListWithSchemas(t *testing.T, f *mcpFixture, token string) map[string]json.RawMessage {
@@ -89,12 +124,7 @@ func TestMCPRegistryInputSchemasMatchGenerated(t *testing.T) {
 	t.Parallel()
 	f := newMCPFixture(t)
 	enableLLM(t, f, testAllWriteTools...)
-	token := issueKey(t, f, "schema-auditor",
-		domain.ScopeCoreRead, domain.ScopeCoreWrite,
-		domain.ScopeAdminRead, domain.ScopeAdminWrite,
-		domain.ScopeDownloadClientsRead, domain.ScopeRequestsRead,
-		domain.ScopeProwlarrRead, domain.ScopeNotificationsRead,
-	)
+	token := issueKey(t, f, "schema-auditor", testAllScopes...)
 	assertInitializeOK(t, f, token, f.srv.URL)
 
 	advertised := callToolsListWithSchemas(t, f, token)
@@ -480,11 +510,12 @@ func writeSampleConfigarr(t *testing.T) string {
 	return p
 }
 
-func testPositiveInstancesAndPolicies(t *testing.T, f *mcpFixture, token string) string {
+func testPositiveInstances(t *testing.T, f *mcpFixture, token string) string {
 	t.Helper()
+	fakeSonarr := newFakeSonarr(t, "secret-test-key")
 	createRes := callToolWithParams(t, f, token, domain.LLMWriteToolCreateInstance, map[string]any{
 		"body": map[string]any{
-			"name": "Sonarr Pos", "kind": "sonarr", "base_url": "http://127.0.0.1:1",
+			"name": "Sonarr Pos", "kind": "sonarr", "base_url": fakeSonarr.srv.URL,
 			"api_key": "secret-test-key", "enabled": true,
 		},
 	})
@@ -495,31 +526,53 @@ func testPositiveInstancesAndPolicies(t *testing.T, f *mcpFixture, token string)
 	if err := json.Unmarshal(createRes.StructuredContent, &createdInst); err != nil {
 		t.Fatalf("decode created instance: %v", err)
 	}
+	if createdInst.Name != "Sonarr Pos" {
+		t.Fatalf("instance name = %q, want 'Sonarr Pos'", createdInst.Name)
+	}
 	instID := createdInst.ID.String()
 
 	testInputRes := callToolWithParams(t, f, token, domain.LLMWriteToolTestInstanceInput, map[string]any{
 		"body": map[string]any{
-			"name": "Sonarr TestIn", "kind": "sonarr", "base_url": "http://127.0.0.1:1",
+			"name": "Sonarr TestIn", "kind": "sonarr", "base_url": fakeSonarr.srv.URL,
 			"api_key": "secret-test-key", "enabled": true,
 		},
 	})
 	if testInputRes.IsError {
 		t.Fatalf("test_instance_input failed: %s", testInputRes.ContentText)
 	}
-	if testRes := callToolWithParams(t, f, token, domain.LLMWriteToolTestInstance, map[string]any{
+	var probeIn oas.ProbeResult
+	if err := json.Unmarshal(testInputRes.StructuredContent, &probeIn); err != nil || probeIn.AppName != "Sonarr" {
+		t.Fatalf("test_instance_input result: %+v, %v", probeIn, err)
+	}
+
+	testRes := callToolWithParams(t, f, token, domain.LLMWriteToolTestInstance, map[string]any{
 		"instanceId": instID,
-	}); testRes.IsError {
+	})
+	if testRes.IsError {
 		t.Fatalf("test_instance failed: %s", testRes.ContentText)
 	}
+	var probe oas.ProbeResult
+	if err := json.Unmarshal(testRes.StructuredContent, &probe); err != nil || probe.AppName != "Sonarr" {
+		t.Fatalf("test_instance result: %+v, %v", probe, err)
+	}
+	if !fakeSonarr.rec.has(http.MethodGet, "/api/v3/system/status") {
+		t.Fatal("fakeSonarr never received /api/v3/system/status request")
+	}
+
 	if updRes := callToolWithParams(t, f, token, domain.LLMWriteToolUpdateInstance, map[string]any{
 		"instanceId": instID,
 		"body": map[string]any{
-			"name": "Sonarr Pos Renamed", "kind": "sonarr", "base_url": "http://127.0.0.1:1",
+			"name": "Sonarr Pos Renamed", "kind": "sonarr", "base_url": fakeSonarr.srv.URL,
 			"api_key": "secret-test-key", "enabled": true,
 		},
 	}); updRes.IsError {
 		t.Fatalf("update_instance failed: %s", updRes.ContentText)
 	}
+	return instID
+}
+
+func testPositivePolicies(t *testing.T, f *mcpFixture, token, instID string) {
+	t.Helper()
 	polGot := callToolWithParams(t, f, token, "snatcharr_get_policy", map[string]any{"instanceId": instID})
 	var polBody map[string]any
 	if err := json.Unmarshal(polGot.StructuredContent, &polBody); err != nil {
@@ -541,7 +594,6 @@ func testPositiveInstancesAndPolicies(t *testing.T, f *mcpFixture, token string)
 	}); updQP.IsError {
 		t.Fatalf("update_queue_policy failed: %s", updQP.ContentText)
 	}
-	return instID
 }
 
 func testPositiveRunsAndEvents(t *testing.T, f *mcpFixture, token, instID string) {
@@ -639,7 +691,8 @@ func TestMCPWriteToolsPositive(t *testing.T) {
 	assertInitializeOK(t, f, token, f.srv.URL)
 
 	configPath := writeSampleConfigarr(t)
-	instID := testPositiveInstancesAndPolicies(t, f, token)
+	instID := testPositiveInstances(t, f, token)
+	testPositivePolicies(t, f, token, instID)
 	testPositiveRunsAndEvents(t, f, token, instID)
 	testPositiveSchedulesAndSettings(t, f, token, configPath, instID)
 }

@@ -2165,23 +2165,49 @@ func (*ListAPIKeysOKApplicationJSON) listAPIKeysRes() {}
 type LlmWriteTool string
 
 const (
-	LlmWriteToolSnatcharrTriggerRun           LlmWriteTool = "snatcharr_trigger_run"
-	LlmWriteToolSnatcharrUpdatePolicy         LlmWriteTool = "snatcharr_update_policy"
-	LlmWriteToolSnatcharrCancelRun            LlmWriteTool = "snatcharr_cancel_run"
-	LlmWriteToolSnatcharrDeleteInstance       LlmWriteTool = "snatcharr_delete_instance"
-	LlmWriteToolSnatcharrCreateInstance       LlmWriteTool = "snatcharr_create_instance"
-	LlmWriteToolSnatcharrTestInstanceInput    LlmWriteTool = "snatcharr_test_instance_input"
-	LlmWriteToolSnatcharrUpdateInstance       LlmWriteTool = "snatcharr_update_instance"
-	LlmWriteToolSnatcharrTestInstance         LlmWriteTool = "snatcharr_test_instance"
-	LlmWriteToolSnatcharrUpdateQueuePolicy    LlmWriteTool = "snatcharr_update_queue_policy"
-	LlmWriteToolSnatcharrPreviewRun           LlmWriteTool = "snatcharr_preview_run"
-	LlmWriteToolSnatcharrDeleteInstanceEvents LlmWriteTool = "snatcharr_delete_instance_events"
-	LlmWriteToolSnatcharrResetState           LlmWriteTool = "snatcharr_reset_state"
-	LlmWriteToolSnatcharrCreateSchedule       LlmWriteTool = "snatcharr_create_schedule"
-	LlmWriteToolSnatcharrUpdateSchedule       LlmWriteTool = "snatcharr_update_schedule"
-	LlmWriteToolSnatcharrDeleteSchedule       LlmWriteTool = "snatcharr_delete_schedule"
-	LlmWriteToolSnatcharrImportConfigarr      LlmWriteTool = "snatcharr_import_configarr"
-	LlmWriteToolSnatcharrUpdateSettings       LlmWriteTool = "snatcharr_update_settings"
+	LlmWriteToolSnatcharrTriggerRun                LlmWriteTool = "snatcharr_trigger_run"
+	LlmWriteToolSnatcharrUpdatePolicy              LlmWriteTool = "snatcharr_update_policy"
+	LlmWriteToolSnatcharrCancelRun                 LlmWriteTool = "snatcharr_cancel_run"
+	LlmWriteToolSnatcharrDeleteInstance            LlmWriteTool = "snatcharr_delete_instance"
+	LlmWriteToolSnatcharrCreateInstance            LlmWriteTool = "snatcharr_create_instance"
+	LlmWriteToolSnatcharrTestInstanceInput         LlmWriteTool = "snatcharr_test_instance_input"
+	LlmWriteToolSnatcharrUpdateInstance            LlmWriteTool = "snatcharr_update_instance"
+	LlmWriteToolSnatcharrTestInstance              LlmWriteTool = "snatcharr_test_instance"
+	LlmWriteToolSnatcharrUpdateQueuePolicy         LlmWriteTool = "snatcharr_update_queue_policy"
+	LlmWriteToolSnatcharrPreviewRun                LlmWriteTool = "snatcharr_preview_run"
+	LlmWriteToolSnatcharrDeleteInstanceEvents      LlmWriteTool = "snatcharr_delete_instance_events"
+	LlmWriteToolSnatcharrResetState                LlmWriteTool = "snatcharr_reset_state"
+	LlmWriteToolSnatcharrCreateSchedule            LlmWriteTool = "snatcharr_create_schedule"
+	LlmWriteToolSnatcharrUpdateSchedule            LlmWriteTool = "snatcharr_update_schedule"
+	LlmWriteToolSnatcharrDeleteSchedule            LlmWriteTool = "snatcharr_delete_schedule"
+	LlmWriteToolSnatcharrImportConfigarr           LlmWriteTool = "snatcharr_import_configarr"
+	LlmWriteToolSnatcharrUpdateSettings            LlmWriteTool = "snatcharr_update_settings"
+	LlmWriteToolSnatcharrCreateDownloadClient      LlmWriteTool = "snatcharr_create_download_client"
+	LlmWriteToolSnatcharrTestDownloadClientInput   LlmWriteTool = "snatcharr_test_download_client_input"
+	LlmWriteToolSnatcharrUpdateDownloadClient      LlmWriteTool = "snatcharr_update_download_client"
+	LlmWriteToolSnatcharrDeleteDownloadClient      LlmWriteTool = "snatcharr_delete_download_client"
+	LlmWriteToolSnatcharrTestDownloadClient        LlmWriteTool = "snatcharr_test_download_client"
+	LlmWriteToolSnatcharrDiscoverDownloadClients   LlmWriteTool = "snatcharr_discover_download_clients"
+	LlmWriteToolSnatcharrCreateSeerrLink           LlmWriteTool = "snatcharr_create_seerr_link"
+	LlmWriteToolSnatcharrTestSeerrLinkInput        LlmWriteTool = "snatcharr_test_seerr_link_input"
+	LlmWriteToolSnatcharrSnatchSeerrRequest        LlmWriteTool = "snatcharr_snatch_seerr_request"
+	LlmWriteToolSnatcharrUpdateSeerrLink           LlmWriteTool = "snatcharr_update_seerr_link"
+	LlmWriteToolSnatcharrDeleteSeerrLink           LlmWriteTool = "snatcharr_delete_seerr_link"
+	LlmWriteToolSnatcharrTestSeerrLink             LlmWriteTool = "snatcharr_test_seerr_link"
+	LlmWriteToolSnatcharrSyncSeerrLink             LlmWriteTool = "snatcharr_sync_seerr_link"
+	LlmWriteToolSnatcharrImportSeerrInstances      LlmWriteTool = "snatcharr_import_seerr_instances"
+	LlmWriteToolSnatcharrCreateProwlarrLink        LlmWriteTool = "snatcharr_create_prowlarr_link"
+	LlmWriteToolSnatcharrTestProwlarrLinkInput     LlmWriteTool = "snatcharr_test_prowlarr_link_input"
+	LlmWriteToolSnatcharrUpdateProwlarrLink        LlmWriteTool = "snatcharr_update_prowlarr_link"
+	LlmWriteToolSnatcharrDeleteProwlarrLink        LlmWriteTool = "snatcharr_delete_prowlarr_link"
+	LlmWriteToolSnatcharrTestProwlarrLink          LlmWriteTool = "snatcharr_test_prowlarr_link"
+	LlmWriteToolSnatcharrCreateNotificationChannel LlmWriteTool = "snatcharr_create_notification_channel"
+	LlmWriteToolSnatcharrUpdateNotificationChannel LlmWriteTool = "snatcharr_update_notification_channel"
+	LlmWriteToolSnatcharrDeleteNotificationChannel LlmWriteTool = "snatcharr_delete_notification_channel"
+	LlmWriteToolSnatcharrTestNotificationChannel   LlmWriteTool = "snatcharr_test_notification_channel"
+	LlmWriteToolSnatcharrCreateNotificationRule    LlmWriteTool = "snatcharr_create_notification_rule"
+	LlmWriteToolSnatcharrUpdateNotificationRule    LlmWriteTool = "snatcharr_update_notification_rule"
+	LlmWriteToolSnatcharrDeleteNotificationRule    LlmWriteTool = "snatcharr_delete_notification_rule"
 )
 
 // AllValues returns all LlmWriteTool values.
@@ -2204,6 +2230,32 @@ func (LlmWriteTool) AllValues() []LlmWriteTool {
 		LlmWriteToolSnatcharrDeleteSchedule,
 		LlmWriteToolSnatcharrImportConfigarr,
 		LlmWriteToolSnatcharrUpdateSettings,
+		LlmWriteToolSnatcharrCreateDownloadClient,
+		LlmWriteToolSnatcharrTestDownloadClientInput,
+		LlmWriteToolSnatcharrUpdateDownloadClient,
+		LlmWriteToolSnatcharrDeleteDownloadClient,
+		LlmWriteToolSnatcharrTestDownloadClient,
+		LlmWriteToolSnatcharrDiscoverDownloadClients,
+		LlmWriteToolSnatcharrCreateSeerrLink,
+		LlmWriteToolSnatcharrTestSeerrLinkInput,
+		LlmWriteToolSnatcharrSnatchSeerrRequest,
+		LlmWriteToolSnatcharrUpdateSeerrLink,
+		LlmWriteToolSnatcharrDeleteSeerrLink,
+		LlmWriteToolSnatcharrTestSeerrLink,
+		LlmWriteToolSnatcharrSyncSeerrLink,
+		LlmWriteToolSnatcharrImportSeerrInstances,
+		LlmWriteToolSnatcharrCreateProwlarrLink,
+		LlmWriteToolSnatcharrTestProwlarrLinkInput,
+		LlmWriteToolSnatcharrUpdateProwlarrLink,
+		LlmWriteToolSnatcharrDeleteProwlarrLink,
+		LlmWriteToolSnatcharrTestProwlarrLink,
+		LlmWriteToolSnatcharrCreateNotificationChannel,
+		LlmWriteToolSnatcharrUpdateNotificationChannel,
+		LlmWriteToolSnatcharrDeleteNotificationChannel,
+		LlmWriteToolSnatcharrTestNotificationChannel,
+		LlmWriteToolSnatcharrCreateNotificationRule,
+		LlmWriteToolSnatcharrUpdateNotificationRule,
+		LlmWriteToolSnatcharrDeleteNotificationRule,
 	}
 }
 
@@ -2243,6 +2295,58 @@ func (s LlmWriteTool) MarshalText() ([]byte, error) {
 	case LlmWriteToolSnatcharrImportConfigarr:
 		return []byte(s), nil
 	case LlmWriteToolSnatcharrUpdateSettings:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrCreateDownloadClient:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrTestDownloadClientInput:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrUpdateDownloadClient:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrDeleteDownloadClient:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrTestDownloadClient:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrDiscoverDownloadClients:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrCreateSeerrLink:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrTestSeerrLinkInput:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrSnatchSeerrRequest:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrUpdateSeerrLink:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrDeleteSeerrLink:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrTestSeerrLink:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrSyncSeerrLink:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrImportSeerrInstances:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrCreateProwlarrLink:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrTestProwlarrLinkInput:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrUpdateProwlarrLink:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrDeleteProwlarrLink:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrTestProwlarrLink:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrCreateNotificationChannel:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrUpdateNotificationChannel:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrDeleteNotificationChannel:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrTestNotificationChannel:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrCreateNotificationRule:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrUpdateNotificationRule:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrDeleteNotificationRule:
 		return []byte(s), nil
 	default:
 		return nil, errors.Errorf("invalid value: %q", s)
@@ -2302,6 +2406,84 @@ func (s *LlmWriteTool) UnmarshalText(data []byte) error {
 		return nil
 	case LlmWriteToolSnatcharrUpdateSettings:
 		*s = LlmWriteToolSnatcharrUpdateSettings
+		return nil
+	case LlmWriteToolSnatcharrCreateDownloadClient:
+		*s = LlmWriteToolSnatcharrCreateDownloadClient
+		return nil
+	case LlmWriteToolSnatcharrTestDownloadClientInput:
+		*s = LlmWriteToolSnatcharrTestDownloadClientInput
+		return nil
+	case LlmWriteToolSnatcharrUpdateDownloadClient:
+		*s = LlmWriteToolSnatcharrUpdateDownloadClient
+		return nil
+	case LlmWriteToolSnatcharrDeleteDownloadClient:
+		*s = LlmWriteToolSnatcharrDeleteDownloadClient
+		return nil
+	case LlmWriteToolSnatcharrTestDownloadClient:
+		*s = LlmWriteToolSnatcharrTestDownloadClient
+		return nil
+	case LlmWriteToolSnatcharrDiscoverDownloadClients:
+		*s = LlmWriteToolSnatcharrDiscoverDownloadClients
+		return nil
+	case LlmWriteToolSnatcharrCreateSeerrLink:
+		*s = LlmWriteToolSnatcharrCreateSeerrLink
+		return nil
+	case LlmWriteToolSnatcharrTestSeerrLinkInput:
+		*s = LlmWriteToolSnatcharrTestSeerrLinkInput
+		return nil
+	case LlmWriteToolSnatcharrSnatchSeerrRequest:
+		*s = LlmWriteToolSnatcharrSnatchSeerrRequest
+		return nil
+	case LlmWriteToolSnatcharrUpdateSeerrLink:
+		*s = LlmWriteToolSnatcharrUpdateSeerrLink
+		return nil
+	case LlmWriteToolSnatcharrDeleteSeerrLink:
+		*s = LlmWriteToolSnatcharrDeleteSeerrLink
+		return nil
+	case LlmWriteToolSnatcharrTestSeerrLink:
+		*s = LlmWriteToolSnatcharrTestSeerrLink
+		return nil
+	case LlmWriteToolSnatcharrSyncSeerrLink:
+		*s = LlmWriteToolSnatcharrSyncSeerrLink
+		return nil
+	case LlmWriteToolSnatcharrImportSeerrInstances:
+		*s = LlmWriteToolSnatcharrImportSeerrInstances
+		return nil
+	case LlmWriteToolSnatcharrCreateProwlarrLink:
+		*s = LlmWriteToolSnatcharrCreateProwlarrLink
+		return nil
+	case LlmWriteToolSnatcharrTestProwlarrLinkInput:
+		*s = LlmWriteToolSnatcharrTestProwlarrLinkInput
+		return nil
+	case LlmWriteToolSnatcharrUpdateProwlarrLink:
+		*s = LlmWriteToolSnatcharrUpdateProwlarrLink
+		return nil
+	case LlmWriteToolSnatcharrDeleteProwlarrLink:
+		*s = LlmWriteToolSnatcharrDeleteProwlarrLink
+		return nil
+	case LlmWriteToolSnatcharrTestProwlarrLink:
+		*s = LlmWriteToolSnatcharrTestProwlarrLink
+		return nil
+	case LlmWriteToolSnatcharrCreateNotificationChannel:
+		*s = LlmWriteToolSnatcharrCreateNotificationChannel
+		return nil
+	case LlmWriteToolSnatcharrUpdateNotificationChannel:
+		*s = LlmWriteToolSnatcharrUpdateNotificationChannel
+		return nil
+	case LlmWriteToolSnatcharrDeleteNotificationChannel:
+		*s = LlmWriteToolSnatcharrDeleteNotificationChannel
+		return nil
+	case LlmWriteToolSnatcharrTestNotificationChannel:
+		*s = LlmWriteToolSnatcharrTestNotificationChannel
+		return nil
+	case LlmWriteToolSnatcharrCreateNotificationRule:
+		*s = LlmWriteToolSnatcharrCreateNotificationRule
+		return nil
+	case LlmWriteToolSnatcharrUpdateNotificationRule:
+		*s = LlmWriteToolSnatcharrUpdateNotificationRule
+		return nil
+	case LlmWriteToolSnatcharrDeleteNotificationRule:
+		*s = LlmWriteToolSnatcharrDeleteNotificationRule
 		return nil
 	default:
 		return errors.Errorf("invalid value: %q", data)
