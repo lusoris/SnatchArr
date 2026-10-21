@@ -14,7 +14,7 @@ x-linuxserver: &linuxserver
 services:
   qbittorrent:
     <<: *linuxserver
-    image: lscr.io/linuxserver/qbittorrent:5.2.4@sha256:97333cc1ccf903e0bbcd8eb67e3332e4970e9c1ecabe145e499e9c0847ebcaed
+    image: docker.io/linuxserver/qbittorrent:5.2.4@sha256:97333cc1ccf903e0bbcd8eb67e3332e4970e9c1ecabe145e499e9c0847ebcaed
     # The WebUI refuses a Host header whose port is not its own (HTTP 401), so it listens on
     # the published port.
     environment:
@@ -33,7 +33,7 @@ services:
 
   deluge:
     <<: *linuxserver
-    image: lscr.io/linuxserver/deluge:2.2.0@sha256:bf306ddd5e6d4a85d3d05ce1b947ab6e344e7fca1b7740b77c58ce170118c7ff
+    image: docker.io/linuxserver/deluge:2.2.0@sha256:bf306ddd5e6d4a85d3d05ce1b947ab6e344e7fca1b7740b77c58ce170118c7ff
     ports: ["127.0.0.1:${DELUGE_PORT:-18103}:8112"]
 
   rtorrent:

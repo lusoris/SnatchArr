@@ -80,7 +80,7 @@ services:
 
   qbittorrent:
     <<: *linuxserver
-    image: lscr.io/linuxserver/qbittorrent:5.2.4@sha256:97333cc1ccf903e0bbcd8eb67e3332e4970e9c1ecabe145e499e9c0847ebcaed
+    image: docker.io/linuxserver/qbittorrent:5.2.4@sha256:97333cc1ccf903e0bbcd8eb67e3332e4970e9c1ecabe145e499e9c0847ebcaed
     environment:
       <<: *env
       WEBUI_PORT: ${QBITTORRENT_PORT:-18310}

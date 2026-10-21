@@ -9,7 +9,7 @@
 #   tools/ci/workflow-check.sh [ROOT]      (default: this repository)
 #
 # Exit status: 0 clean, 1 a finding or a failed run, 2 usage.
-# Needs docker, jq, network and GH_TOKEN or GITHUB_TOKEN (read access is enough).
+# Needs docker (actionlint), python3 with venv, jq, network, token.
 set -euo pipefail
 
 if [ $# -gt 1 ]; then
@@ -28,17 +28,27 @@ if [ -z "$TOKEN" ]; then
   echo "error: GH_TOKEN or GITHUB_TOKEN is required: without a token the version comments are not checked" >&2
   exit 1
 fi
+# zizmor now runs on the host and would read a second token from the environment; it gets $TOKEN only.
+unset GITHUB_TOKEN
 
 ACTIONLINT_IMAGE=""
-ZIZMOR_IMAGE=""
 # shellcheck source=/dev/null
 . "$REPO_ROOT/tools/ci/tool-versions.env"
-for image in "$ACTIONLINT_IMAGE" "$ZIZMOR_IMAGE"; do
+IMAGES=("$ACTIONLINT_IMAGE")
+for image in "${IMAGES[@]}"; do
   if ! [[ "$image" =~ ^[a-z0-9./-]+:[A-Za-z0-9._-]+@sha256:[a-f0-9]{64}$ ]]; then
     echo "error: tools/ci/tool-versions.env: \"$image\" is not an image pinned by version and digest" >&2
     exit 1
   fi
 done
+
+ZIZMOR_REQ="$REPO_ROOT/tools/ci/zizmor-requirements.txt"
+if [ ! -f "$ZIZMOR_REQ" ] || \
+   ! grep -qE '^zizmor==[0-9]+(\.[0-9]+)+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?([[:space:]]*\\)?$' "$ZIZMOR_REQ" || \
+   ! grep -qE -e '--hash=sha256:[a-f0-9]{64}' "$ZIZMOR_REQ"; then
+  echo "error: tools/ci/zizmor-requirements.txt: zizmor is not pinned by version and hash" >&2
+  exit 1
+fi
 
 shopt -s nullglob
 FILES=()
@@ -96,10 +106,21 @@ echo "actionlint: ${#FILES[@]} workflow files passed"
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
+
+ZIZMOR="${ZIZMOR_BIN:-}"
+if [ -z "$ZIZMOR" ]; then
+  if ! python3 -m venv "$WORK/zizmor" || \
+     ! "$WORK/zizmor/bin/pip" install --quiet --disable-pip-version-check \
+       --require-hashes --no-deps --only-binary :all: -r "$ZIZMOR_REQ"; then
+    echo "error: failed to install zizmor from tools/ci/zizmor-requirements.txt" >&2
+    exit 1
+  fi
+  ZIZMOR="$WORK/zizmor/bin/zizmor"
+fi
+
 rc=0
-GH_TOKEN="$TOKEN" "$DOCKER" run --rm -e GH_TOKEN -v "$ROOT:/repo:ro" -w /repo \
-  "$ZIZMOR_IMAGE" --no-progress --color never --format json --persona pedantic \
-  --no-ignores --no-config --strict-collection "${FILES[@]}" \
+(cd "$ROOT" && GH_TOKEN="$TOKEN" "$ZIZMOR" --no-progress --color never --format json --persona pedantic \
+  --no-ignores --no-config --strict-collection "${FILES[@]}") \
   > "$WORK/report.json" 2> "$WORK/zizmor.log" || rc=$?
 # 0 = no finding, 11 to 14 = findings by highest severity; anything else is a failed run.
 case "$rc" in
