@@ -3953,6 +3953,50 @@ func (s *ListAPIKeysOKApplicationJSON) UnmarshalJSON(data []byte) error {
 	return s.Decode(d)
 }
 
+// Encode encodes LlmWriteTool as json.
+func (s LlmWriteTool) Encode(e *jx.Encoder) {
+	e.Str(string(s))
+}
+
+// Decode decodes LlmWriteTool from json.
+func (s *LlmWriteTool) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode LlmWriteTool to nil")
+	}
+	v, err := d.StrBytes()
+	if err != nil {
+		return err
+	}
+	// Try to use constant string.
+	switch LlmWriteTool(v) {
+	case LlmWriteToolSnatcharrTriggerRun:
+		*s = LlmWriteToolSnatcharrTriggerRun
+	case LlmWriteToolSnatcharrUpdatePolicy:
+		*s = LlmWriteToolSnatcharrUpdatePolicy
+	case LlmWriteToolSnatcharrCancelRun:
+		*s = LlmWriteToolSnatcharrCancelRun
+	case LlmWriteToolSnatcharrDeleteInstance:
+		*s = LlmWriteToolSnatcharrDeleteInstance
+	default:
+		*s = LlmWriteTool(v)
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s LlmWriteTool) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *LlmWriteTool) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
 // Encode implements json.Marshaler.
 func (s *LogAttr) Encode(e *jx.Encoder) {
 	e.ObjStart()
@@ -12407,6 +12451,16 @@ func (s *Settings) encodeFields(e *jx.Encoder) {
 		}
 	}
 	{
+		if s.LlmWriteTools != nil {
+			e.FieldStart("llm_write_tools")
+			e.ArrStart()
+			for _, elem := range s.LlmWriteTools {
+				elem.Encode(e)
+			}
+			e.ArrEnd()
+		}
+	}
+	{
 		if s.UpdatedAt.Set {
 			e.FieldStart("updated_at")
 			s.UpdatedAt.Encode(e, json.EncodeDateTime)
@@ -12414,14 +12468,15 @@ func (s *Settings) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfSettings = [7]string{
+var jsonFieldsNameOfSettings = [8]string{
 	0: "history_retention_days",
 	1: "user_agent",
 	2: "global_hourly_cap",
 	3: "search_priority_preset",
 	4: "download_priority_preset",
 	5: "llm_enabled",
-	6: "updated_at",
+	6: "llm_write_tools",
+	7: "updated_at",
 }
 
 // Decode decodes Settings from json.
@@ -12499,6 +12554,23 @@ func (s *Settings) Decode(d *jx.Decoder) error {
 				return nil
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"llm_enabled\"")
+			}
+		case "llm_write_tools":
+			if err := func() error {
+				s.LlmWriteTools = make([]LlmWriteTool, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem LlmWriteTool
+					if err := elem.Decode(d); err != nil {
+						return err
+					}
+					s.LlmWriteTools = append(s.LlmWriteTools, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"llm_write_tools\"")
 			}
 		case "updated_at":
 			if err := func() error {

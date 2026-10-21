@@ -202,6 +202,10 @@ func instancePriorityToOAS(kind domain.AppKind, p domain.InstancePriority, cfg d
 }
 
 func settingsToOAS(s domain.Settings) *oas.Settings {
+	tools := make([]oas.LlmWriteTool, len(s.LLMWriteTools))
+	for i, t := range s.LLMWriteTools {
+		tools[i] = oas.LlmWriteTool(t)
+	}
 	return &oas.Settings{
 		HistoryRetentionDays:   s.HistoryRetentionDays,
 		UserAgent:              s.UserAgent,
@@ -209,11 +213,16 @@ func settingsToOAS(s domain.Settings) *oas.Settings {
 		SearchPriorityPreset:   priorityPresetToOAS(s.SearchPriorityPreset),
 		DownloadPriorityPreset: priorityPresetToOAS(s.DownloadPriorityPreset),
 		LlmEnabled:             oas.NewOptBool(s.LLMEnabled),
+		LlmWriteTools:          tools,
 		UpdatedAt:              oas.NewOptDateTime(s.UpdatedAt),
 	}
 }
 
 func settingsFromOAS(in *oas.Settings) domain.Settings {
+	tools := make([]string, len(in.LlmWriteTools))
+	for i, t := range in.LlmWriteTools {
+		tools[i] = string(t)
+	}
 	return domain.Settings{
 		HistoryRetentionDays:   in.HistoryRetentionDays,
 		UserAgent:              in.UserAgent,
@@ -221,6 +230,7 @@ func settingsFromOAS(in *oas.Settings) domain.Settings {
 		SearchPriorityPreset:   priorityPresetFromOAS(in.SearchPriorityPreset),
 		DownloadPriorityPreset: priorityPresetFromOAS(in.DownloadPriorityPreset),
 		LLMEnabled:             in.LlmEnabled.Or(false),
+		LLMWriteTools:          tools,
 	}
 }
 

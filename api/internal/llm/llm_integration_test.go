@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 	"unicode"
@@ -29,9 +30,11 @@ import (
 	"github.com/golusoris/golusoris/core/id"
 
 	"github.com/lusoris/SnatchArr/api/internal/auth"
+	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/buildinfo"
 	"github.com/lusoris/SnatchArr/api/internal/config"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
+	"github.com/lusoris/SnatchArr/api/internal/events"
 	"github.com/lusoris/SnatchArr/api/internal/httpapi"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
 	"github.com/lusoris/SnatchArr/api/internal/llm"
@@ -44,14 +47,33 @@ import (
 
 func TestMain(m *testing.M) { os.Exit(storetest.Main(m)) }
 
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
 type mcpFixture struct {
 	st          *store.Store
 	settingsSvc *settings.Service
 	instSvc     *instances.Service
+	polSvc      *policies.Service
 	apiKeys     *auth.APIKeys
 	admin       domain.User
 	srv         *httptest.Server
 	client      *http.Client
+	logBuf      *syncBuffer
 }
 
 func newMCPFixture(t *testing.T) *mcpFixture {
@@ -59,7 +81,8 @@ func newMCPFixture(t *testing.T) *mcpFixture {
 	st := storetest.New(t)
 	clk := clock.NewFake()
 	ids := id.New()
-	logger := slog.New(slog.DiscardHandler)
+	logBuf := &syncBuffer{}
+	logger := slog.New(slog.NewTextHandler(logBuf, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	enc, err := crypto.NewEncryptor(bytes.Repeat([]byte{0x42}, 32))
 	if err != nil {
 		t.Fatalf("encryptor: %v", err)
@@ -88,11 +111,13 @@ func newMCPFixture(t *testing.T) *mcpFixture {
 	instSvc := instances.New(st, enc, clk, ids, nil, logger)
 	polSvc := policies.New(st, clk)
 	settingsSvc := settings.New(st, clk)
+	runs := snatch.NewRuns(st, clk, ids)
+	rec := snatch.NewRecorder(st, clk, events.New(logger))
 	workers := snatch.NewWorkers(st, clk)
 	cfg := config.Options{Profile: config.ProfileDev}
 	build := buildinfo.Info{Version: "0.1.0-test", Commit: "abc1234", Date: "2026-10-21"}
 	handlers := httpapi.NewHandlers(build, cfg, clk, authSvc, apiKeys, sessMgr, instSvc, polSvc, logger, httpapi.Deps{
-		Workers: workers, Settings: settingsSvc,
+		Runs: runs, Rec: rec, Workers: workers, Settings: settingsSvc,
 	})
 	sec := httpapi.NewSecurity(sessMgr, cfg, keys, authSvc, apiKeys, clk, logger)
 	llmSvc := llm.New(build, settingsSvc, sec, handlers, logger)
@@ -101,18 +126,19 @@ func newMCPFixture(t *testing.T) *mcpFixture {
 	srv := httptest.NewServer(r)
 	t.Cleanup(srv.Close)
 	return &mcpFixture{
-		st: st, settingsSvc: settingsSvc, instSvc: instSvc, apiKeys: apiKeys, admin: admin,
-		srv: srv, client: &http.Client{Timeout: 10 * time.Second},
+		st: st, settingsSvc: settingsSvc, instSvc: instSvc, polSvc: polSvc, apiKeys: apiKeys, admin: admin,
+		srv: srv, client: &http.Client{Timeout: 10 * time.Second}, logBuf: logBuf,
 	}
 }
 
-func enableLLM(t *testing.T, f *mcpFixture) {
+func enableLLM(t *testing.T, f *mcpFixture, writeTools ...string) {
 	t.Helper()
 	cfg, err := f.settingsSvc.Get(t.Context())
 	if err != nil {
 		t.Fatalf("settings.Get: %v", err)
 	}
 	cfg.LLMEnabled = true
+	cfg.LLMWriteTools = writeTools
 	if _, err := f.settingsSvc.Update(t.Context(), cfg); err != nil {
 		t.Fatalf("settings.Update: %v", err)
 	}
@@ -177,6 +203,10 @@ func TestMCPMiddlewareGates(t *testing.T) {
 		"jsonrpc": "2.0", "id": 2, "method": "tools/call",
 		"params": map[string]any{"name": "snatcharr_list_instances", "arguments": map[string]any{}},
 	}
+	callTriggerRunRPC := map[string]any{
+		"jsonrpc": "2.0", "id": 3, "method": "tools/call",
+		"params": map[string]any{"name": "snatcharr_trigger_run", "arguments": map[string]any{}},
+	}
 
 	cases := []struct {
 		name        string
@@ -225,6 +255,14 @@ func TestMCPMiddlewareGates(t *testing.T) {
 			payload:     callListInstancesRPC,
 			wantStatus:  http.StatusForbidden,
 			wantWWWAuth: []string{`error="insufficient_scope"`, `scope="core:read"`},
+		},
+		{
+			name:        "negative missing write scope on write tool returns 403 before opt-in check",
+			enable:      true,
+			scopes:      []string{domain.ScopeCoreRead},
+			payload:     callTriggerRunRPC,
+			wantStatus:  http.StatusForbidden,
+			wantWWWAuth: []string{`error="insufficient_scope"`, `scope="core:write"`},
 		},
 	}
 
@@ -447,7 +485,11 @@ func TestMCPRegistryNaming(t *testing.T) {
 		t.Fatal("no tools registered")
 	}
 
+	var writeNames []string
 	for _, spec := range tools {
+		if !spec.ReadOnly {
+			writeNames = append(writeNames, spec.Name)
+		}
 		t.Run(spec.Name, func(t *testing.T) {
 			t.Parallel()
 			if !namePattern.MatchString(spec.Name) {
@@ -457,19 +499,25 @@ func TestMCPRegistryNaming(t *testing.T) {
 			if spec.Name != expectedName {
 				t.Fatalf("tool name %q does not match snake_case(operationId) %q", spec.Name, expectedName)
 			}
-			if !spec.ReadOnly {
-				t.Fatalf("read tool %q must have ReadOnly=true", spec.Name)
-			}
-			if spec.Destructive {
+			if spec.ReadOnly && spec.Destructive {
 				t.Fatalf("read tool %q must have Destructive=false", spec.Name)
 			}
 			if spec.Scope == "" {
-				t.Fatalf("read tool %q has empty Scope", spec.Name)
+				t.Fatalf("tool %q has empty Scope", spec.Name)
 			}
 			if spec.Description == "" {
-				t.Fatalf("read tool %q has empty Description", spec.Name)
+				t.Fatalf("tool %q has empty Description", spec.Name)
 			}
 		})
+	}
+
+	enumVals := oas.LlmWriteTool("").AllValues()
+	wantEnum := make([]string, len(enumVals))
+	for i, v := range enumVals {
+		wantEnum[i] = string(v)
+	}
+	if !slices.Equal(writeNames, wantEnum) {
+		t.Fatalf("registry write tools = %v, want LlmWriteTool enum %v", writeNames, wantEnum)
 	}
 }
 
@@ -537,9 +585,14 @@ func TestMCPToolsListScopeFiltering(t *testing.T) {
 			got := callToolsList(t, f, token)
 
 			if tc.wantCountAll {
-				registered := llm.RegisteredToolsForTest()
-				if len(got) != len(registered) {
-					t.Fatalf("tools/list count = %d, want registered count %d; tools = %v", len(got), len(registered), got)
+				wantReadCount := 0
+				for _, spec := range llm.RegisteredToolsForTest() {
+					if spec.ReadOnly {
+						wantReadCount++
+					}
+				}
+				if len(got) != wantReadCount {
+					t.Fatalf("tools/list count = %d, want registered read count %d; tools = %v", len(got), wantReadCount, got)
 				}
 			}
 			if len(tc.wantExact) > 0 {
@@ -662,5 +715,187 @@ func TestMCPParameterizedToolCall(t *testing.T) {
 				t.Fatalf("contentText = %q, want substring %q", got.ContentText, tc.wantDetail)
 			}
 		})
+	}
+}
+
+func TestMCPWriteToolOptInFence(t *testing.T) {
+	t.Parallel()
+	f := newMCPFixture(t)
+	enableLLM(t, f)
+	inst, err := f.instSvc.Create(t.Context(), instances.Input{
+		Kind: domain.KindRadarr, Name: "Radarr Write", BaseURL: "http://radarr.internal:7878", APIKey: "radarr-secret-key", Enabled: true,
+	})
+	if err != nil {
+		t.Fatalf("instSvc.Create: %v", err)
+	}
+	createdKey, err := f.apiKeys.Create(t.Context(), f.admin.ID, "writer", nil, domain.ScopeCoreRead, domain.ScopeCoreWrite)
+	if err != nil {
+		t.Fatalf("apiKeys.Create: %v", err)
+	}
+	token := createdKey.Secret
+
+	// Not opted in: hidden from tools/list and refused with -32021 (ADR planted case 1).
+	if slices.Contains(callToolsList(t, f, token), domain.LLMWriteToolTriggerRun) {
+		t.Fatal("tools/list included snatcharr_trigger_run before opt-in")
+	}
+	assertRefusedWriteCall(t, f, token, createdKey.ID, inst.ID)
+
+	// Opted in: visible in tools/list and succeeds on call.
+	enableLLM(t, f, domain.LLMWriteToolTriggerRun)
+	listed := callToolsList(t, f, token)
+	if !slices.Contains(listed, domain.LLMWriteToolTriggerRun) || slices.Contains(listed, domain.LLMWriteToolDeleteInstance) {
+		t.Fatalf("tools/list after opt-in = %v, want trigger_run only", listed)
+	}
+	got := callToolWithParams(t, f, token, domain.LLMWriteToolTriggerRun, map[string]any{
+		"id": inst.ID.String(), "body": map[string]any{"kind": "missing"},
+	})
+	if got.IsError {
+		t.Fatalf("trigger_run after opt-in failed: %s", got.ContentText)
+	}
+	assertLogContains(t, f.logBuf.String(), "llm: write tool called", "tool=snatcharr_trigger_run", "owner="+f.admin.ID.String(), "key_id="+createdKey.ID)
+	if runs := listRunsCount(t, f, token); runs != 1 {
+		t.Fatalf("runs count after opted-in trigger_run = %d, want 1", runs)
+	}
+}
+
+func assertRefusedWriteCall(t *testing.T, f *mcpFixture, token, keyID string, instID uuid.UUID) {
+	t.Helper()
+	res := postMCP(t, f, token, "", map[string]any{
+		"jsonrpc": "2.0", "id": 42, "method": "tools/call",
+		"params": map[string]any{
+			"name":      domain.LLMWriteToolTriggerRun,
+			"arguments": map[string]any{"id": instID.String(), "body": map[string]any{"kind": "missing"}},
+		},
+	})
+	if res.StatusCode != http.StatusOK || !strings.HasPrefix(res.Header.Get("Content-Type"), "application/json") {
+		t.Fatalf("refused write status=%d ct=%q body=%s", res.StatusCode, res.Header.Get("Content-Type"), string(res.Body))
+	}
+	var rpcErr struct {
+		JSONRPC string `json:"jsonrpc"`
+		ID      int    `json:"id"`
+		Error   struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(res.Body, &rpcErr); err != nil {
+		t.Fatalf("decode JSON-RPC error: %v (%s)", err, string(res.Body))
+	}
+	if rpcErr.ID != 42 || rpcErr.Error.Code != llm.ErrCodeToolNotEnabled || rpcErr.Error.Message != "tool not enabled by administrator" {
+		t.Fatalf("rpcErr = %+v, want id=42 code=-32021 msg='tool not enabled by administrator'", rpcErr)
+	}
+	assertLogContains(t, f.logBuf.String(), "llm: write tool refused", "tool=snatcharr_trigger_run", "owner="+f.admin.ID.String(), "key_id="+keyID, "reason=not_opted_in")
+	if runs := listRunsCount(t, f, token); runs != 0 {
+		t.Fatalf("runs count after refused trigger_run = %d, want 0", runs)
+	}
+}
+
+func listRunsCount(t *testing.T, f *mcpFixture, token string) int {
+	t.Helper()
+	raw := callToolStructured(t, f, token, "snatcharr_list_runs")
+	var runs []map[string]any
+	if err := json.Unmarshal(raw, &runs); err != nil {
+		t.Fatalf("unmarshal list_runs: %v (%s)", err, string(raw))
+	}
+	return len(runs)
+}
+
+func assertLogContains(t *testing.T, logs string, wantSubstrings ...string) {
+	t.Helper()
+	for _, sub := range wantSubstrings {
+		if !strings.Contains(logs, sub) {
+			t.Fatalf("logs missing %q in:\n%s", sub, logs)
+		}
+	}
+}
+
+func TestMCPDestructiveToolConfirmFence(t *testing.T) {
+	t.Parallel()
+	f := newMCPFixture(t)
+	enableLLM(t, f, domain.LLMWriteToolDeleteInstance, domain.LLMWriteToolTriggerRun, domain.LLMWriteToolCancelRun)
+	inst, err := f.instSvc.Create(t.Context(), instances.Input{
+		Kind: domain.KindRadarr, Name: "Radarr Delete", BaseURL: "http://radarr.internal:7878", APIKey: "radarr-secret-key", Enabled: true,
+	})
+	if err != nil {
+		t.Fatalf("instSvc.Create: %v", err)
+	}
+	token := issueKey(t, f, "destroyer", domain.ScopeCoreRead, domain.ScopeCoreWrite)
+
+	// ADR planted case 4: confirm absent and confirm false are refused before mutation.
+	for _, args := range []map[string]any{
+		{"id": inst.ID.String()},
+		{"id": inst.ID.String(), "confirm": false},
+	} {
+		got := callToolWithParams(t, f, token, domain.LLMWriteToolDeleteInstance, args)
+		if !got.IsError || got.ContentText != "confirmation required: pass confirm=true" {
+			t.Fatalf("delete_instance(%v) = isError:%v text:%q", args, got.IsError, got.ContentText)
+		}
+		if _, gErr := f.instSvc.Get(t.Context(), inst.ID); gErr != nil {
+			t.Fatalf("instance deleted without confirm=true: %v", gErr)
+		}
+	}
+	assertLogContains(t, f.logBuf.String(), "llm: destructive tool unconfirmed", "tool=snatcharr_delete_instance")
+
+	// Positive: confirm=true deletes the instance.
+	delGot := callToolWithParams(t, f, token, domain.LLMWriteToolDeleteInstance, map[string]any{
+		"id": inst.ID.String(), "confirm": true,
+	})
+	if delGot.IsError {
+		t.Fatalf("delete_instance(confirm=true) failed: %s", delGot.ContentText)
+	}
+	if _, gErr := f.instSvc.Get(t.Context(), inst.ID); gErr == nil {
+		t.Fatal("instance still exists after delete_instance(confirm=true)")
+	}
+}
+
+func TestMCPUpdatePolicyAndCancelRun(t *testing.T) {
+	t.Parallel()
+	f := newMCPFixture(t)
+	enableLLM(t, f, domain.LLMWriteToolUpdatePolicy, domain.LLMWriteToolTriggerRun, domain.LLMWriteToolCancelRun)
+	inst, err := f.instSvc.Create(t.Context(), instances.Input{
+		Kind: domain.KindRadarr, Name: "Radarr Pol", BaseURL: "http://radarr.internal:7878", APIKey: "radarr-secret-key", Enabled: true,
+	})
+	if err != nil {
+		t.Fatalf("instSvc.Create: %v", err)
+	}
+	token := issueKey(t, f, "pol-writer", domain.ScopeCoreRead, domain.ScopeCoreWrite)
+
+	// Negative: invalid body fails validation in decodeOASBody.
+	badPol := callToolWithParams(t, f, token, domain.LLMWriteToolUpdatePolicy, map[string]any{
+		"id": inst.ID.String(), "body": map[string]any{"missing_per_cycle": -1},
+	})
+	if !badPol.IsError {
+		t.Fatal("update_policy with invalid body expected IsError=true")
+	}
+
+	// Positive: valid SnatchPolicy body updates policy.
+	polGot := callToolWithParams(t, f, token, "snatcharr_get_policy", map[string]any{"id": inst.ID.String()})
+	var polBody map[string]any
+	if err := json.Unmarshal(polGot.StructuredContent, &polBody); err != nil {
+		t.Fatalf("decode get_policy: %v", err)
+	}
+	polBody["missing_per_cycle"] = 7
+	goodPol := callToolWithParams(t, f, token, domain.LLMWriteToolUpdatePolicy, map[string]any{
+		"id": inst.ID.String(), "body": polBody,
+	})
+	if goodPol.IsError {
+		t.Fatalf("update_policy valid failed: %s", goodPol.ContentText)
+	}
+
+	// Queue a run and cancel it with confirm=true.
+	trig := callToolWithParams(t, f, token, domain.LLMWriteToolTriggerRun, map[string]any{
+		"id": inst.ID.String(), "body": map[string]any{"kind": "missing"},
+	})
+	var runOut struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(trig.StructuredContent, &runOut); err != nil {
+		t.Fatalf("decode triggered run: %v", err)
+	}
+	cancelRes := callToolWithParams(t, f, token, domain.LLMWriteToolCancelRun, map[string]any{
+		"id": runOut.ID, "confirm": true,
+	})
+	if cancelRes.IsError {
+		t.Fatalf("cancel_run(confirm=true) failed: %s", cancelRes.ContentText)
 	}
 }

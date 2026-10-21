@@ -219,6 +219,7 @@ type Setting struct {
 	LlmEnabled             bool
 	SearchPriorityPreset   []byte
 	DownloadPriorityPreset []byte
+	LlmWriteTools          []string
 }
 
 type SnatchEvent struct {

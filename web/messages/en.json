@@ -538,5 +538,10 @@
 	"instance_priority_clear": "Clear overrides",
 	"instance_priority_save": "Save priority",
 	"instance_priority_saved": "Instance priority saved",
-	"settings_llm_enabled": "Enable MCP server (/api/v1/mcp)"
+	"settings_llm_enabled": "Enable MCP server (/api/v1/mcp)",
+	"settings_llm_write_tools": "Allowed MCP write tools",
+	"settings_llm_tool_trigger_run": "Trigger snatch run",
+	"settings_llm_tool_update_policy": "Update snatch policy",
+	"settings_llm_tool_cancel_run": "Cancel snatch run",
+	"settings_llm_tool_delete_instance": "Delete instance"
 }

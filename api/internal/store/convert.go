@@ -155,6 +155,10 @@ func presetFromJSON(raw []byte) domain.PriorityPreset {
 
 // SettingsFromRow converts the singleton settings row.
 func SettingsFromRow(r sqlcgen.Setting) domain.Settings {
+	writeTools := r.LlmWriteTools
+	if writeTools == nil {
+		writeTools = []string{}
+	}
 	return domain.Settings{
 		HistoryRetentionDays:   int(r.HistoryRetentionDays),
 		UserAgent:              r.UserAgent,
@@ -162,6 +166,7 @@ func SettingsFromRow(r sqlcgen.Setting) domain.Settings {
 		SearchPriorityPreset:   presetFromJSON(r.SearchPriorityPreset),
 		DownloadPriorityPreset: presetFromJSON(r.DownloadPriorityPreset),
 		LLMEnabled:             r.LlmEnabled,
+		LLMWriteTools:          writeTools,
 		UpdatedAt:              r.UpdatedAt,
 	}
 }

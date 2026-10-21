@@ -2430,6 +2430,13 @@ components:
         download_source:
           $ref: "#/components/schemas/PrioritySource"
 
+    LlmWriteTool:
+      type: string
+      enum:
+        - snatcharr_trigger_run
+        - snatcharr_update_policy
+        - snatcharr_cancel_run
+        - snatcharr_delete_instance
     Settings:
       type: object
       required:
@@ -2460,6 +2467,12 @@ components:
           type: boolean
           default: false
           description: "Whether the Model Context Protocol (MCP) server at /api/v1/mcp is enabled."
+        llm_write_tools:
+          type: array
+          uniqueItems: true
+          description: "MCP write tools enabled by the administrator; an omitted list enables none."
+          items:
+            $ref: "#/components/schemas/LlmWriteTool"
         updated_at:
           type: string
           format: date-time

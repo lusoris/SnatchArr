@@ -41,4 +41,24 @@ func TestSettingsValidate(t *testing.T) {
 			t.Errorf("case %d: expected ErrInvalid, got %v", i, err)
 		}
 	}
+
+	withWriteTools := domain.Settings{
+		HistoryRetentionDays:   90,
+		UserAgent:              "SnatchArr/1.0",
+		SearchPriorityPreset:   preset,
+		DownloadPriorityPreset: preset,
+		LLMWriteTools:          []string{domain.LLMWriteToolTriggerRun, domain.LLMWriteToolDeleteInstance},
+	}
+	if err := withWriteTools.Validate(); err != nil {
+		t.Fatalf("valid llm_write_tools rejected: %v", err)
+	}
+	badWriteTools := []domain.Settings{
+		{HistoryRetentionDays: 90, UserAgent: "x", SearchPriorityPreset: preset, DownloadPriorityPreset: preset, LLMWriteTools: []string{"not_a_tool"}},
+		{HistoryRetentionDays: 90, UserAgent: "x", SearchPriorityPreset: preset, DownloadPriorityPreset: preset, LLMWriteTools: []string{domain.LLMWriteToolTriggerRun, domain.LLMWriteToolTriggerRun}},
+	}
+	for i, s := range badWriteTools {
+		if err := s.Validate(); !errors.Is(err, domain.ErrBadRequest) {
+			t.Errorf("badWriteTools %d: expected ErrBadRequest, got %v", i, err)
+		}
+	}
 }

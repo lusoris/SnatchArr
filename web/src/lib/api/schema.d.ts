@@ -1474,6 +1474,8 @@ export interface components {
             search_source: components["schemas"]["PrioritySource"];
             download_source: components["schemas"]["PrioritySource"];
         };
+        /** @enum {string} */
+        LlmWriteTool: "snatcharr_trigger_run" | "snatcharr_update_policy" | "snatcharr_cancel_run" | "snatcharr_delete_instance";
         Settings: {
             history_retention_days: number;
             user_agent: string;
@@ -1486,6 +1488,8 @@ export interface components {
              * @default false
              */
             llm_enabled: boolean;
+            /** @description MCP write tools enabled by the administrator; an omitted list enables none. */
+            llm_write_tools?: components["schemas"]["LlmWriteTool"][];
             /** Format: date-time */
             updated_at?: string;
         };

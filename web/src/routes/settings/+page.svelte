@@ -34,8 +34,26 @@ SPDX-License-Identifier: EUPL-1.2
 		global_hourly_cap: z.number().int().min(0).max(5000),
 		search_priority_preset: presetMapSchema,
 		download_priority_preset: presetMapSchema,
-		llm_enabled: z.boolean()
+		llm_enabled: z.boolean(),
+		llm_write_tools: z
+			.array(
+				z.enum([
+					'snatcharr_trigger_run',
+					'snatcharr_update_policy',
+					'snatcharr_cancel_run',
+					'snatcharr_delete_instance'
+				])
+			)
+			.optional()
 	}) satisfies z.ZodType<Omit<Settings, 'updated_at'>>;
+	type LlmWriteTool = components['schemas']['LlmWriteTool'];
+
+	const llmWriteToolOptions: { value: LlmWriteTool; label: () => string }[] = [
+		{ value: 'snatcharr_trigger_run', label: () => m.settings_llm_tool_trigger_run() },
+		{ value: 'snatcharr_update_policy', label: () => m.settings_llm_tool_update_policy() },
+		{ value: 'snatcharr_cancel_run', label: () => m.settings_llm_tool_cancel_run() },
+		{ value: 'snatcharr_delete_instance', label: () => m.settings_llm_tool_delete_instance() }
+	];
 
 	const settings = createSentioQuery({
 		queryKey: keys.settings,
@@ -59,7 +77,8 @@ SPDX-License-Identifier: EUPL-1.2
 			draft = {
 				...settings.data,
 				search_priority_preset: { ...(settings.data.search_priority_preset ?? {}) },
-				download_priority_preset: { ...(settings.data.download_priority_preset ?? {}) }
+				download_priority_preset: { ...(settings.data.download_priority_preset ?? {}) },
+				llm_write_tools: [...(settings.data.llm_write_tools ?? [])]
 			};
 		}
 	});
@@ -68,6 +87,16 @@ SPDX-License-Identifier: EUPL-1.2
 		if (!draft || !mediaFirst) return;
 		draft.search_priority_preset = { ...mediaFirst.search };
 		draft.download_priority_preset = { ...mediaFirst.download };
+	}
+
+	function toggleWriteTool(tool: LlmWriteTool, checked: boolean): void {
+		if (!draft) return;
+		const current = draft.llm_write_tools ?? [];
+		draft.llm_write_tools = checked
+			? current.includes(tool)
+				? current
+				: [...current, tool]
+			: current.filter((t) => t !== tool);
 	}
 
 	const save = createSentioMutation({
@@ -162,6 +191,25 @@ SPDX-License-Identifier: EUPL-1.2
 				<input type="checkbox" data-field="llm_enabled" bind:checked={draft.llm_enabled} />
 				{m.settings_llm_enabled()}
 			</label>
+			<fieldset
+				data-field="llm_write_tools"
+				disabled={!draft.llm_enabled}
+				class="flex flex-col gap-2"
+			>
+				<legend class="text-sm font-medium">{m.settings_llm_write_tools()}</legend>
+				{#each llmWriteToolOptions as opt (opt.value)}
+					<label class="flex items-center gap-2">
+						<input
+							type="checkbox"
+							value={opt.value}
+							disabled={!draft.llm_enabled}
+							checked={(draft.llm_write_tools ?? []).includes(opt.value)}
+							onchange={(e) => toggleWriteTool(opt.value, e.currentTarget.checked)}
+						/>
+						{opt.label()}
+					</label>
+				{/each}
+			</fieldset>
 			{#if session.isAdmin}
 				<div>
 					<button type="submit" class="btn btn-primary" disabled={save.isPending}

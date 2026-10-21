@@ -538,5 +538,10 @@
 	"instance_priority_clear": "Überschreibungen löschen",
 	"instance_priority_save": "Priorität speichern",
 	"instance_priority_saved": "Instanz-Priorität gespeichert",
-	"settings_llm_enabled": "MCP-Server aktivieren (/api/v1/mcp)"
+	"settings_llm_enabled": "MCP-Server aktivieren (/api/v1/mcp)",
+	"settings_llm_write_tools": "Erlaubte MCP-Schreibwerkzeuge",
+	"settings_llm_tool_trigger_run": "Suchlauf starten",
+	"settings_llm_tool_update_policy": "Snatch-Richtlinie ändern",
+	"settings_llm_tool_cancel_run": "Suchlauf abbrechen",
+	"settings_llm_tool_delete_instance": "Instanz löschen"
 }

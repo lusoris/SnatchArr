@@ -165,7 +165,8 @@ describe('Field coverage against openapi.yaml', () => {
 			'global_hourly_cap',
 			'search_priority_preset',
 			'download_priority_preset',
-			'llm_enabled'
+			'llm_enabled',
+			'llm_write_tools'
 		]);
 
 		const mediaFirst = {
@@ -184,7 +185,8 @@ describe('Field coverage against openapi.yaml', () => {
 				global_hourly_cap: 100,
 				search_priority_preset: mediaFirst,
 				download_priority_preset: mediaFirst,
-				llm_enabled: false
+				llm_enabled: false,
+				llm_write_tools: []
 			},
 			'/priority-presets': [
 				{
