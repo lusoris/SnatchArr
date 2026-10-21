@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -252,5 +254,73 @@ func checkCommands(t *testing.T, arr *fakeImportArr, wantPaths []string) {
 		if m, _ := f.(map[string]any); m["path"] != wantPaths[i] {
 			t.Fatalf("file %d = %v, want path %s", i, f, wantPaths[i])
 		}
+	}
+}
+
+func TestForceImportRejectionReasons(t *testing.T) {
+	t.Parallel()
+	longReason := strings.Repeat("A", 250)
+	truncatedLong := strings.Repeat("A", 200)
+
+	tests := []struct {
+		name        string
+		kind        domain.AppKind
+		candidates  string
+		wantReasons []string
+	}{
+		{
+			name:        "boundary/zero_reasons_unmapped",
+			kind:        domain.KindSonarr,
+			candidates:  sonarrUnmapped,
+			wantReasons: nil,
+		},
+		{
+			name:        "positive/single_reason",
+			kind:        domain.KindRadarr,
+			candidates:  radarrRejected,
+			wantReasons: []string{"Sample"},
+		},
+		{
+			name: "positive/dedup_single_reason_across_candidates",
+			kind: domain.KindSonarr,
+			candidates: `{"path":"/dl/1.mkv","series":{"id":5},"rejections":[{"reason":"Sample"}]},` +
+				`{"path":"/dl/2.mkv","series":{"id":5},"rejections":[{"reason":"Sample"}]}`,
+			wantReasons: []string{"Sample"},
+		},
+		{
+			name: "boundary/six_reasons_capped_at_five_and_truncated",
+			kind: domain.KindSonarr,
+			candidates: `{"path":"/dl/1.mkv","series":{"id":5},"rejections":[{"reason":"Reason 1"}]},` +
+				`{"path":"/dl/2.mkv","series":{"id":5},"rejections":[{"reason":"Reason 1"},{"reason":"Reason 2"}]},` +
+				`{"path":"/dl/3.mkv","series":{"id":5},"rejections":[{"reason":"` + longReason + `"}]},` +
+				`{"path":"/dl/4.mkv","series":{"id":5},"rejections":[{"reason":"Reason 4"}]},` +
+				`{"path":"/dl/5.mkv","series":{"id":5},"rejections":[{"reason":"Reason 5"}]},` +
+				`{"path":"/dl/6.mkv","series":{"id":5},"rejections":[{"reason":"Reason 6"}]}`,
+			wantReasons: []string{"Reason 1", "Reason 2", truncatedLong, "Reason 4", "Reason 5"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			arr := &fakeImportArr{candidates: tt.candidates}
+			srv := httptest.NewServer(arr)
+			t.Cleanup(srv.Close)
+			p := arrclient.NewGoenvoyProber(arrclient.Options{Timeout: 2 * time.Second})
+			_, err := p.ForceImport(t.Context(), tt.kind, srv.URL, "k", "dl-1", queue.ImportModeClean)
+			if err == nil {
+				t.Fatalf("expected error, got nil")
+			}
+			if !errors.Is(err, queue.ErrNoCleanCandidate) {
+				t.Fatalf("errors.Is(err, ErrNoCleanCandidate) = false, got %v", err)
+			}
+			var nce *queue.NoCleanCandidateError
+			if !errors.As(err, &nce) {
+				t.Fatalf("errors.As(err, &nce) = false, got %v", err)
+			}
+			if !reflect.DeepEqual(nce.Reasons, tt.wantReasons) {
+				t.Fatalf("reasons = %q, want %q", nce.Reasons, tt.wantReasons)
+			}
+		})
 	}
 }

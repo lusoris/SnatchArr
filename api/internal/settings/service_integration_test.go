@@ -32,7 +32,12 @@ func newService(t *testing.T) *settings.Service {
 }
 
 func editable(s domain.Settings) domain.Settings {
-	return domain.Settings{HistoryRetentionDays: s.HistoryRetentionDays, UserAgent: s.UserAgent, GlobalHourlyCap: s.GlobalHourlyCap}
+	return domain.Settings{
+		HistoryRetentionDays: s.HistoryRetentionDays,
+		UserAgent:            s.UserAgent,
+		GlobalHourlyCap:      s.GlobalHourlyCap,
+		LLMEnabled:           s.LLMEnabled,
+	}
 }
 
 func TestGetCreatesTheDefaults(t *testing.T) {
@@ -70,6 +75,12 @@ func TestUpdate(t *testing.T) {
 			"boundary highest values",
 			domain.Settings{HistoryRetentionDays: 3650, UserAgent: strings.Repeat("a", 200), GlobalHourlyCap: domain.GlobalHourlyCapLimit},
 			domain.Settings{HistoryRetentionDays: 3650, UserAgent: strings.Repeat("a", 200), GlobalHourlyCap: domain.GlobalHourlyCapLimit},
+			nil,
+		},
+		{
+			"positive llm_enabled true round-trips",
+			domain.Settings{HistoryRetentionDays: 30, UserAgent: "agent/llm", GlobalHourlyCap: 50, LLMEnabled: true},
+			domain.Settings{HistoryRetentionDays: 30, UserAgent: "agent/llm", GlobalHourlyCap: 50, LLMEnabled: true},
 			nil,
 		},
 		{"negative retention of zero days", domain.Settings{HistoryRetentionDays: 0, UserAgent: "a"}, defaults, domain.ErrInvalid},

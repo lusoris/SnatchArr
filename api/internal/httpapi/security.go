@@ -67,21 +67,39 @@ func (s *Security) HandleCookieAuth(ctx context.Context, _ oas.OperationName, _ 
 	return withUser(ctx, u), nil
 }
 
-// HandleBearerAuth verifies an API key and attaches its owner.
-func (s *Security) HandleBearerAuth(ctx context.Context, _ oas.OperationName, t oas.BearerAuth) (context.Context, error) {
-	key, err := s.keys.Verify(ctx, t.Token)
+// VerifyBearer verifies a raw bearer API key token, loads its owner user, and touches last_used_at.
+func (s *Security) VerifyBearer(ctx context.Context, token string) (domain.User, apikey.Key, error) {
+	key, err := s.keys.Verify(ctx, token)
 	if err != nil {
-		return ctx, fmt.Errorf("%w: invalid api key", domain.ErrUnauthorized)
+		return domain.User{}, apikey.Key{}, fmt.Errorf("%w: invalid api key", domain.ErrUnauthorized)
 	}
 	ownerID, err := uuid.Parse(key.OwnerID)
 	if err != nil {
-		return ctx, fmt.Errorf("%w: bad key owner", domain.ErrUnauthorized)
+		return domain.User{}, apikey.Key{}, fmt.Errorf("%w: bad key owner", domain.ErrUnauthorized)
 	}
 	u, err := s.users.User(ctx, ownerID)
 	if err != nil {
-		return ctx, fmt.Errorf("%w: %w", domain.ErrUnauthorized, err)
+		return domain.User{}, apikey.Key{}, fmt.Errorf("%w: %w", domain.ErrUnauthorized, err)
 	}
 	s.touchAPIKey(ctx, key.ID)
+	return u, key, nil
+}
+
+// VerifyBearerRequest extracts and verifies a Bearer API key from r, ignoring session cookies.
+func (s *Security) VerifyBearerRequest(ctx context.Context, r *http.Request) (domain.User, apikey.Key, error) {
+	scheme, token, ok := strings.Cut(r.Header.Get("Authorization"), " ")
+	if !ok || !strings.EqualFold(scheme, "Bearer") || strings.TrimSpace(token) == "" {
+		return domain.User{}, apikey.Key{}, fmt.Errorf("%w: bearer token required", domain.ErrUnauthorized)
+	}
+	return s.VerifyBearer(ctx, strings.TrimSpace(token))
+}
+
+// HandleBearerAuth verifies an API key and attaches its owner.
+func (s *Security) HandleBearerAuth(ctx context.Context, _ oas.OperationName, t oas.BearerAuth) (context.Context, error) {
+	u, _, err := s.VerifyBearer(ctx, t.Token)
+	if err != nil {
+		return ctx, err
+	}
 	return withUser(ctx, u), nil
 }
 

@@ -67,7 +67,7 @@ FROM api_keys
 WHERE owner_id = $1 AND revoked_at IS NULL;
 
 -- name: ListAPIKeysForOwner :many
-SELECT id, owner_id, name, created_at, expires_at, last_used_at
+SELECT id, owner_id, name, scopes, created_at, expires_at, last_used_at
 FROM api_keys
 WHERE owner_id = $1 AND revoked_at IS NULL
 ORDER BY created_at;

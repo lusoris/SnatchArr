@@ -12,7 +12,6 @@ import (
 	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/leader/gate"
 
-	"github.com/lusoris/SnatchArr/api/internal/events"
 	"github.com/lusoris/SnatchArr/api/internal/metrics"
 )
 
@@ -36,7 +35,8 @@ var Module = fx.Module("snatcharr.queue",
 		func(d *DBInstanceSource) InstanceSource { return d },
 		NewService,
 		NewTicker,
-		func(b *events.Bus) EventPublisher { return b },
+		NewRecorderAdapter,
+		func(a *RecorderAdapter) EventPublisher { return a },
 		func(m *metrics.Metrics) MetricsRecorder { return m },
 	),
 	fx.Provide(gate.Provide[*Ticker]()),

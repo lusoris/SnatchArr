@@ -118,6 +118,7 @@ func SettingsFromRow(r sqlcgen.Setting) domain.Settings {
 		HistoryRetentionDays: int(r.HistoryRetentionDays),
 		UserAgent:            r.UserAgent,
 		GlobalHourlyCap:      int(r.GlobalHourlyCap),
+		LLMEnabled:           r.LlmEnabled,
 		UpdatedAt:            r.UpdatedAt,
 	}
 }

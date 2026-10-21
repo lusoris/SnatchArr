@@ -12,6 +12,22 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 )
 
+func scopesToOAS(in []string) []oas.ApiKeyScope {
+	out := make([]oas.ApiKeyScope, len(in))
+	for i, s := range in {
+		out[i] = oas.ApiKeyScope(s)
+	}
+	return out
+}
+
+func scopesFromOAS(in []oas.ApiKeyScope) []string {
+	out := make([]string, len(in))
+	for i, s := range in {
+		out[i] = string(s)
+	}
+	return out
+}
+
 // ListAPIKeys returns all active API keys for the current session user.
 func (h *Handlers) ListAPIKeys(ctx context.Context) (oas.ListAPIKeysRes, error) {
 	u, ok := UserFrom(ctx)
@@ -27,6 +43,7 @@ func (h *Handlers) ListAPIKeys(ctx context.Context) (oas.ListAPIKeysRes, error) 
 		item := oas.ApiKey{
 			ID:        k.ID,
 			Name:      k.Name,
+			Scopes:    scopesToOAS(k.Scopes),
 			CreatedAt: k.CreatedAt,
 		}
 		if k.ExpiresAt != nil {
@@ -51,13 +68,14 @@ func (h *Handlers) CreateAPIKey(ctx context.Context, req *oas.CreateApiKeyReques
 		exp := req.ExpiresAt.Value
 		expiresAt = &exp
 	}
-	created, err := h.apiKeys.Create(ctx, u.ID, req.Name, expiresAt)
+	created, err := h.apiKeys.Create(ctx, u.ID, req.Name, expiresAt, scopesFromOAS(req.Scopes)...)
 	if err != nil {
 		return nil, err
 	}
 	out := &oas.CreatedApiKey{
 		ID:        created.ID,
 		Name:      created.Name,
+		Scopes:    scopesToOAS(created.Scopes),
 		CreatedAt: created.CreatedAt,
 		Secret:    created.Secret,
 	}

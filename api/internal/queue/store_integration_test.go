@@ -6,6 +6,7 @@ package queue_test
 
 import (
 	"errors"
+	"log/slog"
 	"reflect"
 	"testing"
 	"time"
@@ -15,7 +16,9 @@ import (
 
 	"github.com/golusoris/golusoris/core/clock"
 
+	"github.com/lusoris/SnatchArr/api/internal/events"
 	"github.com/lusoris/SnatchArr/api/internal/queue"
+	"github.com/lusoris/SnatchArr/api/internal/snatch"
 	"github.com/lusoris/SnatchArr/api/internal/store"
 	"github.com/lusoris/SnatchArr/api/internal/store/storetest"
 )
@@ -431,5 +434,46 @@ func TestInstanceDeleteCascades(t *testing.T) {
 	err = f.st.Pool().QueryRow(t.Context(), "SELECT count(*) FROM queue_strikes WHERE instance_id = $1", f.instance).Scan(&strikeCount)
 	if err != nil || strikeCount != 0 {
 		t.Fatalf("strikeCount = %d, %v; want 0", strikeCount, err)
+	}
+}
+
+func TestQueueEventPersistenceIntegration(t *testing.T) {
+	t.Parallel()
+	f := newQueueFixture(t)
+	logger := slog.New(slog.DiscardHandler)
+	bus := events.New(logger)
+	rec := snatch.NewRecorder(f.st, f.clk, bus)
+	adapter := queue.NewRecorderAdapter(rec, bus, logger)
+
+	now := f.clk.Now().UTC()
+	frame := events.Frame{
+		InstanceID: f.instance,
+		Timestamp:  now,
+		Level:      "info",
+		Type:       "queue_item_imported",
+		EntityID:   777,
+		Title:      "dl-777",
+		Detail:     "imported 1 files by rule id_matched",
+	}
+
+	adapter.Publish(t.Context(), frame)
+
+	evs, err := rec.List(t.Context(), snatch.ListParams{
+		InstanceID: &f.instance,
+		Type:       "queue_item_imported",
+		PageSize:   10,
+	})
+	if err != nil {
+		t.Fatalf("rec.List() = %v", err)
+	}
+	if len(evs) != 1 {
+		t.Fatalf("rec.List() returned %d events, want 1", len(evs))
+	}
+	got := evs[0]
+	if got.RunID != nil {
+		t.Fatalf("got.RunID = %v, want nil", got.RunID)
+	}
+	if got.InstanceID != f.instance || got.Type != "queue_item_imported" || got.EntityID != 777 || got.Title != "dl-777" || got.Detail != "imported 1 files by rule id_matched" {
+		t.Fatalf("persisted event = %+v, want matching frame fields", got)
 	}
 }
