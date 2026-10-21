@@ -551,6 +551,17 @@ func TestLoadCompoundKeysFromEnv(t *testing.T) {
 			},
 		},
 		{
+			name: "boundary group name with inner space kept whole",
+			env:  map[string]string{"APP_SNATCHARR_OIDC_VIEWER_GROUPS": " SnatchArr Viewers ,Admins"},
+			assertFn: func(t *testing.T, opts config.Options) {
+				t.Helper()
+				want := []string{"SnatchArr Viewers", "Admins"}
+				if !slices.Equal(opts.OIDC.ViewerGroups, want) {
+					t.Fatalf("OIDC.ViewerGroups = %v, want %v", opts.OIDC.ViewerGroups, want)
+				}
+			},
+		},
+		{
 			name: "oidc groups_claim custom",
 			env:  map[string]string{"APP_SNATCHARR_OIDC_GROUPS_CLAIM": "roles"},
 			assertFn: func(t *testing.T, opts config.Options) {

@@ -16,7 +16,7 @@ Both modes resolve a role from the identity's groups ([ADR-0023](adr/0023-sso-vi
 - A member of a viewer group, and of no admin group, signs in as its own viewer account. The account is created on first sign-in and keyed by the identity in `users.external_id` (`UpsertExternalViewer`). Viewers read everything and get `403` on every change.
 - An identity in no mapped group is refused.
 
-Group names match exactly and case-sensitively. Both modes are disabled by default. If the initial setup has not been completed, SSO login attempts are refused until the admin account is created.
+Group names match exactly and case-sensitively; a name may contain spaces (`SnatchArr Viewers`), and only the space around each comma-separated entry is trimmed (`cleanTrusted` in `api/internal/config/config.go`). Both modes are disabled by default. If the initial setup has not been completed, SSO login attempts are refused until the admin account is created.
 
 ### Session revocation
 
@@ -116,9 +116,9 @@ auth:
     clientId: "snatcharr"
     existingSecret: "snatcharr-oidc-secret"
     adminGroups:
-      - "snatcharr-admins"
+      - "Admins"
     viewerGroups:
-      - "snatcharr-viewers"
+      - "SnatchArr Viewers"
 
   proxyAuth:
     enabled: false
