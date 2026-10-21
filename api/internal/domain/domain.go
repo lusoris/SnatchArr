@@ -73,15 +73,17 @@ const (
 // Instance is a configured *arr application. APIKey is only populated on the write
 // path; reads carry an empty string so the secret never leaves the service layer.
 type Instance struct {
-	ID              uuid.UUID
-	Kind            AppKind
-	Name            string
-	BaseURL         string
-	APIKey          string
-	Enabled         bool
-	Source          InstanceSource
-	ConfigarrKey    string
-	LastSeenVersion string
+	ID               uuid.UUID
+	Kind             AppKind
+	Name             string
+	BaseURL          string
+	APIKey           string
+	Enabled          bool
+	Source           InstanceSource
+	ConfigarrKey     string
+	SearchPriority   *int
+	DownloadPriority *int
+	LastSeenVersion  string
 	// LastSeenProduct is what the last successful connection test found; see Product.
 	LastSeenProduct Product
 	LastCheckAt     *time.Time

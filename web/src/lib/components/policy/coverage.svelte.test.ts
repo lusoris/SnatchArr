@@ -163,16 +163,36 @@ describe('Field coverage against openapi.yaml', () => {
 			'history_retention_days',
 			'user_agent',
 			'global_hourly_cap',
+			'search_priority_preset',
+			'download_priority_preset',
 			'llm_enabled'
 		]);
+
+		const mediaFirst = {
+			sonarr: 10,
+			radarr: 10,
+			lidarr: 20,
+			readarr: 30,
+			whisparr_v2: 40,
+			whisparr_v3: 40
+		};
 
 		stubGet({
 			'/settings': {
 				history_retention_days: 30,
 				user_agent: 'SnatchArr/1.0',
 				global_hourly_cap: 100,
+				search_priority_preset: mediaFirst,
+				download_priority_preset: mediaFirst,
 				llm_enabled: false
 			},
+			'/priority-presets': [
+				{
+					name: 'media_first',
+					search: mediaFirst,
+					download: mediaFirst
+				}
+			],
 			'/notifications/channels': [],
 			'/notifications/rules': []
 		});

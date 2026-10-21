@@ -1949,6 +1949,106 @@ func (s *InstanceInput) SetEnabled(val OptBool) {
 	s.Enabled = val
 }
 
+// Ref: #/components/schemas/InstancePriority
+type InstancePriority struct {
+	SearchPriority            NilInt         `json:"search_priority"`
+	DownloadPriority          NilInt         `json:"download_priority"`
+	EffectiveSearchPriority   int            `json:"effective_search_priority"`
+	EffectiveDownloadPriority int            `json:"effective_download_priority"`
+	SearchSource              PrioritySource `json:"search_source"`
+	DownloadSource            PrioritySource `json:"download_source"`
+}
+
+// GetSearchPriority returns the value of SearchPriority.
+func (s *InstancePriority) GetSearchPriority() NilInt {
+	return s.SearchPriority
+}
+
+// GetDownloadPriority returns the value of DownloadPriority.
+func (s *InstancePriority) GetDownloadPriority() NilInt {
+	return s.DownloadPriority
+}
+
+// GetEffectiveSearchPriority returns the value of EffectiveSearchPriority.
+func (s *InstancePriority) GetEffectiveSearchPriority() int {
+	return s.EffectiveSearchPriority
+}
+
+// GetEffectiveDownloadPriority returns the value of EffectiveDownloadPriority.
+func (s *InstancePriority) GetEffectiveDownloadPriority() int {
+	return s.EffectiveDownloadPriority
+}
+
+// GetSearchSource returns the value of SearchSource.
+func (s *InstancePriority) GetSearchSource() PrioritySource {
+	return s.SearchSource
+}
+
+// GetDownloadSource returns the value of DownloadSource.
+func (s *InstancePriority) GetDownloadSource() PrioritySource {
+	return s.DownloadSource
+}
+
+// SetSearchPriority sets the value of SearchPriority.
+func (s *InstancePriority) SetSearchPriority(val NilInt) {
+	s.SearchPriority = val
+}
+
+// SetDownloadPriority sets the value of DownloadPriority.
+func (s *InstancePriority) SetDownloadPriority(val NilInt) {
+	s.DownloadPriority = val
+}
+
+// SetEffectiveSearchPriority sets the value of EffectiveSearchPriority.
+func (s *InstancePriority) SetEffectiveSearchPriority(val int) {
+	s.EffectiveSearchPriority = val
+}
+
+// SetEffectiveDownloadPriority sets the value of EffectiveDownloadPriority.
+func (s *InstancePriority) SetEffectiveDownloadPriority(val int) {
+	s.EffectiveDownloadPriority = val
+}
+
+// SetSearchSource sets the value of SearchSource.
+func (s *InstancePriority) SetSearchSource(val PrioritySource) {
+	s.SearchSource = val
+}
+
+// SetDownloadSource sets the value of DownloadSource.
+func (s *InstancePriority) SetDownloadSource(val PrioritySource) {
+	s.DownloadSource = val
+}
+
+// Ref: #/components/schemas/InstancePriorityInput
+type InstancePriorityInput struct {
+	// Optional per-instance search priority rank override (1..100, lower goes first; null clears
+	// override).
+	SearchPriority OptNilInt `json:"search_priority"`
+	// Optional per-instance download priority rank override (1..100, lower goes first; null clears
+	// override).
+	DownloadPriority OptNilInt `json:"download_priority"`
+}
+
+// GetSearchPriority returns the value of SearchPriority.
+func (s *InstancePriorityInput) GetSearchPriority() OptNilInt {
+	return s.SearchPriority
+}
+
+// GetDownloadPriority returns the value of DownloadPriority.
+func (s *InstancePriorityInput) GetDownloadPriority() OptNilInt {
+	return s.DownloadPriority
+}
+
+// SetSearchPriority sets the value of SearchPriority.
+func (s *InstancePriorityInput) SetSearchPriority(val OptNilInt) {
+	s.SearchPriority = val
+}
+
+// SetDownloadPriority sets the value of DownloadPriority.
+func (s *InstancePriorityInput) SetDownloadPriority(val OptNilInt) {
+	s.DownloadPriority = val
+}
+
 type InstanceSource string
 
 const (
@@ -2283,6 +2383,51 @@ func (s *LoginRequest) SetPassword(val string) {
 
 // LogoutNoContent is response for Logout operation.
 type LogoutNoContent struct{}
+
+// NewNilInt returns new NilInt with value set to v.
+func NewNilInt(v int) NilInt {
+	return NilInt{
+		Value: v,
+	}
+}
+
+// NilInt is nullable int.
+type NilInt struct {
+	Value int
+	Null  bool
+}
+
+// SetTo sets value to v.
+func (o *NilInt) SetTo(v int) {
+	o.Null = false
+	o.Value = v
+}
+
+// IsNull returns true if value is Null.
+func (o NilInt) IsNull() bool { return o.Null }
+
+// SetToNull sets value to null.
+func (o *NilInt) SetToNull() {
+	o.Null = true
+	var v int
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o NilInt) Get() (v int, ok bool) {
+	if o.Null {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o NilInt) Or(d int) int {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
 
 // Ref: #/components/schemas/NotificationChannel
 type NotificationChannel struct {
@@ -3537,6 +3682,69 @@ func (o OptLogLevel) Or(d LogLevel) LogLevel {
 	return d
 }
 
+// NewOptNilInt returns new OptNilInt with value set to v.
+func NewOptNilInt(v int) OptNilInt {
+	return OptNilInt{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptNilInt is optional nullable int.
+type OptNilInt struct {
+	Value int
+	Set   bool
+	Null  bool
+}
+
+// IsSet returns true if OptNilInt was set.
+func (o OptNilInt) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptNilInt) Reset() {
+	var v int
+	o.Value = v
+	o.Set = false
+	o.Null = false
+}
+
+// SetTo sets value to v.
+func (o *OptNilInt) SetTo(v int) {
+	o.Set = true
+	o.Null = false
+	o.Value = v
+}
+
+// IsNull returns true if value is Null.
+func (o OptNilInt) IsNull() bool { return o.Null }
+
+// SetToNull sets value to null.
+func (o *OptNilInt) SetToNull() {
+	o.Set = true
+	o.Null = true
+	var v int
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptNilInt) Get() (v int, ok bool) {
+	if o.Null {
+		return v, false
+	}
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptNilInt) Or(d int) int {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
 // NewOptNotificationChannelConfig returns new OptNotificationChannelConfig with value set to v.
 func NewOptNotificationChannelConfig(v NotificationChannelConfig) OptNotificationChannelConfig {
 	return OptNotificationChannelConfig{
@@ -3941,6 +4149,99 @@ func (s *PreviewTarget) SetTitle(val string) {
 // SetCost sets the value of Cost.
 func (s *PreviewTarget) SetCost(val int) {
 	s.Cost = val
+}
+
+// Ref: #/components/schemas/PriorityPreset
+type PriorityPreset struct {
+	// Identifier of the shipped preset (e.g. media_first).
+	Name     string            `json:"name"`
+	Search   PriorityPresetMap `json:"search"`
+	Download PriorityPresetMap `json:"download"`
+}
+
+// GetName returns the value of Name.
+func (s *PriorityPreset) GetName() string {
+	return s.Name
+}
+
+// GetSearch returns the value of Search.
+func (s *PriorityPreset) GetSearch() PriorityPresetMap {
+	return s.Search
+}
+
+// GetDownload returns the value of Download.
+func (s *PriorityPreset) GetDownload() PriorityPresetMap {
+	return s.Download
+}
+
+// SetName sets the value of Name.
+func (s *PriorityPreset) SetName(val string) {
+	s.Name = val
+}
+
+// SetSearch sets the value of Search.
+func (s *PriorityPreset) SetSearch(val PriorityPresetMap) {
+	s.Search = val
+}
+
+// SetDownload sets the value of Download.
+func (s *PriorityPreset) SetDownload(val PriorityPresetMap) {
+	s.Download = val
+}
+
+// Priority rank (1..100, lower goes first) per *arr application kind.
+// Ref: #/components/schemas/PriorityPresetMap
+type PriorityPresetMap map[string]int
+
+func (s *PriorityPresetMap) init() PriorityPresetMap {
+	m := *s
+	if m == nil {
+		m = map[string]int{}
+		*s = m
+	}
+	return m
+}
+
+// Ref: #/components/schemas/PrioritySource
+type PrioritySource string
+
+const (
+	PrioritySourcePreset   PrioritySource = "preset"
+	PrioritySourceInstance PrioritySource = "instance"
+)
+
+// AllValues returns all PrioritySource values.
+func (PrioritySource) AllValues() []PrioritySource {
+	return []PrioritySource{
+		PrioritySourcePreset,
+		PrioritySourceInstance,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s PrioritySource) MarshalText() ([]byte, error) {
+	switch s {
+	case PrioritySourcePreset:
+		return []byte(s), nil
+	case PrioritySourceInstance:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *PrioritySource) UnmarshalText(data []byte) error {
+	switch PrioritySource(data) {
+	case PrioritySourcePreset:
+		*s = PrioritySourcePreset
+		return nil
+	case PrioritySourceInstance:
+		*s = PrioritySourceInstance
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
 }
 
 // Ref: #/components/schemas/ProbeResult
@@ -6362,7 +6663,9 @@ type Settings struct {
 	UserAgent            string `json:"user_agent"`
 	// Shared stamina across every instance for setups where several *arr apps hit the same indexers (0 =
 	// off).
-	GlobalHourlyCap int `json:"global_hourly_cap"`
+	GlobalHourlyCap        int               `json:"global_hourly_cap"`
+	SearchPriorityPreset   PriorityPresetMap `json:"search_priority_preset"`
+	DownloadPriorityPreset PriorityPresetMap `json:"download_priority_preset"`
 	// Whether the Model Context Protocol (MCP) server at /api/v1/mcp is enabled.
 	LlmEnabled OptBool     `json:"llm_enabled"`
 	UpdatedAt  OptDateTime `json:"updated_at"`
@@ -6381,6 +6684,16 @@ func (s *Settings) GetUserAgent() string {
 // GetGlobalHourlyCap returns the value of GlobalHourlyCap.
 func (s *Settings) GetGlobalHourlyCap() int {
 	return s.GlobalHourlyCap
+}
+
+// GetSearchPriorityPreset returns the value of SearchPriorityPreset.
+func (s *Settings) GetSearchPriorityPreset() PriorityPresetMap {
+	return s.SearchPriorityPreset
+}
+
+// GetDownloadPriorityPreset returns the value of DownloadPriorityPreset.
+func (s *Settings) GetDownloadPriorityPreset() PriorityPresetMap {
+	return s.DownloadPriorityPreset
 }
 
 // GetLlmEnabled returns the value of LlmEnabled.
@@ -6406,6 +6719,16 @@ func (s *Settings) SetUserAgent(val string) {
 // SetGlobalHourlyCap sets the value of GlobalHourlyCap.
 func (s *Settings) SetGlobalHourlyCap(val int) {
 	s.GlobalHourlyCap = val
+}
+
+// SetSearchPriorityPreset sets the value of SearchPriorityPreset.
+func (s *Settings) SetSearchPriorityPreset(val PriorityPresetMap) {
+	s.SearchPriorityPreset = val
+}
+
+// SetDownloadPriorityPreset sets the value of DownloadPriorityPreset.
+func (s *Settings) SetDownloadPriorityPreset(val PriorityPresetMap) {
+	s.DownloadPriorityPreset = val
 }
 
 // SetLlmEnabled sets the value of LlmEnabled.

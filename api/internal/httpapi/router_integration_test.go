@@ -1513,12 +1513,58 @@ func stepsNotificationRules() []routerStep {
 	}
 }
 
+func stepsPriority() []routerStep {
+	return []routerStep{
+		{
+			op:     "getPriorityPresets",
+			method: http.MethodGet,
+			path:   func(_ *idsState) string { return "/priority-presets" },
+			want:   http.StatusOK,
+			capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
+				t.Helper()
+				items, ok := decoded["items"].([]any)
+				if !ok || len(items) == 0 {
+					t.Fatalf("getPriorityPresets items = %v, want non-empty", decoded["items"])
+				}
+			},
+		},
+		{
+			op:     "getInstancePriority",
+			method: http.MethodGet,
+			path:   func(ids *idsState) string { return "/instances/" + ids.instanceID + "/priority" },
+			want:   http.StatusOK,
+			capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
+				t.Helper()
+				if decoded["search_source"] != "preset" {
+					t.Fatalf("getInstancePriority search_source = %v, want preset", decoded["search_source"])
+				}
+			},
+		},
+		{
+			op:     "updateInstancePriority",
+			method: http.MethodPut,
+			path:   func(ids *idsState) string { return "/instances/" + ids.instanceID + "/priority" },
+			body: func(_ *idsState) any {
+				return map[string]any{"search_priority": 15, "download_priority": 25}
+			},
+			want: http.StatusOK,
+			capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
+				t.Helper()
+				if decoded["search_source"] != "instance" || decoded["effective_search_priority"] != float64(15) {
+					t.Fatalf("updateInstancePriority = %v, want search_source=instance, effective=15", decoded)
+				}
+			},
+		},
+	}
+}
+
 func buildRouterSteps(f *routerFixture) []routerStep {
-	steps := make([]routerStep, 0, 75)
+	steps := make([]routerStep, 0, 78)
 	steps = append(steps, stepsAuth()...)
 	steps = append(steps, stepsAPIKeys()...)
 	steps = append(steps, stepsInstances()...)
 	steps = append(steps, stepsPoliciesAndRuns()...)
+	steps = append(steps, stepsPriority()...)
 	steps = append(steps, stepsSettingsAndSchedules()...)
 	steps = append(steps, stepsDownloadClients()...)
 	steps = append(steps, stepsSeerr(f)...)

@@ -24,12 +24,16 @@ UPDATE snatch_runs
 SET status = 'leased', leased_by = sqlc.arg(leased_by), lease_expires_at = sqlc.arg(lease_expires_at),
     started_at = COALESCE(started_at, sqlc.arg(now)::timestamptz), lease_count = lease_count + 1
 WHERE id = (
-    SELECT id FROM snatch_runs
-    WHERE status = 'queued'
-       OR (status = 'leased' AND lease_expires_at < sqlc.arg(now)::timestamptz AND lease_count < sqlc.arg(max_leases)::int)
-    ORDER BY queued_at
+    SELECT snatch_runs.id FROM snatch_runs
+    JOIN instances ON instances.id = snatch_runs.instance_id
+    LEFT JOIN settings ON settings.singleton
+    WHERE (snatch_runs.status = 'queued'
+       OR (snatch_runs.status = 'leased' AND snatch_runs.lease_expires_at < sqlc.arg(now)::timestamptz AND snatch_runs.lease_count < sqlc.arg(max_leases)::int))
+    ORDER BY (snatch_runs.queued_at < sqlc.arg(now)::timestamptz - make_interval(secs => sqlc.arg(max_wait)::double precision)) DESC,
+             COALESCE(instances.search_priority, (settings.search_priority_preset->>instances.kind)::int) ASC NULLS LAST,
+             snatch_runs.queued_at
     LIMIT 1
-    FOR UPDATE SKIP LOCKED
+    FOR UPDATE OF snatch_runs SKIP LOCKED
 )
 RETURNING *;
 

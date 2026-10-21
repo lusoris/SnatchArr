@@ -45,6 +45,15 @@ func NewStore(st *store.Store, clk clock.Clock) *Store {
 	return &Store{st: st, clk: clk}
 }
 
+// DownloadPriorityPreset returns the active download priority preset from settings, or an error.
+func (s *Store) DownloadPriorityPreset(ctx context.Context) (domain.PriorityPreset, error) {
+	row, err := s.st.Q().GetSettings(ctx)
+	if err != nil {
+		return domain.MediaFirstPreset(), fmt.Errorf("queue: get settings: %w", store.MapError(err))
+	}
+	return store.SettingsFromRow(row).DownloadPriorityPreset, nil
+}
+
 // Settings returns the queue settings for an instance, or DefaultSettings if not yet configured.
 func (s *Store) Settings(ctx context.Context, instanceID uuid.UUID) (Settings, error) {
 	row, err := s.st.Q().GetQueuePolicy(ctx, instanceID)

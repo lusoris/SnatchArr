@@ -204,6 +204,11 @@ func TestMigrationsUpgradePopulated(t *testing.T) {
 	}
 
 	stepDownToVersion(t, m, previousRelease)
+	// Migration 000025 seeds the settings singleton and its down step keeps the row; a real
+	// previous-release database holds only the fixture's own row.
+	if _, err := st.Pool().Exec(t.Context(), "DELETE FROM settings"); err != nil {
+		t.Fatalf("clear seeded settings row: %v", err)
+	}
 	applyFixture(t, st, fixturePath)
 
 	if err := m.Up(); err != nil {

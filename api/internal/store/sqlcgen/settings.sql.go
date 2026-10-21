@@ -13,7 +13,7 @@ import (
 const ensureSettings = `-- name: EnsureSettings :one
 INSERT INTO settings (singleton, updated_at) VALUES (TRUE, $1)
 ON CONFLICT (singleton) DO UPDATE SET singleton = TRUE
-RETURNING singleton, history_retention_days, user_agent, updated_at, global_hourly_cap, llm_enabled
+RETURNING singleton, history_retention_days, user_agent, updated_at, global_hourly_cap, llm_enabled, search_priority_preset, download_priority_preset
 `
 
 func (q *Queries) EnsureSettings(ctx context.Context, updatedAt time.Time) (Setting, error) {
@@ -26,13 +26,15 @@ func (q *Queries) EnsureSettings(ctx context.Context, updatedAt time.Time) (Sett
 		&i.UpdatedAt,
 		&i.GlobalHourlyCap,
 		&i.LlmEnabled,
+		&i.SearchPriorityPreset,
+		&i.DownloadPriorityPreset,
 	)
 	return i, err
 }
 
 const getSettings = `-- name: GetSettings :one
 
-SELECT singleton, history_retention_days, user_agent, updated_at, global_hourly_cap, llm_enabled FROM settings WHERE singleton
+SELECT singleton, history_retention_days, user_agent, updated_at, global_hourly_cap, llm_enabled, search_priority_preset, download_priority_preset FROM settings WHERE singleton
 `
 
 // SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
@@ -47,23 +49,33 @@ func (q *Queries) GetSettings(ctx context.Context) (Setting, error) {
 		&i.UpdatedAt,
 		&i.GlobalHourlyCap,
 		&i.LlmEnabled,
+		&i.SearchPriorityPreset,
+		&i.DownloadPriorityPreset,
 	)
 	return i, err
 }
 
 const updateSettings = `-- name: UpdateSettings :one
 UPDATE settings
-SET history_retention_days = $1, user_agent = $2, global_hourly_cap = $3, llm_enabled = $4, updated_at = $5
+SET history_retention_days = $1,
+    user_agent = $2,
+    global_hourly_cap = $3,
+    search_priority_preset = $4,
+    download_priority_preset = $5,
+    llm_enabled = $6,
+    updated_at = $7
 WHERE singleton
-RETURNING singleton, history_retention_days, user_agent, updated_at, global_hourly_cap, llm_enabled
+RETURNING singleton, history_retention_days, user_agent, updated_at, global_hourly_cap, llm_enabled, search_priority_preset, download_priority_preset
 `
 
 type UpdateSettingsParams struct {
-	HistoryRetentionDays int32
-	UserAgent            string
-	GlobalHourlyCap      int32
-	LlmEnabled           bool
-	UpdatedAt            time.Time
+	HistoryRetentionDays   int32
+	UserAgent              string
+	GlobalHourlyCap        int32
+	SearchPriorityPreset   []byte
+	DownloadPriorityPreset []byte
+	LlmEnabled             bool
+	UpdatedAt              time.Time
 }
 
 func (q *Queries) UpdateSettings(ctx context.Context, arg UpdateSettingsParams) (Setting, error) {
@@ -71,6 +83,8 @@ func (q *Queries) UpdateSettings(ctx context.Context, arg UpdateSettingsParams) 
 		arg.HistoryRetentionDays,
 		arg.UserAgent,
 		arg.GlobalHourlyCap,
+		arg.SearchPriorityPreset,
+		arg.DownloadPriorityPreset,
 		arg.LlmEnabled,
 		arg.UpdatedAt,
 	)
@@ -82,6 +96,8 @@ func (q *Queries) UpdateSettings(ctx context.Context, arg UpdateSettingsParams) 
 		&i.UpdatedAt,
 		&i.GlobalHourlyCap,
 		&i.LlmEnabled,
+		&i.SearchPriorityPreset,
+		&i.DownloadPriorityPreset,
 	)
 	return i, err
 }

@@ -19,9 +19,11 @@ type Settings struct {
 	UserAgent            string
 	// GlobalHourlyCap is stamina shared by every instance (0 = off), for setups where
 	// several *arr apps hit the same indexers.
-	GlobalHourlyCap int
-	LLMEnabled      bool
-	UpdatedAt       time.Time
+	GlobalHourlyCap        int
+	SearchPriorityPreset   PriorityPreset
+	DownloadPriorityPreset PriorityPreset
+	LLMEnabled             bool
+	UpdatedAt              time.Time
 }
 
 // Validate enforces the ranges the UI advertises.
@@ -35,6 +37,12 @@ func (s Settings) Validate() error {
 	}
 	if s.GlobalHourlyCap < 0 || s.GlobalHourlyCap > GlobalHourlyCapLimit {
 		return fmt.Errorf("%w: global_hourly_cap must be between 0 and %d", ErrInvalid, GlobalHourlyCapLimit)
+	}
+	if err := s.SearchPriorityPreset.Validate(); err != nil {
+		return fmt.Errorf("search_priority_preset: %w", err)
+	}
+	if err := s.DownloadPriorityPreset.Validate(); err != nil {
+		return fmt.Errorf("download_priority_preset: %w", err)
 	}
 	return nil
 }

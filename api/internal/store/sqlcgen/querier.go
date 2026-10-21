@@ -83,6 +83,7 @@ type Querier interface {
 	GetFirstAdmin(ctx context.Context) (User, error)
 	GetInstance(ctx context.Context, id uuid.UUID) (Instance, error)
 	GetInstanceByConfigarrKey(ctx context.Context, configarrKey *string) (Instance, error)
+	GetInstancePriority(ctx context.Context, id uuid.UUID) (GetInstancePriorityRow, error)
 	GetLoginLockout(ctx context.Context, key string) (LoginLockout, error)
 	GetNotificationChannel(ctx context.Context, id uuid.UUID) (NotificationChannel, error)
 	GetNotificationRule(ctx context.Context, id uuid.UUID) (NotificationRule, error)
@@ -196,6 +197,7 @@ type Querier interface {
 	TouchWorker(ctx context.Context, arg TouchWorkerParams) error
 	UpdateDownloadClient(ctx context.Context, arg UpdateDownloadClientParams) (DownloadClient, error)
 	UpdateInstance(ctx context.Context, arg UpdateInstanceParams) (Instance, error)
+	UpdateInstancePriority(ctx context.Context, arg UpdateInstancePriorityParams) (UpdateInstancePriorityRow, error)
 	UpdateNotificationChannel(ctx context.Context, arg UpdateNotificationChannelParams) (NotificationChannel, error)
 	UpdateNotificationRule(ctx context.Context, arg UpdateNotificationRuleParams) (NotificationRule, error)
 	UpdateProwlarrLink(ctx context.Context, arg UpdateProwlarrLinkParams) (ProwlarrLink, error)
