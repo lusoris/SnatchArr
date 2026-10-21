@@ -159,13 +159,19 @@ describe('Field coverage against openapi.yaml', () => {
 
 	it('covers every writable Settings property', async () => {
 		const expectedProps = getWritableProperties(yaml, 'Settings');
-		expect(expectedProps).toEqual(['history_retention_days', 'user_agent', 'global_hourly_cap']);
+		expect(expectedProps).toEqual([
+			'history_retention_days',
+			'user_agent',
+			'global_hourly_cap',
+			'llm_enabled'
+		]);
 
 		stubGet({
 			'/settings': {
 				history_retention_days: 30,
 				user_agent: 'SnatchArr/1.0',
-				global_hourly_cap: 100
+				global_hourly_cap: 100,
+				llm_enabled: false
 			},
 			'/notifications/channels': [],
 			'/notifications/rules': []

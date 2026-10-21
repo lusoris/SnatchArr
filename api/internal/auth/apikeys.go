@@ -99,15 +99,19 @@ func (a *APIKeys) setMetaOrRollback(ctx context.Context, issuedID string, ownerI
 }
 
 // Create issues a new API key, validates input, ensures max live key quota, and persists metadata.
-func (a *APIKeys) Create(ctx context.Context, ownerID uuid.UUID, name string, expiresAt *time.Time) (domain.CreatedAPIKey, error) {
+func (a *APIKeys) Create(ctx context.Context, ownerID uuid.UUID, name string, expiresAt *time.Time, scopes ...string) (domain.CreatedAPIKey, error) {
 	trimmed, err := validateCreateInput(a.clk, name, expiresAt)
+	if err != nil {
+		return domain.CreatedAPIKey{}, err
+	}
+	cleanScopes, err := domain.ValidateAPIKeyScopes(scopes)
 	if err != nil {
 		return domain.CreatedAPIKey{}, err
 	}
 	if err = a.ensureQuota(ctx, ownerID); err != nil {
 		return domain.CreatedAPIKey{}, err
 	}
-	raw, issued, err := a.keys.Issue(ctx, ownerID.String(), nil)
+	raw, issued, err := a.keys.Issue(ctx, ownerID.String(), cleanScopes)
 	if err != nil {
 		return domain.CreatedAPIKey{}, fmt.Errorf("auth: issue api key: %w", err)
 	}
@@ -118,6 +122,7 @@ func (a *APIKeys) Create(ctx context.Context, ownerID uuid.UUID, name string, ex
 		ID:         issued.ID,
 		OwnerID:    ownerID,
 		Name:       trimmed,
+		Scopes:     cleanScopes,
 		CreatedAt:  issued.CreatedAt,
 		ExpiresAt:  expiresAt,
 		LastUsedAt: nil,
@@ -133,10 +138,15 @@ func (a *APIKeys) List(ctx context.Context, ownerID uuid.UUID) ([]domain.APIKey,
 	}
 	out := make([]domain.APIKey, 0, len(rows))
 	for _, r := range rows {
+		scopes := r.Scopes
+		if scopes == nil {
+			scopes = []string{}
+		}
 		out = append(out, domain.APIKey{
 			ID:         r.ID,
 			OwnerID:    r.OwnerID,
 			Name:       r.Name,
+			Scopes:     scopes,
 			CreatedAt:  r.CreatedAt,
 			ExpiresAt:  r.ExpiresAt,
 			LastUsedAt: r.LastUsedAt,
