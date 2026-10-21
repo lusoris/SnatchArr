@@ -52,6 +52,32 @@ func TestSettingsValidate(t *testing.T) {
 	if err := withWriteTools.Validate(); err != nil {
 		t.Fatalf("valid llm_write_tools rejected: %v", err)
 	}
+	allWriteTools := domain.Settings{
+		HistoryRetentionDays: 90,
+		UserAgent:            "SnatchArr/1.0",
+		LLMWriteTools: []string{
+			domain.LLMWriteToolTriggerRun,
+			domain.LLMWriteToolUpdatePolicy,
+			domain.LLMWriteToolCancelRun,
+			domain.LLMWriteToolDeleteInstance,
+			domain.LLMWriteToolCreateInstance,
+			domain.LLMWriteToolTestInstanceInput,
+			domain.LLMWriteToolUpdateInstance,
+			domain.LLMWriteToolTestInstance,
+			domain.LLMWriteToolUpdateQueuePolicy,
+			domain.LLMWriteToolPreviewRun,
+			domain.LLMWriteToolDeleteInstanceEvents,
+			domain.LLMWriteToolResetState,
+			domain.LLMWriteToolCreateSchedule,
+			domain.LLMWriteToolUpdateSchedule,
+			domain.LLMWriteToolDeleteSchedule,
+			domain.LLMWriteToolImportConfigarr,
+			domain.LLMWriteToolUpdateSettings,
+		},
+	}
+	if err := allWriteTools.Validate(); err != nil {
+		t.Fatalf("all 17 llm_write_tools rejected: %v", err)
+	}
 	badWriteTools := []domain.Settings{
 		{HistoryRetentionDays: 90, UserAgent: "x", SearchPriorityPreset: preset, DownloadPriorityPreset: preset, LLMWriteTools: []string{"not_a_tool"}},
 		{HistoryRetentionDays: 90, UserAgent: "x", SearchPriorityPreset: preset, DownloadPriorityPreset: preset, LLMWriteTools: []string{domain.LLMWriteToolTriggerRun, domain.LLMWriteToolTriggerRun}},

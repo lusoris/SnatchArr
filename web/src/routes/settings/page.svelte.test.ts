@@ -265,6 +265,50 @@ describe('settings', () => {
 		});
 	});
 
+	it('groups write tools into core and admin fieldsets with legends and allows toggling across scopes', async () => {
+		stubGet(baseStubs);
+		const putSpy = vi.spyOn(api, 'PUT').mockResolvedValue({
+			data: {
+				...sampleSettings,
+				llm_enabled: true,
+				llm_write_tools: ['snatcharr_create_instance', 'snatcharr_update_settings']
+			}
+		} as never);
+		renderWithQuery(SettingsPage);
+
+		expect(await screen.findByText(m.settings_llm_scope_core_write())).toBeTruthy();
+		expect(screen.getByText(m.settings_llm_scope_admin_write())).toBeTruthy();
+
+		const llmToggle = screen.getByLabelText(m.settings_llm_enabled()) as HTMLInputElement;
+		await fireEvent.click(llmToggle);
+
+		const createInstBox = screen.getByLabelText(
+			m.settings_llm_tool_create_instance()
+		) as HTMLInputElement;
+		const updateSettingsBox = screen.getByLabelText(
+			m.settings_llm_tool_update_settings()
+		) as HTMLInputElement;
+
+		expect(createInstBox.disabled).toBe(false);
+		expect(updateSettingsBox.disabled).toBe(false);
+
+		await fireEvent.click(createInstBox);
+		await fireEvent.click(updateSettingsBox);
+		await fireEvent.click(screen.getByRole('button', { name: m.instance_save() }));
+
+		expect(putSpy).toHaveBeenCalledWith('/settings', {
+			body: {
+				history_retention_days: 30,
+				user_agent: 'SnatchArr/1.0',
+				global_hourly_cap: 100,
+				search_priority_preset: mediaFirstRanks,
+				download_priority_preset: mediaFirstRanks,
+				llm_enabled: true,
+				llm_write_tools: ['snatcharr_create_instance', 'snatcharr_update_settings']
+			}
+		});
+	});
+
 	it('prevents submission when retention is outside allowed bounds', async () => {
 		stubGet(baseStubs);
 		const putSpy = vi.spyOn(api, 'PUT');

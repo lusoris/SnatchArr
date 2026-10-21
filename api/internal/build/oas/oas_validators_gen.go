@@ -1138,6 +1138,32 @@ func (s LlmWriteTool) Validate() error {
 		return nil
 	case "snatcharr_delete_instance":
 		return nil
+	case "snatcharr_create_instance":
+		return nil
+	case "snatcharr_test_instance_input":
+		return nil
+	case "snatcharr_update_instance":
+		return nil
+	case "snatcharr_test_instance":
+		return nil
+	case "snatcharr_update_queue_policy":
+		return nil
+	case "snatcharr_preview_run":
+		return nil
+	case "snatcharr_delete_instance_events":
+		return nil
+	case "snatcharr_reset_state":
+		return nil
+	case "snatcharr_create_schedule":
+		return nil
+	case "snatcharr_update_schedule":
+		return nil
+	case "snatcharr_delete_schedule":
+		return nil
+	case "snatcharr_import_configarr":
+		return nil
+	case "snatcharr_update_settings":
+		return nil
 	default:
 		return errors.Errorf("invalid value: %v", s)
 	}

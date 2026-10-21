@@ -1,0 +1,2708 @@
+{
+  "cancelRun": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "confirm": {
+        "description": "Must be true to confirm this destructive operation",
+        "type": "boolean"
+      },
+      "runId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "runId"
+    ],
+    "type": "object"
+  },
+  "changePassword": {
+    "$defs": {
+      "ChangePasswordRequest": {
+        "properties": {
+          "current_password": {
+            "type": "string"
+          },
+          "new_password": {
+            "maxLength": 256,
+            "minLength": 12,
+            "type": "string"
+          }
+        },
+        "required": [
+          "current_password",
+          "new_password"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/ChangePasswordRequest"
+      }
+    },
+    "required": [
+      "body"
+    ],
+    "type": "object"
+  },
+  "completeSetup": {
+    "$defs": {
+      "SetupRequest": {
+        "properties": {
+          "password": {
+            "maxLength": 256,
+            "minLength": 12,
+            "type": "string"
+          },
+          "setup_secret": {
+            "description": "Optional bootstrap secret when APP_SNATCHARR_SETUP_SECRET is configured",
+            "type": "string"
+          },
+          "username": {
+            "maxLength": 64,
+            "minLength": 3,
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "password"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/SetupRequest"
+      }
+    },
+    "required": [
+      "body"
+    ],
+    "type": "object"
+  },
+  "createAPIKey": {
+    "$defs": {
+      "ApiKeyScope": {
+        "enum": [
+          "core:read",
+          "core:write",
+          "requests:read",
+          "requests:write",
+          "download_clients:read",
+          "download_clients:write",
+          "prowlarr:read",
+          "prowlarr:write",
+          "notifications:read",
+          "notifications:write",
+          "admin:read",
+          "admin:write",
+          "adult:read",
+          "adult:write"
+        ],
+        "type": "string"
+      },
+      "CreateApiKeyRequest": {
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
+          "scopes": {
+            "items": {
+              "$ref": "#/$defs/ApiKeyScope"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/CreateApiKeyRequest"
+      }
+    },
+    "required": [
+      "body"
+    ],
+    "type": "object"
+  },
+  "createDownloadClient": {
+    "$defs": {
+      "DownloadClientInput": {
+        "properties": {
+          "bandwidth_budget_bps": {
+            "default": 0,
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "base_url": {
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "type": "boolean"
+          },
+          "instance_id": {
+            "description": "Pin the client to one instance; omit to apply it to every instance",
+            "format": "uuid",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/$defs/DownloadClientKind"
+          },
+          "max_active": {
+            "default": 0,
+            "maximum": 1000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "secret": {
+            "description": "Password, or the API key for SABnzbd. On update, omit to keep the stored one.",
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "name",
+          "base_url"
+        ],
+        "type": "object"
+      },
+      "DownloadClientKind": {
+        "enum": [
+          "qbittorrent",
+          "transmission",
+          "deluge",
+          "rtorrent",
+          "sabnzbd",
+          "nzbget"
+        ],
+        "type": "string"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/DownloadClientInput"
+      }
+    },
+    "required": [
+      "body"
+    ],
+    "type": "object"
+  },
+  "createInstance": {
+    "$defs": {
+      "AppKind": {
+        "enum": [
+          "sonarr",
+          "radarr",
+          "lidarr",
+          "readarr",
+          "whisparr_v2",
+          "whisparr_v3"
+        ],
+        "type": "string"
+      },
+      "InstanceInput": {
+        "properties": {
+          "api_key": {
+            "minLength": 8,
+            "type": "string"
+          },
+          "base_url": {
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "type": "boolean"
+          },
+          "kind": {
+            "$ref": "#/$defs/AppKind"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "name",
+          "base_url",
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/InstanceInput"
+      }
+    },
+    "required": [
+      "body"
+    ],
+    "type": "object"
+  },
+  "createNotificationChannel": {
+    "$defs": {
+      "NotificationChannelConfig": {
+        "properties": {
+          "allow_insecure_http": {
+            "default": false,
+            "description": "Allow webhooks to connect over cleartext http://",
+            "type": "boolean"
+          },
+          "allow_private_network": {
+            "default": false,
+            "description": "Allow webhooks to connect to loopback/private/internal IP addresses",
+            "type": "boolean"
+          },
+          "app_token": {
+            "description": "Gotify App token (write-only, never returned in responses)",
+            "type": "string"
+          },
+          "avatar_url": {
+            "description": "Discord avatar URL override",
+            "type": "string"
+          },
+          "bot_token": {
+            "description": "Telegram Bot token (write-only, never returned in responses)",
+            "type": "string"
+          },
+          "channel": {
+            "description": "Slack channel override",
+            "type": "string"
+          },
+          "chat_id": {
+            "description": "Telegram chat ID (e.g. -1001234567890 or @channel)",
+            "type": "string"
+          },
+          "icon_emoji": {
+            "description": "Slack icon emoji override",
+            "type": "string"
+          },
+          "parse_mode": {
+            "description": "Telegram parse mode (e.g. HTML, MarkdownV2)",
+            "type": "string"
+          },
+          "password": {
+            "description": "Password, sent as HTTP Basic Auth to an Apprise API server (write-only, never returned in responses)",
+            "type": "string"
+          },
+          "priority": {
+            "description": "Priority for ntfy (1-5) or Gotify (0-10)",
+            "type": "integer"
+          },
+          "secret": {
+            "description": "HMAC signing secret (write-only, never returned in responses)",
+            "type": "string"
+          },
+          "server_url": {
+            "description": "Base URL for ntfy or Gotify",
+            "type": "string"
+          },
+          "tags": {
+            "description": "Tags / emoji shortcodes for ntfy; for Apprise, the configuration tags to notify (any one matches)",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "theme_color": {
+            "description": "Teams theme color hex without '#' (e.g. 0076D7)",
+            "type": "string"
+          },
+          "token": {
+            "description": "Bearer token (write-only, never returned in responses)",
+            "type": "string"
+          },
+          "topic": {
+            "description": "ntfy topic name",
+            "type": "string"
+          },
+          "url": {
+            "description": "Target endpoint URL for signed outgoing webhooks",
+            "type": "string"
+          },
+          "username": {
+            "description": "Display username override, or the HTTP Basic Auth user for an Apprise API server",
+            "type": "string"
+          },
+          "webhook_url": {
+            "description": "Webhook URL for Discord, Slack and Teams, or the Apprise API notify URL ({server}/notify/{config key}) (write-only, never returned in responses)",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "NotificationChannelInput": {
+        "properties": {
+          "config": {
+            "$ref": "#/$defs/NotificationChannelConfig"
+          },
+          "enabled": {
+            "default": true,
+            "type": "boolean"
+          },
+          "kind": {
+            "$ref": "#/$defs/NotificationChannelKind"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "config"
+        ],
+        "type": "object"
+      },
+      "NotificationChannelKind": {
+        "enum": [
+          "discord",
+          "slack",
+          "telegram",
+          "ntfy",
+          "gotify",
+          "teams",
+          "webhook",
+          "apprise"
+        ],
+        "type": "string"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/NotificationChannelInput"
+      }
+    },
+    "required": [
+      "body"
+    ],
+    "type": "object"
+  },
+  "createNotificationRule": {
+    "$defs": {
+      "NotificationRuleEventKind": {
+        "enum": [
+          "run_failure_streak",
+          "circuit_opened",
+          "instance_unreachable",
+          "stamina_exhausted",
+          "seerr_request_snatched"
+        ],
+        "type": "string"
+      },
+      "NotificationRuleInput": {
+        "properties": {
+          "channel_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "enabled": {
+            "default": true,
+            "type": "boolean"
+          },
+          "event_kind": {
+            "$ref": "#/$defs/NotificationRuleEventKind"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
+          "threshold": {
+            "default": 1,
+            "description": "Trigger threshold (e.g. N consecutive failures for run_failure_streak)",
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "event_kind",
+          "threshold",
+          "channel_ids"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/NotificationRuleInput"
+      }
+    },
+    "required": [
+      "body"
+    ],
+    "type": "object"
+  },
+  "createProwlarrLink": {
+    "$defs": {
+      "ProwlarrLinkInput": {
+        "properties": {
+          "api_key": {
+            "description": "Required on create; omit on update to keep the stored key",
+            "type": "string"
+          },
+          "base_url": {
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "base_url"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/ProwlarrLinkInput"
+      }
+    },
+    "required": [
+      "body"
+    ],
+    "type": "object"
+  },
+  "createProxySession": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "createSchedule": {
+    "$defs": {
+      "ScheduleInput": {
+        "properties": {
+          "action": {
+            "enum": [
+              "pause",
+              "cap_override"
+            ],
+            "type": "string"
+          },
+          "cap_value": {
+            "maximum": 500,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "days": {
+            "description": "Weekdays the window applies to (0 = Sunday)",
+            "items": {
+              "maximum": 6,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "maxItems": 7,
+            "minItems": 1,
+            "type": "array"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "end": {
+            "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+            "type": "string"
+          },
+          "instance_id": {
+            "description": "Omit for a global window",
+            "format": "uuid",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "start": {
+            "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+            "type": "string"
+          },
+          "tz": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "days",
+          "start",
+          "end",
+          "tz",
+          "action",
+          "enabled"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/ScheduleInput"
+      }
+    },
+    "required": [
+      "body"
+    ],
+    "type": "object"
+  },
+  "createSeerrLink": {
+    "$defs": {
+      "SeerrLinkInput": {
+        "properties": {
+          "api_key": {
+            "description": "Required on create; omit on update to keep the stored key",
+            "type": "string"
+          },
+          "base_url": {
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "radarr_instance_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "sonarr_instance_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "base_url"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/SeerrLinkInput"
+      }
+    },
+    "required": [
+      "body"
+    ],
+    "type": "object"
+  },
+  "deleteDownloadClient": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "clientId": {
+        "format": "uuid",
+        "type": "string"
+      },
+      "confirm": {
+        "description": "Must be true to confirm this destructive operation",
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "clientId"
+    ],
+    "type": "object"
+  },
+  "deleteInstance": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "confirm": {
+        "description": "Must be true to confirm this destructive operation",
+        "type": "boolean"
+      },
+      "instanceId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "instanceId"
+    ],
+    "type": "object"
+  },
+  "deleteInstanceEvents": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "confirm": {
+        "description": "Must be true to confirm this destructive operation",
+        "type": "boolean"
+      },
+      "instanceId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "instanceId"
+    ],
+    "type": "object"
+  },
+  "deleteNotificationChannel": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "channelId": {
+        "format": "uuid",
+        "type": "string"
+      },
+      "confirm": {
+        "description": "Must be true to confirm this destructive operation",
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "channelId"
+    ],
+    "type": "object"
+  },
+  "deleteNotificationRule": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "confirm": {
+        "description": "Must be true to confirm this destructive operation",
+        "type": "boolean"
+      },
+      "ruleId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "ruleId"
+    ],
+    "type": "object"
+  },
+  "deleteProwlarrLink": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "confirm": {
+        "description": "Must be true to confirm this destructive operation",
+        "type": "boolean"
+      },
+      "linkId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "linkId"
+    ],
+    "type": "object"
+  },
+  "deleteSchedule": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "confirm": {
+        "description": "Must be true to confirm this destructive operation",
+        "type": "boolean"
+      },
+      "scheduleId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "scheduleId"
+    ],
+    "type": "object"
+  },
+  "deleteSeerrLink": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "confirm": {
+        "description": "Must be true to confirm this destructive operation",
+        "type": "boolean"
+      },
+      "linkId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "linkId"
+    ],
+    "type": "object"
+  },
+  "discoverDownloadClients": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "instanceId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "instanceId"
+    ],
+    "type": "object"
+  },
+  "getConfigarrStatus": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "getDownloadClient": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "clientId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "clientId"
+    ],
+    "type": "object"
+  },
+  "getDownloadClientStatus": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "getHourlyCaps": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "getInstance": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "instanceId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "instanceId"
+    ],
+    "type": "object"
+  },
+  "getInstancePriority": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "instanceId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "instanceId"
+    ],
+    "type": "object"
+  },
+  "getNotificationChannel": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "channelId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "channelId"
+    ],
+    "type": "object"
+  },
+  "getNotificationRule": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "ruleId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "ruleId"
+    ],
+    "type": "object"
+  },
+  "getPolicy": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "instanceId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "instanceId"
+    ],
+    "type": "object"
+  },
+  "getPolicyFilterOptions": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "instanceId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "instanceId"
+    ],
+    "type": "object"
+  },
+  "getPriorityPresets": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "getProwlarrLink": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "linkId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "linkId"
+    ],
+    "type": "object"
+  },
+  "getProwlarrStatus": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "getQueuePolicy": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "instanceId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "instanceId"
+    ],
+    "type": "object"
+  },
+  "getRun": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "runId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "runId"
+    ],
+    "type": "object"
+  },
+  "getSSO": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "getSeerrLink": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "linkId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "linkId"
+    ],
+    "type": "object"
+  },
+  "getSession": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "getSettings": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "getSetupStatus": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "getSystemStatus": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "importConfigarr": {
+    "$defs": {
+      "ConfigarrImportRequest": {
+        "properties": {
+          "config_path": {
+            "description": "Path to config.yml on the API host; omit to use the linked configuration",
+            "type": "string"
+          },
+          "secrets_path": {
+            "description": "Path to secrets.yml; optional",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/ConfigarrImportRequest"
+      }
+    },
+    "type": "object"
+  },
+  "importSeerrInstances": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "linkId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "linkId"
+    ],
+    "type": "object"
+  },
+  "listAPIKeys": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "listDownloadClients": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "listEvents": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "before_id": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "instance_id": {
+        "format": "uuid",
+        "type": "string"
+      },
+      "page_size": {
+        "maximum": 1000,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "type": {
+        "type": "string"
+      }
+    },
+    "type": "object"
+  },
+  "listInstances": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "listLogs": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "level": {
+        "description": "Minimum level; records below it are left out.",
+        "type": "string"
+      },
+      "limit": {
+        "maximum": 1000,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "q": {
+        "description": "Case-insensitive substring of the message, an attribute key or value.",
+        "type": "string"
+      },
+      "source": {
+        "description": "Source: api, worker for every worker, or worker:\u003cid\u003e for one worker.",
+        "type": "string"
+      }
+    },
+    "type": "object"
+  },
+  "listNotificationChannels": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "listNotificationRules": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "listProwlarrLinks": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "listQueueStrikes": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "instanceId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "instanceId"
+    ],
+    "type": "object"
+  },
+  "listRuns": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "instance_id": {
+        "format": "uuid",
+        "type": "string"
+      },
+      "limit": {
+        "maximum": 500,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "offset": {
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "type": "object"
+  },
+  "listSchedules": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "listSeerrLinks": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "listSeerrRequests": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "login": {
+    "$defs": {
+      "LoginRequest": {
+        "properties": {
+          "password": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "password"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/LoginRequest"
+      }
+    },
+    "required": [
+      "body"
+    ],
+    "type": "object"
+  },
+  "logout": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "previewRun": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "instanceId": {
+        "format": "uuid",
+        "type": "string"
+      },
+      "kind": {
+        "description": "Snatch kind: missing or upgrade",
+        "type": "string"
+      }
+    },
+    "required": [
+      "instanceId",
+      "kind"
+    ],
+    "type": "object"
+  },
+  "resetState": {
+    "$defs": {
+      "StateReset": {
+        "properties": {
+          "instance_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/StateReset"
+      },
+      "confirm": {
+        "description": "Must be true to confirm this destructive operation",
+        "type": "boolean"
+      }
+    },
+    "type": "object"
+  },
+  "revokeAPIKey": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "id"
+    ],
+    "type": "object"
+  },
+  "snatchSeerrRequest": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "linkId": {
+        "format": "uuid",
+        "type": "string"
+      },
+      "requestId": {
+        "minimum": 1,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "linkId",
+      "requestId"
+    ],
+    "type": "object"
+  },
+  "syncSeerrLink": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "linkId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "linkId"
+    ],
+    "type": "object"
+  },
+  "testDownloadClient": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "clientId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "clientId"
+    ],
+    "type": "object"
+  },
+  "testDownloadClientInput": {
+    "$defs": {
+      "DownloadClientInput": {
+        "properties": {
+          "bandwidth_budget_bps": {
+            "default": 0,
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "base_url": {
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "type": "boolean"
+          },
+          "instance_id": {
+            "description": "Pin the client to one instance; omit to apply it to every instance",
+            "format": "uuid",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/$defs/DownloadClientKind"
+          },
+          "max_active": {
+            "default": 0,
+            "maximum": 1000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "secret": {
+            "description": "Password, or the API key for SABnzbd. On update, omit to keep the stored one.",
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "name",
+          "base_url"
+        ],
+        "type": "object"
+      },
+      "DownloadClientKind": {
+        "enum": [
+          "qbittorrent",
+          "transmission",
+          "deluge",
+          "rtorrent",
+          "sabnzbd",
+          "nzbget"
+        ],
+        "type": "string"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/DownloadClientInput"
+      }
+    },
+    "required": [
+      "body"
+    ],
+    "type": "object"
+  },
+  "testInstance": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "instanceId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "instanceId"
+    ],
+    "type": "object"
+  },
+  "testInstanceInput": {
+    "$defs": {
+      "AppKind": {
+        "enum": [
+          "sonarr",
+          "radarr",
+          "lidarr",
+          "readarr",
+          "whisparr_v2",
+          "whisparr_v3"
+        ],
+        "type": "string"
+      },
+      "InstanceInput": {
+        "properties": {
+          "api_key": {
+            "minLength": 8,
+            "type": "string"
+          },
+          "base_url": {
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "type": "boolean"
+          },
+          "kind": {
+            "$ref": "#/$defs/AppKind"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "name",
+          "base_url",
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/InstanceInput"
+      }
+    },
+    "required": [
+      "body"
+    ],
+    "type": "object"
+  },
+  "testNotificationChannel": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "channelId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "channelId"
+    ],
+    "type": "object"
+  },
+  "testProwlarrLink": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "linkId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "linkId"
+    ],
+    "type": "object"
+  },
+  "testProwlarrLinkInput": {
+    "$defs": {
+      "ProwlarrLinkInput": {
+        "properties": {
+          "api_key": {
+            "description": "Required on create; omit on update to keep the stored key",
+            "type": "string"
+          },
+          "base_url": {
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "base_url"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/ProwlarrLinkInput"
+      }
+    },
+    "required": [
+      "body"
+    ],
+    "type": "object"
+  },
+  "testSeerrLink": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "linkId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "linkId"
+    ],
+    "type": "object"
+  },
+  "testSeerrLinkInput": {
+    "$defs": {
+      "SeerrLinkInput": {
+        "properties": {
+          "api_key": {
+            "description": "Required on create; omit on update to keep the stored key",
+            "type": "string"
+          },
+          "base_url": {
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "radarr_instance_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "sonarr_instance_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "base_url"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/SeerrLinkInput"
+      }
+    },
+    "required": [
+      "body"
+    ],
+    "type": "object"
+  },
+  "triggerRun": {
+    "$defs": {
+      "RunTrigger": {
+        "properties": {
+          "kind": {
+            "$ref": "#/$defs/SnatchKind"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "type": "object"
+      },
+      "SnatchKind": {
+        "enum": [
+          "missing",
+          "upgrade"
+        ],
+        "type": "string"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/RunTrigger"
+      },
+      "instanceId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "body",
+      "instanceId"
+    ],
+    "type": "object"
+  },
+  "updateDownloadClient": {
+    "$defs": {
+      "DownloadClientInput": {
+        "properties": {
+          "bandwidth_budget_bps": {
+            "default": 0,
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "base_url": {
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "type": "boolean"
+          },
+          "instance_id": {
+            "description": "Pin the client to one instance; omit to apply it to every instance",
+            "format": "uuid",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/$defs/DownloadClientKind"
+          },
+          "max_active": {
+            "default": 0,
+            "maximum": 1000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "secret": {
+            "description": "Password, or the API key for SABnzbd. On update, omit to keep the stored one.",
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "name",
+          "base_url"
+        ],
+        "type": "object"
+      },
+      "DownloadClientKind": {
+        "enum": [
+          "qbittorrent",
+          "transmission",
+          "deluge",
+          "rtorrent",
+          "sabnzbd",
+          "nzbget"
+        ],
+        "type": "string"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/DownloadClientInput"
+      },
+      "clientId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "body",
+      "clientId"
+    ],
+    "type": "object"
+  },
+  "updateInstance": {
+    "$defs": {
+      "AppKind": {
+        "enum": [
+          "sonarr",
+          "radarr",
+          "lidarr",
+          "readarr",
+          "whisparr_v2",
+          "whisparr_v3"
+        ],
+        "type": "string"
+      },
+      "InstanceUpdate": {
+        "properties": {
+          "api_key": {
+            "description": "Omit or leave empty to keep the stored key",
+            "type": "string"
+          },
+          "base_url": {
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "type": "boolean"
+          },
+          "kind": {
+            "$ref": "#/$defs/AppKind"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "name",
+          "base_url"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/InstanceUpdate"
+      },
+      "instanceId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "body",
+      "instanceId"
+    ],
+    "type": "object"
+  },
+  "updateInstancePriority": {
+    "$defs": {
+      "InstancePriorityInput": {
+        "properties": {
+          "download_priority": {
+            "description": "Optional per-instance download priority rank override (1..100, lower goes first; null clears override).",
+            "maximum": 100,
+            "minimum": 1,
+            "nullable": true,
+            "type": "integer"
+          },
+          "search_priority": {
+            "description": "Optional per-instance search priority rank override (1..100, lower goes first; null clears override).",
+            "maximum": 100,
+            "minimum": 1,
+            "nullable": true,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/InstancePriorityInput"
+      },
+      "instanceId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "body",
+      "instanceId"
+    ],
+    "type": "object"
+  },
+  "updateNotificationChannel": {
+    "$defs": {
+      "NotificationChannelConfig": {
+        "properties": {
+          "allow_insecure_http": {
+            "default": false,
+            "description": "Allow webhooks to connect over cleartext http://",
+            "type": "boolean"
+          },
+          "allow_private_network": {
+            "default": false,
+            "description": "Allow webhooks to connect to loopback/private/internal IP addresses",
+            "type": "boolean"
+          },
+          "app_token": {
+            "description": "Gotify App token (write-only, never returned in responses)",
+            "type": "string"
+          },
+          "avatar_url": {
+            "description": "Discord avatar URL override",
+            "type": "string"
+          },
+          "bot_token": {
+            "description": "Telegram Bot token (write-only, never returned in responses)",
+            "type": "string"
+          },
+          "channel": {
+            "description": "Slack channel override",
+            "type": "string"
+          },
+          "chat_id": {
+            "description": "Telegram chat ID (e.g. -1001234567890 or @channel)",
+            "type": "string"
+          },
+          "icon_emoji": {
+            "description": "Slack icon emoji override",
+            "type": "string"
+          },
+          "parse_mode": {
+            "description": "Telegram parse mode (e.g. HTML, MarkdownV2)",
+            "type": "string"
+          },
+          "password": {
+            "description": "Password, sent as HTTP Basic Auth to an Apprise API server (write-only, never returned in responses)",
+            "type": "string"
+          },
+          "priority": {
+            "description": "Priority for ntfy (1-5) or Gotify (0-10)",
+            "type": "integer"
+          },
+          "secret": {
+            "description": "HMAC signing secret (write-only, never returned in responses)",
+            "type": "string"
+          },
+          "server_url": {
+            "description": "Base URL for ntfy or Gotify",
+            "type": "string"
+          },
+          "tags": {
+            "description": "Tags / emoji shortcodes for ntfy; for Apprise, the configuration tags to notify (any one matches)",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "theme_color": {
+            "description": "Teams theme color hex without '#' (e.g. 0076D7)",
+            "type": "string"
+          },
+          "token": {
+            "description": "Bearer token (write-only, never returned in responses)",
+            "type": "string"
+          },
+          "topic": {
+            "description": "ntfy topic name",
+            "type": "string"
+          },
+          "url": {
+            "description": "Target endpoint URL for signed outgoing webhooks",
+            "type": "string"
+          },
+          "username": {
+            "description": "Display username override, or the HTTP Basic Auth user for an Apprise API server",
+            "type": "string"
+          },
+          "webhook_url": {
+            "description": "Webhook URL for Discord, Slack and Teams, or the Apprise API notify URL ({server}/notify/{config key}) (write-only, never returned in responses)",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "NotificationChannelKind": {
+        "enum": [
+          "discord",
+          "slack",
+          "telegram",
+          "ntfy",
+          "gotify",
+          "teams",
+          "webhook",
+          "apprise"
+        ],
+        "type": "string"
+      },
+      "NotificationChannelUpdate": {
+        "properties": {
+          "config": {
+            "$ref": "#/$defs/NotificationChannelConfig"
+          },
+          "enabled": {
+            "default": true,
+            "type": "boolean"
+          },
+          "kind": {
+            "$ref": "#/$defs/NotificationChannelKind"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "kind"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/NotificationChannelUpdate"
+      },
+      "channelId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "body",
+      "channelId"
+    ],
+    "type": "object"
+  },
+  "updateNotificationRule": {
+    "$defs": {
+      "NotificationRuleEventKind": {
+        "enum": [
+          "run_failure_streak",
+          "circuit_opened",
+          "instance_unreachable",
+          "stamina_exhausted",
+          "seerr_request_snatched"
+        ],
+        "type": "string"
+      },
+      "NotificationRuleUpdate": {
+        "properties": {
+          "channel_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "enabled": {
+            "default": true,
+            "type": "boolean"
+          },
+          "event_kind": {
+            "$ref": "#/$defs/NotificationRuleEventKind"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
+          "threshold": {
+            "default": 1,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "event_kind",
+          "threshold",
+          "channel_ids"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/NotificationRuleUpdate"
+      },
+      "ruleId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "body",
+      "ruleId"
+    ],
+    "type": "object"
+  },
+  "updatePolicy": {
+    "$defs": {
+      "SnatchPolicy": {
+        "properties": {
+          "afterglow_max_h": {
+            "description": "Afterglow doubles after every fruitless snatch of the same item, up to this many hours.",
+            "maximum": 8760,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "await_command": {
+            "type": "boolean"
+          },
+          "cycle_interval_s": {
+            "description": "Refractory period: seconds between two snatches of the same kind.",
+            "maximum": 604800,
+            "minimum": 60,
+            "type": "integer"
+          },
+          "dry_run": {
+            "default": false,
+            "description": "When true, planner creates preview / dry-run runs that do not dispatch searches.",
+            "type": "boolean"
+          },
+          "exclude_quality_profiles": {
+            "description": "*arr quality profile ids: items using any of these profiles are never searched. An id may not be in both profile lists. Absent = empty.",
+            "items": {
+              "format": "int32",
+              "minimum": 1,
+              "type": "integer"
+            },
+            "maxItems": 100,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "exclude_tags": {
+            "description": "*arr tag ids: items carrying any of these tags are never searched. An id may not be in both tag lists. Absent = empty.",
+            "items": {
+              "format": "int32",
+              "minimum": 1,
+              "type": "integer"
+            },
+            "maxItems": 100,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "hourly_cap": {
+            "description": "Stamina: searches an instance may send to its indexers per hour before it needs a rest (1-500). One per episode, season, movie, album or book; one for a whole artist or author search.",
+            "maximum": 500,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "include_quality_profiles": {
+            "description": "*arr quality profile ids: when not empty, only items using one of these profiles are searched. An episode, album or book uses the profile of its series, artist or author; a Chaptarr author counts its audiobook and ebook profiles too. Absent = empty.",
+            "items": {
+              "format": "int32",
+              "minimum": 1,
+              "type": "integer"
+            },
+            "maxItems": 100,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "include_tags": {
+            "description": "*arr tag ids: when not empty, only items carrying one of these tags are searched. An episode, album or book has the tags of its series, artist or author. Absent = empty.",
+            "items": {
+              "format": "int32",
+              "minimum": 1,
+              "type": "integer"
+            },
+            "maxItems": 100,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "lidarr_missing_mode": {
+            "enum": [
+              "artist",
+              "album"
+            ],
+            "type": "string"
+          },
+          "max_queue_size": {
+            "maximum": 100000,
+            "minimum": -1,
+            "type": "integer"
+          },
+          "missing_per_cycle": {
+            "description": "How many missing items one snatch goes after (0 disables missing snatches).",
+            "maximum": 100,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "monitored_only": {
+            "type": "boolean"
+          },
+          "page_size": {
+            "maximum": 1000,
+            "minimum": 10,
+            "type": "integer"
+          },
+          "processed_ttl_h": {
+            "description": "Afterglow: hours an item rests after a snatch before it may be touched again.",
+            "maximum": 8760,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "radarr_release_type": {
+            "enum": [
+              "physical",
+              "digital",
+              "cinema"
+            ],
+            "type": "string"
+          },
+          "recent_grab_window_h": {
+            "description": "Skip items the *arr grabbed within this many hours (its history) and items already in its download queue; 0 keeps only the queue check.",
+            "maximum": 720,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "release_delay_h": {
+            "description": "Skip items released less than this many hours ago; 0 (or absent) turns the delay off. The release date is the one of the app kind: air date (Sonarr, Whisparr v2), the date of radarr_release_type (Radarr, Whisparr v3), the album or book release date. Items without a date are kept.",
+            "maximum": 8760,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "selection": {
+            "description": "random spreads searches over the library, sequential walks it with a cursor, recent prefers the newest releases with a slice reserved for the backlog",
+            "enum": [
+              "random",
+              "sequential",
+              "recent"
+            ],
+            "type": "string"
+          },
+          "skip_future_releases": {
+            "type": "boolean"
+          },
+          "skip_unavailable_movies": {
+            "default": true,
+            "description": "Radarr only: skip movies Radarr reports as not yet available (isAvailable false, the movie's minimum availability is not reached). They are not searched and cost no stamina. Movies without the flag are searched. Absent = true.",
+            "type": "boolean"
+          },
+          "sonarr_missing_mode": {
+            "enum": [
+              "episodes",
+              "season_packs",
+              "shows"
+            ],
+            "type": "string"
+          },
+          "sonarr_upgrade_mode": {
+            "enum": [
+              "episodes",
+              "season_packs"
+            ],
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "readOnly": true,
+            "type": "string"
+          },
+          "upgrade_per_cycle": {
+            "description": "How many cutoff-unmet items one snatch goes after (0 disables upgrade snatches).",
+            "maximum": 100,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "missing_per_cycle",
+          "upgrade_per_cycle",
+          "cycle_interval_s",
+          "hourly_cap",
+          "selection",
+          "monitored_only",
+          "skip_future_releases",
+          "radarr_release_type",
+          "sonarr_missing_mode",
+          "sonarr_upgrade_mode",
+          "lidarr_missing_mode",
+          "processed_ttl_h",
+          "max_queue_size",
+          "await_command",
+          "page_size",
+          "recent_grab_window_h",
+          "afterglow_max_h"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/SnatchPolicy"
+      },
+      "instanceId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "body",
+      "instanceId"
+    ],
+    "type": "object"
+  },
+  "updateProwlarrLink": {
+    "$defs": {
+      "ProwlarrLinkInput": {
+        "properties": {
+          "api_key": {
+            "description": "Required on create; omit on update to keep the stored key",
+            "type": "string"
+          },
+          "base_url": {
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "base_url"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/ProwlarrLinkInput"
+      },
+      "linkId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "body",
+      "linkId"
+    ],
+    "type": "object"
+  },
+  "updateQueuePolicy": {
+    "$defs": {
+      "QueuePolicy": {
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "grace_seconds": {
+            "maximum": 86400,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "match_broken_below_percent": {
+            "description": "Album or book match percentage below which a release is considered broken (default 40; used by rematch fallback).",
+            "format": "double",
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          },
+          "match_fixable_min_percent": {
+            "description": "Minimum album or book match percentage for fixable manual import (default 75).",
+            "format": "double",
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          },
+          "max_imports_per_sweep": {
+            "description": "Most id_matched imports one sweep sends per instance. Optional on write so older clients keep working; left out, it takes the default of 25. Reads always return it.",
+            "maximum": 100,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "max_removals_per_sweep": {
+            "maximum": 100,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "min_bytes_per_second": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "min_custom_format_score": {
+            "description": "Lowest custom format score an item may have; left out, the unwanted_score rule is off.",
+            "format": "int32",
+            "type": "integer"
+          },
+          "rules": {
+            "$ref": "#/$defs/QueueRules"
+          },
+          "track_broken_below_percent": {
+            "description": "Track match percentage below which a release is considered broken (default 40; used by rematch fallback).",
+            "format": "double",
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          },
+          "track_fixable_min_percent": {
+            "description": "Minimum track match percentage for fixable manual import (default 50).",
+            "format": "double",
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [
+          "enabled",
+          "rules",
+          "grace_seconds",
+          "min_bytes_per_second",
+          "max_removals_per_sweep"
+        ],
+        "type": "object"
+      },
+      "QueueRuleMode": {
+        "enum": [
+          "observe",
+          "act"
+        ],
+        "type": "string"
+      },
+      "QueueRuleSettings": {
+        "properties": {
+          "blocklist": {
+            "description": "Blocklist the release when the rule removes the item. Left out on write, the rule keeps its default (every rule except not_an_upgrade, duplicate and unwanted_unmonitored blocklists); reads always return the effective value.",
+            "type": "boolean"
+          },
+          "mode": {
+            "$ref": "#/$defs/QueueRuleMode"
+          },
+          "threshold": {
+            "maximum": 1440,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "mode",
+          "threshold"
+        ],
+        "type": "object"
+      },
+      "QueueRules": {
+        "properties": {
+          "duplicate": {
+            "$ref": "#/$defs/QueueRuleSettings",
+            "description": "Strikes every download for an episode, movie, album or book except the one with the highest custom-format score; a tie keeps the lowest queue id. Optional on write so older clients keep working; left out, the rule takes its default settings. Reads always return it."
+          },
+          "failed": {
+            "$ref": "#/$defs/QueueRuleSettings"
+          },
+          "id_matched": {
+            "$ref": "#/$defs/QueueRuleSettings",
+            "description": "Force-imports a Sonarr or Radarr download the *arr matched to its series or movie by ID only, through a ManualImport of its clean, mapped candidates; it never removes or blocklists (ADR-0013). Optional on write so older clients keep working; left out, the rule takes its default settings. Reads always return it."
+          },
+          "import_blocked": {
+            "$ref": "#/$defs/QueueRuleSettings"
+          },
+          "import_broken": {
+            "$ref": "#/$defs/QueueRuleSettings",
+            "description": "Strikes and removes a download whose release is broken (e.g. no tracks matched, corrupt container, parser error) with blocklist and re-search. Optional on write; left out, the rule takes its default settings. Reads always return it."
+          },
+          "import_fixable": {
+            "$ref": "#/$defs/QueueRuleSettings",
+            "description": "Force-imports a download whose import rejections are fixable (e.g. Lidarr/Readarr track/album match above floor, scene numbering mismatch); never removes or blocklists. Optional on write; left out, the rule takes its default settings. Reads always return it."
+          },
+          "import_not_wanted": {
+            "$ref": "#/$defs/QueueRuleSettings",
+            "description": "Strikes and removes a download that is not wanted (e.g. release not requested, fewer tracks than existing release) with blocklist, without re-search. Optional on write; left out, the rule takes its default settings. Reads always return it."
+          },
+          "metadata_stuck": {
+            "$ref": "#/$defs/QueueRuleSettings",
+            "description": "Strikes and removes a torrent download stuck fetching metadata. Optional on write so older clients keep working; left out, the rule takes its default settings. Reads always return it."
+          },
+          "not_an_upgrade": {
+            "$ref": "#/$defs/QueueRuleSettings",
+            "description": "Strikes a download whose custom-format score does not beat the file already on disk (Sonarr and Radarr). Optional on write so older clients keep working; left out, the rule takes its default settings. Reads always return it."
+          },
+          "slow": {
+            "$ref": "#/$defs/QueueRuleSettings"
+          },
+          "stalled": {
+            "$ref": "#/$defs/QueueRuleSettings"
+          },
+          "unwanted_score": {
+            "$ref": "#/$defs/QueueRuleSettings"
+          },
+          "unwanted_unmonitored": {
+            "$ref": "#/$defs/QueueRuleSettings"
+          }
+        },
+        "required": [
+          "stalled",
+          "slow",
+          "failed",
+          "import_blocked",
+          "unwanted_score",
+          "unwanted_unmonitored"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/QueuePolicy"
+      },
+      "instanceId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "body",
+      "instanceId"
+    ],
+    "type": "object"
+  },
+  "updateSchedule": {
+    "$defs": {
+      "ScheduleInput": {
+        "properties": {
+          "action": {
+            "enum": [
+              "pause",
+              "cap_override"
+            ],
+            "type": "string"
+          },
+          "cap_value": {
+            "maximum": 500,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "days": {
+            "description": "Weekdays the window applies to (0 = Sunday)",
+            "items": {
+              "maximum": 6,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "maxItems": 7,
+            "minItems": 1,
+            "type": "array"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "end": {
+            "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+            "type": "string"
+          },
+          "instance_id": {
+            "description": "Omit for a global window",
+            "format": "uuid",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "start": {
+            "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+            "type": "string"
+          },
+          "tz": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "days",
+          "start",
+          "end",
+          "tz",
+          "action",
+          "enabled"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/ScheduleInput"
+      },
+      "scheduleId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "body",
+      "scheduleId"
+    ],
+    "type": "object"
+  },
+  "updateSeerrLink": {
+    "$defs": {
+      "SeerrLinkInput": {
+        "properties": {
+          "api_key": {
+            "description": "Required on create; omit on update to keep the stored key",
+            "type": "string"
+          },
+          "base_url": {
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "radarr_instance_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "sonarr_instance_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "base_url"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/SeerrLinkInput"
+      },
+      "linkId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "body",
+      "linkId"
+    ],
+    "type": "object"
+  },
+  "updateSettings": {
+    "$defs": {
+      "LlmWriteTool": {
+        "enum": [
+          "snatcharr_trigger_run",
+          "snatcharr_update_policy",
+          "snatcharr_cancel_run",
+          "snatcharr_delete_instance",
+          "snatcharr_create_instance",
+          "snatcharr_test_instance_input",
+          "snatcharr_update_instance",
+          "snatcharr_test_instance",
+          "snatcharr_update_queue_policy",
+          "snatcharr_preview_run",
+          "snatcharr_delete_instance_events",
+          "snatcharr_reset_state",
+          "snatcharr_create_schedule",
+          "snatcharr_update_schedule",
+          "snatcharr_delete_schedule",
+          "snatcharr_import_configarr",
+          "snatcharr_update_settings"
+        ],
+        "type": "string"
+      },
+      "PriorityPresetMap": {
+        "additionalProperties": {
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "description": "Priority rank (1..100, lower goes first) per *arr application kind.",
+        "type": "object"
+      },
+      "Settings": {
+        "properties": {
+          "download_priority_preset": {
+            "$ref": "#/$defs/PriorityPresetMap"
+          },
+          "global_hourly_cap": {
+            "description": "Shared stamina across every instance for setups where several *arr apps hit the same indexers (0 = off).",
+            "maximum": 5000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "history_retention_days": {
+            "maximum": 3650,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "llm_enabled": {
+            "default": false,
+            "description": "Whether the Model Context Protocol (MCP) server at /api/v1/mcp is enabled.",
+            "type": "boolean"
+          },
+          "llm_write_tools": {
+            "description": "MCP write tools enabled by the administrator; an omitted list enables none.",
+            "items": {
+              "$ref": "#/$defs/LlmWriteTool"
+            },
+            "type": "array",
+            "uniqueItems": true
+          },
+          "search_priority_preset": {
+            "$ref": "#/$defs/PriorityPresetMap"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "user_agent": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "history_retention_days",
+          "user_agent",
+          "global_hourly_cap",
+          "search_priority_preset",
+          "download_priority_preset"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/Settings"
+      }
+    },
+    "required": [
+      "body"
+    ],
+    "type": "object"
+  }
+}

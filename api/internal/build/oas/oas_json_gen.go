@@ -3977,6 +3977,32 @@ func (s *LlmWriteTool) Decode(d *jx.Decoder) error {
 		*s = LlmWriteToolSnatcharrCancelRun
 	case LlmWriteToolSnatcharrDeleteInstance:
 		*s = LlmWriteToolSnatcharrDeleteInstance
+	case LlmWriteToolSnatcharrCreateInstance:
+		*s = LlmWriteToolSnatcharrCreateInstance
+	case LlmWriteToolSnatcharrTestInstanceInput:
+		*s = LlmWriteToolSnatcharrTestInstanceInput
+	case LlmWriteToolSnatcharrUpdateInstance:
+		*s = LlmWriteToolSnatcharrUpdateInstance
+	case LlmWriteToolSnatcharrTestInstance:
+		*s = LlmWriteToolSnatcharrTestInstance
+	case LlmWriteToolSnatcharrUpdateQueuePolicy:
+		*s = LlmWriteToolSnatcharrUpdateQueuePolicy
+	case LlmWriteToolSnatcharrPreviewRun:
+		*s = LlmWriteToolSnatcharrPreviewRun
+	case LlmWriteToolSnatcharrDeleteInstanceEvents:
+		*s = LlmWriteToolSnatcharrDeleteInstanceEvents
+	case LlmWriteToolSnatcharrResetState:
+		*s = LlmWriteToolSnatcharrResetState
+	case LlmWriteToolSnatcharrCreateSchedule:
+		*s = LlmWriteToolSnatcharrCreateSchedule
+	case LlmWriteToolSnatcharrUpdateSchedule:
+		*s = LlmWriteToolSnatcharrUpdateSchedule
+	case LlmWriteToolSnatcharrDeleteSchedule:
+		*s = LlmWriteToolSnatcharrDeleteSchedule
+	case LlmWriteToolSnatcharrImportConfigarr:
+		*s = LlmWriteToolSnatcharrImportConfigarr
+	case LlmWriteToolSnatcharrUpdateSettings:
+		*s = LlmWriteToolSnatcharrUpdateSettings
 	default:
 		*s = LlmWriteTool(v)
 	}
