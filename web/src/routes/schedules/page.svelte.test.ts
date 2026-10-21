@@ -47,6 +47,25 @@ const baseStubs = {
 	'/instances': []
 };
 
+async function clickFirstButton(name: string): Promise<void> {
+	const buttons = await screen.findAllByRole('button', { name });
+	const first = buttons[0];
+	if (!first) throw new Error(`missing button: ${name}`);
+	await fireEvent.click(first);
+}
+
+async function openFirstEdit(): Promise<void> {
+	await clickFirstButton(m.schedule_edit());
+	expect(
+		await screen.findByRole('heading', { level: 2, name: m.schedule_edit_title() })
+	).toBeTruthy();
+}
+
+async function openFirstDeleteConfirm(): Promise<void> {
+	await clickFirstButton(m.schedule_delete());
+	expect(screen.getByText(m.schedule_delete_confirm({ name: sampleSchedule.name }))).toBeTruthy();
+}
+
 describe('schedules', () => {
 	afterEach(() => {
 		vi.restoreAllMocks();
@@ -163,15 +182,7 @@ describe('schedules', () => {
 			data: { ...sampleSchedule, name: 'Renamed Night Hours' }
 		} as never);
 		renderWithQuery(SchedulesPage);
-
-		const editButtons = await screen.findAllByRole('button', { name: m.schedule_edit() });
-		const firstEdit = editButtons[0];
-		if (!firstEdit) throw new Error('missing edit button');
-		await fireEvent.click(firstEdit);
-
-		expect(
-			await screen.findByRole('heading', { level: 2, name: m.schedule_edit_title() })
-		).toBeTruthy();
+		await openFirstEdit();
 
 		const nameInput = screen.getByLabelText(m.schedule_name());
 		expect((nameInput as HTMLInputElement).value).toBe('Night Quiet Hours');
@@ -197,15 +208,7 @@ describe('schedules', () => {
 	it('cancels editing and resets form to add mode', async () => {
 		stubGet(baseStubs);
 		renderWithQuery(SchedulesPage);
-
-		const editButtons = await screen.findAllByRole('button', { name: m.schedule_edit() });
-		const firstEdit = editButtons[0];
-		if (!firstEdit) throw new Error('missing edit button');
-		await fireEvent.click(firstEdit);
-
-		expect(
-			await screen.findByRole('heading', { level: 2, name: m.schedule_edit_title() })
-		).toBeTruthy();
+		await openFirstEdit();
 
 		const cancelBtn = screen.getByRole('button', { name: m.schedule_cancel() });
 		await fireEvent.click(cancelBtn);
@@ -217,13 +220,7 @@ describe('schedules', () => {
 		stubGet(baseStubs);
 		const deleteSpy = vi.spyOn(api, 'DELETE').mockResolvedValue({ data: undefined } as never);
 		renderWithQuery(SchedulesPage);
-
-		const deleteButtons = await screen.findAllByRole('button', { name: m.schedule_delete() });
-		const firstDelete = deleteButtons[0];
-		if (!firstDelete) throw new Error('missing delete button');
-		await fireEvent.click(firstDelete);
-
-		expect(screen.getByText(m.schedule_delete_confirm({ name: sampleSchedule.name }))).toBeTruthy();
+		await openFirstDeleteConfirm();
 
 		const confirmBtn = screen.getByRole('button', { name: m.schedule_confirm_delete() });
 		await fireEvent.click(confirmBtn);
@@ -237,13 +234,7 @@ describe('schedules', () => {
 		stubGet(baseStubs);
 		const deleteSpy = vi.spyOn(api, 'DELETE');
 		renderWithQuery(SchedulesPage);
-
-		const deleteButtons = await screen.findAllByRole('button', { name: m.schedule_delete() });
-		const firstDelete = deleteButtons[0];
-		if (!firstDelete) throw new Error('missing delete button');
-		await fireEvent.click(firstDelete);
-
-		expect(screen.getByText(m.schedule_delete_confirm({ name: sampleSchedule.name }))).toBeTruthy();
+		await openFirstDeleteConfirm();
 
 		const cancelBtn = screen.getByRole('button', { name: m.schedule_cancel() });
 		await fireEvent.click(cancelBtn);
