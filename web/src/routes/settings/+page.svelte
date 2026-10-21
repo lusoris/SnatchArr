@@ -28,6 +28,44 @@ SPDX-License-Identifier: EUPL-1.2
 		typeof rankSchema
 	>;
 	const presetMapSchema = z.object(presetFields) satisfies z.ZodType<PriorityPresetMap>;
+	type LlmWriteTool = components['schemas']['LlmWriteTool'];
+
+	const coreWriteToolOptions: { value: LlmWriteTool; label: () => string }[] = [
+		{ value: 'snatcharr_create_instance', label: () => m.settings_llm_tool_create_instance() },
+		{ value: 'snatcharr_update_instance', label: () => m.settings_llm_tool_update_instance() },
+		{ value: 'snatcharr_delete_instance', label: () => m.settings_llm_tool_delete_instance() },
+		{ value: 'snatcharr_test_instance', label: () => m.settings_llm_tool_test_instance() },
+		{
+			value: 'snatcharr_test_instance_input',
+			label: () => m.settings_llm_tool_test_instance_input()
+		},
+		{
+			value: 'snatcharr_delete_instance_events',
+			label: () => m.settings_llm_tool_delete_instance_events()
+		},
+		{ value: 'snatcharr_update_policy', label: () => m.settings_llm_tool_update_policy() },
+		{
+			value: 'snatcharr_update_queue_policy',
+			label: () => m.settings_llm_tool_update_queue_policy()
+		},
+		{ value: 'snatcharr_trigger_run', label: () => m.settings_llm_tool_trigger_run() },
+		{ value: 'snatcharr_preview_run', label: () => m.settings_llm_tool_preview_run() },
+		{ value: 'snatcharr_cancel_run', label: () => m.settings_llm_tool_cancel_run() },
+		{ value: 'snatcharr_reset_state', label: () => m.settings_llm_tool_reset_state() },
+		{ value: 'snatcharr_create_schedule', label: () => m.settings_llm_tool_create_schedule() },
+		{ value: 'snatcharr_update_schedule', label: () => m.settings_llm_tool_update_schedule() },
+		{ value: 'snatcharr_delete_schedule', label: () => m.settings_llm_tool_delete_schedule() },
+		{ value: 'snatcharr_import_configarr', label: () => m.settings_llm_tool_import_configarr() }
+	];
+
+	const adminWriteToolOptions: { value: LlmWriteTool; label: () => string }[] = [
+		{ value: 'snatcharr_update_settings', label: () => m.settings_llm_tool_update_settings() }
+	];
+
+	const knownWriteTools = new Set<string>(
+		[...coreWriteToolOptions, ...adminWriteToolOptions].map((o) => o.value)
+	);
+
 	const settingsSchema = z.object({
 		history_retention_days: z.number().int().min(1).max(3650),
 		user_agent: z.string().min(1).max(200),
@@ -36,24 +74,9 @@ SPDX-License-Identifier: EUPL-1.2
 		download_priority_preset: presetMapSchema,
 		llm_enabled: z.boolean(),
 		llm_write_tools: z
-			.array(
-				z.enum([
-					'snatcharr_trigger_run',
-					'snatcharr_update_policy',
-					'snatcharr_cancel_run',
-					'snatcharr_delete_instance'
-				])
-			)
+			.array(z.custom<LlmWriteTool>((v) => typeof v === 'string' && knownWriteTools.has(v)))
 			.optional()
 	}) satisfies z.ZodType<Omit<Settings, 'updated_at'>>;
-	type LlmWriteTool = components['schemas']['LlmWriteTool'];
-
-	const llmWriteToolOptions: { value: LlmWriteTool; label: () => string }[] = [
-		{ value: 'snatcharr_trigger_run', label: () => m.settings_llm_tool_trigger_run() },
-		{ value: 'snatcharr_update_policy', label: () => m.settings_llm_tool_update_policy() },
-		{ value: 'snatcharr_cancel_run', label: () => m.settings_llm_tool_cancel_run() },
-		{ value: 'snatcharr_delete_instance', label: () => m.settings_llm_tool_delete_instance() }
-	];
 
 	const settings = createSentioQuery({
 		queryKey: keys.settings,
@@ -191,25 +214,47 @@ SPDX-License-Identifier: EUPL-1.2
 				<input type="checkbox" data-field="llm_enabled" bind:checked={draft.llm_enabled} />
 				{m.settings_llm_enabled()}
 			</label>
-			<fieldset
-				data-field="llm_write_tools"
-				disabled={!draft.llm_enabled}
-				class="flex flex-col gap-2"
-			>
-				<legend class="text-sm font-medium">{m.settings_llm_write_tools()}</legend>
-				{#each llmWriteToolOptions as opt (opt.value)}
-					<label class="flex items-center gap-2">
-						<input
-							type="checkbox"
-							value={opt.value}
-							disabled={!draft.llm_enabled}
-							checked={(draft.llm_write_tools ?? []).includes(opt.value)}
-							onchange={(e) => toggleWriteTool(opt.value, e.currentTarget.checked)}
-						/>
-						{opt.label()}
-					</label>
-				{/each}
-			</fieldset>
+			<div class="flex flex-col gap-3" data-field="llm_write_tools">
+				<span class="text-sm font-medium">{m.settings_llm_write_tools()}</span>
+				<fieldset
+					data-field="llm_write_tools_core"
+					disabled={!draft.llm_enabled}
+					class="border-border flex flex-col gap-2 rounded border p-3"
+				>
+					<legend class="px-1 text-sm font-medium">{m.settings_llm_scope_core_write()}</legend>
+					{#each coreWriteToolOptions as opt (opt.value)}
+						<label class="flex items-center gap-2">
+							<input
+								type="checkbox"
+								value={opt.value}
+								disabled={!draft.llm_enabled}
+								checked={(draft.llm_write_tools ?? []).includes(opt.value)}
+								onchange={(e) => toggleWriteTool(opt.value, e.currentTarget.checked)}
+							/>
+							{opt.label()}
+						</label>
+					{/each}
+				</fieldset>
+				<fieldset
+					data-field="llm_write_tools_admin"
+					disabled={!draft.llm_enabled}
+					class="border-border flex flex-col gap-2 rounded border p-3"
+				>
+					<legend class="px-1 text-sm font-medium">{m.settings_llm_scope_admin_write()}</legend>
+					{#each adminWriteToolOptions as opt (opt.value)}
+						<label class="flex items-center gap-2">
+							<input
+								type="checkbox"
+								value={opt.value}
+								disabled={!draft.llm_enabled}
+								checked={(draft.llm_write_tools ?? []).includes(opt.value)}
+								onchange={(e) => toggleWriteTool(opt.value, e.currentTarget.checked)}
+							/>
+							{opt.label()}
+						</label>
+					{/each}
+				</fieldset>
+			</div>
 			{#if session.isAdmin}
 				<div>
 					<button type="submit" class="btn btn-primary" disabled={save.isPending}

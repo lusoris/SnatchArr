@@ -15,17 +15,43 @@ const GlobalHourlyCapLimit = 5000
 
 // LLMWriteTool constants name the MCP write tools that an administrator may opt in to.
 const (
-	LLMWriteToolTriggerRun     = "snatcharr_trigger_run"
-	LLMWriteToolUpdatePolicy   = "snatcharr_update_policy"
-	LLMWriteToolCancelRun      = "snatcharr_cancel_run"
-	LLMWriteToolDeleteInstance = "snatcharr_delete_instance"
+	LLMWriteToolTriggerRun           = "snatcharr_trigger_run"
+	LLMWriteToolUpdatePolicy         = "snatcharr_update_policy"
+	LLMWriteToolCancelRun            = "snatcharr_cancel_run"
+	LLMWriteToolDeleteInstance       = "snatcharr_delete_instance"
+	LLMWriteToolCreateInstance       = "snatcharr_create_instance"
+	LLMWriteToolTestInstanceInput    = "snatcharr_test_instance_input"
+	LLMWriteToolUpdateInstance       = "snatcharr_update_instance"
+	LLMWriteToolTestInstance         = "snatcharr_test_instance"
+	LLMWriteToolUpdateQueuePolicy    = "snatcharr_update_queue_policy"
+	LLMWriteToolPreviewRun           = "snatcharr_preview_run"
+	LLMWriteToolDeleteInstanceEvents = "snatcharr_delete_instance_events"
+	LLMWriteToolResetState           = "snatcharr_reset_state"
+	LLMWriteToolCreateSchedule       = "snatcharr_create_schedule"
+	LLMWriteToolUpdateSchedule       = "snatcharr_update_schedule"
+	LLMWriteToolDeleteSchedule       = "snatcharr_delete_schedule"
+	LLMWriteToolImportConfigarr      = "snatcharr_import_configarr"
+	LLMWriteToolUpdateSettings       = "snatcharr_update_settings"
 )
 
 var validLLMWriteTools = map[string]struct{}{
-	LLMWriteToolTriggerRun:     {},
-	LLMWriteToolUpdatePolicy:   {},
-	LLMWriteToolCancelRun:      {},
-	LLMWriteToolDeleteInstance: {},
+	LLMWriteToolTriggerRun:           {},
+	LLMWriteToolUpdatePolicy:         {},
+	LLMWriteToolCancelRun:            {},
+	LLMWriteToolDeleteInstance:       {},
+	LLMWriteToolCreateInstance:       {},
+	LLMWriteToolTestInstanceInput:    {},
+	LLMWriteToolUpdateInstance:       {},
+	LLMWriteToolTestInstance:         {},
+	LLMWriteToolUpdateQueuePolicy:    {},
+	LLMWriteToolPreviewRun:           {},
+	LLMWriteToolDeleteInstanceEvents: {},
+	LLMWriteToolResetState:           {},
+	LLMWriteToolCreateSchedule:       {},
+	LLMWriteToolUpdateSchedule:       {},
+	LLMWriteToolDeleteSchedule:       {},
+	LLMWriteToolImportConfigarr:      {},
+	LLMWriteToolUpdateSettings:       {},
 }
 
 // Settings is the singleton service configuration users edit at runtime.

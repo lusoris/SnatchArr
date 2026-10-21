@@ -56,28 +56,40 @@ func requestAuthFrom(ctx context.Context) requestAuth {
 
 // Service wraps the stateless MCP Streamable HTTP handler and its security/toggle gates.
 type Service struct {
-	build      buildinfo.Info
-	settings   *settings.Service
-	security   *httpapi.Security
-	handlers   *httpapi.Handlers
-	logger     *slog.Logger
-	mcpHandler http.Handler
+	build       buildinfo.Info
+	settings    *settings.Service
+	security    *httpapi.Security
+	handlers    *httpapi.Handlers
+	logger      *slog.Logger
+	specs       []toolSpec
+	toolSchemas map[string]json.RawMessage
+	mcpHandler  http.Handler
 }
 
-// New constructs the MCP service.
-func New(build buildinfo.Info, settingsSvc *settings.Service, security *httpapi.Security, handlers *httpapi.Handlers, logger *slog.Logger) *Service {
+// New constructs the MCP service and resolves all registered tool input schemas at startup.
+func New(build buildinfo.Info, settingsSvc *settings.Service, security *httpapi.Security, handlers *httpapi.Handlers, logger *slog.Logger) (*Service, error) {
+	return newWithSpecs(build, settingsSvc, security, handlers, logger, toolRegistry)
+}
+
+func newWithSpecs(build buildinfo.Info, settingsSvc *settings.Service, security *httpapi.Security, handlers *httpapi.Handlers, logger *slog.Logger, specs []toolSpec) (*Service, error) {
+	schemas, err := resolveToolSchemas(specs)
+	if err != nil {
+		return nil, err
+	}
 	s := &Service{
-		build:    build,
-		settings: settingsSvc,
-		security: security,
-		handlers: handlers,
-		logger:   logger,
+		build:       build,
+		settings:    settingsSvc,
+		security:    security,
+		handlers:    handlers,
+		logger:      logger,
+		specs:       specs,
+		toolSchemas: schemas,
 	}
 	s.mcpHandler = mcp.NewStreamableHTTPHandler(s.getServer, &mcp.StreamableHTTPOptions{
 		Stateless:    true,
 		JSONResponse: true,
 	})
-	return s
+	return s, nil
 }
 
 // Module provides the MCP service to the fx graph.
@@ -202,7 +214,7 @@ func (s *Service) checkToolCallFences(w http.ResponseWriter, r *http.Request, au
 	if len(buf) == 0 || json.Unmarshal(buf, &peek) != nil || peek.Method != "tools/call" || peek.Params.Name == "" {
 		return true
 	}
-	spec, ok := lookupTool(peek.Params.Name)
+	spec, ok := lookupTool(s.specs, peek.Params.Name)
 	if !ok {
 		return true
 	}
@@ -252,6 +264,6 @@ func (s *Service) getServer(r *http.Request) *mcp.Server {
 		logger: s.logger,
 		user:   auth.user,
 		keyID:  auth.keyID,
-	}, auth.scopes, auth.writeTools)
+	}, s.specs, s.toolSchemas, auth.scopes, auth.writeTools)
 	return srv
 }

@@ -378,6 +378,7 @@ paths:
     delete:
       tags: [instances]
       operationId: deleteInstance
+      x-destructive: true
       summary: Delete an instance and everything it owns
       description: An instance that the Configarr configuration still declares cannot be deleted (403); one that was removed from it can.
       responses:
@@ -612,6 +613,7 @@ paths:
     delete:
       tags: [snatches]
       operationId: deleteInstanceEvents
+      x-destructive: true
       summary: Clear the history of one instance
       responses:
         "204":
@@ -681,6 +683,7 @@ paths:
     post:
       tags: [snatches]
       operationId: cancelRun
+      x-destructive: true
       summary: Cancel a queued or leased run
       parameters:
         - name: runId
@@ -852,6 +855,7 @@ paths:
     post:
       tags: [snatches]
       operationId: resetState
+      x-destructive: true
       summary: Forget processed items (one instance or all)
       requestBody:
         required: false
@@ -935,6 +939,7 @@ paths:
     delete:
       tags: [schedules]
       operationId: deleteSchedule
+      x-destructive: true
       summary: Delete a schedule window
       responses:
         "204":
@@ -1054,6 +1059,7 @@ paths:
     delete:
       tags: [download-clients]
       operationId: deleteDownloadClient
+      x-destructive: true
       summary: Delete a download client
       responses:
         "204":
@@ -1230,6 +1236,7 @@ paths:
     delete:
       tags: [seerr]
       operationId: deleteSeerrLink
+      x-destructive: true
       summary: Delete a Seerr link and its cached requests
       responses:
         "204":
@@ -1400,6 +1407,7 @@ paths:
     delete:
       tags: [prowlarr]
       operationId: deleteProwlarrLink
+      x-destructive: true
       summary: Delete a Prowlarr link
       responses:
         "204":
@@ -1534,6 +1542,7 @@ paths:
     delete:
       tags: [notifications]
       operationId: deleteNotificationChannel
+      x-destructive: true
       summary: Delete a notification channel
       responses:
         "204":
@@ -1628,6 +1637,7 @@ paths:
     delete:
       tags: [notifications]
       operationId: deleteNotificationRule
+      x-destructive: true
       summary: Delete a notification rule
       responses:
         "204":
@@ -2437,6 +2447,19 @@ components:
         - snatcharr_update_policy
         - snatcharr_cancel_run
         - snatcharr_delete_instance
+        - snatcharr_create_instance
+        - snatcharr_test_instance_input
+        - snatcharr_update_instance
+        - snatcharr_test_instance
+        - snatcharr_update_queue_policy
+        - snatcharr_preview_run
+        - snatcharr_delete_instance_events
+        - snatcharr_reset_state
+        - snatcharr_create_schedule
+        - snatcharr_update_schedule
+        - snatcharr_delete_schedule
+        - snatcharr_import_configarr
+        - snatcharr_update_settings
     Settings:
       type: object
       required:

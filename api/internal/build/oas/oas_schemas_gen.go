@@ -2165,10 +2165,23 @@ func (*ListAPIKeysOKApplicationJSON) listAPIKeysRes() {}
 type LlmWriteTool string
 
 const (
-	LlmWriteToolSnatcharrTriggerRun     LlmWriteTool = "snatcharr_trigger_run"
-	LlmWriteToolSnatcharrUpdatePolicy   LlmWriteTool = "snatcharr_update_policy"
-	LlmWriteToolSnatcharrCancelRun      LlmWriteTool = "snatcharr_cancel_run"
-	LlmWriteToolSnatcharrDeleteInstance LlmWriteTool = "snatcharr_delete_instance"
+	LlmWriteToolSnatcharrTriggerRun           LlmWriteTool = "snatcharr_trigger_run"
+	LlmWriteToolSnatcharrUpdatePolicy         LlmWriteTool = "snatcharr_update_policy"
+	LlmWriteToolSnatcharrCancelRun            LlmWriteTool = "snatcharr_cancel_run"
+	LlmWriteToolSnatcharrDeleteInstance       LlmWriteTool = "snatcharr_delete_instance"
+	LlmWriteToolSnatcharrCreateInstance       LlmWriteTool = "snatcharr_create_instance"
+	LlmWriteToolSnatcharrTestInstanceInput    LlmWriteTool = "snatcharr_test_instance_input"
+	LlmWriteToolSnatcharrUpdateInstance       LlmWriteTool = "snatcharr_update_instance"
+	LlmWriteToolSnatcharrTestInstance         LlmWriteTool = "snatcharr_test_instance"
+	LlmWriteToolSnatcharrUpdateQueuePolicy    LlmWriteTool = "snatcharr_update_queue_policy"
+	LlmWriteToolSnatcharrPreviewRun           LlmWriteTool = "snatcharr_preview_run"
+	LlmWriteToolSnatcharrDeleteInstanceEvents LlmWriteTool = "snatcharr_delete_instance_events"
+	LlmWriteToolSnatcharrResetState           LlmWriteTool = "snatcharr_reset_state"
+	LlmWriteToolSnatcharrCreateSchedule       LlmWriteTool = "snatcharr_create_schedule"
+	LlmWriteToolSnatcharrUpdateSchedule       LlmWriteTool = "snatcharr_update_schedule"
+	LlmWriteToolSnatcharrDeleteSchedule       LlmWriteTool = "snatcharr_delete_schedule"
+	LlmWriteToolSnatcharrImportConfigarr      LlmWriteTool = "snatcharr_import_configarr"
+	LlmWriteToolSnatcharrUpdateSettings       LlmWriteTool = "snatcharr_update_settings"
 )
 
 // AllValues returns all LlmWriteTool values.
@@ -2178,6 +2191,19 @@ func (LlmWriteTool) AllValues() []LlmWriteTool {
 		LlmWriteToolSnatcharrUpdatePolicy,
 		LlmWriteToolSnatcharrCancelRun,
 		LlmWriteToolSnatcharrDeleteInstance,
+		LlmWriteToolSnatcharrCreateInstance,
+		LlmWriteToolSnatcharrTestInstanceInput,
+		LlmWriteToolSnatcharrUpdateInstance,
+		LlmWriteToolSnatcharrTestInstance,
+		LlmWriteToolSnatcharrUpdateQueuePolicy,
+		LlmWriteToolSnatcharrPreviewRun,
+		LlmWriteToolSnatcharrDeleteInstanceEvents,
+		LlmWriteToolSnatcharrResetState,
+		LlmWriteToolSnatcharrCreateSchedule,
+		LlmWriteToolSnatcharrUpdateSchedule,
+		LlmWriteToolSnatcharrDeleteSchedule,
+		LlmWriteToolSnatcharrImportConfigarr,
+		LlmWriteToolSnatcharrUpdateSettings,
 	}
 }
 
@@ -2191,6 +2217,32 @@ func (s LlmWriteTool) MarshalText() ([]byte, error) {
 	case LlmWriteToolSnatcharrCancelRun:
 		return []byte(s), nil
 	case LlmWriteToolSnatcharrDeleteInstance:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrCreateInstance:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrTestInstanceInput:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrUpdateInstance:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrTestInstance:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrUpdateQueuePolicy:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrPreviewRun:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrDeleteInstanceEvents:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrResetState:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrCreateSchedule:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrUpdateSchedule:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrDeleteSchedule:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrImportConfigarr:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrUpdateSettings:
 		return []byte(s), nil
 	default:
 		return nil, errors.Errorf("invalid value: %q", s)
@@ -2211,6 +2263,45 @@ func (s *LlmWriteTool) UnmarshalText(data []byte) error {
 		return nil
 	case LlmWriteToolSnatcharrDeleteInstance:
 		*s = LlmWriteToolSnatcharrDeleteInstance
+		return nil
+	case LlmWriteToolSnatcharrCreateInstance:
+		*s = LlmWriteToolSnatcharrCreateInstance
+		return nil
+	case LlmWriteToolSnatcharrTestInstanceInput:
+		*s = LlmWriteToolSnatcharrTestInstanceInput
+		return nil
+	case LlmWriteToolSnatcharrUpdateInstance:
+		*s = LlmWriteToolSnatcharrUpdateInstance
+		return nil
+	case LlmWriteToolSnatcharrTestInstance:
+		*s = LlmWriteToolSnatcharrTestInstance
+		return nil
+	case LlmWriteToolSnatcharrUpdateQueuePolicy:
+		*s = LlmWriteToolSnatcharrUpdateQueuePolicy
+		return nil
+	case LlmWriteToolSnatcharrPreviewRun:
+		*s = LlmWriteToolSnatcharrPreviewRun
+		return nil
+	case LlmWriteToolSnatcharrDeleteInstanceEvents:
+		*s = LlmWriteToolSnatcharrDeleteInstanceEvents
+		return nil
+	case LlmWriteToolSnatcharrResetState:
+		*s = LlmWriteToolSnatcharrResetState
+		return nil
+	case LlmWriteToolSnatcharrCreateSchedule:
+		*s = LlmWriteToolSnatcharrCreateSchedule
+		return nil
+	case LlmWriteToolSnatcharrUpdateSchedule:
+		*s = LlmWriteToolSnatcharrUpdateSchedule
+		return nil
+	case LlmWriteToolSnatcharrDeleteSchedule:
+		*s = LlmWriteToolSnatcharrDeleteSchedule
+		return nil
+	case LlmWriteToolSnatcharrImportConfigarr:
+		*s = LlmWriteToolSnatcharrImportConfigarr
+		return nil
+	case LlmWriteToolSnatcharrUpdateSettings:
+		*s = LlmWriteToolSnatcharrUpdateSettings
 		return nil
 	default:
 		return errors.Errorf("invalid value: %q", data)

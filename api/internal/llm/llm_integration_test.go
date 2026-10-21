@@ -6,6 +6,7 @@ package llm_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -29,16 +30,19 @@ import (
 	"github.com/golusoris/golusoris/core/crypto"
 	"github.com/golusoris/golusoris/core/id"
 
+	"github.com/lusoris/SnatchArr/api/internal/arrclient"
 	"github.com/lusoris/SnatchArr/api/internal/auth"
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/buildinfo"
 	"github.com/lusoris/SnatchArr/api/internal/config"
+	"github.com/lusoris/SnatchArr/api/internal/configarr"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/events"
 	"github.com/lusoris/SnatchArr/api/internal/httpapi"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
 	"github.com/lusoris/SnatchArr/api/internal/llm"
 	"github.com/lusoris/SnatchArr/api/internal/policies"
+	"github.com/lusoris/SnatchArr/api/internal/queue"
 	"github.com/lusoris/SnatchArr/api/internal/settings"
 	"github.com/lusoris/SnatchArr/api/internal/snatch"
 	"github.com/lusoris/SnatchArr/api/internal/store"
@@ -64,12 +68,24 @@ func (b *syncBuffer) String() string {
 	return b.buf.String()
 }
 
+type mcpStubProber struct {
+	res arrclient.Result
+	err error
+}
+
+func (p *mcpStubProber) Probe(context.Context, domain.AppKind, string, string) (arrclient.Result, error) {
+	return p.res, p.err
+}
+
 type mcpFixture struct {
 	st          *store.Store
+	clk         clock.Clock
 	settingsSvc *settings.Service
 	instSvc     *instances.Service
 	polSvc      *policies.Service
 	apiKeys     *auth.APIKeys
+	runs        *snatch.Runs
+	schedules   *snatch.Schedules
 	admin       domain.User
 	srv         *httptest.Server
 	client      *http.Client
@@ -108,25 +124,35 @@ func newMCPFixture(t *testing.T) *mcpFixture {
 	if err != nil {
 		t.Fatalf("session.NewManager: %v", err)
 	}
-	instSvc := instances.New(st, enc, clk, ids, nil, logger)
+	probe := &mcpStubProber{res: arrclient.Result{AppName: "Sonarr", Version: "4.0.10.2544"}}
+	instSvc := instances.New(st, enc, clk, ids, probe, logger)
 	polSvc := policies.New(st, clk)
 	settingsSvc := settings.New(st, clk)
 	runs := snatch.NewRuns(st, clk, ids)
 	rec := snatch.NewRecorder(st, clk, events.New(logger))
 	workers := snatch.NewWorkers(st, clk)
+	schedules := snatch.NewSchedules(st, clk, ids)
+	memory := snatch.NewMemory(st, clk)
+	queueStore := queue.NewStore(st, clk)
 	cfg := config.Options{Profile: config.ProfileDev}
+	configarrSvc := configarr.New(cfg, instSvc, nil, polSvc, queueStore, probe, clk, logger)
 	build := buildinfo.Info{Version: "0.1.0-test", Commit: "abc1234", Date: "2026-10-21"}
 	handlers := httpapi.NewHandlers(build, cfg, clk, authSvc, apiKeys, sessMgr, instSvc, polSvc, logger, httpapi.Deps{
 		Runs: runs, Rec: rec, Workers: workers, Settings: settingsSvc,
+		Schedules: schedules, Memory: memory, Queue: queueStore, Configarr: configarrSvc,
 	})
 	sec := httpapi.NewSecurity(sessMgr, cfg, keys, authSvc, apiKeys, clk, logger)
-	llmSvc := llm.New(build, settingsSvc, sec, handlers, logger)
+	llmSvc, err := llm.New(build, settingsSvc, sec, handlers, logger)
+	if err != nil {
+		t.Fatalf("llm.New: %v", err)
+	}
 	r := chi.NewRouter()
 	llm.Mount(r, llmSvc)
 	srv := httptest.NewServer(r)
 	t.Cleanup(srv.Close)
 	return &mcpFixture{
-		st: st, settingsSvc: settingsSvc, instSvc: instSvc, polSvc: polSvc, apiKeys: apiKeys, admin: admin,
+		st: st, clk: clk, settingsSvc: settingsSvc, instSvc: instSvc, polSvc: polSvc, apiKeys: apiKeys,
+		runs: runs, schedules: schedules, admin: admin,
 		srv: srv, client: &http.Client{Timeout: 10 * time.Second}, logBuf: logBuf,
 	}
 }
@@ -678,18 +704,23 @@ func TestMCPParameterizedToolCall(t *testing.T) {
 	}{
 		{
 			name:      "positive seeded instance id returns matching structuredContent id",
-			args:      map[string]any{"id": seeded.ID.String()},
+			args:      map[string]any{"instanceId": seeded.ID.String()},
 			wantError: false,
 			wantID:    seeded.ID.String(),
 		},
 		{
 			name:      "negative bad uuid returns isError true",
-			args:      map[string]any{"id": "not-a-valid-uuid"},
+			args:      map[string]any{"instanceId": "not-a-valid-uuid"},
+			wantError: true,
+		},
+		{
+			name:      "negative unknown alias key id is rejected",
+			args:      map[string]any{"id": seeded.ID.String()},
 			wantError: true,
 		},
 		{
 			name:       "boundary unknown valid uuid returns isError true with not-found detail",
-			args:       map[string]any{"id": uuid.NewString()},
+			args:       map[string]any{"instanceId": uuid.NewString()},
 			wantError:  true,
 			wantDetail: "not found",
 		},
@@ -747,7 +778,7 @@ func TestMCPWriteToolOptInFence(t *testing.T) {
 		t.Fatalf("tools/list after opt-in = %v, want trigger_run only", listed)
 	}
 	got := callToolWithParams(t, f, token, domain.LLMWriteToolTriggerRun, map[string]any{
-		"id": inst.ID.String(), "body": map[string]any{"kind": "missing"},
+		"instanceId": inst.ID.String(), "body": map[string]any{"kind": "missing"},
 	})
 	if got.IsError {
 		t.Fatalf("trigger_run after opt-in failed: %s", got.ContentText)
@@ -764,7 +795,7 @@ func assertRefusedWriteCall(t *testing.T, f *mcpFixture, token, keyID string, in
 		"jsonrpc": "2.0", "id": 42, "method": "tools/call",
 		"params": map[string]any{
 			"name":      domain.LLMWriteToolTriggerRun,
-			"arguments": map[string]any{"id": instID.String(), "body": map[string]any{"kind": "missing"}},
+			"arguments": map[string]any{"instanceId": instID.String(), "body": map[string]any{"kind": "missing"}},
 		},
 	})
 	if res.StatusCode != http.StatusOK || !strings.HasPrefix(res.Header.Get("Content-Type"), "application/json") {
@@ -823,8 +854,8 @@ func TestMCPDestructiveToolConfirmFence(t *testing.T) {
 
 	// ADR planted case 4: confirm absent and confirm false are refused before mutation.
 	for _, args := range []map[string]any{
-		{"id": inst.ID.String()},
-		{"id": inst.ID.String(), "confirm": false},
+		{"instanceId": inst.ID.String()},
+		{"instanceId": inst.ID.String(), "confirm": false},
 	} {
 		got := callToolWithParams(t, f, token, domain.LLMWriteToolDeleteInstance, args)
 		if !got.IsError || got.ContentText != "confirmation required: pass confirm=true" {
@@ -838,7 +869,7 @@ func TestMCPDestructiveToolConfirmFence(t *testing.T) {
 
 	// Positive: confirm=true deletes the instance.
 	delGot := callToolWithParams(t, f, token, domain.LLMWriteToolDeleteInstance, map[string]any{
-		"id": inst.ID.String(), "confirm": true,
+		"instanceId": inst.ID.String(), "confirm": true,
 	})
 	if delGot.IsError {
 		t.Fatalf("delete_instance(confirm=true) failed: %s", delGot.ContentText)
@@ -862,21 +893,21 @@ func TestMCPUpdatePolicyAndCancelRun(t *testing.T) {
 
 	// Negative: invalid body fails validation in decodeOASBody.
 	badPol := callToolWithParams(t, f, token, domain.LLMWriteToolUpdatePolicy, map[string]any{
-		"id": inst.ID.String(), "body": map[string]any{"missing_per_cycle": -1},
+		"instanceId": inst.ID.String(), "body": map[string]any{"missing_per_cycle": -1},
 	})
 	if !badPol.IsError {
 		t.Fatal("update_policy with invalid body expected IsError=true")
 	}
 
 	// Positive: valid SnatchPolicy body updates policy.
-	polGot := callToolWithParams(t, f, token, "snatcharr_get_policy", map[string]any{"id": inst.ID.String()})
+	polGot := callToolWithParams(t, f, token, "snatcharr_get_policy", map[string]any{"instanceId": inst.ID.String()})
 	var polBody map[string]any
 	if err := json.Unmarshal(polGot.StructuredContent, &polBody); err != nil {
 		t.Fatalf("decode get_policy: %v", err)
 	}
 	polBody["missing_per_cycle"] = 7
 	goodPol := callToolWithParams(t, f, token, domain.LLMWriteToolUpdatePolicy, map[string]any{
-		"id": inst.ID.String(), "body": polBody,
+		"instanceId": inst.ID.String(), "body": polBody,
 	})
 	if goodPol.IsError {
 		t.Fatalf("update_policy valid failed: %s", goodPol.ContentText)
@@ -884,7 +915,7 @@ func TestMCPUpdatePolicyAndCancelRun(t *testing.T) {
 
 	// Queue a run and cancel it with confirm=true.
 	trig := callToolWithParams(t, f, token, domain.LLMWriteToolTriggerRun, map[string]any{
-		"id": inst.ID.String(), "body": map[string]any{"kind": "missing"},
+		"instanceId": inst.ID.String(), "body": map[string]any{"kind": "missing"},
 	})
 	var runOut struct {
 		ID string `json:"id"`
@@ -893,7 +924,7 @@ func TestMCPUpdatePolicyAndCancelRun(t *testing.T) {
 		t.Fatalf("decode triggered run: %v", err)
 	}
 	cancelRes := callToolWithParams(t, f, token, domain.LLMWriteToolCancelRun, map[string]any{
-		"id": runOut.ID, "confirm": true,
+		"runId": runOut.ID, "confirm": true,
 	})
 	if cancelRes.IsError {
 		t.Fatalf("cancel_run(confirm=true) failed: %s", cancelRes.ContentText)
