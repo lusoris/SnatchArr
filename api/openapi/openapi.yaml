@@ -3186,6 +3186,7 @@ components:
       type: string
       enum:
         - stalled
+        - metadata_stuck
         - slow
         - failed
         - import_blocked
@@ -3211,7 +3212,7 @@ components:
         threshold:
           type: integer
           minimum: 1
-          maximum: 100
+          maximum: 1440
         blocklist:
           description: Blocklist the release when the rule removes the item. Left out on write, the rule keeps its default (every rule except not_an_upgrade, duplicate and unwanted_unmonitored blocklists); reads always return the effective value.
           type: boolean
@@ -3227,6 +3228,9 @@ components:
         - unwanted_unmonitored
       properties:
         stalled:
+          $ref: "#/components/schemas/QueueRuleSettings"
+        metadata_stuck:
+          description: Strikes and removes a torrent download stuck fetching metadata. Optional on write so older clients keep working; left out, the rule takes its default settings. Reads always return it.
           $ref: "#/components/schemas/QueueRuleSettings"
         slow:
           $ref: "#/components/schemas/QueueRuleSettings"

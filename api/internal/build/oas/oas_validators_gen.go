@@ -2174,6 +2174,8 @@ func (s QueueRule) Validate() error {
 	switch s {
 	case "stalled":
 		return nil
+	case "metadata_stuck":
+		return nil
 	case "slow":
 		return nil
 	case "failed":
@@ -2234,7 +2236,7 @@ func (s *QueueRuleSettings) Validate() error {
 			MinSet:        true,
 			Min:           1,
 			MaxSet:        true,
-			Max:           100,
+			Max:           1440,
 			MinExclusive:  false,
 			MaxExclusive:  false,
 			MultipleOfSet: false,
@@ -2270,6 +2272,24 @@ func (s *QueueRules) Validate() error {
 	}(); err != nil {
 		failures = append(failures, validate.FieldError{
 			Name:  "stalled",
+			Error: err,
+		})
+	}
+	if err := func() error {
+		if value, ok := s.MetadataStuck.Get(); ok {
+			if err := func() error {
+				if err := value.Validate(); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		failures = append(failures, validate.FieldError{
+			Name:  "metadata_stuck",
 			Error: err,
 		})
 	}

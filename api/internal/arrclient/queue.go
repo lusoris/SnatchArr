@@ -337,6 +337,8 @@ func appendItem(items []mappedItem, r arr.QueueRecord, x recordFacts) []mappedIt
 		Monitored:             x.monitored,
 		Title:                 r.Title,
 		StatusLines:           statusLines(r.StatusMessages),
+		Protocol:              r.Protocol,
+		Size:                  int64(max(r.Size, 0)),
 	}})
 }
 

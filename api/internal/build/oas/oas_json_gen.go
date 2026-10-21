@@ -9062,6 +9062,8 @@ func (s *QueueRule) Decode(d *jx.Decoder) error {
 	switch QueueRule(v) {
 	case QueueRuleStalled:
 		*s = QueueRuleStalled
+	case QueueRuleMetadataStuck:
+		*s = QueueRuleMetadataStuck
 	case QueueRuleSlow:
 		*s = QueueRuleSlow
 	case QueueRuleFailed:
@@ -9286,6 +9288,12 @@ func (s *QueueRules) encodeFields(e *jx.Encoder) {
 		s.Stalled.Encode(e)
 	}
 	{
+		if s.MetadataStuck.Set {
+			e.FieldStart("metadata_stuck")
+			s.MetadataStuck.Encode(e)
+		}
+	}
+	{
 		e.FieldStart("slow")
 		s.Slow.Encode(e)
 	}
@@ -9343,19 +9351,20 @@ func (s *QueueRules) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfQueueRules = [12]string{
+var jsonFieldsNameOfQueueRules = [13]string{
 	0:  "stalled",
-	1:  "slow",
-	2:  "failed",
-	3:  "import_blocked",
-	4:  "id_matched",
-	5:  "import_fixable",
-	6:  "import_broken",
-	7:  "import_not_wanted",
-	8:  "unwanted_score",
-	9:  "not_an_upgrade",
-	10: "duplicate",
-	11: "unwanted_unmonitored",
+	1:  "metadata_stuck",
+	2:  "slow",
+	3:  "failed",
+	4:  "import_blocked",
+	5:  "id_matched",
+	6:  "import_fixable",
+	7:  "import_broken",
+	8:  "import_not_wanted",
+	9:  "unwanted_score",
+	10: "not_an_upgrade",
+	11: "duplicate",
+	12: "unwanted_unmonitored",
 }
 
 // Decode decodes QueueRules from json.
@@ -9377,8 +9386,18 @@ func (s *QueueRules) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"stalled\"")
 			}
+		case "metadata_stuck":
+			if err := func() error {
+				s.MetadataStuck.Reset()
+				if err := s.MetadataStuck.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"metadata_stuck\"")
+			}
 		case "slow":
-			requiredBitSet[0] |= 1 << 1
+			requiredBitSet[0] |= 1 << 2
 			if err := func() error {
 				if err := s.Slow.Decode(d); err != nil {
 					return err
@@ -9388,7 +9407,7 @@ func (s *QueueRules) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"slow\"")
 			}
 		case "failed":
-			requiredBitSet[0] |= 1 << 2
+			requiredBitSet[0] |= 1 << 3
 			if err := func() error {
 				if err := s.Failed.Decode(d); err != nil {
 					return err
@@ -9398,7 +9417,7 @@ func (s *QueueRules) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"failed\"")
 			}
 		case "import_blocked":
-			requiredBitSet[0] |= 1 << 3
+			requiredBitSet[0] |= 1 << 4
 			if err := func() error {
 				if err := s.ImportBlocked.Decode(d); err != nil {
 					return err
@@ -9448,7 +9467,7 @@ func (s *QueueRules) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"import_not_wanted\"")
 			}
 		case "unwanted_score":
-			requiredBitSet[1] |= 1 << 0
+			requiredBitSet[1] |= 1 << 1
 			if err := func() error {
 				if err := s.UnwantedScore.Decode(d); err != nil {
 					return err
@@ -9478,7 +9497,7 @@ func (s *QueueRules) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"duplicate\"")
 			}
 		case "unwanted_unmonitored":
-			requiredBitSet[1] |= 1 << 3
+			requiredBitSet[1] |= 1 << 4
 			if err := func() error {
 				if err := s.UnwantedUnmonitored.Decode(d); err != nil {
 					return err
@@ -9497,8 +9516,8 @@ func (s *QueueRules) Decode(d *jx.Decoder) error {
 	// Validate required fields.
 	var failures []validate.FieldError
 	for i, mask := range [2]uint8{
-		0b00001111,
-		0b00001001,
+		0b00011101,
+		0b00010010,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.

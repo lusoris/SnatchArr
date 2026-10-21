@@ -24,6 +24,11 @@ SPDX-License-Identifier: EUPL-1.2
 		threshold: 1,
 		blocklist: false
 	};
+	const optionalMetadataStuckDefault: components['schemas']['QueueRuleSettings'] = {
+		mode: 'observe',
+		threshold: 180,
+		blocklist: true
+	};
 	const optionalImportFixableDefault: components['schemas']['QueueRuleSettings'] = {
 		mode: 'observe',
 		threshold: 1,
@@ -75,6 +80,9 @@ SPDX-License-Identifier: EUPL-1.2
 				enabled: query.data.enabled,
 				rules: {
 					stalled: { ...query.data.rules.stalled },
+					metadata_stuck: {
+						...(query.data.rules.metadata_stuck ?? optionalMetadataStuckDefault)
+					},
 					slow: { ...query.data.rules.slow },
 					failed: { ...query.data.rules.failed },
 					id_matched: { ...(query.data.rules.id_matched ?? optionalRuleDefault) },
@@ -139,6 +147,7 @@ SPDX-License-Identifier: EUPL-1.2
 
 	const ruleKeys: { key: RuleKey; label: () => string }[] = [
 		{ key: 'stalled', label: m.queue_rule_stalled },
+		{ key: 'metadata_stuck', label: m.queue_rule_metadata_stuck },
 		{ key: 'slow', label: m.queue_rule_slow },
 		{ key: 'failed', label: m.queue_rule_failed },
 		{ key: 'id_matched', label: m.queue_rule_id_matched },
@@ -211,8 +220,8 @@ SPDX-License-Identifier: EUPL-1.2
 										<input
 											class="input w-24"
 											type="number"
-											min="1"
-											max="100"
+											min={r.key === 'metadata_stuck' ? 30 : 1}
+											max={r.key === 'metadata_stuck' ? 1440 : 100}
 											aria-label={`${r.label()} ${m.queue_rule_threshold()}`}
 											bind:value={draft.rules[r.key].threshold}
 										/>

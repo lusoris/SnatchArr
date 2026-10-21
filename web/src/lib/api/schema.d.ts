@@ -1886,7 +1886,7 @@ export interface components {
             updated_at: string;
         };
         /** @enum {string} */
-        QueueRule: "stalled" | "slow" | "failed" | "import_blocked" | "id_matched" | "import_fixable" | "import_broken" | "import_not_wanted" | "unwanted_score" | "not_an_upgrade" | "duplicate" | "unwanted_unmonitored";
+        QueueRule: "stalled" | "metadata_stuck" | "slow" | "failed" | "import_blocked" | "id_matched" | "import_fixable" | "import_broken" | "import_not_wanted" | "unwanted_score" | "not_an_upgrade" | "duplicate" | "unwanted_unmonitored";
         /** @enum {string} */
         QueueRuleMode: "observe" | "act";
         QueueRuleSettings: {
@@ -1897,6 +1897,8 @@ export interface components {
         };
         QueueRules: {
             stalled: components["schemas"]["QueueRuleSettings"];
+            /** @description Strikes and removes a torrent download stuck fetching metadata. Optional on write so older clients keep working; left out, the rule takes its default settings. Reads always return it. */
+            metadata_stuck?: components["schemas"]["QueueRuleSettings"];
             slow: components["schemas"]["QueueRuleSettings"];
             failed: components["schemas"]["QueueRuleSettings"];
             import_blocked: components["schemas"]["QueueRuleSettings"];

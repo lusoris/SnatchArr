@@ -91,6 +91,7 @@ func QueuePolicyToOAS(s queue.Settings) *oas.QueuePolicy {
 		UnwantedScore:       QueueRuleToOAS(queue.ResolveRule(s, queue.RuleUnwantedScore)),
 		UnwantedUnmonitored: QueueRuleToOAS(queue.ResolveRule(s, queue.RuleUnwantedUnmonitored)),
 	}
+	rules.MetadataStuck.SetTo(QueueRuleToOAS(queue.ResolveRule(s, queue.RuleMetadataStuck)))
 	rules.NotAnUpgrade.SetTo(QueueRuleToOAS(queue.ResolveRule(s, queue.RuleNotAnUpgrade)))
 	rules.Duplicate.SetTo(QueueRuleToOAS(queue.ResolveRule(s, queue.RuleDuplicate)))
 	rules.IDMatched.SetTo(QueueRuleToOAS(queue.ResolveRule(s, queue.RuleIDMatched)))
@@ -140,6 +141,7 @@ func QueuePolicyFromOAS(req *oas.QueuePolicy) queue.Settings {
 		queue.RuleUnwantedUnmonitored: QueueRuleFromOAS(req.Rules.UnwantedUnmonitored),
 	}
 	optional := map[queue.Rule]oas.OptQueueRuleSettings{
+		queue.RuleMetadataStuck:   req.Rules.MetadataStuck,
 		queue.RuleNotAnUpgrade:    req.Rules.NotAnUpgrade,
 		queue.RuleDuplicate:       req.Rules.Duplicate,
 		queue.RuleIDMatched:       req.Rules.IDMatched,
