@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/lusoris/SnatchArr/api/internal/events"
@@ -69,8 +70,17 @@ func (s *Service) handleImport(ctx context.Context, inst Instance, d Decision, n
 		s.metrics.QueueImport(inst.Name, importRefused)
 		return true, true
 	case errors.Is(err, ErrNoCleanCandidate):
-		s.logger.InfoContext(ctx, "queue: force import refused", slog.String("instance", inst.Name), slog.String("download_id", d.DownloadID))
-		s.emitImportFailed(ctx, inst, d, now, importRefused)
+		reasons := extractReasons(err)
+		detail := importRefused
+		if len(reasons) > 0 {
+			detail = fmt.Sprintf("%s: %s", importRefused, strings.Join(reasons, "; "))
+		}
+		s.logger.InfoContext(ctx, "queue: force import refused",
+			slog.String("instance", inst.Name),
+			slog.String("download_id", d.DownloadID),
+			slog.Any("reasons", reasons),
+		)
+		s.emitImportFailed(ctx, inst, d, now, detail)
 		s.metrics.QueueImport(inst.Name, importRefused)
 		return true, true
 	case err != nil:
@@ -102,6 +112,14 @@ func (s *Service) emitImportFailed(ctx context.Context, inst Instance, d Decisio
 		Title:      d.DownloadID,
 		Detail:     reason,
 	})
+}
+
+func extractReasons(err error) []string {
+	var nce *NoCleanCandidateError
+	if errors.As(err, &nce) && len(nce.Reasons) > 0 {
+		return nce.Reasons
+	}
+	return nil
 }
 
 // logShadow writes the lines the id_matched parity check reads (ADR-0014): each

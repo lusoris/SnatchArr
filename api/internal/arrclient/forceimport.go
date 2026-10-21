@@ -7,6 +7,7 @@ package arrclient
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/golusoris/goenvoy/arr/lidarr"
 	"github.com/golusoris/goenvoy/arr/radarr"
@@ -52,6 +53,62 @@ func (p *GoenvoyProber) ForceImport(ctx context.Context, kind domain.AppKind, ba
 	return n, nil
 }
 
+const (
+	maxRejectionReasons   = 5
+	maxRejectionReasonLen = 200
+)
+
+func collectRejectionReasons[C any, R any](cands []C, rejections func(*C) []R, reason func(R) string) []string {
+	var reasons []string
+	seen := make(map[string]bool)
+	for i := range cands {
+		reasons = appendCandidateReasons(reasons, seen, rejections(&cands[i]), reason)
+	}
+	return reasons
+}
+
+func appendCandidateReasons[R any](dst []string, seen map[string]bool, rejs []R, reason func(R) string) []string {
+	for _, r := range rejs {
+		if len(dst) >= maxRejectionReasons {
+			break
+		}
+		rs := truncateChars(strings.TrimSpace(reason(r)), maxRejectionReasonLen)
+		if rs == "" || seen[rs] {
+			continue
+		}
+		seen[rs] = true
+		dst = append(dst, rs)
+	}
+	return dst
+}
+
+func truncateChars(s string, maxChars int) string {
+	runes := []rune(s)
+	if len(runes) > maxChars {
+		return string(runes[:maxChars])
+	}
+	return s
+}
+
+func filterQualifiedFiles[C any, R any, F any](
+	cands []C,
+	rejections func(*C) []R,
+	reason func(R) string,
+	file func(*C) (F, bool),
+	mode queue.ImportMode,
+) []F {
+	files := make([]F, 0, len(cands))
+	for i := range cands {
+		if !qualifies(rejections(&cands[i]), reason, mode) {
+			continue
+		}
+		if f, ok := file(&cands[i]); ok {
+			files = append(files, f)
+		}
+	}
+	return files
+}
+
 // forceImport runs candidate discovery, qualification, and submission across *arr kinds.
 func forceImport[C any, R any, F any](
 	ctx context.Context,
@@ -69,17 +126,11 @@ func forceImport[C any, R any, F any](
 	if err != nil {
 		return 0, fmt.Errorf("list candidates: %w", err)
 	}
-	files := make([]F, 0, len(cands))
-	for i := range cands {
-		if !qualifies(rejections(&cands[i]), reason, mode) {
-			continue
-		}
-		if f, ok := file(&cands[i]); ok {
-			files = append(files, f)
-		}
-	}
+	files := filterQualifiedFiles(cands, rejections, reason, file, mode)
 	if len(files) == 0 {
-		return 0, queue.ErrNoCleanCandidate
+		return 0, &queue.NoCleanCandidateError{
+			Reasons: collectRejectionReasons(cands, rejections, reason),
+		}
 	}
 	postCtx, cancel := context.WithTimeout(ctx, p.opts.Timeout)
 	defer cancel()
