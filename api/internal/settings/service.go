@@ -52,6 +52,7 @@ func (s *Service) Update(ctx context.Context, in domain.Settings) (domain.Settin
 		HistoryRetentionDays: int32(in.HistoryRetentionDays), // #nosec G115 -- validated 1..3650
 		UserAgent:            in.UserAgent,
 		GlobalHourlyCap:      int32(in.GlobalHourlyCap), // #nosec G115 -- validated 0..5000
+		LlmEnabled:           in.LLMEnabled,
 		UpdatedAt:            s.clk.Now(),
 	})
 	if err != nil {

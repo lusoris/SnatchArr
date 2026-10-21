@@ -519,5 +519,6 @@
 	"nav_search_placeholder": "Suchen oder springen zu…",
 	"nav_search_shortcut": "Strg+K",
 	"nav_search_shortcut_apple": "⌘K",
-	"nav_bottom_label": "Schnellnavigation"
+	"nav_bottom_label": "Schnellnavigation",
+	"settings_llm_enabled": "MCP-Server aktivieren (/api/v1/mcp)"
 }

@@ -30,6 +30,7 @@ type CreatedApiKey = components['schemas']['CreatedApiKey'];
 const sampleApiKey: ApiKey = {
 	id: '018f2651-3472-749e-8c38-5188bf287c90',
 	name: 'Backup worker',
+	scopes: [],
 	created_at: '2026-10-16T10:00:00Z',
 	last_used_at: '2026-10-16T11:00:00Z',
 	expires_at: '2027-10-16T10:00:00Z'

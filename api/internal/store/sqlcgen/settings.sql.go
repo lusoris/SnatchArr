@@ -13,7 +13,7 @@ import (
 const ensureSettings = `-- name: EnsureSettings :one
 INSERT INTO settings (singleton, updated_at) VALUES (TRUE, $1)
 ON CONFLICT (singleton) DO UPDATE SET singleton = TRUE
-RETURNING singleton, history_retention_days, user_agent, updated_at, global_hourly_cap
+RETURNING singleton, history_retention_days, user_agent, updated_at, global_hourly_cap, llm_enabled
 `
 
 func (q *Queries) EnsureSettings(ctx context.Context, updatedAt time.Time) (Setting, error) {
@@ -25,13 +25,14 @@ func (q *Queries) EnsureSettings(ctx context.Context, updatedAt time.Time) (Sett
 		&i.UserAgent,
 		&i.UpdatedAt,
 		&i.GlobalHourlyCap,
+		&i.LlmEnabled,
 	)
 	return i, err
 }
 
 const getSettings = `-- name: GetSettings :one
 
-SELECT singleton, history_retention_days, user_agent, updated_at, global_hourly_cap FROM settings WHERE singleton
+SELECT singleton, history_retention_days, user_agent, updated_at, global_hourly_cap, llm_enabled FROM settings WHERE singleton
 `
 
 // SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
@@ -45,21 +46,23 @@ func (q *Queries) GetSettings(ctx context.Context) (Setting, error) {
 		&i.UserAgent,
 		&i.UpdatedAt,
 		&i.GlobalHourlyCap,
+		&i.LlmEnabled,
 	)
 	return i, err
 }
 
 const updateSettings = `-- name: UpdateSettings :one
 UPDATE settings
-SET history_retention_days = $1, user_agent = $2, global_hourly_cap = $3, updated_at = $4
+SET history_retention_days = $1, user_agent = $2, global_hourly_cap = $3, llm_enabled = $4, updated_at = $5
 WHERE singleton
-RETURNING singleton, history_retention_days, user_agent, updated_at, global_hourly_cap
+RETURNING singleton, history_retention_days, user_agent, updated_at, global_hourly_cap, llm_enabled
 `
 
 type UpdateSettingsParams struct {
 	HistoryRetentionDays int32
 	UserAgent            string
 	GlobalHourlyCap      int32
+	LlmEnabled           bool
 	UpdatedAt            time.Time
 }
 
@@ -68,6 +71,7 @@ func (q *Queries) UpdateSettings(ctx context.Context, arg UpdateSettingsParams) 
 		arg.HistoryRetentionDays,
 		arg.UserAgent,
 		arg.GlobalHourlyCap,
+		arg.LlmEnabled,
 		arg.UpdatedAt,
 	)
 	var i Setting
@@ -77,6 +81,7 @@ func (q *Queries) UpdateSettings(ctx context.Context, arg UpdateSettingsParams) 
 		&i.UserAgent,
 		&i.UpdatedAt,
 		&i.GlobalHourlyCap,
+		&i.LlmEnabled,
 	)
 	return i, err
 }

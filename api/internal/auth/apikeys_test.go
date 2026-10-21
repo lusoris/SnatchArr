@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -22,17 +23,19 @@ import (
 )
 
 type fakeKeyIssuer struct {
-	issuedRaw  string
-	issuedKey  apikey.Key
-	issueErr   error
-	revokedIDs []string
-	revokeErr  error
+	issuedRaw    string
+	issuedKey    apikey.Key
+	issuedScopes []string
+	issueErr     error
+	revokedIDs   []string
+	revokeErr    error
 }
 
-func (f *fakeKeyIssuer) Issue(_ context.Context, _ string, _ []string) (string, apikey.Key, error) {
+func (f *fakeKeyIssuer) Issue(_ context.Context, _ string, scopes []string) (string, apikey.Key, error) {
 	if f.issueErr != nil {
 		return "", apikey.Key{}, f.issueErr
 	}
+	f.issuedScopes = slices.Clone(scopes)
 	return f.issuedRaw, f.issuedKey, nil
 }
 
@@ -216,4 +219,50 @@ func TestAPIKeysListAndRevoke(t *testing.T) {
 			t.Fatalf("Revoke() err = %v, want ErrNotFound", err)
 		}
 	})
+}
+
+func TestAPIKeysCreateScopes(t *testing.T) {
+	t.Parallel()
+	clk := clock.NewFake()
+	now := clk.Now()
+	owner := uuid.New()
+
+	cases := []struct {
+		name       string
+		scopes     []string
+		wantScopes []string
+		wantErr    error
+	}{
+		{"boundary nil scopes becomes empty slice", nil, []string{}, nil},
+		{"boundary empty scopes", []string{}, []string{}, nil},
+		{"positive valid scopes", []string{"core:read", "admin:read"}, []string{"core:read", "admin:read"}, nil},
+		{"negative unknown scope", []string{"core:read", "bogus:read"}, nil, domain.ErrBadRequest},
+		{"negative duplicate scope", []string{"core:read", "core:read"}, nil, domain.ErrBadRequest},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			issuer := &fakeKeyIssuer{
+				issuedRaw: "sk_test_raw_key",
+				issuedKey: apikey.Key{ID: "sk_test_id", CreatedAt: now},
+			}
+			q := &stubQuerier{countActive: 0, setMetaRows: 1}
+			svc := newAPIKeysWithQuerier(q, issuer, clk, slog.New(slog.DiscardHandler))
+
+			created, err := svc.Create(t.Context(), owner, "scoped-key", nil, tc.scopes...)
+			if tc.wantErr != nil {
+				if !errors.Is(err, tc.wantErr) {
+					t.Fatalf("Create() err = %v, want %v", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Create() unexpected err: %v", err)
+			}
+			if !slices.Equal(created.Scopes, tc.wantScopes) || !slices.Equal(issuer.issuedScopes, tc.wantScopes) {
+				t.Fatalf("scopes = %v (issued %v), want %v", created.Scopes, issuer.issuedScopes, tc.wantScopes)
+			}
+		})
+	}
 }
