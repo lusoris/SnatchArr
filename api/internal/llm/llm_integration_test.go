@@ -12,11 +12,15 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
+	"unicode"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 
 	"github.com/golusoris/golusoris/auth/apikey"
 	"github.com/golusoris/golusoris/auth/session"
@@ -272,8 +276,8 @@ func TestMCPToolsListAndCallScoped(t *testing.T) {
 	coreToken := issueKey(t, f, "core-reader", domain.ScopeCoreRead)
 	assertInitializeOK(t, f, coreToken, f.srv.URL)
 	tools := callToolsList(t, f, coreToken)
-	if len(tools) != 1 || tools[0] != "snatcharr_list_instances" {
-		t.Fatalf("tools/list for core:read = %v, want [snatcharr_list_instances]", tools)
+	if !slices.Contains(tools, "snatcharr_list_instances") {
+		t.Fatalf("tools/list for core:read missing snatcharr_list_instances: %v", tools)
 	}
 
 	structured := callToolStructured(t, f, coreToken, "snatcharr_list_instances")
@@ -415,6 +419,247 @@ func TestMCPOriginAndBodyBounds(t *testing.T) {
 			}
 			if res.StatusCode != tc.wantStatus {
 				t.Fatalf("status = %d, want %d; body = %s", res.StatusCode, tc.wantStatus, string(res.Body))
+			}
+		})
+	}
+}
+
+func toSnakeCase(s string) string {
+	var b strings.Builder
+	for i, r := range s {
+		if unicode.IsUpper(r) {
+			if i > 0 {
+				b.WriteByte('_')
+			}
+			b.WriteRune(unicode.ToLower(r))
+		} else {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+func TestMCPRegistryNaming(t *testing.T) {
+	t.Parallel()
+	namePattern := regexp.MustCompile(`^snatcharr_[a-z0-9_]+$`)
+	tools := llm.RegisteredToolsForTest()
+	if len(tools) == 0 {
+		t.Fatal("no tools registered")
+	}
+
+	for _, spec := range tools {
+		t.Run(spec.Name, func(t *testing.T) {
+			t.Parallel()
+			if !namePattern.MatchString(spec.Name) {
+				t.Fatalf("tool name %q does not match pattern ^snatcharr_[a-z0-9_]+$", spec.Name)
+			}
+			expectedName := "snatcharr_" + toSnakeCase(spec.OperationID)
+			if spec.Name != expectedName {
+				t.Fatalf("tool name %q does not match snake_case(operationId) %q", spec.Name, expectedName)
+			}
+			if !spec.ReadOnly {
+				t.Fatalf("read tool %q must have ReadOnly=true", spec.Name)
+			}
+			if spec.Destructive {
+				t.Fatalf("read tool %q must have Destructive=false", spec.Name)
+			}
+			if spec.Scope == "" {
+				t.Fatalf("read tool %q has empty Scope", spec.Name)
+			}
+			if spec.Description == "" {
+				t.Fatalf("read tool %q has empty Description", spec.Name)
+			}
+		})
+	}
+}
+
+func TestMCPToolsListScopeFiltering(t *testing.T) {
+	t.Parallel()
+	f := newMCPFixture(t)
+	enableLLM(t, f)
+
+	coreReadTools := []string{
+		"snatcharr_list_instances",
+		"snatcharr_get_instance",
+		"snatcharr_get_policy",
+		"snatcharr_get_policy_filter_options",
+		"snatcharr_get_queue_policy",
+		"snatcharr_list_queue_strikes",
+		"snatcharr_list_runs",
+		"snatcharr_get_run",
+		"snatcharr_list_events",
+		"snatcharr_get_hourly_caps",
+		"snatcharr_list_schedules",
+		"snatcharr_get_configarr_status",
+	}
+
+	adminReadTools := []string{
+		"snatcharr_get_system_status",
+		"snatcharr_get_setup_status",
+		"snatcharr_get_settings",
+		"snatcharr_list_logs",
+	}
+
+	allReadScopes := []string{
+		domain.ScopeAdminRead,
+		domain.ScopeCoreRead,
+		domain.ScopeDownloadClientsRead,
+		domain.ScopeRequestsRead,
+		domain.ScopeProwlarrRead,
+		domain.ScopeNotificationsRead,
+	}
+
+	cases := []struct {
+		name         string
+		scopes       []string
+		wantExact    []string
+		wantAbsent   []string
+		wantCountAll bool
+	}{
+		{
+			name:       "key core:read returns exactly core:read tools and no admin:read tools",
+			scopes:     []string{domain.ScopeCoreRead},
+			wantExact:  coreReadTools,
+			wantAbsent: adminReadTools,
+		},
+		{
+			name:         "key with all *:read scopes returns count equal to registered Read rows",
+			scopes:       allReadScopes,
+			wantCountAll: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			token := issueKey(t, f, "filter-"+tc.name, tc.scopes...)
+			assertInitializeOK(t, f, token, f.srv.URL)
+			got := callToolsList(t, f, token)
+
+			if tc.wantCountAll {
+				registered := llm.RegisteredToolsForTest()
+				if len(got) != len(registered) {
+					t.Fatalf("tools/list count = %d, want registered count %d; tools = %v", len(got), len(registered), got)
+				}
+			}
+			if len(tc.wantExact) > 0 {
+				if len(got) != len(tc.wantExact) {
+					t.Fatalf("tools/list count = %d, want %d; got %v, want %v", len(got), len(tc.wantExact), got, tc.wantExact)
+				}
+				for _, exp := range tc.wantExact {
+					if !slices.Contains(got, exp) {
+						t.Fatalf("tools/list missing expected tool %q; got %v", exp, got)
+					}
+				}
+			}
+			for _, abs := range tc.wantAbsent {
+				if slices.Contains(got, abs) {
+					t.Fatalf("tools/list unexpectedly contains absent tool %q; got %v", abs, got)
+				}
+			}
+		})
+	}
+}
+
+type toolCallResultDetails struct {
+	IsError           bool
+	StructuredContent json.RawMessage
+	ContentText       string
+}
+
+func callToolWithParams(t *testing.T, f *mcpFixture, token, toolName string, args map[string]any) toolCallResultDetails {
+	t.Helper()
+	res := postMCP(t, f, token, "", map[string]any{
+		"jsonrpc": "2.0", "id": 5, "method": "tools/call",
+		"params": map[string]any{"name": toolName, "arguments": args},
+	})
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("tools/call(%s) status = %d, body = %s", toolName, res.StatusCode, string(res.Body))
+	}
+	var rpc struct {
+		Result struct {
+			IsError           bool            `json:"isError"`           //nolint:tagliatelle // MCP JSON-RPC wire field
+			StructuredContent json.RawMessage `json:"structuredContent"` //nolint:tagliatelle // MCP JSON-RPC wire field
+			Content           []struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+			} `json:"content"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(res.Body, &rpc); err != nil {
+		t.Fatalf("decode tools/call(%s): %v (%s)", toolName, err, string(res.Body))
+	}
+	var textBuilder strings.Builder
+	for _, c := range rpc.Result.Content {
+		if c.Type == "text" {
+			textBuilder.WriteString(c.Text)
+		}
+	}
+	return toolCallResultDetails{
+		IsError:           rpc.Result.IsError,
+		StructuredContent: rpc.Result.StructuredContent,
+		ContentText:       textBuilder.String(),
+	}
+}
+
+func TestMCPParameterizedToolCall(t *testing.T) {
+	t.Parallel()
+	f := newMCPFixture(t)
+	enableLLM(t, f)
+	coreToken := issueKey(t, f, "param-tester", domain.ScopeCoreRead)
+	assertInitializeOK(t, f, coreToken, f.srv.URL)
+
+	seeded, err := f.instSvc.Create(t.Context(), instances.Input{
+		Kind: domain.KindRadarr, Name: "Radarr Seeded", BaseURL: "http://radarr.internal:7878", APIKey: "radarr-secret-key", Enabled: true,
+	})
+	if err != nil {
+		t.Fatalf("instSvc.Create: %v", err)
+	}
+
+	cases := []struct {
+		name       string
+		args       map[string]any
+		wantError  bool
+		wantID     string
+		wantDetail string
+	}{
+		{
+			name:      "positive seeded instance id returns matching structuredContent id",
+			args:      map[string]any{"id": seeded.ID.String()},
+			wantError: false,
+			wantID:    seeded.ID.String(),
+		},
+		{
+			name:      "negative bad uuid returns isError true",
+			args:      map[string]any{"id": "not-a-valid-uuid"},
+			wantError: true,
+		},
+		{
+			name:       "boundary unknown valid uuid returns isError true with not-found detail",
+			args:       map[string]any{"id": uuid.NewString()},
+			wantError:  true,
+			wantDetail: "not found",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := callToolWithParams(t, f, coreToken, "snatcharr_get_instance", tc.args)
+			if got.IsError != tc.wantError {
+				t.Fatalf("isError = %v, want %v; text = %q", got.IsError, tc.wantError, got.ContentText)
+			}
+			if !tc.wantError {
+				var instanceOut map[string]any
+				if err := json.Unmarshal(got.StructuredContent, &instanceOut); err != nil {
+					t.Fatalf("unmarshal structuredContent: %v (%s)", err, string(got.StructuredContent))
+				}
+				if instanceOut["id"] != tc.wantID {
+					t.Fatalf("structuredContent id = %v, want %s", instanceOut["id"], tc.wantID)
+				}
+			}
+			if tc.wantDetail != "" && !strings.Contains(strings.ToLower(got.ContentText), tc.wantDetail) {
+				t.Fatalf("contentText = %q, want substring %q", got.ContentText, tc.wantDetail)
 			}
 		})
 	}
