@@ -172,7 +172,7 @@ func (h *Handlers) CompleteSetup(ctx context.Context, req *oas.SetupRequest) (oa
 	if err != nil {
 		return nil, err
 	}
-	return h.startSession(ctx, u)
+	return h.startSession(ctx, u, nil)
 }
 
 // ChangePassword changes the current user's password, ends every session of the user and
@@ -211,7 +211,7 @@ func (h *Handlers) Login(ctx context.Context, req *oas.LoginRequest) (oas.LoginR
 		}
 		return nil, err
 	}
-	return h.startSession(ctx, u)
+	return h.startSession(ctx, u, nil)
 }
 
 func remoteIP(ctx context.Context) string {
@@ -254,13 +254,19 @@ func (h *Handlers) GetSession(ctx context.Context) (*oas.SessionHeaders, error) 
 	}, nil
 }
 
-func (h *Handlers) startSession(ctx context.Context, u domain.User) (*oas.Session, error) {
+func (h *Handlers) startSession(ctx context.Context, u domain.User, origin *auth.SSOOrigin) (*oas.Session, error) {
 	w, okW := writerFrom(ctx)
 	r, okR := requestFrom(ctx)
 	if !okW || !okR {
 		return nil, errors.New("httpapi: no http context for session")
 	}
-	if err := h.auth.RenewSession(ctx, h.sessions, w, r, u.ID); err != nil {
+	var err error
+	if origin != nil {
+		err = h.auth.RenewSSOSession(ctx, h.sessions, w, r, u.ID, *origin)
+	} else {
+		err = h.auth.RenewSession(ctx, h.sessions, w, r, u.ID)
+	}
+	if err != nil {
 		return nil, fmt.Errorf("httpapi: %w", err)
 	}
 	return &oas.Session{
@@ -303,6 +309,12 @@ func (h *Handlers) CreateProxySession(ctx context.Context) (oas.CreateProxySessi
 		)
 		return nil, domain.ErrForbidden
 	}
+	origin := auth.SSOOrigin{
+		Source:  "proxy",
+		Subject: user,
+		Groups:  groups,
+		Role:    role,
+	}
 	if role == domain.RoleAdmin {
 		admin, err := h.auth.FirstAdmin(ctx)
 		if err != nil {
@@ -311,11 +323,11 @@ func (h *Handlers) CreateProxySession(ctx context.Context) (oas.CreateProxySessi
 			}
 			return nil, err
 		}
-		return h.startSession(ctx, admin)
+		return h.startSession(ctx, admin, &origin)
 	}
 	viewer, err := h.auth.ProvisionExternalViewer(ctx, "proxy-", user)
 	if err != nil {
 		return nil, err
 	}
-	return h.startSession(ctx, viewer)
+	return h.startSession(ctx, viewer, &origin)
 }

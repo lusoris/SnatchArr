@@ -6,6 +6,7 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -23,6 +24,10 @@ import (
 // Manager.Renew for this (golusoris/golusoris#931, after v0.17.0); this
 // body moves onto it once a golusoris release carries it.
 func (s *Service) RenewSession(ctx context.Context, m *session.Manager, w http.ResponseWriter, r *http.Request, userID uuid.UUID) error {
+	return s.renewSession(ctx, m, w, r, userID, nil)
+}
+
+func (s *Service) renewSession(ctx context.Context, m *session.Manager, w http.ResponseWriter, r *http.Request, userID uuid.UUID, origin *SSOOrigin) error {
 	old, err := m.Load(r)
 	if err != nil {
 		return fmt.Errorf("auth: load session: %w", err)
@@ -38,8 +43,29 @@ func (s *Service) RenewSession(ctx context.Context, m *session.Manager, w http.R
 		return fmt.Errorf("auth: new session: %w", err)
 	}
 	fresh.Set(SessionUserKey, userID.String())
+	if origin != nil {
+		if err := setSSOOrigin(fresh, *origin); err != nil {
+			return err
+		}
+	}
 	if err := m.SaveContext(ctx, w, fresh); err != nil {
 		return fmt.Errorf("auth: save session: %w", err)
 	}
+	return nil
+}
+
+func setSSOOrigin(fresh *session.Session, origin SSOOrigin) error {
+	groups := origin.Groups
+	if groups == nil {
+		groups = []string{}
+	}
+	rawGroups, err := json.Marshal(groups)
+	if err != nil {
+		return fmt.Errorf("auth: encode sso_groups: %w", err)
+	}
+	fresh.Set(SessionSSOSourceKey, origin.Source)
+	fresh.Set(SessionSSOSubjectKey, origin.Subject)
+	fresh.Set(SessionSSOGroupsKey, string(rawGroups))
+	fresh.Set(SessionSSORoleKey, string(origin.Role))
 	return nil
 }

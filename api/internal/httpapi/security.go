@@ -20,12 +20,14 @@ import (
 
 	"github.com/lusoris/SnatchArr/api/internal/auth"
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
+	"github.com/lusoris/SnatchArr/api/internal/config"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 )
 
 // Security resolves cookie sessions and bearer API keys to users.
 type Security struct {
 	sessions *session.Manager
+	ssoCfg   ssoConfig
 	keys     *apikey.Service
 	users    *auth.Service
 	apiKeys  *auth.APIKeys
@@ -34,14 +36,18 @@ type Security struct {
 }
 
 // NewSecurity wires the handler.
-func NewSecurity(sessions *session.Manager, keys *apikey.Service, users *auth.Service, apiKeys *auth.APIKeys, clk clock.Clock, logger *slog.Logger) *Security {
+func NewSecurity(sessions *session.Manager, cfg config.Options, keys *apikey.Service, users *auth.Service, apiKeys *auth.APIKeys, clk clock.Clock, logger *slog.Logger) *Security {
 	return &Security{
 		sessions: sessions,
-		keys:     keys,
-		users:    users,
-		apiKeys:  apiKeys,
-		clk:      clk,
-		logger:   logger,
+		ssoCfg: ssoConfig{
+			OIDC:      cfg.OIDC,
+			ProxyAuth: cfg.ProxyAuth,
+		},
+		keys:    keys,
+		users:   users,
+		apiKeys: apiKeys,
+		clk:     clk,
+		logger:  logger,
 	}
 }
 
@@ -64,7 +70,36 @@ func (s *Security) HandleCookieAuth(ctx context.Context, _ oas.OperationName, _ 
 	if err != nil {
 		return ctx, fmt.Errorf("%w: %w", domain.ErrUnauthorized, err)
 	}
+	origin, hasSSO, ssoErr := auth.SSOOriginFrom(sess)
+	if ssoErr != nil {
+		source, _ := sess.Get(auth.SessionSSOSourceKey).(string)
+		s.revokeSSOSession(ctx, sess.ID, "malformed_origin", source)
+		return ctx, fmt.Errorf("%w: sso session revoked", domain.ErrUnauthorized)
+	}
+	if hasSSO {
+		if reason := checkSSOOrigin(ctx, s.ssoCfg, origin); reason != "" {
+			s.revokeSSOSession(ctx, sess.ID, reason, origin.Source)
+			return ctx, fmt.Errorf("%w: sso session revoked", domain.ErrUnauthorized)
+		}
+	}
 	return withUser(ctx, u), nil
+}
+
+func (s *Security) revokeSSOSession(ctx context.Context, sessID, reason, source string) {
+	if revErr := s.users.RevokeSession(ctx, sessID); revErr != nil {
+		if s.logger != nil {
+			s.logger.WarnContext(ctx, "httpapi: revoke session failed",
+				slog.String("reason", reason),
+				slog.String("error", revErr.Error()),
+			)
+		}
+	}
+	if s.logger != nil {
+		s.logger.WarnContext(ctx, "httpapi: sso session revoked",
+			slog.String("reason", reason),
+			slog.String("source", source),
+		)
+	}
 }
 
 // VerifyBearer verifies a raw bearer API key token, loads its owner user, and touches last_used_at.

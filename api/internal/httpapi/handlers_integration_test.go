@@ -487,7 +487,7 @@ func assertSessionUserAndCsrf(t *testing.T, f *integrationFixture, cookies []*ht
 		req.AddCookie(c)
 	}
 	ctx := withHTTPTest(t.Context(), httptest.NewRecorder(), req)
-	sec := NewSecurity(f.sessMgr, f.keys, f.h.auth, f.h.apiKeys, f.clk, slog.New(slog.DiscardHandler))
+	sec := NewSecurity(f.sessMgr, f.h.cfg, f.keys, f.h.auth, f.h.apiKeys, f.clk, slog.New(slog.DiscardHandler))
 	authCtx, err := sec.HandleCookieAuth(ctx, "GetSession", oas.CookieAuth{})
 	if err != nil {
 		t.Fatalf("HandleCookieAuth() = %v", err)
@@ -516,7 +516,7 @@ func assertSessionDestroyed(t *testing.T, f *integrationFixture, cookies []*http
 		req.AddCookie(c)
 	}
 	ctx := withHTTPTest(t.Context(), httptest.NewRecorder(), req)
-	sec := NewSecurity(f.sessMgr, f.keys, f.h.auth, f.h.apiKeys, f.clk, slog.New(slog.DiscardHandler))
+	sec := NewSecurity(f.sessMgr, f.h.cfg, f.keys, f.h.auth, f.h.apiKeys, f.clk, slog.New(slog.DiscardHandler))
 	if _, err := sec.HandleCookieAuth(ctx, "GetSession", oas.CookieAuth{}); err == nil {
 		t.Fatal("expected session to be destroyed after logout, but old cookie was valid")
 	}
@@ -819,7 +819,7 @@ func TestHandlersChangePassword(t *testing.T) {
 	s3Cookies := login3Rec.Result().Cookies()
 
 	// Verify all 3 sessions are valid
-	sec := NewSecurity(f.sessMgr, f.keys, f.h.auth, f.h.apiKeys, f.clk, slog.New(slog.DiscardHandler))
+	sec := NewSecurity(f.sessMgr, f.h.cfg, f.keys, f.h.auth, f.h.apiKeys, f.clk, slog.New(slog.DiscardHandler))
 	for i, c := range [][]*http.Cookie{s1Cookies, s2Cookies, s3Cookies} {
 		req := httptest.NewRequest(http.MethodGet, "/auth/session", nil)
 		for _, cookie := range c {

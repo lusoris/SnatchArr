@@ -90,7 +90,7 @@ func newMCPFixture(t *testing.T) *mcpFixture {
 	handlers := httpapi.NewHandlers(build, cfg, clk, authSvc, apiKeys, sessMgr, instSvc, polSvc, logger, httpapi.Deps{
 		Workers: workers, Settings: settingsSvc,
 	})
-	sec := httpapi.NewSecurity(sessMgr, keys, authSvc, apiKeys, clk, logger)
+	sec := httpapi.NewSecurity(sessMgr, cfg, keys, authSvc, apiKeys, clk, logger)
 	llmSvc := llm.New(build, settingsSvc, sec, handlers, logger)
 	r := chi.NewRouter()
 	llm.Mount(r, llmSvc)

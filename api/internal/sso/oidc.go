@@ -259,7 +259,13 @@ func (s *Service) completeCallback(w http.ResponseWriter, r *http.Request, code,
 		refuse(r.Context(), reason, "")
 		return
 	}
-	if err := s.loginUser(r.Context(), w, r, user); err != nil {
+	origin := auth.SSOOrigin{
+		Source:  "oidc",
+		Subject: idToken.Subject,
+		Groups:  groups,
+		Role:    role,
+	}
+	if err := s.loginUser(r.Context(), w, r, user, origin); err != nil {
 		onErr(r.Context(), w, r, err)
 		return
 	}
@@ -353,9 +359,9 @@ func (s *Service) extractGroups(idToken *gooidc.IDToken) ([]string, bool) {
 	return groups, true
 }
 
-func (s *Service) loginUser(ctx context.Context, w http.ResponseWriter, r *http.Request, u domain.User) error {
+func (s *Service) loginUser(ctx context.Context, w http.ResponseWriter, r *http.Request, u domain.User, origin auth.SSOOrigin) error {
 	// The pre-login session held the OIDC state; the user gets a fresh id (#268).
-	if err := s.auth.RenewSession(ctx, s.sessions, w, r, u.ID); err != nil {
+	if err := s.auth.RenewSSOSession(ctx, s.sessions, w, r, u.ID, origin); err != nil {
 		return fmt.Errorf("sso: %w", err)
 	}
 	return nil

@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lusoris/SnatchArr/api/internal/auth"
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/config"
 )
@@ -319,5 +320,146 @@ func TestSSO_NoSecretsInLogs(t *testing.T) {
 	}
 	if !strings.Contains(logs, "reason=exchange_failed") || !strings.Contains(logs, "detail=invalid_grant") {
 		t.Errorf("expected refusal log with reason=exchange_failed and detail=invalid_grant, got:\n%s", logs)
+	}
+}
+
+func TestProxyAuth_Revocation(t *testing.T) {
+	t.Parallel()
+	f := setupProxyTest(t, proxyTestCase{enabled: true, hasAdmin: true})
+
+	// 1. Positive: proxy viewer logs in
+	loginReq := httptest.NewRequest(http.MethodPost, PathPrefix+"/auth/proxy-session", nil)
+	loginReq.RemoteAddr = "10.0.0.5:12345"
+	loginReq.Header.Set("Remote-User", "viewer-user")
+	loginReq.Header.Set("X-Authentik-Groups", "snatcharr-viewers")
+	loginRec := httptest.NewRecorder()
+	f.router.ServeHTTP(loginRec, loginReq)
+
+	if loginRec.Code != http.StatusOK {
+		t.Fatalf("proxy login code = %d, want 200 (body: %s)", loginRec.Code, loginRec.Body.String())
+	}
+	cookies := loginRec.Result().Cookies()
+	if len(cookies) == 0 {
+		t.Fatalf("proxy login set no cookies")
+	}
+
+	// Positive: same cookie with original groups -> 200
+	validReq := httptest.NewRequest(http.MethodGet, PathPrefix+"/auth/session", nil)
+	validReq.RemoteAddr = "10.0.0.5:12345"
+	validReq.Header.Set("Remote-User", "viewer-user")
+	validReq.Header.Set("X-Authentik-Groups", "snatcharr-viewers")
+	for _, c := range cookies {
+		validReq.AddCookie(c)
+	}
+	validRec := httptest.NewRecorder()
+	f.router.ServeHTTP(validRec, validReq)
+	if validRec.Code != http.StatusOK {
+		t.Fatalf("valid session check code = %d, want 200", validRec.Code)
+	}
+
+	// 2. GET /auth/session with cookie + same user header + groups header "other-group" -> 401 problem+json
+	revokeReq := httptest.NewRequest(http.MethodGet, PathPrefix+"/auth/session", nil)
+	revokeReq.RemoteAddr = "10.0.0.5:12345"
+	revokeReq.Header.Set("Remote-User", "viewer-user")
+	revokeReq.Header.Set("X-Authentik-Groups", "other-group")
+	for _, c := range cookies {
+		revokeReq.AddCookie(c)
+	}
+	revokeRec := httptest.NewRecorder()
+	f.router.ServeHTTP(revokeRec, revokeReq)
+
+	if revokeRec.Code != http.StatusUnauthorized {
+		t.Fatalf("GET /auth/session with other-group code = %d, want 401", revokeRec.Code)
+	}
+	ct := revokeRec.Header().Get("Content-Type")
+	if !strings.Contains(ct, "application/problem+json") {
+		t.Errorf("Content-Type = %q, want application/problem+json", ct)
+	}
+
+	// 3. Further GET with the original groups -> still 401 (row deleted)
+	furtherReq := httptest.NewRequest(http.MethodGet, PathPrefix+"/auth/session", nil)
+	furtherReq.RemoteAddr = "10.0.0.5:12345"
+	furtherReq.Header.Set("Remote-User", "viewer-user")
+	furtherReq.Header.Set("X-Authentik-Groups", "snatcharr-viewers")
+	for _, c := range cookies {
+		furtherReq.AddCookie(c)
+	}
+	furtherRec := httptest.NewRecorder()
+	f.router.ServeHTTP(furtherRec, furtherReq)
+
+	if furtherRec.Code != http.StatusUnauthorized {
+		t.Fatalf("further GET /auth/session code = %d, want 401 (row deleted)", furtherRec.Code)
+	}
+
+	// 4. Local password admin session unaffected when proxy cfg changes
+	adminLoginBody := `{"username":"admin","password":"password-admin-1234"}`
+	adminLoginReq := httptest.NewRequest(http.MethodPost, PathPrefix+"/auth/login", strings.NewReader(adminLoginBody))
+	adminLoginReq.Header.Set("Content-Type", "application/json")
+	adminLoginRec := httptest.NewRecorder()
+	f.router.ServeHTTP(adminLoginRec, adminLoginReq)
+	if adminLoginRec.Code != http.StatusOK {
+		t.Fatalf("admin login code = %d, want 200", adminLoginRec.Code)
+	}
+	adminCookies := adminLoginRec.Result().Cookies()
+
+	// Mutate proxy config
+	f.sec.ssoCfg.ProxyAuth.Enabled = false
+	f.sec.ssoCfg.ProxyAuth.ViewerGroups = []string{"changed"}
+
+	adminSessReq := httptest.NewRequest(http.MethodGet, PathPrefix+"/auth/session", nil)
+	for _, c := range adminCookies {
+		adminSessReq.AddCookie(c)
+	}
+	adminSessRec := httptest.NewRecorder()
+	f.router.ServeHTTP(adminSessRec, adminSessReq)
+	if adminSessRec.Code != http.StatusOK {
+		t.Fatalf("admin session after proxy cfg change code = %d, want 200", adminSessRec.Code)
+	}
+}
+
+func TestProxyAuth_MalformedOriginRevoked(t *testing.T) {
+	t.Parallel()
+	f := setupProxyTest(t, proxyTestCase{enabled: true, hasAdmin: true})
+
+	loginReq := httptest.NewRequest(http.MethodPost, PathPrefix+"/auth/proxy-session", nil)
+	loginReq.RemoteAddr = "10.0.0.5:12345"
+	loginReq.Header.Set("Remote-User", "viewer-user")
+	loginReq.Header.Set("X-Authentik-Groups", "snatcharr-viewers")
+	loginRec := httptest.NewRecorder()
+	f.router.ServeHTTP(loginRec, loginReq)
+	if loginRec.Code != http.StatusOK {
+		t.Fatalf("proxy login code = %d, want 200", loginRec.Code)
+	}
+	cookies := loginRec.Result().Cookies()
+
+	// Corrupt the stored role so the origin no longer parses.
+	sessReq := httptest.NewRequest(http.MethodGet, PathPrefix+"/auth/session", nil)
+	for _, c := range cookies {
+		sessReq.AddCookie(c)
+	}
+	sess, err := f.sessMgr.Load(sessReq)
+	if err != nil {
+		t.Fatalf("sessMgr.Load: %v", err)
+	}
+	sess.Set(auth.SessionSSORoleKey, "superuser")
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	if sErr := f.sessMgr.SaveContext(ctx, httptest.NewRecorder(), sess); sErr != nil {
+		t.Fatalf("sessMgr.SaveContext: %v", sErr)
+	}
+
+	for i := range 2 {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, PathPrefix+"/auth/session", nil)
+		for _, c := range cookies {
+			req.AddCookie(c)
+		}
+		f.router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("request %d with malformed origin code = %d, want 401", i, rec.Code)
+		}
+	}
+	if !strings.Contains(f.logBuf.String(), "reason=malformed_origin") {
+		t.Errorf("missing revocation log with reason=malformed_origin, got:\n%s", f.logBuf.String())
 	}
 }
