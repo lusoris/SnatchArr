@@ -33,51 +33,199 @@ export const AUTH_ROUTES = [
 	'/settings'
 ] as const;
 
+export const MIN_TABLES: Record<(typeof AUTH_ROUTES)[number], number> = {
+	'/': 0,
+	'/account': 1,
+	'/configarr': 0,
+	'/download-clients': 0,
+	'/history': 1,
+	'/instances': 1,
+	'/instances/[id]': 0,
+	'/instances/[id]/activity': 1,
+	'/instances/[id]/memory': 0,
+	'/instances/[id]/policy': 0,
+	'/instances/[id]/queue': 1,
+	'/live': 0,
+	'/logs': 0,
+	'/prowlarr': 1,
+	'/schedules': 1,
+	'/seerr': 1,
+	'/settings': 2
+};
+
 // Allowed drift in CSS pixels between a header cell and the body cells below it.
 const TOLERANCE_PX = 2;
 
-interface Misaligned {
+export interface Box {
+	x: number;
+	width: number;
+}
+
+export interface ExtractedCell extends Box {
+	scrollWidth: number;
+}
+
+export interface ExtractedRow {
+	cells: ExtractedCell[];
+	spans: boolean;
+}
+
+export interface ExtractedTable {
+	kind: 'table' | 'grid';
+	headers: Box[];
+	rows: ExtractedRow[];
+}
+
+export interface Misaligned {
 	table: number;
 	row: number;
 	column: number;
-	header: { x: number; width: number };
-	cell: { x: number; width: number };
+	header: Box;
+	cell: Box;
+	reason?: string;
 }
 
-// Every table and ARIA grid on the page: compare each body row whose cell count matches the
-// header with the header cells, column by column. Rows that span columns are skipped.
-function findMisalignedCells(tolerance: number): Misaligned[] {
-	const box = (el: Element) => {
+// Extracts table and ARIA grid geometry for rendered-layout verification.
+// Rows with differing cell count are findings unless a cell spans columns;
+// headerless tables are findings; cell content overflowing its track is a finding.
+export function extractTables(): ExtractedTable[] {
+	const box = (el: Element): Box => {
 		const r = el.getBoundingClientRect();
 		return { x: Math.round(r.left), width: Math.round(r.width) };
 	};
-	const tables = Array.from(document.querySelectorAll('table, [role="grid"]'));
-	const found: Misaligned[] = [];
-	tables.slice(0, 50).forEach((table, t) => {
-		const isGrid = table.getAttribute('role') === 'grid';
+	const tables = Array.from(document.querySelectorAll('table, [role="grid"]')).slice(0, 50);
+	return tables.map((t) => {
+		const isGrid = t.getAttribute('role') === 'grid';
 		const headers = isGrid
-			? Array.from(table.querySelectorAll('[role="columnheader"]'))
-			: Array.from(table.querySelectorAll(':scope > thead > tr:first-child > th'));
-		const rows = isGrid
-			? Array.from(table.querySelectorAll('[role="row"]')).filter(
-					(r) => r.querySelector('[role="gridcell"]') !== null
+			? Array.from(t.querySelectorAll('[role="columnheader"]')).filter(
+					(el) => el.closest('[role="grid"]') === t
 				)
-			: Array.from(table.querySelectorAll(':scope > tbody > tr'));
-		rows.slice(0, 500).forEach((row, r) => {
+			: Array.from(t.querySelectorAll('th')).filter(
+					(th) => th.closest('table') === t && th.closest('thead') !== null
+				);
+		const rawRows = isGrid
+			? Array.from(t.querySelectorAll('[role="row"]')).filter(
+					(r) => r.closest('[role="grid"]') === t && r.querySelector('[role="gridcell"]') !== null
+				)
+			: (t.querySelector('tbody')
+					? Array.from(t.querySelectorAll('tbody > tr'))
+					: Array.from(t.querySelectorAll('tr')).filter((tr) => tr.closest('thead') === null)
+				).filter((r) => r.closest('table') === t);
+		const rows = rawRows.slice(0, 500).map((row) => {
 			const cells = isGrid
-				? Array.from(row.querySelectorAll('[role="gridcell"]'))
-				: Array.from(row.querySelectorAll(':scope > td, :scope > th'));
-			if (cells.length !== headers.length) return;
-			cells.forEach((cell, c) => {
-				const h = box(headers[c]);
-				const b = box(cell);
-				if (Math.abs(h.x - b.x) > tolerance || Math.abs(h.width - b.width) > tolerance) {
-					found.push({ table: t, row: r, column: c, header: h, cell: b });
-				}
+				? Array.from(row.querySelectorAll('[role="gridcell"]')).filter(
+						(c) => c.closest('[role="row"]') === row
+					)
+				: Array.from(row.querySelectorAll(':scope > td, :scope > th')).filter(
+						(c) => c.closest('tr') === row
+					);
+			const spans = cells.some((c) => {
+				const cs = c.getAttribute('colspan') || c.getAttribute('aria-colspan');
+				return cs !== null && parseInt(cs, 10) > 1;
 			});
+			return {
+				spans,
+				cells: cells.map((c) => ({ ...box(c), scrollWidth: c.scrollWidth }))
+			};
 		});
+		return { kind: isGrid ? 'grid' : 'table', headers: headers.map(box), rows };
 	});
-	return found;
+}
+
+function checkMissingHeaders(table: ExtractedTable, index: number): Misaligned | null {
+	if (table.headers.length > 0) return null;
+	return {
+		table: index,
+		row: -1,
+		column: -1,
+		header: { x: 0, width: 0 },
+		cell: { x: 0, width: 0 },
+		reason: table.kind === 'grid' ? 'grid without columnheader cells' : 'table without header cells'
+	};
+}
+
+function checkCellCount(
+	tableIdx: number,
+	rowIdx: number,
+	headerCount: number,
+	row: ExtractedRow
+): Misaligned | null {
+	if (row.spans || row.cells.length === headerCount) return null;
+	return {
+		table: tableIdx,
+		row: rowIdx,
+		column: -1,
+		header: { x: headerCount, width: headerCount },
+		cell: { x: row.cells.length, width: row.cells.length },
+		reason: `row cell count (${row.cells.length}) differs from header count (${headerCount})`
+	};
+}
+
+function checkCellAlignment(
+	tableIdx: number,
+	rowIdx: number,
+	colIdx: number,
+	header: Box,
+	cell: ExtractedCell,
+	tolerance: number
+): Misaligned | null {
+	const headerBox = { x: header.x, width: header.width };
+	const cellBox = { x: cell.x, width: cell.width };
+	if (Math.abs(header.x - cell.x) > tolerance || Math.abs(header.width - cell.width) > tolerance) {
+		return { table: tableIdx, row: rowIdx, column: colIdx, header: headerBox, cell: cellBox };
+	}
+	if (cell.scrollWidth > cell.width + tolerance) {
+		return {
+			table: tableIdx,
+			row: rowIdx,
+			column: colIdx,
+			header: headerBox,
+			cell: { x: cell.x, width: cell.scrollWidth },
+			reason: `cell content (${cell.scrollWidth}px) overflows track (${cell.width}px)`
+		};
+	}
+	return null;
+}
+
+export function checkTable(
+	table: ExtractedTable,
+	index: number,
+	tolerance: number
+): { measuredRows: number; findings: Misaligned[] } {
+	const missing = checkMissingHeaders(table, index);
+	if (missing) {
+		return { measuredRows: 0, findings: [missing] };
+	}
+	let measuredRows = 0;
+	const findings: Misaligned[] = [];
+	for (let r = 0; r < table.rows.length; r++) {
+		const row = table.rows[r];
+		if (row.cells.length !== table.headers.length) {
+			const countFinding = checkCellCount(index, r, table.headers.length, row);
+			if (countFinding) findings.push(countFinding);
+			continue;
+		}
+		measuredRows++;
+		for (let c = 0; c < row.cells.length; c++) {
+			const f = checkCellAlignment(index, r, c, table.headers[c], row.cells[c], tolerance);
+			if (f) findings.push(f);
+		}
+	}
+	return { measuredRows, findings };
+}
+
+function checkAllTables(
+	tables: ExtractedTable[],
+	tolerance: number
+): { tableCount: number; measuredRows: number; misaligned: Misaligned[] } {
+	let measuredRows = 0;
+	const misaligned: Misaligned[] = [];
+	for (let i = 0; i < tables.length; i++) {
+		const res = checkTable(tables[i], i, tolerance);
+		measuredRows += res.measuredRows;
+		misaligned.push(...res.findings);
+	}
+	return { tableCount: tables.length, measuredRows, misaligned };
 }
 
 // Signals that the app stylesheet applied: the body paints a background and the sidebar
@@ -92,8 +240,23 @@ function readStyleSignals() {
 	};
 }
 
+async function waitForSettled(page: Page): Promise<void> {
+	await page.waitForLoadState('networkidle');
+	await expect(
+		page.locator(
+			'[aria-busy="true"], [data-testid="skeleton"], [data-testid="live-skeleton"], [role="status"][aria-label*="loading" i], [role="status"][aria-label*="lädt" i], [role="status"][aria-label*="geladen" i]'
+		)
+	).toHaveCount(0);
+	await expect(
+		page.locator('p[aria-live="polite"]').filter({ hasText: /loading|lädt/i })
+	).toHaveCount(0);
+}
+
 export async function assertRenderedLayout(page: Page, route: string): Promise<void> {
+	expect(page.url(), `${route}: landed on /login (unauthenticated)`).not.toMatch(/\/login(?:\?|$)/);
 	await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
+
+	await waitForSettled(page);
 
 	const styles = await page.evaluate(readStyleSignals);
 	expect(styles.sheets, `${route}: no stylesheet loaded`).toBeGreaterThan(0);
@@ -108,6 +271,15 @@ export async function assertRenderedLayout(page: Page, route: string): Promise<v
 	}));
 	expect(scrollWidth, `${route}: horizontal page scroll`).toBeLessThanOrEqual(innerWidth);
 
-	const misaligned = await page.evaluate(findMisalignedCells, TOLERANCE_PX);
+	const tables = await page.evaluate(extractTables);
+	const { tableCount, measuredRows, misaligned } = checkAllTables(tables, TOLERANCE_PX);
+	const minTables = MIN_TABLES[route as keyof typeof MIN_TABLES] ?? 0;
+	expect(
+		tableCount,
+		`${route}: expected at least ${minTables} table(s), measured ${tableCount}`
+	).toBeGreaterThanOrEqual(minTables);
+	if (minTables > 0) {
+		expect(measuredRows, `${route}: declared a table but measured 0 body rows`).toBeGreaterThan(0);
+	}
 	expect(misaligned, `${route}: header and body cells do not share columns`).toEqual([]);
 }
