@@ -6,7 +6,9 @@ SPDX-License-Identifier: EUPL-1.2
 	import { createSentioQuery } from '@sveltesentio/query';
 	import { useSSE } from '@sveltesentio/realtime/use-sse';
 	import { api } from '#lib/api/client.js';
+	import ConnectionStatus from '#lib/components/ConnectionStatus.svelte';
 	import Field from '#lib/components/Field.svelte';
+	import PageHeader from '#lib/components/PageHeader.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import {
 		logLevelLabel,
@@ -65,20 +67,13 @@ SPDX-License-Identifier: EUPL-1.2
 	const sources = $derived(logSources(records));
 </script>
 
-<div class="mb-4 flex items-center justify-between">
-	<h1 class="text-2xl font-semibold">{m.logs_title()}</h1>
-	{#if session.isAdmin}
-		<p class="flex items-center gap-2 text-sm" role="status">
-			<span
-				class="inline-block h-3 w-3 rounded-full"
-				class:bg-green-600={sse.connected}
-				class:bg-amber-500={!sse.connected}
-				aria-hidden="true"
-			></span>
-			{sse.connected ? m.live_connected() : m.live_disconnected()}
-		</p>
-	{/if}
-</div>
+<PageHeader title={m.logs_title()}>
+	{#snippet status()}
+		{#if session.isAdmin}
+			<ConnectionStatus connected={sse.connected} />
+		{/if}
+	{/snippet}
+</PageHeader>
 
 {#if !session.isAdmin}
 	<p role="alert">{m.logs_admin_only()}</p>
