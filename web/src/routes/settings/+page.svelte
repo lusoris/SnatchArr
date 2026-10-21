@@ -27,7 +27,8 @@ SPDX-License-Identifier: EUPL-1.2
 		user_agent: z.string().min(1).max(200),
 		global_hourly_cap: z.number().int().min(0).max(5000),
 		search_priority_preset: presetMapSchema,
-		download_priority_preset: presetMapSchema
+		download_priority_preset: presetMapSchema,
+		llm_enabled: z.boolean()
 	}) satisfies z.ZodType<Omit<Settings, 'updated_at'>>;
 
 	const settings = createSentioQuery({
@@ -151,6 +152,10 @@ SPDX-License-Identifier: EUPL-1.2
 				canReset={mediaFirst !== undefined}
 				onReset={resetToShippedPreset}
 			/>
+			<label class="flex items-center gap-2">
+				<input type="checkbox" data-field="llm_enabled" bind:checked={draft.llm_enabled} />
+				{m.settings_llm_enabled()}
+			</label>
 			<div>
 				<button type="submit" class="btn btn-primary" disabled={save.isPending}
 					>{m.instance_save()}</button

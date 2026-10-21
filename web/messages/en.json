@@ -536,5 +536,6 @@
 	"instance_priority_follow_preset": "Follow preset",
 	"instance_priority_clear": "Clear overrides",
 	"instance_priority_save": "Save priority",
-	"instance_priority_saved": "Instance priority saved"
+	"instance_priority_saved": "Instance priority saved",
+	"settings_llm_enabled": "Enable MCP server (/api/v1/mcp)"
 }

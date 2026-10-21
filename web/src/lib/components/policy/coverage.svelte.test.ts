@@ -164,7 +164,8 @@ describe('Field coverage against openapi.yaml', () => {
 			'user_agent',
 			'global_hourly_cap',
 			'search_priority_preset',
-			'download_priority_preset'
+			'download_priority_preset',
+			'llm_enabled'
 		]);
 
 		const mediaFirst = {
@@ -182,7 +183,8 @@ describe('Field coverage against openapi.yaml', () => {
 				user_agent: 'SnatchArr/1.0',
 				global_hourly_cap: 100,
 				search_priority_preset: mediaFirst,
-				download_priority_preset: mediaFirst
+				download_priority_preset: mediaFirst,
+				llm_enabled: false
 			},
 			'/priority-presets': [
 				{

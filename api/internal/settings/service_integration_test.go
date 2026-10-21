@@ -41,6 +41,7 @@ func editable(s domain.Settings) domain.Settings {
 		GlobalHourlyCap:        s.GlobalHourlyCap,
 		SearchPriorityPreset:   s.SearchPriorityPreset,
 		DownloadPriorityPreset: s.DownloadPriorityPreset,
+		LLMEnabled:             s.LLMEnabled,
 	}
 }
 
@@ -48,6 +49,7 @@ func settingsEqual(a, b domain.Settings) bool {
 	return a.HistoryRetentionDays == b.HistoryRetentionDays &&
 		a.UserAgent == b.UserAgent &&
 		a.GlobalHourlyCap == b.GlobalHourlyCap &&
+		a.LLMEnabled == b.LLMEnabled &&
 		maps.Equal(a.SearchPriorityPreset, b.SearchPriorityPreset) &&
 		maps.Equal(a.DownloadPriorityPreset, b.DownloadPriorityPreset)
 }
@@ -88,6 +90,12 @@ func TestUpdate(t *testing.T) {
 			"boundary highest values",
 			domain.Settings{HistoryRetentionDays: 3650, UserAgent: strings.Repeat("a", 200), GlobalHourlyCap: domain.GlobalHourlyCapLimit, SearchPriorityPreset: preset, DownloadPriorityPreset: preset},
 			domain.Settings{HistoryRetentionDays: 3650, UserAgent: strings.Repeat("a", 200), GlobalHourlyCap: domain.GlobalHourlyCapLimit, SearchPriorityPreset: preset, DownloadPriorityPreset: preset},
+			nil,
+		},
+		{
+			"positive llm_enabled true round-trips",
+			domain.Settings{HistoryRetentionDays: 30, UserAgent: "agent/llm", GlobalHourlyCap: 50, LLMEnabled: true, SearchPriorityPreset: preset, DownloadPriorityPreset: preset},
+			domain.Settings{HistoryRetentionDays: 30, UserAgent: "agent/llm", GlobalHourlyCap: 50, LLMEnabled: true, SearchPriorityPreset: preset, DownloadPriorityPreset: preset},
 			nil,
 		},
 		{"negative retention of zero days", domain.Settings{HistoryRetentionDays: 0, UserAgent: "a", SearchPriorityPreset: preset, DownloadPriorityPreset: preset}, defaults, domain.ErrInvalid},

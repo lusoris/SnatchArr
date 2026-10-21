@@ -62,7 +62,8 @@ SET history_retention_days = $1,
     global_hourly_cap = $3,
     search_priority_preset = $4,
     download_priority_preset = $5,
-    updated_at = $6
+    llm_enabled = $6,
+    updated_at = $7
 WHERE singleton
 RETURNING singleton, history_retention_days, user_agent, updated_at, global_hourly_cap, llm_enabled, search_priority_preset, download_priority_preset
 `
@@ -73,6 +74,7 @@ type UpdateSettingsParams struct {
 	GlobalHourlyCap        int32
 	SearchPriorityPreset   []byte
 	DownloadPriorityPreset []byte
+	LlmEnabled             bool
 	UpdatedAt              time.Time
 }
 
@@ -83,6 +85,7 @@ func (q *Queries) UpdateSettings(ctx context.Context, arg UpdateSettingsParams) 
 		arg.GlobalHourlyCap,
 		arg.SearchPriorityPreset,
 		arg.DownloadPriorityPreset,
+		arg.LlmEnabled,
 		arg.UpdatedAt,
 	)
 	var i Setting

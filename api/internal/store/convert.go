@@ -161,6 +161,7 @@ func SettingsFromRow(r sqlcgen.Setting) domain.Settings {
 		GlobalHourlyCap:        int(r.GlobalHourlyCap),
 		SearchPriorityPreset:   presetFromJSON(r.SearchPriorityPreset),
 		DownloadPriorityPreset: presetFromJSON(r.DownloadPriorityPreset),
+		LLMEnabled:             r.LlmEnabled,
 		UpdatedAt:              r.UpdatedAt,
 	}
 }

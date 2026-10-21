@@ -1182,9 +1182,12 @@ export interface components {
             oidc: boolean;
             proxy: boolean;
         };
+        /** @enum {string} */
+        ApiKeyScope: "core:read" | "core:write" | "requests:read" | "requests:write" | "download_clients:read" | "download_clients:write" | "prowlarr:read" | "prowlarr:write" | "notifications:read" | "notifications:write" | "admin:read" | "admin:write" | "adult:read" | "adult:write";
         ApiKey: {
             id: string;
             name: string;
+            scopes: components["schemas"]["ApiKeyScope"][];
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -1197,6 +1200,7 @@ export interface components {
         };
         CreateApiKeyRequest: {
             name: string;
+            scopes?: components["schemas"]["ApiKeyScope"][];
             /** Format: date-time */
             expires_at?: string;
         };
@@ -1477,6 +1481,11 @@ export interface components {
             global_hourly_cap: number;
             search_priority_preset: components["schemas"]["PriorityPresetMap"];
             download_priority_preset: components["schemas"]["PriorityPresetMap"];
+            /**
+             * @description Whether the Model Context Protocol (MCP) server at /api/v1/mcp is enabled.
+             * @default false
+             */
+            llm_enabled: boolean;
             /** Format: date-time */
             updated_at?: string;
         };

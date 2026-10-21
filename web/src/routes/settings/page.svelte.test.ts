@@ -40,7 +40,8 @@ const sampleSettings: Settings = {
 	user_agent: 'SnatchArr/1.0',
 	global_hourly_cap: 100,
 	search_priority_preset: { ...mediaFirstRanks },
-	download_priority_preset: { ...mediaFirstRanks }
+	download_priority_preset: { ...mediaFirstRanks },
+	llm_enabled: false
 };
 
 const sampleChannel: NotificationChannel = {
@@ -130,7 +131,8 @@ describe('settings', () => {
 				user_agent: 'SnatchArr/1.0',
 				global_hourly_cap: 100,
 				search_priority_preset: mediaFirstRanks,
-				download_priority_preset: mediaFirstRanks
+				download_priority_preset: mediaFirstRanks,
+				llm_enabled: false
 			}
 		});
 	});

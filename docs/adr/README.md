@@ -28,3 +28,4 @@ This directory documents key architectural decisions following the HISS-14 immut
 | [0020](0020-snatch-policy-defaults-and-presets.md) | 2026-10-20 | Snatch policy defaults and presets | Proposed |
 | [0021](0021-llm-access-module.md) | 2026-10-20 | LLM access module | Proposed |
 | [0022](0022-instance-priority.md) | 2026-10-21 | Per-instance priority for searches and downloads | Proposed |
+| [0023](0023-sso-viewer-role.md) | 2026-10-21 | Roles from single sign-on groups | Accepted |

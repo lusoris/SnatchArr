@@ -35,6 +35,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/events"
 	"github.com/lusoris/SnatchArr/api/internal/httpapi"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
+	"github.com/lusoris/SnatchArr/api/internal/llm"
 	"github.com/lusoris/SnatchArr/api/internal/logring"
 	"github.com/lusoris/SnatchArr/api/internal/metrics"
 	"github.com/lusoris/SnatchArr/api/internal/notify"
@@ -94,6 +95,7 @@ var Module = fx.Options(
 	workergrpc.Module,
 	sso.Module,
 	httpapi.Module,
+	llm.Module,
 	// After every module that registers a loop: the gate collects the leader_loops group.
 	gate.Module,
 	fx.Decorate(defaultLeaderName),
@@ -154,6 +156,7 @@ type httpDeps struct {
 	Logs   *logring.Ring
 	Cfg    config.Options
 	SSO    *sso.Service
+	LLM    *llm.Service
 }
 
 func mountHTTP(d httpDeps, api httpapi.MountParams) error {
@@ -176,6 +179,7 @@ func mountHTTP(d httpDeps, api httpapi.MountParams) error {
 		return fmt.Errorf("app: %w", err)
 	}
 	sso.Mount(d.Router, httpapi.PathPrefix, d.SSO, httpapi.ErrorHandler(d.Logger))
+	llm.Mount(d.Router, d.LLM)
 	if err := httpapi.Mount(d.Router, api); err != nil {
 		return err
 	}

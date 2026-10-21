@@ -22,6 +22,7 @@ type Settings struct {
 	GlobalHourlyCap        int
 	SearchPriorityPreset   PriorityPreset
 	DownloadPriorityPreset PriorityPreset
+	LLMEnabled             bool
 	UpdatedAt              time.Time
 }
 

@@ -63,6 +63,7 @@ func (s *Service) Update(ctx context.Context, in domain.Settings) (domain.Settin
 		GlobalHourlyCap:        int32(in.GlobalHourlyCap), // #nosec G115 -- validated 0..5000
 		SearchPriorityPreset:   searchJSON,
 		DownloadPriorityPreset: downloadJSON,
+		LlmEnabled:             in.LLMEnabled,
 		UpdatedAt:              s.clk.Now(),
 	})
 	if err != nil {

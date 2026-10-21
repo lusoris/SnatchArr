@@ -536,5 +536,6 @@
 	"instance_priority_follow_preset": "Vorlage folgen",
 	"instance_priority_clear": "Überschreibungen löschen",
 	"instance_priority_save": "Priorität speichern",
-	"instance_priority_saved": "Instanz-Priorität gespeichert"
+	"instance_priority_saved": "Instanz-Priorität gespeichert",
+	"settings_llm_enabled": "MCP-Server aktivieren (/api/v1/mcp)"
 }

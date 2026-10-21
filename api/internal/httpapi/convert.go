@@ -208,6 +208,7 @@ func settingsToOAS(s domain.Settings) *oas.Settings {
 		GlobalHourlyCap:        s.GlobalHourlyCap,
 		SearchPriorityPreset:   priorityPresetToOAS(s.SearchPriorityPreset),
 		DownloadPriorityPreset: priorityPresetToOAS(s.DownloadPriorityPreset),
+		LlmEnabled:             oas.NewOptBool(s.LLMEnabled),
 		UpdatedAt:              oas.NewOptDateTime(s.UpdatedAt),
 	}
 }
@@ -219,6 +220,7 @@ func settingsFromOAS(in *oas.Settings) domain.Settings {
 		GlobalHourlyCap:        in.GlobalHourlyCap,
 		SearchPriorityPreset:   priorityPresetFromOAS(in.SearchPriorityPreset),
 		DownloadPriorityPreset: priorityPresetFromOAS(in.DownloadPriorityPreset),
+		LLMEnabled:             in.LlmEnabled.Or(false),
 	}
 }
 

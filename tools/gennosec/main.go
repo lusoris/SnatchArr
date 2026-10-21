@@ -16,6 +16,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go/format"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -38,6 +39,12 @@ var rules = []rule{
 		id:     "G101",
 		match:  regexp.MustCompile("^const \\w*(?i:apikey|token|secret|passwd|password|pwd|cred|bearer)\\w* = `"),
 		reason: "sqlc query constant named after a table; the value is SQL, not a credential",
+	},
+	{
+		dir:    "api/internal/build/oas",
+		id:     "G101",
+		match:  regexp.MustCompile(`^\s*ApiKeyScopeProwlarr(Read|Write)\s+ApiKeyScope = "prowlarr:(read|write)"$`),
+		reason: "ogen enum constant of the prowlarr API key scope; the value is a permission name, not a credential",
 	},
 	{
 		dir:    "api/internal/build/oas",
@@ -132,8 +139,14 @@ func applyFile(fsys fs.FS, root, path string, r rule) error {
 	if err != nil {
 		return fmt.Errorf("stat %s: %w", path, err)
 	}
+	// An inserted comment line splits gofmt's alignment section, so the file is
+	// reformatted; otherwise the gofmt pre-commit hook and go generate disagree.
+	formatted, err := format.Source([]byte(strings.Join(out, "\n")))
+	if err != nil {
+		return fmt.Errorf("format %s: %w", path, err)
+	}
 	full := filepath.Join(root, filepath.FromSlash(path))
-	if err := os.WriteFile(full, []byte(strings.Join(out, "\n")), info.Mode().Perm()); err != nil {
+	if err := os.WriteFile(full, formatted, info.Mode().Perm()); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
 	return nil
