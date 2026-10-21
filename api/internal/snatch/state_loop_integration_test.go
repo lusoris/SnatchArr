@@ -20,7 +20,6 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/events"
 	"github.com/lusoris/SnatchArr/api/internal/metrics"
 	"github.com/lusoris/SnatchArr/api/internal/metrics/metricstest"
-	"github.com/lusoris/SnatchArr/api/internal/policies"
 	"github.com/lusoris/SnatchArr/api/internal/settings"
 	"github.com/lusoris/SnatchArr/api/internal/store"
 	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
@@ -111,14 +110,13 @@ func TestStateLoop_Stamina(t *testing.T) {
 	instID := storetest.Instance(t, f.st, f.clk.Now())
 
 	// Update policy hourly cap to 50
-	polSvc := policies.New(f.st, f.clk)
-	pol, err := polSvc.Get(t.Context(), instID)
+	_, err := f.st.Pool().Exec(t.Context(), `
+		INSERT INTO snatch_policies (instance_id, hourly_cap, updated_at)
+		VALUES ($1, 50, $2)
+		ON CONFLICT (instance_id) DO UPDATE SET hourly_cap = 50
+	`, instID, f.clk.Now())
 	if err != nil {
-		t.Fatalf("policies.Get: %v", err)
-	}
-	pol.HourlyCap = 50
-	if _, err = polSvc.Update(t.Context(), pol); err != nil {
-		t.Fatalf("policies.Update: %v", err)
+		t.Fatalf("set hourly cap: %v", err)
 	}
 
 	// Configure global hourly cap = 100

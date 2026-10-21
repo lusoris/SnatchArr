@@ -24,6 +24,10 @@ import (
 // strikeTTL is how long a strike row is kept before it expires and can be purged.
 const strikeTTL = 24 * time.Hour
 
+// RefusedRetry is how long before a refused force import (no clean candidate) is retried.
+// 15m allows unpack/repair to finish without waiting for the full 24h strike TTL.
+const RefusedRetry = 15 * time.Minute
+
 // maxPurgeBatch bounds the rows one Purge call deletes.
 const maxPurgeBatch = 10000
 
