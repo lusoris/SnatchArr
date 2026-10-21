@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { components } from '#lib/api/schema.js';
 import { m } from '#lib/paraglide/messages.js';
 import { renderWithQuery, stubGet } from '#lib/testing/harness.js';
+import { MockEventSource } from '#lib/testing/sse.js';
 import LivePage from './+page.svelte';
 
 type Event = components['schemas']['Event'];
@@ -61,42 +62,32 @@ const sampleStatus: SystemStatus = {
 	worker_last_contact_at: '2026-10-20T12:30:00Z'
 };
 
-const { MockEventSource } = vi.hoisted(() => {
-	class MockEventSource {
-		static instances: MockEventSource[] = [];
-		url: string;
-		init?: { withCredentials?: boolean };
-		private listeners: Record<string, ((event: unknown) => void)[]> = {};
-
-		constructor(url: string, init?: { withCredentials?: boolean }) {
-			this.url = url;
-			this.init = init;
-			MockEventSource.instances.push(this);
-		}
-
-		addEventListener(type: string, handler: (event: unknown) => void) {
-			this.listeners[type] = this.listeners[type] ?? [];
-			this.listeners[type].push(handler);
-		}
-
-		removeEventListener(type: string, handler: (event: unknown) => void) {
-			this.listeners[type] = (this.listeners[type] ?? []).filter((h) => h !== handler);
-		}
-
-		close() {}
-
-		emit(type: string, event: unknown) {
-			for (const handler of [...(this.listeners[type] ?? [])]) {
-				handler(event);
-			}
-		}
+describe('live events', () => {
+	function openMockStream(): MockEventSource {
+		const es = MockEventSource.instances[0];
+		expect(es).toBeDefined();
+		es.emit('open', {});
+		return es;
 	}
 
-	(globalThis as unknown as { EventSource: unknown }).EventSource = MockEventSource;
-	return { MockEventSource };
-});
+	async function renderAndOpenLiveStream(): Promise<MockEventSource> {
+		renderWithQuery(LivePage);
+		const es = openMockStream();
+		expect((await screen.findByRole('status')).textContent).toContain(m.live_connected());
+		return es;
+	}
 
-describe('live events', () => {
+	async function renderLiveWithBacklog(events: Event[] = [sampleEvent]) {
+		stubGet({
+			'/events': events,
+			'/instances': [sampleInstance],
+			'/schedules': [],
+			'/system/status': sampleStatus
+		});
+		renderWithQuery(LivePage);
+		return await screen.findByRole('log');
+	}
+
 	beforeEach(() => {
 		MockEventSource.instances = [];
 		stubGet({
@@ -113,13 +104,8 @@ describe('live events', () => {
 	});
 
 	it('renders heading, connected status, and event row when message arrives', async () => {
-		renderWithQuery(LivePage);
+		const es = await renderAndOpenLiveStream();
 		expect(screen.getByRole('heading', { level: 1, name: m.live_title() })).toBeTruthy();
-		const es = MockEventSource.instances[0];
-		expect(es).toBeDefined();
-
-		es.emit('open', {});
-		expect((await screen.findByRole('status')).textContent).toContain(m.live_connected());
 
 		es.emit('message', {
 			type: 'search_dispatched',
@@ -140,12 +126,7 @@ describe('live events', () => {
 	});
 
 	it('shows disconnected status when stream encounters an error', async () => {
-		renderWithQuery(LivePage);
-		const es = MockEventSource.instances[0];
-		expect(es).toBeDefined();
-
-		es.emit('open', {});
-		expect((await screen.findByRole('status')).textContent).toContain(m.live_connected());
+		const es = await renderAndOpenLiveStream();
 
 		es.emit('error', new Error('stream disconnected'));
 		expect((await screen.findByRole('status')).textContent).toContain(m.live_disconnected());
@@ -173,15 +154,7 @@ describe('live events', () => {
 	});
 
 	it('renders backlog events fetched on mount', async () => {
-		stubGet({
-			'/events': [sampleEvent],
-			'/instances': [sampleInstance],
-			'/schedules': [],
-			'/system/status': sampleStatus
-		});
-		renderWithQuery(LivePage);
-
-		const log = await screen.findByRole('log');
+		const log = await renderLiveWithBacklog();
 		expect(log).toBeTruthy();
 		expect(await screen.findByText('search_dispatched')).toBeTruthy();
 		expect(screen.getByText('Searching Sonarr')).toBeTruthy();
@@ -205,9 +178,7 @@ describe('live events', () => {
 		expect(screen.getByText(m.live_backlog_error())).toBeTruthy();
 
 		// Stream still receives events
-		const es = MockEventSource.instances[0];
-		expect(es).toBeDefined();
-		es.emit('open', {});
+		const es = openMockStream();
 		es.emit('message', {
 			type: 'run_queued',
 			data: JSON.stringify({
@@ -223,21 +194,11 @@ describe('live events', () => {
 	});
 
 	it('deduplicates backlog and stream events by id', async () => {
-		stubGet({
-			'/events': [sampleEvent],
-			'/instances': [sampleInstance],
-			'/schedules': [],
-			'/system/status': sampleStatus
-		});
-		renderWithQuery(LivePage);
-
-		const log = await screen.findByRole('log');
+		const log = await renderLiveWithBacklog();
 		expect(await screen.findByText('Searching Sonarr')).toBeTruthy();
 		expect(within(log).getAllByRole('listitem')).toHaveLength(1);
 
-		const es = MockEventSource.instances[0];
-		expect(es).toBeDefined();
-		es.emit('open', {});
+		const es = openMockStream();
 
 		// Emit frame with identical id 101
 		es.emit('message', {
