@@ -1926,8 +1926,17 @@ func initViewerIDsState(t *testing.T, csrfToken string) *idsState {
 		"history_retention_days": 30,
 		"user_agent":             "SnatchArr/1.0",
 		"global_hourly_cap":      0,
+		// Required since ADR-0022: without them the body fails decoding (400) before the role check.
+		"search_priority_preset":   viewerPriorityPreset(),
+		"download_priority_preset": viewerPriorityPreset(),
 	}
 	return ids
+}
+
+func viewerPriorityPreset() map[string]any {
+	return map[string]any{
+		"sonarr": 10, "radarr": 10, "lidarr": 20, "readarr": 30, "whisparr_v2": 40, "whisparr_v3": 40,
+	}
 }
 
 func indexRouterSteps(steps []routerStep) map[string]routerStep {
