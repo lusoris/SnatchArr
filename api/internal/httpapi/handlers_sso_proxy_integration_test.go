@@ -16,6 +16,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/auth"
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/config"
+	"github.com/lusoris/SnatchArr/api/internal/testdiag"
 )
 
 type proxyTestCase struct {
@@ -167,7 +168,11 @@ func setupProxyTest(t *testing.T, tc proxyTestCase) *ssoFixture {
 	if tc.hasAdmin {
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 		defer cancel()
-		if _, err := f.h.auth.Setup(ctx, "admin", "password-admin-1234"); err != nil {
+		w := testdiag.Watch(5*time.Second, f.st.Pool())
+		_, err := f.h.auth.Setup(ctx, "admin", "password-admin-1234")
+		w.Stop()
+		w.Report(t, err)
+		if err != nil {
 			t.Fatalf("setupProxyTest: auth.Setup: %v", err)
 		}
 	}
@@ -277,7 +282,11 @@ func TestSSO_NoSecretsInLogs(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
-	if _, err := f.h.auth.Setup(ctx, "admin", "password-admin-1234"); err != nil {
+	w := testdiag.Watch(5*time.Second, f.st.Pool())
+	_, err := f.h.auth.Setup(ctx, "admin", "password-admin-1234")
+	w.Stop()
+	w.Report(t, err)
+	if err != nil {
 		t.Fatalf("auth.Setup: %v", err)
 	}
 

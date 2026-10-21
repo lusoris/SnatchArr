@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
+	"github.com/lusoris/SnatchArr/api/internal/testdiag"
 )
 
 func postCreateAPIKey(t *testing.T, f *routerFixture, client *http.Client, csrfToken string, body any) (*http.Response, []byte) {
@@ -93,7 +94,10 @@ func getWithBearer(t *testing.T, f *routerFixture, secret string) *http.Response
 		t.Fatalf("new bearer request: %v", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+secret)
+	w := testdiag.Watch(10*time.Second, f.st.Pool())
 	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	w.Stop()
+	w.Report(t, err)
 	if err != nil {
 		t.Fatalf("bearer do: %v", err)
 	}
@@ -114,7 +118,10 @@ func setupSecondLoggedInUser(t *testing.T, f *routerFixture) (*http.Client, stri
 		t.Fatalf("new login req: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	w := testdiag.Watch(10*time.Second, f.st.Pool())
 	resp, err := client.Do(req)
+	w.Stop()
+	w.Report(t, err)
 	if err != nil {
 		t.Fatalf("second admin login: %v", err)
 	}
@@ -260,7 +267,10 @@ func TestAPIKeyCookieOnly(t *testing.T) {
 	postReq, _ := http.NewRequestWithContext(t.Context(), http.MethodPost, f.srv.URL+PathPrefix+"/auth/api-keys", strings.NewReader(`{"name":"nested"}`))
 	postReq.Header.Set("Authorization", "Bearer "+created.Secret)
 	postReq.Header.Set("Content-Type", "application/json")
+	wPost := testdiag.Watch(10*time.Second, f.st.Pool())
 	pResp, err := client.Do(postReq)
+	wPost.Stop()
+	wPost.Report(t, err)
 	if err != nil {
 		t.Fatalf("do post: %v", err)
 	}
@@ -269,7 +279,10 @@ func TestAPIKeyCookieOnly(t *testing.T) {
 
 	getReq, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, f.srv.URL+PathPrefix+"/auth/api-keys", nil)
 	getReq.Header.Set("Authorization", "Bearer "+created.Secret)
+	wGet := testdiag.Watch(10*time.Second, f.st.Pool())
 	gResp, err := client.Do(getReq)
+	wGet.Stop()
+	wGet.Report(t, err)
 	if err != nil {
 		t.Fatalf("do get: %v", err)
 	}
@@ -278,7 +291,10 @@ func TestAPIKeyCookieOnly(t *testing.T) {
 
 	delReq, _ := http.NewRequestWithContext(t.Context(), http.MethodDelete, f.srv.URL+PathPrefix+"/auth/api-keys/"+created.ID, nil)
 	delReq.Header.Set("Authorization", "Bearer "+created.Secret)
+	wDel := testdiag.Watch(10*time.Second, f.st.Pool())
 	dResp, err := client.Do(delReq)
+	wDel.Stop()
+	wDel.Report(t, err)
 	if err != nil {
 		t.Fatalf("do del: %v", err)
 	}
