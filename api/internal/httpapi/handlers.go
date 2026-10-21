@@ -284,7 +284,7 @@ func (h *Handlers) GetSSO(_ context.Context) (*oas.SSOStatus, error) {
 	}, nil
 }
 
-// CreateProxySession starts a session for the admin when proxy auth is enabled and verified.
+// CreateProxySession starts a session when proxy auth is enabled and verified.
 func (h *Handlers) CreateProxySession(ctx context.Context) (oas.CreateProxySessionRes, error) {
 	if !h.cfg.ProxyAuth.Enabled {
 		return nil, domain.ErrNotFound
@@ -293,24 +293,29 @@ func (h *Handlers) CreateProxySession(ctx context.Context) (oas.CreateProxySessi
 	if !ok || user == "" {
 		return nil, domain.ErrUnauthorized
 	}
-	if !isAllowedProxyUser(user, h.cfg.ProxyAuth.AllowedUsers) {
-		return nil, domain.ErrUnauthorized
+	groups, _ := sso.ProxyGroupsFromContext(ctx)
+	role, ok := sso.ResolveRole(groups, h.cfg.ProxyAuth.AdminGroups, h.cfg.ProxyAuth.ViewerGroups)
+	if !ok {
+		h.logger.WarnContext(ctx, "sso: proxy login refused",
+			slog.String("reason", "not_authorized"),
+			slog.String("subject", user),
+			slog.Int("groups", len(groups)),
+		)
+		return nil, domain.ErrForbidden
 	}
-	admin, err := h.auth.FirstAdmin(ctx)
-	if err != nil {
-		if errors.Is(err, domain.ErrNotFound) {
-			return nil, fmt.Errorf("%w: no admin user configured", domain.ErrConflict)
+	if role == domain.RoleAdmin {
+		admin, err := h.auth.FirstAdmin(ctx)
+		if err != nil {
+			if errors.Is(err, domain.ErrNotFound) {
+				return nil, fmt.Errorf("%w: no admin user configured", domain.ErrConflict)
+			}
+			return nil, err
 		}
+		return h.startSession(ctx, admin)
+	}
+	viewer, err := h.auth.ProvisionExternalViewer(ctx, "proxy-", user)
+	if err != nil {
 		return nil, err
 	}
-	return h.startSession(ctx, admin)
-}
-
-func isAllowedProxyUser(user string, allowed []string) bool {
-	for _, u := range allowed {
-		if strings.EqualFold(user, u) {
-			return true
-		}
-	}
-	return false
+	return h.startSession(ctx, viewer)
 }

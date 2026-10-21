@@ -318,15 +318,33 @@ func TestDownloadClientTesting(t *testing.T) {
 		t.Parallel()
 		f := newIntegrationFixture(t)
 		c := seedTestDownloadClient(t, f)
-		got, err := f.h.TestDownloadClient(t.Context(), oas.TestDownloadClientParams{ClientId: c.ID})
+		got, err := f.h.TestDownloadClient(withUser(t.Context(), f.admin), oas.TestDownloadClientParams{ClientId: c.ID})
 		if err != nil || got.ClientID.Value != c.ID || !got.Reachable || got.Version.Value != "4.5.2" {
 			t.Fatalf("TestDownloadClient() = %+v, %v; want ID %s", got, err, c.ID)
+		}
+	})
+	t.Run("negative test stored client no user", func(t *testing.T) {
+		t.Parallel()
+		f := newIntegrationFixture(t)
+		c := seedTestDownloadClient(t, f)
+		_, err := f.h.TestDownloadClient(t.Context(), oas.TestDownloadClientParams{ClientId: c.ID})
+		if !errors.Is(err, domain.ErrUnauthorized) {
+			t.Fatalf("TestDownloadClient() err = %v, want ErrUnauthorized", err)
+		}
+	})
+	t.Run("negative test stored client viewer", func(t *testing.T) {
+		t.Parallel()
+		f := newIntegrationFixture(t)
+		c := seedTestDownloadClient(t, f)
+		_, err := f.h.TestDownloadClient(withUser(t.Context(), f.viewer), oas.TestDownloadClientParams{ClientId: c.ID})
+		if !errors.Is(err, domain.ErrForbidden) {
+			t.Fatalf("TestDownloadClient() err = %v, want ErrForbidden", err)
 		}
 	})
 	t.Run("negative test stored client not found", func(t *testing.T) {
 		t.Parallel()
 		f := newIntegrationFixture(t)
-		_, err := f.h.TestDownloadClient(t.Context(), oas.TestDownloadClientParams{ClientId: uuid.New()})
+		_, err := f.h.TestDownloadClient(withUser(t.Context(), f.admin), oas.TestDownloadClientParams{ClientId: uuid.New()})
 		if !errors.Is(err, domain.ErrNotFound) {
 			t.Fatalf("TestDownloadClient() err = %v, want ErrNotFound", err)
 		}

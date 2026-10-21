@@ -9,6 +9,7 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -350,5 +351,151 @@ func TestChangePasswordRollbackOnDeleteFailure(t *testing.T) {
 		if _, loadErr := st.Q().LoadSession(ctx, sqlcgen.LoadSessionParams{ID: sid, ExpiresAt: clk.Now()}); loadErr != nil {
 			t.Fatalf("session %s missing after rollback: %v", sid, loadErr)
 		}
+	}
+}
+
+func TestProvisionExternalViewer_BeforeSetupRefused(t *testing.T) {
+	t.Parallel()
+	svc := newService(t)
+	ctx := t.Context()
+
+	_, err := svc.ProvisionExternalViewer(ctx, "oidc-", "alice@example.com")
+	if !errors.Is(err, domain.ErrForbidden) {
+		t.Fatalf("ProvisionExternalViewer before setup = %v, want ErrForbidden", err)
+	}
+
+	admin, err := svc.Setup(ctx, adminName, adminPass)
+	if err != nil {
+		t.Fatalf("Setup after failed provisioning: %v", err)
+	}
+	if admin.Role != domain.RoleAdmin {
+		t.Fatalf("admin role = %v, want %v", admin.Role, domain.RoleAdmin)
+	}
+
+	viewer, err := svc.ProvisionExternalViewer(ctx, "oidc-", "alice@example.com")
+	if err != nil {
+		t.Fatalf("ProvisionExternalViewer after setup: %v", err)
+	}
+	if viewer.Role != domain.RoleViewer {
+		t.Fatalf("viewer role = %v, want %v", viewer.Role, domain.RoleViewer)
+	}
+}
+
+func TestProvisionExternalViewer_PositiveAndReuse(t *testing.T) {
+	t.Parallel()
+	svc := newService(t)
+	ctx := t.Context()
+
+	if _, err := svc.Setup(ctx, adminName, adminPass); err != nil {
+		t.Fatalf("Setup: %v", err)
+	}
+
+	viewer1, err := svc.ProvisionExternalViewer(ctx, "oidc-", "alice@example.com")
+	if err != nil {
+		t.Fatalf("ProvisionExternalViewer: %v", err)
+	}
+	wantUsername := auth.ExternalViewerUsername("oidc-", "alice@example.com")
+	if viewer1.Role != domain.RoleViewer || viewer1.Username != wantUsername {
+		t.Fatalf("viewer1 = %+v, want role viewer and username %q", viewer1, wantUsername)
+	}
+
+	viewer2, err := svc.ProvisionExternalViewer(ctx, "oidc-", "alice@example.com")
+	if err != nil {
+		t.Fatalf("ProvisionExternalViewer second call: %v", err)
+	}
+	if viewer2.ID != viewer1.ID || viewer2.Username != viewer1.Username {
+		t.Fatalf("viewer2 = %+v, want same as viewer1 %+v", viewer2, viewer1)
+	}
+}
+
+func TestProvisionExternalViewer_ConcurrentSignInsOneRow(t *testing.T) {
+	t.Parallel()
+	svc, _, st := newServiceWithStore(t)
+	ctx := t.Context()
+
+	if _, err := svc.Setup(ctx, adminName, adminPass); err != nil {
+		t.Fatalf("Setup: %v", err)
+	}
+
+	const concurrency = 10
+	var (
+		wg      sync.WaitGroup
+		userIDs = make([]uuid.UUID, concurrency)
+		errs    = make([]error, concurrency)
+	)
+
+	wg.Add(concurrency)
+	for i := range concurrency {
+		go func(idx int) {
+			defer wg.Done()
+			u, pErr := svc.ProvisionExternalViewer(ctx, "oidc-", "concurrent-identity@domain.invalid")
+			userIDs[idx] = u.ID
+			errs[idx] = pErr
+		}(i)
+	}
+	wg.Wait()
+
+	for i, pErr := range errs {
+		if pErr != nil {
+			t.Fatalf("worker %d failed: %v", i, pErr)
+		}
+		if userIDs[i] != userIDs[0] {
+			t.Fatalf("worker %d got user ID %v, want %v", i, userIDs[i], userIDs[0])
+		}
+	}
+
+	count, err := st.Q().CountUsers(ctx)
+	if err != nil {
+		t.Fatalf("CountUsers: %v", err)
+	}
+	if count != 2 {
+		t.Fatalf("CountUsers = %d, want 2 (1 admin, 1 viewer)", count)
+	}
+}
+
+func TestLogin_ViewerRowPasswordRefused401(t *testing.T) {
+	t.Parallel()
+	svc := newService(t)
+	ctx := t.Context()
+
+	if _, err := svc.Setup(ctx, adminName, adminPass); err != nil {
+		t.Fatalf("Setup: %v", err)
+	}
+
+	viewer, err := svc.ProvisionExternalViewer(ctx, "oidc-", "alice@example.com")
+	if err != nil {
+		t.Fatalf("ProvisionExternalViewer: %v", err)
+	}
+
+	_, err = svc.Login(ctx, viewer.Username, "some-password-attempt", "127.0.0.1")
+	if !errors.Is(err, domain.ErrUnauthorized) {
+		t.Fatalf("Login against viewer row = %v, want ErrUnauthorized", err)
+	}
+}
+
+func TestExternalViewerUsername_Boundary(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name     string
+		prefix   string
+		identity string
+	}{
+		{"boundary standard oidc", "oidc-", "user-123"},
+		{"boundary standard proxy", "proxy-", "user-456"},
+		{"boundary subject longer than 64 characters", "oidc-", strings.Repeat("long-subject-segment-", 5)},
+		{"boundary containing colons and at symbol", "oidc-", "auth0|user:123@sub.example.com"},
+		{"boundary empty prefix", "", "user@example.com"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			username := auth.ExternalViewerUsername(tc.prefix, tc.identity)
+			if !strings.HasPrefix(username, tc.prefix) {
+				t.Fatalf("username %q missing prefix %q", username, tc.prefix)
+			}
+			if err := domain.ValidateUsername(username); err != nil {
+				t.Fatalf("ValidateUsername(%q) = %v, want valid", username, err)
+			}
+		})
 	}
 }

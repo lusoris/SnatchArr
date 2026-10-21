@@ -16,6 +16,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { m } from '#lib/paraglide/messages.js';
 	import { instanceKindLabel, probeMessage } from '#lib/products.js';
 	import { keys } from '#lib/query.js';
+	import { session } from '#lib/session.svelte.js';
 
 	const instances = createSentioQuery({
 		queryKey: keys.instances,
@@ -82,7 +83,9 @@ SPDX-License-Identifier: EUPL-1.2
 					<th scope="col">{m.instance_source()}</th>
 					<th scope="col">{m.instance_enabled()}</th>
 					<th scope="col">{m.instance_last_check()}</th>
-					<th scope="col"><span class="sr-only">{m.action_actions()}</span></th>
+					{#if session.isAdmin}
+						<th scope="col"><span class="sr-only">{m.action_actions()}</span></th>
+					{/if}
 				</tr>
 			</thead>
 			<tbody>
@@ -105,14 +108,16 @@ SPDX-License-Identifier: EUPL-1.2
 							{/if}
 						</td>
 						<td><CheckState instance={inst} /></td>
-						<td>
-							<button
-								type="button"
-								class="btn"
-								onclick={() => remove.mutate(inst.id)}
-								disabled={inst.source === 'configarr'}>{m.instance_delete()}</button
-							>
-						</td>
+						{#if session.isAdmin}
+							<td>
+								<button
+									type="button"
+									class="btn"
+									onclick={() => remove.mutate(inst.id)}
+									disabled={inst.source === 'configarr'}>{m.instance_delete()}</button
+								>
+							</td>
+						{/if}
 					</tr>
 				{/each}
 			</tbody>
@@ -120,51 +125,53 @@ SPDX-License-Identifier: EUPL-1.2
 	</div>
 {/if}
 
-<section class="card max-w-xl" aria-labelledby="add-instance">
-	<h2 id="add-instance" class="mb-3 text-lg font-semibold">{m.instance_add()}</h2>
-	<form
-		class="flex flex-col gap-3"
-		onsubmit={(e) => {
-			e.preventDefault();
-			create.mutate();
-		}}
-	>
-		<KindSelect bind:value={kind} />
-		<Field id="name" label={m.instance_name()}>
-			<input id="name" class="input" required maxlength="64" bind:value={name} />
-		</Field>
-		<Field id="base_url" label={m.instance_url()} hint="http://sonarr:8989">
-			<input
-				id="base_url"
-				class="input"
-				required
-				inputmode="url"
-				bind:value={baseUrl}
-				aria-describedby="base_url-hint"
-			/>
-		</Field>
-		<Field id="api_key" label={m.instance_api_key()}>
-			<input
-				id="api_key"
-				class="input"
-				type="password"
-				autocomplete="off"
-				required
-				minlength="8"
-				bind:value={apiKey}
-			/>
-		</Field>
-		<div class="flex gap-2">
-			<button type="button" class="btn" onclick={() => probe.mutate()} disabled={probe.isPending}
-				>{m.instance_test()}</button
-			>
-			<button type="submit" class="btn btn-primary" disabled={create.isPending}
-				>{m.instance_save()}</button
-			>
-		</div>
-	</form>
-</section>
+{#if session.isAdmin}
+	<section class="card max-w-xl" aria-labelledby="add-instance">
+		<h2 id="add-instance" class="mb-3 text-lg font-semibold">{m.instance_add()}</h2>
+		<form
+			class="flex flex-col gap-3"
+			onsubmit={(e) => {
+				e.preventDefault();
+				create.mutate();
+			}}
+		>
+			<KindSelect bind:value={kind} />
+			<Field id="name" label={m.instance_name()}>
+				<input id="name" class="input" required maxlength="64" bind:value={name} />
+			</Field>
+			<Field id="base_url" label={m.instance_url()} hint="http://sonarr:8989">
+				<input
+					id="base_url"
+					class="input"
+					required
+					inputmode="url"
+					bind:value={baseUrl}
+					aria-describedby="base_url-hint"
+				/>
+			</Field>
+			<Field id="api_key" label={m.instance_api_key()}>
+				<input
+					id="api_key"
+					class="input"
+					type="password"
+					autocomplete="off"
+					required
+					minlength="8"
+					bind:value={apiKey}
+				/>
+			</Field>
+			<div class="flex gap-2">
+				<button type="button" class="btn" onclick={() => probe.mutate()} disabled={probe.isPending}
+					>{m.instance_test()}</button
+				>
+				<button type="submit" class="btn btn-primary" disabled={create.isPending}
+					>{m.instance_save()}</button
+				>
+			</div>
+		</form>
+	</section>
 
-<div class="mt-6">
-	<ResetMemory />
-</div>
+	<div class="mt-6">
+		<ResetMemory />
+	</div>
+{/if}

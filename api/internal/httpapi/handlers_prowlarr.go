@@ -71,6 +71,9 @@ func (h *Handlers) DeleteProwlarrLink(ctx context.Context, params oas.DeleteProw
 
 // TestProwlarrLink probes a stored link.
 func (h *Handlers) TestProwlarrLink(ctx context.Context, params oas.TestProwlarrLinkParams) (*oas.ProbeResult, error) {
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
+	}
 	st, err := h.prowlarr.Test(ctx, params.LinkId)
 	if err != nil {
 		return nil, err

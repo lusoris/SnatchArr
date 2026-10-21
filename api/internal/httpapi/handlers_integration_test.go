@@ -1134,7 +1134,7 @@ func TestInstanceReadAndProbe(t *testing.T) {
 
 func testInstanceReadCase(t *testing.T, f *integrationFixture, name string, id uuid.UUID, wantErr error) {
 	t.Helper()
-	ctx := t.Context()
+	ctx := withUser(t.Context(), f.admin)
 	switch {
 	case strings.Contains(name, "list instances"):
 		list, err := f.h.ListInstances(ctx)

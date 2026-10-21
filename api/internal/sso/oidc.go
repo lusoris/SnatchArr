@@ -10,11 +10,11 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -234,20 +234,51 @@ func (s *Service) completeCallback(w http.ResponseWriter, r *http.Request, code,
 		refuse(r.Context(), "invalid_nonce", "")
 		return
 	}
-	if !s.verifyClaims(idToken) {
-		refuse(r.Context(), "not_authorized", "")
+	groups, ok := s.extractGroups(idToken)
+	if !ok {
+		s.logger.WarnContext(r.Context(), "sso: oidc login refused",
+			slog.String("reason", "not_authorized"),
+			slog.String("subject", idToken.Subject),
+			slog.Int("groups", 0),
+		)
+		http.Redirect(w, r, "/login?sso=failed", http.StatusFound)
 		return
 	}
-	admin, err := s.auth.FirstAdmin(r.Context())
-	if err != nil {
-		refuse(r.Context(), "no_admin", "")
+	role, ok := ResolveRole(groups, s.cfg.AdminGroups, s.cfg.ViewerGroups)
+	if !ok {
+		s.logger.WarnContext(r.Context(), "sso: oidc login refused",
+			slog.String("reason", "not_authorized"),
+			slog.String("subject", idToken.Subject),
+			slog.Int("groups", len(groups)),
+		)
+		http.Redirect(w, r, "/login?sso=failed", http.StatusFound)
 		return
 	}
-	if err := s.loginAdmin(r.Context(), w, r, admin); err != nil {
+	user, reason, uErr := s.resolveUser(r.Context(), role, idToken.Subject)
+	if uErr != nil {
+		refuse(r.Context(), reason, "")
+		return
+	}
+	if err := s.loginUser(r.Context(), w, r, user); err != nil {
 		onErr(r.Context(), w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/", http.StatusFound)
+}
+
+func (s *Service) resolveUser(ctx context.Context, role domain.Role, subject string) (domain.User, string, error) {
+	if role == domain.RoleAdmin {
+		admin, err := s.auth.FirstAdmin(ctx)
+		if err != nil {
+			return domain.User{}, "no_admin", err
+		}
+		return admin, "", nil
+	}
+	viewer, err := s.auth.ProvisionExternalViewer(ctx, "oidc-", subject)
+	if err != nil {
+		return domain.User{}, "setup_incomplete", err
+	}
+	return viewer, "", nil
 }
 
 func (s *Service) exchangeAndVerify(ctx context.Context, oauth2Cfg *oauth2.Config, verifier *gooidc.IDTokenVerifier, code, verifierCode string) (*gooidc.IDToken, error) {
@@ -302,31 +333,29 @@ func oidcRefusalDetails(err error) (string, string) {
 	return err.Error(), ""
 }
 
-func (s *Service) verifyClaims(idToken *gooidc.IDToken) bool {
-	var claims struct {
-		Subject       string `json:"sub"`
-		Email         string `json:"email"`
-		EmailVerified *bool  `json:"email_verified"`
+func (s *Service) extractGroups(idToken *gooidc.IDToken) ([]string, bool) {
+	claimName := s.cfg.GroupsClaim
+	if claimName == "" {
+		claimName = "groups"
 	}
-	if err := idToken.Claims(&claims); err != nil {
-		return false
+	var rawClaims map[string]json.RawMessage
+	if err := idToken.Claims(&rawClaims); err != nil {
+		return nil, false
 	}
-	if claims.Subject != "" && slices.Contains(s.cfg.AllowedSubjects, claims.Subject) {
-		return true
+	rawGroup, ok := rawClaims[claimName]
+	if !ok {
+		return nil, false
 	}
-	if claims.Email != "" && claims.EmailVerified != nil && *claims.EmailVerified {
-		for _, allowed := range s.cfg.AllowedEmails {
-			if strings.EqualFold(claims.Email, allowed) {
-				return true
-			}
-		}
+	var groups []string
+	if err := json.Unmarshal(rawGroup, &groups); err != nil {
+		return nil, false
 	}
-	return false
+	return groups, true
 }
 
-func (s *Service) loginAdmin(ctx context.Context, w http.ResponseWriter, r *http.Request, admin domain.User) error {
-	// The pre-login session held the OIDC state; the admin gets a fresh id (#268).
-	if err := s.auth.RenewSession(ctx, s.sessions, w, r, admin.ID); err != nil {
+func (s *Service) loginUser(ctx context.Context, w http.ResponseWriter, r *http.Request, u domain.User) error {
+	// The pre-login session held the OIDC state; the user gets a fresh id (#268).
+	if err := s.auth.RenewSession(ctx, s.sessions, w, r, u.ID); err != nil {
 		return fmt.Errorf("sso: %w", err)
 	}
 	return nil

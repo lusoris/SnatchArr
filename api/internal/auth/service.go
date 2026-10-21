@@ -8,6 +8,8 @@ package auth
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -36,6 +38,10 @@ const (
 
 // SessionUserKey is the session data key holding the authenticated user's ID.
 const SessionUserKey = "user_id"
+
+// ExternalViewerSentinelHash is stored as password_hash for SSO viewer users.
+// It is never a valid argon2id hash and auth.Login refuses it before VerifyPassword.
+const ExternalViewerSentinelHash = "!sso-viewer-sentinel-hash!"
 
 // Service handles setup and login.
 type Service struct {
@@ -135,6 +141,11 @@ func (s *Service) Login(ctx context.Context, username, password, clientIP string
 		return domain.User{}, err
 	}
 	row, err := s.st.Q().GetUserByUsername(ctx, trimmedUser)
+	if err == nil && row.PasswordHash == ExternalViewerSentinelHash {
+		s.recordFailures(ctx, userKey, ipKey)
+		s.logger.InfoContext(ctx, "auth: login rejected: external viewer", slog.String("username", username), slog.String("ip", ip))
+		return domain.User{}, fmt.Errorf("%w: invalid username or password", domain.ErrUnauthorized)
+	}
 	hash := s.dummyHash
 	if err == nil {
 		hash = row.PasswordHash
@@ -212,6 +223,45 @@ func (s *Service) FirstAdmin(ctx context.Context) (domain.User, error) {
 	row, err := s.st.Q().GetFirstAdmin(ctx)
 	if err != nil {
 		return domain.User{}, fmt.Errorf("auth: get first admin: %w", store.MapError(err))
+	}
+	return userFromRow(row), nil
+}
+
+// ExternalViewerUsername derives the deterministic handle for an external SSO identity.
+func ExternalViewerUsername(prefix, identity string) string {
+	h := sha256.Sum256([]byte(identity))
+	return prefix + hex.EncodeToString(h[:])[:16]
+}
+
+// ProvisionExternalViewer creates or loads a viewer account mapped to an SSO external identity.
+// Refuses viewer provisioning while setup is incomplete (SetupComplete false).
+func (s *Service) ProvisionExternalViewer(ctx context.Context, prefix, identity string) (domain.User, error) {
+	setupDone, err := s.SetupComplete(ctx)
+	if err != nil {
+		return domain.User{}, err
+	}
+	if !setupDone {
+		return domain.User{}, fmt.Errorf("%w: setup incomplete", domain.ErrForbidden)
+	}
+	trimmed := strings.TrimSpace(identity)
+	if trimmed == "" {
+		return domain.User{}, fmt.Errorf("%w: empty external identity", domain.ErrInvalid)
+	}
+	username := ExternalViewerUsername(prefix, trimmed)
+	newID, err := s.ids.NewUUID()
+	if err != nil {
+		return domain.User{}, fmt.Errorf("auth: new id: %w", err)
+	}
+	now := s.clk.Now()
+	row, err := s.st.Q().UpsertExternalViewer(ctx, sqlcgen.UpsertExternalViewerParams{
+		ID:           newID,
+		Username:     username,
+		PasswordHash: ExternalViewerSentinelHash,
+		ExternalID:   &trimmed,
+		CreatedAt:    now,
+	})
+	if err != nil {
+		return domain.User{}, fmt.Errorf("auth: upsert viewer: %w", store.MapError(err))
 	}
 	return userFromRow(row), nil
 }

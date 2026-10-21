@@ -14,6 +14,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { getLocale } from '#lib/paraglide/runtime.js';
 	import { keys } from '#lib/query.js';
 	import { formatWhen } from '#lib/stamina.js';
+	import { session } from '#lib/session.svelte.js';
 	import ApiKeyDialog from './ApiKeyDialog.svelte';
 
 	type CreatedApiKey = components['schemas']['CreatedApiKey'];
@@ -91,7 +92,9 @@ SPDX-License-Identifier: EUPL-1.2
 					<th scope="col">{m.api_key_created()}</th>
 					<th scope="col">{m.api_key_last_used()}</th>
 					<th scope="col">{m.api_key_expires()}</th>
-					<th scope="col"><span class="sr-only">{m.api_key_actions()}</span></th>
+					{#if session.isAdmin}
+						<th scope="col"><span class="sr-only">{m.api_key_actions()}</span></th>
+					{/if}
 				</tr>
 			</thead>
 			<tbody>
@@ -107,46 +110,48 @@ SPDX-License-Identifier: EUPL-1.2
 						<td>
 							{key.expires_at ? formatWhen(key.expires_at, getLocale()) : m.api_key_never_expires()}
 						</td>
-						<td>
-							{#if revokingId === key.id}
-								<div class="flex flex-col gap-2">
-									<p class="text-sm font-medium text-danger">
-										{m.api_key_revoke_confirm_prompt({ name: key.name })}
-									</p>
-									<div class="flex gap-2">
-										<button
-											type="button"
-											class="btn text-danger hover:border-danger"
-											disabled={revokeKey.isPending}
-											onclick={() => revokeKey.mutate(key.id)}
-										>
-											{m.api_key_revoke_confirm_btn()}
-										</button>
-										<button
-											type="button"
-											class="btn"
-											disabled={revokeKey.isPending}
-											onclick={() => {
-												revokingId = null;
-											}}
-										>
-											{m.api_key_cancel()}
-										</button>
+						{#if session.isAdmin}
+							<td>
+								{#if revokingId === key.id}
+									<div class="flex flex-col gap-2">
+										<p class="text-sm font-medium text-danger">
+											{m.api_key_revoke_confirm_prompt({ name: key.name })}
+										</p>
+										<div class="flex gap-2">
+											<button
+												type="button"
+												class="btn text-danger hover:border-danger"
+												disabled={revokeKey.isPending}
+												onclick={() => revokeKey.mutate(key.id)}
+											>
+												{m.api_key_revoke_confirm_btn()}
+											</button>
+											<button
+												type="button"
+												class="btn"
+												disabled={revokeKey.isPending}
+												onclick={() => {
+													revokingId = null;
+												}}
+											>
+												{m.api_key_cancel()}
+											</button>
+										</div>
 									</div>
-								</div>
-							{:else}
-								<button
-									type="button"
-									class="btn"
-									disabled={revokeKey.isPending}
-									onclick={() => {
-										revokingId = key.id;
-									}}
-								>
-									{m.api_key_revoke()}
-								</button>
-							{/if}
-						</td>
+								{:else}
+									<button
+										type="button"
+										class="btn"
+										disabled={revokeKey.isPending}
+										onclick={() => {
+											revokingId = key.id;
+										}}
+									>
+										{m.api_key_revoke()}
+									</button>
+								{/if}
+							</td>
+						{/if}
 					</tr>
 				{/each}
 			</tbody>
@@ -154,24 +159,26 @@ SPDX-License-Identifier: EUPL-1.2
 	</div>
 {/if}
 
-<h3 class="mt-6 mb-3 text-lg font-semibold">{m.api_key_create()}</h3>
-<form
-	class="card flex max-w-xl flex-col gap-4"
-	onsubmit={(e) => {
-		e.preventDefault();
-		const trimmed = name.trim();
-		if (trimmed) createKey.mutate(trimmed);
-	}}
->
-	<Field id="key-name" label={m.api_key_name()}>
-		<input id="key-name" class="input" required minlength="1" maxlength="100" bind:value={name} />
-	</Field>
-	<div>
-		<button type="submit" class="btn btn-primary" disabled={createKey.isPending}>
-			{m.api_key_create()}
-		</button>
-	</div>
-</form>
+{#if session.isAdmin}
+	<h3 class="mt-6 mb-3 text-lg font-semibold">{m.api_key_create()}</h3>
+	<form
+		class="card flex max-w-xl flex-col gap-4"
+		onsubmit={(e) => {
+			e.preventDefault();
+			const trimmed = name.trim();
+			if (trimmed) createKey.mutate(trimmed);
+		}}
+	>
+		<Field id="key-name" label={m.api_key_name()}>
+			<input id="key-name" class="input" required minlength="1" maxlength="100" bind:value={name} />
+		</Field>
+		<div>
+			<button type="submit" class="btn btn-primary" disabled={createKey.isPending}>
+				{m.api_key_create()}
+			</button>
+		</div>
+	</form>
+{/if}
 
 {#if createdKey}
 	<ApiKeyDialog secret={createdKey.secret} name={createdKey.name} onclose={closeDialog} />

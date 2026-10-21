@@ -14,6 +14,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { m } from '#lib/paraglide/messages.js';
 	import { probeMessage } from '#lib/products.js';
 	import { keys } from '#lib/query.js';
+	import { session } from '#lib/session.svelte.js';
 
 	type Instance = components['schemas']['Instance'];
 
@@ -48,9 +49,17 @@ SPDX-License-Identifier: EUPL-1.2
 	<div class="mb-4">
 		<CheckState instance={instance.data} />
 	</div>
-	<button type="button" class="btn mb-6" onclick={() => probe.mutate()} disabled={probe.isPending}>
-		{m.instance_test()}
-	</button>
 
-	<InstanceEditForm instance={instance.data} />
+	{#if session.isAdmin}
+		<button
+			type="button"
+			class="btn mb-6"
+			onclick={() => probe.mutate()}
+			disabled={probe.isPending}
+		>
+			{m.instance_test()}
+		</button>
+
+		<InstanceEditForm instance={instance.data} />
+	{/if}
 {/if}

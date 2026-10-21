@@ -26,6 +26,8 @@ type idpClaims struct {
 	Issuer        string
 	Expiry        time.Time
 	Nonce         string
+	Groups        []string
+	RawGroups     any
 	UseOtherKey   bool
 }
 
@@ -143,6 +145,7 @@ func (f *fakeIDP) buildIDToken(mod func(idpClaims) idpClaims) (string, error) {
 		Issuer:        f.srv.URL,
 		Expiry:        time.Now().Add(time.Hour),
 		Nonce:         "expected-nonce",
+		Groups:        []string{"snatcharr-admins"},
 	}
 	if mod != nil {
 		c = mod(c)
@@ -174,6 +177,11 @@ func (f *fakeIDP) buildIDToken(mod func(idpClaims) idpClaims) (string, error) {
 	}
 	if c.EmailVerified != nil {
 		customClaims["email_verified"] = *c.EmailVerified
+	}
+	if c.RawGroups != nil {
+		customClaims["groups"] = c.RawGroups
+	} else if c.Groups != nil {
+		customClaims["groups"] = c.Groups
 	}
 	return jwt.Signed(signer).Claims(stdClaims).Claims(customClaims).Serialize()
 }

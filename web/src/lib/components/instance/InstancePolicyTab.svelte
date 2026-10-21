@@ -18,6 +18,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import TimingSection from '#lib/components/policy/TimingSection.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { keys } from '#lib/query.js';
+	import { session } from '#lib/session.svelte.js';
 
 	type Policy = components['schemas']['SnatchPolicy'];
 	type Instance = components['schemas']['Instance'];
@@ -91,12 +92,14 @@ SPDX-License-Identifier: EUPL-1.2
 			<ProblemNote error={save.error} />
 		{/if}
 
-		<PresetPicker
-			{draft}
-			onSelect={(vals) => {
-				if (draft) draft = { ...draft, ...vals };
-			}}
-		/>
+		{#if session.isAdmin}
+			<PresetPicker
+				{draft}
+				onSelect={(vals) => {
+					if (draft) draft = { ...draft, ...vals };
+				}}
+			/>
+		{/if}
 
 		<SearchSection bind:policy={draft} kind={instance.data?.kind} />
 		<TimingSection bind:policy={draft} />
@@ -105,10 +108,12 @@ SPDX-License-Identifier: EUPL-1.2
 		<AppSpecificSection bind:policy={draft} kind={instance.data?.kind} />
 		<SafetySection bind:policy={draft} />
 
-		<div>
-			<button type="submit" class="btn btn-primary" disabled={save.isPending}>
-				{m.instance_save()}
-			</button>
-		</div>
+		{#if session.isAdmin}
+			<div>
+				<button type="submit" class="btn btn-primary" disabled={save.isPending}>
+					{m.instance_save()}
+				</button>
+			</div>
+		{/if}
 	</form>
 {/if}

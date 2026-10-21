@@ -8,6 +8,7 @@ import type { Component } from 'svelte';
 import { vi } from 'vitest';
 import { api } from '#lib/api/client.js';
 import type { components } from '#lib/api/schema.js';
+import { session } from '#lib/session.svelte.js';
 
 export type Instance = components['schemas']['Instance'];
 export type SnatchPolicy = components['schemas']['SnatchPolicy'];
@@ -34,6 +35,9 @@ export function renderWithQuery<Props extends Record<string, unknown>>(
 	options?: Props,
 	client: QueryClient = createTestQueryClient()
 ) {
+	if (session.user === null && session.state === 'unknown') {
+		session.user = { id: 'u1', username: 'admin', role: 'admin' } as never;
+	}
 	return svelteRender(component, options, {
 		wrapper: QueryClientProvider,
 		wrapperProps: { client }

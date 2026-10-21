@@ -35,6 +35,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/auth"
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
+	"github.com/lusoris/SnatchArr/api/internal/queue"
 	"github.com/lusoris/SnatchArr/api/internal/seerr"
 	"github.com/lusoris/SnatchArr/api/internal/seerrclient"
 	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
@@ -64,14 +65,19 @@ func newRouterFixture(t *testing.T) *routerFixture {
 	apiKeys := auth.NewAPIKeys(f.st, keys, f.clk, slog.New(slog.DiscardHandler))
 	f.h.apiKeys = apiKeys
 	r := chi.NewRouter()
-	err = Mount(r, MountParams{
+	mountParams := MountParams{
 		Logger:   slog.New(slog.DiscardHandler),
+		Clock:    f.clk,
 		Handlers: f.h,
 		Security: NewSecurity(f.sessMgr, keys, f.h.auth, apiKeys, f.clk, slog.New(slog.DiscardHandler)),
 		CSRF:     CrossOrigin(slog.New(slog.DiscardHandler)),
-	})
+	}
+	err = Mount(r, mountParams)
 	if err != nil {
 		t.Fatalf("Mount: %v", err)
+	}
+	if err = MountLogStream(r, mountParams, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {})); err != nil {
+		t.Fatalf("MountLogStream: %v", err)
 	}
 	srv := httptest.NewServer(r)
 	t.Cleanup(srv.Close)
@@ -1745,6 +1751,29 @@ func completeInitialSetup(t *testing.T, f *routerFixture) domain.User {
 	}
 }
 
+func createAdminUser(t *testing.T, f *routerFixture) (string, string) {
+	t.Helper()
+	username := "admin-" + uuid.NewString()[:8]
+	password := "admin-pass-1234"
+	hasher := crypto.NewPasswordHasher(1)
+	hash, err := hasher.Hash(t.Context(), password)
+	if err != nil {
+		t.Fatalf("hash password: %v", err)
+	}
+	adminID := uuid.New()
+	_, err = f.st.Q().CreateUser(t.Context(), sqlcgen.CreateUserParams{
+		ID:           adminID,
+		Username:     username,
+		PasswordHash: hash,
+		Role:         string(domain.RoleAdmin),
+		CreatedAt:    f.clk.Now(),
+	})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	return username, password
+}
+
 func createViewerUser(t *testing.T, f *routerFixture) (string, string) {
 	t.Helper()
 	username := "viewer-" + uuid.NewString()[:8]
@@ -1766,6 +1795,207 @@ func createViewerUser(t *testing.T, f *routerFixture) (string, string) {
 		t.Fatalf("CreateUser: %v", err)
 	}
 	return username, password
+}
+
+func loginViewerSession(t *testing.T, f *routerFixture) (*http.Client, string) {
+	t.Helper()
+	viewerUser, viewerPass := createViewerUser(t, f)
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatalf("cookiejar.New: %v", err)
+	}
+	client := &http.Client{Timeout: 10 * time.Second, Jar: jar}
+
+	loginBody := bytes.NewReader([]byte(fmt.Sprintf(`{"username":%q,"password":%q}`, viewerUser, viewerPass)))
+	loginReq, err := http.NewRequestWithContext(t.Context(), http.MethodPost, f.srv.URL+PathPrefix+"/auth/login", loginBody)
+	if err != nil {
+		t.Fatalf("login request: %v", err)
+	}
+	loginReq.Header.Set("Content-Type", "application/json")
+	loginResp, err := client.Do(loginReq)
+	if err != nil {
+		t.Fatalf("viewer login: %v", err)
+	}
+	defer func() { _ = loginResp.Body.Close() }()
+	if loginResp.StatusCode != http.StatusOK {
+		t.Fatalf("viewer login status = %d, want 200", loginResp.StatusCode)
+	}
+
+	sessReq, err := http.NewRequestWithContext(t.Context(), http.MethodGet, f.srv.URL+PathPrefix+"/auth/session", nil)
+	if err != nil {
+		t.Fatalf("session request: %v", err)
+	}
+	sessResp, err := client.Do(sessReq)
+	if err != nil {
+		t.Fatalf("session Do: %v", err)
+	}
+	defer func() { _ = sessResp.Body.Close() }()
+	if sessResp.StatusCode != http.StatusOK {
+		t.Fatalf("session status = %d, want 200", sessResp.StatusCode)
+	}
+	var sess oas.Session
+	if err := json.NewDecoder(sessResp.Body).Decode(&sess); err != nil {
+		t.Fatalf("decode session: %v", err)
+	}
+	return client, sess.CsrfToken
+}
+
+func initViewerIDsState(t *testing.T, csrfToken string) *idsState {
+	t.Helper()
+	dummyUUID := "00000000-0000-0000-0000-000000000001"
+	ids := newIDsState(t)
+	ids.csrfToken = csrfToken
+	ids.apiKeyID = dummyUUID
+	ids.instanceID = dummyUUID
+	ids.runID = dummyUUID
+	ids.scheduleID = dummyUUID
+	ids.clientID = dummyUUID
+	ids.seerrLinkID = dummyUUID
+	ids.seerrReqID = 101
+	ids.prowlarrLinkID = dummyUUID
+	ids.channelID = dummyUUID
+	ids.ruleID = dummyUUID
+
+	pRaw, err := json.Marshal(policyToOAS(domain.DefaultPolicy(uuid.New())))
+	if err != nil {
+		t.Fatalf("marshal default policy: %v", err)
+	}
+	var policyMap map[string]any
+	if err = json.Unmarshal(pRaw, &policyMap); err != nil {
+		t.Fatalf("unmarshal default policy: %v", err)
+	}
+	ids.policy = policyMap
+
+	qpRaw, err := json.Marshal(queuePolicyToOAS(queue.DefaultSettings()))
+	if err != nil {
+		t.Fatalf("marshal default queue policy: %v", err)
+	}
+	var qpMap map[string]any
+	if err = json.Unmarshal(qpRaw, &qpMap); err != nil {
+		t.Fatalf("unmarshal default queue policy: %v", err)
+	}
+	ids.queuePolicy = qpMap
+
+	ids.settings = map[string]any{
+		"history_retention_days": 30,
+		"user_agent":             "SnatchArr/1.0",
+		"global_hourly_cap":      0,
+	}
+	return ids
+}
+
+func indexRouterSteps(steps []routerStep) map[string]routerStep {
+	m := make(map[string]routerStep, len(steps))
+	for _, s := range steps {
+		m[s.op] = s
+	}
+	return m
+}
+
+func isViewerExemptSessionEndpoint(path string) bool {
+	switch path {
+	case "/auth/setup", "/auth/login", "/auth/logout", "/auth/password", "/auth/proxy-session":
+		return true
+	default:
+		return false
+	}
+}
+
+func executeViewerForbiddenStep(t *testing.T, f *routerFixture, client *http.Client, ids *idsState, step routerStep) {
+	t.Helper()
+	reqPath := step.path(ids)
+	reqURL := f.srv.URL + PathPrefix + reqPath
+
+	var bodyReader io.Reader
+	if step.body != nil {
+		if bodyVal := step.body(ids); bodyVal != nil {
+			bodyBytes, err := json.Marshal(bodyVal)
+			if err != nil {
+				t.Fatalf("%s %s: marshal body: %v", step.method, reqPath, err)
+			}
+			bodyReader = bytes.NewReader(bodyBytes)
+		}
+	}
+
+	req, err := http.NewRequestWithContext(t.Context(), step.method, reqURL, bodyReader)
+	if err != nil {
+		t.Fatalf("%s %s: new request: %v", step.method, reqPath, err)
+	}
+	if bodyReader != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if ids.csrfToken != "" && step.method != http.MethodGet && step.method != http.MethodHead {
+		req.Header.Set("X-Csrf-Token", ids.csrfToken)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("%s %s: client.Do: %v", step.method, reqPath, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	assertProblem(t, resp, http.StatusForbidden)
+}
+
+func TestRouterRejectsViewerMutationsAndProbes(t *testing.T) {
+	t.Parallel()
+	f := newRouterFixture(t)
+	setupFixtureStubs(f)
+	_ = completeInitialSetup(t, f)
+
+	viewerClient, csrfToken := loginViewerSession(t, f)
+	ids := initViewerIDsState(t, csrfToken)
+
+	stepsByOp := indexRouterSteps(buildRouterSteps(f))
+	ops := specOperations(t)
+	testedCount := 0
+
+	for _, op := range ops {
+		if isViewerExemptSessionEndpoint(op.path) {
+			continue
+		}
+		if op.method == http.MethodGet && !strings.HasPrefix(strings.ToLower(op.operationID), "test") {
+			continue
+		}
+		step, ok := stepsByOp[op.operationID]
+		if !ok {
+			t.Fatalf("missing routerStep for operation %q", op.operationID)
+		}
+		testedCount++
+		t.Run(op.operationID, func(t *testing.T) {
+			t.Parallel()
+			executeViewerForbiddenStep(t, f, viewerClient, ids, step)
+		})
+	}
+	if testedCount == 0 {
+		t.Fatal("no operations tested")
+	}
+
+	adminOnlyReads := []string{"listLogs", "getConfigarrStatus", "getPolicyFilterOptions"}
+	for _, opID := range adminOnlyReads {
+		step, ok := stepsByOp[opID]
+		if !ok {
+			t.Fatalf("missing routerStep for admin read %q", opID)
+		}
+		t.Run(opID, func(t *testing.T) {
+			t.Parallel()
+			executeViewerForbiddenStep(t, f, viewerClient, ids, step)
+		})
+	}
+
+	t.Run("streamLogs", func(t *testing.T) {
+		t.Parallel()
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, f.srv.URL+LogStreamPath, nil)
+		if err != nil {
+			t.Fatalf("new request: %v", err)
+		}
+		resp, err := viewerClient.Do(req)
+		if err != nil {
+			t.Fatalf("client.Do: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		assertProblem(t, resp, http.StatusForbidden)
+	})
 }
 
 func testProblemMalformedJSON(t *testing.T, f *routerFixture) {

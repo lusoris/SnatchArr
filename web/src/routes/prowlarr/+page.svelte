@@ -17,6 +17,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { keys } from '#lib/query.js';
 	import { formatWhen } from '#lib/stamina.js';
 	import { evaluateLimit, isIndexerExhausted, isIndexerNearLimit } from '#lib/prowlarr.js';
+	import { session } from '#lib/session.svelte.js';
 
 	type ProwlarrLink = components['schemas']['ProwlarrLink'];
 	type ProwlarrIndexerStatus = components['schemas']['ProwlarrIndexerStatus'];
@@ -163,37 +164,41 @@ SPDX-License-Identifier: EUPL-1.2
 						: m.instance_never_tested()}
 				</p>
 				{#if link.last_error}<p class="text-sm text-danger">{link.last_error}</p>{/if}
-				<div class="mt-3 flex flex-wrap gap-2">
-					<button type="button" class="btn" onclick={() => edit(link)}>{m.action_edit()}</button>
-					<button
-						type="button"
-						class="btn"
-						disabled={probe.isPending}
-						onclick={() => probe.mutate(link.id)}>{m.action_test()}</button
-					>
-					<ConfirmDelete
-						name={link.name}
-						disabled={remove.isPending}
-						onconfirm={() => remove.mutate(link)}
-					/>
-				</div>
+				{#if session.isAdmin}
+					<div class="mt-3 flex flex-wrap gap-2">
+						<button type="button" class="btn" onclick={() => edit(link)}>{m.action_edit()}</button>
+						<button
+							type="button"
+							class="btn"
+							disabled={probe.isPending}
+							onclick={() => probe.mutate(link.id)}>{m.action_test()}</button
+						>
+						<ConfirmDelete
+							name={link.name}
+							disabled={remove.isPending}
+							onconfirm={() => remove.mutate(link)}
+						/>
+					</div>
+				{/if}
 			</li>
 		{/each}
 	</ul>
 {/if}
 
-{#key `${editing?.id ?? 'new'}-${formGeneration}`}
-	<LinkForm
-		idPrefix="prowlarr"
-		link={editing}
-		pending={save.isPending}
-		error={save.error}
-		onsave={(body) => save.mutate(body)}
-		oncancel={closeForm}
-		ontest={(body) => probeInput.mutate(body)}
-		testing={probeInput.isPending}
-	/>
-{/key}
+{#if session.isAdmin}
+	{#key `${editing?.id ?? 'new'}-${formGeneration}`}
+		<LinkForm
+			idPrefix="prowlarr"
+			link={editing}
+			pending={save.isPending}
+			error={save.error}
+			onsave={(body) => save.mutate(body)}
+			oncancel={closeForm}
+			ontest={(body) => probeInput.mutate(body)}
+			testing={probeInput.isPending}
+		/>
+	{/key}
+{/if}
 
 <h2 class="mt-8 mb-3 text-lg font-semibold">{m.prowlarr_status_title()}</h2>
 {#if status.isPending}

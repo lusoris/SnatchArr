@@ -13,6 +13,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { keys } from '#lib/query.js';
+	import { session } from '#lib/session.svelte.js';
 
 	type DownloadClient = components['schemas']['DownloadClient'];
 	type DownloadClientInput = components['schemas']['DownloadClientInput'];
@@ -140,26 +141,28 @@ SPDX-License-Identifier: EUPL-1.2
 
 <h1 class="mb-4 text-2xl font-semibold">{m.dlclients_title()}</h1>
 
-<form
-	class="mb-4 flex flex-wrap items-end gap-2"
-	onsubmit={(e) => {
-		e.preventDefault();
-		if (discoverFrom) discover.mutate(discoverFrom);
-	}}
->
-	<label class="flex flex-col gap-1 text-sm">
-		<span>{m.dlclients_discover()}</span>
-		<select class="select" bind:value={discoverFrom} required>
-			<option value="" disabled>{m.dlclients_select_instance()}</option>
-			{#each instances.data ?? [] as inst (inst.id)}
-				<option value={inst.id}>{inst.name}</option>
-			{/each}
-		</select>
-	</label>
-	<button type="submit" class="btn btn-primary" disabled={discover.isPending || !discoverFrom}
-		>{m.dlclients_discover()}</button
+{#if session.isAdmin}
+	<form
+		class="mb-4 flex flex-wrap items-end gap-2"
+		onsubmit={(e) => {
+			e.preventDefault();
+			if (discoverFrom) discover.mutate(discoverFrom);
+		}}
 	>
-</form>
+		<label class="flex flex-col gap-1 text-sm">
+			<span>{m.dlclients_discover()}</span>
+			<select class="select" bind:value={discoverFrom} required>
+				<option value="" disabled>{m.dlclients_select_instance()}</option>
+				{#each instances.data ?? [] as inst (inst.id)}
+					<option value={inst.id}>{inst.name}</option>
+				{/each}
+			</select>
+		</label>
+		<button type="submit" class="btn btn-primary" disabled={discover.isPending || !discoverFrom}
+			>{m.dlclients_discover()}</button
+		>
+	</form>
+{/if}
 
 {#if clients.isPending}
 	<p aria-live="polite">{m.loading()}</p>
@@ -186,39 +189,43 @@ SPDX-License-Identifier: EUPL-1.2
 						{#if st.error}<span class="text-danger"> {st.error}</span>{/if}
 					</p>
 				{/if}
-				<div class="mt-3 flex flex-wrap gap-2">
-					<button
-						type="button"
-						class="btn"
-						disabled={c.source === 'configarr'}
-						onclick={() => edit(c)}>{m.action_edit()}</button
-					>
-					<button
-						type="button"
-						class="btn"
-						disabled={probe.isPending}
-						onclick={() => probe.mutate(c)}>{m.action_test()}</button
-					>
-					<ConfirmDelete
-						name={c.name}
-						disabled={remove.isPending || c.source === 'configarr'}
-						onconfirm={() => remove.mutate(c)}
-					/>
-				</div>
+				{#if session.isAdmin}
+					<div class="mt-3 flex flex-wrap gap-2">
+						<button
+							type="button"
+							class="btn"
+							disabled={c.source === 'configarr'}
+							onclick={() => edit(c)}>{m.action_edit()}</button
+						>
+						<button
+							type="button"
+							class="btn"
+							disabled={probe.isPending}
+							onclick={() => probe.mutate(c)}>{m.action_test()}</button
+						>
+						<ConfirmDelete
+							name={c.name}
+							disabled={remove.isPending || c.source === 'configarr'}
+							onconfirm={() => remove.mutate(c)}
+						/>
+					</div>
+				{/if}
 			</li>
 		{/each}
 	</ul>
 {/if}
 
-{#key `${editing?.id ?? 'new'}-${formGeneration}`}
-	<DownloadClientForm
-		client={editing}
-		instances={instances.data ?? []}
-		pending={save.isPending}
-		error={save.error}
-		onsave={(body) => save.mutate(body)}
-		oncancel={closeForm}
-		ontest={(body) => probeInput.mutate(body)}
-		testing={probeInput.isPending}
-	/>
-{/key}
+{#if session.isAdmin}
+	{#key `${editing?.id ?? 'new'}-${formGeneration}`}
+		<DownloadClientForm
+			client={editing}
+			instances={instances.data ?? []}
+			pending={save.isPending}
+			error={save.error}
+			onsave={(body) => save.mutate(body)}
+			oncancel={closeForm}
+			ontest={(body) => probeInput.mutate(body)}
+			testing={probeInput.isPending}
+		/>
+	{/key}
+{/if}

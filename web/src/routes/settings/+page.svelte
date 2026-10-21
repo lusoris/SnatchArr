@@ -11,6 +11,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { keys } from '#lib/query.js';
+	import { session } from '#lib/session.svelte.js';
 	import NotificationChannels from './NotificationChannels.svelte';
 	import NotificationRules from './NotificationRules.svelte';
 
@@ -111,11 +112,13 @@ SPDX-License-Identifier: EUPL-1.2
 					bind:value={draft.global_hourly_cap}
 				/>
 			</Field>
-			<div>
-				<button type="submit" class="btn btn-primary" disabled={save.isPending}
-					>{m.instance_save()}</button
-				>
-			</div>
+			{#if session.isAdmin}
+				<div>
+					<button type="submit" class="btn btn-primary" disabled={save.isPending}
+						>{m.instance_save()}</button
+					>
+				</div>
+			{/if}
 		</form>
 
 		<h2 class="mt-4 text-xl font-semibold">{m.change_password_title()}</h2>

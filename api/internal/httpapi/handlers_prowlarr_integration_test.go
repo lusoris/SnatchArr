@@ -234,10 +234,12 @@ func TestProwlarrLinkProbe(t *testing.T) {
 		probeErr   error
 		wantErr    error
 	}{
-		{"positive test prowlarr link", false, nil, false, oas.ProwlarrLinkInput{}, false, nil, nil},
-		{"negative test prowlarr link unknown", false, nil, true, oas.ProwlarrLinkInput{}, false, nil, domain.ErrNotFound},
-		{"boundary test prowlarr link 500 fail", false, nil, false, oas.ProwlarrLinkInput{}, true, domain.ErrUnreachable, domain.ErrUnreachable},
-		{"boundary test prowlarr link unreachable", false, nil, false, oas.ProwlarrLinkInput{}, false, domain.ErrUnreachable, domain.ErrUnreachable},
+		{"positive test prowlarr link", false, &domain.User{Role: domain.RoleAdmin}, false, oas.ProwlarrLinkInput{}, false, nil, nil},
+		{"negative test prowlarr link no user", false, nil, false, oas.ProwlarrLinkInput{}, false, nil, domain.ErrUnauthorized},
+		{"negative test prowlarr link viewer", false, &domain.User{Role: domain.RoleViewer}, false, oas.ProwlarrLinkInput{}, false, nil, domain.ErrForbidden},
+		{"negative test prowlarr link unknown", false, &domain.User{Role: domain.RoleAdmin}, true, oas.ProwlarrLinkInput{}, false, nil, domain.ErrNotFound},
+		{"boundary test prowlarr link 500 fail", false, &domain.User{Role: domain.RoleAdmin}, false, oas.ProwlarrLinkInput{}, true, domain.ErrUnreachable, domain.ErrUnreachable},
+		{"boundary test prowlarr link unreachable", false, &domain.User{Role: domain.RoleAdmin}, false, oas.ProwlarrLinkInput{}, false, domain.ErrUnreachable, domain.ErrUnreachable},
 		{"positive test prowlarr link input", true, &domain.User{Role: domain.RoleAdmin}, false, validProwlarrLinkInput(), false, nil, nil},
 		{"negative test prowlarr link input no user", true, nil, false, validProwlarrLinkInput(), false, nil, domain.ErrUnauthorized},
 		{"negative test prowlarr link input viewer", true, &domain.User{Role: domain.RoleViewer}, false, validProwlarrLinkInput(), false, nil, domain.ErrForbidden},
