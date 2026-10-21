@@ -30,6 +30,7 @@ SPDX-License-Identifier: EUPL-1.2
 
 	const ruleLabels: Record<components['schemas']['QueueRule'], () => string> = {
 		stalled: m.queue_rule_stalled,
+		metadata_stuck: m.queue_rule_metadata_stuck,
 		slow: m.queue_rule_slow,
 		failed: m.queue_rule_failed,
 		import_blocked: m.queue_rule_import_blocked,
