@@ -57,13 +57,14 @@ SPDX-License-Identifier: EUPL-1.2
 	.history-table {
 		--ssentio-datatable-columns: minmax(12.5rem, 1.2fr) minmax(5.5rem, 0.5fr) minmax(13rem, 1fr)
 			minmax(10rem, 1.5fr) minmax(16rem, 3fr);
-		overflow-wrap: break-word;
 	}
 	.history-table :global(.ssentio-datatable) {
 		min-inline-size: 57rem;
 	}
 	/* The library pads cells with the control height on both sides (4rem per row here). */
 	.history-table :global(.ssentio-datatable__cell) {
+		min-inline-size: 0;
+		overflow-wrap: anywhere;
 		padding-block: 0.5rem;
 	}
 	.history-table :global(.ssentio-datatable__row + .ssentio-datatable__row) {

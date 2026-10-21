@@ -10,51 +10,61 @@ const authDir = path.resolve(import.meta.dirname, '.auth');
 const authFile = path.join(authDir, 'admin.json');
 const seedFile = path.join(authDir, 'seed.json');
 
+async function postSeed(
+	page: Page,
+	csrfToken: string,
+	url: string,
+	data: Record<string, unknown>
+): Promise<{ id: string }> {
+	const res = await page.request.post(url, { data, headers: { 'X-CSRF-Token': csrfToken } });
+	expect(res.ok(), `seed POST ${url}: status ${res.status()}`).toBeTruthy();
+	return (await res.json()) as { id: string };
+}
+
 async function seedData(page: Page, csrfToken: string): Promise<string> {
-	const csrfHeaders = { 'X-CSRF-Token': csrfToken };
 	const fakearrUrl = process.env.SNATCHARR_E2E_FAKEARR;
 	if (!fakearrUrl) {
 		throw new Error('missing required environment variable: SNATCHARR_E2E_FAKEARR');
 	}
-
-	const instRes = await page.request.post('/api/v1/instances', {
-		data: {
-			kind: 'sonarr',
-			name: 'seeded-sonarr',
-			base_url: fakearrUrl,
-			api_key: 'fake-api-key-0123456789',
-			enabled: true
-		},
-		headers: csrfHeaders
+	const inst = await postSeed(page, csrfToken, '/api/v1/instances', {
+		kind: 'sonarr',
+		name: 'seeded-sonarr',
+		base_url: fakearrUrl,
+		api_key: 'fake-api-key-0123456789',
+		enabled: true
 	});
-	expect(instRes.ok()).toBeTruthy();
-	const inst = (await instRes.json()) as { id: string };
-
-	const dlRes = await page.request.post('/api/v1/download-clients', {
-		data: {
-			kind: 'transmission',
-			name: 'seeded-transmission',
-			base_url: 'http://127.0.0.1:9091',
-			enabled: true
-		},
-		headers: csrfHeaders
+	await postSeed(page, csrfToken, '/api/v1/download-clients', {
+		kind: 'transmission',
+		name: 'seeded-transmission',
+		base_url: 'http://127.0.0.1:9091',
+		enabled: true
 	});
-	expect(dlRes.ok()).toBeTruthy();
-
-	const schedRes = await page.request.post('/api/v1/schedules', {
-		data: {
-			name: 'seeded-schedule',
-			days: [1, 2, 3, 4, 5],
-			start: '08:00',
-			end: '17:00',
-			tz: 'UTC',
-			action: 'pause',
-			enabled: true
-		},
-		headers: csrfHeaders
+	await postSeed(page, csrfToken, '/api/v1/schedules', {
+		name: 'seeded-schedule',
+		days: [1, 2, 3, 4, 5],
+		start: '08:00',
+		end: '17:00',
+		tz: 'UTC',
+		action: 'pause',
+		enabled: true
 	});
-	expect(schedRes.ok()).toBeTruthy();
-
+	await postSeed(page, csrfToken, '/api/v1/auth/api-keys', { name: 'seeded-key' });
+	const chan = await postSeed(page, csrfToken, '/api/v1/notifications/channels', {
+		name: 'seeded-webhook-channel',
+		kind: 'webhook',
+		config: {
+			url: 'http://127.0.0.1:9091/webhook',
+			allow_private_networks: true,
+			allow_insecure_http: true
+		},
+		enabled: true
+	});
+	await postSeed(page, csrfToken, '/api/v1/notifications/rules', {
+		name: 'seeded-rule',
+		event_kind: 'run_failure_streak',
+		threshold: 2,
+		channel_ids: [chan.id]
+	});
 	return inst.id;
 }
 
