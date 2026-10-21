@@ -11,7 +11,12 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 ## Context
 
-SnatchArr has two roles, `admin` and `viewer` (`api/internal/domain/user.go`, `User.role` in `api/openapi/openapi.yaml`), and every mutating handler plus three reads check for `admin` (`requireAdmin`, `api/internal/httpapi/handlers_instances.go`).
+SnatchArr has two roles, `admin` and `viewer` (`api/internal/domain/user.go`, `User.role` in `api/openapi/openapi.yaml`), but only part of the API checks for `admin` today:
+
+- Gated: the instance, download-client, Prowlarr and Seerr writes and their `Test*Input` probes (`requireAdmin`, `api/internal/httpapi/handlers_instances.go`), and four reads: `ListLogs`, `GetConfigarrStatus`, `GetPolicyFilterOptions` and the log stream (`adminOnly`, `api/internal/httpapi/module.go`).
+- Not gated: the notification channel and rule writes plus `TestNotificationChannel` (`handlers_notifications.go`), `CreateAPIKey` and `RevokeAPIKey` (`handlers_apikeys.go`), and the probes of stored targets `TestInstance`, `TestDownloadClient`, `TestProwlarrLink`, `TestSeerrLink`.
+
+With one role in practice the gaps are harmless; with a viewer they would let it send webhooks, change alerts and mint API keys. Closing them is part of this decision.
 
 No path creates a viewer:
 
@@ -33,32 +38,37 @@ Single sign-on gains a second, separate allow-list that maps to a per-identity `
 | `snatcharr.oidc.viewer_emails` | `APP_SNATCHARR_OIDC_VIEWER_EMAILS` | `email` claims that sign in as viewer |
 | `snatcharr.proxy_auth.viewer_users` | `APP_SNATCHARR_PROXY_AUTH_VIEWER_USERS` | proxy user header values that sign in as viewer |
 
-- An identity on both an admin list and a viewer list is refused at config validation, so a typo can never decide the role silently.
+- An identity on both an admin list and a viewer list is refused at config validation (compared case-insensitively), so a typo can never decide the role silently.
+- The three keys join `CompoundKeys()` in `api/internal/config/config.go`, otherwise the `APP_SNATCHARR_*` variables never reach them.
 - `allowed_subjects`, `allowed_emails` and `allowed_users` keep mapping to the first admin, so the operator's own sign-in does not change.
 
 ### 2. Provisioning
 
-- The first viewer sign-in of an identity creates a `users` row with role `viewer`, username `oidc:<sub>` or `proxy:<user>`, and no password hash, so it cannot use the password login.
+- The first viewer sign-in of an identity creates a `users` row with role `viewer`. `ValidateUsername` allows letters, digits, `.`, `-` and `_` up to 64 characters (`api/internal/domain/user.go`), so the username is `oidc-` or `proxy-` followed by a short hash of the subject or user, and the full identity goes into a new `external_id` column (unique). Creation is an upsert on `external_id`, so two first sign-ins at once yield one row.
+- `users.password_hash` is `NOT NULL` (`000001_init.up.sql`). A viewer row stores a fixed sentinel that is never a valid hash, and `auth.Login` refuses it with `401` before it calls `crypto.VerifyPassword`, which would otherwise return an error and answer `500`.
+- No viewer row is created while setup is incomplete: `SetupComplete` counts users (`api/internal/auth/service.go`), so a viewer created first would lock the admin out of `/auth/setup`. Before setup, a viewer sign-in is refused.
 - Later sign-ins reuse that row. Removing the identity from the viewer list refuses the next sign-in; the row stays for the audit trail.
+- Cookie and bearer authentication load the user by id only (`api/internal/httpapi/security.go`). A viewer row whose identity is no longer on a viewer list is refused there as well, so a removed identity loses its open session and any API key at once instead of after the session TTL.
 - The session starts through the same `RenewSession` path as the admin (fresh session id, #268).
 
 ### 3. What a viewer sees
 
-- All reads except the three admin-only ones (`ListLogs`, `GetConfigarrStatus`, `GetPolicyFilterOptions`), which return `403` `application/problem+json`; the SPA shows its problem note there.
-- No mutation: every write handler already calls `requireAdmin`.
-- The SPA hides write controls for `viewer`, based on the `role` of the signed-in user (part of this unit).
+- All reads except the four admin-only ones (`ListLogs`, the log stream, `GetConfigarrStatus`, `GetPolicyFilterOptions`), which return `403` `application/problem+json`; the SPA shows its problem note there.
+- No mutation and no outbound probe: `requireAdmin` is added to every handler listed as not gated above.
+- The SPA hides write controls for `viewer`, based on `isAdmin` from the session (`web/src/lib/session.svelte.ts`); today it gates only the Logs route, so the other pages gain the same check (part of this unit).
 
 ### 4. Tests
 
 - Positive: a listed viewer subject, email and proxy user each get a viewer session; a second sign-in reuses the row.
-- Negative: a viewer gets `403` on every mutating operation (table over the OpenAPI operations); an unlisted identity is refused; an identity on both lists fails config validation.
-- Boundary: empty viewer lists keep today's behaviour; a viewer row has no password hash and fails the password login.
+- Negative: a viewer gets `403` on every mutating and probing operation, generated as a table from the OpenAPI operations so a new one cannot be missed, notifications and API keys included; `403` on the log stream; an unlisted identity is refused; an identity on both lists fails config validation; a viewer sign-in before setup is refused and `/auth/setup` still works.
+- Boundary: empty viewer lists keep today's behaviour; the password login against a viewer row answers `401`, not `500`; a subject longer than 64 characters or with `:` and `@` yields a valid username; two concurrent first sign-ins yield one row; an identity removed from the list loses its session and API key on the next request.
 - Planted case: map the viewer list to `FirstAdmin` and the `403` table turns red.
 
 ## Consequences
 
-- The served layout check signs in as a viewer identity the cluster creates in Authentik; the three admin-only routes are checked in their `403` state, not with data.
+- The served layout check signs in as a viewer identity the cluster creates in Authentik; the admin-only routes are checked in their `403` state, not with data.
 - One more allow-list to keep in sync with Authentik; config validation refuses overlaps.
+- A migration adds `users.external_id`; there is still no role change or user deletion query, so moving an identity from the viewer list to an admin list signs it in as the first admin and leaves the viewer row unused.
 - Proxy auth trusts the user header from the ingress exactly as it does today; the viewer list adds no new trust.
 
 ## Alternatives considered
