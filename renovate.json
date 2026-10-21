@@ -49,14 +49,13 @@
       "datasourceTemplate": "github-digest"
     },
     {
-      "description": "Images of the workflow gate, each pinned by version and digest on one line (tools/ci/workflow-check.sh)",
+      "description": "The image of the workflow gate, pinned by version and digest on one line (tools/ci/workflow-check.sh)",
       "customType": "regex",
       "managerFilePatterns": [
         "tools/ci/tool-versions.env"
       ],
       "matchStrings": [
-        "ACTIONLINT_IMAGE=mirror\\.gcr\\.io/(?<depName>rhysd/actionlint):(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})\\n",
-        "ZIZMOR_IMAGE=(?<depName>ghcr\\.io/zizmorcore/zizmor):(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})\\n"
+        "ACTIONLINT_IMAGE=mirror\\.gcr\\.io/(?<depName>rhysd/actionlint):(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})\\n"
       ],
       "datasourceTemplate": "docker",
       "versioningTemplate": "docker"
@@ -416,6 +415,19 @@
       ],
       "matchCurrentValue": "/^18\\./",
       "allowedVersions": "/^18\\./"
+    },
+    {
+      "description": "linuxserver keeps old Ubuntu-base tags 18.04.1 / 20.04.1 that read as majors (dashboard #55 proposed deluge v18, qbittorrent v20)",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchDepNames": [
+        "docker.io/linuxserver/deluge",
+        "docker.io/linuxserver/qbittorrent",
+        "linuxserver/deluge",
+        "linuxserver/qbittorrent"
+      ],
+      "allowedVersions": "!/^\\d+\\.04\\./"
     },
     {
       "description": "@playwright/test and the Playwright image of the visual baseline move together: tools/e2e/web_visual.sh refuses an image whose version differs from the lockfile",
