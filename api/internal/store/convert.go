@@ -5,6 +5,7 @@
 package store
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -20,22 +21,51 @@ func deref(s *string) string {
 	return *s
 }
 
+func derefInt32(v *int32) *int {
+	if v == nil {
+		return nil
+	}
+	return new(int(*v))
+}
+
+func ptrInt32(v *int) *int32 {
+	if v == nil {
+		return nil
+	}
+	return new(int32(*v)) // #nosec G115 -- validated 1..100
+}
+
+// InstancePriorityFromValues converts nullable int32 columns to domain.InstancePriority.
+func InstancePriorityFromValues(search, download *int32) domain.InstancePriority {
+	return domain.InstancePriority{
+		Search:   derefInt32(search),
+		Download: derefInt32(download),
+	}
+}
+
+// InstancePriorityToValues converts domain.InstancePriority to nullable int32 values.
+func InstancePriorityToValues(p domain.InstancePriority) (search, download *int32) {
+	return ptrInt32(p.Search), ptrInt32(p.Download)
+}
+
 // InstanceFromRow converts a row to the domain type. The API key is never carried.
 func InstanceFromRow(r sqlcgen.Instance) domain.Instance {
 	return domain.Instance{
-		ID:              r.ID,
-		Kind:            domain.AppKind(r.Kind),
-		Name:            r.Name,
-		BaseURL:         r.BaseUrl,
-		Enabled:         r.Enabled,
-		Source:          domain.InstanceSource(r.Source),
-		ConfigarrKey:    deref(r.ConfigarrKey),
-		LastSeenVersion: deref(r.LastSeenVersion),
-		LastSeenProduct: domain.Product(deref(r.LastSeenProduct)),
-		LastCheckAt:     r.LastCheckAt,
-		LastError:       deref(r.LastError),
-		CreatedAt:       r.CreatedAt,
-		UpdatedAt:       r.UpdatedAt,
+		ID:               r.ID,
+		Kind:             domain.AppKind(r.Kind),
+		Name:             r.Name,
+		BaseURL:          r.BaseUrl,
+		Enabled:          r.Enabled,
+		Source:           domain.InstanceSource(r.Source),
+		ConfigarrKey:     deref(r.ConfigarrKey),
+		SearchPriority:   derefInt32(r.SearchPriority),
+		DownloadPriority: derefInt32(r.DownloadPriority),
+		LastSeenVersion:  deref(r.LastSeenVersion),
+		LastSeenProduct:  domain.Product(deref(r.LastSeenProduct)),
+		LastCheckAt:      r.LastCheckAt,
+		LastError:        deref(r.LastError),
+		CreatedAt:        r.CreatedAt,
+		UpdatedAt:        r.UpdatedAt,
 	}
 }
 
@@ -112,13 +142,26 @@ func PolicyParams(p domain.Policy, now time.Time) sqlcgen.UpsertPolicyParams {
 	}
 }
 
+func presetFromJSON(raw []byte) domain.PriorityPreset {
+	if len(raw) == 0 {
+		return domain.MediaFirstPreset()
+	}
+	var p domain.PriorityPreset
+	if err := json.Unmarshal(raw, &p); err != nil || len(p) == 0 {
+		return domain.MediaFirstPreset()
+	}
+	return p
+}
+
 // SettingsFromRow converts the singleton settings row.
 func SettingsFromRow(r sqlcgen.Setting) domain.Settings {
 	return domain.Settings{
-		HistoryRetentionDays: int(r.HistoryRetentionDays),
-		UserAgent:            r.UserAgent,
-		GlobalHourlyCap:      int(r.GlobalHourlyCap),
-		UpdatedAt:            r.UpdatedAt,
+		HistoryRetentionDays:   int(r.HistoryRetentionDays),
+		UserAgent:              r.UserAgent,
+		GlobalHourlyCap:        int(r.GlobalHourlyCap),
+		SearchPriorityPreset:   presetFromJSON(r.SearchPriorityPreset),
+		DownloadPriorityPreset: presetFromJSON(r.DownloadPriorityPreset),
+		UpdatedAt:              r.UpdatedAt,
 	}
 }
 

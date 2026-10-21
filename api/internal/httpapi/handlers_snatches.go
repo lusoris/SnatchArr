@@ -297,11 +297,30 @@ func (h *Handlers) UpdateSettings(ctx context.Context, req *oas.Settings) (*oas.
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	s, err := h.settings.Update(ctx, settingsFromOAS(req))
+	in := settingsFromOAS(req)
+	if err := in.SearchPriorityPreset.Validate(); err != nil {
+		return nil, fmt.Errorf("%w: %s", domain.ErrBadRequest, err.Error())
+	}
+	if err := in.DownloadPriorityPreset.Validate(); err != nil {
+		return nil, fmt.Errorf("%w: %s", domain.ErrBadRequest, err.Error())
+	}
+	s, err := h.settings.Update(ctx, in)
 	if err != nil {
 		return nil, err
 	}
 	return settingsToOAS(s), nil
+}
+
+// GetPriorityPresets returns the shipped search and download priority presets.
+func (h *Handlers) GetPriorityPresets(_ context.Context) ([]oas.PriorityPreset, error) {
+	preset := priorityPresetToOAS(domain.MediaFirstPreset())
+	return []oas.PriorityPreset{
+		{
+			Name:     domain.PresetMediaFirst,
+			Search:   preset,
+			Download: preset,
+		},
+	}, nil
 }
 
 // ResetState forgets processed items.

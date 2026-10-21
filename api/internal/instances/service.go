@@ -252,6 +252,33 @@ func (s *Service) Credentials(ctx context.Context, instID uuid.UUID) (Credential
 	return Credentials{BaseURL: row.BaseUrl, APIKey: string(apiKey)}, nil
 }
 
+// GetPriority returns the instance kind and stored priority overrides.
+func (s *Service) GetPriority(ctx context.Context, instID uuid.UUID) (domain.AppKind, domain.InstancePriority, error) {
+	row, err := s.st.Q().GetInstancePriority(ctx, instID)
+	if err != nil {
+		return "", domain.InstancePriority{}, fmt.Errorf("instances: get priority: %w", store.MapError(err))
+	}
+	return domain.AppKind(row.Kind), store.InstancePriorityFromValues(row.SearchPriority, row.DownloadPriority), nil
+}
+
+// UpdatePriority validates and updates the per-instance priority overrides (allowed for both manual and configarr instances).
+func (s *Service) UpdatePriority(ctx context.Context, instID uuid.UUID, prio domain.InstancePriority) (domain.AppKind, domain.InstancePriority, error) {
+	if err := prio.Validate(); err != nil {
+		return "", domain.InstancePriority{}, fmt.Errorf("instances: %w", err)
+	}
+	searchVal, downloadVal := store.InstancePriorityToValues(prio)
+	row, err := s.st.Q().UpdateInstancePriority(ctx, sqlcgen.UpdateInstancePriorityParams{
+		ID:               instID,
+		SearchPriority:   searchVal,
+		DownloadPriority: downloadVal,
+		UpdatedAt:        s.clk.Now(),
+	})
+	if err != nil {
+		return "", domain.InstancePriority{}, fmt.Errorf("instances: update priority: %w", store.MapError(err))
+	}
+	return domain.AppKind(row.Kind), store.InstancePriorityFromValues(row.SearchPriority, row.DownloadPriority), nil
+}
+
 func (s *Service) normalize(in Input) (Input, error) {
 	if err := domain.ValidateInstanceInput(in.Kind, in.Name, in.BaseURL, in.APIKey); err != nil {
 		return Input{}, fmt.Errorf("instances: %w", err)

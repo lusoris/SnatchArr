@@ -48,7 +48,7 @@ const createInstance = `-- name: CreateInstance :one
 
 INSERT INTO instances (id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, created_at, updated_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
-RETURNING id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product, configarr_orphaned_at, planned_at
+RETURNING id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product, configarr_orphaned_at, planned_at, search_priority, download_priority
 `
 
 type CreateInstanceParams struct {
@@ -95,6 +95,8 @@ func (q *Queries) CreateInstance(ctx context.Context, arg CreateInstanceParams) 
 		&i.LastSeenProduct,
 		&i.ConfigarrOrphanedAt,
 		&i.PlannedAt,
+		&i.SearchPriority,
+		&i.DownloadPriority,
 	)
 	return i, err
 }
@@ -132,7 +134,7 @@ func (q *Queries) DisableConfigarrInstancesNotIn(ctx context.Context, arg Disabl
 }
 
 const getInstance = `-- name: GetInstance :one
-SELECT id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product, configarr_orphaned_at, planned_at FROM instances WHERE id = $1
+SELECT id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product, configarr_orphaned_at, planned_at, search_priority, download_priority FROM instances WHERE id = $1
 `
 
 func (q *Queries) GetInstance(ctx context.Context, id uuid.UUID) (Instance, error) {
@@ -155,12 +157,14 @@ func (q *Queries) GetInstance(ctx context.Context, id uuid.UUID) (Instance, erro
 		&i.LastSeenProduct,
 		&i.ConfigarrOrphanedAt,
 		&i.PlannedAt,
+		&i.SearchPriority,
+		&i.DownloadPriority,
 	)
 	return i, err
 }
 
 const getInstanceByConfigarrKey = `-- name: GetInstanceByConfigarrKey :one
-SELECT id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product, configarr_orphaned_at, planned_at FROM instances WHERE configarr_key = $1
+SELECT id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product, configarr_orphaned_at, planned_at, search_priority, download_priority FROM instances WHERE configarr_key = $1
 `
 
 func (q *Queries) GetInstanceByConfigarrKey(ctx context.Context, configarrKey *string) (Instance, error) {
@@ -183,12 +187,37 @@ func (q *Queries) GetInstanceByConfigarrKey(ctx context.Context, configarrKey *s
 		&i.LastSeenProduct,
 		&i.ConfigarrOrphanedAt,
 		&i.PlannedAt,
+		&i.SearchPriority,
+		&i.DownloadPriority,
+	)
+	return i, err
+}
+
+const getInstancePriority = `-- name: GetInstancePriority :one
+SELECT id, kind, search_priority, download_priority FROM instances WHERE id = $1
+`
+
+type GetInstancePriorityRow struct {
+	ID               uuid.UUID
+	Kind             string
+	SearchPriority   *int32
+	DownloadPriority *int32
+}
+
+func (q *Queries) GetInstancePriority(ctx context.Context, id uuid.UUID) (GetInstancePriorityRow, error) {
+	row := q.db.QueryRow(ctx, getInstancePriority, id)
+	var i GetInstancePriorityRow
+	err := row.Scan(
+		&i.ID,
+		&i.Kind,
+		&i.SearchPriority,
+		&i.DownloadPriority,
 	)
 	return i, err
 }
 
 const listEnabledInstances = `-- name: ListEnabledInstances :many
-SELECT id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product, configarr_orphaned_at, planned_at FROM instances WHERE enabled ORDER BY kind, name
+SELECT id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product, configarr_orphaned_at, planned_at, search_priority, download_priority FROM instances WHERE enabled ORDER BY kind, name
 `
 
 func (q *Queries) ListEnabledInstances(ctx context.Context) ([]Instance, error) {
@@ -217,6 +246,8 @@ func (q *Queries) ListEnabledInstances(ctx context.Context) ([]Instance, error) 
 			&i.LastSeenProduct,
 			&i.ConfigarrOrphanedAt,
 			&i.PlannedAt,
+			&i.SearchPriority,
+			&i.DownloadPriority,
 		); err != nil {
 			return nil, err
 		}
@@ -229,7 +260,7 @@ func (q *Queries) ListEnabledInstances(ctx context.Context) ([]Instance, error) 
 }
 
 const listInstances = `-- name: ListInstances :many
-SELECT id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product, configarr_orphaned_at, planned_at FROM instances ORDER BY kind, name
+SELECT id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product, configarr_orphaned_at, planned_at, search_priority, download_priority FROM instances ORDER BY kind, name
 `
 
 func (q *Queries) ListInstances(ctx context.Context) ([]Instance, error) {
@@ -258,6 +289,8 @@ func (q *Queries) ListInstances(ctx context.Context) ([]Instance, error) {
 			&i.LastSeenProduct,
 			&i.ConfigarrOrphanedAt,
 			&i.PlannedAt,
+			&i.SearchPriority,
+			&i.DownloadPriority,
 		); err != nil {
 			return nil, err
 		}
@@ -270,7 +303,7 @@ func (q *Queries) ListInstances(ctx context.Context) ([]Instance, error) {
 }
 
 const listInstancesToPlan = `-- name: ListInstancesToPlan :many
-SELECT id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product, configarr_orphaned_at, planned_at FROM instances WHERE enabled ORDER BY planned_at NULLS FIRST, kind, name
+SELECT id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product, configarr_orphaned_at, planned_at, search_priority, download_priority FROM instances WHERE enabled ORDER BY planned_at NULLS FIRST, kind, name
 `
 
 // Instances never evaluated come first, then the one evaluated longest ago (#176).
@@ -300,6 +333,8 @@ func (q *Queries) ListInstancesToPlan(ctx context.Context) ([]Instance, error) {
 			&i.LastSeenProduct,
 			&i.ConfigarrOrphanedAt,
 			&i.PlannedAt,
+			&i.SearchPriority,
+			&i.DownloadPriority,
 		); err != nil {
 			return nil, err
 		}
@@ -362,7 +397,7 @@ SET kind = $2, name = $3, base_url = $4, api_key_enc = $5, enabled = $6, updated
     -- The product was seen at the old kind and address: a change of either forgets it.
     last_seen_product = CASE WHEN kind = $2 AND base_url = $4 THEN last_seen_product END
 WHERE id = $1
-RETURNING id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product, configarr_orphaned_at, planned_at
+RETURNING id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product, configarr_orphaned_at, planned_at, search_priority, download_priority
 `
 
 type UpdateInstanceParams struct {
@@ -403,6 +438,48 @@ func (q *Queries) UpdateInstance(ctx context.Context, arg UpdateInstanceParams) 
 		&i.LastSeenProduct,
 		&i.ConfigarrOrphanedAt,
 		&i.PlannedAt,
+		&i.SearchPriority,
+		&i.DownloadPriority,
+	)
+	return i, err
+}
+
+const updateInstancePriority = `-- name: UpdateInstancePriority :one
+UPDATE instances
+SET search_priority = $1,
+    download_priority = $2,
+    updated_at = $3
+WHERE id = $4
+RETURNING id, kind, search_priority, download_priority
+`
+
+type UpdateInstancePriorityParams struct {
+	SearchPriority   *int32
+	DownloadPriority *int32
+	UpdatedAt        time.Time
+	ID               uuid.UUID
+}
+
+type UpdateInstancePriorityRow struct {
+	ID               uuid.UUID
+	Kind             string
+	SearchPriority   *int32
+	DownloadPriority *int32
+}
+
+func (q *Queries) UpdateInstancePriority(ctx context.Context, arg UpdateInstancePriorityParams) (UpdateInstancePriorityRow, error) {
+	row := q.db.QueryRow(ctx, updateInstancePriority,
+		arg.SearchPriority,
+		arg.DownloadPriority,
+		arg.UpdatedAt,
+		arg.ID,
+	)
+	var i UpdateInstancePriorityRow
+	err := row.Scan(
+		&i.ID,
+		&i.Kind,
+		&i.SearchPriority,
+		&i.DownloadPriority,
 	)
 	return i, err
 }
@@ -418,7 +495,7 @@ SET kind = EXCLUDED.kind, name = EXCLUDED.name, base_url = EXCLUDED.base_url,
     last_seen_product = CASE
         WHEN instances.kind = EXCLUDED.kind AND instances.base_url = EXCLUDED.base_url THEN instances.last_seen_product
     END
-RETURNING id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product, configarr_orphaned_at, planned_at, (xmax = 0) AS inserted
+RETURNING id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product, configarr_orphaned_at, planned_at, search_priority, download_priority, (xmax = 0) AS inserted
 `
 
 type UpsertConfigarrInstanceParams struct {
@@ -449,6 +526,8 @@ type UpsertConfigarrInstanceRow struct {
 	LastSeenProduct     *string
 	ConfigarrOrphanedAt *time.Time
 	PlannedAt           *time.Time
+	SearchPriority      *int32
+	DownloadPriority    *int32
 	Inserted            bool
 }
 
@@ -481,6 +560,8 @@ func (q *Queries) UpsertConfigarrInstance(ctx context.Context, arg UpsertConfiga
 		&i.LastSeenProduct,
 		&i.ConfigarrOrphanedAt,
 		&i.PlannedAt,
+		&i.SearchPriority,
+		&i.DownloadPriority,
 		&i.Inserted,
 	)
 	return i, err

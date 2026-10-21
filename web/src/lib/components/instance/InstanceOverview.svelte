@@ -11,6 +11,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import CheckState from '#lib/components/CheckState.svelte';
 	import InstanceEditForm from '#lib/components/InstanceEditForm.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
+	import InstancePriorityCard from '#lib/components/instance/InstancePriorityCard.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { probeMessage } from '#lib/products.js';
 	import { keys } from '#lib/query.js';
@@ -53,4 +54,5 @@ SPDX-License-Identifier: EUPL-1.2
 	</button>
 
 	<InstanceEditForm instance={instance.data} />
+	<InstancePriorityCard instance={instance.data} />
 {/if}

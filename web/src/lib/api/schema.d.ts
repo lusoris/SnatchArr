@@ -292,6 +292,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/instances/{instanceId}/priority": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instanceId: components["parameters"]["InstanceId"];
+            };
+            cookie?: never;
+        };
+        /** Search and download priority overrides and effective ranks of an instance */
+        get: operations["getInstancePriority"];
+        /** Replace the search and download priority overrides of an instance */
+        put: operations["updateInstancePriority"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/instances/{instanceId}/policy/filter-options": {
         parameters: {
             query?: never;
@@ -493,6 +513,23 @@ export interface paths {
         get: operations["getSettings"];
         /** Replace the runtime settings */
         put: operations["updateSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/priority-presets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Shipped search and download priority presets */
+        get: operations["getPriorityPresets"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -1407,11 +1444,39 @@ export interface components {
              */
             dropped: number;
         };
+        /** @description Priority rank (1..100, lower goes first) per *arr application kind. */
+        PriorityPresetMap: {
+            [key: string]: number;
+        };
+        PriorityPreset: {
+            /** @description Identifier of the shipped preset (e.g. media_first). */
+            name: string;
+            search: components["schemas"]["PriorityPresetMap"];
+            download: components["schemas"]["PriorityPresetMap"];
+        };
+        /** @enum {string} */
+        PrioritySource: "preset" | "instance";
+        InstancePriorityInput: {
+            /** @description Optional per-instance search priority rank override (1..100, lower goes first; null clears override). */
+            search_priority?: number | null;
+            /** @description Optional per-instance download priority rank override (1..100, lower goes first; null clears override). */
+            download_priority?: number | null;
+        };
+        InstancePriority: {
+            search_priority: number | null;
+            download_priority: number | null;
+            effective_search_priority: number;
+            effective_download_priority: number;
+            search_source: components["schemas"]["PrioritySource"];
+            download_source: components["schemas"]["PrioritySource"];
+        };
         Settings: {
             history_retention_days: number;
             user_agent: string;
             /** @description Shared stamina across every instance for setups where several *arr apps hit the same indexers (0 = off). */
             global_hourly_cap: number;
+            search_priority_preset: components["schemas"]["PriorityPresetMap"];
+            download_priority_preset: components["schemas"]["PriorityPresetMap"];
             /** Format: date-time */
             updated_at?: string;
         };
@@ -2417,6 +2482,56 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    getInstancePriority: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instanceId: components["parameters"]["InstanceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Instance priority */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstancePriority"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    updateInstancePriority: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instanceId: components["parameters"]["InstanceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InstancePriorityInput"];
+            };
+        };
+        responses: {
+            /** @description Instance priority */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstancePriority"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     getPolicyFilterOptions: {
         parameters: {
             query?: never;
@@ -2731,6 +2846,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Settings"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getPriorityPresets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Shipped priority presets */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PriorityPreset"][];
                 };
             };
             default: components["responses"]["Problem"];

@@ -7,6 +7,7 @@ package settings
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -48,11 +49,21 @@ func (s *Service) Update(ctx context.Context, in domain.Settings) (domain.Settin
 	if _, err := s.st.Q().EnsureSettings(ctx, s.clk.Now()); err != nil {
 		return domain.Settings{}, fmt.Errorf("settings: ensure: %w", store.MapError(err))
 	}
+	searchJSON, err := json.Marshal(in.SearchPriorityPreset)
+	if err != nil {
+		return domain.Settings{}, fmt.Errorf("settings: marshal search preset: %w", err)
+	}
+	downloadJSON, err := json.Marshal(in.DownloadPriorityPreset)
+	if err != nil {
+		return domain.Settings{}, fmt.Errorf("settings: marshal download preset: %w", err)
+	}
 	row, err := s.st.Q().UpdateSettings(ctx, sqlcgen.UpdateSettingsParams{
-		HistoryRetentionDays: int32(in.HistoryRetentionDays), // #nosec G115 -- validated 1..3650
-		UserAgent:            in.UserAgent,
-		GlobalHourlyCap:      int32(in.GlobalHourlyCap), // #nosec G115 -- validated 0..5000
-		UpdatedAt:            s.clk.Now(),
+		HistoryRetentionDays:   int32(in.HistoryRetentionDays), // #nosec G115 -- validated 1..3650
+		UserAgent:              in.UserAgent,
+		GlobalHourlyCap:        int32(in.GlobalHourlyCap), // #nosec G115 -- validated 0..5000
+		SearchPriorityPreset:   searchJSON,
+		DownloadPriorityPreset: downloadJSON,
+		UpdatedAt:              s.clk.Now(),
 	})
 	if err != nil {
 		return domain.Settings{}, fmt.Errorf("settings: update: %w", store.MapError(err))

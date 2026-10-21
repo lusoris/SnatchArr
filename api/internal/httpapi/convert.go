@@ -150,15 +150,76 @@ func policyFromOAS(instanceID uuid.UUID, in *oas.SnatchPolicy) domain.Policy {
 	return policyoas.PolicyFromOAS(instanceID, in)
 }
 
+func priorityPresetToOAS(p domain.PriorityPreset) oas.PriorityPresetMap {
+	out := make(oas.PriorityPresetMap, len(p))
+	for k, v := range p {
+		out[string(k)] = v
+	}
+	return out
+}
+
+func priorityPresetFromOAS(in oas.PriorityPresetMap) domain.PriorityPreset {
+	out := make(domain.PriorityPreset, len(in))
+	for k, v := range in {
+		out[domain.AppKind(k)] = v
+	}
+	return out
+}
+
+func nilIntToOAS(v *int) oas.NilInt {
+	if v == nil {
+		return oas.NilInt{Null: true}
+	}
+	return oas.NilInt{Value: *v}
+}
+
+func optNilIntFromOAS(in oas.OptNilInt) *int {
+	v, ok := in.Get()
+	if !ok {
+		return nil
+	}
+	return new(v)
+}
+
+func instancePriorityFromOAS(in *oas.InstancePriorityInput) domain.InstancePriority {
+	return domain.InstancePriority{
+		Search:   optNilIntFromOAS(in.SearchPriority),
+		Download: optNilIntFromOAS(in.DownloadPriority),
+	}
+}
+
+func instancePriorityToOAS(kind domain.AppKind, p domain.InstancePriority, cfg domain.Settings) *oas.InstancePriority {
+	effS, srcS := p.ResolveSearch(kind, cfg.SearchPriorityPreset)
+	effD, srcD := p.ResolveDownload(kind, cfg.DownloadPriorityPreset)
+	return &oas.InstancePriority{
+		SearchPriority:            nilIntToOAS(p.Search),
+		DownloadPriority:          nilIntToOAS(p.Download),
+		EffectiveSearchPriority:   effS,
+		EffectiveDownloadPriority: effD,
+		SearchSource:              oas.PrioritySource(srcS),
+		DownloadSource:            oas.PrioritySource(srcD),
+	}
+}
+
 func settingsToOAS(s domain.Settings) *oas.Settings {
 	return &oas.Settings{
-		HistoryRetentionDays: s.HistoryRetentionDays, UserAgent: s.UserAgent, GlobalHourlyCap: s.GlobalHourlyCap,
-		UpdatedAt: oas.NewOptDateTime(s.UpdatedAt),
+		HistoryRetentionDays:   s.HistoryRetentionDays,
+		UserAgent:              s.UserAgent,
+		GlobalHourlyCap:        s.GlobalHourlyCap,
+		SearchPriorityPreset:   priorityPresetToOAS(s.SearchPriorityPreset),
+		DownloadPriorityPreset: priorityPresetToOAS(s.DownloadPriorityPreset),
+		UpdatedAt:              oas.NewOptDateTime(s.UpdatedAt),
 	}
 }
 
 func settingsFromOAS(in *oas.Settings) domain.Settings {
-	return domain.Settings{HistoryRetentionDays: in.HistoryRetentionDays, UserAgent: in.UserAgent, GlobalHourlyCap: in.GlobalHourlyCap}
+	return domain.Settings{
+		HistoryRetentionDays:   in.HistoryRetentionDays,
+		UserAgent:              in.UserAgent,
+		GlobalHourlyCap:        in.GlobalHourlyCap,
+		SearchPriorityPreset:   priorityPresetFromOAS(in.SearchPriorityPreset),
+		DownloadPriorityPreset: priorityPresetFromOAS(in.DownloadPriorityPreset),
+	}
 }
 
 func notificationChannelToOAS(c domain.NotificationChannel) oas.NotificationChannel {

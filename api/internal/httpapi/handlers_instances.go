@@ -6,6 +6,7 @@ package httpapi
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	"github.com/lusoris/SnatchArr/api/internal/arrclient"
@@ -147,4 +148,37 @@ func (h *Handlers) UpdatePolicy(ctx context.Context, req *oas.SnatchPolicy, para
 		return nil, err
 	}
 	return policyToOAS(p), nil
+}
+
+// GetInstancePriority returns an instance's search and download priority overrides and effective ranks.
+func (h *Handlers) GetInstancePriority(ctx context.Context, params oas.GetInstancePriorityParams) (*oas.InstancePriority, error) {
+	kind, prio, err := h.instances.GetPriority(ctx, params.InstanceId)
+	if err != nil {
+		return nil, err
+	}
+	cfg, err := h.settings.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return instancePriorityToOAS(kind, prio, cfg), nil
+}
+
+// UpdateInstancePriority replaces an instance's search and download priority overrides.
+func (h *Handlers) UpdateInstancePriority(ctx context.Context, req *oas.InstancePriorityInput, params oas.UpdateInstancePriorityParams) (*oas.InstancePriority, error) {
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
+	}
+	in := instancePriorityFromOAS(req)
+	if err := in.Validate(); err != nil {
+		return nil, fmt.Errorf("%w: %s", domain.ErrBadRequest, err.Error())
+	}
+	kind, prio, err := h.instances.UpdatePriority(ctx, params.InstanceId, in)
+	if err != nil {
+		return nil, err
+	}
+	cfg, err := h.settings.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return instancePriorityToOAS(kind, prio, cfg), nil
 }

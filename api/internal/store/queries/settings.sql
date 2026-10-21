@@ -11,6 +11,11 @@ RETURNING *;
 
 -- name: UpdateSettings :one
 UPDATE settings
-SET history_retention_days = $1, user_agent = $2, global_hourly_cap = $3, updated_at = $4
+SET history_retention_days = $1,
+    user_agent = $2,
+    global_hourly_cap = $3,
+    search_priority_preset = $4,
+    download_priority_preset = $5,
+    updated_at = $6
 WHERE singleton
 RETURNING *;

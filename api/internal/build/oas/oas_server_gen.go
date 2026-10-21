@@ -165,6 +165,12 @@ type Handler interface {
 	//
 	// GET /instances/{instanceId}
 	GetInstance(ctx context.Context, params GetInstanceParams) (*Instance, error)
+	// GetInstancePriority implements getInstancePriority operation.
+	//
+	// Search and download priority overrides and effective ranks of an instance.
+	//
+	// GET /instances/{instanceId}/priority
+	GetInstancePriority(ctx context.Context, params GetInstancePriorityParams) (*InstancePriority, error)
 	// GetNotificationChannel implements getNotificationChannel operation.
 	//
 	// Get one notification channel.
@@ -190,6 +196,12 @@ type Handler interface {
 	//
 	// GET /instances/{instanceId}/policy/filter-options
 	GetPolicyFilterOptions(ctx context.Context, params GetPolicyFilterOptionsParams) (*PolicyFilterOptions, error)
+	// GetPriorityPresets implements getPriorityPresets operation.
+	//
+	// Shipped search and download priority presets.
+	//
+	// GET /priority-presets
+	GetPriorityPresets(ctx context.Context) ([]PriorityPreset, error)
 	// GetProwlarrLink implements getProwlarrLink operation.
 	//
 	// Get one Prowlarr link.
@@ -457,6 +469,12 @@ type Handler interface {
 	//
 	// PUT /instances/{instanceId}
 	UpdateInstance(ctx context.Context, req *InstanceUpdate, params UpdateInstanceParams) (*Instance, error)
+	// UpdateInstancePriority implements updateInstancePriority operation.
+	//
+	// Replace the search and download priority overrides of an instance.
+	//
+	// PUT /instances/{instanceId}/priority
+	UpdateInstancePriority(ctx context.Context, req *InstancePriorityInput, params UpdateInstancePriorityParams) (*InstancePriority, error)
 	// UpdateNotificationChannel implements updateNotificationChannel operation.
 	//
 	// Update a notification channel.

@@ -519,5 +519,22 @@
 	"nav_search_placeholder": "Suchen oder springen zu…",
 	"nav_search_shortcut": "Strg+K",
 	"nav_search_shortcut_apple": "⌘K",
-	"nav_bottom_label": "Schnellnavigation"
+	"nav_bottom_label": "Schnellnavigation",
+	"settings_priority_presets_title": "Instanz-Prioritätsvorlagen",
+	"settings_priority_presets_hint": "Standard-Such- und Download-Ränge pro Anwendungstyp (1–100, kleinere Zahlen laufen zuerst).",
+	"settings_search_priority_preset": "Suchprioritätsvorlage",
+	"settings_download_priority_preset": "Download-Prioritätsvorlage",
+	"settings_priority_reset": "Auf mitgelieferte Vorlage zurücksetzen",
+	"instance_priority_title": "Instanz-Priorität",
+	"instance_priority_hint": "Optionale Überschreibungen für Such- und Download-Rang (1–100, kleinere Zahlen laufen zuerst). Leer lassen, um der Vorlage zu folgen.",
+	"instance_priority_search": "Suchpriorität überschreiben",
+	"instance_priority_download": "Download-Priorität überschreiben",
+	"instance_priority_effective_search": "Effektiver Suchrang: {rank} ({source})",
+	"instance_priority_effective_download": "Effektiver Download-Rang: {rank} ({source})",
+	"instance_priority_source_preset": "Vorlage",
+	"instance_priority_source_instance": "Instanz",
+	"instance_priority_follow_preset": "Vorlage folgen",
+	"instance_priority_clear": "Überschreibungen löschen",
+	"instance_priority_save": "Priorität speichern",
+	"instance_priority_saved": "Instanz-Priorität gespeichert"
 }

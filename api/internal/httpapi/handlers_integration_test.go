@@ -1997,7 +1997,14 @@ func TestSettingsOperations(t *testing.T) {
 				}
 				return
 			}
-			req := &oas.Settings{HistoryRetentionDays: tc.days, UserAgent: tc.ua, GlobalHourlyCap: tc.cap}
+			preset := priorityPresetToOAS(domain.MediaFirstPreset())
+			req := &oas.Settings{
+				HistoryRetentionDays:   tc.days,
+				UserAgent:              tc.ua,
+				GlobalHourlyCap:        tc.cap,
+				SearchPriorityPreset:   preset,
+				DownloadPriorityPreset: preset,
+			}
 			got, err := f.h.UpdateSettings(ctx, req)
 			if tc.wantErr != nil {
 				if !errors.Is(err, tc.wantErr) {
@@ -2044,7 +2051,14 @@ func TestStaminaAndStateOperations(t *testing.T) {
 			}
 			if tc.globalCap > 0 {
 				adminCtx := withUser(t.Context(), f.admin)
-				if _, err := f.h.UpdateSettings(adminCtx, &oas.Settings{HistoryRetentionDays: 30, UserAgent: "SnatchArr", GlobalHourlyCap: tc.globalCap}); err != nil {
+				preset := priorityPresetToOAS(domain.MediaFirstPreset())
+				if _, err := f.h.UpdateSettings(adminCtx, &oas.Settings{
+					HistoryRetentionDays:   30,
+					UserAgent:              "SnatchArr",
+					GlobalHourlyCap:        tc.globalCap,
+					SearchPriorityPreset:   preset,
+					DownloadPriorityPreset: preset,
+				}); err != nil {
 					t.Fatalf("UpdateSettings() = %v", err)
 				}
 			}

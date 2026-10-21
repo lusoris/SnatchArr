@@ -441,6 +441,42 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
 
+  /instances/{instanceId}/priority:
+    parameters:
+      - $ref: "#/components/parameters/InstanceId"
+    get:
+      tags: [instances]
+      operationId: getInstancePriority
+      summary: Search and download priority overrides and effective ranks of an instance
+      responses:
+        "200":
+          description: Instance priority
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstancePriority"
+        default:
+          $ref: "#/components/responses/Problem"
+    put:
+      tags: [instances]
+      operationId: updateInstancePriority
+      summary: Replace the search and download priority overrides of an instance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InstancePriorityInput"
+      responses:
+        "200":
+          description: Instance priority
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstancePriority"
+        default:
+          $ref: "#/components/responses/Problem"
+
   /instances/{instanceId}/policy/filter-options:
     parameters:
       - $ref: "#/components/parameters/InstanceId"
@@ -729,6 +765,23 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Settings"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /priority-presets:
+    get:
+      tags: [system]
+      operationId: getPriorityPresets
+      summary: Shipped search and download priority presets
+      responses:
+        "200":
+          description: Shipped priority presets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PriorityPreset"
         default:
           $ref: "#/components/responses/Problem"
 
@@ -2278,9 +2331,87 @@ components:
           type: integer
           format: int64
           description: Records overwritten since process start because the ring was full.
+    PriorityPresetMap:
+      type: object
+      description: Priority rank (1..100, lower goes first) per *arr application kind.
+      additionalProperties:
+        type: integer
+        minimum: 1
+        maximum: 100
+
+    PriorityPreset:
+      type: object
+      required: [name, search, download]
+      properties:
+        name:
+          type: string
+          description: Identifier of the shipped preset (e.g. media_first).
+        search:
+          $ref: "#/components/schemas/PriorityPresetMap"
+        download:
+          $ref: "#/components/schemas/PriorityPresetMap"
+
+    PrioritySource:
+      type: string
+      enum: [preset, instance]
+
+    InstancePriorityInput:
+      type: object
+      properties:
+        search_priority:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 100
+          description: Optional per-instance search priority rank override (1..100, lower goes first; null clears override).
+        download_priority:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 100
+          description: Optional per-instance download priority rank override (1..100, lower goes first; null clears override).
+
+    InstancePriority:
+      type: object
+      required:
+        - search_priority
+        - download_priority
+        - effective_search_priority
+        - effective_download_priority
+        - search_source
+        - download_source
+      properties:
+        search_priority:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 100
+        download_priority:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 100
+        effective_search_priority:
+          type: integer
+          minimum: 1
+          maximum: 100
+        effective_download_priority:
+          type: integer
+          minimum: 1
+          maximum: 100
+        search_source:
+          $ref: "#/components/schemas/PrioritySource"
+        download_source:
+          $ref: "#/components/schemas/PrioritySource"
+
     Settings:
       type: object
-      required: [history_retention_days, user_agent, global_hourly_cap]
+      required:
+        - history_retention_days
+        - user_agent
+        - global_hourly_cap
+        - search_priority_preset
+        - download_priority_preset
       properties:
         history_retention_days:
           type: integer
@@ -2295,6 +2426,10 @@ components:
           minimum: 0
           maximum: 5000
           description: "Shared stamina across every instance for setups where several *arr apps hit the same indexers (0 = off)."
+        search_priority_preset:
+          $ref: "#/components/schemas/PriorityPresetMap"
+        download_priority_preset:
+          $ref: "#/components/schemas/PriorityPresetMap"
         updated_at:
           type: string
           format: date-time

@@ -65,6 +65,8 @@ type Instance struct {
 	LastSeenProduct     *string
 	ConfigarrOrphanedAt *time.Time
 	PlannedAt           *time.Time
+	SearchPriority      *int32
+	DownloadPriority    *int32
 }
 
 type LoginLockout struct {
@@ -209,11 +211,14 @@ type Session struct {
 }
 
 type Setting struct {
-	Singleton            bool
-	HistoryRetentionDays int32
-	UserAgent            string
-	UpdatedAt            time.Time
-	GlobalHourlyCap      int32
+	Singleton              bool
+	HistoryRetentionDays   int32
+	UserAgent              string
+	UpdatedAt              time.Time
+	GlobalHourlyCap        int32
+	LlmEnabled             bool
+	SearchPriorityPreset   []byte
+	DownloadPriorityPreset []byte
 }
 
 type SnatchEvent struct {
