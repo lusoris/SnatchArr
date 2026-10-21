@@ -27,3 +27,4 @@ This directory documents key architectural decisions following the HISS-14 immut
 | [0019](0019-foreign-title-search.md) | 2026-10-20 | Foreign-title search and release push without proxy indexers | Proposed |
 | [0020](0020-snatch-policy-defaults-and-presets.md) | 2026-10-20 | Snatch policy defaults and presets | Proposed |
 | [0021](0021-llm-access-module.md) | 2026-10-20 | LLM access module | Proposed |
+| [0022](0022-instance-priority.md) | 2026-10-21 | Per-instance priority for searches and downloads | Proposed |
