@@ -63,7 +63,24 @@ export const samplePolicyData = {
 export const sampleSettingsData = {
 	history_retention_days: 30,
 	user_agent: 'SnatchArr/1.0',
-	global_hourly_cap: 100
+	global_hourly_cap: 100,
+	// The seeded default of migration 000025, so the preset fields render as on a real install.
+	search_priority_preset: {
+		sonarr: 10,
+		radarr: 10,
+		lidarr: 20,
+		readarr: 30,
+		whisparr_v2: 40,
+		whisparr_v3: 40
+	},
+	download_priority_preset: {
+		sonarr: 10,
+		radarr: 10,
+		lidarr: 20,
+		readarr: 30,
+		whisparr_v2: 40,
+		whisparr_v3: 40
+	}
 };
 
 export async function mockSignedInApi(page: Page): Promise<void> {

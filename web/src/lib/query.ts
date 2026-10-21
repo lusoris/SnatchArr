@@ -15,6 +15,8 @@ export const keys = {
 	policyFilterOptions: (id: string) => ['instances', id, 'policy', 'filter-options'] as const,
 	queuePolicy: (id: string) => ['instances', id, 'queue-policy'] as const,
 	queueStrikes: (id: string) => ['instances', id, 'queue-strikes'] as const,
+	instancePriority: (id: string) => ['instances', id, 'priority'] as const,
+	priorityPresets: ['priority-presets'] as const,
 	caps: ['hourly-caps'] as const,
 	runs: ['runs'] as const,
 	instanceRuns: (id: string) => ['runs', id] as const,

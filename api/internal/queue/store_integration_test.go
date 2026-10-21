@@ -16,8 +16,10 @@ import (
 
 	"github.com/golusoris/golusoris/core/clock"
 
+	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/events"
 	"github.com/lusoris/SnatchArr/api/internal/queue"
+	"github.com/lusoris/SnatchArr/api/internal/settings"
 	"github.com/lusoris/SnatchArr/api/internal/snatch"
 	"github.com/lusoris/SnatchArr/api/internal/store"
 	"github.com/lusoris/SnatchArr/api/internal/store/storetest"
@@ -434,6 +436,47 @@ func TestInstanceDeleteCascades(t *testing.T) {
 	err = f.st.Pool().QueryRow(t.Context(), "SELECT count(*) FROM queue_strikes WHERE instance_id = $1", f.instance).Scan(&strikeCount)
 	if err != nil || strikeCount != 0 {
 		t.Fatalf("strikeCount = %d, %v; want 0", strikeCount, err)
+	}
+}
+
+func TestDownloadPriorityPreset(t *testing.T) {
+	t.Parallel()
+	f := newQueueFixture(t)
+
+	// Positive: freshly migrated DB returns MediaFirstPreset.
+	got, err := f.q.DownloadPriorityPreset(t.Context())
+	if err != nil {
+		t.Fatalf("DownloadPriorityPreset() freshly migrated = %v", err)
+	}
+	if !reflect.DeepEqual(got, domain.MediaFirstPreset()) {
+		t.Fatalf("DownloadPriorityPreset() freshly migrated = %+v, want MediaFirstPreset %+v", got, domain.MediaFirstPreset())
+	}
+
+	// Positive & boundary: returns stored preset after settings update with ranks 1 and 100.
+	customPreset := domain.PriorityPreset{
+		domain.KindSonarr:     1,
+		domain.KindRadarr:     100,
+		domain.KindLidarr:     20,
+		domain.KindReadarr:    30,
+		domain.KindWhisparrV2: 40,
+		domain.KindWhisparrV3: 50,
+	}
+	settingsSvc := settings.New(f.st, f.clk)
+	current, err := settingsSvc.Get(t.Context())
+	if err != nil {
+		t.Fatalf("settings.Get() = %v", err)
+	}
+	current.DownloadPriorityPreset = customPreset
+	if _, err = settingsSvc.Update(t.Context(), current); err != nil {
+		t.Fatalf("settings.Update() = %v", err)
+	}
+
+	gotAfter, err := f.q.DownloadPriorityPreset(t.Context())
+	if err != nil {
+		t.Fatalf("DownloadPriorityPreset() after update = %v", err)
+	}
+	if !reflect.DeepEqual(gotAfter, customPreset) {
+		t.Fatalf("DownloadPriorityPreset() after update = %+v, want %+v", gotAfter, customPreset)
 	}
 }
 

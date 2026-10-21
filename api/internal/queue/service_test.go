@@ -10,6 +10,7 @@ import (
 	"errors"
 	"log/slog"
 	"maps"
+	"slices"
 	"testing"
 	"time"
 
@@ -28,6 +29,8 @@ type fakeStore struct {
 	recorded    map[uuid.UUID][]queue.Decision
 	forgotten   map[uuid.UUID][]string
 	purgeCalled int
+	preset      domain.PriorityPreset
+	presetErr   error
 }
 
 func newFakeStore() *fakeStore {
@@ -78,6 +81,16 @@ func (f *fakeStore) Purge(_ context.Context, _ int) (int64, error) {
 	return 0, nil
 }
 
+func (f *fakeStore) DownloadPriorityPreset(_ context.Context) (domain.PriorityPreset, error) {
+	if f.presetErr != nil {
+		return domain.MediaFirstPreset(), f.presetErr
+	}
+	if f.preset != nil {
+		return f.preset, nil
+	}
+	return domain.MediaFirstPreset(), nil
+}
+
 type fakeInstanceSource struct {
 	instances []queue.Instance
 	err       error
@@ -100,6 +113,7 @@ type fakeArrClient struct {
 	removeErr   error
 	removals    []fakeRemoval
 	queueCalls  int
+	visited     []string
 	removeCalls int
 	// importErr is the ForceImport result per download id; imports lists the calls.
 	importErr map[string]error
@@ -124,6 +138,7 @@ func (f *fakeArrClient) ForceImport(_ context.Context, kind domain.AppKind, _, _
 
 func (f *fakeArrClient) Queue(_ context.Context, kind domain.AppKind, baseURL, _ string, _, _ int) ([]queue.Item, error) {
 	f.queueCalls++
+	f.visited = append(f.visited, baseURL)
 	key := string(kind) + ":" + baseURL
 	if err, ok := f.queueErr[key]; ok {
 		return nil, err
@@ -568,5 +583,104 @@ func TestPartialInstanceListStillSwept(t *testing.T) {
 	}
 	if arr.queueCalls != 1 {
 		t.Fatalf("queue calls = %d, want 1 (the loaded instance is still swept)", arr.queueCalls)
+	}
+}
+
+func TestSweepAll_DownloadPriorityOrder(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name      string
+		instances []queue.Instance
+		preset    domain.PriorityPreset
+		presetErr error
+		wantOrder []string
+	}{
+		// Positive: preset ranks order sonarr (10) -> lidarr (20) -> readarr (30) -> whisparr_v3 (40).
+		{
+			name: "positive preset download priority order",
+			instances: []queue.Instance{
+				{ID: uuid.New(), Name: "whisparr", Kind: domain.KindWhisparrV3, BaseURL: "http://whisparr"},
+				{ID: uuid.New(), Name: "readarr", Kind: domain.KindReadarr, BaseURL: "http://readarr"},
+				{ID: uuid.New(), Name: "lidarr", Kind: domain.KindLidarr, BaseURL: "http://lidarr"},
+				{ID: uuid.New(), Name: "sonarr", Kind: domain.KindSonarr, BaseURL: "http://sonarr"},
+			},
+			wantOrder: []string{"http://sonarr", "http://lidarr", "http://readarr", "http://whisparr"},
+		},
+		// Positive: custom preset moves readarr ahead of sonarr.
+		{
+			name: "positive custom preset moves readarr first",
+			instances: []queue.Instance{
+				{ID: uuid.New(), Name: "sonarr", Kind: domain.KindSonarr, BaseURL: "http://sonarr"},
+				{ID: uuid.New(), Name: "readarr", Kind: domain.KindReadarr, BaseURL: "http://readarr"},
+			},
+			preset: domain.PriorityPreset{
+				domain.KindSonarr:     50,
+				domain.KindRadarr:     50,
+				domain.KindLidarr:     50,
+				domain.KindReadarr:    1,
+				domain.KindWhisparrV2: 90,
+				domain.KindWhisparrV3: 90,
+			},
+			wantOrder: []string{"http://readarr", "http://sonarr"},
+		},
+		// Boundary: preset read error falls back to MediaFirstPreset and still sweeps.
+		{
+			name: "boundary preset read error falls back to media first preset",
+			instances: []queue.Instance{
+				{ID: uuid.New(), Name: "whisparr", Kind: domain.KindWhisparrV3, BaseURL: "http://whisparr"},
+				{ID: uuid.New(), Name: "sonarr", Kind: domain.KindSonarr, BaseURL: "http://sonarr"},
+			},
+			presetErr: errors.New("database connection refused"),
+			wantOrder: []string{"http://sonarr", "http://whisparr"},
+		},
+		// Positive: instance override download_priority=1 wins over preset.
+		{
+			name: "positive instance download priority override wins",
+			instances: []queue.Instance{
+				{ID: uuid.New(), Name: "sonarr", Kind: domain.KindSonarr, BaseURL: "http://sonarr"},
+				{ID: uuid.New(), Name: "whisparr-top", Kind: domain.KindWhisparrV3, BaseURL: "http://whisparr-top", DownloadPriority: new(1)},
+				{ID: uuid.New(), Name: "lidarr", Kind: domain.KindLidarr, BaseURL: "http://lidarr"},
+			},
+			wantOrder: []string{"http://whisparr-top", "http://sonarr", "http://lidarr"},
+		},
+		// Boundary: equal download priority breaks ties by kind then name.
+		{
+			name: "boundary equal download priority orders by kind then name",
+			instances: []queue.Instance{
+				{ID: uuid.New(), Name: "sonarr-b", Kind: domain.KindSonarr, BaseURL: "http://sonarr-b"},
+				{ID: uuid.New(), Name: "radarr-b", Kind: domain.KindRadarr, BaseURL: "http://radarr-b"},
+				{ID: uuid.New(), Name: "radarr-a", Kind: domain.KindRadarr, BaseURL: "http://radarr-a"},
+				{ID: uuid.New(), Name: "sonarr-a", Kind: domain.KindSonarr, BaseURL: "http://sonarr-a"},
+			},
+			wantOrder: []string{"http://radarr-a", "http://radarr-b", "http://sonarr-a", "http://sonarr-b"},
+		},
+		// Negative: empty instance list visits nothing.
+		{
+			name:      "negative empty list",
+			instances: nil,
+			wantOrder: nil,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			st := newFakeStore()
+			st.preset = tc.preset
+			st.presetErr = tc.presetErr
+			for _, inst := range tc.instances {
+				st.settings[inst.ID] = queue.Settings{Enabled: true}
+			}
+			arr := newFakeArrClient()
+			inCopy := append([]queue.Instance(nil), tc.instances...)
+			is := &fakeInstanceSource{instances: inCopy}
+			svc := newTestService(st, is, arr, clock.NewFake(), &fakeEventPublisher{}, &fakeMetricsRecorder{})
+			if err := svc.SweepAll(t.Context()); err != nil {
+				t.Fatalf("SweepAll() error = %v", err)
+			}
+			if !slices.Equal(arr.visited, tc.wantOrder) {
+				t.Errorf("visited = %v, want %v", arr.visited, tc.wantOrder)
+			}
+		})
 	}
 }

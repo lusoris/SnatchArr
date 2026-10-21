@@ -121,7 +121,11 @@ func TestStateLoop_Stamina(t *testing.T) {
 
 	// Configure global hourly cap = 100
 	if _, err = f.settings.Update(t.Context(), domain.Settings{
-		HistoryRetentionDays: 30, UserAgent: "agent", GlobalHourlyCap: 100,
+		HistoryRetentionDays:   30,
+		UserAgent:              "agent",
+		GlobalHourlyCap:        100,
+		SearchPriorityPreset:   domain.MediaFirstPreset(),
+		DownloadPriorityPreset: domain.MediaFirstPreset(),
 	}); err != nil {
 		t.Fatalf("settings.Update: %v", err)
 	}

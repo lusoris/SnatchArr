@@ -5,11 +5,13 @@
 package queue
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -32,11 +34,12 @@ const (
 
 // Instance holds credentials and metadata of an enabled *arr instance.
 type Instance struct {
-	ID      uuid.UUID
-	Name    string
-	Kind    domain.AppKind
-	BaseURL string
-	APIKey  string
+	ID               uuid.UUID
+	Name             string
+	Kind             domain.AppKind
+	BaseURL          string
+	APIKey           string
+	DownloadPriority *int
 }
 
 // InstanceSource lists enabled instances with decrypted API keys.
@@ -71,12 +74,14 @@ func (s *DBInstanceSource) ListEnabledInstances(ctx context.Context) ([]Instance
 			errs = append(errs, fmt.Errorf("queue: open api key of %s: %w", row.Name, err))
 			continue
 		}
+		prio := store.InstancePriorityFromValues(row.SearchPriority, row.DownloadPriority)
 		out = append(out, Instance{
-			ID:      row.ID,
-			Name:    row.Name,
-			Kind:    domain.AppKind(row.Kind),
-			BaseURL: row.BaseUrl,
-			APIKey:  string(key),
+			ID:               row.ID,
+			Name:             row.Name,
+			Kind:             domain.AppKind(row.Kind),
+			BaseURL:          row.BaseUrl,
+			APIKey:           string(key),
+			DownloadPriority: prio.Download,
 		})
 	}
 	return out, errors.Join(errs...)
@@ -120,6 +125,7 @@ type StoreInterface interface {
 	Record(ctx context.Context, instanceID uuid.UUID, decisions []Decision) error
 	Forget(ctx context.Context, instanceID uuid.UUID, downloadID string) error
 	Purge(ctx context.Context, batch int) (int64, error)
+	DownloadPriorityPreset(ctx context.Context) (domain.PriorityPreset, error)
 }
 
 // NewService constructs a queue Service.
@@ -143,6 +149,25 @@ func NewService(
 	}
 }
 
+func (s *Service) sortByDownloadPriority(ctx context.Context, insts []Instance) {
+	preset, err := s.store.DownloadPriorityPreset(ctx)
+	if err != nil {
+		s.logger.WarnContext(ctx, "queue: read download priority preset failed; using default", slog.String("error", err.Error()))
+		preset = domain.MediaFirstPreset()
+	}
+	slices.SortStableFunc(insts, func(a, b Instance) int {
+		rankA, _ := domain.ResolvePriorityRank(a.DownloadPriority, a.Kind, preset)
+		rankB, _ := domain.ResolvePriorityRank(b.DownloadPriority, b.Kind, preset)
+		if c := cmp.Compare(rankA, rankB); c != 0 {
+			return c
+		}
+		if c := cmp.Compare(string(a.Kind), string(b.Kind)); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.Name, b.Name)
+	})
+}
+
 // SweepAll performs a queue sweep for every enabled instance and purges expired strikes.
 // Instances the source could not load are reported; the ones it returned are swept.
 func (s *Service) SweepAll(ctx context.Context) error {
@@ -150,6 +175,7 @@ func (s *Service) SweepAll(ctx context.Context) error {
 	if err != nil && len(insts) == 0 {
 		return fmt.Errorf("queue: sweep all: %w", err)
 	}
+	s.sortByDownloadPriority(ctx, insts)
 
 	var errs []error
 	if err != nil {

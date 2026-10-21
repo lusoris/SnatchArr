@@ -104,10 +104,19 @@ func (r *Runs) EnqueueWithOptions(ctx context.Context, opts EnqueueOptions) (dom
 	return runFromRow(row), true, nil
 }
 
-// Lease hands the oldest queued (or expired-lease) run to workerID.
+// priorityMaxWait bounds how long a low-priority run waits before overtaking higher-priority runs.
+const priorityMaxWait = time.Hour
+
+// Lease hands the highest-priority (or starvation-promoted) queued or expired-lease run to workerID.
 func (r *Runs) Lease(ctx context.Context, workerID string) (domain.Run, error) {
 	now := r.clk.Now()
-	row, err := r.st.Q().LeaseRun(ctx, sqlcgen.LeaseRunParams{LeasedBy: &workerID, LeaseExpiresAt: new(now.Add(LeaseTTL)), Now: now, MaxLeases: MaxLeases})
+	row, err := r.st.Q().LeaseRun(ctx, sqlcgen.LeaseRunParams{
+		LeasedBy:       &workerID,
+		LeaseExpiresAt: new(now.Add(LeaseTTL)),
+		Now:            now,
+		MaxLeases:      MaxLeases,
+		MaxWait:        priorityMaxWait.Seconds(),
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Run{}, ErrNoRun
 	}

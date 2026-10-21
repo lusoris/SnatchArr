@@ -332,12 +332,16 @@ UPDATE snatch_runs
 SET status = 'leased', leased_by = $1, lease_expires_at = $2,
     started_at = COALESCE(started_at, $3::timestamptz), lease_count = lease_count + 1
 WHERE id = (
-    SELECT id FROM snatch_runs
-    WHERE status = 'queued'
-       OR (status = 'leased' AND lease_expires_at < $3::timestamptz AND lease_count < $4::int)
-    ORDER BY queued_at
+    SELECT snatch_runs.id FROM snatch_runs
+    JOIN instances ON instances.id = snatch_runs.instance_id
+    LEFT JOIN settings ON settings.singleton
+    WHERE (snatch_runs.status = 'queued'
+       OR (snatch_runs.status = 'leased' AND snatch_runs.lease_expires_at < $3::timestamptz AND snatch_runs.lease_count < $4::int))
+    ORDER BY (snatch_runs.queued_at < $3::timestamptz - make_interval(secs => $5::double precision)) DESC,
+             COALESCE(instances.search_priority, (settings.search_priority_preset->>instances.kind)::int) ASC NULLS LAST,
+             snatch_runs.queued_at
     LIMIT 1
-    FOR UPDATE SKIP LOCKED
+    FOR UPDATE OF snatch_runs SKIP LOCKED
 )
 RETURNING id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error, focus_entity_id, focus_group_id, lease_count, dry_run, seed
 `
@@ -347,6 +351,7 @@ type LeaseRunParams struct {
 	LeaseExpiresAt *time.Time
 	Now            time.Time
 	MaxLeases      int32
+	MaxWait        float64
 }
 
 // An expired lease is handed out again only while the run has been leased fewer than
@@ -357,6 +362,7 @@ func (q *Queries) LeaseRun(ctx context.Context, arg LeaseRunParams) (SnatchRun, 
 		arg.LeaseExpiresAt,
 		arg.Now,
 		arg.MaxLeases,
+		arg.MaxWait,
 	)
 	var i SnatchRun
 	err := row.Scan(

@@ -248,6 +248,15 @@ func (UnimplementedHandler) GetInstance(ctx context.Context, params GetInstanceP
 	return r, ht.ErrNotImplemented
 }
 
+// GetInstancePriority implements getInstancePriority operation.
+//
+// Search and download priority overrides and effective ranks of an instance.
+//
+// GET /instances/{instanceId}/priority
+func (UnimplementedHandler) GetInstancePriority(ctx context.Context, params GetInstancePriorityParams) (r *InstancePriority, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // GetNotificationChannel implements getNotificationChannel operation.
 //
 // Get one notification channel.
@@ -282,6 +291,15 @@ func (UnimplementedHandler) GetPolicy(ctx context.Context, params GetPolicyParam
 //
 // GET /instances/{instanceId}/policy/filter-options
 func (UnimplementedHandler) GetPolicyFilterOptions(ctx context.Context, params GetPolicyFilterOptionsParams) (r *PolicyFilterOptions, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// GetPriorityPresets implements getPriorityPresets operation.
+//
+// Shipped search and download priority presets.
+//
+// GET /priority-presets
+func (UnimplementedHandler) GetPriorityPresets(ctx context.Context) (r []PriorityPreset, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -681,6 +699,15 @@ func (UnimplementedHandler) UpdateDownloadClient(ctx context.Context, req *Downl
 //
 // PUT /instances/{instanceId}
 func (UnimplementedHandler) UpdateInstance(ctx context.Context, req *InstanceUpdate, params UpdateInstanceParams) (r *Instance, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UpdateInstancePriority implements updateInstancePriority operation.
+//
+// Replace the search and download priority overrides of an instance.
+//
+// PUT /instances/{instanceId}/priority
+func (UnimplementedHandler) UpdateInstancePriority(ctx context.Context, req *InstancePriorityInput, params UpdateInstancePriorityParams) (r *InstancePriority, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

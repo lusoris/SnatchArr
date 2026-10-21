@@ -18,6 +18,18 @@ SELECT * FROM instances ORDER BY kind, name;
 -- name: ListEnabledInstances :many
 SELECT * FROM instances WHERE enabled ORDER BY kind, name;
 
+
+-- name: GetInstancePriority :one
+SELECT id, kind, search_priority, download_priority FROM instances WHERE id = $1;
+
+-- name: UpdateInstancePriority :one
+UPDATE instances
+SET search_priority = sqlc.arg(search_priority),
+    download_priority = sqlc.arg(download_priority),
+    updated_at = sqlc.arg(updated_at)
+WHERE id = sqlc.arg(id)
+RETURNING id, kind, search_priority, download_priority;
+
 -- name: ListInstancesToPlan :many
 -- Instances never evaluated come first, then the one evaluated longest ago (#176).
 SELECT * FROM instances WHERE enabled ORDER BY planned_at NULLS FIRST, kind, name;
