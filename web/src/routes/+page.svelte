@@ -9,6 +9,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { api, describeError } from '#lib/api/client.js';
 	import type { components } from '#lib/api/schema.js';
 	import CheckState from '#lib/components/CheckState.svelte';
+	import PageHeader from '#lib/components/PageHeader.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import StaminaGauge from '#lib/components/StaminaGauge.svelte';
 	import { m } from '#lib/paraglide/messages.js';
@@ -52,7 +53,7 @@ SPDX-License-Identifier: EUPL-1.2
 	const globalCap = $derived(caps.data?.find((c) => c.scope === 'global'));
 </script>
 
-<h1 class="mb-4 text-2xl font-semibold">{m.dashboard_title()}</h1>
+<PageHeader title={m.dashboard_title()} />
 
 {#if instances.isPending}
 	<p aria-live="polite">{m.loading()}</p>

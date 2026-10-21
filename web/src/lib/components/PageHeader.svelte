@@ -4,16 +4,24 @@ SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import { m } from '#lib/paraglide/messages.js';
 
 	interface Props {
 		title: string;
 		description?: string;
 		status?: Snippet;
 		actions?: Snippet;
+		documentTitle?: boolean;
 	}
 
-	const { title, description, status, actions }: Props = $props();
+	const { title, description, status, actions, documentTitle = false }: Props = $props();
 </script>
+
+<svelte:head>
+	{#if documentTitle}
+		<title>{title} · {m.app_name()}</title>
+	{/if}
+</svelte:head>
 
 <header class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 	<div>

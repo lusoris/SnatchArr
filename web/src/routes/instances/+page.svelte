@@ -10,6 +10,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import CheckState from '#lib/components/CheckState.svelte';
 	import Field from '#lib/components/Field.svelte';
 	import KindSelect from '#lib/components/KindSelect.svelte';
+	import PageHeader from '#lib/components/PageHeader.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import ResetMemory from '#lib/components/ResetMemory.svelte';
 	import type { AppKind } from '#lib/kinds.js';
@@ -65,7 +66,7 @@ SPDX-License-Identifier: EUPL-1.2
 	});
 </script>
 
-<h1 class="mb-4 text-2xl font-semibold">{m.nav_instances()}</h1>
+<PageHeader title={m.nav_instances()} />
 
 {#if instances.isPending}
 	<p aria-live="polite">{m.loading()}</p>
