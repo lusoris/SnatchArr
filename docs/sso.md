@@ -18,6 +18,13 @@ Both modes resolve a role from the identity's groups ([ADR-0023](adr/0023-sso-vi
 
 Group names match exactly and case-sensitively; a name may contain spaces (`SnatchArr Viewers`), and only the space around each comma-separated entry is trimmed (`cleanTrusted` in `api/internal/config/config.go`). Both modes are disabled by default. If the initial setup has not been completed, SSO login attempts are refused until the admin account is created.
 
+### Session revocation
+
+A single sign-on session stores its origin: the mode, the subject, the groups and the role it was granted (`SSOOrigin` in `api/internal/auth/ssoorigin.go`). Every cookie-authenticated request re-resolves the role against the current configuration (`checkSSOOrigin` in `api/internal/httpapi/security_sso.go`). When the mode is disabled, the identity's groups no longer map to a role, the role differs from the stored one, or the proxy asserts a different user, the session row is deleted and the request gets `401`; the log line `httpapi: sso session revoked` carries the reason. Sessions from the local login form are not affected.
+
+- **Proxy mode** judges the groups the proxy sends with each request, so removing an identity from its group in the identity provider ends the session on its next request.
+- **OIDC** has no per-request group source: the stored token groups are judged against the configured `admin_groups` and `viewer_groups`. Removing a group from the configuration ends its sessions on their next request; removing an identity from a group in the identity provider takes effect at its next sign-in.
+
 ---
 
 ## OpenID Connect (OIDC)

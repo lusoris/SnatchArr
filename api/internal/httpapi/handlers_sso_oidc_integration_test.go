@@ -54,6 +54,7 @@ type ssoFixture struct {
 	ssoSvc *sso.Service
 	logBuf *syncBuffer
 	router chi.Router
+	sec    *Security
 }
 
 func newSSOFixture(t *testing.T, oidcCfg config.OIDCOptions, proxyCfg config.ProxyAuthOptions) *ssoFixture {
@@ -82,7 +83,7 @@ func newSSOFixture(t *testing.T, oidcCfg config.OIDCOptions, proxyCfg config.Pro
 		middleware.SecureHeaders(middleware.SecureHeadersDefaults()),
 	)
 	sso.Mount(r, PathPrefix, ssoSvc, ErrorHandler(logger))
-	sec := NewSecurity(f.sessMgr, f.keys, f.h.auth, f.apiKeys, f.clk, logger)
+	sec := NewSecurity(f.sessMgr, f.h.cfg, f.keys, f.h.auth, f.apiKeys, f.clk, logger)
 	if mErr := Mount(r, MountParams{Logger: logger, Handlers: f.h, Security: sec, CSRF: csrfMW}); mErr != nil {
 		t.Fatalf("newSSOFixture: Mount: %v", mErr)
 	}
@@ -109,6 +110,7 @@ func newSSOFixture(t *testing.T, oidcCfg config.OIDCOptions, proxyCfg config.Pro
 		ssoSvc:             ssoSvc,
 		logBuf:             logBuf,
 		router:             r,
+		sec:                sec,
 	}
 }
 
@@ -559,4 +561,53 @@ func TestOIDC_DiscoveryFailure(t *testing.T) {
 	if statusResp.StatusCode != http.StatusOK {
 		t.Errorf("status = %d, want 200", statusResp.StatusCode)
 	}
+}
+
+func TestOIDC_Revocation(t *testing.T) {
+	t.Parallel()
+	idp := newFakeIDP(t)
+	oidcCfg := config.OIDCOptions{
+		Enabled:          true,
+		IssuerURL:        idp.srv.URL,
+		ClientID:         "test-client-id",
+		ClientSecret:     "test-client-secret",
+		RedirectURL:      "http://127.0.0.1:8080/api/v1/auth/oidc/callback",
+		Scopes:           []string{"openid", "email", "profile"},
+		AdminGroups:      []string{"snatcharr-admins"},
+		ViewerGroups:     []string{"snatcharr-viewers"},
+		GroupsClaim:      "groups",
+		DiscoveryTimeout: 5 * time.Second,
+	}
+	f := newSSOFixture(t, oidcCfg, config.ProxyAuthOptions{})
+	f.ssoSvc.SetHTTPClient(idp.srv.Client())
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	if _, err := f.h.auth.Setup(ctx, "admin", "password-admin-1234"); err != nil {
+		t.Fatalf("auth.Setup: %v", err)
+	}
+
+	state, nonce := runOIDCLogin(t, f)
+	idp.setClaimsModifier(func(c idpClaims) idpClaims {
+		c.Nonce = nonce
+		c.Groups = []string{"snatcharr-viewers"}
+		return c
+	})
+
+	cbURL := buildCallbackURL(f.srv.URL, state, "mock-auth-code", "")
+	resp := runOIDCCallback(t, f, cbURL)
+	_ = resp.Body.Close()
+
+	if loc := resp.Header.Get("Location"); loc != "/" {
+		t.Fatalf("Location = %q, want /", loc)
+	}
+
+	// Positive: unchanged cfg -> 200
+	checkSessionUser(t, f, true, "viewer")
+
+	// Set f.sec cfg ViewerGroups to a different list
+	f.sec.ssoCfg.OIDC.ViewerGroups = []string{"other-groups"}
+
+	// Next GET /auth/session -> 401
+	checkSessionUser(t, f, false, "")
 }
