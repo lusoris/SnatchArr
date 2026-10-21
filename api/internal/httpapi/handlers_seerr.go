@@ -71,6 +71,9 @@ func (h *Handlers) DeleteSeerrLink(ctx context.Context, params oas.DeleteSeerrLi
 
 // TestSeerrLink probes a stored link.
 func (h *Handlers) TestSeerrLink(ctx context.Context, params oas.TestSeerrLinkParams) (*oas.ProbeResult, error) {
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
+	}
 	st, err := h.seerr.Test(ctx, params.LinkId)
 	if err != nil {
 		return nil, err

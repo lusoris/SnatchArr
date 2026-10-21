@@ -16,6 +16,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { probeMessage } from '#lib/products.js';
 	import { keys } from '#lib/query.js';
 	import { formatWhen } from '#lib/stamina.js';
+	import { session } from '#lib/session.svelte.js';
 
 	type SeerrLink = components['schemas']['SeerrLink'];
 	type SeerrLinkInput = components['schemas']['SeerrLinkInput'];
@@ -158,49 +159,53 @@ SPDX-License-Identifier: EUPL-1.2
 					{/if}
 				</p>
 				{#if link.last_error}<p class="text-sm text-danger">{link.last_error}</p>{/if}
-				<div class="mt-3 flex flex-wrap gap-2">
-					<button type="button" class="btn" onclick={() => edit(link)}>{m.action_edit()}</button>
-					<button
-						type="button"
-						class="btn"
-						disabled={probe.isPending}
-						onclick={() => probe.mutate(link.id)}>{m.action_test()}</button
-					>
-					<button
-						type="button"
-						class="btn"
-						disabled={sync.isPending}
-						onclick={() => sync.mutate(link.id)}>{m.seerr_sync()}</button
-					>
-					<button
-						type="button"
-						class="btn"
-						disabled={importInstances.isPending}
-						onclick={() => importInstances.mutate(link.id)}>{m.seerr_import()}</button
-					>
-					<ConfirmDelete
-						name={link.name}
-						disabled={remove.isPending}
-						onconfirm={() => remove.mutate(link)}
-					/>
-				</div>
+				{#if session.isAdmin}
+					<div class="mt-3 flex flex-wrap gap-2">
+						<button type="button" class="btn" onclick={() => edit(link)}>{m.action_edit()}</button>
+						<button
+							type="button"
+							class="btn"
+							disabled={probe.isPending}
+							onclick={() => probe.mutate(link.id)}>{m.action_test()}</button
+						>
+						<button
+							type="button"
+							class="btn"
+							disabled={sync.isPending}
+							onclick={() => sync.mutate(link.id)}>{m.seerr_sync()}</button
+						>
+						<button
+							type="button"
+							class="btn"
+							disabled={importInstances.isPending}
+							onclick={() => importInstances.mutate(link.id)}>{m.seerr_import()}</button
+						>
+						<ConfirmDelete
+							name={link.name}
+							disabled={remove.isPending}
+							onconfirm={() => remove.mutate(link)}
+						/>
+					</div>
+				{/if}
 			</li>
 		{/each}
 	</ul>
 {/if}
 
-{#key `${editing?.id ?? 'new'}-${formGeneration}`}
-	<SeerrLinkForm
-		link={editing}
-		instances={instances.data ?? []}
-		pending={save.isPending}
-		error={save.error}
-		onsave={(body) => save.mutate(body)}
-		oncancel={closeForm}
-		ontest={(body) => probeInput.mutate(body)}
-		testing={probeInput.isPending}
-	/>
-{/key}
+{#if session.isAdmin}
+	{#key `${editing?.id ?? 'new'}-${formGeneration}`}
+		<SeerrLinkForm
+			link={editing}
+			instances={instances.data ?? []}
+			pending={save.isPending}
+			error={save.error}
+			onsave={(body) => save.mutate(body)}
+			oncancel={closeForm}
+			ontest={(body) => probeInput.mutate(body)}
+			testing={probeInput.isPending}
+		/>
+	{/key}
+{/if}
 
 <h2 class="mt-8 mb-3 text-lg font-semibold">{m.seerr_requests_title()}</h2>
 {#if requests.isPending}
@@ -220,7 +225,9 @@ SPDX-License-Identifier: EUPL-1.2
 					<th scope="col">{m.instance_name()}</th>
 					<th scope="col">{m.seerr_resolved()}</th>
 					<th scope="col">{m.seerr_last_snatched()}</th>
-					<th scope="col"><span class="sr-only">{m.action_actions()}</span></th>
+					{#if session.isAdmin}
+						<th scope="col"><span class="sr-only">{m.action_actions()}</span></th>
+					{/if}
 				</tr>
 			</thead>
 			<tbody>
@@ -246,16 +253,18 @@ SPDX-License-Identifier: EUPL-1.2
 							{/if}
 						</td>
 						<td>{formatWhen(r.last_snatched_at, getLocale())}</td>
-						<td>
-							<button
-								type="button"
-								class="btn"
-								disabled={!r.resolved || snatch.isPending}
-								onclick={() =>
-									snatch.mutate({ linkId: r.link_id, requestId: r.request_id, title: r.title })}
-								>{m.seerr_snatch_now()}</button
-							>
-						</td>
+						{#if session.isAdmin}
+							<td>
+								<button
+									type="button"
+									class="btn"
+									disabled={!r.resolved || snatch.isPending}
+									onclick={() =>
+										snatch.mutate({ linkId: r.link_id, requestId: r.request_id, title: r.title })}
+									>{m.seerr_snatch_now()}</button
+								>
+							</td>
+						{/if}
 					</tr>
 				{/each}
 			</tbody>

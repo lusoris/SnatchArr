@@ -27,13 +27,19 @@
 //	snatcharr.oidc.client_secret APP_SNATCHARR_OIDC_CLIENT_SECRET OAuth2 client secret
 //	snatcharr.oidc.redirect_url  APP_SNATCHARR_OIDC_REDIRECT_URL  OAuth2 callback URL
 //	snatcharr.oidc.scopes        APP_SNATCHARR_OIDC_SCOPES        comma-separated scopes (default openid,email,profile)
-//	snatcharr.oidc.allowed_subjects APP_SNATCHARR_OIDC_ALLOWED_SUBJECTS comma-separated allowed sub claims
-//	snatcharr.oidc.allowed_emails   APP_SNATCHARR_OIDC_ALLOWED_EMAILS   comma-separated allowed emails
+//	snatcharr.oidc.admin_groups  APP_SNATCHARR_OIDC_ADMIN_GROUPS  comma-separated groups granting admin role
+//	snatcharr.oidc.viewer_groups APP_SNATCHARR_OIDC_VIEWER_GROUPS comma-separated groups granting viewer role
+//	snatcharr.oidc.groups_claim  APP_SNATCHARR_OIDC_GROUPS_CLAIM  claim name holding groups (default groups)
+//	snatcharr.oidc.allowed_subjects APP_SNATCHARR_OIDC_ALLOWED_SUBJECTS deprecated; rejected if set
+//	snatcharr.oidc.allowed_emails   APP_SNATCHARR_OIDC_ALLOWED_EMAILS   deprecated; rejected if set
 //	snatcharr.oidc.discovery_timeout APP_SNATCHARR_OIDC_DISCOVERY_TIMEOUT discovery timeout (default 10s)
 //	snatcharr.proxy_auth.enabled APP_SNATCHARR_PROXY_AUTH_ENABLED enable trusted proxy-header auth
 //	snatcharr.proxy_auth.header  APP_SNATCHARR_PROXY_AUTH_HEADER  trusted proxy user header name (default Remote-User)
+//	snatcharr.proxy_auth.groups_header APP_SNATCHARR_PROXY_AUTH_GROUPS_HEADER header holding pipe-separated groups (default X-authentik-groups)
 //	snatcharr.proxy_auth.trusted_cidrs APP_SNATCHARR_PROXY_AUTH_TRUSTED_CIDRS comma-separated trusted proxy CIDRs
-//	snatcharr.proxy_auth.allowed_users APP_SNATCHARR_PROXY_AUTH_ALLOWED_USERS comma-separated allowed proxy users
+//	snatcharr.proxy_auth.admin_groups  APP_SNATCHARR_PROXY_AUTH_ADMIN_GROUPS  comma-separated groups granting admin role
+//	snatcharr.proxy_auth.viewer_groups APP_SNATCHARR_PROXY_AUTH_VIEWER_GROUPS comma-separated groups granting viewer role
+//	snatcharr.proxy_auth.allowed_users APP_SNATCHARR_PROXY_AUTH_ALLOWED_USERS deprecated; rejected if set
 package config
 
 import (
@@ -126,6 +132,9 @@ type OIDCOptions struct {
 	Scopes           []string      `koanf:"scopes"`
 	AllowedSubjects  []string      `koanf:"allowed_subjects"`
 	AllowedEmails    []string      `koanf:"allowed_emails"`
+	AdminGroups      []string      `koanf:"admin_groups"`
+	ViewerGroups     []string      `koanf:"viewer_groups"`
+	GroupsClaim      string        `koanf:"groups_claim"`
 	DiscoveryTimeout time.Duration `koanf:"discovery_timeout"`
 }
 
@@ -143,8 +152,20 @@ func (o OIDCOptions) Validate(profile Profile) error {
 	if err := validateOIDCRedirect(o.RedirectURL); err != nil {
 		return err
 	}
-	if len(o.AllowedSubjects) == 0 && len(o.AllowedEmails) == 0 {
-		return errors.New("config: oidc requires at least one allowed subject or allowed email")
+	if len(o.AllowedSubjects) > 0 || len(o.AllowedEmails) > 0 {
+		return errors.New("config: oidc.allowed_subjects and oidc.allowed_emails are deprecated; use oidc.admin_groups and oidc.viewer_groups")
+	}
+	return validateGroupLists("oidc", o.AdminGroups, o.ViewerGroups)
+}
+
+func validateGroupLists(prefix string, admin, viewer []string) error {
+	if len(admin) == 0 {
+		return fmt.Errorf("config: %s.admin_groups must not be empty when %s is enabled", prefix, prefix)
+	}
+	for _, ag := range admin {
+		if slices.Contains(viewer, ag) {
+			return fmt.Errorf("config: group %q appears in both %s.admin_groups and %s.viewer_groups", ag, prefix, prefix)
+		}
 	}
 	return nil
 }
@@ -181,8 +202,11 @@ func validateOIDCRedirect(redirectURL string) error {
 type ProxyAuthOptions struct {
 	Enabled      bool     `koanf:"enabled"`
 	Header       string   `koanf:"header"`
+	GroupsHeader string   `koanf:"groups_header"`
 	TrustedCIDRs []string `koanf:"trusted_cidrs"`
 	AllowedUsers []string `koanf:"allowed_users"`
+	AdminGroups  []string `koanf:"admin_groups"`
+	ViewerGroups []string `koanf:"viewer_groups"`
 }
 
 // Validate checks proxy auth configuration when enabled.
@@ -190,13 +214,26 @@ func (p ProxyAuthOptions) Validate() error {
 	if !p.Enabled {
 		return nil
 	}
-	if strings.TrimSpace(p.Header) == "" || !isValidHeaderToken(p.Header) {
-		return fmt.Errorf("config: proxy_auth.header must be a valid HTTP header token, got %q", p.Header)
+	if err := validateProxyHeaders(p.Header, p.GroupsHeader); err != nil {
+		return err
 	}
 	if err := validateProxyCIDRs(p.TrustedCIDRs); err != nil {
 		return err
 	}
-	return validateProxyUsers(p.AllowedUsers)
+	if len(p.AllowedUsers) > 0 {
+		return errors.New("config: proxy_auth.allowed_users is deprecated; use proxy_auth.admin_groups and proxy_auth.viewer_groups")
+	}
+	return validateGroupLists("proxy_auth", p.AdminGroups, p.ViewerGroups)
+}
+
+func validateProxyHeaders(header, groupsHeader string) error {
+	if strings.TrimSpace(header) == "" || !isValidHeaderToken(header) {
+		return fmt.Errorf("config: proxy_auth.header must be a valid HTTP header token, got %q", header)
+	}
+	if strings.TrimSpace(groupsHeader) == "" || !isValidHeaderToken(groupsHeader) {
+		return fmt.Errorf("config: proxy_auth.groups_header must be a valid HTTP header token, got %q", groupsHeader)
+	}
+	return nil
 }
 
 func validateProxyCIDRs(cidrs []string) error {
@@ -215,18 +252,6 @@ func validateProxyCIDRs(cidrs []string) error {
 		ones, _ := ipnet.Mask.Size()
 		if ones == 0 {
 			return fmt.Errorf("config: proxy_auth refuses catch-all CIDR %q", entry)
-		}
-	}
-	return nil
-}
-
-func validateProxyUsers(users []string) error {
-	if len(users) == 0 {
-		return errors.New("config: proxy_auth.allowed_users requires at least one user when proxy auth is enabled")
-	}
-	for _, u := range users {
-		if strings.TrimSpace(u) == "" {
-			return errors.New("config: proxy_auth.allowed_users must not contain empty users")
 		}
 	}
 	return nil
@@ -306,10 +331,12 @@ func Default() Options {
 		Session:   SessionOptions{TTL: 8 * time.Hour, Secure: true},
 		OIDC: OIDCOptions{
 			Scopes:           []string{"openid", "email", "profile"},
+			GroupsClaim:      "groups",
 			DiscoveryTimeout: 10 * time.Second,
 		},
 		ProxyAuth: ProxyAuthOptions{
-			Header: "Remote-User",
+			Header:       "Remote-User",
+			GroupsHeader: "X-authentik-groups",
 		},
 		Prowlarr: ProwlarrOptions{
 			LimitThreshold: 0.9,
@@ -326,25 +353,8 @@ func Load(cfg *config.Config) (Options, error) {
 		return Options{}, fmt.Errorf("config: unmarshal snatcharr: %w", err)
 	}
 	o.Proxy.Trusted = cleanTrusted(o.Proxy.Trusted)
-	o.ProxyAuth.TrustedCIDRs = cleanTrusted(o.ProxyAuth.TrustedCIDRs)
-	o.ProxyAuth.AllowedUsers = cleanTrusted(o.ProxyAuth.AllowedUsers)
-	o.OIDC.AllowedSubjects = cleanTrusted(o.OIDC.AllowedSubjects)
-	o.OIDC.AllowedEmails = cleanTrusted(o.OIDC.AllowedEmails)
-	o.OIDC.Scopes = cleanTrusted(o.OIDC.Scopes)
-	if len(o.OIDC.Scopes) == 0 {
-		o.OIDC.Scopes = []string{"openid", "email", "profile"}
-	} else if !slices.Contains(o.OIDC.Scopes, "openid") {
-		o.OIDC.Scopes = append([]string{"openid"}, o.OIDC.Scopes...)
-	}
-	if o.OIDC.DiscoveryTimeout <= 0 {
-		o.OIDC.DiscoveryTimeout = 10 * time.Second
-	}
-	if o.OIDC.RedirectURL == "" && o.Public.URL != "" {
-		o.OIDC.RedirectURL = strings.TrimRight(o.Public.URL, "/") + "/api/v1/auth/oidc/callback"
-	}
-	if o.ProxyAuth.Header == "" {
-		o.ProxyAuth.Header = "Remote-User"
-	}
+	normalizeOIDC(&o.OIDC, o.Public.URL)
+	normalizeProxyAuth(&o.ProxyAuth)
 	if err := o.Validate(); err != nil {
 		return Options{}, err
 	}
@@ -352,6 +362,41 @@ func Load(cfg *config.Config) (Options, error) {
 		return Options{}, err
 	}
 	return o, nil
+}
+
+func normalizeOIDC(o *OIDCOptions, publicURL string) {
+	o.AllowedSubjects = cleanTrusted(o.AllowedSubjects)
+	o.AllowedEmails = cleanTrusted(o.AllowedEmails)
+	o.AdminGroups = cleanTrusted(o.AdminGroups)
+	o.ViewerGroups = cleanTrusted(o.ViewerGroups)
+	o.Scopes = cleanTrusted(o.Scopes)
+	if len(o.Scopes) == 0 {
+		o.Scopes = []string{"openid", "email", "profile"}
+	} else if !slices.Contains(o.Scopes, "openid") {
+		o.Scopes = append([]string{"openid"}, o.Scopes...)
+	}
+	if o.DiscoveryTimeout <= 0 {
+		o.DiscoveryTimeout = 10 * time.Second
+	}
+	if o.GroupsClaim == "" {
+		o.GroupsClaim = "groups"
+	}
+	if o.RedirectURL == "" && publicURL != "" {
+		o.RedirectURL = strings.TrimRight(publicURL, "/") + "/api/v1/auth/oidc/callback"
+	}
+}
+
+func normalizeProxyAuth(p *ProxyAuthOptions) {
+	p.TrustedCIDRs = cleanTrusted(p.TrustedCIDRs)
+	p.AllowedUsers = cleanTrusted(p.AllowedUsers)
+	p.AdminGroups = cleanTrusted(p.AdminGroups)
+	p.ViewerGroups = cleanTrusted(p.ViewerGroups)
+	if p.Header == "" {
+		p.Header = "Remote-User"
+	}
+	if p.GroupsHeader == "" {
+		p.GroupsHeader = "X-authentik-groups"
+	}
 }
 
 func cleanTrusted(raw []string) []string {
@@ -449,11 +494,17 @@ func CompoundKeys() []string {
 		"snatcharr.oidc.client_id",
 		"snatcharr.oidc.client_secret",
 		"snatcharr.oidc.redirect_url",
+		"snatcharr.oidc.admin_groups",
+		"snatcharr.oidc.viewer_groups",
+		"snatcharr.oidc.groups_claim",
 		"snatcharr.oidc.allowed_subjects",
 		"snatcharr.oidc.allowed_emails",
 		"snatcharr.oidc.discovery_timeout",
 		"snatcharr.proxy_auth.enabled",
 		"snatcharr.proxy_auth.header",
+		"snatcharr.proxy_auth.groups_header",
+		"snatcharr.proxy_auth.admin_groups",
+		"snatcharr.proxy_auth.viewer_groups",
 		"snatcharr.proxy_auth.trusted_cidrs",
 		"snatcharr.proxy_auth.allowed_users",
 		"snatcharr.prowlarr.limit_threshold",

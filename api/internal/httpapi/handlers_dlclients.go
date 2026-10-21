@@ -71,6 +71,9 @@ func (h *Handlers) DeleteDownloadClient(ctx context.Context, params oas.DeleteDo
 
 // TestDownloadClient observes a stored client now.
 func (h *Handlers) TestDownloadClient(ctx context.Context, params oas.TestDownloadClientParams) (*oas.DownloadClientStatus, error) {
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
+	}
 	snap, err := h.clients.Test(ctx, params.ClientId)
 	if err != nil {
 		return nil, err

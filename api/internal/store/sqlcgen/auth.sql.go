@@ -43,7 +43,7 @@ func (q *Queries) CountUsers(ctx context.Context) (int64, error) {
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (id, username, password_hash, role, created_at, updated_at)
 VALUES ($1, $2, $3, $4, $5, $5)
-RETURNING id, username, password_hash, role, created_at, updated_at
+RETURNING id, username, password_hash, role, created_at, updated_at, external_id
 `
 
 type CreateUserParams struct {
@@ -70,6 +70,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.Role,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ExternalID,
 	)
 	return i, err
 }
@@ -136,7 +137,7 @@ func (q *Queries) GetAPIKey(ctx context.Context, id string) (ApiKey, error) {
 }
 
 const getFirstAdmin = `-- name: GetFirstAdmin :one
-SELECT id, username, password_hash, role, created_at, updated_at FROM users
+SELECT id, username, password_hash, role, created_at, updated_at, external_id FROM users
 WHERE role = 'admin'
 ORDER BY created_at, id
 LIMIT 1
@@ -152,6 +153,7 @@ func (q *Queries) GetFirstAdmin(ctx context.Context) (User, error) {
 		&i.Role,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ExternalID,
 	)
 	return i, err
 }
@@ -175,7 +177,7 @@ func (q *Queries) GetLoginLockout(ctx context.Context, key string) (LoginLockout
 }
 
 const getUser = `-- name: GetUser :one
-SELECT id, username, password_hash, role, created_at, updated_at FROM users WHERE id = $1
+SELECT id, username, password_hash, role, created_at, updated_at, external_id FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (User, error) {
@@ -188,12 +190,13 @@ func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.Role,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ExternalID,
 	)
 	return i, err
 }
 
 const getUserByUsername = `-- name: GetUserByUsername :one
-SELECT id, username, password_hash, role, created_at, updated_at FROM users WHERE username = $1
+SELECT id, username, password_hash, role, created_at, updated_at, external_id FROM users WHERE username = $1
 `
 
 func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User, error) {
@@ -206,6 +209,7 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 		&i.Role,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ExternalID,
 	)
 	return i, err
 }
@@ -292,7 +296,7 @@ func (q *Queries) ListAPIKeysForOwner(ctx context.Context, ownerID uuid.UUID) ([
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, username, password_hash, role, created_at, updated_at FROM users ORDER BY username
+SELECT id, username, password_hash, role, created_at, updated_at, external_id FROM users ORDER BY username
 `
 
 func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
@@ -311,6 +315,7 @@ func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
 			&i.Role,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ExternalID,
 		); err != nil {
 			return nil, err
 		}
@@ -577,4 +582,41 @@ type UpdateUserPasswordParams struct {
 func (q *Queries) UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error {
 	_, err := q.db.Exec(ctx, updateUserPassword, arg.ID, arg.PasswordHash, arg.UpdatedAt)
 	return err
+}
+
+const upsertExternalViewer = `-- name: UpsertExternalViewer :one
+INSERT INTO users (id, username, password_hash, role, external_id, created_at, updated_at)
+VALUES ($1, $2, $3, 'viewer', $4, $5, $5)
+ON CONFLICT (external_id) DO UPDATE
+SET updated_at = EXCLUDED.updated_at
+RETURNING id, username, password_hash, role, created_at, updated_at, external_id
+`
+
+type UpsertExternalViewerParams struct {
+	ID           uuid.UUID
+	Username     string
+	PasswordHash string
+	ExternalID   *string
+	CreatedAt    time.Time
+}
+
+func (q *Queries) UpsertExternalViewer(ctx context.Context, arg UpsertExternalViewerParams) (User, error) {
+	row := q.db.QueryRow(ctx, upsertExternalViewer,
+		arg.ID,
+		arg.Username,
+		arg.PasswordHash,
+		arg.ExternalID,
+		arg.CreatedAt,
+	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.PasswordHash,
+		&i.Role,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ExternalID,
+	)
+	return i, err
 }

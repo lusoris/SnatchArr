@@ -89,6 +89,9 @@ func (h *Handlers) DeleteInstance(ctx context.Context, params oas.DeleteInstance
 
 // TestInstance probes a stored instance.
 func (h *Handlers) TestInstance(ctx context.Context, params oas.TestInstanceParams) (*oas.ProbeResult, error) {
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
+	}
 	res, err := h.instances.Test(ctx, params.InstanceId)
 	if err != nil {
 		return nil, err

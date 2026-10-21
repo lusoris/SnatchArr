@@ -9,6 +9,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import type { components } from '#lib/api/schema.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { keys } from '#lib/query.js';
+	import { session } from '#lib/session.svelte.js';
 
 	type Schedule = components['schemas']['Schedule'];
 	type Instance = components['schemas']['Instance'];
@@ -69,7 +70,9 @@ SPDX-License-Identifier: EUPL-1.2
 				<th scope="col">{m.schedule_days()}</th>
 				<th scope="col">{m.schedule_window()}</th>
 				<th scope="col">{m.schedule_action()}</th>
-				<th scope="col"><span class="sr-only">{m.action_actions()}</span></th>
+				{#if session.isAdmin}
+					<th scope="col"><span class="sr-only">{m.action_actions()}</span></th>
+				{/if}
 			</tr>
 		</thead>
 		<tbody>
@@ -95,40 +98,42 @@ SPDX-License-Identifier: EUPL-1.2
 							</div>
 						{/if}
 					</td>
-					<td>
-						{#if deletingId === s.id}
-							<div class="flex flex-wrap items-center gap-2">
-								<span class="text-xs font-medium text-danger">
-									{m.schedule_delete_confirm({ name: s.name })}
-								</span>
-								<button
-									type="button"
-									class="btn btn-primary"
-									disabled={remove.isPending}
-									onclick={() => remove.mutate(s.id)}
-								>
-									{m.schedule_confirm_delete()}
-								</button>
-								<button
-									type="button"
-									class="btn"
-									disabled={remove.isPending}
-									onclick={() => (deletingId = null)}
-								>
-									{m.schedule_cancel()}
-								</button>
-							</div>
-						{:else}
-							<div class="flex items-center gap-2">
-								<button type="button" class="btn" onclick={() => onedit(s)}>
-									{m.schedule_edit()}
-								</button>
-								<button type="button" class="btn" onclick={() => (deletingId = s.id)}>
-									{m.schedule_delete()}
-								</button>
-							</div>
-						{/if}
-					</td>
+					{#if session.isAdmin}
+						<td>
+							{#if deletingId === s.id}
+								<div class="flex flex-wrap items-center gap-2">
+									<span class="text-xs font-medium text-danger">
+										{m.schedule_delete_confirm({ name: s.name })}
+									</span>
+									<button
+										type="button"
+										class="btn btn-primary"
+										disabled={remove.isPending}
+										onclick={() => remove.mutate(s.id)}
+									>
+										{m.schedule_confirm_delete()}
+									</button>
+									<button
+										type="button"
+										class="btn"
+										disabled={remove.isPending}
+										onclick={() => (deletingId = null)}
+									>
+										{m.schedule_cancel()}
+									</button>
+								</div>
+							{:else}
+								<div class="flex items-center gap-2">
+									<button type="button" class="btn" onclick={() => onedit(s)}>
+										{m.schedule_edit()}
+									</button>
+									<button type="button" class="btn" onclick={() => (deletingId = s.id)}>
+										{m.schedule_delete()}
+									</button>
+								</div>
+							{/if}
+						</td>
+					{/if}
 				</tr>
 			{/each}
 		</tbody>

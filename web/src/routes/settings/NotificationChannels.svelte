@@ -11,6 +11,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { keys } from '#lib/query.js';
+	import { session } from '#lib/session.svelte.js';
 
 	type ChannelKind = components['schemas']['NotificationChannelKind'];
 	// Product names, the same in every locale.
@@ -152,7 +153,9 @@ SPDX-License-Identifier: EUPL-1.2
 					<th scope="col">{m.channel_kind()}</th>
 					<th scope="col">{m.channel_enabled()}</th>
 					<th scope="col">{m.channel_has_secret()}</th>
-					<th scope="col"><span class="sr-only">{m.action_actions()}</span></th>
+					{#if session.isAdmin}
+						<th scope="col"><span class="sr-only">{m.action_actions()}</span></th>
+					{/if}
 				</tr>
 			</thead>
 			<tbody>
@@ -162,24 +165,26 @@ SPDX-License-Identifier: EUPL-1.2
 						<td>{ch.kind}</td>
 						<td>{ch.enabled ? '✓' : '–'}</td>
 						<td>{ch.has_secret ? '✓' : '–'}</td>
-						<td class="flex gap-2">
-							<button
-								type="button"
-								class="btn"
-								disabled={testChannel.isPending}
-								onclick={() => testChannel.mutate(ch.id)}
-							>
-								{m.channel_test()}
-							</button>
-							<button
-								type="button"
-								class="btn"
-								disabled={remove.isPending}
-								onclick={() => remove.mutate(ch.id)}
-							>
-								{m.channel_delete()}
-							</button>
-						</td>
+						{#if session.isAdmin}
+							<td class="flex gap-2">
+								<button
+									type="button"
+									class="btn"
+									disabled={testChannel.isPending}
+									onclick={() => testChannel.mutate(ch.id)}
+								>
+									{m.channel_test()}
+								</button>
+								<button
+									type="button"
+									class="btn"
+									disabled={remove.isPending}
+									onclick={() => remove.mutate(ch.id)}
+								>
+									{m.channel_delete()}
+								</button>
+							</td>
+						{/if}
 					</tr>
 				{/each}
 			</tbody>
@@ -187,124 +192,132 @@ SPDX-License-Identifier: EUPL-1.2
 	</div>
 {/if}
 
-<form
-	class="card flex max-w-xl flex-col gap-4"
-	onsubmit={(e) => {
-		e.preventDefault();
-		create.mutate();
-	}}
->
-	<h4 class="font-medium">{m.channel_add()}</h4>
-	<Field id="channel-name" label={m.channel_name()}>
-		<input id="channel-name" class="input" required bind:value={name} />
-	</Field>
-	<Field id="channel-kind" label={m.channel_kind()}>
-		<select id="channel-kind" class="select" bind:value={kind}>
-			{#each channelKinds as k (k.value)}
-				<option value={k.value}>{k.label}</option>
-			{/each}
-		</select>
-	</Field>
-
-	{#if ['webhook', 'discord', 'slack', 'teams'].includes(kind)}
-		<Field id="channel-url" label={m.channel_webhook_url()}>
-			<input id="channel-url" class="input" type="url" required bind:value={webhookUrl} />
+{#if session.isAdmin}
+	<form
+		class="card flex max-w-xl flex-col gap-4"
+		onsubmit={(e) => {
+			e.preventDefault();
+			create.mutate();
+		}}
+	>
+		<h4 class="font-medium">{m.channel_add()}</h4>
+		<Field id="channel-name" label={m.channel_name()}>
+			<input id="channel-name" class="input" required bind:value={name} />
 		</Field>
-	{/if}
+		<Field id="channel-kind" label={m.channel_kind()}>
+			<select id="channel-kind" class="select" bind:value={kind}>
+				{#each channelKinds as k (k.value)}
+					<option value={k.value}>{k.label}</option>
+				{/each}
+			</select>
+		</Field>
 
-	{#if kind === 'apprise'}
-		<Field
-			id="channel-apprise-url"
-			label={m.channel_apprise_url()}
-			hint={m.channel_apprise_url_hint()}
-		>
-			<input
+		{#if ['webhook', 'discord', 'slack', 'teams'].includes(kind)}
+			<Field id="channel-url" label={m.channel_webhook_url()}>
+				<input id="channel-url" class="input" type="url" required bind:value={webhookUrl} />
+			</Field>
+		{/if}
+
+		{#if kind === 'apprise'}
+			<Field
 				id="channel-apprise-url"
-				class="input"
-				type="url"
-				required
-				autocomplete="off"
-				aria-describedby="channel-apprise-url-hint"
-				bind:value={webhookUrl}
-			/>
-		</Field>
-		<Field id="channel-username" label={m.channel_username()}>
-			<input id="channel-username" class="input" autocomplete="off" bind:value={username} />
-		</Field>
-		<Field id="channel-password" label={m.channel_password()}>
-			<input
-				id="channel-password"
-				class="input"
-				type="password"
-				autocomplete="new-password"
-				bind:value={secret}
-			/>
-		</Field>
-		<Field id="channel-tags" label={m.channel_tags()} hint={m.channel_tags_hint()}>
-			<input
-				id="channel-tags"
-				class="input"
-				aria-describedby="channel-tags-hint"
-				bind:value={tags}
-			/>
-		</Field>
-	{/if}
+				label={m.channel_apprise_url()}
+				hint={m.channel_apprise_url_hint()}
+			>
+				<input
+					id="channel-apprise-url"
+					class="input"
+					type="url"
+					required
+					autocomplete="off"
+					aria-describedby="channel-apprise-url-hint"
+					bind:value={webhookUrl}
+				/>
+			</Field>
+			<Field id="channel-username" label={m.channel_username()}>
+				<input id="channel-username" class="input" autocomplete="off" bind:value={username} />
+			</Field>
+			<Field id="channel-password" label={m.channel_password()}>
+				<input
+					id="channel-password"
+					class="input"
+					type="password"
+					autocomplete="new-password"
+					bind:value={secret}
+				/>
+			</Field>
+			<Field id="channel-tags" label={m.channel_tags()} hint={m.channel_tags_hint()}>
+				<input
+					id="channel-tags"
+					class="input"
+					aria-describedby="channel-tags-hint"
+					bind:value={tags}
+				/>
+			</Field>
+		{/if}
 
-	{#if ['ntfy', 'gotify'].includes(kind)}
-		<Field id="channel-server-url" label={m.channel_server_url()}>
-			<input id="channel-server-url" class="input" type="url" required bind:value={serverUrl} />
-		</Field>
-	{/if}
+		{#if ['ntfy', 'gotify'].includes(kind)}
+			<Field id="channel-server-url" label={m.channel_server_url()}>
+				<input id="channel-server-url" class="input" type="url" required bind:value={serverUrl} />
+			</Field>
+		{/if}
 
-	{#if kind === 'ntfy'}
-		<Field id="channel-topic" label={m.channel_topic()}>
-			<input id="channel-topic" class="input" required bind:value={topic} />
-		</Field>
-	{/if}
+		{#if kind === 'ntfy'}
+			<Field id="channel-topic" label={m.channel_topic()}>
+				<input id="channel-topic" class="input" required bind:value={topic} />
+			</Field>
+		{/if}
 
-	{#if kind === 'slack'}
-		<Field id="channel-slack" label={m.channel_slack_channel()}>
-			<input id="channel-slack" class="input" bind:value={slackChannel} />
-		</Field>
-	{/if}
+		{#if kind === 'slack'}
+			<Field id="channel-slack" label={m.channel_slack_channel()}>
+				<input id="channel-slack" class="input" bind:value={slackChannel} />
+			</Field>
+		{/if}
 
-	{#if kind === 'telegram'}
-		<Field id="channel-bot-token" label={m.channel_bot_token()}>
-			<input id="channel-bot-token" class="input" type="password" required bind:value={botToken} />
-		</Field>
-		<Field id="channel-chat-id" label={m.channel_chat_id()}>
-			<input id="channel-chat-id" class="input" required bind:value={chatId} />
-		</Field>
-	{/if}
+		{#if kind === 'telegram'}
+			<Field id="channel-bot-token" label={m.channel_bot_token()}>
+				<input
+					id="channel-bot-token"
+					class="input"
+					type="password"
+					required
+					bind:value={botToken}
+				/>
+			</Field>
+			<Field id="channel-chat-id" label={m.channel_chat_id()}>
+				<input id="channel-chat-id" class="input" required bind:value={chatId} />
+			</Field>
+		{/if}
 
-	{#if ['webhook', 'ntfy', 'gotify'].includes(kind)}
-		<Field id="channel-secret" label={m.channel_secret()}>
-			<input
-				id="channel-secret"
-				class="input"
-				type="password"
-				required={kind === 'gotify'}
-				bind:value={secret}
-			/>
-		</Field>
-	{/if}
+		{#if ['webhook', 'ntfy', 'gotify'].includes(kind)}
+			<Field id="channel-secret" label={m.channel_secret()}>
+				<input
+					id="channel-secret"
+					class="input"
+					type="password"
+					required={kind === 'gotify'}
+					bind:value={secret}
+				/>
+			</Field>
+		{/if}
 
-	{#if kind === 'webhook'}
-		<div class="flex flex-col gap-2">
-			<label class="flex items-center gap-2 text-sm">
-				<input type="checkbox" bind:checked={allowPrivate} />
-				<span>{m.channel_allow_private()}</span>
-			</label>
-			<label class="flex items-center gap-2 text-sm">
-				<input type="checkbox" bind:checked={allowInsecure} />
-				<span>{m.channel_allow_insecure()}</span>
-			</label>
+		{#if kind === 'webhook'}
+			<div class="flex flex-col gap-2">
+				<label class="flex items-center gap-2 text-sm">
+					<input type="checkbox" bind:checked={allowPrivate} />
+					<span>{m.channel_allow_private()}</span>
+				</label>
+				<label class="flex items-center gap-2 text-sm">
+					<input type="checkbox" bind:checked={allowInsecure} />
+					<span>{m.channel_allow_insecure()}</span>
+				</label>
+			</div>
+		{/if}
+
+		<div>
+			<button type="submit" class="btn btn-primary" disabled={create.isPending}>
+				{m.channel_add()}
+			</button>
 		</div>
-	{/if}
-
-	<div>
-		<button type="submit" class="btn btn-primary" disabled={create.isPending}>
-			{m.channel_add()}
-		</button>
-	</div>
-</form>
+	</form>
+{/if}

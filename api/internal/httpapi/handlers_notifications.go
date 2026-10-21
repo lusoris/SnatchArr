@@ -36,6 +36,9 @@ func (h *Handlers) GetNotificationChannel(ctx context.Context, params oas.GetNot
 
 // CreateNotificationChannel implements createNotificationChannel operation.
 func (h *Handlers) CreateNotificationChannel(ctx context.Context, req *oas.NotificationChannelInput) (*oas.NotificationChannel, error) {
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
+	}
 	in := domain.NotificationChannelInput{
 		Name:    req.Name,
 		Kind:    domain.ChannelKind(req.Kind),
@@ -55,6 +58,9 @@ func (h *Handlers) CreateNotificationChannel(ctx context.Context, req *oas.Notif
 
 // UpdateNotificationChannel implements updateNotificationChannel operation.
 func (h *Handlers) UpdateNotificationChannel(ctx context.Context, req *oas.NotificationChannelUpdate, params oas.UpdateNotificationChannelParams) (*oas.NotificationChannel, error) {
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
+	}
 	in := domain.NotificationChannelInput{
 		Name:    req.Name,
 		Kind:    domain.ChannelKind(req.Kind),
@@ -74,11 +80,17 @@ func (h *Handlers) UpdateNotificationChannel(ctx context.Context, req *oas.Notif
 
 // DeleteNotificationChannel implements deleteNotificationChannel operation.
 func (h *Handlers) DeleteNotificationChannel(ctx context.Context, params oas.DeleteNotificationChannelParams) error {
+	if err := requireAdmin(ctx); err != nil {
+		return err
+	}
 	return h.notify.DeleteChannel(ctx, params.ChannelId)
 }
 
 // TestNotificationChannel implements testNotificationChannel operation.
 func (h *Handlers) TestNotificationChannel(ctx context.Context, params oas.TestNotificationChannelParams) error {
+	if err := requireAdmin(ctx); err != nil {
+		return err
+	}
 	return h.notify.TestChannel(ctx, params.ChannelId)
 }
 
@@ -107,6 +119,9 @@ func (h *Handlers) GetNotificationRule(ctx context.Context, params oas.GetNotifi
 
 // CreateNotificationRule implements createNotificationRule operation.
 func (h *Handlers) CreateNotificationRule(ctx context.Context, req *oas.NotificationRuleInput) (*oas.NotificationRule, error) {
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
+	}
 	thresh := req.Threshold
 	if thresh <= 0 {
 		thresh = 1
@@ -132,6 +147,9 @@ func (h *Handlers) CreateNotificationRule(ctx context.Context, req *oas.Notifica
 
 // UpdateNotificationRule implements updateNotificationRule operation.
 func (h *Handlers) UpdateNotificationRule(ctx context.Context, req *oas.NotificationRuleUpdate, params oas.UpdateNotificationRuleParams) (*oas.NotificationRule, error) {
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
+	}
 	thresh := req.Threshold
 	if thresh <= 0 {
 		thresh = 1
@@ -157,5 +175,8 @@ func (h *Handlers) UpdateNotificationRule(ctx context.Context, req *oas.Notifica
 
 // DeleteNotificationRule implements deleteNotificationRule operation.
 func (h *Handlers) DeleteNotificationRule(ctx context.Context, params oas.DeleteNotificationRuleParams) error {
+	if err := requireAdmin(ctx); err != nil {
+		return err
+	}
 	return h.notify.DeleteRule(ctx, params.RuleId)
 }

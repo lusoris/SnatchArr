@@ -45,11 +45,15 @@ data:
   {{- if .Values.auth.oidc.scopes }}
   APP_SNATCHARR_OIDC_SCOPES: {{ join "," .Values.auth.oidc.scopes | quote }}
   {{- end }}
-  {{- if .Values.auth.oidc.allowedSubjects }}
-  APP_SNATCHARR_OIDC_ALLOWED_SUBJECTS: {{ join "," .Values.auth.oidc.allowedSubjects | quote }}
+  {{- if not .Values.auth.oidc.adminGroups }}
+  {{- fail "auth.oidc.adminGroups must name at least one group when auth.oidc.enabled is true" }}
   {{- end }}
-  {{- if .Values.auth.oidc.allowedEmails }}
-  APP_SNATCHARR_OIDC_ALLOWED_EMAILS: {{ join "," .Values.auth.oidc.allowedEmails | quote }}
+  APP_SNATCHARR_OIDC_ADMIN_GROUPS: {{ join "," .Values.auth.oidc.adminGroups | quote }}
+  {{- if .Values.auth.oidc.viewerGroups }}
+  APP_SNATCHARR_OIDC_VIEWER_GROUPS: {{ join "," .Values.auth.oidc.viewerGroups | quote }}
+  {{- end }}
+  {{- with .Values.auth.oidc.groupsClaim }}
+  APP_SNATCHARR_OIDC_GROUPS_CLAIM: {{ . | quote }}
   {{- end }}
   {{- with .Values.auth.oidc.discoveryTimeout }}
   APP_SNATCHARR_OIDC_DISCOVERY_TIMEOUT: {{ . | quote }}
@@ -63,7 +67,14 @@ data:
   {{- if .Values.auth.proxyAuth.trustedCidrs }}
   APP_SNATCHARR_PROXY_AUTH_TRUSTED_CIDRS: {{ join "," .Values.auth.proxyAuth.trustedCidrs | quote }}
   {{- end }}
-  {{- if .Values.auth.proxyAuth.allowedUsers }}
-  APP_SNATCHARR_PROXY_AUTH_ALLOWED_USERS: {{ join "," .Values.auth.proxyAuth.allowedUsers | quote }}
+  {{- with .Values.auth.proxyAuth.groupsHeader }}
+  APP_SNATCHARR_PROXY_AUTH_GROUPS_HEADER: {{ . | quote }}
+  {{- end }}
+  {{- if not .Values.auth.proxyAuth.adminGroups }}
+  {{- fail "auth.proxyAuth.adminGroups must name at least one group when auth.proxyAuth.enabled is true" }}
+  {{- end }}
+  APP_SNATCHARR_PROXY_AUTH_ADMIN_GROUPS: {{ join "," .Values.auth.proxyAuth.adminGroups | quote }}
+  {{- if .Values.auth.proxyAuth.viewerGroups }}
+  APP_SNATCHARR_PROXY_AUTH_VIEWER_GROUPS: {{ join "," .Values.auth.proxyAuth.viewerGroups | quote }}
   {{- end }}
   {{- end }}

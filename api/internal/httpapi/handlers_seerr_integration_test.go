@@ -208,9 +208,11 @@ func TestSeerrLinkProbe(t *testing.T) {
 		probeErr   error
 		wantErr    error
 	}{
-		{"positive test seerr link", false, nil, false, oas.SeerrLinkInput{}, nil, nil},
-		{"negative test seerr link unknown", false, nil, true, oas.SeerrLinkInput{}, nil, domain.ErrNotFound},
-		{"boundary test seerr link unreachable", false, nil, false, oas.SeerrLinkInput{}, domain.ErrUnreachable, domain.ErrUnreachable},
+		{"positive test seerr link", false, &domain.User{Role: domain.RoleAdmin}, false, oas.SeerrLinkInput{}, nil, nil},
+		{"negative test seerr link no user", false, nil, false, oas.SeerrLinkInput{}, nil, domain.ErrUnauthorized},
+		{"negative test seerr link viewer", false, &domain.User{Role: domain.RoleViewer}, false, oas.SeerrLinkInput{}, nil, domain.ErrForbidden},
+		{"negative test seerr link unknown", false, &domain.User{Role: domain.RoleAdmin}, true, oas.SeerrLinkInput{}, nil, domain.ErrNotFound},
+		{"boundary test seerr link unreachable", false, &domain.User{Role: domain.RoleAdmin}, false, oas.SeerrLinkInput{}, domain.ErrUnreachable, domain.ErrUnreachable},
 		{"positive test seerr link input", true, &domain.User{Role: domain.RoleAdmin}, false, validSeerrLinkInput(), nil, nil},
 		{"negative test seerr link input no user", true, nil, false, validSeerrLinkInput(), nil, domain.ErrUnauthorized},
 		{"negative test seerr link input viewer", true, &domain.User{Role: domain.RoleViewer}, false, validSeerrLinkInput(), nil, domain.ErrForbidden},

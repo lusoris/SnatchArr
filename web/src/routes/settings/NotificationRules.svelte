@@ -11,6 +11,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { keys } from '#lib/query.js';
+	import { session } from '#lib/session.svelte.js';
 
 	type EventKind = components['schemas']['NotificationRuleEventKind'];
 
@@ -118,7 +119,9 @@ SPDX-License-Identifier: EUPL-1.2
 					<th scope="col">{m.rule_event_kind()}</th>
 					<th scope="col">{m.rule_threshold()}</th>
 					<th scope="col">{m.rule_channels()}</th>
-					<th scope="col"><span class="sr-only">{m.action_actions()}</span></th>
+					{#if session.isAdmin}
+						<th scope="col"><span class="sr-only">{m.action_actions()}</span></th>
+					{/if}
 				</tr>
 			</thead>
 			<tbody>
@@ -128,16 +131,18 @@ SPDX-License-Identifier: EUPL-1.2
 						<td>{eventLabel(r.event_kind)}</td>
 						<td>{r.threshold}</td>
 						<td>{formatChannels(r.channel_ids)}</td>
-						<td>
-							<button
-								type="button"
-								class="btn"
-								disabled={remove.isPending}
-								onclick={() => remove.mutate(r.id)}
-							>
-								{m.rule_delete()}
-							</button>
-						</td>
+						{#if session.isAdmin}
+							<td>
+								<button
+									type="button"
+									class="btn"
+									disabled={remove.isPending}
+									onclick={() => remove.mutate(r.id)}
+								>
+									{m.rule_delete()}
+								</button>
+							</td>
+						{/if}
 					</tr>
 				{/each}
 			</tbody>
@@ -145,63 +150,65 @@ SPDX-License-Identifier: EUPL-1.2
 	</div>
 {/if}
 
-<form
-	class="card flex max-w-xl flex-col gap-4"
-	onsubmit={(e) => {
-		e.preventDefault();
-		create.mutate();
-	}}
->
-	<h4 class="font-medium">{m.rule_add()}</h4>
-	<Field id="rule-name" label={m.rule_name()}>
-		<input id="rule-name" class="input" required bind:value={name} />
-	</Field>
-	<Field id="rule-event" label={m.rule_event_kind()}>
-		<select id="rule-event" class="select" bind:value={eventKind}>
-			<option value="run_failure_streak">{m.event_kind_run_failure_streak()}</option>
-			<option value="circuit_opened">{m.event_kind_circuit_opened()}</option>
-			<option value="instance_unreachable">{m.event_kind_instance_unreachable()}</option>
-			<option value="stamina_exhausted">{m.event_kind_stamina_exhausted()}</option>
-			<option value="seerr_request_snatched">{m.event_kind_seerr_request_snatched()}</option>
-		</select>
-	</Field>
-	<Field id="rule-threshold" label={m.rule_threshold()}>
-		<input
-			id="rule-threshold"
-			class="input"
-			type="number"
-			min="1"
-			max="1000"
-			required
-			bind:value={threshold}
-		/>
-	</Field>
+{#if session.isAdmin}
+	<form
+		class="card flex max-w-xl flex-col gap-4"
+		onsubmit={(e) => {
+			e.preventDefault();
+			create.mutate();
+		}}
+	>
+		<h4 class="font-medium">{m.rule_add()}</h4>
+		<Field id="rule-name" label={m.rule_name()}>
+			<input id="rule-name" class="input" required bind:value={name} />
+		</Field>
+		<Field id="rule-event" label={m.rule_event_kind()}>
+			<select id="rule-event" class="select" bind:value={eventKind}>
+				<option value="run_failure_streak">{m.event_kind_run_failure_streak()}</option>
+				<option value="circuit_opened">{m.event_kind_circuit_opened()}</option>
+				<option value="instance_unreachable">{m.event_kind_instance_unreachable()}</option>
+				<option value="stamina_exhausted">{m.event_kind_stamina_exhausted()}</option>
+				<option value="seerr_request_snatched">{m.event_kind_seerr_request_snatched()}</option>
+			</select>
+		</Field>
+		<Field id="rule-threshold" label={m.rule_threshold()}>
+			<input
+				id="rule-threshold"
+				class="input"
+				type="number"
+				min="1"
+				max="1000"
+				required
+				bind:value={threshold}
+			/>
+		</Field>
 
-	<fieldset class="flex flex-col gap-2">
-		<legend class="text-sm font-medium">{m.rule_channels()}</legend>
-		{#if (channels.data ?? []).length === 0}
-			<p class="text-sm text-subtle">{m.notifications_empty_channels()}</p>
-		{:else}
-			{#each channels.data ?? [] as ch (ch.id)}
-				<label class="flex items-center gap-2 text-sm">
-					<input
-						type="checkbox"
-						checked={selectedChannels.includes(ch.id)}
-						onchange={() => toggleChannel(ch.id)}
-					/>
-					<span>{ch.name} ({ch.kind})</span>
-				</label>
-			{/each}
-		{/if}
-	</fieldset>
+		<fieldset class="flex flex-col gap-2">
+			<legend class="text-sm font-medium">{m.rule_channels()}</legend>
+			{#if (channels.data ?? []).length === 0}
+				<p class="text-sm text-subtle">{m.notifications_empty_channels()}</p>
+			{:else}
+				{#each channels.data ?? [] as ch (ch.id)}
+					<label class="flex items-center gap-2 text-sm">
+						<input
+							type="checkbox"
+							checked={selectedChannels.includes(ch.id)}
+							onchange={() => toggleChannel(ch.id)}
+						/>
+						<span>{ch.name} ({ch.kind})</span>
+					</label>
+				{/each}
+			{/if}
+		</fieldset>
 
-	<div>
-		<button
-			type="submit"
-			class="btn btn-primary"
-			disabled={create.isPending || selectedChannels.length === 0}
-		>
-			{m.rule_add()}
-		</button>
-	</div>
-</form>
+		<div>
+			<button
+				type="submit"
+				class="btn btn-primary"
+				disabled={create.isPending || selectedChannels.length === 0}
+			>
+				{m.rule_add()}
+			</button>
+		</div>
+	</form>
+{/if}

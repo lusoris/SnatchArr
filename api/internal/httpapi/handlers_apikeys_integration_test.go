@@ -102,7 +102,7 @@ func getWithBearer(t *testing.T, f *routerFixture, secret string) *http.Response
 
 func setupSecondLoggedInUser(t *testing.T, f *routerFixture) (*http.Client, string) {
 	t.Helper()
-	username, pass := createViewerUser(t, f)
+	username, pass := createAdminUser(t, f)
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		t.Fatalf("cookiejar: %v", err)
@@ -116,11 +116,11 @@ func setupSecondLoggedInUser(t *testing.T, f *routerFixture) (*http.Client, stri
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := client.Do(req)
 	if err != nil {
-		t.Fatalf("viewer login: %v", err)
+		t.Fatalf("second admin login: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("viewer login status = %d, want 200", resp.StatusCode)
+		t.Fatalf("second admin login status = %d, want 200", resp.StatusCode)
 	}
 	var sess oas.Session
 	if err := json.NewDecoder(resp.Body).Decode(&sess); err != nil {
@@ -216,26 +216,26 @@ func TestAPIKeyCrossUserRevoke(t *testing.T) {
 	f := newRouterFixture(t)
 	_ = completeInitialSetup(t, f)
 	adminCsrf := getAdminCsrfToken(t, f)
-	viewerClient, viewerCsrf := setupSecondLoggedInUser(t, f)
+	secondClient, secondCsrf := setupSecondLoggedInUser(t, f)
 
-	resp, raw := postCreateAPIKey(t, f, viewerClient, viewerCsrf, map[string]any{"name": "viewer-key"})
+	resp, raw := postCreateAPIKey(t, f, secondClient, secondCsrf, map[string]any{"name": "second-admin-key"})
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("viewer create key status = %d; body: %s", resp.StatusCode, string(raw))
+		t.Fatalf("second admin create key status = %d; body: %s", resp.StatusCode, string(raw))
 	}
-	var viewerKey oas.CreatedApiKey
-	if err := json.Unmarshal(raw, &viewerKey); err != nil {
-		t.Fatalf("unmarshal viewer key: %v", err)
+	var secondKey oas.CreatedApiKey
+	if err := json.Unmarshal(raw, &secondKey); err != nil {
+		t.Fatalf("unmarshal second key: %v", err)
 	}
 
-	delResp := deleteAPIKey(t, f, f.client, adminCsrf, viewerKey.ID)
+	delResp := deleteAPIKey(t, f, f.client, adminCsrf, secondKey.ID)
 	defer func() { _ = delResp.Body.Close() }()
 	assertProblem(t, delResp, http.StatusNotFound)
 
-	bResp := getWithBearer(t, f, viewerKey.Secret)
+	bResp := getWithBearer(t, f, secondKey.Secret)
 	defer func() { _ = bResp.Body.Close() }()
 	if bResp.StatusCode != http.StatusOK {
-		t.Fatalf("viewer key after cross-user delete status = %d, want 200", bResp.StatusCode)
+		t.Fatalf("second admin key after cross-user delete status = %d, want 200", bResp.StatusCode)
 	}
 }
 

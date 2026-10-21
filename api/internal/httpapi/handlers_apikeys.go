@@ -59,6 +59,9 @@ func (h *Handlers) ListAPIKeys(ctx context.Context) (oas.ListAPIKeysRes, error) 
 
 // CreateAPIKey generates a new API key for the current session user.
 func (h *Handlers) CreateAPIKey(ctx context.Context, req *oas.CreateApiKeyRequest) (oas.CreateAPIKeyRes, error) {
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
+	}
 	u, ok := UserFrom(ctx)
 	if !ok {
 		return nil, domain.ErrUnauthorized
@@ -90,6 +93,9 @@ func (h *Handlers) CreateAPIKey(ctx context.Context, req *oas.CreateApiKeyReques
 
 // RevokeAPIKey marks an API key revoked.
 func (h *Handlers) RevokeAPIKey(ctx context.Context, params oas.RevokeAPIKeyParams) (oas.RevokeAPIKeyRes, error) {
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
+	}
 	u, ok := UserFrom(ctx)
 	if !ok {
 		return nil, domain.ErrUnauthorized

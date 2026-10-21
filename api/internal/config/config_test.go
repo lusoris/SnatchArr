@@ -81,7 +81,15 @@ func TestValidate(t *testing.T) {
 			o.OIDC.IssuerURL = "https://idp.example.com"
 			o.OIDC.ClientID = "client-id"
 			o.OIDC.RedirectURL = "https://snatcharr.example.com/api/v1/auth/oidc/callback"
-			o.OIDC.AllowedSubjects = []string{"sub-1"}
+			o.OIDC.AdminGroups = []string{"admin"}
+		}, nil, false},
+		{"positive oidc with viewer groups", func(o *config.Options) {
+			o.OIDC.Enabled = true
+			o.OIDC.IssuerURL = "https://idp.example.com"
+			o.OIDC.ClientID = "client-id"
+			o.OIDC.RedirectURL = "https://snatcharr.example.com/api/v1/auth/oidc/callback"
+			o.OIDC.AdminGroups = []string{"admin"}
+			o.OIDC.ViewerGroups = []string{"viewer"}
 		}, nil, false},
 		{"boundary oidc dev allows http issuer", func(o *config.Options) {
 			o.Profile = config.ProfileDev
@@ -91,102 +99,167 @@ func TestValidate(t *testing.T) {
 			o.OIDC.IssuerURL = "http://localhost:8080"
 			o.OIDC.ClientID = "client-id"
 			o.OIDC.RedirectURL = "http://localhost:8080/api/v1/auth/oidc/callback"
-			o.OIDC.AllowedEmails = []string{"admin@example.com"}
+			o.OIDC.AdminGroups = []string{"admin"}
 		}, nil, false},
 		{"negative oidc prod refuses http issuer", func(o *config.Options) {
 			o.OIDC.Enabled = true
 			o.OIDC.IssuerURL = "http://idp.example.com"
 			o.OIDC.ClientID = "client-id"
 			o.OIDC.RedirectURL = "https://snatcharr.example.com/api/v1/auth/oidc/callback"
-			o.OIDC.AllowedSubjects = []string{"sub-1"}
+			o.OIDC.AdminGroups = []string{"admin"}
 		}, nil, true},
 		{"negative oidc missing issuer", func(o *config.Options) {
 			o.OIDC.Enabled = true
 			o.OIDC.IssuerURL = ""
 			o.OIDC.ClientID = "client-id"
 			o.OIDC.RedirectURL = "https://snatcharr.example.com/api/v1/auth/oidc/callback"
-			o.OIDC.AllowedSubjects = []string{"sub-1"}
+			o.OIDC.AdminGroups = []string{"admin"}
 		}, nil, true},
 		{"negative oidc malformed issuer", func(o *config.Options) {
 			o.OIDC.Enabled = true
 			o.OIDC.IssuerURL = "://invalid"
 			o.OIDC.ClientID = "client-id"
 			o.OIDC.RedirectURL = "https://snatcharr.example.com/api/v1/auth/oidc/callback"
-			o.OIDC.AllowedSubjects = []string{"sub-1"}
+			o.OIDC.AdminGroups = []string{"admin"}
 		}, nil, true},
 		{"negative oidc missing client_id", func(o *config.Options) {
 			o.OIDC.Enabled = true
 			o.OIDC.IssuerURL = "https://idp.example.com"
 			o.OIDC.ClientID = ""
 			o.OIDC.RedirectURL = "https://snatcharr.example.com/api/v1/auth/oidc/callback"
-			o.OIDC.AllowedSubjects = []string{"sub-1"}
+			o.OIDC.AdminGroups = []string{"admin"}
 		}, nil, true},
 		{"negative oidc missing redirect_url", func(o *config.Options) {
 			o.OIDC.Enabled = true
 			o.OIDC.IssuerURL = "https://idp.example.com"
 			o.OIDC.ClientID = "client-id"
 			o.OIDC.RedirectURL = ""
-			o.OIDC.AllowedSubjects = []string{"sub-1"}
+			o.OIDC.AdminGroups = []string{"admin"}
 		}, nil, true},
-		{"negative oidc missing both allowed subjects and emails", func(o *config.Options) {
+		{"negative oidc missing admin groups", func(o *config.Options) {
 			o.OIDC.Enabled = true
 			o.OIDC.IssuerURL = "https://idp.example.com"
 			o.OIDC.ClientID = "client-id"
 			o.OIDC.RedirectURL = "https://snatcharr.example.com/api/v1/auth/oidc/callback"
+			o.OIDC.AdminGroups = nil
+		}, nil, true},
+		{"negative oidc legacy allowed subjects refused", func(o *config.Options) {
+			o.OIDC.Enabled = true
+			o.OIDC.IssuerURL = "https://idp.example.com"
+			o.OIDC.ClientID = "client-id"
+			o.OIDC.RedirectURL = "https://snatcharr.example.com/api/v1/auth/oidc/callback"
+			o.OIDC.AdminGroups = []string{"admin"}
+			o.OIDC.AllowedSubjects = []string{"sub-1"}
+		}, nil, true},
+		{"negative oidc legacy allowed emails refused", func(o *config.Options) {
+			o.OIDC.Enabled = true
+			o.OIDC.IssuerURL = "https://idp.example.com"
+			o.OIDC.ClientID = "client-id"
+			o.OIDC.RedirectURL = "https://snatcharr.example.com/api/v1/auth/oidc/callback"
+			o.OIDC.AdminGroups = []string{"admin"}
+			o.OIDC.AllowedEmails = []string{"user@example.com"}
+		}, nil, true},
+		{"negative oidc group on both admin and viewer lists", func(o *config.Options) {
+			o.OIDC.Enabled = true
+			o.OIDC.IssuerURL = "https://idp.example.com"
+			o.OIDC.ClientID = "client-id"
+			o.OIDC.RedirectURL = "https://snatcharr.example.com/api/v1/auth/oidc/callback"
+			o.OIDC.AdminGroups = []string{"ops"}
+			o.OIDC.ViewerGroups = []string{"ops"}
 		}, nil, true},
 		{"positive proxy auth valid", func(o *config.Options) {
 			o.ProxyAuth.Enabled = true
 			o.ProxyAuth.Header = "Remote-User"
+			o.ProxyAuth.GroupsHeader = "X-authentik-groups"
 			o.ProxyAuth.TrustedCIDRs = []string{"10.0.0.0/8"}
-			o.ProxyAuth.AllowedUsers = []string{"admin"}
+			o.ProxyAuth.AdminGroups = []string{"admin"}
+		}, nil, false},
+		{"positive proxy auth with viewer groups", func(o *config.Options) {
+			o.ProxyAuth.Enabled = true
+			o.ProxyAuth.Header = "Remote-User"
+			o.ProxyAuth.GroupsHeader = "X-authentik-groups"
+			o.ProxyAuth.TrustedCIDRs = []string{"10.0.0.0/8"}
+			o.ProxyAuth.AdminGroups = []string{"admin"}
+			o.ProxyAuth.ViewerGroups = []string{"viewer"}
 		}, nil, false},
 		{"negative proxy auth empty header", func(o *config.Options) {
 			o.ProxyAuth.Enabled = true
 			o.ProxyAuth.Header = ""
+			o.ProxyAuth.GroupsHeader = "X-authentik-groups"
 			o.ProxyAuth.TrustedCIDRs = []string{"10.0.0.0/8"}
-			o.ProxyAuth.AllowedUsers = []string{"admin"}
+			o.ProxyAuth.AdminGroups = []string{"admin"}
 		}, nil, true},
 		{"negative proxy auth invalid header token", func(o *config.Options) {
 			o.ProxyAuth.Enabled = true
 			o.ProxyAuth.Header = "Remote User Header"
+			o.ProxyAuth.GroupsHeader = "X-authentik-groups"
 			o.ProxyAuth.TrustedCIDRs = []string{"10.0.0.0/8"}
-			o.ProxyAuth.AllowedUsers = []string{"admin"}
+			o.ProxyAuth.AdminGroups = []string{"admin"}
+		}, nil, true},
+		{"negative proxy auth empty groups header", func(o *config.Options) {
+			o.ProxyAuth.Enabled = true
+			o.ProxyAuth.Header = "Remote-User"
+			o.ProxyAuth.GroupsHeader = ""
+			o.ProxyAuth.TrustedCIDRs = []string{"10.0.0.0/8"}
+			o.ProxyAuth.AdminGroups = []string{"admin"}
+		}, nil, true},
+		{"negative proxy auth invalid groups header token", func(o *config.Options) {
+			o.ProxyAuth.Enabled = true
+			o.ProxyAuth.Header = "Remote-User"
+			o.ProxyAuth.GroupsHeader = "Invalid Header"
+			o.ProxyAuth.TrustedCIDRs = []string{"10.0.0.0/8"}
+			o.ProxyAuth.AdminGroups = []string{"admin"}
 		}, nil, true},
 		{"negative proxy auth empty trusted cidrs", func(o *config.Options) {
 			o.ProxyAuth.Enabled = true
 			o.ProxyAuth.Header = "Remote-User"
+			o.ProxyAuth.GroupsHeader = "X-authentik-groups"
 			o.ProxyAuth.TrustedCIDRs = nil
-			o.ProxyAuth.AllowedUsers = []string{"admin"}
+			o.ProxyAuth.AdminGroups = []string{"admin"}
 		}, nil, true},
 		{"negative proxy auth catch-all ipv4 cidr refused", func(o *config.Options) {
 			o.ProxyAuth.Enabled = true
 			o.ProxyAuth.Header = "Remote-User"
+			o.ProxyAuth.GroupsHeader = "X-authentik-groups"
 			o.ProxyAuth.TrustedCIDRs = []string{"0.0.0.0/0"}
-			o.ProxyAuth.AllowedUsers = []string{"admin"}
+			o.ProxyAuth.AdminGroups = []string{"admin"}
 		}, nil, true},
 		{"negative proxy auth catch-all ipv6 cidr refused", func(o *config.Options) {
 			o.ProxyAuth.Enabled = true
 			o.ProxyAuth.Header = "Remote-User"
+			o.ProxyAuth.GroupsHeader = "X-authentik-groups"
 			o.ProxyAuth.TrustedCIDRs = []string{"::/0"}
-			o.ProxyAuth.AllowedUsers = []string{"admin"}
+			o.ProxyAuth.AdminGroups = []string{"admin"}
 		}, nil, true},
 		{"negative proxy auth invalid cidr format", func(o *config.Options) {
 			o.ProxyAuth.Enabled = true
 			o.ProxyAuth.Header = "Remote-User"
+			o.ProxyAuth.GroupsHeader = "X-authentik-groups"
 			o.ProxyAuth.TrustedCIDRs = []string{"not-a-cidr"}
+			o.ProxyAuth.AdminGroups = []string{"admin"}
+		}, nil, true},
+		{"negative proxy auth empty admin groups", func(o *config.Options) {
+			o.ProxyAuth.Enabled = true
+			o.ProxyAuth.Header = "Remote-User"
+			o.ProxyAuth.GroupsHeader = "X-authentik-groups"
+			o.ProxyAuth.TrustedCIDRs = []string{"10.0.0.0/8"}
+			o.ProxyAuth.AdminGroups = nil
+		}, nil, true},
+		{"negative proxy auth legacy allowed users refused", func(o *config.Options) {
+			o.ProxyAuth.Enabled = true
+			o.ProxyAuth.Header = "Remote-User"
+			o.ProxyAuth.GroupsHeader = "X-authentik-groups"
+			o.ProxyAuth.TrustedCIDRs = []string{"10.0.0.0/8"}
+			o.ProxyAuth.AdminGroups = []string{"admin"}
 			o.ProxyAuth.AllowedUsers = []string{"admin"}
 		}, nil, true},
-		{"negative proxy auth empty allowed users", func(o *config.Options) {
+		{"negative proxy auth group on both admin and viewer lists", func(o *config.Options) {
 			o.ProxyAuth.Enabled = true
 			o.ProxyAuth.Header = "Remote-User"
+			o.ProxyAuth.GroupsHeader = "X-authentik-groups"
 			o.ProxyAuth.TrustedCIDRs = []string{"10.0.0.0/8"}
-			o.ProxyAuth.AllowedUsers = nil
-		}, nil, true},
-		{"negative proxy auth blank user in allowed users", func(o *config.Options) {
-			o.ProxyAuth.Enabled = true
-			o.ProxyAuth.Header = "Remote-User"
-			o.ProxyAuth.TrustedCIDRs = []string{"10.0.0.0/8"}
-			o.ProxyAuth.AllowedUsers = []string{" "}
+			o.ProxyAuth.AdminGroups = []string{"ops"}
+			o.ProxyAuth.ViewerGroups = []string{"ops"}
 		}, nil, true},
 	}
 	for _, tc := range tests {
@@ -456,16 +529,80 @@ func TestLoadCompoundKeysFromEnv(t *testing.T) {
 			},
 		},
 		{
+			name: "oidc admin_groups comma-split",
+			env:  map[string]string{"APP_SNATCHARR_OIDC_ADMIN_GROUPS": "admin, ops"},
+			assertFn: func(t *testing.T, opts config.Options) {
+				t.Helper()
+				want := []string{"admin", "ops"}
+				if !slices.Equal(opts.OIDC.AdminGroups, want) {
+					t.Fatalf("OIDC.AdminGroups = %v, want %v", opts.OIDC.AdminGroups, want)
+				}
+			},
+		},
+		{
+			name: "oidc viewer_groups comma-split",
+			env:  map[string]string{"APP_SNATCHARR_OIDC_VIEWER_GROUPS": "viewer, guest"},
+			assertFn: func(t *testing.T, opts config.Options) {
+				t.Helper()
+				want := []string{"viewer", "guest"}
+				if !slices.Equal(opts.OIDC.ViewerGroups, want) {
+					t.Fatalf("OIDC.ViewerGroups = %v, want %v", opts.OIDC.ViewerGroups, want)
+				}
+			},
+		},
+		{
+			name: "oidc groups_claim custom",
+			env:  map[string]string{"APP_SNATCHARR_OIDC_GROUPS_CLAIM": "roles"},
+			assertFn: func(t *testing.T, opts config.Options) {
+				t.Helper()
+				if opts.OIDC.GroupsClaim != "roles" {
+					t.Fatalf("OIDC.GroupsClaim = %q, want roles", opts.OIDC.GroupsClaim)
+				}
+			},
+		},
+		{
 			name: "proxy_auth enabled",
 			env: map[string]string{
 				"APP_SNATCHARR_PROXY_AUTH_ENABLED":       "true",
 				"APP_SNATCHARR_PROXY_AUTH_TRUSTED_CIDRS": "10.0.0.0/8",
-				"APP_SNATCHARR_PROXY_AUTH_ALLOWED_USERS": "admin",
+				"APP_SNATCHARR_PROXY_AUTH_ADMIN_GROUPS":  "admin",
 			},
 			assertFn: func(t *testing.T, opts config.Options) {
 				t.Helper()
 				if !opts.ProxyAuth.Enabled {
 					t.Fatalf("ProxyAuth.Enabled = false, want true")
+				}
+			},
+		},
+		{
+			name: "proxy_auth groups_header custom",
+			env:  map[string]string{"APP_SNATCHARR_PROXY_AUTH_GROUPS_HEADER": "X-Custom-Groups"},
+			assertFn: func(t *testing.T, opts config.Options) {
+				t.Helper()
+				if opts.ProxyAuth.GroupsHeader != "X-Custom-Groups" {
+					t.Fatalf("ProxyAuth.GroupsHeader = %q, want X-Custom-Groups", opts.ProxyAuth.GroupsHeader)
+				}
+			},
+		},
+		{
+			name: "proxy_auth admin_groups comma-split",
+			env:  map[string]string{"APP_SNATCHARR_PROXY_AUTH_ADMIN_GROUPS": "admin, ops"},
+			assertFn: func(t *testing.T, opts config.Options) {
+				t.Helper()
+				want := []string{"admin", "ops"}
+				if !slices.Equal(opts.ProxyAuth.AdminGroups, want) {
+					t.Fatalf("ProxyAuth.AdminGroups = %v, want %v", opts.ProxyAuth.AdminGroups, want)
+				}
+			},
+		},
+		{
+			name: "proxy_auth viewer_groups comma-split",
+			env:  map[string]string{"APP_SNATCHARR_PROXY_AUTH_VIEWER_GROUPS": "viewer, guest"},
+			assertFn: func(t *testing.T, opts config.Options) {
+				t.Helper()
+				want := []string{"viewer", "guest"}
+				if !slices.Equal(opts.ProxyAuth.ViewerGroups, want) {
+					t.Fatalf("ProxyAuth.ViewerGroups = %v, want %v", opts.ProxyAuth.ViewerGroups, want)
 				}
 			},
 		},

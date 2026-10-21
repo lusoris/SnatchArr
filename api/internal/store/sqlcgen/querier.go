@@ -208,6 +208,7 @@ type Querier interface {
 	UpsertConfigarrDownloadClient(ctx context.Context, arg UpsertConfigarrDownloadClientParams) (UpsertConfigarrDownloadClientRow, error)
 	UpsertConfigarrInstance(ctx context.Context, arg UpsertConfigarrInstanceParams) (UpsertConfigarrInstanceRow, error)
 	UpsertDiscoveredDownloadClient(ctx context.Context, arg UpsertDiscoveredDownloadClientParams) (UpsertDiscoveredDownloadClientRow, error)
+	UpsertExternalViewer(ctx context.Context, arg UpsertExternalViewerParams) (User, error)
 	// The caller reads the row back with GetPolicy in the same transaction: scanning RETURNING *
 	// here would push the generated function past the HISS-04 length limit.
 	UpsertPolicy(ctx context.Context, arg UpsertPolicyParams) error

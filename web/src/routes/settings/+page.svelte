@@ -14,6 +14,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { APP_KINDS, type AppKind } from '#lib/kinds.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { keys } from '#lib/query.js';
+	import { session } from '#lib/session.svelte.js';
 	import NotificationChannels from './NotificationChannels.svelte';
 	import NotificationRules from './NotificationRules.svelte';
 
@@ -161,11 +162,13 @@ SPDX-License-Identifier: EUPL-1.2
 				<input type="checkbox" data-field="llm_enabled" bind:checked={draft.llm_enabled} />
 				{m.settings_llm_enabled()}
 			</label>
-			<div>
-				<button type="submit" class="btn btn-primary" disabled={save.isPending}
-					>{m.instance_save()}</button
-				>
-			</div>
+			{#if session.isAdmin}
+				<div>
+					<button type="submit" class="btn btn-primary" disabled={save.isPending}
+						>{m.instance_save()}</button
+					>
+				</div>
+			{/if}
 		</form>
 
 		<h2 class="mt-4 text-xl font-semibold">{m.change_password_title()}</h2>

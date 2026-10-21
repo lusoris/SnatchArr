@@ -11,6 +11,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import ScheduleTable from '#lib/components/ScheduleTable.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { keys } from '#lib/query.js';
+	import { session } from '#lib/session.svelte.js';
 
 	type Schedule = components['schemas']['Schedule'];
 
@@ -46,10 +47,12 @@ SPDX-License-Identifier: EUPL-1.2
 		</div>
 	{/if}
 
-	<ScheduleForm
-		instances={instances.data ?? []}
-		editing={editingSchedule}
-		oncancel={() => (editingSchedule = null)}
-		onsuccess={() => (editingSchedule = null)}
-	/>
+	{#if session.isAdmin}
+		<ScheduleForm
+			instances={instances.data ?? []}
+			editing={editingSchedule}
+			oncancel={() => (editingSchedule = null)}
+			onsuccess={() => (editingSchedule = null)}
+		/>
+	{/if}
 {/if}

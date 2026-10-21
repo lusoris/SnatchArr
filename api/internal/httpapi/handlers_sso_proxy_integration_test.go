@@ -18,81 +18,134 @@ import (
 )
 
 type proxyTestCase struct {
-	name         string
-	enabled      bool
-	hasAdmin     bool
-	remoteAddr   string
-	headerVal    string
-	forwardedFor string
-	wantStatus   int
-	wantSession  bool
+	name            string
+	enabled         bool
+	hasAdmin        bool
+	remoteAddr      string
+	headerVal       string
+	groupsHeaderVal string
+	forwardedFor    string
+	wantStatus      int
+	wantSession     bool
+	wantRole        string
 }
 
 func buildProxyCases() []proxyTestCase {
 	return []proxyTestCase{
 		{
-			name:        "trusted CIDR and allowed user",
-			enabled:     true,
-			hasAdmin:    true,
-			remoteAddr:  "10.0.0.5:12345",
-			headerVal:   "admin",
-			wantStatus:  http.StatusOK,
-			wantSession: true,
+			name:            "trusted CIDR and admin group",
+			enabled:         true,
+			hasAdmin:        true,
+			remoteAddr:      "10.0.0.5:12345",
+			headerVal:       "admin",
+			groupsHeaderVal: "snatcharr-admins",
+			wantStatus:      http.StatusOK,
+			wantSession:     true,
+			wantRole:        "admin",
 		},
 		{
-			name:        "same header from untrusted peer",
-			enabled:     true,
-			hasAdmin:    true,
-			remoteAddr:  "192.168.1.100:12345",
-			headerVal:   "admin",
-			wantStatus:  http.StatusUnauthorized,
-			wantSession: false,
+			name:            "trusted CIDR and viewer group",
+			enabled:         true,
+			hasAdmin:        true,
+			remoteAddr:      "10.0.0.5:12345",
+			headerVal:       "viewer-user",
+			groupsHeaderVal: "snatcharr-viewers",
+			wantStatus:      http.StatusOK,
+			wantSession:     true,
+			wantRole:        "viewer",
 		},
 		{
-			name:        "trusted peer with user not allowed",
-			enabled:     true,
-			hasAdmin:    true,
-			remoteAddr:  "10.0.0.5:12345",
-			headerVal:   "unauthorized-stranger",
-			wantStatus:  http.StatusUnauthorized,
-			wantSession: false,
+			name:            "trusted CIDR and both admin and viewer groups",
+			enabled:         true,
+			hasAdmin:        true,
+			remoteAddr:      "10.0.0.5:12345",
+			headerVal:       "admin",
+			groupsHeaderVal: "snatcharr-viewers|snatcharr-admins",
+			wantStatus:      http.StatusOK,
+			wantSession:     true,
+			wantRole:        "admin",
 		},
 		{
-			name:        "trusted peer without header",
-			enabled:     true,
-			hasAdmin:    true,
-			remoteAddr:  "10.0.0.5:12345",
-			headerVal:   "",
-			wantStatus:  http.StatusUnauthorized,
-			wantSession: false,
+			name:            "boundary pipe separated groups with empty segments",
+			enabled:         true,
+			hasAdmin:        true,
+			remoteAddr:      "10.0.0.5:12345",
+			headerVal:       "viewer-pipe",
+			groupsHeaderVal: "|snatcharr-viewers||other|",
+			wantStatus:      http.StatusOK,
+			wantSession:     true,
+			wantRole:        "viewer",
 		},
 		{
-			name:         "untrusted peer with spoofed X-Forwarded-For",
-			enabled:      true,
-			hasAdmin:     true,
-			remoteAddr:   "192.168.1.100:12345",
-			headerVal:    "admin",
-			forwardedFor: "10.0.0.5",
-			wantStatus:   http.StatusUnauthorized,
-			wantSession:  false,
+			name:            "same header from untrusted peer",
+			enabled:         true,
+			hasAdmin:        true,
+			remoteAddr:      "192.168.1.100:12345",
+			headerVal:       "admin",
+			groupsHeaderVal: "snatcharr-admins",
+			wantStatus:      http.StatusUnauthorized,
+			wantSession:     false,
 		},
 		{
-			name:        "proxy auth disabled",
-			enabled:     false,
-			hasAdmin:    true,
-			remoteAddr:  "10.0.0.5:12345",
-			headerVal:   "admin",
-			wantStatus:  http.StatusNotFound,
-			wantSession: false,
+			name:            "trusted peer with group not allowed",
+			enabled:         true,
+			hasAdmin:        true,
+			remoteAddr:      "10.0.0.5:12345",
+			headerVal:       "unauthorized-stranger",
+			groupsHeaderVal: "other-group",
+			wantStatus:      http.StatusForbidden,
+			wantSession:     false,
 		},
 		{
-			name:        "no admin yet",
-			enabled:     true,
-			hasAdmin:    false,
-			remoteAddr:  "10.0.0.5:12345",
-			headerVal:   "admin",
-			wantStatus:  http.StatusConflict,
-			wantSession: false,
+			name:            "trusted peer without groups header",
+			enabled:         true,
+			hasAdmin:        true,
+			remoteAddr:      "10.0.0.5:12345",
+			headerVal:       "admin",
+			groupsHeaderVal: "",
+			wantStatus:      http.StatusForbidden,
+			wantSession:     false,
+		},
+		{
+			name:            "trusted peer without user header",
+			enabled:         true,
+			hasAdmin:        true,
+			remoteAddr:      "10.0.0.5:12345",
+			headerVal:       "",
+			groupsHeaderVal: "snatcharr-admins",
+			wantStatus:      http.StatusUnauthorized,
+			wantSession:     false,
+		},
+		{
+			name:            "untrusted peer with spoofed X-Forwarded-For",
+			enabled:         true,
+			hasAdmin:        true,
+			remoteAddr:      "192.168.1.100:12345",
+			headerVal:       "admin",
+			groupsHeaderVal: "snatcharr-admins",
+			forwardedFor:    "10.0.0.5",
+			wantStatus:      http.StatusUnauthorized,
+			wantSession:     false,
+		},
+		{
+			name:            "proxy auth disabled",
+			enabled:         false,
+			hasAdmin:        true,
+			remoteAddr:      "10.0.0.5:12345",
+			headerVal:       "admin",
+			groupsHeaderVal: "snatcharr-admins",
+			wantStatus:      http.StatusNotFound,
+			wantSession:     false,
+		},
+		{
+			name:            "no admin yet",
+			enabled:         true,
+			hasAdmin:        false,
+			remoteAddr:      "10.0.0.5:12345",
+			headerVal:       "admin",
+			groupsHeaderVal: "snatcharr-admins",
+			wantStatus:      http.StatusConflict,
+			wantSession:     false,
 		},
 	}
 }
@@ -102,8 +155,10 @@ func setupProxyTest(t *testing.T, tc proxyTestCase) *ssoFixture {
 	proxyCfg := config.ProxyAuthOptions{
 		Enabled:      tc.enabled,
 		Header:       "Remote-User",
+		GroupsHeader: "X-authentik-groups",
 		TrustedCIDRs: []string{"10.0.0.0/8"},
-		AllowedUsers: []string{"admin"},
+		AdminGroups:  []string{"snatcharr-admins"},
+		ViewerGroups: []string{"snatcharr-viewers"},
 	}
 	f := newSSOFixture(t, config.OIDCOptions{}, proxyCfg)
 	f.h.cfg.Proxy.Trusted = []string{"192.168.1.0/24"}
@@ -127,6 +182,9 @@ func executeProxyTest(t *testing.T, tc proxyTestCase) {
 	if tc.headerVal != "" {
 		req.Header.Set("Remote-User", tc.headerVal)
 	}
+	if tc.groupsHeaderVal != "" {
+		req.Header.Set("X-Authentik-Groups", tc.groupsHeaderVal)
+	}
 	if tc.forwardedFor != "" {
 		req.Header.Set("X-Forwarded-For", tc.forwardedFor)
 	}
@@ -141,17 +199,21 @@ func executeProxyTest(t *testing.T, tc proxyTestCase) {
 		return
 	}
 
-	verifyProxySession(t, f, rec)
+	verifyProxySession(t, f, rec, tc.wantRole)
 }
 
-func verifyProxySession(t *testing.T, f *ssoFixture, rec *httptest.ResponseRecorder) {
+func verifyProxySession(t *testing.T, f *ssoFixture, rec *httptest.ResponseRecorder, wantRole string) {
 	t.Helper()
 	var sess oas.Session
 	if err := json.NewDecoder(rec.Body).Decode(&sess); err != nil {
 		t.Fatalf("verifyProxySession: decode session: %v", err)
 	}
-	if sess.User.Role != oas.UserRoleAdmin {
-		t.Errorf("verifyProxySession: user role = %q, want admin", sess.User.Role)
+	expectedRole := oas.UserRoleAdmin
+	if wantRole != "" {
+		expectedRole = oas.UserRole(wantRole)
+	}
+	if sess.User.Role != expectedRole {
+		t.Errorf("verifyProxySession: user role = %q, want %q", sess.User.Role, expectedRole)
 	}
 
 	cookies := rec.Result().Cookies()
@@ -198,14 +260,15 @@ func TestSSO_NoSecretsInLogs(t *testing.T) {
 		ClientSecret:     secretClient,
 		RedirectURL:      "http://127.0.0.1:8080/api/v1/auth/oidc/callback",
 		Scopes:           []string{"openid", "email"},
-		AllowedSubjects:  []string{"admin-sub"},
+		AdminGroups:      []string{"snatcharr-admins"},
 		DiscoveryTimeout: 5 * time.Second,
 	}
 	proxyCfg := config.ProxyAuthOptions{
 		Enabled:      true,
 		Header:       "Remote-User",
+		GroupsHeader: "X-authentik-groups",
 		TrustedCIDRs: []string{"10.0.0.0/8"},
-		AllowedUsers: []string{"admin"},
+		AdminGroups:  []string{"snatcharr-admins"},
 	}
 
 	f := newSSOFixture(t, oidcCfg, proxyCfg)

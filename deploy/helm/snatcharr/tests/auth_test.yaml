@@ -28,10 +28,11 @@ tests:
             - openid
             - email
             - profile
-          allowedSubjects:
-            - "sub-123"
-          allowedEmails:
-            - "admin@example.com"
+          adminGroups:
+            - "snatcharr-admins"
+          viewerGroups:
+            - "snatcharr-viewers"
+            - "readers"
     asserts:
       - template: configmap.yaml
         hasDocuments:
@@ -44,8 +45,9 @@ tests:
             APP_SNATCHARR_OIDC_ISSUER_URL: "https://auth.example.com"
             APP_SNATCHARR_OIDC_CLIENT_ID: "snatcharr-client"
             APP_SNATCHARR_OIDC_SCOPES: "openid,email,profile"
-            APP_SNATCHARR_OIDC_ALLOWED_SUBJECTS: "sub-123"
-            APP_SNATCHARR_OIDC_ALLOWED_EMAILS: "admin@example.com"
+            APP_SNATCHARR_OIDC_ADMIN_GROUPS: "snatcharr-admins"
+            APP_SNATCHARR_OIDC_VIEWER_GROUPS: "snatcharr-viewers,readers"
+            APP_SNATCHARR_OIDC_GROUPS_CLAIM: "groups"
       - template: api-deployment.yaml
         contains:
           path: spec.template.spec.containers[0].env
@@ -66,6 +68,8 @@ tests:
           secretKeyRef:
             name: "custom-secret"
             key: "custom-key"
+          adminGroups:
+            - "snatcharr-admins"
     asserts:
       - template: api-deployment.yaml
         contains:
@@ -86,9 +90,11 @@ tests:
           trustedCidrs:
             - "10.0.0.0/8"
             - "172.16.0.0/12"
-          allowedUsers:
-            - "admin"
-            - "lead"
+          adminGroups:
+            - "admins"
+            - "leads"
+          viewerGroups:
+            - "viewers"
     asserts:
       - template: configmap.yaml
         isSubset:
@@ -97,4 +103,49 @@ tests:
             APP_SNATCHARR_PROXY_AUTH_ENABLED: "true"
             APP_SNATCHARR_PROXY_AUTH_HEADER: "Remote-User"
             APP_SNATCHARR_PROXY_AUTH_TRUSTED_CIDRS: "10.0.0.0/8,172.16.0.0/12"
-            APP_SNATCHARR_PROXY_AUTH_ALLOWED_USERS: "admin,lead"
+            APP_SNATCHARR_PROXY_AUTH_GROUPS_HEADER: "X-authentik-groups"
+            APP_SNATCHARR_PROXY_AUTH_ADMIN_GROUPS: "admins,leads"
+            APP_SNATCHARR_PROXY_AUTH_VIEWER_GROUPS: "viewers"
+
+  - it: negative - oidc enabled without admin groups fails to render
+    set:
+      auth:
+        oidc:
+          enabled: true
+          issuerUrl: "https://auth.example.com"
+          clientId: "snatcharr-client"
+          existingSecret: "my-oidc-secret"
+    asserts:
+      - template: configmap.yaml
+        failedTemplate:
+          errorMessage: "auth.oidc.adminGroups must name at least one group when auth.oidc.enabled is true"
+
+  - it: negative - proxyAuth enabled without admin groups fails to render
+    set:
+      auth:
+        proxyAuth:
+          enabled: true
+          trustedCidrs:
+            - "10.0.0.0/8"
+    asserts:
+      - template: configmap.yaml
+        failedTemplate:
+          errorMessage: "auth.proxyAuth.adminGroups must name at least one group when auth.proxyAuth.enabled is true"
+
+  - it: boundary - one admin group and no viewer group renders no viewer key
+    set:
+      auth:
+        proxyAuth:
+          enabled: true
+          trustedCidrs:
+            - "10.0.0.0/8"
+          adminGroups:
+            - "admins"
+    asserts:
+      - template: configmap.yaml
+        equal:
+          path: data.APP_SNATCHARR_PROXY_AUTH_ADMIN_GROUPS
+          value: "admins"
+      - template: configmap.yaml
+        isNull:
+          path: data.APP_SNATCHARR_PROXY_AUTH_VIEWER_GROUPS

@@ -16,7 +16,10 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/config"
 )
 
-type proxyUserKey struct{}
+type (
+	proxyUserKey   struct{}
+	proxyGroupsKey struct{}
+)
 
 // WithProxyUser stores the verified proxy user in ctx.
 func WithProxyUser(ctx context.Context, user string) context.Context {
@@ -29,35 +32,77 @@ func ProxyUserFromContext(ctx context.Context) (string, bool) {
 	return v, ok && v != ""
 }
 
-// ProxyHeaderMiddleware extracts and verifies the trusted reverse-proxy user header.
+// WithProxyGroups stores the verified proxy groups in ctx.
+func WithProxyGroups(ctx context.Context, groups []string) context.Context {
+	return context.WithValue(ctx, proxyGroupsKey{}, groups)
+}
+
+// ProxyGroupsFromContext extracts the verified proxy groups from ctx, if present.
+func ProxyGroupsFromContext(ctx context.Context) ([]string, bool) {
+	v, ok := ctx.Value(proxyGroupsKey{}).([]string)
+	return v, ok
+}
+
+func stripProxyHeaders(r *http.Request, userHeader, groupsHeader string) (string, string) {
+	rawUser := r.Header.Get(userHeader)
+	rawGroups := r.Header.Get(groupsHeader)
+	if rawUser != "" {
+		r.Header.Del(userHeader)
+	}
+	if rawGroups != "" {
+		r.Header.Del(groupsHeader)
+	}
+	return rawUser, rawGroups
+}
+
+func attachProxyContext(ctx context.Context, rawUser, rawGroups string) context.Context {
+	if trimmedUser := strings.TrimSpace(rawUser); trimmedUser != "" {
+		ctx = WithProxyUser(ctx, trimmedUser)
+	}
+	if rawGroups != "" {
+		ctx = WithProxyGroups(ctx, parseGroupsHeader(rawGroups))
+	}
+	return ctx
+}
+
+// ProxyHeaderMiddleware extracts and verifies the trusted reverse-proxy user and groups headers.
 // It is mounted in the HTTP pipeline before TrustProxy so it inspects the direct peer address.
 func ProxyHeaderMiddleware(cfg config.ProxyAuthOptions, logger *slog.Logger) func(http.Handler) http.Handler {
-	headerName := cfg.Header
-	if headerName == "" {
-		headerName = "Remote-User"
+	userHeader := cfg.Header
+	if userHeader == "" {
+		userHeader = "Remote-User"
+	}
+	groupsHeader := cfg.GroupsHeader
+	if groupsHeader == "" {
+		groupsHeader = "X-authentik-groups"
 	}
 	nets := parseCIDRs(cfg.TrustedCIDRs)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			rawVal := r.Header.Get(headerName)
-			if rawVal == "" {
+			rawUser, rawGroups := stripProxyHeaders(r, userHeader, groupsHeader)
+			if rawUser == "" && rawGroups == "" {
 				next.ServeHTTP(w, r)
 				return
 			}
-			r.Header.Del(headerName)
 			if !cfg.Enabled || len(nets) == 0 || !isPeerTrusted(r.RemoteAddr, nets) {
 				logger.DebugContext(r.Context(), "sso: proxy auth untrusted source", slog.String("reason", "untrusted_source"))
 				next.ServeHTTP(w, r)
 				return
 			}
-			trimmed := strings.TrimSpace(rawVal)
-			if trimmed == "" {
-				next.ServeHTTP(w, r)
-				return
-			}
-			next.ServeHTTP(w, r.WithContext(WithProxyUser(r.Context(), trimmed)))
+			next.ServeHTTP(w, r.WithContext(attachProxyContext(r.Context(), rawUser, rawGroups)))
 		})
 	}
+}
+
+func parseGroupsHeader(raw string) []string {
+	var groups []string
+	for part := range strings.SplitSeq(raw, "|") {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			groups = append(groups, trimmed)
+		}
+	}
+	return groups
 }
 
 func isPeerTrusted(remoteAddr string, nets []*net.IPNet) bool {

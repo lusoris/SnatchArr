@@ -126,7 +126,7 @@ func extractAuthParams(t *testing.T, resp *http.Response) (state, nonce string) 
 	return q.Get("state"), q.Get("nonce")
 }
 
-func checkSessionUser(t *testing.T, f *ssoFixture, wantOK bool) {
+func checkSessionUser(t *testing.T, f *ssoFixture, wantOK bool, wantRole string) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
@@ -154,8 +154,12 @@ func checkSessionUser(t *testing.T, f *ssoFixture, wantOK bool) {
 	if err := json.NewDecoder(resp.Body).Decode(&sess); err != nil {
 		t.Fatalf("checkSessionUser: decode session: %v", err)
 	}
-	if sess.User.Role != oas.UserRoleAdmin {
-		t.Errorf("checkSessionUser role = %q, want admin", sess.User.Role)
+	expectedRole := oas.UserRoleAdmin
+	if wantRole != "" {
+		expectedRole = oas.UserRole(wantRole)
+	}
+	if sess.User.Role != expectedRole {
+		t.Errorf("checkSessionUser role = %q, want %q", sess.User.Role, expectedRole)
 	}
 }
 
@@ -169,6 +173,7 @@ type oidcTestCase struct {
 	replay       bool
 	wantRedirect string
 	wantSession  bool
+	wantRole     string
 	wantReason   string
 }
 
@@ -178,12 +183,34 @@ func buildOIDCCases() []oidcTestCase {
 			name:         "positive full flow",
 			wantRedirect: "/",
 			wantSession:  true,
+			wantRole:     "admin",
+		},
+		{
+			name: "positive viewer group flow",
+			claimMod: func(c idpClaims) idpClaims {
+				c.Groups = []string{"snatcharr-viewers"}
+				return c
+			},
+			wantRedirect: "/",
+			wantSession:  true,
+			wantRole:     "viewer",
+		},
+		{
+			name: "positive both admin and viewer groups resolves to admin",
+			claimMod: func(c idpClaims) idpClaims {
+				c.Groups = []string{"snatcharr-viewers", "snatcharr-admins"}
+				return c
+			},
+			wantRedirect: "/",
+			wantSession:  true,
+			wantRole:     "admin",
 		},
 		{
 			name:         "boundary flow 10m-1s",
 			clockAdvance: 10*time.Minute - time.Second,
 			wantRedirect: "/",
 			wantSession:  true,
+			wantRole:     "admin",
 		},
 		{
 			name:         "negative missing state",
@@ -281,10 +308,9 @@ func buildOIDCCases() []oidcTestCase {
 			wantReason:   "invalid_id_token",
 		},
 		{
-			name: "negative subject and email not allowed",
+			name: "negative unmapped group",
 			claimMod: func(c idpClaims) idpClaims {
-				c.Subject = "unauthorized-subject"
-				c.Email = "stranger@example.com"
+				c.Groups = []string{"unmapped-group"}
 				return c
 			},
 			wantRedirect: "/login?sso=failed",
@@ -292,11 +318,19 @@ func buildOIDCCases() []oidcTestCase {
 			wantReason:   "not_authorized",
 		},
 		{
-			name: "negative allowed email unverified",
+			name: "negative missing groups claim",
 			claimMod: func(c idpClaims) idpClaims {
-				c.Subject = "unauthorized-subject"
-				f := false
-				c.EmailVerified = &f
+				c.Groups = nil
+				return c
+			},
+			wantRedirect: "/login?sso=failed",
+			wantSession:  false,
+			wantReason:   "not_authorized",
+		},
+		{
+			name: "negative wrong type in groups claim",
+			claimMod: func(c idpClaims) idpClaims {
+				c.RawGroups = "not-an-array"
 				return c
 			},
 			wantRedirect: "/login?sso=failed",
@@ -418,8 +452,9 @@ func executeOIDCTest(t *testing.T, tc oidcTestCase) {
 		ClientSecret:     "test-client-secret",
 		RedirectURL:      "http://127.0.0.1:8080/api/v1/auth/oidc/callback",
 		Scopes:           []string{"openid", "email", "profile"},
-		AllowedSubjects:  []string{"admin-sub"},
-		AllowedEmails:    []string{"admin@example.com"},
+		AdminGroups:      []string{"snatcharr-admins"},
+		ViewerGroups:     []string{"snatcharr-viewers"},
+		GroupsClaim:      "groups",
 		DiscoveryTimeout: 5 * time.Second,
 	}
 	f := newSSOFixture(t, oidcCfg, config.ProxyAuthOptions{})
@@ -463,7 +498,7 @@ func executeOIDCTest(t *testing.T, tc oidcTestCase) {
 	if loc != tc.wantRedirect {
 		t.Errorf("Location = %q, want %q", loc, tc.wantRedirect)
 	}
-	checkSessionUser(t, f, tc.wantSession)
+	checkSessionUser(t, f, tc.wantSession, tc.wantRole)
 	assertRefusalLog(t, f.logBuf.String(), tc.wantReason)
 }
 
@@ -486,7 +521,7 @@ func TestOIDC_DiscoveryFailure(t *testing.T) {
 		ClientSecret:     "test-client-secret",
 		RedirectURL:      "http://127.0.0.1:8080/api/v1/auth/oidc/callback",
 		Scopes:           []string{"openid", "email"},
-		AllowedSubjects:  []string{"admin-sub"},
+		AdminGroups:      []string{"snatcharr-admins"},
 		DiscoveryTimeout: 500 * time.Millisecond,
 	}
 	f := newSSOFixture(t, oidcCfg, config.ProxyAuthOptions{})
