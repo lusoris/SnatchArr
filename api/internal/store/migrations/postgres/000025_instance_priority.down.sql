@@ -9,3 +9,5 @@ ALTER TABLE instances
 ALTER TABLE settings
     DROP COLUMN IF EXISTS search_priority_preset,
     DROP COLUMN IF EXISTS download_priority_preset;
+
+-- Leave the settings singleton row: it predates nothing this migration removes.

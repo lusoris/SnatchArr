@@ -298,12 +298,6 @@ func (h *Handlers) UpdateSettings(ctx context.Context, req *oas.Settings) (*oas.
 		return nil, err
 	}
 	in := settingsFromOAS(req)
-	if err := in.SearchPriorityPreset.Validate(); err != nil {
-		return nil, fmt.Errorf("%w: %s", domain.ErrBadRequest, err.Error())
-	}
-	if err := in.DownloadPriorityPreset.Validate(); err != nil {
-		return nil, fmt.Errorf("%w: %s", domain.ErrBadRequest, err.Error())
-	}
 	s, err := h.settings.Update(ctx, in)
 	if err != nil {
 		return nil, err

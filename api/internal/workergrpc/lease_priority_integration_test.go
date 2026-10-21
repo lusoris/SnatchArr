@@ -160,12 +160,16 @@ func TestLeasePriority(t *testing.T) {
 		}
 	})
 
-	// Boundary: missing settings row leaves preset rank NULL -> ordered last (queued_at order).
+	// Boundary: migration 000025 seeds the settings row; with the row deleted the preset rank is
+	// NULL for every kind, so the LEFT JOIN degrades to queued_at order instead of failing.
 	t.Run("boundary no settings row leases in queued_at order", func(t *testing.T) {
 		t.Parallel()
 		f := newCompleteFixture(t)
 		if _, err := f.srv.runs.Complete(t.Context(), f.run.ID, "worker", domain.RunDone, 0, ""); err != nil {
 			t.Fatalf("Complete initial fixture run: %v", err)
+		}
+		if _, err := f.st.Pool().Exec(t.Context(), "DELETE FROM settings"); err != nil {
+			t.Fatalf("delete settings row: %v", err)
 		}
 		whisparrID := seedInstanceOfKind(t, f, domain.KindWhisparrV3, "whisparr-first-nosettings", nil)
 		sonarrID := seedInstanceOfKind(t, f, domain.KindSonarr, "sonarr-second-nosettings", nil)

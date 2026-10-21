@@ -6,7 +6,6 @@ package httpapi
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 
 	"github.com/lusoris/SnatchArr/api/internal/arrclient"
@@ -170,7 +169,7 @@ func (h *Handlers) UpdateInstancePriority(ctx context.Context, req *oas.Instance
 	}
 	in := instancePriorityFromOAS(req)
 	if err := in.Validate(); err != nil {
-		return nil, fmt.Errorf("%w: %s", domain.ErrBadRequest, err.Error())
+		return nil, err
 	}
 	kind, prio, err := h.instances.UpdatePriority(ctx, params.InstanceId, in)
 	if err != nil {

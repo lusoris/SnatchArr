@@ -11,6 +11,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import Field from '#lib/components/Field.svelte';
 	import PriorityPresetFields from '#lib/components/PriorityPresetFields.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
+	import { APP_KINDS, type AppKind } from '#lib/kinds.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { keys } from '#lib/query.js';
 	import NotificationChannels from './NotificationChannels.svelte';
@@ -21,7 +22,11 @@ SPDX-License-Identifier: EUPL-1.2
 	type PriorityPresetMap = components['schemas']['PriorityPresetMap'];
 
 	const rankSchema = z.number().int().min(1).max(100);
-	const presetMapSchema = z.record(z.string(), rankSchema) satisfies z.ZodType<PriorityPresetMap>;
+	const presetFields = Object.fromEntries(APP_KINDS.map((k) => [k, rankSchema])) as Record<
+		AppKind,
+		typeof rankSchema
+	>;
+	const presetMapSchema = z.object(presetFields) satisfies z.ZodType<PriorityPresetMap>;
 	const settingsSchema = z.object({
 		history_retention_days: z.number().int().min(1).max(3650),
 		user_agent: z.string().min(1).max(200),
@@ -66,7 +71,7 @@ SPDX-License-Identifier: EUPL-1.2
 
 	const save = createSentioMutation({
 		mutationFn: async (s: Settings) => (await api.PUT('/settings', { body: s })).data,
-		invalidates: [keys.settings, keys.caps],
+		invalidates: [keys.settings, keys.caps, keys.instances],
 		onSuccess: () => toast.success(m.settings_saved()),
 		onError: (err) => toast.error(describeError(err))
 	});

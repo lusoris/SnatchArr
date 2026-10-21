@@ -353,4 +353,23 @@ describe('settings', () => {
 		expect(screen.queryByLabelText(m.channel_apprise_url())).toBeNull();
 		expect(screen.queryByLabelText(m.channel_tags())).toBeNull();
 	});
+
+	it('prevents submission when a priority preset lacks an app kind', async () => {
+		const missingWhisparr: Record<string, number> = { ...mediaFirstRanks };
+		delete missingWhisparr.whisparr_v3;
+		stubGet({
+			...baseStubs,
+			'/settings': {
+				...sampleSettings,
+				search_priority_preset: missingWhisparr
+			}
+		});
+		const putSpy = vi.spyOn(api, 'PUT').mockResolvedValue({ data: sampleSettings } as never);
+		renderWithQuery(SettingsPage);
+
+		const button = await screen.findByRole('button', { name: m.instance_save() });
+		await fireEvent.click(button);
+
+		expect(putSpy).not.toHaveBeenCalled();
+	});
 });

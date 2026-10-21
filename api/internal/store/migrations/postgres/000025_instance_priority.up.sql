@@ -14,3 +14,6 @@ ALTER TABLE instances
         CHECK (search_priority IS NULL OR search_priority BETWEEN 1 AND 100),
     ADD COLUMN download_priority INTEGER
         CHECK (download_priority IS NULL OR download_priority BETWEEN 1 AND 100);
+
+-- LeaseRun LEFT JOINs the settings singleton for the preset; without the row every un-overridden instance sorts NULLS LAST behind any override.
+INSERT INTO settings (singleton, updated_at) VALUES (TRUE, now()) ON CONFLICT (singleton) DO NOTHING;
