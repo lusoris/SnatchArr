@@ -11,40 +11,10 @@ import type { components } from '#lib/api/schema.js';
 import { m } from '#lib/paraglide/messages.js';
 import { session } from '#lib/session.svelte.js';
 import { renderWithQuery, stubGet } from '#lib/testing/harness.js';
+import { MockEventSource } from '#lib/testing/sse.js';
 import LogsPage from './+page.svelte';
 
 type LogPage = components['schemas']['LogPage'];
-
-const { MockEventSource } = vi.hoisted(() => {
-	class MockEventSource {
-		static instances: MockEventSource[] = [];
-		url: string;
-		private listeners: Record<string, ((event: unknown) => void)[]> = {};
-
-		constructor(url: string) {
-			this.url = url;
-			MockEventSource.instances.push(this);
-		}
-
-		addEventListener(type: string, handler: (event: unknown) => void) {
-			this.listeners[type] = this.listeners[type] ?? [];
-			this.listeners[type].push(handler);
-		}
-
-		removeEventListener(type: string, handler: (event: unknown) => void) {
-			this.listeners[type] = (this.listeners[type] ?? []).filter((h) => h !== handler);
-		}
-
-		close() {}
-
-		emit(type: string, event: unknown) {
-			for (const handler of [...(this.listeners[type] ?? [])]) handler(event);
-		}
-	}
-
-	(globalThis as unknown as { EventSource: unknown }).EventSource = MockEventSource;
-	return { MockEventSource };
-});
 
 const samplePage: LogPage = {
 	capacity: 2000,

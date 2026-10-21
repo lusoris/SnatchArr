@@ -8,6 +8,8 @@ SPDX-License-Identifier: EUPL-1.2
 	import { createSentioQuery } from '@sveltesentio/query';
 	import { useSSE } from '@sveltesentio/realtime/use-sse';
 	import { api } from '#lib/api/client.js';
+	import ConnectionStatus from '#lib/components/ConnectionStatus.svelte';
+	import PageHeader from '#lib/components/PageHeader.svelte';
 	import { LIVE_EVENTS } from '#lib/live-events.js';
 	import {
 		eventToLiveFrame,
@@ -120,18 +122,11 @@ SPDX-License-Identifier: EUPL-1.2
 	}
 </script>
 
-<div class="mb-4 flex items-center justify-between">
-	<h1 class="text-2xl font-semibold">{m.live_title()}</h1>
-	<p class="flex items-center gap-2 text-sm" role="status">
-		<span
-			class="inline-block h-3 w-3 rounded-full"
-			class:bg-brand={sse.connected}
-			class:bg-warning={!sse.connected}
-			aria-hidden="true"
-		></span>
-		{sse.connected ? m.live_connected() : m.live_disconnected()}
-	</p>
-</div>
+<PageHeader title={m.live_title()}>
+	{#snippet status()}
+		<ConnectionStatus connected={sse.connected} />
+	{/snippet}
+</PageHeader>
 
 {#if backlogError}
 	<p role="alert" class="card mb-4 border-line text-sm text-danger">
