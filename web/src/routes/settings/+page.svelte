@@ -111,6 +111,10 @@ SPDX-License-Identifier: EUPL-1.2
 					bind:value={draft.global_hourly_cap}
 				/>
 			</Field>
+			<label class="flex items-center gap-2">
+				<input type="checkbox" data-field="llm_enabled" bind:checked={draft.llm_enabled} />
+				{m.settings_llm_enabled()}
+			</label>
 			<div>
 				<button type="submit" class="btn btn-primary" disabled={save.isPending}
 					>{m.instance_save()}</button

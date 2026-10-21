@@ -155,8 +155,10 @@ func TestIDMatchedReadBack(t *testing.T) {
 		{"positive/first_sweep_after_import_fails", sent, imported.Add(10 * time.Minute), true, false},
 		{"negative/failure_reported_once", later, imported.Add(20 * time.Minute), false, false},
 		{"negative/refused_is_no_failed_import", refused, imported.Add(10 * time.Minute), false, false},
-		{"boundary/just_inside_ttl_waits", later, imported.Add(24*time.Hour - time.Second), false, false},
-		{"boundary/at_ttl_imports_again", later, imported.Add(24 * time.Hour), false, true},
+		{"boundary/refused_just_inside_retry_waits", refused, imported.Add(queue.RefusedRetry - time.Second), false, false},
+		{"boundary/refused_at_retry_window_retries", refused, imported.Add(queue.RefusedRetry), false, true},
+		{"negative/success_inside_ttl_waits", later, imported.Add(24*time.Hour - time.Second), false, false},
+		{"boundary/success_at_ttl_imports_again", later, imported.Add(24 * time.Hour), false, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -308,6 +310,36 @@ func TestServiceForceImportRefused(t *testing.T) {
 	f.sweep(t)
 	if got := f.eventTypes(); len(got) != 0 || len(f.arr.imports) != 1 || len(f.arr.removals) != 0 {
 		t.Fatalf("after refusal: events %v imports %v removals %v, want nothing", got, f.arr.imports, f.arr.removals)
+	}
+}
+
+func TestServiceForceImportRefusedWithReasons(t *testing.T) {
+	t.Parallel()
+	f := newImportFixture(t, domain.KindSonarr, queue.ModeAct, idMatchedItem(7, "dl-7"))
+	f.arr.importErr["dl-7"] = &queue.NoCleanCandidateError{
+		Reasons: []string{"Sample", "Unable to parse file on import"},
+	}
+	f.sweep(t)
+	got := f.eventTypes()
+	wantDetail := "queue_item_import_failed:no_clean_candidate: Sample; Unable to parse file on import"
+	if len(got) != 1 || got[0] != wantDetail {
+		t.Fatalf("events = %v, want [%s]", got, wantDetail)
+	}
+	if row := f.st.strikes[f.inst.ID]["dl-7"]; !row.ImportRefused || row.ImportedAt.IsZero() {
+		t.Fatalf("strike row = %+v, want refused stamp", row)
+	}
+	// At t + refusedRetry - 1s, sweep does not retry
+	f.clk.Advance(queue.RefusedRetry - time.Second)
+	f.ev.frames = nil
+	f.sweep(t)
+	if len(f.arr.imports) != 1 {
+		t.Fatalf("at refusedRetry-1s imports = %v, want 1", f.arr.imports)
+	}
+	// At t + refusedRetry, sweep retries
+	f.clk.Advance(time.Second)
+	f.sweep(t)
+	if len(f.arr.imports) != 2 {
+		t.Fatalf("at refusedRetry imports = %v, want 2", f.arr.imports)
 	}
 }
 

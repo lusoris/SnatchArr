@@ -153,12 +153,16 @@ func policyFromOAS(instanceID uuid.UUID, in *oas.SnatchPolicy) domain.Policy {
 func settingsToOAS(s domain.Settings) *oas.Settings {
 	return &oas.Settings{
 		HistoryRetentionDays: s.HistoryRetentionDays, UserAgent: s.UserAgent, GlobalHourlyCap: s.GlobalHourlyCap,
-		UpdatedAt: oas.NewOptDateTime(s.UpdatedAt),
+		LlmEnabled: oas.NewOptBool(s.LLMEnabled),
+		UpdatedAt:  oas.NewOptDateTime(s.UpdatedAt),
 	}
 }
 
 func settingsFromOAS(in *oas.Settings) domain.Settings {
-	return domain.Settings{HistoryRetentionDays: in.HistoryRetentionDays, UserAgent: in.UserAgent, GlobalHourlyCap: in.GlobalHourlyCap}
+	return domain.Settings{
+		HistoryRetentionDays: in.HistoryRetentionDays, UserAgent: in.UserAgent, GlobalHourlyCap: in.GlobalHourlyCap,
+		LLMEnabled: in.LlmEnabled.Or(false),
+	}
 }
 
 func notificationChannelToOAS(c domain.NotificationChannel) oas.NotificationChannel {

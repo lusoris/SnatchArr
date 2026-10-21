@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/lusoris/SnatchArr/api/internal/domain"
@@ -211,6 +212,24 @@ var ErrQueueUnsupported = errors.New("queue management is not supported for this
 // ErrNoCleanCandidate indicates a force import found no candidate without a
 // rejection and with a mapping; nothing was imported.
 var ErrNoCleanCandidate = errors.New("no clean, mapped manual-import candidate")
+
+// NoCleanCandidateError indicates a force import found no candidate without a
+// rejection and with a mapping, carrying distinct rejection reasons.
+type NoCleanCandidateError struct {
+	Reasons []string
+}
+
+func (e *NoCleanCandidateError) Error() string {
+	if len(e.Reasons) == 0 {
+		return ErrNoCleanCandidate.Error()
+	}
+	return fmt.Sprintf("%s: %s", ErrNoCleanCandidate.Error(), strings.Join(e.Reasons, "; "))
+}
+
+// Unwrap lets errors.Is match ErrNoCleanCandidate.
+func (e *NoCleanCandidateError) Unwrap() error {
+	return ErrNoCleanCandidate
+}
 
 // SupportsForceImport reports the kinds whose manual-import candidates carry the
 // grab-history mapping rule id_matched needs (ADR-0013).

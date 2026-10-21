@@ -32,6 +32,14 @@ func (s *ApiKey) encodeFields(e *jx.Encoder) {
 		e.Str(s.Name)
 	}
 	{
+		e.FieldStart("scopes")
+		e.ArrStart()
+		for _, elem := range s.Scopes {
+			elem.Encode(e)
+		}
+		e.ArrEnd()
+	}
+	{
 		e.FieldStart("created_at")
 		json.EncodeDateTime(e, s.CreatedAt)
 	}
@@ -49,12 +57,13 @@ func (s *ApiKey) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfApiKey = [5]string{
+var jsonFieldsNameOfApiKey = [6]string{
 	0: "id",
 	1: "name",
-	2: "created_at",
-	3: "expires_at",
-	4: "last_used_at",
+	2: "scopes",
+	3: "created_at",
+	4: "expires_at",
+	5: "last_used_at",
 }
 
 // Decode decodes ApiKey from json.
@@ -90,8 +99,26 @@ func (s *ApiKey) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"name\"")
 			}
-		case "created_at":
+		case "scopes":
 			requiredBitSet[0] |= 1 << 2
+			if err := func() error {
+				s.Scopes = make([]ApiKeyScope, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem ApiKeyScope
+					if err := elem.Decode(d); err != nil {
+						return err
+					}
+					s.Scopes = append(s.Scopes, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"scopes\"")
+			}
+		case "created_at":
+			requiredBitSet[0] |= 1 << 3
 			if err := func() error {
 				v, err := json.DecodeDateTime(d)
 				s.CreatedAt = v
@@ -132,7 +159,7 @@ func (s *ApiKey) Decode(d *jx.Decoder) error {
 	// Validate required fields.
 	var failures []validate.FieldError
 	for i, mask := range [1]uint8{
-		0b00000111,
+		0b00001111,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -174,6 +201,70 @@ func (s *ApiKey) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *ApiKey) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes ApiKeyScope as json.
+func (s ApiKeyScope) Encode(e *jx.Encoder) {
+	e.Str(string(s))
+}
+
+// Decode decodes ApiKeyScope from json.
+func (s *ApiKeyScope) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode ApiKeyScope to nil")
+	}
+	v, err := d.StrBytes()
+	if err != nil {
+		return err
+	}
+	// Try to use constant string.
+	switch ApiKeyScope(v) {
+	case ApiKeyScopeCoreRead:
+		*s = ApiKeyScopeCoreRead
+	case ApiKeyScopeCoreWrite:
+		*s = ApiKeyScopeCoreWrite
+	case ApiKeyScopeRequestsRead:
+		*s = ApiKeyScopeRequestsRead
+	case ApiKeyScopeRequestsWrite:
+		*s = ApiKeyScopeRequestsWrite
+	case ApiKeyScopeDownloadClientsRead:
+		*s = ApiKeyScopeDownloadClientsRead
+	case ApiKeyScopeDownloadClientsWrite:
+		*s = ApiKeyScopeDownloadClientsWrite
+	case ApiKeyScopeProwlarrRead:
+		*s = ApiKeyScopeProwlarrRead
+	case ApiKeyScopeProwlarrWrite:
+		*s = ApiKeyScopeProwlarrWrite
+	case ApiKeyScopeNotificationsRead:
+		*s = ApiKeyScopeNotificationsRead
+	case ApiKeyScopeNotificationsWrite:
+		*s = ApiKeyScopeNotificationsWrite
+	case ApiKeyScopeAdminRead:
+		*s = ApiKeyScopeAdminRead
+	case ApiKeyScopeAdminWrite:
+		*s = ApiKeyScopeAdminWrite
+	case ApiKeyScopeAdultRead:
+		*s = ApiKeyScopeAdultRead
+	case ApiKeyScopeAdultWrite:
+		*s = ApiKeyScopeAdultWrite
+	default:
+		*s = ApiKeyScope(v)
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s ApiKeyScope) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *ApiKeyScope) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }
@@ -1106,6 +1197,16 @@ func (s *CreateApiKeyRequest) encodeFields(e *jx.Encoder) {
 		e.Str(s.Name)
 	}
 	{
+		if s.Scopes != nil {
+			e.FieldStart("scopes")
+			e.ArrStart()
+			for _, elem := range s.Scopes {
+				elem.Encode(e)
+			}
+			e.ArrEnd()
+		}
+	}
+	{
 		if s.ExpiresAt.Set {
 			e.FieldStart("expires_at")
 			s.ExpiresAt.Encode(e, json.EncodeDateTime)
@@ -1113,9 +1214,10 @@ func (s *CreateApiKeyRequest) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfCreateApiKeyRequest = [2]string{
+var jsonFieldsNameOfCreateApiKeyRequest = [3]string{
 	0: "name",
-	1: "expires_at",
+	1: "scopes",
+	2: "expires_at",
 }
 
 // Decode decodes CreateApiKeyRequest from json.
@@ -1138,6 +1240,23 @@ func (s *CreateApiKeyRequest) Decode(d *jx.Decoder) error {
 				return nil
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"name\"")
+			}
+		case "scopes":
+			if err := func() error {
+				s.Scopes = make([]ApiKeyScope, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem ApiKeyScope
+					if err := elem.Decode(d); err != nil {
+						return err
+					}
+					s.Scopes = append(s.Scopes, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"scopes\"")
 			}
 		case "expires_at":
 			if err := func() error {
@@ -1223,6 +1342,14 @@ func (s *CreatedApiKey) encodeFields(e *jx.Encoder) {
 		e.Str(s.Name)
 	}
 	{
+		e.FieldStart("scopes")
+		e.ArrStart()
+		for _, elem := range s.Scopes {
+			elem.Encode(e)
+		}
+		e.ArrEnd()
+	}
+	{
 		e.FieldStart("created_at")
 		json.EncodeDateTime(e, s.CreatedAt)
 	}
@@ -1244,13 +1371,14 @@ func (s *CreatedApiKey) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfCreatedApiKey = [6]string{
+var jsonFieldsNameOfCreatedApiKey = [7]string{
 	0: "id",
 	1: "name",
-	2: "created_at",
-	3: "expires_at",
-	4: "last_used_at",
-	5: "secret",
+	2: "scopes",
+	3: "created_at",
+	4: "expires_at",
+	5: "last_used_at",
+	6: "secret",
 }
 
 // Decode decodes CreatedApiKey from json.
@@ -1286,8 +1414,26 @@ func (s *CreatedApiKey) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"name\"")
 			}
-		case "created_at":
+		case "scopes":
 			requiredBitSet[0] |= 1 << 2
+			if err := func() error {
+				s.Scopes = make([]ApiKeyScope, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem ApiKeyScope
+					if err := elem.Decode(d); err != nil {
+						return err
+					}
+					s.Scopes = append(s.Scopes, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"scopes\"")
+			}
+		case "created_at":
+			requiredBitSet[0] |= 1 << 3
 			if err := func() error {
 				v, err := json.DecodeDateTime(d)
 				s.CreatedAt = v
@@ -1319,7 +1465,7 @@ func (s *CreatedApiKey) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"last_used_at\"")
 			}
 		case "secret":
-			requiredBitSet[0] |= 1 << 5
+			requiredBitSet[0] |= 1 << 6
 			if err := func() error {
 				v, err := d.Str()
 				s.Secret = string(v)
@@ -1340,7 +1486,7 @@ func (s *CreatedApiKey) Decode(d *jx.Decoder) error {
 	// Validate required fields.
 	var failures []validate.FieldError
 	for i, mask := range [1]uint8{
-		0b00100111,
+		0b01001111,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -11675,6 +11821,12 @@ func (s *Settings) encodeFields(e *jx.Encoder) {
 		e.Int(s.GlobalHourlyCap)
 	}
 	{
+		if s.LlmEnabled.Set {
+			e.FieldStart("llm_enabled")
+			s.LlmEnabled.Encode(e)
+		}
+	}
+	{
 		if s.UpdatedAt.Set {
 			e.FieldStart("updated_at")
 			s.UpdatedAt.Encode(e, json.EncodeDateTime)
@@ -11682,11 +11834,12 @@ func (s *Settings) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfSettings = [4]string{
+var jsonFieldsNameOfSettings = [5]string{
 	0: "history_retention_days",
 	1: "user_agent",
 	2: "global_hourly_cap",
-	3: "updated_at",
+	3: "llm_enabled",
+	4: "updated_at",
 }
 
 // Decode decodes Settings from json.
@@ -11695,6 +11848,7 @@ func (s *Settings) Decode(d *jx.Decoder) error {
 		return errors.New("invalid: unable to decode Settings to nil")
 	}
 	var requiredBitSet [1]uint8
+	s.setDefaults()
 
 	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
 		switch string(k) {
@@ -11733,6 +11887,16 @@ func (s *Settings) Decode(d *jx.Decoder) error {
 				return nil
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"global_hourly_cap\"")
+			}
+		case "llm_enabled":
+			if err := func() error {
+				s.LlmEnabled.Reset()
+				if err := s.LlmEnabled.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"llm_enabled\"")
 			}
 		case "updated_at":
 			if err := func() error {

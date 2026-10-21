@@ -46,6 +46,11 @@ func withUser(ctx context.Context, u domain.User) context.Context {
 	return context.WithValue(ctx, ctxKeyUser, u)
 }
 
+// WithUser returns a child context carrying the authenticated user.
+func WithUser(ctx context.Context, u domain.User) context.Context {
+	return withUser(ctx, u)
+}
+
 // UserFrom returns the authenticated user, if any.
 func UserFrom(ctx context.Context) (domain.User, bool) {
 	u, ok := ctx.Value(ctxKeyUser).(domain.User)

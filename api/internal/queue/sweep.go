@@ -248,9 +248,10 @@ func applyRemovalMatch(s Settings, item Item, rs RuleSettings, next Strike, thre
 	}
 }
 
-// applyImportMatch decides the id_matched action. An item imported or refused
-// less than strikeTTL ago is not tried again; the first sweep after an import
-// reports the item as a failed import, because a cleared item leaves the queue.
+// applyImportMatch decides the id_matched action. An item imported less than
+// strikeTTL ago, or refused less than RefusedRetry ago, is not tried again;
+// the first sweep after an import reports the item as a failed import, because
+// a cleared item leaves the queue.
 func applyImportMatch(s Settings, item Item, prev Strike, rs RuleSettings, next Strike, now time.Time, spent *budget) Decision {
 	d := Decision{
 		ItemID:     item.ID,
@@ -264,7 +265,11 @@ func applyImportMatch(s Settings, item Item, prev Strike, rs RuleSettings, next 
 	if spent.importKeys[key] {
 		return d
 	}
-	if !prev.ImportedAt.IsZero() && now.Sub(prev.ImportedAt) < strikeTTL {
+	cooldown := strikeTTL
+	if prev.ImportRefused {
+		cooldown = RefusedRetry
+	}
+	if !prev.ImportedAt.IsZero() && now.Sub(prev.ImportedAt) < cooldown {
 		d.ImportFailed = !prev.ImportRefused && prev.LastSeen.Equal(prev.ImportedAt)
 		markImportKey(spent, key, d.ImportFailed)
 		return d

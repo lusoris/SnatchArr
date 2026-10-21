@@ -520,5 +520,6 @@
 	"nav_search_placeholder": "Search or jump to…",
 	"nav_search_shortcut": "Ctrl+K",
 	"nav_search_shortcut_apple": "⌘K",
-	"nav_bottom_label": "Quick navigation"
+	"nav_bottom_label": "Quick navigation",
+	"settings_llm_enabled": "Enable MCP server (/api/v1/mcp)"
 }
