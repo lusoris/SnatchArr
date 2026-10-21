@@ -20,6 +20,23 @@ vi.mock('$app/state', () => ({
 	page: pageMock
 }));
 
+async function submitLoginForm(password: string, username = 'admin'): Promise<void> {
+	await fireEvent.input(screen.getByLabelText(m.username()), {
+		target: { value: username }
+	});
+	await fireEvent.input(screen.getByLabelText(m.password()), {
+		target: { value: password }
+	});
+	await fireEvent.click(screen.getByRole('button', { name: m.login_submit() }));
+}
+
+function stubReadySession() {
+	return stubGet({
+		'/auth/setup/status': { setup_complete: true },
+		'/auth/session': { user: { id: 'u1', username: 'admin', role: 'admin' } }
+	});
+}
+
 describe('login', () => {
 	afterEach(() => {
 		vi.restoreAllMocks();
@@ -37,20 +54,11 @@ describe('login', () => {
 	});
 
 	it('submits credentials and navigates on success', async () => {
-		stubGet({
-			'/auth/setup/status': { setup_complete: true },
-			'/auth/session': { user: { id: 'u1', username: 'admin', role: 'admin' } }
-		});
+		stubReadySession();
 		const postSpy = vi.spyOn(api, 'POST').mockResolvedValue({ data: {} } as never);
 		renderWithQuery(LoginPage);
 
-		await fireEvent.input(screen.getByLabelText(m.username()), {
-			target: { value: 'admin' }
-		});
-		await fireEvent.input(screen.getByLabelText(m.password()), {
-			target: { value: 'secretpass' }
-		});
-		await fireEvent.click(screen.getByRole('button', { name: m.login_submit() }));
+		await submitLoginForm('secretpass');
 
 		expect(postSpy).toHaveBeenCalledWith('/auth/login', {
 			body: { username: 'admin', password: 'secretpass' }
@@ -66,13 +74,7 @@ describe('login', () => {
 		);
 		renderWithQuery(LoginPage);
 
-		await fireEvent.input(screen.getByLabelText(m.username()), {
-			target: { value: 'admin' }
-		});
-		await fireEvent.input(screen.getByLabelText(m.password()), {
-			target: { value: 'wrongpass' }
-		});
-		await fireEvent.click(screen.getByRole('button', { name: m.login_submit() }));
+		await submitLoginForm('wrongpass');
 
 		const alert = await screen.findByRole('alert');
 		expect(alert.textContent).toContain('Invalid credentials');

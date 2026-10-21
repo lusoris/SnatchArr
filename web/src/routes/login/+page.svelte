@@ -7,7 +7,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { api, describeError } from '#lib/api/client.js';
-	import BrandMark from '#lib/components/BrandMark.svelte';
+	import AuthCard from '#lib/components/AuthCard.svelte';
 	import Field from '#lib/components/Field.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { session } from '#lib/session.svelte.js';
@@ -62,14 +62,12 @@ SPDX-License-Identifier: EUPL-1.2
 	}
 </script>
 
-<div class="mx-auto w-full max-w-sm">
-	<div class="text-brand mb-6 flex justify-center">
-		<BrandMark size={56} />
-	</div>
-	<h1 class="mb-4 text-center text-2xl font-semibold">{m.login_title()}</h1>
-	{#if ssoFailed}
-		<p role="alert" class="mb-4 text-sm text-danger">{m.login_sso_failed()}</p>
-	{/if}
+<AuthCard title={m.login_title()}>
+	{#snippet notice()}
+		{#if ssoFailed}
+			<p role="alert" class="mb-4 text-sm text-danger">{m.login_sso_failed()}</p>
+		{/if}
+	{/snippet}
 	<form class="card flex flex-col gap-4" onsubmit={submit}>
 		<Field id="username" label={m.username()}>
 			<input id="username" class="input" autocomplete="username" required bind:value={username} />
@@ -99,4 +97,4 @@ SPDX-License-Identifier: EUPL-1.2
 			</a>
 		{/if}
 	</form>
-</div>
+</AuthCard>
