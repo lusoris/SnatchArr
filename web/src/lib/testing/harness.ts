@@ -176,6 +176,7 @@ export const sampleQueuePolicy: QueuePolicy = {
 	enabled: true,
 	rules: {
 		stalled: { mode: 'observe', threshold: 3, blocklist: true },
+		metadata_stuck: { mode: 'observe', threshold: 180, blocklist: true },
 		slow: { mode: 'observe', threshold: 5, blocklist: true },
 		failed: { mode: 'act', threshold: 1, blocklist: true },
 		import_blocked: { mode: 'act', threshold: 2, blocklist: true },

@@ -157,6 +157,7 @@
 	"queue_policy_enabled": "Enable queue management",
 	"queue_policy_rules_title": "Rules",
 	"queue_rule_stalled": "Stalled download",
+	"queue_rule_metadata_stuck": "Metadata stuck",
 	"queue_rule_slow": "Slow download",
 	"queue_rule_failed": "Failed download",
 	"queue_rule_import_blocked": "Import blocked",

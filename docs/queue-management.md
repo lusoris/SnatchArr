@@ -33,6 +33,7 @@ Each sweep checks an item against the rules in this order and gives it at most o
 | Rule | Class | Action | Blocklist | Re-search | Defaults |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | stalled | - | remove | yes | no | observe, threshold 6 |
+| metadata_stuck | - | remove | yes | no | observe, threshold 180 minutes of age |
 | slow | - | remove | yes | no | observe, threshold 6 |
 | failed | - | remove | yes | yes | observe, threshold 2 |
 | id_matched | - | force-import | never removes | no | observe, threshold 1 |
@@ -82,6 +83,12 @@ Floor constraints: 0..100, with fixable floor strictly greater than broken floor
 ### Stalled
 
 Zero progress is stalled, never slow, even when a speed floor is set. A `sizeleft` that grew also counts. The first sighting of an item gives no strike, because there is no earlier `sizeleft` to compare, and neither does `sizeleft = 0`.
+
+### Metadata stuck
+
+A torrent whose client never fetched the metadata of its magnet link. It matches a torrent item (protocol `torrent`, or no protocol reported) that is either `queued` with a status message containing `downloading metadata`, or in warning with a message containing `cannot resolve magnet link`; these are the messages Sonarr's qBittorrent client reports with DHT on and off. Since the messages may be localized, a torrent with a total size of 0 that is `queued` or in warning matches too. That fallback also matches a magnet that the client holds back behind its active-torrent limit before any metadata arrives; the age threshold and the observe default bound that case.
+
+Unlike the other rules, the threshold counts minutes, not strikes: the item is removed (with the client data, and blocklisted by default) once `now - added` reaches it. The range is 30 to 1440 minutes, the default 180. An item without an `added` time never reaches the threshold: it is struck and reported, never removed. Queued items are normally never touched; a metadata-stuck match is the exception. Tests: `api/internal/queue/metadata_stuck_test.go`.
 
 ### Slow
 

@@ -20,6 +20,7 @@ type Rule string
 // Queue rules in priority order.
 const (
 	RuleStalled             Rule = "stalled"
+	RuleMetadataStuck       Rule = "metadata_stuck"
 	RuleSlow                Rule = "slow"
 	RuleFailed              Rule = "failed"
 	RuleIDMatched           Rule = "id_matched"
@@ -36,6 +37,7 @@ const (
 // RuleOrder defines the priority order for evaluating rules.
 var RuleOrder = []Rule{
 	RuleStalled,
+	RuleMetadataStuck,
 	RuleSlow,
 	RuleFailed,
 	RuleIDMatched,
@@ -127,6 +129,10 @@ type Item struct {
 	Title string
 	// StatusLines flattens statusMessages: each message's title, then its messages.
 	StatusLines []string
+	// Protocol is the download transport family (e.g. "torrent", "usenet").
+	Protocol string
+	// Size is the total content size in bytes (0 when unknown, e.g. metadata fetching).
+	Size int64
 
 	// duplicate is set by Sweep when another download for the same media
 	// item scores higher.
@@ -311,8 +317,14 @@ func validateRuleEntry(r Rule, rs RuleSettings) error {
 	if !slices.Contains(RuleOrder, r) {
 		return fmt.Errorf("%w: unknown rule %q", ErrInvalid, r)
 	}
-	if rs.Threshold < 1 || rs.Threshold > 100 {
-		return fmt.Errorf("%w: rule %q threshold must be between 1 and 100, got %d", ErrInvalid, r, rs.Threshold)
+	if r == RuleMetadataStuck {
+		if rs.Threshold < 30 || rs.Threshold > 1440 {
+			return fmt.Errorf("%w: rule %q threshold must be between 30 and 1440, got %d", ErrInvalid, r, rs.Threshold)
+		}
+	} else {
+		if rs.Threshold < 1 || rs.Threshold > 100 {
+			return fmt.Errorf("%w: rule %q threshold must be between 1 and 100, got %d", ErrInvalid, r, rs.Threshold)
+		}
 	}
 	if rs.Mode != "" && rs.Mode != ModeObserve && rs.Mode != ModeAct {
 		return fmt.Errorf("%w: rule %q mode must be observe or act, got %q", ErrInvalid, r, rs.Mode)

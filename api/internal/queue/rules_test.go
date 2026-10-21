@@ -43,6 +43,14 @@ func itemFor(rule queue.Rule, added time.Time) queue.Item {
 	switch rule {
 	case queue.RuleStalled:
 		return base
+	case queue.RuleMetadataStuck:
+		base.Protocol = "torrent"
+		base.Status = "queued"
+		base.TrackedDownloadState = "queued"
+		base.StatusLines = []string{"qBittorrent is downloading metadata"}
+		base.Size = 0
+		base.SizeLeft = 0
+		return base
 	case queue.RuleSlow:
 		base.SizeLeft = 9_999_990
 		return base
@@ -100,6 +108,7 @@ func TestDefaultSettingsFollowSpec(t *testing.T) {
 	t.Parallel()
 	want := map[queue.Rule]int{
 		queue.RuleStalled:             6,
+		queue.RuleMetadataStuck:       180,
 		queue.RuleSlow:                6,
 		queue.RuleFailed:              2,
 		queue.RuleIDMatched:           1,
@@ -135,6 +144,7 @@ func TestRuleOrderDefinitions(t *testing.T) {
 	t.Parallel()
 	expected := []queue.Rule{
 		queue.RuleStalled,
+		queue.RuleMetadataStuck,
 		queue.RuleSlow,
 		queue.RuleFailed,
 		queue.RuleIDMatched,
@@ -481,7 +491,7 @@ func TestEveryRuleBoundary(t *testing.T) {
 				retryItem.SizeLeft = cleanItem.SizeLeft - 10
 			case queue.RuleStalled:
 				retryItem.SizeLeft = cleanItem.SizeLeft
-			case queue.RuleFailed, queue.RuleIDMatched, queue.RuleImportFixable, queue.RuleImportBroken, queue.RuleImportNotWanted, queue.RuleImportBlocked, queue.RuleUnwantedScore, queue.RuleNotAnUpgrade, queue.RuleDuplicate, queue.RuleUnwantedUnmonitored:
+			case queue.RuleFailed, queue.RuleIDMatched, queue.RuleImportFixable, queue.RuleImportBroken, queue.RuleImportNotWanted, queue.RuleImportBlocked, queue.RuleUnwantedScore, queue.RuleNotAnUpgrade, queue.RuleDuplicate, queue.RuleUnwantedUnmonitored, queue.RuleMetadataStuck:
 				// item already has rule-triggering fields set.
 			}
 			retryD := queue.Sweep(s, []queue.Item{retryItem}, prev, retryNow)[0]
@@ -773,6 +783,7 @@ func TestRuleBlocklistDefaultsMatchTable(t *testing.T) {
 	t.Parallel()
 	want := map[queue.Rule]bool{
 		queue.RuleStalled:             true,
+		queue.RuleMetadataStuck:       true,
 		queue.RuleSlow:                true,
 		queue.RuleFailed:              true,
 		queue.RuleImportBlocked:       true,

@@ -4479,6 +4479,7 @@ type QueueRule string
 
 const (
 	QueueRuleStalled             QueueRule = "stalled"
+	QueueRuleMetadataStuck       QueueRule = "metadata_stuck"
 	QueueRuleSlow                QueueRule = "slow"
 	QueueRuleFailed              QueueRule = "failed"
 	QueueRuleImportBlocked       QueueRule = "import_blocked"
@@ -4496,6 +4497,7 @@ const (
 func (QueueRule) AllValues() []QueueRule {
 	return []QueueRule{
 		QueueRuleStalled,
+		QueueRuleMetadataStuck,
 		QueueRuleSlow,
 		QueueRuleFailed,
 		QueueRuleImportBlocked,
@@ -4514,6 +4516,8 @@ func (QueueRule) AllValues() []QueueRule {
 func (s QueueRule) MarshalText() ([]byte, error) {
 	switch s {
 	case QueueRuleStalled:
+		return []byte(s), nil
+	case QueueRuleMetadataStuck:
 		return []byte(s), nil
 	case QueueRuleSlow:
 		return []byte(s), nil
@@ -4547,6 +4551,9 @@ func (s *QueueRule) UnmarshalText(data []byte) error {
 	switch QueueRule(data) {
 	case QueueRuleStalled:
 		*s = QueueRuleStalled
+		return nil
+	case QueueRuleMetadataStuck:
+		*s = QueueRuleMetadataStuck
 		return nil
 	case QueueRuleSlow:
 		*s = QueueRuleSlow
@@ -4670,10 +4677,13 @@ func (s *QueueRuleSettings) SetBlocklist(val OptBool) {
 
 // Ref: #/components/schemas/QueueRules
 type QueueRules struct {
-	Stalled       QueueRuleSettings `json:"stalled"`
-	Slow          QueueRuleSettings `json:"slow"`
-	Failed        QueueRuleSettings `json:"failed"`
-	ImportBlocked QueueRuleSettings `json:"import_blocked"`
+	Stalled QueueRuleSettings `json:"stalled"`
+	// Strikes and removes a torrent download stuck fetching metadata. Optional on write so older clients
+	// keep working; left out, the rule takes its default settings. Reads always return it.
+	MetadataStuck OptQueueRuleSettings `json:"metadata_stuck"`
+	Slow          QueueRuleSettings    `json:"slow"`
+	Failed        QueueRuleSettings    `json:"failed"`
+	ImportBlocked QueueRuleSettings    `json:"import_blocked"`
 	// Force-imports a Sonarr or Radarr download the *arr matched to its series or movie by ID only,
 	// through a ManualImport of its clean, mapped candidates; it never removes or blocklists (ADR-0013).
 	// Optional on write so older clients keep working; left out, the rule takes its default settings.
@@ -4706,6 +4716,11 @@ type QueueRules struct {
 // GetStalled returns the value of Stalled.
 func (s *QueueRules) GetStalled() QueueRuleSettings {
 	return s.Stalled
+}
+
+// GetMetadataStuck returns the value of MetadataStuck.
+func (s *QueueRules) GetMetadataStuck() OptQueueRuleSettings {
+	return s.MetadataStuck
 }
 
 // GetSlow returns the value of Slow.
@@ -4766,6 +4781,11 @@ func (s *QueueRules) GetUnwantedUnmonitored() QueueRuleSettings {
 // SetStalled sets the value of Stalled.
 func (s *QueueRules) SetStalled(val QueueRuleSettings) {
 	s.Stalled = val
+}
+
+// SetMetadataStuck sets the value of MetadataStuck.
+func (s *QueueRules) SetMetadataStuck(val OptQueueRuleSettings) {
+	s.MetadataStuck = val
 }
 
 // SetSlow sets the value of Slow.
