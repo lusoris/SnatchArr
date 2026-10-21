@@ -9,7 +9,7 @@
 // A separate module, so the application module never sees these dependencies.
 module github.com/lusoris/SnatchArr/tools/go
 
-go 1.27.2
+go 1.27.3
 
 tool (
 	github.com/securego/gosec/v2/cmd/gosec
