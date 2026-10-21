@@ -53,8 +53,10 @@ func TestSettingsValidate(t *testing.T) {
 		t.Fatalf("valid llm_write_tools rejected: %v", err)
 	}
 	allWriteTools := domain.Settings{
-		HistoryRetentionDays: 90,
-		UserAgent:            "SnatchArr/1.0",
+		HistoryRetentionDays:   90,
+		UserAgent:              "SnatchArr/1.0",
+		SearchPriorityPreset:   preset,
+		DownloadPriorityPreset: preset,
 		LLMWriteTools: []string{
 			domain.LLMWriteToolTriggerRun,
 			domain.LLMWriteToolUpdatePolicy,

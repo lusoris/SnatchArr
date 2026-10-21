@@ -239,6 +239,7 @@ func TestMCPSettingsUpdateSecurityFence(t *testing.T) {
 			"llm_write_tools":        testAllWriteTools,
 		},
 	}
+	withStoredPresets(t, f, token, updateArgs)
 	got := callToolWithParams(t, f, token, domain.LLMWriteToolUpdateSettings, updateArgs)
 	if got.IsError {
 		t.Fatalf("update_settings failed: %s", got.ContentText)
@@ -453,7 +454,7 @@ func TestMCPWriteToolsInvalidBody(t *testing.T) {
 		{
 			name: "update_settings with 0 retention days",
 			tool: domain.LLMWriteToolUpdateSettings,
-			args: map[string]any{"body": map[string]any{"history_retention_days": 0, "user_agent": "x"}},
+			args: withStoredPresets(t, f, token, map[string]any{"body": map[string]any{"history_retention_days": 0, "user_agent": "x"}}),
 		},
 	}
 
@@ -615,12 +616,12 @@ func testPositiveSchedulesAndSettings(t *testing.T, f *mcpFixture, token, config
 	}); impRes.IsError {
 		t.Fatalf("import_configarr failed: %s", impRes.ContentText)
 	}
-	if uSet := callToolWithParams(t, f, token, domain.LLMWriteToolUpdateSettings, map[string]any{
+	if uSet := callToolWithParams(t, f, token, domain.LLMWriteToolUpdateSettings, withStoredPresets(t, f, token, map[string]any{
 		"body": map[string]any{
 			"history_retention_days": 60, "user_agent": "SnatchArr-Positive/1.0",
 			"global_hourly_cap": 200, "llm_enabled": true, "llm_write_tools": testAllWriteTools,
 		},
-	}); uSet.IsError {
+	})); uSet.IsError {
 		t.Fatalf("update_settings failed: %s", uSet.ContentText)
 	}
 	if dInst := callToolWithParams(t, f, token, domain.LLMWriteToolDeleteInstance, map[string]any{
@@ -641,4 +642,30 @@ func TestMCPWriteToolsPositive(t *testing.T) {
 	instID := testPositiveInstancesAndPolicies(t, f, token)
 	testPositiveRunsAndEvents(t, f, token, instID)
 	testPositiveSchedulesAndSettings(t, f, token, configPath, instID)
+}
+
+// withStoredPresets copies the stored priority presets into an update_settings
+// body, so a test changes only the fields it names.
+func withStoredPresets(t *testing.T, f *mcpFixture, token string, args map[string]any) map[string]any {
+	t.Helper()
+	got := callToolWithParams(t, f, token, "snatcharr_get_settings", map[string]any{})
+	if got.IsError {
+		t.Fatalf("get_settings failed: %s", got.ContentText)
+	}
+	var current map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(got.ContentText), &current); err != nil {
+		t.Fatalf("decode get_settings: %v", err)
+	}
+	body, ok := args["body"].(map[string]any)
+	if !ok {
+		t.Fatalf("args carry no body object")
+	}
+	for _, key := range []string{"search_priority_preset", "download_priority_preset"} {
+		preset, found := current[key]
+		if !found {
+			t.Fatalf("get_settings lacks %s", key)
+		}
+		body[key] = preset
+	}
+	return args
 }
