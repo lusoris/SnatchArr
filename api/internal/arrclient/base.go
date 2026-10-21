@@ -21,14 +21,34 @@ type BaseFactory struct {
 	UserAgent string
 }
 
+// httptest.Server.Close() calls CloseIdleConnections() on http.DefaultTransport,
+// which is shared with every other package in the process. A dedicated package-level
+// transport clone prevents parallel test teardowns from closing idle connections
+// while preserving cross-client connection pooling in production.
+var arrTransport = defaultTransport()
+
+func defaultTransport() http.RoundTripper {
+	return cloneTransport(http.DefaultTransport)
+}
+
+func cloneTransport(rt http.RoundTripper) http.RoundTripper {
+	if t, ok := rt.(*http.Transport); ok {
+		return t.Clone()
+	}
+	return rt
+}
+
 // Options converts the factory settings to goenvoy arr.Option values.
 func (f BaseFactory) Options() []arr.Option {
-	client := &http.Client{
+	return []arr.Option{arr.WithHTTPClient(f.httpClient()), arr.WithUserAgent(f.UserAgent)}
+}
+
+func (f BaseFactory) httpClient() *http.Client {
+	return &http.Client{
 		Timeout:       f.Timeout,
-		Transport:     apiTransport{base: http.DefaultTransport},
+		Transport:     apiTransport{base: arrTransport},
 		CheckRedirect: rejectRedirect,
 	}
-	return []arr.Option{arr.WithHTTPClient(client), arr.WithUserAgent(f.UserAgent)}
 }
 
 // Base builds a goenvoy BaseClient configured with the factory's timeout and user agent.

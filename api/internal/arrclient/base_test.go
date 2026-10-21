@@ -325,3 +325,92 @@ func TestBaseFactoryRejectsHTMLForEveryMethod(t *testing.T) {
 		})
 	}
 }
+
+type customRoundTripper struct{}
+
+func (customRoundTripper) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, errors.New("custom round tripper")
+}
+
+func TestBaseFactoryTransport(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		factory arrclient.BaseFactory
+	}{
+		{
+			name:    "positive: standard factory uses dedicated transport",
+			factory: arrclient.BaseFactory{Timeout: 5 * time.Second, UserAgent: "TestAgent/1.0"},
+		},
+		{
+			name:    "boundary: zero value factory uses dedicated transport",
+			factory: arrclient.BaseFactory{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			c1 := tt.factory.HTTPClient()
+			base1 := arrclient.ClientBaseTransport(c1)
+			if base1 == nil {
+				t.Fatal("client transport is nil or not apiTransport")
+			}
+			if base1 == http.DefaultTransport {
+				t.Fatalf("apiTransport.base uses http.DefaultTransport, want dedicated clone")
+			}
+
+			c2 := tt.factory.HTTPClient()
+			base2 := arrclient.ClientBaseTransport(c2)
+			if base1 != base2 {
+				t.Fatalf("transports not shared across calls: got %p and %p", base1, base2)
+			}
+		})
+	}
+
+	t.Run("positive: different factories share same base transport", func(t *testing.T) {
+		t.Parallel()
+		f1 := arrclient.BaseFactory{Timeout: 5 * time.Second, UserAgent: "Agent1"}
+		f2 := arrclient.BaseFactory{Timeout: 10 * time.Second, UserAgent: "Agent2"}
+		base1 := arrclient.ClientBaseTransport(f1.HTTPClient())
+		base2 := arrclient.ClientBaseTransport(f2.HTTPClient())
+		if base1 != base2 {
+			t.Fatalf("different factories have different transports: got %p and %p", base1, base2)
+		}
+	})
+}
+
+func TestCloneTransport(t *testing.T) {
+	t.Parallel()
+
+	t.Run("positive: *http.Transport is cloned", func(t *testing.T) {
+		t.Parallel()
+		got := arrclient.CloneTransport(http.DefaultTransport)
+		if got == nil {
+			t.Fatal("got nil transport")
+		}
+		if got == http.DefaultTransport {
+			t.Fatal("got same pointer, want cloned instance")
+		}
+		if _, ok := got.(*http.Transport); !ok {
+			t.Fatalf("cloned transport is %T, want *http.Transport", got)
+		}
+	})
+
+	t.Run("negative: non-Transport falls back to input", func(t *testing.T) {
+		t.Parallel()
+		custom := &customRoundTripper{}
+		got := arrclient.CloneTransport(custom)
+		if got != custom {
+			t.Fatalf("got %p, want same pointer %p", got, custom)
+		}
+	})
+
+	t.Run("boundary: nil returns nil without panic", func(t *testing.T) {
+		t.Parallel()
+		if got := arrclient.CloneTransport(nil); got != nil {
+			t.Fatalf("got %v, want nil", got)
+		}
+	})
+}
