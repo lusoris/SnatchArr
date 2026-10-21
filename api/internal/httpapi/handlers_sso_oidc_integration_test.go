@@ -13,6 +13,8 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
+	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -167,6 +169,7 @@ type oidcTestCase struct {
 	replay       bool
 	wantRedirect string
 	wantSession  bool
+	wantReason   string
 }
 
 func buildOIDCCases() []oidcTestCase {
@@ -187,24 +190,28 @@ func buildOIDCCases() []oidcTestCase {
 			tamperState:  "missing",
 			wantRedirect: "/login?sso=failed",
 			wantSession:  false,
+			wantReason:   "invalid_state",
 		},
 		{
 			name:         "negative wrong state",
 			tamperState:  "bogus-state-value",
 			wantRedirect: "/login?sso=failed",
 			wantSession:  false,
+			wantReason:   "invalid_state",
 		},
 		{
 			name:         "negative replayed callback",
 			replay:       true,
 			wantRedirect: "/login?sso=failed",
 			wantSession:  false,
+			wantReason:   "invalid_state",
 		},
 		{
 			name:         "negative expired flow 10m+1s",
 			clockAdvance: 10*time.Minute + time.Second,
 			wantRedirect: "/login?sso=failed",
 			wantSession:  false,
+			wantReason:   "flow_expired",
 		},
 		{
 			name: "negative wrong nonce",
@@ -214,6 +221,7 @@ func buildOIDCCases() []oidcTestCase {
 			},
 			wantRedirect: "/login?sso=failed",
 			wantSession:  false,
+			wantReason:   "invalid_nonce",
 		},
 		{
 			name: "negative missing nonce",
@@ -223,12 +231,14 @@ func buildOIDCCases() []oidcTestCase {
 			},
 			wantRedirect: "/login?sso=failed",
 			wantSession:  false,
+			wantReason:   "invalid_nonce",
 		},
 		{
 			name:         "negative wrong code verifier",
 			rejectCode:   true,
 			wantRedirect: "/login?sso=failed",
 			wantSession:  false,
+			wantReason:   "exchange_failed",
 		},
 		{
 			name: "negative id_token signed by other key",
@@ -238,6 +248,7 @@ func buildOIDCCases() []oidcTestCase {
 			},
 			wantRedirect: "/login?sso=failed",
 			wantSession:  false,
+			wantReason:   "invalid_id_token",
 		},
 		{
 			name: "negative wrong audience",
@@ -247,6 +258,7 @@ func buildOIDCCases() []oidcTestCase {
 			},
 			wantRedirect: "/login?sso=failed",
 			wantSession:  false,
+			wantReason:   "invalid_id_token",
 		},
 		{
 			name: "negative wrong issuer",
@@ -256,6 +268,7 @@ func buildOIDCCases() []oidcTestCase {
 			},
 			wantRedirect: "/login?sso=failed",
 			wantSession:  false,
+			wantReason:   "invalid_id_token",
 		},
 		{
 			name: "negative expired id_token",
@@ -265,6 +278,7 @@ func buildOIDCCases() []oidcTestCase {
 			},
 			wantRedirect: "/login?sso=failed",
 			wantSession:  false,
+			wantReason:   "invalid_id_token",
 		},
 		{
 			name: "negative subject and email not allowed",
@@ -275,6 +289,7 @@ func buildOIDCCases() []oidcTestCase {
 			},
 			wantRedirect: "/login?sso=failed",
 			wantSession:  false,
+			wantReason:   "not_authorized",
 		},
 		{
 			name: "negative allowed email unverified",
@@ -286,12 +301,14 @@ func buildOIDCCases() []oidcTestCase {
 			},
 			wantRedirect: "/login?sso=failed",
 			wantSession:  false,
+			wantReason:   "not_authorized",
 		},
 		{
 			name:         "negative idp error param",
 			errorParam:   "access_denied",
 			wantRedirect: "/login?sso=failed",
 			wantSession:  false,
+			wantReason:   "idp_error",
 		},
 	}
 }
@@ -348,6 +365,49 @@ func buildCallbackURL(srvURL, state, code, errParam string) string {
 	return u + params.Encode()
 }
 
+// hasReasonToken reports whether the slog text line carries reason=wantReason as a whole field.
+func hasReasonToken(line, wantReason string) bool {
+	return slices.Contains(strings.Fields(line), "reason="+wantReason)
+}
+
+func assertRefusalLog(t *testing.T, logs, wantReason string) {
+	t.Helper()
+	const refusalMsg = `msg="sso: oidc login refused"`
+	if wantReason == "" {
+		if strings.Contains(logs, refusalMsg) {
+			t.Errorf("assertRefusalLog: unexpected refusal log in:\n%s", logs)
+		}
+		return
+	}
+
+	lines := strings.Split(logs, "\n")
+	const maxLogLines = 500
+	limit := min(len(lines), maxLogLines)
+	for i := range limit {
+		line := lines[i]
+		if strings.Contains(line, "level=WARN") &&
+			strings.Contains(line, refusalMsg) &&
+			hasReasonToken(line, wantReason) {
+			return
+		}
+	}
+	t.Errorf("assertRefusalLog: missing WARN log for reason %q in:\n%s", wantReason, logs)
+}
+
+func executeOIDCReplay(t *testing.T, f *ssoFixture, cbURL, wantReason string, firstResp *http.Response) {
+	t.Helper()
+	if firstResp.Header.Get("Location") != "/" {
+		t.Fatalf("first callback location = %q, want /", firstResp.Header.Get("Location"))
+	}
+	// Replayed callback (second use of same state) must be refused.
+	resp2 := runOIDCCallback(t, f, cbURL)
+	defer func() { _ = resp2.Body.Close() }()
+	if loc := resp2.Header.Get("Location"); loc != "/login?sso=failed" {
+		t.Errorf("replayed callback Location = %q, want /login?sso=failed", loc)
+	}
+	assertRefusalLog(t, f.logBuf.String(), wantReason)
+}
+
 func executeOIDCTest(t *testing.T, tc oidcTestCase) {
 	t.Helper()
 	idp := newFakeIDP(t)
@@ -395,16 +455,7 @@ func executeOIDCTest(t *testing.T, tc oidcTestCase) {
 	defer func() { _ = resp.Body.Close() }()
 
 	if tc.replay {
-		// First callback succeeds.
-		if resp.Header.Get("Location") != "/" {
-			t.Fatalf("first callback location = %q, want /", resp.Header.Get("Location"))
-		}
-		// Replayed callback (second use of same state) must be refused.
-		resp2 := runOIDCCallback(t, f, cbURL)
-		defer func() { _ = resp2.Body.Close() }()
-		if loc := resp2.Header.Get("Location"); loc != "/login?sso=failed" {
-			t.Errorf("replayed callback Location = %q, want /login?sso=failed", loc)
-		}
+		executeOIDCReplay(t, f, cbURL, tc.wantReason, resp)
 		return
 	}
 
@@ -413,6 +464,7 @@ func executeOIDCTest(t *testing.T, tc oidcTestCase) {
 		t.Errorf("Location = %q, want %q", loc, tc.wantRedirect)
 	}
 	checkSessionUser(t, f, tc.wantSession)
+	assertRefusalLog(t, f.logBuf.String(), tc.wantReason)
 }
 
 func TestOIDC_Flow(t *testing.T) {
