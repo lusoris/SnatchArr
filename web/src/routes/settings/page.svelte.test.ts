@@ -41,7 +41,8 @@ const sampleSettings: Settings = {
 	global_hourly_cap: 100,
 	search_priority_preset: { ...mediaFirstRanks },
 	download_priority_preset: { ...mediaFirstRanks },
-	llm_enabled: false
+	llm_enabled: false,
+	llm_write_tools: []
 };
 
 const sampleChannel: NotificationChannel = {
@@ -132,7 +133,49 @@ describe('settings', () => {
 				global_hourly_cap: 100,
 				search_priority_preset: mediaFirstRanks,
 				download_priority_preset: mediaFirstRanks,
-				llm_enabled: false
+				llm_enabled: false,
+				llm_write_tools: []
+			}
+		});
+	});
+
+	it('disables llm_write_tools checkboxes while llm_enabled is off and submits toggled tools when enabled', async () => {
+		stubGet(baseStubs);
+		const putSpy = vi.spyOn(api, 'PUT').mockResolvedValue({
+			data: {
+				...sampleSettings,
+				llm_enabled: true,
+				llm_write_tools: ['snatcharr_trigger_run', 'snatcharr_delete_instance']
+			}
+		} as never);
+		renderWithQuery(SettingsPage);
+
+		const triggerBox = (await screen.findByLabelText(
+			m.settings_llm_tool_trigger_run()
+		)) as HTMLInputElement;
+		const deleteBox = screen.getByLabelText(
+			m.settings_llm_tool_delete_instance()
+		) as HTMLInputElement;
+		expect(triggerBox.disabled).toBe(true);
+		expect(deleteBox.disabled).toBe(true);
+
+		const llmToggle = screen.getByLabelText(m.settings_llm_enabled()) as HTMLInputElement;
+		await fireEvent.click(llmToggle);
+		expect(triggerBox.disabled).toBe(false);
+
+		await fireEvent.click(triggerBox);
+		await fireEvent.click(deleteBox);
+		await fireEvent.click(screen.getByRole('button', { name: m.instance_save() }));
+
+		expect(putSpy).toHaveBeenCalledWith('/settings', {
+			body: {
+				history_retention_days: 30,
+				user_agent: 'SnatchArr/1.0',
+				global_hourly_cap: 100,
+				search_priority_preset: mediaFirstRanks,
+				download_priority_preset: mediaFirstRanks,
+				llm_enabled: true,
+				llm_write_tools: ['snatcharr_trigger_run', 'snatcharr_delete_instance']
 			}
 		});
 	});

@@ -515,11 +515,43 @@ func TestAPIKeyScopesAndSettingsLLMToggle(t *testing.T) {
 	assertCreateAPIKeyBadRequest(t, f, csrfToken, map[string]any{"name": "bad-scope", "scopes": []string{"not:a:scope"}})
 	assertCreateAPIKeyBadRequest(t, f, csrfToken, map[string]any{"name": "dup-scope", "scopes": []string{"core:read", "core:read"}})
 	assertSettingsLLMRoundTrip(t, f)
+	assertPutSettingsBadRequest(t, f, csrfToken, map[string]any{
+		"history_retention_days": 90,
+		"user_agent":             "SnatchArr/1.0",
+		"global_hourly_cap":      0,
+		"llm_write_tools":        []string{"not_a_tool"},
+	})
+	assertPutSettingsBadRequest(t, f, csrfToken, map[string]any{
+		"history_retention_days": 90,
+		"user_agent":             "SnatchArr/1.0",
+		"global_hourly_cap":      0,
+		"llm_write_tools":        []string{"snatcharr_trigger_run", "snatcharr_trigger_run"},
+	})
 }
 
 func assertCreateAPIKeyBadRequest(t *testing.T, f *routerFixture, csrfToken string, body map[string]any) {
 	t.Helper()
 	resp, _ := postCreateAPIKey(t, f, f.client, csrfToken, body)
+	defer func() { _ = resp.Body.Close() }()
+	assertProblem(t, resp, http.StatusBadRequest)
+}
+
+func assertPutSettingsBadRequest(t *testing.T, f *routerFixture, csrfToken string, body map[string]any) {
+	t.Helper()
+	data, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("marshal settings body: %v", err)
+	}
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, f.srv.URL+PathPrefix+"/settings", bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("new put settings request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Csrf-Token", csrfToken)
+	resp, err := f.client.Do(req)
+	if err != nil {
+		t.Fatalf("put settings: %v", err)
+	}
 	defer func() { _ = resp.Body.Close() }()
 	assertProblem(t, resp, http.StatusBadRequest)
 }
@@ -534,12 +566,24 @@ func assertSettingsLLMRoundTrip(t *testing.T, f *routerFixture) {
 	if got.LlmEnabled.Or(true) {
 		t.Fatalf("default llm_enabled = %v, want false", got.LlmEnabled)
 	}
+	if got.LlmWriteTools == nil || len(got.LlmWriteTools) != 0 {
+		t.Fatalf("default llm_write_tools = %#v, want empty non-nil slice", got.LlmWriteTools)
+	}
 	got.LlmEnabled = oas.NewOptBool(true)
+	got.LlmWriteTools = []oas.LlmWriteTool{
+		oas.LlmWriteToolSnatcharrTriggerRun,
+		oas.LlmWriteToolSnatcharrDeleteInstance,
+	}
 	updated, err := f.h.UpdateSettings(ctx, got)
 	if err != nil {
 		t.Fatalf("UpdateSettings() = %v", err)
 	}
 	if !updated.LlmEnabled.Or(false) {
 		t.Fatalf("updated llm_enabled = %v, want true", updated.LlmEnabled)
+	}
+	if len(updated.LlmWriteTools) != 2 ||
+		updated.LlmWriteTools[0] != oas.LlmWriteToolSnatcharrTriggerRun ||
+		updated.LlmWriteTools[1] != oas.LlmWriteToolSnatcharrDeleteInstance {
+		t.Fatalf("updated llm_write_tools = %v, want [snatcharr_trigger_run snatcharr_delete_instance]", updated.LlmWriteTools)
 	}
 }

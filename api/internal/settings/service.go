@@ -46,7 +46,11 @@ func (s *Service) Update(ctx context.Context, in domain.Settings) (domain.Settin
 	if err := in.Validate(); err != nil {
 		return domain.Settings{}, fmt.Errorf("settings: %w", err)
 	}
-	if _, err := s.st.Q().EnsureSettings(ctx, s.clk.Now()); err != nil {
+	writeTools, err := domain.ValidateLLMWriteTools(in.LLMWriteTools)
+	if err != nil {
+		return domain.Settings{}, fmt.Errorf("settings: %w", err)
+	}
+	if _, err = s.st.Q().EnsureSettings(ctx, s.clk.Now()); err != nil {
 		return domain.Settings{}, fmt.Errorf("settings: ensure: %w", store.MapError(err))
 	}
 	searchJSON, err := json.Marshal(in.SearchPriorityPreset)
@@ -64,6 +68,7 @@ func (s *Service) Update(ctx context.Context, in domain.Settings) (domain.Settin
 		SearchPriorityPreset:   searchJSON,
 		DownloadPriorityPreset: downloadJSON,
 		LlmEnabled:             in.LLMEnabled,
+		LlmWriteTools:          writeTools,
 		UpdatedAt:              s.clk.Now(),
 	})
 	if err != nil {

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"maps"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -42,6 +43,7 @@ func editable(s domain.Settings) domain.Settings {
 		SearchPriorityPreset:   s.SearchPriorityPreset,
 		DownloadPriorityPreset: s.DownloadPriorityPreset,
 		LLMEnabled:             s.LLMEnabled,
+		LLMWriteTools:          s.LLMWriteTools,
 	}
 }
 
@@ -51,7 +53,8 @@ func settingsEqual(a, b domain.Settings) bool {
 		a.GlobalHourlyCap == b.GlobalHourlyCap &&
 		a.LLMEnabled == b.LLMEnabled &&
 		maps.Equal(a.SearchPriorityPreset, b.SearchPriorityPreset) &&
-		maps.Equal(a.DownloadPriorityPreset, b.DownloadPriorityPreset)
+		maps.Equal(a.DownloadPriorityPreset, b.DownloadPriorityPreset) &&
+		slices.Equal(a.LLMWriteTools, b.LLMWriteTools)
 }
 
 func TestGetCreatesTheDefaults(t *testing.T) {
@@ -93,9 +96,17 @@ func TestUpdate(t *testing.T) {
 			nil,
 		},
 		{
-			"positive llm_enabled true round-trips",
-			domain.Settings{HistoryRetentionDays: 30, UserAgent: "agent/llm", GlobalHourlyCap: 50, LLMEnabled: true, SearchPriorityPreset: preset, DownloadPriorityPreset: preset},
-			domain.Settings{HistoryRetentionDays: 30, UserAgent: "agent/llm", GlobalHourlyCap: 50, LLMEnabled: true, SearchPriorityPreset: preset, DownloadPriorityPreset: preset},
+			"positive llm_enabled true and write tools round-trip",
+			domain.Settings{
+				HistoryRetentionDays: 30, UserAgent: "agent/llm", GlobalHourlyCap: 50, LLMEnabled: true,
+				LLMWriteTools:        []string{domain.LLMWriteToolTriggerRun, domain.LLMWriteToolDeleteInstance},
+				SearchPriorityPreset: preset, DownloadPriorityPreset: preset,
+			},
+			domain.Settings{
+				HistoryRetentionDays: 30, UserAgent: "agent/llm", GlobalHourlyCap: 50, LLMEnabled: true,
+				LLMWriteTools:        []string{domain.LLMWriteToolTriggerRun, domain.LLMWriteToolDeleteInstance},
+				SearchPriorityPreset: preset, DownloadPriorityPreset: preset,
+			},
 			nil,
 		},
 		{"negative retention of zero days", domain.Settings{HistoryRetentionDays: 0, UserAgent: "a", SearchPriorityPreset: preset, DownloadPriorityPreset: preset}, defaults, domain.ErrInvalid},
@@ -103,6 +114,8 @@ func TestUpdate(t *testing.T) {
 		{"negative user agent over two lines", domain.Settings{HistoryRetentionDays: 30, UserAgent: "a\nb", SearchPriorityPreset: preset, DownloadPriorityPreset: preset}, defaults, domain.ErrInvalid},
 		{"negative global cap above the limit", domain.Settings{HistoryRetentionDays: 30, UserAgent: "a", GlobalHourlyCap: domain.GlobalHourlyCapLimit + 1, SearchPriorityPreset: preset, DownloadPriorityPreset: preset}, defaults, domain.ErrInvalid},
 		{"negative missing priority preset", domain.Settings{HistoryRetentionDays: 30, UserAgent: "a"}, defaults, domain.ErrInvalid},
+		{"negative unknown llm write tool", domain.Settings{HistoryRetentionDays: 30, UserAgent: "a", LLMWriteTools: []string{"unknown_tool"}, SearchPriorityPreset: preset, DownloadPriorityPreset: preset}, defaults, domain.ErrBadRequest},
+		{"negative duplicate llm write tool", domain.Settings{HistoryRetentionDays: 30, UserAgent: "a", LLMWriteTools: []string{domain.LLMWriteToolTriggerRun, domain.LLMWriteToolTriggerRun}, SearchPriorityPreset: preset, DownloadPriorityPreset: preset}, defaults, domain.ErrBadRequest},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

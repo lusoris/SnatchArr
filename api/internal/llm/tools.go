@@ -6,7 +6,9 @@ package llm
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"log/slog"
 	"slices"
 	"time"
 
@@ -23,6 +25,35 @@ const callTimeout = 30 * time.Second
 type idInput struct {
 	ID string `json:"id" jsonschema:"UUID identifier"`
 }
+
+type confirmIDInput struct {
+	ID      string `json:"id" jsonschema:"UUID identifier"`
+	Confirm bool   `json:"confirm,omitempty" jsonschema:"Must be true to confirm this destructive operation"`
+}
+
+type idBodyInput struct {
+	ID   string          `json:"id"`
+	Body json.RawMessage `json:"body"`
+}
+
+// idBodyInputSchema overrides go-sdk's default reflection inference for
+// idBodyInput so that json.RawMessage ([]uint8) is advertised and validated
+// as a JSON object rather than an integer array.
+var idBodyInputSchema = json.RawMessage(`{
+	"type": "object",
+	"required": ["id", "body"],
+	"additionalProperties": false,
+	"properties": {
+		"id": {
+			"type": "string",
+			"description": "UUID identifier"
+		},
+		"body": {
+			"type": "object",
+			"description": "Request body object"
+		}
+	}
+}`)
 
 type listRunsInput struct {
 	InstanceID *string `json:"instance_id,omitempty" jsonschema:"Filter runs by instance UUID"`
@@ -44,6 +75,14 @@ type listLogsInput struct {
 	Limit  *int    `json:"limit,omitempty" jsonschema:"Maximum log lines to return (1-1000, default 200)"`
 }
 
+type registerContext struct {
+	srv    *mcp.Server
+	h      *httpapi.Handlers
+	logger *slog.Logger
+	user   domain.User
+	keyID  string
+}
+
 type toolSpec struct {
 	Name        string
 	OperationID string
@@ -51,7 +90,7 @@ type toolSpec struct {
 	ReadOnly    bool
 	Destructive bool
 	Description string
-	Register    func(srv *mcp.Server, h *httpapi.Handlers, user domain.User, tool *mcp.Tool)
+	Register    func(rc registerContext, tool *mcp.Tool)
 }
 
 func toolError(msg string) (*mcp.CallToolResult, any, error) {
@@ -89,24 +128,24 @@ func handleResult(ctx context.Context, h *httpapi.Handlers, res any, err error) 
 	}
 }
 
-func registerParamTool[In any](convertAndCall func(ctx context.Context, h *httpapi.Handlers, in In) (any, error)) func(srv *mcp.Server, h *httpapi.Handlers, user domain.User, tool *mcp.Tool) {
-	return func(srv *mcp.Server, h *httpapi.Handlers, user domain.User, tool *mcp.Tool) {
-		mcp.AddTool[In, any](srv, tool, func(ctx context.Context, _ *mcp.CallToolRequest, in In) (*mcp.CallToolResult, any, error) {
-			callCtx, cancel := context.WithTimeout(httpapi.WithUser(ctx, user), callTimeout)
+func registerParamTool[In any](convertAndCall func(ctx context.Context, h *httpapi.Handlers, in In) (any, error)) func(rc registerContext, tool *mcp.Tool) {
+	return func(rc registerContext, tool *mcp.Tool) {
+		mcp.AddTool[In, any](rc.srv, tool, func(ctx context.Context, _ *mcp.CallToolRequest, in In) (*mcp.CallToolResult, any, error) {
+			callCtx, cancel := context.WithTimeout(httpapi.WithUser(ctx, rc.user), callTimeout)
 			defer cancel()
-			out, err := convertAndCall(callCtx, h, in)
-			return handleResult(callCtx, h, out, err)
+			out, err := convertAndCall(callCtx, rc.h, in)
+			return handleResult(callCtx, rc.h, out, err)
 		})
 	}
 }
 
-func registerNoParam(call func(ctx context.Context, h *httpapi.Handlers) (any, error)) func(srv *mcp.Server, h *httpapi.Handlers, user domain.User, tool *mcp.Tool) {
+func registerNoParam(call func(ctx context.Context, h *httpapi.Handlers) (any, error)) func(rc registerContext, tool *mcp.Tool) {
 	return registerParamTool(func(ctx context.Context, h *httpapi.Handlers, _ struct{}) (any, error) {
 		return call(ctx, h)
 	})
 }
 
-func registerIDParam(call func(ctx context.Context, h *httpapi.Handlers, id uuid.UUID) (any, error)) func(srv *mcp.Server, h *httpapi.Handlers, user domain.User, tool *mcp.Tool) {
+func registerIDParam(call func(ctx context.Context, h *httpapi.Handlers, id uuid.UUID) (any, error)) func(rc registerContext, tool *mcp.Tool) {
 	return registerParamTool(func(ctx context.Context, h *httpapi.Handlers, in idInput) (any, error) {
 		parsed, err := uuid.Parse(in.ID)
 		if err != nil {
@@ -114,6 +153,85 @@ func registerIDParam(call func(ctx context.Context, h *httpapi.Handlers, id uuid
 		}
 		return call(ctx, h, parsed)
 	})
+}
+
+// oasBody is the method set every generated request body carries. It is
+// checked at run time, not as a type-set constraint: semgrep cannot parse a
+// `*T` constraint element.
+type oasBody interface {
+	json.Unmarshaler
+	Validate() error
+}
+
+func decodeOASBody[T any](raw json.RawMessage) (*T, error) {
+	if len(raw) == 0 {
+		return nil, fmt.Errorf("%w: request body is required", domain.ErrBadRequest)
+	}
+	var body T
+	ptr, ok := any(&body).(oasBody)
+	if !ok {
+		return nil, fmt.Errorf("llm: body type %T lacks UnmarshalJSON or Validate", &body)
+	}
+	if err := ptr.UnmarshalJSON(raw); err != nil {
+		return nil, fmt.Errorf("%w: decode body: %w", domain.ErrBadRequest, err)
+	}
+	if err := ptr.Validate(); err != nil {
+		return nil, fmt.Errorf("%w: validate body: %w", domain.ErrBadRequest, err)
+	}
+	return &body, nil
+}
+
+func registerWriteIDBody[Body any](call func(ctx context.Context, h *httpapi.Handlers, id uuid.UUID, body *Body) (any, error)) func(rc registerContext, tool *mcp.Tool) {
+	return func(rc registerContext, tool *mcp.Tool) {
+		tool.InputSchema = idBodyInputSchema
+		mcp.AddTool[idBodyInput, any](rc.srv, tool, func(ctx context.Context, _ *mcp.CallToolRequest, in idBodyInput) (*mcp.CallToolResult, any, error) {
+			callCtx, cancel := context.WithTimeout(httpapi.WithUser(ctx, rc.user), callTimeout)
+			defer cancel()
+			rc.logger.InfoContext(callCtx, "llm: write tool called",
+				slog.String("tool", tool.Name),
+				slog.String("owner", rc.user.ID.String()),
+				slog.String("key_id", rc.keyID),
+			)
+			parsedID, err := uuid.Parse(in.ID)
+			if err != nil {
+				return handleResult(callCtx, rc.h, nil, fmt.Errorf("%w: invalid id %q: %w", domain.ErrBadRequest, in.ID, err))
+			}
+			body, err := decodeOASBody[Body](in.Body)
+			if err != nil {
+				return handleResult(callCtx, rc.h, nil, err)
+			}
+			out, err := call(callCtx, rc.h, parsedID, body)
+			return handleResult(callCtx, rc.h, out, err)
+		})
+	}
+}
+
+func registerDestructiveID(call func(ctx context.Context, h *httpapi.Handlers, id uuid.UUID) (any, error)) func(rc registerContext, tool *mcp.Tool) {
+	return func(rc registerContext, tool *mcp.Tool) {
+		mcp.AddTool[confirmIDInput, any](rc.srv, tool, func(ctx context.Context, _ *mcp.CallToolRequest, in confirmIDInput) (*mcp.CallToolResult, any, error) {
+			callCtx, cancel := context.WithTimeout(httpapi.WithUser(ctx, rc.user), callTimeout)
+			defer cancel()
+			if !in.Confirm {
+				rc.logger.WarnContext(callCtx, "llm: destructive tool unconfirmed",
+					slog.String("tool", tool.Name),
+					slog.String("owner", rc.user.ID.String()),
+					slog.String("key_id", rc.keyID),
+				)
+				return toolError("confirmation required: pass confirm=true")
+			}
+			rc.logger.InfoContext(callCtx, "llm: write tool called",
+				slog.String("tool", tool.Name),
+				slog.String("owner", rc.user.ID.String()),
+				slog.String("key_id", rc.keyID),
+			)
+			parsedID, err := uuid.Parse(in.ID)
+			if err != nil {
+				return handleResult(callCtx, rc.h, nil, fmt.Errorf("%w: invalid id %q: %w", domain.ErrBadRequest, in.ID, err))
+			}
+			out, err := call(callCtx, rc.h, parsedID)
+			return handleResult(callCtx, rc.h, out, err)
+		})
+	}
 }
 
 func convertListRunsParams(in listRunsInput) (oas.ListRunsParams, error) {
@@ -493,6 +611,50 @@ var toolRegistry = []toolSpec{
 			return h.GetNotificationRule(ctx, oas.GetNotificationRuleParams{RuleId: id})
 		}),
 	},
+	{
+		Name:        domain.LLMWriteToolTriggerRun,
+		OperationID: "triggerRun",
+		Scope:       domain.ScopeCoreWrite,
+		ReadOnly:    false,
+		Destructive: false,
+		Description: "Quickie - queue a snatch now (ignores the refractory period).",
+		Register: registerWriteIDBody[oas.RunTrigger](func(ctx context.Context, h *httpapi.Handlers, id uuid.UUID, body *oas.RunTrigger) (any, error) {
+			return h.TriggerRun(ctx, body, oas.TriggerRunParams{InstanceId: id})
+		}),
+	},
+	{
+		Name:        domain.LLMWriteToolUpdatePolicy,
+		OperationID: "updatePolicy",
+		Scope:       domain.ScopeCoreWrite,
+		ReadOnly:    false,
+		Destructive: false,
+		Description: "Replace the snatch policy of an instance.",
+		Register: registerWriteIDBody[oas.SnatchPolicy](func(ctx context.Context, h *httpapi.Handlers, id uuid.UUID, body *oas.SnatchPolicy) (any, error) {
+			return h.UpdatePolicy(ctx, body, oas.UpdatePolicyParams{InstanceId: id})
+		}),
+	},
+	{
+		Name:        domain.LLMWriteToolCancelRun,
+		OperationID: "cancelRun",
+		Scope:       domain.ScopeCoreWrite,
+		ReadOnly:    false,
+		Destructive: true,
+		Description: "Cancel a queued or leased run.",
+		Register: registerDestructiveID(func(ctx context.Context, h *httpapi.Handlers, id uuid.UUID) (any, error) {
+			return struct{}{}, h.CancelRun(ctx, oas.CancelRunParams{RunId: id})
+		}),
+	},
+	{
+		Name:        domain.LLMWriteToolDeleteInstance,
+		OperationID: "deleteInstance",
+		Scope:       domain.ScopeCoreWrite,
+		ReadOnly:    false,
+		Destructive: true,
+		Description: "Delete an instance and everything it owns.",
+		Register: registerDestructiveID(func(ctx context.Context, h *httpapi.Handlers, id uuid.UUID) (any, error) {
+			return h.DeleteInstance(ctx, oas.DeleteInstanceParams{InstanceId: id})
+		}),
+	},
 }
 
 func lookupTool(name string) (toolSpec, bool) {
@@ -504,9 +666,12 @@ func lookupTool(name string) (toolSpec, bool) {
 	return toolSpec{}, false
 }
 
-func registerTools(srv *mcp.Server, h *httpapi.Handlers, user domain.User, scopes []string) {
+func registerTools(rc registerContext, scopes, writeTools []string) {
 	for _, spec := range toolRegistry {
 		if !slices.Contains(scopes, spec.Scope) {
+			continue
+		}
+		if !spec.ReadOnly && !slices.Contains(writeTools, spec.Name) {
 			continue
 		}
 		destructive := spec.Destructive
@@ -518,6 +683,6 @@ func registerTools(srv *mcp.Server, h *httpapi.Handlers, user domain.User, scope
 				DestructiveHint: &destructive,
 			},
 		}
-		spec.Register(srv, h, user, tool)
+		spec.Register(rc, tool)
 	}
 }

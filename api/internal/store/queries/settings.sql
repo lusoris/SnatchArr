@@ -17,6 +17,7 @@ SET history_retention_days = $1,
     search_priority_preset = $4,
     download_priority_preset = $5,
     llm_enabled = $6,
-    updated_at = $7
+    llm_write_tools = $7,
+    updated_at = $8
 WHERE singleton
 RETURNING *;

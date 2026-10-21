@@ -2161,6 +2161,62 @@ type ListAPIKeysOKApplicationJSON []ApiKey
 
 func (*ListAPIKeysOKApplicationJSON) listAPIKeysRes() {}
 
+// Ref: #/components/schemas/LlmWriteTool
+type LlmWriteTool string
+
+const (
+	LlmWriteToolSnatcharrTriggerRun     LlmWriteTool = "snatcharr_trigger_run"
+	LlmWriteToolSnatcharrUpdatePolicy   LlmWriteTool = "snatcharr_update_policy"
+	LlmWriteToolSnatcharrCancelRun      LlmWriteTool = "snatcharr_cancel_run"
+	LlmWriteToolSnatcharrDeleteInstance LlmWriteTool = "snatcharr_delete_instance"
+)
+
+// AllValues returns all LlmWriteTool values.
+func (LlmWriteTool) AllValues() []LlmWriteTool {
+	return []LlmWriteTool{
+		LlmWriteToolSnatcharrTriggerRun,
+		LlmWriteToolSnatcharrUpdatePolicy,
+		LlmWriteToolSnatcharrCancelRun,
+		LlmWriteToolSnatcharrDeleteInstance,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s LlmWriteTool) MarshalText() ([]byte, error) {
+	switch s {
+	case LlmWriteToolSnatcharrTriggerRun:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrUpdatePolicy:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrCancelRun:
+		return []byte(s), nil
+	case LlmWriteToolSnatcharrDeleteInstance:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *LlmWriteTool) UnmarshalText(data []byte) error {
+	switch LlmWriteTool(data) {
+	case LlmWriteToolSnatcharrTriggerRun:
+		*s = LlmWriteToolSnatcharrTriggerRun
+		return nil
+	case LlmWriteToolSnatcharrUpdatePolicy:
+		*s = LlmWriteToolSnatcharrUpdatePolicy
+		return nil
+	case LlmWriteToolSnatcharrCancelRun:
+		*s = LlmWriteToolSnatcharrCancelRun
+		return nil
+	case LlmWriteToolSnatcharrDeleteInstance:
+		*s = LlmWriteToolSnatcharrDeleteInstance
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
 // Ref: #/components/schemas/LogAttr
 type LogAttr struct {
 	// Attribute key; group names are joined with dots.
@@ -6667,8 +6723,10 @@ type Settings struct {
 	SearchPriorityPreset   PriorityPresetMap `json:"search_priority_preset"`
 	DownloadPriorityPreset PriorityPresetMap `json:"download_priority_preset"`
 	// Whether the Model Context Protocol (MCP) server at /api/v1/mcp is enabled.
-	LlmEnabled OptBool     `json:"llm_enabled"`
-	UpdatedAt  OptDateTime `json:"updated_at"`
+	LlmEnabled OptBool `json:"llm_enabled"`
+	// MCP write tools enabled by the administrator; an omitted list enables none.
+	LlmWriteTools []LlmWriteTool `json:"llm_write_tools"`
+	UpdatedAt     OptDateTime    `json:"updated_at"`
 }
 
 // GetHistoryRetentionDays returns the value of HistoryRetentionDays.
@@ -6699,6 +6757,11 @@ func (s *Settings) GetDownloadPriorityPreset() PriorityPresetMap {
 // GetLlmEnabled returns the value of LlmEnabled.
 func (s *Settings) GetLlmEnabled() OptBool {
 	return s.LlmEnabled
+}
+
+// GetLlmWriteTools returns the value of LlmWriteTools.
+func (s *Settings) GetLlmWriteTools() []LlmWriteTool {
+	return s.LlmWriteTools
 }
 
 // GetUpdatedAt returns the value of UpdatedAt.
@@ -6734,6 +6797,11 @@ func (s *Settings) SetDownloadPriorityPreset(val PriorityPresetMap) {
 // SetLlmEnabled sets the value of LlmEnabled.
 func (s *Settings) SetLlmEnabled(val OptBool) {
 	s.LlmEnabled = val
+}
+
+// SetLlmWriteTools sets the value of LlmWriteTools.
+func (s *Settings) SetLlmWriteTools(val []LlmWriteTool) {
+	s.LlmWriteTools = val
 }
 
 // SetUpdatedAt sets the value of UpdatedAt.

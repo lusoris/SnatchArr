@@ -13,7 +13,7 @@ import (
 const ensureSettings = `-- name: EnsureSettings :one
 INSERT INTO settings (singleton, updated_at) VALUES (TRUE, $1)
 ON CONFLICT (singleton) DO UPDATE SET singleton = TRUE
-RETURNING singleton, history_retention_days, user_agent, updated_at, global_hourly_cap, llm_enabled, search_priority_preset, download_priority_preset
+RETURNING singleton, history_retention_days, user_agent, updated_at, global_hourly_cap, llm_enabled, search_priority_preset, download_priority_preset, llm_write_tools
 `
 
 func (q *Queries) EnsureSettings(ctx context.Context, updatedAt time.Time) (Setting, error) {
@@ -28,13 +28,14 @@ func (q *Queries) EnsureSettings(ctx context.Context, updatedAt time.Time) (Sett
 		&i.LlmEnabled,
 		&i.SearchPriorityPreset,
 		&i.DownloadPriorityPreset,
+		&i.LlmWriteTools,
 	)
 	return i, err
 }
 
 const getSettings = `-- name: GetSettings :one
 
-SELECT singleton, history_retention_days, user_agent, updated_at, global_hourly_cap, llm_enabled, search_priority_preset, download_priority_preset FROM settings WHERE singleton
+SELECT singleton, history_retention_days, user_agent, updated_at, global_hourly_cap, llm_enabled, search_priority_preset, download_priority_preset, llm_write_tools FROM settings WHERE singleton
 `
 
 // SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
@@ -51,6 +52,7 @@ func (q *Queries) GetSettings(ctx context.Context) (Setting, error) {
 		&i.LlmEnabled,
 		&i.SearchPriorityPreset,
 		&i.DownloadPriorityPreset,
+		&i.LlmWriteTools,
 	)
 	return i, err
 }
@@ -63,9 +65,10 @@ SET history_retention_days = $1,
     search_priority_preset = $4,
     download_priority_preset = $5,
     llm_enabled = $6,
-    updated_at = $7
+    llm_write_tools = $7,
+    updated_at = $8
 WHERE singleton
-RETURNING singleton, history_retention_days, user_agent, updated_at, global_hourly_cap, llm_enabled, search_priority_preset, download_priority_preset
+RETURNING singleton, history_retention_days, user_agent, updated_at, global_hourly_cap, llm_enabled, search_priority_preset, download_priority_preset, llm_write_tools
 `
 
 type UpdateSettingsParams struct {
@@ -75,6 +78,7 @@ type UpdateSettingsParams struct {
 	SearchPriorityPreset   []byte
 	DownloadPriorityPreset []byte
 	LlmEnabled             bool
+	LlmWriteTools          []string
 	UpdatedAt              time.Time
 }
 
@@ -86,6 +90,7 @@ func (q *Queries) UpdateSettings(ctx context.Context, arg UpdateSettingsParams) 
 		arg.SearchPriorityPreset,
 		arg.DownloadPriorityPreset,
 		arg.LlmEnabled,
+		arg.LlmWriteTools,
 		arg.UpdatedAt,
 	)
 	var i Setting
@@ -98,6 +103,7 @@ func (q *Queries) UpdateSettings(ctx context.Context, arg UpdateSettingsParams) 
 		&i.LlmEnabled,
 		&i.SearchPriorityPreset,
 		&i.DownloadPriorityPreset,
+		&i.LlmWriteTools,
 	)
 	return i, err
 }
