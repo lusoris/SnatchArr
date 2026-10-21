@@ -13,6 +13,22 @@ import SetupPage from './+page.svelte';
 const navMocks = vi.hoisted(() => ({ goto: vi.fn() }));
 vi.mock('$app/navigation', () => ({ goto: navMocks.goto }));
 
+async function clickSubmit(): Promise<void> {
+	await fireEvent.click(screen.getByRole('button', { name: m.setup_submit() }));
+}
+
+async function submitSetup(secret?: string): Promise<void> {
+	await fireEvent.input(screen.getByLabelText(m.password()), {
+		target: { value: 'correct-horse-battery-staple' }
+	});
+	if (secret !== undefined) {
+		await fireEvent.input(screen.getByLabelText(m.setup_secret()), {
+			target: { value: secret }
+		});
+	}
+	await clickSubmit();
+}
+
 describe('setup', () => {
 	afterEach(() => {
 		vi.restoreAllMocks();
@@ -39,10 +55,7 @@ describe('setup', () => {
 		const postSpy = vi.spyOn(api, 'POST').mockResolvedValue({ data: {} } as never);
 		renderWithQuery(SetupPage);
 
-		await fireEvent.input(screen.getByLabelText(m.password()), {
-			target: { value: 'correct-horse-battery-staple' }
-		});
-		await fireEvent.click(screen.getByRole('button', { name: m.setup_submit() }));
+		await submitSetup();
 
 		await waitFor(() => {
 			expect(postSpy).toHaveBeenCalledWith('/auth/setup', {
@@ -60,10 +73,7 @@ describe('setup', () => {
 		);
 		renderWithQuery(SetupPage);
 
-		await fireEvent.input(screen.getByLabelText(m.password()), {
-			target: { value: 'correct-horse-battery-staple' }
-		});
-		await fireEvent.click(screen.getByRole('button', { name: m.setup_submit() }));
+		await submitSetup();
 
 		const alert = await screen.findByRole('alert');
 		expect(alert.textContent).toContain('Password too weak');
@@ -81,7 +91,7 @@ describe('setup', () => {
 		expect(passwordInput.checkValidity()).toBe(false);
 		expect(passwordInput.validity.valueMissing).toBe(true);
 
-		await fireEvent.click(screen.getByRole('button', { name: m.setup_submit() }));
+		await clickSubmit();
 		expect(postSpy).not.toHaveBeenCalled();
 	});
 
@@ -97,13 +107,7 @@ describe('setup', () => {
 
 		const secretInput = screen.getByLabelText(m.setup_secret()) as HTMLInputElement;
 		expect(secretInput).toBeTruthy();
-		await fireEvent.input(screen.getByLabelText(m.password()), {
-			target: { value: 'correct-horse-battery-staple' }
-		});
-		await fireEvent.input(secretInput, {
-			target: { value: 'my-bootstrap-secret' }
-		});
-		await fireEvent.click(screen.getByRole('button', { name: m.setup_submit() }));
+		await submitSetup('my-bootstrap-secret');
 
 		await waitFor(() => {
 			expect(postSpy).toHaveBeenCalledWith('/auth/setup', {
