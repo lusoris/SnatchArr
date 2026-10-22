@@ -326,6 +326,60 @@ linters:
       - path: _test\.go$
         linters:
           - testifylint
+      # Dated exceptions for tools/apicompat/gate/main.go, a locked praetor asset not edited here.
+      # `make tools-lint` regenerates the block below and fails on a new finding, on an expired
+      # entry whose finding is still there, and on an entry whose finding is gone. #N in an entry
+      # is cordanaLLM/praetor#N, the upstream issue that tracks the findings.
+      # praetor:generated-exceptions begin (praetorctl linters exceptions; never edit by hand)
+      # category A, entered 2026-10-22, expires 2027-01-20, #1226
+      - path: ^tools/apicompat/gate/main\.go$
+        linters:
+          - exhaustive
+      # category A, entered 2026-10-22, expires 2027-01-20, #1226
+      - path: ^tools/apicompat/gate/main\.go$
+        linters:
+          - forbidigo
+      # category A, entered 2026-10-22, expires 2027-01-20, #1226
+      - path: ^tools/apicompat/gate/main\.go$
+        linters:
+          - gocognit
+      # category A, entered 2026-10-22, expires 2027-01-20, #1226
+      - path: ^tools/apicompat/gate/main\.go$
+        linters:
+          - gocritic
+      # category A, entered 2026-10-22, expires 2027-01-20, #1226
+      - path: ^tools/apicompat/gate/main\.go$
+        linters:
+          - gocyclo
+      # category A, entered 2026-10-22, expires 2027-01-20, #1226
+      - path: ^tools/apicompat/gate/main\.go$
+        linters:
+          - govet
+      # category A, entered 2026-10-22, expires 2027-01-20, #1226
+      - path: ^tools/apicompat/gate/main\.go$
+        linters:
+          - intrange
+      # category A, entered 2026-10-22, expires 2027-01-20, #1226
+      - path: ^tools/apicompat/gate/main\.go$
+        linters:
+          - recvcheck
+      # category A, entered 2026-10-22, expires 2027-01-20, #1226
+      - path: ^tools/apicompat/gate/main\.go$
+        linters:
+          - revive
+      # category A, entered 2026-10-22, expires 2027-01-20, #1226
+      - path: ^tools/apicompat/gate/main\.go$
+        linters:
+          - staticcheck
+      # category A, entered 2026-10-22, expires 2027-01-20, #1226
+      - path: ^tools/apicompat/gate/main\.go$
+        linters:
+          - unparam
+      # category A, entered 2026-10-22, expires 2027-01-20, #1226
+      - path: ^tools/apicompat/gate/main\.go$
+        linters:
+          - wrapcheck
+      # praetor:generated-exceptions end
 
 formatters:
   enable:

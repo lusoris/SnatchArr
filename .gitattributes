@@ -1,0 +1,9 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+#
+# Line endings of files a test reads byte for byte, or a tool rewrites line by line: a checkout
+# with core.autocrlf on Windows would otherwise turn them into CRLF and the comparison or the
+# rewrite would differ (HISS-21, praetorctl audit).
+*.json eol=lf
+*.sql eol=lf
+.golangci.yml eol=lf
