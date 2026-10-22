@@ -133,21 +133,24 @@ api-cover: ## Coverage gate on hand-written packages (generated code excluded)
 GOLANGCI   ?= golangci-lint
 TOOLS_PKG  ?= ./tools/...
 TOOLS_TAG  ?= apicompatgate
-TOOLS_LIST ?= exceptions.yaml
+TOOLS_ISSUE ?= 1226
 tools-verify: tools-lint tools-test tools-gosec ## golangci-lint + go vet + go test -race + gosec over tools/
 
-# The tagged run fails on no finding by itself: it writes every finding to a report, and
-# tools/lintexcept accepts the report only when each finding has a dated exception in
-# TOOLS_LIST that still holds and each exception still has its finding. No file is excluded in
-# .golangci.yml, so the list is the one place that excuses a finding.
-tools-lint: ## golangci-lint over tools/; a finding needs a dated exception in exceptions.yaml
+# The tagged run fails on no finding by itself: it writes every finding to a report, measured
+# against .golangci.yml without its generated exceptions block. tools/ci/lint_exceptions.sh
+# regenerates that block from the report with praetorctl at the pinned engine and fails on a new
+# finding, on an expired entry whose finding is still there, and on an entry whose finding is
+# gone. TOOLS_ISSUE is the cordanaLLM/praetor issue each generated entry names.
+tools-lint: ## golangci-lint over tools/; a finding needs a dated entry in the generated block of .golangci.yml
 	$(GOLANGCI) run --config .golangci.yml $(TOOLS_PKG)
-	report=$$(mktemp)
-	trap 'rm -f "$$report"' EXIT
-	$(GOLANGCI) run --config .golangci.yml --build-tags $(TOOLS_TAG) --issues-exit-code 0 \
+	sh tools/ci/lint_exceptions_test.sh
+	work=$$(mktemp -d)
+	trap 'rm -rf "$$work"' EXIT
+	sh .config/lefthook/engine.sh linters exceptions strip-config --config .golangci.yml --out "$$work/golangci.yml"
+	$(GOLANGCI) run --config "$$work/golangci.yml" --build-tags $(TOOLS_TAG) --issues-exit-code 0 \
 	  --max-issues-per-linter 0 --max-same-issues 0 --uniq-by-line=false \
-	  --output.json.path "$$report" $(TOOLS_PKG)
-	go run ./tools/lintexcept check -list "$(TOOLS_LIST)" -report "$$report"
+	  --output.json.path "$$work/report.json" $(TOOLS_PKG)
+	sh tools/ci/lint_exceptions.sh .golangci.yml "$$work/report.json" $(TOOLS_ISSUE)
 
 tools-test: ## go vet + go test -race over tools/
 	go vet $(TOOLS_PKG)
