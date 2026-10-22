@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.5.5](https://github.com/lusoris/SnatchArr/compare/v0.5.4...v0.5.5) (2026-10-22)
+
+
+### Features
+
+* **auth:** revoke single sign-on sessions whose role no longer holds ([#509](https://github.com/lusoris/SnatchArr/issues/509)) ([5540732](https://github.com/lusoris/SnatchArr/commit/5540732423858c81a8103ab18a6e93fa2fadf08f))
+* **llm:** add the core write tools with generated input schemas ([#521](https://github.com/lusoris/SnatchArr/issues/521)) ([9ee5543](https://github.com/lusoris/SnatchArr/commit/9ee5543eb1a1c5e641f3ffbd3d94d00456106a4f))
+* **llm:** add the remaining write tools of the MCP catalog ([#523](https://github.com/lusoris/SnatchArr/issues/523)) ([aa0e458](https://github.com/lusoris/SnatchArr/commit/aa0e458eaf3f75c3d89e1b299f06dc6352a1df3d))
+* **llm:** expose every read operation of the catalog as an MCP tool ([#519](https://github.com/lusoris/SnatchArr/issues/519)) ([a812de1](https://github.com/lusoris/SnatchArr/commit/a812de1f9fbd3760eefee27ddd4da5b3ecc32e82))
+* **llm:** fence MCP write tools behind an admin opt-in and confirmation ([#520](https://github.com/lusoris/SnatchArr/issues/520)) ([80f8a6a](https://github.com/lusoris/SnatchArr/commit/80f8a6a21b4e3ff866d115d64dbad8b4f7c22b77))
+
+
+### Bug Fixes
+
+* **deps:** update golusoris ([#512](https://github.com/lusoris/SnatchArr/issues/512)) ([06874a9](https://github.com/lusoris/SnatchArr/commit/06874a95bf83be22707bb04c4c8ab4e6cb82631b))
+
+
+### Refactoring
+
+* **web:** share the connection status and SSE test stub ([#525](https://github.com/lusoris/SnatchArr/issues/525)) ([02a5eca](https://github.com/lusoris/SnatchArr/commit/02a5eca1e35d5560c55e96a8924eb72de27fa399))
+* **web:** share the sign-in card between login and setup ([#527](https://github.com/lusoris/SnatchArr/issues/527)) ([fb14e51](https://github.com/lusoris/SnatchArr/commit/fb14e51a5e86d04d2d85032be90e74ddc878674f))
+* **web:** use PageHeader on the dashboard, account and instances pages ([#524](https://github.com/lusoris/SnatchArr/issues/524)) ([96cd84e](https://github.com/lusoris/SnatchArr/commit/96cd84ec7a5312149da60a2387ceb492b1997905))
+
+
+### Documentation
+
+* **sso:** use the live group names in the Helm example ([#507](https://github.com/lusoris/SnatchArr/issues/507)) ([9ecf0ef](https://github.com/lusoris/SnatchArr/commit/9ecf0efbf67a8b8f9a9b41888f1e280a9ac7109d))
+
 ## [0.5.4](https://github.com/lusoris/SnatchArr/compare/v0.5.3...v0.5.4) (2026-10-21)
 
 
