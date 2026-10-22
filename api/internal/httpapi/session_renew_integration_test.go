@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
+	"github.com/lusoris/SnatchArr/api/internal/testdiag"
 )
 
 // Session fixation (#268): every sign-in and every password change issues a
@@ -164,7 +165,10 @@ func renewAssertSession(t *testing.T, f *routerFixture, sessID string, want int)
 	}
 	req.AddCookie(&http.Cookie{Name: renewSessionCookie, Value: sessID})
 	client := &http.Client{Timeout: 10 * time.Second}
+	w := testdiag.Watch(10*time.Second, f.st.Pool())
 	resp, err := client.Do(req)
+	w.Stop()
+	w.Report(t, err)
 	if err != nil {
 		t.Fatalf("get session: %v", err)
 	}

@@ -39,6 +39,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/seerr"
 	"github.com/lusoris/SnatchArr/api/internal/seerrclient"
 	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
+	"github.com/lusoris/SnatchArr/api/internal/testdiag"
 )
 
 type routerFixture struct {
@@ -1778,7 +1779,10 @@ func completeInitialSetup(t *testing.T, f *routerFixture) domain.User {
 		t.Fatalf("NewRequest: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	w := testdiag.Watch(10*time.Second, f.st.Pool())
 	resp, err := f.client.Do(req)
+	w.Stop()
+	w.Report(t, err)
 	if err != nil {
 		t.Fatalf("completeSetup: %v", err)
 	}

@@ -27,6 +27,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/config"
 	"github.com/lusoris/SnatchArr/api/internal/sso"
+	"github.com/lusoris/SnatchArr/api/internal/testdiag"
 )
 
 type syncBuffer struct {
@@ -464,7 +465,11 @@ func executeOIDCTest(t *testing.T, tc oidcTestCase) {
 
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
-	if _, err := f.h.auth.Setup(ctx, "admin", "password-admin-1234"); err != nil {
+	w := testdiag.Watch(5*time.Second, f.st.Pool())
+	_, err := f.h.auth.Setup(ctx, "admin", "password-admin-1234")
+	w.Stop()
+	w.Report(t, err)
+	if err != nil {
 		t.Fatalf("auth.Setup: %v", err)
 	}
 
