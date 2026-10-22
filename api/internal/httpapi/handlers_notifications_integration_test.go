@@ -27,6 +27,7 @@ import (
 	snatcharrv1 "github.com/lusoris/SnatchArr/api/internal/gen/snatcharr/v1"
 	"github.com/lusoris/SnatchArr/api/internal/metrics/metricstest"
 	"github.com/lusoris/SnatchArr/api/internal/snatch"
+	"github.com/lusoris/SnatchArr/api/internal/testdiag"
 	"github.com/lusoris/SnatchArr/api/internal/workergrpc"
 )
 
@@ -714,11 +715,7 @@ func TestEngineLifecycleCancelledStartCtx(t *testing.T) {
 		Level: "warn",
 	})
 
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) && counter.Load() < 1 {
-		time.Sleep(20 * time.Millisecond)
-	}
-	if got := counter.Load(); got != 1 {
+	if got := waitDeliveries(t, f, &counter, 1); got != 1 {
 		t.Fatalf("counter after cancelled startCtx = %d, want 1 (engine workers died prematurely)", got)
 	}
 
@@ -781,11 +778,7 @@ func TestEngineWorkerBoundRestart(t *testing.T) {
 		})
 	}
 
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) && counter.Load() < 5 {
-		time.Sleep(20 * time.Millisecond)
-	}
-	if got := counter.Load(); got != 5 {
+	if got := waitDeliveries(t, f, &counter, 5); got != 5 {
 		t.Fatalf("counter after inner bound = %d, want 5 (workers exited silently)", got)
 	}
 }
@@ -830,4 +823,59 @@ func TestUpdateChannelDeletesWebhookEndpointOnKindChange(t *testing.T) {
 	if _, err := f.webhookStore.FindEndpoint(ctx, ch.ID.String()); err == nil {
 		t.Fatal("FindEndpoint after kind change succeeded, want not found / error")
 	}
+}
+
+func waitDeliveries(t *testing.T, f *integrationFixture, counter *atomic.Int64, want int64) int64 {
+	t.Helper()
+	w := testdiag.Watch(2*time.Second, f.st.Pool())
+	deadline := time.Now().Add(2 * time.Second)
+	for range 100 {
+		if time.Now().After(deadline) || counter.Load() >= want {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	w.Stop()
+
+	got := counter.Load()
+	if got >= want {
+		return got
+	}
+
+	w.Report(t, context.DeadlineExceeded)
+	pollGraceDeliveries(t, counter, want)
+	logBufferOutput(t, f.logs)
+	return got
+}
+
+func pollGraceDeliveries(t *testing.T, counter *atomic.Int64, want int64) {
+	t.Helper()
+	graceStart := time.Now()
+	graceDeadline := graceStart.Add(20 * time.Second)
+	for range 1000 {
+		if time.Now().After(graceDeadline) || counter.Load() >= want {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	late := counter.Load()
+	graceStr := "exhausted"
+	if late >= want {
+		graceStr = time.Since(graceStart).Round(time.Millisecond).String()
+	}
+	t.Logf("notifydiag: delivered=%d/%d after deadline, grace=%s", late, want, graceStr)
+}
+
+func logBufferOutput(t *testing.T, logs *testdiag.LogBuffer) {
+	t.Helper()
+	if logs == nil {
+		t.Log("notifydiag: no warn records")
+		return
+	}
+	out := logs.String()
+	if out == "" {
+		t.Log("notifydiag: no warn records")
+		return
+	}
+	t.Logf("%s", out)
 }
