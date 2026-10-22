@@ -24,8 +24,8 @@ require (
 	github.com/golusoris/goenvoy/downloadclient/rtorrent/v2 v2.0.1
 	github.com/golusoris/goenvoy/downloadclient/sabnzbd/v2 v2.0.0
 	github.com/golusoris/goenvoy/downloadclient/transmission/v2 v2.0.0
-	github.com/golusoris/golusoris v0.18.0
-	github.com/golusoris/golusoris/core v0.11.0
+	github.com/golusoris/golusoris v0.20.0
+	github.com/golusoris/golusoris/core v0.12.1
 	github.com/google/jsonschema-go v0.4.3
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.11.0

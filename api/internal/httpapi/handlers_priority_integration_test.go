@@ -108,23 +108,24 @@ func TestInstancePriorityHTTP(t *testing.T) {
 		t.Fatalf("cleared priority = %+v, want null/preset/10", got)
 	}
 
-	// Negative: PUT priority 0, 101, string -> 400 problem+json.
+	// Negative: PUT priority 0 or 101 -> 422 problem+json (schema bounds); string -> 400 (malformed body).
 	badBodies := []struct {
-		name string
-		body string
+		name       string
+		body       string
+		wantStatus int
 	}{
-		{name: "negative search_priority 0", body: `{"search_priority":0}`},
-		{name: "negative search_priority 101", body: `{"search_priority":101}`},
-		{name: "negative download_priority 0", body: `{"download_priority":0}`},
-		{name: "negative download_priority 101", body: `{"download_priority":101}`},
-		{name: "negative search_priority string", body: `{"search_priority":"high"}`},
+		{name: "negative search_priority 0", body: `{"search_priority":0}`, wantStatus: http.StatusUnprocessableEntity},
+		{name: "negative search_priority 101", body: `{"search_priority":101}`, wantStatus: http.StatusUnprocessableEntity},
+		{name: "negative download_priority 0", body: `{"download_priority":0}`, wantStatus: http.StatusUnprocessableEntity},
+		{name: "negative download_priority 101", body: `{"download_priority":101}`, wantStatus: http.StatusUnprocessableEntity},
+		{name: "negative search_priority string", body: `{"search_priority":"high"}`, wantStatus: http.StatusBadRequest},
 	}
 	for _, tc := range badBodies {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			bResp, _ := doPriorityRequest(t, f, http.MethodPut, "/instances/"+instID+"/priority", csrf, tc.body)
 			defer func() { _ = bResp.Body.Close() }()
-			assertProblem(t, bResp, http.StatusBadRequest)
+			assertProblem(t, bResp, tc.wantStatus)
 		})
 	}
 }
@@ -174,7 +175,7 @@ func TestInstancePriorityConfigarrAndSettingsValidation(t *testing.T) {
 		t.Fatalf("configarr priority after re-import = %+v, want 5/15 from instance", reGot)
 	}
 
-	// Negative: PUT /settings with missing kind, unknown kind -> 422 problem+json; 0 or 101 -> 400.
+	// Negative: PUT /settings with missing kind, unknown kind, rank 0 or 101 -> 422 problem+json.
 	badSettings := []struct {
 		name       string
 		body       string
@@ -196,14 +197,14 @@ func TestInstancePriorityConfigarrAndSettingsValidation(t *testing.T) {
 			wantStatus: http.StatusUnprocessableEntity,
 		},
 		{
-			name:       "negative settings rank 0 rejected with 400 by ogen schema validation",
+			name:       "negative settings rank 0 rejected with 422 by ogen schema validation",
 			body:       `{"history_retention_days":90,"user_agent":"SnatchArr/1.0","global_hourly_cap":0,"search_priority_preset":{"sonarr":0,"radarr":10,"lidarr":20,"readarr":30,"whisparr_v2":40,"whisparr_v3":40},"download_priority_preset":{"sonarr":10,"radarr":10,"lidarr":20,"readarr":30,"whisparr_v2":40,"whisparr_v3":40}}`,
-			wantStatus: http.StatusBadRequest,
+			wantStatus: http.StatusUnprocessableEntity,
 		},
 		{
-			name:       "negative settings rank 101 rejected with 400 by ogen schema validation",
+			name:       "negative settings rank 101 rejected with 422 by ogen schema validation",
 			body:       `{"history_retention_days":90,"user_agent":"SnatchArr/1.0","global_hourly_cap":0,"search_priority_preset":{"sonarr":101,"radarr":10,"lidarr":20,"readarr":30,"whisparr_v2":40,"whisparr_v3":40},"download_priority_preset":{"sonarr":10,"radarr":10,"lidarr":20,"readarr":30,"whisparr_v2":40,"whisparr_v3":40}}`,
-			wantStatus: http.StatusBadRequest,
+			wantStatus: http.StatusUnprocessableEntity,
 		},
 	}
 	for _, tc := range badSettings {

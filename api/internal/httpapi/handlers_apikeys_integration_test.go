@@ -313,12 +313,13 @@ func TestAPIKeyNameValidation(t *testing.T) {
 		input    string
 		wantCode int
 	}{
-		{name: "empty", input: "", wantCode: http.StatusBadRequest},
+		// Schema bounds (minLength/maxLength) answer 422 + invalid-params; the trim check in the handler answers 400.
+		{name: "empty", input: "", wantCode: http.StatusUnprocessableEntity},
 		{name: "spaces_only", input: "   ", wantCode: http.StatusBadRequest},
-		{name: "too_long_101", input: strings.Repeat("a", 101), wantCode: http.StatusBadRequest},
+		{name: "too_long_101", input: strings.Repeat("a", 101), wantCode: http.StatusUnprocessableEntity},
 		{name: "max_len_100", input: strings.Repeat("a", 100), wantCode: http.StatusCreated},
 		{name: "umlaut_100", input: strings.Repeat("ä", 100), wantCode: http.StatusCreated},
-		{name: "umlaut_101", input: strings.Repeat("ä", 101), wantCode: http.StatusBadRequest},
+		{name: "umlaut_101", input: strings.Repeat("ä", 101), wantCode: http.StatusUnprocessableEntity},
 		{name: "trimmed_valid", input: "  trimmed-name  ", wantCode: http.StatusCreated},
 	}
 
@@ -330,8 +331,8 @@ func TestAPIKeyNameValidation(t *testing.T) {
 			if resp.StatusCode != tc.wantCode {
 				t.Fatalf("status = %d, want %d; body: %s", resp.StatusCode, tc.wantCode, string(raw))
 			}
-			if tc.wantCode == http.StatusBadRequest {
-				assertProblem(t, resp, http.StatusBadRequest)
+			if tc.wantCode >= http.StatusBadRequest {
+				assertProblem(t, resp, tc.wantCode)
 			}
 		})
 	}
@@ -528,31 +529,32 @@ func TestAPIKeyScopesAndSettingsLLMToggle(t *testing.T) {
 		t.Fatalf("listed keys = %+v, want scopes round-trip", keys)
 	}
 
-	assertCreateAPIKeyBadRequest(t, f, csrfToken, map[string]any{"name": "bad-scope", "scopes": []string{"not:a:scope"}})
-	assertCreateAPIKeyBadRequest(t, f, csrfToken, map[string]any{"name": "dup-scope", "scopes": []string{"core:read", "core:read"}})
+	// Enum violation = schema check, 422 + invalid-params; duplicate scope = handler check, 400.
+	assertCreateAPIKeyRejected(t, f, csrfToken, map[string]any{"name": "bad-scope", "scopes": []string{"not:a:scope"}}, http.StatusUnprocessableEntity)
+	assertCreateAPIKeyRejected(t, f, csrfToken, map[string]any{"name": "dup-scope", "scopes": []string{"core:read", "core:read"}}, http.StatusBadRequest)
 	assertSettingsLLMRoundTrip(t, f)
-	assertPutSettingsBadRequest(t, f, csrfToken, map[string]any{
+	assertPutSettingsRejected(t, f, csrfToken, map[string]any{
 		"history_retention_days": 90,
 		"user_agent":             "SnatchArr/1.0",
 		"global_hourly_cap":      0,
 		"llm_write_tools":        []string{"not_a_tool"},
-	})
-	assertPutSettingsBadRequest(t, f, csrfToken, map[string]any{
+	}, http.StatusUnprocessableEntity)
+	assertPutSettingsRejected(t, f, csrfToken, map[string]any{
 		"history_retention_days": 90,
 		"user_agent":             "SnatchArr/1.0",
 		"global_hourly_cap":      0,
 		"llm_write_tools":        []string{"snatcharr_trigger_run", "snatcharr_trigger_run"},
-	})
+	}, http.StatusUnprocessableEntity)
 }
 
-func assertCreateAPIKeyBadRequest(t *testing.T, f *routerFixture, csrfToken string, body map[string]any) {
+func assertCreateAPIKeyRejected(t *testing.T, f *routerFixture, csrfToken string, body map[string]any, wantCode int) {
 	t.Helper()
 	resp, _ := postCreateAPIKey(t, f, f.client, csrfToken, body)
 	defer func() { _ = resp.Body.Close() }()
-	assertProblem(t, resp, http.StatusBadRequest)
+	assertProblem(t, resp, wantCode)
 }
 
-func assertPutSettingsBadRequest(t *testing.T, f *routerFixture, csrfToken string, body map[string]any) {
+func assertPutSettingsRejected(t *testing.T, f *routerFixture, csrfToken string, body map[string]any, wantCode int) {
 	t.Helper()
 	data, err := json.Marshal(body)
 	if err != nil {
@@ -569,7 +571,7 @@ func assertPutSettingsBadRequest(t *testing.T, f *routerFixture, csrfToken strin
 		t.Fatalf("put settings: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	assertProblem(t, resp, http.StatusBadRequest)
+	assertProblem(t, resp, wantCode)
 }
 
 func assertSettingsLLMRoundTrip(t *testing.T, f *routerFixture) {
