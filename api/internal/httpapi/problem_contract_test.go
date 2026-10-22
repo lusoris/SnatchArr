@@ -92,6 +92,21 @@ func problemContractCases() []contractTestCase {
 			},
 		},
 		{
+			// Body bound violations reach the handler as a decode error wrapping validate.Error.
+			name:   "positive decode request error wrapping validate error 422",
+			err:    &ogenerrors.DecodeRequestError{Err: validateErr},
+			target: "/api/v1/instances",
+			want: contractExpected{
+				status:   http.StatusUnprocessableEntity,
+				detail:   "request validation failed",
+				instance: "/api/v1/instances",
+				invalidParams: []contractInvalidParam{
+					{Name: "page_size", Reason: "must be at least 1"},
+					{Name: "sort_order", Reason: "unsupported sort direction"},
+				},
+			},
+		},
+		{
 			name:   "positive domain invalid wrapped 422",
 			err:    fmt.Errorf("instance validation: %w: name too short", domain.ErrInvalid),
 			target: "/api/v1/instances",

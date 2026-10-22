@@ -566,7 +566,7 @@ func testConfigarrUpdateRefused(t *testing.T, f *integrationFixture, adminCtx co
 	if !errors.Is(err, domain.ErrForbidden) {
 		t.Fatalf("UpdateInstance() err = %v, want ErrForbidden", err)
 	}
-	status, _, _ := statusOf(err)
+	status := statusOf(err)
 	if status != http.StatusForbidden {
 		t.Fatalf("statusOf(err) = %d, want %d", status, http.StatusForbidden)
 	}

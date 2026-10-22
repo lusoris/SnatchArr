@@ -5,11 +5,14 @@
 package httpapi
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 
 	"github.com/golusoris/golusoris/httpx/middleware"
 )
+
+var errCrossOrigin = errors.New("cross-origin request refused")
 
 // CrossOrigin is the CSRF protection of cookie traffic: Go's same-origin check on the
 // Sec-Fetch-Site and Origin headers, the algorithm golusoris httpx/csrf delegates to
@@ -18,11 +21,9 @@ import (
 // gets a 403 problem+json, as every other error does.
 func CrossOrigin(logger *slog.Logger) middleware.Middleware {
 	guard := http.NewCrossOriginProtection()
+	onErr := ErrorHandler(logger)
 	guard.SetDenyHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		writeProblem(r.Context(), logger, w, problem{
-			Type: "about:blank", Title: http.StatusText(http.StatusForbidden), Status: http.StatusForbidden,
-			Detail: "cross-origin request refused", Instance: r.URL.Path,
-		})
+		onErr(r.Context(), w, r, errCrossOrigin)
 	}))
 	return guard.Handler
 }

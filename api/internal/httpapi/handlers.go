@@ -104,18 +104,18 @@ var _ oas.Handler = (*Handlers)(nil)
 
 // NewError renders handler errors as RFC 9457 (ogen "convenient error" hook).
 func (h *Handlers) NewError(_ context.Context, err error) *oas.ProblemStatusCode {
-	status, detail, params := statusOf(err)
-	items := make([]oas.ProblemInvalidMinusParamsItem, 0, len(params))
-	for _, p := range params {
-		items = append(items, oas.ProblemInvalidMinusParamsItem{Name: p.Name, Reason: p.Reason})
+	p := resolver.Resolve(nil, err)
+	items := make([]oas.ProblemInvalidMinusParamsItem, 0, len(p.InvalidParams))
+	for _, ip := range p.InvalidParams {
+		items = append(items, oas.ProblemInvalidMinusParamsItem{Name: ip.Name, Reason: ip.Reason})
 	}
 	return &oas.ProblemStatusCode{
-		StatusCode: status,
+		StatusCode: p.Status,
 		Response: oas.Problem{
 			Type:               url.URL{Scheme: "about", Opaque: "blank"},
-			Title:              httpStatusText(status),
-			Status:             status,
-			Detail:             optString(detail),
+			Title:              p.Title,
+			Status:             p.Status,
+			Detail:             optString(p.Detail),
 			InvalidMinusParams: items,
 		},
 	}

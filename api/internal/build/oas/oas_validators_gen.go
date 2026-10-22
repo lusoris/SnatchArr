@@ -314,6 +314,14 @@ func (s *CreateAPIKeyUnauthorized) Validate() error {
 	return nil
 }
 
+func (s *CreateAPIKeyUnprocessableEntity) Validate() error {
+	alias := (*ProblemStatusCode)(s)
+	if err := alias.Validate(); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (s *CreateApiKeyRequest) Validate() error {
 	if s == nil {
 		return validate.ErrNilPointer

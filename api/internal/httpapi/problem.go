@@ -5,110 +5,42 @@
 package httpapi
 
 import (
-	"context"
-	"encoding/json"
-	"errors"
 	"log/slog"
 	"net/http"
 
 	"github.com/ogen-go/ogen/ogenerrors"
-	"github.com/ogen-go/ogen/validate"
+
+	"github.com/golusoris/golusoris/ogenkit"
 
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/queue"
 )
 
-// problem is the RFC 9457 body. `invalid-params` follows the common extension used by
-// sveltesentio's problemToFieldErrors.
-type problem struct {
-	Type          string         `json:"type"`
-	Title         string         `json:"title"`
-	Status        int            `json:"status"`
-	Detail        string         `json:"detail,omitempty"`
-	Instance      string         `json:"instance,omitempty"`
-	InvalidParams []invalidParam `json:"invalid-params,omitempty"` //nolint:tagliatelle // RFC 9457 extension member name is hyphenated
-}
-
-type invalidParam struct {
-	Name   string `json:"name"`
-	Reason string `json:"reason"`
-}
-
-func decodeErrorStatus(err error) (int, string, bool) {
-	var decErr *ogenerrors.DecodeRequestError
-	var paramErr *ogenerrors.DecodeParamsError
-	if errors.As(err, &decErr) || errors.As(err, &paramErr) {
-		return http.StatusBadRequest, "malformed request", true
-	}
-	return 0, "", false
-}
-
-func validationErrorStatus(err error) (int, string, []invalidParam, bool) {
-	if valErr, ok := errors.AsType[*validate.Error](err); ok {
-		return http.StatusUnprocessableEntity, "request validation failed", validationParams(valErr), true
-	}
-	if errors.Is(err, domain.ErrInvalid) || errors.Is(err, queue.ErrInvalid) {
-		return http.StatusUnprocessableEntity, err.Error(), nil, true
-	}
-	return 0, "", nil, false
-}
-
-// statusOf maps errors from every layer to an HTTP status and a public detail.
-func statusOf(err error) (status int, detail string, params []invalidParam) {
-	if st, msg, ok := decodeErrorStatus(err); ok {
-		return st, msg, nil
-	}
-	if st, msg, p, ok := validationErrorStatus(err); ok {
-		return st, msg, p
-	}
-	var secErr *ogenerrors.SecurityError
-	switch {
-	case errors.As(err, &secErr), errors.Is(err, domain.ErrUnauthorized):
-		return http.StatusUnauthorized, "authentication required", nil
-	case errors.Is(err, domain.ErrForbidden):
-		return http.StatusForbidden, err.Error(), nil
-	case errors.Is(err, domain.ErrTooManyRequests):
-		return http.StatusTooManyRequests, "too many requests", nil
-	case errors.Is(err, domain.ErrNotFound):
-		return http.StatusNotFound, err.Error(), nil
-	case errors.Is(err, domain.ErrConflict):
-		return http.StatusConflict, err.Error(), nil
-	case errors.Is(err, domain.ErrBadRequest):
-		return http.StatusBadRequest, err.Error(), nil
-	case errors.Is(err, domain.ErrUnreachable):
-		return http.StatusBadGateway, err.Error(), nil
-	default:
-		return http.StatusInternalServerError, "internal error", nil
+// problemOptions maps errors to RFC 9457 problems; problem_contract_test.go pins every entry.
+func problemOptions() []ogenkit.Option {
+	return []ogenkit.Option{
+		ogenkit.WithPathInstance(),
+		ogenkit.WithDecodeDetail("malformed request"),
+		ogenkit.WithInvalidParams(),
+		ogenkit.WithValidationType("about:blank"),
+		ogenkit.WithHTTPStatus(domain.ErrInvalid, http.StatusUnprocessableEntity, ""),
+		ogenkit.WithHTTPStatus(queue.ErrInvalid, http.StatusUnprocessableEntity, ""),
+		ogenkit.WithSecurityStatus(http.StatusUnauthorized, "authentication required"),
+		ogenkit.WithHTTPStatus(domain.ErrUnauthorized, http.StatusUnauthorized, "authentication required"),
+		ogenkit.WithHTTPStatus(domain.ErrForbidden, http.StatusForbidden, ""),
+		ogenkit.WithHTTPStatus(errCrossOrigin, http.StatusForbidden, "cross-origin request refused"),
+		ogenkit.WithHTTPStatus(domain.ErrNotFound, http.StatusNotFound, ""),
+		ogenkit.WithHTTPStatus(domain.ErrConflict, http.StatusConflict, ""),
+		ogenkit.WithHTTPStatus(domain.ErrBadRequest, http.StatusBadRequest, ""),
+		ogenkit.WithHTTPStatus(domain.ErrUnreachable, http.StatusBadGateway, ""),
+		ogenkit.WithHTTPStatus(domain.ErrTooManyRequests, http.StatusTooManyRequests, "too many requests"),
+		ogenkit.WithFallbackDetail("internal error"),
 	}
 }
 
-func validationParams(v *validate.Error) []invalidParam {
-	out := make([]invalidParam, 0, len(v.Fields))
-	for _, f := range v.Fields {
-		out = append(out, invalidParam{Name: f.Name, Reason: f.Error.Error()})
-	}
-	return out
-}
+var resolver = ogenkit.NewResolver(problemOptions()...)
 
 // ErrorHandler renders every ogen-level or handler error as application/problem+json.
 func ErrorHandler(logger *slog.Logger) ogenerrors.ErrorHandler {
-	return func(ctx context.Context, w http.ResponseWriter, r *http.Request, err error) {
-		status, detail, params := statusOf(err)
-		if status >= http.StatusInternalServerError {
-			logger.ErrorContext(ctx, "httpapi: unhandled error", slog.String("path", r.URL.Path), slog.String("error", err.Error()))
-		}
-		writeProblem(ctx, logger, w, problem{
-			Type: "about:blank", Title: http.StatusText(status), Status: status,
-			Detail: detail, Instance: r.URL.Path, InvalidParams: params,
-		})
-	}
-}
-
-func writeProblem(ctx context.Context, logger *slog.Logger, w http.ResponseWriter, p problem) {
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.Header().Set("Cache-Control", "no-store")
-	w.WriteHeader(p.Status)
-	if err := json.NewEncoder(w).Encode(p); err != nil {
-		logger.WarnContext(ctx, "httpapi: write problem body", slog.String("error", err.Error()))
-	}
+	return ogenkit.ErrorHandlerWith(logger, problemOptions()...)
 }

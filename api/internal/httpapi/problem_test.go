@@ -17,8 +17,14 @@ import (
 	"github.com/ogen-go/ogen/ogenerrors"
 	"github.com/ogen-go/ogen/validate"
 
+	"github.com/golusoris/golusoris/ogenkit"
+
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 )
+
+func statusOf(err error) int {
+	return resolver.Resolve(nil, err).Status
+}
 
 func TestStatusOf(t *testing.T) {
 	t.Parallel()
@@ -32,6 +38,7 @@ func TestStatusOf(t *testing.T) {
 		{"positive invalid", fmt.Errorf("%w: bad", domain.ErrInvalid), http.StatusUnprocessableEntity},
 		{"positive unauthorized", domain.ErrUnauthorized, http.StatusUnauthorized},
 		{"positive forbidden", domain.ErrForbidden, http.StatusForbidden},
+		{"positive crossorigin", errCrossOrigin, http.StatusForbidden},
 		{"positive too many requests", fmt.Errorf("wrap: %w", domain.ErrTooManyRequests), http.StatusTooManyRequests},
 		{"positive unreachable", domain.ErrUnreachable, http.StatusBadGateway},
 		{"positive ogen security", &ogenerrors.SecurityError{Security: "cookieAuth", Err: errors.New("no")}, http.StatusUnauthorized},
@@ -42,7 +49,7 @@ func TestStatusOf(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got, _, _ := statusOf(tc.err)
+			got := statusOf(tc.err)
 			if got != tc.want {
 				t.Fatalf("status = %d, want %d", got, tc.want)
 			}
@@ -63,7 +70,7 @@ func TestErrorHandlerWritesProblemJSON(t *testing.T) {
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d", rec.Code)
 	}
-	var body problem
+	var body ogenkit.Problem
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode: %v", err)
 	}

@@ -784,6 +784,10 @@ type CreateAPIKeyUnauthorized ProblemStatusCode
 
 func (*CreateAPIKeyUnauthorized) createAPIKeyRes() {}
 
+type CreateAPIKeyUnprocessableEntity ProblemStatusCode
+
+func (*CreateAPIKeyUnprocessableEntity) createAPIKeyRes() {}
+
 // Ref: #/components/schemas/CreateApiKeyRequest
 type CreateApiKeyRequest struct {
 	Name      string        `json:"name"`

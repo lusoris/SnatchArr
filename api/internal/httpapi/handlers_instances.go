@@ -6,19 +6,11 @@ package httpapi
 
 import (
 	"context"
-	"net/http"
 
 	"github.com/lusoris/SnatchArr/api/internal/arrclient"
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 )
-
-func httpStatusText(status int) string {
-	if t := http.StatusText(status); t != "" {
-		return t
-	}
-	return "Error"
-}
 
 func requireAdmin(ctx context.Context) error {
 	u, ok := UserFrom(ctx)

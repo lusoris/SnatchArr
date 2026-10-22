@@ -692,11 +692,13 @@ func TestLoadCompoundKeysFromEnv(t *testing.T) {
 	}
 }
 
-func TestLoadWithoutCompoundKeys_Fails(t *testing.T) {
+// golusoris core v0.12 Unmarshal infers underscore paths from the koanf struct tags, so
+// underscore keys resolve from env even without CompoundKeys (golusoris/golusoris#937).
+func TestLoadWithoutCompoundKeys_ResolvesUnderscoreKeys(t *testing.T) {
 	t.Setenv("APP_SNATCHARR_PROFILE", "dev")
 	t.Setenv("APP_SNATCHARR_PROXY_AUTH_ENABLED", "true")
 	t.Setenv("APP_SNATCHARR_PROXY_AUTH_TRUSTED_CIDRS", "10.0.0.0/8")
-	t.Setenv("APP_SNATCHARR_PROXY_AUTH_ALLOWED_USERS", "admin")
+	t.Setenv("APP_SNATCHARR_PROXY_AUTH_ADMIN_GROUPS", "admins")
 
 	cfg, err := gconfig.New(gconfig.Options{EnvPrefix: "APP_"})
 	if err != nil {
@@ -706,7 +708,25 @@ func TestLoadWithoutCompoundKeys_Fails(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config.Load: %v", err)
 	}
-	if opts.ProxyAuth.Enabled {
-		t.Fatalf("ProxyAuth.Enabled = true without CompoundKeys; expected false because env was split into snatcharr.proxy.auth.enabled")
+	if !opts.ProxyAuth.Enabled {
+		t.Fatal("ProxyAuth.Enabled = false; want true from APP_SNATCHARR_PROXY_AUTH_ENABLED")
+	}
+	if len(opts.ProxyAuth.AdminGroups) != 1 || opts.ProxyAuth.AdminGroups[0] != "admins" {
+		t.Fatalf("ProxyAuth.AdminGroups = %v, want [admins]", opts.ProxyAuth.AdminGroups)
+	}
+}
+
+func TestLoadWithoutCompoundKeys_RefusesDeprecatedAllowedUsers(t *testing.T) {
+	t.Setenv("APP_SNATCHARR_PROFILE", "dev")
+	t.Setenv("APP_SNATCHARR_PROXY_AUTH_ENABLED", "true")
+	t.Setenv("APP_SNATCHARR_PROXY_AUTH_TRUSTED_CIDRS", "10.0.0.0/8")
+	t.Setenv("APP_SNATCHARR_PROXY_AUTH_ALLOWED_USERS", "admin")
+
+	cfg, err := gconfig.New(gconfig.Options{EnvPrefix: "APP_"})
+	if err != nil {
+		t.Fatalf("gconfig.New: %v", err)
+	}
+	if _, err := config.Load(cfg); err == nil || !strings.Contains(err.Error(), "allowed_users is deprecated") {
+		t.Fatalf("config.Load error = %v, want allowed_users deprecation", err)
 	}
 }
