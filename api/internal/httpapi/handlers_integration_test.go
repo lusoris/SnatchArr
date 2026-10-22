@@ -53,6 +53,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/store"
 	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
 	"github.com/lusoris/SnatchArr/api/internal/store/storetest"
+	"github.com/lusoris/SnatchArr/api/internal/testdiag"
 )
 
 type stubSnapshotter struct {
@@ -250,6 +251,7 @@ type integrationFixture struct {
 	notifyEngine   *notify.Engine
 	rec            *snatch.Recorder
 	enc            *crypto.Encryptor
+	logs           *testdiag.LogBuffer
 }
 
 func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Generator, authSvc *auth.Service, apiKeys *auth.APIKeys, sessMgr *session.Manager, probe *stubProber, dlSnap dlclients.Snapshotter, dlDisc arrclient.Discoverer, m *metrics.Metrics, logger *slog.Logger, seerrClient *stubSeerrClient, res *stubResolver) (*Handlers, *notify.Service, *notify.WebhookStore, *notify.Engine, *snatch.Recorder, *crypto.Encryptor, *prowlarr.Service) {
@@ -322,7 +324,8 @@ func newIntegrationFixture(t *testing.T) *integrationFixture {
 	clk := clock.NewFake()
 	ids := id.New()
 	hasher := crypto.NewPasswordHasher(1)
-	logger := slog.New(slog.DiscardHandler)
+	logs := testdiag.NewLogBuffer(slog.LevelWarn, 64<<10)
+	logger := slog.New(logs)
 	authSvc, err := auth.NewService(st, hasher, clk, ids, logger)
 	if err != nil {
 		t.Fatalf("newIntegrationFixture: auth.NewService: %v", err)
@@ -382,6 +385,7 @@ func newIntegrationFixture(t *testing.T) *integrationFixture {
 		notifyEngine:   nEngine,
 		rec:            rec,
 		enc:            enc,
+		logs:           logs,
 	}
 }
 
