@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.6.1](https://github.com/lusoris/SnatchArr/compare/v0.6.0...v0.6.1) (2026-10-23)
+
+
+### Features
+
+* **web:** show the version, add an About page and a Ko-fi link ([#554](https://github.com/lusoris/SnatchArr/issues/554)) ([79c210d](https://github.com/lusoris/SnatchArr/commit/79c210dd486df59fd2d581dad3627064358eec59))
+
+
+### Bug Fixes
+
+* **deps:** update golusoris ([#553](https://github.com/lusoris/SnatchArr/issues/553)) ([5a42756](https://github.com/lusoris/SnatchArr/commit/5a42756fde9c95a8ce642ae9d852e6f9cce845bf))
+* **dlclients:** count waiting jobs as queued in every adapter ([#556](https://github.com/lusoris/SnatchArr/issues/556)) ([1620357](https://github.com/lusoris/SnatchArr/commit/1620357594247ccdb976c38df24b2aa9529a0102))
+* **licences:** read the module cache from go env ([#555](https://github.com/lusoris/SnatchArr/issues/555)) ([27ab7dc](https://github.com/lusoris/SnatchArr/commit/27ab7dcd4176ee4bc211664c45eb891fa9e40739))
+
+
+### Refactoring
+
+* **web:** share admin form edit state through FormEditor ([#557](https://github.com/lusoris/SnatchArr/issues/557)) ([7702f7a](https://github.com/lusoris/SnatchArr/commit/7702f7af23fae5f9a9739685f9701247ada3e16f))
+* **web:** share the admin-only link form slot across three pages ([#546](https://github.com/lusoris/SnatchArr/issues/546)) ([d22fcf1](https://github.com/lusoris/SnatchArr/commit/d22fcf1fe21816288467d6726999539641239fa9))
+* **web:** share the new-password field and the account test steps ([#548](https://github.com/lusoris/SnatchArr/issues/548)) ([f36ecc9](https://github.com/lusoris/SnatchArr/commit/f36ecc9c795c5abeb519feef1825e45570cc4979))
+* **web:** share the policy section prop types and kind check ([#547](https://github.com/lusoris/SnatchArr/issues/547)) ([5dbdf4b](https://github.com/lusoris/SnatchArr/commit/5dbdf4bfb3ada35da27a03ccc888f6e4371f83ba))
+* **worker:** share the wanted-cycle and dispatched-id test helpers ([#545](https://github.com/lusoris/SnatchArr/issues/545)) ([b733fa8](https://github.com/lusoris/SnatchArr/commit/b733fa85c9d9891ae4f5525aad54e5f5b8cb08a2))
+
 ## [0.6.0](https://github.com/lusoris/SnatchArr/compare/v0.5.5...v0.6.0) (2026-10-23)
 
 
