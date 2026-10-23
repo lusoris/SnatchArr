@@ -162,7 +162,7 @@ type httpDeps struct {
 func mountHTTP(d httpDeps, api httpapi.MountParams) error {
 	d.Router.Use(
 		middleware.RequestID,
-		sso.ProxyHeaderMiddleware(d.Cfg.ProxyAuth, d.Logger),
+		sso.ProxyHeaderMiddleware(d.Cfg.ProxyAuth, d.Logger, httpapi.ErrorHandler(d.Logger)),
 		middleware.TrustProxy(middleware.TrustProxyOptions{TrustedCIDRs: d.Cfg.Proxy.Trusted}),
 		middleware.Recover(d.Logger),
 		middleware.Logger(d.Logger, d.Clock),

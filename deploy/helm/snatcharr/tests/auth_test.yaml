@@ -81,12 +81,14 @@ tests:
                 name: "custom-secret"
                 key: "custom-key"
 
-  - it: positive - proxyAuth enabled renders configmap entries
+  - it: positive - proxyAuth enabled renders configmap entries and secret env
     set:
       auth:
         proxyAuth:
           enabled: true
           header: "Remote-User"
+          secretHeader: "X-SnatchArr-Proxy-Secret"
+          existingSecret: "my-proxy-secret"
           trustedCidrs:
             - "10.0.0.0/8"
             - "172.16.0.0/12"
@@ -102,10 +104,20 @@ tests:
           content:
             APP_SNATCHARR_PROXY_AUTH_ENABLED: "true"
             APP_SNATCHARR_PROXY_AUTH_HEADER: "Remote-User"
+            APP_SNATCHARR_PROXY_AUTH_SECRET_HEADER: "X-SnatchArr-Proxy-Secret"
             APP_SNATCHARR_PROXY_AUTH_TRUSTED_CIDRS: "10.0.0.0/8,172.16.0.0/12"
             APP_SNATCHARR_PROXY_AUTH_GROUPS_HEADER: "X-authentik-groups"
             APP_SNATCHARR_PROXY_AUTH_ADMIN_GROUPS: "admins,leads"
             APP_SNATCHARR_PROXY_AUTH_VIEWER_GROUPS: "viewers"
+      - template: api-deployment.yaml
+        contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: APP_SNATCHARR_PROXY_AUTH_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: "my-proxy-secret"
+                key: "proxy-auth-secret"
 
   - it: negative - oidc enabled without admin groups fails to render
     set:
@@ -120,11 +132,25 @@ tests:
         failedTemplate:
           errorMessage: "auth.oidc.adminGroups must name at least one group when auth.oidc.enabled is true"
 
+  - it: negative - proxyAuth enabled without existingSecret fails to render
+    set:
+      auth:
+        proxyAuth:
+          enabled: true
+          adminGroups:
+            - "admins"
+          existingSecret: ""
+    asserts:
+      - template: api-deployment.yaml
+        failedTemplate:
+          errorMessage: "auth.proxyAuth is enabled: set auth.proxyAuth.existingSecret"
+
   - it: negative - proxyAuth enabled without admin groups fails to render
     set:
       auth:
         proxyAuth:
           enabled: true
+          existingSecret: "my-proxy-secret"
           trustedCidrs:
             - "10.0.0.0/8"
     asserts:
@@ -137,6 +163,7 @@ tests:
       auth:
         proxyAuth:
           enabled: true
+          existingSecret: "my-proxy-secret"
           trustedCidrs:
             - "10.0.0.0/8"
           adminGroups:
@@ -149,3 +176,23 @@ tests:
       - template: configmap.yaml
         isNull:
           path: data.APP_SNATCHARR_PROXY_AUTH_VIEWER_GROUPS
+
+  - it: boundary - proxyAuth custom secretKey used
+    set:
+      auth:
+        proxyAuth:
+          enabled: true
+          existingSecret: "custom-proxy-secret"
+          secretKey: "custom-secret-key"
+          adminGroups:
+            - "admins"
+    asserts:
+      - template: api-deployment.yaml
+        contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: APP_SNATCHARR_PROXY_AUTH_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: "custom-proxy-secret"
+                key: "custom-secret-key"

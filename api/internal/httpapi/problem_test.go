@@ -20,6 +20,7 @@ import (
 	"github.com/golusoris/golusoris/ogenkit"
 
 	"github.com/lusoris/SnatchArr/api/internal/domain"
+	"github.com/lusoris/SnatchArr/api/internal/sso"
 )
 
 func statusOf(err error) int {
@@ -37,6 +38,7 @@ func TestStatusOf(t *testing.T) {
 		{"positive conflict", domain.ErrConflict, http.StatusConflict},
 		{"positive invalid", fmt.Errorf("%w: bad", domain.ErrInvalid), http.StatusUnprocessableEntity},
 		{"positive unauthorized", domain.ErrUnauthorized, http.StatusUnauthorized},
+		{"positive sso proxy secret", sso.ErrProxySecret, http.StatusUnauthorized},
 		{"positive forbidden", domain.ErrForbidden, http.StatusForbidden},
 		{"positive crossorigin", errCrossOrigin, http.StatusForbidden},
 		{"positive too many requests", fmt.Errorf("wrap: %w", domain.ErrTooManyRequests), http.StatusTooManyRequests},

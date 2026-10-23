@@ -8,13 +8,21 @@ package sso
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
+	"errors"
 	"log/slog"
 	"net"
 	"net/http"
 	"strings"
 
+	"github.com/ogen-go/ogen/ogenerrors"
+
 	"github.com/lusoris/SnatchArr/api/internal/config"
 )
+
+// ErrProxySecret is returned when a trusted reverse-proxy presents an invalid or missing shared secret.
+var ErrProxySecret = errors.New("sso: proxy auth secret refused")
 
 type (
 	proxyUserKey   struct{}
@@ -43,16 +51,18 @@ func ProxyGroupsFromContext(ctx context.Context) ([]string, bool) {
 	return v, ok
 }
 
-func stripProxyHeaders(r *http.Request, userHeader, groupsHeader string) (string, string) {
+func stripProxyHeaders(r *http.Request, userHeader, groupsHeader, secretHeader string) (string, string, string) {
 	rawUser := r.Header.Get(userHeader)
 	rawGroups := r.Header.Get(groupsHeader)
+	rawSecret := r.Header.Get(secretHeader)
 	if rawUser != "" {
 		r.Header.Del(userHeader)
 	}
 	if rawGroups != "" {
 		r.Header.Del(groupsHeader)
 	}
-	return rawUser, rawGroups
+	r.Header.Del(secretHeader)
+	return rawUser, rawGroups, rawSecret
 }
 
 func attachProxyContext(ctx context.Context, rawUser, rawGroups string) context.Context {
@@ -67,7 +77,7 @@ func attachProxyContext(ctx context.Context, rawUser, rawGroups string) context.
 
 // ProxyHeaderMiddleware extracts and verifies the trusted reverse-proxy user and groups headers.
 // It is mounted in the HTTP pipeline before TrustProxy so it inspects the direct peer address.
-func ProxyHeaderMiddleware(cfg config.ProxyAuthOptions, logger *slog.Logger) func(http.Handler) http.Handler {
+func ProxyHeaderMiddleware(cfg config.ProxyAuthOptions, logger *slog.Logger, onErr ogenerrors.ErrorHandler) func(http.Handler) http.Handler {
 	userHeader := cfg.Header
 	if userHeader == "" {
 		userHeader = "Remote-User"
@@ -76,10 +86,16 @@ func ProxyHeaderMiddleware(cfg config.ProxyAuthOptions, logger *slog.Logger) fun
 	if groupsHeader == "" {
 		groupsHeader = "X-authentik-groups"
 	}
+	secretHeader := cfg.SecretHeader
+	if secretHeader == "" {
+		secretHeader = config.DefaultProxySecretHeader
+	}
 	nets := parseCIDRs(cfg.TrustedCIDRs)
+	checkSecret := newSecretCheck(cfg.Secret)
+
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			rawUser, rawGroups := stripProxyHeaders(r, userHeader, groupsHeader)
+			rawUser, rawGroups, rawSecret := stripProxyHeaders(r, userHeader, groupsHeader, secretHeader)
 			if rawUser == "" && rawGroups == "" {
 				next.ServeHTTP(w, r)
 				return
@@ -89,8 +105,30 @@ func ProxyHeaderMiddleware(cfg config.ProxyAuthOptions, logger *slog.Logger) fun
 				next.ServeHTTP(w, r)
 				return
 			}
+			if reason := checkSecret(rawSecret); reason != "" {
+				logger.WarnContext(r.Context(), "sso: proxy auth secret refused", slog.String("reason", reason))
+				onErr(r.Context(), w, r, ErrProxySecret)
+				return
+			}
 			next.ServeHTTP(w, r.WithContext(attachProxyContext(r.Context(), rawUser, rawGroups)))
 		})
+	}
+}
+
+// newSecretCheck returns a check of the presented proxy secret: "" when it matches want, else
+// the refusal reason. Both sides are hashed first, so the compare takes the same time whatever
+// the presented length; an empty want refuses every request.
+func newSecretCheck(want string) func(got string) string {
+	wantDigest := sha256.Sum256([]byte(want))
+	return func(got string) string {
+		if got == "" {
+			return "missing_secret"
+		}
+		gotDigest := sha256.Sum256([]byte(got))
+		if want == "" || subtle.ConstantTimeCompare(gotDigest[:], wantDigest[:]) != 1 {
+			return "wrong_secret"
+		}
+		return ""
 	}
 }
 

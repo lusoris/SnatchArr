@@ -19,6 +19,7 @@ import (
 
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/queue"
+	"github.com/lusoris/SnatchArr/api/internal/sso"
 )
 
 type contractExpected struct {
@@ -139,6 +140,16 @@ func problemContractCases() []contractTestCase {
 		{
 			name:   "positive domain unauthorized wrapped 401",
 			err:    fmt.Errorf("auth guard: %w", domain.ErrUnauthorized),
+			target: "/api/v1/instances",
+			want: contractExpected{
+				status:   http.StatusUnauthorized,
+				detail:   "authentication required",
+				instance: "/api/v1/instances",
+			},
+		},
+		{
+			name:   "positive sso proxy secret error 401",
+			err:    sso.ErrProxySecret,
 			target: "/api/v1/instances",
 			want: contractExpected{
 				status:   http.StatusUnauthorized,

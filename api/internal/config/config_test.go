@@ -171,6 +171,7 @@ func TestValidate(t *testing.T) {
 			o.ProxyAuth.Enabled = true
 			o.ProxyAuth.Header = "Remote-User"
 			o.ProxyAuth.GroupsHeader = "X-authentik-groups"
+			o.ProxyAuth.Secret = strings.Repeat("s", 32)
 			o.ProxyAuth.TrustedCIDRs = []string{"10.0.0.0/8"}
 			o.ProxyAuth.AdminGroups = []string{"admin"}
 		}, nil, false},
@@ -178,6 +179,7 @@ func TestValidate(t *testing.T) {
 			o.ProxyAuth.Enabled = true
 			o.ProxyAuth.Header = "Remote-User"
 			o.ProxyAuth.GroupsHeader = "X-authentik-groups"
+			o.ProxyAuth.Secret = strings.Repeat("s", 32)
 			o.ProxyAuth.TrustedCIDRs = []string{"10.0.0.0/8"}
 			o.ProxyAuth.AdminGroups = []string{"admin"}
 			o.ProxyAuth.ViewerGroups = []string{"viewer"}
@@ -186,6 +188,7 @@ func TestValidate(t *testing.T) {
 			o.ProxyAuth.Enabled = true
 			o.ProxyAuth.Header = ""
 			o.ProxyAuth.GroupsHeader = "X-authentik-groups"
+			o.ProxyAuth.Secret = strings.Repeat("s", 32)
 			o.ProxyAuth.TrustedCIDRs = []string{"10.0.0.0/8"}
 			o.ProxyAuth.AdminGroups = []string{"admin"}
 		}, nil, true},
@@ -193,6 +196,7 @@ func TestValidate(t *testing.T) {
 			o.ProxyAuth.Enabled = true
 			o.ProxyAuth.Header = "Remote User Header"
 			o.ProxyAuth.GroupsHeader = "X-authentik-groups"
+			o.ProxyAuth.Secret = strings.Repeat("s", 32)
 			o.ProxyAuth.TrustedCIDRs = []string{"10.0.0.0/8"}
 			o.ProxyAuth.AdminGroups = []string{"admin"}
 		}, nil, true},
@@ -200,6 +204,7 @@ func TestValidate(t *testing.T) {
 			o.ProxyAuth.Enabled = true
 			o.ProxyAuth.Header = "Remote-User"
 			o.ProxyAuth.GroupsHeader = ""
+			o.ProxyAuth.Secret = strings.Repeat("s", 32)
 			o.ProxyAuth.TrustedCIDRs = []string{"10.0.0.0/8"}
 			o.ProxyAuth.AdminGroups = []string{"admin"}
 		}, nil, true},
@@ -207,6 +212,7 @@ func TestValidate(t *testing.T) {
 			o.ProxyAuth.Enabled = true
 			o.ProxyAuth.Header = "Remote-User"
 			o.ProxyAuth.GroupsHeader = "Invalid Header"
+			o.ProxyAuth.Secret = strings.Repeat("s", 32)
 			o.ProxyAuth.TrustedCIDRs = []string{"10.0.0.0/8"}
 			o.ProxyAuth.AdminGroups = []string{"admin"}
 		}, nil, true},
@@ -214,6 +220,7 @@ func TestValidate(t *testing.T) {
 			o.ProxyAuth.Enabled = true
 			o.ProxyAuth.Header = "Remote-User"
 			o.ProxyAuth.GroupsHeader = "X-authentik-groups"
+			o.ProxyAuth.Secret = strings.Repeat("s", 32)
 			o.ProxyAuth.TrustedCIDRs = nil
 			o.ProxyAuth.AdminGroups = []string{"admin"}
 		}, nil, true},
@@ -221,6 +228,7 @@ func TestValidate(t *testing.T) {
 			o.ProxyAuth.Enabled = true
 			o.ProxyAuth.Header = "Remote-User"
 			o.ProxyAuth.GroupsHeader = "X-authentik-groups"
+			o.ProxyAuth.Secret = strings.Repeat("s", 32)
 			o.ProxyAuth.TrustedCIDRs = []string{"0.0.0.0/0"}
 			o.ProxyAuth.AdminGroups = []string{"admin"}
 		}, nil, true},
@@ -228,6 +236,7 @@ func TestValidate(t *testing.T) {
 			o.ProxyAuth.Enabled = true
 			o.ProxyAuth.Header = "Remote-User"
 			o.ProxyAuth.GroupsHeader = "X-authentik-groups"
+			o.ProxyAuth.Secret = strings.Repeat("s", 32)
 			o.ProxyAuth.TrustedCIDRs = []string{"::/0"}
 			o.ProxyAuth.AdminGroups = []string{"admin"}
 		}, nil, true},
@@ -235,6 +244,7 @@ func TestValidate(t *testing.T) {
 			o.ProxyAuth.Enabled = true
 			o.ProxyAuth.Header = "Remote-User"
 			o.ProxyAuth.GroupsHeader = "X-authentik-groups"
+			o.ProxyAuth.Secret = strings.Repeat("s", 32)
 			o.ProxyAuth.TrustedCIDRs = []string{"not-a-cidr"}
 			o.ProxyAuth.AdminGroups = []string{"admin"}
 		}, nil, true},
@@ -242,6 +252,7 @@ func TestValidate(t *testing.T) {
 			o.ProxyAuth.Enabled = true
 			o.ProxyAuth.Header = "Remote-User"
 			o.ProxyAuth.GroupsHeader = "X-authentik-groups"
+			o.ProxyAuth.Secret = strings.Repeat("s", 32)
 			o.ProxyAuth.TrustedCIDRs = []string{"10.0.0.0/8"}
 			o.ProxyAuth.AdminGroups = nil
 		}, nil, true},
@@ -249,6 +260,7 @@ func TestValidate(t *testing.T) {
 			o.ProxyAuth.Enabled = true
 			o.ProxyAuth.Header = "Remote-User"
 			o.ProxyAuth.GroupsHeader = "X-authentik-groups"
+			o.ProxyAuth.Secret = strings.Repeat("s", 32)
 			o.ProxyAuth.TrustedCIDRs = []string{"10.0.0.0/8"}
 			o.ProxyAuth.AdminGroups = []string{"admin"}
 			o.ProxyAuth.AllowedUsers = []string{"admin"}
@@ -257,9 +269,78 @@ func TestValidate(t *testing.T) {
 			o.ProxyAuth.Enabled = true
 			o.ProxyAuth.Header = "Remote-User"
 			o.ProxyAuth.GroupsHeader = "X-authentik-groups"
+			o.ProxyAuth.Secret = strings.Repeat("s", 32)
 			o.ProxyAuth.TrustedCIDRs = []string{"10.0.0.0/8"}
 			o.ProxyAuth.AdminGroups = []string{"ops"}
 			o.ProxyAuth.ViewerGroups = []string{"ops"}
+		}, nil, true},
+		{"positive proxy auth enabled and valid secret", func(o *config.Options) {
+			o.ProxyAuth.Enabled = true
+			o.ProxyAuth.Header = "Remote-User"
+			o.ProxyAuth.GroupsHeader = "X-authentik-groups"
+			o.ProxyAuth.SecretHeader = "X-SnatchArr-Proxy-Secret"
+			o.ProxyAuth.Secret = strings.Repeat("s", 32)
+			o.ProxyAuth.TrustedCIDRs = []string{"10.0.0.0/8"}
+			o.ProxyAuth.AdminGroups = []string{"admin"}
+		}, nil, false},
+		{"negative proxy auth missing secret", func(o *config.Options) {
+			o.ProxyAuth.Enabled = true
+			o.ProxyAuth.Header = "Remote-User"
+			o.ProxyAuth.GroupsHeader = "X-authentik-groups"
+			o.ProxyAuth.Secret = ""
+			o.ProxyAuth.TrustedCIDRs = []string{"10.0.0.0/8"}
+			o.ProxyAuth.AdminGroups = []string{"admin"}
+		}, nil, true},
+		{"negative proxy auth 31-byte secret", func(o *config.Options) {
+			o.ProxyAuth.Enabled = true
+			o.ProxyAuth.Header = "Remote-User"
+			o.ProxyAuth.GroupsHeader = "X-authentik-groups"
+			o.ProxyAuth.Secret = strings.Repeat("s", 31)
+			o.ProxyAuth.TrustedCIDRs = []string{"10.0.0.0/8"}
+			o.ProxyAuth.AdminGroups = []string{"admin"}
+		}, nil, true},
+		{"boundary proxy auth 32-byte secret ok", func(o *config.Options) {
+			o.ProxyAuth.Enabled = true
+			o.ProxyAuth.Header = "Remote-User"
+			o.ProxyAuth.GroupsHeader = "X-authentik-groups"
+			o.ProxyAuth.Secret = strings.Repeat("s", 32)
+			o.ProxyAuth.TrustedCIDRs = []string{"10.0.0.0/8"}
+			o.ProxyAuth.AdminGroups = []string{"admin"}
+		}, nil, false},
+		{"negative proxy auth whitespace-only secret", func(o *config.Options) {
+			o.ProxyAuth.Enabled = true
+			o.ProxyAuth.Header = "Remote-User"
+			o.ProxyAuth.GroupsHeader = "X-authentik-groups"
+			o.ProxyAuth.Secret = "   \t\n   "
+			o.ProxyAuth.TrustedCIDRs = []string{"10.0.0.0/8"}
+			o.ProxyAuth.AdminGroups = []string{"admin"}
+		}, nil, true},
+		{"negative proxy auth invalid secret_header token", func(o *config.Options) {
+			o.ProxyAuth.Enabled = true
+			o.ProxyAuth.Header = "Remote-User"
+			o.ProxyAuth.GroupsHeader = "X-authentik-groups"
+			o.ProxyAuth.SecretHeader = "Invalid Secret Header"
+			o.ProxyAuth.Secret = strings.Repeat("s", 32)
+			o.ProxyAuth.TrustedCIDRs = []string{"10.0.0.0/8"}
+			o.ProxyAuth.AdminGroups = []string{"admin"}
+		}, nil, true},
+		{"negative proxy auth secret_header equal to header in other case", func(o *config.Options) {
+			o.ProxyAuth.Enabled = true
+			o.ProxyAuth.Header = "Remote-User"
+			o.ProxyAuth.GroupsHeader = "X-authentik-groups"
+			o.ProxyAuth.SecretHeader = "remote-user"
+			o.ProxyAuth.Secret = strings.Repeat("s", 32)
+			o.ProxyAuth.TrustedCIDRs = []string{"10.0.0.0/8"}
+			o.ProxyAuth.AdminGroups = []string{"admin"}
+		}, nil, true},
+		{"negative proxy auth secret_header equal to groups_header in other case", func(o *config.Options) {
+			o.ProxyAuth.Enabled = true
+			o.ProxyAuth.Header = "Remote-User"
+			o.ProxyAuth.GroupsHeader = "X-authentik-groups"
+			o.ProxyAuth.SecretHeader = "x-AUTHENTIK-groups"
+			o.ProxyAuth.Secret = strings.Repeat("s", 32)
+			o.ProxyAuth.TrustedCIDRs = []string{"10.0.0.0/8"}
+			o.ProxyAuth.AdminGroups = []string{"admin"}
 		}, nil, true},
 	}
 	for _, tc := range tests {
@@ -577,11 +658,32 @@ func TestLoadCompoundKeysFromEnv(t *testing.T) {
 				"APP_SNATCHARR_PROXY_AUTH_ENABLED":       "true",
 				"APP_SNATCHARR_PROXY_AUTH_TRUSTED_CIDRS": "10.0.0.0/8",
 				"APP_SNATCHARR_PROXY_AUTH_ADMIN_GROUPS":  "admin",
+				"APP_SNATCHARR_PROXY_AUTH_SECRET":        strings.Repeat("s", 32),
 			},
 			assertFn: func(t *testing.T, opts config.Options) {
 				t.Helper()
 				if !opts.ProxyAuth.Enabled {
 					t.Fatalf("ProxyAuth.Enabled = false, want true")
+				}
+			},
+		},
+		{
+			name: "proxy_auth secret_header custom",
+			env:  map[string]string{"APP_SNATCHARR_PROXY_AUTH_SECRET_HEADER": "X-Custom-Secret"},
+			assertFn: func(t *testing.T, opts config.Options) {
+				t.Helper()
+				if opts.ProxyAuth.SecretHeader != "X-Custom-Secret" {
+					t.Fatalf("ProxyAuth.SecretHeader = %q, want X-Custom-Secret", opts.ProxyAuth.SecretHeader)
+				}
+			},
+		},
+		{
+			name: "proxy_auth secret",
+			env:  map[string]string{"APP_SNATCHARR_PROXY_AUTH_SECRET": strings.Repeat("s", 32)},
+			assertFn: func(t *testing.T, opts config.Options) {
+				t.Helper()
+				if opts.ProxyAuth.Secret != strings.Repeat("s", 32) {
+					t.Fatalf("ProxyAuth.Secret = %q, want 32 's'", opts.ProxyAuth.Secret)
 				}
 			},
 		},
@@ -699,6 +801,7 @@ func TestLoadWithoutCompoundKeys_ResolvesUnderscoreKeys(t *testing.T) {
 	t.Setenv("APP_SNATCHARR_PROXY_AUTH_ENABLED", "true")
 	t.Setenv("APP_SNATCHARR_PROXY_AUTH_TRUSTED_CIDRS", "10.0.0.0/8")
 	t.Setenv("APP_SNATCHARR_PROXY_AUTH_ADMIN_GROUPS", "admins")
+	t.Setenv("APP_SNATCHARR_PROXY_AUTH_SECRET", strings.Repeat("s", 32))
 
 	cfg, err := gconfig.New(gconfig.Options{EnvPrefix: "APP_"})
 	if err != nil {
@@ -721,6 +824,7 @@ func TestLoadWithoutCompoundKeys_RefusesDeprecatedAllowedUsers(t *testing.T) {
 	t.Setenv("APP_SNATCHARR_PROXY_AUTH_ENABLED", "true")
 	t.Setenv("APP_SNATCHARR_PROXY_AUTH_TRUSTED_CIDRS", "10.0.0.0/8")
 	t.Setenv("APP_SNATCHARR_PROXY_AUTH_ALLOWED_USERS", "admin")
+	t.Setenv("APP_SNATCHARR_PROXY_AUTH_SECRET", strings.Repeat("s", 32))
 
 	cfg, err := gconfig.New(gconfig.Options{EnvPrefix: "APP_"})
 	if err != nil {
@@ -728,5 +832,44 @@ func TestLoadWithoutCompoundKeys_RefusesDeprecatedAllowedUsers(t *testing.T) {
 	}
 	if _, err := config.Load(cfg); err == nil || !strings.Contains(err.Error(), "allowed_users is deprecated") {
 		t.Fatalf("config.Load error = %v, want allowed_users deprecation", err)
+	}
+}
+
+func TestLoadProxyAuthSecretTrimmed(t *testing.T) {
+	cases := []struct {
+		name       string
+		envVal     string
+		wantSecret string
+		wantErr    bool
+	}{
+		{"positive secret kept", strings.Repeat("s", 32), strings.Repeat("s", 32), false},
+		{"boundary trailing newline from a secret file trimmed", strings.Repeat("s", 32) + "\n", strings.Repeat("s", 32), false},
+		{"negative 31 bytes plus newline refused", strings.Repeat("s", 31) + "\n", "", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("APP_SNATCHARR_PROFILE", "dev")
+			t.Setenv("APP_SNATCHARR_PROXY_AUTH_ENABLED", "true")
+			t.Setenv("APP_SNATCHARR_PROXY_AUTH_TRUSTED_CIDRS", "10.0.0.0/8")
+			t.Setenv("APP_SNATCHARR_PROXY_AUTH_ADMIN_GROUPS", "admins")
+			t.Setenv("APP_SNATCHARR_PROXY_AUTH_SECRET", tc.envVal)
+			cfg, err := gconfig.New(gconfig.Options{EnvPrefix: "APP_"})
+			if err != nil {
+				t.Fatalf("gconfig.New: %v", err)
+			}
+			opts, err := config.Load(cfg)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("config.Load accepted a short secret")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("config.Load: %v", err)
+			}
+			if opts.ProxyAuth.Secret != tc.wantSecret {
+				t.Fatalf("ProxyAuth.Secret length = %d, want %d", len(opts.ProxyAuth.Secret), len(tc.wantSecret))
+			}
+		})
 	}
 }

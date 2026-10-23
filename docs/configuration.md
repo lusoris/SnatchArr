@@ -54,6 +54,8 @@ UI.
 | `APP_SNATCHARR_PROXY_AUTH_HEADER` | `Remote-User` | Name of header containing authenticated username |
 | `APP_SNATCHARR_PROXY_AUTH_TRUSTED_CIDRS` | | Comma-separated CIDRs of reverse proxies trusted for proxy-header auth |
 | `APP_SNATCHARR_PROXY_AUTH_GROUPS_HEADER` | `X-authentik-groups` | Header containing `\|`-separated groups |
+| `APP_SNATCHARR_PROXY_AUTH_SECRET_HEADER` | `X-SnatchArr-Proxy-Secret` | Name of header containing shared proxy secret |
+| `APP_SNATCHARR_PROXY_AUTH_SECRET` | | Shared secret reverse proxy must present (min 32 bytes) |
 | `APP_SNATCHARR_PROXY_AUTH_ADMIN_GROUPS` | | Comma-separated groups that sign in as admin (required) |
 | `APP_SNATCHARR_PROXY_AUTH_VIEWER_GROUPS` | | Comma-separated groups that sign in as viewers |
 | `APP_OTEL_ENABLED` | `true` | OpenTelemetry export (no-op without an endpoint) |

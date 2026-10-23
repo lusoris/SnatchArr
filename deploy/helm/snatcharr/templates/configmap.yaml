@@ -70,6 +70,9 @@ data:
   {{- with .Values.auth.proxyAuth.groupsHeader }}
   APP_SNATCHARR_PROXY_AUTH_GROUPS_HEADER: {{ . | quote }}
   {{- end }}
+  {{- with .Values.auth.proxyAuth.secretHeader }}
+  APP_SNATCHARR_PROXY_AUTH_SECRET_HEADER: {{ . | quote }}
+  {{- end }}
   {{- if not .Values.auth.proxyAuth.adminGroups }}
   {{- fail "auth.proxyAuth.adminGroups must name at least one group when auth.proxyAuth.enabled is true" }}
   {{- end }}

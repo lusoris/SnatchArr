@@ -14,6 +14,7 @@ import (
 
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/queue"
+	"github.com/lusoris/SnatchArr/api/internal/sso"
 )
 
 // problemOptions maps errors to RFC 9457 problems; problem_contract_test.go pins every entry.
@@ -27,6 +28,7 @@ func problemOptions() []ogenkit.Option {
 		ogenkit.WithHTTPStatus(queue.ErrInvalid, http.StatusUnprocessableEntity, ""),
 		ogenkit.WithSecurityStatus(http.StatusUnauthorized, "authentication required"),
 		ogenkit.WithHTTPStatus(domain.ErrUnauthorized, http.StatusUnauthorized, "authentication required"),
+		ogenkit.WithHTTPStatus(sso.ErrProxySecret, http.StatusUnauthorized, "authentication required"),
 		ogenkit.WithHTTPStatus(domain.ErrForbidden, http.StatusForbidden, ""),
 		ogenkit.WithHTTPStatus(errCrossOrigin, http.StatusForbidden, "cross-origin request refused"),
 		ogenkit.WithHTTPStatus(domain.ErrNotFound, http.StatusNotFound, ""),
