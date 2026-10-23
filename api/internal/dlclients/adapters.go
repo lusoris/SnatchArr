@@ -44,6 +44,15 @@ type observation struct {
 	Version      string
 }
 
+// dlClass categorizes a download item's operational state for capacity accounting.
+type dlClass uint8
+
+const (
+	dlClassNone dlClass = iota
+	dlClassActive
+	dlClassQueued
+)
+
 // ErrDelugeNoDaemon reports a Deluge web UI that is not connected to a daemon. SnatchArr only
 // observes, so it does not connect one; the connection manager of the web UI does.
 var ErrDelugeNoDaemon = errors.New("deluge: the web UI is not connected to a daemon; connect one in its connection manager")
@@ -98,6 +107,52 @@ func (g *Goenvoy) observe(ctx context.Context, c domain.DownloadClient, secret s
 	}
 }
 
+// qBittorrent release-5.3.0 state classification.
+// Source: qbittorrent/qBittorrent@release-5.3.0 (commit 9213075dd5f7b352208361c6a84c1c115efc898e)
+// - src/base/bittorrent/torrent.h:82-110 (enum class TorrentState)
+// - src/webui/api/serialize/serialize_torrent.cpp:44-87 (torrentStateToString)
+// - src/base/bittorrent/torrentimpl.cpp:1187-1347 (updateState, isActive)
+//
+// | State String         | Classification | Reason (file:line)                                         |
+// | :------------------- | :------------- | :--------------------------------------------------------- |
+// | "downloading"        | active         | Actively transferring payload (torrentimpl.cpp:1342-1343)   |
+// | "forcedDL"           | active         | Force-started download (torrentimpl.cpp:1340-1341)          |
+// | "stalledDL"          | queued         | Started slot with 0 B/s payload rate (torrentimpl.cpp:1344) |
+// | "metaDL"             | queued         | Fetching .torrent metadata (torrentimpl.cpp:1307-1314)      |
+// | "forcedMetaDL"       | queued         | Force-fetching .torrent metadata (torrentimpl.cpp:1314)     |
+// | "checkingDL"         | queued         | Checking piece hashes before download (torrentimpl:1316)   |
+// | "checkingResumeData" | queued         | Checking fastresume data on start (torrentimpl.cpp:1291)   |
+// | "queuedDL"           | queued         | Waiting in queue for download slot (torrentimpl.cpp:1311)   |
+// | "allocating"         | queued         | Pre-allocating disk space (legacy 4.x / libtorrent 1.2)    |
+// | "stoppedDL"          | none           | User-stopped/paused unfinished download                    |
+// | "pausedDL"           | none           | Legacy 4.x name for stoppedDL                              |
+// | "moving"             | none           | Moving torrent storage on disk                             |
+// | "uploading"          | none           | Completed torrent seeding                                  |
+// | "stalledUP"          | none           | Completed torrent seeding with 0 B/s                       |
+// | "queuedUP"           | none           | Completed torrent queued for seed slot                     |
+// | "forcedUP"           | none           | Completed torrent force-seeding                            |
+// | "checkingUP"         | none           | Completed torrent checking piece hashes                    |
+// | "stoppedUP"          | none           | Completed torrent stopped/paused                           |
+// | "pausedUP"           | none           | Legacy 4.x name for stoppedUP                              |
+// | "error"              | none           | Error state                                                |
+// | "missingFiles"       | none           | Missing files on disk                                      |
+// | "unknown"            | none           | Fallback / uninitialized state                             |.
+var qbitStateClasses = map[string]dlClass{
+	"downloading":        dlClassActive,
+	"forcedDL":           dlClassActive,
+	"stalledDL":          dlClassQueued,
+	"metaDL":             dlClassQueued,
+	"forcedMetaDL":       dlClassQueued,
+	"checkingDL":         dlClassQueued,
+	"checkingResumeData": dlClassQueued,
+	"queuedDL":           dlClassQueued,
+	"allocating":         dlClassQueued,
+}
+
+func classifyQbit(state string) dlClass {
+	return qbitStateClasses[state]
+}
+
 func (g *Goenvoy) qbittorrent(ctx context.Context, c domain.DownloadClient, secret string) (observation, error) {
 	cl, err := qbit.New(c.BaseURL, qbit.WithTimeout(g.timeout), qbit.WithUserAgent(g.userAgent))
 	if err != nil {
@@ -115,11 +170,12 @@ func (g *Goenvoy) qbittorrent(ctx context.Context, c domain.DownloadClient, secr
 	for _, t := range torrents {
 		obs.DownloadRate += t.DlSpeed
 		obs.UploadRate += t.UpSpeed
-		switch t.State {
-		case "downloading", "metaDL", "forcedDL", "forcedMetaDL", "stalledDL", "checkingDL":
+		switch classifyQbit(t.State) {
+		case dlClassActive:
 			obs.Active++
-		case "queuedDL":
+		case dlClassQueued:
 			obs.Queued++
+		case dlClassNone:
 		}
 	}
 	return obs, nil
@@ -173,27 +229,72 @@ func transmissionTarget(baseURL string) (string, string, error) {
 	return u.String(), "/" + path, nil
 }
 
-// Transmission torrent status codes (rpc-spec "status").
+// Transmission 4.1.4 torrent status codes (rpc-spec "status", tr_torrent_activity).
+// Source: transmission/transmission@4.1.4 (commit a6d907d9ea2313143af714d7830feb6c1b60b84c)
+// - libtransmission/transmission.h:1434-1445 (enum tr_torrent_activity : uint8_t)
+// - libtransmission/torrent.cc:616-645,1350-1370 (tr_torrent::start, tr_torrent::activity)
+//
+// | Status Int | Enum Constant          | Classification | Reason (file:line)                                         |
+// | :--------- | :--------------------- | :------------- | :--------------------------------------------------------- |
+// | 4          | TR_STATUS_DOWNLOAD     | active/queued  | Active when Error==0 && !IsStalled; queued when IsStalled   |
+// | 3          | TR_STATUS_DOWNLOAD_WAIT| queued         | Waiting in queue for download slot (torrent.cc:623)        |
+// | 1          | TR_STATUS_CHECK_WAIT   | queued/none    | Queued if LeftUntilDone>0 && !IsFinished (torrent.cc:632)  |
+// | 2          | TR_STATUS_CHECK        | queued/none    | Queued if LeftUntilDone>0 && !IsFinished (torrent.cc:631)  |
+// | 0          | TR_STATUS_STOPPED      | none           | Stopped/paused (torrent.cc:637)                            |
+// | 5          | TR_STATUS_SEED_WAIT    | none           | Seeding queue wait (torrent.cc:622)                        |
+// | 6          | TR_STATUS_SEED         | none           | Seeding (torrent.cc:618)                                   |.
 const (
+	transmissionCheckWait    = 1
+	transmissionCheck        = 2
 	transmissionDownloadWait = 3
 	transmissionDownloading  = 4
 )
 
-func (g *Goenvoy) transmission(ctx context.Context, c domain.DownloadClient, secret string) (observation, error) {
-	base, rpcPath, err := transmissionTarget(c.BaseURL)
-	if err != nil {
-		return observation{}, err
+func classifyTransmission(t transmission.Torrent) dlClass {
+	if t.Error != 0 {
+		return dlClassNone
 	}
-	opts := []transmission.Option{transmission.WithTimeout(g.timeout), transmission.WithUserAgent(g.userAgent)}
-	if c.Username != "" {
-		opts = append(opts, transmission.WithAuth(c.Username, secret))
+	switch t.Status {
+	case transmissionDownloading:
+		if t.IsStalled {
+			return dlClassQueued
+		}
+		return dlClassActive
+	case transmissionDownloadWait:
+		return dlClassQueued
+	case transmissionCheckWait, transmissionCheck:
+		if t.LeftUntilDone > 0 && !t.IsFinished {
+			return dlClassQueued
+		}
+		return dlClassNone
+	default:
+		return dlClassNone
+	}
+}
+
+func transmissionClient(baseURL, username, secret string, timeout time.Duration, userAgent string) (*transmission.Client, error) {
+	base, rpcPath, err := transmissionTarget(baseURL)
+	if err != nil {
+		return nil, err
+	}
+	opts := []transmission.Option{transmission.WithTimeout(timeout), transmission.WithUserAgent(userAgent)}
+	if username != "" {
+		opts = append(opts, transmission.WithAuth(username, secret))
 	}
 	if rpcPath != "" {
 		opts = append(opts, transmission.WithRPCPath(rpcPath))
 	}
 	cl, err := transmission.New(base, opts...)
 	if err != nil {
-		return observation{}, fmt.Errorf("transmission client: %w", err)
+		return nil, fmt.Errorf("transmission client: %w", err)
+	}
+	return cl, nil
+}
+
+func (g *Goenvoy) transmission(ctx context.Context, c domain.DownloadClient, secret string) (observation, error) {
+	cl, err := transmissionClient(c.BaseURL, c.Username, secret, g.timeout, g.userAgent)
+	if err != nil {
+		return observation{}, err
 	}
 	session, err := cl.GetSession(ctx)
 	if err != nil {
@@ -207,11 +308,12 @@ func (g *Goenvoy) transmission(ctx context.Context, c domain.DownloadClient, sec
 	for _, t := range torrents {
 		obs.DownloadRate += t.RateDownload
 		obs.UploadRate += t.RateUpload
-		switch t.Status {
-		case transmissionDownloading:
+		switch classifyTransmission(t) {
+		case dlClassActive:
 			obs.Active++
-		case transmissionDownloadWait:
+		case dlClassQueued:
 			obs.Queued++
+		case dlClassNone:
 		}
 	}
 	return obs, nil
@@ -237,6 +339,39 @@ func (g *Goenvoy) delugeSession(ctx context.Context, c domain.DownloadClient, se
 	return cl, nil
 }
 
+// Deluge 2.2.0 state classification.
+// Source: deluge-torrent/deluge@deluge-2.2.0 (commit e9777eaabc8698473a05d8c02624f462bdc5af61)
+// - deluge/common.py:73-82 (TORRENT_STATE)
+// - deluge/core/torrent.py:39-48 (LT_TORRENT_STATE_MAP)
+// - deluge/core/torrent.py:644-671 (Torrent.update_state)
+//
+// | State String | Classification | Reason (file:line)                                         |
+// | :----------- | :------------- | :--------------------------------------------------------- |
+// | "Downloading"| active         | Transferring payload or metadata (core/torrent.py:42-43)    |
+// | "Queued"     | queued/none    | Queued if !IsFinished && !IsSeed (core/torrent.py:664-665) |
+// | "Checking"   | queued/none    | Queued if !IsFinished && !IsSeed (core/torrent.py:40-41)   |
+// | "Allocating" | queued/none    | Queued if !IsFinished && !IsSeed (core/torrent.py:46)      |
+// | "Paused"     | none           | User or session pause (core/torrent.py:666-667)           |
+// | "Moving"     | none           | Storage relocation (core/torrent.py:657-658)               |
+// | "Seeding"    | none           | Completed seeding (core/torrent.py:44-45)                  |
+// | "Error"      | none           | Error state (core/torrent.py:649-656)                      |.
+func classifyDeluge(t *deluge.Torrent) dlClass {
+	if t == nil {
+		return dlClassNone
+	}
+	switch t.State {
+	case "Downloading":
+		return dlClassActive
+	case "Queued", "Checking", "Allocating":
+		if !t.IsFinished && !t.IsSeed {
+			return dlClassQueued
+		}
+		return dlClassNone
+	default:
+		return dlClassNone
+	}
+}
+
 func (g *Goenvoy) deluge(ctx context.Context, c domain.DownloadClient, secret string) (observation, error) {
 	cl, err := g.delugeSession(ctx, c, secret)
 	if err != nil {
@@ -260,14 +395,46 @@ func (g *Goenvoy) deluge(ctx context.Context, c domain.DownloadClient, secret st
 		}
 		obs.DownloadRate += t.DownloadPayloadRate
 		obs.UploadRate += t.UploadPayloadRate
-		switch t.State {
-		case "Downloading":
+		switch classifyDeluge(t) {
+		case dlClassActive:
 			obs.Active++
-		case "Queued":
+		case dlClassQueued:
 			obs.Queued++
+		case dlClassNone:
 		}
 	}
 	return obs, nil
+}
+
+// rTorrent v0.16.26 state classification.
+// Source: rakshasa/rtorrent@v0.16.26 (commit 62899bd053c39b70380464e8f64dbcfce92579aa)
+// - src/command_download.cc:696-745,826-832 (d.is_open, d.is_active, d.state, d.complete, d.hashing)
+// - src/core/download.h:28-31,41-53 (is_open, is_active, is_done, is_hash_checking)
+// - src/core/download_list.cc:228-553,659-700 (open, close, resume, pause, hash_queue)
+// - src/core/manager.cc:390-455 (Manager::receive_hashing_changed)
+//
+// | Complete | Open | Active | HashChecking | Classification | Reason (file:line)                                         |
+// | :------- | :--- | :----- | :----------- | :------------- | :--------------------------------------------------------- |
+// | false    | true | true   | false        | active         | Incomplete running peer transfers (download.h:44)          |
+// | false    | any  | false  | true         | queued         | Incomplete actively verifying piece hashes (manager.cc:438)|
+// | false    | false| false  | false        | none           | Closed/stopped (see note below)                            |
+// | false    | true | false  | false        | none           | Paused in memory (download_list.cc:487-535)                |
+// | true     | any  | any    | any          | none           | Completed / seeding / complete check                       |
+//
+// goenvoy rtorrent/v2@v2.0.1 does not fetch d.hashing, so a torrent waiting in the hash
+// queue (closed, d.hashing != 0) looks like a stopped one and counts as none until goenvoy
+// reads that field.
+func classifyRTorrent(t rtorrent.Torrent) dlClass {
+	if t.IsComplete {
+		return dlClassNone
+	}
+	if t.IsOpen && t.IsActive {
+		return dlClassActive
+	}
+	if t.IsHashChecking {
+		return dlClassQueued
+	}
+	return dlClassNone
 }
 
 func (g *Goenvoy) rtorrent(ctx context.Context, c domain.DownloadClient, secret string) (observation, error) {
@@ -291,11 +458,73 @@ func (g *Goenvoy) rtorrent(ctx context.Context, c domain.DownloadClient, secret 
 	for _, t := range torrents {
 		obs.DownloadRate += t.DownRate
 		obs.UploadRate += t.UpRate
-		if t.IsOpen && t.IsActive && !t.IsComplete {
+		switch classifyRTorrent(t) {
+		case dlClassActive:
 			obs.Active++
+		case dlClassQueued:
+			obs.Queued++
+		case dlClassNone:
 		}
 	}
 	return obs, nil
+}
+
+// SABnzbd 5.1.3 queue slot classification.
+// Source: sabnzbd/sabnzbd@5.1.3 (commit a647f73426cb70ad60ae7964b96c2d5e939b4727)
+// - sabnzbd/constants.py:167-185 (class Status)
+// - sabnzbd/api.py:1679-1748 (build_queue, queue & slot status)
+// - sabnzbd/nzb/object.py:334-337 (pre_check status)
+// - sabnzbd/nzbqueue.py:718-732,782-788 (get_articles, end_job)
+//
+// | Status String | Classification   | Reason (file:line)                                         |
+// | :------------ | :--------------- | :--------------------------------------------------------- |
+// | "Downloading" | active/queued    | SAB marks ALL unpaused waiting slots "Downloading"         |
+// |               |                  | (api.py:1713-1725); head slot transfers, rest queued.     |
+// | "Fetching"    | active/queued    | Extra par2 download (postproc.py:892); head or queued.    |
+// | "Checking"    | queued           | Pre-check running or waiting (nzb/object.py:334-337)       |
+// | "Grabbing"    | queued           | Fetching .nzb from URL (urlgrabber.py:447)                 |
+// | "Propagating" | queued           | Propagation delay timer (api.py:1714-1715)                 |
+// | "Queued"      | queued           | Emitted when downloader paused (api.py:1720-1724)          |
+// | "Paused"      | none             | Individually paused slot                                   |
+// | "Deleted"     | none             | Marked deleted                                             |
+// | "Idle"        | none             | Queue status header only                                   |
+// | "QuickCheck"  | none             | Post-processing quick verification                         |
+// | "Verifying"   | none             | Post-processing par2 verification                          |
+// | "Repairing"   | none             | Post-processing par2 repair                                |
+// | "Extracting"  | none             | Post-processing archive unpack                             |
+// | "Moving"      | none             | Post-processing move to destination                         |
+// | "Running"     | none             | Post-processing script running                             |
+// | "Completed"   | none             | Post-processing finished                                    |
+// | "Failed"      | none             | Post-processing failed                                     |.
+var sabSlotClasses = map[string]dlClass{
+	"Downloading": dlClassActive,
+	"Fetching":    dlClassActive,
+	"Checking":    dlClassQueued,
+	"Grabbing":    dlClassQueued,
+	"Propagating": dlClassQueued,
+	"Queued":      dlClassQueued,
+}
+
+func classifySABStatus(status string) dlClass {
+	return sabSlotClasses[status]
+}
+
+func classifySAB(slots []sabnzbd.Slot) (active, queued int) {
+	dlOrFetch := 0
+	for _, s := range slots {
+		switch classifySABStatus(s.Status) {
+		case dlClassActive:
+			dlOrFetch++
+		case dlClassQueued:
+			queued++
+		case dlClassNone:
+		}
+	}
+	if dlOrFetch > 0 {
+		active = 1
+		queued += dlOrFetch - 1
+	}
+	return active, queued
 }
 
 func (g *Goenvoy) sabnzbd(ctx context.Context, c domain.DownloadClient, secret string) (observation, error) {
@@ -312,14 +541,7 @@ func (g *Goenvoy) sabnzbd(ctx context.Context, c domain.DownloadClient, secret s
 		return observation{}, fmt.Errorf("sabnzbd queue: %w", err)
 	}
 	obs := observation{Version: version, Paused: q.Paused || q.PausedAll, DownloadRate: ParseSABSpeed(q.Speed)}
-	for _, s := range q.Slots {
-		switch s.Status {
-		case "Downloading":
-			obs.Active++
-		case "Queued":
-			obs.Queued++
-		}
-	}
+	obs.Active, obs.Queued = classifySAB(q.Slots)
 	return obs, nil
 }
 
@@ -342,6 +564,40 @@ func ParseSABSpeed(s string) int64 {
 	return int64(math.Round(f * mult))
 }
 
+// NZBGet v26.3 group status classification.
+// Source: nzbgetcom/nzbget@v26.3 (commit 674787848dddabf9047b8fc1a75cf92fe6e41c55)
+// - daemon/remote/XmlRpc.cpp:2326-2365 (ListGroupsXmlCommand::DetectStatus)
+// - daemon/queue/DownloadInfo.h:189,243,516-517,702,796-815 (ActiveDownloads, PostInfo::EStage)
+//
+// | Status String          | Classification | Reason (file:line)                                         |
+// | :--------------------- | :------------- | :--------------------------------------------------------- |
+// | "DOWNLOADING"          | active         | ArticleDownloader active on NZB articles (XmlRpc.cpp:2352) |
+// | "FETCHING"             | queued         | UrlDownloader fetching .nzb URL (XmlRpc.cpp:2354)         |
+// | "QUEUED"               | queued         | Waiting in queue without active downloaders (XmlRpc:2360)  |
+// | "PAUSED"               | none           | Group paused (XmlRpc.cpp:2356)                             |
+// | "QS_QUEUED"            | none           | Queue script queued (XmlRpc.cpp:2344)                      |
+// | "QS_EXECUTING"         | none           | Queue script running (XmlRpc.cpp:2344)                     |
+// | "PP_QUEUED"            | none           | Post-processing queued (XmlRpc.cpp:2328)                   |
+// | "LOADING_PARS"         | none           | Post-processing loading par2 (XmlRpc.cpp:2329)             |
+// | "VERIFYING_SOURCES"    | none           | Post-processing verifying sources (XmlRpc.cpp:2330)        |
+// | "REPAIRING"            | none           | Post-processing par2 repair (XmlRpc.cpp:2331)             |
+// | "VERIFYING_REPAIRED"   | none           | Post-processing verifying repaired (XmlRpc.cpp:2332)       |
+// | "RENAMING"             | none           | Post-processing par/rar rename (XmlRpc.cpp:2333)           |
+// | "UNPACKING"            | none           | Post-processing archive unpack (XmlRpc.cpp:2334)           |
+// | "MOVING"               | none           | Post-processing cleanup/move (XmlRpc.cpp:2335)             |
+// | "POST_UNPACK_RENAMING" | none           | Post-processing post-unpack rename (XmlRpc.cpp:2336)       |
+// | "EXECUTING_SCRIPT"     | none           | Post-processing extension script (XmlRpc.cpp:2337)         |
+// | "PP_FINISHED"          | none           | Post-processing finished (XmlRpc.cpp:2338)                 |.
+var nzbgetStateClasses = map[string]dlClass{
+	"DOWNLOADING": dlClassActive,
+	"FETCHING":    dlClassQueued,
+	"QUEUED":      dlClassQueued,
+}
+
+func classifyNZBGet(status string) dlClass {
+	return nzbgetStateClasses[status]
+}
+
 func (g *Goenvoy) nzbget(ctx context.Context, c domain.DownloadClient, secret string) (observation, error) {
 	cl, err := nzbget.New(c.BaseURL, c.Username, secret, nzbget.WithTimeout(g.timeout), nzbget.WithUserAgent(g.userAgent))
 	if err != nil {
@@ -361,11 +617,12 @@ func (g *Goenvoy) nzbget(ctx context.Context, c domain.DownloadClient, secret st
 	}
 	obs := observation{Version: version, Paused: st.DownloadPaused, DownloadRate: st.DownloadRate}
 	for _, grp := range groups {
-		switch {
-		case grp.ActiveDownloads > 0 || strings.HasPrefix(grp.Status, "DOWNLOADING"):
+		switch classifyNZBGet(grp.Status) {
+		case dlClassActive:
 			obs.Active++
-		case grp.Status == "QUEUED":
+		case dlClassQueued:
 			obs.Queued++
+		case dlClassNone:
 		}
 	}
 	return obs, nil

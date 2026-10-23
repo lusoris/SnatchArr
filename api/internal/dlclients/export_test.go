@@ -13,6 +13,25 @@ import (
 // MaxConcurrentObserve exports the concurrency bound for tests.
 const MaxConcurrentObserve = maxConcurrentObserve
 
+// DLClass exports dlClass for tests in dlclients_test.
+type DLClass = dlClass
+
+const (
+	DLClassNone   = dlClassNone
+	DLClassActive = dlClassActive
+	DLClassQueued = dlClassQueued
+)
+
+var (
+	ClassifyQbit         = classifyQbit
+	ClassifyTransmission = classifyTransmission
+	ClassifyDeluge       = classifyDeluge
+	ClassifyRTorrent     = classifyRTorrent
+	ClassifySAB          = classifySAB
+	ClassifySABStatus    = classifySABStatus
+	ClassifyNZBGet       = classifyNZBGet
+)
+
 // NewGoenvoyWithTimeout builds the adapter set with a shorter observation bound, so a test can
 // prove the bound without waiting ObserveTimeout per client.
 func NewGoenvoyWithTimeout(clk clock.Clock, timeout time.Duration) *Goenvoy {
