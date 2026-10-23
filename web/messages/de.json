@@ -602,5 +602,13 @@
 	"about_license_name": "EUPL-1.2",
 	"about_license_aria": "EUPL-1.2-Lizenz (öffnet in neuem Tab)",
 	"about_third_party_title": "Drittanbieter-Lizenzen",
-	"about_third_party_placeholder": "Lizenzen und Hinweise zu Drittanbieter-Komponenten werden hier aufgeführt."
+	"about_third_party_placeholder": "Lizenzen und Hinweise zu Drittanbieter-Komponenten werden hier aufgeführt.",
+	"about_third_party_group_go": "Go",
+	"about_third_party_group_rust": "Rust",
+	"about_third_party_group_npm": "npm",
+	"about_third_party_count": "{count} Pakete",
+	"about_third_party_empty": "Keine Drittanbieter-Lizenzen erfasst.",
+	"about_third_party_toggle_text": "Lizenztext",
+	"about_third_party_visit_link": "Projektseite",
+	"about_third_party_visit_aria": "{name}-Projektseite besuchen (öffnet in neuem Tab)"
 }
