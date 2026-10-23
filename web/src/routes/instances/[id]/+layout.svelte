@@ -6,25 +6,17 @@ SPDX-License-Identifier: EUPL-1.2
 	import type { Snippet } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { createSentioQuery } from '@sveltesentio/query';
-	import { api, problemStatus } from '#lib/api/client.js';
-	import type { components } from '#lib/api/schema.js';
+	import { problemStatus } from '#lib/api/client.js';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
+	import { instanceQuery } from '#lib/components/instance/instance-query.svelte.js';
 	import { getInstanceTabs, isTabActive } from '#lib/components/instance/tabs.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { instanceKindLabel } from '#lib/products.js';
-	import { keys } from '#lib/query.js';
-
-	type Instance = components['schemas']['Instance'];
 
 	const { children }: { children: Snippet } = $props();
 
 	const instanceId = $derived(page.params.id ?? '');
-	const instance = createSentioQuery<Instance | undefined>(() => ({
-		queryKey: keys.instance(instanceId),
-		queryFn: async () =>
-			(await api.GET('/instances/{instanceId}', { params: { path: { instanceId } } })).data
-	}));
+	const instance = instanceQuery(() => instanceId);
 
 	const isNotFound = $derived(
 		(instance.isError && problemStatus(instance.error) === 404) ||

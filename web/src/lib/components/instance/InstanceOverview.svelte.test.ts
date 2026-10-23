@@ -8,29 +8,27 @@ import { WCAG_22_AA_TAGS } from '@sveltesentio/testing';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
 import { api } from '#lib/api/client.js';
-import type { components } from '#lib/api/schema.js';
 import { m } from '#lib/paraglide/messages.js';
 import {
 	configarrInstance,
 	failedInstance,
 	forkInstance,
 	renderWithQuery,
+	samplePriority,
 	stubGet,
 	untestedInstance,
-	type Instance
+	type Instance,
+	type InstancePriority
 } from '#lib/testing/harness.js';
 import InstanceOverview from './InstanceOverview.svelte';
 
-type InstancePriority = components['schemas']['InstancePriority'];
-
-const samplePriority: InstancePriority = {
-	search_priority: null,
-	download_priority: null,
-	effective_search_priority: 30,
-	effective_download_priority: 30,
-	search_source: 'preset',
-	download_source: 'preset'
-};
+function renderOverview(instance: Instance = forkInstance) {
+	stubGet({
+		'/instances/{instanceId}': instance,
+		'/instances/{instanceId}/priority': samplePriority
+	});
+	return renderWithQuery(InstanceOverview, { id: instance.id });
+}
 
 describe('InstanceOverview', () => {
 	afterEach(() => {
@@ -38,11 +36,7 @@ describe('InstanceOverview', () => {
 	});
 
 	it('shows CheckState and passed connection test of the instance', async () => {
-		stubGet({
-			'/instances/{instanceId}': forkInstance,
-			'/instances/{instanceId}/priority': samplePriority
-		});
-		renderWithQuery(InstanceOverview, { id: forkInstance.id });
+		renderOverview(forkInstance);
 
 		const lastCheck = new RegExp(m.instance_last_check());
 		expect((await screen.findByText(lastCheck)).textContent).toContain('0.4.21.182');
@@ -50,22 +44,14 @@ describe('InstanceOverview', () => {
 	});
 
 	it('shows an instance whose connection test failed', async () => {
-		stubGet({
-			'/instances/{instanceId}': failedInstance,
-			'/instances/{instanceId}/priority': samplePriority
-		});
-		renderWithQuery(InstanceOverview, { id: failedInstance.id });
+		renderOverview(failedInstance);
 
 		const failed = await screen.findByRole('status');
 		expect(failed.textContent).toContain('Connection refused (ECONNREFUSED)');
 	});
 
 	it('shows an instance no connection test has reached', async () => {
-		stubGet({
-			'/instances/{instanceId}': untestedInstance,
-			'/instances/{instanceId}/priority': samplePriority
-		});
-		renderWithQuery(InstanceOverview, { id: untestedInstance.id });
+		renderOverview(untestedInstance);
 
 		expect(await screen.findByText(m.instance_never_tested())).toBeTruthy();
 		expect(screen.queryByRole('status')).toBeNull();
@@ -112,11 +98,7 @@ describe('InstanceOverview', () => {
 	});
 
 	it('shows the edit form of the instance', async () => {
-		stubGet({
-			'/instances/{instanceId}': forkInstance,
-			'/instances/{instanceId}/priority': samplePriority
-		});
-		renderWithQuery(InstanceOverview, { id: forkInstance.id });
+		renderOverview(forkInstance);
 
 		expect(await screen.findByRole('form', { name: m.instance_edit_title() })).toBeTruthy();
 		expect((screen.getByLabelText(m.instance_name()) as HTMLInputElement).value).toBe(
@@ -216,11 +198,7 @@ describe('InstanceOverview', () => {
 	});
 
 	it('renders the priority card without axe violations', async () => {
-		stubGet({
-			'/instances/{instanceId}': forkInstance,
-			'/instances/{instanceId}/priority': samplePriority
-		});
-		const { container } = renderWithQuery(InstanceOverview, { id: forkInstance.id });
+		const { container } = renderOverview(forkInstance);
 		await screen.findByRole('heading', { name: m.instance_priority_title() });
 
 		const results = await axe(container, {

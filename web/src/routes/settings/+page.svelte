@@ -8,13 +8,13 @@ SPDX-License-Identifier: EUPL-1.2
 	import { z } from 'zod';
 	import { api, describeError } from '#lib/api/client.js';
 	import type { components } from '#lib/api/schema.js';
+	import AdminSaveButton from '#lib/components/AdminSaveButton.svelte';
 	import Field from '#lib/components/Field.svelte';
 	import PriorityPresetFields from '#lib/components/PriorityPresetFields.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import { APP_KINDS, type AppKind } from '#lib/kinds.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { keys } from '#lib/query.js';
-	import { session } from '#lib/session.svelte.js';
 	import NotificationChannels from './NotificationChannels.svelte';
 	import NotificationRules from './NotificationRules.svelte';
 
@@ -405,13 +405,7 @@ SPDX-License-Identifier: EUPL-1.2
 					</fieldset>
 				{/each}
 			</div>
-			{#if session.isAdmin}
-				<div>
-					<button type="submit" class="btn btn-primary" disabled={save.isPending}
-						>{m.instance_save()}</button
-					>
-				</div>
-			{/if}
+			<AdminSaveButton disabled={save.isPending} />
 		</form>
 
 		<h2 class="mt-4 text-xl font-semibold">{m.change_password_title()}</h2>

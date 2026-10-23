@@ -16,6 +16,7 @@ export type Run = components['schemas']['Run'];
 export type PolicyFilterOptions = components['schemas']['PolicyFilterOptions'];
 export type QueuePolicy = components['schemas']['QueuePolicy'];
 export type QueueStrike = components['schemas']['QueueStrike'];
+export type InstancePriority = components['schemas']['InstancePriority'];
 
 /** A query client per test: no retry, so a refused request shows at once; nothing cached. */
 function createTestQueryClient(): QueryClient {
@@ -214,3 +215,13 @@ export const sampleQueueStrikes: QueueStrike[] = [
 		last_seen: '2026-09-01T12:00:00Z'
 	}
 ];
+
+/** Sample instance priority matching default preset values. */
+export const samplePriority: InstancePriority = {
+	search_priority: null,
+	download_priority: null,
+	effective_search_priority: 30,
+	effective_download_priority: 30,
+	search_source: 'preset',
+	download_source: 'preset'
+};
