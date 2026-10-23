@@ -7,9 +7,10 @@ SPDX-License-Identifier: EUPL-1.2
 	import { page } from '$app/state';
 	import BrandMark from '#lib/components/BrandMark.svelte';
 	import { m } from '#lib/paraglide/messages.js';
-	import { getLocale, locales, setLocale, type Locale } from '#lib/paraglide/runtime.js';
 	import { isRouteActive, type NavGroup } from './nav.js';
 	import NavIcon from './NavIcon.svelte';
+	import NavGroups from './NavGroups.svelte';
+	import LocaleSelect from './LocaleSelect.svelte';
 
 	interface Props {
 		open: boolean;
@@ -51,11 +52,6 @@ SPDX-License-Identifier: EUPL-1.2
 			dialogEl?.close();
 		}
 	}
-
-	function changeLocale(event: Event): void {
-		const value = (event.currentTarget as HTMLSelectElement).value as Locale;
-		setLocale(value);
-	}
 </script>
 
 <dialog
@@ -89,51 +85,16 @@ SPDX-License-Identifier: EUPL-1.2
 	</div>
 
 	<nav class="flex-1 overflow-y-auto px-3 py-4" aria-label={m.app_name()}>
-		<div class="flex flex-col gap-5">
-			{#each navGroups as group (group.label)}
-				<div>
-					<div class="mb-2 px-3 text-[11px] font-bold tracking-wider text-subtle uppercase">
-						{group.label}
-					</div>
-					<ul class="flex flex-col gap-1">
-						{#each group.items as item (item.href)}
-							{@const active = isRouteActive(page.url.pathname, item.href)}
-							<li>
-								<a
-									href={resolve(item.href)}
-									aria-current={active ? 'page' : undefined}
-									onclick={onClose}
-									class="nav-link flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium"
-								>
-									<NavIcon
-										name={item.icon}
-										size={16}
-										class={active ? 'text-brand' : 'text-subtle'}
-									/>
-									<span>{item.label}</span>
-								</a>
-							</li>
-						{/each}
-					</ul>
-				</div>
-			{/each}
-		</div>
+		<NavGroups
+			{navGroups}
+			onNavigate={onClose}
+			groupLabelClass="mb-2 px-3 text-[11px] font-bold tracking-wider text-subtle uppercase"
+			itemListClass="flex flex-col gap-1"
+		/>
 	</nav>
 
 	<div class="flex flex-col gap-3 border-t border-line p-3 text-xs">
-		<div class="flex items-center justify-between gap-2">
-			<label for="mobile-lang" class="font-medium text-subtle">{m.language()}</label>
-			<select
-				id="mobile-lang"
-				class="select h-8 min-h-0 w-24 rounded border border-control bg-bg px-2 text-xs"
-				value={getLocale()}
-				onchange={changeLocale}
-			>
-				{#each locales as loc (loc)}
-					<option value={loc}>{loc}</option>
-				{/each}
-			</select>
-		</div>
+		<LocaleSelect id="mobile-lang" />
 
 		<div class="flex items-center justify-between gap-2 pt-1">
 			<a

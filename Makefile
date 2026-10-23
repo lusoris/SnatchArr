@@ -262,6 +262,7 @@ e2e-dev-compose-smoke: ## Dev compose stack with both profiles: services up, Pro
 dlclients-live: ## Real qBittorrent, Transmission, Deluge, rTorrent, SABnzbd, NZBGet observed by the adapters (needs Docker)
 	bash tools/e2e/pull_retry_test.sh
 	bash tools/e2e/planted_test.sh
+	bash tools/e2e/live_lib_test.sh
 	bash tools/e2e/planted.sh SNATCHARR_DLCLIENTS_PLANT tools/e2e/dlclients_live.sh \
 	  "secret:not reachable with the right secret" "pause:paused = false; the client was left with paused = true"
 
@@ -273,6 +274,7 @@ dlclients-live: ## Real qBittorrent, Transmission, Deluge, rTorrent, SABnzbd, NZ
 arr-forceimport-live: ## Real Sonarr and Radarr: ID-matched release force-imported, planted cases refused (needs Docker)
 	bash tools/e2e/pull_retry_test.sh
 	bash tools/e2e/planted_test.sh
+	bash tools/e2e/live_lib_test.sh
 	bash tools/e2e/planted.sh SNATCHARR_FORCEIMPORT_PLANT tools/e2e/forceimport_live.sh \
 	  "audio:no clean, mapped manual-import candidate" "unmapped:no clean, mapped manual-import candidate" \
 	  "second-line:is not id-matched" "skip:is still in the queue"
@@ -284,6 +286,7 @@ arr-forceimport-live: ## Real Sonarr and Radarr: ID-matched release force-import
 integrations-live: ## Real app containers: every integration driven end to end (needs Docker)
 	bash tools/e2e/pull_retry_test.sh
 	bash tools/e2e/planted_test.sh
+	bash tools/e2e/live_lib_test.sh
 	bash tools/e2e/planted.sh SNATCHARR_INTEGRATIONS_PLANT tools/e2e/integrations_live.sh \
 	  "badkey:prowlarr test failed" "seerrpath:seerr test failed" \
 	  "badclient:download client test failed" "badinstance:instance test failed"
@@ -507,6 +510,7 @@ workflows-verify: ## The rule of "CI success", the Security Scan issue step, the
 	sh tools/ci/security_issue_test.sh
 	sh tools/ci/semgrep_scan_test.sh
 	bash tools/e2e/planted_test.sh
+	bash tools/e2e/live_lib_test.sh
 
 # Not part of verify-all: needs Docker, the network and a forge token (GH_TOKEN, read access).
 # The CI job "workflows" runs it on every pull request.
