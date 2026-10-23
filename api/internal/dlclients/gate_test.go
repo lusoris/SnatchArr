@@ -44,6 +44,7 @@ func TestEvaluate(t *testing.T) {
 		{"paused", client("q", 0, 0), dlclients.Snapshot{Reachable: true, Paused: true}, true, false, snatch.GateClientPaused, "paused", 0},
 		{"at max active", client("q", 3, 0), dlclients.Snapshot{Reachable: true, Active: 3}, true, false, snatch.GateClientActiveLimit, "3 active downloads (limit 3)", 0},
 		{"below max active", client("q", 3, 0), dlclients.Snapshot{Reachable: true, Active: 2}, true, true, "", "", 1},
+		{"queued items do not trip max active", client("q", 3, 0), dlclients.Snapshot{Reachable: true, Active: 2, Queued: 10}, true, true, "", "", 1},
 		{"half bandwidth", client("q", 0, 1000), dlclients.Snapshot{Reachable: true, DownloadRate: 500}, true, true, "", "", 0.5},
 		{"bandwidth saturated", client("q", 0, 1000), dlclients.Snapshot{Reachable: true, DownloadRate: 1200}, true, false, snatch.GateBandwidthSaturated, "saturating", 0},
 		{"disabled client ignored", func() domain.DownloadClient { c := client("q", 0, 0); c.Enabled = false; return c }(), dlclients.Snapshot{}, true, true, "", "", 1},
