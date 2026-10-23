@@ -14,11 +14,9 @@ SPDX-License-Identifier: EUPL-1.2
 </script>
 
 {#if query.isPending}
-	<span data-testid="status">loading</span>
+	<span data-testid="status" data-state="loading"></span>
 {:else if query.isError}
-	<span data-testid="status"
-		>error: {query.error instanceof Error ? query.error.message : 'failed'}</span
-	>
+	<span data-testid="status" data-state="error">{String(query.error?.message ?? query.error)}</span>
 {:else if query.data}
-	<span data-testid="status">loaded: {query.data.name}</span>
+	<span data-testid="status" data-state="loaded">{query.data.name}</span>
 {/if}

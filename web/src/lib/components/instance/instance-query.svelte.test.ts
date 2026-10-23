@@ -2,10 +2,16 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-import { screen } from '@testing-library/svelte';
+import { screen, waitFor } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { forkInstance, renderWithQuery, stubGet } from '#lib/testing/harness.js';
 import InstanceQueryHarness from './InstanceQueryHarness.svelte';
+
+/** Waits for the harness to reach a state and returns the text it shows there. */
+async function settled(state: 'loaded' | 'error'): Promise<string | null> {
+	await waitFor(() => expect(screen.getByTestId('status').dataset.state).toBe(state));
+	return screen.getByTestId('status').textContent;
+}
 
 describe('instanceQuery', () => {
 	afterEach(() => {
@@ -18,7 +24,7 @@ describe('instanceQuery', () => {
 		});
 		renderWithQuery(InstanceQueryHarness, { id: forkInstance.id });
 
-		expect(await screen.findByText(`loaded: ${forkInstance.name}`)).toBeTruthy();
+		expect(await settled('loaded')).toBe(forkInstance.name);
 	});
 
 	it('negative: enters error state when endpoint fails', async () => {
@@ -27,7 +33,7 @@ describe('instanceQuery', () => {
 		});
 		renderWithQuery(InstanceQueryHarness, { id: forkInstance.id });
 
-		expect(await screen.findByText('error: network timeout')).toBeTruthy();
+		expect(await settled('error')).toBe('network timeout');
 	});
 
 	it('boundary: resolves data when id is supplied as a getter function', async () => {
@@ -36,6 +42,6 @@ describe('instanceQuery', () => {
 		});
 		renderWithQuery(InstanceQueryHarness, { id: () => forkInstance.id });
 
-		expect(await screen.findByText(`loaded: ${forkInstance.name}`)).toBeTruthy();
+		expect(await settled('loaded')).toBe(forkInstance.name);
 	});
 });
