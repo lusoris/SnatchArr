@@ -2,12 +2,13 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-import { render as svelteRender } from '@testing-library/svelte';
+import { fireEvent, render as svelteRender, screen, within } from '@testing-library/svelte';
 import { QueryClient, QueryClientProvider } from '@tanstack/svelte-query';
 import type { Component } from 'svelte';
-import { vi } from 'vitest';
+import { expect, vi } from 'vitest';
 import { api } from '#lib/api/client.js';
 import type { components } from '#lib/api/schema.js';
+import { m } from '#lib/paraglide/messages.js';
 import { session } from '#lib/session.svelte.js';
 
 export type Instance = components['schemas']['Instance'];
@@ -214,3 +215,36 @@ export const sampleQueueStrikes: QueueStrike[] = [
 		last_seen: '2026-09-01T12:00:00Z'
 	}
 ];
+
+/** Types text into an input addressed by its accessible label. */
+export async function fill(label: string, value: string): Promise<void> {
+	await fireEvent.input(screen.getByLabelText(label), { target: { value } });
+}
+
+/** Locates a card `<li>` containing a heading with the given accessible name. */
+export async function cardFor(name: string | RegExp, level = 3) {
+	const heading = await screen.findByRole('heading', { level, name });
+	return within(heading.closest('li') as HTMLElement);
+}
+
+/** Triggers delete inside a card and confirms it. */
+export async function confirmDeleteInCard(card: ReturnType<typeof within>): Promise<void> {
+	await fireEvent.click(card.getByRole('button', { name: m.action_delete() }));
+	await fireEvent.click(card.getByRole('button', { name: m.confirm_delete_yes() }));
+}
+
+/** Triggers delete inside a card and cancels it. */
+export async function cancelDeleteInCard(card: ReturnType<typeof within>): Promise<void> {
+	await fireEvent.click(card.getByRole('button', { name: m.action_delete() }));
+	await fireEvent.click(card.getByRole('button', { name: m.action_cancel() }));
+}
+
+/** Verifies that cancelling delete leaves the card and does not delete. */
+export async function assertCancelDelete(
+	card: ReturnType<typeof within>,
+	deleteSpy: ReturnType<typeof vi.spyOn>
+): Promise<void> {
+	await cancelDeleteInCard(card);
+	expect(deleteSpy).not.toHaveBeenCalled();
+	expect(card.getByRole('button', { name: m.action_delete() })).toBeTruthy();
+}

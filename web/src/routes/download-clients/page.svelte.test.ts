@@ -9,7 +9,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api } from '#lib/api/client.js';
 import type { components } from '#lib/api/schema.js';
 import { m } from '#lib/paraglide/messages.js';
-import { forkInstance, renderWithQuery, stubGet } from '#lib/testing/harness.js';
+import {
+	cancelDeleteInCard,
+	fill,
+	forkInstance,
+	renderWithQuery,
+	stubGet
+} from '#lib/testing/harness.js';
 import DownloadClientsPage from './+page.svelte';
 
 type DownloadClient = components['schemas']['DownloadClient'];
@@ -149,10 +155,6 @@ const listStubs = {
 	'/download-clients/status': [sampleStatus],
 	'/instances': [forkInstance]
 };
-
-async function fill(label: string, value: string) {
-	await fireEvent.input(screen.getByLabelText(label), { target: { value } });
-}
 
 /** The card of the sample client, where its Edit, Test and Delete buttons live. */
 async function sampleCard() {
@@ -295,8 +297,7 @@ describe('download-clients management', () => {
 		renderWithQuery(DownloadClientsPage);
 
 		const card = await sampleCard();
-		await fireEvent.click(card.getByRole('button', { name: m.action_delete() }));
-		await fireEvent.click(card.getByRole('button', { name: m.action_cancel() }));
+		await cancelDeleteInCard(card);
 
 		expect(deleteSpy).not.toHaveBeenCalled();
 		expect(card.queryByRole('group')).toBeNull();

@@ -10,7 +10,11 @@ import { api } from '#lib/api/client.js';
 import type { components } from '#lib/api/schema.js';
 import { m } from '#lib/paraglide/messages.js';
 import {
+	assertCancelDelete,
+	cardFor,
+	confirmDeleteInCard,
 	failedInstance,
+	fill,
 	renderWithQuery,
 	stubGet,
 	untestedInstance
@@ -157,14 +161,7 @@ const linkStubs = {
 	'/seerr/requests': []
 };
 
-async function fill(label: string, value: string) {
-	await fireEvent.input(screen.getByLabelText(label), { target: { value } });
-}
-
-async function linkCard() {
-	const heading = await screen.findByRole('heading', { level: 3, name: /Main Overseerr/ });
-	return within(heading.closest('li') as HTMLElement);
-}
+const linkCard = () => cardFor(/Main Overseerr/);
 
 /** Answers `api.POST` per path template, like stubGet does for reads. */
 function stubPost(table: Record<string, unknown>) {
@@ -242,9 +239,8 @@ describe('seerr links', () => {
 		renderWithQuery(SeerrPage);
 
 		const card = await linkCard();
-		await fireEvent.click(card.getByRole('button', { name: m.action_delete() }));
 		expect(deleteSpy).not.toHaveBeenCalled();
-		await fireEvent.click(card.getByRole('button', { name: m.confirm_delete_yes() }));
+		await confirmDeleteInCard(card);
 
 		expect(deleteSpy).toHaveBeenCalledWith('/seerr/{linkId}', {
 			params: { path: { linkId: sampleLink.id } }
@@ -256,12 +252,7 @@ describe('seerr links', () => {
 		const deleteSpy = vi.spyOn(api, 'DELETE');
 		renderWithQuery(SeerrPage);
 
-		const card = await linkCard();
-		await fireEvent.click(card.getByRole('button', { name: m.action_delete() }));
-		await fireEvent.click(card.getByRole('button', { name: m.action_cancel() }));
-
-		expect(deleteSpy).not.toHaveBeenCalled();
-		expect(card.getByRole('button', { name: m.action_delete() })).toBeTruthy();
+		await assertCancelDelete(await linkCard(), deleteSpy);
 	});
 
 	it('tests, syncs and imports instances from a stored link', async () => {
