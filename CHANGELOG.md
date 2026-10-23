@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.6.2](https://github.com/lusoris/SnatchArr/compare/v0.6.1...v0.6.2) (2026-10-23)
+
+
+### Bug Fixes
+
+* **web:** keep the dashboard instance cards inside a phone viewport ([#577](https://github.com/lusoris/SnatchArr/issues/577)) ([2597e23](https://github.com/lusoris/SnatchArr/commit/2597e230b7820d34f760678a0e188e30ff9c6129))
+
+
+### Refactoring
+
+* **web:** share the navigation footer between drawer and sidebar ([#578](https://github.com/lusoris/SnatchArr/issues/578)) ([3d8ed47](https://github.com/lusoris/SnatchArr/commit/3d8ed47d6c841e284044ac374f6781c18356518d))
+
+
+### Documentation
+
+* add a roadmap page for 0.7 to 0.9 ([#573](https://github.com/lusoris/SnatchArr/issues/573)) ([037c278](https://github.com/lusoris/SnatchArr/commit/037c27877264df923d1dfa5562574b05357c3dc4))
+
 ## [0.6.1](https://github.com/lusoris/SnatchArr/compare/v0.6.0...v0.6.1) (2026-10-23)
 
 
