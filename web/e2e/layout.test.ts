@@ -84,11 +84,35 @@ const historyEvents = [
 	}
 ];
 
+const overflowDashboardInstance = [
+	{
+		id: '00000000-0000-0000-0000-000000000001',
+		name: 'sonarr Instance',
+		kind: 'sonarr' as const,
+		base_url: 'http://sonarr.anime.remux.media.svc.cluster.local:8989',
+		source: 'manual' as const,
+		enabled: true,
+		created_at: '2026-01-01T00:00:00Z',
+		updated_at: '2026-01-01T00:00:00Z'
+	}
+];
+
+async function mockDashboardRoute(page: Page): Promise<void> {
+	await page.route('**/api/v1/instances', (route) => {
+		if (route.request().method() !== 'GET') {
+			return route.fallback();
+		}
+		return route.fulfill(json(overflowDashboardInstance));
+	});
+}
+
 for (const [viewportName, viewport] of Object.entries(VIEWPORTS)) {
 	for (const pattern of AUTH_ROUTES) {
 		test(`authenticated: layout ${pattern} ${viewportName}`, async ({ page }, testInfo) => {
 			await page.setViewportSize(viewport);
-			if (pattern === '/history' && !served) {
+			if (pattern === '/' && !served) {
+				await mockDashboardRoute(page);
+			} else if (pattern === '/history' && !served) {
 				await page.route('**/api/v1/events*', (route) =>
 					route.fulfill({
 						status: 200,
