@@ -3,7 +3,6 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
-	import { tick } from 'svelte';
 	import { createSentioQuery, createSentioMutation } from '@sveltesentio/query';
 	import { toast } from 'svelte-sonner';
 	import { api, describeError } from '#lib/api/client.js';
@@ -12,6 +11,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import ConfirmDelete from '#lib/components/ConfirmDelete.svelte';
 	import DownloadClientForm from '#lib/components/DownloadClientForm.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
+	import { FormEditor } from '#lib/formEditor.svelte.js';
 	import { deleteCallbacks, probeFailed, saveSuccess } from '#lib/forms.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { keys } from '#lib/query.js';
@@ -48,14 +48,11 @@ SPDX-License-Identifier: EUPL-1.2
 		onError: (err) => toast.error(describeError(err))
 	});
 
-	/** The client in the form; null adds a new one. */
-	let editing = $state<DownloadClient | null>(null);
-	/** Bumped to remount an emptied create form after a save. */
-	let formGeneration = $state(0);
+	const editor = new FormEditor<DownloadClient>('dlclient-name', () => save.reset());
 
 	const save = createSentioMutation({
 		mutationFn: async (body: DownloadClientInput) => {
-			const target = editing;
+			const target = editor.editing;
 			const res = target
 				? await api.PUT('/download-clients/{clientId}', {
 						params: { path: { clientId: target.id } },
@@ -65,7 +62,7 @@ SPDX-License-Identifier: EUPL-1.2
 			return res.data;
 		},
 		invalidates: [keys.dlclients, keys.dlstatus],
-		onSuccess: saveSuccess(closeForm)
+		onSuccess: saveSuccess(editor.close)
 	});
 
 	const remove = createSentioMutation({
@@ -74,7 +71,7 @@ SPDX-License-Identifier: EUPL-1.2
 			return c;
 		},
 		invalidates: [keys.dlclients, keys.dlstatus],
-		...deleteCallbacks(() => editing, closeForm)
+		...deleteCallbacks(() => editor.editing, editor.close)
 	});
 
 	const probe = createSentioMutation({
@@ -109,18 +106,9 @@ SPDX-License-Identifier: EUPL-1.2
 		else toast.error(m.dlclients_test_unreachable({ name, detail: observed?.error ?? '' }));
 	}
 
-	function closeForm(): void {
-		editing = null;
-		formGeneration += 1;
-		save.reset();
-	}
-
 	async function edit(c: DownloadClient): Promise<void> {
 		if (c.source === 'configarr') return;
-		save.reset();
-		editing = c;
-		await tick();
-		document.getElementById('dlclient-name')?.focus();
+		await editor.open(c);
 	}
 
 	function statusFor(id: string) {
@@ -210,13 +198,8 @@ SPDX-License-Identifier: EUPL-1.2
 	</ul>
 {/if}
 
-<AdminFormSlot
-	key={`${editing?.id ?? 'new'}-${formGeneration}`}
-	{save}
-	probe={probeInput}
-	oncancel={closeForm}
->
+<AdminFormSlot {editor} {save} probe={probeInput}>
 	{#snippet form(props)}
-		<DownloadClientForm client={editing} instances={instances.data ?? []} {...props} />
+		<DownloadClientForm client={editor.editing} instances={instances.data ?? []} {...props} />
 	{/snippet}
 </AdminFormSlot>
