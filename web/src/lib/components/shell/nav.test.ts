@@ -14,14 +14,21 @@ describe('nav group model', () => {
 		expect(fleetGroup?.items.map((i) => i.href)).toEqual(['/', '/instances']);
 
 		const systemGroup = groups.find((g) => g.items.some((i) => i.href === '/settings'));
-		expect(systemGroup?.items.map((i) => i.href)).toEqual(['/settings', '/logs']);
+		expect(systemGroup?.items.map((i) => i.href)).toEqual(['/settings', '/logs', '/about']);
 	});
 
 	it('negative: admin-only entry (/logs) hidden for non-admin', () => {
 		const groups = getNavGroups(false);
 		const systemGroup = groups.find((g) => g.items.some((i) => i.href === '/settings'));
-		expect(systemGroup?.items.map((i) => i.href)).toEqual(['/settings']);
+		expect(systemGroup?.items.map((i) => i.href)).toEqual(['/settings', '/about']);
 		expect(groups.some((g) => g.items.some((i) => i.href === '/logs'))).toBe(false);
+	});
+
+	it('positive: about route is present for both viewer and admin', () => {
+		const viewerGroups = getNavGroups(false);
+		const adminGroups = getNavGroups(true);
+		expect(viewerGroups.some((g) => g.items.some((i) => i.href === '/about'))).toBe(true);
+		expect(adminGroups.some((g) => g.items.some((i) => i.href === '/about'))).toBe(true);
 	});
 
 	describe('isRouteActive', () => {

@@ -52,7 +52,8 @@ test.describe('keyboard navigation', () => {
 			'/prowlarr',
 			'/configarr',
 			'/settings',
-			'/logs'
+			'/logs',
+			'/about'
 		];
 
 		for (let i = 1; i < expectedHrefs.length; i++) {

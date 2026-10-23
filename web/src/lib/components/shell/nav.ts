@@ -6,6 +6,7 @@ import { m } from '#lib/paraglide/messages.js';
 
 export type AppRoute =
 	| '/'
+	| '/about'
 	| '/account'
 	| '/configarr'
 	| '/download-clients'
@@ -66,7 +67,8 @@ export function getNavGroups(isAdmin: boolean): NavGroup[] {
 			label: m.nav_group_system(),
 			items: [
 				{ href: '/settings', label: m.nav_settings(), icon: 'settings' },
-				...(isAdmin ? [{ href: '/logs' as const, label: m.nav_logs(), icon: 'terminal' }] : [])
+				...(isAdmin ? [{ href: '/logs' as const, label: m.nav_logs(), icon: 'terminal' }] : []),
+				{ href: '/about', label: m.nav_about(), icon: 'info' }
 			]
 		}
 	];

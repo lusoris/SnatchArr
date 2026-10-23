@@ -15,6 +15,7 @@ export const VIEWPORTS = {
 
 export const AUTH_ROUTES = [
 	'/',
+	'/about',
 	'/account',
 	'/configarr',
 	'/download-clients',
@@ -35,6 +36,7 @@ export const AUTH_ROUTES = [
 
 export const MIN_TABLES: Record<(typeof AUTH_ROUTES)[number], number> = {
 	'/': 0,
+	'/about': 0,
 	'/account': 1,
 	'/configarr': 0,
 	'/download-clients': 0,

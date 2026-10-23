@@ -8,7 +8,9 @@ import CloudDownload from '@lucide/svelte/icons/cloud-download';
 import Ellipsis from '@lucide/svelte/icons/ellipsis';
 import FileCode from '@lucide/svelte/icons/file-code';
 import Film from '@lucide/svelte/icons/film';
+import Heart from '@lucide/svelte/icons/heart';
 import History from '@lucide/svelte/icons/history';
+import Info from '@lucide/svelte/icons/info';
 import LayoutDashboard from '@lucide/svelte/icons/layout-dashboard';
 import LogOut from '@lucide/svelte/icons/log-out';
 import Menu from '@lucide/svelte/icons/menu';
@@ -32,7 +34,9 @@ export const shellIconLoader = createLucideLoader({
 	Ellipsis,
 	FileCode,
 	Film,
+	Heart,
 	History,
+	Info,
 	LayoutDashboard,
 	LogOut,
 	Menu,
@@ -46,4 +50,12 @@ export const shellIconLoader = createLucideLoader({
 });
 
 /** Icon names the shell renders outside the nav groups. */
-export const shellChromeIcons = ['menu', 'x', 'user', 'log-out', 'search', 'ellipsis'] as const;
+export const shellChromeIcons = [
+	'menu',
+	'x',
+	'user',
+	'log-out',
+	'search',
+	'ellipsis',
+	'heart'
+] as const;

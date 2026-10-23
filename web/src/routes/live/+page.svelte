@@ -21,6 +21,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
 	import { keys } from '#lib/query.js';
+	import { systemStatusQuery } from '#lib/queries/system.js';
 	import { formatWhen } from '#lib/stamina.js';
 
 	const sse = useSSE({
@@ -52,10 +53,7 @@ SPDX-License-Identifier: EUPL-1.2
 		queryFn: async () => (await api.GET('/schedules')).data ?? []
 	});
 
-	const systemStatus = createSentioQuery({
-		queryKey: ['system', 'status'],
-		queryFn: async () => (await api.GET('/system/status')).data
-	});
+	const systemStatus = systemStatusQuery();
 
 	async function loadBacklog(): Promise<void> {
 		try {
