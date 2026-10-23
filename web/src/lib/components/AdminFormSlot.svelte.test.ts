@@ -8,7 +8,11 @@ import { createRawSnippet, flushSync } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
 import { session } from '#lib/session.svelte.js';
-import AdminFormSlot, { type FormSlotProps, type MutationLike } from './AdminFormSlot.svelte';
+import AdminFormSlot, {
+	type FormEditorLike,
+	type FormSlotProps,
+	type MutationLike
+} from './AdminFormSlot.svelte';
 
 interface TestBody {
 	name: string;
@@ -33,6 +37,10 @@ describe('AdminFormSlot', () => {
 			};
 		});
 
+		const editor: FormEditorLike = {
+			key: 'form-1',
+			close: vi.fn()
+		};
 		const save: MutationLike<TestBody> = {
 			isPending: false,
 			error: 'save-error',
@@ -43,14 +51,12 @@ describe('AdminFormSlot', () => {
 			error: null,
 			mutate: vi.fn()
 		};
-		const oncancel = vi.fn();
 
 		const { container } = render(AdminFormSlot<TestBody>, {
 			props: {
-				key: 'form-1',
+				editor,
 				save,
 				probe,
-				oncancel,
 				form: formSnippet
 			}
 		});
@@ -68,7 +74,7 @@ describe('AdminFormSlot', () => {
 		expect(probe.mutate).toHaveBeenCalledWith({ name: 'item-test' });
 
 		captured?.oncancel();
-		expect(oncancel).toHaveBeenCalledTimes(1);
+		expect(editor.close).toHaveBeenCalledTimes(1);
 
 		const a11y = await axe(container, {
 			runOnly: { type: 'tag', values: [...WCAG_22_AA_TAGS] }
@@ -94,9 +100,8 @@ describe('AdminFormSlot', () => {
 
 		render(AdminFormSlot<TestBody>, {
 			props: {
-				key: 'form-neg',
+				editor: { key: 'form-neg', close: vi.fn() },
 				save,
-				oncancel: vi.fn(),
 				form: formSnippet
 			}
 		});
@@ -123,9 +128,8 @@ describe('AdminFormSlot', () => {
 
 		render(AdminFormSlot<TestBody>, {
 			props: {
-				key: 'form-no-probe',
+				editor: { key: 'form-no-probe', close: vi.fn() },
 				save,
-				oncancel: vi.fn(),
 				form: formSnippet
 			}
 		});
@@ -150,9 +154,8 @@ describe('AdminFormSlot', () => {
 
 		render(AdminFormSlot<TestBody>, {
 			props: {
-				key: 'dyn-1',
+				editor: { key: 'dyn-1', close: vi.fn() },
 				save,
-				oncancel: vi.fn(),
 				form: formSnippet
 			}
 		});

@@ -12,6 +12,11 @@ SPDX-License-Identifier: EUPL-1.2
 		mutate: (body: T) => void;
 	}
 
+	export interface FormEditorLike {
+		readonly key: unknown;
+		close: () => void;
+	}
+
 	export interface FormSlotProps<T> {
 		pending: boolean;
 		error: unknown;
@@ -22,23 +27,22 @@ SPDX-License-Identifier: EUPL-1.2
 	}
 
 	interface Props<T> {
-		key: unknown;
+		editor: FormEditorLike;
 		save: MutationLike<T>;
 		probe?: MutationLike<T>;
-		oncancel: () => void;
 		form: Snippet<[formProps: FormSlotProps<T>]>;
 	}
 
-	const { key, save, probe, oncancel, form }: Props<T> = $props();
+	const { editor, save, probe, form }: Props<T> = $props();
 </script>
 
 {#if session.isAdmin}
-	{#key key}
+	{#key editor.key}
 		{@render form({
 			pending: save.isPending,
 			error: save.error,
 			onsave: (body: T) => save.mutate(body),
-			oncancel,
+			oncancel: editor.close,
 			ontest: probe ? (body: T) => probe.mutate(body) : undefined,
 			testing: probe?.isPending
 		})}
