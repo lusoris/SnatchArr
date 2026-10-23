@@ -66,7 +66,7 @@ Notifications are dispatched according to configurable rules. Each rule targets 
    - Fires immediately when a worker trips its search circuit breaker after consecutive upstream search errors.
 
 3. **Instance unreachable (`instance_unreachable`)**
-   - Fires when an instance health check fails or an instance becomes unresponsive during a scheduled run.
+   - Fires when an instance health check fails or an instance becomes unresponsive during a scheduled run. Enabled instances are checked every 5 minutes on the leader.
 
 4. **Stamina exhausted (`stamina_exhausted`)**
    - Fires when an instance or global hourly stamina budget reaches zero.

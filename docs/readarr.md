@@ -156,8 +156,9 @@ show it next to the kind:
 | not recognised | `readarr · unknown product` |
 | Readarr, or no test yet | `readarr (legacy)` |
 
-SnatchArr tests an instance only when you ask it to, so the name is as old as
-`last_check_at`. The test of unsaved form values (`POST /instances/test`) names the product
+Enabled instances are checked every 5 minutes on the leader (updating
+`last_check_at`), and an on-demand test runs whenever you test the connection.
+The test of unsaved form values (`POST /instances/test`) names the product
 in its answer and keeps nothing.
 
 - A test that fails keeps the name: an instance that does not answer is still that product.

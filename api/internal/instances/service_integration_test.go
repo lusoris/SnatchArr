@@ -12,12 +12,13 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jonboulle/clockwork"
 
-	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/core/crypto"
 	"github.com/golusoris/golusoris/core/id"
 
@@ -25,6 +26,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
+	"github.com/lusoris/SnatchArr/api/internal/metrics/metricstest"
 	"github.com/lusoris/SnatchArr/api/internal/store"
 	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
 	"github.com/lusoris/SnatchArr/api/internal/store/storetest"
@@ -53,11 +55,17 @@ var (
 
 // stubProber answers every probe with what the current step set.
 type stubProber struct {
-	res arrclient.Result
-	err error
+	res   arrclient.Result
+	err   error
+	calls atomic.Int32
+	fn    func(ctx context.Context, kind domain.AppKind, baseURL, apiKey string) (arrclient.Result, error)
 }
 
-func (p *stubProber) Probe(context.Context, domain.AppKind, string, string) (arrclient.Result, error) {
+func (p *stubProber) Probe(ctx context.Context, kind domain.AppKind, baseURL, apiKey string) (arrclient.Result, error) {
+	p.calls.Add(1)
+	if p.fn != nil {
+		return p.fn(ctx, kind, baseURL, apiKey)
+	}
 	return p.res, p.err
 }
 
@@ -75,7 +83,7 @@ func newFixture(t *testing.T) fixture {
 	if err != nil {
 		t.Fatalf("encryptor: %v", err)
 	}
-	clk := clock.NewFake()
+	clk := clockwork.NewFakeClockAt(time.Date(2026, 10, 23, 10, 0, 0, 0, time.UTC))
 	probe := &stubProber{}
 	svc := instances.New(st, enc, clk, id.New(), probe, slog.New(slog.DiscardHandler))
 	return fixture{svc: svc, st: st, clk: clk, probe: probe}
@@ -457,5 +465,196 @@ func TestService_Delete_ConfigarrRule(t *testing.T) {
 			t.Parallel()
 			tc.run(t)
 		})
+	}
+}
+
+func TestService_CheckAll_Positive(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	inst1, err := f.svc.Create(t.Context(), readarrInput(booksURL))
+	if err != nil {
+		t.Fatalf("Create() 1 = %v", err)
+	}
+	in2 := readarrInput(otherURL)
+	in2.Name = "other"
+	inst2, err := f.svc.Create(t.Context(), in2)
+	if err != nil {
+		t.Fatalf("Create() 2 = %v", err)
+	}
+
+	t1 := f.clk.Now().UTC()
+	if err = f.svc.CheckAll(t.Context()); err != nil {
+		t.Fatalf("CheckAll() = %v", err)
+	}
+
+	for _, id := range []uuid.UUID{inst1.ID, inst2.ID} {
+		got, getErr := f.svc.Get(t.Context(), id)
+		if getErr != nil {
+			t.Fatalf("Get(%s) = %v", id, getErr)
+		}
+		if got.LastCheckAt == nil || !got.LastCheckAt.UTC().Equal(t1) {
+			t.Errorf("instance %s last_check_at = %v, want %v", id, got.LastCheckAt, t1)
+		}
+	}
+
+	f.clk.Advance(5 * time.Minute)
+	t2 := f.clk.Now().UTC()
+	if err = f.svc.CheckAll(t.Context()); err != nil {
+		t.Fatalf("second CheckAll() = %v", err)
+	}
+
+	for _, id := range []uuid.UUID{inst1.ID, inst2.ID} {
+		got, getErr := f.svc.Get(t.Context(), id)
+		if getErr != nil {
+			t.Fatalf("Get(%s) = %v", id, getErr)
+		}
+		if got.LastCheckAt == nil || !got.LastCheckAt.UTC().Equal(t2) {
+			t.Errorf("instance %s second last_check_at = %v, want %v", id, got.LastCheckAt, t2)
+		}
+	}
+}
+
+func TestService_CheckAll_PlantedStaleClock(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	inst, err := f.svc.Create(t.Context(), readarrInput(booksURL))
+	if err != nil {
+		t.Fatalf("Create() = %v", err)
+	}
+
+	t1 := f.clk.Now().UTC()
+	if err = f.svc.CheckAll(t.Context()); err != nil {
+		t.Fatalf("CheckAll() = %v", err)
+	}
+
+	f.clk.Advance(5 * time.Minute)
+	t2 := f.clk.Now().UTC()
+	if err = f.svc.CheckAll(t.Context()); err != nil {
+		t.Fatalf("second CheckAll() = %v", err)
+	}
+
+	got, err := f.svc.Get(t.Context(), inst.ID)
+	if err != nil {
+		t.Fatalf("Get() = %v", err)
+	}
+	if got.LastCheckAt == nil {
+		t.Fatalf("got.LastCheckAt is nil")
+	}
+	if got.LastCheckAt.UTC().Equal(t1) {
+		t.Errorf("last_check_at remained stale at %v instead of advancing to %v", t1, t2)
+	}
+	if !got.LastCheckAt.UTC().Equal(t2) {
+		t.Errorf("last_check_at = %v, want %v", got.LastCheckAt, t2)
+	}
+}
+
+func TestService_CheckAll_Negative(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	inst1, err := f.svc.Create(t.Context(), readarrInput(booksURL))
+	if err != nil {
+		t.Fatalf("Create() 1 = %v", err)
+	}
+	in2 := readarrInput(otherURL)
+	in2.Name = "other"
+	inst2, err := f.svc.Create(t.Context(), in2)
+	if err != nil {
+		t.Fatalf("Create() 2 = %v", err)
+	}
+
+	f.probe.fn = func(_ context.Context, _ domain.AppKind, baseURL, _ string) (arrclient.Result, error) {
+		if baseURL == booksURL {
+			return arrclient.Result{}, errRefused
+		}
+		return sonarr, nil
+	}
+
+	t1 := f.clk.Now().UTC()
+	if err = f.svc.CheckAll(t.Context()); err != nil {
+		t.Fatalf("CheckAll() = %v, want pass not aborted", err)
+	}
+
+	got1, err := f.svc.Get(t.Context(), inst1.ID)
+	if err != nil {
+		t.Fatalf("Get(inst1) = %v", err)
+	}
+	if got1.LastCheckAt == nil || !got1.LastCheckAt.UTC().Equal(t1) {
+		t.Errorf("inst1 last_check_at = %v, want %v", got1.LastCheckAt, t1)
+	}
+	if !strings.Contains(got1.LastError, errRefused.Error()) {
+		t.Errorf("inst1 last_error = %q, want containing %q", got1.LastError, errRefused.Error())
+	}
+
+	got2, err := f.svc.Get(t.Context(), inst2.ID)
+	if err != nil {
+		t.Fatalf("Get(inst2) = %v", err)
+	}
+	if got2.LastCheckAt == nil || !got2.LastCheckAt.UTC().Equal(t1) {
+		t.Errorf("inst2 last_check_at = %v, want %v", got2.LastCheckAt, t1)
+	}
+	if got2.LastError != "" {
+		t.Errorf("inst2 last_error = %q, want empty", got2.LastError)
+	}
+	if got2.LastSeenVersion != sonarr.Version {
+		t.Errorf("inst2 version = %q, want %q", got2.LastSeenVersion, sonarr.Version)
+	}
+}
+
+func TestService_CheckAll_Boundary(t *testing.T) {
+	t.Parallel()
+	t.Run("disabled instance is not probed and keeps old last_check_at", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		in := readarrInput(booksURL)
+		inst, err := f.svc.Create(t.Context(), in)
+		if err != nil {
+			t.Fatalf("Create() = %v", err)
+		}
+
+		t1 := f.clk.Now().UTC()
+		if err = f.svc.CheckAll(t.Context()); err != nil {
+			t.Fatalf("CheckAll() = %v", err)
+		}
+
+		in.Enabled = false
+		if _, err = f.svc.Update(t.Context(), inst.ID, in); err != nil {
+			t.Fatalf("Update() = %v", err)
+		}
+
+		f.probe.calls.Store(0)
+		f.clk.Advance(5 * time.Minute)
+		if err = f.svc.CheckAll(t.Context()); err != nil {
+			t.Fatalf("second CheckAll() = %v", err)
+		}
+
+		if calls := f.probe.calls.Load(); calls != 0 {
+			t.Errorf("disabled instance probed: call count = %d, want 0", calls)
+		}
+
+		got, err := f.svc.Get(t.Context(), inst.ID)
+		if err != nil {
+			t.Fatalf("Get() = %v", err)
+		}
+		if got.LastCheckAt == nil || !got.LastCheckAt.UTC().Equal(t1) {
+			t.Errorf("last_check_at = %v, want kept old %v", got.LastCheckAt, t1)
+		}
+	})
+
+	t.Run("zero enabled instances returns nil", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		if err := f.svc.CheckAll(t.Context()); err != nil {
+			t.Errorf("CheckAll() = %v, want nil", err)
+		}
+	})
+}
+
+func TestNewTicker_Constructs(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	m, _ := metricstest.New(t)
+	ticker := instances.NewTicker(f.svc, f.clk, m)
+	if ticker == nil {
+		t.Fatal("NewTicker() = nil")
 	}
 }

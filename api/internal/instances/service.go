@@ -13,7 +13,6 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/core/crypto"
@@ -186,20 +185,43 @@ func (s *Service) Delete(ctx context.Context, instID uuid.UUID) error {
 
 // Test probes a stored instance and records the outcome.
 func (s *Service) Test(ctx context.Context, instID uuid.UUID) (arrclient.Result, error) {
-	creds, err := s.Credentials(ctx, instID)
+	row, err := s.st.Q().GetInstance(ctx, instID)
+	if err != nil {
+		return arrclient.Result{}, fmt.Errorf("instances: get: %w", store.MapError(err))
+	}
+	return s.testRow(ctx, row)
+}
+
+func (s *Service) testRow(ctx context.Context, row sqlcgen.Instance) (arrclient.Result, error) {
+	apiKey, err := s.decryptAPIKey(row.ApiKeyEnc)
 	if err != nil {
 		return arrclient.Result{}, err
 	}
-	inst, err := s.Get(ctx, instID)
-	if err != nil {
-		return arrclient.Result{}, err
-	}
-	res, probeErr := s.probe.Probe(ctx, inst.Kind, creds.BaseURL, creds.APIKey)
-	s.recordCheck(ctx, instID, res, probeErr)
+	res, probeErr := s.probe.Probe(ctx, domain.AppKind(row.Kind), row.BaseUrl, apiKey)
+	s.recordCheck(ctx, row.ID, res, probeErr)
 	if probeErr != nil {
 		return res, fmt.Errorf("instances: test: %w", probeErr)
 	}
 	return res, nil
+}
+
+// CheckAll probes every enabled instance. A failed probe is recorded on the instance
+// and logged, never aborting the pass.
+func (s *Service) CheckAll(ctx context.Context) error {
+	rows, err := s.st.Q().ListEnabledInstances(ctx)
+	if err != nil {
+		s.logger.WarnContext(ctx, "instances: list enabled", slog.String("error", err.Error()))
+		return fmt.Errorf("instances: list enabled: %w", store.MapError(err))
+	}
+	timeout := arrclient.DefaultOptions().Timeout
+	for _, row := range rows {
+		probeCtx, cancel := context.WithTimeout(ctx, timeout)
+		if _, err := s.testRow(probeCtx, row); err != nil {
+			s.logger.WarnContext(ctx, "instances: check", slog.String("instance", row.Name), slog.String("error", err.Error()))
+		}
+		cancel()
+	}
+	return nil
 }
 
 func (s *Service) recordCheck(ctx context.Context, instID uuid.UUID, res arrclient.Result, probeErr error) {
@@ -245,11 +267,19 @@ func (s *Service) Credentials(ctx context.Context, instID uuid.UUID) (Credential
 	if err != nil {
 		return Credentials{}, fmt.Errorf("instances: get: %w", store.MapError(err))
 	}
-	apiKey, err := s.enc.Open(row.ApiKeyEnc)
+	apiKey, err := s.decryptAPIKey(row.ApiKeyEnc)
 	if err != nil {
-		return Credentials{}, fmt.Errorf("instances: open api key: %w", err)
+		return Credentials{}, err
 	}
-	return Credentials{BaseURL: row.BaseUrl, APIKey: string(apiKey)}, nil
+	return Credentials{BaseURL: row.BaseUrl, APIKey: apiKey}, nil
+}
+
+func (s *Service) decryptAPIKey(sealed []byte) (string, error) {
+	apiKey, err := s.enc.Open(sealed)
+	if err != nil {
+		return "", fmt.Errorf("instances: open api key: %w", err)
+	}
+	return string(apiKey), nil
 }
 
 // GetPriority returns the instance kind and stored priority overrides.
@@ -388,6 +418,3 @@ func (s *Service) IDByConfigarrKey(ctx context.Context, key string) (uuid.UUID, 
 	}
 	return row.ID, true
 }
-
-// Module provides the Service.
-var Module = fx.Module("snatcharr.instances", fx.Provide(New))
