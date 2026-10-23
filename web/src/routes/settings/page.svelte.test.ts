@@ -77,6 +77,14 @@ const baseStubs = {
 	'/notifications/rules': []
 };
 
+function expectedSettingsWithTools(tools: Settings['llm_write_tools']): Settings {
+	return {
+		...sampleSettings,
+		llm_enabled: true,
+		llm_write_tools: tools
+	};
+}
+
 describe('settings', () => {
 	afterEach(() => {
 		vi.restoreAllMocks();
@@ -168,15 +176,7 @@ describe('settings', () => {
 		await fireEvent.click(screen.getByRole('button', { name: m.instance_save() }));
 
 		expect(putSpy).toHaveBeenCalledWith('/settings', {
-			body: {
-				history_retention_days: 30,
-				user_agent: 'SnatchArr/1.0',
-				global_hourly_cap: 100,
-				search_priority_preset: mediaFirstRanks,
-				download_priority_preset: mediaFirstRanks,
-				llm_enabled: true,
-				llm_write_tools: ['snatcharr_trigger_run', 'snatcharr_delete_instance']
-			}
+			body: expectedSettingsWithTools(['snatcharr_trigger_run', 'snatcharr_delete_instance'])
 		});
 	});
 
@@ -239,15 +239,12 @@ describe('settings', () => {
 		expect(axeResults.violations).toEqual([]);
 
 		// Negative: 0 and 101 refused
-		await fireEvent.input(sonarrSearch, { target: { value: '0' } });
-		expect(sonarrSearch.checkValidity()).toBe(false);
-		await fireEvent.click(screen.getByRole('button', { name: m.instance_save() }));
-		expect(putSpy).not.toHaveBeenCalled();
-
-		await fireEvent.input(sonarrSearch, { target: { value: '101' } });
-		expect(sonarrSearch.checkValidity()).toBe(false);
-		await fireEvent.click(screen.getByRole('button', { name: m.instance_save() }));
-		expect(putSpy).not.toHaveBeenCalled();
+		for (const invalid of ['0', '101']) {
+			await fireEvent.input(sonarrSearch, { target: { value: invalid } });
+			expect(sonarrSearch.checkValidity()).toBe(false);
+			await fireEvent.click(screen.getByRole('button', { name: m.instance_save() }));
+			expect(putSpy).not.toHaveBeenCalled();
+		}
 
 		// Boundary: 1 and 100 accepted
 		await fireEvent.input(sonarrSearch, { target: { value: '1' } });
@@ -309,22 +306,14 @@ describe('settings', () => {
 		await fireEvent.click(screen.getByRole('button', { name: m.instance_save() }));
 
 		expect(putSpy).toHaveBeenCalledWith('/settings', {
-			body: {
-				history_retention_days: 30,
-				user_agent: 'SnatchArr/1.0',
-				global_hourly_cap: 100,
-				search_priority_preset: mediaFirstRanks,
-				download_priority_preset: mediaFirstRanks,
-				llm_enabled: true,
-				llm_write_tools: [
-					'snatcharr_create_instance',
-					'snatcharr_update_settings',
-					'snatcharr_create_download_client',
-					'snatcharr_snatch_seerr_request',
-					'snatcharr_create_prowlarr_link',
-					'snatcharr_create_notification_channel'
-				]
-			}
+			body: expectedSettingsWithTools([
+				'snatcharr_create_instance',
+				'snatcharr_update_settings',
+				'snatcharr_create_download_client',
+				'snatcharr_snatch_seerr_request',
+				'snatcharr_create_prowlarr_link',
+				'snatcharr_create_notification_channel'
+			])
 		});
 	});
 
