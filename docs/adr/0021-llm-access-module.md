@@ -250,7 +250,7 @@ SnatchArr ships an official Agent Skills bundle complying with the `agentskills.
 | **Claude Code** | `~/.claude/skills/snatcharr/SKILL.md` | `.claude/skills/snatcharr/SKILL.md` |
 | **Editors (Cursor)** | `~/.cursor/skills/snatcharr/SKILL.md` | `.cursor/skills/snatcharr/SKILL.md` or `.agents/skills/snatcharr/SKILL.md` |
 
-Paths checked 2026-10-21 against each client's own documentation: Codex (developers.openai.com/codex/skills), Gemini CLI (`docs/cli/skills.md` in google-gemini/gemini-cli), Antigravity (its built-in `antigravity_guide` skill), opencode (`packages/web/src/content/docs/skills.mdx` in anomalyco/opencode), Cursor (cursor.com/docs/context/skills). The `.agents/skills/` workspace path is read by Codex, Gemini CLI, Antigravity, opencode and Cursor, so the repository ships the bundle there once.
+Paths checked 2026-10-21 against each client's own documentation: Codex (developers.openai.com/codex/skills), Gemini CLI (`docs/cli/skills.md` in google-gemini/gemini-cli), Antigravity (its built-in `antigravity_guide` skill), opencode (`packages/web/src/content/docs/skills.mdx` in anomalyco/opencode), Cursor (cursor.com/docs/context/skills). The repository ships one copy at `skills/snatcharr/`; operators copy that directory to the path of their client from the table; no second copy under `.agents/skills/` (that folder holds the repository's own development skills, caveman-linted by praetor).
 
 ### 9. Documentation and MkDocs `llms.txt` integration
 
