@@ -123,13 +123,13 @@ SPDX-License-Identifier: EUPL-1.2
 										{#each pkgs as pkg (`${pkg.name}@${pkg.version}`)}
 											<li class="flex flex-col gap-1 pt-2 first:pt-0">
 												<div class="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
-													<div class="flex flex-wrap items-baseline gap-2">
-														<span class="font-medium text-fg">{pkg.name}</span>
+													<div class="flex min-w-0 flex-wrap items-baseline gap-2">
+														<span class="min-w-0 font-medium break-all text-fg">{pkg.name}</span>
 														<span class="font-mono text-xs text-subtle">{pkg.version}</span>
 													</div>
-													<div class="flex items-center gap-2">
+													<div class="flex min-w-0 items-center gap-2">
 														<span
-															class="bg-muted rounded px-1.5 py-0.5 font-mono text-xs font-medium text-fg"
+															class="bg-muted min-w-0 rounded px-1.5 py-0.5 font-mono text-xs font-medium break-words text-fg"
 														>
 															{pkg.licence}
 														</span>
