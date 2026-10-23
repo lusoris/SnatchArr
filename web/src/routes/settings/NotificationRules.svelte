@@ -7,6 +7,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { toast } from 'svelte-sonner';
 	import { api, describeError } from '#lib/api/client.js';
 	import type { components } from '#lib/api/schema.js';
+	import CreateForm from '#lib/components/CreateForm.svelte';
 	import Field from '#lib/components/Field.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import { m } from '#lib/paraglide/messages.js';
@@ -150,65 +151,56 @@ SPDX-License-Identifier: EUPL-1.2
 	</div>
 {/if}
 
-{#if session.isAdmin}
-	<form
-		class="card flex max-w-xl flex-col gap-4"
-		onsubmit={(e) => {
-			e.preventDefault();
-			create.mutate();
-		}}
-	>
-		<h4 class="font-medium">{m.rule_add()}</h4>
-		<Field id="rule-name" label={m.rule_name()}>
-			<input id="rule-name" class="input" required bind:value={name} />
-		</Field>
-		<Field id="rule-event" label={m.rule_event_kind()}>
-			<select id="rule-event" class="select" bind:value={eventKind}>
-				<option value="run_failure_streak">{m.event_kind_run_failure_streak()}</option>
-				<option value="circuit_opened">{m.event_kind_circuit_opened()}</option>
-				<option value="instance_unreachable">{m.event_kind_instance_unreachable()}</option>
-				<option value="stamina_exhausted">{m.event_kind_stamina_exhausted()}</option>
-				<option value="seerr_request_snatched">{m.event_kind_seerr_request_snatched()}</option>
-			</select>
-		</Field>
-		<Field id="rule-threshold" label={m.rule_threshold()}>
-			<input
-				id="rule-threshold"
-				class="input"
-				type="number"
-				min="1"
-				max="1000"
-				required
-				bind:value={threshold}
-			/>
-		</Field>
+<CreateForm heading={m.rule_add()} onsubmit={() => create.mutate()}>
+	<Field id="rule-name" label={m.rule_name()}>
+		<input id="rule-name" class="input" required bind:value={name} />
+	</Field>
+	<Field id="rule-event" label={m.rule_event_kind()}>
+		<select id="rule-event" class="select" bind:value={eventKind}>
+			<option value="run_failure_streak">{m.event_kind_run_failure_streak()}</option>
+			<option value="circuit_opened">{m.event_kind_circuit_opened()}</option>
+			<option value="instance_unreachable">{m.event_kind_instance_unreachable()}</option>
+			<option value="stamina_exhausted">{m.event_kind_stamina_exhausted()}</option>
+			<option value="seerr_request_snatched">{m.event_kind_seerr_request_snatched()}</option>
+		</select>
+	</Field>
+	<Field id="rule-threshold" label={m.rule_threshold()}>
+		<input
+			id="rule-threshold"
+			class="input"
+			type="number"
+			min="1"
+			max="1000"
+			required
+			bind:value={threshold}
+		/>
+	</Field>
 
-		<fieldset class="flex flex-col gap-2">
-			<legend class="text-sm font-medium">{m.rule_channels()}</legend>
-			{#if (channels.data ?? []).length === 0}
-				<p class="text-sm text-subtle">{m.notifications_empty_channels()}</p>
-			{:else}
-				{#each channels.data ?? [] as ch (ch.id)}
-					<label class="flex items-center gap-2 text-sm">
-						<input
-							type="checkbox"
-							checked={selectedChannels.includes(ch.id)}
-							onchange={() => toggleChannel(ch.id)}
-						/>
-						<span>{ch.name} ({ch.kind})</span>
-					</label>
-				{/each}
-			{/if}
-		</fieldset>
+	<fieldset class="flex flex-col gap-2">
+		<legend class="text-sm font-medium">{m.rule_channels()}</legend>
+		{#if (channels.data ?? []).length === 0}
+			<p class="text-sm text-subtle">{m.notifications_empty_channels()}</p>
+		{:else}
+			{#each channels.data ?? [] as ch (ch.id)}
+				<label class="flex items-center gap-2 text-sm">
+					<input
+						type="checkbox"
+						checked={selectedChannels.includes(ch.id)}
+						onchange={() => toggleChannel(ch.id)}
+					/>
+					<span>{ch.name} ({ch.kind})</span>
+				</label>
+			{/each}
+		{/if}
+	</fieldset>
 
-		<div>
-			<button
-				type="submit"
-				class="btn btn-primary"
-				disabled={create.isPending || selectedChannels.length === 0}
-			>
-				{m.rule_add()}
-			</button>
-		</div>
-	</form>
-{/if}
+	<div>
+		<button
+			type="submit"
+			class="btn btn-primary"
+			disabled={create.isPending || selectedChannels.length === 0}
+		>
+			{m.rule_add()}
+		</button>
+	</div>
+</CreateForm>
