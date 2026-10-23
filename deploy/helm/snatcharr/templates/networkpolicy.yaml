@@ -25,6 +25,14 @@ spec:
       from:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+    # Metrics: Prometheus scraping.
+    - ports:
+        - port: metrics
+          protocol: TCP
+      {{- with .Values.networkPolicy.metricsFrom }}
+      from:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
     # gRPC: only the worker may lease runs.
     - ports:
         - port: grpc

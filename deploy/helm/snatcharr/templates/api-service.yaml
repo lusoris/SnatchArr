@@ -23,5 +23,9 @@ spec:
       targetPort: grpc
       protocol: TCP
       appProtocol: kubernetes.io/h2c
+    - name: metrics
+      port: {{ .Values.api.service.metricsPort }}
+      targetPort: metrics
+      protocol: TCP
   selector:
     {{- include "snatcharr.selectorLabels" $sel | nindent 4 }}

@@ -22,7 +22,6 @@ import (
 	grpcx "github.com/golusoris/golusoris/grpc"
 	"github.com/golusoris/golusoris/httpx/middleware"
 	"github.com/golusoris/golusoris/k8s/health"
-	"github.com/golusoris/golusoris/k8s/metrics/prom"
 	"github.com/golusoris/golusoris/leader/gate"
 	"github.com/golusoris/golusoris/observability/statuspage"
 	"github.com/golusoris/golusoris/otel"
@@ -148,6 +147,7 @@ func registerHealthChecks(reg *statuspage.Registry, pool *pgxpool.Pool, startup 
 
 type httpDeps struct {
 	fx.In
+	LC     fx.Lifecycle
 	Router chi.Router
 	Logger *slog.Logger
 	Clock  clock.Clock
@@ -169,7 +169,7 @@ func mountHTTP(d httpDeps, api httpapi.MountParams) error {
 		middleware.SecureHeaders(securityHeaders(d.Cfg.Session.Secure)),
 	)
 	health.Mount(d.Router, d.Reg)
-	if err := prom.Mount(d.Router, d.Reg); err != nil {
+	if err := mountMetrics(d); err != nil {
 		return fmt.Errorf("app: mount metrics: %w", err)
 	}
 	if err := httpapi.MountStream(d.Router, api, d.Events.Hub().Handler()); err != nil {

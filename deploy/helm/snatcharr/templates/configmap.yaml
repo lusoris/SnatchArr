@@ -8,6 +8,11 @@ metadata:
 data:
   APP_HTTP_ADDR: ":{{ .Values.api.service.port }}"
   APP_GRPC_LISTEN: ":{{ .Values.api.service.grpcPort }}"
+  {{- $svc := .Values.api.service }}
+  {{- if or (eq (int $svc.metricsPort) (int $svc.port)) (eq (int $svc.metricsPort) (int $svc.grpcPort)) }}
+  {{- fail (printf "api.service.metricsPort %v must differ from api.service.port and api.service.grpcPort" $svc.metricsPort) }}
+  {{- end }}
+  APP_SNATCHARR_METRICS_ADDR: ":{{ $svc.metricsPort }}"
   APP_SNATCHARR_PROFILE: prod
   # Planner, Seerr sync and Configarr poll run on one elected replica (pg advisory lock).
   APP_LEADER_ENABLED: "true"

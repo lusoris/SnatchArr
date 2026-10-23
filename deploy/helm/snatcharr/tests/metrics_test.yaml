@@ -1,0 +1,131 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+suite: metrics port and networkpolicy
+templates:
+  - configmap.yaml
+  - api-deployment.yaml
+  - api-service.yaml
+  - servicemonitor.yaml
+  - networkpolicy.yaml
+release:
+  name: snatcharr
+  namespace: snatcharr
+tests:
+  - it: default - renders metrics port 9464 on deployment, service, servicemonitor and configmap
+    set:
+      serviceMonitor:
+        enabled: true
+    asserts:
+      - equal:
+          path: data.APP_SNATCHARR_METRICS_ADDR
+          value: ":9464"
+        template: configmap.yaml
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            name: metrics
+            containerPort: 9464
+            protocol: TCP
+        template: api-deployment.yaml
+      - contains:
+          path: spec.ports
+          content:
+            name: metrics
+            port: 9464
+            targetPort: metrics
+            protocol: TCP
+        template: api-service.yaml
+      - equal:
+          path: spec.endpoints[0].port
+          value: metrics
+        template: servicemonitor.yaml
+        documentIndex: 0
+
+  - it: positive - custom metricsPort renders custom port on all resources
+    set:
+      api:
+        service:
+          metricsPort: 9100
+      serviceMonitor:
+        enabled: true
+    asserts:
+      - equal:
+          path: data.APP_SNATCHARR_METRICS_ADDR
+          value: ":9100"
+        template: configmap.yaml
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            name: metrics
+            containerPort: 9100
+            protocol: TCP
+        template: api-deployment.yaml
+      - contains:
+          path: spec.ports
+          content:
+            name: metrics
+            port: 9100
+            targetPort: metrics
+            protocol: TCP
+        template: api-service.yaml
+      - equal:
+          path: spec.endpoints[0].port
+          value: metrics
+        template: servicemonitor.yaml
+        documentIndex: 0
+
+  - it: default - networkpolicy metrics rule renders absent from when metricsFrom is empty
+    template: networkpolicy.yaml
+    documentIndex: 0
+    set:
+      networkPolicy:
+        enabled: true
+    asserts:
+      - contains:
+          path: spec.ingress
+          content:
+            ports:
+              - port: metrics
+                protocol: TCP
+
+  - it: positive - networkpolicy metrics rule renders from when metricsFrom is set
+    template: networkpolicy.yaml
+    documentIndex: 0
+    set:
+      networkPolicy:
+        enabled: true
+        metricsFrom:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: monitoring
+    asserts:
+      - contains:
+          path: spec.ingress
+          content:
+            ports:
+              - port: metrics
+                protocol: TCP
+            from:
+              - namespaceSelector:
+                  matchLabels:
+                    kubernetes.io/metadata.name: monitoring
+
+  - it: negative - metricsPort equal to grpcPort is refused
+    template: configmap.yaml
+    set:
+      api:
+        service:
+          metricsPort: 9090
+    asserts:
+      - failedTemplate:
+          errorMessage: api.service.metricsPort 9090 must differ from api.service.port and api.service.grpcPort
+
+  - it: negative - metricsPort equal to the http port is refused
+    template: configmap.yaml
+    set:
+      api:
+        service:
+          metricsPort: 8080
+    asserts:
+      - failedTemplate:
+          errorMessage: api.service.metricsPort 8080 must differ from api.service.port and api.service.grpcPort

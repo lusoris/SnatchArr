@@ -16,7 +16,7 @@ serviceMonitor:
 ```
 
 This provisions:
-- A `ServiceMonitor` targeting the control plane API `/metrics` endpoint on port `http` (8080).
+- A `ServiceMonitor` targeting the control plane API `/metrics` endpoint on port `metrics` (9464 by default, configured via `api.service.metricsPort` and `APP_SNATCHARR_METRICS_ADDR`).
 - A `PodMonitor` targeting the worker data plane `/metrics` endpoint on port `http` (8081).
 
 To automatically deploy the pre-packaged Grafana dashboard, enable:
@@ -122,6 +122,14 @@ The API serves these metrics on `/metrics`:
 - `result`: `granted`, `partial`, `denied`, `error`
 - `status`: `queued`, `leased`, `done`, `failed`, `cancelled`
 - `reason`: `schedule_closed`, `already_running`, `client_unreachable`, `client_paused`, `client_active_limit`, `bandwidth_saturated`, `gate_refusal`, `indexer_limit`, `tick_bound`
+
+### Dedicated Metrics Port & External Scrape Upgrades
+
+By default in Kubernetes (and whenever `APP_SNATCHARR_METRICS_ADDR` is configured, e.g. `:9464`), the API serves `/metrics` on a dedicated metrics port instead of the main HTTP port (`8080`). This isolates metrics scraping so NetworkPolicies can allow Prometheus without opening the UI and API port (which trusts proxy headers from cluster CIDRs) to the scraper.
+
+When `APP_SNATCHARR_METRICS_ADDR` is set, `GET /metrics` on the main port (`8080`) returns `404 Not Found`.
+
+**Upgrade action**: Update external Prometheus scrape configurations (static configs, custom scrape jobs) that target port `8080` to scrape the dedicated metrics port (`9464`) instead. Leaving `APP_SNATCHARR_METRICS_ADDR` empty (`""`) keeps `/metrics` on the main HTTP router.
 
 ### Upgrading from 0.4.x
 

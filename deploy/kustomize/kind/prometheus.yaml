@@ -19,7 +19,7 @@ data:
     scrape_configs:
       - job_name: snatcharr-api
         static_configs:
-          - targets: ["snatcharr-api.snatcharr.svc:8080"]
+          - targets: ["snatcharr-api.snatcharr.svc:9464"]
             labels:
               namespace: snatcharr
 ---
