@@ -87,8 +87,40 @@ When deploying behind an authenticating reverse proxy (such as Authelia, Authent
 | `APP_SNATCHARR_PROXY_AUTH_HEADER` | `auth.proxyAuth.header` | `Remote-User` | Name of the incoming header containing the pre-authenticated username. |
 | `APP_SNATCHARR_PROXY_AUTH_TRUSTED_CIDRS` | `auth.proxyAuth.trustedCidrs` | | Comma-separated list of IP CIDRs allowed to assert proxy authentication (e.g. `10.0.0.0/8,172.16.0.0/12`). |
 | `APP_SNATCHARR_PROXY_AUTH_GROUPS_HEADER` | `auth.proxyAuth.groupsHeader` | `X-authentik-groups` | Name of the incoming header containing the user's groups, separated by `\|`. |
+| `APP_SNATCHARR_PROXY_AUTH_SECRET_HEADER` | `auth.proxyAuth.secretHeader` | `X-SnatchArr-Proxy-Secret` | Name of the incoming header containing the shared proxy authentication secret. |
+| `APP_SNATCHARR_PROXY_AUTH_SECRET` | via `auth.proxyAuth.existingSecret` | | Shared secret the reverse proxy must send (min 32 bytes after leading and trailing whitespace is trimmed, so a secret file's trailing newline is harmless). Never committed or inlined in values files. |
 | `APP_SNATCHARR_PROXY_AUTH_ADMIN_GROUPS` | `auth.proxyAuth.adminGroups` | | Comma-separated groups whose members sign in as admin. Required. |
 | `APP_SNATCHARR_PROXY_AUTH_VIEWER_GROUPS` | `auth.proxyAuth.viewerGroups` | | Comma-separated groups whose members sign in as viewers. |
+
+### Reverse proxy configuration
+
+The reverse proxy must inject the shared secret header and strip any untrusted incoming copy sent by external clients:
+
+- **Header injection**: The reverse proxy authenticates the user, forwards identity headers (`Remote-User` and `X-authentik-groups`), and injects the shared secret header (`X-SnatchArr-Proxy-Secret`):
+  - **Traefik**: Use a Middleware with `customRequestHeaders`:
+    ```yaml
+    apiVersion: traefik.io/v1alpha1
+    kind: Middleware
+    metadata:
+      name: snatcharr-proxy-auth
+    spec:
+      headers:
+        customRequestHeaders:
+          X-SnatchArr-Proxy-Secret: "YOUR_SHARED_SECRET_32_BYTES_MIN"
+    ```
+  - **nginx**: Use `proxy_set_header`:
+    ```nginx
+    proxy_set_header Remote-User $remote_user;
+    proxy_set_header X-authentik-groups $authentik_groups;
+    proxy_set_header X-SnatchArr-Proxy-Secret "YOUR_SHARED_SECRET_32_BYTES_MIN";
+    ```
+  - **Authentik outpost**: Place the outpost behind a proxy configured as above to append the shared secret header.
+- **Client header stripping**: The reverse proxy must strip any client-supplied copy of the secret header so external clients cannot forge the secret.
+- **Enforcement**: Any request originating from a trusted CIDR presenting proxy identity headers with a missing or incorrect secret receives an immediate `401 Unauthorized` (`application/problem+json`) response.
+
+### Upgrading from a release without the shared secret
+
+Proxy authentication now refuses to start without `APP_SNATCHARR_PROXY_AUTH_SECRET`. Before upgrading, create a Kubernetes Secret with a random value of at least 32 bytes (for example `openssl rand -hex 32`), set `auth.proxyAuth.existingSecret` (and `auth.proxyAuth.secretKey` if the key is not `proxy-auth-secret`), and configure the reverse proxy to send that value in the secret header.
 
 ### Security risks and operational rules
 
@@ -98,11 +130,12 @@ When deploying behind an authenticating reverse proxy (such as Authelia, Authent
 To prevent unauthorized access when using proxy authentication:
 
 1. **Direct peer verification**: The proxy authentication middleware (`sso.ProxyHeaderMiddleware` in `api/internal/sso/sso.go`) checks the direct TCP peer IP before `middleware.TrustProxy` evaluates any `X-Forwarded-For` header. Spoofed `X-Forwarded-For` headers cannot trick the proxy check.
-2. **Wildcard CIDRs rejected**: Startup fails if `trusted_cidrs` contains `0.0.0.0/0` or `::/0` (`config.Validate` in `api/internal/config/config.go`).
-3. **Mandatory admin group**: Startup fails if `admin_groups` is empty, if a group is on both lists, or while the legacy `allowed_users` is set.
-4. **Header stripping**: Both headers are deleted from the request immediately after evaluation. Downstream application handlers never see the raw incoming header.
-5. **No direct request authentication**: The proxy header does not authenticate API requests directly. It is only accepted at `POST /api/v1/auth/proxy-session` to issue a standard cookie session.
-6. **Network isolation**: Ensure the SnatchArr HTTP service is not exposed directly to untrusted networks or pods. Only the reverse proxy should be able to route traffic to the container port.
+2. **Shared proxy secret**: In addition to CIDR trust, the proxy must present a pre-shared secret of at least 32 bytes (`APP_SNATCHARR_PROXY_AUTH_SECRET`). Any trusted-CIDR request presenting proxy headers without or with an invalid secret is refused with `401 Unauthorized`. Secret comparisons are performed in constant time via SHA-256 digests.
+3. **Wildcard CIDRs rejected**: Startup fails if `trusted_cidrs` contains `0.0.0.0/0` or `::/0` (`config.Validate` in `api/internal/config/config.go`).
+4. **Mandatory admin group**: Startup fails if `admin_groups` is empty, if a group is on both lists, or while the legacy `allowed_users` is set.
+5. **Header stripping**: All proxy authentication headers (username, groups, and secret) are deleted from the request immediately after evaluation. Downstream application handlers never see the raw incoming headers or secret.
+6. **No direct request authentication**: The proxy header does not authenticate API requests directly. It is only accepted at `POST /api/v1/auth/proxy-session` to issue a standard cookie session.
+7. **Network isolation**: Ensure the SnatchArr HTTP service is not exposed directly to untrusted networks or pods. Only the reverse proxy should be able to route traffic to the container port.
 
 ---
 

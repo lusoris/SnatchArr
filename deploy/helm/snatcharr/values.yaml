@@ -68,6 +68,10 @@ auth:
     enabled: false
     header: "Remote-User"
     groupsHeader: "X-authentik-groups"
+    secretHeader: "X-SnatchArr-Proxy-Secret"
+    # Shared secret is NEVER stored directly in values.yaml. Reference an existing secret.
+    existingSecret: ""
+    secretKey: proxy-auth-secret
     trustedCidrs: []
     adminGroups: []
     viewerGroups: []

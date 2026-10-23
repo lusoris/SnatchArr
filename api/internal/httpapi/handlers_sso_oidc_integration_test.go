@@ -77,7 +77,7 @@ func newSSOFixture(t *testing.T, oidcCfg config.OIDCOptions, proxyCfg config.Pro
 	r := chi.NewRouter()
 	r.Use(
 		middleware.RequestID,
-		sso.ProxyHeaderMiddleware(proxyCfg, logger),
+		sso.ProxyHeaderMiddleware(proxyCfg, logger, ErrorHandler(logger)),
 		middleware.TrustProxy(middleware.TrustProxyOptions{TrustedCIDRs: f.h.cfg.Proxy.Trusted}),
 		middleware.Recover(logger),
 		middleware.Logger(logger, f.clk),

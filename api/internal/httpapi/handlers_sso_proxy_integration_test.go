@@ -27,10 +27,13 @@ type proxyTestCase struct {
 	headerVal       string
 	groupsHeaderVal string
 	forwardedFor    string
+	omitSecret      bool
 	wantStatus      int
 	wantSession     bool
 	wantRole        string
 }
+
+var testProxySecret = strings.Repeat("s", 32)
 
 func buildProxyCases() []proxyTestCase {
 	return []proxyTestCase{
@@ -149,6 +152,17 @@ func buildProxyCases() []proxyTestCase {
 			wantStatus:      http.StatusConflict,
 			wantSession:     false,
 		},
+		{
+			name:            "trusted peer with headers and no secret",
+			enabled:         true,
+			hasAdmin:        true,
+			remoteAddr:      "10.0.0.5:12345",
+			headerVal:       "admin",
+			groupsHeaderVal: "snatcharr-admins",
+			omitSecret:      true,
+			wantStatus:      http.StatusUnauthorized,
+			wantSession:     false,
+		},
 	}
 }
 
@@ -158,6 +172,8 @@ func setupProxyTest(t *testing.T, tc proxyTestCase) *ssoFixture {
 		Enabled:      tc.enabled,
 		Header:       "Remote-User",
 		GroupsHeader: "X-authentik-groups",
+		SecretHeader: "X-SnatchArr-Proxy-Secret",
+		Secret:       testProxySecret,
 		TrustedCIDRs: []string{"10.0.0.0/8"},
 		AdminGroups:  []string{"snatcharr-admins"},
 		ViewerGroups: []string{"snatcharr-viewers"},
@@ -194,6 +210,9 @@ func executeProxyTest(t *testing.T, tc proxyTestCase) {
 	if tc.forwardedFor != "" {
 		req.Header.Set("X-Forwarded-For", tc.forwardedFor)
 	}
+	if !tc.omitSecret {
+		req.Header.Set("X-Snatcharr-Proxy-Secret", testProxySecret)
+	}
 
 	rec := httptest.NewRecorder()
 	f.router.ServeHTTP(rec, req)
@@ -201,7 +220,16 @@ func executeProxyTest(t *testing.T, tc proxyTestCase) {
 	if rec.Code != tc.wantStatus {
 		t.Fatalf("proxy-session status = %d, want %d (body: %s)", rec.Code, tc.wantStatus, rec.Body.String())
 	}
+	if rec.Code == http.StatusUnauthorized {
+		ct := rec.Header().Get("Content-Type")
+		if !strings.Contains(ct, "application/problem+json") {
+			t.Errorf("Content-Type = %q, want application/problem+json", ct)
+		}
+	}
 	if !tc.wantSession {
+		if cookies := rec.Result().Cookies(); len(cookies) > 0 {
+			t.Fatalf("unexpected session cookie on failure: %v", cookies)
+		}
 		return
 	}
 
@@ -273,6 +301,8 @@ func TestSSO_NoSecretsInLogs(t *testing.T) {
 		Enabled:      true,
 		Header:       "Remote-User",
 		GroupsHeader: "X-authentik-groups",
+		SecretHeader: "X-SnatchArr-Proxy-Secret",
+		Secret:       testProxySecret,
 		TrustedCIDRs: []string{"10.0.0.0/8"},
 		AdminGroups:  []string{"snatcharr-admins"},
 	}
@@ -341,6 +371,7 @@ func TestProxyAuth_Revocation(t *testing.T) {
 	loginReq.RemoteAddr = "10.0.0.5:12345"
 	loginReq.Header.Set("Remote-User", "viewer-user")
 	loginReq.Header.Set("X-Authentik-Groups", "snatcharr-viewers")
+	loginReq.Header.Set("X-Snatcharr-Proxy-Secret", testProxySecret)
 	loginRec := httptest.NewRecorder()
 	f.router.ServeHTTP(loginRec, loginReq)
 
@@ -357,6 +388,7 @@ func TestProxyAuth_Revocation(t *testing.T) {
 	validReq.RemoteAddr = "10.0.0.5:12345"
 	validReq.Header.Set("Remote-User", "viewer-user")
 	validReq.Header.Set("X-Authentik-Groups", "snatcharr-viewers")
+	validReq.Header.Set("X-Snatcharr-Proxy-Secret", testProxySecret)
 	for _, c := range cookies {
 		validReq.AddCookie(c)
 	}
@@ -371,6 +403,7 @@ func TestProxyAuth_Revocation(t *testing.T) {
 	revokeReq.RemoteAddr = "10.0.0.5:12345"
 	revokeReq.Header.Set("Remote-User", "viewer-user")
 	revokeReq.Header.Set("X-Authentik-Groups", "other-group")
+	revokeReq.Header.Set("X-Snatcharr-Proxy-Secret", testProxySecret)
 	for _, c := range cookies {
 		revokeReq.AddCookie(c)
 	}
@@ -390,6 +423,7 @@ func TestProxyAuth_Revocation(t *testing.T) {
 	furtherReq.RemoteAddr = "10.0.0.5:12345"
 	furtherReq.Header.Set("Remote-User", "viewer-user")
 	furtherReq.Header.Set("X-Authentik-Groups", "snatcharr-viewers")
+	furtherReq.Header.Set("X-Snatcharr-Proxy-Secret", testProxySecret)
 	for _, c := range cookies {
 		furtherReq.AddCookie(c)
 	}
@@ -434,6 +468,7 @@ func TestProxyAuth_MalformedOriginRevoked(t *testing.T) {
 	loginReq.RemoteAddr = "10.0.0.5:12345"
 	loginReq.Header.Set("Remote-User", "viewer-user")
 	loginReq.Header.Set("X-Authentik-Groups", "snatcharr-viewers")
+	loginReq.Header.Set("X-Snatcharr-Proxy-Secret", testProxySecret)
 	loginRec := httptest.NewRecorder()
 	f.router.ServeHTTP(loginRec, loginReq)
 	if loginRec.Code != http.StatusOK {

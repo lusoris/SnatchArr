@@ -110,6 +110,17 @@ spec:
                   {{- fail "auth.oidc is enabled: configure either auth.oidc.existingSecret or auth.oidc.secretKeyRef" }}
                   {{- end }}
             {{- end }}
+            {{- if and .Values.auth .Values.auth.proxyAuth .Values.auth.proxyAuth.enabled }}
+            - name: APP_SNATCHARR_PROXY_AUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.auth.proxyAuth.existingSecret }}
+                  name: {{ .Values.auth.proxyAuth.existingSecret }}
+                  key: {{ default "proxy-auth-secret" .Values.auth.proxyAuth.secretKey }}
+                  {{- else }}
+                  {{- fail "auth.proxyAuth is enabled: set auth.proxyAuth.existingSecret" }}
+                  {{- end }}
+            {{- end }}
             {{- with .Values.config.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

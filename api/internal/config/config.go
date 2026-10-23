@@ -36,6 +36,8 @@
 //	snatcharr.proxy_auth.enabled APP_SNATCHARR_PROXY_AUTH_ENABLED enable trusted proxy-header auth
 //	snatcharr.proxy_auth.header  APP_SNATCHARR_PROXY_AUTH_HEADER  trusted proxy user header name (default Remote-User)
 //	snatcharr.proxy_auth.groups_header APP_SNATCHARR_PROXY_AUTH_GROUPS_HEADER header holding pipe-separated groups (default X-authentik-groups)
+//	snatcharr.proxy_auth.secret_header APP_SNATCHARR_PROXY_AUTH_SECRET_HEADER header holding shared proxy secret (default X-SnatchArr-Proxy-Secret)
+//	snatcharr.proxy_auth.secret  APP_SNATCHARR_PROXY_AUTH_SECRET  shared secret proxy must present (min 32 bytes)
 //	snatcharr.proxy_auth.trusted_cidrs APP_SNATCHARR_PROXY_AUTH_TRUSTED_CIDRS comma-separated trusted proxy CIDRs
 //	snatcharr.proxy_auth.admin_groups  APP_SNATCHARR_PROXY_AUTH_ADMIN_GROUPS  comma-separated groups granting admin role
 //	snatcharr.proxy_auth.viewer_groups APP_SNATCHARR_PROXY_AUTH_VIEWER_GROUPS comma-separated groups granting viewer role
@@ -203,6 +205,8 @@ type ProxyAuthOptions struct {
 	Enabled      bool     `koanf:"enabled"`
 	Header       string   `koanf:"header"`
 	GroupsHeader string   `koanf:"groups_header"`
+	SecretHeader string   `koanf:"secret_header"`
+	Secret       string   `koanf:"secret"`
 	TrustedCIDRs []string `koanf:"trusted_cidrs"`
 	AllowedUsers []string `koanf:"allowed_users"`
 	AdminGroups  []string `koanf:"admin_groups"`
@@ -214,7 +218,10 @@ func (p ProxyAuthOptions) Validate() error {
 	if !p.Enabled {
 		return nil
 	}
-	if err := validateProxyHeaders(p.Header, p.GroupsHeader); err != nil {
+	if err := validateProxyHeaders(p.Header, p.GroupsHeader, p.SecretHeader); err != nil {
+		return err
+	}
+	if err := validateProxySecret(p.Secret); err != nil {
 		return err
 	}
 	if err := validateProxyCIDRs(p.TrustedCIDRs); err != nil {
@@ -226,12 +233,32 @@ func (p ProxyAuthOptions) Validate() error {
 	return validateGroupLists("proxy_auth", p.AdminGroups, p.ViewerGroups)
 }
 
-func validateProxyHeaders(header, groupsHeader string) error {
+func validateProxyHeaders(header, groupsHeader, secretHeader string) error {
 	if strings.TrimSpace(header) == "" || !isValidHeaderToken(header) {
 		return fmt.Errorf("config: proxy_auth.header must be a valid HTTP header token, got %q", header)
 	}
 	if strings.TrimSpace(groupsHeader) == "" || !isValidHeaderToken(groupsHeader) {
 		return fmt.Errorf("config: proxy_auth.groups_header must be a valid HTTP header token, got %q", groupsHeader)
+	}
+	if strings.TrimSpace(secretHeader) == "" || !isValidHeaderToken(secretHeader) {
+		return fmt.Errorf("config: proxy_auth.secret_header must be a valid HTTP header token, got %q", secretHeader)
+	}
+	if strings.EqualFold(secretHeader, header) {
+		return errors.New("config: proxy_auth.secret_header must differ from proxy_auth.header")
+	}
+	if strings.EqualFold(secretHeader, groupsHeader) {
+		return errors.New("config: proxy_auth.secret_header must differ from proxy_auth.groups_header")
+	}
+	return nil
+}
+
+func validateProxySecret(secret string) error {
+	trimmed := strings.TrimSpace(secret)
+	if trimmed == "" {
+		return errors.New("config: proxy_auth.secret is required when proxy auth is enabled")
+	}
+	if len(trimmed) < 32 {
+		return errors.New("config: proxy_auth.secret must be at least 32 bytes")
 	}
 	return nil
 }
@@ -323,6 +350,9 @@ type APIKeyOptions struct {
 // ErrMissingSecret is returned when a production deployment lacks a required secret.
 var ErrMissingSecret = errors.New("config: required secret is empty")
 
+// DefaultProxySecretHeader is the header a trusted reverse proxy sends the shared secret in.
+const DefaultProxySecretHeader = "X-SnatchArr-Proxy-Secret" // #nosec G101 -- HTTP header name; the secret value comes from APP_SNATCHARR_PROXY_AUTH_SECRET
+
 // Default returns the defaults applied before config is unmarshalled over them.
 func Default() Options {
 	return Options{
@@ -337,6 +367,7 @@ func Default() Options {
 		ProxyAuth: ProxyAuthOptions{
 			Header:       "Remote-User",
 			GroupsHeader: "X-authentik-groups",
+			SecretHeader: DefaultProxySecretHeader,
 		},
 		Prowlarr: ProwlarrOptions{
 			LimitThreshold: 0.9,
@@ -397,6 +428,11 @@ func normalizeProxyAuth(p *ProxyAuthOptions) {
 	if p.GroupsHeader == "" {
 		p.GroupsHeader = "X-authentik-groups"
 	}
+	if p.SecretHeader == "" {
+		p.SecretHeader = DefaultProxySecretHeader
+	}
+	// Secret files often end in a newline; the proxy never sends one.
+	p.Secret = strings.TrimSpace(p.Secret)
 }
 
 func cleanTrusted(raw []string) []string {
@@ -503,6 +539,8 @@ func CompoundKeys() []string {
 		"snatcharr.proxy_auth.enabled",
 		"snatcharr.proxy_auth.header",
 		"snatcharr.proxy_auth.groups_header",
+		"snatcharr.proxy_auth.secret_header",
+		"snatcharr.proxy_auth.secret",
 		"snatcharr.proxy_auth.admin_groups",
 		"snatcharr.proxy_auth.viewer_groups",
 		"snatcharr.proxy_auth.trusted_cidrs",
