@@ -188,13 +188,10 @@ def collect_go(repo_root):
     env = os.environ.copy()
     env["GOOS"] = "linux"
     env["GOARCH"] = "amd64"
-    if "GOPATH" not in env or env["GOPATH"] == "/home/kilian/go":
-        env["GOPATH"] = "/home/kilian/.gotmp/go"
-    if "GOMODCACHE" not in env:
-        env["GOMODCACHE"] = "/home/kilian/go/pkg/mod"
+    gomodcache = run_cmd(["go", "env", "GOMODCACHE"], repo_root, env).strip()
 
     out = run_go_licenses(repo_root, env)
-    by_pkg = parse_go_report(out, env["GOMODCACHE"])
+    by_pkg = parse_go_report(out, gomodcache)
 
     go_pkgs = []
     for (name, ver), info in by_pkg.items():
