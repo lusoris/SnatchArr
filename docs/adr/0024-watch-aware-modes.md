@@ -50,19 +50,23 @@ Seerr (v3.5.1) marks availability from `statistics.episodeFileCount`, not from t
 | Episeerr | AGPL-3.0 | Episode-level progression from Jellyfin or Tautulli webhooks; dry run and an approval queue |
 | Jellyfin Media Cleaner plugin | GPL-3.0 | Removes played items inside Jellyfin; protection rules |
 
-No existing application gates seasons on watch state across Seerr requests at season granularity together with per-indexer search caps. Maintainerr covers most of remove-when-seen. Whether SnatchArr builds or links that half is open question 1.
+No existing application gates seasons on watch state across Seerr requests at season granularity together with per-indexer search caps. Maintainerr covers most of remove-when-seen today.
 
 ## Decision
 
 ### Module
 
-The two modes form one new module, **watch-aware modes**. The final display name is part of open question 4. It follows ADR-0018: its own package `api/internal/watchaware`, its own OpenAPI routes, its own tables and migrations, and off by default. The two modes have separate switches inside the module, so an operator can run the season gate without any removal.
+The two modes form one new module, **Watch-aware modes** (German label through Paraglide; `snatcharr-watch-module-name-20261023`). It follows ADR-0018: its own package `api/internal/watchaware`, its own OpenAPI routes, its own tables and migrations, and off by default. The two modes have separate switches inside the module, so an operator can run the season gate without any removal.
+
+### Order of delivery
+
+The season gate is built first (`snatcharr-watch-build-or-link-20261023`). Remove when seen follows in SnatchArr once the gate has shipped and its observe run has produced watch data; the design below fixes its shape now so the gate's tables and the watch predicate serve both. Until then, the documentation names Maintainerr as an alternative for removal. Revisit trigger: the gate's observe run is complete.
 
 Watch state is read through a `WatchSource` interface with one adapter per media server, on the existing goenvoy clients. Jellyfin and Emby come first, and Plex follows through Tautulli. A periodic sync runs as a `leader_loops` member (`gate.Provide[*T]()`). It stores per user, per item: played, last played and resume position. Webhooks can later shorten the delay; the poll stays the source of truth.
 
 "Watched" is one shared predicate for both modes. An item counts as watched by a user when `Played` is true, or when `PlayedPercentage` is at or above a threshold (default 90 %). A season counts as watched when the watched share of its aired episodes reaches a threshold (default: all of them for removal, and the last aired episode or 50 % for promotion).
 
-Whose watch counts is a per-mode setting:
+Whose watch counts is a per-mode setting (`snatcharr-watch-whose-watch-20261023`); the default is `all` for removal and `any` for promotion:
 
 - `requester`: the Seerr requester mapped to a Jellyfin user, falling back to `all` when the item has no request;
 - `any`: any user with access;
@@ -70,11 +74,13 @@ Whose watch counts is a per-mode setting:
 
 ### Season gate
 
+The gate is hard: it unmonitors later seasons in Sonarr rather than only skipping SnatchArr's own searches, because Sonarr's RSS sync would otherwise still grab them (`snatcharr-watch-gate-hard-20261023`).
+
 1. **On add.** For a series that enters Sonarr (from Seerr, an import list or by hand), the gate leaves seasons `1..N` monitored (default N = 1) and unmonitors the later ones through `PUT /api/v3/series/{id}`. Specials stay as Sonarr set them. Series that already have files beyond the gate are never narrowed: the gate only holds back, it never removes.
 2. **Seerr requests are not edited.** The request stays as the user made it; Seerr shows the show as partially available.
    - The SnatchArr request view marks the held seasons as "waiting for season N to be watched".
    - SnatchArr reads that state from its own gate table, not from Seerr.
-3. **Promotion.** When the gate season counts as watched (under the configured "whose watch" rule), the next season is monitored, and SnatchArr's core search picks it up under the normal hourly caps.
+3. **Promotion.** When the gate season counts as watched (under the promotion "whose watch" rule, default `any`), the next season is monitored, and SnatchArr's core search picks it up under the normal hourly caps.
    - The look-ahead setting (default 1) says how many seasons stay monitored ahead of the furthest watched one.
 4. **Exemptions.**
    - A Sonarr tag (default `snatcharr-no-gate`) exempts a series.
@@ -84,7 +90,7 @@ Whose watch counts is a per-mode setting:
 
 ### Remove when seen
 
-Removal is staged. Each stage can be inspected in the UI and audited in a table.
+This mode is the later delivery step (see Order of delivery). Removal is staged. Each stage can be inspected in the UI and audited in a table.
 
 1. **Candidate.** A movie, or a season of a series, counts as watched under the removal "whose watch" rule (default `all`). Its last play must also be older than a minimum age (default 14 days).
 2. **Protections.** Any one of these keeps the item:
@@ -131,20 +137,27 @@ The two modes fit together: a season removed after watching stays unmonitored, a
 - Plex users need Tautulli, which adds an application to their stack.
 - Watch-state sync adds load on the media server; the poll interval and page size need bounds.
 
-## Open questions
+## Decisions taken
 
-These are sent to the controller as DECISION lines; this ADR stays proposed until they are answered.
+The four open questions of the first draft were answered on 2026-10-23:
 
-1. `snatcharr-watch-build-or-link-20261023`: build remove-when-seen in SnatchArr, or link Maintainerr for it and build only the season gate.
-2. `snatcharr-watch-gate-hard-20261023`: hard gate (unmonitor in Sonarr) or soft gate (SnatchArr only skips the searches; Sonarr RSS can still grab later seasons).
-3. `snatcharr-watch-whose-watch-20261023`: default "whose watch counts" rule for removal and for promotion.
-4. `snatcharr-watch-module-name-20261023`: final module name, as shown on the settings page.
+| Question | Answer |
+| :--- | :--- |
+| Build remove-when-seen or link Maintainerr (`snatcharr-watch-build-or-link-20261023`) | Build the season gate now; build removal in SnatchArr after the gate's observe run; name Maintainerr as an alternative meanwhile |
+| Hard or soft gate (`snatcharr-watch-gate-hard-20261023`) | Hard gate, observe mode first, tag `snatcharr-no-gate` exempts a series |
+| Whose watch counts (`snatcharr-watch-whose-watch-20261023`) | Removal `all`, promotion `any`; the per-mode setting stays |
+| Module name (`snatcharr-watch-module-name-20261023`) | Watch-aware modes, with a German equivalent; package `api/internal/watchaware` |
 
 ## Follow-ups
 
 - goenvoy: confirm `UserData.PlayedPercentage` and `PlaybackPositionTicks` on the Jellyfin and Emby clients, and add a collection write for "leaving soon".
-- Implementation plan, after the open questions are answered: watch-state sync first, then the season gate in observe mode, then removal in observe mode.
+- Implementation plan: watch-state sync first, then the season gate in observe mode, then the gate in act mode. Removal follows after the gate's observe run.
+- Docs: name Maintainerr as an alternative for removal until remove when seen ships.
 
 ## References
 
 - `snatcharr-watch-aware-modes-20261023` (2026-10-23T16:02:09) (paraphrased): SnatchArr lacks two watch-aware modes: removal of watched media in a configurable, cautious form, and a season gate that fetches only the first part of an unwatched show and narrows all-season requests until that part is watched. Concept first.
+- `snatcharr-watch-build-or-link-20261023` (2026-10-23T17:10:36) (paraphrased): build the season gate now; removal follows later in SnatchArr after the gate's observe run; Maintainerr may be named meanwhile.
+- `snatcharr-watch-gate-hard-20261023` (2026-10-23T17:10:36) (paraphrased): hard gate that unmonitors later seasons in Sonarr, observe mode first, an exemption tag per series.
+- `snatcharr-watch-whose-watch-20261023` (2026-10-23T17:10:36) (paraphrased): default rules removal all and promotion any; the per-mode setting stays.
+- `snatcharr-watch-module-name-20261023` (2026-10-23T17:10:36) (paraphrased): settings-page name Watch-aware modes with a German equivalent; package name unchanged.
