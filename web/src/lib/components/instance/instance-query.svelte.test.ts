@@ -19,12 +19,15 @@ describe('instanceQuery', () => {
 	});
 
 	it('positive: loads instance data with a static id string', async () => {
-		stubGet({
+		const getSpy = stubGet({
 			'/instances/{instanceId}': forkInstance
 		});
 		renderWithQuery(InstanceQueryHarness, { id: forkInstance.id });
 
 		expect(await settled('loaded')).toBe(forkInstance.name);
+		expect(getSpy).toHaveBeenCalledWith('/instances/{instanceId}', {
+			params: { path: { instanceId: forkInstance.id } }
+		});
 	});
 
 	it('negative: enters error state when endpoint fails', async () => {
@@ -37,11 +40,16 @@ describe('instanceQuery', () => {
 	});
 
 	it('boundary: resolves data when id is supplied as a getter function', async () => {
-		stubGet({
+		const getSpy = stubGet({
 			'/instances/{instanceId}': forkInstance
 		});
-		renderWithQuery(InstanceQueryHarness, { id: () => forkInstance.id });
+		const getId = vi.fn(() => forkInstance.id);
+		renderWithQuery(InstanceQueryHarness, { id: getId });
 
 		expect(await settled('loaded')).toBe(forkInstance.name);
+		expect(getId).toHaveBeenCalled();
+		expect(getSpy).toHaveBeenCalledWith('/instances/{instanceId}', {
+			params: { path: { instanceId: forkInstance.id } }
+		});
 	});
 });

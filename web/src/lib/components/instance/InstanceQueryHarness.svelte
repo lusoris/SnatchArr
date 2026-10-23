@@ -3,6 +3,7 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { instanceQuery } from './instance-query.svelte.js';
 
 	interface Props {
@@ -10,7 +11,7 @@ SPDX-License-Identifier: EUPL-1.2
 	}
 
 	const { id }: Props = $props();
-	const query = instanceQuery(() => (typeof id === 'function' ? id() : id));
+	const query = instanceQuery(untrack(() => id));
 </script>
 
 {#if query.isPending}
