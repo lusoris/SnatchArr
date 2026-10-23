@@ -48,36 +48,15 @@ cleanup() {
 }
 trap cleanup EXIT
 
-fail() {
-    echo "dlclients-live: $*" >&2
-    exit 1
-}
-
-# answers URL: true once URL answers HTTP at all (any status), within 90 s.
-answers() {
-    local i
-    for i in $(seq 1 90); do
-        if curl -s -o /dev/null --max-time 2 "$1"; then return 0; fi
-        sleep 1
-    done
-    fail "$1 did not answer within 90 s (tries: $i)"
-}
+label="dlclients-live"
+# shellcheck source=tools/e2e/live_lib.sh
+. "$(dirname "$0")/live_lib.sh"
 
 # jsonrpc URL BODY [curl options]: one JSON-RPC call with a deadline.
 jsonrpc() {
     local url=$1 body=$2
     shift 2
     curl -sf --max-time 10 -H 'Content-Type: application/json' -d "$body" "$@" "$url"
-}
-
-qbit_password() {
-    local i pass
-    for i in $(seq 1 60); do
-        pass=$(dc logs --no-color qbittorrent 2>/dev/null | sed -n 's/.*temporary password is provided for this session: \([^ ]*\).*/\1/p' | tail -1 | tr -d '\r')
-        if [ -n "$pass" ]; then printf '%s' "$pass"; return 0; fi
-        sleep 1
-    done
-    fail "qBittorrent printed no temporary password within 60 s (tries: $i)"
 }
 
 sab_key() {

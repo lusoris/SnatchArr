@@ -31,10 +31,9 @@ work=$(mktemp -d)
 ns=""
 pf=""
 
-fail() {
-    echo "chart-install: $*" >&2
-    exit 1
-}
+label="chart-install"
+# shellcheck source=tools/e2e/live_lib.sh
+. "$(dirname "$0")/live_lib.sh"
 
 # diagnose prints what an operator needs to see why an install is not Ready.
 diagnose() {
@@ -142,16 +141,6 @@ secret_keys() {
         -o go-template='{{range $k, $v := .data}}{{$k}}={{$v}}{{"\n"}}{{end}}'
 }
 
-# add_image adds the --set arguments for a CHART_<component>_IMAGE of repository:tag.
-images=()
-add_image() {
-    local component=$1 ref=$2
-    [ -n "$ref" ] || return 0
-    [[ "$ref" == *:* && "${ref##*:}" != */* && "$ref" != *@* ]] ||
-        fail "$component image $ref is not repository:tag"
-    images+=(--set "image.$component.repository=${ref%:*}" --set "image.$component.tag=${ref##*:}"
-        --set "image.$component.pullPolicy=Never")
-}
 add_image api "${CHART_API_IMAGE:-}"
 add_image worker "${CHART_WORKER_IMAGE:-}"
 echo "chart-install: api image ${CHART_API_IMAGE:-released appVersion}, worker image ${CHART_WORKER_IMAGE:-released appVersion}"

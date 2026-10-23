@@ -68,20 +68,10 @@ cleanup() {
 }
 trap cleanup EXIT
 
-fail() {
-    echo "integrations-live: $*" >&2
-    exit 1
-}
-
-free_port() {
-    local port=$1 tries=0
-    while (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null; do
-        port=$((port + 1))
-        tries=$((tries + 1))
-        [ "$tries" -lt 100 ] || fail "no free port from $1"
-    done
-    echo "$port"
-}
+label="integrations-live"
+FREE_PORT_MAX_TRIES=100
+# shellcheck source=tools/e2e/live_lib.sh
+. "$(dirname "$0")/live_lib.sh"
 
 base_port=${INTEGRATIONS_BASE_PORT:-18300}
 allocate_port() {
