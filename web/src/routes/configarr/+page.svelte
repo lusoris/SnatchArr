@@ -8,7 +8,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { api } from '#lib/api/client.js';
 	import type { components } from '#lib/api/schema.js';
 	import FormCard from '#lib/components/FormCard.svelte';
-	import ProblemNote from '#lib/components/ProblemNote.svelte';
+	import QueryGuard from '#lib/components/QueryGuard.svelte';
 	import TextField from '#lib/components/TextField.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
@@ -54,43 +54,40 @@ SPDX-License-Identifier: EUPL-1.2
 	<h2 id="configarr-status-title" class="mb-3 text-lg font-semibold">
 		{m.configarr_status_title()}
 	</h2>
-	{#if status.isPending}
-		<p aria-live="polite">{m.loading()}</p>
-	{:else if status.isError}
-		<ProblemNote error={status.error} />
-	{:else if status.data}
-		{@const st = status.data}
-		<ul class="flex flex-col gap-1 text-sm">
-			<li class="break-all">
-				{st.linked && st.config_path
-					? m.configarr_linked({ path: st.config_path })
-					: m.configarr_not_linked()}
-			</li>
-			{#if st.secrets_path}
-				<li class="break-all">{m.configarr_secrets_linked({ path: st.secrets_path })}</li>
-			{/if}
-			<li>{st.watching ? m.configarr_watching() : m.configarr_not_watching()}</li>
-			<li>
-				{st.last_import_at
-					? m.configarr_last_import({ when: formatWhen(st.last_import_at, getLocale()) })
-					: m.configarr_never_imported()}
-			</li>
-			{#if st.last_result}
-				<li>{resultText(st.last_result)}</li>
-			{/if}
-			{#if st.last_error}
-				<li class="text-danger">{m.configarr_last_error({ detail: st.last_error })}</li>
-			{/if}
-		</ul>
-		{#if st.last_result && st.last_result.warnings.length > 0}
-			<h3 class="mt-3 text-sm font-semibold">{m.configarr_warnings()}</h3>
-			<ul class="list-disc ps-5 text-sm">
-				{#each st.last_result.warnings as w, i (i)}
-					<li>{w}</li>
-				{/each}
+	<QueryGuard query={status}>
+		{#snippet children(st)}
+			<ul class="flex flex-col gap-1 text-sm">
+				<li class="break-all">
+					{st.linked && st.config_path
+						? m.configarr_linked({ path: st.config_path })
+						: m.configarr_not_linked()}
+				</li>
+				{#if st.secrets_path}
+					<li class="break-all">{m.configarr_secrets_linked({ path: st.secrets_path })}</li>
+				{/if}
+				<li>{st.watching ? m.configarr_watching() : m.configarr_not_watching()}</li>
+				<li>
+					{st.last_import_at
+						? m.configarr_last_import({ when: formatWhen(st.last_import_at, getLocale()) })
+						: m.configarr_never_imported()}
+				</li>
+				{#if st.last_result}
+					<li>{resultText(st.last_result)}</li>
+				{/if}
+				{#if st.last_error}
+					<li class="text-danger">{m.configarr_last_error({ detail: st.last_error })}</li>
+				{/if}
 			</ul>
-		{/if}
-	{/if}
+			{#if st.last_result && st.last_result.warnings.length > 0}
+				<h3 class="mt-3 text-sm font-semibold">{m.configarr_warnings()}</h3>
+				<ul class="list-disc ps-5 text-sm">
+					{#each st.last_result.warnings as w, i (i)}
+						<li>{w}</li>
+					{/each}
+				</ul>
+			{/if}
+		{/snippet}
+	</QueryGuard>
 </section>
 
 <FormCard
