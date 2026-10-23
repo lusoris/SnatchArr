@@ -162,6 +162,24 @@ async function sampleCard() {
 	return within(heading.closest('li') as HTMLElement);
 }
 
+/** Stubs list GET endpoints and renders the page with a PUT spy. */
+async function openEdit() {
+	stubGet(listStubs);
+	const putSpy = vi.spyOn(api, 'PUT').mockResolvedValue({ data: sampleClient } as never);
+	renderWithQuery(DownloadClientsPage);
+	await fireEvent.click((await sampleCard()).getByRole('button', { name: m.action_edit() }));
+	return putSpy;
+}
+
+/** Stubs list GET endpoints and renders the page with a POST probe spy and toast spy. */
+function renderWithTestProbe() {
+	stubGet(listStubs);
+	const success = vi.spyOn(toast, 'success');
+	const postSpy = vi.spyOn(api, 'POST').mockResolvedValue({ data: sampleStatus } as never);
+	renderWithQuery(DownloadClientsPage);
+	return { success, postSpy };
+}
+
 describe('download-clients management', () => {
 	afterEach(() => {
 		vi.restoreAllMocks();
@@ -218,11 +236,7 @@ describe('download-clients management', () => {
 	});
 
 	it('edits a client: prefilled except the secret, which stays out when left empty', async () => {
-		stubGet(listStubs);
-		const putSpy = vi.spyOn(api, 'PUT').mockResolvedValue({ data: sampleClient } as never);
-		renderWithQuery(DownloadClientsPage);
-
-		await fireEvent.click((await sampleCard()).getByRole('button', { name: m.action_edit() }));
+		const putSpy = await openEdit();
 
 		expect(
 			screen.getByRole('heading', {
@@ -258,11 +272,7 @@ describe('download-clients management', () => {
 	});
 
 	it('sends a new secret typed while editing', async () => {
-		stubGet(listStubs);
-		const putSpy = vi.spyOn(api, 'PUT').mockResolvedValue({ data: sampleClient } as never);
-		renderWithQuery(DownloadClientsPage);
-
-		await fireEvent.click((await sampleCard()).getByRole('button', { name: m.action_edit() }));
+		const putSpy = await openEdit();
 		await fill(m.dlclients_secret(), 'rotated-password');
 		await fireEvent.click(screen.getByRole('button', { name: m.action_save() }));
 
@@ -305,10 +315,7 @@ describe('download-clients management', () => {
 	});
 
 	it('tests a stored client and reports the observation', async () => {
-		stubGet(listStubs);
-		const success = vi.spyOn(toast, 'success');
-		const postSpy = vi.spyOn(api, 'POST').mockResolvedValue({ data: sampleStatus } as never);
-		renderWithQuery(DownloadClientsPage);
+		const { success, postSpy } = renderWithTestProbe();
 
 		await fireEvent.click((await sampleCard()).getByRole('button', { name: m.action_test() }));
 
@@ -321,10 +328,7 @@ describe('download-clients management', () => {
 	});
 
 	it('tests the typed values before saving, and only on the create form', async () => {
-		stubGet(listStubs);
-		const success = vi.spyOn(toast, 'success');
-		const postSpy = vi.spyOn(api, 'POST').mockResolvedValue({ data: sampleStatus } as never);
-		renderWithQuery(DownloadClientsPage);
+		const { success, postSpy } = renderWithTestProbe();
 
 		await screen.findByLabelText(m.dlclients_instance());
 		const form = within(screen.getByRole('region', { name: m.dlclients_add() }) as HTMLElement);
