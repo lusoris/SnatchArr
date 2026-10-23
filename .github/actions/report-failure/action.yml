@@ -1,0 +1,25 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+name: Report Failure
+description: Opens or updates a GitHub issue on workflow failure on main.
+inputs:
+  title-suffix:
+    description: Suffix for the issue title (e.g. Soak)
+    required: false
+    default: ''
+runs:
+  using: composite
+  steps:
+    - name: Open or update the issue
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GH_REPO: ${{ github.repository }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        TITLE_SUFFIX: ${{ inputs.title-suffix }}
+      run: |
+        if [ -n "$TITLE_SUFFIX" ]; then
+          sh tools/ci/security_issue.sh "$RUN_URL" "$TITLE_SUFFIX"
+        else
+          sh tools/ci/security_issue.sh "$RUN_URL"
+        fi
