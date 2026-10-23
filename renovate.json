@@ -430,6 +430,17 @@
       "allowedVersions": "!/^\\d+\\.04\\./"
     },
     {
+      "description": "linuxserver/qbittorrent also keeps the 14.x tags of its 2022 libtorrent builds (14.3.9 = qBittorrent 4.3.9, pushed 2022-01-06), which read as a major above 5.x (#518 proposed v14). This rule replaces the one above for qbittorrent, so it repeats the Ubuntu-base exclusion",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchDepNames": [
+        "docker.io/linuxserver/qbittorrent",
+        "linuxserver/qbittorrent"
+      ],
+      "allowedVersions": "!/^(\\d+\\.04\\.|14\\.)/"
+    },
+    {
       "description": "@playwright/test and the Playwright image of the visual baseline move together: tools/e2e/web_visual.sh refuses an image whose version differs from the lockfile",
       "matchDepNames": [
         "@playwright/test",
