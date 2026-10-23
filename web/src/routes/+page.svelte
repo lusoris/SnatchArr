@@ -111,20 +111,20 @@ SPDX-License-Identifier: EUPL-1.2
 			</ul>
 		</section>
 	{/if}
-	<ul class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+	<ul class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
 		{#each instances.data ?? [] as inst (inst.id)}
 			{@const cap = capFor(inst, caps.data)}
 			<li class="card flex flex-col gap-3">
 				<div class="flex items-start justify-between gap-2">
-					<div>
+					<div class="min-w-0">
 						<h2 class="text-lg font-semibold">
 							<a class="hover:underline" href={resolve(`instances/${inst.id}`)}>{inst.name}</a>
 						</h2>
-						<p class="text-sm text-subtle">
+						<p class="text-sm [overflow-wrap:anywhere] text-subtle">
 							{instanceKindLabel(inst.kind, inst.last_seen_product)} · {inst.base_url}
 						</p>
 					</div>
-					<span class="rounded-full border border-line px-2 py-0.5 text-xs"
+					<span class="shrink-0 rounded-full border border-line px-2 py-0.5 text-xs"
 						>{inst.enabled ? m.instance_enabled() : m.instance_disabled()}</span
 					>
 				</div>
