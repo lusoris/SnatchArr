@@ -11,6 +11,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import ConfirmDelete from '#lib/components/ConfirmDelete.svelte';
 	import DownloadClientForm from '#lib/components/DownloadClientForm.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
+	import { deleteCallbacks, probeFailed, saveSuccess } from '#lib/forms.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { keys } from '#lib/query.js';
 	import { session } from '#lib/session.svelte.js';
@@ -63,10 +64,7 @@ SPDX-License-Identifier: EUPL-1.2
 			return res.data;
 		},
 		invalidates: [keys.dlclients, keys.dlstatus],
-		onSuccess: (c) => {
-			toast.success(m.form_saved({ name: c?.name ?? '' }));
-			closeForm();
-		}
+		onSuccess: saveSuccess(closeForm)
 	});
 
 	const remove = createSentioMutation({
@@ -75,11 +73,7 @@ SPDX-License-Identifier: EUPL-1.2
 			return c;
 		},
 		invalidates: [keys.dlclients, keys.dlstatus],
-		onSuccess: (c) => {
-			toast.success(m.form_deleted({ name: c.name }));
-			if (editing?.id === c.id) closeForm();
-		},
-		onError: (err) => toast.error(describeError(err))
+		...deleteCallbacks(() => editing, closeForm)
 	});
 
 	const probe = createSentioMutation({
@@ -91,7 +85,7 @@ SPDX-License-Identifier: EUPL-1.2
 		},
 		invalidates: [keys.dlclients, keys.dlstatus],
 		onSuccess: reportObservation,
-		onError: (err) => toast.error(m.probe_failed({ detail: describeError(err) }))
+		onError: probeFailed
 	});
 
 	const probeInput = createSentioMutation({
@@ -100,7 +94,7 @@ SPDX-License-Identifier: EUPL-1.2
 			return { name: body.name, observed: res.data };
 		},
 		onSuccess: reportObservation,
-		onError: (err) => toast.error(m.probe_failed({ detail: describeError(err) }))
+		onError: probeFailed
 	});
 
 	function reportObservation({
