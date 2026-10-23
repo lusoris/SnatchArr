@@ -169,20 +169,30 @@ describe('account', () => {
 		});
 	});
 
+	async function fillAndSubmitPassword(current: string, next: string, confirm: string) {
+		const currentPass = (await screen.findByLabelText(m.current_password())) as HTMLInputElement;
+		const newPass = screen.getByLabelText(m.new_password()) as HTMLInputElement;
+		const confirmPass = screen.getByLabelText(m.confirm_new_password()) as HTMLInputElement;
+		const submitBtn = screen.getByRole('button', { name: m.change_password_submit() });
+
+		await fireEvent.input(currentPass, { target: { value: current } });
+		await fireEvent.input(newPass, { target: { value: next } });
+		await fireEvent.input(confirmPass, { target: { value: confirm } });
+		await fireEvent.click(submitBtn);
+
+		return { currentPass, newPass, confirmPass };
+	}
+
 	it('blocks password change client-side when confirmation does not match', async () => {
 		stubGet(baseStubs);
 		const postSpy = vi.spyOn(api, 'POST');
 		renderWithQuery(AccountPage);
 
-		const currentPass = await screen.findByLabelText(m.current_password());
-		const newPass = screen.getByLabelText(m.new_password());
-		const confirmPass = screen.getByLabelText(m.confirm_new_password());
-		const submitBtn = screen.getByRole('button', { name: m.change_password_submit() });
-
-		await fireEvent.input(currentPass, { target: { value: 'current-valid-password' } });
-		await fireEvent.input(newPass, { target: { value: 'new-valid-password-123' } });
-		await fireEvent.input(confirmPass, { target: { value: 'different-password-123' } });
-		await fireEvent.click(submitBtn);
+		await fillAndSubmitPassword(
+			'current-valid-password',
+			'new-valid-password-123',
+			'different-password-123'
+		);
 
 		expect(postSpy).not.toHaveBeenCalled();
 		expect(screen.getByText(m.password_mismatch())).toBeTruthy();
@@ -200,15 +210,11 @@ describe('account', () => {
 		);
 		renderWithQuery(AccountPage);
 
-		const currentPass = await screen.findByLabelText(m.current_password());
-		const newPass = screen.getByLabelText(m.new_password());
-		const confirmPass = screen.getByLabelText(m.confirm_new_password());
-		const submitBtn = screen.getByRole('button', { name: m.change_password_submit() });
-
-		await fireEvent.input(currentPass, { target: { value: 'current-valid-password' } });
-		await fireEvent.input(newPass, { target: { value: 'new-weak-password-123' } });
-		await fireEvent.input(confirmPass, { target: { value: 'new-weak-password-123' } });
-		await fireEvent.click(submitBtn);
+		await fillAndSubmitPassword(
+			'current-valid-password',
+			'new-weak-password-123',
+			'new-weak-password-123'
+		);
 
 		expect(await screen.findByText('password too weak')).toBeTruthy();
 	});
@@ -218,19 +224,15 @@ describe('account', () => {
 		vi.spyOn(api, 'POST').mockResolvedValue({ data: undefined } as never);
 		renderWithQuery(AccountPage);
 
-		const currentPass = await screen.findByLabelText(m.current_password());
-		const newPass = screen.getByLabelText(m.new_password());
-		const confirmPass = screen.getByLabelText(m.confirm_new_password());
-		const submitBtn = screen.getByRole('button', { name: m.change_password_submit() });
-
-		await fireEvent.input(currentPass, { target: { value: 'current-valid-password' } });
-		await fireEvent.input(newPass, { target: { value: 'new-valid-password-123' } });
-		await fireEvent.input(confirmPass, { target: { value: 'new-valid-password-123' } });
-		await fireEvent.click(submitBtn);
+		const { currentPass, newPass, confirmPass } = await fillAndSubmitPassword(
+			'current-valid-password',
+			'new-valid-password-123',
+			'new-valid-password-123'
+		);
 
 		expect(await screen.findByText(m.password_changed_sessions_ended())).toBeTruthy();
-		expect((currentPass as HTMLInputElement).value).toBe('');
-		expect((newPass as HTMLInputElement).value).toBe('');
-		expect((confirmPass as HTMLInputElement).value).toBe('');
+		expect(currentPass.value).toBe('');
+		expect(newPass.value).toBe('');
+		expect(confirmPass.value).toBe('');
 	});
 });
