@@ -342,6 +342,16 @@ func TestValidate(t *testing.T) {
 			o.ProxyAuth.TrustedCIDRs = []string{"10.0.0.0/8"}
 			o.ProxyAuth.AdminGroups = []string{"admin"}
 		}, nil, true},
+		{"positive metrics addr empty ok", func(o *config.Options) { o.Metrics.Addr = "" }, nil, false},
+		{"positive metrics addr port only ok", func(o *config.Options) { o.Metrics.Addr = ":9090" }, nil, false},
+		{"positive metrics addr host and port ok", func(o *config.Options) { o.Metrics.Addr = "127.0.0.1:9090" }, nil, false},
+		{"boundary metrics addr port 1 ok", func(o *config.Options) { o.Metrics.Addr = ":1" }, nil, false},
+		{"boundary metrics addr port 65535 ok", func(o *config.Options) { o.Metrics.Addr = ":65535" }, nil, false},
+		{"negative metrics addr port 0 refused", func(o *config.Options) { o.Metrics.Addr = ":0" }, nil, true},
+		{"negative metrics addr port 65536 refused", func(o *config.Options) { o.Metrics.Addr = ":65536" }, nil, true},
+		{"negative metrics addr non-numeric port refused", func(o *config.Options) { o.Metrics.Addr = ":abc" }, nil, true},
+		{"negative metrics addr missing port refused", func(o *config.Options) { o.Metrics.Addr = "localhost" }, nil, true},
+		{"negative metrics addr numeric without colon refused", func(o *config.Options) { o.Metrics.Addr = "9090" }, nil, true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -869,6 +879,50 @@ func TestLoadProxyAuthSecretTrimmed(t *testing.T) {
 			}
 			if opts.ProxyAuth.Secret != tc.wantSecret {
 				t.Fatalf("ProxyAuth.Secret length = %d, want %d", len(opts.ProxyAuth.Secret), len(tc.wantSecret))
+			}
+		})
+	}
+}
+
+func TestMetricsAddr_Load(t *testing.T) {
+	cases := []struct {
+		name     string
+		envVal   string
+		wantAddr string
+		wantErr  bool
+	}{
+		{"positive empty default ok", "", "", false},
+		{"positive custom port ok", ":9090", ":9090", false},
+		{"positive host and port ok", "127.0.0.1:9090", "127.0.0.1:9090", false},
+		{"boundary port 1 ok", ":1", ":1", false},
+		{"boundary port 65535 ok", ":65535", ":65535", false},
+		{"negative port 0 refused", ":0", "", true},
+		{"negative port 65536 refused", ":65536", "", true},
+		{"negative non numeric port refused", ":abc", "", true},
+		{"negative missing port refused", "localhost", "", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("APP_SNATCHARR_PROFILE", "dev")
+			if tc.envVal != "" {
+				t.Setenv("APP_SNATCHARR_METRICS_ADDR", tc.envVal)
+			}
+			cfg, err := gconfig.New(gconfig.Options{EnvPrefix: "APP_"})
+			if err != nil {
+				t.Fatalf("gconfig.New: %v", err)
+			}
+			opts, err := config.Load(cfg)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("config.Load accepted invalid metrics addr %q", tc.envVal)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("config.Load: %v", err)
+			}
+			if opts.Metrics.Addr != tc.wantAddr {
+				t.Fatalf("Metrics.Addr = %q, want %q", opts.Metrics.Addr, tc.wantAddr)
 			}
 		})
 	}

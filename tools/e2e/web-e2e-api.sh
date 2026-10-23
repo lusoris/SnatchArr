@@ -12,15 +12,9 @@ set -euo pipefail
 : "${SMOKE_API_BIN:?path to the snatcharr binary}"
 : "${SMOKE_FAKEARR_BIN:?path to the fakearr binary}"
 
-free_port() {
-    local port=$1 tries=0
-    while (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null; do
-        port=$((port + 1))
-        tries=$((tries + 1))
-        [ "$tries" -lt 50 ] || { echo "web-e2e-api: no free port from $1" >&2; exit 1; }
-    done
-    echo "$port"
-}
+label="web-e2e-api"
+# shellcheck source=tools/e2e/live_lib.sh
+. "$(dirname "$0")/live_lib.sh"
 
 SONARR_PORT=$(free_port "${SMOKE_SONARR_PORT:-18989}")
 default_flow_port=$((SONARR_PORT >= 18990 ? SONARR_PORT + 1 : 18990))

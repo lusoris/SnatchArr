@@ -5,15 +5,14 @@ SPDX-License-Identifier: EUPL-1.2
 <script lang="ts">
 	import { tick } from 'svelte';
 	import { createSentioQuery, createSentioMutation } from '@sveltesentio/query';
-	import { toast } from 'svelte-sonner';
-	import { api, describeError } from '#lib/api/client.js';
+	import { api } from '#lib/api/client.js';
 	import type { components } from '#lib/api/schema.js';
-	import ConfirmDelete from '#lib/components/ConfirmDelete.svelte';
+	import LinkCard from '#lib/components/LinkCard.svelte';
 	import LinkForm, { type LinkBody } from '#lib/components/LinkForm.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
+	import { deleteCallbacks, probeCallbacks, saveSuccess } from '#lib/forms.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
-	import { probeMessage } from '#lib/products.js';
 	import { keys } from '#lib/query.js';
 	import { formatWhen } from '#lib/stamina.js';
 	import { evaluateLimit, isIndexerExhausted, isIndexerNearLimit } from '#lib/prowlarr.js';
@@ -46,10 +45,7 @@ SPDX-License-Identifier: EUPL-1.2
 			return res.data;
 		},
 		invalidates: [keys.prowlarrLinks, keys.prowlarr],
-		onSuccess: (link) => {
-			toast.success(m.form_saved({ name: link?.name ?? '' }));
-			closeForm();
-		}
+		onSuccess: saveSuccess(closeForm)
 	});
 
 	const remove = createSentioMutation({
@@ -58,25 +54,19 @@ SPDX-License-Identifier: EUPL-1.2
 			return link;
 		},
 		invalidates: [keys.prowlarrLinks, keys.prowlarr],
-		onSuccess: (link) => {
-			toast.success(m.form_deleted({ name: link.name }));
-			if (editing?.id === link.id) closeForm();
-		},
-		onError: (err) => toast.error(describeError(err))
+		...deleteCallbacks(() => editing, closeForm)
 	});
 
 	const probe = createSentioMutation({
 		mutationFn: async (linkId: string) =>
 			(await api.POST('/prowlarr/{linkId}/test', { params: { path: { linkId } } })).data,
 		invalidates: [keys.prowlarrLinks],
-		onSuccess: (r) => toast.success(probeMessage(r)),
-		onError: (err) => toast.error(m.probe_failed({ detail: describeError(err) }))
+		...probeCallbacks()
 	});
 
 	const probeInput = createSentioMutation({
 		mutationFn: async (body: LinkBody) => (await api.POST('/prowlarr/test', { body })).data,
-		onSuccess: (r) => toast.success(probeMessage(r)),
-		onError: (err) => toast.error(m.probe_failed({ detail: describeError(err) }))
+		...probeCallbacks()
 	});
 
 	function indexerReason(idx: ProwlarrIndexerStatus): string | undefined {
@@ -153,34 +143,14 @@ SPDX-License-Identifier: EUPL-1.2
 {:else}
 	<ul class="mb-6 grid gap-3 md:grid-cols-2">
 		{#each links.data ?? [] as link (link.id)}
-			<li class="card">
-				<h3 class="font-semibold">
-					{link.name} <span class="text-sm text-subtle">{link.last_seen_version ?? ''}</span>
-				</h3>
-				<p class="text-sm break-all text-subtle">{link.base_url}</p>
-				<p class="text-sm">
-					{link.last_check_at
-						? m.link_last_check({ when: formatWhen(link.last_check_at, getLocale()) })
-						: m.instance_never_tested()}
-				</p>
-				{#if link.last_error}<p class="text-sm text-danger">{link.last_error}</p>{/if}
-				{#if session.isAdmin}
-					<div class="mt-3 flex flex-wrap gap-2">
-						<button type="button" class="btn" onclick={() => edit(link)}>{m.action_edit()}</button>
-						<button
-							type="button"
-							class="btn"
-							disabled={probe.isPending}
-							onclick={() => probe.mutate(link.id)}>{m.action_test()}</button
-						>
-						<ConfirmDelete
-							name={link.name}
-							disabled={remove.isPending}
-							onconfirm={() => remove.mutate(link)}
-						/>
-					</div>
-				{/if}
-			</li>
+			<LinkCard
+				{link}
+				testPending={probe.isPending}
+				deletePending={remove.isPending}
+				onedit={() => edit(link)}
+				ontest={() => probe.mutate(link.id)}
+				ondelete={() => remove.mutate(link)}
+			/>
 		{/each}
 	</ul>
 {/if}

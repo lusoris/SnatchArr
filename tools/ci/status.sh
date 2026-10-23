@@ -107,8 +107,17 @@ first_steps() {
     /^jobs:$/ { in_jobs = 1; next }
     in_jobs && /^  [A-Za-z0-9_-]+:$/ { job = substr($0, 3, length($0) - 3); in_steps = 0; seen = 0; next }
     in_jobs && job != "" && /^    steps:$/ { in_steps = 1; next }
+    # A step anchored as &stop-draft names itself on the next line; *stop-draft resolves to that name.
+    anchored != "" {
+      step = $0
+      if (sub(/^        name: /, "", step)) draft = step; else step = "&stop-draft"
+      print anchored "|" step; anchored = ""; next
+    }
     in_steps && !seen && /^      - / {
-      step = $0; sub(/^      - (name: )?/, "", step); print job "|" step; seen = 1
+      step = $0; sub(/^      - (name: )?/, "", step); seen = 1
+      if (step == "&stop-draft") { anchored = job; next }
+      if (step == "*stop-draft" && draft != "") step = draft
+      print job "|" step
     }
   ' "$1"
 }
