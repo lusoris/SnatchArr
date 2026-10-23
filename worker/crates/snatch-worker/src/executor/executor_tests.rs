@@ -318,7 +318,7 @@ async fn mount_sonarr(
 }
 
 /// Answers every search command POST with `response`.
-async fn mount_command(server: &MockServer, response: ResponseTemplate) {
+async fn mount_command(server: &MockServer, response: impl wiremock::Respond + 'static) {
     Mock::given(method("POST"))
         .and(path("/api/v3/command"))
         .respond_with(response)
@@ -364,19 +364,21 @@ struct SonarrRun {
     requests: Vec<wiremock::Request>,
 }
 
-async fn run_sonarr_cycle(
+/// Runs one wanted-list cycle against `api`, mounting `wanted` and `command` on a fresh mock
+/// server and applying `configure` to [`default_run`] before polling.
+async fn run_wanted_cycle(
     api: &FakeApi,
     wanted: serde_json::Value,
-    per_cycle: Option<u32>,
+    command: impl wiremock::Respond + 'static,
+    configure: impl FnOnce(&mut Run) -> TestResult,
 ) -> Result<SonarrRun, Box<dyn std::error::Error>> {
     let (client, _) = start_fake_api(api.clone()).await?;
     let mock_server = MockServer::start().await;
-    mount_sonarr_default(&mock_server, wanted).await;
+    mount_sonarr_wanted(&mock_server, wanted).await;
+    mount_command(&mock_server, command).await;
 
     let mut run = default_run(&mock_server.uri());
-    if let Some(pc) = per_cycle {
-        some(run.policy.as_mut(), "run policy")?.per_cycle = pc;
-    }
+    configure(&mut run)?;
     run_short_polling(client, run).await;
 
     let requests = some(mock_server.received_requests().await, "recorded requests")?;
@@ -386,11 +388,53 @@ async fn run_sonarr_cycle(
     })
 }
 
+async fn run_sonarr_cycle(
+    api: &FakeApi,
+    wanted: serde_json::Value,
+    per_cycle: Option<u32>,
+) -> Result<SonarrRun, Box<dyn std::error::Error>> {
+    run_wanted_cycle(api, wanted, queued_command(), |run| {
+        if let Some(pc) = per_cycle {
+            some(run.policy.as_mut(), "run policy")?.per_cycle = pc;
+        }
+        Ok(())
+    })
+    .await
+}
+
 fn command_posts(requests: &[wiremock::Request]) -> Vec<&wiremock::Request> {
     requests
         .iter()
         .filter(|r| r.method == "POST" && r.url.path() == "/api/v3/command")
         .collect()
+}
+
+/// Sorted i64 ids under `field` across every search command JSON payload in `bodies`.
+fn parse_dispatched_ids<'a>(
+    bodies: impl IntoIterator<Item = &'a [u8]>,
+    field: &str,
+) -> Result<Vec<i64>, Box<dyn std::error::Error>> {
+    let mut ids = Vec::new();
+    for raw in bodies {
+        let body: serde_json::Value = serde_json::from_slice(raw)?;
+        let searched = some(body.get(field).and_then(|v| v.as_array()), field)?;
+        ids.extend(searched.iter().filter_map(serde_json::Value::as_i64));
+    }
+    ids.sort_unstable();
+    Ok(ids)
+}
+
+/// Sorted i64 ids under `field` across every `/api/v3/command` POST in `requests`.
+fn dispatched_ids(
+    requests: &[wiremock::Request],
+    field: &str,
+) -> Result<Vec<i64>, Box<dyn std::error::Error>> {
+    parse_dispatched_ids(
+        command_posts(requests)
+            .into_iter()
+            .map(|p| p.body.as_slice()),
+        field,
+    )
 }
 
 fn has_circuit_open_event(events: &[SnatchEvent]) -> bool {
@@ -648,25 +692,26 @@ async fn dispatched_with(
         filter_unprocessed: vec![1, 2, 3],
         ..Default::default()
     };
-    let (client, _) = start_fake_api(api).await?;
-    let mock_server = MockServer::start().await;
-    mount_sonarr_wanted(&mock_server, labelled_episodes()).await;
-    mount_command(&mock_server, queued_command()).await;
-    let mut run = default_run(&mock_server.uri());
-    change(some(run.policy.as_mut(), "policy")?);
-    run_short_polling(client, run).await;
-    let requests = some(mock_server.received_requests().await, "recorded requests")?;
-    let mut ids = Vec::new();
-    for post in command_posts(&requests) {
-        let body: serde_json::Value = serde_json::from_slice(&post.body)?;
-        let searched = some(
-            body.get("episodeIds").and_then(|v| v.as_array()),
-            "episodeIds",
-        )?;
-        ids.extend(searched.iter().filter_map(serde_json::Value::as_i64));
-    }
-    ids.sort_unstable();
-    Ok(ids)
+    let cycle = run_wanted_cycle(&api, labelled_episodes(), queued_command(), |run| {
+        change(some(run.policy.as_mut(), "policy")?);
+        Ok(())
+    })
+    .await?;
+    dispatched_ids(&cycle.requests, "episodeIds")
+}
+
+#[test]
+fn parse_dispatched_ids_sorts_and_validates_command_field() -> TestResult {
+    // Positive: extracts and sorts ids across multiple command bodies.
+    let bodies: [&[u8]; 2] = [br#"{"episodeIds":[3,1]}"#, br#"{"episodeIds":[2]}"#];
+    assert_eq!(parse_dispatched_ids(bodies, "episodeIds")?, vec![1, 2, 3]);
+    // Boundary: no bodies or an empty id array yields an empty list.
+    assert!(parse_dispatched_ids(std::iter::empty::<&[u8]>(), "episodeIds")?.is_empty());
+    assert!(parse_dispatched_ids([&br#"{"episodeIds":[]}"#[..]], "episodeIds")?.is_empty());
+    // Negative: missing field or malformed JSON fails.
+    assert!(parse_dispatched_ids([&br#"{"movieIds":[1]}"#[..]], "episodeIds").is_err());
+    assert!(parse_dispatched_ids([&b"not-json"[..]], "episodeIds").is_err());
+    Ok(())
 }
 
 #[tokio::test]
@@ -732,8 +777,6 @@ async fn radarr_availability_run(
         filter_unprocessed: vec![1, 2, 3],
         ..Default::default()
     };
-    let (client, _) = start_fake_api(api.clone()).await?;
-    let mock_server = MockServer::start().await;
     let movie = |id: i64, available: Option<bool>| {
         let mut m = serde_json::json!({"id": id, "title": format!("Film {id}"), "monitored": true});
         if let (Some(m), Some(a)) = (m.as_object_mut(), available) {
@@ -742,20 +785,13 @@ async fn radarr_availability_run(
         m
     };
     let records = serde_json::json!([movie(1, Some(true)), movie(2, Some(false)), movie(3, None)]);
-    mount_sonarr_wanted(&mock_server, records).await;
-    mount_command(&mock_server, queued_command()).await;
-    let mut run = default_run(&mock_server.uri());
-    run.app = AppKind::Radarr as i32;
-    some(run.policy.as_mut(), "policy")?.skip_unavailable_movies = skip_unavailable;
-    run_short_polling(client, run).await;
-    let requests = some(mock_server.received_requests().await, "recorded requests")?;
-    let mut ids = Vec::new();
-    for post in command_posts(&requests) {
-        let body: serde_json::Value = serde_json::from_slice(&post.body)?;
-        let searched = some(body.get("movieIds").and_then(|v| v.as_array()), "movieIds")?;
-        ids.extend(searched.iter().filter_map(serde_json::Value::as_i64));
-    }
-    ids.sort_unstable();
+    let cycle = run_wanted_cycle(&api, records, queued_command(), |run| {
+        run.app = AppKind::Radarr as i32;
+        some(run.policy.as_mut(), "policy")?.skip_unavailable_movies = skip_unavailable;
+        Ok(())
+    })
+    .await?;
+    let ids = dispatched_ids(&cycle.requests, "movieIds")?;
     let asked = api
         .budget_calls
         .lock()
@@ -833,30 +869,27 @@ async fn await_command_exits_after_bound() -> TestResult {
     Ok(())
 }
 
-#[tokio::test]
-async fn circuit_opens_after_consecutive_failures() -> TestResult {
+/// Runs one 4-target Sonarr cycle against a custom `/api/v3/command` responder.
+async fn run_circuit_cycle(
+    command: impl wiremock::Respond + 'static,
+) -> Result<(FakeApi, SonarrRun), Box<dyn std::error::Error>> {
     let api = FakeApi {
         filter_unprocessed: vec![1, 2, 3, 4],
         ..Default::default()
     };
-    let (client, _) = start_fake_api(api.clone()).await?;
+    let wanted = episodes(&[(1, 10), (2, 11), (3, 12), (4, 13)]);
+    let cycle = run_wanted_cycle(&api, wanted, command, |run| {
+        some(run.policy.as_mut(), "run policy")?.per_cycle = 4;
+        Ok(())
+    })
+    .await?;
+    Ok((api, cycle))
+}
 
-    let mock_server = MockServer::start().await;
-    mount_sonarr_wanted(
-        &mock_server,
-        episodes(&[(1, 10), (2, 11), (3, 12), (4, 13)]),
-    )
-    .await;
-
-    mount_command(&mock_server, ResponseTemplate::new(500)).await;
-
-    let mut run = default_run(&mock_server.uri());
-    some(run.policy.as_mut(), "run policy")?.per_cycle = 4;
-
-    run_short_polling(client, run).await;
-
-    let requests = some(mock_server.received_requests().await, "recorded requests")?;
-    let posts = command_posts(&requests);
+#[tokio::test]
+async fn circuit_opens_after_consecutive_failures() -> TestResult {
+    let (api, run) = run_circuit_cycle(ResponseTemplate::new(500)).await?;
+    let posts = command_posts(&run.requests);
     assert_eq!(
         posts.len(),
         9,
@@ -929,31 +962,10 @@ impl wiremock::Respond for FailThenSucceed {
 
 #[tokio::test]
 async fn circuit_boundary_recovers() -> TestResult {
-    let api = FakeApi {
-        filter_unprocessed: vec![1, 2, 3, 4],
-        ..Default::default()
-    };
-    let (client, _) = start_fake_api(api.clone()).await?;
-
-    let mock_server = MockServer::start().await;
-    mount_sonarr_wanted(
-        &mock_server,
-        episodes(&[(1, 10), (2, 11), (3, 12), (4, 13)]),
-    )
-    .await;
-
-    Mock::given(method("POST"))
-        .and(path("/api/v3/command"))
-        .respond_with(FailThenSucceed {
-            failures: Arc::new(AtomicI32::new(6)),
-        })
-        .mount(&mock_server)
-        .await;
-
-    let mut run = default_run(&mock_server.uri());
-    some(run.policy.as_mut(), "run policy")?.per_cycle = 4;
-
-    run_short_polling(client, run).await;
+    let (api, _run) = run_circuit_cycle(FailThenSucceed {
+        failures: Arc::new(AtomicI32::new(6)),
+    })
+    .await?;
 
     let events = api.reported_events.lock().await;
     assert!(

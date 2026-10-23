@@ -14,7 +14,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { probeMessage } from '#lib/products.js';
 	import { keys } from '#lib/query.js';
 	import { session } from '#lib/session.svelte.js';
-	import InstanceTabGuard from './InstanceTabGuard.svelte';
+	import QueryGuard from '#lib/components/QueryGuard.svelte';
 	import { instanceQuery } from './instance-query.svelte.js';
 
 	const { id }: { id: string } = $props();
@@ -35,7 +35,7 @@ SPDX-License-Identifier: EUPL-1.2
 	});
 </script>
 
-<InstanceTabGuard query={instance}>
+<QueryGuard query={instance}>
 	{#snippet children(data)}
 		<div class="mb-4">
 			<CheckState instance={data} />
@@ -55,4 +55,4 @@ SPDX-License-Identifier: EUPL-1.2
 			<InstancePriorityCard instance={data} />
 		{/if}
 	{/snippet}
-</InstanceTabGuard>
+</QueryGuard>

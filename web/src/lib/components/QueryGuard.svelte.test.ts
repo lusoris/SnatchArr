@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { axe } from 'vitest-axe';
 import { m } from '#lib/paraglide/messages.js';
 import { forkInstance, type Instance } from '#lib/testing/harness.js';
-import InstanceTabGuard from './InstanceTabGuard.svelte';
+import QueryGuard from './QueryGuard.svelte';
 
 const testChild = createRawSnippet<[unknown]>((getData) => {
 	const instance = getData() as Instance | undefined;
@@ -19,9 +19,9 @@ const testChild = createRawSnippet<[unknown]>((getData) => {
 	};
 });
 
-describe('InstanceTabGuard', () => {
+describe('QueryGuard', () => {
 	it('positive: renders children when query data is present and passes WCAG', async () => {
-		const { container } = render(InstanceTabGuard, {
+		const { container } = render(QueryGuard, {
 			props: {
 				query: { isPending: false, isError: false, error: null, data: forkInstance },
 				children: testChild
@@ -43,7 +43,7 @@ describe('InstanceTabGuard', () => {
 			status: 503,
 			detail: 'instance unreachable'
 		});
-		render(InstanceTabGuard, {
+		render(QueryGuard, {
 			props: {
 				query: { isPending: false, isError: true, error, data: undefined },
 				children: testChild
@@ -56,7 +56,7 @@ describe('InstanceTabGuard', () => {
 	});
 
 	it('boundary: renders polite loading indicator while query is pending', () => {
-		render(InstanceTabGuard, {
+		render(QueryGuard, {
 			props: {
 				query: { isPending: true, isError: false, error: null, data: undefined },
 				children: testChild
