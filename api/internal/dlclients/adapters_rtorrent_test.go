@@ -34,6 +34,7 @@ const (
 // rtTorrent is what the adapter reads of one download.
 type rtTorrent struct {
 	downRate, upRate       int64
+	hashing                int64
 	open, active, complete bool
 }
 
@@ -50,14 +51,14 @@ func rtFlag(set bool) string {
 
 // row is one d.multicall2 result in the order of the fields the client asks for: hash, name,
 // size, completed bytes, down rate, up rate, up total, ratio, open, active, complete, hash
-// checking, base path, directory, label, start time, message.
+// checking, base path, directory, label, start time, message, hashing.
 func (d rtTorrent) row() string {
 	fields := []string{
 		rtString("0123456789ABCDEF0123456789ABCDEF01234567"), rtString("a download"),
 		rtNumber(4_000_000_000), rtNumber(1_000_000_000), rtNumber(d.downRate), rtNumber(d.upRate),
 		rtNumber(0), rtNumber(0), rtFlag(d.open), rtFlag(d.active), rtFlag(d.complete), rtFlag(false),
 		rtString("/downloads/a download"), rtString("/downloads"), rtString(""), rtNumber(1_760_000_000),
-		rtString(""),
+		rtString(""), rtNumber(d.hashing),
 	}
 	return "<value><array><data>" + strings.Join(fields, "") + "</data></array></value>"
 }
