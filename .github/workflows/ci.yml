@@ -381,7 +381,7 @@ jobs:
       # The runner's rustup installs the release pinned in rust-toolchain.toml.
       - name: Rust toolchain (rust-toolchain.toml)
         run: rustup toolchain install --component llvm-tools-preview
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - name: Format
         run: cargo fmt --all --check
       - name: Clippy (zero warnings)
@@ -428,7 +428,7 @@ jobs:
       # The runner's rustup installs the release pinned in rust-toolchain.toml.
       - name: Rust toolchain (rust-toolchain.toml)
         run: rustup toolchain install
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       # Postgres, the API, two workers and two fakearr instances: lease, stamina and dispatch
       # together (#19). The same target runs locally.
       - name: make e2e-smoke
@@ -789,7 +789,7 @@ jobs:
       # The runner's rustup installs the release pinned in rust-toolchain.toml.
       - name: Rust toolchain (rust-toolchain.toml)
         run: rustup toolchain install
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - name: Clients against the pinned upstream specs
         run: make contracts-verify
 

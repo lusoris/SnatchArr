@@ -26,4 +26,11 @@ describe('StaminaGauge', () => {
 		expect(container.querySelector<HTMLElement>('.fill')?.style.width).toBe('100%');
 		expect(container.querySelector('.stamina')?.getAttribute('data-level')).toBe('spent');
 	});
+
+	it('carries data-label-value and gap-x-3 on the header row', () => {
+		const { container } = render(StaminaGauge, { label: 'FakeTV', used: 16, cap: 20 });
+		const header = container.querySelector('[data-label-value]');
+		expect(header).not.toBeNull();
+		expect(header?.classList.contains('gap-x-3')).toBe(true);
+	});
 });

@@ -11,19 +11,19 @@ require (
 	github.com/go-faster/errors v0.8.0
 	github.com/go-faster/jx v1.2.0
 	github.com/go-jose/go-jose/v4 v4.1.6
-	github.com/golusoris/goenvoy/arr/lidarr v1.6.0
-	github.com/golusoris/goenvoy/arr/radarr v1.5.3
-	github.com/golusoris/goenvoy/arr/readarr v1.5.0
-	github.com/golusoris/goenvoy/arr/seerr v1.5.2
-	github.com/golusoris/goenvoy/arr/sonarr v1.5.3
-	github.com/golusoris/goenvoy/arr/v2 v2.6.0
-	github.com/golusoris/goenvoy/arr/whisparr v1.5.0
-	github.com/golusoris/goenvoy/downloadclient/deluge/v2 v2.0.1
-	github.com/golusoris/goenvoy/downloadclient/nzbget/v2 v2.0.1
-	github.com/golusoris/goenvoy/downloadclient/qbit/v2 v2.0.1
-	github.com/golusoris/goenvoy/downloadclient/rtorrent/v2 v2.0.1
-	github.com/golusoris/goenvoy/downloadclient/sabnzbd/v2 v2.0.1
-	github.com/golusoris/goenvoy/downloadclient/transmission/v2 v2.0.1
+	github.com/golusoris/goenvoy/arr/lidarr v1.6.1
+	github.com/golusoris/goenvoy/arr/radarr v1.5.4
+	github.com/golusoris/goenvoy/arr/readarr v1.5.1
+	github.com/golusoris/goenvoy/arr/seerr v1.5.3
+	github.com/golusoris/goenvoy/arr/sonarr v1.5.4
+	github.com/golusoris/goenvoy/arr/v2 v2.6.1
+	github.com/golusoris/goenvoy/arr/whisparr v1.5.1
+	github.com/golusoris/goenvoy/downloadclient/deluge/v2 v2.0.2
+	github.com/golusoris/goenvoy/downloadclient/nzbget/v2 v2.0.2
+	github.com/golusoris/goenvoy/downloadclient/qbit/v2 v2.0.2
+	github.com/golusoris/goenvoy/downloadclient/rtorrent/v2 v2.1.0
+	github.com/golusoris/goenvoy/downloadclient/sabnzbd/v2 v2.0.2
+	github.com/golusoris/goenvoy/downloadclient/transmission/v2 v2.0.2
 	github.com/golusoris/golusoris v0.20.0
 	github.com/golusoris/golusoris/core v0.12.1
 	github.com/google/jsonschema-go v0.4.3

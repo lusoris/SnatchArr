@@ -97,12 +97,53 @@ const overflowDashboardInstance = [
 	}
 ];
 
+const dashboardHourlyCaps = [
+	{
+		scope: 'instance' as const,
+		instance_id: '00000000-0000-0000-0000-000000000001',
+		used: 12,
+		cap: 15,
+		resets_at: '2026-10-21T07:00:00Z'
+	}
+];
+
+const dashboardProwlarrStatus = [
+	{
+		link_id: '00000000-0000-0000-0000-000000000001',
+		name: 'Prowlarr',
+		reachable: true,
+		checked_at: '2026-10-21T06:19:00Z',
+		indexers: Array.from({ length: 31 }, (_, i) => ({
+			id: i + 1,
+			name: `Indexer ${i + 1}`,
+			limits_unit: 1,
+			used_queries: i < 3 ? 100 : 5,
+			query_limit: 100,
+			used_grabs: 0,
+			grab_limit: 50,
+			exhausted: i < 3
+		}))
+	}
+];
+
 async function mockDashboardRoute(page: Page): Promise<void> {
 	await page.route('**/api/v1/instances', (route) => {
 		if (route.request().method() !== 'GET') {
 			return route.fallback();
 		}
 		return route.fulfill(json(overflowDashboardInstance));
+	});
+	await page.route('**/api/v1/hourly-caps', (route) => {
+		if (route.request().method() !== 'GET') {
+			return route.fallback();
+		}
+		return route.fulfill(json(dashboardHourlyCaps));
+	});
+	await page.route('**/api/v1/prowlarr/status*', (route) => {
+		if (route.request().method() !== 'GET') {
+			return route.fallback();
+		}
+		return route.fulfill(json(dashboardProwlarrStatus));
 	});
 }
 

@@ -325,6 +325,30 @@ function readStyleSignals() {
 	};
 }
 
+export interface LabelValueOffender {
+	text: string;
+	gap: number;
+}
+
+function checkLabelValueGaps(): LabelValueOffender[] {
+	const rows = Array.from(document.querySelectorAll<HTMLElement>('[data-label-value]'));
+	const offenders: LabelValueOffender[] = [];
+	for (const row of rows) {
+		const first = row.firstElementChild;
+		const last = row.lastElementChild;
+		if (!first || !last || first === last) continue;
+		const a = first.getBoundingClientRect();
+		const b = last.getBoundingClientRect();
+		if (a.top < b.bottom && b.top < a.bottom) {
+			const gap = b.left - a.right;
+			if (gap < 8) {
+				offenders.push({ text: first.textContent?.trim() ?? '', gap });
+			}
+		}
+	}
+	return offenders;
+}
+
 async function waitForSettled(page: Page): Promise<void> {
 	await page.waitForLoadState('networkidle');
 	await expect(
@@ -359,6 +383,9 @@ export async function assertRenderedLayout(
 		innerWidth: window.innerWidth
 	}));
 	expect(scrollWidth, `${route}: horizontal page scroll`).toBeLessThanOrEqual(innerWidth);
+
+	const offenders = await page.evaluate(checkLabelValueGaps);
+	expect(offenders, `${route}: label and value touch`).toEqual([]);
 
 	const tables = await page.evaluate(extractTables);
 	const { tableCount, measuredRows, misaligned } = checkAllTables(tables, TOLERANCE_PX);
