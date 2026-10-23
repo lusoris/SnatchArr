@@ -13,6 +13,7 @@ import {
 	renderWithQuery,
 	sampleFilterOptions,
 	samplePolicy,
+	sampleQueuePolicy,
 	stubGet
 } from '#lib/testing/harness.js';
 import SettingsPage from '../../../routes/settings/+page.svelte';
@@ -123,31 +124,7 @@ describe('Field coverage against openapi.yaml', () => {
 		expect(expectedProps.length).toBeGreaterThan(5);
 
 		stubGet({
-			'/instances/{instanceId}/queue-policy': {
-				enabled: true,
-				rules: {
-					stalled: { mode: 'observe', threshold: 1, blocklist: false },
-					slow: { mode: 'observe', threshold: 1, blocklist: false },
-					failed: { mode: 'observe', threshold: 1, blocklist: false },
-					import_blocked: { mode: 'observe', threshold: 1, blocklist: false },
-					id_matched: { mode: 'observe', threshold: 1, blocklist: false },
-					import_fixable: { mode: 'observe', threshold: 1, blocklist: false },
-					import_broken: { mode: 'observe', threshold: 2, blocklist: true },
-					import_not_wanted: { mode: 'observe', threshold: 1, blocklist: true },
-					unwanted_score: { mode: 'observe', threshold: 1, blocklist: false },
-					not_an_upgrade: { mode: 'observe', threshold: 1, blocklist: false },
-					duplicate: { mode: 'observe', threshold: 1, blocklist: false },
-					unwanted_unmonitored: { mode: 'observe', threshold: 1, blocklist: false }
-				},
-				grace_seconds: 3600,
-				min_bytes_per_second: 1024,
-				max_removals_per_sweep: 5,
-				max_imports_per_sweep: 25,
-				match_fixable_min_percent: 75,
-				match_broken_below_percent: 40,
-				track_fixable_min_percent: 50,
-				track_broken_below_percent: 40
-			}
+			'/instances/{instanceId}/queue-policy': sampleQueuePolicy
 		});
 
 		const { container } = renderWithQuery(QueuePolicy, { instanceId: forkInstance.id });
