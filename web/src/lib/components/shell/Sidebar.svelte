@@ -48,7 +48,7 @@ SPDX-License-Identifier: EUPL-1.2
 				type="button"
 				onclick={onOpenSearch}
 				class="flex h-9 w-full items-center justify-between rounded-md border border-line bg-bg px-2.5 text-xs text-subtle transition-colors hover:border-control hover:text-fg"
-				aria-label={m.nav_search()}
+				aria-keyshortcuts="Control+K Meta+K"
 			>
 				<span class="flex items-center gap-2">
 					<NavIcon name="search" size={14} class="text-subtle" />

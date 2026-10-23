@@ -139,6 +139,10 @@ linters:
         # gRPC status errors and stream replies must be returned as-is so clients read the code.
         - google.golang.org/grpc/*
         - google.golang.org/grpc
+        # golusoris core/errors builds coded errors (gerr.NotFound, ...): a store returns one as
+        # its contract, with no inner error to wrap. wrapcheck in golangci-lint v2.15.0 flags
+        # these constructors.
+        - github.com/golusoris/golusoris/core/errors
       extra-ignore-sigs:
         - .Errorf(
         - errors.New(

@@ -4,7 +4,7 @@
 set -euo pipefail
 
 # Go toolchain. Every tool is pinned; Renovate moves the pins (renovate.json, devcontainer tools).
-go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
 # gosec and govulncheck at the tools/go/go.mod pins: gosec@latest resolves an x/tools that
 # cannot load Go 1.27.2 packages.
 make gosec-install govulncheck-install
