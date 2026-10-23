@@ -7,8 +7,15 @@
 // site and stores one full-page screenshot per route and viewport.
 import fs from 'node:fs';
 import path from 'node:path';
-import { expect, test } from '@playwright/test';
-import { assertRenderedLayout, AUTH_ROUTES, VIEWPORTS } from './layout.js';
+import { expect, test, type Page } from '@playwright/test';
+import {
+	assertRenderedLayout,
+	AUTH_ROUTES,
+	collectLists,
+	expectedTables,
+	VIEWPORTS
+} from './layout.js';
+import { json, mockSettingsApi } from './mocks.js';
 
 const served = !!process.env.SNATCHARR_SERVED_URL;
 if (served && !process.env.SNATCHARR_SERVED_STATE) {
@@ -181,15 +188,111 @@ for (const [viewportName, viewport] of Object.entries(VIEWPORTS)) {
 				);
 			}
 			const route = pattern.replace('[id]', instanceId());
+			const lists = collectLists(page);
 			await page.goto(route);
 			expect(page.url(), `${pattern}: landed on /login (unauthenticated)`).not.toMatch(
 				/\/login(?:\?|$)/
 			);
-			await assertRenderedLayout(page, pattern);
+			await assertRenderedLayout(page, pattern, lists);
 			if (shots) {
 				const name = `${pattern.replace(/[/[\]]+/g, '-').replace(/^-|-$/g, '') || 'root'}-${viewportName}.png`;
 				await page.screenshot({ path: testInfo.outputPath(name), fullPage: true });
 			}
 		});
+	}
+}
+
+test('authenticated: layout expected tables follow role and data', () => {
+	// Admin with the CI seed: one table per non-empty list.
+	expect(expectedTables('/schedules', 'admin', { '/api/v1/schedules': 1 })).toBe(1);
+	expect(
+		expectedTables('/settings', 'admin', {
+			'/api/v1/notifications/channels': 1,
+			'/api/v1/notifications/rules': 0
+		})
+	).toBe(1);
+	expect(expectedTables('/account', 'admin', { '/api/v1/auth/api-keys': 2 })).toBe(1);
+	// Viewer: the same lists, empty data shows no table.
+	expect(expectedTables('/schedules', 'viewer', { '/api/v1/schedules': 0 })).toBe(0);
+	expect(expectedTables('/account', 'viewer', { '/api/v1/auth/api-keys': 0 })).toBe(0);
+	// A viewer owning an API key, or a list the page never received, fails.
+	expect(() => expectedTables('/account', 'viewer', { '/api/v1/auth/api-keys': 1 })).toThrow(
+		/ADR-0023/
+	);
+	expect(() => expectedTables('/settings', 'viewer', {})).toThrow(/gave the page no JSON list/);
+});
+
+// Viewer runs in API mode (the served viewer run uses the served-layout project): the session
+// reports role viewer, and the lists carry either the served deployment's empty data or one
+// row each. The table count must follow role and data in both.
+const STAMP = '2026-10-21T06:19:00Z';
+const viewerData = {
+	empty: { schedules: [], channels: [], rules: [] },
+	filled: {
+		schedules: [
+			{
+				id: '00000000-0000-0000-0000-000000000021',
+				name: 'Night pause',
+				days: [1, 2, 3, 4, 5],
+				start: '00:00',
+				end: '06:00',
+				tz: 'UTC',
+				action: 'pause',
+				enabled: true,
+				created_at: STAMP,
+				updated_at: STAMP
+			}
+		],
+		channels: [
+			{
+				id: '00000000-0000-0000-0000-000000000031',
+				name: 'ops-webhook',
+				kind: 'webhook',
+				enabled: true,
+				has_secret: false,
+				config: { allow_private_network: false, allow_insecure_http: false },
+				created_at: STAMP,
+				updated_at: STAMP
+			}
+		],
+		rules: [
+			{
+				id: '00000000-0000-0000-0000-000000000041',
+				name: 'run failures',
+				event_kind: 'run_failure_streak',
+				threshold: 2,
+				enabled: true,
+				channel_ids: ['00000000-0000-0000-0000-000000000031'],
+				created_at: STAMP,
+				updated_at: STAMP
+			}
+		]
+	}
+} as const;
+
+async function mockViewerApi(page: Page, data: (typeof viewerData)[keyof typeof viewerData]) {
+	await mockSettingsApi(page, { role: 'viewer' });
+	// Registered later, so these answer before the empty lists of mockSettingsApi.
+	await page.route('**/api/v1/schedules', (r) => r.fulfill(json(data.schedules)));
+	await page.route('**/api/v1/notifications/channels', (r) => r.fulfill(json(data.channels)));
+	await page.route('**/api/v1/notifications/rules', (r) => r.fulfill(json(data.rules)));
+	await page.route('**/api/v1/auth/api-keys', (r) => r.fulfill(json([])));
+}
+
+if (!served) {
+	for (const [viewportName, viewport] of Object.entries(VIEWPORTS)) {
+		for (const [dataName, data] of Object.entries(viewerData)) {
+			for (const pattern of ['/schedules', '/settings', '/account']) {
+				test(`authenticated: layout viewer ${dataName} ${pattern} ${viewportName}`, async ({
+					page
+				}) => {
+					await page.setViewportSize(viewport);
+					await mockViewerApi(page, data);
+					const lists = collectLists(page);
+					await page.goto(pattern);
+					await assertRenderedLayout(page, pattern, lists);
+				});
+			}
+		}
 	}
 }
