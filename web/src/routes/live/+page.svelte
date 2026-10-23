@@ -209,9 +209,11 @@ SPDX-License-Identifier: EUPL-1.2
 							{instanceName(f.instance_id)}
 						</a>
 					{/if}
-					<span class="font-medium">{f.title ?? ''}</span>
+					<span class="min-w-0 font-medium [overflow-wrap:anywhere] break-words"
+						>{f.title ?? ''}</span
+					>
 					{#if f.detail}
-						<span class="text-subtle">{f.detail}</span>
+						<span class="min-w-0 [overflow-wrap:anywhere] break-words text-subtle">{f.detail}</span>
 					{/if}
 				</li>
 			{/each}

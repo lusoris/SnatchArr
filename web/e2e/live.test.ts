@@ -255,4 +255,94 @@ test.describe('live', () => {
 			await new Promise<void>((resolve) => sseServer.close(() => resolve()));
 		}
 	});
+
+	for (const [viewportName, viewport] of [
+		['desktop', { width: 1280, height: 800 }],
+		['phone', { width: 390, height: 844 }]
+	] as const) {
+		test(`live unbroken token does not overflow page horizontally on ${viewportName}`, async ({
+			page
+		}) => {
+			await page.setViewportSize(viewport);
+			await mockSignedInApi(page);
+			await page.route('**/api/v1/instances', (route) =>
+				route.fulfill({
+					status: 200,
+					contentType: 'application/json',
+					body: JSON.stringify([instanceA])
+				})
+			);
+			await page.route('**/api/v1/system/status', (route) =>
+				route.fulfill({
+					status: 200,
+					contentType: 'application/json',
+					body: JSON.stringify({
+						name: 'SnatchArr',
+						version: '0.1.0',
+						commit: 'abc1234',
+						build_date: '2026-10-20',
+						profile: 'dev',
+						setup_complete: true,
+						worker_last_contact_at: '2026-10-20T12:30:00Z'
+					})
+				})
+			);
+			await page.route('**/api/v1/schedules', (route) =>
+				route.fulfill({
+					status: 200,
+					contentType: 'application/json',
+					body: JSON.stringify([])
+				})
+			);
+			await page.route('**/api/v1/events?*', (route) =>
+				route.fulfill({
+					status: 200,
+					contentType: 'application/json',
+					body: JSON.stringify([
+						{
+							id: 99,
+							ts: '2026-10-20T12:00:00Z',
+							level: 'warn',
+							type: 'queue_item_struck',
+							instance_id: instanceA.id,
+							title: '16EA72E67E27AE7BFC5A1BF6D7A62DD602137D5B',
+							detail:
+								'{"rule":"import_blocked","count":3,"threshold":3,"download_id":"16EA72E67E27AE7BFC5A1BF6D7A62DD602137D5B"}'
+						},
+						// The frame above overflows the desktop column only with the served
+						// monospace font; this token is wider than it in any font.
+						{
+							id: 98,
+							ts: '2026-10-20T12:00:00Z',
+							level: 'warn',
+							type: 'queue_item_struck',
+							instance_id: instanceA.id,
+							title: 'unbroken',
+							detail: 'x'.repeat(200)
+						}
+					])
+				})
+			);
+			await page.route('**/api/v1/events/stream', async () => {
+				await new Promise(() => {});
+			});
+
+			await page.goto('/live');
+
+			const log = page.getByRole('log');
+			await expect(log).toBeVisible({ timeout: 5000 });
+			await expect(
+				page.getByText('16EA72E67E27AE7BFC5A1BF6D7A62DD602137D5B', { exact: true })
+			).toBeVisible();
+
+			const { scrollWidth, innerWidth } = await page.evaluate(() => ({
+				scrollWidth: document.documentElement.scrollWidth,
+				innerWidth: window.innerWidth
+			}));
+			expect(
+				scrollWidth,
+				`live: horizontal page scroll ${scrollWidth}>${innerWidth} on ${viewportName}`
+			).toBeLessThanOrEqual(innerWidth);
+		});
+	}
 });
