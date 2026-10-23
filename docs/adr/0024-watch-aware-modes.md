@@ -122,6 +122,84 @@ The two modes fit together: a season removed after watching stays unmonitored, a
 | Seerr | none | — |
 | Jellyfin, Emby, Tautulli | none (read only); a collection write is a later step | — |
 
+## Implementation plan
+
+The season gate ships in three slices, each one pull request, in the order fixed under Order of delivery. Every slice keeps the module off by default and reuses existing SnatchArr patterns, so nothing below is a new mechanism (HISS-19).
+
+### Patterns reused
+
+- Leader loop: `Ticker` wrapping `gate.Periodic`, provided through `gate.Provide[*Ticker]()`, as in `api/internal/seerr/module.go:24` and `api/internal/instances/module.go`.
+- Observe, then act: `queue.Mode` with `ModeObserve` and `ModeAct` (`api/internal/queue/rules.go:65-71`); observe mode records what it would do and returns before any write (`api/internal/queue/sweep.go:308`).
+- Seerr requests: the cached request rows written by `UpsertSeerrRequest` (`api/internal/seerr/sync.go:138`).
+- Instance credentials: `instances.Service.Credentials` (`api/internal/instances/service.go:265`).
+- Notifications: `notify.Engine` (`api/internal/notify/engine.go:37`), see [docs/notifications.md](../notifications.md).
+- Persistence: migrations in `api/internal/store/migrations/postgres/` (the next free number is `000028`), queries in `api/internal/store/queries/`.
+
+No Jellyfin or Emby account source exists in `api/internal`; ADR-0018 leaves accounts to a later decision, so the module keeps its own media-server connections.
+
+### Slice 1: watch-state sync
+
+- Scope: a leader loop that reads per-user watch state from Jellyfin and Emby and stores it.
+- Package: `api/internal/watchaware` (`module.go`, `source.go` with the `WatchSource` interface, `jellyfin.go`, `emby.go`, `sync.go`, `predicate.go`), wired in `api/internal/app`.
+- Contracts:
+  - table `watchaware_sources` (one row per media server: kind, URL, API key encrypted with `core/crypto` and write-only in the API, enabled);
+  - table `watchaware_item_watches` (key: source, user, item; columns: series and season and episode numbers or movie id, played, played percentage, resume position, last played, synced at);
+  - OpenAPI: list, create, update and delete media-server sources, and a sync status read;
+  - settings: module switch (default off), sync interval;
+  - Paraglide keys under `watchaware_*` in `web/messages/en.json` and `de.json`.
+- Upstream: goenvoy `mediaserver/jellyfin/v3` and `mediaserver/emby/v3` (`GetUsers`, `GetItems` with a user filter); new module requirements in `go.mod`, so `web/static/licences.json` is regenerated in the same pull request.
+- Blocked on goenvoy: `UserItemDataDto` has `PlayCount`, `PlaybackPositionTicks` and `LastPlayedDate` but no `Played` and no `PlayedPercentage` (`mediaserver/jellyfin/types.go:90`, same in `mediaserver/emby/types.go`). The predicate needs both; the fields are added upstream first.
+- Tests:
+  - positive: an item with `Played` true, and one at 90 % played, count as watched;
+  - negative: an unreachable server records the error and the loop goes on with the next source;
+  - boundary: 89.9 % is not watched, 90.0 % is;
+  - planted defect: a predicate that ignores the threshold makes the boundary test fail.
+- Gate: `make api-verify`, `make web-verify`.
+- Switch off: module switch off (default); the loop then never runs.
+
+### Slice 2: season gate in observe mode
+
+- Scope: evaluate the gate for series added to Sonarr and for watch progress, and record what it would unmonitor and promote, with no Sonarr write.
+- Package: `api/internal/watchaware` (`gate.go`, `promote.go`).
+- Contracts:
+  - table `watchaware_gate_series` (key: instance, series; gate season, state, added-before-gate flag);
+  - table `watchaware_gate_decisions` (instance, series, season, action, would-act flag, reason, time);
+  - OpenAPI: per-instance gate settings, the decision list, and the held seasons per series for the request view;
+  - settings, with the defaults from Decision: gate switch (off), mode (`observe`), seasons kept on add (1), look-ahead (1), promotion "whose watch" (`any`), season watched threshold (last aired episode or 50 %), exemption tag (`snatcharr-no-gate`);
+  - Paraglide keys under `watchaware_gate_*`;
+  - SSE and notification event for a recorded decision.
+- Upstream: goenvoy `arr/sonarr` `GetAllSeries`, `GetSeries`, `GetEpisodes`, `GetTags`.
+- Blocked on goenvoy for the `requester` rule only: the Seerr `User` type has no `jellyfinUserId` or `jellyfinUsername` (`arr/seerr/types.go:11`), while Seerr itself stores both. `any` and `all` work without it.
+- Tests:
+  - positive: a new unwatched series records "would unmonitor" for seasons after the first; a watched first season records "would promote" for the second;
+  - negative: a series tagged `snatcharr-no-gate`, a series with files beyond the gate, and a series added before the gate was switched on all record nothing;
+  - boundary: a season at 49.9 % holds, at 50.0 % promotes; look-ahead 0 and 1;
+  - planted defect: a gate that ignores the exemption tag makes the negative test fail.
+- Gate: `make api-verify`, `make web-verify`.
+- Switch off: gate switch off (default); observe mode is the default and writes nothing.
+
+### Slice 3: season gate in act mode
+
+- Scope: carry out the recorded decisions against Sonarr, and let an admin release all seasons of a series.
+- Package: `api/internal/watchaware` (`act.go`).
+- Contracts: mode `act` accepted by the settings validation; OpenAPI action to release a series (the per-request override from Decision); Paraglide keys for the release action.
+- Upstream: goenvoy `arr/sonarr` `UpdateSeasonPass` (`arr/sonarr/series.go:48`), which sets `monitored` per season for one series without a full series round trip; `UpdateSeries` (`series.go:29`) stays unused.
+- Tests:
+  - positive: act mode sends one season-pass update that unmonitors the later seasons, and one that monitors the promoted season;
+  - negative: in observe mode, no Sonarr write reaches the fake server; a released series is never narrowed again;
+  - boundary: a failed Sonarr write leaves the decision pending, and the next pass retries it;
+  - planted defect: an actor that writes in observe mode makes the negative test fail.
+- Gate: `make api-verify`, `make web-verify`, `make web-e2e` (gate settings and request view).
+- Switch off: set the mode back to `observe` (writes stop at the next pass), or switch the gate off.
+
+### Removal planning
+
+Not planned here. It is planned once the season gate's observe run is complete (the revisit trigger under Order of delivery).
+
+### Open points
+
+- How a new series is noticed. Recommendation: the periodic pass compares Sonarr's series list with `watchaware_gate_series`; a Sonarr webhook can shorten the delay later, the poll stays the source of truth, as for watch state.
+
 ## Consequences
 
 ### Positive
@@ -150,8 +228,10 @@ The four open questions of the first draft were answered on 2026-10-23:
 
 ## Follow-ups
 
-- goenvoy: confirm `UserData.PlayedPercentage` and `PlaybackPositionTicks` on the Jellyfin and Emby clients, and add a collection write for "leaving soon".
-- Implementation plan: watch-state sync first, then the season gate in observe mode, then the gate in act mode. Removal follows after the gate's observe run.
+- goenvoy (checked on main, `mediaserver/jellyfin` and `mediaserver/emby` v3.0.2): add `Played` and `PlayedPercentage` to `UserItemDataDto`; slice 1 waits for them.
+- goenvoy (`arr/seerr`): add `jellyfinUserId` and `jellyfinUsername` to `User`, for the `requester` rule.
+- goenvoy (`mediaserver/jellyfin`): add a collection write for "leaving soon".
+- Implementation plan: see the section above.
 - Docs: name Maintainerr as an alternative for removal until remove when seen ships.
 
 ## References
