@@ -24,7 +24,7 @@ spec:
       protocol: TCP
       appProtocol: kubernetes.io/h2c
     - name: metrics
-      port: {{ .Values.api.service.metricsPort }}
+      port: {{ include "snatcharr.metricsPort" . }}
       targetPort: metrics
       protocol: TCP
   selector:

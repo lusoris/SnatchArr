@@ -129,3 +129,29 @@ tests:
     asserts:
       - failedTemplate:
           errorMessage: api.service.metricsPort 8080 must differ from api.service.port and api.service.grpcPort
+
+  - it: boundary - values reused from a chart without metricsPort render port 9464
+    set:
+      api:
+        service:
+          metricsPort: null
+    asserts:
+      - equal:
+          path: data.APP_SNATCHARR_METRICS_ADDR
+          value: ":9464"
+        template: configmap.yaml
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            name: metrics
+            containerPort: 9464
+            protocol: TCP
+        template: api-deployment.yaml
+      - contains:
+          path: spec.ports
+          content:
+            name: metrics
+            port: 9464
+            targetPort: metrics
+            protocol: TCP
+        template: api-service.yaml

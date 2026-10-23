@@ -52,7 +52,7 @@ spec:
               containerPort: {{ .Values.api.service.grpcPort }}
               protocol: TCP
             - name: metrics
-              containerPort: {{ .Values.api.service.metricsPort }}
+              containerPort: {{ include "snatcharr.metricsPort" . }}
               protocol: TCP
           envFrom:
             - configMapRef:
