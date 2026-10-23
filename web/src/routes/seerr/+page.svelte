@@ -8,6 +8,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { toast } from 'svelte-sonner';
 	import { api, describeError } from '#lib/api/client.js';
 	import type { components } from '#lib/api/schema.js';
+	import AdminFormSlot from '#lib/components/AdminFormSlot.svelte';
 	import LinkCard from '#lib/components/LinkCard.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import SeerrLinkForm from '#lib/components/SeerrLinkForm.svelte';
@@ -168,20 +169,16 @@ SPDX-License-Identifier: EUPL-1.2
 	</ul>
 {/if}
 
-{#if session.isAdmin}
-	{#key `${editing?.id ?? 'new'}-${formGeneration}`}
-		<SeerrLinkForm
-			link={editing}
-			instances={instances.data ?? []}
-			pending={save.isPending}
-			error={save.error}
-			onsave={(body) => save.mutate(body)}
-			oncancel={closeForm}
-			ontest={(body) => probeInput.mutate(body)}
-			testing={probeInput.isPending}
-		/>
-	{/key}
-{/if}
+<AdminFormSlot
+	key={`${editing?.id ?? 'new'}-${formGeneration}`}
+	{save}
+	probe={probeInput}
+	oncancel={closeForm}
+>
+	{#snippet form(props)}
+		<SeerrLinkForm link={editing} instances={instances.data ?? []} {...props} />
+	{/snippet}
+</AdminFormSlot>
 
 <h2 class="mt-8 mb-3 text-lg font-semibold">{m.seerr_requests_title()}</h2>
 {#if requests.isPending}
