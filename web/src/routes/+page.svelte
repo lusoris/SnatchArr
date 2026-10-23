@@ -81,7 +81,10 @@ SPDX-License-Identifier: EUPL-1.2
 					{@const exhausted = countExhausted(link.indexers)}
 					{@const headroom = countHeadroom(link.indexers)}
 					<li class="flex flex-col gap-1">
-						<div class="flex items-baseline justify-between text-sm">
+						<div
+							class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-sm"
+							data-label-value
+						>
 							<span class="font-medium">{link.name}</span>
 							<span class="text-subtle">
 								{m.prowlarr_headroom_count({ count: headroom, total })} · {m.prowlarr_exhausted_count(

@@ -25,7 +25,10 @@ SPDX-License-Identifier: EUPL-1.2
 </script>
 
 <div class="stamina" data-level={level}>
-	<div class="flex items-baseline justify-between text-sm">
+	<div
+		class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-sm"
+		data-label-value
+	>
 		<span class="font-medium">{label}</span>
 		<span class="text-subtle">{m.stamina_used({ used, cap })} · {levelText}</span>
 	</div>
