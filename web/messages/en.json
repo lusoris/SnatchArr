@@ -588,5 +588,19 @@
 	"settings_llm_tool_test_notification_channel": "Test notification channel",
 	"settings_llm_tool_create_notification_rule": "Create notification rule",
 	"settings_llm_tool_update_notification_rule": "Update notification rule",
-	"settings_llm_tool_delete_notification_rule": "Delete notification rule"
+	"settings_llm_tool_delete_notification_rule": "Delete notification rule",
+	"nav_about": "About",
+	"nav_kofi": "Ko-fi",
+	"nav_kofi_aria": "Support on Ko-fi (opens in a new tab)",
+	"about_title": "About",
+	"about_app_heading": "Application",
+	"about_field_app_name": "Name",
+	"about_field_version": "Version",
+	"about_field_commit": "Commit",
+	"about_field_build_date": "Build date",
+	"about_field_license": "Licence",
+	"about_license_name": "EUPL-1.2",
+	"about_license_aria": "EUPL-1.2 licence (opens in a new tab)",
+	"about_third_party_title": "Third-party licences",
+	"about_third_party_placeholder": "Third-party component licences and notices will be listed here."
 }

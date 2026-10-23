@@ -12,6 +12,8 @@ SPDX-License-Identifier: EUPL-1.2
 	import NavIcon from './NavIcon.svelte';
 	import NavGroups from './NavGroups.svelte';
 	import LocaleSelect from './LocaleSelect.svelte';
+	import KofiLink from './KofiLink.svelte';
+	import VersionLabel from './VersionLabel.svelte';
 
 	interface Props {
 		navGroups: NavGroup[];
@@ -65,6 +67,8 @@ SPDX-License-Identifier: EUPL-1.2
 
 	<nav class="flex-1 overflow-y-auto px-3 py-3" aria-label={m.app_name()}>
 		<NavGroups {navGroups} />
+
+		<KofiLink />
 	</nav>
 
 	<div class="flex flex-col gap-3 border-t border-line p-3 text-xs">
@@ -88,5 +92,7 @@ SPDX-License-Identifier: EUPL-1.2
 				<span>{m.nav_logout()}</span>
 			</button>
 		</div>
+
+		<VersionLabel />
 	</div>
 </aside>
