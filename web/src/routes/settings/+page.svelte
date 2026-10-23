@@ -10,6 +10,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import type { components } from '#lib/api/schema.js';
 	import AdminSaveButton from '#lib/components/AdminSaveButton.svelte';
 	import Field from '#lib/components/Field.svelte';
+	import NewPasswordField from '#lib/components/NewPasswordField.svelte';
 	import PriorityPresetFields from '#lib/components/PriorityPresetFields.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import { APP_KINDS, type AppKind } from '#lib/kinds.js';
@@ -420,17 +421,7 @@ SPDX-License-Identifier: EUPL-1.2
 					bind:value={currentPassword}
 				/>
 			</Field>
-			<Field id="new-password" label={m.new_password()} hint={m.password_min_hint()}>
-				<input
-					id="new-password"
-					class="input"
-					type="password"
-					autocomplete="new-password"
-					required
-					minlength="12"
-					bind:value={newPassword}
-				/>
-			</Field>
+			<NewPasswordField bind:value={newPassword} />
 			{#if passwordError}
 				<p role="alert" class="text-sm text-danger">{passwordError}</p>
 			{/if}

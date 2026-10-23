@@ -7,6 +7,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { toast } from 'svelte-sonner';
 	import { api } from '#lib/api/client.js';
 	import Field from '#lib/components/Field.svelte';
+	import NewPasswordField from '#lib/components/NewPasswordField.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 
@@ -83,17 +84,7 @@ SPDX-License-Identifier: EUPL-1.2
 		<p role="alert" class="text-xs text-danger">{fieldErrors.current_password}</p>
 	{/if}
 
-	<Field id="new-password" label={m.new_password()} hint={m.password_min_hint()}>
-		<input
-			id="new-password"
-			class="input"
-			type="password"
-			autocomplete="new-password"
-			required
-			minlength="12"
-			bind:value={newPassword}
-		/>
-	</Field>
+	<NewPasswordField bind:value={newPassword} />
 	{#if fieldErrors.new_password}
 		<p role="alert" class="text-xs text-danger">{fieldErrors.new_password}</p>
 	{/if}
