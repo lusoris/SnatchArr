@@ -34,16 +34,9 @@ if [ -z "${SMOKE_WORKER_IMAGE:-}" ]; then
     : "${SMOKE_WORKER_BIN:?path to the snatch-worker binary}"
 fi
 
-# free_port START: the first port from START on which nothing listens (at most 50 tried).
-free_port() {
-    local port=$1 tries=0
-    while (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null; do
-        port=$((port + 1))
-        tries=$((tries + 1))
-        [ "$tries" -lt 50 ] || { echo "smoke: no free port from $1" >&2; exit 1; }
-    done
-    echo "$port"
-}
+label="smoke"
+# shellcheck source=tools/e2e/live_lib.sh
+. "$(dirname "$0")/live_lib.sh"
 SONARR_PORT=$(free_port "${SMOKE_SONARR_PORT:-18989}")
 SONARR_SERIES_PORT=$(free_port "${SMOKE_SONARR_SERIES_PORT:-18990}")
 RADARR_PORT=$(free_port "${SMOKE_RADARR_PORT:-17878}")
