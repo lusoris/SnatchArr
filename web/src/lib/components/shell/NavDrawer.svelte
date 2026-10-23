@@ -4,15 +4,13 @@ SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { page } from '$app/state';
 	import BrandMark from '#lib/components/BrandMark.svelte';
 	import { m } from '#lib/paraglide/messages.js';
-	import { isRouteActive, type NavGroup } from './nav.js';
+	import type { NavGroup } from './nav.js';
 	import NavIcon from './NavIcon.svelte';
 	import NavGroups from './NavGroups.svelte';
-	import LocaleSelect from './LocaleSelect.svelte';
 	import KofiLink from './KofiLink.svelte';
-	import VersionLabel from './VersionLabel.svelte';
+	import NavFooter from './NavFooter.svelte';
 
 	interface Props {
 		open: boolean;
@@ -97,32 +95,5 @@ SPDX-License-Identifier: EUPL-1.2
 		<KofiLink onclick={onClose} />
 	</nav>
 
-	<div class="flex flex-col gap-3 border-t border-line p-3 text-xs">
-		<LocaleSelect id="mobile-lang" />
-
-		<div class="flex items-center justify-between gap-2 pt-1">
-			<a
-				href={resolve('account')}
-				aria-current={isRouteActive(page.url.pathname, '/account') ? 'page' : undefined}
-				onclick={onClose}
-				class="nav-link flex items-center gap-2 rounded px-2 py-1.5 text-sm text-fg"
-			>
-				<NavIcon name="user" size={16} class="text-subtle" />
-				<span>{m.nav_account()}</span>
-			</a>
-			<button
-				type="button"
-				class="btn inline-flex min-h-0 items-center gap-1.5 rounded px-2 py-1.5 text-sm text-subtle hover:border-danger hover:text-danger"
-				onclick={() => {
-					onClose();
-					onLogout();
-				}}
-			>
-				<NavIcon name="log-out" size={15} />
-				<span>{m.nav_logout()}</span>
-			</button>
-		</div>
-
-		<VersionLabel />
-	</div>
+	<NavFooter localeId="mobile-lang" {onLogout} onNavigate={onClose} />
 </dialog>
