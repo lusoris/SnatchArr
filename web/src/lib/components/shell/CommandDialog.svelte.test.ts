@@ -37,6 +37,20 @@ const mockInstance: Instance = {
 	updated_at: '2026-10-20T00:00:00Z'
 };
 
+async function openViaKey(key = 'k', modifier: 'ctrlKey' | 'metaKey' = 'ctrlKey'): Promise<void> {
+	window.dispatchEvent(new KeyboardEvent('keydown', { key, [modifier]: true, bubbles: true }));
+	await vi.waitFor(() => {
+		expect(screen.getByRole('combobox')).toBeTruthy();
+	});
+}
+
+async function closeViaEscape(): Promise<void> {
+	window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+	await vi.waitFor(() => {
+		expect(screen.queryByRole('combobox')).toBeNull();
+	});
+}
+
 describe('CommandDialog', () => {
 	beforeEach(() => {
 		stubGet({
@@ -54,20 +68,14 @@ describe('CommandDialog', () => {
 
 		expect(screen.queryByRole('combobox')).toBeNull();
 
-		window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }));
-		await vi.waitFor(() => {
-			expect(screen.getByRole('combobox')).toBeTruthy();
-		});
+		await openViaKey();
 
 		const results = await axe(container, {
 			runOnly: { type: 'tag', values: [...WCAG_22_AA_TAGS] }
 		});
 		expect(results.violations).toEqual([]);
 
-		window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-		await vi.waitFor(() => {
-			expect(screen.queryByRole('combobox')).toBeNull();
-		});
+		await closeViaEscape();
 	});
 
 	it('boundary: on Apple platforms Cmd+K opens and Ctrl+K does not', async () => {
@@ -77,10 +85,7 @@ describe('CommandDialog', () => {
 		window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }));
 		expect(screen.queryByRole('combobox')).toBeNull();
 
-		window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }));
-		await vi.waitFor(() => {
-			expect(screen.getByRole('combobox')).toBeTruthy();
-		});
+		await openViaKey('k', 'metaKey');
 	});
 
 	it('negative: entries follow the given nav groups only', async () => {
@@ -117,10 +122,7 @@ describe('CommandDialog', () => {
 	it('boundary: opens with uppercase K (Ctrl+K)', async () => {
 		renderWithQuery(CommandDialog, { navGroups, open: false });
 
-		window.dispatchEvent(new KeyboardEvent('keydown', { key: 'K', ctrlKey: true, bubbles: true }));
-		await vi.waitFor(() => {
-			expect(screen.getByRole('combobox')).toBeTruthy();
-		});
+		await openViaKey('K');
 	});
 
 	it('positive: Escape closes dialog and returns focus to opener element', async () => {
@@ -133,16 +135,10 @@ describe('CommandDialog', () => {
 		renderWithQuery(CommandDialog, { navGroups, open: false });
 
 		// Open via Ctrl+K while opener is focused
-		window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }));
-		await vi.waitFor(() => {
-			expect(screen.getByRole('combobox')).toBeTruthy();
-		});
+		await openViaKey();
 
 		// Press Escape to close
-		window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-		await vi.waitFor(() => {
-			expect(screen.queryByRole('combobox')).toBeNull();
-		});
+		await closeViaEscape();
 
 		// Focus should return to opener button
 		expect(document.activeElement).toBe(opener);

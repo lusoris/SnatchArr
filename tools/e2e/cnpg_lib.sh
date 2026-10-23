@@ -25,10 +25,9 @@ api="http://127.0.0.1:$port"
 work=$(mktemp -d)
 pf=""
 
-fail() {
-    echo "${label:?set label before sourcing cnpg_lib.sh}: $*" >&2
-    exit 1
-}
+# fail, add_image and images.
+# shellcheck source=tools/e2e/live_lib.sh
+. "$(dirname "${BASH_SOURCE[0]}")/live_lib.sh"
 
 cleanup() {
     status=$?
@@ -119,16 +118,6 @@ check_app() {
     login || fail "login with the password set before failed"
 }
 
-# add_image adds the --set arguments for an image of repository:tag.
-images=()
-add_image() {
-    local component=$1 ref=$2
-    [ -n "$ref" ] || return 0
-    [[ "$ref" == *:* && "${ref##*:}" != */* && "$ref" != *@* ]] ||
-        fail "$component image $ref is not repository:tag"
-    images+=(--set "image.$component.repository=${ref%:*}" --set "image.$component.tag=${ref##*:}"
-        --set "image.$component.pullPolicy=Never")
-}
 api_image_var="${prefix}_API_IMAGE"
 worker_image_var="${prefix}_WORKER_IMAGE"
 add_image api "${!api_image_var:-}"
