@@ -3,7 +3,6 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
-	import { tick } from 'svelte';
 	import { createSentioQuery, createSentioMutation } from '@sveltesentio/query';
 	import { api } from '#lib/api/client.js';
 	import type { components } from '#lib/api/schema.js';
@@ -11,6 +10,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import LinkCard from '#lib/components/LinkCard.svelte';
 	import LinkForm, { type LinkBody } from '#lib/components/LinkForm.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
+	import { FormEditor } from '#lib/formEditor.svelte.js';
 	import { deleteCallbacks, probeCallbacks, saveSuccess } from '#lib/forms.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
@@ -31,21 +31,18 @@ SPDX-License-Identifier: EUPL-1.2
 		refetchInterval: 30_000
 	});
 
-	/** The link in the form; null adds a new one. */
-	let editing = $state<ProwlarrLink | null>(null);
-	/** Bumped to remount an emptied create form after a save. */
-	let formGeneration = $state(0);
+	const editor = new FormEditor<ProwlarrLink>('prowlarr-name', () => save.reset());
 
 	const save = createSentioMutation({
 		mutationFn: async (body: LinkBody) => {
-			const target = editing;
+			const target = editor.editing;
 			const res = target
 				? await api.PUT('/prowlarr/{linkId}', { params: { path: { linkId: target.id } }, body })
 				: await api.POST('/prowlarr', { body });
 			return res.data;
 		},
 		invalidates: [keys.prowlarrLinks, keys.prowlarr],
-		onSuccess: saveSuccess(closeForm)
+		onSuccess: saveSuccess(editor.close)
 	});
 
 	const remove = createSentioMutation({
@@ -54,7 +51,7 @@ SPDX-License-Identifier: EUPL-1.2
 			return link;
 		},
 		invalidates: [keys.prowlarrLinks, keys.prowlarr],
-		...deleteCallbacks(() => editing, closeForm)
+		...deleteCallbacks(() => editor.editing, editor.close)
 	});
 
 	const probe = createSentioMutation({
@@ -115,19 +112,6 @@ SPDX-License-Identifier: EUPL-1.2
 		}
 		return { label: m.prowlarr_state_ok(), level: 'ok' };
 	}
-
-	function closeForm(): void {
-		editing = null;
-		formGeneration += 1;
-		save.reset();
-	}
-
-	async function edit(link: ProwlarrLink): Promise<void> {
-		save.reset();
-		editing = link;
-		await tick();
-		document.getElementById('prowlarr-name')?.focus();
-	}
 </script>
 
 <h1 class="mb-2 text-2xl font-semibold">{m.prowlarr_title()}</h1>
@@ -147,7 +131,7 @@ SPDX-License-Identifier: EUPL-1.2
 				{link}
 				testPending={probe.isPending}
 				deletePending={remove.isPending}
-				onedit={() => edit(link)}
+				onedit={() => editor.open(link)}
 				ontest={() => probe.mutate(link.id)}
 				ondelete={() => remove.mutate(link)}
 			/>
@@ -155,14 +139,9 @@ SPDX-License-Identifier: EUPL-1.2
 	</ul>
 {/if}
 
-<AdminFormSlot
-	key={`${editing?.id ?? 'new'}-${formGeneration}`}
-	{save}
-	probe={probeInput}
-	oncancel={closeForm}
->
+<AdminFormSlot {editor} {save} probe={probeInput}>
 	{#snippet form(props)}
-		<LinkForm idPrefix="prowlarr" link={editing} {...props} />
+		<LinkForm idPrefix="prowlarr" link={editor.editing} {...props} />
 	{/snippet}
 </AdminFormSlot>
 

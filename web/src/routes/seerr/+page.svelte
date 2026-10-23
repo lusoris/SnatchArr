@@ -3,7 +3,6 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
-	import { tick } from 'svelte';
 	import { createSentioQuery, createSentioMutation } from '@sveltesentio/query';
 	import { toast } from 'svelte-sonner';
 	import { api, describeError } from '#lib/api/client.js';
@@ -12,6 +11,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import LinkCard from '#lib/components/LinkCard.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import SeerrLinkForm from '#lib/components/SeerrLinkForm.svelte';
+	import { FormEditor } from '#lib/formEditor.svelte.js';
 	import { deleteCallbacks, probeCallbacks, saveSuccess } from '#lib/forms.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
@@ -47,21 +47,18 @@ SPDX-License-Identifier: EUPL-1.2
 		onError: (err) => toast.error(describeError(err))
 	});
 
-	/** The link in the form; null adds a new one. */
-	let editing = $state<SeerrLink | null>(null);
-	/** Bumped to remount an emptied create form after a save. */
-	let formGeneration = $state(0);
+	const editor = new FormEditor<SeerrLink>('seerr-name', () => save.reset());
 
 	const save = createSentioMutation({
 		mutationFn: async (body: SeerrLinkInput) => {
-			const target = editing;
+			const target = editor.editing;
 			const res = target
 				? await api.PUT('/seerr/{linkId}', { params: { path: { linkId: target.id } }, body })
 				: await api.POST('/seerr', { body });
 			return res.data;
 		},
 		invalidates: [keys.seerrLinks, keys.seerrRequests],
-		onSuccess: saveSuccess(closeForm)
+		onSuccess: saveSuccess(editor.close)
 	});
 
 	const remove = createSentioMutation({
@@ -70,7 +67,7 @@ SPDX-License-Identifier: EUPL-1.2
 			return link;
 		},
 		invalidates: [keys.seerrLinks, keys.seerrRequests],
-		...deleteCallbacks(() => editing, closeForm)
+		...deleteCallbacks(() => editor.editing, editor.close)
 	});
 
 	const probe = createSentioMutation({
@@ -110,19 +107,6 @@ SPDX-License-Identifier: EUPL-1.2
 			),
 		onError: (err) => toast.error(describeError(err))
 	});
-
-	function closeForm(): void {
-		editing = null;
-		formGeneration += 1;
-		save.reset();
-	}
-
-	async function edit(link: SeerrLink): Promise<void> {
-		save.reset();
-		editing = link;
-		await tick();
-		document.getElementById('seerr-name')?.focus();
-	}
 </script>
 
 <h1 class="mb-4 text-2xl font-semibold">{m.seerr_title()}</h1>
@@ -141,7 +125,7 @@ SPDX-License-Identifier: EUPL-1.2
 				{link}
 				testPending={probe.isPending}
 				deletePending={remove.isPending}
-				onedit={() => edit(link)}
+				onedit={() => editor.open(link)}
 				ontest={() => probe.mutate(link.id)}
 				ondelete={() => remove.mutate(link)}
 			>
@@ -169,14 +153,9 @@ SPDX-License-Identifier: EUPL-1.2
 	</ul>
 {/if}
 
-<AdminFormSlot
-	key={`${editing?.id ?? 'new'}-${formGeneration}`}
-	{save}
-	probe={probeInput}
-	oncancel={closeForm}
->
+<AdminFormSlot {editor} {save} probe={probeInput}>
 	{#snippet form(props)}
-		<SeerrLinkForm link={editing} instances={instances.data ?? []} {...props} />
+		<SeerrLinkForm link={editor.editing} instances={instances.data ?? []} {...props} />
 	{/snippet}
 </AdminFormSlot>
 
