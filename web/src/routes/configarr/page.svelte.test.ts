@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api } from '#lib/api/client.js';
 import type { components } from '#lib/api/schema.js';
 import { m } from '#lib/paraglide/messages.js';
-import { renderWithQuery, stubGet } from '#lib/testing/harness.js';
+import { fill, renderWithQuery, stubGet } from '#lib/testing/harness.js';
 import ConfigarrPage from './+page.svelte';
 
 type ConfigarrStatus = components['schemas']['ConfigarrStatus'];
@@ -37,10 +37,6 @@ const linkedStatus: ConfigarrStatus = {
 };
 
 const unlinkedStatus: ConfigarrStatus = { linked: false, watching: false };
-
-async function fill(label: string, value: string) {
-	await fireEvent.input(screen.getByLabelText(label), { target: { value } });
-}
 
 describe('configarr', () => {
 	afterEach(() => {

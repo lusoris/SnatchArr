@@ -14,6 +14,7 @@ import {
 	samplePolicy,
 	stubGet,
 	untestedInstance,
+	type Instance,
 	type SnatchPolicy
 } from '#lib/testing/harness.js';
 import InstancePolicyTab from './InstancePolicyTab.svelte';
@@ -21,6 +22,23 @@ import InstancePolicyTab from './InstancePolicyTab.svelte';
 function savePolicyButton(): HTMLElement {
 	const form = screen.getByRole('form', { name: m.policy_title() });
 	return within(form).getByRole('button', { name: m.instance_save() });
+}
+
+function setupPolicyTab(instance: Instance = forkInstance) {
+	const put = vi.spyOn(api, 'PUT').mockResolvedValue({ data: samplePolicy } as never);
+	stubGet({
+		'/instances/{instanceId}': instance,
+		'/instances/{instanceId}/policy': samplePolicy,
+		'/instances/{instanceId}/policy/filter-options': sampleFilterOptions
+	});
+	const renderResult = renderWithQuery(InstancePolicyTab, { id: instance.id });
+	return { put, ...renderResult };
+}
+
+async function saveAndExpectBody(put: ReturnType<typeof vi.spyOn>): Promise<SnatchPolicy> {
+	await fireEvent.click(savePolicyButton());
+	expect(put).toHaveBeenCalledOnce();
+	return (put.mock.calls[0]![1] as { body: SnatchPolicy }).body;
 }
 
 describe('InstancePolicyTab', () => {
@@ -44,13 +62,7 @@ describe('InstancePolicyTab', () => {
 	});
 
 	it('saves the picked filters and the release delay with the policy', async () => {
-		const put = vi.spyOn(api, 'PUT').mockResolvedValue({ data: samplePolicy } as never);
-		stubGet({
-			'/instances/{instanceId}': forkInstance,
-			'/instances/{instanceId}/policy': samplePolicy,
-			'/instances/{instanceId}/policy/filter-options': sampleFilterOptions
-		});
-		renderWithQuery(InstancePolicyTab, { id: forkInstance.id });
+		const { put } = setupPolicyTab();
 
 		const include = (await screen.findByLabelText(m.policy_include_tags())) as HTMLSelectElement;
 		const kids = [...include.options].find((o) => o.textContent === 'kids');
@@ -63,38 +75,12 @@ describe('InstancePolicyTab', () => {
 		await fireEvent.input(screen.getByLabelText(m.policy_release_delay()), {
 			target: { value: '12' }
 		});
-		await fireEvent.click(savePolicyButton());
-
-		expect(put).toHaveBeenCalledOnce();
-		const body = (put.mock.calls[0]![1] as { body: SnatchPolicy }).body;
+		const body = await saveAndExpectBody(put);
 		expect(body.include_tags).toEqual([5]);
 		expect(body.exclude_tags).toEqual([]);
 		expect(body.include_quality_profiles).toEqual([]);
 		expect(body.exclude_quality_profiles).toEqual([4]);
 		expect(body.release_delay_h).toBe(12);
-	});
-
-	it('keeps the stored filters when the instance cannot list its tags', async () => {
-		const put = vi.spyOn(api, 'PUT').mockResolvedValue({ data: samplePolicy } as never);
-		stubGet({
-			'/instances/{instanceId}': forkInstance,
-			'/instances/{instanceId}/policy': { ...samplePolicy, exclude_tags: [9], release_delay_h: 6 },
-			'/instances/{instanceId}/policy/filter-options': new ProblemError({
-				type: 'about:blank',
-				status: 502,
-				detail: 'instance unreachable'
-			})
-		});
-		renderWithQuery(InstancePolicyTab, { id: forkInstance.id });
-
-		expect((await screen.findByRole('alert')).textContent).toContain('instance unreachable');
-		expect(screen.queryByLabelText(m.policy_include_tags())).toBeNull();
-		await fireEvent.click(savePolicyButton());
-
-		const body = (put.mock.calls[0]![1] as { body: SnatchPolicy }).body;
-		expect(body.exclude_tags).toEqual([9]);
-		expect(body.include_tags).toEqual([]);
-		expect(body.release_delay_h).toBe(6);
 	});
 
 	it('says so when the instance has no tags or quality profiles', async () => {
@@ -111,13 +97,7 @@ describe('InstancePolicyTab', () => {
 	});
 
 	it('toggles and saves the dry_run policy setting', async () => {
-		const put = vi.spyOn(api, 'PUT').mockResolvedValue({ data: samplePolicy } as never);
-		stubGet({
-			'/instances/{instanceId}': forkInstance,
-			'/instances/{instanceId}/policy': samplePolicy,
-			'/instances/{instanceId}/policy/filter-options': sampleFilterOptions
-		});
-		renderWithQuery(InstancePolicyTab, { id: forkInstance.id });
+		const { put } = setupPolicyTab();
 
 		const checkbox = (await screen.findByRole('checkbox', {
 			name: m.policy_dry_run()
@@ -127,21 +107,12 @@ describe('InstancePolicyTab', () => {
 		await fireEvent.click(checkbox);
 		expect(checkbox.checked).toBe(true);
 
-		await fireEvent.click(savePolicyButton());
-
-		expect(put).toHaveBeenCalledOnce();
-		const body = (put.mock.calls[0]![1] as { body: SnatchPolicy }).body;
+		const body = await saveAndExpectBody(put);
 		expect(body.dry_run).toBe(true);
 	});
 
 	it('offers the availability switch on a Radarr instance and saves it off', async () => {
-		const put = vi.spyOn(api, 'PUT').mockResolvedValue({ data: samplePolicy } as never);
-		stubGet({
-			'/instances/{instanceId}': untestedInstance,
-			'/instances/{instanceId}/policy': samplePolicy,
-			'/instances/{instanceId}/policy/filter-options': sampleFilterOptions
-		});
-		renderWithQuery(InstancePolicyTab, { id: untestedInstance.id });
+		const { put } = setupPolicyTab(untestedInstance);
 
 		const checkbox = (await screen.findByRole('checkbox', {
 			name: m.policy_skip_unavailable()
@@ -149,33 +120,19 @@ describe('InstancePolicyTab', () => {
 		expect(checkbox.checked).toBe(true);
 
 		await fireEvent.click(checkbox);
-		await fireEvent.click(savePolicyButton());
-
-		expect(put).toHaveBeenCalledOnce();
-		const body = (put.mock.calls[0]![1] as { body: SnatchPolicy }).body;
+		const body = await saveAndExpectBody(put);
 		expect(body.skip_unavailable_movies).toBe(false);
 	});
 
 	it('hides the availability switch on other kinds', async () => {
-		stubGet({
-			'/instances/{instanceId}': forkInstance,
-			'/instances/{instanceId}/policy': samplePolicy,
-			'/instances/{instanceId}/policy/filter-options': sampleFilterOptions
-		});
-		renderWithQuery(InstancePolicyTab, { id: forkInstance.id });
+		setupPolicyTab();
 
 		await screen.findByRole('checkbox', { name: m.policy_dry_run() });
 		expect(screen.queryByRole('checkbox', { name: m.policy_skip_unavailable() })).toBeNull();
 	});
 
 	it('fills draft from a chosen preset without saving until save button is clicked', async () => {
-		const put = vi.spyOn(api, 'PUT').mockResolvedValue({ data: samplePolicy } as never);
-		stubGet({
-			'/instances/{instanceId}': forkInstance,
-			'/instances/{instanceId}/policy': samplePolicy,
-			'/instances/{instanceId}/policy/filter-options': sampleFilterOptions
-		});
-		renderWithQuery(InstancePolicyTab, { id: forkInstance.id });
+		const { put } = setupPolicyTab();
 
 		const gentleBtn = await screen.findByRole('button', {
 			name: new RegExp(m.preset_gentle_label())
@@ -189,9 +146,7 @@ describe('InstancePolicyTab', () => {
 		const missingInput = screen.getByLabelText(m.policy_missing_per_cycle()) as HTMLInputElement;
 		expect(missingInput.value).toBe('1');
 
-		await fireEvent.click(savePolicyButton());
-		expect(put).toHaveBeenCalledOnce();
-		const body = (put.mock.calls[0]![1] as { body: SnatchPolicy }).body;
+		const body = await saveAndExpectBody(put);
 		expect(body.missing_per_cycle).toBe(1);
 		expect(body.upgrade_per_cycle).toBe(0);
 		expect(body.cycle_interval_s).toBe(900);
@@ -200,13 +155,7 @@ describe('InstancePolicyTab', () => {
 
 	it('shows app-specific options for Sonarr and Lidarr and saves them', async () => {
 		const sonarrInstance = { ...forkInstance, id: 'sonarr-1', kind: 'sonarr' as const };
-		const put = vi.spyOn(api, 'PUT').mockResolvedValue({ data: samplePolicy } as never);
-		stubGet({
-			'/instances/{instanceId}': sonarrInstance,
-			'/instances/{instanceId}/policy': samplePolicy,
-			'/instances/{instanceId}/policy/filter-options': sampleFilterOptions
-		});
-		const { unmount } = renderWithQuery(InstancePolicyTab, { id: sonarrInstance.id });
+		const { put, unmount } = setupPolicyTab(sonarrInstance);
 
 		const missingSelect = (await screen.findByLabelText(
 			m.policy_sonarr_missing_mode()

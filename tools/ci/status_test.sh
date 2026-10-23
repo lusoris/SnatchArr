@@ -149,13 +149,18 @@ mirror_refuses "commits condition differs from the expectation" \
 mirror_refuses "draft step dropped from the changes job" \
   'job changes: the first step is not "Stop on a draft pull request"' \
   '/^  changes:$/ { in_changes = 1 } /^  [a-z-]+:$/ && !/^  changes:$/ { in_changes = 0 }
-   in_changes && /^      - name: Stop on a draft pull request$/ { skip = 1; next }
+   in_changes && /^      - (name: Stop on a draft pull request|\*stop-draft)$/ { skip = 1; next }
    skip && /^      - / { skip = 0 } !skip { print }'
 mirror_refuses "draft step dropped from the semgrep job" \
   'job semgrep: the first step is not "Stop on a draft pull request"' \
   '/^  semgrep:$/ { in_job = 1 } /^  [a-z-]+:$/ && !/^  semgrep:$/ { in_job = 0 }
-   in_job && /^      - name: Stop on a draft pull request$/ { skip = 1; next }
+   in_job && /^      - (name: Stop on a draft pull request|\*stop-draft)$/ { skip = 1; next }
    skip && /^      - / { skip = 0 } !skip { print }'
+# The jobs share the step through the YAML anchor &stop-draft: an alias reads the anchor's name.
+mirror_refuses "anchored draft step names another step" \
+  'job semgrep: the first step is not "Stop on a draft pull request"' \
+  'prev == "      - &stop-draft" { sub(/name: Stop on a draft pull request$/, "name: Stop early") }
+   { print; prev = $0 }'
 mirror_refuses "expectation of the commits job removed" "status: no COMMITS_EXPECTED expression" \
   '!/^ *COMMITS_EXPECTED: /'
 

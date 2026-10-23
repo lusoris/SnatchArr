@@ -2,14 +2,21 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, screen, waitFor, within } from '@testing-library/svelte';
 import { ProblemError } from '@sveltesentio/core';
 import { toast } from 'svelte-sonner';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { m } from '#lib/paraglide/messages.js';
 import { api } from '#lib/api/client.js';
 import type { components } from '#lib/api/schema.js';
-import { m } from '#lib/paraglide/messages.js';
-import { renderWithQuery, stubGet } from '#lib/testing/harness.js';
+import {
+	assertCancelDelete,
+	cardFor,
+	confirmDeleteInCard,
+	fill,
+	renderWithQuery,
+	stubGet
+} from '#lib/testing/harness.js';
 import ProwlarrPage from './+page.svelte';
 
 type ProwlarrLink = components['schemas']['ProwlarrLink'];
@@ -107,15 +114,7 @@ const storedLink: ProwlarrLink = {
 };
 
 const linkStubs = { '/prowlarr': [storedLink], '/prowlarr/status': [] };
-
-async function fill(label: string, value: string) {
-	await fireEvent.input(screen.getByLabelText(label), { target: { value } });
-}
-
-async function linkCard() {
-	const heading = await screen.findByRole('heading', { level: 3, name: /Primary Prowlarr/ });
-	return within(heading.closest('li') as HTMLElement);
-}
+const linkCard = () => cardFor(/Primary Prowlarr/);
 
 describe('prowlarr', () => {
 	afterEach(() => {
@@ -289,9 +288,8 @@ describe('prowlarr links', () => {
 		renderWithQuery(ProwlarrPage);
 
 		const card = await linkCard();
-		await fireEvent.click(card.getByRole('button', { name: m.action_delete() }));
 		expect(deleteSpy).not.toHaveBeenCalled();
-		await fireEvent.click(card.getByRole('button', { name: m.confirm_delete_yes() }));
+		await confirmDeleteInCard(card);
 
 		expect(deleteSpy).toHaveBeenCalledWith('/prowlarr/{linkId}', {
 			params: { path: { linkId: storedLink.id } }
@@ -303,12 +301,7 @@ describe('prowlarr links', () => {
 		const deleteSpy = vi.spyOn(api, 'DELETE');
 		renderWithQuery(ProwlarrPage);
 
-		const card = await linkCard();
-		await fireEvent.click(card.getByRole('button', { name: m.action_delete() }));
-		await fireEvent.click(card.getByRole('button', { name: m.action_cancel() }));
-
-		expect(deleteSpy).not.toHaveBeenCalled();
-		expect(card.getByRole('button', { name: m.action_delete() })).toBeTruthy();
+		await assertCancelDelete(await linkCard(), deleteSpy);
 	});
 
 	it('tests a stored link and reports a failure', async () => {

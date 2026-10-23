@@ -65,6 +65,36 @@ jobs:
 YAML
 }
 
+# plant_action CASE USES: one composite action whose step uses USES, called from planted.yml.
+plant_action() {
+  mkdir -p "$WORK/$1/.github/workflows" "$WORK/$1/.github/actions/planted"
+  cat > "$WORK/$1/.github/actions/planted/action.yml" <<YAML
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+name: planted
+description: planted action
+runs:
+  using: composite
+  steps:
+    - uses: $2
+YAML
+  cat > "$WORK/$1/.github/workflows/planted.yml" <<YAML
+name: planted
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  planted:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: $CHECKOUT # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/planted
+YAML
+}
+
 # expect_accepted CASE NEEDLE: the check must pass and its output must name NEEDLE.
 expect_accepted() {
   local name="$1" needle="$2" out
@@ -133,6 +163,15 @@ expect_accepted go-install-pinned "no version comment names another tag"
 
 plant_install go-install-variable "go install \"github.com/cordanaLLM/praetor/cmd/standardsctl@\${PRAETOR_REF}\""
 expect_accepted go-install-variable "no version comment names another tag"
+
+plant_action action-pinned "$CHECKOUT # v7.0.1"
+expect_accepted action-pinned "no version comment names another tag"
+
+plant_action action-branch "$CHECKOUT # master"
+expect_accepted action-branch "note .github/actions/planted/action.yml:8: ref-version-mismatch: branch points to commit"
+
+plant_action action-unpinned "actions/checkout@v7"
+expect_refusal action-unpinned "refused .github/actions/planted/action.yml:8: unpinned-uses"
 
 expect_refusal clean "is required" env -u GH_TOKEN -u GITHUB_TOKEN
 
@@ -225,4 +264,4 @@ if jq -e -n --arg file "tools/ci/zizmor.txt" --arg pat "$PIP_PATTERN" '$file | t
 fi
 echo "ok   renovate: pip_requirements reads tools/ci/zizmor-requirements.txt and ignores zizmor.txt"
 
-echo "workflow check: 4 accepted, 14 refused; Renovate reads 1 image pin, zizmor-requirements.txt and $pinned go install pins"
+echo "workflow check: 6 accepted, 15 refused; Renovate reads 1 image pin, zizmor-requirements.txt and $pinned go install pins"

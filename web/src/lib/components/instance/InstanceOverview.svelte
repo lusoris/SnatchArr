@@ -4,31 +4,24 @@ SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { createSentioMutation, createSentioQuery, useQueryClient } from '@sveltesentio/query';
+	import { createSentioMutation, useQueryClient } from '@sveltesentio/query';
 	import { toast } from 'svelte-sonner';
 	import { api, describeError } from '#lib/api/client.js';
-	import type { components } from '#lib/api/schema.js';
 	import CheckState from '#lib/components/CheckState.svelte';
 	import InstanceEditForm from '#lib/components/InstanceEditForm.svelte';
-	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import InstancePriorityCard from '#lib/components/instance/InstancePriorityCard.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { probeMessage } from '#lib/products.js';
 	import { keys } from '#lib/query.js';
 	import { session } from '#lib/session.svelte.js';
-
-	type Instance = components['schemas']['Instance'];
+	import InstanceTabGuard from './InstanceTabGuard.svelte';
+	import { instanceQuery } from './instance-query.svelte.js';
 
 	const { id }: { id: string } = $props();
 	// The layout remounts each tab per id ({#key}), so the initial value is the value.
 	const instanceId = untrack(() => id);
 	const queryClient = useQueryClient();
-
-	const instance = createSentioQuery<Instance | undefined>(() => ({
-		queryKey: keys.instance(instanceId),
-		queryFn: async () =>
-			(await api.GET('/instances/{instanceId}', { params: { path: { instanceId } } })).data
-	}));
+	const instance = instanceQuery(instanceId);
 
 	const probe = createSentioMutation({
 		mutationFn: async () =>
@@ -42,26 +35,24 @@ SPDX-License-Identifier: EUPL-1.2
 	});
 </script>
 
-{#if instance.isPending}
-	<p aria-live="polite">{m.loading()}</p>
-{:else if instance.isError}
-	<ProblemNote error={instance.error} />
-{:else if instance.data}
-	<div class="mb-4">
-		<CheckState instance={instance.data} />
-	</div>
+<InstanceTabGuard query={instance}>
+	{#snippet children(data)}
+		<div class="mb-4">
+			<CheckState instance={data} />
+		</div>
 
-	{#if session.isAdmin}
-		<button
-			type="button"
-			class="btn mb-6"
-			onclick={() => probe.mutate()}
-			disabled={probe.isPending}
-		>
-			{m.instance_test()}
-		</button>
+		{#if session.isAdmin}
+			<button
+				type="button"
+				class="btn mb-6"
+				onclick={() => probe.mutate()}
+				disabled={probe.isPending}
+			>
+				{m.instance_test()}
+			</button>
 
-		<InstanceEditForm instance={instance.data} />
-		<InstancePriorityCard instance={instance.data} />
-	{/if}
-{/if}
+			<InstanceEditForm instance={data} />
+			<InstancePriorityCard instance={data} />
+		{/if}
+	{/snippet}
+</InstanceTabGuard>

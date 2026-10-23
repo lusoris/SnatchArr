@@ -8,6 +8,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { toast } from 'svelte-sonner';
 	import { api, describeError } from '#lib/api/client.js';
 	import type { components } from '#lib/api/schema.js';
+	import AdminSaveButton from '#lib/components/AdminSaveButton.svelte';
 	import PolicyFilters from '#lib/components/PolicyFilters.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import AppSpecificSection from '#lib/components/policy/AppSpecificSection.svelte';
@@ -19,19 +20,15 @@ SPDX-License-Identifier: EUPL-1.2
 	import { m } from '#lib/paraglide/messages.js';
 	import { keys } from '#lib/query.js';
 	import { session } from '#lib/session.svelte.js';
+	import { instanceQuery } from './instance-query.svelte.js';
 
 	type Policy = components['schemas']['SnatchPolicy'];
-	type Instance = components['schemas']['Instance'];
 
 	const { id }: { id: string } = $props();
 	// The layout remounts each tab per id ({#key}), so the initial value is the value.
 	const instanceId = untrack(() => id);
 
-	const instance = createSentioQuery<Instance | undefined>(() => ({
-		queryKey: keys.instance(instanceId),
-		queryFn: async () =>
-			(await api.GET('/instances/{instanceId}', { params: { path: { instanceId } } })).data
-	}));
+	const instance = instanceQuery(instanceId);
 
 	const policy = createSentioQuery<Policy | undefined>(() => ({
 		queryKey: keys.policy(instanceId),
@@ -108,12 +105,6 @@ SPDX-License-Identifier: EUPL-1.2
 		<AppSpecificSection bind:policy={draft} kind={instance.data?.kind} />
 		<SafetySection bind:policy={draft} />
 
-		{#if session.isAdmin}
-			<div>
-				<button type="submit" class="btn btn-primary" disabled={save.isPending}>
-					{m.instance_save()}
-				</button>
-			</div>
-		{/if}
+		<AdminSaveButton disabled={save.isPending} />
 	</form>
 {/if}

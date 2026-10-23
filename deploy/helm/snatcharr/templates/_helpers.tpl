@@ -111,6 +111,15 @@ render; any other pinned tag (a branch or commit build) is not a release and is 
 {{- end -}}
 
 {{/*
+snatcharr.metricsPort is the api /metrics port. Values reused from chart 0.5.5 or older
+(helm upgrade --reuse-values) have no metricsPort key; the default keeps the port from rendering
+as 0.
+*/}}
+{{- define "snatcharr.metricsPort" -}}
+{{- .Values.api.service.metricsPort | default 9464 -}}
+{{- end -}}
+
+{{/*
 snatcharr.arrEgressRules renders the *arr egress rules, or nothing when there is no peer (an
 empty `to` would allow every destination, #120).
 
