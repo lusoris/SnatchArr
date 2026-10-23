@@ -7,6 +7,7 @@ package dlclients_test
 import (
 	"encoding/json"
 	"encoding/xml"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -342,6 +343,14 @@ func TestRTorrent_StateClassification(t *testing.T) {
 		{"active: open, active, incomplete", rtorrent.Torrent{IsOpen: true, IsActive: true, IsComplete: false}, dlclients.DLClassActive},
 		{"queued: incomplete hash checking", rtorrent.Torrent{IsOpen: true, IsActive: false, IsComplete: false, IsHashChecking: true}, dlclients.DLClassQueued},
 		{"queued: closed incomplete hash checking", rtorrent.Torrent{IsOpen: false, IsActive: false, IsComplete: false, IsHashChecking: true}, dlclients.DLClassQueued},
+		{"queued: closed incomplete hashing=1 initial", rtorrent.Torrent{IsOpen: false, IsActive: false, IsComplete: false, Hashing: 1}, dlclients.DLClassQueued},
+		{"queued: closed incomplete hashing=2 last", rtorrent.Torrent{IsOpen: false, IsActive: false, IsComplete: false, Hashing: 2}, dlclients.DLClassQueued},
+		{"queued: closed incomplete hashing=3 rehash", rtorrent.Torrent{IsOpen: false, IsActive: false, IsComplete: false, Hashing: 3}, dlclients.DLClassQueued},
+		{"none boundary: closed incomplete hashing=0", rtorrent.Torrent{IsOpen: false, IsActive: false, IsComplete: false, Hashing: 0}, dlclients.DLClassNone},
+		{"none boundary: closed incomplete hashing=4 (unknown)", rtorrent.Torrent{IsOpen: false, IsActive: false, IsComplete: false, Hashing: 4}, dlclients.DLClassNone},
+		{"none boundary: closed incomplete hashing=-1", rtorrent.Torrent{IsOpen: false, IsActive: false, IsComplete: false, Hashing: -1}, dlclients.DLClassNone},
+		{"none: complete closed hashing=1", rtorrent.Torrent{IsOpen: false, IsActive: false, IsComplete: true, Hashing: 1}, dlclients.DLClassNone},
+		{"active: open active incomplete hashing=1 (active wins)", rtorrent.Torrent{IsOpen: true, IsActive: true, IsComplete: false, Hashing: 1}, dlclients.DLClassActive},
 		{"none: stopped/closed incomplete", rtorrent.Torrent{IsOpen: false, IsActive: false, IsComplete: false, IsHashChecking: false}, dlclients.DLClassNone},
 		{"none: paused open incomplete", rtorrent.Torrent{IsOpen: true, IsActive: false, IsComplete: false, IsHashChecking: false}, dlclients.DLClassNone},
 		{"none: complete seeding", rtorrent.Torrent{IsOpen: true, IsActive: true, IsComplete: true}, dlclients.DLClassNone},
@@ -359,7 +368,7 @@ func TestRTorrent_StateClassification(t *testing.T) {
 	}
 }
 
-func rtorrentRow(open, active, complete, hashChecking bool) string {
+func rtorrentRow(open, active, complete, hashChecking bool, hashing int64) string {
 	flag := func(b bool) string {
 		if b {
 			return "<value><i8>1</i8></value>"
@@ -384,6 +393,7 @@ func rtorrentRow(open, active, complete, hashChecking bool) string {
 		"<value><string></string></value>",
 		"<value><i8>1760000000</i8></value>",
 		"<value><string></string></value>",
+		fmt.Sprintf("<value><i8>%d</i8></value>", hashing),
 	}
 	return "<value><array><data>" + strings.Join(fields, "") + "</data></array></value>"
 }
@@ -415,12 +425,13 @@ func rtorrentTestServer(torrentsXML string) *httptest.Server {
 func TestRTorrent_DocumentedStatesHTTP(t *testing.T) {
 	t.Parallel()
 	allRows := strings.Join([]string{
-		rtorrentRow(true, true, false, false),   // active
-		rtorrentRow(true, false, false, true),   // queued (hash checking)
-		rtorrentRow(false, false, false, false), // none (stopped)
-		rtorrentRow(true, false, false, false),  // none (paused)
-		rtorrentRow(true, true, true, false),    // none (seeding)
-		rtorrentRow(true, false, true, true),    // none (complete hashing)
+		rtorrentRow(true, true, false, false, 0),   // active
+		rtorrentRow(true, false, false, true, 0),   // queued (hash checking)
+		rtorrentRow(false, false, false, false, 1), // queued (in hash queue)
+		rtorrentRow(false, false, false, false, 0), // none (stopped)
+		rtorrentRow(true, false, false, false, 0),  // none (paused)
+		rtorrentRow(true, true, true, false, 0),    // none (seeding)
+		rtorrentRow(true, false, true, true, 0),    // none (complete hashing)
 	}, "")
 
 	cases := []struct {
@@ -429,10 +440,11 @@ func TestRTorrent_DocumentedStatesHTTP(t *testing.T) {
 		wantActive int
 		wantQueued int
 	}{
-		{"all documented states", allRows, 1, 1},
+		{"all documented states", allRows, 1, 2},
 		{"boundary: empty list", "", 0, 0},
-		{"boundary: single downloading", rtorrentRow(true, true, false, false), 1, 0},
-		{"boundary: all closed/paused", rtorrentRow(false, false, false, false) + rtorrentRow(true, false, false, false), 0, 0},
+		{"boundary: single downloading", rtorrentRow(true, true, false, false, 0), 1, 0},
+		{"boundary: all closed/paused", rtorrentRow(false, false, false, false, 0) + rtorrentRow(true, false, false, false, 0), 0, 0},
+		{"boundary: unknown hashing value", rtorrentRow(false, false, false, false, 4), 0, 0},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -413,17 +413,17 @@ func (g *Goenvoy) deluge(ctx context.Context, c domain.DownloadClient, secret st
 // - src/core/download_list.cc:228-553,659-700 (open, close, resume, pause, hash_queue)
 // - src/core/manager.cc:390-455 (Manager::receive_hashing_changed)
 //
-// | Complete | Open | Active | HashChecking | Classification | Reason (file:line)                                         |
-// | :------- | :--- | :----- | :----------- | :------------- | :--------------------------------------------------------- |
-// | false    | true | true   | false        | active         | Incomplete running peer transfers (download.h:44)          |
-// | false    | any  | false  | true         | queued         | Incomplete actively verifying piece hashes (manager.cc:438)|
-// | false    | false| false  | false        | none           | Closed/stopped (see note below)                            |
-// | false    | true | false  | false        | none           | Paused in memory (download_list.cc:487-535)                |
-// | true     | any  | any    | any          | none           | Completed / seeding / complete check                       |
+// | Complete | Open | Active | HashChecking | Hashing | Classification | Reason (file:line)                                          |
+// | :------- | :--- | :----- | :----------- | :------ | :------------- | :---------------------------------------------------------- |
+// | false    | true | true   | any          | any     | active         | Incomplete running peer transfers (download.h:44)           |
+// | false    | any  | false  | true         | any     | queued         | Incomplete actively verifying piece hashes (manager.cc:438) |
+// | false    | any  | false  | false        | 1..3    | queued         | Waiting in the hash queue (download.h variable_hashing_*)   |
+// | false    | false| false  | false        | other   | none           | Closed/stopped                                              |
+// | false    | true | false  | false        | other   | none           | Paused in memory (download_list.cc:487-535)                 |
+// | true     | any  | any    | any          | any     | none           | Completed / seeding / complete check                        |
 //
-// goenvoy rtorrent/v2@v2.0.1 does not fetch d.hashing, so a torrent waiting in the hash
-// queue (closed, d.hashing != 0) looks like a stopped one and counts as none until goenvoy
-// reads that field.
+// Hashing is d.hashing, read by goenvoy rtorrent/v2 since v2.1.0: 1 initial, 2 last, 3 rehash.
+// Any other value, 0 (stopped) included, counts as not hashing.
 func classifyRTorrent(t rtorrent.Torrent) dlClass {
 	if t.IsComplete {
 		return dlClassNone
@@ -431,10 +431,20 @@ func classifyRTorrent(t rtorrent.Torrent) dlClass {
 	if t.IsOpen && t.IsActive {
 		return dlClassActive
 	}
-	if t.IsHashChecking {
+	if t.IsHashChecking || rtorrentHashQueued(t.Hashing) {
 		return dlClassQueued
 	}
 	return dlClassNone
+}
+
+// rtorrentHashQueued allow-lists the d.hashing values that mean the download is in the hash queue.
+func rtorrentHashQueued(v int64) bool {
+	switch v {
+	case 1, 2, 3:
+		return true
+	default:
+		return false
+	}
 }
 
 func (g *Goenvoy) rtorrent(ctx context.Context, c domain.DownloadClient, secret string) (observation, error) {
