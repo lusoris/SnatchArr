@@ -419,6 +419,42 @@ func convertListRunsParams(in listRunsInput) (oas.ListRunsParams, error) {
 	return params, nil
 }
 
+func callListInstances(ctx context.Context, h *httpapi.Handlers) (any, error) {
+	return h.ListInstances(ctx)
+}
+
+func callGetDownloadClientStatus(ctx context.Context, h *httpapi.Handlers) (any, error) {
+	return h.GetDownloadClientStatus(ctx)
+}
+
+func callGetProwlarrStatus(ctx context.Context, h *httpapi.Handlers) (any, error) {
+	return h.GetProwlarrStatus(ctx)
+}
+
+func callGetQueuePolicy(ctx context.Context, h *httpapi.Handlers, id uuid.UUID) (any, error) {
+	return h.GetQueuePolicy(ctx, oas.GetQueuePolicyParams{InstanceId: id})
+}
+
+func callListQueueStrikes(ctx context.Context, h *httpapi.Handlers, id uuid.UUID) (any, error) {
+	return h.ListQueueStrikes(ctx, oas.ListQueueStrikesParams{InstanceId: id})
+}
+
+func callListRuns(ctx context.Context, h *httpapi.Handlers, in listRunsInput) (any, error) {
+	params, err := convertListRunsParams(in)
+	if err != nil {
+		return nil, err
+	}
+	return h.ListRuns(ctx, params)
+}
+
+func callListEvents(ctx context.Context, h *httpapi.Handlers, in listEventsInput) (any, error) {
+	params, err := convertListEventsParams(in)
+	if err != nil {
+		return nil, err
+	}
+	return h.ListEvents(ctx, params)
+}
+
 func convertListEventsParams(in listEventsInput) (oas.ListEventsParams, error) {
 	var params oas.ListEventsParams
 	if in.InstanceID != nil {
@@ -496,9 +532,7 @@ var toolRegistry = []toolSpec{
 		Scope:       domain.ScopeCoreRead,
 		ReadOnly:    true,
 		Description: "List instances (API keys are never returned).",
-		Register: registerNoParam(func(ctx context.Context, h *httpapi.Handlers) (any, error) {
-			return h.ListInstances(ctx)
-		}),
+		Register:    registerNoParam(callListInstances),
 	},
 	{
 		Name:        "snatcharr_get_instance",
@@ -536,9 +570,7 @@ var toolRegistry = []toolSpec{
 		Scope:       domain.ScopeCoreRead,
 		ReadOnly:    true,
 		Description: "Queue management policy of an instance.",
-		Register: registerIDParam("instanceId", func(ctx context.Context, h *httpapi.Handlers, id uuid.UUID) (any, error) {
-			return h.GetQueuePolicy(ctx, oas.GetQueuePolicyParams{InstanceId: id})
-		}),
+		Register:    registerIDParam("instanceId", callGetQueuePolicy),
 	},
 	{
 		Name:        "snatcharr_list_queue_strikes",
@@ -546,9 +578,7 @@ var toolRegistry = []toolSpec{
 		Scope:       domain.ScopeCoreRead,
 		ReadOnly:    true,
 		Description: "Active queue strikes of an instance.",
-		Register: registerIDParam("instanceId", func(ctx context.Context, h *httpapi.Handlers, id uuid.UUID) (any, error) {
-			return h.ListQueueStrikes(ctx, oas.ListQueueStrikesParams{InstanceId: id})
-		}),
+		Register:    registerIDParam("instanceId", callListQueueStrikes),
 	},
 	{
 		Name:        "snatcharr_list_runs",
@@ -556,13 +586,7 @@ var toolRegistry = []toolSpec{
 		Scope:       domain.ScopeCoreRead,
 		ReadOnly:    true,
 		Description: "Recent snatch runs, newest first.",
-		Register: registerParamTool(func(ctx context.Context, h *httpapi.Handlers, in listRunsInput) (any, error) {
-			params, err := convertListRunsParams(in)
-			if err != nil {
-				return nil, err
-			}
-			return h.ListRuns(ctx, params)
-		}),
+		Register:    registerParamTool(callListRuns),
 	},
 	{
 		Name:        "snatcharr_get_run",
@@ -580,13 +604,7 @@ var toolRegistry = []toolSpec{
 		Scope:       domain.ScopeCoreRead,
 		ReadOnly:    true,
 		Description: "Snatch history, newest first (cursor on before_id).",
-		Register: registerParamTool(func(ctx context.Context, h *httpapi.Handlers, in listEventsInput) (any, error) {
-			params, err := convertListEventsParams(in)
-			if err != nil {
-				return nil, err
-			}
-			return h.ListEvents(ctx, params)
-		}),
+		Register:    registerParamTool(callListEvents),
 	},
 	{
 		Name:        "snatcharr_get_settings",
@@ -648,9 +666,7 @@ var toolRegistry = []toolSpec{
 		Scope:       domain.ScopeDownloadClientsRead,
 		ReadOnly:    true,
 		Description: "Latest observation of every enabled download client (cached 20 s).",
-		Register: registerNoParam(func(ctx context.Context, h *httpapi.Handlers) (any, error) {
-			return h.GetDownloadClientStatus(ctx)
-		}),
+		Register:    registerNoParam(callGetDownloadClientStatus),
 	},
 	{
 		Name:        "snatcharr_get_download_client",
@@ -708,9 +724,7 @@ var toolRegistry = []toolSpec{
 		Scope:       domain.ScopeProwlarrRead,
 		ReadOnly:    true,
 		Description: "Live view of every enabled Prowlarr link (cached 30 s).",
-		Register: registerNoParam(func(ctx context.Context, h *httpapi.Handlers) (any, error) {
-			return h.GetProwlarrStatus(ctx)
-		}),
+		Register:    registerNoParam(callGetProwlarrStatus),
 	},
 	{
 		Name:        "snatcharr_get_prowlarr_link",
