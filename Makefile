@@ -21,14 +21,14 @@ GOMODCACHE       = $(subst \,/,$(shell go env GOMODCACHE))
 GOLUSORIS_VER    = $(shell go list -m -f '{{.Version}}' github.com/golusoris/golusoris)
 GOLUSORIS_SHARED = $(GOMODCACHE)/github.com/golusoris/golusoris@$(GOLUSORIS_VER)/tools/Makefile.shared
 
-.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-soak e2e-compose-smoke e2e-compose-pg-upgrade e2e-dev-compose-smoke dlclients-live arr-forceimport-live integrations-live e2e-cnpg-pg-upgrade e2e-cnpg-backup-restore e2e-chart-install web-verify web-e2e web-e2e-api web-visual web-visual-update proto-verify deploy-verify chart-package governance-verify hooks-verify contracts-verify workflows-verify workflows-lint secret-scan \
+.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-soak e2e-compose-smoke e2e-compose-pg-upgrade e2e-dev-compose-smoke dlclients-live arr-forceimport-live integrations-live e2e-cnpg-pg-upgrade e2e-cnpg-backup-restore e2e-chart-install web-verify web-e2e web-e2e-api web-visual web-visual-update proto-verify deploy-verify chart-package governance-verify hooks-verify contracts-verify workflows-verify workflows-lint secret-scan licences licences-check \
 	images kind-up kind-deploy kind-keda-proof kind-down \
         api-gen api-gosec api-vuln gosec-install govulncheck-install sqlc-install tools-verify tools-lint tools-test tools-gosec web-gen proto-gen dev hooks setup
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-18s %s\n", $$1, $$2}'
 
-verify-all: governance-verify hooks-verify workflows-verify secret-scan proto-verify api-verify worker-verify web-verify deploy-verify contracts-verify ## Every gate (praetor universal verification)
+verify-all: governance-verify hooks-verify workflows-verify secret-scan proto-verify api-verify worker-verify web-verify deploy-verify contracts-verify licences-check ## Every gate (praetor universal verification)
 	@echo "All SnatchArr verification gates passed."
 
 # ── api/ (Go, golusoris) ──────────────────────────────────────────────────────
@@ -492,6 +492,16 @@ contracts-verify: ## Hand-written clients against the pinned upstream OpenAPI sp
 	go test -count=1 -run '^TestUpstreamContract$$' ./api/internal/seerrclient/
 	cargo test --locked -p arr-client -- --ignored upstream_contract
 	go run ./tools/upstreamspec receipts -cache "$(SPEC_CACHE)"
+
+# ── Third-party licences ─────────────────────────────────────────────────────
+# Shipped dependencies across Go (api), Rust (snatch-worker) and npm (web prod).
+# cargo-about 0.9.2 requires the cli feature: cargo install --locked cargo-about --version 0.9.2 --features cli
+licences: ## Generate web/static/licences.json for shipped dependencies
+	python3 tools/licences/generate.py
+
+licences-check: ## Verify web/static/licences.json is up to date and test planted mutations
+	python3 tools/licences/generate.py --check
+	bash tools/licences/generate_test.sh
 
 governance-verify: ## compile-context --verify, audit, state audit, flavor audit (go-service)
 	$(PRAETORCTL) compile-context --verify
