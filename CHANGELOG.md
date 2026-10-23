@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.6.3](https://github.com/lusoris/SnatchArr/compare/v0.6.2...v0.6.3) (2026-10-23)
+
+
+### Bug Fixes
+
+* **dlclients:** count rTorrent downloads in the hash queue as queued ([#580](https://github.com/lusoris/SnatchArr/issues/580)) ([2004549](https://github.com/lusoris/SnatchArr/commit/20045494ceff719230f33c7f3a651771bee6e143))
+* **instances:** check enabled instances every 5 minutes on the leader ([#582](https://github.com/lusoris/SnatchArr/issues/582)) ([fa2438b](https://github.com/lusoris/SnatchArr/commit/fa2438b7e315056d947544f35b1a95bd022ca35c))
+* **web:** keep a gap between label and value on the dashboard rows ([#583](https://github.com/lusoris/SnatchArr/issues/583)) ([abc373c](https://github.com/lusoris/SnatchArr/commit/abc373cb9f9563e9e831545f007972ff867eea96))
+
+
+### Documentation
+
+* **adr:** plan the season gate in three slices in ADR-0024 ([#579](https://github.com/lusoris/SnatchArr/issues/579)) ([9fb3cfb](https://github.com/lusoris/SnatchArr/commit/9fb3cfbc40bc2c18bd0154a0a75e69847cb6b5bd))
+
 ## [0.6.2](https://github.com/lusoris/SnatchArr/compare/v0.6.1...v0.6.2) (2026-10-23)
 
 
