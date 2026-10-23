@@ -60,6 +60,11 @@ if [ ${#FILES[@]} -eq 0 ]; then
   exit 1
 fi
 
+ACTION_FILES=()
+for f in "$ROOT"/.github/actions/*/*.yml "$ROOT"/.github/actions/*/*.yaml; do
+  ACTION_FILES+=("${f#"$ROOT"/}")
+done
+
 # go_install_pinned ARGS: whether every package after `go install` names a release (v + semver)
 # or a workflow variable (${...}). @latest, a branch, or no version at all floats.
 go_install_pinned() {
@@ -83,7 +88,7 @@ go_install_pinned() {
 # A Go tool installed at a floating version changes under an unchanged workflow; Renovate moves
 # the pinned ones (renovate.json, manager for go install in workflows).
 floating=0
-for file in "${FILES[@]}"; do
+for file in "${FILES[@]}" "${ACTION_FILES[@]}"; do
   lineno=0
   while IFS= read -r line || [ -n "$line" ]; do
     lineno=$((lineno + 1))
@@ -120,7 +125,7 @@ fi
 
 rc=0
 (cd "$ROOT" && GH_TOKEN="$TOKEN" "$ZIZMOR" --no-progress --color never --format json --persona pedantic \
-  --no-ignores --no-config --strict-collection "${FILES[@]}") \
+  --no-ignores --no-config --strict-collection "${FILES[@]}" "${ACTION_FILES[@]}") \
   > "$WORK/report.json" 2> "$WORK/zizmor.log" || rc=$?
 # 0 = no finding, 11 to 14 = findings by highest severity; anything else is a failed run.
 case "$rc" in
@@ -156,4 +161,8 @@ if grep '^refused ' "$WORK/findings.txt" >&2; then
   echo "error: pin every action to a commit and keep its version comment on that commit's tag" >&2
   exit 1
 fi
-echo "zizmor: every action in ${#FILES[@]} workflow files is pinned to a commit; no version comment names another tag"
+if [ ${#ACTION_FILES[@]} -gt 0 ]; then
+  echo "zizmor: every action in ${#FILES[@]} workflow files and ${#ACTION_FILES[@]} composite action files is pinned to a commit; no version comment names another tag"
+else
+  echo "zizmor: every action in ${#FILES[@]} workflow files is pinned to a commit; no version comment names another tag"
+fi

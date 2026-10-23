@@ -1,0 +1,27 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+name: Build E2E Images
+description: Builds the local amd64 snatcharr-api and snatcharr-worker container images using Buildx cache.
+runs:
+  using: composite
+  steps:
+    - name: Build api image
+      uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+      with:
+        context: .
+        file: Dockerfile
+        platforms: linux/amd64
+        load: true
+        push: false
+        tags: snatcharr-api:e2e
+        cache-from: type=gha,scope=api
+    - name: Build worker image
+      uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+      with:
+        context: .
+        file: worker/Dockerfile
+        platforms: linux/amd64
+        load: true
+        push: false
+        tags: snatcharr-worker:e2e
+        cache-from: type=gha,scope=worker

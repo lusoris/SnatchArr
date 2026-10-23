@@ -26,7 +26,8 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
-      - name: Stop on a draft pull request
+      - &stop-draft
+        name: Stop on a draft pull request
         if: github.event.pull_request.draft == true
         shell: bash
         env:
@@ -67,19 +68,9 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
-      - name: Stop on a draft pull request
-        if: github.event.pull_request.draft == true
-        shell: bash
-        env:
-          TITLE: Gate not run on a draft
-          MESSAGE: >-
-            The gate did not run because the pull request is a draft.
-            It runs when the pull request is marked ready for review.
-        run: |
-          echo "::error title=$TITLE::$MESSAGE"
-          echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
-          exit 1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - *stop-draft
+      - &checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: The aggregate rule refuses its planted cases
@@ -103,18 +94,7 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
-      - name: Stop on a draft pull request
-        if: github.event.pull_request.draft == true
-        shell: bash
-        env:
-          TITLE: Gate not run on a draft
-          MESSAGE: >-
-            The gate did not run because the pull request is a draft.
-            It runs when the pull request is marked ready for review.
-        run: |
-          echo "::error title=$TITLE::$MESSAGE"
-          echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
-          exit 1
+      - *stop-draft
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
@@ -129,21 +109,8 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
-      - name: Stop on a draft pull request
-        if: github.event.pull_request.draft == true
-        shell: bash
-        env:
-          TITLE: Gate not run on a draft
-          MESSAGE: >-
-            The gate did not run because the pull request is a draft.
-            It runs when the pull request is marked ready for review.
-        run: |
-          echo "::error title=$TITLE::$MESSAGE"
-          echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
-          exit 1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+      - *stop-draft
+      - *checkout
       - name: The scan script refuses its planted cases
         run: sh tools/ci/semgrep_scan_test.sh
       - name: Replay the rule fixtures, then scan the tracked Go files
@@ -160,21 +127,8 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:
-      - name: Stop on a draft pull request
-        if: github.event.pull_request.draft == true
-        shell: bash
-        env:
-          TITLE: Gate not run on a draft
-          MESSAGE: >-
-            The gate did not run because the pull request is a draft.
-            It runs when the pull request is marked ready for review.
-        run: |
-          echo "::error title=$TITLE::$MESSAGE"
-          echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
-          exit 1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+      - *stop-draft
+      - *checkout
       - name: Scan the tracked files
         # HIGH and CRITICAL findings with a fix fail the job; no .trivyignore is read.
         env:
@@ -203,18 +157,7 @@ jobs:
       contracts: ${{ steps.filter.outputs.contracts }}
       docs: ${{ steps.filter.outputs.docs }}
     steps:
-      - name: Stop on a draft pull request
-        if: github.event.pull_request.draft == true
-        shell: bash
-        env:
-          TITLE: Gate not run on a draft
-          MESSAGE: >-
-            The gate did not run because the pull request is a draft.
-            It runs when the pull request is marked ready for review.
-        run: |
-          echo "::error title=$TITLE::$MESSAGE"
-          echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
-          exit 1
+      - *stop-draft
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
@@ -320,10 +263,7 @@ jobs:
         working-directory: api
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
+      - uses: ./.github/actions/setup-go
       - name: go.mod and go.sum are tidy
         # A dependency update that leaves a requirement unused, or marked indirect while the code
         # imports it, still builds; this prints the missing changes and fails.
@@ -362,10 +302,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
+      - uses: ./.github/actions/setup-go
       - name: go vet + build
         run: cd api && go vet ./... && go build ./...
       - name: go test -race
@@ -389,10 +326,7 @@ jobs:
         working-directory: api
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
+      - uses: ./.github/actions/setup-go
       - name: gosec (zero exclusions)
         # From the module root: started in api/, gosec loads no package and passes on zero files.
         working-directory: ${{ github.workspace }}
@@ -477,7 +411,7 @@ jobs:
     timeout-minutes: 20
     services:
       # The Postgres the integration tests pin, through the Docker Hub mirror.
-      postgres:
+      postgres: &postgres
         image: mirror.gcr.io/library/postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
         env:
           POSTGRES_PASSWORD: smoke
@@ -490,10 +424,7 @@ jobs:
           - 5432:5432
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
+      - uses: ./.github/actions/setup-go
       # The runner's rustup installs the release pinned in rust-toolchain.toml.
       - name: Rust toolchain (rust-toolchain.toml)
         run: rustup toolchain install
@@ -513,43 +444,12 @@ jobs:
     timeout-minutes: 30
     services:
       # The Postgres the integration tests pin, through the Docker Hub mirror.
-      postgres:
-        image: mirror.gcr.io/library/postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
-        env:
-          POSTGRES_PASSWORD: smoke
-        options: >-
-          --health-cmd "pg_isready -h 127.0.0.1 -U postgres"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 12
-        ports:
-          - 5432:5432
+      postgres: *postgres
     steps:
-      - name: Stop on a draft pull request
-        if: github.event.pull_request.draft == true
-        shell: bash
-        env:
-          TITLE: Gate not run on a draft
-          MESSAGE: >-
-            The gate did not run because the pull request is a draft.
-            It runs when the pull request is marked ready for review.
-        run: |
-          echo "::error title=$TITLE::$MESSAGE"
-          echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
-          exit 1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-        with:
-          driver-opts: image=mirror.gcr.io/moby/buildkit:v0.33.1@sha256:cec9f139f45e93c5c69c60f8b07cfad9f43f4ef6b6a6cd917527fea5ff2e3dea
-          buildkitd-config-inline: |
-            [registry."docker.io"]
-              mirrors = ["mirror.gcr.io"]
+      - *stop-draft
+      - *checkout
+      - uses: ./.github/actions/setup-go
+      - uses: ./.github/actions/setup-buildx
       - name: Build api image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
@@ -614,21 +514,8 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
-      - name: Stop on a draft pull request
-        if: github.event.pull_request.draft == true
-        shell: bash
-        env:
-          TITLE: Gate not run on a draft
-          MESSAGE: >-
-            The gate did not run because the pull request is a draft.
-            It runs when the pull request is marked ready for review.
-        run: |
-          echo "::error title=$TITLE::$MESSAGE"
-          echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
-          exit 1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+      - *stop-draft
+      - *checkout
       # deploy/compose with the arr and observability profiles, as `make dev` and docs/metrics.md
       # start it, after two planted defects the smoke must refuse (gap audit C9-08).
       - name: make e2e-dev-compose-smoke
@@ -641,25 +528,9 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
-      - name: Stop on a draft pull request
-        if: github.event.pull_request.draft == true
-        shell: bash
-        env:
-          TITLE: Gate not run on a draft
-          MESSAGE: >-
-            The gate did not run because the pull request is a draft.
-            It runs when the pull request is marked ready for review.
-        run: |
-          echo "::error title=$TITLE::$MESSAGE"
-          echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
-          exit 1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
+      - *stop-draft
+      - *checkout
+      - uses: ./.github/actions/setup-go
       # Each supported download client as a real release, observed by the production adapters,
       # after two planted defects the test must refuse (gap audit C9-05).
       - name: make dlclients-live
@@ -672,25 +543,9 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
-      - name: Stop on a draft pull request
-        if: github.event.pull_request.draft == true
-        shell: bash
-        env:
-          TITLE: Gate not run on a draft
-          MESSAGE: >-
-            The gate did not run because the pull request is a draft.
-            It runs when the pull request is marked ready for review.
-        run: |
-          echo "::error title=$TITLE::$MESSAGE"
-          echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
-          exit 1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
+      - *stop-draft
+      - *checkout
+      - uses: ./.github/actions/setup-go
       # Rule id_matched (ADR-0013) on real Sonarr and Radarr: the production client
       # force-imports an ID-matched release after four planted cases it must refuse.
       - name: make arr-forceimport-live
@@ -703,25 +558,9 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:
-      - name: Stop on a draft pull request
-        if: github.event.pull_request.draft == true
-        shell: bash
-        env:
-          TITLE: Gate not run on a draft
-          MESSAGE: >-
-            The gate did not run because the pull request is a draft.
-            It runs when the pull request is marked ready for review.
-        run: |
-          echo "::error title=$TITLE::$MESSAGE"
-          echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
-          exit 1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
+      - *stop-draft
+      - *checkout
+      - uses: ./.github/actions/setup-go
       # All supported integrations driven end to end against real application
       # containers, after four planted defects the test must refuse.
       - name: make integrations-live
@@ -746,23 +585,10 @@ jobs:
     timeout-minutes: 20
     services:
       # The Postgres the integration tests pin, through the Docker Hub mirror.
-      postgres:
-        image: mirror.gcr.io/library/postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
-        env:
-          POSTGRES_PASSWORD: smoke
-        options: >-
-          --health-cmd "pg_isready -h 127.0.0.1 -U postgres"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 12
-        ports:
-          - 5432:5432
+      postgres: *postgres
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
+      - uses: ./.github/actions/setup-go
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           package_json_file: web/package.json
@@ -791,21 +617,8 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:
-      - name: Stop on a draft pull request
-        if: github.event.pull_request.draft == true
-        shell: bash
-        env:
-          TITLE: Gate not run on a draft
-          MESSAGE: >-
-            The gate did not run because the pull request is a draft.
-            It runs when the pull request is marked ready for review.
-        run: |
-          echo "::error title=$TITLE::$MESSAGE"
-          echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
-          exit 1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+      - *stop-draft
+      - *checkout
       # /login and /setup in en and de, light and dark, inside the Playwright image pinned in
       # web/e2e/visual-image.env, after two planted visual changes the comparison must refuse
       # (gap audit C15-03).
@@ -912,32 +725,8 @@ jobs:
       # The upgrade test runs the chart on the images of this checkout: on a release pull request
       # the chart already pins the new appVersion, whose images are not published yet. Read-only
       # use of the image-smoke build cache.
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-        with:
-          driver-opts: image=mirror.gcr.io/moby/buildkit:v0.33.1@sha256:cec9f139f45e93c5c69c60f8b07cfad9f43f4ef6b6a6cd917527fea5ff2e3dea
-          buildkitd-config-inline: |
-            [registry."docker.io"]
-              mirrors = ["mirror.gcr.io"]
-      - name: Build api image
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          file: Dockerfile
-          platforms: linux/amd64
-          load: true
-          push: false
-          tags: snatcharr-api:e2e
-          cache-from: type=gha,scope=api
-      - name: Build worker image
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          file: worker/Dockerfile
-          platforms: linux/amd64
-          load: true
-          push: false
-          tags: snatcharr-worker:e2e
-          cache-from: type=gha,scope=worker
+      - uses: ./.github/actions/setup-buildx
+      - uses: ./.github/actions/build-e2e-images
       - name: Load the images into kind
         run: kind load docker-image snatcharr-api:e2e snatcharr-worker:e2e --name chart-check
       # A dry run cannot see a pod that never becomes Ready (0.1.0 shipped one). The chart of this
@@ -990,10 +779,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
+      - uses: ./.github/actions/setup-go
       # The runner's rustup installs the release pinned in rust-toolchain.toml.
       - name: Rust toolchain (rust-toolchain.toml)
         run: rustup toolchain install
@@ -1041,9 +827,7 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+      - *checkout
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.15'
