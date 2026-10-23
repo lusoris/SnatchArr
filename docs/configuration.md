@@ -20,7 +20,7 @@ UI.
 | `APP_GRPC_KEEPALIVE_MAX_CONNECTION_AGE_GRACE` | unlimited | How long RPCs already running on an aged connection may finish. A finite value must be at least `35s` (the 30 s `LeaseRun` long-poll plus margin) or the API refuses to start; note that a finite value can still cut a run's `ReportEvents` stream |
 | `APP_CRYPTO_KEY` | required in prod | Key that encrypts *arr API keys and download-client secrets at rest (`openssl rand -hex 32`). The dev profile without it runs on a development key published in the source and warns that stored secrets are unprotected; prod refuses to start on that key |
 | `APP_HTTP_CSRF_SECRET` | not read | No longer used: the API refuses cross-site requests from the browser's `Sec-Fetch-Site` and `Origin` headers, which needs no secret and cannot be switched off. A value that is still set is ignored |
-| `APP_LEADER_ENABLED` | `false` | Elect one replica (Postgres advisory lock) to run the planner, Seerr sync and Configarr poll; leave off for a single replica |
+| `APP_LEADER_ENABLED` | `false` | Elect one replica (Postgres advisory lock) to run the planner, Seerr sync, instance checks and Configarr poll; leave off for a single replica |
 | `APP_LEADER_NAME` | `snatcharr` | Lock name; one per deployment |
 | `APP_LEADER_IDENTITY` | hostname | This replica's name in logs |
 | `APP_LEADER_PG_RETRY` | `2s` | How often a follower retries the lock |
