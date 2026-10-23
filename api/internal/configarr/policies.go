@@ -274,15 +274,6 @@ type diffTask struct {
 	remarshaled map[string]any
 }
 
-func sortedKeys(m map[string]any) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	slices.Sort(keys)
-	return keys
-}
-
 func checkDiffKey(curr diffTask, k string, unknown *[]string, queue *[]diffTask) {
 	fullPath := k
 	if curr.pathPrefix != "" {
@@ -312,7 +303,7 @@ func findUnknownFields(merged, remarshaled map[string]any) []string {
 		curr := queue[0]
 		queue = queue[1:]
 
-		for _, k := range sortedKeys(curr.merged) {
+		for _, k := range slices.Sorted(maps.Keys(curr.merged)) {
 			checkDiffKey(curr, k, &unknown, &queue)
 		}
 	}

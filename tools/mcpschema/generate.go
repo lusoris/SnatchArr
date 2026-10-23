@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 
 	"gopkg.in/yaml.v3"
@@ -52,7 +53,7 @@ func Generate(src []byte) ([]byte, error) {
 		return nil, fmt.Errorf("unmarshal openapi yaml: %w", err)
 	}
 	result := make(map[string]any)
-	paths := sortedKeys(spec.Paths)
+	paths := slices.Sorted(maps.Keys(spec.Paths))
 	for _, p := range paths {
 		pathItem := spec.Paths[p]
 		if err := processPathItem(p, pathItem, spec.Components, result); err != nil {
@@ -64,15 +65,6 @@ func Generate(src []byte) ([]byte, error) {
 		return nil, fmt.Errorf("marshal schemas json: %w", err)
 	}
 	return append(out, '\n'), nil
-}
-
-func sortedKeys[V any](m map[string]V) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	slices.Sort(keys)
-	return keys
 }
 
 func processPathItem(path string, pathItem map[string]any, comps Components, result map[string]any) error {
