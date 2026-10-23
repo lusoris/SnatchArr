@@ -58,6 +58,7 @@ UI.
 | `APP_SNATCHARR_PROXY_AUTH_SECRET` | | Shared secret reverse proxy must present (min 32 bytes) |
 | `APP_SNATCHARR_PROXY_AUTH_ADMIN_GROUPS` | | Comma-separated groups that sign in as admin (required) |
 | `APP_SNATCHARR_PROXY_AUTH_VIEWER_GROUPS` | | Comma-separated groups that sign in as viewers |
+| `APP_SNATCHARR_METRICS_ADDR` | | Dedicated HTTP listen address for Prometheus `/metrics` (e.g. `:9464`); empty leaves `/metrics` on main HTTP port |
 | `APP_OTEL_ENABLED` | `true` | OpenTelemetry export (no-op without an endpoint) |
 | `APP_LOG_FORMAT` | `json` | `json` or `text` |
 

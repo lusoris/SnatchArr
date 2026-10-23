@@ -42,6 +42,7 @@
 //	snatcharr.proxy_auth.admin_groups  APP_SNATCHARR_PROXY_AUTH_ADMIN_GROUPS  comma-separated groups granting admin role
 //	snatcharr.proxy_auth.viewer_groups APP_SNATCHARR_PROXY_AUTH_VIEWER_GROUPS comma-separated groups granting viewer role
 //	snatcharr.proxy_auth.allowed_users APP_SNATCHARR_PROXY_AUTH_ALLOWED_USERS deprecated; rejected if set
+//	snatcharr.metrics.addr       APP_SNATCHARR_METRICS_ADDR       separate HTTP listen address for Prometheus /metrics
 package config
 
 import (
@@ -50,6 +51,7 @@ import (
 	"net"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -82,6 +84,28 @@ type Options struct {
 	ProxyAuth ProxyAuthOptions `koanf:"proxy_auth"`
 	Prowlarr  ProwlarrOptions  `koanf:"prowlarr"`
 	Logs      LogsOptions      `koanf:"logs"`
+	Metrics   MetricsOptions   `koanf:"metrics"`
+}
+
+// MetricsOptions configures Prometheus /metrics endpoint exposure.
+type MetricsOptions struct {
+	Addr string `koanf:"addr"`
+}
+
+// Validate checks that Addr is either empty or a valid host:port with numeric port in 1..65535.
+func (m MetricsOptions) Validate() error {
+	if m.Addr == "" {
+		return nil
+	}
+	_, portStr, err := net.SplitHostPort(m.Addr)
+	if err != nil {
+		return fmt.Errorf("config: invalid metrics.addr %q: %w", m.Addr, err)
+	}
+	port, err := strconv.ParseUint(portStr, 10, 16)
+	if err != nil || port == 0 {
+		return fmt.Errorf("config: metrics.addr port must be a number from 1 to 65535, got %q", portStr)
+	}
+	return nil
 }
 
 // ProwlarrOptions configures the Prowlarr link and planner gate.
@@ -494,6 +518,9 @@ func (o Options) Validate() error {
 		return err
 	}
 	if err := o.Prowlarr.Validate(); err != nil {
+		return err
+	}
+	if err := o.Metrics.Validate(); err != nil {
 		return err
 	}
 	return o.Proxy.Validate()
