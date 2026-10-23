@@ -53,6 +53,89 @@ export const MIN_TABLES: Record<(typeof AUTH_ROUTES)[number], number> = {
 	'/settings': 2
 };
 
+// Routes whose table count follows the signed-in role and the data, not a fixed number: each
+// list below renders one table when it is non-empty and an empty-state line otherwise.
+const ROUTE_LISTS = {
+	'/schedules': ['/api/v1/schedules'],
+	'/settings': ['/api/v1/notifications/channels', '/api/v1/notifications/rules'],
+	'/account': ['/api/v1/auth/api-keys']
+} as const satisfies Partial<Record<(typeof AUTH_ROUTES)[number], readonly string[]>>;
+type DataRoute = keyof typeof ROUTE_LISTS;
+const DATA_LISTS: readonly string[] = Object.values(ROUTE_LISTS).flat();
+const SESSION_PATH = '/api/v1/auth/session';
+
+export type Role = 'admin' | 'viewer';
+
+// Role matrix of ADR-0023 (docs/sso.md): a viewer reads every list above, but CreateAPIKey is
+// admin-only, so a viewer's own key list stays empty and /account shows it no table.
+const ROLE_LISTS: Record<Role, { readable: readonly string[]; neverFilled: readonly string[] }> = {
+	admin: { readable: DATA_LISTS, neverFilled: [] },
+	viewer: { readable: DATA_LISTS, neverFilled: ['/api/v1/auth/api-keys'] }
+};
+
+export function isDataRoute(route: string): route is DataRoute {
+	return Object.hasOwn(ROUTE_LISTS, route);
+}
+
+// Tables a data route must show for this role, given the list lengths the page received. A
+// readable list the page did not receive, or a list the role can never fill, fails the check.
+export function expectedTables(
+	route: DataRoute,
+	role: Role,
+	lengths: Readonly<Record<string, number>>
+): number {
+	const { readable, neverFilled } = ROLE_LISTS[role];
+	let tables = 0;
+	for (const list of ROUTE_LISTS[route]) {
+		if (!readable.includes(list)) continue;
+		const n = lengths[list];
+		if (n === undefined) throw new Error(`${route}: GET ${list} gave the page no JSON list`);
+		if (n > 0 && neverFilled.includes(list)) {
+			throw new Error(`${route}: ${role} holds ${n} item(s) of ${list}; ADR-0023 forbids that`);
+		}
+		if (n > 0) tables += 1;
+	}
+	return tables;
+}
+
+export interface PageLists {
+	role?: Role;
+	lengths: Record<string, number>;
+	reads: Promise<void>[];
+}
+
+// Records the session role and the list lengths the page fetches. Register before page.goto;
+// works against the served site and against page.route mocks alike.
+export function collectLists(page: Page): PageLists {
+	const seen: PageLists = { lengths: {}, reads: [] };
+	page.on('response', (res) => {
+		if (res.request().method() !== 'GET' || !res.ok()) return;
+		const path = new URL(res.url()).pathname;
+		if (path === SESSION_PATH) {
+			seen.reads.push(
+				res.json().then((b: { user?: { role?: Role } }) => {
+					seen.role = b.user?.role;
+				})
+			);
+		} else if (DATA_LISTS.includes(path)) {
+			seen.reads.push(
+				res.json().then((b: unknown) => {
+					if (Array.isArray(b)) seen.lengths[path] = b.length;
+				})
+			);
+		}
+	});
+	return seen;
+}
+
+async function minTablesFor(route: string, lists?: PageLists): Promise<number | undefined> {
+	if (!isDataRoute(route)) return undefined;
+	expect(lists, `${route}: collectLists(page) was not registered before page.goto`).toBeDefined();
+	await Promise.all(lists!.reads);
+	expect(lists!.role, `${route}: no session role seen`).toMatch(/^(admin|viewer)$/);
+	return expectedTables(route, lists!.role!, lists!.lengths);
+}
+
 // Allowed drift in CSS pixels between a header cell and the body cells below it.
 const TOLERANCE_PX = 2;
 
@@ -252,7 +335,11 @@ async function waitForSettled(page: Page): Promise<void> {
 	).toHaveCount(0);
 }
 
-export async function assertRenderedLayout(page: Page, route: string): Promise<void> {
+export async function assertRenderedLayout(
+	page: Page,
+	route: string,
+	lists?: PageLists
+): Promise<void> {
 	expect(page.url(), `${route}: landed on /login (unauthenticated)`).not.toMatch(/\/login(?:\?|$)/);
 	await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
 
@@ -273,11 +360,19 @@ export async function assertRenderedLayout(page: Page, route: string): Promise<v
 
 	const tables = await page.evaluate(extractTables);
 	const { tableCount, measuredRows, misaligned } = checkAllTables(tables, TOLERANCE_PX);
-	const minTables = MIN_TABLES[route as keyof typeof MIN_TABLES] ?? 0;
-	expect(
-		tableCount,
-		`${route}: expected at least ${minTables} table(s), measured ${tableCount}`
-	).toBeGreaterThanOrEqual(minTables);
+	const exact = await minTablesFor(route, lists);
+	const minTables = exact ?? MIN_TABLES[route as keyof typeof MIN_TABLES] ?? 0;
+	if (exact === undefined) {
+		expect(
+			tableCount,
+			`${route}: expected at least ${minTables} table(s), measured ${tableCount}`
+		).toBeGreaterThanOrEqual(minTables);
+	} else {
+		expect(
+			tableCount,
+			`${route}: expected ${exact} table(s) for role ${lists?.role}, measured ${tableCount}`
+		).toBe(exact);
+	}
 	if (minTables > 0) {
 		expect(measuredRows, `${route}: declared a table but measured 0 body rows`).toBeGreaterThan(0);
 	}

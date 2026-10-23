@@ -83,14 +83,17 @@ export const sampleSettingsData = {
 	}
 };
 
-export async function mockSignedInApi(page: Page): Promise<void> {
+export async function mockSignedInApi(
+	page: Page,
+	role: 'admin' | 'viewer' = 'admin'
+): Promise<void> {
 	await page.route('**/api/v1/auth/setup/status', (route) =>
 		route.fulfill(json({ setup_complete: true }))
 	);
 	await page.route('**/api/v1/auth/session', (route) =>
 		route.fulfill(
 			json({
-				user: { id: '00000000-0000-0000-0000-000000000099', username: 'admin', role: 'admin' },
+				user: { id: '00000000-0000-0000-0000-000000000099', username: role, role },
 				csrf_token: 'test-token',
 				expires_at: '2099-01-01T00:00:00Z'
 			})
@@ -167,9 +170,10 @@ export async function mockSettingsApi(
 		status?: number;
 		saveDelayMs?: number;
 		saveStatus?: number;
+		role?: 'admin' | 'viewer';
 	}
 ): Promise<void> {
-	await mockSignedInApi(page);
+	await mockSignedInApi(page, options?.role);
 	await page.route('**/api/v1/settings', async (route) => {
 		if (route.request().method() === 'PUT') {
 			if (options?.saveDelayMs) {
