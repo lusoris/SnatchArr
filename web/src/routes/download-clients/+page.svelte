@@ -8,6 +8,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { toast } from 'svelte-sonner';
 	import { api, describeError } from '#lib/api/client.js';
 	import type { components } from '#lib/api/schema.js';
+	import AdminFormSlot from '#lib/components/AdminFormSlot.svelte';
 	import ConfirmDelete from '#lib/components/ConfirmDelete.svelte';
 	import DownloadClientForm from '#lib/components/DownloadClientForm.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
@@ -209,17 +210,13 @@ SPDX-License-Identifier: EUPL-1.2
 	</ul>
 {/if}
 
-{#if session.isAdmin}
-	{#key `${editing?.id ?? 'new'}-${formGeneration}`}
-		<DownloadClientForm
-			client={editing}
-			instances={instances.data ?? []}
-			pending={save.isPending}
-			error={save.error}
-			onsave={(body) => save.mutate(body)}
-			oncancel={closeForm}
-			ontest={(body) => probeInput.mutate(body)}
-			testing={probeInput.isPending}
-		/>
-	{/key}
-{/if}
+<AdminFormSlot
+	key={`${editing?.id ?? 'new'}-${formGeneration}`}
+	{save}
+	probe={probeInput}
+	oncancel={closeForm}
+>
+	{#snippet form(props)}
+		<DownloadClientForm client={editing} instances={instances.data ?? []} {...props} />
+	{/snippet}
+</AdminFormSlot>

@@ -3,17 +3,11 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
-	import type { components } from '#lib/api/schema.js';
 	import Field from '#lib/components/Field.svelte';
 	import { m } from '#lib/paraglide/messages.js';
+	import type { PolicySectionProps } from './section.js';
 
-	type SnatchPolicy = components['schemas']['SnatchPolicy'];
-
-	interface Props {
-		policy: SnatchPolicy;
-	}
-
-	let { policy = $bindable() }: Props = $props();
+	let { policy = $bindable() }: PolicySectionProps = $props();
 </script>
 
 <fieldset class="card flex flex-col gap-4">

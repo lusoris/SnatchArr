@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.6.0](https://github.com/lusoris/SnatchArr/compare/v0.5.5...v0.6.0) (2026-10-23)
+
+
+### ⚠ BREAKING CHANGES
+
+* **api:** serve /metrics on a port of its own ([#538](https://github.com/lusoris/SnatchArr/issues/538))
+* **sso:** require a shared secret from the trusted proxy ([#535](https://github.com/lusoris/SnatchArr/issues/535))
+
+### Features
+
+* **api:** serve /metrics on a port of its own ([#538](https://github.com/lusoris/SnatchArr/issues/538)) ([b5d505e](https://github.com/lusoris/SnatchArr/commit/b5d505e1835ab23e3ce693e11d979aa38437564e))
+
+
+### Bug Fixes
+
+* **deps:** take golusoris v0.20.0 and its exported ogenkit problem resolver ([#533](https://github.com/lusoris/SnatchArr/issues/533)) ([59df0a0](https://github.com/lusoris/SnatchArr/commit/59df0a083e65b21029b795eb2298bd6f83822dbd))
+* **httpapi:** answer 422 instead of 400 for request bodies that break an OpenAPI schema bound ([#533](https://github.com/lusoris/SnatchArr/issues/533)) ([59df0a0](https://github.com/lusoris/SnatchArr/commit/59df0a083e65b21029b795eb2298bd6f83822dbd))
+* **sso:** require a shared secret from the trusted proxy ([#535](https://github.com/lusoris/SnatchArr/issues/535)) ([d757d9b](https://github.com/lusoris/SnatchArr/commit/d757d9bb2705df03b8846d5c3e31ed8dd636da81))
+* **web:** take dompurify 3.4.17 for two new advisories ([#531](https://github.com/lusoris/SnatchArr/issues/531)) ([012fd6b](https://github.com/lusoris/SnatchArr/commit/012fd6bbc8fe417b734e4fa32176e7aea348dd3d))
+* **web:** wrap long /live frames and make layout tables role-aware ([#542](https://github.com/lusoris/SnatchArr/issues/542)) ([5708aa2](https://github.com/lusoris/SnatchArr/commit/5708aa2312f4974fdbd85b47a9d7d6db05f16696))
+
+
+### Refactoring
+
+* **ci:** share repeated workflow steps through composite actions ([#540](https://github.com/lusoris/SnatchArr/issues/540)) ([1b98535](https://github.com/lusoris/SnatchArr/commit/1b985359201d60e528b0b092974ee78d0230b05c))
+* **e2e:** share fail, answers, free_port and add_image helpers ([#537](https://github.com/lusoris/SnatchArr/issues/537)) ([8214590](https://github.com/lusoris/SnatchArr/commit/8214590361c6f0fa0e61a7c31e6c937cc0609928))
+* **web:** render configarr status through a shared query guard ([#544](https://github.com/lusoris/SnatchArr/issues/544)) ([ddf9ae4](https://github.com/lusoris/SnatchArr/commit/ddf9ae4acc5910e3b7596e1e4cf1076a2189cc30))
+* **web:** share the admin create form of notification settings ([#534](https://github.com/lusoris/SnatchArr/issues/534)) ([f31fe0e](https://github.com/lusoris/SnatchArr/commit/f31fe0e62bde2768f9178541a0f1c512d529ee18))
+* **web:** share the instance query, tab guard and admin save button ([#541](https://github.com/lusoris/SnatchArr/issues/541)) ([37f269f](https://github.com/lusoris/SnatchArr/commit/37f269ff6cc27cc4c65180de646d7e024ed65052))
+* **web:** share the link card and mutation toasts of link pages ([#539](https://github.com/lusoris/SnatchArr/issues/539)) ([e547fe3](https://github.com/lusoris/SnatchArr/commit/e547fe31d514d89d3a8b9c619d35d01b8129b4ee))
+* **web:** share the nav group list and locale select of the shell ([#536](https://github.com/lusoris/SnatchArr/issues/536)) ([e626b96](https://github.com/lusoris/SnatchArr/commit/e626b96f56947daafbe435cb6cac4215a4fba549))
+
 ## [0.5.5](https://github.com/lusoris/SnatchArr/compare/v0.5.4...v0.5.5) (2026-10-22)
 
 

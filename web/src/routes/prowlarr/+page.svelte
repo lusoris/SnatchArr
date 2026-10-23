@@ -7,6 +7,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { createSentioQuery, createSentioMutation } from '@sveltesentio/query';
 	import { api } from '#lib/api/client.js';
 	import type { components } from '#lib/api/schema.js';
+	import AdminFormSlot from '#lib/components/AdminFormSlot.svelte';
 	import LinkCard from '#lib/components/LinkCard.svelte';
 	import LinkForm, { type LinkBody } from '#lib/components/LinkForm.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
@@ -16,7 +17,6 @@ SPDX-License-Identifier: EUPL-1.2
 	import { keys } from '#lib/query.js';
 	import { formatWhen } from '#lib/stamina.js';
 	import { evaluateLimit, isIndexerExhausted, isIndexerNearLimit } from '#lib/prowlarr.js';
-	import { session } from '#lib/session.svelte.js';
 
 	type ProwlarrLink = components['schemas']['ProwlarrLink'];
 	type ProwlarrIndexerStatus = components['schemas']['ProwlarrIndexerStatus'];
@@ -155,20 +155,16 @@ SPDX-License-Identifier: EUPL-1.2
 	</ul>
 {/if}
 
-{#if session.isAdmin}
-	{#key `${editing?.id ?? 'new'}-${formGeneration}`}
-		<LinkForm
-			idPrefix="prowlarr"
-			link={editing}
-			pending={save.isPending}
-			error={save.error}
-			onsave={(body) => save.mutate(body)}
-			oncancel={closeForm}
-			ontest={(body) => probeInput.mutate(body)}
-			testing={probeInput.isPending}
-		/>
-	{/key}
-{/if}
+<AdminFormSlot
+	key={`${editing?.id ?? 'new'}-${formGeneration}`}
+	{save}
+	probe={probeInput}
+	oncancel={closeForm}
+>
+	{#snippet form(props)}
+		<LinkForm idPrefix="prowlarr" link={editing} {...props} />
+	{/snippet}
+</AdminFormSlot>
 
 <h2 class="mt-8 mb-3 text-lg font-semibold">{m.prowlarr_status_title()}</h2>
 {#if status.isPending}
