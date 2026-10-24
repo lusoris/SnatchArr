@@ -2231,6 +2231,7 @@ components:
         lidarr_missing_mode:
           type: string
           enum: [artist, album]
+          description: "Search grouping for Lidarr missing runs; upgrade runs always search per album."
         processed_ttl_h:
           type: integer
           description: "Afterglow: hours an item rests after a snatch before it may be touched again."

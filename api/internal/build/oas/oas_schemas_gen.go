@@ -7646,7 +7646,8 @@ type SnatchPolicy struct {
 	RadarrReleaseType  SnatchPolicyRadarrReleaseType `json:"radarr_release_type"`
 	SonarrMissingMode  SnatchPolicySonarrMissingMode `json:"sonarr_missing_mode"`
 	SonarrUpgradeMode  SnatchPolicySonarrUpgradeMode `json:"sonarr_upgrade_mode"`
-	LidarrMissingMode  SnatchPolicyLidarrMissingMode `json:"lidarr_missing_mode"`
+	// Search grouping for Lidarr missing runs; upgrade runs always search per album.
+	LidarrMissingMode SnatchPolicyLidarrMissingMode `json:"lidarr_missing_mode"`
 	// Afterglow: hours an item rests after a snatch before it may be touched again.
 	ProcessedTTLH int  `json:"processed_ttl_h"`
 	MaxQueueSize  int  `json:"max_queue_size"`
@@ -7933,6 +7934,7 @@ func (s *SnatchPolicy) SetUpdatedAt(val OptDateTime) {
 	s.UpdatedAt = val
 }
 
+// Search grouping for Lidarr missing runs; upgrade runs always search per album.
 type SnatchPolicyLidarrMissingMode string
 
 const (

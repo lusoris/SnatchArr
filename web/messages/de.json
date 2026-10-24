@@ -113,7 +113,7 @@
 	"policy_sonarr_upgrade_mode": "Suchgranularität für Upgrades",
 	"policy_sonarr_upgrade_mode_hint": "Ob Sonarr nach Qualitätsupgrades als einzelne Episoden oder Staffelpakete sucht.",
 	"policy_lidarr_missing_mode": "Suchgranularität für fehlende Musik",
-	"policy_lidarr_missing_mode_hint": "Ob Lidarr nach Interpreten oder nach einzelnen Alben sucht.",
+	"policy_lidarr_missing_mode_hint": "Ob Lidarr fehlende Musik nach Interpreten oder nach einzelnen Alben sucht. Upgrade-Suchen laufen immer pro Album.",
 	"policy_lidarr_mode_artist": "Gesamter Interpret",
 	"policy_lidarr_mode_album": "Einzelnes Album",
 	"policy_group_search": "Was gesucht wird",

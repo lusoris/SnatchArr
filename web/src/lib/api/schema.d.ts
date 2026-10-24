@@ -1403,7 +1403,10 @@ export interface components {
             sonarr_missing_mode: "episodes" | "season_packs" | "shows";
             /** @enum {string} */
             sonarr_upgrade_mode: "episodes" | "season_packs";
-            /** @enum {string} */
+            /**
+             * @description Search grouping for Lidarr missing runs; upgrade runs always search per album.
+             * @enum {string}
+             */
             lidarr_missing_mode: "artist" | "album";
             /** @description Afterglow: hours an item rests after a snatch before it may be touched again. */
             processed_ttl_h: number;

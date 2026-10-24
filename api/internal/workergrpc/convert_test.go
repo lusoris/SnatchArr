@@ -90,3 +90,31 @@ func TestLevelNameAndOutcome(t *testing.T) {
 		}
 	}
 }
+
+func TestLidarrModeFor(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		kind domain.SnatchKind
+		mode string
+		want snatcharrv1.LidarrMode
+	}{
+		{name: "missing artist", kind: domain.SnatchMissing, mode: "artist", want: snatcharrv1.LidarrMode_LIDARR_MODE_ARTIST},
+		{name: "missing album", kind: domain.SnatchMissing, mode: "album", want: snatcharrv1.LidarrMode_LIDARR_MODE_ALBUM},
+		{name: "upgrade artist", kind: domain.SnatchUpgrade, mode: "artist", want: snatcharrv1.LidarrMode_LIDARR_MODE_ALBUM},
+		{name: "upgrade album", kind: domain.SnatchUpgrade, mode: "album", want: snatcharrv1.LidarrMode_LIDARR_MODE_ALBUM},
+		{name: "missing empty", kind: domain.SnatchMissing, mode: "", want: snatcharrv1.LidarrMode_LIDARR_MODE_ARTIST},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			p := domain.Policy{LidarrMissingMode: tc.mode}
+			if got := lidarrModeFor(p, tc.kind); got != tc.want {
+				t.Errorf("lidarrModeFor(mode=%q, kind=%v) = %v, want %v", tc.mode, tc.kind, got, tc.want)
+			}
+			if got := policyProto(p, tc.kind).GetLidarrMode(); got != tc.want {
+				t.Errorf("policyProto(mode=%q, kind=%v).GetLidarrMode() = %v, want %v", tc.mode, tc.kind, got, tc.want)
+			}
+		})
+	}
+}
