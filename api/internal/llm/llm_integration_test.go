@@ -41,6 +41,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/httpapi"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
 	"github.com/lusoris/SnatchArr/api/internal/llm"
+	"github.com/lusoris/SnatchArr/api/internal/modules"
 	"github.com/lusoris/SnatchArr/api/internal/notify"
 	"github.com/lusoris/SnatchArr/api/internal/policies"
 	"github.com/lusoris/SnatchArr/api/internal/prowlarr"
@@ -77,6 +78,11 @@ type mcpFixture struct {
 	st          *store.Store
 	clk         clock.Clock
 	settingsSvc *settings.Service
+	modulesSvc  *modules.Service
+	handlers    *httpapi.Handlers
+	security    *httpapi.Security
+	build       buildinfo.Info
+	logger      *slog.Logger
 	instSvc     *instances.Service
 	polSvc      *policies.Service
 	apiKeys     *auth.APIKeys
@@ -154,7 +160,17 @@ func newMCPFixture(t *testing.T) *mcpFixture {
 		Schedules: schedules, Memory: snatch.NewMemory(st, clk), Queue: queueStore, QueueSvc: queueSvc, Configarr: configarrSvc,
 		Clients: dlSvc, Seerr: seerrSvc, Prowlarr: prowlarrSvc, Notify: notifySvc,
 	})
-	llmSvc, err := llm.New(build, settingsSvc, httpapi.NewSecurity(sessMgr, cfg, keys, authSvc, apiKeys, clk, logger), handlers, logger)
+	var modReg *modules.Registry
+	modReg, err = modules.DefaultRegistry()
+	if err != nil {
+		t.Fatalf("modules.DefaultRegistry: %v", err)
+	}
+	modulesSvc := modules.New(st, clk, modReg)
+	if err = modulesSvc.Ensure(t.Context()); err != nil {
+		t.Fatalf("modulesSvc.Ensure: %v", err)
+	}
+	security := httpapi.NewSecurity(sessMgr, cfg, keys, authSvc, apiKeys, clk, logger)
+	llmSvc, err := llm.New(build, settingsSvc, security, handlers, modulesSvc, logger)
 	if err != nil {
 		t.Fatalf("llm.New: %v", err)
 	}
@@ -163,7 +179,8 @@ func newMCPFixture(t *testing.T) *mcpFixture {
 	srv := httptest.NewServer(r)
 	t.Cleanup(srv.Close)
 	return &mcpFixture{
-		st: st, clk: clk, settingsSvc: settingsSvc, instSvc: instSvc, polSvc: polSvc, apiKeys: apiKeys,
+		st: st, clk: clk, settingsSvc: settingsSvc, modulesSvc: modulesSvc, handlers: handlers,
+		security: security, build: build, logger: logger, instSvc: instSvc, polSvc: polSvc, apiKeys: apiKeys,
 		runs: runs, schedules: schedules, dlSvc: dlSvc, seerrSvc: seerrSvc,
 		prowlarrSvc: prowlarrSvc, notifySvc: notifySvc, admin: admin,
 		srv: srv, client: &http.Client{Timeout: 10 * time.Second}, logBuf: logBuf,

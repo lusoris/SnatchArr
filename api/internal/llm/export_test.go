@@ -19,14 +19,39 @@ import (
 // ToolSpecForTest exposes toolSpec for tests in package llm_test.
 type ToolSpecForTest = toolSpec
 
+// ModuleCheckerForTest exposes the module checker interface for package llm_test.
+type ModuleCheckerForTest = moduleChecker
+
 // RegisteredToolsForTest returns the registered tools slice for tests.
 func RegisteredToolsForTest() []toolSpec {
 	return toolRegistry
 }
 
 // NewWithSpecsForTest constructs a Service using a custom toolSpec slice for testing error paths.
-func NewWithSpecsForTest(build buildinfo.Info, settingsSvc *settings.Service, security *httpapi.Security, handlers *httpapi.Handlers, logger *slog.Logger, specs []toolSpec) (*Service, error) {
-	return newWithSpecs(build, settingsSvc, security, handlers, logger, specs)
+func NewWithSpecsForTest(
+	build buildinfo.Info,
+	settingsSvc *settings.Service,
+	security *httpapi.Security,
+	handlers *httpapi.Handlers,
+	modulesSvc moduleChecker,
+	logger *slog.Logger,
+	specs []toolSpec,
+) (*Service, error) {
+	return newWithSpecs(build, settingsSvc, security, handlers, modulesSvc, logger, specs, nil)
+}
+
+// NewWithSpecsAndOpsForTest constructs a Service using custom toolSpec and ops for testing module gating.
+func NewWithSpecsAndOpsForTest(
+	build buildinfo.Info,
+	settingsSvc *settings.Service,
+	security *httpapi.Security,
+	handlers *httpapi.Handlers,
+	modulesSvc moduleChecker,
+	logger *slog.Logger,
+	specs []toolSpec,
+	ops map[string]string,
+) (*Service, error) {
+	return newWithSpecs(build, settingsSvc, security, handlers, modulesSvc, logger, specs, ops)
 }
 
 // PromptInstructionsForTest returns the three prompt instruction constants for tests.
