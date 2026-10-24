@@ -41,6 +41,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/logring"
 	"github.com/lusoris/SnatchArr/api/internal/metrics"
 	"github.com/lusoris/SnatchArr/api/internal/metrics/metricstest"
+	"github.com/lusoris/SnatchArr/api/internal/modules"
 	"github.com/lusoris/SnatchArr/api/internal/notify"
 	"github.com/lusoris/SnatchArr/api/internal/policies"
 	"github.com/lusoris/SnatchArr/api/internal/prowlarr"
@@ -289,6 +290,14 @@ func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Genera
 	queueStore := queue.NewStore(st, clk)
 	queueSvc := queue.NewService(queueStore, queue.NewDBInstanceSource(st, enc), probe, clk, queue.NewRecorderAdapter(rec, bus, logger), m, logger)
 	configarrSvc := configarr.New(cfg, instSvc, clients, polSvc, queueStore, probe, clk, logger)
+	reg, err := modules.DefaultRegistry()
+	if err != nil {
+		t.Fatalf("buildHandlers: modules.DefaultRegistry: %v", err)
+	}
+	modulesSvc := modules.New(st, clk, reg)
+	if err := modulesSvc.Ensure(context.Background()); err != nil {
+		t.Fatalf("buildHandlers: modules.Ensure: %v", err)
+	}
 	build := buildinfo.Info{Version: "test-ver", Commit: "test-commit", Date: "2026-10-14"}
 	h := &Handlers{
 		build:     build,
@@ -311,6 +320,7 @@ func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Genera
 		schedules: schedules,
 		clients:   clients,
 		settings:  settingsSvc,
+		modules:   modulesSvc,
 		configarr: configarrSvc,
 		seerr:     seerrSvc,
 		prowlarr:  prowlarrSvc,

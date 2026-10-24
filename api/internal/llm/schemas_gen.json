@@ -868,6 +868,20 @@
     ],
     "type": "object"
   },
+  "getModule": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "id": {
+        "description": "Unique module identifier",
+        "type": "string"
+      }
+    },
+    "required": [
+      "id"
+    ],
+    "type": "object"
+  },
   "getNotificationChannel": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -1124,6 +1138,12 @@
         "type": "string"
       }
     },
+    "type": "object"
+  },
+  "listModules": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
     "type": "object"
   },
   "listNotificationChannels": {
@@ -1839,6 +1859,45 @@
     "required": [
       "body",
       "instanceId"
+    ],
+    "type": "object"
+  },
+  "updateModule": {
+    "$defs": {
+      "ModuleUpdate": {
+        "description": "Update payload for an optional module",
+        "properties": {
+          "config": {
+            "additionalProperties": true,
+            "description": "Optional module-specific configuration to update",
+            "type": "object"
+          },
+          "enabled": {
+            "description": "Whether the module should be enabled",
+            "example": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/ModuleUpdate"
+      },
+      "id": {
+        "description": "Unique module identifier",
+        "type": "string"
+      }
+    },
+    "required": [
+      "body",
+      "id"
     ],
     "type": "object"
   },

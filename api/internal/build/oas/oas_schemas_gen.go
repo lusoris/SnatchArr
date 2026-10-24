@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/go-faster/errors"
+	"github.com/go-faster/jx"
 	"github.com/google/uuid"
 )
 
@@ -2717,6 +2718,141 @@ func (s *LoginRequest) SetPassword(val string) {
 // LogoutNoContent is response for Logout operation.
 type LogoutNoContent struct{}
 
+// Detailed configuration and state of an optional module.
+// Ref: #/components/schemas/Module
+type Module struct {
+	// Unique module identifier.
+	ID string `json:"id"`
+	// Whether the module is enabled.
+	Enabled bool `json:"enabled"`
+	// Free-form JSON object configuration.
+	Config ModuleConfig `json:"config"`
+	// When the module was last updated.
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// GetID returns the value of ID.
+func (s *Module) GetID() string {
+	return s.ID
+}
+
+// GetEnabled returns the value of Enabled.
+func (s *Module) GetEnabled() bool {
+	return s.Enabled
+}
+
+// GetConfig returns the value of Config.
+func (s *Module) GetConfig() ModuleConfig {
+	return s.Config
+}
+
+// GetUpdatedAt returns the value of UpdatedAt.
+func (s *Module) GetUpdatedAt() time.Time {
+	return s.UpdatedAt
+}
+
+// SetID sets the value of ID.
+func (s *Module) SetID(val string) {
+	s.ID = val
+}
+
+// SetEnabled sets the value of Enabled.
+func (s *Module) SetEnabled(val bool) {
+	s.Enabled = val
+}
+
+// SetConfig sets the value of Config.
+func (s *Module) SetConfig(val ModuleConfig) {
+	s.Config = val
+}
+
+// SetUpdatedAt sets the value of UpdatedAt.
+func (s *Module) SetUpdatedAt(val time.Time) {
+	s.UpdatedAt = val
+}
+
+// Free-form JSON object configuration.
+type ModuleConfig map[string]jx.Raw
+
+func (s *ModuleConfig) init() ModuleConfig {
+	m := *s
+	if m == nil {
+		m = map[string]jx.Raw{}
+		*s = m
+	}
+	return m
+}
+
+// Basic state of an optional module.
+// Ref: #/components/schemas/ModuleState
+type ModuleState struct {
+	// Unique module identifier.
+	ID string `json:"id"`
+	// Whether the module is enabled.
+	Enabled bool `json:"enabled"`
+}
+
+// GetID returns the value of ID.
+func (s *ModuleState) GetID() string {
+	return s.ID
+}
+
+// GetEnabled returns the value of Enabled.
+func (s *ModuleState) GetEnabled() bool {
+	return s.Enabled
+}
+
+// SetID sets the value of ID.
+func (s *ModuleState) SetID(val string) {
+	s.ID = val
+}
+
+// SetEnabled sets the value of Enabled.
+func (s *ModuleState) SetEnabled(val bool) {
+	s.Enabled = val
+}
+
+// Update payload for an optional module.
+// Ref: #/components/schemas/ModuleUpdate
+type ModuleUpdate struct {
+	// Whether the module should be enabled.
+	Enabled bool `json:"enabled"`
+	// Optional module-specific configuration to update.
+	Config OptModuleUpdateConfig `json:"config"`
+}
+
+// GetEnabled returns the value of Enabled.
+func (s *ModuleUpdate) GetEnabled() bool {
+	return s.Enabled
+}
+
+// GetConfig returns the value of Config.
+func (s *ModuleUpdate) GetConfig() OptModuleUpdateConfig {
+	return s.Config
+}
+
+// SetEnabled sets the value of Enabled.
+func (s *ModuleUpdate) SetEnabled(val bool) {
+	s.Enabled = val
+}
+
+// SetConfig sets the value of Config.
+func (s *ModuleUpdate) SetConfig(val OptModuleUpdateConfig) {
+	s.Config = val
+}
+
+// Optional module-specific configuration to update.
+type ModuleUpdateConfig map[string]jx.Raw
+
+func (s *ModuleUpdateConfig) init() ModuleUpdateConfig {
+	m := *s
+	if m == nil {
+		m = map[string]jx.Raw{}
+		*s = m
+	}
+	return m
+}
+
 // NewNilInt returns new NilInt with value set to v.
 func NewNilInt(v int) NilInt {
 	return NilInt{
@@ -4009,6 +4145,52 @@ func (o OptLogLevel) Get() (v LogLevel, ok bool) {
 
 // Or returns value if set, or given parameter if does not.
 func (o OptLogLevel) Or(d LogLevel) LogLevel {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptModuleUpdateConfig returns new OptModuleUpdateConfig with value set to v.
+func NewOptModuleUpdateConfig(v ModuleUpdateConfig) OptModuleUpdateConfig {
+	return OptModuleUpdateConfig{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptModuleUpdateConfig is optional ModuleUpdateConfig.
+type OptModuleUpdateConfig struct {
+	Value ModuleUpdateConfig
+	Set   bool
+}
+
+// IsSet returns true if OptModuleUpdateConfig was set.
+func (o OptModuleUpdateConfig) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptModuleUpdateConfig) Reset() {
+	var v ModuleUpdateConfig
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptModuleUpdateConfig) SetTo(v ModuleUpdateConfig) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptModuleUpdateConfig) Get() (v ModuleUpdateConfig, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptModuleUpdateConfig) Or(d ModuleUpdateConfig) ModuleUpdateConfig {
 	if v, ok := o.Get(); ok {
 		return v
 	}

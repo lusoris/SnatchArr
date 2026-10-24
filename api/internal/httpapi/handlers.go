@@ -30,6 +30,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
 	"github.com/lusoris/SnatchArr/api/internal/logring"
+	"github.com/lusoris/SnatchArr/api/internal/modules"
 	"github.com/lusoris/SnatchArr/api/internal/notify"
 	"github.com/lusoris/SnatchArr/api/internal/policies"
 	"github.com/lusoris/SnatchArr/api/internal/prowlarr"
@@ -63,6 +64,7 @@ type Handlers struct {
 	schedules *snatch.Schedules
 	clients   *dlclients.Service
 	settings  *settings.Service
+	modules   *modules.Service
 	seerr     *seerr.Service
 	prowlarr  *prowlarr.Service
 	configarr *configarr.Service
@@ -82,6 +84,7 @@ type Deps struct {
 	Schedules *snatch.Schedules
 	Clients   *dlclients.Service
 	Settings  *settings.Service
+	Modules   *modules.Service
 	Seerr     *seerr.Service
 	Prowlarr  *prowlarr.Service
 	Configarr *configarr.Service
@@ -98,7 +101,7 @@ func NewHandlers(build buildinfo.Info, cfg config.Options, clk clock.Clock, auth
 ) *Handlers {
 	return &Handlers{
 		build: build, cfg: cfg, clk: clk, auth: authSvc, apiKeys: apiKeys, sessions: sessions, instances: inst, policies: pol,
-		queue: d.Queue, queueSvc: d.QueueSvc, runs: d.Runs, workers: d.Workers, rec: d.Rec, budget: d.Budget, memory: d.Memory, planner: d.Planner, schedules: d.Schedules, clients: d.Clients, settings: d.Settings, seerr: d.Seerr, prowlarr: d.Prowlarr, configarr: d.Configarr, notify: d.Notify, options: d.Options, logs: d.Logs, logger: logger,
+		queue: d.Queue, queueSvc: d.QueueSvc, runs: d.Runs, workers: d.Workers, rec: d.Rec, budget: d.Budget, memory: d.Memory, planner: d.Planner, schedules: d.Schedules, clients: d.Clients, settings: d.Settings, modules: d.Modules, seerr: d.Seerr, prowlarr: d.Prowlarr, configarr: d.Configarr, notify: d.Notify, options: d.Options, logs: d.Logs, logger: logger,
 	}
 }
 

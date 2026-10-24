@@ -5,6 +5,8 @@
 package httpapi
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/url"
 	"time"
 
@@ -308,4 +310,55 @@ func notificationRuleToOAS(r domain.NotificationRule) oas.NotificationRule {
 		CreatedAt:  r.CreatedAt,
 		UpdatedAt:  r.UpdatedAt,
 	}
+}
+
+func moduleStateToOAS(m domain.Module) oas.ModuleState {
+	return oas.ModuleState{
+		ID:      m.ID,
+		Enabled: m.Enabled,
+	}
+}
+
+func moduleStatesToOAS(list []domain.Module) []oas.ModuleState {
+	out := make([]oas.ModuleState, 0, len(list))
+	for _, m := range list {
+		out = append(out, moduleStateToOAS(m))
+	}
+	return out
+}
+
+func moduleConfigToOAS(raw json.RawMessage) (oas.ModuleConfig, error) {
+	if len(raw) == 0 {
+		return oas.ModuleConfig{}, nil
+	}
+	var m oas.ModuleConfig
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return nil, fmt.Errorf("httpapi: decode module config: %w", err)
+	}
+	return m, nil
+}
+
+func moduleToOAS(m domain.Module) (*oas.Module, error) {
+	cfg, err := moduleConfigToOAS(m.Config)
+	if err != nil {
+		return nil, err
+	}
+	return &oas.Module{
+		ID:        m.ID,
+		Enabled:   m.Enabled,
+		Config:    cfg,
+		UpdatedAt: m.UpdatedAt,
+	}, nil
+}
+
+func moduleUpdateConfigFromOAS(opt oas.OptModuleUpdateConfig) ([]byte, bool, error) {
+	cfg, ok := opt.Get()
+	if !ok {
+		return nil, false, nil
+	}
+	b, err := json.Marshal(cfg)
+	if err != nil {
+		return nil, false, fmt.Errorf("%w: marshal module config: %w", domain.ErrInvalid, err)
+	}
+	return b, true, nil
 }

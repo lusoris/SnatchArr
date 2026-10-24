@@ -21,6 +21,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/system/modules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List optional modules and their enabled state
+         * @description Basic state of all registered optional modules. Any authenticated user may access this endpoint.
+         */
+        get: operations["listModules"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/system/modules/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Unique module identifier */
+                id: components["parameters"]["ModuleId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Get configuration and state of an optional module
+         * @description Persistent configuration and enabled state for the specified module (admin only).
+         */
+        get: operations["getModule"];
+        /**
+         * Update configuration and state of an optional module
+         * @description Updates the enabled state and optional configuration of the specified module (admin only).
+         */
+        put: operations["updateModule"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/setup/status": {
         parameters: {
             query?: never;
@@ -1154,6 +1201,53 @@ export interface components {
                 reason: string;
             }[];
         };
+        /** @description Basic state of an optional module */
+        ModuleState: {
+            /**
+             * @description Unique module identifier
+             * @example llm
+             */
+            id: string;
+            /**
+             * @description Whether the module is enabled
+             * @example false
+             */
+            enabled: boolean;
+        };
+        /** @description Detailed configuration and state of an optional module */
+        Module: {
+            /**
+             * @description Unique module identifier
+             * @example llm
+             */
+            id: string;
+            /**
+             * @description Whether the module is enabled
+             * @example false
+             */
+            enabled: boolean;
+            /** @description Free-form JSON object configuration */
+            config: {
+                [key: string]: unknown;
+            };
+            /**
+             * Format: date-time
+             * @description When the module was last updated
+             */
+            updated_at: string;
+        };
+        /** @description Update payload for an optional module */
+        ModuleUpdate: {
+            /**
+             * @description Whether the module should be enabled
+             * @example true
+             */
+            enabled: boolean;
+            /** @description Optional module-specific configuration to update */
+            config?: {
+                [key: string]: unknown;
+            };
+        };
         SystemStatus: {
             name: string;
             version: string;
@@ -2044,6 +2138,8 @@ export interface components {
         ClientId: string;
         LinkId: string;
         ApiKeyId: string;
+        /** @description Unique module identifier */
+        ModuleId: string;
         NotificationChannelId: string;
         NotificationRuleId: string;
     };
@@ -2069,6 +2165,79 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SystemStatus"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listModules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Module states */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModuleState"][];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getModule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Unique module identifier */
+                id: components["parameters"]["ModuleId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Module details */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Module"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    updateModule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Unique module identifier */
+                id: components["parameters"]["ModuleId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModuleUpdate"];
+            };
+        };
+        responses: {
+            /** @description Updated module details */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Module"];
                 };
             };
             default: components["responses"]["Problem"];

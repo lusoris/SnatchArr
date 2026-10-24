@@ -257,6 +257,15 @@ func (UnimplementedHandler) GetInstancePriority(ctx context.Context, params GetI
 	return r, ht.ErrNotImplemented
 }
 
+// GetModule implements getModule operation.
+//
+// Persistent configuration and enabled state for the specified module (admin only).
+//
+// GET /system/modules/{id}
+func (UnimplementedHandler) GetModule(ctx context.Context, params GetModuleParams) (r *Module, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // GetNotificationChannel implements getNotificationChannel operation.
 //
 // Get one notification channel.
@@ -456,6 +465,15 @@ func (UnimplementedHandler) ListInstances(ctx context.Context) (r []Instance, _ 
 //
 // GET /logs
 func (UnimplementedHandler) ListLogs(ctx context.Context, params ListLogsParams) (r *LogPage, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ListModules implements listModules operation.
+//
+// Basic state of all registered optional modules. Any authenticated user may access this endpoint.
+//
+// GET /system/modules
+func (UnimplementedHandler) ListModules(ctx context.Context) (r []ModuleState, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -717,6 +735,15 @@ func (UnimplementedHandler) UpdateInstance(ctx context.Context, req *InstanceUpd
 //
 // PUT /instances/{instanceId}/priority
 func (UnimplementedHandler) UpdateInstancePriority(ctx context.Context, req *InstancePriorityInput, params UpdateInstancePriorityParams) (r *InstancePriority, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UpdateModule implements updateModule operation.
+//
+// Updates the enabled state and optional configuration of the specified module (admin only).
+//
+// PUT /system/modules/{id}
+func (UnimplementedHandler) UpdateModule(ctx context.Context, req *ModuleUpdate, params UpdateModuleParams) (r *Module, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
