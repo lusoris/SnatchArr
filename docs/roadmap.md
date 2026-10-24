@@ -77,3 +77,10 @@ Epic [#572](https://github.com/lusoris/SnatchArr/issues/572), in the backlog.
 
 - [#567](https://github.com/lusoris/SnatchArr/issues/567): the ADR for the plugin.
   Implementation issues follow once it is accepted.
+
+### Watch-aware modes
+
+The season gate is planned ([ADR-0024](adr/0024-watch-aware-modes.md)), and
+remove-when-seen follows after the gate's observe run. Until then,
+[Maintainerr](https://github.com/Maintainerr/Maintainerr) is an alternative for
+removing watched media.
