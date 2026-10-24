@@ -93,8 +93,10 @@ const historyEvents = [
 // download client); /logs and /live must wrap it at URL delimiters, never mid-word.
 const urlErrorText =
 	'Post "http://127.0.0.1:9091/transmission/rpc": dial tcp 127.0.0.1:9091: connect: connection refused';
-const urlRowFixtures: Record<string, { glob: string; body: unknown }> = {
-	'/logs': {
+const urlRowFixtures: Partial<
+	Record<(typeof AUTH_ROUTES)[number], { glob: string; body: unknown }>
+> = {
+	'/activity?source=log': {
 		glob: '**/api/v1/logs?*',
 		body: {
 			records: [
@@ -111,7 +113,7 @@ const urlRowFixtures: Record<string, { glob: string; body: unknown }> = {
 			dropped: 0
 		}
 	},
-	'/live': {
+	'/activity?source=live': {
 		glob: '**/api/v1/events?*',
 		body: [
 			{
@@ -126,7 +128,14 @@ const urlRowFixtures: Record<string, { glob: string; body: unknown }> = {
 	}
 };
 
-async function mockUrlRows(page: Page, pattern: string): Promise<void> {
+// A fixture keyed by a path the sweep no longer visits would leave its URL check silently unrun.
+test('authenticated: URL-row fixtures name swept routes', () => {
+	const swept: readonly string[] = AUTH_ROUTES;
+	const stale = Object.keys(urlRowFixtures).filter((key) => !swept.includes(key));
+	expect(stale).toEqual([]);
+});
+
+async function mockUrlRows(page: Page, pattern: (typeof AUTH_ROUTES)[number]): Promise<void> {
 	const fixture = urlRowFixtures[pattern];
 	if (!fixture || served) return;
 	await page.route(fixture.glob, (route) => route.fulfill(json(fixture.body)));
