@@ -54,6 +54,62 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
 
+  /system/modules:
+    get:
+      tags: [system]
+      operationId: listModules
+      summary: List optional modules and their enabled state
+      description: Basic state of all registered optional modules. Any authenticated user may access this endpoint.
+      responses:
+        "200":
+          description: Module states
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ModuleState"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /system/modules/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ModuleId"
+    get:
+      tags: [system]
+      operationId: getModule
+      summary: Get configuration and state of an optional module
+      description: Persistent configuration and enabled state for the specified module (admin only).
+      responses:
+        "200":
+          description: Module details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Module"
+        default:
+          $ref: "#/components/responses/Problem"
+    put:
+      tags: [system]
+      operationId: updateModule
+      summary: Update configuration and state of an optional module
+      description: Updates the enabled state and optional configuration of the specified module (admin only).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ModuleUpdate"
+      responses:
+        "200":
+          description: Updated module details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Module"
+        default:
+          $ref: "#/components/responses/Problem"
+
   /auth/setup/status:
     get:
       tags: [auth]
@@ -1704,6 +1760,15 @@ components:
       required: true
       schema:
         type: string
+    ModuleId:
+      name: id
+      in: path
+      required: true
+      description: Unique module identifier
+      schema:
+        type: string
+        maxLength: 64
+        pattern: "^[a-z][a-z0-9_]{0,63}$"
     NotificationChannelId:
       name: channelId
       in: path
@@ -1755,6 +1820,60 @@ components:
                 type: string
               reason:
                 type: string
+
+    ModuleState:
+      type: object
+      description: Basic state of an optional module
+      required: [id, enabled]
+      properties:
+        id:
+          type: string
+          maxLength: 64
+          pattern: "^[a-z][a-z0-9_]{0,63}$"
+          description: Unique module identifier
+          example: llm
+        enabled:
+          type: boolean
+          description: Whether the module is enabled
+          example: false
+
+    Module:
+      type: object
+      description: Detailed configuration and state of an optional module
+      required: [id, enabled, config, updated_at]
+      properties:
+        id:
+          type: string
+          maxLength: 64
+          pattern: "^[a-z][a-z0-9_]{0,63}$"
+          description: Unique module identifier
+          example: llm
+        enabled:
+          type: boolean
+          description: Whether the module is enabled
+          example: false
+        config:
+          type: object
+          additionalProperties: true
+          description: Free-form JSON object configuration
+        updated_at:
+          type: string
+          format: date-time
+          description: When the module was last updated
+
+    ModuleUpdate:
+      type: object
+      description: Update payload for an optional module
+      required: [enabled]
+      properties:
+        enabled:
+          type: boolean
+          description: Whether the module should be enabled
+          example: true
+        config:
+          type: object
+          additionalProperties: true
+          description: Optional module-specific configuration to update
 
     SystemStatus:
       type: object

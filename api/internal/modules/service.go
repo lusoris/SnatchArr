@@ -61,6 +61,9 @@ func (s *Service) Ensure(ctx context.Context) error {
 
 // Get returns the persistent state and config for the specified module.
 func (s *Service) Get(ctx context.Context, id string) (domain.Module, error) {
+	if _, ok := s.reg.Lookup(id); !ok {
+		return domain.Module{}, fmt.Errorf("modules: get %q: %w", id, domain.ErrNotFound)
+	}
 	row, err := s.st.Q().GetModule(ctx, id)
 	if err != nil {
 		return domain.Module{}, fmt.Errorf("modules: get %q: %w", id, store.MapError(err))
@@ -79,6 +82,57 @@ func (s *Service) List(ctx context.Context) ([]domain.Module, error) {
 		out = append(out, moduleFromRow(r))
 	}
 	return out, nil
+}
+
+// Update updates a registered module's enabled state and optionally its configuration.
+// When config is non-nil, it is validated against the module descriptor before the transaction.
+func (s *Service) Update(ctx context.Context, id string, enabled bool, config *json.RawMessage) (domain.Module, error) {
+	desc, ok := s.reg.Lookup(id)
+	if !ok {
+		return domain.Module{}, fmt.Errorf("modules: update %q: %w", id, domain.ErrNotFound)
+	}
+	var trimmed []byte
+	if config != nil {
+		if err := desc.ValidateConfig(*config); err != nil {
+			return domain.Module{}, fmt.Errorf("modules: update %q: %w", id, err)
+		}
+		trimmed = bytes.TrimSpace(*config)
+	}
+	now := s.clk.Now()
+	var finalRow sqlcgen.Module
+	err := s.st.Tx(ctx, func(q *sqlcgen.Queries) error {
+		if err := q.EnsureModule(ctx, sqlcgen.EnsureModuleParams{
+			ID:        id,
+			Enabled:   desc.DefaultEnabled,
+			Config:    []byte("{}"),
+			UpdatedAt: now,
+		}); err != nil {
+			return err
+		}
+		if config != nil {
+			if _, err := q.SetModuleConfig(ctx, sqlcgen.SetModuleConfigParams{
+				ID:        id,
+				Config:    trimmed,
+				UpdatedAt: now,
+			}); err != nil {
+				return err
+			}
+		}
+		r, err := q.SetModuleEnabled(ctx, sqlcgen.SetModuleEnabledParams{
+			ID:        id,
+			Enabled:   enabled,
+			UpdatedAt: now,
+		})
+		if err != nil {
+			return err
+		}
+		finalRow = r
+		return nil
+	})
+	if err != nil {
+		return domain.Module{}, fmt.Errorf("modules: update %q: %w", id, store.MapError(err))
+	}
+	return moduleFromRow(finalRow), nil
 }
 
 // SetEnabled toggles a registered module on or off without altering its configuration.

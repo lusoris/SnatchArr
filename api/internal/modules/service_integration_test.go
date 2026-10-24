@@ -128,3 +128,53 @@ func TestBoundaryDataOnDisable(t *testing.T) {
 		t.Errorf("Get(%s).Config = %v, want %v", domain.ModuleWatchAware, gotMap, wantMap)
 	}
 }
+
+func TestServiceUpdate(t *testing.T) {
+	t.Parallel()
+	svc := newService(t)
+	ctx := t.Context()
+
+	if err := svc.Ensure(ctx); err != nil {
+		t.Fatalf("Ensure() error = %v", err)
+	}
+
+	// 1. Positive: update with valid config
+	cfg := json.RawMessage(`{"sync_interval_minutes":20}`)
+	mod, err := svc.Update(ctx, domain.ModuleWatchAware, true, &cfg)
+	if err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	if !mod.Enabled {
+		t.Errorf("mod.Enabled = false, want true")
+	}
+	var gotCfg map[string]any
+	if uErr := json.Unmarshal(mod.Config, &gotCfg); uErr != nil || int(gotCfg["sync_interval_minutes"].(float64)) != 20 {
+		t.Fatalf("mod.Config = %v, want sync_interval_minutes=20", gotCfg)
+	}
+
+	// 2. Positive: update without config preserves config and toggles enabled
+	mod, err = svc.Update(ctx, domain.ModuleWatchAware, false, nil)
+	if err != nil {
+		t.Fatalf("Update(nil config) error = %v", err)
+	}
+	if mod.Enabled {
+		t.Errorf("mod.Enabled = true, want false")
+	}
+	gotCfg = nil
+	if uErr := json.Unmarshal(mod.Config, &gotCfg); uErr != nil || int(gotCfg["sync_interval_minutes"].(float64)) != 20 {
+		t.Fatalf("preserved mod.Config = %v, want sync_interval_minutes=20", gotCfg)
+	}
+
+	// 3. Negative: unknown module id
+	_, err = svc.Update(ctx, "nonexistent", true, nil)
+	if !errors.Is(err, domain.ErrNotFound) {
+		t.Errorf("Update(nonexistent) error = %v, want ErrNotFound", err)
+	}
+
+	// 4. Negative: invalid config
+	badCfg := json.RawMessage(`{"sync_interval_minutes":9999}`)
+	_, err = svc.Update(ctx, domain.ModuleWatchAware, true, &badCfg)
+	if !errors.Is(err, domain.ErrInvalid) {
+		t.Errorf("Update(badCfg) error = %v, want ErrInvalid", err)
+	}
+}

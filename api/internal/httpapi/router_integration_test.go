@@ -830,6 +830,54 @@ func stepsSettingsAndSchedules() []routerStep {
 	}
 }
 
+func stepsModules() []routerStep {
+	return []routerStep{
+		{
+			op:     "listModules",
+			method: http.MethodGet,
+			path:   func(_ *idsState) string { return "/system/modules" },
+			want:   http.StatusOK,
+			capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
+				t.Helper()
+				items, ok := decoded["items"].([]any)
+				if !ok || len(items) == 0 {
+					t.Fatalf("listModules items = %v, want non-empty", decoded)
+				}
+			},
+		},
+		{
+			op:     "getModule",
+			method: http.MethodGet,
+			path:   func(_ *idsState) string { return "/system/modules/llm" },
+			want:   http.StatusOK,
+			capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
+				t.Helper()
+				if id, ok := decoded["id"].(string); !ok || id != "llm" {
+					t.Fatalf("getModule id = %v, want llm", decoded["id"])
+				}
+			},
+		},
+		{
+			op:     "updateModule",
+			method: http.MethodPut,
+			path:   func(_ *idsState) string { return "/system/modules/llm" },
+			body: func(_ *idsState) any {
+				return map[string]any{
+					"enabled": false,
+					"config":  map[string]any{},
+				}
+			},
+			want: http.StatusOK,
+			capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
+				t.Helper()
+				if enabled, ok := decoded["enabled"].(bool); !ok || enabled {
+					t.Fatalf("updateModule enabled = %v, want false", decoded["enabled"])
+				}
+			},
+		},
+	}
+}
+
 func stepsDownloadClients() []routerStep {
 	return []routerStep{
 		{
@@ -1582,6 +1630,7 @@ func buildRouterSteps(f *routerFixture) []routerStep {
 	steps = append(steps, stepsPoliciesAndRuns()...)
 	steps = append(steps, stepsPriority()...)
 	steps = append(steps, stepsSettingsAndSchedules()...)
+	steps = append(steps, stepsModules()...)
 	steps = append(steps, stepsDownloadClients()...)
 	steps = append(steps, stepsSeerr(f)...)
 	steps = append(steps, stepsConfigarr()...)
@@ -2045,7 +2094,7 @@ func TestRouterRejectsViewerMutationsAndProbes(t *testing.T) {
 		t.Fatal("no operations tested")
 	}
 
-	adminOnlyReads := []string{"listLogs", "getConfigarrStatus", "getPolicyFilterOptions"}
+	adminOnlyReads := []string{"listLogs", "getConfigarrStatus", "getPolicyFilterOptions", "getModule"}
 	for _, opID := range adminOnlyReads {
 		step, ok := stepsByOp[opID]
 		if !ok {

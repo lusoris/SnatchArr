@@ -171,6 +171,12 @@ type Handler interface {
 	//
 	// GET /instances/{instanceId}/priority
 	GetInstancePriority(ctx context.Context, params GetInstancePriorityParams) (*InstancePriority, error)
+	// GetModule implements getModule operation.
+	//
+	// Persistent configuration and enabled state for the specified module (admin only).
+	//
+	// GET /system/modules/{id}
+	GetModule(ctx context.Context, params GetModuleParams) (*Module, error)
 	// GetNotificationChannel implements getNotificationChannel operation.
 	//
 	// Get one notification channel.
@@ -307,6 +313,12 @@ type Handler interface {
 	//
 	// GET /logs
 	ListLogs(ctx context.Context, params ListLogsParams) (*LogPage, error)
+	// ListModules implements listModules operation.
+	//
+	// Basic state of all registered optional modules. Any authenticated user may access this endpoint.
+	//
+	// GET /system/modules
+	ListModules(ctx context.Context) ([]ModuleState, error)
 	// ListNotificationChannels implements listNotificationChannels operation.
 	//
 	// List all configured notification channels.
@@ -481,6 +493,12 @@ type Handler interface {
 	//
 	// PUT /instances/{instanceId}/priority
 	UpdateInstancePriority(ctx context.Context, req *InstancePriorityInput, params UpdateInstancePriorityParams) (*InstancePriority, error)
+	// UpdateModule implements updateModule operation.
+	//
+	// Updates the enabled state and optional configuration of the specified module (admin only).
+	//
+	// PUT /system/modules/{id}
+	UpdateModule(ctx context.Context, req *ModuleUpdate, params UpdateModuleParams) (*Module, error)
 	// UpdateNotificationChannel implements updateNotificationChannel operation.
 	//
 	// Update a notification channel.
