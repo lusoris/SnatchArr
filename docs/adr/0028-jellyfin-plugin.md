@@ -48,7 +48,7 @@ A survey of the SnatchArr codebase and upstream dependencies establishes the fou
 2. **Upstream licenses**:
    - `jellyfin/jellyfin` is licensed under GNU General Public License v2.0 (read 2026-10-24 from [jellyfin LICENSE](https://raw.githubusercontent.com/jellyfin/jellyfin/v12.3/LICENSE)).
    - `jellyfin/jellyfin-plugin-template` is licensed under GNU General Public License v3.0 (read 2026-10-24 from [jellyfin-plugin-template LICENSE](https://raw.githubusercontent.com/jellyfin/jellyfin-plugin-template/master/LICENSE)).
-   - C# plugins linking against `Jellyfin.Controller` and `MediaBrowser.*` assemblies create a combined work under the GPL, requiring the plugin source and binary distribution to carry a GPL-compatible license.
+   - C# plugins linking against `Jellyfin.Controller` and `MediaBrowser.*` assemblies may form a combined work with GPL code under the Free Software Foundation's reading of the GPL. Which licence the plugin carries is open question 2; until it is answered, no template code is copied into the plugin.
 3. **Existing community plugins and link-not-build**:
    - Stash metadata plugins exist in the community: `DirtyRacer1337/Jellyfin.Plugin.Stash` (read 2026-10-24 from [DirtyRacer1337/Jellyfin.Plugin.Stash](https://github.com/DirtyRacer1337/Jellyfin.Plugin.Stash), MIT License, head commit `b1ab78b` of 2026-09-10) and the fork `alysson-souza/Jellyfin.Plugin.Stash` (MIT, last push 2026-09-09, read 2026-10-24 from [alysson-souza/Jellyfin.Plugin.Stash](https://github.com/alysson-souza/Jellyfin.Plugin.Stash)).
    - Stash-side NFO export tools exist: `carrotwaxr/stash-plugins` (`mcMetadata`, MIT, read 2026-10-24 from [carrotwaxr/stash-plugins](https://github.com/carrotwaxr/stash-plugins)).
@@ -332,7 +332,7 @@ The permanent repository name is left as an open question per operating rules (p
 #### Licensing consequence of linking Jellyfin assemblies
 
 - **Legal fact**: Jellyfin Server is licensed under GPLv2 ([LICENSE](https://raw.githubusercontent.com/jellyfin/jellyfin/v12.3/LICENSE)) and Jellyfin Plugin Template is licensed under GPLv3 ([LICENSE](https://raw.githubusercontent.com/jellyfin/jellyfin-plugin-template/master/LICENSE)). Compiling a C# plugin requires linking against `Jellyfin.Controller`, `Jellyfin.Model`, `MediaBrowser.Controller`, and `MediaBrowser.Model`.
-- **Consequence**: Under the Free Software Foundation's legal interpretation of the GNU General Public License, dynamic linking against GPL libraries creates a derivative/combined work. Consequently, the companion plugin binary and source code must be released under a GPL-compatible open-source license (such as GPL-3.0-only or GPL-3.0-or-later).
+- **Consequence**: Under the Free Software Foundation's reading of the GPL, dynamic linking against GPL libraries forms a combined work, so the plugin licence must be one under which that combination can be distributed. The fleet's own-code licence is EUPL-1.2; whether that or a GPL licence applies here is open question 2, not settled by this record.
 - **Separation benefit**: Housing the plugin in a dedicated repository (`Option 6B`) ensures that Jellyfin's GPL copyleft boundary remains strictly confined to the C# plugin repository and does not cross into SnatchArr's EUPL-1.2/MIT core repository. The specific license selection for the plugin repository is recorded as an open question.
 
 ### 7. Verification and testing architecture
@@ -359,7 +359,7 @@ A three-tier testing strategy guarantees contract correctness and security bound
 - **Native media center experience**: Users can browse adult scenes, view performer credits, inspect image-set galleries, and view snatch status badges directly within their existing Jellyfin applications (`snatcharr-product-jellyfin-plugin-20261020`).
 - **Zero Seerr duplication**: Movie and TV requests continue through Seerr without code duplication or competing approval workflows (`snatcharr-product-seerr-20261020`).
 - **Secure credential fencing**: Stash-box API credentials, upstream indexer keys, and private network URLs remain protected inside SnatchArr, completely isolated from client applications (`snatcharr-product-adult-scope-20261020`).
-- **Clean licensing boundary**: A separate repository isolates the GPL-licensed C# Jellyfin plugin from SnatchArr's EUPL-1.2/MIT core codebase.
+- **Clean licensing boundary**: A separate repository keeps the C# plugin that links GPL Jellyfin assemblies apart from SnatchArr's EUPL-1.2/MIT core codebase.
 - **Resilient module gating**: Adherence to ADR-0025 ensures that disabled modules and unauthorized content return clean 404 responses without leaking information or throwing server exceptions.
 
 ### Negative
@@ -372,8 +372,6 @@ A three-tier testing strategy guarantees contract correctness and security bound
 
 - [ ] Decision on repository name and creation of `lusoris/<jellyfin-plugin-placeholder>` (Open Question 1).
 - [ ] Decision on plugin open-source license (Open Question 2).
-- [ ] Decision on preferred web UI injection mechanism for Jellyfin Web (Open Question 3).
-- [ ] Decision on user-delegated authorization protocol (Open Question 4, aligned with ADR-0026).
 - [ ] Add an OpenAPI diff check against the base revision (HISS-14) before the plugin contract ships.
 - [ ] Add plugin API client endpoints to `api/openapi/openapi.yaml` and regenerate server bindings via `make api-gen`.
 - [ ] Implement `SnatchArrAdultProvider` metadata provider and image provider in the plugin repository.
@@ -395,18 +393,20 @@ A three-tier testing strategy guarantees contract correctness and security bound
   - c) `lusoris/snatcharr-companion-jellyfin` (Explicit descriptor).
     - *Risk*: Overly verbose repository identifier.
 - **Recommended**: Option a (`lusoris/jellyfin-plugin-snatcharr`). Matches the standard convention followed by virtually all community Jellyfin plugins, simplifying catalog discovery.
+- **Status (2026-10-24)**: Queued for the operator together with the organisation the repository lives in (controller ledger `snatcharr-jellyfin-plugin-repo-name`). No repository is created until answered.
 
 ### Question 2: Plugin open-source license (`jellyfin-plugin-license`)
 
-- **Context**: The plugin links directly to GPL-licensed Jellyfin assemblies (`Jellyfin.Controller`, `Jellyfin.Model`). The plugin license must satisfy GPL copyleft terms while aligning with the organization's open-source policy.
+- **Context**: The plugin links directly to GPL-licensed Jellyfin assemblies (`Jellyfin.Controller`, `Jellyfin.Model`). The fleet's own-code licence is EUPL-1.2, and copying GPL-3.0 template code would bind the plugin to the GPL.
 - **Options**:
   - a) `GPL-3.0-or-later` (Permits forward compatibility with modern GPL-3.0+ plugins and template).
-    - *Risk*: Stricter copyleft than SnatchArr's EUPL-1.2/MIT core, but legally unimpeachable when linking Jellyfin assemblies.
+    - *Risk*: Departs from the fleet's own-code licence EUPL-1.2.
   - b) `GPL-2.0-only` (Direct match with Jellyfin Server repository license).
     - *Risk*: Incompatible with GPL-3.0-only dependencies or newer Jellyfin plugin template components.
-  - c) `EUPL-1.2` with GPL-3.0 compatibility clause.
-    - *Risk*: Requires legal validation of the EUPL compatibility matrix with linked .NET assemblies.
-- **Recommended**: Option a (`GPL-3.0-or-later`). Provides full compliance with the Free Software Foundation's guidelines for derivative works linking GPLv2/v3 assemblies, matching `jellyfin/jellyfin-plugin-template`.
+  - c) `EUPL-1.2`, the fleet's own-code licence, with no template code copied.
+    - *Risk*: Whether an EUPL-1.2 plugin linking GPL assemblies can be distributed needs a licence review.
+- **Recommended**: Option a (`GPL-3.0-or-later`), matching `jellyfin/jellyfin-plugin-template`.
+- **Status (2026-10-24)**: Queued for the operator (controller ledger `snatcharr-jellyfin-plugin-license`). Until answered, no template code is copied.
 
 ### Question 3: Web UI injection distribution method (`jellyfin-plugin-web-injection-method`)
 
@@ -419,6 +419,7 @@ A three-tier testing strategy guarantees contract correctness and security bound
   - c) No web script in the first release; server features only.
     - *Risk*: No in-page badges or request buttons on the web until a later release.
 - **Recommended**: Option a, optional. Server features never depend on it, so a broken injector loses only the web extras.
+- **Answered (2026-10-24, controller ledger `snatcharr-jellyfin-plugin-web-injection-method`)**: Option a. Every server feature works without the injector; a missing injector is logged, and the docs name it optional. A test runs the plugin with the injector absent.
 
 ### Question 4: User-delegated authorization protocol (`jellyfin-plugin-user-auth-method`)
 
@@ -431,6 +432,7 @@ A three-tier testing strategy guarantees contract correctness and security bound
   - c) Per-user SnatchArr API tokens stored in Jellyfin user preferences.
     - *Risk*: High friction; every household member creates and pastes a key.
 - **Recommended**: Option b. Jellyfin itself proves who the user is, and no network position grants identity.
+- **Answered (2026-10-24, controller ledger `snatcharr-jellyfin-plugin-user-auth-method`)**: Option b. SnatchArr verifies the forwarded token with `GET /Users/Me`, caches the result briefly and never stores the token. When no user token is reachable, the request fails closed. Tests: a forged or expired token gets 401, and a caller-supplied user id header is ignored.
 
 ## References
 
@@ -445,7 +447,7 @@ A three-tier testing strategy guarantees contract correctness and security bound
 - `snatcharr-product-more-media-20261020` (2026-10-20T14:55:08) (paraphrased): First stable version covers TV, movies, music, books, audiobooks, comics, games, and adult media.
 - [Jellyfin Server release v12.3](https://github.com/jellyfin/jellyfin/releases/tag/v12.3) (published 2026-10-23, read 2026-10-24; .NET SDK 10.0.0, target framework `net10.0`, GPLv2).
 - [Jellyfin Plugin Template](https://github.com/jellyfin/jellyfin-plugin-template) (commit `c93225a0a5a76d3843db05b4b5b77fcfc482fba3`, read 2026-10-24; target framework `net9.0`, target ABI `10.11.0.0`, GPLv3).
-- [DirtyRacer1337/Jellyfin.Plugin.Stash](https://github.com/DirtyRacer1337/Jellyfin.Plugin.Stash) (commit `4806a6c` on `main`, pushed 2026-09-10, read 2026-10-24; MIT License, community Stash metadata provider for Jellyfin).
+- [DirtyRacer1337/Jellyfin.Plugin.Stash](https://github.com/DirtyRacer1337/Jellyfin.Plugin.Stash) (head commit `b1ab78b`, pushed 2026-09-10, read 2026-10-24; MIT License, community Stash metadata provider for Jellyfin).
 - [alysson-souza/Jellyfin.Plugin.Stash](https://github.com/alysson-souza/Jellyfin.Plugin.Stash) (active fork of Jellyfin Stash metadata plugin, read 2026-10-24).
 - [carrotwaxr/stash-plugins](https://github.com/carrotwaxr/stash-plugins) (`mcMetadata`, read 2026-10-24; Stash-side NFO and image exporter).
 - [IAmParadox27/jellyfin-plugin-file-transformation](https://github.com/IAmParadox27/jellyfin-plugin-file-transformation) (read 2026-10-24; community file-transformation middleware for Jellyfin Web).
