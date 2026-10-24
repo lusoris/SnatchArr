@@ -516,7 +516,12 @@ func checkImportRule(rule Rule, item Item, c *itemClassifier) bool {
 	}
 }
 
+// checkStalled strikes torrents only: usenet clients queue jobs serially and report
+// waiting jobs as downloading, and their own failure handling covers dead jobs.
 func checkStalled(item Item, prev Strike) bool {
+	if !isTorrentProtocol(item.Protocol) {
+		return false
+	}
 	if !strings.EqualFold(item.TrackedDownloadState, "downloading") {
 		return false
 	}
@@ -659,6 +664,7 @@ func MatchMetadataStuck(item Item) bool {
 	return isLocalizedMetadataStuck(item, isQueued, isWarning)
 }
 
+// isTorrentProtocol reports whether protocol is torrent; empty/unknown protocol is treated as torrent.
 func isTorrentProtocol(protocol string) bool {
 	return protocol == "" || strings.EqualFold(protocol, "torrent")
 }
