@@ -337,6 +337,7 @@ func appendItem(items []mappedItem, r arr.QueueRecord, x recordFacts) []mappedIt
 		Monitored:             x.monitored,
 		Title:                 r.Title,
 		StatusLines:           statusLines(r.StatusMessages),
+		ReasonLines:           reasonLines(r.StatusMessages),
 		Protocol:              r.Protocol,
 		Size:                  int64(max(r.Size, 0)),
 	}})
@@ -384,6 +385,27 @@ func statusLines(msgs []arr.StatusMessage) []string {
 	for _, m := range msgs {
 		if m.Title != "" {
 			lines = append(lines, m.Title)
+		}
+		for _, l := range m.Messages {
+			if l != "" {
+				lines = append(lines, l)
+			}
+		}
+	}
+	return lines
+}
+
+// reasonLines flattens rejection reasons in the order the *arr returns them,
+// dropping empty strings: each message's messages, its title only when it
+// carries none (title over messages names the release or file).
+func reasonLines(msgs []arr.StatusMessage) []string {
+	var lines []string
+	for _, m := range msgs {
+		if len(m.Messages) == 0 {
+			if m.Title != "" {
+				lines = append(lines, m.Title)
+			}
+			continue
 		}
 		for _, l := range m.Messages {
 			if l != "" {
