@@ -3,7 +3,7 @@
 #
 # The docs toolchain, read by the CI job docs (every pull request that touches the docs) and by
 # pages.yml (the deployment on main), so the build a pull request passes is the build that ships.
-mkdocs-material==9.7.7
+mkdocs-material==9.8.0
 pymdown-extensions==12.3
 # Machine-readable documentation generator (pawamoy/mkdocs-llmstxt, ADR-0021 section 9)
 mkdocs-llmstxt==0.5.1
