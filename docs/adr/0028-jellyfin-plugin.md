@@ -48,7 +48,7 @@ A survey of the SnatchArr codebase and upstream dependencies establishes the fou
 2. **Upstream licenses**:
    - `jellyfin/jellyfin` is licensed under GNU General Public License v2.0 (read 2026-10-24 from [jellyfin LICENSE](https://raw.githubusercontent.com/jellyfin/jellyfin/v12.3/LICENSE)).
    - `jellyfin/jellyfin-plugin-template` is licensed under GNU General Public License v3.0 (read 2026-10-24 from [jellyfin-plugin-template LICENSE](https://raw.githubusercontent.com/jellyfin/jellyfin-plugin-template/master/LICENSE)).
-   - C# plugins linking against `Jellyfin.Controller` and `MediaBrowser.*` assemblies may form a combined work with GPL code under the Free Software Foundation's reading of the GPL. Which licence the plugin carries is open question 2; until it is answered, no template code is copied into the plugin.
+   - C# plugins linking against `Jellyfin.Controller` and `MediaBrowser.*` assemblies form a combined work with GPL code under the Free Software Foundation's reading of the GPL. Per answered question `snatcharr-jellyfin-plugin-license`, the plugin carries `GPL-3.0-or-later`, matching `jellyfin/jellyfin-plugin-template`; template code may now be used with its notice, while SnatchArr core stays EUPL-1.2.
 3. **Existing community plugins and link-not-build**:
    - Stash metadata plugins exist in the community: `DirtyRacer1337/Jellyfin.Plugin.Stash` (read 2026-10-24 from [DirtyRacer1337/Jellyfin.Plugin.Stash](https://github.com/DirtyRacer1337/Jellyfin.Plugin.Stash), MIT License, head commit `b1ab78b` of 2026-09-10) and the fork `alysson-souza/Jellyfin.Plugin.Stash` (MIT, last push 2026-09-09, read 2026-10-24 from [alysson-souza/Jellyfin.Plugin.Stash](https://github.com/alysson-souza/Jellyfin.Plugin.Stash)).
    - Stash-side NFO export tools exist: `carrotwaxr/stash-plugins` (`mcMetadata`, MIT, read 2026-10-24 from [carrotwaxr/stash-plugins](https://github.com/carrotwaxr/stash-plugins)).
@@ -292,10 +292,10 @@ Deep link / API to Seerr   Forward to SnatchArr
 | Option | Description | Trade-offs | Verdict |
 | :--- | :--- | :--- | :--- |
 | **Option 6A: Subdirectory in `lusoris/SnatchArr` monorepo** | Place plugin in `plugins/jellyfin/`. | Synchronized versioning, but mixes .NET toolchain into Go/Rust CI; creates licensing friction with GPL linking. | Rejected. |
-| **Option 6B: Dedicated repository `lusoris/<jellyfin-plugin-placeholder>` (Recommended)** | Dedicated repository under the `lusoris` GitHub organization. | Clean separation of C# build tooling, independent release cadence, isolated GPL licensing boundary, standard Jellyfin plugin manifest hosting. Requires multi-repo issue tracking. | **Adopted**. Standard Jellyfin community practice. |
+| **Option 6B: Dedicated repository `lusoris/jellyfin-plugin-snatcharr` (Recommended)** | Dedicated repository under the `lusoris` GitHub organization. | Clean separation of C# build tooling, independent release cadence, isolated GPL licensing boundary, standard Jellyfin plugin manifest hosting. Requires multi-repo issue tracking. | **Adopted**. Standard Jellyfin community practice. |
 | **Option 6C: Multi-client companion plugins repository** | Combined repository for all future media server plugins (Jellyfin, Plex, Emby). | Premature abstraction before other platform plugins exist. | Rejected. |
 
-The permanent repository name is left as an open question per operating rules (placeholder: `lusoris/<jellyfin-plugin-placeholder>`).
+The repository is `lusoris/jellyfin-plugin-snatcharr` in the lusoris organisation beside SnatchArr, with the same rulesets, secrets, and release setup as SnatchArr, created after the licence answer and with fleet adoption (per answered question `snatcharr-jellyfin-plugin-repo-name`).
 
 #### Build and release pipeline
 
@@ -317,7 +317,7 @@ The permanent repository name is left as an open question per operating rules (p
            "changelog": "Initial release of SnatchArr companion plugin.",
            "targetAbi": "12.3.0.0",
            "framework": "net10.0",
-           "sourceUrl": "https://github.com/lusoris/<jellyfin-plugin-placeholder>/releases/download/v1.0.0.0/snatcharr-jellyfin-1.0.0.0.zip",
+           "sourceUrl": "https://github.com/lusoris/jellyfin-plugin-snatcharr/releases/download/v1.0.0.0/snatcharr-jellyfin-1.0.0.0.zip",
            "checksum": "<sha256-hex-digest>",
            "timestamp": "2026-10-24T05:15:00Z"
          }
@@ -332,8 +332,8 @@ The permanent repository name is left as an open question per operating rules (p
 #### Licensing consequence of linking Jellyfin assemblies
 
 - **Legal fact**: Jellyfin Server is licensed under GPLv2 ([LICENSE](https://raw.githubusercontent.com/jellyfin/jellyfin/v12.3/LICENSE)) and Jellyfin Plugin Template is licensed under GPLv3 ([LICENSE](https://raw.githubusercontent.com/jellyfin/jellyfin-plugin-template/master/LICENSE)). Compiling a C# plugin requires linking against `Jellyfin.Controller`, `Jellyfin.Model`, `MediaBrowser.Controller`, and `MediaBrowser.Model`.
-- **Consequence**: Under the Free Software Foundation's reading of the GPL, dynamic linking against GPL libraries forms a combined work, so the plugin licence must be one under which that combination can be distributed. The fleet's own-code licence is EUPL-1.2; whether that or a GPL licence applies here is open question 2, not settled by this record.
-- **Separation benefit**: Housing the plugin in a dedicated repository (`Option 6B`) ensures that Jellyfin's GPL copyleft boundary remains strictly confined to the C# plugin repository and does not cross into SnatchArr's EUPL-1.2/MIT core repository. The specific license selection for the plugin repository is recorded as an open question.
+- **Consequence**: Under the Free Software Foundation's reading of the GPL, dynamic linking against GPL libraries forms a combined work, so the plugin licence must be one under which that combination can be distributed. Per answered question `snatcharr-jellyfin-plugin-license`, the plugin carries `GPL-3.0-or-later`, matching `jellyfin/jellyfin-plugin-template`; recorded as a named exception to the fleet EUPL-1.2 own-code rule, reason: combined work with GPL Jellyfin assemblies; REUSE headers and the template's licence notice are carried. Template code may now be used with its notice. SnatchArr core stays EUPL-1.2.
+- **Separation benefit**: Housing the plugin in a dedicated repository `lusoris/jellyfin-plugin-snatcharr` (`Option 6B`) ensures that Jellyfin's GPL copyleft boundary remains strictly confined to the C# plugin repository and does not cross into SnatchArr's EUPL-1.2/MIT core repository.
 
 ### 7. Verification and testing architecture
 
@@ -370,8 +370,8 @@ A three-tier testing strategy guarantees contract correctness and security bound
 
 ## Follow-ups
 
-- [ ] Decision on repository name and creation of `lusoris/<jellyfin-plugin-placeholder>` (Open Question 1).
-- [ ] Decision on plugin open-source license (Open Question 2).
+- [ ] Create `lusoris/jellyfin-plugin-snatcharr` with fleet adoption, rulesets/secrets/release setup as SnatchArr, GPL-3.0-or-later LICENSE + REUSE headers + template notice.
+- [ ] Record the GPL-3.0-or-later exception in the fleet exception list with category and expiry.
 - [ ] Add an OpenAPI diff check against the base revision (HISS-14) before the plugin contract ships.
 - [ ] Add plugin API client endpoints to `api/openapi/openapi.yaml` and regenerate server bindings via `make api-gen`.
 - [ ] Implement `SnatchArrAdultProvider` metadata provider and image provider in the plugin repository.
@@ -393,7 +393,7 @@ A three-tier testing strategy guarantees contract correctness and security bound
   - c) `lusoris/snatcharr-companion-jellyfin` (Explicit descriptor).
     - *Risk*: Overly verbose repository identifier.
 - **Recommended**: Option a (`lusoris/jellyfin-plugin-snatcharr`). Matches the standard convention followed by virtually all community Jellyfin plugins, simplifying catalog discovery.
-- **Status (2026-10-24)**: Queued for the operator together with the organisation the repository lives in (controller ledger `snatcharr-jellyfin-plugin-repo-name`). No repository is created until answered.
+- **Answered (2026-10-24, controller ledger `snatcharr-jellyfin-plugin-repo-name` and `snatcharr-jellyfin-plugin-org`)**: Option a. Repository `lusoris/jellyfin-plugin-snatcharr` in the lusoris organisation beside SnatchArr, same rulesets, secrets and release setup as SnatchArr; created after the licence answer and with fleet adoption.
 
 ### Question 2: Plugin open-source license (`jellyfin-plugin-license`)
 
@@ -406,7 +406,7 @@ A three-tier testing strategy guarantees contract correctness and security bound
   - c) `EUPL-1.2`, the fleet's own-code licence, with no template code copied.
     - *Risk*: Whether an EUPL-1.2 plugin linking GPL assemblies can be distributed needs a licence review.
 - **Recommended**: Option a (`GPL-3.0-or-later`), matching `jellyfin/jellyfin-plugin-template`.
-- **Status (2026-10-24)**: Queued for the operator (controller ledger `snatcharr-jellyfin-plugin-license`). Until answered, no template code is copied.
+- **Answered (2026-10-24, controller ledger `snatcharr-jellyfin-plugin-license`)**: Option a. `GPL-3.0-or-later`, matching `jellyfin/jellyfin-plugin-template`; recorded as a named exception to the fleet EUPL-1.2 own-code rule, reason: combined work with GPL Jellyfin assemblies; REUSE headers and the template's licence notice are carried. Template code may now be used with its notice. SnatchArr core stays EUPL-1.2.
 
 ### Question 3: Web UI injection distribution method (`jellyfin-plugin-web-injection-method`)
 

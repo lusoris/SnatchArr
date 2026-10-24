@@ -49,7 +49,7 @@ Integrating adult media into SnatchArr without clear architectural boundaries ri
 
 ## Decision
 
-SnatchArr implements the adult content module under the placeholder module identifier `adult` (`napp2-name-direct-adult-20261020`), disabled by default (`napp-shape-20261020`), adhering to the architectural decisions detailed below.
+SnatchArr implements the adult content module under the module identifier `adult` (`napp2-name-direct-adult-20261020`), disabled by default (`napp-shape-20261020`), adhering to the architectural decisions detailed below.
 
 ### 1. Stash-box protocol and multi-instance federation
 
@@ -342,7 +342,7 @@ In accordance with HISS-15 (3D testing: positive, negative, boundary) and HISS-2
 
 ### 1. `adult-module-display-name`
 
-In accordance with operator decision `napp2-name-direct-adult-20261020`, the module name must plainly and directly state that it governs adult content without euphemisms. The permanent module display name, package name, and identifier remain to be decided:
+In accordance with operator decision `napp2-name-direct-adult-20261020`, the module name must plainly and directly state that it governs adult content without euphemisms:
 
 - **Options**:
   - *Option a: "Adult Content"* (Module ID: `adult`, Go package: `api/internal/adult`).
@@ -351,7 +351,8 @@ In accordance with operator decision `napp2-name-direct-adult-20261020`, the mod
     - *Risk*: Stresses browsing the own library and undersells discovery and requests.
   - *Option c: "Adult Media"* (Module ID: `adultmedia`, Go package: `api/internal/adultmedia`).
     - *Risk*: Slightly longer compound identifier without offering functional distinction over "Adult Content".
-- **Recommendation**: **Option a** ("Adult Content", ID: `adult`). The name is a permanent decision for the operator; `adult` stays a placeholder until then.
+- **Recommendation**: **Option a** ("Adult Content", ID: `adult`).
+- **Answered (2026-10-24, controller ledger `snatcharr-adult-module-display-name`)**: Option a. UI label "Adult Content", module id `adult`, Go package `adult` (`api/internal/adult`).
 
 ### 2. `adult-image-set-storage-path`
 
@@ -381,7 +382,6 @@ Extent of Stash-box client capabilities upstreamed to `goenvoy`:
 
 ## Follow-ups
 
-- [ ] Operator decision on open question 1 (`adult-module-display-name`); questions 2 and 3 answered.
 - [ ] Upstream PR in `github.com/golusoris/goenvoy` for `metadata/adult/stashbox` write mutations (`favoritePerformer`, `favoriteStudio`).
 - [ ] Database migration slice: tables `adult_stashbox_instances`, `adult_favorite_performers`, `adult_performer_links`, `adult_image_sets`, `adult_image_items`.
 - [ ] Go control plane slice: module descriptor registration in `api/internal/modules` and `ModuleGateMiddleware` integration ([ADR-0025](0025-module-switches.md)).

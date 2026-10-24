@@ -117,7 +117,7 @@ SnatchArr supports simultaneous sign-in methods against a unified `users` table:
    - Non-password external accounts store a fixed invalid password hash sentinel, which `auth.Service.Login` already refuses with HTTP 401 before argon2 verification (`api/internal/auth/service.go:144`, sentinel `ExternalViewerSentinelHash` at `api/internal/auth/service.go:44`); the sentinel is renamed for all external accounts.
 3. **Account linking and precedence**:
    - *Local admin*: Direct password sign-in against the local admin account remains functional for emergency break-glass operations.
-   - *Identity linking*: SSO and Jellyfin identities of one person stay separate accounts until linked; the linking rule is open question 3. Jellyfin's `UserDto` carries no e-mail address, so e-mail matching is not available.
+   - *Identity linking*: SSO and Jellyfin identities of one person stay separate accounts until linked (per answered question `snatcharr-account-auto-link`). There is no automatic linking; a signed-in user links the second identity by signing in with it from the account page, proving control of both identities. Username-based auto-linking is refused because it allows account takeover. Jellyfin's `UserDto` carries no e-mail address, so e-mail matching is not available.
    - *Role precedence*: If an identity is recognized as an administrator by either Authentik (`admin_groups`) OR Jellyfin (`IsAdministrator == true`), the user receives the `admin` role. In multi-provider setups, administrative privilege takes precedence over unprivileged group assignments.
    - *Session origin isolation*: Each session records its active authentication source in `auth.SSOOrigin` (`api/internal/auth/ssoorigin.go:31-36`). Revalidation follows the provider that authenticated the session.
 
@@ -170,7 +170,7 @@ The OpenAPI specification (`api/openapi/openapi.yaml`) updates the `UserRole` sc
      - `APP_SNATCHARR_PROXY_AUTH_REQUESTER_GROUPS` (`snatcharr.proxy_auth.requester_groups`)
 2. **Jellyfin sign-in**:
    - `UserPolicy.IsAdministrator == true`: Assigned `admin`.
-   - Otherwise: Assigned the default role for new Jellyfin sign-ins (open question 2).
+   - Otherwise: Setting `snatcharr.jellyfin.default_role`, default `requester`, decides the role of a non-admin Jellyfin member on first sign-in (per answered question `snatcharr-jellyfin-default-role`).
 
 ### 4. Parental control and adult media visibility
 
@@ -197,7 +197,7 @@ Adult content visibility (`ADR-0018`, `ADR-0025`) is governed by a strict two-ba
 
 1. **Source of truth**:
    - *Jellyfin users*: Governed by `UserPolicy.MaxParentalRating`, `UserPolicy.BlockedTags` and library access. A user is authorized for adult media if and only if:
-     1. `MaxParentalRating == null` (unrestricted) OR `MaxParentalRating >= AdultRatingThreshold` (threshold: open question 1).
+     1. `MaxParentalRating == null` (unrestricted) OR `MaxParentalRating >= AdultRatingThreshold` (configurable threshold setting `snatcharr.adult.min_parental_rating`, default 18, per answered question `snatcharr-adult-rating-scale`).
      2. `BlockedTags` does not contain any configured adult restriction tag (e.g. `adult`, `nsfw`, `xxx`).
      3. The adult library id is included in `EnabledFolders` when `EnableAllFolders == false`.
    - *SSO users*: Governed by group membership in `snatcharr.oidc.adult_groups` or `snatcharr.proxy_auth.adult_groups`.
@@ -295,17 +295,20 @@ An audit of `github.com/golusoris/goenvoy` at tag `mediaserver/jellyfin/v3.1.0` 
    - *Option b*: Always assign `viewer`. (Risk: Requires admin intervention to elevate household members).
    - *Option c*: Configurable setting (`snatcharr.jellyfin.default_role`, default `requester`). (Risk: Configuration knob addition).
    - *Recommendation*: Option c.
+   - *Answered (2026-10-24, controller ledger `snatcharr-jellyfin-default-role`)*: Option c. Setting `snatcharr.jellyfin.default_role`, default `requester`, decides the role of a non-admin Jellyfin member on first sign-in; Jellyfin administrators map to `admin`.
 3. **Linking an SSO identity and a Jellyfin identity of one person (`snatcharr-account-auto-link`)**:
    - *Option a*: Link automatically when the SSO username equals the Jellyfin username. (Risk: account takeover when one person can choose a name that collides with another person's account on the other provider.)
    - *Option b*: Keep identities separate; the signed-in user links the other identity by signing in with it from the account page. (Risk: a linking flow in the SPA; until used, one person has two accounts.)
    - *Option c*: Only the admin links accounts. (Risk: manual work per household member.)
    - *Recommendation*: Option b; it proves control of both identities. Jellyfin's `UserDto` has no e-mail address, so e-mail matching is not an option.
+   - *Answered (2026-10-24, controller ledger `snatcharr-account-auto-link`)*: Option b. No automatic linking; a signed-in user links the second identity by signing in with it from the account page, so the user proves both. Username-based auto-linking is refused because it allows account takeover.
 
 ## Follow-ups
 
 - [ ] Upstream PR to `github.com/golusoris/goenvoy` (`mediaserver/jellyfin`): Add `InitiateQuickConnect`, `CheckQuickConnect`, `AuthenticateWithQuickConnect`, and `GetUser(id)`.
 - [ ] Upstream PR to `github.com/golusoris/goenvoy` (`mediaserver/jellyfin`): Move `MaxParentalRating` to `UserPolicy` as `*int`; add `EnableAllFolders`, `EnabledFolders`, `AllowedTags` and `BlockUnratedItems`; return `AuthenticationResult` from `AuthenticateByName`.
-- [ ] Decide open questions 2 and 3 (controller DECISION lines; question 1 answered).
+- [ ] Implement `snatcharr.jellyfin.default_role` setting with tests: non-admin gets configured role, admin maps to `admin`, invalid setting value refused at boot.
+- [ ] Implement account-page linking flow with tests: link requires sign-in with second identity; equal usernames on both providers do NOT link; planted case: auto-link by username makes test fail.
 - [ ] Database migration: Add `'requester'` to role enum/checks and create `jellyfin_user_id` column or expanded `external_id` indexes on `users`.
 - [ ] Implement `requireRequester` API middleware and update OpenAPI security schemes.
 - [ ] Implement Jellyfin credential authentication handler (`POST /api/v1/auth/jellyfin`) in `api/internal/auth`.

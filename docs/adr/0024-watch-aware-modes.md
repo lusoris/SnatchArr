@@ -133,19 +133,22 @@ The season gate ships in three slices, each one pull request, in the order fixed
 - Seerr requests: the cached request rows written by `UpsertSeerrRequest` (`api/internal/seerr/sync.go:138`).
 - Instance credentials: `instances.Service.Credentials` (`api/internal/instances/service.go:265`).
 - Notifications: `notify.Engine` (`api/internal/notify/engine.go:37`), see [docs/notifications.md](../notifications.md).
-- Persistence: migrations in `api/internal/store/migrations/postgres/` (the next free number is `000028`), queries in `api/internal/store/queries/`.
+- Persistence: migrations in `api/internal/store/migrations/postgres/` (taking the next free migration number after `000028_modules`), queries in `api/internal/store/queries/`.
 
 No Jellyfin or Emby account source exists in `api/internal`; ADR-0018 leaves accounts to a later decision, so the module keeps its own media-server connections.
 
 ### Slice 1: watch-state sync
+
+The storage-free part of this slice shipped in [#602](https://github.com/lusoris/SnatchArr/pull/602) (package `api/internal/watchaware`: `WatchSource`, Jellyfin/Emby adapters, `Watched` predicate, `SyncAll`; `ErrTruncated` fail-closed). Storage and runtime gating follow under the ADR-0025 module architecture.
 
 - Scope: a leader loop that reads per-user watch state from Jellyfin and Emby and stores it.
 - Package: `api/internal/watchaware` (`module.go`, `source.go` with the `WatchSource` interface, `jellyfin.go`, `emby.go`, `sync.go`, `predicate.go`), wired in `api/internal/app`.
 - Contracts:
   - table `watchaware_sources` (one row per media server: kind, URL, API key encrypted with `core/crypto` and write-only in the API, enabled);
   - table `watchaware_item_watches` (key: source, user, item; columns: series and season and episode numbers or movie id, played, played percentage, resume position, last played, synced at);
+  - watchaware tables take the next free migration number after `000028_modules` (which is owned by ADR-0025 Slice 1);
   - OpenAPI: list, create, update and delete media-server sources, and a sync status read;
-  - settings: module switch (default off), sync interval;
+  - settings: module switch (default off) and sync interval live in `modules` row `watchaware` config JSONB (per ADR-0025 answer `snatcharr-adr25-module-config-storage`), not a settings column;
   - Paraglide keys under `watchaware_*` in `web/messages/en.json` and `de.json`.
 - Upstream: goenvoy `mediaserver/jellyfin/v3` and `mediaserver/emby/v3` (`GetUsers`, `GetItems` with a user filter); new module requirements in `go.mod`, so `web/static/licences.json` is regenerated in the same pull request.
 - Upstream dependency resolved: `UserItemDataDto` has `Played` and `PlayedPercentage` from `mediaserver/jellyfin/v3.1.0` and `mediaserver/emby/v3.1.0` (`mediaserver/jellyfin/types.go:91-92`, same in `mediaserver/emby/types.go`; [goenvoy#173](https://github.com/golusoris/goenvoy/pull/173)).
@@ -231,7 +234,7 @@ The four open questions of the first draft were answered on 2026-10-23:
 - [x] goenvoy: added `Played` and `PlayedPercentage` to `UserItemDataDto` in `mediaserver/jellyfin/v3.1.0` and `mediaserver/emby/v3.1.0` ([goenvoy#173](https://github.com/golusoris/goenvoy/pull/173)).
 - [x] goenvoy: added `JellyfinUserID` and `JellyfinUsername` to `User` in `arr/seerr/v1.6.0` for the `requester` rule ([goenvoy#173](https://github.com/golusoris/goenvoy/pull/173)).
 - [x] goenvoy: added collection writes (`CreateCollection`, `AddToCollection`, `RemoveFromCollection`) in `mediaserver/jellyfin/v3.1.0` for "leaving soon" ([goenvoy#173](https://github.com/golusoris/goenvoy/pull/173)).
-- [ ] Implementation plan: season gate slices 1-3 (section [Implementation plan](#implementation-plan)); `go.mod` requirements (`mediaserver/jellyfin/v3.1.0`, `mediaserver/emby/v3.1.0`, `arr/seerr/v1.6.0`) land with slice 1.
+- [ ] Implementation plan: season gate slices 1-3 (section [Implementation plan](#implementation-plan)); Slice 1 now depends on ADR-0025 Slice 1 (`000028_modules`); `go.mod` requirements (`mediaserver/jellyfin/v3.1.0`, `mediaserver/emby/v3.1.0`, `arr/seerr/v1.6.0`) land with slice 1.
 - [x] Docs: name Maintainerr as an alternative for removal until remove-when-seen ships ([docs/roadmap.md](../roadmap.md#watch-aware-modes)).
 
 ## References
