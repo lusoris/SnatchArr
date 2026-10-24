@@ -44,6 +44,39 @@ theme:
 
 plugins:
   - search
+  - llmstxt:
+      full_output: llms-full.txt
+      sections:
+        Getting started:
+          - index.md
+          - concepts.md
+          - configuration.md
+        Features and integrations:
+          - notifications.md
+          - sso.md
+          - download-clients.md
+          - queue-management.md
+          - seerr.md
+          - prowlarr.md
+          - readarr.md
+        LLM access:
+          - llm/index.md
+          - llm/antigravity.md
+          - llm/claude-code.md
+          - llm/codex.md
+          - llm/editors.md
+          - llm/gemini-cli.md
+          - llm/opencode.md
+        Operations and reference:
+          - api.md
+          - upstream-contracts.md
+          - install-compose.md
+          - deployment.md
+          - metrics.md
+          - logs.md
+          - roadmap.md
+        Architecture decisions:
+          - adr/*.md
 
 markdown_extensions:
   - admonition
@@ -71,6 +104,14 @@ nav:
   - Seerr: seerr.md
   - Prowlarr: prowlarr.md
   - Readarr (legacy): readarr.md
+  - LLM access:
+      - Overview: llm/index.md
+      - Antigravity: llm/antigravity.md
+      - Claude Code: llm/claude-code.md
+      - Codex: llm/codex.md
+      - Editors: llm/editors.md
+      - Gemini CLI: llm/gemini-cli.md
+      - OpenCode: llm/opencode.md
   - API: api.md
   - Upstream contracts: upstream-contracts.md
   - Install with Docker Compose: install-compose.md
