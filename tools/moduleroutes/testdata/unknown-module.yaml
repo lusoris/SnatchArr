@@ -1,0 +1,15 @@
+openapi: 3.1.0
+info:
+  title: Unknown Module Test API
+  version: 0.1.0
+paths:
+  /custom/feature:
+    get:
+      tags:
+        - custom
+      operationId: getCustomFeature
+      x-module: unknown_mod
+      summary: Custom feature
+      responses:
+        '200':
+          description: OK

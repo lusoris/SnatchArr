@@ -60,6 +60,7 @@ api-verify: ## golangci-lint + go fix + gosec + govulncheck + go test -race + ge
 	$(MAKE) api-cover
 	sh tools/spectral/lint_test.sh
 	sh tools/spectral/lint.sh api/openapi/openapi.yaml
+	go run ./tools/moduleroutes check -in api/openapi/openapi.yaml
 
 api-gen: ## Regenerate the ogen server and the sqlc queries (go generate in api/, pinned versions)
 	cd api && go generate ./...

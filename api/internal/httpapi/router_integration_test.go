@@ -72,6 +72,7 @@ func newRouterFixture(t *testing.T) *routerFixture {
 		Handlers: f.h,
 		Security: NewSecurity(f.sessMgr, f.h.cfg, keys, f.h.auth, apiKeys, f.clk, slog.New(slog.DiscardHandler)),
 		CSRF:     CrossOrigin(slog.New(slog.DiscardHandler)),
+		Modules:  f.h.modules,
 	}
 	err = Mount(r, mountParams)
 	if err != nil {
