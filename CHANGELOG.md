@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.6.5](https://github.com/lusoris/SnatchArr/compare/v0.6.4...v0.6.5) (2026-10-24)
+
+
+### Features
+
+* **llm:** hide and refuse MCP tools of switched-off modules ([#619](https://github.com/lusoris/SnatchArr/issues/619)) ([34ccd83](https://github.com/lusoris/SnatchArr/commit/34ccd83b2b862ac2afa52978eae3cba13485b643))
+* **watchaware:** persist sources and run the sync loop behind the module switch ([#623](https://github.com/lusoris/SnatchArr/issues/623)) ([049c3fc](https://github.com/lusoris/SnatchArr/commit/049c3fcbf9cf2a252b07d7184e1288e7dd119493))
+* **web:** add desktop width gate, status tokens and StatusIcon ([#621](https://github.com/lusoris/SnatchArr/issues/621)) ([583e63a](https://github.com/lusoris/SnatchArr/commit/583e63ae84bc5d9f48bd6d4ebe4380c154f272c1))
+
+
+### Bug Fixes
+
+* **e2e:** retry image pulls in the dev compose smoke ([#625](https://github.com/lusoris/SnatchArr/issues/625)) ([d23f08d](https://github.com/lusoris/SnatchArr/commit/d23f08d1a8af57663a13e48eeb889a740e66c347))
+* **web:** wrap URLs in log and live rows at delimiters ([#622](https://github.com/lusoris/SnatchArr/issues/622)) ([83b4351](https://github.com/lusoris/SnatchArr/commit/83b435171488e93f3eb3b6e5c0a71274e0c8c59b))
+
+
+### Documentation
+
+* **adr:** accept ADR-0029 task-flow UI, one activity view and context help ([#618](https://github.com/lusoris/SnatchArr/issues/618)) ([9365abf](https://github.com/lusoris/SnatchArr/commit/9365abf9c233b0579a2a59cb46faf120454309b3))
+
 ## [0.6.4](https://github.com/lusoris/SnatchArr/compare/v0.6.3...v0.6.4) (2026-10-24)
 
 
