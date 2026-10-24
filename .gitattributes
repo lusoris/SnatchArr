@@ -7,3 +7,4 @@
 *.json eol=lf
 *.sql eol=lf
 .golangci.yml eol=lf
+tools/moduleroutes/testdata/*.yaml eol=lf

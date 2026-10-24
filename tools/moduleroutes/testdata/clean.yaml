@@ -1,0 +1,24 @@
+openapi: 3.1.0
+info:
+  title: Clean Test API
+  version: 0.1.0
+paths:
+  /system/status:
+    get:
+      tags:
+        - system
+      operationId: getSystemStatus
+      summary: Service status
+      responses:
+        '200':
+          description: OK
+  /watchaware/sources:
+    get:
+      tags:
+        - watchaware
+      operationId: listWatchSources
+      x-module: watchaware
+      summary: List watch sources
+      responses:
+        '200':
+          description: OK

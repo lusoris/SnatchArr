@@ -7,5 +7,6 @@
 package httpapi
 
 //go:generate go run github.com/ogen-go/ogen/cmd/ogen@v1.20.2 --config ogen.yml --target ../build/oas --package oas --clean ../../openapi/openapi.yaml
+//go:generate go run github.com/lusoris/SnatchArr/tools/moduleroutes gen -in ../../openapi/openapi.yaml -out ../build/moduleops/moduleops_gen.go
 //go:generate go run github.com/lusoris/SnatchArr/tools/mcpschema -in ../../openapi/openapi.yaml -out ../llm/schemas_gen.json
 //go:generate go run github.com/lusoris/SnatchArr/tools/gennosec apply

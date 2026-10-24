@@ -15,7 +15,9 @@ import (
 	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/httpx/middleware"
 
+	"github.com/lusoris/SnatchArr/api/internal/build/moduleops"
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
+	"github.com/lusoris/SnatchArr/api/internal/modules"
 )
 
 // PathPrefix is where the OpenAPI server is mounted.
@@ -30,6 +32,7 @@ type MountParams struct {
 	Handlers *Handlers
 	Security *Security
 	CSRF     middleware.Middleware
+	Modules  *modules.Service
 }
 
 // Mount builds the ogen server and attaches it under PathPrefix with the request-context
@@ -38,6 +41,7 @@ func Mount(r chi.Router, p MountParams) error {
 	srv, err := oas.NewServer(p.Handlers, p.Security,
 		oas.WithPathPrefix(PathPrefix),
 		oas.WithErrorHandler(ErrorHandler(p.Logger)),
+		oas.WithMiddleware(ModuleGateMiddleware(moduleops.ByOperation, p.Modules)),
 	)
 	if err != nil {
 		return fmt.Errorf("httpapi: new server: %w", err)

@@ -254,7 +254,7 @@ The module switch implementation must be verified with three-dimensional testing
    - **Boundary**: Switching a module from off to on and back to off at runtime without restarting the API process immediately toggles route availability and tool visibility across consecutive requests.
    - **Planted defect**: A test case where a newly added route omits the `x-module` annotation or where an operation is assigned an unregistered module ID must fail the verification gate.
 2. **Automated repository gate check**:
-   A dedicated check `tools/ci/check_module_routes.go` (integrated into `make contracts-verify`) reads `api/openapi/openapi.yaml` and asserts:
+   A dedicated check `tools/moduleroutes` (integrated into `make api-verify`) reads `api/openapi/openapi.yaml` and asserts:
    - Every operation tagged with a non-core tag carries a valid `x-module` extension matching a registered module in `api/internal/modules`.
    - Every operation declaring `x-module` is bound to the `ModuleGateMiddleware` test suite.
 

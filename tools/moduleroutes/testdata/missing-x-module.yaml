@@ -1,0 +1,14 @@
+openapi: 3.1.0
+info:
+  title: Missing x-module Test API
+  version: 0.1.0
+paths:
+  /watchaware/sources:
+    get:
+      tags:
+        - watchaware
+      operationId: listWatchSources
+      summary: List watch sources
+      responses:
+        '200':
+          description: OK
