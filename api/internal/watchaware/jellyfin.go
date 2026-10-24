@@ -61,35 +61,11 @@ func (s *JellyfinSource) fetchPage(ctx context.Context, userID, userName string,
 	}
 	watches := make([]Watch, len(result.Items))
 	for i, it := range result.Items {
-		watches[i] = mapJellyfinItem(userID, userName, it)
+		watches[i] = newWatch(userID, userName, itemRef{
+			ID: it.ID, Type: it.Type, SeriesID: it.SeriesID,
+			Season: it.ParentIndexNumber, Episode: it.IndexNumber,
+			UserData: (*userData)(it.UserData),
+		})
 	}
 	return watches, result.TotalRecordCount, nil
-}
-
-func mapJellyfinItem(userID, userName string, item jellyfin.BaseItemDto) Watch {
-	var (
-		played           bool
-		playedPercentage *float64
-		positionTicks    int64
-		lastPlayed       string
-	)
-	if item.UserData != nil {
-		played = item.UserData.Played
-		playedPercentage = item.UserData.PlayedPercentage
-		positionTicks = item.UserData.PlaybackPositionTicks
-		lastPlayed = item.UserData.LastPlayedDate
-	}
-	return Watch{
-		UserID:           userID,
-		UserName:         userName,
-		ItemID:           item.ID,
-		ItemType:         item.Type,
-		SeriesID:         item.SeriesID,
-		SeasonNumber:     item.ParentIndexNumber,
-		EpisodeNumber:    item.IndexNumber,
-		Played:           played,
-		PlayedPercentage: playedPercentage,
-		PositionTicks:    positionTicks,
-		LastPlayed:       lastPlayed,
-	}
 }

@@ -65,6 +65,43 @@ type userRecord struct {
 	Name string
 }
 
+// userData mirrors goenvoy's UserItemDataDto, which Jellyfin and Emby define with the
+// same fields; each adapter converts its own pointer type to *userData.
+type userData struct {
+	PlayCount             int
+	Played                bool
+	PlayedPercentage      *float64
+	IsFavorite            bool
+	PlaybackPositionTicks int64
+	LastPlayedDate        string
+}
+
+// itemRef is the part of a media-server item a Watch reads.
+type itemRef struct {
+	ID, Type, SeriesID string
+	Season, Episode    int
+	UserData           *userData
+}
+
+func newWatch(userID, userName string, it itemRef) Watch {
+	w := Watch{
+		UserID:        userID,
+		UserName:      userName,
+		ItemID:        it.ID,
+		ItemType:      it.Type,
+		SeriesID:      it.SeriesID,
+		SeasonNumber:  it.Season,
+		EpisodeNumber: it.Episode,
+	}
+	if ud := it.UserData; ud != nil {
+		w.Played = ud.Played
+		w.PlayedPercentage = ud.PlayedPercentage
+		w.PositionTicks = ud.PlaybackPositionTicks
+		w.LastPlayed = ud.LastPlayedDate
+	}
+	return w
+}
+
 func buildItemParams(userID string, startIndex, limit int) url.Values {
 	return url.Values{
 		"userId":           {userID},
