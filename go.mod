@@ -24,6 +24,8 @@ require (
 	github.com/golusoris/goenvoy/downloadclient/rtorrent/v2 v2.1.1
 	github.com/golusoris/goenvoy/downloadclient/sabnzbd/v2 v2.0.2
 	github.com/golusoris/goenvoy/downloadclient/transmission/v2 v2.0.2
+	github.com/golusoris/goenvoy/mediaserver/emby/v3 v3.1.0
+	github.com/golusoris/goenvoy/mediaserver/jellyfin/v3 v3.1.0
 	github.com/golusoris/golusoris v0.20.0
 	github.com/golusoris/golusoris/core v0.12.1
 	github.com/google/jsonschema-go v0.4.3

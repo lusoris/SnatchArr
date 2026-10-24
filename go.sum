@@ -203,6 +203,10 @@ github.com/golusoris/goenvoy/downloadclient/sabnzbd/v2 v2.0.2 h1:OUtDmX9UumWXMl0
 github.com/golusoris/goenvoy/downloadclient/sabnzbd/v2 v2.0.2/go.mod h1:SwsZjJNnS+OesTuA+P1dxdfC4yyqD6yJdgfZ8iLVIdo=
 github.com/golusoris/goenvoy/downloadclient/transmission/v2 v2.0.2 h1:ytSVhqjRfbCnt5eDmbuC8rocHrPd5QmyZbOIQ/+N9T4=
 github.com/golusoris/goenvoy/downloadclient/transmission/v2 v2.0.2/go.mod h1:zdIY7IPHfCN4LVJKjzIG5xZBl40hMr15HjRptmlYOlg=
+github.com/golusoris/goenvoy/mediaserver/emby/v3 v3.1.0 h1:W073tI8U0Vkd7p19Qa7fE/5PH9Px77BbEZByVQeeAi0=
+github.com/golusoris/goenvoy/mediaserver/emby/v3 v3.1.0/go.mod h1:Mwak5u2AqPrmBXimnZSZ8FVU41scxgVnS4wtmrFQJBE=
+github.com/golusoris/goenvoy/mediaserver/jellyfin/v3 v3.1.0 h1:Cp+O72nd/7KAmPLsIPetEQUicR9Av4ykubyJK329MIk=
+github.com/golusoris/goenvoy/mediaserver/jellyfin/v3 v3.1.0/go.mod h1:75q83+TdD0dFtEd2x8opdKxDU5qHFvUtpQvTkh7syX4=
 github.com/golusoris/golusoris v0.20.0 h1:bw2FTdIT948NLUXc50ipzcfK1diCbI5e0mC164FAdyM=
 github.com/golusoris/golusoris v0.20.0/go.mod h1:71BKJYihr4GZcMDqtb6/WPpthwjXTFI149uwWEcZ3Yg=
 github.com/golusoris/golusoris/core v0.12.1 h1:3vF0NhNDHV18bm8QXPRDjETH2cERaGIk2XcMzS5l5GY=
