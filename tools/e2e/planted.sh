@@ -41,12 +41,16 @@ for case in "$@"; do
         exit 1
     fi
     if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then
+        # Reason line precedes container logs; print it before the tail.
+        printf '%s\n' "$out" | awk '/^FAIL /' >&2
         printf '%s\n' "$out" | tail -20 >&2
         exit 1
     fi
     case "$out" in
     *"$want"*) echo "ok   planted case $plant refused: $want" ;;
     *)
+        # Reason line precedes container logs; print it before the tail.
+        printf '%s\n' "$out" | awk '/^FAIL /' >&2
         printf '%s\n' "$out" | tail -20 >&2
         echo "planted: case $plant failed without '$want'" >&2
         exit 1
