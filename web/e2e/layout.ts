@@ -10,6 +10,7 @@ import { expect, type Page } from '@playwright/test';
 
 export const VIEWPORTS = {
 	desktop: { width: 1280, height: 800 },
+	desktop1920: { width: 1920, height: 1080 },
 	phone: { width: 390, height: 844 },
 	phone375: { width: 375, height: 812 }
 } as const;
@@ -483,3 +484,76 @@ export async function assertRenderedLayout(
 	}
 	expect(misaligned, `${route}: header and body cells do not share columns`).toEqual([]);
 }
+
+export interface ContentSpan {
+	mainWidth: number;
+	widest: number;
+	ratio: number;
+}
+
+export function measureContentSpan(): ContentSpan {
+	const main = document.querySelector('main');
+	if (!main) return { mainWidth: 0, widest: 0, ratio: 0 };
+	const mainStyle = window.getComputedStyle(main);
+	const padLeft = parseFloat(mainStyle.paddingLeft) || 0;
+	const padRight = parseFloat(mainStyle.paddingRight) || 0;
+	const mainWidth = Math.round(main.clientWidth - padLeft - padRight);
+
+	const selector = 'section, .card, table, form, [role="table"], ul, dl';
+	const elements = Array.from(main.querySelectorAll(selector));
+	let widest = 0;
+	for (const el of elements) {
+		const style = window.getComputedStyle(el);
+		if (style.display === 'none' || style.visibility === 'hidden') continue;
+		const rect = el.getBoundingClientRect();
+		const width = Math.round(rect.width);
+		if (width > 0 && width > widest) {
+			widest = width;
+		}
+	}
+	const ratio = mainWidth > 0 ? widest / mainWidth : 0;
+	return { mainWidth, widest, ratio };
+}
+
+export async function assertDesktopWidth(page: Page, route: string): Promise<void> {
+	const { mainWidth, widest, ratio } = await page.evaluate(measureContentSpan);
+	if (widest === 0) {
+		throw new Error(`${route}: no content block measured`);
+	}
+	if (ratio < 0.75) {
+		throw new Error(
+			`${route}: widest content block ${widest}px is narrower than 75% of main (${mainWidth}px)`
+		);
+	}
+}
+
+export const SCROLL_BUDGET_ROUTES = ['/', '/instances'] as const;
+
+export async function assertScrollBudget(page: Page, route: string): Promise<void> {
+	const { scrollHeight, innerHeight } = await page.evaluate(() => ({
+		scrollHeight: document.documentElement.scrollHeight,
+		innerHeight: window.innerHeight
+	}));
+	const limit = 1.25 * innerHeight;
+	expect(
+		scrollHeight,
+		`${route}: scroll height (${scrollHeight}px) exceeds 1.25 * innerHeight (${limit}px)`
+	).toBeLessThanOrEqual(limit);
+}
+
+export interface PendingRoute {
+	pr: 'C' | 'D' | 'F' | 'G';
+	/** ISO date (YYYY-MM-DD); past it the entry fails like a missing one. */
+	expires: string;
+	reason: string;
+}
+
+export const WIDTH_PENDING: Record<string, PendingRoute> = {
+	'/history': { pr: 'C', expires: '2026-11-23', reason: 'metric finds no block' },
+	'/instances/[id]': { pr: 'D', expires: '2026-11-23', reason: 'narrow content wrapper' },
+	'/instances/[id]/memory': { pr: 'D', expires: '2026-11-23', reason: 'narrow content wrapper' },
+	'/instances/[id]/policy': { pr: 'D', expires: '2026-11-23', reason: 'narrow content wrapper' },
+	'/configarr': { pr: 'F', expires: '2026-11-23', reason: 'narrow content wrapper' },
+	'/settings': { pr: 'G', expires: '2026-11-23', reason: 'narrow content wrapper' },
+	'/about': { pr: 'G', expires: '2026-11-23', reason: 'narrow content wrapper' }
+};
