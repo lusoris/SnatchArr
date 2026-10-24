@@ -7,6 +7,8 @@
 #   a. Postgres turns healthy and Sonarr and Radarr answer /ping;
 #   b. Prometheus scrapes the OTel collector (target up);
 #   c. Grafana has the Prometheus data source working and the provisioned SnatchArr dashboard.
+# Images are pulled first with bounded, jittered retries (pull_retry.sh): a registry rate limit
+# during a planted case failed main on 2026-10-24.
 #
 # DEV_PLANT=no-dashboards (empty dashboard folder) or DEV_PLANT=bad-target (collector target
 # on a closed port) plants a defect the smoke must refuse. Needs docker compose, curl and jq.
@@ -45,8 +47,10 @@ EOF
     ;;
 esac
 
+# shellcheck source=tools/e2e/pull_retry.sh
+. "$root/tools/e2e/pull_retry.sh"
 dc() {
-    docker compose -p "$project" "${files[@]}" --profile arr --profile observability "$@"
+    compose -p "$project" "${files[@]}" --profile arr --profile observability "$@"
 }
 
 fail() {
@@ -81,6 +85,7 @@ get() {
 }
 
 dc config --quiet
+pull_retry dc pull --quiet || fail "images did not pull"
 dc up -d --quiet-pull --wait --wait-timeout 240 || fail "services did not start"
 
 health=$(dc ps --format '{{.Health}}' postgres)
