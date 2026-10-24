@@ -96,6 +96,10 @@ func TestQueuePagingAndMapping(t *testing.T) {
 						"records": [
 							{
 								"id": 12,
+								"statusMessages": [
+									{"title": "01 Song.flac", "messages": ["Has missing tracks"]},
+									{"title": "One or more tracks expected in this release were not imported or missing from the release", "messages": []}
+								],
 								"downloadId": "dl-12",
 								"added": "2026-10-17T20:10:00Z",
 								"status": "queued",
@@ -138,8 +142,15 @@ func TestQueuePagingAndMapping(t *testing.T) {
 			if items[0].Title != "Release.10" || !slices.Equal(items[0].StatusLines, wantLines) {
 				t.Errorf("item 0 title/lines = %q %q, want Release.10 %q", items[0].Title, items[0].StatusLines, wantLines)
 			}
+			wantReasons0 := []string{"Automatic import is not possible.", "second"}
+			if !slices.Equal(items[0].ReasonLines, wantReasons0) {
+				t.Errorf("item 0 reasonLines = %q, want %q", items[0].ReasonLines, wantReasons0)
+			}
 			if len(items[1].StatusLines) != 0 {
 				t.Errorf("item 1 lines = %q, want none", items[1].StatusLines)
+			}
+			if len(items[1].ReasonLines) != 0 {
+				t.Errorf("item 1 reasonLines = %q, want none", items[1].ReasonLines)
 			}
 			// Item 2: nil entity -> monitored=true, negative size clamped to 0
 			if items[1].ID != 11 || !items[1].Monitored || items[1].SizeLeft != 0 {
@@ -148,6 +159,13 @@ func TestQueuePagingAndMapping(t *testing.T) {
 			// Item 3: monitored=false
 			if items[2].ID != 12 || items[2].Monitored {
 				t.Errorf("item 2 unexpected: %+v", items[2])
+			}
+			wantReasons2 := []string{
+				"Has missing tracks",
+				"One or more tracks expected in this release were not imported or missing from the release",
+			}
+			if !slices.Equal(items[2].ReasonLines, wantReasons2) {
+				t.Errorf("item 2 reasonLines = %q, want %q", items[2].ReasonLines, wantReasons2)
 			}
 		})
 	}
