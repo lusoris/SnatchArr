@@ -204,6 +204,24 @@ func readRequestBody(r *http.Request) ([]byte, error) {
 	return buf, nil
 }
 
+func (s *Service) requiredScopeForPeek(peek rpcToolCallPeek) (string, *toolSpec) {
+	switch peek.Method {
+	case "tools/call":
+		if peek.Params.Name == "" {
+			return "", nil
+		}
+		spec, ok := lookupTool(s.specs, peek.Params.Name)
+		if !ok {
+			return "", nil
+		}
+		return spec.Scope, &spec
+	case "resources/read", "prompts/get":
+		return domain.ScopeCoreRead, nil
+	default:
+		return "", nil
+	}
+}
+
 func (s *Service) checkToolCallFences(w http.ResponseWriter, r *http.Request, auth requestAuth, onErr func(context.Context, http.ResponseWriter, *http.Request, error)) bool {
 	buf, err := readRequestBody(r)
 	if err != nil {
@@ -211,19 +229,19 @@ func (s *Service) checkToolCallFences(w http.ResponseWriter, r *http.Request, au
 		return false
 	}
 	var peek rpcToolCallPeek
-	if len(buf) == 0 || json.Unmarshal(buf, &peek) != nil || peek.Method != "tools/call" || peek.Params.Name == "" {
+	if len(buf) == 0 || json.Unmarshal(buf, &peek) != nil {
 		return true
 	}
-	spec, ok := lookupTool(s.specs, peek.Params.Name)
-	if !ok {
+	reqScope, spec := s.requiredScopeForPeek(peek)
+	if reqScope == "" {
 		return true
 	}
-	if !slices.Contains(auth.scopes, spec.Scope) {
-		w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer error="insufficient_scope", scope=%q`, spec.Scope))
-		onErr(r.Context(), w, r, fmt.Errorf("%w: key lacks required scope %s", domain.ErrForbidden, spec.Scope))
+	if !slices.Contains(auth.scopes, reqScope) {
+		w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer error="insufficient_scope", scope=%q`, reqScope))
+		onErr(r.Context(), w, r, fmt.Errorf("%w: key lacks required scope %s", domain.ErrForbidden, reqScope))
 		return false
 	}
-	if !spec.ReadOnly && !slices.Contains(auth.writeTools, spec.Name) {
+	if spec != nil && !spec.ReadOnly && !slices.Contains(auth.writeTools, spec.Name) {
 		s.logger.WarnContext(r.Context(), "llm: write tool refused",
 			slog.String("tool", spec.Name),
 			slog.String("owner", auth.user.ID.String()),
@@ -265,5 +283,7 @@ func (s *Service) getServer(r *http.Request) *mcp.Server {
 		user:   auth.user,
 		keyID:  auth.keyID,
 	}, s.specs, s.toolSchemas, auth.scopes, auth.writeTools)
+	registerResources(srv, s.handlers)
+	registerPrompts(srv)
 	return srv
 }
