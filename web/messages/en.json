@@ -113,7 +113,7 @@
 	"policy_sonarr_upgrade_mode": "Upgrade search granularity",
 	"policy_sonarr_upgrade_mode_hint": "Whether Sonarr searches for cutoff-unmet upgrades as individual episodes or season packs.",
 	"policy_lidarr_missing_mode": "Missing search granularity",
-	"policy_lidarr_missing_mode_hint": "Whether Lidarr searches for missing music by artist or by album.",
+	"policy_lidarr_missing_mode_hint": "Whether Lidarr searches for missing music by artist or by album. Upgrade searches always run per album.",
 	"policy_lidarr_mode_artist": "Entire artist",
 	"policy_lidarr_mode_album": "Single album",
 	"policy_group_search": "What gets searched",

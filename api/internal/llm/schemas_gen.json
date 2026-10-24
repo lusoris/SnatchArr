@@ -2188,6 +2188,7 @@
             "uniqueItems": true
           },
           "lidarr_missing_mode": {
+            "description": "Search grouping for Lidarr missing runs; upgrade runs always search per album.",
             "enum": [
               "artist",
               "album"

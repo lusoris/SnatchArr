@@ -80,6 +80,14 @@ func lidarrMode(mode string) snatcharrv1.LidarrMode {
 	return snatcharrv1.LidarrMode_LIDARR_MODE_ARTIST
 }
 
+// lidarrModeFor forces album search on upgrades because Lidarr artist search ignores missingOnly and grabs upgrades for every album.
+func lidarrModeFor(p domain.Policy, kind domain.SnatchKind) snatcharrv1.LidarrMode {
+	if kind == domain.SnatchUpgrade {
+		return snatcharrv1.LidarrMode_LIDARR_MODE_ALBUM
+	}
+	return lidarrMode(p.LidarrMissingMode)
+}
+
 func releaseType(rt string) snatcharrv1.RadarrReleaseType {
 	switch rt {
 	case "digital":
@@ -103,7 +111,7 @@ func policyProto(p domain.Policy, kind domain.SnatchKind) *snatcharrv1.Policy {
 		MonitoredOnly:          p.MonitoredOnly,
 		SkipFutureReleases:     p.SkipFutureReleases,
 		SonarrMode:             sonarrMode(mode),
-		LidarrMode:             lidarrMode(p.LidarrMissingMode),
+		LidarrMode:             lidarrModeFor(p, kind),
 		RadarrReleaseType:      releaseType(p.RadarrReleaseType),
 		AwaitCommand:           p.AwaitCommand,
 		PageSize:               uint32(max(p.PageSize, 0)),                   // #nosec G115 -- validated 10..1000
