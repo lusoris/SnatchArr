@@ -35,7 +35,7 @@ SnatchArr exposes a Streamable HTTP MCP endpoint:
 - **Argument Naming**: Path identifier parameters use camelCase (e.g., `instanceId`, `runId`, `scheduleId`, `clientId`, `linkId`, `channelId`, `ruleId`), whereas list query filters use snake_case (e.g., `instance_id`, `before_id`, `page_size`).
 
 > [!NOTE]
-> Passive resources (`snatcharr://*`), prompt templates (`prompts/get`), and the local CLI transport (`snatcharr mcp stdio`) are planned for future releases and not currently available.
+> Resources (`snatcharr://instances`, `snatcharr://queue/{instance_id}`, `snatcharr://history`) and prompt templates (`why_not_snatched`, `daily_summary`, `cap_headroom`, all requiring `core:read`) are available. The local subprocess transport is available via `snatcharr mcp stdio` (or `docker exec -i -e SNATCHARR_URL -e SNATCHARR_API_KEY <container> /snatcharr-api mcp stdio`).
 
 ## Trust Model and Security Guardrails
 

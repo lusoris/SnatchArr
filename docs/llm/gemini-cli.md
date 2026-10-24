@@ -11,11 +11,10 @@ This guide describes how to connect Google Gemini CLI to SnatchArr's Model Conte
 
 ## Protocol and Transport
 
-SnatchArr exposes a native Model Context Protocol server over Streamable HTTP:
+SnatchArr exposes a native Model Context Protocol server over two transports:
 
-- **Endpoint**: `http://localhost:8080/api/v1/mcp` (adjust the host and port for your deployment).
-- **Transport**: Streamable HTTP (sessionless JSON-RPC 2.0).
-- **Subprocess stdio**: A local CLI wrapper (`snatcharr mcp stdio`) is planned for a future release; current configurations connect directly over HTTP.
+- **Streamable HTTP**: `http://localhost:8080/api/v1/mcp` (sessionless JSON-RPC 2.0).
+- **Subprocess stdio**: `snatcharr mcp stdio` (or `docker exec -i -e SNATCHARR_URL -e SNATCHARR_API_KEY <container> /snatcharr-api mcp stdio` for container deployments), a thin proxy that delegates to `/api/v1/mcp` via `SNATCHARR_URL` and `SNATCHARR_API_KEY`.
 
 ---
 
@@ -28,9 +27,10 @@ Connecting to SnatchArr requires:
 
 See [Module Toggle Switch](index.md#2-module-toggle-switch) and [Authentication and Permission Scopes](index.md#3-authentication-and-permission-scopes) for full scope descriptions, challenge behavior, and write-tool activation instructions.
 
-Export the API key in your shell environment:
+Export the connection environment variables in your shell:
 
 ```bash
+export SNATCHARR_URL="http://localhost:8080"
 export SNATCHARR_API_KEY="your-snatcharr-api-key"
 ```
 
@@ -40,9 +40,47 @@ export SNATCHARR_API_KEY="your-snatcharr-api-key"
 
 Gemini CLI reads MCP server declarations from `~/.gemini/settings.json` (global) or `.gemini/settings.json` (project-specific).
 
-### Configuration Snippet (`settings.json`)
+### Option A: Subprocess stdio Transport (`settings.json`)
 
-Add the `snatcharr` configuration to `mcpServers`:
+To compile and install the host `snatcharr` CLI binary, see [Install the proxy](index.md#install-the-proxy).
+
+Configure the local stdio proxy:
+
+```json
+{
+  "mcpServers": {
+    "snatcharr": {
+      "command": "snatcharr",
+      "args": ["mcp", "stdio"],
+      "env": {
+        "SNATCHARR_URL": "http://localhost:8080",
+        "SNATCHARR_API_KEY": "$SNATCHARR_API_KEY"
+      }
+    }
+  }
+}
+```
+
+For containerized deployments:
+
+```json
+{
+  "mcpServers": {
+    "snatcharr": {
+      "command": "docker",
+      "args": ["exec", "-i", "-e", "SNATCHARR_URL", "-e", "SNATCHARR_API_KEY", "snatcharr-api", "/snatcharr-api", "mcp", "stdio"],
+      "env": {
+        "SNATCHARR_URL": "http://localhost:8080",
+        "SNATCHARR_API_KEY": "$SNATCHARR_API_KEY"
+      }
+    }
+  }
+}
+```
+
+### Option B: Streamable HTTP Transport (`settings.json`)
+
+Alternatively, configure the HTTP transport directly:
 
 ```json
 {

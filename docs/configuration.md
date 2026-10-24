@@ -74,6 +74,15 @@ UI.
 The worker never holds state. It leases a snatch, heartbeats while working, reports events
 and completes; a restart loses nothing.
 
+## MCP stdio client (`snatcharr mcp stdio`)
+
+These environment variables configure the client-side `snatcharr mcp stdio` CLI proxy. They are client-side variables supplied to the proxy subprocess, not `APP_` server configurations.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `SNATCHARR_URL` | required | Base URL of the SnatchArr instance (e.g. `http://localhost:8080` or `https://snatcharr.example.com`). Proxy posts to `<base>/api/v1/mcp` |
+| `SNATCHARR_API_KEY` | required | Scoped bearer API key minted on `/account` under API keys |
+
 ## Snatch policy
 
 Every instance has one policy (`GET/PUT /api/v1/instances/{id}/policy`).

@@ -32,8 +32,21 @@ SnatchArr supports all major agent and editor runtimes on equal footing. Follow 
   - Served directly by the Go API control plane at `/api/v1/mcp`.
   - Conforms to the MCP 2026-07-28 specification: clients send JSON-RPC 2.0 requests via HTTP `POST` requests and receive standard JSON (`application/json`) or Server-Sent Events (`text/event-stream`).
   - Stateless: no session state or session IDs are required across HTTP requests.
-- **stdio transport (planned)**:
-  - A lightweight local CLI wrapper (`snatcharr mcp stdio`) that proxies standard input/output streams to `/api/v1/mcp` is planned for a future release. All client guides currently configure the Streamable HTTP transport.
+- **stdio transport**:
+  - A lightweight local CLI wrapper (`snatcharr mcp stdio`, or `docker exec -i -e SNATCHARR_URL -e SNATCHARR_API_KEY <container> /snatcharr-api mcp stdio` for container deployments) that proxies standard input/output streams to `/api/v1/mcp` using `SNATCHARR_URL` and `SNATCHARR_API_KEY`. Bare `-e NAME` forwards the host environment variable value into the container process ([Docker exec documentation](https://docs.docker.com/reference/cli/docker/container/exec/)).
+  - Inside the container, the URL addresses the container's own listener: `SNATCHARR_URL=http://localhost:8080` (since `APP_HTTP_ADDR` defaults to `:8080`).
+  - Kubernetes: `kubectl exec` cannot set environment variables and the container image is distroless (no `env` binary or shell) -> stdio from a pod is not supported; use the host binary or Streamable HTTP. No `kubectl exec` snippet.
+  - Conforms to the MCP stdio transport specification: newline-delimited JSON-RPC messages on stdin/stdout, logs only on stderr. Delegating directly to the HTTP endpoint ensures authentication, rate limiting, and audit logging remain unified ([ADR-0021](../adr/0021-llm-access-module.md) section 2).
+
+### Install the Proxy
+
+Release assets do not ship a standalone prebuilt `snatcharr` host binary (container images carry `/snatcharr-api`). To build and install the `snatcharr` CLI binary to `$GOPATH/bin`:
+
+```bash
+go install github.com/lusoris/SnatchArr/api/cmd/snatcharr@vX.Y.Z
+```
+
+Replace `vX.Y.Z` with a release tag whose [changelog](https://github.com/lusoris/SnatchArr/blob/main/CHANGELOG.md) lists `snatcharr mcp stdio`, ideally the same version your server runs. Pin an exact tag rather than `@latest` so the build stays reproducible.
 
 ### 2. Module Toggle Switch
 
