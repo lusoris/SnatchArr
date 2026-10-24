@@ -8,6 +8,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { page } from '$app/state';
 	import { problemStatus } from '#lib/api/client.js';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
+	import UrlText from '#lib/components/UrlText.svelte';
 	import { instanceQuery } from '#lib/components/instance/instance-query.svelte.js';
 	import { getInstanceTabs, isTabActive } from '#lib/components/instance/tabs.js';
 	import { m } from '#lib/paraglide/messages.js';
@@ -44,8 +45,9 @@ SPDX-License-Identifier: EUPL-1.2
 	{:else if instance.data}
 		<h1 class="mb-1 text-2xl font-semibold">{instance.data.name}</h1>
 		<p class="mb-4 text-sm text-subtle">
-			{instanceKindLabel(instance.data.kind, instance.data.last_seen_product)} · {instance.data
-				.base_url}
+			{instanceKindLabel(instance.data.kind, instance.data.last_seen_product)} · <UrlText
+				url={instance.data.base_url}
+			/>
 		</p>
 
 		<nav aria-label={m.instance_tabs_label()} class="subtab-bar mb-6">

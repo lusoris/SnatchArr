@@ -44,7 +44,7 @@ describe('dashboard', () => {
 			`${m.instance_check_failed()}: Connection refused (ECONNREFUSED)`
 		);
 		expect(screen.queryByText(lastCheck)).toBeNull();
-		expect(screen.getByText(/^\s*sonarr · /).textContent?.trim()).toBe(
+		expect(screen.getByText(/^\s*sonarr ·/).textContent?.trim()).toBe(
 			'sonarr · http://sonarr.local:8989'
 		);
 	});
@@ -54,7 +54,7 @@ describe('dashboard', () => {
 		renderWithQuery(Dashboard);
 
 		expect(await screen.findByRole('link', { name: 'Fresh Radarr' })).toBeTruthy();
-		expect(screen.getByText(/^\s*radarr · /).textContent?.trim()).toBe(
+		expect(screen.getByText(/^\s*radarr ·/).textContent?.trim()).toBe(
 			'radarr · http://radarr.local:7878'
 		);
 		expect(screen.getByText(m.instance_never_tested())).toBeTruthy();
