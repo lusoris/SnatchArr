@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.6.4](https://github.com/lusoris/SnatchArr/compare/v0.6.3...v0.6.4) (2026-10-24)
+
+
+### Features
+
+* **llm:** add MCP resources and prompts ([#591](https://github.com/lusoris/SnatchArr/issues/591)) ([2bf2b51](https://github.com/lusoris/SnatchArr/commit/2bf2b51d73798bd346d71366d3da7824f0b3e9e8))
+* **llm:** add snatcharr mcp stdio proxy ([#592](https://github.com/lusoris/SnatchArr/issues/592)) ([155795d](https://github.com/lusoris/SnatchArr/commit/155795d3354ea58aa1b6a6ab39e65a3593b3d966))
+* **llm:** serve live queue contents in the queue resource ([#593](https://github.com/lusoris/SnatchArr/issues/593)) ([f13d219](https://github.com/lusoris/SnatchArr/commit/f13d2190cc04b8d12be25abdf856122aa3eb0426))
+* **modules:** add module registry and modules table ([#604](https://github.com/lusoris/SnatchArr/issues/604)) ([5038596](https://github.com/lusoris/SnatchArr/commit/50385969fe4ef43e3eba84f11ef8c3d8248df319))
+* **modules:** add module switch HTTP API ([#605](https://github.com/lusoris/SnatchArr/issues/605)) ([881c613](https://github.com/lusoris/SnatchArr/commit/881c613edcb330964e4e86f8640a43676f58e530))
+* **modules:** gate module operations by x-module ([#606](https://github.com/lusoris/SnatchArr/issues/606)) ([4420a55](https://github.com/lusoris/SnatchArr/commit/4420a55325296cc309a42eac26673e60caf3a748))
+* **watchaware:** add Jellyfin and Emby watch-state sources ([#602](https://github.com/lusoris/SnatchArr/issues/602)) ([fd0b978](https://github.com/lusoris/SnatchArr/commit/fd0b97814f0be6006c9aea3faab250d5fee726c1))
+
+
+### Bug Fixes
+
+* **dlclients:** take goenvoy rtorrent v2.1.1 for short multicall rows ([#587](https://github.com/lusoris/SnatchArr/issues/587)) ([ba5224a](https://github.com/lusoris/SnatchArr/commit/ba5224a8bd7172ae902a4af3053cd2e4e3a7b1b2))
+* **queue:** apply stalled rule to torrents only ([#608](https://github.com/lusoris/SnatchArr/issues/608)) ([4e740c0](https://github.com/lusoris/SnatchArr/commit/4e740c0bd9a03f361976b6788557edaf08a0f8e9))
+* **queue:** classify Lidarr import failures by reason lines ([#607](https://github.com/lusoris/SnatchArr/issues/607)) ([a3b9a42](https://github.com/lusoris/SnatchArr/commit/a3b9a42ccb4c0f748927e16beab37377cd236340))
+* **web:** wrap instance URLs only at host, port and path boundaries ([#594](https://github.com/lusoris/SnatchArr/issues/594)) ([5d744e0](https://github.com/lusoris/SnatchArr/commit/5d744e0ccaf25ab6a1b4f7d91f2d940f5f5633e0))
+* **workergrpc:** search Lidarr upgrades per album ([#609](https://github.com/lusoris/SnatchArr/issues/609)) ([c092827](https://github.com/lusoris/SnatchArr/commit/c092827d5d24dcaae4a3457490250b104836d88a))
+
+
+### Documentation
+
+* **adr:** close the goenvoy follow-ups of ADR-0024 ([#596](https://github.com/lusoris/SnatchArr/issues/596)) ([be467ea](https://github.com/lusoris/SnatchArr/commit/be467ea53da60a360ed9d93e252c77b6145d3389))
+* **adr:** mark ADR-0018 follow-ups done ([#601](https://github.com/lusoris/SnatchArr/issues/601)) ([ed38ebc](https://github.com/lusoris/SnatchArr/commit/ed38ebc488196ffe4188e267908084f24d91413b))
+* **adr:** propose ADR-0025 for optional module switches ([#595](https://github.com/lusoris/SnatchArr/issues/595)) ([6473838](https://github.com/lusoris/SnatchArr/commit/6473838c9a9d4f763a2fde2d257168f060f23c93)), closes [#563](https://github.com/lusoris/SnatchArr/issues/563)
+* **adr:** propose ADR-0026 accounts, roles and Jellyfin sign-in ([#597](https://github.com/lusoris/SnatchArr/issues/597)) ([95de0fc](https://github.com/lusoris/SnatchArr/commit/95de0fc2760603a7aa369f05b394e6675286124b))
+* **adr:** propose ADR-0027 adult module ([#598](https://github.com/lusoris/SnatchArr/issues/598)) ([dab4f07](https://github.com/lusoris/SnatchArr/commit/dab4f07c64062fd2561438f4bd73300eb4255f9a))
+* **adr:** propose ADR-0028 Jellyfin companion plugin ([#599](https://github.com/lusoris/SnatchArr/issues/599)) ([62775dc](https://github.com/lusoris/SnatchArr/commit/62775dc87494232590ee4dd3ee93903cdc6a9474))
+* **adr:** record answered questions in ADR-0026 to ADR-0028 ([#600](https://github.com/lusoris/SnatchArr/issues/600)) ([9243060](https://github.com/lusoris/SnatchArr/commit/9243060646a65cf78f576598d793fcfd05591805))
+* **adr:** record operator answers in ADR-0024 to ADR-0028 ([#603](https://github.com/lusoris/SnatchArr/issues/603)) ([3009b43](https://github.com/lusoris/SnatchArr/commit/3009b43dbac70ad80c3226000f389c686722c3a7))
+* **llm:** add client connection guides and llms.txt ([#590](https://github.com/lusoris/SnatchArr/issues/590)) ([ec1127a](https://github.com/lusoris/SnatchArr/commit/ec1127a46e12432b2b75f0499c835b5d63e108f7))
+* **llm:** ship the snatcharr agent skills bundle ([#589](https://github.com/lusoris/SnatchArr/issues/589)) ([f65a409](https://github.com/lusoris/SnatchArr/commit/f65a4091feee20208b1225824d2deaf8591312b2))
+
 ## [0.6.3](https://github.com/lusoris/SnatchArr/compare/v0.6.2...v0.6.3) (2026-10-23)
 
 
