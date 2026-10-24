@@ -100,9 +100,14 @@ until_ok 60 collector_up || fail "the otel-collector target is not up in Prometh
 echo "ok   prometheus scrapes the otel-collector"
 
 until_ok 90 get http://127.0.0.1:3000/api/health || fail "grafana did not answer /api/health"
-ds=$(get http://127.0.0.1:3000/api/datasources/uid/prometheus/health) ||
-    fail "the grafana Prometheus data source check failed"
-jq -e '.status == "OK"' >/dev/null <<<"$ds" || fail "the grafana Prometheus data source reports $ds"
+
+datasource_ok() {
+    get http://127.0.0.1:3000/api/datasources/uid/prometheus/health | jq -e '.status == "OK"'
+}
+if ! until_ok 60 datasource_ok; then
+    ds=$(get http://127.0.0.1:3000/api/datasources/uid/prometheus/health 2>&1) || ds="no response: $ds"
+    fail "the grafana Prometheus data source is not OK: $ds"
+fi
 echo "ok   grafana Prometheus data source OK"
 
 dashboards() {
