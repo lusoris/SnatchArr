@@ -130,6 +130,9 @@ type Item struct {
 	Title string
 	// StatusLines flattens statusMessages: each message's title, then its messages.
 	StatusLines []string
+	// ReasonLines holds rejection reasons only: each message's messages, its title
+	// only when it carries none (title over messages names the release or file).
+	ReasonLines []string
 	// Protocol is the download transport family (e.g. "torrent", "usenet").
 	Protocol string
 	// Size is the total content size in bytes (0 when unknown, e.g. metadata fetching).

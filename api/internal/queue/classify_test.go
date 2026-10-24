@@ -35,6 +35,7 @@ func TestClassifierTaxonomyPositive(t *testing.T) {
 		{"lidarr/not_upgrade_track", "Not an upgrade for existing track file(s)", queue.ClassNotWanted},
 		{"lidarr/not_upgrade_track_with_quality", "Not an upgrade for existing track file(s). New Quality is FLAC", queue.ClassNotWanted},
 		{"lidarr/not_upgrade_album", "Not an upgrade for existing album file(s)", queue.ClassNotWanted},
+		{"lidarr/album_already_imported", "Album already imported at 10/23/2026 8:12:01 AM", queue.ClassNotWanted},
 		{"lidarr/couldnt_find_similar_album", "Couldn't find similar album for Artist - Album", queue.ClassBroken},
 		{"lidarr/artist_name_mismatch", "Artist name mismatch, automatic import is not possible for Artist", queue.ClassFixable},
 		{"lidarr/missing_tracks_expected", "One or more tracks expected in this release were not imported or missing from the release", queue.ClassFixable},
@@ -417,6 +418,69 @@ func TestClassifyRejection(t *testing.T) {
 			got := queue.ClassifyRejection(tt.rejection)
 			if got != tt.wantClass {
 				t.Errorf("ClassifyRejection(%q) = %q, want %q", tt.rejection, got, tt.wantClass)
+			}
+		})
+	}
+}
+
+func TestClassifyImportItemReasonLines(t *testing.T) {
+	t.Parallel()
+
+	s := queue.DefaultSettings()
+	s.Grace = 15 * time.Minute
+	now := fixedNow
+	oldAdded := now.Add(-1 * time.Hour)
+
+	tests := []struct {
+		name        string
+		reasonLines []string
+		statusLines []string
+		wantClass   queue.Class
+	}{
+		{
+			name:        "reason_lines_has_missing_tracks_fixable",
+			reasonLines: []string{"Has missing tracks"},
+			statusLines: []string{"01 Hound Dog.flac", "Has missing tracks"},
+			wantClass:   queue.ClassFixable,
+		},
+		{
+			name:        "nil_reason_lines_fallback_unknown",
+			reasonLines: nil,
+			statusLines: []string{"01 Hound Dog.flac", "Has missing tracks"},
+			wantClass:   queue.ClassUnknown,
+		},
+		{
+			name:        "reason_lines_distance_fixable",
+			reasonLines: []string{"Album match is not close enough: 75.0% vs 80%"},
+			statusLines: []string{"01 Hound Dog.flac", "Album match is not close enough: 75.0% vs 80%"},
+			wantClass:   queue.ClassFixable,
+		},
+		{
+			name:        "reason_lines_distance_below_floor_unknown",
+			reasonLines: []string{"Album match is not close enough: 74.9% vs 80%"},
+			statusLines: []string{"01 Hound Dog.flac", "Album match is not close enough: 74.9% vs 80%"},
+			wantClass:   queue.ClassUnknown,
+		},
+		{
+			name:        "empty_reason_and_status_lines_unknown",
+			reasonLines: []string{},
+			statusLines: []string{},
+			wantClass:   queue.ClassUnknown,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			item := queue.Item{
+				Title:       "Test.Item.Title",
+				ReasonLines: tt.reasonLines,
+				StatusLines: tt.statusLines,
+				Added:       oldAdded,
+			}
+			gotClass, _, _ := queue.ClassifyImportItem(item, s, now)
+			if gotClass != tt.wantClass {
+				t.Errorf("ClassifyImportItem() class = %q, want %q", gotClass, tt.wantClass)
 			}
 		})
 	}
