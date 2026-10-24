@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -22,9 +23,11 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"go.uber.org/fx"
 
+	"github.com/lusoris/SnatchArr/api/internal/build/moduleops"
 	"github.com/lusoris/SnatchArr/api/internal/buildinfo"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/httpapi"
+	"github.com/lusoris/SnatchArr/api/internal/modules"
 	"github.com/lusoris/SnatchArr/api/internal/settings"
 )
 
@@ -34,15 +37,26 @@ const Path = httpapi.PathPrefix + "/mcp"
 // ErrCodeToolNotEnabled is the JSON-RPC error code returned when a write tool is not opted in.
 const ErrCodeToolNotEnabled = -32021
 
-const maxBodyBytes = 1 << 20
+// ErrCodeModuleDisabled is the JSON-RPC error code returned when a tool belongs to a disabled module.
+const ErrCodeModuleDisabled = -32022
+
+const (
+	maxBodyBytes = 1 << 20
+	maxModules   = 32
+)
+
+type moduleChecker interface {
+	IsEnabled(ctx context.Context, id string) (bool, error)
+}
 
 type authCtxKey struct{}
 
 type requestAuth struct {
-	user       domain.User
-	keyID      string
-	scopes     []string
-	writeTools []string
+	user            domain.User
+	keyID           string
+	scopes          []string
+	writeTools      []string
+	disabledModules []string
 }
 
 func withRequestAuth(ctx context.Context, auth requestAuth) context.Context {
@@ -56,34 +70,84 @@ func requestAuthFrom(ctx context.Context) requestAuth {
 
 // Service wraps the stateless MCP Streamable HTTP handler and its security/toggle gates.
 type Service struct {
-	build       buildinfo.Info
-	settings    *settings.Service
-	security    *httpapi.Security
-	handlers    *httpapi.Handlers
-	logger      *slog.Logger
-	specs       []toolSpec
-	toolSchemas map[string]json.RawMessage
-	mcpHandler  http.Handler
+	build             buildinfo.Info
+	settings          *settings.Service
+	modules           moduleChecker
+	ops               map[string]string
+	referencedModules []string
+	security          *httpapi.Security
+	handlers          *httpapi.Handlers
+	logger            *slog.Logger
+	specs             []toolSpec
+	toolSchemas       map[string]json.RawMessage
+	mcpHandler        http.Handler
 }
 
 // New constructs the MCP service and resolves all registered tool input schemas at startup.
-func New(build buildinfo.Info, settingsSvc *settings.Service, security *httpapi.Security, handlers *httpapi.Handlers, logger *slog.Logger) (*Service, error) {
-	return newWithSpecs(build, settingsSvc, security, handlers, logger, toolRegistry)
+func New(
+	build buildinfo.Info,
+	settingsSvc *settings.Service,
+	security *httpapi.Security,
+	handlers *httpapi.Handlers,
+	modulesSvc *modules.Service,
+	logger *slog.Logger,
+) (*Service, error) {
+	return newWithSpecs(build, settingsSvc, security, handlers, modulesSvc, logger, toolRegistry, moduleops.ByOperation)
 }
 
-func newWithSpecs(build buildinfo.Info, settingsSvc *settings.Service, security *httpapi.Security, handlers *httpapi.Handlers, logger *slog.Logger, specs []toolSpec) (*Service, error) {
-	schemas, err := resolveToolSchemas(specs)
+func bindModuleSpecs(specs []toolSpec, ops map[string]string) ([]toolSpec, []string, error) {
+	copied := make([]toolSpec, len(specs))
+	copy(copied, specs)
+	var refMods []string
+	for i := range copied {
+		opID := copied[i].OperationID
+		var mod string
+		if ops != nil {
+			mod = ops[opID]
+		}
+		if copied[i].Module != "" && copied[i].Module != mod {
+			return nil, nil, fmt.Errorf("%w: tool %q module %q disagrees with ops mapping %q", domain.ErrInvalid, copied[i].Name, copied[i].Module, mod)
+		}
+		copied[i].Module = mod
+		if mod != "" && !slices.Contains(refMods, mod) {
+			refMods = append(refMods, mod)
+		}
+	}
+	if len(refMods) > maxModules {
+		return nil, nil, fmt.Errorf("%w: referenced module count %d exceeds maximum of %d", domain.ErrInvalid, len(refMods), maxModules)
+	}
+	return copied, refMods, nil
+}
+
+func newWithSpecs(
+	build buildinfo.Info,
+	settingsSvc *settings.Service,
+	security *httpapi.Security,
+	handlers *httpapi.Handlers,
+	modulesSvc moduleChecker,
+	logger *slog.Logger,
+	specs []toolSpec,
+	ops map[string]string,
+) (*Service, error) {
+	boundSpecs, refMods, err := bindModuleSpecs(specs, ops)
+	if err != nil {
+		return nil, err
+	}
+	schemas, err := resolveToolSchemas(boundSpecs)
 	if err != nil {
 		return nil, err
 	}
 	s := &Service{
-		build:       build,
-		settings:    settingsSvc,
-		security:    security,
-		handlers:    handlers,
-		logger:      logger,
-		specs:       specs,
-		toolSchemas: schemas,
+		build:             build,
+		settings:          settingsSvc,
+		modules:           modulesSvc,
+		ops:               ops,
+		referencedModules: refMods,
+		security:          security,
+		handlers:          handlers,
+		logger:            logger,
+		specs:             boundSpecs,
+		toolSchemas:       schemas,
 	}
 	s.mcpHandler = mcp.NewStreamableHTTPHandler(s.getServer, &mcp.StreamableHTTPOptions{
 		Stateless:    true,
@@ -125,13 +189,46 @@ func (s *Service) Handler() http.Handler {
 			onErr(r.Context(), w, r, fmt.Errorf("%w: unscoped api keys are not permitted on mcp", domain.ErrForbidden))
 			return
 		}
-		auth := requestAuth{user: user, keyID: keyID, scopes: scopes, writeTools: cfg.LLMWriteTools}
+		disabled, err := s.resolveDisabledModules(r.Context())
+		if err != nil {
+			onErr(r.Context(), w, r, err)
+			return
+		}
+		auth := requestAuth{
+			user:            user,
+			keyID:           keyID,
+			scopes:          scopes,
+			writeTools:      cfg.LLMWriteTools,
+			disabledModules: disabled,
+		}
 		if !s.checkToolCallFences(w, r, auth, onErr) {
 			return
 		}
 		ctx := withRequestAuth(httpapi.WithUser(r.Context(), user), auth)
 		s.mcpHandler.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func (s *Service) resolveDisabledModules(ctx context.Context) ([]string, error) {
+	if len(s.referencedModules) == 0 {
+		return nil, nil
+	}
+	if s.modules == nil {
+		return nil, errors.New("llm: modules service is nil")
+	}
+	var disabled []string
+	for _, modID := range s.referencedModules {
+		mCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		enabled, err := s.modules.IsEnabled(mCtx, modID)
+		cancel()
+		if err != nil {
+			return nil, fmt.Errorf("llm: resolve module %s: %w", modID, err)
+		}
+		if !enabled {
+			disabled = append(disabled, modID)
+		}
+	}
+	return disabled, nil
 }
 
 func (s *Service) loadEnabledSettings(ctx context.Context) (domain.Settings, error) {
@@ -236,22 +333,44 @@ func (s *Service) checkToolCallFences(w http.ResponseWriter, r *http.Request, au
 	if reqScope == "" {
 		return true
 	}
+	if !s.checkModuleFence(w, r, auth, spec, peek) {
+		return false
+	}
 	if !slices.Contains(auth.scopes, reqScope) {
 		w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer error="insufficient_scope", scope=%q`, reqScope))
 		onErr(r.Context(), w, r, fmt.Errorf("%w: key lacks required scope %s", domain.ErrForbidden, reqScope))
 		return false
 	}
-	if spec != nil && !spec.ReadOnly && !slices.Contains(auth.writeTools, spec.Name) {
-		s.logger.WarnContext(r.Context(), "llm: write tool refused",
-			slog.String("tool", spec.Name),
-			slog.String("owner", auth.user.ID.String()),
-			slog.String("key_id", auth.keyID),
-			slog.String("reason", "not_opted_in"),
-		)
-		writeJSONRPCError(r.Context(), s.logger, w, peek.ID, ErrCodeToolNotEnabled, "tool not enabled by administrator")
-		return false
+	return s.checkWriteToolFence(w, r, auth, spec, peek)
+}
+
+func (s *Service) checkModuleFence(w http.ResponseWriter, r *http.Request, auth requestAuth, spec *toolSpec, peek rpcToolCallPeek) bool {
+	if spec == nil || spec.Module == "" || !slices.Contains(auth.disabledModules, spec.Module) {
+		return true
 	}
-	return true
+	s.logger.WarnContext(r.Context(), "llm: module tool refused",
+		slog.String("tool", spec.Name),
+		slog.String("module", spec.Module),
+		slog.String("owner", auth.user.ID.String()),
+		slog.String("key_id", auth.keyID),
+		slog.String("reason", "module_disabled"),
+	)
+	writeJSONRPCError(r.Context(), s.logger, w, peek.ID, ErrCodeModuleDisabled, "module disabled")
+	return false
+}
+
+func (s *Service) checkWriteToolFence(w http.ResponseWriter, r *http.Request, auth requestAuth, spec *toolSpec, peek rpcToolCallPeek) bool {
+	if spec == nil || spec.ReadOnly || slices.Contains(auth.writeTools, spec.Name) {
+		return true
+	}
+	s.logger.WarnContext(r.Context(), "llm: write tool refused",
+		slog.String("tool", spec.Name),
+		slog.String("owner", auth.user.ID.String()),
+		slog.String("key_id", auth.keyID),
+		slog.String("reason", "not_opted_in"),
+	)
+	writeJSONRPCError(r.Context(), s.logger, w, peek.ID, ErrCodeToolNotEnabled, "tool not enabled by administrator")
+	return false
 }
 
 func writeJSONRPCError(ctx context.Context, logger *slog.Logger, w http.ResponseWriter, id json.RawMessage, code int, msg string) {
@@ -282,7 +401,7 @@ func (s *Service) getServer(r *http.Request) *mcp.Server {
 		logger: s.logger,
 		user:   auth.user,
 		keyID:  auth.keyID,
-	}, s.specs, s.toolSchemas, auth.scopes, auth.writeTools)
+	}, s.specs, s.toolSchemas, auth.scopes, auth.writeTools, auth.disabledModules)
 	registerResources(srv, s.handlers)
 	registerPrompts(srv)
 	return srv

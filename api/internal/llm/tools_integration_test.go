@@ -169,7 +169,7 @@ func TestMCPConstructorRejectsUnknownOperationID(t *testing.T) {
 			Description: "Unknown operation.",
 		},
 	}
-	_, err := llm.NewWithSpecsForTest(buildinfo.Info{Version: "test"}, nil, nil, nil, nil, specs)
+	_, err := llm.NewWithSpecsForTest(buildinfo.Info{Version: "test"}, nil, nil, nil, nil, nil, specs)
 	if err == nil {
 		t.Fatal("expected error for unknown OperationID, got nil")
 	}
