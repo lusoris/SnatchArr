@@ -26,6 +26,9 @@
 	--color-nav-active: oklch(0.93 0.035 285);
 	--color-nav-active-foreground: oklch(0.20 0.10 285);
 	--color-warning: oklch(0.55 0.16 80);
+	--color-success: oklch(0.50 0.13 150);
+	--color-info: oklch(0.50 0.12 240);
+	--color-running: oklch(0.50 0.16 285);
 }
 
 .dark {
@@ -53,6 +56,9 @@
 	--color-nav-active: oklch(0.24 0.055 285);
 	--color-nav-active-foreground: oklch(0.92 0.08 290);
 	--color-warning: oklch(0.75 0.16 80);
+	--color-success: oklch(0.78 0.14 150);
+	--color-info: oklch(0.78 0.11 240);
+	--color-running: oklch(0.76 0.16 290);
 }
 :root {
 	--ui-min-target-size: 24px;
@@ -61,4 +67,14 @@
 	--ui-spacing-scale: 0.875;
 	--ui-radius: 0.375rem;
 	--ui-focus-emphasis: 0;
+}
+:root {
+	--motion-duration-short: 150ms;
+	--motion-easing: cubic-bezier(0.2, 0, 0, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	:root {
+		--motion-duration-short: 0ms;
+	}
 }

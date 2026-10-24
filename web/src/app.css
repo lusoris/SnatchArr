@@ -6,9 +6,11 @@
 /* Aliases over sveltesentio's tokens. Names deliberately differ from the token names
    (--color-muted, --color-card, ...) so no custom property references itself. --color-control
    is the boundary of a control (3:1, WCAG 2.2 SC 1.4.11); --color-line only draws dividers.
-   The palette already names --color-brand, --color-brand-foreground and --color-warning in
-   theme.css, so they get no alias here (it would reference itself): text-brand and bg-brand are
-   plain classes below, and components read var(--color-warning). */
+   The palette already names --color-brand, --color-brand-foreground, --color-warning,
+   --color-success, --color-info and --color-running in theme.css, so they get no alias here
+   (it would reference itself): text-brand, bg-brand, text-warning, bg-warning, text-success,
+   bg-success, text-info, bg-info, text-running and bg-running are plain classes below, and
+   components read var(--color-warning). */
 @theme {
 	--color-bg: var(--color-background);
 	--color-fg: var(--color-foreground);
@@ -31,6 +33,24 @@
 }
 .bg-warning {
 	background-color: var(--color-warning);
+}
+.text-success {
+	color: var(--color-success);
+}
+.bg-success {
+	background-color: var(--color-success);
+}
+.text-info {
+	color: var(--color-info);
+}
+.bg-info {
+	background-color: var(--color-info);
+}
+.text-running {
+	color: var(--color-running);
+}
+.bg-running {
+	background-color: var(--color-running);
 }
 
 :root {

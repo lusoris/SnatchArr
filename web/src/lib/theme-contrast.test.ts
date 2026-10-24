@@ -97,6 +97,26 @@ describe.each(Object.entries(themes))('%s theme warning token (#417, #418)', (_n
 	});
 });
 
+const STATUS_TOKENS = ['success', 'info', 'running', 'warning', 'destructive'] as const;
+const STATUS_SURFACES = ['background', 'card'] as const;
+
+describe.each(Object.entries(themes))(
+	'%s theme status tokens reach 3:1 (WCAG 1.4.11)',
+	(_name, tokens) => {
+		for (const token of STATUS_TOKENS) {
+			it.each(STATUS_SURFACES)(`--color-${token} reaches 3:1 on --color-%s`, (surface) => {
+				expect(contrastRatio(tokens[token], tokens[surface])).toBeGreaterThanOrEqual(MIN);
+			});
+		}
+	}
+);
+
+describe('status token contrast negative case', () => {
+	it('refuses low-contrast pair (< 3:1)', () => {
+		expect(contrastRatio('oklch(0.95 0.02 150)', 'oklch(1 0 0)')).toBeLessThan(MIN);
+	});
+});
+
 const FOREGROUND_PAIRS = [
 	['primary-foreground', 'primary'],
 	['brand-foreground', 'brand'],
