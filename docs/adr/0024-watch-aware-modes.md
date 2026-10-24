@@ -148,7 +148,7 @@ No Jellyfin or Emby account source exists in `api/internal`; ADR-0018 leaves acc
   - settings: module switch (default off), sync interval;
   - Paraglide keys under `watchaware_*` in `web/messages/en.json` and `de.json`.
 - Upstream: goenvoy `mediaserver/jellyfin/v3` and `mediaserver/emby/v3` (`GetUsers`, `GetItems` with a user filter); new module requirements in `go.mod`, so `web/static/licences.json` is regenerated in the same pull request.
-- Blocked on goenvoy: `UserItemDataDto` has `PlayCount`, `PlaybackPositionTicks` and `LastPlayedDate` but no `Played` and no `PlayedPercentage` (`mediaserver/jellyfin/types.go:90`, same in `mediaserver/emby/types.go`). The predicate needs both; the fields are added upstream first.
+- Upstream dependency resolved: `UserItemDataDto` has `Played` and `PlayedPercentage` from `mediaserver/jellyfin/v3.1.0` and `mediaserver/emby/v3.1.0` (`mediaserver/jellyfin/types.go:91-92`, same in `mediaserver/emby/types.go`; [goenvoy#173](https://github.com/golusoris/goenvoy/pull/173)).
 - Tests:
   - positive: an item with `Played` true, and one at 90 % played, count as watched;
   - negative: an unreachable server records the error and the loop goes on with the next source;
@@ -169,7 +169,7 @@ No Jellyfin or Emby account source exists in `api/internal`; ADR-0018 leaves acc
   - Paraglide keys under `watchaware_gate_*`;
   - SSE and notification event for a recorded decision.
 - Upstream: goenvoy `arr/sonarr` `GetAllSeries`, `GetSeries`, `GetEpisodes`, `GetTags`.
-- Blocked on goenvoy for the `requester` rule only: the Seerr `User` type has no `jellyfinUserId` or `jellyfinUsername` (`arr/seerr/types.go:11`), while Seerr itself stores both. `any` and `all` work without it.
+- Upstream dependency resolved for the `requester` rule: the Seerr `User` type has `JellyfinUserID` and `JellyfinUsername` from `arr/seerr/v1.6.0` (`arr/seerr/types.go:19-20`; [goenvoy#173](https://github.com/golusoris/goenvoy/pull/173)).
 - Tests:
   - positive: a new unwatched series records "would unmonitor" for seasons after the first; a watched first season records "would promote" for the second;
   - negative: a series tagged `snatcharr-no-gate`, a series with files beyond the gate, and a series added before the gate was switched on all record nothing;
@@ -228,11 +228,11 @@ The four open questions of the first draft were answered on 2026-10-23:
 
 ## Follow-ups
 
-- goenvoy (checked on main, `mediaserver/jellyfin` and `mediaserver/emby` v3.0.2): add `Played` and `PlayedPercentage` to `UserItemDataDto`; slice 1 waits for them.
-- goenvoy (`arr/seerr`): add `jellyfinUserId` and `jellyfinUsername` to `User`, for the `requester` rule.
-- goenvoy (`mediaserver/jellyfin`): add a collection write for "leaving soon".
-- Implementation plan: see the section above.
-- Docs: name Maintainerr as an alternative for removal until remove when seen ships.
+- [x] goenvoy: added `Played` and `PlayedPercentage` to `UserItemDataDto` in `mediaserver/jellyfin/v3.1.0` and `mediaserver/emby/v3.1.0` ([goenvoy#173](https://github.com/golusoris/goenvoy/pull/173)).
+- [x] goenvoy: added `JellyfinUserID` and `JellyfinUsername` to `User` in `arr/seerr/v1.6.0` for the `requester` rule ([goenvoy#173](https://github.com/golusoris/goenvoy/pull/173)).
+- [x] goenvoy: added collection writes (`CreateCollection`, `AddToCollection`, `RemoveFromCollection`) in `mediaserver/jellyfin/v3.1.0` for "leaving soon" ([goenvoy#173](https://github.com/golusoris/goenvoy/pull/173)).
+- [ ] Implementation plan: season gate slices 1-3 (section [Implementation plan](#implementation-plan)); `go.mod` requirements (`mediaserver/jellyfin/v3.1.0`, `mediaserver/emby/v3.1.0`, `arr/seerr/v1.6.0`) land with slice 1.
+- [x] Docs: name Maintainerr as an alternative for removal until remove-when-seen ships ([docs/roadmap.md](../roadmap.md#watch-aware-modes)).
 
 ## References
 
