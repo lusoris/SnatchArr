@@ -101,6 +101,23 @@ def run_go_licenses(repo_root, env):
             os.remove(tpl_path)
 
 
+def normalize_go_url(name, url):
+    """Drop /vN/ from GitHub URLs when the module ends in /vN (N>=2).
+
+    go-licenses v2.0.1 (internal/third_party/pkgsite/source/source.go
+    adjustVersionedModuleDirectory) sends a HEAD request for <repo>/blob/<tag>/vN/go.mod.
+    On success it keeps the /vN/ dir, but on failure (e.g. CI rate limits) it
+    drops it. For packages like github.com/sony/gobreaker/v2 whose LICENSE is at
+    repo root, dropping the /vN/ segment makes both probe outcomes consistent.
+    """
+    if not url:
+        return url
+    m = re.search(r"/(v\d+)$", name)
+    if m and int(m.group(1)[1:]) >= 2:
+        return re.sub(r"(/blob/[^/]+)/" + re.escape(m.group(1)) + r"/", r"\1/", url, count=1)
+    return url
+
+
 def normalize_go_entry(name, ver, lic, url, path, gomodcache):
     """Normalize Go entry fields, handling known special packages."""
     if name.startswith("github.com/segmentio/asm"):
@@ -111,6 +128,7 @@ def normalize_go_entry(name, ver, lic, url, path, gomodcache):
             "https://github.com/segmentio/asm/blob/v1.2.1/LICENSE",
             os.path.join(gomodcache, "github.com/segmentio/asm@v1.2.1/LICENSE"),
         )
+    url = normalize_go_url(name, url)
     return name, ver, lic, url, path
 
 
