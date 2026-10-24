@@ -4,11 +4,11 @@
 
 import { describe, expect, it } from 'vitest';
 import { shellChromeIcons, shellIconLoader } from './icons.js';
-import { getNavGroups } from './nav.js';
+import { getNavItems } from './nav.js';
 
 describe('shell icon loader', () => {
 	it('positive: every nav entry icon resolves to a bundled component', () => {
-		const names = getNavGroups(true).flatMap((g) => g.items.map((i) => i.icon));
+		const names = getNavItems().map((i) => i.icon);
 		const missing = names.filter((n) => shellIconLoader(n) === undefined);
 		expect(missing).toEqual([]);
 	});

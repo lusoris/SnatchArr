@@ -27,6 +27,14 @@ describe('BottomBar', () => {
 		pageMock.url = new URL('http://localhost/');
 	});
 
+	it('positive: renders exactly 4 items (3 destinations + More)', () => {
+		const { container } = render(BottomBar, { props: { onOpenDrawer: vi.fn() } });
+		const links = container.querySelectorAll('nav a');
+		const buttons = container.querySelectorAll('nav button');
+		expect(links.length).toBe(3);
+		expect(buttons.length).toBe(1);
+	});
+
 	it('positive: active item matches current route and receives aria-current="page"', async () => {
 		pageMock.url = new URL('http://localhost/instances');
 		const { container } = render(BottomBar, { props: { onOpenDrawer: vi.fn() } });
@@ -45,9 +53,9 @@ describe('BottomBar', () => {
 		pageMock.url = new URL('http://localhost/instances');
 		render(BottomBar, { props: { onOpenDrawer: vi.fn() } });
 
-		const historyLink = screen.getByRole('link', { name: new RegExp(m.nav_history(), 'i') });
-		expect(historyLink.getAttribute('aria-current')).toBeNull();
-		expect(historyLink.className).toContain('text-subtle');
+		const activityLink = screen.getByRole('link', { name: new RegExp(m.nav_activity(), 'i') });
+		expect(activityLink.getAttribute('aria-current')).toBeNull();
+		expect(activityLink.className).toContain('text-subtle');
 	});
 
 	it('positive: clicking More button opens drawer via onOpenDrawer callback', async () => {
@@ -65,8 +73,8 @@ describe('BottomBar', () => {
 		const onOpenDrawer = vi.fn();
 		render(BottomBar, { props: { onOpenDrawer } });
 
-		const dashboardLink = screen.getByRole('link', { name: new RegExp(m.nav_dashboard(), 'i') });
-		await fireEvent.click(dashboardLink);
+		const overviewLink = screen.getByRole('link', { name: new RegExp(m.nav_overview(), 'i') });
+		await fireEvent.click(overviewLink);
 		expect(onOpenDrawer).not.toHaveBeenCalled();
 	});
 
@@ -80,8 +88,8 @@ describe('BottomBar', () => {
 		pageMock.url = new URL('http://localhost/instances');
 		render(BottomBar, { props: { onOpenDrawer: vi.fn() } });
 
-		const dashboardLink = screen.getByRole('link', { name: new RegExp(m.nav_dashboard(), 'i') });
-		expect(dashboardLink.getAttribute('aria-current')).toBeNull();
+		const overviewLink = screen.getByRole('link', { name: new RegExp(m.nav_overview(), 'i') });
+		expect(overviewLink.getAttribute('aria-current')).toBeNull();
 
 		pageMock.url = new URL('http://localhost/');
 		const { container: rootContainer } = render(BottomBar, { props: { onOpenDrawer: vi.fn() } });

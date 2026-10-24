@@ -11,14 +11,14 @@ SPDX-License-Identifier: EUPL-1.2
 	import { api } from '#lib/api/client.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { keys } from '#lib/query.js';
-	import type { NavGroup } from './nav.js';
+	import { getNavItems, type NavItem } from './nav.js';
 
 	interface Props {
-		navGroups: NavGroup[];
+		navItems?: NavItem[];
 		open?: boolean;
 	}
 
-	let { navGroups, open = $bindable(false) }: Props = $props();
+	let { navItems = getNavItems(), open = $bindable(false) }: Props = $props();
 
 	let openerEl: HTMLElement | null = null;
 	let prevOpen = false;
@@ -28,21 +28,38 @@ SPDX-License-Identifier: EUPL-1.2
 		queryFn: async () => (await api.GET('/instances')).data ?? []
 	});
 
+	const connectionPages = [
+		{ href: '/connections/download-clients' as const, label: m.nav_download_clients() },
+		{ href: '/connections/seerr' as const, label: m.nav_seerr() },
+		{ href: '/connections/prowlarr' as const, label: m.nav_prowlarr() },
+		{ href: '/connections/configarr' as const, label: m.nav_configarr() }
+	];
+
 	const registry = $derived.by(() => {
 		const cmds: Command[] = [];
 
-		for (const group of navGroups) {
-			for (const item of group.items) {
-				cmds.push({
-					id: `nav-${item.href}`,
-					title: item.label,
-					subtitle: group.label,
-					group: group.label,
-					run: async () => {
-						await goto(resolve(item.href));
-					}
-				});
-			}
+		for (const item of navItems) {
+			cmds.push({
+				id: `nav-${item.href}`,
+				title: item.label,
+				subtitle: item.label,
+				group: m.nav_overview(),
+				run: async () => {
+					await goto(resolve(item.href));
+				}
+			});
+		}
+
+		for (const page of connectionPages) {
+			cmds.push({
+				id: `nav-${page.href}`,
+				title: page.label,
+				subtitle: m.nav_connections(),
+				group: m.nav_connections(),
+				run: async () => {
+					await goto(resolve(page.href));
+				}
+			});
 		}
 
 		cmds.push({

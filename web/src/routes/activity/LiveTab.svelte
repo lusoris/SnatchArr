@@ -9,7 +9,6 @@ SPDX-License-Identifier: EUPL-1.2
 	import { useSSE } from '@sveltesentio/realtime/use-sse';
 	import { api } from '#lib/api/client.js';
 	import ConnectionStatus from '#lib/components/ConnectionStatus.svelte';
-	import PageHeader from '#lib/components/PageHeader.svelte';
 	import { LIVE_EVENTS } from '#lib/live-events.js';
 	import {
 		eventToLiveFrame,
@@ -120,11 +119,10 @@ SPDX-License-Identifier: EUPL-1.2
 	}
 </script>
 
-<PageHeader title={m.live_title()}>
-	{#snippet status()}
-		<ConnectionStatus connected={sse.connected} />
-	{/snippet}
-</PageHeader>
+<div class="mb-4 flex items-center justify-between">
+	<h2 class="text-xl font-semibold">{m.live_title()}</h2>
+	<ConnectionStatus connected={sse.connected} />
+</div>
 
 {#if backlogError}
 	<p role="alert" class="card mb-4 border-line text-sm text-danger">

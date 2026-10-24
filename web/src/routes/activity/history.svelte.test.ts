@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { components } from '#lib/api/schema.js';
 import { m } from '#lib/paraglide/messages.js';
 import { renderWithQuery, stubGet } from '#lib/testing/harness.js';
-import HistoryPage from './+page.svelte';
+import HistoryTab from './HistoryTab.svelte';
 
 type Event = components['schemas']['Event'];
 
@@ -29,9 +29,9 @@ describe('history', () => {
 
 	it('renders heading, table headers and event rows in data grid', async () => {
 		stubGet({ '/events': [sampleEvent] });
-		renderWithQuery(HistoryPage);
+		renderWithQuery(HistoryTab);
 
-		expect(await screen.findByRole('heading', { level: 1, name: m.history_title() })).toBeTruthy();
+		expect(await screen.findByRole('heading', { level: 2, name: m.history_title() })).toBeTruthy();
 
 		const grid = await screen.findByRole('grid', { name: m.history_title() });
 		expect(grid).toBeTruthy();
@@ -56,7 +56,7 @@ describe('history', () => {
 				detail: 'history store failed'
 			})
 		});
-		renderWithQuery(HistoryPage);
+		renderWithQuery(HistoryTab);
 
 		expect((await screen.findByRole('alert')).textContent).toContain('history store failed');
 		expect(screen.queryByRole('grid')).toBeNull();
@@ -64,7 +64,7 @@ describe('history', () => {
 
 	it('renders empty data grid when there are no events', async () => {
 		stubGet({ '/events': [] });
-		renderWithQuery(HistoryPage);
+		renderWithQuery(HistoryTab);
 
 		const grid = await screen.findByRole('grid', { name: m.history_title() });
 		expect(grid).toBeTruthy();

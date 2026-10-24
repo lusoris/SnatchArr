@@ -43,17 +43,11 @@ test.describe('keyboard navigation', () => {
 		// Check every nav entry is reachable by tabbing sequentially
 		const expectedHrefs = [
 			'/',
+			'/activity',
 			'/instances',
-			'/history',
-			'/live',
-			'/schedules',
-			'/download-clients',
-			'/seerr',
-			'/prowlarr',
-			'/configarr',
-			'/settings',
-			'/logs',
-			'/about'
+			'/automation',
+			'/connections',
+			'/system'
 		];
 
 		for (let i = 1; i < expectedHrefs.length; i++) {

@@ -5,19 +5,7 @@
 import { m } from '#lib/paraglide/messages.js';
 
 export type AppRoute =
-	| '/'
-	| '/about'
-	| '/account'
-	| '/configarr'
-	| '/download-clients'
-	| '/history'
-	| '/instances'
-	| '/live'
-	| '/logs'
-	| '/prowlarr'
-	| '/schedules'
-	| '/seerr'
-	| '/settings';
+	'/' | '/activity' | '/instances' | '/automation' | '/connections' | '/system' | '/account';
 
 export interface NavItem {
 	href: AppRoute;
@@ -25,52 +13,18 @@ export interface NavItem {
 	icon: string;
 }
 
-export interface NavGroup {
-	label: string;
-	items: NavItem[];
-}
-
 /**
- * Returns navigation groups according to ADR-0015 section 3.
- * System group conditionally includes logs for administrators.
+ * Returns top-level navigation items according to ADR-0029 section 1.
+ * Exactly 6 primary entries in fixed order: Overview, Activity, Instances, Automation, Connections, System.
  */
-export function getNavGroups(isAdmin: boolean): NavGroup[] {
+export function getNavItems(): NavItem[] {
 	return [
-		{
-			label: m.nav_group_fleet(),
-			items: [
-				{ href: '/', label: m.nav_dashboard(), icon: 'layout-dashboard' },
-				{ href: '/instances', label: m.nav_instances(), icon: 'server' }
-			]
-		},
-		{
-			label: m.nav_group_activity(),
-			items: [
-				{ href: '/history', label: m.nav_history(), icon: 'history' },
-				{ href: '/live', label: m.nav_live(), icon: 'radio' }
-			]
-		},
-		{
-			label: m.nav_group_automation(),
-			items: [{ href: '/schedules', label: m.nav_schedules(), icon: 'clock' }]
-		},
-		{
-			label: m.nav_group_integrations(),
-			items: [
-				{ href: '/download-clients', label: m.nav_download_clients(), icon: 'cloud-download' },
-				{ href: '/seerr', label: m.nav_seerr(), icon: 'film' },
-				{ href: '/prowlarr', label: m.nav_prowlarr(), icon: 'search' },
-				{ href: '/configarr', label: m.nav_configarr(), icon: 'file-code' }
-			]
-		},
-		{
-			label: m.nav_group_system(),
-			items: [
-				{ href: '/settings', label: m.nav_settings(), icon: 'settings' },
-				...(isAdmin ? [{ href: '/logs' as const, label: m.nav_logs(), icon: 'terminal' }] : []),
-				{ href: '/about', label: m.nav_about(), icon: 'info' }
-			]
-		}
+		{ href: '/', label: m.nav_overview(), icon: 'layout-dashboard' },
+		{ href: '/activity', label: m.nav_activity(), icon: 'activity' },
+		{ href: '/instances', label: m.nav_instances(), icon: 'server' },
+		{ href: '/automation', label: m.nav_automation(), icon: 'clock' },
+		{ href: '/connections', label: m.nav_connections(), icon: 'link' },
+		{ href: '/system', label: m.nav_system(), icon: 'settings' }
 	];
 }
 

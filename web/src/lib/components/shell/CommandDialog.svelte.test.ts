@@ -9,9 +9,9 @@ import { axe } from 'vitest-axe';
 import { m } from '#lib/paraglide/messages.js';
 import { renderWithQuery, stubGet, type Instance } from '#lib/testing/harness.js';
 import CommandDialog from './CommandDialog.svelte';
-import { getNavGroups } from './nav.js';
+import { getNavItems } from './nav.js';
 
-const navGroups = getNavGroups(true);
+const navItems = getNavItems();
 
 const navMocks = vi.hoisted(() => ({
 	goto: vi.fn().mockResolvedValue(undefined)
@@ -64,7 +64,7 @@ describe('CommandDialog', () => {
 	});
 
 	it('positive: opens on Ctrl+K off Apple platforms, Escape closes', async () => {
-		const { container } = renderWithQuery(CommandDialog, { navGroups, open: false });
+		const { container } = renderWithQuery(CommandDialog, { navItems, open: false });
 
 		expect(screen.queryByRole('combobox')).toBeNull();
 
@@ -80,7 +80,7 @@ describe('CommandDialog', () => {
 
 	it('boundary: on Apple platforms Cmd+K opens and Ctrl+K does not', async () => {
 		vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel');
-		renderWithQuery(CommandDialog, { navGroups, open: false });
+		renderWithQuery(CommandDialog, { navItems, open: false });
 
 		window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }));
 		expect(screen.queryByRole('combobox')).toBeNull();
@@ -88,21 +88,8 @@ describe('CommandDialog', () => {
 		await openViaKey('k', 'metaKey');
 	});
 
-	it('negative: entries follow the given nav groups only', async () => {
-		renderWithQuery(CommandDialog, { navGroups: getNavGroups(false), open: true });
-		const input = await screen.findByRole('combobox');
-		const adminOnly = navGroups
-			.flatMap((g) => g.items)
-			.filter((i) => !getNavGroups(false).some((g) => g.items.some((j) => j.href === i.href)));
-		expect(adminOnly.length).toBeGreaterThan(0);
-		for (const item of adminOnly) {
-			await fireEvent.input(input, { target: { value: item.label } });
-			expect(screen.queryByText(new RegExp(`^${item.label} —`))).toBeNull();
-		}
-	});
-
 	it('negative: does not open on unrelated keys or extra modifiers', async () => {
-		renderWithQuery(CommandDialog, { navGroups, open: false });
+		renderWithQuery(CommandDialog, { navItems, open: false });
 
 		// Ctrl+J does not open
 		window.dispatchEvent(new KeyboardEvent('keydown', { key: 'j', ctrlKey: true, bubbles: true }));
@@ -120,7 +107,7 @@ describe('CommandDialog', () => {
 	});
 
 	it('boundary: opens with uppercase K (Ctrl+K)', async () => {
-		renderWithQuery(CommandDialog, { navGroups, open: false });
+		renderWithQuery(CommandDialog, { navItems, open: false });
 
 		await openViaKey('K');
 	});
@@ -132,7 +119,7 @@ describe('CommandDialog', () => {
 		opener.focus();
 		expect(document.activeElement).toBe(opener);
 
-		renderWithQuery(CommandDialog, { navGroups, open: false });
+		renderWithQuery(CommandDialog, { navItems, open: false });
 
 		// Open via Ctrl+K while opener is focused
 		await openViaKey();
@@ -147,24 +134,40 @@ describe('CommandDialog', () => {
 	});
 
 	it('positive: selecting a nav entry executes goto with resolved route', async () => {
-		renderWithQuery(CommandDialog, { navGroups, open: true });
+		renderWithQuery(CommandDialog, { navItems, open: true });
 
 		await vi.waitFor(() => {
 			expect(screen.getByRole('combobox')).toBeTruthy();
 		});
 
-		// Search for Dashboard
+		// Search for Overview
 		const input = screen.getByRole('combobox');
-		await fireEvent.input(input, { target: { value: m.nav_dashboard() } });
+		await fireEvent.input(input, { target: { value: m.nav_overview() } });
 
-		const dashboardOption = await screen.findByText(new RegExp(m.nav_dashboard(), 'i'));
-		await fireEvent.click(dashboardOption);
+		const overviewOption = await screen.findByText(new RegExp(m.nav_overview(), 'i'));
+		await fireEvent.click(overviewOption);
 
 		expect(navMocks.goto).toHaveBeenCalledWith('/');
 	});
 
+	it('positive: includes connections sub-pages and navigates to them', async () => {
+		renderWithQuery(CommandDialog, { navItems, open: true });
+
+		await vi.waitFor(() => {
+			expect(screen.getByRole('combobox')).toBeTruthy();
+		});
+
+		const input = screen.getByRole('combobox');
+		await fireEvent.input(input, { target: { value: m.nav_download_clients() } });
+
+		const dlOption = await screen.findByText(new RegExp(m.nav_download_clients(), 'i'));
+		await fireEvent.click(dlOption);
+
+		expect(navMocks.goto).toHaveBeenCalledWith('/connections/download-clients');
+	});
+
 	it('positive: includes instances in search and navigates to instance detail', async () => {
-		renderWithQuery(CommandDialog, { navGroups, open: true });
+		renderWithQuery(CommandDialog, { navItems, open: true });
 
 		await vi.waitFor(() => {
 			expect(screen.getByRole('combobox')).toBeTruthy();
@@ -179,7 +182,7 @@ describe('CommandDialog', () => {
 	});
 
 	it('negative: typing an unknown search term shows empty message', async () => {
-		renderWithQuery(CommandDialog, { navGroups, open: true });
+		renderWithQuery(CommandDialog, { navItems, open: true });
 
 		const input = await screen.findByRole('combobox');
 		await fireEvent.input(input, { target: { value: 'nonexistent-route-xyz' } });

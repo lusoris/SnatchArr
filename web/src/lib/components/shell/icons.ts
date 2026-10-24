@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 import { createLucideLoader } from '@sveltesentio/ui/icons';
+import Activity from '@lucide/svelte/icons/activity';
 import Clock from '@lucide/svelte/icons/clock';
 import CloudDownload from '@lucide/svelte/icons/cloud-download';
 import Ellipsis from '@lucide/svelte/icons/ellipsis';
@@ -12,6 +13,7 @@ import Heart from '@lucide/svelte/icons/heart';
 import History from '@lucide/svelte/icons/history';
 import Info from '@lucide/svelte/icons/info';
 import LayoutDashboard from '@lucide/svelte/icons/layout-dashboard';
+import Link from '@lucide/svelte/icons/link';
 import LogOut from '@lucide/svelte/icons/log-out';
 import Menu from '@lucide/svelte/icons/menu';
 import Radio from '@lucide/svelte/icons/radio';
@@ -29,6 +31,7 @@ import X from '@lucide/svelte/icons/x';
  * icons never load in production.
  */
 export const shellIconLoader = createLucideLoader({
+	Activity,
 	Clock,
 	CloudDownload,
 	Ellipsis,
@@ -38,6 +41,7 @@ export const shellIconLoader = createLucideLoader({
 	History,
 	Info,
 	LayoutDashboard,
+	Link,
 	LogOut,
 	Menu,
 	Radio,

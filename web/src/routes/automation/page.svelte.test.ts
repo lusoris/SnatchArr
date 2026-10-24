@@ -75,9 +75,7 @@ describe('schedules', () => {
 		stubGet(baseStubs);
 		renderWithQuery(SchedulesPage);
 
-		expect(
-			await screen.findByRole('heading', { level: 1, name: m.schedules_title() })
-		).toBeTruthy();
+		expect(await screen.findByRole('heading', { level: 1, name: m.nav_automation() })).toBeTruthy();
 
 		const table = await screen.findByRole('table');
 		expect(table).toBeTruthy();

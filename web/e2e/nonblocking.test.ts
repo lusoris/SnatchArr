@@ -8,7 +8,7 @@ import { mockInstancePolicyApi, mockSettingsApi } from './mocks.js';
 const testInstanceId = '00000000-0000-0000-0000-000000000001';
 
 test.describe('nonblocking', () => {
-	for (const initialPath of ['/instances', '/live']) {
+	for (const initialPath of ['/activity', '/automation', '/connections', '/system']) {
 		test(`delayed 10s API responses on ${initialPath} do not block shell render or navigation, and 503 renders ProblemNote or skeleton`, async ({
 			page
 		}) => {
@@ -41,11 +41,11 @@ test.describe('nonblocking', () => {
 			// 2. Nav click changes URL within 1000 ms while requests are pending
 			const targetLink = page
 				.getByRole('link', {
-					name: initialPath === '/live' ? /History|Ereignisverlauf/i : /Schedules|Zeitpläne/i
+					name: initialPath === '/activity' ? /Automation|Automatisierung/i : /Activity|Aktivität/i
 				})
 				.first();
 			await targetLink.click();
-			await expect(page).toHaveURL(initialPath === '/live' ? /\/history/ : /\/schedules/, {
+			await expect(page).toHaveURL(initialPath === '/activity' ? /\/automation/ : /\/activity/, {
 				timeout: 1000
 			});
 
@@ -53,7 +53,7 @@ test.describe('nonblocking', () => {
 			await expect(
 				page
 					.locator(
-						'.problem-note, [role="alert"], [data-testid="skeleton"], [data-testid="live-skeleton"]'
+						'.problem-note, [role="alert"], [data-testid="skeleton"], [data-testid="live-skeleton"], a.card'
 					)
 					.first()
 			).toBeVisible({
@@ -72,10 +72,10 @@ test.describe('nonblocking', () => {
 		const loading = page.locator('[aria-live="polite"]').first();
 		await expect(loading).toBeVisible({ timeout: 1000 });
 
-		// Navigation stays interactive: click settings link within 1000 ms
-		const settingsLink = page.getByRole('link', { name: /Settings|Einstellungen/i }).first();
-		await settingsLink.click();
-		await expect(page).toHaveURL(/\/settings/, { timeout: 1000 });
+		// Navigation stays interactive: click system link within 1000 ms
+		const systemLink = page.getByRole('link', { name: /System/i }).first();
+		await systemLink.click();
+		await expect(page).toHaveURL(/\/system/, { timeout: 1000 });
 	});
 
 	test('policy tab: 503 renders problem note and form recovers', async ({ page }) => {
@@ -109,11 +109,11 @@ test.describe('nonblocking', () => {
 		await expect(saveBtn).toBeEnabled({ timeout: 3000 });
 	});
 
-	test('settings: delayed 10s API response shows loading and remains interactive', async ({
+	test('system: delayed 10s API response shows loading and remains interactive', async ({
 		page
 	}) => {
 		await mockSettingsApi(page, { delayMs: 10_000 });
-		await page.goto('/settings');
+		await page.goto('/system');
 
 		const loading = page.locator('[aria-live="polite"]').first();
 		await expect(loading).toBeVisible({ timeout: 1000 });
@@ -123,9 +123,9 @@ test.describe('nonblocking', () => {
 		await expect(page).toHaveURL(/\/instances/, { timeout: 1000 });
 	});
 
-	test('settings: 503 renders problem note and form recovers', async ({ page }) => {
+	test('system: 503 renders problem note and form recovers', async ({ page }) => {
 		await mockSettingsApi(page, { status: 503 });
-		await page.goto('/settings');
+		await page.goto('/system');
 
 		const problem = page.locator('.problem-note, [role="alert"]').first();
 		await expect(problem).toBeVisible({ timeout: 12_000 });
@@ -139,9 +139,9 @@ test.describe('nonblocking', () => {
 		await expect(field).toHaveValue('75');
 	});
 
-	test('settings: save action shows pending state and recovers on 503', async ({ page }) => {
+	test('system: save action shows pending state and recovers on 503', async ({ page }) => {
 		await mockSettingsApi(page, { saveDelayMs: 400, saveStatus: 503 });
-		await page.goto('/settings');
+		await page.goto('/system');
 
 		const saveBtn = page.getByRole('button', { name: /Save|Speichern/i }).first();
 		await expect(saveBtn).toBeVisible({ timeout: 3000 });

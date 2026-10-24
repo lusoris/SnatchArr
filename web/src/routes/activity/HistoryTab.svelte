@@ -32,7 +32,7 @@ SPDX-License-Identifier: EUPL-1.2
 	];
 </script>
 
-<h1 class="mb-4 text-2xl font-semibold">{m.history_title()}</h1>
+<h2 class="mb-4 text-2xl font-semibold">{m.history_title()}</h2>
 
 {#if events.isPending}
 	<p aria-live="polite">{m.loading()}</p>
