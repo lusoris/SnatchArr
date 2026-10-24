@@ -365,6 +365,7 @@ Where image set files and galleries should reside on disk:
   - *Option c: Internal application state volume* (e.g. `/var/lib/snatcharr/imagesets/`).
     - *Risk*: Combines high-volume media assets with lightweight database backups, complicating storage tiering.
 - **Recommendation**: **Option b** (Dedicated external directory path configured in module settings, with optional scene co-location linking).
+- **Answered (2026-10-24, controller ledger `snatcharr-adult-image-set-storage-path`)**: Option b, narrowed. One configured directory, validated at boot: a missing directory refuses start-up. A scene link is optional. Directories managed by an *arr app stay untouched, and Jellyfin must be able to index the directory (ADR-0028). The cluster path and any new dataset are a later deployment order.
 
 ### 3. `adult-goenvoy-upstream-scope`
 
@@ -376,16 +377,17 @@ Extent of Stash-box client capabilities upstreamed to `goenvoy`:
   - *Option b: Maintain bespoke GraphQL mutations in `api/internal/adult`*.
     - *Risk*: Breaches HISS-19 ("reuse before writing") by splitting stash-box protocol logic across two repositories.
 - **Recommendation**: **Option a** (Reuse goenvoy v2.0.3, upstreaming mutation additions).
+- **Answered (2026-10-24, controller ledger `snatcharr-adult-goenvoy-upstream-scope`)**: Option a. Typed `favoritePerformer` and `favoriteStudio` wrappers go to goenvoy `metadata/adult/stashbox` by pull request; the generic `Query` method bridges until a tagged goenvoy release, and SnatchArr then pins that tag (no pseudo-version).
 
 ## Follow-ups
 
-- [ ] Operator decision on open questions (`adult-module-display-name`, `adult-image-set-storage-path`, `adult-goenvoy-upstream-scope`).
+- [ ] Operator decision on open question 1 (`adult-module-display-name`); questions 2 and 3 answered.
 - [ ] Upstream PR in `github.com/golusoris/goenvoy` for `metadata/adult/stashbox` write mutations (`favoritePerformer`, `favoriteStudio`).
 - [ ] Database migration slice: tables `adult_stashbox_instances`, `adult_favorite_performers`, `adult_performer_links`, `adult_image_sets`, `adult_image_items`.
 - [ ] Go control plane slice: module descriptor registration in `api/internal/modules` and `ModuleGateMiddleware` integration ([ADR-0025](0025-module-switches.md)).
 - [ ] Stash-box federation slice: multi-instance client pooling, leader loop in `leader_loops` fx group with quiescent tick, bounded pagination sync.
 - [ ] Whisparr request slice: scene request intake, `StashId` mapping for Whisparr v3 and series mapping for v2, hourly cap debit.
-- [ ] Image set engine slice: directory scanner, WebP thumbnail generator with 100 MB decode bound, streaming image server.
+- [ ] Image set engine slice: directory scanner, WebP thumbnail generator with 100 MB decode bound, streaming image server, and a boot test that refuses a missing image-set directory.
 - [ ] OpenAPI and Jellyfin integration slice: `/api/v1/adult/*` routes with `x-module: adult` and companion Jellyfin endpoints ([ADR-0018](0018-product-front-door.md) follow-up 4, issue [#567](https://github.com/lusoris/SnatchArr/issues/567)).
 - [ ] Frontend SPA slice: adult settings toggle, stash-box instance management, favourites search, image set gallery viewer in Svelte 5.
 

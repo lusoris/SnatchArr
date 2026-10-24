@@ -289,6 +289,7 @@ An audit of `github.com/golusoris/goenvoy` at tag `mediaserver/jellyfin/v3.1.0` 
    - *Option b*: Configurable threshold setting (`snatcharr.adult.min_parental_rating`, default 18) combined with tag blacklist (`snatcharr.adult.blocked_tags`). (Risk: Minor configuration surface addition).
    - *Option c*: Strict metadata tag whitelist/blacklist only, ignoring age integers. (Risk: Bypasses standard Jellyfin parental age controls).
    - *Recommendation*: Option b.
+   - *Answered (2026-10-24, controller ledger `snatcharr-adult-rating-scale`)*: Option b, narrowed. The gate reads the user's Jellyfin policy fields `MaxParentalRating` (`null` = unrestricted), `BlockedTags` and `AllowedTags`. The configurable threshold (default 18) only classifies which items count as adult; it never widens access. SnatchArr never grants a user more than Jellyfin allows that user.
 2. **Default role for new Jellyfin sign-ins (`snatcharr-jellyfin-default-role`)**:
    - *Option a*: Always assign `requester`. (Risk: New users can immediately submit requests before admin review).
    - *Option b*: Always assign `viewer`. (Risk: Requires admin intervention to elevate household members).
@@ -304,12 +305,12 @@ An audit of `github.com/golusoris/goenvoy` at tag `mediaserver/jellyfin/v3.1.0` 
 
 - [ ] Upstream PR to `github.com/golusoris/goenvoy` (`mediaserver/jellyfin`): Add `InitiateQuickConnect`, `CheckQuickConnect`, `AuthenticateWithQuickConnect`, and `GetUser(id)`.
 - [ ] Upstream PR to `github.com/golusoris/goenvoy` (`mediaserver/jellyfin`): Move `MaxParentalRating` to `UserPolicy` as `*int`; add `EnableAllFolders`, `EnabledFolders`, `AllowedTags` and `BlockUnratedItems`; return `AuthenticationResult` from `AuthenticateByName`.
-- [ ] Decide open questions 1-3 (controller DECISION lines).
+- [ ] Decide open questions 2 and 3 (controller DECISION lines; question 1 answered).
 - [ ] Database migration: Add `'requester'` to role enum/checks and create `jellyfin_user_id` column or expanded `external_id` indexes on `users`.
 - [ ] Implement `requireRequester` API middleware and update OpenAPI security schemes.
 - [ ] Implement Jellyfin credential authentication handler (`POST /api/v1/auth/jellyfin`) in `api/internal/auth`.
 - [ ] Implement Jellyfin Quick Connect handlers in `api/internal/auth`.
-- [ ] Implement parental rating and blocked tags filtering in media catalog and adult module endpoints.
+- [ ] Implement parental rating and tag filtering in media catalog and adult module endpoints, with boundary tests at threshold minus one, at the threshold and with `MaxParentalRating` `null`, plus a `BlockedTags` case.
 - [ ] Update SvelteKit SPA navigation and request dialogs to gate on `session.isRequester`.
 
 ## References
