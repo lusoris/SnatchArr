@@ -11,11 +11,10 @@ This guide describes how to connect modern editor environments—specifically Cu
 
 ## Protocol and Transport
 
-SnatchArr exposes a native Model Context Protocol server over Streamable HTTP:
+SnatchArr exposes a native Model Context Protocol server over two transports:
 
-- **Endpoint**: `http://localhost:8080/api/v1/mcp` (adjust the host and port for your deployment).
-- **Transport**: Streamable HTTP (sessionless JSON-RPC 2.0).
-- **Subprocess stdio**: A local CLI wrapper (`snatcharr mcp stdio`) is planned for a future release; current configurations connect directly over HTTP.
+- **Streamable HTTP**: `http://localhost:8080/api/v1/mcp` (sessionless JSON-RPC 2.0).
+- **Subprocess stdio**: `snatcharr mcp stdio` (or `docker exec -i -e SNATCHARR_URL -e SNATCHARR_API_KEY <container> /snatcharr-api mcp stdio` for container deployments), a thin proxy that delegates to `/api/v1/mcp` via `SNATCHARR_URL` and `SNATCHARR_API_KEY`.
 
 ---
 
@@ -28,9 +27,10 @@ Connecting to SnatchArr requires:
 
 See [Module Toggle Switch](index.md#2-module-toggle-switch) and [Authentication and Permission Scopes](index.md#3-authentication-and-permission-scopes) for full scope descriptions, challenge behavior, and write-tool activation instructions.
 
-Export the API key in your shell environment before launching your editor:
+Export the connection environment variables before launching your editor:
 
 ```bash
+export SNATCHARR_URL="http://localhost:8080"
 export SNATCHARR_API_KEY="your-snatcharr-api-key"
 ```
 
@@ -40,9 +40,47 @@ export SNATCHARR_API_KEY="your-snatcharr-api-key"
 
 Cursor reads MCP configurations from `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (workspace root).
 
-### Configuration Snippet (`.cursor/mcp.json`)
+### Option A: Subprocess stdio Transport (`.cursor/mcp.json`)
 
-Create or update `.cursor/mcp.json`:
+To compile and install the host `snatcharr` CLI binary, see [Install the proxy](index.md#install-the-proxy).
+
+Configure the stdio server using the local proxy or container:
+
+```json
+{
+  "mcpServers": {
+    "snatcharr": {
+      "command": "snatcharr",
+      "args": ["mcp", "stdio"],
+      "env": {
+        "SNATCHARR_URL": "http://localhost:8080",
+        "SNATCHARR_API_KEY": "${env:SNATCHARR_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+For containerized deployments:
+
+```json
+{
+  "mcpServers": {
+    "snatcharr": {
+      "command": "docker",
+      "args": ["exec", "-i", "-e", "SNATCHARR_URL", "-e", "SNATCHARR_API_KEY", "snatcharr-api", "/snatcharr-api", "mcp", "stdio"],
+      "env": {
+        "SNATCHARR_URL": "http://localhost:8080",
+        "SNATCHARR_API_KEY": "${env:SNATCHARR_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+### Option B: Streamable HTTP Transport (`.cursor/mcp.json`)
+
+Alternatively, configure the HTTP endpoint directly:
 
 ```json
 {
@@ -88,9 +126,47 @@ cp -r skills/snatcharr/* .cursor/skills/snatcharr/
 
 Visual Studio Code supports MCP servers via workspace configuration files located at `.vscode/mcp.json` or through profile-level settings.
 
-### Configuration Snippet (`.vscode/mcp.json`)
+### Option A: Subprocess stdio Transport (`.vscode/mcp.json`)
 
-Create or update `.vscode/mcp.json`:
+To compile and install the host `snatcharr` CLI binary, see [Install the proxy](index.md#install-the-proxy).
+
+Configure the stdio server using the local proxy:
+
+```json
+{
+  "mcpServers": {
+    "snatcharr": {
+      "command": "snatcharr",
+      "args": ["mcp", "stdio"],
+      "env": {
+        "SNATCHARR_URL": "http://localhost:8080",
+        "SNATCHARR_API_KEY": "${env:SNATCHARR_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+For containerized deployments:
+
+```json
+{
+  "mcpServers": {
+    "snatcharr": {
+      "command": "docker",
+      "args": ["exec", "-i", "-e", "SNATCHARR_URL", "-e", "SNATCHARR_API_KEY", "snatcharr-api", "/snatcharr-api", "mcp", "stdio"],
+      "env": {
+        "SNATCHARR_URL": "http://localhost:8080",
+        "SNATCHARR_API_KEY": "${env:SNATCHARR_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+### Option B: Streamable HTTP Transport (`.vscode/mcp.json`)
+
+Alternatively, configure the HTTP endpoint directly:
 
 ```json
 {

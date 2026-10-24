@@ -11,11 +11,10 @@ This guide describes how to connect OpenAI Codex to SnatchArr's Model Context Pr
 
 ## Protocol and Transport
 
-SnatchArr exposes a native Model Context Protocol server over Streamable HTTP:
+SnatchArr exposes a native Model Context Protocol server over two transports:
 
-- **Endpoint**: `http://localhost:8080/api/v1/mcp` (adjust the host and port for your deployment).
-- **Transport**: Streamable HTTP (sessionless JSON-RPC 2.0).
-- **Subprocess stdio**: A local CLI wrapper (`snatcharr mcp stdio`) is planned for a future release; current configurations connect directly over HTTP.
+- **Streamable HTTP**: `http://localhost:8080/api/v1/mcp` (sessionless JSON-RPC 2.0).
+- **Subprocess stdio**: `snatcharr mcp stdio` (or `docker exec -i -e SNATCHARR_URL -e SNATCHARR_API_KEY <container> /snatcharr-api mcp stdio` for container deployments), a thin proxy that delegates to `/api/v1/mcp` via `SNATCHARR_URL` and `SNATCHARR_API_KEY`.
 
 ---
 
@@ -28,9 +27,10 @@ Connecting to SnatchArr requires:
 
 See [Module Toggle Switch](index.md#2-module-toggle-switch) and [Authentication and Permission Scopes](index.md#3-authentication-and-permission-scopes) for full scope descriptions, challenge behavior, and write-tool activation instructions.
 
-Export the API key in your shell environment:
+Export the connection environment variables in your shell:
 
 ```bash
+export SNATCHARR_URL="http://localhost:8080"
 export SNATCHARR_API_KEY="your-snatcharr-api-key"
 ```
 
@@ -40,9 +40,43 @@ export SNATCHARR_API_KEY="your-snatcharr-api-key"
 
 Codex manages MCP server connections using TOML configuration files or the `codex mcp` CLI.
 
-### Option A: Configuration File (`config.toml`)
+### Option A: Subprocess stdio Transport
+
+To compile and install the host `snatcharr` CLI binary, see [Install the proxy](index.md#install-the-proxy).
+
+#### Configuration File (`config.toml`)
 
 Add the `snatcharr` server block to `~/.codex/config.toml` (global) or `.codex/config.toml` (workspace):
+
+```toml
+[mcp_servers.snatcharr]
+command = "snatcharr"
+args = ["mcp", "stdio"]
+env = { SNATCHARR_URL = "http://localhost:8080", SNATCHARR_API_KEY = "your-snatcharr-api-key" }
+```
+
+For containerized deployments where the binary `/snatcharr-api` runs inside a container:
+
+```toml
+[mcp_servers.snatcharr]
+command = "docker"
+args = ["exec", "-i", "-e", "SNATCHARR_URL", "-e", "SNATCHARR_API_KEY", "snatcharr-api", "/snatcharr-api", "mcp", "stdio"]
+env = { SNATCHARR_URL = "http://localhost:8080", SNATCHARR_API_KEY = "your-snatcharr-api-key" }
+```
+
+#### CLI Helper
+
+Register the stdio server using the Codex CLI:
+
+```bash
+codex mcp add snatcharr --env SNATCHARR_URL="http://localhost:8080" --env SNATCHARR_API_KEY="${SNATCHARR_API_KEY}" -- snatcharr mcp stdio
+```
+
+### Option B: Streamable HTTP Transport
+
+#### Configuration File (`config.toml`)
+
+Add the HTTP server block:
 
 ```toml
 [mcp_servers.snatcharr]
@@ -53,7 +87,7 @@ bearer_token_env_var = "SNATCHARR_API_KEY"
 > [!IMPORTANT]
 > In Codex TOML configurations, `http_headers` only accepts static string literals and does not support environment variable interpolation. Use `bearer_token_env_var` to supply your API key dynamically from the named environment variable without committing secrets to disk. For custom non-bearer headers, Codex provides `env_http_headers` to map header names to environment variables.
 
-### Option B: CLI Helper
+#### CLI Helper
 
 Register the server using the Codex CLI:
 

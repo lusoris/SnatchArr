@@ -15,6 +15,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/app"
 	"github.com/lusoris/SnatchArr/api/internal/buildinfo"
 	"github.com/lusoris/SnatchArr/api/internal/healthprobe"
+	"github.com/lusoris/SnatchArr/api/internal/mcpstdio"
 )
 
 // Build metadata injected by -ldflags (see Dockerfile / GoReleaser).
@@ -31,6 +32,9 @@ func main() {
 	// health check in a distroless image).
 	if len(os.Args) > 1 && os.Args[1] == healthprobe.Command {
 		os.Exit(healthprobe.Run(context.Background(), os.Getenv, os.Stderr))
+	}
+	if len(os.Args) > 1 && os.Args[1] == mcpstdio.Command {
+		os.Exit(mcpstdio.Run(context.Background(), os.Args[2:], os.Getenv, os.Stdin, os.Stdout, os.Stderr))
 	}
 	fx.New(
 		fx.Supply(buildinfo.Info{Version: version, Commit: commit, Date: date}),

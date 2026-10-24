@@ -11,11 +11,10 @@ This guide describes how to connect Anthropic Claude Code to SnatchArr's Model C
 
 ## Protocol and Transport
 
-SnatchArr exposes a native Model Context Protocol server over Streamable HTTP:
+SnatchArr exposes a native Model Context Protocol server over two transports:
 
-- **Endpoint**: `http://localhost:8080/api/v1/mcp` (adjust the host and port for your deployment).
-- **Transport**: Streamable HTTP (sessionless JSON-RPC 2.0).
-- **Subprocess stdio**: A local CLI wrapper (`snatcharr mcp stdio`) is planned for a future release; current configurations connect directly over HTTP.
+- **Streamable HTTP**: `http://localhost:8080/api/v1/mcp` (sessionless JSON-RPC 2.0).
+- **Subprocess stdio**: `snatcharr mcp stdio` (or `docker exec -i -e SNATCHARR_URL -e SNATCHARR_API_KEY <container> /snatcharr-api mcp stdio` for container deployments), a thin proxy that delegates to `/api/v1/mcp` via `SNATCHARR_URL` and `SNATCHARR_API_KEY`.
 
 ---
 
@@ -28,9 +27,10 @@ Connecting to SnatchArr requires:
 
 See [Module Toggle Switch](index.md#2-module-toggle-switch) and [Authentication and Permission Scopes](index.md#3-authentication-and-permission-scopes) for full scope descriptions, challenge behavior, and write-tool activation instructions.
 
-Export the API key in your shell environment:
+Export the connection environment variables in your shell:
 
 ```bash
+export SNATCHARR_URL="http://localhost:8080"
 export SNATCHARR_API_KEY="your-snatcharr-api-key"
 ```
 
@@ -40,20 +40,59 @@ export SNATCHARR_API_KEY="your-snatcharr-api-key"
 
 Claude Code supports configuring MCP servers via CLI commands or configuration files.
 
-### Option A: CLI Helper
+### Option A: Subprocess stdio Transport
 
-Register the HTTP transport server using the `claude mcp add` command:
+To compile and install the host `snatcharr` CLI binary, see [Install the proxy](index.md#install-the-proxy).
+
+#### CLI Registration
+
+Register the local CLI proxy using `claude mcp add`:
+
+```bash
+claude mcp add snatcharr -e SNATCHARR_URL="http://localhost:8080" -e SNATCHARR_API_KEY="${SNATCHARR_API_KEY}" -- snatcharr mcp stdio
+```
+
+For containerized deployments where the binary `/snatcharr-api` runs inside a container:
+
+```bash
+claude mcp add snatcharr -e SNATCHARR_URL="http://localhost:8080" -e SNATCHARR_API_KEY="${SNATCHARR_API_KEY}" -- docker exec -i -e SNATCHARR_URL -e SNATCHARR_API_KEY snatcharr-api /snatcharr-api mcp stdio
+```
+
+#### Project Configuration (`.mcp.json`)
+
+Alternatively, configure the stdio server at the project root in `.mcp.json`, where Claude Code natively expands `${VAR}` in `env`:
+
+```json
+{
+  "mcpServers": {
+    "snatcharr": {
+      "command": "snatcharr",
+      "args": ["mcp", "stdio"],
+      "env": {
+        "SNATCHARR_URL": "http://localhost:8080",
+        "SNATCHARR_API_KEY": "${SNATCHARR_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+### Option B: Streamable HTTP Transport
+
+#### CLI Registration
+
+Register the HTTP transport server using `claude mcp add`:
 
 ```bash
 claude mcp add --transport http snatcharr http://localhost:8080/api/v1/mcp --header "Authorization: Bearer ${SNATCHARR_API_KEY}"
 ```
 
 > [!IMPORTANT]
-> The shell expands `${SNATCHARR_API_KEY}` before executing the command, and `claude mcp add` stores the expanded literal value into the client configuration. For dynamic environment variable expansion that avoids persisting plaintext secrets into configuration files, prefer Option B (`.mcp.json`).
+> The shell expands `${SNATCHARR_API_KEY}` before executing the command, and `claude mcp add` stores the expanded literal value into the client configuration. For dynamic environment variable expansion that avoids persisting plaintext secrets into configuration files, prefer Option A or Option B (`.mcp.json`).
 
-### Option B: Project Configuration (`.mcp.json`)
+#### Project Configuration (`.mcp.json`)
 
-Alternatively, define the server at the project root in `.mcp.json`, where Claude Code natively expands `${VAR}` in `url` and `headers` at runtime:
+Alternatively, define the HTTP server in `.mcp.json`:
 
 ```json
 {

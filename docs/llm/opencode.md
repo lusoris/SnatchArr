@@ -11,11 +11,10 @@ This guide describes how to connect OpenCode to SnatchArr's Model Context Protoc
 
 ## Protocol and Transport
 
-SnatchArr exposes a native Model Context Protocol server over Streamable HTTP:
+SnatchArr exposes a native Model Context Protocol server over two transports:
 
-- **Endpoint**: `http://localhost:8080/api/v1/mcp` (adjust the host and port for your deployment).
-- **Transport**: Streamable HTTP (sessionless JSON-RPC 2.0).
-- **Subprocess stdio**: A local CLI wrapper (`snatcharr mcp stdio`) is planned for a future release; current configurations connect directly over HTTP.
+- **Streamable HTTP**: `http://localhost:8080/api/v1/mcp` (sessionless JSON-RPC 2.0).
+- **Subprocess stdio**: `snatcharr mcp stdio` (or `docker exec -i -e SNATCHARR_URL -e SNATCHARR_API_KEY <container> /snatcharr-api mcp stdio` for container deployments), a thin proxy that delegates to `/api/v1/mcp` via `SNATCHARR_URL` and `SNATCHARR_API_KEY`.
 
 ---
 
@@ -28,9 +27,10 @@ Connecting to SnatchArr requires:
 
 See [Module Toggle Switch](index.md#2-module-toggle-switch) and [Authentication and Permission Scopes](index.md#3-authentication-and-permission-scopes) for full scope descriptions, challenge behavior, and write-tool activation instructions.
 
-Export the API key in your shell environment:
+Export the connection environment variables in your shell:
 
 ```bash
+export SNATCHARR_URL="http://localhost:8080"
 export SNATCHARR_API_KEY="your-snatcharr-api-key"
 ```
 
@@ -40,9 +40,65 @@ export SNATCHARR_API_KEY="your-snatcharr-api-key"
 
 OpenCode supports configuring MCP servers via `opencode.json` (or `opencode.jsonc`) or via the `opencode mcp` CLI.
 
-### Option A: Configuration File (`opencode.json`)
+### Option A: Subprocess stdio Transport
 
-Add the `snatcharr` server under the `mcp` key in `~/.config/opencode/opencode.json` (global) or `opencode.json` (workspace):
+To compile and install the host `snatcharr` CLI binary, see [Install the proxy](index.md#install-the-proxy).
+
+#### Configuration File (`opencode.json`)
+
+Add the local proxy server under the `mcp` key in `~/.config/opencode/opencode.json` (global) or `opencode.json` (workspace):
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "snatcharr": {
+      "type": "local",
+      "command": "snatcharr",
+      "args": ["mcp", "stdio"],
+      "enabled": true,
+      "env": {
+        "SNATCHARR_URL": "http://localhost:8080",
+        "SNATCHARR_API_KEY": "{env:SNATCHARR_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+For containerized deployments:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "snatcharr": {
+      "type": "local",
+      "command": "docker",
+      "args": ["exec", "-i", "-e", "SNATCHARR_URL", "-e", "SNATCHARR_API_KEY", "snatcharr-api", "/snatcharr-api", "mcp", "stdio"],
+      "enabled": true,
+      "env": {
+        "SNATCHARR_URL": "http://localhost:8080",
+        "SNATCHARR_API_KEY": "{env:SNATCHARR_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+#### CLI Helper
+
+Register the stdio server using the CLI:
+
+```bash
+opencode mcp add snatcharr --command snatcharr --args mcp,stdio --env SNATCHARR_URL="http://localhost:8080" --env SNATCHARR_API_KEY="${SNATCHARR_API_KEY}"
+```
+
+### Option B: Streamable HTTP Transport
+
+#### Configuration File (`opencode.json`)
+
+Add the remote server:
 
 ```json
 {
@@ -63,7 +119,7 @@ Add the `snatcharr` server under the `mcp` key in `~/.config/opencode/opencode.j
 > [!IMPORTANT]
 > OpenCode's `{env:VARIABLE_NAME}` syntax interpolates the secret from your environment dynamically at runtime. Never place raw bearer credentials into the JSON configuration file.
 
-### Option B: CLI Helper
+#### CLI Helper
 
 Register the remote MCP server using the CLI:
 
