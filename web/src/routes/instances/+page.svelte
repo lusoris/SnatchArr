@@ -13,6 +13,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import PageHeader from '#lib/components/PageHeader.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import ResetMemory from '#lib/components/ResetMemory.svelte';
+	import UrlText from '#lib/components/UrlText.svelte';
 	import type { AppKind } from '#lib/kinds.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { instanceKindLabel, probeMessage } from '#lib/products.js';
@@ -98,7 +99,7 @@ SPDX-License-Identifier: EUPL-1.2
 							</div>
 						</td>
 						<td>{instanceKindLabel(inst.kind, inst.last_seen_product)}</td>
-						<td class="break-all">{inst.base_url}</td>
+						<td><UrlText url={inst.base_url} /></td>
 						<td>{inst.source}</td>
 						<td>
 							{#if inst.enabled}

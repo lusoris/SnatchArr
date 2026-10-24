@@ -10,7 +10,8 @@ import { expect, type Page } from '@playwright/test';
 
 export const VIEWPORTS = {
 	desktop: { width: 1280, height: 800 },
-	phone: { width: 390, height: 844 }
+	phone: { width: 390, height: 844 },
+	phone375: { width: 375, height: 812 }
 } as const;
 
 export const AUTH_ROUTES = [
@@ -349,6 +350,78 @@ function checkLabelValueGaps(): LabelValueOffender[] {
 	return offenders;
 }
 
+export interface UrlBreakOffender {
+	url: string;
+	prevChar: string;
+	nextChar: string;
+	segment: string;
+	segmentWidth: number;
+	elementWidth: number;
+}
+
+type CPos = { c: string; n: Text; o: number };
+type Cand = { u: string; el: HTMLElement; ch: CPos[] };
+export function checkUrlBreaks(): UrlBreakOffender[] {
+	const d = /[.:?&#/]/,
+		cands: Cand[] = [],
+		offenders: UrlBreakOffender[] = [],
+		tw = document.createTreeWalker(document.body, 4),
+		range = document.createRange(),
+		m = document.body.appendChild(document.createElement('span'));
+	m.style.cssText = 'white-space:nowrap;visibility:hidden;position:absolute';
+	const pos = (n: Text, s = n.data, o = 0) => [...s].map((c, i) => ({ c, n, o: o + i }));
+	let tn: Text | null,
+		scanned = 0;
+	while ((tn = tw.nextNode() as Text | null) && cands.length < 200 && scanned < 20000) {
+		const p = tn.parentElement;
+		if (!p || !p.offsetWidth || !p.offsetHeight) continue;
+		const du = p.closest<HTMLElement>('[data-url]');
+		if (du && !du.dataset.scanned) {
+			du.dataset.scanned = '1';
+			const ch = [...du.childNodes].flatMap((n) => (n.nodeType === 3 ? pos(n as Text) : []));
+			scanned += ch.length;
+			cands.push({ u: du.textContent ?? '', el: du, ch });
+		} else if (!du && tn.data.includes('http')) {
+			if (p.closest('input, textarea, select, script, style, details:not([open])')) continue;
+			scanned += tn.data.length;
+			for (const mt of tn.data.matchAll(/https?:\/\/[^\s]+/g))
+				cands.push({ u: mt[0], el: p, ch: pos(tn, mt[0], mt.index) });
+		}
+	}
+	for (const { u, el, ch } of cands) {
+		if (offenders.some((o) => o.url === u)) continue;
+		let b: HTMLElement = el;
+		while (b.parentElement && getComputedStyle(b).display === 'inline') b = b.parentElement;
+		const elW = b.getBoundingClientRect().width;
+		m.style.font = getComputedStyle(el).font;
+		for (let i = 0, prevTop = 0; i < ch.length; i++) {
+			range.setStart(ch[i].n, ch[i].o);
+			range.setEnd(ch[i].n, ch[i].o + 1);
+			const r = range.getBoundingClientRect();
+			const isBrk = i > 0 && r.top > prevTop + 4 && !d.test(ch[i - 1].c) && !d.test(ch[i].c);
+			prevTop = r.top;
+			if (!isBrk) continue;
+			let [s, e] = [i - 1, i];
+			while (s > 0 && !d.test(u[s]) && u.slice(s - 3, s) !== '://') s--;
+			while (e < u.length && !d.test(u[e])) e++;
+			m.textContent = u.slice(s, e);
+			if (m.getBoundingClientRect().width <= elW) {
+				offenders.push({
+					url: u,
+					prevChar: ch[i - 1].c,
+					nextChar: ch[i].c,
+					segment: u.slice(s, e),
+					segmentWidth: Math.round(m.getBoundingClientRect().width),
+					elementWidth: Math.round(elW)
+				});
+				break;
+			}
+		}
+	}
+	m.remove();
+	return offenders;
+}
+
 async function waitForSettled(page: Page): Promise<void> {
 	await page.waitForLoadState('networkidle');
 	await expect(
@@ -386,6 +459,9 @@ export async function assertRenderedLayout(
 
 	const offenders = await page.evaluate(checkLabelValueGaps);
 	expect(offenders, `${route}: label and value touch`).toEqual([]);
+
+	const urlOffenders = await page.evaluate(checkUrlBreaks);
+	expect(urlOffenders, `${route}: URL wrapped mid-token`).toEqual([]);
 
 	const tables = await page.evaluate(extractTables);
 	const { tableCount, measuredRows, misaligned } = checkAllTables(tables, TOLERANCE_PX);
