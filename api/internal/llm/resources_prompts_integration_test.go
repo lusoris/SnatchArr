@@ -7,6 +7,7 @@ package llm_test
 import (
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"regexp"
 	"slices"
 	"strings"
@@ -280,16 +281,94 @@ func testPositiveQueueResource(t *testing.T, f *mcpFixture, token string, instID
 	if len(rpc.Result.Contents) != 1 || rpc.Result.Contents[0].MIMEType != "application/json" {
 		t.Fatalf("unexpected contents: %+v", rpc.Result.Contents)
 	}
-	var snap struct {
+	text := rpc.Result.Contents[0].Text
+	if strings.Contains(text, "seeded-secret-key") {
+		t.Fatalf("queue snapshot leaked api key in text: %s", text)
+	}
+	var snapDown struct {
 		InstanceID string `json:"instance_id"`
 		Policy     any    `json:"policy"`
 		Strikes    any    `json:"strikes"`
+		LiveError  string `json:"live_error"`
 	}
-	if err := json.Unmarshal([]byte(rpc.Result.Contents[0].Text), &snap); err != nil {
+	if err := json.Unmarshal([]byte(text), &snapDown); err != nil {
 		t.Fatalf("decode queue snapshot: %v", err)
 	}
-	if snap.InstanceID != instID.String() || snap.Policy == nil || snap.Strikes == nil {
-		t.Fatalf("invalid queue snapshot: %+v", snap)
+	if snapDown.InstanceID != instID.String() || snapDown.Policy == nil || snapDown.Strikes == nil {
+		t.Fatalf("invalid queue snapshot: %+v", snapDown)
+	}
+	if snapDown.LiveError == "" {
+		t.Fatal("expected live_error when arr is down, got empty")
+	}
+	if strings.Contains(snapDown.LiveError, "http://") || strings.Contains(snapDown.LiveError, "https://") {
+		t.Fatalf("live_error contains raw URL: %s", snapDown.LiveError)
+	}
+
+	testQueueResourceLiveItems(t, f, token)
+}
+
+func testQueueResourceLiveItems(t *testing.T, f *mcpFixture, token string) {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v3/queue" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{
+				"page": 1,
+				"pageSize": 100,
+				"totalRecords": 1,
+				"records": [{
+					"id": 10,
+					"downloadId": "dl-live-01",
+					"title": "Live Show S01E01",
+					"status": "downloading",
+					"trackedDownloadStatus": "ok",
+					"trackedDownloadState": "downloading",
+					"size": 1000000,
+					"sizeleft": 500000,
+					"protocol": "torrent",
+					"added": "2026-10-24T00:00:00Z"
+				}]
+			}`))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(srv.Close)
+
+	inst, err := f.instSvc.Create(t.Context(), instances.Input{
+		Kind:    domain.KindSonarr,
+		Name:    "Live Sonarr",
+		BaseURL: srv.URL,
+		APIKey:  "live-key-42",
+		Enabled: true,
+	})
+	if err != nil {
+		t.Fatalf("instSvc.Create: %v", err)
+	}
+
+	rpc := readResourceRPC(t, f, token, "snatcharr://queue/"+inst.ID.String())
+	if rpc.Error != nil {
+		t.Fatalf("read snatcharr://queue live error: %v", rpc.Error)
+	}
+	var snap struct {
+		InstanceID     string `json:"instance_id"`
+		Policy         any    `json:"policy"`
+		Strikes        any    `json:"strikes"`
+		Items          []any  `json:"items"`
+		ItemsTruncated bool   `json:"items_truncated"`
+		LiveError      string `json:"live_error"`
+	}
+	if err := json.Unmarshal([]byte(rpc.Result.Contents[0].Text), &snap); err != nil {
+		t.Fatalf("decode live queue snapshot: %v", err)
+	}
+	if snap.LiveError != "" {
+		t.Fatalf("unexpected live_error on live arr: %s", snap.LiveError)
+	}
+	if len(snap.Items) != 1 {
+		t.Fatalf("len(items) = %d, want 1", len(snap.Items))
+	}
+	if snap.ItemsTruncated {
+		t.Errorf("items_truncated = true, want false")
 	}
 }
 
@@ -457,8 +536,27 @@ func TestMCPResourcesNegativeAndBoundary(t *testing.T) {
 
 	coreToken := issueKey(t, f, "core-reader", domain.ScopeCoreRead)
 	testQueueResourceNotFound(t, f, coreToken)
+	testQueueResourceDisabledInstance(t, f, coreToken)
 	testPromptArgValidation(t, f, coreToken)
 	testInstancesWithAllReadScopes(t, f)
+}
+
+func testQueueResourceDisabledInstance(t *testing.T, f *mcpFixture, token string) {
+	t.Helper()
+	inst, err := f.instSvc.Create(t.Context(), instances.Input{
+		Kind:    domain.KindSonarr,
+		Name:    "Disabled Sonarr",
+		BaseURL: "http://disabled.internal:8989",
+		APIKey:  "disabled-key",
+		Enabled: false,
+	})
+	if err != nil {
+		t.Fatalf("create disabled instance: %v", err)
+	}
+	rpc := readResourceRPC(t, f, token, "snatcharr://queue/"+inst.ID.String())
+	if rpc.Error == nil || !strings.Contains(strings.ToLower(rpc.Error.Message), "not found") {
+		t.Fatalf("disabled instance queue error = %+v, want not found", rpc.Error)
+	}
 }
 
 func testScopeRejection(t *testing.T, f *mcpFixture, token string) {

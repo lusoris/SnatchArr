@@ -325,6 +325,12 @@ type Handler interface {
 	//
 	// GET /prowlarr
 	ListProwlarrLinks(ctx context.Context) ([]ProwlarrLink, error)
+	// ListQueueItems implements listQueueItems operation.
+	//
+	// Returns real-time *arr queue items with sweep decisions, strike records, and blocklist states.
+	//
+	// GET /instances/{instanceId}/queue
+	ListQueueItems(ctx context.Context, params ListQueueItemsParams) (*QueueInspection, error)
 	// ListQueueStrikes implements listQueueStrikes operation.
 	//
 	// Items with at least one strike; items the last sweep found clean are left out.

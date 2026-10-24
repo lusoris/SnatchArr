@@ -5135,6 +5135,258 @@ func (s *ProwlarrStatus) SetIndexers(val []ProwlarrIndexerStatus) {
 	s.Indexers = val
 }
 
+// Ref: #/components/schemas/QueueInspectedItem
+type QueueInspectedItem struct {
+	QueueID               int32     `json:"queue_id"`
+	DownloadID            string    `json:"download_id"`
+	Title                 string    `json:"title"`
+	Status                string    `json:"status"`
+	TrackedDownloadStatus string    `json:"tracked_download_status"`
+	TrackedDownloadState  string    `json:"tracked_download_state"`
+	Protocol              string    `json:"protocol"`
+	Size                  int64     `json:"size"`
+	SizeLeft              int64     `json:"size_left"`
+	Added                 time.Time `json:"added"`
+	StatusLines           []string  `json:"status_lines"`
+	// Rule broken by this item, or empty if clean.
+	Rule               string `json:"rule"`
+	StrikeCount        int    `json:"strike_count"`
+	Threshold          int    `json:"threshold"`
+	WouldRemove        bool   `json:"would_remove"`
+	Remove             bool   `json:"remove"`
+	BlocklistOnRemoval bool   `json:"blocklist_on_removal"`
+	Deferred           bool   `json:"deferred"`
+	WouldImport        bool   `json:"would_import"`
+	Import             bool   `json:"import"`
+}
+
+// GetQueueID returns the value of QueueID.
+func (s *QueueInspectedItem) GetQueueID() int32 {
+	return s.QueueID
+}
+
+// GetDownloadID returns the value of DownloadID.
+func (s *QueueInspectedItem) GetDownloadID() string {
+	return s.DownloadID
+}
+
+// GetTitle returns the value of Title.
+func (s *QueueInspectedItem) GetTitle() string {
+	return s.Title
+}
+
+// GetStatus returns the value of Status.
+func (s *QueueInspectedItem) GetStatus() string {
+	return s.Status
+}
+
+// GetTrackedDownloadStatus returns the value of TrackedDownloadStatus.
+func (s *QueueInspectedItem) GetTrackedDownloadStatus() string {
+	return s.TrackedDownloadStatus
+}
+
+// GetTrackedDownloadState returns the value of TrackedDownloadState.
+func (s *QueueInspectedItem) GetTrackedDownloadState() string {
+	return s.TrackedDownloadState
+}
+
+// GetProtocol returns the value of Protocol.
+func (s *QueueInspectedItem) GetProtocol() string {
+	return s.Protocol
+}
+
+// GetSize returns the value of Size.
+func (s *QueueInspectedItem) GetSize() int64 {
+	return s.Size
+}
+
+// GetSizeLeft returns the value of SizeLeft.
+func (s *QueueInspectedItem) GetSizeLeft() int64 {
+	return s.SizeLeft
+}
+
+// GetAdded returns the value of Added.
+func (s *QueueInspectedItem) GetAdded() time.Time {
+	return s.Added
+}
+
+// GetStatusLines returns the value of StatusLines.
+func (s *QueueInspectedItem) GetStatusLines() []string {
+	return s.StatusLines
+}
+
+// GetRule returns the value of Rule.
+func (s *QueueInspectedItem) GetRule() string {
+	return s.Rule
+}
+
+// GetStrikeCount returns the value of StrikeCount.
+func (s *QueueInspectedItem) GetStrikeCount() int {
+	return s.StrikeCount
+}
+
+// GetThreshold returns the value of Threshold.
+func (s *QueueInspectedItem) GetThreshold() int {
+	return s.Threshold
+}
+
+// GetWouldRemove returns the value of WouldRemove.
+func (s *QueueInspectedItem) GetWouldRemove() bool {
+	return s.WouldRemove
+}
+
+// GetRemove returns the value of Remove.
+func (s *QueueInspectedItem) GetRemove() bool {
+	return s.Remove
+}
+
+// GetBlocklistOnRemoval returns the value of BlocklistOnRemoval.
+func (s *QueueInspectedItem) GetBlocklistOnRemoval() bool {
+	return s.BlocklistOnRemoval
+}
+
+// GetDeferred returns the value of Deferred.
+func (s *QueueInspectedItem) GetDeferred() bool {
+	return s.Deferred
+}
+
+// GetWouldImport returns the value of WouldImport.
+func (s *QueueInspectedItem) GetWouldImport() bool {
+	return s.WouldImport
+}
+
+// GetImport returns the value of Import.
+func (s *QueueInspectedItem) GetImport() bool {
+	return s.Import
+}
+
+// SetQueueID sets the value of QueueID.
+func (s *QueueInspectedItem) SetQueueID(val int32) {
+	s.QueueID = val
+}
+
+// SetDownloadID sets the value of DownloadID.
+func (s *QueueInspectedItem) SetDownloadID(val string) {
+	s.DownloadID = val
+}
+
+// SetTitle sets the value of Title.
+func (s *QueueInspectedItem) SetTitle(val string) {
+	s.Title = val
+}
+
+// SetStatus sets the value of Status.
+func (s *QueueInspectedItem) SetStatus(val string) {
+	s.Status = val
+}
+
+// SetTrackedDownloadStatus sets the value of TrackedDownloadStatus.
+func (s *QueueInspectedItem) SetTrackedDownloadStatus(val string) {
+	s.TrackedDownloadStatus = val
+}
+
+// SetTrackedDownloadState sets the value of TrackedDownloadState.
+func (s *QueueInspectedItem) SetTrackedDownloadState(val string) {
+	s.TrackedDownloadState = val
+}
+
+// SetProtocol sets the value of Protocol.
+func (s *QueueInspectedItem) SetProtocol(val string) {
+	s.Protocol = val
+}
+
+// SetSize sets the value of Size.
+func (s *QueueInspectedItem) SetSize(val int64) {
+	s.Size = val
+}
+
+// SetSizeLeft sets the value of SizeLeft.
+func (s *QueueInspectedItem) SetSizeLeft(val int64) {
+	s.SizeLeft = val
+}
+
+// SetAdded sets the value of Added.
+func (s *QueueInspectedItem) SetAdded(val time.Time) {
+	s.Added = val
+}
+
+// SetStatusLines sets the value of StatusLines.
+func (s *QueueInspectedItem) SetStatusLines(val []string) {
+	s.StatusLines = val
+}
+
+// SetRule sets the value of Rule.
+func (s *QueueInspectedItem) SetRule(val string) {
+	s.Rule = val
+}
+
+// SetStrikeCount sets the value of StrikeCount.
+func (s *QueueInspectedItem) SetStrikeCount(val int) {
+	s.StrikeCount = val
+}
+
+// SetThreshold sets the value of Threshold.
+func (s *QueueInspectedItem) SetThreshold(val int) {
+	s.Threshold = val
+}
+
+// SetWouldRemove sets the value of WouldRemove.
+func (s *QueueInspectedItem) SetWouldRemove(val bool) {
+	s.WouldRemove = val
+}
+
+// SetRemove sets the value of Remove.
+func (s *QueueInspectedItem) SetRemove(val bool) {
+	s.Remove = val
+}
+
+// SetBlocklistOnRemoval sets the value of BlocklistOnRemoval.
+func (s *QueueInspectedItem) SetBlocklistOnRemoval(val bool) {
+	s.BlocklistOnRemoval = val
+}
+
+// SetDeferred sets the value of Deferred.
+func (s *QueueInspectedItem) SetDeferred(val bool) {
+	s.Deferred = val
+}
+
+// SetWouldImport sets the value of WouldImport.
+func (s *QueueInspectedItem) SetWouldImport(val bool) {
+	s.WouldImport = val
+}
+
+// SetImport sets the value of Import.
+func (s *QueueInspectedItem) SetImport(val bool) {
+	s.Import = val
+}
+
+// Ref: #/components/schemas/QueueInspection
+type QueueInspection struct {
+	Items []QueueInspectedItem `json:"items"`
+	// True when the returned queue items reached the inspection page bound and more items exist.
+	Truncated bool `json:"truncated"`
+}
+
+// GetItems returns the value of Items.
+func (s *QueueInspection) GetItems() []QueueInspectedItem {
+	return s.Items
+}
+
+// GetTruncated returns the value of Truncated.
+func (s *QueueInspection) GetTruncated() bool {
+	return s.Truncated
+}
+
+// SetItems sets the value of Items.
+func (s *QueueInspection) SetItems(val []QueueInspectedItem) {
+	s.Items = val
+}
+
+// SetTruncated sets the value of Truncated.
+func (s *QueueInspection) SetTruncated(val bool) {
+	s.Truncated = val
+}
+
 // Ref: #/components/schemas/QueuePolicy
 type QueuePolicy struct {
 	Enabled           bool       `json:"enabled"`
