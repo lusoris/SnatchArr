@@ -70,6 +70,8 @@ var staticPatterns = []patternRule{
 	{re: regexp.MustCompile(`(?i)^Not an upgrade for existing track file\(s\)(\. New Quality is .*)?$`), class: ClassNotWanted},
 	// src/NzbDrone.Core/MediaFiles/TrackImport/Specifications/AlbumUpgradeSpecification.cs:43
 	{re: regexp.MustCompile(`(?i)^Not an upgrade for existing album file\(s\)$`), class: ClassNotWanted},
+	// src/NzbDrone.Core/MediaFiles/TrackImport/Specifications/AlreadyImportedSpecification.cs:67,73 (override: not_wanted)
+	{re: regexp.MustCompile(`(?i)^Album already imported at .*`), class: ClassNotWanted},
 	// src/NzbDrone.Core/MediaFiles/TrackImport/ImportDecisionMaker.cs:219
 	{re: regexp.MustCompile(`(?i)^Couldn't find similar album for .*`), class: ClassBroken},
 	// src/NzbDrone.Core/Download/CompletedDownloadService.cs:96
@@ -299,7 +301,7 @@ func (c *importCollector) record(res lineClassification) {
 // ClassifyImportItem classifies an item's status messages, considering grace period and returning any distance match percent.
 func ClassifyImportItem(item Item, s Settings, now time.Time) (Class, string, *float64) {
 	s = resolveSettingsFloors(s)
-	lines := filterMeaningfulLines(item.StatusLines, item.Title)
+	lines := filterMeaningfulLines(importLines(item), item.Title)
 	if len(lines) == 0 {
 		return ClassUnknown, "", nil
 	}
@@ -314,6 +316,14 @@ func ClassifyImportItem(item Item, s Settings, now time.Time) (Class, string, *f
 	}
 
 	return resolveClassPrecedence(c.sawUnknown, c.rematchOnly, c.brokenPat, c.notWantedPat, c.fixablePat, c.minMatchPct)
+}
+
+// importLines prefers the rejection reasons; items built without them fall back to every status line.
+func importLines(item Item) []string {
+	if len(item.ReasonLines) > 0 {
+		return item.ReasonLines
+	}
+	return item.StatusLines
 }
 
 func resolveClassPrecedence(unknown, rematchOnly bool, broken, notWanted, fixable string, pct *float64) (Class, string, *float64) {
