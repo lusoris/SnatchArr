@@ -28,7 +28,7 @@ services:
 
   qbittorrent:
     <<: *linuxserver
-    image: docker.io/linuxserver/qbittorrent:5.2.4@sha256:97333cc1ccf903e0bbcd8eb67e3332e4970e9c1ecabe145e499e9c0847ebcaed
+    image: docker.io/linuxserver/qbittorrent:5.3.0@sha256:e887804fa9de4c60f5f0fb1f3a7e4febe40a8f69fe736f70c4e8589b1f868dab
     # The WebUI refuses a Host header whose port is not its own (HTTP 401). The *arr apps
     # reach it inside the network on that port too.
     environment:
