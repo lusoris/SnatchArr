@@ -5,6 +5,7 @@ SPDX-License-Identifier: EUPL-1.2
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import ConfirmDelete from './ConfirmDelete.svelte';
+	import UrlText from './UrlText.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
 	import { session } from '#lib/session.svelte.js';
@@ -45,7 +46,7 @@ SPDX-License-Identifier: EUPL-1.2
 	<h3 class="font-semibold">
 		{link.name} <span class="text-sm text-subtle">{link.last_seen_version ?? ''}</span>
 	</h3>
-	<p class="text-sm break-all text-subtle">{link.base_url}</p>
+	<p class="text-sm text-subtle"><UrlText url={link.base_url} /></p>
 	<p class="text-sm">
 		{link.last_check_at
 			? m.link_last_check({ when: formatWhen(link.last_check_at, getLocale()) })

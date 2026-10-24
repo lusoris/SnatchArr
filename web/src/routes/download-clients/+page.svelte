@@ -11,6 +11,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import ConfirmDelete from '#lib/components/ConfirmDelete.svelte';
 	import DownloadClientForm from '#lib/components/DownloadClientForm.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
+	import UrlText from '#lib/components/UrlText.svelte';
 	import { FormEditor } from '#lib/formEditor.svelte.js';
 	import { deleteCallbacks, probeFailed, saveSuccess } from '#lib/forms.js';
 	import { m } from '#lib/paraglide/messages.js';
@@ -161,7 +162,7 @@ SPDX-License-Identifier: EUPL-1.2
 				<h2 class="font-semibold">
 					{c.name} <span class="text-sm text-subtle">{c.kind} · {c.protocol}</span>
 				</h2>
-				<p class="text-sm break-all text-subtle">{c.base_url}</p>
+				<p class="text-sm text-subtle"><UrlText url={c.base_url} /></p>
 				<p class="text-sm text-subtle">{instanceName(c.instance_id)}</p>
 				{#if st}
 					<p class="mt-1 text-sm" role="status">

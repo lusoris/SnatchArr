@@ -12,6 +12,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import PageHeader from '#lib/components/PageHeader.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import StaminaGauge from '#lib/components/StaminaGauge.svelte';
+	import UrlText from '#lib/components/UrlText.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { instanceKindLabel } from '#lib/products.js';
 	import { countExhausted, countHeadroom } from '#lib/prowlarr.js';
@@ -123,8 +124,10 @@ SPDX-License-Identifier: EUPL-1.2
 						<h2 class="text-lg font-semibold">
 							<a class="hover:underline" href={resolve(`instances/${inst.id}`)}>{inst.name}</a>
 						</h2>
-						<p class="text-sm [overflow-wrap:anywhere] text-subtle">
-							{instanceKindLabel(inst.kind, inst.last_seen_product)} · {inst.base_url}
+						<p class="text-sm text-subtle">
+							{instanceKindLabel(inst.kind, inst.last_seen_product)} · <UrlText
+								url={inst.base_url}
+							/>
 						</p>
 					</div>
 					<span class="shrink-0 rounded-full border border-line px-2 py-0.5 text-xs"
