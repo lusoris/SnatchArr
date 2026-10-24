@@ -276,7 +276,7 @@ The module switch implementation must be verified with three-dimensional testing
 
 Implementation of this architecture proceeds in five discrete pull requests:
 
-- [ ] **Slice 1: Module registry and storage**: Introduce `api/internal/modules`, database table `modules`, migration `000028_modules`, and system settings API endpoints.
+- [ ] **Slice 1: Module registry and storage**: Introduce `api/internal/modules`, database table `modules`, migration `000028_modules` (owned by ADR-0025 Slice 1, ranking before ADR-0024 Slice 1), config validation per module in Go, `llm_enabled` data migration, system settings API endpoints, and a boundary test verifying off-then-on returns the same rows.
 - [ ] **Slice 2: OpenAPI gating middleware and repository check**: Implement `x-module` validation, ogen `ModuleGateMiddleware`, and `check_module_routes` CI verification.
 - [ ] **Slice 3: MCP dynamic tool gating**: Add `Module` field to `toolSpec` in `api/internal/llm/tools.go` and implement dynamic filtering in `tools/list` and `tools/call`.
 - [ ] **Slice 4: SPA dynamic navigation and route guards**: Update `nav.ts` and SvelteKit router layout to filter links and guard routes based on active module states.
@@ -284,17 +284,18 @@ Implementation of this architecture proceeds in five discrete pull requests:
 
 ## Open Questions
 
-The following decisions require operator confirmation:
-
-1. **Storage model for module-specific configuration**:
+1. **Storage model for module-specific configuration (`snatcharr-adr25-module-config-storage`)**:
    - *Options*: a) Store module-specific sub-configurations inside `modules.config` JSONB (Recommended). b) Require dedicated relational settings tables per module (e.g. `watchaware_settings`).
    - *Recommendation*: Option a for simplicity and isolation, moving to dedicated tables only when complex relational foreign keys are needed.
-2. **Route refusal status code**:
+   - *Answered (2026-10-24, controller ledger `snatcharr-adr25-module-config-storage`)*: Option a. One `modules` table (id, enabled, config JSONB); each module validates its own config in Go; `settings.llm_enabled` migrates into it (matching the section 2 migration path).
+2. **Route refusal status code (`snatcharr-adr25-disabled-status`)**:
    - *Options*: a) Return HTTP 404 Not Found (Recommended, per [#563](https://github.com/lusoris/SnatchArr/issues/563) to prevent feature enumeration). b) Return HTTP 403 Forbidden with `module_disabled` detail.
    - *Recommendation*: Option a (HTTP 404 with RFC 9457 Problem JSON), ensuring disabled features present no discoverable attack surface.
-3. **Data retention on switch-off**:
+   - *Answered (2026-10-24, controller ledger `snatcharr-adr25-disabled-status`)*: Option a. Every route of a switched-off module returns HTTP 404 with RFC 9457 `application/problem+json` (matching the shipped LLM module in `api/internal/llm/llm.go` and issue [#563](https://github.com/lusoris/SnatchArr/issues/563)). Checked in the Slice 2 test suite: every operation of an off module answers 404 Problem JSON.
+3. **Data retention on switch-off (`snatcharr-adr25-data-on-disable`)**:
    - *Options*: a) Retain existing module data in database when a module is toggled off (Recommended). b) Offer an optional administrative checkbox to purge module data upon deactivation.
    - *Recommendation*: Option a to prevent accidental data loss during temporary deactivation.
+   - *Answered (2026-10-24, controller ledger `snatcharr-adr25-data-on-disable`)*: Option a. Switch-off keeps data and deletes nothing. Any purge option constitutes deletion of user data and requires its own operator decision before any slice builds it. Checked in the Slice 1 boundary test: switching a module off and then back on returns the same database rows.
 
 ## References
 
