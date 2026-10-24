@@ -650,6 +650,58 @@
     ],
     "type": "object"
   },
+  "createWatchawareSource": {
+    "$defs": {
+      "WatchawareSourceInput": {
+        "properties": {
+          "api_key": {
+            "description": "Required on create; omit on update to keep stored key",
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "type": "boolean"
+          },
+          "kind": {
+            "$ref": "#/$defs/WatchawareSourceKind"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "url": {
+            "format": "uri",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "name",
+          "url"
+        ],
+        "type": "object"
+      },
+      "WatchawareSourceKind": {
+        "enum": [
+          "jellyfin",
+          "emby"
+        ],
+        "type": "string"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/WatchawareSourceInput"
+      }
+    },
+    "required": [
+      "body"
+    ],
+    "type": "object"
+  },
   "deleteDownloadClient": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -791,6 +843,24 @@
     },
     "required": [
       "linkId"
+    ],
+    "type": "object"
+  },
+  "deleteWatchawareSource": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "confirm": {
+        "description": "Must be true to confirm this destructive operation",
+        "type": "boolean"
+      },
+      "sourceId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "sourceId"
     ],
     "type": "object"
   },
@@ -1036,6 +1106,12 @@
     "properties": {},
     "type": "object"
   },
+  "getWatchawareSyncStatus": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
   "importConfigarr": {
     "$defs": {
       "ConfigarrImportRequest": {
@@ -1225,6 +1301,12 @@
     "type": "object"
   },
   "listSeerrRequests": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "listWatchawareSources": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
     "properties": {},
@@ -2802,6 +2884,63 @@
     },
     "required": [
       "body"
+    ],
+    "type": "object"
+  },
+  "updateWatchawareSource": {
+    "$defs": {
+      "WatchawareSourceInput": {
+        "properties": {
+          "api_key": {
+            "description": "Required on create; omit on update to keep stored key",
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "type": "boolean"
+          },
+          "kind": {
+            "$ref": "#/$defs/WatchawareSourceKind"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "url": {
+            "format": "uri",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "name",
+          "url"
+        ],
+        "type": "object"
+      },
+      "WatchawareSourceKind": {
+        "enum": [
+          "jellyfin",
+          "emby"
+        ],
+        "type": "string"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/WatchawareSourceInput"
+      },
+      "sourceId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "body",
+      "sourceId"
     ],
     "type": "object"
   }

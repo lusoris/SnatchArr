@@ -148,7 +148,7 @@ The storage-free part of this slice shipped in [#602](https://github.com/lusoris
   - table `watchaware_item_watches` (key: source, user, item; columns: series and season and episode numbers or movie id, played, played percentage, resume position, last played, synced at);
   - watchaware tables take the next free migration number after `000028_modules` (which is owned by ADR-0025 Slice 1);
   - OpenAPI: list, create, update and delete media-server sources, and a sync status read;
-  - settings: module switch (default off) and sync interval live in `modules` row `watchaware` config JSONB (per ADR-0025 answer `snatcharr-adr25-module-config-storage`), not a settings column;
+  - settings: module switch (default off) and sync interval live in `modules` row `watchaware` config JSONB (per ADR-0025 answer `snatcharr-adr25-module-config-storage`), not a settings column; default sync interval 15 minutes when config omits `sync_interval_minutes`, base tick 1 minute;
   - Paraglide keys under `watchaware_*` in `web/messages/en.json` and `de.json`.
 - Upstream: goenvoy `mediaserver/jellyfin/v3` and `mediaserver/emby/v3` (`GetUsers`, `GetItems` with a user filter); new module requirements in `go.mod`, so `web/static/licences.json` is regenerated in the same pull request.
 - Upstream dependency resolved: `UserItemDataDto` has `Played` and `PlayedPercentage` from `mediaserver/jellyfin/v3.1.0` and `mediaserver/emby/v3.1.0` (`mediaserver/jellyfin/types.go:91-92`, same in `mediaserver/emby/types.go`; [goenvoy#173](https://github.com/golusoris/goenvoy/pull/173)).
@@ -234,7 +234,7 @@ The four open questions of the first draft were answered on 2026-10-23:
 - [x] goenvoy: added `Played` and `PlayedPercentage` to `UserItemDataDto` in `mediaserver/jellyfin/v3.1.0` and `mediaserver/emby/v3.1.0` ([goenvoy#173](https://github.com/golusoris/goenvoy/pull/173)).
 - [x] goenvoy: added `JellyfinUserID` and `JellyfinUsername` to `User` in `arr/seerr/v1.6.0` for the `requester` rule ([goenvoy#173](https://github.com/golusoris/goenvoy/pull/173)).
 - [x] goenvoy: added collection writes (`CreateCollection`, `AddToCollection`, `RemoveFromCollection`) in `mediaserver/jellyfin/v3.1.0` for "leaving soon" ([goenvoy#173](https://github.com/golusoris/goenvoy/pull/173)).
-- [ ] Implementation plan: season gate slices 1-3 (section [Implementation plan](#implementation-plan)); Slice 1 now depends on ADR-0025 Slice 1 (`000028_modules`); `go.mod` requirements (`mediaserver/jellyfin/v3.1.0`, `mediaserver/emby/v3.1.0`, `arr/seerr/v1.6.0`) land with slice 1.
+- [x] Implementation plan: Slice 1 backend completed (persistence, HTTP API under `x-module` watchaware, leader loop ticking quiescent while module off; ADR-0025 Slice 5); season gate slices 2-3 and SPA follow in later slices.
 - [x] Docs: name Maintainerr as an alternative for removal until remove-when-seen ships ([docs/roadmap.md](../roadmap.md#watch-aware-modes)).
 
 ## References

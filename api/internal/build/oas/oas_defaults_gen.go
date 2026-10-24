@@ -134,3 +134,11 @@ func (s *SnatchPolicy) setDefaults() {
 		s.SkipUnavailableMovies.SetTo(val)
 	}
 }
+
+// setDefaults set default value of fields.
+func (s *WatchawareSourceInput) setDefaults() {
+	{
+		val := bool(true)
+		s.Enabled.SetTo(val)
+	}
+}

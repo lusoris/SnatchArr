@@ -600,6 +600,71 @@ func decodeDeleteSeerrLinkParams(args [1]string, argsEscaped bool, r *http.Reque
 	return params, nil
 }
 
+// DeleteWatchawareSourceParams is parameters of deleteWatchawareSource operation.
+type DeleteWatchawareSourceParams struct {
+	SourceId uuid.UUID
+}
+
+func unpackDeleteWatchawareSourceParams(packed middleware.Parameters) (params DeleteWatchawareSourceParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "sourceId",
+			In:   "path",
+		}
+		params.SourceId = packed[key].(uuid.UUID)
+	}
+	return params
+}
+
+func decodeDeleteWatchawareSourceParams(args [1]string, argsEscaped bool, r *http.Request) (params DeleteWatchawareSourceParams, _ error) {
+	// Decode path: sourceId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "sourceId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.SourceId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "sourceId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
 // DiscoverDownloadClientsParams is parameters of discoverDownloadClients operation.
 type DiscoverDownloadClientsParams struct {
 	InstanceId uuid.UUID
@@ -3948,6 +4013,71 @@ func decodeUpdateSeerrLinkParams(args [1]string, argsEscaped bool, r *http.Reque
 	}(); err != nil {
 		return params, &ogenerrors.DecodeParamError{
 			Name: "linkId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
+// UpdateWatchawareSourceParams is parameters of updateWatchawareSource operation.
+type UpdateWatchawareSourceParams struct {
+	SourceId uuid.UUID
+}
+
+func unpackUpdateWatchawareSourceParams(packed middleware.Parameters) (params UpdateWatchawareSourceParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "sourceId",
+			In:   "path",
+		}
+		params.SourceId = packed[key].(uuid.UUID)
+	}
+	return params
+}
+
+func decodeUpdateWatchawareSourceParams(args [1]string, argsEscaped bool, r *http.Request) (params UpdateWatchawareSourceParams, _ error) {
+	// Decode path: sourceId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "sourceId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.SourceId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "sourceId",
 			In:   "path",
 			Err:  err,
 		}

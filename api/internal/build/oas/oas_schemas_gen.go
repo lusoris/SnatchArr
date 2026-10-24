@@ -948,6 +948,9 @@ type DeleteScheduleNoContent struct{}
 // DeleteSeerrLinkNoContent is response for DeleteSeerrLink operation.
 type DeleteSeerrLinkNoContent struct{}
 
+// DeleteWatchawareSourceNoContent is response for DeleteWatchawareSource operation.
+type DeleteWatchawareSourceNoContent struct{}
+
 // Ref: #/components/schemas/DiscoveryResult
 type DiscoveryResult struct {
 	Imported    int      `json:"imported"`
@@ -8404,4 +8407,280 @@ func (s *UserRole) UnmarshalText(data []byte) error {
 	default:
 		return errors.Errorf("invalid value: %q", data)
 	}
+}
+
+// Ref: #/components/schemas/WatchawareSource
+type WatchawareSource struct {
+	ID   uuid.UUID            `json:"id"`
+	Kind WatchawareSourceKind `json:"kind"`
+	Name string               `json:"name"`
+	URL  url.URL              `json:"url"`
+	// True when an encrypted API key is stored (the key itself is write-only).
+	HasAPIKey  bool        `json:"has_api_key"`
+	Enabled    bool        `json:"enabled"`
+	LastSyncAt OptDateTime `json:"last_sync_at"`
+	LastError  OptString   `json:"last_error"`
+	CreatedAt  time.Time   `json:"created_at"`
+	UpdatedAt  time.Time   `json:"updated_at"`
+}
+
+// GetID returns the value of ID.
+func (s *WatchawareSource) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetKind returns the value of Kind.
+func (s *WatchawareSource) GetKind() WatchawareSourceKind {
+	return s.Kind
+}
+
+// GetName returns the value of Name.
+func (s *WatchawareSource) GetName() string {
+	return s.Name
+}
+
+// GetURL returns the value of URL.
+func (s *WatchawareSource) GetURL() url.URL {
+	return s.URL
+}
+
+// GetHasAPIKey returns the value of HasAPIKey.
+func (s *WatchawareSource) GetHasAPIKey() bool {
+	return s.HasAPIKey
+}
+
+// GetEnabled returns the value of Enabled.
+func (s *WatchawareSource) GetEnabled() bool {
+	return s.Enabled
+}
+
+// GetLastSyncAt returns the value of LastSyncAt.
+func (s *WatchawareSource) GetLastSyncAt() OptDateTime {
+	return s.LastSyncAt
+}
+
+// GetLastError returns the value of LastError.
+func (s *WatchawareSource) GetLastError() OptString {
+	return s.LastError
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *WatchawareSource) GetCreatedAt() time.Time {
+	return s.CreatedAt
+}
+
+// GetUpdatedAt returns the value of UpdatedAt.
+func (s *WatchawareSource) GetUpdatedAt() time.Time {
+	return s.UpdatedAt
+}
+
+// SetID sets the value of ID.
+func (s *WatchawareSource) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetKind sets the value of Kind.
+func (s *WatchawareSource) SetKind(val WatchawareSourceKind) {
+	s.Kind = val
+}
+
+// SetName sets the value of Name.
+func (s *WatchawareSource) SetName(val string) {
+	s.Name = val
+}
+
+// SetURL sets the value of URL.
+func (s *WatchawareSource) SetURL(val url.URL) {
+	s.URL = val
+}
+
+// SetHasAPIKey sets the value of HasAPIKey.
+func (s *WatchawareSource) SetHasAPIKey(val bool) {
+	s.HasAPIKey = val
+}
+
+// SetEnabled sets the value of Enabled.
+func (s *WatchawareSource) SetEnabled(val bool) {
+	s.Enabled = val
+}
+
+// SetLastSyncAt sets the value of LastSyncAt.
+func (s *WatchawareSource) SetLastSyncAt(val OptDateTime) {
+	s.LastSyncAt = val
+}
+
+// SetLastError sets the value of LastError.
+func (s *WatchawareSource) SetLastError(val OptString) {
+	s.LastError = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *WatchawareSource) SetCreatedAt(val time.Time) {
+	s.CreatedAt = val
+}
+
+// SetUpdatedAt sets the value of UpdatedAt.
+func (s *WatchawareSource) SetUpdatedAt(val time.Time) {
+	s.UpdatedAt = val
+}
+
+// Ref: #/components/schemas/WatchawareSourceInput
+type WatchawareSourceInput struct {
+	Kind WatchawareSourceKind `json:"kind"`
+	Name string               `json:"name"`
+	URL  url.URL              `json:"url"`
+	// Required on create; omit on update to keep stored key.
+	APIKey  OptString `json:"api_key"`
+	Enabled OptBool   `json:"enabled"`
+}
+
+// GetKind returns the value of Kind.
+func (s *WatchawareSourceInput) GetKind() WatchawareSourceKind {
+	return s.Kind
+}
+
+// GetName returns the value of Name.
+func (s *WatchawareSourceInput) GetName() string {
+	return s.Name
+}
+
+// GetURL returns the value of URL.
+func (s *WatchawareSourceInput) GetURL() url.URL {
+	return s.URL
+}
+
+// GetAPIKey returns the value of APIKey.
+func (s *WatchawareSourceInput) GetAPIKey() OptString {
+	return s.APIKey
+}
+
+// GetEnabled returns the value of Enabled.
+func (s *WatchawareSourceInput) GetEnabled() OptBool {
+	return s.Enabled
+}
+
+// SetKind sets the value of Kind.
+func (s *WatchawareSourceInput) SetKind(val WatchawareSourceKind) {
+	s.Kind = val
+}
+
+// SetName sets the value of Name.
+func (s *WatchawareSourceInput) SetName(val string) {
+	s.Name = val
+}
+
+// SetURL sets the value of URL.
+func (s *WatchawareSourceInput) SetURL(val url.URL) {
+	s.URL = val
+}
+
+// SetAPIKey sets the value of APIKey.
+func (s *WatchawareSourceInput) SetAPIKey(val OptString) {
+	s.APIKey = val
+}
+
+// SetEnabled sets the value of Enabled.
+func (s *WatchawareSourceInput) SetEnabled(val OptBool) {
+	s.Enabled = val
+}
+
+// Ref: #/components/schemas/WatchawareSourceKind
+type WatchawareSourceKind string
+
+const (
+	WatchawareSourceKindJellyfin WatchawareSourceKind = "jellyfin"
+	WatchawareSourceKindEmby     WatchawareSourceKind = "emby"
+)
+
+// AllValues returns all WatchawareSourceKind values.
+func (WatchawareSourceKind) AllValues() []WatchawareSourceKind {
+	return []WatchawareSourceKind{
+		WatchawareSourceKindJellyfin,
+		WatchawareSourceKindEmby,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s WatchawareSourceKind) MarshalText() ([]byte, error) {
+	switch s {
+	case WatchawareSourceKindJellyfin:
+		return []byte(s), nil
+	case WatchawareSourceKindEmby:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *WatchawareSourceKind) UnmarshalText(data []byte) error {
+	switch WatchawareSourceKind(data) {
+	case WatchawareSourceKindJellyfin:
+		*s = WatchawareSourceKindJellyfin
+		return nil
+	case WatchawareSourceKindEmby:
+		*s = WatchawareSourceKindEmby
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/WatchawareSyncStatus
+type WatchawareSyncStatus struct {
+	LastSyncAt     OptDateTime `json:"last_sync_at"`
+	TotalSources   int         `json:"total_sources"`
+	EnabledSources int         `json:"enabled_sources"`
+	TotalWatches   int         `json:"total_watches"`
+	LastError      OptString   `json:"last_error"`
+}
+
+// GetLastSyncAt returns the value of LastSyncAt.
+func (s *WatchawareSyncStatus) GetLastSyncAt() OptDateTime {
+	return s.LastSyncAt
+}
+
+// GetTotalSources returns the value of TotalSources.
+func (s *WatchawareSyncStatus) GetTotalSources() int {
+	return s.TotalSources
+}
+
+// GetEnabledSources returns the value of EnabledSources.
+func (s *WatchawareSyncStatus) GetEnabledSources() int {
+	return s.EnabledSources
+}
+
+// GetTotalWatches returns the value of TotalWatches.
+func (s *WatchawareSyncStatus) GetTotalWatches() int {
+	return s.TotalWatches
+}
+
+// GetLastError returns the value of LastError.
+func (s *WatchawareSyncStatus) GetLastError() OptString {
+	return s.LastError
+}
+
+// SetLastSyncAt sets the value of LastSyncAt.
+func (s *WatchawareSyncStatus) SetLastSyncAt(val OptDateTime) {
+	s.LastSyncAt = val
+}
+
+// SetTotalSources sets the value of TotalSources.
+func (s *WatchawareSyncStatus) SetTotalSources(val int) {
+	s.TotalSources = val
+}
+
+// SetEnabledSources sets the value of EnabledSources.
+func (s *WatchawareSyncStatus) SetEnabledSources(val int) {
+	s.EnabledSources = val
+}
+
+// SetTotalWatches sets the value of TotalWatches.
+func (s *WatchawareSyncStatus) SetTotalWatches(val int) {
+	s.TotalWatches = val
+}
+
+// SetLastError sets the value of LastError.
+func (s *WatchawareSyncStatus) SetLastError(val OptString) {
+	s.LastError = val
 }
