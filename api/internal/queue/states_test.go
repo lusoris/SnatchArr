@@ -120,6 +120,8 @@ func stalledNegativeCases() []stateTestCase {
 	zeroItem.SizeLeft = 0
 	droppedItem := itemFor(queue.RuleStalled, fixedNow.Add(-1*time.Hour))
 	droppedItem.SizeLeft = 5_000_000
+	usenetItem := itemFor(queue.RuleStalled, fixedNow.Add(-1*time.Hour))
+	usenetItem.Protocol = "usenet"
 	return []stateTestCase{
 		{
 			name:     "negative/first_sighting_no_prev",
@@ -139,6 +141,13 @@ func stalledNegativeCases() []stateTestCase {
 			name:     "negative/sizeleft_dropped_normal",
 			settings: act6,
 			item:     droppedItem,
+			prev:     map[string]queue.Strike{"dl-42": prevFor(queue.RuleStalled, fixedNow.Add(-10*time.Minute), 1)},
+			want:     wantDecision{rule: "", strike: false, remove: false, blocklist: false, count: 0},
+		},
+		{
+			name:     "negative/usenet_sizeleft_unchanged",
+			settings: act6,
+			item:     usenetItem,
 			prev:     map[string]queue.Strike{"dl-42": prevFor(queue.RuleStalled, fixedNow.Add(-10*time.Minute), 1)},
 			want:     wantDecision{rule: "", strike: false, remove: false, blocklist: false, count: 0},
 		},

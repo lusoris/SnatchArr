@@ -82,7 +82,7 @@ Floor constraints: 0..100, with fixable floor strictly greater than broken floor
 
 ### Stalled
 
-Zero progress is stalled, never slow, even when a speed floor is set. A `sizeleft` that grew also counts. The first sighting of an item gives no strike, because there is no earlier `sizeleft` to compare, and neither does `sizeleft = 0`.
+Zero progress is stalled, never slow, even when a speed floor is set. A `sizeleft` that grew also counts. The first sighting of an item gives no strike, because there is no earlier `sizeleft` to compare, and neither does `sizeleft = 0`. The stalled rule applies to torrents only; usenet clients queue jobs serially and report waiting jobs as downloading, and their own failure handling covers dead jobs.
 
 ### Metadata stuck
 

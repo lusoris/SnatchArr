@@ -803,3 +803,70 @@ func TestRuleBlocklistDefaultsMatchTable(t *testing.T) {
 		}
 	}
 }
+
+func TestCheckStalled(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC)
+	prev := queue.Strike{
+		LastSeen:     now.Add(-10 * time.Minute),
+		LastSizeLeft: 10_000_000,
+	}
+
+	tests := []struct {
+		name string
+		item queue.Item
+		prev queue.Strike
+		want bool
+	}{
+		{
+			name: "torrent downloading sizeleft unchanged -> struck",
+			item: queue.Item{
+				Protocol:             "torrent",
+				TrackedDownloadState: "downloading",
+				SizeLeft:             10_000_000,
+			},
+			prev: prev,
+			want: true,
+		},
+		{
+			name: "usenet downloading sizeleft unchanged -> not struck (planted case)",
+			item: queue.Item{
+				Protocol:             "usenet",
+				TrackedDownloadState: "downloading",
+				SizeLeft:             10_000_000,
+			},
+			prev: prev,
+			want: false,
+		},
+		{
+			name: "torrent sizeleft dropped -> not struck",
+			item: queue.Item{
+				Protocol:             "torrent",
+				TrackedDownloadState: "downloading",
+				SizeLeft:             9_000_000,
+			},
+			prev: prev,
+			want: false,
+		},
+		{
+			name: "torrent first sight (prev.LastSeen zero) -> not struck",
+			item: queue.Item{
+				Protocol:             "torrent",
+				TrackedDownloadState: "downloading",
+				SizeLeft:             10_000_000,
+			},
+			prev: queue.Strike{},
+			want: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := queue.CheckStalled(tc.item, tc.prev)
+			if got != tc.want {
+				t.Errorf("CheckStalled(%s) = %v, want %v", tc.name, got, tc.want)
+			}
+		})
+	}
+}
