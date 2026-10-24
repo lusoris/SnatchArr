@@ -108,7 +108,7 @@ func (a *lineAccumulator) handleEOF(chunk []byte) ([]byte, bool, error) {
 
 // Run executes the stdio proxy with a default HTTP client.
 func Run(ctx context.Context, args []string, getenv func(string) string, stdin io.Reader, stdout, stderr io.Writer) int {
-	return RunWithClient(ctx, &http.Client{}, args, getenv, stdin, stdout, stderr)
+	return RunWithClient(ctx, &http.Client{Timeout: requestTimeout}, args, getenv, stdin, stdout, stderr)
 }
 
 // RunWithClient executes the stdio proxy using the provided HTTP client.
