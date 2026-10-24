@@ -121,6 +121,7 @@ type toolSpec struct {
 	Name        string
 	OperationID string
 	Scope       string
+	Module      string
 	ReadOnly    bool
 	Destructive bool
 	Description string
@@ -1289,8 +1290,11 @@ func lookupTool(specs []toolSpec, name string) (toolSpec, bool) {
 	return toolSpec{}, false
 }
 
-func registerTools(rc registerContext, specs []toolSpec, schemas map[string]json.RawMessage, scopes, writeTools []string) {
+func registerTools(rc registerContext, specs []toolSpec, schemas map[string]json.RawMessage, scopes, writeTools, disabledModules []string) {
 	for _, spec := range specs {
+		if spec.Module != "" && slices.Contains(disabledModules, spec.Module) {
+			continue
+		}
 		if !slices.Contains(scopes, spec.Scope) {
 			continue
 		}
