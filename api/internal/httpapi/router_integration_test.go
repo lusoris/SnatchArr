@@ -6,6 +6,7 @@ package httpapi
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -177,21 +178,22 @@ func specOperations(t *testing.T) []specOp {
 }
 
 type idsState struct {
-	csrfToken      string
-	apiKeyID       string
-	instanceID     string
-	runID          string
-	scheduleID     string
-	clientID       string
-	seerrLinkID    string
-	seerrReqID     int
-	prowlarrLinkID string
-	configarrPath  string
-	policy         map[string]any
-	queuePolicy    map[string]any
-	settings       map[string]any
-	channelID      string
-	ruleID         string
+	csrfToken          string
+	apiKeyID           string
+	instanceID         string
+	runID              string
+	scheduleID         string
+	clientID           string
+	seerrLinkID        string
+	seerrReqID         int
+	prowlarrLinkID     string
+	configarrPath      string
+	policy             map[string]any
+	queuePolicy        map[string]any
+	settings           map[string]any
+	channelID          string
+	ruleID             string
+	watchawareSourceID string
 }
 
 func newIDsState(t *testing.T) *idsState {
@@ -1377,6 +1379,12 @@ func stepsDeletesAndAuth() []routerStep {
 			want:   http.StatusNoContent,
 		},
 		{
+			op:     "deleteWatchawareSource",
+			method: http.MethodDelete,
+			path:   func(ids *idsState) string { return "/watchaware/sources/" + ids.watchawareSourceID },
+			want:   http.StatusNoContent,
+		},
+		{
 			op:     "deleteInstance",
 			method: http.MethodDelete,
 			path:   func(ids *idsState) string { return "/instances/" + ids.instanceID },
@@ -1623,8 +1631,78 @@ func stepsPriority() []routerStep {
 	}
 }
 
+func stepsWatchaware() []routerStep {
+	return []routerStep{
+		{
+			op:     "createWatchawareSource",
+			method: http.MethodPost,
+			path:   func(_ *idsState) string { return "/watchaware/sources" },
+			body: func(_ *idsState) any {
+				return map[string]any{
+					"kind":    "jellyfin",
+					"name":    "jf-router-test",
+					"url":     "http://jellyfin.invalid:8096",
+					"api_key": "secret-jf-key",
+					"enabled": true,
+				}
+			},
+			want: http.StatusCreated,
+			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
+				t.Helper()
+				id, ok := decoded["id"].(string)
+				if !ok || id == "" {
+					t.Fatalf("createWatchawareSource id = %v, want valid uuid", decoded["id"])
+				}
+				ids.watchawareSourceID = id
+				if decoded["name"] != "jf-router-test" {
+					t.Fatalf("createWatchawareSource name = %v, want jf-router-test", decoded["name"])
+				}
+			},
+		},
+		{
+			op:     "listWatchawareSources",
+			method: http.MethodGet,
+			path:   func(_ *idsState) string { return "/watchaware/sources" },
+			want:   http.StatusOK,
+			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
+				t.Helper()
+				if !containsID(decoded["items"], ids.watchawareSourceID) {
+					t.Fatalf("listWatchawareSources missing source %s", ids.watchawareSourceID)
+				}
+			},
+		},
+		{
+			op:     "updateWatchawareSource",
+			method: http.MethodPut,
+			path:   func(ids *idsState) string { return "/watchaware/sources/" + ids.watchawareSourceID },
+			body: func(_ *idsState) any {
+				return map[string]any{
+					"kind":    "jellyfin",
+					"name":    "jf-router-updated",
+					"url":     "http://jellyfin.invalid:8096",
+					"api_key": "secret-jf-key",
+					"enabled": true,
+				}
+			},
+			want: http.StatusOK,
+			capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
+				t.Helper()
+				if decoded["name"] != "jf-router-updated" {
+					t.Fatalf("updateWatchawareSource name = %v, want jf-router-updated", decoded["name"])
+				}
+			},
+		},
+		{
+			op:     "getWatchawareSyncStatus",
+			method: http.MethodGet,
+			path:   func(_ *idsState) string { return "/watchaware/sync/status" },
+			want:   http.StatusOK,
+		},
+	}
+}
+
 func buildRouterSteps(f *routerFixture) []routerStep {
-	steps := make([]routerStep, 0, 78)
+	steps := make([]routerStep, 0, 85)
 	steps = append(steps, stepsAuth()...)
 	steps = append(steps, stepsAPIKeys()...)
 	steps = append(steps, stepsInstances()...)
@@ -1638,6 +1716,7 @@ func buildRouterSteps(f *routerFixture) []routerStep {
 	steps = append(steps, stepsProwlarr(f)...)
 	steps = append(steps, stepsNotificationChannels(f)...)
 	steps = append(steps, stepsNotificationRules()...)
+	steps = append(steps, stepsWatchaware()...)
 	steps = append(steps, stepsDeletesAndAuth()...)
 	return steps
 }
@@ -1756,6 +1835,9 @@ func TestRouterOperations(t *testing.T) {
 	t.Parallel()
 	f := newRouterFixture(t)
 	setupFixtureStubs(f)
+	if f.h.modules != nil {
+		_ = f.h.modules.SetEnabled(context.Background(), domain.ModuleWatchAware, true)
+	}
 	steps := buildRouterSteps(f)
 	assertCoverageGuard(t, steps)
 
@@ -1970,6 +2052,7 @@ func initViewerIDsState(t *testing.T, csrfToken string) *idsState {
 	ids.prowlarrLinkID = dummyUUID
 	ids.channelID = dummyUUID
 	ids.ruleID = dummyUUID
+	ids.watchawareSourceID = dummyUUID
 
 	pRaw, err := json.Marshal(policyToOAS(domain.DefaultPolicy(uuid.New())))
 	if err != nil {
@@ -2065,6 +2148,9 @@ func TestRouterRejectsViewerMutationsAndProbes(t *testing.T) {
 	t.Parallel()
 	f := newRouterFixture(t)
 	setupFixtureStubs(f)
+	if f.h.modules != nil {
+		_ = f.h.modules.SetEnabled(context.Background(), domain.ModuleWatchAware, true)
+	}
 	_ = completeInitialSetup(t, f)
 
 	viewerClient, csrfToken := loginViewerSession(t, f)

@@ -2,4 +2,10 @@
 
 package moduleops
 
-var ByOperation = map[string]string{}
+var ByOperation = map[string]string{
+	"createWatchawareSource":  "watchaware",
+	"deleteWatchawareSource":  "watchaware",
+	"getWatchawareSyncStatus": "watchaware",
+	"listWatchawareSources":   "watchaware",
+	"updateWatchawareSource":  "watchaware",
+}

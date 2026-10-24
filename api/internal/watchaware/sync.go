@@ -26,6 +26,20 @@ type Named struct {
 	Source WatchSource
 }
 
+// SourceError records a failure while syncing a specific watch source.
+type SourceError struct {
+	ID  string
+	Err error
+}
+
+func (e *SourceError) Error() string {
+	return fmt.Sprintf("watchaware: source %s: %v", e.ID, e.Err)
+}
+
+func (e *SourceError) Unwrap() error {
+	return e.Err
+}
+
 // SyncAll iterates through sources (bounded by maxSources) and stores their
 // watch state in sink. For each source, it reads watches; on error it records
 // a wrapped error formatted as "watchaware: source <id>: <err>", logs it via
@@ -41,14 +55,14 @@ func SyncAll(ctx context.Context, sources []Named, sink Sink, logf func(format s
 
 	var errs []error
 	for _, s := range sources {
-		if err := syncOne(ctx, s, sink, logf); err != nil {
-			errs = append(errs, err)
+		if srcErr := syncOne(ctx, s, sink, logf); srcErr != nil {
+			errs = append(errs, srcErr)
 		}
 	}
 	return errs
 }
 
-func syncOne(ctx context.Context, s Named, sink Sink, logf func(format string, args ...any)) error {
+func syncOne(ctx context.Context, s Named, sink Sink, logf func(format string, args ...any)) *SourceError {
 	err := readAndStore(ctx, s, sink)
 	if err == nil {
 		return nil
@@ -56,7 +70,10 @@ func syncOne(ctx context.Context, s Named, sink Sink, logf func(format string, a
 	if logf != nil {
 		logf("watchaware: source %s: %v", s.ID, err)
 	}
-	return fmt.Errorf("watchaware: source %s: %w", s.ID, err)
+	return &SourceError{
+		ID:  s.ID,
+		Err: err,
+	}
 }
 
 func readAndStore(ctx context.Context, s Named, sink Sink) error {

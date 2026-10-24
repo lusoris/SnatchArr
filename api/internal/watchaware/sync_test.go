@@ -169,3 +169,34 @@ func TestSyncAll_MaxSourcesBound(t *testing.T) {
 		t.Errorf("sink.calls = %d, want %d (bounded by maxSources)", len(sink.calls), maxSources)
 	}
 }
+
+func TestSourceError_AsAndUnwrap(t *testing.T) {
+	t.Parallel()
+
+	innerErr := errors.New("underlying network timeout")
+	srcErr := &watchaware.SourceError{
+		ID:  "source-abc-123",
+		Err: innerErr,
+	}
+
+	wantText := "watchaware: source source-abc-123: underlying network timeout"
+	if gotText := srcErr.Error(); gotText != wantText {
+		t.Errorf("Error() = %q, want %q", gotText, wantText)
+	}
+
+	wrapped := fmt.Errorf("wrap: %w", srcErr)
+	var target *watchaware.SourceError
+	if !errors.As(wrapped, &target) {
+		t.Fatalf("errors.As failed to match *SourceError")
+	}
+	if target.ID != "source-abc-123" {
+		t.Errorf("target.ID = %q, want source-abc-123", target.ID)
+	}
+
+	if !errors.Is(wrapped, innerErr) {
+		t.Errorf("errors.Is(wrapped, innerErr) = false, want true")
+	}
+	if !errors.Is(target.Unwrap(), innerErr) {
+		t.Errorf("target.Unwrap() = %v, want %v", target.Unwrap(), innerErr)
+	}
+}

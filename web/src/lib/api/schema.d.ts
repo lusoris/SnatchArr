@@ -1182,6 +1182,61 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/watchaware/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List configured watch-aware sources */
+        get: operations["listWatchawareSources"];
+        put?: never;
+        /** Add a watch-aware source */
+        post: operations["createWatchawareSource"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/watchaware/sources/{sourceId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sourceId: components["parameters"]["WatchawareSourceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Update a watch-aware source (omit api_key to keep stored key) */
+        put: operations["updateWatchawareSource"];
+        post?: never;
+        /** Delete a watch-aware source and its synced watches */
+        delete: operations["deleteWatchawareSource"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/watchaware/sync/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get watch-aware sync status across sources */
+        get: operations["getWatchawareSyncStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2124,6 +2179,44 @@ export interface components {
             would_import: boolean;
             import: boolean;
         };
+        /** @enum {string} */
+        WatchawareSourceKind: "jellyfin" | "emby";
+        WatchawareSource: {
+            /** Format: uuid */
+            id: string;
+            kind: components["schemas"]["WatchawareSourceKind"];
+            name: string;
+            /** Format: uri */
+            url: string;
+            /** @description True when an encrypted API key is stored (the key itself is write-only) */
+            has_api_key: boolean;
+            enabled: boolean;
+            /** Format: date-time */
+            last_sync_at?: string;
+            last_error?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        WatchawareSourceInput: {
+            kind: components["schemas"]["WatchawareSourceKind"];
+            name: string;
+            /** Format: uri */
+            url: string;
+            /** @description Required on create; omit on update to keep stored key */
+            api_key?: string;
+            /** @default true */
+            enabled: boolean;
+        };
+        WatchawareSyncStatus: {
+            /** Format: date-time */
+            last_sync_at?: string;
+            total_sources: number;
+            enabled_sources: number;
+            total_watches: number;
+            last_error?: string;
+        };
     };
     responses: {
         /** @description RFC 9457 problem details */
@@ -2145,6 +2238,7 @@ export interface components {
         ModuleId: string;
         NotificationChannelId: string;
         NotificationRuleId: string;
+        WatchawareSourceId: string;
     };
     requestBodies: never;
     headers: never;
@@ -4254,6 +4348,121 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listWatchawareSources: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Watch-aware sources */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchawareSource"][];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createWatchawareSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WatchawareSourceInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchawareSource"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    updateWatchawareSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sourceId: components["parameters"]["WatchawareSourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WatchawareSourceInput"];
+            };
+        };
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchawareSource"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteWatchawareSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sourceId: components["parameters"]["WatchawareSourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getWatchawareSyncStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sync status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchawareSyncStatus"];
+                };
             };
             default: components["responses"]["Problem"];
         };

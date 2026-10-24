@@ -33,6 +33,8 @@ tags:
     description: Instances imported from a Configarr config.yml (ADR-0003)
   - name: notifications
     description: Channels and rules for dispatching failure, circuit, stamina and Seerr notifications
+  - name: watchaware
+    description: Watch-aware media server sources and watch state synchronization
 security:
   - cookieAuth: []
   - bearerAuth: []
@@ -1721,6 +1723,95 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
 
+  /watchaware/sources:
+    get:
+      tags: [watchaware]
+      operationId: listWatchawareSources
+      x-module: watchaware
+      summary: List configured watch-aware sources
+      responses:
+        "200":
+          description: Watch-aware sources
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WatchawareSource"
+        default:
+          $ref: "#/components/responses/Problem"
+    post:
+      tags: [watchaware]
+      operationId: createWatchawareSource
+      x-module: watchaware
+      summary: Add a watch-aware source
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WatchawareSourceInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WatchawareSource"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /watchaware/sources/{sourceId}:
+    parameters:
+      - $ref: "#/components/parameters/WatchawareSourceId"
+    put:
+      tags: [watchaware]
+      operationId: updateWatchawareSource
+      x-module: watchaware
+      summary: Update a watch-aware source (omit api_key to keep stored key)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WatchawareSourceInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WatchawareSource"
+        default:
+          $ref: "#/components/responses/Problem"
+    delete:
+      tags: [watchaware]
+      operationId: deleteWatchawareSource
+      x-module: watchaware
+      x-destructive: true
+      summary: Delete a watch-aware source and its synced watches
+      responses:
+        "204":
+          description: Deleted
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /watchaware/sync/status:
+    get:
+      tags: [watchaware]
+      operationId: getWatchawareSyncStatus
+      x-module: watchaware
+      summary: Get watch-aware sync status across sources
+      responses:
+        "200":
+          description: Sync status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WatchawareSyncStatus"
+        default:
+          $ref: "#/components/responses/Problem"
+
 components:
   securitySchemes:
     cookieAuth:
@@ -1778,6 +1869,13 @@ components:
         format: uuid
     NotificationRuleId:
       name: ruleId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    WatchawareSourceId:
+      name: sourceId
       in: path
       required: true
       schema:
@@ -3639,4 +3737,76 @@ components:
           type: boolean
         import:
           type: boolean
+
+    WatchawareSourceKind:
+      type: string
+      enum: [jellyfin, emby]
+
+    WatchawareSource:
+      type: object
+      required: [id, kind, name, url, has_api_key, enabled, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          $ref: "#/components/schemas/WatchawareSourceKind"
+        name:
+          type: string
+        url:
+          type: string
+          format: uri
+        has_api_key:
+          type: boolean
+          description: True when an encrypted API key is stored (the key itself is write-only)
+        enabled:
+          type: boolean
+        last_sync_at:
+          type: string
+          format: date-time
+        last_error:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    WatchawareSourceInput:
+      type: object
+      required: [kind, name, url]
+      properties:
+        kind:
+          $ref: "#/components/schemas/WatchawareSourceKind"
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+        url:
+          type: string
+          format: uri
+        api_key:
+          type: string
+          description: Required on create; omit on update to keep stored key
+        enabled:
+          type: boolean
+          default: true
+
+    WatchawareSyncStatus:
+      type: object
+      required: [total_sources, enabled_sources, total_watches]
+      properties:
+        last_sync_at:
+          type: string
+          format: date-time
+        total_sources:
+          type: integer
+        enabled_sources:
+          type: integer
+        total_watches:
+          type: integer
+        last_error:
+          type: string
+
 

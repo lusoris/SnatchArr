@@ -276,11 +276,11 @@ The module switch implementation must be verified with three-dimensional testing
 
 Implementation of this architecture proceeds in five discrete pull requests:
 
-- [ ] **Slice 1: Module registry and storage**: Introduce `api/internal/modules`, database table `modules`, migration `000028_modules` (owned by ADR-0025 Slice 1, ranking before ADR-0024 Slice 1), config validation per module in Go, `llm_enabled` data migration, system settings API endpoints, and a boundary test verifying off-then-on returns the same rows.
-- [ ] **Slice 2: OpenAPI gating middleware and repository check**: Implement `x-module` validation, ogen `ModuleGateMiddleware`, and `check_module_routes` CI verification.
-- [ ] **Slice 3: MCP dynamic tool gating**: Add `Module` field to `toolSpec` in `api/internal/llm/tools.go` and implement dynamic filtering in `tools/list` and `tools/call`.
+- [x] **Slice 1: Module registry and storage**: Introduce `api/internal/modules`, database table `modules`, migration `000028_modules` (owned by ADR-0025 Slice 1, ranking before ADR-0024 Slice 1), config validation per module in Go, `llm_enabled` data migration, system settings API endpoints, and a boundary test verifying off-then-on returns the same rows (#604, #605).
+- [x] **Slice 2: OpenAPI gating middleware and repository check**: Implement `x-module` validation, ogen `ModuleGateMiddleware`, and `check_module_routes` CI verification (#606).
+- [x] **Slice 3: MCP dynamic tool gating**: Add `Module` field to `toolSpec` in `api/internal/llm/tools.go` and implement dynamic filtering in `tools/list` and `tools/call` (#619).
 - [ ] **Slice 4: SPA dynamic navigation and route guards**: Update `nav.ts` and SvelteKit router layout to filter links and guard routes based on active module states.
-- [ ] **Slice 5: Watch-aware module migration**: Adopt the ADR-0025 switch architecture as the foundation for watch-aware modes ([ADR-0024](0024-watch-aware-modes.md) Slice 1).
+- [x] **Slice 5: Watch-aware module migration**: Adopt the ADR-0025 switch architecture as the foundation for watch-aware modes ([ADR-0024](0024-watch-aware-modes.md) Slice 1) (this PR).
 
 ## Open Questions
 
