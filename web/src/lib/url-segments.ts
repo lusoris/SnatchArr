@@ -50,3 +50,27 @@ export function splitUrl(url: string): string[] {
 	if (current.length > 0) segments.push(current);
 	return segments.length > 0 ? segments : [''];
 }
+
+export interface TextPart {
+	text: string;
+	url: boolean;
+}
+
+const URL_IN_TEXT = /https?:\/\/[^\s"'<>]+/g;
+
+/**
+ * Splits free text (log messages, event details) into plain and URL parts so a
+ * URL renders through UrlText and wraps only at its delimiters.
+ */
+export function splitTextUrls(text: string): TextPart[] {
+	const parts: TextPart[] = [];
+	let last = 0;
+	for (const match of text.matchAll(URL_IN_TEXT)) {
+		const start = match.index;
+		if (start > last) parts.push({ text: text.slice(last, start), url: false });
+		parts.push({ text: match[0], url: true });
+		last = start + match[0].length;
+	}
+	if (last < text.length) parts.push({ text: text.slice(last), url: false });
+	return parts;
+}

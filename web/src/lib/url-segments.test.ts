@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 import { describe, expect, it } from 'vitest';
-import { splitUrl } from './url-segments.js';
+import { splitTextUrls, splitUrl } from './url-segments.js';
 
 describe('splitUrl', () => {
 	it('positive: splits typical service URL into segments at scheme and delimiters', () => {
@@ -56,5 +56,30 @@ describe('splitUrl', () => {
 			'#bottom'
 		]);
 		expect(segments.join('')).toBe(url);
+	});
+});
+
+describe('splitTextUrls', () => {
+	it('positive: separates URLs from surrounding text and stops at quotes', () => {
+		expect(splitTextUrls('get "http://h:1/a/rpc": refused')).toEqual([
+			{ text: 'get "', url: false },
+			{ text: 'http://h:1/a/rpc', url: true },
+			{ text: '": refused', url: false }
+		]);
+	});
+
+	it('negative: text without a URL is one plain part, empty text no parts', () => {
+		expect(splitTextUrls('no link here')).toEqual([{ text: 'no link here', url: false }]);
+		expect(splitTextUrls('')).toEqual([]);
+	});
+
+	it('boundary: URLs at start, end and back to back', () => {
+		const parts = splitTextUrls('https://a.b https://c.d');
+		expect(parts).toEqual([
+			{ text: 'https://a.b', url: true },
+			{ text: ' ', url: false },
+			{ text: 'https://c.d', url: true }
+		]);
+		expect(parts.map((p) => p.text).join('')).toBe('https://a.b https://c.d');
 	});
 });
