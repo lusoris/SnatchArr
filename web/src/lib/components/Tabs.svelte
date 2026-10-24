@@ -97,7 +97,7 @@ SPDX-License-Identifier: EUPL-1.2
 		id={`panel-${active}`}
 		aria-labelledby={`tab-${active}`}
 		tabindex="0"
-		class="tabpanel focus-visible:outline-none"
+		class="tabpanel"
 	>
 		{@render children?.(active)}
 	</div>

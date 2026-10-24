@@ -153,4 +153,25 @@ test.describe('keyboard navigation', () => {
 		await expect(dialog).toBeHidden();
 		await expect(moreButton).toBeFocused();
 	});
+
+	test('authenticated: desktop: on /system, Tab from active tab reaches panel with visible focus ring', async ({
+		page
+	}) => {
+		await page.setViewportSize({ width: 1280, height: 800 });
+		await page.goto('/system');
+		await page.waitForLoadState('networkidle');
+
+		const activeTab = page.getByRole('tab', { selected: true });
+		await expect(activeTab).toBeVisible();
+		await activeTab.focus();
+		await expect(activeTab).toBeFocused();
+
+		await page.keyboard.press('Tab');
+
+		const panel = page.getByRole('tabpanel');
+		await expect(panel).toBeFocused();
+
+		const outlineStyle = await panel.evaluate((el) => window.getComputedStyle(el).outlineStyle);
+		expect(outlineStyle).not.toBe('none');
+	});
 });

@@ -160,4 +160,18 @@ describe('Tabs', () => {
 		await fireEvent.keyDown(secondTab, { key: 'End' });
 		expect(onchange).toHaveBeenCalledWith('third');
 	});
+
+	it('positive: tabpanel does not suppress visible focus indicator', () => {
+		render(Tabs, {
+			props: {
+				tabs: sampleTabs,
+				active: 'first'
+			}
+		});
+
+		const panel = screen.getByRole('tabpanel');
+		expect(panel.getAttribute('tabindex')).toBe('0');
+		expect(Array.from(panel.classList).some((cls) => cls.includes('outline-none'))).toBe(false);
+		expect(panel.className).not.toContain('outline-none');
+	});
 });

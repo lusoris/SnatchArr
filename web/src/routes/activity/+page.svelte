@@ -20,13 +20,13 @@ SPDX-License-Identifier: EUPL-1.2
 	const tabs = $derived<Tab<ActivityTabKey>[]>(
 		session.isAdmin
 			? [
-					{ id: 'history', label: m.history_title() },
-					{ id: 'live', label: m.live_title() },
-					{ id: 'log', label: m.logs_title() }
+					{ id: 'history', label: m.activity_tab_history() },
+					{ id: 'live', label: m.activity_tab_live() },
+					{ id: 'log', label: m.activity_tab_log() }
 				]
 			: [
-					{ id: 'history', label: m.history_title() },
-					{ id: 'live', label: m.live_title() }
+					{ id: 'history', label: m.activity_tab_history() },
+					{ id: 'live', label: m.activity_tab_live() }
 				]
 	);
 

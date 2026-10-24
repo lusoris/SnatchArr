@@ -51,7 +51,9 @@ describe('activity page tabs', () => {
 		renderWithQuery(ActivityPage);
 
 		expect(await screen.findByRole('heading', { level: 1, name: m.nav_activity() })).toBeTruthy();
-		expect(screen.getByRole('tab', { name: m.history_title(), selected: true })).toBeTruthy();
+		expect(
+			screen.getByRole('tab', { name: m.activity_tab_history(), selected: true })
+		).toBeTruthy();
 		expect(screen.getByRole('grid', { name: m.history_title() })).toBeTruthy();
 	});
 
@@ -59,14 +61,18 @@ describe('activity page tabs', () => {
 		pageMock.url = new URL('http://localhost/activity?source=live');
 		renderWithQuery(ActivityPage);
 
-		expect(await screen.findByRole('tab', { name: m.live_title(), selected: true })).toBeTruthy();
+		expect(
+			await screen.findByRole('tab', { name: m.activity_tab_live(), selected: true })
+		).toBeTruthy();
 	});
 
 	it('renders log tab for admin when source=log', async () => {
 		pageMock.url = new URL('http://localhost/activity?source=log');
 		renderWithQuery(ActivityPage);
 
-		expect(await screen.findByRole('tab', { name: m.logs_title(), selected: true })).toBeTruthy();
+		expect(
+			await screen.findByRole('tab', { name: m.activity_tab_log(), selected: true })
+		).toBeTruthy();
 	});
 
 	it('omits log tab and falls back to history for viewer even if source=log', async () => {
@@ -74,14 +80,16 @@ describe('activity page tabs', () => {
 		pageMock.url = new URL('http://localhost/activity?source=log');
 		renderWithQuery(ActivityPage);
 
-		expect(screen.queryByRole('tab', { name: m.logs_title() })).toBeNull();
-		expect(screen.getByRole('tab', { name: m.history_title(), selected: true })).toBeTruthy();
+		expect(screen.queryByRole('tab', { name: m.activity_tab_log() })).toBeNull();
+		expect(
+			screen.getByRole('tab', { name: m.activity_tab_history(), selected: true })
+		).toBeTruthy();
 	});
 
 	it('clicking a tab updates query and calls goto', async () => {
 		renderWithQuery(ActivityPage);
 
-		const liveTab = screen.getByRole('tab', { name: m.live_title() });
+		const liveTab = screen.getByRole('tab', { name: m.activity_tab_live() });
 		await fireEvent.click(liveTab);
 
 		expect(navMocks.goto).toHaveBeenCalledWith('/activity?source=live', { replaceState: true });
