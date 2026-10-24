@@ -31,14 +31,14 @@ test.describe('keyboard navigation', () => {
 		await page.goto('/');
 		await page.waitForLoadState('networkidle');
 
-		// Tab from top: Skip link -> Brand link -> search trigger -> first nav item (Dashboard)
+		// Tab from top: Skip link -> Brand link -> search trigger -> first nav item (Overview)
 		await page.keyboard.press('Tab'); // skip link
 		await page.keyboard.press('Tab'); // brand link in sidebar
 		await page.keyboard.press('Tab'); // search trigger button
-		await page.keyboard.press('Tab'); // first nav item (Dashboard)
+		await page.keyboard.press('Tab'); // first nav item (Overview)
 
-		const dashboardLink = page.getByRole('link', { name: /Dashboard|Übersicht/i }).first();
-		await expect(dashboardLink).toBeFocused();
+		const overviewLink = page.getByRole('link', { name: /Overview|Übersicht/i }).first();
+		await expect(overviewLink).toBeFocused();
 
 		// Check every nav entry is reachable by tabbing sequentially
 		const expectedHrefs = [
