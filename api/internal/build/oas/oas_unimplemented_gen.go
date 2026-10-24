@@ -121,6 +121,15 @@ func (UnimplementedHandler) CreateSeerrLink(ctx context.Context, req *SeerrLinkI
 	return r, ht.ErrNotImplemented
 }
 
+// CreateWatchawareSource implements createWatchawareSource operation.
+//
+// Add a watch-aware source.
+//
+// POST /watchaware/sources
+func (UnimplementedHandler) CreateWatchawareSource(ctx context.Context, req *WatchawareSourceInput) (r *WatchawareSource, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // DeleteDownloadClient implements deleteDownloadClient operation.
 //
 // Delete a download client.
@@ -191,6 +200,15 @@ func (UnimplementedHandler) DeleteSchedule(ctx context.Context, params DeleteSch
 //
 // DELETE /seerr/{linkId}
 func (UnimplementedHandler) DeleteSeerrLink(ctx context.Context, params DeleteSeerrLinkParams) error {
+	return ht.ErrNotImplemented
+}
+
+// DeleteWatchawareSource implements deleteWatchawareSource operation.
+//
+// Delete a watch-aware source and its synced watches.
+//
+// DELETE /watchaware/sources/{sourceId}
+func (UnimplementedHandler) DeleteWatchawareSource(ctx context.Context, params DeleteWatchawareSourceParams) error {
 	return ht.ErrNotImplemented
 }
 
@@ -402,6 +420,15 @@ func (UnimplementedHandler) GetSystemStatus(ctx context.Context) (r *SystemStatu
 	return r, ht.ErrNotImplemented
 }
 
+// GetWatchawareSyncStatus implements getWatchawareSyncStatus operation.
+//
+// Get watch-aware sync status across sources.
+//
+// GET /watchaware/sync/status
+func (UnimplementedHandler) GetWatchawareSyncStatus(ctx context.Context) (r *WatchawareSyncStatus, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // ImportConfigarr implements importConfigarr operation.
 //
 // Import instances from a Configarr config.yml (defaults to the linked files).
@@ -555,6 +582,15 @@ func (UnimplementedHandler) ListSeerrLinks(ctx context.Context) (r []SeerrLink, 
 //
 // GET /seerr/requests
 func (UnimplementedHandler) ListSeerrRequests(ctx context.Context) (r []SeerrRequest, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ListWatchawareSources implements listWatchawareSources operation.
+//
+// List configured watch-aware sources.
+//
+// GET /watchaware/sources
+func (UnimplementedHandler) ListWatchawareSources(ctx context.Context) (r []WatchawareSource, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -816,6 +852,15 @@ func (UnimplementedHandler) UpdateSeerrLink(ctx context.Context, req *SeerrLinkI
 //
 // PUT /settings
 func (UnimplementedHandler) UpdateSettings(ctx context.Context, req *Settings) (r *Settings, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UpdateWatchawareSource implements updateWatchawareSource operation.
+//
+// Update a watch-aware source (omit api_key to keep stored key).
+//
+// PUT /watchaware/sources/{sourceId}
+func (UnimplementedHandler) UpdateWatchawareSource(ctx context.Context, req *WatchawareSourceInput, params UpdateWatchawareSourceParams) (r *WatchawareSource, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

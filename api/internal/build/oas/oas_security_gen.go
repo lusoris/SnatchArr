@@ -44,6 +44,7 @@ var operationRolesBearerAuth = map[string][]string{
 	CreateProwlarrLinkOperation:        []string{},
 	CreateScheduleOperation:            []string{},
 	CreateSeerrLinkOperation:           []string{},
+	CreateWatchawareSourceOperation:    []string{},
 	DeleteDownloadClientOperation:      []string{},
 	DeleteInstanceOperation:            []string{},
 	DeleteInstanceEventsOperation:      []string{},
@@ -52,6 +53,7 @@ var operationRolesBearerAuth = map[string][]string{
 	DeleteProwlarrLinkOperation:        []string{},
 	DeleteScheduleOperation:            []string{},
 	DeleteSeerrLinkOperation:           []string{},
+	DeleteWatchawareSourceOperation:    []string{},
 	DiscoverDownloadClientsOperation:   []string{},
 	GetConfigarrStatusOperation:        []string{},
 	GetDownloadClientOperation:         []string{},
@@ -72,6 +74,7 @@ var operationRolesBearerAuth = map[string][]string{
 	GetSeerrLinkOperation:              []string{},
 	GetSessionOperation:                []string{},
 	GetSettingsOperation:               []string{},
+	GetWatchawareSyncStatusOperation:   []string{},
 	ImportConfigarrOperation:           []string{},
 	ImportSeerrInstancesOperation:      []string{},
 	ListDownloadClientsOperation:       []string{},
@@ -88,6 +91,7 @@ var operationRolesBearerAuth = map[string][]string{
 	ListSchedulesOperation:             []string{},
 	ListSeerrLinksOperation:            []string{},
 	ListSeerrRequestsOperation:         []string{},
+	ListWatchawareSourcesOperation:     []string{},
 	LogoutOperation:                    []string{},
 	PreviewRunOperation:                []string{},
 	ResetStateOperation:                []string{},
@@ -115,6 +119,7 @@ var operationRolesBearerAuth = map[string][]string{
 	UpdateScheduleOperation:            []string{},
 	UpdateSeerrLinkOperation:           []string{},
 	UpdateSettingsOperation:            []string{},
+	UpdateWatchawareSourceOperation:    []string{},
 }
 
 // GetRolesForBearerAuth returns the required roles for the given operation.
@@ -150,6 +155,7 @@ var operationRolesCookieAuth = map[string][]string{
 	CreateProwlarrLinkOperation:        []string{},
 	CreateScheduleOperation:            []string{},
 	CreateSeerrLinkOperation:           []string{},
+	CreateWatchawareSourceOperation:    []string{},
 	DeleteDownloadClientOperation:      []string{},
 	DeleteInstanceOperation:            []string{},
 	DeleteInstanceEventsOperation:      []string{},
@@ -158,6 +164,7 @@ var operationRolesCookieAuth = map[string][]string{
 	DeleteProwlarrLinkOperation:        []string{},
 	DeleteScheduleOperation:            []string{},
 	DeleteSeerrLinkOperation:           []string{},
+	DeleteWatchawareSourceOperation:    []string{},
 	DiscoverDownloadClientsOperation:   []string{},
 	GetConfigarrStatusOperation:        []string{},
 	GetDownloadClientOperation:         []string{},
@@ -178,6 +185,7 @@ var operationRolesCookieAuth = map[string][]string{
 	GetSeerrLinkOperation:              []string{},
 	GetSessionOperation:                []string{},
 	GetSettingsOperation:               []string{},
+	GetWatchawareSyncStatusOperation:   []string{},
 	ImportConfigarrOperation:           []string{},
 	ImportSeerrInstancesOperation:      []string{},
 	ListAPIKeysOperation:               []string{},
@@ -195,6 +203,7 @@ var operationRolesCookieAuth = map[string][]string{
 	ListSchedulesOperation:             []string{},
 	ListSeerrLinksOperation:            []string{},
 	ListSeerrRequestsOperation:         []string{},
+	ListWatchawareSourcesOperation:     []string{},
 	LogoutOperation:                    []string{},
 	PreviewRunOperation:                []string{},
 	ResetStateOperation:                []string{},
@@ -223,6 +232,7 @@ var operationRolesCookieAuth = map[string][]string{
 	UpdateScheduleOperation:            []string{},
 	UpdateSeerrLinkOperation:           []string{},
 	UpdateSettingsOperation:            []string{},
+	UpdateWatchawareSourceOperation:    []string{},
 }
 
 // GetRolesForCookieAuth returns the required roles for the given operation.

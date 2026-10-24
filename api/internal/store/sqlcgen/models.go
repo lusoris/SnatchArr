@@ -302,6 +302,35 @@ type User struct {
 	ExternalID   *string
 }
 
+type WatchawareItemWatch struct {
+	SourceID         uuid.UUID
+	UserID           string
+	ItemID           string
+	UserName         string
+	ItemType         string
+	SeriesID         string
+	SeasonNumber     int32
+	EpisodeNumber    int32
+	Played           bool
+	PlayedPercentage *float64
+	ResumePosition   int64
+	LastPlayedAt     string
+	SyncedAt         time.Time
+}
+
+type WatchawareSource struct {
+	ID         uuid.UUID
+	Kind       string
+	Name       string
+	Url        string
+	ApiKeyEnc  []byte
+	Enabled    bool
+	LastSyncAt *time.Time
+	LastError  *string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}
+
 type WebhookDelivery struct {
 	ID         string
 	EndpointID string

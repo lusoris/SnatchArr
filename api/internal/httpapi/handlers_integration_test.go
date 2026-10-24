@@ -55,6 +55,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
 	"github.com/lusoris/SnatchArr/api/internal/store/storetest"
 	"github.com/lusoris/SnatchArr/api/internal/testdiag"
+	"github.com/lusoris/SnatchArr/api/internal/watchaware"
 )
 
 type stubSnapshotter struct {
@@ -298,35 +299,37 @@ func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Genera
 	if err := modulesSvc.Ensure(context.Background()); err != nil {
 		t.Fatalf("buildHandlers: modules.Ensure: %v", err)
 	}
+	watchawareSvc := watchaware.NewService(st, enc, clk, ids, logger, modulesSvc)
 	build := buildinfo.Info{Version: "test-ver", Commit: "test-commit", Date: "2026-10-14"}
 	h := &Handlers{
-		build:     build,
-		cfg:       cfg,
-		clk:       clk,
-		auth:      authSvc,
-		apiKeys:   apiKeys,
-		sessions:  sessMgr,
-		instances: instSvc,
-		policies:  polSvc,
-		queue:     queueStore,
-		queueSvc:  queueSvc,
-		options:   policies.NewOptions(instSvc, labeler),
-		runs:      runs,
-		workers:   workers,
-		rec:       rec,
-		budget:    budget,
-		memory:    memory,
-		planner:   planner,
-		schedules: schedules,
-		clients:   clients,
-		settings:  settingsSvc,
-		modules:   modulesSvc,
-		configarr: configarrSvc,
-		seerr:     seerrSvc,
-		prowlarr:  prowlarrSvc,
-		notify:    notifySvc,
-		logs:      logring.New(logring.MinSize),
-		logger:    logger,
+		build:      build,
+		cfg:        cfg,
+		clk:        clk,
+		auth:       authSvc,
+		apiKeys:    apiKeys,
+		sessions:   sessMgr,
+		instances:  instSvc,
+		policies:   polSvc,
+		queue:      queueStore,
+		queueSvc:   queueSvc,
+		options:    policies.NewOptions(instSvc, labeler),
+		runs:       runs,
+		workers:    workers,
+		rec:        rec,
+		budget:     budget,
+		memory:     memory,
+		planner:    planner,
+		schedules:  schedules,
+		clients:    clients,
+		settings:   settingsSvc,
+		modules:    modulesSvc,
+		configarr:  configarrSvc,
+		seerr:      seerrSvc,
+		prowlarr:   prowlarrSvc,
+		notify:     notifySvc,
+		watchaware: watchawareSvc,
+		logs:       logring.New(logring.MinSize),
+		logger:     logger,
 	}
 	return h, notifySvc, webhookStore, notifyEngine, rec, enc, prowlarrSvc
 }

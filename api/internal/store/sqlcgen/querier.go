@@ -26,6 +26,8 @@ type Querier interface {
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
 	CountUsers(ctx context.Context) (int64, error)
+	CountWatchAwareItemWatches(ctx context.Context) (int64, error)
+	CountWatchAwareItemWatchesForSource(ctx context.Context, sourceID uuid.UUID) (int64, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
 	CreateDownloadClient(ctx context.Context, arg CreateDownloadClientParams) (DownloadClient, error)
@@ -46,6 +48,9 @@ type Querier interface {
 	// SPDX-License-Identifier: EUPL-1.2
 	CreateSeerrLink(ctx context.Context, arg CreateSeerrLinkParams) (SeerrLink, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+	// SPDX-License-Identifier: EUPL-1.2
+	CreateWatchAwareSource(ctx context.Context, arg CreateWatchAwareSourceParams) (WatchawareSource, error)
 	DeleteConfigarrDownloadClientsNotIn(ctx context.Context, keys []string) (int64, error)
 	DeleteDownloadClient(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteEventsForInstance(ctx context.Context, instanceID uuid.UUID) (int64, error)
@@ -62,6 +67,7 @@ type Querier interface {
 	DeleteUnseenSeerrRequests(ctx context.Context, arg DeleteUnseenSeerrRequestsParams) (int64, error)
 	// data->>'user_id' couples to auth.SessionUserKey in api/internal/auth/service.go.
 	DeleteUserSessionsExcept(ctx context.Context, arg DeleteUserSessionsExceptParams) (int64, error)
+	DeleteWatchAwareSource(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteWebhookEndpoint(ctx context.Context, id string) (int64, error)
 	DisableConfigarrInstancesNotIn(ctx context.Context, arg DisableConfigarrInstancesNotInParams) (int64, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
@@ -85,6 +91,7 @@ type Querier interface {
 	GetInstance(ctx context.Context, id uuid.UUID) (Instance, error)
 	GetInstanceByConfigarrKey(ctx context.Context, configarrKey *string) (Instance, error)
 	GetInstancePriority(ctx context.Context, id uuid.UUID) (GetInstancePriorityRow, error)
+	GetLatestWatchAwareSourceError(ctx context.Context) (*string, error)
 	GetLoginLockout(ctx context.Context, key string) (LoginLockout, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
@@ -108,6 +115,8 @@ type Querier interface {
 	GetSettings(ctx context.Context) (Setting, error)
 	GetUser(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserByUsername(ctx context.Context, username string) (User, error)
+	GetWatchAwareSource(ctx context.Context, id uuid.UUID) (WatchawareSource, error)
+	GetWatchAwareSyncSummary(ctx context.Context) (GetWatchAwareSyncSummaryRow, error)
 	GlobalBucketUsage(ctx context.Context, since time.Time) (GlobalBucketUsageRow, error)
 	HasActiveRun(ctx context.Context, arg HasActiveRunParams) (bool, error)
 	HeartbeatRun(ctx context.Context, arg HeartbeatRunParams) (SnatchRun, error)
@@ -131,11 +140,13 @@ type Querier interface {
 	ListEnabledProwlarrLinks(ctx context.Context) ([]ProwlarrLink, error)
 	ListEnabledSchedulesFor(ctx context.Context, instanceID *uuid.UUID) ([]Schedule, error)
 	ListEnabledSeerrLinks(ctx context.Context) ([]SeerrLink, error)
+	ListEnabledWatchAwareSources(ctx context.Context) ([]WatchawareSource, error)
 	ListEvents(ctx context.Context, arg ListEventsParams) ([]SnatchEvent, error)
 	ListEventsForRun(ctx context.Context, runID *uuid.UUID) ([]SnatchEvent, error)
 	ListInstances(ctx context.Context) ([]Instance, error)
 	// Instances never evaluated come first, then the one evaluated longest ago (#176).
 	ListInstancesToPlan(ctx context.Context) ([]Instance, error)
+	ListItemWatchesForSource(ctx context.Context, sourceID uuid.UUID) ([]WatchawareItemWatch, error)
 	ListModules(ctx context.Context) ([]Module, error)
 	ListNotificationChannels(ctx context.Context) ([]NotificationChannel, error)
 	ListNotificationChannelsByIDs(ctx context.Context, ids []uuid.UUID) ([]NotificationChannel, error)
@@ -148,6 +159,7 @@ type Querier interface {
 	ListSeerrLinks(ctx context.Context) ([]SeerrLink, error)
 	ListSeerrRequests(ctx context.Context, limit int32) ([]ListSeerrRequestsRow, error)
 	ListUsers(ctx context.Context) ([]User, error)
+	ListWatchAwareSources(ctx context.Context) ([]WatchawareSource, error)
 	ListWebhookEndpoints(ctx context.Context, dollar_1 string) ([]WebhookEndpoint, error)
 	LoadSession(ctx context.Context, arg LoadSessionParams) ([]byte, error)
 	// Taken after LockInstanceBudget, never before, so the two locks cannot deadlock.
@@ -184,6 +196,8 @@ type Querier interface {
 	RecordProwlarrCheck(ctx context.Context, arg RecordProwlarrCheckParams) error
 	RecordSeerrCheck(ctx context.Context, arg RecordSeerrCheckParams) error
 	RecordSeerrSync(ctx context.Context, arg RecordSeerrSyncParams) error
+	RecordWatchAwareSourceSyncError(ctx context.Context, arg RecordWatchAwareSourceSyncErrorParams) error
+	RecordWatchAwareSourceSyncSuccess(ctx context.Context, arg RecordWatchAwareSourceSyncSuccessParams) error
 	ResetProcessed(ctx context.Context, instanceID *uuid.UUID) (int64, error)
 	RevokeAPIKey(ctx context.Context, arg RevokeAPIKeyParams) (int64, error)
 	RevokeAPIKeyForOwner(ctx context.Context, arg RevokeAPIKeyForOwnerParams) (int64, error)
@@ -212,6 +226,7 @@ type Querier interface {
 	UpdateSeerrLink(ctx context.Context, arg UpdateSeerrLinkParams) (SeerrLink, error)
 	UpdateSettings(ctx context.Context, arg UpdateSettingsParams) (Setting, error)
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
+	UpdateWatchAwareSource(ctx context.Context, arg UpdateWatchAwareSourceParams) (WatchawareSource, error)
 	UpsertConfigarrDownloadClient(ctx context.Context, arg UpsertConfigarrDownloadClientParams) (UpsertConfigarrDownloadClientRow, error)
 	UpsertConfigarrInstance(ctx context.Context, arg UpsertConfigarrInstanceParams) (UpsertConfigarrInstanceRow, error)
 	UpsertDiscoveredDownloadClient(ctx context.Context, arg UpsertDiscoveredDownloadClientParams) (UpsertDiscoveredDownloadClientRow, error)
@@ -222,6 +237,7 @@ type Querier interface {
 	UpsertQueuePolicy(ctx context.Context, arg UpsertQueuePolicyParams) error
 	UpsertQueueStrikes(ctx context.Context, arg UpsertQueueStrikesParams) error
 	UpsertSeerrRequest(ctx context.Context, arg UpsertSeerrRequestParams) error
+	UpsertWatchAwareItemWatch(ctx context.Context, arg UpsertWatchAwareItemWatchParams) error
 }
 
 var _ Querier = (*Queries)(nil)

@@ -80,6 +80,12 @@ type Handler interface {
 	//
 	// POST /seerr
 	CreateSeerrLink(ctx context.Context, req *SeerrLinkInput) (*SeerrLink, error)
+	// CreateWatchawareSource implements createWatchawareSource operation.
+	//
+	// Add a watch-aware source.
+	//
+	// POST /watchaware/sources
+	CreateWatchawareSource(ctx context.Context, req *WatchawareSourceInput) (*WatchawareSource, error)
 	// DeleteDownloadClient implements deleteDownloadClient operation.
 	//
 	// Delete a download client.
@@ -129,6 +135,12 @@ type Handler interface {
 	//
 	// DELETE /seerr/{linkId}
 	DeleteSeerrLink(ctx context.Context, params DeleteSeerrLinkParams) error
+	// DeleteWatchawareSource implements deleteWatchawareSource operation.
+	//
+	// Delete a watch-aware source and its synced watches.
+	//
+	// DELETE /watchaware/sources/{sourceId}
+	DeleteWatchawareSource(ctx context.Context, params DeleteWatchawareSourceParams) error
 	// DiscoverDownloadClients implements discoverDownloadClients operation.
 	//
 	// Import the download clients this instance has configured.
@@ -268,6 +280,12 @@ type Handler interface {
 	//
 	// GET /system/status
 	GetSystemStatus(ctx context.Context) (*SystemStatus, error)
+	// GetWatchawareSyncStatus implements getWatchawareSyncStatus operation.
+	//
+	// Get watch-aware sync status across sources.
+	//
+	// GET /watchaware/sync/status
+	GetWatchawareSyncStatus(ctx context.Context) (*WatchawareSyncStatus, error)
 	// ImportConfigarr implements importConfigarr operation.
 	//
 	// Import instances from a Configarr config.yml (defaults to the linked files).
@@ -373,6 +391,12 @@ type Handler interface {
 	//
 	// GET /seerr/requests
 	ListSeerrRequests(ctx context.Context) ([]SeerrRequest, error)
+	// ListWatchawareSources implements listWatchawareSources operation.
+	//
+	// List configured watch-aware sources.
+	//
+	// GET /watchaware/sources
+	ListWatchawareSources(ctx context.Context) ([]WatchawareSource, error)
 	// Login implements login operation.
 	//
 	// Start a session with username and password.
@@ -547,6 +571,12 @@ type Handler interface {
 	//
 	// PUT /settings
 	UpdateSettings(ctx context.Context, req *Settings) (*Settings, error)
+	// UpdateWatchawareSource implements updateWatchawareSource operation.
+	//
+	// Update a watch-aware source (omit api_key to keep stored key).
+	//
+	// PUT /watchaware/sources/{sourceId}
+	UpdateWatchawareSource(ctx context.Context, req *WatchawareSourceInput, params UpdateWatchawareSourceParams) (*WatchawareSource, error)
 	// NewError creates *ProblemStatusCode from error returned by handler.
 	//
 	// Used for common default response.

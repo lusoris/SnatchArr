@@ -24,8 +24,10 @@ type watchAwareConfig struct {
 }
 
 const (
-	minSyncIntervalMinutes = 5
-	maxSyncIntervalMinutes = 1440
+	// MinSyncIntervalMinutes is the minimum allowed sync interval for watchaware.
+	MinSyncIntervalMinutes = 5
+	// MaxSyncIntervalMinutes is the maximum allowed sync interval for watchaware.
+	MaxSyncIntervalMinutes = 1440
 )
 
 func decodeStrictObject(raw json.RawMessage, name string, dst any) error {
@@ -60,12 +62,12 @@ func ValidateWatchAwareConfig(raw json.RawMessage) error {
 	}
 	if cfg.SyncIntervalMinutes != nil {
 		val := *cfg.SyncIntervalMinutes
-		if val < minSyncIntervalMinutes || val > maxSyncIntervalMinutes {
+		if val < MinSyncIntervalMinutes || val > MaxSyncIntervalMinutes {
 			return fmt.Errorf(
 				"%w: sync_interval_minutes must be between %d and %d",
 				domain.ErrInvalid,
-				minSyncIntervalMinutes,
-				maxSyncIntervalMinutes,
+				MinSyncIntervalMinutes,
+				MaxSyncIntervalMinutes,
 			)
 		}
 	}
