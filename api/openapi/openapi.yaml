@@ -536,6 +536,24 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
 
+  /instances/{instanceId}/queue:
+    parameters:
+      - $ref: "#/components/parameters/InstanceId"
+    get:
+      tags: [instances]
+      operationId: listQueueItems
+      summary: Real-time download queue contents and sweep decisions for an instance
+      description: Returns real-time *arr queue items with sweep decisions, strike records, and blocklist states.
+      responses:
+        "200":
+          description: Queue inspection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueueInspection"
+        default:
+          $ref: "#/components/responses/Problem"
+
   /instances/{instanceId}/queue-strikes:
     parameters:
       - $ref: "#/components/parameters/InstanceId"
@@ -3414,5 +3432,91 @@ components:
           format: date-time
         import_refused:
           description: True when the last force import found no clean, mapped candidate and sent nothing.
+          type: boolean
+
+    QueueInspection:
+      type: object
+      required:
+        - items
+        - truncated
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/QueueInspectedItem"
+        truncated:
+          type: boolean
+          description: True when the returned queue items reached the inspection page bound and more items exist.
+
+    QueueInspectedItem:
+      type: object
+      required:
+        - queue_id
+        - download_id
+        - title
+        - status
+        - tracked_download_status
+        - tracked_download_state
+        - protocol
+        - size
+        - size_left
+        - added
+        - status_lines
+        - rule
+        - strike_count
+        - threshold
+        - would_remove
+        - remove
+        - blocklist_on_removal
+        - deferred
+        - would_import
+        - import
+      properties:
+        queue_id:
+          type: integer
+          format: int32
+        download_id:
+          type: string
+        title:
+          type: string
+        status:
+          type: string
+        tracked_download_status:
+          type: string
+        tracked_download_state:
+          type: string
+        protocol:
+          type: string
+        size:
+          type: integer
+          format: int64
+        size_left:
+          type: integer
+          format: int64
+        added:
+          type: string
+          format: date-time
+        status_lines:
+          type: array
+          items:
+            type: string
+        rule:
+          type: string
+          description: Rule broken by this item, or empty if clean.
+        strike_count:
+          type: integer
+        threshold:
+          type: integer
+        would_remove:
+          type: boolean
+        remove:
+          type: boolean
+        blocklist_on_removal:
+          type: boolean
+        deferred:
+          type: boolean
+        would_import:
+          type: boolean
+        import:
           type: boolean
 

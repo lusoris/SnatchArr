@@ -439,6 +439,10 @@ func callListQueueStrikes(ctx context.Context, h *httpapi.Handlers, id uuid.UUID
 	return h.ListQueueStrikes(ctx, oas.ListQueueStrikesParams{InstanceId: id})
 }
 
+func callListQueueItems(ctx context.Context, h *httpapi.Handlers, id uuid.UUID) (*oas.QueueInspection, error) {
+	return h.ListQueueItems(ctx, oas.ListQueueItemsParams{InstanceId: id})
+}
+
 func callListRuns(ctx context.Context, h *httpapi.Handlers, in listRunsInput) (any, error) {
 	params, err := convertListRunsParams(in)
 	if err != nil {

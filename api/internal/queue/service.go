@@ -45,6 +45,7 @@ type Instance struct {
 // InstanceSource lists enabled instances with decrypted API keys.
 type InstanceSource interface {
 	ListEnabledInstances(ctx context.Context) ([]Instance, error)
+	EnabledInstance(ctx context.Context, id uuid.UUID) (Instance, error)
 }
 
 // DBInstanceSource loads enabled instances from Postgres and decrypts their keys.
@@ -85,6 +86,35 @@ func (s *DBInstanceSource) ListEnabledInstances(ctx context.Context) ([]Instance
 		})
 	}
 	return out, errors.Join(errs...)
+}
+
+// EnabledInstance returns one enabled instance with its decrypted API key.
+// Returns domain.ErrNotFound when the instance does not exist or is disabled.
+func (s *DBInstanceSource) EnabledInstance(ctx context.Context, id uuid.UUID) (Instance, error) {
+	row, err := s.st.Q().GetInstance(ctx, id)
+	if err != nil {
+		mapped := store.MapError(err)
+		if errors.Is(mapped, domain.ErrNotFound) {
+			return Instance{}, domain.ErrNotFound
+		}
+		return Instance{}, fmt.Errorf("queue: get instance: %w", mapped)
+	}
+	if !row.Enabled {
+		return Instance{}, domain.ErrNotFound
+	}
+	key, err := s.enc.Open(row.ApiKeyEnc)
+	if err != nil {
+		return Instance{}, fmt.Errorf("queue: open api key of %s: %w", row.Name, err)
+	}
+	prio := store.InstancePriorityFromValues(row.SearchPriority, row.DownloadPriority)
+	return Instance{
+		ID:               row.ID,
+		Name:             row.Name,
+		Kind:             domain.AppKind(row.Kind),
+		BaseURL:          row.BaseUrl,
+		APIKey:           string(key),
+		DownloadPriority: prio.Download,
+	}, nil
 }
 
 // ArrClient defines the *arr queue operations needed by the sweep.

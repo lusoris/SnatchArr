@@ -2011,6 +2011,71 @@ func decodeListLogsParams(args [0]string, argsEscaped bool, r *http.Request) (pa
 	return params, nil
 }
 
+// ListQueueItemsParams is parameters of listQueueItems operation.
+type ListQueueItemsParams struct {
+	InstanceId uuid.UUID
+}
+
+func unpackListQueueItemsParams(packed middleware.Parameters) (params ListQueueItemsParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "instanceId",
+			In:   "path",
+		}
+		params.InstanceId = packed[key].(uuid.UUID)
+	}
+	return params
+}
+
+func decodeListQueueItemsParams(args [1]string, argsEscaped bool, r *http.Request) (params ListQueueItemsParams, _ error) {
+	// Decode path: instanceId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "instanceId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.InstanceId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "instanceId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
 // ListQueueStrikesParams is parameters of listQueueStrikes operation.
 type ListQueueStrikesParams struct {
 	InstanceId uuid.UUID

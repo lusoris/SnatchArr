@@ -355,6 +355,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/instances/{instanceId}/queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instanceId: components["parameters"]["InstanceId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Real-time download queue contents and sweep decisions for an instance
+         * @description Returns real-time *arr queue items with sweep decisions, strike records, and blocklist states.
+         */
+        get: operations["listQueueItems"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/instances/{instanceId}/queue-strikes": {
         parameters: {
             query?: never;
@@ -1973,6 +1995,38 @@ export interface components {
             /** @description True when the last force import found no clean, mapped candidate and sent nothing. */
             import_refused?: boolean;
         };
+        QueueInspection: {
+            items: components["schemas"]["QueueInspectedItem"][];
+            /** @description True when the returned queue items reached the inspection page bound and more items exist. */
+            truncated: boolean;
+        };
+        QueueInspectedItem: {
+            /** Format: int32 */
+            queue_id: number;
+            download_id: string;
+            title: string;
+            status: string;
+            tracked_download_status: string;
+            tracked_download_state: string;
+            protocol: string;
+            /** Format: int64 */
+            size: number;
+            /** Format: int64 */
+            size_left: number;
+            /** Format: date-time */
+            added: string;
+            status_lines: string[];
+            /** @description Rule broken by this item, or empty if clean. */
+            rule: string;
+            strike_count: number;
+            threshold: number;
+            would_remove: boolean;
+            remove: boolean;
+            blocklist_on_removal: boolean;
+            deferred: boolean;
+            would_import: boolean;
+            import: boolean;
+        };
     };
     responses: {
         /** @description RFC 9457 problem details */
@@ -2616,6 +2670,29 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["QueuePolicy"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listQueueItems: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instanceId: components["parameters"]["InstanceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Queue inspection */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueueInspection"];
                 };
             };
             default: components["responses"]["Problem"];

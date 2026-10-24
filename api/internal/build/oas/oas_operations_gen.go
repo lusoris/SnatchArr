@@ -58,6 +58,7 @@ const (
 	ListNotificationChannelsOperation  OperationName = "ListNotificationChannels"
 	ListNotificationRulesOperation     OperationName = "ListNotificationRules"
 	ListProwlarrLinksOperation         OperationName = "ListProwlarrLinks"
+	ListQueueItemsOperation            OperationName = "ListQueueItems"
 	ListQueueStrikesOperation          OperationName = "ListQueueStrikes"
 	ListRunsOperation                  OperationName = "ListRuns"
 	ListSchedulesOperation             OperationName = "ListSchedules"

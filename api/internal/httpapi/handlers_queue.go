@@ -39,6 +39,55 @@ func (h *Handlers) UpdateQueuePolicy(ctx context.Context, req *oas.QueuePolicy, 
 	return queuePolicyToOAS(cfg), nil
 }
 
+// ListQueueItems returns real-time queue items and sweep decisions for an instance.
+func (h *Handlers) ListQueueItems(ctx context.Context, params oas.ListQueueItemsParams) (*oas.QueueInspection, error) {
+	res, err := h.queueSvc.Inspect(ctx, params.InstanceId)
+	if err != nil {
+		return nil, err
+	}
+	return queueInspectionToOAS(res), nil
+}
+
+func queueInspectionToOAS(res queue.Inspection) *oas.QueueInspection {
+	items := make([]oas.QueueInspectedItem, 0, len(res.Items))
+	for _, item := range res.Items {
+		items = append(items, queueInspectedItemToOAS(item))
+	}
+	return &oas.QueueInspection{
+		Items:     items,
+		Truncated: res.Truncated,
+	}
+}
+
+func queueInspectedItemToOAS(item queue.InspectedItem) oas.QueueInspectedItem {
+	statusLines := item.StatusLines
+	if statusLines == nil {
+		statusLines = []string{}
+	}
+	return oas.QueueInspectedItem{
+		QueueID:               item.QueueID,
+		DownloadID:            item.DownloadID,
+		Title:                 item.Title,
+		Status:                item.Status,
+		TrackedDownloadStatus: item.TrackedDownloadStatus,
+		TrackedDownloadState:  item.TrackedDownloadState,
+		Protocol:              item.Protocol,
+		Size:                  item.Size,
+		SizeLeft:              item.SizeLeft,
+		Added:                 item.Added,
+		StatusLines:           statusLines,
+		Rule:                  string(item.Rule),
+		StrikeCount:           item.StrikeCount,
+		Threshold:             item.Threshold,
+		WouldRemove:           item.WouldRemove,
+		Remove:                item.Remove,
+		BlocklistOnRemoval:    item.BlocklistOnRemoval,
+		Deferred:              item.Deferred,
+		WouldImport:           item.WouldImport,
+		Import:                item.Import,
+	}
+}
+
 // ListQueueStrikes lists active queue strikes for an instance.
 func (h *Handlers) ListQueueStrikes(ctx context.Context, params oas.ListQueueStrikesParams) ([]oas.QueueStrike, error) {
 	if _, err := h.instances.Get(ctx, params.InstanceId); err != nil {

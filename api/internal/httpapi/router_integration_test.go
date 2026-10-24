@@ -597,6 +597,21 @@ func stepsPoliciesAndRuns() []routerStep {
 			},
 		},
 		{
+			op:     "listQueueItems",
+			method: http.MethodGet,
+			path:   func(ids *idsState) string { return "/instances/" + ids.instanceID + "/queue" },
+			want:   http.StatusOK,
+			capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
+				t.Helper()
+				if _, ok := decoded["items"].([]any); !ok {
+					t.Fatalf("listQueueItems = %v; want items array", decoded)
+				}
+				if _, ok := decoded["truncated"].(bool); !ok {
+					t.Fatalf("listQueueItems = %v; want truncated bool", decoded)
+				}
+			},
+		},
+		{
 			op:     "triggerRun",
 			method: http.MethodPost,
 			path:   func(ids *idsState) string { return "/instances/" + ids.instanceID + "/runs" },

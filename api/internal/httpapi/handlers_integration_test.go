@@ -286,7 +286,9 @@ func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Genera
 		Profile: config.ProfileDev,
 		Session: config.SessionOptions{TTL: 8 * time.Hour, Secure: false},
 	}
-	configarrSvc := configarr.New(cfg, instSvc, clients, polSvc, queue.NewStore(st, clk), probe, clk, logger)
+	queueStore := queue.NewStore(st, clk)
+	queueSvc := queue.NewService(queueStore, queue.NewDBInstanceSource(st, enc), probe, clk, queue.NewRecorderAdapter(rec, bus, logger), m, logger)
+	configarrSvc := configarr.New(cfg, instSvc, clients, polSvc, queueStore, probe, clk, logger)
 	build := buildinfo.Info{Version: "test-ver", Commit: "test-commit", Date: "2026-10-14"}
 	h := &Handlers{
 		build:     build,
@@ -297,7 +299,8 @@ func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Genera
 		sessions:  sessMgr,
 		instances: instSvc,
 		policies:  polSvc,
-		queue:     queue.NewStore(st, clk),
+		queue:     queueStore,
+		queueSvc:  queueSvc,
 		options:   policies.NewOptions(instSvc, labeler),
 		runs:      runs,
 		workers:   workers,

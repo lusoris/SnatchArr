@@ -1144,6 +1144,20 @@
     "properties": {},
     "type": "object"
   },
+  "listQueueItems": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "instanceId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "instanceId"
+    ],
+    "type": "object"
+  },
   "listQueueStrikes": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,

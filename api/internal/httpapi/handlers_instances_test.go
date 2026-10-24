@@ -14,6 +14,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
+	"github.com/lusoris/SnatchArr/api/internal/queue"
 )
 
 // stubProber answers every probe with one result and counts the probes.
@@ -21,11 +22,27 @@ type stubProber struct {
 	res   arrclient.Result
 	err   error
 	asked int
+	items []queue.Item
 }
 
 func (p *stubProber) Probe(context.Context, domain.AppKind, string, string) (arrclient.Result, error) {
 	p.asked++
 	return p.res, p.err
+}
+
+func (p *stubProber) Queue(context.Context, domain.AppKind, string, string, int, int) ([]queue.Item, error) {
+	if p.err != nil {
+		return nil, p.err
+	}
+	return p.items, nil
+}
+
+func (p *stubProber) RemoveQueueItem(context.Context, domain.AppKind, string, string, int32, bool, bool) error {
+	return p.err
+}
+
+func (p *stubProber) ForceImport(context.Context, domain.AppKind, string, string, string, queue.ImportMode) (int, error) {
+	return 0, p.err
 }
 
 // TestTestInstanceInput covers the probe of credentials that are not stored. That path asks
