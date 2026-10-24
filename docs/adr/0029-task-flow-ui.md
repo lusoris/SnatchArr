@@ -200,7 +200,7 @@ On desktop screens (>=1280 px), `/` renders as a high-density 12-column operatio
 3. **Density and spacing**:
    - Table row height is standardized to 2.25rem (36 px) at >=1280 px desktop. On mobile devices (<768 px), touch targets maintain a 2.75rem (44 px) height, fully satisfying WCAG 2.5.8 (min 24 px spacing).
    - Sticky `PageHeader`: Title, status badges, and action bars remain pinned to the top of the viewport during content scrolling.
-   - Form organization: Multi-card forms are organized into tabbed views (`@sveltesentio/ui/tabs`) rather than vertically stacked card monoliths (e.g. `/system` tabs for General, Modules, Notifications, Accounts, and About).
+   - Form organization: Multi-card forms are organized into tabbed views (via a local component until the library ships one) rather than vertically stacked card monoliths (e.g. `/system` tabs for General, Modules, Notifications, Accounts, and About).
 4. **Scroll budget**:
    - At 1280x800 viewport using the `web-e2e-api` seed dataset, the following routes must fit within 1.25x viewport height (<=1000 px document height): `Overview`, `Instances`, `Instance overview`, `Automation`, `Connections hub`, and `System (General)`.
    - Data tables and activity feeds scroll within dedicated internal containers while the outer page header remains fixed.
@@ -219,21 +219,21 @@ Palette A ("Night Prowler" violet hue 285) and strict OKLCH colour specification
 
 | Token | Role | Source | Light mode value | Dark mode value |
 | :--- | :--- | :--- | :--- | :--- |
-| `--color-destructive` | Critical error, failure, delete | `@sveltesentio/ui` | `oklch(0.55 0.22 25)` | `oklch(0.55 0.22 25)` |
-| `--color-warning` | Warning, rate limit, stamina caution | `@sveltesentio/ui` | `oklch(0.55 0.16 80)` | `oklch(0.75 0.16 80)` |
+| `--color-destructive` | Critical error, failure, delete | `@sveltesentio/ui` preset via `paletteCss` | `oklch(0.55 0.22 25)` | `oklch(0.55 0.22 25)` |
+| `--color-warning` | Warning, rate limit, stamina caution | Local (`web/scripts/gen-theme.ts`, #417) | `oklch(0.55 0.16 80)` | `oklch(0.75 0.16 80)` |
 | `--ui-min-target-size`| Accessible touch target floor | `@sveltesentio/ui` | `24px` | `24px` |
 | `--ui-focus-emphasis` | Focus ring thickness offset | `@sveltesentio/ui` | `0` | `0` |
-| `--color-success` | Healthy, completed, active | Local (`web/src/lib/theme.css`), upstream issue in `golusoris/sveltesentio` | `oklch(0.50 0.13 150)` | `oklch(0.78 0.14 150)` |
-| `--color-info` | Information, secondary status | Local (`web/src/lib/theme.css`), upstream issue in `golusoris/sveltesentio` | `oklch(0.50 0.12 240)` | `oklch(0.78 0.11 240)` |
-| `--color-running` | Active in-progress execution | Local (`web/src/lib/theme.css`), upstream issue in `golusoris/sveltesentio` | `oklch(0.50 0.16 285)` | `oklch(0.76 0.16 290)` |
-| `--motion-duration-short` | Micro-transition duration | Local (`web/src/lib/theme.css`), upstream issue in `golusoris/sveltesentio` | `150ms` | `150ms` |
-| `--motion-easing` | Standard motion transition curve | Local (`web/src/lib/theme.css`), upstream issue in `golusoris/sveltesentio` | `cubic-bezier(0.2, 0, 0, 1)` | `cubic-bezier(0.2, 0, 0, 1)` |
+| `--color-success` | Healthy, completed, active | Local (`web/scripts/gen-theme.ts`), upstream golusoris/sveltesentio#453 | `oklch(0.50 0.13 150)` | `oklch(0.78 0.14 150)` |
+| `--color-info` | Information, secondary status | Local (`web/scripts/gen-theme.ts`), upstream golusoris/sveltesentio#453 | `oklch(0.50 0.12 240)` | `oklch(0.78 0.11 240)` |
+| `--color-running` | Active in-progress execution | Local (`web/scripts/gen-theme.ts`), upstream golusoris/sveltesentio#453 | `oklch(0.50 0.16 285)` | `oklch(0.76 0.16 290)` |
+| `--motion-duration-short` | Micro-transition duration | Local (`web/scripts/gen-theme.ts`), upstream golusoris/sveltesentio#453 | `150ms` | `150ms` |
+| `--motion-easing` | Standard motion transition curve | Local (`web/scripts/gen-theme.ts`), upstream golusoris/sveltesentio#453 | `cubic-bezier(0.2, 0, 0, 1)` | `cubic-bezier(0.2, 0, 0, 1)` |
 
 *Upstream status note*: Checked `@sveltesentio/ui` 0.8.1 source code; the package currently provides no motion tokens and no `@media (prefers-reduced-motion)` rules.
 
 *Contrast check requirement*: Proposed local OKLCH tokens must be contrast-checked (`>= 4.5:1` for text, `>= 3:1` for non-text graphics) against `--color-card` and `--color-background` in both light and dark modes by the PR that introduces them (`web/src/lib/theme-contrast.test.ts`). Values must adjust if any contrast assertion fails.
 
-*Upstream swap rule*: Once `@sveltesentio/ui` publishes official success, info, running, and motion tokens, local overrides in `web/src/lib/theme.css` will be removed in that dependency update PR.
+*Upstream swap rule*: Once `@sveltesentio/ui` publishes official success, info, running, and motion tokens, the local extension in `web/scripts/gen-theme.ts` (and the regenerated `web/src/lib/theme.css`) is removed in that dependency update PR.
 
 #### Component and motion rules
 
@@ -391,11 +391,9 @@ Every source file in `web/src/routes` and `web/src/lib/components` is cataloged 
 Delivery is structured across seven discrete, reviewable pull requests. Each PR must independently achieve a clean git status, pass all CI verification gates, and maintain zero regression:
 
 1. **PR A: Shell, Navigation, Redirects, Layout Gate, and Status Tokens**
-   - Reconfigures top-level navigation in `nav.ts` to the 6 primary entries, updates `Sidebar.svelte` and `BottomBar.svelte`.
-   - Establishes client-side redirects for legacy routes in SvelteKit router.
-   - Introduces `StatusIcon.svelte` and local OKLCH status tokens in `theme.css`.
-   - Extends `web/e2e/layout.ts` and `layout.test.ts` with `assertDesktopWidth` and scroll budget verification.
-   - Ships planted negative test in `layout.test.ts` (centered `max-w-md` column fails).
+   Delivered in two parts:
+   - **PR A1**: Layout width gate (`assertDesktopWidth`, scroll budget, planted negative in `layout.test.ts`), local status and motion tokens in `gen-theme.ts` / `theme.css`, contrast tests in `theme-contrast.test.ts`, and `StatusIcon.svelte`.
+   - **PR A2**: Reconfigures top-level navigation in `nav.ts` to the 6 primary entries, updates `Sidebar.svelte` and `BottomBar.svelte`, establishes client-side redirects for legacy routes in SvelteKit router, and route hosts.
 2. **PR B: Overview Redo (`/`)**
    - Implements 12-column operational desktop layout, 5 KPI telemetry tiles, compact instance table, and mini activity stream.
    - Introduces 3-step structured empty fleet onboarding checklist.

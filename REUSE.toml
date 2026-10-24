@@ -42,6 +42,7 @@ path = [
   "web/static/favicon-32x32.png",
   "web/static/apple-touch-icon.png",
   "web/e2e/visual/*.png",
+  "web/e2e/visual/redo/*.png",
 ]
 precedence = "override"
 SPDX-FileCopyrightText = ["2024 T. Kebert", "2026 lusoris <lusoris@pm.me>"]

@@ -9,11 +9,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import {
+	assertDesktopWidth,
 	assertRenderedLayout,
+	assertScrollBudget,
 	AUTH_ROUTES,
 	collectLists,
 	expectedTables,
-	VIEWPORTS
+	measureContentSpan,
+	SCROLL_BUDGET_ROUTES,
+	VIEWPORTS,
+	WIDTH_PENDING
 } from './layout.js';
 import { json, mockSettingsApi } from './mocks.js';
 
@@ -259,6 +264,26 @@ for (const [viewportName, viewport] of Object.entries(VIEWPORTS)) {
 				/\/login(?:\?|$)/
 			);
 			await assertRenderedLayout(page, pattern, lists);
+
+			if (viewportName === 'desktop' || viewportName === 'desktop1920') {
+				const pending = WIDTH_PENDING[pattern];
+				if (pending) {
+					const today = new Date().toISOString().slice(0, 10);
+					expect(
+						today <= pending.expires,
+						`WIDTH_PENDING entry for ${pattern} expired on ${pending.expires} (today: ${today})`
+					).toBe(true);
+					// A pending route must still fail the width gate; once it passes, its entry is stale.
+					const passed = await assertDesktopWidth(page, pattern).then(
+						() => true,
+						() => false
+					);
+					expect(passed, `route ${pattern} now passes; remove it from WIDTH_PENDING`).toBe(false);
+				} else {
+					await assertDesktopWidth(page, pattern);
+				}
+			}
+
 			if (shots) {
 				const name = `${pattern.replace(/[/[\]]+/g, '-').replace(/^-|-$/g, '') || 'root'}-${viewportName}.png`;
 				await page.screenshot({ path: testInfo.outputPath(name), fullPage: true });
@@ -361,3 +386,56 @@ if (!served) {
 		}
 	}
 }
+
+for (const pattern of SCROLL_BUDGET_ROUTES) {
+	test(`authenticated: layout scroll budget ${pattern} at 1280x800`, async ({ page }) => {
+		await page.setViewportSize({ width: 1280, height: 800 });
+		if (pattern === '/' && !served) {
+			await mockDashboardRoute(page);
+		}
+		const route = pattern.replace('[id]', instanceId());
+		await page.goto(route);
+		await page.waitForLoadState('networkidle');
+		await assertScrollBudget(page, pattern);
+	});
+}
+
+test('authenticated: desktop width gate fixtures and planted negative', async ({ page }) => {
+	// Planted negative: centered narrow column (max-w-md = 28rem = 448px in 1000px main)
+	await page.setContent(
+		'<main style="width:1000px;padding:0"><section style="max-width:28rem;margin-inline:auto">x</section></main>'
+	);
+	const measured = await page.evaluate(measureContentSpan);
+	expect(measured.ratio).toBeLessThan(0.75);
+	await expect(assertDesktopWidth(page, '/test-negative')).rejects.toThrow(
+		`/test-negative: widest content block ${measured.widest}px is narrower than 75% of main (1000px)`
+	);
+
+	// Positive fixture: section full width (1000px of 1000px)
+	await page.setContent(
+		'<main style="width:1000px;padding:0"><section style="width:1000px">x</section></main>'
+	);
+	await expect(assertDesktopWidth(page, '/test-positive')).resolves.not.toThrow();
+
+	// Boundary fixture: section exactly 750px of 1000px (ratio = 0.75) -> passes
+	await page.setContent(
+		'<main style="width:1000px;padding:0"><section style="width:750px">x</section></main>'
+	);
+	await expect(assertDesktopWidth(page, '/test-boundary-pass')).resolves.not.toThrow();
+
+	// Boundary fixture: section 749px of 1000px (ratio = 0.749 < 0.75) -> fails
+	await page.setContent(
+		'<main style="width:1000px;padding:0"><section style="width:749px">x</section></main>'
+	);
+	await expect(assertDesktopWidth(page, '/test-boundary-fail')).rejects.toThrow(
+		'/test-boundary-fail: widest content block 749px is narrower than 75% of main (1000px)'
+	);
+
+	// Empty fixture: no matching block -> fails
+	await page.setContent(
+		'<main style="width:1000px;padding:0"><div>no matching elements</div></main>'
+	);
+	await expect(assertDesktopWidth(page, '/test-empty')).rejects.toThrow(
+		'/test-empty: no content block measured'
+	);
+});

@@ -20,12 +20,29 @@ const banner = `/* SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me> */\n/* S
 const warningLight = 'oklch(0.55 0.16 80)';
 const warningDark = 'oklch(0.75 0.16 80)';
 
+// SnatchArr-local extension, upstream golusoris/sveltesentio#453, delete when the
+// library ships them (ADR-0029 section 5).
+const successLight = 'oklch(0.50 0.13 150)';
+const successDark = 'oklch(0.78 0.14 150)';
+const infoLight = 'oklch(0.50 0.12 240)';
+const infoDark = 'oklch(0.78 0.11 240)';
+const runningLight = 'oklch(0.50 0.16 285)';
+const runningDark = 'oklch(0.76 0.16 290)';
+
 const palette = paletteCss(presetSnatchArr)
-	.replace(/(:root\s*\{[^}]*)(\})/, `$1\t--color-warning: ${warningLight};\n$2`)
-	.replace(/(\.dark\s*\{[^}]*)(\})/, `$1\t--color-warning: ${warningDark};\n$2`);
+	.replace(
+		/(:root\s*\{[^}]*)(\})/,
+		`$1\t--color-warning: ${warningLight};\n\t--color-success: ${successLight};\n\t--color-info: ${infoLight};\n\t--color-running: ${runningLight};\n$2`
+	)
+	.replace(
+		/(\.dark\s*\{[^}]*)(\})/,
+		`$1\t--color-warning: ${warningDark};\n\t--color-success: ${successDark};\n\t--color-info: ${infoDark};\n\t--color-running: ${runningDark};\n$2`
+	);
+
+const motionCss = `:root {\n\t--motion-duration-short: 150ms;\n\t--motion-easing: cubic-bezier(0.2, 0, 0, 1);\n}\n\n@media (prefers-reduced-motion: reduce) {\n\t:root {\n\t\t--motion-duration-short: 0ms;\n\t}\n}\n`;
 
 // presetDashboard non-colour variables: radius, density, font sizes for @sveltesentio/ui
 // components (DataTable, CommandPalette). Emits zero --color-* variables.
-const css = `${banner}${palette}\n${presetCss(presetDashboard, ':root')}\n`;
+const css = `${banner}${palette}\n${presetCss(presetDashboard, ':root')}\n${motionCss}`;
 writeFileSync(new URL('../src/lib/theme.css', import.meta.url), css);
 console.warn('wrote src/lib/theme.css');
