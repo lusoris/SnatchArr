@@ -30,7 +30,7 @@ SPDX-License-Identifier: EUPL-1.2
 
 	<div class="flex items-center justify-between gap-2 pt-1">
 		<a
-			href={resolve('account')}
+			href={resolve('/account')}
 			aria-current={isRouteActive(page.url.pathname, '/account') ? 'page' : undefined}
 			onclick={onNavigate}
 			class="nav-link flex items-center gap-2 rounded px-2 py-1.5 text-sm text-fg"

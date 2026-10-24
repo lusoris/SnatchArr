@@ -54,9 +54,9 @@ test.describe('INP measurements', () => {
 		await expect(dialog).toBeVisible();
 
 		// 2. Nav click interaction
-		const instancesLink = page.getByRole('link', { name: /Instances|Instanzen/i }).first();
-		await instancesLink.click();
-		await expect(page).toHaveURL(/\/instances/);
+		const connectionsLink = dialog.getByRole('link', { name: /Connections|Verbindungen/i });
+		await connectionsLink.click();
+		await expect(page).toHaveURL(/\/connections/);
 
 		// Allow observers to collect events
 		await page.waitForTimeout(200);

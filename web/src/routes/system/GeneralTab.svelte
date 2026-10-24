@@ -320,7 +320,7 @@ SPDX-License-Identifier: EUPL-1.2
 </script>
 
 <div class="mx-auto flex max-w-xl flex-col gap-6">
-	<h1 class="text-2xl font-semibold">{m.settings_title()}</h1>
+	<h2 class="text-2xl font-semibold">{m.settings_title()}</h2>
 
 	{#if settings.isPending}
 		<p aria-live="polite">{m.loading()}</p>

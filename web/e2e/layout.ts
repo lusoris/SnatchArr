@@ -17,51 +17,53 @@ export const VIEWPORTS = {
 
 export const AUTH_ROUTES = [
 	'/',
-	'/about',
 	'/account',
-	'/configarr',
-	'/download-clients',
-	'/history',
+	'/activity',
+	'/activity?source=live',
+	'/activity?source=log',
+	'/automation',
+	'/connections',
+	'/connections/configarr',
+	'/connections/download-clients',
+	'/connections/prowlarr',
+	'/connections/seerr',
 	'/instances',
 	'/instances/[id]',
 	'/instances/[id]/activity',
 	'/instances/[id]/memory',
 	'/instances/[id]/policy',
 	'/instances/[id]/queue',
-	'/live',
-	'/logs',
-	'/prowlarr',
-	'/schedules',
-	'/seerr',
-	'/settings'
+	'/system',
+	'/system?tab=about'
 ] as const;
 
 export const MIN_TABLES: Record<(typeof AUTH_ROUTES)[number], number> = {
 	'/': 0,
-	'/about': 0,
 	'/account': 1,
-	'/configarr': 0,
-	'/download-clients': 0,
-	'/history': 1,
+	'/activity': 1,
+	'/activity?source=live': 0,
+	'/activity?source=log': 0,
+	'/automation': 1,
+	'/connections': 0,
+	'/connections/configarr': 0,
+	'/connections/download-clients': 0,
+	'/connections/prowlarr': 1,
+	'/connections/seerr': 1,
 	'/instances': 1,
 	'/instances/[id]': 0,
 	'/instances/[id]/activity': 1,
 	'/instances/[id]/memory': 0,
 	'/instances/[id]/policy': 0,
 	'/instances/[id]/queue': 1,
-	'/live': 0,
-	'/logs': 0,
-	'/prowlarr': 1,
-	'/schedules': 1,
-	'/seerr': 1,
-	'/settings': 2
+	'/system': 2,
+	'/system?tab=about': 0
 };
 
 // Routes whose table count follows the signed-in role and the data, not a fixed number: each
 // list below renders one table when it is non-empty and an empty-state line otherwise.
 const ROUTE_LISTS = {
-	'/schedules': ['/api/v1/schedules'],
-	'/settings': ['/api/v1/notifications/channels', '/api/v1/notifications/rules'],
+	'/automation': ['/api/v1/schedules'],
+	'/system': ['/api/v1/notifications/channels', '/api/v1/notifications/rules'],
 	'/account': ['/api/v1/auth/api-keys']
 } as const satisfies Partial<Record<(typeof AUTH_ROUTES)[number], readonly string[]>>;
 type DataRoute = keyof typeof ROUTE_LISTS;
@@ -542,18 +544,18 @@ export async function assertScrollBudget(page: Page, route: string): Promise<voi
 }
 
 export interface PendingRoute {
-	pr: 'C' | 'D' | 'F' | 'G';
+	pr: 'C' | 'D' | 'E' | 'F' | 'G';
 	/** ISO date (YYYY-MM-DD); past it the entry fails like a missing one. */
 	expires: string;
 	reason: string;
 }
 
 export const WIDTH_PENDING: Record<string, PendingRoute> = {
-	'/history': { pr: 'C', expires: '2026-11-23', reason: 'metric finds no block' },
+	'/activity': { pr: 'C', expires: '2026-11-23', reason: 'metric finds no block' },
 	'/instances/[id]': { pr: 'D', expires: '2026-11-23', reason: 'narrow content wrapper' },
 	'/instances/[id]/memory': { pr: 'D', expires: '2026-11-23', reason: 'narrow content wrapper' },
 	'/instances/[id]/policy': { pr: 'D', expires: '2026-11-23', reason: 'narrow content wrapper' },
-	'/configarr': { pr: 'F', expires: '2026-11-23', reason: 'narrow content wrapper' },
-	'/settings': { pr: 'G', expires: '2026-11-23', reason: 'narrow content wrapper' },
-	'/about': { pr: 'G', expires: '2026-11-23', reason: 'narrow content wrapper' }
+	'/connections/configarr': { pr: 'F', expires: '2026-11-23', reason: 'narrow content wrapper' },
+	'/system': { pr: 'G', expires: '2026-11-23', reason: 'narrow content wrapper' },
+	'/system?tab=about': { pr: 'G', expires: '2026-11-23', reason: 'narrow content wrapper' }
 };

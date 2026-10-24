@@ -3,7 +3,6 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
-	import PageHeader from '#lib/components/PageHeader.svelte';
 	import QueryGuard from '#lib/components/QueryGuard.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
@@ -24,8 +23,6 @@ SPDX-License-Identifier: EUPL-1.2
 		return packages.filter((p) => p.ecosystem === eco);
 	}
 </script>
-
-<PageHeader title={m.about_title()} documentTitle />
 
 <div class="flex max-w-2xl flex-col gap-6">
 	<section class="card flex flex-col gap-4" aria-labelledby="about-app-heading">

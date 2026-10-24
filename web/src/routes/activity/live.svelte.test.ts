@@ -9,7 +9,7 @@ import type { components } from '#lib/api/schema.js';
 import { m } from '#lib/paraglide/messages.js';
 import { renderWithQuery, stubGet } from '#lib/testing/harness.js';
 import { MockEventSource } from '#lib/testing/sse.js';
-import LivePage from './+page.svelte';
+import LiveTab from './LiveTab.svelte';
 
 type Event = components['schemas']['Event'];
 type Instance = components['schemas']['Instance'];
@@ -71,7 +71,7 @@ describe('live events', () => {
 	}
 
 	async function renderAndOpenLiveStream(): Promise<MockEventSource> {
-		renderWithQuery(LivePage);
+		renderWithQuery(LiveTab);
 		const es = openMockStream();
 		expect((await screen.findByRole('status')).textContent).toContain(m.live_connected());
 		return es;
@@ -84,7 +84,7 @@ describe('live events', () => {
 			'/schedules': [],
 			'/system/status': sampleStatus
 		});
-		renderWithQuery(LivePage);
+		renderWithQuery(LiveTab);
 		return await screen.findByRole('log');
 	}
 
@@ -105,7 +105,7 @@ describe('live events', () => {
 
 	it('renders heading, connected status, and event row when message arrives', async () => {
 		const es = await renderAndOpenLiveStream();
-		expect(screen.getByRole('heading', { level: 1, name: m.live_title() })).toBeTruthy();
+		expect(screen.getByRole('heading', { level: 2, name: m.live_title() })).toBeTruthy();
 
 		es.emit('message', {
 			type: 'search_dispatched',
@@ -139,7 +139,7 @@ describe('live events', () => {
 			'/schedules': [sampleSchedule],
 			'/system/status': sampleStatus
 		});
-		renderWithQuery(LivePage);
+		renderWithQuery(LiveTab);
 
 		expect(
 			await screen.findByRole('heading', { level: 2, name: m.live_empty_title() })
@@ -172,7 +172,7 @@ describe('live events', () => {
 			'/schedules': [],
 			'/system/status': sampleStatus
 		});
-		renderWithQuery(LivePage);
+		renderWithQuery(LiveTab);
 
 		expect(await screen.findByRole('alert')).toBeTruthy();
 		expect(screen.getByText(m.live_backlog_error())).toBeTruthy();
