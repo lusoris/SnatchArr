@@ -177,13 +177,13 @@ The product keeps the name SnatchArr; no rename is planned (`snatcharr-product-n
 
 ### Follow-ups
 
-Implementation of this product architecture requires six dedicated follow-up decisions and actions:
+Implementation of this product architecture requires five dedicated follow-up decisions; each is now drafted as its own ADR:
 
-1. **Module-switch architecture ADR**: Define the technical mechanism for dynamic module registration, route gating, and settings page schema (`napp-shape-20261020`). Drafted in [ADR-0025](0025-module-switches.md), proposed.
-2. **LLM integration ADR**: Define MCP server endpoints, public tool signatures, security boundary tests, and client configuration formats (`snatcharr-llm-integration-20261020`).
-3. **Adult module ADR**: Establish the direct descriptive name, Stash-box synchronization protocol, Whisparr mapping rules, and image-set storage schema (`napp3-folded-into-napp2-20261020`, `napp-shape-20261020`, `snatcharr-product-adult-scope-20261020`). Drafted in [ADR-0027](0027-adult-module.md), proposed.
-4. **Jellyfin plugin ADR**: Specify the plugin architecture, API contract between Jellyfin and SnatchArr, gallery layout, and metadata delivery (`snatcharr-product-jellyfin-plugin-20261020`). Drafted in [ADR-0028](0028-jellyfin-plugin.md), proposed.
-5. **Accounts and roles ADR**: Detail Jellyfin authentication integration, session management, group-to-role mappings, and parental control enforcement (`snatcharr-product-users-20261020`, `snatcharr-product-accounts-20261020`). Drafted in [ADR-0026](0026-accounts-and-roles.md), proposed.
+1. [x] **Module-switch architecture ADR**: Define the technical mechanism for dynamic module registration, route gating, and settings page schema (`napp-shape-20261020`). Drafted in [ADR-0025](0025-module-switches.md), proposed.
+2. [x] **LLM integration ADR**: Define MCP server endpoints, public tool signatures, security boundary tests, and client configuration formats (`snatcharr-llm-integration-20261020`). Drafted in [ADR-0021](0021-llm-access-module.md), proposed.
+3. [x] **Adult module ADR**: Establish the direct descriptive name, Stash-box synchronization protocol, Whisparr mapping rules, and image-set storage schema (`napp3-folded-into-napp2-20261020`, `napp-shape-20261020`, `snatcharr-product-adult-scope-20261020`). Drafted in [ADR-0027](0027-adult-module.md), proposed.
+4. [x] **Jellyfin plugin ADR**: Specify the plugin architecture, API contract between Jellyfin and SnatchArr, gallery layout, and metadata delivery (`snatcharr-product-jellyfin-plugin-20261020`). Drafted in [ADR-0028](0028-jellyfin-plugin.md), proposed.
+5. [x] **Accounts and roles ADR**: Detail Jellyfin authentication integration, session management, group-to-role mappings, and parental control enforcement (`snatcharr-product-users-20261020`, `snatcharr-product-accounts-20261020`). Drafted in [ADR-0026](0026-accounts-and-roles.md), proposed.
 
 ## References
 
