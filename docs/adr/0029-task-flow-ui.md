@@ -48,7 +48,7 @@ An operator review on 2026-10-24 (paraphrased) identified that the user interfac
 
 ### Measured baseline
 
-Document scroll height per route before the redo, captured on 2026-10-24 from `origin/main` at `776cea4a` in API mode (`tools/e2e/web-e2e-api.sh` with the e2e seed: fakearr instances, one notification channel and rule), light scheme, reduced motion. "Widest content block" is the widest `section`, `.card`, `table`, `form`, `ul` or `dl` inside `main`. Routes at the viewport height (800, 1080, 900) do not scroll. Screenshots for every row at all three viewports, light and dark, are attached to the pull request that accepted this record.
+Document scroll height per route before the redo, captured on 2026-10-24 from `origin/main` at `776cea4a` in API mode (`tools/e2e/web-e2e-api.sh` with the e2e seed: fakearr instances, one notification channel and rule), light scheme, reduced motion. "Widest content block" is the widest `section`, `.card`, `table`, `form`, `ul` or `dl` inside `main`. Routes at the viewport height (800, 1080, 900) do not scroll. Screenshots for every row at all three viewports, light and dark, form the before set of delivery pull request A (section 8), which shows them beside its after set.
 
 | Route | 1280x800 scroll height (px) | 1920x1080 | 390x844 | widest content block at 1280 / 1920 (px) |
 | :--- | ---: | ---: | ---: | ---: |
