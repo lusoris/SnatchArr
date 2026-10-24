@@ -392,3 +392,54 @@ func assertSeerr(t *testing.T, q *sqlcgen.Queries, ctx context.Context, seerrID 
 		t.Errorf("GetSeerrRequest = %+v, err %v", req, err)
 	}
 }
+
+// TestMigration000028Modules verifies that migration 000028 copies llm_enabled to the modules table,
+// and that stepping down restores the value to settings.llm_enabled and drops the modules table.
+func TestMigration000028Modules(t *testing.T) {
+	t.Parallel()
+	st := storetest.New(t)
+	m := storetest.Migrator(t, st)
+
+	stepDownToVersion(t, m, 27)
+
+	ctx := t.Context()
+	_, err := st.Pool().Exec(ctx, "UPDATE settings SET llm_enabled = TRUE WHERE singleton")
+	if err != nil {
+		t.Fatalf("set settings.llm_enabled = true: %v", err)
+	}
+
+	if err = m.Steps(1); err != nil {
+		t.Fatalf("Steps(1) up to 28: %v", err)
+	}
+
+	var enabled bool
+	err = st.Pool().QueryRow(ctx, "SELECT enabled FROM modules WHERE id = 'llm'").Scan(&enabled)
+	if err != nil {
+		t.Fatalf("query modules llm: %v", err)
+	}
+	if !enabled {
+		t.Fatalf("modules llm enabled = false, want true")
+	}
+
+	if err = m.Steps(-1); err != nil {
+		t.Fatalf("Steps(-1) down to 27: %v", err)
+	}
+
+	var restoredLLM bool
+	err = st.Pool().QueryRow(ctx, "SELECT llm_enabled FROM settings WHERE singleton").Scan(&restoredLLM)
+	if err != nil {
+		t.Fatalf("query settings.llm_enabled after down: %v", err)
+	}
+	if !restoredLLM {
+		t.Fatalf("settings.llm_enabled = false after down migration, want true")
+	}
+
+	var tableExists bool
+	err = st.Pool().QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='modules')").Scan(&tableExists)
+	if err != nil {
+		t.Fatalf("check modules table exists: %v", err)
+	}
+	if tableExists {
+		t.Fatalf("modules table still exists after down migration")
+	}
+}

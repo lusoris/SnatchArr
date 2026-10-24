@@ -8,6 +8,7 @@ package settings
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -37,7 +38,17 @@ func (s *Service) Get(ctx context.Context) (domain.Settings, error) {
 	if err != nil {
 		return domain.Settings{}, fmt.Errorf("settings: get: %w", store.MapError(err))
 	}
-	return store.SettingsFromRow(row), nil
+	out := store.SettingsFromRow(row)
+	mod, err := s.st.Q().GetModule(ctx, domain.ModuleLLM)
+	if err != nil {
+		if errors.Is(store.MapError(err), domain.ErrNotFound) {
+			out.LLMEnabled = false
+			return out, nil
+		}
+		return domain.Settings{}, fmt.Errorf("settings: get llm module: %w", store.MapError(err))
+	}
+	out.LLMEnabled = mod.Enabled
+	return out, nil
 }
 
 // Update validates and replaces the editable fields.
@@ -61,20 +72,39 @@ func (s *Service) Update(ctx context.Context, in domain.Settings) (domain.Settin
 	if err != nil {
 		return domain.Settings{}, fmt.Errorf("settings: marshal download preset: %w", err)
 	}
-	row, err := s.st.Q().UpdateSettings(ctx, sqlcgen.UpdateSettingsParams{
-		HistoryRetentionDays:   int32(in.HistoryRetentionDays), // #nosec G115 -- validated 1..3650
-		UserAgent:              in.UserAgent,
-		GlobalHourlyCap:        int32(in.GlobalHourlyCap), // #nosec G115 -- validated 0..5000
-		SearchPriorityPreset:   searchJSON,
-		DownloadPriorityPreset: downloadJSON,
-		LlmEnabled:             in.LLMEnabled,
-		LlmWriteTools:          writeTools,
-		UpdatedAt:              s.clk.Now(),
+	now := s.clk.Now()
+	var row sqlcgen.Setting
+	err = s.st.Tx(ctx, func(q *sqlcgen.Queries) error {
+		var txErr error
+		row, txErr = q.UpdateSettings(ctx, sqlcgen.UpdateSettingsParams{
+			HistoryRetentionDays:   int32(in.HistoryRetentionDays), // #nosec G115 -- validated 1..3650
+			UserAgent:              in.UserAgent,
+			GlobalHourlyCap:        int32(in.GlobalHourlyCap), // #nosec G115 -- validated 0..5000
+			SearchPriorityPreset:   searchJSON,
+			DownloadPriorityPreset: downloadJSON,
+			LlmEnabled:             in.LLMEnabled,
+			LlmWriteTools:          writeTools,
+			UpdatedAt:              now,
+		})
+		if txErr != nil {
+			return fmt.Errorf("update settings: %w", store.MapError(txErr))
+		}
+		_, txErr = q.SetModuleEnabled(ctx, sqlcgen.SetModuleEnabledParams{
+			ID:        domain.ModuleLLM,
+			Enabled:   in.LLMEnabled,
+			UpdatedAt: now,
+		})
+		if txErr != nil {
+			return fmt.Errorf("set module enabled: %w", store.MapError(txErr))
+		}
+		return nil
 	})
 	if err != nil {
-		return domain.Settings{}, fmt.Errorf("settings: update: %w", store.MapError(err))
+		return domain.Settings{}, fmt.Errorf("settings: update: %w", err)
 	}
-	return store.SettingsFromRow(row), nil
+	out := store.SettingsFromRow(row)
+	out.LLMEnabled = in.LLMEnabled
+	return out, nil
 }
 
 // Module provides the Service.

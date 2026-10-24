@@ -134,3 +134,51 @@ func TestUpdate(t *testing.T) {
 		})
 	}
 }
+
+func TestLLMMirrorWithModules(t *testing.T) {
+	t.Parallel()
+	st := storetest.New(t)
+	svc := settings.New(st, clock.NewFake())
+	ctx := t.Context()
+
+	preset := domain.MediaFirstPreset()
+	in := domain.Settings{
+		HistoryRetentionDays:   30,
+		UserAgent:              "agent/mirror",
+		GlobalHourlyCap:        50,
+		LLMEnabled:             true,
+		SearchPriorityPreset:   preset,
+		DownloadPriorityPreset: preset,
+	}
+
+	// 1. Update LLMEnabled=true -> modules llm enabled
+	updated, err := svc.Update(ctx, in)
+	if err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	if !updated.LLMEnabled {
+		t.Fatalf("Update().LLMEnabled = false, want true")
+	}
+
+	mod, err := st.Q().GetModule(ctx, domain.ModuleLLM)
+	if err != nil {
+		t.Fatalf("GetModule(%s) error = %v", domain.ModuleLLM, err)
+	}
+	if !mod.Enabled {
+		t.Fatalf("modules row %q Enabled = false after Update(LLMEnabled=true), want true", domain.ModuleLLM)
+	}
+
+	// 2. modules llm set false directly -> settings Get reports false
+	_, err = st.Pool().Exec(ctx, "UPDATE modules SET enabled = false WHERE id = $1", domain.ModuleLLM)
+	if err != nil {
+		t.Fatalf("direct UPDATE modules failed: %v", err)
+	}
+
+	got, err := svc.Get(ctx)
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if got.LLMEnabled {
+		t.Errorf("Get().LLMEnabled = true after modules row set to false, want false")
+	}
+}

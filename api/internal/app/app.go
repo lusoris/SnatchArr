@@ -37,6 +37,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/llm"
 	"github.com/lusoris/SnatchArr/api/internal/logring"
 	"github.com/lusoris/SnatchArr/api/internal/metrics"
+	"github.com/lusoris/SnatchArr/api/internal/modules"
 	"github.com/lusoris/SnatchArr/api/internal/notify"
 	"github.com/lusoris/SnatchArr/api/internal/policies"
 	"github.com/lusoris/SnatchArr/api/internal/prowlarr"
@@ -79,6 +80,7 @@ var Module = fx.Options(
 	arrclient.Module,
 	instances.Module,
 	policies.Module,
+	modules.Module,
 	settings.Module,
 	auth.Module,
 	events.Module,
