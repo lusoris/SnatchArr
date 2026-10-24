@@ -34,3 +34,4 @@ This directory documents key architectural decisions following the HISS-14 immut
 | [0026](0026-accounts-and-roles.md) | 2026-10-24 | Accounts, roles and Jellyfin sign-in | Proposed |
 | [0027](0027-adult-module.md) | 2026-10-24 | Adult module: stash-box sources, Whisparr requests and image sets | Proposed |
 | [0028](0028-jellyfin-plugin.md) | 2026-10-24 | Jellyfin companion plugin and its contract | Proposed |
+| [0029](0029-task-flow-ui.md) | 2026-10-24 | Task-flow navigation, one activity view, desktop-first density and context help | Accepted |
