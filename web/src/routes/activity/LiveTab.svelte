@@ -9,6 +9,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { useSSE } from '@sveltesentio/realtime/use-sse';
 	import { api } from '#lib/api/client.js';
 	import ConnectionStatus from '#lib/components/ConnectionStatus.svelte';
+	import LinkText from '#lib/components/LinkText.svelte';
 	import { LIVE_EVENTS } from '#lib/live-events.js';
 	import {
 		eventToLiveFrame,
@@ -205,11 +206,15 @@ SPDX-License-Identifier: EUPL-1.2
 							{instanceName(f.instance_id)}
 						</a>
 					{/if}
-					<span class="min-w-0 font-medium [overflow-wrap:anywhere] break-words"
-						>{f.title ?? ''}</span
-					>
+					<LinkText
+						class="min-w-0 font-medium [overflow-wrap:anywhere] break-words"
+						text={f.title ?? ''}
+					/>
 					{#if f.detail}
-						<span class="min-w-0 [overflow-wrap:anywhere] break-words text-subtle">{f.detail}</span>
+						<LinkText
+							class="min-w-0 [overflow-wrap:anywhere] break-words text-subtle"
+							text={f.detail}
+						/>
 					{/if}
 				</li>
 			{/each}

@@ -8,6 +8,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { api } from '#lib/api/client.js';
 	import ConnectionStatus from '#lib/components/ConnectionStatus.svelte';
 	import Field from '#lib/components/Field.svelte';
+	import LinkText from '#lib/components/LinkText.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import {
 		logLevelLabel,
@@ -127,11 +128,12 @@ SPDX-License-Identifier: EUPL-1.2
 						<span class="text-subtle">{formatWhen(r.time, getLocale())}</span>
 						<span class="ml-2 font-semibold">{logLevelLabel(r.level)}</span>
 						<span class="ml-2 [overflow-wrap:anywhere] break-words text-subtle">{r.source}</span>
-						<span class="ml-2 [overflow-wrap:anywhere] break-words">{r.message}</span>
+						<LinkText class="ml-2 [overflow-wrap:anywhere] break-words" text={r.message} />
 						{#each r.attrs as a, i (i)}
-							<span class="ml-2 [overflow-wrap:anywhere] break-words text-subtle"
-								>{a.key}={a.value}</span
-							>
+							<LinkText
+								class="ml-2 [overflow-wrap:anywhere] break-words text-subtle"
+								text={`${a.key}=${a.value}`}
+							/>
 						{/each}
 					</li>
 				{/each}

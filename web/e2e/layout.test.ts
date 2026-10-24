@@ -89,6 +89,49 @@ const historyEvents = [
 	}
 ];
 
+// A transport error carries the full client URL in its text (seen on main with the seeded
+// download client); /logs and /live must wrap it at URL delimiters, never mid-word.
+const urlErrorText =
+	'Post "http://127.0.0.1:9091/transmission/rpc": dial tcp 127.0.0.1:9091: connect: connection refused';
+const urlRowFixtures: Record<string, { glob: string; body: unknown }> = {
+	'/logs': {
+		glob: '**/api/v1/logs?*',
+		body: {
+			records: [
+				{
+					seq: 1,
+					time: '2026-10-21T06:19:00Z',
+					level: 'error',
+					source: 'downloadclients',
+					message: urlErrorText,
+					attrs: [{ key: 'url', value: 'http://127.0.0.1:9091/transmission/rpc' }]
+				}
+			],
+			capacity: 500,
+			dropped: 0
+		}
+	},
+	'/live': {
+		glob: '**/api/v1/events?*',
+		body: [
+			{
+				id: 1,
+				ts: '2026-10-21T06:19:00Z',
+				level: 'error',
+				type: 'run_failed',
+				title: 'Download client unreachable',
+				detail: urlErrorText
+			}
+		]
+	}
+};
+
+async function mockUrlRows(page: Page, pattern: string): Promise<void> {
+	const fixture = urlRowFixtures[pattern];
+	if (!fixture || served) return;
+	await page.route(fixture.glob, (route) => route.fulfill(json(fixture.body)));
+}
+
 const overflowDashboardInstance = [
 	{
 		id: '00000000-0000-0000-0000-000000000001',
@@ -156,6 +199,7 @@ for (const [viewportName, viewport] of Object.entries(VIEWPORTS)) {
 	for (const pattern of AUTH_ROUTES) {
 		test(`authenticated: layout ${pattern} ${viewportName}`, async ({ page }, testInfo) => {
 			await page.setViewportSize(viewport);
+			await mockUrlRows(page, pattern);
 			if (pattern === '/' && !served) {
 				await mockDashboardRoute(page);
 			} else if (pattern.startsWith('/activity') && !served) {
