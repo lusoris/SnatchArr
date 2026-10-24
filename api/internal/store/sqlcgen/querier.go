@@ -68,6 +68,7 @@ type Querier interface {
 	// SPDX-License-Identifier: EUPL-1.2
 	EnqueueRun(ctx context.Context, arg EnqueueRunParams) (SnatchRun, error)
 	EnsureDefaultPolicy(ctx context.Context, arg EnsureDefaultPolicyParams) (SnatchPolicy, error)
+	EnsureModule(ctx context.Context, arg EnsureModuleParams) error
 	EnsureSettings(ctx context.Context, updatedAt time.Time) (Setting, error)
 	// Ends, as failed, runs whose lease expired after max_leases leases, oldest first and at
 	// most batch per call.
@@ -85,6 +86,9 @@ type Querier interface {
 	GetInstanceByConfigarrKey(ctx context.Context, configarrKey *string) (Instance, error)
 	GetInstancePriority(ctx context.Context, id uuid.UUID) (GetInstancePriorityRow, error)
 	GetLoginLockout(ctx context.Context, key string) (LoginLockout, error)
+	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+	// SPDX-License-Identifier: EUPL-1.2
+	GetModule(ctx context.Context, id string) (Module, error)
 	GetNotificationChannel(ctx context.Context, id uuid.UUID) (NotificationChannel, error)
 	GetNotificationRule(ctx context.Context, id uuid.UUID) (NotificationRule, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
@@ -132,6 +136,7 @@ type Querier interface {
 	ListInstances(ctx context.Context) ([]Instance, error)
 	// Instances never evaluated come first, then the one evaluated longest ago (#176).
 	ListInstancesToPlan(ctx context.Context) ([]Instance, error)
+	ListModules(ctx context.Context) ([]Module, error)
 	ListNotificationChannels(ctx context.Context) ([]NotificationChannel, error)
 	ListNotificationChannelsByIDs(ctx context.Context, ids []uuid.UUID) ([]NotificationChannel, error)
 	ListNotificationRules(ctx context.Context) ([]NotificationRule, error)
@@ -190,6 +195,8 @@ type Querier interface {
 	// SPDX-License-Identifier: EUPL-1.2
 	SaveWebhookEndpoint(ctx context.Context, arg SaveWebhookEndpointParams) (WebhookEndpoint, error)
 	SetAPIKeyMeta(ctx context.Context, arg SetAPIKeyMetaParams) (int64, error)
+	SetModuleConfig(ctx context.Context, arg SetModuleConfigParams) (Module, error)
+	SetModuleEnabled(ctx context.Context, arg SetModuleEnabledParams) (Module, error)
 	TouchAPIKey(ctx context.Context, arg TouchAPIKeyParams) error
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2

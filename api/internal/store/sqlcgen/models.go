@@ -76,6 +76,13 @@ type LoginLockout struct {
 	LockedUntil *time.Time
 }
 
+type Module struct {
+	ID        string
+	Enabled   bool
+	Config    []byte
+	UpdatedAt time.Time
+}
+
 type NotificationChannel struct {
 	ID        uuid.UUID
 	Name      string
