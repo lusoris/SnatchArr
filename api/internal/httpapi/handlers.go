@@ -51,6 +51,7 @@ type Handlers struct {
 	instances *instances.Service
 	policies  *policies.Service
 	queue     *queue.Store
+	queueSvc  *queue.Service
 	options   *policies.Options
 	logs      *logring.Ring
 	runs      *snatch.Runs
@@ -88,6 +89,7 @@ type Deps struct {
 	Options   *policies.Options
 	Logs      *logring.Ring
 	Queue     *queue.Store
+	QueueSvc  *queue.Service
 }
 
 // NewHandlers wires the operation handlers.
@@ -96,7 +98,7 @@ func NewHandlers(build buildinfo.Info, cfg config.Options, clk clock.Clock, auth
 ) *Handlers {
 	return &Handlers{
 		build: build, cfg: cfg, clk: clk, auth: authSvc, apiKeys: apiKeys, sessions: sessions, instances: inst, policies: pol,
-		queue: d.Queue, runs: d.Runs, workers: d.Workers, rec: d.Rec, budget: d.Budget, memory: d.Memory, planner: d.Planner, schedules: d.Schedules, clients: d.Clients, settings: d.Settings, seerr: d.Seerr, prowlarr: d.Prowlarr, configarr: d.Configarr, notify: d.Notify, options: d.Options, logs: d.Logs, logger: logger,
+		queue: d.Queue, queueSvc: d.QueueSvc, runs: d.Runs, workers: d.Workers, rec: d.Rec, budget: d.Budget, memory: d.Memory, planner: d.Planner, schedules: d.Schedules, clients: d.Clients, settings: d.Settings, seerr: d.Seerr, prowlarr: d.Prowlarr, configarr: d.Configarr, notify: d.Notify, options: d.Options, logs: d.Logs, logger: logger,
 	}
 }
 

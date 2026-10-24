@@ -94,10 +94,26 @@ func (f *fakeStore) DownloadPriorityPreset(_ context.Context) (domain.PriorityPr
 type fakeInstanceSource struct {
 	instances []queue.Instance
 	err       error
+	disabled  map[uuid.UUID]bool
 }
 
 func (f *fakeInstanceSource) ListEnabledInstances(_ context.Context) ([]queue.Instance, error) {
 	return f.instances, f.err
+}
+
+func (f *fakeInstanceSource) EnabledInstance(_ context.Context, id uuid.UUID) (queue.Instance, error) {
+	if f.err != nil {
+		return queue.Instance{}, f.err
+	}
+	if f.disabled != nil && f.disabled[id] {
+		return queue.Instance{}, domain.ErrNotFound
+	}
+	for _, inst := range f.instances {
+		if inst.ID == id {
+			return inst, nil
+		}
+	}
+	return queue.Instance{}, domain.ErrNotFound
 }
 
 type fakeRemoval struct {

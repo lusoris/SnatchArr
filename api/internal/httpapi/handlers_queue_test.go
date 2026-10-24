@@ -6,6 +6,7 @@ package httpapi
 
 import (
 	"errors"
+	"net/http"
 	"testing"
 	"time"
 
@@ -245,6 +246,95 @@ func TestListQueueStrikes(t *testing.T) {
 			t.Fatalf("ListQueueStrikes() err = %v, want %v", err, domain.ErrNotFound)
 		}
 	})
+}
+
+func TestListQueueItems(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name       string
+		unknownID  bool
+		arrErr     error
+		seedItems  bool
+		wantStatus int
+		wantErr    error
+		wantCount  int
+		wantTrunc  bool
+	}{
+		{
+			name:       "positive live queue items returned",
+			seedItems:  true,
+			wantStatus: http.StatusOK,
+			wantCount:  1,
+			wantTrunc:  false,
+		},
+		{
+			name:       "negative unknown instance answers not found",
+			unknownID:  true,
+			wantStatus: http.StatusNotFound,
+			wantErr:    domain.ErrNotFound,
+		},
+		{
+			name:       "negative arr unreachable answers bad gateway",
+			arrErr:     domain.ErrUnreachable,
+			wantStatus: http.StatusBadGateway,
+			wantErr:    domain.ErrUnreachable,
+		},
+		{
+			name:       "boundary empty queue",
+			seedItems:  false,
+			wantStatus: http.StatusOK,
+			wantCount:  0,
+			wantTrunc:  false,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			f := newIntegrationFixture(t)
+			instID := seedTestInstance(t, f)
+			if tc.unknownID {
+				instID = uuid.New()
+			}
+			if tc.arrErr != nil {
+				f.probe.err = tc.arrErr
+			}
+			if tc.seedItems {
+				f.probe.items = []queue.Item{
+					{
+						ID:                    42,
+						DownloadID:            "dl-01",
+						Title:                 "Test Item",
+						Status:                "downloading",
+						TrackedDownloadStatus: "ok",
+						TrackedDownloadState:  "downloading",
+						SizeLeft:              1000,
+						Added:                 f.clk.Now().Add(-5 * time.Minute),
+					},
+				}
+			}
+			got, err := f.h.ListQueueItems(t.Context(), oas.ListQueueItemsParams{InstanceId: instID})
+			if tc.wantErr != nil {
+				if !errors.Is(err, tc.wantErr) {
+					t.Fatalf("ListQueueItems() err = %v, want %v", err, tc.wantErr)
+				}
+				prob := f.h.NewError(t.Context(), err)
+				if prob.StatusCode != tc.wantStatus {
+					t.Errorf("NewError status = %d, want %d", prob.StatusCode, tc.wantStatus)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ListQueueItems() err = %v", err)
+			}
+			if len(got.Items) != tc.wantCount {
+				t.Errorf("len(Items) = %d, want %d", len(got.Items), tc.wantCount)
+			}
+			if got.Truncated != tc.wantTrunc {
+				t.Errorf("Truncated = %v, want %v", got.Truncated, tc.wantTrunc)
+			}
+		})
+	}
 }
 
 func TestQueueRuleBlocklistMapping(t *testing.T) {

@@ -68,7 +68,7 @@ Tokens are minted on the account page (`/account`) under the **API keys** sectio
 
 | Scope | Protected Domain |
 | :--- | :--- |
-| `core:read` / `core:write` | Instances, snatches, schedules, queue policies, strikes |
+| `core:read` / `core:write` | Instances, snatches, schedules, queue policies, live queue contents, strikes |
 | `requests:read` / `requests:write` | Seerr links, media requests, instance imports |
 | `download_clients:read` / `download_clients:write` | Download client status, configuration, discovery |
 | `prowlarr:read` / `prowlarr:write` | Indexer links, sync status, connectivity tests |
@@ -91,6 +91,16 @@ SnatchArr implements four levels of defense against unintended model actions:
 ### 5. Prompt Injection Defense
 
 Torrent release names, indexer descriptions, and Usenet headers are untrusted external text that could harbor prompt injection attacks. SnatchArr isolates external text into structured JSON fields (`structuredContent`), ensuring external strings are never interpolated directly into instruction prompts or prompt templates.
+
+### 6. Read-Only Context Resources
+
+Connected clients retrieve standardized passive context resources via `resources/read` ([ADR-0021](../adr/0021-llm-access-module.md) section 6):
+
+| Resource URI | Description | Scope |
+| :--- | :--- | :--- |
+| `snatcharr://instances` | Snapshot of configured \*arr instances, download client status, and prowlarr status. | `core:read` |
+| `snatcharr://queue/{instance_id}` | Real-time download queue contents, strike records, stalled downloads, and blocklist states for the designated instance. | `core:read` |
+| `snatcharr://history` | Recent execution runs and snatch history events. | `core:read` |
 
 ---
 

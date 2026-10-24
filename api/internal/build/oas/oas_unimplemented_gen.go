@@ -486,6 +486,15 @@ func (UnimplementedHandler) ListProwlarrLinks(ctx context.Context) (r []Prowlarr
 	return r, ht.ErrNotImplemented
 }
 
+// ListQueueItems implements listQueueItems operation.
+//
+// Returns real-time *arr queue items with sweep decisions, strike records, and blocklist states.
+//
+// GET /instances/{instanceId}/queue
+func (UnimplementedHandler) ListQueueItems(ctx context.Context, params ListQueueItemsParams) (r *QueueInspection, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // ListQueueStrikes implements listQueueStrikes operation.
 //
 // Items with at least one strike; items the last sweep found clean are left out.

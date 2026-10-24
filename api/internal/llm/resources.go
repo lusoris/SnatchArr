@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -33,9 +34,57 @@ type instancesResourceSnapshot struct {
 }
 
 type queueResourceSnapshot struct {
-	InstanceID uuid.UUID `json:"instance_id"`
-	Policy     any       `json:"policy"`
-	Strikes    any       `json:"strikes"`
+	InstanceID     uuid.UUID `json:"instance_id"`
+	Policy         any       `json:"policy"`
+	Strikes        any       `json:"strikes"`
+	Items          any       `json:"items,omitempty"`
+	ItemsTruncated *bool     `json:"items_truncated,omitempty"`
+	LiveError      string    `json:"live_error,omitempty"`
+}
+
+func (s queueResourceSnapshot) MarshalJSON() ([]byte, error) {
+	if s.LiveError != "" {
+		data, err := json.Marshal(struct {
+			InstanceID uuid.UUID `json:"instance_id"`
+			Policy     any       `json:"policy"`
+			Strikes    any       `json:"strikes"`
+			LiveError  string    `json:"live_error"`
+		}{
+			InstanceID: s.InstanceID,
+			Policy:     s.Policy,
+			Strikes:    s.Strikes,
+			LiveError:  s.LiveError,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("marshal queue snapshot with error: %w", err)
+		}
+		return data, nil
+	}
+	items := s.Items
+	if items == nil {
+		items = []any{}
+	}
+	truncated := false
+	if s.ItemsTruncated != nil {
+		truncated = *s.ItemsTruncated
+	}
+	data, err := json.Marshal(struct {
+		InstanceID     uuid.UUID `json:"instance_id"`
+		Policy         any       `json:"policy"`
+		Strikes        any       `json:"strikes"`
+		Items          any       `json:"items"`
+		ItemsTruncated bool      `json:"items_truncated"`
+	}{
+		InstanceID:     s.InstanceID,
+		Policy:         s.Policy,
+		Strikes:        s.Strikes,
+		Items:          items,
+		ItemsTruncated: truncated,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal queue snapshot: %w", err)
+	}
+	return data, nil
 }
 
 type historyResourceSnapshot struct {
@@ -73,7 +122,7 @@ func registerResources(srv *mcp.Server, h *httpapi.Handlers) {
 	srv.AddResourceTemplate(&mcp.ResourceTemplate{
 		URITemplate: "snatcharr://queue/{instance_id}",
 		Name:        "queue",
-		Description: "Queue policy and active queue strikes for an instance.",
+		Description: "Real-time download queue contents, strike records, stalled downloads, and blocklist states for the designated instance.",
 		MIMEType:    "application/json",
 	}, handleQueueResource(h))
 }
@@ -161,6 +210,25 @@ func parseQueueResourceURI(uri string) (uuid.UUID, error) {
 	return parsedID, nil
 }
 
+var (
+	quotedURLPattern = regexp.MustCompile(`"[^"]*https?://[^"]*"`)
+	bareURLPattern   = regexp.MustCompile(`https?://\S+`)
+	secretPattern    = regexp.MustCompile(`(?i)(api[_-]?key|token|secret|password)[=:][^\s&"'>]+`)
+	hexKeyPattern    = regexp.MustCompile(`\b[0-9a-fA-F]{32}\b`)
+)
+
+func sanitizeLiveError(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := err.Error()
+	msg = quotedURLPattern.ReplaceAllString(msg, `"[redacted]"`)
+	msg = bareURLPattern.ReplaceAllString(msg, `[redacted]`)
+	msg = secretPattern.ReplaceAllString(msg, `$1=[redacted]`)
+	msg = hexKeyPattern.ReplaceAllString(msg, `[redacted]`)
+	return msg
+}
+
 func fetchQueueSnapshot(ctx context.Context, h *httpapi.Handlers, uri string, instID uuid.UUID) (*queueResourceSnapshot, error) {
 	policy, err := callGetQueuePolicy(ctx, h, instID)
 	if err != nil {
@@ -176,11 +244,22 @@ func fetchQueueSnapshot(ctx context.Context, h *httpapi.Handlers, uri string, in
 		}
 		return nil, fmt.Errorf("llm: read queue strikes: %w", err)
 	}
-	return &queueResourceSnapshot{
+	snap := &queueResourceSnapshot{
 		InstanceID: instID,
 		Policy:     policy,
 		Strikes:    strikes,
-	}, nil
+	}
+	inspection, err := callListQueueItems(ctx, h, instID)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return nil, fmt.Errorf("%w", mcp.ResourceNotFoundError(uri))
+		}
+		snap.LiveError = sanitizeLiveError(err)
+		return snap, nil
+	}
+	snap.Items = inspection.Items
+	snap.ItemsTruncated = &inspection.Truncated
+	return snap, nil
 }
 
 func handleQueueResource(h *httpapi.Handlers) mcp.ResourceHandler {

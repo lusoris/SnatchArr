@@ -138,6 +138,7 @@ func newMCPFixture(t *testing.T) *mcpFixture {
 	rec := snatch.NewRecorder(st, clk, events.New(logger))
 	schedules := snatch.NewSchedules(st, clk, ids)
 	queueStore := queue.NewStore(st, clk)
+	queueSvc := queue.NewService(queueStore, queue.NewDBInstanceSource(st, enc), probe, clk, nil, nil, logger)
 	dlSnap := dlclients.NewGoenvoy(clk)
 	dlSvc := dlclients.New(st, enc, clk, ids, dlSnap, probe, instSvc, logger)
 	seerrClient := seerrclient.New(5*time.Second, "SnatchArr-test")
@@ -150,7 +151,7 @@ func newMCPFixture(t *testing.T) *mcpFixture {
 	build := buildinfo.Info{Version: "0.1.0-test", Commit: "abc1234", Date: "2026-10-21"}
 	handlers := httpapi.NewHandlers(build, cfg, clk, authSvc, apiKeys, sessMgr, instSvc, polSvc, logger, httpapi.Deps{
 		Runs: runs, Rec: rec, Workers: snatch.NewWorkers(st, clk), Settings: settingsSvc,
-		Schedules: schedules, Memory: snatch.NewMemory(st, clk), Queue: queueStore, Configarr: configarrSvc,
+		Schedules: schedules, Memory: snatch.NewMemory(st, clk), Queue: queueStore, QueueSvc: queueSvc, Configarr: configarrSvc,
 		Clients: dlSvc, Seerr: seerrSvc, Prowlarr: prowlarrSvc, Notify: notifySvc,
 	})
 	llmSvc, err := llm.New(build, settingsSvc, httpapi.NewSecurity(sessMgr, cfg, keys, authSvc, apiKeys, clk, logger), handlers, logger)
