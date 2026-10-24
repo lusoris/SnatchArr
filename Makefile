@@ -253,6 +253,7 @@ e2e-compose-pg-upgrade: ## Homelab compose bundle: Postgres previous major -> pi
 # dashboard folder and point Prometheus at a closed port; the smoke must refuse both (gap audit
 # C9-08). Not in verify-all (slow, needs Docker).
 e2e-dev-compose-smoke: ## Dev compose stack with both profiles: services up, Prometheus target up, Grafana dashboard provisioned (needs Docker)
+	bash tools/e2e/pull_retry_test.sh
 	bash tools/e2e/planted.sh DEV_PLANT tools/e2e/dev_compose_smoke.sh \
 	  "no-dashboards:grafana provisioned 0 dashboards" "bad-target:the otel-collector target is not up"
 
