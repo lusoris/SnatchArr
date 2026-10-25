@@ -23,3 +23,8 @@ func ClientBaseTransport(c *http.Client) http.RoundTripper {
 func CloneTransport(rt http.RoundTripper) http.RoundTripper {
 	return cloneTransport(rt)
 }
+
+// ProberOpts exports the unexported opts field of GoenvoyProber for external tests.
+func (p *GoenvoyProber) ProberOpts() Options {
+	return p.opts
+}

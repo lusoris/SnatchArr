@@ -17,8 +17,11 @@ import (
 
 // BaseFactory builds goenvoy clients with a shared API response policy.
 type BaseFactory struct {
-	Timeout   time.Duration
-	UserAgent string
+	Timeout time.Duration
+	// ImportTimeout is the bound for manual-import listing and submission, which scan
+	// the download's files on the *arr side (Lidarr measured 39-48 s).
+	ImportTimeout time.Duration
+	UserAgent     string
 }
 
 // httptest.Server.Close() calls CloseIdleConnections() on http.DefaultTransport,

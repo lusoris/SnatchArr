@@ -324,3 +324,86 @@ func TestForceImportRejectionReasons(t *testing.T) {
 		})
 	}
 }
+
+func TestForceImportTimeout(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		opts    arrclient.Options
+		delay   time.Duration
+		wantErr bool
+		wantN   int
+	}{
+		{
+			name:    "positive: import timeout allows slow response",
+			opts:    arrclient.Options{Timeout: 50 * time.Millisecond, ImportTimeout: 2 * time.Second},
+			delay:   200 * time.Millisecond,
+			wantErr: false,
+			wantN:   1,
+		},
+		{
+			name:    "negative: exceeded import timeout errors",
+			opts:    arrclient.Options{Timeout: 50 * time.Millisecond, ImportTimeout: 100 * time.Millisecond},
+			delay:   400 * time.Millisecond,
+			wantErr: true,
+			wantN:   0,
+		},
+		{
+			name:    "boundary: import timeout raised to timeout",
+			opts:    arrclient.Options{Timeout: time.Second, ImportTimeout: 10 * time.Millisecond},
+			delay:   100 * time.Millisecond,
+			wantErr: false,
+			wantN:   1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			srv := httptest.NewServer(timeoutImportHandler(tt.delay))
+			t.Cleanup(srv.Close)
+
+			p := arrclient.NewGoenvoyProber(tt.opts)
+			n, err := p.ForceImport(t.Context(), domain.KindLidarr, srv.URL, "k", "dl-1", queue.ImportModeClean)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				if errors.Is(err, queue.ErrNoCleanCandidate) {
+					t.Fatalf("expected non-ErrNoCleanCandidate error, got %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if n != tt.wantN {
+				t.Fatalf("n = %d, want %d", n, tt.wantN)
+			}
+		})
+	}
+}
+
+func timeoutImportHandler(delay time.Duration) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodGet && (r.URL.Path == "/api/v1/manualimport" || r.URL.Path == "/api/v3/manualimport") {
+			timer := time.NewTimer(delay)
+			defer timer.Stop()
+			select {
+			case <-r.Context().Done():
+				return
+			case <-timer.C:
+			}
+			_, _ = io.WriteString(w, "["+lidarrClean+"]")
+			return
+		}
+		if r.Method == http.MethodPost && (r.URL.Path == "/api/v1/command" || r.URL.Path == "/api/v3/command") {
+			w.WriteHeader(http.StatusCreated)
+			_, _ = io.WriteString(w, `{"id":1,"name":"ManualImport","status":"queued"}`)
+			return
+		}
+		http.NotFound(w, r)
+	})
+}
