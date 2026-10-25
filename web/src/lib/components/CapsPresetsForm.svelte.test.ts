@@ -2,12 +2,13 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-import { fireEvent, screen } from '@testing-library/svelte';
+import { fireEvent, screen, within } from '@testing-library/svelte';
 import { ProblemError } from '@sveltesentio/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
 import { api } from '#lib/api/client.js';
 import type { components } from '#lib/api/schema.js';
+import { kindLabel } from '#lib/kinds.js';
 import { m } from '#lib/paraglide/messages.js';
 import { session } from '#lib/session.svelte.js';
 import { renderWithQuery, stubGet } from '#lib/testing/harness.js';
@@ -118,11 +119,18 @@ describe('CapsPresetsForm', () => {
 		} as never);
 		renderWithQuery(CapsPresetsForm);
 
-		const sonarrSearch = (await screen.findByLabelText(
-			`${m.settings_search_priority_preset()} (sonarr)`
-		)) as HTMLInputElement;
-		const whisparrDownload = screen.getByLabelText(
-			`${m.settings_download_priority_preset()} (whisparr_v3)`
+		const searchFieldset = (await screen.findByRole('group', {
+			name: m.settings_search_priority_preset()
+		})) as HTMLElement;
+		const downloadFieldset = screen.getByRole('group', {
+			name: m.settings_download_priority_preset()
+		}) as HTMLElement;
+
+		const sonarrSearch = within(searchFieldset).getByLabelText(
+			kindLabel('sonarr')
+		) as HTMLInputElement;
+		const whisparrDownload = within(downloadFieldset).getByLabelText(
+			kindLabel('whisparr_v3')
 		) as HTMLInputElement;
 		expect(sonarrSearch.value).toBe('55');
 		expect(whisparrDownload.value).toBe('5');
@@ -150,11 +158,18 @@ describe('CapsPresetsForm', () => {
 		} as never);
 		const { container } = renderWithQuery(CapsPresetsForm);
 
-		const sonarrSearch = (await screen.findByLabelText(
-			`${m.settings_search_priority_preset()} (sonarr)`
-		)) as HTMLInputElement;
-		const radarrDownload = screen.getByLabelText(
-			`${m.settings_download_priority_preset()} (radarr)`
+		const searchFieldset = (await screen.findByRole('group', {
+			name: m.settings_search_priority_preset()
+		})) as HTMLElement;
+		const downloadFieldset = screen.getByRole('group', {
+			name: m.settings_download_priority_preset()
+		}) as HTMLElement;
+
+		const sonarrSearch = within(searchFieldset).getByLabelText(
+			kindLabel('sonarr')
+		) as HTMLInputElement;
+		const radarrDownload = within(downloadFieldset).getByLabelText(
+			kindLabel('radarr')
 		) as HTMLInputElement;
 
 		const axeResults = await axe(container, {
@@ -225,8 +240,11 @@ describe('CapsPresetsForm', () => {
 		const cap = (await screen.findByLabelText(m.settings_global_cap())) as HTMLInputElement;
 		expect(cap.disabled).toBe(true);
 
-		const sonarrSearch = screen.getByLabelText(
-			`${m.settings_search_priority_preset()} (sonarr)`
+		const searchFieldset = (await screen.findByRole('group', {
+			name: m.settings_search_priority_preset()
+		})) as HTMLElement;
+		const sonarrSearch = within(searchFieldset).getByLabelText(
+			kindLabel('sonarr')
 		) as HTMLInputElement;
 		expect(sonarrSearch.disabled).toBe(true);
 
