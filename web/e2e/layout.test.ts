@@ -13,10 +13,12 @@ import {
 	assertRenderedLayout,
 	assertScrollBudget,
 	assertTableFits,
+	assertTouchTargetHeights,
 	AUTH_ROUTES,
 	collectLists,
 	expectedTables,
 	measureContentSpan,
+	measureTouchTargets,
 	SCROLL_BUDGET_ROUTES,
 	VIEWPORTS,
 	WIDTH_PENDING
@@ -360,6 +362,10 @@ for (const [viewportName, viewport] of Object.entries(VIEWPORTS)) {
 				}
 			}
 
+			if (viewportName === 'phone' || viewportName === 'phone375') {
+				await assertTouchTargetHeights(page, pattern);
+			}
+
 			if (shots) {
 				const name = `${pattern.replace(/[/[\]]+/g, '-').replace(/^-|-$/g, '') || 'root'}-${viewportName}.png`;
 				await page.screenshot({ path: testInfo.outputPath(name), fullPage: true });
@@ -542,6 +548,41 @@ test('authenticated: desktop width gate fixtures and planted negative', async ({
 	await expect(assertDesktopWidth(page, '/test-empty')).rejects.toThrow(
 		'/test-empty: no content block measured'
 	);
+});
+
+test('authenticated: layout touch target height gate fixtures and planted negative', async ({
+	page
+}) => {
+	// Planted negative: 32px button (.btn) must fail the check
+	await page.setContent(
+		'<button type="button" class="btn" style="min-height: 0; height: 32px">Action</button>'
+	);
+	const measured = await page.evaluate(measureTouchTargets);
+	expect(measured.length).toBeGreaterThan(0);
+	expect(measured[0].height).toBe(32);
+	await expect(assertTouchTargetHeights(page, '/test-negative')).rejects.toThrow(
+		/\/test-negative: touch target height < 44px on phone \(1 element\(s\)\)/
+	);
+
+	// Positive fixture: 44px button passes
+	await page.setContent(
+		'<button type="button" class="btn" style="min-height: 44px; height: 44px">Action</button>'
+	);
+	await expect(assertTouchTargetHeights(page, '/test-positive')).resolves.not.toThrow();
+
+	// Boundary fixture: 43.5px fails
+	await page.setContent(
+		'<button type="button" class="btn" style="min-height: 0; height: 43.5px">Action</button>'
+	);
+	await expect(assertTouchTargetHeights(page, '/test-boundary-fail')).rejects.toThrow(
+		/\/test-boundary-fail: touch target height < 44px/
+	);
+
+	// Hidden element fixture: hidden 32px button is ignored
+	await page.setContent(
+		'<button type="button" class="btn" style="display: none; height: 32px">Action</button>'
+	);
+	await expect(assertTouchTargetHeights(page, '/test-hidden')).resolves.not.toThrow();
 });
 
 test('authenticated: layout /connections/download-clients table fits at 1280', async ({ page }) => {

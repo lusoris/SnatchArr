@@ -597,3 +597,46 @@ export interface PendingRoute {
 }
 
 export const WIDTH_PENDING: Record<string, PendingRoute> = {};
+
+export interface TouchTargetOffender {
+	selector: string;
+	height: number;
+}
+
+export function measureTouchTargets(): TouchTargetOffender[] {
+	const selector = '.btn, .input, .select, .nav-link, .subtab-link, [role="tab"]';
+	const elements = Array.from(document.querySelectorAll(selector));
+	const offenders: TouchTargetOffender[] = [];
+	for (const el of elements) {
+		if (
+			typeof el.checkVisibility === 'function' &&
+			!el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })
+		) {
+			continue;
+		}
+		const rect = el.getBoundingClientRect();
+		if (rect.width <= 1 || rect.height <= 1) continue;
+		const height = Math.round(rect.height * 2) / 2;
+		if (height < 44) {
+			const tag = el.tagName.toLowerCase();
+			const cls = (el.getAttribute('class') ?? '').trim().replace(/\s+/g, ' ');
+			const name =
+				el.getAttribute('aria-label') ??
+				el.getAttribute('title') ??
+				(el.textContent ? el.textContent.trim().replace(/\s+/g, ' ').slice(0, 40) : '');
+			const desc = `${tag}${cls ? `.${cls.split(' ').join('.')}` : ''}${name ? ` "${name}"` : ''}`;
+			offenders.push({ selector: desc, height });
+		}
+	}
+	return offenders;
+}
+
+export async function assertTouchTargetHeights(page: Page, route: string): Promise<void> {
+	const offenders = await page.evaluate(measureTouchTargets);
+	if (offenders.length > 0) {
+		const summary = offenders.map((o) => `  - ${o.selector}: ${o.height}px < 44px`).join('\n');
+		throw new Error(
+			`${route}: touch target height < 44px on phone (${offenders.length} element(s)):\n${summary}`
+		);
+	}
+}

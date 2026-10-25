@@ -190,7 +190,7 @@ SPDX-License-Identifier: EUPL-1.2
 				</label>
 			</div>
 
-			<fieldset class="border-border rounded border p-4 md:col-span-2" data-field="rules">
+			<fieldset class="border-border min-w-0 rounded border p-4 md:col-span-2" data-field="rules">
 				<legend class="px-2 text-sm font-semibold">{m.queue_policy_rules_title()}</legend>
 				<div class="overflow-x-auto">
 					<table class="w-full text-left text-sm">

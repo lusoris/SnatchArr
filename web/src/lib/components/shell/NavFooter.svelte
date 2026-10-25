@@ -54,7 +54,7 @@ SPDX-License-Identifier: EUPL-1.2
 		</a>
 		<button
 			type="button"
-			class="btn inline-flex min-h-0 items-center gap-1.5 rounded px-2 py-1.5 text-sm text-subtle hover:border-danger hover:text-danger"
+			class="btn inline-flex min-h-11 items-center gap-1.5 rounded px-2 py-1.5 text-sm text-subtle hover:border-danger hover:text-danger md:min-h-0"
 			onclick={handleLogout}
 		>
 			<NavIcon name="log-out" size={15} />
