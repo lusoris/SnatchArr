@@ -202,6 +202,24 @@ async function mockDashboardRoute(page: Page): Promise<void> {
 		}
 		return route.fulfill(json(dashboardProwlarrStatus));
 	});
+	await page.route('**/api/v1/runs*', (route) => {
+		if (route.request().method() !== 'GET') {
+			return route.fallback();
+		}
+		return route.fulfill(json([]));
+	});
+	await page.route('**/api/v1/events*', (route) => {
+		if (route.request().method() !== 'GET') {
+			return route.fallback();
+		}
+		return route.fulfill(json([]));
+	});
+	await page.route('**/api/v1/schedules*', (route) => {
+		if (route.request().method() !== 'GET') {
+			return route.fallback();
+		}
+		return route.fulfill(json([]));
+	});
 }
 
 for (const [viewportName, viewport] of Object.entries(VIEWPORTS)) {

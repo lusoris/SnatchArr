@@ -7,6 +7,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { toast } from 'svelte-sonner';
 	import { api, describeError } from '#lib/api/client.js';
 	import type { components } from '#lib/api/schema.js';
+	import { activePauseText } from '#lib/overview.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { keys } from '#lib/query.js';
 	import { session } from '#lib/session.svelte.js';
@@ -38,12 +39,6 @@ SPDX-License-Identifier: EUPL-1.2
 		if (!id) return undefined;
 		const match = instances.find((i) => i.id === id);
 		return match?.name;
-	}
-
-	function activePauseText(s: Schedule): string {
-		if (s.action !== 'pause' || !s.active) return '';
-		const target = instanceName(s.instance_id) ?? m.schedule_all_instances();
-		return m.schedule_active_pause({ target });
 	}
 
 	const remove = createSentioMutation({
@@ -94,7 +89,7 @@ SPDX-License-Identifier: EUPL-1.2
 						</div>
 						{#if s.action === 'pause' && s.active}
 							<div class="mt-1 text-xs font-semibold text-danger">
-								{activePauseText(s)}
+								{activePauseText(s, instances)}
 							</div>
 						{/if}
 					</td>
