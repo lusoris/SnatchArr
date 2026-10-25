@@ -66,7 +66,7 @@ SPDX-License-Identifier: EUPL-1.2
 		>
 			<span class="text-xs font-semibold md:text-sm">
 				{#if group.run_id}
-					Run {group.run_id.slice(0, 8)}
+					{m.activity_run_label({ id: group.run_id.slice(0, 8) })}
 				{:else}
 					{group.type}
 				{/if}

@@ -7,6 +7,7 @@
 // the axe sweep of the public pages (title prefix "public:").
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
+import { settleToasts } from './settle.js';
 
 const WCAG_22_AA = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 
@@ -23,6 +24,7 @@ for (const [scheme, path] of [
 		const dark = await page.evaluate(() => document.documentElement.classList.contains('dark'));
 		expect(dark).toBe(scheme === 'dark');
 		await expect(page.locator('html')).toHaveCSS('color-scheme', scheme);
+		await settleToasts(page);
 		const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
 		expect(results.violations).toEqual([]);
 	});
