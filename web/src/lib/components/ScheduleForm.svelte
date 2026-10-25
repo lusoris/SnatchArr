@@ -143,7 +143,7 @@ SPDX-License-Identifier: EUPL-1.2
 </script>
 
 <form
-	class="card flex max-w-xl flex-col gap-4"
+	class="card flex flex-col gap-4"
 	onsubmit={(e) => {
 		e.preventDefault();
 		save.mutate();

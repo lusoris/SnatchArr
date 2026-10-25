@@ -4,14 +4,25 @@
 
 import { fireEvent, screen, within } from '@testing-library/svelte';
 import { ProblemError } from '@sveltesentio/core';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '#lib/api/client.js';
 import type { components } from '#lib/api/schema.js';
 import { m } from '#lib/paraglide/messages.js';
+import { session } from '#lib/session.svelte.js';
 import { forkInstance, renderWithQuery, stubGet } from '#lib/testing/harness.js';
 import SchedulesPage from './+page.svelte';
 
 type Schedule = components['schemas']['Schedule'];
+
+const navMocks = vi.hoisted(() => ({ goto: vi.fn() }));
+vi.mock('$app/navigation', () => ({ goto: navMocks.goto }));
+
+const pageMock = vi.hoisted(() => ({
+	url: new URL('http://localhost/automation')
+}));
+vi.mock('$app/state', () => ({
+	page: pageMock
+}));
 
 const sampleSchedule: Schedule = {
 	id: '00000000-0000-0000-0000-000000000020',
@@ -42,9 +53,31 @@ const capSchedule: Schedule = {
 	updated_at: '2026-01-01T00:00:00Z'
 };
 
+const mediaFirstRanks = {
+	sonarr: 10,
+	radarr: 10,
+	lidarr: 20,
+	readarr: 30,
+	whisparr_v2: 40,
+	whisparr_v3: 40
+};
+
+const sampleSettings = {
+	history_retention_days: 30,
+	user_agent: 'SnatchArr/1.0',
+	global_hourly_cap: 100,
+	search_priority_preset: mediaFirstRanks,
+	download_priority_preset: mediaFirstRanks,
+	llm_enabled: false,
+	llm_write_tools: [],
+	updated_at: '2026-10-25T05:00:00Z'
+};
+
 const baseStubs = {
 	'/schedules': [sampleSchedule, capSchedule],
-	'/instances': []
+	'/instances': [],
+	'/settings': sampleSettings,
+	'/priority-presets': []
 };
 
 async function clickFirstButton(name: string): Promise<void> {
@@ -66,9 +99,90 @@ async function openFirstDeleteConfirm(): Promise<void> {
 	expect(screen.getByText(m.schedule_delete_confirm({ name: sampleSchedule.name }))).toBeTruthy();
 }
 
-describe('schedules', () => {
+describe('automation page tabs', () => {
+	beforeEach(() => {
+		pageMock.url = new URL('http://localhost/automation');
+		stubGet(baseStubs);
+	});
+
 	afterEach(() => {
 		vi.restoreAllMocks();
+		session.user = { id: 'u1', username: 'admin', role: 'admin' } as never;
+	});
+
+	it('renders schedules tab by default', async () => {
+		renderWithQuery(SchedulesPage);
+
+		expect(await screen.findByRole('heading', { level: 1, name: m.nav_automation() })).toBeTruthy();
+		expect(
+			screen.getByRole('tab', { name: m.automation_tab_schedules(), selected: true })
+		).toBeTruthy();
+		expect(
+			screen.getByRole('tab', { name: m.automation_tab_caps(), selected: false })
+		).toBeTruthy();
+		expect(await screen.findByRole('table')).toBeTruthy();
+	});
+
+	it('deep link: renders caps tab when tab=caps', async () => {
+		pageMock.url = new URL('http://localhost/automation?tab=caps');
+		renderWithQuery(SchedulesPage);
+
+		expect(await screen.findByRole('heading', { level: 1, name: m.nav_automation() })).toBeTruthy();
+		expect(screen.getByRole('tab', { name: m.automation_tab_caps(), selected: true })).toBeTruthy();
+		expect(
+			screen.getByRole('tab', { name: m.automation_tab_schedules(), selected: false })
+		).toBeTruthy();
+		expect(await screen.findByLabelText(m.settings_global_cap())).toBeTruthy();
+	});
+
+	it('unknown tab param falls back to schedules tab', async () => {
+		pageMock.url = new URL('http://localhost/automation?tab=unknown');
+		renderWithQuery(SchedulesPage);
+
+		expect(
+			screen.getByRole('tab', { name: m.automation_tab_schedules(), selected: true })
+		).toBeTruthy();
+		expect(await screen.findByRole('table')).toBeTruthy();
+	});
+
+	it('clicking caps tab calls goto with tab=caps', async () => {
+		renderWithQuery(SchedulesPage);
+
+		const capsTab = screen.getByRole('tab', { name: m.automation_tab_caps() });
+		await fireEvent.click(capsTab);
+
+		expect(navMocks.goto).toHaveBeenCalledWith('/automation?tab=caps', { replaceState: true });
+	});
+
+	it('viewer role: schedules tab shows table without edit/delete buttons or form', async () => {
+		session.user = { id: 'u2', username: 'viewer', role: 'viewer' } as never;
+		renderWithQuery(SchedulesPage);
+
+		expect(await screen.findByRole('table')).toBeTruthy();
+		expect(screen.queryByRole('button', { name: m.schedule_add() })).toBeNull();
+		expect(screen.queryByRole('button', { name: m.schedule_edit() })).toBeNull();
+		expect(screen.queryByRole('button', { name: m.schedule_delete() })).toBeNull();
+	});
+
+	it('viewer role: caps tab shows disabled inputs and no save button', async () => {
+		session.user = { id: 'u2', username: 'viewer', role: 'viewer' } as never;
+		pageMock.url = new URL('http://localhost/automation?tab=caps');
+		renderWithQuery(SchedulesPage);
+
+		const cap = (await screen.findByLabelText(m.settings_global_cap())) as HTMLInputElement;
+		expect(cap.disabled).toBe(true);
+		expect(screen.queryByRole('button', { name: m.instance_save() })).toBeNull();
+	});
+});
+
+describe('schedules', () => {
+	beforeEach(() => {
+		pageMock.url = new URL('http://localhost/automation');
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+		session.user = { id: 'u1', username: 'admin', role: 'admin' } as never;
 	});
 
 	it('renders heading, table headers and schedule rows', async () => {
@@ -109,14 +223,30 @@ describe('schedules', () => {
 			active: true,
 			action: 'pause'
 		};
+
 		stubGet({
 			'/schedules': [activeGlobal, activeInstance],
-			'/instances': [forkInstance]
+			'/instances': [forkInstance],
+			'/settings': sampleSettings,
+			'/priority-presets': []
 		});
 		renderWithQuery(SchedulesPage);
 
 		expect(await screen.findByText('Pausing: all instances')).toBeTruthy();
 		expect(screen.getByText('Pausing: Library Readarr')).toBeTruthy();
+	});
+
+	it('shows empty message when no schedules exist', async () => {
+		stubGet({
+			'/schedules': [],
+			'/instances': [],
+			'/settings': sampleSettings,
+			'/priority-presets': []
+		});
+		renderWithQuery(SchedulesPage);
+
+		expect(await screen.findByText(m.schedules_empty())).toBeTruthy();
+		expect(screen.queryByRole('table')).toBeNull();
 	});
 
 	it('announces the problem document when the schedules query fails', async () => {
@@ -126,7 +256,9 @@ describe('schedules', () => {
 				status: 500,
 				detail: 'schedules query failed'
 			}),
-			'/instances': []
+			'/instances': [],
+			'/settings': sampleSettings,
+			'/priority-presets': []
 		});
 		renderWithQuery(SchedulesPage);
 
@@ -134,16 +266,13 @@ describe('schedules', () => {
 		expect(screen.queryByRole('table')).toBeNull();
 	});
 
-	it('renders the empty state card when there are no schedules', async () => {
-		stubGet({ '/schedules': [], '/instances': [] });
-		renderWithQuery(SchedulesPage);
-
-		expect(await screen.findByText(m.schedules_empty())).toBeTruthy();
-		expect(screen.queryByRole('table')).toBeNull();
-	});
-
 	it('creates a new schedule on form submit', async () => {
-		stubGet({ '/schedules': [], '/instances': [] });
+		stubGet({
+			'/schedules': [],
+			'/instances': [],
+			'/settings': sampleSettings,
+			'/priority-presets': []
+		});
 		const postSpy = vi.spyOn(api, 'POST').mockResolvedValue({
 			data: { ...sampleSchedule, id: '00000000-0000-0000-0000-000000000024' }
 		} as never);
@@ -180,6 +309,7 @@ describe('schedules', () => {
 			data: { ...sampleSchedule, name: 'Renamed Night Hours' }
 		} as never);
 		renderWithQuery(SchedulesPage);
+
 		await openFirstEdit();
 
 		const nameInput = screen.getByLabelText(m.schedule_name());
@@ -242,7 +372,12 @@ describe('schedules', () => {
 	});
 
 	it('shows cap_value input only when action is cap_override', async () => {
-		stubGet({ '/schedules': [], '/instances': [] });
+		stubGet({
+			'/schedules': [],
+			'/instances': [],
+			'/settings': sampleSettings,
+			'/priority-presets': []
+		});
 		renderWithQuery(SchedulesPage);
 
 		expect(screen.queryByLabelText(m.schedule_cap_value())).toBeNull();
@@ -257,7 +392,12 @@ describe('schedules', () => {
 	});
 
 	it('enforces validation boundaries for start/end pattern and cap_value', async () => {
-		stubGet({ '/schedules': [], '/instances': [] });
+		stubGet({
+			'/schedules': [],
+			'/instances': [],
+			'/settings': sampleSettings,
+			'/priority-presets': []
+		});
 		renderWithQuery(SchedulesPage);
 
 		const startInput = (await screen.findByLabelText(m.schedule_start())) as HTMLInputElement;

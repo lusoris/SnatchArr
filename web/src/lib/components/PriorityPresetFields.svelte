@@ -15,13 +15,15 @@ SPDX-License-Identifier: EUPL-1.2
 		downloadPreset: PriorityPresetMap;
 		canReset?: boolean;
 		onReset: () => void;
+		disabled?: boolean;
 	}
 
 	let {
 		searchPreset = $bindable(),
 		downloadPreset = $bindable(),
 		canReset = false,
-		onReset
+		onReset,
+		disabled = false
 	}: Props = $props();
 </script>
 
@@ -31,12 +33,12 @@ SPDX-License-Identifier: EUPL-1.2
 			<h2 class="text-base font-semibold">{m.settings_priority_presets_title()}</h2>
 			<p class="text-xs text-subtle">{m.settings_priority_presets_hint()}</p>
 		</div>
-		<button type="button" class="btn" disabled={!canReset} onclick={onReset}>
+		<button type="button" class="btn" disabled={disabled || !canReset} onclick={onReset}>
 			{m.settings_priority_reset()}
 		</button>
 	</div>
 
-	<fieldset class="flex flex-col gap-2" data-field="search_priority_preset">
+	<fieldset class="flex flex-col gap-2" data-field="search_priority_preset" {disabled}>
 		<legend class="text-sm font-medium">{m.settings_search_priority_preset()}</legend>
 		<div class="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
 			{#each APP_KINDS as kind (kind)}
@@ -52,6 +54,7 @@ SPDX-License-Identifier: EUPL-1.2
 							min="1"
 							max="100"
 							required
+							{disabled}
 							bind:value={searchPreset[kind]}
 						/>
 					</Field>
@@ -60,7 +63,7 @@ SPDX-License-Identifier: EUPL-1.2
 		</div>
 	</fieldset>
 
-	<fieldset class="flex flex-col gap-2" data-field="download_priority_preset">
+	<fieldset class="flex flex-col gap-2" data-field="download_priority_preset" {disabled}>
 		<legend class="text-sm font-medium">{m.settings_download_priority_preset()}</legend>
 		<div class="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
 			{#each APP_KINDS as kind (kind)}
@@ -76,6 +79,7 @@ SPDX-License-Identifier: EUPL-1.2
 							min="1"
 							max="100"
 							required
+							{disabled}
 							bind:value={downloadPreset[kind]}
 						/>
 					</Field>
