@@ -26,6 +26,9 @@ The following optional modules are registered:
   [ADR-0024](adr/0024-watch-aware-modes.md). When enabled, the **Automation** view exposes
   a **Season gate** tab (`/automation?tab=season-gate`) displaying evaluated series and
   decisions. Decisions emit the `watchaware_gate_decided` event and notification rule trigger.
+  In observe mode, the season gate evaluates watch data to propose season promotions without
+  modifying Sonarr: when the furthest watched season advances, held seasons within the configured
+  look-ahead window receive promote decisions.
 
 ## Enabling and disabling modules
 

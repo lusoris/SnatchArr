@@ -41,9 +41,9 @@ DELETE FROM watchaware_sources WHERE id = $1;
 INSERT INTO watchaware_item_watches (
     source_id, user_id, item_id, user_name, item_type, series_id,
     season_number, episode_number, played, played_percentage,
-    resume_position, last_played_at, synced_at
+    resume_position, last_played_at, synced_at, provider_tvdb_id
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
 )
 ON CONFLICT (source_id, user_id, item_id) DO UPDATE SET
     user_name = EXCLUDED.user_name,
@@ -55,13 +55,14 @@ ON CONFLICT (source_id, user_id, item_id) DO UPDATE SET
     played_percentage = EXCLUDED.played_percentage,
     resume_position = EXCLUDED.resume_position,
     last_played_at = EXCLUDED.last_played_at,
-    synced_at = EXCLUDED.synced_at;
+    synced_at = EXCLUDED.synced_at,
+    provider_tvdb_id = EXCLUDED.provider_tvdb_id;
 
 -- name: CountWatchAwareItemWatches :one
-SELECT COUNT(*) FROM watchaware_item_watches;
+SELECT COUNT(*) FROM watchaware_item_watches WHERE item_type != 'Series';
 
 -- name: CountWatchAwareItemWatchesForSource :one
-SELECT COUNT(*) FROM watchaware_item_watches WHERE source_id = $1;
+SELECT COUNT(*) FROM watchaware_item_watches WHERE source_id = $1 AND item_type != 'Series';
 
 -- name: ListItemWatchesForSource :many
 SELECT * FROM watchaware_item_watches WHERE source_id = $1 ORDER BY item_id ASC;
@@ -149,4 +150,38 @@ WHERE id IN (
     WHERE decided_at < sqlc.arg(before)::timestamptz
     LIMIT sqlc.arg(max_rows)::int
 );
+
+-- name: ListGatedSeriesWithHeldSeasons :many
+SELECT * FROM watchaware_gate_series
+WHERE instance_id = $1
+  AND state = 'gated'
+  AND cardinality(held_seasons) > 0
+ORDER BY series_id ASC
+LIMIT $2;
+
+-- name: ListEpisodeWatchesByTvdbIDs :many
+SELECT
+    s.provider_tvdb_id,
+    e.source_id,
+    e.user_id,
+    e.season_number,
+    e.episode_number,
+    e.played,
+    e.played_percentage
+FROM watchaware_item_watches e
+JOIN watchaware_item_watches s
+    ON e.source_id = s.source_id
+   AND e.user_id = s.user_id
+   AND e.series_id = s.item_id
+   AND s.item_type = 'Series'
+WHERE e.item_type = 'Episode'
+  AND s.provider_tvdb_id = ANY(@tvdb_ids::text[])
+ORDER BY s.provider_tvdb_id, e.source_id, e.user_id, e.season_number, e.episode_number
+LIMIT @max_rows;
+
+-- name: UpdateGateSeriesHeldSeasons :exec
+UPDATE watchaware_gate_series
+SET held_seasons = $3, updated_at = $4
+WHERE instance_id = $1 AND series_id = $2;
+
 

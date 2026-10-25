@@ -262,6 +262,7 @@ func upsertWatch(ctx context.Context, q *sqlcgen.Queries, srcUUID uuid.UUID, w W
 		ResumePosition:   w.PositionTicks,
 		LastPlayedAt:     w.LastPlayed,
 		SyncedAt:         now,
+		ProviderTvdbID:   w.TvdbID,
 	})
 	if upsertErr != nil {
 		return fmt.Errorf("upsert watch %s/%s: %w", w.UserID, w.ItemID, store.MapError(upsertErr))

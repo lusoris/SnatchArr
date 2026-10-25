@@ -13,7 +13,7 @@ import (
 )
 
 const countWatchAwareItemWatches = `-- name: CountWatchAwareItemWatches :one
-SELECT COUNT(*) FROM watchaware_item_watches
+SELECT COUNT(*) FROM watchaware_item_watches WHERE item_type != 'Series'
 `
 
 func (q *Queries) CountWatchAwareItemWatches(ctx context.Context) (int64, error) {
@@ -24,7 +24,7 @@ func (q *Queries) CountWatchAwareItemWatches(ctx context.Context) (int64, error)
 }
 
 const countWatchAwareItemWatchesForSource = `-- name: CountWatchAwareItemWatchesForSource :one
-SELECT COUNT(*) FROM watchaware_item_watches WHERE source_id = $1
+SELECT COUNT(*) FROM watchaware_item_watches WHERE source_id = $1 AND item_type != 'Series'
 `
 
 func (q *Queries) CountWatchAwareItemWatchesForSource(ctx context.Context, sourceID uuid.UUID) (int64, error) {
@@ -248,6 +248,70 @@ func (q *Queries) ListEnabledWatchAwareSources(ctx context.Context) ([]Watchawar
 	return items, nil
 }
 
+const listEpisodeWatchesByTvdbIDs = `-- name: ListEpisodeWatchesByTvdbIDs :many
+SELECT
+    s.provider_tvdb_id,
+    e.source_id,
+    e.user_id,
+    e.season_number,
+    e.episode_number,
+    e.played,
+    e.played_percentage
+FROM watchaware_item_watches e
+JOIN watchaware_item_watches s
+    ON e.source_id = s.source_id
+   AND e.user_id = s.user_id
+   AND e.series_id = s.item_id
+   AND s.item_type = 'Series'
+WHERE e.item_type = 'Episode'
+  AND s.provider_tvdb_id = ANY($1::text[])
+ORDER BY s.provider_tvdb_id, e.source_id, e.user_id, e.season_number, e.episode_number
+LIMIT $2
+`
+
+type ListEpisodeWatchesByTvdbIDsParams struct {
+	TvdbIds []string
+	MaxRows int32
+}
+
+type ListEpisodeWatchesByTvdbIDsRow struct {
+	ProviderTvdbID   string
+	SourceID         uuid.UUID
+	UserID           string
+	SeasonNumber     int32
+	EpisodeNumber    int32
+	Played           bool
+	PlayedPercentage *float64
+}
+
+func (q *Queries) ListEpisodeWatchesByTvdbIDs(ctx context.Context, arg ListEpisodeWatchesByTvdbIDsParams) ([]ListEpisodeWatchesByTvdbIDsRow, error) {
+	rows, err := q.db.Query(ctx, listEpisodeWatchesByTvdbIDs, arg.TvdbIds, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListEpisodeWatchesByTvdbIDsRow{}
+	for rows.Next() {
+		var i ListEpisodeWatchesByTvdbIDsRow
+		if err := rows.Scan(
+			&i.ProviderTvdbID,
+			&i.SourceID,
+			&i.UserID,
+			&i.SeasonNumber,
+			&i.EpisodeNumber,
+			&i.Played,
+			&i.PlayedPercentage,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listGateDecisions = `-- name: ListGateDecisions :many
 SELECT id, instance_id, series_id, season_number, action, would_act, reason, decided_at FROM watchaware_gate_decisions
 WHERE ($2::uuid IS NULL OR instance_id = $2::uuid)
@@ -356,8 +420,53 @@ func (q *Queries) ListGateSeriesIDsForInstance(ctx context.Context, instanceID u
 	return items, nil
 }
 
+const listGatedSeriesWithHeldSeasons = `-- name: ListGatedSeriesWithHeldSeasons :many
+SELECT instance_id, series_id, tvdb_id, title, gate_season, state, added_before_gate, held_seasons, first_seen_at, updated_at FROM watchaware_gate_series
+WHERE instance_id = $1
+  AND state = 'gated'
+  AND cardinality(held_seasons) > 0
+ORDER BY series_id ASC
+LIMIT $2
+`
+
+type ListGatedSeriesWithHeldSeasonsParams struct {
+	InstanceID uuid.UUID
+	Limit      int32
+}
+
+func (q *Queries) ListGatedSeriesWithHeldSeasons(ctx context.Context, arg ListGatedSeriesWithHeldSeasonsParams) ([]WatchawareGateSeries, error) {
+	rows, err := q.db.Query(ctx, listGatedSeriesWithHeldSeasons, arg.InstanceID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []WatchawareGateSeries{}
+	for rows.Next() {
+		var i WatchawareGateSeries
+		if err := rows.Scan(
+			&i.InstanceID,
+			&i.SeriesID,
+			&i.TvdbID,
+			&i.Title,
+			&i.GateSeason,
+			&i.State,
+			&i.AddedBeforeGate,
+			&i.HeldSeasons,
+			&i.FirstSeenAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listItemWatchesForSource = `-- name: ListItemWatchesForSource :many
-SELECT source_id, user_id, item_id, user_name, item_type, series_id, season_number, episode_number, played, played_percentage, resume_position, last_played_at, synced_at FROM watchaware_item_watches WHERE source_id = $1 ORDER BY item_id ASC
+SELECT source_id, user_id, item_id, user_name, item_type, series_id, season_number, episode_number, played, played_percentage, resume_position, last_played_at, synced_at, provider_tvdb_id FROM watchaware_item_watches WHERE source_id = $1 ORDER BY item_id ASC
 `
 
 func (q *Queries) ListItemWatchesForSource(ctx context.Context, sourceID uuid.UUID) ([]WatchawareItemWatch, error) {
@@ -383,6 +492,7 @@ func (q *Queries) ListItemWatchesForSource(ctx context.Context, sourceID uuid.UU
 			&i.ResumePosition,
 			&i.LastPlayedAt,
 			&i.SyncedAt,
+			&i.ProviderTvdbID,
 		); err != nil {
 			return nil, err
 		}
@@ -481,6 +591,29 @@ type RecordWatchAwareSourceSyncSuccessParams struct {
 
 func (q *Queries) RecordWatchAwareSourceSyncSuccess(ctx context.Context, arg RecordWatchAwareSourceSyncSuccessParams) error {
 	_, err := q.db.Exec(ctx, recordWatchAwareSourceSyncSuccess, arg.ID, arg.LastSyncAt)
+	return err
+}
+
+const updateGateSeriesHeldSeasons = `-- name: UpdateGateSeriesHeldSeasons :exec
+UPDATE watchaware_gate_series
+SET held_seasons = $3, updated_at = $4
+WHERE instance_id = $1 AND series_id = $2
+`
+
+type UpdateGateSeriesHeldSeasonsParams struct {
+	InstanceID  uuid.UUID
+	SeriesID    int32
+	HeldSeasons []int32
+	UpdatedAt   time.Time
+}
+
+func (q *Queries) UpdateGateSeriesHeldSeasons(ctx context.Context, arg UpdateGateSeriesHeldSeasonsParams) error {
+	_, err := q.db.Exec(ctx, updateGateSeriesHeldSeasons,
+		arg.InstanceID,
+		arg.SeriesID,
+		arg.HeldSeasons,
+		arg.UpdatedAt,
+	)
 	return err
 }
 
@@ -635,9 +768,9 @@ const upsertWatchAwareItemWatch = `-- name: UpsertWatchAwareItemWatch :exec
 INSERT INTO watchaware_item_watches (
     source_id, user_id, item_id, user_name, item_type, series_id,
     season_number, episode_number, played, played_percentage,
-    resume_position, last_played_at, synced_at
+    resume_position, last_played_at, synced_at, provider_tvdb_id
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
 )
 ON CONFLICT (source_id, user_id, item_id) DO UPDATE SET
     user_name = EXCLUDED.user_name,
@@ -649,7 +782,8 @@ ON CONFLICT (source_id, user_id, item_id) DO UPDATE SET
     played_percentage = EXCLUDED.played_percentage,
     resume_position = EXCLUDED.resume_position,
     last_played_at = EXCLUDED.last_played_at,
-    synced_at = EXCLUDED.synced_at
+    synced_at = EXCLUDED.synced_at,
+    provider_tvdb_id = EXCLUDED.provider_tvdb_id
 `
 
 type UpsertWatchAwareItemWatchParams struct {
@@ -666,6 +800,7 @@ type UpsertWatchAwareItemWatchParams struct {
 	ResumePosition   int64
 	LastPlayedAt     string
 	SyncedAt         time.Time
+	ProviderTvdbID   string
 }
 
 func (q *Queries) UpsertWatchAwareItemWatch(ctx context.Context, arg UpsertWatchAwareItemWatchParams) error {
@@ -683,6 +818,7 @@ func (q *Queries) UpsertWatchAwareItemWatch(ctx context.Context, arg UpsertWatch
 		arg.ResumePosition,
 		arg.LastPlayedAt,
 		arg.SyncedAt,
+		arg.ProviderTvdbID,
 	)
 	return err
 }

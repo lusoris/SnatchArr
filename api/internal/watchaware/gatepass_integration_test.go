@@ -922,3 +922,220 @@ func TestGatePass_GateDecidedEvents(t *testing.T) {
 		})
 	}
 }
+
+func TestGatePass_PromotionIntegration(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	env := setupTestEnv(ctx, t)
+
+	instID := uuid.New()
+	createTestInstance(ctx, t, env.st, instID, "Sonarr Promotion Test")
+	instMgr := &fakeInstanceManager{
+		instances: []domain.Instance{
+			{ID: instID, Kind: domain.KindSonarr, Name: "Sonarr Promotion Test", Enabled: true},
+		},
+		creds: map[uuid.UUID]instances.Credentials{
+			instID: {BaseURL: "http://sonarr.local", APIKey: "key-123"},
+		},
+	}
+	reader := newFakeSeriesReader()
+	reader.tags[instID] = []arr.Tag{{ID: 42, Label: "snatcharr-no-gate"}}
+	rec := &fakeEventRecorder{}
+
+	// Baseline series present before gate is active
+	reader.series[instID] = []watchaware.GateSeries{
+		{
+			ID:     1,
+			TvdbID: 501,
+			Title:  "Baseline Series",
+			Seasons: []watchaware.GateSeason{
+				{Number: 1, Monitored: true, FileCount: 0},
+				{Number: 2, Monitored: true, FileCount: 0},
+			},
+		},
+	}
+
+	env.svc.SetInstanceManager(instMgr)
+	env.svc.SetSeriesReader(reader)
+	env.svc.SetEventRecorder(rec)
+
+	gateCfg := map[string]any{
+		"gate": map[string]any{
+			"enabled":        true,
+			"mode":           "observe",
+			"seasons_on_add": 1,
+			"look_ahead":     1,
+			"promote_whose":  "any",
+			"exempt_tag":     "snatcharr-no-gate",
+		},
+	}
+	rawCfg, err := json.Marshal(gateCfg)
+	if err != nil {
+		t.Fatalf("marshal config: %v", err)
+	}
+	rawMsg := json.RawMessage(rawCfg)
+	if _, err = env.modulesSvc.Update(ctx, domain.ModuleWatchAware, true, &rawMsg); err != nil {
+		t.Fatalf("modulesSvc.Update: %v", err)
+	}
+
+	// 1. Baseline pass -> no promotion, baseline series recorded as before_gate
+	if passErr := env.svc.ObserveGatePass(ctx); passErr != nil {
+		t.Fatalf("baseline pass: %v", passErr)
+	}
+	decisions, err := env.svc.ListGateDecisions(ctx, &instID, 100)
+	if err != nil {
+		t.Fatalf("ListGateDecisions: %v", err)
+	}
+	if len(decisions) != 0 {
+		t.Fatalf("baseline produced %d decisions, want 0", len(decisions))
+	}
+
+	// 2. Incremental series: new series 2 added after baseline
+	reader.series[instID] = append(reader.series[instID], watchaware.GateSeries{
+		ID:     2,
+		TvdbID: 502,
+		Title:  "Show 502",
+		Seasons: []watchaware.GateSeason{
+			{Number: 1, Monitored: true, FileCount: 0},
+			{Number: 2, Monitored: true, FileCount: 0},
+			{Number: 3, Monitored: true, FileCount: 0},
+		},
+	})
+
+	// Run incremental pass without media-server matches
+	if passErr := env.svc.ObserveGatePass(ctx); passErr != nil {
+		t.Fatalf("incremental pass: %v", passErr)
+	}
+
+	// Series 2 is gated with held_seasons [2, 3], but has no media-server match -> no promotion
+	seriesList, err := env.svc.ListGateSeries(ctx, instID, 100)
+	if err != nil {
+		t.Fatalf("ListGateSeries: %v", err)
+	}
+	var s2 *watchaware.GateSeriesRecord
+	for i := range seriesList {
+		if seriesList[i].SeriesID == 2 {
+			s2 = &seriesList[i]
+			break
+		}
+	}
+	if s2 == nil {
+		t.Fatal("series 2 not found in gate series list")
+	}
+	if len(s2.HeldSeasons) != 2 || s2.HeldSeasons[0] != 2 || s2.HeldSeasons[1] != 3 {
+		t.Fatalf("series 2 held seasons = %v, want [2, 3]", s2.HeldSeasons)
+	}
+
+	// 3. Now store media-server watches for TVDB ID 502
+	srcID := uuid.New()
+	_, err = env.st.Pool().Exec(ctx, `
+		INSERT INTO watchaware_sources (id, kind, name, url, api_key_enc, enabled, created_at, updated_at)
+		VALUES ($1, 'jellyfin', 'jf-promo', 'http://jf.local', '\x0102', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+	`, srcID)
+	if err != nil {
+		t.Fatalf("insert watch source: %v", err)
+	}
+
+	// Series row mapping series item to TVDB 502
+	_, err = env.st.Pool().Exec(ctx, `
+		INSERT INTO watchaware_item_watches (
+			source_id, user_id, item_id, user_name, item_type, series_id,
+			season_number, episode_number, played, provider_tvdb_id, synced_at
+		) VALUES ($1, 'user-1', 'jf-series-502', 'Alice', 'Series', '', 0, 0, false, '502', CURRENT_TIMESTAMP)
+	`, srcID)
+	if err != nil {
+		t.Fatalf("insert series watch row: %v", err)
+	}
+
+	// Episode row matching series
+	_, err = env.st.Pool().Exec(ctx, `
+		INSERT INTO watchaware_item_watches (
+			source_id, user_id, item_id, user_name, item_type, series_id,
+			season_number, episode_number, played, provider_tvdb_id, synced_at
+		) VALUES ($1, 'user-1', 'jf-ep-1', 'Alice', 'Episode', 'jf-series-502', 1, 1, true, '', CURRENT_TIMESTAMP)
+	`, srcID)
+	if err != nil {
+		t.Fatalf("insert episode watch row: %v", err)
+	}
+
+	// 4. Run promotion pass: season 1 watched -> promote season 2
+	if passErr := env.svc.ObserveGatePass(ctx); passErr != nil {
+		t.Fatalf("promotion pass: %v", passErr)
+	}
+
+	// Verify promote decision row exists with would_act false
+	decisions, err = env.svc.ListGateDecisions(ctx, &instID, 100)
+	if err != nil {
+		t.Fatalf("ListGateDecisions after promotion: %v", err)
+	}
+	var promoteDecs []watchaware.GateDecisionRecord
+	for _, d := range decisions {
+		if d.Action == watchaware.GateActionPromote {
+			promoteDecs = append(promoteDecs, d)
+		}
+	}
+	if len(promoteDecs) != 1 {
+		t.Fatalf("got %d promote decisions, want 1: %+v", len(promoteDecs), promoteDecs)
+	}
+	pd := promoteDecs[0]
+	if pd.SeriesID != 2 || pd.SeasonNumber != 2 || pd.WouldAct != false {
+		t.Errorf("promote decision = %+v, want series 2 season 2 would_act false", pd)
+	}
+
+	// Verify held_seasons shrinks from [2, 3] to [3]
+	seriesList, err = env.svc.ListGateSeries(ctx, instID, 100)
+	if err != nil {
+		t.Fatalf("ListGateSeries: %v", err)
+	}
+	for i := range seriesList {
+		if seriesList[i].SeriesID == 2 {
+			s2 = &seriesList[i]
+			break
+		}
+	}
+	if len(s2.HeldSeasons) != 1 || s2.HeldSeasons[0] != 3 {
+		t.Errorf("series 2 held seasons after promotion = %v, want [3]", s2.HeldSeasons)
+	}
+
+	// Verify 1 event with detail "would promote season 2"
+	var promoEvents []domain.Event
+	for _, ev := range rec.getEvents() {
+		if ev.Type == "watchaware_gate_decided" && ev.Detail == "would promote season 2" {
+			promoEvents = append(promoEvents, ev)
+		}
+	}
+	if len(promoEvents) != 1 {
+		t.Fatalf("got %d promo events, want 1: %+v", len(promoEvents), rec.getEvents())
+	}
+	if promoEvents[0].EntityID != 2 || promoEvents[0].Title != "Show 502" {
+		t.Errorf("promo event = %+v", promoEvents[0])
+	}
+
+	// 5. Second pass -> no duplicate decision, no second event
+	if passErr := env.svc.ObserveGatePass(ctx); passErr != nil {
+		t.Fatalf("second pass: %v", passErr)
+	}
+	decisions2, err := env.svc.ListGateDecisions(ctx, &instID, 100)
+	if err != nil {
+		t.Fatalf("ListGateDecisions second pass: %v", err)
+	}
+	var promoteDecs2 []watchaware.GateDecisionRecord
+	for _, d := range decisions2 {
+		if d.Action == watchaware.GateActionPromote {
+			promoteDecs2 = append(promoteDecs2, d)
+		}
+	}
+	if len(promoteDecs2) != 1 {
+		t.Errorf("got %d promote decisions on second pass, want 1 (no duplicate)", len(promoteDecs2))
+	}
+
+	var promoEvents2 []domain.Event
+	for _, ev := range rec.getEvents() {
+		if ev.Type == "watchaware_gate_decided" && ev.Detail == "would promote season 2" {
+			promoEvents2 = append(promoEvents2, ev)
+		}
+	}
+	if len(promoEvents2) != 1 {
+		t.Errorf("got %d promo events after second pass, want 1 (no second event)", len(promoEvents2))
+	}
+}
