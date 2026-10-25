@@ -416,7 +416,6 @@
 	"memory_reset_one_confirm": "Forget every item SnatchArr has already searched on {name}, for missing and upgrade snatches alike? The next snatches search all of them again.",
 	"memory_reset_all_confirm": "Forget every item SnatchArr has already searched on every instance, for missing and upgrade snatches alike? The next snatches search all of them again.",
 	"memory_reset_done": "{count} processed items forgotten",
-	"nav_configarr": "Configarr",
 	"action_edit": "Edit",
 	"action_delete": "Delete",
 	"action_test": "Test",
