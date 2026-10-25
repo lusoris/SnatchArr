@@ -55,6 +55,7 @@ func TestRuleEventKindValid(t *testing.T) {
 		{"instance_unreachable", domain.RuleInstanceUnreachable, true},
 		{"stamina_exhausted", domain.RuleStaminaExhausted, true},
 		{"seerr_request_snatched", domain.RuleSeerrRequestSnatched, true},
+		{"watchaware_gate_decided", domain.RuleWatchawareGateDecided, true},
 		// Negative.
 		{"unknown event", domain.RuleEventKind("search_failed"), false},
 		{"empty string", domain.RuleEventKind(""), false},

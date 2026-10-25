@@ -111,6 +111,28 @@ func (f *fakeSeriesReader) getCallCount() int {
 	return f.callCount
 }
 
+type fakeEventRecorder struct {
+	mu     sync.Mutex
+	events []domain.Event
+	err    error
+}
+
+func (f *fakeEventRecorder) Record(_ context.Context, e domain.Event) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.err != nil {
+		return f.err
+	}
+	f.events = append(f.events, e)
+	return nil
+}
+
+func (f *fakeEventRecorder) getEvents() []domain.Event {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]domain.Event(nil), f.events...)
+}
+
 func TestGatePass_BaselineAndIncremental(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -659,6 +681,244 @@ func TestGatePass_LifecycleCases(t *testing.T) {
 			}
 
 			tc.run(t, ctx, env, instID, reader)
+		})
+	}
+}
+
+func TestGatePass_GateDecidedEvents(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		run  func(t *testing.T, ctx context.Context, env *testEnv, instID uuid.UUID, reader *fakeSeriesReader, rec *fakeEventRecorder)
+	}{
+		{
+			name: "positive: new gated series with 3 seasons -> exactly 1 event, type watchaware_gate_decided, EntityID series id, detail names seasons 2, 3",
+			run: func(t *testing.T, ctx context.Context, env *testEnv, instID uuid.UUID, reader *fakeSeriesReader, rec *fakeEventRecorder) {
+				t.Helper()
+				if err := env.svc.ObserveGatePass(ctx); err != nil {
+					t.Fatalf("baseline pass: %v", err)
+				}
+				reader.series[instID] = append(reader.series[instID], watchaware.GateSeries{
+					ID:     10,
+					TvdbID: 110,
+					Title:  "Three Seasons Show",
+					Seasons: []watchaware.GateSeason{
+						{Number: 1, Monitored: true, FileCount: 0},
+						{Number: 2, Monitored: true, FileCount: 0},
+						{Number: 3, Monitored: true, FileCount: 0},
+					},
+				})
+				if err := env.svc.ObserveGatePass(ctx); err != nil {
+					t.Fatalf("incremental pass: %v", err)
+				}
+				evs := rec.getEvents()
+				if len(evs) != 1 {
+					t.Fatalf("got %d events, want 1", len(evs))
+				}
+				e := evs[0]
+				if e.Type != "watchaware_gate_decided" {
+					t.Errorf("event Type = %q, want %q", e.Type, "watchaware_gate_decided")
+				}
+				if e.Level != "info" {
+					t.Errorf("event Level = %q, want %q", e.Level, "info")
+				}
+				if e.InstanceID != instID {
+					t.Errorf("event InstanceID = %s, want %s", e.InstanceID, instID)
+				}
+				if e.EntityType != "series" {
+					t.Errorf("event EntityType = %q, want %q", e.EntityType, "series")
+				}
+				if e.EntityID != 10 {
+					t.Errorf("event EntityID = %d, want 10", e.EntityID)
+				}
+				if e.Title != "Three Seasons Show" {
+					t.Errorf("event Title = %q, want %q", e.Title, "Three Seasons Show")
+				}
+				if e.Detail != "would unmonitor seasons 2, 3" {
+					t.Errorf("event Detail = %q, want %q", e.Detail, "would unmonitor seasons 2, 3")
+				}
+			},
+		},
+		{
+			name: "negative: exempt-tag series -> 0 events",
+			run: func(t *testing.T, ctx context.Context, env *testEnv, instID uuid.UUID, reader *fakeSeriesReader, rec *fakeEventRecorder) {
+				t.Helper()
+				if err := env.svc.ObserveGatePass(ctx); err != nil {
+					t.Fatalf("baseline pass: %v", err)
+				}
+				reader.series[instID] = append(reader.series[instID], watchaware.GateSeries{
+					ID:     20,
+					TvdbID: 120,
+					Title:  "Exempt Show",
+					TagIDs: []int{42},
+					Seasons: []watchaware.GateSeason{
+						{Number: 1, Monitored: true, FileCount: 0},
+						{Number: 2, Monitored: true, FileCount: 0},
+					},
+				})
+				if err := env.svc.ObserveGatePass(ctx); err != nil {
+					t.Fatalf("incremental pass: %v", err)
+				}
+				if evs := rec.getEvents(); len(evs) != 0 {
+					t.Errorf("got %d events for exempt series, want 0", len(evs))
+				}
+			},
+		},
+		{
+			name: "negative: before_gate baseline pass -> 0 events",
+			run: func(t *testing.T, ctx context.Context, env *testEnv, instID uuid.UUID, reader *fakeSeriesReader, rec *fakeEventRecorder) {
+				t.Helper()
+				reader.series[instID] = []watchaware.GateSeries{
+					{
+						ID:     30,
+						TvdbID: 130,
+						Title:  "Initial Show",
+						Seasons: []watchaware.GateSeason{
+							{Number: 1, Monitored: true, FileCount: 0},
+							{Number: 2, Monitored: true, FileCount: 0},
+						},
+					},
+				}
+				if err := env.svc.ObserveGatePass(ctx); err != nil {
+					t.Fatalf("baseline pass: %v", err)
+				}
+				if evs := rec.getEvents(); len(evs) != 0 {
+					t.Errorf("got %d events on baseline pass, want 0", len(evs))
+				}
+			},
+		},
+		{
+			name: "negative: files-beyond-gate -> 0 events",
+			run: func(t *testing.T, ctx context.Context, env *testEnv, instID uuid.UUID, reader *fakeSeriesReader, rec *fakeEventRecorder) {
+				t.Helper()
+				if err := env.svc.ObserveGatePass(ctx); err != nil {
+					t.Fatalf("baseline pass: %v", err)
+				}
+				reader.series[instID] = append(reader.series[instID], watchaware.GateSeries{
+					ID:     40,
+					TvdbID: 140,
+					Title:  "Files Beyond Gate Show",
+					Seasons: []watchaware.GateSeason{
+						{Number: 1, Monitored: true, FileCount: 5},
+						{Number: 2, Monitored: true, FileCount: 3},
+					},
+				})
+				if err := env.svc.ObserveGatePass(ctx); err != nil {
+					t.Fatalf("incremental pass: %v", err)
+				}
+				if evs := rec.getEvents(); len(evs) != 0 {
+					t.Errorf("got %d events for files-beyond-gate series, want 0", len(evs))
+				}
+			},
+		},
+		{
+			name: "negative: recorder returning error -> pass still succeeds, rows stored",
+			run: func(t *testing.T, ctx context.Context, env *testEnv, instID uuid.UUID, reader *fakeSeriesReader, rec *fakeEventRecorder) {
+				t.Helper()
+				if err := env.svc.ObserveGatePass(ctx); err != nil {
+					t.Fatalf("baseline pass: %v", err)
+				}
+				rec.err = errors.New("recorder failure")
+				reader.series[instID] = append(reader.series[instID], watchaware.GateSeries{
+					ID:     50,
+					TvdbID: 150,
+					Title:  "Recorder Error Show",
+					Seasons: []watchaware.GateSeason{
+						{Number: 1, Monitored: true, FileCount: 0},
+						{Number: 2, Monitored: true, FileCount: 0},
+						{Number: 3, Monitored: true, FileCount: 0},
+					},
+				})
+				if err := env.svc.ObserveGatePass(ctx); err != nil {
+					t.Fatalf("incremental pass failed despite event recording error: %v", err)
+				}
+				seriesList, err := env.svc.ListGateSeries(ctx, instID, 100)
+				if err != nil {
+					t.Fatalf("ListGateSeries: %v", err)
+				}
+				found := false
+				for _, s := range seriesList {
+					if s.SeriesID == 50 {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("series 50 was not stored when event recording failed")
+				}
+				decisions, err := env.svc.ListGateDecisions(ctx, &instID, 100)
+				if err != nil {
+					t.Fatalf("ListGateDecisions: %v", err)
+				}
+				if len(decisions) != 2 {
+					t.Errorf("got %d decisions, want 2", len(decisions))
+				}
+			},
+		},
+		{
+			name: "boundary: single-season series (no decisions) -> 0 events",
+			run: func(t *testing.T, ctx context.Context, env *testEnv, instID uuid.UUID, reader *fakeSeriesReader, rec *fakeEventRecorder) {
+				t.Helper()
+				if err := env.svc.ObserveGatePass(ctx); err != nil {
+					t.Fatalf("baseline pass: %v", err)
+				}
+				reader.series[instID] = append(reader.series[instID], watchaware.GateSeries{
+					ID:     60,
+					TvdbID: 160,
+					Title:  "Single Season Mini-Series",
+					Seasons: []watchaware.GateSeason{
+						{Number: 1, Monitored: true, FileCount: 0},
+					},
+				})
+				if err := env.svc.ObserveGatePass(ctx); err != nil {
+					t.Fatalf("incremental pass: %v", err)
+				}
+				if evs := rec.getEvents(); len(evs) != 0 {
+					t.Errorf("got %d events for single-season series, want 0", len(evs))
+				}
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := context.Background()
+			env := setupTestEnv(ctx, t)
+
+			instID := uuid.New()
+			createTestInstance(ctx, t, env.st, instID, "Sonarr Event Test")
+			instMgr := &fakeInstanceManager{
+				instances: []domain.Instance{
+					{ID: instID, Kind: domain.KindSonarr, Name: "Sonarr Event Test", Enabled: true},
+				},
+				creds: map[uuid.UUID]instances.Credentials{
+					instID: {BaseURL: "http://sonarr.local", APIKey: "key-123"},
+				},
+			}
+			reader := newFakeSeriesReader()
+			reader.tags[instID] = []arr.Tag{{ID: 42, Label: "snatcharr-no-gate"}}
+			rec := &fakeEventRecorder{}
+			env.svc.SetInstanceManager(instMgr)
+			env.svc.SetSeriesReader(reader)
+			env.svc.SetEventRecorder(rec)
+
+			gateCfg := map[string]any{
+				"gate": map[string]any{
+					"enabled":        true,
+					"mode":           "observe",
+					"seasons_on_add": 1,
+					"exempt_tag":     "snatcharr-no-gate",
+				},
+			}
+			rawCfg, _ := json.Marshal(gateCfg)
+			rawMsg := json.RawMessage(rawCfg)
+			if _, err := env.modulesSvc.Update(ctx, domain.ModuleWatchAware, true, &rawMsg); err != nil {
+				t.Fatalf("modulesSvc.Update: %v", err)
+			}
+
+			tc.run(t, ctx, env, instID, reader, rec)
 		})
 	}
 }

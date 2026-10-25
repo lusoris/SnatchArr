@@ -1600,6 +1600,8 @@ func (s NotificationRuleEventKind) Validate() error {
 		return nil
 	case "seerr_request_snatched":
 		return nil
+	case "watchaware_gate_decided":
+		return nil
 	default:
 		return errors.Errorf("invalid value: %v", s)
 	}

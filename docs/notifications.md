@@ -77,6 +77,9 @@ Notifications are dispatched according to configurable rules. Each rule targets 
 5. **Seerr request snatched (`seerr_request_snatched`)**
    - Fires when a search is dispatched for an entity that resolves to a pending Overseerr or Jellyseerr request.
 
+6. **Season gate decided (`watchaware_gate_decided`)**
+   - Fires when the watch-aware season gate evaluates a newly added series on Sonarr and records decisions in observe mode.
+
 ---
 
 ## Outgoing Webhooks

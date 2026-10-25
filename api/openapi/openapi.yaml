@@ -3477,7 +3477,7 @@ components:
 
     NotificationRuleEventKind:
       type: string
-      enum: [run_failure_streak, circuit_opened, instance_unreachable, stamina_exhausted, seerr_request_snatched]
+      enum: [run_failure_streak, circuit_opened, instance_unreachable, stamina_exhausted, seerr_request_snatched, watchaware_gate_decided]
 
     NotificationRuleInput:
       type: object

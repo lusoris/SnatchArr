@@ -466,6 +466,7 @@ const (
 	EventType_EVENT_TYPE_QUEUE_ITEM_REMOVED       EventType = 13
 	EventType_EVENT_TYPE_QUEUE_ITEM_IMPORTED      EventType = 14
 	EventType_EVENT_TYPE_QUEUE_ITEM_IMPORT_FAILED EventType = 15
+	EventType_EVENT_TYPE_WATCHAWARE_GATE_DECIDED  EventType = 16
 )
 
 // Enum value maps for EventType.
@@ -487,6 +488,7 @@ var (
 		13: "EVENT_TYPE_QUEUE_ITEM_REMOVED",
 		14: "EVENT_TYPE_QUEUE_ITEM_IMPORTED",
 		15: "EVENT_TYPE_QUEUE_ITEM_IMPORT_FAILED",
+		16: "EVENT_TYPE_WATCHAWARE_GATE_DECIDED",
 	}
 	EventType_value = map[string]int32{
 		"EVENT_TYPE_UNSPECIFIED":              0,
@@ -505,6 +507,7 @@ var (
 		"EVENT_TYPE_QUEUE_ITEM_REMOVED":       13,
 		"EVENT_TYPE_QUEUE_ITEM_IMPORTED":      14,
 		"EVENT_TYPE_QUEUE_ITEM_IMPORT_FAILED": 15,
+		"EVENT_TYPE_WATCHAWARE_GATE_DECIDED":  16,
 	}
 )
 
@@ -2217,7 +2220,7 @@ const file_snatcharr_v1_worker_proto_rawDesc = "" +
 	"LEVEL_INFO\x10\x02\x12\x0e\n" +
 	"\n" +
 	"LEVEL_WARN\x10\x03\x12\x0f\n" +
-	"\vLEVEL_ERROR\x10\x04*\x99\x04\n" +
+	"\vLEVEL_ERROR\x10\x04*\xc1\x04\n" +
 	"\tEventType\x12\x1a\n" +
 	"\x16EVENT_TYPE_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16EVENT_TYPE_RUN_STARTED\x10\x01\x12\x1b\n" +
@@ -2235,7 +2238,8 @@ const file_snatcharr_v1_worker_proto_rawDesc = "" +
 	"\x1cEVENT_TYPE_QUEUE_ITEM_STRUCK\x10\f\x12!\n" +
 	"\x1dEVENT_TYPE_QUEUE_ITEM_REMOVED\x10\r\x12\"\n" +
 	"\x1eEVENT_TYPE_QUEUE_ITEM_IMPORTED\x10\x0e\x12'\n" +
-	"#EVENT_TYPE_QUEUE_ITEM_IMPORT_FAILED\x10\x0f*r\n" +
+	"#EVENT_TYPE_QUEUE_ITEM_IMPORT_FAILED\x10\x0f\x12&\n" +
+	"\"EVENT_TYPE_WATCHAWARE_GATE_DECIDED\x10\x10*r\n" +
 	"\n" +
 	"RunOutcome\x12\x1b\n" +
 	"\x17RUN_OUTCOME_UNSPECIFIED\x10\x00\x12\x14\n" +

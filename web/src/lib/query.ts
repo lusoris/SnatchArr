@@ -38,5 +38,7 @@ export const keys = {
 	systemStatus: ['system', 'status'] as const,
 	licences: ['licences'] as const,
 	modules: ['system', 'modules'] as const,
-	module: (id: string) => ['system', 'modules', id] as const
+	module: (id: string) => ['system', 'modules', id] as const,
+	watchawareGateSeries: (id: string) => ['watchaware', 'gate', 'series', id] as const,
+	watchawareGateDecisions: (id: string) => ['watchaware', 'gate', 'decisions', id] as const
 };

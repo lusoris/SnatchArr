@@ -82,7 +82,8 @@ const baseStubs = {
 	'/schedules': [sampleSchedule, capSchedule],
 	'/instances': [],
 	'/settings': sampleSettings,
-	'/priority-presets': []
+	'/priority-presets': [],
+	'/system/modules': []
 };
 
 async function clickFirstButton(name: string): Promise<void> {
@@ -107,12 +108,14 @@ async function openFirstDeleteConfirm(): Promise<void> {
 describe('automation page tabs', () => {
 	beforeEach(() => {
 		pageMock.url = new URL('http://localhost/automation');
+		session.state = 'authenticated';
 		stubGet(baseStubs);
 	});
 
 	afterEach(() => {
 		vi.restoreAllMocks();
 		session.user = { id: 'u1', username: 'admin', role: 'admin' } as never;
+		session.state = 'authenticated';
 	});
 
 	it('renders schedules tab by default', async () => {
@@ -177,6 +180,38 @@ describe('automation page tabs', () => {
 		const cap = (await screen.findByLabelText(m.settings_global_cap())) as HTMLInputElement;
 		expect(cap.disabled).toBe(true);
 		expect(screen.queryByRole('button', { name: m.instance_save() })).toBeNull();
+	});
+
+	it('negative: season-gate tab hidden when watchaware module disabled and tab param falls back', async () => {
+		pageMock.url = new URL('http://localhost/automation?tab=season-gate');
+		stubGet({
+			...baseStubs,
+			'/system/modules': [{ id: 'watchaware', enabled: false }]
+		});
+		renderWithQuery(SchedulesPage);
+
+		expect(await screen.findByRole('heading', { level: 1, name: m.nav_automation() })).toBeTruthy();
+		expect(screen.queryByRole('tab', { name: m.watchaware_gate_tab() })).toBeNull();
+		expect(
+			screen.getByRole('tab', { name: m.automation_tab_schedules(), selected: true })
+		).toBeTruthy();
+	});
+
+	it('positive: season-gate tab visible and activated when watchaware module enabled', async () => {
+		pageMock.url = new URL('http://localhost/automation?tab=season-gate');
+		stubGet({
+			...baseStubs,
+			'/system/modules': [{ id: 'watchaware', enabled: true }],
+			'/watchaware/gate/series': [],
+			'/watchaware/gate/decisions': []
+		});
+		renderWithQuery(SchedulesPage);
+
+		expect(await screen.findByRole('heading', { level: 1, name: m.nav_automation() })).toBeTruthy();
+		expect(
+			await screen.findByRole('tab', { name: m.watchaware_gate_tab(), selected: true })
+		).toBeTruthy();
+		expect(await screen.findByText(m.watchaware_gate_observe_note())).toBeTruthy();
 	});
 });
 

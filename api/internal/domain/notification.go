@@ -30,11 +30,12 @@ type RuleEventKind string
 
 // Rule event kinds.
 const (
-	RuleRunFailureStreak     RuleEventKind = "run_failure_streak"
-	RuleCircuitOpened        RuleEventKind = "circuit_opened"
-	RuleInstanceUnreachable  RuleEventKind = "instance_unreachable"
-	RuleStaminaExhausted     RuleEventKind = "stamina_exhausted"
-	RuleSeerrRequestSnatched RuleEventKind = "seerr_request_snatched"
+	RuleRunFailureStreak      RuleEventKind = "run_failure_streak"
+	RuleCircuitOpened         RuleEventKind = "circuit_opened"
+	RuleInstanceUnreachable   RuleEventKind = "instance_unreachable"
+	RuleStaminaExhausted      RuleEventKind = "stamina_exhausted"
+	RuleSeerrRequestSnatched  RuleEventKind = "seerr_request_snatched"
+	RuleWatchawareGateDecided RuleEventKind = "watchaware_gate_decided"
 )
 
 // ChannelConfig holds the union of configuration options across all channel kinds.
@@ -101,7 +102,7 @@ func (k ChannelKind) Valid() bool {
 // Valid reports whether the rule event kind is recognized.
 func (k RuleEventKind) Valid() bool {
 	switch k {
-	case RuleRunFailureStreak, RuleCircuitOpened, RuleInstanceUnreachable, RuleStaminaExhausted, RuleSeerrRequestSnatched:
+	case RuleRunFailureStreak, RuleCircuitOpened, RuleInstanceUnreachable, RuleStaminaExhausted, RuleSeerrRequestSnatched, RuleWatchawareGateDecided:
 		return true
 	default:
 		return false

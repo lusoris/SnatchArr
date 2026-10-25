@@ -3539,11 +3539,12 @@ func (s *NotificationRule) SetUpdatedAt(val time.Time) {
 type NotificationRuleEventKind string
 
 const (
-	NotificationRuleEventKindRunFailureStreak     NotificationRuleEventKind = "run_failure_streak"
-	NotificationRuleEventKindCircuitOpened        NotificationRuleEventKind = "circuit_opened"
-	NotificationRuleEventKindInstanceUnreachable  NotificationRuleEventKind = "instance_unreachable"
-	NotificationRuleEventKindStaminaExhausted     NotificationRuleEventKind = "stamina_exhausted"
-	NotificationRuleEventKindSeerrRequestSnatched NotificationRuleEventKind = "seerr_request_snatched"
+	NotificationRuleEventKindRunFailureStreak      NotificationRuleEventKind = "run_failure_streak"
+	NotificationRuleEventKindCircuitOpened         NotificationRuleEventKind = "circuit_opened"
+	NotificationRuleEventKindInstanceUnreachable   NotificationRuleEventKind = "instance_unreachable"
+	NotificationRuleEventKindStaminaExhausted      NotificationRuleEventKind = "stamina_exhausted"
+	NotificationRuleEventKindSeerrRequestSnatched  NotificationRuleEventKind = "seerr_request_snatched"
+	NotificationRuleEventKindWatchawareGateDecided NotificationRuleEventKind = "watchaware_gate_decided"
 )
 
 // AllValues returns all NotificationRuleEventKind values.
@@ -3554,6 +3555,7 @@ func (NotificationRuleEventKind) AllValues() []NotificationRuleEventKind {
 		NotificationRuleEventKindInstanceUnreachable,
 		NotificationRuleEventKindStaminaExhausted,
 		NotificationRuleEventKindSeerrRequestSnatched,
+		NotificationRuleEventKindWatchawareGateDecided,
 	}
 }
 
@@ -3569,6 +3571,8 @@ func (s NotificationRuleEventKind) MarshalText() ([]byte, error) {
 	case NotificationRuleEventKindStaminaExhausted:
 		return []byte(s), nil
 	case NotificationRuleEventKindSeerrRequestSnatched:
+		return []byte(s), nil
+	case NotificationRuleEventKindWatchawareGateDecided:
 		return []byte(s), nil
 	default:
 		return nil, errors.Errorf("invalid value: %q", s)
@@ -3592,6 +3596,9 @@ func (s *NotificationRuleEventKind) UnmarshalText(data []byte) error {
 		return nil
 	case NotificationRuleEventKindSeerrRequestSnatched:
 		*s = NotificationRuleEventKindSeerrRequestSnatched
+		return nil
+	case NotificationRuleEventKindWatchawareGateDecided:
+		*s = NotificationRuleEventKindWatchawareGateDecided
 		return nil
 	default:
 		return errors.Errorf("invalid value: %q", data)

@@ -132,6 +132,74 @@ test('authenticated: phone overflow /automation?tab=caps', async ({ page }) => {
 	await assertNoHorizontalOverflow(page, '/automation?tab=caps');
 });
 
+test('authenticated: phone overflow /automation?tab=season-gate', async ({ page }) => {
+	await page.route('**/api/v1/system/modules', (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify([{ id: 'watchaware', enabled: true }])
+		})
+	);
+	await page.route('**/api/v1/instances*', (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify([
+				{
+					id: '00000000-0000-0000-0000-000000000001',
+					name: 'Sonarr 1',
+					kind: 'sonarr',
+					base_url: 'http://sonarr.local',
+					enabled: true,
+					source: 'manual',
+					created_at: '2026-01-01T00:00:00Z',
+					updated_at: '2026-01-01T00:00:00Z'
+				}
+			])
+		})
+	);
+	await page.route('**/api/v1/watchaware/gate/series*', (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify([
+				{
+					instance_id: '00000000-0000-0000-0000-000000000001',
+					series_id: 1,
+					tvdb_id: 101,
+					title: 'Example Series',
+					gate_season: 1,
+					state: 'gated',
+					added_before_gate: false,
+					held_seasons: [2, 3],
+					updated_at: '2026-01-01T00:00:00Z'
+				}
+			])
+		})
+	);
+	await page.route('**/api/v1/watchaware/gate/decisions*', (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify([
+				{
+					id: '00000000-0000-0000-0000-000000000002',
+					instance_id: '00000000-0000-0000-0000-000000000001',
+					series_id: 1,
+					season_number: 2,
+					action: 'unmonitor',
+					would_act: false,
+					reason: 'season after gate',
+					decided_at: '2026-01-01T00:00:00Z'
+				}
+			])
+		})
+	);
+	await page.goto('/automation?tab=season-gate');
+	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+	await assertNoHorizontalOverflow(page, '/automation?tab=season-gate');
+});
+
 test('authenticated: phone overflow /connections/seerr', async ({ page }) => {
 	await page.route('**/api/v1/seerr/requests', async (route) => {
 		await route.fulfill({

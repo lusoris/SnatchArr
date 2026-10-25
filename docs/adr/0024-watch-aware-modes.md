@@ -191,8 +191,8 @@ Slice 2 lands in two parts:
   - Read endpoints `GET /watchaware/gate/series` and `GET /watchaware/gate/decisions`.
   - Packages: `gate.go` (pure) and `gatepass.go`.
 - 2b, the rest of Slice 2.
-  - Promotion from watch data, the SPA view, the SSE and notification event, and the Paraglide keys.
-  - Promotion has to map a media-server series to its Sonarr series by TVDB id. goenvoy `mediaserver/jellyfin/v3.1.0` and `mediaserver/emby/v3.1.0` carry no `ProviderIds` on `BaseItemDto` yet, so 2b waits for that goenvoy release (see Follow-ups).
+  - 2b-1: season-gate event (`watchaware_gate_decided`), SPA view (`/automation?tab=season-gate`), and Paraglide keys.
+  - 2b-2: promotion from watch data. Promotion has to map a media-server series to its Sonarr series by TVDB id. goenvoy `mediaserver/jellyfin/v3.1.0` and `mediaserver/emby/v3.1.0` carry no `ProviderIds` on `BaseItemDto` yet, so promotion waits for that goenvoy release (see Follow-ups).
 
 ### Slice 3: season gate in act mode
 

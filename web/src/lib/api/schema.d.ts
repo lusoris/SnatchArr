@@ -2066,7 +2066,7 @@ export interface components {
             updated_at: string;
         };
         /** @enum {string} */
-        NotificationRuleEventKind: "run_failure_streak" | "circuit_opened" | "instance_unreachable" | "stamina_exhausted" | "seerr_request_snatched";
+        NotificationRuleEventKind: "run_failure_streak" | "circuit_opened" | "instance_unreachable" | "stamina_exhausted" | "seerr_request_snatched" | "watchaware_gate_decided";
         NotificationRuleInput: {
             name: string;
             event_kind: components["schemas"]["NotificationRuleEventKind"];

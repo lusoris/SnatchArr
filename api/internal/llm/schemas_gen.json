@@ -432,7 +432,8 @@
           "circuit_opened",
           "instance_unreachable",
           "stamina_exhausted",
-          "seerr_request_snatched"
+          "seerr_request_snatched",
+          "watchaware_gate_decided"
         ],
         "type": "string"
       },
@@ -2191,7 +2192,8 @@
           "circuit_opened",
           "instance_unreachable",
           "stamina_exhausted",
-          "seerr_request_snatched"
+          "seerr_request_snatched",
+          "watchaware_gate_decided"
         ],
         "type": "string"
       },

@@ -11,7 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { mockSettingsApi } from './mocks.js';
+import { json, mockModulesApi, mockSettingsApi, mockSignedInApi } from './mocks.js';
 import { settleToasts } from './settle.js';
 
 const WCAG_22_AA = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
@@ -302,6 +302,67 @@ if (!process.env.SNATCHARR_E2E_API) {
 		await page.goto('/automation?tab=caps');
 		await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 		await expect(page.locator('[data-field="global_hourly_cap"]')).toBeVisible();
+
+		await settleToasts(page);
+		const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
+		expect(results.violations).toEqual([]);
+	});
+
+	test('/automation?tab=season-gate has no axe violations', async ({ page }) => {
+		await mockSignedInApi(page);
+		await mockModulesApi(page, [{ id: 'watchaware', enabled: true }]);
+		await page.route('**/api/v1/instances*', (route) =>
+			route.fulfill(
+				json([
+					{
+						id: '00000000-0000-0000-0000-000000000001',
+						name: 'Sonarr 1',
+						kind: 'sonarr',
+						base_url: 'http://sonarr.local',
+						enabled: true,
+						source: 'manual',
+						created_at: '2026-01-01T00:00:00Z',
+						updated_at: '2026-01-01T00:00:00Z'
+					}
+				])
+			)
+		);
+		await page.route('**/api/v1/watchaware/gate/series*', (route) =>
+			route.fulfill(
+				json([
+					{
+						instance_id: '00000000-0000-0000-0000-000000000001',
+						series_id: 1,
+						tvdb_id: 101,
+						title: 'Example Series',
+						gate_season: 1,
+						state: 'gated',
+						added_before_gate: false,
+						held_seasons: [2, 3],
+						updated_at: '2026-01-01T00:00:00Z'
+					}
+				])
+			)
+		);
+		await page.route('**/api/v1/watchaware/gate/decisions*', (route) =>
+			route.fulfill(
+				json([
+					{
+						id: '00000000-0000-0000-0000-000000000002',
+						instance_id: '00000000-0000-0000-0000-000000000001',
+						series_id: 1,
+						season_number: 2,
+						action: 'unmonitor',
+						would_act: false,
+						reason: 'season after gate',
+						decided_at: '2026-01-01T00:00:00Z'
+					}
+				])
+			)
+		);
+		await page.goto('/automation?tab=season-gate');
+		await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+		await expect(page.getByRole('table').first()).toBeVisible();
 
 		await settleToasts(page);
 		const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
