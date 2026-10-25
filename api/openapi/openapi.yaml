@@ -298,6 +298,7 @@ paths:
       tags: [auth]
       operationId: createAPIKey
       summary: Create a new API key for the current user
+      description: Create a new API key for the current user. Allowed for admin or requester (own keys).
       security:
         - cookieAuth: []
       requestBody:
@@ -331,6 +332,7 @@ paths:
       tags: [auth]
       operationId: revokeAPIKey
       summary: Revoke an API key
+      description: Revoke an API key. Allowed for admin or requester (own keys).
       security:
         - cookieAuth: []
       responses:
@@ -2117,7 +2119,7 @@ components:
           type: string
         role:
           type: string
-          enum: [admin, viewer]
+          enum: [admin, requester, viewer]
 
     Session:
       type: object

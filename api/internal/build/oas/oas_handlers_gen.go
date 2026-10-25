@@ -608,7 +608,7 @@ func (s *Server) handleCompleteSetupRequest(args [0]string, argsEscaped bool, w 
 
 // handleCreateAPIKeyRequest handles createAPIKey operation.
 //
-// Create a new API key for the current user.
+// Create a new API key for the current user. Allowed for admin or requester (own keys).
 //
 // POST /auth/api-keys
 func (s *Server) handleCreateAPIKeyRequest(args [0]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
@@ -14591,7 +14591,7 @@ func (s *Server) handleResetStateRequest(args [0]string, argsEscaped bool, w htt
 
 // handleRevokeAPIKeyRequest handles revokeAPIKey operation.
 //
-// Revoke an API key.
+// Revoke an API key. Allowed for admin or requester (own keys).
 //
 // DELETE /auth/api-keys/{id}
 func (s *Server) handleRevokeAPIKeyRequest(args [1]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {

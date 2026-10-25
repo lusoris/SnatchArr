@@ -85,7 +85,7 @@ export const sampleSettingsData = {
 
 export async function mockSignedInApi(
 	page: Page,
-	role: 'admin' | 'viewer' = 'admin'
+	role: 'admin' | 'requester' | 'viewer' = 'admin'
 ): Promise<void> {
 	await page.route('**/api/v1/auth/setup/status', (route) =>
 		route.fulfill(json({ setup_complete: true }))
@@ -192,7 +192,7 @@ export async function mockSettingsApi(
 		status?: number;
 		saveDelayMs?: number;
 		saveStatus?: number;
-		role?: 'admin' | 'viewer';
+		role?: 'admin' | 'requester' | 'viewer';
 	}
 ): Promise<void> {
 	await mockSignedInApi(page, options?.role);

@@ -141,11 +141,11 @@ WHERE role = 'admin'
 ORDER BY created_at, id
 LIMIT 1;
 
--- name: UpsertExternalViewer :one
+-- name: UpsertExternalUser :one
 INSERT INTO users (id, username, password_hash, role, external_id, created_at, updated_at)
-VALUES ($1, $2, $3, 'viewer', $4, $5, $5)
+VALUES ($1, $2, $3, $4, $5, $6, $6)
 ON CONFLICT (external_id) DO UPDATE
-SET updated_at = EXCLUDED.updated_at
+SET role = EXCLUDED.role, updated_at = EXCLUDED.updated_at
 RETURNING *;
 
 

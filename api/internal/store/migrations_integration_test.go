@@ -497,3 +497,62 @@ func TestMigration000030DownloadClientsMaxQueued(t *testing.T) {
 		t.Fatalf("max_queued column still exists after down migration")
 	}
 }
+
+// TestMigration000033UserRoleRequester verifies migration 000033 widens the users.role
+// CHECK constraint to include 'requester', and stepping down updates 'requester' rows to
+// 'viewer' and restores the old check constraint.
+func TestMigration000033UserRoleRequester(t *testing.T) {
+	t.Parallel()
+	st := storetest.New(t)
+	m := storetest.Migrator(t, st)
+
+	stepDownToVersion(t, m, 32)
+	ctx := t.Context()
+
+	reqID := uuid.New()
+	const insertUser = `INSERT INTO users (
+		id, username, password_hash, role, created_at, updated_at
+	) VALUES (
+		$1, $2, 'dummy-hash', $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+	)`
+
+	// At v32, inserting role 'requester' must be rejected by check constraint.
+	if _, err := st.Pool().Exec(ctx, insertUser, reqID, "req-user-m33", "requester"); err == nil {
+		t.Fatalf("expected error inserting role 'requester' at v32, got nil")
+	}
+
+	// Step up to 33.
+	if err := m.Steps(1); err != nil {
+		t.Fatalf("Steps(1) up to 33: %v", err)
+	}
+
+	// At v33, inserting role 'requester' succeeds.
+	if _, err := st.Pool().Exec(ctx, insertUser, reqID, "req-user-m33", "requester"); err != nil {
+		t.Fatalf("insert user with role 'requester' at v33: %v", err)
+	}
+
+	// Step down to 32: must convert requester to viewer and restore check constraint.
+	if err := m.Steps(-1); err != nil {
+		t.Fatalf("Steps(-1) down to 32: %v", err)
+	}
+
+	var role string
+	err := st.Pool().QueryRow(ctx, "SELECT role FROM users WHERE id = $1", reqID).Scan(&role)
+	if err != nil {
+		t.Fatalf("query user role after down migration: %v", err)
+	}
+	if role != "viewer" {
+		t.Fatalf("user role after down migration = %q, want 'viewer'", role)
+	}
+
+	// At v32 again, inserting role 'requester' must fail.
+	otherID := uuid.New()
+	if _, err := st.Pool().Exec(ctx, insertUser, otherID, "req-user-2", "requester"); err == nil {
+		t.Fatalf("expected error inserting role 'requester' after step down to v32, got nil")
+	}
+
+	// Restore to v33.
+	if err := m.Steps(1); err != nil {
+		t.Fatalf("Steps(1) back up to 33: %v", err)
+	}
+}

@@ -47,6 +47,7 @@ UI.
 | `APP_SNATCHARR_OIDC_REDIRECT_URL` | | OAuth2 callback URL (defaults to `public.url` + `/api/v1/auth/oidc/callback`) |
 | `APP_SNATCHARR_OIDC_SCOPES` | `openid,email,profile` | Comma-separated scopes (`openid` always present) |
 | `APP_SNATCHARR_OIDC_ADMIN_GROUPS` | | Comma-separated groups that sign in as admin (required) |
+| `APP_SNATCHARR_OIDC_REQUESTER_GROUPS` | | Comma-separated groups that sign in as requesters |
 | `APP_SNATCHARR_OIDC_VIEWER_GROUPS` | | Comma-separated groups that sign in as viewers |
 | `APP_SNATCHARR_OIDC_GROUPS_CLAIM` | `groups` | ID token claim holding the groups |
 | `APP_SNATCHARR_OIDC_DISCOVERY_TIMEOUT` | `10s` | IdP discovery timeout |
@@ -57,6 +58,7 @@ UI.
 | `APP_SNATCHARR_PROXY_AUTH_SECRET_HEADER` | `X-SnatchArr-Proxy-Secret` | Name of header containing shared proxy secret |
 | `APP_SNATCHARR_PROXY_AUTH_SECRET` | | Shared secret reverse proxy must present (min 32 bytes) |
 | `APP_SNATCHARR_PROXY_AUTH_ADMIN_GROUPS` | | Comma-separated groups that sign in as admin (required) |
+| `APP_SNATCHARR_PROXY_AUTH_REQUESTER_GROUPS` | | Comma-separated groups that sign in as requesters |
 | `APP_SNATCHARR_PROXY_AUTH_VIEWER_GROUPS` | | Comma-separated groups that sign in as viewers |
 | `APP_SNATCHARR_METRICS_ADDR` | | Dedicated HTTP listen address for Prometheus `/metrics` (e.g. `:9464`); empty leaves `/metrics` on main HTTP port |
 | `APP_OTEL_ENABLED` | `true` | OpenTelemetry export (no-op without an endpoint) |

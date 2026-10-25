@@ -15485,6 +15485,8 @@ func (s *UserRole) Decode(d *jx.Decoder) error {
 	switch UserRole(v) {
 	case UserRoleAdmin:
 		*s = UserRoleAdmin
+	case UserRoleRequester:
+		*s = UserRoleRequester
 	case UserRoleViewer:
 		*s = UserRoleViewer
 	default:

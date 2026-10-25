@@ -584,27 +584,29 @@ func (q *Queries) UpdateUserPassword(ctx context.Context, arg UpdateUserPassword
 	return err
 }
 
-const upsertExternalViewer = `-- name: UpsertExternalViewer :one
+const upsertExternalUser = `-- name: UpsertExternalUser :one
 INSERT INTO users (id, username, password_hash, role, external_id, created_at, updated_at)
-VALUES ($1, $2, $3, 'viewer', $4, $5, $5)
+VALUES ($1, $2, $3, $4, $5, $6, $6)
 ON CONFLICT (external_id) DO UPDATE
-SET updated_at = EXCLUDED.updated_at
+SET role = EXCLUDED.role, updated_at = EXCLUDED.updated_at
 RETURNING id, username, password_hash, role, created_at, updated_at, external_id
 `
 
-type UpsertExternalViewerParams struct {
+type UpsertExternalUserParams struct {
 	ID           uuid.UUID
 	Username     string
 	PasswordHash string
+	Role         string
 	ExternalID   *string
 	CreatedAt    time.Time
 }
 
-func (q *Queries) UpsertExternalViewer(ctx context.Context, arg UpsertExternalViewerParams) (User, error) {
-	row := q.db.QueryRow(ctx, upsertExternalViewer,
+func (q *Queries) UpsertExternalUser(ctx context.Context, arg UpsertExternalUserParams) (User, error) {
+	row := q.db.QueryRow(ctx, upsertExternalUser,
 		arg.ID,
 		arg.Username,
 		arg.PasswordHash,
+		arg.Role,
 		arg.ExternalID,
 		arg.CreatedAt,
 	)

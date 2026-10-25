@@ -244,7 +244,7 @@ func (s *Service) completeCallback(w http.ResponseWriter, r *http.Request, code,
 		http.Redirect(w, r, "/login?sso=failed", http.StatusFound)
 		return
 	}
-	role, ok := ResolveRole(groups, s.cfg.AdminGroups, s.cfg.ViewerGroups)
+	role, ok := ResolveRole(groups, s.cfg.AdminGroups, s.cfg.RequesterGroups, s.cfg.ViewerGroups)
 	if !ok {
 		s.logger.WarnContext(r.Context(), "sso: oidc login refused",
 			slog.String("reason", "not_authorized"),
@@ -280,11 +280,11 @@ func (s *Service) resolveUser(ctx context.Context, role domain.Role, subject str
 		}
 		return admin, "", nil
 	}
-	viewer, err := s.auth.ProvisionExternalViewer(ctx, "oidc-", subject)
+	externalUser, err := s.auth.ProvisionExternalUser(ctx, "oidc-", subject, role)
 	if err != nil {
 		return domain.User{}, "setup_incomplete", err
 	}
-	return viewer, "", nil
+	return externalUser, "", nil
 }
 
 func (s *Service) exchangeAndVerify(ctx context.Context, oauth2Cfg *oauth2.Config, verifier *gooidc.IDTokenVerifier, code, verifierCode string) (*gooidc.IDToken, error) {

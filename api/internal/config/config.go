@@ -28,6 +28,7 @@
 //	snatcharr.oidc.redirect_url  APP_SNATCHARR_OIDC_REDIRECT_URL  OAuth2 callback URL
 //	snatcharr.oidc.scopes        APP_SNATCHARR_OIDC_SCOPES        comma-separated scopes (default openid,email,profile)
 //	snatcharr.oidc.admin_groups  APP_SNATCHARR_OIDC_ADMIN_GROUPS  comma-separated groups granting admin role
+//	snatcharr.oidc.requester_groups APP_SNATCHARR_OIDC_REQUESTER_GROUPS comma-separated groups granting requester role
 //	snatcharr.oidc.viewer_groups APP_SNATCHARR_OIDC_VIEWER_GROUPS comma-separated groups granting viewer role
 //	snatcharr.oidc.groups_claim  APP_SNATCHARR_OIDC_GROUPS_CLAIM  claim name holding groups (default groups)
 //	snatcharr.oidc.allowed_subjects APP_SNATCHARR_OIDC_ALLOWED_SUBJECTS deprecated; rejected if set
@@ -40,6 +41,7 @@
 //	snatcharr.proxy_auth.secret  APP_SNATCHARR_PROXY_AUTH_SECRET  shared secret proxy must present (min 32 bytes)
 //	snatcharr.proxy_auth.trusted_cidrs APP_SNATCHARR_PROXY_AUTH_TRUSTED_CIDRS comma-separated trusted proxy CIDRs
 //	snatcharr.proxy_auth.admin_groups  APP_SNATCHARR_PROXY_AUTH_ADMIN_GROUPS  comma-separated groups granting admin role
+//	snatcharr.proxy_auth.requester_groups APP_SNATCHARR_PROXY_AUTH_REQUESTER_GROUPS comma-separated groups granting requester role
 //	snatcharr.proxy_auth.viewer_groups APP_SNATCHARR_PROXY_AUTH_VIEWER_GROUPS comma-separated groups granting viewer role
 //	snatcharr.proxy_auth.allowed_users APP_SNATCHARR_PROXY_AUTH_ALLOWED_USERS deprecated; rejected if set
 //	snatcharr.metrics.addr       APP_SNATCHARR_METRICS_ADDR       separate HTTP listen address for Prometheus /metrics
@@ -159,6 +161,7 @@ type OIDCOptions struct {
 	AllowedSubjects  []string      `koanf:"allowed_subjects"`
 	AllowedEmails    []string      `koanf:"allowed_emails"`
 	AdminGroups      []string      `koanf:"admin_groups"`
+	RequesterGroups  []string      `koanf:"requester_groups"`
 	ViewerGroups     []string      `koanf:"viewer_groups"`
 	GroupsClaim      string        `koanf:"groups_claim"`
 	DiscoveryTimeout time.Duration `koanf:"discovery_timeout"`
@@ -181,16 +184,24 @@ func (o OIDCOptions) Validate(profile Profile) error {
 	if len(o.AllowedSubjects) > 0 || len(o.AllowedEmails) > 0 {
 		return errors.New("config: oidc.allowed_subjects and oidc.allowed_emails are deprecated; use oidc.admin_groups and oidc.viewer_groups")
 	}
-	return validateGroupLists("oidc", o.AdminGroups, o.ViewerGroups)
+	return validateGroupLists("oidc", o.AdminGroups, o.RequesterGroups, o.ViewerGroups)
 }
 
-func validateGroupLists(prefix string, admin, viewer []string) error {
+func validateGroupLists(prefix string, admin, requester, viewer []string) error {
 	if len(admin) == 0 {
 		return fmt.Errorf("config: %s.admin_groups must not be empty when %s is enabled", prefix, prefix)
 	}
 	for _, ag := range admin {
+		if slices.Contains(requester, ag) {
+			return fmt.Errorf("config: group %q appears in both %s.admin_groups and %s.requester_groups", ag, prefix, prefix)
+		}
 		if slices.Contains(viewer, ag) {
 			return fmt.Errorf("config: group %q appears in both %s.admin_groups and %s.viewer_groups", ag, prefix, prefix)
+		}
+	}
+	for _, rg := range requester {
+		if slices.Contains(viewer, rg) {
+			return fmt.Errorf("config: group %q appears in both %s.requester_groups and %s.viewer_groups", rg, prefix, prefix)
 		}
 	}
 	return nil
@@ -226,15 +237,16 @@ func validateOIDCRedirect(redirectURL string) error {
 
 // ProxyAuthOptions configures trusted reverse-proxy header authentication.
 type ProxyAuthOptions struct {
-	Enabled      bool     `koanf:"enabled"`
-	Header       string   `koanf:"header"`
-	GroupsHeader string   `koanf:"groups_header"`
-	SecretHeader string   `koanf:"secret_header"`
-	Secret       string   `koanf:"secret"`
-	TrustedCIDRs []string `koanf:"trusted_cidrs"`
-	AllowedUsers []string `koanf:"allowed_users"`
-	AdminGroups  []string `koanf:"admin_groups"`
-	ViewerGroups []string `koanf:"viewer_groups"`
+	Enabled         bool     `koanf:"enabled"`
+	Header          string   `koanf:"header"`
+	GroupsHeader    string   `koanf:"groups_header"`
+	SecretHeader    string   `koanf:"secret_header"`
+	Secret          string   `koanf:"secret"`
+	TrustedCIDRs    []string `koanf:"trusted_cidrs"`
+	AllowedUsers    []string `koanf:"allowed_users"`
+	AdminGroups     []string `koanf:"admin_groups"`
+	RequesterGroups []string `koanf:"requester_groups"`
+	ViewerGroups    []string `koanf:"viewer_groups"`
 }
 
 // Validate checks proxy auth configuration when enabled.
@@ -254,7 +266,7 @@ func (p ProxyAuthOptions) Validate() error {
 	if len(p.AllowedUsers) > 0 {
 		return errors.New("config: proxy_auth.allowed_users is deprecated; use proxy_auth.admin_groups and proxy_auth.viewer_groups")
 	}
-	return validateGroupLists("proxy_auth", p.AdminGroups, p.ViewerGroups)
+	return validateGroupLists("proxy_auth", p.AdminGroups, p.RequesterGroups, p.ViewerGroups)
 }
 
 func validateProxyHeaders(header, groupsHeader, secretHeader string) error {
@@ -423,6 +435,7 @@ func normalizeOIDC(o *OIDCOptions, publicURL string) {
 	o.AllowedSubjects = cleanTrusted(o.AllowedSubjects)
 	o.AllowedEmails = cleanTrusted(o.AllowedEmails)
 	o.AdminGroups = cleanTrusted(o.AdminGroups)
+	o.RequesterGroups = cleanTrusted(o.RequesterGroups)
 	o.ViewerGroups = cleanTrusted(o.ViewerGroups)
 	o.Scopes = cleanTrusted(o.Scopes)
 	if len(o.Scopes) == 0 {
@@ -445,6 +458,7 @@ func normalizeProxyAuth(p *ProxyAuthOptions) {
 	p.TrustedCIDRs = cleanTrusted(p.TrustedCIDRs)
 	p.AllowedUsers = cleanTrusted(p.AllowedUsers)
 	p.AdminGroups = cleanTrusted(p.AdminGroups)
+	p.RequesterGroups = cleanTrusted(p.RequesterGroups)
 	p.ViewerGroups = cleanTrusted(p.ViewerGroups)
 	if p.Header == "" {
 		p.Header = "Remote-User"
@@ -558,6 +572,7 @@ func CompoundKeys() []string {
 		"snatcharr.oidc.client_secret",
 		"snatcharr.oidc.redirect_url",
 		"snatcharr.oidc.admin_groups",
+		"snatcharr.oidc.requester_groups",
 		"snatcharr.oidc.viewer_groups",
 		"snatcharr.oidc.groups_claim",
 		"snatcharr.oidc.allowed_subjects",
@@ -569,6 +584,7 @@ func CompoundKeys() []string {
 		"snatcharr.proxy_auth.secret_header",
 		"snatcharr.proxy_auth.secret",
 		"snatcharr.proxy_auth.admin_groups",
+		"snatcharr.proxy_auth.requester_groups",
 		"snatcharr.proxy_auth.viewer_groups",
 		"snatcharr.proxy_auth.trusted_cidrs",
 		"snatcharr.proxy_auth.allowed_users",
