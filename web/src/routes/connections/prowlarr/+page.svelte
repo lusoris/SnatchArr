@@ -117,33 +117,42 @@ SPDX-License-Identifier: EUPL-1.2
 <h1 class="mb-2 text-2xl font-semibold">{m.prowlarr_title()}</h1>
 <p class="mb-4 text-sm text-subtle">{m.prowlarr_readonly_hint()}</p>
 
-<h2 class="mb-3 text-lg font-semibold">{m.prowlarr_links_title()}</h2>
-{#if links.isPending}
-	<p aria-live="polite">{m.loading()}</p>
-{:else if links.isError}
-	<ProblemNote error={links.error} />
-{:else if (links.data ?? []).length === 0}
-	<p class="card mb-6">{m.prowlarr_links_empty()}</p>
-{:else}
-	<ul class="mb-6 grid gap-3 md:grid-cols-2">
-		{#each links.data ?? [] as link (link.id)}
-			<LinkCard
-				{link}
-				testPending={probe.isPending}
-				deletePending={remove.isPending}
-				onedit={() => editor.open(link)}
-				ontest={() => probe.mutate(link.id)}
-				ondelete={() => remove.mutate(link)}
-			/>
-		{/each}
-	</ul>
-{/if}
+<section aria-labelledby="prowlarr-links-section-title" class="w-full">
+	<h2 id="prowlarr-links-section-title" class="sr-only">{m.prowlarr_links_title()}</h2>
+	<div class="grid w-full grid-cols-1 items-start gap-6 xl:grid-cols-12">
+		<div class="flex flex-col gap-3 xl:col-span-7">
+			<h2 class="text-lg font-semibold">{m.prowlarr_links_title()}</h2>
+			{#if links.isPending}
+				<p aria-live="polite">{m.loading()}</p>
+			{:else if links.isError}
+				<ProblemNote error={links.error} />
+			{:else if (links.data ?? []).length === 0}
+				<p class="card">{m.prowlarr_links_empty()}</p>
+			{:else}
+				<ul class="grid grid-cols-1 gap-3 xl:grid-cols-2">
+					{#each links.data ?? [] as link (link.id)}
+						<LinkCard
+							{link}
+							testPending={probe.isPending}
+							deletePending={remove.isPending}
+							onedit={() => editor.open(link)}
+							ontest={() => probe.mutate(link.id)}
+							ondelete={() => remove.mutate(link)}
+						/>
+					{/each}
+				</ul>
+			{/if}
+		</div>
 
-<AdminFormSlot {editor} {save} probe={probeInput}>
-	{#snippet form(props)}
-		<LinkForm idPrefix="prowlarr" link={editor.editing} {...props} />
-	{/snippet}
-</AdminFormSlot>
+		<div class="xl:col-span-5">
+			<AdminFormSlot {editor} {save} probe={probeInput}>
+				{#snippet form(props)}
+					<LinkForm idPrefix="prowlarr" link={editor.editing} {...props} />
+				{/snippet}
+			</AdminFormSlot>
+		</div>
+	</div>
+</section>
 
 <h2 class="mt-8 mb-3 text-lg font-semibold">{m.prowlarr_status_title()}</h2>
 {#if status.isPending}

@@ -535,6 +535,7 @@ export const SCROLL_BUDGET_ROUTES = [
 	'/',
 	'/automation',
 	'/automation?tab=caps',
+	'/connections',
 	'/instances',
 	'/instances/[id]',
 	'/activity',
@@ -562,6 +563,25 @@ export async function assertScrollBudget(
 	).toBeLessThanOrEqual(limit);
 }
 
+export async function assertTableFits(page: Page, tableSelector = 'table'): Promise<void> {
+	const fit = await page.evaluate((sel) => {
+		const table = document.querySelector<HTMLElement>(sel);
+		if (!table) return null;
+		const container = table.closest<HTMLElement>('.overflow-x-auto') ?? table.parentElement;
+		if (!container) return null;
+		return {
+			scrollWidth: table.scrollWidth,
+			clientWidth: container.clientWidth
+		};
+	}, tableSelector);
+
+	expect(fit, `table matching "${tableSelector}" not found in page`).not.toBeNull();
+	expect(
+		fit!.scrollWidth,
+		`table (${fit!.scrollWidth}px) exceeds container (${fit!.clientWidth}px)`
+	).toBeLessThanOrEqual(fit!.clientWidth);
+}
+
 export interface PendingRoute {
 	pr: 'C' | 'D' | 'E' | 'F' | 'G';
 	/** ISO date (YYYY-MM-DD); past it the entry fails like a missing one. */
@@ -570,7 +590,6 @@ export interface PendingRoute {
 }
 
 export const WIDTH_PENDING: Record<string, PendingRoute> = {
-	'/connections/configarr': { pr: 'F', expires: '2026-11-23', reason: 'narrow content wrapper' },
 	'/system': { pr: 'G', expires: '2026-11-23', reason: 'narrow content wrapper' },
 	'/system?tab=about': { pr: 'G', expires: '2026-11-23', reason: 'narrow content wrapper' }
 };
