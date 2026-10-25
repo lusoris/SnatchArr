@@ -10,9 +10,10 @@ SPDX-License-Identifier: EUPL-1.2
 		label: string;
 		used: number;
 		cap: number;
+		hideLabel?: boolean;
 	}
 
-	const { label, used, cap }: Props = $props();
+	const { label, used, cap, hideLabel = false }: Props = $props();
 	const level = $derived(staminaLevel(used, cap));
 	const percent = $derived(staminaPercent(used, cap));
 	const levelText = $derived(
@@ -29,7 +30,7 @@ SPDX-License-Identifier: EUPL-1.2
 		class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-sm"
 		data-label-value
 	>
-		<span class="font-medium">{label}</span>
+		<span class={hideLabel ? 'sr-only' : 'font-medium'}>{label}</span>
 		<span class="text-subtle">{m.stamina_used({ used, cap })} · {levelText}</span>
 	</div>
 	<div
