@@ -90,6 +90,22 @@ describe('download-clients', () => {
 		expect(option.textContent).toBe(forkInstance.name);
 	});
 
+	it('renders download client cards with min-w-0 and wrapping heading', async () => {
+		stubGet({
+			'/download-clients': [sampleClient],
+			'/download-clients/status': [sampleStatus],
+			'/instances': [forkInstance]
+		});
+		renderWithQuery(DownloadClientsPage);
+
+		const heading = await screen.findByRole('heading', { level: 2, name: /qBittorrent Primary/ });
+		const card = heading.closest('li');
+		expect(card?.classList.contains('min-w-0')).toBe(true);
+		expect(
+			heading.classList.contains('flex-wrap') || heading.classList.contains('break-words')
+		).toBe(true);
+	});
+
 	it('announces the problem document when the clients query fails', async () => {
 		stubGet({
 			'/download-clients': new ProblemError({

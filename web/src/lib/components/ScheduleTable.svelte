@@ -57,7 +57,7 @@ SPDX-License-Identifier: EUPL-1.2
 </script>
 
 <div class="relative overflow-x-auto">
-	<table class="table">
+	<table class="table-stack table">
 		<caption class="sr-only">{m.schedules_title()}</caption>
 		<thead>
 			<tr>
@@ -73,28 +73,34 @@ SPDX-License-Identifier: EUPL-1.2
 		<tbody>
 			{#each schedules as s (s.id)}
 				<tr>
-					<td>
-						<div>{s.name}</div>
-						{#if s.instance_id}
-							<div class="text-xs text-subtle">{instanceName(s.instance_id) ?? s.instance_id}</div>
-						{/if}
-					</td>
-					<td>{s.days.map((d) => dayNames[d] ?? d).join(', ')}</td>
-					<td>{s.start}–{s.end} {s.tz}</td>
-					<td>
+					<td data-label={m.schedule_name()}>
 						<div>
-							{s.action === 'pause'
-								? m.schedule_pause()
-								: `${m.schedule_cap_override()} ${s.cap_value ?? ''}`}
+							<div>{s.name}</div>
+							{#if s.instance_id}
+								<div class="text-xs text-subtle">
+									{instanceName(s.instance_id) ?? s.instance_id}
+								</div>
+							{/if}
 						</div>
-						{#if s.action === 'pause' && s.active}
-							<div class="mt-1 text-xs font-semibold text-danger">
-								{activePauseText(s, instances)}
+					</td>
+					<td data-label={m.schedule_days()}>{s.days.map((d) => dayNames[d] ?? d).join(', ')}</td>
+					<td data-label={m.schedule_window()}>{s.start}–{s.end} {s.tz}</td>
+					<td data-label={m.schedule_action()}>
+						<div>
+							<div>
+								{s.action === 'pause'
+									? m.schedule_pause()
+									: `${m.schedule_cap_override()} ${s.cap_value ?? ''}`}
 							</div>
-						{/if}
+							{#if s.action === 'pause' && s.active}
+								<div class="mt-1 text-xs font-semibold text-danger">
+									{activePauseText(s, instances)}
+								</div>
+							{/if}
+						</div>
 					</td>
 					{#if session.isAdmin}
-						<td>
+						<td data-label="">
 							{#if deletingId === s.id}
 								<div class="flex flex-wrap items-center gap-2">
 									<span class="text-xs font-medium text-danger">

@@ -84,7 +84,7 @@ SPDX-License-Identifier: EUPL-1.2
 	<p class="card mb-4">{m.api_keys_empty()}</p>
 {:else}
 	<div class="relative overflow-x-auto">
-		<table class="mb-6 table">
+		<table class="table-stack mb-6 table">
 			<caption class="sr-only">{m.api_keys_title()}</caption>
 			<thead>
 				<tr>
@@ -100,18 +100,18 @@ SPDX-License-Identifier: EUPL-1.2
 			<tbody>
 				{#each apiKeys.data ?? [] as key (key.id)}
 					<tr>
-						<td>{key.name}</td>
-						<td>{formatWhen(key.created_at, getLocale())}</td>
-						<td>
+						<td data-label={m.api_key_name()}>{key.name}</td>
+						<td data-label={m.api_key_created()}>{formatWhen(key.created_at, getLocale())}</td>
+						<td data-label={m.api_key_last_used()}>
 							{key.last_used_at
 								? formatWhen(key.last_used_at, getLocale())
 								: m.api_key_never_used()}
 						</td>
-						<td>
+						<td data-label={m.api_key_expires()}>
 							{key.expires_at ? formatWhen(key.expires_at, getLocale()) : m.api_key_never_expires()}
 						</td>
 						{#if session.isAdmin}
-							<td>
+							<td data-label="">
 								{#if revokingId === key.id}
 									<div class="flex flex-col gap-2">
 										<p class="text-sm font-medium text-danger">

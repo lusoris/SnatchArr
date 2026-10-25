@@ -12,8 +12,18 @@ export const VIEWPORTS = {
 	desktop: { width: 1280, height: 800 },
 	desktop1920: { width: 1920, height: 1080 },
 	phone: { width: 390, height: 844 },
-	phone375: { width: 375, height: 812 }
+	phone375: { width: 375, height: 812 },
+	phone414: { width: 414, height: 896 }
 } as const;
+
+export const PHONE_FIT_ROUTES = [
+	'/',
+	'/account',
+	'/automation',
+	'/connections/download-clients',
+	'/instances',
+	'/system'
+] as const;
 
 export const AUTH_ROUTES = [
 	'/',
@@ -154,6 +164,7 @@ export interface Box {
 
 export interface ExtractedCell extends Box {
 	scrollWidth: number;
+	hasDataLabel?: boolean;
 }
 
 export interface ExtractedRow {
@@ -165,6 +176,7 @@ export interface ExtractedTable {
 	kind: 'table' | 'grid';
 	headers: Box[];
 	rows: ExtractedRow[];
+	stacked?: boolean;
 }
 
 export interface Misaligned {
@@ -184,9 +196,12 @@ export function extractTables(): ExtractedTable[] {
 		const r = el.getBoundingClientRect();
 		return { x: Math.round(r.left), width: Math.round(r.width) };
 	};
+	// Below 48rem app.css stacks .table-stack rows into labelled cards.
+	const isPhoneWidth = window.matchMedia('(width < 48rem)').matches;
 	const tables = Array.from(document.querySelectorAll('table, [role="grid"]')).slice(0, 50);
 	return tables.map((t) => {
 		const isGrid = t.getAttribute('role') === 'grid';
+		const isStacked = !isGrid && t.classList.contains('table-stack') && isPhoneWidth;
 		const headers = isGrid
 			? Array.from(t.querySelectorAll('[role="columnheader"]')).filter(
 					(el) => el.closest('[role="grid"]') === t
@@ -216,10 +231,14 @@ export function extractTables(): ExtractedTable[] {
 			});
 			return {
 				spans,
-				cells: cells.map((c) => ({ ...box(c), scrollWidth: c.scrollWidth }))
+				cells: cells.map((c) => ({
+					...box(c),
+					scrollWidth: c.scrollWidth,
+					hasDataLabel: c.tagName.toLowerCase() === 'td' ? c.hasAttribute('data-label') : true
+				}))
 			};
 		});
-		return { kind: isGrid ? 'grid' : 'table', headers: headers.map(box), rows };
+		return { kind: isGrid ? 'grid' : 'table', headers: headers.map(box), rows, stacked: isStacked };
 	});
 }
 
@@ -289,6 +308,26 @@ export function checkTable(
 	}
 	let measuredRows = 0;
 	const findings: Misaligned[] = [];
+	if (table.stacked) {
+		for (let r = 0; r < table.rows.length; r++) {
+			const row = table.rows[r];
+			measuredRows++;
+			for (let c = 0; c < row.cells.length; c++) {
+				const cell = row.cells[c];
+				if (cell.hasDataLabel === false) {
+					findings.push({
+						table: index,
+						row: r,
+						column: c,
+						header: table.headers[c] ?? { x: 0, width: 0 },
+						cell: { x: cell.x, width: cell.width },
+						reason: 'stacked table cell missing data-label attribute'
+					});
+				}
+			}
+		}
+		return { measuredRows, findings };
+	}
 	for (let r = 0; r < table.rows.length; r++) {
 		const row = table.rows[r];
 		if (row.cells.length !== table.headers.length) {
@@ -528,6 +567,53 @@ export async function assertDesktopWidth(page: Page, route: string): Promise<voi
 	if (ratio < 0.75) {
 		throw new Error(
 			`${route}: widest content block ${widest}px is narrower than 75% of main (${mainWidth}px)`
+		);
+	}
+}
+
+export interface PhoneFitOffender {
+	tag: string;
+	cls: string;
+	width: number;
+	scrollWidth: number;
+}
+
+export interface PhoneFitResult {
+	mainWidth: number;
+	offenders: PhoneFitOffender[];
+}
+
+// Flags blocks wider than main's content box and inner horizontal scroll
+// containers: on PHONE_FIT_ROUTES every column must fit without scrolling.
+export function measurePhoneFit(): PhoneFitResult {
+	const main = document.querySelector('main');
+	if (!main) return { mainWidth: 0, offenders: [] };
+	const mainStyle = window.getComputedStyle(main);
+	const mainWidth = Math.round(
+		main.clientWidth - parseFloat(mainStyle.paddingLeft) - parseFloat(mainStyle.paddingRight)
+	);
+	const blocks = 'section, .card, table, form, [role="table"], [role="grid"], [role="log"], ul, dl';
+	const offenders: PhoneFitOffender[] = [];
+	for (const el of Array.from(main.querySelectorAll('*'))) {
+		const style = window.getComputedStyle(el);
+		if (style.display === 'none' || style.visibility === 'hidden') continue;
+		const width = Math.round(el.getBoundingClientRect().width);
+		const tooWide = el.matches(blocks) && width > mainWidth + 1;
+		const scrolls =
+			(style.overflowX === 'auto' || style.overflowX === 'scroll') &&
+			el.scrollWidth > el.clientWidth + 1;
+		if (!tooWide && !scrolls) continue;
+		const cls = (el.getAttribute('class') ?? '').slice(0, 60);
+		offenders.push({ tag: el.tagName.toLowerCase(), cls, width, scrollWidth: el.scrollWidth });
+	}
+	return { mainWidth, offenders };
+}
+
+export async function assertPhoneFit(page: Page, route: string): Promise<void> {
+	const { offenders } = await page.evaluate(measurePhoneFit);
+	if (offenders.length > 0) {
+		throw new Error(
+			`${route}: content wider than main at phone width (${offenders.length} block(s)): ${JSON.stringify(offenders)}`
 		);
 	}
 }

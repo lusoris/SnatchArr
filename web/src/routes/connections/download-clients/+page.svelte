@@ -158,9 +158,9 @@ SPDX-License-Identifier: EUPL-1.2
 	<ul class="mb-6 grid gap-3 md:grid-cols-2">
 		{#each clients.data ?? [] as c (c.id)}
 			{@const st = statusFor(c.id)}
-			<li class="card">
-				<h2 class="font-semibold">
-					{c.name} <span class="text-sm text-subtle">{c.kind} · {c.protocol}</span>
+			<li class="card min-w-0">
+				<h2 class="flex flex-wrap items-baseline gap-x-1.5 font-semibold break-words">
+					<span>{c.name}</span> <span class="text-sm text-subtle">{c.kind} · {c.protocol}</span>
 				</h2>
 				<p class="text-sm text-subtle"><UrlText url={c.base_url} /></p>
 				<p class="text-sm text-subtle">{instanceName(c.instance_id)}</p>

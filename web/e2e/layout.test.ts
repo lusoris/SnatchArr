@@ -10,12 +10,14 @@ import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import {
 	assertDesktopWidth,
+	assertPhoneFit,
 	assertRenderedLayout,
 	assertScrollBudget,
 	AUTH_ROUTES,
 	collectLists,
 	expectedTables,
 	measureContentSpan,
+	PHONE_FIT_ROUTES,
 	SCROLL_BUDGET_ROUTES,
 	VIEWPORTS,
 	WIDTH_PENDING
@@ -389,6 +391,10 @@ for (const [viewportName, viewport] of Object.entries(VIEWPORTS)) {
 				}
 			}
 
+			if (viewport.width < 768 && (PHONE_FIT_ROUTES as readonly string[]).includes(pattern)) {
+				await assertPhoneFit(page, pattern);
+			}
+
 			if (shots) {
 				const name = `${pattern.replace(/[/[\]]+/g, '-').replace(/^-|-$/g, '') || 'root'}-${viewportName}.png`;
 				await page.screenshot({ path: testInfo.outputPath(name), fullPage: true });
@@ -584,4 +590,32 @@ test('authenticated: desktop width gate fixtures and planted negative', async ({
 	await expect(assertDesktopWidth(page, '/test-empty')).rejects.toThrow(
 		'/test-empty: no content block measured'
 	);
+});
+
+test('authenticated: phone fit gate fixtures and planted negative', async ({ page }) => {
+	await page.setViewportSize({ width: 390, height: 844 });
+
+	await page.setContent(
+		'<main style="width:390px;padding:0"><table style="width:600px"><tr><td>wide</td></tr></table></main>'
+	);
+	await expect(assertPhoneFit(page, '/test-negative')).rejects.toThrow(
+		/\/test-negative: content wider than main at phone width \(1 block\(s\)\)/
+	);
+
+	await page.setContent(
+		'<main style="width:390px;padding:0"><div style="overflow-x:auto;width:390px"><div style="width:600px">scroll</div></div></main>'
+	);
+	await expect(assertPhoneFit(page, '/test-negative-scroll')).rejects.toThrow(
+		/\/test-negative-scroll: content wider than main at phone width \(1 block\(s\)\)/
+	);
+
+	await page.setContent(
+		'<main style="width:390px;padding:0"><table style="width:100%"><tr><td>fits</td></tr></table></main>'
+	);
+	await expect(assertPhoneFit(page, '/test-positive')).resolves.not.toThrow();
+
+	await page.setContent(
+		'<main style="width:390px;padding:0"><section style="width:390px">x</section></main>'
+	);
+	await expect(assertPhoneFit(page, '/test-boundary')).resolves.not.toThrow();
 });
