@@ -238,7 +238,7 @@ type Querier interface {
 	UpsertConfigarrDownloadClient(ctx context.Context, arg UpsertConfigarrDownloadClientParams) (UpsertConfigarrDownloadClientRow, error)
 	UpsertConfigarrInstance(ctx context.Context, arg UpsertConfigarrInstanceParams) (UpsertConfigarrInstanceRow, error)
 	UpsertDiscoveredDownloadClient(ctx context.Context, arg UpsertDiscoveredDownloadClientParams) (UpsertDiscoveredDownloadClientRow, error)
-	UpsertExternalViewer(ctx context.Context, arg UpsertExternalViewerParams) (User, error)
+	UpsertExternalUser(ctx context.Context, arg UpsertExternalUserParams) (User, error)
 	UpsertGateDecision(ctx context.Context, arg UpsertGateDecisionParams) error
 	UpsertGateSeries(ctx context.Context, arg UpsertGateSeriesParams) error
 	// The caller reads the row back with GetPolicy in the same transaction: scanning RETURNING *

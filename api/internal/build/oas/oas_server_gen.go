@@ -28,7 +28,7 @@ type Handler interface {
 	CompleteSetup(ctx context.Context, req *SetupRequest) (CompleteSetupRes, error)
 	// CreateAPIKey implements createAPIKey operation.
 	//
-	// Create a new API key for the current user.
+	// Create a new API key for the current user. Allowed for admin or requester (own keys).
 	//
 	// POST /auth/api-keys
 	CreateAPIKey(ctx context.Context, req *CreateApiKeyRequest) (CreateAPIKeyRes, error)
@@ -435,7 +435,7 @@ type Handler interface {
 	ResetState(ctx context.Context, req OptStateReset) (*StateResetResult, error)
 	// RevokeAPIKey implements revokeAPIKey operation.
 	//
-	// Revoke an API key.
+	// Revoke an API key. Allowed for admin or requester (own keys).
 	//
 	// DELETE /auth/api-keys/{id}
 	RevokeAPIKey(ctx context.Context, params RevokeAPIKeyParams) (RevokeAPIKeyRes, error)

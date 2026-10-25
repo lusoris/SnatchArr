@@ -87,12 +87,13 @@ type DataRoute = keyof typeof ROUTE_LISTS;
 const DATA_LISTS: readonly string[] = Object.values(ROUTE_LISTS).flat();
 const SESSION_PATH = '/api/v1/auth/session';
 
-export type Role = 'admin' | 'viewer';
+export type Role = 'admin' | 'requester' | 'viewer';
 
-// Role matrix of ADR-0023 (docs/sso.md): a viewer reads every list above, but CreateAPIKey is
-// admin-only, so a viewer's own key list stays empty and /account shows it no table.
+// Role matrix of ADR-0023 (docs/sso.md) and ADR-0026: a viewer reads every list above, but CreateAPIKey is
+// admin- or requester-only, so a viewer's own key list stays empty and /account shows it no table.
 const ROLE_LISTS: Record<Role, { readable: readonly string[]; neverFilled: readonly string[] }> = {
 	admin: { readable: DATA_LISTS, neverFilled: [] },
+	requester: { readable: DATA_LISTS, neverFilled: [] },
 	viewer: { readable: DATA_LISTS, neverFilled: ['/api/v1/auth/api-keys'] }
 };
 
@@ -155,7 +156,7 @@ async function minTablesFor(route: string, lists?: PageLists): Promise<number | 
 	if (!isDataRoute(route)) return undefined;
 	expect(lists, `${route}: collectLists(page) was not registered before page.goto`).toBeDefined();
 	await Promise.all(lists!.reads);
-	expect(lists!.role, `${route}: no session role seen`).toMatch(/^(admin|viewer)$/);
+	expect(lists!.role, `${route}: no session role seen`).toMatch(/^(admin|requester|viewer)$/);
 	return expectedTables(route, lists!.role!, lists!.lengths);
 }
 

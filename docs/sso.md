@@ -10,11 +10,14 @@ SnatchArr supports two single sign-on mechanisms:
 1. **OpenID Connect (OIDC)**: Authorization code flow with PKCE S256 against identity providers like Authentik, Keycloak, Okta, or Google.
 2. **Trusted reverse-proxy authentication**: Pre-authenticated user identity asserted via a reverse-proxy HTTP header (Authelia, Authentik proxy outpost, Cloudflare Access, Tailscale).
 
-Both modes resolve a role from the identity's groups ([ADR-0023](adr/0023-sso-viewer-role.md), `sso.ResolveRole` in `api/internal/sso/role.go`):
+Both modes resolve a role from the identity's groups ([ADR-0023](adr/0023-sso-viewer-role.md), [ADR-0026](adr/0026-accounts-and-roles.md), `sso.ResolveRole` in `api/internal/sso/role.go`):
 
 - A member of any admin group signs in as the local administrator account (`GetFirstAdmin` in `api/internal/store/queries/auth.sql`).
-- A member of a viewer group, and of no admin group, signs in as its own viewer account. The account is created on first sign-in and keyed by the identity in `users.external_id` (`UpsertExternalViewer`). Viewers read everything and get `403` on every change.
+- A member of a requester group, and of no admin group, signs in as its own requester account. The account is created on first sign-in and keyed by the identity in `users.external_id` (`UpsertExternalUser`). Requesters can manage their own API keys and submit requests.
+- A member of a viewer group, and of no admin or requester group, signs in as its own viewer account (`UpsertExternalUser`). Viewers read everything and get `403` on every change.
 - An identity in no mapped group is refused.
+
+Role precedence is `admin > requester > viewer`.
 
 Group names match exactly and case-sensitively; a name may contain spaces (`SnatchArr Viewers`), and only the space around each comma-separated entry is trimmed (`cleanTrusted` in `api/internal/config/config.go`). Both modes are disabled by default. If the initial setup has not been completed, SSO login attempts are refused until the admin account is created.
 
@@ -23,7 +26,7 @@ Group names match exactly and case-sensitively; a name may contain spaces (`Snat
 A single sign-on session stores its origin: the mode, the subject, the groups and the role it was granted (`SSOOrigin` in `api/internal/auth/ssoorigin.go`). Every cookie-authenticated request re-resolves the role against the current configuration (`checkSSOOrigin` in `api/internal/httpapi/security_sso.go`). When the mode is disabled, the identity's groups no longer map to a role, the role differs from the stored one, or the proxy asserts a different user, the session row is deleted and the request gets `401`; the log line `httpapi: sso session revoked` carries the reason. Sessions from the local login form are not affected.
 
 - **Proxy mode** judges the groups the proxy sends with each request, so removing an identity from its group in the identity provider ends the session on its next request.
-- **OIDC** has no per-request group source: the stored token groups are judged against the configured `admin_groups` and `viewer_groups`. Removing a group from the configuration ends its sessions on their next request; removing an identity from a group in the identity provider takes effect at its next sign-in.
+- **OIDC** has no per-request group source: the stored token groups are judged against the configured `admin_groups`, `requester_groups`, and `viewer_groups`. Removing a group from the configuration ends its sessions on their next request; removing an identity from a group in the identity provider takes effect at its next sign-in.
 
 ---
 
@@ -52,13 +55,14 @@ To configure OIDC:
 | `APP_SNATCHARR_OIDC_REDIRECT_URL` | `auth.oidc.redirectUrl` | `public.url` + `/api/v1/auth/oidc/callback` | OAuth2 redirect URL. |
 | `APP_SNATCHARR_OIDC_SCOPES` | `auth.oidc.scopes` | `openid,email,profile` | Comma-separated list of scopes. `openid` is always required and added automatically if omitted. |
 | `APP_SNATCHARR_OIDC_ADMIN_GROUPS` | `auth.oidc.adminGroups` | | Comma-separated groups whose members sign in as admin. Required. |
+| `APP_SNATCHARR_OIDC_REQUESTER_GROUPS` | `auth.oidc.requesterGroups` | | Comma-separated groups whose members sign in as requesters. |
 | `APP_SNATCHARR_OIDC_VIEWER_GROUPS` | `auth.oidc.viewerGroups` | | Comma-separated groups whose members sign in as viewers. |
 | `APP_SNATCHARR_OIDC_GROUPS_CLAIM` | `auth.oidc.groupsClaim` | `groups` | ID token claim holding the user's groups as a list of strings. |
 | `APP_SNATCHARR_OIDC_DISCOVERY_TIMEOUT` | `auth.oidc.discoveryTimeout` | `10s` | HTTP timeout for provider discovery and token exchange. |
 
 ### Security guarantees
 
-- **Mandatory admin group**: Startup fails if OIDC is enabled with an empty `admin_groups`, or with a group on both lists (`config.Validate` in `api/internal/config/config.go`).
+- **Mandatory admin group**: Startup fails if OIDC is enabled with an empty `admin_groups`, or with a group appearing in any two group lists (`config.Validate` in `api/internal/config/config.go`).
 - **Legacy allow-lists refused**: `allowed_subjects` and `allowed_emails` no longer grant access; startup fails while either is set, so a stale value cannot quietly keep or lose access.
 - **Missing or malformed groups**: A token without the groups claim, or with a claim that is not a list of strings, is refused.
 - **PKCE and state integrity**: Every login generates 32 random bytes for state, nonce, and PKCE verifier (`sso.LoginHandler` in `api/internal/sso/oidc.go`). State and nonce verification uses constant-time comparison.
@@ -90,6 +94,7 @@ When deploying behind an authenticating reverse proxy (such as Authelia, Authent
 | `APP_SNATCHARR_PROXY_AUTH_SECRET_HEADER` | `auth.proxyAuth.secretHeader` | `X-SnatchArr-Proxy-Secret` | Name of the incoming header containing the shared proxy authentication secret. |
 | `APP_SNATCHARR_PROXY_AUTH_SECRET` | via `auth.proxyAuth.existingSecret` | | Shared secret the reverse proxy must send (min 32 bytes after leading and trailing whitespace is trimmed, so a secret file's trailing newline is harmless). Never committed or inlined in values files. |
 | `APP_SNATCHARR_PROXY_AUTH_ADMIN_GROUPS` | `auth.proxyAuth.adminGroups` | | Comma-separated groups whose members sign in as admin. Required. |
+| `APP_SNATCHARR_PROXY_AUTH_REQUESTER_GROUPS` | `auth.proxyAuth.requesterGroups` | | Comma-separated groups whose members sign in as requesters. |
 | `APP_SNATCHARR_PROXY_AUTH_VIEWER_GROUPS` | `auth.proxyAuth.viewerGroups` | | Comma-separated groups whose members sign in as viewers. |
 
 ### Reverse proxy configuration

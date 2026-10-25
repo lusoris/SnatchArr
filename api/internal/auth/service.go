@@ -39,9 +39,9 @@ const (
 // SessionUserKey is the session data key holding the authenticated user's ID.
 const SessionUserKey = "user_id"
 
-// ExternalViewerSentinelHash is stored as password_hash for SSO viewer users.
+// ExternalAccountSentinelHash is stored as password_hash for external SSO accounts.
 // It is never a valid argon2id hash and auth.Login refuses it before VerifyPassword.
-const ExternalViewerSentinelHash = "!sso-viewer-sentinel-hash!"
+const ExternalAccountSentinelHash = "!sso-viewer-sentinel-hash!"
 
 // Service handles setup and login.
 type Service struct {
@@ -141,9 +141,9 @@ func (s *Service) Login(ctx context.Context, username, password, clientIP string
 		return domain.User{}, err
 	}
 	row, err := s.st.Q().GetUserByUsername(ctx, trimmedUser)
-	if err == nil && row.PasswordHash == ExternalViewerSentinelHash {
+	if err == nil && row.PasswordHash == ExternalAccountSentinelHash {
 		s.recordFailures(ctx, userKey, ipKey)
-		s.logger.InfoContext(ctx, "auth: login rejected: external viewer", slog.String("username", username), slog.String("ip", ip))
+		s.logger.InfoContext(ctx, "auth: login rejected: external account", slog.String("username", username), slog.String("ip", ip))
 		return domain.User{}, fmt.Errorf("%w: invalid username or password", domain.ErrUnauthorized)
 	}
 	hash := s.dummyHash
@@ -227,15 +227,19 @@ func (s *Service) FirstAdmin(ctx context.Context) (domain.User, error) {
 	return userFromRow(row), nil
 }
 
-// ExternalViewerUsername derives the deterministic handle for an external SSO identity.
-func ExternalViewerUsername(prefix, identity string) string {
+// ExternalUsername derives the deterministic handle for an external SSO identity.
+func ExternalUsername(prefix, identity string) string {
 	h := sha256.Sum256([]byte(identity))
 	return prefix + hex.EncodeToString(h[:])[:16]
 }
 
-// ProvisionExternalViewer creates or loads a viewer account mapped to an SSO external identity.
-// Refuses viewer provisioning while setup is incomplete (SetupComplete false).
-func (s *Service) ProvisionExternalViewer(ctx context.Context, prefix, identity string) (domain.User, error) {
+// ProvisionExternalUser creates or loads an external account mapped to an SSO identity.
+// Refuses admin and invalid roles with domain.ErrInvalid (admins map to FirstAdmin).
+// Refuses user provisioning while setup is incomplete (SetupComplete false).
+func (s *Service) ProvisionExternalUser(ctx context.Context, prefix, identity string, role domain.Role) (domain.User, error) {
+	if !role.Valid() || role == domain.RoleAdmin {
+		return domain.User{}, fmt.Errorf("%w: invalid external user role %q", domain.ErrInvalid, role)
+	}
 	setupDone, err := s.SetupComplete(ctx)
 	if err != nil {
 		return domain.User{}, err
@@ -247,21 +251,22 @@ func (s *Service) ProvisionExternalViewer(ctx context.Context, prefix, identity 
 	if trimmed == "" {
 		return domain.User{}, fmt.Errorf("%w: empty external identity", domain.ErrInvalid)
 	}
-	username := ExternalViewerUsername(prefix, trimmed)
+	username := ExternalUsername(prefix, trimmed)
 	newID, err := s.ids.NewUUID()
 	if err != nil {
 		return domain.User{}, fmt.Errorf("auth: new id: %w", err)
 	}
 	now := s.clk.Now()
-	row, err := s.st.Q().UpsertExternalViewer(ctx, sqlcgen.UpsertExternalViewerParams{
+	row, err := s.st.Q().UpsertExternalUser(ctx, sqlcgen.UpsertExternalUserParams{
 		ID:           newID,
 		Username:     username,
-		PasswordHash: ExternalViewerSentinelHash,
+		PasswordHash: ExternalAccountSentinelHash,
+		Role:         string(role),
 		ExternalID:   &trimmed,
 		CreatedAt:    now,
 	})
 	if err != nil {
-		return domain.User{}, fmt.Errorf("auth: upsert viewer: %w", store.MapError(err))
+		return domain.User{}, fmt.Errorf("auth: upsert external user: %w", store.MapError(err))
 	}
 	return userFromRow(row), nil
 }

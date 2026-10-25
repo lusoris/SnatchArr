@@ -19,14 +19,16 @@ func TestCheckSSOOrigin_Table(t *testing.T) {
 
 	baseCfg := ssoConfig{
 		OIDC: config.OIDCOptions{
-			Enabled:      true,
-			AdminGroups:  []string{"oidc-admins"},
-			ViewerGroups: []string{"oidc-viewers", "SnatchArr Viewers"},
+			Enabled:         true,
+			AdminGroups:     []string{"oidc-admins"},
+			RequesterGroups: []string{"oidc-requesters"},
+			ViewerGroups:    []string{"oidc-viewers", "SnatchArr Viewers"},
 		},
 		ProxyAuth: config.ProxyAuthOptions{
-			Enabled:      true,
-			AdminGroups:  []string{"proxy-admins"},
-			ViewerGroups: []string{"proxy-viewers", "SnatchArr Viewers"},
+			Enabled:         true,
+			AdminGroups:     []string{"proxy-admins"},
+			RequesterGroups: []string{"proxy-requesters"},
+			ViewerGroups:    []string{"proxy-viewers", "SnatchArr Viewers"},
 		},
 	}
 
@@ -44,6 +46,16 @@ func TestCheckSSOOrigin_Table(t *testing.T) {
 				Subject: "sub-1",
 				Groups:  []string{"oidc-viewers"},
 				Role:    domain.RoleViewer,
+			},
+			wantReason: "",
+		},
+		{
+			name: "oidc requester allowed",
+			origin: auth.SSOOrigin{
+				Source:  "oidc",
+				Subject: "sub-req",
+				Groups:  []string{"oidc-requesters"},
+				Role:    domain.RoleRequester,
 			},
 			wantReason: "",
 		},
@@ -94,6 +106,20 @@ func TestCheckSSOOrigin_Table(t *testing.T) {
 				Subject: "proxy-user-1",
 				Groups:  []string{"old-group"},
 				Role:    domain.RoleViewer,
+			},
+			wantReason: "",
+		},
+		{
+			name: "proxy live groups requester allowed",
+			ctxMod: func(ctx context.Context) context.Context {
+				ctx = sso.WithProxyUser(ctx, "proxy-user-req")
+				return sso.WithProxyGroups(ctx, []string{"proxy-requesters"})
+			},
+			origin: auth.SSOOrigin{
+				Source:  "proxy",
+				Subject: "proxy-user-req",
+				Groups:  []string{"old-group"},
+				Role:    domain.RoleRequester,
 			},
 			wantReason: "",
 		},

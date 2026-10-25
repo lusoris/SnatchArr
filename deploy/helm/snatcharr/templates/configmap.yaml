@@ -55,6 +55,9 @@ data:
   {{- fail "auth.oidc.adminGroups must name at least one group when auth.oidc.enabled is true" }}
   {{- end }}
   APP_SNATCHARR_OIDC_ADMIN_GROUPS: {{ join "," .Values.auth.oidc.adminGroups | quote }}
+  {{- if .Values.auth.oidc.requesterGroups }}
+  APP_SNATCHARR_OIDC_REQUESTER_GROUPS: {{ join "," .Values.auth.oidc.requesterGroups | quote }}
+  {{- end }}
   {{- if .Values.auth.oidc.viewerGroups }}
   APP_SNATCHARR_OIDC_VIEWER_GROUPS: {{ join "," .Values.auth.oidc.viewerGroups | quote }}
   {{- end }}
@@ -83,6 +86,9 @@ data:
   {{- fail "auth.proxyAuth.adminGroups must name at least one group when auth.proxyAuth.enabled is true" }}
   {{- end }}
   APP_SNATCHARR_PROXY_AUTH_ADMIN_GROUPS: {{ join "," .Values.auth.proxyAuth.adminGroups | quote }}
+  {{- if .Values.auth.proxyAuth.requesterGroups }}
+  APP_SNATCHARR_PROXY_AUTH_REQUESTER_GROUPS: {{ join "," .Values.auth.proxyAuth.requesterGroups | quote }}
+  {{- end }}
   {{- if .Values.auth.proxyAuth.viewerGroups }}
   APP_SNATCHARR_PROXY_AUTH_VIEWER_GROUPS: {{ join "," .Values.auth.proxyAuth.viewerGroups | quote }}
   {{- end }}

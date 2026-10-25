@@ -42,7 +42,7 @@ func (UnimplementedHandler) CompleteSetup(ctx context.Context, req *SetupRequest
 
 // CreateAPIKey implements createAPIKey operation.
 //
-// Create a new API key for the current user.
+// Create a new API key for the current user. Allowed for admin or requester (own keys).
 //
 // POST /auth/api-keys
 func (UnimplementedHandler) CreateAPIKey(ctx context.Context, req *CreateApiKeyRequest) (r CreateAPIKeyRes, _ error) {
@@ -650,7 +650,7 @@ func (UnimplementedHandler) ResetState(ctx context.Context, req OptStateReset) (
 
 // RevokeAPIKey implements revokeAPIKey operation.
 //
-// Revoke an API key.
+// Revoke an API key. Allowed for admin or requester (own keys).
 //
 // DELETE /auth/api-keys/{id}
 func (UnimplementedHandler) RevokeAPIKey(ctx context.Context, params RevokeAPIKeyParams) (r RevokeAPIKeyRes, _ error) {

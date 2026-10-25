@@ -101,7 +101,7 @@ func validateRole(raw any) (domain.Role, error) {
 		return "", errors.New("auth: malformed sso_role")
 	}
 	role := domain.Role(roleStr)
-	if role != domain.RoleAdmin && role != domain.RoleViewer {
+	if !role.Valid() {
 		return "", errors.New("auth: invalid sso_role")
 	}
 	return role, nil

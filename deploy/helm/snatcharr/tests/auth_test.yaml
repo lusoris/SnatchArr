@@ -30,6 +30,9 @@ tests:
             - profile
           adminGroups:
             - "snatcharr-admins"
+          requesterGroups:
+            - "snatcharr-requesters"
+            - "family"
           viewerGroups:
             - "snatcharr-viewers"
             - "readers"
@@ -46,6 +49,7 @@ tests:
             APP_SNATCHARR_OIDC_CLIENT_ID: "snatcharr-client"
             APP_SNATCHARR_OIDC_SCOPES: "openid,email,profile"
             APP_SNATCHARR_OIDC_ADMIN_GROUPS: "snatcharr-admins"
+            APP_SNATCHARR_OIDC_REQUESTER_GROUPS: "snatcharr-requesters,family"
             APP_SNATCHARR_OIDC_VIEWER_GROUPS: "snatcharr-viewers,readers"
             APP_SNATCHARR_OIDC_GROUPS_CLAIM: "groups"
       - template: api-deployment.yaml
@@ -95,6 +99,9 @@ tests:
           adminGroups:
             - "admins"
             - "leads"
+          requesterGroups:
+            - "requesters"
+            - "family"
           viewerGroups:
             - "viewers"
     asserts:
@@ -108,6 +115,7 @@ tests:
             APP_SNATCHARR_PROXY_AUTH_TRUSTED_CIDRS: "10.0.0.0/8,172.16.0.0/12"
             APP_SNATCHARR_PROXY_AUTH_GROUPS_HEADER: "X-authentik-groups"
             APP_SNATCHARR_PROXY_AUTH_ADMIN_GROUPS: "admins,leads"
+            APP_SNATCHARR_PROXY_AUTH_REQUESTER_GROUPS: "requesters,family"
             APP_SNATCHARR_PROXY_AUTH_VIEWER_GROUPS: "viewers"
       - template: api-deployment.yaml
         contains:
@@ -158,7 +166,7 @@ tests:
         failedTemplate:
           errorMessage: "auth.proxyAuth.adminGroups must name at least one group when auth.proxyAuth.enabled is true"
 
-  - it: boundary - one admin group and no viewer group renders no viewer key
+  - it: boundary - one admin group and no viewer or requester group renders neither key
     set:
       auth:
         proxyAuth:
@@ -173,6 +181,9 @@ tests:
         equal:
           path: data.APP_SNATCHARR_PROXY_AUTH_ADMIN_GROUPS
           value: "admins"
+      - template: configmap.yaml
+        isNull:
+          path: data.APP_SNATCHARR_PROXY_AUTH_REQUESTER_GROUPS
       - template: configmap.yaml
         isNull:
           path: data.APP_SNATCHARR_PROXY_AUTH_VIEWER_GROUPS

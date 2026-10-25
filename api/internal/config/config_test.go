@@ -91,6 +91,15 @@ func TestValidate(t *testing.T) {
 			o.OIDC.AdminGroups = []string{"admin"}
 			o.OIDC.ViewerGroups = []string{"viewer"}
 		}, nil, false},
+		{"positive oidc with requester groups", func(o *config.Options) {
+			o.OIDC.Enabled = true
+			o.OIDC.IssuerURL = "https://idp.example.com"
+			o.OIDC.ClientID = "client-id"
+			o.OIDC.RedirectURL = "https://snatcharr.example.com/api/v1/auth/oidc/callback"
+			o.OIDC.AdminGroups = []string{"admin"}
+			o.OIDC.RequesterGroups = []string{"requester"}
+			o.OIDC.ViewerGroups = []string{"viewer"}
+		}, nil, false},
 		{"boundary oidc dev allows http issuer", func(o *config.Options) {
 			o.Profile = config.ProfileDev
 			o.Worker.Token = ""
@@ -167,6 +176,23 @@ func TestValidate(t *testing.T) {
 			o.OIDC.AdminGroups = []string{"ops"}
 			o.OIDC.ViewerGroups = []string{"ops"}
 		}, nil, true},
+		{"negative oidc group on both admin and requester lists", func(o *config.Options) {
+			o.OIDC.Enabled = true
+			o.OIDC.IssuerURL = "https://idp.example.com"
+			o.OIDC.ClientID = "client-id"
+			o.OIDC.RedirectURL = "https://snatcharr.example.com/api/v1/auth/oidc/callback"
+			o.OIDC.AdminGroups = []string{"ops"}
+			o.OIDC.RequesterGroups = []string{"ops"}
+		}, nil, true},
+		{"negative oidc group on both requester and viewer lists", func(o *config.Options) {
+			o.OIDC.Enabled = true
+			o.OIDC.IssuerURL = "https://idp.example.com"
+			o.OIDC.ClientID = "client-id"
+			o.OIDC.RedirectURL = "https://snatcharr.example.com/api/v1/auth/oidc/callback"
+			o.OIDC.AdminGroups = []string{"admin"}
+			o.OIDC.RequesterGroups = []string{"family"}
+			o.OIDC.ViewerGroups = []string{"family"}
+		}, nil, true},
 		{"positive proxy auth valid", func(o *config.Options) {
 			o.ProxyAuth.Enabled = true
 			o.ProxyAuth.Header = "Remote-User"
@@ -184,6 +210,35 @@ func TestValidate(t *testing.T) {
 			o.ProxyAuth.AdminGroups = []string{"admin"}
 			o.ProxyAuth.ViewerGroups = []string{"viewer"}
 		}, nil, false},
+		{"positive proxy auth with requester groups", func(o *config.Options) {
+			o.ProxyAuth.Enabled = true
+			o.ProxyAuth.Header = "Remote-User"
+			o.ProxyAuth.GroupsHeader = "X-authentik-groups"
+			o.ProxyAuth.Secret = strings.Repeat("s", 32)
+			o.ProxyAuth.TrustedCIDRs = []string{"10.0.0.0/8"}
+			o.ProxyAuth.AdminGroups = []string{"admin"}
+			o.ProxyAuth.RequesterGroups = []string{"requester"}
+			o.ProxyAuth.ViewerGroups = []string{"viewer"}
+		}, nil, false},
+		{"negative proxy auth group on both admin and requester lists", func(o *config.Options) {
+			o.ProxyAuth.Enabled = true
+			o.ProxyAuth.Header = "Remote-User"
+			o.ProxyAuth.GroupsHeader = "X-authentik-groups"
+			o.ProxyAuth.Secret = strings.Repeat("s", 32)
+			o.ProxyAuth.TrustedCIDRs = []string{"10.0.0.0/8"}
+			o.ProxyAuth.AdminGroups = []string{"admin"}
+			o.ProxyAuth.RequesterGroups = []string{"admin"}
+		}, nil, true},
+		{"negative proxy auth group on both requester and viewer lists", func(o *config.Options) {
+			o.ProxyAuth.Enabled = true
+			o.ProxyAuth.Header = "Remote-User"
+			o.ProxyAuth.GroupsHeader = "X-authentik-groups"
+			o.ProxyAuth.Secret = strings.Repeat("s", 32)
+			o.ProxyAuth.TrustedCIDRs = []string{"10.0.0.0/8"}
+			o.ProxyAuth.AdminGroups = []string{"admin"}
+			o.ProxyAuth.RequesterGroups = []string{"viewer"}
+			o.ProxyAuth.ViewerGroups = []string{"viewer"}
+		}, nil, true},
 		{"negative proxy auth empty header", func(o *config.Options) {
 			o.ProxyAuth.Enabled = true
 			o.ProxyAuth.Header = ""
@@ -631,6 +686,17 @@ func TestLoadCompoundKeysFromEnv(t *testing.T) {
 			},
 		},
 		{
+			name: "oidc requester_groups comma-split",
+			env:  map[string]string{"APP_SNATCHARR_OIDC_REQUESTER_GROUPS": "requester, family"},
+			assertFn: func(t *testing.T, opts config.Options) {
+				t.Helper()
+				want := []string{"requester", "family"}
+				if !slices.Equal(opts.OIDC.RequesterGroups, want) {
+					t.Fatalf("OIDC.RequesterGroups = %v, want %v", opts.OIDC.RequesterGroups, want)
+				}
+			},
+		},
+		{
 			name: "oidc viewer_groups comma-split",
 			env:  map[string]string{"APP_SNATCHARR_OIDC_VIEWER_GROUPS": "viewer, guest"},
 			assertFn: func(t *testing.T, opts config.Options) {
@@ -715,6 +781,17 @@ func TestLoadCompoundKeysFromEnv(t *testing.T) {
 				want := []string{"admin", "ops"}
 				if !slices.Equal(opts.ProxyAuth.AdminGroups, want) {
 					t.Fatalf("ProxyAuth.AdminGroups = %v, want %v", opts.ProxyAuth.AdminGroups, want)
+				}
+			},
+		},
+		{
+			name: "proxy_auth requester_groups comma-split",
+			env:  map[string]string{"APP_SNATCHARR_PROXY_AUTH_REQUESTER_GROUPS": "requester, family"},
+			assertFn: func(t *testing.T, opts config.Options) {
+				t.Helper()
+				want := []string{"requester", "family"}
+				if !slices.Equal(opts.ProxyAuth.RequesterGroups, want) {
+					t.Fatalf("ProxyAuth.RequesterGroups = %v, want %v", opts.ProxyAuth.RequesterGroups, want)
 				}
 			},
 		},

@@ -8401,14 +8401,16 @@ func (s *User) SetRole(val UserRole) {
 type UserRole string
 
 const (
-	UserRoleAdmin  UserRole = "admin"
-	UserRoleViewer UserRole = "viewer"
+	UserRoleAdmin     UserRole = "admin"
+	UserRoleRequester UserRole = "requester"
+	UserRoleViewer    UserRole = "viewer"
 )
 
 // AllValues returns all UserRole values.
 func (UserRole) AllValues() []UserRole {
 	return []UserRole{
 		UserRoleAdmin,
+		UserRoleRequester,
 		UserRoleViewer,
 	}
 }
@@ -8417,6 +8419,8 @@ func (UserRole) AllValues() []UserRole {
 func (s UserRole) MarshalText() ([]byte, error) {
 	switch s {
 	case UserRoleAdmin:
+		return []byte(s), nil
+	case UserRoleRequester:
 		return []byte(s), nil
 	case UserRoleViewer:
 		return []byte(s), nil
@@ -8430,6 +8434,9 @@ func (s *UserRole) UnmarshalText(data []byte) error {
 	switch UserRole(data) {
 	case UserRoleAdmin:
 		*s = UserRoleAdmin
+		return nil
+	case UserRoleRequester:
+		*s = UserRoleRequester
 		return nil
 	case UserRoleViewer:
 		*s = UserRoleViewer

@@ -308,7 +308,7 @@ func (h *Handlers) CreateProxySession(ctx context.Context) (oas.CreateProxySessi
 		return nil, domain.ErrUnauthorized
 	}
 	groups, _ := sso.ProxyGroupsFromContext(ctx)
-	role, ok := sso.ResolveRole(groups, h.cfg.ProxyAuth.AdminGroups, h.cfg.ProxyAuth.ViewerGroups)
+	role, ok := sso.ResolveRole(groups, h.cfg.ProxyAuth.AdminGroups, h.cfg.ProxyAuth.RequesterGroups, h.cfg.ProxyAuth.ViewerGroups)
 	if !ok {
 		h.logger.WarnContext(ctx, "sso: proxy login refused",
 			slog.String("reason", "not_authorized"),
@@ -333,9 +333,9 @@ func (h *Handlers) CreateProxySession(ctx context.Context) (oas.CreateProxySessi
 		}
 		return h.startSession(ctx, admin, &origin)
 	}
-	viewer, err := h.auth.ProvisionExternalViewer(ctx, "proxy-", user)
+	externalUser, err := h.auth.ProvisionExternalUser(ctx, "proxy-", user, role)
 	if err != nil {
 		return nil, err
 	}
-	return h.startSession(ctx, viewer, &origin)
+	return h.startSession(ctx, externalUser, &origin)
 }

@@ -178,6 +178,17 @@ func TestSSOOriginFrom_Table(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name: "positive requester",
+			setup: func(s *session.Session) {
+				s.Set(SessionSSOSourceKey, "proxy")
+				s.Set(SessionSSOSubjectKey, "charlie")
+				s.Set(SessionSSOGroupsKey, string(validGroups))
+				s.Set(SessionSSORoleKey, string(domain.RoleRequester))
+			},
+			wantOK:  true,
+			wantErr: false,
+		},
+		{
 			name: "positive viewer",
 			setup: func(s *session.Session) {
 				s.Set(SessionSSOSourceKey, "proxy")
