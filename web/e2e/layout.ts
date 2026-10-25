@@ -22,6 +22,7 @@ export const AUTH_ROUTES = [
 	'/activity?source=live',
 	'/activity?source=log',
 	'/automation',
+	'/automation?tab=caps',
 	'/connections',
 	'/connections/configarr',
 	'/connections/download-clients',
@@ -44,6 +45,7 @@ export const MIN_TABLES: Record<(typeof AUTH_ROUTES)[number], number> = {
 	'/activity?source=live': 0,
 	'/activity?source=log': 0,
 	'/automation': 1,
+	'/automation?tab=caps': 0,
 	'/connections': 0,
 	'/connections/configarr': 0,
 	'/connections/download-clients': 0,
@@ -531,7 +533,11 @@ export async function assertDesktopWidth(page: Page, route: string): Promise<voi
 
 export const SCROLL_BUDGET_ROUTES = [
 	'/',
+	'/automation',
+	'/automation?tab=caps',
+	'/connections',
 	'/instances',
+	'/instances/[id]',
 	'/activity',
 	'/activity?source=log',
 	'/instances/[id]/activity'
@@ -557,6 +563,25 @@ export async function assertScrollBudget(
 	).toBeLessThanOrEqual(limit);
 }
 
+export async function assertTableFits(page: Page, tableSelector = 'table'): Promise<void> {
+	const fit = await page.evaluate((sel) => {
+		const table = document.querySelector<HTMLElement>(sel);
+		if (!table) return null;
+		const container = table.closest<HTMLElement>('.overflow-x-auto') ?? table.parentElement;
+		if (!container) return null;
+		return {
+			scrollWidth: table.scrollWidth,
+			clientWidth: container.clientWidth
+		};
+	}, tableSelector);
+
+	expect(fit, `table matching "${tableSelector}" not found in page`).not.toBeNull();
+	expect(
+		fit!.scrollWidth,
+		`table (${fit!.scrollWidth}px) exceeds container (${fit!.clientWidth}px)`
+	).toBeLessThanOrEqual(fit!.clientWidth);
+}
+
 export interface PendingRoute {
 	pr: 'C' | 'D' | 'E' | 'F' | 'G';
 	/** ISO date (YYYY-MM-DD); past it the entry fails like a missing one. */
@@ -565,10 +590,6 @@ export interface PendingRoute {
 }
 
 export const WIDTH_PENDING: Record<string, PendingRoute> = {
-	'/instances/[id]': { pr: 'D', expires: '2026-11-23', reason: 'narrow content wrapper' },
-	'/instances/[id]/memory': { pr: 'D', expires: '2026-11-23', reason: 'narrow content wrapper' },
-	'/instances/[id]/policy': { pr: 'D', expires: '2026-11-23', reason: 'narrow content wrapper' },
-	'/connections/configarr': { pr: 'F', expires: '2026-11-23', reason: 'narrow content wrapper' },
 	'/system': { pr: 'G', expires: '2026-11-23', reason: 'narrow content wrapper' },
 	'/system?tab=about': { pr: 'G', expires: '2026-11-23', reason: 'narrow content wrapper' }
 };

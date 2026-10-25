@@ -33,7 +33,7 @@ SPDX-License-Identifier: EUPL-1.2
 	});
 </script>
 
-<section class="card mb-6 flex max-w-xl flex-col gap-3" aria-labelledby="memory-title">
+<section class="card mb-6 flex flex-col gap-3" aria-labelledby="memory-title">
 	<h2 id="memory-title" class="text-lg font-semibold">{m.memory_title()}</h2>
 	<ConfirmAction
 		{label}

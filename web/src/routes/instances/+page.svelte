@@ -13,6 +13,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import PageHeader from '#lib/components/PageHeader.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import ResetMemory from '#lib/components/ResetMemory.svelte';
+	import StatusIcon from '#lib/components/StatusIcon.svelte';
 	import UrlText from '#lib/components/UrlText.svelte';
 	import type { AppKind } from '#lib/kinds.js';
 	import { m } from '#lib/paraglide/messages.js';
@@ -74,8 +75,8 @@ SPDX-License-Identifier: EUPL-1.2
 {:else if instances.isError}
 	<ProblemNote error={instances.error} />
 {:else}
-	<div class="relative overflow-x-auto">
-		<table class="mb-6 table">
+	<div class="relative w-full overflow-x-auto rounded-lg border border-line">
+		<table class="compact-table table w-full">
 			<caption class="sr-only">{m.nav_instances()}</caption>
 			<thead>
 				<tr>
@@ -103,10 +104,9 @@ SPDX-License-Identifier: EUPL-1.2
 						<td>{inst.source}</td>
 						<td>
 							{#if inst.enabled}
-								<span aria-hidden="true">✓</span><span class="sr-only">{m.instance_enabled()}</span>
+								<StatusIcon status="ok" label={m.instance_enabled()} size={16} />
 							{:else}
-								<span aria-hidden="true">–</span><span class="sr-only">{m.instance_disabled()}</span
-								>
+								<StatusIcon status="disabled" label={m.instance_disabled()} size={16} />
 							{/if}
 						</td>
 						<td><CheckState instance={inst} /></td>
@@ -128,52 +128,81 @@ SPDX-License-Identifier: EUPL-1.2
 {/if}
 
 {#if session.isAdmin}
-	<section class="card max-w-xl" aria-labelledby="add-instance">
-		<h2 id="add-instance" class="mb-3 text-lg font-semibold">{m.instance_add()}</h2>
-		<form
-			class="flex flex-col gap-3"
-			onsubmit={(e) => {
-				e.preventDefault();
-				create.mutate();
-			}}
-		>
-			<KindSelect bind:value={kind} />
-			<Field id="name" label={m.instance_name()}>
-				<input id="name" class="input" required maxlength="64" bind:value={name} />
-			</Field>
-			<Field id="base_url" label={m.instance_url()} hint="http://sonarr:8989">
-				<input
-					id="base_url"
-					class="input"
-					required
-					inputmode="url"
-					bind:value={baseUrl}
-					aria-describedby="base_url-hint"
-				/>
-			</Field>
-			<Field id="api_key" label={m.instance_api_key()}>
-				<input
-					id="api_key"
-					class="input"
-					type="password"
-					autocomplete="off"
-					required
-					minlength="8"
-					bind:value={apiKey}
-				/>
-			</Field>
-			<div class="flex gap-2">
-				<button type="button" class="btn" onclick={() => probe.mutate()} disabled={probe.isPending}
-					>{m.instance_test()}</button
-				>
-				<button type="submit" class="btn btn-primary" disabled={create.isPending}
-					>{m.instance_save()}</button
-				>
-			</div>
-		</form>
-	</section>
+	<div class="mt-8 grid gap-6 xl:grid-cols-12">
+		<section class="card xl:col-span-8" aria-labelledby="add-instance">
+			<h2 id="add-instance" class="mb-4 text-lg font-semibold">{m.instance_add()}</h2>
+			<form
+				class="grid gap-4 sm:grid-cols-2"
+				onsubmit={(e) => {
+					e.preventDefault();
+					create.mutate();
+				}}
+			>
+				<div class="sm:col-span-2">
+					<KindSelect bind:value={kind} />
+				</div>
+				<Field id="name" label={m.instance_name()}>
+					<input id="name" class="input" required maxlength="64" bind:value={name} />
+				</Field>
+				<Field id="base_url" label={m.instance_url()} hint="http://sonarr:8989">
+					<input
+						id="base_url"
+						class="input"
+						required
+						inputmode="url"
+						bind:value={baseUrl}
+						aria-describedby="base_url-hint"
+					/>
+				</Field>
+				<div class="sm:col-span-2">
+					<Field id="api_key" label={m.instance_api_key()}>
+						<input
+							id="api_key"
+							class="input"
+							type="password"
+							autocomplete="off"
+							required
+							minlength="8"
+							bind:value={apiKey}
+						/>
+					</Field>
+				</div>
+				<div class="flex gap-2 sm:col-span-2">
+					<button
+						type="button"
+						class="btn"
+						onclick={() => probe.mutate()}
+						disabled={probe.isPending}>{m.instance_test()}</button
+					>
+					<button type="submit" class="btn btn-primary" disabled={create.isPending}
+						>{m.instance_save()}</button
+					>
+				</div>
+			</form>
+		</section>
 
-	<div class="mt-6">
-		<ResetMemory />
+		<div class="xl:col-span-4">
+			<ResetMemory />
+		</div>
 	</div>
 {/if}
+
+<style>
+	.compact-table tbody tr {
+		height: 2.75rem;
+	}
+	@media (min-width: 1280px) {
+		.compact-table tbody tr {
+			height: 2.25rem;
+		}
+		.compact-table :global(.btn) {
+			min-height: 1.75rem;
+			padding: 0.15rem 0.5rem;
+			font-size: 0.75rem;
+		}
+	}
+	.compact-table th,
+	.compact-table td {
+		vertical-align: middle;
+	}
+</style>

@@ -18,10 +18,19 @@ describe('UrlText', () => {
 
 		// Verifies accessible plain text and copy/paste yields exact URL without extra characters
 		expect(span?.textContent).toBe(url);
+		expect(span?.getAttribute('title')).toBe(url);
 
 		const wbrs = container.querySelectorAll('wbr');
 		// 7 segments means 6 <wbr> elements
 		expect(wbrs.length).toBe(6);
+	});
+
+	it('positive: custom title overrides default URL title attribute', () => {
+		const url = 'http://127.0.0.1:9091';
+		const { container } = render(UrlText, { props: { url, title: 'Custom Tooltip' } });
+
+		const span = container.querySelector('[data-url]');
+		expect(span?.getAttribute('title')).toBe('Custom Tooltip');
 	});
 
 	it('negative: handles empty URL without throwing', () => {

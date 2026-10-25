@@ -6,8 +6,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { screen, within } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import CapsPresetsForm from '#lib/components/CapsPresetsForm.svelte';
 import InstancePolicyTab from '#lib/components/instance/InstancePolicyTab.svelte';
 import QueuePolicy from '#lib/components/QueuePolicy.svelte';
+import { m } from '#lib/paraglide/messages.js';
 import {
 	forkInstance,
 	renderWithQuery,
@@ -176,10 +178,17 @@ describe('Field coverage against openapi.yaml', () => {
 			'/notifications/rules': []
 		});
 
-		const { container } = renderWithQuery(GeneralTab);
-		await screen.findByRole('heading', { level: 2 });
+		const { container: generalContainer } = renderWithQuery(GeneralTab);
+		await screen.findByRole('heading', { level: 2, name: m.settings_title() });
 
-		const missing = checkFieldCoverage(container, expectedProps);
+		const { container: capsContainer } = renderWithQuery(CapsPresetsForm);
+		await screen.findByLabelText(m.settings_global_cap());
+
+		const combined = document.createElement('div');
+		combined.appendChild(generalContainer.cloneNode(true));
+		combined.appendChild(capsContainer.cloneNode(true));
+
+		const missing = checkFieldCoverage(combined, expectedProps);
 		expect(missing).toEqual([]);
 	});
 

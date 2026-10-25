@@ -12,9 +12,21 @@ SPDX-License-Identifier: EUPL-1.2
 		status?: Snippet;
 		actions?: Snippet;
 		documentTitle?: boolean;
+		sticky?: boolean;
+		class?: string;
+		children?: Snippet;
 	}
 
-	const { title, description, status, actions, documentTitle = false }: Props = $props();
+	const {
+		title,
+		description,
+		status,
+		actions,
+		documentTitle = false,
+		sticky = false,
+		class: className = '',
+		children
+	}: Props = $props();
 </script>
 
 <svelte:head>
@@ -23,21 +35,30 @@ SPDX-License-Identifier: EUPL-1.2
 	{/if}
 </svelte:head>
 
-<header class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-	<div>
-		<div class="flex flex-wrap items-center gap-2.5">
-			<h1 class="text-2xl font-semibold tracking-tight text-fg">{title}</h1>
-			{#if status}
-				{@render status()}
+<header
+	class="mb-6 flex flex-col gap-3 {sticky
+		? 'sticky top-0 z-10 -mx-4 bg-bg/95 px-4 pt-1 pb-2 backdrop-blur-md md:-mx-6 md:px-6'
+		: ''} {className}"
+>
+	<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+		<div>
+			<div class="flex flex-wrap items-center gap-2.5">
+				<h1 class="text-2xl font-semibold tracking-tight text-fg">{title}</h1>
+				{#if status}
+					{@render status()}
+				{/if}
+			</div>
+			{#if description}
+				<p class="mt-1 text-sm text-subtle">{description}</p>
 			{/if}
 		</div>
-		{#if description}
-			<p class="mt-1 text-sm text-subtle">{description}</p>
+		{#if actions}
+			<div class="flex items-center gap-2">
+				{@render actions()}
+			</div>
 		{/if}
 	</div>
-	{#if actions}
-		<div class="flex items-center gap-2">
-			{@render actions()}
-		</div>
+	{#if children}
+		{@render children()}
 	{/if}
 </header>

@@ -12,6 +12,7 @@ import {
 	assertDesktopWidth,
 	assertRenderedLayout,
 	assertScrollBudget,
+	assertTableFits,
 	assertTouchTargetHeights,
 	AUTH_ROUTES,
 	collectLists,
@@ -580,4 +581,16 @@ test('authenticated: layout touch target height gate fixtures and planted negati
 		'<button type="button" class="btn" style="display: none; height: 32px">Action</button>'
 	);
 	await expect(assertTouchTargetHeights(page, '/test-hidden')).resolves.not.toThrow();
+});
+
+test('authenticated: layout /connections/download-clients table fits at 1280', async ({ page }) => {
+	await page.setViewportSize({ width: 1280, height: 800 });
+	await page.goto('/connections/download-clients');
+	await page.waitForLoadState('networkidle');
+
+	const table = page.locator('table');
+	await expect(table).toBeVisible();
+	await expect(table.getByText(/connection refused/i).first()).toBeVisible();
+
+	await assertTableFits(page, 'table');
 });

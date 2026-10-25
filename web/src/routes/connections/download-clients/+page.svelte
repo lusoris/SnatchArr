@@ -123,84 +123,161 @@ SPDX-License-Identifier: EUPL-1.2
 	}
 </script>
 
-<h1 class="mb-4 text-2xl font-semibold">{m.dlclients_title()}</h1>
+<h1 id="dlclients-title" class="mb-4 text-2xl font-semibold">{m.dlclients_title()}</h1>
 
-{#if session.isAdmin}
-	<form
-		class="mb-4 flex flex-wrap items-end gap-2"
-		onsubmit={(e) => {
-			e.preventDefault();
-			if (discoverFrom) discover.mutate(discoverFrom);
-		}}
-	>
-		<label class="flex flex-col gap-1 text-sm">
-			<span>{m.dlclients_discover()}</span>
-			<select class="select" bind:value={discoverFrom} required>
-				<option value="" disabled>{m.dlclients_select_instance()}</option>
-				{#each instances.data ?? [] as inst (inst.id)}
-					<option value={inst.id}>{inst.name}</option>
-				{/each}
-			</select>
-		</label>
-		<button type="submit" class="btn btn-primary" disabled={discover.isPending || !discoverFrom}
-			>{m.dlclients_discover()}</button
-		>
-	</form>
-{/if}
+<section aria-labelledby="dlclients-title" class="w-full">
+	<div class="grid w-full grid-cols-1 items-start gap-6 xl:grid-cols-12">
+		<div class="flex flex-col gap-4 xl:col-span-7">
+			{#if session.isAdmin}
+				<form
+					class="flex flex-wrap items-end gap-2"
+					onsubmit={(e) => {
+						e.preventDefault();
+						if (discoverFrom) discover.mutate(discoverFrom);
+					}}
+				>
+					<label class="flex flex-col gap-1 text-sm">
+						<span>{m.dlclients_discover()}</span>
+						<select class="select" bind:value={discoverFrom} required>
+							<option value="" disabled>{m.dlclients_select_instance()}</option>
+							{#each instances.data ?? [] as inst (inst.id)}
+								<option value={inst.id}>{inst.name}</option>
+							{/each}
+						</select>
+					</label>
+					<button
+						type="submit"
+						class="btn btn-primary"
+						disabled={discover.isPending || !discoverFrom}>{m.dlclients_discover()}</button
+					>
+				</form>
+			{/if}
 
-{#if clients.isPending}
-	<p aria-live="polite">{m.loading()}</p>
-{:else if clients.isError}
-	<ProblemNote error={clients.error} />
-{:else if (clients.data ?? []).length === 0}
-	<p class="card mb-6">{m.dlclients_empty()}</p>
-{:else}
-	<ul class="mb-6 grid gap-3 md:grid-cols-2">
-		{#each clients.data ?? [] as c (c.id)}
-			{@const st = statusFor(c.id)}
-			<li class="card">
-				<h2 class="font-semibold">
-					{c.name} <span class="text-sm text-subtle">{c.kind} · {c.protocol}</span>
-				</h2>
-				<p class="text-sm text-subtle"><UrlText url={c.base_url} /></p>
-				<p class="text-sm text-subtle">{instanceName(c.instance_id)}</p>
-				{#if st}
-					<p class="mt-1 text-sm" role="status">
-						{st.reachable ? m.dlclients_reachable() : m.dlclients_unreachable()}
-						{#if st.reachable}· {m.dlclients_active({ active: st.active, queued: st.queued })} · ↓ {Math.round(
-								st.download_rate_bps / 1024
-							)} KiB/s{/if}
-						{#if st.error}<span class="text-danger"> {st.error}</span>{/if}
-					</p>
-				{/if}
-				{#if session.isAdmin}
-					<div class="mt-3 flex flex-wrap gap-2">
-						<button
-							type="button"
-							class="btn"
-							disabled={c.source === 'configarr'}
-							onclick={() => edit(c)}>{m.action_edit()}</button
-						>
-						<button
-							type="button"
-							class="btn"
-							disabled={probe.isPending}
-							onclick={() => probe.mutate(c)}>{m.action_test()}</button
-						>
-						<ConfirmDelete
-							name={c.name}
-							disabled={remove.isPending || c.source === 'configarr'}
-							onconfirm={() => remove.mutate(c)}
-						/>
-					</div>
-				{/if}
-			</li>
-		{/each}
-	</ul>
-{/if}
+			{#if clients.isPending}
+				<p aria-live="polite">{m.loading()}</p>
+			{:else if clients.isError}
+				<ProblemNote error={clients.error} />
+			{:else if (clients.data ?? []).length === 0}
+				<p class="card mb-6">{m.dlclients_empty()}</p>
+			{:else}
+				<div class="relative w-full overflow-x-auto rounded-lg border border-line">
+					<table class="compact-table table w-full">
+						<caption class="sr-only">{m.dlclients_title()}</caption>
+						<thead>
+							<tr>
+								<th scope="col">{m.instance_name()}</th>
+								<th scope="col">{m.dlclients_kind()}</th>
+								<th scope="col">{m.instance_url()}</th>
+								<th scope="col">{m.dlclients_instance()}</th>
+								<th scope="col">{m.instance_last_check()}</th>
+								{#if session.isAdmin}
+									<th scope="col"><span class="sr-only">{m.action_actions()}</span></th>
+								{/if}
+							</tr>
+						</thead>
+						<tbody>
+							{#each clients.data ?? [] as c (c.id)}
+								{@const st = statusFor(c.id)}
+								<tr>
+									<td>
+										<h2 class="max-w-28 truncate text-sm font-semibold" title={c.name}>{c.name}</h2>
+									</td>
+									<td class="text-sm text-subtle">{c.kind} · {c.protocol}</td>
+									<td class="text-sm text-subtle"
+										><UrlText
+											url={c.base_url}
+											title={c.base_url}
+											class="block max-w-24 truncate"
+										/></td
+									>
+									<td class="text-sm text-subtle">{instanceName(c.instance_id)}</td>
+									<td>
+										{#if st}
+											<div class="text-sm" role="status">
+												<div>
+													{st.reachable ? m.dlclients_reachable() : m.dlclients_unreachable()}
+													{#if st.reachable}· {m.dlclients_active({
+															active: st.active,
+															queued: st.queued
+														})} · ↓ {Math.round(st.download_rate_bps / 1024)} KiB/s{/if}
+												</div>
+												{#if st.error}
+													<details class="max-w-24 text-xs text-danger">
+														<summary
+															class="line-clamp-2 cursor-pointer break-words"
+															title={st.error}
+														>
+															{st.error}
+														</summary>
+														<p class="mt-1 break-all whitespace-pre-wrap">{st.error}</p>
+													</details>
+												{/if}
+											</div>
+										{:else}
+											<span class="text-sm text-subtle">{m.instance_never_tested()}</span>
+										{/if}
+									</td>
+									{#if session.isAdmin}
+										<td>
+											<div class="flex flex-wrap items-center gap-1.5">
+												<button
+													type="button"
+													class="btn"
+													disabled={c.source === 'configarr'}
+													onclick={() => edit(c)}>{m.action_edit()}</button
+												>
+												<button
+													type="button"
+													class="btn"
+													disabled={probe.isPending}
+													onclick={() => probe.mutate(c)}>{m.action_test()}</button
+												>
+												<ConfirmDelete
+													name={c.name}
+													disabled={remove.isPending || c.source === 'configarr'}
+													onconfirm={() => remove.mutate(c)}
+												/>
+											</div>
+										</td>
+									{/if}
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			{/if}
+		</div>
 
-<AdminFormSlot {editor} {save} probe={probeInput}>
-	{#snippet form(props)}
-		<DownloadClientForm client={editor.editing} instances={instances.data ?? []} {...props} />
-	{/snippet}
-</AdminFormSlot>
+		<div class="xl:col-span-5">
+			<AdminFormSlot {editor} {save} probe={probeInput}>
+				{#snippet form(props)}
+					<DownloadClientForm client={editor.editing} instances={instances.data ?? []} {...props} />
+				{/snippet}
+			</AdminFormSlot>
+		</div>
+	</div>
+</section>
+
+<style>
+	.compact-table tbody tr {
+		height: 2.75rem;
+	}
+	@media (min-width: 1280px) {
+		.compact-table tbody tr {
+			height: 2.25rem;
+		}
+		.compact-table th,
+		.compact-table td {
+			padding: 0.35rem 0.5rem;
+		}
+		.compact-table :global(.btn) {
+			min-height: 1.75rem;
+			padding: 0.15rem 0.5rem;
+			font-size: 0.75rem;
+		}
+	}
+	.compact-table th,
+	.compact-table td {
+		vertical-align: middle;
+	}
+</style>

@@ -7,6 +7,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { problemStatus } from '#lib/api/client.js';
+	import PageHeader from '#lib/components/PageHeader.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import UrlText from '#lib/components/UrlText.svelte';
 	import { instanceQuery } from '#lib/components/instance/instance-query.svelte.js';
@@ -35,7 +36,7 @@ SPDX-License-Identifier: EUPL-1.2
 			<span class="sr-only">{m.instance_loading()}</span>
 		</div>
 	{:else if isNotFound}
-		<div class="card max-w-xl">
+		<div class="card">
 			<h1 class="mb-2 text-2xl font-semibold">{m.instance_not_found_title()}</h1>
 			<p class="mb-4 text-sm text-subtle">{m.instance_not_found_text()}</p>
 			<a href={resolve('/instances')} class="btn btn-primary">{m.instance_not_found_back()}</a>
@@ -43,59 +44,67 @@ SPDX-License-Identifier: EUPL-1.2
 	{:else if instance.isError}
 		<ProblemNote error={instance.error} />
 	{:else if instance.data}
-		<h1 class="mb-1 text-2xl font-semibold">{instance.data.name}</h1>
-		<p class="mb-4 text-sm text-subtle">
-			{instanceKindLabel(instance.data.kind, instance.data.last_seen_product)} · <UrlText
-				url={instance.data.base_url}
-			/>
-		</p>
-
-		<nav aria-label={m.instance_tabs_label()} class="subtab-bar mb-6">
-			{#each tabs as tab (tab.key)}
-				{@const active = isTabActive(page.url.pathname, tab.href, tab.key === 'overview')}
-				{#if tab.key === 'overview'}
-					<a
-						href={resolve('/instances/[id]', { id: instanceId })}
-						class="subtab-link"
-						aria-current={active ? 'page' : undefined}
-					>
-						{tab.label}
-					</a>
-				{:else if tab.key === 'policy'}
-					<a
-						href={resolve('/instances/[id]/policy', { id: instanceId })}
-						class="subtab-link"
-						aria-current={active ? 'page' : undefined}
-					>
-						{tab.label}
-					</a>
-				{:else if tab.key === 'queue'}
-					<a
-						href={resolve('/instances/[id]/queue', { id: instanceId })}
-						class="subtab-link"
-						aria-current={active ? 'page' : undefined}
-					>
-						{tab.label}
-					</a>
-				{:else if tab.key === 'activity'}
-					<a
-						href={resolve('/instances/[id]/activity', { id: instanceId })}
-						class="subtab-link"
-						aria-current={active ? 'page' : undefined}
-					>
-						{tab.label}
-					</a>
-				{:else}
-					<a
-						href={resolve('/instances/[id]/memory', { id: instanceId })}
-						class="subtab-link"
-						aria-current={active ? 'page' : undefined}
-					>
-						{tab.label}
-					</a>
-				{/if}
-			{/each}
-		</nav>
+		{@const inst = instance.data}
+		<PageHeader title={inst.name} sticky>
+			{#snippet status()}
+				<span
+					class="inline-block rounded-full border border-line px-2.5 py-0.5 text-xs text-subtle"
+				>
+					{instanceKindLabel(inst.kind, inst.last_seen_product)}
+				</span>
+			{/snippet}
+			{#snippet actions()}
+				<span class="text-sm text-subtle">
+					<UrlText url={inst.base_url} />
+				</span>
+			{/snippet}
+			<nav aria-label={m.instance_tabs_label()} class="subtab-bar">
+				{#each tabs as tab (tab.key)}
+					{@const active = isTabActive(page.url.pathname, tab.href, tab.key === 'overview')}
+					{#if tab.key === 'overview'}
+						<a
+							href={resolve('/instances/[id]', { id: instanceId })}
+							class="subtab-link"
+							aria-current={active ? 'page' : undefined}
+						>
+							{tab.label}
+						</a>
+					{:else if tab.key === 'policy'}
+						<a
+							href={resolve('/instances/[id]/policy', { id: instanceId })}
+							class="subtab-link"
+							aria-current={active ? 'page' : undefined}
+						>
+							{tab.label}
+						</a>
+					{:else if tab.key === 'queue'}
+						<a
+							href={resolve('/instances/[id]/queue', { id: instanceId })}
+							class="subtab-link"
+							aria-current={active ? 'page' : undefined}
+						>
+							{tab.label}
+						</a>
+					{:else if tab.key === 'activity'}
+						<a
+							href={resolve('/instances/[id]/activity', { id: instanceId })}
+							class="subtab-link"
+							aria-current={active ? 'page' : undefined}
+						>
+							{tab.label}
+						</a>
+					{:else}
+						<a
+							href={resolve('/instances/[id]/memory', { id: instanceId })}
+							class="subtab-link"
+							aria-current={active ? 'page' : undefined}
+						>
+							{tab.label}
+						</a>
+					{/if}
+				{/each}
+			</nav>
+		</PageHeader>
 
 		{@render children()}
 	{/if}
