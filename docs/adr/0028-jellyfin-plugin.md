@@ -300,12 +300,12 @@ The repository is `lusoris/jellyfin-plugin-snatcharr` in the lusoris organisatio
 #### Build and release pipeline
 
 1. **Toolchain pin**: .NET SDK `10.0.x` via `global.json` at the plugin repository root, matching Jellyfin v12.3.
-2. **Jellyfin plugin manifest**: The plugin repository publishes a standard Jellyfin plugin catalog manifest (`manifest.json`; the values below are an example, the GUID is generated once at repository creation):
+2. **Jellyfin plugin manifest**: The plugin repository publishes a standard Jellyfin plugin catalog manifest (`manifest.json`; the GUID below was generated once at repository creation on 2026-10-25 and never changes, the version and URL values are an example):
 
    ```json
    [
      {
-       "guid": "e5b8d234-912a-4a87-b9c1-7f3e82d1a042",
+       "guid": "040a8e66-1be2-4e9b-befb-89a889fdb229",
        "name": "SnatchArr Companion",
        "description": "Media requests, adult library metadata, and image-set galleries for SnatchArr.",
        "overview": "Bridges Jellyfin with your SnatchArr front door.",
@@ -370,7 +370,7 @@ A three-tier testing strategy guarantees contract correctness and security bound
 
 ## Follow-ups
 
-- [ ] Create `lusoris/jellyfin-plugin-snatcharr` with fleet adoption, rulesets/secrets/release setup as SnatchArr, GPL-3.0-or-later LICENSE + REUSE headers + template notice.
+- [x] Create `lusoris/jellyfin-plugin-snatcharr` with fleet adoption, rulesets/secrets/release setup as SnatchArr, GPL-3.0-or-later LICENSE + REUSE headers + template notice (created 2026-10-25; adoption in lusoris/jellyfin-plugin-snatcharr#1; the release app private key is still to be stored by the operator).
 - [ ] Record the GPL-3.0-or-later exception in the fleet exception list with category and expiry.
 - [ ] Add an OpenAPI diff check against the base revision (HISS-14) before the plugin contract ships.
 - [ ] Add plugin API client endpoints to `api/openapi/openapi.yaml` and regenerate server bindings via `make api-gen`.
