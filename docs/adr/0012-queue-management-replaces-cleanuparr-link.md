@@ -64,7 +64,15 @@ lusoris/SnatchArr#45.
    the `seeker_overlap` field of the `Instance` schema. It also covers the status page, the
    Seeker badge and banner, the configuration keys, the docs and the tests. The goenvoy
    `arr/cleanuparr` package stays in goenvoy, and SnatchArr stops importing it.
-7. **No outside code.** The rules are written from the pinned *arr OpenAPI specs and the
+7. **Unknown import blocks remove only for a bad match or an unrecognized line.** Added
+   2026-10-25. The import-blocked rule covers items whose status lines classify as unknown.
+   In act mode it removes an item only when its lines show a Lidarr or Readarr match below
+   the fixable floor (`rematch_pending`) or a line no pattern recognizes (`unrecognized`).
+   An item with an operational line (free space, locked or unpacking files, paths,
+   permissions, sample detection) is never removed. Strikes, threshold, the per-sweep
+   removal bound and removal through the *arr queue API apply unchanged, and observe stays
+   the default.
+8. **No outside code.** The rules are written from the pinned *arr OpenAPI specs and the
    behaviour issue. No code is copied from Cleanuparr or from any private script.
 
 ## Consequences

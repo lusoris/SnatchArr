@@ -485,3 +485,188 @@ func TestClassifyImportItemReasonLines(t *testing.T) {
 		})
 	}
 }
+
+func TestClassifyImportBlockedRemovableAndOperational(t *testing.T) {
+	t.Parallel()
+
+	s := queue.DefaultSettings()
+	s.Grace = 15 * time.Minute
+	now := fixedNow
+	oldAdded := now.Add(-1 * time.Hour)
+	recentAdded := now.Add(-5 * time.Minute)
+
+	const rematchLine = "Album match is not close enough: 10.2% vs 80%"
+	const unrecogLine = "Some unrecognized error string from downstream"
+
+	t.Run("positive/rematch_only", func(t *testing.T) {
+		t.Parallel()
+		item := queue.Item{
+			Title:       "Release.Title",
+			StatusLines: []string{"Release.Title", rematchLine},
+			Added:       oldAdded,
+		}
+		class, pat, pct := queue.ClassifyImportItem(item, s, now)
+		if class != queue.ClassUnknown || pat != queue.SubreasonRematchPending || pct == nil || *pct != 10.2 {
+			t.Fatalf("got (%v, %q, %v), want (unknown, rematch_pending, 10.2)", class, pat, pct)
+		}
+	})
+
+	t.Run("positive/unrecognized", func(t *testing.T) {
+		t.Parallel()
+		item := queue.Item{
+			Title:       "Release.Title",
+			StatusLines: []string{"Release.Title", unrecogLine},
+			Added:       oldAdded,
+		}
+		class, pat, _ := queue.ClassifyImportItem(item, s, now)
+		if class != queue.ClassUnknown || pat != queue.SubreasonUnrecognized {
+			t.Fatalf("got (%v, %q), want (unknown, unrecognized)", class, pat)
+		}
+	})
+
+	t.Run("positive/mixed_rematch_and_unrecognized", func(t *testing.T) {
+		t.Parallel()
+		item := queue.Item{
+			Title:       "Release.Title",
+			StatusLines: []string{"Release.Title", rematchLine, unrecogLine},
+			Added:       oldAdded,
+		}
+		class, pat, _ := queue.ClassifyImportItem(item, s, now)
+		if class != queue.ClassUnknown || pat != queue.SubreasonUnrecognized {
+			t.Fatalf("got (%v, %q), want (unknown, unrecognized)", class, pat)
+		}
+	})
+
+	t.Run("positive/zero_lines", func(t *testing.T) {
+		t.Parallel()
+		item := queue.Item{
+			Title:       "Release.Title",
+			StatusLines: nil,
+			Added:       oldAdded,
+		}
+		class, pat, _ := queue.ClassifyImportItem(item, s, now)
+		if class != queue.ClassUnknown || pat != "" {
+			t.Fatalf("got (%v, %q), want (unknown, \"\")", class, pat)
+		}
+	})
+
+	t.Run("helper/is_removable_unknown", func(t *testing.T) {
+		t.Parallel()
+		if !queue.IsRemovableUnknown(queue.SubreasonRematchPending) {
+			t.Errorf("IsRemovableUnknown(rematch_pending) = false, want true")
+		}
+		if !queue.IsRemovableUnknown(queue.SubreasonUnrecognized) {
+			t.Errorf("IsRemovableUnknown(unrecognized) = false, want true")
+		}
+		if queue.IsRemovableUnknown("") {
+			t.Errorf("IsRemovableUnknown(\"\") = true, want false")
+		}
+		if queue.IsRemovableUnknown("operational") {
+			t.Errorf("IsRemovableUnknown(\"operational\") = true, want false")
+		}
+	})
+
+	opCases := []struct {
+		name        string
+		statusLines []string
+		added       time.Time
+	}{
+		// 10 static patterns with ClassUnknown
+		{
+			name:        "sample_undetermined",
+			statusLines: []string{"Unable to determine if file is a sample"},
+			added:       oldAdded,
+		},
+		{
+			name:        "episode_tba_title",
+			statusLines: []string{"Episode has a TBA title and recently aired"},
+			added:       oldAdded,
+		},
+		{
+			name:        "episode_no_absolute_number",
+			statusLines: []string{"Episode does not have an absolute episode number and recently aired"},
+			added:       oldAdded,
+		},
+		{
+			name:        "category_skip",
+			statusLines: []string{"Download wasn't grabbed by Sonarr and not in a category, Skipping."},
+			added:       oldAdded,
+		},
+		{
+			name:        "remote_path_mapping",
+			statusLines: []string{"[/data/dl] is not a valid local path. You may need a Remote Path Mapping."},
+			added:       oldAdded,
+		},
+		{
+			name:        "not_enough_free_space",
+			statusLines: []string{"Not enough free space"},
+			added:       oldAdded,
+		},
+		{
+			name:        "still_unpacking",
+			statusLines: []string{"File is still being unpacked"},
+			added:       oldAdded,
+		},
+		{
+			name:        "locked_file",
+			statusLines: []string{"Locked file, try again later"},
+			added:       oldAdded,
+		},
+		{
+			name:        "mapped_to_series_folder",
+			statusLines: []string{"Import path is mapped to a series folder"},
+			added:       oldAdded,
+		},
+		{
+			name:        "destination_not_in_root_folder",
+			statusLines: []string{"Destination artist folder /music is not in a Root Folder"},
+			added:       oldAdded,
+		},
+		// 2 no-files cases
+		{
+			name:        "no_files_within_grace",
+			statusLines: []string{"No files found are eligible for import in /downloads/album"},
+			added:       recentAdded,
+		},
+		{
+			name:        "no_files_with_unpack_locked",
+			statusLines: []string{"No files found are eligible for import in /downloads/album", "File is still being unpacked"},
+			added:       oldAdded,
+		},
+		// Permission line
+		{
+			name:        "permission_denied",
+			statusLines: []string{"Access to the path '/media/music' is denied"},
+			added:       oldAdded,
+		},
+	}
+
+	for _, tc := range opCases {
+		t.Run("operational/alone/"+tc.name, func(t *testing.T) {
+			t.Parallel()
+			item := queue.Item{
+				Title:       "Test.Item",
+				StatusLines: append([]string{"Test.Item"}, tc.statusLines...),
+				Added:       tc.added,
+			}
+			class, pat, _ := queue.ClassifyImportItem(item, s, now)
+			if class != queue.ClassUnknown || pat != "" {
+				t.Fatalf("%s alone: got (%v, %q), want (unknown, \"\")", tc.name, class, pat)
+			}
+		})
+
+		t.Run("operational/mixed_removable/"+tc.name, func(t *testing.T) {
+			t.Parallel()
+			lines := append([]string{"Test.Item", rematchLine, unrecogLine}, tc.statusLines...)
+			item := queue.Item{
+				Title:       "Test.Item",
+				StatusLines: lines,
+				Added:       tc.added,
+			}
+			class, pat, _ := queue.ClassifyImportItem(item, s, now)
+			if class != queue.ClassUnknown || pat != "" {
+				t.Fatalf("%s mixed with rematch and unrecognized lines: got (%v, %q), want (unknown, \"\")", tc.name, class, pat)
+			}
+		})
+	}
+}

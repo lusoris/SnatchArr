@@ -196,7 +196,7 @@ type Decision struct {
 	Title string
 	// Class is the categorized import failure class (fixable, not_wanted, broken, unknown).
 	Class Class
-	// Pattern is the matching pattern string or subreason; empty for unknown.
+	// Pattern is the matching pattern string or subreason; for unknown, a removable sub-reason (rematch_pending, unrecognized) or empty when protected.
 	Pattern string
 	// Unknown reports that the item carries an unknown or operational failure reason.
 	Unknown bool

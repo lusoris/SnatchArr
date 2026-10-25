@@ -40,7 +40,7 @@ Each sweep checks an item against the rules in this order and gives it at most o
 | import_fixable | fixable | force-import | never removes | no | observe, threshold 1 |
 | import_broken | broken | remove | yes | yes | observe, threshold 2 |
 | import_not_wanted | not_wanted | remove | yes | no | observe, threshold 1 |
-| import_blocked | unknown | observe only (never removes) | yes (no effect) | no | observe, threshold 6 |
+| import_blocked | unknown | remove `rematch_pending` and `unrecognized` only | yes | no | observe, threshold 6 |
 | unwanted_score | - | remove | yes | no | observe, threshold 1 |
 | not_an_upgrade | - | remove | no | no | observe, threshold 1 |
 | duplicate | - | remove | no | no | observe, threshold 1 |
@@ -55,12 +55,14 @@ The state tests live in `api/internal/queue/states_test.go` and `api/internal/qu
 For import-blocked and import-failed items, SnatchArr evaluates the item's status messages through a pure classifier (`api/internal/queue/classify.go`) against an allow-list of anchored, case-insensitive patterns derived from upstream *arr sources.
 
 When an item carries several status lines, precedence resolves as:
-1. `unknown` / operational lines win over everything (never delete when e.g. "Not enough free space", path or permission lines are present).
+1. `unknown` / operational lines win over everything (never delete when e.g. "Not enough free space", path or permission lines are present). Within `unknown`, an operational line wins over an unrecognized line, and an unrecognized line wins over `rematch_pending`.
 2. `broken`
 3. `not_wanted`
 4. `fixable`
 
-A line that matches no pattern and is not the item's own release title resolves to `unknown`. An item with zero lines resolves to `unknown`.
+A line that matches no pattern and is not the item's own release title resolves to `unknown` with sub-reason `unrecognized`, unless it names a permission problem ("permission", "Access to the path ... is denied", "unauthorized"); that line is operational. An item with zero lines resolves to `unknown` with no sub-reason.
+
+Operational lines are the `unknown` patterns of the table (sample undetermined, title or absolute number missing and recently aired, download not grabbed, Remote Path Mapping, free space, still unpacking, locked file, import path mapped to a folder, destination outside a root folder), "No files found are eligible" while it is still `unknown` and permission lines. An item with an operational line resolves to `unknown` with no sub-reason.
 
 Taxonomy overrides:
 - "No files found are eligible for import" is `broken` only after `grace_seconds` and when no "still being unpacked" or "Locked file" line is present; otherwise `unknown`.
@@ -109,7 +111,7 @@ Removals triggered by `failed` (and `import_broken`) set `skipRedownload=false` 
 - `import_fixable`: class `fixable`. Attempts manual import via `ForceImport` (subject to `max_imports_per_sweep` bound). On Sonarr, Radarr, Lidarr, and Readarr, candidates qualify if mapped and all rejections classify as `fixable`. On Whisparr, `ForceImport` returns `ErrQueueUnsupported` and the item is reported as `WouldImport` with `import_refused`, never removed.
 - `import_broken`: class `broken`. Removes the item with `blocklist=true` and `skipRedownload=false` (re-search).
 - `import_not_wanted`: class `not_wanted`. Removes the item with `blocklist=true` and `skipRedownload=true` (no re-search).
-- `import_blocked`: class `unknown`. Strikes the item for reporting (records `Decision.Unknown = true` and `Pattern`), but **never removes** or blocklists, even when configured in `act` mode.
+- `import_blocked`: class `unknown`. Strikes the item and records `Decision.Unknown = true` and `Pattern`. In `act` mode it removes the item at the threshold, within `max_removals_per_sweep`, only when `Pattern` is `rematch_pending` or `unrecognized`; the removal sets `blocklist=true` and `skipRedownload=true`, and the planner searches the item again. An item with an operational line or no line is never removed, in any mode (`IsRemovableUnknown`, `api/internal/queue/classify.go`).
 
 ### ID-matched
 
