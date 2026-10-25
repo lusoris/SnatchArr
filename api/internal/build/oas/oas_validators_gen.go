@@ -4224,6 +4224,8 @@ func (s UserRole) Validate() error {
 	switch s {
 	case "admin":
 		return nil
+	case "requester":
+		return nil
 	case "viewer":
 		return nil
 	default:

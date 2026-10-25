@@ -18,9 +18,20 @@ type Role string
 
 // Roles.
 const (
-	RoleAdmin  Role = "admin"
-	RoleViewer Role = "viewer"
+	RoleAdmin     Role = "admin"
+	RoleRequester Role = "requester"
+	RoleViewer    Role = "viewer"
 )
+
+// Valid returns whether r is a known, supported role.
+func (r Role) Valid() bool {
+	return r == RoleAdmin || r == RoleRequester || r == RoleViewer
+}
+
+// CanRequest reports whether the role is authorized to submit requests and manage own keys.
+func (r Role) CanRequest() bool {
+	return r == RoleAdmin || r == RoleRequester
+}
 
 // User is a local account.
 type User struct {

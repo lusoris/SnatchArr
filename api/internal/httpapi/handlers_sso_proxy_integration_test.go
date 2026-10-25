@@ -49,6 +49,17 @@ func buildProxyCases() []proxyTestCase {
 			wantRole:        "admin",
 		},
 		{
+			name:            "trusted CIDR and requester group",
+			enabled:         true,
+			hasAdmin:        true,
+			remoteAddr:      "10.0.0.5:12345",
+			headerVal:       "requester-user",
+			groupsHeaderVal: "snatcharr-requesters",
+			wantStatus:      http.StatusOK,
+			wantSession:     true,
+			wantRole:        "requester",
+		},
+		{
 			name:            "trusted CIDR and viewer group",
 			enabled:         true,
 			hasAdmin:        true,
@@ -169,14 +180,15 @@ func buildProxyCases() []proxyTestCase {
 func setupProxyTest(t *testing.T, tc proxyTestCase) *ssoFixture {
 	t.Helper()
 	proxyCfg := config.ProxyAuthOptions{
-		Enabled:      tc.enabled,
-		Header:       "Remote-User",
-		GroupsHeader: "X-authentik-groups",
-		SecretHeader: "X-SnatchArr-Proxy-Secret",
-		Secret:       testProxySecret,
-		TrustedCIDRs: []string{"10.0.0.0/8"},
-		AdminGroups:  []string{"snatcharr-admins"},
-		ViewerGroups: []string{"snatcharr-viewers"},
+		Enabled:         tc.enabled,
+		Header:          "Remote-User",
+		GroupsHeader:    "X-authentik-groups",
+		SecretHeader:    "X-SnatchArr-Proxy-Secret",
+		Secret:          testProxySecret,
+		TrustedCIDRs:    []string{"10.0.0.0/8"},
+		AdminGroups:     []string{"snatcharr-admins"},
+		RequesterGroups: []string{"snatcharr-requesters"},
+		ViewerGroups:    []string{"snatcharr-viewers"},
 	}
 	f := newSSOFixture(t, config.OIDCOptions{}, proxyCfg)
 	f.h.cfg.Proxy.Trusted = []string{"192.168.1.0/24"}

@@ -15,7 +15,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
+	"github.com/golusoris/golusoris/core/crypto"
+
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
+	"github.com/lusoris/SnatchArr/api/internal/domain"
+	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
 	"github.com/lusoris/SnatchArr/api/internal/testdiag"
 )
 
@@ -603,5 +609,132 @@ func assertSettingsLLMRoundTrip(t *testing.T, f *routerFixture) {
 		updated.LlmWriteTools[0] != oas.LlmWriteToolSnatcharrTriggerRun ||
 		updated.LlmWriteTools[1] != oas.LlmWriteToolSnatcharrDeleteInstance {
 		t.Fatalf("updated llm_write_tools = %v, want [snatcharr_trigger_run snatcharr_delete_instance]", updated.LlmWriteTools)
+	}
+}
+
+func createRequesterUser(t *testing.T, f *routerFixture) (string, string) {
+	t.Helper()
+	username := "requester-" + uuid.NewString()[:8]
+	password := "requester-pass-1234"
+	hasher := crypto.NewPasswordHasher(1)
+	hash, err := hasher.Hash(t.Context(), password)
+	if err != nil {
+		t.Fatalf("hash password: %v", err)
+	}
+	requesterID := uuid.New()
+	_, err = f.st.Q().CreateUser(t.Context(), sqlcgen.CreateUserParams{
+		ID:           requesterID,
+		Username:     username,
+		PasswordHash: hash,
+		Role:         string(domain.RoleRequester),
+		CreatedAt:    f.clk.Now(),
+	})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	return username, password
+}
+
+func loginRequesterSession(t *testing.T, f *routerFixture) (*http.Client, string) {
+	t.Helper()
+	reqUser, reqPass := createRequesterUser(t, f)
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatalf("cookiejar.New: %v", err)
+	}
+	client := &http.Client{Timeout: 10 * time.Second, Jar: jar}
+
+	loginBody := bytes.NewReader([]byte(fmt.Sprintf(`{"username":%q,"password":%q}`, reqUser, reqPass)))
+	loginReq, err := http.NewRequestWithContext(t.Context(), http.MethodPost, f.srv.URL+PathPrefix+"/auth/login", loginBody)
+	if err != nil {
+		t.Fatalf("login request: %v", err)
+	}
+	loginReq.Header.Set("Content-Type", "application/json")
+	loginResp, err := client.Do(loginReq)
+	if err != nil {
+		t.Fatalf("requester login: %v", err)
+	}
+	defer func() { _ = loginResp.Body.Close() }()
+	if loginResp.StatusCode != http.StatusOK {
+		t.Fatalf("requester login status = %d, want 200", loginResp.StatusCode)
+	}
+
+	sessReq, err := http.NewRequestWithContext(t.Context(), http.MethodGet, f.srv.URL+PathPrefix+"/auth/session", nil)
+	if err != nil {
+		t.Fatalf("session request: %v", err)
+	}
+	sessResp, err := client.Do(sessReq)
+	if err != nil {
+		t.Fatalf("session Do: %v", err)
+	}
+	defer func() { _ = sessResp.Body.Close() }()
+	if sessResp.StatusCode != http.StatusOK {
+		t.Fatalf("session status = %d, want 200", sessResp.StatusCode)
+	}
+	var sess oas.Session
+	if err := json.NewDecoder(sessResp.Body).Decode(&sess); err != nil {
+		t.Fatalf("decode session: %v", err)
+	}
+	return client, sess.CsrfToken
+}
+
+func TestAPIKeyRequesterRoleFencing(t *testing.T) {
+	t.Parallel()
+	f := newRouterFixture(t)
+	_ = completeInitialSetup(t, f)
+	adminCsrf := getAdminCsrfToken(t, f)
+
+	// 1. Requester session POST /instances -> 403 Forbidden problem+json
+	reqClient, reqCsrf := loginRequesterSession(t, f)
+	instBody := strings.NewReader(`{"kind":"sonarr","name":"req-inst","base_url":"http://sonarr.invalid:8989","api_key":"secret-test-key","enabled":true}`)
+	instReq, err := http.NewRequestWithContext(t.Context(), http.MethodPost, f.srv.URL+PathPrefix+"/instances", instBody)
+	if err != nil {
+		t.Fatalf("new create instance req: %v", err)
+	}
+	instReq.Header.Set("Content-Type", "application/json")
+	instReq.Header.Set("X-Csrf-Token", reqCsrf)
+	instResp, err := reqClient.Do(instReq)
+	if err != nil {
+		t.Fatalf("requester post /instances: %v", err)
+	}
+	defer func() { _ = instResp.Body.Close() }()
+	assertProblem(t, instResp, http.StatusForbidden)
+
+	// 2. Viewer POST /auth/api-keys -> 403 Forbidden problem+json
+	viewClient, viewCsrf := loginViewerSession(t, f)
+	vResp, _ := postCreateAPIKey(t, f, viewClient, viewCsrf, map[string]any{"name": "viewer-key"})
+	defer func() { _ = vResp.Body.Close() }()
+	assertProblem(t, vResp, http.StatusForbidden)
+
+	// 3. Requester POST /auth/api-keys -> 201 Created
+	rResp, rawKey := postCreateAPIKey(t, f, reqClient, reqCsrf, map[string]any{"name": "requester-key"})
+	defer func() { _ = rResp.Body.Close() }()
+	if rResp.StatusCode != http.StatusCreated {
+		t.Fatalf("requester create api key status = %d, want 201; body: %s", rResp.StatusCode, string(rawKey))
+	}
+	var createdKey oas.CreatedApiKey
+	if err := json.Unmarshal(rawKey, &createdKey); err != nil {
+		t.Fatalf("unmarshal created key: %v", err)
+	}
+
+	// 4. Requester cannot revoke another user's key (admin key) -> 404 Not Found problem+json
+	adminResp, adminRaw := postCreateAPIKey(t, f, f.client, adminCsrf, map[string]any{"name": "admin-owned-key"})
+	defer func() { _ = adminResp.Body.Close() }()
+	if adminResp.StatusCode != http.StatusCreated {
+		t.Fatalf("admin create key status = %d, want 201; body: %s", adminResp.StatusCode, string(adminRaw))
+	}
+	var adminKey oas.CreatedApiKey
+	if err := json.Unmarshal(adminRaw, &adminKey); err != nil {
+		t.Fatalf("unmarshal admin key: %v", err)
+	}
+	delAdminByReq := deleteAPIKey(t, f, reqClient, reqCsrf, adminKey.ID)
+	defer func() { _ = delAdminByReq.Body.Close() }()
+	assertProblem(t, delAdminByReq, http.StatusNotFound)
+
+	// 5. Requester DELETE own key -> 204 No Content
+	delOwnResp := deleteAPIKey(t, f, reqClient, reqCsrf, createdKey.ID)
+	_ = delOwnResp.Body.Close()
+	if delOwnResp.StatusCode != http.StatusNoContent {
+		t.Fatalf("requester revoke own key status = %d, want 204", delOwnResp.StatusCode)
 	}
 }

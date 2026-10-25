@@ -59,8 +59,9 @@ auth:
       - openid
       - email
       - profile
-    # Groups whose members sign in as admin (required) or as viewers (ADR-0023).
+    # Groups whose members sign in as admin (required), as requesters (ADR-0026), or as viewers (ADR-0023).
     adminGroups: []
+    requesterGroups: []
     viewerGroups: []
     groupsClaim: groups
     discoveryTimeout: 10s
@@ -74,6 +75,7 @@ auth:
     secretKey: proxy-auth-secret
     trustedCidrs: []
     adminGroups: []
+    requesterGroups: []
     viewerGroups: []
 
 # Secrets the control plane needs. Either point at an existing Secret with the keys

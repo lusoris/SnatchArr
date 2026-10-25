@@ -354,14 +354,14 @@ func TestChangePasswordRollbackOnDeleteFailure(t *testing.T) {
 	}
 }
 
-func TestProvisionExternalViewer_BeforeSetupRefused(t *testing.T) {
+func TestProvisionExternalUser_BeforeSetupRefused(t *testing.T) {
 	t.Parallel()
 	svc := newService(t)
 	ctx := t.Context()
 
-	_, err := svc.ProvisionExternalViewer(ctx, "oidc-", "alice@example.com")
+	_, err := svc.ProvisionExternalUser(ctx, "oidc-", "alice@example.com", domain.RoleRequester)
 	if !errors.Is(err, domain.ErrForbidden) {
-		t.Fatalf("ProvisionExternalViewer before setup = %v, want ErrForbidden", err)
+		t.Fatalf("ProvisionExternalUser before setup = %v, want ErrForbidden", err)
 	}
 
 	admin, err := svc.Setup(ctx, adminName, adminPass)
@@ -372,16 +372,16 @@ func TestProvisionExternalViewer_BeforeSetupRefused(t *testing.T) {
 		t.Fatalf("admin role = %v, want %v", admin.Role, domain.RoleAdmin)
 	}
 
-	viewer, err := svc.ProvisionExternalViewer(ctx, "oidc-", "alice@example.com")
+	requester, err := svc.ProvisionExternalUser(ctx, "oidc-", "alice@example.com", domain.RoleRequester)
 	if err != nil {
-		t.Fatalf("ProvisionExternalViewer after setup: %v", err)
+		t.Fatalf("ProvisionExternalUser after setup: %v", err)
 	}
-	if viewer.Role != domain.RoleViewer {
-		t.Fatalf("viewer role = %v, want %v", viewer.Role, domain.RoleViewer)
+	if requester.Role != domain.RoleRequester {
+		t.Fatalf("requester role = %v, want %v", requester.Role, domain.RoleRequester)
 	}
 }
 
-func TestProvisionExternalViewer_PositiveAndReuse(t *testing.T) {
+func TestProvisionExternalUser_PositiveAndReuse(t *testing.T) {
 	t.Parallel()
 	svc := newService(t)
 	ctx := t.Context()
@@ -390,25 +390,61 @@ func TestProvisionExternalViewer_PositiveAndReuse(t *testing.T) {
 		t.Fatalf("Setup: %v", err)
 	}
 
-	viewer1, err := svc.ProvisionExternalViewer(ctx, "oidc-", "alice@example.com")
+	// First sign-in: requester row created.
+	reqUser, err := svc.ProvisionExternalUser(ctx, "oidc-", "alice@example.com", domain.RoleRequester)
 	if err != nil {
-		t.Fatalf("ProvisionExternalViewer: %v", err)
+		t.Fatalf("ProvisionExternalUser requester: %v", err)
 	}
-	wantUsername := auth.ExternalViewerUsername("oidc-", "alice@example.com")
-	if viewer1.Role != domain.RoleViewer || viewer1.Username != wantUsername {
-		t.Fatalf("viewer1 = %+v, want role viewer and username %q", viewer1, wantUsername)
+	wantUsername := auth.ExternalUsername("oidc-", "alice@example.com")
+	if reqUser.Role != domain.RoleRequester || reqUser.Username != wantUsername {
+		t.Fatalf("reqUser = %+v, want role requester and username %q", reqUser, wantUsername)
 	}
 
-	viewer2, err := svc.ProvisionExternalViewer(ctx, "oidc-", "alice@example.com")
+	// Same identity again with viewer: role updated to viewer, ID preserved.
+	viewerUser, err := svc.ProvisionExternalUser(ctx, "oidc-", "alice@example.com", domain.RoleViewer)
 	if err != nil {
-		t.Fatalf("ProvisionExternalViewer second call: %v", err)
+		t.Fatalf("ProvisionExternalUser second call with viewer: %v", err)
 	}
-	if viewer2.ID != viewer1.ID || viewer2.Username != viewer1.Username {
-		t.Fatalf("viewer2 = %+v, want same as viewer1 %+v", viewer2, viewer1)
+	if viewerUser.ID != reqUser.ID || viewerUser.Username != reqUser.Username {
+		t.Fatalf("viewerUser = %+v, want same ID and username as reqUser %+v", viewerUser, reqUser)
+	}
+	if viewerUser.Role != domain.RoleViewer {
+		t.Fatalf("viewerUser.Role = %v, want %v", viewerUser.Role, domain.RoleViewer)
 	}
 }
 
-func TestProvisionExternalViewer_ConcurrentSignInsOneRow(t *testing.T) {
+func TestProvisionExternalUser_AdminAndInvalidRoleRefused(t *testing.T) {
+	t.Parallel()
+	svc := newService(t)
+	ctx := t.Context()
+
+	if _, err := svc.Setup(ctx, adminName, adminPass); err != nil {
+		t.Fatalf("Setup: %v", err)
+	}
+
+	cases := []struct {
+		name string
+		role domain.Role
+	}{
+		{"negative admin role", domain.RoleAdmin},
+		{"negative empty role", ""},
+		{"negative invalid role string", "operator"},
+		{"negative case-sensitive Admin", "Admin"},
+		{"negative case-sensitive Requester", "Requester"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := svc.ProvisionExternalUser(ctx, "oidc-", "bob@example.com", tc.role)
+			if !errors.Is(err, domain.ErrInvalid) {
+				t.Fatalf("ProvisionExternalUser with role %q error = %v, want ErrInvalid", tc.role, err)
+			}
+		})
+	}
+}
+
+func TestProvisionExternalUser_ConcurrentSignInsOneRow(t *testing.T) {
 	t.Parallel()
 	svc, _, st := newServiceWithStore(t)
 	ctx := t.Context()
@@ -428,7 +464,7 @@ func TestProvisionExternalViewer_ConcurrentSignInsOneRow(t *testing.T) {
 	for i := range concurrency {
 		go func(idx int) {
 			defer wg.Done()
-			u, pErr := svc.ProvisionExternalViewer(ctx, "oidc-", "concurrent-identity@domain.invalid")
+			u, pErr := svc.ProvisionExternalUser(ctx, "oidc-", "concurrent-identity@domain.invalid", domain.RoleRequester)
 			userIDs[idx] = u.ID
 			errs[idx] = pErr
 		}(i)
@@ -449,7 +485,7 @@ func TestProvisionExternalViewer_ConcurrentSignInsOneRow(t *testing.T) {
 		t.Fatalf("CountUsers: %v", err)
 	}
 	if count != 2 {
-		t.Fatalf("CountUsers = %d, want 2 (1 admin, 1 viewer)", count)
+		t.Fatalf("CountUsers = %d, want 2 (1 admin, 1 external user)", count)
 	}
 }
 
@@ -462,9 +498,9 @@ func TestLogin_ViewerRowPasswordRefused401(t *testing.T) {
 		t.Fatalf("Setup: %v", err)
 	}
 
-	viewer, err := svc.ProvisionExternalViewer(ctx, "oidc-", "alice@example.com")
+	viewer, err := svc.ProvisionExternalUser(ctx, "oidc-", "alice@example.com", domain.RoleViewer)
 	if err != nil {
-		t.Fatalf("ProvisionExternalViewer: %v", err)
+		t.Fatalf("ProvisionExternalUser: %v", err)
 	}
 
 	_, err = svc.Login(ctx, viewer.Username, "some-password-attempt", "127.0.0.1")
@@ -473,7 +509,7 @@ func TestLogin_ViewerRowPasswordRefused401(t *testing.T) {
 	}
 }
 
-func TestExternalViewerUsername_Boundary(t *testing.T) {
+func TestExternalUsername_Boundary(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		name     string
@@ -489,7 +525,7 @@ func TestExternalViewerUsername_Boundary(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			username := auth.ExternalViewerUsername(tc.prefix, tc.identity)
+			username := auth.ExternalUsername(tc.prefix, tc.identity)
 			if !strings.HasPrefix(username, tc.prefix) {
 				t.Fatalf("username %q missing prefix %q", username, tc.prefix)
 			}

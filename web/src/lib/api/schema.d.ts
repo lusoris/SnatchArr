@@ -214,7 +214,10 @@ export interface paths {
         /** List the current user's active API keys */
         get: operations["listAPIKeys"];
         put?: never;
-        /** Create a new API key for the current user */
+        /**
+         * Create a new API key for the current user
+         * @description Create a new API key for the current user. Allowed for admin or requester (own keys).
+         */
         post: operations["createAPIKey"];
         delete?: never;
         options?: never;
@@ -234,7 +237,10 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Revoke an API key */
+        /**
+         * Revoke an API key
+         * @description Revoke an API key. Allowed for admin or requester (own keys).
+         */
         delete: operations["revokeAPIKey"];
         options?: never;
         head?: never;
@@ -1375,7 +1381,7 @@ export interface components {
             id: string;
             username: string;
             /** @enum {string} */
-            role: "admin" | "viewer";
+            role: "admin" | "requester" | "viewer";
         };
         Session: {
             user: components["schemas"]["User"];

@@ -23,6 +23,17 @@ func requireAdmin(ctx context.Context) error {
 	return nil
 }
 
+func requireRequester(ctx context.Context) error {
+	u, ok := UserFrom(ctx)
+	if !ok {
+		return domain.ErrUnauthorized
+	}
+	if !u.Role.CanRequest() {
+		return domain.ErrForbidden
+	}
+	return nil
+}
+
 // ListInstances returns every instance without secrets.
 func (h *Handlers) ListInstances(ctx context.Context) ([]oas.Instance, error) {
 	list, err := h.instances.List(ctx)
