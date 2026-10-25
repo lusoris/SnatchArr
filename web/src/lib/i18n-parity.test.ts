@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { assertLocaleParity } from '@sveltesentio/testing/locale-parity';
 import { describe, expect, it } from 'vitest';
+import { findDuplicateKeys } from './json-duplicate-keys.js';
 
 const webDir = path.resolve(import.meta.dirname, '../..');
 const messagesDir = path.join(webDir, 'messages');
@@ -45,5 +46,31 @@ describe('messages/*.json parity', () => {
 		const run = () => assertLocaleParity({ ...catalogs, zz: planted }, { base });
 		expect(run).toThrow(`[zz] missing keys: ${dropped}`);
 		expect(run).toThrow('[zz] extra keys: planted_extra');
+	});
+
+	it('refuses duplicate keys in every catalog file', () => {
+		const files = fs
+			.readdirSync(messagesDir)
+			.filter((file) => file.endsWith('.json'))
+			.sort();
+		for (const file of files) {
+			const raw = fs.readFileSync(path.join(messagesDir, file), 'utf8');
+			expect(findDuplicateKeys(raw), file).toEqual([]);
+		}
+	});
+
+	it('detects a planted duplicate key in the base catalog', () => {
+		const raw = fs.readFileSync(path.join(messagesDir, `${base}.json`), 'utf8');
+		const lines = raw.split('\n');
+		const lineIdx = lines.findIndex((line) => /^\s*"([^"]+)":/.test(line));
+		expect(lineIdx).toBeGreaterThanOrEqual(0);
+		const keyMatch = lines[lineIdx]?.match(/"([^"]+)":/);
+		const expectedKey = keyMatch ? keyMatch[1] : '';
+		const planted = [
+			...lines.slice(0, lineIdx + 1),
+			lines[lineIdx],
+			...lines.slice(lineIdx + 1)
+		].join('\n');
+		expect(findDuplicateKeys(planted)).toEqual([expectedKey]);
 	});
 });

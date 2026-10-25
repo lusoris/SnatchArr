@@ -7,29 +7,38 @@ SPDX-License-Identifier: EUPL-1.2
 	import { page } from '$app/state';
 	import BrandMark from '#lib/components/BrandMark.svelte';
 	import { m } from '#lib/paraglide/messages.js';
-	import { isRouteActive } from './nav.js';
+	import { filterByModule, isRouteActive, type ModuledItem } from './nav.js';
 	import NavIcon from './NavIcon.svelte';
 	import KofiLink from './KofiLink.svelte';
 	import NavFooter from './NavFooter.svelte';
+
+	interface DrawerItem extends ModuledItem {
+		href: '/automation' | '/connections' | '/system' | '/account';
+		label: string;
+		icon: string;
+	}
 
 	interface Props {
 		open: boolean;
 		onClose: () => void;
 		onLogout: () => void;
 		menuButtonEl: HTMLButtonElement | null;
+		activeModules?: ReadonlySet<string>;
 	}
 
-	const { open, onClose, onLogout, menuButtonEl }: Props = $props();
+	const { open, onClose, onLogout, menuButtonEl, activeModules = new Set() }: Props = $props();
 
 	let dialogEl = $state<HTMLDialogElement | null>(null);
 	let closeButtonEl = $state<HTMLButtonElement | null>(null);
 
-	const drawerItems = [
+	const drawerItems: readonly DrawerItem[] = [
 		{ href: '/automation', label: m.nav_automation(), icon: 'clock' },
 		{ href: '/connections', label: m.nav_connections(), icon: 'link' },
 		{ href: '/system', label: m.nav_system(), icon: 'settings' },
 		{ href: '/account', label: m.nav_account(), icon: 'user' }
-	] as const;
+	];
+
+	const visibleItems = $derived(filterByModule(drawerItems, activeModules));
 
 	$effect(() => {
 		if (!dialogEl) return;
@@ -92,7 +101,7 @@ SPDX-License-Identifier: EUPL-1.2
 
 	<nav class="flex-1 overflow-y-auto px-3 py-4" aria-label={m.app_name()}>
 		<ul class="flex flex-col gap-1">
-			{#each drawerItems as item (item.href)}
+			{#each visibleItems as item (item.href)}
 				{@const active = isRouteActive(page.url.pathname, item.href)}
 				<li>
 					<a

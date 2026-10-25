@@ -60,6 +60,7 @@
 	"activity_filter_search": "Suchen",
 	"activity_filter_toggle": "Filter",
 	"activity_clear_filters": "Filter zurücksetzen",
+	"activity_run_label": "Lauf {id}",
 	"activity_run_summary": "{dispatches} Suchläufe, {items} Einträge",
 	"activity_expand_details": "Details ausklappen",
 	"activity_collapse_details": "Details einklappen",
@@ -753,5 +754,9 @@
 	"docs_entry_about_snatcharr": "Über SnatchArr",
 	"docs_entry_api_authentication": "API-Authentifizierung",
 	"docs_entry_single_sign_on": "Single Sign-On",
-	"docs_entry_installation_setup": "Installation & Einrichtung"
+	"docs_entry_installation_setup": "Installation & Einrichtung",
+	"page_not_found_title": "404 - Seite nicht gefunden",
+	"page_not_found_text": "Die angeforderte Seite ist nicht verfügbar oder das entsprechende Modul ist deaktiviert.",
+	"page_not_found_back": "Zurück zur Übersicht",
+	"module_disabled_detail": "Modul {module} ist deaktiviert"
 }

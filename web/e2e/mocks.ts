@@ -122,6 +122,13 @@ export async function mockSignedInApi(
 	);
 }
 
+export async function mockModulesApi(
+	page: Page,
+	modules: Array<{ id: string; enabled: boolean }>
+): Promise<void> {
+	await page.route('**/api/v1/system/modules', (route) => route.fulfill(json(modules)));
+}
+
 export async function mockInstancePolicyApi(
 	page: Page,
 	instanceId: string,
