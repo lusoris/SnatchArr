@@ -53,6 +53,7 @@ plugins:
           - configuration.md
         Features and integrations:
           - connections.md
+          - modules.md
           - notifications.md
           - sso.md
           - download-clients.md
@@ -98,6 +99,7 @@ nav:
   - Home: index.md
   - Concepts: concepts.md
   - Configuration: configuration.md
+  - Modules: modules.md
   - Notifications: notifications.md
   - Single Sign-On: sso.md
   - Connections: connections.md

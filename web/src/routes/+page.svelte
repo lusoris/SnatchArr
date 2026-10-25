@@ -10,6 +10,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import type { components } from '#lib/api/schema.js';
 	import ConfirmAction from '#lib/components/ConfirmAction.svelte';
 	import EmptyFleetOnboarding from '#lib/components/EmptyFleetOnboarding.svelte';
+	import { HELP_MAP } from '#lib/help.js';
 	import KpiTile from '#lib/components/KpiTile.svelte';
 	import PageHeader from '#lib/components/PageHeader.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
@@ -99,7 +100,7 @@ SPDX-License-Identifier: EUPL-1.2
 	const prowlarrKpi = $derived(kpiProwlarr(prowlarr.data));
 </script>
 
-<PageHeader title={m.nav_overview()} />
+<PageHeader title={m.nav_overview()} help={HELP_MAP['/']} />
 
 <div class="overview-content flex min-w-0 flex-col gap-6">
 	<!-- Row 1: KPI tiles (2-up on phone, 3-col on tablet/desktop) -->

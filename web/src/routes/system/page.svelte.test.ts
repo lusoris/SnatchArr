@@ -31,6 +31,7 @@ const baseStubs = {
 	'/priority-presets': [],
 	'/notifications/channels': [],
 	'/notifications/rules': [],
+	'/system/modules': [],
 	'/system/status': {
 		name: 'SnatchArr',
 		version: '0.1.0',
@@ -59,6 +60,26 @@ describe('system page tabs', () => {
 		expect(screen.getByRole('heading', { level: 2, name: m.settings_title() })).toBeTruthy();
 	});
 
+	it('renders modules tab when tab=modules', async () => {
+		pageMock.url = new URL('http://localhost/system?tab=modules');
+		renderWithQuery(SystemPage);
+
+		expect(
+			await screen.findByRole('tab', { name: m.system_tab_modules(), selected: true })
+		).toBeTruthy();
+		expect(screen.getByRole('heading', { level: 2, name: m.modules_title() })).toBeTruthy();
+	});
+
+	it('renders notifications tab when tab=notifications', async () => {
+		pageMock.url = new URL('http://localhost/system?tab=notifications');
+		renderWithQuery(SystemPage);
+
+		expect(
+			await screen.findByRole('tab', { name: m.system_tab_notifications(), selected: true })
+		).toBeTruthy();
+		expect(screen.getByRole('heading', { level: 2, name: m.notifications_title() })).toBeTruthy();
+	});
+
 	it('renders about tab when tab=about', async () => {
 		pageMock.url = new URL('http://localhost/system?tab=about');
 		renderWithQuery(SystemPage);
@@ -69,12 +90,22 @@ describe('system page tabs', () => {
 		expect(screen.getByRole('heading', { level: 2, name: m.about_app_heading() })).toBeTruthy();
 	});
 
-	it('clicking about tab calls goto with tab=about', async () => {
+	it('falls back to general tab when tab is unknown', async () => {
+		pageMock.url = new URL('http://localhost/system?tab=unknown');
 		renderWithQuery(SystemPage);
 
-		const aboutTab = screen.getByRole('tab', { name: m.system_tab_about() });
-		await fireEvent.click(aboutTab);
+		expect(
+			await screen.findByRole('tab', { name: m.system_tab_general(), selected: true })
+		).toBeTruthy();
+		expect(screen.getByRole('heading', { level: 2, name: m.settings_title() })).toBeTruthy();
+	});
 
-		expect(navMocks.goto).toHaveBeenCalledWith('/system?tab=about', { replaceState: true });
+	it('clicking tab calls goto without replaceState for back button history', async () => {
+		renderWithQuery(SystemPage);
+
+		const modulesTab = screen.getByRole('tab', { name: m.system_tab_modules() });
+		await fireEvent.click(modulesTab);
+
+		expect(navMocks.goto).toHaveBeenCalledWith('/system?tab=modules');
 	});
 });

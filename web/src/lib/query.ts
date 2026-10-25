@@ -36,5 +36,7 @@ export const keys = {
 	rules: ['notification-rules'] as const,
 	apiKeys: ['api-keys'] as const,
 	systemStatus: ['system', 'status'] as const,
-	licences: ['licences'] as const
+	licences: ['licences'] as const,
+	modules: ['system', 'modules'] as const,
+	module: (id: string) => ['system', 'modules', id] as const
 };

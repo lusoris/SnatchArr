@@ -8,8 +8,10 @@ SPDX-License-Identifier: EUPL-1.2
 	import { api } from '#lib/api/client.js';
 	import type { components } from '#lib/api/schema.js';
 	import FormCard from '#lib/components/FormCard.svelte';
+	import PageHeader from '#lib/components/PageHeader.svelte';
 	import QueryGuard from '#lib/components/QueryGuard.svelte';
 	import TextField from '#lib/components/TextField.svelte';
+	import { HELP_MAP } from '#lib/help.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
 	import { fieldErrors, filledPart } from '#lib/problem.js';
@@ -48,9 +50,9 @@ SPDX-License-Identifier: EUPL-1.2
 	}
 </script>
 
-<h1 id="configarr-main-title" class="mb-4 text-2xl font-semibold">{m.configarr_title()}</h1>
+<PageHeader title={m.configarr_title()} documentTitle help={HELP_MAP['/connections/configarr']} />
 
-<section aria-labelledby="configarr-main-title" class="w-full">
+<section aria-label={m.configarr_title()} class="w-full">
 	<div class="grid w-full grid-cols-1 items-start gap-6 xl:grid-cols-12">
 		<div class="flex flex-col gap-6 xl:col-span-7">
 			<section class="card w-full" aria-labelledby="configarr-status-title">

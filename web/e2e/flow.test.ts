@@ -70,7 +70,7 @@ test('notifications: create channel, test delivery, create rule, read back from 
 		});
 		expect(login.ok()).toBeTruthy();
 
-		await page.goto('/settings');
+		await page.goto('/system?tab=notifications');
 		await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 		await expect(
 			page.getByRole('heading', { level: 2, name: /notifications|benachrichtigungen/i })

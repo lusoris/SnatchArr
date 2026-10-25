@@ -9,10 +9,12 @@ SPDX-License-Identifier: EUPL-1.2
 	import type { components } from '#lib/api/schema.js';
 	import AdminFormSlot from '#lib/components/AdminFormSlot.svelte';
 	import LinkCard from '#lib/components/LinkCard.svelte';
+	import PageHeader from '#lib/components/PageHeader.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import SeerrLinkForm from '#lib/components/SeerrLinkForm.svelte';
 	import { FormEditor } from '#lib/formEditor.svelte.js';
 	import { deleteCallbacks, probeCallbacks, saveSuccess } from '#lib/forms.js';
+	import { HELP_MAP } from '#lib/help.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
 	import { keys } from '#lib/query.js';
@@ -109,7 +111,7 @@ SPDX-License-Identifier: EUPL-1.2
 	});
 </script>
 
-<h1 class="mb-4 text-2xl font-semibold">{m.seerr_title()}</h1>
+<PageHeader title={m.seerr_title()} documentTitle help={HELP_MAP['/connections/seerr']} />
 
 <section aria-labelledby="seerr-links-section-title" class="w-full">
 	<h2 id="seerr-links-section-title" class="sr-only">{m.seerr_links_title()}</h2>

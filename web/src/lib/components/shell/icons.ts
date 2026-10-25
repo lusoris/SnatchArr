@@ -4,9 +4,11 @@
 
 import { createLucideLoader } from '@sveltesentio/ui/icons';
 import Activity from '@lucide/svelte/icons/activity';
+import BookOpen from '@lucide/svelte/icons/book-open';
 import Clock from '@lucide/svelte/icons/clock';
 import CloudDownload from '@lucide/svelte/icons/cloud-download';
 import Ellipsis from '@lucide/svelte/icons/ellipsis';
+import ExternalLink from '@lucide/svelte/icons/external-link';
 import FileCode from '@lucide/svelte/icons/file-code';
 import Film from '@lucide/svelte/icons/film';
 import Heart from '@lucide/svelte/icons/heart';
@@ -32,9 +34,11 @@ import X from '@lucide/svelte/icons/x';
  */
 export const shellIconLoader = createLucideLoader({
 	Activity,
+	BookOpen,
 	Clock,
 	CloudDownload,
 	Ellipsis,
+	ExternalLink,
 	FileCode,
 	Film,
 	Heart,
@@ -61,5 +65,7 @@ export const shellChromeIcons = [
 	'log-out',
 	'search',
 	'ellipsis',
-	'heart'
+	'heart',
+	'book-open',
+	'external-link'
 ] as const;

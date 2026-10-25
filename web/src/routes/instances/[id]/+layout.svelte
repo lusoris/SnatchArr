@@ -10,6 +10,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import PageHeader from '#lib/components/PageHeader.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import UrlText from '#lib/components/UrlText.svelte';
+	import { HELP_MAP } from '#lib/help.js';
 	import { instanceQuery } from '#lib/components/instance/instance-query.svelte.js';
 	import { getInstanceTabs, isTabActive } from '#lib/components/instance/tabs.js';
 	import { m } from '#lib/paraglide/messages.js';
@@ -26,6 +27,15 @@ SPDX-License-Identifier: EUPL-1.2
 	);
 
 	const tabs = $derived(getInstanceTabs(instanceId));
+
+	const currentHelp = $derived.by(() => {
+		const path = page.url.pathname;
+		if (path.endsWith('/policy')) return HELP_MAP['/instances/[id]/policy'];
+		if (path.endsWith('/queue')) return HELP_MAP['/instances/[id]/queue'];
+		if (path.endsWith('/activity')) return HELP_MAP['/instances/[id]/activity'];
+		if (path.endsWith('/memory')) return HELP_MAP['/instances/[id]/memory'];
+		return HELP_MAP['/instances/[id]'];
+	});
 </script>
 
 {#key page.params.id}
@@ -45,7 +55,7 @@ SPDX-License-Identifier: EUPL-1.2
 		<ProblemNote error={instance.error} />
 	{:else if instance.data}
 		{@const inst = instance.data}
-		<PageHeader title={inst.name} sticky>
+		<PageHeader title={inst.name} sticky help={currentHelp}>
 			{#snippet status()}
 				<span
 					class="inline-block rounded-full border border-line px-2.5 py-0.5 text-xs text-subtle"

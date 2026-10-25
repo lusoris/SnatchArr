@@ -112,7 +112,8 @@ export async function mockSignedInApi(
 		'seerr',
 		'runs',
 		'events',
-		'schedules'
+		'schedules',
+		'system/modules'
 	]) {
 		await page.route(`**/api/v1/${path}*`, (route) => route.fulfill(json([])));
 	}
@@ -213,4 +214,59 @@ export async function mockSettingsApi(
 	await page.route('**/api/v1/notifications/channels', (route) => route.fulfill(json([])));
 	await page.route('**/api/v1/notifications/rules', (route) => route.fulfill(json([])));
 	await page.route('**/api/v1/priority-presets', (route) => route.fulfill(json([])));
+}
+
+export const sampleModulesData = [{ id: 'llm', enabled: false }];
+
+export async function mockModulesApi(
+	page: Page,
+	options?: {
+		modules?: typeof sampleModulesData;
+		delayMs?: number;
+		status?: number;
+		toggleStatus?: number;
+	}
+): Promise<void> {
+	await mockSignedInApi(page);
+	await page.route('**/api/v1/system/modules', async (route) => {
+		if (options?.delayMs) {
+			await new Promise((r) => setTimeout(r, options.delayMs));
+		}
+		if (options?.status && options.status >= 400) {
+			await route.fulfill(problemJson(options.status, 'Modules list failure'));
+			return;
+		}
+		await route.fulfill(json(options?.modules ?? sampleModulesData));
+	});
+
+	await page.route('**/api/v1/system/modules/*', async (route) => {
+		const id = route.request().url().split('/').pop()?.split('?')[0] ?? 'llm';
+		if (route.request().method() === 'PUT') {
+			if (options?.toggleStatus && options.toggleStatus >= 400) {
+				await route.fulfill(problemJson(options.toggleStatus, 'Module update failure'));
+				return;
+			}
+			const body = route.request().postDataJSON() as {
+				enabled: boolean;
+				config?: Record<string, unknown>;
+			};
+			await route.fulfill(
+				json({
+					id,
+					enabled: body?.enabled ?? true,
+					config: body?.config ?? {},
+					updated_at: '2026-10-25T00:00:00Z'
+				})
+			);
+			return;
+		}
+		await route.fulfill(
+			json({
+				id,
+				enabled: false,
+				config: {},
+				updated_at: '2026-10-25T00:00:00Z'
+			})
+		);
+	});
 }

@@ -35,6 +35,8 @@ export const AUTH_ROUTES = [
 	'/instances/[id]/policy',
 	'/instances/[id]/queue',
 	'/system',
+	'/system?tab=modules',
+	'/system?tab=notifications',
 	'/system?tab=about'
 ] as const;
 
@@ -57,7 +59,9 @@ export const MIN_TABLES: Record<(typeof AUTH_ROUTES)[number], number> = {
 	'/instances/[id]/memory': 0,
 	'/instances/[id]/policy': 0,
 	'/instances/[id]/queue': 1,
-	'/system': 2,
+	'/system': 0,
+	'/system?tab=modules': 0,
+	'/system?tab=notifications': 2,
 	'/system?tab=about': 0
 };
 
@@ -65,7 +69,7 @@ export const MIN_TABLES: Record<(typeof AUTH_ROUTES)[number], number> = {
 // list below renders one table when it is non-empty and an empty-state line otherwise.
 const ROUTE_LISTS = {
 	'/automation': ['/api/v1/schedules'],
-	'/system': ['/api/v1/notifications/channels', '/api/v1/notifications/rules'],
+	'/system?tab=notifications': ['/api/v1/notifications/channels', '/api/v1/notifications/rules'],
 	'/account': ['/api/v1/auth/api-keys']
 } as const satisfies Partial<Record<(typeof AUTH_ROUTES)[number], readonly string[]>>;
 type DataRoute = keyof typeof ROUTE_LISTS;
@@ -540,7 +544,9 @@ export const SCROLL_BUDGET_ROUTES = [
 	'/instances/[id]',
 	'/activity',
 	'/activity?source=log',
-	'/instances/[id]/activity'
+	'/instances/[id]/activity',
+	'/system?tab=modules',
+	'/system?tab=notifications'
 ] as const;
 
 export async function assertScrollBudget(
@@ -589,7 +595,4 @@ export interface PendingRoute {
 	reason: string;
 }
 
-export const WIDTH_PENDING: Record<string, PendingRoute> = {
-	'/system': { pr: 'G', expires: '2026-11-23', reason: 'narrow content wrapper' },
-	'/system?tab=about': { pr: 'G', expires: '2026-11-23', reason: 'narrow content wrapper' }
-};
+export const WIDTH_PENDING: Record<string, PendingRoute> = {};

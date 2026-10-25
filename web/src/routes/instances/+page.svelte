@@ -11,6 +11,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import Field from '#lib/components/Field.svelte';
 	import KindSelect from '#lib/components/KindSelect.svelte';
 	import PageHeader from '#lib/components/PageHeader.svelte';
+	import { HELP_MAP } from '#lib/help.js';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import ResetMemory from '#lib/components/ResetMemory.svelte';
 	import StatusIcon from '#lib/components/StatusIcon.svelte';
@@ -68,7 +69,7 @@ SPDX-License-Identifier: EUPL-1.2
 	});
 </script>
 
-<PageHeader title={m.nav_instances()} />
+<PageHeader title={m.nav_instances()} help={HELP_MAP['/instances']} />
 
 {#if instances.isPending}
 	<p aria-live="polite">{m.loading()}</p>

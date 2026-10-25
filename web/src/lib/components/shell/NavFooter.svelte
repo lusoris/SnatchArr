@@ -5,6 +5,7 @@ SPDX-License-Identifier: EUPL-1.2
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
+	import { docsUrl } from '#lib/docs.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { isRouteActive } from './nav.js';
 	import NavIcon from './NavIcon.svelte';
@@ -27,6 +28,19 @@ SPDX-License-Identifier: EUPL-1.2
 
 <div class="flex flex-col gap-3 border-t border-line p-3 text-xs">
 	<LocaleSelect id={localeId} />
+
+	<a
+		href={docsUrl('')}
+		target="_blank"
+		rel="external noopener"
+		class="nav-link flex items-center justify-between rounded px-2 py-1.5 text-sm text-fg"
+	>
+		<span class="flex items-center gap-2">
+			<NavIcon name="book-open" size={16} class="text-subtle" />
+			<span>{m.nav_documentation()}</span>
+		</span>
+		<NavIcon name="external-link" size={14} class="text-subtle" />
+	</a>
 
 	<div class="flex items-center justify-between gap-2 pt-1">
 		<a

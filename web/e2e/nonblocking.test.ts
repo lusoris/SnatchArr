@@ -8,7 +8,14 @@ import { mockInstancePolicyApi, mockSettingsApi, mockSignedInApi } from './mocks
 const testInstanceId = '00000000-0000-0000-0000-000000000001';
 
 test.describe('nonblocking', () => {
-	for (const initialPath of ['/', '/activity', '/automation', '/connections', '/system']) {
+	for (const initialPath of [
+		'/',
+		'/activity',
+		'/automation',
+		'/connections',
+		'/system',
+		'/system?tab=modules'
+	]) {
 		test(`delayed 10s API responses on ${initialPath} do not block shell render or navigation, and 503 renders ProblemNote or skeleton`, async ({
 			page
 		}) => {
