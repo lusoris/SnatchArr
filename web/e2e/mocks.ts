@@ -106,12 +106,19 @@ export async function mockSignedInApi(
 		'instances',
 		'hourly-caps',
 		'prowlarr/status',
+		'prowlarr',
+		'download-clients/status',
+		'download-clients',
+		'seerr',
 		'runs',
 		'events',
 		'schedules'
 	]) {
 		await page.route(`**/api/v1/${path}*`, (route) => route.fulfill(json([])));
 	}
+	await page.route('**/api/v1/configarr/status*', (route) =>
+		route.fulfill(json({ linked: false, watching: false }))
+	);
 }
 
 export async function mockInstancePolicyApi(

@@ -160,7 +160,7 @@ const listStubs = {
 /** The card of the sample client, where its Edit, Test and Delete buttons live. */
 async function sampleCard() {
 	const heading = await screen.findByRole('heading', { level: 2, name: /qBittorrent Primary/ });
-	return within(heading.closest('li') as HTMLElement);
+	return within(heading.closest('tr, li') as HTMLElement);
 }
 
 /** Stubs list GET endpoints and renders the page with a PUT spy. */
@@ -425,7 +425,7 @@ describe('download-clients management', () => {
 
 		const card = within(
 			(await screen.findByRole('heading', { level: 2, name: /Configarr qBit/ })).closest(
-				'li'
+				'tr, li'
 			) as HTMLElement
 		);
 		const editBtn = card.getByRole('button', { name: m.action_edit() }) as HTMLButtonElement;

@@ -52,6 +52,7 @@ plugins:
           - concepts.md
           - configuration.md
         Features and integrations:
+          - connections.md
           - notifications.md
           - sso.md
           - download-clients.md
@@ -99,6 +100,7 @@ nav:
   - Configuration: configuration.md
   - Notifications: notifications.md
   - Single Sign-On: sso.md
+  - Connections: connections.md
   - Download clients: download-clients.md
   - Queue management: queue-management.md
   - Seerr: seerr.md

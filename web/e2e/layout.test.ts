@@ -12,6 +12,7 @@ import {
 	assertDesktopWidth,
 	assertRenderedLayout,
 	assertScrollBudget,
+	assertTableFits,
 	AUTH_ROUTES,
 	collectLists,
 	expectedTables,
@@ -539,4 +540,16 @@ test('authenticated: desktop width gate fixtures and planted negative', async ({
 	await expect(assertDesktopWidth(page, '/test-empty')).rejects.toThrow(
 		'/test-empty: no content block measured'
 	);
+});
+
+test('authenticated: layout /connections/download-clients table fits at 1280', async ({ page }) => {
+	await page.setViewportSize({ width: 1280, height: 800 });
+	await page.goto('/connections/download-clients');
+	await page.waitForLoadState('networkidle');
+
+	const table = page.locator('table');
+	await expect(table).toBeVisible();
+	await expect(table.getByText(/connection refused/i).first()).toBeVisible();
+
+	await assertTableFits(page, 'table');
 });

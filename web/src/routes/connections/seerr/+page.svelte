@@ -111,53 +111,62 @@ SPDX-License-Identifier: EUPL-1.2
 
 <h1 class="mb-4 text-2xl font-semibold">{m.seerr_title()}</h1>
 
-<h2 class="mb-3 text-lg font-semibold">{m.seerr_links_title()}</h2>
-{#if links.isPending}
-	<p aria-live="polite">{m.loading()}</p>
-{:else if links.isError}
-	<ProblemNote error={links.error} />
-{:else if (links.data ?? []).length === 0}
-	<p class="card mb-6">{m.seerr_links_empty()}</p>
-{:else}
-	<ul class="mb-6 grid gap-3 md:grid-cols-2">
-		{#each links.data ?? [] as link (link.id)}
-			<LinkCard
-				{link}
-				testPending={probe.isPending}
-				deletePending={remove.isPending}
-				onedit={() => editor.open(link)}
-				ontest={() => probe.mutate(link.id)}
-				ondelete={() => remove.mutate(link)}
-			>
-				{#snippet statusExtra()}
-					{#if link.last_sync_at}
-						· {m.seerr_last_sync({ when: formatWhen(link.last_sync_at, getLocale()) })}
-					{/if}
-				{/snippet}
-				{#snippet extraActions()}
-					<button
-						type="button"
-						class="btn"
-						disabled={sync.isPending}
-						onclick={() => sync.mutate(link.id)}>{m.seerr_sync()}</button
-					>
-					<button
-						type="button"
-						class="btn"
-						disabled={importInstances.isPending}
-						onclick={() => importInstances.mutate(link.id)}>{m.seerr_import()}</button
-					>
-				{/snippet}
-			</LinkCard>
-		{/each}
-	</ul>
-{/if}
+<section aria-labelledby="seerr-links-section-title" class="w-full">
+	<h2 id="seerr-links-section-title" class="sr-only">{m.seerr_links_title()}</h2>
+	<div class="grid w-full grid-cols-1 items-start gap-6 xl:grid-cols-12">
+		<div class="flex flex-col gap-3 xl:col-span-7">
+			<h2 class="text-lg font-semibold">{m.seerr_links_title()}</h2>
+			{#if links.isPending}
+				<p aria-live="polite">{m.loading()}</p>
+			{:else if links.isError}
+				<ProblemNote error={links.error} />
+			{:else if (links.data ?? []).length === 0}
+				<p class="card">{m.seerr_links_empty()}</p>
+			{:else}
+				<ul class="grid grid-cols-1 gap-3 xl:grid-cols-2">
+					{#each links.data ?? [] as link (link.id)}
+						<LinkCard
+							{link}
+							testPending={probe.isPending}
+							deletePending={remove.isPending}
+							onedit={() => editor.open(link)}
+							ontest={() => probe.mutate(link.id)}
+							ondelete={() => remove.mutate(link)}
+						>
+							{#snippet statusExtra()}
+								{#if link.last_sync_at}
+									· {m.seerr_last_sync({ when: formatWhen(link.last_sync_at, getLocale()) })}
+								{/if}
+							{/snippet}
+							{#snippet extraActions()}
+								<button
+									type="button"
+									class="btn"
+									disabled={sync.isPending}
+									onclick={() => sync.mutate(link.id)}>{m.seerr_sync()}</button
+								>
+								<button
+									type="button"
+									class="btn"
+									disabled={importInstances.isPending}
+									onclick={() => importInstances.mutate(link.id)}>{m.seerr_import()}</button
+								>
+							{/snippet}
+						</LinkCard>
+					{/each}
+				</ul>
+			{/if}
+		</div>
 
-<AdminFormSlot {editor} {save} probe={probeInput}>
-	{#snippet form(props)}
-		<SeerrLinkForm link={editor.editing} instances={instances.data ?? []} {...props} />
-	{/snippet}
-</AdminFormSlot>
+		<div class="xl:col-span-5">
+			<AdminFormSlot {editor} {save} probe={probeInput}>
+				{#snippet form(props)}
+					<SeerrLinkForm link={editor.editing} instances={instances.data ?? []} {...props} />
+				{/snippet}
+			</AdminFormSlot>
+		</div>
+	</div>
+</section>
 
 <h2 class="mt-8 mb-3 text-lg font-semibold">{m.seerr_requests_title()}</h2>
 {#if requests.isPending}
