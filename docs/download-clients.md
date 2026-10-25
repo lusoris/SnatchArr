@@ -63,6 +63,7 @@ client; observations are cached for 20 seconds.
 | --- | --- |
 | client unreachable or paused | The instance's snatches are deferred until it is back |
 | `max_active` | Defer snatches while at least this many downloads are active (0 = no limit) |
+| `max_queued` | Defer snatches while at least this many downloads are queued (0 = no limit) |
 | `bandwidth_budget_bps` | Scale per-cycle counts by the share of the budget still free; a saturated budget defers (0 = off) |
 
 Deferrals are recorded once as `snatch_deferred` and cleared with `snatch_resumed`; a paced

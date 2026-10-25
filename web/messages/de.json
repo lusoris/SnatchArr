@@ -441,6 +441,7 @@
 	"dlclients_all_instances": "Alle Instanzen",
 	"dlclients_pinned": "Nur {name}",
 	"dlclients_max_active": "Max. aktive Downloads (0 = unbegrenzt)",
+	"dlclients_max_queued": "Max. eingereihte Downloads (0 = unbegrenzt)",
 	"dlclients_bandwidth": "Bandbreitenbudget in Bytes/s (0 = aus)",
 	"dlclients_test_ok": "{name} ist erreichbar",
 	"dlclients_test_unreachable": "{name} ist nicht erreichbar: {detail}",

@@ -158,11 +158,11 @@ func TestDownloadClientConversions(t *testing.T) {
 	instID := uuid.New()
 	c := domain.DownloadClient{
 		ID: uuid.New(), InstanceID: &instID, Kind: domain.ClientSABnzbd, Name: "sab", BaseURL: "http://sab:8080", Username: "",
-		Enabled: true, Source: domain.ClientSourceDiscovered, RemoteID: 3, MaxActive: 4, BandwidthBudgetBPS: 5_000_000,
+		Enabled: true, Source: domain.ClientSourceDiscovered, RemoteID: 3, MaxActive: 4, MaxQueued: 7, BandwidthBudgetBPS: 5_000_000,
 		LastCheckAt: &now, LastError: "boom", CreatedAt: now, UpdatedAt: now,
 	}
 	got := downloadClientToOAS(c)
-	if got.Protocol != oas.DownloadClientProtocolUsenet || !got.InstanceID.Set || got.InstanceID.Value != instID || got.LastError.Value != "boom" || got.BandwidthBudgetBps != 5_000_000 {
+	if got.Protocol != oas.DownloadClientProtocolUsenet || !got.InstanceID.Set || got.InstanceID.Value != instID || got.LastError.Value != "boom" || got.BandwidthBudgetBps != 5_000_000 || got.MaxQueued != 7 {
 		t.Fatalf("downloadClientToOAS: %+v", got)
 	}
 	global := c
@@ -172,9 +172,9 @@ func TestDownloadClientConversions(t *testing.T) {
 	}
 	in := downloadClientInputFromOAS(&oas.DownloadClientInput{
 		Kind: oas.DownloadClientKindQbittorrent, Name: "q", BaseURL: "http://q", Secret: oas.NewOptString("pw"),
-		InstanceID: oas.NewOptUUID(instID), MaxActive: oas.NewOptInt(2),
+		InstanceID: oas.NewOptUUID(instID), MaxActive: oas.NewOptInt(2), MaxQueued: oas.NewOptInt(6),
 	})
-	if in.Kind != domain.ClientQBittorrent || in.Secret != "pw" || !in.Enabled || in.MaxActive != 2 || in.InstanceID == nil || *in.InstanceID != instID {
+	if in.Kind != domain.ClientQBittorrent || in.Secret != "pw" || !in.Enabled || in.MaxActive != 2 || in.MaxQueued != 6 || in.InstanceID == nil || *in.InstanceID != instID {
 		t.Fatalf("downloadClientInputFromOAS: %+v", in)
 	}
 	snap := snapshotToOAS(dlclients.Snapshot{ClientID: c.ID, Name: "sab", Kind: domain.ClientSABnzbd, Reachable: true, Active: 1, DownloadRate: 10, CheckedAt: now})
