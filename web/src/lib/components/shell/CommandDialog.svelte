@@ -11,14 +11,28 @@ SPDX-License-Identifier: EUPL-1.2
 	import { api } from '#lib/api/client.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { keys } from '#lib/query.js';
-	import { getNavItems, type NavItem } from './nav.js';
+	import { filterByModule, getNavItems, type ModuledItem, type NavItem } from './nav.js';
+
+	interface ConnectionPageItem extends ModuledItem {
+		href:
+			| '/connections/download-clients'
+			| '/connections/seerr'
+			| '/connections/prowlarr'
+			| '/connections/configarr';
+		label: string;
+	}
 
 	interface Props {
 		navItems?: NavItem[];
+		activeModules?: ReadonlySet<string>;
 		open?: boolean;
 	}
 
-	let { navItems = getNavItems(), open = $bindable(false) }: Props = $props();
+	let { navItems, activeModules = new Set(), open = $bindable(false) }: Props = $props();
+
+	const effectiveNavItems = $derived(
+		filterByModule(navItems ?? getNavItems(activeModules), activeModules)
+	);
 
 	let openerEl: HTMLElement | null = null;
 	let prevOpen = false;
@@ -28,29 +42,32 @@ SPDX-License-Identifier: EUPL-1.2
 		queryFn: async () => (await api.GET('/instances')).data ?? []
 	});
 
-	const connectionPages = [
-		{ href: '/connections/download-clients' as const, label: m.nav_download_clients() },
-		{ href: '/connections/seerr' as const, label: m.nav_seerr() },
-		{ href: '/connections/prowlarr' as const, label: m.nav_prowlarr() },
-		{ href: '/connections/configarr' as const, label: m.nav_configarr() }
+	const connectionPages: readonly ConnectionPageItem[] = [
+		{ href: '/connections/download-clients', label: m.nav_download_clients() },
+		{ href: '/connections/seerr', label: m.nav_seerr() },
+		{ href: '/connections/prowlarr', label: m.nav_prowlarr() },
+		{ href: '/connections/configarr', label: m.nav_configarr() }
 	];
+
+	const visibleConnectionPages = $derived(filterByModule(connectionPages, activeModules));
 
 	const registry = $derived.by(() => {
 		const cmds: Command[] = [];
 
-		for (const item of navItems) {
+		for (const item of effectiveNavItems) {
 			cmds.push({
 				id: `nav-${item.href}`,
 				title: item.label,
 				subtitle: item.label,
 				group: m.nav_overview(),
+				keywords: [item.href.replace('/', ''), item.label.toLowerCase()],
 				run: async () => {
 					await goto(resolve(item.href));
 				}
 			});
 		}
 
-		for (const page of connectionPages) {
+		for (const page of visibleConnectionPages) {
 			cmds.push({
 				id: `nav-${page.href}`,
 				title: page.label,
