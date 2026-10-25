@@ -50,6 +50,7 @@ SPDX-License-Identifier: EUPL-1.2
 	let instanceId = $state(initial?.instance_id ?? '');
 	let enabled = $state(initial?.enabled ?? true);
 	let maxActive = $state<number | null>(initial?.max_active ?? 0);
+	let maxQueued = $state<number | null>(initial?.max_queued ?? 0);
 	let bandwidth = $state<number | null>(initial?.bandwidth_budget_bps ?? 0);
 	const errors = $derived(fieldErrors(error));
 
@@ -61,6 +62,7 @@ SPDX-License-Identifier: EUPL-1.2
 			username,
 			enabled,
 			max_active: maxActive ?? 0,
+			max_queued: maxQueued ?? 0,
 			bandwidth_budget_bps: bandwidth ?? 0,
 			...filledPart('secret', secret),
 			...filledPart('instance_id', instanceId)
@@ -134,6 +136,15 @@ SPDX-License-Identifier: EUPL-1.2
 		max={1000}
 		error={errors.max_active}
 		bind:value={maxActive}
+	/>
+	<TextField
+		id="dlclient-max-queued"
+		label={m.dlclients_max_queued()}
+		type="number"
+		min={0}
+		max={1000}
+		error={errors.max_queued}
+		bind:value={maxQueued}
 	/>
 	<TextField
 		id="dlclient-bandwidth"
