@@ -1698,6 +1698,18 @@ func stepsWatchaware() []routerStep {
 			path:   func(_ *idsState) string { return "/watchaware/sync/status" },
 			want:   http.StatusOK,
 		},
+		{
+			op:     "listWatchawareGateSeries",
+			method: http.MethodGet,
+			path:   func(ids *idsState) string { return "/watchaware/gate/series?instance_id=" + ids.instanceID },
+			want:   http.StatusOK,
+		},
+		{
+			op:     "listWatchawareGateDecisions",
+			method: http.MethodGet,
+			path:   func(_ *idsState) string { return "/watchaware/gate/decisions" },
+			want:   http.StatusOK,
+		},
 	}
 }
 

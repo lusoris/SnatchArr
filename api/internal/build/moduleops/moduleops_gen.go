@@ -3,9 +3,11 @@
 package moduleops
 
 var ByOperation = map[string]string{
-	"createWatchawareSource":  "watchaware",
-	"deleteWatchawareSource":  "watchaware",
-	"getWatchawareSyncStatus": "watchaware",
-	"listWatchawareSources":   "watchaware",
-	"updateWatchawareSource":  "watchaware",
+	"createWatchawareSource":      "watchaware",
+	"deleteWatchawareSource":      "watchaware",
+	"getWatchawareSyncStatus":     "watchaware",
+	"listWatchawareGateDecisions": "watchaware",
+	"listWatchawareGateSeries":    "watchaware",
+	"listWatchawareSources":       "watchaware",
+	"updateWatchawareSource":      "watchaware",
 }

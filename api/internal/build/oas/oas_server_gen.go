@@ -391,6 +391,18 @@ type Handler interface {
 	//
 	// GET /seerr/requests
 	ListSeerrRequests(ctx context.Context) ([]SeerrRequest, error)
+	// ListWatchawareGateDecisions implements listWatchawareGateDecisions operation.
+	//
+	// List watch-aware gate decisions.
+	//
+	// GET /watchaware/gate/decisions
+	ListWatchawareGateDecisions(ctx context.Context, params ListWatchawareGateDecisionsParams) ([]WatchawareGateDecision, error)
+	// ListWatchawareGateSeries implements listWatchawareGateSeries operation.
+	//
+	// List watch-aware gate series state for an instance.
+	//
+	// GET /watchaware/gate/series
+	ListWatchawareGateSeries(ctx context.Context, params ListWatchawareGateSeriesParams) ([]WatchawareGateSeries, error)
 	// ListWatchawareSources implements listWatchawareSources operation.
 	//
 	// List configured watch-aware sources.

@@ -14,10 +14,10 @@ var (
 	rn8AllowedHeaders = map[string]string{
 		"POST": "Content-Type",
 	}
-	rn75AllowedHeaders = map[string]string{
+	rn79AllowedHeaders = map[string]string{
 		"POST": "Content-Type",
 	}
-	rn77AllowedHeaders = map[string]string{
+	rn81AllowedHeaders = map[string]string{
 		"POST": "Authorization",
 	}
 	rn5AllowedHeaders = map[string]string{
@@ -42,7 +42,7 @@ var (
 	rn41AllowedHeaders = map[string]string{
 		"GET": "Authorization",
 	}
-	rn91AllowedHeaders = map[string]string{
+	rn95AllowedHeaders = map[string]string{
 		"POST": "Authorization,Content-Type",
 	}
 	rn22AllowedHeaders = map[string]string{
@@ -50,7 +50,7 @@ var (
 		"GET":    "Authorization",
 		"PUT":    "Authorization,Content-Type",
 	}
-	rn90AllowedHeaders = map[string]string{
+	rn94AllowedHeaders = map[string]string{
 		"POST": "Authorization",
 	}
 	rn67AllowedHeaders = map[string]string{
@@ -63,7 +63,7 @@ var (
 		"GET":  "Authorization",
 		"POST": "Authorization,Content-Type",
 	}
-	rn93AllowedHeaders = map[string]string{
+	rn97AllowedHeaders = map[string]string{
 		"POST": "Authorization,Content-Type",
 	}
 	rn24AllowedHeaders = map[string]string{
@@ -84,7 +84,7 @@ var (
 	rn48AllowedHeaders = map[string]string{
 		"GET": "Authorization",
 	}
-	rn79AllowedHeaders = map[string]string{
+	rn83AllowedHeaders = map[string]string{
 		"POST": "Authorization",
 	}
 	rn43AllowedHeaders = map[string]string{
@@ -101,10 +101,10 @@ var (
 	rn72AllowedHeaders = map[string]string{
 		"GET": "Authorization",
 	}
-	rn99AllowedHeaders = map[string]string{
+	rn103AllowedHeaders = map[string]string{
 		"POST": "Authorization,Content-Type",
 	}
-	rn92AllowedHeaders = map[string]string{
+	rn96AllowedHeaders = map[string]string{
 		"POST": "Authorization",
 	}
 	rn68AllowedHeaders = map[string]string{
@@ -119,7 +119,7 @@ var (
 		"GET":    "Authorization",
 		"PUT":    "Authorization,Content-Type",
 	}
-	rn94AllowedHeaders = map[string]string{
+	rn98AllowedHeaders = map[string]string{
 		"POST": "Authorization",
 	}
 	rn13AllowedHeaders = map[string]string{
@@ -141,7 +141,7 @@ var (
 	rn51AllowedHeaders = map[string]string{
 		"GET": "Authorization",
 	}
-	rn96AllowedHeaders = map[string]string{
+	rn100AllowedHeaders = map[string]string{
 		"POST": "Authorization,Content-Type",
 	}
 	rn31AllowedHeaders = map[string]string{
@@ -149,7 +149,7 @@ var (
 		"GET":    "Authorization",
 		"PUT":    "Authorization,Content-Type",
 	}
-	rn95AllowedHeaders = map[string]string{
+	rn99AllowedHeaders = map[string]string{
 		"POST": "Authorization",
 	}
 	rn73AllowedHeaders = map[string]string{
@@ -176,10 +176,10 @@ var (
 	rn74AllowedHeaders = map[string]string{
 		"GET": "Authorization",
 	}
-	rn87AllowedHeaders = map[string]string{
+	rn91AllowedHeaders = map[string]string{
 		"POST": "Authorization",
 	}
-	rn98AllowedHeaders = map[string]string{
+	rn102AllowedHeaders = map[string]string{
 		"POST": "Authorization,Content-Type",
 	}
 	rn35AllowedHeaders = map[string]string{
@@ -190,17 +190,17 @@ var (
 	rn66AllowedHeaders = map[string]string{
 		"POST": "Authorization",
 	}
-	rn89AllowedHeaders = map[string]string{
+	rn93AllowedHeaders = map[string]string{
 		"POST": "Authorization",
 	}
-	rn97AllowedHeaders = map[string]string{
+	rn101AllowedHeaders = map[string]string{
 		"POST": "Authorization",
 	}
 	rn58AllowedHeaders = map[string]string{
 		"GET": "Authorization",
 		"PUT": "Authorization,Content-Type",
 	}
-	rn80AllowedHeaders = map[string]string{
+	rn84AllowedHeaders = map[string]string{
 		"POST": "Authorization,Content-Type",
 	}
 	rn69AllowedHeaders = map[string]string{
@@ -209,6 +209,12 @@ var (
 	rn45AllowedHeaders = map[string]string{
 		"GET": "Authorization",
 		"PUT": "Authorization,Content-Type",
+	}
+	rn76AllowedHeaders = map[string]string{
+		"GET": "Authorization",
+	}
+	rn78AllowedHeaders = map[string]string{
+		"GET": "Authorization",
 	}
 	rn20AllowedHeaders = map[string]string{
 		"GET":  "Authorization",
@@ -378,7 +384,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 							default:
 								s.notAllowed(w, r, notAllowedParams{
 									allowedMethods: "POST",
-									allowedHeaders: rn75AllowedHeaders,
+									allowedHeaders: rn79AllowedHeaders,
 									acceptPost:     "application/json",
 									acceptPatch:    "",
 								})
@@ -403,7 +409,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 							default:
 								s.notAllowed(w, r, notAllowedParams{
 									allowedMethods: "POST",
-									allowedHeaders: rn77AllowedHeaders,
+									allowedHeaders: rn81AllowedHeaders,
 									acceptPost:     "",
 									acceptPatch:    "",
 								})
@@ -753,7 +759,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 							default:
 								s.notAllowed(w, r, notAllowedParams{
 									allowedMethods: "POST",
-									allowedHeaders: rn91AllowedHeaders,
+									allowedHeaders: rn95AllowedHeaders,
 									acceptPost:     "application/json",
 									acceptPatch:    "",
 								})
@@ -817,7 +823,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 							default:
 								s.notAllowed(w, r, notAllowedParams{
 									allowedMethods: "POST",
-									allowedHeaders: rn90AllowedHeaders,
+									allowedHeaders: rn94AllowedHeaders,
 									acceptPost:     "",
 									acceptPatch:    "",
 								})
@@ -934,7 +940,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 							default:
 								s.notAllowed(w, r, notAllowedParams{
 									allowedMethods: "POST",
-									allowedHeaders: rn93AllowedHeaders,
+									allowedHeaders: rn97AllowedHeaders,
 									acceptPost:     "application/json",
 									acceptPatch:    "",
 								})
@@ -1147,7 +1153,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 										default:
 											s.notAllowed(w, r, notAllowedParams{
 												allowedMethods: "POST",
-												allowedHeaders: rn79AllowedHeaders,
+												allowedHeaders: rn83AllowedHeaders,
 												acceptPost:     "",
 												acceptPatch:    "",
 											})
@@ -1309,7 +1315,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 								default:
 									s.notAllowed(w, r, notAllowedParams{
 										allowedMethods: "POST",
-										allowedHeaders: rn99AllowedHeaders,
+										allowedHeaders: rn103AllowedHeaders,
 										acceptPost:     "application/json",
 										acceptPatch:    "",
 									})
@@ -1336,7 +1342,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 								default:
 									s.notAllowed(w, r, notAllowedParams{
 										allowedMethods: "POST",
-										allowedHeaders: rn92AllowedHeaders,
+										allowedHeaders: rn96AllowedHeaders,
 										acceptPost:     "",
 										acceptPatch:    "",
 									})
@@ -1475,7 +1481,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 								default:
 									s.notAllowed(w, r, notAllowedParams{
 										allowedMethods: "POST",
-										allowedHeaders: rn94AllowedHeaders,
+										allowedHeaders: rn98AllowedHeaders,
 										acceptPost:     "",
 										acceptPatch:    "",
 									})
@@ -1679,7 +1685,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 								default:
 									s.notAllowed(w, r, notAllowedParams{
 										allowedMethods: "POST",
-										allowedHeaders: rn96AllowedHeaders,
+										allowedHeaders: rn100AllowedHeaders,
 										acceptPost:     "application/json",
 										acceptPatch:    "",
 									})
@@ -1743,7 +1749,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 								default:
 									s.notAllowed(w, r, notAllowedParams{
 										allowedMethods: "POST",
-										allowedHeaders: rn95AllowedHeaders,
+										allowedHeaders: rn99AllowedHeaders,
 										acceptPost:     "",
 										acceptPatch:    "",
 									})
@@ -2063,7 +2069,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 												default:
 													s.notAllowed(w, r, notAllowedParams{
 														allowedMethods: "POST",
-														allowedHeaders: rn87AllowedHeaders,
+														allowedHeaders: rn91AllowedHeaders,
 														acceptPost:     "",
 														acceptPatch:    "",
 													})
@@ -2095,7 +2101,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 									default:
 										s.notAllowed(w, r, notAllowedParams{
 											allowedMethods: "POST",
-											allowedHeaders: rn98AllowedHeaders,
+											allowedHeaders: rn102AllowedHeaders,
 											acceptPost:     "application/json",
 											acceptPatch:    "",
 										})
@@ -2198,7 +2204,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 										default:
 											s.notAllowed(w, r, notAllowedParams{
 												allowedMethods: "POST",
-												allowedHeaders: rn89AllowedHeaders,
+												allowedHeaders: rn93AllowedHeaders,
 												acceptPost:     "",
 												acceptPatch:    "",
 											})
@@ -2225,7 +2231,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 										default:
 											s.notAllowed(w, r, notAllowedParams{
 												allowedMethods: "POST",
-												allowedHeaders: rn97AllowedHeaders,
+												allowedHeaders: rn101AllowedHeaders,
 												acceptPost:     "",
 												acceptPatch:    "",
 											})
@@ -2285,7 +2291,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 						default:
 							s.notAllowed(w, r, notAllowedParams{
 								allowedMethods: "POST",
-								allowedHeaders: rn80AllowedHeaders,
+								allowedHeaders: rn84AllowedHeaders,
 								acceptPost:     "application/json",
 								acceptPatch:    "",
 							})
@@ -2401,9 +2407,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 				}
 
-			case 'w': // Prefix: "watchaware/s"
+			case 'w': // Prefix: "watchaware/"
 
-				if l := len("watchaware/s"); len(elem) >= l && elem[0:l] == "watchaware/s" {
+				if l := len("watchaware/"); len(elem) >= l && elem[0:l] == "watchaware/" {
 					elem = elem[l:]
 				} else {
 					break
@@ -2413,64 +2419,60 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					break
 				}
 				switch elem[0] {
-				case 'o': // Prefix: "ources"
+				case 'g': // Prefix: "gate/"
 
-					if l := len("ources"); len(elem) >= l && elem[0:l] == "ources" {
+					if l := len("gate/"); len(elem) >= l && elem[0:l] == "gate/" {
 						elem = elem[l:]
 					} else {
 						break
 					}
 
 					if len(elem) == 0 {
-						switch r.Method {
-						case "GET":
-							s.handleListWatchawareSourcesRequest([0]string{}, elemIsEscaped, w, r)
-						case "POST":
-							s.handleCreateWatchawareSourceRequest([0]string{}, elemIsEscaped, w, r)
-						default:
-							s.notAllowed(w, r, notAllowedParams{
-								allowedMethods: "GET,POST",
-								allowedHeaders: rn20AllowedHeaders,
-								acceptPost:     "application/json",
-								acceptPatch:    "",
-							})
-						}
-
-						return
+						break
 					}
 					switch elem[0] {
-					case '/': // Prefix: "/"
+					case 'd': // Prefix: "decisions"
 
-						if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
+						if l := len("decisions"); len(elem) >= l && elem[0:l] == "decisions" {
 							elem = elem[l:]
 						} else {
 							break
 						}
 
-						// Param: "sourceId"
-						// Leaf parameter, slashes are prohibited
-						idx := strings.IndexByte(elem, '/')
-						if idx >= 0 {
+						if len(elem) == 0 {
+							// Leaf node.
+							switch r.Method {
+							case "GET":
+								s.handleListWatchawareGateDecisionsRequest([0]string{}, elemIsEscaped, w, r)
+							default:
+								s.notAllowed(w, r, notAllowedParams{
+									allowedMethods: "GET",
+									allowedHeaders: rn76AllowedHeaders,
+									acceptPost:     "",
+									acceptPatch:    "",
+								})
+							}
+
+							return
+						}
+
+					case 's': // Prefix: "series"
+
+						if l := len("series"); len(elem) >= l && elem[0:l] == "series" {
+							elem = elem[l:]
+						} else {
 							break
 						}
-						args[0] = elem
-						elem = ""
 
 						if len(elem) == 0 {
 							// Leaf node.
 							switch r.Method {
-							case "DELETE":
-								s.handleDeleteWatchawareSourceRequest([1]string{
-									args[0],
-								}, elemIsEscaped, w, r)
-							case "PUT":
-								s.handleUpdateWatchawareSourceRequest([1]string{
-									args[0],
-								}, elemIsEscaped, w, r)
+							case "GET":
+								s.handleListWatchawareGateSeriesRequest([0]string{}, elemIsEscaped, w, r)
 							default:
 								s.notAllowed(w, r, notAllowedParams{
-									allowedMethods: "DELETE,PUT",
-									allowedHeaders: rn37AllowedHeaders,
+									allowedMethods: "GET",
+									allowedHeaders: rn78AllowedHeaders,
 									acceptPost:     "",
 									acceptPatch:    "",
 								})
@@ -2481,29 +2483,111 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 					}
 
-				case 'y': // Prefix: "ync/status"
+				case 's': // Prefix: "s"
 
-					if l := len("ync/status"); len(elem) >= l && elem[0:l] == "ync/status" {
+					if l := len("s"); len(elem) >= l && elem[0:l] == "s" {
 						elem = elem[l:]
 					} else {
 						break
 					}
 
 					if len(elem) == 0 {
-						// Leaf node.
-						switch r.Method {
-						case "GET":
-							s.handleGetWatchawareSyncStatusRequest([0]string{}, elemIsEscaped, w, r)
-						default:
-							s.notAllowed(w, r, notAllowedParams{
-								allowedMethods: "GET",
-								allowedHeaders: rn63AllowedHeaders,
-								acceptPost:     "",
-								acceptPatch:    "",
-							})
+						break
+					}
+					switch elem[0] {
+					case 'o': // Prefix: "ources"
+
+						if l := len("ources"); len(elem) >= l && elem[0:l] == "ources" {
+							elem = elem[l:]
+						} else {
+							break
 						}
 
-						return
+						if len(elem) == 0 {
+							switch r.Method {
+							case "GET":
+								s.handleListWatchawareSourcesRequest([0]string{}, elemIsEscaped, w, r)
+							case "POST":
+								s.handleCreateWatchawareSourceRequest([0]string{}, elemIsEscaped, w, r)
+							default:
+								s.notAllowed(w, r, notAllowedParams{
+									allowedMethods: "GET,POST",
+									allowedHeaders: rn20AllowedHeaders,
+									acceptPost:     "application/json",
+									acceptPatch:    "",
+								})
+							}
+
+							return
+						}
+						switch elem[0] {
+						case '/': // Prefix: "/"
+
+							if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
+								elem = elem[l:]
+							} else {
+								break
+							}
+
+							// Param: "sourceId"
+							// Leaf parameter, slashes are prohibited
+							idx := strings.IndexByte(elem, '/')
+							if idx >= 0 {
+								break
+							}
+							args[0] = elem
+							elem = ""
+
+							if len(elem) == 0 {
+								// Leaf node.
+								switch r.Method {
+								case "DELETE":
+									s.handleDeleteWatchawareSourceRequest([1]string{
+										args[0],
+									}, elemIsEscaped, w, r)
+								case "PUT":
+									s.handleUpdateWatchawareSourceRequest([1]string{
+										args[0],
+									}, elemIsEscaped, w, r)
+								default:
+									s.notAllowed(w, r, notAllowedParams{
+										allowedMethods: "DELETE,PUT",
+										allowedHeaders: rn37AllowedHeaders,
+										acceptPost:     "",
+										acceptPatch:    "",
+									})
+								}
+
+								return
+							}
+
+						}
+
+					case 'y': // Prefix: "ync/status"
+
+						if l := len("ync/status"); len(elem) >= l && elem[0:l] == "ync/status" {
+							elem = elem[l:]
+						} else {
+							break
+						}
+
+						if len(elem) == 0 {
+							// Leaf node.
+							switch r.Method {
+							case "GET":
+								s.handleGetWatchawareSyncStatusRequest([0]string{}, elemIsEscaped, w, r)
+							default:
+								s.notAllowed(w, r, notAllowedParams{
+									allowedMethods: "GET",
+									allowedHeaders: rn63AllowedHeaders,
+									acceptPost:     "",
+									acceptPatch:    "",
+								})
+							}
+
+							return
+						}
+
 					}
 
 				}
@@ -4824,9 +4908,9 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 
 				}
 
-			case 'w': // Prefix: "watchaware/s"
+			case 'w': // Prefix: "watchaware/"
 
-				if l := len("watchaware/s"); len(elem) >= l && elem[0:l] == "watchaware/s" {
+				if l := len("watchaware/"); len(elem) >= l && elem[0:l] == "watchaware/" {
 					elem = elem[l:]
 				} else {
 					break
@@ -4836,76 +4920,62 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 					break
 				}
 				switch elem[0] {
-				case 'o': // Prefix: "ources"
+				case 'g': // Prefix: "gate/"
 
-					if l := len("ources"); len(elem) >= l && elem[0:l] == "ources" {
+					if l := len("gate/"); len(elem) >= l && elem[0:l] == "gate/" {
 						elem = elem[l:]
 					} else {
 						break
 					}
 
 					if len(elem) == 0 {
-						switch method {
-						case "GET":
-							r.name = ListWatchawareSourcesOperation
-							r.summary = "List configured watch-aware sources"
-							r.operationID = "listWatchawareSources"
-							r.operationGroup = ""
-							r.pathPattern = "/watchaware/sources"
-							r.args = args
-							r.count = 0
-							return r, true
-						case "POST":
-							r.name = CreateWatchawareSourceOperation
-							r.summary = "Add a watch-aware source"
-							r.operationID = "createWatchawareSource"
-							r.operationGroup = ""
-							r.pathPattern = "/watchaware/sources"
-							r.args = args
-							r.count = 0
-							return r, true
-						default:
-							return
-						}
+						break
 					}
 					switch elem[0] {
-					case '/': // Prefix: "/"
+					case 'd': // Prefix: "decisions"
 
-						if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
+						if l := len("decisions"); len(elem) >= l && elem[0:l] == "decisions" {
 							elem = elem[l:]
 						} else {
 							break
 						}
 
-						// Param: "sourceId"
-						// Leaf parameter, slashes are prohibited
-						idx := strings.IndexByte(elem, '/')
-						if idx >= 0 {
+						if len(elem) == 0 {
+							// Leaf node.
+							switch method {
+							case "GET":
+								r.name = ListWatchawareGateDecisionsOperation
+								r.summary = "List watch-aware gate decisions"
+								r.operationID = "listWatchawareGateDecisions"
+								r.operationGroup = ""
+								r.pathPattern = "/watchaware/gate/decisions"
+								r.args = args
+								r.count = 0
+								return r, true
+							default:
+								return
+							}
+						}
+
+					case 's': // Prefix: "series"
+
+						if l := len("series"); len(elem) >= l && elem[0:l] == "series" {
+							elem = elem[l:]
+						} else {
 							break
 						}
-						args[0] = elem
-						elem = ""
 
 						if len(elem) == 0 {
 							// Leaf node.
 							switch method {
-							case "DELETE":
-								r.name = DeleteWatchawareSourceOperation
-								r.summary = "Delete a watch-aware source and its synced watches"
-								r.operationID = "deleteWatchawareSource"
+							case "GET":
+								r.name = ListWatchawareGateSeriesOperation
+								r.summary = "List watch-aware gate series state for an instance"
+								r.operationID = "listWatchawareGateSeries"
 								r.operationGroup = ""
-								r.pathPattern = "/watchaware/sources/{sourceId}"
+								r.pathPattern = "/watchaware/gate/series"
 								r.args = args
-								r.count = 1
-								return r, true
-							case "PUT":
-								r.name = UpdateWatchawareSourceOperation
-								r.summary = "Update a watch-aware source (omit api_key to keep stored key)"
-								r.operationID = "updateWatchawareSource"
-								r.operationGroup = ""
-								r.pathPattern = "/watchaware/sources/{sourceId}"
-								r.args = args
-								r.count = 1
+								r.count = 0
 								return r, true
 							default:
 								return
@@ -4914,29 +4984,121 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 
 					}
 
-				case 'y': // Prefix: "ync/status"
+				case 's': // Prefix: "s"
 
-					if l := len("ync/status"); len(elem) >= l && elem[0:l] == "ync/status" {
+					if l := len("s"); len(elem) >= l && elem[0:l] == "s" {
 						elem = elem[l:]
 					} else {
 						break
 					}
 
 					if len(elem) == 0 {
-						// Leaf node.
-						switch method {
-						case "GET":
-							r.name = GetWatchawareSyncStatusOperation
-							r.summary = "Get watch-aware sync status across sources"
-							r.operationID = "getWatchawareSyncStatus"
-							r.operationGroup = ""
-							r.pathPattern = "/watchaware/sync/status"
-							r.args = args
-							r.count = 0
-							return r, true
-						default:
-							return
+						break
+					}
+					switch elem[0] {
+					case 'o': // Prefix: "ources"
+
+						if l := len("ources"); len(elem) >= l && elem[0:l] == "ources" {
+							elem = elem[l:]
+						} else {
+							break
 						}
+
+						if len(elem) == 0 {
+							switch method {
+							case "GET":
+								r.name = ListWatchawareSourcesOperation
+								r.summary = "List configured watch-aware sources"
+								r.operationID = "listWatchawareSources"
+								r.operationGroup = ""
+								r.pathPattern = "/watchaware/sources"
+								r.args = args
+								r.count = 0
+								return r, true
+							case "POST":
+								r.name = CreateWatchawareSourceOperation
+								r.summary = "Add a watch-aware source"
+								r.operationID = "createWatchawareSource"
+								r.operationGroup = ""
+								r.pathPattern = "/watchaware/sources"
+								r.args = args
+								r.count = 0
+								return r, true
+							default:
+								return
+							}
+						}
+						switch elem[0] {
+						case '/': // Prefix: "/"
+
+							if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
+								elem = elem[l:]
+							} else {
+								break
+							}
+
+							// Param: "sourceId"
+							// Leaf parameter, slashes are prohibited
+							idx := strings.IndexByte(elem, '/')
+							if idx >= 0 {
+								break
+							}
+							args[0] = elem
+							elem = ""
+
+							if len(elem) == 0 {
+								// Leaf node.
+								switch method {
+								case "DELETE":
+									r.name = DeleteWatchawareSourceOperation
+									r.summary = "Delete a watch-aware source and its synced watches"
+									r.operationID = "deleteWatchawareSource"
+									r.operationGroup = ""
+									r.pathPattern = "/watchaware/sources/{sourceId}"
+									r.args = args
+									r.count = 1
+									return r, true
+								case "PUT":
+									r.name = UpdateWatchawareSourceOperation
+									r.summary = "Update a watch-aware source (omit api_key to keep stored key)"
+									r.operationID = "updateWatchawareSource"
+									r.operationGroup = ""
+									r.pathPattern = "/watchaware/sources/{sourceId}"
+									r.args = args
+									r.count = 1
+									return r, true
+								default:
+									return
+								}
+							}
+
+						}
+
+					case 'y': // Prefix: "ync/status"
+
+						if l := len("ync/status"); len(elem) >= l && elem[0:l] == "ync/status" {
+							elem = elem[l:]
+						} else {
+							break
+						}
+
+						if len(elem) == 0 {
+							// Leaf node.
+							switch method {
+							case "GET":
+								r.name = GetWatchawareSyncStatusOperation
+								r.summary = "Get watch-aware sync status across sources"
+								r.operationID = "getWatchawareSyncStatus"
+								r.operationGroup = ""
+								r.pathPattern = "/watchaware/sync/status"
+								r.args = args
+								r.count = 0
+								return r, true
+							default:
+								return
+							}
+						}
+
 					}
 
 				}

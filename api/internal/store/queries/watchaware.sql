@@ -79,3 +79,74 @@ FROM watchaware_sources
 WHERE last_error IS NOT NULL AND last_error != ''
 ORDER BY updated_at DESC
 LIMIT 1;
+
+-- name: GetGateBaseline :one
+SELECT * FROM watchaware_gate_baselines WHERE instance_id = $1;
+
+-- name: InsertGateBaseline :exec
+INSERT INTO watchaware_gate_baselines (
+    instance_id, baselined_at, series_count
+) VALUES (
+    $1, $2, $3
+)
+ON CONFLICT (instance_id) DO NOTHING;
+
+-- name: UpsertGateSeries :exec
+INSERT INTO watchaware_gate_series (
+    instance_id, series_id, tvdb_id, title, gate_season, state,
+    added_before_gate, held_seasons, first_seen_at, updated_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+)
+ON CONFLICT (instance_id, series_id) DO UPDATE SET
+    tvdb_id = EXCLUDED.tvdb_id,
+    title = EXCLUDED.title,
+    gate_season = EXCLUDED.gate_season,
+    state = EXCLUDED.state,
+    added_before_gate = EXCLUDED.added_before_gate,
+    held_seasons = EXCLUDED.held_seasons,
+    updated_at = EXCLUDED.updated_at;
+
+-- name: UpdateGateSeriesTitle :exec
+UPDATE watchaware_gate_series
+SET title = $3, updated_at = $4
+WHERE instance_id = $1 AND series_id = $2;
+
+-- name: ListGateSeriesIDsForInstance :many
+SELECT series_id FROM watchaware_gate_series WHERE instance_id = $1;
+
+-- name: ListGateSeries :many
+SELECT * FROM watchaware_gate_series
+WHERE instance_id = $1
+ORDER BY title ASC, series_id ASC
+LIMIT $2;
+
+-- name: GetGateSeries :one
+SELECT * FROM watchaware_gate_series
+WHERE instance_id = $1 AND series_id = $2;
+
+-- name: UpsertGateDecision :exec
+INSERT INTO watchaware_gate_decisions (
+    id, instance_id, series_id, season_number, action, would_act, reason, decided_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8
+)
+ON CONFLICT (instance_id, series_id, season_number, action) DO UPDATE SET
+    would_act = EXCLUDED.would_act,
+    reason = EXCLUDED.reason,
+    decided_at = EXCLUDED.decided_at;
+
+-- name: ListGateDecisions :many
+SELECT * FROM watchaware_gate_decisions
+WHERE (sqlc.narg(instance_id)::uuid IS NULL OR instance_id = sqlc.narg(instance_id)::uuid)
+ORDER BY decided_at DESC
+LIMIT $1;
+
+-- name: PruneGateDecisions :execrows
+DELETE FROM watchaware_gate_decisions
+WHERE id IN (
+    SELECT id FROM watchaware_gate_decisions
+    WHERE decided_at < sqlc.arg(before)::timestamptz
+    LIMIT sqlc.arg(max_rows)::int
+);
+

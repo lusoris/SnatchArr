@@ -96,6 +96,45 @@ func (q *Queries) DeleteWatchAwareSource(ctx context.Context, id uuid.UUID) (int
 	return result.RowsAffected(), nil
 }
 
+const getGateBaseline = `-- name: GetGateBaseline :one
+SELECT instance_id, baselined_at, series_count FROM watchaware_gate_baselines WHERE instance_id = $1
+`
+
+func (q *Queries) GetGateBaseline(ctx context.Context, instanceID uuid.UUID) (WatchawareGateBaseline, error) {
+	row := q.db.QueryRow(ctx, getGateBaseline, instanceID)
+	var i WatchawareGateBaseline
+	err := row.Scan(&i.InstanceID, &i.BaselinedAt, &i.SeriesCount)
+	return i, err
+}
+
+const getGateSeries = `-- name: GetGateSeries :one
+SELECT instance_id, series_id, tvdb_id, title, gate_season, state, added_before_gate, held_seasons, first_seen_at, updated_at FROM watchaware_gate_series
+WHERE instance_id = $1 AND series_id = $2
+`
+
+type GetGateSeriesParams struct {
+	InstanceID uuid.UUID
+	SeriesID   int32
+}
+
+func (q *Queries) GetGateSeries(ctx context.Context, arg GetGateSeriesParams) (WatchawareGateSeries, error) {
+	row := q.db.QueryRow(ctx, getGateSeries, arg.InstanceID, arg.SeriesID)
+	var i WatchawareGateSeries
+	err := row.Scan(
+		&i.InstanceID,
+		&i.SeriesID,
+		&i.TvdbID,
+		&i.Title,
+		&i.GateSeason,
+		&i.State,
+		&i.AddedBeforeGate,
+		&i.HeldSeasons,
+		&i.FirstSeenAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getLatestWatchAwareSourceError = `-- name: GetLatestWatchAwareSourceError :one
 SELECT last_error
 FROM watchaware_sources
@@ -154,6 +193,26 @@ func (q *Queries) GetWatchAwareSyncSummary(ctx context.Context) (GetWatchAwareSy
 	return i, err
 }
 
+const insertGateBaseline = `-- name: InsertGateBaseline :exec
+INSERT INTO watchaware_gate_baselines (
+    instance_id, baselined_at, series_count
+) VALUES (
+    $1, $2, $3
+)
+ON CONFLICT (instance_id) DO NOTHING
+`
+
+type InsertGateBaselineParams struct {
+	InstanceID  uuid.UUID
+	BaselinedAt time.Time
+	SeriesCount int32
+}
+
+func (q *Queries) InsertGateBaseline(ctx context.Context, arg InsertGateBaselineParams) error {
+	_, err := q.db.Exec(ctx, insertGateBaseline, arg.InstanceID, arg.BaselinedAt, arg.SeriesCount)
+	return err
+}
+
 const listEnabledWatchAwareSources = `-- name: ListEnabledWatchAwareSources :many
 SELECT id, kind, name, url, api_key_enc, enabled, last_sync_at, last_error, created_at, updated_at FROM watchaware_sources WHERE enabled = TRUE ORDER BY name ASC
 `
@@ -182,6 +241,114 @@ func (q *Queries) ListEnabledWatchAwareSources(ctx context.Context) ([]Watchawar
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listGateDecisions = `-- name: ListGateDecisions :many
+SELECT id, instance_id, series_id, season_number, action, would_act, reason, decided_at FROM watchaware_gate_decisions
+WHERE ($2::uuid IS NULL OR instance_id = $2::uuid)
+ORDER BY decided_at DESC
+LIMIT $1
+`
+
+type ListGateDecisionsParams struct {
+	Limit      int32
+	InstanceID *uuid.UUID
+}
+
+func (q *Queries) ListGateDecisions(ctx context.Context, arg ListGateDecisionsParams) ([]WatchawareGateDecision, error) {
+	rows, err := q.db.Query(ctx, listGateDecisions, arg.Limit, arg.InstanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []WatchawareGateDecision{}
+	for rows.Next() {
+		var i WatchawareGateDecision
+		if err := rows.Scan(
+			&i.ID,
+			&i.InstanceID,
+			&i.SeriesID,
+			&i.SeasonNumber,
+			&i.Action,
+			&i.WouldAct,
+			&i.Reason,
+			&i.DecidedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listGateSeries = `-- name: ListGateSeries :many
+SELECT instance_id, series_id, tvdb_id, title, gate_season, state, added_before_gate, held_seasons, first_seen_at, updated_at FROM watchaware_gate_series
+WHERE instance_id = $1
+ORDER BY title ASC, series_id ASC
+LIMIT $2
+`
+
+type ListGateSeriesParams struct {
+	InstanceID uuid.UUID
+	Limit      int32
+}
+
+func (q *Queries) ListGateSeries(ctx context.Context, arg ListGateSeriesParams) ([]WatchawareGateSeries, error) {
+	rows, err := q.db.Query(ctx, listGateSeries, arg.InstanceID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []WatchawareGateSeries{}
+	for rows.Next() {
+		var i WatchawareGateSeries
+		if err := rows.Scan(
+			&i.InstanceID,
+			&i.SeriesID,
+			&i.TvdbID,
+			&i.Title,
+			&i.GateSeason,
+			&i.State,
+			&i.AddedBeforeGate,
+			&i.HeldSeasons,
+			&i.FirstSeenAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listGateSeriesIDsForInstance = `-- name: ListGateSeriesIDsForInstance :many
+SELECT series_id FROM watchaware_gate_series WHERE instance_id = $1
+`
+
+func (q *Queries) ListGateSeriesIDsForInstance(ctx context.Context, instanceID uuid.UUID) ([]int32, error) {
+	rows, err := q.db.Query(ctx, listGateSeriesIDsForInstance, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []int32{}
+	for rows.Next() {
+		var series_id int32
+		if err := rows.Scan(&series_id); err != nil {
+			return nil, err
+		}
+		items = append(items, series_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -262,6 +429,28 @@ func (q *Queries) ListWatchAwareSources(ctx context.Context) ([]WatchawareSource
 	return items, nil
 }
 
+const pruneGateDecisions = `-- name: PruneGateDecisions :execrows
+DELETE FROM watchaware_gate_decisions
+WHERE id IN (
+    SELECT id FROM watchaware_gate_decisions
+    WHERE decided_at < $1::timestamptz
+    LIMIT $2::int
+)
+`
+
+type PruneGateDecisionsParams struct {
+	Before  time.Time
+	MaxRows int32
+}
+
+func (q *Queries) PruneGateDecisions(ctx context.Context, arg PruneGateDecisionsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, pruneGateDecisions, arg.Before, arg.MaxRows)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const recordWatchAwareSourceSyncError = `-- name: RecordWatchAwareSourceSyncError :exec
 UPDATE watchaware_sources
 SET last_error = $2, updated_at = $3
@@ -292,6 +481,29 @@ type RecordWatchAwareSourceSyncSuccessParams struct {
 
 func (q *Queries) RecordWatchAwareSourceSyncSuccess(ctx context.Context, arg RecordWatchAwareSourceSyncSuccessParams) error {
 	_, err := q.db.Exec(ctx, recordWatchAwareSourceSyncSuccess, arg.ID, arg.LastSyncAt)
+	return err
+}
+
+const updateGateSeriesTitle = `-- name: UpdateGateSeriesTitle :exec
+UPDATE watchaware_gate_series
+SET title = $3, updated_at = $4
+WHERE instance_id = $1 AND series_id = $2
+`
+
+type UpdateGateSeriesTitleParams struct {
+	InstanceID uuid.UUID
+	SeriesID   int32
+	Title      string
+	UpdatedAt  time.Time
+}
+
+func (q *Queries) UpdateGateSeriesTitle(ctx context.Context, arg UpdateGateSeriesTitleParams) error {
+	_, err := q.db.Exec(ctx, updateGateSeriesTitle,
+		arg.InstanceID,
+		arg.SeriesID,
+		arg.Title,
+		arg.UpdatedAt,
+	)
 	return err
 }
 
@@ -334,6 +546,89 @@ func (q *Queries) UpdateWatchAwareSource(ctx context.Context, arg UpdateWatchAwa
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const upsertGateDecision = `-- name: UpsertGateDecision :exec
+INSERT INTO watchaware_gate_decisions (
+    id, instance_id, series_id, season_number, action, would_act, reason, decided_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8
+)
+ON CONFLICT (instance_id, series_id, season_number, action) DO UPDATE SET
+    would_act = EXCLUDED.would_act,
+    reason = EXCLUDED.reason,
+    decided_at = EXCLUDED.decided_at
+`
+
+type UpsertGateDecisionParams struct {
+	ID           uuid.UUID
+	InstanceID   uuid.UUID
+	SeriesID     int32
+	SeasonNumber int32
+	Action       string
+	WouldAct     bool
+	Reason       string
+	DecidedAt    time.Time
+}
+
+func (q *Queries) UpsertGateDecision(ctx context.Context, arg UpsertGateDecisionParams) error {
+	_, err := q.db.Exec(ctx, upsertGateDecision,
+		arg.ID,
+		arg.InstanceID,
+		arg.SeriesID,
+		arg.SeasonNumber,
+		arg.Action,
+		arg.WouldAct,
+		arg.Reason,
+		arg.DecidedAt,
+	)
+	return err
+}
+
+const upsertGateSeries = `-- name: UpsertGateSeries :exec
+INSERT INTO watchaware_gate_series (
+    instance_id, series_id, tvdb_id, title, gate_season, state,
+    added_before_gate, held_seasons, first_seen_at, updated_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+)
+ON CONFLICT (instance_id, series_id) DO UPDATE SET
+    tvdb_id = EXCLUDED.tvdb_id,
+    title = EXCLUDED.title,
+    gate_season = EXCLUDED.gate_season,
+    state = EXCLUDED.state,
+    added_before_gate = EXCLUDED.added_before_gate,
+    held_seasons = EXCLUDED.held_seasons,
+    updated_at = EXCLUDED.updated_at
+`
+
+type UpsertGateSeriesParams struct {
+	InstanceID      uuid.UUID
+	SeriesID        int32
+	TvdbID          int32
+	Title           string
+	GateSeason      int32
+	State           string
+	AddedBeforeGate bool
+	HeldSeasons     []int32
+	FirstSeenAt     time.Time
+	UpdatedAt       time.Time
+}
+
+func (q *Queries) UpsertGateSeries(ctx context.Context, arg UpsertGateSeriesParams) error {
+	_, err := q.db.Exec(ctx, upsertGateSeries,
+		arg.InstanceID,
+		arg.SeriesID,
+		arg.TvdbID,
+		arg.Title,
+		arg.GateSeason,
+		arg.State,
+		arg.AddedBeforeGate,
+		arg.HeldSeasons,
+		arg.FirstSeenAt,
+		arg.UpdatedAt,
+	)
+	return err
 }
 
 const upsertWatchAwareItemWatch = `-- name: UpsertWatchAwareItemWatch :exec

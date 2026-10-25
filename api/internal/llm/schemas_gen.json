@@ -1312,6 +1312,41 @@
     "properties": {},
     "type": "object"
   },
+  "listWatchawareGateDecisions": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "instance_id": {
+        "format": "uuid",
+        "type": "string"
+      },
+      "limit": {
+        "maximum": 500,
+        "minimum": 1,
+        "type": "integer"
+      }
+    },
+    "type": "object"
+  },
+  "listWatchawareGateSeries": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "instance_id": {
+        "format": "uuid",
+        "type": "string"
+      },
+      "limit": {
+        "maximum": 500,
+        "minimum": 1,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "instance_id"
+    ],
+    "type": "object"
+  },
   "listWatchawareSources": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,

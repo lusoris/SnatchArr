@@ -303,6 +303,36 @@ type User struct {
 	ExternalID   *string
 }
 
+type WatchawareGateBaseline struct {
+	InstanceID  uuid.UUID
+	BaselinedAt time.Time
+	SeriesCount int32
+}
+
+type WatchawareGateDecision struct {
+	ID           uuid.UUID
+	InstanceID   uuid.UUID
+	SeriesID     int32
+	SeasonNumber int32
+	Action       string
+	WouldAct     bool
+	Reason       string
+	DecidedAt    time.Time
+}
+
+type WatchawareGateSeries struct {
+	InstanceID      uuid.UUID
+	SeriesID        int32
+	TvdbID          int32
+	Title           string
+	GateSeason      int32
+	State           string
+	AddedBeforeGate bool
+	HeldSeasons     []int32
+	FirstSeenAt     time.Time
+	UpdatedAt       time.Time
+}
+
 type WatchawareItemWatch struct {
 	SourceID         uuid.UUID
 	UserID           string

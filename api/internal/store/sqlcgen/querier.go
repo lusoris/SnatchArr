@@ -88,6 +88,8 @@ type Querier interface {
 	GetAPIKey(ctx context.Context, id string) (ApiKey, error)
 	GetDownloadClient(ctx context.Context, id uuid.UUID) (DownloadClient, error)
 	GetFirstAdmin(ctx context.Context) (User, error)
+	GetGateBaseline(ctx context.Context, instanceID uuid.UUID) (WatchawareGateBaseline, error)
+	GetGateSeries(ctx context.Context, arg GetGateSeriesParams) (WatchawareGateSeries, error)
 	GetInstance(ctx context.Context, id uuid.UUID) (Instance, error)
 	GetInstanceByConfigarrKey(ctx context.Context, configarrKey *string) (Instance, error)
 	GetInstancePriority(ctx context.Context, id uuid.UUID) (GetInstancePriorityRow, error)
@@ -123,6 +125,7 @@ type Querier interface {
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
 	InsertEvent(ctx context.Context, arg InsertEventParams) (int64, error)
+	InsertGateBaseline(ctx context.Context, arg InsertGateBaselineParams) error
 	LastFinishedAt(ctx context.Context, arg LastFinishedAtParams) (time.Time, error)
 	LastWorkerContact(ctx context.Context) (time.Time, error)
 	// An expired lease is handed out again only while the run has been leased fewer than
@@ -143,6 +146,9 @@ type Querier interface {
 	ListEnabledWatchAwareSources(ctx context.Context) ([]WatchawareSource, error)
 	ListEvents(ctx context.Context, arg ListEventsParams) ([]SnatchEvent, error)
 	ListEventsForRun(ctx context.Context, runID *uuid.UUID) ([]SnatchEvent, error)
+	ListGateDecisions(ctx context.Context, arg ListGateDecisionsParams) ([]WatchawareGateDecision, error)
+	ListGateSeries(ctx context.Context, arg ListGateSeriesParams) ([]WatchawareGateSeries, error)
+	ListGateSeriesIDsForInstance(ctx context.Context, instanceID uuid.UUID) ([]int32, error)
 	ListInstances(ctx context.Context) ([]Instance, error)
 	// Instances never evaluated come first, then the one evaluated longest ago (#176).
 	ListInstancesToPlan(ctx context.Context) ([]Instance, error)
@@ -175,6 +181,7 @@ type Querier interface {
 	MarkSeerrRequestsSnatched(ctx context.Context, arg MarkSeerrRequestsSnatchedParams) (int64, error)
 	PriorityEntityIDs(ctx context.Context, instanceID *uuid.UUID) ([]int64, error)
 	ProcessedAttempts(ctx context.Context, arg ProcessedAttemptsParams) (int32, error)
+	PruneGateDecisions(ctx context.Context, arg PruneGateDecisionsParams) (int64, error)
 	PurgeBucketsBefore(ctx context.Context, arg PurgeBucketsBeforeParams) (int64, error)
 	PurgeEventsBefore(ctx context.Context, arg PurgeEventsBeforeParams) (int64, error)
 	PurgeExpiredLoginLockouts(ctx context.Context, arg PurgeExpiredLoginLockoutsParams) (int64, error)
@@ -217,6 +224,7 @@ type Querier interface {
 	// A late write from a slower replica never moves the contact back.
 	TouchWorker(ctx context.Context, arg TouchWorkerParams) error
 	UpdateDownloadClient(ctx context.Context, arg UpdateDownloadClientParams) (DownloadClient, error)
+	UpdateGateSeriesTitle(ctx context.Context, arg UpdateGateSeriesTitleParams) error
 	UpdateInstance(ctx context.Context, arg UpdateInstanceParams) (Instance, error)
 	UpdateInstancePriority(ctx context.Context, arg UpdateInstancePriorityParams) (UpdateInstancePriorityRow, error)
 	UpdateNotificationChannel(ctx context.Context, arg UpdateNotificationChannelParams) (NotificationChannel, error)
@@ -231,6 +239,8 @@ type Querier interface {
 	UpsertConfigarrInstance(ctx context.Context, arg UpsertConfigarrInstanceParams) (UpsertConfigarrInstanceRow, error)
 	UpsertDiscoveredDownloadClient(ctx context.Context, arg UpsertDiscoveredDownloadClientParams) (UpsertDiscoveredDownloadClientRow, error)
 	UpsertExternalViewer(ctx context.Context, arg UpsertExternalViewerParams) (User, error)
+	UpsertGateDecision(ctx context.Context, arg UpsertGateDecisionParams) error
+	UpsertGateSeries(ctx context.Context, arg UpsertGateSeriesParams) error
 	// The caller reads the row back with GetPolicy in the same transaction: scanning RETURNING *
 	// here would push the generated function past the HISS-04 length limit.
 	UpsertPolicy(ctx context.Context, arg UpsertPolicyParams) error

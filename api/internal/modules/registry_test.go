@@ -158,6 +158,23 @@ func TestConfigValidation(t *testing.T) {
 		{name: "negative watchaware string value refused", val: modules.ValidateWatchAwareConfig, raw: `{"sync_interval_minutes":"10"}`, wantErr: true},
 		{name: "negative watchaware unknown key refused", val: modules.ValidateWatchAwareConfig, raw: `{"other_key":10}`, wantErr: true},
 		{name: "negative watchaware null refused", val: modules.ValidateWatchAwareConfig, raw: "null", wantErr: true},
+		{name: "positive watchaware gate empty object ok", val: modules.ValidateWatchAwareConfig, raw: `{"gate":{}}`, wantErr: false},
+		{name: "positive watchaware gate defaults ok", val: modules.ValidateWatchAwareConfig, raw: `{"gate":{"enabled":true,"mode":"observe","seasons_on_add":1,"look_ahead":1,"promote_whose":"any","exempt_tag":"snatcharr-no-gate"}}`, wantErr: false},
+		{name: "positive watchaware gate seasons_on_add boundary 1 ok", val: modules.ValidateWatchAwareConfig, raw: `{"gate":{"seasons_on_add":1}}`, wantErr: false},
+		{name: "positive watchaware gate seasons_on_add boundary 20 ok", val: modules.ValidateWatchAwareConfig, raw: `{"gate":{"seasons_on_add":20}}`, wantErr: false},
+		{name: "negative watchaware gate seasons_on_add boundary 0 refused", val: modules.ValidateWatchAwareConfig, raw: `{"gate":{"seasons_on_add":0}}`, wantErr: true},
+		{name: "negative watchaware gate seasons_on_add boundary 21 refused", val: modules.ValidateWatchAwareConfig, raw: `{"gate":{"seasons_on_add":21}}`, wantErr: true},
+		{name: "negative watchaware gate mode act refused", val: modules.ValidateWatchAwareConfig, raw: `{"gate":{"mode":"act"}}`, wantErr: true},
+		{name: "negative watchaware gate mode unknown refused", val: modules.ValidateWatchAwareConfig, raw: `{"gate":{"mode":"unknown"}}`, wantErr: true},
+		{name: "negative watchaware gate unknown key refused", val: modules.ValidateWatchAwareConfig, raw: `{"gate":{"bogus":1}}`, wantErr: true},
+		{name: "negative watchaware gate bad uuid refused", val: modules.ValidateWatchAwareConfig, raw: `{"gate":{"instance_ids":["not-a-uuid"]}}`, wantErr: true},
+		{name: "positive watchaware gate valid uuid ok", val: modules.ValidateWatchAwareConfig, raw: `{"gate":{"instance_ids":["a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"]}}`, wantErr: false},
+		{name: "positive watchaware gate look_ahead boundary 0 ok", val: modules.ValidateWatchAwareConfig, raw: `{"gate":{"look_ahead":0}}`, wantErr: false},
+		{name: "positive watchaware gate look_ahead boundary 5 ok", val: modules.ValidateWatchAwareConfig, raw: `{"gate":{"look_ahead":5}}`, wantErr: false},
+		{name: "negative watchaware gate look_ahead boundary 6 refused", val: modules.ValidateWatchAwareConfig, raw: `{"gate":{"look_ahead":6}}`, wantErr: true},
+		{name: "positive watchaware gate promote_whose all ok", val: modules.ValidateWatchAwareConfig, raw: `{"gate":{"promote_whose":"all"}}`, wantErr: false},
+		{name: "negative watchaware gate promote_whose invalid refused", val: modules.ValidateWatchAwareConfig, raw: `{"gate":{"promote_whose":"invalid"}}`, wantErr: true},
+		{name: "negative watchaware gate exempt_tag empty refused", val: modules.ValidateWatchAwareConfig, raw: `{"gate":{"exempt_tag":""}}`, wantErr: true},
 	}
 
 	for _, tc := range cases {

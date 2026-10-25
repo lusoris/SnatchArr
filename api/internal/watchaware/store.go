@@ -20,6 +20,7 @@ import (
 	"github.com/golusoris/golusoris/core/id"
 
 	"github.com/lusoris/SnatchArr/api/internal/domain"
+	"github.com/lusoris/SnatchArr/api/internal/instances"
 	"github.com/lusoris/SnatchArr/api/internal/modules"
 	"github.com/lusoris/SnatchArr/api/internal/store"
 	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
@@ -29,7 +30,34 @@ const (
 	unchangedKey     = "<unchanged>"
 	maxStoredWatches = 100000 // HISS-02 upper bound
 	batchSize        = 200    // HISS-02 bounded batch size
+	defaultGateLimit = 100
+	maxGateLimit     = 500
 )
+
+// GateSeriesRecord represents stored gate status for a series on an instance.
+type GateSeriesRecord struct {
+	InstanceID      uuid.UUID
+	SeriesID        int
+	TvdbID          int
+	Title           string
+	GateSeason      int
+	State           string
+	AddedBeforeGate bool
+	HeldSeasons     []int
+	UpdatedAt       time.Time
+}
+
+// GateDecisionRecord represents a recorded gate decision.
+type GateDecisionRecord struct {
+	ID           uuid.UUID
+	InstanceID   uuid.UUID
+	SeriesID     int
+	SeasonNumber int
+	Action       string
+	WouldAct     bool
+	Reason       string
+	DecidedAt    time.Time
+}
 
 // Source represents a configured watch-aware media server source without secret credentials.
 type Source struct {
@@ -68,6 +96,11 @@ type moduleManager interface {
 	Get(ctx context.Context, id string) (domain.Module, error)
 }
 
+type instanceManager interface {
+	List(ctx context.Context) ([]domain.Instance, error)
+	Credentials(ctx context.Context, instID uuid.UUID) (instances.Credentials, error)
+}
+
 // Service manages watchaware sources, watch-state persistence (Sink), and sync passes.
 type Service struct {
 	st       *store.Store
@@ -76,6 +109,8 @@ type Service struct {
 	ids      id.Generator
 	logger   *slog.Logger
 	mod      moduleManager
+	inst     instanceManager
+	reader   SeriesReader
 	mu       sync.Mutex
 	lastPass time.Time
 }
@@ -88,7 +123,13 @@ func NewService(
 	ids id.Generator,
 	logger *slog.Logger,
 	mod *modules.Service,
+	inst *instances.Service,
+	reader SeriesReader,
 ) *Service {
+	var im instanceManager
+	if inst != nil {
+		im = inst
+	}
 	return &Service{
 		st:     st,
 		enc:    enc,
@@ -96,7 +137,87 @@ func NewService(
 		ids:    ids,
 		logger: logger,
 		mod:    mod,
+		inst:   im,
+		reader: reader,
 	}
+}
+
+// SetSeriesReader sets the SeriesReader, primarily for testing.
+func (s *Service) SetSeriesReader(r SeriesReader) {
+	s.reader = r
+}
+
+// SetInstanceManager sets the instance manager, primarily for testing.
+func (s *Service) SetInstanceManager(im instanceManager) {
+	s.inst = im
+}
+
+func clampGateLimit(limit int) int {
+	if limit <= 0 {
+		return defaultGateLimit
+	}
+	if limit > maxGateLimit {
+		return maxGateLimit
+	}
+	return limit
+}
+
+// ListGateSeries returns gate series for an instance, including held seasons.
+func (s *Service) ListGateSeries(ctx context.Context, instanceID uuid.UUID, limit int) ([]GateSeriesRecord, error) {
+	lim := int32(clampGateLimit(limit)) // #nosec G115 -- limit clamped to 500
+	rows, err := s.st.Q().ListGateSeries(ctx, sqlcgen.ListGateSeriesParams{
+		InstanceID: instanceID,
+		Limit:      lim,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("watchaware: list gate series: %w", store.MapError(err))
+	}
+
+	out := make([]GateSeriesRecord, 0, len(rows))
+	for _, r := range rows {
+		held := make([]int, len(r.HeldSeasons))
+		for i, v := range r.HeldSeasons {
+			held[i] = int(v)
+		}
+		out = append(out, GateSeriesRecord{
+			InstanceID:      r.InstanceID,
+			SeriesID:        int(r.SeriesID),
+			TvdbID:          int(r.TvdbID),
+			Title:           r.Title,
+			GateSeason:      int(r.GateSeason),
+			State:           r.State,
+			AddedBeforeGate: r.AddedBeforeGate,
+			HeldSeasons:     held,
+			UpdatedAt:       r.UpdatedAt,
+		})
+	}
+	return out, nil
+}
+
+// ListGateDecisions returns recorded gate decisions, optionally filtered by instance.
+func (s *Service) ListGateDecisions(ctx context.Context, instanceID *uuid.UUID, limit int) ([]GateDecisionRecord, error) {
+	lim := int32(clampGateLimit(limit)) // #nosec G115 -- limit clamped to 500
+	rows, err := s.st.Q().ListGateDecisions(ctx, sqlcgen.ListGateDecisionsParams{
+		InstanceID: instanceID,
+		Limit:      lim,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("watchaware: list gate decisions: %w", store.MapError(err))
+	}
+	out := make([]GateDecisionRecord, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, GateDecisionRecord{
+			ID:           r.ID,
+			InstanceID:   r.InstanceID,
+			SeriesID:     int(r.SeriesID),
+			SeasonNumber: int(r.SeasonNumber),
+			Action:       r.Action,
+			WouldAct:     r.WouldAct,
+			Reason:       r.Reason,
+			DecidedAt:    r.DecidedAt,
+		})
+	}
+	return out, nil
 }
 
 var _ Sink = (*Service)(nil)
