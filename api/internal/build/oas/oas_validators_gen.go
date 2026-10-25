@@ -4311,6 +4311,8 @@ func (s WatchawareGateSeriesState) Validate() error {
 		return nil
 	case "files_beyond_gate":
 		return nil
+	case "released":
+		return nil
 	default:
 		return errors.Errorf("invalid value: %v", s)
 	}

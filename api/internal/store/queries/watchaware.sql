@@ -135,7 +135,11 @@ INSERT INTO watchaware_gate_decisions (
 ON CONFLICT (instance_id, series_id, season_number, action) DO UPDATE SET
     would_act = EXCLUDED.would_act,
     reason = EXCLUDED.reason,
-    decided_at = EXCLUDED.decided_at;
+    decided_at = EXCLUDED.decided_at,
+    applied_at = CASE
+        WHEN watchaware_gate_decisions.would_act = EXCLUDED.would_act THEN watchaware_gate_decisions.applied_at
+        ELSE NULL
+    END;
 
 -- name: ListGateDecisions :many
 SELECT * FROM watchaware_gate_decisions
@@ -184,4 +188,38 @@ UPDATE watchaware_gate_series
 SET held_seasons = $3, updated_at = $4
 WHERE instance_id = $1 AND series_id = $2;
 
+-- name: ListPendingGateDecisions :many
+SELECT
+    d.id,
+    d.instance_id,
+    d.series_id,
+    d.season_number,
+    d.action,
+    d.would_act,
+    d.reason,
+    d.decided_at,
+    d.applied_at
+FROM watchaware_gate_decisions d
+JOIN watchaware_gate_series s
+    ON d.instance_id = s.instance_id
+   AND d.series_id = s.series_id
+WHERE d.instance_id = $1
+  AND d.would_act = TRUE
+  AND d.applied_at IS NULL
+  AND NOT (s.state = 'released' AND d.action = 'unmonitor')
+ORDER BY d.series_id ASC, d.season_number ASC
+LIMIT @max_rows;
 
+-- name: MarkGateDecisionsApplied :exec
+UPDATE watchaware_gate_decisions
+SET applied_at = sqlc.arg(applied_at)::timestamptz
+WHERE id = ANY(sqlc.arg(ids)::uuid[]);
+
+-- name: ReleaseGateSeries :one
+UPDATE watchaware_gate_series
+SET state = 'released',
+    held_seasons = '{}',
+    released_at = $3,
+    updated_at = $3
+WHERE instance_id = $1 AND series_id = $2
+RETURNING *;

@@ -7160,6 +7160,57 @@ func (s *OptModuleUpdateConfig) UnmarshalJSON(data []byte) error {
 	return s.Decode(d)
 }
 
+// Encode encodes time.Time as json.
+func (o OptNilDateTime) Encode(e *jx.Encoder, format func(*jx.Encoder, time.Time)) {
+	if !o.Set {
+		return
+	}
+	if o.Null {
+		e.Null()
+		return
+	}
+	format(e, o.Value)
+}
+
+// Decode decodes time.Time from json.
+func (o *OptNilDateTime) Decode(d *jx.Decoder, format func(*jx.Decoder) (time.Time, error)) error {
+	if o == nil {
+		return errors.New("invalid: unable to decode OptNilDateTime to nil")
+	}
+	if d.Next() == jx.Null {
+		if err := d.Null(); err != nil {
+			return err
+		}
+
+		var v time.Time
+		o.Value = v
+		o.Set = true
+		o.Null = true
+		return nil
+	}
+	o.Set = true
+	o.Null = false
+	v, err := format(d)
+	if err != nil {
+		return err
+	}
+	o.Value = v
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s OptNilDateTime) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e, json.EncodeDateTime)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *OptNilDateTime) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d, json.DecodeDateTime)
+}
+
 // Encode encodes int as json.
 func (o OptNilInt) Encode(e *jx.Encoder) {
 	if !o.Set {
@@ -15550,9 +15601,15 @@ func (s *WatchawareGateDecision) encodeFields(e *jx.Encoder) {
 		e.FieldStart("decided_at")
 		json.EncodeDateTime(e, s.DecidedAt)
 	}
+	{
+		if s.AppliedAt.Set {
+			e.FieldStart("applied_at")
+			s.AppliedAt.Encode(e, json.EncodeDateTime)
+		}
+	}
 }
 
-var jsonFieldsNameOfWatchawareGateDecision = [8]string{
+var jsonFieldsNameOfWatchawareGateDecision = [9]string{
 	0: "id",
 	1: "instance_id",
 	2: "series_id",
@@ -15561,6 +15618,7 @@ var jsonFieldsNameOfWatchawareGateDecision = [8]string{
 	5: "would_act",
 	6: "reason",
 	7: "decided_at",
+	8: "applied_at",
 }
 
 // Decode decodes WatchawareGateDecision from json.
@@ -15568,7 +15626,7 @@ func (s *WatchawareGateDecision) Decode(d *jx.Decoder) error {
 	if s == nil {
 		return errors.New("invalid: unable to decode WatchawareGateDecision to nil")
 	}
-	var requiredBitSet [1]uint8
+	var requiredBitSet [2]uint8
 
 	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
 		switch string(k) {
@@ -15666,6 +15724,16 @@ func (s *WatchawareGateDecision) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"decided_at\"")
 			}
+		case "applied_at":
+			if err := func() error {
+				s.AppliedAt.Reset()
+				if err := s.AppliedAt.Decode(d, json.DecodeDateTime); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"applied_at\"")
+			}
 		default:
 			return d.Skip()
 		}
@@ -15675,8 +15743,9 @@ func (s *WatchawareGateDecision) Decode(d *jx.Decoder) error {
 	}
 	// Validate required fields.
 	var failures []validate.FieldError
-	for i, mask := range [1]uint8{
+	for i, mask := range [2]uint8{
 		0b11111111,
+		0b00000000,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -15811,9 +15880,15 @@ func (s *WatchawareGateSeries) encodeFields(e *jx.Encoder) {
 		e.FieldStart("updated_at")
 		json.EncodeDateTime(e, s.UpdatedAt)
 	}
+	{
+		if s.ReleasedAt.Set {
+			e.FieldStart("released_at")
+			s.ReleasedAt.Encode(e, json.EncodeDateTime)
+		}
+	}
 }
 
-var jsonFieldsNameOfWatchawareGateSeries = [9]string{
+var jsonFieldsNameOfWatchawareGateSeries = [10]string{
 	0: "instance_id",
 	1: "series_id",
 	2: "tvdb_id",
@@ -15823,6 +15898,7 @@ var jsonFieldsNameOfWatchawareGateSeries = [9]string{
 	6: "added_before_gate",
 	7: "held_seasons",
 	8: "updated_at",
+	9: "released_at",
 }
 
 // Decode decodes WatchawareGateSeries from json.
@@ -15948,6 +16024,16 @@ func (s *WatchawareGateSeries) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"updated_at\"")
 			}
+		case "released_at":
+			if err := func() error {
+				s.ReleasedAt.Reset()
+				if err := s.ReleasedAt.Decode(d, json.DecodeDateTime); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"released_at\"")
+			}
 		default:
 			return d.Skip()
 		}
@@ -16029,6 +16115,8 @@ func (s *WatchawareGateSeriesState) Decode(d *jx.Decoder) error {
 		*s = WatchawareGateSeriesStateBeforeGate
 	case WatchawareGateSeriesStateFilesBeyondGate:
 		*s = WatchawareGateSeriesStateFilesBeyondGate
+	case WatchawareGateSeriesStateReleased:
+		*s = WatchawareGateSeriesStateReleased
 	default:
 		*s = WatchawareGateSeriesState(v)
 	}

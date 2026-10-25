@@ -199,7 +199,8 @@ Slice 2 lands in two parts:
 - Scope: carry out the recorded decisions against Sonarr, and let an admin release all seasons of a series.
 - Package: `api/internal/watchaware` (`act.go`).
 - Contracts: mode `act` accepted by the settings validation; OpenAPI action to release a series (the per-request override from Decision); Paraglide keys for the release action.
-- Upstream: goenvoy `arr/sonarr` `UpdateSeasonPass` (`arr/sonarr/series.go:48`), which sets `monitored` per season for one series without a full series round trip; `UpdateSeries` (`series.go:29`) stays unused.
+- Upstream: goenvoy `arr/sonarr` `UpdateSeasonPass` (`arr/sonarr/series.go:48`) sets the season flags and keeps the series flag as Sonarr reports it. A season pass without monitoring options leaves the episode flags unchanged, and Sonarr's wanted/missing list filters on the episode flag, so the actor also calls `GetEpisodes` (`episode.go:11`) and `MonitorEpisodes` (`episode.go:29`) for the affected seasons. `UpdateSeries` stays unused.
+- Pending decisions: only decisions recorded while the mode is `act` are carried out. Decisions recorded in observe mode are never replayed; after a switch to `act`, the next pass acts on the decisions it records from then on. When an unmonitor and a promote for the same season are pending together, the promote wins.
 - Tests:
   - positive: act mode sends one season-pass update that unmonitors the later seasons, and one that monitors the promoted season;
   - negative: in observe mode, no Sonarr write reaches the fake server; a released series is never narrowed again;

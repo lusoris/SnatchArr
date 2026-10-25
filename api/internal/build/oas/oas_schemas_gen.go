@@ -4230,6 +4230,69 @@ func (o OptModuleUpdateConfig) Or(d ModuleUpdateConfig) ModuleUpdateConfig {
 	return d
 }
 
+// NewOptNilDateTime returns new OptNilDateTime with value set to v.
+func NewOptNilDateTime(v time.Time) OptNilDateTime {
+	return OptNilDateTime{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptNilDateTime is optional nullable time.Time.
+type OptNilDateTime struct {
+	Value time.Time
+	Set   bool
+	Null  bool
+}
+
+// IsSet returns true if OptNilDateTime was set.
+func (o OptNilDateTime) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptNilDateTime) Reset() {
+	var v time.Time
+	o.Value = v
+	o.Set = false
+	o.Null = false
+}
+
+// SetTo sets value to v.
+func (o *OptNilDateTime) SetTo(v time.Time) {
+	o.Set = true
+	o.Null = false
+	o.Value = v
+}
+
+// IsNull returns true if value is Null.
+func (o OptNilDateTime) IsNull() bool { return o.Null }
+
+// SetToNull sets value to null.
+func (o *OptNilDateTime) SetToNull() {
+	o.Set = true
+	o.Null = true
+	var v time.Time
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptNilDateTime) Get() (v time.Time, ok bool) {
+	if o.Null {
+		return v, false
+	}
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptNilDateTime) Or(d time.Time) time.Time {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
 // NewOptNilInt returns new OptNilInt with value set to v.
 func NewOptNilInt(v int) OptNilInt {
 	return OptNilInt{
@@ -8456,6 +8519,7 @@ type WatchawareGateDecision struct {
 	WouldAct     bool                         `json:"would_act"`
 	Reason       string                       `json:"reason"`
 	DecidedAt    time.Time                    `json:"decided_at"`
+	AppliedAt    OptNilDateTime               `json:"applied_at"`
 }
 
 // GetID returns the value of ID.
@@ -8498,6 +8562,11 @@ func (s *WatchawareGateDecision) GetDecidedAt() time.Time {
 	return s.DecidedAt
 }
 
+// GetAppliedAt returns the value of AppliedAt.
+func (s *WatchawareGateDecision) GetAppliedAt() OptNilDateTime {
+	return s.AppliedAt
+}
+
 // SetID sets the value of ID.
 func (s *WatchawareGateDecision) SetID(val uuid.UUID) {
 	s.ID = val
@@ -8536,6 +8605,11 @@ func (s *WatchawareGateDecision) SetReason(val string) {
 // SetDecidedAt sets the value of DecidedAt.
 func (s *WatchawareGateDecision) SetDecidedAt(val time.Time) {
 	s.DecidedAt = val
+}
+
+// SetAppliedAt sets the value of AppliedAt.
+func (s *WatchawareGateDecision) SetAppliedAt(val OptNilDateTime) {
+	s.AppliedAt = val
 }
 
 type WatchawareGateDecisionAction string
@@ -8590,6 +8664,7 @@ type WatchawareGateSeries struct {
 	AddedBeforeGate bool                      `json:"added_before_gate"`
 	HeldSeasons     []int                     `json:"held_seasons"`
 	UpdatedAt       time.Time                 `json:"updated_at"`
+	ReleasedAt      OptNilDateTime            `json:"released_at"`
 }
 
 // GetInstanceID returns the value of InstanceID.
@@ -8637,6 +8712,11 @@ func (s *WatchawareGateSeries) GetUpdatedAt() time.Time {
 	return s.UpdatedAt
 }
 
+// GetReleasedAt returns the value of ReleasedAt.
+func (s *WatchawareGateSeries) GetReleasedAt() OptNilDateTime {
+	return s.ReleasedAt
+}
+
 // SetInstanceID sets the value of InstanceID.
 func (s *WatchawareGateSeries) SetInstanceID(val uuid.UUID) {
 	s.InstanceID = val
@@ -8682,6 +8762,11 @@ func (s *WatchawareGateSeries) SetUpdatedAt(val time.Time) {
 	s.UpdatedAt = val
 }
 
+// SetReleasedAt sets the value of ReleasedAt.
+func (s *WatchawareGateSeries) SetReleasedAt(val OptNilDateTime) {
+	s.ReleasedAt = val
+}
+
 type WatchawareGateSeriesState string
 
 const (
@@ -8689,6 +8774,7 @@ const (
 	WatchawareGateSeriesStateExemptTag       WatchawareGateSeriesState = "exempt_tag"
 	WatchawareGateSeriesStateBeforeGate      WatchawareGateSeriesState = "before_gate"
 	WatchawareGateSeriesStateFilesBeyondGate WatchawareGateSeriesState = "files_beyond_gate"
+	WatchawareGateSeriesStateReleased        WatchawareGateSeriesState = "released"
 )
 
 // AllValues returns all WatchawareGateSeriesState values.
@@ -8698,6 +8784,7 @@ func (WatchawareGateSeriesState) AllValues() []WatchawareGateSeriesState {
 		WatchawareGateSeriesStateExemptTag,
 		WatchawareGateSeriesStateBeforeGate,
 		WatchawareGateSeriesStateFilesBeyondGate,
+		WatchawareGateSeriesStateReleased,
 	}
 }
 
@@ -8711,6 +8798,8 @@ func (s WatchawareGateSeriesState) MarshalText() ([]byte, error) {
 	case WatchawareGateSeriesStateBeforeGate:
 		return []byte(s), nil
 	case WatchawareGateSeriesStateFilesBeyondGate:
+		return []byte(s), nil
+	case WatchawareGateSeriesStateReleased:
 		return []byte(s), nil
 	default:
 		return nil, errors.Errorf("invalid value: %q", s)
@@ -8731,6 +8820,9 @@ func (s *WatchawareGateSeriesState) UnmarshalText(data []byte) error {
 		return nil
 	case WatchawareGateSeriesStateFilesBeyondGate:
 		*s = WatchawareGateSeriesStateFilesBeyondGate
+		return nil
+	case WatchawareGateSeriesStateReleased:
+		*s = WatchawareGateSeriesStateReleased
 		return nil
 	default:
 		return errors.Errorf("invalid value: %q", data)

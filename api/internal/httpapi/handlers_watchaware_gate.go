@@ -6,6 +6,7 @@ package httpapi
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -51,6 +52,19 @@ func (h *Handlers) ListWatchawareGateDecisions(ctx context.Context, params oas.L
 	return out, nil
 }
 
+// ReleaseWatchawareGateSeries releases all held seasons for a gated series.
+func (h *Handlers) ReleaseWatchawareGateSeries(ctx context.Context, params oas.ReleaseWatchawareGateSeriesParams) (*oas.WatchawareGateSeries, error) {
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
+	}
+	record, err := h.watchaware.ReleaseGateSeries(ctx, params.InstanceID, params.SeriesID)
+	if err != nil {
+		return nil, err
+	}
+	res := gateSeriesToOAS(record)
+	return &res, nil
+}
+
 func gateSeriesToOAS(r watchaware.GateSeriesRecord) oas.WatchawareGateSeries {
 	held := r.HeldSeasons
 	if held == nil {
@@ -66,6 +80,7 @@ func gateSeriesToOAS(r watchaware.GateSeriesRecord) oas.WatchawareGateSeries {
 		AddedBeforeGate: r.AddedBeforeGate,
 		HeldSeasons:     held,
 		UpdatedAt:       r.UpdatedAt,
+		ReleasedAt:      optNilTime(r.ReleasedAt),
 	}
 }
 
@@ -79,5 +94,13 @@ func gateDecisionToOAS(r watchaware.GateDecisionRecord) oas.WatchawareGateDecisi
 		WouldAct:     r.WouldAct,
 		Reason:       r.Reason,
 		DecidedAt:    r.DecidedAt,
+		AppliedAt:    optNilTime(r.AppliedAt),
 	}
+}
+
+func optNilTime(t *time.Time) oas.OptNilDateTime {
+	if t == nil {
+		return oas.OptNilDateTime{}
+	}
+	return oas.NewOptNilDateTime(*t)
 }

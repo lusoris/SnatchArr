@@ -6,6 +6,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -13,6 +14,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/lusoris/SnatchArr/api/internal/domain"
+	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
+	"github.com/lusoris/SnatchArr/api/internal/watchaware"
 )
 
 func TestWatchawareRoutes_Positive_CRUD(t *testing.T) {
@@ -330,5 +333,73 @@ func TestWatchawareRoutes_GateEndpoints(t *testing.T) {
 	resDec2 := doHTTP(t, f.client, http.MethodGet, f.srv.URL+PathPrefix+"/watchaware/gate/decisions?instance_id="+instID+"&limit=50", "", nil)
 	if resDec2.statusCode != http.StatusOK {
 		t.Errorf("resDec2 status = %d, want 200", resDec2.statusCode)
+	}
+}
+
+func TestReleaseWatchawareGateSeries_Integration(t *testing.T) {
+	t.Parallel()
+	f := newRouterFixture(t)
+	setupFixtureStubs(f)
+	_ = completeInitialSetup(t, f)
+	adminCsrf := getAdminCsrfToken(t, f)
+	instUUID := uuid.New()
+	instID := instUUID.String()
+
+	now := f.clk.Now()
+	if _, err := f.st.Q().CreateInstance(t.Context(), sqlcgen.CreateInstanceParams{
+		ID:        instUUID,
+		Kind:      "sonarr",
+		Name:      "Sonarr Test",
+		BaseUrl:   "http://sonarr.local",
+		ApiKeyEnc: []byte("encrypted"),
+		Enabled:   true,
+		Source:    "manual",
+		CreatedAt: now,
+	}); err != nil {
+		t.Fatalf("CreateInstance: %v", err)
+	}
+
+	// Enable watchaware
+	enableRes := doHTTP(t, f.client, http.MethodPut, f.srv.URL+PathPrefix+"/system/modules/"+domain.ModuleWatchAware, adminCsrf, map[string]any{"enabled": true})
+	if enableRes.statusCode != http.StatusOK {
+		t.Fatalf("enable module status = %d, want 200", enableRes.statusCode)
+	}
+
+	// Seed gated series with held seasons [2, 3]
+	if err := f.st.Q().UpsertGateSeries(t.Context(), sqlcgen.UpsertGateSeriesParams{
+		InstanceID:      instUUID,
+		SeriesID:        42,
+		TvdbID:          1042,
+		Title:           "Gated Show",
+		GateSeason:      1,
+		State:           watchaware.GateStateGated,
+		AddedBeforeGate: false,
+		HeldSeasons:     []int32{2, 3},
+		FirstSeenAt:     now,
+		UpdatedAt:       now,
+	}); err != nil {
+		t.Fatalf("UpsertGateSeries: %v", err)
+	}
+
+	releaseURL := fmt.Sprintf("%s%s/watchaware/gate/series/%s/42/release", f.srv.URL, PathPrefix, instID)
+
+	// 1. Viewer role gets 403
+	viewerClient, viewerCsrf := loginViewerSession(t, f)
+	viewerRes := doHTTP(t, viewerClient, http.MethodPost, releaseURL, viewerCsrf, nil)
+	if viewerRes.statusCode != http.StatusForbidden {
+		t.Errorf("viewer release status = %d, want 403", viewerRes.statusCode)
+	}
+
+	// 2. Admin role gets 200 OK
+	adminRes := doHTTP(t, f.client, http.MethodPost, releaseURL, adminCsrf, nil)
+	if adminRes.statusCode != http.StatusOK {
+		t.Fatalf("admin release status = %d, want 200; body: %s", adminRes.statusCode, string(adminRes.body))
+	}
+	var resBody map[string]any
+	if err := json.Unmarshal(adminRes.body, &resBody); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if resBody["state"] != "released" {
+		t.Errorf("state = %v, want released", resBody["state"])
 	}
 }

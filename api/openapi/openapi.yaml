@@ -1846,6 +1846,34 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
 
+  /watchaware/gate/series/{instance_id}/{series_id}/release:
+    post:
+      tags: [watchaware]
+      operationId: releaseWatchawareGateSeries
+      x-module: watchaware
+      summary: Release all seasons of a gated series
+      parameters:
+        - name: instance_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: series_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Released gate series
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WatchawareGateSeries"
+        default:
+          $ref: "#/components/responses/Problem"
+
   /watchaware/gate/decisions:
     get:
       tags: [watchaware]
@@ -3908,7 +3936,7 @@ components:
           type: integer
         state:
           type: string
-          enum: [gated, exempt_tag, before_gate, files_beyond_gate]
+          enum: [gated, exempt_tag, before_gate, files_beyond_gate, released]
         added_before_gate:
           type: boolean
         held_seasons:
@@ -3918,6 +3946,10 @@ components:
         updated_at:
           type: string
           format: date-time
+        released_at:
+          type: string
+          format: date-time
+          nullable: true
 
     WatchawareGateDecision:
       type: object
@@ -3951,5 +3983,9 @@ components:
         decided_at:
           type: string
           format: date-time
+        applied_at:
+          type: string
+          format: date-time
+          nullable: true
 
 

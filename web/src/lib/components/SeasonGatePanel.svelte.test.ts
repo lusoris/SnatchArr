@@ -2,9 +2,10 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-import { screen } from '@testing-library/svelte';
+import { fireEvent, screen } from '@testing-library/svelte';
 import { ProblemError } from '@sveltesentio/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { api } from '#lib/api/client.js';
 import type { components } from '#lib/api/schema.js';
 import { m } from '#lib/paraglide/messages.js';
 import { session } from '#lib/session.svelte.js';
@@ -135,5 +136,75 @@ describe('SeasonGatePanel', () => {
 
 		expect(await screen.findByText('Gated Test Show')).toBeTruthy();
 		expect(screen.getByText('—')).toBeTruthy();
+	});
+
+	it('positive: releases gated series when confirmed and calls release op', async () => {
+		const postSpy = vi.spyOn(api, 'POST').mockResolvedValue({
+			data: { ...sampleSeries, state: 'released', held_seasons: [] }
+		} as never);
+
+		stubGet({
+			'/instances': [sonarrInstance],
+			'/watchaware/gate/series': [sampleSeries],
+			'/watchaware/gate/decisions': [sampleDecision]
+		});
+
+		renderWithQuery(SeasonGatePanel);
+
+		const releaseBtn = await screen.findByRole('button', {
+			name: m.watchaware_gate_action_release()
+		});
+		await fireEvent.click(releaseBtn);
+
+		const confirmBtn = screen.getByRole('button', { name: m.confirm_yes() });
+		await fireEvent.click(confirmBtn);
+
+		expect(postSpy).toHaveBeenCalledWith(
+			'/watchaware/gate/series/{instance_id}/{series_id}/release',
+			{
+				params: {
+					path: {
+						instance_id: sonarrInstance.id,
+						series_id: 42
+					}
+				}
+			}
+		);
+	});
+
+	it('positive: renders released state and applied/pending badges, hides observe note on act', async () => {
+		const releasedSeries: GateSeries = {
+			...sampleSeries,
+			state: 'released',
+			held_seasons: []
+		};
+		const appliedDecision: GateDecision = {
+			...sampleDecision,
+			id: '00000000-0000-0000-0000-000000000091',
+			season_number: 2,
+			would_act: true,
+			applied_at: '2026-10-25T12:00:00Z'
+		};
+		const pendingDecision: GateDecision = {
+			...sampleDecision,
+			id: '00000000-0000-0000-0000-000000000092',
+			season_number: 3,
+			would_act: true,
+			applied_at: null
+		};
+
+		stubGet({
+			'/instances': [sonarrInstance],
+			'/watchaware/gate/series': [releasedSeries],
+			'/watchaware/gate/decisions': [appliedDecision, pendingDecision]
+		});
+
+		renderWithQuery(SeasonGatePanel);
+
+		expect(await screen.findByText(m.watchaware_gate_state_released())).toBeTruthy();
+		expect(screen.getByText(m.watchaware_gate_status_applied())).toBeTruthy();
+		expect(screen.getByText(m.watchaware_gate_status_pending())).toBeTruthy();
+		expect(screen.queryByText(m.watchaware_gate_observe_note())).toBeNull();
+		expect(screen.queryByRole('button', { name: m.watchaware_gate_action_release() })).toBeNull();
 	});
 });

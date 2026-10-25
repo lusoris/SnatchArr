@@ -427,6 +427,12 @@ type Handler interface {
 	//
 	// POST /instances/{instanceId}/preview
 	PreviewRun(ctx context.Context, params PreviewRunParams) (*PreviewResult, error)
+	// ReleaseWatchawareGateSeries implements releaseWatchawareGateSeries operation.
+	//
+	// Release all seasons of a gated series.
+	//
+	// POST /watchaware/gate/series/{instance_id}/{series_id}/release
+	ReleaseWatchawareGateSeries(ctx context.Context, params ReleaseWatchawareGateSeriesParams) (*WatchawareGateSeries, error)
 	// ResetState implements resetState operation.
 	//
 	// Forget processed items (one instance or all).

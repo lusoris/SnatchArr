@@ -86,10 +86,8 @@ func validateGateMode(mode *string) error {
 		return nil
 	}
 	switch *mode {
-	case "observe":
+	case "observe", "act":
 		return nil
-	case "act":
-		return fmt.Errorf("%w: gate mode act not supported until slice 3", domain.ErrInvalid)
 	default:
 		return fmt.Errorf("%w: invalid gate mode %q", domain.ErrInvalid, *mode)
 	}

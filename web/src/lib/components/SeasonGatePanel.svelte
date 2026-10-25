@@ -4,8 +4,10 @@ SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
 	import { createSentioQuery } from '@sveltesentio/query';
+	import { toast } from 'svelte-sonner';
 	import { api } from '#lib/api/client.js';
 	import type { components } from '#lib/api/schema.js';
+	import ConfirmAction from '#lib/components/ConfirmAction.svelte';
 	import InstanceSelect from '#lib/components/InstanceSelect.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import { m } from '#lib/paraglide/messages.js';
@@ -67,6 +69,33 @@ SPDX-License-Identifier: EUPL-1.2
 	}));
 
 	const seriesMap = $derived(new Map((seriesQuery.data ?? []).map((s) => [s.series_id, s.title])));
+	const hasWouldAct = $derived((decisionsQuery.data ?? []).some((d) => d.would_act));
+
+	let releasingSeriesId = $state<number | null>(null);
+
+	async function releaseSeries(seriesId: number) {
+		releasingSeriesId = seriesId;
+		try {
+			const res = await api.POST('/watchaware/gate/series/{instance_id}/{series_id}/release', {
+				params: {
+					path: {
+						instance_id: selectedInstanceId,
+						series_id: seriesId
+					}
+				}
+			});
+			if (res.error) {
+				toast.error(m.watchaware_gate_release_error());
+				return;
+			}
+			toast.success(m.watchaware_gate_release_success());
+			await Promise.all([seriesQuery.refetch(), decisionsQuery.refetch()]);
+		} catch {
+			toast.error(m.watchaware_gate_release_error());
+		} finally {
+			releasingSeriesId = null;
+		}
+	}
 
 	function seriesTitle(id: number): string {
 		return seriesMap.get(id) ?? `#${id}`;
@@ -76,6 +105,8 @@ SPDX-License-Identifier: EUPL-1.2
 		switch (state) {
 			case 'gated':
 				return m.watchaware_gate_state_gated();
+			case 'released':
+				return m.watchaware_gate_state_released();
 			case 'exempt_tag':
 				return m.watchaware_gate_state_exempt_tag();
 			case 'before_gate':
@@ -107,7 +138,9 @@ SPDX-License-Identifier: EUPL-1.2
 </script>
 
 <div class="flex flex-col gap-6">
-	<p class="card text-subtle">{m.watchaware_gate_observe_note()}</p>
+	{#if !hasWouldAct}
+		<p class="card text-subtle">{m.watchaware_gate_observe_note()}</p>
+	{/if}
 
 	{#if instancesQuery.isPending && !propInstances}
 		<p aria-live="polite">{m.loading()}</p>
@@ -148,6 +181,7 @@ SPDX-License-Identifier: EUPL-1.2
 									<th scope="col">{m.watchaware_gate_col_gate_season()}</th>
 									<th scope="col">{m.watchaware_gate_col_held_seasons()}</th>
 									<th scope="col">{m.watchaware_gate_col_updated()}</th>
+									<th scope="col"><span class="sr-only">{m.action_actions()}</span></th>
 								</tr>
 							</thead>
 							<tbody>
@@ -161,6 +195,18 @@ SPDX-License-Identifier: EUPL-1.2
 										</td>
 										<td data-label={m.watchaware_gate_col_updated()}>
 											{formatWhen(s.updated_at, getLocale())}
+										</td>
+										<td data-label="">
+											{#if s.state === 'gated'}
+												<ConfirmAction
+													label={m.watchaware_gate_action_release()}
+													message={m.watchaware_gate_release_confirm()}
+													groupLabel={`${m.watchaware_gate_action_release()}: ${s.title}`}
+													pending={releasingSeriesId === s.series_id}
+													inline={true}
+													onconfirm={() => releaseSeries(s.series_id)}
+												/>
+											{/if}
 										</td>
 									</tr>
 								{/each}
@@ -199,6 +245,14 @@ SPDX-License-Identifier: EUPL-1.2
 											{#if !d.would_act}
 												<span class="ml-1.5 rounded-full border border-line px-2 py-0.5 text-xs">
 													{m.watchaware_gate_mode_observe()}
+												</span>
+											{:else if d.applied_at}
+												<span class="ml-1.5 rounded-full border border-line px-2 py-0.5 text-xs">
+													{m.watchaware_gate_status_applied()}
+												</span>
+											{:else}
+												<span class="ml-1.5 rounded-full border border-line px-2 py-0.5 text-xs">
+													{m.watchaware_gate_status_pending()}
 												</span>
 											{/if}
 										</td>

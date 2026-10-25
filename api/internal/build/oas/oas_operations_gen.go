@@ -75,6 +75,7 @@ const (
 	LoginOperation                       OperationName = "Login"
 	LogoutOperation                      OperationName = "Logout"
 	PreviewRunOperation                  OperationName = "PreviewRun"
+	ReleaseWatchawareGateSeriesOperation OperationName = "ReleaseWatchawareGateSeries"
 	ResetStateOperation                  OperationName = "ResetState"
 	RevokeAPIKeyOperation                OperationName = "RevokeAPIKey"
 	SnatchSeerrRequestOperation          OperationName = "SnatchSeerrRequest"
