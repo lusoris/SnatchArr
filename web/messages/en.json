@@ -591,6 +591,7 @@
 	"instance_priority_saved": "Instance priority saved",
 	"settings_llm_enabled": "Enable MCP server (/api/v1/mcp)",
 	"settings_llm_write_tools": "Allowed MCP write tools",
+	"settings_llm_write_tools_allowed": "{count} of {total} allowed",
 	"settings_llm_scope_core_write": "Core operations (instances, runs, policies, schedules)",
 	"settings_llm_scope_admin_write": "Administrative operations (settings)",
 	"settings_llm_scope_download_clients_write": "Download client operations",

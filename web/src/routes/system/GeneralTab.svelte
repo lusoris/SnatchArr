@@ -261,6 +261,12 @@ SPDX-License-Identifier: EUPL-1.2
 			: current.filter((t) => t !== tool);
 	}
 
+	function allowedCount(group: WriteToolGroup): number {
+		if (!draft?.llm_write_tools) return 0;
+		const tools = draft.llm_write_tools;
+		return group.options.filter((opt) => tools.includes(opt.value)).length;
+	}
+
 	const save = createSentioMutation({
 		mutationFn: (d: GeneralSettingsDraft) => saveMergedSettings(d, mergeGeneralSettings),
 		invalidates: [keys.settings, keys.caps, keys.instances],
@@ -298,19 +304,19 @@ SPDX-License-Identifier: EUPL-1.2
 	{:else if settings.isError}
 		<ProblemNote error={settings.error} />
 	{:else if draft}
-		<div class="grid w-full grid-cols-1 items-start gap-6 xl:grid-cols-12">
-			<div class="flex flex-col gap-6 xl:col-span-7">
-				{#if save.isError}
-					<ProblemNote error={save.error} />
-				{/if}
+		<div class="flex w-full flex-col gap-6">
+			{#if save.isError}
+				<ProblemNote error={save.error} />
+			{/if}
 
-				<form
-					class="card flex flex-col gap-4"
-					onsubmit={(e) => {
-						e.preventDefault();
-						if (draft && schema.safeParse(draft).success) save.mutate(draft);
-					}}
-				>
+			<form
+				class="card flex flex-col gap-4"
+				onsubmit={(e) => {
+					e.preventDefault();
+					if (draft && schema.safeParse(draft).success) save.mutate(draft);
+				}}
+			>
+				<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 					<Field id="retention" label={m.settings_retention()} hint={m.settings_retention_hint()}>
 						<input
 							id="retention"
@@ -333,44 +339,64 @@ SPDX-License-Identifier: EUPL-1.2
 							bind:value={draft.user_agent}
 						/>
 					</Field>
-					<label class="flex items-center gap-2">
-						<input type="checkbox" data-field="llm_enabled" bind:checked={draft.llm_enabled} />
-						{m.settings_llm_enabled()}
-					</label>
-					<div class="flex flex-col gap-3" data-field="llm_write_tools">
-						<span class="text-sm font-medium">{m.settings_llm_write_tools()}</span>
+				</div>
+				<label class="flex items-center gap-2">
+					<input type="checkbox" data-field="llm_enabled" bind:checked={draft.llm_enabled} />
+					{m.settings_llm_enabled()}
+				</label>
+				<div class="flex flex-col gap-3" data-field="llm_write_tools">
+					<span class="text-sm font-medium">{m.settings_llm_write_tools()}</span>
+					<div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
 						{#each writeToolGroups as group (group.field)}
-							<fieldset
-								data-field={group.field}
-								disabled={!draft.llm_enabled}
-								class="border-border flex flex-col gap-2 rounded border p-3"
+							<details
+								class="border-border rounded border p-3"
+								class:opacity-60={!draft.llm_enabled}
 							>
-								<legend class="px-1 text-sm font-medium">{group.legend()}</legend>
-								{#each group.options as opt (opt.value)}
-									<label class="flex items-center gap-2">
-										<input
-											type="checkbox"
-											value={opt.value}
-											disabled={!draft.llm_enabled}
-											checked={(draft.llm_write_tools ?? []).includes(opt.value)}
-											onchange={(e) => toggleWriteTool(opt.value, e.currentTarget.checked)}
-										/>
-										{opt.label()}
-									</label>
-								{/each}
-							</fieldset>
+								<summary
+									class="flex cursor-pointer items-center justify-between gap-2 text-sm font-medium select-none"
+								>
+									<span>{group.legend()}</span>
+									<span class="text-xs font-normal text-subtle">
+										{m.settings_llm_write_tools_allowed({
+											count: allowedCount(group),
+											total: group.options.length
+										})}
+									</span>
+								</summary>
+								<fieldset
+									data-field={group.field}
+									disabled={!draft.llm_enabled}
+									class="mt-3 flex flex-col gap-2 border-0 p-0"
+								>
+									<legend class="sr-only">{group.legend()}</legend>
+									{#each group.options as opt (opt.value)}
+										<label class="flex items-center gap-2 text-sm">
+											<input
+												type="checkbox"
+												value={opt.value}
+												disabled={!draft.llm_enabled}
+												checked={(draft.llm_write_tools ?? []).includes(opt.value)}
+												onchange={(e) => toggleWriteTool(opt.value, e.currentTarget.checked)}
+											/>
+											{opt.label()}
+										</label>
+									{/each}
+								</fieldset>
+							</details>
 						{/each}
 					</div>
+				</div>
+				<div>
 					<AdminSaveButton disabled={save.isPending} />
-				</form>
-			</div>
+				</div>
+			</form>
 
-			<div class="flex flex-col gap-6 xl:col-span-5">
-				<section class="card flex flex-col gap-4" aria-labelledby="change-password-heading">
-					<h2 id="change-password-heading" class="text-xl font-semibold">
-						{m.change_password_title()}
-					</h2>
-					<form class="flex flex-col gap-4" onsubmit={changePassword}>
+			<section class="card flex flex-col gap-4" aria-labelledby="change-password-heading">
+				<h2 id="change-password-heading" class="text-xl font-semibold">
+					{m.change_password_title()}
+				</h2>
+				<form class="flex flex-col gap-4" onsubmit={changePassword}>
+					<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 						<Field id="current-password" label={m.current_password()}>
 							<input
 								id="current-password"
@@ -382,17 +408,17 @@ SPDX-License-Identifier: EUPL-1.2
 							/>
 						</Field>
 						<NewPasswordField bind:value={newPassword} />
-						{#if passwordError}
-							<p role="alert" class="text-sm text-danger">{passwordError}</p>
-						{/if}
-						<div>
-							<button type="submit" class="btn btn-primary" disabled={changingPassword}>
-								{m.change_password_submit()}
-							</button>
-						</div>
-					</form>
-				</section>
-			</div>
+					</div>
+					{#if passwordError}
+						<p role="alert" class="text-sm text-danger">{passwordError}</p>
+					{/if}
+					<div>
+						<button type="submit" class="btn btn-primary" disabled={changingPassword}>
+							{m.change_password_submit()}
+						</button>
+					</div>
+				</form>
+			</section>
 		</div>
 	{/if}
 </section>

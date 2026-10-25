@@ -545,6 +545,7 @@ export const SCROLL_BUDGET_ROUTES = [
 	'/activity',
 	'/activity?source=log',
 	'/instances/[id]/activity',
+	'/system',
 	'/system?tab=modules',
 	'/system?tab=notifications'
 ] as const;

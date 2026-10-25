@@ -180,12 +180,18 @@ describe('settings', () => {
 		} as never);
 		renderWithQuery(GeneralTab);
 
-		expect(await screen.findByText(m.settings_llm_scope_core_write())).toBeTruthy();
-		expect(screen.getByText(m.settings_llm_scope_admin_write())).toBeTruthy();
-		expect(screen.getByText(m.settings_llm_scope_download_clients_write())).toBeTruthy();
-		expect(screen.getByText(m.settings_llm_scope_requests_write())).toBeTruthy();
-		expect(screen.getByText(m.settings_llm_scope_prowlarr_write())).toBeTruthy();
-		expect(screen.getByText(m.settings_llm_scope_notifications_write())).toBeTruthy();
+		expect(
+			await screen.findByRole('group', { name: m.settings_llm_scope_core_write() })
+		).toBeTruthy();
+		expect(screen.getByRole('group', { name: m.settings_llm_scope_admin_write() })).toBeTruthy();
+		expect(
+			screen.getByRole('group', { name: m.settings_llm_scope_download_clients_write() })
+		).toBeTruthy();
+		expect(screen.getByRole('group', { name: m.settings_llm_scope_requests_write() })).toBeTruthy();
+		expect(screen.getByRole('group', { name: m.settings_llm_scope_prowlarr_write() })).toBeTruthy();
+		expect(
+			screen.getByRole('group', { name: m.settings_llm_scope_notifications_write() })
+		).toBeTruthy();
 
 		const llmToggle = screen.getByLabelText(m.settings_llm_enabled()) as HTMLInputElement;
 		await fireEvent.click(llmToggle);
@@ -274,5 +280,108 @@ describe('settings', () => {
 
 		const alert = await screen.findByRole('alert');
 		expect(alert.textContent).toContain('invalid current password');
+	});
+
+	it('updates disclosure summary count when tool checkboxes are toggled', async () => {
+		stubGet({
+			...baseStubs,
+			'/settings': {
+				...sampleSettings,
+				llm_enabled: true,
+				llm_write_tools: []
+			}
+		});
+		renderWithQuery(GeneralTab);
+
+		expect(
+			await screen.findByText(m.settings_llm_write_tools_allowed({ count: 0, total: 16 }))
+		).toBeTruthy();
+
+		const triggerBox = screen.getByLabelText(m.settings_llm_tool_trigger_run()) as HTMLInputElement;
+		await fireEvent.click(triggerBox);
+
+		expect(
+			screen.getByText(m.settings_llm_write_tools_allowed({ count: 1, total: 16 }))
+		).toBeTruthy();
+
+		const deleteBox = screen.getByLabelText(
+			m.settings_llm_tool_delete_instance()
+		) as HTMLInputElement;
+		await fireEvent.click(deleteBox);
+
+		expect(
+			screen.getByText(m.settings_llm_write_tools_allowed({ count: 2, total: 16 }))
+		).toBeTruthy();
+	});
+
+	it('submits checked tools from closed disclosures when saved', async () => {
+		stubGet({
+			...baseStubs,
+			'/settings': {
+				...sampleSettings,
+				llm_enabled: true,
+				llm_write_tools: ['snatcharr_trigger_run', 'snatcharr_update_settings']
+			}
+		});
+		const putSpy = vi.spyOn(api, 'PUT').mockResolvedValue({
+			data: {
+				...sampleSettings,
+				llm_enabled: true,
+				llm_write_tools: ['snatcharr_trigger_run', 'snatcharr_update_settings']
+			}
+		} as never);
+		renderWithQuery(GeneralTab);
+
+		const coreFieldset = await screen.findByRole('group', {
+			name: m.settings_llm_scope_core_write()
+		});
+		const coreDetails = coreFieldset.closest('details');
+		expect(coreDetails).toBeTruthy();
+		expect(coreDetails?.open).toBe(false);
+
+		const button = screen.getByRole('button', { name: m.instance_save() });
+		await fireEvent.click(button);
+
+		expect(putSpy).toHaveBeenCalledWith('/settings', {
+			body: expectedSettingsWithTools(['snatcharr_trigger_run', 'snatcharr_update_settings'])
+		});
+	});
+
+	it('renders boundary 0 of n and n of n labels for tool disclosures', async () => {
+		const allCoreTools = [
+			'snatcharr_create_instance',
+			'snatcharr_update_instance',
+			'snatcharr_delete_instance',
+			'snatcharr_test_instance',
+			'snatcharr_test_instance_input',
+			'snatcharr_delete_instance_events',
+			'snatcharr_update_policy',
+			'snatcharr_update_queue_policy',
+			'snatcharr_trigger_run',
+			'snatcharr_preview_run',
+			'snatcharr_cancel_run',
+			'snatcharr_reset_state',
+			'snatcharr_create_schedule',
+			'snatcharr_update_schedule',
+			'snatcharr_delete_schedule',
+			'snatcharr_import_configarr'
+		];
+		stubGet({
+			...baseStubs,
+			'/settings': {
+				...sampleSettings,
+				llm_enabled: true,
+				llm_write_tools: allCoreTools
+			}
+		});
+		renderWithQuery(GeneralTab);
+
+		expect(
+			await screen.findByText(m.settings_llm_write_tools_allowed({ count: 16, total: 16 }))
+		).toBeTruthy();
+
+		expect(
+			screen.getByText(m.settings_llm_write_tools_allowed({ count: 0, total: 1 }))
+		).toBeTruthy();
 	});
 });
