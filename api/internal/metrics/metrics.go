@@ -68,6 +68,7 @@ const (
 	DeferralClientUnreachable  = "client_unreachable"
 	DeferralClientPaused       = "client_paused"
 	DeferralClientActiveLimit  = "client_active_limit"
+	DeferralClientQueuedLimit  = "client_queued_limit"
 	DeferralBandwidthSaturated = "bandwidth_saturated"
 	DeferralGateRefusal        = "gate_refusal"
 	DeferralIndexerLimit       = "indexer_limit"
@@ -82,6 +83,7 @@ var AllDeferralReasons = []string{
 	DeferralClientUnreachable,
 	DeferralClientPaused,
 	DeferralClientActiveLimit,
+	DeferralClientQueuedLimit,
 	DeferralBandwidthSaturated,
 	DeferralGateRefusal,
 	DeferralIndexerLimit,

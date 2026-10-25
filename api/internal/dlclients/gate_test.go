@@ -19,6 +19,10 @@ func client(name string, maxActive int, budget int64) domain.DownloadClient {
 	return domain.DownloadClient{ID: uuid.New(), Name: name, Kind: domain.ClientQBittorrent, Enabled: true, MaxActive: maxActive, BandwidthBudgetBPS: budget}
 }
 
+func clientWithQueued(maxActive, maxQueued int) domain.DownloadClient {
+	return domain.DownloadClient{ID: uuid.New(), Name: "q", Kind: domain.ClientQBittorrent, Enabled: true, MaxActive: maxActive, MaxQueued: maxQueued}
+}
+
 func snapFor(c domain.DownloadClient, s dlclients.Snapshot) map[uuid.UUID]dlclients.Snapshot {
 	s.ClientID = c.ID
 	return map[uuid.UUID]dlclients.Snapshot{c.ID: s}
@@ -45,6 +49,10 @@ func TestEvaluate(t *testing.T) {
 		{"at max active", client("q", 3, 0), dlclients.Snapshot{Reachable: true, Active: 3}, true, false, snatch.GateClientActiveLimit, "3 active downloads (limit 3)", 0},
 		{"below max active", client("q", 3, 0), dlclients.Snapshot{Reachable: true, Active: 2}, true, true, "", "", 1},
 		{"queued items do not trip max active", client("q", 3, 0), dlclients.Snapshot{Reachable: true, Active: 2, Queued: 10}, true, true, "", "", 1},
+		{"queued below limit allowed", clientWithQueued(0, 5), dlclients.Snapshot{Reachable: true, Queued: 4}, true, true, "", "", 1},
+		{"at max queued", clientWithQueued(0, 5), dlclients.Snapshot{Reachable: true, Queued: 5}, true, false, snatch.GateClientQueuedLimit, "5 queued downloads (limit 5)", 0},
+		{"max_queued zero with queued downloads allowed", clientWithQueued(0, 0), dlclients.Snapshot{Reachable: true, Queued: 100}, true, true, "", "", 1},
+		{"active limit wins over queued limit", clientWithQueued(3, 5), dlclients.Snapshot{Reachable: true, Active: 3, Queued: 5}, true, false, snatch.GateClientActiveLimit, "3 active downloads (limit 3)", 0},
 		{"half bandwidth", client("q", 0, 1000), dlclients.Snapshot{Reachable: true, DownloadRate: 500}, true, true, "", "", 0.5},
 		{"bandwidth saturated", client("q", 0, 1000), dlclients.Snapshot{Reachable: true, DownloadRate: 1200}, true, false, snatch.GateBandwidthSaturated, "saturating", 0},
 		{"disabled client ignored", func() domain.DownloadClient { c := client("q", 0, 0); c.Enabled = false; return c }(), dlclients.Snapshot{}, true, true, "", "", 1},

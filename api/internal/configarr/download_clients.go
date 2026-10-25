@@ -29,6 +29,7 @@ type ClientDefinition struct {
 	Secret             string // password or api_key
 	InstanceKey        string // optional Configarr instance key
 	MaxActive          int
+	MaxQueued          int
 	BandwidthBudgetBPS int64
 	Enabled            bool
 }
@@ -135,7 +136,25 @@ func parseClientEntry(p *Parser, kind domain.DownloadClientKind, name string, no
 	return def, true, nil
 }
 
+func parseLimits(def *ClientDefinition, key, field, val string) (bool, error) {
+	var err error
+	switch field {
+	case "max_active":
+		def.MaxActive, err = parseMaxActive(key, val)
+	case "max_queued":
+		def.MaxQueued, err = parseMaxQueued(key, val)
+	case "bandwidth_budget_bps":
+		def.BandwidthBudgetBPS, err = parseBandwidth(key, val)
+	default:
+		return false, nil
+	}
+	return true, err
+}
+
 func parseField(p *Parser, key, field string, node *yaml.Node, def *ClientDefinition, flags *secretFlags) error {
+	if handled, err := parseLimits(def, key, field, node.Value); handled {
+		return err
+	}
 	var err error
 	switch field {
 	case "base_url":
@@ -156,10 +175,6 @@ func parseField(p *Parser, key, field string, node *yaml.Node, def *ClientDefini
 			return fmt.Errorf("%w: %s: enabled must be true or false", ErrParse, key)
 		}
 		def.Enabled = b
-	case "max_active":
-		def.MaxActive, err = parseMaxActive(key, node.Value)
-	case "bandwidth_budget_bps":
-		def.BandwidthBudgetBPS, err = parseBandwidth(key, node.Value)
 	default:
 		return fmt.Errorf("%w: %s: unknown field %q", ErrParse, key, field)
 	}
@@ -170,6 +185,14 @@ func parseMaxActive(key, val string) (int, error) {
 	n, err := strconv.Atoi(strings.TrimSpace(val))
 	if err != nil || n < 0 || n > domain.MaxActiveDownloadsLimit {
 		return 0, fmt.Errorf("%w: %s: max_active must be between 0 and %d", ErrParse, key, domain.MaxActiveDownloadsLimit)
+	}
+	return n, nil
+}
+
+func parseMaxQueued(key, val string) (int, error) {
+	n, err := strconv.Atoi(strings.TrimSpace(val))
+	if err != nil || n < 0 || n > domain.MaxQueuedDownloadsLimit {
+		return 0, fmt.Errorf("%w: %s: max_queued must be between 0 and %d", ErrParse, key, domain.MaxQueuedDownloadsLimit)
 	}
 	return n, nil
 }

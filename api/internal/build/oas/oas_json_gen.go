@@ -1772,6 +1772,10 @@ func (s *DownloadClient) encodeFields(e *jx.Encoder) {
 		e.Int(s.MaxActive)
 	}
 	{
+		e.FieldStart("max_queued")
+		e.Int(s.MaxQueued)
+	}
+	{
 		e.FieldStart("bandwidth_budget_bps")
 		e.Int64(s.BandwidthBudgetBps)
 	}
@@ -1797,7 +1801,7 @@ func (s *DownloadClient) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfDownloadClient = [15]string{
+var jsonFieldsNameOfDownloadClient = [16]string{
 	0:  "id",
 	1:  "instance_id",
 	2:  "kind",
@@ -1808,11 +1812,12 @@ var jsonFieldsNameOfDownloadClient = [15]string{
 	7:  "enabled",
 	8:  "source",
 	9:  "max_active",
-	10: "bandwidth_budget_bps",
-	11: "last_check_at",
-	12: "last_error",
-	13: "created_at",
-	14: "updated_at",
+	10: "max_queued",
+	11: "bandwidth_budget_bps",
+	12: "last_check_at",
+	13: "last_error",
+	14: "created_at",
+	15: "updated_at",
 }
 
 // Decode decodes DownloadClient from json.
@@ -1936,8 +1941,20 @@ func (s *DownloadClient) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"max_active\"")
 			}
-		case "bandwidth_budget_bps":
+		case "max_queued":
 			requiredBitSet[1] |= 1 << 2
+			if err := func() error {
+				v, err := d.Int()
+				s.MaxQueued = int(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"max_queued\"")
+			}
+		case "bandwidth_budget_bps":
+			requiredBitSet[1] |= 1 << 3
 			if err := func() error {
 				v, err := d.Int64()
 				s.BandwidthBudgetBps = int64(v)
@@ -1969,7 +1986,7 @@ func (s *DownloadClient) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"last_error\"")
 			}
 		case "created_at":
-			requiredBitSet[1] |= 1 << 5
+			requiredBitSet[1] |= 1 << 6
 			if err := func() error {
 				v, err := json.DecodeDateTime(d)
 				s.CreatedAt = v
@@ -1981,7 +1998,7 @@ func (s *DownloadClient) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"created_at\"")
 			}
 		case "updated_at":
-			requiredBitSet[1] |= 1 << 6
+			requiredBitSet[1] |= 1 << 7
 			if err := func() error {
 				v, err := json.DecodeDateTime(d)
 				s.UpdatedAt = v
@@ -2003,7 +2020,7 @@ func (s *DownloadClient) Decode(d *jx.Decoder) error {
 	var failures []validate.FieldError
 	for i, mask := range [2]uint8{
 		0b11111101,
-		0b01100111,
+		0b11001111,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -2101,6 +2118,12 @@ func (s *DownloadClientInput) encodeFields(e *jx.Encoder) {
 		}
 	}
 	{
+		if s.MaxQueued.Set {
+			e.FieldStart("max_queued")
+			s.MaxQueued.Encode(e)
+		}
+	}
+	{
 		if s.BandwidthBudgetBps.Set {
 			e.FieldStart("bandwidth_budget_bps")
 			s.BandwidthBudgetBps.Encode(e)
@@ -2108,7 +2131,7 @@ func (s *DownloadClientInput) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfDownloadClientInput = [9]string{
+var jsonFieldsNameOfDownloadClientInput = [10]string{
 	0: "instance_id",
 	1: "kind",
 	2: "name",
@@ -2117,7 +2140,8 @@ var jsonFieldsNameOfDownloadClientInput = [9]string{
 	5: "secret",
 	6: "enabled",
 	7: "max_active",
-	8: "bandwidth_budget_bps",
+	8: "max_queued",
+	9: "bandwidth_budget_bps",
 }
 
 // Decode decodes DownloadClientInput from json.
@@ -2213,6 +2237,16 @@ func (s *DownloadClientInput) Decode(d *jx.Decoder) error {
 				return nil
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"max_active\"")
+			}
+		case "max_queued":
+			if err := func() error {
+				s.MaxQueued.Reset()
+				if err := s.MaxQueued.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"max_queued\"")
 			}
 		case "bandwidth_budget_bps":
 			if err := func() error {

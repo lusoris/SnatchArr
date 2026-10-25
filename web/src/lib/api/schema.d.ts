@@ -1723,6 +1723,8 @@ export interface components {
             source: "manual" | "discovered" | "configarr";
             /** @description Foreplay - defer snatches once this many downloads are active (0 = no limit) */
             max_active: number;
+            /** @description Foreplay - defer snatches once this many downloads are queued (0 = no limit) */
+            max_queued: number;
             /**
              * Format: int64
              * @description Foreplay - bytes per second the client may use before snatches are paced (0 = off)
@@ -1752,6 +1754,8 @@ export interface components {
             enabled: boolean;
             /** @default 0 */
             max_active: number;
+            /** @default 0 */
+            max_queued: number;
             /**
              * Format: int64
              * @default 0

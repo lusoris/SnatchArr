@@ -36,6 +36,7 @@ type Input struct {
 	Secret             string // password, or API key for SABnzbd
 	Enabled            bool
 	MaxActive          int
+	MaxQueued          int
 	BandwidthBudgetBPS int64
 }
 
@@ -116,6 +117,7 @@ func (s *Service) Create(ctx context.Context, in Input) (domain.DownloadClient, 
 		ID: clientID, InstanceID: in.InstanceID, Kind: string(in.Kind), Name: in.Name, BaseUrl: in.BaseURL,
 		Username: in.Username, SecretEnc: sealed, Enabled: in.Enabled, Source: string(domain.ClientSourceManual),
 		MaxActive:          int32(in.MaxActive), // #nosec G115 -- validated 0..1000
+		MaxQueued:          int32(in.MaxQueued), // #nosec G115 -- validated 0..1000
 		BandwidthBudgetBps: in.BandwidthBudgetBPS,
 		CreatedAt:          s.clk.Now(),
 	})
@@ -151,6 +153,7 @@ func (s *Service) Update(ctx context.Context, clientID uuid.UUID, in Input) (dom
 		ID: clientID, InstanceID: in.InstanceID, Kind: string(in.Kind), Name: in.Name, BaseUrl: in.BaseURL,
 		Username: in.Username, SecretEnc: sealed, Enabled: in.Enabled,
 		MaxActive:          int32(in.MaxActive), // #nosec G115 -- validated 0..1000
+		MaxQueued:          int32(in.MaxQueued), // #nosec G115 -- validated 0..1000
 		BandwidthBudgetBps: in.BandwidthBudgetBPS,
 		UpdatedAt:          s.clk.Now(),
 	})
@@ -289,7 +292,7 @@ func (s *Service) recordCheck(ctx context.Context, clientID uuid.UUID, snap Snap
 }
 
 func (s *Service) normalize(ctx context.Context, in Input) (Input, error) {
-	if err := domain.ValidateDownloadClientInput(in.Kind, in.Name, in.BaseURL, in.MaxActive, in.BandwidthBudgetBPS); err != nil {
+	if err := domain.ValidateDownloadClientInput(in.Kind, in.Name, in.BaseURL, in.MaxActive, in.MaxQueued, in.BandwidthBudgetBPS); err != nil {
 		return Input{}, fmt.Errorf("dlclients: %w", err)
 	}
 	normalized, err := domain.NormalizeBaseURL(in.BaseURL)
@@ -406,6 +409,7 @@ func (s *Service) UpsertConfigarr(ctx context.Context, key string, in Input) (bo
 		Enabled:            in.Enabled,
 		ConfigarrKey:       &key,
 		MaxActive:          int32(in.MaxActive), // #nosec G115 -- validated 0..1000
+		MaxQueued:          int32(in.MaxQueued), // #nosec G115 -- validated 0..1000
 		BandwidthBudgetBps: in.BandwidthBudgetBPS,
 		CreatedAt:          s.clk.Now(),
 	})

@@ -203,6 +203,7 @@ qbittorrent:            # section = domain.DownloadClientKind value; accept ever
     password: !file /etc/snatcharr/configarr-secrets/qbit-password
     instance: sonarr/main   # optional Configarr instance key; omitted = applies to every instance
     max_active: 0           # optional int
+    max_queued: 0           # optional int
     bandwidth_budget_bps: 0 # optional int64
     enabled: true           # optional, default true
 sabnzbd:

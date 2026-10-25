@@ -42,22 +42,27 @@ func TestValidateDownloadClientInput(t *testing.T) {
 		clientNm  string
 		baseURL   string
 		maxActive int
+		maxQueued int
 		budget    int64
 		wantErr   bool
 	}{
-		{"ok", domain.ClientQBittorrent, "qbit", "http://qbit:8080", 5, 10_000_000, false},
-		{"no limits", domain.ClientSABnzbd, "sab", "https://sab.example", 0, 0, false},
-		{"bad kind", "utorrent", "x", "http://x", 0, 0, true},
-		{"empty name", domain.ClientDeluge, "  ", "http://x", 0, 0, true},
-		{"bad url", domain.ClientDeluge, "d", "ftp://x", 0, 0, true},
-		{"negative active", domain.ClientNZBGet, "n", "http://x", -1, 0, true},
-		{"too many active", domain.ClientNZBGet, "n", "http://x", 1001, 0, true},
-		{"negative budget", domain.ClientNZBGet, "n", "http://x", 0, -5, true},
+		{"ok", domain.ClientQBittorrent, "qbit", "http://qbit:8080", 5, 10, 10_000_000, false},
+		{"no limits", domain.ClientSABnzbd, "sab", "https://sab.example", 0, 0, 0, false},
+		{"bad kind", "utorrent", "x", "http://x", 0, 0, 0, true},
+		{"empty name", domain.ClientDeluge, "  ", "http://x", 0, 0, 0, true},
+		{"bad url", domain.ClientDeluge, "d", "ftp://x", 0, 0, 0, true},
+		{"negative active", domain.ClientNZBGet, "n", "http://x", -1, 0, 0, true},
+		{"too many active", domain.ClientNZBGet, "n", "http://x", 1001, 0, 0, true},
+		{"negative queued", domain.ClientNZBGet, "n", "http://x", 0, -1, 0, true},
+		{"boundary queued zero", domain.ClientNZBGet, "n", "http://x", 0, 0, 0, false},
+		{"boundary queued max limit", domain.ClientNZBGet, "n", "http://x", 0, 1000, 0, false},
+		{"too many queued", domain.ClientNZBGet, "n", "http://x", 0, 1001, 0, true},
+		{"negative budget", domain.ClientNZBGet, "n", "http://x", 0, 0, -5, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			err := domain.ValidateDownloadClientInput(tc.kind, tc.clientNm, tc.baseURL, tc.maxActive, tc.budget)
+			err := domain.ValidateDownloadClientInput(tc.kind, tc.clientNm, tc.baseURL, tc.maxActive, tc.maxQueued, tc.budget)
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("wantErr=%v got %v", tc.wantErr, err)
 			}
