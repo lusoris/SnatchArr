@@ -70,9 +70,13 @@ type Labeler interface {
 // Options tune the probe.
 type Options = BaseFactory
 
-// DefaultOptions returns a 15 s timeout and the product User-Agent.
+// DefaultOptions returns a 15 s timeout, 120 s import timeout and the product User-Agent.
 func DefaultOptions() Options {
-	return Options{Timeout: 15 * time.Second, UserAgent: "SnatchArr/1.0 (https://github.com/lusoris/SnatchArr)"}
+	return Options{
+		Timeout:       15 * time.Second,
+		ImportTimeout: 120 * time.Second,
+		UserAgent:     "SnatchArr/1.0 (https://github.com/lusoris/SnatchArr)",
+	}
 }
 
 // GoenvoyProber probes through goenvoy's typed clients.
@@ -84,6 +88,12 @@ type GoenvoyProber struct {
 func NewGoenvoyProber(opts Options) *GoenvoyProber {
 	if opts.Timeout <= 0 {
 		opts.Timeout = DefaultOptions().Timeout
+	}
+	if opts.ImportTimeout <= 0 {
+		opts.ImportTimeout = DefaultOptions().ImportTimeout
+	}
+	if opts.ImportTimeout < opts.Timeout {
+		opts.ImportTimeout = opts.Timeout
 	}
 	if opts.UserAgent == "" {
 		opts.UserAgent = DefaultOptions().UserAgent

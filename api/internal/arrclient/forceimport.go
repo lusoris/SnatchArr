@@ -28,20 +28,22 @@ import (
 // or an author and book on Readarr. Without a qualifying candidate it sends nothing and
 // returns queue.ErrNoCleanCandidate.
 // The command runs asynchronously; the next sweep reads the result back.
+// Listing and sending use Options.ImportTimeout.
 func (p *GoenvoyProber) ForceImport(ctx context.Context, kind domain.AppKind, baseURL, apiKey, downloadID string, mode queue.ImportMode) (int, error) {
+	ip := p.importProber()
 	var (
 		n   int
 		err error
 	)
 	switch kind {
 	case domain.KindSonarr:
-		n, err = p.sonarrForceImport(ctx, baseURL, apiKey, downloadID, mode)
+		n, err = ip.sonarrForceImport(ctx, baseURL, apiKey, downloadID, mode)
 	case domain.KindRadarr:
-		n, err = p.radarrForceImport(ctx, baseURL, apiKey, downloadID, mode)
+		n, err = ip.radarrForceImport(ctx, baseURL, apiKey, downloadID, mode)
 	case domain.KindLidarr:
-		n, err = p.lidarrForceImport(ctx, baseURL, apiKey, downloadID, mode)
+		n, err = ip.lidarrForceImport(ctx, baseURL, apiKey, downloadID, mode)
 	case domain.KindReadarr:
-		n, err = p.readarrForceImport(ctx, baseURL, apiKey, downloadID, mode)
+		n, err = ip.readarrForceImport(ctx, baseURL, apiKey, downloadID, mode)
 	case domain.KindWhisparrV2, domain.KindWhisparrV3:
 		return 0, fmt.Errorf("arrclient: %s force import: %w", kind, queue.ErrQueueUnsupported)
 	default:
@@ -51,6 +53,12 @@ func (p *GoenvoyProber) ForceImport(ctx context.Context, kind domain.AppKind, ba
 		return 0, fmt.Errorf("arrclient: %s force import %s: %w", kind, downloadID, err)
 	}
 	return n, nil
+}
+
+func (p *GoenvoyProber) importProber() *GoenvoyProber {
+	o := p.opts
+	o.Timeout = o.ImportTimeout
+	return &GoenvoyProber{opts: o}
 }
 
 const (

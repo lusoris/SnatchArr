@@ -110,3 +110,69 @@ func TestProbeHonoursTimeout(t *testing.T) {
 		t.Fatal("probe did not respect its timeout")
 	}
 }
+
+func TestDefaultOptions(t *testing.T) {
+	t.Parallel()
+
+	opts := arrclient.DefaultOptions()
+	if opts.Timeout != 15*time.Second {
+		t.Errorf("Timeout = %v, want 15s", opts.Timeout)
+	}
+	if opts.ImportTimeout != 120*time.Second {
+		t.Errorf("ImportTimeout = %v, want 120s", opts.ImportTimeout)
+	}
+	if opts.UserAgent != "SnatchArr/1.0 (https://github.com/lusoris/SnatchArr)" {
+		t.Errorf("UserAgent = %q, want SnatchArr default", opts.UserAgent)
+	}
+}
+
+func TestNewGoenvoyProberOptions(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name              string
+		in                arrclient.Options
+		wantTimeout       time.Duration
+		wantImportTimeout time.Duration
+		wantUserAgent     string
+	}{
+		{
+			name:              "positive: explicit options preserved",
+			in:                arrclient.Options{Timeout: 5 * time.Second, ImportTimeout: 30 * time.Second, UserAgent: "CustomUA/1.0"},
+			wantTimeout:       5 * time.Second,
+			wantImportTimeout: 30 * time.Second,
+			wantUserAgent:     "CustomUA/1.0",
+		},
+		{
+			name:              "negative: zero values default",
+			in:                arrclient.Options{},
+			wantTimeout:       15 * time.Second,
+			wantImportTimeout: 120 * time.Second,
+			wantUserAgent:     "SnatchArr/1.0 (https://github.com/lusoris/SnatchArr)",
+		},
+		{
+			name:              "boundary: import timeout raised to timeout",
+			in:                arrclient.Options{Timeout: 30 * time.Second, ImportTimeout: 10 * time.Second},
+			wantTimeout:       30 * time.Second,
+			wantImportTimeout: 30 * time.Second,
+			wantUserAgent:     "SnatchArr/1.0 (https://github.com/lusoris/SnatchArr)",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			p := arrclient.NewGoenvoyProber(tt.in)
+			opts := p.ProberOpts()
+			if opts.Timeout != tt.wantTimeout {
+				t.Errorf("Timeout = %v, want %v", opts.Timeout, tt.wantTimeout)
+			}
+			if opts.ImportTimeout != tt.wantImportTimeout {
+				t.Errorf("ImportTimeout = %v, want %v", opts.ImportTimeout, tt.wantImportTimeout)
+			}
+			if opts.UserAgent != tt.wantUserAgent {
+				t.Errorf("UserAgent = %q, want %q", opts.UserAgent, tt.wantUserAgent)
+			}
+		})
+	}
+}
