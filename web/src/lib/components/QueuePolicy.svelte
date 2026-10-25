@@ -169,7 +169,7 @@ SPDX-License-Identifier: EUPL-1.2
 		<ProblemNote error={query.error} />
 	{:else if draft}
 		<form
-			class="card grid max-w-3xl gap-4 md:grid-cols-2"
+			class="card grid gap-4 md:grid-cols-2"
 			onsubmit={handleSubmit}
 			aria-labelledby="queue-policy-title"
 		>

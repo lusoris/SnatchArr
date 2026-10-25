@@ -163,7 +163,7 @@ SPDX-License-Identifier: EUPL-1.2
 				class="min-h-screen p-4 pb-[calc(4rem+env(safe-area-inset-bottom,0px))] md:p-6 md:pb-6 lg:pl-[16.5rem]"
 				tabindex="-1"
 			>
-				<div class="mx-auto max-w-[80rem]">
+				<div class="max-w-[100rem]">
 					<svelte:boundary>
 						{#if session.state === 'unknown' || session.state === 'anonymous'}
 							<div

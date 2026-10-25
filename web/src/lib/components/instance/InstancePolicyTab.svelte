@@ -78,11 +78,7 @@ SPDX-License-Identifier: EUPL-1.2
 {:else if instance.isError}
 	<ProblemNote error={instance.error} />
 {:else if draft}
-	<form
-		class="mx-auto flex max-w-xl flex-col gap-6"
-		aria-labelledby="policy-title"
-		onsubmit={handleSubmit}
-	>
+	<form class="flex flex-col gap-6" aria-labelledby="policy-title" onsubmit={handleSubmit}>
 		<h2 id="policy-title" class="text-lg font-semibold">{m.policy_title()}</h2>
 
 		{#if save.isError}
@@ -98,12 +94,18 @@ SPDX-License-Identifier: EUPL-1.2
 			/>
 		{/if}
 
-		<SearchSection bind:policy={draft} kind={instance.data?.kind} />
-		<TimingSection bind:policy={draft} />
-		<LimitsSection bind:policy={draft} />
-		<PolicyFilters {instanceId} bind:policy={draft} />
-		<AppSpecificSection bind:policy={draft} kind={instance.data?.kind} />
-		<SafetySection bind:policy={draft} />
+		<div class="grid gap-6 xl:grid-cols-2">
+			<div class="flex flex-col gap-6">
+				<SearchSection bind:policy={draft} kind={instance.data?.kind} />
+				<TimingSection bind:policy={draft} />
+				<LimitsSection bind:policy={draft} />
+			</div>
+			<div class="flex flex-col gap-6">
+				<PolicyFilters {instanceId} bind:policy={draft} />
+				<AppSpecificSection bind:policy={draft} kind={instance.data?.kind} />
+				<SafetySection bind:policy={draft} />
+			</div>
+		</div>
 
 		<AdminSaveButton disabled={save.isPending} />
 	</form>

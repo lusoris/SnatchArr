@@ -293,4 +293,24 @@ test.describe('instance detail subtabs', () => {
 			).toBeLessThanOrEqual(innerWidth);
 		}
 	});
+
+	test('at 1280x800 the sidebar and the instance header stay in view after scrolling the policy tab', async ({
+		page
+	}) => {
+		await page.setViewportSize({ width: 1280, height: 800 });
+		await page.goto(`/instances/${instanceId}/policy`);
+		await page.waitForLoadState('networkidle');
+		const scrolled = await page.evaluate(() => {
+			window.scrollTo(0, document.documentElement.scrollHeight);
+			return window.scrollY;
+		});
+		expect(scrolled, 'policy tab must be taller than the viewport').toBeGreaterThan(0);
+
+		const sidebar = await page.locator('aside').first().boundingBox();
+		expect(sidebar?.y).toBe(0);
+		expect(sidebar?.height).toBe(800);
+
+		const header = await page.locator('header', { has: page.locator('h1') }).boundingBox();
+		expect(header?.y).toBe(0);
+	});
 });

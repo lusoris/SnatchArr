@@ -87,4 +87,22 @@ describe('PageHeader', () => {
 
 		expect(document.title).toBe('Unchanged Title');
 	});
+
+	it('positive: renders sticky class and children snippet when provided', () => {
+		const childrenSnippet = createRawSnippet(() => ({
+			render: () => '<nav data-testid="test-nav">Subtabs</nav>'
+		}));
+		const { container } = render(PageHeader, {
+			props: {
+				title: 'Sticky Page',
+				sticky: true,
+				children: childrenSnippet
+			}
+		});
+
+		const header = container.querySelector('header');
+		expect(header?.className).toContain('sticky');
+		expect(header?.className).toContain('top-0');
+		expect(screen.getByTestId('test-nav').textContent).toBe('Subtabs');
+	});
 });

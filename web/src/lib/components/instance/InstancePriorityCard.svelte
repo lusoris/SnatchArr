@@ -99,7 +99,7 @@ SPDX-License-Identifier: EUPL-1.2
 </script>
 
 <form
-	class="card mb-6 flex max-w-xl flex-col gap-3"
+	class="card flex flex-col gap-3"
 	aria-labelledby="instance-priority-title"
 	onsubmit={handleSubmit}
 >

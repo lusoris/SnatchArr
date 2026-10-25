@@ -56,8 +56,8 @@ SPDX-License-Identifier: EUPL-1.2
 	{:else if (query.data ?? []).length === 0}
 		<p class="text-sm text-subtle">{m.queue_strikes_empty()}</p>
 	{:else}
-		<div class="overflow-x-auto">
-			<table class="table">
+		<div class="max-h-[30rem] overflow-x-auto overflow-y-auto rounded-lg border border-line">
+			<table class="table w-full">
 				<caption class="sr-only">{m.queue_strikes_title()}</caption>
 				<thead>
 					<tr>
