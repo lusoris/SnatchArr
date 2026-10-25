@@ -441,6 +441,7 @@
 	"dlclients_all_instances": "All instances",
 	"dlclients_pinned": "Only {name}",
 	"dlclients_max_active": "Max active downloads (0 = no limit)",
+	"dlclients_max_queued": "Max queued downloads (0 = no limit)",
 	"dlclients_bandwidth": "Bandwidth budget in bytes/s (0 = off)",
 	"dlclients_test_ok": "{name} is reachable",
 	"dlclients_test_unreachable": "{name} is unreachable: {detail}",

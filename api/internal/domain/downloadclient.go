@@ -70,6 +70,9 @@ const (
 // MaxActiveDownloadsLimit bounds max_active.
 const MaxActiveDownloadsLimit = 1000
 
+// MaxQueuedDownloadsLimit bounds max_queued.
+const MaxQueuedDownloadsLimit = 1000
+
 // DownloadClient is a torrent or Usenet client SnatchArr observes for backpressure. It is
 // never used to add, remove or reorder downloads. InstanceID nil means the client applies
 // to every instance; discovered clients always belong to the instance that listed them.
@@ -85,6 +88,7 @@ type DownloadClient struct {
 	RemoteID           int
 	ConfigarrKey       string
 	MaxActive          int   // 0 = no limit
+	MaxQueued          int   // 0 = no limit
 	BandwidthBudgetBPS int64 // 0 = no pacing
 	LastCheckAt        *time.Time
 	LastError          string
@@ -93,7 +97,7 @@ type DownloadClient struct {
 }
 
 // ValidateDownloadClientInput checks the user-supplied fields of a download client.
-func ValidateDownloadClientInput(kind DownloadClientKind, name, baseURL string, maxActive int, budgetBPS int64) error {
+func ValidateDownloadClientInput(kind DownloadClientKind, name, baseURL string, maxActive, maxQueued int, budgetBPS int64) error {
 	if _, err := ParseDownloadClientKind(string(kind)); err != nil {
 		return err
 	}
@@ -106,6 +110,9 @@ func ValidateDownloadClientInput(kind DownloadClientKind, name, baseURL string, 
 	}
 	if maxActive < 0 || maxActive > MaxActiveDownloadsLimit {
 		return fmt.Errorf("%w: max_active must be between 0 and %d", ErrInvalid, MaxActiveDownloadsLimit)
+	}
+	if maxQueued < 0 || maxQueued > MaxQueuedDownloadsLimit {
+		return fmt.Errorf("%w: max_queued must be between 0 and %d", ErrInvalid, MaxQueuedDownloadsLimit)
 	}
 	if budgetBPS < 0 {
 		return fmt.Errorf("%w: bandwidth_budget_bps must not be negative", ErrInvalid)

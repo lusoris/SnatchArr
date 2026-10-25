@@ -134,7 +134,7 @@ func downloadClientToOAS(c domain.DownloadClient) oas.DownloadClient {
 	out := oas.DownloadClient{
 		ID: c.ID, Kind: oas.DownloadClientKind(c.Kind), Protocol: oas.DownloadClientProtocol(c.Kind.Protocol()),
 		Name: c.Name, BaseURL: c.BaseURL, Username: c.Username, Enabled: c.Enabled,
-		Source: oas.DownloadClientSource(c.Source), MaxActive: c.MaxActive, BandwidthBudgetBps: c.BandwidthBudgetBPS,
+		Source: oas.DownloadClientSource(c.Source), MaxActive: c.MaxActive, MaxQueued: c.MaxQueued, BandwidthBudgetBps: c.BandwidthBudgetBPS,
 		LastCheckAt: optTime(c.LastCheckAt), LastError: optString(c.LastError), CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt,
 	}
 	if c.InstanceID != nil {
@@ -147,7 +147,7 @@ func downloadClientInputFromOAS(in *oas.DownloadClientInput) dlclients.Input {
 	out := dlclients.Input{
 		Kind: domain.DownloadClientKind(in.Kind), Name: in.Name, BaseURL: in.BaseURL,
 		Username: in.Username.Or(""), Secret: in.Secret.Or(""), Enabled: in.Enabled.Or(true),
-		MaxActive: in.MaxActive.Or(0), BandwidthBudgetBPS: in.BandwidthBudgetBps.Or(0),
+		MaxActive: in.MaxActive.Or(0), MaxQueued: in.MaxQueued.Or(0), BandwidthBudgetBPS: in.BandwidthBudgetBps.Or(0),
 	}
 	if v, ok := in.InstanceID.Get(); ok {
 		out.InstanceID = &v

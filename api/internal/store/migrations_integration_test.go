@@ -375,7 +375,7 @@ func assertKeysAndWorkers(t *testing.T, q *sqlcgen.Queries, ctx context.Context,
 func assertClients(t *testing.T, q *sqlcgen.Queries, ctx context.Context, clientID uuid.UUID) {
 	t.Helper()
 	client, err := q.GetDownloadClient(ctx, clientID)
-	if err != nil || client.Name != "qbit-local" || client.Kind != "qbittorrent" {
+	if err != nil || client.Name != "qbit-local" || client.Kind != "qbittorrent" || client.MaxQueued != 0 {
 		t.Errorf("GetDownloadClient = %+v, err %v", client, err)
 	}
 }
@@ -441,5 +441,59 @@ func TestMigration000028Modules(t *testing.T) {
 	}
 	if tableExists {
 		t.Fatalf("modules table still exists after down migration")
+	}
+}
+
+// TestMigration000030DownloadClientsMaxQueued verifies migration 000030 adds max_queued
+// with default 0 and check constraint 0..1000, and stepping down drops the column.
+func TestMigration000030DownloadClientsMaxQueued(t *testing.T) {
+	t.Parallel()
+	st := storetest.New(t)
+	m := storetest.Migrator(t, st)
+
+	stepDownToVersion(t, m, 29)
+
+	ctx := t.Context()
+	clientID := uuid.New()
+	const insert29 = `INSERT INTO download_clients (
+		id, kind, name, base_url, secret_enc, max_active, created_at, updated_at
+	) VALUES (
+		$1, 'qbittorrent', 'qbit-m30', 'http://127.0.0.1:8080', '\x0102', 5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+	)`
+	if _, err := st.Pool().Exec(ctx, insert29, clientID); err != nil {
+		t.Fatalf("insert download client at v29: %v", err)
+	}
+
+	if err := m.Steps(1); err != nil {
+		t.Fatalf("Steps(1) up to 30: %v", err)
+	}
+
+	var maxQueued int
+	err := st.Pool().QueryRow(ctx, "SELECT max_queued FROM download_clients WHERE id = $1", clientID).Scan(&maxQueued)
+	if err != nil {
+		t.Fatalf("query max_queued after up: %v", err)
+	}
+	if maxQueued != 0 {
+		t.Fatalf("max_queued = %d, want 0", maxQueued)
+	}
+
+	if _, err = st.Pool().Exec(ctx, "UPDATE download_clients SET max_queued = 1001 WHERE id = $1", clientID); err == nil {
+		t.Fatalf("expected error updating max_queued = 1001, got nil")
+	}
+	if _, err = st.Pool().Exec(ctx, "UPDATE download_clients SET max_queued = -1 WHERE id = $1", clientID); err == nil {
+		t.Fatalf("expected error updating max_queued = -1, got nil")
+	}
+
+	if err = m.Steps(-1); err != nil {
+		t.Fatalf("Steps(-1) down to 29: %v", err)
+	}
+
+	var colExists bool
+	err = st.Pool().QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='download_clients' AND column_name='max_queued')").Scan(&colExists)
+	if err != nil {
+		t.Fatalf("check column exists after down: %v", err)
+	}
+	if colExists {
+		t.Fatalf("max_queued column still exists after down migration")
 	}
 }

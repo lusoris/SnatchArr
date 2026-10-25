@@ -30,6 +30,7 @@ func seedTestDownloadClient(t *testing.T, f *integrationFixture) domain.Download
 		Secret:    "secret-pass",
 		Enabled:   true,
 		MaxActive: 10,
+		MaxQueued: 20,
 	})
 	if err != nil {
 		t.Fatalf("seedTestDownloadClient: %v", err)
@@ -46,6 +47,7 @@ func validDownloadClientInput() oas.DownloadClientInput {
 		Secret:             oas.NewOptString("secret-pass"),
 		Enabled:            oas.NewOptBool(true),
 		MaxActive:          oas.NewOptInt(10),
+		MaxQueued:          oas.NewOptInt(20),
 		BandwidthBudgetBps: oas.NewOptInt64(1048576),
 	}
 }
@@ -153,6 +155,12 @@ func TestCreateDownloadClient(t *testing.T) {
 	maxCap.MaxActive = oas.NewOptInt(1000)
 	overCap := validDownloadClientInput()
 	overCap.MaxActive = oas.NewOptInt(1001)
+	zeroQueued := validDownloadClientInput()
+	zeroQueued.MaxQueued = oas.NewOptInt(0)
+	maxQueuedCap := validDownloadClientInput()
+	maxQueuedCap.MaxQueued = oas.NewOptInt(1000)
+	overQueuedCap := validDownloadClientInput()
+	overQueuedCap.MaxQueued = oas.NewOptInt(1001)
 
 	cases := []struct {
 		name    string
@@ -167,6 +175,9 @@ func TestCreateDownloadClient(t *testing.T) {
 		{"boundary max active zero", &domain.User{Role: domain.RoleAdmin}, zeroMax, nil},
 		{"boundary max active max limit", &domain.User{Role: domain.RoleAdmin}, maxCap, nil},
 		{"boundary max active above limit", &domain.User{Role: domain.RoleAdmin}, overCap, domain.ErrInvalid},
+		{"boundary max queued zero", &domain.User{Role: domain.RoleAdmin}, zeroQueued, nil},
+		{"boundary max queued max limit", &domain.User{Role: domain.RoleAdmin}, maxQueuedCap, nil},
+		{"boundary max queued above limit", &domain.User{Role: domain.RoleAdmin}, overQueuedCap, domain.ErrInvalid},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -194,7 +205,7 @@ func execUpdateTestCase(t *testing.T, f *integrationFixture, targetID uuid.UUID,
 		}
 		return
 	}
-	if err != nil || got.Name != in.Name || got.MaxActive != in.MaxActive.Or(0) {
+	if err != nil || got.Name != in.Name || got.MaxActive != in.MaxActive.Or(0) || got.MaxQueued != in.MaxQueued.Or(0) {
 		t.Fatalf("UpdateDownloadClient() = %+v, %v; want name %s", got, err, in.Name)
 	}
 	c, getErr := f.h.GetDownloadClient(ctx, oas.GetDownloadClientParams{ClientId: orig.ID})
@@ -208,10 +219,13 @@ func TestUpdateDownloadClient(t *testing.T) {
 	validUp := validDownloadClientInput()
 	validUp.Name = "qbit-updated"
 	validUp.MaxActive = oas.NewOptInt(5)
+	validUp.MaxQueued = oas.NewOptInt(15)
 	emptyName := validUp
 	emptyName.Name = ""
 	zeroMax := validUp
 	zeroMax.MaxActive = oas.NewOptInt(0)
+	zeroQueued := validUp
+	zeroQueued.MaxQueued = oas.NewOptInt(0)
 
 	cases := []struct {
 		name       string
@@ -226,6 +240,7 @@ func TestUpdateDownloadClient(t *testing.T) {
 		{"negative update not found", &domain.User{Role: domain.RoleAdmin}, true, validUp, domain.ErrNotFound},
 		{"negative update invalid empty name", &domain.User{Role: domain.RoleAdmin}, false, emptyName, domain.ErrInvalid},
 		{"boundary update max active zero", &domain.User{Role: domain.RoleAdmin}, false, zeroMax, nil},
+		{"boundary update max queued zero", &domain.User{Role: domain.RoleAdmin}, false, zeroQueued, nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

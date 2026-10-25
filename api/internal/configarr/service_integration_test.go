@@ -545,6 +545,7 @@ qbittorrent:
     password: qbit-secret-pass
     instance: sonarr/main
     max_active: 5
+    max_queued: 8
     bandwidth_budget_bps: 10485760
     enabled: true
 sabnzbd:
@@ -586,7 +587,7 @@ func testDownloadClientsInitial(t *testing.T, f fixture, configPath string) (uui
 			if c.InstanceID == nil {
 				t.Fatalf("expected qbit to link to sonarr instance")
 			}
-			if c.MaxActive != 5 || c.BandwidthBudgetBPS != 10485760 {
+			if c.MaxActive != 5 || c.MaxQueued != 8 || c.BandwidthBudgetBPS != 10485760 {
 				t.Fatalf("qbit limits mismatch: %+v", c)
 			}
 		}
@@ -594,6 +595,9 @@ func testDownloadClientsInitial(t *testing.T, f fixture, configPath string) (uui
 			sabID = c.ID
 			if c.InstanceID != nil {
 				t.Fatalf("expected sabnzbd to have nil instanceID")
+			}
+			if c.MaxQueued != 0 {
+				t.Fatalf("expected sabnzbd to have maxQueued 0, got %d", c.MaxQueued)
 			}
 		}
 	}
@@ -617,6 +621,7 @@ qbittorrent:
     password: qbit-secret-pass
     instance: sonarr/main
     max_active: 10
+    max_queued: 25
 sabnzbd:
   main:
     base_url: http://sabnzbd.media.svc:8080
@@ -627,8 +632,8 @@ sabnzbd:
 		t.Fatalf("third Import() after update = %+v, %v; want ClientsUpdated=2", res, err)
 	}
 	qbit, err := f.dlSvc.Get(ctx, qbitID)
-	if err != nil || qbit.MaxActive != 10 {
-		t.Fatalf("qbit MaxActive = %d, %v; want 10", qbit.MaxActive, err)
+	if err != nil || qbit.MaxActive != 10 || qbit.MaxQueued != 25 {
+		t.Fatalf("qbit MaxActive = %d, MaxQueued = %d, %v; want 10, 25", qbit.MaxActive, qbit.MaxQueued, err)
 	}
 }
 
