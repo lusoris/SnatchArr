@@ -12,8 +12,18 @@ export const VIEWPORTS = {
 	desktop: { width: 1280, height: 800 },
 	desktop1920: { width: 1920, height: 1080 },
 	phone: { width: 390, height: 844 },
-	phone375: { width: 375, height: 812 }
+	phone375: { width: 375, height: 812 },
+	phone414: { width: 414, height: 896 }
 } as const;
+
+export const PHONE_FIT_ROUTES = [
+	'/',
+	'/account',
+	'/automation',
+	'/connections/download-clients',
+	'/instances',
+	'/system'
+] as const;
 
 export const AUTH_ROUTES = [
 	'/',
@@ -158,6 +168,7 @@ export interface Box {
 
 export interface ExtractedCell extends Box {
 	scrollWidth: number;
+	hasDataLabel?: boolean;
 }
 
 export interface ExtractedRow {
@@ -169,6 +180,7 @@ export interface ExtractedTable {
 	kind: 'table' | 'grid';
 	headers: Box[];
 	rows: ExtractedRow[];
+	stacked?: boolean;
 }
 
 export interface Misaligned {
@@ -188,9 +200,12 @@ export function extractTables(): ExtractedTable[] {
 		const r = el.getBoundingClientRect();
 		return { x: Math.round(r.left), width: Math.round(r.width) };
 	};
+	// Below 48rem app.css stacks .table-stack rows into labelled cards.
+	const isPhoneWidth = window.matchMedia('(width < 48rem)').matches;
 	const tables = Array.from(document.querySelectorAll('table, [role="grid"]')).slice(0, 50);
 	return tables.map((t) => {
 		const isGrid = t.getAttribute('role') === 'grid';
+		const isStacked = !isGrid && t.classList.contains('table-stack') && isPhoneWidth;
 		const headers = isGrid
 			? Array.from(t.querySelectorAll('[role="columnheader"]')).filter(
 					(el) => el.closest('[role="grid"]') === t
@@ -220,10 +235,14 @@ export function extractTables(): ExtractedTable[] {
 			});
 			return {
 				spans,
-				cells: cells.map((c) => ({ ...box(c), scrollWidth: c.scrollWidth }))
+				cells: cells.map((c) => ({
+					...box(c),
+					scrollWidth: c.scrollWidth,
+					hasDataLabel: c.tagName.toLowerCase() === 'td' ? c.hasAttribute('data-label') : true
+				}))
 			};
 		});
-		return { kind: isGrid ? 'grid' : 'table', headers: headers.map(box), rows };
+		return { kind: isGrid ? 'grid' : 'table', headers: headers.map(box), rows, stacked: isStacked };
 	});
 }
 
@@ -293,6 +312,26 @@ export function checkTable(
 	}
 	let measuredRows = 0;
 	const findings: Misaligned[] = [];
+	if (table.stacked) {
+		for (let r = 0; r < table.rows.length; r++) {
+			const row = table.rows[r];
+			measuredRows++;
+			for (let c = 0; c < row.cells.length; c++) {
+				const cell = row.cells[c];
+				if (cell.hasDataLabel === false) {
+					findings.push({
+						table: index,
+						row: r,
+						column: c,
+						header: table.headers[c] ?? { x: 0, width: 0 },
+						cell: { x: cell.x, width: cell.width },
+						reason: 'stacked table cell missing data-label attribute'
+					});
+				}
+			}
+		}
+		return { measuredRows, findings };
+	}
 	for (let r = 0; r < table.rows.length; r++) {
 		const row = table.rows[r];
 		if (row.cells.length !== table.headers.length) {
@@ -507,7 +546,8 @@ export function measureContentSpan(): ContentSpan {
 	const padRight = parseFloat(mainStyle.paddingRight) || 0;
 	const mainWidth = Math.round(main.clientWidth - padLeft - padRight);
 
-	const selector = 'section, .card, table, form, [role="table"], [role="log"], ul, dl';
+	const selector =
+		'section, .card, table, form, [role="table"], [role="grid"], [role="log"], ul, dl';
 	const elements = Array.from(main.querySelectorAll(selector));
 	let widest = 0;
 	for (const el of elements) {
@@ -531,6 +571,53 @@ export async function assertDesktopWidth(page: Page, route: string): Promise<voi
 	if (ratio < 0.75) {
 		throw new Error(
 			`${route}: widest content block ${widest}px is narrower than 75% of main (${mainWidth}px)`
+		);
+	}
+}
+
+export interface PhoneFitOffender {
+	tag: string;
+	cls: string;
+	width: number;
+	scrollWidth: number;
+}
+
+export interface PhoneFitResult {
+	mainWidth: number;
+	offenders: PhoneFitOffender[];
+}
+
+// Flags blocks wider than main's content box and inner horizontal scroll
+// containers: on PHONE_FIT_ROUTES every column must fit without scrolling.
+export function measurePhoneFit(): PhoneFitResult {
+	const main = document.querySelector('main');
+	if (!main) return { mainWidth: 0, offenders: [] };
+	const mainStyle = window.getComputedStyle(main);
+	const mainWidth = Math.round(
+		main.clientWidth - parseFloat(mainStyle.paddingLeft) - parseFloat(mainStyle.paddingRight)
+	);
+	const blocks = 'section, .card, table, form, [role="table"], [role="grid"], [role="log"], ul, dl';
+	const offenders: PhoneFitOffender[] = [];
+	for (const el of Array.from(main.querySelectorAll('*'))) {
+		const style = window.getComputedStyle(el);
+		if (style.display === 'none' || style.visibility === 'hidden') continue;
+		const width = Math.round(el.getBoundingClientRect().width);
+		const tooWide = el.matches(blocks) && width > mainWidth + 1;
+		const scrolls =
+			(style.overflowX === 'auto' || style.overflowX === 'scroll') &&
+			el.scrollWidth > el.clientWidth + 1;
+		if (!tooWide && !scrolls) continue;
+		const cls = (el.getAttribute('class') ?? '').slice(0, 60);
+		offenders.push({ tag: el.tagName.toLowerCase(), cls, width, scrollWidth: el.scrollWidth });
+	}
+	return { mainWidth, offenders };
+}
+
+export async function assertPhoneFit(page: Page, route: string): Promise<void> {
+	const { offenders } = await page.evaluate(measurePhoneFit);
+	if (offenders.length > 0) {
+		throw new Error(
+			`${route}: content wider than main at phone width (${offenders.length} block(s)): ${JSON.stringify(offenders)}`
 		);
 	}
 }
@@ -637,6 +724,58 @@ export async function assertTouchTargetHeights(page: Page, route: string): Promi
 		const summary = offenders.map((o) => `  - ${o.selector}: ${o.height}px < 44px`).join('\n');
 		throw new Error(
 			`${route}: touch target height < 44px on phone (${offenders.length} element(s)):\n${summary}`
+		);
+	}
+}
+
+export interface GridRowOffender {
+	grid: string;
+	row: number;
+	spread: number;
+}
+
+// Runs inside page.evaluate, so every helper lives in the function body.
+// Children whose boxes overlap vertically share a grid row; their first
+// input or select must start at the same top edge.
+export function measureGridRowAlignment(): GridRowOffender[] {
+	const visible = (el: Element): boolean => el.checkVisibility({ checkVisibilityCSS: true });
+	const control = (child: Element): HTMLElement | null =>
+		child.matches('input, select') ? (child as HTMLElement) : child.querySelector('input, select');
+	const offenders: GridRowOffender[] = [];
+	for (const grid of Array.from(document.querySelectorAll<HTMLElement>('main .grid'))) {
+		if (!visible(grid)) continue;
+		const cells = Array.from(grid.children)
+			.filter((child) => visible(child) && control(child) !== null)
+			.map((child) => ({
+				box: child.getBoundingClientRect(),
+				top: control(child)!.getBoundingClientRect().top
+			}))
+			.sort((x, y) => x.box.top - y.box.top);
+		const rows: (typeof cells)[] = [];
+		for (const cell of cells) {
+			const row = rows.at(-1);
+			if (row && cell.box.top < Math.max(...row.map((c) => c.box.bottom)) - 1) row.push(cell);
+			else rows.push([cell]);
+		}
+		for (const row of rows) {
+			const tops = row.map((c) => c.top);
+			const spread = Math.round((Math.max(...tops) - Math.min(...tops)) * 100) / 100;
+			if (spread <= 1) continue;
+			const legend = grid.closest('fieldset')?.querySelector('legend')?.textContent?.trim();
+			offenders.push({ grid: legend ?? 'grid', row: Math.round(row[0].box.top), spread });
+		}
+	}
+	return offenders;
+}
+
+export async function assertGridRowAlignment(page: Page, route: string): Promise<void> {
+	const offenders = await page.evaluate(measureGridRowAlignment);
+	if (offenders.length > 0) {
+		const list = offenders
+			.map((o) => `${o.grid} (row ${o.row}px, spread ${o.spread}px)`)
+			.join('; ');
+		throw new Error(
+			`${route}: inputs misaligned in grid row (${offenders.length} row(s)): ${list}`
 		);
 	}
 }

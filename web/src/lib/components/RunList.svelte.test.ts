@@ -7,7 +7,13 @@ import { ProblemError } from '@sveltesentio/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api } from '#lib/api/client.js';
 import { m } from '#lib/paraglide/messages.js';
-import { forkInstance, renderWithQuery, sampleRuns, stubGet } from '#lib/testing/harness.js';
+import {
+	expectStackedLabels,
+	forkInstance,
+	renderWithQuery,
+	sampleRuns,
+	stubGet
+} from '#lib/testing/harness.js';
 import RunList from './RunList.svelte';
 
 /** Renders the run list of the fork instance and returns its body rows. */
@@ -140,5 +146,18 @@ describe('RunList', () => {
 		const body = await rows(mixedRuns);
 		const badges = body.map((r) => within(r).queryByText(m.run_preview_badge()) !== null);
 		expect(badges).toEqual([true, false, false]);
+	});
+
+	it('stacks rows below md with data-label matching th on every td except actions', async () => {
+		stubGet({ '/runs': sampleRuns });
+		renderWithQuery(RunList, { instanceId: forkInstance.id });
+		const table = await screen.findByRole('table');
+		expectStackedLabels(table);
+	});
+
+	it('renders no table rows when runs list is empty', async () => {
+		stubGet({ '/runs': [] });
+		renderWithQuery(RunList, { instanceId: forkInstance.id });
+		expect(screen.queryByRole('table')).toBeNull();
 	});
 });

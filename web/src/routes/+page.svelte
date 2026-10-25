@@ -202,7 +202,7 @@ SPDX-License-Identifier: EUPL-1.2
 						</a>
 					</div>
 					<div class="relative w-full overflow-x-auto">
-						<table class="compact-table table w-full">
+						<table class="compact-table table-stack table w-full">
 							<caption class="sr-only">{m.overview_fleet_title()}</caption>
 							<thead>
 								<tr>
@@ -224,45 +224,53 @@ SPDX-License-Identifier: EUPL-1.2
 									{@const lastRun = lastRunForInstance(runs.data, inst.id)}
 									{@const nextSchedule = nextScheduleForInstance(schedules.data, inst.id)}
 									<tr>
-										<td class="w-10 text-center">
+										<td class="md:w-10 md:text-center" data-label={m.schedule_status()}>
 											<StatusIcon status={instStatus.status} label={instStatus.label} size={16} />
 										</td>
-										<td>
-											<a
-												href={resolve('/instances/[id]', { id: inst.id })}
-												class="font-medium hover:underline"
-											>
-												{inst.name}
-											</a>
-											{#if inst.last_error}
-												<div class="truncate text-xs text-danger" title={inst.last_error}>
-													{inst.last_error}
-												</div>
-											{/if}
+										<td data-label={m.instance_name()}>
+											<div class="min-w-0 text-right md:text-left">
+												<a
+													href={resolve('/instances/[id]', { id: inst.id })}
+													class="font-medium hover:underline"
+												>
+													{inst.name}
+												</a>
+												{#if inst.last_error}
+													<div class="truncate text-xs text-danger" title={inst.last_error}>
+														{inst.last_error}
+													</div>
+												{/if}
+											</div>
 										</td>
-										<td>
+										<td data-label={m.instance_kind()}>
 											<span
 												class="inline-block rounded-full border border-line px-2 py-0.5 text-xs text-subtle"
 											>
 												{instanceKindLabel(inst.kind, inst.last_seen_product)}
 											</span>
 										</td>
-										<td>
+										<td data-label={m.stamina()}>
 											{#if cap}
 												<StaminaGauge label={inst.name} used={cap.used} cap={cap.cap} hideLabel />
 											{:else}
 												<span class="text-xs text-subtle">—</span>
 											{/if}
 										</td>
-										<td class="text-xs whitespace-nowrap text-subtle">
+										<td
+											class="text-xs whitespace-nowrap text-subtle"
+											data-label={m.overview_last_run()}
+										>
 											{lastRun
 												? formatWhen(lastRun.started_at ?? lastRun.queued_at, getLocale())
 												: '—'}
 										</td>
-										<td class="text-xs whitespace-nowrap text-subtle">
+										<td
+											class="text-xs whitespace-nowrap text-subtle"
+											data-label={m.overview_next_window()}
+										>
 											{formatScheduleWindow(nextSchedule)}
 										</td>
-										<td>
+										<td data-label="">
 											<div
 												class="flex flex-col items-stretch gap-1.5 2xl:flex-row 2xl:items-center"
 											>

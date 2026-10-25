@@ -53,7 +53,7 @@ SPDX-License-Identifier: EUPL-1.2
 		<p class="text-sm text-subtle">{m.runs_empty()}</p>
 	{:else}
 		<div class="relative overflow-x-auto">
-			<table class="table">
+			<table class="table-stack table">
 				<caption class="sr-only">{m.runs_title()}</caption>
 				<thead>
 					<tr>
@@ -68,19 +68,27 @@ SPDX-License-Identifier: EUPL-1.2
 				<tbody>
 					{#each runs.data ?? [] as run (run.id)}
 						<tr>
-							<td>
-								{snatchKindLabel(run.kind)}
-								{#if run.dry_run}
-									<span class="ml-1.5 rounded-full border border-line px-2 py-0.5 text-xs">
-										{m.run_preview_badge()}
-									</span>
-								{/if}
+							<td data-label={m.run_kind()}>
+								<div>
+									{snatchKindLabel(run.kind)}
+									{#if run.dry_run}
+										<span class="ml-1.5 rounded-full border border-line px-2 py-0.5 text-xs">
+											{m.run_preview_badge()}
+										</span>
+									{/if}
+								</div>
 							</td>
-							<td>{runStatusLabel(run.status)}{run.error ? ` · ${run.error}` : ''}</td>
-							<td>{formatWhen(run.started_at ?? run.queued_at, getLocale())}</td>
-							<td>{formatWhen(run.finished_at, getLocale()) || '–'}</td>
-							<td>{run.searched_count}</td>
-							<td>
+							<td data-label={m.run_status()}>
+								{runStatusLabel(run.status)}{run.error ? ` · ${run.error}` : ''}
+							</td>
+							<td data-label={m.run_started()}>
+								{formatWhen(run.started_at ?? run.queued_at, getLocale())}
+							</td>
+							<td data-label={m.run_finished()}
+								>{formatWhen(run.finished_at, getLocale()) || '–'}</td
+							>
+							<td data-label={m.run_searched()}>{run.searched_count}</td>
+							<td data-label="">
 								{#if cancellable(run)}
 									<ConfirmAction
 										label={m.run_cancel()}

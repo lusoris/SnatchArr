@@ -11,6 +11,7 @@ import type { components } from '#lib/api/schema.js';
 import { m } from '#lib/paraglide/messages.js';
 import {
 	cancelDeleteInCard,
+	expectStackedLabels,
 	fill,
 	forkInstance,
 	renderWithQuery,
@@ -69,7 +70,14 @@ describe('download-clients', () => {
 		expect(
 			screen.getByRole('heading', { level: 2, name: /qBittorrent Primary/ }).textContent
 		).toContain('qBittorrent Primary');
-		expect(screen.getByText('http://qbittorrent.local:8080')).toBeTruthy();
+		expect(
+			screen.getByText(
+				(_, el) =>
+					el?.tagName === 'SPAN' &&
+					el.hasAttribute('data-url') &&
+					el.textContent === 'http://qbittorrent.local:8080'
+			)
+		).toBeTruthy();
 		const statusText = screen.getByRole('status').textContent;
 		expect(statusText).toContain(m.dlclients_reachable());
 		expect(statusText).toContain(m.dlclients_active({ active: 2, queued: 1 }));
@@ -81,6 +89,18 @@ describe('download-clients', () => {
 			}
 		);
 		expect(option.textContent).toBe(forkInstance.name);
+	});
+
+	it('labels every table cell for the stacked phone layout', async () => {
+		stubGet({
+			'/download-clients': [sampleClient],
+			'/download-clients/status': [sampleStatus],
+			'/instances': [forkInstance]
+		});
+		renderWithQuery(DownloadClientsPage);
+
+		const table = (await screen.findByRole('table')) as HTMLElement;
+		expectStackedLabels(table);
 	});
 
 	it('announces the problem document when the clients query fails', async () => {

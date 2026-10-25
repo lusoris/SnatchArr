@@ -146,7 +146,7 @@ SPDX-License-Identifier: EUPL-1.2
 	<p class="card mb-4">{m.notifications_empty_channels()}</p>
 {:else}
 	<div class="relative overflow-x-auto">
-		<table class="mb-6 table">
+		<table class="table-stack mb-6 table">
 			<caption class="sr-only">{m.notifications_channels_title()}</caption>
 			<thead>
 				<tr>
@@ -162,12 +162,12 @@ SPDX-License-Identifier: EUPL-1.2
 			<tbody>
 				{#each channels.data ?? [] as ch (ch.id)}
 					<tr>
-						<td>{ch.name}</td>
-						<td>{ch.kind}</td>
-						<td>{ch.enabled ? '✓' : '–'}</td>
-						<td>{ch.has_secret ? '✓' : '–'}</td>
+						<td data-label={m.channel_name()}>{ch.name}</td>
+						<td data-label={m.channel_kind()}>{ch.kind}</td>
+						<td data-label={m.channel_enabled()}>{ch.enabled ? '✓' : '–'}</td>
+						<td data-label={m.channel_has_secret()}>{ch.has_secret ? '✓' : '–'}</td>
 						{#if session.isAdmin}
-							<td class="flex gap-2">
+							<td class="flex flex-wrap gap-2" data-label="">
 								<button
 									type="button"
 									class="btn"

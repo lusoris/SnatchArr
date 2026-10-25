@@ -9,7 +9,12 @@ import { api } from '#lib/api/client.js';
 import type { components } from '#lib/api/schema.js';
 import { m } from '#lib/paraglide/messages.js';
 import { session } from '#lib/session.svelte.js';
-import { forkInstance, renderWithQuery, stubGet } from '#lib/testing/harness.js';
+import {
+	expectStackedLabels,
+	forkInstance,
+	renderWithQuery,
+	stubGet
+} from '#lib/testing/harness.js';
 import SchedulesPage from './+page.svelte';
 
 type Schedule = components['schemas']['Schedule'];
@@ -429,5 +434,31 @@ describe('schedules', () => {
 		await fireEvent.input(capInput, { target: { value: '501' } });
 		expect(capInput.checkValidity()).toBe(false);
 		expect(capInput.validity.rangeOverflow).toBe(true);
+	});
+
+	it('stacks schedules table rows below md with data-label matching th on every td except actions', async () => {
+		stubGet({
+			'/schedules': [sampleSchedule],
+			'/instances': [forkInstance],
+			'/settings': sampleSettings,
+			'/priority-presets': []
+		});
+		renderWithQuery(SchedulesPage);
+
+		const table = await screen.findByRole('table');
+		expectStackedLabels(table);
+	});
+
+	it('renders no schedules table rows when schedule list is empty', async () => {
+		stubGet({
+			'/schedules': [],
+			'/instances': [],
+			'/settings': sampleSettings,
+			'/priority-presets': []
+		});
+		renderWithQuery(SchedulesPage);
+
+		expect(await screen.findByText(m.schedules_empty())).toBeTruthy();
+		expect(screen.queryByRole('table')).toBeNull();
 	});
 });
