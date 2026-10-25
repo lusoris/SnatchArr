@@ -436,7 +436,6 @@
 	"memory_reset_one_confirm": "Alles vergessen, was SnatchArr auf {name} bereits gesucht hat, für fehlende Einträge und Upgrades gleichermaßen? Die nächsten Snatches suchen alles erneut.",
 	"memory_reset_all_confirm": "Alles vergessen, was SnatchArr auf allen Instanzen bereits gesucht hat, für fehlende Einträge und Upgrades gleichermaßen? Die nächsten Snatches suchen alles erneut.",
 	"memory_reset_done": "{count} verarbeitete Einträge vergessen",
-	"nav_configarr": "Configarr",
 	"action_edit": "Bearbeiten",
 	"action_delete": "Löschen",
 	"action_test": "Testen",
