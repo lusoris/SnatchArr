@@ -9,9 +9,11 @@ SPDX-License-Identifier: EUPL-1.2
 	import AdminFormSlot from '#lib/components/AdminFormSlot.svelte';
 	import LinkCard from '#lib/components/LinkCard.svelte';
 	import LinkForm, { type LinkBody } from '#lib/components/LinkForm.svelte';
+	import PageHeader from '#lib/components/PageHeader.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import { FormEditor } from '#lib/formEditor.svelte.js';
 	import { deleteCallbacks, probeCallbacks, saveSuccess } from '#lib/forms.js';
+	import { HELP_MAP } from '#lib/help.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
 	import { keys } from '#lib/query.js';
@@ -114,8 +116,12 @@ SPDX-License-Identifier: EUPL-1.2
 	}
 </script>
 
-<h1 class="mb-2 text-2xl font-semibold">{m.prowlarr_title()}</h1>
-<p class="mb-4 text-sm text-subtle">{m.prowlarr_readonly_hint()}</p>
+<PageHeader
+	title={m.prowlarr_title()}
+	description={m.prowlarr_readonly_hint()}
+	documentTitle
+	help={HELP_MAP['/connections/prowlarr']}
+/>
 
 <section aria-labelledby="prowlarr-links-section-title" class="w-full">
 	<h2 id="prowlarr-links-section-title" class="sr-only">{m.prowlarr_links_title()}</h2>

@@ -4,13 +4,16 @@ SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import CircleHelp from '@lucide/svelte/icons/circle-help';
 	import { m } from '#lib/paraglide/messages.js';
+	import HelpSheet from './HelpSheet.svelte';
 
 	interface Props {
 		title: string;
 		description?: string;
 		status?: Snippet;
 		actions?: Snippet;
+		help?: { summaryKey: string; docsPath: string };
 		documentTitle?: boolean;
 		sticky?: boolean;
 		class?: string;
@@ -22,11 +25,14 @@ SPDX-License-Identifier: EUPL-1.2
 		description,
 		status,
 		actions,
+		help,
 		documentTitle = false,
 		sticky = false,
 		class: className = '',
 		children
 	}: Props = $props();
+
+	let helpOpen = $state(false);
 </script>
 
 <svelte:head>
@@ -47,6 +53,16 @@ SPDX-License-Identifier: EUPL-1.2
 				{#if status}
 					{@render status()}
 				{/if}
+				{#if help}
+					<button
+						type="button"
+						class="inline-flex h-11 w-11 items-center justify-center rounded-full border border-control bg-surface text-subtle hover:text-fg"
+						aria-label={m.help_button_aria()}
+						onclick={() => (helpOpen = true)}
+					>
+						<CircleHelp size={18} aria-hidden="true" />
+					</button>
+				{/if}
 			</div>
 			{#if description}
 				<p class="mt-1 text-sm text-subtle">{description}</p>
@@ -62,3 +78,7 @@ SPDX-License-Identifier: EUPL-1.2
 		{@render children()}
 	{/if}
 </header>
+
+{#if help}
+	<HelpSheet bind:open={helpOpen} summaryKey={help.summaryKey} docsPath={help.docsPath} />
+{/if}

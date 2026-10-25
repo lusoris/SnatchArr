@@ -169,8 +169,20 @@ test('authenticated: phone overflow /connections/seerr', async ({ page }) => {
 test('authenticated: phone overflow /system', async ({ page }) => {
 	await page.goto('/system');
 	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-	await expect(page.getByRole('table').first()).toBeVisible();
 	await assertNoHorizontalOverflow(page, '/system');
+});
+
+test('authenticated: phone overflow /system?tab=modules', async ({ page }) => {
+	await page.goto('/system?tab=modules');
+	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+	await assertNoHorizontalOverflow(page, '/system?tab=modules');
+});
+
+test('authenticated: phone overflow /system?tab=notifications', async ({ page }) => {
+	await page.goto('/system?tab=notifications');
+	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+	await expect(page.getByRole('table').first()).toBeVisible();
+	await assertNoHorizontalOverflow(page, '/system?tab=notifications');
 });
 
 test('authenticated: phone overflow /activity?source=log', async ({ page }) => {

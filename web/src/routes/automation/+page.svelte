@@ -12,6 +12,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import type { components } from '#lib/api/schema.js';
 	import CapsPresetsForm from '#lib/components/CapsPresetsForm.svelte';
 	import PageHeader from '#lib/components/PageHeader.svelte';
+	import { HELP_MAP } from '#lib/help.js';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import ScheduleForm from '#lib/components/ScheduleForm.svelte';
 	import ScheduleTable from '#lib/components/ScheduleTable.svelte';
@@ -51,7 +52,7 @@ SPDX-License-Identifier: EUPL-1.2
 	}
 </script>
 
-<PageHeader title={m.nav_automation()} documentTitle />
+<PageHeader title={m.nav_automation()} documentTitle help={HELP_MAP['/automation']} />
 
 <Tabs {tabs} active={activeTab} onchange={handleTabChange} label={m.nav_automation()}>
 	{#snippet children(current)}

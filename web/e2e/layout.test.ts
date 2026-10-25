@@ -424,7 +424,7 @@ test('authenticated: layout expected tables follow role and data', () => {
 	// Admin with the CI seed: one table per non-empty list.
 	expect(expectedTables('/automation', 'admin', { '/api/v1/schedules': 1 })).toBe(1);
 	expect(
-		expectedTables('/system', 'admin', {
+		expectedTables('/system?tab=notifications', 'admin', {
 			'/api/v1/notifications/channels': 1,
 			'/api/v1/notifications/rules': 0
 		})
@@ -437,7 +437,9 @@ test('authenticated: layout expected tables follow role and data', () => {
 	expect(() => expectedTables('/account', 'viewer', { '/api/v1/auth/api-keys': 1 })).toThrow(
 		/ADR-0023/
 	);
-	expect(() => expectedTables('/system', 'viewer', {})).toThrow(/gave the page no JSON list/);
+	expect(() => expectedTables('/system?tab=notifications', 'viewer', {})).toThrow(
+		/gave the page no JSON list/
+	);
 });
 
 // Viewer runs in API mode (the served viewer run uses the served-layout project): the session
@@ -500,7 +502,7 @@ async function mockViewerApi(page: Page, data: (typeof viewerData)[keyof typeof 
 if (!served) {
 	for (const [viewportName, viewport] of Object.entries(VIEWPORTS)) {
 		for (const [dataName, data] of Object.entries(viewerData)) {
-			for (const pattern of ['/automation', '/system', '/account']) {
+			for (const pattern of ['/automation', '/system?tab=notifications', '/account']) {
 				test(`authenticated: layout viewer ${dataName} ${pattern} ${viewportName}`, async ({
 					page
 				}) => {

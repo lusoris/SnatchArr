@@ -7,9 +7,10 @@ SPDX-License-Identifier: EUPL-1.2
 	import BookOpen from '@lucide/svelte/icons/book-open';
 	import Search from '@lucide/svelte/icons/search';
 	import Server from '@lucide/svelte/icons/server';
+	import { docsUrl } from '#lib/docs.js';
 	import { m } from '#lib/paraglide/messages.js';
 
-	const DOCS_URL = 'https://lusoris.github.io/SnatchArr/';
+	const DOCS_URL = docsUrl('');
 </script>
 
 <section class="card flex flex-col gap-6 p-6" aria-labelledby="onboarding-title">
@@ -67,7 +68,7 @@ SPDX-License-Identifier: EUPL-1.2
 				<a
 					href={DOCS_URL}
 					target="_blank"
-					rel="noopener noreferrer"
+					rel="external noopener noreferrer"
 					class="btn w-full justify-center"
 				>
 					{m.overview_onboarding_step3_action()}

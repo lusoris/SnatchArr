@@ -68,7 +68,7 @@ SPDX-License-Identifier: EUPL-1.2
 	<div
 		role="tablist"
 		aria-label={label}
-		class="subtab-bar mb-6 flex gap-2 overflow-x-auto border-b border-line"
+		class="subtab-bar mb-6 flex flex-wrap gap-2 overflow-x-visible border-b border-line md:flex-nowrap md:overflow-x-auto"
 	>
 		{#each visibleTabs as tab (tab.id)}
 			{@const isSelected = tab.id === active}

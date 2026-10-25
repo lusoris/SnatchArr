@@ -10,10 +10,12 @@ SPDX-License-Identifier: EUPL-1.2
 	import AdminFormSlot from '#lib/components/AdminFormSlot.svelte';
 	import ConfirmDelete from '#lib/components/ConfirmDelete.svelte';
 	import DownloadClientForm from '#lib/components/DownloadClientForm.svelte';
+	import PageHeader from '#lib/components/PageHeader.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import UrlText from '#lib/components/UrlText.svelte';
 	import { FormEditor } from '#lib/formEditor.svelte.js';
 	import { deleteCallbacks, probeFailed, saveSuccess } from '#lib/forms.js';
+	import { HELP_MAP } from '#lib/help.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { keys } from '#lib/query.js';
 	import { session } from '#lib/session.svelte.js';
@@ -123,9 +125,13 @@ SPDX-License-Identifier: EUPL-1.2
 	}
 </script>
 
-<h1 id="dlclients-title" class="mb-4 text-2xl font-semibold">{m.dlclients_title()}</h1>
+<PageHeader
+	title={m.dlclients_title()}
+	documentTitle
+	help={HELP_MAP['/connections/download-clients']}
+/>
 
-<section aria-labelledby="dlclients-title" class="w-full">
+<section aria-label={m.dlclients_title()} class="w-full">
 	<div class="grid w-full grid-cols-1 items-start gap-6 xl:grid-cols-12">
 		<div class="flex flex-col gap-4 xl:col-span-7">
 			{#if session.isAdmin}

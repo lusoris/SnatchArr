@@ -2,19 +2,17 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-import { fireEvent, screen, within } from '@testing-library/svelte';
+import { fireEvent, screen } from '@testing-library/svelte';
 import { ProblemError } from '@sveltesentio/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api } from '#lib/api/client.js';
 import type { components } from '#lib/api/schema.js';
 import { m } from '#lib/paraglide/messages.js';
-import { expectStackedLabels, renderWithQuery, stubGet } from '#lib/testing/harness.js';
+import { renderWithQuery, stubGet } from '#lib/testing/harness.js';
 import GeneralTab from './GeneralTab.svelte';
 
 type Settings = components['schemas']['Settings'];
 type PriorityPreset = components['schemas']['PriorityPreset'];
-type NotificationChannel = components['schemas']['NotificationChannel'];
-type NotificationRule = components['schemas']['NotificationRule'];
 
 const mediaFirstRanks = {
 	sonarr: 10,
@@ -43,36 +41,9 @@ const sampleSettings: Settings = {
 	llm_write_tools: []
 };
 
-const sampleChannel: NotificationChannel = {
-	id: '018f2651-3472-749e-8c38-5188bf287c80',
-	name: 'Discord Alerts',
-	kind: 'discord',
-	enabled: true,
-	has_secret: true,
-	config: {
-		allow_private_network: false,
-		allow_insecure_http: false
-	},
-	created_at: '2026-10-16T10:00:00Z',
-	updated_at: '2026-10-16T10:00:00Z'
-};
-
-const sampleRule: NotificationRule = {
-	id: '018f2651-3472-749e-8c38-5188bf287c81',
-	name: 'Streak Rule',
-	event_kind: 'run_failure_streak',
-	threshold: 3,
-	enabled: true,
-	channel_ids: ['018f2651-3472-749e-8c38-5188bf287c80'],
-	created_at: '2026-10-16T10:00:00Z',
-	updated_at: '2026-10-16T10:00:00Z'
-};
-
 const baseStubs = {
 	'/settings': sampleSettings,
-	'/priority-presets': samplePresets,
-	'/notifications/channels': [],
-	'/notifications/rules': []
+	'/priority-presets': samplePresets
 };
 
 function expectedSettingsWithTools(tools: Settings['llm_write_tools']): Settings {
@@ -209,12 +180,18 @@ describe('settings', () => {
 		} as never);
 		renderWithQuery(GeneralTab);
 
-		expect(await screen.findByText(m.settings_llm_scope_core_write())).toBeTruthy();
-		expect(screen.getByText(m.settings_llm_scope_admin_write())).toBeTruthy();
-		expect(screen.getByText(m.settings_llm_scope_download_clients_write())).toBeTruthy();
-		expect(screen.getByText(m.settings_llm_scope_requests_write())).toBeTruthy();
-		expect(screen.getByText(m.settings_llm_scope_prowlarr_write())).toBeTruthy();
-		expect(screen.getByText(m.settings_llm_scope_notifications_write())).toBeTruthy();
+		expect(
+			await screen.findByRole('group', { name: m.settings_llm_scope_core_write() })
+		).toBeTruthy();
+		expect(screen.getByRole('group', { name: m.settings_llm_scope_admin_write() })).toBeTruthy();
+		expect(
+			screen.getByRole('group', { name: m.settings_llm_scope_download_clients_write() })
+		).toBeTruthy();
+		expect(screen.getByRole('group', { name: m.settings_llm_scope_requests_write() })).toBeTruthy();
+		expect(screen.getByRole('group', { name: m.settings_llm_scope_prowlarr_write() })).toBeTruthy();
+		expect(
+			screen.getByRole('group', { name: m.settings_llm_scope_notifications_write() })
+		).toBeTruthy();
 
 		const llmToggle = screen.getByLabelText(m.settings_llm_enabled()) as HTMLInputElement;
 		await fireEvent.click(llmToggle);
@@ -305,124 +282,106 @@ describe('settings', () => {
 		expect(alert.textContent).toContain('invalid current password');
 	});
 
-	it('renders notification channels and rules', async () => {
+	it('updates disclosure summary count when tool checkboxes are toggled', async () => {
 		stubGet({
 			...baseStubs,
-			'/notifications/channels': [sampleChannel],
-			'/notifications/rules': [sampleRule]
+			'/settings': {
+				...sampleSettings,
+				llm_enabled: true,
+				llm_write_tools: []
+			}
 		});
 		renderWithQuery(GeneralTab);
 
 		expect(
-			await screen.findByRole('heading', { level: 2, name: m.notifications_title() })
+			await screen.findByText(m.settings_llm_write_tools_allowed({ count: 0, total: 16 }))
 		).toBeTruthy();
-		expect(screen.getAllByText('Discord Alerts').length).toBeGreaterThanOrEqual(1);
-		expect(screen.getByText('Streak Rule')).toBeTruthy();
-		expect(screen.getByRole('button', { name: m.channel_test() })).toBeTruthy();
+
+		const triggerBox = screen.getByLabelText(m.settings_llm_tool_trigger_run()) as HTMLInputElement;
+		await fireEvent.click(triggerBox);
+
+		expect(
+			screen.getByText(m.settings_llm_write_tools_allowed({ count: 1, total: 16 }))
+		).toBeTruthy();
+
+		const deleteBox = screen.getByLabelText(
+			m.settings_llm_tool_delete_instance()
+		) as HTMLInputElement;
+		await fireEvent.click(deleteBox);
+
+		expect(
+			screen.getByText(m.settings_llm_write_tools_allowed({ count: 2, total: 16 }))
+		).toBeTruthy();
 	});
 
-	it('tests notification channel when test button clicked', async () => {
+	it('submits checked tools from closed disclosures when saved', async () => {
 		stubGet({
 			...baseStubs,
-			'/notifications/channels': [sampleChannel],
-			'/notifications/rules': []
+			'/settings': {
+				...sampleSettings,
+				llm_enabled: true,
+				llm_write_tools: ['snatcharr_trigger_run', 'snatcharr_update_settings']
+			}
 		});
-		const postSpy = vi.spyOn(api, 'POST').mockResolvedValue({ data: undefined } as never);
+		const putSpy = vi.spyOn(api, 'PUT').mockResolvedValue({
+			data: {
+				...sampleSettings,
+				llm_enabled: true,
+				llm_write_tools: ['snatcharr_trigger_run', 'snatcharr_update_settings']
+			}
+		} as never);
 		renderWithQuery(GeneralTab);
 
-		const testBtn = await screen.findByRole('button', { name: m.channel_test() });
-		await fireEvent.click(testBtn);
-
-		expect(postSpy).toHaveBeenCalledWith('/notifications/channels/{channelId}/test', {
-			params: { path: { channelId: sampleChannel.id } }
+		const coreFieldset = await screen.findByRole('group', {
+			name: m.settings_llm_scope_core_write()
 		});
-	});
-	it('sends an Apprise channel with its notify URL, Basic Auth and trimmed tags', async () => {
-		stubGet(baseStubs);
-		const postSpy = vi.spyOn(api, 'POST').mockResolvedValue({ data: sampleChannel } as never);
-		renderWithQuery(GeneralTab);
+		const coreDetails = coreFieldset.closest('details');
+		expect(coreDetails).toBeTruthy();
+		expect(coreDetails?.open).toBe(false);
 
-		const heading = await screen.findByRole('heading', { name: m.channel_add() });
-		const form = within(heading.closest('form') as HTMLElement);
-		await fireEvent.input(form.getByLabelText(m.channel_name()), { target: { value: 'Apprise' } });
-		await fireEvent.change(form.getByLabelText(m.channel_kind()), {
-			target: { value: 'apprise' }
-		});
-		const set = async (label: string, value: string) =>
-			fireEvent.input(await form.findByLabelText(label), { target: { value } });
-		await set(m.channel_apprise_url(), 'http://apprise:8000/notify/snatch-key');
-		await set(m.channel_username(), 'snatch');
-		await set(m.channel_password(), 'pw');
-		await set(m.channel_tags(), ' ops, ,home ');
-		await fireEvent.click(form.getByRole('button', { name: m.channel_add() }));
+		const button = screen.getByRole('button', { name: m.instance_save() });
+		await fireEvent.click(button);
 
-		expect(postSpy).toHaveBeenCalledWith('/notifications/channels', {
-			body: expect.objectContaining({
-				kind: 'apprise',
-				config: expect.objectContaining({
-					webhook_url: 'http://apprise:8000/notify/snatch-key',
-					username: 'snatch',
-					password: 'pw',
-					tags: ['ops', 'home']
-				})
-			})
+		expect(putSpy).toHaveBeenCalledWith('/settings', {
+			body: expectedSettingsWithTools(['snatcharr_trigger_run', 'snatcharr_update_settings'])
 		});
 	});
 
-	it('shows the Apprise fields only for the Apprise kind', async () => {
-		stubGet(baseStubs);
-		renderWithQuery(GeneralTab);
-
-		await screen.findByRole('heading', { name: m.channel_add() });
-		expect(screen.queryByLabelText(m.channel_apprise_url())).toBeNull();
-		expect(screen.queryByLabelText(m.channel_tags())).toBeNull();
-	});
-
-	it('stacks notification channels table rows below md with data-label matching th on every td except actions', async () => {
+	it('renders boundary 0 of n and n of n labels for tool disclosures', async () => {
+		const allCoreTools = [
+			'snatcharr_create_instance',
+			'snatcharr_update_instance',
+			'snatcharr_delete_instance',
+			'snatcharr_test_instance',
+			'snatcharr_test_instance_input',
+			'snatcharr_delete_instance_events',
+			'snatcharr_update_policy',
+			'snatcharr_update_queue_policy',
+			'snatcharr_trigger_run',
+			'snatcharr_preview_run',
+			'snatcharr_cancel_run',
+			'snatcharr_reset_state',
+			'snatcharr_create_schedule',
+			'snatcharr_update_schedule',
+			'snatcharr_delete_schedule',
+			'snatcharr_import_configarr'
+		];
 		stubGet({
 			...baseStubs,
-			'/notifications/channels': [sampleChannel],
-			'/notifications/rules': []
+			'/settings': {
+				...sampleSettings,
+				llm_enabled: true,
+				llm_write_tools: allCoreTools
+			}
 		});
 		renderWithQuery(GeneralTab);
 
-		const table = await screen.findByRole('table', { name: m.notifications_channels_title() });
-		expectStackedLabels(table);
-	});
+		expect(
+			await screen.findByText(m.settings_llm_write_tools_allowed({ count: 16, total: 16 }))
+		).toBeTruthy();
 
-	it('renders no notification channels table rows when channels list is empty', async () => {
-		stubGet({
-			...baseStubs,
-			'/notifications/channels': [],
-			'/notifications/rules': []
-		});
-		renderWithQuery(GeneralTab);
-
-		expect(await screen.findByText(m.notifications_empty_channels())).toBeTruthy();
-		expect(screen.queryByRole('table', { name: m.notifications_channels_title() })).toBeNull();
-	});
-
-	it('stacks notification rules table rows below md with data-label matching th on every td except actions', async () => {
-		stubGet({
-			...baseStubs,
-			'/notifications/channels': [sampleChannel],
-			'/notifications/rules': [sampleRule]
-		});
-		renderWithQuery(GeneralTab);
-
-		const table = await screen.findByRole('table', { name: m.notifications_rules_title() });
-		expectStackedLabels(table);
-	});
-
-	it('renders no notification rules table rows when rules list is empty', async () => {
-		stubGet({
-			...baseStubs,
-			'/notifications/channels': [],
-			'/notifications/rules': []
-		});
-		renderWithQuery(GeneralTab);
-
-		expect(await screen.findByText(m.notifications_empty_rules())).toBeTruthy();
-		expect(screen.queryByRole('table', { name: m.notifications_rules_title() })).toBeNull();
+		expect(
+			screen.getByText(m.settings_llm_write_tools_allowed({ count: 0, total: 1 }))
+		).toBeTruthy();
 	});
 });

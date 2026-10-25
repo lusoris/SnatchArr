@@ -9,6 +9,8 @@ SPDX-License-Identifier: EUPL-1.2
 	import { CommandRegistry, type Command } from '@sveltesentio/ui/cmd';
 	import CommandPalette from '@sveltesentio/ui/cmd/palette';
 	import { api } from '#lib/api/client.js';
+	import { docsUrl } from '#lib/docs.js';
+	import { DOCS_ENTRIES } from '#lib/help.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { keys } from '#lib/query.js';
 	import { filterByModule, getNavItems, type ModuledItem, type NavItem } from './nav.js';
@@ -98,6 +100,20 @@ SPDX-License-Identifier: EUPL-1.2
 				keywords: [inst.kind, inst.name],
 				run: async () => {
 					await goto(resolve('/instances/[id]', { id: inst.id }));
+				}
+			});
+		}
+
+		for (const doc of DOCS_ENTRIES) {
+			const title = doc.title();
+			cmds.push({
+				id: `docs-${doc.docsPath}`,
+				title: m.docs_cmd_prefix({ title }),
+				subtitle: docsUrl(doc.docsPath),
+				group: m.nav_documentation(),
+				keywords: ['docs', 'documentation', title],
+				run: () => {
+					window.open(docsUrl(doc.docsPath), '_blank', 'noopener');
 				}
 			});
 		}

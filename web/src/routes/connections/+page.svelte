@@ -4,6 +4,7 @@ SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
 	import PageHeader from '#lib/components/PageHeader.svelte';
+	import { HELP_MAP } from '#lib/help.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { session } from '#lib/session.svelte.js';
 	import ConfigarrCard from './ConfigarrCard.svelte';
@@ -12,7 +13,12 @@ SPDX-License-Identifier: EUPL-1.2
 	import SeerrCard from './SeerrCard.svelte';
 </script>
 
-<PageHeader title={m.nav_connections()} description={m.connections_description()} documentTitle />
+<PageHeader
+	title={m.nav_connections()}
+	description={m.connections_description()}
+	documentTitle
+	help={HELP_MAP['/connections']}
+/>
 
 <section aria-labelledby="connections-heading" class="w-full">
 	<h2 id="connections-heading" class="sr-only">{m.nav_connections()}</h2>
