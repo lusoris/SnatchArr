@@ -408,7 +408,7 @@ jobs:
         run: cargo test --workspace --locked
       # Prebuilt, checksum-verified binaries from GitHub releases. cargo-deny-action built a
       # container from Docker Hub on every run and failed on its anonymous pull limit (429).
-      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+      - uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2.87.30
         with:
           tool: cargo-audit,cargo-deny,cargo-llvm-cov@0.9.1
           fallback: none
@@ -844,7 +844,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - *checkout
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.15'
       - name: Install the docs toolchain
@@ -871,7 +871,7 @@ jobs:
           node-version: '24'
       - name: Install web dependencies
         run: cd web && pnpm install --frozen-lockfile
-      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+      - uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2.87.30
         with:
           tool: cargo-about@0.9.2
           fallback: none
