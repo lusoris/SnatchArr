@@ -62,7 +62,14 @@ describe('LinkCard', () => {
 		});
 
 		expect(screen.getByRole('heading', { level: 3, name: /Test Prowlarr/ })).toBeTruthy();
-		expect(screen.getByText('http://prowlarr.local:9696')).toBeTruthy();
+		expect(
+			screen.getByText(
+				(_, el) =>
+					el?.tagName === 'SPAN' &&
+					el.hasAttribute('data-url') &&
+					el.textContent === 'http://prowlarr.local:9696'
+			)
+		).toBeTruthy();
 		expect(screen.getByText('1.2.3')).toBeTruthy();
 		expect(screen.getByTestId('status-extra')).toBeTruthy();
 		expect(screen.getByTestId('extra-action')).toBeTruthy();

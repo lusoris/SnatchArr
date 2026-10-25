@@ -112,7 +112,7 @@ SPDX-License-Identifier: EUPL-1.2
 	<p class="card mb-4">{m.notifications_empty_rules()}</p>
 {:else}
 	<div class="relative overflow-x-auto">
-		<table class="mb-6 table">
+		<table class="table-stack mb-6 table">
 			<caption class="sr-only">{m.notifications_rules_title()}</caption>
 			<thead>
 				<tr>
@@ -128,12 +128,12 @@ SPDX-License-Identifier: EUPL-1.2
 			<tbody>
 				{#each rules.data ?? [] as r (r.id)}
 					<tr>
-						<td>{r.name}</td>
-						<td>{eventLabel(r.event_kind)}</td>
-						<td>{r.threshold}</td>
-						<td>{formatChannels(r.channel_ids)}</td>
+						<td data-label={m.rule_name()}>{r.name}</td>
+						<td data-label={m.rule_event_kind()}>{eventLabel(r.event_kind)}</td>
+						<td data-label={m.rule_threshold()}>{r.threshold}</td>
+						<td data-label={m.rule_channels()}>{formatChannels(r.channel_ids)}</td>
 						{#if session.isAdmin}
-							<td>
+							<td data-label="">
 								<button
 									type="button"
 									class="btn"

@@ -9,7 +9,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { api } from '#lib/api/client.js';
 import type { components } from '#lib/api/schema.js';
 import { m } from '#lib/paraglide/messages.js';
-import { renderWithQuery, stubGet } from '#lib/testing/harness.js';
+import { expectStackedLabels, renderWithQuery, stubGet } from '#lib/testing/harness.js';
 import AccountPage from './+page.svelte';
 
 // jsdom has no modal dialog API: open and close the way a browser does, firing the close
@@ -234,5 +234,21 @@ describe('account', () => {
 		expect(currentPass.value).toBe('');
 		expect(newPass.value).toBe('');
 		expect(confirmPass.value).toBe('');
+	});
+
+	it('stacks API keys table rows below md with data-label matching th on every td except actions', async () => {
+		stubGet(baseStubs);
+		renderWithQuery(AccountPage);
+
+		const table = await screen.findByRole('table');
+		expectStackedLabels(table);
+	});
+
+	it('renders no API keys table rows when list is empty', async () => {
+		stubGet({ '/auth/api-keys': [] });
+		renderWithQuery(AccountPage);
+
+		expect(await screen.findByText(m.api_keys_empty())).toBeTruthy();
+		expect(screen.queryByRole('table')).toBeNull();
 	});
 });

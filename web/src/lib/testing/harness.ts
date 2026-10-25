@@ -259,3 +259,35 @@ export async function assertCancelDelete(
 	expect(deleteSpy).not.toHaveBeenCalled();
 	expect(card.getByRole('button', { name: m.action_delete() })).toBeTruthy();
 }
+
+/**
+ * Verifies that a table has the `table-stack` class and that every tbody row has `data-label`
+ * attributes matching the corresponding thead `th` text content. For the actions column
+ * (`th` text equal to `m.action_actions()`), the `data-label` may be empty or omitted.
+ */
+export function expectStackedLabels(table: HTMLElement): void {
+	expect(table.classList.contains('table-stack')).toBe(true);
+
+	const thTexts = Array.from(table.querySelectorAll('thead th')).map(
+		(th) => th.textContent?.trim() ?? ''
+	);
+	const bodyRows = Array.from(table.querySelectorAll('tbody tr'));
+	expect(bodyRows.length).toBeGreaterThan(0);
+	for (const row of bodyRows) {
+		const tds = Array.from(row.querySelectorAll('td'));
+		expect(tds.length).toBe(thTexts.length);
+		tds.forEach((td, i) => {
+			const label = td.getAttribute('data-label');
+			if (
+				thTexts[i] === m.action_actions() ||
+				thTexts[i] === m.api_key_actions() ||
+				thTexts[i] === m.run_actions()
+			) {
+				expect(label ?? '').toBe('');
+			} else {
+				expect(label).toBeTruthy();
+				expect(label).toBe(thTexts[i]);
+			}
+		});
+	}
+}

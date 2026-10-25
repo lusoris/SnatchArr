@@ -75,7 +75,55 @@ SPDX-License-Identifier: EUPL-1.2
 {:else if instances.isError}
 	<ProblemNote error={instances.error} />
 {:else}
-	<div class="relative w-full overflow-x-auto rounded-lg border border-line">
+	{#if (instances.data ?? []).length > 0}
+		<ul class="space-y-3 md:hidden" aria-label={m.nav_instances()}>
+			{#each instances.data ?? [] as inst (inst.id)}
+				<li class="card flex flex-col gap-2">
+					<div class="flex items-start justify-between gap-2">
+						<div class="flex flex-col gap-0.5">
+							<a class="font-semibold underline" href={resolve(`instances/${inst.id}`)}
+								>{inst.name}</a
+							>
+							<div class="flex flex-wrap items-center gap-1.5 text-xs text-subtle">
+								<span
+									><span class="sr-only">{m.instance_kind()}: </span>{instanceKindLabel(
+										inst.kind,
+										inst.last_seen_product
+									)}</span
+								>
+								<span aria-hidden="true">·</span>
+								<span><span class="sr-only">{m.instance_source()}: </span>{inst.source}</span>
+							</div>
+						</div>
+						{#if inst.enabled}
+							<StatusIcon status="ok" label={m.instance_enabled()} size={16} />
+						{:else}
+							<StatusIcon status="disabled" label={m.instance_disabled()} size={16} />
+						{/if}
+					</div>
+					<div class="text-sm">
+						<span class="sr-only">{m.instance_url()}: </span>
+						<UrlText url={inst.base_url} />
+					</div>
+					<div class="text-sm">
+						<CheckState instance={inst} />
+					</div>
+					{#if session.isAdmin}
+						<div class="mt-1 flex">
+							<button
+								type="button"
+								class="btn"
+								onclick={() => remove.mutate(inst.id)}
+								disabled={inst.source === 'configarr'}>{m.instance_delete()}</button
+							>
+						</div>
+					{/if}
+				</li>
+			{/each}
+		</ul>
+	{/if}
+
+	<div class="relative hidden w-full overflow-x-auto rounded-lg border border-line md:block">
 		<table class="compact-table table w-full">
 			<caption class="sr-only">{m.nav_instances()}</caption>
 			<thead>

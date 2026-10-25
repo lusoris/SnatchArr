@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api } from '#lib/api/client.js';
 import type { components } from '#lib/api/schema.js';
 import { m } from '#lib/paraglide/messages.js';
-import { renderWithQuery, stubGet } from '#lib/testing/harness.js';
+import { expectStackedLabels, renderWithQuery, stubGet } from '#lib/testing/harness.js';
 import GeneralTab from './GeneralTab.svelte';
 
 type Settings = components['schemas']['Settings'];
@@ -376,5 +376,53 @@ describe('settings', () => {
 		await screen.findByRole('heading', { name: m.channel_add() });
 		expect(screen.queryByLabelText(m.channel_apprise_url())).toBeNull();
 		expect(screen.queryByLabelText(m.channel_tags())).toBeNull();
+	});
+
+	it('stacks notification channels table rows below md with data-label matching th on every td except actions', async () => {
+		stubGet({
+			...baseStubs,
+			'/notifications/channels': [sampleChannel],
+			'/notifications/rules': []
+		});
+		renderWithQuery(GeneralTab);
+
+		const table = await screen.findByRole('table', { name: m.notifications_channels_title() });
+		expectStackedLabels(table);
+	});
+
+	it('renders no notification channels table rows when channels list is empty', async () => {
+		stubGet({
+			...baseStubs,
+			'/notifications/channels': [],
+			'/notifications/rules': []
+		});
+		renderWithQuery(GeneralTab);
+
+		expect(await screen.findByText(m.notifications_empty_channels())).toBeTruthy();
+		expect(screen.queryByRole('table', { name: m.notifications_channels_title() })).toBeNull();
+	});
+
+	it('stacks notification rules table rows below md with data-label matching th on every td except actions', async () => {
+		stubGet({
+			...baseStubs,
+			'/notifications/channels': [sampleChannel],
+			'/notifications/rules': [sampleRule]
+		});
+		renderWithQuery(GeneralTab);
+
+		const table = await screen.findByRole('table', { name: m.notifications_rules_title() });
+		expectStackedLabels(table);
+	});
+
+	it('renders no notification rules table rows when rules list is empty', async () => {
+		stubGet({
+			...baseStubs,
+			'/notifications/channels': [],
+			'/notifications/rules': []
+		});
+		renderWithQuery(GeneralTab);
+
+		expect(await screen.findByText(m.notifications_empty_rules())).toBeTruthy();
+		expect(screen.queryByRole('table', { name: m.notifications_rules_title() })).toBeNull();
 	});
 });

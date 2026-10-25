@@ -9,6 +9,7 @@ import { api } from '#lib/api/client.js';
 import { logLevelLabel } from '#lib/logs.js';
 import { m } from '#lib/paraglide/messages.js';
 import {
+	expectStackedLabels,
 	failedInstance,
 	forkInstance,
 	renderWithQuery,
@@ -397,5 +398,23 @@ describe('dashboard overview redo', () => {
 		expect(
 			screen.queryByRole('heading', { level: 2, name: m.prowlarr_dashboard_title() })
 		).toBeNull();
+	});
+
+	it('stacks fleet table rows below md with data-label matching th on every td except actions', async () => {
+		stubGet(defaultDashboardStubs({ '/instances': [forkInstance] }));
+		renderWithQuery(Dashboard);
+
+		const table = await screen.findByRole('table', { name: m.overview_fleet_title() });
+		expectStackedLabels(table);
+	});
+
+	it('renders no fleet table rows when instances list is empty', async () => {
+		stubGet(defaultDashboardStubs({ '/instances': [] }));
+		renderWithQuery(Dashboard);
+
+		expect(
+			await screen.findByRole('heading', { level: 2, name: m.overview_onboarding_title() })
+		).toBeTruthy();
+		expect(screen.queryByRole('table', { name: m.overview_fleet_title() })).toBeNull();
 	});
 });

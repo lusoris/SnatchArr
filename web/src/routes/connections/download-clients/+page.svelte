@@ -161,7 +161,7 @@ SPDX-License-Identifier: EUPL-1.2
 				<p class="card mb-6">{m.dlclients_empty()}</p>
 			{:else}
 				<div class="relative w-full overflow-x-auto rounded-lg border border-line">
-					<table class="compact-table table w-full">
+					<table class="compact-table table-stack table w-full">
 						<caption class="sr-only">{m.dlclients_title()}</caption>
 						<thead>
 							<tr>
@@ -179,19 +179,28 @@ SPDX-License-Identifier: EUPL-1.2
 							{#each clients.data ?? [] as c (c.id)}
 								{@const st = statusFor(c.id)}
 								<tr>
-									<td>
-										<h2 class="max-w-28 truncate text-sm font-semibold" title={c.name}>{c.name}</h2>
+									<td data-label={m.instance_name()}>
+										<h2
+											class="text-sm font-semibold break-words md:max-w-28 md:truncate"
+											title={c.name}
+										>
+											{c.name}
+										</h2>
 									</td>
-									<td class="text-sm text-subtle">{c.kind} · {c.protocol}</td>
-									<td class="text-sm text-subtle"
+									<td class="text-sm text-subtle" data-label={m.dlclients_kind()}
+										>{c.kind} · {c.protocol}</td
+									>
+									<td class="text-sm text-subtle" data-label={m.instance_url()}
 										><UrlText
 											url={c.base_url}
 											title={c.base_url}
-											class="block max-w-24 truncate"
+											class="block md:max-w-24 md:truncate"
 										/></td
 									>
-									<td class="text-sm text-subtle">{instanceName(c.instance_id)}</td>
-									<td>
+									<td class="text-sm text-subtle" data-label={m.dlclients_instance()}
+										>{instanceName(c.instance_id)}</td
+									>
+									<td data-label={m.instance_last_check()}>
 										{#if st}
 											<div class="text-sm" role="status">
 												<div>
@@ -202,7 +211,7 @@ SPDX-License-Identifier: EUPL-1.2
 														})} · ↓ {Math.round(st.download_rate_bps / 1024)} KiB/s{/if}
 												</div>
 												{#if st.error}
-													<details class="max-w-24 text-xs text-danger">
+													<details class="text-xs text-danger md:max-w-24">
 														<summary
 															class="line-clamp-2 cursor-pointer break-words"
 															title={st.error}
@@ -218,7 +227,7 @@ SPDX-License-Identifier: EUPL-1.2
 										{/if}
 									</td>
 									{#if session.isAdmin}
-										<td>
+										<td data-label="">
 											<div class="flex flex-wrap items-center gap-1.5">
 												<button
 													type="button"
