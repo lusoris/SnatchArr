@@ -136,17 +136,17 @@ SPDX-License-Identifier: EUPL-1.2
 	});
 </script>
 
-<h3 class="mt-6 mb-3 text-lg font-semibold">{m.notifications_channels_title()}</h3>
+<h3 class="text-lg font-semibold">{m.notifications_channels_title()}</h3>
 
 {#if channels.isPending}
 	<p aria-live="polite">{m.loading()}</p>
 {:else if channels.isError}
 	<ProblemNote error={channels.error} />
 {:else if (channels.data ?? []).length === 0}
-	<p class="card mb-4">{m.notifications_empty_channels()}</p>
+	<p class="card">{m.notifications_empty_channels()}</p>
 {:else}
 	<div class="relative overflow-x-auto">
-		<table class="table-stack mb-6 table">
+		<table class="table-stack table">
 			<caption class="sr-only">{m.notifications_channels_title()}</caption>
 			<thead>
 				<tr>

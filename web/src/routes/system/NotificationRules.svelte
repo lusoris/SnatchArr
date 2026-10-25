@@ -102,17 +102,17 @@ SPDX-License-Identifier: EUPL-1.2
 	});
 </script>
 
-<h3 class="mt-6 mb-3 text-lg font-semibold">{m.notifications_rules_title()}</h3>
+<h3 class="text-lg font-semibold">{m.notifications_rules_title()}</h3>
 
 {#if rules.isPending}
 	<p aria-live="polite">{m.loading()}</p>
 {:else if rules.isError}
 	<ProblemNote error={rules.error} />
 {:else if (rules.data ?? []).length === 0}
-	<p class="card mb-4">{m.notifications_empty_rules()}</p>
+	<p class="card">{m.notifications_empty_rules()}</p>
 {:else}
 	<div class="relative overflow-x-auto">
-		<table class="table-stack mb-6 table">
+		<table class="table-stack table">
 			<caption class="sr-only">{m.notifications_rules_title()}</caption>
 			<thead>
 				<tr>

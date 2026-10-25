@@ -109,7 +109,7 @@ SPDX-License-Identifier: EUPL-1.2
 												<td class="text-end">
 													<button
 														type="button"
-														class="btn min-h-0 px-3 py-1.5 text-xs {mod.enabled
+														class="btn min-h-11 px-3 py-1.5 text-xs md:min-h-0 {mod.enabled
 															? ''
 															: 'btn-primary'}"
 														disabled={togglingId === mod.id}
