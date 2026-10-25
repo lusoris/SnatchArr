@@ -5,27 +5,27 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Modules
 
-Optional modules provide modular capabilities that extend SnatchArr beyond core search dispatching and queue management.
+Optional modules add features outside the core search dispatch and queue management.
 
 ## Overview
 
-In accordance with [ADR-0025](adr/0025-module-switches.md), SnatchArr features a unified optional module switch mechanism. Modules remain disabled by default and can be toggled by administrators at runtime without service restarts.
+Each module has a switch ([ADR-0025](adr/0025-module-switches.md)). Modules are off by default, and administrators turn them on or off at runtime without restarting the service.
 
-Each module maintains strict isolation across Go packages, database tables, HTTP endpoints, and frontend user interfaces.
+Each module has its own Go package under `api/internal/` and its own HTTP routes.
 
 ## Available modules
 
-The following optional modules are supported or planned:
+The following optional modules are registered:
 
-- **LLM Access (`llm`)**: Model Context Protocol (MCP) tool exposure and AI agent orchestration for autonomous media operations ([ADR-0021](adr/0021-llm-access-module.md)).
-- **Watch-Aware Modes (`watchaware`)**: Synchronizes watch status from Jellyfin and Emby to prioritize snatching media that users are currently watching ([ADR-0024](adr/0024-watch-aware-modes.md)).
+- **LLM Access (`llm`)**: exposes SnatchArr operations as Model Context Protocol (MCP) tools at `/api/v1/mcp` ([ADR-0021](adr/0021-llm-access-module.md)).
+- **Watch-Aware Modes (`watchaware`)**: reads watch state from Jellyfin and Emby. The season gate and removal modes it feeds are planned in [ADR-0024](adr/0024-watch-aware-modes.md).
 
 ## Enabling and disabling modules
 
-Administrators can toggle optional modules in the web interface under **System > Modules**, or programmatically via the REST API:
+Administrators can toggle optional modules in the web interface under **System > Modules**, or via the REST API:
 
 - `GET /api/v1/system/modules` lists all registered optional modules and their current state.
-- `GET /api/v1/system/modules/{id}` retrieves module details and configuration.
-- `PUT /api/v1/system/modules/{id}` toggles the enabled state or updates configuration.
+- `GET /api/v1/system/modules/{id}` returns the configuration and state of one module.
+- `PUT /api/v1/system/modules/{id}` updates the configuration and state of one module.
 
-Disabling a module immediately terminates its background loops and returns an RFC 9457 HTTP 404 response on any routes owned by that module.
+When a module is disabled, its HTTP endpoints return an RFC 9457 HTTP 404 Problem JSON response, its MCP tools are omitted from tool discovery, and its background loops remain inactive without performing work.
