@@ -1,5 +1,39 @@
 # Changelog
 
+## [0.6.6](https://github.com/lusoris/SnatchArr/compare/v0.6.5...v0.6.6) (2026-10-25)
+
+
+### Features
+
+* **auth:** add the requester role for local and single sign-on accounts ([#654](https://github.com/lusoris/SnatchArr/issues/654)) ([726d788](https://github.com/lusoris/SnatchArr/commit/726d788d9cffe8e6dacddb7cb4b164871e2165c7))
+* **watchaware:** carry out season gate decisions in act mode ([#658](https://github.com/lusoris/SnatchArr/issues/658)) ([8f6356f](https://github.com/lusoris/SnatchArr/commit/8f6356f225e822ff2373f22e352370b258d8570a))
+* **watchaware:** promote held seasons from watch data in observe mode ([#655](https://github.com/lusoris/SnatchArr/issues/655)) ([86dc337](https://github.com/lusoris/SnatchArr/commit/86dc3376de713ea0f488e4cabc322be2ae1e5e55))
+* **watchaware:** record season-gate decisions in observe mode ([#652](https://github.com/lusoris/SnatchArr/issues/652)) ([6f67306](https://github.com/lusoris/SnatchArr/commit/6f67306b06a3777d1857dc96ac46ddbb645a3813))
+* **watchaware:** show season-gate decisions and emit a gate event ([#653](https://github.com/lusoris/SnatchArr/issues/653)) ([aade628](https://github.com/lusoris/SnatchArr/commit/aade628e1885e95d1ecf2ddd6795c096925ee82a))
+* **web:** add connections hub with per-service health ([#640](https://github.com/lusoris/SnatchArr/issues/640)) ([7bb5a52](https://github.com/lusoris/SnatchArr/commit/7bb5a529a01969073b53a7ad5a3ad5c96328b1c3))
+* **web:** add system tabs and context help ([#649](https://github.com/lusoris/SnatchArr/issues/649)) ([c7e690b](https://github.com/lusoris/SnatchArr/commit/c7e690b14d8266c476c03d0be1d06360630d5154))
+* **web:** gate navigation and routes on module switches ([#628](https://github.com/lusoris/SnatchArr/issues/628)) ([300d0df](https://github.com/lusoris/SnatchArr/commit/300d0dfb842b2de012135b0efb5af51f0503ca40))
+* **web:** merge events and server log into one activity feed ([#637](https://github.com/lusoris/SnatchArr/issues/637)) ([119ab03](https://github.com/lusoris/SnatchArr/commit/119ab03dab14b730b5e41f880ce444727dbc56e5))
+* **web:** move caps and priority presets to automation ([#639](https://github.com/lusoris/SnatchArr/issues/639)) ([171403e](https://github.com/lusoris/SnatchArr/commit/171403eff8ffb543b40b0f9dea0de3eb3825d3f0))
+* **web:** redo the overview as a task-flow operations grid ([#629](https://github.com/lusoris/SnatchArr/issues/629)) ([3855df0](https://github.com/lusoris/SnatchArr/commit/3855df01f38df34571efda97f78fc33069788b94))
+* **web:** widen instance pages and pin the instance header ([#638](https://github.com/lusoris/SnatchArr/issues/638)) ([bb0f51e](https://github.com/lusoris/SnatchArr/commit/bb0f51e06a88bcb5a5905544ccf72e24cefbcbd8))
+
+
+### Bug Fixes
+
+* **queue:** give force imports a 120-second timeout ([#650](https://github.com/lusoris/SnatchArr/issues/650)) ([8847da9](https://github.com/lusoris/SnatchArr/commit/8847da916ebcfed68c47a61751a5c394d640a166))
+* **queue:** let import_blocked remove bad matches and unrecognized lines ([#651](https://github.com/lusoris/SnatchArr/issues/651)) ([b64bb9d](https://github.com/lusoris/SnatchArr/commit/b64bb9d0258a7e3b6007b64a4c4d0544fb67af65))
+* **web:** drop duplicate message key and refuse duplicates in catalogs ([#635](https://github.com/lusoris/SnatchArr/issues/635)) ([fc34b10](https://github.com/lusoris/SnatchArr/commit/fc34b10714505f0d291d75a0451bbfb87e6ce374))
+* **web:** move component classes into [@layer](https://github.com/layer) components ([#642](https://github.com/lusoris/SnatchArr/issues/642)) ([83b7412](https://github.com/lusoris/SnatchArr/commit/83b7412db0a19ca951109bf8c06ebe4c2267e292))
+* **web:** show app names in priority preset labels and align rows ([#647](https://github.com/lusoris/SnatchArr/issues/647)) ([d31e3ce](https://github.com/lusoris/SnatchArr/commit/d31e3ce0fd5837cfbcb1a0d4e53915c3c1508f2d))
+* **web:** stack tables into labelled cards on phones on every route ([#648](https://github.com/lusoris/SnatchArr/issues/648)) ([119842e](https://github.com/lusoris/SnatchArr/commit/119842e463c31e675c6b55235623a5bb4cb11bda))
+
+
+### Documentation
+
+* **adr:** record the plugin GUID and the plugin repository in ADR-0028 ([#656](https://github.com/lusoris/SnatchArr/issues/656)) ([2bbf1e0](https://github.com/lusoris/SnatchArr/commit/2bbf1e0d805047923da7bf7a4bbd1d77cc52dc60))
+* **adr:** record the plugin release key as stored in ADR-0028 ([#657](https://github.com/lusoris/SnatchArr/issues/657)) ([0a8672c](https://github.com/lusoris/SnatchArr/commit/0a8672cb5d84e87f58adee289bfb26162f06ef75))
+
 ## [0.6.5](https://github.com/lusoris/SnatchArr/compare/v0.6.4...v0.6.5) (2026-10-25)
 
 
