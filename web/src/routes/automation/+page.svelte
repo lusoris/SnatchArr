@@ -10,6 +10,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { createSentioQuery } from '@sveltesentio/query';
 	import { api } from '#lib/api/client.js';
 	import type { components } from '#lib/api/schema.js';
+	import CapsPresetsForm from '#lib/components/CapsPresetsForm.svelte';
 	import PageHeader from '#lib/components/PageHeader.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import ScheduleForm from '#lib/components/ScheduleForm.svelte';
@@ -20,8 +21,12 @@ SPDX-License-Identifier: EUPL-1.2
 	import { session } from '#lib/session.svelte.js';
 
 	type Schedule = components['schemas']['Schedule'];
+	type AutomationTabKey = 'schedules' | 'caps';
 
-	const tabs: Tab[] = [{ id: 'schedules', label: m.automation_tab_schedules() }];
+	const tabs: Tab<AutomationTabKey>[] = [
+		{ id: 'schedules', label: m.automation_tab_schedules() },
+		{ id: 'caps', label: m.automation_tab_caps() }
+	];
 
 	const schedules = createSentioQuery({
 		queryKey: keys.schedules,
@@ -36,9 +41,9 @@ SPDX-License-Identifier: EUPL-1.2
 	let editingSchedule = $state<Schedule | null>(null);
 
 	const tabParam = $derived(page.url.searchParams.get('tab'));
-	const activeTab = $derived(tabParam === 'schedules' ? 'schedules' : 'schedules');
+	const activeTab = $derived<AutomationTabKey>(tabParam === 'caps' ? 'caps' : 'schedules');
 
-	function handleTabChange(newTab: string): void {
+	function handleTabChange(newTab: AutomationTabKey): void {
 		const newUrl = new URL(page.url.href);
 		newUrl.searchParams.set('tab', newTab);
 		const target = `${resolve('/automation')}${newUrl.search}` as ResolvedPathname;
@@ -56,27 +61,33 @@ SPDX-License-Identifier: EUPL-1.2
 			{:else if schedules.isError}
 				<ProblemNote error={schedules.error} />
 			{:else}
-				{#if (schedules.data ?? []).length === 0}
-					<p class="card mb-6">{m.schedules_empty()}</p>
-				{:else}
-					<div class="mb-6">
-						<ScheduleTable
-							schedules={schedules.data ?? []}
-							instances={instances.data ?? []}
-							onedit={(s) => (editingSchedule = s)}
-						/>
+				<section class="grid min-w-0 gap-6 xl:grid-cols-12">
+					<div class={`min-w-0 ${session.isAdmin ? 'xl:col-span-7' : 'xl:col-span-12'}`}>
+						{#if (schedules.data ?? []).length === 0}
+							<p class="card">{m.schedules_empty()}</p>
+						{:else}
+							<ScheduleTable
+								schedules={schedules.data ?? []}
+								instances={instances.data ?? []}
+								onedit={(s) => (editingSchedule = s)}
+							/>
+						{/if}
 					</div>
-				{/if}
 
-				{#if session.isAdmin}
-					<ScheduleForm
-						instances={instances.data ?? []}
-						editing={editingSchedule}
-						oncancel={() => (editingSchedule = null)}
-						onsuccess={() => (editingSchedule = null)}
-					/>
-				{/if}
+					{#if session.isAdmin}
+						<div class="min-w-0 xl:col-span-5">
+							<ScheduleForm
+								instances={instances.data ?? []}
+								editing={editingSchedule}
+								oncancel={() => (editingSchedule = null)}
+								onsuccess={() => (editingSchedule = null)}
+							/>
+						</div>
+					{/if}
+				</section>
 			{/if}
+		{:else if current === 'caps'}
+			<CapsPresetsForm />
 		{/if}
 	{/snippet}
 </Tabs>

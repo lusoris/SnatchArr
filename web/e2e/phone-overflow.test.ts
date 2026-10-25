@@ -109,6 +109,13 @@ test('authenticated: phone overflow /automation', async ({ page }) => {
 	await assertNoHorizontalOverflow(page, '/automation');
 });
 
+test('authenticated: phone overflow /automation?tab=caps', async ({ page }) => {
+	await page.goto('/automation?tab=caps');
+	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+	await expect(page.locator('[data-field="global_hourly_cap"]')).toBeVisible();
+	await assertNoHorizontalOverflow(page, '/automation?tab=caps');
+});
+
 test('authenticated: phone overflow /connections/seerr', async ({ page }) => {
 	await page.route('**/api/v1/seerr/requests', async (route) => {
 		await route.fulfill({

@@ -144,7 +144,7 @@ for (const viewport of SHELL_VIEWPORTS) {
 				await page.emulateMedia({ colorScheme: scheme, reducedMotion: 'reduce' });
 				await mockSettingsApi(page);
 				await prep(page, '/settings');
-				await expect(page.locator('[data-field="global_hourly_cap"]')).toBeVisible();
+				await expect(page.locator('[data-field="history_retention_days"]')).toBeVisible();
 				await expect(page).toHaveScreenshot(`settings-${viewport.name}-${locale}-${scheme}.png`, {
 					fullPage: true
 				});

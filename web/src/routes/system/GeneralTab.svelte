@@ -7,29 +7,21 @@ SPDX-License-Identifier: EUPL-1.2
 	import { toast } from 'svelte-sonner';
 	import { z } from 'zod';
 	import { api, describeError } from '#lib/api/client.js';
-	import type { components } from '#lib/api/schema.js';
 	import AdminSaveButton from '#lib/components/AdminSaveButton.svelte';
 	import Field from '#lib/components/Field.svelte';
 	import NewPasswordField from '#lib/components/NewPasswordField.svelte';
-	import PriorityPresetFields from '#lib/components/PriorityPresetFields.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
-	import { APP_KINDS, type AppKind } from '#lib/kinds.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { keys } from '#lib/query.js';
+	import {
+		generalSettingsSchema,
+		mergeGeneralSettings,
+		saveMergedSettings,
+		type GeneralSettingsDraft,
+		type LlmWriteTool
+	} from '#lib/settings.js';
 	import NotificationChannels from './NotificationChannels.svelte';
 	import NotificationRules from './NotificationRules.svelte';
-
-	type Settings = components['schemas']['Settings'];
-	type PriorityPreset = components['schemas']['PriorityPreset'];
-	type PriorityPresetMap = components['schemas']['PriorityPresetMap'];
-
-	const rankSchema = z.number().int().min(1).max(100);
-	const presetFields = Object.fromEntries(APP_KINDS.map((k) => [k, rankSchema])) as Record<
-		AppKind,
-		typeof rankSchema
-	>;
-	const presetMapSchema = z.object(presetFields) satisfies z.ZodType<PriorityPresetMap>;
-	type LlmWriteTool = components['schemas']['LlmWriteTool'];
 
 	type WriteToolGroup = {
 		field: string;
@@ -233,52 +225,33 @@ SPDX-License-Identifier: EUPL-1.2
 	const knownWriteTools = new Set<string>(
 		writeToolGroups.flatMap((g) => g.options.map((o) => o.value))
 	);
-
-	const settingsSchema = z.object({
-		history_retention_days: z.number().int().min(1).max(3650),
-		user_agent: z.string().min(1).max(200),
-		global_hourly_cap: z.number().int().min(0).max(5000),
-		search_priority_preset: presetMapSchema,
-		download_priority_preset: presetMapSchema,
-		llm_enabled: z.boolean(),
+	const schema = generalSettingsSchema.extend({
 		llm_write_tools: z
 			.array(z.custom<LlmWriteTool>((v) => typeof v === 'string' && knownWriteTools.has(v)))
 			.optional()
-	}) satisfies z.ZodType<Omit<Settings, 'updated_at'>>;
+	});
 
 	const settings = createSentioQuery({
 		queryKey: keys.settings,
 		queryFn: async () => (await api.GET('/settings')).data
 	});
-	const presets = createSentioQuery<PriorityPreset[] | undefined>({
-		queryKey: keys.priorityPresets,
-		queryFn: async () => (await api.GET('/priority-presets')).data
-	});
 
-	let draft = $state<Settings | null>(null);
+	let draft = $state<GeneralSettingsDraft | null>(null);
 	let currentPassword = $state('');
 	let newPassword = $state('');
 	let passwordError = $state('');
 	let changingPassword = $state(false);
 
-	const mediaFirst = $derived(presets.data?.find((p) => p.name === 'media_first'));
-
 	$effect(() => {
 		if (settings.data && !draft) {
 			draft = {
-				...settings.data,
-				search_priority_preset: { ...(settings.data.search_priority_preset ?? {}) },
-				download_priority_preset: { ...(settings.data.download_priority_preset ?? {}) },
+				history_retention_days: settings.data.history_retention_days,
+				user_agent: settings.data.user_agent,
+				llm_enabled: settings.data.llm_enabled,
 				llm_write_tools: [...(settings.data.llm_write_tools ?? [])]
 			};
 		}
 	});
-
-	function resetToShippedPreset(): void {
-		if (!draft || !mediaFirst) return;
-		draft.search_priority_preset = { ...mediaFirst.search };
-		draft.download_priority_preset = { ...mediaFirst.download };
-	}
 
 	function toggleWriteTool(tool: LlmWriteTool, checked: boolean): void {
 		if (!draft) return;
@@ -291,7 +264,7 @@ SPDX-License-Identifier: EUPL-1.2
 	}
 
 	const save = createSentioMutation({
-		mutationFn: async (s: Settings) => (await api.PUT('/settings', { body: s })).data,
+		mutationFn: (d: GeneralSettingsDraft) => saveMergedSettings(d, mergeGeneralSettings),
 		invalidates: [keys.settings, keys.caps, keys.instances],
 		onSuccess: () => toast.success(m.settings_saved()),
 		onError: (err) => toast.error(describeError(err))
@@ -335,7 +308,7 @@ SPDX-License-Identifier: EUPL-1.2
 			class="card flex flex-col gap-4"
 			onsubmit={(e) => {
 				e.preventDefault();
-				if (draft && settingsSchema.safeParse(draft).success) save.mutate(draft);
+				if (draft && schema.safeParse(draft).success) save.mutate(draft);
 			}}
 		>
 			<Field id="retention" label={m.settings_retention()} hint={m.settings_retention_hint()}>
@@ -360,24 +333,6 @@ SPDX-License-Identifier: EUPL-1.2
 					bind:value={draft.user_agent}
 				/>
 			</Field>
-			<Field id="global_cap" label={m.settings_global_cap()} hint={m.settings_global_cap_hint()}>
-				<input
-					id="global_cap"
-					data-field="global_hourly_cap"
-					class="input"
-					type="number"
-					min="0"
-					max="5000"
-					aria-describedby="global_cap-hint"
-					bind:value={draft.global_hourly_cap}
-				/>
-			</Field>
-			<PriorityPresetFields
-				bind:searchPreset={draft.search_priority_preset}
-				bind:downloadPreset={draft.download_priority_preset}
-				canReset={mediaFirst !== undefined}
-				onReset={resetToShippedPreset}
-			/>
 			<label class="flex items-center gap-2">
 				<input type="checkbox" data-field="llm_enabled" bind:checked={draft.llm_enabled} />
 				{m.settings_llm_enabled()}

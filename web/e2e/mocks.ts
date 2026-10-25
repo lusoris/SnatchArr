@@ -213,4 +213,5 @@ export async function mockSettingsApi(
 	});
 	await page.route('**/api/v1/notifications/channels', (route) => route.fulfill(json([])));
 	await page.route('**/api/v1/notifications/rules', (route) => route.fulfill(json([])));
+	await page.route('**/api/v1/priority-presets', (route) => route.fulfill(json([])));
 }

@@ -22,6 +22,7 @@ export const AUTH_ROUTES = [
 	'/activity?source=live',
 	'/activity?source=log',
 	'/automation',
+	'/automation?tab=caps',
 	'/connections',
 	'/connections/configarr',
 	'/connections/download-clients',
@@ -44,6 +45,7 @@ export const MIN_TABLES: Record<(typeof AUTH_ROUTES)[number], number> = {
 	'/activity?source=live': 0,
 	'/activity?source=log': 0,
 	'/automation': 1,
+	'/automation?tab=caps': 0,
 	'/connections': 0,
 	'/connections/configarr': 0,
 	'/connections/download-clients': 0,
@@ -531,6 +533,8 @@ export async function assertDesktopWidth(page: Page, route: string): Promise<voi
 
 export const SCROLL_BUDGET_ROUTES = [
 	'/',
+	'/automation',
+	'/automation?tab=caps',
 	'/instances',
 	'/instances/[id]',
 	'/activity',

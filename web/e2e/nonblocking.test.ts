@@ -133,6 +133,53 @@ test.describe('nonblocking', () => {
 		// API recovers, reload brings usable form
 		await mockSettingsApi(page);
 		await page.reload();
+		const field = page.locator('[data-field="history_retention_days"]');
+		await expect(field).toBeVisible({ timeout: 3000 });
+		await field.fill('60');
+		await expect(field).toHaveValue('60');
+	});
+
+	test('automation caps: delayed 10s API response shows loading, remains interactive, and 503 renders problem note', async ({
+		page
+	}) => {
+		await mockSettingsApi(page);
+		let requestCount = 0;
+		await page.route('**/api/v1/settings*', async (route) => {
+			requestCount++;
+			if (requestCount === 1) {
+				await new Promise((r) => setTimeout(r, 10_000));
+			}
+			await route.fulfill({
+				status: 503,
+				contentType: 'application/problem+json',
+				body: JSON.stringify({
+					type: 'https://tools.ietf.org/html/rfc9457',
+					title: 'Service Unavailable',
+					status: 503,
+					detail: 'Settings unavailable'
+				})
+			});
+		});
+
+		await page.goto('/automation?tab=caps');
+
+		const nav = page.getByRole('navigation', { name: /SnatchArr/i }).first();
+		await expect(nav).toBeVisible({ timeout: 1000 });
+
+		const loading = page.locator('[aria-live="polite"]').first();
+		await expect(loading).toBeVisible({ timeout: 1000 });
+
+		const instancesLink = page.getByRole('link', { name: /Instances|Instanzen/i }).first();
+		await instancesLink.click();
+		await expect(page).toHaveURL(/\/instances/, { timeout: 1000 });
+
+		await page.goto('/automation?tab=caps');
+		const problem = page.locator('.problem-note, [role="alert"]').first();
+		await expect(problem).toBeVisible({ timeout: 12_000 });
+
+		// API recovers, reload brings usable form
+		await mockSettingsApi(page);
+		await page.reload();
 		const field = page.locator('[data-field="global_hourly_cap"]');
 		await expect(field).toBeVisible({ timeout: 3000 });
 		await field.fill('75');

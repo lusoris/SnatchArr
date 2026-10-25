@@ -4,9 +4,7 @@
 
 import { fireEvent, screen, within } from '@testing-library/svelte';
 import { ProblemError } from '@sveltesentio/core';
-import { WCAG_22_AA_TAGS } from '@sveltesentio/testing';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { axe } from 'vitest-axe';
 import { api } from '#lib/api/client.js';
 import type { components } from '#lib/api/schema.js';
 import { m } from '#lib/paraglide/messages.js';
@@ -98,11 +96,10 @@ describe('settings', () => {
 
 		const retention = (await screen.findByLabelText(m.settings_retention())) as HTMLInputElement;
 		const ua = screen.getByLabelText(m.settings_user_agent()) as HTMLInputElement;
-		const cap = screen.getByLabelText(m.settings_global_cap()) as HTMLInputElement;
 
 		expect(retention.value).toBe('30');
 		expect(ua.value).toBe('SnatchArr/1.0');
-		expect(cap.value).toBe('100');
+		expect(screen.queryByLabelText(m.settings_global_cap())).toBeNull();
 		expect(screen.getByRole('button', { name: m.instance_save() })).toBeTruthy();
 	});
 
@@ -147,6 +144,20 @@ describe('settings', () => {
 		});
 	});
 
+	it('refuses to save a write tool the form does not know', async () => {
+		stubGet({
+			...baseStubs,
+			'/settings': { ...sampleSettings, llm_write_tools: ['bogus_tool' as never] }
+		});
+		const putSpy = vi.spyOn(api, 'PUT');
+		renderWithQuery(GeneralTab);
+
+		await screen.findByLabelText(m.settings_retention());
+		await fireEvent.click(screen.getByRole('button', { name: m.instance_save() }));
+
+		expect(putSpy).not.toHaveBeenCalled();
+	});
+
 	it('disables llm_write_tools checkboxes while llm_enabled is off and submits toggled tools when enabled', async () => {
 		stubGet(baseStubs);
 		const putSpy = vi.spyOn(api, 'PUT').mockResolvedValue({
@@ -177,88 +188,6 @@ describe('settings', () => {
 
 		expect(putSpy).toHaveBeenCalledWith('/settings', {
 			body: expectedSettingsWithTools(['snatcharr_trigger_run', 'snatcharr_delete_instance'])
-		});
-	});
-
-	it('resets priority presets to shipped media_first preset when reset button is clicked', async () => {
-		stubGet({
-			...baseStubs,
-			'/settings': {
-				...sampleSettings,
-				search_priority_preset: { ...mediaFirstRanks, sonarr: 55 },
-				download_priority_preset: { ...mediaFirstRanks, whisparr_v3: 5 }
-			}
-		});
-		const putSpy = vi.spyOn(api, 'PUT').mockResolvedValue({
-			data: sampleSettings
-		} as never);
-		renderWithQuery(GeneralTab);
-
-		const sonarrSearch = (await screen.findByLabelText(
-			`${m.settings_search_priority_preset()} (sonarr)`
-		)) as HTMLInputElement;
-		const whisparrDownload = screen.getByLabelText(
-			`${m.settings_download_priority_preset()} (whisparr_v3)`
-		) as HTMLInputElement;
-		expect(sonarrSearch.value).toBe('55');
-		expect(whisparrDownload.value).toBe('5');
-
-		const resetBtn = await screen.findByRole('button', { name: m.settings_priority_reset() });
-		await fireEvent.click(resetBtn);
-
-		expect(sonarrSearch.value).toBe('10');
-		expect(whisparrDownload.value).toBe('40');
-
-		await fireEvent.click(screen.getByRole('button', { name: m.instance_save() }));
-		expect(putSpy).toHaveBeenCalledWith('/settings', {
-			body: {
-				...sampleSettings,
-				search_priority_preset: mediaFirstRanks,
-				download_priority_preset: mediaFirstRanks
-			}
-		});
-	});
-
-	it('rejects out-of-bounds priority rank (0 and 101) and accepts boundary ranks (1 and 100) cleanly under axe', async () => {
-		stubGet(baseStubs);
-		const putSpy = vi.spyOn(api, 'PUT').mockResolvedValue({
-			data: sampleSettings
-		} as never);
-		const { container } = renderWithQuery(GeneralTab);
-
-		const sonarrSearch = (await screen.findByLabelText(
-			`${m.settings_search_priority_preset()} (sonarr)`
-		)) as HTMLInputElement;
-		const radarrDownload = screen.getByLabelText(
-			`${m.settings_download_priority_preset()} (radarr)`
-		) as HTMLInputElement;
-
-		const axeResults = await axe(container, {
-			runOnly: { type: 'tag', values: [...WCAG_22_AA_TAGS] }
-		});
-		expect(axeResults.violations).toEqual([]);
-
-		// Negative: 0 and 101 refused
-		for (const invalid of ['0', '101']) {
-			await fireEvent.input(sonarrSearch, { target: { value: invalid } });
-			expect(sonarrSearch.checkValidity()).toBe(false);
-			await fireEvent.click(screen.getByRole('button', { name: m.instance_save() }));
-			expect(putSpy).not.toHaveBeenCalled();
-		}
-
-		// Boundary: 1 and 100 accepted
-		await fireEvent.input(sonarrSearch, { target: { value: '1' } });
-		await fireEvent.input(radarrDownload, { target: { value: '100' } });
-		expect(sonarrSearch.checkValidity()).toBe(true);
-		expect(radarrDownload.checkValidity()).toBe(true);
-
-		await fireEvent.click(screen.getByRole('button', { name: m.instance_save() }));
-		expect(putSpy).toHaveBeenCalledWith('/settings', {
-			body: {
-				...sampleSettings,
-				search_priority_preset: { ...mediaFirstRanks, sonarr: 1 },
-				download_priority_preset: { ...mediaFirstRanks, radarr: 100 }
-			}
 		});
 	});
 
@@ -447,24 +376,5 @@ describe('settings', () => {
 		await screen.findByRole('heading', { name: m.channel_add() });
 		expect(screen.queryByLabelText(m.channel_apprise_url())).toBeNull();
 		expect(screen.queryByLabelText(m.channel_tags())).toBeNull();
-	});
-
-	it('prevents submission when a priority preset lacks an app kind', async () => {
-		const missingWhisparr: Record<string, number> = { ...mediaFirstRanks };
-		delete missingWhisparr.whisparr_v3;
-		stubGet({
-			...baseStubs,
-			'/settings': {
-				...sampleSettings,
-				search_priority_preset: missingWhisparr
-			}
-		});
-		const putSpy = vi.spyOn(api, 'PUT').mockResolvedValue({ data: sampleSettings } as never);
-		renderWithQuery(GeneralTab);
-
-		const button = await screen.findByRole('button', { name: m.instance_save() });
-		await fireEvent.click(button);
-
-		expect(putSpy).not.toHaveBeenCalled();
 	});
 });
