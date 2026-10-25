@@ -22,7 +22,8 @@ export const PHONE_FIT_ROUTES = [
 	'/automation',
 	'/connections/download-clients',
 	'/instances',
-	'/system'
+	'/system',
+	'/system?tab=notifications'
 ] as const;
 
 export const AUTH_ROUTES = [
