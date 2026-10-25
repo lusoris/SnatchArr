@@ -17,25 +17,23 @@ const WCAG_22_AA = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 
 const ALL_ROUTES = [
 	'/',
-	'/about',
 	'/account',
-	'/configarr',
-	'/download-clients',
-	'/history',
+	'/activity',
+	'/automation',
+	'/connections',
+	'/connections/configarr',
+	'/connections/download-clients',
+	'/connections/prowlarr',
+	'/connections/seerr',
 	'/instances',
 	'/instances/[id]',
 	'/instances/[id]/activity',
 	'/instances/[id]/memory',
 	'/instances/[id]/policy',
 	'/instances/[id]/queue',
-	'/live',
 	'/login',
-	'/logs',
-	'/prowlarr',
-	'/schedules',
-	'/seerr',
-	'/settings',
-	'/setup'
+	'/setup',
+	'/system'
 ] as const;
 
 const AUTH_ROUTES = ALL_ROUTES.filter((r) => r !== '/setup' && r !== '/login');
@@ -285,9 +283,9 @@ if (!process.env.SNATCHARR_E2E_API) {
 		expect(results.violations).toEqual([]);
 	});
 
-	test('/settings has no axe violations', async ({ page }) => {
+	test('/system has no axe violations', async ({ page }) => {
 		await mockSettingsApi(page);
-		await page.goto('/settings');
+		await page.goto('/system');
 		await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 		await expect(page.locator('[data-field="global_hourly_cap"]')).toBeVisible();
 
@@ -469,7 +467,7 @@ if (!process.env.SNATCHARR_E2E_API) {
 		expect(results.violations).toEqual([]);
 	});
 
-	test('/live empty state has no axe violations', async ({ page }) => {
+	test('/activity?source=live empty state has no axe violations', async ({ page }) => {
 		await setupAuthRoutes(page);
 		await page.route('**/api/v1/instances', (route) =>
 			route.fulfill({
@@ -518,7 +516,7 @@ if (!process.env.SNATCHARR_E2E_API) {
 			})
 		);
 
-		await page.goto('/live');
+		await page.goto('/activity?source=live');
 		await expect(
 			page.getByRole('heading', {
 				level: 2,
@@ -530,7 +528,7 @@ if (!process.env.SNATCHARR_E2E_API) {
 		expect(results.violations).toEqual([]);
 	});
 
-	test('/live with backlog rows has no axe violations', async ({ page }) => {
+	test('/activity?source=live with backlog rows has no axe violations', async ({ page }) => {
 		await setupAuthRoutes(page);
 		await page.route('**/api/v1/instances', (route) =>
 			route.fulfill({
@@ -601,7 +599,7 @@ if (!process.env.SNATCHARR_E2E_API) {
 			})
 		);
 
-		await page.goto('/live');
+		await page.goto('/activity?source=live');
 		await expect(page.getByRole('log')).toBeVisible();
 
 		const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();

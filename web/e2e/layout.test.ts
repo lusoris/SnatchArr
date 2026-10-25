@@ -93,8 +93,10 @@ const historyEvents = [
 // download client); /logs and /live must wrap it at URL delimiters, never mid-word.
 const urlErrorText =
 	'Post "http://127.0.0.1:9091/transmission/rpc": dial tcp 127.0.0.1:9091: connect: connection refused';
-const urlRowFixtures: Record<string, { glob: string; body: unknown }> = {
-	'/logs': {
+const urlRowFixtures: Partial<
+	Record<(typeof AUTH_ROUTES)[number], { glob: string; body: unknown }>
+> = {
+	'/activity?source=log': {
 		glob: '**/api/v1/logs?*',
 		body: {
 			records: [
@@ -111,7 +113,7 @@ const urlRowFixtures: Record<string, { glob: string; body: unknown }> = {
 			dropped: 0
 		}
 	},
-	'/live': {
+	'/activity?source=live': {
 		glob: '**/api/v1/events?*',
 		body: [
 			{
@@ -126,7 +128,14 @@ const urlRowFixtures: Record<string, { glob: string; body: unknown }> = {
 	}
 };
 
-async function mockUrlRows(page: Page, pattern: string): Promise<void> {
+// A fixture keyed by a path the sweep no longer visits would leave its URL check silently unrun.
+test('authenticated: URL-row fixtures name swept routes', () => {
+	const swept: readonly string[] = AUTH_ROUTES;
+	const stale = Object.keys(urlRowFixtures).filter((key) => !swept.includes(key));
+	expect(stale).toEqual([]);
+});
+
+async function mockUrlRows(page: Page, pattern: (typeof AUTH_ROUTES)[number]): Promise<void> {
 	const fixture = urlRowFixtures[pattern];
 	if (!fixture || served) return;
 	await page.route(fixture.glob, (route) => route.fulfill(json(fixture.body)));
@@ -202,7 +211,7 @@ for (const [viewportName, viewport] of Object.entries(VIEWPORTS)) {
 			await mockUrlRows(page, pattern);
 			if (pattern === '/' && !served) {
 				await mockDashboardRoute(page);
-			} else if (pattern === '/history' && !served) {
+			} else if (pattern.startsWith('/activity') && !served) {
 				await page.route('**/api/v1/events*', (route) =>
 					route.fulfill({
 						status: 200,
@@ -246,7 +255,7 @@ for (const [viewportName, viewport] of Object.entries(VIEWPORTS)) {
 						])
 					})
 				);
-			} else if (pattern === '/prowlarr' && !served) {
+			} else if (pattern === '/connections/prowlarr' && !served) {
 				await page.route('**/api/v1/prowlarr/status*', (route) =>
 					route.fulfill({
 						status: 200,
@@ -273,7 +282,7 @@ for (const [viewportName, viewport] of Object.entries(VIEWPORTS)) {
 						])
 					})
 				);
-			} else if (pattern === '/seerr' && !served) {
+			} else if (pattern === '/connections/seerr' && !served) {
 				await page.route('**/api/v1/seerr/requests*', (route) =>
 					route.fulfill({
 						status: 200,
@@ -338,22 +347,22 @@ for (const [viewportName, viewport] of Object.entries(VIEWPORTS)) {
 
 test('authenticated: layout expected tables follow role and data', () => {
 	// Admin with the CI seed: one table per non-empty list.
-	expect(expectedTables('/schedules', 'admin', { '/api/v1/schedules': 1 })).toBe(1);
+	expect(expectedTables('/automation', 'admin', { '/api/v1/schedules': 1 })).toBe(1);
 	expect(
-		expectedTables('/settings', 'admin', {
+		expectedTables('/system', 'admin', {
 			'/api/v1/notifications/channels': 1,
 			'/api/v1/notifications/rules': 0
 		})
 	).toBe(1);
 	expect(expectedTables('/account', 'admin', { '/api/v1/auth/api-keys': 2 })).toBe(1);
 	// Viewer: the same lists, empty data shows no table.
-	expect(expectedTables('/schedules', 'viewer', { '/api/v1/schedules': 0 })).toBe(0);
+	expect(expectedTables('/automation', 'viewer', { '/api/v1/schedules': 0 })).toBe(0);
 	expect(expectedTables('/account', 'viewer', { '/api/v1/auth/api-keys': 0 })).toBe(0);
 	// A viewer owning an API key, or a list the page never received, fails.
 	expect(() => expectedTables('/account', 'viewer', { '/api/v1/auth/api-keys': 1 })).toThrow(
 		/ADR-0023/
 	);
-	expect(() => expectedTables('/settings', 'viewer', {})).toThrow(/gave the page no JSON list/);
+	expect(() => expectedTables('/system', 'viewer', {})).toThrow(/gave the page no JSON list/);
 });
 
 // Viewer runs in API mode (the served viewer run uses the served-layout project): the session
@@ -416,7 +425,7 @@ async function mockViewerApi(page: Page, data: (typeof viewerData)[keyof typeof 
 if (!served) {
 	for (const [viewportName, viewport] of Object.entries(VIEWPORTS)) {
 		for (const [dataName, data] of Object.entries(viewerData)) {
-			for (const pattern of ['/schedules', '/settings', '/account']) {
+			for (const pattern of ['/automation', '/system', '/account']) {
 				test(`authenticated: layout viewer ${dataName} ${pattern} ${viewportName}`, async ({
 					page
 				}) => {

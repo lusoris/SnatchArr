@@ -6,7 +6,7 @@ import { screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { m } from '#lib/paraglide/messages.js';
 import { renderWithQuery, stubGet } from '#lib/testing/harness.js';
-import { getNavGroups } from './nav.js';
+import { getNavItems } from './nav.js';
 import NavDrawer from './NavDrawer.svelte';
 import Sidebar from './Sidebar.svelte';
 
@@ -28,7 +28,7 @@ vi.mock('$app/state', () => ({
 	page: { url: new URL('http://localhost/') }
 }));
 
-const navGroups = getNavGroups(true);
+const navItems = getNavItems();
 const prodStatus = {
 	name: 'SnatchArr',
 	version: '0.1.0',
@@ -59,7 +59,7 @@ describe('Sidebar and NavDrawer shell components', () => {
 		stubGet({ '/system/status': prodStatus });
 
 		const { container } = renderWithQuery(Sidebar, {
-			navGroups,
+			navItems,
 			onLogout: () => {}
 		});
 
@@ -71,7 +71,6 @@ describe('Sidebar and NavDrawer shell components', () => {
 
 		const { container } = renderWithQuery(NavDrawer, {
 			open: true,
-			navGroups,
 			onClose: () => {},
 			onLogout: () => {},
 			menuButtonEl: null
@@ -84,7 +83,7 @@ describe('Sidebar and NavDrawer shell components', () => {
 		stubGet({ '/system/status': prodStatus });
 
 		renderWithQuery(Sidebar, {
-			navGroups,
+			navItems,
 			onLogout: () => {}
 		});
 
@@ -100,7 +99,7 @@ describe('Sidebar and NavDrawer shell components', () => {
 		});
 
 		renderWithQuery(Sidebar, {
-			navGroups,
+			navItems,
 			onLogout: () => {}
 		});
 
@@ -122,7 +121,7 @@ describe('Sidebar and NavDrawer shell components', () => {
 		});
 
 		renderWithQuery(Sidebar, {
-			navGroups,
+			navItems,
 			onLogout: () => {}
 		});
 

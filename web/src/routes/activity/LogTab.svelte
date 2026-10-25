@@ -9,7 +9,6 @@ SPDX-License-Identifier: EUPL-1.2
 	import ConnectionStatus from '#lib/components/ConnectionStatus.svelte';
 	import Field from '#lib/components/Field.svelte';
 	import LinkText from '#lib/components/LinkText.svelte';
-	import PageHeader from '#lib/components/PageHeader.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import {
 		logLevelLabel,
@@ -68,13 +67,12 @@ SPDX-License-Identifier: EUPL-1.2
 	const sources = $derived(logSources(records));
 </script>
 
-<PageHeader title={m.logs_title()}>
-	{#snippet status()}
-		{#if session.isAdmin}
-			<ConnectionStatus connected={sse.connected} />
-		{/if}
-	{/snippet}
-</PageHeader>
+<div class="mb-4 flex items-center justify-between">
+	<h2 class="text-xl font-semibold">{m.logs_title()}</h2>
+	{#if session.isAdmin}
+		<ConnectionStatus connected={sse.connected} />
+	{/if}
+</div>
 
 {#if !session.isAdmin}
 	<p role="alert">{m.logs_admin_only()}</p>

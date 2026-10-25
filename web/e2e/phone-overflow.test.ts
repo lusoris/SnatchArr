@@ -102,14 +102,14 @@ test('authenticated: phone overflow /account', async ({ page }) => {
 	await assertNoHorizontalOverflow(page, '/account');
 });
 
-test('authenticated: phone overflow /schedules', async ({ page }) => {
-	await page.goto('/schedules');
+test('authenticated: phone overflow /automation', async ({ page }) => {
+	await page.goto('/automation');
 	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 	await expect(page.getByRole('table')).toBeVisible();
-	await assertNoHorizontalOverflow(page, '/schedules');
+	await assertNoHorizontalOverflow(page, '/automation');
 });
 
-test('authenticated: phone overflow /seerr', async ({ page }) => {
+test('authenticated: phone overflow /connections/seerr', async ({ page }) => {
 	await page.route('**/api/v1/seerr/requests', async (route) => {
 		await route.fulfill({
 			status: 200,
@@ -137,20 +137,20 @@ test('authenticated: phone overflow /seerr', async ({ page }) => {
 		});
 	});
 
-	await page.goto('/seerr');
+	await page.goto('/connections/seerr');
 	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 	await expect(page.getByRole('table')).toBeVisible();
-	await assertNoHorizontalOverflow(page, '/seerr');
+	await assertNoHorizontalOverflow(page, '/connections/seerr');
 });
 
-test('authenticated: phone overflow /settings', async ({ page }) => {
-	await page.goto('/settings');
+test('authenticated: phone overflow /system', async ({ page }) => {
+	await page.goto('/system');
 	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 	await expect(page.getByRole('table').first()).toBeVisible();
-	await assertNoHorizontalOverflow(page, '/settings');
+	await assertNoHorizontalOverflow(page, '/system');
 });
 
-test('authenticated: phone overflow /logs', async ({ page }) => {
+test('authenticated: phone overflow /activity?source=log', async ({ page }) => {
 	await page.route('**/api/v1/logs?*', async (route) => {
 		await route.fulfill({
 			status: 200,
@@ -180,12 +180,12 @@ test('authenticated: phone overflow /logs', async ({ page }) => {
 		});
 	});
 
-	await page.goto('/logs');
+	await page.goto('/activity?source=log');
 	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-	await assertNoHorizontalOverflow(page, '/logs');
+	await assertNoHorizontalOverflow(page, '/activity?source=log');
 });
 
-test('authenticated: desktop overflow /logs', async ({ page }) => {
+test('authenticated: desktop overflow /activity?source=log', async ({ page }) => {
 	await page.setViewportSize({ width: 1280, height: 800 });
 	await page.route('**/api/v1/logs?*', async (route) => {
 		await route.fulfill({
@@ -216,12 +216,12 @@ test('authenticated: desktop overflow /logs', async ({ page }) => {
 		});
 	});
 
-	await page.goto('/logs');
+	await page.goto('/activity?source=log');
 	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-	await assertNoHorizontalOverflow(page, '/logs');
+	await assertNoHorizontalOverflow(page, '/activity?source=log');
 });
 
-test('authenticated: phone overflow /history', async ({ page }) => {
+test('authenticated: phone overflow /activity', async ({ page }) => {
 	await page.route('**/api/v1/events?*', async (route) => {
 		await route.fulfill({
 			status: 200,
@@ -241,10 +241,10 @@ test('authenticated: phone overflow /history', async ({ page }) => {
 		});
 	});
 
-	await page.goto('/history');
+	await page.goto('/activity');
 	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 	await expect(page.getByRole('grid')).toBeVisible();
-	await assertNoHorizontalOverflow(page, '/history');
+	await assertNoHorizontalOverflow(page, '/activity');
 });
 
 test('authenticated: html[lang] follows app locale switch from de to en', async ({

@@ -12,7 +12,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { toastPreset } from '@sveltesentio/ui/toast';
 	import { onMount } from 'svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
-	import { getNavGroups } from '#lib/components/shell/nav.js';
+	import { getNavItems } from '#lib/components/shell/nav.js';
 	import BottomBar from '#lib/components/shell/BottomBar.svelte';
 	import CommandDialog from '#lib/components/shell/CommandDialog.svelte';
 	import NavDrawer from '#lib/components/shell/NavDrawer.svelte';
@@ -36,7 +36,7 @@ SPDX-License-Identifier: EUPL-1.2
 	let cmdOpen = $state(false);
 	let menuButtonEl = $state<HTMLButtonElement | null>(null);
 
-	const navGroups = $derived(getNavGroups(session.isAdmin));
+	const navItems = $derived(getNavItems());
 
 	function openDrawer(opener?: HTMLButtonElement): void {
 		if (opener) {
@@ -105,19 +105,13 @@ SPDX-License-Identifier: EUPL-1.2
 		<div class="min-h-screen bg-bg text-fg">
 			<TopBar {drawerOpen} onOpenDrawer={openDrawer} onOpenSearch={openSearch} bind:menuButtonEl />
 
-			<Sidebar {navGroups} onLogout={logout} onOpenSearch={openSearch} />
+			<Sidebar {navItems} onLogout={logout} onOpenSearch={openSearch} />
 
-			<NavDrawer
-				open={drawerOpen}
-				{navGroups}
-				onClose={closeDrawer}
-				onLogout={logout}
-				{menuButtonEl}
-			/>
+			<NavDrawer open={drawerOpen} onClose={closeDrawer} onLogout={logout} {menuButtonEl} />
 
 			<BottomBar onOpenDrawer={openDrawer} />
 
-			<CommandDialog {navGroups} bind:open={cmdOpen} />
+			<CommandDialog {navItems} bind:open={cmdOpen} />
 
 			<main
 				id="main"

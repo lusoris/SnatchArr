@@ -31,29 +31,23 @@ test.describe('keyboard navigation', () => {
 		await page.goto('/');
 		await page.waitForLoadState('networkidle');
 
-		// Tab from top: Skip link -> Brand link -> search trigger -> first nav item (Dashboard)
+		// Tab from top: Skip link -> Brand link -> search trigger -> first nav item (Overview)
 		await page.keyboard.press('Tab'); // skip link
 		await page.keyboard.press('Tab'); // brand link in sidebar
 		await page.keyboard.press('Tab'); // search trigger button
-		await page.keyboard.press('Tab'); // first nav item (Dashboard)
+		await page.keyboard.press('Tab'); // first nav item (Overview)
 
-		const dashboardLink = page.getByRole('link', { name: /Dashboard|Übersicht/i }).first();
-		await expect(dashboardLink).toBeFocused();
+		const overviewLink = page.getByRole('link', { name: /Overview|Übersicht/i }).first();
+		await expect(overviewLink).toBeFocused();
 
 		// Check every nav entry is reachable by tabbing sequentially
 		const expectedHrefs = [
 			'/',
+			'/activity',
 			'/instances',
-			'/history',
-			'/live',
-			'/schedules',
-			'/download-clients',
-			'/seerr',
-			'/prowlarr',
-			'/configarr',
-			'/settings',
-			'/logs',
-			'/about'
+			'/automation',
+			'/connections',
+			'/system'
 		];
 
 		for (let i = 1; i < expectedHrefs.length; i++) {
@@ -158,5 +152,26 @@ test.describe('keyboard navigation', () => {
 		await page.keyboard.press('Escape');
 		await expect(dialog).toBeHidden();
 		await expect(moreButton).toBeFocused();
+	});
+
+	test('authenticated: desktop: on /system, Tab from active tab reaches panel with visible focus ring', async ({
+		page
+	}) => {
+		await page.setViewportSize({ width: 1280, height: 800 });
+		await page.goto('/system');
+		await page.waitForLoadState('networkidle');
+
+		const activeTab = page.getByRole('tab', { selected: true });
+		await expect(activeTab).toBeVisible();
+		await activeTab.focus();
+		await expect(activeTab).toBeFocused();
+
+		await page.keyboard.press('Tab');
+
+		const panel = page.getByRole('tabpanel');
+		await expect(panel).toBeFocused();
+
+		const outlineStyle = await panel.evaluate((el) => window.getComputedStyle(el).outlineStyle);
+		expect(outlineStyle).not.toBe('none');
 	});
 });

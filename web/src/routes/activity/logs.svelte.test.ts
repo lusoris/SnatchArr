@@ -12,7 +12,7 @@ import { m } from '#lib/paraglide/messages.js';
 import { session } from '#lib/session.svelte.js';
 import { renderWithQuery, stubGet } from '#lib/testing/harness.js';
 import { MockEventSource } from '#lib/testing/sse.js';
-import LogsPage from './+page.svelte';
+import LogTab from './LogTab.svelte';
 
 type LogPage = components['schemas']['LogPage'];
 
@@ -56,7 +56,7 @@ describe('logs', () => {
 	it('positive lists the page and adds streamed records on top', async () => {
 		asRole('admin');
 		stubGet({ '/logs': samplePage });
-		const { container } = renderWithQuery(LogsPage);
+		const { container } = renderWithQuery(LogTab);
 
 		const log = await screen.findByRole('log', { name: m.logs_title() });
 		expect(within(log).getByText('sonarr unreachable')).toBeTruthy();
@@ -105,7 +105,7 @@ describe('logs', () => {
 	it('positive asks the API again with the chosen minimum level', async () => {
 		asRole('admin');
 		const get = stubGet({ '/logs': samplePage });
-		renderWithQuery(LogsPage);
+		renderWithQuery(LogTab);
 		await screen.findByRole('log');
 
 		await fireEvent.change(screen.getByLabelText(m.logs_level()), { target: { value: 'error' } });
@@ -122,7 +122,7 @@ describe('logs', () => {
 		stubGet({
 			'/logs': new ProblemError({ type: 'about:blank', status: 403, detail: 'admin role required' })
 		});
-		renderWithQuery(LogsPage);
+		renderWithQuery(LogTab);
 
 		expect((await screen.findByRole('alert')).textContent).toContain('admin role required');
 		expect(screen.queryByRole('log')).toBeNull();
@@ -131,7 +131,7 @@ describe('logs', () => {
 	it('negative a viewer gets a note, no request and no stream', () => {
 		asRole('viewer');
 		const get = stubGet({});
-		renderWithQuery(LogsPage);
+		renderWithQuery(LogTab);
 
 		expect(screen.getByRole('alert').textContent).toContain(m.logs_admin_only());
 		expect(get).not.toHaveBeenCalled();
@@ -141,7 +141,7 @@ describe('logs', () => {
 	it('boundary an empty ring says no record matches', async () => {
 		asRole('admin');
 		stubGet({ '/logs': { capacity: 100, dropped: 0, records: [] } });
-		renderWithQuery(LogsPage);
+		renderWithQuery(LogTab);
 
 		expect(await screen.findByText(m.logs_empty())).toBeTruthy();
 		expect(within(screen.getByRole('log')).queryAllByRole('listitem')).toHaveLength(0);

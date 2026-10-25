@@ -17,10 +17,9 @@ SPDX-License-Identifier: EUPL-1.2
 	let moreButtonEl = $state<HTMLButtonElement | null>(null);
 
 	const primaryTabs = [
-		{ href: '/', label: m.nav_dashboard(), icon: 'layout-dashboard' },
-		{ href: '/instances', label: m.nav_instances(), icon: 'server' },
-		{ href: '/history', label: m.nav_history(), icon: 'history' },
-		{ href: '/live', label: m.nav_live(), icon: 'radio' }
+		{ href: '/', label: m.nav_overview(), icon: 'layout-dashboard' },
+		{ href: '/activity', label: m.nav_activity(), icon: 'activity' },
+		{ href: '/instances', label: m.nav_instances(), icon: 'server' }
 	] as const;
 </script>
 

@@ -11,7 +11,7 @@ import { api } from '#lib/api/client.js';
 import type { components } from '#lib/api/schema.js';
 import { m } from '#lib/paraglide/messages.js';
 import { renderWithQuery, stubGet } from '#lib/testing/harness.js';
-import SettingsPage from './+page.svelte';
+import GeneralTab from './GeneralTab.svelte';
 
 type Settings = components['schemas']['Settings'];
 type PriorityPreset = components['schemas']['PriorityPreset'];
@@ -92,9 +92,9 @@ describe('settings', () => {
 
 	it('renders heading and form with settings from API', async () => {
 		stubGet(baseStubs);
-		renderWithQuery(SettingsPage);
+		renderWithQuery(GeneralTab);
 
-		expect(await screen.findByRole('heading', { level: 1, name: m.settings_title() })).toBeTruthy();
+		expect(await screen.findByRole('heading', { level: 2, name: m.settings_title() })).toBeTruthy();
 
 		const retention = (await screen.findByLabelText(m.settings_retention())) as HTMLInputElement;
 		const ua = screen.getByLabelText(m.settings_user_agent()) as HTMLInputElement;
@@ -115,7 +115,7 @@ describe('settings', () => {
 				detail: 'failed to read settings'
 			})
 		});
-		renderWithQuery(SettingsPage);
+		renderWithQuery(GeneralTab);
 
 		expect((await screen.findByRole('alert')).textContent).toContain('failed to read settings');
 		expect(screen.queryByRole('button', { name: m.instance_save() })).toBeNull();
@@ -126,7 +126,7 @@ describe('settings', () => {
 		const putSpy = vi.spyOn(api, 'PUT').mockResolvedValue({
 			data: { ...sampleSettings, history_retention_days: 60 }
 		} as never);
-		renderWithQuery(SettingsPage);
+		renderWithQuery(GeneralTab);
 
 		const retention = await screen.findByLabelText(m.settings_retention());
 		await fireEvent.input(retention, { target: { value: '60' } });
@@ -156,7 +156,7 @@ describe('settings', () => {
 				llm_write_tools: ['snatcharr_trigger_run', 'snatcharr_delete_instance']
 			}
 		} as never);
-		renderWithQuery(SettingsPage);
+		renderWithQuery(GeneralTab);
 
 		const triggerBox = (await screen.findByLabelText(
 			m.settings_llm_tool_trigger_run()
@@ -192,7 +192,7 @@ describe('settings', () => {
 		const putSpy = vi.spyOn(api, 'PUT').mockResolvedValue({
 			data: sampleSettings
 		} as never);
-		renderWithQuery(SettingsPage);
+		renderWithQuery(GeneralTab);
 
 		const sonarrSearch = (await screen.findByLabelText(
 			`${m.settings_search_priority_preset()} (sonarr)`
@@ -224,7 +224,7 @@ describe('settings', () => {
 		const putSpy = vi.spyOn(api, 'PUT').mockResolvedValue({
 			data: sampleSettings
 		} as never);
-		const { container } = renderWithQuery(SettingsPage);
+		const { container } = renderWithQuery(GeneralTab);
 
 		const sonarrSearch = (await screen.findByLabelText(
 			`${m.settings_search_priority_preset()} (sonarr)`
@@ -278,7 +278,7 @@ describe('settings', () => {
 				]
 			}
 		} as never);
-		renderWithQuery(SettingsPage);
+		renderWithQuery(GeneralTab);
 
 		expect(await screen.findByText(m.settings_llm_scope_core_write())).toBeTruthy();
 		expect(screen.getByText(m.settings_llm_scope_admin_write())).toBeTruthy();
@@ -320,7 +320,7 @@ describe('settings', () => {
 	it('prevents submission when retention is outside allowed bounds', async () => {
 		stubGet(baseStubs);
 		const putSpy = vi.spyOn(api, 'PUT');
-		renderWithQuery(SettingsPage);
+		renderWithQuery(GeneralTab);
 
 		const retention = (await screen.findByLabelText(m.settings_retention())) as HTMLInputElement;
 		await fireEvent.input(retention, { target: { value: '0' } });
@@ -336,7 +336,7 @@ describe('settings', () => {
 	it('renders change password form and submits password change', async () => {
 		stubGet(baseStubs);
 		const postSpy = vi.spyOn(api, 'POST').mockResolvedValue({ data: undefined } as never);
-		renderWithQuery(SettingsPage);
+		renderWithQuery(GeneralTab);
 
 		expect(
 			await screen.findByRole('heading', { level: 2, name: m.change_password_title() })
@@ -362,7 +362,7 @@ describe('settings', () => {
 		vi.spyOn(api, 'POST').mockRejectedValue(
 			new ProblemError({ type: 'about:blank', status: 401, detail: 'invalid current password' })
 		);
-		renderWithQuery(SettingsPage);
+		renderWithQuery(GeneralTab);
 
 		const currentPass = await screen.findByLabelText(m.current_password());
 		const newPass = screen.getByLabelText(m.new_password());
@@ -382,7 +382,7 @@ describe('settings', () => {
 			'/notifications/channels': [sampleChannel],
 			'/notifications/rules': [sampleRule]
 		});
-		renderWithQuery(SettingsPage);
+		renderWithQuery(GeneralTab);
 
 		expect(
 			await screen.findByRole('heading', { level: 2, name: m.notifications_title() })
@@ -399,7 +399,7 @@ describe('settings', () => {
 			'/notifications/rules': []
 		});
 		const postSpy = vi.spyOn(api, 'POST').mockResolvedValue({ data: undefined } as never);
-		renderWithQuery(SettingsPage);
+		renderWithQuery(GeneralTab);
 
 		const testBtn = await screen.findByRole('button', { name: m.channel_test() });
 		await fireEvent.click(testBtn);
@@ -411,7 +411,7 @@ describe('settings', () => {
 	it('sends an Apprise channel with its notify URL, Basic Auth and trimmed tags', async () => {
 		stubGet(baseStubs);
 		const postSpy = vi.spyOn(api, 'POST').mockResolvedValue({ data: sampleChannel } as never);
-		renderWithQuery(SettingsPage);
+		renderWithQuery(GeneralTab);
 
 		const heading = await screen.findByRole('heading', { name: m.channel_add() });
 		const form = within(heading.closest('form') as HTMLElement);
@@ -442,7 +442,7 @@ describe('settings', () => {
 
 	it('shows the Apprise fields only for the Apprise kind', async () => {
 		stubGet(baseStubs);
-		renderWithQuery(SettingsPage);
+		renderWithQuery(GeneralTab);
 
 		await screen.findByRole('heading', { name: m.channel_add() });
 		expect(screen.queryByLabelText(m.channel_apprise_url())).toBeNull();
@@ -460,7 +460,7 @@ describe('settings', () => {
 			}
 		});
 		const putSpy = vi.spyOn(api, 'PUT').mockResolvedValue({ data: sampleSettings } as never);
-		renderWithQuery(SettingsPage);
+		renderWithQuery(GeneralTab);
 
 		const button = await screen.findByRole('button', { name: m.instance_save() });
 		await fireEvent.click(button);

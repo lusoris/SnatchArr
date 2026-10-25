@@ -16,7 +16,7 @@ import {
 	sampleQueuePolicy,
 	stubGet
 } from '#lib/testing/harness.js';
-import SettingsPage from '../../../routes/settings/+page.svelte';
+import GeneralTab from '../../../routes/system/GeneralTab.svelte';
 
 const openapiPath = path.resolve(import.meta.dirname, '../../../../../api/openapi/openapi.yaml');
 
@@ -176,8 +176,8 @@ describe('Field coverage against openapi.yaml', () => {
 			'/notifications/rules': []
 		});
 
-		const { container } = renderWithQuery(SettingsPage);
-		await screen.findByRole('heading', { level: 1 });
+		const { container } = renderWithQuery(GeneralTab);
+		await screen.findByRole('heading', { level: 2 });
 
 		const missing = checkFieldCoverage(container, expectedProps);
 		expect(missing).toEqual([]);

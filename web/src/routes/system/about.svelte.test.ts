@@ -11,7 +11,7 @@ import { getLocale } from '#lib/paraglide/runtime.js';
 import type { LicencesData } from '#lib/queries/licences.js';
 import { formatWhen } from '#lib/stamina.js';
 import { renderWithQuery, stubGet } from '#lib/testing/harness.js';
-import AboutPage from './+page.svelte';
+import AboutTab from './AboutTab.svelte';
 
 const sampleStatus = {
 	name: 'SnatchArr',
@@ -83,9 +83,11 @@ describe('about page', () => {
 	it('positive: renders heading, system status fields, licence link and third-party groups', async () => {
 		stubGet({ '/system/status': sampleStatus });
 		stubLicences(sampleLicences);
-		const { container } = renderWithQuery(AboutPage);
+		const { container } = renderWithQuery(AboutTab);
 
-		expect(await screen.findByRole('heading', { level: 1, name: m.about_title() })).toBeTruthy();
+		expect(
+			await screen.findByRole('heading', { level: 2, name: m.about_app_heading() })
+		).toBeTruthy();
 		expect(screen.getByText('SnatchArr')).toBeTruthy();
 		expect(screen.getByText('1.2.3')).toBeTruthy();
 		expect(screen.getByText('abcdef1234567890abcdef1234567890abcdef12')).toBeTruthy();
@@ -136,9 +138,11 @@ describe('about page', () => {
 	it('negative: fetch error shows message, status stays intact', async () => {
 		stubGet({ '/system/status': sampleStatus });
 		stubLicences(new Error('failed'));
-		renderWithQuery(AboutPage);
+		renderWithQuery(AboutTab);
 
-		expect(await screen.findByRole('heading', { level: 1, name: m.about_title() })).toBeTruthy();
+		expect(
+			await screen.findByRole('heading', { level: 2, name: m.about_app_heading() })
+		).toBeTruthy();
 		expect(screen.getByText('SnatchArr')).toBeTruthy();
 		expect(await screen.findByRole('alert')).toBeTruthy();
 	});
@@ -149,7 +153,7 @@ describe('about page', () => {
 			generatedBy: sampleLicences.generatedBy,
 			packages: []
 		});
-		renderWithQuery(AboutPage);
+		renderWithQuery(AboutTab);
 
 		expect(await screen.findByText(m.about_third_party_empty())).toBeTruthy();
 	});
@@ -166,9 +170,11 @@ describe('about page', () => {
 			}
 		});
 		stubLicences(sampleLicences);
-		renderWithQuery(AboutPage);
+		renderWithQuery(AboutTab);
 
-		expect(await screen.findByRole('heading', { level: 1, name: m.about_title() })).toBeTruthy();
+		expect(
+			await screen.findByRole('heading', { level: 2, name: m.about_app_heading() })
+		).toBeTruthy();
 		expect(screen.getByText('dev')).toBeTruthy();
 		expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(1);
 	});

@@ -4,26 +4,32 @@ SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import BrandMark from '#lib/components/BrandMark.svelte';
 	import { m } from '#lib/paraglide/messages.js';
-	import type { NavGroup } from './nav.js';
+	import { isRouteActive } from './nav.js';
 	import NavIcon from './NavIcon.svelte';
-	import NavGroups from './NavGroups.svelte';
 	import KofiLink from './KofiLink.svelte';
 	import NavFooter from './NavFooter.svelte';
 
 	interface Props {
 		open: boolean;
-		navGroups: NavGroup[];
 		onClose: () => void;
 		onLogout: () => void;
 		menuButtonEl: HTMLButtonElement | null;
 	}
 
-	const { open, navGroups, onClose, onLogout, menuButtonEl }: Props = $props();
+	const { open, onClose, onLogout, menuButtonEl }: Props = $props();
 
 	let dialogEl = $state<HTMLDialogElement | null>(null);
 	let closeButtonEl = $state<HTMLButtonElement | null>(null);
+
+	const drawerItems = [
+		{ href: '/automation', label: m.nav_automation(), icon: 'clock' },
+		{ href: '/connections', label: m.nav_connections(), icon: 'link' },
+		{ href: '/system', label: m.nav_system(), icon: 'settings' },
+		{ href: '/account', label: m.nav_account(), icon: 'user' }
+	] as const;
 
 	$effect(() => {
 		if (!dialogEl) return;
@@ -85,12 +91,22 @@ SPDX-License-Identifier: EUPL-1.2
 	</div>
 
 	<nav class="flex-1 overflow-y-auto px-3 py-4" aria-label={m.app_name()}>
-		<NavGroups
-			{navGroups}
-			onNavigate={onClose}
-			groupLabelClass="mb-2 px-3 text-[11px] font-bold tracking-wider text-subtle uppercase"
-			itemListClass="flex flex-col gap-1"
-		/>
+		<ul class="flex flex-col gap-1">
+			{#each drawerItems as item (item.href)}
+				{@const active = isRouteActive(page.url.pathname, item.href)}
+				<li>
+					<a
+						href={resolve(item.href)}
+						aria-current={active ? 'page' : undefined}
+						onclick={onClose}
+						class="nav-link flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium"
+					>
+						<NavIcon name={item.icon} size={16} class={active ? 'text-brand' : 'text-subtle'} />
+						<span>{item.label}</span>
+					</a>
+				</li>
+			{/each}
+		</ul>
 
 		<KofiLink onclick={onClose} />
 	</nav>
