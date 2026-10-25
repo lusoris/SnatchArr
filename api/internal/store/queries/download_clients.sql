@@ -4,10 +4,10 @@
 -- name: CreateDownloadClient :one
 INSERT INTO download_clients (
     id, instance_id, kind, name, base_url, username, secret_enc, enabled, source, remote_id,
-    max_active, bandwidth_budget_bps, created_at, updated_at
+    max_active, max_queued, bandwidth_budget_bps, created_at, updated_at
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-    $11, $12, $13, $13
+    $11, $12, $13, $14, $14
 )
 RETURNING *;
 
@@ -28,7 +28,7 @@ ORDER BY name, created_at;
 -- name: UpdateDownloadClient :one
 UPDATE download_clients
 SET instance_id = $2, kind = $3, name = $4, base_url = $5, username = $6, secret_enc = $7,
-    enabled = $8, max_active = $9, bandwidth_budget_bps = $10, updated_at = $11
+    enabled = $8, max_active = $9, max_queued = $10, bandwidth_budget_bps = $11, updated_at = $12
 WHERE id = $1
 RETURNING *;
 
@@ -59,15 +59,15 @@ DELETE FROM download_clients WHERE id = $1;
 -- name: UpsertConfigarrDownloadClient :one
 INSERT INTO download_clients (
     id, instance_id, kind, name, base_url, username, secret_enc, enabled, source, configarr_key,
-    max_active, bandwidth_budget_bps, created_at, updated_at
+    max_active, max_queued, bandwidth_budget_bps, created_at, updated_at
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, 'configarr', $9,
-    $10, $11, $12, $12
+    $10, $11, $12, $13, $13
 )
 ON CONFLICT (configarr_key) WHERE configarr_key IS NOT NULL DO UPDATE
 SET instance_id = EXCLUDED.instance_id, kind = EXCLUDED.kind, name = EXCLUDED.name,
     base_url = EXCLUDED.base_url, username = EXCLUDED.username, secret_enc = EXCLUDED.secret_enc,
-    enabled = EXCLUDED.enabled, max_active = EXCLUDED.max_active,
+    enabled = EXCLUDED.enabled, max_active = EXCLUDED.max_active, max_queued = EXCLUDED.max_queued,
     bandwidth_budget_bps = EXCLUDED.bandwidth_budget_bps, updated_at = EXCLUDED.updated_at
 RETURNING *, (xmax = 0) AS inserted;
 

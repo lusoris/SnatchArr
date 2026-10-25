@@ -78,6 +78,8 @@ func blockReason(c domain.DownloadClient, s Snapshot) (string, string) {
 		return snatch.GateClientPaused, fmt.Sprintf("download client %s is paused", c.Name)
 	case c.MaxActive > 0 && s.Active >= c.MaxActive:
 		return snatch.GateClientActiveLimit, fmt.Sprintf("download client %s has %d active downloads (limit %d)", c.Name, s.Active, c.MaxActive)
+	case c.MaxQueued > 0 && s.Queued >= c.MaxQueued:
+		return snatch.GateClientQueuedLimit, fmt.Sprintf("download client %s has %d queued downloads (limit %d)", c.Name, s.Queued, c.MaxQueued)
 	default:
 		return "", ""
 	}

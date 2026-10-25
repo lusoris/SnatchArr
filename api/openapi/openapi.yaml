@@ -2844,7 +2844,7 @@ components:
 
     DownloadClient:
       type: object
-      required: [id, kind, protocol, name, base_url, username, enabled, source, max_active, bandwidth_budget_bps, created_at, updated_at]
+      required: [id, kind, protocol, name, base_url, username, enabled, source, max_active, max_queued, bandwidth_budget_bps, created_at, updated_at]
       properties:
         id:
           type: string
@@ -2872,6 +2872,9 @@ components:
         max_active:
           type: integer
           description: Foreplay - defer snatches once this many downloads are active (0 = no limit)
+        max_queued:
+          type: integer
+          description: Foreplay - defer snatches once this many downloads are queued (0 = no limit)
         bandwidth_budget_bps:
           type: integer
           format: int64
@@ -2913,6 +2916,11 @@ components:
           type: boolean
           default: true
         max_active:
+          type: integer
+          minimum: 0
+          maximum: 1000
+          default: 0
+        max_queued:
           type: integer
           minimum: 0
           maximum: 1000

@@ -28,6 +28,7 @@ qbittorrent:
     password: !file qbit-pass.txt
     instance: sonarr/main
     max_active: 5
+    max_queued: 15
     bandwidth_budget_bps: 10485760
     enabled: true
 sabnzbd:
@@ -75,6 +76,14 @@ qbittorrent:
     unknown_setting: foo
 `
 
+	invalidMaxQueuedYAML := `
+qbittorrent:
+  main:
+    base_url: http://qbit:8080
+    password: pass
+    max_queued: 1001
+`
+
 	missingSecretYAML := `
 qbittorrent:
   missing_secret:
@@ -114,11 +123,11 @@ qbittorrent:
 				if qbit.BaseURL != "http://qbittorrent.media.svc:8080" || qbit.Username != "admin_qbit" || qbit.Secret != "qbit-secret-pass" {
 					t.Fatalf("unexpected qbit connection: %+v", qbit)
 				}
-				if qbit.InstanceKey != "sonarr/main" || qbit.MaxActive != 5 || qbit.BandwidthBudgetBPS != 10485760 || !qbit.Enabled {
+				if qbit.InstanceKey != "sonarr/main" || qbit.MaxActive != 5 || qbit.MaxQueued != 15 || qbit.BandwidthBudgetBPS != 10485760 || !qbit.Enabled {
 					t.Fatalf("unexpected qbit settings: %+v", qbit)
 				}
 				sab := res.Clients[1]
-				if sab.Key != "sabnzbd/main" || sab.Kind != domain.ClientSABnzbd || sab.Secret != "sabnzbd-secret-key" {
+				if sab.Key != "sabnzbd/main" || sab.Kind != domain.ClientSABnzbd || sab.Secret != "sabnzbd-secret-key" || sab.MaxQueued != 0 {
 					t.Fatalf("unexpected sab: %+v", sab)
 				}
 			},
@@ -149,6 +158,11 @@ qbittorrent:
 		{
 			name:    "negative_unknown_field",
 			content: unknownFieldYAML,
+			wantErr: true,
+		},
+		{
+			name:    "negative_max_queued_invalid",
+			content: invalidMaxQueuedYAML,
 			wantErr: true,
 		},
 		{

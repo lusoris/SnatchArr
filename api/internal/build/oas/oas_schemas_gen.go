@@ -1024,6 +1024,8 @@ type DownloadClient struct {
 	Source     DownloadClientSource   `json:"source"`
 	// Foreplay - defer snatches once this many downloads are active (0 = no limit).
 	MaxActive int `json:"max_active"`
+	// Foreplay - defer snatches once this many downloads are queued (0 = no limit).
+	MaxQueued int `json:"max_queued"`
 	// Foreplay - bytes per second the client may use before snatches are paced (0 = off).
 	BandwidthBudgetBps int64       `json:"bandwidth_budget_bps"`
 	LastCheckAt        OptDateTime `json:"last_check_at"`
@@ -1080,6 +1082,11 @@ func (s *DownloadClient) GetSource() DownloadClientSource {
 // GetMaxActive returns the value of MaxActive.
 func (s *DownloadClient) GetMaxActive() int {
 	return s.MaxActive
+}
+
+// GetMaxQueued returns the value of MaxQueued.
+func (s *DownloadClient) GetMaxQueued() int {
+	return s.MaxQueued
 }
 
 // GetBandwidthBudgetBps returns the value of BandwidthBudgetBps.
@@ -1157,6 +1164,11 @@ func (s *DownloadClient) SetMaxActive(val int) {
 	s.MaxActive = val
 }
 
+// SetMaxQueued sets the value of MaxQueued.
+func (s *DownloadClient) SetMaxQueued(val int) {
+	s.MaxQueued = val
+}
+
 // SetBandwidthBudgetBps sets the value of BandwidthBudgetBps.
 func (s *DownloadClient) SetBandwidthBudgetBps(val int64) {
 	s.BandwidthBudgetBps = val
@@ -1194,6 +1206,7 @@ type DownloadClientInput struct {
 	Secret             OptString `json:"secret"`
 	Enabled            OptBool   `json:"enabled"`
 	MaxActive          OptInt    `json:"max_active"`
+	MaxQueued          OptInt    `json:"max_queued"`
 	BandwidthBudgetBps OptInt64  `json:"bandwidth_budget_bps"`
 }
 
@@ -1235,6 +1248,11 @@ func (s *DownloadClientInput) GetEnabled() OptBool {
 // GetMaxActive returns the value of MaxActive.
 func (s *DownloadClientInput) GetMaxActive() OptInt {
 	return s.MaxActive
+}
+
+// GetMaxQueued returns the value of MaxQueued.
+func (s *DownloadClientInput) GetMaxQueued() OptInt {
+	return s.MaxQueued
 }
 
 // GetBandwidthBudgetBps returns the value of BandwidthBudgetBps.
@@ -1280,6 +1298,11 @@ func (s *DownloadClientInput) SetEnabled(val OptBool) {
 // SetMaxActive sets the value of MaxActive.
 func (s *DownloadClientInput) SetMaxActive(val OptInt) {
 	s.MaxActive = val
+}
+
+// SetMaxQueued sets the value of MaxQueued.
+func (s *DownloadClientInput) SetMaxQueued(val OptInt) {
+	s.MaxQueued = val
 }
 
 // SetBandwidthBudgetBps sets the value of BandwidthBudgetBps.
