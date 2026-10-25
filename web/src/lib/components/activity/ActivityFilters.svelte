@@ -69,25 +69,22 @@ SPDX-License-Identifier: EUPL-1.2
 				oninput={(e) => onupdate({ q: e.currentTarget.value }, true)}
 			/>
 		</div>
-		<!-- The wrapper hides the toggle at md+: .btn sets display outside the utility layer. -->
-		<div class="md:hidden">
-			<button
-				type="button"
-				class="btn btn-sm inline-flex items-center gap-1.5 rounded border border-line px-2.5 py-1 text-xs"
-				aria-expanded={disclosed}
-				onclick={() => (disclosed = !disclosed)}
-			>
-				<span>{m.activity_filter_toggle()}</span>
-				{#if activeDisclosedCount > 0}
-					<span
-						data-testid="filter-badge"
-						class="bg-surface-active rounded-full px-1.5 py-0.5 text-[10px] font-semibold text-fg"
-					>
-						{activeDisclosedCount}
-					</span>
-				{/if}
-			</button>
-		</div>
+		<button
+			type="button"
+			class="btn btn-sm inline-flex items-center gap-1.5 rounded border border-line md:hidden"
+			aria-expanded={disclosed}
+			onclick={() => (disclosed = !disclosed)}
+		>
+			<span>{m.activity_filter_toggle()}</span>
+			{#if activeDisclosedCount > 0}
+				<span
+					data-testid="filter-badge"
+					class="bg-surface-active rounded-full px-1.5 py-0.5 text-[10px] font-semibold text-fg"
+				>
+					{activeDisclosedCount}
+				</span>
+			{/if}
+		</button>
 	</div>
 
 	<div
@@ -169,7 +166,7 @@ SPDX-License-Identifier: EUPL-1.2
 	{#if hasActiveFilters}
 		<button
 			type="button"
-			class="btn btn-sm hover:text-foreground rounded border border-line px-2.5 py-1 text-xs text-subtle"
+			class="btn btn-sm hover:text-foreground rounded border border-line text-subtle"
 			onclick={onclear}
 		>
 			{m.activity_clear_filters()}

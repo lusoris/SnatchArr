@@ -91,7 +91,7 @@ SPDX-License-Identifier: EUPL-1.2
 		<button
 			bind:this={closeButtonEl}
 			type="button"
-			class="btn inline-flex h-8 min-h-0 w-8 items-center justify-center rounded border border-control p-0"
+			class="btn inline-flex h-11 min-h-11 w-11 items-center justify-center rounded border border-control p-0 md:h-8 md:min-h-0 md:w-8"
 			onclick={onClose}
 			aria-label={m.nav_close_menu()}
 		>

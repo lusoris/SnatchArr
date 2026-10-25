@@ -37,7 +37,7 @@ SPDX-License-Identifier: EUPL-1.2
 		{#if onOpenSearch}
 			<button
 				type="button"
-				class="btn inline-flex h-9 min-h-0 w-9 items-center justify-center rounded-md border border-control p-0"
+				class="btn inline-flex h-11 min-h-11 w-11 items-center justify-center rounded-md border border-control p-0 md:h-9 md:min-h-0 md:w-9"
 				onclick={onOpenSearch}
 				aria-label={m.nav_search()}
 			>
@@ -47,7 +47,7 @@ SPDX-License-Identifier: EUPL-1.2
 		<button
 			bind:this={menuButtonEl}
 			type="button"
-			class="btn inline-flex h-9 min-h-0 w-9 items-center justify-center rounded-md border border-control p-0"
+			class="btn inline-flex h-11 min-h-11 w-11 items-center justify-center rounded-md border border-control p-0 md:h-9 md:min-h-0 md:w-9"
 			onclick={onOpenDrawer}
 			aria-label={m.nav_open_menu()}
 			aria-expanded={drawerOpen}

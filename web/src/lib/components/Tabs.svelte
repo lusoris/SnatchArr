@@ -83,7 +83,7 @@ SPDX-License-Identifier: EUPL-1.2
 				aria-disabled={tab.disabled ? 'true' : undefined}
 				onclick={() => selectTab(tab.id)}
 				onkeydown={handleKeydown}
-				class="inline-flex items-center rounded-t-lg border-b-[3px] px-3.5 py-2 text-sm font-medium whitespace-nowrap transition-colors {isSelected
+				class="inline-flex min-h-11 items-center rounded-t-lg border-b-[3px] px-3.5 py-2 text-sm font-medium whitespace-nowrap transition-colors md:min-h-0 {isSelected
 					? 'border-brand bg-[var(--color-nav-active)] font-semibold text-[var(--color-nav-active-foreground)]'
 					: 'border-transparent text-subtle hover:bg-[var(--color-secondary)] hover:text-fg disabled:cursor-not-allowed disabled:opacity-50'}"
 			>
