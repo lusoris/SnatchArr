@@ -112,10 +112,12 @@ test.describe('authenticated: client-side legacy redirects', () => {
 			page.getByRole('heading', { level: 1, name: /Activity|Aktivität/i })
 		).toBeVisible();
 
-		// Log tab is omitted for viewer; history tab is active
-		await expect(page.getByRole('tab', { name: /Logs|Protokolle/i })).toHaveCount(0);
+		// Log tab is omitted for viewer; events/history tab is active
 		await expect(
-			page.getByRole('tab', { name: /History|Ereignisverlauf/i, selected: true })
+			page.getByRole('tab', { name: /Logs|Protokolle|Server log|Serverprotokoll/i })
+		).toHaveCount(0);
+		await expect(
+			page.getByRole('tab', { name: /Events|Ereignisse|History|Ereignisverlauf/i, selected: true })
 		).toBeVisible();
 	});
 });

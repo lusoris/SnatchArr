@@ -4,6 +4,7 @@ SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import ActivityFeed from '#lib/components/ActivityFeed.svelte';
 	import PreviewPanel from '#lib/components/PreviewPanel.svelte';
 	import RunList from '#lib/components/RunList.svelte';
 
@@ -14,3 +15,4 @@ SPDX-License-Identifier: EUPL-1.2
 
 <PreviewPanel {instanceId} />
 <RunList {instanceId} />
+<ActivityFeed fixedInstanceId={instanceId} />

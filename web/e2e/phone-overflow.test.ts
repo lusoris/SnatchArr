@@ -243,7 +243,7 @@ test('authenticated: phone overflow /activity', async ({ page }) => {
 
 	await page.goto('/activity');
 	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-	await expect(page.getByRole('grid')).toBeVisible();
+	await expect(page.getByRole('log')).toBeVisible();
 	await assertNoHorizontalOverflow(page, '/activity');
 });
 

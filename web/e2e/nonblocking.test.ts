@@ -150,4 +150,79 @@ test.describe('nonblocking', () => {
 		await expect(saveBtn).toBeDisabled({ timeout: 500 });
 		await expect(saveBtn).toBeEnabled({ timeout: 3000 });
 	});
+
+	test('activity events: delayed 10s API response shows skeleton, remains interactive, and 503 renders problem note', async ({
+		page
+	}) => {
+		await mockSettingsApi(page);
+		let requestCount = 0;
+		await page.route('**/api/v1/events*', async (route) => {
+			requestCount++;
+			if (requestCount === 1) {
+				await new Promise((r) => setTimeout(r, 10_000));
+			}
+			await route.fulfill({
+				status: 503,
+				contentType: 'application/problem+json',
+				body: JSON.stringify({
+					type: 'https://tools.ietf.org/html/rfc9457',
+					title: 'Service Unavailable',
+					status: 503,
+					detail: 'Events store unavailable'
+				})
+			});
+		});
+
+		await page.goto('/activity');
+
+		const nav = page.getByRole('navigation', { name: /SnatchArr/i }).first();
+		await expect(nav).toBeVisible({ timeout: 1000 });
+
+		const skeleton = page.locator('[data-testid="activity-skeleton"]').first();
+		await expect(skeleton).toBeVisible({ timeout: 1000 });
+
+		const automationLink = page.getByRole('link', { name: /Automation|Automatisierung/i }).first();
+		await automationLink.click();
+		await expect(page).toHaveURL(/\/automation/, { timeout: 1000 });
+
+		await page.goto('/activity');
+		const problem = page.getByRole('alert').first();
+		await expect(problem).toBeVisible({ timeout: 12_000 });
+	});
+
+	test('activity logs: delayed 10s API response shows skeleton, remains interactive, and 503 renders problem note', async ({
+		page
+	}) => {
+		await mockSettingsApi(page, { role: 'admin' });
+		let requestCount = 0;
+		await page.route('**/api/v1/logs*', async (route) => {
+			requestCount++;
+			if (requestCount === 1) {
+				await new Promise((r) => setTimeout(r, 10_000));
+			}
+			await route.fulfill({
+				status: 503,
+				contentType: 'application/problem+json',
+				body: JSON.stringify({
+					type: 'https://tools.ietf.org/html/rfc9457',
+					title: 'Service Unavailable',
+					status: 503,
+					detail: 'Logs unavailable'
+				})
+			});
+		});
+
+		await page.goto('/activity?source=log');
+
+		const skeleton = page.locator('[data-testid="skeleton"]').first();
+		await expect(skeleton).toBeVisible({ timeout: 1000 });
+
+		const instancesLink = page.getByRole('link', { name: /Instances|Instanzen/i }).first();
+		await instancesLink.click();
+		await expect(page).toHaveURL(/\/instances/, { timeout: 1000 });
+
+		await page.goto('/activity?source=log');
+		const problem = page.getByRole('alert').first();
+		await expect(problem).toBeVisible({ timeout: 12_000 });
+	});
 });

@@ -40,7 +40,7 @@ export const AUTH_ROUTES = [
 export const MIN_TABLES: Record<(typeof AUTH_ROUTES)[number], number> = {
 	'/': 0,
 	'/account': 1,
-	'/activity': 1,
+	'/activity': 0,
 	'/activity?source=live': 0,
 	'/activity?source=log': 0,
 	'/automation': 1,
@@ -501,7 +501,7 @@ export function measureContentSpan(): ContentSpan {
 	const padRight = parseFloat(mainStyle.paddingRight) || 0;
 	const mainWidth = Math.round(main.clientWidth - padLeft - padRight);
 
-	const selector = 'section, .card, table, form, [role="table"], ul, dl';
+	const selector = 'section, .card, table, form, [role="table"], [role="log"], ul, dl';
 	const elements = Array.from(main.querySelectorAll(selector));
 	let widest = 0;
 	for (const el of elements) {
@@ -529,17 +529,31 @@ export async function assertDesktopWidth(page: Page, route: string): Promise<voi
 	}
 }
 
-export const SCROLL_BUDGET_ROUTES = ['/', '/instances'] as const;
+export const SCROLL_BUDGET_ROUTES = [
+	'/',
+	'/instances',
+	'/activity',
+	'/activity?source=log',
+	'/instances/[id]/activity'
+] as const;
 
-export async function assertScrollBudget(page: Page, route: string): Promise<void> {
+export async function assertScrollBudget(
+	page: Page,
+	route: string,
+	maxBudget?: number
+): Promise<void> {
 	const { scrollHeight, innerHeight } = await page.evaluate(() => ({
 		scrollHeight: document.documentElement.scrollHeight,
 		innerHeight: window.innerHeight
 	}));
-	const limit = 1.25 * innerHeight;
+	const limit =
+		maxBudget ??
+		(route === '/activity' || route === '/activity?source=log'
+			? innerHeight + 2
+			: 1.25 * innerHeight);
 	expect(
 		scrollHeight,
-		`${route}: scroll height (${scrollHeight}px) exceeds 1.25 * innerHeight (${limit}px)`
+		`${route}: scroll height (${scrollHeight}px) exceeds budget (${limit}px)`
 	).toBeLessThanOrEqual(limit);
 }
 
@@ -551,7 +565,6 @@ export interface PendingRoute {
 }
 
 export const WIDTH_PENDING: Record<string, PendingRoute> = {
-	'/activity': { pr: 'C', expires: '2026-11-23', reason: 'metric finds no block' },
 	'/instances/[id]': { pr: 'D', expires: '2026-11-23', reason: 'narrow content wrapper' },
 	'/instances/[id]/memory': { pr: 'D', expires: '2026-11-23', reason: 'narrow content wrapper' },
 	'/instances/[id]/policy': { pr: 'D', expires: '2026-11-23', reason: 'narrow content wrapper' },

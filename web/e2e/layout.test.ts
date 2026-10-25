@@ -229,7 +229,10 @@ for (const [viewportName, viewport] of Object.entries(VIEWPORTS)) {
 			await mockUrlRows(page, pattern);
 			if (pattern === '/' && !served) {
 				await mockDashboardRoute(page);
-			} else if (pattern.startsWith('/activity') && !served) {
+			} else if (
+				(pattern.startsWith('/activity') || pattern === '/instances/[id]/activity') &&
+				!served
+			) {
 				await page.route('**/api/v1/events*', (route) =>
 					route.fulfill({
 						status: 200,
@@ -237,25 +240,26 @@ for (const [viewportName, viewport] of Object.entries(VIEWPORTS)) {
 						body: JSON.stringify(historyEvents)
 					})
 				);
-			} else if (pattern === '/instances/[id]/activity' && !served) {
-				await page.route('**/api/v1/runs?*', (route) =>
-					route.fulfill({
-						status: 200,
-						contentType: 'application/json',
-						body: JSON.stringify([
-							{
-								id: '00000000-0000-0000-0000-000000000010',
-								instance_id: instanceId(),
-								kind: 'missing',
-								status: 'completed',
-								dry_run: true,
-								started_at: '2026-10-21T06:19:00Z',
-								finished_at: '2026-10-21T06:20:00Z',
-								searched_count: 42
-							}
-						])
-					})
-				);
+				if (pattern === '/instances/[id]/activity') {
+					await page.route('**/api/v1/runs?*', (route) =>
+						route.fulfill({
+							status: 200,
+							contentType: 'application/json',
+							body: JSON.stringify([
+								{
+									id: '00000000-0000-0000-0000-000000000010',
+									instance_id: instanceId(),
+									kind: 'missing',
+									status: 'completed',
+									dry_run: true,
+									started_at: '2026-10-21T06:19:00Z',
+									finished_at: '2026-10-21T06:20:00Z',
+									searched_count: 42
+								}
+							])
+						})
+					);
+				}
 			} else if (pattern === '/instances/[id]/queue' && !served) {
 				await page.route('**/api/v1/instances/*/queue-strikes*', (route) =>
 					route.fulfill({
@@ -464,12 +468,23 @@ for (const pattern of SCROLL_BUDGET_ROUTES) {
 		if (pattern === '/' && !served) {
 			await mockDashboardRoute(page);
 		}
+		if (pattern in urlRowFixtures) {
+			await mockUrlRows(page, pattern as (typeof AUTH_ROUTES)[number]);
+		}
 		const route = pattern.replace('[id]', instanceId());
 		await page.goto(route);
 		await page.waitForLoadState('networkidle');
 		await assertScrollBudget(page, pattern);
 	});
 }
+
+test('authenticated: layout scroll budget planted negative', async ({ page }) => {
+	await page.setViewportSize({ width: 1280, height: 800 });
+	await page.setContent('<div style="height: 1000px">tall content</div>');
+	await expect(assertScrollBudget(page, '/activity')).rejects.toThrow(
+		/\/activity: scroll height \(\d+px\) exceeds budget/
+	);
+});
 
 test('authenticated: desktop width gate fixtures and planted negative', async ({ page }) => {
 	// Planted negative: centered narrow column (max-w-md = 28rem = 448px in 1000px main)
@@ -500,6 +515,21 @@ test('authenticated: desktop width gate fixtures and planted negative', async ({
 	);
 	await expect(assertDesktopWidth(page, '/test-boundary-fail')).rejects.toThrow(
 		'/test-boundary-fail: widest content block 749px is narrower than 75% of main (1000px)'
+	);
+
+	// role=log fixture (/activity): wide role=log passes, narrow role=log fails
+	await page.setContent(
+		'<main style="width:1000px;padding:0"><div role="log" style="width:1000px">logs</div></main>'
+	);
+	await expect(assertDesktopWidth(page, '/test-log-pass')).resolves.not.toThrow();
+
+	await page.setContent(
+		'<main style="width:1000px;padding:0"><div role="log" style="max-width:28rem;margin-inline:auto">logs</div></main>'
+	);
+	const measuredLog = await page.evaluate(measureContentSpan);
+	expect(measuredLog.ratio).toBeLessThan(0.75);
+	await expect(assertDesktopWidth(page, '/test-log-negative')).rejects.toThrow(
+		`/test-log-negative: widest content block ${measuredLog.widest}px is narrower than 75% of main (1000px)`
 	);
 
 	// Empty fixture: no matching block -> fails
