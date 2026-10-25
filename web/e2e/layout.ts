@@ -503,7 +503,8 @@ export function measureContentSpan(): ContentSpan {
 	const padRight = parseFloat(mainStyle.paddingRight) || 0;
 	const mainWidth = Math.round(main.clientWidth - padLeft - padRight);
 
-	const selector = 'section, .card, table, form, [role="table"], [role="log"], ul, dl';
+	const selector =
+		'section, .card, table, form, [role="table"], [role="grid"], [role="log"], ul, dl';
 	const elements = Array.from(main.querySelectorAll(selector));
 	let widest = 0;
 	for (const el of elements) {

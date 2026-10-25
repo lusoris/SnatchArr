@@ -46,8 +46,9 @@ describe('instance list', () => {
 		]);
 		expect(rows[0]?.[5]).toContain('0.4.21.182');
 		expect(screen.getByRole('columnheader', { name: m.instance_last_check() })).toBeTruthy();
-		const link = screen.getByRole('link', { name: 'Library Readarr' });
-		expect(link.getAttribute('href')).toBe(`/instances/${forkInstance.id}`);
+		const links = screen.getAllByRole('link', { name: 'Library Readarr' });
+		expect(links.length).toBeGreaterThan(0);
+		expect(links[0].getAttribute('href')).toBe(`/instances/${forkInstance.id}`);
 	});
 
 	it('shows failed connection test error in the table', async () => {
@@ -57,7 +58,10 @@ describe('instance list', () => {
 		const rows = await bodyRows();
 		expect(rows).toHaveLength(1);
 		expect(rows[0]?.[5]).toContain('Connection refused (ECONNREFUSED)');
-		expect(screen.getByRole('status').textContent).toContain('Connection refused (ECONNREFUSED)');
+		const statuses = screen.getAllByRole('status');
+		expect(statuses.some((s) => s.textContent?.includes('Connection refused (ECONNREFUSED)'))).toBe(
+			true
+		);
 	});
 
 	it('shows never tested state in the table', async () => {
@@ -67,7 +71,22 @@ describe('instance list', () => {
 		const rows = await bodyRows();
 		expect(rows).toHaveLength(1);
 		expect(rows[0]?.[5]).toBe(m.instance_never_tested());
-		expect(screen.getByText(m.instance_never_tested())).toBeTruthy();
+		expect(screen.getAllByText(m.instance_never_tested()).length).toBeGreaterThan(0);
+	});
+
+	it('shows stacked card list with instance details and delete button below md', async () => {
+		stubGet({ '/instances': [forkInstance] });
+		renderWithQuery(InstancesPage);
+
+		const list = await screen.findByRole('list', { name: m.nav_instances() });
+		expect(list).toBeTruthy();
+		const items = within(list).getAllByRole('listitem');
+		expect(items).toHaveLength(1);
+		expect(items[0].textContent).toContain('Library Readarr');
+		expect(items[0].textContent).toContain('readarr · Bookshelf');
+		expect(items[0].textContent).toContain('http://readarr.local:8787');
+		expect(items[0].textContent).toContain('manual');
+		expect(within(items[0]).getByRole('button', { name: m.instance_delete() })).toBeTruthy();
 	});
 
 	it('shows the table without a body row when there is no instance', async () => {

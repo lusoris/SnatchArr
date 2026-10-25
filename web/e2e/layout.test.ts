@@ -154,6 +154,29 @@ const overflowDashboardInstance = [
 	}
 ];
 
+const hyphenatedInstancesList = [
+	{
+		id: '00000000-0000-0000-0000-000000000001',
+		name: 'radarr-4k',
+		kind: 'radarr' as const,
+		base_url: 'http://radarr-4k.media.svc.cluster.local:7878',
+		source: 'configarr' as const,
+		enabled: true,
+		created_at: '2026-01-01T00:00:00Z',
+		updated_at: '2026-01-01T00:00:00Z'
+	},
+	{
+		id: '00000000-0000-0000-0000-000000000002',
+		name: 'sonarr-4k',
+		kind: 'sonarr' as const,
+		base_url: 'http://sonarr-4k.anime.svc.cluster.local:8989',
+		source: 'manual' as const,
+		enabled: true,
+		created_at: '2026-01-01T00:00:00Z',
+		updated_at: '2026-01-01T00:00:00Z'
+	}
+];
+
 const dashboardHourlyCaps = [
 	{
 		scope: 'instance' as const,
@@ -229,6 +252,13 @@ for (const [viewportName, viewport] of Object.entries(VIEWPORTS)) {
 			await mockUrlRows(page, pattern);
 			if (pattern === '/' && !served) {
 				await mockDashboardRoute(page);
+			} else if (pattern === '/instances' && !served) {
+				await page.route('**/api/v1/instances', (route) => {
+					if (route.request().method() !== 'GET') {
+						return route.fallback();
+					}
+					return route.fulfill(json(hyphenatedInstancesList));
+				});
 			} else if (
 				(pattern.startsWith('/activity') || pattern === '/instances/[id]/activity') &&
 				!served
@@ -530,6 +560,21 @@ test('authenticated: desktop width gate fixtures and planted negative', async ({
 	expect(measuredLog.ratio).toBeLessThan(0.75);
 	await expect(assertDesktopWidth(page, '/test-log-negative')).rejects.toThrow(
 		`/test-log-negative: widest content block ${measuredLog.widest}px is narrower than 75% of main (1000px)`
+	);
+
+	// role=grid fixture: wide role=grid passes, narrow role=grid fails
+	await page.setContent(
+		'<main style="width:1000px;padding:0"><div role="grid" style="width:1000px">grid</div></main>'
+	);
+	await expect(assertDesktopWidth(page, '/test-grid-pass')).resolves.not.toThrow();
+
+	await page.setContent(
+		'<main style="width:1000px;padding:0"><div role="grid" style="max-width:28rem;margin-inline:auto">grid</div></main>'
+	);
+	const measuredGrid = await page.evaluate(measureContentSpan);
+	expect(measuredGrid.ratio).toBeLessThan(0.75);
+	await expect(assertDesktopWidth(page, '/test-grid-negative')).rejects.toThrow(
+		`/test-grid-negative: widest content block ${measuredGrid.widest}px is narrower than 75% of main (1000px)`
 	);
 
 	// Empty fixture: no matching block -> fails

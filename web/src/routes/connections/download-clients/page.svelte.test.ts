@@ -69,7 +69,14 @@ describe('download-clients', () => {
 		expect(
 			screen.getByRole('heading', { level: 2, name: /qBittorrent Primary/ }).textContent
 		).toContain('qBittorrent Primary');
-		expect(screen.getByText('http://qbittorrent.local:8080')).toBeTruthy();
+		expect(
+			screen.getByText(
+				(_, el) =>
+					el?.tagName === 'SPAN' &&
+					el.hasAttribute('data-url') &&
+					el.textContent === 'http://qbittorrent.local:8080'
+			)
+		).toBeTruthy();
 		const statusText = screen.getByRole('status').textContent;
 		expect(statusText).toContain(m.dlclients_reachable());
 		expect(statusText).toContain(m.dlclients_active({ active: 2, queued: 1 }));

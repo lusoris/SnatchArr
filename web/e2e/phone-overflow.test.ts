@@ -91,7 +91,23 @@ test.beforeAll(async ({ request }) => {
 test('authenticated: phone overflow /instances', async ({ page }) => {
 	await page.goto('/instances');
 	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-	await expect(page.getByRole('table')).toBeVisible();
+	await expect(page.getByRole('list', { name: 'Instances' })).toBeVisible();
+	await assertNoHorizontalOverflow(page, '/instances');
+});
+
+test('authenticated: phone overflow /instances at 375px', async ({ page }) => {
+	await page.setViewportSize({ width: 375, height: 812 });
+	await page.goto('/instances');
+	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+	await expect(page.getByRole('list', { name: 'Instances' })).toBeVisible();
+	await assertNoHorizontalOverflow(page, '/instances');
+});
+
+test('authenticated: phone overflow /instances at 414px', async ({ page }) => {
+	await page.setViewportSize({ width: 414, height: 896 });
+	await page.goto('/instances');
+	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+	await expect(page.getByRole('list', { name: 'Instances' })).toBeVisible();
 	await assertNoHorizontalOverflow(page, '/instances');
 });
 
