@@ -619,5 +619,9 @@
 	"about_third_party_empty": "Keine Drittanbieter-Lizenzen erfasst.",
 	"about_third_party_toggle_text": "Lizenztext",
 	"about_third_party_visit_link": "Projektseite",
-	"about_third_party_visit_aria": "{name}-Projektseite besuchen (öffnet in neuem Tab)"
+	"about_third_party_visit_aria": "{name}-Projektseite besuchen (öffnet in neuem Tab)",
+	"page_not_found_title": "404 - Seite nicht gefunden",
+	"page_not_found_text": "Die angeforderte Seite ist nicht verfügbar oder das entsprechende Modul ist deaktiviert.",
+	"page_not_found_back": "Zurück zur Übersicht",
+	"module_disabled_detail": "Modul {module} ist deaktiviert"
 }

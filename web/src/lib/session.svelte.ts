@@ -77,6 +77,7 @@ class Session {
 		} finally {
 			this.user = null;
 			this.state = 'anonymous';
+			queryClient.clear();
 		}
 	}
 

@@ -7,22 +7,27 @@ SPDX-License-Identifier: EUPL-1.2
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import { QueryClientProvider } from '@tanstack/svelte-query';
+	import { QueryClientProvider, setQueryClientContext } from '@tanstack/svelte-query';
 	import { Toaster } from 'svelte-sonner';
 	import { toastPreset } from '@sveltesentio/ui/toast';
+	import { createSentioQuery } from '@sveltesentio/query';
+	import { ProblemError } from '@sveltesentio/core';
 	import { onMount } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
-	import { getNavItems } from '#lib/components/shell/nav.js';
+	import { getNavItems, isRouteDisabled } from '#lib/components/shell/nav.js';
 	import BottomBar from '#lib/components/shell/BottomBar.svelte';
 	import CommandDialog from '#lib/components/shell/CommandDialog.svelte';
 	import NavDrawer from '#lib/components/shell/NavDrawer.svelte';
 	import Sidebar from '#lib/components/shell/Sidebar.svelte';
 	import TopBar from '#lib/components/shell/TopBar.svelte';
 	import { m } from '#lib/paraglide/messages.js';
-	import { PUBLIC_ROUTES } from '#lib/api/client.js';
+	import { api, PUBLIC_ROUTES } from '#lib/api/client.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
-	import { queryClient } from '#lib/query.js';
+	import { keys, queryClient } from '#lib/query.js';
 	import { session } from '#lib/session.svelte.js';
+
+	setQueryClientContext(queryClient);
 
 	const { children } = $props();
 	const toast = toastPreset('dashboard');
@@ -36,7 +41,41 @@ SPDX-License-Identifier: EUPL-1.2
 	let cmdOpen = $state(false);
 	let menuButtonEl = $state<HTMLButtonElement | null>(null);
 
-	const navItems = $derived(getNavItems());
+	const modulesQuery = createSentioQuery(() => ({
+		queryKey: keys.modules,
+		enabled: session.state === 'authenticated',
+		queryFn: async () => {
+			const res = await api.GET('/system/modules');
+			return res.data ?? [];
+		}
+	}));
+
+	const activeModules = $derived.by(() => {
+		const list = modulesQuery.data;
+		if (!list || modulesQuery.isError) {
+			return new SvelteSet<string>();
+		}
+		const set = new SvelteSet<string>();
+		for (const mod of list) {
+			if (mod.enabled) {
+				set.add(mod.id);
+			}
+		}
+		return set;
+	});
+
+	const navItems = $derived(getNavItems(activeModules));
+	const routeGuard = $derived(isRouteDisabled(page.url.pathname, activeModules));
+
+	const disabledRouteProblem = $derived.by(() => {
+		if (!routeGuard.disabled) return null;
+		return new ProblemError({
+			type: 'urn:problem:not-found',
+			status: 404,
+			title: m.page_not_found_title(),
+			detail: m.module_disabled_detail({ module: routeGuard.moduleId ?? '' })
+		});
+	});
 
 	function openDrawer(opener?: HTMLButtonElement): void {
 		if (opener) {
@@ -105,13 +144,19 @@ SPDX-License-Identifier: EUPL-1.2
 		<div class="min-h-screen bg-bg text-fg">
 			<TopBar {drawerOpen} onOpenDrawer={openDrawer} onOpenSearch={openSearch} bind:menuButtonEl />
 
-			<Sidebar {navItems} onLogout={logout} onOpenSearch={openSearch} />
+			<Sidebar {navItems} {activeModules} onLogout={logout} onOpenSearch={openSearch} />
 
-			<NavDrawer open={drawerOpen} onClose={closeDrawer} onLogout={logout} {menuButtonEl} />
+			<NavDrawer
+				open={drawerOpen}
+				onClose={closeDrawer}
+				onLogout={logout}
+				{menuButtonEl}
+				{activeModules}
+			/>
 
-			<BottomBar onOpenDrawer={openDrawer} />
+			<BottomBar onOpenDrawer={openDrawer} {activeModules} />
 
-			<CommandDialog {navItems} bind:open={cmdOpen} />
+			<CommandDialog {navItems} {activeModules} bind:open={cmdOpen} />
 
 			<main
 				id="main"
@@ -134,6 +179,17 @@ SPDX-License-Identifier: EUPL-1.2
 							</div>
 						{:else if session.error}
 							<ProblemNote error={session.error} />
+						{:else if routeGuard.disabled}
+							<div class="flex flex-col gap-4 py-8" data-testid="not-found-view">
+								<h1 class="text-2xl font-bold tracking-tight">{m.page_not_found_title()}</h1>
+								<p class="text-sm text-subtle">{m.page_not_found_text()}</p>
+								<ProblemNote error={disabledRouteProblem} />
+								<div>
+									<a href={resolve('/')} class="btn btn-outline inline-flex items-center gap-2">
+										{m.page_not_found_back()}
+									</a>
+								</div>
+							</div>
 						{:else}
 							{@render children()}
 						{/if}

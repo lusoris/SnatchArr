@@ -102,9 +102,16 @@ export async function mockSignedInApi(
 	await page.route('**/api/v1/auth/sso', (route) =>
 		route.fulfill(json({ oidc: false, proxy: false }))
 	);
-	for (const path of ['instances', 'hourly-caps', 'prowlarr/status']) {
+	for (const path of ['instances', 'hourly-caps', 'prowlarr/status', 'system/modules']) {
 		await page.route(`**/api/v1/${path}`, (route) => route.fulfill(json([])));
 	}
+}
+
+export async function mockModulesApi(
+	page: Page,
+	modules: Array<{ id: string; enabled: boolean }>
+): Promise<void> {
+	await page.route('**/api/v1/system/modules', (route) => route.fulfill(json(modules)));
 }
 
 export async function mockInstancePolicyApi(
