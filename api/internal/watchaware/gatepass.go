@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -211,7 +212,7 @@ func (s *Service) recordNewGateSeries(
 	state, gateSeason, decisions := EvaluateOnAdd(item, cfg, exemptTagID, hasExemptTag)
 	heldSeasons := deriveHeldSeasons(state, decisions)
 
-	return s.st.Tx(ctx, func(q *sqlcgen.Queries) error {
+	err := s.st.Tx(ctx, func(q *sqlcgen.Queries) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -230,29 +231,104 @@ func (s *Service) recordNewGateSeries(
 			return fmt.Errorf("upsert series %d: %w", item.ID, store.MapError(uErr))
 		}
 
-		for _, d := range decisions {
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-			decID, idErr := s.ids.NewUUID()
-			if idErr != nil {
-				return fmt.Errorf("generate decision id: %w", idErr)
-			}
-			if dErr := q.UpsertGateDecision(ctx, sqlcgen.UpsertGateDecisionParams{
-				ID:           decID,
-				InstanceID:   instID,
-				SeriesID:     sID,
-				SeasonNumber: int32(d.Season), // #nosec G115 -- season fits in int32
-				Action:       d.Action,
-				WouldAct:     d.WouldAct,
-				Reason:       d.Reason,
-				DecidedAt:    now,
-			}); dErr != nil {
-				return fmt.Errorf("upsert decision %d season %d: %w", item.ID, d.Season, store.MapError(dErr))
-			}
-		}
-		return nil
+		return s.insertDecisions(ctx, q, instID, sID, decisions, now)
 	})
+	if err != nil {
+		return err
+	}
+
+	if state == GateStateGated && len(decisions) > 0 {
+		s.emitGateDecidedEvent(ctx, instID, item, decisions, now)
+	}
+	return nil
+}
+
+func (s *Service) insertDecisions(
+	ctx context.Context,
+	q *sqlcgen.Queries,
+	instID uuid.UUID,
+	sID int32,
+	decisions []GateDecision,
+	now time.Time,
+) error {
+	for _, d := range decisions {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		decID, idErr := s.ids.NewUUID()
+		if idErr != nil {
+			return fmt.Errorf("generate decision id: %w", idErr)
+		}
+		if dErr := q.UpsertGateDecision(ctx, sqlcgen.UpsertGateDecisionParams{
+			ID:           decID,
+			InstanceID:   instID,
+			SeriesID:     sID,
+			SeasonNumber: int32(d.Season), // #nosec G115 -- season fits in int32
+			Action:       d.Action,
+			WouldAct:     d.WouldAct,
+			Reason:       d.Reason,
+			DecidedAt:    now,
+		}); dErr != nil {
+			return fmt.Errorf("upsert decision %d season %d: %w", sID, d.Season, store.MapError(dErr))
+		}
+	}
+	return nil
+}
+
+func formatGateDecidedDetail(decisions []GateDecision) string {
+	if len(decisions) == 0 {
+		return ""
+	}
+	action := decisions[0].Action
+	wouldAct := decisions[0].WouldAct
+	seasons := make([]int, 0, len(decisions))
+	for _, d := range decisions {
+		seasons = append(seasons, d.Season)
+	}
+	slices.Sort(seasons)
+	seasonStrs := make([]string, 0, len(seasons))
+	for _, sn := range seasons {
+		seasonStrs = append(seasonStrs, strconv.Itoa(sn))
+	}
+	seasonWord := "seasons"
+	if len(seasons) == 1 {
+		seasonWord = "season"
+	}
+	prefix := ""
+	if !wouldAct {
+		prefix = "would "
+	}
+	return fmt.Sprintf("%s%s %s %s", prefix, action, seasonWord, strings.Join(seasonStrs, ", "))
+}
+
+func (s *Service) emitGateDecidedEvent(
+	ctx context.Context,
+	instID uuid.UUID,
+	item GateSeries,
+	decisions []GateDecision,
+	now time.Time,
+) {
+	if s.rec == nil {
+		return
+	}
+	detail := formatGateDecidedDetail(decisions)
+	ev := domain.Event{
+		InstanceID: instID,
+		Timestamp:  now,
+		Level:      "info",
+		Type:       "watchaware_gate_decided",
+		EntityType: "series",
+		EntityID:   int64(item.ID),
+		Title:      item.Title,
+		Detail:     detail,
+	}
+	if err := s.rec.Record(ctx, ev); err != nil {
+		s.logger.WarnContext(ctx, "watchaware: record gate decided event failed",
+			slog.String("instance_id", instID.String()),
+			slog.Int("series_id", item.ID),
+			slog.Any("error", err),
+		)
+	}
 }
 
 func (s *Service) processIncremental(

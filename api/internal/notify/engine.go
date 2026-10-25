@@ -188,6 +188,8 @@ func (e *Engine) ruleMatches(ctx context.Context, rule domain.NotificationRule, 
 		return e.matchStreak(ctx, rule, ev)
 	case domain.RuleSeerrRequestSnatched:
 		return e.matchSeerr(ev)
+	case domain.RuleWatchawareGateDecided:
+		return ev.Type == "watchaware_gate_decided"
 	default:
 		return false
 	}

@@ -23,7 +23,9 @@ The following optional modules are registered:
   tools at `/api/v1/mcp` ([ADR-0021](adr/0021-llm-access-module.md)).
 - **Watch-Aware Modes (`watchaware`)**: reads watch state from Jellyfin and Emby. The
   season gate and removal modes it feeds are planned in
-  [ADR-0024](adr/0024-watch-aware-modes.md).
+  [ADR-0024](adr/0024-watch-aware-modes.md). When enabled, the **Automation** view exposes
+  a **Season gate** tab (`/automation?tab=season-gate`) displaying evaluated series and
+  decisions. Decisions emit the `watchaware_gate_decided` event and notification rule trigger.
 
 ## Enabling and disabling modules
 

@@ -6445,6 +6445,8 @@ func (s *NotificationRuleEventKind) Decode(d *jx.Decoder) error {
 		*s = NotificationRuleEventKindStaminaExhausted
 	case NotificationRuleEventKindSeerrRequestSnatched:
 		*s = NotificationRuleEventKindSeerrRequestSnatched
+	case NotificationRuleEventKindWatchawareGateDecided:
+		*s = NotificationRuleEventKindWatchawareGateDecided
 	default:
 		*s = NotificationRuleEventKind(v)
 	}

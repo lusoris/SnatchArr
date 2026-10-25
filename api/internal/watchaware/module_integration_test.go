@@ -66,7 +66,7 @@ func setupTestEnv(ctx context.Context, t *testing.T) *testEnv {
 	}
 
 	logger := slog.New(slog.DiscardHandler)
-	svc := watchaware.NewService(st, enc, clk, ids, logger, modulesSvc, nil, nil)
+	svc := watchaware.NewService(st, enc, clk, ids, logger, modulesSvc, nil, nil, nil)
 
 	return &testEnv{
 		st:         st,

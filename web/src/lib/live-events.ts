@@ -23,6 +23,7 @@ export const LIVE_EVENTS = [
 	'queue_item_removed',
 	'queue_item_imported',
 	'queue_item_import_failed',
+	'watchaware_gate_decided',
 	// recorded by the API itself
 	'run_queued',
 	'snatch_deferred',

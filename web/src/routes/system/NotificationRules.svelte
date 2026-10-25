@@ -58,6 +58,8 @@ SPDX-License-Identifier: EUPL-1.2
 				return m.event_kind_stamina_exhausted();
 			case 'seerr_request_snatched':
 				return m.event_kind_seerr_request_snatched();
+			case 'watchaware_gate_decided':
+				return m.event_kind_watchaware_gate_decided();
 			default:
 				return kind;
 		}
@@ -162,6 +164,7 @@ SPDX-License-Identifier: EUPL-1.2
 			<option value="instance_unreachable">{m.event_kind_instance_unreachable()}</option>
 			<option value="stamina_exhausted">{m.event_kind_stamina_exhausted()}</option>
 			<option value="seerr_request_snatched">{m.event_kind_seerr_request_snatched()}</option>
+			<option value="watchaware_gate_decided">{m.event_kind_watchaware_gate_decided()}</option>
 		</select>
 	</Field>
 	<Field id="rule-threshold" label={m.rule_threshold()}>

@@ -16,18 +16,37 @@ SPDX-License-Identifier: EUPL-1.2
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import ScheduleForm from '#lib/components/ScheduleForm.svelte';
 	import ScheduleTable from '#lib/components/ScheduleTable.svelte';
+	import SeasonGatePanel from '#lib/components/SeasonGatePanel.svelte';
 	import Tabs, { type Tab } from '#lib/components/Tabs.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { keys } from '#lib/query.js';
 	import { session } from '#lib/session.svelte.js';
 
 	type Schedule = components['schemas']['Schedule'];
-	type AutomationTabKey = 'schedules' | 'caps';
+	type AutomationTabKey = 'schedules' | 'caps' | 'season-gate';
 
-	const tabs: Tab<AutomationTabKey>[] = [
+	const modulesQuery = createSentioQuery(() => ({
+		queryKey: keys.modules,
+		enabled: session.state === 'authenticated',
+		queryFn: async () => {
+			const res = await api.GET('/system/modules');
+			return res.data ?? [];
+		}
+	}));
+
+	const isWatchAwareEnabled = $derived.by(() => {
+		const list = modulesQuery.data;
+		if (!list || modulesQuery.isError) {
+			return false;
+		}
+		return list.some((mod) => mod.id === 'watchaware' && mod.enabled);
+	});
+
+	const tabs = $derived<Tab<AutomationTabKey>[]>([
 		{ id: 'schedules', label: m.automation_tab_schedules() },
-		{ id: 'caps', label: m.automation_tab_caps() }
-	];
+		{ id: 'caps', label: m.automation_tab_caps() },
+		{ id: 'season-gate', label: m.watchaware_gate_tab(), hidden: !isWatchAwareEnabled }
+	]);
 
 	const schedules = createSentioQuery({
 		queryKey: keys.schedules,
@@ -42,7 +61,13 @@ SPDX-License-Identifier: EUPL-1.2
 	let editingSchedule = $state<Schedule | null>(null);
 
 	const tabParam = $derived(page.url.searchParams.get('tab'));
-	const activeTab = $derived<AutomationTabKey>(tabParam === 'caps' ? 'caps' : 'schedules');
+	const activeTab = $derived<AutomationTabKey>(
+		tabParam === 'season-gate' && isWatchAwareEnabled
+			? 'season-gate'
+			: tabParam === 'caps'
+				? 'caps'
+				: 'schedules'
+	);
 
 	function handleTabChange(newTab: AutomationTabKey): void {
 		const newUrl = new URL(page.url.href);
@@ -89,6 +114,8 @@ SPDX-License-Identifier: EUPL-1.2
 			{/if}
 		{:else if current === 'caps'}
 			<CapsPresetsForm />
+		{:else if current === 'season-gate'}
+			<SeasonGatePanel instances={instances.data ?? []} />
 		{/if}
 	{/snippet}
 </Tabs>

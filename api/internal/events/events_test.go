@@ -34,6 +34,7 @@ func TestEventName(t *testing.T) {
 		{"EVENT_TYPE_QUEUE_ITEM_REMOVED", "queue_item_removed"},
 		{"EVENT_TYPE_QUEUE_ITEM_IMPORTED", "queue_item_imported"},
 		{"EVENT_TYPE_QUEUE_ITEM_IMPORT_FAILED", "queue_item_import_failed"},
+		{"EVENT_TYPE_WATCHAWARE_GATE_DECIDED", "watchaware_gate_decided"},
 		{"already_lower", "already_lower"},
 		{"", ""},
 	}

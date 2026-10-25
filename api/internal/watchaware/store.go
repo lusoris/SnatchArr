@@ -22,6 +22,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
 	"github.com/lusoris/SnatchArr/api/internal/modules"
+	"github.com/lusoris/SnatchArr/api/internal/snatch"
 	"github.com/lusoris/SnatchArr/api/internal/store"
 	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
 )
@@ -101,6 +102,11 @@ type instanceManager interface {
 	Credentials(ctx context.Context, instID uuid.UUID) (instances.Credentials, error)
 }
 
+// EventRecorder records domain events.
+type EventRecorder interface {
+	Record(ctx context.Context, e domain.Event) error
+}
+
 // Service manages watchaware sources, watch-state persistence (Sink), and sync passes.
 type Service struct {
 	st       *store.Store
@@ -111,6 +117,7 @@ type Service struct {
 	mod      moduleManager
 	inst     instanceManager
 	reader   SeriesReader
+	rec      EventRecorder
 	mu       sync.Mutex
 	lastPass time.Time
 }
@@ -125,10 +132,15 @@ func NewService(
 	mod *modules.Service,
 	inst *instances.Service,
 	reader SeriesReader,
+	rec *snatch.Recorder,
 ) *Service {
 	var im instanceManager
 	if inst != nil {
 		im = inst
+	}
+	var er EventRecorder
+	if rec != nil {
+		er = rec
 	}
 	return &Service{
 		st:     st,
@@ -139,6 +151,7 @@ func NewService(
 		mod:    mod,
 		inst:   im,
 		reader: reader,
+		rec:    er,
 	}
 }
 
@@ -150,6 +163,11 @@ func (s *Service) SetSeriesReader(r SeriesReader) {
 // SetInstanceManager sets the instance manager, primarily for testing.
 func (s *Service) SetInstanceManager(im instanceManager) {
 	s.inst = im
+}
+
+// SetEventRecorder sets the event recorder, primarily for testing.
+func (s *Service) SetEventRecorder(rec EventRecorder) {
+	s.rec = rec
 }
 
 func clampGateLimit(limit int) int {
