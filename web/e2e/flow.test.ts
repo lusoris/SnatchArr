@@ -340,9 +340,7 @@ test('download clients: create, edit and delete one through the UI', async ({ pa
 	const renamed = 'e2e-qbittorrent-renamed';
 	const save = page.getByRole('button', { name: /^(save|speichern)$/i });
 	const card = (title: string) =>
-		page
-			.getByRole('listitem')
-			.filter({ has: page.getByRole('heading', { level: 2, name: title }) });
+		page.locator('tr, [role="listitem"]').filter({ has: page.locator(`text="${title}"`) });
 	type Stored = { id: string; name: string; username: string; secret?: string };
 	async function stored(): Promise<Stored[]> {
 		const res = await page.request.get('/api/v1/download-clients');

@@ -48,7 +48,7 @@ SPDX-License-Identifier: EUPL-1.2
 	}
 </script>
 
-<section class="card max-w-xl" aria-labelledby={id}>
+<section class="card w-full" aria-labelledby={id}>
 	<h2 {id} class="mb-3 text-lg font-semibold">{title}</h2>
 	<form
 		bind:this={form}

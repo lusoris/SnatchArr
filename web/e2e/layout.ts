@@ -622,6 +622,7 @@ export const SCROLL_BUDGET_ROUTES = [
 	'/',
 	'/automation',
 	'/automation?tab=caps',
+	'/connections',
 	'/instances',
 	'/instances/[id]',
 	'/activity',
@@ -649,6 +650,25 @@ export async function assertScrollBudget(
 	).toBeLessThanOrEqual(limit);
 }
 
+export async function assertTableFits(page: Page, tableSelector = 'table'): Promise<void> {
+	const fit = await page.evaluate((sel) => {
+		const table = document.querySelector<HTMLElement>(sel);
+		if (!table) return null;
+		const container = table.closest<HTMLElement>('.overflow-x-auto') ?? table.parentElement;
+		if (!container) return null;
+		return {
+			scrollWidth: table.scrollWidth,
+			clientWidth: container.clientWidth
+		};
+	}, tableSelector);
+
+	expect(fit, `table matching "${tableSelector}" not found in page`).not.toBeNull();
+	expect(
+		fit!.scrollWidth,
+		`table (${fit!.scrollWidth}px) exceeds container (${fit!.clientWidth}px)`
+	).toBeLessThanOrEqual(fit!.clientWidth);
+}
+
 export interface PendingRoute {
 	pr: 'C' | 'D' | 'E' | 'F' | 'G';
 	/** ISO date (YYYY-MM-DD); past it the entry fails like a missing one. */
@@ -657,7 +677,49 @@ export interface PendingRoute {
 }
 
 export const WIDTH_PENDING: Record<string, PendingRoute> = {
-	'/connections/configarr': { pr: 'F', expires: '2026-11-23', reason: 'narrow content wrapper' },
 	'/system': { pr: 'G', expires: '2026-11-23', reason: 'narrow content wrapper' },
 	'/system?tab=about': { pr: 'G', expires: '2026-11-23', reason: 'narrow content wrapper' }
 };
+
+export interface TouchTargetOffender {
+	selector: string;
+	height: number;
+}
+
+export function measureTouchTargets(): TouchTargetOffender[] {
+	const selector = '.btn, .input, .select, .nav-link, .subtab-link, [role="tab"]';
+	const elements = Array.from(document.querySelectorAll(selector));
+	const offenders: TouchTargetOffender[] = [];
+	for (const el of elements) {
+		if (
+			typeof el.checkVisibility === 'function' &&
+			!el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })
+		) {
+			continue;
+		}
+		const rect = el.getBoundingClientRect();
+		if (rect.width <= 1 || rect.height <= 1) continue;
+		const height = Math.round(rect.height * 2) / 2;
+		if (height < 44) {
+			const tag = el.tagName.toLowerCase();
+			const cls = (el.getAttribute('class') ?? '').trim().replace(/\s+/g, ' ');
+			const name =
+				el.getAttribute('aria-label') ??
+				el.getAttribute('title') ??
+				(el.textContent ? el.textContent.trim().replace(/\s+/g, ' ').slice(0, 40) : '');
+			const desc = `${tag}${cls ? `.${cls.split(' ').join('.')}` : ''}${name ? ` "${name}"` : ''}`;
+			offenders.push({ selector: desc, height });
+		}
+	}
+	return offenders;
+}
+
+export async function assertTouchTargetHeights(page: Page, route: string): Promise<void> {
+	const offenders = await page.evaluate(measureTouchTargets);
+	if (offenders.length > 0) {
+		const summary = offenders.map((o) => `  - ${o.selector}: ${o.height}px < 44px`).join('\n');
+		throw new Error(
+			`${route}: touch target height < 44px on phone (${offenders.length} element(s)):\n${summary}`
+		);
+	}
+}

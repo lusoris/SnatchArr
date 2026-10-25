@@ -305,7 +305,7 @@ SPDX-License-Identifier: EUPL-1.2
 					role="tab"
 					id="tab-events"
 					aria-selected={activeSource === 'events'}
-					class="btn-segmented rounded-md px-3 py-1 text-xs font-medium transition {activeSource ===
+					class="btn-segmented min-h-11 rounded-md px-3 py-1 text-xs font-medium transition md:min-h-0 {activeSource ===
 					'events'
 						? 'bg-card font-semibold shadow-xs'
 						: 'hover:text-foreground text-subtle'}"
@@ -317,7 +317,7 @@ SPDX-License-Identifier: EUPL-1.2
 						role="tab"
 						id="tab-log"
 						aria-selected={activeSource === 'log'}
-						class="btn-segmented rounded-md px-3 py-1 text-xs font-medium transition {activeSource ===
+						class="btn-segmented min-h-11 rounded-md px-3 py-1 text-xs font-medium transition md:min-h-0 {activeSource ===
 						'log'
 							? 'bg-card font-semibold shadow-xs'
 							: 'hover:text-foreground text-subtle'}"
@@ -327,7 +327,7 @@ SPDX-License-Identifier: EUPL-1.2
 			</div>
 			<button
 				type="button"
-				class="btn btn-sm inline-flex items-center gap-1.5 rounded border border-line px-2.5 py-1 text-xs font-medium {followLive
+				class="btn btn-sm inline-flex items-center gap-1.5 rounded border border-line font-medium {followLive
 					? 'bg-surface font-semibold'
 					: 'text-subtle'}"
 				aria-pressed={followLive}

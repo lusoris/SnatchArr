@@ -11,6 +11,7 @@ import type { components } from '#lib/api/schema.js';
 import { m } from '#lib/paraglide/messages.js';
 import {
 	cancelDeleteInCard,
+	expectStackedLabels,
 	fill,
 	forkInstance,
 	renderWithQuery,
@@ -90,7 +91,7 @@ describe('download-clients', () => {
 		expect(option.textContent).toBe(forkInstance.name);
 	});
 
-	it('renders download client cards with min-w-0 and wrapping heading', async () => {
+	it('labels every table cell for the stacked phone layout', async () => {
 		stubGet({
 			'/download-clients': [sampleClient],
 			'/download-clients/status': [sampleStatus],
@@ -98,12 +99,8 @@ describe('download-clients', () => {
 		});
 		renderWithQuery(DownloadClientsPage);
 
-		const heading = await screen.findByRole('heading', { level: 2, name: /qBittorrent Primary/ });
-		const card = heading.closest('li');
-		expect(card?.classList.contains('min-w-0')).toBe(true);
-		expect(
-			heading.classList.contains('flex-wrap') || heading.classList.contains('break-words')
-		).toBe(true);
+		const table = (await screen.findByRole('table')) as HTMLElement;
+		expectStackedLabels(table);
 	});
 
 	it('announces the problem document when the clients query fails', async () => {
@@ -183,7 +180,7 @@ const listStubs = {
 /** The card of the sample client, where its Edit, Test and Delete buttons live. */
 async function sampleCard() {
 	const heading = await screen.findByRole('heading', { level: 2, name: /qBittorrent Primary/ });
-	return within(heading.closest('li') as HTMLElement);
+	return within(heading.closest('tr, li') as HTMLElement);
 }
 
 /** Stubs list GET endpoints and renders the page with a PUT spy. */
@@ -448,7 +445,7 @@ describe('download-clients management', () => {
 
 		const card = within(
 			(await screen.findByRole('heading', { level: 2, name: /Configarr qBit/ })).closest(
-				'li'
+				'tr, li'
 			) as HTMLElement
 		);
 		const editBtn = card.getByRole('button', { name: m.action_edit() }) as HTMLButtonElement;

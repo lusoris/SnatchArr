@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 import { expect, test } from '@playwright/test';
-import { mockInstancePolicyApi, mockSettingsApi } from './mocks.js';
+import { mockInstancePolicyApi, mockSettingsApi, mockSignedInApi } from './mocks.js';
 
 const testInstanceId = '00000000-0000-0000-0000-000000000001';
 
@@ -271,5 +271,50 @@ test.describe('nonblocking', () => {
 		await page.goto('/activity?source=log');
 		const problem = page.getByRole('alert').first();
 		await expect(problem).toBeVisible({ timeout: 12_000 });
+	});
+
+	test('connections hub: planted 10s delay then 503 on one service status endpoint leaves nav responsive and other cards render', async ({
+		page
+	}) => {
+		await mockSignedInApi(page, 'admin');
+
+		let requestCount = 0;
+		await page.route('**/api/v1/prowlarr/status*', async (route) => {
+			requestCount++;
+			if (requestCount === 1) {
+				await new Promise((r) => setTimeout(r, 10_000));
+			}
+			await route.fulfill({
+				status: 503,
+				contentType: 'application/problem+json',
+				body: JSON.stringify({
+					type: 'https://tools.ietf.org/html/rfc9457',
+					title: 'Service Unavailable',
+					status: 503,
+					detail: 'Prowlarr status unreachable'
+				})
+			});
+		});
+
+		await page.goto('/connections');
+
+		// 1. Shell nav and header are responsive within 1000 ms
+		const nav = page.getByRole('navigation', { name: /SnatchArr/i }).first();
+		await expect(nav).toBeVisible({ timeout: 1000 });
+
+		// 2. Other cards render while prowlarr/status is delayed
+		const dlHeading = page.getByRole('heading', { name: /Download clients/i });
+		await expect(dlHeading).toBeVisible({ timeout: 1000 });
+
+		// 3. Nav click changes URL within 1000 ms
+		const instancesLink = page.getByRole('link', { name: /Instances|Instanzen/i }).first();
+		await instancesLink.click();
+		await expect(page).toHaveURL(/\/instances/, { timeout: 1000 });
+
+		// 4. Return to /connections: 503 renders ProblemNote on Prowlarr card while others remain rendered
+		await page.goto('/connections');
+		const problem = page.locator('.problem-note, [role="alert"]').first();
+		await expect(problem).toBeVisible({ timeout: 12_000 });
+		await expect(dlHeading).toBeVisible();
 	});
 });

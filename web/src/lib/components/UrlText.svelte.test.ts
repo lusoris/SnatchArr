@@ -18,6 +18,7 @@ describe('UrlText', () => {
 
 		// Verifies accessible plain text and copy/paste yields exact URL without extra characters
 		expect(span?.textContent).toBe(url);
+		expect(span?.getAttribute('title')).toBe(url);
 
 		const wbrs = container.querySelectorAll('wbr');
 		// 7 segments means 6 <wbr> elements
@@ -29,6 +30,14 @@ describe('UrlText', () => {
 		const radarrSpan = Array.from(nowrapSpans).find((s) => s.textContent === 'radarr-4k');
 		expect(radarrSpan).toBeTruthy();
 		expect(radarrSpan?.classList.contains('whitespace-nowrap')).toBe(true);
+	});
+
+	it('positive: custom title overrides default URL title attribute', () => {
+		const url = 'http://127.0.0.1:9091';
+		const { container } = render(UrlText, { props: { url, title: 'Custom Tooltip' } });
+
+		const span = container.querySelector('[data-url]');
+		expect(span?.getAttribute('title')).toBe('Custom Tooltip');
 	});
 
 	it('negative: renders plain host without hyphenated segments', () => {

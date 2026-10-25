@@ -18,7 +18,7 @@ SPDX-License-Identifier: EUPL-1.2
 	<label for={id} class="font-medium text-subtle">{m.language()}</label>
 	<select
 		{id}
-		class="select h-8 min-h-0 w-24 rounded border border-control bg-bg px-2 text-xs"
+		class="select h-11 min-h-11 w-24 rounded border border-control bg-bg px-2 text-xs md:h-8 md:min-h-0"
 		value={getLocale()}
 		onchange={changeLocale}
 	>

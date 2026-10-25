@@ -73,6 +73,7 @@ describe('LinkCard', () => {
 		expect(screen.getByText('1.2.3')).toBeTruthy();
 		expect(screen.getByTestId('status-extra')).toBeTruthy();
 		expect(screen.getByTestId('extra-action')).toBeTruthy();
+		expect(container.querySelector('[data-status="ok"]')).toBeTruthy();
 
 		await fireEvent.click(screen.getByRole('button', { name: m.action_edit() }));
 		expect(onedit).toHaveBeenCalledTimes(1);
@@ -95,14 +96,15 @@ describe('LinkCard', () => {
 		};
 
 		signIn('viewer');
-		renderCard({
+		const { container } = renderCard({
 			link: linkWithoutCheck,
 			onedit: vi.fn(),
 			ontest: vi.fn(),
 			ondelete: vi.fn()
 		});
 
-		expect(screen.getByText(m.instance_never_tested())).toBeTruthy();
+		expect(screen.getAllByText(m.instance_never_tested()).length).toBeGreaterThanOrEqual(1);
+		expect(container.querySelector('[data-status="idle"]')).toBeTruthy();
 		expect(screen.queryByRole('button', { name: m.action_edit() })).toBeNull();
 		expect(screen.queryByRole('button', { name: m.action_test() })).toBeNull();
 		expect(screen.queryByRole('button', { name: m.action_delete() })).toBeNull();
@@ -116,7 +118,7 @@ describe('LinkCard', () => {
 		};
 
 		signIn('admin');
-		renderCard({
+		const { container } = renderCard({
 			link: errorLink,
 			onedit: vi.fn(),
 			ontest: vi.fn(),
@@ -125,7 +127,8 @@ describe('LinkCard', () => {
 			deletePending: true
 		});
 
-		expect(screen.getByText('connection timeout')).toBeTruthy();
+		expect(screen.getAllByText('connection timeout').length).toBeGreaterThanOrEqual(1);
+		expect(container.querySelector('[data-status="danger"]')).toBeTruthy();
 		const testBtn = screen.getByRole('button', { name: m.action_test() }) as HTMLButtonElement;
 		expect(testBtn.disabled).toBe(true);
 		const deleteBtn = screen.getByRole('button', { name: m.action_delete() }) as HTMLButtonElement;
