@@ -8432,6 +8432,297 @@ func (s *UserRole) UnmarshalText(data []byte) error {
 	}
 }
 
+// Ref: #/components/schemas/WatchawareGateDecision
+type WatchawareGateDecision struct {
+	ID           uuid.UUID                    `json:"id"`
+	InstanceID   uuid.UUID                    `json:"instance_id"`
+	SeriesID     int                          `json:"series_id"`
+	SeasonNumber int                          `json:"season_number"`
+	Action       WatchawareGateDecisionAction `json:"action"`
+	WouldAct     bool                         `json:"would_act"`
+	Reason       string                       `json:"reason"`
+	DecidedAt    time.Time                    `json:"decided_at"`
+}
+
+// GetID returns the value of ID.
+func (s *WatchawareGateDecision) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetInstanceID returns the value of InstanceID.
+func (s *WatchawareGateDecision) GetInstanceID() uuid.UUID {
+	return s.InstanceID
+}
+
+// GetSeriesID returns the value of SeriesID.
+func (s *WatchawareGateDecision) GetSeriesID() int {
+	return s.SeriesID
+}
+
+// GetSeasonNumber returns the value of SeasonNumber.
+func (s *WatchawareGateDecision) GetSeasonNumber() int {
+	return s.SeasonNumber
+}
+
+// GetAction returns the value of Action.
+func (s *WatchawareGateDecision) GetAction() WatchawareGateDecisionAction {
+	return s.Action
+}
+
+// GetWouldAct returns the value of WouldAct.
+func (s *WatchawareGateDecision) GetWouldAct() bool {
+	return s.WouldAct
+}
+
+// GetReason returns the value of Reason.
+func (s *WatchawareGateDecision) GetReason() string {
+	return s.Reason
+}
+
+// GetDecidedAt returns the value of DecidedAt.
+func (s *WatchawareGateDecision) GetDecidedAt() time.Time {
+	return s.DecidedAt
+}
+
+// SetID sets the value of ID.
+func (s *WatchawareGateDecision) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetInstanceID sets the value of InstanceID.
+func (s *WatchawareGateDecision) SetInstanceID(val uuid.UUID) {
+	s.InstanceID = val
+}
+
+// SetSeriesID sets the value of SeriesID.
+func (s *WatchawareGateDecision) SetSeriesID(val int) {
+	s.SeriesID = val
+}
+
+// SetSeasonNumber sets the value of SeasonNumber.
+func (s *WatchawareGateDecision) SetSeasonNumber(val int) {
+	s.SeasonNumber = val
+}
+
+// SetAction sets the value of Action.
+func (s *WatchawareGateDecision) SetAction(val WatchawareGateDecisionAction) {
+	s.Action = val
+}
+
+// SetWouldAct sets the value of WouldAct.
+func (s *WatchawareGateDecision) SetWouldAct(val bool) {
+	s.WouldAct = val
+}
+
+// SetReason sets the value of Reason.
+func (s *WatchawareGateDecision) SetReason(val string) {
+	s.Reason = val
+}
+
+// SetDecidedAt sets the value of DecidedAt.
+func (s *WatchawareGateDecision) SetDecidedAt(val time.Time) {
+	s.DecidedAt = val
+}
+
+type WatchawareGateDecisionAction string
+
+const (
+	WatchawareGateDecisionActionUnmonitor WatchawareGateDecisionAction = "unmonitor"
+	WatchawareGateDecisionActionPromote   WatchawareGateDecisionAction = "promote"
+)
+
+// AllValues returns all WatchawareGateDecisionAction values.
+func (WatchawareGateDecisionAction) AllValues() []WatchawareGateDecisionAction {
+	return []WatchawareGateDecisionAction{
+		WatchawareGateDecisionActionUnmonitor,
+		WatchawareGateDecisionActionPromote,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s WatchawareGateDecisionAction) MarshalText() ([]byte, error) {
+	switch s {
+	case WatchawareGateDecisionActionUnmonitor:
+		return []byte(s), nil
+	case WatchawareGateDecisionActionPromote:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *WatchawareGateDecisionAction) UnmarshalText(data []byte) error {
+	switch WatchawareGateDecisionAction(data) {
+	case WatchawareGateDecisionActionUnmonitor:
+		*s = WatchawareGateDecisionActionUnmonitor
+		return nil
+	case WatchawareGateDecisionActionPromote:
+		*s = WatchawareGateDecisionActionPromote
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/WatchawareGateSeries
+type WatchawareGateSeries struct {
+	InstanceID      uuid.UUID                 `json:"instance_id"`
+	SeriesID        int                       `json:"series_id"`
+	TvdbID          int                       `json:"tvdb_id"`
+	Title           string                    `json:"title"`
+	GateSeason      int                       `json:"gate_season"`
+	State           WatchawareGateSeriesState `json:"state"`
+	AddedBeforeGate bool                      `json:"added_before_gate"`
+	HeldSeasons     []int                     `json:"held_seasons"`
+	UpdatedAt       time.Time                 `json:"updated_at"`
+}
+
+// GetInstanceID returns the value of InstanceID.
+func (s *WatchawareGateSeries) GetInstanceID() uuid.UUID {
+	return s.InstanceID
+}
+
+// GetSeriesID returns the value of SeriesID.
+func (s *WatchawareGateSeries) GetSeriesID() int {
+	return s.SeriesID
+}
+
+// GetTvdbID returns the value of TvdbID.
+func (s *WatchawareGateSeries) GetTvdbID() int {
+	return s.TvdbID
+}
+
+// GetTitle returns the value of Title.
+func (s *WatchawareGateSeries) GetTitle() string {
+	return s.Title
+}
+
+// GetGateSeason returns the value of GateSeason.
+func (s *WatchawareGateSeries) GetGateSeason() int {
+	return s.GateSeason
+}
+
+// GetState returns the value of State.
+func (s *WatchawareGateSeries) GetState() WatchawareGateSeriesState {
+	return s.State
+}
+
+// GetAddedBeforeGate returns the value of AddedBeforeGate.
+func (s *WatchawareGateSeries) GetAddedBeforeGate() bool {
+	return s.AddedBeforeGate
+}
+
+// GetHeldSeasons returns the value of HeldSeasons.
+func (s *WatchawareGateSeries) GetHeldSeasons() []int {
+	return s.HeldSeasons
+}
+
+// GetUpdatedAt returns the value of UpdatedAt.
+func (s *WatchawareGateSeries) GetUpdatedAt() time.Time {
+	return s.UpdatedAt
+}
+
+// SetInstanceID sets the value of InstanceID.
+func (s *WatchawareGateSeries) SetInstanceID(val uuid.UUID) {
+	s.InstanceID = val
+}
+
+// SetSeriesID sets the value of SeriesID.
+func (s *WatchawareGateSeries) SetSeriesID(val int) {
+	s.SeriesID = val
+}
+
+// SetTvdbID sets the value of TvdbID.
+func (s *WatchawareGateSeries) SetTvdbID(val int) {
+	s.TvdbID = val
+}
+
+// SetTitle sets the value of Title.
+func (s *WatchawareGateSeries) SetTitle(val string) {
+	s.Title = val
+}
+
+// SetGateSeason sets the value of GateSeason.
+func (s *WatchawareGateSeries) SetGateSeason(val int) {
+	s.GateSeason = val
+}
+
+// SetState sets the value of State.
+func (s *WatchawareGateSeries) SetState(val WatchawareGateSeriesState) {
+	s.State = val
+}
+
+// SetAddedBeforeGate sets the value of AddedBeforeGate.
+func (s *WatchawareGateSeries) SetAddedBeforeGate(val bool) {
+	s.AddedBeforeGate = val
+}
+
+// SetHeldSeasons sets the value of HeldSeasons.
+func (s *WatchawareGateSeries) SetHeldSeasons(val []int) {
+	s.HeldSeasons = val
+}
+
+// SetUpdatedAt sets the value of UpdatedAt.
+func (s *WatchawareGateSeries) SetUpdatedAt(val time.Time) {
+	s.UpdatedAt = val
+}
+
+type WatchawareGateSeriesState string
+
+const (
+	WatchawareGateSeriesStateGated           WatchawareGateSeriesState = "gated"
+	WatchawareGateSeriesStateExemptTag       WatchawareGateSeriesState = "exempt_tag"
+	WatchawareGateSeriesStateBeforeGate      WatchawareGateSeriesState = "before_gate"
+	WatchawareGateSeriesStateFilesBeyondGate WatchawareGateSeriesState = "files_beyond_gate"
+)
+
+// AllValues returns all WatchawareGateSeriesState values.
+func (WatchawareGateSeriesState) AllValues() []WatchawareGateSeriesState {
+	return []WatchawareGateSeriesState{
+		WatchawareGateSeriesStateGated,
+		WatchawareGateSeriesStateExemptTag,
+		WatchawareGateSeriesStateBeforeGate,
+		WatchawareGateSeriesStateFilesBeyondGate,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s WatchawareGateSeriesState) MarshalText() ([]byte, error) {
+	switch s {
+	case WatchawareGateSeriesStateGated:
+		return []byte(s), nil
+	case WatchawareGateSeriesStateExemptTag:
+		return []byte(s), nil
+	case WatchawareGateSeriesStateBeforeGate:
+		return []byte(s), nil
+	case WatchawareGateSeriesStateFilesBeyondGate:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *WatchawareGateSeriesState) UnmarshalText(data []byte) error {
+	switch WatchawareGateSeriesState(data) {
+	case WatchawareGateSeriesStateGated:
+		*s = WatchawareGateSeriesStateGated
+		return nil
+	case WatchawareGateSeriesStateExemptTag:
+		*s = WatchawareGateSeriesStateExemptTag
+		return nil
+	case WatchawareGateSeriesStateBeforeGate:
+		*s = WatchawareGateSeriesStateBeforeGate
+		return nil
+	case WatchawareGateSeriesStateFilesBeyondGate:
+		*s = WatchawareGateSeriesStateFilesBeyondGate
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
 // Ref: #/components/schemas/WatchawareSource
 type WatchawareSource struct {
 	ID   uuid.UUID            `json:"id"`

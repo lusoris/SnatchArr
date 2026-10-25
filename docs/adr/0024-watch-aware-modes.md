@@ -181,6 +181,19 @@ The storage-free part of this slice shipped in [#602](https://github.com/lusoris
 - Gate: `make api-verify`, `make web-verify`.
 - Switch off: gate switch off (default); observe mode is the default and writes nothing.
 
+Slice 2 lands in two parts:
+
+- 2a, the Sonarr side.
+  - The gate on add and the exemptions, with decisions recorded and nothing written to Sonarr.
+  - The settings live under the key `gate` in the watch-aware module's `modules.config`, as ADR-0025 fixes for module config.
+  - Migration `000031_watchaware_gate`. The table `watchaware_gate_baselines` marks the first pass for each instance. That pass records every existing series as `before_gate` in one transaction, so a series that is already in Sonarr when the gate is switched on is never gated.
+  - The held seasons are stored on the series row, so pruning the decision log after 30 days keeps them.
+  - Read endpoints `GET /watchaware/gate/series` and `GET /watchaware/gate/decisions`.
+  - Packages: `gate.go` (pure) and `gatepass.go`.
+- 2b, the rest of Slice 2.
+  - Promotion from watch data, the SPA view, the SSE and notification event, and the Paraglide keys.
+  - Promotion has to map a media-server series to its Sonarr series by TVDB id. goenvoy `mediaserver/jellyfin/v3.1.0` and `mediaserver/emby/v3.1.0` carry no `ProviderIds` on `BaseItemDto` yet, so 2b waits for that goenvoy release (see Follow-ups).
+
 ### Slice 3: season gate in act mode
 
 - Scope: carry out the recorded decisions against Sonarr, and let an admin release all seasons of a series.
@@ -235,6 +248,7 @@ The four open questions of the first draft were answered on 2026-10-23:
 - [x] goenvoy: added `JellyfinUserID` and `JellyfinUsername` to `User` in `arr/seerr/v1.6.0` for the `requester` rule ([goenvoy#173](https://github.com/golusoris/goenvoy/pull/173)).
 - [x] goenvoy: added collection writes (`CreateCollection`, `AddToCollection`, `RemoveFromCollection`) in `mediaserver/jellyfin/v3.1.0` for "leaving soon" ([goenvoy#173](https://github.com/golusoris/goenvoy/pull/173)).
 - [x] Implementation plan: Slice 1 backend completed (persistence, HTTP API under `x-module` watchaware, leader loop ticking quiescent while module off; ADR-0025 Slice 5); season gate slices 2-3 and SPA follow in later slices.
+- [ ] goenvoy: add `ProviderIds` to `BaseItemDto` in `mediaserver/jellyfin` and `mediaserver/emby`, which season-gate promotion (Slice 2b) needs to map a media-server series to its Sonarr series.
 - [x] Docs: name Maintainerr as an alternative for removal until remove-when-seen ships ([docs/roadmap.md](../roadmap.md#watch-aware-modes)).
 
 ## References

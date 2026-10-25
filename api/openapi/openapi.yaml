@@ -1812,6 +1812,69 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
 
+  /watchaware/gate/series:
+    get:
+      tags: [watchaware]
+      operationId: listWatchawareGateSeries
+      x-module: watchaware
+      summary: List watch-aware gate series state for an instance
+      parameters:
+        - name: instance_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        "200":
+          description: Gate series list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WatchawareGateSeries"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /watchaware/gate/decisions:
+    get:
+      tags: [watchaware]
+      operationId: listWatchawareGateDecisions
+      x-module: watchaware
+      summary: List watch-aware gate decisions
+      parameters:
+        - name: instance_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        "200":
+          description: Gate decisions list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WatchawareGateDecision"
+        default:
+          $ref: "#/components/responses/Problem"
+
 components:
   securitySchemes:
     cookieAuth:
@@ -3816,5 +3879,75 @@ components:
           type: integer
         last_error:
           type: string
+
+    WatchawareGateSeries:
+      type: object
+      required:
+        - instance_id
+        - series_id
+        - tvdb_id
+        - title
+        - gate_season
+        - state
+        - added_before_gate
+        - held_seasons
+        - updated_at
+      properties:
+        instance_id:
+          type: string
+          format: uuid
+        series_id:
+          type: integer
+        tvdb_id:
+          type: integer
+        title:
+          type: string
+        gate_season:
+          type: integer
+        state:
+          type: string
+          enum: [gated, exempt_tag, before_gate, files_beyond_gate]
+        added_before_gate:
+          type: boolean
+        held_seasons:
+          type: array
+          items:
+            type: integer
+        updated_at:
+          type: string
+          format: date-time
+
+    WatchawareGateDecision:
+      type: object
+      required:
+        - id
+        - instance_id
+        - series_id
+        - season_number
+        - action
+        - would_act
+        - reason
+        - decided_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        instance_id:
+          type: string
+          format: uuid
+        series_id:
+          type: integer
+        season_number:
+          type: integer
+        action:
+          type: string
+          enum: [unmonitor, promote]
+        would_act:
+          type: boolean
+        reason:
+          type: string
+        decided_at:
+          type: string
+          format: date-time
 
 

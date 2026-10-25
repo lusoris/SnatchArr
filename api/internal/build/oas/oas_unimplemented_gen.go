@@ -585,6 +585,24 @@ func (UnimplementedHandler) ListSeerrRequests(ctx context.Context) (r []SeerrReq
 	return r, ht.ErrNotImplemented
 }
 
+// ListWatchawareGateDecisions implements listWatchawareGateDecisions operation.
+//
+// List watch-aware gate decisions.
+//
+// GET /watchaware/gate/decisions
+func (UnimplementedHandler) ListWatchawareGateDecisions(ctx context.Context, params ListWatchawareGateDecisionsParams) (r []WatchawareGateDecision, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ListWatchawareGateSeries implements listWatchawareGateSeries operation.
+//
+// List watch-aware gate series state for an instance.
+//
+// GET /watchaware/gate/series
+func (UnimplementedHandler) ListWatchawareGateSeries(ctx context.Context, params ListWatchawareGateSeriesParams) (r []WatchawareGateSeries, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // ListWatchawareSources implements listWatchawareSources operation.
 //
 // List configured watch-aware sources.

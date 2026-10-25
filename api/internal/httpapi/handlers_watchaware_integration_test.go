@@ -285,3 +285,50 @@ func TestWatchawareRoutes_Boundary_ToggleOffOnLive(t *testing.T) {
 		t.Errorf("res3 status = %d, want 404", res3.statusCode)
 	}
 }
+
+func TestWatchawareRoutes_GateEndpoints(t *testing.T) {
+	t.Parallel()
+	f := newRouterFixture(t)
+	setupFixtureStubs(f)
+	_ = completeInitialSetup(t, f)
+	adminCsrf := getAdminCsrfToken(t, f)
+
+	// 1. Off -> 404
+	instID := uuid.New().String()
+	resOff1 := doHTTP(t, f.client, http.MethodGet, f.srv.URL+PathPrefix+"/watchaware/gate/series?instance_id="+instID, "", nil)
+	if resOff1.statusCode != http.StatusNotFound {
+		t.Errorf("resOff1 status = %d, want 404", resOff1.statusCode)
+	}
+	resOff2 := doHTTP(t, f.client, http.MethodGet, f.srv.URL+PathPrefix+"/watchaware/gate/decisions", "", nil)
+	if resOff2.statusCode != http.StatusNotFound {
+		t.Errorf("resOff2 status = %d, want 404", resOff2.statusCode)
+	}
+
+	// 2. Enable watchaware
+	enableRes := doHTTP(t, f.client, http.MethodPut, f.srv.URL+PathPrefix+"/system/modules/"+domain.ModuleWatchAware, adminCsrf, map[string]any{"enabled": true})
+	if enableRes.statusCode != http.StatusOK {
+		t.Fatalf("enable module status = %d, want 200", enableRes.statusCode)
+	}
+
+	// 3. GET gate series missing instance_id -> 400
+	resBad := doHTTP(t, f.client, http.MethodGet, f.srv.URL+PathPrefix+"/watchaware/gate/series", "", nil)
+	if resBad.statusCode != http.StatusBadRequest {
+		t.Errorf("resBad status = %d, want 400", resBad.statusCode)
+	}
+
+	// 4. GET gate series valid instance_id -> 200
+	resSeries := doHTTP(t, f.client, http.MethodGet, f.srv.URL+PathPrefix+"/watchaware/gate/series?instance_id="+instID, "", nil)
+	if resSeries.statusCode != http.StatusOK {
+		t.Errorf("resSeries status = %d, want 200", resSeries.statusCode)
+	}
+
+	// 5. GET gate decisions with and without instance_id -> 200
+	resDec1 := doHTTP(t, f.client, http.MethodGet, f.srv.URL+PathPrefix+"/watchaware/gate/decisions", "", nil)
+	if resDec1.statusCode != http.StatusOK {
+		t.Errorf("resDec1 status = %d, want 200", resDec1.statusCode)
+	}
+	resDec2 := doHTTP(t, f.client, http.MethodGet, f.srv.URL+PathPrefix+"/watchaware/gate/decisions?instance_id="+instID+"&limit=50", "", nil)
+	if resDec2.statusCode != http.StatusOK {
+		t.Errorf("resDec2 status = %d, want 200", resDec2.statusCode)
+	}
+}

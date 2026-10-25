@@ -1237,6 +1237,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/watchaware/gate/series": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List watch-aware gate series state for an instance */
+        get: operations["listWatchawareGateSeries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/watchaware/gate/decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List watch-aware gate decisions */
+        get: operations["listWatchawareGateDecisions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2220,6 +2254,34 @@ export interface components {
             enabled_sources: number;
             total_watches: number;
             last_error?: string;
+        };
+        WatchawareGateSeries: {
+            /** Format: uuid */
+            instance_id: string;
+            series_id: number;
+            tvdb_id: number;
+            title: string;
+            gate_season: number;
+            /** @enum {string} */
+            state: "gated" | "exempt_tag" | "before_gate" | "files_beyond_gate";
+            added_before_gate: boolean;
+            held_seasons: number[];
+            /** Format: date-time */
+            updated_at: string;
+        };
+        WatchawareGateDecision: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            instance_id: string;
+            series_id: number;
+            season_number: number;
+            /** @enum {string} */
+            action: "unmonitor" | "promote";
+            would_act: boolean;
+            reason: string;
+            /** Format: date-time */
+            decided_at: string;
         };
     };
     responses: {
@@ -4466,6 +4528,54 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WatchawareSyncStatus"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listWatchawareGateSeries: {
+        parameters: {
+            query: {
+                instance_id: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Gate series list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchawareGateSeries"][];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listWatchawareGateDecisions: {
+        parameters: {
+            query?: {
+                instance_id?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Gate decisions list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchawareGateDecision"][];
                 };
             };
             default: components["responses"]["Problem"];

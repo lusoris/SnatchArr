@@ -46,6 +46,7 @@ func NewTicker(svc *Service, clk clock.Clock, m *metrics.Metrics) *Ticker {
 // Module provides the Service, its Ticker, and registers the ticker in the leader_loops fx group.
 var Module = fx.Module("snatcharr.watchaware",
 	fx.Provide(
+		NewGoenvoySeriesReader,
 		NewService,
 		NewTicker,
 	),
@@ -136,15 +137,7 @@ func (s *Service) recordResults(ctx context.Context, namedSources []Named, syncE
 	}
 }
 
-// Tick executes a single scheduled synchronization pass.
-func (s *Service) Tick(ctx context.Context) error {
-	// (a) and (b): module switch and interval check
-	ok, err := s.shouldTick(ctx)
-	if err != nil || !ok {
-		return err
-	}
-
-	// (c) build Named sources from enabled rows with decrypted keys + goenvoy clients
+func (s *Service) syncSources(ctx context.Context) error {
 	rows, err := s.st.Q().ListEnabledWatchAwareSources(ctx)
 	if err != nil {
 		return fmt.Errorf("watchaware: list enabled sources: %w", store.MapError(err))
@@ -170,6 +163,24 @@ func (s *Service) Tick(ctx context.Context) error {
 	}
 	syncErrs := SyncAll(ctx, namedSources, s, logf)
 	s.recordResults(ctx, namedSources, syncErrs)
+	return nil
+}
+
+// Tick executes a single scheduled synchronization pass.
+func (s *Service) Tick(ctx context.Context) error {
+	// (a) and (b): module switch and interval check
+	ok, err := s.shouldTick(ctx)
+	if err != nil || !ok {
+		return err
+	}
+
+	if syncErr := s.syncSources(ctx); syncErr != nil {
+		s.logger.ErrorContext(ctx, "watchaware: sync sources failed", slog.Any("error", syncErr))
+	}
+
+	if gateErr := s.ObserveGatePass(ctx); gateErr != nil {
+		s.logger.ErrorContext(ctx, "watchaware: observe gate pass failed", slog.Any("error", gateErr))
+	}
 	return nil
 }
 
