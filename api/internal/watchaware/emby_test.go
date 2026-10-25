@@ -40,6 +40,12 @@ func TestEmbyAdapter_TwoPagesAndMapping(t *testing.T) {
 			} else {
 				userParamChecked.Store(true)
 			}
+			if got := r.URL.Query().Get("IncludeItemTypes"); got != "Episode,Movie,Series" {
+				t.Errorf("IncludeItemTypes = %q, want Episode,Movie,Series", got)
+			}
+			if got := r.URL.Query().Get("Fields"); got != "ProviderIds" {
+				t.Errorf("Fields = %q, want ProviderIds", got)
+			}
 
 			startStr := r.URL.Query().Get("StartIndex")
 			startIndex, _ := strconv.Atoi(startStr)
@@ -60,7 +66,7 @@ func TestEmbyAdapter_TwoPagesAndMapping(t *testing.T) {
 					}
 				}
 				_ = json.NewEncoder(w).Encode(emby.ItemsResult{
-					TotalRecordCount: 201,
+					TotalRecordCount: 202,
 					StartIndex:       0,
 					Items:            items,
 				})
@@ -70,7 +76,7 @@ func TestEmbyAdapter_TwoPagesAndMapping(t *testing.T) {
 			// Page 2
 			pct := 94.0
 			_ = json.NewEncoder(w).Encode(emby.ItemsResult{
-				TotalRecordCount: 201,
+				TotalRecordCount: 202,
 				StartIndex:       200,
 				Items: []emby.BaseItemDto{
 					{
@@ -85,6 +91,11 @@ func TestEmbyAdapter_TwoPagesAndMapping(t *testing.T) {
 							PlaybackPositionTicks: 8888,
 							LastPlayedDate:        "2026-10-23T21:00:00Z",
 						},
+					},
+					{
+						ID:          "series-200",
+						Type:        "Series",
+						ProviderIDs: map[string]string{"tvdb": "67890"},
 					},
 				},
 			})
@@ -113,14 +124,17 @@ func TestEmbyAdapter_TwoPagesAndMapping(t *testing.T) {
 		t.Fatal("userId query parameter was not verified")
 	}
 
-	if len(watches) != 201 {
-		t.Fatalf("len(watches) = %d, want 201", len(watches))
+	if len(watches) != 202 {
+		t.Fatalf("len(watches) = %d, want 202", len(watches))
 	}
 
 	// Verify mapped episode
 	w0 := watches[0]
 	if w0.UserID != "user-emby-1" || w0.UserName != "Bob" || w0.ItemID != "ep-0" || w0.ItemType != "Episode" {
 		t.Errorf("w0 identification = %+v", w0)
+	}
+	if w0.TvdbID != "" {
+		t.Errorf("w0 TvdbID = %q, want empty", w0.TvdbID)
 	}
 	if w0.SeriesID != "series-200" || w0.SeasonNumber != 1 || w0.EpisodeNumber != 1 {
 		t.Errorf("w0 season/episode = series:%s s%02de%02d, want series-200 s01e01", w0.SeriesID, w0.SeasonNumber, w0.EpisodeNumber)
@@ -134,11 +148,20 @@ func TestEmbyAdapter_TwoPagesAndMapping(t *testing.T) {
 	if w200.ItemID != "movie-301" || w200.ItemType != "Movie" || w200.Played {
 		t.Errorf("w200 = %+v", w200)
 	}
+	if w200.TvdbID != "" {
+		t.Errorf("w200 TvdbID = %q, want empty", w200.TvdbID)
+	}
 	if w200.PlayedPercentage == nil || *w200.PlayedPercentage != 94.0 {
 		t.Errorf("w200 PlayedPercentage = %v, want 94.0", w200.PlayedPercentage)
 	}
 	if w200.PositionTicks != 8888 || w200.LastPlayed != "2026-10-23T21:00:00Z" {
 		t.Errorf("w200 playback = %+v", w200)
+	}
+
+	// Verify mapped series with Tvdb ID
+	w201 := watches[201]
+	if w201.ItemID != "series-200" || w201.ItemType != "Series" || w201.TvdbID != "67890" {
+		t.Errorf("w201 = %+v, want series-200 Series tvdb 67890", w201)
 	}
 }
 

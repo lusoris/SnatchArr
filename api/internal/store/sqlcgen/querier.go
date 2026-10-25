@@ -144,11 +144,13 @@ type Querier interface {
 	ListEnabledSchedulesFor(ctx context.Context, instanceID *uuid.UUID) ([]Schedule, error)
 	ListEnabledSeerrLinks(ctx context.Context) ([]SeerrLink, error)
 	ListEnabledWatchAwareSources(ctx context.Context) ([]WatchawareSource, error)
+	ListEpisodeWatchesByTvdbIDs(ctx context.Context, arg ListEpisodeWatchesByTvdbIDsParams) ([]ListEpisodeWatchesByTvdbIDsRow, error)
 	ListEvents(ctx context.Context, arg ListEventsParams) ([]SnatchEvent, error)
 	ListEventsForRun(ctx context.Context, runID *uuid.UUID) ([]SnatchEvent, error)
 	ListGateDecisions(ctx context.Context, arg ListGateDecisionsParams) ([]WatchawareGateDecision, error)
 	ListGateSeries(ctx context.Context, arg ListGateSeriesParams) ([]WatchawareGateSeries, error)
 	ListGateSeriesIDsForInstance(ctx context.Context, instanceID uuid.UUID) ([]int32, error)
+	ListGatedSeriesWithHeldSeasons(ctx context.Context, arg ListGatedSeriesWithHeldSeasonsParams) ([]WatchawareGateSeries, error)
 	ListInstances(ctx context.Context) ([]Instance, error)
 	// Instances never evaluated come first, then the one evaluated longest ago (#176).
 	ListInstancesToPlan(ctx context.Context) ([]Instance, error)
@@ -224,6 +226,7 @@ type Querier interface {
 	// A late write from a slower replica never moves the contact back.
 	TouchWorker(ctx context.Context, arg TouchWorkerParams) error
 	UpdateDownloadClient(ctx context.Context, arg UpdateDownloadClientParams) (DownloadClient, error)
+	UpdateGateSeriesHeldSeasons(ctx context.Context, arg UpdateGateSeriesHeldSeasonsParams) error
 	UpdateGateSeriesTitle(ctx context.Context, arg UpdateGateSeriesTitleParams) error
 	UpdateInstance(ctx context.Context, arg UpdateInstanceParams) (Instance, error)
 	UpdateInstancePriority(ctx context.Context, arg UpdateInstancePriorityParams) (UpdateInstancePriorityRow, error)

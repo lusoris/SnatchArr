@@ -65,6 +65,7 @@ func (s *EmbySource) fetchPage(ctx context.Context, userID, userName string, sta
 			ID: it.ID, Type: it.Type, SeriesID: it.SeriesID,
 			Season: it.ParentIndexNumber, Episode: it.IndexNumber,
 			UserData: (*userData)(it.UserData),
+			TvdbID:   extractTvdbID(it.ProviderIDs),
 		})
 	}
 	return watches, result.TotalRecordCount, nil

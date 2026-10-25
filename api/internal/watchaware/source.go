@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"strings"
 )
 
 // Bounds (HISS-02).
@@ -43,7 +44,7 @@ type Watch struct {
 	UserID           string
 	UserName         string
 	ItemID           string
-	ItemType         string // "Episode" | "Movie"
+	ItemType         string // "Episode" | "Movie" | "Series"
 	SeriesID         string
 	SeasonNumber     int
 	EpisodeNumber    int
@@ -51,6 +52,7 @@ type Watch struct {
 	PlayedPercentage *float64
 	PositionTicks    int64
 	LastPlayed       string
+	TvdbID           string
 }
 
 // WatchSource fetches watch state from a media server.
@@ -81,6 +83,16 @@ type itemRef struct {
 	ID, Type, SeriesID string
 	Season, Episode    int
 	UserData           *userData
+	TvdbID             string
+}
+
+func extractTvdbID(providers map[string]string) string {
+	for k, v := range providers {
+		if strings.EqualFold(k, "tvdb") {
+			return v
+		}
+	}
+	return ""
 }
 
 func newWatch(userID, userName string, it itemRef) Watch {
@@ -92,6 +104,7 @@ func newWatch(userID, userName string, it itemRef) Watch {
 		SeriesID:      it.SeriesID,
 		SeasonNumber:  it.Season,
 		EpisodeNumber: it.Episode,
+		TvdbID:        it.TvdbID,
 	}
 	if ud := it.UserData; ud != nil {
 		w.Played = ud.Played
@@ -106,7 +119,8 @@ func buildItemParams(userID string, startIndex, limit int) url.Values {
 	return url.Values{
 		"userId":           {userID},
 		"Recursive":        {"true"},
-		"IncludeItemTypes": {"Episode,Movie"},
+		"IncludeItemTypes": {"Episode,Movie,Series"},
+		"Fields":           {"ProviderIds"},
 		"EnableUserData":   {"true"},
 		"StartIndex":       {strconv.Itoa(startIndex)},
 		"Limit":            {strconv.Itoa(limit)},

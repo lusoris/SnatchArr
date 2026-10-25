@@ -556,3 +556,60 @@ func TestMigration000033UserRoleRequester(t *testing.T) {
 		t.Fatalf("Steps(1) back up to 33: %v", err)
 	}
 }
+
+// TestMigration000034WatchAwareTvdb verifies migration 000034 adds provider_tvdb_id
+// with an empty-string default to watchaware_item_watches, and stepping down drops the column.
+func TestMigration000034WatchAwareTvdb(t *testing.T) {
+	t.Parallel()
+	st := storetest.New(t)
+	m := storetest.Migrator(t, st)
+
+	stepDownToVersion(t, m, 33)
+
+	ctx := t.Context()
+	srcID := uuid.New()
+	const insertSrc = `INSERT INTO watchaware_sources (
+		id, kind, name, url, api_key_enc, enabled, created_at, updated_at
+	) VALUES (
+		$1, 'jellyfin', 'jf-m34', 'http://127.0.0.1:8096', '\x0102', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+	)`
+	if _, err := st.Pool().Exec(ctx, insertSrc, srcID); err != nil {
+		t.Fatalf("insert watchaware source at v33: %v", err)
+	}
+
+	const insert33 = `INSERT INTO watchaware_item_watches (
+		source_id, user_id, item_id, user_name, item_type, series_id,
+		season_number, episode_number, played, synced_at
+	) VALUES (
+		$1, 'u1', 'it1', 'Alice', 'Episode', 's1', 1, 1, true, CURRENT_TIMESTAMP
+	)`
+	if _, err := st.Pool().Exec(ctx, insert33, srcID); err != nil {
+		t.Fatalf("insert watch item at v33: %v", err)
+	}
+
+	if err := m.Steps(1); err != nil {
+		t.Fatalf("Steps(1) up to 34: %v", err)
+	}
+
+	var tvdbID string
+	err := st.Pool().QueryRow(ctx, "SELECT provider_tvdb_id FROM watchaware_item_watches WHERE source_id = $1 AND user_id = 'u1' AND item_id = 'it1'", srcID).Scan(&tvdbID)
+	if err != nil {
+		t.Fatalf("query provider_tvdb_id after up: %v", err)
+	}
+	if tvdbID != "" {
+		t.Fatalf("provider_tvdb_id = %q, want empty string default", tvdbID)
+	}
+
+	if err = m.Steps(-1); err != nil {
+		t.Fatalf("Steps(-1) down to 33: %v", err)
+	}
+
+	var colExists bool
+	err = st.Pool().QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='watchaware_item_watches' AND column_name='provider_tvdb_id')").Scan(&colExists)
+	if err != nil {
+		t.Fatalf("check column exists after down: %v", err)
+	}
+	if colExists {
+		t.Fatalf("provider_tvdb_id column still exists after down migration")
+	}
+}

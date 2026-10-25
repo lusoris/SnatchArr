@@ -347,6 +347,7 @@ type WatchawareItemWatch struct {
 	ResumePosition   int64
 	LastPlayedAt     string
 	SyncedAt         time.Time
+	ProviderTvdbID   string
 }
 
 type WatchawareSource struct {

@@ -427,6 +427,7 @@ func (s *Service) processGateInstance(ctx context.Context, inst domain.Instance,
 	}
 
 	s.processIncremental(ctx, inst.ID, seriesList, cfg, exemptTagID, hasExemptTag, now)
+	s.processPromotion(ctx, inst.ID, cfg, now)
 }
 
 // ObserveGatePass evaluates the season gate in observe mode across configured Sonarr instances.

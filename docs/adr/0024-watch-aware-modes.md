@@ -192,7 +192,7 @@ Slice 2 lands in two parts:
   - Packages: `gate.go` (pure) and `gatepass.go`.
 - 2b, the rest of Slice 2.
   - 2b-1: season-gate event (`watchaware_gate_decided`), SPA view (`/automation?tab=season-gate`), and Paraglide keys.
-  - 2b-2: promotion from watch data. Promotion has to map a media-server series to its Sonarr series by TVDB id. goenvoy `mediaserver/jellyfin/v3.1.0` and `mediaserver/emby/v3.1.0` carry no `ProviderIds` on `BaseItemDto` yet, so promotion waits for that goenvoy release (see Follow-ups).
+  - 2b-2: promotion from watch data, observe mode only. A media-server series maps to its Sonarr series through the `Tvdb` entry of `ProviderIds`. A season counts as watched when its last library episode is watched or at least 50.0 % of its library episodes are; "aired" is approximated by "present in the media-server library". Held seasons up to the furthest watched season plus `look_ahead` get promote decisions, and `held_seasons` shrinks.
 
 ### Slice 3: season gate in act mode
 
@@ -248,7 +248,7 @@ The four open questions of the first draft were answered on 2026-10-23:
 - [x] goenvoy: added `JellyfinUserID` and `JellyfinUsername` to `User` in `arr/seerr/v1.6.0` for the `requester` rule ([goenvoy#173](https://github.com/golusoris/goenvoy/pull/173)).
 - [x] goenvoy: added collection writes (`CreateCollection`, `AddToCollection`, `RemoveFromCollection`) in `mediaserver/jellyfin/v3.1.0` for "leaving soon" ([goenvoy#173](https://github.com/golusoris/goenvoy/pull/173)).
 - [x] Implementation plan: Slice 1 backend completed (persistence, HTTP API under `x-module` watchaware, leader loop ticking quiescent while module off; ADR-0025 Slice 5); season gate slices 2-3 and SPA follow in later slices.
-- [ ] goenvoy: add `ProviderIds` to `BaseItemDto` in `mediaserver/jellyfin` and `mediaserver/emby`, which season-gate promotion (Slice 2b) needs to map a media-server series to its Sonarr series.
+- [x] goenvoy: add `ProviderIds` to `BaseItemDto` in `mediaserver/jellyfin` and `mediaserver/emby`, which season-gate promotion (Slice 2b) needs to map a media-server series to its Sonarr series (shipped in goenvoy mediaserver v3.2.0).
 - [x] Docs: name Maintainerr as an alternative for removal until remove-when-seen ships ([docs/roadmap.md](../roadmap.md#watch-aware-modes)).
 
 ## References
