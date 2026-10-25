@@ -31,6 +31,7 @@ const sampleClient: DownloadClient = {
 	enabled: true,
 	source: 'manual',
 	max_active: 5,
+	max_queued: 0,
 	bandwidth_budget_bps: 0,
 	created_at: '2026-01-01T00:00:00Z',
 	updated_at: '2026-01-01T00:00:00Z'
@@ -202,6 +203,7 @@ describe('download-clients management', () => {
 		await fill(m.dlclients_secret(), 'sab-api-key');
 		await fireEvent.change(pin, { target: { value: forkInstance.id } });
 		await fill(m.dlclients_max_active(), '3');
+		await fill(m.dlclients_max_queued(), '7');
 		await fireEvent.click(screen.getByRole('button', { name: m.action_save() }));
 
 		expect(postSpy).toHaveBeenCalledWith('/download-clients', {
@@ -212,6 +214,7 @@ describe('download-clients management', () => {
 				username: '',
 				enabled: true,
 				max_active: 3,
+				max_queued: 7,
 				bandwidth_budget_bps: 0,
 				secret: 'sab-api-key',
 				instance_id: forkInstance.id
@@ -266,6 +269,7 @@ describe('download-clients management', () => {
 				username: 'admin',
 				enabled: true,
 				max_active: 5,
+				max_queued: 0,
 				bandwidth_budget_bps: 0
 			}
 		});
@@ -377,6 +381,31 @@ describe('download-clients management', () => {
 		const field = screen.getByLabelText(m.dlclients_max_active());
 		expect(field.getAttribute('aria-invalid')).toBe('true');
 		expect(field.getAttribute('aria-describedby')).toBe('dlclient-max-active-error');
+		expect(screen.getByText('value 5000 greater than maximum 1000')).toBeTruthy();
+	});
+
+	it('shows a 422 validation problem on the max_queued field', async () => {
+		stubGet(listStubs);
+		vi.spyOn(api, 'POST').mockRejectedValue(
+			new ProblemError({
+				type: 'about:blank',
+				status: 422,
+				title: 'Unprocessable Entity',
+				detail: 'request validation failed',
+				invalidParams: [{ name: 'max_queued', reason: 'value 5000 greater than maximum 1000' }]
+			})
+		);
+		renderWithQuery(DownloadClientsPage);
+
+		await screen.findByLabelText(m.dlclients_instance());
+		await fill(m.instance_name(), 'Too many queued');
+		await fill(m.instance_url(), 'http://qb:8080');
+		await fireEvent.click(screen.getByRole('button', { name: m.action_save() }));
+
+		expect((await screen.findByRole('alert')).textContent).toContain('request validation failed');
+		const field = screen.getByLabelText(m.dlclients_max_queued());
+		expect(field.getAttribute('aria-invalid')).toBe('true');
+		expect(field.getAttribute('aria-describedby')).toBe('dlclient-max-queued-error');
 		expect(screen.getByText('value 5000 greater than maximum 1000')).toBeTruthy();
 	});
 

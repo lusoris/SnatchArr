@@ -178,6 +178,7 @@ func TestNew_CreatesTheAlertSeriesAtZero(t *testing.T) {
 		"deferral unreach":       {"snatcharr_planner_deferrals_total", metrics.DeferralClientUnreachable},
 		"deferral paused":        {"snatcharr_planner_deferrals_total", metrics.DeferralClientPaused},
 		"deferral limit":         {"snatcharr_planner_deferrals_total", metrics.DeferralClientActiveLimit},
+		"deferral queued limit":  {"snatcharr_planner_deferrals_total", metrics.DeferralClientQueuedLimit},
 		"deferral bandwidth":     {"snatcharr_planner_deferrals_total", metrics.DeferralBandwidthSaturated},
 		"deferral gate":          {"snatcharr_planner_deferrals_total", metrics.DeferralGateRefusal},
 		"deferral indexer limit": {"snatcharr_planner_deferrals_total", metrics.DeferralIndexerLimit},

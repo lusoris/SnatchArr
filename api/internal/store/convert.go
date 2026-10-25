@@ -238,6 +238,7 @@ func DownloadClientFromRow(r sqlcgen.DownloadClient) domain.DownloadClient {
 		RemoteID:           remote,
 		ConfigarrKey:       deref(r.ConfigarrKey),
 		MaxActive:          int(r.MaxActive),
+		MaxQueued:          int(r.MaxQueued),
 		BandwidthBudgetBPS: r.BandwidthBudgetBps,
 		LastCheckAt:        r.LastCheckAt,
 		LastError:          deref(r.LastError),

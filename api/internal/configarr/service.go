@@ -288,6 +288,7 @@ func (s *Service) upsertOneDownloadClient(ctx context.Context, def ClientDefinit
 		Secret:             def.Secret,
 		Enabled:            def.Enabled,
 		MaxActive:          def.MaxActive,
+		MaxQueued:          def.MaxQueued,
 		BandwidthBudgetBPS: def.BandwidthBudgetBPS,
 	})
 	switch {

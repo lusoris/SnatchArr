@@ -18,6 +18,10 @@ func (s *DownloadClientInput) setDefaults() {
 		s.MaxActive.SetTo(val)
 	}
 	{
+		val := int(0)
+		s.MaxQueued.SetTo(val)
+	}
+	{
 		val := int64(0)
 		s.BandwidthBudgetBps.SetTo(val)
 	}
