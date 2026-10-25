@@ -162,7 +162,7 @@ A single, unified `ActivityFeed.svelte` component powers both `/activity` and th
   - Each row displays a semantic `StatusIcon.svelte`, relative timestamp (`formatWhen`), instance badge, and event summary. Clicking a row expands an inline detail tray with formatted JSON metadata; no navigation away from the feed is required.
   - Consecutive events belonging to the same snatch execution collapse into a single run summary card based on `run_id` (`api/openapi/openapi.yaml:2415`), displaying item counts and dispatches. Where `run_id` is omitted in event records, grouping falls back to `instance_id` + `type` within a 60-second window (a backend API follow-up is planned to ensure `run_id` is emitted across all snatch events).
 - **Virtualization and memory bounds**:
-  - DOM virtualization is applied when the feed exceeds 500 rows. The SSE ring frame budget of 500 frames is maintained (`historyLimit: 500` from `web/src/routes/live/+page.svelte:32` and `logs/+page.svelte:56`). `ConnectionStatus.svelte` remains present to communicate realtime SSE connection health.
+  - Bounded list of at most 500 frames per stream, no virtualization; reason: the cap bounds memory and DOM, rows have variable height. `ConnectionStatus.svelte` remains present to communicate realtime SSE connection health.
 
 ### 3. Overview redo
 
@@ -398,7 +398,7 @@ Delivery is structured across seven discrete, reviewable pull requests. Each PR 
    - Implements 12-column operational desktop layout, 5 KPI telemetry tiles, compact instance table, and mini activity stream.
    - Introduces 3-step structured empty fleet onboarding checklist.
 3. **PR C: Unified Activity View (`/activity`)**
-   - Implements `ActivityFeed.svelte` merging events and server logs with follow-live toggle, query filters, and virtualized list.
+   - Implements `ActivityFeed.svelte` merging events and server logs with follow-live toggle, query filters, and bounded list of at most 500 frames per stream, no virtualization; reason: the cap bounds memory and DOM, rows have variable height.
    - Refactors `/instances/[id]/activity` to consume `ActivityFeed.svelte`.
 4. **PR D: Instances Fleet and Subtabs (`/instances`, `/instances/[id]/*`)**
    - Eliminates `max-w-xl` constraints across instance forms and subtabs.

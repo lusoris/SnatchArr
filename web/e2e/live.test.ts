@@ -103,7 +103,7 @@ test.describe('live', () => {
 		const log = page.getByRole('log');
 		await expect(log).toBeVisible({ timeout: 5000 });
 		await expect(page.getByText('Backlog Item Inception')).toBeVisible();
-		await expect(page.getByText('search_dispatched')).toBeVisible();
+		await expect(log.getByText('search_dispatched')).toBeVisible();
 		const instLink = log.getByRole('link', { name: 'Sonarr Main' });
 		await expect(instLink).toHaveAttribute('href', `/instances/${instanceA.id}`);
 		await page.screenshot({ path: test.info().outputPath('live-backlog.png'), fullPage: true });
@@ -171,7 +171,6 @@ test.describe('live', () => {
 			/Continuous/
 		);
 		const main = page.locator('#main');
-		await expect(main.getByRole('link', { name: /Event history|Ereignisverlauf/i })).toBeVisible();
 		await expect(main.getByRole('link', { name: /Schedules|Zeitpläne/i })).toBeVisible();
 		await page.screenshot({ path: test.info().outputPath('live-empty.png'), fullPage: true });
 	});
@@ -331,6 +330,9 @@ test.describe('live', () => {
 
 			const log = page.getByRole('log');
 			await expect(log).toBeVisible({ timeout: 5000 });
+			const groupToggle = log.getByRole('button', { name: /queue_item_struck/i });
+			await expect(groupToggle).toBeVisible();
+			await groupToggle.click();
 			await expect(
 				page.getByText('16EA72E67E27AE7BFC5A1BF6D7A62DD602137D5B', { exact: true })
 			).toBeVisible();

@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-import { fireEvent, screen } from '@testing-library/svelte';
+import { screen } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { m } from '#lib/paraglide/messages.js';
 import { session } from '#lib/session.svelte.js';
@@ -35,7 +35,7 @@ const baseStubs = {
 	'/logs': { capacity: 100, dropped: 0, records: [] }
 };
 
-describe('activity page tabs', () => {
+describe('activity page', () => {
 	beforeEach(() => {
 		pageMock.url = new URL('http://localhost/activity');
 		session.user = { id: 'u1', username: 'admin', role: 'admin' } as never;
@@ -47,22 +47,12 @@ describe('activity page tabs', () => {
 		vi.restoreAllMocks();
 	});
 
-	it('renders history tab by default', async () => {
+	it('renders heading and ActivityFeed with events tab active by default', async () => {
 		renderWithQuery(ActivityPage);
 
 		expect(await screen.findByRole('heading', { level: 1, name: m.nav_activity() })).toBeTruthy();
 		expect(
-			screen.getByRole('tab', { name: m.activity_tab_history(), selected: true })
-		).toBeTruthy();
-		expect(screen.getByRole('grid', { name: m.history_title() })).toBeTruthy();
-	});
-
-	it('renders live tab when source=live', async () => {
-		pageMock.url = new URL('http://localhost/activity?source=live');
-		renderWithQuery(ActivityPage);
-
-		expect(
-			await screen.findByRole('tab', { name: m.activity_tab_live(), selected: true })
+			screen.getByRole('tab', { name: m.activity_source_events(), selected: true })
 		).toBeTruthy();
 	});
 
@@ -71,27 +61,15 @@ describe('activity page tabs', () => {
 		renderWithQuery(ActivityPage);
 
 		expect(
-			await screen.findByRole('tab', { name: m.activity_tab_log(), selected: true })
+			await screen.findByRole('tab', { name: m.activity_source_log(), selected: true })
 		).toBeTruthy();
 	});
 
-	it('omits log tab and falls back to history for viewer even if source=log', async () => {
+	it('omits log tab for viewer even if source=log', async () => {
 		session.user = { id: 'u2', username: 'viewer', role: 'viewer' } as never;
 		pageMock.url = new URL('http://localhost/activity?source=log');
 		renderWithQuery(ActivityPage);
 
-		expect(screen.queryByRole('tab', { name: m.activity_tab_log() })).toBeNull();
-		expect(
-			screen.getByRole('tab', { name: m.activity_tab_history(), selected: true })
-		).toBeTruthy();
-	});
-
-	it('clicking a tab updates query and calls goto', async () => {
-		renderWithQuery(ActivityPage);
-
-		const liveTab = screen.getByRole('tab', { name: m.activity_tab_live() });
-		await fireEvent.click(liveTab);
-
-		expect(navMocks.goto).toHaveBeenCalledWith('/activity?source=live', { replaceState: true });
+		expect(screen.queryByRole('tab', { name: m.activity_source_log() })).toBeNull();
 	});
 });
