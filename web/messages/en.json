@@ -652,5 +652,9 @@
 	"overview_onboarding_step2_action": "Connect Prowlarr",
 	"overview_onboarding_step3_title": "3. Read documentation",
 	"overview_onboarding_step3_desc": "Learn about stamina management, snatch policies, and scheduler automation.",
-	"overview_onboarding_step3_action": "Open docs"
+	"overview_onboarding_step3_action": "Open docs",
+	"page_not_found_title": "404 - Page not found",
+	"page_not_found_text": "The requested page is not available or its module is disabled.",
+	"page_not_found_back": "Back to overview",
+	"module_disabled_detail": "Module {module} is disabled"
 }

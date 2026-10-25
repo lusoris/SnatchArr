@@ -8,6 +8,7 @@ import type net from 'node:net';
 import path from 'node:path';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, request, test, type Page } from '@playwright/test';
+import { settleToasts } from './settle.js';
 
 const WCAG_22_AA = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 
@@ -133,6 +134,7 @@ test('schedules: create, edit, delete through UI and verify axe clean', async ({
 	await page.goto('/schedules');
 	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 
+	await settleToasts(page);
 	const axe = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
 	expect(axe.violations).toEqual([]);
 
@@ -198,6 +200,7 @@ test('account: create API key, read back with Bearer token, revoke key, check 40
 	await page.goto('/account');
 	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 
+	await settleToasts(page);
 	const axeResults = await new AxeBuilder({ page })
 		.withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
 		.analyze();
@@ -218,6 +221,7 @@ test('account: create API key, read back with Bearer token, revoke key, check 40
 
 	// The modal dialog holds focus and passes axe; Escape closes it and drops the secret
 	expect(await dialog.evaluate((el) => el.contains(document.activeElement))).toBe(true);
+	await settleToasts(page);
 	const dialogAxe = await new AxeBuilder({ page })
 		.withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
 		.analyze();
@@ -379,6 +383,7 @@ test('download clients: create, edit and delete one through the UI', async ({ pa
 		.getByRole('button', { name: /^(delete|löschen)$/i })
 		.click();
 	await expect(card(renamed).getByRole('group')).toBeVisible();
+	await settleToasts(page);
 	const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
 	expect(results.violations).toEqual([]);
 	await card(renamed)

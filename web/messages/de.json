@@ -652,5 +652,9 @@
 	"overview_onboarding_step2_action": "Prowlarr verknüpfen",
 	"overview_onboarding_step3_title": "3. Dokumentation lesen",
 	"overview_onboarding_step3_desc": "Erfahre mehr über Stamina-Verwaltung, Richtlinien und Automatisierung.",
-	"overview_onboarding_step3_action": "Doku öffnen"
+	"overview_onboarding_step3_action": "Doku öffnen",
+	"page_not_found_title": "404 - Seite nicht gefunden",
+	"page_not_found_text": "Die angeforderte Seite ist nicht verfügbar oder das entsprechende Modul ist deaktiviert.",
+	"page_not_found_back": "Zurück zur Übersicht",
+	"module_disabled_detail": "Modul {module} ist deaktiviert"
 }

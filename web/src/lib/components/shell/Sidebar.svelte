@@ -8,18 +8,23 @@ SPDX-License-Identifier: EUPL-1.2
 	import { isApplePlatform } from '@sveltesentio/ui/cmd';
 	import BrandMark from '#lib/components/BrandMark.svelte';
 	import { m } from '#lib/paraglide/messages.js';
-	import { getNavItems, isRouteActive, type NavItem } from './nav.js';
+	import { filterByModule, getNavItems, isRouteActive, type NavItem } from './nav.js';
 	import NavIcon from './NavIcon.svelte';
 	import KofiLink from './KofiLink.svelte';
 	import NavFooter from './NavFooter.svelte';
 
 	interface Props {
 		navItems?: NavItem[];
+		activeModules?: ReadonlySet<string>;
 		onLogout: () => void;
 		onOpenSearch?: () => void;
 	}
 
-	const { navItems = getNavItems(), onLogout, onOpenSearch }: Props = $props();
+	const { navItems, activeModules = new Set(), onLogout, onOpenSearch }: Props = $props();
+
+	const effectiveNavItems = $derived(
+		filterByModule(navItems ?? getNavItems(activeModules), activeModules)
+	);
 	const shortcutLabel = isApplePlatform() ? m.nav_search_shortcut_apple() : m.nav_search_shortcut();
 </script>
 
@@ -65,7 +70,7 @@ SPDX-License-Identifier: EUPL-1.2
 
 	<nav class="flex-1 overflow-y-auto px-3 py-3" aria-label={m.app_name()}>
 		<ul class="flex flex-col gap-0.5">
-			{#each navItems as item (item.href)}
+			{#each effectiveNavItems as item (item.href)}
 				{@const active = isRouteActive(page.url.pathname, item.href)}
 				<li>
 					<a

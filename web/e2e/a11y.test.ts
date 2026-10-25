@@ -12,6 +12,7 @@ import path from 'node:path';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { mockSettingsApi } from './mocks.js';
+import { settleToasts } from './settle.js';
 
 const WCAG_22_AA = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 
@@ -86,6 +87,7 @@ if (!process.env.SNATCHARR_E2E_API) {
 		test(`${route} has no axe violations`, async ({ page }) => {
 			await page.goto(route);
 			await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+			await settleToasts(page);
 			const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
 			expect(results.violations).toEqual([]);
 		});
@@ -267,6 +269,7 @@ if (!process.env.SNATCHARR_E2E_API) {
 			page.getByRole('heading', { level: 2, name: /Edit instance|Instanz bearbeiten/i })
 		).toBeVisible();
 
+		await settleToasts(page);
 		const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
 		expect(results.violations).toEqual([]);
 	});
@@ -279,6 +282,7 @@ if (!process.env.SNATCHARR_E2E_API) {
 			page.getByRole('heading', { level: 2, name: /Snatch policy|Snatch-Regeln/i })
 		).toBeVisible();
 
+		await settleToasts(page);
 		const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
 		expect(results.violations).toEqual([]);
 	});
@@ -289,6 +293,7 @@ if (!process.env.SNATCHARR_E2E_API) {
 		await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 		await expect(page.locator('[data-field="global_hourly_cap"]')).toBeVisible();
 
+		await settleToasts(page);
 		const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
 		expect(results.violations).toEqual([]);
 	});
@@ -301,6 +306,7 @@ if (!process.env.SNATCHARR_E2E_API) {
 			page.getByRole('heading', { level: 2, name: /Queue management|Warteschlangenverwaltung/i })
 		).toBeVisible();
 
+		await settleToasts(page);
 		const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
 		expect(results.violations).toEqual([]);
 	});
@@ -322,6 +328,7 @@ if (!process.env.SNATCHARR_E2E_API) {
 		).toBeVisible();
 		await expect(page.getByText('Inception')).toBeVisible();
 
+		await settleToasts(page);
 		const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
 		expect(results.violations).toEqual([]);
 	});
@@ -334,6 +341,7 @@ if (!process.env.SNATCHARR_E2E_API) {
 			page.getByRole('heading', { level: 2, name: /Processed memory|Speicher/i })
 		).toBeVisible();
 
+		await settleToasts(page);
 		const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
 		expect(results.violations).toEqual([]);
 	});
@@ -344,6 +352,7 @@ if (!process.env.SNATCHARR_E2E_API) {
 		await page.goto(`/instances/${instanceId}`);
 		await expect(page.getByRole('heading', { level: 1, name: 'Library Sonarr' })).toBeVisible();
 
+		await settleToasts(page);
 		const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
 		expect(results.violations).toEqual([]);
 	});
@@ -397,6 +406,7 @@ if (!process.env.SNATCHARR_E2E_API) {
 			page.getByRole('heading', { level: 1, name: /Instance not found|Instanz nicht gefunden/i })
 		).toBeVisible();
 
+		await settleToasts(page);
 		const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
 		expect(results.violations).toEqual([]);
 	});
@@ -463,6 +473,7 @@ if (!process.env.SNATCHARR_E2E_API) {
 		const dialog = page.locator('dialog#mobile-nav-dialog');
 		await expect(dialog).toBeVisible();
 
+		await settleToasts(page);
 		const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
 		expect(results.violations).toEqual([]);
 	});
@@ -524,6 +535,7 @@ if (!process.env.SNATCHARR_E2E_API) {
 			})
 		).toBeVisible();
 
+		await settleToasts(page);
 		const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
 		expect(results.violations).toEqual([]);
 	});
@@ -602,6 +614,7 @@ if (!process.env.SNATCHARR_E2E_API) {
 		await page.goto('/activity?source=live');
 		await expect(page.getByRole('log')).toBeVisible();
 
+		await settleToasts(page);
 		const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
 		expect(results.violations).toEqual([]);
 	});
@@ -610,6 +623,7 @@ if (!process.env.SNATCHARR_E2E_API) {
 		test('public: /setup has no axe violations', async ({ page }) => {
 			await page.goto('/setup');
 			await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+			await settleToasts(page);
 			const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
 			expect(results.violations).toEqual([]);
 		});
@@ -619,6 +633,7 @@ if (!process.env.SNATCHARR_E2E_API) {
 		test('anonymous: /login has no axe violations', async ({ page }) => {
 			await page.goto('/login');
 			await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+			await settleToasts(page);
 			const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
 			expect(results.violations).toEqual([]);
 		});
@@ -630,6 +645,7 @@ if (!process.env.SNATCHARR_E2E_API) {
 				const target = resolvePath(routePattern);
 				await page.goto(target);
 				await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+				await settleToasts(page);
 				const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
 				expect(results.violations).toEqual([]);
 			});
