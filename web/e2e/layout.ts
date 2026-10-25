@@ -532,6 +532,7 @@ export async function assertDesktopWidth(page: Page, route: string): Promise<voi
 export const SCROLL_BUDGET_ROUTES = [
 	'/',
 	'/instances',
+	'/instances/[id]',
 	'/activity',
 	'/activity?source=log',
 	'/instances/[id]/activity'
@@ -565,9 +566,6 @@ export interface PendingRoute {
 }
 
 export const WIDTH_PENDING: Record<string, PendingRoute> = {
-	'/instances/[id]': { pr: 'D', expires: '2026-11-23', reason: 'narrow content wrapper' },
-	'/instances/[id]/memory': { pr: 'D', expires: '2026-11-23', reason: 'narrow content wrapper' },
-	'/instances/[id]/policy': { pr: 'D', expires: '2026-11-23', reason: 'narrow content wrapper' },
 	'/connections/configarr': { pr: 'F', expires: '2026-11-23', reason: 'narrow content wrapper' },
 	'/system': { pr: 'G', expires: '2026-11-23', reason: 'narrow content wrapper' },
 	'/system?tab=about': { pr: 'G', expires: '2026-11-23', reason: 'narrow content wrapper' }

@@ -37,22 +37,27 @@ SPDX-License-Identifier: EUPL-1.2
 
 <QueryGuard query={instance}>
 	{#snippet children(data)}
-		<div class="mb-4">
-			<CheckState instance={data} />
-		</div>
+		<section class="card mb-6">
+			<div class="flex flex-wrap items-center justify-between gap-4">
+				<CheckState instance={data} />
+				{#if session.isAdmin}
+					<button
+						type="button"
+						class="btn"
+						onclick={() => probe.mutate()}
+						disabled={probe.isPending}
+					>
+						{m.instance_test()}
+					</button>
+				{/if}
+			</div>
+		</section>
 
 		{#if session.isAdmin}
-			<button
-				type="button"
-				class="btn mb-6"
-				onclick={() => probe.mutate()}
-				disabled={probe.isPending}
-			>
-				{m.instance_test()}
-			</button>
-
-			<InstanceEditForm instance={data} />
-			<InstancePriorityCard instance={data} />
+			<div class="grid gap-6 xl:grid-cols-2">
+				<InstanceEditForm instance={data} />
+				<InstancePriorityCard instance={data} />
+			</div>
 		{/if}
 	{/snippet}
 </QueryGuard>
