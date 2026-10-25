@@ -40,13 +40,10 @@ SPDX-License-Identifier: EUPL-1.2
 
 	<fieldset class="flex flex-col gap-2" data-field="search_priority_preset" {disabled}>
 		<legend class="text-sm font-medium">{m.settings_search_priority_preset()}</legend>
-		<div class="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
+		<div class="grid items-end gap-3 sm:grid-cols-2 md:grid-cols-3">
 			{#each APP_KINDS as kind (kind)}
 				{#if searchPreset[kind] !== undefined}
-					<Field
-						id={`search-priority-${kind}`}
-						label={`${m.settings_search_priority_preset()} (${kindLabel(kind)})`}
-					>
+					<Field id={`search-priority-${kind}`} label={kindLabel(kind)}>
 						<input
 							id={`search-priority-${kind}`}
 							class="input"
@@ -65,13 +62,10 @@ SPDX-License-Identifier: EUPL-1.2
 
 	<fieldset class="flex flex-col gap-2" data-field="download_priority_preset" {disabled}>
 		<legend class="text-sm font-medium">{m.settings_download_priority_preset()}</legend>
-		<div class="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
+		<div class="grid items-end gap-3 sm:grid-cols-2 md:grid-cols-3">
 			{#each APP_KINDS as kind (kind)}
 				{#if downloadPreset[kind] !== undefined}
-					<Field
-						id={`download-priority-${kind}`}
-						label={`${m.settings_download_priority_preset()} (${kindLabel(kind)})`}
-					>
+					<Field id={`download-priority-${kind}`} label={kindLabel(kind)}>
 						<input
 							id={`download-priority-${kind}`}
 							class="input"

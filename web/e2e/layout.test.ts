@@ -11,6 +11,7 @@ import { expect, test, type Page } from '@playwright/test';
 import {
 	assertDesktopWidth,
 	assertPhoneFit,
+	assertGridRowAlignment,
 	assertRenderedLayout,
 	assertScrollBudget,
 	assertTableFits,
@@ -264,6 +265,8 @@ for (const [viewportName, viewport] of Object.entries(VIEWPORTS)) {
 					}
 					return route.fulfill(json(hyphenatedInstancesList));
 				});
+			} else if (pattern === '/automation?tab=caps' && !served) {
+				await mockSettingsApi(page);
 			} else if (
 				(pattern.startsWith('/activity') || pattern === '/instances/[id]/activity') &&
 				!served
@@ -374,6 +377,13 @@ for (const [viewportName, viewport] of Object.entries(VIEWPORTS)) {
 				/\/login(?:\?|$)/
 			);
 			await assertRenderedLayout(page, pattern, lists);
+
+			if (
+				pattern === '/automation?tab=caps' &&
+				(viewportName === 'desktop' || viewportName === 'phone')
+			) {
+				await assertGridRowAlignment(page, pattern);
+			}
 
 			if (viewportName === 'desktop' || viewportName === 'desktop1920') {
 				const pending = WIDTH_PENDING[pattern];
@@ -540,19 +550,16 @@ test('authenticated: desktop width gate fixtures and planted negative', async ({
 		`/test-negative: widest content block ${measured.widest}px is narrower than 75% of main (1000px)`
 	);
 
-	// Positive fixture: section full width (1000px of 1000px)
 	await page.setContent(
 		'<main style="width:1000px;padding:0"><section style="width:1000px">x</section></main>'
 	);
 	await expect(assertDesktopWidth(page, '/test-positive')).resolves.not.toThrow();
 
-	// Boundary fixture: section exactly 750px of 1000px (ratio = 0.75) -> passes
 	await page.setContent(
 		'<main style="width:1000px;padding:0"><section style="width:750px">x</section></main>'
 	);
 	await expect(assertDesktopWidth(page, '/test-boundary-pass')).resolves.not.toThrow();
 
-	// Boundary fixture: section 749px of 1000px (ratio = 0.749 < 0.75) -> fails
 	await page.setContent(
 		'<main style="width:1000px;padding:0"><section style="width:749px">x</section></main>'
 	);
@@ -672,4 +679,76 @@ test('authenticated: layout /connections/download-clients table fits at 1280', a
 	await expect(table.getByText(/connection refused/i).first()).toBeVisible();
 
 	await assertTableFits(page, 'table');
+});
+
+test('authenticated: grid row alignment fixtures and planted negative', async ({ page }) => {
+	await page.setContent(`
+		<main style="width:600px">
+			<div class="grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+				<div style="display:flex;flex-direction:column">
+					<label style="line-height:20px;height:20px">Short label</label>
+					<input style="height:32px" />
+				</div>
+				<div style="display:flex;flex-direction:column">
+					<label style="line-height:20px;height:40px">Longer label<br>that wraps</label>
+					<input style="height:32px" />
+				</div>
+				<div style="display:flex;flex-direction:column">
+					<label style="line-height:20px;height:20px">Short label</label>
+					<input style="height:32px" />
+				</div>
+			</div>
+		</main>
+	`);
+	await expect(assertGridRowAlignment(page, '/test-negative')).rejects.toThrow(
+		/\/test-negative: inputs misaligned in grid row \(1 row\(s\)\)/
+	);
+
+	await page.setContent(`
+		<main style="width:600px">
+			<div class="grid items-end" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;align-items:end">
+				<div style="display:flex;flex-direction:column">
+					<label style="line-height:20px;height:20px">Short label</label>
+					<input style="height:32px" />
+				</div>
+				<div style="display:flex;flex-direction:column">
+					<label style="line-height:20px;height:40px">Longer label<br>that wraps</label>
+					<input style="height:32px" />
+				</div>
+				<div style="display:flex;flex-direction:column">
+					<label style="line-height:20px;height:20px">Short label</label>
+					<input style="height:32px" />
+				</div>
+			</div>
+		</main>
+	`);
+	await expect(assertGridRowAlignment(page, '/test-positive')).resolves.not.toThrow();
+
+	await page.setContent(`
+		<main style="width:600px">
+			<div class="grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+				<div style="display:flex;flex-direction:column">
+					<label style="line-height:20px;height:40px">Single child</label>
+					<input style="height:32px" />
+				</div>
+			</div>
+		</main>
+	`);
+	await expect(assertGridRowAlignment(page, '/test-single-child')).resolves.not.toThrow();
+
+	await page.setContent(`
+		<main style="width:600px">
+			<div class="grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px">
+				<div style="display:flex;flex-direction:column">
+					<label style="line-height:20px;height:20px">Label 1</label>
+					<input style="height:32px" />
+				</div>
+				<div style="display:flex;flex-direction:column">
+					<label style="line-height:21px;height:21px">Label 2</label>
+					<input style="height:32px" />
+				</div>
+			</div>
+		</main>
+	`);
+	await expect(assertGridRowAlignment(page, '/test-spread-1px')).resolves.not.toThrow();
 });

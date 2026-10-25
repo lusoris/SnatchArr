@@ -723,3 +723,55 @@ export async function assertTouchTargetHeights(page: Page, route: string): Promi
 		);
 	}
 }
+
+export interface GridRowOffender {
+	grid: string;
+	row: number;
+	spread: number;
+}
+
+// Runs inside page.evaluate, so every helper lives in the function body.
+// Children whose boxes overlap vertically share a grid row; their first
+// input or select must start at the same top edge.
+export function measureGridRowAlignment(): GridRowOffender[] {
+	const visible = (el: Element): boolean => el.checkVisibility({ checkVisibilityCSS: true });
+	const control = (child: Element): HTMLElement | null =>
+		child.matches('input, select') ? (child as HTMLElement) : child.querySelector('input, select');
+	const offenders: GridRowOffender[] = [];
+	for (const grid of Array.from(document.querySelectorAll<HTMLElement>('main .grid'))) {
+		if (!visible(grid)) continue;
+		const cells = Array.from(grid.children)
+			.filter((child) => visible(child) && control(child) !== null)
+			.map((child) => ({
+				box: child.getBoundingClientRect(),
+				top: control(child)!.getBoundingClientRect().top
+			}))
+			.sort((x, y) => x.box.top - y.box.top);
+		const rows: (typeof cells)[] = [];
+		for (const cell of cells) {
+			const row = rows.at(-1);
+			if (row && cell.box.top < Math.max(...row.map((c) => c.box.bottom)) - 1) row.push(cell);
+			else rows.push([cell]);
+		}
+		for (const row of rows) {
+			const tops = row.map((c) => c.top);
+			const spread = Math.round((Math.max(...tops) - Math.min(...tops)) * 100) / 100;
+			if (spread <= 1) continue;
+			const legend = grid.closest('fieldset')?.querySelector('legend')?.textContent?.trim();
+			offenders.push({ grid: legend ?? 'grid', row: Math.round(row[0].box.top), spread });
+		}
+	}
+	return offenders;
+}
+
+export async function assertGridRowAlignment(page: Page, route: string): Promise<void> {
+	const offenders = await page.evaluate(measureGridRowAlignment);
+	if (offenders.length > 0) {
+		const list = offenders
+			.map((o) => `${o.grid} (row ${o.row}px, spread ${o.spread}px)`)
+			.join('; ');
+		throw new Error(
+			`${route}: inputs misaligned in grid row (${offenders.length} row(s)): ${list}`
+		);
+	}
+}
