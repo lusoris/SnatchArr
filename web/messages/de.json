@@ -42,6 +42,7 @@
 	"activity_filter_search": "Suchen",
 	"activity_filter_toggle": "Filter",
 	"activity_clear_filters": "Filter zurücksetzen",
+	"activity_run_label": "Lauf {id}",
 	"activity_run_summary": "{dispatches} Suchläufe, {items} Einträge",
 	"activity_expand_details": "Details ausklappen",
 	"activity_collapse_details": "Details einklappen",

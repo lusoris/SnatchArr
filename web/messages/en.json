@@ -42,6 +42,7 @@
 	"activity_filter_search": "Search",
 	"activity_filter_toggle": "Filters",
 	"activity_clear_filters": "Clear filters",
+	"activity_run_label": "Run {id}",
 	"activity_run_summary": "{dispatches} dispatches, {items} items",
 	"activity_expand_details": "Expand details",
 	"activity_collapse_details": "Collapse details",
