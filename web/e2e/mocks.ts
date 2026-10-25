@@ -112,13 +112,21 @@ export async function mockSignedInApi(
 		'seerr',
 		'runs',
 		'events',
-		'schedules'
+		'schedules',
+		'system/modules'
 	]) {
 		await page.route(`**/api/v1/${path}*`, (route) => route.fulfill(json([])));
 	}
 	await page.route('**/api/v1/configarr/status*', (route) =>
 		route.fulfill(json({ linked: false, watching: false }))
 	);
+}
+
+export async function mockModulesApi(
+	page: Page,
+	modules: Array<{ id: string; enabled: boolean }>
+): Promise<void> {
+	await page.route('**/api/v1/system/modules', (route) => route.fulfill(json(modules)));
 }
 
 export async function mockInstancePolicyApi(

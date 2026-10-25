@@ -58,6 +58,7 @@
 	"activity_filter_search": "Suchen",
 	"activity_filter_toggle": "Filter",
 	"activity_clear_filters": "Filter zurücksetzen",
+	"activity_run_label": "Lauf {id}",
 	"activity_run_summary": "{dispatches} Suchläufe, {items} Einträge",
 	"activity_expand_details": "Details ausklappen",
 	"activity_collapse_details": "Details einklappen",
@@ -455,7 +456,6 @@
 	"memory_reset_one_confirm": "Alles vergessen, was SnatchArr auf {name} bereits gesucht hat, für fehlende Einträge und Upgrades gleichermaßen? Die nächsten Snatches suchen alles erneut.",
 	"memory_reset_all_confirm": "Alles vergessen, was SnatchArr auf allen Instanzen bereits gesucht hat, für fehlende Einträge und Upgrades gleichermaßen? Die nächsten Snatches suchen alles erneut.",
 	"memory_reset_done": "{count} verarbeitete Einträge vergessen",
-	"nav_configarr": "Configarr",
 	"action_edit": "Bearbeiten",
 	"action_delete": "Löschen",
 	"action_test": "Testen",
@@ -691,5 +691,9 @@
 	"overview_onboarding_step2_action": "Prowlarr verknüpfen",
 	"overview_onboarding_step3_title": "3. Dokumentation lesen",
 	"overview_onboarding_step3_desc": "Erfahre mehr über Stamina-Verwaltung, Richtlinien und Automatisierung.",
-	"overview_onboarding_step3_action": "Doku öffnen"
+	"overview_onboarding_step3_action": "Doku öffnen",
+	"page_not_found_title": "404 - Seite nicht gefunden",
+	"page_not_found_text": "Die angeforderte Seite ist nicht verfügbar oder das entsprechende Modul ist deaktiviert.",
+	"page_not_found_back": "Zurück zur Übersicht",
+	"module_disabled_detail": "Modul {module} ist deaktiviert"
 }
