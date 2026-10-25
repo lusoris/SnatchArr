@@ -1409,6 +1409,24 @@
     ],
     "type": "object"
   },
+  "releaseWatchawareGateSeries": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "instance_id": {
+        "format": "uuid",
+        "type": "string"
+      },
+      "series_id": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "instance_id",
+      "series_id"
+    ],
+    "type": "object"
+  },
   "resetState": {
     "$defs": {
       "StateReset": {

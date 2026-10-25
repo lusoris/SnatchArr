@@ -46,6 +46,7 @@ type GateSeriesRecord struct {
 	AddedBeforeGate bool
 	HeldSeasons     []int
 	UpdatedAt       time.Time
+	ReleasedAt      *time.Time
 }
 
 // GateDecisionRecord represents a recorded gate decision.
@@ -58,6 +59,7 @@ type GateDecisionRecord struct {
 	WouldAct     bool
 	Reason       string
 	DecidedAt    time.Time
+	AppliedAt    *time.Time
 }
 
 // Source represents a configured watch-aware media server source without secret credentials.
@@ -117,6 +119,7 @@ type Service struct {
 	mod      moduleManager
 	inst     instanceManager
 	reader   SeriesReader
+	writer   SeasonWriter
 	rec      EventRecorder
 	mu       sync.Mutex
 	lastPass time.Time
@@ -132,6 +135,7 @@ func NewService(
 	mod *modules.Service,
 	inst *instances.Service,
 	reader SeriesReader,
+	writer SeasonWriter,
 	rec *snatch.Recorder,
 ) *Service {
 	var im instanceManager
@@ -151,6 +155,7 @@ func NewService(
 		mod:    mod,
 		inst:   im,
 		reader: reader,
+		writer: writer,
 		rec:    er,
 	}
 }
@@ -158,6 +163,11 @@ func NewService(
 // SetSeriesReader sets the SeriesReader, primarily for testing.
 func (s *Service) SetSeriesReader(r SeriesReader) {
 	s.reader = r
+}
+
+// SetSeasonWriter sets the SeasonWriter, primarily for testing.
+func (s *Service) SetSeasonWriter(w SeasonWriter) {
+	s.writer = w
 }
 
 // SetInstanceManager sets the instance manager, primarily for testing.
@@ -180,6 +190,39 @@ func clampGateLimit(limit int) int {
 	return limit
 }
 
+func gateSeriesRecordFromRow(r sqlcgen.WatchawareGateSeries) GateSeriesRecord {
+	held := make([]int, len(r.HeldSeasons))
+	for i, v := range r.HeldSeasons {
+		held[i] = int(v)
+	}
+	return GateSeriesRecord{
+		InstanceID:      r.InstanceID,
+		SeriesID:        int(r.SeriesID),
+		TvdbID:          int(r.TvdbID),
+		Title:           r.Title,
+		GateSeason:      int(r.GateSeason),
+		State:           r.State,
+		AddedBeforeGate: r.AddedBeforeGate,
+		HeldSeasons:     held,
+		UpdatedAt:       r.UpdatedAt,
+		ReleasedAt:      r.ReleasedAt,
+	}
+}
+
+func gateDecisionRecordFromRow(r sqlcgen.WatchawareGateDecision) GateDecisionRecord {
+	return GateDecisionRecord{
+		ID:           r.ID,
+		InstanceID:   r.InstanceID,
+		SeriesID:     int(r.SeriesID),
+		SeasonNumber: int(r.SeasonNumber),
+		Action:       r.Action,
+		WouldAct:     r.WouldAct,
+		Reason:       r.Reason,
+		DecidedAt:    r.DecidedAt,
+		AppliedAt:    r.AppliedAt,
+	}
+}
+
 // ListGateSeries returns gate series for an instance, including held seasons.
 func (s *Service) ListGateSeries(ctx context.Context, instanceID uuid.UUID, limit int) ([]GateSeriesRecord, error) {
 	lim := int32(clampGateLimit(limit)) // #nosec G115 -- limit clamped to 500
@@ -193,21 +236,7 @@ func (s *Service) ListGateSeries(ctx context.Context, instanceID uuid.UUID, limi
 
 	out := make([]GateSeriesRecord, 0, len(rows))
 	for _, r := range rows {
-		held := make([]int, len(r.HeldSeasons))
-		for i, v := range r.HeldSeasons {
-			held[i] = int(v)
-		}
-		out = append(out, GateSeriesRecord{
-			InstanceID:      r.InstanceID,
-			SeriesID:        int(r.SeriesID),
-			TvdbID:          int(r.TvdbID),
-			Title:           r.Title,
-			GateSeason:      int(r.GateSeason),
-			State:           r.State,
-			AddedBeforeGate: r.AddedBeforeGate,
-			HeldSeasons:     held,
-			UpdatedAt:       r.UpdatedAt,
-		})
+		out = append(out, gateSeriesRecordFromRow(r))
 	}
 	return out, nil
 }
@@ -224,16 +253,7 @@ func (s *Service) ListGateDecisions(ctx context.Context, instanceID *uuid.UUID, 
 	}
 	out := make([]GateDecisionRecord, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, GateDecisionRecord{
-			ID:           r.ID,
-			InstanceID:   r.InstanceID,
-			SeriesID:     int(r.SeriesID),
-			SeasonNumber: int(r.SeasonNumber),
-			Action:       r.Action,
-			WouldAct:     r.WouldAct,
-			Reason:       r.Reason,
-			DecidedAt:    r.DecidedAt,
-		})
+		out = append(out, gateDecisionRecordFromRow(r))
 	}
 	return out, nil
 }

@@ -105,11 +105,12 @@ func mapGoenvoySeries(raw []sonarr.Series) []GateSeries {
 			})
 		}
 		out = append(out, GateSeries{
-			ID:      s.ID,
-			TvdbID:  s.TvdbID,
-			Title:   s.Title,
-			TagIDs:  s.Tags,
-			Seasons: seasons,
+			ID:        s.ID,
+			TvdbID:    s.TvdbID,
+			Title:     s.Title,
+			TagIDs:    s.Tags,
+			Monitored: s.Monitored,
+			Seasons:   seasons,
 		})
 	}
 	return out
@@ -428,10 +429,16 @@ func (s *Service) processGateInstance(ctx context.Context, inst domain.Instance,
 
 	s.processIncremental(ctx, inst.ID, seriesList, cfg, exemptTagID, hasExemptTag, now)
 	s.processPromotion(ctx, inst.ID, cfg, now)
+
+	monitoredBySeries := make(map[int]bool, len(seriesList))
+	for _, item := range seriesList {
+		monitoredBySeries[item.ID] = item.Monitored
+	}
+	s.actPending(ctx, inst, cfg, monitoredBySeries, now)
 }
 
-// ObserveGatePass evaluates the season gate in observe mode across configured Sonarr instances.
-func (s *Service) ObserveGatePass(ctx context.Context) error {
+// GatePass evaluates the season gate and carries out pending decisions across configured Sonarr instances.
+func (s *Service) GatePass(ctx context.Context) error {
 	enabled, err := s.mod.IsEnabled(ctx, domain.ModuleWatchAware)
 	if err != nil {
 		return fmt.Errorf("watchaware: check module enabled: %w", err)

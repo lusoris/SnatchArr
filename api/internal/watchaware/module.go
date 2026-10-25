@@ -47,6 +47,7 @@ func NewTicker(svc *Service, clk clock.Clock, m *metrics.Metrics) *Ticker {
 var Module = fx.Module("snatcharr.watchaware",
 	fx.Provide(
 		NewGoenvoySeriesReader,
+		NewGoenvoySeasonWriter,
 		NewService,
 		NewTicker,
 	),
@@ -178,8 +179,8 @@ func (s *Service) Tick(ctx context.Context) error {
 		s.logger.ErrorContext(ctx, "watchaware: sync sources failed", slog.Any("error", syncErr))
 	}
 
-	if gateErr := s.ObserveGatePass(ctx); gateErr != nil {
-		s.logger.ErrorContext(ctx, "watchaware: observe gate pass failed", slog.Any("error", gateErr))
+	if gateErr := s.GatePass(ctx); gateErr != nil {
+		s.logger.ErrorContext(ctx, "watchaware: gate pass failed", slog.Any("error", gateErr))
 	}
 	return nil
 }

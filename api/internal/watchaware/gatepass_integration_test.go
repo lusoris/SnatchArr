@@ -194,7 +194,7 @@ func TestGatePass_BaselineAndIncremental(t *testing.T) {
 	}
 
 	// 2. First pass: baseline -> zero decisions and before_gate rows
-	if err = env.svc.ObserveGatePass(ctx); err != nil {
+	if err = env.svc.GatePass(ctx); err != nil {
 		t.Fatalf("ObserveGatePass baseline: %v", err)
 	}
 
@@ -240,7 +240,7 @@ func TestGatePass_BaselineAndIncremental(t *testing.T) {
 		},
 	})
 
-	if err = env.svc.ObserveGatePass(ctx); err != nil {
+	if err = env.svc.GatePass(ctx); err != nil {
 		t.Fatalf("ObserveGatePass incremental: %v", err)
 	}
 
@@ -348,7 +348,7 @@ func TestGatePass_InstanceErrorContinues(t *testing.T) {
 	}
 
 	// Run pass: failing instance logs error, working instance succeeds
-	if err := env.svc.ObserveGatePass(ctx); err != nil {
+	if err := env.svc.GatePass(ctx); err != nil {
 		t.Fatalf("ObserveGatePass should not return error on single instance failure: %v", err)
 	}
 
@@ -405,7 +405,7 @@ func TestGatePass_GateDisabledSkipsReader(t *testing.T) {
 		t.Fatalf("modulesSvc.Update: %v", err)
 	}
 
-	if err := env.svc.ObserveGatePass(ctx); err != nil {
+	if err := env.svc.GatePass(ctx); err != nil {
 		t.Fatalf("ObserveGatePass: %v", err)
 	}
 
@@ -427,7 +427,7 @@ func TestGatePass_LifecycleCases(t *testing.T) {
 				t.Helper()
 				reader.series[instID] = []watchaware.GateSeries{}
 
-				if bErr := env.svc.ObserveGatePass(ctx); bErr != nil {
+				if bErr := env.svc.GatePass(ctx); bErr != nil {
 					t.Fatalf("ObserveGatePass baseline: %v", bErr)
 				}
 
@@ -470,7 +470,7 @@ func TestGatePass_LifecycleCases(t *testing.T) {
 					},
 				}
 
-				if incErr := env.svc.ObserveGatePass(ctx); incErr != nil {
+				if incErr := env.svc.GatePass(ctx); incErr != nil {
 					t.Fatalf("ObserveGatePass incremental: %v", incErr)
 				}
 
@@ -531,7 +531,7 @@ func TestGatePass_LifecycleCases(t *testing.T) {
 					t.Fatalf("add constraint: %v", cErr)
 				}
 
-				if pErr := env.svc.ObserveGatePass(ctx); pErr != nil {
+				if pErr := env.svc.GatePass(ctx); pErr != nil {
 					t.Fatalf("ObserveGatePass should not return error on per-instance failure: %v", pErr)
 				}
 
@@ -552,7 +552,7 @@ func TestGatePass_LifecycleCases(t *testing.T) {
 					t.Fatalf("drop constraint: %v", dErr)
 				}
 
-				if rErr := env.svc.ObserveGatePass(ctx); rErr != nil {
+				if rErr := env.svc.GatePass(ctx); rErr != nil {
 					t.Fatalf("ObserveGatePass retry: %v", rErr)
 				}
 
@@ -586,7 +586,7 @@ func TestGatePass_LifecycleCases(t *testing.T) {
 			run: func(t *testing.T, ctx context.Context, env *testEnv, instID uuid.UUID, reader *fakeSeriesReader) {
 				t.Helper()
 				reader.series[instID] = []watchaware.GateSeries{}
-				if bErr := env.svc.ObserveGatePass(ctx); bErr != nil {
+				if bErr := env.svc.GatePass(ctx); bErr != nil {
 					t.Fatalf("ObserveGatePass baseline: %v", bErr)
 				}
 
@@ -602,7 +602,7 @@ func TestGatePass_LifecycleCases(t *testing.T) {
 						},
 					},
 				}
-				if incErr := env.svc.ObserveGatePass(ctx); incErr != nil {
+				if incErr := env.svc.GatePass(ctx); incErr != nil {
 					t.Fatalf("ObserveGatePass incremental: %v", incErr)
 				}
 
@@ -619,7 +619,7 @@ func TestGatePass_LifecycleCases(t *testing.T) {
 					t.Fatalf("update decided_at: %v", uErr)
 				}
 
-				if pErr := env.svc.ObserveGatePass(ctx); pErr != nil {
+				if pErr := env.svc.GatePass(ctx); pErr != nil {
 					t.Fatalf("ObserveGatePass with prune: %v", pErr)
 				}
 
@@ -696,7 +696,7 @@ func TestGatePass_GateDecidedEvents(t *testing.T) {
 			name: "positive: new gated series with 3 seasons -> exactly 1 event, type watchaware_gate_decided, EntityID series id, detail names seasons 2, 3",
 			run: func(t *testing.T, ctx context.Context, env *testEnv, instID uuid.UUID, reader *fakeSeriesReader, rec *fakeEventRecorder) {
 				t.Helper()
-				if err := env.svc.ObserveGatePass(ctx); err != nil {
+				if err := env.svc.GatePass(ctx); err != nil {
 					t.Fatalf("baseline pass: %v", err)
 				}
 				reader.series[instID] = append(reader.series[instID], watchaware.GateSeries{
@@ -709,7 +709,7 @@ func TestGatePass_GateDecidedEvents(t *testing.T) {
 						{Number: 3, Monitored: true, FileCount: 0},
 					},
 				})
-				if err := env.svc.ObserveGatePass(ctx); err != nil {
+				if err := env.svc.GatePass(ctx); err != nil {
 					t.Fatalf("incremental pass: %v", err)
 				}
 				evs := rec.getEvents()
@@ -744,7 +744,7 @@ func TestGatePass_GateDecidedEvents(t *testing.T) {
 			name: "negative: exempt-tag series -> 0 events",
 			run: func(t *testing.T, ctx context.Context, env *testEnv, instID uuid.UUID, reader *fakeSeriesReader, rec *fakeEventRecorder) {
 				t.Helper()
-				if err := env.svc.ObserveGatePass(ctx); err != nil {
+				if err := env.svc.GatePass(ctx); err != nil {
 					t.Fatalf("baseline pass: %v", err)
 				}
 				reader.series[instID] = append(reader.series[instID], watchaware.GateSeries{
@@ -757,7 +757,7 @@ func TestGatePass_GateDecidedEvents(t *testing.T) {
 						{Number: 2, Monitored: true, FileCount: 0},
 					},
 				})
-				if err := env.svc.ObserveGatePass(ctx); err != nil {
+				if err := env.svc.GatePass(ctx); err != nil {
 					t.Fatalf("incremental pass: %v", err)
 				}
 				if evs := rec.getEvents(); len(evs) != 0 {
@@ -780,7 +780,7 @@ func TestGatePass_GateDecidedEvents(t *testing.T) {
 						},
 					},
 				}
-				if err := env.svc.ObserveGatePass(ctx); err != nil {
+				if err := env.svc.GatePass(ctx); err != nil {
 					t.Fatalf("baseline pass: %v", err)
 				}
 				if evs := rec.getEvents(); len(evs) != 0 {
@@ -792,7 +792,7 @@ func TestGatePass_GateDecidedEvents(t *testing.T) {
 			name: "negative: files-beyond-gate -> 0 events",
 			run: func(t *testing.T, ctx context.Context, env *testEnv, instID uuid.UUID, reader *fakeSeriesReader, rec *fakeEventRecorder) {
 				t.Helper()
-				if err := env.svc.ObserveGatePass(ctx); err != nil {
+				if err := env.svc.GatePass(ctx); err != nil {
 					t.Fatalf("baseline pass: %v", err)
 				}
 				reader.series[instID] = append(reader.series[instID], watchaware.GateSeries{
@@ -804,7 +804,7 @@ func TestGatePass_GateDecidedEvents(t *testing.T) {
 						{Number: 2, Monitored: true, FileCount: 3},
 					},
 				})
-				if err := env.svc.ObserveGatePass(ctx); err != nil {
+				if err := env.svc.GatePass(ctx); err != nil {
 					t.Fatalf("incremental pass: %v", err)
 				}
 				if evs := rec.getEvents(); len(evs) != 0 {
@@ -816,7 +816,7 @@ func TestGatePass_GateDecidedEvents(t *testing.T) {
 			name: "negative: recorder returning error -> pass still succeeds, rows stored",
 			run: func(t *testing.T, ctx context.Context, env *testEnv, instID uuid.UUID, reader *fakeSeriesReader, rec *fakeEventRecorder) {
 				t.Helper()
-				if err := env.svc.ObserveGatePass(ctx); err != nil {
+				if err := env.svc.GatePass(ctx); err != nil {
 					t.Fatalf("baseline pass: %v", err)
 				}
 				rec.err = errors.New("recorder failure")
@@ -830,7 +830,7 @@ func TestGatePass_GateDecidedEvents(t *testing.T) {
 						{Number: 3, Monitored: true, FileCount: 0},
 					},
 				})
-				if err := env.svc.ObserveGatePass(ctx); err != nil {
+				if err := env.svc.GatePass(ctx); err != nil {
 					t.Fatalf("incremental pass failed despite event recording error: %v", err)
 				}
 				seriesList, err := env.svc.ListGateSeries(ctx, instID, 100)
@@ -860,7 +860,7 @@ func TestGatePass_GateDecidedEvents(t *testing.T) {
 			name: "boundary: single-season series (no decisions) -> 0 events",
 			run: func(t *testing.T, ctx context.Context, env *testEnv, instID uuid.UUID, reader *fakeSeriesReader, rec *fakeEventRecorder) {
 				t.Helper()
-				if err := env.svc.ObserveGatePass(ctx); err != nil {
+				if err := env.svc.GatePass(ctx); err != nil {
 					t.Fatalf("baseline pass: %v", err)
 				}
 				reader.series[instID] = append(reader.series[instID], watchaware.GateSeries{
@@ -871,7 +871,7 @@ func TestGatePass_GateDecidedEvents(t *testing.T) {
 						{Number: 1, Monitored: true, FileCount: 0},
 					},
 				})
-				if err := env.svc.ObserveGatePass(ctx); err != nil {
+				if err := env.svc.GatePass(ctx); err != nil {
 					t.Fatalf("incremental pass: %v", err)
 				}
 				if evs := rec.getEvents(); len(evs) != 0 {
@@ -979,7 +979,7 @@ func TestGatePass_PromotionIntegration(t *testing.T) {
 	}
 
 	// 1. Baseline pass -> no promotion, baseline series recorded as before_gate
-	if passErr := env.svc.ObserveGatePass(ctx); passErr != nil {
+	if passErr := env.svc.GatePass(ctx); passErr != nil {
 		t.Fatalf("baseline pass: %v", passErr)
 	}
 	decisions, err := env.svc.ListGateDecisions(ctx, &instID, 100)
@@ -1003,7 +1003,7 @@ func TestGatePass_PromotionIntegration(t *testing.T) {
 	})
 
 	// Run incremental pass without media-server matches
-	if passErr := env.svc.ObserveGatePass(ctx); passErr != nil {
+	if passErr := env.svc.GatePass(ctx); passErr != nil {
 		t.Fatalf("incremental pass: %v", passErr)
 	}
 
@@ -1059,7 +1059,7 @@ func TestGatePass_PromotionIntegration(t *testing.T) {
 	}
 
 	// 4. Run promotion pass: season 1 watched -> promote season 2
-	if passErr := env.svc.ObserveGatePass(ctx); passErr != nil {
+	if passErr := env.svc.GatePass(ctx); passErr != nil {
 		t.Fatalf("promotion pass: %v", passErr)
 	}
 
@@ -1112,7 +1112,7 @@ func TestGatePass_PromotionIntegration(t *testing.T) {
 	}
 
 	// 5. Second pass -> no duplicate decision, no second event
-	if passErr := env.svc.ObserveGatePass(ctx); passErr != nil {
+	if passErr := env.svc.GatePass(ctx); passErr != nil {
 		t.Fatalf("second pass: %v", passErr)
 	}
 	decisions2, err := env.svc.ListGateDecisions(ctx, &instID, 100)

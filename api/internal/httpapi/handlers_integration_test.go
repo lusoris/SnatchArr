@@ -299,7 +299,7 @@ func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Genera
 	if err := modulesSvc.Ensure(context.Background()); err != nil {
 		t.Fatalf("buildHandlers: modules.Ensure: %v", err)
 	}
-	watchawareSvc := watchaware.NewService(st, enc, clk, ids, logger, modulesSvc, instSvc, nil, nil)
+	watchawareSvc := watchaware.NewService(st, enc, clk, ids, logger, modulesSvc, instSvc, nil, nil, nil)
 	build := buildinfo.Info{Version: "test-ver", Commit: "test-commit", Date: "2026-10-14"}
 	h := &Handlers{
 		build:      build,

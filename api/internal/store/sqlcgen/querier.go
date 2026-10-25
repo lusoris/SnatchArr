@@ -160,6 +160,7 @@ type Querier interface {
 	ListNotificationChannelsByIDs(ctx context.Context, ids []uuid.UUID) ([]NotificationChannel, error)
 	ListNotificationRules(ctx context.Context) ([]NotificationRule, error)
 	ListNotificationRulesByEvent(ctx context.Context, eventKind string) ([]NotificationRule, error)
+	ListPendingGateDecisions(ctx context.Context, arg ListPendingGateDecisionsParams) ([]WatchawareGateDecision, error)
 	ListProwlarrLinks(ctx context.Context) ([]ProwlarrLink, error)
 	ListQueueStrikes(ctx context.Context, instanceID uuid.UUID) ([]QueueStrike, error)
 	ListRuns(ctx context.Context, arg ListRunsParams) ([]SnatchRun, error)
@@ -176,6 +177,7 @@ type Querier interface {
 	// runs under this transaction-scoped lock, so two grants on either side of a minute
 	// boundary (different bucket rows) still see each other.
 	LockInstanceBudget(ctx context.Context, instanceID uuid.UUID) error
+	MarkGateDecisionsApplied(ctx context.Context, arg MarkGateDecisionsAppliedParams) error
 	MarkInstancesPlanned(ctx context.Context, arg MarkInstancesPlannedParams) error
 	// Afterglow backoff: the first snatch rests base_s seconds, every further snatch of the
 	// same item doubles the rest, capped at max_s.
@@ -207,6 +209,7 @@ type Querier interface {
 	RecordSeerrSync(ctx context.Context, arg RecordSeerrSyncParams) error
 	RecordWatchAwareSourceSyncError(ctx context.Context, arg RecordWatchAwareSourceSyncErrorParams) error
 	RecordWatchAwareSourceSyncSuccess(ctx context.Context, arg RecordWatchAwareSourceSyncSuccessParams) error
+	ReleaseGateSeries(ctx context.Context, arg ReleaseGateSeriesParams) (WatchawareGateSeries, error)
 	ResetProcessed(ctx context.Context, instanceID *uuid.UUID) (int64, error)
 	RevokeAPIKey(ctx context.Context, arg RevokeAPIKeyParams) (int64, error)
 	RevokeAPIKeyForOwner(ctx context.Context, arg RevokeAPIKeyForOwnerParams) (int64, error)

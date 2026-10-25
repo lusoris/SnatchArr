@@ -1260,6 +1260,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/watchaware/gate/series/{instance_id}/{series_id}/release": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Release all seasons of a gated series */
+        post: operations["releaseWatchawareGateSeries"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/watchaware/gate/decisions": {
         parameters: {
             query?: never;
@@ -2269,11 +2286,13 @@ export interface components {
             title: string;
             gate_season: number;
             /** @enum {string} */
-            state: "gated" | "exempt_tag" | "before_gate" | "files_beyond_gate";
+            state: "gated" | "exempt_tag" | "before_gate" | "files_beyond_gate" | "released";
             added_before_gate: boolean;
             held_seasons: number[];
             /** Format: date-time */
             updated_at: string;
+            /** Format: date-time */
+            released_at?: string | null;
         };
         WatchawareGateDecision: {
             /** Format: uuid */
@@ -2288,6 +2307,8 @@ export interface components {
             reason: string;
             /** Format: date-time */
             decided_at: string;
+            /** Format: date-time */
+            applied_at?: string | null;
         };
     };
     responses: {
@@ -4558,6 +4579,30 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WatchawareGateSeries"][];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    releaseWatchawareGateSeries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instance_id: string;
+                series_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Released gate series */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchawareGateSeries"];
                 };
             };
             default: components["responses"]["Problem"];

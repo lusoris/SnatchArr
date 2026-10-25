@@ -639,6 +639,15 @@ func (UnimplementedHandler) PreviewRun(ctx context.Context, params PreviewRunPar
 	return r, ht.ErrNotImplemented
 }
 
+// ReleaseWatchawareGateSeries implements releaseWatchawareGateSeries operation.
+//
+// Release all seasons of a gated series.
+//
+// POST /watchaware/gate/series/{instance_id}/{series_id}/release
+func (UnimplementedHandler) ReleaseWatchawareGateSeries(ctx context.Context, params ReleaseWatchawareGateSeriesParams) (r *WatchawareGateSeries, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // ResetState implements resetState operation.
 //
 // Forget processed items (one instance or all).

@@ -9,5 +9,6 @@ var ByOperation = map[string]string{
 	"listWatchawareGateDecisions": "watchaware",
 	"listWatchawareGateSeries":    "watchaware",
 	"listWatchawareSources":       "watchaware",
+	"releaseWatchawareGateSeries": "watchaware",
 	"updateWatchawareSource":      "watchaware",
 }

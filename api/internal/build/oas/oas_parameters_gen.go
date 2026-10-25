@@ -2911,6 +2911,124 @@ func decodePreviewRunParams(args [1]string, argsEscaped bool, r *http.Request) (
 	return params, nil
 }
 
+// ReleaseWatchawareGateSeriesParams is parameters of releaseWatchawareGateSeries operation.
+type ReleaseWatchawareGateSeriesParams struct {
+	InstanceID uuid.UUID
+	SeriesID   int
+}
+
+func unpackReleaseWatchawareGateSeriesParams(packed middleware.Parameters) (params ReleaseWatchawareGateSeriesParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "instance_id",
+			In:   "path",
+		}
+		params.InstanceID = packed[key].(uuid.UUID)
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "series_id",
+			In:   "path",
+		}
+		params.SeriesID = packed[key].(int)
+	}
+	return params
+}
+
+func decodeReleaseWatchawareGateSeriesParams(args [2]string, argsEscaped bool, r *http.Request) (params ReleaseWatchawareGateSeriesParams, _ error) {
+	// Decode path: instance_id.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "instance_id",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.InstanceID = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "instance_id",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	// Decode path: series_id.
+	if err := func() error {
+		param := args[1]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[1])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "series_id",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToInt(val)
+				if err != nil {
+					return err
+				}
+
+				params.SeriesID = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "series_id",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
 // RevokeAPIKeyParams is parameters of revokeAPIKey operation.
 type RevokeAPIKeyParams struct {
 	ID string

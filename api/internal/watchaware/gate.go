@@ -14,6 +14,8 @@ import (
 const (
 	// GateStateGated marks a series whose later seasons are held back by the gate.
 	GateStateGated = "gated"
+	// GateStateReleased marks a series whose seasons were released by an admin.
+	GateStateReleased = "released"
 	// GateStateExemptTag marks a series exempted by its tag in Sonarr.
 	GateStateExemptTag = "exempt_tag"
 	// GateStateBeforeGate marks a series present in Sonarr before the gate was activated.
@@ -53,11 +55,12 @@ type GateSeason struct {
 
 // GateSeries holds metadata and seasons of a series for gate evaluation.
 type GateSeries struct {
-	ID      int
-	TvdbID  int
-	Title   string
-	TagIDs  []int
-	Seasons []GateSeason
+	ID        int
+	TvdbID    int
+	Title     string
+	TagIDs    []int
+	Monitored bool
+	Seasons   []GateSeason
 }
 
 // GateDecision represents an action the gate would take or has taken.
@@ -133,8 +136,10 @@ func applyGateModeAndEnabled(cfg *GateConfig, enabled *bool, mode *string) {
 	if enabled != nil {
 		cfg.Enabled = *enabled
 	}
-	if mode != nil && *mode != "" {
-		cfg.Mode = *mode
+	if mode != nil && *mode == GateModeAct {
+		cfg.Mode = GateModeAct
+	} else {
+		cfg.Mode = GateModeObserve
 	}
 }
 
@@ -184,7 +189,7 @@ func hasFilesBeyondGate(seasons []GateSeason, seasonsOnAdd int) bool {
 	return false
 }
 
-func buildUnmonitorDecisions(seriesID int, seasons []GateSeason, seasonsOnAdd int) []GateDecision {
+func buildUnmonitorDecisions(seriesID int, seasons []GateSeason, seasonsOnAdd int, cfg GateConfig) []GateDecision {
 	var decisions []GateDecision
 	for _, s := range seasons {
 		if s.Number > seasonsOnAdd && s.Monitored {
@@ -192,7 +197,7 @@ func buildUnmonitorDecisions(seriesID int, seasons []GateSeason, seasonsOnAdd in
 				SeriesID: seriesID,
 				Season:   s.Number,
 				Action:   GateActionUnmonitor,
-				WouldAct: false,
+				WouldAct: cfg.Mode == GateModeAct,
 				Reason:   "season after gate",
 			})
 		}
@@ -221,6 +226,6 @@ func EvaluateOnAdd(
 		return GateStateFilesBeyondGate, 0, nil
 	}
 
-	decisions = buildUnmonitorDecisions(s.ID, seasons, cfg.SeasonsOnAdd)
+	decisions = buildUnmonitorDecisions(s.ID, seasons, cfg.SeasonsOnAdd, cfg)
 	return GateStateGated, cfg.SeasonsOnAdd, decisions
 }

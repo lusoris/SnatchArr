@@ -318,6 +318,7 @@ type WatchawareGateDecision struct {
 	WouldAct     bool
 	Reason       string
 	DecidedAt    time.Time
+	AppliedAt    *time.Time
 }
 
 type WatchawareGateSeries struct {
@@ -331,6 +332,7 @@ type WatchawareGateSeries struct {
 	HeldSeasons     []int32
 	FirstSeenAt     time.Time
 	UpdatedAt       time.Time
+	ReleasedAt      *time.Time
 }
 
 type WatchawareItemWatch struct {
