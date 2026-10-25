@@ -39,7 +39,8 @@ proto proto
 deploy deploy
 contracts contracts
 governance governance
-docs docs'
+docs docs
+licences licences'
 
 DRAFT_STEP='Stop on a draft pull request'
 
