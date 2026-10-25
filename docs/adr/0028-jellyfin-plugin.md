@@ -371,7 +371,7 @@ A three-tier testing strategy guarantees contract correctness and security bound
 ## Follow-ups
 
 - [x] Create `lusoris/jellyfin-plugin-snatcharr` with fleet adoption, rulesets/secrets/release setup as SnatchArr, GPL-3.0-or-later LICENSE + REUSE headers + template notice (created 2026-10-25; adoption in lusoris/jellyfin-plugin-snatcharr#1; the release app private key is still to be stored by the operator).
-- [ ] Record the GPL-3.0-or-later exception in the fleet exception list with category and expiry.
+- [x] Record the GPL-3.0-or-later licence choice: it is a permanent operator decision (2026-10-24), not a standards exception with a category and expiry, so it is stated in the plugin repository's [licence section](https://github.com/lusoris/jellyfin-plugin-snatcharr#licence) instead of the fleet exception list.
 - [ ] Add an OpenAPI diff check against the base revision (HISS-14) before the plugin contract ships.
 - [ ] Add plugin API client endpoints to `api/openapi/openapi.yaml` and regenerate server bindings via `make api-gen`.
 - [ ] Implement `SnatchArrAdultProvider` metadata provider and image provider in the plugin repository.
