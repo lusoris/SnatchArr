@@ -219,8 +219,8 @@ func TestEveryRulePositive(t *testing.T) {
 				}
 				switch {
 				case tt.rule == queue.RuleImportBlocked:
-					if d.Remove || d.WouldRemove || !d.Unknown {
-						t.Fatalf("sweep %d: import_blocked must never remove and must be unknown: %+v", sweep, d)
+					if d.Remove || d.WouldRemove || !d.Unknown || d.Pattern != "" {
+						t.Fatalf("sweep %d: import_blocked (zero lines -> protected) must never remove and pattern must be empty: %+v", sweep, d)
 					}
 				case sweep < tt.threshold:
 					if d.Remove {

@@ -139,7 +139,7 @@ func evaluateItem(s Settings, item Item, prev Strike, now time.Time, spent *budg
 			},
 		}
 	}
-	d := applyRuleMatch(s, item, prev, rule, now, spent)
+	d := applyRuleMatch(s, item, prev, rule, pattern, now, spent)
 	d.Class = class
 	d.Pattern = pattern
 	d.MatchPercent = pct
@@ -156,7 +156,7 @@ func nextStrikeCount(prev Strike, r Rule, threshold int) int {
 	return 1
 }
 
-func applyRuleMatch(s Settings, item Item, prev Strike, r Rule, now time.Time, spent *budget) Decision {
+func applyRuleMatch(s Settings, item Item, prev Strike, r Rule, pattern string, now time.Time, spent *budget) Decision {
 	rs := ResolveRule(s, r)
 	count := nextStrikeCount(prev, r, rs.Threshold)
 	next := Strike{
@@ -172,7 +172,7 @@ func applyRuleMatch(s Settings, item Item, prev Strike, r Rule, now time.Time, s
 	if r == RuleIDMatched || r == RuleImportFixable {
 		d = applyImportMatch(s, item, prev, rs, next, now, spent)
 	} else {
-		d = applyRemovalMatch(s, item, rs, next, thresholdMet, spent)
+		d = applyRemovalMatch(s, item, rs, next, pattern, thresholdMet, spent)
 	}
 	if r == RuleFailed || r == RuleImportBroken {
 		d.Research = true
@@ -214,9 +214,8 @@ func isThresholdReached(r Rule, item Item, prev Strike, rs RuleSettings, thresho
 	return prev.Rule != r || prev.Count < rs.Threshold
 }
 
-func applyRemovalMatch(s Settings, item Item, rs RuleSettings, next Strike, thresholdMet bool, spent *budget) Decision {
-	var remove, wouldRemove, deferred bool
-	if next.Rule == RuleImportBlocked {
+func applyRemovalMatch(s Settings, item Item, rs RuleSettings, next Strike, pattern string, thresholdMet bool, spent *budget) Decision {
+	if next.Rule == RuleImportBlocked && !IsRemovableUnknown(pattern) {
 		return Decision{
 			ItemID:      item.ID,
 			DownloadID:  item.DownloadID,
@@ -231,6 +230,7 @@ func applyRemovalMatch(s Settings, item Item, rs RuleSettings, next Strike, thre
 			Unknown:     true,
 		}
 	}
+	var remove, wouldRemove, deferred bool
 	if thresholdMet {
 		remove, wouldRemove, deferred = resolveThresholdAction(rs.Mode, s.MaxRemovalsPerSweep, &spent.removals)
 	}
@@ -245,6 +245,7 @@ func applyRemovalMatch(s Settings, item Item, rs RuleSettings, next Strike, thre
 		WouldRemove: wouldRemove,
 		Blocklist:   *rs.Blocklist,
 		Deferred:    deferred,
+		Unknown:     next.Rule == RuleImportBlocked,
 	}
 }
 

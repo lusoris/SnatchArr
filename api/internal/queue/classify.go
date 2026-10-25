@@ -26,6 +26,14 @@ const (
 // SubreasonRematchPending marks a Lidarr/Readarr distance message below the fixable floor.
 const SubreasonRematchPending = "rematch_pending"
 
+// SubreasonUnrecognized marks a non-empty status line that matches no known pattern.
+const SubreasonUnrecognized = "unrecognized"
+
+// IsRemovableUnknown reports whether an unknown import failure pattern is a removable sub-reason.
+func IsRemovableUnknown(pattern string) bool {
+	return pattern == SubreasonRematchPending || pattern == SubreasonUnrecognized
+}
+
 type patternRule struct {
 	re    *regexp.Regexp
 	class Class
@@ -50,6 +58,9 @@ var (
 	reLockedFile = regexp.MustCompile(`(?i)^Locked file, try again later$`)
 	// src/NzbDrone.Core/Download/CompletedDownloadService.cs.
 	reNoFilesFound = regexp.MustCompile(`(?i)^No files found are eligible for import in .*`)
+
+	// Permission errors are host problems, never a bad release.
+	reOperationalPermission = regexp.MustCompile(`(?i)(permission|access to the path .* is denied|unauthorized)`)
 )
 
 var staticPatterns = []patternRule{
@@ -175,10 +186,11 @@ var staticPatterns = []patternRule{
 }
 
 type lineClassification struct {
-	class     Class
-	pattern   string
-	subreason string
-	pct       *float64
+	class       Class
+	pattern     string
+	subreason   string
+	operational bool
+	pct         *float64
 }
 
 func parsePercent(raw string) (float64, bool) {
@@ -234,14 +246,25 @@ func classifyLine(line string, s Settings, hasUnpackOrLocked, pastGrace bool) li
 		if !hasUnpackOrLocked && pastGrace {
 			return lineClassification{class: ClassBroken, pattern: reNoFilesFound.String()}
 		}
-		return lineClassification{class: ClassUnknown}
+		return lineClassification{class: ClassUnknown, operational: true}
 	}
 	for _, p := range staticPatterns {
 		if p.re.MatchString(trimmed) {
-			return lineClassification{class: p.class, pattern: p.re.String()}
+			return lineClassification{
+				class:       p.class,
+				pattern:     p.re.String(),
+				operational: p.class == ClassUnknown,
+			}
 		}
 	}
-	return lineClassification{class: ClassUnknown}
+	if reOperationalPermission.MatchString(trimmed) {
+		return lineClassification{class: ClassUnknown, operational: true}
+	}
+	return lineClassification{
+		class:     ClassUnknown,
+		pattern:   SubreasonUnrecognized,
+		subreason: SubreasonUnrecognized,
+	}
 }
 
 // ClassifyRejection classifies a single rejection reason string using the shared pattern table.
@@ -263,12 +286,14 @@ func resolveSettingsFloors(s Settings) Settings {
 }
 
 type importCollector struct {
-	sawUnknown   bool
-	rematchOnly  bool
-	brokenPat    string
-	notWantedPat string
-	fixablePat   string
-	minMatchPct  *float64
+	sawUnknown      bool
+	sawOperational  bool
+	sawUnrecognized bool
+	rematchOnly     bool
+	brokenPat       string
+	notWantedPat    string
+	fixablePat      string
+	minMatchPct     *float64
 }
 
 func (c *importCollector) record(res lineClassification) {
@@ -277,10 +302,7 @@ func (c *importCollector) record(res lineClassification) {
 	}
 	switch res.class {
 	case ClassUnknown:
-		c.sawUnknown = true
-		if res.subreason != SubreasonRematchPending {
-			c.rematchOnly = false
-		}
+		c.recordUnknown(res)
 	case ClassBroken:
 		c.rematchOnly = false
 		if c.brokenPat == "" {
@@ -295,6 +317,17 @@ func (c *importCollector) record(res lineClassification) {
 		if c.fixablePat == "" {
 			c.fixablePat = res.pattern
 		}
+	}
+}
+
+// recordUnknown notes whether an unknown line is operational, unrecognized or
+// a rematch line; only rematch lines keep rematchOnly.
+func (c *importCollector) recordUnknown(res lineClassification) {
+	c.sawUnknown = true
+	c.sawOperational = c.sawOperational || res.operational
+	c.sawUnrecognized = c.sawUnrecognized || res.subreason == SubreasonUnrecognized
+	if res.subreason != SubreasonRematchPending {
+		c.rematchOnly = false
 	}
 }
 
@@ -315,7 +348,7 @@ func ClassifyImportItem(item Item, s Settings, now time.Time) (Class, string, *f
 		c.record(res)
 	}
 
-	return resolveClassPrecedence(c.sawUnknown, c.rematchOnly, c.brokenPat, c.notWantedPat, c.fixablePat, c.minMatchPct)
+	return resolveClassPrecedence(c)
 }
 
 // importLines prefers the rejection reasons; items built without them fall back to every status line.
@@ -326,23 +359,29 @@ func importLines(item Item) []string {
 	return item.StatusLines
 }
 
-func resolveClassPrecedence(unknown, rematchOnly bool, broken, notWanted, fixable string, pct *float64) (Class, string, *float64) {
-	if unknown {
-		if rematchOnly && pct != nil {
-			return ClassUnknown, SubreasonRematchPending, pct
+func resolveClassPrecedence(c *importCollector) (Class, string, *float64) {
+	if c.sawUnknown {
+		if c.sawOperational {
+			return ClassUnknown, "", c.minMatchPct
 		}
-		return ClassUnknown, "", pct
+		if c.sawUnrecognized {
+			return ClassUnknown, SubreasonUnrecognized, c.minMatchPct
+		}
+		if c.rematchOnly && c.minMatchPct != nil {
+			return ClassUnknown, SubreasonRematchPending, c.minMatchPct
+		}
+		return ClassUnknown, "", c.minMatchPct
 	}
-	if broken != "" {
-		return ClassBroken, broken, pct
+	if c.brokenPat != "" {
+		return ClassBroken, c.brokenPat, c.minMatchPct
 	}
-	if notWanted != "" {
-		return ClassNotWanted, notWanted, pct
+	if c.notWantedPat != "" {
+		return ClassNotWanted, c.notWantedPat, c.minMatchPct
 	}
-	if fixable != "" {
-		return ClassFixable, fixable, pct
+	if c.fixablePat != "" {
+		return ClassFixable, c.fixablePat, c.minMatchPct
 	}
-	return ClassUnknown, "", pct
+	return ClassUnknown, "", c.minMatchPct
 }
 
 func filterMeaningfulLines(lines []string, title string) []string {

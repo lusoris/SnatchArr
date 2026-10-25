@@ -169,7 +169,7 @@ func TestReasonRulesObserveVsActAndFlags(t *testing.T) {
 		}
 	})
 
-	t.Run("import_blocked/act_mode_never_removes", func(t *testing.T) {
+	t.Run("import_blocked/act_mode_removes_unrecognized", func(t *testing.T) {
 		t.Parallel()
 
 		item := queue.Item{
@@ -198,11 +198,14 @@ func TestReasonRulesObserveVsActAndFlags(t *testing.T) {
 		if d.Next.Count != 6 {
 			t.Fatalf("count = %d, want 6", d.Next.Count)
 		}
-		if d.Remove || d.WouldRemove {
-			t.Fatalf("import_blocked in act mode must NEVER remove: remove = %v, wouldRemove = %v", d.Remove, d.WouldRemove)
+		if !d.Remove || d.WouldRemove {
+			t.Fatalf("import_blocked unrecognized in act mode must remove: remove = %v, wouldRemove = %v", d.Remove, d.WouldRemove)
 		}
 		if !d.Unknown {
 			t.Fatalf("import_blocked must report Unknown = true")
+		}
+		if d.Pattern != "unrecognized" {
+			t.Fatalf("pattern = %q, want unrecognized", d.Pattern)
 		}
 	})
 
@@ -335,4 +338,229 @@ func TestLidarrCensusShapes(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSweepImportBlockedRemovableAndOperational(t *testing.T) {
+	t.Parallel()
+
+	now := fixedNow
+	oldAdded := now.Add(-1 * time.Hour)
+
+	sAct := testSettings(queue.ModeAct, map[queue.Rule]int{queue.RuleImportBlocked: 2})
+	sAct.Grace = 15 * time.Minute
+
+	t.Run("positive/removable_reaches_threshold_in_act", func(t *testing.T) {
+		t.Parallel()
+
+		items := []struct {
+			name        string
+			downloadID  string
+			statusLines []string
+			wantPattern string
+		}{
+			{
+				name:        "rematch_pending",
+				downloadID:  "dl-pos-rematch",
+				statusLines: []string{"Album match is not close enough: 10.2% vs 80%"},
+				wantPattern: queue.SubreasonRematchPending,
+			},
+			{
+				name:        "unrecognized",
+				downloadID:  "dl-pos-unrecog",
+				statusLines: []string{"Completely unknown error from downloader"},
+				wantPattern: queue.SubreasonUnrecognized,
+			},
+		}
+
+		for _, tc := range items {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+
+				item := queue.Item{
+					ID:                   801,
+					DownloadID:           tc.downloadID,
+					Title:                tc.name,
+					Added:                oldAdded,
+					TrackedDownloadState: "importBlocked",
+					StatusLines:          append([]string{tc.name}, tc.statusLines...),
+				}
+
+				// Sweep 1: count 1, before threshold
+				d1 := sweepOne(t, sAct, item, nil, now)
+				if d1.Rule != queue.RuleImportBlocked || d1.Next.Count != 1 || d1.Remove || d1.WouldRemove || !d1.Unknown || d1.Research {
+					t.Fatalf("sweep 1: got %+v, want count 1, remove false, wouldRemove false, unknown true, research false", d1)
+				}
+				if d1.Pattern != tc.wantPattern {
+					t.Fatalf("sweep 1 pattern: got %q, want %q", d1.Pattern, tc.wantPattern)
+				}
+
+				// Sweep 2: count 2, reaches threshold -> Remove true, WouldRemove false, Unknown true, Research false
+				prev := map[string]queue.Strike{item.DownloadID: d1.Next}
+				d2 := sweepOne(t, sAct, item, prev, now.Add(10*time.Minute))
+				if d2.Rule != queue.RuleImportBlocked || d2.Next.Count != 2 || !d2.Remove || d2.WouldRemove || !d2.Unknown || d2.Research {
+					t.Fatalf("sweep 2: got %+v, want count 2, remove true, wouldRemove false, unknown true, research false", d2)
+				}
+				if d2.Pattern != tc.wantPattern {
+					t.Fatalf("sweep 2 pattern: got %q, want %q", d2.Pattern, tc.wantPattern)
+				}
+			})
+		}
+	})
+
+	t.Run("negative/operational_rows_never_remove", func(t *testing.T) {
+		t.Parallel()
+
+		opCases := []struct {
+			name        string
+			statusLines []string
+			added       time.Time
+		}{
+			{"sample_undetermined", []string{"Unable to determine if file is a sample"}, oldAdded},
+			{"episode_tba_title", []string{"Episode has a TBA title and recently aired"}, oldAdded},
+			{"episode_no_absolute_number", []string{"Episode does not have an absolute episode number and recently aired"}, oldAdded},
+			{"category_skip", []string{"Download wasn't grabbed by Sonarr and not in a category, Skipping."}, oldAdded},
+			{"remote_path_mapping", []string{"[/data/dl] is not a valid local path. You may need a Remote Path Mapping."}, oldAdded},
+			{"not_enough_free_space", []string{"Not enough free space"}, oldAdded},
+			{"still_unpacking", []string{"File is still being unpacked"}, oldAdded},
+			{"locked_file", []string{"Locked file, try again later"}, oldAdded},
+			{"mapped_to_series_folder", []string{"Import path is mapped to a series folder"}, oldAdded},
+			{"destination_not_in_root_folder", []string{"Destination artist folder /music is not in a Root Folder"}, oldAdded},
+			// Inside the grace period the sweep never touches an item (isNeverTouched);
+			// TestClassifyImportBlockedRemovableAndOperational covers that line.
+			{"no_files_with_unpack_locked", []string{"No files found are eligible for import in /downloads/album", "File is still being unpacked"}, oldAdded},
+			{"permission_denied", []string{"Access to the path '/media/music' is denied"}, oldAdded},
+		}
+
+		for _, tc := range opCases {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+
+				item := queue.Item{
+					ID:                   850,
+					DownloadID:           "dl-op-" + tc.name,
+					Title:                tc.name,
+					Added:                tc.added,
+					TrackedDownloadState: "importBlocked",
+					StatusLines:          append([]string{tc.name}, tc.statusLines...),
+				}
+
+				// Sweep 1: count 1
+				d1 := sweepOne(t, sAct, item, nil, now)
+				if d1.Remove || d1.WouldRemove || !d1.Unknown || d1.Pattern != "" {
+					t.Fatalf("sweep 1: got remove %v, wouldRemove %v, unknown %v, pattern %q", d1.Remove, d1.WouldRemove, d1.Unknown, d1.Pattern)
+				}
+
+				// Sweep 2: count 2 = threshold
+				prev := map[string]queue.Strike{item.DownloadID: d1.Next}
+				d2 := sweepOne(t, sAct, item, prev, now.Add(10*time.Minute))
+				if d2.Remove || d2.WouldRemove || !d2.Unknown || d2.Pattern != "" {
+					t.Fatalf("sweep 2: got remove %v, wouldRemove %v, unknown %v, pattern %q", d2.Remove, d2.WouldRemove, d2.Unknown, d2.Pattern)
+				}
+
+				// Sweep 3: count 2, past threshold
+				prev[item.DownloadID] = d2.Next
+				d3 := sweepOne(t, sAct, item, prev, now.Add(20*time.Minute))
+				if d3.Remove || d3.WouldRemove || !d3.Unknown || d3.Pattern != "" {
+					t.Fatalf("sweep 3: got remove %v, wouldRemove %v, unknown %v, pattern %q", d3.Remove, d3.WouldRemove, d3.Unknown, d3.Pattern)
+				}
+			})
+		}
+	})
+
+	t.Run("negative/mode_observe_with_rematch_pending", func(t *testing.T) {
+		t.Parallel()
+
+		sObs := testSettings(queue.ModeObserve, map[queue.Rule]int{queue.RuleImportBlocked: 2})
+		item := queue.Item{
+			ID:                   890,
+			DownloadID:           "dl-obs-rematch",
+			Added:                oldAdded,
+			TrackedDownloadState: "importBlocked",
+			StatusLines:          []string{"Album match is not close enough: 10.2% vs 80%"},
+		}
+
+		// Sweep 1: count 1
+		d1 := sweepOne(t, sObs, item, nil, now)
+		if d1.Remove || d1.WouldRemove || !d1.Unknown {
+			t.Fatalf("sweep 1: got remove %v, wouldRemove %v, unknown %v", d1.Remove, d1.WouldRemove, d1.Unknown)
+		}
+
+		// Sweep 2: count 2 = threshold -> WouldRemove true, Remove false
+		prev := map[string]queue.Strike{item.DownloadID: d1.Next}
+		d2 := sweepOne(t, sObs, item, prev, now.Add(10*time.Minute))
+		if d2.Remove || !d2.WouldRemove || !d2.Unknown {
+			t.Fatalf("sweep 2: got remove %v, wouldRemove %v, unknown %v, want remove false, wouldRemove true", d2.Remove, d2.WouldRemove, d2.Unknown)
+		}
+	})
+
+	t.Run("boundary/threshold_progression", func(t *testing.T) {
+		t.Parallel()
+
+		sAct3 := testSettings(queue.ModeAct, map[queue.Rule]int{queue.RuleImportBlocked: 3})
+		item := queue.Item{
+			ID:                   895,
+			DownloadID:           "dl-bound-thresh",
+			Added:                oldAdded,
+			TrackedDownloadState: "importBlocked",
+			StatusLines:          []string{"Unrecognized failure"},
+		}
+
+		// Sweep 1: count 1
+		d1 := sweepOne(t, sAct3, item, nil, now)
+		if d1.Remove || d1.Next.Count != 1 {
+			t.Fatalf("sweep 1: remove %v, count %d", d1.Remove, d1.Next.Count)
+		}
+
+		// Sweep 2: threshold - 1 (count 2) -> no remove
+		prev := map[string]queue.Strike{item.DownloadID: d1.Next}
+		d2 := sweepOne(t, sAct3, item, prev, now.Add(10*time.Minute))
+		if d2.Remove || d2.Next.Count != 2 {
+			t.Fatalf("sweep 2: remove %v, count %d", d2.Remove, d2.Next.Count)
+		}
+
+		// Sweep 3: threshold (count 3) -> remove
+		prev[item.DownloadID] = d2.Next
+		d3 := sweepOne(t, sAct3, item, prev, now.Add(20*time.Minute))
+		if !d3.Remove || d3.Next.Count != 3 {
+			t.Fatalf("sweep 3: remove %v, count %d", d3.Remove, d3.Next.Count)
+		}
+	})
+
+	t.Run("boundary/max_removals_per_sweep", func(t *testing.T) {
+		t.Parallel()
+
+		sBound := testSettings(queue.ModeAct, map[queue.Rule]int{queue.RuleImportBlocked: 2})
+		sBound.MaxRemovalsPerSweep = 1
+
+		item1 := queue.Item{
+			ID:                   898,
+			DownloadID:           "dl-bound-1",
+			Added:                oldAdded,
+			TrackedDownloadState: "importBlocked",
+			StatusLines:          []string{"Album match is not close enough: 10.2% vs 80%"},
+		}
+		item2 := queue.Item{
+			ID:                   899,
+			DownloadID:           "dl-bound-2",
+			Added:                oldAdded,
+			TrackedDownloadState: "importBlocked",
+			StatusLines:          []string{"Unrecognized download issue"},
+		}
+
+		prev := map[string]queue.Strike{
+			item1.DownloadID: {Rule: queue.RuleImportBlocked, Count: 1, LastSeen: now.Add(-10 * time.Minute)},
+			item2.DownloadID: {Rule: queue.RuleImportBlocked, Count: 1, LastSeen: now.Add(-10 * time.Minute)},
+		}
+
+		decisions := queue.Sweep(sBound, []queue.Item{item1, item2}, prev, now)
+		if len(decisions) != 2 {
+			t.Fatalf("returned %d decisions, want 2", len(decisions))
+		}
+		if !decisions[0].Remove || decisions[0].Deferred || !decisions[0].Unknown {
+			t.Errorf("item1: remove %v, deferred %v, unknown %v, want true, false, true", decisions[0].Remove, decisions[0].Deferred, decisions[0].Unknown)
+		}
+		if decisions[1].Remove || !decisions[1].Deferred || !decisions[1].Unknown {
+			t.Errorf("item2: remove %v, deferred %v, unknown %v, want false, true, true", decisions[1].Remove, decisions[1].Deferred, decisions[1].Unknown)
+		}
+	})
 }
