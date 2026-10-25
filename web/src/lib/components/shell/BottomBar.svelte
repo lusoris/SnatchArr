@@ -6,28 +6,37 @@ SPDX-License-Identifier: EUPL-1.2
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { m } from '#lib/paraglide/messages.js';
-	import { isRouteActive } from './nav.js';
+	import { filterByModule, isRouteActive, type ModuledItem } from './nav.js';
 	import NavIcon from './NavIcon.svelte';
+
+	interface TabItem extends ModuledItem {
+		href: '/' | '/activity' | '/instances';
+		label: string;
+		icon: string;
+	}
 
 	interface Props {
 		onOpenDrawer: (opener?: HTMLButtonElement) => void;
+		activeModules?: ReadonlySet<string>;
 	}
 
-	const { onOpenDrawer }: Props = $props();
+	const { onOpenDrawer, activeModules = new Set() }: Props = $props();
 	let moreButtonEl = $state<HTMLButtonElement | null>(null);
 
-	const primaryTabs = [
+	const primaryTabs: readonly TabItem[] = [
 		{ href: '/', label: m.nav_overview(), icon: 'layout-dashboard' },
 		{ href: '/activity', label: m.nav_activity(), icon: 'activity' },
 		{ href: '/instances', label: m.nav_instances(), icon: 'server' }
-	] as const;
+	];
+
+	const visibleTabs = $derived(filterByModule(primaryTabs, activeModules));
 </script>
 
 <nav
 	aria-label={m.nav_bottom_label()}
 	class="fixed inset-x-0 bottom-0 z-40 flex h-[calc(4rem+env(safe-area-inset-bottom,0px))] items-center justify-around border-t border-line bg-surface/95 px-2 pb-[env(safe-area-inset-bottom,0px)] backdrop-blur-md md:hidden"
 >
-	{#each primaryTabs as tab (tab.href)}
+	{#each visibleTabs as tab (tab.href)}
 		{@const active = isRouteActive(page.url.pathname, tab.href)}
 		<a
 			href={resolve(tab.href)}

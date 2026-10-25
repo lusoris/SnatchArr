@@ -13,6 +13,7 @@ describe('query keys', () => {
 		expect(keys.prowlarrLinks).toEqual(['prowlarr', 'links']);
 		expect(keys.prowlarr).toEqual(['prowlarr', 'status']);
 		expect(keys.apiKeys).toEqual(['api-keys']);
+		expect(keys.modules).toEqual(['system', 'modules']);
 		expect(keys.run('a').slice(0, 1)).toEqual(keys.runs);
 	});
 
