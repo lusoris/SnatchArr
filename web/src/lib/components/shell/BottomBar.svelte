@@ -41,7 +41,7 @@ SPDX-License-Identifier: EUPL-1.2
 		<a
 			href={resolve(tab.href)}
 			aria-current={active ? 'page' : undefined}
-			class="flex flex-1 flex-col items-center justify-center gap-1 py-1 text-center transition-colors {active
+			class="flex min-h-11 flex-1 flex-col items-center justify-center gap-1 py-1 text-center transition-colors {active
 				? 'text-brand font-semibold'
 				: 'text-subtle hover:text-fg'}"
 		>
@@ -52,7 +52,7 @@ SPDX-License-Identifier: EUPL-1.2
 	<button
 		bind:this={moreButtonEl}
 		type="button"
-		class="flex flex-1 flex-col items-center justify-center gap-1 py-1 text-center text-subtle transition-colors hover:text-fg"
+		class="flex min-h-11 flex-1 flex-col items-center justify-center gap-1 py-1 text-center text-subtle transition-colors hover:text-fg"
 		onclick={() => onOpenDrawer(moreButtonEl ?? undefined)}
 		aria-label={m.nav_bottom_more()}
 	>

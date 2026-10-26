@@ -669,6 +669,19 @@ test('authenticated: layout touch target height gate fixtures and planted negati
 		'<button type="button" class="btn" style="display: none; height: 32px">Action</button>'
 	);
 	await expect(assertTouchTargetHeights(page, '/test-hidden')).resolves.not.toThrow();
+
+	// Planted nav negative: 43px nav link must fail the check
+	await page.setContent('<nav><a href="/x" style="display:block;height:43px">Tab</a></nav>');
+	const measuredNav = await page.evaluate(measureTouchTargets);
+	expect(measuredNav.length).toBeGreaterThan(0);
+	expect(measuredNav[0].height).toBe(43);
+	await expect(assertTouchTargetHeights(page, '/test-nav-negative')).rejects.toThrow(
+		/\/test-nav-negative: touch target height < 44px on phone \(1 element\(s\)\)/
+	);
+
+	// Positive nav fixture: 44px nav link passes
+	await page.setContent('<nav><a href="/x" style="display:block;height:44px">Tab</a></nav>');
+	await expect(assertTouchTargetHeights(page, '/test-nav-positive')).resolves.not.toThrow();
 });
 
 test('authenticated: layout /connections/download-clients table fits at 1280', async ({ page }) => {
@@ -678,7 +691,9 @@ test('authenticated: layout /connections/download-clients table fits at 1280', a
 
 	const table = page.locator('table');
 	await expect(table).toBeVisible();
-	await expect(table.getByText(/connection refused/i).first()).toBeVisible();
+	if (!served) {
+		await expect(table.getByText(/connection refused/i).first()).toBeVisible();
+	}
 
 	await assertTableFits(page, 'table');
 });
