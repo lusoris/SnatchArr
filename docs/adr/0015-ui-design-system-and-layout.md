@@ -176,6 +176,12 @@ Each round closes milestone issues and shows, in its pull request:
 - SnatchArr pins a released `@sveltesentio/ui` that contains `presetSnatchArr`. Until
   that release exists, `gen-theme.ts` keeps its current tokens, and no round adds local
   colour values in the meantime.
+- Amendment 2026-10-26: the operator picked palette candidate C, Violet Amber (a violet
+  brand with deeper chroma and an amber accent). It lands as a local `PalettePreset` in
+  `web/scripts/gen-theme.ts` before sveltesentio ships it, as an interim exception to the
+  previous point. Expiry trigger: the first `@sveltesentio/ui` release whose
+  `presetSnatchArr` carries the Violet Amber tokens; that bump deletes the local preset and
+  goes back to `presetSnatchArr`. `theme-contrast.test.ts` checks the local tokens until then.
 - Lighthouse CI and the INP measurement add one CI job; its runtime is part of the
   first implementation round's pull request.
 - Child-route subtabs change the instance detail URLs; the old `/instances/[id]` URL
