@@ -25,12 +25,17 @@ vi.mock('$app/paths', () => ({
 import { session } from './session.svelte.js';
 
 const admin = { id: 'u1', username: 'admin', role: 'admin' };
+const requester = { id: 'u2', username: 'requester', role: 'requester' };
+const viewer = { id: 'u3', username: 'viewer', role: 'viewer' };
 
 describe('session', () => {
 	beforeEach(() => {
 		mocks.GET.mockReset();
 		mocks.POST.mockReset();
 		mocks.goto.mockReset();
+		session.user = null;
+		session.state = 'unknown';
+		session.error = '';
 	});
 
 	it('routes to setup while no user exists', async () => {
@@ -38,6 +43,7 @@ describe('session', () => {
 		expect(await session.refresh()).toBe('setup');
 		expect(session.user).toBeNull();
 		expect(session.isAdmin).toBe(false);
+		expect(session.isRequester).toBe(false);
 	});
 
 	it('is authenticated when the cookie session resolves a user', async () => {
@@ -46,6 +52,25 @@ describe('session', () => {
 		});
 		expect(await session.refresh()).toBe('authenticated');
 		expect(session.isAdmin).toBe(true);
+		expect(session.isRequester).toBe(true);
+	});
+
+	it('positive: isRequester is true for admin and requester', () => {
+		session.user = admin as never;
+		expect(session.isRequester).toBe(true);
+
+		session.user = requester as never;
+		expect(session.isRequester).toBe(true);
+	});
+
+	it('negative: isRequester is false for viewer', () => {
+		session.user = viewer as never;
+		expect(session.isRequester).toBe(false);
+	});
+
+	it('boundary: isRequester is false when no user is logged in', () => {
+		session.user = null;
+		expect(session.isRequester).toBe(false);
 	});
 
 	it('treats 401 as anonymous without an error', async () => {

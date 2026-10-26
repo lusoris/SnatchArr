@@ -92,7 +92,7 @@ SPDX-License-Identifier: EUPL-1.2
 					<th scope="col">{m.api_key_created()}</th>
 					<th scope="col">{m.api_key_last_used()}</th>
 					<th scope="col">{m.api_key_expires()}</th>
-					{#if session.isAdmin}
+					{#if session.isRequester}
 						<th scope="col"><span class="sr-only">{m.api_key_actions()}</span></th>
 					{/if}
 				</tr>
@@ -110,7 +110,7 @@ SPDX-License-Identifier: EUPL-1.2
 						<td data-label={m.api_key_expires()}>
 							{key.expires_at ? formatWhen(key.expires_at, getLocale()) : m.api_key_never_expires()}
 						</td>
-						{#if session.isAdmin}
+						{#if session.isRequester}
 							<td data-label="">
 								{#if revokingId === key.id}
 									<div class="flex flex-col gap-2">
@@ -159,7 +159,7 @@ SPDX-License-Identifier: EUPL-1.2
 	</div>
 {/if}
 
-{#if session.isAdmin}
+{#if session.isRequester}
 	<h3 class="mt-6 mb-3 text-lg font-semibold">{m.api_key_create()}</h3>
 	<form
 		class="card flex max-w-xl flex-col gap-4"
