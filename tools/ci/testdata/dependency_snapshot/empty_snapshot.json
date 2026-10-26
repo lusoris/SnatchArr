@@ -1,0 +1,16 @@
+{
+  "version": 0,
+  "detector": {
+    "name": "trivy",
+    "version": "0.75.0",
+    "url": "https://github.com/aquasecurity/trivy"
+  },
+  "ref": "refs/heads/main",
+  "sha": "0000000000000000000000000000000000000000",
+  "job": {
+    "correlator": "Security Scan_dependency-submission",
+    "id": "12345678"
+  },
+  "scanned": "2026-10-26T08:00:00Z",
+  "manifests": {}
+}
