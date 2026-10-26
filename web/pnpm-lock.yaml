@@ -185,8 +185,8 @@ importers:
         specifier: 0.7.0
         version: 0.7.0(a68f8db886b943d81c9f2e9c649f16d4)
       '@sveltesentio/ui':
-        specifier: 0.8.1
-        version: 0.8.1(@lucide/svelte@1.60.0(svelte@5.57.2(@typescript-eslint/types@8.72.0)))(svelte-sonner@1.2.1(svelte@5.57.2(@typescript-eslint/types@8.72.0)))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(tailwindcss@4.3.3)(typescript@6.0.3)
+        specifier: 0.9.0
+        version: 0.9.0(@lucide/svelte@1.60.0(svelte@5.57.2(@typescript-eslint/types@8.72.0)))(svelte-sonner@1.2.1(svelte@5.57.2(@typescript-eslint/types@8.72.0)))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(tailwindcss@4.3.3)(typescript@6.0.3)
       '@tanstack/svelte-query':
         specifier: ^6.2.1
         version: 6.3.5(svelte@5.57.2(@typescript-eslint/types@8.72.0))
@@ -1124,8 +1124,8 @@ packages:
       vitest:
         optional: true
 
-  '@sveltesentio/ui@0.8.1':
-    resolution: {integrity: sha512-j4pcr4XLdi7QqbUYcn+A9khe5+k+gG5uOGyuPfrd4sy9l/CSUo1Jz5j9HBo/sVYz3CaQoswhd8cIkDhu6KTMZA==}
+  '@sveltesentio/ui@0.9.0':
+    resolution: {integrity: sha512-o5DEOtCFqU5uy0s5MlFvstql4RKi/3Qs5mT1OVjCiRGIADAWERgAxcTyZc2XTGDThKtl1Tad3jz00FBLxPUGfw==}
     engines: {node: '>=24'}
     peerDependencies:
       '@iconify/svelte': '>=5.0.0'
@@ -3268,7 +3268,7 @@ snapshots:
     optionalDependencies:
       vitest: 5.0.5(@types/node@24.19.2)(@vitest/coverage-v8@5.0.5)(jsdom@30.1.3)(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
 
-  '@sveltesentio/ui@0.8.1(@lucide/svelte@1.60.0(svelte@5.57.2(@typescript-eslint/types@8.72.0)))(svelte-sonner@1.2.1(svelte@5.57.2(@typescript-eslint/types@8.72.0)))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(tailwindcss@4.3.3)(typescript@6.0.3)':
+  '@sveltesentio/ui@0.9.0(@lucide/svelte@1.60.0(svelte@5.57.2(@typescript-eslint/types@8.72.0)))(svelte-sonner@1.2.1(svelte@5.57.2(@typescript-eslint/types@8.72.0)))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(tailwindcss@4.3.3)(typescript@6.0.3)':
     dependencies:
       dompurify: 3.4.17
       esm-env: 1.2.2
