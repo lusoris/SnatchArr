@@ -3,10 +3,15 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as sentioQuery from '@sveltesentio/query';
+import { toast } from 'svelte-sonner';
 import { api } from './api/client.js';
+import { m } from './paraglide/messages.js';
+import { keys } from './query.js';
 import type { PriorityPresetMap, Settings } from './settings.js';
 import {
 	capsSettingsSchema,
+	createSettingsSave,
 	generalSettingsSchema,
 	mergeCapsSettings,
 	mergeGeneralSettings,
@@ -32,6 +37,11 @@ const sampleServerSettings: Settings = {
 	llm_write_tools: ['snatcharr_create_instance', 'snatcharr_update_instance'],
 	updated_at: '2026-10-25T05:00:00Z'
 };
+
+function stubSettingsApi(data: Settings) {
+	vi.spyOn(api, 'GET').mockResolvedValue({ data } as never);
+	return vi.spyOn(api, 'PUT').mockResolvedValue({ data } as never);
+}
 
 describe('settings pure helpers and schemas', () => {
 	describe('capsSettingsSchema', () => {
@@ -195,8 +205,7 @@ describe('settings pure helpers and schemas', () => {
 
 		it('positive: puts the fresh server copy merged with the draft', async () => {
 			const fresh = { ...sampleServerSettings, user_agent: 'Fresh/2.0' };
-			vi.spyOn(api, 'GET').mockResolvedValue({ data: fresh } as never);
-			const put = vi.spyOn(api, 'PUT').mockResolvedValue({ data: fresh } as never);
+			const put = stubSettingsApi(fresh);
 			await saveMergedSettings(
 				{
 					global_hourly_cap: 0,
@@ -226,6 +235,94 @@ describe('settings pure helpers and schemas', () => {
 				saveMergedSettings({ user_agent: 'x' }, (server, d) => ({ ...server, ...d }))
 			).rejects.toThrow('503');
 			expect(put).not.toHaveBeenCalled();
+		});
+	});
+
+	describe('createSettingsSave', () => {
+		afterEach(() => vi.restoreAllMocks());
+
+		it('positive: configures mutation and executes save on mutationFn', async () => {
+			const mutationSpy = vi
+				.spyOn(sentioQuery, 'createSentioMutation')
+				.mockImplementation(((options: unknown) => options) as never);
+			const toastSuccess = vi.spyOn(toast, 'success').mockReturnValue('' as never);
+
+			const mutation = createSettingsSave(mergeGeneralSettings) as unknown as {
+				mutationFn: (d: {
+					history_retention_days: number;
+					user_agent: string;
+					llm_enabled: boolean;
+				}) => Promise<unknown>;
+				invalidates: unknown[];
+				onSuccess: () => void;
+				onError: (err: unknown) => void;
+			};
+
+			expect(mutationSpy).toHaveBeenCalledOnce();
+			expect(mutation.invalidates).toEqual([keys.settings, keys.caps, keys.instances]);
+
+			const fresh = { ...sampleServerSettings, user_agent: 'Fresh/2.0' };
+			const put = stubSettingsApi(fresh);
+
+			await mutation.mutationFn({
+				history_retention_days: 45,
+				user_agent: 'Agent/3.0',
+				llm_enabled: true
+			});
+
+			const body = (put.mock.calls[0]?.[1] as { body: Settings }).body;
+			expect(body.history_retention_days).toBe(45);
+			expect(body.user_agent).toBe('Agent/3.0');
+
+			mutation.onSuccess();
+			expect(toastSuccess).toHaveBeenCalledWith(m.settings_saved());
+		});
+
+		it('negative: triggers toast error on onError and rejects on save failure', async () => {
+			vi.spyOn(sentioQuery, 'createSentioMutation').mockImplementation(
+				((options: unknown) => options) as never
+			);
+			const toastError = vi.spyOn(toast, 'error').mockReturnValue('' as never);
+
+			const mutation = createSettingsSave(mergeGeneralSettings) as unknown as {
+				mutationFn: (d: unknown) => Promise<unknown>;
+				onError: (err: unknown) => void;
+			};
+
+			mutation.onError(new Error('save failed'));
+			expect(toastError).toHaveBeenCalledWith('save failed');
+
+			vi.spyOn(api, 'GET').mockRejectedValue(new Error('network error'));
+			await expect(mutation.mutationFn({ history_retention_days: 10 })).rejects.toThrow(
+				'network error'
+			);
+		});
+
+		it('boundary: preserves unchanged fields across boundary values and invalidates required keys', async () => {
+			vi.spyOn(sentioQuery, 'createSentioMutation').mockImplementation(
+				((options: unknown) => options) as never
+			);
+
+			const mutation = createSettingsSave(mergeCapsSettings) as unknown as {
+				mutationFn: (d: unknown) => Promise<unknown>;
+				invalidates: unknown[];
+			};
+
+			expect(mutation.invalidates).toHaveLength(3);
+			expect(mutation.invalidates).toContain(keys.settings);
+			expect(mutation.invalidates).toContain(keys.caps);
+			expect(mutation.invalidates).toContain(keys.instances);
+
+			const put = stubSettingsApi({ ...sampleServerSettings });
+
+			await mutation.mutationFn({
+				global_hourly_cap: 0,
+				search_priority_preset: samplePresetMap,
+				download_priority_preset: samplePresetMap
+			});
+
+			const body = (put.mock.calls[0]?.[1] as { body: Settings }).body;
+			expect(body.global_hourly_cap).toBe(0);
 		});
 	});
 });

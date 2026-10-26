@@ -260,6 +260,12 @@ export async function assertCancelDelete(
 	expect(card.getByRole('button', { name: m.action_delete() })).toBeTruthy();
 }
 
+/** Verifies that a problem alert with the given detail is displayed and no save button is present. */
+export async function assertProblemAlert(detail: string): Promise<void> {
+	expect((await screen.findByRole('alert')).textContent).toContain(detail);
+	expect(screen.queryByRole('button', { name: m.instance_save() })).toBeNull();
+}
+
 /**
  * Verifies that a table has the `table-stack` class and that every tbody row has `data-label`
  * attributes matching the corresponding thead `th` text content. For the actions column

@@ -11,7 +11,7 @@ import type { components } from '#lib/api/schema.js';
 import { kindLabel } from '#lib/kinds.js';
 import { m } from '#lib/paraglide/messages.js';
 import { session } from '#lib/session.svelte.js';
-import { renderWithQuery, stubGet } from '#lib/testing/harness.js';
+import { assertProblemAlert, renderWithQuery, stubGet } from '#lib/testing/harness.js';
 import CapsPresetsForm from './CapsPresetsForm.svelte';
 
 type Settings = components['schemas']['Settings'];
@@ -52,6 +52,19 @@ const baseStubs = {
 	'/priority-presets': samplePresets
 };
 
+async function getPriorityFieldsets(): Promise<{
+	search: HTMLElement;
+	download: HTMLElement;
+}> {
+	const search = (await screen.findByRole('group', {
+		name: m.settings_search_priority_preset()
+	})) as HTMLElement;
+	const download = screen.getByRole('group', {
+		name: m.settings_download_priority_preset()
+	}) as HTMLElement;
+	return { search, download };
+}
+
 describe('CapsPresetsForm', () => {
 	afterEach(() => {
 		vi.restoreAllMocks();
@@ -79,9 +92,7 @@ describe('CapsPresetsForm', () => {
 			})
 		});
 		renderWithQuery(CapsPresetsForm);
-
-		expect((await screen.findByRole('alert')).textContent).toContain('failed to read settings');
-		expect(screen.queryByRole('button', { name: m.instance_save() })).toBeNull();
+		await assertProblemAlert('failed to read settings');
 	});
 
 	it('submits updated cap to /settings merging with server copy', async () => {
@@ -119,12 +130,7 @@ describe('CapsPresetsForm', () => {
 		} as never);
 		renderWithQuery(CapsPresetsForm);
 
-		const searchFieldset = (await screen.findByRole('group', {
-			name: m.settings_search_priority_preset()
-		})) as HTMLElement;
-		const downloadFieldset = screen.getByRole('group', {
-			name: m.settings_download_priority_preset()
-		}) as HTMLElement;
+		const { search: searchFieldset, download: downloadFieldset } = await getPriorityFieldsets();
 
 		const sonarrSearch = within(searchFieldset).getByLabelText(
 			kindLabel('sonarr')
@@ -158,12 +164,7 @@ describe('CapsPresetsForm', () => {
 		} as never);
 		const { container } = renderWithQuery(CapsPresetsForm);
 
-		const searchFieldset = (await screen.findByRole('group', {
-			name: m.settings_search_priority_preset()
-		})) as HTMLElement;
-		const downloadFieldset = screen.getByRole('group', {
-			name: m.settings_download_priority_preset()
-		}) as HTMLElement;
+		const { search: searchFieldset, download: downloadFieldset } = await getPriorityFieldsets();
 
 		const sonarrSearch = within(searchFieldset).getByLabelText(
 			kindLabel('sonarr')
