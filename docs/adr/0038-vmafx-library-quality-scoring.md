@@ -7,7 +7,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # ADR-0038: VMAFx Perceptual Video Quality Scoring and Unified Video Hashing Across Media Libraries
 
-- **Status:** Proposed
+- **Status:** Accepted (operator answers recorded 2026-10-26, ledger ids `snatcharr-oq-0038-1` to `snatcharr-oq-0038-9`)
 - **Date:** 2026-10-26
 - **Deciders:** lusoris
 
@@ -82,7 +82,7 @@ This ADR is grounded in the pinned upstream source of **VMAFx** (meaning: extend
 
 ## Decision
 
-SnatchArr adopts an optional, local-only perceptual video quality and content-verification pipeline built on **VMAFx** (`v1.0.0-rc.3` contract) and a single shared video-hashing implementation (`HISS-19`) across all video libraries. The architecture is divided into five parts, with the remaining design choices recorded as explicit open questions (`OQ-0038-1` through `OQ-0038-9`).
+SnatchArr adopts an optional, local-only perceptual video quality and content-verification pipeline built on **VMAFx** (`v1.0.0-rc.3` contract) and a single shared video-hashing implementation (`HISS-19`) across all video libraries. The architecture is divided into five parts, with the design choices answered in `OQ-0038-1` through `OQ-0038-9` (see Answered Questions).
 
 ```mermaid
 flowchart LR
@@ -204,7 +204,7 @@ Three candidate owners were evaluated (`OQ-0038-1`):
 | **2. `Stash` GraphQL (`phash` + `oshash`, [ADR-0032](0032-stash-own-or-integrate.md))** | Stash computes 64-bit `oshash` and 64-bit sprite-grid DCT `phash` natively and exposes them over GraphQL ([ADR-0033](0033-adult-identity-and-model.md)). Stash is licensed under `AGPL-3.0-or-later`, which ADR-0032 isolated via the `Link` boundary. | Zero new hashing code for folders already indexed by a linked Stash instance; bit-exact with `stash-box` fingerprints. | Fails for every adopter who runs only Radarr/Sonarr/Lidarr/Jellyfin with the adult module disabled ([ADR-0025](0025-module-switches.md), [ADR-0027](0027-adult-module.md)); copying Stash's `AGPL-3.0-or-later` source into SnatchArr is forbidden by ADR-0032. |
 | **3. `SnatchArr`-owned clean-room Rust crate (`worker/crates/snatch-vhash`) + optional Stash import** | Implemented once in Rust under SnatchArr's `EUPL-1.2` licence (`#![forbid(unsafe_code)]`) following the public `oshash` spec (head/tail 64 KiB + file size) and the public 64-bit DCT sprite-grid `phash` algorithm; imports pre-computed hashes from Stash GraphQL when Stash already scanned the path. | Serves **all** video libraries (films, series, anime, music videos, adult) without requiring Stash; respects ADR-0032 `AGPL-3.0` isolation; satisfies `HISS-19` with a single internal implementation. | Must maintain clean-room parity fixtures against the `stash-box` 64-bit DCT sprite-grid specification so Hamming distances stay within `d <= 4` ([ADR-0033](0033-adult-identity-and-model.md)). |
 
-The choice of hash source is recorded as open decision `OQ-0038-1`.
+Answer `OQ-0038-1` (ledger `snatcharr-oq-0038-1`): owner 3, the clean-room Rust crate `worker/crates/snatch-vhash`, `stash-box` compatible, proven by golden parity vectors; hashes from a linked Stash are imported, never recomputed twice.
 
 ### c) Video Hash as Identity Evidence and Pre-VMAFx Cut Gate
 
@@ -240,7 +240,7 @@ Hashes and VMAFx scores integrate directly into the four-stage Fellegi-Sunter ma
 
 ### d) Where Scoring Runs: Placement Options and Operational Invariants
 
-SnatchArr's Go control plane (`api/`) never downloads media ([ADR-0006](0006-download-client-backpressure.md)) and remains a lightweight stateless/PostgreSQL control service ([ADR-0010](0010-keep-api-worker-split.md)). Video quality scoring requires reading mounted library or staging files and decoding raw YUV frames. Four execution placements remain open (`OQ-0038-2`):
+SnatchArr's Go control plane (`api/`) never downloads media ([ADR-0006](0006-download-client-backpressure.md)) and remains a lightweight stateless/PostgreSQL control service ([ADR-0010](0010-keep-api-worker-split.md)). Video quality scoring requires reading mounted library or staging files and decoding raw YUV frames. Four execution placements were evaluated; answer `OQ-0038-2` (ledger `snatcharr-oq-0038-2`) chose option a, a dedicated optional VMAFx service container (Compose and Helm) with read-only media mounts, called over gRPC or HTTP:
 
 | Option | Mechanism | Pros | Risks & Trade-offs |
 | :--- | :--- | :--- | :--- |
@@ -268,7 +268,25 @@ SnatchArr's Go control plane (`api/`) never downloads media ([ADR-0006](0006-dow
 - **No hosted scoring service**: SnatchArr never uploads video frames, clips, filenames, or paths to any external or cloud-hosted scoring API.
 - **Loopback / internal transport confinement**: Embedded MCP transports bind to `127.0.0.1` for SSE or `0700` Unix domain sockets (`core/include/libvmaf/libvmaf_mcp.h:33-36,167-191`), and standalone `vmafx-server` / `vmafx-controller` / `vmafx-mcp` endpoints run on the internal container/cluster network with mTLS or bearer-token authentication (`docs/server/controller.md:196-236`).
 
+## Answered Questions
+
+The operator answered every open question on 2026-10-26. Each answer is recorded in the decision ledger under the id shown; the wording is a paraphrase. Where an answer differs from the recommendation in the question list that follows, the answer binds.
+
+| ID | Answer | Ledger id |
+| :--- | :--- | :--- |
+| `OQ-0038-1` | **a**: clean-room Rust crate `snatch-vhash` in `worker/`, `stash-box` compatible `phash` and `oshash` with golden parity vectors; Stash hashes are imported when Stash is linked. | `snatcharr-oq-0038-1` |
+| `OQ-0038-2` | **a**: dedicated optional VMAFx service container (Compose and Helm), read-only media mounts, called over gRPC or HTTP. | `snatcharr-oq-0038-2` |
+| `OQ-0038-3` | **a**: event-driven on a staged upgrade or duplicate plus an on-demand trigger; upgrade interception starts in observe mode ([ADR-0012](0012-queue-management-replaces-cleanuparr-link.md)). | `snatcharr-oq-0038-3` |
+| `OQ-0038-4` | **a**: a single copy stores probe and hashes with `score_kind = 'unscored_single_copy'`; full-reference VMAF only with a second copy; optional no-reference or probe diagnostics live in a separate field, never mixed with `fr_vmaf`. | `snatcharr-oq-0038-4` |
+| `OQ-0038-5` | **a**: gate on `vmaf_harmonic_mean` (or `vmaf_perc10`): candidate at least 85.0 and no regression above 1.0 point; observe mode first. | `snatcharr-oq-0038-5` |
+| `OQ-0038-6` | **a**: own module switch `APP_SNATCHARR_MODULES_QUALITY_SCORING_ENABLED`, default off ([ADR-0025](0025-module-switches.md)). | `snatcharr-oq-0038-6` |
+| `OQ-0038-7` | **a**: CPU-only hosts run SIMD scoring over deterministic sampled windows at a low thread count; full-file scoring is an opt-in profile. | `snatcharr-oq-0038-7` |
+| `OQ-0038-8` | **a**: three 20 s windows at 15, 50 and 85 % with odd subsample 3 or 5; automatic escalation to the full stream on high window variance. | `snatcharr-oq-0038-8` |
+| `OQ-0038-9` | **b**, against the recommendation: the VMAFx library default `vmaf_v1.0.16_3d0h` everywhere, not `vmaf_v0.6.1`. The 4K CUDA throughput drop and the `216x160` minimum at `v1.0.0-rc.3` are VMAFx gaps that the VMAFx project closes; they are no reason to pin the old model. Until they close, a file below the floor is recorded with a typed geometry error and stays unscored; SnatchArr never switches model silently. | `snatcharr-oq-0038-9` |
+
 ## Open Questions
+
+The question list below is kept as the record of the options and risks the answers chose from.
 
 Each open architectural fork is recorded below in canonical option-and-risk format for operator resolution before implementation slices land:
 
