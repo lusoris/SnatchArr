@@ -1,0 +1,6 @@
+{
+  "name": "fixture-empty",
+  "dependencies": {
+    "zod": "^4.0.0"
+  }
+}
