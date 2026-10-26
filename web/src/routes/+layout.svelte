@@ -14,6 +14,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { ProblemError } from '@sveltesentio/core';
 	import { onMount } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
+	import { DEFAULT_BRAND_MARK, DEFAULT_SFW_MODE, resolveBrandMark } from '#lib/brand-mark.js';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import { getNavItems, isRouteDisabled } from '#lib/components/shell/nav.js';
 	import BottomBar from '#lib/components/shell/BottomBar.svelte';
@@ -64,6 +65,11 @@ SPDX-License-Identifier: EUPL-1.2
 		return set;
 	});
 
+	// The persisted brand_mark / sfw_mode settings follow in a later change; the session does not
+	// carry adult_allowed yet (ADR-0026 section 4), so auto fails closed to the hand mark (ADR-0042).
+	const brandMark = $derived(
+		resolveBrandMark(DEFAULT_BRAND_MARK, DEFAULT_SFW_MODE, activeModules.has('adult'), false)
+	);
 	const navItems = $derived(getNavItems(activeModules));
 	const routeGuard = $derived(isRouteDisabled(page.url.pathname, activeModules));
 
@@ -142,9 +148,21 @@ SPDX-License-Identifier: EUPL-1.2
 		</main>
 	{:else}
 		<div class="min-h-screen bg-bg text-fg">
-			<TopBar {drawerOpen} onOpenDrawer={openDrawer} onOpenSearch={openSearch} bind:menuButtonEl />
+			<TopBar
+				{drawerOpen}
+				onOpenDrawer={openDrawer}
+				onOpenSearch={openSearch}
+				bind:menuButtonEl
+				mark={brandMark}
+			/>
 
-			<Sidebar {navItems} {activeModules} onLogout={logout} onOpenSearch={openSearch} />
+			<Sidebar
+				{navItems}
+				{activeModules}
+				onLogout={logout}
+				onOpenSearch={openSearch}
+				mark={brandMark}
+			/>
 
 			<NavDrawer
 				open={drawerOpen}
@@ -152,6 +170,7 @@ SPDX-License-Identifier: EUPL-1.2
 				onLogout={logout}
 				{menuButtonEl}
 				{activeModules}
+				mark={brandMark}
 			/>
 
 			<BottomBar onOpenDrawer={openDrawer} {activeModules} />

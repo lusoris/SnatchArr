@@ -5,6 +5,7 @@ SPDX-License-Identifier: EUPL-1.2
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { isApplePlatform } from '@sveltesentio/ui/cmd';
+	import { FALLBACK_BRAND_MARK, type BrandMarkKind } from '#lib/brand-mark.js';
 	import BrandMark from '#lib/components/BrandMark.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { filterByModule, getNavItems, type NavItem } from './nav.js';
@@ -18,9 +19,17 @@ SPDX-License-Identifier: EUPL-1.2
 		activeModules?: ReadonlySet<string>;
 		onLogout: () => void;
 		onOpenSearch?: () => void;
+		/** Effective brand mark, resolved by the layout (ADR-0042). Defaults to the fail-closed fallback. */
+		mark?: BrandMarkKind;
 	}
 
-	const { navItems, activeModules = new Set(), onLogout, onOpenSearch }: Props = $props();
+	const {
+		navItems,
+		activeModules = new Set(),
+		onLogout,
+		onOpenSearch,
+		mark = FALLBACK_BRAND_MARK
+	}: Props = $props();
 
 	const effectiveNavItems = $derived(
 		filterByModule(navItems ?? getNavItems(activeModules), activeModules)
@@ -41,7 +50,7 @@ SPDX-License-Identifier: EUPL-1.2
 			class="flex items-center gap-2.5 font-sans text-base font-semibold tracking-[-0.01em] text-fg"
 		>
 			<span class="text-brand flex items-center">
-				<BrandMark size={24} />
+				<BrandMark size={24} {mark} />
 			</span>
 			<span>{m.app_name()}</span>
 		</a>
