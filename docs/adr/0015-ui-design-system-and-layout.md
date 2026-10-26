@@ -182,6 +182,9 @@ Each round closes milestone issues and shows, in its pull request:
   previous point. Expiry trigger: the first `@sveltesentio/ui` release whose
   `presetSnatchArr` carries the Violet Amber tokens; that bump deletes the local preset and
   goes back to `presetSnatchArr`. `theme-contrast.test.ts` checks the local tokens until then.
+- Amendment 2026-10-26: `@sveltesentio/ui` 0.9.0 ships Violet Amber as `presetSnatchArr`.
+  The interim exception has ended: `gen-theme.ts` uses `presetSnatchArr` again, and the
+  generated `theme.css` is unchanged.
 - Lighthouse CI and the INP measurement add one CI job; its runtime is part of the
   first implementation round's pull request.
 - Child-route subtabs change the instance detail URLs; the old `/instances/[id]` URL
