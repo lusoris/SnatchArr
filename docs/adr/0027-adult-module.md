@@ -7,6 +7,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 # ADR-0027: Adult module: stash-box sources, Whisparr requests and image sets
 
 - Status: proposed
+- **Implementation:** pending ([#566](https://github.com/lusoris/SnatchArr/issues/566))
 - Date: 2026-10-24
 - Related: [ADR-0006](0006-download-client-backpressure.md), [ADR-0018](0018-product-front-door.md), [ADR-0021](0021-llm-access-module.md), [ADR-0023](0023-sso-viewer-role.md), [ADR-0025](0025-module-switches.md)
 
@@ -338,7 +339,7 @@ In accordance with HISS-15 (3D testing: positive, negative, boundary) and HISS-2
 - **Upstream dependency**: Relies on goenvoy upstream pull request for stash-box GraphQL mutations if write-back is enabled.
 - **Filesystem mapping requirements**: Image set support requires configuring shared volume mounts across container deployments.
 
-## Open questions
+## Answered questions
 
 ### 1. `adult-module-display-name`
 
@@ -382,15 +383,16 @@ Extent of Stash-box client capabilities upstreamed to `goenvoy`:
 
 ## Follow-ups
 
-- [ ] Upstream PR in `github.com/golusoris/goenvoy` for `metadata/adult/stashbox` write mutations (`favoritePerformer`, `favoriteStudio`).
-- [x] Database migration slice: tables `adult_stashbox_instances`, `adult_favorite_performers`, `adult_performer_links`, `adult_image_sets`, `adult_image_items`. Migration `000036_adult_module` also adds `adult_favorite_studios` and `adult_studio_links`.
-- [x] Go control plane slice: module descriptor registration in `api/internal/modules` and `ModuleGateMiddleware` integration ([ADR-0025](0025-module-switches.md)). `adult` is registered disabled by default with a strict config validator (`image_set_dir`, `sync_interval_minutes`); `TestModuleOpsRegisteredInRegistry` now accepts `x-module: adult` operations, which arrive with the OpenAPI slice.
-- [x] Stash-box federation slice: multi-instance client pooling, leader loop in `leader_loops` fx group with quiescent tick, bounded pagination sync. Package `api/internal/adult`; favourite URLs persist in migration `000038_adult_favorite_urls`; a sweep truncated at 500 items skips stale-link marking.
-- [ ] Whisparr request slice: scene request intake, `StashId` mapping for Whisparr v3 and series mapping for v2, hourly cap debit.
-- [x] Image set engine slice: directory scanner, WebP thumbnail generator with 100 MB decode bound, streaming image server, and a boot test that refuses a missing image-set directory (`bootcheck.go`, `scan.go`, `thumb.go`, `serve.go`, `ScanTicker`, optional config key `thumbnail_cache_dir`, unique index in migration `000039_adult_image_items_unique`).
-- [ ] OpenAPI and Jellyfin integration slice: `/api/v1/adult/*` routes with `x-module: adult` and companion Jellyfin endpoints ([ADR-0018](0018-product-front-door.md) follow-up 4, issue [#567](https://github.com/lusoris/SnatchArr/issues/567)).
-- [ ] Frontend SPA slice: adult settings toggle, stash-box instance management, favourites search, image set gallery viewer in Svelte 5.
-
+| Item | Issue | Milestone |
+| :--- | :--- | :--- |
+| Upstream PR in `github.com/golusoris/goenvoy` for `metadata/adult/stashbox` write mutations (`favoritePerformer`, `favoriteStudio`). | [#807](https://github.com/lusoris/SnatchArr/issues/807) | **0.10** |
+| Database migration slice: tables `adult_stashbox_instances`, `adult_favorite_performers`, `adult_performer_links`, `adult_image_sets`, `adult_image_items`. Migration `000036_adult_module` also adds `adult_favorite_studios` and `adult_studio_links`. | done in [#663](https://github.com/lusoris/SnatchArr/pull/663) | - |
+| Go control plane slice: module descriptor registration in `api/internal/modules` and `ModuleGateMiddleware` integration ([ADR-0025](0025-module-switches.md)). `adult` is registered disabled by default with a strict config validator (`image_set_dir`, `sync_interval_minutes`); `TestModuleOpsRegisteredInRegistry` now accepts `x-module: adult` operations, which arrive with the OpenAPI slice. | done in [#668](https://github.com/lusoris/SnatchArr/pull/668) | - |
+| Stash-box federation slice: multi-instance client pooling, leader loop in `leader_loops` fx group with quiescent tick, bounded pagination sync. Package `api/internal/adult`; favourite URLs persist in migration `000038_adult_favorite_urls`; a sweep truncated at 500 items skips stale-link marking. | done in [#674](https://github.com/lusoris/SnatchArr/pull/674) | - |
+| Whisparr request slice: scene request intake, `StashId` mapping for Whisparr v3 and series mapping for v2, hourly cap debit. | [#737](https://github.com/lusoris/SnatchArr/issues/737) | **0.10** |
+| Image set engine slice: directory scanner, WebP thumbnail generator with 100 MB decode bound, streaming image server, and a boot test that refuses a missing image-set directory (`bootcheck.go`, `scan.go`, `thumb.go`, `serve.go`, `ScanTicker`, optional config key `thumbnail_cache_dir`, unique index in migration `000039_adult_image_items_unique`). | done in [#679](https://github.com/lusoris/SnatchArr/pull/679) | - |
+| OpenAPI and Jellyfin integration slice: `/api/v1/adult/*` routes with `x-module: adult` and companion Jellyfin endpoints ([ADR-0018](0018-product-front-door.md) follow-up 4, issue [#567](https://github.com/lusoris/SnatchArr/issues/567)). | [#768](https://github.com/lusoris/SnatchArr/issues/768) | **0.10** |
+| Frontend SPA slice: adult settings toggle, stash-box instance management, favourites search, image set gallery viewer in Svelte 5. | [#566](https://github.com/lusoris/SnatchArr/issues/566) | **0.10** |
 ## References
 
 - `napp3-folded-into-napp2-20261020` (2026-10-20T14:09:54) (paraphrased): Image sets folded into adult module (working name stashbridge, not to be used as final); multi-instance stash-box sync, favourites search, Whisparr scene linking, Jellyfin integration.
