@@ -1,0 +1,9 @@
+{
+  "name": "fixture-accept",
+  "dependencies": {
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@inlang/paraglide-js": "^2.0.0"
+  }
+}
