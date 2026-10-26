@@ -100,8 +100,9 @@ export async function mockSignedInApi(
 		)
 	);
 	await page.route('**/api/v1/auth/sso', (route) =>
-		route.fulfill(json({ oidc: false, proxy: false }))
+		route.fulfill(json({ oidc: false, proxy: false, jellyfin: true }))
 	);
+	await page.route('**/api/v1/auth/identities', (route) => route.fulfill(json({ items: [] })));
 	for (const path of [
 		'instances',
 		'hourly-caps',
