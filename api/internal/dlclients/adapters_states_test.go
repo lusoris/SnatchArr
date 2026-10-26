@@ -126,8 +126,8 @@ func TestQBittorrent_DocumentedStatesHTTP(t *testing.T) {
 			defer srv.Close()
 			s := observe(t, domain.ClientQBittorrent, srv.URL, "", "")
 			if !s.Reachable || s.Active != tc.wantActive || s.Queued != tc.wantQueued {
-				t.Fatalf("got reachable=%t, active=%d, queued=%d; want active=%d, queued=%d",
-					s.Reachable, s.Active, s.Queued, tc.wantActive, tc.wantQueued)
+				t.Fatalf("got reachable=%t, active=%d, queued=%d; want active=%d, queued=%d, error=%q",
+					s.Reachable, s.Active, s.Queued, tc.wantActive, tc.wantQueued, s.Error)
 			}
 		})
 	}
@@ -226,8 +226,8 @@ func TestTransmission_DocumentedStatesHTTP(t *testing.T) {
 			defer srv.Close()
 			s := observe(t, domain.ClientTransmission, srv.URL, "", "")
 			if !s.Reachable || s.Active != tc.wantActive || s.Queued != tc.wantQueued {
-				t.Fatalf("got reachable=%t, active=%d, queued=%d; want active=%d, queued=%d",
-					s.Reachable, s.Active, s.Queued, tc.wantActive, tc.wantQueued)
+				t.Fatalf("got reachable=%t, active=%d, queued=%d; want active=%d, queued=%d, error=%q",
+					s.Reachable, s.Active, s.Queued, tc.wantActive, tc.wantQueued, s.Error)
 			}
 		})
 	}
@@ -326,8 +326,8 @@ func TestDeluge_DocumentedStatesHTTP(t *testing.T) {
 			defer srv.Close()
 			s := observe(t, domain.ClientDeluge, srv.URL, "", "")
 			if !s.Reachable || s.Active != tc.wantActive || s.Queued != tc.wantQueued {
-				t.Fatalf("got reachable=%t, active=%d, queued=%d; want active=%d, queued=%d",
-					s.Reachable, s.Active, s.Queued, tc.wantActive, tc.wantQueued)
+				t.Fatalf("got reachable=%t, active=%d, queued=%d; want active=%d, queued=%d, error=%q",
+					s.Reachable, s.Active, s.Queued, tc.wantActive, tc.wantQueued, s.Error)
 			}
 		})
 	}
@@ -453,8 +453,8 @@ func TestRTorrent_DocumentedStatesHTTP(t *testing.T) {
 			defer srv.Close()
 			s := observe(t, domain.ClientRTorrent, srv.URL, "", "")
 			if !s.Reachable || s.Active != tc.wantActive || s.Queued != tc.wantQueued {
-				t.Fatalf("got reachable=%t, active=%d, queued=%d; want active=%d, queued=%d",
-					s.Reachable, s.Active, s.Queued, tc.wantActive, tc.wantQueued)
+				t.Fatalf("got reachable=%t, active=%d, queued=%d; want active=%d, queued=%d, error=%q",
+					s.Reachable, s.Active, s.Queued, tc.wantActive, tc.wantQueued, s.Error)
 			}
 		})
 	}
@@ -570,8 +570,8 @@ func TestSABnzbd_PreCheckFixtureHTTP(t *testing.T) {
 
 	s := observe(t, domain.ClientSABnzbd, srv.URL, "", "")
 	if !s.Reachable || s.Active != 1 || s.Queued != 8 {
-		t.Fatalf("got reachable=%t, active=%d, queued=%d; want active=1, queued=8",
-			s.Reachable, s.Active, s.Queued)
+		t.Fatalf("got reachable=%t, active=%d, queued=%d; want active=1, queued=8, error=%q",
+			s.Reachable, s.Active, s.Queued, s.Error)
 	}
 }
 
@@ -671,8 +671,8 @@ func TestNZBGet_DocumentedStatesHTTP(t *testing.T) {
 			defer srv.Close()
 			s := observe(t, domain.ClientNZBGet, srv.URL, "", "")
 			if !s.Reachable || s.Active != tc.wantActive || s.Queued != tc.wantQueued {
-				t.Fatalf("got reachable=%t, active=%d, queued=%d; want active=%d, queued=%d",
-					s.Reachable, s.Active, s.Queued, tc.wantActive, tc.wantQueued)
+				t.Fatalf("got reachable=%t, active=%d, queued=%d; want active=%d, queued=%d, error=%q",
+					s.Reachable, s.Active, s.Queued, tc.wantActive, tc.wantQueued, s.Error)
 			}
 		})
 	}
