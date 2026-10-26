@@ -44,6 +44,7 @@
 //	snatcharr.proxy_auth.requester_groups APP_SNATCHARR_PROXY_AUTH_REQUESTER_GROUPS comma-separated groups granting requester role
 //	snatcharr.proxy_auth.viewer_groups APP_SNATCHARR_PROXY_AUTH_VIEWER_GROUPS comma-separated groups granting viewer role
 //	snatcharr.proxy_auth.allowed_users APP_SNATCHARR_PROXY_AUTH_ALLOWED_USERS deprecated; rejected if set
+//	snatcharr.jellyfin.default_role APP_SNATCHARR_JELLYFIN_DEFAULT_ROLE default role for new Jellyfin members (default requester)
 //	snatcharr.metrics.addr       APP_SNATCHARR_METRICS_ADDR       separate HTTP listen address for Prometheus /metrics
 package config
 
@@ -60,6 +61,8 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/config"
+
+	"github.com/lusoris/SnatchArr/api/internal/domain"
 )
 
 // Profile selects the runtime wiring.
@@ -85,6 +88,7 @@ type Options struct {
 	OIDC      OIDCOptions      `koanf:"oidc"`
 	ProxyAuth ProxyAuthOptions `koanf:"proxy_auth"`
 	Prowlarr  ProwlarrOptions  `koanf:"prowlarr"`
+	Jellyfin  JellyfinOptions  `koanf:"jellyfin"`
 	Logs      LogsOptions      `koanf:"logs"`
 	Metrics   MetricsOptions   `koanf:"metrics"`
 }
@@ -121,6 +125,26 @@ func (p ProwlarrOptions) Validate() error {
 		return fmt.Errorf("config: prowlarr.limit_threshold must be between 0 (exclusive) and 1 (inclusive), got %v", p.LimitThreshold)
 	}
 	return nil
+}
+
+// JellyfinOptions configures Jellyfin authentication and membership settings.
+type JellyfinOptions struct {
+	DefaultRole domain.Role `koanf:"default_role"`
+}
+
+// Validate checks that DefaultRole is either requester or viewer.
+func (j JellyfinOptions) Validate() error {
+	normalized := domain.Role(strings.ToLower(strings.TrimSpace(string(j.DefaultRole))))
+	switch normalized {
+	case domain.RoleRequester, domain.RoleViewer:
+		return nil
+	case domain.RoleAdmin:
+		return errors.New("config: snatcharr.jellyfin.default_role (APP_SNATCHARR_JELLYFIN_DEFAULT_ROLE) cannot be \"admin\"; must be \"requester\" or \"viewer\"")
+	case "":
+		return errors.New("config: snatcharr.jellyfin.default_role (APP_SNATCHARR_JELLYFIN_DEFAULT_ROLE) must not be empty; must be \"requester\" or \"viewer\"")
+	default:
+		return fmt.Errorf("config: invalid snatcharr.jellyfin.default_role (APP_SNATCHARR_JELLYFIN_DEFAULT_ROLE) %q: must be %q or %q", j.DefaultRole, domain.RoleRequester, domain.RoleViewer)
+	}
 }
 
 // SetupOptions configure the first-run setup wizard.
@@ -408,6 +432,9 @@ func Default() Options {
 		Prowlarr: ProwlarrOptions{
 			LimitThreshold: 0.9,
 		},
+		Jellyfin: JellyfinOptions{
+			DefaultRole: domain.RoleRequester,
+		},
 		Logs: LogsOptions{RingSize: 2000},
 	}
 }
@@ -422,6 +449,7 @@ func Load(cfg *config.Config) (Options, error) {
 	o.Proxy.Trusted = cleanTrusted(o.Proxy.Trusted)
 	normalizeOIDC(&o.OIDC, o.Public.URL)
 	normalizeProxyAuth(&o.ProxyAuth)
+	normalizeJellyfin(&o.Jellyfin)
 	if err := o.Validate(); err != nil {
 		return Options{}, err
 	}
@@ -471,6 +499,10 @@ func normalizeProxyAuth(p *ProxyAuthOptions) {
 	}
 	// Secret files often end in a newline; the proxy never sends one.
 	p.Secret = strings.TrimSpace(p.Secret)
+}
+
+func normalizeJellyfin(j *JellyfinOptions) {
+	j.DefaultRole = domain.Role(strings.ToLower(strings.TrimSpace(string(j.DefaultRole))))
 }
 
 func cleanTrusted(raw []string) []string {
@@ -534,6 +566,9 @@ func (o Options) Validate() error {
 	if err := o.Prowlarr.Validate(); err != nil {
 		return err
 	}
+	if err := o.Jellyfin.Validate(); err != nil {
+		return err
+	}
 	if err := o.Metrics.Validate(); err != nil {
 		return err
 	}
@@ -589,6 +624,7 @@ func CompoundKeys() []string {
 		"snatcharr.proxy_auth.trusted_cidrs",
 		"snatcharr.proxy_auth.allowed_users",
 		"snatcharr.prowlarr.limit_threshold",
+		"snatcharr.jellyfin.default_role",
 		"snatcharr.logs.ring_size",
 		"snatcharr.configarr.download_clients",
 	}

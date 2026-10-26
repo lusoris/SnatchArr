@@ -15,6 +15,7 @@ import (
 	gconfig "github.com/golusoris/golusoris/core/config"
 
 	"github.com/lusoris/SnatchArr/api/internal/config"
+	"github.com/lusoris/SnatchArr/api/internal/domain"
 )
 
 func TestValidate(t *testing.T) {
@@ -75,6 +76,22 @@ func TestValidate(t *testing.T) {
 		}, nil, true},
 		{"negative prowlarr threshold greater than 1 refused", func(o *config.Options) {
 			o.Prowlarr.LimitThreshold = 1.01
+		}, nil, true},
+		{"positive jellyfin default role default requester", func(o *config.Options) {}, nil, false},
+		{"positive jellyfin default role viewer", func(o *config.Options) {
+			o.Jellyfin.DefaultRole = domain.RoleViewer
+		}, nil, false},
+		{"positive jellyfin default role normalized whitespace", func(o *config.Options) {
+			o.Jellyfin.DefaultRole = "  Viewer  "
+		}, nil, false},
+		{"negative jellyfin default role admin refused", func(o *config.Options) {
+			o.Jellyfin.DefaultRole = domain.RoleAdmin
+		}, nil, true},
+		{"negative jellyfin default role owner refused", func(o *config.Options) {
+			o.Jellyfin.DefaultRole = "owner"
+		}, nil, true},
+		{"negative jellyfin default role empty refused", func(o *config.Options) {
+			o.Jellyfin.DefaultRole = ""
 		}, nil, true},
 		{"positive oidc valid prod", func(o *config.Options) {
 			o.OIDC.Enabled = true
@@ -858,6 +875,16 @@ func TestLoadCompoundKeysFromEnv(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "jellyfin default_role",
+			env:  map[string]string{"APP_SNATCHARR_JELLYFIN_DEFAULT_ROLE": "viewer"},
+			assertFn: func(t *testing.T, opts config.Options) {
+				t.Helper()
+				if opts.Jellyfin.DefaultRole != domain.RoleViewer {
+					t.Fatalf("Jellyfin.DefaultRole = %q, want %q", opts.Jellyfin.DefaultRole, domain.RoleViewer)
+				}
+			},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1000,6 +1027,123 @@ func TestMetricsAddr_Load(t *testing.T) {
 			}
 			if opts.Metrics.Addr != tc.wantAddr {
 				t.Fatalf("Metrics.Addr = %q, want %q", opts.Metrics.Addr, tc.wantAddr)
+			}
+		})
+	}
+}
+
+func TestLoad_JellyfinDefaultRole(t *testing.T) {
+	cases := []struct {
+		name     string
+		setEnv   bool
+		envVal   string
+		wantRole domain.Role
+		wantErr  bool
+	}{
+		{
+			name:     "positive default yields requester",
+			setEnv:   false,
+			wantRole: domain.RoleRequester,
+			wantErr:  false,
+		},
+		{
+			name:     "positive viewer accepted",
+			setEnv:   true,
+			envVal:   "viewer",
+			wantRole: domain.RoleViewer,
+			wantErr:  false,
+		},
+		{
+			name:     "positive Viewer with whitespace accepted and normalized",
+			setEnv:   true,
+			envVal:   "  Viewer  ",
+			wantRole: domain.RoleViewer,
+			wantErr:  false,
+		},
+		{
+			name:    "negative admin refused at boot",
+			setEnv:  true,
+			envVal:  "admin",
+			wantErr: true,
+		},
+		{
+			name:    "negative owner refused at boot",
+			setEnv:  true,
+			envVal:  "owner",
+			wantErr: true,
+		},
+		{
+			name:    "negative explicit empty refused at boot",
+			setEnv:  true,
+			envVal:  "",
+			wantErr: true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("APP_SNATCHARR_PROFILE", "dev")
+			if tc.setEnv {
+				t.Setenv("APP_SNATCHARR_JELLYFIN_DEFAULT_ROLE", tc.envVal)
+			}
+			cfg, err := gconfig.New(gconfig.Options{
+				EnvPrefix:    "APP_",
+				CompoundKeys: config.CompoundKeys(),
+			})
+			if err != nil {
+				t.Fatalf("gconfig.New: %v", err)
+			}
+			opts, err := config.Load(cfg)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("config.Load accepted invalid jellyfin default role %q", tc.envVal)
+				}
+				msg := err.Error()
+				if !strings.Contains(msg, "snatcharr.jellyfin.default_role") {
+					t.Errorf("error %q should mention config key snatcharr.jellyfin.default_role", msg)
+				}
+				if !strings.Contains(msg, "APP_SNATCHARR_JELLYFIN_DEFAULT_ROLE") {
+					t.Errorf("error %q should mention env var APP_SNATCHARR_JELLYFIN_DEFAULT_ROLE", msg)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("config.Load: %v", err)
+			}
+			if opts.Jellyfin.DefaultRole != tc.wantRole {
+				t.Fatalf("Jellyfin.DefaultRole = %q, want %q", opts.Jellyfin.DefaultRole, tc.wantRole)
+			}
+		})
+	}
+}
+
+func TestValidate_JellyfinDefaultRoleErrorMessage(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		role domain.Role
+	}{
+		{"negative admin refused", domain.RoleAdmin},
+		{"negative owner refused", "owner"},
+		{"negative empty refused", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			opts := config.Default()
+			opts.Worker.Token = "t"
+			opts.APIKey.Secret = "s"
+			opts.Jellyfin.DefaultRole = tc.role
+			err := opts.Validate()
+			if err == nil {
+				t.Fatalf("opts.Validate() expected error for role %q, got nil", tc.role)
+			}
+			msg := err.Error()
+			if !strings.Contains(msg, "snatcharr.jellyfin.default_role") {
+				t.Errorf("error %q should mention config key snatcharr.jellyfin.default_role", msg)
+			}
+			if !strings.Contains(msg, "APP_SNATCHARR_JELLYFIN_DEFAULT_ROLE") {
+				t.Errorf("error %q should mention env var APP_SNATCHARR_JELLYFIN_DEFAULT_ROLE", msg)
 			}
 		})
 	}
