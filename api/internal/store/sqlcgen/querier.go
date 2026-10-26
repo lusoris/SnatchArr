@@ -16,6 +16,9 @@ type Querier interface {
 	AddGlobalBucketUsed(ctx context.Context, arg AddGlobalBucketUsedParams) error
 	BucketUsage(ctx context.Context, arg BucketUsageParams) (BucketUsageRow, error)
 	CancelRun(ctx context.Context, arg CancelRunParams) (int64, error)
+	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+	// SPDX-License-Identifier: EUPL-1.2
+	CheckAndRecordItemSearch(ctx context.Context, arg CheckAndRecordItemSearchParams) (time.Time, error)
 	CompleteRun(ctx context.Context, arg CompleteRunParams) (SnatchRun, error)
 	CountActiveAPIKeysByOwner(ctx context.Context, ownerID uuid.UUID) (int64, error)
 	CountInstancesByBaseURL(ctx context.Context, arg CountInstancesByBaseURLParams) (int64, error)
@@ -108,6 +111,7 @@ type Querier interface {
 	GetInstance(ctx context.Context, id uuid.UUID) (Instance, error)
 	GetInstanceByConfigarrKey(ctx context.Context, configarrKey *string) (Instance, error)
 	GetInstancePriority(ctx context.Context, id uuid.UUID) (GetInstancePriorityRow, error)
+	GetItemSearchCooldown(ctx context.Context, userID uuid.UUID) (time.Time, error)
 	GetLatestWatchAwareSourceError(ctx context.Context) (*string, error)
 	GetLoginLockout(ctx context.Context, key string) (LoginLockout, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
@@ -244,6 +248,7 @@ type Querier interface {
 	RecordWatchAwareSourceSyncError(ctx context.Context, arg RecordWatchAwareSourceSyncErrorParams) error
 	RecordWatchAwareSourceSyncSuccess(ctx context.Context, arg RecordWatchAwareSourceSyncSuccessParams) error
 	ReleaseGateSeries(ctx context.Context, arg ReleaseGateSeriesParams) (WatchawareGateSeries, error)
+	ResetItemSearchCooldown(ctx context.Context, userID uuid.UUID) error
 	ResetProcessed(ctx context.Context, instanceID *uuid.UUID) (int64, error)
 	RevokeAPIKey(ctx context.Context, arg RevokeAPIKeyParams) (int64, error)
 	RevokeAPIKeyForOwner(ctx context.Context, arg RevokeAPIKeyForOwnerParams) (int64, error)

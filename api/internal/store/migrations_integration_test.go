@@ -892,3 +892,76 @@ func testUserIdentitiesBoundary(t *testing.T, st *store.Store, userID uuid.UUID)
 		t.Fatalf("user_identities count after user cascade delete = %d, want 0", count)
 	}
 }
+
+func TestMigration000041ItemSearchCooldown(t *testing.T) {
+	t.Parallel()
+	st := storetest.New(t)
+	m := storetest.Migrator(t, st)
+
+	stepDownToVersion(t, m, 40)
+	assertTableExists(t, st, "item_search_cooldowns", false)
+
+	if err := m.Steps(1); err != nil {
+		t.Fatalf("Steps(1) up to 41: %v", err)
+	}
+	assertTableExists(t, st, "item_search_cooldowns", true)
+
+	userID := uuid.New()
+	testItemSearchCooldownPositive(t, st, userID)
+	testItemSearchCooldownNegative(t, st, userID)
+	testItemSearchCooldownBoundary(t, st, userID)
+
+	if err := m.Steps(-1); err != nil {
+		t.Fatalf("Steps(-1) down to 40: %v", err)
+	}
+	assertTableExists(t, st, "item_search_cooldowns", false)
+
+	if err := m.Steps(1); err != nil {
+		t.Fatalf("Steps(1) back up to 41: %v", err)
+	}
+	assertTableExists(t, st, "item_search_cooldowns", true)
+}
+
+func testItemSearchCooldownPositive(t *testing.T, st *store.Store, userID uuid.UUID) {
+	t.Helper()
+	now := time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC)
+	const insUser = `INSERT INTO users (id, username, password_hash, role, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $5)`
+	if _, err := st.Pool().Exec(t.Context(), insUser, userID, "cd-user", "unused", "requester", now); err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+	const insCooldown = `INSERT INTO item_search_cooldowns (user_id, last_searched_at) VALUES ($1, $2)`
+	if _, err := st.Pool().Exec(t.Context(), insCooldown, userID, now); err != nil {
+		t.Fatalf("insert item_search_cooldown: %v", err)
+	}
+}
+
+func testItemSearchCooldownNegative(t *testing.T, st *store.Store, userID uuid.UUID) {
+	t.Helper()
+	now := time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC)
+	const insCooldown = `INSERT INTO item_search_cooldowns (user_id, last_searched_at) VALUES ($1, $2)`
+
+	// Foreign key violation
+	if _, err := st.Pool().Exec(t.Context(), insCooldown, uuid.New(), now); err == nil {
+		t.Fatal("insert item_search_cooldown with unknown user_id succeeded, want fk violation")
+	}
+
+	// Duplicate primary key
+	if _, err := st.Pool().Exec(t.Context(), insCooldown, userID, now); err == nil {
+		t.Fatal("duplicate item_search_cooldown for user succeeded, want primary key conflict")
+	}
+}
+
+func testItemSearchCooldownBoundary(t *testing.T, st *store.Store, userID uuid.UUID) {
+	t.Helper()
+	// Deleting user must cascade delete item_search_cooldowns
+	if _, err := st.Pool().Exec(t.Context(), `DELETE FROM users WHERE id = $1`, userID); err != nil {
+		t.Fatalf("delete user: %v", err)
+	}
+	var count int
+	if err := st.Pool().QueryRow(t.Context(), `SELECT count(*) FROM item_search_cooldowns WHERE user_id = $1`, userID).Scan(&count); err != nil {
+		t.Fatalf("count item_search_cooldowns: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("item_search_cooldowns count after user cascade delete = %d, want 0", count)
+	}
+}
