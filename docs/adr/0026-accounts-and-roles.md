@@ -314,7 +314,7 @@ An audit of `github.com/golusoris/goenvoy` at tag `mediaserver/jellyfin/v3.1.0` 
 - [ ] Implement Jellyfin credential authentication handler (`POST /api/v1/auth/jellyfin`) in `api/internal/auth`.
 - [ ] Implement Jellyfin Quick Connect handlers in `api/internal/auth`.
 - [ ] Implement parental rating and tag filtering in media catalog and adult module endpoints, with boundary tests at threshold minus one, at the threshold and with `MaxParentalRating` `null`, plus a `BlockedTags` case.
-- [ ] Update SvelteKit SPA navigation and request dialogs to gate on `session.isRequester`.
+- [x] Update SvelteKit SPA navigation and request dialogs to gate on `session.isRequester`. (`session.isRequester` mirrors `Role.CanRequest`; the API key create and revoke controls on the account page now use it, matching `requireRequester` in `api/internal/httpapi/handlers_apikeys.go`. The SPA has no request dialog or requester-only navigation yet; the request slice gates its own controls on the same getter.)
 
 ## References
 

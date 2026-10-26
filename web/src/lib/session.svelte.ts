@@ -23,6 +23,14 @@ class Session {
 		return this.user?.role === 'admin';
 	}
 
+	/**
+	 * Reports whether the authenticated role can submit requests and manage own keys.
+	 * Server-side source of truth is domain Role.CanRequest.
+	 */
+	get isRequester(): boolean {
+		return this.user?.role === 'admin' || this.user?.role === 'requester';
+	}
+
 	/** Resolves the state from the API: setup status first, then the cookie session. */
 	async refresh(): Promise<SessionState> {
 		try {
