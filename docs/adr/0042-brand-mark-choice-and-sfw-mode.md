@@ -6,7 +6,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # ADR-0042: Brand mark choice (vulva, penis, hand) and SFW mode
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-26
 - **Extends:** [ADR-0017](0017-anatomical-brand-mark.md)
 - **Related:** [ADR-0025](0025-module-switches.md), [ADR-0026](0026-accounts-and-roles.md), [ADR-0027](0027-adult-module.md), [ADR-0028](0028-jellyfin-plugin.md), [ADR-0039](0039-metadata-single-source.md)
@@ -17,7 +17,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 1. **Safe-for-work (`SFW`) and general-audience surfaces**: Adopters running SnatchArr for general household media (**Radarr**, **Sonarr**, **Lidarr**, **Readarr**) with the `adult` module disabled ([ADR-0025](0025-module-switches.md)), or opening the web interface on shared displays, work laptops, or living-room screens, need an unintrusive, general-audience mark that still plays directly on the verb *snatch* (a hand snatching a media disc).
 2. **Anatomical parity**: Where anatomical branding is active, offering a companion anatomical penis mark alongside the existing vulva mark lets each user or household choose the anatomical study they prefer while keeping the vulva mark as the default anatomical mark.
-3. **External client surfaces**: The **Jellyfin** companion plugin ([ADR-0028](0028-jellyfin-plugin.md), `lusoris/snatcharr-jellyfin-plugin`) runs inside a general-audience media server shared by household members of all ages and parental-rating policies; embedding adult anatomical vector assets in the plugin binary or catalogue thumbnail is inappropriate for that distribution channel.
+3. **External client surfaces**: The **Jellyfin** companion plugin ([ADR-0028](0028-jellyfin-plugin.md), `lusoris/jellyfin-plugin-snatcharr`) runs inside a general-audience media server shared by household members of all ages and parental-rating policies; embedding adult anatomical vector assets in the plugin binary or catalogue thumbnail is inappropriate for that distribution channel.
 
 ### Glossary of referenced projects (meaning, origin, pronunciation)
 
@@ -42,7 +42,7 @@ SnatchArr defines three brand marks sharing the [ADR-0017](0017-anatomical-brand
 
 ### 2. Candidate variants for operator selection
 
-All candidate SVGs live in `.workingdir/marks/candidates/<name>.svg` (full detail for `>= 40 px`) and `.workingdir/marks/candidates/<name>-cut.svg` (simplified cut for `< 40 px`), with rendered `16 px`, `32 px`, and `180 px` light and dark PNGs and contact sheets in `.workingdir/evidence/marks-candidates-20261026/`. No candidate is wired into `web/` until the operator answers `OQ-0042-1` and `OQ-0042-2`.
+All candidate SVGs live in `.workingdir/marks/candidates/<name>.svg` (full detail for `>= 40 px`) and `.workingdir/marks/candidates/<name>-cut.svg` (simplified cut for `< 40 px`), with rendered `16 px`, `32 px`, and `180 px` light and dark PNGs and contact sheets in `.workingdir/evidence/marks-candidates-20261026/`. The operator picked `hand-snatch` (`OQ-0042-1`) and `penis-upright` (`OQ-0042-2`); section 7 records the result.
 
 #### 2.1 SFW `hand` candidates (3 variants)
 
@@ -103,11 +103,11 @@ Under [ADR-0025](0025-module-switches.md), the `adult` module (**Whisparr** + **
      - `sfw_mode = 'off'`: displays the chosen `brand_mark` (`'vulva'`, `'penis'`, or `'hand'`), even when `modules.adult.enabled == false` (preserving [ADR-0017](0017-anatomical-brand-mark.md) anatomical branding for general-media adopters who want it without enabling **Whisparr**/**Stash**).
    - *Risk*: Slightly richer state matrix (`3 x 3` effective combinations in unit tests) than a two-state boolean, mitigated by a single pure selector function `resolveEffectiveBrandMark(brandMark, sfwMode, adultModuleEnabled, userAdultAllowed) -> 'vulva' | 'penis' | 'hand'`.
 
-- **Recommendation**: **Option c (both — `auto` default coupled to the `adult` module switch with explicit `on` / `off` override)**. It gives general-audience installs (`modules.adult.enabled = false`) and non-adult household accounts a safe-for-work default out of the box without forcing **Whisparr**/**Stash** on operators who want the anatomical mark (`sfw_mode = 'off'`), while still letting `adult`-enabled operators switch `sfw_mode = 'on'` at any time.
+- **Decision** (`OQ-0042-3`, answered c): **Option c (both — `auto` default coupled to the `adult` module switch with explicit `on` / `off` override)**. It gives general-audience installs (`modules.adult.enabled = false`) and non-adult household accounts a safe-for-work default out of the box without forcing **Whisparr**/**Stash** on operators who want the anatomical mark (`sfw_mode = 'off'`), while still letting `adult`-enabled operators switch `sfw_mode = 'on'` at any time.
 
 ### 5. Jellyfin companion plugin ([ADR-0028](0028-jellyfin-plugin.md)) ships `hand` only
 
-The **Jellyfin** companion plugin (`lusoris/snatcharr-jellyfin-plugin`, [ADR-0028](0028-jellyfin-plugin.md)) embeds and serves **only the SFW `hand` mark**:
+The **Jellyfin** companion plugin (`lusoris/jellyfin-plugin-snatcharr`, [ADR-0028](0028-jellyfin-plugin.md)) embeds and serves **only the SFW `hand` mark**:
 
 - The plugin catalogue thumbnail (`thumb.png` / `mark-hand.svg`) and any in-client badge inside **Jellyfin** web/TV clients never bundle `vulva` or `penis` SVG/PNG assets.
 - Rationale: **Jellyfin** plugin catalogue pages and client script bundles are readable by all household profiles before per-user parental controls are evaluated.
@@ -140,8 +140,17 @@ Because `LICENSES/CC-BY-SA-4.0.txt` is already present in the repository and bot
 - Adds a `mark` prop (`'vulva' | 'penis' | 'hand'`) to `BrandMark.svelte` and a user/instance preference lookup once wired.
 - Static `<link rel="icon">` and `apple-touch-icon.png` in `web/src/app.html` must pick one build-time default (or switch `<link rel="icon">` dynamically at runtime once the session/config loads).
 
-## Open questions
+### 7. Picked marks and wiring
 
-1. **OQ-0042-1**: Which SFW `hand` mark candidate should SnatchArr adopt (`hand-snatch` derived from Quincy Morgan's `CC0` reaching hand, `hand-pinch` side-profile thumb-and-index pinch, or `hand-claw` overhead symmetrical claw)?
-2. **OQ-0042-2**: Which anatomical `penis` mark candidate should SnatchArr adopt (`penis-kebert` derived from T. Kebert's `CC BY-SA 4.0` frontal anatomical study to pair directly with T. Kebert's `Female_vulva.svg`, or `penis-upright` own ventral upright study)?
-3. **OQ-0042-3**: How should `SFW` mode relate to the `adult` module switch of [ADR-0025](0025-module-switches.md) — **a)** forced `SFW` whenever the `adult` module is off, **b)** an independent toggle (`sfw_mode` uncoupled from `modules.adult.enabled`), or **c)** both (`sfw_mode = 'auto' | 'on' | 'off'`, defaulting to `'auto'` which follows `!modules.adult.enabled` with an explicit `'on'` / `'off'` override; recommended)?
+- `hand` = `hand-snatch`, derived from Quincy Morgan's `CC0-1.0` reaching hand. `CC0` asks for no credit; SnatchArr credits the base author anyway, in the SVG comment, `BrandMark.svelte` and the about page.
+- `penis` = `penis-upright`, the own ventral study next to the vulva mark.
+- `vulva` stays the default `brand_mark`.
+- One pure selector, `resolveBrandMark(brandMark, sfwMode, adultModuleEnabled, userAdultAllowed)` in `web/src/lib/brand-mark.ts`, decides the effective mark; a table test covers every combination of its inputs.
+- Until the session carries `adult_allowed` ([ADR-0026](0026-accounts-and-roles.md) section 4), the web passes `userAdultAllowed = false`, so `auto` fails closed to `hand`.
+- `web/static/brand/mark-hand.svg` is the standalone hand asset; the Jellyfin plugin copies it.
+
+## Answered questions
+
+1. **OQ-0042-1** (`snatcharr-marks-pick-20261026`, answered a): `hand-snatch`.
+2. **OQ-0042-2** (`snatcharr-marks-pick-20261026`, answered a): `penis-upright`.
+3. **OQ-0042-3** (`snatcharr-marks-sfw-coupling`, answered c): tri-state `sfw_mode = 'auto' | 'on' | 'off'`, default `'auto'`: SFW when the `adult` module is off or the user lacks adult visibility; one pure selector with a table test over every state.
