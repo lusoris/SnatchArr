@@ -177,6 +177,9 @@ func (c *Client) User(ctx context.Context, id string) (Member, error) {
 
 	u, err := c.svcClient.GetUser(reqCtx, id)
 	if err != nil {
+		if apiErr, ok := errors.AsType[*jellyfin.APIError](err); ok && apiErr.StatusCode == http.StatusNotFound {
+			return Member{}, fmt.Errorf("%w: %s", domain.ErrNotFound, apiErr.Error())
+		}
 		return Member{}, mapAPIError(err, false)
 	}
 	return toMember(u)
