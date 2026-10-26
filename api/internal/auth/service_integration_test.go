@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jonboulle/clockwork"
 
 	"github.com/golusoris/golusoris/core/clock"
@@ -488,6 +489,121 @@ func TestProvisionExternalUser_ConcurrentSignInsOneRow(t *testing.T) {
 	if count != 2 {
 		t.Fatalf("CountUsers = %d, want 2 (1 admin, 1 external user)", count)
 	}
+}
+
+type provisionResult struct {
+	user domain.User
+	err  error
+}
+
+// waitForBlockedLock waits until some session waits on transaction xid. pg_locks spans every
+// database of the shared test server, so the filter on xid keeps parallel tests out.
+func waitForBlockedLock(t *testing.T, pool *pgxpool.Pool, xid string) {
+	t.Helper()
+	const (
+		maxAttempts = 200
+		interval    = 25 * time.Millisecond
+	)
+	acqCtx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	conn, err := pool.Acquire(acqCtx)
+	if err != nil {
+		t.Fatalf("acquire pool connection: %v", err)
+	}
+	defer conn.Release()
+
+	for range maxAttempts {
+		pollCtx, pollCancel := context.WithTimeout(t.Context(), 2*time.Second)
+		var blocked int64
+		scanErr := conn.QueryRow(pollCtx, `SELECT count(*) FROM pg_locks
+			WHERE NOT granted AND locktype = 'transactionid' AND transactionid::text = $1`, xid).Scan(&blocked)
+		pollCancel()
+		if scanErr != nil {
+			t.Fatalf("query pg_locks: %v", scanErr)
+		}
+		if blocked > 0 {
+			return
+		}
+		time.Sleep(interval)
+	}
+	t.Fatal("timed out waiting for goroutine to block on pg_locks")
+}
+
+func receiveProvisionResult(t *testing.T, ctx context.Context, ch <-chan provisionResult) provisionResult {
+	t.Helper()
+	select {
+	case res := <-ch:
+		return res
+	case <-ctx.Done():
+		t.Fatalf("timed out waiting for ProvisionExternalUser: %v", ctx.Err())
+		return provisionResult{}
+	}
+}
+
+func assertUserCount(t *testing.T, ctx context.Context, st *store.Store, want int64) {
+	t.Helper()
+	count, err := st.Q().CountUsers(ctx)
+	if err != nil {
+		t.Fatalf("CountUsers: %v", err)
+	}
+	if count != want {
+		t.Fatalf("CountUsers = %d, want %d", count, want)
+	}
+}
+
+func TestProvisionExternalUser_UsernameConflictRetried(t *testing.T) {
+	t.Parallel()
+	svc, _, st := newServiceWithStore(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancel()
+
+	if _, err := svc.Setup(ctx, adminName, adminPass); err != nil {
+		t.Fatalf("Setup: %v", err)
+	}
+
+	identity := "race-identity@domain.invalid"
+	username := auth.ExternalUsername("oidc-", identity)
+
+	txA, err := st.Pool().Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin txA: %v", err)
+	}
+	defer func() { _ = txA.Rollback(ctx) }()
+
+	insertSQL := `INSERT INTO users (id, username, password_hash, role, external_id, created_at, updated_at)
+		VALUES ($1, $2, $3, 'requester', NULL, now(), now())`
+	if _, err = txA.Exec(ctx, insertSQL, uuid.New(), username, auth.ExternalAccountSentinelHash); err != nil {
+		t.Fatalf("txA insert: %v", err)
+	}
+	var xidA string
+	if err = txA.QueryRow(ctx, "SELECT pg_current_xact_id()::xid::text").Scan(&xidA); err != nil {
+		t.Fatalf("txA xid: %v", err)
+	}
+
+	resCh := make(chan provisionResult, 1)
+	go func() {
+		u, pErr := svc.ProvisionExternalUser(ctx, "oidc-", identity, domain.RoleRequester)
+		resCh <- provisionResult{user: u, err: pErr}
+	}()
+
+	waitForBlockedLock(t, st.Pool(), xidA)
+
+	updateSQL := `UPDATE users SET external_id = $1 WHERE username = $2`
+	if _, err = txA.Exec(ctx, updateSQL, identity, username); err != nil {
+		t.Fatalf("txA update: %v", err)
+	}
+	if err = txA.Commit(ctx); err != nil {
+		t.Fatalf("txA commit: %v", err)
+	}
+
+	res := receiveProvisionResult(t, ctx, resCh)
+	if res.err != nil {
+		t.Fatalf("ProvisionExternalUser = %v, want nil", res.err)
+	}
+	if res.user.Username != username {
+		t.Fatalf("user.Username = %q, want %q", res.user.Username, username)
+	}
+	assertUserCount(t, ctx, st, 2)
 }
 
 func TestLogin_ViewerRowPasswordRefused401(t *testing.T) {

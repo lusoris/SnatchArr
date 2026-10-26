@@ -291,7 +291,7 @@ func (s *Service) ProvisionExternalUser(ctx context.Context, prefix, identity st
 		return domain.User{}, fmt.Errorf("auth: new id: %w", err)
 	}
 	now := s.clk.Now()
-	row, err := s.st.Q().UpsertExternalUser(ctx, sqlcgen.UpsertExternalUserParams{
+	row, err := s.upsertExternalUser(ctx, sqlcgen.UpsertExternalUserParams{
 		ID:           newID,
 		Username:     username,
 		PasswordHash: ExternalAccountSentinelHash,
@@ -300,9 +300,27 @@ func (s *Service) ProvisionExternalUser(ctx context.Context, prefix, identity st
 		CreatedAt:    now,
 	})
 	if err != nil {
-		return domain.User{}, fmt.Errorf("auth: upsert external user: %w", store.MapError(err))
+		return domain.User{}, err
 	}
 	return userFromRow(row), nil
+}
+
+const maxExternalUpsertAttempts = 3
+
+func (s *Service) upsertExternalUser(ctx context.Context, params sqlcgen.UpsertExternalUserParams) (sqlcgen.User, error) {
+	var lastErr error
+	for range maxExternalUpsertAttempts {
+		row, err := s.st.Q().UpsertExternalUser(ctx, params)
+		if err == nil {
+			return row, nil
+		}
+		mapped := store.MapError(err)
+		if !errors.Is(mapped, domain.ErrConflict) {
+			return sqlcgen.User{}, fmt.Errorf("auth: upsert external user: %w", mapped)
+		}
+		lastErr = mapped
+	}
+	return sqlcgen.User{}, fmt.Errorf("auth: upsert external user: %w", lastErr)
 }
 
 // ProvisionJellyfinUser creates or loads an external account mapped to a Jellyfin user.
