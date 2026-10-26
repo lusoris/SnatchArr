@@ -6,7 +6,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 # ADR-0037: Studio-scoped numbered performer names, scene-ownership conflict rules and Stash wrong-merge import check
 
-- **Status:** Proposed (amends [ADR-0033](0033-adult-identity-and-model.md))
+- **Status:** Accepted (amends [ADR-0033](0033-adult-identity-and-model.md))
 - **Date:** 2026-10-26
 - **Related:** [ADR-0027](0027-adult-module.md), [ADR-0029](0029-task-flow-ui.md), [ADR-0032](0032-stash-own-or-integrate.md), [ADR-0033](0033-adult-identity-and-model.md), [ADR-0034](0034-matching-engine-and-model-connection.md)
 
@@ -116,12 +116,18 @@ sequenceDiagram
     API-->>Op: List findings in Audit UI with per-scene source ID breakdown
 ```
 
-1. **Read-only invariant:** The import check issues **only** GraphQL `query` operations (`FindPerformers`, `FindScenes`, and generic `Client.Query` with `context.Context` deadlines and `MaxItemsPerSweep` pagination bounds per HISS-02). It executes zero GraphQL mutations against the connected `Stash` instance unless and until write-back is separately enabled under `OQ-0037-2`.
+1. **Read-only invariant:** The import check issues **only** GraphQL `query` operations (`FindPerformers`, `FindScenes`, and generic `Client.Query` with `context.Context` deadlines and `MaxItemsPerSweep` pagination bounds per HISS-02). The scan itself executes zero GraphQL mutations against the connected `Stash` instance. The only write path is the automatic write-back of a split the operator has confirmed (item 4, ledger `snatcharr-oq-0037-2`).
 2. **Detection rules for existing wrong merges in `Stash`:** A local `Stash` performer $P_{\text{stash}}$ is flagged as a `stash_wrong_merge` finding when any of the following hold:
    - **Rule A (Multiple distinct `stash-box` performer IDs on the performer record):** $P_{\text{stash}}.\text{stash\_ids}$ contains two or more distinct `stash_id` UUIDs for the **same** `stash-box` `endpoint` (unless one UUID is listed in the other's upstream `merged_ids`).
    - **Rule B (Scenes under one `Stash` performer resolve to different upstream performer IDs):** Across the scenes credited to $P_{\text{stash}}$ in `Stash`, resolving each scene's `stash_ids` (or `oshash` / `phash` fingerprints) against configured `stash-box` instances or `ThePornDB` yields two or more distinct upstream performer foreign IDs for $P_{\text{stash}}$'s credit slot (for example, Scene 1 resolves on `stash-box` to performer UUID $U_{12}$ `"Clara 12"` while Scene 2 resolves on the same `stash-box` endpoint to performer UUID $U_{47}$ `"Clara 47"`, or Scene 3 in `"Studio Y"` resolves to performer UUID $U_{Y}$ `"Clara"`).
    - **Rule C (Same-studio conflicting casting numbers under a bare-name performer):** $P_{\text{stash}}$ has a bare first name (`"Clara"`) and is credited on multiple scenes from the same studio whose titles, studio codes, or upstream metadata carry distinct `<given_name> <number>` tokens (`"Clara 12"` vs `"Clara 47"`).
 3. **Surfacing in the Audit Workbench:** Each detected wrong merge is persisted in `adult_identity_suggestions` (`audit_kind = 'stash_wrong_merge'`) with the partitioned scene groups and their upstream `(endpoint, stash_id)` evidence, and listed in the [ADR-0034](0034-matching-engine-and-model-connection.md) Part 3 audit UI (`web/`, built on `sveltesentio`, the shared Svelte 5 design system and component library, from "Svelte" and Latin *sentio* meaning "I perceive", pronounced "svelt-sen-tee-oh").
+4. **Split workflow and automatic `Stash` write-back** (ledger `snatcharr-oq-0037-1` b and `snatcharr-oq-0037-2` c):
+   - The audit queue row opens a step-by-step split drawer. Each step shows one target performer bucket with its scenes and their upstream `(endpoint, stash_id)` evidence; the operator assigns the open scenes and moves to the next bucket. The last step shows the full partition, and one confirmation commits it in a single transaction.
+   - When the confirmed split concerns a performer that also exists in a connected `Stash` instance, SnatchArr writes the split back to `Stash` automatically: it creates the missing performers, moves each scene's performer credits to the new performer, and records the `Stash` state before the change in `before_snapshot_json` so undo restores both SnatchArr and `Stash`.
+   - No write happens without a confirmed split: detection, scans and suggestions stay read-only. A failed `Stash` write leaves the SnatchArr split committed, marks the finding `stash_writeback_failed` with the error, and offers a retry; it never retries silently in a loop.
+   - The typed `Stash` mutation calls are not in `github.com/golusoris/goenvoy/mediaserver/stash/v2` yet (main `ac12960bb042` has `Find*` reads plus a raw `Client.Query`); the request for typed wrappers goes through the controller (`snatcharr-goenvoy-stash-mutations`). Until they ship, the slice codes against a small interface with a fake `Stash` in tests.
+5. **Bare-name favourites resolved through scene overlap** (ledger `snatcharr-oq-0037-3` b): when favourite sync (`adult_favorite_performers`) imports two bare first-name performers from different `stash-box` instances with no external URL or cross-reference, the sync runs one scene-overlap lookup per pair: it pages the scenes of both performers and compares scene fingerprints and `stash_ids`. Shared scenes above the evidence threshold of [ADR-0034](0034-matching-engine-and-model-connection.md) link the pair; no overlap keeps both rows apart and enqueues a `MatchAuditCandidate`. Each lookup has a scalar page bound and a deadline (HISS-02) and counts against the `stash-box` instance rate limit; a pair is looked up once per sync sweep and the result is cached until either performer changes.
 
 ---
 
@@ -142,9 +148,19 @@ In accordance with HISS-15 (3D testing: positive, negative, boundary) and HISS-2
 
 ---
 
-## Open Questions
+## Answered Questions
 
-Product and user-experience choices that remain undecided are recorded below in FOR-DEC format for maintainer decision:
+The operator answered all three questions on 2026-10-26 (ledger `snatcharr-oq-0037-answers-20261026`). The answers bind where they differ from the recommendation in the original question.
+
+| Question | Answer | Ledger |
+| :--- | :--- | :--- |
+| `OQ-0037-1` | **b**: a step-by-step split drawer launched from the audit queue row, one target performer bucket per step, one confirmation for the whole partition (item 4). | `snatcharr-oq-0037-1` |
+| `OQ-0037-2` | **c**: automatic write-back to `Stash` when a split is confirmed in SnatchArr; scans stay read-only (item 4). | `snatcharr-oq-0037-2` |
+| `OQ-0037-3` | **b**: a scene-overlap lookup per bare-name favourite pair during sync, bounded and rate-limited (item 5). | `snatcharr-oq-0037-3` |
+
+### Original questions
+
+The questions as proposed, kept for the record:
 
 - `OQ-0037-1 | How should the ADR-0034 Part 3 audit workbench render multi-way performer split and wrong-merge findings (where one merged performer holds scenes belonging to 2..N distinct source performer IDs)? | a) Extend the existing 12-column 1:1 split comparison view with a tabbed or grouped N-way scene partition table inside the right 8-column pane, where each detected source performer ID is a column/bucket and keyboard shortcuts (1..9, s) assign unresolved scenes before committing the split (risk: dense right pane when N > 3 distinct performers were merged into one record) b) Dedicated two-step "Split Wizard" drawer or modal launched from the audit queue row that steps through each target performer bucket one at a time (risk: adds modal/stepper navigation steps and departs from ADR-0029 single-view task-flow consolidation) c) Emit N-1 separate pairwise 1:1 split rows in the audit queue so the existing 2-column diff table remains unchanged (risk: operator cannot see the full partition of the merged performer's scenes at once, and splitting in the wrong order requires multiple passes) | recommended: a, preserves ADR-0029 single-screen keyboard triage and shows every target performer bucket and scene assignment in one atomic transaction.`
 - `OQ-0037-2 | When the Stash wrong-merge import check detects a wrongly merged performer in a connected Stash instance, should SnatchArr write the split and scene reassignments back to Stash? | a) Read-only in Stash by default, with an opt-in "Apply split to Stash" action in the audit workbench that executes Stash GraphQL mutations (performerCreate / sceneUpdate) only on explicit per-finding operator confirmation and records a reversible snapshot (risk: requires mutation wrappers in goenvoy/mediaserver/stash/v2 and a Stash API key with write role) b) Strictly read-only integration with Stash at all times; SnatchArr splits the performer in its own database and offers a copyable repair report / GraphQL payload for the operator to apply in Stash (risk: operator still has to perform manual or scripted clicks inside Stash to fix Stash's own database) c) Automatic background write-back to Stash whenever a split is confirmed in SnatchArr (risk: unexpected external mutation of the user's Stash library if the operator only intended to adjust SnatchArr's local index) | recommended: a, keeps background scans strictly read-only while eliminating manual repair work in Stash when the operator explicitly confirms a split.`
@@ -161,9 +177,13 @@ Product and user-experience choices that remain undecided are recorded below in 
 - **Eliminates homonym and casting-number false merges:** Performers credited as `"Clara 12"`, `"Clara 47"`, and `"Clara"` across one or more studios never collapse into a single performer on name alone.
 - **Preserves scene ownership integrity:** Scene credits only merge when backed by Tier 1–3 evidence (`stash-box` ID, `ThePornDB` ID, verified `OSHASH`/`PHASH` scene fingerprint, or studio + release date + code), and any ownership collision halts auto-merge in favour of the audit queue.
 - **Detects pre-existing library corruption:** Adopters connecting an existing `Stash` library immediately get a read-only audit of performers whose scenes point to conflicting upstream `stash-box` performer UUIDs.
-- **Reversible splits:** Splitting a performer reassigns scenes deterministically by upstream source ID and records a full `before_snapshot_json` for single-click undo.
+- **Reversible splits:** Splitting a performer reassigns scenes deterministically by upstream source ID and records a full `before_snapshot_json` for single-click undo, in SnatchArr and in the connected `Stash` instance.
+- **No manual repair in `Stash`:** a confirmed split reaches `Stash` without extra clicks.
 
 #### Negative
+
+- **External writes:** a confirmed split changes the operator's `Stash` library. The write needs a `Stash` API key with write rights, and a failed write leaves the two systems apart until the retry succeeds.
+- **More `stash-box` queries during sync:** each unresolved bare-name pair costs one bounded scene-overlap lookup per sweep.
 
 - **Higher initial audit queue volume for unlinked mononyms:** Performers on secondary `stash-box` instances that lack both cross-instance endpoint URLs and external social/index URLs will no longer merge silently by name; they enter the audit queue as `MatchAuditCandidate` items until confirmed once by the operator.
 
@@ -183,6 +203,9 @@ Product and user-experience choices that remain undecided are recorded below in 
    - `gofmt -l api/internal/adult` (zero unformatted files).
    - `golangci-lint run ./api/internal/adult/...` using root `.golangci.yml` (zero warnings; cyclomatic complexity $\le 10$, cognitive complexity $\le 15$, function length $\le 60$ lines per `AGENTS.md`).
    - `reuse lint` (100% SPDX licence compliance).
+3. **Split write-back (`snatcharr-oq-0037-2`):** an end-to-end test against a `Stash` test instance seeds one performer holding scenes of three upstream performers, confirms a three-way split through the drawer, and asserts that `Stash` then holds three performers with the scene credits moved; undo restores the seeded state. A planted failing `Stash` write marks the finding `stash_writeback_failed` and leaves no partial credit move.
+4. **Scene-overlap resolution (`snatcharr-oq-0037-3`):** a sync test with two bare-name favourites on two fake `stash-box` instances links the pair when they share scenes, keeps them apart and enqueues an audit candidate when they share none, and stops at the page bound.
+5. **Split drawer (`snatcharr-oq-0037-1`):** a Playwright test walks a three-bucket split step by step and passes `axe-core` with zero violations.
 
 ### 5.4 Follow-Up Slices (Milestone `0.10`)
 
@@ -194,7 +217,9 @@ Because this unit touches only the ADR and the in-memory resolver in `api/intern
 | **Slice 2: Studio-scoped numbered-name parser and scene-ownership conflict guard** | `0.10` | Implement `<given_name> [#]?<number>` token extraction, studio-scoped disambiguation check, and the scene-ownership conflict blocker in the Stage 3 Fellegi-Sunter resolver (`api/internal/adult/`). Add the studio X/Y numbered-performer fixtures to `api/internal/adult/testdata/matching_regression_battery.json`. |
 | **Slice 3: Source-ID scene split endpoint and undo** | `0.10` | Implement `POST /api/v1/adult/entities/performer/{id}/split` in `api/openapi/openapi.yaml` and `api/internal/adult/`, reassigning `adult_scene_performers` and `adult_image_set_performers` by upstream `(source_instance_id, foreign_id)` with full `before_snapshot_json` undo support. |
 | **Slice 4: Connected `Stash` read-only wrong-merge scanner** | `0.10` | Implement the read-only `Stash` wrong-merge scan over `github.com/golusoris/goenvoy/mediaserver/stash/v2`, detecting local `Stash` performers whose scenes resolve to $\ge 2$ distinct upstream `stash-box` performer UUIDs or conflicting studio casting numbers, and surfacing `stash_wrong_merge` items in `/api/v1/adult/audit-items`. |
-| **Slice 5: Audit Workbench UI for performer splits and `Stash` findings** | `0.10` | Implement the `web/` audit workbench view (`sveltesentio`, Svelte 5 runes, OKLCH tokens, Paraglide `en`/`de` messages, Playwright + `axe-core` zero-violation gate) following the resolution of `OQ-0037-1` and `OQ-0037-2`. |
+| **Slice 5: Audit Workbench UI for performer splits and `Stash` findings** | `0.10` | Implement the `web/` audit workbench view (`sveltesentio`, Svelte 5 runes, OKLCH tokens, Paraglide `en`/`de` messages, Playwright + `axe-core` zero-violation gate) as the step-by-step split drawer of item 4 (`snatcharr-oq-0037-1`). |
+| **Slice 6: Automatic `Stash` split write-back** | `0.10` | Write confirmed splits back to `Stash` with snapshot and undo (`snatcharr-oq-0037-2`); typed mutation calls wait for `snatcharr-goenvoy-stash-mutations`, the slice starts against an interface and a fake `Stash`. |
+| **Slice 7: Scene-overlap lookup for bare-name favourites** | `0.10` | Bounded, rate-limited overlap lookup per bare-name favourite pair during sync, cached per sweep (`snatcharr-oq-0037-3`). |
 
 ---
 
