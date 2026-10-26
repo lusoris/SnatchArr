@@ -38,3 +38,4 @@ web/src/lib/components/CapsPresetsForm.svelte
 web/src/lib/components/CapsPresetsForm.svelte.test.ts
 web/src/routes/system/GeneralTab.svelte
 web/src/routes/system/about.svelte.test.ts
+web/src/routes/+page.svelte
