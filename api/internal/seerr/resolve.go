@@ -164,3 +164,10 @@ func seasonsOf(r seerrclient.Request) []int32 {
 	}
 	return out
 }
+
+func requestedByJellyfinID(r seerrclient.Request) string {
+	if r.RequestedBy == nil {
+		return ""
+	}
+	return r.RequestedBy.JellyfinUserID
+}

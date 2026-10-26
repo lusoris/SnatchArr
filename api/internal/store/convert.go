@@ -192,14 +192,18 @@ func SeerrLinkFromRow(r sqlcgen.SeerrLink) domain.SeerrLink {
 
 // SeerrRequestFromRow converts a cached request row.
 func SeerrRequestFromRow(r sqlcgen.SeerrRequest) domain.SeerrRequest {
-	return seerrRequest(r.LinkID, r.RequestID, r.MediaType, r.TmdbID, r.TvdbID, r.Title, r.RequestStatus, r.MediaStatus, r.Is4k,
+	out := seerrRequest(r.LinkID, r.RequestID, r.MediaType, r.TmdbID, r.TvdbID, r.Title, r.RequestStatus, r.MediaStatus, r.Is4k,
 		r.RequestedBy, r.Seasons, r.SeerrServerID, r.InstanceID, r.EntityID, r.RequestedAt, r.LastSnatchedAt, r.LastSeenAt, r.UpdatedAt)
+	out.RequestedByJellyfinID = r.RequestedByJellyfinID
+	return out
 }
 
 // SeerrRequestFromListRow converts a dashboard row (same columns plus names).
 func SeerrRequestFromListRow(r sqlcgen.ListSeerrRequestsRow) domain.SeerrRequest {
-	return seerrRequest(r.LinkID, r.RequestID, r.MediaType, r.TmdbID, r.TvdbID, r.Title, r.RequestStatus, r.MediaStatus, r.Is4k,
+	out := seerrRequest(r.LinkID, r.RequestID, r.MediaType, r.TmdbID, r.TvdbID, r.Title, r.RequestStatus, r.MediaStatus, r.Is4k,
 		r.RequestedBy, r.Seasons, r.SeerrServerID, r.InstanceID, r.EntityID, r.RequestedAt, r.LastSnatchedAt, r.LastSeenAt, r.UpdatedAt)
+	out.RequestedByJellyfinID = r.RequestedByJellyfinID
+	return out
 }
 
 func seerrRequest(linkID uuid.UUID, requestID int32, mediaType string, tmdb, tvdb int32, title string, reqStatus, mediaStatus int32, is4k bool,
