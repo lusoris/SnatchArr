@@ -42,6 +42,7 @@ func NewSecurity(sessions *session.Manager, cfg config.Options, keys *apikey.Ser
 		ssoCfg: ssoConfig{
 			OIDC:      cfg.OIDC,
 			ProxyAuth: cfg.ProxyAuth,
+			Jellyfin:  cfg.Jellyfin,
 		},
 		keys:    keys,
 		users:   users,

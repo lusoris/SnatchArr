@@ -204,6 +204,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/jellyfin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start a session with Jellyfin credentials */
+        post: operations["jellyfinLogin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/jellyfin/quickconnect/initiate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Initiate Jellyfin Quick Connect authentication */
+        post: operations["jellyfinQuickConnectInitiate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/jellyfin/quickconnect/authenticate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Authenticate an authorized Jellyfin Quick Connect session */
+        post: operations["jellyfinQuickConnectAuthenticate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/api-keys": {
         parameters: {
             query?: never;
@@ -1393,6 +1444,17 @@ export interface components {
             username: string;
             password: string;
         };
+        JellyfinLoginRequest: {
+            username: string;
+            password: string;
+        };
+        JellyfinQuickConnect: {
+            code: string;
+            secret: string;
+        };
+        JellyfinQuickConnectAuthenticateRequest: {
+            secret: string;
+        };
         User: {
             /** Format: uuid */
             id: string;
@@ -1409,6 +1471,8 @@ export interface components {
         SSOStatus: {
             oidc: boolean;
             proxy: boolean;
+            jellyfin: boolean;
+            jellyfinQuickConnect?: boolean;
         };
         /** @enum {string} */
         ApiKeyScope: "core:read" | "core:write" | "requests:read" | "requests:write" | "download_clients:read" | "download_clients:write" | "prowlarr:read" | "prowlarr:write" | "notifications:read" | "notifications:write" | "admin:read" | "admin:write" | "adult:read" | "adult:write";
@@ -2618,6 +2682,78 @@ export interface operations {
             401: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    jellyfinLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JellyfinLoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Session started */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            429: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    jellyfinQuickConnectInitiate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Quick Connect initiated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JellyfinQuickConnect"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    jellyfinQuickConnectAuthenticate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JellyfinQuickConnectAuthenticateRequest"];
+            };
+        };
+        responses: {
+            /** @description Session started */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
             default: components["responses"]["Problem"];
         };
     };

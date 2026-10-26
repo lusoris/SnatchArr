@@ -447,6 +447,33 @@ func (UnimplementedHandler) ImportSeerrInstances(ctx context.Context, params Imp
 	return r, ht.ErrNotImplemented
 }
 
+// JellyfinLogin implements jellyfinLogin operation.
+//
+// Start a session with Jellyfin credentials.
+//
+// POST /auth/jellyfin
+func (UnimplementedHandler) JellyfinLogin(ctx context.Context, req *JellyfinLoginRequest) (r JellyfinLoginRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// JellyfinQuickConnectAuthenticate implements jellyfinQuickConnectAuthenticate operation.
+//
+// Authenticate an authorized Jellyfin Quick Connect session.
+//
+// POST /auth/jellyfin/quickconnect/authenticate
+func (UnimplementedHandler) JellyfinQuickConnectAuthenticate(ctx context.Context, req *JellyfinQuickConnectAuthenticateRequest) (r *Session, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// JellyfinQuickConnectInitiate implements jellyfinQuickConnectInitiate operation.
+//
+// Initiate Jellyfin Quick Connect authentication.
+//
+// POST /auth/jellyfin/quickconnect/initiate
+func (UnimplementedHandler) JellyfinQuickConnectInitiate(ctx context.Context) (r *JellyfinQuickConnect, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // ListAPIKeys implements listAPIKeys operation.
 //
 // List the current user's active API keys.

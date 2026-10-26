@@ -93,6 +93,43 @@ func TestValidate(t *testing.T) {
 		{"negative jellyfin default role empty refused", func(o *config.Options) {
 			o.Jellyfin.DefaultRole = ""
 		}, nil, true},
+		{"positive jellyfin enabled valid", func(o *config.Options) {
+			o.Jellyfin.Enabled = true
+			o.Jellyfin.URL = "http://jellyfin.local:8096"
+			o.Jellyfin.APIKey = "valid-api-key"
+			o.Jellyfin.Timeout = 5 * time.Second
+		}, nil, false},
+		{"negative jellyfin enabled no url", func(o *config.Options) {
+			o.Jellyfin.Enabled = true
+			o.Jellyfin.URL = ""
+			o.Jellyfin.APIKey = "valid-key"
+		}, nil, true},
+		{"negative jellyfin enabled bad scheme", func(o *config.Options) {
+			o.Jellyfin.Enabled = true
+			o.Jellyfin.URL = "ftp://jellyfin.local"
+			o.Jellyfin.APIKey = "valid-key"
+		}, nil, true},
+		{"negative jellyfin enabled empty key", func(o *config.Options) {
+			o.Jellyfin.Enabled = true
+			o.Jellyfin.URL = "http://jellyfin.local:8096"
+			o.Jellyfin.APIKey = ""
+		}, nil, true},
+		{"boundary jellyfin disabled with empty url passes", func(o *config.Options) {
+			o.Jellyfin.Enabled = false
+			o.Jellyfin.URL = ""
+			o.Jellyfin.APIKey = ""
+		}, nil, false},
+		{"boundary jellyfin key of only whitespace refused", func(o *config.Options) {
+			o.Jellyfin.Enabled = true
+			o.Jellyfin.URL = "http://jellyfin.local:8096"
+			o.Jellyfin.APIKey = "   "
+		}, nil, true},
+		{"boundary jellyfin timeout zero refused", func(o *config.Options) {
+			o.Jellyfin.Enabled = true
+			o.Jellyfin.URL = "http://jellyfin.local:8096"
+			o.Jellyfin.APIKey = "valid-key"
+			o.Jellyfin.Timeout = 0
+		}, nil, true},
 		{"positive oidc valid prod", func(o *config.Options) {
 			o.OIDC.Enabled = true
 			o.OIDC.IssuerURL = "https://idp.example.com"
@@ -880,6 +917,34 @@ func TestLoadCompoundKeysFromEnv(t *testing.T) {
 			env:  map[string]string{"APP_SNATCHARR_JELLYFIN_DEFAULT_ROLE": "viewer"},
 			assertFn: func(t *testing.T, opts config.Options) {
 				t.Helper()
+				if opts.Jellyfin.DefaultRole != domain.RoleViewer {
+					t.Fatalf("Jellyfin.DefaultRole = %q, want %q", opts.Jellyfin.DefaultRole, domain.RoleViewer)
+				}
+			},
+		},
+		{
+			name: "jellyfin full env",
+			env: map[string]string{
+				"APP_SNATCHARR_JELLYFIN_ENABLED":      "true",
+				"APP_SNATCHARR_JELLYFIN_URL":          "https://jf.example.com",
+				"APP_SNATCHARR_JELLYFIN_API_KEY":      "secret-key\n",
+				"APP_SNATCHARR_JELLYFIN_TIMEOUT":      "5s",
+				"APP_SNATCHARR_JELLYFIN_DEFAULT_ROLE": "viewer",
+			},
+			assertFn: func(t *testing.T, opts config.Options) {
+				t.Helper()
+				if !opts.Jellyfin.Enabled {
+					t.Fatal("expected Jellyfin.Enabled = true")
+				}
+				if opts.Jellyfin.URL != "https://jf.example.com" {
+					t.Fatalf("Jellyfin.URL = %q, want %q", opts.Jellyfin.URL, "https://jf.example.com")
+				}
+				if opts.Jellyfin.APIKey != "secret-key" {
+					t.Fatalf("Jellyfin.APIKey = %q, want %q", opts.Jellyfin.APIKey, "secret-key")
+				}
+				if opts.Jellyfin.Timeout != 5*time.Second {
+					t.Fatalf("Jellyfin.Timeout = %v, want 5s", opts.Jellyfin.Timeout)
+				}
 				if opts.Jellyfin.DefaultRole != domain.RoleViewer {
 					t.Fatalf("Jellyfin.DefaultRole = %q, want %q", opts.Jellyfin.DefaultRole, domain.RoleViewer)
 				}
