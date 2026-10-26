@@ -6,9 +6,9 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # ADR-0033: Adult identity resolution and normalized data model
 
-- Status: Proposed
+- Status: Accepted (2026-10-26)
 - Date: 2026-10-26
-- Related: [ADR-0018](0018-product-front-door.md), [ADR-0025](0025-module-switches.md), [ADR-0026](0026-accounts-and-roles.md), [ADR-0027](0027-adult-module.md), [ADR-0028](0028-jellyfin-plugin.md), ADR-0031 (catalogued creator content search, draft in work), ADR-0032 (Stash link versus build, draft in work)
+- Related: [ADR-0018](0018-product-front-door.md), [ADR-0025](0025-module-switches.md), [ADR-0026](0026-accounts-and-roles.md), [ADR-0027](0027-adult-module.md), [ADR-0028](0028-jellyfin-plugin.md), [ADR-0031](0031-creator-content-fansdb.md), [ADR-0032](0032-stash-own-or-integrate.md)
 
 ## Context
 
@@ -82,7 +82,7 @@ Inspection of `github.com/golusoris/goenvoy` (`main` commit `ac12960bb042cf3b582
 
 ### 1. Cross-source identity resolution and match keys
 
-Every adult metadata record ingested from `stash-box` instances, `ThePornDB` REST, `Whisparr` (v2 and v3), or local filesystem scanners resolves into `SnatchArr`'s canonical entity graph (`Performer`, `Studio`, `Scene`, `ImageSet`, and `Tag`).
+Every adult metadata record ingested from `stash-box` instances, `ThePornDB` REST, `Whisparr` (v2 and v3), or local filesystem scanners resolves into `SnatchArr`'s canonical entity graph (`Performer`, `Studio`, `Scene`, `Movie`, `ImageSet`, and `Tag`). `Whisparr` v3 carries both full-length movies and scenes in one resource, told apart by `ItemType` (`Movie`, `Scene`; `src/NzbDrone.Core/Movies/MovieMetadata.cs` at `v3.1.0.2116`), and `ThePornDB` serves them on separate `/movies` and `/scenes` endpoints. A scene and a full-length movie are rows of `adult_scenes` with `item_kind IN ('scene', 'movie')`; `adult_movie_scenes` links a full movie to the scenes cut from it. Two rows of different `item_kind` never auto-merge.
 
 #### Match keys table
 
@@ -139,6 +139,7 @@ Even when a key produces $S \ge 85$, automatic merging is blocked and downgraded
 2. **Explicit exclusion rule**: The pair $(E_1, E_2)$ or their underlying `(source_instance_id, foreign_id)` links appear in `adult_identity_exclusions` (created when an operator splits a merge or rejects a suggestion).
 3. **Disambiguation clash**: Both records specify non-empty `disambiguation` strings on the same source family that normalize to different values (e.g., `"Performer Alpha (1995)"` vs `"Performer Alpha (2001)"`).
 4. **Biographical contradiction**: Performer `birth_date` values on both records have year precision or better and differ by more than 365 days, or scene durations differ by more than 20 % when neither scene is flagged as a trailer/clip.
+5. **Item kind mismatch**: A `scene` row and a full-length `movie` row never merge, even on a shared fingerprint, because a scene cut from a movie shares its frames; the pair becomes an `adult_movie_scenes` suggestion in the audit queue instead.
 
 #### Manual merge, split, and undo lifecycle
 
@@ -174,6 +175,8 @@ erDiagram
     adult_scenes ||--o{ adult_scene_performers : "credits"
     adult_scenes ||--o{ adult_scene_fingerprints : "identified_by"
     adult_scenes ||--o{ adult_image_sets : "companion_gallery"
+    adult_scenes ||--o{ adult_movie_scenes : "movie_contains"
+    adult_scenes ||--o{ adult_movie_scenes : "cut_from"
     adult_image_sets ||--|{ adult_image_items : "contains"
     adult_tags ||--o{ adult_entity_tags : "classifies"
     adult_external_refs ||--o{ adult_field_provenance : "supplies"
@@ -223,6 +226,7 @@ erDiagram
 
     adult_scenes {
         uuid id PK
+        varchar item_kind
         varchar title
         varchar code
         date release_date
@@ -234,6 +238,13 @@ erDiagram
         uuid merged_into_id FK
         timestamptz created_at
         timestamptz updated_at
+    }
+
+    adult_movie_scenes {
+        uuid movie_id PK,FK
+        uuid scene_id PK,FK
+        int sort_order
+        uuid source_ref_id FK
     }
 
     adult_scene_performers {
@@ -363,7 +374,8 @@ erDiagram
 
 1. **`adult_studios` two-level hierarchy**: Models both immediate parent sub-brands (`parent_studio_id`) and top-level umbrella networks (`network_studio_id`), matching `ThePornDB` `SiteResource` (`parent_id`, `network_id`) and `stash-box` recursive `Studio.parent` chains (`graphql/schema/types/studio.graphql`). Cycle prevention is enforced at write time (depth bounded at 4 levels per HISS-01/HISS-02).
 2. **`adult_external_refs` polymorphism**: Generalizes `adult_performer_links` and `adult_studio_links` across `entity_type IN ('performer', 'studio', 'scene', 'image_set', 'tag')` and `source_kind IN ('stashbox', 'tpdb_rest', 'whisparr_v3', 'whisparr_v2', 'stash_local', 'local_fs')`. For `ThePornDB`, `foreign_id` stores the UUID (`id`) and `secondary_id` stores the integer `_id` as text so both REST identifier formats resolve in $O(1)$ via unique index `(source_kind, COALESCE(source_instance_id, '00000000-0000-0000-0000-000000000000'), entity_type, foreign_id)`.
-3. **`adult_scene_fingerprints` dual representation**: Stores both `hash_hex` (`VARCHAR(64)`, supporting 128-bit `MD5`, 64-bit `OSHASH`, and 64-bit `PHASH`) and `hash_int64` (`BIGINT`, nullable, populated for 64-bit `OSHASH` and `PHASH` so PostgreSQL `bit_count(hash_int64 # $1::bigint) <= $2` executes indexed or bounded Hamming-distance scans directly in SQL without decoding hex in Go).
+3. **Full movies and scenes**: `adult_scenes.item_kind` is `scene` or `movie`, mapped from `Whisparr` v3 `ItemType` and from the `ThePornDB` endpoint the record came from. `adult_movie_scenes` rows always point from an `item_kind = 'movie'` row to an `item_kind = 'scene'` row; the write path refuses any other pair, and a hard conflict blocks merging rows of different `item_kind`.
+4. **`adult_scene_fingerprints` dual representation**: Stores both `hash_hex` (`VARCHAR(64)`, supporting 128-bit `MD5`, 64-bit `OSHASH`, and 64-bit `PHASH`) and `hash_int64` (`BIGINT`, nullable, populated for 64-bit `OSHASH` and `PHASH` so PostgreSQL `bit_count(hash_int64 # $1::bigint) <= $2` executes indexed or bounded Hamming-distance scans directly in SQL without decoding hex in Go).
 
 #### Per-field source precedence and provenance
 
@@ -421,9 +433,9 @@ To evaluate how `SnatchArr`'s normalized adult entities map into `Jellyfin`, the
 
 #### Recommendation for `Jellyfin` virtual library mapping
 
-`SnatchArr` and `lusoris/jellyfin-plugin-snatcharr` ([ADR-0028](0028-jellyfin-plugin.md)) adopt a **hybrid composition of (b) + (c1 + opt-in c2 for favourites) + (d)**, with optional **(a)** support only for legacy `Whisparr` v2 series libraries:
+`SnatchArr` and `lusoris/jellyfin-plugin-snatcharr` ([ADR-0028](0028-jellyfin-plugin.md)) adopt a **hybrid composition of (b) + (c1 + opt-in c2 for favourites) + (d)**, with optional **(a)** support only for legacy `Whisparr` v2 series libraries. Video goes into two libraries, one for full-length movies and one for scenes, both holding `Movie` items:
 
-1. **Scenes and movies (`Option b` primary)**: Adult video libraries use `Jellyfin`'s `Movies` (or `Mixed` / `MusicVideos`) library type backed by `IRemoteMetadataProvider<Movie, MovieInfo>` and `IRemoteImageProvider`. For 16:9 scenes lacking a 2:3 poster, `SnatchArrAdultImageProvider` serves the 16:9 frame as both `ImageType.Thumb` and `ImageType.Backdrop`, and serves `ThePornDB` 2:3 `posters` (when available in `adult_external_refs`) or a non-cropped 16:9 `ImageType.Primary` according to plugin setting `PreferLandscapeSceneThumbs`.
+1. **Two video libraries (`Option b` primary)**: an adult movies library holds `item_kind = 'movie'` rows and an adult scenes library holds `item_kind = 'scene'` rows. A `BoxSet` links each full movie to the scenes cut from it (`adult_movie_scenes`, ordered by `sort_order`), so a viewer moves from a movie to its scenes and back. Both libraries use `Jellyfin`'s `Movies` (or `Mixed` / `MusicVideos`) library type backed by `IRemoteMetadataProvider<Movie, MovieInfo>` and `IRemoteImageProvider`. For 16:9 scenes lacking a 2:3 poster, `SnatchArrAdultImageProvider` serves the 16:9 frame as both `ImageType.Thumb` and `ImageType.Backdrop`, and serves `ThePornDB` 2:3 `posters` (when available in `adult_external_refs`) or a non-cropped 16:9 `ImageType.Primary` according to plugin setting `PreferLandscapeSceneThumbs`.
 2. **Studios and networks**: Populated on `BaseItem.Studios` (both the sub-studio `canonical_name` and parent `network_studio_id` name) so native studio filtering works on all clients. `BoxSet` creation is restricted to parent networks or studios marked `is_favorite = true` in `SnatchArr`.
 3. **Performers (`Option c1` + optional `c2` for favourites)**: Every scene populates `MetadataResult<Movie>.People` with `PersonInfo` (`Type = PersonKind.Actor`, `Name = canonical_name`, `Role = credited_as != canonical_name ? "as " + credited_as : ""`, `ProviderIds = {"SnatchArrPerformer": id}`). `SnatchArrPersonProvider : IRemoteMetadataProvider<Person, PersonLookupInfo>` enriches biographies, birthdates, and headshots. To mitigate `Person.cs` (`skipAllowedTagsCheck: true`) on multi-user servers where restricted household accounts exist, the plugin configuration includes `PopulateGlobalPersonEntities` (default `true` when all `Jellyfin` users have adult access or library access is isolated; when `false`, performer names are written to `Tags` as `performer:<canonical_name>` and favourite performers are exposed as `BoxSet` collections covered by `BoxSet.IsVisible`).
 4. **Image sets (`Option d`)**: Indexed as `PhotoAlbum` / `Photo` inside a dedicated `Jellyfin` `Photos` library pointed at `image_set_dir` ([ADR-0027](0027-adult-module.md) open question 2). Because `PhotoAlbum` lacks `IHasLookupInfo`, the plugin implements `ICustomMetadataProvider<PhotoAlbum>` (`MediaBrowser.Controller/Providers/ICustomMetadataProvider.cs`) and an `IScheduledTask` that matches `PhotoAlbum.Path` against `GET /api/v1/adult/jellyfin/image-sets` and writes `Name`, `PremiereDate`, `Overview`, `Studios`, `Tags`, `People`, and `ProviderIds["SnatchArrImageSet"]` directly onto the `PhotoAlbum` entity. On `Jellyfin` Web, the optional companion script from [ADR-0028](0028-jellyfin-plugin.md) Section 4 renders the inline scene gallery lightbox via `GET /api/v1/adult/scenes/{id}/gallery`.
@@ -514,9 +526,29 @@ Live contract tests live in `goenvoy` (`metadata/adult/tpdb` and `metadata/adult
 
 ---
 
-## Open questions
+## Resolved questions
+
+Answered on 2026-10-26; each answer is recorded in the maintainer's decision ledger under the id named.
 
 ### 1. `adult-tpdb-integration-transport`
+
+Decision: option a. `ThePornDB` is read through its REST API with `goenvoy/metadata/adult/tpdb` and its `/changes/{type}` feed; the `stash-box` GraphQL endpoint stays a read-only fallback. The client fixes in section 4 land in `goenvoy` first; `SnatchArr` enables `ThePornDB` once they are released.
+
+### 2. `adult-phash-auto-merge-distance`
+
+Decision: option a. Auto-merge at $d \le 4$ with duration within $\pm 5\text{ s}$, audit queue at $5 \le d \le 8$, reject at $d > 8$. These are start values; the matching follow-up ADR's learning loop tunes them from audit decisions.
+
+### 3. `adult-jellyfin-library-presentation`
+
+Decision: option a, extended to two video libraries. The option set offered first did not cover full-length movies, which `Whisparr` v3 carries alongside scenes. Full movies and scenes go into separate libraries, both as `Movie` items; a `BoxSet` links each full movie to its scenes; studios and favourites are `BoxSet` collections; performers are `Person` cast with the tag fallback on shared servers; image sets are `PhotoAlbum` items. Section 3 and the data model above carry this.
+
+### 4. `adult-favorite-schema-migration`
+
+Decision: option a. Migration `000040_adult_normalized_model` promotes the favourite tables in place into the normalized tables with `adult_external_refs` and `adult_field_provenance`. Check: an up and down round trip, and favourites keep their links.
+
+## Options considered for the resolved questions
+
+### 1. Options for `adult-tpdb-integration-transport`
 
 How `SnatchArr` should integrate with `ThePornDB` given that `ThePornDB` exposes both a native REST API (`https://api.theporndb.net`, OpenAPI `v3.24.767`) and a proprietary `stash-box` GraphQL compatibility endpoint (`https://theporndb.net/graphql`):
 
@@ -527,9 +559,9 @@ How `SnatchArr` should integrate with `ThePornDB` given that `ThePornDB` exposes
     - *Risk*: Depends on the user's remote web profile flag (`GraphQL Manager Scene Type = Any`), loses `PerformerSite` canonical parent links, loses `/changes/{type}` incremental feeds, and hits proprietary GraphQL schema divergences from upstream `stash-box` `v0.10.3`.
   - c) **Support both transports simultaneously for the same `ThePornDB` account**: Polls both REST and GraphQL for `ThePornDB`.
     - *Risk*: Doubles token rate-limit consumption against `ThePornDB`'s Laravel Sanctum limiter and creates redundant self-merges.
-- **Recommended**: **Option a** (Native REST via `goenvoy/metadata/adult/tpdb` for `ThePornDB`, with `source_kind = 'tpdb_rest'`).
+- **Chosen**: **Option a** (Native REST via `goenvoy/metadata/adult/tpdb` for `ThePornDB`, with `source_kind = 'tpdb_rest'`).
 
-### 2. `adult-phash-auto-merge-distance`
+### 2. Options for `adult-phash-auto-merge-distance`
 
 What maximum `PHASH` Hamming distance $d$ (out of 64 bits) should qualify a scene fingerprint match for **automatic merge** ($S \ge 85$) when scene durations agree within $\pm 5\text{ s}$:
 
@@ -540,9 +572,9 @@ What maximum `PHASH` Hamming distance $d$ (out of 64 bits) should qualify a scen
     - *Risk*: Fails to auto-merge 1080p vs 4K encodes of the same scene whose `PHASH` values commonly differ by 1 to 4 bits, inflating the operator review queue.
   - c) **Auto-merge up to $d \le 8$ without additional corroboration**: Matches the full `stash-box` moderator cluster radius automatically.
     - *Risk*: Scenes sharing identical long studio intros/outros or static camera angles can fall within $6 \le d \le 8$, causing false-positive automatic scene merges.
-- **Recommended**: **Option a** (Auto-merge at $d \le 4$ with duration $\pm 5\text{ s}$; suggest at $5 \le d \le 8$; reject at $d > 8$).
+- **Chosen**: **Option a** (Auto-merge at $d \le 4$ with duration $\pm 5\text{ s}$; suggest at $5 \le d \le 8$; reject at $d > 8$).
 
-### 3. `adult-jellyfin-library-presentation`
+### 3. Options for `adult-jellyfin-library-presentation`
 
 How the `Jellyfin` companion plugin ([ADR-0028](0028-jellyfin-plugin.md)) should model adult scenes, studios, performers, and image sets in `Jellyfin` `v12.3`:
 
@@ -553,9 +585,9 @@ How the `Jellyfin` companion plugin ([ADR-0028](0028-jellyfin-plugin.md)) should
     - *Risk*: Breaks on `Episode.GetUserDataKeys` (`Episode.cs`) and `FillMissingEpisodeNumbersFromPath` (`Episode.cs`) without synthetic integer episode numbers, and misfits standalone creator scenes and full-length movies.
   - c) **`Movie` items with `BoxSet` collections generated for every studio and every performer instead of `Person` entities**: Avoids `Person.IsVisible` (`skipAllowedTagsCheck: true`) entirely by never creating `Person` rows.
     - *Risk*: Removes the interactive cast ribbon with performer headshots and roles from every scene detail page and floods `Jellyfin`'s Collections view with thousands of `BoxSet` folders.
-- **Recommended**: **Option a** (Hybrid `Movie` + `Person` + `ICustomMetadataProvider<PhotoAlbum>` + favourite-scoped `BoxSet` collections).
+- **Chosen**: **Option a** (Hybrid `Movie` + `Person` + `ICustomMetadataProvider<PhotoAlbum>` + favourite-scoped `BoxSet` collections).
 
-### 4. `adult-favorite-schema-migration`
+### 4. Options for `adult-favorite-schema-migration`
 
 How existing `000036_adult_module` and `000038_adult_favorite_urls` tables (`adult_favorite_performers`, `adult_performer_links`, `adult_performer_urls`, `adult_favorite_studios`, `adult_studio_links`, `adult_studio_urls`) should transition to the normalized schema (`adult_performers`, `adult_studios`, `adult_external_refs`, `adult_field_provenance`):
 
@@ -566,7 +598,7 @@ How existing `000036_adult_module` and `000038_adult_favorite_urls` tables (`adu
     - *Risk*: Violates HISS-19 and the single-normalized-model mandate of this ADR by duplicating identity and URL state across two schemas.
   - c) **Replace `adult_favorite_*` with compatibility SQL views over `adult_performers` and `adult_studios` (`WHERE is_favorite = TRUE`)**: Promotes the base tables and leaves read-only SQL views under the old names during transition.
     - *Risk*: `sqlc` code generation and write queries still need updating to target the new tables, so the view layer adds schema surface without avoiding the Go query update.
-- **Recommended**: **Option a** (In-place SQL migration promoting `adult_favorite_*` into `adult_performers`, `adult_studios`, `adult_external_refs`, and `adult_field_provenance` in one atomic slice).
+- **Chosen**: **Option a** (In-place SQL migration promoting `adult_favorite_*` into `adult_performers`, `adult_studios`, `adult_external_refs`, and `adult_field_provenance` in one atomic slice).
 
 ## References
 
