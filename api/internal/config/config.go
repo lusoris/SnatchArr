@@ -49,6 +49,7 @@
 //	snatcharr.jellyfin.api_key   APP_SNATCHARR_JELLYFIN_API_KEY   Jellyfin service account API key
 //	snatcharr.jellyfin.timeout   APP_SNATCHARR_JELLYFIN_TIMEOUT   Jellyfin HTTP request timeout (default 10s)
 //	snatcharr.jellyfin.default_role APP_SNATCHARR_JELLYFIN_DEFAULT_ROLE default role for new Jellyfin members (default requester)
+//	snatcharr.item_search.cooldown_seconds APP_SNATCHARR_ITEM_SEARCH_COOLDOWN_SECONDS per-user item search cooldown in seconds (default 60, 0..3600, 0 = off)
 //	snatcharr.metrics.addr       APP_SNATCHARR_METRICS_ADDR       separate HTTP listen address for Prometheus /metrics
 package config
 
@@ -80,21 +81,22 @@ const (
 
 // Options is SnatchArr's typed configuration.
 type Options struct {
-	Profile   Profile          `koanf:"profile"`
-	Public    PublicOptions    `koanf:"public"`
-	Web       WebOptions       `koanf:"web"`
-	Worker    WorkerOptions    `koanf:"worker"`
-	Configarr ConfigarrOptions `koanf:"configarr"`
-	Session   SessionOptions   `koanf:"session"`
-	APIKey    APIKeyOptions    `koanf:"apikey"`
-	Proxy     ProxyOptions     `koanf:"proxy"`
-	Setup     SetupOptions     `koanf:"setup"`
-	OIDC      OIDCOptions      `koanf:"oidc"`
-	ProxyAuth ProxyAuthOptions `koanf:"proxy_auth"`
-	Prowlarr  ProwlarrOptions  `koanf:"prowlarr"`
-	Jellyfin  JellyfinOptions  `koanf:"jellyfin"`
-	Logs      LogsOptions      `koanf:"logs"`
-	Metrics   MetricsOptions   `koanf:"metrics"`
+	Profile    Profile           `koanf:"profile"`
+	Public     PublicOptions     `koanf:"public"`
+	Web        WebOptions        `koanf:"web"`
+	Worker     WorkerOptions     `koanf:"worker"`
+	Configarr  ConfigarrOptions  `koanf:"configarr"`
+	Session    SessionOptions    `koanf:"session"`
+	APIKey     APIKeyOptions     `koanf:"apikey"`
+	Proxy      ProxyOptions      `koanf:"proxy"`
+	Setup      SetupOptions      `koanf:"setup"`
+	OIDC       OIDCOptions       `koanf:"oidc"`
+	ProxyAuth  ProxyAuthOptions  `koanf:"proxy_auth"`
+	Prowlarr   ProwlarrOptions   `koanf:"prowlarr"`
+	Jellyfin   JellyfinOptions   `koanf:"jellyfin"`
+	ItemSearch ItemSearchOptions `koanf:"item_search"`
+	Logs       LogsOptions       `koanf:"logs"`
+	Metrics    MetricsOptions    `koanf:"metrics"`
 }
 
 // MetricsOptions configures Prometheus /metrics endpoint exposure.
@@ -179,6 +181,26 @@ func (j JellyfinOptions) validateConnection() error {
 	}
 	if j.Timeout <= 0 {
 		return errors.New("config: snatcharr.jellyfin.timeout (APP_SNATCHARR_JELLYFIN_TIMEOUT) must be greater than zero")
+	}
+	return nil
+}
+
+// Item-search cooldown bounds (ledger snatcharr-oq-0035-2-cooldown-cap-values).
+const (
+	DefaultItemSearchCooldownSeconds = 60
+	MaxItemSearchCooldownSeconds     = 3600
+)
+
+// ItemSearchOptions configures item-scoped search and its per-user cooldown.
+type ItemSearchOptions struct {
+	// CooldownSeconds is the per-user window between two item searches; 0 turns it off.
+	CooldownSeconds int `koanf:"cooldown_seconds"`
+}
+
+// Validate checks that CooldownSeconds lies in 0..MaxItemSearchCooldownSeconds.
+func (i ItemSearchOptions) Validate() error {
+	if i.CooldownSeconds < 0 || i.CooldownSeconds > MaxItemSearchCooldownSeconds {
+		return fmt.Errorf("config: snatcharr.item_search.cooldown_seconds (APP_SNATCHARR_ITEM_SEARCH_COOLDOWN_SECONDS) must be between 0 and %d, got %d", MaxItemSearchCooldownSeconds, i.CooldownSeconds)
 	}
 	return nil
 }
@@ -472,7 +494,8 @@ func Default() Options {
 			Timeout:     10 * time.Second,
 			DefaultRole: domain.RoleRequester,
 		},
-		Logs: LogsOptions{RingSize: 2000},
+		ItemSearch: ItemSearchOptions{CooldownSeconds: DefaultItemSearchCooldownSeconds},
+		Logs:       LogsOptions{RingSize: 2000},
 	}
 }
 
@@ -608,6 +631,9 @@ func (o Options) Validate() error {
 	if err := o.Jellyfin.Validate(); err != nil {
 		return err
 	}
+	if err := o.ItemSearch.Validate(); err != nil {
+		return err
+	}
 	if err := o.Metrics.Validate(); err != nil {
 		return err
 	}
@@ -665,6 +691,7 @@ func CompoundKeys() []string {
 		"snatcharr.prowlarr.limit_threshold",
 		"snatcharr.jellyfin.api_key",
 		"snatcharr.jellyfin.default_role",
+		"snatcharr.item_search.cooldown_seconds",
 		"snatcharr.logs.ring_size",
 		"snatcharr.configarr.download_clients",
 	}

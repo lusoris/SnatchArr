@@ -1577,6 +1577,54 @@
     ],
     "type": "object"
   },
+  "searchItem": {
+    "$defs": {
+      "ItemSearchRequest": {
+        "properties": {
+          "entity_id": {
+            "description": "Target entity ID",
+            "format": "int64",
+            "type": "integer"
+          },
+          "group_id": {
+            "description": "Target group ID",
+            "format": "int64",
+            "type": "integer"
+          },
+          "kind": {
+            "$ref": "#/$defs/SnatchKind"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "type": "object"
+      },
+      "SnatchKind": {
+        "enum": [
+          "missing",
+          "upgrade"
+        ],
+        "type": "string"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/ItemSearchRequest"
+      },
+      "instanceId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "body",
+      "instanceId"
+    ],
+    "type": "object"
+  },
   "snatchSeerrRequest": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
