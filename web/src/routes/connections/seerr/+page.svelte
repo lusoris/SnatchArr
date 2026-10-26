@@ -8,7 +8,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { api, describeError } from '#lib/api/client.js';
 	import type { components } from '#lib/api/schema.js';
 	import AdminFormSlot from '#lib/components/AdminFormSlot.svelte';
-	import LinkCard from '#lib/components/LinkCard.svelte';
+	import LinkListSection from '#lib/components/LinkListSection.svelte';
 	import PageHeader from '#lib/components/PageHeader.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import SeerrLinkForm from '#lib/components/SeerrLinkForm.svelte';
@@ -113,62 +113,39 @@ SPDX-License-Identifier: EUPL-1.2
 
 <PageHeader title={m.seerr_title()} documentTitle help={HELP_MAP['/connections/seerr']} />
 
-<section aria-labelledby="seerr-links-section-title" class="w-full">
-	<h2 id="seerr-links-section-title" class="sr-only">{m.seerr_links_title()}</h2>
-	<div class="grid w-full grid-cols-1 items-start gap-6 xl:grid-cols-12">
-		<div class="flex flex-col gap-3 xl:col-span-7">
-			<h2 class="text-lg font-semibold">{m.seerr_links_title()}</h2>
-			{#if links.isPending}
-				<p aria-live="polite">{m.loading()}</p>
-			{:else if links.isError}
-				<ProblemNote error={links.error} />
-			{:else if (links.data ?? []).length === 0}
-				<p class="card">{m.seerr_links_empty()}</p>
-			{:else}
-				<ul class="grid grid-cols-1 gap-3 xl:grid-cols-2">
-					{#each links.data ?? [] as link (link.id)}
-						<LinkCard
-							{link}
-							testPending={probe.isPending}
-							deletePending={remove.isPending}
-							onedit={() => editor.open(link)}
-							ontest={() => probe.mutate(link.id)}
-							ondelete={() => remove.mutate(link)}
-						>
-							{#snippet statusExtra()}
-								{#if link.last_sync_at}
-									· {m.seerr_last_sync({ when: formatWhen(link.last_sync_at, getLocale()) })}
-								{/if}
-							{/snippet}
-							{#snippet extraActions()}
-								<button
-									type="button"
-									class="btn"
-									disabled={sync.isPending}
-									onclick={() => sync.mutate(link.id)}>{m.seerr_sync()}</button
-								>
-								<button
-									type="button"
-									class="btn"
-									disabled={importInstances.isPending}
-									onclick={() => importInstances.mutate(link.id)}>{m.seerr_import()}</button
-								>
-							{/snippet}
-						</LinkCard>
-					{/each}
-				</ul>
-			{/if}
-		</div>
-
-		<div class="xl:col-span-5">
-			<AdminFormSlot {editor} {save} probe={probeInput}>
-				{#snippet form(props)}
-					<SeerrLinkForm link={editor.editing} instances={instances.data ?? []} {...props} />
-				{/snippet}
-			</AdminFormSlot>
-		</div>
-	</div>
-</section>
+<LinkListSection
+	idPrefix="seerr"
+	title={m.seerr_links_title()}
+	emptyText={m.seerr_links_empty()}
+	query={links}
+	{editor}
+	{probe}
+	{remove}
+>
+	{#snippet statusExtra(link)}
+		{#if link.last_sync_at}
+			· {m.seerr_last_sync({ when: formatWhen(link.last_sync_at, getLocale()) })}
+		{/if}
+	{/snippet}
+	{#snippet extraActions(link)}
+		<button type="button" class="btn" disabled={sync.isPending} onclick={() => sync.mutate(link.id)}
+			>{m.seerr_sync()}</button
+		>
+		<button
+			type="button"
+			class="btn"
+			disabled={importInstances.isPending}
+			onclick={() => importInstances.mutate(link.id)}>{m.seerr_import()}</button
+		>
+	{/snippet}
+	{#snippet aside()}
+		<AdminFormSlot {editor} {save} probe={probeInput}>
+			{#snippet form(props)}
+				<SeerrLinkForm link={editor.editing} instances={instances.data ?? []} {...props} />
+			{/snippet}
+		</AdminFormSlot>
+	{/snippet}
+</LinkListSection>
 
 <h2 class="mt-8 mb-3 text-lg font-semibold">{m.seerr_requests_title()}</h2>
 {#if requests.isPending}
