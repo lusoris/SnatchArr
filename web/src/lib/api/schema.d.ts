@@ -2026,6 +2026,9 @@ export interface components {
             media_status: number;
             is_4k: boolean;
             requested_by: string;
+            /** Format: uuid */
+            requestedByUserId?: string;
+            requestedByUsername?: string;
             seasons: number[];
             /** Format: uuid */
             instance_id?: string;
