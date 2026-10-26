@@ -52,6 +52,25 @@ type User struct {
 	UpdatedAt time.Time
 }
 
+// UserIdentity represents a linked external authentication identity.
+type UserIdentity struct {
+	Provider  string
+	Subject   string
+	UserID    uuid.UUID
+	CreatedAt time.Time
+}
+
+// Identity providers for external account linking.
+const (
+	IdentityProviderJellyfin = "jellyfin"
+	IdentityProviderProxy    = "proxy"
+)
+
+// ValidIdentityProvider reports whether provider is supported for account linking.
+func ValidIdentityProvider(provider string) bool {
+	return provider == IdentityProviderJellyfin || provider == IdentityProviderProxy
+}
+
 // Password policy bounds.
 const (
 	MinPasswordLen = 12

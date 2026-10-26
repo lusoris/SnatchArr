@@ -133,3 +133,30 @@ func TestRoleForJellyfinMember(t *testing.T) {
 		})
 	}
 }
+
+func TestValidIdentityProvider(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		provider string
+		want     bool
+	}{
+		{name: "positive jellyfin", provider: domain.IdentityProviderJellyfin, want: true},
+		{name: "positive proxy", provider: domain.IdentityProviderProxy, want: true},
+		{name: "negative empty", provider: "", want: false},
+		{name: "negative unknown oidc", provider: "oidc", want: false},
+		{name: "negative case Jellyfin", provider: "Jellyfin", want: false},
+		{name: "boundary padded", provider: " jellyfin ", want: false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := domain.ValidIdentityProvider(tc.provider)
+			if got != tc.want {
+				t.Fatalf("ValidIdentityProvider(%q) = %v, want %v", tc.provider, got, tc.want)
+			}
+		})
+	}
+}

@@ -82,6 +82,7 @@ func (s *Security) HandleCookieAuth(ctx context.Context, _ oas.OperationName, _ 
 			s.revokeSSOSession(ctx, sess.ID, reason, origin.Source)
 			return ctx, fmt.Errorf("%w: sso session revoked", domain.ErrUnauthorized)
 		}
+		u.Role = origin.Role
 	}
 	return withUser(ctx, u), nil
 }

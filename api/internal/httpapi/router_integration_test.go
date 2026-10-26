@@ -380,6 +380,57 @@ func stepsAuth() []routerStep {
 	}
 }
 
+func stepsIdentities() []routerStep {
+	return []routerStep{
+		{
+			op:     "listIdentities",
+			method: http.MethodGet,
+			path:   func(_ *idsState) string { return "/auth/identities" },
+			want:   http.StatusOK,
+			capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
+				t.Helper()
+				items, ok := decoded["items"].([]any)
+				if !ok {
+					t.Fatalf("listIdentities items = %v, want slice", decoded["items"])
+				}
+				if len(items) != 0 {
+					t.Fatalf("listIdentities items len = %d, want 0", len(items))
+				}
+			},
+		},
+		{
+			op:     "linkJellyfinIdentity",
+			method: http.MethodPost,
+			path:   func(_ *idsState) string { return "/auth/identities/jellyfin" },
+			body: func(_ *idsState) any {
+				return map[string]any{
+					"username": "admin",
+					"password": "secret",
+				}
+			},
+			want: http.StatusNotFound,
+		},
+		{
+			op:     "linkProxyIdentity",
+			method: http.MethodPost,
+			path:   func(_ *idsState) string { return "/auth/identities/proxy" },
+			want:   http.StatusNotFound,
+		},
+		{
+			op:     "unlinkJellyfinIdentity",
+			method: http.MethodDelete,
+			path:   func(_ *idsState) string { return "/auth/identities/jellyfin" },
+			want:   http.StatusNotFound,
+		},
+		{
+			op:     "unlinkProxyIdentity",
+			method: http.MethodDelete,
+			path:   func(_ *idsState) string { return "/auth/identities/proxy" },
+			want:   http.StatusNotFound,
+		},
+	}
+}
+
 func stepsAPIKeys() []routerStep {
 	return []routerStep{
 		{
@@ -1754,6 +1805,7 @@ func stepsWatchaware() []routerStep {
 func buildRouterSteps(f *routerFixture) []routerStep {
 	steps := make([]routerStep, 0, 85)
 	steps = append(steps, stepsAuth()...)
+	steps = append(steps, stepsIdentities()...)
 	steps = append(steps, stepsAPIKeys()...)
 	steps = append(steps, stepsInstances()...)
 	steps = append(steps, stepsPoliciesAndRuns()...)
@@ -2152,7 +2204,8 @@ func indexRouterSteps(steps []routerStep) map[string]routerStep {
 func isViewerExemptSessionEndpoint(path string) bool {
 	switch path {
 	case "/auth/setup", "/auth/login", "/auth/logout", "/auth/password", "/auth/proxy-session",
-		"/auth/jellyfin", "/auth/jellyfin/quickconnect/initiate", "/auth/jellyfin/quickconnect/authenticate":
+		"/auth/jellyfin", "/auth/jellyfin/quickconnect/initiate", "/auth/jellyfin/quickconnect/authenticate",
+		"/auth/identities", "/auth/identities/jellyfin", "/auth/identities/proxy":
 		return true
 	default:
 		return false

@@ -99,6 +99,13 @@ func (h *Handlers) startJellyfinSession(ctx context.Context, m jellyfin.Member) 
 		}
 		return h.startSession(ctx, admin, &origin)
 	}
+	linkedUser, ok, err := h.auth.LinkedUser(ctx, domain.IdentityProviderJellyfin, m.ID)
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		return h.startSession(ctx, linkedUser, &origin)
+	}
 	externalUser, err := h.auth.ProvisionJellyfinUser(ctx, m, role)
 	if err != nil {
 		return nil, err

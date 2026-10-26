@@ -94,6 +94,24 @@ func (q *Queries) DeleteSession(ctx context.Context, id string) error {
 	return err
 }
 
+const deleteUserIdentity = `-- name: DeleteUserIdentity :execrows
+DELETE FROM user_identities
+WHERE user_id = $1 AND provider = $2
+`
+
+type DeleteUserIdentityParams struct {
+	UserID   uuid.UUID
+	Provider string
+}
+
+func (q *Queries) DeleteUserIdentity(ctx context.Context, arg DeleteUserIdentityParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteUserIdentity, arg.UserID, arg.Provider)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteUserSessionsExcept = `-- name: DeleteUserSessionsExcept :execrows
 DELETE FROM sessions
 WHERE data->>'user_id' = $1::text
@@ -195,6 +213,26 @@ func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (User, error) {
 	return i, err
 }
 
+const getUserByExternalID = `-- name: GetUserByExternalID :one
+SELECT id, username, password_hash, role, created_at, updated_at, external_id FROM users
+WHERE external_id = $1
+`
+
+func (q *Queries) GetUserByExternalID(ctx context.Context, externalID *string) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByExternalID, externalID)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.PasswordHash,
+		&i.Role,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ExternalID,
+	)
+	return i, err
+}
+
 const getUserByUsername = `-- name: GetUserByUsername :one
 SELECT id, username, password_hash, role, created_at, updated_at, external_id FROM users WHERE username = $1
 `
@@ -210,6 +248,59 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ExternalID,
+	)
+	return i, err
+}
+
+const getUserIdentity = `-- name: GetUserIdentity :one
+SELECT provider, subject, user_id, created_at FROM user_identities
+WHERE provider = $1 AND subject = $2
+`
+
+type GetUserIdentityParams struct {
+	Provider string
+	Subject  string
+}
+
+func (q *Queries) GetUserIdentity(ctx context.Context, arg GetUserIdentityParams) (UserIdentity, error) {
+	row := q.db.QueryRow(ctx, getUserIdentity, arg.Provider, arg.Subject)
+	var i UserIdentity
+	err := row.Scan(
+		&i.Provider,
+		&i.Subject,
+		&i.UserID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const insertUserIdentity = `-- name: InsertUserIdentity :one
+INSERT INTO user_identities (provider, subject, user_id, created_at)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (provider, subject) DO NOTHING
+RETURNING provider, subject, user_id, created_at
+`
+
+type InsertUserIdentityParams struct {
+	Provider  string
+	Subject   string
+	UserID    uuid.UUID
+	CreatedAt time.Time
+}
+
+func (q *Queries) InsertUserIdentity(ctx context.Context, arg InsertUserIdentityParams) (UserIdentity, error) {
+	row := q.db.QueryRow(ctx, insertUserIdentity,
+		arg.Provider,
+		arg.Subject,
+		arg.UserID,
+		arg.CreatedAt,
+	)
+	var i UserIdentity
+	err := row.Scan(
+		&i.Provider,
+		&i.Subject,
+		&i.UserID,
+		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -284,6 +375,37 @@ func (q *Queries) ListAPIKeysForOwner(ctx context.Context, ownerID uuid.UUID) ([
 			&i.CreatedAt,
 			&i.ExpiresAt,
 			&i.LastUsedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserIdentities = `-- name: ListUserIdentities :many
+SELECT provider, subject, user_id, created_at FROM user_identities
+WHERE user_id = $1
+ORDER BY provider
+`
+
+func (q *Queries) ListUserIdentities(ctx context.Context, userID uuid.UUID) ([]UserIdentity, error) {
+	rows, err := q.db.Query(ctx, listUserIdentities, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []UserIdentity{}
+	for rows.Next() {
+		var i UserIdentity
+		if err := rows.Scan(
+			&i.Provider,
+			&i.Subject,
+			&i.UserID,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}

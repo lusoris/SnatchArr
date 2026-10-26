@@ -373,6 +373,13 @@ type User struct {
 	ExternalID   *string
 }
 
+type UserIdentity struct {
+	Provider  string
+	Subject   string
+	UserID    uuid.UUID
+	CreatedAt time.Time
+}
+
 type WatchawareGateBaseline struct {
 	InstanceID  uuid.UUID
 	BaselinedAt time.Time

@@ -1225,6 +1225,45 @@
     "properties": {},
     "type": "object"
   },
+  "linkJellyfinIdentity": {
+    "$defs": {
+      "JellyfinLoginRequest": {
+        "properties": {
+          "password": {
+            "maxLength": 1024,
+            "type": "string"
+          },
+          "username": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "password"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/JellyfinLoginRequest"
+      }
+    },
+    "required": [
+      "body"
+    ],
+    "type": "object"
+  },
+  "linkProxyIdentity": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
   "listAPIKeys": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -1258,6 +1297,12 @@
         "type": "string"
       }
     },
+    "type": "object"
+  },
+  "listIdentities": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
     "type": "object"
   },
   "listInstances": {
@@ -1896,6 +1941,18 @@
       "body",
       "instanceId"
     ],
+    "type": "object"
+  },
+  "unlinkJellyfinIdentity": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "unlinkProxyIdentity": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
     "type": "object"
   },
   "updateDownloadClient": {

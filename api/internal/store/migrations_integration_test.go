@@ -799,3 +799,96 @@ func TestMigration000036AdultModule(t *testing.T) {
 	}
 	assertAdultTables(t, st, true)
 }
+
+// TestMigration000037UserIdentities verifies migration 000037 creates user_identities,
+// enforces provider and subject check constraints, foreign keys and cascades, and steps down/up.
+func TestMigration000037UserIdentities(t *testing.T) {
+	t.Parallel()
+	st := storetest.New(t)
+	m := storetest.Migrator(t, st)
+
+	stepDownToVersion(t, m, 36)
+	assertTableExists(t, st, "user_identities", false)
+
+	if err := m.Steps(1); err != nil {
+		t.Fatalf("Steps(1) up to 37: %v", err)
+	}
+	assertTableExists(t, st, "user_identities", true)
+
+	userID := uuid.New()
+	testUserIdentitiesPositive(t, st, userID)
+	testUserIdentitiesNegative(t, st, userID)
+	testUserIdentitiesBoundary(t, st, userID)
+
+	if err := m.Steps(-1); err != nil {
+		t.Fatalf("Steps(-1) down to 36: %v", err)
+	}
+	assertTableExists(t, st, "user_identities", false)
+
+	if err := m.Steps(1); err != nil {
+		t.Fatalf("Steps(1) back up to 37: %v", err)
+	}
+	assertTableExists(t, st, "user_identities", true)
+}
+
+func testUserIdentitiesPositive(t *testing.T, st *store.Store, userID uuid.UUID) {
+	t.Helper()
+	now := time.Date(2026, 10, 26, 6, 0, 0, 0, time.UTC)
+	const insUser = `INSERT INTO users (id, username, password_hash, role, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $5)`
+	if _, err := st.Pool().Exec(t.Context(), insUser, userID, "ident-user", "unused", "requester", now); err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+	const insIdent = `INSERT INTO user_identities (provider, subject, user_id, created_at) VALUES ($1, $2, $3, $4)`
+	if _, err := st.Pool().Exec(t.Context(), insIdent, "jellyfin", "jf-sub-1", userID, now); err != nil {
+		t.Fatalf("insert jellyfin identity: %v", err)
+	}
+	if _, err := st.Pool().Exec(t.Context(), insIdent, "proxy", "proxy-sub-1", userID, now); err != nil {
+		t.Fatalf("insert proxy identity: %v", err)
+	}
+}
+
+func testUserIdentitiesNegative(t *testing.T, st *store.Store, userID uuid.UUID) {
+	t.Helper()
+	now := time.Date(2026, 10, 26, 6, 0, 0, 0, time.UTC)
+	const insIdent = `INSERT INTO user_identities (provider, subject, user_id, created_at) VALUES ($1, $2, $3, $4)`
+
+	// Invalid provider
+	if _, err := st.Pool().Exec(t.Context(), insIdent, "oidc", "sub-invalid", userID, now); err == nil {
+		t.Fatal("insert oidc provider succeeded, want check violation")
+	}
+
+	// Empty subject
+	if _, err := st.Pool().Exec(t.Context(), insIdent, "jellyfin", "", userID, now); err == nil {
+		t.Fatal("insert empty subject succeeded, want check violation")
+	}
+
+	// Duplicate (provider, subject)
+	if _, err := st.Pool().Exec(t.Context(), insIdent, "jellyfin", "jf-sub-1", userID, now); err == nil {
+		t.Fatal("duplicate (provider, subject) succeeded, want primary key conflict")
+	}
+
+	// Duplicate (user_id, provider) with different subject -> unique index violation
+	if _, err := st.Pool().Exec(t.Context(), insIdent, "jellyfin", "jf-sub-2", userID, now); err == nil {
+		t.Fatal("second jellyfin identity for same user succeeded, want unique index violation")
+	}
+
+	// Foreign key violation
+	if _, err := st.Pool().Exec(t.Context(), insIdent, "proxy", "sub-fk", uuid.New(), now); err == nil {
+		t.Fatal("insert invalid user_id fk succeeded, want fk violation")
+	}
+}
+
+func testUserIdentitiesBoundary(t *testing.T, st *store.Store, userID uuid.UUID) {
+	t.Helper()
+	// Deleting user should cascade delete user_identities
+	if _, err := st.Pool().Exec(t.Context(), `DELETE FROM users WHERE id = $1`, userID); err != nil {
+		t.Fatalf("delete user: %v", err)
+	}
+	var count int
+	if err := st.Pool().QueryRow(t.Context(), `SELECT count(*) FROM user_identities WHERE user_id = $1`, userID).Scan(&count); err != nil {
+		t.Fatalf("count user identities: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("user_identities count after user cascade delete = %d, want 0", count)
+	}
+}

@@ -827,3 +827,111 @@ func TestLoginJellyfin_NonAuthErrorDoesNotLockOut(t *testing.T) {
 		t.Fatalf("LoginJellyfin with correct credentials after upstream errors = %v, want success", err)
 	}
 }
+
+func TestIdentities_ServiceIntegration(t *testing.T) {
+	t.Parallel()
+	svc := newService(t)
+	ctx := t.Context()
+
+	if _, err := svc.Setup(ctx, "admin-user", "password-admin-1234"); err != nil {
+		t.Fatalf("Setup: %v", err)
+	}
+
+	userA, err := svc.ProvisionExternalUser(ctx, "oidc-", "usera@example.com", domain.RoleRequester)
+	if err != nil {
+		t.Fatalf("ProvisionExternalUser userA: %v", err)
+	}
+	userB, err := svc.ProvisionExternalUser(ctx, "oidc-", "userb@example.com", domain.RoleRequester)
+	if err != nil {
+		t.Fatalf("ProvisionExternalUser userB: %v", err)
+	}
+
+	testIdentitiesValidationAndLinking(ctx, t, svc, userA)
+	testIdentitiesConflicts(ctx, t, svc, userA, userB)
+	testIdentitiesQueryAndUnlink(ctx, t, svc, userA)
+}
+
+func testIdentitiesValidationAndLinking(ctx context.Context, t *testing.T, svc *auth.Service, userA domain.User) {
+	t.Helper()
+	// Invalid inputs
+	if err := svc.LinkIdentity(ctx, userA.ID, "unknown", "subject1"); !errors.Is(err, domain.ErrInvalid) {
+		t.Fatalf("LinkIdentity unknown provider = %v, want ErrInvalid", err)
+	}
+	if err := svc.LinkIdentity(ctx, userA.ID, domain.IdentityProviderJellyfin, "  "); !errors.Is(err, domain.ErrInvalid) {
+		t.Fatalf("LinkIdentity empty subject = %v, want ErrInvalid", err)
+	}
+
+	// Positive linking
+	if err := svc.LinkIdentity(ctx, userA.ID, domain.IdentityProviderJellyfin, "jf-sub-a"); err != nil {
+		t.Fatalf("LinkIdentity userA jellyfin: %v", err)
+	}
+	if err := svc.LinkIdentity(ctx, userA.ID, domain.IdentityProviderProxy, "proxy-sub-a"); err != nil {
+		t.Fatalf("LinkIdentity userA proxy: %v", err)
+	}
+
+	// Idempotent re-link same user
+	if err := svc.LinkIdentity(ctx, userA.ID, domain.IdentityProviderJellyfin, "jf-sub-a"); err != nil {
+		t.Fatalf("LinkIdentity userA jellyfin again = %v, want nil", err)
+	}
+
+	// Linking identity that is user's own external_id -> nil
+	proxyUser, err := svc.ProvisionExternalUser(ctx, "proxy-", "own-proxy-subject", domain.RoleRequester)
+	if err != nil {
+		t.Fatalf("ProvisionExternalUser proxy: %v", err)
+	}
+	if err := svc.LinkIdentity(ctx, proxyUser.ID, domain.IdentityProviderProxy, "own-proxy-subject"); err != nil {
+		t.Fatalf("LinkIdentity own external_id = %v, want nil", err)
+	}
+}
+
+func testIdentitiesConflicts(ctx context.Context, t *testing.T, svc *auth.Service, userA, userB domain.User) {
+	t.Helper()
+	// Conflict: identity already belongs to userA in user_identities
+	if err := svc.LinkIdentity(ctx, userB.ID, domain.IdentityProviderJellyfin, "jf-sub-a"); !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("LinkIdentity userB with userA's identity = %v, want ErrConflict", err)
+	}
+
+	// Conflict: identity belongs to another user's external_id
+	if err := svc.LinkIdentity(ctx, userA.ID, domain.IdentityProviderProxy, "own-proxy-subject"); !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("LinkIdentity with external_id of another account = %v, want ErrConflict", err)
+	}
+
+	// Conflict: userA already linked to a different subject of the same provider
+	diffErr := svc.LinkIdentity(ctx, userA.ID, domain.IdentityProviderJellyfin, "jf-sub-different")
+	if !errors.Is(diffErr, domain.ErrConflict) {
+		t.Fatalf("LinkIdentity userA with second jellyfin identity = %v, want ErrConflict", diffErr)
+	}
+	if !strings.Contains(diffErr.Error(), "already linked to another jellyfin identity; unlink first") {
+		t.Fatalf("LinkIdentity diffErr = %q, want mention of unlink first", diffErr.Error())
+	}
+}
+
+func testIdentitiesQueryAndUnlink(ctx context.Context, t *testing.T, svc *auth.Service, userA domain.User) {
+	t.Helper()
+	// LinkedUser
+	u, ok, err := svc.LinkedUser(ctx, domain.IdentityProviderJellyfin, "jf-sub-a")
+	if err != nil || !ok || u.ID != userA.ID {
+		t.Fatalf("LinkedUser jf-sub-a = (%+v, %v, %v), want userA ID %s", u, ok, err, userA.ID)
+	}
+	_, ok, err = svc.LinkedUser(ctx, domain.IdentityProviderJellyfin, "non-existent")
+	if err != nil || ok {
+		t.Fatalf("LinkedUser non-existent = ok %v, err %v, want false, nil", ok, err)
+	}
+
+	// ListIdentities (order by provider: jellyfin then proxy)
+	list, err := svc.ListIdentities(ctx, userA.ID)
+	if err != nil {
+		t.Fatalf("ListIdentities: %v", err)
+	}
+	if len(list) != 2 || list[0].Provider != domain.IdentityProviderJellyfin || list[1].Provider != domain.IdentityProviderProxy {
+		t.Fatalf("ListIdentities userA = %+v, want jellyfin then proxy", list)
+	}
+
+	// UnlinkIdentity
+	if err := svc.UnlinkIdentity(ctx, userA.ID, domain.IdentityProviderJellyfin); err != nil {
+		t.Fatalf("UnlinkIdentity: %v", err)
+	}
+	if err := svc.UnlinkIdentity(ctx, userA.ID, domain.IdentityProviderJellyfin); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("UnlinkIdentity again = %v, want ErrNotFound", err)
+	}
+}

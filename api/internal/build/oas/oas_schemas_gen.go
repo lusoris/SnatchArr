@@ -2255,6 +2255,52 @@ func (s *JellyfinQuickConnectAuthenticateRequest) SetSecret(val string) {
 	s.Secret = val
 }
 
+type LinkJellyfinIdentityConflict ProblemStatusCode
+
+func (*LinkJellyfinIdentityConflict) linkJellyfinIdentityRes() {}
+
+type LinkJellyfinIdentityForbidden ProblemStatusCode
+
+func (*LinkJellyfinIdentityForbidden) linkJellyfinIdentityRes() {}
+
+// LinkJellyfinIdentityNoContent is response for LinkJellyfinIdentity operation.
+type LinkJellyfinIdentityNoContent struct{}
+
+func (*LinkJellyfinIdentityNoContent) linkJellyfinIdentityRes() {}
+
+type LinkJellyfinIdentityNotFound ProblemStatusCode
+
+func (*LinkJellyfinIdentityNotFound) linkJellyfinIdentityRes() {}
+
+type LinkJellyfinIdentityTooManyRequests ProblemStatusCode
+
+func (*LinkJellyfinIdentityTooManyRequests) linkJellyfinIdentityRes() {}
+
+type LinkJellyfinIdentityUnauthorized ProblemStatusCode
+
+func (*LinkJellyfinIdentityUnauthorized) linkJellyfinIdentityRes() {}
+
+type LinkProxyIdentityConflict ProblemStatusCode
+
+func (*LinkProxyIdentityConflict) linkProxyIdentityRes() {}
+
+type LinkProxyIdentityForbidden ProblemStatusCode
+
+func (*LinkProxyIdentityForbidden) linkProxyIdentityRes() {}
+
+// LinkProxyIdentityNoContent is response for LinkProxyIdentity operation.
+type LinkProxyIdentityNoContent struct{}
+
+func (*LinkProxyIdentityNoContent) linkProxyIdentityRes() {}
+
+type LinkProxyIdentityNotFound ProblemStatusCode
+
+func (*LinkProxyIdentityNotFound) linkProxyIdentityRes() {}
+
+type LinkProxyIdentityUnauthorized ProblemStatusCode
+
+func (*LinkProxyIdentityUnauthorized) linkProxyIdentityRes() {}
+
 type ListAPIKeysOKApplicationJSON []ApiKey
 
 func (*ListAPIKeysOKApplicationJSON) listAPIKeysRes() {}
@@ -5083,6 +5129,7 @@ func (s *ProblemStatusCode) SetResponse(val Problem) {
 func (*ProblemStatusCode) deleteInstanceRes() {}
 func (*ProblemStatusCode) jellyfinLoginRes()  {}
 func (*ProblemStatusCode) listAPIKeysRes()    {}
+func (*ProblemStatusCode) listIdentitiesRes() {}
 func (*ProblemStatusCode) loginRes()          {}
 
 // Ref: #/components/schemas/ProwlarrIndexerStatus
@@ -8515,6 +8562,32 @@ type TriggerRunOK Run
 
 func (*TriggerRunOK) triggerRunRes() {}
 
+// UnlinkJellyfinIdentityNoContent is response for UnlinkJellyfinIdentity operation.
+type UnlinkJellyfinIdentityNoContent struct{}
+
+func (*UnlinkJellyfinIdentityNoContent) unlinkJellyfinIdentityRes() {}
+
+type UnlinkJellyfinIdentityNotFound ProblemStatusCode
+
+func (*UnlinkJellyfinIdentityNotFound) unlinkJellyfinIdentityRes() {}
+
+type UnlinkJellyfinIdentityUnauthorized ProblemStatusCode
+
+func (*UnlinkJellyfinIdentityUnauthorized) unlinkJellyfinIdentityRes() {}
+
+// UnlinkProxyIdentityNoContent is response for UnlinkProxyIdentity operation.
+type UnlinkProxyIdentityNoContent struct{}
+
+func (*UnlinkProxyIdentityNoContent) unlinkProxyIdentityRes() {}
+
+type UnlinkProxyIdentityNotFound ProblemStatusCode
+
+func (*UnlinkProxyIdentityNotFound) unlinkProxyIdentityRes() {}
+
+type UnlinkProxyIdentityUnauthorized ProblemStatusCode
+
+func (*UnlinkProxyIdentityUnauthorized) unlinkProxyIdentityRes() {}
+
 // Ref: #/components/schemas/User
 type User struct {
 	ID       uuid.UUID `json:"id"`
@@ -8550,6 +8623,91 @@ func (s *User) SetUsername(val string) {
 // SetRole sets the value of Role.
 func (s *User) SetRole(val UserRole) {
 	s.Role = val
+}
+
+// Ref: #/components/schemas/UserIdentities
+type UserIdentities struct {
+	Items []UserIdentity `json:"items"`
+}
+
+// GetItems returns the value of Items.
+func (s *UserIdentities) GetItems() []UserIdentity {
+	return s.Items
+}
+
+// SetItems sets the value of Items.
+func (s *UserIdentities) SetItems(val []UserIdentity) {
+	s.Items = val
+}
+
+func (*UserIdentities) listIdentitiesRes() {}
+
+// Ref: #/components/schemas/UserIdentity
+type UserIdentity struct {
+	Provider UserIdentityProvider `json:"provider"`
+	LinkedAt time.Time            `json:"linked_at"`
+}
+
+// GetProvider returns the value of Provider.
+func (s *UserIdentity) GetProvider() UserIdentityProvider {
+	return s.Provider
+}
+
+// GetLinkedAt returns the value of LinkedAt.
+func (s *UserIdentity) GetLinkedAt() time.Time {
+	return s.LinkedAt
+}
+
+// SetProvider sets the value of Provider.
+func (s *UserIdentity) SetProvider(val UserIdentityProvider) {
+	s.Provider = val
+}
+
+// SetLinkedAt sets the value of LinkedAt.
+func (s *UserIdentity) SetLinkedAt(val time.Time) {
+	s.LinkedAt = val
+}
+
+// Ref: #/components/schemas/UserIdentityProvider
+type UserIdentityProvider string
+
+const (
+	UserIdentityProviderJellyfin UserIdentityProvider = "jellyfin"
+	UserIdentityProviderProxy    UserIdentityProvider = "proxy"
+)
+
+// AllValues returns all UserIdentityProvider values.
+func (UserIdentityProvider) AllValues() []UserIdentityProvider {
+	return []UserIdentityProvider{
+		UserIdentityProviderJellyfin,
+		UserIdentityProviderProxy,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s UserIdentityProvider) MarshalText() ([]byte, error) {
+	switch s {
+	case UserIdentityProviderJellyfin:
+		return []byte(s), nil
+	case UserIdentityProviderProxy:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *UserIdentityProvider) UnmarshalText(data []byte) error {
+	switch UserIdentityProvider(data) {
+	case UserIdentityProviderJellyfin:
+		*s = UserIdentityProviderJellyfin
+		return nil
+	case UserIdentityProviderProxy:
+		*s = UserIdentityProviderProxy
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
 }
 
 type UserRole string
