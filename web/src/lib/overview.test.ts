@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 import { describe, expect, it } from 'vitest';
-import type { components } from '#lib/api/schema.js';
 import { logLevelLabel } from '#lib/logs.js';
 import { m } from '#lib/paraglide/messages.js';
 import {
@@ -16,14 +15,13 @@ import {
 	kpiProwlarr,
 	kpiSearches,
 	lastRunForInstance,
-	nextScheduleForInstance
+	nextScheduleForInstance,
+	type CapStatus,
+	type Instance,
+	type ProwlarrStatus,
+	type Run,
+	type Schedule
 } from './overview.js';
-
-type Instance = components['schemas']['Instance'];
-type CapStatus = components['schemas']['CapStatus'];
-type ProwlarrStatus = components['schemas']['ProwlarrStatus'];
-type Run = components['schemas']['Run'];
-type Schedule = components['schemas']['Schedule'];
 
 const baseInstance: Instance = {
 	id: '00000000-0000-0000-0000-000000000001',
@@ -167,35 +165,26 @@ describe('overview helper: kpiFleet', () => {
 });
 
 describe('overview helper: kpiProwlarr', () => {
+	type Indexer = NonNullable<ProwlarrStatus['indexers']>[number];
+	const indexer = (id: number, used: number, exhausted: boolean): Indexer => ({
+		id,
+		name: `Idx ${id}`,
+		query_limit: 100,
+		limits_unit: 0,
+		used_queries: used,
+		used_grabs: 0,
+		exhausted
+	});
+	const link = (indexers: Indexer[]): ProwlarrStatus => ({
+		link_id: 'link1',
+		name: 'Prowlarr 1',
+		reachable: true,
+		checked_at: '2026-01-01T00:00:00Z',
+		indexers
+	});
+
 	it('positive: reports ok when all indexers have headroom', () => {
-		const links: ProwlarrStatus[] = [
-			{
-				link_id: 'link1',
-				name: 'Prowlarr 1',
-				reachable: true,
-				checked_at: '2026-01-01T00:00:00Z',
-				indexers: [
-					{
-						id: 1,
-						name: 'Idx 1',
-						query_limit: 100,
-						limits_unit: 0,
-						used_queries: 10,
-						used_grabs: 0,
-						exhausted: false
-					},
-					{
-						id: 2,
-						name: 'Idx 2',
-						query_limit: 100,
-						limits_unit: 0,
-						used_queries: 20,
-						used_grabs: 0,
-						exhausted: false
-					}
-				]
-			}
-		];
+		const links: ProwlarrStatus[] = [link([indexer(1, 10, false), indexer(2, 20, false)])];
 		const res = kpiProwlarr(links);
 		expect(res.status).toBe('ok');
 		expect(res.total).toBe(2);
@@ -204,34 +193,7 @@ describe('overview helper: kpiProwlarr', () => {
 	});
 
 	it('negative: reports warn when some indexers are exhausted', () => {
-		const links: ProwlarrStatus[] = [
-			{
-				link_id: 'link1',
-				name: 'Prowlarr 1',
-				reachable: true,
-				checked_at: '2026-01-01T00:00:00Z',
-				indexers: [
-					{
-						id: 1,
-						name: 'Idx 1',
-						query_limit: 100,
-						limits_unit: 0,
-						used_queries: 10,
-						used_grabs: 0,
-						exhausted: false
-					},
-					{
-						id: 2,
-						name: 'Idx 2',
-						query_limit: 100,
-						limits_unit: 0,
-						used_queries: 100,
-						used_grabs: 0,
-						exhausted: true
-					}
-				]
-			}
-		];
+		const links: ProwlarrStatus[] = [link([indexer(1, 10, false), indexer(2, 100, true)])];
 		const res = kpiProwlarr(links);
 		expect(res.status).toBe('warn');
 		expect(res.headroom).toBe(1);
@@ -239,25 +201,7 @@ describe('overview helper: kpiProwlarr', () => {
 	});
 
 	it('boundary: reports danger when all indexers are exhausted', () => {
-		const links: ProwlarrStatus[] = [
-			{
-				link_id: 'link1',
-				name: 'Prowlarr 1',
-				reachable: true,
-				checked_at: '2026-01-01T00:00:00Z',
-				indexers: [
-					{
-						id: 1,
-						name: 'Idx 1',
-						query_limit: 100,
-						limits_unit: 0,
-						used_queries: 100,
-						used_grabs: 0,
-						exhausted: true
-					}
-				]
-			}
-		];
+		const links: ProwlarrStatus[] = [link([indexer(1, 100, true)])];
 		const res = kpiProwlarr(links);
 		expect(res.status).toBe('danger');
 		expect(res.headroom).toBe(0);
