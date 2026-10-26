@@ -25,8 +25,20 @@ type JellyfinLoginRes interface {
 	jellyfinLoginRes()
 }
 
+type LinkJellyfinIdentityRes interface {
+	linkJellyfinIdentityRes()
+}
+
+type LinkProxyIdentityRes interface {
+	linkProxyIdentityRes()
+}
+
 type ListAPIKeysRes interface {
 	listAPIKeysRes()
+}
+
+type ListIdentitiesRes interface {
+	listIdentitiesRes()
 }
 
 type LoginRes interface {
@@ -39,4 +51,12 @@ type RevokeAPIKeyRes interface {
 
 type TriggerRunRes interface {
 	triggerRunRes()
+}
+
+type UnlinkJellyfinIdentityRes interface {
+	unlinkJellyfinIdentityRes()
+}
+
+type UnlinkProxyIdentityRes interface {
+	unlinkProxyIdentityRes()
 }

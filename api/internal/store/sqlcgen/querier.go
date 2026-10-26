@@ -65,6 +65,7 @@ type Querier interface {
 	DeleteSession(ctx context.Context, id string) error
 	DeleteStaleDiscoveredDownloadClients(ctx context.Context, arg DeleteStaleDiscoveredDownloadClientsParams) (int64, error)
 	DeleteUnseenSeerrRequests(ctx context.Context, arg DeleteUnseenSeerrRequestsParams) (int64, error)
+	DeleteUserIdentity(ctx context.Context, arg DeleteUserIdentityParams) (int64, error)
 	// data->>'user_id' couples to auth.SessionUserKey in api/internal/auth/service.go.
 	DeleteUserSessionsExcept(ctx context.Context, arg DeleteUserSessionsExceptParams) (int64, error)
 	DeleteWatchAwareSource(ctx context.Context, id uuid.UUID) (int64, error)
@@ -116,7 +117,9 @@ type Querier interface {
 	// SPDX-License-Identifier: EUPL-1.2
 	GetSettings(ctx context.Context) (Setting, error)
 	GetUser(ctx context.Context, id uuid.UUID) (User, error)
+	GetUserByExternalID(ctx context.Context, externalID *string) (User, error)
 	GetUserByUsername(ctx context.Context, username string) (User, error)
+	GetUserIdentity(ctx context.Context, arg GetUserIdentityParams) (UserIdentity, error)
 	GetWatchAwareSource(ctx context.Context, id uuid.UUID) (WatchawareSource, error)
 	GetWatchAwareSyncSummary(ctx context.Context) (GetWatchAwareSyncSummaryRow, error)
 	GlobalBucketUsage(ctx context.Context, since time.Time) (GlobalBucketUsageRow, error)
@@ -126,6 +129,7 @@ type Querier interface {
 	// SPDX-License-Identifier: EUPL-1.2
 	InsertEvent(ctx context.Context, arg InsertEventParams) (int64, error)
 	InsertGateBaseline(ctx context.Context, arg InsertGateBaselineParams) error
+	InsertUserIdentity(ctx context.Context, arg InsertUserIdentityParams) (UserIdentity, error)
 	LastFinishedAt(ctx context.Context, arg LastFinishedAtParams) (time.Time, error)
 	LastWorkerContact(ctx context.Context) (time.Time, error)
 	// An expired lease is handed out again only while the run has been leased fewer than
@@ -170,6 +174,7 @@ type Querier interface {
 	// data->>'sso_source', data->>'sso_subject', and data->>'sso_role' couple to
 	// SessionSSOSourceKey, SessionSSOSubjectKey, and SessionSSORoleKey in api/internal/auth/ssoorigin.go.
 	ListSessionsBySSOSource(ctx context.Context, arg ListSessionsBySSOSourceParams) ([]ListSessionsBySSOSourceRow, error)
+	ListUserIdentities(ctx context.Context, userID uuid.UUID) ([]UserIdentity, error)
 	ListUsers(ctx context.Context) ([]User, error)
 	ListWatchAwareSources(ctx context.Context) ([]WatchawareSource, error)
 	ListWebhookEndpoints(ctx context.Context, dollar_1 string) ([]WebhookEndpoint, error)

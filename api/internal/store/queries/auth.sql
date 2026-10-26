@@ -158,4 +158,27 @@ ON CONFLICT (external_id) DO UPDATE
 SET role = EXCLUDED.role, updated_at = EXCLUDED.updated_at
 RETURNING *;
 
+-- name: InsertUserIdentity :one
+INSERT INTO user_identities (provider, subject, user_id, created_at)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (provider, subject) DO NOTHING
+RETURNING *;
+
+-- name: GetUserIdentity :one
+SELECT * FROM user_identities
+WHERE provider = $1 AND subject = $2;
+
+-- name: ListUserIdentities :many
+SELECT * FROM user_identities
+WHERE user_id = $1
+ORDER BY provider;
+
+-- name: DeleteUserIdentity :execrows
+DELETE FROM user_identities
+WHERE user_id = $1 AND provider = $2;
+
+-- name: GetUserByExternalID :one
+SELECT * FROM users
+WHERE external_id = $1;
+
 

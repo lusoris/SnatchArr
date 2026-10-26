@@ -45,6 +45,9 @@ const SessionUserKey = "user_id"
 // It is never a valid argon2id hash and auth.Login refuses it before VerifyPassword.
 const ExternalAccountSentinelHash = "!sso-viewer-sentinel-hash!"
 
+// ErrMemberDisabled indicates the Jellyfin user account is disabled.
+var ErrMemberDisabled = errors.New("jellyfin member disabled")
+
 // Service handles setup and login.
 type Service struct {
 	st        *store.Store
@@ -191,7 +194,7 @@ func (s *Service) LoginJellyfin(ctx context.Context, a jellyfin.Authenticator, u
 	if m.Disabled {
 		s.recordFailures(ctx, userKey, ipKey)
 		s.logger.InfoContext(ctx, "auth: jellyfin login rejected: user disabled", slog.String("username", username), slog.String("ip", ip))
-		return jellyfin.Member{}, fmt.Errorf("%w: user disabled", domain.ErrUnauthorized)
+		return jellyfin.Member{}, fmt.Errorf("%w: %w", domain.ErrUnauthorized, ErrMemberDisabled)
 	}
 	if err := s.lockout.Reset(ctx, userKey); err != nil {
 		s.logger.WarnContext(ctx, "auth: reset lockout failed", slog.String("key", userKey), slog.String("error", err.Error()))

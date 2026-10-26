@@ -336,6 +336,105 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
 
+  /auth/identities:
+    get:
+      tags: [auth]
+      operationId: listIdentities
+      summary: List linked external authentication identities
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Linked identities list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserIdentities"
+        "401":
+          $ref: "#/components/responses/Problem"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /auth/identities/jellyfin:
+    post:
+      tags: [auth]
+      operationId: linkJellyfinIdentity
+      summary: Link a Jellyfin account to the current user
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JellyfinLoginRequest"
+      responses:
+        "204":
+          description: Jellyfin identity linked
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "409":
+          $ref: "#/components/responses/Problem"
+        "429":
+          $ref: "#/components/responses/Problem"
+        default:
+          $ref: "#/components/responses/Problem"
+    delete:
+      tags: [auth]
+      operationId: unlinkJellyfinIdentity
+      summary: Unlink Jellyfin identity from the current user
+      security:
+        - cookieAuth: []
+      responses:
+        "204":
+          description: Jellyfin identity unlinked
+        "401":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /auth/identities/proxy:
+    post:
+      tags: [auth]
+      operationId: linkProxyIdentity
+      summary: Link a reverse proxy account to the current user
+      security:
+        - cookieAuth: []
+      responses:
+        "204":
+          description: Proxy identity linked
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "409":
+          $ref: "#/components/responses/Problem"
+        default:
+          $ref: "#/components/responses/Problem"
+    delete:
+      tags: [auth]
+      operationId: unlinkProxyIdentity
+      summary: Unlink reverse proxy identity from the current user
+      security:
+        - cookieAuth: []
+      responses:
+        "204":
+          description: Proxy identity unlinked
+        "401":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        default:
+          $ref: "#/components/responses/Problem"
+
   /auth/api-keys:
     get:
       tags: [auth]
@@ -2227,6 +2326,29 @@ components:
           type: string
           minLength: 1
           maxLength: 256
+
+    UserIdentityProvider:
+      type: string
+      enum: [jellyfin, proxy]
+
+    UserIdentities:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/UserIdentity"
+
+    UserIdentity:
+      type: object
+      required: [provider, linked_at]
+      properties:
+        provider:
+          $ref: "#/components/schemas/UserIdentityProvider"
+        linked_at:
+          type: string
+          format: date-time
 
     User:
       type: object

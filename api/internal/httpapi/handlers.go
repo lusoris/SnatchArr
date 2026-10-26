@@ -286,6 +286,7 @@ func (h *Handlers) startSession(ctx context.Context, u domain.User, origin *auth
 	}
 	var err error
 	if origin != nil {
+		u.Role = origin.Role
 		err = h.auth.RenewSSOSession(ctx, h.sessions, w, r, u.ID, *origin)
 	} else {
 		err = h.auth.RenewSession(ctx, h.sessions, w, r, u.ID)
@@ -345,6 +346,27 @@ func (h *Handlers) quickConnectEnabled(ctx context.Context) bool {
 	return enabled
 }
 
+func (h *Handlers) resolveProxyAccount(ctx context.Context, user string, role domain.Role) (domain.User, error) {
+	if role == domain.RoleAdmin {
+		admin, err := h.auth.FirstAdmin(ctx)
+		if err != nil {
+			if errors.Is(err, domain.ErrNotFound) {
+				return domain.User{}, fmt.Errorf("%w: no admin user configured", domain.ErrConflict)
+			}
+			return domain.User{}, err
+		}
+		return admin, nil
+	}
+	linkedUser, ok, err := h.auth.LinkedUser(ctx, domain.IdentityProviderProxy, user)
+	if err != nil {
+		return domain.User{}, err
+	}
+	if ok {
+		return linkedUser, nil
+	}
+	return h.auth.ProvisionExternalUser(ctx, "proxy-", user, role)
+}
+
 // CreateProxySession starts a session when proxy auth is enabled and verified.
 func (h *Handlers) CreateProxySession(ctx context.Context) (oas.CreateProxySessionRes, error) {
 	if !h.cfg.ProxyAuth.Enabled {
@@ -370,19 +392,9 @@ func (h *Handlers) CreateProxySession(ctx context.Context) (oas.CreateProxySessi
 		Groups:  groups,
 		Role:    role,
 	}
-	if role == domain.RoleAdmin {
-		admin, err := h.auth.FirstAdmin(ctx)
-		if err != nil {
-			if errors.Is(err, domain.ErrNotFound) {
-				return nil, fmt.Errorf("%w: no admin user configured", domain.ErrConflict)
-			}
-			return nil, err
-		}
-		return h.startSession(ctx, admin, &origin)
-	}
-	externalUser, err := h.auth.ProvisionExternalUser(ctx, "proxy-", user, role)
+	targetUser, err := h.resolveProxyAccount(ctx, user, role)
 	if err != nil {
 		return nil, err
 	}
-	return h.startSession(ctx, externalUser, &origin)
+	return h.startSession(ctx, targetUser, &origin)
 }

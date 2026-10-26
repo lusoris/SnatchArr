@@ -316,6 +316,18 @@ type Handler interface {
 	//
 	// POST /auth/jellyfin/quickconnect/initiate
 	JellyfinQuickConnectInitiate(ctx context.Context) (*JellyfinQuickConnect, error)
+	// LinkJellyfinIdentity implements linkJellyfinIdentity operation.
+	//
+	// Link a Jellyfin account to the current user.
+	//
+	// POST /auth/identities/jellyfin
+	LinkJellyfinIdentity(ctx context.Context, req *JellyfinLoginRequest) (LinkJellyfinIdentityRes, error)
+	// LinkProxyIdentity implements linkProxyIdentity operation.
+	//
+	// Link a reverse proxy account to the current user.
+	//
+	// POST /auth/identities/proxy
+	LinkProxyIdentity(ctx context.Context) (LinkProxyIdentityRes, error)
 	// ListAPIKeys implements listAPIKeys operation.
 	//
 	// List the current user's active API keys.
@@ -334,6 +346,12 @@ type Handler interface {
 	//
 	// GET /events
 	ListEvents(ctx context.Context, params ListEventsParams) ([]Event, error)
+	// ListIdentities implements listIdentities operation.
+	//
+	// List linked external authentication identities.
+	//
+	// GET /auth/identities
+	ListIdentities(ctx context.Context) (ListIdentitiesRes, error)
 	// ListInstances implements listInstances operation.
 	//
 	// List instances (API keys are never returned).
@@ -535,6 +553,18 @@ type Handler interface {
 	//
 	// POST /instances/{instanceId}/runs
 	TriggerRun(ctx context.Context, req *RunTrigger, params TriggerRunParams) (TriggerRunRes, error)
+	// UnlinkJellyfinIdentity implements unlinkJellyfinIdentity operation.
+	//
+	// Unlink Jellyfin identity from the current user.
+	//
+	// DELETE /auth/identities/jellyfin
+	UnlinkJellyfinIdentity(ctx context.Context) (UnlinkJellyfinIdentityRes, error)
+	// UnlinkProxyIdentity implements unlinkProxyIdentity operation.
+	//
+	// Unlink reverse proxy identity from the current user.
+	//
+	// DELETE /auth/identities/proxy
+	UnlinkProxyIdentity(ctx context.Context) (UnlinkProxyIdentityRes, error)
 	// UpdateDownloadClient implements updateDownloadClient operation.
 	//
 	// Update a download client (omit secret to keep it).

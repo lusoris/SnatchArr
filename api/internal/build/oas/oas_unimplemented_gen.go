@@ -474,6 +474,24 @@ func (UnimplementedHandler) JellyfinQuickConnectInitiate(ctx context.Context) (r
 	return r, ht.ErrNotImplemented
 }
 
+// LinkJellyfinIdentity implements linkJellyfinIdentity operation.
+//
+// Link a Jellyfin account to the current user.
+//
+// POST /auth/identities/jellyfin
+func (UnimplementedHandler) LinkJellyfinIdentity(ctx context.Context, req *JellyfinLoginRequest) (r LinkJellyfinIdentityRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// LinkProxyIdentity implements linkProxyIdentity operation.
+//
+// Link a reverse proxy account to the current user.
+//
+// POST /auth/identities/proxy
+func (UnimplementedHandler) LinkProxyIdentity(ctx context.Context) (r LinkProxyIdentityRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // ListAPIKeys implements listAPIKeys operation.
 //
 // List the current user's active API keys.
@@ -498,6 +516,15 @@ func (UnimplementedHandler) ListDownloadClients(ctx context.Context) (r []Downlo
 //
 // GET /events
 func (UnimplementedHandler) ListEvents(ctx context.Context, params ListEventsParams) (r []Event, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ListIdentities implements listIdentities operation.
+//
+// List linked external authentication identities.
+//
+// GET /auth/identities
+func (UnimplementedHandler) ListIdentities(ctx context.Context) (r ListIdentitiesRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -798,6 +825,24 @@ func (UnimplementedHandler) TestSeerrLinkInput(ctx context.Context, req *SeerrLi
 //
 // POST /instances/{instanceId}/runs
 func (UnimplementedHandler) TriggerRun(ctx context.Context, req *RunTrigger, params TriggerRunParams) (r TriggerRunRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UnlinkJellyfinIdentity implements unlinkJellyfinIdentity operation.
+//
+// Unlink Jellyfin identity from the current user.
+//
+// DELETE /auth/identities/jellyfin
+func (UnimplementedHandler) UnlinkJellyfinIdentity(ctx context.Context) (r UnlinkJellyfinIdentityRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UnlinkProxyIdentity implements unlinkProxyIdentity operation.
+//
+// Unlink reverse proxy identity from the current user.
+//
+// DELETE /auth/identities/proxy
+func (UnimplementedHandler) UnlinkProxyIdentity(ctx context.Context) (r UnlinkProxyIdentityRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

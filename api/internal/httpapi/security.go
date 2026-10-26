@@ -84,6 +84,7 @@ func (s *Security) HandleCookieAuth(ctx context.Context, _ oas.OperationName, _ 
 		if err := s.verifySSOSession(ctx, sess.ID, origin); err != nil {
 			return ctx, err
 		}
+		u.Role = origin.Role
 	}
 	return withUser(ctx, u), nil
 }
