@@ -6,7 +6,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # ADR-0032: Stash: own or integrate — adult library engine evaluation
 
-- Status: proposed
+- Status: accepted (2026-10-26)
 - Date: 2026-10-26
 - Related: [ADR-0018](0018-product-front-door.md), [ADR-0025](0025-module-switches.md), [ADR-0027](0027-adult-module.md), [ADR-0028](0028-jellyfin-plugin.md)
 
@@ -103,7 +103,7 @@ SnatchArr acts strictly as a lightweight front door, querying an external Stash 
   - *Negative*: Directly exposes users to Stash's severe gallery limitations (silent zip deletion failures [#7106](https://github.com/stashapp/stash/issues/7106), zip cleaning crashes [#4542](https://github.com/stashapp/stash/issues/4542), missing scene-to-gallery associations [#3344](https://github.com/stashapp/stash/issues/3344), and memory spikes [#7129](https://github.com/stashapp/stash/issues/7129)). Requires running Stash even for users who only want scene requests and photo gallery browsing. Fails to provide companion streaming to Jellyfin.
   - *Risk*: High user friction; inability to fix upstream Stash gallery architecture.
 
-### Option (b): Hybrid: Stash for video library + SnatchArr for image sets and snatching (Recommended)
+### Option (b): Hybrid: Stash for video library + SnatchArr for image sets and snatching (Chosen)
 
 Stash remains the recommended engine for adult video library management (organizing local video files, scene marker timestamping, interactive scrubbing, and community website scraping). SnatchArr builds native modules **only where real functional gaps exist**:
 
@@ -128,9 +128,9 @@ SnatchArr builds a complete adult media server: native filesystem video scanner,
   - *Negative*: Contradicts the baseline precedent (`snatcharr-product-overlap-20261020`), ADR-0018 and HISS-19. Needs a full media-server code base, FFmpeg dependencies that complicate distroless container builds, overlap with Whisparr's library tracking, and ongoing scraper maintenance. Recreating Stash's tagger and player adds no capability Stash lacks.
   - *Risk*: Large scope and permanent maintenance load for duplicated functions.
 
-## Recommendation
+## Decision
 
-**Option (b): Hybrid model**.
+**Option (b): Hybrid model**, accepted by the maintainer on 2026-10-26 (ledger `snatcharr-stash-own-or-integrate`).
 
 SnatchArr preserves Stash as an external, optional video library engine, integrating via its GraphQL API (`github.com/golusoris/goenvoy/mediaserver/stash/v2`). SnatchArr builds native components exclusively to bridge proven functional gaps:
 
@@ -152,7 +152,9 @@ SnatchArr preserves Stash as an external, optional video library engine, integra
 
 - **Dual-engine awareness**: Users running both Stash and SnatchArr must configure volume mounts to ensure Stash does not perform redundant, memory-heavy image phash scans on SnatchArr's image set directories.
 
-## Open questions
+## Resolved questions
+
+The maintainer answered all three on 2026-10-26; each answer is recorded in the decision ledger under the question id.
 
 ### 1. `stash-integration-mode`
 
@@ -165,7 +167,7 @@ How should Stash be represented within SnatchArr's configuration and instance re
     - *Risk*: Isolates Stash from general instance health probes and metrics, creating a special-case connection pattern.
   - *Option c: Mandatory backend dependency* (SnatchArr refuses adult module activation unless a healthy Stash instance is connected).
     - *Risk*: Forces all adult module users to run Stash, preventing standalone Whisparr + Jellyfin deployments.
-- **Recommendation**: **Option a** (Optional companion media server instance). Consistent with how Seerr, Jellyfin, and *arr instances are managed.
+- **Decision**: **Option a**. `stash` is appended to the instance kind enum (append-only) and uses the same health probes as other instances.
 
 ### 2. `gallery-storage-coexistence`
 
@@ -178,7 +180,7 @@ How should SnatchArr prevent Stash from executing duplicate, memory-intensive sc
     - *Risk*: Prone to operator misconfiguration, leading to duplicate indexing and memory exhaustion in Stash.
   - *Option c: Proxy image sets into Stash via GraphQL* (Push SnatchArr image sets into Stash's database via GraphQL mutations).
     - *Risk*: Reintroduces Stash's gallery bugs, zip deletion failures, and memory bloat into SnatchArr's workflow.
-- **Recommendation**: **Option a** (Automatic `.stashignore` placement in image-set root directories). Leverages Stash's official exclusion standard (v0.31.0+) to ensure zero-touch coexistence.
+- **Decision**: **Option a**. SnatchArr writes `.stashignore` at the `image_set_dir` root. The docs and the Stash instance probe state the Stash v0.31.0 minimum. Nothing is written when the directory is read-only.
 
 ### 3. `stash-auth-credential-storage`
 
@@ -191,13 +193,14 @@ How should Stash GraphQL API credentials be secured at rest within SnatchArr?
     - *Risk*: Violates the repository rule on encrypted credentials (`AGENTS.md`, Don'ts).
   - *Option c: Static environment variable (`SNATCHARR_STASH_API_KEY`)*.
     - *Risk*: Inflexible in multi-instance deployments; bypasses UI configuration.
-- **Recommendation**: **Option a** (Encrypted at rest via `crypto.Encryptor` AES-GCM).
+- **Decision**: **Option a**. The key is AES-GCM encrypted at rest and `writeOnly` in the API.
 
 ## Follow-ups
 
 - [ ] Add `stash` to the instance kind enum in `api/openapi/openapi.yaml` (today `sonarr, radarr, lidarr, readarr, whisparr_v2, whisparr_v3`) as an optional companion target.
 - [ ] Implement Stash inventory probe and scene presence check using `github.com/golusoris/goenvoy/mediaserver/stash/v2`.
-- [ ] Implement `.stashignore` file writer during image-set directory initialization in `api/internal/adult`.
+- [ ] Implement `.stashignore` file writer during image-set directory initialization in `api/internal/adult`; skip on a read-only directory.
+- [ ] Document the Stash v0.31.0 minimum and report it from the Stash instance probe.
 - [ ] Complete the image-set engine slice with WebP thumbnail caching and streaming endpoints for the Jellyfin plugin ([ADR-0027](0027-adult-module.md):390, [ADR-0028](0028-jellyfin-plugin.md)).
 - [ ] Add OpenAPI specification entries for Stash connection settings under `x-module: adult`.
 
