@@ -107,6 +107,22 @@ describe('about page', () => {
 		expect(licenseLink.getAttribute('target')).toBe('_blank');
 		expect(licenseLink.getAttribute('rel')).toBe('noopener noreferrer');
 
+		expect(screen.getByRole('heading', { level: 2, name: m.about_brand_heading() })).toBeTruthy();
+
+		const vulvaLink = screen.getByRole('link', { name: m.about_brand_vulva_aria() });
+		expect(vulvaLink.getAttribute('href')).toBe(
+			'https://commons.wikimedia.org/wiki/File:Female_vulva.svg'
+		);
+		expect(vulvaLink.getAttribute('target')).toBe('_blank');
+		expect(vulvaLink.getAttribute('rel')).toBe('noopener noreferrer');
+
+		const handLink = screen.getByRole('link', { name: m.about_brand_hand_aria() });
+		expect(handLink.getAttribute('href')).toBe(
+			'https://commons.wikimedia.org/wiki/File:Hand_reaching_down_Pinhead_icon.svg'
+		);
+		expect(handLink.getAttribute('target')).toBe('_blank');
+		expect(handLink.getAttribute('rel')).toBe('noopener noreferrer');
+
 		expect(
 			screen.getByRole('heading', { level: 2, name: m.about_third_party_title() })
 		).toBeTruthy();

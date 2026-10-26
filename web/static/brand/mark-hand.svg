@@ -1,0 +1,51 @@
+<!--
+  SPDX-FileCopyrightText: 2026 Quincy Morgan
+  SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+  SPDX-License-Identifier: CC-BY-SA-4.0
+
+  SnatchArr SFW brand mark candidate (hand-snatch) — hand reaching down to
+  snatch a media disc. Hand contour derived from "Hand reaching down Pinhead
+  icon.svg" by Quincy Morgan (Wikimedia Commons,
+  https://commons.wikimedia.org/wiki/File:Hand_reaching_down_Pinhead_icon.svg,
+  CC0 1.0, uploaded 2026-03-06): converted from filled silhouette to open
+  centerline + outline strokes in 0 0 100 100 viewBox, paired with a media
+  disc and motion arcs, and recoloured to the SnatchArr oklch palette.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="SnatchArr">
+  <style>
+    :root {
+      --o: oklch(0.28 0.09 15);
+      --b: oklch(0.32 0.05 55);
+      --p: oklch(0.55 0.14 15);
+      --s: oklch(0.18 0.07 15);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --o: oklch(0.82 0.06 12);
+        --b: oklch(0.78 0.04 55);
+        --p: oklch(0.70 0.14 12);
+        --s: oklch(0.14 0.06 15);
+      }
+    }
+  </style>
+  <defs>
+    <radialGradient id="s" cx="56" cy="72" r="16" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="var(--s)" />
+      <stop offset="0.7" stop-color="var(--s)" />
+      <stop offset="1" stop-color="var(--p)" />
+    </radialGradient>
+  </defs>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 10.5,24.5 L 26.8,13.2" stroke="var(--b)" stroke-width="2.5" />
+    <path d="M 26.8,13.2 C 35.5,22.2 44.5,26.8 60.5,31.0 C 70.5,33.6 80.5,35.4 85.5,36.4 C 89.2,37.2 91.2,40.0 90.4,43.0 C 89.6,46.0 86.6,47.4 82.8,46.8 L 69.2,44.6" stroke="var(--o)" stroke-width="2.4" />
+    <path d="M 46.0,27.2 L 69.2,36.2" stroke="var(--o)" stroke-width="2.0" />
+    <path d="M 69.2,36.2 L 85.8,44.2 C 89.2,45.8 90.8,49.0 89.4,52.0 C 88.0,55.0 84.5,55.8 81.2,54.0 L 64.5,45.2" stroke="var(--o)" stroke-width="2.4" />
+    <path d="M 42.5,33.5 L 64.5,45.2" stroke="var(--o)" stroke-width="2.0" />
+    <path d="M 13.5,30.2 C 20.5,40.8 26.5,53.2 31.2,67.5 C 32.2,70.5 35.2,71.2 37.5,69.5 C 40.0,67.6 40.5,64.2 39.2,58.8 C 37.8,52.8 40.2,48.0 46.8,46.6 C 53.5,45.2 61.2,48.2 69.5,56.5 C 73.5,60.5 76.8,65.0 79.2,68.8 C 81.2,72.0 84.8,72.6 87.2,70.6 C 89.6,68.6 89.8,64.8 87.6,61.6 C 83.8,56.2 78.2,50.5 71.5,45.8" stroke="var(--o)" stroke-width="2.4" />
+    <path d="M 19.5,33.5 C 24.8,42.5 29.2,52.8 33.2,64.2" stroke="var(--b)" stroke-width="1.8" />
+    <circle cx="56" cy="72" r="13.5" fill="var(--p)" stroke="var(--o)" stroke-width="2.4" />
+    <circle cx="56" cy="72" r="5.2" fill="url(#s)" stroke="var(--o)" stroke-width="1.8" />
+    <path d="M 37.5,73.5 C 38.2,80.8 43.2,86.5 50.0,88.2" stroke="var(--b)" stroke-width="2.0" />
+    <path d="M 74.5,73.5 C 73.8,80.8 68.8,86.5 62.0,88.2" stroke="var(--b)" stroke-width="2.0" />
+  </g>
+</svg>

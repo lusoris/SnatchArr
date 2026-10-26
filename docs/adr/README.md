@@ -47,3 +47,4 @@ This directory documents key architectural decisions following the HISS-14 immut
 | [0039](0039-metadata-single-source.md) | 2026-10-26 | Single source of truth for metadata across *arr, Stash, Jellyfin and SnatchArr | Proposed |
 | [0040](0040-audiobookshelf-integration.md) | 2026-10-26 | Audiobookshelf full integration | Accepted |
 | [0041](0041-rule-driven-library-processing.md) | 2026-10-26 | Rule-driven library processing (remux and re-encode by rules) | Accepted |
+| [0042](0042-brand-mark-choice-and-sfw-mode.md) | 2026-10-26 | Brand mark choice (vulva, penis, hand) and SFW mode | Accepted |

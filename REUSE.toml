@@ -29,6 +29,16 @@ precedence = "override"
 SPDX-FileCopyrightText = "2026 lusoris <lusoris@pm.me>"
 SPDX-License-Identifier = "EUPL-1.2"
 
+# Brand mark component: embeds three brand marks (vulva, penis, hand).
+# Vulva mark derived from "Female vulva.svg" by T. Kebert (CC BY-SA 4.0).
+# Hand mark derived from "Hand reaching down Pinhead icon.svg" by Quincy Morgan (CC0 1.0).
+# Penis mark is an original drawing by lusoris.
+[[annotations]]
+path = ["web/src/lib/components/BrandMark.svelte"]
+precedence = "override"
+SPDX-FileCopyrightText = ["2024 T. Kebert", "2026 Quincy Morgan", "2026 lusoris <lusoris@pm.me>"]
+SPDX-License-Identifier = "CC-BY-SA-4.0"
+
 # Brand mark: derived from "Female vulva.svg" by T. Kebert, Wikimedia Commons,
 # CC BY-SA 4.0, modified (https://commons.wikimedia.org/wiki/File:Female_vulva.svg).
 # Changes: cropped to the vulva, clitoral glans enlarged, vaginal opening shaded,
@@ -36,7 +46,6 @@ SPDX-License-Identifier = "EUPL-1.2"
 # show the mark, so they carry its licence too.
 [[annotations]]
 path = [
-  "web/src/lib/components/BrandMark.svelte",
   "web/static/brand/mark.svg",
   "docs/assets/mark.svg",
   "web/static/favicon-32x32.png",

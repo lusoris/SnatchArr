@@ -92,6 +92,32 @@ SPDX-License-Identifier: EUPL-1.2
 					{/snippet}
 				</QueryGuard>
 			</section>
+
+			<section class="card flex flex-col gap-4" aria-labelledby="about-brand-heading">
+				<h2 id="about-brand-heading" class="text-lg font-semibold">
+					{m.about_brand_heading()}
+				</h2>
+				<ul class="flex flex-col gap-2 text-sm text-fg">
+					<li>
+						{m.about_brand_vulva_text()}<a
+							href="https://commons.wikimedia.org/wiki/File:Female_vulva.svg"
+							target="_blank"
+							rel="noopener noreferrer"
+							aria-label={m.about_brand_vulva_aria()}
+							class="text-brand underline hover:opacity-80">{m.about_brand_vulva_file()}</a
+						>{m.about_brand_vulva_author()}
+					</li>
+					<li>
+						{m.about_brand_hand_text()}<a
+							href="https://commons.wikimedia.org/wiki/File:Hand_reaching_down_Pinhead_icon.svg"
+							target="_blank"
+							rel="noopener noreferrer"
+							aria-label={m.about_brand_hand_aria()}
+							class="text-brand underline hover:opacity-80">{m.about_brand_hand_file()}</a
+						>{m.about_brand_hand_author()}
+					</li>
+				</ul>
+			</section>
 		</div>
 
 		<div class="flex flex-col gap-6 xl:col-span-7">

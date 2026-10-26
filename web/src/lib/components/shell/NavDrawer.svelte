@@ -4,6 +4,7 @@ SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { FALLBACK_BRAND_MARK, type BrandMarkKind } from '#lib/brand-mark.js';
 	import BrandMark from '#lib/components/BrandMark.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { filterByModule, type ModuledItem } from './nav.js';
@@ -24,9 +25,18 @@ SPDX-License-Identifier: EUPL-1.2
 		onLogout: () => void;
 		menuButtonEl: HTMLButtonElement | null;
 		activeModules?: ReadonlySet<string>;
+		/** Effective brand mark, resolved by the layout (ADR-0042). Defaults to the fail-closed fallback. */
+		mark?: BrandMarkKind;
 	}
 
-	const { open, onClose, onLogout, menuButtonEl, activeModules = new Set() }: Props = $props();
+	const {
+		open,
+		onClose,
+		onLogout,
+		menuButtonEl,
+		activeModules = new Set(),
+		mark = FALLBACK_BRAND_MARK
+	}: Props = $props();
 
 	let dialogEl = $state<HTMLDialogElement | null>(null);
 	let closeButtonEl = $state<HTMLButtonElement | null>(null);
@@ -84,7 +94,7 @@ SPDX-License-Identifier: EUPL-1.2
 			onclick={onClose}
 		>
 			<span class="text-brand flex items-center">
-				<BrandMark size={24} />
+				<BrandMark size={24} {mark} />
 			</span>
 			<span>{m.app_name()}</span>
 		</a>

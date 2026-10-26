@@ -4,6 +4,7 @@ SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import { FALLBACK_BRAND_MARK, type BrandMarkKind } from '#lib/brand-mark.js';
 	import BrandMark from '#lib/components/BrandMark.svelte';
 
 	interface Props {
@@ -11,14 +12,16 @@ SPDX-License-Identifier: EUPL-1.2
 		intro?: string;
 		notice?: Snippet;
 		children: Snippet;
+		/** Effective brand mark, resolved by the layout (ADR-0042). Defaults to the fail-closed fallback. */
+		mark?: BrandMarkKind;
 	}
 
-	const { title, intro, notice, children }: Props = $props();
+	const { title, intro, notice, children, mark = FALLBACK_BRAND_MARK }: Props = $props();
 </script>
 
 <div class="mx-auto w-full max-w-sm">
 	<div class="text-brand mb-6 flex justify-center">
-		<BrandMark size={56} />
+		<BrandMark size={56} {mark} />
 	</div>
 	<h1 class="{intro ? 'mb-2' : 'mb-4'} text-center text-2xl font-semibold">{title}</h1>
 	{#if intro}
