@@ -7,9 +7,12 @@ package jellyfin
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 
 	"go.uber.org/fx"
+
+	"github.com/golusoris/golusoris/core/clock"
 
 	"github.com/lusoris/SnatchArr/api/internal/config"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
@@ -119,7 +122,12 @@ func ProvideAuthenticator(cfg config.Options) (Authenticator, error) {
 	return NewClient(cfg.Jellyfin.URL, cfg.Jellyfin.APIKey, cfg.Jellyfin.Timeout, DefaultUserAgent, nil)
 }
 
-// Module provides the Jellyfin Authenticator to the fx graph.
+// ProvideRevalidator provides the Jellyfin session Revalidator to the fx graph.
+func ProvideRevalidator(auth Authenticator, cfg config.Options, clk clock.Clock, logger *slog.Logger) *Revalidator {
+	return NewRevalidator(auth, clk, cfg.Jellyfin.DefaultRole, cfg.Jellyfin.Timeout, logger)
+}
+
+// Module provides the Jellyfin Authenticator and Revalidator to the fx graph.
 var Module = fx.Module("snatcharr.jellyfin",
-	fx.Provide(ProvideAuthenticator),
+	fx.Provide(ProvideAuthenticator, ProvideRevalidator),
 )

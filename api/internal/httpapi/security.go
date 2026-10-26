@@ -22,6 +22,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/config"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
+	"github.com/lusoris/SnatchArr/api/internal/jellyfin"
 )
 
 // Security resolves cookie sessions and bearer API keys to users.
@@ -33,10 +34,11 @@ type Security struct {
 	apiKeys  *auth.APIKeys
 	clk      clock.Clock
 	logger   *slog.Logger
+	reval    *jellyfin.Revalidator
 }
 
 // NewSecurity wires the handler.
-func NewSecurity(sessions *session.Manager, cfg config.Options, keys *apikey.Service, users *auth.Service, apiKeys *auth.APIKeys, clk clock.Clock, logger *slog.Logger) *Security {
+func NewSecurity(sessions *session.Manager, cfg config.Options, keys *apikey.Service, users *auth.Service, apiKeys *auth.APIKeys, clk clock.Clock, logger *slog.Logger, reval *jellyfin.Revalidator) *Security {
 	return &Security{
 		sessions: sessions,
 		ssoCfg: ssoConfig{
@@ -49,6 +51,7 @@ func NewSecurity(sessions *session.Manager, cfg config.Options, keys *apikey.Ser
 		apiKeys: apiKeys,
 		clk:     clk,
 		logger:  logger,
+		reval:   reval,
 	}
 }
 
@@ -78,12 +81,25 @@ func (s *Security) HandleCookieAuth(ctx context.Context, _ oas.OperationName, _ 
 		return ctx, fmt.Errorf("%w: sso session revoked", domain.ErrUnauthorized)
 	}
 	if hasSSO {
-		if reason := checkSSOOrigin(ctx, s.ssoCfg, origin); reason != "" {
-			s.revokeSSOSession(ctx, sess.ID, reason, origin.Source)
-			return ctx, fmt.Errorf("%w: sso session revoked", domain.ErrUnauthorized)
+		if err := s.verifySSOSession(ctx, sess.ID, origin); err != nil {
+			return ctx, err
 		}
 	}
 	return withUser(ctx, u), nil
+}
+
+func (s *Security) verifySSOSession(ctx context.Context, sessID string, origin auth.SSOOrigin) error {
+	if reason := checkSSOOrigin(ctx, s.ssoCfg, origin); reason != "" {
+		s.revokeSSOSession(ctx, sessID, reason, origin.Source)
+		return fmt.Errorf("%w: sso session revoked", domain.ErrUnauthorized)
+	}
+	if origin.Source == "jellyfin" && s.reval != nil {
+		if reason := s.reval.Revalidate(ctx, origin.Subject, origin.Role); reason != "" {
+			s.revokeSSOSession(ctx, sessID, reason, origin.Source)
+			return fmt.Errorf("%w: sso session revoked", domain.ErrUnauthorized)
+		}
+	}
+	return nil
 }
 
 func (s *Security) revokeSSOSession(ctx context.Context, sessID, reason, source string) {

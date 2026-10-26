@@ -13,6 +13,7 @@ import (
 	"github.com/golusoris/golusoris/auth/apikey"
 	"github.com/golusoris/golusoris/auth/session"
 	"github.com/golusoris/golusoris/core/clock"
+	"github.com/golusoris/golusoris/leader/gate"
 
 	"github.com/lusoris/SnatchArr/api/internal/config"
 )
@@ -53,8 +54,9 @@ func newAPIKeyService(st *PgAPIKeyStore, cfg config.Options, clk clock.Clock, lo
 	return svc, nil
 }
 
-// Module provides the auth service, the Postgres-backed session manager and the API-key
-// service.
+// Module provides the auth service, the Postgres-backed session manager, the API-key
+// service, and the Jellyfin session revalidation loop.
 var Module = fx.Module("snatcharr.auth",
-	fx.Provide(NewService, NewPgSessionStore, NewPgAPIKeyStore, NewPgLockoutStore, newSessionManager, newAPIKeyService, NewAPIKeys),
+	fx.Provide(NewService, NewPgSessionStore, NewPgAPIKeyStore, NewPgLockoutStore, newSessionManager, newAPIKeyService, NewAPIKeys, NewJellyfinRevalidateTicker),
+	fx.Provide(gate.Provide[*JellyfinRevalidateTicker]()),
 )

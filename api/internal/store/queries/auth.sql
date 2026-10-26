@@ -39,6 +39,16 @@ DELETE FROM sessions
 WHERE data->>'user_id' = sqlc.arg(user_id)::text
   AND id != sqlc.arg(current_session_id)::text;
 
+-- data->>'sso_source', data->>'sso_subject', and data->>'sso_role' couple to
+-- SessionSSOSourceKey, SessionSSOSubjectKey, and SessionSSORoleKey in api/internal/auth/ssoorigin.go.
+-- name: ListSessionsBySSOSource :many
+SELECT id, data->>'sso_subject' AS subject, data->>'sso_role' AS role
+FROM sessions
+WHERE data->>'sso_source' = sqlc.arg(source)::text
+  AND expires_at > sqlc.arg(now)::timestamptz
+ORDER BY id
+LIMIT sqlc.arg(batch)::int;
+
 -- name: PurgeExpiredSessions :execrows
 DELETE FROM sessions
 WHERE id IN (SELECT id FROM sessions WHERE expires_at <= sqlc.arg(now)::timestamptz LIMIT sqlc.arg(batch)::int);
