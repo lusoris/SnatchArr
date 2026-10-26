@@ -173,6 +173,7 @@ jobs:
               - '.gosec.json'
               - 'tools/spectral.yaml'
               - 'tools/spectral/**'
+              - 'tools/oasdiff/**'
               - 'tools/cover/**'
               - 'tools/e2e/**'
               - 'tools/**/*.go'
@@ -378,13 +379,45 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
       - name: Planted cases (each bad spec fails on its rule)
         run: sh tools/spectral/lint_test.sh
       - name: Spectral
         run: sh tools/spectral/lint.sh api/openapi/openapi.yaml
+      - name: Planted breaking cases (tools/oasdiff/breaking_test.sh)
+        run: sh tools/oasdiff/breaking_test.sh
+      - name: OpenAPI breaking changes vs base
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          base=$(mktemp)
+          trap 'rm -f "$base"' EXIT
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            git show "$BASE_SHA:api/openapi/openapi.yaml" > "$base"
+            sh tools/oasdiff/breaking.sh "$base" api/openapi/openapi.yaml "$PR_TITLE"
+          elif [ "$EVENT_NAME" = "push" ]; then
+            if [ -z "$BEFORE_SHA" ] || [ "$BEFORE_SHA" = "0000000000000000000000000000000000000000" ] || ! git rev-parse --verify -q "$BEFORE_SHA" >/dev/null; then
+              echo "Skipping OpenAPI breaking check: no valid before sha on push ($BEFORE_SHA)"
+            elif ! git cat-file -e "$BEFORE_SHA:api/openapi/openapi.yaml" 2>/dev/null; then
+              echo "Skipping OpenAPI breaking check: api/openapi/openapi.yaml did not exist in $BEFORE_SHA"
+            else
+              git show "$BEFORE_SHA:api/openapi/openapi.yaml" > "$base"
+              sh tools/oasdiff/breaking.sh "$base" api/openapi/openapi.yaml "$(git log -1 --format=%s)"
+            fi
+          else
+            echo "Skipping OpenAPI breaking check: event $EVENT_NAME not pull_request or push"
+          fi
 
   worker:
     name: worker (Rust)
