@@ -19,10 +19,6 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/jellyfin"
 )
 
-func intPtr(v int) *int {
-	return &v
-}
-
 func TestAdultAllowed(t *testing.T) {
 	t.Parallel()
 
@@ -36,13 +32,13 @@ func TestAdultAllowed(t *testing.T) {
 	}{
 		{
 			name:      "boundary 17 deny at threshold 18",
-			policy:    jellyfin.Policy{MaxParentalRating: intPtr(17), EnableAllFolders: true},
+			policy:    jellyfin.Policy{MaxParentalRating: new(17), EnableAllFolders: true},
 			threshold: 18,
 			want:      false,
 		},
 		{
 			name:      "boundary 18 allow at threshold 18",
-			policy:    jellyfin.Policy{MaxParentalRating: intPtr(18), EnableAllFolders: true},
+			policy:    jellyfin.Policy{MaxParentalRating: new(18), EnableAllFolders: true},
 			threshold: 18,
 			want:      true,
 		},
@@ -54,14 +50,14 @@ func TestAdultAllowed(t *testing.T) {
 		},
 		{
 			name:      "boundary 0 rating deny at threshold 18",
-			policy:    jellyfin.Policy{MaxParentalRating: intPtr(0), EnableAllFolders: true},
+			policy:    jellyfin.Policy{MaxParentalRating: new(0), EnableAllFolders: true},
 			threshold: 18,
 			want:      false,
 		},
 		{
 			name: "negative blocked tag Adult vs restrict adult case-insensitive deny",
 			policy: jellyfin.Policy{
-				MaxParentalRating: intPtr(18),
+				MaxParentalRating: new(18),
 				BlockedTags:       []string{"  Adult "},
 				EnableAllFolders:  true,
 			},
@@ -72,7 +68,7 @@ func TestAdultAllowed(t *testing.T) {
 		{
 			name: "positive blocked tag unrelated allow",
 			policy: jellyfin.Policy{
-				MaxParentalRating: intPtr(18),
+				MaxParentalRating: new(18),
 				BlockedTags:       []string{"horror"},
 				EnableAllFolders:  true,
 			},
@@ -83,7 +79,7 @@ func TestAdultAllowed(t *testing.T) {
 		{
 			name: "positive folder allow-list enabled folder matches",
 			policy: jellyfin.Policy{
-				MaxParentalRating: intPtr(18),
+				MaxParentalRating: new(18),
 				EnableAllFolders:  false,
 				EnabledFolders:    []string{"lib-adult", "lib-movies"},
 			},
@@ -94,7 +90,7 @@ func TestAdultAllowed(t *testing.T) {
 		{
 			name: "negative folder allow-list enabled folder absent",
 			policy: jellyfin.Policy{
-				MaxParentalRating: intPtr(18),
+				MaxParentalRating: new(18),
 				EnableAllFolders:  false,
 				EnabledFolders:    []string{"lib-movies"},
 			},
@@ -105,7 +101,7 @@ func TestAdultAllowed(t *testing.T) {
 		{
 			name: "positive enable all folders true ignores library list",
 			policy: jellyfin.Policy{
-				MaxParentalRating: intPtr(18),
+				MaxParentalRating: new(18),
 				EnableAllFolders:  true,
 				EnabledFolders:    nil,
 			},
@@ -116,7 +112,7 @@ func TestAdultAllowed(t *testing.T) {
 		{
 			name: "positive empty adult library id ignores folder check",
 			policy: jellyfin.Policy{
-				MaxParentalRating: intPtr(18),
+				MaxParentalRating: new(18),
 				EnableAllFolders:  false,
 				EnabledFolders:    nil,
 			},

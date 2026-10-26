@@ -72,8 +72,7 @@ func mapAPIError(err error, map404ToUnauthorized bool) error {
 	if err == nil {
 		return nil
 	}
-	var apiErr *jellyfin.APIError
-	if errors.As(err, &apiErr) {
+	if apiErr, ok := errors.AsType[*jellyfin.APIError](err); ok {
 		if apiErr.StatusCode == http.StatusUnauthorized || apiErr.StatusCode == http.StatusForbidden {
 			return fmt.Errorf("%w: %s", domain.ErrUnauthorized, apiErr.Error())
 		}
