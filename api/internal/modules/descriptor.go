@@ -8,6 +8,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -19,6 +21,11 @@ type Descriptor struct {
 	ID             string
 	DefaultEnabled bool
 	ValidateConfig func(json.RawMessage) error
+}
+
+type adultConfig struct {
+	ImageSetDir         *string `json:"image_set_dir"`
+	SyncIntervalMinutes *int    `json:"sync_interval_minutes"`
 }
 
 type watchAwareGateConfig struct {
@@ -37,6 +44,13 @@ type watchAwareConfig struct {
 }
 
 const (
+	// MinAdultSyncIntervalMinutes is the minimum allowed sync interval for the adult module in minutes.
+	MinAdultSyncIntervalMinutes = 15
+	// MaxAdultSyncIntervalMinutes is the maximum allowed sync interval for the adult module in minutes.
+	MaxAdultSyncIntervalMinutes = 1440
+	// MaxAdultImageSetDirLen is the maximum allowed path length for the adult image set directory.
+	MaxAdultImageSetDirLen = 4096
+
 	// MinSyncIntervalMinutes is the minimum allowed sync interval for watchaware.
 	MinSyncIntervalMinutes = 5
 	// MaxSyncIntervalMinutes is the maximum allowed sync interval for watchaware.
@@ -72,6 +86,63 @@ func decodeStrictObject(raw json.RawMessage, name string, dst any) error {
 		return fmt.Errorf("%w: unexpected trailing data in %s config", domain.ErrInvalid, name)
 	}
 	return nil
+}
+
+func validateAdultSyncInterval(interval *int) error {
+	if interval == nil {
+		return nil
+	}
+	val := *interval
+	if val < MinAdultSyncIntervalMinutes || val > MaxAdultSyncIntervalMinutes {
+		return fmt.Errorf(
+			"%w: sync_interval_minutes must be between %d and %d",
+			domain.ErrInvalid,
+			MinAdultSyncIntervalMinutes,
+			MaxAdultSyncIntervalMinutes,
+		)
+	}
+	return nil
+}
+
+func validateAdultImageSetDir(dirPtr *string) error {
+	if dirPtr == nil {
+		return nil
+	}
+	dir := *dirPtr
+	if len(dir) == 0 {
+		return fmt.Errorf("%w: image_set_dir must not be empty", domain.ErrInvalid)
+	}
+	if len(dir) > MaxAdultImageSetDirLen {
+		return fmt.Errorf(
+			"%w: image_set_dir exceeds maximum length of %d",
+			domain.ErrInvalid,
+			MaxAdultImageSetDirLen,
+		)
+	}
+	if strings.ContainsRune(dir, '\x00') {
+		return fmt.Errorf("%w: image_set_dir must not contain NUL bytes", domain.ErrInvalid)
+	}
+	if !filepath.IsAbs(dir) {
+		return fmt.Errorf("%w: image_set_dir must be an absolute path", domain.ErrInvalid)
+	}
+	if filepath.Clean(dir) != dir {
+		return fmt.Errorf("%w: image_set_dir must be a clean path", domain.ErrInvalid)
+	}
+	return nil
+}
+
+// ValidateAdultConfig validates configuration for the adult module.
+// Optional key sync_interval_minutes must be between 15 and 1440.
+// Optional key image_set_dir must be a non-empty, clean absolute path without NUL bytes up to 4096 bytes.
+func ValidateAdultConfig(raw json.RawMessage) error {
+	var cfg adultConfig
+	if err := decodeStrictObject(raw, domain.ModuleAdult, &cfg); err != nil {
+		return err
+	}
+	if err := validateAdultSyncInterval(cfg.SyncIntervalMinutes); err != nil {
+		return err
+	}
+	return validateAdultImageSetDir(cfg.ImageSetDir)
 }
 
 // ValidateLLMConfig validates configuration for the llm module.
@@ -182,6 +253,11 @@ func ValidateWatchAwareConfig(raw json.RawMessage) error {
 // DefaultDescriptors returns the descriptors for the standard built-in modules.
 func DefaultDescriptors() []Descriptor {
 	return []Descriptor{
+		{
+			ID:             domain.ModuleAdult,
+			DefaultEnabled: false,
+			ValidateConfig: ValidateAdultConfig,
+		},
 		{
 			ID:             domain.ModuleLLM,
 			DefaultEnabled: false,
