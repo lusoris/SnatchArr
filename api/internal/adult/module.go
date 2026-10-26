@@ -10,12 +10,17 @@ import (
 	"github.com/golusoris/golusoris/leader/gate"
 )
 
-// Module provides the adult service, its ticker, and registers the ticker in the leader_loops fx group.
+// Module provides the adult service, tickers, boot check, and registers tickers in leader_loops.
 var Module = fx.Module("snatcharr.adult",
 	fx.Provide(
 		NewService,
 		NewTicker,
+		NewScanTicker,
 	),
-	// Sync runs on the elected leader replica only.
-	fx.Provide(gate.Provide[*Ticker]()),
+	fx.Invoke(registerBootCheck),
+	// Sync and scan run on the elected leader replica only.
+	fx.Provide(
+		gate.Provide[*Ticker](),
+		gate.Provide[*ScanTicker](),
+	),
 )

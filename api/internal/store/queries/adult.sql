@@ -141,3 +141,78 @@ ORDER BY instance_id, foreign_id;
 UPDATE adult_studio_links
 SET is_favorite = FALSE
 WHERE instance_id = $1 AND last_synced_at < $2 AND is_favorite = TRUE;
+
+-- name: UpsertAdultImageSet :one
+INSERT INTO adult_image_sets (
+    id, title, directory_path, created_at, updated_at
+) VALUES (
+    $1, $2, $3, $4, $5
+)
+ON CONFLICT (directory_path) DO UPDATE SET
+    title = EXCLUDED.title,
+    updated_at = EXCLUDED.updated_at
+RETURNING *;
+
+-- name: GetAdultImageSetByDirectory :one
+SELECT * FROM adult_image_sets
+WHERE directory_path = $1;
+
+-- name: GetAdultImageSet :one
+SELECT * FROM adult_image_sets
+WHERE id = $1;
+
+-- name: ListAdultImageSets :many
+SELECT * FROM adult_image_sets
+ORDER BY created_at DESC;
+
+-- name: UpdateAdultImageSetSummary :one
+UPDATE adult_image_sets
+SET
+    item_count = $2,
+    total_size_bytes = $3,
+    cover_image_path = $4,
+    updated_at = $5
+WHERE id = $1
+RETURNING *;
+
+-- name: DeleteAdultImageSetsNotInPaths :execrows
+DELETE FROM adult_image_sets
+WHERE NOT (directory_path = ANY(@keep_paths::text[]));
+
+-- name: DeleteAllAdultImageSets :execrows
+DELETE FROM adult_image_sets;
+
+-- name: UpsertAdultImageItem :one
+INSERT INTO adult_image_items (
+    id, image_set_id, file_path, file_name, file_size_bytes, mime_type, width, height, sha256_checksum, sort_order, created_at, file_mtime
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+)
+ON CONFLICT (image_set_id, file_path) DO UPDATE SET
+    file_name = EXCLUDED.file_name,
+    file_size_bytes = EXCLUDED.file_size_bytes,
+    mime_type = EXCLUDED.mime_type,
+    width = EXCLUDED.width,
+    height = EXCLUDED.height,
+    sha256_checksum = EXCLUDED.sha256_checksum,
+    sort_order = EXCLUDED.sort_order,
+    file_mtime = EXCLUDED.file_mtime
+RETURNING *;
+
+-- name: GetAdultImageItem :one
+SELECT * FROM adult_image_items
+WHERE id = $1;
+
+-- name: ListAdultImageItemsForSet :many
+SELECT * FROM adult_image_items
+WHERE image_set_id = $1
+ORDER BY sort_order ASC, file_name ASC;
+
+-- name: DeleteAdultImageItemsNotInPaths :execrows
+DELETE FROM adult_image_items
+WHERE image_set_id = $1 AND NOT (file_path = ANY(@keep_paths::text[]));
+
+-- name: DeleteAllAdultImageItemsForSet :execrows
+DELETE FROM adult_image_items
+WHERE image_set_id = $1;
+

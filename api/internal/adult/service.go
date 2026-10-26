@@ -7,6 +7,7 @@ package adult
 import (
 	"context"
 	"log/slog"
+	"os"
 	"sync"
 	"time"
 
@@ -28,17 +29,26 @@ type ModuleChecker interface {
 	Get(ctx context.Context, id string) (domain.Module, error)
 }
 
-// Service provides Stash-box synchronization, pooling, and federated search.
+const (
+	// MaxThumbnailConcurrency is the scalar upper bound on concurrent thumbnail generation workers.
+	MaxThumbnailConcurrency = 2
+)
+
+// Service provides Stash-box synchronization, pooling, federated search, and image set management.
 type Service struct {
-	st       *store.Store
-	enc      *crypto.Encryptor
-	clk      clock.Clock
-	ids      id.Generator
-	mod      ModuleChecker
-	pool     *ClientBuilder
-	logger   *slog.Logger
-	mu       sync.Mutex
-	lastPass time.Time
+	st           *store.Store
+	enc          *crypto.Encryptor
+	clk          clock.Clock
+	ids          id.Generator
+	mod          ModuleChecker
+	pool         *ClientBuilder
+	logger       *slog.Logger
+	mu           sync.Mutex
+	lastPass     time.Time
+	lastScanPass time.Time
+	thumbSem     chan struct{}
+	openFile     func(name string) (*os.File, error)
+	maxImageSets int
 }
 
 // NewService constructs an adult Service.
@@ -52,13 +62,16 @@ func NewService(
 ) *Service {
 	pool := NewClientBuilder(enc, DefaultClientTimeout, logger)
 	return &Service{
-		st:     st,
-		enc:    enc,
-		clk:    clk,
-		ids:    ids,
-		mod:    mod,
-		pool:   pool,
-		logger: logger,
+		st:           st,
+		enc:          enc,
+		clk:          clk,
+		ids:          ids,
+		mod:          mod,
+		pool:         pool,
+		logger:       logger,
+		thumbSem:     make(chan struct{}, MaxThumbnailConcurrency),
+		openFile:     os.Open,
+		maxImageSets: 0,
 	}
 }
 
@@ -73,13 +86,16 @@ func NewServiceWithChecker(
 ) *Service {
 	pool := NewClientBuilder(enc, DefaultClientTimeout, logger)
 	return &Service{
-		st:     st,
-		enc:    enc,
-		clk:    clk,
-		ids:    ids,
-		mod:    mod,
-		pool:   pool,
-		logger: logger,
+		st:           st,
+		enc:          enc,
+		clk:          clk,
+		ids:          ids,
+		mod:          mod,
+		pool:         pool,
+		logger:       logger,
+		thumbSem:     make(chan struct{}, MaxThumbnailConcurrency),
+		openFile:     os.Open,
+		maxImageSets: 0,
 	}
 }
 
