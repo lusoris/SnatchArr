@@ -267,25 +267,10 @@ SPDX-License-Identifier: EUPL-1.2
 </section>
 
 <style>
-	.compact-table tbody tr {
-		height: 2.75rem;
-	}
 	@media (min-width: 1280px) {
-		.compact-table tbody tr {
-			height: 2.25rem;
-		}
 		.compact-table th,
 		.compact-table td {
 			padding: 0.35rem 0.5rem;
 		}
-		.compact-table :global(.btn) {
-			min-height: 1.75rem;
-			padding: 0.15rem 0.5rem;
-			font-size: 0.75rem;
-		}
-	}
-	.compact-table th,
-	.compact-table td {
-		vertical-align: middle;
 	}
 </style>
