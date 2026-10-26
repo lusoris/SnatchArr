@@ -8,9 +8,13 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/uuid"
+
+	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/core/crypto"
 	"github.com/golusoris/golusoris/webhooks/out"
 
+	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/store"
 	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
 )
@@ -164,4 +168,101 @@ func (s *WebhookStore) ListDeadLetters(ctx context.Context) ([]out.Delivery, err
 		})
 	}
 	return outDeliveries, nil
+}
+
+// UserTargetStore manages persistent user notification targets, ensuring at-rest encryption.
+type UserTargetStore struct {
+	st  *store.Store
+	enc *crypto.Encryptor
+	clk clock.Clock
+}
+
+// NewUserTargetStore creates a UserTargetStore.
+func NewUserTargetStore(st *store.Store, enc *crypto.Encryptor, clk clock.Clock) *UserTargetStore {
+	return &UserTargetStore{st: st, enc: enc, clk: clk}
+}
+
+// InsertTarget persists a target record, refusing unsealed bytes.
+func (s *UserTargetStore) InsertTarget(ctx context.Context, id, userID uuid.UUID, kind string, configEnc []byte, enabled bool) (sqlcgen.UserNotifyTarget, error) {
+	if _, err := s.enc.Open(configEnc); err != nil {
+		return sqlcgen.UserNotifyTarget{}, fmt.Errorf("%w: store write refused unsealed config bytes", domain.ErrInvalid)
+	}
+	now := s.clk.Now()
+	row, err := s.st.Q().CreateUserNotifyTarget(ctx, sqlcgen.CreateUserNotifyTargetParams{
+		ID:        id,
+		UserID:    userID,
+		Kind:      kind,
+		ConfigEnc: configEnc,
+		Enabled:   enabled,
+		CreatedAt: now,
+	})
+	if err != nil {
+		return sqlcgen.UserNotifyTarget{}, fmt.Errorf("user target store: create target: %w", store.MapError(err))
+	}
+	return row, nil
+}
+
+// UpdateTarget updates an existing target, refusing unsealed bytes.
+func (s *UserTargetStore) UpdateTarget(ctx context.Context, id, userID uuid.UUID, kind string, configEnc []byte, enabled bool) (sqlcgen.UserNotifyTarget, error) {
+	if _, err := s.enc.Open(configEnc); err != nil {
+		return sqlcgen.UserNotifyTarget{}, fmt.Errorf("%w: store write refused unsealed config bytes", domain.ErrInvalid)
+	}
+	now := s.clk.Now()
+	row, err := s.st.Q().UpdateUserNotifyTarget(ctx, sqlcgen.UpdateUserNotifyTargetParams{
+		ID:        id,
+		UserID:    userID,
+		Kind:      kind,
+		ConfigEnc: configEnc,
+		Enabled:   enabled,
+		UpdatedAt: now,
+	})
+	if err != nil {
+		return sqlcgen.UserNotifyTarget{}, fmt.Errorf("user target store: update target: %w", store.MapError(err))
+	}
+	return row, nil
+}
+
+// GetTarget retrieves a user target.
+func (s *UserTargetStore) GetTarget(ctx context.Context, id, userID uuid.UUID) (sqlcgen.UserNotifyTarget, error) {
+	row, err := s.st.Q().GetUserNotifyTarget(ctx, sqlcgen.GetUserNotifyTargetParams{
+		ID:     id,
+		UserID: userID,
+	})
+	if err != nil {
+		return sqlcgen.UserNotifyTarget{}, fmt.Errorf("user target store: get target: %w", store.MapError(err))
+	}
+	return row, nil
+}
+
+// ListTargets lists all targets for a user.
+func (s *UserTargetStore) ListTargets(ctx context.Context, userID uuid.UUID) ([]sqlcgen.UserNotifyTarget, error) {
+	rows, err := s.st.Q().ListUserNotifyTargets(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("user target store: list targets: %w", store.MapError(err))
+	}
+	return rows, nil
+}
+
+// ListEnabledTargets lists all enabled targets for a user.
+func (s *UserTargetStore) ListEnabledTargets(ctx context.Context, userID uuid.UUID) ([]sqlcgen.UserNotifyTarget, error) {
+	rows, err := s.st.Q().ListEnabledUserNotifyTargets(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("user target store: list enabled targets: %w", store.MapError(err))
+	}
+	return rows, nil
+}
+
+// DeleteTarget deletes a user target.
+func (s *UserTargetStore) DeleteTarget(ctx context.Context, id, userID uuid.UUID) error {
+	n, err := s.st.Q().DeleteUserNotifyTarget(ctx, sqlcgen.DeleteUserNotifyTargetParams{
+		ID:     id,
+		UserID: userID,
+	})
+	if err != nil {
+		return fmt.Errorf("user target store: delete target: %w", store.MapError(err))
+	}
+	if n == 0 {
+		return fmt.Errorf("%w: user target %s not found", domain.ErrNotFound, id)
+	}
+	return nil
 }

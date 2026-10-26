@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -157,6 +158,73 @@ func (e *Engine) ProcessEvent(ctx context.Context, ev domain.Event) {
 	}
 	for _, rule := range rules {
 		e.deliverRule(pctx, rule, ev)
+	}
+	if ev.UserID != nil && *ev.UserID != uuid.Nil {
+		e.deliverUserTargets(pctx, ev)
+	}
+}
+
+func isAdultEvent(ev domain.Event) bool {
+	if ev.IsAdult {
+		return true
+	}
+	if strings.HasPrefix(strings.ToLower(ev.EntityType), "adult") {
+		return true
+	}
+	if strings.HasPrefix(strings.ToLower(ev.Type), "adult") {
+		return true
+	}
+	return false
+}
+
+func (e *Engine) deliverUserTargets(ctx context.Context, ev domain.Event) {
+	if isAdultEvent(ev) {
+		row, err := e.st.Q().GetUser(ctx, *ev.UserID)
+		if err != nil {
+			e.logger.DebugContext(ctx, "notify: adult event dropped for user target", slog.Int64("event_id", ev.ID), slog.String("error", err.Error()))
+			return
+		}
+		u := domain.User{
+			ID:        row.ID,
+			Username:  row.Username,
+			Role:      domain.Role(row.Role),
+			CreatedAt: row.CreatedAt,
+			UpdatedAt: row.UpdatedAt,
+		}
+		if !u.MayReceiveAdult() {
+			e.logger.DebugContext(ctx, "notify: adult event dropped for user target", slog.Int64("event_id", ev.ID))
+			return
+		}
+	}
+
+	targets, err := e.svc.ListEnabledUserTargets(ctx, *ev.UserID)
+	if err != nil {
+		e.logger.WarnContext(ctx, "notify: list user targets failed", slog.String("error", err.Error()), slog.String("user_id", ev.UserID.String()))
+		return
+	}
+	if len(targets) == 0 {
+		return
+	}
+
+	payload := Payload{
+		Event:      ev.Type,
+		Timestamp:  ev.Timestamp,
+		Title:      ev.Title,
+		Detail:     ev.Detail,
+		Level:      ev.Level,
+		InstanceID: &ev.InstanceID,
+		RunID:      ev.RunID,
+	}
+
+	for _, t := range targets {
+		ch := domain.NotificationChannel{
+			ID:      t.ID,
+			Name:    fmt.Sprintf("user-%s-%s", t.UserID, t.Kind),
+			Kind:    t.Kind,
+			Enabled: t.Enabled,
+			Config:  t.Config,
+		}
+		e.deliverChannel(ctx, ch, payload, ev)
 	}
 }
 

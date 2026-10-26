@@ -1909,6 +1909,101 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
 
+  /me/notify-targets:
+    get:
+      tags: [notifications]
+      operationId: listMyNotifyTargets
+      summary: List current user's notification targets
+      responses:
+        "200":
+          description: List of user notification targets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UserNotifyTarget"
+        default:
+          $ref: "#/components/responses/Problem"
+    post:
+      tags: [notifications]
+      operationId: createMyNotifyTarget
+      summary: Create a notification target for current user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserNotifyTargetInput"
+      responses:
+        "201":
+          description: Target created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserNotifyTarget"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /me/notify-targets/{targetId}:
+    parameters:
+      - $ref: "#/components/parameters/UserNotifyTargetId"
+    get:
+      tags: [notifications]
+      operationId: getMyNotifyTarget
+      summary: Get one notification target for current user
+      responses:
+        "200":
+          description: User notification target
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserNotifyTarget"
+        default:
+          $ref: "#/components/responses/Problem"
+    put:
+      tags: [notifications]
+      operationId: updateMyNotifyTarget
+      summary: Update a notification target for current user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserNotifyTargetUpdate"
+      responses:
+        "200":
+          description: Target updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserNotifyTarget"
+        default:
+          $ref: "#/components/responses/Problem"
+    delete:
+      tags: [notifications]
+      operationId: deleteMyNotifyTarget
+      x-destructive: true
+      summary: Delete a notification target for current user
+      responses:
+        "204":
+          description: Target deleted
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /me/notify-targets/{targetId}/test:
+    parameters:
+      - $ref: "#/components/parameters/UserNotifyTargetId"
+    post:
+      tags: [notifications]
+      operationId: testMyNotifyTarget
+      summary: Send a test notification to a user target
+      responses:
+        "204":
+          description: Test notification delivered successfully
+        default:
+          $ref: "#/components/responses/Problem"
+
   /watchaware/sources:
     get:
       tags: [watchaware]
@@ -2146,6 +2241,13 @@ components:
         format: uuid
     NotificationRuleId:
       name: ruleId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    UserNotifyTargetId:
+      name: targetId
       in: path
       required: true
       schema:
@@ -3759,6 +3861,48 @@ components:
           description: Whether a secret is stored for this channel
         config:
           $ref: "#/components/schemas/NotificationChannelConfig"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    UserNotifyTargetInput:
+      type: object
+      required: [kind, config]
+      properties:
+        kind:
+          $ref: "#/components/schemas/NotificationChannelKind"
+        enabled:
+          type: boolean
+          default: true
+        config:
+          $ref: "#/components/schemas/NotificationChannelConfig"
+
+    UserNotifyTargetUpdate:
+      type: object
+      required: [kind]
+      properties:
+        kind:
+          $ref: "#/components/schemas/NotificationChannelKind"
+        enabled:
+          type: boolean
+          default: true
+        config:
+          $ref: "#/components/schemas/NotificationChannelConfig"
+
+    UserNotifyTarget:
+      type: object
+      required: [id, kind, enabled, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          $ref: "#/components/schemas/NotificationChannelKind"
+        enabled:
+          type: boolean
         created_at:
           type: string
           format: date-time
