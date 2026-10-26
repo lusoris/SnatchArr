@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.6.8](https://github.com/lusoris/SnatchArr/compare/v0.6.7...v0.6.8) (2026-10-26)
+
+
+### Features
+
+* **auth:** revalidate Jellyfin sessions against the member policy ([#670](https://github.com/lusoris/SnatchArr/issues/670)) ([e308539](https://github.com/lusoris/SnatchArr/commit/e30853904e88fbe125aa9e928910b26807092b40))
+* **modules:** register the adult module, disabled by default ([#668](https://github.com/lusoris/SnatchArr/issues/668)) ([6e3b791](https://github.com/lusoris/SnatchArr/commit/6e3b791de359d2fcccb215cc28fcac7111ed6e2f))
+
+
+### Bug Fixes
+
+* **auth:** retry the external user upsert on a username conflict ([#667](https://github.com/lusoris/SnatchArr/issues/667)) ([b710a6a](https://github.com/lusoris/SnatchArr/commit/b710a6ae2e155e1d8d168ec7e94b2b3a8cc40c02))
+* **web:** give the bottom bar tabs a 44 px touch target ([#665](https://github.com/lusoris/SnatchArr/issues/665)) ([8b71d99](https://github.com/lusoris/SnatchArr/commit/8b71d99254994fd82f1bcc5db4cccef8482e862c))
+
 ## [0.6.7](https://github.com/lusoris/SnatchArr/compare/v0.6.6...v0.6.7) (2026-10-26)
 
 
