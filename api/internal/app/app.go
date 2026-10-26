@@ -26,6 +26,7 @@ import (
 	"github.com/golusoris/golusoris/observability/statuspage"
 	"github.com/golusoris/golusoris/otel"
 
+	"github.com/lusoris/SnatchArr/api/internal/adult"
 	"github.com/lusoris/SnatchArr/api/internal/arrclient"
 	"github.com/lusoris/SnatchArr/api/internal/auth"
 	"github.com/lusoris/SnatchArr/api/internal/config"
@@ -101,6 +102,7 @@ var Module = fx.Options(
 	httpapi.Module,
 	llm.Module,
 	watchaware.Module,
+	adult.Module,
 	// After every module that registers a loop: the gate collects the leader_loops group.
 	gate.Module,
 	fx.Decorate(defaultLeaderName),

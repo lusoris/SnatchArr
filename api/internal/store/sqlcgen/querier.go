@@ -87,6 +87,13 @@ type Querier interface {
 	FindWebhookDelivery(ctx context.Context, id string) (WebhookDelivery, error)
 	FindWebhookEndpoint(ctx context.Context, id string) (WebhookEndpoint, error)
 	GetAPIKey(ctx context.Context, id string) (ApiKey, error)
+	GetAdultFavoritePerformer(ctx context.Context, id uuid.UUID) (AdultFavoritePerformer, error)
+	GetAdultFavoritePerformerByLink(ctx context.Context, arg GetAdultFavoritePerformerByLinkParams) (AdultFavoritePerformer, error)
+	GetAdultFavoriteStudio(ctx context.Context, id uuid.UUID) (AdultFavoriteStudio, error)
+	GetAdultFavoriteStudioByLink(ctx context.Context, arg GetAdultFavoriteStudioByLinkParams) (AdultFavoriteStudio, error)
+	GetAdultPerformerLink(ctx context.Context, arg GetAdultPerformerLinkParams) (AdultPerformerLink, error)
+	GetAdultStashboxInstance(ctx context.Context, id uuid.UUID) (AdultStashboxInstance, error)
+	GetAdultStudioLink(ctx context.Context, arg GetAdultStudioLinkParams) (AdultStudioLink, error)
 	GetDownloadClient(ctx context.Context, id uuid.UUID) (DownloadClient, error)
 	GetFirstAdmin(ctx context.Context) (User, error)
 	GetGateBaseline(ctx context.Context, instanceID uuid.UUID) (WatchawareGateBaseline, error)
@@ -137,9 +144,16 @@ type Querier interface {
 	LeaseRun(ctx context.Context, arg LeaseRunParams) (SnatchRun, error)
 	ListAPIKeysByOwner(ctx context.Context, ownerID uuid.UUID) ([]ApiKey, error)
 	ListAPIKeysForOwner(ctx context.Context, ownerID uuid.UUID) ([]ListAPIKeysForOwnerRow, error)
+	ListAdultFavoritePerformers(ctx context.Context) ([]AdultFavoritePerformer, error)
+	ListAdultFavoriteStudios(ctx context.Context) ([]AdultFavoriteStudio, error)
+	ListAdultPerformerLinks(ctx context.Context) ([]AdultPerformerLink, error)
+	ListAdultPerformerLinksForFavorite(ctx context.Context, favoriteID uuid.UUID) ([]AdultPerformerLink, error)
+	ListAdultStudioLinks(ctx context.Context) ([]AdultStudioLink, error)
+	ListAdultStudioLinksForFavorite(ctx context.Context, favoriteID uuid.UUID) ([]AdultStudioLink, error)
 	ListDeadLetterDeliveries(ctx context.Context) ([]WebhookDelivery, error)
 	ListDownloadClients(ctx context.Context) ([]DownloadClient, error)
 	ListDownloadClientsForInstance(ctx context.Context, instanceID *uuid.UUID) ([]DownloadClient, error)
+	ListEnabledAdultStashboxInstances(ctx context.Context) ([]AdultStashboxInstance, error)
 	ListEnabledDownloadClients(ctx context.Context) ([]DownloadClient, error)
 	ListEnabledInstances(ctx context.Context) ([]Instance, error)
 	ListEnabledNotificationChannels(ctx context.Context) ([]NotificationChannel, error)
@@ -174,6 +188,7 @@ type Querier interface {
 	// data->>'sso_source', data->>'sso_subject', and data->>'sso_role' couple to
 	// SessionSSOSourceKey, SessionSSOSubjectKey, and SessionSSORoleKey in api/internal/auth/ssoorigin.go.
 	ListSessionsBySSOSource(ctx context.Context, arg ListSessionsBySSOSourceParams) ([]ListSessionsBySSOSourceRow, error)
+	ListSyncableAdultStashboxInstances(ctx context.Context) ([]AdultStashboxInstance, error)
 	ListUserIdentities(ctx context.Context, userID uuid.UUID) ([]UserIdentity, error)
 	ListUsers(ctx context.Context) ([]User, error)
 	ListWatchAwareSources(ctx context.Context) ([]WatchawareSource, error)
@@ -191,6 +206,8 @@ type Querier interface {
 	// same item doubles the rest, capped at max_s.
 	MarkProcessed(ctx context.Context, arg MarkProcessedParams) error
 	MarkSeerrRequestsSnatched(ctx context.Context, arg MarkSeerrRequestsSnatchedParams) (int64, error)
+	MarkStaleAdultPerformerLinksUnfavorite(ctx context.Context, arg MarkStaleAdultPerformerLinksUnfavoriteParams) (int64, error)
+	MarkStaleAdultStudioLinksUnfavorite(ctx context.Context, arg MarkStaleAdultStudioLinksUnfavoriteParams) (int64, error)
 	PriorityEntityIDs(ctx context.Context, instanceID *uuid.UUID) ([]int64, error)
 	ProcessedAttempts(ctx context.Context, arg ProcessedAttemptsParams) (int32, error)
 	PruneGateDecisions(ctx context.Context, arg PruneGateDecisionsParams) (int64, error)
@@ -249,6 +266,13 @@ type Querier interface {
 	UpdateSettings(ctx context.Context, arg UpdateSettingsParams) (Setting, error)
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
 	UpdateWatchAwareSource(ctx context.Context, arg UpdateWatchAwareSourceParams) (WatchawareSource, error)
+	UpsertAdultFavoritePerformer(ctx context.Context, arg UpsertAdultFavoritePerformerParams) (AdultFavoritePerformer, error)
+	UpsertAdultFavoriteStudio(ctx context.Context, arg UpsertAdultFavoriteStudioParams) (AdultFavoriteStudio, error)
+	UpsertAdultPerformerLink(ctx context.Context, arg UpsertAdultPerformerLinkParams) (AdultPerformerLink, error)
+	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+	// SPDX-License-Identifier: EUPL-1.2
+	UpsertAdultStashboxInstance(ctx context.Context, arg UpsertAdultStashboxInstanceParams) (AdultStashboxInstance, error)
+	UpsertAdultStudioLink(ctx context.Context, arg UpsertAdultStudioLinkParams) (AdultStudioLink, error)
 	UpsertConfigarrDownloadClient(ctx context.Context, arg UpsertConfigarrDownloadClientParams) (UpsertConfigarrDownloadClientRow, error)
 	UpsertConfigarrInstance(ctx context.Context, arg UpsertConfigarrInstanceParams) (UpsertConfigarrInstanceRow, error)
 	UpsertDiscoveredDownloadClient(ctx context.Context, arg UpsertDiscoveredDownloadClientParams) (UpsertDiscoveredDownloadClientRow, error)
