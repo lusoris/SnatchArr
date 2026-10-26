@@ -35,16 +35,17 @@ DELETE FROM seerr_links WHERE id = $1;
 -- name: UpsertSeerrRequest :exec
 INSERT INTO seerr_requests (
     link_id, request_id, media_type, tmdb_id, tvdb_id, title, request_status, media_status, is_4k,
-    requested_by, seasons, seerr_server_id, instance_id, entity_id, requested_at, last_seen_at, updated_at
+    requested_by, requested_by_jellyfin_id, seasons, seerr_server_id, instance_id, entity_id, requested_at, last_seen_at, updated_at
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9,
-    $10, $11, $12, $13, $14, $15, $16, $16
+    $10, $11, $12, $13, $14, $15, $16, $17, $17
 )
 ON CONFLICT (link_id, request_id) DO UPDATE SET
     media_type = EXCLUDED.media_type, tmdb_id = EXCLUDED.tmdb_id, tvdb_id = EXCLUDED.tvdb_id,
     title = CASE WHEN EXCLUDED.title = '' THEN seerr_requests.title ELSE EXCLUDED.title END,
     request_status = EXCLUDED.request_status, media_status = EXCLUDED.media_status, is_4k = EXCLUDED.is_4k,
-    requested_by = EXCLUDED.requested_by, seasons = EXCLUDED.seasons, seerr_server_id = EXCLUDED.seerr_server_id,
+    requested_by = EXCLUDED.requested_by, requested_by_jellyfin_id = EXCLUDED.requested_by_jellyfin_id,
+    seasons = EXCLUDED.seasons, seerr_server_id = EXCLUDED.seerr_server_id,
     instance_id = EXCLUDED.instance_id, entity_id = EXCLUDED.entity_id, requested_at = EXCLUDED.requested_at,
     last_seen_at = EXCLUDED.last_seen_at, updated_at = EXCLUDED.updated_at;
 

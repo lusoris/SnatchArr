@@ -183,8 +183,8 @@ github.com/golusoris/goenvoy/arr/radarr v1.5.4 h1:BUolaR57v5io812d5s+knN3ZMcy394
 github.com/golusoris/goenvoy/arr/radarr v1.5.4/go.mod h1:BG8ygBUO4r6nlJ2l0QbYcTL/6nzLjN/Q51aPgXbLUiY=
 github.com/golusoris/goenvoy/arr/readarr v1.5.1 h1:FGQMM013AF1T4bRIhL/zJGHSNzw0SY41g7a/k2kCRVQ=
 github.com/golusoris/goenvoy/arr/readarr v1.5.1/go.mod h1:MyrNuDGNKyJeocjF2H2wIP+5mnWTxiy1OAp7yhWC17M=
-github.com/golusoris/goenvoy/arr/seerr v1.5.3 h1:EaGZ/iJqa0SfCpzW3oo1h6xweIgc7zNDIIc5RY3+2IQ=
-github.com/golusoris/goenvoy/arr/seerr v1.5.3/go.mod h1:W53K3tc3iZ0FXLPMOiln/C2MzJfyVjp4Tq13dynoWGY=
+github.com/golusoris/goenvoy/arr/seerr v1.6.1 h1:8G1ejxau0Lip9TxQsc3qsExR32ukzyE0rxH9DGeScSk=
+github.com/golusoris/goenvoy/arr/seerr v1.6.1/go.mod h1:d/SMpmFTnK/dF9K9kyyoPt4aOmtH99X5baDSAammLrM=
 github.com/golusoris/goenvoy/arr/sonarr v1.5.4 h1:L2CUF4lzvcJS4S4oQ7yXBz4E5K/QJPbdPjYKFrujOEI=
 github.com/golusoris/goenvoy/arr/sonarr v1.5.4/go.mod h1:L0+6WlEQN/9+WYypwA1DwouUP87rp38JHjCMHQt84J0=
 github.com/golusoris/goenvoy/arr/v2 v2.6.1 h1:TDqg9Laj/6CT65fxkFOD92U2uVcIlyJov9bQ2rAjX2g=

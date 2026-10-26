@@ -61,24 +61,25 @@ const (
 
 // SeerrRequest is a cached, approved-but-unavailable request mapped onto SnatchArr.
 type SeerrRequest struct {
-	LinkID         uuid.UUID
-	RequestID      int
-	MediaType      SeerrMediaType
-	TmdbID         int
-	TvdbID         int
-	Title          string
-	RequestStatus  int
-	MediaStatus    int
-	Is4K           bool
-	RequestedBy    string
-	Seasons        []int
-	SeerrServerID  int
-	InstanceID     *uuid.UUID // resolved SnatchArr instance, nil when unresolved
-	EntityID       *int64     // Radarr movie id or Sonarr series id, nil when not in the library
-	RequestedAt    *time.Time
-	LastSnatchedAt *time.Time
-	LastSeenAt     time.Time
-	UpdatedAt      time.Time
+	LinkID                uuid.UUID
+	RequestID             int
+	MediaType             SeerrMediaType
+	TmdbID                int
+	TvdbID                int
+	Title                 string
+	RequestStatus         int
+	MediaStatus           int
+	Is4K                  bool
+	RequestedBy           string
+	RequestedByJellyfinID string
+	Seasons               []int
+	SeerrServerID         int
+	InstanceID            *uuid.UUID // resolved SnatchArr instance, nil when unresolved
+	EntityID              *int64     // Radarr movie id or Sonarr series id, nil when not in the library
+	RequestedAt           *time.Time
+	LastSnatchedAt        *time.Time
+	LastSeenAt            time.Time
+	UpdatedAt             time.Time
 }
 
 // Resolved reports whether the request maps to an instance and a library entity.

@@ -264,24 +264,25 @@ type SeerrLink struct {
 }
 
 type SeerrRequest struct {
-	LinkID         uuid.UUID
-	RequestID      int32
-	MediaType      string
-	TmdbID         int32
-	TvdbID         int32
-	Title          string
-	RequestStatus  int32
-	MediaStatus    int32
-	Is4k           bool
-	RequestedBy    string
-	Seasons        []int32
-	SeerrServerID  *int32
-	InstanceID     *uuid.UUID
-	EntityID       *int64
-	RequestedAt    *time.Time
-	LastSnatchedAt *time.Time
-	LastSeenAt     time.Time
-	UpdatedAt      time.Time
+	LinkID                uuid.UUID
+	RequestID             int32
+	MediaType             string
+	TmdbID                int32
+	TvdbID                int32
+	Title                 string
+	RequestStatus         int32
+	MediaStatus           int32
+	Is4k                  bool
+	RequestedBy           string
+	Seasons               []int32
+	SeerrServerID         *int32
+	InstanceID            *uuid.UUID
+	EntityID              *int64
+	RequestedAt           *time.Time
+	LastSnatchedAt        *time.Time
+	LastSeenAt            time.Time
+	UpdatedAt             time.Time
+	RequestedByJellyfinID string
 }
 
 type Session struct {
