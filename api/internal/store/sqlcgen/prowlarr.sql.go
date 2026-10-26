@@ -14,9 +14,9 @@ import (
 
 const createProwlarrLink = `-- name: CreateProwlarrLink :one
 
-INSERT INTO prowlarr_links (id, name, base_url, api_key_enc, enabled, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5, $6, $6)
-RETURNING id, name, base_url, api_key_enc, enabled, last_seen_version, last_check_at, last_error, created_at, updated_at
+INSERT INTO prowlarr_links (id, name, base_url, api_key_enc, hourly_cap, enabled, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
+RETURNING id, name, base_url, api_key_enc, enabled, last_seen_version, last_check_at, last_error, created_at, updated_at, hourly_cap
 `
 
 type CreateProwlarrLinkParams struct {
@@ -24,6 +24,7 @@ type CreateProwlarrLinkParams struct {
 	Name      string
 	BaseUrl   string
 	ApiKeyEnc []byte
+	HourlyCap int32
 	Enabled   bool
 	CreatedAt time.Time
 }
@@ -36,6 +37,7 @@ func (q *Queries) CreateProwlarrLink(ctx context.Context, arg CreateProwlarrLink
 		arg.Name,
 		arg.BaseUrl,
 		arg.ApiKeyEnc,
+		arg.HourlyCap,
 		arg.Enabled,
 		arg.CreatedAt,
 	)
@@ -51,6 +53,7 @@ func (q *Queries) CreateProwlarrLink(ctx context.Context, arg CreateProwlarrLink
 		&i.LastError,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.HourlyCap,
 	)
 	return i, err
 }
@@ -68,7 +71,7 @@ func (q *Queries) DeleteProwlarrLink(ctx context.Context, id uuid.UUID) (int64, 
 }
 
 const getProwlarrLink = `-- name: GetProwlarrLink :one
-SELECT id, name, base_url, api_key_enc, enabled, last_seen_version, last_check_at, last_error, created_at, updated_at FROM prowlarr_links WHERE id = $1
+SELECT id, name, base_url, api_key_enc, enabled, last_seen_version, last_check_at, last_error, created_at, updated_at, hourly_cap FROM prowlarr_links WHERE id = $1
 `
 
 func (q *Queries) GetProwlarrLink(ctx context.Context, id uuid.UUID) (ProwlarrLink, error) {
@@ -85,12 +88,13 @@ func (q *Queries) GetProwlarrLink(ctx context.Context, id uuid.UUID) (ProwlarrLi
 		&i.LastError,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.HourlyCap,
 	)
 	return i, err
 }
 
 const listEnabledProwlarrLinks = `-- name: ListEnabledProwlarrLinks :many
-SELECT id, name, base_url, api_key_enc, enabled, last_seen_version, last_check_at, last_error, created_at, updated_at FROM prowlarr_links WHERE enabled ORDER BY name
+SELECT id, name, base_url, api_key_enc, enabled, last_seen_version, last_check_at, last_error, created_at, updated_at, hourly_cap FROM prowlarr_links WHERE enabled ORDER BY name
 `
 
 func (q *Queries) ListEnabledProwlarrLinks(ctx context.Context) ([]ProwlarrLink, error) {
@@ -113,6 +117,7 @@ func (q *Queries) ListEnabledProwlarrLinks(ctx context.Context) ([]ProwlarrLink,
 			&i.LastError,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.HourlyCap,
 		); err != nil {
 			return nil, err
 		}
@@ -125,7 +130,7 @@ func (q *Queries) ListEnabledProwlarrLinks(ctx context.Context) ([]ProwlarrLink,
 }
 
 const listProwlarrLinks = `-- name: ListProwlarrLinks :many
-SELECT id, name, base_url, api_key_enc, enabled, last_seen_version, last_check_at, last_error, created_at, updated_at FROM prowlarr_links ORDER BY name
+SELECT id, name, base_url, api_key_enc, enabled, last_seen_version, last_check_at, last_error, created_at, updated_at, hourly_cap FROM prowlarr_links ORDER BY name
 `
 
 func (q *Queries) ListProwlarrLinks(ctx context.Context) ([]ProwlarrLink, error) {
@@ -148,6 +153,7 @@ func (q *Queries) ListProwlarrLinks(ctx context.Context) ([]ProwlarrLink, error)
 			&i.LastError,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.HourlyCap,
 		); err != nil {
 			return nil, err
 		}
@@ -184,9 +190,9 @@ func (q *Queries) RecordProwlarrCheck(ctx context.Context, arg RecordProwlarrChe
 
 const updateProwlarrLink = `-- name: UpdateProwlarrLink :one
 UPDATE prowlarr_links
-SET name = $2, base_url = $3, api_key_enc = $4, enabled = $5, updated_at = $6
+SET name = $2, base_url = $3, api_key_enc = $4, hourly_cap = $5, enabled = $6, updated_at = $7
 WHERE id = $1
-RETURNING id, name, base_url, api_key_enc, enabled, last_seen_version, last_check_at, last_error, created_at, updated_at
+RETURNING id, name, base_url, api_key_enc, enabled, last_seen_version, last_check_at, last_error, created_at, updated_at, hourly_cap
 `
 
 type UpdateProwlarrLinkParams struct {
@@ -194,6 +200,7 @@ type UpdateProwlarrLinkParams struct {
 	Name      string
 	BaseUrl   string
 	ApiKeyEnc []byte
+	HourlyCap int32
 	Enabled   bool
 	UpdatedAt time.Time
 }
@@ -204,6 +211,7 @@ func (q *Queries) UpdateProwlarrLink(ctx context.Context, arg UpdateProwlarrLink
 		arg.Name,
 		arg.BaseUrl,
 		arg.ApiKeyEnc,
+		arg.HourlyCap,
 		arg.Enabled,
 		arg.UpdatedAt,
 	)
@@ -219,6 +227,7 @@ func (q *Queries) UpdateProwlarrLink(ctx context.Context, arg UpdateProwlarrLink
 		&i.LastError,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.HourlyCap,
 	)
 	return i, err
 }

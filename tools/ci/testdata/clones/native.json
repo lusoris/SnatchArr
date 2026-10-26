@@ -1,0 +1,23 @@
+{
+  "passed": false,
+  "foreign_scanner": "jscpd 5.4.1",
+  "duplicates": [
+    {
+      "hash": "native222",
+      "loc": 10,
+      "locations": [
+        {
+          "path": "web/src/lib/legacyRedirect.ts",
+          "line": 12,
+          "func_name": "legacyLoad"
+        },
+        {
+          "path": "web/src/lib/other.ts",
+          "line": 24,
+          "func_name": "otherLoad"
+        }
+      ]
+    }
+  ],
+  "foreign_duplicates": []
+}

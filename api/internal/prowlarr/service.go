@@ -41,10 +41,11 @@ const (
 
 // Input is the user-supplied part of a link.
 type Input struct {
-	Name    string
-	BaseURL string
-	APIKey  string
-	Enabled bool
+	Name      string
+	BaseURL   string
+	APIKey    string
+	HourlyCap int
+	Enabled   bool
 }
 
 // IndexerStatus is the live status of an indexer from Prowlarr.
@@ -141,8 +142,15 @@ func (s *Service) Create(ctx context.Context, in Input) (domain.ProwlarrLink, er
 	if err != nil {
 		return domain.ProwlarrLink{}, fmt.Errorf("prowlarr: seal api key: %w", err)
 	}
+	hourlyCap := int32(in.HourlyCap) // #nosec G115 -- validated 1..500
 	row, err := s.st.Q().CreateProwlarrLink(ctx, sqlcgen.CreateProwlarrLinkParams{
-		ID: linkID, Name: in.Name, BaseUrl: in.BaseURL, ApiKeyEnc: sealed, Enabled: in.Enabled, CreatedAt: s.clk.Now(),
+		ID:        linkID,
+		Name:      in.Name,
+		BaseUrl:   in.BaseURL,
+		ApiKeyEnc: sealed,
+		HourlyCap: hourlyCap,
+		Enabled:   in.Enabled,
+		CreatedAt: s.clk.Now(),
 	})
 	if err != nil {
 		return domain.ProwlarrLink{}, fmt.Errorf("prowlarr: create: %w", store.MapError(err))
@@ -159,6 +167,9 @@ func (s *Service) Update(ctx context.Context, linkID uuid.UUID, in Input) (domai
 	if in.APIKey == "" {
 		in.APIKey = unchangedKey
 	}
+	if in.HourlyCap == 0 {
+		in.HourlyCap = int(current.HourlyCap)
+	}
 	in, err = normalize(in)
 	if err != nil {
 		return domain.ProwlarrLink{}, err
@@ -169,8 +180,15 @@ func (s *Service) Update(ctx context.Context, linkID uuid.UUID, in Input) (domai
 			return domain.ProwlarrLink{}, fmt.Errorf("prowlarr: seal api key: %w", err)
 		}
 	}
+	hourlyCap := int32(in.HourlyCap) // #nosec G115 -- validated 1..500
 	row, err := s.st.Q().UpdateProwlarrLink(ctx, sqlcgen.UpdateProwlarrLinkParams{
-		ID: linkID, Name: in.Name, BaseUrl: in.BaseURL, ApiKeyEnc: sealed, Enabled: in.Enabled, UpdatedAt: s.clk.Now(),
+		ID:        linkID,
+		Name:      in.Name,
+		BaseUrl:   in.BaseURL,
+		ApiKeyEnc: sealed,
+		HourlyCap: hourlyCap,
+		Enabled:   in.Enabled,
+		UpdatedAt: s.clk.Now(),
 	})
 	if err != nil {
 		return domain.ProwlarrLink{}, fmt.Errorf("prowlarr: update: %w", store.MapError(err))
@@ -588,7 +606,10 @@ func findIndexer(indexers []IndexerStatus, id int) (IndexerStatus, bool) {
 }
 
 func normalize(in Input) (Input, error) {
-	if err := domain.ValidateProwlarrLinkInput(in.Name, in.BaseURL, in.APIKey); err != nil {
+	if in.HourlyCap == 0 {
+		in.HourlyCap = domain.DefaultProwlarrHourlyCap
+	}
+	if err := domain.ValidateProwlarrLinkInput(in.Name, in.BaseURL, in.APIKey, in.HourlyCap); err != nil {
 		return Input{}, fmt.Errorf("prowlarr: %w", err)
 	}
 	normalized, err := domain.NormalizeBaseURL(in.BaseURL)

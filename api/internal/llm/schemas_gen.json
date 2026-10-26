@@ -638,6 +638,12 @@
             "default": true,
             "type": "boolean"
           },
+          "hourly_cap": {
+            "default": 15,
+            "maximum": 500,
+            "minimum": 1,
+            "type": "integer"
+          },
           "name": {
             "maxLength": 64,
             "minLength": 1,
@@ -2055,6 +2061,12 @@
             "default": true,
             "type": "boolean"
           },
+          "hourly_cap": {
+            "default": 15,
+            "maximum": 500,
+            "minimum": 1,
+            "type": "integer"
+          },
           "name": {
             "maxLength": 64,
             "minLength": 1,
@@ -2994,6 +3006,12 @@
           "enabled": {
             "default": true,
             "type": "boolean"
+          },
+          "hourly_cap": {
+            "default": 15,
+            "maximum": 500,
+            "minimum": 1,
+            "type": "integer"
           },
           "name": {
             "maxLength": 64,

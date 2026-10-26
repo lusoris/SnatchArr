@@ -205,6 +205,13 @@ type ProwlarrLink struct {
 	LastError       *string
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
+	HourlyCap       int32
+}
+
+type ProwlarrRateBucket struct {
+	LinkID      uuid.UUID
+	WindowStart time.Time
+	Used        int32
 }
 
 type QueuePolicy struct {

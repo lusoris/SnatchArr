@@ -1,0 +1,22 @@
+{
+  "passed": false,
+  "foreign_scanner": "jscpd 5.4.1",
+  "duplicates": [],
+  "foreign_duplicates": [
+    {
+      "language": "typescript",
+      "hash": "planted111",
+      "loc": 7,
+      "locations": [
+        {
+          "path": "web/src/routes/about/+page.ts:typescript",
+          "line": 9
+        },
+        {
+          "path": "web/src/routes/history/+page.ts:typescript",
+          "line": 9
+        }
+      ]
+    }
+  ]
+}

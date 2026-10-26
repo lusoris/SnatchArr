@@ -3586,7 +3586,7 @@ components:
 
     ProwlarrLink:
       type: object
-      required: [id, name, base_url, enabled, created_at, updated_at]
+      required: [id, name, base_url, hourly_cap, enabled, created_at, updated_at]
       properties:
         id:
           type: string
@@ -3595,6 +3595,11 @@ components:
           type: string
         base_url:
           type: string
+        hourly_cap:
+          type: integer
+          minimum: 1
+          maximum: 500
+          default: 15
         enabled:
           type: boolean
         last_seen_version:
@@ -3624,6 +3629,11 @@ components:
         api_key:
           type: string
           description: Required on create; omit on update to keep the stored key
+        hourly_cap:
+          type: integer
+          minimum: 1
+          maximum: 500
+          default: 15
         enabled:
           type: boolean
           default: true

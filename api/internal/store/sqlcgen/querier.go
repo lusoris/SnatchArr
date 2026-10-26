@@ -14,6 +14,7 @@ import (
 type Querier interface {
 	AddBucketUsed(ctx context.Context, arg AddBucketUsedParams) error
 	AddGlobalBucketUsed(ctx context.Context, arg AddGlobalBucketUsedParams) error
+	AddProwlarrBucketUsed(ctx context.Context, arg AddProwlarrBucketUsedParams) error
 	BucketUsage(ctx context.Context, arg BucketUsageParams) (BucketUsageRow, error)
 	CancelRun(ctx context.Context, arg CancelRunParams) (int64, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
@@ -218,6 +219,13 @@ type Querier interface {
 	// runs under this transaction-scoped lock, so two grants on either side of a minute
 	// boundary (different bucket rows) still see each other.
 	LockInstanceBudget(ctx context.Context, instanceID uuid.UUID) error
+	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+	// SPDX-License-Identifier: EUPL-1.2
+	// Prowlarr link stamina is a rolling window of one-minute buckets (#777). Every grab for a link
+	// runs under this transaction-scoped lock, so two grabs on either side of a minute
+	// boundary still see each other.
+	// Lock order: LockProwlarrLinkBudget first, then LockGlobalBudget.
+	LockProwlarrLinkBudget(ctx context.Context, linkID uuid.UUID) error
 	MarkGateDecisionsApplied(ctx context.Context, arg MarkGateDecisionsAppliedParams) error
 	MarkInstancesPlanned(ctx context.Context, arg MarkInstancesPlannedParams) error
 	// Afterglow backoff: the first snatch rests base_s seconds, every further snatch of the
@@ -228,6 +236,7 @@ type Querier interface {
 	MarkStaleAdultStudioLinksUnfavorite(ctx context.Context, arg MarkStaleAdultStudioLinksUnfavoriteParams) (int64, error)
 	PriorityEntityIDs(ctx context.Context, instanceID *uuid.UUID) ([]int64, error)
 	ProcessedAttempts(ctx context.Context, arg ProcessedAttemptsParams) (int32, error)
+	ProwlarrBucketUsage(ctx context.Context, arg ProwlarrBucketUsageParams) (ProwlarrBucketUsageRow, error)
 	PruneGateDecisions(ctx context.Context, arg PruneGateDecisionsParams) (int64, error)
 	PurgeBucketsBefore(ctx context.Context, arg PurgeBucketsBeforeParams) (int64, error)
 	PurgeEventsBefore(ctx context.Context, arg PurgeEventsBeforeParams) (int64, error)
@@ -240,6 +249,7 @@ type Querier interface {
 	PurgeExpiredQueueStrikes(ctx context.Context, arg PurgeExpiredQueueStrikesParams) (int64, error)
 	PurgeExpiredSessions(ctx context.Context, arg PurgeExpiredSessionsParams) (int64, error)
 	PurgeGlobalBucketsBefore(ctx context.Context, arg PurgeGlobalBucketsBeforeParams) (int64, error)
+	PurgeProwlarrBucketsBefore(ctx context.Context, arg PurgeProwlarrBucketsBeforeParams) (int64, error)
 	PurgeRunsBefore(ctx context.Context, arg PurgeRunsBeforeParams) (int64, error)
 	PurgeWorkersBefore(ctx context.Context, arg PurgeWorkersBeforeParams) (int64, error)
 	RecentInstanceRunStatuses(ctx context.Context, arg RecentInstanceRunStatusesParams) ([]string, error)
