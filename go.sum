@@ -207,6 +207,10 @@ github.com/golusoris/goenvoy/mediaserver/emby/v3 v3.2.0 h1:zXkf8KSx/rQoO0wdWHPoW
 github.com/golusoris/goenvoy/mediaserver/emby/v3 v3.2.0/go.mod h1:Mwak5u2AqPrmBXimnZSZ8FVU41scxgVnS4wtmrFQJBE=
 github.com/golusoris/goenvoy/mediaserver/jellyfin/v3 v3.3.0 h1:50nKKqoQ76KTn3izfzLP2gJePA29zq3IUHoZ5ji7IrI=
 github.com/golusoris/goenvoy/mediaserver/jellyfin/v3 v3.3.0/go.mod h1:75q83+TdD0dFtEd2x8opdKxDU5qHFvUtpQvTkh7syX4=
+github.com/golusoris/goenvoy/metadata v1.4.1 h1:Qo2YxrT/KX3aGONTKl2I0uOK3TTN51AcTp+u+/Sf4oY=
+github.com/golusoris/goenvoy/metadata v1.4.1/go.mod h1:VEJ5vqTGsrZF8LQEhiTNpQUW8Ju897k+yKVcXD/GGTY=
+github.com/golusoris/goenvoy/metadata/adult/stashbox/v2 v2.0.4 h1:DejXKqECXlBFfxHqJAP05RJ588BwgmZ5biR0KUy2y38=
+github.com/golusoris/goenvoy/metadata/adult/stashbox/v2 v2.0.4/go.mod h1:sCdU6+BYqt6Iyc+iCTJXhSDDJnMfakuW2ASC1r9A4hk=
 github.com/golusoris/golusoris v0.20.0 h1:bw2FTdIT948NLUXc50ipzcfK1diCbI5e0mC164FAdyM=
 github.com/golusoris/golusoris v0.20.0/go.mod h1:71BKJYihr4GZcMDqtb6/WPpthwjXTFI149uwWEcZ3Yg=
 github.com/golusoris/golusoris/core v0.12.1 h1:3vF0NhNDHV18bm8QXPRDjETH2cERaGIk2XcMzS5l5GY=

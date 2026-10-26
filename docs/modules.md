@@ -19,6 +19,7 @@ Each module has its own Go package under `api/internal/` and its own HTTP routes
 
 The following optional modules are registered:
 
+- **Adult Content (`adult`)**: synchronizes performer and studio favourites across configured Stash-box community instances ([ADR-0027](adr/0027-adult-module.md)). A leader loop executes bounded pagination sweeps on a configurable interval (default: 6 hours), deduplicates entities cross-instance using endpoint cross-references, normalized external site URLs, and canonical names, and provides federated search across active instances.
 - **LLM Access (`llm`)**: exposes SnatchArr operations as Model Context Protocol (MCP)
   tools at `/api/v1/mcp` ([ADR-0021](adr/0021-llm-access-module.md)).
 - **Watch-Aware Modes (`watchaware`)**: reads watch state from Jellyfin and Emby. The

@@ -17,6 +17,7 @@ type AdultFavoritePerformer struct {
 	Disambiguation *string
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
+	Urls           []string
 }
 
 type AdultFavoriteStudio struct {
@@ -24,6 +25,7 @@ type AdultFavoriteStudio struct {
 	CanonicalName string
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
+	Urls          []string
 }
 
 type AdultImageItem struct {
