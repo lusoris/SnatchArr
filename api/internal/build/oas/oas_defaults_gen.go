@@ -104,7 +104,19 @@ func (s *Problem) setDefaults() {
 }
 
 // setDefaults set default value of fields.
+func (s *ProwlarrLink) setDefaults() {
+	{
+		val := int(15)
+		s.HourlyCap = val
+	}
+}
+
+// setDefaults set default value of fields.
 func (s *ProwlarrLinkInput) setDefaults() {
+	{
+		val := int(15)
+		s.HourlyCap.SetTo(val)
+	}
 	{
 		val := bool(true)
 		s.Enabled.SetTo(val)

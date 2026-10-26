@@ -98,6 +98,29 @@ func TestErrorHandlerHidesInternalDetail(t *testing.T) {
 	}
 }
 
+func TestErrorHandlerWritesTooManyRequestsProblemJSON(t *testing.T) {
+	t.Parallel()
+	h := ErrorHandler(slog.New(slog.DiscardHandler))
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/prowlarr/grab", nil)
+	wrappedErr := fmt.Errorf("prowlarr: %w: link cap exhausted (15/15)", domain.ErrTooManyRequests)
+	h(t.Context(), rec, req, wrappedErr)
+
+	if ct := rec.Header().Get("Content-Type"); ct != "application/problem+json" {
+		t.Fatalf("content type = %q, want application/problem+json", ct)
+	}
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want 429", rec.Code)
+	}
+	var body ogenkit.Problem
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode problem: %v", err)
+	}
+	if body.Status != http.StatusTooManyRequests {
+		t.Fatalf("body status = %d, want 429", body.Status)
+	}
+}
+
 func contains(s, sub string) bool {
 	return len(sub) > 0 && len(s) >= len(sub) && func() bool {
 		for i := 0; i+len(sub) <= len(s); i++ {

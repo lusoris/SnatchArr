@@ -9,6 +9,7 @@ SPDX-License-Identifier: EUPL-1.2
 		base_url: string;
 		enabled: boolean;
 		api_key?: string;
+		hourly_cap?: number;
 	}
 </script>
 
@@ -24,7 +25,7 @@ SPDX-License-Identifier: EUPL-1.2
 		/** Prefix for element ids, so two forms never share one. */
 		idPrefix: string;
 		/** The stored link being edited, or null to add one. The parent remounts per link. */
-		link: { name: string; base_url: string; enabled: boolean } | null;
+		link: { name: string; base_url: string; enabled: boolean; hourly_cap?: number } | null;
 		pending: boolean;
 		error: unknown;
 		onsave: (body: LinkBody) => void;
@@ -32,6 +33,7 @@ SPDX-License-Identifier: EUPL-1.2
 		/** Probes the typed values; offered on the create form only, where the key is at hand. */
 		ontest?: (body: LinkBody) => void;
 		testing?: boolean;
+		showHourlyCap?: boolean;
 		/** Link-specific fields, rendered after the shared ones. */
 		extra?: Snippet;
 	}
@@ -45,6 +47,7 @@ SPDX-License-Identifier: EUPL-1.2
 		oncancel,
 		ontest,
 		testing = false,
+		showHourlyCap = false,
 		extra
 	}: Props = $props();
 
@@ -52,11 +55,21 @@ SPDX-License-Identifier: EUPL-1.2
 	let name = $state(initial?.name ?? '');
 	let baseUrl = $state(initial?.base_url ?? '');
 	let apiKey = $state('');
+	let hourlyCap = $state(initial?.hourly_cap ?? 15);
 	let enabled = $state(initial?.enabled ?? true);
 	const errors = $derived(fieldErrors(error));
 
 	function body(): LinkBody {
-		return { name, base_url: baseUrl, enabled, ...filledPart('api_key', apiKey) };
+		const out: LinkBody = {
+			name,
+			base_url: baseUrl,
+			enabled,
+			...filledPart('api_key', apiKey)
+		};
+		if (showHourlyCap) {
+			out.hourly_cap = Number(hourlyCap);
+		}
+		return out;
 	}
 </script>
 
@@ -95,6 +108,19 @@ SPDX-License-Identifier: EUPL-1.2
 		error={errors.api_key}
 		bind:value={apiKey}
 	/>
+	{#if showHourlyCap}
+		<TextField
+			id={`${idPrefix}-hourly-cap`}
+			label={m.prowlarr_hourly_cap()}
+			type="number"
+			min={1}
+			max={500}
+			step={1}
+			hint={m.prowlarr_hourly_cap_hint()}
+			error={errors.hourly_cap}
+			bind:value={hourlyCap}
+		/>
+	{/if}
 	<label class="flex items-center gap-2 text-sm">
 		<input type="checkbox" bind:checked={enabled} />
 		<span>{m.form_enabled()}</span>
