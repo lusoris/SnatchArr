@@ -307,7 +307,7 @@ An audit of `github.com/golusoris/goenvoy` at tag `mediaserver/jellyfin/v3.1.0` 
 
 - [ ] Upstream PR to `github.com/golusoris/goenvoy` (`mediaserver/jellyfin`): Add `InitiateQuickConnect`, `CheckQuickConnect`, `AuthenticateWithQuickConnect`, and `GetUser(id)`.
 - [ ] Upstream PR to `github.com/golusoris/goenvoy` (`mediaserver/jellyfin`): Move `MaxParentalRating` to `UserPolicy` as `*int`; add `EnableAllFolders`, `EnabledFolders`, `AllowedTags` and `BlockUnratedItems`; return `AuthenticationResult` from `AuthenticateByName`.
-- [ ] Implement `snatcharr.jellyfin.default_role` setting with tests: non-admin gets configured role, admin maps to `admin`, invalid setting value refused at boot.
+- [x] Implement `snatcharr.jellyfin.default_role` setting with tests: non-admin gets configured role, admin maps to `admin`, invalid setting value refused at boot. (`JellyfinOptions` in `api/internal/config/config.go` accepts `requester` or `viewer` and refuses `admin`, an empty value and any other value at boot; `domain.RoleForJellyfinMember` maps Jellyfin administrators to `admin`; the Jellyfin sign-in handler calls it.)
 - [ ] Implement account-page linking flow with tests: link requires sign-in with second identity; equal usernames on both providers do NOT link; planted case: auto-link by username makes test fail.
 - [x] Database migration: Add `'requester'` to role enum/checks and create `jellyfin_user_id` column or expanded `external_id` indexes on `users`. (slice A: CHECK widened in 000033; the existing UNIQUE `external_id` index carries `jellyfin:<id>`, no new column; the prefix rewrite moves into the Jellyfin sign-in item)
 - [x] Implement `requireRequester` API middleware and update OpenAPI security schemes.

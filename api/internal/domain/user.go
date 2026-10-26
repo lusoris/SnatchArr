@@ -33,6 +33,16 @@ func (r Role) CanRequest() bool {
 	return r == RoleAdmin || r == RoleRequester
 }
 
+// RoleForJellyfinMember decides the role of a Jellyfin member on first sign-in.
+// Jellyfin administrators always map to RoleAdmin; non-administrators receive
+// the configured default role (ADR-0026).
+func RoleForJellyfinMember(isAdministrator bool, defaultRole Role) Role {
+	if isAdministrator {
+		return RoleAdmin
+	}
+	return defaultRole
+}
+
 // User is a local account.
 type User struct {
 	ID        uuid.UUID
