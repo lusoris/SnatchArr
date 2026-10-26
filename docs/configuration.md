@@ -36,6 +36,10 @@ UI.
 | `APP_SNATCHARR_CONFIGARR_SECRETS` | | Path to Configarr `secrets.yml` |
 | `APP_SNATCHARR_CONFIGARR_WATCH` | `true` | Re-import on file change |
 | `APP_SNATCHARR_PROWLARR_LIMIT_THRESHOLD` | `0.9` | Fraction (0, 1] of an indexer's Prowlarr query limit at which SnatchArr treats the indexer as exhausted ([Prowlarr](prowlarr.md)) |
+| `APP_SNATCHARR_JELLYFIN_ENABLED` | `false` | Enable Jellyfin authentication and Quick Connect |
+| `APP_SNATCHARR_JELLYFIN_URL` | | Jellyfin server base URL (must be http or https with host) |
+| `APP_SNATCHARR_JELLYFIN_API_KEY` | | Jellyfin service account API key |
+| `APP_SNATCHARR_JELLYFIN_TIMEOUT` | `10s` | HTTP request timeout for Jellyfin client calls |
 | `APP_SNATCHARR_JELLYFIN_DEFAULT_ROLE` | `requester` | Role for a non-admin Jellyfin member on first sign-in (`requester` or `viewer`); Jellyfin administrators become admin |
 | `APP_SNATCHARR_LOGS_RING_SIZE` | `2000` | Log records the API keeps in memory for the admin [Logs](logs.md) page; clamped to 100 to 20000 |
 | `APP_SNATCHARR_WEB_DEV` | `false` | Disable the embedded SPA (Vite dev server proxies instead) |

@@ -23,6 +23,7 @@ import (
 
 	"github.com/lusoris/SnatchArr/api/internal/auth"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
+	"github.com/lusoris/SnatchArr/api/internal/jellyfin"
 	"github.com/lusoris/SnatchArr/api/internal/store"
 	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
 	"github.com/lusoris/SnatchArr/api/internal/store/storetest"
@@ -533,5 +534,180 @@ func TestExternalUsername_Boundary(t *testing.T) {
 				t.Fatalf("ValidateUsername(%q) = %v, want valid", username, err)
 			}
 		})
+	}
+}
+
+type fakeJellyfinAuth struct {
+	signInFunc func(ctx context.Context, user, pw string) (jellyfin.Member, error)
+}
+
+func (f *fakeJellyfinAuth) SignIn(ctx context.Context, user, pw string) (jellyfin.Member, error) {
+	if f.signInFunc != nil {
+		return f.signInFunc(ctx, user, pw)
+	}
+	return jellyfin.Member{}, domain.ErrUnauthorized
+}
+
+func (f *fakeJellyfinAuth) QuickConnectEnabled(context.Context) (bool, error) {
+	return false, nil
+}
+
+func (f *fakeJellyfinAuth) InitiateQuickConnect(context.Context) (string, string, error) {
+	return "", "", nil
+}
+
+func (f *fakeJellyfinAuth) QuickConnectAuthorized(context.Context, string) (bool, error) {
+	return false, nil
+}
+
+func (f *fakeJellyfinAuth) SignInQuickConnect(context.Context, string) (jellyfin.Member, error) {
+	return jellyfin.Member{}, nil
+}
+
+func (f *fakeJellyfinAuth) User(context.Context, string) (jellyfin.Member, error) {
+	return jellyfin.Member{}, nil
+}
+
+func TestProvisionJellyfinUser_Integration(t *testing.T) {
+	t.Parallel()
+	svc := newService(t)
+	ctx := t.Context()
+
+	m1 := jellyfin.Member{ID: "jf-id-1", Name: "alice"}
+	if _, err := svc.ProvisionJellyfinUser(ctx, m1, domain.RoleRequester); !errors.Is(err, domain.ErrForbidden) {
+		t.Fatalf("ProvisionJellyfinUser before setup = %v, want ErrForbidden", err)
+	}
+
+	if _, err := svc.Setup(ctx, adminName, adminPass); err != nil {
+		t.Fatalf("Setup: %v", err)
+	}
+
+	if _, err := svc.ProvisionJellyfinUser(ctx, m1, domain.RoleAdmin); !errors.Is(err, domain.ErrInvalid) {
+		t.Fatalf("ProvisionJellyfinUser with RoleAdmin = %v, want ErrInvalid", err)
+	}
+
+	u1, err := svc.ProvisionJellyfinUser(ctx, m1, domain.RoleRequester)
+	if err != nil {
+		t.Fatalf("ProvisionJellyfinUser m1: %v", err)
+	}
+	if u1.Username != "jf-alice" || u1.Role != domain.RoleRequester {
+		t.Fatalf("u1 = %+v, want username jf-alice and role requester", u1)
+	}
+
+	m2 := jellyfin.Member{ID: "jf-id-2", Name: "alice"}
+	u2, err := svc.ProvisionJellyfinUser(ctx, m2, domain.RoleRequester)
+	if err != nil {
+		t.Fatalf("ProvisionJellyfinUser m2: %v", err)
+	}
+	if u2.Username != "jf-alice-2" || u2.ID == u1.ID {
+		t.Fatalf("u2 = %+v, want username jf-alice-2 and distinct id from u1", u2)
+	}
+
+	u1Again, err := svc.ProvisionJellyfinUser(ctx, m1, domain.RoleViewer)
+	if err != nil {
+		t.Fatalf("ProvisionJellyfinUser m1 again: %v", err)
+	}
+	if u1Again.ID != u1.ID || u1Again.Username != u1.Username || u1Again.Role != domain.RoleViewer {
+		t.Fatalf("u1Again = %+v, want same id %s, same username %s, updated role viewer", u1Again, u1.ID, u1.Username)
+	}
+
+	mInvalidName := jellyfin.Member{ID: "jf-id-invalid", Name: "Bob With Spaces"}
+	uInvalid, err := svc.ProvisionJellyfinUser(ctx, mInvalidName, domain.RoleRequester)
+	if err != nil {
+		t.Fatalf("ProvisionJellyfinUser invalid name: %v", err)
+	}
+	wantFallback := auth.ExternalUsername("jf-", "jf-id-invalid")
+	if uInvalid.Username != wantFallback {
+		t.Fatalf("uInvalid.Username = %q, want %q", uInvalid.Username, wantFallback)
+	}
+}
+
+func TestLoginJellyfin_Lockout(t *testing.T) {
+	t.Parallel()
+	svc, clk := newServiceWithClock(t)
+	ctx := t.Context()
+
+	if _, err := svc.Setup(ctx, adminName, adminPass); err != nil {
+		t.Fatalf("Setup: %v", err)
+	}
+
+	clientIP := "198.51.100.1"
+	username := "bob"
+
+	authMock := &fakeJellyfinAuth{
+		signInFunc: func(ctx context.Context, u, pw string) (jellyfin.Member, error) {
+			if pw == "secret" {
+				return jellyfin.Member{ID: "jf-bob-id", Name: "bob", Admin: false}, nil
+			}
+			return jellyfin.Member{}, domain.ErrUnauthorized
+		},
+	}
+
+	for i := 1; i < auth.LockoutMaxFails; i++ {
+		if _, err := svc.LoginJellyfin(ctx, authMock, username, "wrong-pass", clientIP); !errors.Is(err, domain.ErrUnauthorized) {
+			t.Fatalf("fail attempt %d: err = %v, want ErrUnauthorized", i, err)
+		}
+	}
+	if _, err := svc.LoginJellyfin(ctx, authMock, username, "secret", clientIP); err != nil {
+		t.Fatalf("LoginJellyfin after 4 fails = %v, want success", err)
+	}
+
+	clientIP2 := "198.51.100.2"
+	for i := 1; i <= auth.LockoutMaxFails; i++ {
+		if _, err := svc.LoginJellyfin(ctx, authMock, username, "wrong-pass", clientIP2); !errors.Is(err, domain.ErrUnauthorized) {
+			t.Fatalf("fail attempt %d: err = %v, want ErrUnauthorized", i, err)
+		}
+	}
+	if _, err := svc.LoginJellyfin(ctx, authMock, username, "secret", clientIP2); !errors.Is(err, domain.ErrTooManyRequests) {
+		t.Fatalf("LoginJellyfin when locked = %v, want ErrTooManyRequests", err)
+	}
+
+	clk.Advance(auth.LockoutCooldown + time.Second)
+	if _, err := svc.LoginJellyfin(ctx, authMock, username, "secret", clientIP2); err != nil {
+		t.Fatalf("LoginJellyfin after cooldown = %v, want success", err)
+	}
+
+	authMock.signInFunc = func(ctx context.Context, u, pw string) (jellyfin.Member, error) {
+		return jellyfin.Member{ID: "jf-disabled", Name: "disabled", Disabled: true}, nil
+	}
+	if _, err := svc.LoginJellyfin(ctx, authMock, "disabled", "any", "198.51.100.3"); !errors.Is(err, domain.ErrUnauthorized) {
+		t.Fatalf("LoginJellyfin for disabled member = %v, want ErrUnauthorized", err)
+	}
+}
+
+func TestLoginJellyfin_NonAuthErrorDoesNotLockOut(t *testing.T) {
+	t.Parallel()
+	svc, _ := newServiceWithClock(t)
+	ctx := t.Context()
+
+	if _, err := svc.Setup(ctx, adminName, adminPass); err != nil {
+		t.Fatalf("Setup: %v", err)
+	}
+
+	clientIP := "198.51.100.10"
+	username := "charlie"
+	errUpstream := errors.New("upstream jellyfin connection refused")
+
+	authMock := &fakeJellyfinAuth{
+		signInFunc: func(_ context.Context, _, pw string) (jellyfin.Member, error) {
+			if pw == "secret" {
+				return jellyfin.Member{ID: "jf-charlie", Name: "charlie"}, nil
+			}
+			return jellyfin.Member{}, errUpstream
+		},
+	}
+
+	for i := 1; i <= auth.LockoutMaxFails+2; i++ {
+		_, err := svc.LoginJellyfin(ctx, authMock, username, "any-password", clientIP)
+		if errors.Is(err, domain.ErrUnauthorized) {
+			t.Fatalf("attempt %d: err = %v, must not be ErrUnauthorized", i, err)
+		}
+		if !errors.Is(err, errUpstream) {
+			t.Fatalf("attempt %d: err = %v, want wrap errUpstream", i, err)
+		}
+	}
+
+	if _, err := svc.LoginJellyfin(ctx, authMock, username, "secret", clientIP); err != nil {
+		t.Fatalf("LoginJellyfin with correct credentials after upstream errors = %v, want success", err)
 	}
 }

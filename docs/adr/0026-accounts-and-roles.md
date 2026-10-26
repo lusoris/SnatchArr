@@ -305,14 +305,15 @@ An audit of `github.com/golusoris/goenvoy` at tag `mediaserver/jellyfin/v3.1.0` 
 
 ## Follow-ups
 
-- [ ] Upstream PR to `github.com/golusoris/goenvoy` (`mediaserver/jellyfin`): Add `InitiateQuickConnect`, `CheckQuickConnect`, `AuthenticateWithQuickConnect`, and `GetUser(id)`.
-- [ ] Upstream PR to `github.com/golusoris/goenvoy` (`mediaserver/jellyfin`): Move `MaxParentalRating` to `UserPolicy` as `*int`; add `EnableAllFolders`, `EnabledFolders`, `AllowedTags` and `BlockUnratedItems`; return `AuthenticationResult` from `AuthenticateByName`.
+- [x] Upstream PR to `github.com/golusoris/goenvoy` (`mediaserver/jellyfin`): Add `InitiateQuickConnect`, `CheckQuickConnect`, `AuthenticateWithQuickConnect`, and `GetUser(id)`. (released in goenvoy `mediaserver/jellyfin/v3.3.0`, commit `17183e33`; SnatchArr pins it)
+- [x] Upstream PR to `github.com/golusoris/goenvoy` (`mediaserver/jellyfin`): Move `MaxParentalRating` to `UserPolicy` as `*int`; add `EnableAllFolders`, `EnabledFolders`, `AllowedTags` and `BlockUnratedItems`; return `AuthenticationResult` from `AuthenticateByName`. (released in goenvoy `mediaserver/jellyfin/v3.3.0`, commit `17183e33`; SnatchArr pins it)
 - [x] Implement `snatcharr.jellyfin.default_role` setting with tests: non-admin gets configured role, admin maps to `admin`, invalid setting value refused at boot. (`JellyfinOptions` in `api/internal/config/config.go` accepts `requester` or `viewer` and refuses `admin`, an empty value and any other value at boot; `domain.RoleForJellyfinMember` maps Jellyfin administrators to `admin`; the Jellyfin sign-in handler calls it.)
 - [ ] Implement account-page linking flow with tests: link requires sign-in with second identity; equal usernames on both providers do NOT link; planted case: auto-link by username makes test fail.
 - [x] Database migration: Add `'requester'` to role enum/checks and create `jellyfin_user_id` column or expanded `external_id` indexes on `users`. (slice A: CHECK widened in 000033; the existing UNIQUE `external_id` index carries `jellyfin:<id>`, no new column; the prefix rewrite moves into the Jellyfin sign-in item)
 - [x] Implement `requireRequester` API middleware and update OpenAPI security schemes.
-- [ ] Implement Jellyfin credential authentication handler (`POST /api/v1/auth/jellyfin`) in `api/internal/auth`.
-- [ ] Implement Jellyfin Quick Connect handlers in `api/internal/auth`.
+- [x] Implement Jellyfin credential authentication handler (`POST /api/v1/auth/jellyfin`) in `api/internal/auth`. (`api/internal/httpapi/handlers_jellyfin.go`, route `POST /auth/jellyfin`)
+- [x] Implement Jellyfin Quick Connect handlers in `api/internal/auth`. (`api/internal/httpapi/handlers_jellyfin.go`, routes `POST /auth/jellyfin/quickconnect/initiate` and `POST /auth/jellyfin/quickconnect/authenticate`)
+- [ ] Revalidate Jellyfin session policy: re-read the member with `GetUser` after 15 minutes of session age and in a 30-minute leader loop; revoke on missing, disabled, or changed admin flag or derived adult access.
 - [ ] Implement parental rating and tag filtering in media catalog and adult module endpoints, with boundary tests at threshold minus one, at the threshold and with `MaxParentalRating` `null`, plus a `BlockedTags` case.
 - [x] Update SvelteKit SPA navigation and request dialogs to gate on `session.isRequester`. (`session.isRequester` mirrors `Role.CanRequest`; the API key create and revoke controls on the account page now use it, matching `requireRequester` in `api/internal/httpapi/handlers_apikeys.go`. The SPA has no request dialog or requester-only navigation yet; the request slice gates its own controls on the same getter.)
 

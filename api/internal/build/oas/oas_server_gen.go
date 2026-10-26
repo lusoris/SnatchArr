@@ -298,6 +298,24 @@ type Handler interface {
 	//
 	// POST /seerr/{linkId}/import-instances
 	ImportSeerrInstances(ctx context.Context, params ImportSeerrInstancesParams) (*SeerrImportResult, error)
+	// JellyfinLogin implements jellyfinLogin operation.
+	//
+	// Start a session with Jellyfin credentials.
+	//
+	// POST /auth/jellyfin
+	JellyfinLogin(ctx context.Context, req *JellyfinLoginRequest) (JellyfinLoginRes, error)
+	// JellyfinQuickConnectAuthenticate implements jellyfinQuickConnectAuthenticate operation.
+	//
+	// Authenticate an authorized Jellyfin Quick Connect session.
+	//
+	// POST /auth/jellyfin/quickconnect/authenticate
+	JellyfinQuickConnectAuthenticate(ctx context.Context, req *JellyfinQuickConnectAuthenticateRequest) (*Session, error)
+	// JellyfinQuickConnectInitiate implements jellyfinQuickConnectInitiate operation.
+	//
+	// Initiate Jellyfin Quick Connect authentication.
+	//
+	// POST /auth/jellyfin/quickconnect/initiate
+	JellyfinQuickConnectInitiate(ctx context.Context) (*JellyfinQuickConnect, error)
 	// ListAPIKeys implements listAPIKeys operation.
 	//
 	// List the current user's active API keys.

@@ -5,10 +5,11 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Single Sign-On (SSO)
 
-SnatchArr supports two single sign-on mechanisms:
+SnatchArr supports three external sign-in mechanisms:
 
 1. **OpenID Connect (OIDC)**: Authorization code flow with PKCE S256 against identity providers like Authentik, Keycloak, Okta, or Google.
 2. **Trusted reverse-proxy authentication**: Pre-authenticated user identity asserted via a reverse-proxy HTTP header (Authelia, Authentik proxy outpost, Cloudflare Access, Tailscale).
+3. **Jellyfin authentication**: Direct credential sign-in and Quick Connect against a Jellyfin server ([ADR-0026](adr/0026-accounts-and-roles.md)).
 
 Both modes resolve a role from the identity's groups ([ADR-0023](adr/0023-sso-viewer-role.md), [ADR-0026](adr/0026-accounts-and-roles.md), `sso.ResolveRole` in `api/internal/sso/role.go`):
 
@@ -27,6 +28,7 @@ A single sign-on session stores its origin: the mode, the subject, the groups an
 
 - **Proxy mode** judges the groups the proxy sends with each request, so removing an identity from its group in the identity provider ends the session on its next request.
 - **OIDC** has no per-request group source: the stored token groups are judged against the configured `admin_groups`, `requester_groups`, and `viewer_groups`. Removing a group from the configuration ends its sessions on their next request; removing an identity from a group in the identity provider takes effect at its next sign-in.
+- **Jellyfin mode** revokes active sessions immediately if Jellyfin authentication is disabled (`APP_SNATCHARR_JELLYFIN_ENABLED=false`).
 
 ---
 
@@ -141,6 +143,32 @@ To prevent unauthorized access when using proxy authentication:
 5. **Header stripping**: All proxy authentication headers (username, groups, and secret) are deleted from the request immediately after evaluation. Downstream application handlers never see the raw incoming headers or secret.
 6. **No direct request authentication**: The proxy header does not authenticate API requests directly. It is only accepted at `POST /api/v1/auth/proxy-session` to issue a standard cookie session.
 7. **Network isolation**: Ensure the SnatchArr HTTP service is not exposed directly to untrusted networks or pods. Only the reverse proxy should be able to route traffic to the container port.
+
+---
+
+## Jellyfin sign-in
+
+SnatchArr supports Jellyfin authentication via user credentials or Quick Connect ([ADR-0026](adr/0026-accounts-and-roles.md)):
+
+1. **Credential sign-in**: `POST /api/v1/auth/jellyfin` authenticates against Jellyfin's `/Users/AuthenticateByName`.
+2. **Quick Connect**: `POST /api/v1/auth/jellyfin/quickconnect/initiate` initiates an authorization code flow displayed in the Jellyfin client, and `POST /api/v1/auth/jellyfin/quickconnect/authenticate` completes authentication once approved on the Jellyfin server.
+
+### Role mapping and user provisioning
+
+- Jellyfin administrators (`UserPolicy.IsAdministrator: true`) sign in directly as the local administrator account (`GetFirstAdmin`).
+- Non-administrator Jellyfin users are provisioned as independent accounts on first sign-in, keyed by `jellyfin:<id>` in `users.external_id` (`UpsertExternalUser`).
+- Non-administrator accounts receive the role configured in `APP_SNATCHARR_JELLYFIN_DEFAULT_ROLE` (`requester` or `viewer`, default `requester`).
+- Jellyfin access tokens are never logged, stored in the database, or returned to clients.
+
+### Configuration
+
+| Environment variable | Helm value | Default | Description |
+| --- | --- | --- | --- |
+| `APP_SNATCHARR_JELLYFIN_ENABLED` | `jellyfin.enabled` | `false` | Enable Jellyfin authentication. |
+| `APP_SNATCHARR_JELLYFIN_URL` | `jellyfin.url` | | Base URL of the Jellyfin server (e.g. `http://jellyfin:8096`). Must be absolute http/https with host. |
+| `APP_SNATCHARR_JELLYFIN_API_KEY` | via `jellyfin.existingSecret` or `jellyfin.secretKeyRef` | | Jellyfin server API key for querying Quick Connect state and user policies. |
+| `APP_SNATCHARR_JELLYFIN_TIMEOUT` | `jellyfin.timeout` | `10s` | Request timeout for communication with Jellyfin. |
+| `APP_SNATCHARR_JELLYFIN_DEFAULT_ROLE` | `jellyfin.defaultRole` | `requester` | Role for non-admin Jellyfin users on first sign-in (`requester` or `viewer`). |
 
 ---
 

@@ -30,6 +30,9 @@ func TestCheckSSOOrigin_Table(t *testing.T) {
 			RequesterGroups: []string{"proxy-requesters"},
 			ViewerGroups:    []string{"proxy-viewers", "SnatchArr Viewers"},
 		},
+		Jellyfin: config.JellyfinOptions{
+			Enabled: true,
+		},
 	}
 
 	cases := []struct {
@@ -202,6 +205,36 @@ func TestCheckSSOOrigin_Table(t *testing.T) {
 				Role:    domain.RoleViewer,
 			},
 			wantReason: "not_authorized",
+		},
+		{
+			name: "jellyfin enabled allowed",
+			origin: auth.SSOOrigin{
+				Source:  "jellyfin",
+				Subject: "jf-user-1",
+				Role:    domain.RoleRequester,
+			},
+			wantReason: "",
+		},
+		{
+			name: "jellyfin disabled refused",
+			cfgMod: func(c *ssoConfig) {
+				c.Jellyfin.Enabled = false
+			},
+			origin: auth.SSOOrigin{
+				Source:  "jellyfin",
+				Subject: "jf-user-1",
+				Role:    domain.RoleRequester,
+			},
+			wantReason: "jellyfin_disabled",
+		},
+		{
+			name: "unknown source refused",
+			origin: auth.SSOOrigin{
+				Source:  "unknown-provider",
+				Subject: "sub-1",
+				Role:    domain.RoleViewer,
+			},
+			wantReason: "unknown_source",
 		},
 	}
 
