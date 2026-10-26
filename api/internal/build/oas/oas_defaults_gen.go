@@ -140,6 +140,22 @@ func (s *SnatchPolicy) setDefaults() {
 }
 
 // setDefaults set default value of fields.
+func (s *UserNotifyTargetInput) setDefaults() {
+	{
+		val := bool(true)
+		s.Enabled.SetTo(val)
+	}
+}
+
+// setDefaults set default value of fields.
+func (s *UserNotifyTargetUpdate) setDefaults() {
+	{
+		val := bool(true)
+		s.Enabled.SetTo(val)
+	}
+}
+
+// setDefaults set default value of fields.
 func (s *WatchawareSourceInput) setDefaults() {
 	{
 		val := bool(true)
