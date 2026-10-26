@@ -7,6 +7,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 # ADR-0028: Jellyfin companion plugin and its contract
 
 - Status: proposed
+- **Implementation:** pending ([#572](https://github.com/lusoris/SnatchArr/issues/572))
 - Date: 2026-10-24
 - Related: [ADR-0018](0018-product-front-door.md), [ADR-0023](0023-sso-viewer-role.md), [ADR-0025](0025-module-switches.md), [ADR-0026](0026-accounts-and-roles.md), [ADR-0027](0027-adult-module.md)
 
@@ -370,17 +371,18 @@ A three-tier testing strategy guarantees contract correctness and security bound
 
 ## Follow-ups
 
-- [x] Create `lusoris/jellyfin-plugin-snatcharr` with fleet adoption, rulesets/secrets/release setup as SnatchArr, GPL-3.0-or-later LICENSE + REUSE headers + template notice (created 2026-10-25; adoption in lusoris/jellyfin-plugin-snatcharr#1; the release app private key was stored on 2026-10-25, and the release-please workflow has run green on main since).
-- [x] Record the GPL-3.0-or-later licence choice: it is a permanent operator decision (2026-10-24), not a standards exception with a category and expiry, so it is stated in the plugin repository's [licence section](https://github.com/lusoris/jellyfin-plugin-snatcharr#licence) instead of the fleet exception list.
-- [x] Add an OpenAPI diff check against the base revision (HISS-14) before the plugin contract ships. (`tools/oasdiff/breaking.sh` runs the pinned oasdiff from `tools/go/go.mod` and fails on an error-level change unless the subject declares a break with `!`; `make api-openapi-breaking` in `make api-verify` compares with `origin/main`, the CI job `api-openapi` with the pull request base; `tools/oasdiff/breaking_test.sh` holds the planted cases.)
-- [ ] Add plugin API client endpoints to `api/openapi/openapi.yaml` and regenerate server bindings via `make api-gen`.
-- [ ] Implement `SnatchArrAdultProvider` metadata provider and image provider in the plugin repository.
-- [ ] Implement image-set presentation through a Jellyfin photo library and verify whether a native scene-to-set link exists.
-- [ ] Implement request routing in the plugin (delegating movies/TV to Seerr, gap media to SnatchArr).
-- [ ] Implement companion JavaScript script for Jellyfin Web status badges and request modals.
-- [ ] Configure GitHub Actions CI in the plugin repository with .NET SDK pinning, automated unit tests, and manifest generation.
-
-## Open questions
+| Item | Issue | Milestone |
+| :--- | :--- | :--- |
+| Create `lusoris/jellyfin-plugin-snatcharr` with fleet adoption, rulesets/secrets/release setup as SnatchArr, GPL-3.0-or-later LICENSE + REUSE headers + template notice (created 2026-10-25; adoption in lusoris/jellyfin-plugin-snatcharr#1; the release app private key was stored on 2026-10-25, and the release-please workflow has run green on main since). | done in [#656](https://github.com/lusoris/SnatchArr/pull/656) and [#657](https://github.com/lusoris/SnatchArr/pull/657) | - |
+| Record the GPL-3.0-or-later licence choice: it is a permanent operator decision (2026-10-24), not a standards exception with a category and expiry, so it is stated in the plugin repository's [licence section](https://github.com/lusoris/jellyfin-plugin-snatcharr#licence) instead of the fleet exception list. | done in [#603](https://github.com/lusoris/SnatchArr/pull/603) | - |
+| Add an OpenAPI diff check against the base revision (HISS-14) before the plugin contract ships. (`tools/oasdiff/breaking.sh` runs the pinned oasdiff from `tools/go/go.mod` and fails on an error-level change unless the subject declares a break with `!`; `make api-openapi-breaking` in `make api-verify` compares with `origin/main`, the CI job `api-openapi` with the pull request base; `tools/oasdiff/breaking_test.sh` holds the planted cases.) | done in [#662](https://github.com/lusoris/SnatchArr/pull/662) | - |
+| Add plugin API client endpoints to `api/openapi/openapi.yaml` and regenerate server bindings via `make api-gen`. | [#768](https://github.com/lusoris/SnatchArr/issues/768) | **0.10** |
+| Implement `SnatchArrAdultProvider` metadata provider and image provider in the plugin repository. | [#572](https://github.com/lusoris/SnatchArr/issues/572) | **0.12** |
+| Implement image-set presentation through a Jellyfin photo library and verify whether a native scene-to-set link exists. | [#727](https://github.com/lusoris/SnatchArr/issues/727) | **0.12** |
+| Implement request routing in the plugin (delegating movies/TV to Seerr, gap media to SnatchArr). | [#708](https://github.com/lusoris/SnatchArr/issues/708) | **0.12** |
+| Implement companion JavaScript script for Jellyfin Web status badges and request modals. | [#743](https://github.com/lusoris/SnatchArr/issues/743) | **0.12** |
+| Configure GitHub Actions CI in the plugin repository with .NET SDK pinning, automated unit tests, and manifest generation. | [#572](https://github.com/lusoris/SnatchArr/issues/572) | **0.12** |
+## Answered questions
 
 ### Question 1: Plugin repository location and name (`jellyfin-plugin-repo-name`)
 

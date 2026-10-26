@@ -9,11 +9,11 @@ import { m } from '#lib/paraglide/messages.js';
 import { countExhausted, countHeadroom } from '#lib/prowlarr.js';
 import { staminaLevel, type StaminaLevel } from '#lib/stamina.js';
 
-type Instance = components['schemas']['Instance'];
-type CapStatus = components['schemas']['CapStatus'];
-type ProwlarrStatus = components['schemas']['ProwlarrStatus'];
-type Run = components['schemas']['Run'];
-type Schedule = components['schemas']['Schedule'];
+export type Instance = components['schemas']['Instance'];
+export type CapStatus = components['schemas']['CapStatus'];
+export type ProwlarrStatus = components['schemas']['ProwlarrStatus'];
+export type Run = components['schemas']['Run'];
+export type Schedule = components['schemas']['Schedule'];
 
 export interface SearchesKpi {
 	used: number;

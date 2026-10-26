@@ -7,6 +7,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 # ADR-0026: Accounts, roles and Jellyfin sign-in
 
 - Status: proposed
+- **Implementation:** pending ([#685](https://github.com/lusoris/SnatchArr/issues/685))
 - Date: 2026-10-24
 - Related: [ADR-0018](0018-product-front-door.md), [ADR-0023](0023-sso-viewer-role.md), [ADR-0024](0024-watch-aware-modes.md), [ADR-0025](0025-module-switches.md)
 
@@ -282,7 +283,7 @@ An audit of `github.com/golusoris/goenvoy` at tag `mediaserver/jellyfin/v3.1.0` 
 - **Frontend-only parental hiding**: Rejected; violates the *two-barrier rule* and allows unauthorized users to inspect adult titles via direct API queries.
 - **Single flat role model**: Rejected; cannot distinguish between household members requesting media and guests who only need availability visibility.
 
-## Open questions
+## Answered questions
 
 1. **Adult rating threshold scale (`snatcharr-adult-rating-scale`)**:
    - *Option a*: Fixed numerical constant of 18. (Risk: Jellyfin supports custom rating systems and US TV-MA internal integers that do not equate to 18).
@@ -305,18 +306,19 @@ An audit of `github.com/golusoris/goenvoy` at tag `mediaserver/jellyfin/v3.1.0` 
 
 ## Follow-ups
 
-- [x] Upstream PR to `github.com/golusoris/goenvoy` (`mediaserver/jellyfin`): Add `InitiateQuickConnect`, `CheckQuickConnect`, `AuthenticateWithQuickConnect`, and `GetUser(id)`. (released in goenvoy `mediaserver/jellyfin/v3.3.0`, commit `17183e33`; SnatchArr pins it)
-- [x] Upstream PR to `github.com/golusoris/goenvoy` (`mediaserver/jellyfin`): Move `MaxParentalRating` to `UserPolicy` as `*int`; add `EnableAllFolders`, `EnabledFolders`, `AllowedTags` and `BlockUnratedItems`; return `AuthenticationResult` from `AuthenticateByName`. (released in goenvoy `mediaserver/jellyfin/v3.3.0`, commit `17183e33`; SnatchArr pins it)
-- [x] Implement `snatcharr.jellyfin.default_role` setting with tests: non-admin gets configured role, admin maps to `admin`, invalid setting value refused at boot. (`JellyfinOptions` in `api/internal/config/config.go` accepts `requester` or `viewer` and refuses `admin`, an empty value and any other value at boot; `domain.RoleForJellyfinMember` maps Jellyfin administrators to `admin`; the Jellyfin sign-in handler calls it.)
-- [x] Implement account-page linking flow with tests: link requires sign-in with second identity; equal usernames on both providers do NOT link; planted case: auto-link by username makes test fail. (API #671, account page this change)
-- [x] Database migration: Add `'requester'` to role enum/checks and create `jellyfin_user_id` column or expanded `external_id` indexes on `users`. (slice A: CHECK widened in 000033; the existing UNIQUE `external_id` index carries `jellyfin:<id>`, no new column; the prefix rewrite moves into the Jellyfin sign-in item)
-- [x] Implement `requireRequester` API middleware and update OpenAPI security schemes.
-- [x] Implement Jellyfin credential authentication handler (`POST /api/v1/auth/jellyfin`) in `api/internal/auth`. (`api/internal/httpapi/handlers_jellyfin.go`, route `POST /auth/jellyfin`)
-- [x] Implement Jellyfin Quick Connect handlers in `api/internal/auth`. (`api/internal/httpapi/handlers_jellyfin.go`, routes `POST /auth/jellyfin/quickconnect/initiate` and `POST /auth/jellyfin/quickconnect/authenticate`)
-- [x] Revalidate Jellyfin session policy: re-read the member with `GetUser` after 15 minutes of session age and in a 30-minute leader loop; revoke on missing, disabled, or changed admin flag or derived adult access. (`api/internal/jellyfin/revalidator.go` re-reads a member at most every 15 minutes per subject and session role on the request path; `api/internal/auth/jellyfin_ticker.go` runs the 30-minute leader loop over at most 1000 live sessions and 200 members per tick. A refused service key revokes too; a transient Jellyfin error keeps the session. Derived adult access has no policy setting yet and lands with the parental filtering item below.)
-- [ ] Implement parental rating and tag filtering in media catalog and adult module endpoints, with boundary tests at threshold minus one, at the threshold and with `MaxParentalRating` `null`, plus a `BlockedTags` case.
-- [x] Update SvelteKit SPA navigation and request dialogs to gate on `session.isRequester`. (`session.isRequester` mirrors `Role.CanRequest`; the API key create and revoke controls on the account page now use it, matching `requireRequester` in `api/internal/httpapi/handlers_apikeys.go`. The SPA has no request dialog or requester-only navigation yet; the request slice gates its own controls on the same getter.)
-
+| Item | Issue | Milestone |
+| :--- | :--- | :--- |
+| Upstream PR to `github.com/golusoris/goenvoy` (`mediaserver/jellyfin`): Add `InitiateQuickConnect`, `CheckQuickConnect`, `AuthenticateWithQuickConnect`, and `GetUser(id)`. (released in goenvoy `mediaserver/jellyfin/v3.3.0`, commit `17183e33`; SnatchArr pins it) | done in [#664](https://github.com/lusoris/SnatchArr/pull/664) | - |
+| Upstream PR to `github.com/golusoris/goenvoy` (`mediaserver/jellyfin`): Move `MaxParentalRating` to `UserPolicy` as `*int`; add `EnableAllFolders`, `EnabledFolders`, `AllowedTags` and `BlockUnratedItems`; return `AuthenticationResult` from `AuthenticateByName`. (released in goenvoy `mediaserver/jellyfin/v3.3.0`, commit `17183e33`; SnatchArr pins it) | done in [#664](https://github.com/lusoris/SnatchArr/pull/664) | - |
+| Implement `snatcharr.jellyfin.default_role` setting with tests: non-admin gets configured role, admin maps to `admin`, invalid setting value refused at boot. (`JellyfinOptions` in `api/internal/config/config.go` accepts `requester` or `viewer` and refuses `admin`, an empty value and any other value at boot; `domain.RoleForJellyfinMember` maps Jellyfin administrators to `admin`; the Jellyfin sign-in handler calls it.) | done in [#661](https://github.com/lusoris/SnatchArr/pull/661) | - |
+| Implement account-page linking flow with tests: link requires sign-in with second identity; equal usernames on both providers do NOT link; planted case: auto-link by username makes test fail. (API #671, account page this change) | done in [#671](https://github.com/lusoris/SnatchArr/pull/671) and [#673](https://github.com/lusoris/SnatchArr/pull/673) | - |
+| Database migration: Add `'requester'` to role enum/checks and create `jellyfin_user_id` column or expanded `external_id` indexes on `users`. (slice A: CHECK widened in 000033; the existing UNIQUE `external_id` index carries `jellyfin:<id>`, no new column; the prefix rewrite moves into the Jellyfin sign-in item) | done in [#654](https://github.com/lusoris/SnatchArr/pull/654) | - |
+| Implement `requireRequester` API middleware and update OpenAPI security schemes. | done in [#654](https://github.com/lusoris/SnatchArr/pull/654) | - |
+| Implement Jellyfin credential authentication handler (`POST /api/v1/auth/jellyfin`) in `api/internal/auth`. (`api/internal/httpapi/handlers_jellyfin.go`, route `POST /auth/jellyfin`) | done in [#664](https://github.com/lusoris/SnatchArr/pull/664) | - |
+| Implement Jellyfin Quick Connect handlers in `api/internal/auth`. (`api/internal/httpapi/handlers_jellyfin.go`, routes `POST /auth/jellyfin/quickconnect/initiate` and `POST /auth/jellyfin/quickconnect/authenticate`) | done in [#664](https://github.com/lusoris/SnatchArr/pull/664) | - |
+| Revalidate Jellyfin session policy: re-read the member with `GetUser` after 15 minutes of session age and in a 30-minute leader loop; revoke on missing, disabled, or changed admin flag or derived adult access. (`api/internal/jellyfin/revalidator.go` re-reads a member at most every 15 minutes per subject and session role on the request path; `api/internal/auth/jellyfin_ticker.go` runs the 30-minute leader loop over at most 1000 live sessions and 200 members per tick. A refused service key revokes too; a transient Jellyfin error keeps the session. Derived adult access has no policy setting yet and lands with the parental filtering item below.) | done in [#670](https://github.com/lusoris/SnatchArr/pull/670) | - |
+| Implement parental rating and tag filtering in media catalog and adult module endpoints, with boundary tests at threshold minus one, at the threshold and with `MaxParentalRating` `null`, plus a `BlockedTags` case. | [#806](https://github.com/lusoris/SnatchArr/issues/806) | **0.10** |
+| Update SvelteKit SPA navigation and request dialogs to gate on `session.isRequester`. (`session.isRequester` mirrors `Role.CanRequest`; the API key create and revoke controls on the account page now use it, matching `requireRequester` in `api/internal/httpapi/handlers_apikeys.go`. The SPA has no request dialog or requester-only navigation yet; the request slice gates its own controls on the same getter.) | done in [#659](https://github.com/lusoris/SnatchArr/pull/659) | - |
 ## References
 
 - `snatcharr-product-users-20261020` (2026-10-20T14:51:45) (paraphrased): User accounts with admin, requester, and viewer roles; account source fits the existing Jellyfin plus SSO setup.

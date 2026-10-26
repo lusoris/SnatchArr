@@ -197,13 +197,14 @@ How should Stash GraphQL API credentials be secured at rest within SnatchArr?
 
 ## Follow-ups
 
-- [ ] Add `stash` to the instance kind enum in `api/openapi/openapi.yaml` (today `sonarr, radarr, lidarr, readarr, whisparr_v2, whisparr_v3`) as an optional companion target.
-- [ ] Implement Stash inventory probe and scene presence check using `github.com/golusoris/goenvoy/mediaserver/stash/v2`.
-- [ ] Implement `.stashignore` file writer during image-set directory initialization in `api/internal/adult`; skip on a read-only directory.
-- [ ] Document the Stash v0.31.0 minimum and report it from the Stash instance probe.
-- [ ] Complete the image-set engine slice with WebP thumbnail caching and streaming endpoints for the Jellyfin plugin ([ADR-0027](0027-adult-module.md):390, [ADR-0028](0028-jellyfin-plugin.md)).
-- [ ] Add OpenAPI specification entries for Stash connection settings under `x-module: adult`.
-
+| Item | Issue | Milestone |
+| :--- | :--- | :--- |
+| Add `stash` to the instance kind enum in `api/openapi/openapi.yaml` (today `sonarr, radarr, lidarr, readarr, whisparr_v2, whisparr_v3`) as an optional companion target. | [#701](https://github.com/lusoris/SnatchArr/issues/701) | **0.10** |
+| Implement Stash inventory probe and scene presence check using `github.com/golusoris/goenvoy/mediaserver/stash/v2`. | [#701](https://github.com/lusoris/SnatchArr/issues/701) | **0.10** |
+| Implement `.stashignore` file writer during image-set directory initialization in `api/internal/adult`; skip on a read-only directory. | [#701](https://github.com/lusoris/SnatchArr/issues/701) | **0.10** |
+| Document the Stash v0.31.0 minimum and report it from the Stash instance probe. | [#701](https://github.com/lusoris/SnatchArr/issues/701) | **0.10** |
+| Complete the image-set engine slice with WebP thumbnail caching and streaming endpoints for the Jellyfin plugin ([ADR-0027](0027-adult-module.md):390, [ADR-0028](0028-jellyfin-plugin.md)). | [#702](https://github.com/lusoris/SnatchArr/issues/702) | **0.10** |
+| Add OpenAPI specification entries for Stash connection settings under `x-module: adult`. | [#701](https://github.com/lusoris/SnatchArr/issues/701) | **0.10** |
 ## References
 
 - `snatcharr-product-overlap-20261020` (2026-10-20T14:48:58) (paraphrased): Where existing applications (Seerr, Stash, Cleanuparr) perform a job, build only what bridges functional gaps.
