@@ -7,7 +7,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # ADR-0039: Single source of truth for metadata across *arr, Stash, Jellyfin and SnatchArr
 
-- **Status**: Proposed (design questions `OQ-0039-1` to `OQ-0039-6` answered 2026-10-26, ledger ids `snatcharr-oq-0039-1` to `snatcharr-oq-0039-6`; scope questions `OQ-0039-7` to `OQ-0039-10` open)
+- **Status**: Proposed (design questions `OQ-0039-1` to `OQ-0039-6` answered 2026-10-26, ledger ids `snatcharr-oq-0039-1` to `snatcharr-oq-0039-6`; scope questions `OQ-0039-7` to `OQ-0039-10` answered 2026-10-26, ledger ids `snatcharr-oq-0039-7` to `snatcharr-oq-0039-10`)
 - **Date**: 2026-10-26
 - **Deciders**: lusoris
 - **Related**:
@@ -259,9 +259,9 @@ Both Stash and Whisparr are optional in SnatchArr ([ADR-0027](0027-adult-module.
 
 The table below maps the 15 public pain themes synthesized in `.workingdir/evidence/stash-pain-research-20261026.md` (incorporating the owner corrections in its *Judge notes* section: **10 themes assessed for SnatchArr, 3 for Stash, 1 split, 1 out of scope**) to the sections of this ADR and companion ADRs. Every SnatchArr capability is explicitly marked **shipped** (with code path) or **planned** (with target ADR).
 
-The owner column is an assessment from the research judge notes, not a decision. Each scope assignment the research made for SnatchArr (10 themes), the out-of-scope scraper breakage theme and the multi-version split is an open question until the decision ledger records an answer: `OQ-0039-7` to `OQ-0039-10` below, `OQ-0033-1` to `OQ-0033-6` in [ADR-0033](0033-adult-identity-and-model.md), and `OQ-0037-4` and `OQ-0037-5` in [ADR-0037](0037-studio-scoped-numbered-performer-names.md).
+The owner column started as an assessment from the research judge notes. Each scope assignment the research made for SnatchArr (10 themes), the out-of-scope scraper breakage theme and the multi-version split is an operator question with a ledger answer: `OQ-0039-7` to `OQ-0039-10` below (answered), `OQ-0033-1` to `OQ-0033-6` in [ADR-0033](0033-adult-identity-and-model.md), and `OQ-0037-4` and `OQ-0037-5` in [ADR-0037](0037-studio-scoped-numbered-performer-names.md).
 
-| Theme Name (`.workingdir/evidence/stash-pain-research-20261026.md`) | Weight | Assessed owner (open question) | How This ADR & Companion ADRs Address It (Shipped vs Planned) |
+| Theme Name (`.workingdir/evidence/stash-pain-research-20261026.md`) | Weight | Owner (assessed; see answered questions) | How This ADR & Companion ADRs Address It (Shipped vs Planned) |
 | :--- | :--- | :--- | :--- |
 | **Metadata overwrite on refresh & authority conflicts** | 1395 | **SnatchArr must cover it** | **Planned** in **Decision §1, §3, §4** of this ADR and [ADR-0033](0033-adult-identity-and-model.md) / [ADR-0034](0034-matching-engine-and-model-connection.md): `adult_field_provenance` tracks per-field `winning_source_ref_id`, `value_sha256`, `candidate_values_json`, and `locked_by_user`. Unlocked fields follow deterministic per-field strategies (`ignore`, `merge`, `overwrite`), null/empty upstream values never clobber populated fields, and `locked_by_user = TRUE` (plus Jellyfin `LockedFields`) blocks overwrite on every subsequent refresh. |
 | **Multi-version & edition release grouping** | 1021 | **Split** (Jellyfin owns general media version grouping; SnatchArr covers adult scene vs movie edition model) | **Split**: General movie/episode multi-version grouping in Jellyfin belongs to Jellyfin's native version-grouping engine and `*arr` file management. For the adult catalog, **SnatchArr covers it (planned)** via `adult_scenes.item_kind` (`'scene'` \| `'movie'` \| `'jav'`) and `adult_movie_scenes(movie_id, scene_id, scene_number)` in [ADR-0033](0033-adult-identity-and-model.md) and **Decision §1a**, preventing full-length anthologies from colliding with individual scene cuts. |
@@ -283,7 +283,7 @@ The owner column is an assessment from the research judge notes, not a decision.
 
 ## Answered questions
 
-The operator answered the design questions `OQ-0039-1` to `OQ-0039-6` on 2026-10-26. Each answer is recorded in the decision ledger under the id shown; the wording is a paraphrase. Where an answer differs from the recommendation in the question list that follows, the answer binds. The scope questions `OQ-0039-7` to `OQ-0039-10` stay open.
+The operator answered the design questions `OQ-0039-1` to `OQ-0039-6` and the scope questions `OQ-0039-7` to `OQ-0039-10` on 2026-10-26. Each answer is recorded in the decision ledger under the id shown; the wording is a paraphrase. Where an answer differs from the recommendation in the question list that follows, the answer binds.
 
 | ID | Answer | Ledger id |
 | :--- | :--- | :--- |
@@ -293,10 +293,14 @@ The operator answered the design questions `OQ-0039-1` to `OQ-0039-6` on 2026-10
 | `OQ-0039-4` | **b**: polling baseline plus opt-in inbound webhooks (*arr, Stash) that enqueue a coalesced, rate-bounded refresh of the affected entity. | `snatcharr-oq-0039-4` |
 | `OQ-0039-5` | **a**: Jellyfin `LockedFields` is the only barrier; SnatchArr never writes general-media metadata in Jellyfin or an *arr app (only Sonarr monitored flags in watchaware act mode). | `snatcharr-oq-0039-5` |
 | `OQ-0039-6` | **a**: no `.nfo` writers in the adult stack; Jellyfin reads adult metadata from SnatchArr through the SnatchArr Jellyfin plugin. | `snatcharr-oq-0039-6` |
+| `OQ-0039-7` | **a**: SnatchArr covers metadata authority: per-field ownership, value provenance and user locks; a refresh never overwrites a locked or hand-edited field. | `snatcharr-oq-0039-7` |
+| `OQ-0039-8` | **a**: out of scope. SnatchArr runs no scrapers; its API clients fail closed with a named error ([ADR-0032](0032-stash-own-or-integrate.md)). | `snatcharr-oq-0039-8` |
+| `OQ-0039-9` | **a**: SnatchArr covers people imagery: it fetches and chooses images from its metadata sources and hands them to Jellyfin. | `snatcharr-oq-0039-9` |
+| `OQ-0039-10` | **a**: SnatchArr covers cross-source and cross-instance ID mapping, tied to the metadata-authority work of `OQ-0039-7`. | `snatcharr-oq-0039-10` |
 
-## Open questions
+## Options considered for the resolved questions
 
-The list keeps the options and risks the answers above chose from; `OQ-0039-7` to `OQ-0039-10` remain open for operator decision before their slices land:
+The list keeps the options and risks the answers above chose from; every question in it is answered:
 
 - `OQ-0039-1 | Who owns performer and people portrait images across stash-box, ThePornDB, Stash, Whisparr, TMDb, and Jellyfin? | a) SnatchArr owns canonical portrait selection and provenance for adult performers (serving images to Jellyfin via lusoris/jellyfin-plugin-snatcharr) while Jellyfin and *arr keep TMDb/MusicBrainz person images for general media (risk: SnatchArr must proxy or cache upstream adult performer images so Jellyfin scans do not hit stash-box rate limits) b) Jellyfin and Stash each fetch and store performer/people images directly from upstream providers without SnatchArr mediating image URLs (risk: Jellyfin and Stash display different portraits for the same performer and overwrite custom portrait selections on refresh) c) SnatchArr proxies and caches person/performer images for both adult and general media libraries (risk: duplicates TMDb person image handling that Jellyfin and Radarr/Sonarr already perform natively) | recommended: a`
 - `OQ-0039-2 | Beyond the decided automatic Stash write-back of confirmed performer splits (snatcharr-oq-0037-2), should SnatchArr write reconciled metadata back into Stash, Jellyfin, or an *arr instance, and with which opt-in? | a) Strictly read-only pull into SnatchArr plus pull-based delivery to Jellyfin via the companion plugin (ADR-0028); zero further metadata mutation calls to Stash GraphQL or *arr PUT endpoints beyond the split write-back (risk: operators who browse inside Stash or Whisparr UIs instead of Jellyfin/SnatchArr do not see SnatchArr's reconciled titles or split performers inside Stash/Whisparr) b) Read-only by default, with per-target opt-in write-back (mode = "observe" default, mode = "act" per instance and field group) pushing reconciled scenes/performers/studios to Stash GraphQL (sceneUpdate/performerUpdate) and Whisparr v3 (UpdateMovie/UpdatePerformer) (risk: bidirectional write loops if Stash or Whisparr also runs scheduled upstream scrapes without respecting field locks) c) Full automatic push to Stash, Jellyfin REST API, and Whisparr whenever SnatchArr reconciles a change (risk: violates read-only default safety and can clobber local state in downstream tools on misconfiguration) | recommended: a (with b as a gated Phase 2 opt-in only for Stash when Stash auto-scrape is disabled)`
