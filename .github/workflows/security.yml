@@ -81,12 +81,36 @@ jobs:
       - name: pnpm audit
         run: cd web && pnpm audit --audit-level=high
 
+  dependency-submission:
+    name: web (dependency graph snapshot)
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Generate dependency snapshot
+        env:
+          TRIVY_IMAGE: mirror.gcr.io/aquasec/trivy:0.75.0@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa
+        run: |
+          set -euo pipefail
+          docker pull --quiet "$TRIVY_IMAGE"
+          python3 -I tools/ci/dependency_snapshot.py --trivy "$TRIVY_IMAGE" --out "$RUNNER_TEMP/snapshot.json"
+      - name: Submit dependency snapshot
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --method POST "repos/$GITHUB_REPOSITORY/dependency-graph/snapshots" --input "$RUNNER_TEMP/snapshot.json"
+
   # A failed scan on main opens the issue "Security Scan fails on main", or comments on it while it
   # is open: new advisories against unchanged code reach the issue list, not only the run email
   # (gap audit A2-02). Pull requests run the same scanners under "CI success".
   report:
     name: Open an issue on a failure on main
-    needs: [go-vulncheck, rust-audit, web-audit]
+    needs: [go-vulncheck, rust-audit, web-audit, dependency-submission]
     if: ${{ failure() && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-26.04
     timeout-minutes: 5

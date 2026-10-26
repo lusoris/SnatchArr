@@ -1,0 +1,7 @@
+{
+  "name": "fixture-refuse",
+  "dependencies": {
+    "zod": "^4.0.0",
+    "missing-dep": "^1.0.0"
+  }
+}

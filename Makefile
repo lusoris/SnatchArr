@@ -156,6 +156,7 @@ tools-verify: tools-lint tools-test tools-gosec ## golangci-lint + go vet + go t
 tools-lint: ## golangci-lint over tools/; a finding needs a dated entry in the generated block of .golangci.yml
 	$(GOLANGCI) run --config .golangci.yml $(TOOLS_PKG)
 	sh tools/ci/lint_exceptions_test.sh
+	sh tools/ci/dependency_snapshot_test.sh
 	work=$$(mktemp -d)
 	trap 'rm -rf "$$work"' EXIT
 	sh .config/lefthook/engine.sh linters exceptions strip-config --config .golangci.yml --out "$$work/golangci.yml"
