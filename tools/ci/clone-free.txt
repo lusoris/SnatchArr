@@ -33,3 +33,11 @@ web/src/lib/components/shell/shell.svelte.test.ts
 web/src/routes/layout-guard.svelte.test.ts
 web/src/routes/account/LinkedSignIns.svelte.test.ts
 web/src/routes/+page.svelte
+web/src/routes/login/LocalLoginForm.svelte
+web/src/routes/login/JellyfinLoginCard.svelte
+web/src/routes/setup/+page.svelte
+web/src/lib/components/CredentialFields.svelte
+web/src/lib/auth-submit.svelte.ts
+web/src/lib/components/CredentialFields.svelte.test.ts
+web/src/lib/auth-submit.svelte.test.ts
+web/src/routes/login/+page.svelte
