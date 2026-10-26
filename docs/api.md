@@ -9,7 +9,9 @@ The HTTP API is an OpenAPI 3.1 contract at
 [`api/openapi/openapi.yaml`](https://github.com/lusoris/SnatchArr/blob/main/api/openapi/openapi.yaml),
 served under `/api/v1`. The Go server is generated from it with ogen; the web UI's client
 types are generated from the same file. Errors are RFC 9457 problem details
-(`application/problem+json`).
+(`application/problem+json`). The contract is append-only (HISS-14); breaking changes are
+checked against the base revision with `oasdiff` (`make api-openapi-breaking`) and require a
+breaking conventional-commit subject (`!` prefix, e.g. `feat(api)!: ...`) and a `Migration:` footer.
 
 ## Authentication
 
