@@ -5,23 +5,13 @@
 import { screen } from '@testing-library/svelte';
 import { WCAG_22_AA_TAGS } from '@sveltesentio/testing';
 import { flushSync } from 'svelte';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
 import type { components } from '#lib/api/schema.js';
 import { m } from '#lib/paraglide/messages.js';
 import { session } from '#lib/session.svelte.js';
 import { renderWithQuery, stubGet } from '#lib/testing/harness.js';
 import ApiKeys from './ApiKeys.svelte';
-
-beforeAll(() => {
-	HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {
-		this.setAttribute('open', '');
-	};
-	HTMLDialogElement.prototype.close ??= function (this: HTMLDialogElement) {
-		this.removeAttribute('open');
-		this.dispatchEvent(new Event('close'));
-	};
-});
 
 type ApiKey = components['schemas']['ApiKey'];
 
@@ -42,6 +32,21 @@ const admin = { id: 'u1', username: 'admin', role: 'admin' } as never;
 const requester = { id: 'u2', username: 'requester', role: 'requester' } as never;
 const viewer = { id: 'u3', username: 'viewer', role: 'viewer' } as never;
 
+function expectActionButtons(present: boolean): void {
+	if (present) {
+		expect(screen.getByRole('button', { name: m.api_key_create() })).toBeTruthy();
+		expect(screen.getByRole('button', { name: m.api_key_revoke() })).toBeTruthy();
+	} else {
+		expect(screen.queryByRole('button', { name: m.api_key_create() })).toBeNull();
+		expect(screen.queryByRole('button', { name: m.api_key_revoke() })).toBeNull();
+	}
+}
+
+function switchUser(user: typeof admin | null): void {
+	session.user = user;
+	flushSync();
+}
+
 describe('ApiKeys', () => {
 	afterEach(() => {
 		session.user = null;
@@ -55,8 +60,7 @@ describe('ApiKeys', () => {
 
 		expect(await screen.findByText('Backup worker')).toBeTruthy();
 		expect(screen.getByRole('heading', { level: 3, name: m.api_key_create() })).toBeTruthy();
-		expect(screen.getByRole('button', { name: m.api_key_create() })).toBeTruthy();
-		expect(screen.getByRole('button', { name: m.api_key_revoke() })).toBeTruthy();
+		expectActionButtons(true);
 		expect(screen.getByText(m.api_key_actions())).toBeTruthy();
 
 		const a11y = await axe(container, {
@@ -72,8 +76,7 @@ describe('ApiKeys', () => {
 
 		expect(await screen.findByText('Backup worker')).toBeTruthy();
 		expect(screen.queryByRole('heading', { level: 3, name: m.api_key_create() })).toBeNull();
-		expect(screen.queryByRole('button', { name: m.api_key_create() })).toBeNull();
-		expect(screen.queryByRole('button', { name: m.api_key_revoke() })).toBeNull();
+		expectActionButtons(false);
 		expect(screen.queryByText(m.api_key_actions())).toBeNull();
 	});
 
@@ -83,22 +86,15 @@ describe('ApiKeys', () => {
 		renderWithQuery(ApiKeys);
 
 		expect(await screen.findByText('Backup worker')).toBeTruthy();
-		expect(screen.queryByRole('button', { name: m.api_key_create() })).toBeNull();
-		expect(screen.queryByRole('button', { name: m.api_key_revoke() })).toBeNull();
+		expectActionButtons(false);
 
-		session.user = requester;
-		flushSync();
-		expect(screen.getByRole('button', { name: m.api_key_create() })).toBeTruthy();
-		expect(screen.getByRole('button', { name: m.api_key_revoke() })).toBeTruthy();
+		switchUser(requester);
+		expectActionButtons(true);
 
-		session.user = admin;
-		flushSync();
-		expect(screen.getByRole('button', { name: m.api_key_create() })).toBeTruthy();
-		expect(screen.getByRole('button', { name: m.api_key_revoke() })).toBeTruthy();
+		switchUser(admin);
+		expectActionButtons(true);
 
-		session.user = null;
-		flushSync();
-		expect(screen.queryByRole('button', { name: m.api_key_create() })).toBeNull();
-		expect(screen.queryByRole('button', { name: m.api_key_revoke() })).toBeNull();
+		switchUser(null);
+		expectActionButtons(false);
 	});
 });
