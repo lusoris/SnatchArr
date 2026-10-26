@@ -2,8 +2,8 @@
 -- SPDX-License-Identifier: EUPL-1.2
 
 -- name: CreateProwlarrLink :one
-INSERT INTO prowlarr_links (id, name, base_url, api_key_enc, enabled, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5, $6, $6)
+INSERT INTO prowlarr_links (id, name, base_url, api_key_enc, hourly_cap, enabled, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
 RETURNING *;
 
 -- name: GetProwlarrLink :one
@@ -17,7 +17,7 @@ SELECT * FROM prowlarr_links WHERE enabled ORDER BY name;
 
 -- name: UpdateProwlarrLink :one
 UPDATE prowlarr_links
-SET name = $2, base_url = $3, api_key_enc = $4, enabled = $5, updated_at = $6
+SET name = $2, base_url = $3, api_key_enc = $4, hourly_cap = $5, enabled = $6, updated_at = $7
 WHERE id = $1
 RETURNING *;
 

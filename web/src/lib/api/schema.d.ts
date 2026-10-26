@@ -2095,6 +2095,8 @@ export interface components {
             id: string;
             name: string;
             base_url: string;
+            /** @default 15 */
+            hourly_cap: number;
             enabled: boolean;
             last_seen_version?: string;
             /** Format: date-time */
@@ -2110,6 +2112,8 @@ export interface components {
             base_url: string;
             /** @description Required on create; omit on update to keep the stored key */
             api_key?: string;
+            /** @default 15 */
+            hourly_cap: number;
             /** @default true */
             enabled: boolean;
         };

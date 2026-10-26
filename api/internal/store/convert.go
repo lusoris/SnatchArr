@@ -174,7 +174,7 @@ func SettingsFromRow(r sqlcgen.Setting) domain.Settings {
 // ProwlarrLinkFromRow converts a row; the API key is never carried.
 func ProwlarrLinkFromRow(r sqlcgen.ProwlarrLink) domain.ProwlarrLink {
 	return domain.ProwlarrLink{
-		ID: r.ID, Name: r.Name, BaseURL: r.BaseUrl, Enabled: r.Enabled,
+		ID: r.ID, Name: r.Name, BaseURL: r.BaseUrl, HourlyCap: int(r.HourlyCap), Enabled: r.Enabled,
 		LastSeenVersion: deref(r.LastSeenVersion), LastCheckAt: r.LastCheckAt, LastError: deref(r.LastError),
 		CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
 	}

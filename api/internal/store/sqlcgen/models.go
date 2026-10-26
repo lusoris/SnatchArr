@@ -205,6 +205,13 @@ type ProwlarrLink struct {
 	LastError       *string
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
+	HourlyCap       int32
+}
+
+type ProwlarrRateBucket struct {
+	LinkID      uuid.UUID
+	WindowStart time.Time
+	Used        int32
 }
 
 type QueuePolicy struct {
@@ -387,6 +394,16 @@ type UserIdentity struct {
 	Subject   string
 	UserID    uuid.UUID
 	CreatedAt time.Time
+}
+
+type UserNotifyTarget struct {
+	ID        uuid.UUID
+	UserID    uuid.UUID
+	Kind      string
+	ConfigEnc []byte
+	Enabled   bool
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 type WatchawareGateBaseline struct {

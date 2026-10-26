@@ -14,7 +14,9 @@ import (
 
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/prowlarrclient"
+	"github.com/lusoris/SnatchArr/api/internal/snatch"
 	"github.com/lusoris/SnatchArr/api/internal/store"
+	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
 )
 
 // ErrNoRelease indicates that no eligible release was found for the item.
@@ -38,6 +40,9 @@ func (s *Service) GrabForItem(ctx context.Context, linkID uuid.UUID, query prowl
 	if !view.Reachable {
 		return prowlarrclient.Release{}, fmt.Errorf("%w: prowlarr unreachable: %s", domain.ErrUnreachable, view.Error)
 	}
+	if err = s.acquireGrabBudget(ctx, linkID, int(row.HourlyCap)); err != nil {
+		return prowlarrclient.Release{}, fmt.Errorf("prowlarr: %w", err)
+	}
 
 	apiKey := string(key)
 	releases, err := s.client.Search(ctx, row.BaseUrl, apiKey, query)
@@ -56,6 +61,64 @@ func (s *Service) GrabForItem(ctx context.Context, linkID uuid.UUID, query prowl
 		return prowlarrclient.Release{}, fmt.Errorf("prowlarr: grab: %w", err)
 	}
 	return *chosen, nil
+}
+
+func (s *Service) checkAndDebitGlobal(ctx context.Context, q *sqlcgen.Queries, globalCap int, now, minute time.Time) error {
+	if globalCap <= 0 {
+		return nil
+	}
+	if err := q.LockGlobalBudget(ctx); err != nil {
+		return fmt.Errorf("lock global budget: %w", err)
+	}
+	globalUsage, err := q.GlobalBucketUsage(ctx, snatch.SpanStart(now))
+	if err != nil {
+		return fmt.Errorf("global usage: %w", err)
+	}
+	if int(globalUsage.Used) >= globalCap {
+		return fmt.Errorf("%w: global hourly cap exhausted (%d/%d)", domain.ErrTooManyRequests, globalUsage.Used, globalCap)
+	}
+	if err := q.AddGlobalBucketUsed(ctx, sqlcgen.AddGlobalBucketUsedParams{
+		WindowStart: minute,
+		Used:        1,
+	}); err != nil {
+		return fmt.Errorf("debit global bucket: %w", err)
+	}
+	return nil
+}
+
+func (s *Service) acquireGrabBudget(ctx context.Context, linkID uuid.UUID, hourlyCap int) error {
+	return s.st.Tx(ctx, func(q *sqlcgen.Queries) error {
+		if err := q.LockProwlarrLinkBudget(ctx, linkID); err != nil {
+			return fmt.Errorf("lock prowlarr link budget: %w", err)
+		}
+		now := s.clk.Now()
+		linkUsage, err := q.ProwlarrBucketUsage(ctx, sqlcgen.ProwlarrBucketUsageParams{
+			Since:  snatch.SpanStart(now),
+			LinkID: linkID,
+		})
+		if err != nil {
+			return fmt.Errorf("prowlarr link usage: %w", err)
+		}
+		if int(linkUsage.Used) >= hourlyCap {
+			return fmt.Errorf("%w: prowlarr link %s hourly cap exhausted (%d/%d)", domain.ErrTooManyRequests, linkID, linkUsage.Used, hourlyCap)
+		}
+		settingsRow, err := q.GetSettings(ctx)
+		if err != nil {
+			return fmt.Errorf("get settings: %w", err)
+		}
+		minute := snatch.Minute(now)
+		if err := s.checkAndDebitGlobal(ctx, q, int(settingsRow.GlobalHourlyCap), now, minute); err != nil {
+			return err
+		}
+		if err := q.AddProwlarrBucketUsed(ctx, sqlcgen.AddProwlarrBucketUsedParams{
+			LinkID:      linkID,
+			WindowStart: minute,
+			Used:        1,
+		}); err != nil {
+			return fmt.Errorf("debit prowlarr bucket: %w", err)
+		}
+		return nil
+	})
 }
 
 func pickRelease(releases []prowlarrclient.Release, indexers []IndexerStatus, now time.Time) *prowlarrclient.Release {

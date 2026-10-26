@@ -589,6 +589,8 @@
 	"prowlarr_exhausted_count": "{count} erschöpft oder deaktiviert",
 	"prowlarr_headroom_label": "Indexer mit Kontingent für {name}",
 	"prowlarr_indexers_empty": "Keine Indexer gemeldet.",
+	"prowlarr_hourly_cap": "Stündliches Limit",
+	"prowlarr_hourly_cap_hint": "Maximale Anzahl an Indexer-Suchen, die dieser Link pro Stunde senden darf (1–500).",
 	"configarr_title": "Configarr",
 	"configarr_status_title": "Verknüpfter Modus",
 	"configarr_linked": "Verknüpft mit {path}",

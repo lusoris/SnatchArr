@@ -6,6 +6,7 @@ package prowlarr_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jonboulle/clockwork"
 
 	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/core/crypto"
@@ -25,9 +27,13 @@ import (
 
 	"github.com/lusoris/SnatchArr/api/internal/arrclient"
 	"github.com/lusoris/SnatchArr/api/internal/config"
+	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
 	"github.com/lusoris/SnatchArr/api/internal/prowlarr"
 	"github.com/lusoris/SnatchArr/api/internal/prowlarrclient"
+	"github.com/lusoris/SnatchArr/api/internal/snatch"
+	"github.com/lusoris/SnatchArr/api/internal/store"
+	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
 	"github.com/lusoris/SnatchArr/api/internal/store/storetest"
 )
 
@@ -121,6 +127,8 @@ type grabFixture struct {
 	svc    *prowlarr.Service
 	fps    *grabProwlarrServer
 	linkID uuid.UUID
+	st     *store.Store
+	clk    *clockwork.FakeClock
 }
 
 func setupGrabFixture(t *testing.T) grabFixture {
@@ -154,6 +162,8 @@ func setupGrabFixture(t *testing.T) grabFixture {
 		svc:    svc,
 		fps:    fps,
 		linkID: link.ID,
+		st:     st,
+		clk:    clk,
 	}
 }
 
@@ -394,5 +404,190 @@ func TestGrabForItem_DisabledOrNotFoundLink(t *testing.T) {
 	_, err = f.svc.GrabForItem(t.Context(), f.linkID, prowlarrclient.SearchQuery{Query: "Test"})
 	if err == nil {
 		t.Error("expected error for disabled link, got nil")
+	}
+}
+
+func seedGrabRelease(f *grabFixture, guid string) {
+	f.fps.mu.Lock()
+	defer f.fps.mu.Unlock()
+	f.fps.searchResults = []map[string]any{
+		{"guid": guid, "indexerId": 1, "title": "Test Release"},
+	}
+}
+
+func linkUsage(ctx context.Context, st *store.Store, linkID uuid.UUID, now time.Time) (int64, error) {
+	row, err := st.Q().ProwlarrBucketUsage(ctx, sqlcgen.ProwlarrBucketUsageParams{
+		LinkID: linkID,
+		Since:  snatch.SpanStart(now),
+	})
+	if err != nil {
+		return 0, err
+	}
+	return int64(row.Used), nil
+}
+
+func globalUsage(ctx context.Context, st *store.Store, now time.Time) (int64, error) {
+	row, err := st.Q().GlobalBucketUsage(ctx, snatch.SpanStart(now))
+	if err != nil {
+		return 0, err
+	}
+	return int64(row.Used), nil
+}
+
+func TestGrabForItem_UnderCapDebitsLinkAndGlobal(t *testing.T) {
+	t.Parallel()
+	f := setupGrabFixture(t)
+	seedGrabRelease(&f, "rel-under-cap")
+	ctx := t.Context()
+
+	if _, err := f.st.Pool().Exec(ctx, "UPDATE settings SET global_hourly_cap = 50"); err != nil {
+		t.Fatalf("set global_hourly_cap: %v", err)
+	}
+
+	q := prowlarrclient.SearchQuery{Query: "UnderCap"}
+	rel, err := f.svc.GrabForItem(ctx, f.linkID, q)
+	if err != nil {
+		t.Fatalf("GrabForItem() err = %v, want nil", err)
+	}
+	if rel.GUID != "rel-under-cap" {
+		t.Fatalf("grabbed GUID = %q, want rel-under-cap", rel.GUID)
+	}
+
+	now := f.clk.Now()
+	lu, err := linkUsage(ctx, f.st, f.linkID, now)
+	if err != nil {
+		t.Fatalf("linkUsage: %v", err)
+	}
+	if lu != 1 {
+		t.Errorf("linkUsage = %d, want 1", lu)
+	}
+
+	gu, err := globalUsage(ctx, f.st, now)
+	if err != nil {
+		t.Fatalf("globalUsage: %v", err)
+	}
+	if gu != 1 {
+		t.Errorf("globalUsage = %d, want 1", gu)
+	}
+}
+
+func TestGrabForItem_AtCapRefused(t *testing.T) {
+	t.Parallel()
+	f := setupGrabFixture(t)
+	seedGrabRelease(&f, "rel-at-cap")
+	ctx := t.Context()
+
+	now := f.clk.Now()
+	err := f.st.Q().AddProwlarrBucketUsed(ctx, sqlcgen.AddProwlarrBucketUsedParams{
+		LinkID:      f.linkID,
+		WindowStart: snatch.Minute(now),
+		Used:        15,
+	})
+	if err != nil {
+		t.Fatalf("seed bucket: %v", err)
+	}
+
+	f.fps.mu.Lock()
+	f.fps.requests = nil
+	f.fps.requestBodies = nil
+	f.fps.mu.Unlock()
+
+	q := prowlarrclient.SearchQuery{Query: "AtCap"}
+	_, err = f.svc.GrabForItem(ctx, f.linkID, q)
+	if !errors.Is(err, domain.ErrTooManyRequests) {
+		t.Fatalf("GrabForItem() err = %v, want ErrTooManyRequests", err)
+	}
+
+	f.fps.mu.Lock()
+	defer f.fps.mu.Unlock()
+	for _, r := range f.fps.requests {
+		if r.URL.Path == "/api/v1/search" {
+			t.Errorf("unexpected search/grab request to %s %s", r.Method, r.URL.Path)
+		}
+	}
+}
+
+func TestGrabForItem_GlobalCapExhaustedRefused(t *testing.T) {
+	t.Parallel()
+	f := setupGrabFixture(t)
+	seedGrabRelease(&f, "rel-global-exhausted")
+	ctx := t.Context()
+
+	if _, err := f.st.Pool().Exec(ctx, "UPDATE settings SET global_hourly_cap = 5"); err != nil {
+		t.Fatalf("set global_hourly_cap: %v", err)
+	}
+	now := f.clk.Now()
+	err := f.st.Q().AddGlobalBucketUsed(ctx, sqlcgen.AddGlobalBucketUsedParams{
+		WindowStart: snatch.Minute(now),
+		Used:        5,
+	})
+	if err != nil {
+		t.Fatalf("seed global bucket: %v", err)
+	}
+
+	q := prowlarrclient.SearchQuery{Query: "GlobalExhausted"}
+	_, err = f.svc.GrabForItem(ctx, f.linkID, q)
+	if !errors.Is(err, domain.ErrTooManyRequests) {
+		t.Fatalf("GrabForItem() err = %v, want ErrTooManyRequests", err)
+	}
+
+	lu, err := linkUsage(ctx, f.st, f.linkID, now)
+	if err != nil {
+		t.Fatalf("linkUsage: %v", err)
+	}
+	if lu != 0 {
+		t.Errorf("linkUsage = %d, want 0", lu)
+	}
+}
+
+func TestGrabForItem_BoundaryCap1(t *testing.T) {
+	t.Parallel()
+	f := setupGrabFixture(t)
+	seedGrabRelease(&f, "rel-cap-1")
+	ctx := t.Context()
+
+	if _, err := f.st.Pool().Exec(ctx, "UPDATE prowlarr_links SET hourly_cap = 1 WHERE id = $1", f.linkID); err != nil {
+		t.Fatalf("update hourly_cap = 1: %v", err)
+	}
+
+	q := prowlarrclient.SearchQuery{Query: "Cap1"}
+	if _, err := f.svc.GrabForItem(ctx, f.linkID, q); err != nil {
+		t.Fatalf("first GrabForItem() err = %v", err)
+	}
+	if _, err := f.svc.GrabForItem(ctx, f.linkID, q); !errors.Is(err, domain.ErrTooManyRequests) {
+		t.Fatalf("second GrabForItem() err = %v, want ErrTooManyRequests", err)
+	}
+
+	f.clk.Advance(61 * time.Minute)
+	if _, err := f.svc.GrabForItem(ctx, f.linkID, q); err != nil {
+		t.Fatalf("third GrabForItem() after advance err = %v", err)
+	}
+}
+
+func TestGrabForItem_BoundaryCap500(t *testing.T) {
+	t.Parallel()
+	f := setupGrabFixture(t)
+	seedGrabRelease(&f, "rel-cap-500")
+	ctx := t.Context()
+
+	if _, err := f.st.Pool().Exec(ctx, "UPDATE prowlarr_links SET hourly_cap = 500 WHERE id = $1", f.linkID); err != nil {
+		t.Fatalf("update hourly_cap = 500: %v", err)
+	}
+	now := f.clk.Now()
+	err := f.st.Q().AddProwlarrBucketUsed(ctx, sqlcgen.AddProwlarrBucketUsedParams{
+		LinkID:      f.linkID,
+		WindowStart: snatch.Minute(now),
+		Used:        499,
+	})
+	if err != nil {
+		t.Fatalf("seed bucket 499: %v", err)
+	}
+
+	q := prowlarrclient.SearchQuery{Query: "Cap500"}
+	if _, err := f.svc.GrabForItem(ctx, f.linkID, q); err != nil {
+		t.Fatalf("500th GrabForItem() err = %v", err)
+	}
+	if _, err := f.svc.GrabForItem(ctx, f.linkID, q); !errors.Is(err, domain.ErrTooManyRequests) {
+		t.Fatalf("501st GrabForItem() err = %v, want ErrTooManyRequests", err)
 	}
 }

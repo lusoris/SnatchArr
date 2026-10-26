@@ -5339,6 +5339,7 @@ type ProwlarrLink struct {
 	ID              uuid.UUID   `json:"id"`
 	Name            string      `json:"name"`
 	BaseURL         string      `json:"base_url"`
+	HourlyCap       int         `json:"hourly_cap"`
 	Enabled         bool        `json:"enabled"`
 	LastSeenVersion OptString   `json:"last_seen_version"`
 	LastCheckAt     OptDateTime `json:"last_check_at"`
@@ -5360,6 +5361,11 @@ func (s *ProwlarrLink) GetName() string {
 // GetBaseURL returns the value of BaseURL.
 func (s *ProwlarrLink) GetBaseURL() string {
 	return s.BaseURL
+}
+
+// GetHourlyCap returns the value of HourlyCap.
+func (s *ProwlarrLink) GetHourlyCap() int {
+	return s.HourlyCap
 }
 
 // GetEnabled returns the value of Enabled.
@@ -5407,6 +5413,11 @@ func (s *ProwlarrLink) SetBaseURL(val string) {
 	s.BaseURL = val
 }
 
+// SetHourlyCap sets the value of HourlyCap.
+func (s *ProwlarrLink) SetHourlyCap(val int) {
+	s.HourlyCap = val
+}
+
 // SetEnabled sets the value of Enabled.
 func (s *ProwlarrLink) SetEnabled(val bool) {
 	s.Enabled = val
@@ -5442,8 +5453,9 @@ type ProwlarrLinkInput struct {
 	Name    string `json:"name"`
 	BaseURL string `json:"base_url"`
 	// Required on create; omit on update to keep the stored key.
-	APIKey  OptString `json:"api_key"`
-	Enabled OptBool   `json:"enabled"`
+	APIKey    OptString `json:"api_key"`
+	HourlyCap OptInt    `json:"hourly_cap"`
+	Enabled   OptBool   `json:"enabled"`
 }
 
 // GetName returns the value of Name.
@@ -5459,6 +5471,11 @@ func (s *ProwlarrLinkInput) GetBaseURL() string {
 // GetAPIKey returns the value of APIKey.
 func (s *ProwlarrLinkInput) GetAPIKey() OptString {
 	return s.APIKey
+}
+
+// GetHourlyCap returns the value of HourlyCap.
+func (s *ProwlarrLinkInput) GetHourlyCap() OptInt {
+	return s.HourlyCap
 }
 
 // GetEnabled returns the value of Enabled.
@@ -5479,6 +5496,11 @@ func (s *ProwlarrLinkInput) SetBaseURL(val string) {
 // SetAPIKey sets the value of APIKey.
 func (s *ProwlarrLinkInput) SetAPIKey(val OptString) {
 	s.APIKey = val
+}
+
+// SetHourlyCap sets the value of HourlyCap.
+func (s *ProwlarrLinkInput) SetHourlyCap(val OptInt) {
+	s.HourlyCap = val
 }
 
 // SetEnabled sets the value of Enabled.
