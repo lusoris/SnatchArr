@@ -81,6 +81,7 @@ func TestListModulesAsViewer(t *testing.T) {
 		t.Fatalf("unmarshal listModules: %v; body: %s", err, string(res.body))
 	}
 
+	foundAdult := false
 	foundLLM := false
 	foundWatchAware := false
 	for _, item := range items {
@@ -93,14 +94,16 @@ func TestListModulesAsViewer(t *testing.T) {
 			t.Errorf("module %s unexpectedly returned config field in listModules", id)
 		}
 		switch id {
+		case domain.ModuleAdult:
+			foundAdult = true
 		case domain.ModuleLLM:
 			foundLLM = true
 		case domain.ModuleWatchAware:
 			foundWatchAware = true
 		}
 	}
-	if !foundLLM || !foundWatchAware {
-		t.Fatalf("listModules missing expected modules (llm=%v, watchaware=%v): %v", foundLLM, foundWatchAware, items)
+	if !foundAdult || !foundLLM || !foundWatchAware {
+		t.Fatalf("listModules missing expected modules (adult=%v, llm=%v, watchaware=%v): %v", foundAdult, foundLLM, foundWatchAware, items)
 	}
 }
 
