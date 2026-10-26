@@ -181,6 +181,8 @@ github.com/golang/protobuf v1.5.4 h1:i7eJL8qZTpSEXOPTxNKhASYpMn+8e5Q6AdndVa1dWek
 github.com/golang/protobuf v1.5.4/go.mod h1:lnTiLA8Wa4RWRcIUkrtSVa5nRhsEGBg48fD6rSs7xps=
 github.com/golusoris/goenvoy/arr/lidarr v1.6.1 h1:LzRjAl3zg1tNbo2lmt3c9W/4r+ctNU89s+WjzENvjvE=
 github.com/golusoris/goenvoy/arr/lidarr v1.6.1/go.mod h1:R+Q+bkPK4sHNUhjHEJuSndp28X7vpaBFd/qVdkczTN4=
+github.com/golusoris/goenvoy/arr/prowlarr/v2 v2.1.6 h1:lBBJNDSBFoZcOop3+8am8qXEPksLQ3DibGnFKHM1AUk=
+github.com/golusoris/goenvoy/arr/prowlarr/v2 v2.1.6/go.mod h1:r/2u9vixmFkWAsvTqQ10nTTFII6NXt86+gqPi1tlf5U=
 github.com/golusoris/goenvoy/arr/radarr v1.5.4 h1:BUolaR57v5io812d5s+knN3ZMcy394Pplfera6fLBlc=
 github.com/golusoris/goenvoy/arr/radarr v1.5.4/go.mod h1:BG8ygBUO4r6nlJ2l0QbYcTL/6nzLjN/Q51aPgXbLUiY=
 github.com/golusoris/goenvoy/arr/readarr v1.5.1 h1:FGQMM013AF1T4bRIhL/zJGHSNzw0SY41g7a/k2kCRVQ=

@@ -13,6 +13,7 @@ require (
 	github.com/go-faster/jx v1.2.0
 	github.com/go-jose/go-jose/v4 v4.1.6
 	github.com/golusoris/goenvoy/arr/lidarr v1.6.1
+	github.com/golusoris/goenvoy/arr/prowlarr/v2 v2.1.6
 	github.com/golusoris/goenvoy/arr/radarr v1.5.4
 	github.com/golusoris/goenvoy/arr/readarr v1.5.1
 	github.com/golusoris/goenvoy/arr/seerr v1.5.3

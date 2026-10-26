@@ -2,9 +2,12 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-// Package prowlarrclient reads indexers, stats and health statuses from a Prowlarr
-// server (X-Api-Key auth, /api/v1/system/status, /api/v1/indexer, /api/v1/indexerstats,
-// /api/v1/indexerstatus). Nothing is ever written (#38).
+// Package prowlarrclient interacts with a Prowlarr server (X-Api-Key auth,
+// /api/v1/system/status, /api/v1/indexer, /api/v1/indexerstats,
+// /api/v1/indexerstatus, /api/v1/search). Grab posts a chosen release to
+// /api/v1/search so Prowlarr hands it to its own download client; SnatchArr
+// adds no download itself (ADR-0006 amendment, ledger
+// snatcharr-oq-0036-14-grab-path).
 package prowlarrclient
 
 import (
@@ -16,6 +19,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	prowlarr "github.com/golusoris/goenvoy/arr/prowlarr/v2"
 
 	"github.com/lusoris/SnatchArr/api/internal/arrclient"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
@@ -42,13 +47,37 @@ type Usage struct {
 	Grabs   int
 }
 
-// Client is the subset of the Prowlarr API SnatchArr reads.
+// SearchQuery configures parameters for searching releases in Prowlarr.
+type SearchQuery struct {
+	Query      string
+	Type       string
+	IndexerIDs []int
+	Categories []int
+	Limit      int
+	Offset     int
+}
+
+// Release is a media release indexed by Prowlarr.
+type Release struct {
+	GUID        string
+	IndexerID   int
+	Title       string
+	Size        int64
+	Indexer     string
+	DownloadURL string
+	InfoHash    string
+	Categories  []int
+}
+
+// Client is the subset of the Prowlarr API SnatchArr reads and dispatches.
 type Client interface {
 	Status(ctx context.Context, baseURL, apiKey string) (Status, error)
 	Indexers(ctx context.Context, baseURL, apiKey string) ([]Indexer, error)
 	Usage(ctx context.Context, baseURL, apiKey string, start, end time.Time) (map[int]Usage, error)
 	Statuses(ctx context.Context, baseURL, apiKey string) (map[int]time.Time, error)
 	ProwlarrURLs(ctx context.Context, baseURL, apiKey string) ([]string, error)
+	Search(ctx context.Context, baseURL, apiKey string, q SearchQuery) ([]Release, error)
+	Grab(ctx context.Context, baseURL, apiKey string, r Release) error
 }
 
 // HTTP implements Client over goenvoy's base client (X-Api-Key convention).
@@ -297,4 +326,73 @@ func (h *HTTP) ProwlarrURLs(ctx context.Context, baseURL, apiKey string) ([]stri
 		}
 	}
 	return out, nil
+}
+
+func mapReleaseCategories(cats []prowlarr.IndexerCategory) []int {
+	out := make([]int, 0, len(cats))
+	for _, c := range cats {
+		out = append(out, c.ID)
+	}
+	return out
+}
+
+// Search implements Client: GET /api/v1/search.
+func (h *HTTP) Search(ctx context.Context, baseURL, apiKey string, q SearchQuery) ([]Release, error) {
+	pc, err := prowlarr.New(baseURL, apiKey, h.Options()...)
+	if err != nil {
+		return nil, fmt.Errorf("prowlarr: client: %w", err)
+	}
+	opts := &prowlarr.SearchOptions{
+		Query:      q.Query,
+		Type:       q.Type,
+		IndexerIDs: q.IndexerIDs,
+		Categories: q.Categories,
+		Limit:      q.Limit,
+		Offset:     q.Offset,
+	}
+	raw, err := pc.Search(ctx, opts)
+	if err != nil {
+		return nil, fmt.Errorf("%w: prowlarr search: %w", domain.ErrUnreachable, arrclient.HintAPIError(err, "Prowlarr"))
+	}
+	out := make([]Release, 0, len(raw))
+	for _, r := range raw {
+		out = append(out, Release{
+			GUID:        r.GUID,
+			IndexerID:   r.IndexerID,
+			Title:       r.Title,
+			Size:        r.Size,
+			Indexer:     r.Indexer,
+			DownloadURL: r.DownloadURL,
+			InfoHash:    r.InfoHash,
+			Categories:  mapReleaseCategories(r.Categories),
+		})
+	}
+	return out, nil
+}
+
+// Grab implements Client: POST /api/v1/search.
+func (h *HTTP) Grab(ctx context.Context, baseURL, apiKey string, r Release) error {
+	if strings.TrimSpace(r.GUID) == "" {
+		return fmt.Errorf("%w: prowlarr grab: empty release guid", domain.ErrInvalid)
+	}
+	if r.IndexerID <= 0 {
+		return fmt.Errorf("%w: prowlarr grab: indexerId must be > 0 (got %d)", domain.ErrInvalid, r.IndexerID)
+	}
+	pc, err := prowlarr.New(baseURL, apiKey, h.Options()...)
+	if err != nil {
+		return fmt.Errorf("prowlarr: client: %w", err)
+	}
+	req := &prowlarr.Release{
+		GUID:        r.GUID,
+		IndexerID:   r.IndexerID,
+		Title:       r.Title,
+		Size:        r.Size,
+		Indexer:     r.Indexer,
+		DownloadURL: r.DownloadURL,
+		InfoHash:    r.InfoHash,
+	}
+	if _, err := pc.GrabRelease(ctx, req); err != nil {
+		return fmt.Errorf("%w: prowlarr grab: %w", domain.ErrUnreachable, arrclient.HintAPIError(err, "Prowlarr"))
+	}
+	return nil
 }
