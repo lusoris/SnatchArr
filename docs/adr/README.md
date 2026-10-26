@@ -40,4 +40,5 @@ This directory documents key architectural decisions following the HISS-14 immut
 | [0032](0032-stash-own-or-integrate.md) | 2026-10-26 | Stash: own or integrate — adult library engine evaluation | Accepted |
 | [0033](0033-adult-identity-and-model.md) | 2026-10-26 | Adult identity resolution and normalized data model | Accepted |
 | [0034](0034-matching-engine-and-model-connection.md) | 2026-10-26 | Adult metadata matching engine, attribute reconciliation, audit workbench and outbound model connection | Accepted |
+| [0035](0035-jellyfin-integration.md) | 2026-10-26 | Complete SnatchArr integration inside Jellyfin without an external identity provider | Accepted |
 | [0036](0036-community-requests-and-voting.md) | 2026-10-26 | Community requests and voting across media types | Proposed |
