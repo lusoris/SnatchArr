@@ -9392,6 +9392,10 @@ func (s *ProwlarrLink) encodeFields(e *jx.Encoder) {
 		e.Str(s.BaseURL)
 	}
 	{
+		e.FieldStart("hourly_cap")
+		e.Int(s.HourlyCap)
+	}
+	{
 		e.FieldStart("enabled")
 		e.Bool(s.Enabled)
 	}
@@ -9423,16 +9427,17 @@ func (s *ProwlarrLink) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfProwlarrLink = [9]string{
+var jsonFieldsNameOfProwlarrLink = [10]string{
 	0: "id",
 	1: "name",
 	2: "base_url",
-	3: "enabled",
-	4: "last_seen_version",
-	5: "last_check_at",
-	6: "last_error",
-	7: "created_at",
-	8: "updated_at",
+	3: "hourly_cap",
+	4: "enabled",
+	5: "last_seen_version",
+	6: "last_check_at",
+	7: "last_error",
+	8: "created_at",
+	9: "updated_at",
 }
 
 // Decode decodes ProwlarrLink from json.
@@ -9441,6 +9446,7 @@ func (s *ProwlarrLink) Decode(d *jx.Decoder) error {
 		return errors.New("invalid: unable to decode ProwlarrLink to nil")
 	}
 	var requiredBitSet [2]uint8
+	s.setDefaults()
 
 	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
 		switch string(k) {
@@ -9480,8 +9486,20 @@ func (s *ProwlarrLink) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"base_url\"")
 			}
-		case "enabled":
+		case "hourly_cap":
 			requiredBitSet[0] |= 1 << 3
+			if err := func() error {
+				v, err := d.Int()
+				s.HourlyCap = int(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"hourly_cap\"")
+			}
+		case "enabled":
+			requiredBitSet[0] |= 1 << 4
 			if err := func() error {
 				v, err := d.Bool()
 				s.Enabled = bool(v)
@@ -9523,7 +9541,7 @@ func (s *ProwlarrLink) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"last_error\"")
 			}
 		case "created_at":
-			requiredBitSet[0] |= 1 << 7
+			requiredBitSet[1] |= 1 << 0
 			if err := func() error {
 				v, err := json.DecodeDateTime(d)
 				s.CreatedAt = v
@@ -9535,7 +9553,7 @@ func (s *ProwlarrLink) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"created_at\"")
 			}
 		case "updated_at":
-			requiredBitSet[1] |= 1 << 0
+			requiredBitSet[1] |= 1 << 1
 			if err := func() error {
 				v, err := json.DecodeDateTime(d)
 				s.UpdatedAt = v
@@ -9556,8 +9574,8 @@ func (s *ProwlarrLink) Decode(d *jx.Decoder) error {
 	// Validate required fields.
 	var failures []validate.FieldError
 	for i, mask := range [2]uint8{
-		0b10001111,
-		0b00000001,
+		0b00011111,
+		0b00000011,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -9627,6 +9645,12 @@ func (s *ProwlarrLinkInput) encodeFields(e *jx.Encoder) {
 		}
 	}
 	{
+		if s.HourlyCap.Set {
+			e.FieldStart("hourly_cap")
+			s.HourlyCap.Encode(e)
+		}
+	}
+	{
 		if s.Enabled.Set {
 			e.FieldStart("enabled")
 			s.Enabled.Encode(e)
@@ -9634,11 +9658,12 @@ func (s *ProwlarrLinkInput) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfProwlarrLinkInput = [4]string{
+var jsonFieldsNameOfProwlarrLinkInput = [5]string{
 	0: "name",
 	1: "base_url",
 	2: "api_key",
-	3: "enabled",
+	3: "hourly_cap",
+	4: "enabled",
 }
 
 // Decode decodes ProwlarrLinkInput from json.
@@ -9684,6 +9709,16 @@ func (s *ProwlarrLinkInput) Decode(d *jx.Decoder) error {
 				return nil
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"api_key\"")
+			}
+		case "hourly_cap":
+			if err := func() error {
+				s.HourlyCap.Reset()
+				if err := s.HourlyCap.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"hourly_cap\"")
 			}
 		case "enabled":
 			if err := func() error {

@@ -589,6 +589,8 @@
 	"prowlarr_exhausted_count": "{count} exhausted or disabled",
 	"prowlarr_headroom_label": "Indexers with headroom for {name}",
 	"prowlarr_indexers_empty": "No indexers reported.",
+	"prowlarr_hourly_cap": "Hourly cap",
+	"prowlarr_hourly_cap_hint": "Maximum indexer searches this link may send per hour (1–500).",
 	"configarr_title": "Configarr",
 	"configarr_status_title": "Linked mode",
 	"configarr_linked": "Linked to {path}",

@@ -111,6 +111,25 @@ func (c *stubClient) ProwlarrURLs(_ context.Context, _, key string) ([]string, e
 	return nil, nil
 }
 
+func (c *stubClient) Search(_ context.Context, _, key string, _ prowlarrclient.SearchQuery) ([]prowlarrclient.Release, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.calls++
+	c.keys = append(c.keys, key)
+	if c.err != nil {
+		return nil, c.err
+	}
+	return nil, nil
+}
+
+func (c *stubClient) Grab(_ context.Context, _, key string, _ prowlarrclient.Release) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.calls++
+	c.keys = append(c.keys, key)
+	return c.err
+}
+
 func (c *stubClient) lastKey() (string, int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

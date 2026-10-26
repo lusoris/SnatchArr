@@ -106,6 +106,7 @@ const storedLink: ProwlarrLink = {
 	id: '00000000-0000-0000-0000-000000000020',
 	name: 'Primary Prowlarr',
 	base_url: 'http://prowlarr.local:9696',
+	hourly_cap: 15,
 	enabled: true,
 	last_seen_version: '1.30.0',
 	last_check_at: '2026-09-01T12:00:00Z',
@@ -247,6 +248,30 @@ describe('prowlarr links', () => {
 			body: {
 				name: 'Prowlarr',
 				base_url: 'http://prowlarr:9696',
+				hourly_cap: 15,
+				enabled: true,
+				api_key: 'prowlarr-key'
+			}
+		});
+	});
+
+	it('creates a link with a custom hourly cap', async () => {
+		stubGet({ '/prowlarr': [], '/prowlarr/status': [] });
+		const postSpy = vi.spyOn(api, 'POST').mockResolvedValue({ data: storedLink } as never);
+		renderWithQuery(ProwlarrPage);
+
+		await screen.findByText(m.prowlarr_links_empty());
+		await fill(m.instance_name(), 'Prowlarr Custom');
+		await fill(m.instance_url(), 'http://prowlarr:9696');
+		await fill(m.instance_api_key(), 'prowlarr-key');
+		await fill(m.prowlarr_hourly_cap(), '50');
+		await fireEvent.click(screen.getByRole('button', { name: m.action_save() }));
+
+		expect(postSpy).toHaveBeenCalledWith('/prowlarr', {
+			body: {
+				name: 'Prowlarr Custom',
+				base_url: 'http://prowlarr:9696',
+				hourly_cap: 50,
 				enabled: true,
 				api_key: 'prowlarr-key'
 			}
@@ -267,7 +292,7 @@ describe('prowlarr links', () => {
 
 		expect(putSpy).toHaveBeenCalledWith('/prowlarr/{linkId}', {
 			params: { path: { linkId: storedLink.id } },
-			body: { name: storedLink.name, base_url: storedLink.base_url, enabled: false }
+			body: { name: storedLink.name, base_url: storedLink.base_url, hourly_cap: 15, enabled: false }
 		});
 	});
 
@@ -338,7 +363,13 @@ describe('prowlarr links', () => {
 		await fireEvent.click(screen.getByRole('button', { name: m.action_test() }));
 
 		expect(postSpy).toHaveBeenCalledWith('/prowlarr/test', {
-			body: { name: 'Prowlarr', base_url: 'http://prowlarr:9696', enabled: true, api_key: 'k' }
+			body: {
+				name: 'Prowlarr',
+				base_url: 'http://prowlarr:9696',
+				hourly_cap: 15,
+				enabled: true,
+				api_key: 'k'
+			}
 		});
 	});
 

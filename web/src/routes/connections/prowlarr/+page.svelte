@@ -21,6 +21,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { evaluateLimit, isIndexerExhausted, isIndexerNearLimit } from '#lib/prowlarr.js';
 
 	type ProwlarrLink = components['schemas']['ProwlarrLink'];
+	type ProwlarrLinkInput = components['schemas']['ProwlarrLinkInput'];
 	type ProwlarrIndexerStatus = components['schemas']['ProwlarrIndexerStatus'];
 
 	const links = createSentioQuery({
@@ -35,12 +36,26 @@ SPDX-License-Identifier: EUPL-1.2
 
 	const editor = new FormEditor<ProwlarrLink>('prowlarr-name', () => save.reset());
 
+	function toLinkInput(body: LinkBody): ProwlarrLinkInput {
+		return {
+			name: body.name,
+			base_url: body.base_url,
+			enabled: body.enabled,
+			hourly_cap: body.hourly_cap ?? 15,
+			...(body.api_key ? { api_key: body.api_key } : {})
+		};
+	}
+
 	const save = createSentioMutation({
 		mutationFn: async (body: LinkBody) => {
 			const target = editor.editing;
+			const input = toLinkInput(body);
 			const res = target
-				? await api.PUT('/prowlarr/{linkId}', { params: { path: { linkId: target.id } }, body })
-				: await api.POST('/prowlarr', { body });
+				? await api.PUT('/prowlarr/{linkId}', {
+						params: { path: { linkId: target.id } },
+						body: input
+					})
+				: await api.POST('/prowlarr', { body: input });
 			return res.data;
 		},
 		invalidates: [keys.prowlarrLinks, keys.prowlarr],
@@ -64,7 +79,8 @@ SPDX-License-Identifier: EUPL-1.2
 	});
 
 	const probeInput = createSentioMutation({
-		mutationFn: async (body: LinkBody) => (await api.POST('/prowlarr/test', { body })).data,
+		mutationFn: async (body: LinkBody) =>
+			(await api.POST('/prowlarr/test', { body: toLinkInput(body) })).data,
 		...probeCallbacks()
 	});
 
@@ -153,7 +169,7 @@ SPDX-License-Identifier: EUPL-1.2
 		<div class="xl:col-span-5">
 			<AdminFormSlot {editor} {save} probe={probeInput}>
 				{#snippet form(props)}
-					<LinkForm idPrefix="prowlarr" link={editor.editing} {...props} />
+					<LinkForm idPrefix="prowlarr" showHourlyCap link={editor.editing} {...props} />
 				{/snippet}
 			</AdminFormSlot>
 		</div>

@@ -111,6 +111,7 @@ func prowlarrLinkToOAS(l domain.ProwlarrLink) oas.ProwlarrLink {
 		ID:              l.ID,
 		Name:            l.Name,
 		BaseURL:         l.BaseURL,
+		HourlyCap:       l.HourlyCap,
 		Enabled:         l.Enabled,
 		LastSeenVersion: optString(l.LastSeenVersion),
 		LastCheckAt:     optTime(l.LastCheckAt),
@@ -121,7 +122,13 @@ func prowlarrLinkToOAS(l domain.ProwlarrLink) oas.ProwlarrLink {
 }
 
 func prowlarrInputFromOAS(in *oas.ProwlarrLinkInput) prowlarr.Input {
-	return prowlarr.Input{Name: in.Name, BaseURL: in.BaseURL, APIKey: in.APIKey.Or(""), Enabled: in.Enabled.Or(true)}
+	return prowlarr.Input{
+		Name:      in.Name,
+		BaseURL:   in.BaseURL,
+		APIKey:    in.APIKey.Or(""),
+		HourlyCap: in.HourlyCap.Or(0),
+		Enabled:   in.Enabled.Or(true),
+	}
 }
 
 func prowlarrStatusToOAS(v prowlarr.LinkStatus) oas.ProwlarrStatus {
