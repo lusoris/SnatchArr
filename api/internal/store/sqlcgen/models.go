@@ -11,6 +11,76 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AdultFavoritePerformer struct {
+	ID             uuid.UUID
+	CanonicalName  string
+	Disambiguation *string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+type AdultFavoriteStudio struct {
+	ID            uuid.UUID
+	CanonicalName string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+type AdultImageItem struct {
+	ID             uuid.UUID
+	ImageSetID     uuid.UUID
+	FilePath       string
+	FileName       string
+	FileSizeBytes  int64
+	MimeType       string
+	Width          *int32
+	Height         *int32
+	Sha256Checksum string
+	SortOrder      int32
+	CreatedAt      time.Time
+}
+
+type AdultImageSet struct {
+	ID                     uuid.UUID
+	Title                  string
+	DirectoryPath          string
+	WhisparrSceneForeignID *string
+	PerformerID            *uuid.UUID
+	ItemCount              int32
+	TotalSizeBytes         int64
+	CoverImagePath         *string
+	CreatedAt              time.Time
+	UpdatedAt              time.Time
+}
+
+type AdultPerformerLink struct {
+	FavoriteID   uuid.UUID
+	InstanceID   uuid.UUID
+	ForeignID    string
+	IsFavorite   bool
+	LastSyncedAt time.Time
+}
+
+type AdultStashboxInstance struct {
+	ID            uuid.UUID
+	Name          string
+	Endpoint      string
+	ApiKeyEnc     []byte
+	Enabled       bool
+	SyncFavorites bool
+	Priority      int32
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+type AdultStudioLink struct {
+	FavoriteID   uuid.UUID
+	InstanceID   uuid.UUID
+	ForeignID    string
+	IsFavorite   bool
+	LastSyncedAt time.Time
+}
+
 type ApiKey struct {
 	ID         string
 	OwnerID    uuid.UUID

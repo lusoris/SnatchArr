@@ -613,3 +613,189 @@ func TestMigration000034WatchAwareTvdb(t *testing.T) {
 		t.Fatalf("provider_tvdb_id column still exists after down migration")
 	}
 }
+
+type adultModuleIDs struct {
+	instanceID  uuid.UUID
+	performerID uuid.UUID
+	setID       uuid.UUID
+	itemID      uuid.UUID
+}
+
+var adultModuleTables = []string{
+	"adult_stashbox_instances",
+	"adult_favorite_performers",
+	"adult_performer_links",
+	"adult_favorite_studios",
+	"adult_studio_links",
+	"adult_image_sets",
+	"adult_image_items",
+}
+
+func assertTableExists(t *testing.T, st *store.Store, table string, want bool) {
+	t.Helper()
+	var exists bool
+	const q = `SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name=$1)`
+	if err := st.Pool().QueryRow(t.Context(), q, table).Scan(&exists); err != nil {
+		t.Fatalf("check table %s exists: %v", table, err)
+	}
+	if exists != want {
+		t.Fatalf("table %s exists = %v, want %v", table, exists, want)
+	}
+}
+
+func assertAdultTables(t *testing.T, st *store.Store, want bool) {
+	t.Helper()
+	for _, table := range adultModuleTables {
+		assertTableExists(t, st, table, want)
+	}
+}
+
+func testAdultMigrationPositive(t *testing.T, st *store.Store, ids adultModuleIDs) {
+	t.Helper()
+	ctx := t.Context()
+	const insInst = `INSERT INTO adult_stashbox_instances (
+		id, name, endpoint, api_key_enc, priority, created_at, updated_at
+	) VALUES ($1, 'stashbox-m36', 'https://stashdb.org/graphql', '\x0102', 10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+	if _, err := st.Pool().Exec(ctx, insInst, ids.instanceID); err != nil {
+		t.Fatalf("insert adult_stashbox_instances: %v", err)
+	}
+
+	const insPerf = `INSERT INTO adult_favorite_performers (
+		id, canonical_name, disambiguation, created_at, updated_at
+	) VALUES ($1, 'Jane Doe', 'Star', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+	if _, err := st.Pool().Exec(ctx, insPerf, ids.performerID); err != nil {
+		t.Fatalf("insert adult_favorite_performers: %v", err)
+	}
+
+	const insLink = `INSERT INTO adult_performer_links (
+		favorite_id, instance_id, foreign_id, is_favorite, last_synced_at
+	) VALUES ($1, $2, 'foreign-p1', true, CURRENT_TIMESTAMP)`
+	if _, err := st.Pool().Exec(ctx, insLink, ids.performerID, ids.instanceID); err != nil {
+		t.Fatalf("insert adult_performer_links: %v", err)
+	}
+
+	const insSet = `INSERT INTO adult_image_sets (
+		id, title, directory_path, whisparr_scene_foreign_id, performer_id,
+		item_count, total_size_bytes, cover_image_path, created_at, updated_at
+	) VALUES ($1, 'Gallery 1', '/media/imagesets/set1', 'scene-1', $2, 1, 1024, '/media/imagesets/set1/cover.jpg', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+	if _, err := st.Pool().Exec(ctx, insSet, ids.setID, ids.performerID); err != nil {
+		t.Fatalf("insert adult_image_sets: %v", err)
+	}
+
+	const insItem = `INSERT INTO adult_image_items (
+		id, image_set_id, file_path, file_name, file_size_bytes, mime_type,
+		width, height, sha256_checksum, sort_order, created_at
+	) VALUES ($1, $2, '/media/imagesets/set1/img1.jpg', 'img1.jpg', 1024, 'image/jpeg', 1920, 1080, '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef', 0, CURRENT_TIMESTAMP)`
+	if _, err := st.Pool().Exec(ctx, insItem, ids.itemID, ids.setID); err != nil {
+		t.Fatalf("insert adult_image_items: %v", err)
+	}
+
+	var instName, foreignID, title, fileName string
+	if err := st.Pool().QueryRow(ctx, "SELECT name FROM adult_stashbox_instances WHERE id = $1", ids.instanceID).Scan(&instName); err != nil || instName != "stashbox-m36" {
+		t.Fatalf("query instance: %v (got %q)", err, instName)
+	}
+	if err := st.Pool().QueryRow(ctx, "SELECT foreign_id FROM adult_performer_links WHERE favorite_id = $1 AND instance_id = $2", ids.performerID, ids.instanceID).Scan(&foreignID); err != nil || foreignID != "foreign-p1" {
+		t.Fatalf("query performer link: %v (got %q)", err, foreignID)
+	}
+	if err := st.Pool().QueryRow(ctx, "SELECT title FROM adult_image_sets WHERE id = $1", ids.setID).Scan(&title); err != nil || title != "Gallery 1" {
+		t.Fatalf("query image set: %v (got %q)", err, title)
+	}
+	if err := st.Pool().QueryRow(ctx, "SELECT file_name FROM adult_image_items WHERE id = $1", ids.itemID).Scan(&fileName); err != nil || fileName != "img1.jpg" {
+		t.Fatalf("query image item: %v (got %q)", err, fileName)
+	}
+}
+
+func testAdultMigrationNegative(t *testing.T, st *store.Store, ids adultModuleIDs) {
+	t.Helper()
+	ctx := t.Context()
+
+	unknownInstID := uuid.New()
+	const badLink = `INSERT INTO adult_performer_links (
+		favorite_id, instance_id, foreign_id, is_favorite, last_synced_at
+	) VALUES ($1, $2, 'foreign-unknown', true, CURRENT_TIMESTAMP)`
+	if _, err := st.Pool().Exec(ctx, badLink, ids.performerID, unknownInstID); err == nil {
+		t.Fatalf("expected error inserting link with unknown instance_id, got nil")
+	}
+
+	badItem := uuid.New()
+	const badCheck = `INSERT INTO adult_image_items (
+		id, image_set_id, file_path, file_name, file_size_bytes, mime_type,
+		width, height, sha256_checksum, sort_order, created_at
+	) VALUES ($1, $2, '/media/imagesets/set1/bad.jpg', 'bad.jpg', 1024, 'image/jpeg', 1920, 1080, 'xyz', 0, CURRENT_TIMESTAMP)`
+	if _, err := st.Pool().Exec(ctx, badCheck, badItem, ids.setID); err == nil {
+		t.Fatalf("expected error inserting item with checksum 'xyz', got nil")
+	}
+
+	badSet := uuid.New()
+	const badCount = `INSERT INTO adult_image_sets (
+		id, title, directory_path, item_count, total_size_bytes, created_at, updated_at
+	) VALUES ($1, 'Bad Set', '/media/imagesets/bad', -1, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+	if _, err := st.Pool().Exec(ctx, badCount, badSet); err == nil {
+		t.Fatalf("expected error inserting image set with item_count -1, got nil")
+	}
+}
+
+func testAdultMigrationBoundary(t *testing.T, st *store.Store, ids adultModuleIDs) {
+	t.Helper()
+	ctx := t.Context()
+
+	if _, err := st.Pool().Exec(ctx, "DELETE FROM adult_stashbox_instances WHERE id = $1", ids.instanceID); err != nil {
+		t.Fatalf("delete instance: %v", err)
+	}
+	var linkCount int
+	err := st.Pool().QueryRow(ctx, "SELECT count(*) FROM adult_performer_links WHERE instance_id = $1", ids.instanceID).Scan(&linkCount)
+	if err != nil {
+		t.Fatalf("count performer links: %v", err)
+	}
+	if linkCount != 0 {
+		t.Fatalf("linkCount = %d after deleting instance, want 0", linkCount)
+	}
+
+	if _, err = st.Pool().Exec(ctx, "DELETE FROM adult_favorite_performers WHERE id = $1", ids.performerID); err != nil {
+		t.Fatalf("delete performer: %v", err)
+	}
+	var perfID *uuid.UUID
+	err = st.Pool().QueryRow(ctx, "SELECT performer_id FROM adult_image_sets WHERE id = $1", ids.setID).Scan(&perfID)
+	if err != nil {
+		t.Fatalf("query image_set performer_id: %v", err)
+	}
+	if perfID != nil {
+		t.Fatalf("image_set performer_id = %v after deleting performer, want NULL", perfID)
+	}
+}
+
+// TestMigration000036AdultModule verifies migration 000036 creates the 7 adult module tables,
+// enforces constraints, handles cascading deletes, and cleanly steps down and up.
+func TestMigration000036AdultModule(t *testing.T) {
+	t.Parallel()
+	st := storetest.New(t)
+	m := storetest.Migrator(t, st)
+
+	stepDownToVersion(t, m, 35)
+	assertTableExists(t, st, "adult_stashbox_instances", false)
+
+	if err := m.Steps(1); err != nil {
+		t.Fatalf("Steps(1) up to 36: %v", err)
+	}
+
+	ids := adultModuleIDs{
+		instanceID:  uuid.New(),
+		performerID: uuid.New(),
+		setID:       uuid.New(),
+		itemID:      uuid.New(),
+	}
+
+	testAdultMigrationPositive(t, st, ids)
+	testAdultMigrationNegative(t, st, ids)
+	testAdultMigrationBoundary(t, st, ids)
+
+	if err := m.Steps(-1); err != nil {
+		t.Fatalf("Steps(-1) down to 35: %v", err)
+	}
+	assertAdultTables(t, st, false)
+
+	if err := m.Steps(1); err != nil {
+		t.Fatalf("Steps(1) back up to 36: %v", err)
+	}
+	assertAdultTables(t, st, true)
+}
