@@ -505,6 +505,12 @@ type Handler interface {
 	//
 	// DELETE /auth/api-keys/{id}
 	RevokeAPIKey(ctx context.Context, params RevokeAPIKeyParams) (RevokeAPIKeyRes, error)
+	// SearchItem implements searchItem operation.
+	//
+	// Item-scoped snatch run for a specific entity or group.
+	//
+	// POST /instances/{instanceId}/items/search
+	SearchItem(ctx context.Context, req *ItemSearchRequest, params SearchItemParams) (*Run, error)
 	// SnatchSeerrRequest implements snatchSeerrRequest operation.
 	//
 	// Quickie focused on one request (missing snatch of its instance, limited to that movie or series).

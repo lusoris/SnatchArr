@@ -575,6 +575,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/instances/{instanceId}/items/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instanceId: components["parameters"]["InstanceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Item-scoped snatch run for a specific entity or group */
+        post: operations["searchItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/instances/{instanceId}/preview": {
         parameters: {
             query?: never;
@@ -1741,6 +1760,19 @@ export interface components {
         SnatchKind: "missing" | "upgrade";
         RunTrigger: {
             kind: components["schemas"]["SnatchKind"];
+        };
+        ItemSearchRequest: {
+            kind: components["schemas"]["SnatchKind"];
+            /**
+             * Format: int64
+             * @description Target entity ID
+             */
+            entity_id?: number;
+            /**
+             * Format: int64
+             * @description Target group ID
+             */
+            group_id?: number;
         };
         Run: {
             /** Format: uuid */
@@ -3502,6 +3534,33 @@ export interface operations {
                     "application/json": components["schemas"]["Run"];
                 };
             };
+            /** @description Run queued */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Run"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    searchItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instanceId: components["parameters"]["InstanceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ItemSearchRequest"];
+            };
+        };
+        responses: {
             /** @description Run queued */
             201: {
                 headers: {

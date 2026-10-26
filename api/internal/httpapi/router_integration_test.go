@@ -98,6 +98,8 @@ func newRouterFixture(t *testing.T) *routerFixture {
 		Timeout: 10 * time.Second,
 		Jar:     jar,
 	}
+	cd := 60
+	f.h.cfg.ItemSearch.CooldownSeconds = cd
 	return &routerFixture{
 		integrationFixture: f,
 		srv:                srv,
@@ -764,6 +766,32 @@ func stepsPoliciesAndRuns() []routerStep {
 					t.Fatalf("previewRun seed = %v, want non-zero", decoded["seed"])
 				}
 				ids.runID = runID
+			},
+		},
+		{
+			op:     "cancelRun",
+			method: http.MethodPost,
+			path:   func(ids *idsState) string { return "/runs/" + ids.runID + "/cancel" },
+			want:   http.StatusNoContent,
+		},
+		{
+			op:     "searchItem",
+			method: http.MethodPost,
+			path:   func(ids *idsState) string { return "/instances/" + ids.instanceID + "/items/search" },
+			body: func(_ *idsState) any {
+				return map[string]any{"kind": "missing", "entity_id": 42}
+			},
+			want: http.StatusCreated,
+			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
+				t.Helper()
+				id, ok := decoded["id"].(string)
+				if !ok || id == "" {
+					t.Fatalf("searchItem id = %v, want valid uuid", decoded["id"])
+				}
+				ids.runID = id
+				if decoded["status"] != "queued" {
+					t.Fatalf("searchItem status = %v, want queued", decoded["status"])
+				}
 			},
 		},
 		{

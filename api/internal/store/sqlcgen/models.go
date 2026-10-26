@@ -143,6 +143,11 @@ type Instance struct {
 	DownloadPriority    *int32
 }
 
+type ItemSearchCooldown struct {
+	UserID         uuid.UUID
+	LastSearchedAt time.Time
+}
+
 type LoginLockout struct {
 	Key         string
 	Fails       int32

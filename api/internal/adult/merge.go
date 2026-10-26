@@ -146,46 +146,78 @@ func matchByName(incoming IncomingEntity, c Candidate) bool {
 	return normInc != "" && normInc == normCand
 }
 
+// MatchKind classifies how an incoming entity matched an existing candidate.
+type MatchKind string
+
+const (
+	// MatchNone indicates no match or correlation was found.
+	MatchNone MatchKind = ""
+	// MatchAutoMerge indicates a strong identifier match (endpoint foreign ID or normalized external URL) safe for automatic merging.
+	MatchAutoMerge MatchKind = "auto_merge"
+	// MatchAuditCandidate indicates a weak name-only correlation that must be routed to the audit queue rather than auto-merged.
+	MatchAuditCandidate MatchKind = "audit_candidate"
+)
+
+// AuditCandidate records a pair of entities that share a normalized name without a strong identifier match.
+type AuditCandidate struct {
+	Existing Candidate
+	Incoming Candidate
+}
+
 // MatchEntity attempts to match an incoming entity against existing candidates according to:
-// (1) URLs pointing at another configured stash-box endpoint whose foreign ID we already hold.
-// (2) Normalized external site URL (lowercase host without www., trimmed trailing slash, scheme ignored).
-// (3) Exact normalized name when disambiguation is empty on both entities.
-// Returns the matched candidate and its index, or (nil, -1) if no candidate matches.
-func MatchEntity(incoming IncomingEntity, candidates []Candidate, endpoints []StashboxEndpoint) (*Candidate, int) {
+// (1) URLs pointing at another configured stash-box endpoint whose foreign ID we already hold (MatchAutoMerge).
+// (2) Normalized external site URL (lowercase host without www., trimmed trailing slash, scheme ignored) (MatchAutoMerge).
+// (3) Exact normalized name when disambiguation is empty on both entities (MatchAuditCandidate; never auto-merged).
+// Returns the matched candidate, its index, and the MatchKind, or (nil, -1, MatchNone) if no candidate matches.
+func MatchEntity(incoming IncomingEntity, candidates []Candidate, endpoints []StashboxEndpoint) (*Candidate, int, MatchKind) {
 	for i := range candidates {
 		if matchByEndpointURL(incoming, candidates[i], endpoints) {
-			return &candidates[i], i
+			return &candidates[i], i, MatchAutoMerge
 		}
 	}
 	for i := range candidates {
 		if matchByExternalURL(incoming, candidates[i]) {
-			return &candidates[i], i
+			return &candidates[i], i, MatchAutoMerge
 		}
 	}
 	for i := range candidates {
 		if matchByName(incoming, candidates[i]) {
-			return &candidates[i], i
+			return &candidates[i], i, MatchAuditCandidate
 		}
 	}
-	return nil, -1
+	return nil, -1, MatchNone
 }
 
-// DeduplicateEntities collapses a list of candidates into a deduplicated slice using the merge rules.
-func DeduplicateEntities(items []Candidate, endpoints []StashboxEndpoint) []Candidate {
+// DeduplicateEntitiesWithAudit collapses a list of candidates using strong auto-merge rules
+// and returns any name-only correlations as audit candidates instead of merging them.
+func DeduplicateEntitiesWithAudit(items []Candidate, endpoints []StashboxEndpoint) ([]Candidate, []AuditCandidate) {
 	var deduped []Candidate
+	var audit []AuditCandidate
 	for _, item := range items {
 		inc := IncomingEntity{
 			Name:           item.Name,
 			Disambiguation: item.Disambiguation,
 			URLs:           item.URLs,
 		}
-		matched, _ := MatchEntity(inc, deduped, endpoints)
-		if matched != nil {
+		matched, _, kind := MatchEntity(inc, deduped, endpoints)
+		if matched != nil && kind == MatchAutoMerge {
 			matched.URLs = append(matched.URLs, item.URLs...)
 			matched.Links = append(matched.Links, item.Links...)
 			continue
 		}
+		if matched != nil && kind == MatchAuditCandidate {
+			audit = append(audit, AuditCandidate{
+				Existing: *matched,
+				Incoming: item,
+			})
+		}
 		deduped = append(deduped, item)
 	}
+	return deduped, audit
+}
+
+// DeduplicateEntities collapses a list of candidates into a deduplicated slice using strong auto-merge rules.
+func DeduplicateEntities(items []Candidate, endpoints []StashboxEndpoint) []Candidate {
+	deduped, _ := DeduplicateEntitiesWithAudit(items, endpoints)
 	return deduped
 }
