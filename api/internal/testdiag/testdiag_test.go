@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jonboulle/clockwork"
 
 	"github.com/lusoris/SnatchArr/api/internal/store/storetest"
 )
@@ -145,9 +146,23 @@ func TestWatchReport(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			fake := newFakeTB(t)
-			w := Watch(tc.budget, tc.pool)
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+
+			clk := clockwork.NewFakeClock()
+			w := watchWithClock(tc.budget, tc.pool, clk)
 			if tc.sleep > 0 {
-				time.Sleep(tc.sleep)
+				if err := clk.BlockUntilContext(ctx, 1); err != nil {
+					t.Fatalf("clockwork waiter blocked: %v", err)
+				}
+				clk.Advance(tc.sleep)
+			}
+			if tc.sleep >= tc.budget*4/5 {
+				select {
+				case <-w.snapshotDone:
+				case <-ctx.Done():
+					t.Fatalf("snapshot callback did not finish: %v", ctx.Err())
+				}
 			}
 			w.Stop()
 			w.Report(fake, tc.err)
