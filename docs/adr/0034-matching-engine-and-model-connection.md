@@ -6,7 +6,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 # ADR-0034: Adult Metadata Matching Engine, Attribute Reconciliation, Audit Workbench and Outbound Model Connection
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-26
 - **Related:** ADR-0018 (Product Front Door), ADR-0021 (LLM Access Module), ADR-0025 (Module Switches), ADR-0026 (Accounts and Roles), ADR-0027 (Optional Adult Module), ADR-0028 (Jellyfin Plugin), ADR-0029 (Task-Flow UI), ADR-0031 (Creator Content Pool), ADR-0032 (Stash Companion Boundary), ADR-0033 (Adult Metadata Identity, Normalized Model and Media-Server Delivery)
 
@@ -175,7 +175,7 @@ where $\lambda$ is the prior match probability and $w_k(\gamma_k) = \log_2(m_{k,
 The log-odds sum is mapped monotonically onto [ADR-0033](0033-adult-identity-and-model.md)'s integer confidence scale $S \in [0, 100]$ ($S \ge 85$ auto-merge, $60 \le S \le 84$ audit queue, $S < 60$ reject).
 
 - **Static versioned asset:** Model parameters ($\lambda$, comparison level thresholds, $m_{k,\gamma}$, $u_{k,\gamma}$, and term-frequency tables) are committed as a static, versioned JSON file embedded in the Go binary (`api/internal/adult/weights/v1.json`, validated by JSON schema in `make api-verify`).
-- **Weight production workflow:** Whether updated weight files (`v2.json`, ...) are produced by a pure-Go Expectation-Maximization (EM) / maximum-likelihood estimator CLI under `tools/` or an offline `Splink` calibration job over exported labelled pairs is tracked as Open Question `OQ-0034-2`.
+- **Weight production workflow:** Whether updated weight files (`v2.json`, ...) are produced by a pure-Go Expectation-Maximization (EM) / maximum-likelihood estimator CLI under `tools/` or an offline `Splink` calibration job over exported labelled pairs is decided by answered question `OQ-0034-2`: a pure-Go command.
 
 #### Part 2 Options Considered
 
@@ -344,8 +344,8 @@ All matching and audit metrics are registered in `api/internal/metrics/metrics.g
 
 ---
 
-## Open Questions
+## Answered Questions
 
-- `OQ-0034-1` | Should optional public-text embedding candidate retrieval (Stage 2 top-$K$ blocking fallback) ship in the initial matching engine implementation or be deferred until phonetic and trigram blocking recall is measured in production? | a) Defer embedding retrieval to a follow-up slice and ship exact + trigram + phonetic (`DoubleMetaphone`) blocking in `pg_trgm` first (risk: cross-script transliterations without shared aliases may miss candidate generation until aliases are synced) b) Ship outbound `/v1/embeddings` + `pgvector` candidate retrieval in the first slice alongside `/v1/chat/completions` (risk: adds `pgvector` extension requirement to the PostgreSQL deployment contract and extra outbound API calls during bulk sync) c) Compute lightweight local character $n$-gram TF-IDF vectors in Go without external embedding calls or `pgvector` (risk: lower recall on semantic studio/imprint renamings than neural embeddings) | recommended: a) Defer embedding retrieval to a follow-up slice and ship exact + trigram + phonetic blocking first, keeping PostgreSQL extension requirements unchanged while measuring real recall gaps.
-- `OQ-0034-2` | How should updated Fellegi-Sunter weight files (`api/internal/adult/weights/vN.json`) be produced from exported human-labelled pairs? | a) Build a pure-Go Expectation-Maximization (EM) and supervised maximum-likelihood CLI under `tools/adult-weights/` that reads `regression-pairs` JSON and emits `vN.json` (risk: ~300 LOC of numerical estimation code in `tools/` to maintain and test) b) Run a pinned offline Python `Splink` calibration script in a developer/CI container workflow outside the production image (risk: introduces a second language toolchain for offline weight regeneration) c) Maintain weights by hand-tuning log-odds values against the CI regression battery (risk: suboptimal log-odds calibration as comparison features grow) | recommended: a) Build a pure-Go calibration CLI under `tools/adult-weights/` using supervised smoothed log-odds estimation over labelled pairs plus EM for unlabelled pairs, keeping the entire toolchain in Go (`make tools-verify`).
-- `OQ-0034-3` | What default sampling rate of `auto_merge` decisions ($S \ge 85$) should be routed into the audit queue (`audit_kind = "sampled_auto_merge"`) to compute live Audit Precision? | a) Default to `2%` deterministic hash-based sampling (`sha256(entity_a_id || entity_b_id) mod 100 < 2`), configurable `0..20%` in `/api/v1/adult/matching/config` (risk: creates ~20 audit items per 1,000 auto-merges for the operator) b) Default to `0%` sampling and rely solely on post-hoc manual `split` events to estimate false merges (risk: undercounts false merges that operators never manually inspect, biasing Audit Precision toward 1.0) c) Default to `10%` sampling (risk: fatigues operators during initial bulk library import of thousands of performers and scenes) | recommended: a) Default to `2%` deterministic hash-based sampling (with an automatic cap of at most 5 sampled items per sync run during bulk imports), configurable down to `0%`.
+- `OQ-0034-1` (ledger `snatcharr-oq-0034-1-embeddings`, answer a): embedding candidate retrieval is deferred. The first slice ships exact, trigram and phonetic blocking in `pg_trgm`; no `pgvector` migration. Revisit trigger: `snatcharr_adult_audit_precision` measured below target on visual-only matches.
+- `OQ-0034-2` (ledger `snatcharr-oq-0034-2-weights`, answer a): weight files are produced by a pure-Go command under `tools/adult-weights/`, reproducible from the audit export, writing `api/internal/adult/weights/vN.json`. `make tools-verify` covers it, and the regression battery replays `v1.json`.
+- `OQ-0034-3` (ledger `snatcharr-oq-0034-3-sampling`, answer c): the audit sampling rate of `auto_merge` decisions is a setting in the API and the UI, default 2 percent deterministic hash-based sampling with at most 5 sampled items per sync run. The metric `snatcharr_adult_audit_precision` is emitted in the e2e suite.
