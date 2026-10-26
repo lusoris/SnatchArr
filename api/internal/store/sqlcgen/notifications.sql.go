@@ -120,7 +120,7 @@ func (q *Queries) DeleteNotificationRule(ctx context.Context, id uuid.UUID) (int
 }
 
 const findSeerrRequestForEntity = `-- name: FindSeerrRequestForEntity :one
-SELECT link_id, request_id, media_type, tmdb_id, tvdb_id, title, request_status, media_status, is_4k, requested_by, seasons, seerr_server_id, instance_id, entity_id, requested_at, last_snatched_at, last_seen_at, updated_at FROM seerr_requests
+SELECT link_id, request_id, media_type, tmdb_id, tvdb_id, title, request_status, media_status, is_4k, requested_by, seasons, seerr_server_id, instance_id, entity_id, requested_at, last_snatched_at, last_seen_at, updated_at, requested_by_jellyfin_id FROM seerr_requests
 WHERE instance_id = $1 AND entity_id = $2
 LIMIT 1
 `
@@ -152,6 +152,7 @@ func (q *Queries) FindSeerrRequestForEntity(ctx context.Context, arg FindSeerrRe
 		&i.LastSnatchedAt,
 		&i.LastSeenAt,
 		&i.UpdatedAt,
+		&i.RequestedByJellyfinID,
 	)
 	return i, err
 }

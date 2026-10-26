@@ -7285,12 +7285,14 @@ type SeerrRequest struct {
 	// Seerr MediaRequestStatus: 1 pending, 2 approved, 3 declined, 4 failed, 5 completed.
 	RequestStatus int `json:"request_status"`
 	// Seerr MediaStatus: 1 unknown, 2 pending, 3 processing, 4 partially available, 5 available.
-	MediaStatus  int       `json:"media_status"`
-	Is4k         bool      `json:"is_4k"`
-	RequestedBy  string    `json:"requested_by"`
-	Seasons      []int     `json:"seasons"`
-	InstanceID   OptUUID   `json:"instance_id"`
-	InstanceName OptString `json:"instance_name"`
+	MediaStatus         int       `json:"media_status"`
+	Is4k                bool      `json:"is_4k"`
+	RequestedBy         string    `json:"requested_by"`
+	RequestedByUserId   OptUUID   `json:"requestedByUserId"`
+	RequestedByUsername OptString `json:"requestedByUsername"`
+	Seasons             []int     `json:"seasons"`
+	InstanceID          OptUUID   `json:"instance_id"`
+	InstanceName        OptString `json:"instance_name"`
 	// Radarr movie id or Sonarr series id in the resolved instance.
 	EntityID OptInt64 `json:"entity_id"`
 	// True when the request maps to an instance and a library entity and is snatched first.
@@ -7354,6 +7356,16 @@ func (s *SeerrRequest) GetIs4k() bool {
 // GetRequestedBy returns the value of RequestedBy.
 func (s *SeerrRequest) GetRequestedBy() string {
 	return s.RequestedBy
+}
+
+// GetRequestedByUserId returns the value of RequestedByUserId.
+func (s *SeerrRequest) GetRequestedByUserId() OptUUID {
+	return s.RequestedByUserId
+}
+
+// GetRequestedByUsername returns the value of RequestedByUsername.
+func (s *SeerrRequest) GetRequestedByUsername() OptString {
+	return s.RequestedByUsername
 }
 
 // GetSeasons returns the value of Seasons.
@@ -7454,6 +7466,16 @@ func (s *SeerrRequest) SetIs4k(val bool) {
 // SetRequestedBy sets the value of RequestedBy.
 func (s *SeerrRequest) SetRequestedBy(val string) {
 	s.RequestedBy = val
+}
+
+// SetRequestedByUserId sets the value of RequestedByUserId.
+func (s *SeerrRequest) SetRequestedByUserId(val OptUUID) {
+	s.RequestedByUserId = val
+}
+
+// SetRequestedByUsername sets the value of RequestedByUsername.
+func (s *SeerrRequest) SetRequestedByUsername(val OptString) {
+	s.RequestedByUsername = val
 }
 
 // SetSeasons sets the value of Seasons.

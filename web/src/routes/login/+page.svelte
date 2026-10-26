@@ -6,17 +6,17 @@ SPDX-License-Identifier: EUPL-1.2
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { api, describeError } from '#lib/api/client.js';
+	import { api } from '#lib/api/client.js';
 	import AuthCard from '#lib/components/AuthCard.svelte';
-	import Field from '#lib/components/Field.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { session } from '#lib/session.svelte.js';
+	import JellyfinLoginCard from './JellyfinLoginCard.svelte';
+	import LocalLoginForm from './LocalLoginForm.svelte';
 
-	let username = $state('');
-	let password = $state('');
-	let error = $state('');
-	let busy = $state(false);
 	let ssoOidc = $state(false);
+	let ssoJellyfin = $state(false);
+	let ssoQuickConnect = $state(false);
+	let fallbackOpen = $state(false);
 	let ssoFailed = $derived(page.url.searchParams.get('sso') === 'failed');
 
 	$effect(() => {
@@ -25,6 +25,8 @@ SPDX-License-Identifier: EUPL-1.2
 				const res = await api.GET('/auth/sso');
 				if (res.data) {
 					ssoOidc = res.data.oidc;
+					ssoJellyfin = Boolean(res.data.jellyfin);
+					ssoQuickConnect = Boolean(res.data.jellyfinQuickConnect);
 					if (res.data.proxy) {
 						await tryProxyLogin();
 					}
@@ -47,18 +49,9 @@ SPDX-License-Identifier: EUPL-1.2
 		}
 	}
 
-	async function submit(event: SubmitEvent): Promise<void> {
+	function toggleFallback(event: MouseEvent): void {
 		event.preventDefault();
-		busy = true;
-		error = '';
-		try {
-			await session.login(username, password);
-			await goto(resolve('/'));
-		} catch (err) {
-			error = describeError(err);
-		} finally {
-			busy = false;
-		}
+		fallbackOpen = !fallbackOpen;
 	}
 </script>
 
@@ -68,33 +61,17 @@ SPDX-License-Identifier: EUPL-1.2
 			<p role="alert" class="mb-4 text-sm text-danger">{m.login_sso_failed()}</p>
 		{/if}
 	{/snippet}
-	<form class="card flex flex-col gap-4" onsubmit={submit}>
-		<Field id="username" label={m.username()}>
-			<input id="username" class="input" autocomplete="username" required bind:value={username} />
-		</Field>
-		<Field id="password" label={m.password()}>
-			<input
-				id="password"
-				class="input"
-				type="password"
-				autocomplete="current-password"
-				required
-				bind:value={password}
-			/>
-		</Field>
-		{#if error}
-			<p role="alert" class="text-sm text-danger">{error}</p>
-		{/if}
-		<button type="submit" class="btn btn-primary" disabled={busy}>{m.login_submit()}</button>
-		{#if ssoOidc}
-			<a
-				href="/api/v1/auth/oidc/login"
-				rel="external"
-				class="btn justify-center text-center"
-				data-sveltekit-reload
-			>
-				{m.login_sso()}
-			</a>
-		{/if}
-	</form>
+	{#if ssoJellyfin}
+		<JellyfinLoginCard quickConnectEnabled={ssoQuickConnect} {ssoOidc} />
+		<details class="card mt-4" open={fallbackOpen}>
+			<summary class="cursor-pointer text-sm font-medium select-none" onclick={toggleFallback}>
+				{m.login_admin_fallback()}
+			</summary>
+			{#if fallbackOpen}
+				<LocalLoginForm showOidc={false} embedded={true} />
+			{/if}
+		</details>
+	{:else}
+		<LocalLoginForm showOidc={ssoOidc} embedded={false} />
+	{/if}
 </AuthCard>
