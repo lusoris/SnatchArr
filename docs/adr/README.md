@@ -43,3 +43,4 @@ This directory documents key architectural decisions following the HISS-14 immut
 | [0035](0035-jellyfin-integration.md) | 2026-10-26 | Complete SnatchArr integration inside Jellyfin without an external identity provider | Accepted |
 | [0036](0036-community-requests-and-voting.md) | 2026-10-26 | Community requests and voting across media types | Proposed |
 | [0037](0037-studio-scoped-numbered-performer-names.md) | 2026-10-26 | Studio-scoped numbered performer names, scene-ownership conflict rules and Stash wrong-merge import check | Accepted |
+| [0041](0041-rule-driven-library-processing.md) | 2026-10-26 | Rule-driven library processing (remux and re-encode by rules) | Proposed |
