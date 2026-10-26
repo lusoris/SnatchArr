@@ -20,3 +20,7 @@ web/src/lib/components/ActivityFeed.svelte
 web/src/lib/connections.test.ts
 web/src/lib/overview.ts
 web/src/lib/overview.test.ts
+web/src/lib/queries/connections.ts
+web/src/routes/connections/DownloadClientsCard.svelte
+web/src/routes/connections/ProwlarrCard.svelte
+web/src/routes/connections/SeerrCard.svelte
