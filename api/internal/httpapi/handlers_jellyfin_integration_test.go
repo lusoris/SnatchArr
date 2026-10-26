@@ -799,3 +799,35 @@ func TestJellyfin_CookieAuthRevalidation(t *testing.T) {
 		}
 	})
 }
+
+func TestJellyfin_QuickConnect_WrongSecretRefused(t *testing.T) {
+	t.Parallel()
+	defaultCfg := config.JellyfinOptions{
+		Enabled:     true,
+		URL:         "http://jellyfin.local:8096",
+		APIKey:      "api-key-test",
+		Timeout:     5 * time.Second,
+		DefaultRole: domain.RoleRequester,
+	}
+	fakeAuth := &fakeJellyfinAuthenticator{
+		quickConnectAuthorizedFunc: func(context.Context, string) (bool, error) {
+			return true, nil
+		},
+		signInQuickConnectFunc: func(context.Context, string) (jellyfin.Member, error) {
+			return jellyfin.Member{}, domain.ErrUnauthorized
+		},
+	}
+	f := setupJellyfinFixture(t, defaultCfg, fakeAuth)
+
+	req := httptest.NewRequest(http.MethodPost, PathPrefix+"/auth/jellyfin/quickconnect/authenticate", bytes.NewBufferString(`{"secret":"invalid-secret"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	f.router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("POST /auth/jellyfin/quickconnect/authenticate status = %d, want %d", rec.Code, http.StatusUnauthorized)
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "application/problem+json") {
+		t.Errorf("Content-Type = %q, want application/problem+json", ct)
+	}
+}

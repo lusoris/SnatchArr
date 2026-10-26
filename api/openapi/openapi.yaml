@@ -3385,6 +3385,11 @@ components:
           type: boolean
         requested_by:
           type: string
+        requestedByUserId:
+          type: string
+          format: uuid
+        requestedByUsername:
+          type: string
         seasons:
           type: array
           items:

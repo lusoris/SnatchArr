@@ -140,6 +140,22 @@ describe('seerr', () => {
 			}
 		});
 	});
+
+	it('shows the mapped SnatchArr username when requestedByUsername is present and falls back to requested_by', async () => {
+		const mappedRequest: SeerrRequest = {
+			...sampleRequest,
+			requested_by: 'seerr-alice',
+			requestedByUserId: '00000000-0000-0000-0000-000000000077',
+			requestedByUsername: 'snatcharr-alice'
+		};
+		stubGet({ ...noLinks, '/seerr/requests': [mappedRequest, unresolvedRequest] });
+		renderWithQuery(SeerrPage);
+
+		const table = await screen.findByRole('table');
+		expect(within(table).getByText('snatcharr-alice')).toBeTruthy();
+		expect(within(table).queryByText('seerr-alice')).toBeNull();
+		expect(within(table).getByText('bob')).toBeTruthy();
+	});
 });
 
 const sampleLink: SeerrLink = {
