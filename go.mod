@@ -7,6 +7,7 @@ ignore ./web/node_modules
 
 require (
 	github.com/coreos/go-oidc/v3 v3.21.0
+	github.com/gen2brain/webp v0.6.4
 	github.com/go-chi/chi/v5 v5.5.0
 	github.com/go-faster/errors v0.8.0
 	github.com/go-faster/jx v1.2.0
@@ -44,6 +45,7 @@ require (
 	go.opentelemetry.io/otel/metric v1.47.0
 	go.opentelemetry.io/otel/trace v1.47.0
 	go.uber.org/fx v1.24.0
+	golang.org/x/image v0.47.0
 	golang.org/x/oauth2 v0.37.0
 	google.golang.org/grpc v1.84.0
 	google.golang.org/protobuf v1.36.12
