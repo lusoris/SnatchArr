@@ -44,3 +44,4 @@ This directory documents key architectural decisions following the HISS-14 immut
 | [0036](0036-community-requests-and-voting.md) | 2026-10-26 | Community requests and voting across media types | Accepted |
 | [0037](0037-studio-scoped-numbered-performer-names.md) | 2026-10-26 | Studio-scoped numbered performer names, scene-ownership conflict rules and Stash wrong-merge import check | Accepted |
 | [0040](0040-audiobookshelf-integration.md) | 2026-10-26 | Audiobookshelf full integration | Proposed |
+| [0041](0041-rule-driven-library-processing.md) | 2026-10-26 | Rule-driven library processing (remux and re-encode by rules) | Proposed |

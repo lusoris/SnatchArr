@@ -84,6 +84,7 @@ const (
 	ReleaseWatchawareGateSeriesOperation      OperationName = "ReleaseWatchawareGateSeries"
 	ResetStateOperation                       OperationName = "ResetState"
 	RevokeAPIKeyOperation                     OperationName = "RevokeAPIKey"
+	SearchItemOperation                       OperationName = "SearchItem"
 	SnatchSeerrRequestOperation               OperationName = "SnatchSeerrRequest"
 	SyncSeerrLinkOperation                    OperationName = "SyncSeerrLink"
 	TestDownloadClientOperation               OperationName = "TestDownloadClient"
