@@ -2,9 +2,33 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
+import { z } from 'zod';
 import type { components } from '#lib/api/schema.js';
 
+export type ProwlarrLink = components['schemas']['ProwlarrLink'];
+export type ProwlarrLinkInput = components['schemas']['ProwlarrLinkInput'];
 export type ProwlarrIndexerStatus = components['schemas']['ProwlarrIndexerStatus'];
+
+export const prowlarrLinkInputSchema = z.object({
+	name: z.string().min(1).max(64),
+	base_url: z.string().min(1),
+	api_key: z.string().optional(),
+	hourly_cap: z.number().int().min(1).max(500),
+	enabled: z.boolean()
+}) satisfies z.ZodType<ProwlarrLinkInput>;
+
+export const prowlarrLinkSchema = z.object({
+	id: z.string(),
+	name: z.string(),
+	base_url: z.string(),
+	hourly_cap: z.number().int().min(1).max(500),
+	enabled: z.boolean(),
+	last_seen_version: z.string().optional(),
+	last_check_at: z.string().optional(),
+	last_error: z.string().optional(),
+	created_at: z.string(),
+	updated_at: z.string()
+}) satisfies z.ZodType<ProwlarrLink>;
 
 export type LimitLevel = 'ok' | 'near' | 'exhausted';
 

@@ -965,3 +965,85 @@ func testItemSearchCooldownBoundary(t *testing.T, st *store.Store, userID uuid.U
 		t.Fatalf("item_search_cooldowns count after user cascade delete = %d, want 0", count)
 	}
 }
+
+func TestMigration000043ProwlarrLinkCap(t *testing.T) {
+	t.Parallel()
+	st := storetest.New(t)
+	m := storetest.Migrator(t, st)
+
+	stepDownToVersion(t, m, 42)
+	assertTableExists(t, st, "prowlarr_rate_buckets", false)
+
+	ctx := t.Context()
+	linkID := uuid.New()
+	const insertV42 = `INSERT INTO prowlarr_links (
+		id, name, base_url, api_key_enc, enabled, created_at, updated_at
+	) VALUES (
+		$1, 'prowlarr-m43', 'http://127.0.0.1:9696', '\x0102', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+	)`
+	if _, err := st.Pool().Exec(ctx, insertV42, linkID); err != nil {
+		t.Fatalf("insert prowlarr link at v42: %v", err)
+	}
+
+	if err := m.Steps(1); err != nil {
+		t.Fatalf("Steps(1) up to 43: %v", err)
+	}
+	assertTableExists(t, st, "prowlarr_rate_buckets", true)
+
+	// Check default 15 on existing row
+	var capVal int
+	err := st.Pool().QueryRow(ctx, "SELECT hourly_cap FROM prowlarr_links WHERE id = $1", linkID).Scan(&capVal)
+	if err != nil {
+		t.Fatalf("query hourly_cap after up: %v", err)
+	}
+	if capVal != 15 {
+		t.Fatalf("hourly_cap default = %d, want 15", capVal)
+	}
+
+	// CHECK constraint rejects 0 and 501
+	if _, err = st.Pool().Exec(ctx, "UPDATE prowlarr_links SET hourly_cap = 0 WHERE id = $1", linkID); err == nil {
+		t.Fatal("expected error updating hourly_cap = 0, got nil")
+	}
+	if _, err = st.Pool().Exec(ctx, "UPDATE prowlarr_links SET hourly_cap = 501 WHERE id = $1", linkID); err == nil {
+		t.Fatal("expected error updating hourly_cap = 501, got nil")
+	}
+
+	// Boundary values 1 and 500 accepted
+	if _, err = st.Pool().Exec(ctx, "UPDATE prowlarr_links SET hourly_cap = 1 WHERE id = $1", linkID); err != nil {
+		t.Fatalf("update hourly_cap = 1: %v", err)
+	}
+	if _, err = st.Pool().Exec(ctx, "UPDATE prowlarr_links SET hourly_cap = 500 WHERE id = $1", linkID); err != nil {
+		t.Fatalf("update hourly_cap = 500: %v", err)
+	}
+
+	// prowlarr_rate_buckets: FK constraint and cascade delete
+	now := time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC)
+	const insBucket = `INSERT INTO prowlarr_rate_buckets (link_id, window_start, used) VALUES ($1, $2, $3)`
+	if _, err = st.Pool().Exec(ctx, insBucket, uuid.New(), now, 1); err == nil {
+		t.Fatal("insert bucket with unknown link_id succeeded, want fk violation")
+	}
+	if _, err = st.Pool().Exec(ctx, insBucket, linkID, now, 1); err != nil {
+		t.Fatalf("insert bucket: %v", err)
+	}
+
+	// Down migration
+	if err = m.Steps(-1); err != nil {
+		t.Fatalf("Steps(-1) down to 42: %v", err)
+	}
+	assertTableExists(t, st, "prowlarr_rate_buckets", false)
+
+	var colExists bool
+	err = st.Pool().QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='prowlarr_links' AND column_name='hourly_cap')").Scan(&colExists)
+	if err != nil {
+		t.Fatalf("check column exists after down: %v", err)
+	}
+	if colExists {
+		t.Fatalf("hourly_cap column still exists after down migration")
+	}
+
+	// Back up to 43
+	if err = m.Steps(1); err != nil {
+		t.Fatalf("Steps(1) back up to 43: %v", err)
+	}
+	assertTableExists(t, st, "prowlarr_rate_buckets", true)
+}

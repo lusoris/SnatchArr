@@ -128,8 +128,8 @@ func (u usage) resetsAt(now time.Time) time.Time {
 	return FreesAt(u.oldest)
 }
 
-// Purge drops up to limit instance and up to limit global buckets older than BucketKeep (one
-// batch of the retention janitor) and returns how many rows went.
+// Purge drops up to limit instance, up to limit global, and up to limit prowlarr buckets
+// older than BucketKeep (one batch of the retention janitor) and returns how many rows went.
 func (b *Budget) Purge(ctx context.Context, limit int32) (int64, error) {
 	before := Minute(b.clk.Now()).Add(-BucketKeep)
 	n, err := b.st.Q().PurgeBucketsBefore(ctx, sqlcgen.PurgeBucketsBeforeParams{Before: before, Batch: limit})
@@ -140,7 +140,11 @@ func (b *Budget) Purge(ctx context.Context, limit int32) (int64, error) {
 	if err != nil {
 		return n, fmt.Errorf("snatch: purge global buckets: %w", store.MapError(err))
 	}
-	return n + global, nil
+	prowlarr, err := b.st.Q().PurgeProwlarrBucketsBefore(ctx, sqlcgen.PurgeProwlarrBucketsBeforeParams{Before: before, Batch: limit})
+	if err != nil {
+		return n + global, fmt.Errorf("snatch: purge prowlarr buckets: %w", store.MapError(err))
+	}
+	return n + global + prowlarr, nil
 }
 
 // Acquire grants up to `requested` items without exceeding the instance cap within the
