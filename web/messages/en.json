@@ -825,5 +825,16 @@
 	"page_not_found_title": "404 - Page not found",
 	"page_not_found_text": "The requested page is not available or its module is disabled.",
 	"page_not_found_back": "Back to overview",
-	"module_disabled_detail": "Module {module} is disabled"
+	"module_disabled_detail": "Module {module} is disabled",
+	"login_jellyfin_title": "Sign in with Jellyfin",
+	"login_jellyfin_username": "Jellyfin username",
+	"login_jellyfin_password": "Jellyfin password",
+	"login_jellyfin_submit": "Sign in with Jellyfin",
+	"login_jellyfin_quick_connect": "Quick Connect",
+	"login_jellyfin_quick_connect_code": "Quick Connect code: {code}",
+	"login_jellyfin_quick_connect_hint": "Enter this code in your Jellyfin app or web client to sign in.",
+	"login_jellyfin_quick_connect_waiting": "Waiting for authorization…",
+	"login_jellyfin_quick_connect_cancel": "Cancel",
+	"login_jellyfin_quick_connect_timeout": "Quick Connect timed out. Please try again.",
+	"login_admin_fallback": "Administrator fallback sign-in"
 }

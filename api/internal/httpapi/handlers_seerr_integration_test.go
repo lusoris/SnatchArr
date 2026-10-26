@@ -16,6 +16,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
 	"github.com/lusoris/SnatchArr/api/internal/seerrclient"
+	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
 )
 
 func TestSeerrLinkRead(t *testing.T) {
@@ -451,5 +452,66 @@ func testSeerrRequestCase(t *testing.T, f *integrationFixture, ctx context.Conte
 	}
 	if err != nil || run.InstanceID != instID || run.Kind != oas.SnatchKindMissing {
 		t.Fatalf("SnatchSeerrRequest() = %+v, %v; want inst %s", run, err, instID)
+	}
+}
+
+type seerrJellyfinMapCase struct {
+	name       string
+	jellyfinID string
+	linkUser   bool
+	wantMapped bool
+}
+
+func (tc seerrJellyfinMapCase) run(t *testing.T) {
+	t.Helper()
+	f := newIntegrationFixture(t)
+	ctx := t.Context()
+	link := seedTestSeerrLink(t, f)
+	var wantUser domain.User
+	if tc.linkUser {
+		u, err := f.h.auth.Setup(ctx, "alice", "password-alice-1234")
+		if err != nil {
+			t.Fatalf("Setup: %v", err)
+		}
+		if err := f.h.auth.LinkIdentity(ctx, u.ID, domain.IdentityProviderJellyfin, tc.jellyfinID); err != nil {
+			t.Fatalf("LinkIdentity: %v", err)
+		}
+		wantUser = u
+	}
+	now := f.clk.Now()
+	err := f.st.Q().UpsertSeerrRequest(ctx, sqlcgen.UpsertSeerrRequestParams{
+		LinkID: link.ID, RequestID: 501, MediaType: string(domain.SeerrMovie),
+		TmdbID: 1501, Title: "Mapped Movie", RequestStatus: 2, MediaStatus: 3,
+		RequestedBy: "seerr-alice", RequestedByJellyfinID: tc.jellyfinID,
+		Seasons: []int32{}, RequestedAt: &now, LastSeenAt: now,
+	})
+	if err != nil {
+		t.Fatalf("UpsertSeerrRequest: %v", err)
+	}
+	list, err := f.h.ListSeerrRequests(ctx)
+	if err != nil || len(list) != 1 {
+		t.Fatalf("ListSeerrRequests() = %+v, %v; want 1 item", list, err)
+	}
+	got := list[0]
+	if got.RequestedByUserId.IsSet() != tc.wantMapped || got.RequestedByUsername.IsSet() != tc.wantMapped {
+		t.Fatalf("mapped set = (%v, %v), want %v", got.RequestedByUserId.IsSet(), got.RequestedByUsername.IsSet(), tc.wantMapped)
+	}
+	if tc.wantMapped && (got.RequestedByUserId.Value != wantUser.ID || got.RequestedByUsername.Value != wantUser.Username) {
+		t.Fatalf("mapped = (%s, %q), want (%s, %q)", got.RequestedByUserId.Value, got.RequestedByUsername.Value, wantUser.ID, wantUser.Username)
+	}
+}
+
+func TestListSeerrRequests_JellyfinMapping(t *testing.T) {
+	t.Parallel()
+	cases := []seerrJellyfinMapCase{
+		{name: "positive linked jellyfin id resolves to user", jellyfinID: "jf-linked-1", linkUser: true, wantMapped: true},
+		{name: "negative unlinked jellyfin id leaves fields absent", jellyfinID: "jf-unlinked-2", linkUser: false, wantMapped: false},
+		{name: "boundary empty jellyfin id leaves fields absent", jellyfinID: "", linkUser: false, wantMapped: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			tc.run(t)
+		})
 	}
 }
