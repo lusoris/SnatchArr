@@ -41,3 +41,20 @@ Observations are cached for 20 s and taken at most once per client per tick.
   a linked client.
 - A client that was never observed does not block: ignorance is not backpressure.
 - Secrets are encrypted at rest like *arr API keys and never returned by the API.
+
+## Amendment 2026-10-26: Prowlarr grab path for types without an *arr
+
+Ledger answer `snatcharr-oq-0036-14-grab-path`, recorded for
+[ADR-0036](0036-community-requests-and-voting.md):
+
+- Media types with no `*arr` target (games and ROMs, and books, audiobooks
+  and comics when no Readarr-compatible, Kapowarr or Mylar3 target is
+  connected) grab a chosen release through Prowlarr `GrabRelease`
+  (`POST /api/v1/search`). Prowlarr hands the release to its own configured
+  download client.
+- SnatchArr still downloads nothing and never adds, pauses or removes a
+  download in a client; the decision above stands for every client SnatchArr
+  observes.
+- No import step follows the grab. The library application picks the file
+  up from the download folder; SnatchArr only detects availability.
+- Each grab search debits the indexer hourly cap like an `*arr` search.

@@ -50,6 +50,87 @@ func (h *Handlers) TriggerRun(ctx context.Context, req *oas.RunTrigger, params o
 	return &out, nil
 }
 
+// SearchItem queues an item-scoped snatch run for a single entity or group.
+func (h *Handlers) SearchItem(ctx context.Context, req *oas.ItemSearchRequest, params oas.SearchItemParams) (*oas.Run, error) {
+	if err := requireRequester(ctx); err != nil {
+		return nil, err
+	}
+	if _, err := h.instances.Get(ctx, params.InstanceId); err != nil {
+		return nil, err
+	}
+	focusEntity, focusGroup, err := parseItemFocus(req)
+	if err != nil {
+		return nil, err
+	}
+	kind, err := domain.ParseSnatchKind(string(req.Kind))
+	if err != nil {
+		return nil, err
+	}
+	user, ok := UserFrom(ctx)
+	if !ok {
+		return nil, domain.ErrUnauthorized
+	}
+	if cdErr := h.checkItemSearchCooldown(ctx, user.ID); cdErr != nil {
+		return nil, cdErr
+	}
+	run, err := h.enqueueItemSearchRun(ctx, params.InstanceId, user.ID, kind, focusEntity, focusGroup)
+	if err != nil {
+		return nil, err
+	}
+	h.recordQuickie(ctx, run)
+	out := runToOAS(run)
+	return &out, nil
+}
+
+func (h *Handlers) checkItemSearchCooldown(ctx context.Context, userID uuid.UUID) error {
+	retryAfter, allowed, err := h.runs.CheckAndRecordItemSearch(ctx, userID, h.cfg.ItemSearch.CooldownSeconds)
+	if err != nil {
+		return err
+	}
+	if !allowed {
+		if w, ok := writerFrom(ctx); ok {
+			w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
+		}
+		return domain.ErrTooManyRequests
+	}
+	return nil
+}
+
+func (h *Handlers) enqueueItemSearchRun(ctx context.Context, instID uuid.UUID, userID uuid.UUID, kind domain.SnatchKind, entity, group *int64) (domain.Run, error) {
+	run, created, err := h.runs.EnqueueFocused(ctx, instID, kind, entity, group)
+	if err != nil {
+		return domain.Run{}, h.resetItemSearchCooldown(ctx, userID, err)
+	}
+	if !created {
+		conflict := fmt.Errorf("%w: a %s snatch is already queued or running for this instance", domain.ErrConflict, kind)
+		return domain.Run{}, h.resetItemSearchCooldown(ctx, userID, conflict)
+	}
+	return run, nil
+}
+
+// resetItemSearchCooldown clears the cooldown a refused enqueue recorded, so
+// the user may retry at once, and joins a reset failure to the cause.
+func (h *Handlers) resetItemSearchCooldown(ctx context.Context, userID uuid.UUID, cause error) error {
+	if err := h.runs.ResetItemSearchCooldown(ctx, userID); err != nil {
+		return errors.Join(cause, fmt.Errorf("reset item search cooldown: %w", err))
+	}
+	return cause
+}
+
+func parseItemFocus(req *oas.ItemSearchRequest) (*int64, *int64, error) {
+	hasEntity := req.EntityID.IsSet()
+	hasGroup := req.GroupID.IsSet()
+	if (hasEntity && hasGroup) || (!hasEntity && !hasGroup) {
+		return nil, nil, fmt.Errorf("%w: exactly one of entity_id or group_id must be provided", domain.ErrBadRequest)
+	}
+	if hasEntity {
+		v := req.EntityID.Value
+		return &v, nil, nil
+	}
+	v := req.GroupID.Value
+	return nil, &v, nil
+}
+
 // PreviewRun queues a dry-run / preview snatch run immediately.
 func (h *Handlers) PreviewRun(ctx context.Context, params oas.PreviewRunParams) (*oas.PreviewResult, error) {
 	if err := requireAdmin(ctx); err != nil {

@@ -352,6 +352,20 @@ func encodeCreateInstanceResponse(response *Instance, w http.ResponseWriter, spa
 	return nil
 }
 
+func encodeCreateMyNotifyTargetResponse(response *UserNotifyTarget, w http.ResponseWriter, span trace.Span) error {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(201)
+	span.SetStatus(codes.Ok, http.StatusText(201))
+
+	e := new(jx.Encoder)
+	response.Encode(e)
+	if _, err := e.WriteTo(w); err != nil {
+		return errors.Wrap(err, "write")
+	}
+
+	return nil
+}
+
 func encodeCreateNotificationChannelResponse(response *NotificationChannel, w http.ResponseWriter, span trace.Span) error {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(201)
@@ -583,6 +597,13 @@ func encodeDeleteInstanceEventsResponse(response *DeleteInstanceEventsNoContent,
 	return nil
 }
 
+func encodeDeleteMyNotifyTargetResponse(response *DeleteMyNotifyTargetNoContent, w http.ResponseWriter, span trace.Span) error {
+	w.WriteHeader(204)
+	span.SetStatus(codes.Ok, http.StatusText(204))
+
+	return nil
+}
+
 func encodeDeleteNotificationChannelResponse(response *DeleteNotificationChannelNoContent, w http.ResponseWriter, span trace.Span) error {
 	w.WriteHeader(204)
 	span.SetStatus(codes.Ok, http.StatusText(204))
@@ -732,6 +753,20 @@ func encodeGetInstancePriorityResponse(response *InstancePriority, w http.Respon
 }
 
 func encodeGetModuleResponse(response *Module, w http.ResponseWriter, span trace.Span) error {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(200)
+	span.SetStatus(codes.Ok, http.StatusText(200))
+
+	e := new(jx.Encoder)
+	response.Encode(e)
+	if _, err := e.WriteTo(w); err != nil {
+		return errors.Wrap(err, "write")
+	}
+
+	return nil
+}
+
+func encodeGetMyNotifyTargetResponse(response *UserNotifyTarget, w http.ResponseWriter, span trace.Span) error {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(200)
 	span.SetStatus(codes.Ok, http.StatusText(200))
@@ -1525,6 +1560,24 @@ func encodeListModulesResponse(response []ModuleState, w http.ResponseWriter, sp
 	return nil
 }
 
+func encodeListMyNotifyTargetsResponse(response []UserNotifyTarget, w http.ResponseWriter, span trace.Span) error {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(200)
+	span.SetStatus(codes.Ok, http.StatusText(200))
+
+	e := new(jx.Encoder)
+	e.ArrStart()
+	for _, elem := range response {
+		elem.Encode(e)
+	}
+	e.ArrEnd()
+	if _, err := e.WriteTo(w); err != nil {
+		return errors.Wrap(err, "write")
+	}
+
+	return nil
+}
+
 func encodeListNotificationChannelsResponse(response []NotificationChannel, w http.ResponseWriter, span trace.Span) error {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(200)
@@ -1894,6 +1947,20 @@ func encodeRevokeAPIKeyResponse(response RevokeAPIKeyRes, w http.ResponseWriter,
 	}
 }
 
+func encodeSearchItemResponse(response *Run, w http.ResponseWriter, span trace.Span) error {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(201)
+	span.SetStatus(codes.Ok, http.StatusText(201))
+
+	e := new(jx.Encoder)
+	response.Encode(e)
+	if _, err := e.WriteTo(w); err != nil {
+		return errors.Wrap(err, "write")
+	}
+
+	return nil
+}
+
 func encodeSnatchSeerrRequestResponse(response *Run, w http.ResponseWriter, span trace.Span) error {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(201)
@@ -1974,6 +2041,13 @@ func encodeTestInstanceInputResponse(response *ProbeResult, w http.ResponseWrite
 	if _, err := e.WriteTo(w); err != nil {
 		return errors.Wrap(err, "write")
 	}
+
+	return nil
+}
+
+func encodeTestMyNotifyTargetResponse(response *TestMyNotifyTargetNoContent, w http.ResponseWriter, span trace.Span) error {
+	w.WriteHeader(204)
+	span.SetStatus(codes.Ok, http.StatusText(204))
 
 	return nil
 }
@@ -2243,6 +2317,20 @@ func encodeUpdateInstancePriorityResponse(response *InstancePriority, w http.Res
 }
 
 func encodeUpdateModuleResponse(response *Module, w http.ResponseWriter, span trace.Span) error {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(200)
+	span.SetStatus(codes.Ok, http.StatusText(200))
+
+	e := new(jx.Encoder)
+	response.Encode(e)
+	if _, err := e.WriteTo(w); err != nil {
+		return errors.Wrap(err, "write")
+	}
+
+	return nil
+}
+
+func encodeUpdateMyNotifyTargetResponse(response *UserNotifyTarget, w http.ResponseWriter, span trace.Span) error {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(200)
 	span.SetStatus(codes.Ok, http.StatusText(200))

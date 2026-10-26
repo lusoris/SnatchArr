@@ -95,6 +95,43 @@ func (q *Queries) CreateNotificationRule(ctx context.Context, arg CreateNotifica
 	return i, err
 }
 
+const createUserNotifyTarget = `-- name: CreateUserNotifyTarget :one
+INSERT INTO user_notify_targets (id, user_id, kind, config_enc, enabled, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $6)
+RETURNING id, user_id, kind, config_enc, enabled, created_at, updated_at
+`
+
+type CreateUserNotifyTargetParams struct {
+	ID        uuid.UUID
+	UserID    uuid.UUID
+	Kind      string
+	ConfigEnc []byte
+	Enabled   bool
+	CreatedAt time.Time
+}
+
+func (q *Queries) CreateUserNotifyTarget(ctx context.Context, arg CreateUserNotifyTargetParams) (UserNotifyTarget, error) {
+	row := q.db.QueryRow(ctx, createUserNotifyTarget,
+		arg.ID,
+		arg.UserID,
+		arg.Kind,
+		arg.ConfigEnc,
+		arg.Enabled,
+		arg.CreatedAt,
+	)
+	var i UserNotifyTarget
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Kind,
+		&i.ConfigEnc,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const deleteNotificationChannel = `-- name: DeleteNotificationChannel :execrows
 DELETE FROM notification_channels WHERE id = $1
 `
@@ -113,6 +150,24 @@ DELETE FROM notification_rules WHERE id = $1
 
 func (q *Queries) DeleteNotificationRule(ctx context.Context, id uuid.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteNotificationRule, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteUserNotifyTarget = `-- name: DeleteUserNotifyTarget :execrows
+DELETE FROM user_notify_targets
+WHERE id = $1 AND user_id = $2
+`
+
+type DeleteUserNotifyTargetParams struct {
+	ID     uuid.UUID
+	UserID uuid.UUID
+}
+
+func (q *Queries) DeleteUserNotifyTarget(ctx context.Context, arg DeleteUserNotifyTargetParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteUserNotifyTarget, arg.ID, arg.UserID)
 	if err != nil {
 		return 0, err
 	}
@@ -197,6 +252,31 @@ func (q *Queries) GetNotificationRule(ctx context.Context, id uuid.UUID) (Notifi
 	return i, err
 }
 
+const getUserNotifyTarget = `-- name: GetUserNotifyTarget :one
+SELECT id, user_id, kind, config_enc, enabled, created_at, updated_at FROM user_notify_targets
+WHERE id = $1 AND user_id = $2
+`
+
+type GetUserNotifyTargetParams struct {
+	ID     uuid.UUID
+	UserID uuid.UUID
+}
+
+func (q *Queries) GetUserNotifyTarget(ctx context.Context, arg GetUserNotifyTargetParams) (UserNotifyTarget, error) {
+	row := q.db.QueryRow(ctx, getUserNotifyTarget, arg.ID, arg.UserID)
+	var i UserNotifyTarget
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Kind,
+		&i.ConfigEnc,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const listEnabledNotificationChannels = `-- name: ListEnabledNotificationChannels :many
 SELECT id, name, kind, enabled, config_enc, has_secret, created_at, updated_at FROM notification_channels WHERE enabled ORDER BY name
 `
@@ -250,6 +330,40 @@ func (q *Queries) ListEnabledNotificationRules(ctx context.Context) ([]Notificat
 			&i.Threshold,
 			&i.Enabled,
 			&i.ChannelIds,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEnabledUserNotifyTargets = `-- name: ListEnabledUserNotifyTargets :many
+SELECT id, user_id, kind, config_enc, enabled, created_at, updated_at FROM user_notify_targets
+WHERE user_id = $1 AND enabled = TRUE
+ORDER BY created_at ASC
+`
+
+func (q *Queries) ListEnabledUserNotifyTargets(ctx context.Context, userID uuid.UUID) ([]UserNotifyTarget, error) {
+	rows, err := q.db.Query(ctx, listEnabledUserNotifyTargets, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []UserNotifyTarget{}
+	for rows.Next() {
+		var i UserNotifyTarget
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Kind,
+			&i.ConfigEnc,
+			&i.Enabled,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -395,6 +509,40 @@ func (q *Queries) ListNotificationRulesByEvent(ctx context.Context, eventKind st
 	return items, nil
 }
 
+const listUserNotifyTargets = `-- name: ListUserNotifyTargets :many
+SELECT id, user_id, kind, config_enc, enabled, created_at, updated_at FROM user_notify_targets
+WHERE user_id = $1
+ORDER BY created_at ASC
+`
+
+func (q *Queries) ListUserNotifyTargets(ctx context.Context, userID uuid.UUID) ([]UserNotifyTarget, error) {
+	rows, err := q.db.Query(ctx, listUserNotifyTargets, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []UserNotifyTarget{}
+	for rows.Next() {
+		var i UserNotifyTarget
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Kind,
+			&i.ConfigEnc,
+			&i.Enabled,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const recentInstanceRunStatuses = `-- name: RecentInstanceRunStatuses :many
 SELECT status FROM snatch_runs
 WHERE instance_id = $1 AND status IN ('done', 'failed')
@@ -503,6 +651,44 @@ func (q *Queries) UpdateNotificationRule(ctx context.Context, arg UpdateNotifica
 		&i.Threshold,
 		&i.Enabled,
 		&i.ChannelIds,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateUserNotifyTarget = `-- name: UpdateUserNotifyTarget :one
+UPDATE user_notify_targets
+SET kind = $3, config_enc = $4, enabled = $5, updated_at = $6
+WHERE id = $1 AND user_id = $2
+RETURNING id, user_id, kind, config_enc, enabled, created_at, updated_at
+`
+
+type UpdateUserNotifyTargetParams struct {
+	ID        uuid.UUID
+	UserID    uuid.UUID
+	Kind      string
+	ConfigEnc []byte
+	Enabled   bool
+	UpdatedAt time.Time
+}
+
+func (q *Queries) UpdateUserNotifyTarget(ctx context.Context, arg UpdateUserNotifyTargetParams) (UserNotifyTarget, error) {
+	row := q.db.QueryRow(ctx, updateUserNotifyTarget,
+		arg.ID,
+		arg.UserID,
+		arg.Kind,
+		arg.ConfigEnc,
+		arg.Enabled,
+		arg.UpdatedAt,
+	)
+	var i UserNotifyTarget
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Kind,
+		&i.ConfigEnc,
+		&i.Enabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

@@ -236,6 +236,16 @@ func settingsFromOAS(in *oas.Settings) domain.Settings {
 	}
 }
 
+func userNotifyTargetToOAS(t domain.UserNotifyTarget) oas.UserNotifyTarget {
+	return oas.UserNotifyTarget{
+		ID:        t.ID,
+		Kind:      oas.NotificationChannelKind(t.Kind),
+		Enabled:   t.Enabled,
+		CreatedAt: t.CreatedAt,
+		UpdatedAt: t.UpdatedAt,
+	}
+}
+
 func notificationChannelToOAS(c domain.NotificationChannel) oas.NotificationChannel {
 	return oas.NotificationChannel{
 		ID:        c.ID,

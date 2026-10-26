@@ -6,7 +6,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # ADR-0033: Adult identity resolution and normalized data model
 
-- Status: Accepted (2026-10-26)
+- Status: Accepted (2026-10-26); scope questions `OQ-0033-1` to `OQ-0033-6` answered
 - Date: 2026-10-26
 - Related: [ADR-0018](0018-product-front-door.md), [ADR-0025](0025-module-switches.md), [ADR-0026](0026-accounts-and-roles.md), [ADR-0027](0027-adult-module.md), [ADR-0028](0028-jellyfin-plugin.md), [ADR-0031](0031-creator-content-fansdb.md), [ADR-0032](0032-stash-own-or-integrate.md)
 
@@ -523,6 +523,26 @@ Live contract tests live in `goenvoy` (`metadata/adult/tpdb` and `metadata/adult
 
 - **Additional storage metadata**: Storing `adult_field_provenance` and `adult_identity_events` adds relational rows per entity, bounded by the number of linked metadata sources (typically 1 to 5 per entity).
 - **Upstream `goenvoy` release coordination**: `SnatchArr` must land and tag the `goenvoy` `metadata/adult/tpdb` (`v1.4.0`) and `metadata/adult/stashbox/v2` (`v2.1.0`) updates before wiring the `ThePornDB` REST sync loop.
+
+## Open scope questions
+
+The public pain research in `.workingdir/evidence/stash-pain-research-20261026.md` (sha256 `1a2c4df2f45b`) assessed six themes that feed this ADR. The assessment is not a decision: each assignment stays open until the decision ledger records an answer under the id `snatcharr-oq-0033-<n>`. The answers change the follow-up slice list, not the accepted decision above.
+
+- `OQ-0033-1 | Scope owner for the research theme "Multi-version and edition release grouping" (weight 1021, 8 rows): who covers it? | a) split: Jellyfin owns general movie and episode version grouping; SnatchArr covers only the adult scene and movie edition model (risk: two version models side by side) b) SnatchArr covers all version grouping (risk: duplicates a Jellyfin feature) c) Jellyfin and Stash own it all; no SnatchArr edition model (risk: adult editions stay duplicate scenes) | recommended: a`
+- `OQ-0033-2 | Scope owner for the research theme "Tag sprawl, taxonomy normalization and tag hierarchy" (weight 450, 30 rows): who covers it? | a) SnatchArr covers it in ADR-0033 scope (normalized tag taxonomy with aliases) (risk: build and maintenance cost; overlap with upstream work) b) upstream (Stash, stash-box) owns it; SnatchArr only reads its result (risk: the pain stays for adopters who run SnatchArr) c) out of scope, no SnatchArr work (risk: theme stays unaddressed; research weight 450) | recommended: a`
+- `OQ-0033-3 | Scope owner for the research theme "Duplicate release detection and library deduplication" (weight 280, 9 rows): who covers it? | a) SnatchArr covers it in ADR-0033 scope (cross-instance candidate dedupe before dispatch) (risk: build and maintenance cost; overlap with upstream work) b) upstream (Stash duplicate checker, Jellyfin) owns it; SnatchArr only reads its result (risk: the pain stays for adopters who run SnatchArr) c) out of scope, no SnatchArr work (risk: theme stays unaddressed; research weight 280) | recommended: a`
+- `OQ-0033-4 | Scope owner for the research theme "Gallery and image-set identification and matching" (weight 137, 6 rows): who covers it? | a) SnatchArr covers it in ADR-0033 scope (local image-set discovery and matching) (risk: build and maintenance cost; overlap with upstream work) b) upstream (Stash) owns it; SnatchArr only reads its result (risk: the pain stays for adopters who run SnatchArr) c) out of scope, no SnatchArr work (risk: theme stays unaddressed; research weight 137) | recommended: a`
+- `OQ-0033-5 | Scope owner for the research theme "Perceptual hash false matches and fingerprint poisoning" (weight 81, 13 rows): who covers it? | a) SnatchArr covers it in ADR-0033 scope (distance confidence bands with audit undo) (risk: build and maintenance cost; overlap with upstream work) b) upstream (stash-box) owns it; SnatchArr only reads its result (risk: the pain stays for adopters who run SnatchArr) c) out of scope, no SnatchArr work (risk: theme stays unaddressed; research weight 81) | recommended: a`
+- `OQ-0033-6 | Scope owner for the research theme "Studio hierarchy, parent-child inheritance and studio codes" (weight 41, 3 rows): who covers it? | a) SnatchArr covers it in ADR-0033 scope (parent-child studio networks and codes) (risk: build and maintenance cost; overlap with upstream work) b) upstream (Stash, Whisparr) owns it; SnatchArr only reads its result (risk: the pain stays for adopters who run SnatchArr) c) out of scope, no SnatchArr work (risk: theme stays unaddressed; research weight 41) | recommended: a`
+
+Answers recorded (2026-10-26, maintainer decision, wording paraphrased):
+
+- `OQ-0033-1`: option a (ledger `snatcharr-oq-0033-1`). Jellyfin keeps general movie and episode version grouping; SnatchArr adds an edition model for adult scenes and movies only.
+- `OQ-0033-2`: option a (ledger `snatcharr-oq-0033-2`). SnatchArr covers tag normalization and the tag hierarchy in this ADR's scope.
+- `OQ-0033-3`: option a (ledger `snatcharr-oq-0033-3`). SnatchArr covers release and file duplicate detection: it checks before hand-off and lists existing duplicates, and it deletes nothing.
+- `OQ-0033-4`: option a (ledger `snatcharr-oq-0033-4`). SnatchArr covers gallery and image-set matching to scenes and people.
+- `OQ-0033-5`: option a (ledger `snatcharr-oq-0033-5`). SnatchArr covers perceptual hash false matches: a fingerprint alone is never trusted, duration and other signals are cross-checked, and conflicts are flagged.
+- `OQ-0033-6`: option a (ledger `snatcharr-oq-0033-6`). SnatchArr covers the studio parent and child hierarchy and studio codes, built on the tag hierarchy of `OQ-0033-2`.
 
 ---
 

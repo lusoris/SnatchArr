@@ -143,6 +143,11 @@ type Instance struct {
 	DownloadPriority    *int32
 }
 
+type ItemSearchCooldown struct {
+	UserID         uuid.UUID
+	LastSearchedAt time.Time
+}
+
 type LoginLockout struct {
 	Key         string
 	Fails       int32
@@ -382,6 +387,16 @@ type UserIdentity struct {
 	Subject   string
 	UserID    uuid.UUID
 	CreatedAt time.Time
+}
+
+type UserNotifyTarget struct {
+	ID        uuid.UUID
+	UserID    uuid.UUID
+	Kind      string
+	ConfigEnc []byte
+	Enabled   bool
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 type WatchawareGateBaseline struct {

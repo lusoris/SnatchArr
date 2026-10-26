@@ -106,3 +106,9 @@ func ValidatePassword(p string) error {
 	}
 	return nil
 }
+
+// MayReceiveAdult reports whether the user is authorized to receive notifications for adult media.
+// Fails closed (returns false) until ADR-0026 per-user adult_allowed flag is added to users.
+func (u User) MayReceiveAdult() bool {
+	return false
+}
