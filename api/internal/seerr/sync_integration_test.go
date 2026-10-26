@@ -362,3 +362,73 @@ func TestService_Sync_MatchesInstanceByKeyWhenURLsDiffer(t *testing.T) {
 		t.Errorf("row.InstanceID = %v, want %s", row.InstanceID, inst.ID)
 	}
 }
+
+type syncRequestedByCase struct {
+	name           string
+	resultsJSON    string
+	wantBy         string
+	wantJellyfinID string
+}
+
+func (tc syncRequestedByCase) run(t *testing.T) {
+	t.Helper()
+	f := newSyncFixture(t, slog.New(slog.DiscardHandler))
+	mux := http.NewServeMux()
+	none := func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte("[]"))
+	}
+	mux.HandleFunc("GET /api/v1/settings/sonarr", none)
+	mux.HandleFunc("GET /api/v1/settings/radarr", none)
+	mux.HandleFunc("GET /api/v1/request", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(tc.resultsJSON))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	link, err := f.svc.Create(t.Context(), Input{Name: "seerr-jf", BaseURL: srv.URL, APIKey: "seerr-admin-key", Enabled: true})
+	if err != nil {
+		t.Fatalf("create link: %v", err)
+	}
+	if _, err = f.svc.Sync(t.Context(), link.ID); err != nil {
+		t.Fatalf("Sync() = %v", err)
+	}
+	row, err := f.st.Q().GetSeerrRequest(t.Context(), sqlcgen.GetSeerrRequestParams{LinkID: link.ID, RequestID: 77})
+	if err != nil {
+		t.Fatalf("GetSeerrRequest: %v", err)
+	}
+	if row.RequestedBy != tc.wantBy || row.RequestedByJellyfinID != tc.wantJellyfinID {
+		t.Fatalf("got requested_by=%q jellyfin_id=%q, want %q / %q", row.RequestedBy, row.RequestedByJellyfinID, tc.wantBy, tc.wantJellyfinID)
+	}
+}
+
+func TestService_Sync_RequestedByJellyfinID(t *testing.T) {
+	t.Parallel()
+	cases := []syncRequestedByCase{
+		{
+			name:           "positive stores jellyfin user id and username",
+			resultsJSON:    `{"pageInfo":{"pages":1,"results":1},"results":[{"id":77,"status":2,"type":"movie","media":{"id":10,"mediaType":"movie","tmdbId":550,"status":3},"requestedBy":{"id":5,"displayName":"alice","jellyfinUsername":"alice","jellyfinUserId":"jf-user-123"}}]}`,
+			wantBy:         "alice",
+			wantJellyfinID: "jf-user-123",
+		},
+		{
+			name:           "negative nil requestedBy stores empty strings",
+			resultsJSON:    `{"pageInfo":{"pages":1,"results":1},"results":[{"id":77,"status":2,"type":"movie","media":{"id":10,"mediaType":"movie","tmdbId":550,"status":3}}]}`,
+			wantBy:         "",
+			wantJellyfinID: "",
+		},
+		{
+			name:           "boundary non-jellyfin user stores empty jellyfin id",
+			resultsJSON:    `{"pageInfo":{"pages":1,"results":1},"results":[{"id":77,"status":2,"type":"movie","media":{"id":10,"mediaType":"movie","tmdbId":550,"status":3},"requestedBy":{"id":6,"username":"bob"}}]}`,
+			wantBy:         "bob",
+			wantJellyfinID: "",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			tc.run(t)
+		})
+	}
+}

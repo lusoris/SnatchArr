@@ -16,7 +16,7 @@ require (
 	github.com/golusoris/goenvoy/arr/prowlarr/v2 v2.1.6
 	github.com/golusoris/goenvoy/arr/radarr v1.5.4
 	github.com/golusoris/goenvoy/arr/readarr v1.5.1
-	github.com/golusoris/goenvoy/arr/seerr v1.5.3
+	github.com/golusoris/goenvoy/arr/seerr v1.6.1
 	github.com/golusoris/goenvoy/arr/sonarr v1.5.4
 	github.com/golusoris/goenvoy/arr/v2 v2.6.1
 	github.com/golusoris/goenvoy/arr/whisparr v1.5.1

@@ -13321,6 +13321,18 @@ func (s *SeerrRequest) encodeFields(e *jx.Encoder) {
 		e.Str(s.RequestedBy)
 	}
 	{
+		if s.RequestedByUserId.Set {
+			e.FieldStart("requestedByUserId")
+			s.RequestedByUserId.Encode(e)
+		}
+	}
+	{
+		if s.RequestedByUsername.Set {
+			e.FieldStart("requestedByUsername")
+			s.RequestedByUsername.Encode(e)
+		}
+	}
+	{
 		e.FieldStart("seasons")
 		e.ArrStart()
 		for _, elem := range s.Seasons {
@@ -13374,7 +13386,7 @@ func (s *SeerrRequest) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfSeerrRequest = [20]string{
+var jsonFieldsNameOfSeerrRequest = [22]string{
 	0:  "link_id",
 	1:  "link_name",
 	2:  "request_id",
@@ -13386,15 +13398,17 @@ var jsonFieldsNameOfSeerrRequest = [20]string{
 	8:  "media_status",
 	9:  "is_4k",
 	10: "requested_by",
-	11: "seasons",
-	12: "instance_id",
-	13: "instance_name",
-	14: "entity_id",
-	15: "resolved",
-	16: "unresolved_reason",
-	17: "requested_at",
-	18: "last_snatched_at",
-	19: "last_seen_at",
+	11: "requestedByUserId",
+	12: "requestedByUsername",
+	13: "seasons",
+	14: "instance_id",
+	15: "instance_name",
+	16: "entity_id",
+	17: "resolved",
+	18: "unresolved_reason",
+	19: "requested_at",
+	20: "last_snatched_at",
+	21: "last_seen_at",
 }
 
 // Decode decodes SeerrRequest from json.
@@ -13536,8 +13550,28 @@ func (s *SeerrRequest) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"requested_by\"")
 			}
+		case "requestedByUserId":
+			if err := func() error {
+				s.RequestedByUserId.Reset()
+				if err := s.RequestedByUserId.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"requestedByUserId\"")
+			}
+		case "requestedByUsername":
+			if err := func() error {
+				s.RequestedByUsername.Reset()
+				if err := s.RequestedByUsername.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"requestedByUsername\"")
+			}
 		case "seasons":
-			requiredBitSet[1] |= 1 << 3
+			requiredBitSet[1] |= 1 << 5
 			if err := func() error {
 				s.Seasons = make([]int, 0)
 				if err := d.Arr(func(d *jx.Decoder) error {
@@ -13587,7 +13621,7 @@ func (s *SeerrRequest) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"entity_id\"")
 			}
 		case "resolved":
-			requiredBitSet[1] |= 1 << 7
+			requiredBitSet[2] |= 1 << 1
 			if err := func() error {
 				v, err := d.Bool()
 				s.Resolved = bool(v)
@@ -13629,7 +13663,7 @@ func (s *SeerrRequest) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"last_snatched_at\"")
 			}
 		case "last_seen_at":
-			requiredBitSet[2] |= 1 << 3
+			requiredBitSet[2] |= 1 << 5
 			if err := func() error {
 				v, err := json.DecodeDateTime(d)
 				s.LastSeenAt = v
@@ -13651,8 +13685,8 @@ func (s *SeerrRequest) Decode(d *jx.Decoder) error {
 	var failures []validate.FieldError
 	for i, mask := range [3]uint8{
 		0b11111111,
-		0b10001111,
-		0b00001000,
+		0b00100111,
+		0b00100010,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.

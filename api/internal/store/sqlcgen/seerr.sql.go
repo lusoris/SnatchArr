@@ -128,7 +128,7 @@ func (q *Queries) GetSeerrLink(ctx context.Context, id uuid.UUID) (SeerrLink, er
 }
 
 const getSeerrRequest = `-- name: GetSeerrRequest :one
-SELECT link_id, request_id, media_type, tmdb_id, tvdb_id, title, request_status, media_status, is_4k, requested_by, seasons, seerr_server_id, instance_id, entity_id, requested_at, last_snatched_at, last_seen_at, updated_at FROM seerr_requests WHERE link_id = $1 AND request_id = $2
+SELECT link_id, request_id, media_type, tmdb_id, tvdb_id, title, request_status, media_status, is_4k, requested_by, seasons, seerr_server_id, instance_id, entity_id, requested_at, last_snatched_at, last_seen_at, updated_at, requested_by_jellyfin_id FROM seerr_requests WHERE link_id = $1 AND request_id = $2
 `
 
 type GetSeerrRequestParams struct {
@@ -158,6 +158,7 @@ func (q *Queries) GetSeerrRequest(ctx context.Context, arg GetSeerrRequestParams
 		&i.LastSnatchedAt,
 		&i.LastSeenAt,
 		&i.UpdatedAt,
+		&i.RequestedByJellyfinID,
 	)
 	return i, err
 }
@@ -255,7 +256,7 @@ func (q *Queries) ListSeerrLinks(ctx context.Context) ([]SeerrLink, error) {
 }
 
 const listSeerrRequests = `-- name: ListSeerrRequests :many
-SELECT r.link_id, r.request_id, r.media_type, r.tmdb_id, r.tvdb_id, r.title, r.request_status, r.media_status, r.is_4k, r.requested_by, r.seasons, r.seerr_server_id, r.instance_id, r.entity_id, r.requested_at, r.last_snatched_at, r.last_seen_at, r.updated_at, l.name AS link_name, i.name AS instance_name
+SELECT r.link_id, r.request_id, r.media_type, r.tmdb_id, r.tvdb_id, r.title, r.request_status, r.media_status, r.is_4k, r.requested_by, r.seasons, r.seerr_server_id, r.instance_id, r.entity_id, r.requested_at, r.last_snatched_at, r.last_seen_at, r.updated_at, r.requested_by_jellyfin_id, l.name AS link_name, i.name AS instance_name
 FROM seerr_requests r
 JOIN seerr_links l ON l.id = r.link_id
 LEFT JOIN instances i ON i.id = r.instance_id
@@ -264,26 +265,27 @@ LIMIT $1
 `
 
 type ListSeerrRequestsRow struct {
-	LinkID         uuid.UUID
-	RequestID      int32
-	MediaType      string
-	TmdbID         int32
-	TvdbID         int32
-	Title          string
-	RequestStatus  int32
-	MediaStatus    int32
-	Is4k           bool
-	RequestedBy    string
-	Seasons        []int32
-	SeerrServerID  *int32
-	InstanceID     *uuid.UUID
-	EntityID       *int64
-	RequestedAt    *time.Time
-	LastSnatchedAt *time.Time
-	LastSeenAt     time.Time
-	UpdatedAt      time.Time
-	LinkName       string
-	InstanceName   *string
+	LinkID                uuid.UUID
+	RequestID             int32
+	MediaType             string
+	TmdbID                int32
+	TvdbID                int32
+	Title                 string
+	RequestStatus         int32
+	MediaStatus           int32
+	Is4k                  bool
+	RequestedBy           string
+	Seasons               []int32
+	SeerrServerID         *int32
+	InstanceID            *uuid.UUID
+	EntityID              *int64
+	RequestedAt           *time.Time
+	LastSnatchedAt        *time.Time
+	LastSeenAt            time.Time
+	UpdatedAt             time.Time
+	RequestedByJellyfinID string
+	LinkName              string
+	InstanceName          *string
 }
 
 func (q *Queries) ListSeerrRequests(ctx context.Context, limit int32) ([]ListSeerrRequestsRow, error) {
@@ -314,6 +316,7 @@ func (q *Queries) ListSeerrRequests(ctx context.Context, limit int32) ([]ListSee
 			&i.LastSnatchedAt,
 			&i.LastSeenAt,
 			&i.UpdatedAt,
+			&i.RequestedByJellyfinID,
 			&i.LinkName,
 			&i.InstanceName,
 		); err != nil {
@@ -462,37 +465,39 @@ func (q *Queries) UpdateSeerrLink(ctx context.Context, arg UpdateSeerrLinkParams
 const upsertSeerrRequest = `-- name: UpsertSeerrRequest :exec
 INSERT INTO seerr_requests (
     link_id, request_id, media_type, tmdb_id, tvdb_id, title, request_status, media_status, is_4k,
-    requested_by, seasons, seerr_server_id, instance_id, entity_id, requested_at, last_seen_at, updated_at
+    requested_by, requested_by_jellyfin_id, seasons, seerr_server_id, instance_id, entity_id, requested_at, last_seen_at, updated_at
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9,
-    $10, $11, $12, $13, $14, $15, $16, $16
+    $10, $11, $12, $13, $14, $15, $16, $17, $17
 )
 ON CONFLICT (link_id, request_id) DO UPDATE SET
     media_type = EXCLUDED.media_type, tmdb_id = EXCLUDED.tmdb_id, tvdb_id = EXCLUDED.tvdb_id,
     title = CASE WHEN EXCLUDED.title = '' THEN seerr_requests.title ELSE EXCLUDED.title END,
     request_status = EXCLUDED.request_status, media_status = EXCLUDED.media_status, is_4k = EXCLUDED.is_4k,
-    requested_by = EXCLUDED.requested_by, seasons = EXCLUDED.seasons, seerr_server_id = EXCLUDED.seerr_server_id,
+    requested_by = EXCLUDED.requested_by, requested_by_jellyfin_id = EXCLUDED.requested_by_jellyfin_id,
+    seasons = EXCLUDED.seasons, seerr_server_id = EXCLUDED.seerr_server_id,
     instance_id = EXCLUDED.instance_id, entity_id = EXCLUDED.entity_id, requested_at = EXCLUDED.requested_at,
     last_seen_at = EXCLUDED.last_seen_at, updated_at = EXCLUDED.updated_at
 `
 
 type UpsertSeerrRequestParams struct {
-	LinkID        uuid.UUID
-	RequestID     int32
-	MediaType     string
-	TmdbID        int32
-	TvdbID        int32
-	Title         string
-	RequestStatus int32
-	MediaStatus   int32
-	Is4k          bool
-	RequestedBy   string
-	Seasons       []int32
-	SeerrServerID *int32
-	InstanceID    *uuid.UUID
-	EntityID      *int64
-	RequestedAt   *time.Time
-	LastSeenAt    time.Time
+	LinkID                uuid.UUID
+	RequestID             int32
+	MediaType             string
+	TmdbID                int32
+	TvdbID                int32
+	Title                 string
+	RequestStatus         int32
+	MediaStatus           int32
+	Is4k                  bool
+	RequestedBy           string
+	RequestedByJellyfinID string
+	Seasons               []int32
+	SeerrServerID         *int32
+	InstanceID            *uuid.UUID
+	EntityID              *int64
+	RequestedAt           *time.Time
+	LastSeenAt            time.Time
 }
 
 func (q *Queries) UpsertSeerrRequest(ctx context.Context, arg UpsertSeerrRequestParams) error {
@@ -507,6 +512,7 @@ func (q *Queries) UpsertSeerrRequest(ctx context.Context, arg UpsertSeerrRequest
 		arg.MediaStatus,
 		arg.Is4k,
 		arg.RequestedBy,
+		arg.RequestedByJellyfinID,
 		arg.Seasons,
 		arg.SeerrServerID,
 		arg.InstanceID,
