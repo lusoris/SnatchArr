@@ -24,3 +24,4 @@ web/src/lib/queries/connections.ts
 web/src/routes/connections/DownloadClientsCard.svelte
 web/src/routes/connections/ProwlarrCard.svelte
 web/src/routes/connections/SeerrCard.svelte
+web/src/lib/components/LinkListSection.svelte
