@@ -52,9 +52,9 @@ func TestSettings_Validate(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "boundary ttl max 3650",
+			name: "boundary ttl one day",
 			mutate: func(s *requests.Settings) {
-				s.VotingTTLDays = requests.MaxVotingTTLDays
+				s.VotingTTLDays = 1
 			},
 			wantErr: false,
 		},
@@ -83,13 +83,6 @@ func TestSettings_Validate(t *testing.T) {
 			name: "boundary negative ttl minus one",
 			mutate: func(s *requests.Settings) {
 				s.VotingTTLDays = -1
-			},
-			wantErr: true,
-		},
-		{
-			name: "boundary negative ttl 3651",
-			mutate: func(s *requests.Settings) {
-				s.VotingTTLDays = 3651
 			},
 			wantErr: true,
 		},

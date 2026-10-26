@@ -29,9 +29,6 @@ const (
 	VisibilityPrivate          Visibility = "private_to_requester_and_admin"
 )
 
-// MaxVotingTTLDays bounds the maximum configurable lifetime in days for requests in voting status.
-const MaxVotingTTLDays = 3650
-
 // Settings holds runtime configuration for the community requests module.
 type Settings struct {
 	VotingMode       VotingMode `json:"voting_mode"`
@@ -66,8 +63,8 @@ func (s Settings) Validate() error {
 		return fmt.Errorf("%w: unknown visibility %q", domain.ErrInvalid, s.Visibility)
 	}
 
-	if s.VotingTTLDays < 0 || s.VotingTTLDays > MaxVotingTTLDays {
-		return fmt.Errorf("%w: voting_ttl_days must be between 0 and %d", domain.ErrInvalid, MaxVotingTTLDays)
+	if s.VotingTTLDays < 0 {
+		return fmt.Errorf("%w: voting_ttl_days must not be negative", domain.ErrInvalid)
 	}
 
 	return nil
