@@ -17,6 +17,9 @@ import (
 
 	"github.com/golusoris/goenvoy/metadata"
 	"github.com/golusoris/goenvoy/metadata/adult/stashbox/v2"
+	"github.com/google/uuid"
+
+	"github.com/golusoris/golusoris/core/id"
 
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 )
@@ -247,5 +250,73 @@ func TestSyncErrorWrapping_401AndGraphQL(t *testing.T) {
 	wrappedGQL := fmt.Errorf("%w: %w", domain.ErrInvalid, err)
 	if !errors.Is(wrappedGQL, domain.ErrInvalid) {
 		t.Errorf("expected errors.Is(wrappedGQL, domain.ErrInvalid)")
+	}
+}
+
+func TestResolvePerformerMatch_NameOnlyDoesNotMerge(t *testing.T) {
+	t.Parallel()
+	svc := &Service{ids: id.New()}
+	inst1ID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	inst2ID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
+	endpoints := []StashboxEndpoint{
+		{InstanceID: inst1ID, Endpoint: "https://stashdb.org/graphql"},
+		{InstanceID: inst2ID, Endpoint: "https://alt-stash.org/graphql"},
+	}
+
+	var cands []Candidate
+
+	id1, _, err := svc.resolvePerformerMatch(
+		inst1ID,
+		stashbox.Performer{ID: "sb-studio-x-clara-12", Name: "Clara 12"},
+		[]string{"https://studio-x.example/models/clara-12"},
+		&cands,
+		endpoints,
+	)
+	if err != nil {
+		t.Fatalf("resolvePerformerMatch 1: %v", err)
+	}
+
+	id2, _, err := svc.resolvePerformerMatch(
+		inst1ID,
+		stashbox.Performer{ID: "sb-studio-x-clara-47", Name: "Clara"},
+		[]string{"https://studio-x.example/models/clara-47"},
+		&cands,
+		endpoints,
+	)
+	if err != nil {
+		t.Fatalf("resolvePerformerMatch 2: %v", err)
+	}
+
+	id3, _, err := svc.resolvePerformerMatch(
+		inst2ID,
+		stashbox.Performer{ID: "sb-studio-y-clara-01", Name: "Clara"},
+		[]string{"https://studio-y.example/models/clara"},
+		&cands,
+		endpoints,
+	)
+	if err != nil {
+		t.Fatalf("resolvePerformerMatch 3: %v", err)
+	}
+
+	if id1 == id2 || id2 == id3 || id1 == id3 {
+		t.Fatalf("expected 3 distinct performer IDs, got %v, %v, %v", id1, id2, id3)
+	}
+	if len(cands) != 3 {
+		t.Fatalf("expected 3 candidates in slice, got %d", len(cands))
+	}
+
+	// Positive: endpoint URL cross-reference still merges into id1
+	id4, _, err := svc.resolvePerformerMatch(
+		inst2ID,
+		stashbox.Performer{ID: "alt-studio-x-clara-12", Name: "Clara"},
+		[]string{"https://stashdb.org/performers/sb-studio-x-clara-12"},
+		&cands,
+		endpoints,
+	)
+	if err != nil {
+		t.Fatalf("resolvePerformerMatch 4: %v", err)
+	}
+	if id4 != id1 {
+		t.Fatalf("expected endpoint cross-ref to merge into %v, got %v", id1, id4)
 	}
 }
