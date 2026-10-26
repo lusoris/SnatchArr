@@ -132,6 +132,7 @@ Per the ownership split decided on 2026-10-26 (ledger id `snatcharr-vmafx-video-
 - **VMAFx** ([github.com/VMAFx/vmafx](https://github.com/VMAFx/vmafx)) owns the complete video stream: target codec and encoder choice, hardware probing with software/hardware fallback, HDR10 / HDR10+ / Dolby Vision carry-through and conversion, resolution scaling, deinterlacing, perceptual quality planning (`vmaf-tune auto`), and GPU worker pools (`vmafx-node`). This builds on existing VMAFx architecture records [ADR-0237: Quality-aware encode automation](https://github.com/VMAFx/vmafx/blob/main/docs/adr/0237-quality-aware-encode-automation.md) and [ADR-0297: vmaf-tune encode multi-codec](https://github.com/VMAFx/vmafx/blob/main/docs/adr/0297-vmaf-tune-encode-multi-codec.md). The VMAFx encode-job API ADR is currently pending in the VMAFx repository; implementation slice S6 will add the link when it lands.
 - **SnatchArr** owns library policies and declarative rules, stream and track selection, container remuxing and in-place header edits, audio transcoding and loudness normalization, file staging and pre-replace verification gates, quarantine and rollback, service notifications (`*arr`, Jellyfin, Stash, Audiobookshelf), and task scheduling.
 - SnatchArr calls VMAFx for every lossy video encode and ships zero video encoder, HDR conversion, resolution scaling, or GPU device code.
+- SnatchArr uses the whole VMAFx surface through the VMAFx encode-job API, phased: the auto encode first (slice S6), then scoring, compare, bitrate ladder, per-shot tuning, saliency, HDR handling, sample clips, and node workers as later slices (slice S9). SnatchArr re-implements none of these functions and has no fixed CRF or bitrate path of its own (ledger id `snatcharr-vmafx-full-toolkit-20261026`).
 - Answers to questions `OQ-0041-8`, `OQ-0041-9`, `OQ-0041-11`, `OQ-0041-12`, and `OQ-0041-17` (option a) stand as architectural requirements on VMAFx rather than SnatchArr code.
 
 ### 1. Component architecture, orchestration, and module gating (OQ-0041-1, OQ-0041-2, OQ-0041-3)
@@ -439,6 +440,7 @@ Follow-up implementation work is tracked under the version milestone **0.13 (rul
 | **S6** ([#794](https://github.com/lusoris/SnatchArr/issues/794)) | VMAFx encode-job client: SnatchArr sends input file + stream map + rule targets, receives verified video stream + provenance (`OQ-0041-8`..`OQ-0041-12`, `OQ-0041-17` as requirements on VMAFx). | **0.13** | S5, issue [#761](https://github.com/lusoris/SnatchArr/issues/761), VMAFx encode-job API ADR (VMAFx repository, pending) |
 | **S7** ([#795](https://github.com/lusoris/SnatchArr/issues/795)) | `*arr` Custom Format / cutoff guard + planner `RuleNotAnUpgrade` (`OQ-0041-21`, `OQ-0041-22`). | **0.13** | S5 |
 | **S8** ([#796](https://github.com/lusoris/SnatchArr/issues/796)) | UI in web SPA + Jellyfin companion plugin surface, Playwright + axe-core accessibility gate (`OQ-0041-20`). | **0.13** | S1, S5, [ADR-0028](0028-jellyfin-plugin.md) |
+| **S9** ([#797](https://github.com/lusoris/SnatchArr/issues/797)) | Remaining VMAFx surfaces through the encode-job API: scoring, compare, bitrate ladder, per-shot tuning, saliency, HDR handling, sample clips, node workers; one issue per surface once the VMAFx encode-job API ADR names its phases. | **0.14** | S6, VMAFx encode-job API ADR (VMAFx repository, pending) |
 
 ---
 
@@ -449,3 +451,4 @@ Follow-up implementation work is tracked under the version milestone **0.13 (rul
 - Ledger `snatcharr-oq-0038-9`: VMAF model `vmaf_v1.0.16_3d0h` everywhere, cited in the VMAFx section.
 - Ledger range `snatcharr-oq-0041-1` to `snatcharr-oq-0041-22`: answers to open questions OQ-0041-1 through OQ-0041-22, recorded 2026-10-26.
 - Ledger `snatcharr-vmafx-video-split-20261026`: ownership split between SnatchArr and VMAFx decided 2026-10-26 (VMAFx owns the video stream; SnatchArr owns rules, remux, audio, safety, and coordination).
+- Ledger `snatcharr-vmafx-full-toolkit-20261026`: SnatchArr uses every VMAFx function through the encode-job API, auto encode first and the other surfaces as later slices, decided 2026-10-26.
