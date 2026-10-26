@@ -933,6 +933,9 @@ type DeleteInstanceNoContent struct{}
 
 func (*DeleteInstanceNoContent) deleteInstanceRes() {}
 
+// DeleteMyNotifyTargetNoContent is response for DeleteMyNotifyTarget operation.
+type DeleteMyNotifyTargetNoContent struct{}
+
 // DeleteNotificationChannelNoContent is response for DeleteNotificationChannel operation.
 type DeleteNotificationChannelNoContent struct{}
 
@@ -8634,6 +8637,9 @@ func (s *SystemStatusProfile) UnmarshalText(data []byte) error {
 	}
 }
 
+// TestMyNotifyTargetNoContent is response for TestMyNotifyTarget operation.
+type TestMyNotifyTargetNoContent struct{}
+
 // TestNotificationChannelNoContent is response for TestNotificationChannel operation.
 type TestNotificationChannelNoContent struct{}
 
@@ -8791,6 +8797,139 @@ func (s *UserIdentityProvider) UnmarshalText(data []byte) error {
 	default:
 		return errors.Errorf("invalid value: %q", data)
 	}
+}
+
+// Ref: #/components/schemas/UserNotifyTarget
+type UserNotifyTarget struct {
+	ID        uuid.UUID               `json:"id"`
+	Kind      NotificationChannelKind `json:"kind"`
+	Enabled   bool                    `json:"enabled"`
+	CreatedAt time.Time               `json:"created_at"`
+	UpdatedAt time.Time               `json:"updated_at"`
+}
+
+// GetID returns the value of ID.
+func (s *UserNotifyTarget) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetKind returns the value of Kind.
+func (s *UserNotifyTarget) GetKind() NotificationChannelKind {
+	return s.Kind
+}
+
+// GetEnabled returns the value of Enabled.
+func (s *UserNotifyTarget) GetEnabled() bool {
+	return s.Enabled
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *UserNotifyTarget) GetCreatedAt() time.Time {
+	return s.CreatedAt
+}
+
+// GetUpdatedAt returns the value of UpdatedAt.
+func (s *UserNotifyTarget) GetUpdatedAt() time.Time {
+	return s.UpdatedAt
+}
+
+// SetID sets the value of ID.
+func (s *UserNotifyTarget) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetKind sets the value of Kind.
+func (s *UserNotifyTarget) SetKind(val NotificationChannelKind) {
+	s.Kind = val
+}
+
+// SetEnabled sets the value of Enabled.
+func (s *UserNotifyTarget) SetEnabled(val bool) {
+	s.Enabled = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *UserNotifyTarget) SetCreatedAt(val time.Time) {
+	s.CreatedAt = val
+}
+
+// SetUpdatedAt sets the value of UpdatedAt.
+func (s *UserNotifyTarget) SetUpdatedAt(val time.Time) {
+	s.UpdatedAt = val
+}
+
+// Ref: #/components/schemas/UserNotifyTargetInput
+type UserNotifyTargetInput struct {
+	Kind    NotificationChannelKind   `json:"kind"`
+	Enabled OptBool                   `json:"enabled"`
+	Config  NotificationChannelConfig `json:"config"`
+}
+
+// GetKind returns the value of Kind.
+func (s *UserNotifyTargetInput) GetKind() NotificationChannelKind {
+	return s.Kind
+}
+
+// GetEnabled returns the value of Enabled.
+func (s *UserNotifyTargetInput) GetEnabled() OptBool {
+	return s.Enabled
+}
+
+// GetConfig returns the value of Config.
+func (s *UserNotifyTargetInput) GetConfig() NotificationChannelConfig {
+	return s.Config
+}
+
+// SetKind sets the value of Kind.
+func (s *UserNotifyTargetInput) SetKind(val NotificationChannelKind) {
+	s.Kind = val
+}
+
+// SetEnabled sets the value of Enabled.
+func (s *UserNotifyTargetInput) SetEnabled(val OptBool) {
+	s.Enabled = val
+}
+
+// SetConfig sets the value of Config.
+func (s *UserNotifyTargetInput) SetConfig(val NotificationChannelConfig) {
+	s.Config = val
+}
+
+// Ref: #/components/schemas/UserNotifyTargetUpdate
+type UserNotifyTargetUpdate struct {
+	Kind    NotificationChannelKind      `json:"kind"`
+	Enabled OptBool                      `json:"enabled"`
+	Config  OptNotificationChannelConfig `json:"config"`
+}
+
+// GetKind returns the value of Kind.
+func (s *UserNotifyTargetUpdate) GetKind() NotificationChannelKind {
+	return s.Kind
+}
+
+// GetEnabled returns the value of Enabled.
+func (s *UserNotifyTargetUpdate) GetEnabled() OptBool {
+	return s.Enabled
+}
+
+// GetConfig returns the value of Config.
+func (s *UserNotifyTargetUpdate) GetConfig() OptNotificationChannelConfig {
+	return s.Config
+}
+
+// SetKind sets the value of Kind.
+func (s *UserNotifyTargetUpdate) SetKind(val NotificationChannelKind) {
+	s.Kind = val
+}
+
+// SetEnabled sets the value of Enabled.
+func (s *UserNotifyTargetUpdate) SetEnabled(val OptBool) {
+	s.Enabled = val
+}
+
+// SetConfig sets the value of Config.
+func (s *UserNotifyTargetUpdate) SetConfig(val OptNotificationChannelConfig) {
+	s.Config = val
 }
 
 type UserRole string

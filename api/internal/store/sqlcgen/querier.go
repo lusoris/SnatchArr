@@ -52,6 +52,7 @@ type Querier interface {
 	// SPDX-License-Identifier: EUPL-1.2
 	CreateSeerrLink(ctx context.Context, arg CreateSeerrLinkParams) (SeerrLink, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	CreateUserNotifyTarget(ctx context.Context, arg CreateUserNotifyTargetParams) (UserNotifyTarget, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
 	CreateWatchAwareSource(ctx context.Context, arg CreateWatchAwareSourceParams) (WatchawareSource, error)
@@ -74,6 +75,7 @@ type Querier interface {
 	DeleteStaleDiscoveredDownloadClients(ctx context.Context, arg DeleteStaleDiscoveredDownloadClientsParams) (int64, error)
 	DeleteUnseenSeerrRequests(ctx context.Context, arg DeleteUnseenSeerrRequestsParams) (int64, error)
 	DeleteUserIdentity(ctx context.Context, arg DeleteUserIdentityParams) (int64, error)
+	DeleteUserNotifyTarget(ctx context.Context, arg DeleteUserNotifyTargetParams) (int64, error)
 	// data->>'user_id' couples to auth.SessionUserKey in api/internal/auth/service.go.
 	DeleteUserSessionsExcept(ctx context.Context, arg DeleteUserSessionsExceptParams) (int64, error)
 	DeleteWatchAwareSource(ctx context.Context, id uuid.UUID) (int64, error)
@@ -139,6 +141,7 @@ type Querier interface {
 	GetUserByExternalID(ctx context.Context, externalID *string) (User, error)
 	GetUserByUsername(ctx context.Context, username string) (User, error)
 	GetUserIdentity(ctx context.Context, arg GetUserIdentityParams) (UserIdentity, error)
+	GetUserNotifyTarget(ctx context.Context, arg GetUserNotifyTargetParams) (UserNotifyTarget, error)
 	GetWatchAwareSource(ctx context.Context, id uuid.UUID) (WatchawareSource, error)
 	GetWatchAwareSyncSummary(ctx context.Context) (GetWatchAwareSyncSummaryRow, error)
 	GlobalBucketUsage(ctx context.Context, since time.Time) (GlobalBucketUsageRow, error)
@@ -175,6 +178,7 @@ type Querier interface {
 	ListEnabledProwlarrLinks(ctx context.Context) ([]ProwlarrLink, error)
 	ListEnabledSchedulesFor(ctx context.Context, instanceID *uuid.UUID) ([]Schedule, error)
 	ListEnabledSeerrLinks(ctx context.Context) ([]SeerrLink, error)
+	ListEnabledUserNotifyTargets(ctx context.Context, userID uuid.UUID) ([]UserNotifyTarget, error)
 	ListEnabledWatchAwareSources(ctx context.Context) ([]WatchawareSource, error)
 	ListEpisodeWatchesByTvdbIDs(ctx context.Context, arg ListEpisodeWatchesByTvdbIDsParams) ([]ListEpisodeWatchesByTvdbIDsRow, error)
 	ListEvents(ctx context.Context, arg ListEventsParams) ([]SnatchEvent, error)
@@ -204,6 +208,7 @@ type Querier interface {
 	ListSessionsBySSOSource(ctx context.Context, arg ListSessionsBySSOSourceParams) ([]ListSessionsBySSOSourceRow, error)
 	ListSyncableAdultStashboxInstances(ctx context.Context) ([]AdultStashboxInstance, error)
 	ListUserIdentities(ctx context.Context, userID uuid.UUID) ([]UserIdentity, error)
+	ListUserNotifyTargets(ctx context.Context, userID uuid.UUID) ([]UserNotifyTarget, error)
 	ListUsers(ctx context.Context) ([]User, error)
 	ListWatchAwareSources(ctx context.Context) ([]WatchawareSource, error)
 	ListWebhookEndpoints(ctx context.Context, dollar_1 string) ([]WebhookEndpoint, error)
@@ -289,6 +294,7 @@ type Querier interface {
 	UpdateSchedule(ctx context.Context, arg UpdateScheduleParams) (Schedule, error)
 	UpdateSeerrLink(ctx context.Context, arg UpdateSeerrLinkParams) (SeerrLink, error)
 	UpdateSettings(ctx context.Context, arg UpdateSettingsParams) (Setting, error)
+	UpdateUserNotifyTarget(ctx context.Context, arg UpdateUserNotifyTargetParams) (UserNotifyTarget, error)
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
 	UpdateWatchAwareSource(ctx context.Context, arg UpdateWatchAwareSourceParams) (WatchawareSource, error)
 	UpsertAdultFavoritePerformer(ctx context.Context, arg UpsertAdultFavoritePerformerParams) (AdultFavoritePerformer, error)

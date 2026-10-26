@@ -44,6 +44,12 @@ type Handler interface {
 	//
 	// POST /instances
 	CreateInstance(ctx context.Context, req *InstanceInput) (*Instance, error)
+	// CreateMyNotifyTarget implements createMyNotifyTarget operation.
+	//
+	// Create a notification target for current user.
+	//
+	// POST /me/notify-targets
+	CreateMyNotifyTarget(ctx context.Context, req *UserNotifyTargetInput) (*UserNotifyTarget, error)
 	// CreateNotificationChannel implements createNotificationChannel operation.
 	//
 	// Create a notification channel.
@@ -105,6 +111,12 @@ type Handler interface {
 	//
 	// DELETE /instances/{instanceId}/events
 	DeleteInstanceEvents(ctx context.Context, params DeleteInstanceEventsParams) error
+	// DeleteMyNotifyTarget implements deleteMyNotifyTarget operation.
+	//
+	// Delete a notification target for current user.
+	//
+	// DELETE /me/notify-targets/{targetId}
+	DeleteMyNotifyTarget(ctx context.Context, params DeleteMyNotifyTargetParams) error
 	// DeleteNotificationChannel implements deleteNotificationChannel operation.
 	//
 	// Delete a notification channel.
@@ -189,6 +201,12 @@ type Handler interface {
 	//
 	// GET /system/modules/{id}
 	GetModule(ctx context.Context, params GetModuleParams) (*Module, error)
+	// GetMyNotifyTarget implements getMyNotifyTarget operation.
+	//
+	// Get one notification target for current user.
+	//
+	// GET /me/notify-targets/{targetId}
+	GetMyNotifyTarget(ctx context.Context, params GetMyNotifyTargetParams) (*UserNotifyTarget, error)
 	// GetNotificationChannel implements getNotificationChannel operation.
 	//
 	// Get one notification channel.
@@ -373,6 +391,12 @@ type Handler interface {
 	//
 	// GET /system/modules
 	ListModules(ctx context.Context) ([]ModuleState, error)
+	// ListMyNotifyTargets implements listMyNotifyTargets operation.
+	//
+	// List current user's notification targets.
+	//
+	// GET /me/notify-targets
+	ListMyNotifyTargets(ctx context.Context) ([]UserNotifyTarget, error)
 	// ListNotificationChannels implements listNotificationChannels operation.
 	//
 	// List all configured notification channels.
@@ -523,6 +547,12 @@ type Handler interface {
 	//
 	// POST /instances/test
 	TestInstanceInput(ctx context.Context, req *InstanceInput) (*ProbeResult, error)
+	// TestMyNotifyTarget implements testMyNotifyTarget operation.
+	//
+	// Send a test notification to a user target.
+	//
+	// POST /me/notify-targets/{targetId}/test
+	TestMyNotifyTarget(ctx context.Context, params TestMyNotifyTargetParams) error
 	// TestNotificationChannel implements testNotificationChannel operation.
 	//
 	// Send a synchronous test notification to a channel.
@@ -595,6 +625,12 @@ type Handler interface {
 	//
 	// PUT /system/modules/{id}
 	UpdateModule(ctx context.Context, req *ModuleUpdate, params UpdateModuleParams) (*Module, error)
+	// UpdateMyNotifyTarget implements updateMyNotifyTarget operation.
+	//
+	// Update a notification target for current user.
+	//
+	// PUT /me/notify-targets/{targetId}
+	UpdateMyNotifyTarget(ctx context.Context, req *UserNotifyTargetUpdate, params UpdateMyNotifyTargetParams) (*UserNotifyTarget, error)
 	// UpdateNotificationChannel implements updateNotificationChannel operation.
 	//
 	// Update a notification channel.

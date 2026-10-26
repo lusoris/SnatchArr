@@ -167,3 +167,28 @@ type NotificationRuleInput struct {
 	Enabled    bool
 	ChannelIDs []uuid.UUID
 }
+
+// UserNotifyTarget represents a per-user notification target with write-only config.
+type UserNotifyTarget struct {
+	ID        uuid.UUID
+	UserID    uuid.UUID
+	Kind      ChannelKind
+	Enabled   bool
+	Config    ChannelConfig
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+// UserNotifyTargetInput is input for creating a user notification target.
+type UserNotifyTargetInput struct {
+	Kind    ChannelKind
+	Enabled bool
+	Config  ChannelConfig
+}
+
+// UserNotifyTargetUpdateInput is input for updating a user notification target.
+type UserNotifyTargetUpdateInput struct {
+	Kind    ChannelKind
+	Enabled bool
+	Config  *ChannelConfig // nil preserves stored config
+}
