@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.6.7](https://github.com/lusoris/SnatchArr/compare/v0.6.6...v0.6.7) (2026-10-26)
+
+
+### Features
+
+* **auth:** add Jellyfin sign-in and Quick Connect ([#664](https://github.com/lusoris/SnatchArr/issues/664)) ([1c85c37](https://github.com/lusoris/SnatchArr/commit/1c85c37df6eb50a639a4db84fe26056e125044fb))
+* **config:** add the Jellyfin default role setting ([#661](https://github.com/lusoris/SnatchArr/issues/661)) ([f43f6fb](https://github.com/lusoris/SnatchArr/commit/f43f6fb26945c61a8a70f792af0e2822f34ed9b9))
+* **store:** add the adult module tables ([#663](https://github.com/lusoris/SnatchArr/issues/663)) ([cb261a2](https://github.com/lusoris/SnatchArr/commit/cb261a2293c2f9ee9699e23b747cb881d447b383))
+
+
+### Bug Fixes
+
+* **web:** let requesters manage their own API keys ([#659](https://github.com/lusoris/SnatchArr/issues/659)) ([16e4d6d](https://github.com/lusoris/SnatchArr/commit/16e4d6ddd47092076e064232e7432ce2af1ab81a))
+
 ## [0.6.6](https://github.com/lusoris/SnatchArr/compare/v0.6.5...v0.6.6) (2026-10-25)
 
 
