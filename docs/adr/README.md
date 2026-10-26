@@ -38,8 +38,9 @@ This directory documents key architectural decisions following the HISS-14 immut
 | [0030](0030-pnpm-boot-document-dependency-graph.md) | 2026-10-26 | pnpm boot document and GitHub dependency graph snapshot submission | Accepted |
 | [0031](0031-creator-content-fansdb.md) | 2026-10-26 | Creator content catalogued in FansDB inside the adult module | Accepted |
 | [0032](0032-stash-own-or-integrate.md) | 2026-10-26 | Stash: own or integrate — adult library engine evaluation | Accepted |
-| [0033](0033-adult-identity-and-model.md) | 2026-10-26 | Adult identity resolution and normalized data model | Accepted |
+| [0033](0033-adult-identity-and-model.md) | 2026-10-26 | Adult identity resolution and normalized data model | Accepted; amended by 0037 |
 | [0034](0034-matching-engine-and-model-connection.md) | 2026-10-26 | Adult metadata matching engine, attribute reconciliation, audit workbench and outbound model connection | Accepted |
 | [0035](0035-jellyfin-integration.md) | 2026-10-26 | Complete SnatchArr integration inside Jellyfin without an external identity provider | Accepted |
 | [0036](0036-community-requests-and-voting.md) | 2026-10-26 | Community requests and voting across media types | Proposed |
+| [0037](0037-studio-scoped-numbered-performer-names.md) | 2026-10-26 | Studio-scoped numbered performer names, scene-ownership conflict rules and Stash wrong-merge import check | Accepted |
 | [0039](0039-metadata-single-source.md) | 2026-10-26 | Single source of truth for metadata across *arr, Stash, Jellyfin and SnatchArr | Proposed |

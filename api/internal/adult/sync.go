@@ -289,8 +289,8 @@ func (s *Service) resolvePerformerMatch(
 		Disambiguation: p.Disambiguation,
 		URLs:           urls,
 	}
-	matched, _ := MatchEntity(inc, *cands, endpoints)
-	if matched != nil {
+	matched, _, kind := MatchEntity(inc, *cands, endpoints)
+	if matched != nil && kind == MatchAutoMerge {
 		matched.URLs = unionURLs(matched.URLs, urls)
 		matched.Links = append(matched.Links, EntityLink{InstanceID: instID, ForeignID: p.ID})
 		return matched.ID, matched.URLs, nil
@@ -375,8 +375,8 @@ func (s *Service) resolveStudioMatch(
 		Name: st.Name,
 		URLs: urls,
 	}
-	matched, _ := MatchEntity(inc, *cands, endpoints)
-	if matched != nil {
+	matched, _, kind := MatchEntity(inc, *cands, endpoints)
+	if matched != nil && kind == MatchAutoMerge {
 		matched.URLs = unionURLs(matched.URLs, urls)
 		matched.Links = append(matched.Links, EntityLink{InstanceID: instID, ForeignID: st.ID})
 		return matched.ID, matched.URLs, nil
