@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -25,6 +26,7 @@ type Descriptor struct {
 
 type adultConfig struct {
 	ImageSetDir         *string `json:"image_set_dir"`
+	ThumbnailCacheDir   *string `json:"thumbnail_cache_dir"`
 	SyncIntervalMinutes *int    `json:"sync_interval_minutes"`
 }
 
@@ -104,36 +106,42 @@ func validateAdultSyncInterval(interval *int) error {
 	return nil
 }
 
-func validateAdultImageSetDir(dirPtr *string) error {
+func validateAdultDir(name string, dirPtr *string) error {
 	if dirPtr == nil {
 		return nil
 	}
 	dir := *dirPtr
 	if len(dir) == 0 {
-		return fmt.Errorf("%w: image_set_dir must not be empty", domain.ErrInvalid)
+		return fmt.Errorf("%w: %s must not be empty", domain.ErrInvalid, name)
 	}
 	if len(dir) > MaxAdultImageSetDirLen {
 		return fmt.Errorf(
-			"%w: image_set_dir exceeds maximum length of %d",
+			"%w: %s exceeds maximum length of %d",
 			domain.ErrInvalid,
+			name,
 			MaxAdultImageSetDirLen,
 		)
 	}
 	if strings.ContainsRune(dir, '\x00') {
-		return fmt.Errorf("%w: image_set_dir must not contain NUL bytes", domain.ErrInvalid)
+		return fmt.Errorf("%w: %s must not contain NUL bytes", domain.ErrInvalid, name)
 	}
 	if !filepath.IsAbs(dir) {
-		return fmt.Errorf("%w: image_set_dir must be an absolute path", domain.ErrInvalid)
+		return fmt.Errorf("%w: %s must be an absolute path", domain.ErrInvalid, name)
 	}
 	if filepath.Clean(dir) != dir {
-		return fmt.Errorf("%w: image_set_dir must be a clean path", domain.ErrInvalid)
+		return fmt.Errorf("%w: %s must be a clean path", domain.ErrInvalid, name)
 	}
 	return nil
 }
 
+// DefaultAdultThumbnailCacheDir returns the default thumbnail cache directory.
+func DefaultAdultThumbnailCacheDir() string {
+	return filepath.Join(os.TempDir(), "snatcharr-adult-thumbnails")
+}
+
 // ValidateAdultConfig validates configuration for the adult module.
 // Optional key sync_interval_minutes must be between 15 and 1440.
-// Optional key image_set_dir must be a non-empty, clean absolute path without NUL bytes up to 4096 bytes.
+// Optional keys image_set_dir and thumbnail_cache_dir must be non-empty, clean absolute paths without NUL bytes up to 4096 bytes.
 func ValidateAdultConfig(raw json.RawMessage) error {
 	var cfg adultConfig
 	if err := decodeStrictObject(raw, domain.ModuleAdult, &cfg); err != nil {
@@ -142,7 +150,10 @@ func ValidateAdultConfig(raw json.RawMessage) error {
 	if err := validateAdultSyncInterval(cfg.SyncIntervalMinutes); err != nil {
 		return err
 	}
-	return validateAdultImageSetDir(cfg.ImageSetDir)
+	if err := validateAdultDir("image_set_dir", cfg.ImageSetDir); err != nil {
+		return err
+	}
+	return validateAdultDir("thumbnail_cache_dir", cfg.ThumbnailCacheDir)
 }
 
 // ValidateLLMConfig validates configuration for the llm module.

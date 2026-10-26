@@ -12,6 +12,62 @@ import (
 	"github.com/google/uuid"
 )
 
+const deleteAdultImageItemsNotInPaths = `-- name: DeleteAdultImageItemsNotInPaths :execrows
+DELETE FROM adult_image_items
+WHERE image_set_id = $1 AND NOT (file_path = ANY($2::text[]))
+`
+
+type DeleteAdultImageItemsNotInPathsParams struct {
+	ImageSetID uuid.UUID
+	KeepPaths  []string
+}
+
+func (q *Queries) DeleteAdultImageItemsNotInPaths(ctx context.Context, arg DeleteAdultImageItemsNotInPathsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteAdultImageItemsNotInPaths, arg.ImageSetID, arg.KeepPaths)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteAdultImageSetsNotInPaths = `-- name: DeleteAdultImageSetsNotInPaths :execrows
+DELETE FROM adult_image_sets
+WHERE NOT (directory_path = ANY($1::text[]))
+`
+
+func (q *Queries) DeleteAdultImageSetsNotInPaths(ctx context.Context, keepPaths []string) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteAdultImageSetsNotInPaths, keepPaths)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteAllAdultImageItemsForSet = `-- name: DeleteAllAdultImageItemsForSet :execrows
+DELETE FROM adult_image_items
+WHERE image_set_id = $1
+`
+
+func (q *Queries) DeleteAllAdultImageItemsForSet(ctx context.Context, imageSetID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteAllAdultImageItemsForSet, imageSetID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteAllAdultImageSets = `-- name: DeleteAllAdultImageSets :execrows
+DELETE FROM adult_image_sets
+`
+
+func (q *Queries) DeleteAllAdultImageSets(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteAllAdultImageSets)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getAdultFavoritePerformer = `-- name: GetAdultFavoritePerformer :one
 SELECT id, canonical_name, disambiguation, created_at, updated_at, urls FROM adult_favorite_performers
 WHERE id = $1
@@ -94,6 +150,77 @@ func (q *Queries) GetAdultFavoriteStudioByLink(ctx context.Context, arg GetAdult
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Urls,
+	)
+	return i, err
+}
+
+const getAdultImageItem = `-- name: GetAdultImageItem :one
+SELECT id, image_set_id, file_path, file_name, file_size_bytes, mime_type, width, height, sha256_checksum, sort_order, created_at, file_mtime FROM adult_image_items
+WHERE id = $1
+`
+
+func (q *Queries) GetAdultImageItem(ctx context.Context, id uuid.UUID) (AdultImageItem, error) {
+	row := q.db.QueryRow(ctx, getAdultImageItem, id)
+	var i AdultImageItem
+	err := row.Scan(
+		&i.ID,
+		&i.ImageSetID,
+		&i.FilePath,
+		&i.FileName,
+		&i.FileSizeBytes,
+		&i.MimeType,
+		&i.Width,
+		&i.Height,
+		&i.Sha256Checksum,
+		&i.SortOrder,
+		&i.CreatedAt,
+		&i.FileMtime,
+	)
+	return i, err
+}
+
+const getAdultImageSet = `-- name: GetAdultImageSet :one
+SELECT id, title, directory_path, whisparr_scene_foreign_id, performer_id, item_count, total_size_bytes, cover_image_path, created_at, updated_at FROM adult_image_sets
+WHERE id = $1
+`
+
+func (q *Queries) GetAdultImageSet(ctx context.Context, id uuid.UUID) (AdultImageSet, error) {
+	row := q.db.QueryRow(ctx, getAdultImageSet, id)
+	var i AdultImageSet
+	err := row.Scan(
+		&i.ID,
+		&i.Title,
+		&i.DirectoryPath,
+		&i.WhisparrSceneForeignID,
+		&i.PerformerID,
+		&i.ItemCount,
+		&i.TotalSizeBytes,
+		&i.CoverImagePath,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getAdultImageSetByDirectory = `-- name: GetAdultImageSetByDirectory :one
+SELECT id, title, directory_path, whisparr_scene_foreign_id, performer_id, item_count, total_size_bytes, cover_image_path, created_at, updated_at FROM adult_image_sets
+WHERE directory_path = $1
+`
+
+func (q *Queries) GetAdultImageSetByDirectory(ctx context.Context, directoryPath string) (AdultImageSet, error) {
+	row := q.db.QueryRow(ctx, getAdultImageSetByDirectory, directoryPath)
+	var i AdultImageSet
+	err := row.Scan(
+		&i.ID,
+		&i.Title,
+		&i.DirectoryPath,
+		&i.WhisparrSceneForeignID,
+		&i.PerformerID,
+		&i.ItemCount,
+		&i.TotalSizeBytes,
+		&i.CoverImagePath,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -218,6 +345,81 @@ func (q *Queries) ListAdultFavoriteStudios(ctx context.Context) ([]AdultFavorite
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Urls,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAdultImageItemsForSet = `-- name: ListAdultImageItemsForSet :many
+SELECT id, image_set_id, file_path, file_name, file_size_bytes, mime_type, width, height, sha256_checksum, sort_order, created_at, file_mtime FROM adult_image_items
+WHERE image_set_id = $1
+ORDER BY sort_order ASC, file_name ASC
+`
+
+func (q *Queries) ListAdultImageItemsForSet(ctx context.Context, imageSetID uuid.UUID) ([]AdultImageItem, error) {
+	rows, err := q.db.Query(ctx, listAdultImageItemsForSet, imageSetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AdultImageItem{}
+	for rows.Next() {
+		var i AdultImageItem
+		if err := rows.Scan(
+			&i.ID,
+			&i.ImageSetID,
+			&i.FilePath,
+			&i.FileName,
+			&i.FileSizeBytes,
+			&i.MimeType,
+			&i.Width,
+			&i.Height,
+			&i.Sha256Checksum,
+			&i.SortOrder,
+			&i.CreatedAt,
+			&i.FileMtime,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAdultImageSets = `-- name: ListAdultImageSets :many
+SELECT id, title, directory_path, whisparr_scene_foreign_id, performer_id, item_count, total_size_bytes, cover_image_path, created_at, updated_at FROM adult_image_sets
+ORDER BY created_at DESC
+`
+
+func (q *Queries) ListAdultImageSets(ctx context.Context) ([]AdultImageSet, error) {
+	rows, err := q.db.Query(ctx, listAdultImageSets)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AdultImageSet{}
+	for rows.Next() {
+		var i AdultImageSet
+		if err := rows.Scan(
+			&i.ID,
+			&i.Title,
+			&i.DirectoryPath,
+			&i.WhisparrSceneForeignID,
+			&i.PerformerID,
+			&i.ItemCount,
+			&i.TotalSizeBytes,
+			&i.CoverImagePath,
+			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -465,6 +667,49 @@ func (q *Queries) MarkStaleAdultStudioLinksUnfavorite(ctx context.Context, arg M
 	return result.RowsAffected(), nil
 }
 
+const updateAdultImageSetSummary = `-- name: UpdateAdultImageSetSummary :one
+UPDATE adult_image_sets
+SET
+    item_count = $2,
+    total_size_bytes = $3,
+    cover_image_path = $4,
+    updated_at = $5
+WHERE id = $1
+RETURNING id, title, directory_path, whisparr_scene_foreign_id, performer_id, item_count, total_size_bytes, cover_image_path, created_at, updated_at
+`
+
+type UpdateAdultImageSetSummaryParams struct {
+	ID             uuid.UUID
+	ItemCount      int32
+	TotalSizeBytes int64
+	CoverImagePath *string
+	UpdatedAt      time.Time
+}
+
+func (q *Queries) UpdateAdultImageSetSummary(ctx context.Context, arg UpdateAdultImageSetSummaryParams) (AdultImageSet, error) {
+	row := q.db.QueryRow(ctx, updateAdultImageSetSummary,
+		arg.ID,
+		arg.ItemCount,
+		arg.TotalSizeBytes,
+		arg.CoverImagePath,
+		arg.UpdatedAt,
+	)
+	var i AdultImageSet
+	err := row.Scan(
+		&i.ID,
+		&i.Title,
+		&i.DirectoryPath,
+		&i.WhisparrSceneForeignID,
+		&i.PerformerID,
+		&i.ItemCount,
+		&i.TotalSizeBytes,
+		&i.CoverImagePath,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const upsertAdultFavoritePerformer = `-- name: UpsertAdultFavoritePerformer :one
 INSERT INTO adult_favorite_performers (
     id, canonical_name, disambiguation, urls, created_at, updated_at
@@ -545,6 +790,116 @@ func (q *Queries) UpsertAdultFavoriteStudio(ctx context.Context, arg UpsertAdult
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Urls,
+	)
+	return i, err
+}
+
+const upsertAdultImageItem = `-- name: UpsertAdultImageItem :one
+INSERT INTO adult_image_items (
+    id, image_set_id, file_path, file_name, file_size_bytes, mime_type, width, height, sha256_checksum, sort_order, created_at, file_mtime
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+)
+ON CONFLICT (image_set_id, file_path) DO UPDATE SET
+    file_name = EXCLUDED.file_name,
+    file_size_bytes = EXCLUDED.file_size_bytes,
+    mime_type = EXCLUDED.mime_type,
+    width = EXCLUDED.width,
+    height = EXCLUDED.height,
+    sha256_checksum = EXCLUDED.sha256_checksum,
+    sort_order = EXCLUDED.sort_order,
+    file_mtime = EXCLUDED.file_mtime
+RETURNING id, image_set_id, file_path, file_name, file_size_bytes, mime_type, width, height, sha256_checksum, sort_order, created_at, file_mtime
+`
+
+type UpsertAdultImageItemParams struct {
+	ID             uuid.UUID
+	ImageSetID     uuid.UUID
+	FilePath       string
+	FileName       string
+	FileSizeBytes  int64
+	MimeType       string
+	Width          *int32
+	Height         *int32
+	Sha256Checksum string
+	SortOrder      int32
+	CreatedAt      time.Time
+	FileMtime      *time.Time
+}
+
+func (q *Queries) UpsertAdultImageItem(ctx context.Context, arg UpsertAdultImageItemParams) (AdultImageItem, error) {
+	row := q.db.QueryRow(ctx, upsertAdultImageItem,
+		arg.ID,
+		arg.ImageSetID,
+		arg.FilePath,
+		arg.FileName,
+		arg.FileSizeBytes,
+		arg.MimeType,
+		arg.Width,
+		arg.Height,
+		arg.Sha256Checksum,
+		arg.SortOrder,
+		arg.CreatedAt,
+		arg.FileMtime,
+	)
+	var i AdultImageItem
+	err := row.Scan(
+		&i.ID,
+		&i.ImageSetID,
+		&i.FilePath,
+		&i.FileName,
+		&i.FileSizeBytes,
+		&i.MimeType,
+		&i.Width,
+		&i.Height,
+		&i.Sha256Checksum,
+		&i.SortOrder,
+		&i.CreatedAt,
+		&i.FileMtime,
+	)
+	return i, err
+}
+
+const upsertAdultImageSet = `-- name: UpsertAdultImageSet :one
+INSERT INTO adult_image_sets (
+    id, title, directory_path, created_at, updated_at
+) VALUES (
+    $1, $2, $3, $4, $5
+)
+ON CONFLICT (directory_path) DO UPDATE SET
+    title = EXCLUDED.title,
+    updated_at = EXCLUDED.updated_at
+RETURNING id, title, directory_path, whisparr_scene_foreign_id, performer_id, item_count, total_size_bytes, cover_image_path, created_at, updated_at
+`
+
+type UpsertAdultImageSetParams struct {
+	ID            uuid.UUID
+	Title         string
+	DirectoryPath string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+func (q *Queries) UpsertAdultImageSet(ctx context.Context, arg UpsertAdultImageSetParams) (AdultImageSet, error) {
+	row := q.db.QueryRow(ctx, upsertAdultImageSet,
+		arg.ID,
+		arg.Title,
+		arg.DirectoryPath,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	var i AdultImageSet
+	err := row.Scan(
+		&i.ID,
+		&i.Title,
+		&i.DirectoryPath,
+		&i.WhisparrSceneForeignID,
+		&i.PerformerID,
+		&i.ItemCount,
+		&i.TotalSizeBytes,
+		&i.CoverImagePath,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
