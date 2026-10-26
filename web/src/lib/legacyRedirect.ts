@@ -2,6 +2,18 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
+import { redirect } from '@sveltejs/kit';
+
+/**
+ * Shared page load handler for legacy route paths.
+ * Redirects (status 307, temporary) to the consolidated task-flow route target.
+ *
+ * Kept for one minor release (ADR-0029 section 1); removal tracked in OPEN item.
+ */
+export const legacyLoad = ({ url }: { url: URL }): never => {
+	redirect(307, legacyTarget(url.pathname, url));
+};
+
 /**
  * Static mapping of legacy route paths to new task-flow route targets.
  * Kept for one minor release (ADR-0029 section 1); removal tracked in OPEN item.

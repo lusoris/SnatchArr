@@ -330,6 +330,8 @@ e2e-chart-install: ## Chart install + upgrade from the last published chart unti
 web-verify: ## pnpm lint/typecheck/test(+coverage)/build + OpenAPI type drift
 	cd web
 	pnpm install --frozen-lockfile
+	sh ../tools/ci/clones_check_test.sh
+	PRAETORCTL='$(PRAETORCTL)' python3 ../tools/ci/clones_check.py
 	pnpm gen:api
 	git diff --exit-code -- src/lib/api/schema.d.ts
 	sh ../tools/ci/prettier_ignore_test.sh

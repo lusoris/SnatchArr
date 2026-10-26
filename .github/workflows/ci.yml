@@ -231,6 +231,11 @@ jobs:
               - '.gemini/**'
               - '.codex/**'
               - '.github/workflows/ci.yml'
+              - 'web/**'
+              - 'tools/ci/clones_check.py'
+              - 'tools/ci/clones_check_test.sh'
+              - 'tools/ci/clone-free.txt'
+              - 'tools/ci/testdata/clones/**'
             contracts:
               - 'tools/upstreamspec/**'
               - 'renovate.json'
@@ -857,6 +862,18 @@ jobs:
           go install "github.com/cordanaLLM/praetor/cmd/standardsctl@${PRAETOR_REF}"
           ln -s "$(go env GOPATH)/bin/standardsctl" "$(go env GOPATH)/bin/praetorctl"
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: web/package.json
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - name: Install web dependencies
+        run: cd web && pnpm install --frozen-lockfile
+      - name: Clone gate
+        run: |
+          sh tools/ci/clones_check_test.sh
+          python3 tools/ci/clones_check.py
       - name: Context integrity
         run: praetorctl compile-context --verify
       - name: HISS audit

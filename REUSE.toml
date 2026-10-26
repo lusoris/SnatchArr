@@ -24,7 +24,7 @@ SPDX-FileCopyrightText = "2026 s4ntrx"
 SPDX-License-Identifier = "MIT"
 
 [[annotations]]
-path = ["web/static/licences.json", "tools/ci/testdata/dependency_snapshot/**"]
+path = ["web/static/licences.json", "tools/ci/testdata/dependency_snapshot/**", "tools/ci/testdata/clones/**"]
 precedence = "override"
 SPDX-FileCopyrightText = "2026 lusoris <lusoris@pm.me>"
 SPDX-License-Identifier = "EUPL-1.2"
