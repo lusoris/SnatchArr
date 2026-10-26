@@ -33,7 +33,7 @@ func TestClientBuilder_Build(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 	builder := NewClientBuilder(enc, 5*time.Second, logger)
 
-	apiKey := "secret-api-key-12345"
+	apiKey := "a-key-for-the-stub"
 	sealed, err := enc.Seal([]byte(apiKey))
 	if err != nil {
 		t.Fatalf("Seal error: %v", err)

@@ -15,3 +15,5 @@
 2a1038558d4a51318faaffecd01cd80ceeefadf4:api/internal/configarr/parse_test.go:generic-api-key:64
 # expires 2027-02-11: category D, helm-unittest mock lookup Secrets in the chart's csrf-secret refusal suite; low-entropy placeholder values, no credential
 deploy/helm/snatcharr/tests/secret_test.yaml:kubernetes-secret-yaml
+# expires 2026-10-29: category B, test fixture, not a credential; a placeholder stash-box key in the first commit of the stash-box sync branch, replaced by a low-entropy stub in the next commit; remove once that branch is merged
+7d50255c2cbbd8461a096143e4a99c845463f21a:api/internal/adult/pool_test.go:generic-api-key:36

@@ -137,21 +137,14 @@ func (s *Service) Search(ctx context.Context, query string) (SearchResults, erro
 		return SearchResults{}, nil
 	}
 
-	concurrency := min(len(clients), MaxSearchConcurrency)
-	jobs := make(chan InstanceClient, len(clients))
-	for _, ic := range clients {
-		jobs <- ic
-	}
-	close(jobs)
-
 	resChan := make(chan instanceSearchResult, len(clients))
+	sem := make(chan struct{}, MaxSearchConcurrency)
 	var wg sync.WaitGroup
-	for range concurrency {
+	for _, ic := range clients {
+		sem <- struct{}{}
 		wg.Go(func() {
-			for job := range jobs {
-				res := s.searchInstance(ctx, job, query)
-				resChan <- res
-			}
+			defer func() { <-sem }()
+			resChan <- s.searchInstance(ctx, ic, query)
 		})
 	}
 	wg.Wait()
