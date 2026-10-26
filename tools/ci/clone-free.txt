@@ -32,3 +32,4 @@ web/src/lib/components/shell/CommandDialog.svelte.test.ts
 web/src/lib/components/shell/shell.svelte.test.ts
 web/src/routes/layout-guard.svelte.test.ts
 web/src/routes/account/LinkedSignIns.svelte.test.ts
+web/src/routes/+page.svelte
