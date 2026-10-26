@@ -75,6 +75,15 @@ function stubLicences(dataOrError: LicencesData | Error) {
 	});
 }
 
+async function renderAboutTab(): Promise<ReturnType<typeof renderWithQuery>> {
+	const rendered = renderWithQuery(AboutTab);
+	expect(
+		await screen.findByRole('heading', { level: 2, name: m.about_app_heading() })
+	).toBeTruthy();
+	expect(screen.getByText('SnatchArr')).toBeTruthy();
+	return rendered;
+}
+
 describe('about page', () => {
 	afterEach(() => {
 		vi.restoreAllMocks();
@@ -83,12 +92,8 @@ describe('about page', () => {
 	it('positive: renders heading, system status fields, licence link and third-party groups', async () => {
 		stubGet({ '/system/status': sampleStatus });
 		stubLicences(sampleLicences);
-		const { container } = renderWithQuery(AboutTab);
+		const { container } = await renderAboutTab();
 
-		expect(
-			await screen.findByRole('heading', { level: 2, name: m.about_app_heading() })
-		).toBeTruthy();
-		expect(screen.getByText('SnatchArr')).toBeTruthy();
 		expect(screen.getByText('1.2.3')).toBeTruthy();
 		expect(screen.getByText('abcdef1234567890abcdef1234567890abcdef12')).toBeTruthy();
 
@@ -138,12 +143,8 @@ describe('about page', () => {
 	it('negative: fetch error shows message, status stays intact', async () => {
 		stubGet({ '/system/status': sampleStatus });
 		stubLicences(new Error('failed'));
-		renderWithQuery(AboutTab);
+		await renderAboutTab();
 
-		expect(
-			await screen.findByRole('heading', { level: 2, name: m.about_app_heading() })
-		).toBeTruthy();
-		expect(screen.getByText('SnatchArr')).toBeTruthy();
 		expect(await screen.findByRole('alert')).toBeTruthy();
 	});
 

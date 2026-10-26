@@ -32,6 +32,12 @@ web/src/lib/components/shell/CommandDialog.svelte.test.ts
 web/src/lib/components/shell/shell.svelte.test.ts
 web/src/routes/layout-guard.svelte.test.ts
 web/src/routes/account/LinkedSignIns.svelte.test.ts
+web/src/lib/settings.ts
+web/src/lib/settings.test.ts
+web/src/lib/components/CapsPresetsForm.svelte
+web/src/lib/components/CapsPresetsForm.svelte.test.ts
+web/src/routes/system/GeneralTab.svelte
+web/src/routes/system/about.svelte.test.ts
 web/src/routes/+page.svelte
 web/src/routes/login/LocalLoginForm.svelte
 web/src/routes/login/JellyfinLoginCard.svelte

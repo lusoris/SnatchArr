@@ -3,7 +3,7 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
-	import { createSentioQuery, createSentioMutation } from '@sveltesentio/query';
+	import { createSentioQuery } from '@sveltesentio/query';
 	import { toast } from 'svelte-sonner';
 	import { z } from 'zod';
 	import { api, describeError } from '#lib/api/client.js';
@@ -11,12 +11,13 @@ SPDX-License-Identifier: EUPL-1.2
 	import Field from '#lib/components/Field.svelte';
 	import NewPasswordField from '#lib/components/NewPasswordField.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
+	import QueryGuard from '#lib/components/QueryGuard.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { keys } from '#lib/query.js';
 	import {
+		createSettingsSave,
 		generalSettingsSchema,
 		mergeGeneralSettings,
-		saveMergedSettings,
 		type GeneralSettingsDraft,
 		type LlmWriteTool
 	} from '#lib/settings.js';
@@ -267,12 +268,7 @@ SPDX-License-Identifier: EUPL-1.2
 		return group.options.filter((opt) => tools.includes(opt.value)).length;
 	}
 
-	const save = createSentioMutation({
-		mutationFn: (d: GeneralSettingsDraft) => saveMergedSettings(d, mergeGeneralSettings),
-		invalidates: [keys.settings, keys.caps, keys.instances],
-		onSuccess: () => toast.success(m.settings_saved()),
-		onError: (err) => toast.error(describeError(err))
-	});
+	const save = createSettingsSave(mergeGeneralSettings);
 
 	async function changePassword(e: SubmitEvent): Promise<void> {
 		e.preventDefault();
@@ -299,123 +295,121 @@ SPDX-License-Identifier: EUPL-1.2
 <section class="w-full" aria-labelledby="settings-main-title">
 	<h2 id="settings-main-title" class="mb-4 text-2xl font-semibold">{m.settings_title()}</h2>
 
-	{#if settings.isPending}
-		<p aria-live="polite">{m.loading()}</p>
-	{:else if settings.isError}
-		<ProblemNote error={settings.error} />
-	{:else if draft}
-		<div class="flex w-full flex-col gap-6">
-			{#if save.isError}
-				<ProblemNote error={save.error} />
-			{/if}
+	<QueryGuard query={settings}>
+		{#if draft}
+			<div class="flex w-full flex-col gap-6">
+				{#if save.isError}
+					<ProblemNote error={save.error} />
+				{/if}
 
-			<form
-				class="card flex flex-col gap-4"
-				onsubmit={(e) => {
-					e.preventDefault();
-					if (draft && schema.safeParse(draft).success) save.mutate(draft);
-				}}
-			>
-				<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-					<Field id="retention" label={m.settings_retention()} hint={m.settings_retention_hint()}>
-						<input
-							id="retention"
-							data-field="history_retention_days"
-							class="input"
-							type="number"
-							min="1"
-							max="3650"
-							aria-describedby="retention-hint"
-							bind:value={draft.history_retention_days}
-						/>
-					</Field>
-					<Field id="ua" label={m.settings_user_agent()} hint={m.settings_user_agent_hint()}>
-						<input
-							id="ua"
-							data-field="user_agent"
-							class="input"
-							maxlength="200"
-							aria-describedby="ua-hint"
-							bind:value={draft.user_agent}
-						/>
-					</Field>
-				</div>
-				<label class="flex items-center gap-2">
-					<input type="checkbox" data-field="llm_enabled" bind:checked={draft.llm_enabled} />
-					{m.settings_llm_enabled()}
-				</label>
-				<div class="flex flex-col gap-3" data-field="llm_write_tools">
-					<span class="text-sm font-medium">{m.settings_llm_write_tools()}</span>
-					<div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-						{#each writeToolGroups as group (group.field)}
-							<details class="border-border rounded border p-3">
-								<summary
-									class="flex cursor-pointer items-center justify-between gap-2 text-sm font-medium select-none"
-								>
-									<span>{group.legend()}</span>
-									<span class="text-xs font-normal text-subtle">
-										{m.settings_llm_write_tools_allowed({
-											count: allowedCount(group),
-											total: group.options.length
-										})}
-									</span>
-								</summary>
-								<fieldset
-									data-field={group.field}
-									disabled={!draft.llm_enabled}
-									class="mt-3 flex flex-col gap-2 border-0 p-0"
-								>
-									<legend class="sr-only">{group.legend()}</legend>
-									{#each group.options as opt (opt.value)}
-										<label class="flex items-center gap-2 text-sm">
-											<input
-												type="checkbox"
-												value={opt.value}
-												disabled={!draft.llm_enabled}
-												checked={(draft.llm_write_tools ?? []).includes(opt.value)}
-												onchange={(e) => toggleWriteTool(opt.value, e.currentTarget.checked)}
-											/>
-											{opt.label()}
-										</label>
-									{/each}
-								</fieldset>
-							</details>
-						{/each}
-					</div>
-				</div>
-				<div>
-					<AdminSaveButton disabled={save.isPending} />
-				</div>
-			</form>
-
-			<section class="card flex flex-col gap-4" aria-labelledby="change-password-heading">
-				<h2 id="change-password-heading" class="text-xl font-semibold">
-					{m.change_password_title()}
-				</h2>
-				<form class="flex flex-col gap-4" onsubmit={changePassword}>
+				<form
+					class="card flex flex-col gap-4"
+					onsubmit={(e) => {
+						e.preventDefault();
+						if (draft && schema.safeParse(draft).success) save.mutate(draft);
+					}}
+				>
 					<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-						<Field id="current-password" label={m.current_password()}>
+						<Field id="retention" label={m.settings_retention()} hint={m.settings_retention_hint()}>
 							<input
-								id="current-password"
+								id="retention"
+								data-field="history_retention_days"
 								class="input"
-								type="password"
-								autocomplete="current-password"
-								required
-								bind:value={currentPassword}
+								type="number"
+								min="1"
+								max="3650"
+								aria-describedby="retention-hint"
+								bind:value={draft.history_retention_days}
 							/>
 						</Field>
-						<NewPasswordField bind:value={newPassword} />
+						<Field id="ua" label={m.settings_user_agent()} hint={m.settings_user_agent_hint()}>
+							<input
+								id="ua"
+								data-field="user_agent"
+								class="input"
+								maxlength="200"
+								aria-describedby="ua-hint"
+								bind:value={draft.user_agent}
+							/>
+						</Field>
 					</div>
-					{#if passwordError}
-						<p role="alert" class="text-sm text-danger">{passwordError}</p>
-					{/if}
+					<label class="flex items-center gap-2">
+						<input type="checkbox" data-field="llm_enabled" bind:checked={draft.llm_enabled} />
+						{m.settings_llm_enabled()}
+					</label>
+					<div class="flex flex-col gap-3" data-field="llm_write_tools">
+						<span class="text-sm font-medium">{m.settings_llm_write_tools()}</span>
+						<div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+							{#each writeToolGroups as group (group.field)}
+								<details class="border-border rounded border p-3">
+									<summary
+										class="flex cursor-pointer items-center justify-between gap-2 text-sm font-medium select-none"
+									>
+										<span>{group.legend()}</span>
+										<span class="text-xs font-normal text-subtle">
+											{m.settings_llm_write_tools_allowed({
+												count: allowedCount(group),
+												total: group.options.length
+											})}
+										</span>
+									</summary>
+									<fieldset
+										data-field={group.field}
+										disabled={!draft.llm_enabled}
+										class="mt-3 flex flex-col gap-2 border-0 p-0"
+									>
+										<legend class="sr-only">{group.legend()}</legend>
+										{#each group.options as opt (opt.value)}
+											<label class="flex items-center gap-2 text-sm">
+												<input
+													type="checkbox"
+													value={opt.value}
+													disabled={!draft.llm_enabled}
+													checked={(draft.llm_write_tools ?? []).includes(opt.value)}
+													onchange={(e) => toggleWriteTool(opt.value, e.currentTarget.checked)}
+												/>
+												{opt.label()}
+											</label>
+										{/each}
+									</fieldset>
+								</details>
+							{/each}
+						</div>
+					</div>
 					<div>
-						<button type="submit" class="btn btn-primary" disabled={changingPassword}>
-							{m.change_password_submit()}
-						</button>
+						<AdminSaveButton disabled={save.isPending} />
 					</div>
 				</form>
-			</section>
-		</div>
-	{/if}
+
+				<section class="card flex flex-col gap-4" aria-labelledby="change-password-heading">
+					<h2 id="change-password-heading" class="text-xl font-semibold">
+						{m.change_password_title()}
+					</h2>
+					<form class="flex flex-col gap-4" onsubmit={changePassword}>
+						<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+							<Field id="current-password" label={m.current_password()}>
+								<input
+									id="current-password"
+									class="input"
+									type="password"
+									autocomplete="current-password"
+									required
+									bind:value={currentPassword}
+								/>
+							</Field>
+							<NewPasswordField bind:value={newPassword} />
+						</div>
+						{#if passwordError}
+							<p role="alert" class="text-sm text-danger">{passwordError}</p>
+						{/if}
+						<div>
+							<button type="submit" class="btn btn-primary" disabled={changingPassword}>
+								{m.change_password_submit()}
+							</button>
+						</div>
+					</form>
+				</section>
+			</div>
+		{/if}
+	</QueryGuard>
 </section>
