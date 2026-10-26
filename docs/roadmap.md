@@ -13,12 +13,12 @@ The milestones on GitHub are the current state; this page is rendered from them.
 
 | Milestone | Scope | Open issues |
 | :--- | :--- | ---: |
-| [0.7](https://github.com/lusoris/SnatchArr/milestone/12) | Jellyfin sign-in as the only user path, then reported problems, then search and priorities. | 21 |
+| [0.7](https://github.com/lusoris/SnatchArr/milestone/12) | Jellyfin sign-in as the only user path, then reported problems, then search and priorities. | 20 |
 | [0.8](https://github.com/lusoris/SnatchArr/milestone/13) | Settings and the Live page, UI consistency, brand, code health, dependencies and deployment. | 20 |
-| [0.9](https://github.com/lusoris/SnatchArr/milestone/14) | Module switches, Jellyfin-facing API surfaces, community requests, the request portal and the remaining research items. | 16 |
-| [0.10](https://github.com/lusoris/SnatchArr/milestone/15) | The adult module: identity model, Stash integration, image sets, matching and adult requests. | 8 |
-| [0.11](https://github.com/lusoris/SnatchArr/milestone/16) | LLM integration. | 3 |
-| [0.12](https://github.com/lusoris/SnatchArr/milestone/17) | The Jellyfin companion plugin and every SnatchArr function surface inside Jellyfin. | 26 |
+| [0.9](https://github.com/lusoris/SnatchArr/milestone/14) | Module switches, Jellyfin-facing API surfaces, community requests, the request portal, Audiobookshelf integration, the quality-scoring groundwork and the remaining research items. | 24 |
+| [0.10](https://github.com/lusoris/SnatchArr/milestone/15) | The adult module: identity model, Stash integration, image sets, matching, metadata reconciliation and adult requests. | 20 |
+| [0.11](https://github.com/lusoris/SnatchArr/milestone/16) | LLM integration, and quality scores in the queue rules and the matcher. | 4 |
+| [0.12](https://github.com/lusoris/SnatchArr/milestone/17) | The Jellyfin companion plugin and every SnatchArr function surface inside Jellyfin, plus quality diagnostics in the web app. | 29 |
 
 The [milestone list](https://github.com/lusoris/SnatchArr/milestones) shows every milestone with its open and closed issues.
 
@@ -26,10 +26,8 @@ The [milestone list](https://github.com/lusoris/SnatchArr/milestones) shows ever
 
 Jellyfin sign-in as the only user path, then reported problems, then search and priorities.
 
-1. [#681](https://github.com/lusoris/SnatchArr/issues/681): Jellyfin sign-in as the only user path on the login page
 1. [#682](https://github.com/lusoris/SnatchArr/issues/682): Jellyfin default role setting and admin mapping
 1. [#683](https://github.com/lusoris/SnatchArr/issues/683): Link a second sign-in identity from the account page
-1. [#684](https://github.com/lusoris/SnatchArr/issues/684): Map Seerr requests to the requesting Jellyfin user
 1. [#685](https://github.com/lusoris/SnatchArr/issues/685): Sign-in for any adopter without a reverse proxy or identity provider
 1. [#705](https://github.com/lusoris/SnatchArr/issues/705): Jellyfin surface: API keys
 1. [#686](https://github.com/lusoris/SnatchArr/issues/686): Close out stale active units in the plan graph with evidence
@@ -47,6 +45,7 @@ Jellyfin sign-in as the only user path, then reported problems, then search and 
 1. [#558](https://github.com/lusoris/SnatchArr/issues/558): Choose the search shape per *arr family: season packs, seasons, episode groups or episodes
 1. [#559](https://github.com/lusoris/SnatchArr/issues/559): Instance priority: named presets and separate search and download orders
 1. [#560](https://github.com/lusoris/SnatchArr/issues/560): Apply instance priority inside download-client queues
+1. [#742](https://github.com/lusoris/SnatchArr/issues/742): First Jellyfin admin claims a fresh install with a one-time setup code
 
 ## 0.8
 
@@ -75,14 +74,14 @@ Settings and the Live page, UI consistency, brand, code health, dependencies and
 
 ## 0.9
 
-Module switches, Jellyfin-facing API surfaces, community requests, the request portal and the remaining research items.
+Module switches, Jellyfin-facing API surfaces, community requests, the request portal, Audiobookshelf integration, the quality-scoring groundwork and the remaining research items.
 
 1. [#570](https://github.com/lusoris/SnatchArr/issues/570): [EPIC] Optional modules (0.8 and 0.9)
 1. [#693](https://github.com/lusoris/SnatchArr/issues/693): Community requests with voting and admin approval rules
 1. [#731](https://github.com/lusoris/SnatchArr/issues/731): Register requests module switch and schema migrations
 1. [#732](https://github.com/lusoris/SnatchArr/issues/732): Implement deterministic approval rule and quota engine
 1. [#733](https://github.com/lusoris/SnatchArr/issues/733): Add OpenAPI endpoints for submitting, listing, and voting on requests
-1. [#734](https://github.com/lusoris/SnatchArr/issues/734): Add handoff adapters for music, books, comics, and games wishlist
+1. [#734](https://github.com/lusoris/SnatchArr/issues/734): Add request handoff for music, books, comics, games and ROMs
 1. [#735](https://github.com/lusoris/SnatchArr/issues/735): Extend notification engine with community request lifecycle events
 1. [#736](https://github.com/lusoris/SnatchArr/issues/736): Add community requests and voting view in SnatchArr SPA
 1. [#565](https://github.com/lusoris/SnatchArr/issues/565): Request portal module for media types Seerr does not cover
@@ -93,10 +92,18 @@ Module switches, Jellyfin-facing API surfaces, community requests, the request p
 1. [#575](https://github.com/lusoris/SnatchArr/issues/575): Re-decide ADR-0012 when its queue-management bounds change
 1. [#697](https://github.com/lusoris/SnatchArr/issues/697): Watch the re-decide triggers of ADR-0010 and ADR-0015
 1. [#698](https://github.com/lusoris/SnatchArr/issues/698): CUE sheet splitter
+1. [#760](https://github.com/lusoris/SnatchArr/issues/760): Quality scoring: schema, module switch and unified video hash
+1. [#764](https://github.com/lusoris/SnatchArr/issues/764): Metadata: external ID resolver for music and books
+1. [#769](https://github.com/lusoris/SnatchArr/issues/769): Audiobookshelf: bump goenvoy client to the release with the six fixes
+1. [#770](https://github.com/lusoris/SnatchArr/issues/770): Audiobookshelf: listening progress as a watch-aware source
+1. [#771](https://github.com/lusoris/SnatchArr/issues/771): Audiobookshelf: account linking and revalidation
+1. [#772](https://github.com/lusoris/SnatchArr/issues/772): Audiobookshelf: availability, requests and votes
+1. [#773](https://github.com/lusoris/SnatchArr/issues/773): Audiobookshelf: podcast fulfilment over RSS and notifications
+1. [#774](https://github.com/lusoris/SnatchArr/issues/774): Audiobookshelf: explicit-content and adult fencing tests
 
 ## 0.10
 
-The adult module: identity model, Stash integration, image sets, matching and adult requests.
+The adult module: identity model, Stash integration, image sets, matching, metadata reconciliation and adult requests.
 
 1. [#566](https://github.com/lusoris/SnatchArr/issues/566): Adult content module: stash-box sync, favourites, scene image sets and Jellyfin integration
 1. [#737](https://github.com/lusoris/SnatchArr/issues/737): Add adult scene, performer, and studio request kinds and Whisparr handoff
@@ -106,18 +113,31 @@ The adult module: identity model, Stash integration, image sets, matching and ad
 1. [#701](https://github.com/lusoris/SnatchArr/issues/701): Stash integration slices of ADR-0032
 1. [#702](https://github.com/lusoris/SnatchArr/issues/702): Image-set engine follow-ups after #679
 1. [#703](https://github.com/lusoris/SnatchArr/issues/703): Matching engine slices of ADR-0034
+1. [#753](https://github.com/lusoris/SnatchArr/issues/753): Adult identity: persist audit candidates during sync
+1. [#754](https://github.com/lusoris/SnatchArr/issues/754): Adult identity: studio-scoped numbered-name parser and scene-ownership guard
+1. [#755](https://github.com/lusoris/SnatchArr/issues/755): Adult identity: split a performer by source ID, with undo
+1. [#756](https://github.com/lusoris/SnatchArr/issues/756): Adult identity: read-only wrong-merge scan of a connected Stash
+1. [#757](https://github.com/lusoris/SnatchArr/issues/757): Adult identity: audit workbench split drawer and Stash findings
+1. [#758](https://github.com/lusoris/SnatchArr/issues/758): Adult identity: write confirmed splits back to Stash, with undo
+1. [#759](https://github.com/lusoris/SnatchArr/issues/759): Adult identity: scene-overlap lookup for bare-name favourites
+1. [#761](https://github.com/lusoris/SnatchArr/issues/761): Quality scoring: VMAFx client, sampler and synthetic gate
+1. [#765](https://github.com/lusoris/SnatchArr/issues/765): Metadata: normalized adult schema and field provenance
+1. [#766](https://github.com/lusoris/SnatchArr/issues/766): Metadata: reconciler, field locks and matching engine
+1. [#767](https://github.com/lusoris/SnatchArr/issues/767): Metadata: multi-source adult sync and degraded modes
+1. [#768](https://github.com/lusoris/SnatchArr/issues/768): Metadata: Jellyfin metadata and image-set endpoints
 
 ## 0.11
 
-LLM integration.
+LLM integration, and quality scores in the queue rules and the matcher.
 
 1. [#571](https://github.com/lusoris/SnatchArr/issues/571): [EPIC] LLM integration (0.9)
 1. [#564](https://github.com/lusoris/SnatchArr/issues/564): LLM access module: agent skills bundle, llms.txt and per-client connect guides
 1. [#730](https://github.com/lusoris/SnatchArr/issues/730): Jellyfin surface: LLM and MCP tool surface
+1. [#762](https://github.com/lusoris/SnatchArr/issues/762): Quality scoring: queue rules and matcher integration
 
 ## 0.12
 
-The Jellyfin companion plugin and every SnatchArr function surface inside Jellyfin.
+The Jellyfin companion plugin and every SnatchArr function surface inside Jellyfin, plus quality diagnostics in the web app.
 
 1. [#567](https://github.com/lusoris/SnatchArr/issues/567): ADR: Jellyfin companion plugin
 1. [#572](https://github.com/lusoris/SnatchArr/issues/572): [EPIC] Jellyfin companion plugin
@@ -145,6 +165,9 @@ The Jellyfin companion plugin and every SnatchArr function surface inside Jellyf
 1. [#727](https://github.com/lusoris/SnatchArr/issues/727): Jellyfin surface: Adult image-set galleries
 1. [#728](https://github.com/lusoris/SnatchArr/issues/728): Jellyfin surface: Adult matching audit queue
 1. [#729](https://github.com/lusoris/SnatchArr/issues/729): Jellyfin surface: Stash companion instance settings
+1. [#763](https://github.com/lusoris/SnatchArr/issues/763): Quality scoring: watch-aware planner input and UI diagnostics
+1. [#743](https://github.com/lusoris/SnatchArr/issues/743): Jellyfin: request or wish button on every poster and item card
+1. [#744](https://github.com/lusoris/SnatchArr/issues/744): Request state for many Jellyfin items in one call
 
 ## Alternatives
 
