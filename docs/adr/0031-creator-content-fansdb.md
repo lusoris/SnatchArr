@@ -6,7 +6,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # ADR-0031: Creator content catalogued in FansDB inside the adult module
 
-- Status: proposed
+- Status: accepted (2026-10-26)
 - Date: 2026-10-26
 - Related: [ADR-0006](0006-download-client-backpressure.md), [ADR-0018](0018-product-front-door.md), [ADR-0022](0022-instance-priority.md), [ADR-0025](0025-module-switches.md), [ADR-0027](0027-adult-module.md)
 
@@ -78,7 +78,7 @@ FansDB operates as a standard instance of the upstream `stashapp/stash-box` Grap
 
 | Option | Upstream reused (version, licence) | Effort | Risk |
 | :--- | :--- | :--- | :--- |
-| **(a) FansDB as one more stash-box source in adult sync + search via Whisparr** (Recommended) | `Whisparr/Whisparr` v3 (`v3.1.0.2116`, GPL-3.0); `goenvoy` stashbox (`v2.0.4`, MIT) | Low | Low. Reuses existing `adult` stash-box pool and Whisparr v3 `StashId` search pipeline. Respects [ADR-0006](0006-download-client-backpressure.md) and [ADR-0027](0027-adult-module.md). |
+| **(a) FansDB as one more stash-box source in adult sync + search via Whisparr** (Chosen) | `Whisparr/Whisparr` v3 (`v3.1.0.2116`, GPL-3.0); `goenvoy` stashbox (`v2.0.4`, MIT) | Low | Low. Reuses existing `adult` stash-box pool and Whisparr v3 `StashId` search pipeline. Respects [ADR-0006](0006-download-client-backpressure.md) and [ADR-0027](0027-adult-module.md). |
 | **(b) FansDB source + direct indexer search through Prowlarr** | `Prowlarr` API (`v2.6.5.5623`, GPL-3.0); `itsrenoria/ptt-go` (untagged, MIT) or `razsteinmetz/go-ptn` (MIT) | High | Critical. Violates [ADR-0006](0006-download-client-backpressure.md). Requires SnatchArr to implement full torrent/usenet grab evaluation, quality profile parsing, custom formats, and download client queue management. Bypasses Whisparr library state and file unblockers. |
 | **(c) Link only, no SnatchArr feature** | None | Zero | High. Fails product objectives ([ADR-0018](0018-product-front-door.md)). Forces operators to manually discover, monitor, search, and map creator content without fleet automation or stamina governance. |
 
@@ -178,7 +178,9 @@ In alignment with [ADR-0025](0025-module-switches.md) and [ADR-0027](0027-adult-
 - **Whisparr metadata coupling**: If Whisparr v3 is not configured to resolve FansDB stash IDs, scene matching must fall back to textual studio/date/title lookup.
 - **Filesystem coordination**: Local image sets require accessible volume mounts shared between SnatchArr and media storage.
 
-## Open questions
+## Resolved questions
+
+The maintainer answered all three on 2026-10-26; each answer is recorded in the decision ledger under the question id. Cases that automatic matching cannot settle go to the matching audit queue, which a follow-up ADR on model-backed matching and attribute reconciliation defines.
 
 ### 1. `fansdb-instance-onboarding`
 
@@ -187,37 +189,37 @@ How FansDB instances are registered in SnatchArr:
 - **Options**:
   - *Option a: Pre-configured preset endpoint in SnatchArr settings with the user providing only their API key*.
     - *Risk*: Hardcodes the third-party endpoint URL in application defaults; requires a code change if the domain or GraphQL path moves.
-  - *Option b: Generic stash-box instance entry where the operator provides both endpoint URL (`https://fansdb.cc/graphql`) and API key* (Recommended).
+  - *Option b: Generic stash-box instance entry where the operator provides both endpoint URL (`https://fansdb.cc/graphql`) and API key* (Chosen).
     - *Risk*: Requires the operator to manually copy the GraphQL endpoint URL into the instance configuration form.
   - *Option c: Automatic credential import from Whisparr v3 configuration*.
     - *Risk*: Copies a credential out of another application's settings; unverified whether the Whisparr v3 API returns stash-box keys at all.
-- **Recommendation**: **Option b** (Generic stash-box instance entry). Treats FansDB uniformly as a stash-box instance in `adult_stashbox_instances` without hardcoding third-party domains.
+- **Decision**: **Option b**. FansDB is a generic stash-box instance in `adult_stashbox_instances`; the operator enters URL and key. No FansDB literal appears in `api/` code or in defaults.
 
 ### 2. `fansdb-scene-request-matching`
 
 How SnatchArr submits creator scene requests to Whisparr v3:
 
 - **Options**:
-  - *Option a: Direct `StashId` lookup (`stash:<id>`) assuming Whisparr v3 has FansDB configured as a metadata provider* (Recommended).
+  - *Option a: Direct `StashId` lookup (`stash:<id>`) assuming Whisparr v3 has FansDB configured as a metadata provider* (Chosen).
     - *Risk*: Fails to add the movie in Whisparr if the user has not configured FansDB in Whisparr's metadata settings.
   - *Option b: Fallback to structured title and date query (`Studio YYYY-MM-DD Title`) if `stash:<id>` lookup yields no match*.
     - *Risk*: Fuzzy title matching in Whisparr can occasionally match similarly named scenes from the same studio.
   - *Option c: Require manual movie mapping in the SnatchArr UI prior to dispatch*.
     - *Risk*: Breaks automated background request processing and introduces significant operator friction.
-- **Recommendation**: **Option a with fallback to Option b**. Attempt primary lookup by FansDB `StashId`; fall back to structured `Studio YYYY-MM-DD Title` search if unmatched.
+- **Decision**: **Option a with fallback to Option b**. Lookup by `StashId` first; on a miss, a structured `Studio YYYY-MM-DD Title` query. A text hit below the confidence floor never adds a scene automatically; it goes to the audit queue.
 
 ### 3. `fansdb-image-set-ingest`
 
 How creator image sets in `image_set_dir` are discovered and paired with FansDB metadata:
 
 - **Options**:
-  - *Option a: Directory scanner using folder naming convention (`[Studio] [YYYY-MM-DD] Title` or `[Performer] [YYYY-MM-DD] Title`)* (Recommended).
+  - *Option a: Directory scanner using folder naming convention (`[Studio] [YYYY-MM-DD] Title` or `[Performer] [YYYY-MM-DD] Title`)* (Chosen).
     - *Risk*: Relies on consistent folder naming on the library side.
   - *Option b: Sidecar metadata reader (`.json` or `.nfo` files placed alongside images)*.
     - *Risk*: Library folders may carry no standardized metadata sidecars.
   - *Option c: Manual UI upload and folder creation only*.
     - *Risk*: Infeasible for large multi-gigabyte collections containing hundreds of photo galleries.
-- **Recommendation**: **Option a with optional sidecar fallback**. Primary directory scanner parses folder names matching `[Studio] [YYYY-MM-DD] Title` to pair with FansDB performers and scenes, reading optional JSON sidecars when present.
+- **Decision**: **Option a; a JSON sidecar overrides the folder name**. The scanner parses `[Studio] [YYYY-MM-DD] Title` folder names. Unmatched or low-confidence folders go to the audit queue and are never paired silently.
 
 ## References
 
