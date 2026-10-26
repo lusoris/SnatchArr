@@ -123,6 +123,13 @@ if (!process.env.SNATCHARR_E2E_API) {
 				body: JSON.stringify({ oidc: false, proxy: false })
 			})
 		);
+		await page.route('**/api/v1/auth/identities', (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ items: [] })
+			})
+		);
 	}
 
 	async function setupInstanceDetailRoutes(page: Page, id: string) {
@@ -459,6 +466,13 @@ if (!process.env.SNATCHARR_E2E_API) {
 				body: JSON.stringify({ oidc: false, proxy: false })
 			})
 		);
+		await page.route('**/api/v1/auth/identities', (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ items: [] })
+			})
+		);
 		await page.route(`**/api/v1/instances/${unknownId}`, (route) =>
 			route.fulfill({
 				status: 404,
@@ -511,6 +525,13 @@ if (!process.env.SNATCHARR_E2E_API) {
 				status: 200,
 				contentType: 'application/json',
 				body: JSON.stringify({ oidc: false, proxy: false })
+			})
+		);
+		await page.route('**/api/v1/auth/identities', (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ items: [] })
 			})
 		);
 		await page.route('**/api/v1/instances', (route) =>

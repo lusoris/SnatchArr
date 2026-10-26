@@ -42,7 +42,9 @@ const sampleCreatedKey: CreatedApiKey = {
 };
 
 const baseStubs = {
-	'/auth/api-keys': [sampleApiKey]
+	'/auth/api-keys': [sampleApiKey],
+	'/auth/sso': { oidc: false, proxy: false, jellyfin: false },
+	'/auth/identities': { items: [] }
 };
 
 describe('account', () => {
@@ -245,10 +247,27 @@ describe('account', () => {
 	});
 
 	it('renders no API keys table rows when list is empty', async () => {
-		stubGet({ '/auth/api-keys': [] });
+		stubGet({
+			'/auth/api-keys': [],
+			'/auth/sso': { oidc: false, proxy: false, jellyfin: false },
+			'/auth/identities': { items: [] }
+		});
 		renderWithQuery(AccountPage);
 
 		expect(await screen.findByText(m.api_keys_empty())).toBeTruthy();
 		expect(screen.queryByRole('table')).toBeNull();
+	});
+
+	it('renders linked sign-ins section when a provider is enabled', async () => {
+		stubGet({
+			...baseStubs,
+			'/auth/sso': { oidc: false, proxy: false, jellyfin: true }
+		});
+		renderWithQuery(AccountPage);
+
+		expect(
+			await screen.findByRole('heading', { level: 2, name: m.linked_sign_ins_title() })
+		).toBeTruthy();
+		expect(screen.getByText(m.linked_sign_in_provider_jellyfin())).toBeTruthy();
 	});
 });

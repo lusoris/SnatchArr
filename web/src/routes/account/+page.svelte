@@ -8,6 +8,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { m } from '#lib/paraglide/messages.js';
 	import ApiKeys from './ApiKeys.svelte';
 	import ChangePassword from './ChangePassword.svelte';
+	import LinkedSignIns from './LinkedSignIns.svelte';
 </script>
 
 <PageHeader title={m.account_title()} documentTitle help={HELP_MAP['/account']} />
@@ -26,4 +27,6 @@ SPDX-License-Identifier: EUPL-1.2
 		</h2>
 		<ApiKeys />
 	</section>
+
+	<LinkedSignIns />
 </div>
