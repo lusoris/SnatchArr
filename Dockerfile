@@ -26,9 +26,14 @@ ARG TARGETARCH
 ARG VERSION=dev
 ARG COMMIT=unknown
 ARG DATE=unknown
-RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath \
+# nodynamic: gen2brain/webp otherwise loads libwebp through purego, which links the
+# binary against the glibc loader; distroless/static has none. The readelf step fails
+# the build when any program interpreter is present.
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath -tags nodynamic \
       -ldflags="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${DATE}" \
-      -o /out/snatcharr-api ./api/cmd/snatcharr
+      -o /out/snatcharr-api ./api/cmd/snatcharr \
+    && if readelf -l /out/snatcharr-api | grep -q INTERP; then \
+         echo "snatcharr-api is dynamically linked" >&2; exit 1; fi
 
 # ── runtime ───────────────────────────────────────────────────────────────────
 FROM gcr.io/distroless/static-debian13:nonroot@sha256:e2e927ec666bae08560abb3c55d0659eceabb657f56b6782ab500a9fc7f555e3

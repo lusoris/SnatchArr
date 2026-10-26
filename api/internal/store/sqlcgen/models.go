@@ -40,6 +40,7 @@ type AdultImageItem struct {
 	Sha256Checksum string
 	SortOrder      int32
 	CreatedAt      time.Time
+	FileMtime      *time.Time
 }
 
 type AdultImageSet struct {

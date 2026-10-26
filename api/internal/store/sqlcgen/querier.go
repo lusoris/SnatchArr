@@ -51,6 +51,10 @@ type Querier interface {
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
 	CreateWatchAwareSource(ctx context.Context, arg CreateWatchAwareSourceParams) (WatchawareSource, error)
+	DeleteAdultImageItemsNotInPaths(ctx context.Context, arg DeleteAdultImageItemsNotInPathsParams) (int64, error)
+	DeleteAdultImageSetsNotInPaths(ctx context.Context, keepPaths []string) (int64, error)
+	DeleteAllAdultImageItemsForSet(ctx context.Context, imageSetID uuid.UUID) (int64, error)
+	DeleteAllAdultImageSets(ctx context.Context) (int64, error)
 	DeleteConfigarrDownloadClientsNotIn(ctx context.Context, keys []string) (int64, error)
 	DeleteDownloadClient(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteEventsForInstance(ctx context.Context, instanceID uuid.UUID) (int64, error)
@@ -91,6 +95,9 @@ type Querier interface {
 	GetAdultFavoritePerformerByLink(ctx context.Context, arg GetAdultFavoritePerformerByLinkParams) (AdultFavoritePerformer, error)
 	GetAdultFavoriteStudio(ctx context.Context, id uuid.UUID) (AdultFavoriteStudio, error)
 	GetAdultFavoriteStudioByLink(ctx context.Context, arg GetAdultFavoriteStudioByLinkParams) (AdultFavoriteStudio, error)
+	GetAdultImageItem(ctx context.Context, id uuid.UUID) (AdultImageItem, error)
+	GetAdultImageSet(ctx context.Context, id uuid.UUID) (AdultImageSet, error)
+	GetAdultImageSetByDirectory(ctx context.Context, directoryPath string) (AdultImageSet, error)
 	GetAdultPerformerLink(ctx context.Context, arg GetAdultPerformerLinkParams) (AdultPerformerLink, error)
 	GetAdultStashboxInstance(ctx context.Context, id uuid.UUID) (AdultStashboxInstance, error)
 	GetAdultStudioLink(ctx context.Context, arg GetAdultStudioLinkParams) (AdultStudioLink, error)
@@ -146,6 +153,8 @@ type Querier interface {
 	ListAPIKeysForOwner(ctx context.Context, ownerID uuid.UUID) ([]ListAPIKeysForOwnerRow, error)
 	ListAdultFavoritePerformers(ctx context.Context) ([]AdultFavoritePerformer, error)
 	ListAdultFavoriteStudios(ctx context.Context) ([]AdultFavoriteStudio, error)
+	ListAdultImageItemsForSet(ctx context.Context, imageSetID uuid.UUID) ([]AdultImageItem, error)
+	ListAdultImageSets(ctx context.Context) ([]AdultImageSet, error)
 	ListAdultPerformerLinks(ctx context.Context) ([]AdultPerformerLink, error)
 	ListAdultPerformerLinksForFavorite(ctx context.Context, favoriteID uuid.UUID) ([]AdultPerformerLink, error)
 	ListAdultStudioLinks(ctx context.Context) ([]AdultStudioLink, error)
@@ -253,6 +262,7 @@ type Querier interface {
 	// SPDX-License-Identifier: EUPL-1.2
 	// A late write from a slower replica never moves the contact back.
 	TouchWorker(ctx context.Context, arg TouchWorkerParams) error
+	UpdateAdultImageSetSummary(ctx context.Context, arg UpdateAdultImageSetSummaryParams) (AdultImageSet, error)
 	UpdateDownloadClient(ctx context.Context, arg UpdateDownloadClientParams) (DownloadClient, error)
 	UpdateGateSeriesHeldSeasons(ctx context.Context, arg UpdateGateSeriesHeldSeasonsParams) error
 	UpdateGateSeriesTitle(ctx context.Context, arg UpdateGateSeriesTitleParams) error
@@ -268,6 +278,8 @@ type Querier interface {
 	UpdateWatchAwareSource(ctx context.Context, arg UpdateWatchAwareSourceParams) (WatchawareSource, error)
 	UpsertAdultFavoritePerformer(ctx context.Context, arg UpsertAdultFavoritePerformerParams) (AdultFavoritePerformer, error)
 	UpsertAdultFavoriteStudio(ctx context.Context, arg UpsertAdultFavoriteStudioParams) (AdultFavoriteStudio, error)
+	UpsertAdultImageItem(ctx context.Context, arg UpsertAdultImageItemParams) (AdultImageItem, error)
+	UpsertAdultImageSet(ctx context.Context, arg UpsertAdultImageSetParams) (AdultImageSet, error)
 	UpsertAdultPerformerLink(ctx context.Context, arg UpsertAdultPerformerLinkParams) (AdultPerformerLink, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
