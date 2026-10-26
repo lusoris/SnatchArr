@@ -4,7 +4,7 @@
 
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
-import { json, mockAuthenticatedApi } from './mocks.js';
+import { json, mockSignedInApi } from './mocks.js';
 
 const WCAG_22_AA = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 
@@ -13,7 +13,7 @@ test.describe('Jellyfin sign-in and Seerr user mapping', () => {
 		page
 	}) => {
 		let signedIn = false;
-		await mockAuthenticatedApi(page);
+		await mockSignedInApi(page);
 		await page.route('**/api/v1/auth/sso', (route) =>
 			route.fulfill(json({ oidc: false, proxy: false, jellyfin: true, jellyfinQuickConnect: true }))
 		);
@@ -73,9 +73,11 @@ test.describe('Jellyfin sign-in and Seerr user mapping', () => {
 	});
 
 	test('wrong Jellyfin credentials show 401 problem alert and stay on /login', async ({ page }) => {
-		await mockAuthenticatedApi(page);
+		await mockSignedInApi(page);
 		await page.route('**/api/v1/auth/sso', (route) =>
-			route.fulfill(json({ oidc: false, proxy: false, jellyfin: true, jellyfinQuickConnect: false }))
+			route.fulfill(
+				json({ oidc: false, proxy: false, jellyfin: true, jellyfinQuickConnect: false })
+			)
 		);
 		await page.route('**/api/v1/auth/session', (route) =>
 			route.fulfill({
@@ -116,7 +118,7 @@ test.describe('Jellyfin sign-in and Seerr user mapping', () => {
 	test('Seerr request list shows mapped SnatchArr username and falls back to Seerr name', async ({
 		page
 	}) => {
-		await mockAuthenticatedApi(page);
+		await mockSignedInApi(page);
 		await page.route('**/api/v1/seerr/requests*', (route) =>
 			route.fulfill(
 				json([

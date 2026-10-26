@@ -391,7 +391,7 @@ func (tc syncRequestedByCase) run(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create link: %v", err)
 	}
-	if _, err := f.svc.Sync(t.Context(), link.ID); err != nil {
+	if _, err = f.svc.Sync(t.Context(), link.ID); err != nil {
 		t.Fatalf("Sync() = %v", err)
 	}
 	row, err := f.st.Q().GetSeerrRequest(t.Context(), sqlcgen.GetSeerrRequestParams{LinkID: link.ID, RequestID: 77})
