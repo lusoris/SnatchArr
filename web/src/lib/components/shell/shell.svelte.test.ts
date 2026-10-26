@@ -5,19 +5,13 @@
 import { screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { m } from '#lib/paraglide/messages.js';
-import { renderWithQuery, stubGet } from '#lib/testing/harness.js';
+import { installDialogPolyfill, renderWithQuery, stubGet } from '#lib/testing/harness.js';
 import { getNavItems } from './nav.js';
 import NavDrawer from './NavDrawer.svelte';
 import Sidebar from './Sidebar.svelte';
 
 beforeAll(() => {
-	HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {
-		this.setAttribute('open', '');
-	};
-	HTMLDialogElement.prototype.close ??= function (this: HTMLDialogElement) {
-		this.removeAttribute('open');
-		this.dispatchEvent(new Event('close'));
-	};
+	installDialogPolyfill();
 });
 
 vi.mock('$app/paths', () => ({
@@ -79,18 +73,24 @@ describe('Sidebar and NavDrawer shell components', () => {
 		expectKofi(lastNavLink(container));
 	});
 
-	it('positive: renders version label with short commit in sidebar footer', async () => {
-		stubGet({ '/system/status': prodStatus });
-
-		renderWithQuery(Sidebar, {
+	function renderSidebar(): ReturnType<typeof renderWithQuery> {
+		return renderWithQuery(Sidebar, {
 			navItems,
 			onLogout: () => {}
 		});
+	}
 
+	async function expectVersionBadge(expected: string): Promise<void> {
+		renderSidebar();
 		await waitFor(() => {
 			const badge = screen.getByTestId('shell-version');
-			expect(badge.textContent?.trim()).toBe('v0.1.0 (abcdef1)');
+			expect(badge.textContent?.trim()).toBe(expected);
 		});
+	}
+
+	it('positive: renders version label with short commit in sidebar footer', async () => {
+		stubGet({ '/system/status': prodStatus });
+		await expectVersionBadge('v0.1.0 (abcdef1)');
 	});
 
 	it('negative: renders no version label on query error', async () => {
@@ -98,10 +98,7 @@ describe('Sidebar and NavDrawer shell components', () => {
 			'/system/status': new Error('network down')
 		});
 
-		renderWithQuery(Sidebar, {
-			navItems,
-			onLogout: () => {}
-		});
+		renderSidebar();
 
 		// Wait a tick for query resolution
 		await new Promise((r) => setTimeout(r, 50));
@@ -120,14 +117,6 @@ describe('Sidebar and NavDrawer shell components', () => {
 			}
 		});
 
-		renderWithQuery(Sidebar, {
-			navItems,
-			onLogout: () => {}
-		});
-
-		await waitFor(() => {
-			const badge = screen.getByTestId('shell-version');
-			expect(badge.textContent?.trim()).toBe('dev');
-		});
+		await expectVersionBadge('dev');
 	});
 });

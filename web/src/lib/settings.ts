@@ -2,10 +2,14 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
+import { createSentioMutation } from '@sveltesentio/query';
+import { toast } from 'svelte-sonner';
 import { z } from 'zod';
-import { api } from './api/client.js';
+import { api, describeError } from './api/client.js';
 import type { components } from './api/schema.js';
 import { APP_KINDS, type AppKind } from './kinds.js';
+import { m } from './paraglide/messages.js';
+import { keys } from './query.js';
 
 export type Settings = components['schemas']['Settings'];
 export type PriorityPresetMap = components['schemas']['PriorityPresetMap'];
@@ -82,4 +86,14 @@ export async function saveMergedSettings<D>(
 	const server = (await api.GET('/settings')).data;
 	if (!server) throw new Error('GET /settings returned no body');
 	return (await api.PUT('/settings', { body: merge(server, draft) })).data;
+}
+
+/** Creates a mutation that applies one form's draft with `merge` and saves merged settings. */
+export function createSettingsSave<D>(merge: (server: Settings, draft: D) => Settings) {
+	return createSentioMutation({
+		mutationFn: (d: D) => saveMergedSettings(d, merge),
+		invalidates: [keys.settings, keys.caps, keys.instances],
+		onSuccess: () => toast.success(m.settings_saved()),
+		onError: (err) => toast.error(describeError(err))
+	});
 }

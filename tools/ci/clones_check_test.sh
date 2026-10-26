@@ -4,7 +4,7 @@
 #
 # Unit tests for tools/ci/clones_check.py.
 # Verifies expected exit status for clean, planted, native, missing scanner,
-# and empty clone-free list fixtures.
+# sibling-file, directory-entry and empty clone-free list fixtures.
 set -eu
 
 script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
@@ -43,7 +43,14 @@ expect_exit 2 --report "$testdata/noscanner.json" --clone-free "$clone_free"
 # 5. nopassed.json: report without the passed field -> exit 2
 expect_exit 2 --report "$testdata/nopassed.json" --clone-free "$clone_free"
 
-# 6. empty clone-free list -> exit 2
+# 6. sibling.json: a clone in ActivityFeed.svelte.test.ts, next to the
+# listed ActivityFeed.svelte, is not that file -> exit 0
+expect_exit 0 --report "$testdata/sibling.json" --clone-free "$clone_free"
+
+# 7. directory entry: planted.json against a list naming web/src/routes/about/ -> exit 1
+expect_exit 1 --report "$testdata/planted.json" --clone-free "$testdata/dir-clone-free.txt"
+
+# 8. empty clone-free list -> exit 2
 expect_exit 2 --report "$testdata/clean.json" --clone-free "$testdata/empty-clone-free.txt"
 
 exit "$failed"

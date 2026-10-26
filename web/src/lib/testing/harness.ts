@@ -260,6 +260,12 @@ export async function assertCancelDelete(
 	expect(card.getByRole('button', { name: m.action_delete() })).toBeTruthy();
 }
 
+/** Verifies that a problem alert with the given detail is displayed and no save button is present. */
+export async function assertProblemAlert(detail: string): Promise<void> {
+	expect((await screen.findByRole('alert')).textContent).toContain(detail);
+	expect(screen.queryByRole('button', { name: m.instance_save() })).toBeNull();
+}
+
 /**
  * Verifies that a table has the `table-stack` class and that every tbody row has `data-label`
  * attributes matching the corresponding thead `th` text content. For the actions column
@@ -290,4 +296,18 @@ export function expectStackedLabels(table: HTMLElement): void {
 			}
 		});
 	}
+}
+
+/**
+ * jsdom has no modal dialog API: open and close the way a browser does, firing the close
+ * event. Focus trapping and Escape run in a real browser in e2e/flow.test.ts.
+ */
+export function installDialogPolyfill(): void {
+	HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {
+		this.setAttribute('open', '');
+	};
+	HTMLDialogElement.prototype.close ??= function (this: HTMLDialogElement) {
+		this.removeAttribute('open');
+		this.dispatchEvent(new Event('close'));
+	};
 }

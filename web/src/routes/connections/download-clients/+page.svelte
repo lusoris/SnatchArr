@@ -13,6 +13,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import PageHeader from '#lib/components/PageHeader.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import UrlText from '#lib/components/UrlText.svelte';
+	import { downloadClientQueries } from '#lib/queries/connections.js';
 	import { FormEditor } from '#lib/formEditor.svelte.js';
 	import { deleteCallbacks, probeFailed, saveSuccess } from '#lib/forms.js';
 	import { HELP_MAP } from '#lib/help.js';
@@ -24,15 +25,7 @@ SPDX-License-Identifier: EUPL-1.2
 	type DownloadClientInput = components['schemas']['DownloadClientInput'];
 	type DownloadClientStatus = components['schemas']['DownloadClientStatus'];
 
-	const clients = createSentioQuery({
-		queryKey: keys.dlclients,
-		queryFn: async () => (await api.GET('/download-clients')).data ?? []
-	});
-	const status = createSentioQuery({
-		queryKey: keys.dlstatus,
-		queryFn: async () => (await api.GET('/download-clients/status')).data ?? [],
-		refetchInterval: 30_000
-	});
+	const { clients, status } = downloadClientQueries();
 	const instances = createSentioQuery({
 		queryKey: keys.instances,
 		queryFn: async () => (await api.GET('/instances')).data ?? []
@@ -274,25 +267,10 @@ SPDX-License-Identifier: EUPL-1.2
 </section>
 
 <style>
-	.compact-table tbody tr {
-		height: 2.75rem;
-	}
 	@media (min-width: 1280px) {
-		.compact-table tbody tr {
-			height: 2.25rem;
-		}
 		.compact-table th,
 		.compact-table td {
 			padding: 0.35rem 0.5rem;
 		}
-		.compact-table :global(.btn) {
-			min-height: 1.75rem;
-			padding: 0.15rem 0.5rem;
-			font-size: 0.75rem;
-		}
-	}
-	.compact-table th,
-	.compact-table td {
-		vertical-align: middle;
 	}
 </style>

@@ -7,7 +7,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createRawSnippet } from 'svelte';
 import { m } from '#lib/paraglide/messages.js';
 import { session } from '#lib/session.svelte.js';
-import { stubGet } from '#lib/testing/harness.js';
+import { installDialogPolyfill, stubGet } from '#lib/testing/harness.js';
 import * as nav from '#lib/components/shell/nav.js';
 import Layout from './+layout.svelte';
 
@@ -22,13 +22,7 @@ beforeAll(() => {
 		removeEventListener: vi.fn(),
 		dispatchEvent: vi.fn()
 	}));
-	HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {
-		this.setAttribute('open', '');
-	};
-	HTMLDialogElement.prototype.close ??= function (this: HTMLDialogElement) {
-		this.removeAttribute('open');
-		this.dispatchEvent(new Event('close'));
-	};
+	installDialogPolyfill();
 });
 
 vi.mock('$app/paths', () => ({
@@ -47,6 +41,34 @@ vi.mock('$app/state', () => ({
 	page: mockPage
 }));
 
+const protectedContent = createRawSnippet(() => ({
+	render: () => '<div data-testid="protected-content">Content</div>'
+}));
+
+function signInAdmin() {
+	session.user = { id: 'u1', username: 'admin', role: 'admin' } as never;
+	session.state = 'authenticated';
+	vi.spyOn(session, 'refresh').mockResolvedValue('authenticated');
+	stubGet({
+		'/system/modules': [],
+		'/instances': [],
+		'/hourly-caps': [],
+		'/prowlarr/status': [],
+		'/system/status': {
+			name: 'SnatchArr',
+			version: 'dev',
+			commit: '',
+			build_date: '',
+			profile: 'dev',
+			setup_complete: true
+		}
+	});
+}
+
+function renderLayout() {
+	render(Layout, { props: { children: protectedContent } });
+}
+
 describe('Layout route guard', () => {
 	afterEach(() => {
 		session.user = null;
@@ -54,39 +76,14 @@ describe('Layout route guard', () => {
 	});
 
 	it('positive: renders 404 guard view with module details when route is disabled', async () => {
-		session.user = { id: 'u1', username: 'admin', role: 'admin' } as never;
-		session.state = 'authenticated';
-		vi.spyOn(session, 'refresh').mockResolvedValue('authenticated');
-
-		stubGet({
-			'/system/modules': [],
-			'/instances': [],
-			'/hourly-caps': [],
-			'/prowlarr/status': [],
-			'/system/status': {
-				name: 'SnatchArr',
-				version: 'dev',
-				commit: '',
-				build_date: '',
-				profile: 'dev',
-				setup_complete: true
-			}
-		});
+		signInAdmin();
 
 		vi.spyOn(nav, 'isRouteDisabled').mockReturnValue({
 			disabled: true,
 			moduleId: 'fixture_mod'
 		});
 
-		const childrenSnippet = createRawSnippet(() => ({
-			render: () => '<div data-testid="protected-content">Content</div>'
-		}));
-
-		render(Layout, {
-			props: {
-				children: childrenSnippet
-			}
-		});
+		renderLayout();
 
 		const guardView = await screen.findByTestId('not-found-view');
 		expect(guardView).toBeTruthy();
@@ -102,38 +99,13 @@ describe('Layout route guard', () => {
 	});
 
 	it('negative: renders children content when route is not disabled', async () => {
-		session.user = { id: 'u1', username: 'admin', role: 'admin' } as never;
-		session.state = 'authenticated';
-		vi.spyOn(session, 'refresh').mockResolvedValue('authenticated');
-
-		stubGet({
-			'/system/modules': [],
-			'/instances': [],
-			'/hourly-caps': [],
-			'/prowlarr/status': [],
-			'/system/status': {
-				name: 'SnatchArr',
-				version: 'dev',
-				commit: '',
-				build_date: '',
-				profile: 'dev',
-				setup_complete: true
-			}
-		});
+		signInAdmin();
 
 		vi.spyOn(nav, 'isRouteDisabled').mockReturnValue({
 			disabled: false
 		});
 
-		const childrenSnippet = createRawSnippet(() => ({
-			render: () => '<div data-testid="protected-content">Content</div>'
-		}));
-
-		render(Layout, {
-			props: {
-				children: childrenSnippet
-			}
-		});
+		renderLayout();
 
 		expect(await screen.findByTestId('protected-content')).toBeTruthy();
 		expect(screen.queryByTestId('not-found-view')).toBeNull();

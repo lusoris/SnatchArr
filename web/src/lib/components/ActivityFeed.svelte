@@ -11,6 +11,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { createSentioQuery } from '@sveltesentio/query';
 	import { useSSE } from '@sveltesentio/realtime/use-sse';
 	import {
+		createTimerOptions,
 		groupActivityEvents,
 		matchesActivityFilters,
 		resolveScheduleState,
@@ -126,23 +127,13 @@ SPDX-License-Identifier: EUPL-1.2
 		return m.live_cycle_continuous();
 	}
 
-	// The client calls its default timers with itself as receiver, which browsers
-	// refuse, so it never reconnects (golusoris/sveltesentio#424); bound wrappers
-	// avoid that until a fixed release is out.
-	const timerOpts = {
-		setTimeoutImpl: ((cb: TimerHandler, ms?: number) =>
-			setTimeout(cb, ms)) as unknown as typeof setTimeout,
-		clearTimeoutImpl: ((id?: number | NodeJS.Timeout) =>
-			clearTimeout(id)) as unknown as typeof clearTimeout
-	};
-
 	const eventsSSE = useSSE({
 		url: '/api/v1/events/stream',
 		withCredentials: true,
 		events: LIVE_EVENTS,
 		bufferMs: 100,
 		historyLimit: 500,
-		...timerOpts
+		...createTimerOptions()
 	});
 	let backlogFrames = $state<LiveFrame[]>([]);
 
@@ -230,7 +221,7 @@ SPDX-License-Identifier: EUPL-1.2
 		autoConnect: false,
 		bufferMs: 250,
 		historyLimit: 500,
-		...timerOpts
+		...createTimerOptions()
 	});
 	$effect(() => {
 		if (session.isAdmin && activeSource === 'log') logsSSE.connect();

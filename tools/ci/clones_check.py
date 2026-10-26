@@ -164,8 +164,16 @@ def fetch_report(root: pathlib.Path, report_file: str | None) -> dict:
     return data
 
 
+def is_clone_free(path: str, clone_free_paths: list[str]) -> bool:
+    """Match an exact file entry, or a directory entry that ends in a slash."""
+    return any(
+        path.startswith(entry) if entry.endswith("/") else path == entry
+        for entry in clone_free_paths
+    )
+
+
 def check_clones(report: dict, clone_free_paths: list[str]) -> int:
-    """Verify that no duplicate group touches any clone-free prefix."""
+    """Verify that no duplicate group touches any clone-free path."""
     matching_clones: list[dict] = []
     duplicate_groups = report.get("duplicates", []) + report.get("foreign_duplicates", [])
 
@@ -175,7 +183,7 @@ def check_clones(report: dict, clone_free_paths: list[str]) -> int:
         for loc in locs:
             path_str = loc.get("path", "")
             clean_path = strip_lang_suffix(path_str)
-            if any(clean_path.startswith(prefix) for prefix in clone_free_paths):
+            if is_clone_free(clean_path, clone_free_paths):
                 touches = True
                 break
         if touches:

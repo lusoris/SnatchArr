@@ -26,11 +26,11 @@
       "loc": 15,
       "locations": [
         {
-          "path": "web/src/routes/+page.svelte:css",
+          "path": "web/src/routes/fixture-unlisted/+page.svelte:css",
           "line": 100
         },
         {
-          "path": "web/src/routes/instances/+page.svelte:css",
+          "path": "web/src/routes/fixture-unlisted/other/+page.svelte:css",
           "line": 200
         }
       ]
