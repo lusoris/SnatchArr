@@ -197,7 +197,7 @@ SPDX-License-Identifier: EUPL-1.2
 				{#each requests.data ?? [] as r (`${r.link_id}/${r.request_id}`)}
 					<tr>
 						<td>{r.title || `${r.media_type} #${r.request_id}`} {r.is_4k ? '4K' : ''}</td>
-						<td>{r.requested_by}</td>
+						<td>{r.requestedByUsername || r.requested_by}</td>
 						<td>
 							{#if r.instance_name}
 								{r.instance_name}
