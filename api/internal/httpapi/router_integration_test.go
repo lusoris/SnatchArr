@@ -192,6 +192,7 @@ type idsState struct {
 	queuePolicy        map[string]any
 	settings           map[string]any
 	channelID          string
+	userTargetID       string
 	ruleID             string
 	watchawareSourceID string
 }
@@ -1462,6 +1463,12 @@ func stepsDeletesAndAuth() []routerStep {
 			want:   http.StatusNoContent,
 		},
 		{
+			op:     "deleteMyNotifyTarget",
+			method: http.MethodDelete,
+			path:   func(ids *idsState) string { return "/me/notify-targets/" + ids.userTargetID },
+			want:   http.StatusNoContent,
+		},
+		{
 			op:     "deleteWatchawareSource",
 			method: http.MethodDelete,
 			path:   func(ids *idsState) string { return "/watchaware/sources/" + ids.watchawareSourceID },
@@ -1597,6 +1604,79 @@ func stepsNotificationChannels(f *routerFixture) []routerStep {
 			op:     "testNotificationChannel",
 			method: http.MethodPost,
 			path:   func(ids *idsState) string { return "/notifications/channels/" + ids.channelID + "/test" },
+			want:   http.StatusNoContent,
+		},
+	}
+}
+
+func stepsUserNotifyTargets(f *routerFixture) []routerStep {
+	return []routerStep{
+		{
+			op:     "listMyNotifyTargets",
+			method: http.MethodGet,
+			path:   func(_ *idsState) string { return "/me/notify-targets" },
+			want:   http.StatusOK,
+		},
+		{
+			op:     "createMyNotifyTarget",
+			method: http.MethodPost,
+			path:   func(_ *idsState) string { return "/me/notify-targets" },
+			body: func(_ *idsState) any {
+				return map[string]any{
+					"kind":    "webhook",
+					"enabled": true,
+					"config": map[string]any{
+						"url":                   f.notifySrvURL,
+						"secret":                "32-bytes-test-secret-for-webhook",
+						"allow_insecure_http":   true,
+						"allow_private_network": true,
+					},
+				}
+			},
+			want: http.StatusCreated,
+			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
+				t.Helper()
+				id, ok := decoded["id"].(string)
+				if !ok || id == "" {
+					t.Fatalf("createMyNotifyTarget id = %v, want non-empty", decoded["id"])
+				}
+				ids.userTargetID = id
+			},
+		},
+		{
+			op:     "getMyNotifyTarget",
+			method: http.MethodGet,
+			path:   func(ids *idsState) string { return "/me/notify-targets/" + ids.userTargetID },
+			want:   http.StatusOK,
+			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
+				t.Helper()
+				if decoded["id"] != ids.userTargetID {
+					t.Fatalf("getMyNotifyTarget id = %v, want %s", decoded["id"], ids.userTargetID)
+				}
+			},
+		},
+		{
+			op:     "updateMyNotifyTarget",
+			method: http.MethodPut,
+			path:   func(ids *idsState) string { return "/me/notify-targets/" + ids.userTargetID },
+			body: func(_ *idsState) any {
+				return map[string]any{
+					"kind":    "webhook",
+					"enabled": false,
+				}
+			},
+			want: http.StatusOK,
+			capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
+				t.Helper()
+				if decoded["enabled"] != false {
+					t.Fatalf("updateMyNotifyTarget enabled = %v, want false", decoded["enabled"])
+				}
+			},
+		},
+		{
+			op:     "testMyNotifyTarget",
+			method: http.MethodPost,
+			path:   func(ids *idsState) string { return "/me/notify-targets/" + ids.userTargetID + "/test" },
 			want:   http.StatusNoContent,
 		},
 	}
@@ -1817,6 +1897,7 @@ func buildRouterSteps(f *routerFixture) []routerStep {
 	steps = append(steps, stepsConfigarr()...)
 	steps = append(steps, stepsProwlarr(f)...)
 	steps = append(steps, stepsNotificationChannels(f)...)
+	steps = append(steps, stepsUserNotifyTargets(f)...)
 	steps = append(steps, stepsNotificationRules()...)
 	steps = append(steps, stepsWatchaware()...)
 	steps = append(steps, stepsDeletesAndAuth()...)
@@ -2205,10 +2286,11 @@ func isViewerExemptSessionEndpoint(path string) bool {
 	switch path {
 	case "/auth/setup", "/auth/login", "/auth/logout", "/auth/password", "/auth/proxy-session",
 		"/auth/jellyfin", "/auth/jellyfin/quickconnect/initiate", "/auth/jellyfin/quickconnect/authenticate",
-		"/auth/identities", "/auth/identities/jellyfin", "/auth/identities/proxy":
+		"/auth/identities", "/auth/identities/jellyfin", "/auth/identities/proxy",
+		"/me/notify-targets", "/me/notify-targets/{targetId}", "/me/notify-targets/{targetId}/test":
 		return true
 	default:
-		return false
+		return strings.HasPrefix(path, "/me/notify-targets")
 	}
 }
 

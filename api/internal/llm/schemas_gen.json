@@ -281,6 +281,143 @@
     ],
     "type": "object"
   },
+  "createMyNotifyTarget": {
+    "$defs": {
+      "NotificationChannelConfig": {
+        "properties": {
+          "allow_insecure_http": {
+            "default": false,
+            "description": "Allow webhooks to connect over cleartext http://",
+            "type": "boolean"
+          },
+          "allow_private_network": {
+            "default": false,
+            "description": "Allow webhooks to connect to loopback/private/internal IP addresses",
+            "type": "boolean"
+          },
+          "app_token": {
+            "description": "Gotify App token (write-only, never returned in responses)",
+            "type": "string"
+          },
+          "avatar_url": {
+            "description": "Discord avatar URL override",
+            "type": "string"
+          },
+          "bot_token": {
+            "description": "Telegram Bot token (write-only, never returned in responses)",
+            "type": "string"
+          },
+          "channel": {
+            "description": "Slack channel override",
+            "type": "string"
+          },
+          "chat_id": {
+            "description": "Telegram chat ID (e.g. -1001234567890 or @channel)",
+            "type": "string"
+          },
+          "icon_emoji": {
+            "description": "Slack icon emoji override",
+            "type": "string"
+          },
+          "parse_mode": {
+            "description": "Telegram parse mode (e.g. HTML, MarkdownV2)",
+            "type": "string"
+          },
+          "password": {
+            "description": "Password, sent as HTTP Basic Auth to an Apprise API server (write-only, never returned in responses)",
+            "type": "string"
+          },
+          "priority": {
+            "description": "Priority for ntfy (1-5) or Gotify (0-10)",
+            "type": "integer"
+          },
+          "secret": {
+            "description": "HMAC signing secret (write-only, never returned in responses)",
+            "type": "string"
+          },
+          "server_url": {
+            "description": "Base URL for ntfy or Gotify",
+            "type": "string"
+          },
+          "tags": {
+            "description": "Tags / emoji shortcodes for ntfy; for Apprise, the configuration tags to notify (any one matches)",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "theme_color": {
+            "description": "Teams theme color hex without '#' (e.g. 0076D7)",
+            "type": "string"
+          },
+          "token": {
+            "description": "Bearer token (write-only, never returned in responses)",
+            "type": "string"
+          },
+          "topic": {
+            "description": "ntfy topic name",
+            "type": "string"
+          },
+          "url": {
+            "description": "Target endpoint URL for signed outgoing webhooks",
+            "type": "string"
+          },
+          "username": {
+            "description": "Display username override, or the HTTP Basic Auth user for an Apprise API server",
+            "type": "string"
+          },
+          "webhook_url": {
+            "description": "Webhook URL for Discord, Slack and Teams, or the Apprise API notify URL ({server}/notify/{config key}) (write-only, never returned in responses)",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "NotificationChannelKind": {
+        "enum": [
+          "discord",
+          "slack",
+          "telegram",
+          "ntfy",
+          "gotify",
+          "teams",
+          "webhook",
+          "apprise"
+        ],
+        "type": "string"
+      },
+      "UserNotifyTargetInput": {
+        "properties": {
+          "config": {
+            "$ref": "#/$defs/NotificationChannelConfig"
+          },
+          "enabled": {
+            "default": true,
+            "type": "boolean"
+          },
+          "kind": {
+            "$ref": "#/$defs/NotificationChannelKind"
+          }
+        },
+        "required": [
+          "kind",
+          "config"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/UserNotifyTargetInput"
+      }
+    },
+    "required": [
+      "body"
+    ],
+    "type": "object"
+  },
   "createNotificationChannel": {
     "$defs": {
       "NotificationChannelConfig": {
@@ -763,6 +900,24 @@
     ],
     "type": "object"
   },
+  "deleteMyNotifyTarget": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "confirm": {
+        "description": "Must be true to confirm this destructive operation",
+        "type": "boolean"
+      },
+      "targetId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "targetId"
+    ],
+    "type": "object"
+  },
   "deleteNotificationChannel": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -956,6 +1111,20 @@
     },
     "required": [
       "id"
+    ],
+    "type": "object"
+  },
+  "getMyNotifyTarget": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "targetId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "targetId"
     ],
     "type": "object"
   },
@@ -1336,6 +1505,12 @@
     "type": "object"
   },
   "listModules": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "listMyNotifyTargets": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
     "properties": {},
@@ -1775,6 +1950,20 @@
     ],
     "type": "object"
   },
+  "testMyNotifyTarget": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "targetId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "targetId"
+    ],
+    "type": "object"
+  },
   "testNotificationChannel": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -2176,6 +2365,147 @@
     "required": [
       "body",
       "id"
+    ],
+    "type": "object"
+  },
+  "updateMyNotifyTarget": {
+    "$defs": {
+      "NotificationChannelConfig": {
+        "properties": {
+          "allow_insecure_http": {
+            "default": false,
+            "description": "Allow webhooks to connect over cleartext http://",
+            "type": "boolean"
+          },
+          "allow_private_network": {
+            "default": false,
+            "description": "Allow webhooks to connect to loopback/private/internal IP addresses",
+            "type": "boolean"
+          },
+          "app_token": {
+            "description": "Gotify App token (write-only, never returned in responses)",
+            "type": "string"
+          },
+          "avatar_url": {
+            "description": "Discord avatar URL override",
+            "type": "string"
+          },
+          "bot_token": {
+            "description": "Telegram Bot token (write-only, never returned in responses)",
+            "type": "string"
+          },
+          "channel": {
+            "description": "Slack channel override",
+            "type": "string"
+          },
+          "chat_id": {
+            "description": "Telegram chat ID (e.g. -1001234567890 or @channel)",
+            "type": "string"
+          },
+          "icon_emoji": {
+            "description": "Slack icon emoji override",
+            "type": "string"
+          },
+          "parse_mode": {
+            "description": "Telegram parse mode (e.g. HTML, MarkdownV2)",
+            "type": "string"
+          },
+          "password": {
+            "description": "Password, sent as HTTP Basic Auth to an Apprise API server (write-only, never returned in responses)",
+            "type": "string"
+          },
+          "priority": {
+            "description": "Priority for ntfy (1-5) or Gotify (0-10)",
+            "type": "integer"
+          },
+          "secret": {
+            "description": "HMAC signing secret (write-only, never returned in responses)",
+            "type": "string"
+          },
+          "server_url": {
+            "description": "Base URL for ntfy or Gotify",
+            "type": "string"
+          },
+          "tags": {
+            "description": "Tags / emoji shortcodes for ntfy; for Apprise, the configuration tags to notify (any one matches)",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "theme_color": {
+            "description": "Teams theme color hex without '#' (e.g. 0076D7)",
+            "type": "string"
+          },
+          "token": {
+            "description": "Bearer token (write-only, never returned in responses)",
+            "type": "string"
+          },
+          "topic": {
+            "description": "ntfy topic name",
+            "type": "string"
+          },
+          "url": {
+            "description": "Target endpoint URL for signed outgoing webhooks",
+            "type": "string"
+          },
+          "username": {
+            "description": "Display username override, or the HTTP Basic Auth user for an Apprise API server",
+            "type": "string"
+          },
+          "webhook_url": {
+            "description": "Webhook URL for Discord, Slack and Teams, or the Apprise API notify URL ({server}/notify/{config key}) (write-only, never returned in responses)",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "NotificationChannelKind": {
+        "enum": [
+          "discord",
+          "slack",
+          "telegram",
+          "ntfy",
+          "gotify",
+          "teams",
+          "webhook",
+          "apprise"
+        ],
+        "type": "string"
+      },
+      "UserNotifyTargetUpdate": {
+        "properties": {
+          "config": {
+            "$ref": "#/$defs/NotificationChannelConfig"
+          },
+          "enabled": {
+            "default": true,
+            "type": "boolean"
+          },
+          "kind": {
+            "$ref": "#/$defs/NotificationChannelKind"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/UserNotifyTargetUpdate"
+      },
+      "targetId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "body",
+      "targetId"
     ],
     "type": "object"
   },

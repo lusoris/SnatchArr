@@ -1292,6 +1292,64 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/notify-targets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List current user's notification targets */
+        get: operations["listMyNotifyTargets"];
+        put?: never;
+        /** Create a notification target for current user */
+        post: operations["createMyNotifyTarget"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/notify-targets/{targetId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                targetId: components["parameters"]["UserNotifyTargetId"];
+            };
+            cookie?: never;
+        };
+        /** Get one notification target for current user */
+        get: operations["getMyNotifyTarget"];
+        /** Update a notification target for current user */
+        put: operations["updateMyNotifyTarget"];
+        post?: never;
+        /** Delete a notification target for current user */
+        delete: operations["deleteMyNotifyTarget"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/notify-targets/{targetId}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                targetId: components["parameters"]["UserNotifyTargetId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Send a test notification to a user target */
+        post: operations["testMyNotifyTarget"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/watchaware/sources": {
         parameters: {
             query?: never;
@@ -2218,6 +2276,28 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        UserNotifyTargetInput: {
+            kind: components["schemas"]["NotificationChannelKind"];
+            /** @default true */
+            enabled: boolean;
+            config: components["schemas"]["NotificationChannelConfig"];
+        };
+        UserNotifyTargetUpdate: {
+            kind: components["schemas"]["NotificationChannelKind"];
+            /** @default true */
+            enabled: boolean;
+            config?: components["schemas"]["NotificationChannelConfig"];
+        };
+        UserNotifyTarget: {
+            /** Format: uuid */
+            id: string;
+            kind: components["schemas"]["NotificationChannelKind"];
+            enabled: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
         /** @enum {string} */
         NotificationRuleEventKind: "run_failure_streak" | "circuit_opened" | "instance_unreachable" | "stamina_exhausted" | "seerr_request_snatched" | "watchaware_gate_decided";
         NotificationRuleInput: {
@@ -2461,6 +2541,7 @@ export interface components {
         ModuleId: string;
         NotificationChannelId: string;
         NotificationRuleId: string;
+        UserNotifyTargetId: string;
         WatchawareSourceId: string;
     };
     requestBodies: never;
@@ -4753,6 +4834,144 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Rule deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listMyNotifyTargets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description List of user notification targets */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserNotifyTarget"][];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createMyNotifyTarget: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserNotifyTargetInput"];
+            };
+        };
+        responses: {
+            /** @description Target created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserNotifyTarget"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getMyNotifyTarget: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                targetId: components["parameters"]["UserNotifyTargetId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description User notification target */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserNotifyTarget"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    updateMyNotifyTarget: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                targetId: components["parameters"]["UserNotifyTargetId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserNotifyTargetUpdate"];
+            };
+        };
+        responses: {
+            /** @description Target updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserNotifyTarget"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteMyNotifyTarget: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                targetId: components["parameters"]["UserNotifyTargetId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Target deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    testMyNotifyTarget: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                targetId: components["parameters"]["UserNotifyTargetId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Test notification delivered successfully */
             204: {
                 headers: {
                     [name: string]: unknown;

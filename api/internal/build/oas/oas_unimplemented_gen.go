@@ -67,6 +67,15 @@ func (UnimplementedHandler) CreateInstance(ctx context.Context, req *InstanceInp
 	return r, ht.ErrNotImplemented
 }
 
+// CreateMyNotifyTarget implements createMyNotifyTarget operation.
+//
+// Create a notification target for current user.
+//
+// POST /me/notify-targets
+func (UnimplementedHandler) CreateMyNotifyTarget(ctx context.Context, req *UserNotifyTargetInput) (r *UserNotifyTarget, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // CreateNotificationChannel implements createNotificationChannel operation.
 //
 // Create a notification channel.
@@ -155,6 +164,15 @@ func (UnimplementedHandler) DeleteInstance(ctx context.Context, params DeleteIns
 //
 // DELETE /instances/{instanceId}/events
 func (UnimplementedHandler) DeleteInstanceEvents(ctx context.Context, params DeleteInstanceEventsParams) error {
+	return ht.ErrNotImplemented
+}
+
+// DeleteMyNotifyTarget implements deleteMyNotifyTarget operation.
+//
+// Delete a notification target for current user.
+//
+// DELETE /me/notify-targets/{targetId}
+func (UnimplementedHandler) DeleteMyNotifyTarget(ctx context.Context, params DeleteMyNotifyTargetParams) error {
 	return ht.ErrNotImplemented
 }
 
@@ -281,6 +299,15 @@ func (UnimplementedHandler) GetInstancePriority(ctx context.Context, params GetI
 //
 // GET /system/modules/{id}
 func (UnimplementedHandler) GetModule(ctx context.Context, params GetModuleParams) (r *Module, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// GetMyNotifyTarget implements getMyNotifyTarget operation.
+//
+// Get one notification target for current user.
+//
+// GET /me/notify-targets/{targetId}
+func (UnimplementedHandler) GetMyNotifyTarget(ctx context.Context, params GetMyNotifyTargetParams) (r *UserNotifyTarget, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -558,6 +585,15 @@ func (UnimplementedHandler) ListModules(ctx context.Context) (r []ModuleState, _
 	return r, ht.ErrNotImplemented
 }
 
+// ListMyNotifyTargets implements listMyNotifyTargets operation.
+//
+// List current user's notification targets.
+//
+// GET /me/notify-targets
+func (UnimplementedHandler) ListMyNotifyTargets(ctx context.Context) (r []UserNotifyTarget, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // ListNotificationChannels implements listNotificationChannels operation.
 //
 // List all configured notification channels.
@@ -774,6 +810,15 @@ func (UnimplementedHandler) TestInstanceInput(ctx context.Context, req *Instance
 	return r, ht.ErrNotImplemented
 }
 
+// TestMyNotifyTarget implements testMyNotifyTarget operation.
+//
+// Send a test notification to a user target.
+//
+// POST /me/notify-targets/{targetId}/test
+func (UnimplementedHandler) TestMyNotifyTarget(ctx context.Context, params TestMyNotifyTargetParams) error {
+	return ht.ErrNotImplemented
+}
+
 // TestNotificationChannel implements testNotificationChannel operation.
 //
 // Send a synchronous test notification to a channel.
@@ -879,6 +924,15 @@ func (UnimplementedHandler) UpdateInstancePriority(ctx context.Context, req *Ins
 //
 // PUT /system/modules/{id}
 func (UnimplementedHandler) UpdateModule(ctx context.Context, req *ModuleUpdate, params UpdateModuleParams) (r *Module, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UpdateMyNotifyTarget implements updateMyNotifyTarget operation.
+//
+// Update a notification target for current user.
+//
+// PUT /me/notify-targets/{targetId}
+func (UnimplementedHandler) UpdateMyNotifyTarget(ctx context.Context, req *UserNotifyTargetUpdate, params UpdateMyNotifyTargetParams) (r *UserNotifyTarget, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
