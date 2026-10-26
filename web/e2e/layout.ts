@@ -693,7 +693,8 @@ export interface TouchTargetOffender {
 }
 
 export function measureTouchTargets(): TouchTargetOffender[] {
-	const selector = '.btn, .input, .select, .nav-link, .subtab-link, [role="tab"]';
+	const selector =
+		'.btn, .input, .select, .nav-link, .subtab-link, [role="tab"], nav a[href], nav button';
 	const elements = Array.from(document.querySelectorAll(selector));
 	const offenders: TouchTargetOffender[] = [];
 	for (const el of elements) {
