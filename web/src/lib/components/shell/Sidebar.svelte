@@ -4,12 +4,12 @@ SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { page } from '$app/state';
 	import { isApplePlatform } from '@sveltesentio/ui/cmd';
 	import BrandMark from '#lib/components/BrandMark.svelte';
 	import { m } from '#lib/paraglide/messages.js';
-	import { filterByModule, getNavItems, isRouteActive, type NavItem } from './nav.js';
+	import { filterByModule, getNavItems, type NavItem } from './nav.js';
 	import NavIcon from './NavIcon.svelte';
+	import NavList from './NavList.svelte';
 	import KofiLink from './KofiLink.svelte';
 	import NavFooter from './NavFooter.svelte';
 
@@ -69,21 +69,7 @@ SPDX-License-Identifier: EUPL-1.2
 	{/if}
 
 	<nav class="flex-1 overflow-y-auto px-3 py-3" aria-label={m.app_name()}>
-		<ul class="flex flex-col gap-0.5">
-			{#each effectiveNavItems as item (item.href)}
-				{@const active = isRouteActive(page.url.pathname, item.href)}
-				<li>
-					<a
-						href={resolve(item.href)}
-						aria-current={active ? 'page' : undefined}
-						class="nav-link flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium"
-					>
-						<NavIcon name={item.icon} size={16} class={active ? 'text-brand' : 'text-subtle'} />
-						<span>{item.label}</span>
-					</a>
-				</li>
-			{/each}
-		</ul>
+		<NavList items={effectiveNavItems} />
 
 		<KofiLink />
 	</nav>
