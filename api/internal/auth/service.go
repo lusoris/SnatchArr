@@ -181,9 +181,12 @@ func (s *Service) LoginJellyfin(ctx context.Context, a jellyfin.Authenticator, u
 	}
 	m, err := a.SignIn(ctx, username, password)
 	if err != nil {
-		s.recordFailures(ctx, userKey, ipKey)
-		s.logger.InfoContext(ctx, "auth: jellyfin login rejected", slog.String("username", username), slog.String("ip", ip))
-		return jellyfin.Member{}, fmt.Errorf("%w: invalid username or password", domain.ErrUnauthorized)
+		if errors.Is(err, domain.ErrUnauthorized) {
+			s.recordFailures(ctx, userKey, ipKey)
+			s.logger.InfoContext(ctx, "auth: jellyfin login rejected", slog.String("username", username), slog.String("ip", ip))
+			return jellyfin.Member{}, fmt.Errorf("%w: invalid username or password", domain.ErrUnauthorized)
+		}
+		return jellyfin.Member{}, fmt.Errorf("auth: jellyfin sign-in: %w", err)
 	}
 	if m.Disabled {
 		s.recordFailures(ctx, userKey, ipKey)

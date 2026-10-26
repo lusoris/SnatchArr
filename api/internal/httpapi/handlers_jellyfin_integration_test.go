@@ -8,10 +8,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -254,6 +256,30 @@ func TestJellyfin_HandlerIntegration(t *testing.T) {
 		}
 	})
 
+	t.Run("upstream error yields 500 problem+json", func(t *testing.T) {
+		t.Parallel()
+		fakeAuth := &fakeJellyfinAuthenticator{
+			signInFunc: func(context.Context, string, string) (jellyfin.Member, error) {
+				return jellyfin.Member{}, errors.New("upstream jellyfin connection refused")
+			},
+		}
+		f := setupJellyfinFixture(t, defaultCfg, fakeAuth)
+
+		body := `{"username":"alice","password":"password"}`
+		req := httptest.NewRequest(http.MethodPost, PathPrefix+"/auth/jellyfin", bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		f.router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusInternalServerError {
+			t.Fatalf("POST /auth/jellyfin status = %d, want %d", rec.Code, http.StatusInternalServerError)
+		}
+		ct := rec.Header().Get("Content-Type")
+		if !strings.Contains(ct, "application/problem+json") {
+			t.Errorf("Content-Type = %q, want application/problem+json", ct)
+		}
+	})
+
 	t.Run("disabled provider yields 404 problem+json", func(t *testing.T) {
 		t.Parallel()
 		disabledCfg := defaultCfg
@@ -415,5 +441,47 @@ func TestJellyfin_PlantedCheck_NonAdminNeverAdmin(t *testing.T) {
 	}
 	if sess.User.Role != oas.UserRoleRequester {
 		t.Fatalf("role = %q, want requester", sess.User.Role)
+	}
+}
+
+func TestGetSSO_QuickConnectCache(t *testing.T) {
+	t.Parallel()
+	var callCount atomic.Int32
+	fakeAuth := &fakeJellyfinAuthenticator{
+		quickConnectEnabledFunc: func(context.Context) (bool, error) {
+			callCount.Add(1)
+			return true, nil
+		},
+	}
+	f := setupJellyfinFixture(t, config.JellyfinOptions{Enabled: true}, fakeAuth)
+	ctx := t.Context()
+
+	assertSSO(t, f, ctx, true, 1, &callCount)
+	f.clk.Advance(30 * time.Second)
+	assertSSO(t, f, ctx, true, 1, &callCount)
+	f.clk.Advance(31 * time.Second)
+	assertSSO(t, f, ctx, true, 2, &callCount)
+
+	f.clk.Advance(61 * time.Second)
+	fakeAuth.quickConnectEnabledFunc = func(context.Context) (bool, error) {
+		callCount.Add(1)
+		return false, errors.New("upstream jellyfin error")
+	}
+	assertSSO(t, f, ctx, false, 3, &callCount)
+	f.clk.Advance(30 * time.Second)
+	assertSSO(t, f, ctx, false, 3, &callCount)
+}
+
+func assertSSO(t *testing.T, f *jellyfinFixture, ctx context.Context, wantQC bool, wantCalls int32, calls *atomic.Int32) {
+	t.Helper()
+	sso, err := f.h.GetSSO(ctx)
+	if err != nil {
+		t.Fatalf("GetSSO: %v", err)
+	}
+	if sso.JellyfinQuickConnect.Value != wantQC {
+		t.Fatalf("JellyfinQuickConnect = %v, want %v", sso.JellyfinQuickConnect.Value, wantQC)
+	}
+	if got := calls.Load(); got != wantCalls {
+		t.Fatalf("callCount = %d, want %d", got, wantCalls)
 	}
 }

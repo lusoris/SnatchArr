@@ -14,6 +14,8 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"go.uber.org/fx"
 
@@ -74,6 +76,13 @@ type Handlers struct {
 	watchaware *watchaware.Service
 	jellyfin   jellyfin.Authenticator
 	logger     *slog.Logger
+	qcCache    quickConnectCache
+}
+
+type quickConnectCache struct {
+	mu        sync.Mutex
+	value     bool
+	fetchedAt time.Time
 }
 
 // Deps groups the snatch services the handlers need.
@@ -297,6 +306,8 @@ func (h *Handlers) csrfToken(ctx context.Context) string {
 	return csrf.Token(r)
 }
 
+const quickConnectCacheTTL = 60 * time.Second
+
 // GetSSO reports whether OIDC, proxy, or Jellyfin authentication is enabled.
 func (h *Handlers) GetSSO(ctx context.Context) (*oas.SSOStatus, error) {
 	status := &oas.SSOStatus{
@@ -308,14 +319,30 @@ func (h *Handlers) GetSSO(ctx context.Context) (*oas.SSOStatus, error) {
 		status.JellyfinQuickConnect = oas.NewOptBool(false)
 		return status, nil
 	}
-	qcEnabled, err := h.jellyfin.QuickConnectEnabled(ctx)
-	if err != nil {
-		h.logger.WarnContext(ctx, "httpapi: check jellyfin quick connect enabled failed", slog.String("error", err.Error()))
-		status.JellyfinQuickConnect = oas.NewOptBool(false)
-	} else {
-		status.JellyfinQuickConnect = oas.NewOptBool(qcEnabled)
-	}
+	qcEnabled := h.quickConnectEnabled(ctx)
+	status.JellyfinQuickConnect = oas.NewOptBool(qcEnabled)
 	return status, nil
+}
+
+func (h *Handlers) quickConnectEnabled(ctx context.Context) bool {
+	h.qcCache.mu.Lock()
+	defer h.qcCache.mu.Unlock()
+
+	now := h.clk.Now()
+	if !h.qcCache.fetchedAt.IsZero() && now.Sub(h.qcCache.fetchedAt) < quickConnectCacheTTL {
+		return h.qcCache.value
+	}
+	enabled, err := h.jellyfin.QuickConnectEnabled(ctx)
+	h.qcCache.fetchedAt = now
+	if err != nil {
+		if h.logger != nil {
+			h.logger.WarnContext(ctx, "httpapi: check jellyfin quick connect enabled failed", slog.String("error", err.Error()))
+		}
+		h.qcCache.value = false
+		return false
+	}
+	h.qcCache.value = enabled
+	return enabled
 }
 
 // CreateProxySession starts a session when proxy auth is enabled and verified.

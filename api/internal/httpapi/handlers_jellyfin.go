@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 
 	"github.com/lusoris/SnatchArr/api/internal/auth"
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
@@ -21,13 +22,14 @@ func (h *Handlers) JellyfinLogin(ctx context.Context, req *oas.JellyfinLoginRequ
 	if !h.cfg.Jellyfin.Enabled {
 		return nil, domain.ErrNotFound
 	}
-	r, _ := requestFrom(ctx)
-	var clientIP string
-	if r != nil {
-		clientIP = r.RemoteAddr
-	}
-	m, err := h.auth.LoginJellyfin(ctx, h.jellyfin, req.Username, req.Password, clientIP)
+	ip := remoteIP(ctx)
+	m, err := h.auth.LoginJellyfin(ctx, h.jellyfin, req.Username, req.Password, ip)
 	if err != nil {
+		if errors.Is(err, domain.ErrTooManyRequests) {
+			if w, ok := writerFrom(ctx); ok {
+				w.Header().Set("Retry-After", strconv.Itoa(int(auth.LockoutCooldown.Seconds())))
+			}
+		}
 		return nil, err
 	}
 	return h.startJellyfinSession(ctx, m)

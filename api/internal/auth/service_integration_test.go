@@ -674,3 +674,40 @@ func TestLoginJellyfin_Lockout(t *testing.T) {
 		t.Fatalf("LoginJellyfin for disabled member = %v, want ErrUnauthorized", err)
 	}
 }
+
+func TestLoginJellyfin_NonAuthErrorDoesNotLockOut(t *testing.T) {
+	t.Parallel()
+	svc, _ := newServiceWithClock(t)
+	ctx := t.Context()
+
+	if _, err := svc.Setup(ctx, adminName, adminPass); err != nil {
+		t.Fatalf("Setup: %v", err)
+	}
+
+	clientIP := "198.51.100.10"
+	username := "charlie"
+	errUpstream := errors.New("upstream jellyfin connection refused")
+
+	authMock := &fakeJellyfinAuth{
+		signInFunc: func(_ context.Context, _, pw string) (jellyfin.Member, error) {
+			if pw == "secret" {
+				return jellyfin.Member{ID: "jf-charlie", Name: "charlie"}, nil
+			}
+			return jellyfin.Member{}, errUpstream
+		},
+	}
+
+	for i := 1; i <= auth.LockoutMaxFails+2; i++ {
+		_, err := svc.LoginJellyfin(ctx, authMock, username, "any-password", clientIP)
+		if errors.Is(err, domain.ErrUnauthorized) {
+			t.Fatalf("attempt %d: err = %v, must not be ErrUnauthorized", i, err)
+		}
+		if !errors.Is(err, errUpstream) {
+			t.Fatalf("attempt %d: err = %v, want wrap errUpstream", i, err)
+		}
+	}
+
+	if _, err := svc.LoginJellyfin(ctx, authMock, username, "secret", clientIP); err != nil {
+		t.Fatalf("LoginJellyfin with correct credentials after upstream errors = %v, want success", err)
+	}
+}
