@@ -44,6 +44,10 @@
 //	snatcharr.proxy_auth.requester_groups APP_SNATCHARR_PROXY_AUTH_REQUESTER_GROUPS comma-separated groups granting requester role
 //	snatcharr.proxy_auth.viewer_groups APP_SNATCHARR_PROXY_AUTH_VIEWER_GROUPS comma-separated groups granting viewer role
 //	snatcharr.proxy_auth.allowed_users APP_SNATCHARR_PROXY_AUTH_ALLOWED_USERS deprecated; rejected if set
+//	snatcharr.jellyfin.enabled   APP_SNATCHARR_JELLYFIN_ENABLED   enable Jellyfin authentication
+//	snatcharr.jellyfin.url       APP_SNATCHARR_JELLYFIN_URL       Jellyfin server base URL
+//	snatcharr.jellyfin.api_key   APP_SNATCHARR_JELLYFIN_API_KEY   Jellyfin service account API key
+//	snatcharr.jellyfin.timeout   APP_SNATCHARR_JELLYFIN_TIMEOUT   Jellyfin HTTP request timeout (default 10s)
 //	snatcharr.jellyfin.default_role APP_SNATCHARR_JELLYFIN_DEFAULT_ROLE default role for new Jellyfin members (default requester)
 //	snatcharr.metrics.addr       APP_SNATCHARR_METRICS_ADDR       separate HTTP listen address for Prometheus /metrics
 package config
@@ -129,11 +133,26 @@ func (p ProwlarrOptions) Validate() error {
 
 // JellyfinOptions configures Jellyfin authentication and membership settings.
 type JellyfinOptions struct {
-	DefaultRole domain.Role `koanf:"default_role"`
+	Enabled     bool          `koanf:"enabled"`
+	URL         string        `koanf:"url"`
+	APIKey      string        `koanf:"api_key"`
+	Timeout     time.Duration `koanf:"timeout"`
+	DefaultRole domain.Role   `koanf:"default_role"`
 }
 
-// Validate checks that DefaultRole is either requester or viewer.
+// Validate checks that DefaultRole is either requester or viewer, and that
+// if enabled, URL is an absolute http(s) URL with host, APIKey is non-empty, and Timeout > 0.
 func (j JellyfinOptions) Validate() error {
+	if err := j.validateDefaultRole(); err != nil {
+		return err
+	}
+	if !j.Enabled {
+		return nil
+	}
+	return j.validateConnection()
+}
+
+func (j JellyfinOptions) validateDefaultRole() error {
 	normalized := domain.Role(strings.ToLower(strings.TrimSpace(string(j.DefaultRole))))
 	switch normalized {
 	case domain.RoleRequester, domain.RoleViewer:
@@ -145,6 +164,23 @@ func (j JellyfinOptions) Validate() error {
 	default:
 		return fmt.Errorf("config: invalid snatcharr.jellyfin.default_role (APP_SNATCHARR_JELLYFIN_DEFAULT_ROLE) %q: must be %q or %q", j.DefaultRole, domain.RoleRequester, domain.RoleViewer)
 	}
+}
+
+func (j JellyfinOptions) validateConnection() error {
+	if strings.TrimSpace(j.URL) == "" {
+		return errors.New("config: snatcharr.jellyfin.url (APP_SNATCHARR_JELLYFIN_URL) must not be empty when jellyfin is enabled")
+	}
+	u, err := url.Parse(j.URL)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return fmt.Errorf("config: snatcharr.jellyfin.url (APP_SNATCHARR_JELLYFIN_URL) %q must be an absolute http or https URL with a host", j.URL)
+	}
+	if strings.TrimSpace(j.APIKey) == "" {
+		return errors.New("config: snatcharr.jellyfin.api_key (APP_SNATCHARR_JELLYFIN_API_KEY) must not be empty when jellyfin is enabled")
+	}
+	if j.Timeout <= 0 {
+		return errors.New("config: snatcharr.jellyfin.timeout (APP_SNATCHARR_JELLYFIN_TIMEOUT) must be greater than zero")
+	}
+	return nil
 }
 
 // SetupOptions configure the first-run setup wizard.
@@ -433,6 +469,7 @@ func Default() Options {
 			LimitThreshold: 0.9,
 		},
 		Jellyfin: JellyfinOptions{
+			Timeout:     10 * time.Second,
 			DefaultRole: domain.RoleRequester,
 		},
 		Logs: LogsOptions{RingSize: 2000},
@@ -502,6 +539,8 @@ func normalizeProxyAuth(p *ProxyAuthOptions) {
 }
 
 func normalizeJellyfin(j *JellyfinOptions) {
+	j.URL = strings.TrimSpace(j.URL)
+	j.APIKey = strings.TrimSpace(j.APIKey)
 	j.DefaultRole = domain.Role(strings.ToLower(strings.TrimSpace(string(j.DefaultRole))))
 }
 
@@ -624,6 +663,7 @@ func CompoundKeys() []string {
 		"snatcharr.proxy_auth.trusted_cidrs",
 		"snatcharr.proxy_auth.allowed_users",
 		"snatcharr.prowlarr.limit_threshold",
+		"snatcharr.jellyfin.api_key",
 		"snatcharr.jellyfin.default_role",
 		"snatcharr.logs.ring_size",
 		"snatcharr.configarr.download_clients",

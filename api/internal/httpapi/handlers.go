@@ -29,6 +29,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/dlclients"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
+	"github.com/lusoris/SnatchArr/api/internal/jellyfin"
 	"github.com/lusoris/SnatchArr/api/internal/logring"
 	"github.com/lusoris/SnatchArr/api/internal/modules"
 	"github.com/lusoris/SnatchArr/api/internal/notify"
@@ -71,6 +72,7 @@ type Handlers struct {
 	configarr  *configarr.Service
 	notify     *notify.Service
 	watchaware *watchaware.Service
+	jellyfin   jellyfin.Authenticator
 	logger     *slog.Logger
 }
 
@@ -92,6 +94,7 @@ type Deps struct {
 	Configarr  *configarr.Service
 	Notify     *notify.Service
 	WatchAware *watchaware.Service
+	Jellyfin   jellyfin.Authenticator
 	Options    *policies.Options
 	Logs       *logring.Ring
 	Queue      *queue.Store
@@ -102,9 +105,13 @@ type Deps struct {
 func NewHandlers(build buildinfo.Info, cfg config.Options, clk clock.Clock, authSvc *auth.Service,
 	apiKeys *auth.APIKeys, sessions *session.Manager, inst *instances.Service, pol *policies.Service, logger *slog.Logger, d Deps,
 ) *Handlers {
+	jf := d.Jellyfin
+	if jf == nil {
+		jf, _ = jellyfin.ProvideAuthenticator(config.Options{})
+	}
 	return &Handlers{
 		build: build, cfg: cfg, clk: clk, auth: authSvc, apiKeys: apiKeys, sessions: sessions, instances: inst, policies: pol,
-		queue: d.Queue, queueSvc: d.QueueSvc, runs: d.Runs, workers: d.Workers, rec: d.Rec, budget: d.Budget, memory: d.Memory, planner: d.Planner, schedules: d.Schedules, clients: d.Clients, settings: d.Settings, modules: d.Modules, seerr: d.Seerr, prowlarr: d.Prowlarr, configarr: d.Configarr, notify: d.Notify, watchaware: d.WatchAware, options: d.Options, logs: d.Logs, logger: logger,
+		queue: d.Queue, queueSvc: d.QueueSvc, runs: d.Runs, workers: d.Workers, rec: d.Rec, budget: d.Budget, memory: d.Memory, planner: d.Planner, schedules: d.Schedules, clients: d.Clients, settings: d.Settings, modules: d.Modules, seerr: d.Seerr, prowlarr: d.Prowlarr, configarr: d.Configarr, notify: d.Notify, watchaware: d.WatchAware, jellyfin: jf, options: d.Options, logs: d.Logs, logger: logger,
 	}
 }
 
@@ -290,12 +297,25 @@ func (h *Handlers) csrfToken(ctx context.Context) string {
 	return csrf.Token(r)
 }
 
-// GetSSO reports whether OIDC or proxy authentication is enabled.
-func (h *Handlers) GetSSO(_ context.Context) (*oas.SSOStatus, error) {
-	return &oas.SSOStatus{
-		Oidc:  h.cfg.OIDC.Enabled,
-		Proxy: h.cfg.ProxyAuth.Enabled,
-	}, nil
+// GetSSO reports whether OIDC, proxy, or Jellyfin authentication is enabled.
+func (h *Handlers) GetSSO(ctx context.Context) (*oas.SSOStatus, error) {
+	status := &oas.SSOStatus{
+		Oidc:     h.cfg.OIDC.Enabled,
+		Proxy:    h.cfg.ProxyAuth.Enabled,
+		Jellyfin: h.cfg.Jellyfin.Enabled,
+	}
+	if !h.cfg.Jellyfin.Enabled {
+		status.JellyfinQuickConnect = oas.NewOptBool(false)
+		return status, nil
+	}
+	qcEnabled, err := h.jellyfin.QuickConnectEnabled(ctx)
+	if err != nil {
+		h.logger.WarnContext(ctx, "httpapi: check jellyfin quick connect enabled failed", slog.String("error", err.Error()))
+		status.JellyfinQuickConnect = oas.NewOptBool(false)
+	} else {
+		status.JellyfinQuickConnect = oas.NewOptBool(qcEnabled)
+	}
+	return status, nil
 }
 
 // CreateProxySession starts a session when proxy auth is enabled and verified.

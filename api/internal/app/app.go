@@ -34,6 +34,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/events"
 	"github.com/lusoris/SnatchArr/api/internal/httpapi"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
+	"github.com/lusoris/SnatchArr/api/internal/jellyfin"
 	"github.com/lusoris/SnatchArr/api/internal/llm"
 	"github.com/lusoris/SnatchArr/api/internal/logring"
 	"github.com/lusoris/SnatchArr/api/internal/metrics"
@@ -96,6 +97,7 @@ var Module = fx.Options(
 	fx.Provide(func(s *dlclients.Service) workergrpc.Pacer { return s }),
 	workergrpc.Module,
 	sso.Module,
+	jellyfin.Module,
 	httpapi.Module,
 	llm.Module,
 	watchaware.Module,
