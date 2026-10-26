@@ -6,7 +6,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 # ADR-0037: Studio-scoped numbered performer names, scene-ownership conflict rules and Stash wrong-merge import check
 
-- **Status:** Accepted (amends [ADR-0033](0033-adult-identity-and-model.md)); scope questions `OQ-0037-4` and `OQ-0037-5` open
+- **Status:** Accepted (amends [ADR-0033](0033-adult-identity-and-model.md)); scope questions `OQ-0037-4` and `OQ-0037-5` answered
 - **Date:** 2026-10-26
 - **Related:** [ADR-0027](0027-adult-module.md), [ADR-0029](0029-task-flow-ui.md), [ADR-0032](0032-stash-own-or-integrate.md), [ADR-0033](0033-adult-identity-and-model.md), [ADR-0034](0034-matching-engine-and-model-connection.md)
 
@@ -172,6 +172,11 @@ The public pain research in `.workingdir/evidence/stash-pain-research-20261026.m
 
 - `OQ-0037-4 | Scope owner for the research theme "Performer identity disambiguation and collision on identical names" (weight 415, 18 rows): who covers it? | a) SnatchArr covers it in ADR-0037 scope (per-studio aliases and pairwise disambiguation) (risk: build and maintenance cost; overlap with upstream work) b) upstream (Stash, stash-box) owns it; SnatchArr only reads its result (risk: the pain stays for adopters who run SnatchArr) c) out of scope, no SnatchArr work (risk: theme stays unaddressed; research weight 415) | recommended: a`
 - `OQ-0037-5 | Scope owner for the research theme "Numbered or studio-scoped performer identities" (weight 51, 5 rows): who covers it? | a) SnatchArr covers it in ADR-0037 scope (studio-scoped numbered names) (risk: build and maintenance cost; overlap with upstream work) b) upstream (Stash, stash-box) owns it; SnatchArr only reads its result (risk: the pain stays for adopters who run SnatchArr) c) out of scope, no SnatchArr work (risk: theme stays unaddressed; research weight 51) | recommended: a`
+
+Answers recorded (2026-10-26, maintainer decision, wording paraphrased):
+
+- `OQ-0037-4`: option a (ledger `snatcharr-oq-0037-4`). SnatchArr covers performer disambiguation in this ADR's scope: disambiguation fields, stable IDs and a merge and split view.
+- `OQ-0037-5`: option a (ledger `snatcharr-oq-0037-5`). SnatchArr covers studio-scoped numbered performer identities, linked to the real person when known.
 
 ---
 

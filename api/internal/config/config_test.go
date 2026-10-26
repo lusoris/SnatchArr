@@ -99,6 +99,16 @@ func TestValidate(t *testing.T) {
 			o.Jellyfin.APIKey = "valid-api-key"
 			o.Jellyfin.Timeout = 5 * time.Second
 		}, nil, false},
+		{"positive item search cooldown default", func(o *config.Options) {}, nil, false},
+		{"positive item search cooldown 30", func(o *config.Options) {
+			o.ItemSearch.CooldownSeconds = 30
+		}, nil, false},
+		{"negative item search cooldown above max refused", func(o *config.Options) {
+			o.ItemSearch.CooldownSeconds = config.MaxItemSearchCooldownSeconds + 1
+		}, nil, true},
+		{"negative item search cooldown negative refused", func(o *config.Options) {
+			o.ItemSearch.CooldownSeconds = -1
+		}, nil, true},
 		{"negative jellyfin enabled no url", func(o *config.Options) {
 			o.Jellyfin.Enabled = true
 			o.Jellyfin.URL = ""
@@ -1212,4 +1222,109 @@ func TestValidate_JellyfinDefaultRoleErrorMessage(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestItemSearchCooldownConfig(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name        string
+		val         int
+		wantErr     bool
+		errContains []string
+	}{
+		{name: "positive cooldown 60s", val: 60, wantErr: false},
+		{name: "boundary cooldown 0s turns it off", val: 0, wantErr: false},
+		{name: "boundary cooldown 3600s maximum", val: 3600, wantErr: false},
+		{
+			name:        "negative cooldown 3601s refused",
+			val:         3601,
+			wantErr:     true,
+			errContains: []string{"snatcharr.item_search.cooldown_seconds", "APP_SNATCHARR_ITEM_SEARCH_COOLDOWN_SECONDS"},
+		},
+		{
+			name:        "negative cooldown -1s refused",
+			val:         -1,
+			wantErr:     true,
+			errContains: []string{"snatcharr.item_search.cooldown_seconds", "APP_SNATCHARR_ITEM_SEARCH_COOLDOWN_SECONDS"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			opts := config.Default()
+			opts.Worker.Token = "t"
+			opts.APIKey.Secret = "s"
+			opts.ItemSearch.CooldownSeconds = tc.val
+			err := opts.Validate()
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("opts.Validate() expected error for cooldown %d, got nil", tc.val)
+				}
+				for _, substr := range tc.errContains {
+					if !strings.Contains(err.Error(), substr) {
+						t.Errorf("error %q should contain %q", err.Error(), substr)
+					}
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("opts.Validate() unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestLoadItemSearchCooldownFromEnv(t *testing.T) {
+	t.Run("positive env var sets cooldown", func(t *testing.T) {
+		t.Setenv("APP_SNATCHARR_PROFILE", "dev")
+		t.Setenv("APP_SNATCHARR_ITEM_SEARCH_COOLDOWN_SECONDS", "45")
+
+		cfg, err := gconfig.New(gconfig.Options{EnvPrefix: "APP_"})
+		if err != nil {
+			t.Fatalf("gconfig.New: %v", err)
+		}
+		opts, err := config.Load(cfg)
+		if err != nil {
+			t.Fatalf("config.Load: %v", err)
+		}
+		if opts.ItemSearch.CooldownSeconds != 45 {
+			t.Fatalf("opts.ItemSearch.CooldownSeconds = %d, want 45", opts.ItemSearch.CooldownSeconds)
+		}
+	})
+
+	t.Run("positive default is 60 when unset", func(t *testing.T) {
+		t.Setenv("APP_SNATCHARR_PROFILE", "dev")
+
+		cfg, err := gconfig.New(gconfig.Options{EnvPrefix: "APP_"})
+		if err != nil {
+			t.Fatalf("gconfig.New: %v", err)
+		}
+		opts, err := config.Load(cfg)
+		if err != nil {
+			t.Fatalf("config.Load: %v", err)
+		}
+		if opts.ItemSearch.CooldownSeconds != config.DefaultItemSearchCooldownSeconds {
+			t.Fatalf("opts.ItemSearch.CooldownSeconds = %d, want %d", opts.ItemSearch.CooldownSeconds, config.DefaultItemSearchCooldownSeconds)
+		}
+	})
+
+	t.Run("negative env var 3601 refused", func(t *testing.T) {
+		t.Setenv("APP_SNATCHARR_PROFILE", "dev")
+		t.Setenv("APP_SNATCHARR_ITEM_SEARCH_COOLDOWN_SECONDS", "3601")
+
+		cfg, err := gconfig.New(gconfig.Options{EnvPrefix: "APP_"})
+		if err != nil {
+			t.Fatalf("gconfig.New: %v", err)
+		}
+		_, err = config.Load(cfg)
+		if err == nil {
+			t.Fatal("config.Load expected error for cooldown 3601, got nil")
+		}
+		if !strings.Contains(err.Error(), "snatcharr.item_search.cooldown_seconds") {
+			t.Errorf("error %q should mention snatcharr.item_search.cooldown_seconds", err.Error())
+		}
+		if !strings.Contains(err.Error(), "APP_SNATCHARR_ITEM_SEARCH_COOLDOWN_SECONDS") {
+			t.Errorf("error %q should mention APP_SNATCHARR_ITEM_SEARCH_COOLDOWN_SECONDS", err.Error())
+		}
+	})
 }

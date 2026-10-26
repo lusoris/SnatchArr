@@ -2188,6 +2188,45 @@ func (s *InstanceUpdate) SetEnabled(val OptBool) {
 	s.Enabled = val
 }
 
+// Ref: #/components/schemas/ItemSearchRequest
+type ItemSearchRequest struct {
+	Kind SnatchKind `json:"kind"`
+	// Target entity ID.
+	EntityID OptInt64 `json:"entity_id"`
+	// Target group ID.
+	GroupID OptInt64 `json:"group_id"`
+}
+
+// GetKind returns the value of Kind.
+func (s *ItemSearchRequest) GetKind() SnatchKind {
+	return s.Kind
+}
+
+// GetEntityID returns the value of EntityID.
+func (s *ItemSearchRequest) GetEntityID() OptInt64 {
+	return s.EntityID
+}
+
+// GetGroupID returns the value of GroupID.
+func (s *ItemSearchRequest) GetGroupID() OptInt64 {
+	return s.GroupID
+}
+
+// SetKind sets the value of Kind.
+func (s *ItemSearchRequest) SetKind(val SnatchKind) {
+	s.Kind = val
+}
+
+// SetEntityID sets the value of EntityID.
+func (s *ItemSearchRequest) SetEntityID(val OptInt64) {
+	s.EntityID = val
+}
+
+// SetGroupID sets the value of GroupID.
+func (s *ItemSearchRequest) SetGroupID(val OptInt64) {
+	s.GroupID = val
+}
+
 // Ref: #/components/schemas/JellyfinLoginRequest
 type JellyfinLoginRequest struct {
 	Username string `json:"username"`
