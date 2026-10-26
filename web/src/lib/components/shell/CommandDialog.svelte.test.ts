@@ -133,52 +133,39 @@ describe('CommandDialog', () => {
 		opener.remove();
 	});
 
-	it('positive: selecting a nav entry executes goto with resolved route', async () => {
+	async function searchAndSelect(
+		searchTerm: string,
+		optionMatcher: RegExp | string
+	): Promise<void> {
 		renderWithQuery(CommandDialog, { navItems, open: true });
 
 		await vi.waitFor(() => {
 			expect(screen.getByRole('combobox')).toBeTruthy();
 		});
 
-		// Search for Overview
 		const input = screen.getByRole('combobox');
-		await fireEvent.input(input, { target: { value: m.nav_overview() } });
+		await fireEvent.input(input, { target: { value: searchTerm } });
 
-		const overviewOption = await screen.findByText(new RegExp(`^${m.nav_overview()} — `, 'i'));
-		await fireEvent.click(overviewOption);
+		const option = await screen.findByText(optionMatcher);
+		await fireEvent.click(option);
+	}
 
+	it('positive: selecting a nav entry executes goto with resolved route', async () => {
+		await searchAndSelect(m.nav_overview(), new RegExp(`^${m.nav_overview()} — `, 'i'));
 		expect(navMocks.goto).toHaveBeenCalledWith('/');
 	});
 
 	it('positive: includes connections sub-pages and navigates to them', async () => {
-		renderWithQuery(CommandDialog, { navItems, open: true });
-
-		await vi.waitFor(() => {
-			expect(screen.getByRole('combobox')).toBeTruthy();
-		});
-
-		const input = screen.getByRole('combobox');
-		await fireEvent.input(input, { target: { value: m.nav_download_clients() } });
-
-		const dlOption = await screen.findByText(new RegExp(`^${m.nav_download_clients()} — `, 'i'));
-		await fireEvent.click(dlOption);
-
+		await searchAndSelect(
+			m.nav_download_clients(),
+			new RegExp(`^${m.nav_download_clients()} — `, 'i')
+		);
 		expect(navMocks.goto).toHaveBeenCalledWith('/connections/download-clients');
 	});
 
 	it('positive: includes docs entries and opens documentation in a new tab', async () => {
 		const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
-		renderWithQuery(CommandDialog, { navItems, open: true });
-
-		await vi.waitFor(() => {
-			expect(screen.getByRole('combobox')).toBeTruthy();
-		});
-
-		const input = screen.getByRole('combobox');
-		await fireEvent.input(input, { target: { value: 'Docs:' } });
-
-		const docsOption = await screen.findByText(/Docs: Overview/i);
-		await fireEvent.click(docsOption);
+		await searchAndSelect('Docs:', /Docs: Overview/i);
 
 		expect(openSpy).toHaveBeenCalledWith(
 			expect.stringContaining('concepts/'),
