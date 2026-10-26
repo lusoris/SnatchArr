@@ -6,7 +6,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # ADR-0036: Community requests and voting across media types
 
-- Status: Proposed
+- Status: Accepted (operator answers recorded 2026-10-26, ledger ids `snatcharr-oq-0036-1` to `snatcharr-oq-0036-13`)
 - Date: 2026-10-26
 - Related: [ADR-0006](0006-download-client-backpressure.md), [ADR-0008](0008-readarr-frozen-legacy-target.md), [ADR-0012](0012-queue-management-replaces-cleanuparr-link.md), [ADR-0018](0018-product-front-door.md), [ADR-0022](0022-instance-priority.md), [ADR-0023](0023-sso-viewer-role.md), [ADR-0025](0025-module-switches.md), [ADR-0026](0026-accounts-and-roles.md), [ADR-0027](0027-adult-module.md), [ADR-0028](0028-jellyfin-plugin.md), [ADR-0029](0029-task-flow-ui.md), [ADR-0032](0032-stash-own-or-integrate.md), [ADR-0033](0033-adult-identity-and-model.md), ADR-0035 (draft, Jellyfin integration)
 
@@ -57,7 +57,7 @@ In addition to **SnatchArr**, **Jellyfin**, **Seerr**, **Radarr**, and **Sonarr*
 - **Overseerr** (meaning: Plex media request management UI; origin: *overseer* + `*rr`; pronunciation: `/ˌoʊ.vərˈsɪər/`) and **Jellyseerr** (meaning: Jellyfin and Emby fork of Overseerr; origin: *Jellyfin* + *Overseerr*; pronunciation: `/ˈdʒɛl.i.sɪər/`), now merged into **Seerr**.
 - **Ombi** (meaning: self-hosted media request and user management portal; origin: coined short name replacing *Plex Requests.Net*; pronunciation: `/ˈɒm.bi/`).
 - **Requestrr** (meaning: chat bot for media requests; origin: *request* + `*rr`; pronunciation: `/rɪˈkwɛst.ɑːr/`).
-- **Doplarr** (meaning: Discord media request bot; origin: *Doppler* + `*arr*; pronunciation: `/ˈdɒp.lɑːr/`).
+- **Doplarr** (meaning: Discord media request bot; origin: *Doppler* + `*arr`; pronunciation: `/ˈdɒp.lɑːr/`).
 - **Petio** (meaning: Plex companion request and review portal; origin: Latin *petitio*, "a request or petition"; pronunciation: `/ˈpɛt.i.oʊ/`).
 - **Pulsarr** (meaning: Plex watchlist-to-`*arr` bridge; origin: *pulsar* + `*arr`; pronunciation: `/ˈpʌl.sɑːr/`).
 - **Searcharr** (meaning: Telegram request bot for Sonarr, Radarr, and Readarr; origin: *search* + `*arr`; pronunciation: `/ˈsɜːrtʃ.ɑːr/`).
@@ -116,7 +116,7 @@ All target repositories, APIs, licences, and `golusoris/goenvoy` client packages
 
 ## Decision
 
-This section defines only the structural architecture required by the direction. Policy defaults, vote semantics, quota windows, film/series ownership vs Seerr, surface placement, and visibility rules are recorded as open questions (`OQ-0036-1` through `OQ-0036-13`) in the next section.
+This section defines the structural architecture required by the direction. Policy defaults, vote semantics, quota windows, film/series ownership vs Seerr, surface placement, and visibility rules were open questions (`OQ-0036-1` through `OQ-0036-13`); the operator answered all of them on 2026-10-26, and the [Answered questions](#answered-questions) section records each answer with its ledger id. Where an answer differs from the recommendation in the question table, the answer binds.
 
 ```mermaid
 flowchart LR
@@ -129,7 +129,7 @@ flowchart LR
   HAND -->|Comics| KAP["Kapowarr / Mylar3"]
   HAND -->|Games / ROMs| ROMM["RomM Check + Wishlist Queue"]
   HAND -->|Adult| WHISP["Whisparr v3/v2 (/api/v3)"]
-  HAND -->|Film / Series| SEERR["Seerr or Radarr/Sonarr (OQ-0036-5)"]
+  HAND -->|Film / Series| SEERR["Seerr (OQ-0036-5: handoff_to_seerr or disabled_use_seerr)"]
   HAND --> PLAN["SnatchArr Priority Planner & Hourly Caps"]
   ENG --> NOTIFY["Notification Engine (api/internal/notify)"]
 ```
@@ -231,7 +231,7 @@ Every outbound call in `HandoffAdapter` carries a bounded `context.Context` dead
 3. **Comics and manga (`comic_volume`)**: Dispatches to **Kapowarr** (`POST /api/volumes` with `comicvine_id`, `monitor: true`, `auto_search: true`) or **Mylar3** (`cmd=addComic` via `goenvoy/arr/mylar`). **Kavita** and **Komga** are queried only by `CheckAvailability`.
 4. **Games and ROMs (`game`)**: Queries **RomM** (`/api/roms`) for local availability and enriches metadata via `goenvoy/metadata/game/*`. Because no maintained open-source `*arr` application provides an automated wanted-item and indexer-search API for games/ROMs, approved `game` requests transition to an administrator wishlist / manual fulfilment queue (or are hidden if unconfigured, per `OQ-0036-9`).
 5. **Adult content (`adult_scene`, `adult_performer`, `adult_studio`)**: Queries **Stash** (`POST /graphql` per [ADR-0032](0032-stash-own-or-integrate.md)) for existing local scenes/performers/studios; if absent, dispatches to **Whisparr v3 (Eros)** (`POST /api/v3/movie`, `/api/v3/performer`, `/api/v3/studio`) or **Whisparr v2** (`POST /api/v3/series`, `PUT /api/v3/episode/monitor`) using Stash-box identity resolution ([ADR-0027](0027-adult-module.md), [ADR-0033](0033-adult-identity-and-model.md)), then schedules snatching under Whisparr's hourly indexer budget.
-6. **Film and series (`movie`, `series`)**: Either delegates to **Seerr** (`POST /api/v1/request`) or dispatches directly to **Radarr** (`POST /api/v3/movie`) and **Sonarr** (`POST /api/v3/series`) when Seerr is not deployed, as decided under `OQ-0036-5`.
+6. **Film and series (`movie`, `series`)**: Delegates approved requests to **Seerr** (`POST /api/v1/request`) when `film_series_mode` is `handoff_to_seerr` (default), or leaves film and series to Seerr alone when it is `disabled_use_seerr`. There is no direct Radarr/Sonarr mode (`OQ-0036-5`, ledger `snatcharr-oq-0036-5`, which follows `snatcharr-product-seerr-20261020`).
 
 ### 7. Notifications (`api/internal/notify`)
 
@@ -251,12 +251,35 @@ To satisfy the any-adopter constraint (zero SSO, zero reverse-proxy auth headers
 
 1. **Inside Jellyfin**: The Jellyfin companion plugin ([ADR-0028](0028-jellyfin-plugin.md), ADR-0035 (draft, Jellyfin integration)) renders a community requests and voting surface inside Jellyfin. The plugin authenticates requests to SnatchArr using its scoped `X-Api-Key` (`requests:read`, `requests:write`) combined with the acting user's `X-Jellyfin-User-Token` header, which SnatchArr verifies directly against Jellyfin's `GET /Users/Me` (`ADR-0028:99-111`) and maps to the corresponding `users` row (`external_id = jellyfin:<uuid>`, [ADR-0026](0026-accounts-and-roles.md)).
 2. **Direct SnatchArr web UI**: Users signing into SnatchArr's embedded SPA directly authenticate with their Jellyfin credentials (`POST /api/v1/auth/jellyfin`) or Jellyfin Quick Connect (`POST /api/v1/auth/jellyfin/quickconnect/*`, [ADR-0026](0026-accounts-and-roles.md)). Jellyfin's `EnableContentDeletion` / administrator flag and `MaxParentalRating` / folder access policy automatically govern SnatchArr role assignment (`RoleForJellyfinMember` in `api/internal/domain/user.go:39-44`) and `adult_allowed` gating.
+3. **Request or wish button on every poster and item card** (`OQ-0036-6`, ledger `snatcharr-oq-0036-6`): the plugin adds a request or wish button to each poster and item card in jellyfin-web through web injection, following `snatcharr-jellyfin-plugin-web-injection-method`. The plugin ships an optional snippet for the JavaScript Injector plugin; every server-side feature (request API, voting, plugin pages) works with the injector absent, and the plugin writes a log line naming the missing injector so the absent button is never a silent fallback. Native clients (Android TV, Swiftfin, Findroid) get no button and use the plugin page or the SnatchArr web UI.
 
 ---
 
+## Answered questions
+
+The operator answered every open question on 2026-10-26. Each answer is recorded in the decision ledger under the id shown; the wording below is a paraphrase. Where an answer differs from the recommendation in the question table that follows, the answer binds.
+
+| ID | Answer | Ledger id |
+| :--- | :--- | :--- |
+| `OQ-0036-1` | **a**: requests wait in `voting` until the vote threshold or an admin approval by default; the module activation screen offers one-click presets. | `snatcharr-oq-0036-1` |
+| `OQ-0036-2` | **c**: admin-selectable `upvotes_only` or `net_score`, default `upvotes_only`. | `snatcharr-oq-0036-2` |
+| `OQ-0036-3` | **c**: rolling window in days per media type, an optional global cap, and `votes_consume_quota` default `false`. | `snatcharr-oq-0036-3` |
+| `OQ-0036-4` | **a** with a toggle: `admin` and `requester` vote; `allow_viewer_votes` default `false`. | `snatcharr-oq-0036-4` |
+| `OQ-0036-5` | **b**, narrowed to two modes of the admin setting `film_series_mode`: `handoff_to_seerr` (default; film and series use SnatchArr voting and rules, approved requests go to Seerr) and `disabled_use_seerr` (Seerr alone). No `direct_arr` mode, per `snatcharr-product-seerr-20261020`. | `snatcharr-oq-0036-5` |
+| `OQ-0036-6` | **a** plus: dual surface on one API (SnatchArr `/requests` page in `0.9`, Jellyfin plugin page in `0.12`), and a request or wish button on every poster and item card through web injection, using the optional JavaScript Injector snippet of `snatcharr-jellyfin-plugin-web-injection-method`; every server feature works without the injector, and the plugin logs when it is missing. | `snatcharr-oq-0036-6` |
+| `OQ-0036-7` | **a**: a request type appears only when a matching target is connected or the admin enables wish-list mode for it. | `snatcharr-oq-0036-7` |
+| `OQ-0036-8` | **a**: admin routing rules by media type, genre, language, format and user or role; requesters never see instance topology. | `snatcharr-oq-0036-8` |
+| `OQ-0036-9` | **a**: `wishlist_only` mode for games and ROMs with metadata lookup, voting, an admin fulfilment queue and availability detection. | `snatcharr-oq-0036-9` |
+| `OQ-0036-10` | **a**: admin-configured notification rules in `api/internal/notify`, with `allow_adult` channel fencing, in `0.9`; per-user endpoints later. | `snatcharr-oq-0036-10` |
+| `OQ-0036-11` | **c**: admin setting `public_attributed`, `public_anonymous` or `private_to_requester_and_admin`, default `public_anonymous`. | `snatcharr-oq-0036-11` |
+| `OQ-0036-12` | **b**: users without adult access get `404` behind two independent checks; among adult-allowed users the adult request board is shared and votable by default. | `snatcharr-oq-0036-12` |
+| `OQ-0036-13` | **a**: `voting_ttl_days`, default `0` (never expire), reconciled on the leader loop. | `snatcharr-oq-0036-13` |
+
 ## Open Questions
 
-Every product and UX fork with genuine trade-offs is catalogued below in FOR-DEC format (`OQ-0036-N | question | options with risks | recommended`) for operator resolution before implementation.
+The question table below is kept as the record of the options and risks the answers chose from.
+
+Every product and UX fork with genuine trade-offs was catalogued below in FOR-DEC format (`OQ-0036-N | question | options with risks | recommended`) for operator resolution before implementation.
 
 | ID | Question | Options & risks | Recommended |
 | :--- | :--- | :--- | :--- |
@@ -339,7 +362,7 @@ Every component of this ADR will be verified under SnatchArr's 3D testing standa
 
 ## Milestone Placement Proposal
 
-The work decomposes into nine implementation issues across milestones `0.9`, `0.10`, and `0.12` (also exported in `.workingdir/agy/reqvote-issues.tsv`):
+The work decomposes into ten implementation issues across milestones `0.9`, `0.10`, and `0.12` (also exported in `.workingdir/agy/reqvote-issues.tsv`):
 
 | Milestone | Issue title | Summary |
 | :--- | :--- | :--- |
@@ -350,8 +373,9 @@ The work decomposes into nine implementation issues across milestones `0.9`, `0.
 | `0.9` | `feat(notify): extend notification engine with community request lifecycle events` | Add `request_submitted`, `request_approved`, `request_declined`, `request_handed_off`, and `request_available` `RuleEventKind` triggers to `api/internal/notify` across existing encrypted notification channels (ADR-0036). |
 | `0.9` | `feat(web): add community requests and voting view in SnatchArr SPA` | Add the `/requests` task-flow route (ADR-0029) and admin approval rule configuration sheet in `web/` with Svelte 5 runes, Paraglide `en`/`de` locales, and zero axe-core WCAG 2.2 AA violations (ADR-0036). |
 | `0.10` | `feat(requests): add adult scene, performer, and studio request kinds and Whisparr handoff` | Extend the `requests` module with `adult_scene`, `adult_performer`, and `adult_studio` kinds gated by two-barrier adult access (`ModuleAdult` enabled plus `user.adult_allowed` per ADR-0026/ADR-0027), Stash availability checks (ADR-0032), and Whisparr v3/v2 handoff (ADR-0033, ADR-0036). |
-| `0.10` | `feat(requests): isolate adult request visibility, voting, and sanitized notifications` | Enforce RFC 9457 `404` isolation for non-authorized accounts on adult requests, apply admin-configured adult voting visibility rules (`OQ-0036-12`), and fence adult request notifications to adult-authorized channels (ADR-0027, ADR-0036). |
+| `0.10` | `feat(requests): isolate adult request visibility, voting, and sanitized notifications` | Enforce RFC 9457 `404` isolation for non-authorized accounts on adult requests, apply the shared adult request board among adult-allowed users (`OQ-0036-12`, ledger `snatcharr-oq-0036-12`), and fence adult request notifications to adult-authorized channels (ADR-0027, ADR-0036). |
 | `0.12` | `feat(jellyfin-plugin): embed community request submission and voting surface in Jellyfin` | Expose multi-type catalog lookup, request submission, quota badge, and one-click voting inside the Jellyfin companion plugin using delegated Jellyfin user tokens without external SSO or reverse-proxy requirements (ADR-0028, ADR-0035, ADR-0036). |
+| `0.12` | `feat(jellyfin-plugin): add a request or wish button to every poster and item card` | Ship the optional JavaScript Injector snippet that adds the button to posters and item cards, keep every server feature working without the injector, and log when the injector is missing (`OQ-0036-6`, ledger `snatcharr-oq-0036-6`, `snatcharr-jellyfin-plugin-web-injection-method`). |
 
 ---
 
