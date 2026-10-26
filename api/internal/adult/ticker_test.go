@@ -104,3 +104,66 @@ func TestTicker_ModuleDisabled_ZeroHTTPRequests(t *testing.T) {
 		t.Fatalf("expected 0 HTTP hits when module is disabled, got %d", hits)
 	}
 }
+
+func TestScanTicker_DisabledOrUnsetDir(t *testing.T) {
+	t.Parallel()
+	clk := clock.NewFake()
+	enc := testEncryptor(t)
+	ids := id.New()
+	logger := slog.New(slog.DiscardHandler)
+	ctx := context.Background()
+
+	t.Run("module disabled -> false", func(t *testing.T) {
+		t.Parallel()
+		checker := &staticModuleChecker{enabled: false}
+		svc := NewServiceWithChecker(nil, enc, clk, ids, checker, logger)
+		due, err := svc.shouldScanTick(ctx)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if due {
+			t.Fatal("expected shouldScanTick to return false when disabled")
+		}
+	})
+
+	t.Run("image_set_dir unset -> false", func(t *testing.T) {
+		t.Parallel()
+		checker := &staticModuleChecker{
+			enabled: true,
+			cfg: domain.Module{
+				ID:      domain.ModuleAdult,
+				Enabled: true,
+				Config:  json.RawMessage(`{"sync_interval_minutes":15}`),
+			},
+		}
+		svc := NewServiceWithChecker(nil, enc, clk, ids, checker, logger)
+		due, err := svc.shouldScanTick(ctx)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if due {
+			t.Fatal("expected shouldScanTick to return false when image_set_dir unset")
+		}
+	})
+
+	t.Run("image_set_dir set and interval elapsed -> true then false", func(t *testing.T) {
+		t.Parallel()
+		checker := &staticModuleChecker{
+			enabled: true,
+			cfg: domain.Module{
+				ID:      domain.ModuleAdult,
+				Enabled: true,
+				Config:  json.RawMessage(`{"image_set_dir":"/var/media/imagesets","sync_interval_minutes":15}`),
+			},
+		}
+		svc := NewServiceWithChecker(nil, enc, clk, ids, checker, logger)
+		due, err := svc.shouldScanTick(ctx)
+		if err != nil || !due {
+			t.Fatalf("expected shouldScanTick to return true, got due=%v, err=%v", due, err)
+		}
+		due2, err := svc.shouldScanTick(ctx)
+		if err != nil || due2 {
+			t.Fatalf("expected immediate second call to return false, got due=%v, err=%v", due2, err)
+		}
+	})
+}

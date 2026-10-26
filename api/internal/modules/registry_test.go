@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
@@ -170,6 +172,14 @@ func TestConfigValidation(t *testing.T) {
 		{name: "negative adult NUL refused", val: modules.ValidateAdultConfig, raw: "{\"image_set_dir\":\"/var/media\\u0000/imagesets\"}", wantErr: true},
 		{name: "positive adult 4096-byte dir ok", val: modules.ValidateAdultConfig, raw: fmt.Sprintf(`{"image_set_dir":%q}`, abs4096Dir), wantErr: false},
 		{name: "negative adult 4097-byte dir refused", val: modules.ValidateAdultConfig, raw: fmt.Sprintf(`{"image_set_dir":%q}`, abs4097Dir), wantErr: true},
+		{name: "positive adult abs clean thumb dir ok", val: modules.ValidateAdultConfig, raw: fmt.Sprintf(`{"thumbnail_cache_dir":%q}`, absCleanDir), wantErr: false},
+		{name: "negative adult relative thumb dir refused", val: modules.ValidateAdultConfig, raw: `{"thumbnail_cache_dir":"relative/path"}`, wantErr: true},
+		{name: "negative adult unclean thumb /a/../b refused", val: modules.ValidateAdultConfig, raw: `{"thumbnail_cache_dir":"/a/../b"}`, wantErr: true},
+		{name: "negative adult empty string thumb refused", val: modules.ValidateAdultConfig, raw: `{"thumbnail_cache_dir":""}`, wantErr: true},
+		{name: "negative adult NUL thumb refused", val: modules.ValidateAdultConfig, raw: "{\"thumbnail_cache_dir\":\"/var/media\\u0000/thumbs\"}", wantErr: true},
+		{name: "positive adult 4096-byte thumb dir ok", val: modules.ValidateAdultConfig, raw: fmt.Sprintf(`{"thumbnail_cache_dir":%q}`, abs4096Dir), wantErr: false},
+		{name: "negative adult 4097-byte thumb dir refused", val: modules.ValidateAdultConfig, raw: fmt.Sprintf(`{"thumbnail_cache_dir":%q}`, abs4097Dir), wantErr: true},
+		{name: "positive adult both dirs ok", val: modules.ValidateAdultConfig, raw: fmt.Sprintf(`{"image_set_dir":%q,"thumbnail_cache_dir":%q}`, absCleanDir, absCleanDir), wantErr: false},
 		{name: "positive llm empty object ok", val: modules.ValidateLLMConfig, raw: "{}", wantErr: false},
 		{name: "negative llm unknown field refused", val: modules.ValidateLLMConfig, raw: `{"x":1}`, wantErr: true},
 		{name: "negative llm null refused", val: modules.ValidateLLMConfig, raw: "null", wantErr: true},
@@ -237,5 +247,14 @@ func TestDefaultRegistryContainsAdult(t *testing.T) {
 	}
 	if desc.ValidateConfig == nil {
 		t.Errorf("desc.ValidateConfig is nil, want non-nil")
+	}
+}
+
+func TestDefaultAdultThumbnailCacheDir(t *testing.T) {
+	t.Parallel()
+	got := modules.DefaultAdultThumbnailCacheDir()
+	want := filepath.Join(os.TempDir(), "snatcharr-adult-thumbnails")
+	if got != want {
+		t.Fatalf("DefaultAdultThumbnailCacheDir() = %q, want %q", got, want)
 	}
 }
