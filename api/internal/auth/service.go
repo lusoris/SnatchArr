@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/golusoris/golusoris/auth/lockout"
 	"github.com/golusoris/golusoris/core/clock"
@@ -25,6 +26,7 @@ import (
 	"github.com/golusoris/golusoris/core/id"
 
 	"github.com/lusoris/SnatchArr/api/internal/domain"
+	"github.com/lusoris/SnatchArr/api/internal/jellyfin"
 	"github.com/lusoris/SnatchArr/api/internal/store"
 	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
 )
@@ -165,6 +167,38 @@ func (s *Service) Login(ctx context.Context, username, password, clientIP string
 	return userFromRow(row), nil
 }
 
+// LoginJellyfin verifies Jellyfin credentials and enforces lockout counters on "jellyfin:"+lower(username).
+func (s *Service) LoginJellyfin(ctx context.Context, a jellyfin.Authenticator, username, password, clientIP string) (jellyfin.Member, error) {
+	trimmedUser := strings.TrimSpace(username)
+	userKey := "jellyfin:" + strings.ToLower(trimmedUser)
+	ip := strings.TrimSpace(clientIP)
+	var ipKey string
+	if ip != "" {
+		ipKey = "ip:" + ip
+	}
+	if err := s.checkLockout(ctx, userKey, ipKey, username, ip); err != nil {
+		return jellyfin.Member{}, err
+	}
+	m, err := a.SignIn(ctx, username, password)
+	if err != nil {
+		if errors.Is(err, domain.ErrUnauthorized) {
+			s.recordFailures(ctx, userKey, ipKey)
+			s.logger.InfoContext(ctx, "auth: jellyfin login rejected", slog.String("username", username), slog.String("ip", ip))
+			return jellyfin.Member{}, fmt.Errorf("%w: invalid username or password", domain.ErrUnauthorized)
+		}
+		return jellyfin.Member{}, fmt.Errorf("auth: jellyfin sign-in: %w", err)
+	}
+	if m.Disabled {
+		s.recordFailures(ctx, userKey, ipKey)
+		s.logger.InfoContext(ctx, "auth: jellyfin login rejected: user disabled", slog.String("username", username), slog.String("ip", ip))
+		return jellyfin.Member{}, fmt.Errorf("%w: user disabled", domain.ErrUnauthorized)
+	}
+	if err := s.lockout.Reset(ctx, userKey); err != nil {
+		s.logger.WarnContext(ctx, "auth: reset lockout failed", slog.String("key", userKey), slog.String("error", err.Error()))
+	}
+	return m, nil
+}
+
 func (s *Service) checkLockout(ctx context.Context, userKey, ipKey, username, ip string) error {
 	if err := s.checkKey(ctx, userKey); err != nil {
 		if errors.Is(err, domain.ErrTooManyRequests) {
@@ -269,6 +303,76 @@ func (s *Service) ProvisionExternalUser(ctx context.Context, prefix, identity st
 		return domain.User{}, fmt.Errorf("auth: upsert external user: %w", store.MapError(err))
 	}
 	return userFromRow(row), nil
+}
+
+// ProvisionJellyfinUser creates or loads an external account mapped to a Jellyfin user.
+// Refuses admin and invalid roles with domain.ErrInvalid (admins map to FirstAdmin).
+// Refuses user provisioning while setup is incomplete (SetupComplete false).
+func (s *Service) ProvisionJellyfinUser(ctx context.Context, m jellyfin.Member, role domain.Role) (domain.User, error) {
+	if !role.Valid() || role == domain.RoleAdmin {
+		return domain.User{}, fmt.Errorf("%w: invalid external user role %q", domain.ErrInvalid, role)
+	}
+	setupDone, err := s.SetupComplete(ctx)
+	if err != nil {
+		return domain.User{}, err
+	}
+	if !setupDone {
+		return domain.User{}, fmt.Errorf("%w: setup incomplete", domain.ErrForbidden)
+	}
+	extID := "jellyfin:" + strings.TrimSpace(m.ID)
+	if strings.TrimSpace(m.ID) == "" {
+		return domain.User{}, fmt.Errorf("%w: empty jellyfin user id", domain.ErrInvalid)
+	}
+
+	candidates := jellyfinHandleCandidates(m)
+	newID, err := s.ids.NewUUID()
+	if err != nil {
+		return domain.User{}, fmt.Errorf("auth: new id: %w", err)
+	}
+	now := s.clk.Now()
+
+	for _, username := range candidates {
+		row, err := s.st.Q().UpsertExternalUser(ctx, sqlcgen.UpsertExternalUserParams{
+			ID:           newID,
+			Username:     username,
+			PasswordHash: ExternalAccountSentinelHash,
+			Role:         string(role),
+			ExternalID:   &extID,
+			CreatedAt:    now,
+		})
+		if err == nil {
+			return userFromRow(row), nil
+		}
+		if isUsernameConflict(err) {
+			continue
+		}
+		return domain.User{}, fmt.Errorf("auth: upsert jellyfin user: %w", store.MapError(err))
+	}
+	return domain.User{}, fmt.Errorf("%w: could not allocate unique username for jellyfin user", domain.ErrConflict)
+}
+
+func jellyfinHandleCandidates(m jellyfin.Member) []string {
+	base := "jf-" + strings.ToLower(strings.TrimSpace(m.Name))
+	if domain.ValidateUsername(base) != nil {
+		return []string{ExternalUsername("jf-", m.ID)}
+	}
+	candidates := make([]string, 0, 10)
+	candidates = append(candidates, base)
+	for i := 2; i <= 9; i++ {
+		cand := fmt.Sprintf("%s-%d", base, i)
+		if domain.ValidateUsername(cand) == nil {
+			candidates = append(candidates, cand)
+		}
+	}
+	candidates = append(candidates, ExternalUsername("jf-", m.ID))
+	return candidates
+}
+
+func isUsernameConflict(err error) bool {
+	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok {
+		return pgErr.Code == "23505" && strings.Contains(pgErr.ConstraintName, "username")
+	}
+	return errors.Is(err, domain.ErrConflict) && strings.Contains(err.Error(), "username")
 }
 
 // ChangePassword verifies current password, updates it to newPassword, and ends every session of

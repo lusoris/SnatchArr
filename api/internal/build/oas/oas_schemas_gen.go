@@ -2188,6 +2188,73 @@ func (s *InstanceUpdate) SetEnabled(val OptBool) {
 	s.Enabled = val
 }
 
+// Ref: #/components/schemas/JellyfinLoginRequest
+type JellyfinLoginRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+// GetUsername returns the value of Username.
+func (s *JellyfinLoginRequest) GetUsername() string {
+	return s.Username
+}
+
+// GetPassword returns the value of Password.
+func (s *JellyfinLoginRequest) GetPassword() string {
+	return s.Password
+}
+
+// SetUsername sets the value of Username.
+func (s *JellyfinLoginRequest) SetUsername(val string) {
+	s.Username = val
+}
+
+// SetPassword sets the value of Password.
+func (s *JellyfinLoginRequest) SetPassword(val string) {
+	s.Password = val
+}
+
+// Ref: #/components/schemas/JellyfinQuickConnect
+type JellyfinQuickConnect struct {
+	Code   string `json:"code"`
+	Secret string `json:"secret"`
+}
+
+// GetCode returns the value of Code.
+func (s *JellyfinQuickConnect) GetCode() string {
+	return s.Code
+}
+
+// GetSecret returns the value of Secret.
+func (s *JellyfinQuickConnect) GetSecret() string {
+	return s.Secret
+}
+
+// SetCode sets the value of Code.
+func (s *JellyfinQuickConnect) SetCode(val string) {
+	s.Code = val
+}
+
+// SetSecret sets the value of Secret.
+func (s *JellyfinQuickConnect) SetSecret(val string) {
+	s.Secret = val
+}
+
+// Ref: #/components/schemas/JellyfinQuickConnectAuthenticateRequest
+type JellyfinQuickConnectAuthenticateRequest struct {
+	Secret string `json:"secret"`
+}
+
+// GetSecret returns the value of Secret.
+func (s *JellyfinQuickConnectAuthenticateRequest) GetSecret() string {
+	return s.Secret
+}
+
+// SetSecret sets the value of Secret.
+func (s *JellyfinQuickConnectAuthenticateRequest) SetSecret(val string) {
+	s.Secret = val
+}
+
 type ListAPIKeysOKApplicationJSON []ApiKey
 
 func (*ListAPIKeysOKApplicationJSON) listAPIKeysRes() {}
@@ -5014,6 +5081,7 @@ func (s *ProblemStatusCode) SetResponse(val Problem) {
 }
 
 func (*ProblemStatusCode) deleteInstanceRes() {}
+func (*ProblemStatusCode) jellyfinLoginRes()  {}
 func (*ProblemStatusCode) listAPIKeysRes()    {}
 func (*ProblemStatusCode) loginRes()          {}
 
@@ -6539,8 +6607,10 @@ func (s *RunTrigger) SetKind(val SnatchKind) {
 
 // Ref: #/components/schemas/SSOStatus
 type SSOStatus struct {
-	Oidc  bool `json:"oidc"`
-	Proxy bool `json:"proxy"`
+	Oidc                 bool    `json:"oidc"`
+	Proxy                bool    `json:"proxy"`
+	Jellyfin             bool    `json:"jellyfin"`
+	JellyfinQuickConnect OptBool `json:"jellyfinQuickConnect"`
 }
 
 // GetOidc returns the value of Oidc.
@@ -6553,6 +6623,16 @@ func (s *SSOStatus) GetProxy() bool {
 	return s.Proxy
 }
 
+// GetJellyfin returns the value of Jellyfin.
+func (s *SSOStatus) GetJellyfin() bool {
+	return s.Jellyfin
+}
+
+// GetJellyfinQuickConnect returns the value of JellyfinQuickConnect.
+func (s *SSOStatus) GetJellyfinQuickConnect() OptBool {
+	return s.JellyfinQuickConnect
+}
+
 // SetOidc sets the value of Oidc.
 func (s *SSOStatus) SetOidc(val bool) {
 	s.Oidc = val
@@ -6561,6 +6641,16 @@ func (s *SSOStatus) SetOidc(val bool) {
 // SetProxy sets the value of Proxy.
 func (s *SSOStatus) SetProxy(val bool) {
 	s.Proxy = val
+}
+
+// SetJellyfin sets the value of Jellyfin.
+func (s *SSOStatus) SetJellyfin(val bool) {
+	s.Jellyfin = val
+}
+
+// SetJellyfinQuickConnect sets the value of JellyfinQuickConnect.
+func (s *SSOStatus) SetJellyfinQuickConnect(val OptBool) {
+	s.JellyfinQuickConnect = val
 }
 
 // Merged schema.
@@ -7492,6 +7582,7 @@ func (s *Session) SetExpiresAt(val time.Time) {
 
 func (*Session) completeSetupRes()      {}
 func (*Session) createProxySessionRes() {}
+func (*Session) jellyfinLoginRes()      {}
 func (*Session) loginRes()              {}
 
 // SessionHeaders wraps Session with response headers.

@@ -290,6 +290,9 @@ func stepsAuth() []routerStep {
 				if _, ok := decoded["proxy"].(bool); !ok {
 					t.Fatalf("getSSO proxy field = %v, want bool", decoded["proxy"])
 				}
+				if _, ok := decoded["jellyfin"].(bool); !ok {
+					t.Fatalf("getSSO jellyfin field = %v, want bool", decoded["jellyfin"])
+				}
 			},
 		},
 		{
@@ -297,6 +300,35 @@ func stepsAuth() []routerStep {
 			method: http.MethodPost,
 			path:   func(_ *idsState) string { return "/auth/proxy-session" },
 			want:   http.StatusNotFound,
+		},
+		{
+			op:     "jellyfinLogin",
+			method: http.MethodPost,
+			path:   func(_ *idsState) string { return "/auth/jellyfin" },
+			body: func(_ *idsState) any {
+				return map[string]any{
+					"username": "admin",
+					"password": "secret",
+				}
+			},
+			want: http.StatusNotFound,
+		},
+		{
+			op:     "jellyfinQuickConnectInitiate",
+			method: http.MethodPost,
+			path:   func(_ *idsState) string { return "/auth/jellyfin/quickconnect/initiate" },
+			want:   http.StatusNotFound,
+		},
+		{
+			op:     "jellyfinQuickConnectAuthenticate",
+			method: http.MethodPost,
+			path:   func(_ *idsState) string { return "/auth/jellyfin/quickconnect/authenticate" },
+			body: func(_ *idsState) any {
+				return map[string]any{
+					"secret": "secret",
+				}
+			},
+			want: http.StatusNotFound,
 		},
 		{
 			op:     "completeSetup",
@@ -2119,7 +2151,8 @@ func indexRouterSteps(steps []routerStep) map[string]routerStep {
 
 func isViewerExemptSessionEndpoint(path string) bool {
 	switch path {
-	case "/auth/setup", "/auth/login", "/auth/logout", "/auth/password", "/auth/proxy-session":
+	case "/auth/setup", "/auth/login", "/auth/logout", "/auth/password", "/auth/proxy-session",
+		"/auth/jellyfin", "/auth/jellyfin/quickconnect/initiate", "/auth/jellyfin/quickconnect/authenticate":
 		return true
 	default:
 		return false

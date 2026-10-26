@@ -1158,6 +1158,73 @@
     ],
     "type": "object"
   },
+  "jellyfinLogin": {
+    "$defs": {
+      "JellyfinLoginRequest": {
+        "properties": {
+          "password": {
+            "maxLength": 1024,
+            "type": "string"
+          },
+          "username": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "password"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/JellyfinLoginRequest"
+      }
+    },
+    "required": [
+      "body"
+    ],
+    "type": "object"
+  },
+  "jellyfinQuickConnectAuthenticate": {
+    "$defs": {
+      "JellyfinQuickConnectAuthenticateRequest": {
+        "properties": {
+          "secret": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "secret"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/JellyfinQuickConnectAuthenticateRequest"
+      }
+    },
+    "required": [
+      "body"
+    ],
+    "type": "object"
+  },
+  "jellyfinQuickConnectInitiate": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
   "listAPIKeys": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,

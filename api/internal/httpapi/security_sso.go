@@ -15,6 +15,7 @@ import (
 type ssoConfig struct {
 	OIDC      config.OIDCOptions
 	ProxyAuth config.ProxyAuthOptions
+	Jellyfin  config.JellyfinOptions
 }
 
 // ssoGroups returns the groups to resolve and the configured admin, requester and viewer groups for origin,
@@ -48,6 +49,12 @@ func ssoGroups(ctx context.Context, cfg ssoConfig, origin auth.SSOOrigin) (group
 // checkSSOOrigin re-resolves the role of a single sign-on session against the current
 // configuration. It returns "" when the session still holds its role, else the refusal reason.
 func checkSSOOrigin(ctx context.Context, cfg ssoConfig, origin auth.SSOOrigin) string {
+	if origin.Source == "jellyfin" {
+		if !cfg.Jellyfin.Enabled {
+			return "jellyfin_disabled"
+		}
+		return ""
+	}
 	groups, admin, requester, viewer, reason := ssoGroups(ctx, cfg, origin)
 	if reason != "" {
 		return reason

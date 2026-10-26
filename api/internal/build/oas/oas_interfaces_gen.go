@@ -21,6 +21,10 @@ type DeleteInstanceRes interface {
 	deleteInstanceRes()
 }
 
+type JellyfinLoginRes interface {
+	jellyfinLoginRes()
+}
+
 type ListAPIKeysRes interface {
 	listAPIKeysRes()
 }

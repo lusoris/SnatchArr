@@ -274,6 +274,68 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
 
+  /auth/jellyfin:
+    post:
+      tags: [auth]
+      operationId: jellyfinLogin
+      summary: Start a session with Jellyfin credentials
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JellyfinLoginRequest"
+      responses:
+        "200":
+          description: Session started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        "429":
+          $ref: "#/components/responses/Problem"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /auth/jellyfin/quickconnect/initiate:
+    post:
+      tags: [auth]
+      operationId: jellyfinQuickConnectInitiate
+      summary: Initiate Jellyfin Quick Connect authentication
+      security: []
+      responses:
+        "200":
+          description: Quick Connect initiated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JellyfinQuickConnect"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /auth/jellyfin/quickconnect/authenticate:
+    post:
+      tags: [auth]
+      operationId: jellyfinQuickConnectAuthenticate
+      summary: Authenticate an authorized Jellyfin Quick Connect session
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JellyfinQuickConnectAuthenticateRequest"
+      responses:
+        "200":
+          description: Session started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        default:
+          $ref: "#/components/responses/Problem"
+
   /auth/api-keys:
     get:
       tags: [auth]
@@ -2136,6 +2198,36 @@ components:
         password:
           type: string
 
+    JellyfinLoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          minLength: 1
+          maxLength: 256
+        password:
+          type: string
+          maxLength: 1024
+
+    JellyfinQuickConnect:
+      type: object
+      required: [code, secret]
+      properties:
+        code:
+          type: string
+        secret:
+          type: string
+
+    JellyfinQuickConnectAuthenticateRequest:
+      type: object
+      required: [secret]
+      properties:
+        secret:
+          type: string
+          minLength: 1
+          maxLength: 256
+
     User:
       type: object
       required: [id, username, role]
@@ -2163,11 +2255,15 @@ components:
 
     SSOStatus:
       type: object
-      required: [oidc, proxy]
+      required: [oidc, proxy, jellyfin]
       properties:
         oidc:
           type: boolean
         proxy:
+          type: boolean
+        jellyfin:
+          type: boolean
+        jellyfinQuickConnect:
           type: boolean
 
     ApiKeyScope:
