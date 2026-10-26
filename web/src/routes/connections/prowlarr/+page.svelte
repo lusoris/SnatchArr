@@ -3,7 +3,7 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
-	import { createSentioQuery, createSentioMutation } from '@sveltesentio/query';
+	import { createSentioMutation } from '@sveltesentio/query';
 	import { api } from '#lib/api/client.js';
 	import type { components } from '#lib/api/schema.js';
 	import AdminFormSlot from '#lib/components/AdminFormSlot.svelte';
@@ -11,6 +11,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import LinkForm, { type LinkBody } from '#lib/components/LinkForm.svelte';
 	import PageHeader from '#lib/components/PageHeader.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
+	import { prowlarrQueries } from '#lib/queries/connections.js';
 	import { FormEditor } from '#lib/formEditor.svelte.js';
 	import { deleteCallbacks, probeCallbacks, saveSuccess } from '#lib/forms.js';
 	import { HELP_MAP } from '#lib/help.js';
@@ -24,15 +25,7 @@ SPDX-License-Identifier: EUPL-1.2
 	type ProwlarrLinkInput = components['schemas']['ProwlarrLinkInput'];
 	type ProwlarrIndexerStatus = components['schemas']['ProwlarrIndexerStatus'];
 
-	const links = createSentioQuery({
-		queryKey: keys.prowlarrLinks,
-		queryFn: async () => (await api.GET('/prowlarr')).data ?? []
-	});
-	const status = createSentioQuery({
-		queryKey: keys.prowlarr,
-		queryFn: async () => (await api.GET('/prowlarr/status')).data ?? [],
-		refetchInterval: 30_000
-	});
+	const { links, status } = prowlarrQueries();
 
 	const editor = new FormEditor<ProwlarrLink>('prowlarr-name', () => save.reset());
 

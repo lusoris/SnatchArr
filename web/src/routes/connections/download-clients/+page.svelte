@@ -13,6 +13,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import PageHeader from '#lib/components/PageHeader.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import UrlText from '#lib/components/UrlText.svelte';
+	import { downloadClientQueries } from '#lib/queries/connections.js';
 	import { FormEditor } from '#lib/formEditor.svelte.js';
 	import { deleteCallbacks, probeFailed, saveSuccess } from '#lib/forms.js';
 	import { HELP_MAP } from '#lib/help.js';
@@ -24,15 +25,7 @@ SPDX-License-Identifier: EUPL-1.2
 	type DownloadClientInput = components['schemas']['DownloadClientInput'];
 	type DownloadClientStatus = components['schemas']['DownloadClientStatus'];
 
-	const clients = createSentioQuery({
-		queryKey: keys.dlclients,
-		queryFn: async () => (await api.GET('/download-clients')).data ?? []
-	});
-	const status = createSentioQuery({
-		queryKey: keys.dlstatus,
-		queryFn: async () => (await api.GET('/download-clients/status')).data ?? [],
-		refetchInterval: 30_000
-	});
+	const { clients, status } = downloadClientQueries();
 	const instances = createSentioQuery({
 		queryKey: keys.instances,
 		queryFn: async () => (await api.GET('/instances')).data ?? []
