@@ -11,6 +11,7 @@ import (
 
 // Well-known optional module identifiers.
 const (
+	ModuleAdult      = "adult"
 	ModuleLLM        = "llm"
 	ModuleWatchAware = "watchaware"
 )

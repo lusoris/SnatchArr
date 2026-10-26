@@ -8,7 +8,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"runtime"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/lusoris/SnatchArr/api/internal/domain"
@@ -138,12 +140,36 @@ func TestRegistryValidation(t *testing.T) {
 func TestConfigValidation(t *testing.T) {
 	t.Parallel()
 
+	absCleanDir := "/var/media/imagesets"
+	abs4096Dir := "/" + strings.Repeat("a", 4095)
+	abs4097Dir := "/" + strings.Repeat("a", 4096)
+	if runtime.GOOS == "windows" {
+		absCleanDir = `C:\var\media\imagesets`
+		abs4096Dir = `C:\` + strings.Repeat("a", 4093)
+		abs4097Dir = `C:\` + strings.Repeat("a", 4094)
+	}
+
 	cases := []struct {
 		name    string
 		val     func(json.RawMessage) error
 		raw     string
 		wantErr bool
 	}{
+		{name: "positive adult empty object ok", val: modules.ValidateAdultConfig, raw: "{}", wantErr: false},
+		{name: "positive adult boundary 15 ok", val: modules.ValidateAdultConfig, raw: `{"sync_interval_minutes":15}`, wantErr: false},
+		{name: "positive adult boundary 1440 ok", val: modules.ValidateAdultConfig, raw: `{"sync_interval_minutes":1440}`, wantErr: false},
+		{name: "negative adult boundary 14 refused", val: modules.ValidateAdultConfig, raw: `{"sync_interval_minutes":14}`, wantErr: true},
+		{name: "negative adult boundary 1441 refused", val: modules.ValidateAdultConfig, raw: `{"sync_interval_minutes":1441}`, wantErr: true},
+		{name: "negative adult string value refused", val: modules.ValidateAdultConfig, raw: `{"sync_interval_minutes":"15"}`, wantErr: true},
+		{name: "negative adult unknown key refused", val: modules.ValidateAdultConfig, raw: `{"unknown_key":1}`, wantErr: true},
+		{name: "negative adult null refused", val: modules.ValidateAdultConfig, raw: "null", wantErr: true},
+		{name: "positive adult abs clean dir ok", val: modules.ValidateAdultConfig, raw: fmt.Sprintf(`{"image_set_dir":%q}`, absCleanDir), wantErr: false},
+		{name: "negative adult relative dir refused", val: modules.ValidateAdultConfig, raw: `{"image_set_dir":"relative/path"}`, wantErr: true},
+		{name: "negative adult unclean /a/../b refused", val: modules.ValidateAdultConfig, raw: `{"image_set_dir":"/a/../b"}`, wantErr: true},
+		{name: "negative adult empty string refused", val: modules.ValidateAdultConfig, raw: `{"image_set_dir":""}`, wantErr: true},
+		{name: "negative adult NUL refused", val: modules.ValidateAdultConfig, raw: "{\"image_set_dir\":\"/var/media\\u0000/imagesets\"}", wantErr: true},
+		{name: "positive adult 4096-byte dir ok", val: modules.ValidateAdultConfig, raw: fmt.Sprintf(`{"image_set_dir":%q}`, abs4096Dir), wantErr: false},
+		{name: "negative adult 4097-byte dir refused", val: modules.ValidateAdultConfig, raw: fmt.Sprintf(`{"image_set_dir":%q}`, abs4097Dir), wantErr: true},
 		{name: "positive llm empty object ok", val: modules.ValidateLLMConfig, raw: "{}", wantErr: false},
 		{name: "negative llm unknown field refused", val: modules.ValidateLLMConfig, raw: `{"x":1}`, wantErr: true},
 		{name: "negative llm null refused", val: modules.ValidateLLMConfig, raw: "null", wantErr: true},
@@ -190,5 +216,26 @@ func TestConfigValidation(t *testing.T) {
 				t.Fatalf("ValidateConfig(%q) err = %v, want ErrInvalid", tc.raw, err)
 			}
 		})
+	}
+}
+
+func TestDefaultRegistryContainsAdult(t *testing.T) {
+	t.Parallel()
+	reg, err := modules.DefaultRegistry()
+	if err != nil {
+		t.Fatalf("DefaultRegistry() error = %v", err)
+	}
+	desc, ok := reg.Lookup(domain.ModuleAdult)
+	if !ok {
+		t.Fatalf("DefaultRegistry() missing module %q", domain.ModuleAdult)
+	}
+	if desc.ID != domain.ModuleAdult {
+		t.Errorf("desc.ID = %q, want %q", desc.ID, domain.ModuleAdult)
+	}
+	if desc.DefaultEnabled {
+		t.Errorf("desc.DefaultEnabled = true, want false")
+	}
+	if desc.ValidateConfig == nil {
+		t.Errorf("desc.ValidateConfig is nil, want non-nil")
 	}
 }
