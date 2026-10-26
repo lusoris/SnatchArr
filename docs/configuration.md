@@ -36,6 +36,7 @@ UI.
 | `APP_SNATCHARR_CONFIGARR_SECRETS` | | Path to Configarr `secrets.yml` |
 | `APP_SNATCHARR_CONFIGARR_WATCH` | `true` | Re-import on file change |
 | `APP_SNATCHARR_PROWLARR_LIMIT_THRESHOLD` | `0.9` | Fraction (0, 1] of an indexer's Prowlarr query limit at which SnatchArr treats the indexer as exhausted ([Prowlarr](prowlarr.md)) |
+| `APP_SNATCHARR_JELLYFIN_DEFAULT_ROLE` | `requester` | Role for a non-admin Jellyfin member on first sign-in (`requester` or `viewer`); Jellyfin administrators become admin |
 | `APP_SNATCHARR_LOGS_RING_SIZE` | `2000` | Log records the API keeps in memory for the admin [Logs](logs.md) page; clamped to 100 to 20000 |
 | `APP_SNATCHARR_WEB_DEV` | `false` | Disable the embedded SPA (Vite dev server proxies instead) |
 | `APP_SNATCHARR_PROXY_TRUSTED` | | Comma-separated CIDRs of trusted reverse proxies (e.g. `10.0.0.0/8`). Enables client IP resolution from `X-Forwarded-For` for login throttling |
