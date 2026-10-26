@@ -10,7 +10,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 - **Status**: Proposed (`OQ-0040-1` to `OQ-0040-8` answered 2026-10-26, ledger ids `snatcharr-oq-0040-1` to `snatcharr-oq-0040-8`; `OQ-0040-9` open)
 - **Date**: 2026-10-26
 - **Deciders**: lusoris
-- **Relates to**: [ADR-0005](0005-multi-instance.md), [ADR-0011](0011-notifications.md), [ADR-0024](0024-watch-aware-modes.md), [ADR-0026](0026-accounts-and-roles.md), [ADR-0027](0027-adult-module.md), [ADR-0028](0028-jellyfin-plugin.md), [ADR-0035](0035-jellyfin-integration.md), [ADR-0036](0036-community-requests-and-voting.md)
+- **Relates to**: [ADR-0024](0024-watch-aware-modes.md), [ADR-0026](0026-accounts-and-roles.md), [ADR-0027](0027-adult-module.md), [ADR-0028](0028-jellyfin-plugin.md), [ADR-0035](0035-jellyfin-integration.md), [ADR-0036](0036-community-requests-and-voting.md)
 - **Supersedes (in part)**: [ADR-0036](0036-community-requests-and-voting.md) `OQ-0036-9` (`Audiobookshelf = availability detection only` clause; ledger id `snatcharr-audiobookshelf-full-integration-20261026`)
 
 ## Context
