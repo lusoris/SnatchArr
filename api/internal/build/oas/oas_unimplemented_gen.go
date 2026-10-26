@@ -720,6 +720,15 @@ func (UnimplementedHandler) RevokeAPIKey(ctx context.Context, params RevokeAPIKe
 	return r, ht.ErrNotImplemented
 }
 
+// SearchItem implements searchItem operation.
+//
+// Item-scoped snatch run for a specific entity or group.
+//
+// POST /instances/{instanceId}/items/search
+func (UnimplementedHandler) SearchItem(ctx context.Context, req *ItemSearchRequest, params SearchItemParams) (r *Run, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // SnatchSeerrRequest implements snatchSeerrRequest operation.
 //
 // Quickie focused on one request (missing snatch of its instance, limited to that movie or series).

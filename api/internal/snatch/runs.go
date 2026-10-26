@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/google/uuid"
@@ -102,6 +103,54 @@ func (r *Runs) EnqueueWithOptions(ctx context.Context, opts EnqueueOptions) (dom
 		return domain.Run{}, false, fmt.Errorf("snatch: enqueue: %w", store.MapError(err))
 	}
 	return runFromRow(row), true, nil
+}
+
+// CheckAndRecordItemSearch records an item search for userID if outside the cooldownSeconds window.
+// It executes check + write in one transaction.
+// If outside the cooldown window, it returns (0, true, nil).
+// If inside the cooldown window, it returns (retryAfterSeconds, false, nil).
+func (r *Runs) CheckAndRecordItemSearch(ctx context.Context, userID uuid.UUID, cooldownSeconds int) (int, bool, error) {
+	now := r.clk.Now()
+	var (
+		allowed    bool
+		retryAfter int
+	)
+	err := r.st.Tx(ctx, func(q *sqlcgen.Queries) error {
+		_, err := q.CheckAndRecordItemSearch(ctx, sqlcgen.CheckAndRecordItemSearchParams{
+			UserID:          userID,
+			Now:             now,
+			CooldownSeconds: float64(cooldownSeconds),
+		})
+		if err == nil {
+			allowed = true
+			return nil
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("snatch: check item search cooldown: %w", store.MapError(err))
+		}
+		lastSearchedAt, getErr := q.GetItemSearchCooldown(ctx, userID)
+		if getErr != nil {
+			return fmt.Errorf("snatch: get item search cooldown: %w", store.MapError(getErr))
+		}
+		elapsed := now.Sub(lastSearchedAt)
+		remaining := time.Duration(cooldownSeconds)*time.Second - elapsed
+		secs := max(int(math.Ceil(remaining.Seconds())), 1)
+		retryAfter = secs
+		allowed = false
+		return nil
+	})
+	if err != nil {
+		return 0, false, err
+	}
+	return retryAfter, allowed, nil
+}
+
+// ResetItemSearchCooldown removes the cooldown record for a user.
+func (r *Runs) ResetItemSearchCooldown(ctx context.Context, userID uuid.UUID) error {
+	if err := r.st.Q().ResetItemSearchCooldown(ctx, userID); err != nil {
+		return fmt.Errorf("snatch: reset item search cooldown: %w", store.MapError(err))
+	}
+	return nil
 }
 
 // priorityMaxWait bounds how long a low-priority run waits before overtaking higher-priority runs.
