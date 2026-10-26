@@ -135,7 +135,7 @@ Because classic SVM VMAF (`VMAF_MODEL_KIND_SVM` in `core/include/libvmaf/model.h
   - When an item has only a single file on disk (for example, `/media/anime/synthetic-ova-2026/synthetic-ova-1080p.mkv`) and no queued candidate or second edition exists, **full-reference VMAF cannot run**.
   - The file is recorded with `score_kind = 'unscored_single_copy'` (no synthetic full-reference VMAF number is ever fabricated). Whether SnatchArr leaves single-copy files unscored until a second copy arrives or records an advisory no-reference metric (`nr_metric_v1.onnx` / `brisque` / `niqe` / `fr_from_nr_adapter` CRF probe) in a separate column is tracked in `OQ-0038-4`.
 
-#### 2. Where Results Live (Schema Sketch Only — Follow-Up Slice)
+#### 2. Where Results Live (schema sketch only, built in a later slice)
 
 Durable state lives in PostgreSQL owned by `api/internal/store` ([ADR-0010](0010-keep-api-worker-split.md)). A follow-up migration slice will introduce two tables (sketch only):
 
@@ -284,7 +284,7 @@ The operator answered every open question on 2026-10-26. Each answer is recorded
 | `OQ-0038-8` | **a**: three 20 s windows at 15, 50 and 85 % with odd subsample 3 or 5; automatic escalation to the full stream on high window variance. | `snatcharr-oq-0038-8` |
 | `OQ-0038-9` | **b**, against the recommendation: the VMAFx library default `vmaf_v1.0.16_3d0h` everywhere, not `vmaf_v0.6.1`. The 4K CUDA throughput drop and the `216x160` minimum at `v1.0.0-rc.3` are VMAFx gaps that the VMAFx project closes; they are no reason to pin the old model. Until they close, a file below the floor is recorded with a typed geometry error and stays unscored; SnatchArr never switches model silently. | `snatcharr-oq-0038-9` |
 
-## Open Questions
+## Question record
 
 The question list below is kept as the record of the options and risks the answers chose from.
 
@@ -365,9 +365,9 @@ All automated tests use **synthetic video streams generated at test time** and *
 
 Aligned with `docs/roadmap.md` (`0.9` through `0.12`):
 
-| Milestone | Slice | Deliverable Summary |
-| :--- | :--- | :--- |
-| **`0.9`** | **Slice 1 — Schema, Module Switch & Unified Video Hash (`HISS-19`)** | Add PostgreSQL tables `library_media_files` and `library_quality_scores` (`api/internal/store`), module switch `APP_SNATCHARR_MODULES_QUALITY_SCORING_ENABLED` (default `false`, [ADR-0025](0025-module-switches.md)), and the unified 64-bit `oshash` + DCT `phash` extractor (`OQ-0038-1`) with synthetic parity fixtures. |
-| **`0.10`** | **Slice 2 — VMAFx Client Adapter, Dynamic GPU Pool & Synthetic Gate** | Implement the `VMAFx` client adapter (`OQ-0038-2`), deterministic multi-window sampler (`OQ-0038-8`), pre-scoring `phash` + duration cut gate, dynamic backend discovery (`list_backends` / `probe_backend` without per-device pinning), and the `ffmpeg testsrc` planted-pair test suite. |
-| **`0.11`** | **Slice 3 — Queue `RuleNotAnUpgrade`, `RuleDuplicate` & ADR-0034 Matcher Integration** | Wire VMAFx scores into `api/internal/queue/sweep.go` (`checkNotAnUpgrade` and `duplicateLosers`) in `observe` mode first ([ADR-0012](0012-queue-management-replaces-cleanuparr-link.md)), closing the `errNoFileScore` gap on Whisparr and Lidarr (`api/internal/arrclient/queue.go:230-307`), and connect `oshash`/`phash`/VMAFx ranking to `api/internal/matcher` ([ADR-0034](0034-matching-engine-and-model-connection.md)). |
-| **`0.12`** | **Slice 4 — Watch-Aware Planner Integration & UI Quality Diagnostics** | Feed low-VMAF library scores into `Planner.Tick` (`api/internal/snatch/planner.go`, [ADR-0024](0024-watch-aware-modes.md)) and surface pooled VMAFx badges (`harmonic_mean`, `perc10`, `mean`, `model_version`, `backend_used`) and worst-frame diagnostics in the SvelteKit SPA (`web/`, [ADR-0015](0015-ui-design-system-and-layout.md)). |
+| Milestone | Slice | Deliverable Summary | Issue |
+| :--- | :--- | :--- | :--- |
+| **`0.9`** | **Slice 1 — Schema, Module Switch & Unified Video Hash (`HISS-19`)** | Add PostgreSQL tables `library_media_files` and `library_quality_scores` (`api/internal/store`), module switch `APP_SNATCHARR_MODULES_QUALITY_SCORING_ENABLED` (default `false`, [ADR-0025](0025-module-switches.md)), and the unified 64-bit `oshash` + DCT `phash` extractor (`OQ-0038-1`) with synthetic parity fixtures. | [#760](https://github.com/lusoris/SnatchArr/issues/760) |
+| **`0.10`** | **Slice 2 — VMAFx Client Adapter, Dynamic GPU Pool & Synthetic Gate** | Implement the `VMAFx` client adapter (`OQ-0038-2`), deterministic multi-window sampler (`OQ-0038-8`), pre-scoring `phash` + duration cut gate, dynamic backend discovery (`list_backends` / `probe_backend` without per-device pinning), and the `ffmpeg testsrc` planted-pair test suite. | [#761](https://github.com/lusoris/SnatchArr/issues/761) |
+| **`0.11`** | **Slice 3 — Queue `RuleNotAnUpgrade`, `RuleDuplicate` & ADR-0034 Matcher Integration** | Wire VMAFx scores into `api/internal/queue/sweep.go` (`checkNotAnUpgrade` and `duplicateLosers`) in `observe` mode first ([ADR-0012](0012-queue-management-replaces-cleanuparr-link.md)), closing the `errNoFileScore` gap on Whisparr and Lidarr (`api/internal/arrclient/queue.go:230-307`), and connect `oshash`/`phash`/VMAFx ranking to `api/internal/matcher` ([ADR-0034](0034-matching-engine-and-model-connection.md)). | [#762](https://github.com/lusoris/SnatchArr/issues/762) |
+| **`0.12`** | **Slice 4 — Watch-Aware Planner Integration & UI Quality Diagnostics** | Feed low-VMAF library scores into `Planner.Tick` (`api/internal/snatch/planner.go`, [ADR-0024](0024-watch-aware-modes.md)) and surface pooled VMAFx badges (`harmonic_mean`, `perc10`, `mean`, `model_version`, `backend_used`) and worst-frame diagnostics in the SvelteKit SPA (`web/`, [ADR-0015](0015-ui-design-system-and-layout.md)). | [#763](https://github.com/lusoris/SnatchArr/issues/763) |

@@ -1,0 +1,39 @@
+{
+  "passed": false,
+  "foreign_scanner": "jscpd 5.4.1",
+  "duplicates": [
+    {
+      "hash": "abc12345",
+      "loc": 8,
+      "locations": [
+        {
+          "path": "api/internal/other/service.go",
+          "line": 42,
+          "func_name": "DoWork"
+        },
+        {
+          "path": "api/internal/other/service2.go",
+          "line": 84,
+          "func_name": "DoOtherWork"
+        }
+      ]
+    }
+  ],
+  "foreign_duplicates": [
+    {
+      "language": "css",
+      "hash": "def67890",
+      "loc": 15,
+      "locations": [
+        {
+          "path": "web/src/routes/+page.svelte:css",
+          "line": 100
+        },
+        {
+          "path": "web/src/routes/instances/+page.svelte:css",
+          "line": 200
+        }
+      ]
+    }
+  ]
+}

@@ -255,7 +255,7 @@ The operator answered every open question on 2026-10-26. Each answer is recorded
 
 Poster and item-card buttons: the answer to `OQ-0036-6` (ledger `snatcharr-oq-0036-6`) adds a request or wish button to every poster and item card through the web injection path of section 1.3; surface 20 in the function table below carries it.
 
-## Open questions
+## Question record
 
 The question list below is kept as the record of the options and risks the answers chose from.
 

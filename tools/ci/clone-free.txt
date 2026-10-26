@@ -1,0 +1,26 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+#
+# Paths whose clone groups were removed; a clone touching one fails tools/ci/clones_check.py.
+# A line names one file exactly, or a directory when it ends in a slash.
+web/src/routes/about/+page.ts
+web/src/routes/configarr/+page.ts
+web/src/routes/download-clients/+page.ts
+web/src/routes/history/+page.ts
+web/src/routes/live/+page.ts
+web/src/routes/logs/+page.ts
+web/src/routes/prowlarr/+page.ts
+web/src/routes/schedules/+page.ts
+web/src/routes/seerr/+page.ts
+web/src/routes/settings/+page.ts
+web/src/lib/legacyRedirect.ts
+web/src/lib/activity.ts
+web/src/lib/activity.test.ts
+web/src/lib/components/ActivityFeed.svelte
+web/src/lib/connections.test.ts
+web/src/lib/overview.ts
+web/src/lib/overview.test.ts
+web/src/lib/queries/connections.ts
+web/src/routes/connections/DownloadClientsCard.svelte
+web/src/routes/connections/ProwlarrCard.svelte
+web/src/routes/connections/SeerrCard.svelte
