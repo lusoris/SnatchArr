@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api } from '#lib/api/client.js';
 import type { components } from '#lib/api/schema.js';
 import { m } from '#lib/paraglide/messages.js';
-import { renderWithQuery, stubGet } from '#lib/testing/harness.js';
+import { assertProblemAlert, renderWithQuery, stubGet } from '#lib/testing/harness.js';
 import GeneralTab from './GeneralTab.svelte';
 
 type Settings = components['schemas']['Settings'];
@@ -84,9 +84,7 @@ describe('settings', () => {
 			})
 		});
 		renderWithQuery(GeneralTab);
-
-		expect((await screen.findByRole('alert')).textContent).toContain('failed to read settings');
-		expect(screen.queryByRole('button', { name: m.instance_save() })).toBeNull();
+		await assertProblemAlert('failed to read settings');
 	});
 
 	it('submits updated settings when save button is clicked', async () => {
