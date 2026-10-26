@@ -172,6 +172,17 @@ SnatchArr supports Jellyfin authentication via user credentials or Quick Connect
 
 ---
 
+## Linked sign-ins
+
+Users can link external identities (Jellyfin accounts and reverse-proxy sign-ins) to their existing SnatchArr account from the account page (`/account`) under the **Linked sign-ins** section ([ADR-0026](adr/0026-accounts-and-roles.md)):
+
+- **Jellyfin**: An active user can link their Jellyfin account by submitting their Jellyfin username and password. SnatchArr verifies credentials directly against the configured Jellyfin server and links the identity to the account. Jellyfin administrator accounts cannot be linked; an identity already linked to another account, or one that has its own SnatchArr account, is refused (409).
+- **Reverse proxy**: When accessing SnatchArr through an authenticating reverse proxy, the user can link the proxy identity of the active browser session. Proxy identities in an administrator group cannot be linked.
+- **Unlinking**: Any linked identity can be unlinked at any time via an explicit confirmation dialog.
+- **Precedence**: Account linking requires actively authenticating with the second identity. SnatchArr never automatically links accounts based solely on matching usernames.
+
+---
+
 ## Helm deployment example
 
 ```yaml

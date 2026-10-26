@@ -35,6 +35,8 @@ export const keys = {
 	channels: ['notification-channels'] as const,
 	rules: ['notification-rules'] as const,
 	apiKeys: ['api-keys'] as const,
+	identities: ['identities'] as const,
+	ssoStatus: ['sso-status'] as const,
 	systemStatus: ['system', 'status'] as const,
 	licences: ['licences'] as const,
 	modules: ['system', 'modules'] as const,
