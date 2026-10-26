@@ -139,7 +139,8 @@ func (s *Service) syncOne(ctx context.Context, sc *syncContext, r seerrclient.Re
 		LinkID: sc.link.ID, RequestID: int32(min(max(r.ID, 0), 1<<30)), MediaType: string(mt), // #nosec G115 -- clamped
 		TmdbID: int32(min(max(media.TmdbID, 0), 1<<30)), TvdbID: int32(min(max(tvdb, 0), 1<<30)), // #nosec G115 -- clamped
 		Title: title, RequestStatus: int32(min(max(r.Status, 0), 100)), MediaStatus: int32(min(max(media.Status, 0), 100)), // #nosec G115 -- clamped
-		Is4k: r.Is4k, RequestedBy: r.RequestedBy.Name(), Seasons: seasonsOf(r), SeerrServerID: serverID,
+		Is4k: r.Is4k, RequestedBy: r.RequestedBy.Name(), RequestedByJellyfinID: requestedByJellyfinID(r),
+		Seasons: seasonsOf(r), SeerrServerID: serverID,
 		InstanceID: instID, EntityID: entityID, RequestedAt: parseSeerrTime(r.CreatedAt), LastSeenAt: s.clk.Now(),
 	})
 	if err != nil {

@@ -825,5 +825,16 @@
 	"page_not_found_title": "404 - Seite nicht gefunden",
 	"page_not_found_text": "Die angeforderte Seite ist nicht verfügbar oder das entsprechende Modul ist deaktiviert.",
 	"page_not_found_back": "Zurück zur Übersicht",
-	"module_disabled_detail": "Modul {module} ist deaktiviert"
+	"module_disabled_detail": "Modul {module} ist deaktiviert",
+	"login_jellyfin_title": "Mit Jellyfin anmelden",
+	"login_jellyfin_username": "Jellyfin-Benutzername",
+	"login_jellyfin_password": "Jellyfin-Passwort",
+	"login_jellyfin_submit": "Mit Jellyfin anmelden",
+	"login_jellyfin_quick_connect": "Quick Connect",
+	"login_jellyfin_quick_connect_code": "Quick-Connect-Code: {code}",
+	"login_jellyfin_quick_connect_hint": "Gib diesen Code in deiner Jellyfin-App oder im Webclient ein, um dich anzumelden.",
+	"login_jellyfin_quick_connect_waiting": "Warte auf Autorisierung …",
+	"login_jellyfin_quick_connect_cancel": "Abbrechen",
+	"login_jellyfin_quick_connect_timeout": "Quick Connect ist abgelaufen. Bitte erneut versuchen.",
+	"login_admin_fallback": "Administrator-Notfallanmeldung"
 }

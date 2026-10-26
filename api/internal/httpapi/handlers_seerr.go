@@ -6,6 +6,7 @@ package httpapi
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
@@ -138,9 +139,27 @@ func (h *Handlers) ListSeerrRequests(ctx context.Context) ([]oas.SeerrRequest, e
 	}
 	out := make([]oas.SeerrRequest, 0, len(list))
 	for _, r := range list {
-		out = append(out, seerrRequestToOAS(r))
+		item := seerrRequestToOAS(r)
+		h.resolveSeerrRequester(ctx, r.RequestedByJellyfinID, &item)
+		out = append(out, item)
 	}
 	return out, nil
+}
+
+func (h *Handlers) resolveSeerrRequester(ctx context.Context, jellyfinID string, out *oas.SeerrRequest) {
+	if h.auth == nil || jellyfinID == "" {
+		return
+	}
+	u, ok, err := h.auth.LinkedUser(ctx, domain.IdentityProviderJellyfin, jellyfinID)
+	if err != nil {
+		h.logger.WarnContext(ctx, "seerr: requester lookup failed", slog.Any("err", err))
+		return
+	}
+	if !ok {
+		return
+	}
+	out.RequestedByUserId = oas.NewOptUUID(u.ID)
+	out.RequestedByUsername = oas.NewOptString(u.Username)
 }
 
 func seerrLinkToOAS(l domain.SeerrLink) oas.SeerrLink {
