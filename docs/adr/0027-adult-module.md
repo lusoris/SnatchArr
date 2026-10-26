@@ -383,7 +383,7 @@ Extent of Stash-box client capabilities upstreamed to `goenvoy`:
 ## Follow-ups
 
 - [ ] Upstream PR in `github.com/golusoris/goenvoy` for `metadata/adult/stashbox` write mutations (`favoritePerformer`, `favoriteStudio`).
-- [ ] Database migration slice: tables `adult_stashbox_instances`, `adult_favorite_performers`, `adult_performer_links`, `adult_image_sets`, `adult_image_items`.
+- [x] Database migration slice: tables `adult_stashbox_instances`, `adult_favorite_performers`, `adult_performer_links`, `adult_image_sets`, `adult_image_items`. Migration `000036_adult_module` also adds `adult_favorite_studios` and `adult_studio_links`.
 - [ ] Go control plane slice: module descriptor registration in `api/internal/modules` and `ModuleGateMiddleware` integration ([ADR-0025](0025-module-switches.md)).
 - [ ] Stash-box federation slice: multi-instance client pooling, leader loop in `leader_loops` fx group with quiescent tick, bounded pagination sync.
 - [ ] Whisparr request slice: scene request intake, `StashId` mapping for Whisparr v3 and series mapping for v2, hourly cap debit.
