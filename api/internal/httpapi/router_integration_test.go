@@ -71,7 +71,7 @@ func newRouterFixture(t *testing.T) *routerFixture {
 		Logger:   slog.New(slog.DiscardHandler),
 		Clock:    f.clk,
 		Handlers: f.h,
-		Security: NewSecurity(f.sessMgr, f.h.cfg, keys, f.h.auth, apiKeys, f.clk, slog.New(slog.DiscardHandler)),
+		Security: NewSecurity(f.sessMgr, f.h.cfg, keys, f.h.auth, apiKeys, f.clk, slog.New(slog.DiscardHandler), nil),
 		CSRF:     CrossOrigin(slog.New(slog.DiscardHandler)),
 		Modules:  f.h.modules,
 	}

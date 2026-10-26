@@ -143,6 +143,8 @@ type fakeJellyfinServer struct {
 	unknownSecret          bool
 	nilPolicy              bool
 	qcAuthorized           bool
+	failSignIn404          bool
+	failUser404            bool
 }
 
 func newFakeJellyfinServer(t *testing.T) *fakeJellyfinServer {
@@ -152,6 +154,11 @@ func newFakeJellyfinServer(t *testing.T) *fakeJellyfinServer {
 
 	mux.HandleFunc("/Users/AuthenticateByName", func(w http.ResponseWriter, r *http.Request) {
 		s.signInAuthHeader = r.Header.Get("Authorization")
+		if s.failSignIn404 {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"message":"Endpoint not found"}`))
+			return
+		}
 		if s.failAuth {
 			w.WriteHeader(http.StatusUnauthorized)
 			_, _ = w.Write([]byte(`{"message":"Invalid username or password"}`))
@@ -244,6 +251,11 @@ func newFakeJellyfinServer(t *testing.T) *fakeJellyfinServer {
 
 	mux.HandleFunc("/Users/", func(w http.ResponseWriter, r *http.Request) {
 		s.userAuthHeader = r.Header.Get("Authorization")
+		if s.failUser404 {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"message":"User not found"}`))
+			return
+		}
 		userID := strings.TrimPrefix(r.URL.Path, "/Users/")
 		var policy any
 		if !s.nilPolicy {
@@ -422,6 +434,42 @@ func TestClient_ErrorMapping(t *testing.T) {
 		_, err = client.SignIn(context.Background(), "Alice", "pwd")
 		if !errors.Is(err, domain.ErrUnauthorized) {
 			t.Fatalf("expected ErrUnauthorized for nil policy, got %v", err)
+		}
+	})
+
+	t.Run("User 404 returns ErrNotFound", func(t *testing.T) {
+		t.Parallel()
+		fake := newFakeJellyfinServer(t)
+		fake.failUser404 = true
+		client, err := jellyfin.NewClient(fake.srv.URL, "key", 2*time.Second, "TestUA", fake.srv.Client())
+		if err != nil {
+			t.Fatalf("NewClient failed: %v", err)
+		}
+
+		_, err = client.User(context.Background(), "user-1")
+		if !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("expected ErrNotFound for User 404, got %v", err)
+		}
+	})
+
+	t.Run("SignIn 404 does not return ErrNotFound or ErrUnauthorized", func(t *testing.T) {
+		t.Parallel()
+		fake := newFakeJellyfinServer(t)
+		fake.failSignIn404 = true
+		client, err := jellyfin.NewClient(fake.srv.URL, "key", 2*time.Second, "TestUA", fake.srv.Client())
+		if err != nil {
+			t.Fatalf("NewClient failed: %v", err)
+		}
+
+		_, err = client.SignIn(context.Background(), "Alice", "pwd")
+		if errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("SignIn 404 should not return ErrNotFound, got %v", err)
+		}
+		if errors.Is(err, domain.ErrUnauthorized) {
+			t.Fatalf("SignIn 404 should not return ErrUnauthorized, got %v", err)
+		}
+		if err == nil {
+			t.Fatal("expected error for SignIn 404, got nil")
 		}
 	})
 }

@@ -9,6 +9,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -22,6 +24,7 @@ import (
 	"github.com/golusoris/golusoris/httpx/csrf"
 	"github.com/golusoris/golusoris/httpx/middleware"
 
+	"github.com/lusoris/SnatchArr/api/internal/auth"
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/config"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
@@ -113,7 +116,8 @@ func setupJellyfinFixture(t *testing.T, jfCfg config.JellyfinOptions, fakeAuth *
 		middleware.Recover(logger),
 		middleware.Logger(logger, f.clk),
 	)
-	sec := NewSecurity(f.sessMgr, f.h.cfg, f.keys, f.h.auth, f.apiKeys, f.clk, logger)
+	reval := jellyfin.NewRevalidator(fakeAuth, f.clk, f.h.cfg.Jellyfin.DefaultRole, 2*time.Second, logger)
+	sec := NewSecurity(f.sessMgr, f.h.cfg, f.keys, f.h.auth, f.apiKeys, f.clk, logger, reval)
 	if mErr := Mount(r, MountParams{Logger: logger, Handlers: f.h, Security: sec, CSRF: csrfMW, Modules: f.h.modules}); mErr != nil {
 		t.Fatalf("setupJellyfinFixture: Mount: %v", mErr)
 	}
@@ -484,4 +488,314 @@ func assertSSO(t *testing.T, f *jellyfinFixture, ctx context.Context, wantQC boo
 	if got := calls.Load(); got != wantCalls {
 		t.Fatalf("callCount = %d, want %d", got, wantCalls)
 	}
+}
+
+func loginJellyfinHelper(t *testing.T, f *jellyfinFixture, username string) []*http.Cookie {
+	t.Helper()
+	body := fmt.Sprintf(`{"username":%q,"password":"pwd"}`, username)
+	req := httptest.NewRequest(http.MethodPost, PathPrefix+"/auth/jellyfin", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	f.router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /auth/jellyfin failed: %d, body: %s", rec.Code, rec.Body.String())
+	}
+	cookies := rec.Result().Cookies()
+	if len(cookies) == 0 {
+		t.Fatal("expected session cookie from login")
+	}
+	return cookies
+}
+
+func getSessionRequestHelper(f *jellyfinFixture, cookies []*http.Cookie) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodGet, PathPrefix+"/auth/session", nil)
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
+	rec := httptest.NewRecorder()
+	f.router.ServeHTTP(rec, req)
+	return rec
+}
+
+func TestJellyfin_CookieAuthRevalidation(t *testing.T) {
+	t.Parallel()
+
+	defaultCfg := config.JellyfinOptions{
+		Enabled:     true,
+		URL:         "http://jellyfin.local:8096",
+		APIKey:      "api-key-test",
+		Timeout:     5 * time.Second,
+		DefaultRole: domain.RoleRequester,
+	}
+
+	t.Run("fresh cache skips call and 15m boundary", func(t *testing.T) {
+		t.Parallel()
+		var userCalls atomic.Int32
+		fakeAuth := &fakeJellyfinAuthenticator{
+			signInFunc: func(_ context.Context, u, pw string) (jellyfin.Member, error) {
+				return jellyfin.Member{ID: "jf-reval-1", Name: u, Admin: false}, nil
+			},
+			userFunc: func(_ context.Context, id string) (jellyfin.Member, error) {
+				userCalls.Add(1)
+				return jellyfin.Member{ID: id, Name: "reval1", Admin: false}, nil
+			},
+		}
+		f := setupJellyfinFixture(t, defaultCfg, fakeAuth)
+		cookies := loginJellyfinHelper(t, f, "reval1")
+
+		// First request: cache empty, User called once
+		rec1 := getSessionRequestHelper(f, cookies)
+		if rec1.Code != http.StatusOK {
+			t.Fatalf("first request status = %d, want 200", rec1.Code)
+		}
+		if calls := userCalls.Load(); calls != 1 {
+			t.Fatalf("first request calls = %d, want 1", calls)
+		}
+
+		// Second request immediately: fresh cache, no User call
+		rec2 := getSessionRequestHelper(f, cookies)
+		if rec2.Code != http.StatusOK {
+			t.Fatalf("second request status = %d, want 200", rec2.Code)
+		}
+		if calls := userCalls.Load(); calls != 1 {
+			t.Fatalf("second request calls = %d, want 1 (cache hit)", calls)
+		}
+
+		// Advance 14m59s: boundary check, still fresh cache
+		f.clk.Advance(14*time.Minute + 59*time.Second)
+		rec3 := getSessionRequestHelper(f, cookies)
+		if rec3.Code != http.StatusOK {
+			t.Fatalf("at 14m59s status = %d, want 200", rec3.Code)
+		}
+		if calls := userCalls.Load(); calls != 1 {
+			t.Fatalf("at 14m59s calls = %d, want 1 (cache hit)", calls)
+		}
+
+		// Advance 1s (total 15m): cache expired, User called
+		f.clk.Advance(1 * time.Second)
+		rec4 := getSessionRequestHelper(f, cookies)
+		if rec4.Code != http.StatusOK {
+			t.Fatalf("at 15m status = %d, want 200", rec4.Code)
+		}
+		if calls := userCalls.Load(); calls != 2 {
+			t.Fatalf("at 15m calls = %d, want 2 (cache expired)", calls)
+		}
+	})
+
+	t.Run("missing member revokes session with 401", func(t *testing.T) {
+		t.Parallel()
+		fakeAuth := &fakeJellyfinAuthenticator{
+			signInFunc: func(_ context.Context, u, pw string) (jellyfin.Member, error) {
+				return jellyfin.Member{ID: "jf-missing-id", Name: u, Admin: false}, nil
+			},
+			userFunc: func(_ context.Context, id string) (jellyfin.Member, error) {
+				return jellyfin.Member{ID: id, Name: "missing", Admin: false}, nil
+			},
+		}
+		f := setupJellyfinFixture(t, defaultCfg, fakeAuth)
+		cookies := loginJellyfinHelper(t, f, "missinguser")
+
+		// First request to populate cache
+		rec1 := getSessionRequestHelper(f, cookies)
+		if rec1.Code != http.StatusOK {
+			t.Fatalf("init request = %d, want 200", rec1.Code)
+		}
+
+		// User deleted from Jellyfin: User returns ErrNotFound
+		fakeAuth.userFunc = func(context.Context, string) (jellyfin.Member, error) {
+			return jellyfin.Member{}, domain.ErrNotFound
+		}
+
+		// Advance past 15m
+		f.clk.Advance(15 * time.Minute)
+		rec2 := getSessionRequestHelper(f, cookies)
+		if rec2.Code != http.StatusUnauthorized {
+			t.Fatalf("missing user status = %d, want 401", rec2.Code)
+		}
+
+		// Subsequent request must also fail with 401 because session is revoked from DB
+		rec3 := getSessionRequestHelper(f, cookies)
+		if rec3.Code != http.StatusUnauthorized {
+			t.Fatalf("subsequent status = %d, want 401", rec3.Code)
+		}
+	})
+
+	t.Run("disabled member revokes session with 401", func(t *testing.T) {
+		t.Parallel()
+		fakeAuth := &fakeJellyfinAuthenticator{
+			signInFunc: func(_ context.Context, u, pw string) (jellyfin.Member, error) {
+				return jellyfin.Member{ID: "jf-dis-id", Name: u, Admin: false}, nil
+			},
+			userFunc: func(_ context.Context, id string) (jellyfin.Member, error) {
+				return jellyfin.Member{ID: id, Name: "dis", Admin: false}, nil
+			},
+		}
+		f := setupJellyfinFixture(t, defaultCfg, fakeAuth)
+		cookies := loginJellyfinHelper(t, f, "disuser")
+
+		rec1 := getSessionRequestHelper(f, cookies)
+		if rec1.Code != http.StatusOK {
+			t.Fatalf("init request = %d, want 200", rec1.Code)
+		}
+
+		// Member disabled in Jellyfin
+		fakeAuth.userFunc = func(context.Context, string) (jellyfin.Member, error) {
+			return jellyfin.Member{ID: "jf-dis-id", Name: "dis", Disabled: true}, nil
+		}
+
+		f.clk.Advance(15 * time.Minute)
+		rec2 := getSessionRequestHelper(f, cookies)
+		if rec2.Code != http.StatusUnauthorized {
+			t.Fatalf("disabled user status = %d, want 401", rec2.Code)
+		}
+	})
+
+	t.Run("role changed admin to requester revokes session", func(t *testing.T) {
+		t.Parallel()
+		fakeAuth := &fakeJellyfinAuthenticator{
+			signInFunc: func(_ context.Context, u, pw string) (jellyfin.Member, error) {
+				return jellyfin.Member{ID: "jf-admin-demo", Name: u, Admin: true}, nil
+			},
+			userFunc: func(_ context.Context, id string) (jellyfin.Member, error) {
+				return jellyfin.Member{ID: id, Name: "admin-demo", Admin: true}, nil
+			},
+		}
+		f := setupJellyfinFixture(t, defaultCfg, fakeAuth)
+		cookies := loginJellyfinHelper(t, f, "admin-demo")
+
+		rec1 := getSessionRequestHelper(f, cookies)
+		if rec1.Code != http.StatusOK {
+			t.Fatalf("init request = %d, want 200", rec1.Code)
+		}
+
+		// Admin revoked in Jellyfin (now Admin: false)
+		fakeAuth.userFunc = func(context.Context, string) (jellyfin.Member, error) {
+			return jellyfin.Member{ID: "jf-admin-demo", Name: "admin-demo", Admin: false}, nil
+		}
+
+		f.clk.Advance(15 * time.Minute)
+		rec2 := getSessionRequestHelper(f, cookies)
+		if rec2.Code != http.StatusUnauthorized {
+			t.Fatalf("role changed status = %d, want 401", rec2.Code)
+		}
+	})
+
+	t.Run("role changed requester to admin revokes session", func(t *testing.T) {
+		t.Parallel()
+		fakeAuth := &fakeJellyfinAuthenticator{
+			signInFunc: func(_ context.Context, u, pw string) (jellyfin.Member, error) {
+				return jellyfin.Member{ID: "jf-req-demo", Name: u, Admin: false}, nil
+			},
+			userFunc: func(_ context.Context, id string) (jellyfin.Member, error) {
+				return jellyfin.Member{ID: id, Name: "req-demo", Admin: false}, nil
+			},
+		}
+		f := setupJellyfinFixture(t, defaultCfg, fakeAuth)
+		cookies := loginJellyfinHelper(t, f, "req-demo")
+
+		rec1 := getSessionRequestHelper(f, cookies)
+		if rec1.Code != http.StatusOK {
+			t.Fatalf("init request = %d, want 200", rec1.Code)
+		}
+
+		// User promoted to admin in Jellyfin
+		fakeAuth.userFunc = func(context.Context, string) (jellyfin.Member, error) {
+			return jellyfin.Member{ID: "jf-req-demo", Name: "req-demo", Admin: true}, nil
+		}
+
+		f.clk.Advance(15 * time.Minute)
+		rec2 := getSessionRequestHelper(f, cookies)
+		if rec2.Code != http.StatusUnauthorized {
+			t.Fatalf("role changed status = %d, want 401", rec2.Code)
+		}
+	})
+
+	t.Run("transient error keeps session and retries next request", func(t *testing.T) {
+		t.Parallel()
+		var userCalls atomic.Int32
+		fakeAuth := &fakeJellyfinAuthenticator{
+			signInFunc: func(_ context.Context, u, pw string) (jellyfin.Member, error) {
+				return jellyfin.Member{ID: "jf-trans-id", Name: u, Admin: false}, nil
+			},
+			userFunc: func(_ context.Context, id string) (jellyfin.Member, error) {
+				userCalls.Add(1)
+				return jellyfin.Member{ID: id, Name: "trans", Admin: false}, nil
+			},
+		}
+		f := setupJellyfinFixture(t, defaultCfg, fakeAuth)
+		cookies := loginJellyfinHelper(t, f, "transuser")
+
+		rec1 := getSessionRequestHelper(f, cookies)
+		if rec1.Code != http.StatusOK {
+			t.Fatalf("init request = %d, want 200", rec1.Code)
+		}
+		if calls := userCalls.Load(); calls != 1 {
+			t.Fatalf("init calls = %d, want 1", calls)
+		}
+
+		// Set transient error
+		fakeAuth.userFunc = func(context.Context, string) (jellyfin.Member, error) {
+			userCalls.Add(1)
+			return jellyfin.Member{}, io.ErrUnexpectedEOF
+		}
+
+		f.clk.Advance(15 * time.Minute)
+		rec2 := getSessionRequestHelper(f, cookies)
+		if rec2.Code != http.StatusOK {
+			t.Fatalf("transient error status = %d, want 200 (session kept)", rec2.Code)
+		}
+		if calls := userCalls.Load(); calls != 2 {
+			t.Fatalf("calls after transient error = %d, want 2", calls)
+		}
+
+		// Next request must call userFunc again (retry!)
+		rec3 := getSessionRequestHelper(f, cookies)
+		if rec3.Code != http.StatusOK {
+			t.Fatalf("retry status = %d, want 200", rec3.Code)
+		}
+		if calls := userCalls.Load(); calls != 3 {
+			t.Fatalf("calls on immediate retry = %d, want 3", calls)
+		}
+	})
+
+	t.Run("jellyfin disabled revokes with 401", func(t *testing.T) {
+		t.Parallel()
+		fakeAuth := &fakeJellyfinAuthenticator{
+			signInFunc: func(_ context.Context, u, pw string) (jellyfin.Member, error) {
+				return jellyfin.Member{ID: "jf-dis-jf-id", Name: u, Admin: false}, nil
+			},
+			userFunc: func(_ context.Context, id string) (jellyfin.Member, error) {
+				return jellyfin.Member{ID: id, Name: "dis-jf", Admin: false}, nil
+			},
+		}
+		f := setupJellyfinFixture(t, defaultCfg, fakeAuth)
+		cookies := loginJellyfinHelper(t, f, "disjfuser")
+
+		rec1 := getSessionRequestHelper(f, cookies)
+		if rec1.Code != http.StatusOK {
+			t.Fatalf("init request = %d, want 200", rec1.Code)
+		}
+
+		// Disable Jellyfin in security config
+		cfgDisabled := f.h.cfg
+		cfgDisabled.Jellyfin.Enabled = false
+		secDisabled := NewSecurity(f.sessMgr, cfgDisabled, f.keys, f.h.auth, f.apiKeys, f.clk, f.h.logger, nil)
+
+		// Make request through secDisabled
+		req := httptest.NewRequest(http.MethodGet, PathPrefix+"/auth/session", nil)
+		for _, c := range cookies {
+			req.AddCookie(c)
+		}
+		ctx := withHTTPTest(t.Context(), httptest.NewRecorder(), req)
+		_, err := secDisabled.HandleCookieAuth(ctx, "GetSession", oas.CookieAuth{})
+		if !errors.Is(err, domain.ErrUnauthorized) {
+			t.Fatalf("expected ErrUnauthorized when Jellyfin disabled, got %v", err)
+		}
+
+		// Session should now be revoked in the store (Load returns empty session without user)
+		sess, err := f.sessMgr.Load(req)
+		if err != nil || sess.Get(auth.SessionUserKey) != nil {
+			t.Fatal("expected session to be revoked when Jellyfin disabled")
+		}
+	})
 }

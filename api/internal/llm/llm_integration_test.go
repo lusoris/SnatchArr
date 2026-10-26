@@ -169,7 +169,7 @@ func newMCPFixture(t *testing.T) *mcpFixture {
 	if err = modulesSvc.Ensure(t.Context()); err != nil {
 		t.Fatalf("modulesSvc.Ensure: %v", err)
 	}
-	security := httpapi.NewSecurity(sessMgr, cfg, keys, authSvc, apiKeys, clk, logger)
+	security := httpapi.NewSecurity(sessMgr, cfg, keys, authSvc, apiKeys, clk, logger, nil)
 	llmSvc, err := llm.New(build, settingsSvc, security, handlers, modulesSvc, logger)
 	if err != nil {
 		t.Fatalf("llm.New: %v", err)

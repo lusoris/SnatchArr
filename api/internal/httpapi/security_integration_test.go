@@ -72,7 +72,7 @@ func newStreamFixture(t *testing.T) streamFixture {
 	p := MountParams{
 		Logger:   slog.New(slog.DiscardHandler),
 		Clock:    f.clk,
-		Security: NewSecurity(f.sessMgr, f.h.cfg, keys, f.h.auth, apiKeys, f.clk, slog.New(slog.DiscardHandler)),
+		Security: NewSecurity(f.sessMgr, f.h.cfg, keys, f.h.auth, apiKeys, f.clk, slog.New(slog.DiscardHandler), nil),
 	}
 	stub := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := UserFrom(r.Context()); !ok {

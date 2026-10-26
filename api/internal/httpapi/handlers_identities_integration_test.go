@@ -89,7 +89,7 @@ func setupIdentitiesFixture(t *testing.T, jfDefaultRole domain.Role) *identities
 		middleware.Recover(logger),
 		middleware.Logger(logger, f.clk),
 	)
-	sec := NewSecurity(f.sessMgr, f.h.cfg, f.keys, f.h.auth, f.apiKeys, f.clk, logger)
+	sec := NewSecurity(f.sessMgr, f.h.cfg, f.keys, f.h.auth, f.apiKeys, f.clk, logger, nil)
 	if mErr := Mount(r, MountParams{Logger: logger, Handlers: f.h, Security: sec, CSRF: csrfMW, Modules: f.h.modules}); mErr != nil {
 		t.Fatalf("setupIdentitiesFixture: Mount: %v", mErr)
 	}

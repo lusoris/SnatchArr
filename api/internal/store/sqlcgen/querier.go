@@ -171,6 +171,9 @@ type Querier interface {
 	ListSchedules(ctx context.Context) ([]Schedule, error)
 	ListSeerrLinks(ctx context.Context) ([]SeerrLink, error)
 	ListSeerrRequests(ctx context.Context, limit int32) ([]ListSeerrRequestsRow, error)
+	// data->>'sso_source', data->>'sso_subject', and data->>'sso_role' couple to
+	// SessionSSOSourceKey, SessionSSOSubjectKey, and SessionSSORoleKey in api/internal/auth/ssoorigin.go.
+	ListSessionsBySSOSource(ctx context.Context, arg ListSessionsBySSOSourceParams) ([]ListSessionsBySSOSourceRow, error)
 	ListUserIdentities(ctx context.Context, userID uuid.UUID) ([]UserIdentity, error)
 	ListUsers(ctx context.Context) ([]User, error)
 	ListWatchAwareSources(ctx context.Context) ([]WatchawareSource, error)

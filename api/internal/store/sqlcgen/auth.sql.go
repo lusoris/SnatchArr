@@ -386,6 +386,49 @@ func (q *Queries) ListAPIKeysForOwner(ctx context.Context, ownerID uuid.UUID) ([
 	return items, nil
 }
 
+const listSessionsBySSOSource = `-- name: ListSessionsBySSOSource :many
+SELECT id, data->>'sso_subject' AS subject, data->>'sso_role' AS role
+FROM sessions
+WHERE data->>'sso_source' = $1::text
+  AND expires_at > $2::timestamptz
+ORDER BY id
+LIMIT $3::int
+`
+
+type ListSessionsBySSOSourceParams struct {
+	Source string
+	Now    time.Time
+	Batch  int32
+}
+
+type ListSessionsBySSOSourceRow struct {
+	ID      string
+	Subject interface{}
+	Role    interface{}
+}
+
+// data->>'sso_source', data->>'sso_subject', and data->>'sso_role' couple to
+// SessionSSOSourceKey, SessionSSOSubjectKey, and SessionSSORoleKey in api/internal/auth/ssoorigin.go.
+func (q *Queries) ListSessionsBySSOSource(ctx context.Context, arg ListSessionsBySSOSourceParams) ([]ListSessionsBySSOSourceRow, error) {
+	rows, err := q.db.Query(ctx, listSessionsBySSOSource, arg.Source, arg.Now, arg.Batch)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListSessionsBySSOSourceRow{}
+	for rows.Next() {
+		var i ListSessionsBySSOSourceRow
+		if err := rows.Scan(&i.ID, &i.Subject, &i.Role); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserIdentities = `-- name: ListUserIdentities :many
 SELECT provider, subject, user_id, created_at FROM user_identities
 WHERE user_id = $1

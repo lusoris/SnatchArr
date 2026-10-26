@@ -84,7 +84,7 @@ func newSSOFixture(t *testing.T, oidcCfg config.OIDCOptions, proxyCfg config.Pro
 		middleware.SecureHeaders(middleware.SecureHeadersDefaults()),
 	)
 	sso.Mount(r, PathPrefix, ssoSvc, ErrorHandler(logger))
-	sec := NewSecurity(f.sessMgr, f.h.cfg, f.keys, f.h.auth, f.apiKeys, f.clk, logger)
+	sec := NewSecurity(f.sessMgr, f.h.cfg, f.keys, f.h.auth, f.apiKeys, f.clk, logger, nil)
 	if mErr := Mount(r, MountParams{Logger: logger, Handlers: f.h, Security: sec, CSRF: csrfMW, Modules: f.h.modules}); mErr != nil {
 		t.Fatalf("newSSOFixture: Mount: %v", mErr)
 	}
