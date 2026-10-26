@@ -45,4 +45,5 @@ This directory documents key architectural decisions following the HISS-14 immut
 | [0037](0037-studio-scoped-numbered-performer-names.md) | 2026-10-26 | Studio-scoped numbered performer names, scene-ownership conflict rules and Stash wrong-merge import check | Accepted |
 | [0038](0038-vmafx-library-quality-scoring.md) | 2026-10-26 | VMAFx perceptual video quality scoring and unified video hashing across media libraries | Accepted |
 | [0039](0039-metadata-single-source.md) | 2026-10-26 | Single source of truth for metadata across *arr, Stash, Jellyfin and SnatchArr | Proposed |
+| [0040](0040-audiobookshelf-integration.md) | 2026-10-26 | Audiobookshelf full integration | Proposed |
 | [0041](0041-rule-driven-library-processing.md) | 2026-10-26 | Rule-driven library processing (remux and re-encode by rules) | Proposed |
