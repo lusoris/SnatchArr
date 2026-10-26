@@ -25,4 +25,10 @@ web/src/routes/connections/DownloadClientsCard.svelte
 web/src/routes/connections/ProwlarrCard.svelte
 web/src/routes/connections/SeerrCard.svelte
 web/src/lib/components/LinkListSection.svelte
+web/src/lib/components/shell/NavList.svelte
+web/src/lib/components/shell/NavDrawer.svelte
+web/src/lib/components/shell/Sidebar.svelte
+web/src/lib/components/shell/CommandDialog.svelte.test.ts
+web/src/lib/components/shell/shell.svelte.test.ts
+web/src/routes/layout-guard.svelte.test.ts
 web/src/routes/account/LinkedSignIns.svelte.test.ts
