@@ -50,8 +50,8 @@ func deduplicatePerformers(items []stashbox.Performer, endpoints []StashboxEndpo
 			Disambiguation: p.Disambiguation,
 			URLs:           urls,
 		}
-		matched, _ := MatchEntity(inc, candidates, endpoints)
-		if matched != nil {
+		matched, _, kind := MatchEntity(inc, candidates, endpoints)
+		if matched != nil && kind == MatchAutoMerge {
 			matched.URLs = append(matched.URLs, urls...)
 			continue
 		}
@@ -79,8 +79,8 @@ func deduplicateStudios(items []stashbox.Studio, endpoints []StashboxEndpoint) [
 			Name: st.Name,
 			URLs: urls,
 		}
-		matched, _ := MatchEntity(inc, candidates, endpoints)
-		if matched != nil {
+		matched, _, kind := MatchEntity(inc, candidates, endpoints)
+		if matched != nil && kind == MatchAutoMerge {
 			matched.URLs = append(matched.URLs, urls...)
 			continue
 		}
