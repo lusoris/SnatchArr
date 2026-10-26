@@ -54,6 +54,8 @@ type Event struct {
 	EntityID   int64
 	Title      string
 	Detail     string
+	UserID     *uuid.UUID
+	IsAdult    bool
 }
 
 // SearchedItem is what a worker reports as dispatched.

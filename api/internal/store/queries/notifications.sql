@@ -63,3 +63,33 @@ LIMIT $2;
 SELECT * FROM seerr_requests
 WHERE instance_id = $1 AND entity_id = $2
 LIMIT 1;
+
+-- name: CreateUserNotifyTarget :one
+INSERT INTO user_notify_targets (id, user_id, kind, config_enc, enabled, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $6)
+RETURNING *;
+
+-- name: GetUserNotifyTarget :one
+SELECT * FROM user_notify_targets
+WHERE id = $1 AND user_id = $2;
+
+-- name: ListUserNotifyTargets :many
+SELECT * FROM user_notify_targets
+WHERE user_id = $1
+ORDER BY created_at ASC;
+
+-- name: ListEnabledUserNotifyTargets :many
+SELECT * FROM user_notify_targets
+WHERE user_id = $1 AND enabled = TRUE
+ORDER BY created_at ASC;
+
+-- name: UpdateUserNotifyTarget :one
+UPDATE user_notify_targets
+SET kind = $3, config_enc = $4, enabled = $5, updated_at = $6
+WHERE id = $1 AND user_id = $2
+RETURNING *;
+
+-- name: DeleteUserNotifyTarget :execrows
+DELETE FROM user_notify_targets
+WHERE id = $1 AND user_id = $2;
+

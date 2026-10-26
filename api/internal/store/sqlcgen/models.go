@@ -389,6 +389,16 @@ type UserIdentity struct {
 	CreatedAt time.Time
 }
 
+type UserNotifyTarget struct {
+	ID        uuid.UUID
+	UserID    uuid.UUID
+	Kind      string
+	ConfigEnc []byte
+	Enabled   bool
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
 type WatchawareGateBaseline struct {
 	InstanceID  uuid.UUID
 	BaselinedAt time.Time
