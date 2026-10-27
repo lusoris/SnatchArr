@@ -205,12 +205,12 @@ test('positive: failure streak fires at threshold, deduplicates on higher streak
 	}
 });
 
-test('negative: rule creation rejects invalid threshold and empty channel_ids with problem', async ({
+test('negative: rule creation refuses a zero threshold and empty channel_ids with a problem', async ({
 	page
 }) => {
 	const csrfToken = await getCsrfToken(page);
 
-	// Zero threshold is rejected
+	// Zero threshold breaks the schema minimum: request validation answers 422
 	const zeroThresholdRes = await page.request.post('/api/v1/notifications/rules', {
 		headers: { 'X-CSRF-Token': csrfToken },
 		data: {
@@ -220,10 +220,10 @@ test('negative: rule creation rejects invalid threshold and empty channel_ids wi
 			channel_ids: ['00000000-0000-0000-0000-000000000001']
 		}
 	});
-	expect(zeroThresholdRes.status()).toBe(400);
+	expect(zeroThresholdRes.status()).toBe(422);
 	expect(zeroThresholdRes.headers()['content-type']).toContain('application/problem+json');
 
-	// Empty channel_ids rejected
+	// Empty channel_ids passes the schema; the service refuses it as invalid (422)
 	const emptyChannelsRes = await page.request.post('/api/v1/notifications/rules', {
 		headers: { 'X-CSRF-Token': csrfToken },
 		data: {
@@ -233,7 +233,7 @@ test('negative: rule creation rejects invalid threshold and empty channel_ids wi
 			channel_ids: []
 		}
 	});
-	expect(emptyChannelsRes.status()).toBe(400);
+	expect(emptyChannelsRes.status()).toBe(422);
 	expect(emptyChannelsRes.headers()['content-type']).toContain('application/problem+json');
 });
 
