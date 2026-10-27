@@ -1115,6 +1115,20 @@
     ],
     "type": "object"
   },
+  "getAdultPerformer": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "performerId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "performerId"
+    ],
+    "type": "object"
+  },
   "getAdultSource": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -1126,6 +1140,20 @@
     },
     "required": [
       "sourceId"
+    ],
+    "type": "object"
+  },
+  "getAdultStudio": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "studioId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "studioId"
     ],
     "type": "object"
   },
@@ -1540,10 +1568,52 @@
     "properties": {},
     "type": "object"
   },
+  "listAdultPerformers": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "cursor": {
+        "description": "Opaque keyset pagination cursor",
+        "type": "string"
+      },
+      "favorite": {
+        "description": "Filter by favourite status",
+        "type": "boolean"
+      },
+      "limit": {
+        "description": "Maximum performers to return",
+        "maximum": 200,
+        "minimum": 1,
+        "type": "integer"
+      }
+    },
+    "type": "object"
+  },
   "listAdultSources": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
     "properties": {},
+    "type": "object"
+  },
+  "listAdultStudios": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "cursor": {
+        "description": "Opaque keyset pagination cursor",
+        "type": "string"
+      },
+      "favorite": {
+        "description": "Filter by favourite status",
+        "type": "boolean"
+      },
+      "limit": {
+        "description": "Maximum studios to return",
+        "maximum": 200,
+        "minimum": 1,
+        "type": "integer"
+      }
+    },
     "type": "object"
   },
   "listDownloadClients": {

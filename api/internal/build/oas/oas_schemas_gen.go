@@ -16,6 +16,227 @@ func (s *ProblemStatusCode) Error() string {
 	return fmt.Sprintf("code %d: %+v", s.StatusCode, s.Response)
 }
 
+// Ref: #/components/schemas/AdultExternalRef
+type AdultExternalRef struct {
+	ID               OptUUID   `json:"id"`
+	SourceKind       string    `json:"source_kind"`
+	SourceInstanceID OptUUID   `json:"source_instance_id"`
+	ForeignID        string    `json:"foreign_id"`
+	IsFavorite       bool      `json:"is_favorite"`
+	URL              OptString `json:"url"`
+}
+
+// GetID returns the value of ID.
+func (s *AdultExternalRef) GetID() OptUUID {
+	return s.ID
+}
+
+// GetSourceKind returns the value of SourceKind.
+func (s *AdultExternalRef) GetSourceKind() string {
+	return s.SourceKind
+}
+
+// GetSourceInstanceID returns the value of SourceInstanceID.
+func (s *AdultExternalRef) GetSourceInstanceID() OptUUID {
+	return s.SourceInstanceID
+}
+
+// GetForeignID returns the value of ForeignID.
+func (s *AdultExternalRef) GetForeignID() string {
+	return s.ForeignID
+}
+
+// GetIsFavorite returns the value of IsFavorite.
+func (s *AdultExternalRef) GetIsFavorite() bool {
+	return s.IsFavorite
+}
+
+// GetURL returns the value of URL.
+func (s *AdultExternalRef) GetURL() OptString {
+	return s.URL
+}
+
+// SetID sets the value of ID.
+func (s *AdultExternalRef) SetID(val OptUUID) {
+	s.ID = val
+}
+
+// SetSourceKind sets the value of SourceKind.
+func (s *AdultExternalRef) SetSourceKind(val string) {
+	s.SourceKind = val
+}
+
+// SetSourceInstanceID sets the value of SourceInstanceID.
+func (s *AdultExternalRef) SetSourceInstanceID(val OptUUID) {
+	s.SourceInstanceID = val
+}
+
+// SetForeignID sets the value of ForeignID.
+func (s *AdultExternalRef) SetForeignID(val string) {
+	s.ForeignID = val
+}
+
+// SetIsFavorite sets the value of IsFavorite.
+func (s *AdultExternalRef) SetIsFavorite(val bool) {
+	s.IsFavorite = val
+}
+
+// SetURL sets the value of URL.
+func (s *AdultExternalRef) SetURL(val OptString) {
+	s.URL = val
+}
+
+// Ref: #/components/schemas/AdultPerformer
+type AdultPerformer struct {
+	ID             uuid.UUID          `json:"id"`
+	Name           string             `json:"name"`
+	CanonicalName  OptString          `json:"canonical_name"`
+	Disambiguation OptString          `json:"disambiguation"`
+	Urls           []string           `json:"urls"`
+	IsFavorite     bool               `json:"is_favorite"`
+	RefCount       OptInt             `json:"ref_count"`
+	ExternalRefs   []AdultExternalRef `json:"external_refs"`
+	CreatedAt      OptDateTime        `json:"created_at"`
+	UpdatedAt      OptDateTime        `json:"updated_at"`
+}
+
+// GetID returns the value of ID.
+func (s *AdultPerformer) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetName returns the value of Name.
+func (s *AdultPerformer) GetName() string {
+	return s.Name
+}
+
+// GetCanonicalName returns the value of CanonicalName.
+func (s *AdultPerformer) GetCanonicalName() OptString {
+	return s.CanonicalName
+}
+
+// GetDisambiguation returns the value of Disambiguation.
+func (s *AdultPerformer) GetDisambiguation() OptString {
+	return s.Disambiguation
+}
+
+// GetUrls returns the value of Urls.
+func (s *AdultPerformer) GetUrls() []string {
+	return s.Urls
+}
+
+// GetIsFavorite returns the value of IsFavorite.
+func (s *AdultPerformer) GetIsFavorite() bool {
+	return s.IsFavorite
+}
+
+// GetRefCount returns the value of RefCount.
+func (s *AdultPerformer) GetRefCount() OptInt {
+	return s.RefCount
+}
+
+// GetExternalRefs returns the value of ExternalRefs.
+func (s *AdultPerformer) GetExternalRefs() []AdultExternalRef {
+	return s.ExternalRefs
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *AdultPerformer) GetCreatedAt() OptDateTime {
+	return s.CreatedAt
+}
+
+// GetUpdatedAt returns the value of UpdatedAt.
+func (s *AdultPerformer) GetUpdatedAt() OptDateTime {
+	return s.UpdatedAt
+}
+
+// SetID sets the value of ID.
+func (s *AdultPerformer) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetName sets the value of Name.
+func (s *AdultPerformer) SetName(val string) {
+	s.Name = val
+}
+
+// SetCanonicalName sets the value of CanonicalName.
+func (s *AdultPerformer) SetCanonicalName(val OptString) {
+	s.CanonicalName = val
+}
+
+// SetDisambiguation sets the value of Disambiguation.
+func (s *AdultPerformer) SetDisambiguation(val OptString) {
+	s.Disambiguation = val
+}
+
+// SetUrls sets the value of Urls.
+func (s *AdultPerformer) SetUrls(val []string) {
+	s.Urls = val
+}
+
+// SetIsFavorite sets the value of IsFavorite.
+func (s *AdultPerformer) SetIsFavorite(val bool) {
+	s.IsFavorite = val
+}
+
+// SetRefCount sets the value of RefCount.
+func (s *AdultPerformer) SetRefCount(val OptInt) {
+	s.RefCount = val
+}
+
+// SetExternalRefs sets the value of ExternalRefs.
+func (s *AdultPerformer) SetExternalRefs(val []AdultExternalRef) {
+	s.ExternalRefs = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *AdultPerformer) SetCreatedAt(val OptDateTime) {
+	s.CreatedAt = val
+}
+
+// SetUpdatedAt sets the value of UpdatedAt.
+func (s *AdultPerformer) SetUpdatedAt(val OptDateTime) {
+	s.UpdatedAt = val
+}
+
+// Ref: #/components/schemas/AdultPerformerPage
+type AdultPerformerPage struct {
+	Items      []AdultPerformer `json:"items"`
+	NextCursor OptString        `json:"next_cursor"`
+	Cursor     OptString        `json:"cursor"`
+}
+
+// GetItems returns the value of Items.
+func (s *AdultPerformerPage) GetItems() []AdultPerformer {
+	return s.Items
+}
+
+// GetNextCursor returns the value of NextCursor.
+func (s *AdultPerformerPage) GetNextCursor() OptString {
+	return s.NextCursor
+}
+
+// GetCursor returns the value of Cursor.
+func (s *AdultPerformerPage) GetCursor() OptString {
+	return s.Cursor
+}
+
+// SetItems sets the value of Items.
+func (s *AdultPerformerPage) SetItems(val []AdultPerformer) {
+	s.Items = val
+}
+
+// SetNextCursor sets the value of NextCursor.
+func (s *AdultPerformerPage) SetNextCursor(val OptString) {
+	s.NextCursor = val
+}
+
+// SetCursor sets the value of Cursor.
+func (s *AdultPerformerPage) SetCursor(val OptString) {
+	s.Cursor = val
+}
+
 // Ref: #/components/schemas/AdultSource
 type AdultSource struct {
 	ID       uuid.UUID `json:"id"`
@@ -213,6 +434,146 @@ func (s *AdultSourceInput) SetSyncFavorites(val OptBool) {
 // SetPriority sets the value of Priority.
 func (s *AdultSourceInput) SetPriority(val OptInt) {
 	s.Priority = val
+}
+
+// Ref: #/components/schemas/AdultStudio
+type AdultStudio struct {
+	ID            uuid.UUID          `json:"id"`
+	Name          string             `json:"name"`
+	CanonicalName OptString          `json:"canonical_name"`
+	Urls          []string           `json:"urls"`
+	IsFavorite    bool               `json:"is_favorite"`
+	RefCount      OptInt             `json:"ref_count"`
+	ExternalRefs  []AdultExternalRef `json:"external_refs"`
+	CreatedAt     OptDateTime        `json:"created_at"`
+	UpdatedAt     OptDateTime        `json:"updated_at"`
+}
+
+// GetID returns the value of ID.
+func (s *AdultStudio) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetName returns the value of Name.
+func (s *AdultStudio) GetName() string {
+	return s.Name
+}
+
+// GetCanonicalName returns the value of CanonicalName.
+func (s *AdultStudio) GetCanonicalName() OptString {
+	return s.CanonicalName
+}
+
+// GetUrls returns the value of Urls.
+func (s *AdultStudio) GetUrls() []string {
+	return s.Urls
+}
+
+// GetIsFavorite returns the value of IsFavorite.
+func (s *AdultStudio) GetIsFavorite() bool {
+	return s.IsFavorite
+}
+
+// GetRefCount returns the value of RefCount.
+func (s *AdultStudio) GetRefCount() OptInt {
+	return s.RefCount
+}
+
+// GetExternalRefs returns the value of ExternalRefs.
+func (s *AdultStudio) GetExternalRefs() []AdultExternalRef {
+	return s.ExternalRefs
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *AdultStudio) GetCreatedAt() OptDateTime {
+	return s.CreatedAt
+}
+
+// GetUpdatedAt returns the value of UpdatedAt.
+func (s *AdultStudio) GetUpdatedAt() OptDateTime {
+	return s.UpdatedAt
+}
+
+// SetID sets the value of ID.
+func (s *AdultStudio) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetName sets the value of Name.
+func (s *AdultStudio) SetName(val string) {
+	s.Name = val
+}
+
+// SetCanonicalName sets the value of CanonicalName.
+func (s *AdultStudio) SetCanonicalName(val OptString) {
+	s.CanonicalName = val
+}
+
+// SetUrls sets the value of Urls.
+func (s *AdultStudio) SetUrls(val []string) {
+	s.Urls = val
+}
+
+// SetIsFavorite sets the value of IsFavorite.
+func (s *AdultStudio) SetIsFavorite(val bool) {
+	s.IsFavorite = val
+}
+
+// SetRefCount sets the value of RefCount.
+func (s *AdultStudio) SetRefCount(val OptInt) {
+	s.RefCount = val
+}
+
+// SetExternalRefs sets the value of ExternalRefs.
+func (s *AdultStudio) SetExternalRefs(val []AdultExternalRef) {
+	s.ExternalRefs = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *AdultStudio) SetCreatedAt(val OptDateTime) {
+	s.CreatedAt = val
+}
+
+// SetUpdatedAt sets the value of UpdatedAt.
+func (s *AdultStudio) SetUpdatedAt(val OptDateTime) {
+	s.UpdatedAt = val
+}
+
+// Ref: #/components/schemas/AdultStudioPage
+type AdultStudioPage struct {
+	Items      []AdultStudio `json:"items"`
+	NextCursor OptString     `json:"next_cursor"`
+	Cursor     OptString     `json:"cursor"`
+}
+
+// GetItems returns the value of Items.
+func (s *AdultStudioPage) GetItems() []AdultStudio {
+	return s.Items
+}
+
+// GetNextCursor returns the value of NextCursor.
+func (s *AdultStudioPage) GetNextCursor() OptString {
+	return s.NextCursor
+}
+
+// GetCursor returns the value of Cursor.
+func (s *AdultStudioPage) GetCursor() OptString {
+	return s.Cursor
+}
+
+// SetItems sets the value of Items.
+func (s *AdultStudioPage) SetItems(val []AdultStudio) {
+	s.Items = val
+}
+
+// SetNextCursor sets the value of NextCursor.
+func (s *AdultStudioPage) SetNextCursor(val OptString) {
+	s.NextCursor = val
+}
+
+// SetCursor sets the value of Cursor.
+func (s *AdultStudioPage) SetCursor(val OptString) {
+	s.Cursor = val
 }
 
 // Ref: #/components/schemas/AdultSyncStatus

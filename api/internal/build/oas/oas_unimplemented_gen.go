@@ -257,12 +257,30 @@ func (UnimplementedHandler) DiscoverDownloadClients(ctx context.Context, params 
 	return r, ht.ErrNotImplemented
 }
 
+// GetAdultPerformer implements getAdultPerformer operation.
+//
+// Get a synchronized performer by ID.
+//
+// GET /adult/performers/{performerId}
+func (UnimplementedHandler) GetAdultPerformer(ctx context.Context, params GetAdultPerformerParams) (r *AdultPerformer, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // GetAdultSource implements getAdultSource operation.
 //
 // Get a catalogue source.
 //
 // GET /adult/sources/{sourceId}
 func (UnimplementedHandler) GetAdultSource(ctx context.Context, params GetAdultSourceParams) (r *AdultSource, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// GetAdultStudio implements getAdultStudio operation.
+//
+// Get a synchronized studio by ID.
+//
+// GET /adult/studios/{studioId}
+func (UnimplementedHandler) GetAdultStudio(ctx context.Context, params GetAdultStudioParams) (r *AdultStudio, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -573,12 +591,30 @@ func (UnimplementedHandler) ListAPIKeys(ctx context.Context) (r ListAPIKeysRes, 
 	return r, ht.ErrNotImplemented
 }
 
+// ListAdultPerformers implements listAdultPerformers operation.
+//
+// List synchronized performers with cursor pagination.
+//
+// GET /adult/performers
+func (UnimplementedHandler) ListAdultPerformers(ctx context.Context, params ListAdultPerformersParams) (r *AdultPerformerPage, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // ListAdultSources implements listAdultSources operation.
 //
 // List configured catalogue sources.
 //
 // GET /adult/sources
 func (UnimplementedHandler) ListAdultSources(ctx context.Context) (r []AdultSource, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ListAdultStudios implements listAdultStudios operation.
+//
+// List synchronized studios with cursor pagination.
+//
+// GET /adult/studios
+func (UnimplementedHandler) ListAdultStudios(ctx context.Context, params ListAdultStudiosParams) (r *AdultStudioPage, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
