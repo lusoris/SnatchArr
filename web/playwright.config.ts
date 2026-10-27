@@ -110,6 +110,14 @@ export default defineConfig({
 							testMatch: /(^|\/)flow\.test\.ts/,
 							dependencies: ['authenticated'],
 							use: { browserName: 'chromium', storageState: authFile }
+						},
+						// One file per released feat or fix, named <pr>-<slug>.test.ts, with a
+						// `covers: #<pr>` line; tools/ci/release_e2e_check.py maps release commits to them.
+						{
+							name: 'features',
+							testMatch: /(^|\/)features\/[^/]+\.test\.ts/,
+							dependencies: ['authenticated'],
+							use: { browserName: 'chromium', storageState: authFile }
 						}
 					]
 });
