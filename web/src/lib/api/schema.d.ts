@@ -1655,7 +1655,7 @@ export interface components {
             expires_at?: string;
         };
         /** @enum {string} */
-        AppKind: "sonarr" | "radarr" | "lidarr" | "readarr" | "whisparr_v2" | "whisparr_v3";
+        AppKind: "sonarr" | "radarr" | "lidarr" | "readarr" | "whisparr_v2" | "whisparr_v3" | "stash";
         Instance: {
             /** Format: uuid */
             id: string;

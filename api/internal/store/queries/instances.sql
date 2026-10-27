@@ -16,7 +16,7 @@ SELECT * FROM instances WHERE configarr_key = $1;
 SELECT * FROM instances ORDER BY kind, name;
 
 -- name: ListEnabledInstances :many
-SELECT * FROM instances WHERE enabled ORDER BY kind, name;
+SELECT * FROM instances WHERE enabled AND kind <> 'stash' ORDER BY kind, name;
 
 
 -- name: GetInstancePriority :one
@@ -32,7 +32,7 @@ RETURNING id, kind, search_priority, download_priority;
 
 -- name: ListInstancesToPlan :many
 -- Instances never evaluated come first, then the one evaluated longest ago (#176).
-SELECT * FROM instances WHERE enabled ORDER BY planned_at NULLS FIRST, kind, name;
+SELECT * FROM instances WHERE enabled AND kind <> 'stash' ORDER BY planned_at NULLS FIRST, kind, name;
 
 -- name: MarkInstancesPlanned :exec
 UPDATE instances SET planned_at = sqlc.arg(planned_at)::timestamptz WHERE id = ANY(sqlc.arg(ids)::uuid[]);

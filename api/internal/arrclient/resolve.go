@@ -56,7 +56,7 @@ func lookupPath(kind domain.AppKind, tmdbID, tvdbID int) (string, error) {
 			return "", fmt.Errorf("%w: a TVDB id is required for %s", domain.ErrInvalid, kind)
 		}
 		return fmt.Sprintf("/api/v3/series?tvdbId=%d", tvdbID), nil
-	case domain.KindLidarr, domain.KindReadarr:
+	case domain.KindLidarr, domain.KindReadarr, domain.KindStash:
 		return "", fmt.Errorf("%w: %s has no TMDB/TVDB lookup", domain.ErrInvalid, kind)
 	default:
 		return "", fmt.Errorf("%w: unsupported kind %q", domain.ErrInvalid, kind)

@@ -22,6 +22,7 @@ func TestParseAppKind(t *testing.T) {
 	}{
 		{"positive sonarr", "sonarr", domain.KindSonarr, false},
 		{"positive whisparr v3", "whisparr_v3", domain.KindWhisparrV3, false},
+		{"negative stash rejected for arr kind", "stash", "", true},
 		{"negative unknown", "plex", "", true},
 		{"boundary empty", "", "", true},
 		{"boundary case-sensitive", "Sonarr", "", true},
@@ -38,6 +39,65 @@ func TestParseAppKind(t *testing.T) {
 			}
 			if got != tc.want {
 				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestParseInstanceKind(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		in      string
+		want    domain.AppKind
+		wantErr bool
+	}{
+		{"positive sonarr", "sonarr", domain.KindSonarr, false},
+		{"positive whisparr v3", "whisparr_v3", domain.KindWhisparrV3, false},
+		{"positive stash", "stash", domain.KindStash, false},
+		{"negative unknown", "plex", "", true},
+		{"boundary empty", "", "", true},
+		{"boundary case-sensitive", "Stash", "", true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := domain.ParseInstanceKind(tc.in)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("err = %v, wantErr %v", err, tc.wantErr)
+			}
+			if tc.wantErr && !errors.Is(err, domain.ErrInvalid) {
+				t.Fatalf("expected ErrInvalid, got %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestAppKindIsArr(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		kind domain.AppKind
+		want bool
+	}{
+		{"positive sonarr", domain.KindSonarr, true},
+		{"positive radarr", domain.KindRadarr, true},
+		{"positive lidarr", domain.KindLidarr, true},
+		{"positive readarr", domain.KindReadarr, true},
+		{"positive whisparr v2", domain.KindWhisparrV2, true},
+		{"positive whisparr v3", domain.KindWhisparrV3, true},
+		{"negative stash", domain.KindStash, false},
+		{"negative unknown", domain.AppKind("plex"), false},
+		{"boundary empty", domain.AppKind(""), false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := tc.kind.IsArr(); got != tc.want {
+				t.Fatalf("IsArr(%q) = %v, want %v", tc.kind, got, tc.want)
 			}
 		})
 	}
@@ -93,6 +153,7 @@ func TestValidateInstanceInput(t *testing.T) {
 		wantErr bool
 	}{
 		{"positive", domain.KindRadarr, "Movies", "http://radarr:7878", "0123456789abcdef", false},
+		{"positive stash", domain.KindStash, "Stash", "http://stash:9999", "0123456789abcdef", false},
 		{"negative kind", "plex", "x", "http://a", "0123456789abcdef", true},
 		{"negative empty name", domain.KindRadarr, "  ", "http://a", "0123456789abcdef", true},
 		{"boundary 64-char name ok", domain.KindRadarr, long[:64], "http://a", "0123456789abcdef", false},

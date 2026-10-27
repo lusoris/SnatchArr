@@ -33,6 +33,8 @@ func appKind(k domain.AppKind) snatcharrv1.AppKind {
 		return snatcharrv1.AppKind_APP_KIND_WHISPARR_V2
 	case domain.KindWhisparrV3:
 		return snatcharrv1.AppKind_APP_KIND_WHISPARR_V3
+	case domain.KindStash:
+		return snatcharrv1.AppKind_APP_KIND_UNSPECIFIED
 	default:
 		return snatcharrv1.AppKind_APP_KIND_UNSPECIFIED
 	}

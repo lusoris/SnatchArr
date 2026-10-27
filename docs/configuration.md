@@ -90,6 +90,15 @@ These environment variables configure the client-side `snatcharr mcp stdio` CLI 
 | `SNATCHARR_URL` | required | Base URL of the SnatchArr instance (e.g. `http://localhost:8080` or `https://snatcharr.example.com`). Proxy posts to `<base>/api/v1/mcp` |
 | `SNATCHARR_API_KEY` | required | Scoped bearer API key minted on `/account` under API keys |
 
+## Instances
+
+Administrators register instances under `/instances` (`POST /api/v1/instances`). Supported `kind` values are the six \*arr kinds (`sonarr`, `radarr`, `lidarr`, `readarr` ([legacy](readarr.md)), `whisparr_v2`, `whisparr_v3`) plus `stash` ([ADR-0032](adr/0032-stash-own-or-integrate.md)). Instance API keys are write-only on the HTTP API and encrypted at rest with AES-GCM (`APP_CRYPTO_KEY`).
+
+A `stash` instance is a companion only:
+
+- **Companion only, never snatched**: `stash` instances never enter snatch planning (`ListInstancesToPlan`), worker leases, queue management, Seerr resolution, Configarr import, hourly stamina caps (`/api/v1/hourly-caps`), or priority presets.
+- **Minimum version `v0.31.0`**: Connectivity probes (`POST /api/v1/instances/{id}/test` and `POST /api/v1/instances/test`) query the Stash GraphQL `version` field via `github.com/golusoris/goenvoy/mediaserver/stash/v2` and require Stash `0.31.0` or newer (for `.stashignore` support). Older versions are rejected with HTTP 422.
+
 ## Snatch policy
 
 Every instance has one policy (`GET/PUT /api/v1/instances/{id}/policy`).

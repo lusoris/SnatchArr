@@ -98,6 +98,8 @@ func (s AppKind) Validate() error {
 		return nil
 	case "whisparr_v3":
 		return nil
+	case "stash":
+		return nil
 	default:
 		return errors.Errorf("invalid value: %v", s)
 	}

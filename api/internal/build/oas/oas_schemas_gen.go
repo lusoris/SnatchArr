@@ -224,6 +224,7 @@ const (
 	AppKindReadarr    AppKind = "readarr"
 	AppKindWhisparrV2 AppKind = "whisparr_v2"
 	AppKindWhisparrV3 AppKind = "whisparr_v3"
+	AppKindStash      AppKind = "stash"
 )
 
 // AllValues returns all AppKind values.
@@ -235,6 +236,7 @@ func (AppKind) AllValues() []AppKind {
 		AppKindReadarr,
 		AppKindWhisparrV2,
 		AppKindWhisparrV3,
+		AppKindStash,
 	}
 }
 
@@ -252,6 +254,8 @@ func (s AppKind) MarshalText() ([]byte, error) {
 	case AppKindWhisparrV2:
 		return []byte(s), nil
 	case AppKindWhisparrV3:
+		return []byte(s), nil
+	case AppKindStash:
 		return []byte(s), nil
 	default:
 		return nil, errors.Errorf("invalid value: %q", s)
@@ -278,6 +282,9 @@ func (s *AppKind) UnmarshalText(data []byte) error {
 		return nil
 	case AppKindWhisparrV3:
 		*s = AppKindWhisparrV3
+		return nil
+	case AppKindStash:
+		*s = AppKindStash
 		return nil
 	default:
 		return errors.Errorf("invalid value: %q", data)

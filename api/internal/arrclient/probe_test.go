@@ -8,8 +8,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -174,5 +176,123 @@ func TestNewGoenvoyProberOptions(t *testing.T) {
 				t.Errorf("UserAgent = %q, want %q", opts.UserAgent, tt.wantUserAgent)
 			}
 		})
+	}
+}
+
+func fakeStash(t *testing.T, rawBody string, wantKey string) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/graphql" || r.Method != http.MethodPost {
+			http.NotFound(w, r)
+			return
+		}
+		if r.Header.Get("Apikey") != wantKey {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"errors":[{"message":"Unauthorized"}]}`))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(rawBody))
+	}))
+}
+
+func TestProbeStash(t *testing.T) {
+	t.Parallel()
+	versionBody := func(ver string) string {
+		return fmt.Sprintf(`{"data":{"version":{"version":%q,"hash":"abc1234","build_type":"OFFICIAL"}}}`, ver)
+	}
+	tests := []struct {
+		name        string
+		body        string
+		urlSuffix   string
+		key         string
+		wantVersion string
+		wantErr     error
+		wantErrSub  string
+	}{
+		{
+			name:        "boundary 0.31.0 accepted",
+			body:        versionBody("0.31.0"),
+			key:         "stash-key",
+			wantVersion: "0.31.0",
+		},
+		{
+			name:        "positive v0.31.1 with /graphql suffix accepted",
+			body:        versionBody("v0.31.1-12-gabcdef"),
+			urlSuffix:   "/graphql",
+			key:         "stash-key",
+			wantVersion: "v0.31.1-12-gabcdef",
+		},
+		{
+			name:        "positive 1.0.0 accepted",
+			body:        versionBody("1.0.0"),
+			key:         "stash-key",
+			wantVersion: "1.0.0",
+		},
+		{
+			name:       "boundary 0.30.9 rejected",
+			body:       versionBody("0.30.9"),
+			key:        "stash-key",
+			wantErr:    domain.ErrInvalid,
+			wantErrSub: "0.31.0",
+		},
+		{
+			name:       "negative malformed version string rejected",
+			body:       versionBody("not-a-semver"),
+			key:        "stash-key",
+			wantErr:    domain.ErrInvalid,
+			wantErrSub: "0.31.0",
+		},
+		{
+			name:    "negative malformed JSON response rejected",
+			body:    `{not-json`,
+			key:     "stash-key",
+			wantErr: domain.ErrUnreachable,
+		},
+		{
+			name:    "negative 401 unauthorized rejected",
+			body:    versionBody("0.31.0"),
+			key:     "wrong-key",
+			wantErr: domain.ErrUnreachable,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			srv := fakeStash(t, tc.body, "stash-key")
+			defer srv.Close()
+			p := arrclient.NewGoenvoyProber(arrclient.Options{Timeout: 2 * time.Second})
+			res, err := p.Probe(context.Background(), domain.KindStash, srv.URL+tc.urlSuffix, tc.key)
+			if tc.wantErr == nil {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if res.AppName != "Stash" || res.Version != tc.wantVersion || res.Product != domain.ProductNone {
+					t.Fatalf("result = %+v, want AppName=Stash Version=%q Product=%q", res, tc.wantVersion, domain.ProductNone)
+				}
+				return
+			}
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("err = %v, want %v", err, tc.wantErr)
+			}
+			if tc.wantErrSub != "" && !strings.Contains(err.Error(), tc.wantErrSub) {
+				t.Fatalf("err = %q, want substring %q", err.Error(), tc.wantErrSub)
+			}
+		})
+	}
+}
+
+func TestStashUnsupportedArrOperations(t *testing.T) {
+	t.Parallel()
+	p := arrclient.NewGoenvoyProber(arrclient.Options{Timeout: 2 * time.Second})
+	ctx := context.Background()
+	if _, err := p.DownloadClients(ctx, domain.KindStash, "http://127.0.0.1:9999", "stash-key"); !errors.Is(err, domain.ErrInvalid) {
+		t.Fatalf("DownloadClients(stash) err = %v, want ErrInvalid", err)
+	}
+	if _, err := p.Indexers(ctx, domain.KindStash, "http://127.0.0.1:9999", "stash-key"); !errors.Is(err, domain.ErrInvalid) {
+		t.Fatalf("Indexers(stash) err = %v, want ErrInvalid", err)
+	}
+	if _, err := p.Labels(ctx, domain.KindStash, "http://127.0.0.1:9999", "stash-key"); !errors.Is(err, domain.ErrInvalid) {
+		t.Fatalf("Labels(stash) err = %v, want ErrInvalid", err)
 	}
 }

@@ -2193,3 +2193,72 @@ func TestResetStateDetails(t *testing.T) {
 		t.Fatalf("FilterUnprocessed() inst2 len = %d, %v; want 0 forgotten (retained)", len(unprocessed2), err)
 	}
 }
+
+func TestCreateStashInstanceEncryptedKeyAndExclusions(t *testing.T) {
+	t.Parallel()
+	f := newIntegrationFixture(t)
+	adminCtx := withUser(t.Context(), f.admin)
+	const secretKey = "stash-super-secret-api-key-9999"
+
+	created, err := f.h.CreateInstance(adminCtx, &oas.InstanceInput{
+		Kind:    oas.AppKindStash,
+		Name:    "Companion Stash",
+		BaseURL: "http://stash.invalid:9999",
+		APIKey:  secretKey,
+		Enabled: oas.NewOptBool(true),
+	})
+	if err != nil {
+		t.Fatalf("CreateInstance(stash) = %v", err)
+	}
+	if created.Kind != oas.AppKindStash {
+		t.Fatalf("created.Kind = %q, want %q", created.Kind, oas.AppKindStash)
+	}
+	rawJSON, err := json.Marshal(created)
+	if err != nil {
+		t.Fatalf("json.Marshal(created) = %v", err)
+	}
+	if strings.Contains(string(rawJSON), secretKey) {
+		t.Fatal("HTTP response leaked plaintext stash API key")
+	}
+
+	assertStashEncryptedAtRest(t, f, created.ID, secretKey)
+	assertStashExcludedFromArrEndpoints(t, f, adminCtx, created.ID)
+}
+
+func assertStashEncryptedAtRest(t *testing.T, f *integrationFixture, instID uuid.UUID, wantPlaintext string) {
+	t.Helper()
+	row, err := f.st.Q().GetInstance(t.Context(), instID)
+	if err != nil {
+		t.Fatalf("GetInstance(stash) = %v", err)
+	}
+	if len(row.ApiKeyEnc) == 0 || bytes.Contains(row.ApiKeyEnc, []byte(wantPlaintext)) {
+		t.Fatal("stored api_key_enc is empty or contains plaintext secret")
+	}
+	opened, err := f.enc.Open(row.ApiKeyEnc)
+	if err != nil {
+		t.Fatalf("enc.Open(api_key_enc) = %v", err)
+	}
+	if string(opened) != wantPlaintext {
+		t.Fatalf("decrypted key = %q, want %q", string(opened), wantPlaintext)
+	}
+}
+
+func assertStashExcludedFromArrEndpoints(t *testing.T, f *integrationFixture, adminCtx context.Context, stashID uuid.UUID) {
+	t.Helper()
+	caps, err := f.h.GetHourlyCaps(adminCtx)
+	if err != nil {
+		t.Fatalf("GetHourlyCaps() = %v", err)
+	}
+	if len(caps) != 0 {
+		t.Fatalf("GetHourlyCaps() len = %d, want 0 (stash excluded)", len(caps))
+	}
+	if _, err := f.h.TriggerRun(adminCtx, &oas.RunTrigger{Kind: oas.SnatchKindMissing}, oas.TriggerRunParams{InstanceId: stashID}); !errors.Is(err, domain.ErrInvalid) {
+		t.Fatalf("TriggerRun(stash) err = %v, want ErrInvalid", err)
+	}
+	if _, err := f.h.PreviewRun(adminCtx, oas.PreviewRunParams{InstanceId: stashID, Kind: "missing"}); !errors.Is(err, domain.ErrInvalid) {
+		t.Fatalf("PreviewRun(stash) err = %v, want ErrInvalid", err)
+	}
+	if _, err := f.h.GetInstancePriority(adminCtx, oas.GetInstancePriorityParams{InstanceId: stashID}); !errors.Is(err, domain.ErrInvalid) {
+		t.Fatalf("GetInstancePriority(stash) err = %v, want ErrInvalid", err)
+	}
+}

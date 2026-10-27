@@ -206,4 +206,20 @@ describe('InstanceOverview', () => {
 		});
 		expect(results.violations).toEqual([]);
 	});
+
+	it('hides the priority card for Stash companion instances', async () => {
+		const stashInstance: Instance = {
+			...forkInstance,
+			kind: 'stash',
+			name: 'Companion Stash',
+			last_seen_product: undefined
+		};
+		stubGet({
+			'/instances/{instanceId}': stashInstance
+		});
+		renderWithQuery(InstanceOverview, { id: stashInstance.id });
+
+		expect(await screen.findByRole('form', { name: m.instance_edit_title() })).toBeTruthy();
+		expect(screen.queryByRole('heading', { name: m.instance_priority_title() })).toBeNull();
+	});
 });

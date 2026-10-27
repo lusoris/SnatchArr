@@ -10,6 +10,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import CheckState from '#lib/components/CheckState.svelte';
 	import InstanceEditForm from '#lib/components/InstanceEditForm.svelte';
 	import InstancePriorityCard from '#lib/components/instance/InstancePriorityCard.svelte';
+	import { isArrKind } from '#lib/kinds.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { probeMessage } from '#lib/products.js';
 	import { keys } from '#lib/query.js';
@@ -56,7 +57,9 @@ SPDX-License-Identifier: EUPL-1.2
 		{#if session.isAdmin}
 			<div class="grid gap-6 xl:grid-cols-2">
 				<InstanceEditForm instance={data} />
-				<InstancePriorityCard instance={data} />
+				{#if isArrKind(data.kind)}
+					<InstancePriorityCard instance={data} />
+				{/if}
 			</div>
 		{/if}
 	{/snippet}

@@ -11,7 +11,7 @@ import KindSelect from './KindSelect.svelte';
 const select = (): HTMLSelectElement => screen.getByLabelText<HTMLSelectElement>('Kind');
 
 describe('KindSelect', () => {
-	it('offers every kind and labels Readarr as legacy', () => {
+	it('offers every kind and labels Readarr as legacy and Stash as Stash', () => {
 		render(KindSelect, { value: 'sonarr' });
 		const options = screen.getAllByRole<HTMLOptionElement>('option');
 		expect(options.map((o) => o.value)).toEqual([
@@ -20,7 +20,8 @@ describe('KindSelect', () => {
 			'lidarr',
 			'readarr',
 			'whisparr_v2',
-			'whisparr_v3'
+			'whisparr_v3',
+			'stash'
 		]);
 		expect(options.map((o) => o.textContent)).toEqual([
 			'sonarr',
@@ -28,7 +29,8 @@ describe('KindSelect', () => {
 			'lidarr',
 			'readarr (legacy)',
 			'whisparr_v2',
-			'whisparr_v3'
+			'whisparr_v3',
+			'Stash'
 		]);
 	});
 
