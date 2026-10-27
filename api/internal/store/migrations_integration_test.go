@@ -1209,3 +1209,255 @@ func assertStashSkippedByArrQueries(t *testing.T, st *store.Store, sonarrID, sta
 		t.Fatalf("ListInstancesToPlan returned %d rows (first=%v), want only sonarr %v (stash %v skipped)", len(toPlan), toPlan, sonarrID, stashID)
 	}
 }
+
+type adultNormalizedSeed struct {
+	instID      uuid.UUID
+	perfFavID   uuid.UUID
+	perfUnfavID uuid.UUID
+	studioFavID uuid.UUID
+	setID       uuid.UUID
+	syncedAt    time.Time
+}
+
+func seedPre000046AdultData(t *testing.T, st *store.Store) adultNormalizedSeed {
+	t.Helper()
+	ctx := t.Context()
+	seed := adultNormalizedSeed{
+		instID:      uuid.New(),
+		perfFavID:   uuid.New(),
+		perfUnfavID: uuid.New(),
+		studioFavID: uuid.New(),
+		setID:       uuid.New(),
+		syncedAt:    time.Date(2026, 10, 26, 14, 0, 0, 0, time.UTC),
+	}
+	const insInst = `INSERT INTO adult_stashbox_instances (
+		id, name, endpoint, api_key_enc, priority, created_at, updated_at
+	) VALUES ($1, 'stashbox-m46', 'https://stashbox.example.org/graphql', '\x0102', 10, $2, $2)`
+	if _, err := st.Pool().Exec(ctx, insInst, seed.instID, seed.syncedAt); err != nil {
+		t.Fatalf("insert instance: %v", err)
+	}
+	const insPerf = `INSERT INTO adult_favorite_performers (
+		id, canonical_name, disambiguation, urls, created_at, updated_at
+	) VALUES ($1, $2, $3, $4, $5, $5)`
+	if _, err := st.Pool().Exec(ctx, insPerf, seed.perfFavID, "Performer A", "Alpha", []string{"https://example.org/performer-a"}, seed.syncedAt); err != nil {
+		t.Fatalf("insert performer A: %v", err)
+	}
+	if _, err := st.Pool().Exec(ctx, insPerf, seed.perfUnfavID, "Performer B", nil, []string{}, seed.syncedAt); err != nil {
+		t.Fatalf("insert performer B: %v", err)
+	}
+	const insPerfLink = `INSERT INTO adult_performer_links (
+		favorite_id, instance_id, foreign_id, is_favorite, last_synced_at
+	) VALUES ($1, $2, $3, $4, $5)`
+	if _, err := st.Pool().Exec(ctx, insPerfLink, seed.perfFavID, seed.instID, "sb-perf-a", true, seed.syncedAt); err != nil {
+		t.Fatalf("insert performer A link: %v", err)
+	}
+	if _, err := st.Pool().Exec(ctx, insPerfLink, seed.perfUnfavID, seed.instID, "sb-perf-b", false, seed.syncedAt); err != nil {
+		t.Fatalf("insert performer B link: %v", err)
+	}
+	const insStudio = `INSERT INTO adult_favorite_studios (
+		id, canonical_name, urls, created_at, updated_at
+	) VALUES ($1, 'Studio B', $2, $3, $3)`
+	if _, err := st.Pool().Exec(ctx, insStudio, seed.studioFavID, []string{"https://example.org/studio-b"}, seed.syncedAt); err != nil {
+		t.Fatalf("insert studio B: %v", err)
+	}
+	const insStudioLink = `INSERT INTO adult_studio_links (
+		favorite_id, instance_id, foreign_id, is_favorite, last_synced_at
+	) VALUES ($1, $2, 'sb-studio-b', true, $3)`
+	if _, err := st.Pool().Exec(ctx, insStudioLink, seed.studioFavID, seed.instID, seed.syncedAt); err != nil {
+		t.Fatalf("insert studio B link: %v", err)
+	}
+	const insSet = `INSERT INTO adult_image_sets (
+		id, title, directory_path, performer_id, item_count, total_size_bytes, created_at, updated_at
+	) VALUES ($1, 'Gallery M46', '/media/imagesets/m46', $2, 0, 0, $3, $3)`
+	if _, err := st.Pool().Exec(ctx, insSet, seed.setID, seed.perfFavID, seed.syncedAt); err != nil {
+		t.Fatalf("insert image set: %v", err)
+	}
+	return seed
+}
+
+func assertPost000046Up(t *testing.T, st *store.Store, seed adultNormalizedSeed) {
+	t.Helper()
+	ctx := t.Context()
+	for _, oldTbl := range []string{"adult_favorite_performers", "adult_performer_links", "adult_favorite_studios", "adult_studio_links"} {
+		assertTableExists(t, st, oldTbl, false)
+	}
+	for _, newTbl := range []string{"adult_performers", "adult_studios", "adult_external_refs"} {
+		assertTableExists(t, st, newTbl, true)
+	}
+
+	var favA, favB, favStudio bool
+	if err := st.Pool().QueryRow(ctx, "SELECT is_favorite FROM adult_performers WHERE id = $1", seed.perfFavID).Scan(&favA); err != nil || !favA {
+		t.Fatalf("performer A is_favorite = %v, want true (err: %v)", favA, err)
+	}
+	if err := st.Pool().QueryRow(ctx, "SELECT is_favorite FROM adult_performers WHERE id = $1", seed.perfUnfavID).Scan(&favB); err != nil || favB {
+		t.Fatalf("performer B is_favorite = %v, want false (err: %v)", favB, err)
+	}
+	if err := st.Pool().QueryRow(ctx, "SELECT is_favorite FROM adult_studios WHERE id = $1", seed.studioFavID).Scan(&favStudio); err != nil || !favStudio {
+		t.Fatalf("studio B is_favorite = %v, want true (err: %v)", favStudio, err)
+	}
+
+	var refFav bool
+	var matchMethod string
+	var fetchedAt, lastSeenAt time.Time
+	const qRef = `SELECT is_favorite, match_method, fetched_at, last_seen_at FROM adult_external_refs
+		WHERE entity_type = $1 AND entity_id = $2 AND source_kind = 'stashbox' AND source_instance_id = $3 AND foreign_id = $4`
+	if err := st.Pool().QueryRow(ctx, qRef, "performer", seed.perfFavID, seed.instID, "sb-perf-a").Scan(&refFav, &matchMethod, &fetchedAt, &lastSeenAt); err != nil {
+		t.Fatalf("query migrated performer A ref: %v", err)
+	}
+	if !refFav || matchMethod != "migrated" || !fetchedAt.Equal(seed.syncedAt) || !lastSeenAt.Equal(seed.syncedAt) {
+		t.Fatalf("migrated performer A ref = (fav=%v, method=%q, fetched=%v, seen=%v)", refFav, matchMethod, fetchedAt, lastSeenAt)
+	}
+	if err := st.Pool().QueryRow(ctx, qRef, "studio", seed.studioFavID, seed.instID, "sb-studio-b").Scan(&refFav, &matchMethod, &fetchedAt, &lastSeenAt); err != nil || !refFav || matchMethod != "migrated" {
+		t.Fatalf("query migrated studio B ref: %v (fav=%v, method=%q)", err, refFav, matchMethod)
+	}
+
+	var setPerfID uuid.UUID
+	if err := st.Pool().QueryRow(ctx, "SELECT performer_id FROM adult_image_sets WHERE id = $1", seed.setID).Scan(&setPerfID); err != nil || setPerfID != seed.perfFavID {
+		t.Fatalf("image set performer_id = %v, want %v (err: %v)", setPerfID, seed.perfFavID, err)
+	}
+}
+
+func testMigration000046NegativeRefs(t *testing.T, st *store.Store, seed adultNormalizedSeed) {
+	t.Helper()
+	ctx := t.Context()
+
+	const insNullRef = `INSERT INTO adult_external_refs (
+		id, entity_type, entity_id, source_kind, source_instance_id, foreign_id, is_favorite, fetched_at, last_seen_at
+	) VALUES ($1, 'performer', $2, 'tpdb_rest', NULL, 'tpdb-p-1', false, $3, $3)`
+	if _, err := st.Pool().Exec(ctx, insNullRef, uuid.New(), seed.perfFavID, seed.syncedAt); err != nil {
+		t.Fatalf("insert valid tpdb_rest ref: %v", err)
+	}
+
+	negCases := []struct {
+		name  string
+		query string
+		args  []any
+	}{
+		{
+			name:  "rejects bad entity_type",
+			query: `INSERT INTO adult_external_refs (id, entity_type, entity_id, source_kind, foreign_id, is_favorite, fetched_at, last_seen_at) VALUES ($1, 'invalid_type', $2, 'tpdb_rest', 'f-1', false, $3, $3)`,
+			args:  []any{uuid.New(), seed.perfFavID, seed.syncedAt},
+		},
+		{
+			name:  "rejects bad source_kind",
+			query: `INSERT INTO adult_external_refs (id, entity_type, entity_id, source_kind, foreign_id, is_favorite, fetched_at, last_seen_at) VALUES ($1, 'performer', $2, 'invalid_source', 'f-2', false, $3, $3)`,
+			args:  []any{uuid.New(), seed.perfFavID, seed.syncedAt},
+		},
+		{
+			name:  "rejects confidence_score below 0",
+			query: `INSERT INTO adult_external_refs (id, entity_type, entity_id, source_kind, foreign_id, confidence_score, is_favorite, fetched_at, last_seen_at) VALUES ($1, 'performer', $2, 'tpdb_rest', 'f-3', -1, false, $3, $3)`,
+			args:  []any{uuid.New(), seed.perfFavID, seed.syncedAt},
+		},
+		{
+			name:  "rejects confidence_score above 100",
+			query: `INSERT INTO adult_external_refs (id, entity_type, entity_id, source_kind, foreign_id, confidence_score, is_favorite, fetched_at, last_seen_at) VALUES ($1, 'performer', $2, 'tpdb_rest', 'f-4', 101, false, $3, $3)`,
+			args:  []any{uuid.New(), seed.perfFavID, seed.syncedAt},
+		},
+		{
+			name:  "rejects duplicate stashbox ref",
+			query: `INSERT INTO adult_external_refs (id, entity_type, entity_id, source_kind, source_instance_id, foreign_id, is_favorite, fetched_at, last_seen_at) VALUES ($1, 'performer', $2, 'stashbox', $3, 'sb-perf-a', true, $4, $4)`,
+			args:  []any{uuid.New(), seed.perfFavID, seed.instID, seed.syncedAt},
+		},
+		{
+			name:  "rejects duplicate NULL source_instance_id ref via NULLS NOT DISTINCT",
+			query: insNullRef,
+			args:  []any{uuid.New(), seed.perfFavID, seed.syncedAt},
+		},
+	}
+	for _, tc := range negCases {
+		if _, err := st.Pool().Exec(ctx, tc.query, tc.args...); err == nil {
+			t.Fatalf("%s: expected error, got nil", tc.name)
+		}
+	}
+}
+
+func testMigration000046NegativeSelfFKs(t *testing.T, st *store.Store, seed adultNormalizedSeed) {
+	t.Helper()
+	ctx := t.Context()
+	selfCases := []struct {
+		name  string
+		query string
+		id    uuid.UUID
+	}{
+		{"performers self merged_into_id", `UPDATE adult_performers SET merged_into_id = id WHERE id = $1`, seed.perfFavID},
+		{"studios self merged_into_id", `UPDATE adult_studios SET merged_into_id = id WHERE id = $1`, seed.studioFavID},
+		{"studios self parent_studio_id", `UPDATE adult_studios SET parent_studio_id = id WHERE id = $1`, seed.studioFavID},
+		{"studios self network_studio_id", `UPDATE adult_studios SET network_studio_id = id WHERE id = $1`, seed.studioFavID},
+	}
+	for _, tc := range selfCases {
+		if _, err := st.Pool().Exec(ctx, tc.query, tc.id); err == nil {
+			t.Fatalf("%s: expected error, got nil", tc.name)
+		}
+	}
+}
+
+func testMigration000046BoundaryTriggers(t *testing.T, st *store.Store, seed adultNormalizedSeed) {
+	t.Helper()
+	ctx := t.Context()
+
+	// Boundary: confidence_score 0 and 100 accepted
+	for i, score := range []int16{0, 100} {
+		const insScore = `INSERT INTO adult_external_refs (
+			id, entity_type, entity_id, source_kind, foreign_id, confidence_score, is_favorite, fetched_at, last_seen_at
+		) VALUES ($1, 'performer', $2, 'tpdb_rest', $3, $4, false, $5, $5)`
+		if _, err := st.Pool().Exec(ctx, insScore, uuid.New(), seed.perfFavID, "tpdb-bound-"+string(rune('0'+i)), score, seed.syncedAt); err != nil {
+			t.Fatalf("insert boundary confidence_score=%d: %v", score, err)
+		}
+	}
+
+	// Boundary: deleting a performer deletes its polymorphic adult_external_refs via trigger
+	tempPerfID := uuid.New()
+	if _, err := st.Pool().Exec(ctx, `INSERT INTO adult_performers (id, canonical_name, created_at, updated_at) VALUES ($1, 'Performer Temp', $2, $2)`, tempPerfID, seed.syncedAt); err != nil {
+		t.Fatalf("insert temp performer: %v", err)
+	}
+	if _, err := st.Pool().Exec(ctx, `INSERT INTO adult_external_refs (id, entity_type, entity_id, source_kind, source_instance_id, foreign_id, is_favorite, fetched_at, last_seen_at) VALUES ($1, 'performer', $2, 'stashbox', $3, 'sb-temp-p', true, $4, $4)`, uuid.New(), tempPerfID, seed.instID, seed.syncedAt); err != nil {
+		t.Fatalf("insert temp performer ref: %v", err)
+	}
+	if _, err := st.Pool().Exec(ctx, `DELETE FROM adult_performers WHERE id = $1`, tempPerfID); err != nil {
+		t.Fatalf("delete temp performer: %v", err)
+	}
+	var count int
+	if err := st.Pool().QueryRow(ctx, `SELECT count(*) FROM adult_external_refs WHERE entity_type = 'performer' AND entity_id = $1`, tempPerfID).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("refs after deleting performer = %d, want 0 (err: %v)", count, err)
+	}
+}
+
+func TestMigration000046AdultNormalizedModel(t *testing.T) {
+	t.Parallel()
+	st := storetest.New(t)
+	m := storetest.Migrator(t, st)
+
+	stepDownToVersion(t, m, 45)
+	assertTableExists(t, st, "adult_external_refs", false)
+	assertTableExists(t, st, "adult_favorite_performers", true)
+
+	seed := seedPre000046AdultData(t, st)
+
+	if err := m.Steps(1); err != nil {
+		t.Fatalf("Steps(1) up to 46: %v", err)
+	}
+	assertPost000046Up(t, st, seed)
+	testMigration000046NegativeRefs(t, st, seed)
+	testMigration000046NegativeSelfFKs(t, st, seed)
+	testMigration000046BoundaryTriggers(t, st, seed)
+
+	if err := m.Steps(-1); err != nil {
+		t.Fatalf("Steps(-1) down from 46: %v", err)
+	}
+	assertTableExists(t, st, "adult_external_refs", false)
+	assertTableExists(t, st, "adult_performer_links", true)
+	assertTableExists(t, st, "adult_studio_links", true)
+
+	var restoredPerfLinks, restoredStudioLinks int
+	if err := st.Pool().QueryRow(t.Context(), `SELECT count(*) FROM adult_performer_links WHERE favorite_id = $1 AND foreign_id = 'sb-perf-a' AND is_favorite = TRUE`, seed.perfFavID).Scan(&restoredPerfLinks); err != nil || restoredPerfLinks != 1 {
+		t.Fatalf("restored performer links = %d, want 1 (err: %v)", restoredPerfLinks, err)
+	}
+	if err := st.Pool().QueryRow(t.Context(), `SELECT count(*) FROM adult_studio_links WHERE favorite_id = $1 AND foreign_id = 'sb-studio-b' AND is_favorite = TRUE`, seed.studioFavID).Scan(&restoredStudioLinks); err != nil || restoredStudioLinks != 1 {
+		t.Fatalf("restored studio links = %d, want 1 (err: %v)", restoredStudioLinks, err)
+	}
+
+	if err := m.Steps(1); err != nil {
+		t.Fatalf("Steps(1) back up to 46: %v", err)
+	}
+	assertPost000046Up(t, st, seed)
+}

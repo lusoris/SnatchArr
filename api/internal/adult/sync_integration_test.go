@@ -226,25 +226,32 @@ func TestSync_Positive_MultiPageAndCrossInstanceMerge(t *testing.T) {
 		t.Fatalf("expected 3 studios, got %d", len(studios))
 	}
 
-	// Verify links for merged Jane Doe:
-	link1, err := env.st.Q().GetAdultPerformerLink(ctx, sqlcgen.GetAdultPerformerLinkParams{
-		InstanceID: inst1ID,
-		ForeignID:  "inst1-performer-0",
+	// Verify external refs for merged Jane Doe:
+	ref1, err := env.st.Q().GetAdultExternalRef(ctx, sqlcgen.GetAdultExternalRefParams{
+		SourceKind:       SourceKindStashbox,
+		SourceInstanceID: &inst1ID,
+		EntityType:       EntityTypePerformer,
+		ForeignID:        "inst1-performer-0",
 	})
 	if err != nil {
-		t.Fatalf("link1: %v", err)
+		t.Fatalf("ref1: %v", err)
 	}
-	link2, err := env.st.Q().GetAdultPerformerLink(ctx, sqlcgen.GetAdultPerformerLinkParams{
-		InstanceID: inst2ID,
-		ForeignID:  "inst2-performer-0",
+	ref2, err := env.st.Q().GetAdultExternalRef(ctx, sqlcgen.GetAdultExternalRefParams{
+		SourceKind:       SourceKindStashbox,
+		SourceInstanceID: &inst2ID,
+		EntityType:       EntityTypePerformer,
+		ForeignID:        "inst2-performer-0",
 	})
 	if err != nil {
-		t.Fatalf("link2: %v", err)
+		t.Fatalf("ref2: %v", err)
 	}
 
-	if link1.FavoriteID != link2.FavoriteID {
-		t.Fatalf("expected cross-instance merge: link1.FavoriteID (%v) != link2.FavoriteID (%v)",
-			link1.FavoriteID, link2.FavoriteID)
+	if ref1.EntityID != ref2.EntityID {
+		t.Fatalf("expected cross-instance merge: ref1.EntityID (%v) != ref2.EntityID (%v)",
+			ref1.EntityID, ref2.EntityID)
+	}
+	if !ref1.IsFavorite || !ref2.IsFavorite {
+		t.Fatalf("expected both refs to have is_favorite=true, got %v and %v", ref1.IsFavorite, ref2.IsFavorite)
 	}
 }
 
@@ -519,12 +526,12 @@ func TestSync_F1_ExactLinkReuse_DisambiguationNoURLs_NoOrphanRows(t *testing.T) 
 	if len(perfs2) != 1 {
 		t.Fatalf("expected exactly 1 favourite row after 2nd sweep (no orphans), got %d", len(perfs2))
 	}
-	links, err := env.st.Q().ListAdultPerformerLinks(ctx)
+	refs, err := env.st.Q().ListAdultExternalRefsByEntityType(ctx, EntityTypePerformer)
 	if err != nil {
-		t.Fatalf("ListAdultPerformerLinks: %v", err)
+		t.Fatalf("ListAdultExternalRefsByEntityType: %v", err)
 	}
-	if len(links) != 1 {
-		t.Fatalf("expected exactly 1 link row after 2nd sweep, got %d", len(links))
+	if len(refs) != 1 {
+		t.Fatalf("expected exactly 1 ref row after 2nd sweep, got %d", len(refs))
 	}
 	if perfs2[0].ID != perfs1[0].ID {
 		t.Fatalf("favourite ID changed across sweeps: %v != %v", perfs2[0].ID, perfs1[0].ID)
@@ -547,7 +554,10 @@ func TestSync_F2_FreshService_MergesBySharedExternalURL(t *testing.T) {
 						map[string]any{
 							"id":   "inst1-p1",
 							"name": "Alice Singer",
-							"urls": []any{map[string]any{"url": "https://twitter.com/alicesinger"}},
+							"urls": []any{
+								map[string]any{"url": "https://twitter.com/alicesinger"},
+								map[string]any{"url": "https://example.org/performer-a"},
+							},
 						},
 					},
 				},
@@ -595,15 +605,20 @@ func TestSync_F2_FreshService_MergesBySharedExternalURL(t *testing.T) {
 	if len(perfs) != 1 {
 		t.Fatalf("expected 1 merged performer after fresh service restart, got %d", len(perfs))
 	}
-	links, err := env.st.Q().ListAdultPerformerLinks(ctx)
-	if err != nil || len(links) != 2 {
-		t.Fatalf("expected 2 links for merged performer, got %d (err: %v)", len(links), err)
+	refs, err := env.st.Q().ListAdultExternalRefsByEntityType(ctx, EntityTypePerformer)
+	if err != nil || len(refs) != 2 {
+		t.Fatalf("expected 2 refs for merged performer, got %d (err: %v)", len(refs), err)
 	}
-	if links[0].FavoriteID != links[1].FavoriteID {
-		t.Fatalf("links point to different favorites: %v != %v", links[0].FavoriteID, links[1].FavoriteID)
+	if refs[0].EntityID != refs[1].EntityID {
+		t.Fatalf("refs point to different entities: %v != %v", refs[0].EntityID, refs[1].EntityID)
 	}
-	if len(perfs[0].Urls) == 0 {
-		t.Fatalf("expected persisted URLs on performer, got empty")
+	if len(perfs[0].Urls) < 2 {
+		t.Fatalf("expected merged URLs from both instances on performer, got %v", perfs[0].Urls)
+	}
+	// Refs are ordered by source_instance_id; refs[1] belongs to instance 2,
+	// which reported only the shared URL. A ref keeps its own source's URLs.
+	if got := refs[1].ExtraUrls; len(got) != 1 {
+		t.Fatalf("instance 2 ref extra_urls = %v, want its single own URL", got)
 	}
 }
 
@@ -639,25 +654,31 @@ func TestSync_F3_Boundary500Cap_LeavesItem501Favorite(t *testing.T) {
 
 	p501ID := uuid.MustParse("00000000-0000-0000-0000-000000000501")
 	oldTime := env.clk.Now().Add(-2 * time.Hour)
-	_, err := env.st.Q().UpsertAdultFavoritePerformer(ctx, sqlcgen.UpsertAdultFavoritePerformerParams{
+	_, err := env.st.Q().UpsertAdultPerformer(ctx, sqlcgen.UpsertAdultPerformerParams{
 		ID:            p501ID,
 		CanonicalName: "Performer 501",
 		Urls:          []string{},
+		IsFavorite:    true,
 		CreatedAt:     oldTime,
 		UpdatedAt:     oldTime,
 	})
 	if err != nil {
-		t.Fatalf("UpsertAdultFavoritePerformer: %v", err)
+		t.Fatalf("UpsertAdultPerformer: %v", err)
 	}
-	_, err = env.st.Q().UpsertAdultPerformerLink(ctx, sqlcgen.UpsertAdultPerformerLinkParams{
-		FavoriteID:   p501ID,
-		InstanceID:   instID,
-		ForeignID:    "foreign-501",
-		IsFavorite:   true,
-		LastSyncedAt: oldTime,
+	_, err = env.st.Q().UpsertAdultExternalRef(ctx, sqlcgen.UpsertAdultExternalRefParams{
+		ID:               uuid.New(),
+		EntityType:       EntityTypePerformer,
+		EntityID:         p501ID,
+		SourceKind:       SourceKindStashbox,
+		SourceInstanceID: &instID,
+		ForeignID:        "foreign-501",
+		ExtraUrls:        []string{},
+		IsFavorite:       true,
+		FetchedAt:        oldTime,
+		LastSeenAt:       oldTime,
 	})
 	if err != nil {
-		t.Fatalf("UpsertAdultPerformerLink: %v", err)
+		t.Fatalf("UpsertAdultExternalRef: %v", err)
 	}
 
 	env.clk.Advance(1 * time.Hour)
@@ -665,14 +686,169 @@ func TestSync_F3_Boundary500Cap_LeavesItem501Favorite(t *testing.T) {
 		t.Fatalf("SyncAll: %v", err)
 	}
 
-	link501, err := env.st.Q().GetAdultPerformerLink(ctx, sqlcgen.GetAdultPerformerLinkParams{
-		InstanceID: instID,
-		ForeignID:  "foreign-501",
+	ref501, err := env.st.Q().GetAdultExternalRef(ctx, sqlcgen.GetAdultExternalRefParams{
+		SourceKind:       SourceKindStashbox,
+		SourceInstanceID: &instID,
+		EntityType:       EntityTypePerformer,
+		ForeignID:        "foreign-501",
 	})
 	if err != nil {
-		t.Fatalf("GetAdultPerformerLink for 501: %v", err)
+		t.Fatalf("GetAdultExternalRef for 501: %v", err)
 	}
-	if !link501.IsFavorite {
-		t.Fatalf("expected item 501 is_favorite to remain true when sweep is capped at 500, but got false")
+	if !ref501.IsFavorite {
+		t.Fatalf("expected item 501 ref is_favorite to remain true when sweep is capped at 500, but got false")
+	}
+	perf501, err := env.st.Q().GetAdultPerformer(ctx, p501ID)
+	if err != nil {
+		t.Fatalf("GetAdultPerformer for 501: %v", err)
+	}
+	if !perf501.IsFavorite {
+		t.Fatalf("expected item 501 canonical is_favorite to remain true when sweep is capped at 500, but got false")
+	}
+}
+
+func newUnfavoriteServer1(t *testing.T, phase *atomic.Int32) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		perfs := []any{
+			map[string]any{
+				"id":   "inst1-perf-a",
+				"name": "Performer A",
+				"urls": []any{map[string]any{"url": "https://example.org/performer-a"}},
+			},
+		}
+		studios := []any{
+			map[string]any{"id": "inst1-studio-a", "name": "Studio A"},
+		}
+		if phase.Load() == 0 {
+			perfs = append(perfs, map[string]any{
+				"id":   "inst1-perf-b",
+				"name": "Performer B",
+				"urls": []any{map[string]any{"url": "https://example.org/performer-b"}},
+			})
+			studios = append(studios, map[string]any{"id": "inst1-studio-b", "name": "Studio B"})
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{
+				"query_performers": map[string]any{"count": len(perfs), "performers": perfs},
+				"query_studios":    map[string]any{"count": len(studios), "studios": studios},
+			},
+		})
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func newUnfavoriteServer2(t *testing.T, phase *atomic.Int32) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		var perfs []any
+		if phase.Load() == 0 {
+			perfs = append(perfs, map[string]any{
+				"id":   "inst2-perf-b",
+				"name": "Performer B",
+				"urls": []any{map[string]any{"url": "https://www.example.org/performer-b/"}},
+			})
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{
+				"query_performers": map[string]any{"count": len(perfs), "performers": perfs},
+				"query_studios":    map[string]any{"count": 0, "studios": []any{}},
+			},
+		})
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func TestSync_UnfavoriteFlipsCanonicalAndRef(t *testing.T) {
+	ctx := context.Background()
+	env := setupTestEnv(ctx, t)
+	inst1ID := uuid.MustParse("00000000-0000-0000-0000-000000000081")
+	inst2ID := uuid.MustParse("00000000-0000-0000-0000-000000000082")
+
+	var inst1Phase, inst2Phase atomic.Int32
+	srv1 := newUnfavoriteServer1(t, &inst1Phase)
+	srv2 := newUnfavoriteServer2(t, &inst2Phase)
+
+	insertTestInstance(ctx, t, env, inst1ID, "Instance U1", srv1.URL)
+	insertTestInstance(ctx, t, env, inst2ID, "Instance U2", srv2.URL)
+
+	// Phase 0: Both instances sync favourites
+	if err := env.svc.SyncAll(ctx); err != nil {
+		t.Fatalf("phase 0 SyncAll: %v", err)
+	}
+	assertUnfavoritePhase(ctx, t, env, inst1ID, inst2ID, 2, 2, true, true, true)
+
+	// Phase 1: Unfavourite Performer B and Studio B on Instance 1 only (Instance 2 keeps Performer B)
+	inst1Phase.Store(1)
+	env.clk.Advance(1 * time.Hour)
+	if err := env.svc.SyncAll(ctx); err != nil {
+		t.Fatalf("phase 1 SyncAll: %v", err)
+	}
+	assertUnfavoritePhase(ctx, t, env, inst1ID, inst2ID, 2, 1, false, true, false)
+
+	// Phase 2: Unfavourite Performer B on Instance 2 as well -> canonical Performer B flips is_favorite=false
+	inst2Phase.Store(1)
+	env.clk.Advance(1 * time.Hour)
+	if err := env.svc.SyncAll(ctx); err != nil {
+		t.Fatalf("phase 2 SyncAll: %v", err)
+	}
+	assertUnfavoritePhase(ctx, t, env, inst1ID, inst2ID, 1, 1, false, false, false)
+}
+
+func assertUnfavoritePhase(
+	ctx context.Context,
+	t *testing.T,
+	env *testEnv,
+	inst1ID, inst2ID uuid.UUID,
+	wantFavPerfs, wantFavStudios int,
+	wantRef1PerfB, wantRef2PerfB, wantStudioBFav bool,
+) {
+	t.Helper()
+	favPerfs, err := env.st.Q().ListAdultFavoritePerformers(ctx)
+	if err != nil || len(favPerfs) != wantFavPerfs {
+		t.Fatalf("ListAdultFavoritePerformers count = %d, want %d (err: %v)", len(favPerfs), wantFavPerfs, err)
+	}
+	favStudios, err := env.st.Q().ListAdultFavoriteStudios(ctx)
+	if err != nil || len(favStudios) != wantFavStudios {
+		t.Fatalf("ListAdultFavoriteStudios count = %d, want %d (err: %v)", len(favStudios), wantFavStudios, err)
+	}
+	ref1B, err := env.st.Q().GetAdultExternalRef(ctx, sqlcgen.GetAdultExternalRefParams{
+		SourceKind:       SourceKindStashbox,
+		SourceInstanceID: &inst1ID,
+		EntityType:       EntityTypePerformer,
+		ForeignID:        "inst1-perf-b",
+	})
+	if err != nil || ref1B.IsFavorite != wantRef1PerfB {
+		t.Fatalf("ref1B.IsFavorite = %v, want %v (err: %v)", ref1B.IsFavorite, wantRef1PerfB, err)
+	}
+	ref2B, err := env.st.Q().GetAdultExternalRef(ctx, sqlcgen.GetAdultExternalRefParams{
+		SourceKind:       SourceKindStashbox,
+		SourceInstanceID: &inst2ID,
+		EntityType:       EntityTypePerformer,
+		ForeignID:        "inst2-perf-b",
+	})
+	if err != nil || ref2B.IsFavorite != wantRef2PerfB {
+		t.Fatalf("ref2B.IsFavorite = %v, want %v (err: %v)", ref2B.IsFavorite, wantRef2PerfB, err)
+	}
+	perfB, err := env.st.Q().GetAdultPerformer(ctx, ref1B.EntityID)
+	if err != nil || perfB.IsFavorite != (wantRef1PerfB || wantRef2PerfB) {
+		t.Fatalf("perfB.IsFavorite = %v, want %v (err: %v)", perfB.IsFavorite, wantRef1PerfB || wantRef2PerfB, err)
+	}
+	refStudioB, err := env.st.Q().GetAdultExternalRef(ctx, sqlcgen.GetAdultExternalRefParams{
+		SourceKind:       SourceKindStashbox,
+		SourceInstanceID: &inst1ID,
+		EntityType:       EntityTypeStudio,
+		ForeignID:        "inst1-studio-b",
+	})
+	if err != nil || refStudioB.IsFavorite != wantStudioBFav {
+		t.Fatalf("refStudioB.IsFavorite = %v, want %v (err: %v)", refStudioB.IsFavorite, wantStudioBFav, err)
+	}
+	studioB, err := env.st.Q().GetAdultStudio(ctx, refStudioB.EntityID)
+	if err != nil || studioB.IsFavorite != wantStudioBFav {
+		t.Fatalf("studioB.IsFavorite = %v, want %v (err: %v)", studioB.IsFavorite, wantStudioBFav, err)
 	}
 }

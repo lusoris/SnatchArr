@@ -11,21 +11,21 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type AdultFavoritePerformer struct {
-	ID             uuid.UUID
-	CanonicalName  string
-	Disambiguation *string
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
-	Urls           []string
-}
-
-type AdultFavoriteStudio struct {
-	ID            uuid.UUID
-	CanonicalName string
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
-	Urls          []string
+type AdultExternalRef struct {
+	ID               uuid.UUID
+	EntityType       string
+	EntityID         uuid.UUID
+	SourceKind       string
+	SourceInstanceID *uuid.UUID
+	ForeignID        string
+	SecondaryID      *string
+	CanonicalUrl     *string
+	ExtraUrls        []string
+	IsFavorite       bool
+	ConfidenceScore  *int16
+	MatchMethod      *string
+	FetchedAt        time.Time
+	LastSeenAt       time.Time
 }
 
 type AdultImageItem struct {
@@ -56,12 +56,15 @@ type AdultImageSet struct {
 	UpdatedAt              time.Time
 }
 
-type AdultPerformerLink struct {
-	FavoriteID   uuid.UUID
-	InstanceID   uuid.UUID
-	ForeignID    string
-	IsFavorite   bool
-	LastSyncedAt time.Time
+type AdultPerformer struct {
+	ID             uuid.UUID
+	CanonicalName  string
+	Disambiguation *string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	Urls           []string
+	IsFavorite     bool
+	MergedIntoID   *uuid.UUID
 }
 
 type AdultStashboxInstance struct {
@@ -76,12 +79,16 @@ type AdultStashboxInstance struct {
 	UpdatedAt     time.Time
 }
 
-type AdultStudioLink struct {
-	FavoriteID   uuid.UUID
-	InstanceID   uuid.UUID
-	ForeignID    string
-	IsFavorite   bool
-	LastSyncedAt time.Time
+type AdultStudio struct {
+	ID              uuid.UUID
+	CanonicalName   string
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	Urls            []string
+	IsFavorite      bool
+	MergedIntoID    *uuid.UUID
+	ParentStudioID  *uuid.UUID
+	NetworkStudioID *uuid.UUID
 }
 
 type ApiKey struct {
