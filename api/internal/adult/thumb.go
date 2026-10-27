@@ -75,7 +75,7 @@ func (s *Service) Thumbnail(ctx context.Context, itemID uuid.UUID) (string, erro
 	destPath := filepath.Join(thumbDir, item.Sha256Checksum+".webp")
 
 	// Fast cache hit check
-	if _, err := os.Stat(destPath); err == nil {
+	if _, statErr := os.Stat(destPath); statErr == nil {
 		return destPath, nil
 	}
 
@@ -88,48 +88,43 @@ func (s *Service) Thumbnail(ctx context.Context, itemID uuid.UUID) (string, erro
 	}
 
 	// Double check cache hit after acquiring semaphore
-	if _, err := os.Stat(destPath); err == nil {
+	if _, statErr := os.Stat(destPath); statErr == nil {
 		return destPath, nil
 	}
 
-	if err := s.validateItemFile(cfg, item); err != nil {
+	cleanBase, err := thumbSourceBase(cfg, item)
+	if err != nil {
 		return "", err
 	}
-
-	return destPath, s.generateThumbnail(item.FilePath, destPath, thumbDir)
+	return destPath, s.generateThumbnail(cleanBase, item.FilePath, destPath, thumbDir)
 }
 
-func (s *Service) validateItemFile(cfg adultSettings, item sqlcgen.AdultImageItem) error {
+// thumbSourceBase returns the clean image_set_dir that must contain the item.
+// File type and size are checked on the rooted open in generateThumbnail.
+func thumbSourceBase(cfg adultSettings, item sqlcgen.AdultImageItem) (string, error) {
 	if cfg.ImageSetDir == nil || *cfg.ImageSetDir == "" {
-		return fmt.Errorf("adult: image_set_dir not configured: %w", domain.ErrInvalid)
+		return "", fmt.Errorf("adult: image_set_dir not configured: %w", domain.ErrInvalid)
 	}
 	cleanBase := filepath.Clean(*cfg.ImageSetDir)
 	if !isCleanSubdir(cleanBase, item.FilePath) {
-		return fmt.Errorf("adult: file path escapes image set dir: %w", domain.ErrInvalid)
+		return "", fmt.Errorf("adult: file path escapes image set dir: %w", domain.ErrInvalid)
 	}
+	return cleanBase, nil
+}
 
-	fi, err := os.Lstat(item.FilePath)
+func (s *Service) generateThumbnail(baseDir, srcPath, destPath, thumbDir string) (err error) {
+	f, fi, err := openRegularInRoot(baseDir, srcPath)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("adult: image file missing: %w", domain.ErrNotFound)
+		if errors.Is(err, domain.ErrInvalid) {
+			return err
 		}
-		return fmt.Errorf("adult: stat image file: %w", err)
+		return mapFileErr(err, "open")
 	}
-	if fi.Mode()&os.ModeSymlink != 0 || !fi.Mode().IsRegular() {
-		return fmt.Errorf("adult: file is symlink or not regular: %w", domain.ErrInvalid)
-	}
+	defer gerr.CloseInto(f, &err, "adult: close image")
+
 	if fi.Size() > MaxImageDecodeBytes {
 		return fmt.Errorf("adult: file size %d exceeds decode limit %d: %w", fi.Size(), MaxImageDecodeBytes, domain.ErrInvalid)
 	}
-	return nil
-}
-
-func (s *Service) generateThumbnail(srcPath, destPath, thumbDir string) (err error) {
-	f, err := os.Open(srcPath) // #nosec G304 -- path verified within imageSetDir
-	if err != nil {
-		return fmt.Errorf("adult: open image: %w", err)
-	}
-	defer gerr.CloseInto(f, &err, "adult: close image")
 
 	cfg, _, err := image.DecodeConfig(f)
 	if err != nil {

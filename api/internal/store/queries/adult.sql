@@ -214,6 +214,9 @@ WHERE NOT (directory_path = ANY(@keep_paths::text[]));
 -- name: DeleteAllAdultImageSets :execrows
 DELETE FROM adult_image_sets;
 
+-- name: CountAdultImageSets :one
+SELECT count(*) FROM adult_image_sets;
+
 -- name: UpsertAdultImageItem :one
 INSERT INTO adult_image_items (
     id, image_set_id, file_path, file_name, file_size_bytes, mime_type, width, height, sha256_checksum, sort_order, created_at, file_mtime

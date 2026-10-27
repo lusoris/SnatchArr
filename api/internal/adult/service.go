@@ -6,6 +6,7 @@ package adult
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"sync"
@@ -47,8 +48,16 @@ type Service struct {
 	lastPass     time.Time
 	lastScanPass time.Time
 	thumbSem     chan struct{}
-	openFile     func(name string) (*os.File, error)
+	openFile     func(root *os.Root, rel string) (*os.File, error)
 	maxImageSets int
+}
+
+func defaultRootOpen(root *os.Root, rel string) (*os.File, error) {
+	f, err := root.Open(rel)
+	if err != nil {
+		return nil, fmt.Errorf("adult: root open: %w", err)
+	}
+	return f, nil
 }
 
 // NewService constructs an adult Service.
@@ -70,7 +79,7 @@ func NewService(
 		pool:         pool,
 		logger:       logger,
 		thumbSem:     make(chan struct{}, MaxThumbnailConcurrency),
-		openFile:     os.Open,
+		openFile:     defaultRootOpen,
 		maxImageSets: 0,
 	}
 }
@@ -94,7 +103,7 @@ func NewServiceWithChecker(
 		pool:         pool,
 		logger:       logger,
 		thumbSem:     make(chan struct{}, MaxThumbnailConcurrency),
-		openFile:     os.Open,
+		openFile:     defaultRootOpen,
 		maxImageSets: 0,
 	}
 }

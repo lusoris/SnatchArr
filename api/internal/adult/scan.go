@@ -160,7 +160,7 @@ func (s *Service) scanDir(ctx context.Context, baseDir string) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	return s.maybeCleanVanishedSets(ctx, truncated, seenPaths)
+	return s.maybeCleanVanishedSets(ctx, truncated, baseDir, len(entries), seenPaths)
 }
 
 func isValidSetDir(baseDir, subPath string) bool {
@@ -171,18 +171,34 @@ func isValidSetDir(baseDir, subPath string) bool {
 	return err == nil && fi.Mode()&os.ModeSymlink == 0 && fi.IsDir()
 }
 
-func (s *Service) maybeCleanVanishedSets(ctx context.Context, truncated bool, seenPaths []string) error {
+func (s *Service) maybeCleanVanishedSets(ctx context.Context, truncated bool, baseDir string, entryCount int, seenPaths []string) error {
 	if truncated {
 		return nil
 	}
-	return s.cleanVanishedSets(ctx, seenPaths)
+	return s.cleanVanishedSets(ctx, baseDir, entryCount, seenPaths)
 }
 
-func (s *Service) cleanVanishedSets(ctx context.Context, seenPaths []string) error {
+func (s *Service) cleanVanishedSets(ctx context.Context, baseDir string, entryCount int, seenPaths []string) error {
 	if len(seenPaths) > 0 {
 		_, err := s.st.Q().DeleteAdultImageSetsNotInPaths(ctx, seenPaths)
 		if err != nil {
 			return fmt.Errorf("delete vanished sets: %w", err)
+		}
+		return nil
+	}
+	if entryCount == 0 {
+		count, err := s.st.Q().CountAdultImageSets(ctx)
+		if err != nil {
+			return fmt.Errorf("count adult image sets: %w", err)
+		}
+		if count >= 1 {
+			s.logger.WarnContext(
+				ctx,
+				"adult: image_set_dir is empty, keeping set index (mount missing?)",
+				"dir", baseDir,
+				"count", count,
+			)
+			return nil
 		}
 		return nil
 	}
@@ -302,7 +318,7 @@ func (s *Service) collectValidItems(
 			s.logger.WarnContext(ctx, "adult: max items per set limit reached", "image_set_id", setID, "item_count", count)
 			break
 		}
-		item, err := s.resolveItem(entry, existingMap)
+		item, err := s.resolveItem(baseDir, entry, existingMap)
 		if err != nil {
 			continue
 		}
@@ -314,6 +330,7 @@ func (s *Service) collectValidItems(
 }
 
 func (s *Service) resolveItem(
+	baseDir string,
 	entry validEntry,
 	existingMap map[string]sqlcgen.AdultImageItem,
 ) (scannedItem, error) {
@@ -330,7 +347,7 @@ func (s *Service) resolveItem(
 			mtime:    &mtime,
 		}, nil
 	}
-	return s.inspectImageFile(entry.filePath, entry.size, entry.mtime, entry.ext)
+	return s.inspectImageFile(baseDir, entry.filePath, entry.size, entry.mtime, entry.ext)
 }
 
 func isItemUnchanged(existing sqlcgen.AdultImageItem, size int64, mtime time.Time) bool {
@@ -432,12 +449,8 @@ func extractDimensions(f io.ReadSeeker) (*int32, *int32) {
 	return &w, &h
 }
 
-func (s *Service) inspectImageFile(filePath string, size int64, mtime time.Time, ext string) (_ scannedItem, err error) {
-	openFn := s.openFile
-	if openFn == nil {
-		openFn = os.Open
-	}
-	f, err := openFn(filePath) // #nosec G304 -- path verified within imageSetDir
+func (s *Service) inspectImageFile(baseDir, filePath string, size int64, mtime time.Time, ext string) (_ scannedItem, err error) {
+	f, _, err := openRegularInRootWith(baseDir, filePath, s.openFile)
 	if err != nil {
 		return scannedItem{}, fmt.Errorf("open file: %w", err)
 	}

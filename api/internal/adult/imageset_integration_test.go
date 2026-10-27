@@ -537,9 +537,9 @@ func TestImageSetScanCachingAndTouch(t *testing.T) {
 	configureAdultModule(ctx, t, env, imagesDir, thumbDir)
 
 	var openCount atomic.Int64
-	env.svc.openFile = func(name string) (*os.File, error) {
+	env.svc.openFile = func(root *os.Root, rel string) (*os.File, error) {
 		openCount.Add(1)
-		return os.Open(name)
+		return root.Open(rel)
 	}
 
 	// First scan: opens both files
@@ -627,12 +627,15 @@ func TestImageSetVanishedSetsAndTruncatedPass(t *testing.T) {
 		t.Fatalf("full pass got %d sets, want 2", len(setsAfterFull))
 	}
 
-	// Empty directory pass: remove remaining sets, all sets deleted
+	// Empty directory pass: legit removal has .stashignore in base dir, all sets deleted
 	if err := os.RemoveAll(set1Dir); err != nil {
 		t.Fatalf("remove set1Dir: %v", err)
 	}
 	if err := os.RemoveAll(set2Dir); err != nil {
 		t.Fatalf("remove set2Dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(imagesDir, StashIgnoreFilename), []byte(StashIgnoreContent), 0o644); err != nil {
+		t.Fatalf("write stashignore: %v", err)
 	}
 	if err := env.svc.ScanImageSets(ctx); err != nil {
 		t.Fatalf("empty scan: %v", err)
@@ -643,6 +646,94 @@ func TestImageSetVanishedSetsAndTruncatedPass(t *testing.T) {
 	}
 	if len(setsAfterEmpty) != 0 {
 		t.Fatalf("empty pass got %d sets, want 0", len(setsAfterEmpty))
+	}
+}
+
+func TestImageSetEmptyMountKeepsIndex(t *testing.T) {
+	ctx := context.Background()
+	env := setupTestEnv(ctx, t)
+
+	tmp := t.TempDir()
+	imagesDir := filepath.Join(tmp, "images_empty_mount_test")
+	thumbDir := filepath.Join(tmp, "thumbs_empty_mount_test")
+	set1Dir := filepath.Join(imagesDir, "gallery_1")
+	set2Dir := filepath.Join(imagesDir, "gallery_2")
+	for _, d := range []string{set1Dir, set2Dir} {
+		if err := os.MkdirAll(d, 0o750); err != nil {
+			t.Fatalf("mkdir %s: %v", d, err)
+		}
+		createTestPNG(t, filepath.Join(d, "img.png"), 30, 30)
+	}
+
+	configureAdultModule(ctx, t, env, imagesDir, thumbDir)
+
+	if err := env.svc.ScanImageSets(ctx); err != nil {
+		t.Fatalf("initial scan: %v", err)
+	}
+
+	setsBefore, err := env.st.Q().ListAdultImageSets(ctx)
+	if err != nil {
+		t.Fatalf("list sets before: %v", err)
+	}
+	if len(setsBefore) != 2 {
+		t.Fatalf("got %d sets, want 2", len(setsBefore))
+	}
+
+	// Remove everything in imagesDir including any .stashignore (fully empty dir)
+	if err := os.RemoveAll(set1Dir); err != nil {
+		t.Fatalf("remove set1Dir: %v", err)
+	}
+	if err := os.RemoveAll(set2Dir); err != nil {
+		t.Fatalf("remove set2Dir: %v", err)
+	}
+	stashPath := filepath.Join(imagesDir, StashIgnoreFilename)
+	if err := os.Remove(stashPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("remove stashignore: %v", err)
+	}
+
+	entries, err := os.ReadDir(imagesDir)
+	if err != nil {
+		t.Fatalf("read imagesDir: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("imagesDir has %d entries, want 0", len(entries))
+	}
+
+	// Scan returns nil, both sets still listed in DB
+	if err := env.svc.ScanImageSets(ctx); err != nil {
+		t.Fatalf("empty mount scan: %v", err)
+	}
+
+	setsAfter, err := env.st.Q().ListAdultImageSets(ctx)
+	if err != nil {
+		t.Fatalf("list sets after: %v", err)
+	}
+	if len(setsAfter) != 2 {
+		t.Fatalf("empty mount wipe occurred: got %d sets, want 2", len(setsAfter))
+	}
+
+	// Boundary: fully empty dir with empty index -> no-op, no error
+	if _, err := env.st.Q().DeleteAllAdultImageSets(ctx); err != nil {
+		t.Fatalf("delete all sets for boundary test: %v", err)
+	}
+	count, err := env.st.Q().CountAdultImageSets(ctx)
+	if err != nil {
+		t.Fatalf("count sets: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("count = %d, want 0", count)
+	}
+
+	if err := env.svc.ScanImageSets(ctx); err != nil {
+		t.Fatalf("boundary scan: %v", err)
+	}
+
+	setsBoundary, err := env.st.Q().ListAdultImageSets(ctx)
+	if err != nil {
+		t.Fatalf("list sets boundary: %v", err)
+	}
+	if len(setsBoundary) != 0 {
+		t.Fatalf("boundary pass got %d sets, want 0", len(setsBoundary))
 	}
 }
 

@@ -54,6 +54,17 @@ func (q *Queries) ClearUnfavoritedAdultStudios(ctx context.Context, updatedAt ti
 	return result.RowsAffected(), nil
 }
 
+const countAdultImageSets = `-- name: CountAdultImageSets :one
+SELECT count(*) FROM adult_image_sets
+`
+
+func (q *Queries) CountAdultImageSets(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countAdultImageSets)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const deleteAdultExternalRefsByEntity = `-- name: DeleteAdultExternalRefsByEntity :execrows
 DELETE FROM adult_external_refs
 WHERE entity_type = $1 AND entity_id = $2
