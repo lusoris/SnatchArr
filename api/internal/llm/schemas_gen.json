@@ -1134,6 +1134,12 @@
     ],
     "type": "object"
   },
+  "getMyPreferences": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
   "getNotificationChannel": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -2569,6 +2575,62 @@
     ],
     "type": "object"
   },
+  "updateMyPreferences": {
+    "$defs": {
+      "BrandMark": {
+        "default": "vulva",
+        "enum": [
+          "vulva",
+          "penis",
+          "hand"
+        ],
+        "type": "string"
+      },
+      "SfwMode": {
+        "default": "auto",
+        "enum": [
+          "auto",
+          "on",
+          "off"
+        ],
+        "type": "string"
+      },
+      "UserPreferences": {
+        "properties": {
+          "brand_mark": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/BrandMark"
+              }
+            ],
+            "description": "Per-user brand mark override; null or omitted follows the installation default.",
+            "nullable": true
+          },
+          "sfw_mode": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/SfwMode"
+              }
+            ],
+            "description": "Per-user SFW mode override; null or omitted follows the installation default.",
+            "nullable": true
+          }
+        },
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/UserPreferences"
+      }
+    },
+    "required": [
+      "body"
+    ],
+    "type": "object"
+  },
   "updateNotificationChannel": {
     "$defs": {
       "NotificationChannelConfig": {
@@ -3359,6 +3421,15 @@
   },
   "updateSettings": {
     "$defs": {
+      "BrandMark": {
+        "default": "vulva",
+        "enum": [
+          "vulva",
+          "penis",
+          "hand"
+        ],
+        "type": "string"
+      },
       "LlmWriteTool": {
         "enum": [
           "snatcharr_trigger_run",
@@ -3418,6 +3489,10 @@
       },
       "Settings": {
         "properties": {
+          "brand_mark": {
+            "$ref": "#/$defs/BrandMark",
+            "description": "Installation-wide brand mark shown when a user has no override."
+          },
           "download_priority_preset": {
             "$ref": "#/$defs/PriorityPresetMap"
           },
@@ -3448,6 +3523,10 @@
           "search_priority_preset": {
             "$ref": "#/$defs/PriorityPresetMap"
           },
+          "sfw_mode": {
+            "$ref": "#/$defs/SfwMode",
+            "description": "Installation-wide SFW mode applied when a user has no override."
+          },
           "updated_at": {
             "format": "date-time",
             "type": "string"
@@ -3466,6 +3545,15 @@
           "download_priority_preset"
         ],
         "type": "object"
+      },
+      "SfwMode": {
+        "default": "auto",
+        "enum": [
+          "auto",
+          "on",
+          "off"
+        ],
+        "type": "string"
       }
     },
     "$schema": "https://json-schema.org/draft/2020-12/schema",

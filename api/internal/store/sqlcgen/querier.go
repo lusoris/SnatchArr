@@ -142,6 +142,7 @@ type Querier interface {
 	GetUserByUsername(ctx context.Context, username string) (User, error)
 	GetUserIdentity(ctx context.Context, arg GetUserIdentityParams) (UserIdentity, error)
 	GetUserNotifyTarget(ctx context.Context, arg GetUserNotifyTargetParams) (UserNotifyTarget, error)
+	GetUserPreferences(ctx context.Context, userID uuid.UUID) (UsersPref, error)
 	GetWatchAwareSource(ctx context.Context, id uuid.UUID) (WatchawareSource, error)
 	GetWatchAwareSyncSummary(ctx context.Context) (GetWatchAwareSyncSummaryRow, error)
 	GlobalBucketUsage(ctx context.Context, since time.Time) (GlobalBucketUsageRow, error)
@@ -318,6 +319,7 @@ type Querier interface {
 	UpsertQueuePolicy(ctx context.Context, arg UpsertQueuePolicyParams) error
 	UpsertQueueStrikes(ctx context.Context, arg UpsertQueueStrikesParams) error
 	UpsertSeerrRequest(ctx context.Context, arg UpsertSeerrRequestParams) error
+	UpsertUserPreferences(ctx context.Context, arg UpsertUserPreferencesParams) (UsersPref, error)
 	UpsertWatchAwareItemWatch(ctx context.Context, arg UpsertWatchAwareItemWatchParams) error
 }
 

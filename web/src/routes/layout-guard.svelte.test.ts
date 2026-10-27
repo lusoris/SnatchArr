@@ -54,6 +54,20 @@ function signInAdmin() {
 		'/instances': [],
 		'/hourly-caps': [],
 		'/prowlarr/status': [],
+		'/settings': {
+			history_retention_days: 30,
+			user_agent: 'SnatchArr/1.0',
+			global_hourly_cap: 100,
+			search_priority_preset: {},
+			download_priority_preset: {},
+			llm_enabled: false,
+			brand_mark: 'vulva',
+			sfw_mode: 'auto'
+		},
+		'/me/preferences': {
+			brand_mark: null,
+			sfw_mode: null
+		},
 		'/system/status': {
 			name: 'SnatchArr',
 			version: 'dev',

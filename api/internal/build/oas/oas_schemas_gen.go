@@ -377,6 +377,55 @@ func (s *BearerAuth) SetRoles(val []string) {
 	s.Roles = val
 }
 
+// Ref: #/components/schemas/BrandMark
+type BrandMark string
+
+const (
+	BrandMarkVulva BrandMark = "vulva"
+	BrandMarkPenis BrandMark = "penis"
+	BrandMarkHand  BrandMark = "hand"
+)
+
+// AllValues returns all BrandMark values.
+func (BrandMark) AllValues() []BrandMark {
+	return []BrandMark{
+		BrandMarkVulva,
+		BrandMarkPenis,
+		BrandMarkHand,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s BrandMark) MarshalText() ([]byte, error) {
+	switch s {
+	case BrandMarkVulva:
+		return []byte(s), nil
+	case BrandMarkPenis:
+		return []byte(s), nil
+	case BrandMarkHand:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *BrandMark) UnmarshalText(data []byte) error {
+	switch BrandMark(data) {
+	case BrandMarkVulva:
+		*s = BrandMarkVulva
+		return nil
+	case BrandMarkPenis:
+		*s = BrandMarkPenis
+		return nil
+	case BrandMarkHand:
+		*s = BrandMarkHand
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
 // CancelRunNoContent is response for CancelRun operation.
 type CancelRunNoContent struct{}
 
@@ -3971,6 +4020,52 @@ func (o OptBool) Or(d bool) bool {
 	return d
 }
 
+// NewOptBrandMark returns new OptBrandMark with value set to v.
+func NewOptBrandMark(v BrandMark) OptBrandMark {
+	return OptBrandMark{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptBrandMark is optional BrandMark.
+type OptBrandMark struct {
+	Value BrandMark
+	Set   bool
+}
+
+// IsSet returns true if OptBrandMark was set.
+func (o OptBrandMark) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptBrandMark) Reset() {
+	var v BrandMark
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptBrandMark) SetTo(v BrandMark) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptBrandMark) Get() (v BrandMark, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptBrandMark) Or(d BrandMark) BrandMark {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
 // NewOptConfigarrImportRequest returns new OptConfigarrImportRequest with value set to v.
 func NewOptConfigarrImportRequest(v ConfigarrImportRequest) OptConfigarrImportRequest {
 	return OptConfigarrImportRequest{
@@ -4385,6 +4480,69 @@ func (o OptModuleUpdateConfig) Or(d ModuleUpdateConfig) ModuleUpdateConfig {
 	return d
 }
 
+// NewOptNilBrandMark returns new OptNilBrandMark with value set to v.
+func NewOptNilBrandMark(v BrandMark) OptNilBrandMark {
+	return OptNilBrandMark{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptNilBrandMark is optional nullable BrandMark.
+type OptNilBrandMark struct {
+	Value BrandMark
+	Set   bool
+	Null  bool
+}
+
+// IsSet returns true if OptNilBrandMark was set.
+func (o OptNilBrandMark) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptNilBrandMark) Reset() {
+	var v BrandMark
+	o.Value = v
+	o.Set = false
+	o.Null = false
+}
+
+// SetTo sets value to v.
+func (o *OptNilBrandMark) SetTo(v BrandMark) {
+	o.Set = true
+	o.Null = false
+	o.Value = v
+}
+
+// IsNull returns true if value is Null.
+func (o OptNilBrandMark) IsNull() bool { return o.Null }
+
+// SetToNull sets value to null.
+func (o *OptNilBrandMark) SetToNull() {
+	o.Set = true
+	o.Null = true
+	var v BrandMark
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptNilBrandMark) Get() (v BrandMark, ok bool) {
+	if o.Null {
+		return v, false
+	}
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptNilBrandMark) Or(d BrandMark) BrandMark {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
 // NewOptNilDateTime returns new OptNilDateTime with value set to v.
 func NewOptNilDateTime(v time.Time) OptNilDateTime {
 	return OptNilDateTime{
@@ -4505,6 +4663,69 @@ func (o OptNilInt) Get() (v int, ok bool) {
 
 // Or returns value if set, or given parameter if does not.
 func (o OptNilInt) Or(d int) int {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptNilSfwMode returns new OptNilSfwMode with value set to v.
+func NewOptNilSfwMode(v SfwMode) OptNilSfwMode {
+	return OptNilSfwMode{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptNilSfwMode is optional nullable SfwMode.
+type OptNilSfwMode struct {
+	Value SfwMode
+	Set   bool
+	Null  bool
+}
+
+// IsSet returns true if OptNilSfwMode was set.
+func (o OptNilSfwMode) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptNilSfwMode) Reset() {
+	var v SfwMode
+	o.Value = v
+	o.Set = false
+	o.Null = false
+}
+
+// SetTo sets value to v.
+func (o *OptNilSfwMode) SetTo(v SfwMode) {
+	o.Set = true
+	o.Null = false
+	o.Value = v
+}
+
+// IsNull returns true if value is Null.
+func (o OptNilSfwMode) IsNull() bool { return o.Null }
+
+// SetToNull sets value to null.
+func (o *OptNilSfwMode) SetToNull() {
+	o.Set = true
+	o.Null = true
+	var v SfwMode
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptNilSfwMode) Get() (v SfwMode, ok bool) {
+	if o.Null {
+		return v, false
+	}
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptNilSfwMode) Or(d SfwMode) SfwMode {
 	if v, ok := o.Get(); ok {
 		return v
 	}
@@ -4643,6 +4864,52 @@ func (o OptQueueRuleSettings) Get() (v QueueRuleSettings, ok bool) {
 
 // Or returns value if set, or given parameter if does not.
 func (o OptQueueRuleSettings) Or(d QueueRuleSettings) QueueRuleSettings {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptSfwMode returns new OptSfwMode with value set to v.
+func NewOptSfwMode(v SfwMode) OptSfwMode {
+	return OptSfwMode{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptSfwMode is optional SfwMode.
+type OptSfwMode struct {
+	Value SfwMode
+	Set   bool
+}
+
+// IsSet returns true if OptSfwMode was set.
+func (o OptSfwMode) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptSfwMode) Reset() {
+	var v SfwMode
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptSfwMode) SetTo(v SfwMode) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptSfwMode) Get() (v SfwMode, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptSfwMode) Or(d SfwMode) SfwMode {
 	if v, ok := o.Get(); ok {
 		return v
 	}
@@ -7757,7 +8024,11 @@ type Settings struct {
 	LlmEnabled OptBool `json:"llm_enabled"`
 	// MCP write tools enabled by the administrator; an omitted list enables none.
 	LlmWriteTools []LlmWriteTool `json:"llm_write_tools"`
-	UpdatedAt     OptDateTime    `json:"updated_at"`
+	// Installation-wide brand mark shown when a user has no override.
+	BrandMark OptBrandMark `json:"brand_mark"`
+	// Installation-wide SFW mode applied when a user has no override.
+	SfwMode   OptSfwMode  `json:"sfw_mode"`
+	UpdatedAt OptDateTime `json:"updated_at"`
 }
 
 // GetHistoryRetentionDays returns the value of HistoryRetentionDays.
@@ -7793,6 +8064,16 @@ func (s *Settings) GetLlmEnabled() OptBool {
 // GetLlmWriteTools returns the value of LlmWriteTools.
 func (s *Settings) GetLlmWriteTools() []LlmWriteTool {
 	return s.LlmWriteTools
+}
+
+// GetBrandMark returns the value of BrandMark.
+func (s *Settings) GetBrandMark() OptBrandMark {
+	return s.BrandMark
+}
+
+// GetSfwMode returns the value of SfwMode.
+func (s *Settings) GetSfwMode() OptSfwMode {
+	return s.SfwMode
 }
 
 // GetUpdatedAt returns the value of UpdatedAt.
@@ -7833,6 +8114,16 @@ func (s *Settings) SetLlmEnabled(val OptBool) {
 // SetLlmWriteTools sets the value of LlmWriteTools.
 func (s *Settings) SetLlmWriteTools(val []LlmWriteTool) {
 	s.LlmWriteTools = val
+}
+
+// SetBrandMark sets the value of BrandMark.
+func (s *Settings) SetBrandMark(val OptBrandMark) {
+	s.BrandMark = val
+}
+
+// SetSfwMode sets the value of SfwMode.
+func (s *Settings) SetSfwMode(val OptSfwMode) {
+	s.SfwMode = val
 }
 
 // SetUpdatedAt sets the value of UpdatedAt.
@@ -7903,6 +8194,55 @@ func (s *SetupStatus) SetSetupComplete(val bool) {
 // SetSecretRequired sets the value of SecretRequired.
 func (s *SetupStatus) SetSecretRequired(val bool) {
 	s.SecretRequired = val
+}
+
+// Ref: #/components/schemas/SfwMode
+type SfwMode string
+
+const (
+	SfwModeAuto SfwMode = "auto"
+	SfwModeOn   SfwMode = "on"
+	SfwModeOff  SfwMode = "off"
+)
+
+// AllValues returns all SfwMode values.
+func (SfwMode) AllValues() []SfwMode {
+	return []SfwMode{
+		SfwModeAuto,
+		SfwModeOn,
+		SfwModeOff,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s SfwMode) MarshalText() ([]byte, error) {
+	switch s {
+	case SfwModeAuto:
+		return []byte(s), nil
+	case SfwModeOn:
+		return []byte(s), nil
+	case SfwModeOff:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *SfwMode) UnmarshalText(data []byte) error {
+	switch SfwMode(data) {
+	case SfwModeAuto:
+		*s = SfwModeAuto
+		return nil
+	case SfwModeOn:
+		*s = SfwModeOn
+		return nil
+	case SfwModeOff:
+		*s = SfwModeOff
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
 }
 
 // Ref: #/components/schemas/SnatchKind
@@ -8930,6 +9270,34 @@ func (s *UserNotifyTargetUpdate) SetEnabled(val OptBool) {
 // SetConfig sets the value of Config.
 func (s *UserNotifyTargetUpdate) SetConfig(val OptNotificationChannelConfig) {
 	s.Config = val
+}
+
+// Ref: #/components/schemas/UserPreferences
+type UserPreferences struct {
+	// Per-user brand mark override; null or omitted follows the installation default.
+	BrandMark OptNilBrandMark `json:"brand_mark"`
+	// Per-user SFW mode override; null or omitted follows the installation default.
+	SfwMode OptNilSfwMode `json:"sfw_mode"`
+}
+
+// GetBrandMark returns the value of BrandMark.
+func (s *UserPreferences) GetBrandMark() OptNilBrandMark {
+	return s.BrandMark
+}
+
+// GetSfwMode returns the value of SfwMode.
+func (s *UserPreferences) GetSfwMode() OptNilSfwMode {
+	return s.SfwMode
+}
+
+// SetBrandMark sets the value of BrandMark.
+func (s *UserPreferences) SetBrandMark(val OptNilBrandMark) {
+	s.BrandMark = val
+}
+
+// SetSfwMode sets the value of SfwMode.
+func (s *UserPreferences) SetSfwMode(val OptNilSfwMode) {
+	s.SfwMode = val
 }
 
 type UserRole string

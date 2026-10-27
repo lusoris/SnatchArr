@@ -5,8 +5,14 @@
 /** Brand mark choice variants (ADR-0042 section 1). */
 export type BrandMarkKind = 'vulva' | 'penis' | 'hand';
 
+/** All supported brand mark variants. */
+export const BRAND_MARKS: readonly BrandMarkKind[] = ['vulva', 'penis', 'hand'];
+
 /** Safe-for-work mode setting variants (ADR-0042 section 4). */
 export type SfwMode = 'auto' | 'on' | 'off';
+
+/** All supported safe-for-work mode variants. */
+export const SFW_MODES: readonly SfwMode[] = ['auto', 'on', 'off'];
 
 /** Default brand mark choice (vulva, ADR-0017 and ADR-0042 section 7). */
 export const DEFAULT_BRAND_MARK: BrandMarkKind = 'vulva';
@@ -48,3 +54,32 @@ export const FALLBACK_BRAND_MARK: BrandMarkKind = resolveBrandMark(
 	false,
 	false
 );
+
+export interface BrandMarkInputs {
+	brandMark: BrandMarkKind;
+	sfwMode: SfwMode;
+}
+
+export interface BrandMarkSettingsInput {
+	brand_mark?: BrandMarkKind | null;
+	sfw_mode?: SfwMode | null;
+}
+
+export interface BrandMarkPrefsInput {
+	brand_mark?: BrandMarkKind | null;
+	sfw_mode?: SfwMode | null;
+}
+
+/**
+ * Resolves effective brand mark inputs from installation settings and user preferences.
+ * Evaluation order: user preference override -> installation setting -> system default.
+ */
+export function effectiveBrandInputs(
+	settings?: BrandMarkSettingsInput | null,
+	prefs?: BrandMarkPrefsInput | null
+): BrandMarkInputs {
+	return {
+		brandMark: prefs?.brand_mark ?? settings?.brand_mark ?? DEFAULT_BRAND_MARK,
+		sfwMode: prefs?.sfw_mode ?? settings?.sfw_mode ?? DEFAULT_SFW_MODE
+	};
+}

@@ -207,6 +207,12 @@ type Handler interface {
 	//
 	// GET /me/notify-targets/{targetId}
 	GetMyNotifyTarget(ctx context.Context, params GetMyNotifyTargetParams) (*UserNotifyTarget, error)
+	// GetMyPreferences implements getMyPreferences operation.
+	//
+	// Preferences for the current user.
+	//
+	// GET /me/preferences
+	GetMyPreferences(ctx context.Context) (*UserPreferences, error)
 	// GetNotificationChannel implements getNotificationChannel operation.
 	//
 	// Get one notification channel.
@@ -631,6 +637,12 @@ type Handler interface {
 	//
 	// PUT /me/notify-targets/{targetId}
 	UpdateMyNotifyTarget(ctx context.Context, req *UserNotifyTargetUpdate, params UpdateMyNotifyTargetParams) (*UserNotifyTarget, error)
+	// UpdateMyPreferences implements updateMyPreferences operation.
+	//
+	// Replace preferences for the current user.
+	//
+	// PUT /me/preferences
+	UpdateMyPreferences(ctx context.Context, req *UserPreferences) (*UserPreferences, error)
 	// UpdateNotificationChannel implements updateNotificationChannel operation.
 	//
 	// Update a notification channel.

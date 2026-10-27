@@ -137,6 +137,14 @@ func (s *Settings) setDefaults() {
 		val := bool(false)
 		s.LlmEnabled.SetTo(val)
 	}
+	{
+		val := BrandMark("vulva")
+		s.BrandMark.SetTo(val)
+	}
+	{
+		val := SfwMode("auto")
+		s.SfwMode.SetTo(val)
+	}
 }
 
 // setDefaults set default value of fields.

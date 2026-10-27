@@ -14,7 +14,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { ProblemError } from '@sveltesentio/core';
 	import { onMount } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
-	import { DEFAULT_BRAND_MARK, DEFAULT_SFW_MODE, resolveBrandMark } from '#lib/brand-mark.js';
+	import { FALLBACK_BRAND_MARK, effectiveBrandInputs, resolveBrandMark } from '#lib/brand-mark.js';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import { getNavItems, isRouteDisabled } from '#lib/components/shell/nav.js';
 	import BottomBar from '#lib/components/shell/BottomBar.svelte';
@@ -51,6 +51,18 @@ SPDX-License-Identifier: EUPL-1.2
 		}
 	}));
 
+	const settingsQuery = createSentioQuery(() => ({
+		queryKey: keys.settings,
+		enabled: session.state === 'authenticated',
+		queryFn: async () => (await api.GET('/settings')).data
+	}));
+
+	const preferencesQuery = createSentioQuery(() => ({
+		queryKey: keys.preferences,
+		enabled: session.state === 'authenticated',
+		queryFn: async () => (await api.GET('/me/preferences')).data
+	}));
+
 	const activeModules = $derived.by(() => {
 		const list = modulesQuery.data;
 		if (!list || modulesQuery.isError) {
@@ -65,11 +77,16 @@ SPDX-License-Identifier: EUPL-1.2
 		return set;
 	});
 
-	// The persisted brand_mark / sfw_mode settings follow in a later change; the session does not
-	// carry adult_allowed yet (ADR-0026 section 4), so auto fails closed to the hand mark (ADR-0042).
-	const brandMark = $derived(
-		resolveBrandMark(DEFAULT_BRAND_MARK, DEFAULT_SFW_MODE, activeModules.has('adult'), false)
-	);
+	const brandMark = $derived.by(() => {
+		if (session.state !== 'authenticated') {
+			return FALLBACK_BRAND_MARK;
+		}
+		if (modulesQuery.isLoading || settingsQuery.isLoading || preferencesQuery.isLoading) {
+			return FALLBACK_BRAND_MARK;
+		}
+		const inputs = effectiveBrandInputs(settingsQuery.data, preferencesQuery.data);
+		return resolveBrandMark(inputs.brandMark, inputs.sfwMode, activeModules.has('adult'), false);
+	});
 	const navItems = $derived(getNavItems(activeModules));
 	const routeGuard = $derived(isRouteDisabled(page.url.pathname, activeModules));
 

@@ -311,6 +311,15 @@ func (UnimplementedHandler) GetMyNotifyTarget(ctx context.Context, params GetMyN
 	return r, ht.ErrNotImplemented
 }
 
+// GetMyPreferences implements getMyPreferences operation.
+//
+// Preferences for the current user.
+//
+// GET /me/preferences
+func (UnimplementedHandler) GetMyPreferences(ctx context.Context) (r *UserPreferences, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // GetNotificationChannel implements getNotificationChannel operation.
 //
 // Get one notification channel.
@@ -942,6 +951,15 @@ func (UnimplementedHandler) UpdateModule(ctx context.Context, req *ModuleUpdate,
 //
 // PUT /me/notify-targets/{targetId}
 func (UnimplementedHandler) UpdateMyNotifyTarget(ctx context.Context, req *UserNotifyTargetUpdate, params UpdateMyNotifyTargetParams) (r *UserNotifyTarget, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UpdateMyPreferences implements updateMyPreferences operation.
+//
+// Replace preferences for the current user.
+//
+// PUT /me/preferences
+func (UnimplementedHandler) UpdateMyPreferences(ctx context.Context, req *UserPreferences) (r *UserPreferences, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
