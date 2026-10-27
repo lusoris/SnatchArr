@@ -242,8 +242,8 @@
       "licence": "MIT",
       "name": "github.com/golusoris/goenvoy/arr/lidarr",
       "text": "MIT License\n\nCopyright (c) 2026 lusoris\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
-      "url": "https://github.com/golusoris/goenvoy/blob/arr/lidarr/v1.6.1/arr/lidarr/LICENSE",
-      "version": "v1.6.1"
+      "url": "https://github.com/golusoris/goenvoy/blob/arr/lidarr/v1.6.2/arr/lidarr/LICENSE",
+      "version": "v1.6.2"
     },
     {
       "ecosystem": "go",
@@ -258,16 +258,16 @@
       "licence": "MIT",
       "name": "github.com/golusoris/goenvoy/arr/radarr",
       "text": "MIT License\n\nCopyright (c) 2026 lusoris\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
-      "url": "https://github.com/golusoris/goenvoy/blob/arr/radarr/v1.5.4/arr/radarr/LICENSE",
-      "version": "v1.5.4"
+      "url": "https://github.com/golusoris/goenvoy/blob/arr/radarr/v1.5.5/arr/radarr/LICENSE",
+      "version": "v1.5.5"
     },
     {
       "ecosystem": "go",
       "licence": "MIT",
       "name": "github.com/golusoris/goenvoy/arr/readarr",
       "text": "MIT License\n\nCopyright (c) 2026 lusoris\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
-      "url": "https://github.com/golusoris/goenvoy/blob/arr/readarr/v1.5.1/arr/readarr/LICENSE",
-      "version": "v1.5.1"
+      "url": "https://github.com/golusoris/goenvoy/blob/arr/readarr/v1.5.2/arr/readarr/LICENSE",
+      "version": "v1.5.2"
     },
     {
       "ecosystem": "go",
@@ -282,16 +282,16 @@
       "licence": "MIT",
       "name": "github.com/golusoris/goenvoy/arr/sonarr",
       "text": "MIT License\n\nCopyright (c) 2026 lusoris\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
-      "url": "https://github.com/golusoris/goenvoy/blob/arr/sonarr/v1.5.4/arr/sonarr/LICENSE",
-      "version": "v1.5.4"
+      "url": "https://github.com/golusoris/goenvoy/blob/arr/sonarr/v1.5.5/arr/sonarr/LICENSE",
+      "version": "v1.5.5"
     },
     {
       "ecosystem": "go",
       "licence": "MIT",
       "name": "github.com/golusoris/goenvoy/arr/v2",
       "text": "MIT License\n\nCopyright (c) 2026 lusoris\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
-      "url": "https://github.com/golusoris/goenvoy/blob/arr/v2.6.1/arr/LICENSE",
-      "version": "v2.6.1"
+      "url": "https://github.com/golusoris/goenvoy/blob/arr/v2.6.2/arr/LICENSE",
+      "version": "v2.6.2"
     },
     {
       "ecosystem": "go",
@@ -306,56 +306,56 @@
       "licence": "MIT",
       "name": "github.com/golusoris/goenvoy/downloadclient/deluge/v2",
       "text": "MIT License\n\nCopyright (c) 2026 lusoris\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
-      "url": "https://github.com/golusoris/goenvoy/blob/downloadclient/deluge/v2.0.2/downloadclient/deluge/LICENSE",
-      "version": "v2.0.2"
+      "url": "https://github.com/golusoris/goenvoy/blob/downloadclient/deluge/v2.0.3/downloadclient/deluge/LICENSE",
+      "version": "v2.0.3"
     },
     {
       "ecosystem": "go",
       "licence": "MIT",
       "name": "github.com/golusoris/goenvoy/downloadclient/nzbget/v2",
       "text": "MIT License\n\nCopyright (c) 2026 lusoris\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
-      "url": "https://github.com/golusoris/goenvoy/blob/downloadclient/nzbget/v2.0.2/downloadclient/nzbget/LICENSE",
-      "version": "v2.0.2"
+      "url": "https://github.com/golusoris/goenvoy/blob/downloadclient/nzbget/v2.0.3/downloadclient/nzbget/LICENSE",
+      "version": "v2.0.3"
     },
     {
       "ecosystem": "go",
       "licence": "MIT",
       "name": "github.com/golusoris/goenvoy/downloadclient/qbit/v2",
       "text": "MIT License\n\nCopyright (c) 2026 lusoris\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
-      "url": "https://github.com/golusoris/goenvoy/blob/downloadclient/qbit/v2.0.2/downloadclient/qbit/LICENSE",
-      "version": "v2.0.2"
+      "url": "https://github.com/golusoris/goenvoy/blob/downloadclient/qbit/v2.0.3/downloadclient/qbit/LICENSE",
+      "version": "v2.0.3"
     },
     {
       "ecosystem": "go",
       "licence": "MIT",
       "name": "github.com/golusoris/goenvoy/downloadclient/rtorrent/v2",
       "text": "MIT License\n\nCopyright (c) 2026 lusoris\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
-      "url": "https://github.com/golusoris/goenvoy/blob/downloadclient/rtorrent/v2.1.1/downloadclient/rtorrent/LICENSE",
-      "version": "v2.1.1"
+      "url": "https://github.com/golusoris/goenvoy/blob/downloadclient/rtorrent/v2.1.2/downloadclient/rtorrent/LICENSE",
+      "version": "v2.1.2"
     },
     {
       "ecosystem": "go",
       "licence": "MIT",
       "name": "github.com/golusoris/goenvoy/downloadclient/sabnzbd/v2",
       "text": "MIT License\n\nCopyright (c) 2026 lusoris\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
-      "url": "https://github.com/golusoris/goenvoy/blob/downloadclient/sabnzbd/v2.0.2/downloadclient/sabnzbd/LICENSE",
-      "version": "v2.0.2"
+      "url": "https://github.com/golusoris/goenvoy/blob/downloadclient/sabnzbd/v2.0.3/downloadclient/sabnzbd/LICENSE",
+      "version": "v2.0.3"
     },
     {
       "ecosystem": "go",
       "licence": "MIT",
       "name": "github.com/golusoris/goenvoy/downloadclient/transmission/v2",
       "text": "MIT License\n\nCopyright (c) 2026 lusoris\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
-      "url": "https://github.com/golusoris/goenvoy/blob/downloadclient/transmission/v2.0.2/downloadclient/transmission/LICENSE",
-      "version": "v2.0.2"
+      "url": "https://github.com/golusoris/goenvoy/blob/downloadclient/transmission/v2.0.3/downloadclient/transmission/LICENSE",
+      "version": "v2.0.3"
     },
     {
       "ecosystem": "go",
       "licence": "MIT",
       "name": "github.com/golusoris/goenvoy/mediaserver/emby/v3",
       "text": "MIT License\n\nCopyright (c) 2026 lusoris\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
-      "url": "https://github.com/golusoris/goenvoy/blob/mediaserver/emby/v3.2.0/mediaserver/emby/LICENSE",
-      "version": "v3.2.0"
+      "url": "https://github.com/golusoris/goenvoy/blob/mediaserver/emby/v3.2.1/mediaserver/emby/LICENSE",
+      "version": "v3.2.1"
     },
     {
       "ecosystem": "go",
@@ -378,16 +378,16 @@
       "licence": "MIT",
       "name": "github.com/golusoris/goenvoy/metadata",
       "text": "MIT License\n\nCopyright (c) 2026 lusoris\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
-      "url": "https://github.com/golusoris/goenvoy/blob/metadata/v1.4.1/metadata/LICENSE",
-      "version": "v1.4.1"
+      "url": "https://github.com/golusoris/goenvoy/blob/metadata/v1.4.3/metadata/LICENSE",
+      "version": "v1.4.3"
     },
     {
       "ecosystem": "go",
       "licence": "MIT",
       "name": "github.com/golusoris/goenvoy/metadata/adult/stashbox/v2",
       "text": "MIT License\n\nCopyright (c) 2026 lusoris\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
-      "url": "https://github.com/golusoris/goenvoy/blob/metadata/adult/stashbox/v2.0.4/metadata/adult/stashbox/LICENSE",
-      "version": "v2.0.4"
+      "url": "https://github.com/golusoris/goenvoy/blob/metadata/adult/stashbox/v2.1.0/metadata/adult/stashbox/LICENSE",
+      "version": "v2.1.0"
     },
     {
       "ecosystem": "go",
