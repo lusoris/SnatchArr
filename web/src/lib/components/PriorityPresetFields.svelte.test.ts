@@ -7,13 +7,13 @@ import { describe, expect, it } from 'vitest';
 import PriorityPresetFields from './PriorityPresetFields.svelte';
 
 describe('PriorityPresetFields', () => {
-	it('positive: labels search-priority-readarr input as "readarr (legacy)" exactly', () => {
+	it('positive: labels search-priority-readarr input as "Readarr (legacy)" exactly', () => {
 		render(PriorityPresetFields, {
 			searchPreset: { readarr: 30 },
 			downloadPreset: {},
 			onReset: () => {}
 		});
-		const input = screen.getByLabelText('readarr (legacy)', { exact: true });
+		const input = screen.getByLabelText('Readarr (legacy)', { exact: true });
 		expect(input).toBeInstanceOf(HTMLInputElement);
 		expect(input.id).toBe('search-priority-readarr');
 	});
