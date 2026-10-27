@@ -80,6 +80,71 @@ func decodeCancelRunParams(args [1]string, argsEscaped bool, r *http.Request) (p
 	return params, nil
 }
 
+// DeleteAdultSourceParams is parameters of deleteAdultSource operation.
+type DeleteAdultSourceParams struct {
+	SourceId uuid.UUID
+}
+
+func unpackDeleteAdultSourceParams(packed middleware.Parameters) (params DeleteAdultSourceParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "sourceId",
+			In:   "path",
+		}
+		params.SourceId = packed[key].(uuid.UUID)
+	}
+	return params
+}
+
+func decodeDeleteAdultSourceParams(args [1]string, argsEscaped bool, r *http.Request) (params DeleteAdultSourceParams, _ error) {
+	// Decode path: sourceId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "sourceId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.SourceId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "sourceId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
 // DeleteDownloadClientParams is parameters of deleteDownloadClient operation.
 type DeleteDownloadClientParams struct {
 	ClientId uuid.UUID
@@ -788,6 +853,71 @@ func decodeDiscoverDownloadClientsParams(args [1]string, argsEscaped bool, r *ht
 	}(); err != nil {
 		return params, &ogenerrors.DecodeParamError{
 			Name: "instanceId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
+// GetAdultSourceParams is parameters of getAdultSource operation.
+type GetAdultSourceParams struct {
+	SourceId uuid.UUID
+}
+
+func unpackGetAdultSourceParams(packed middleware.Parameters) (params GetAdultSourceParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "sourceId",
+			In:   "path",
+		}
+		params.SourceId = packed[key].(uuid.UUID)
+	}
+	return params
+}
+
+func decodeGetAdultSourceParams(args [1]string, argsEscaped bool, r *http.Request) (params GetAdultSourceParams, _ error) {
+	// Decode path: sourceId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "sourceId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.SourceId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "sourceId",
 			In:   "path",
 			Err:  err,
 		}
@@ -3938,6 +4068,71 @@ func decodeTriggerRunParams(args [1]string, argsEscaped bool, r *http.Request) (
 	}(); err != nil {
 		return params, &ogenerrors.DecodeParamError{
 			Name: "instanceId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
+// UpdateAdultSourceParams is parameters of updateAdultSource operation.
+type UpdateAdultSourceParams struct {
+	SourceId uuid.UUID
+}
+
+func unpackUpdateAdultSourceParams(packed middleware.Parameters) (params UpdateAdultSourceParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "sourceId",
+			In:   "path",
+		}
+		params.SourceId = packed[key].(uuid.UUID)
+	}
+	return params
+}
+
+func decodeUpdateAdultSourceParams(args [1]string, argsEscaped bool, r *http.Request) (params UpdateAdultSourceParams, _ error) {
+	// Decode path: sourceId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "sourceId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.SourceId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "sourceId",
 			In:   "path",
 			Err:  err,
 		}

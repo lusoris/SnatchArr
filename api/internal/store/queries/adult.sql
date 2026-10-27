@@ -31,6 +31,14 @@ SELECT * FROM adult_stashbox_instances
 WHERE enabled = TRUE
 ORDER BY priority ASC, name ASC;
 
+-- name: ListAdultStashboxInstances :many
+SELECT * FROM adult_stashbox_instances
+ORDER BY priority ASC, name ASC;
+
+-- name: DeleteAdultStashboxInstance :execrows
+DELETE FROM adult_stashbox_instances
+WHERE id = $1;
+
 -- name: UpsertAdultPerformer :one
 INSERT INTO adult_performers (
     id, canonical_name, disambiguation, urls, is_favorite, created_at, updated_at

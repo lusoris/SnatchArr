@@ -114,6 +114,19 @@ func (q *Queries) DeleteAdultImageSetsNotInPaths(ctx context.Context, keepPaths 
 	return result.RowsAffected(), nil
 }
 
+const deleteAdultStashboxInstance = `-- name: DeleteAdultStashboxInstance :execrows
+DELETE FROM adult_stashbox_instances
+WHERE id = $1
+`
+
+func (q *Queries) DeleteAdultStashboxInstance(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteAdultStashboxInstance, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteAllAdultImageItemsForSet = `-- name: DeleteAllAdultImageItemsForSet :execrows
 DELETE FROM adult_image_items
 WHERE image_set_id = $1
@@ -634,6 +647,41 @@ func (q *Queries) ListAdultPerformers(ctx context.Context) ([]AdultPerformer, er
 			&i.Urls,
 			&i.IsFavorite,
 			&i.MergedIntoID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAdultStashboxInstances = `-- name: ListAdultStashboxInstances :many
+SELECT id, name, endpoint, api_key_enc, enabled, sync_favorites, priority, created_at, updated_at FROM adult_stashbox_instances
+ORDER BY priority ASC, name ASC
+`
+
+func (q *Queries) ListAdultStashboxInstances(ctx context.Context) ([]AdultStashboxInstance, error) {
+	rows, err := q.db.Query(ctx, listAdultStashboxInstances)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AdultStashboxInstance{}
+	for rows.Next() {
+		var i AdultStashboxInstance
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Endpoint,
+			&i.ApiKeyEnc,
+			&i.Enabled,
+			&i.SyncFavorites,
+			&i.Priority,
+			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}

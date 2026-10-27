@@ -1493,6 +1493,79 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/adult/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List configured catalogue sources */
+        get: operations["listAdultSources"];
+        put?: never;
+        /** Add a catalogue source */
+        post: operations["createAdultSource"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/adult/sources/{sourceId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sourceId: components["parameters"]["AdultSourceId"];
+            };
+            cookie?: never;
+        };
+        /** Get a catalogue source */
+        get: operations["getAdultSource"];
+        /** Update a catalogue source (omit api_key to keep stored key) */
+        put: operations["updateAdultSource"];
+        post?: never;
+        /** Delete a catalogue source */
+        delete: operations["deleteAdultSource"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/adult/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run favourite performer and studio synchronization across enabled catalogue sources */
+        post: operations["triggerAdultSync"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/adult/sync/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get synchronization status across catalogue sources */
+        get: operations["getAdultSyncStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2594,6 +2667,49 @@ export interface components {
             /** Format: date-time */
             applied_at?: string | null;
         };
+        AdultSource: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            endpoint: string;
+            /** @description True when an encrypted API key is stored (the key itself is write-only) */
+            has_api_key: boolean;
+            enabled: boolean;
+            sync_favorites: boolean;
+            priority: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        AdultSourceInput: {
+            /** @description Display name of the catalogue source (1..128 characters) */
+            name: string;
+            /** @description GraphQL endpoint URL (http or https) */
+            endpoint: string;
+            /** @description Required on create; omit on update to keep stored key */
+            api_key?: string;
+            /** @default true */
+            enabled: boolean;
+            /** @default true */
+            sync_favorites: boolean;
+            /** @default 0 */
+            priority: number;
+        };
+        AdultSyncSummary: {
+            sources_synced: number;
+            performers_synced: number;
+            studios_synced: number;
+        };
+        AdultSyncStatus: {
+            /** Format: date-time */
+            last_sync_at?: string;
+            last_error?: string;
+            total_sources: number;
+            enabled_sources: number;
+            performers_synced: number;
+            studios_synced: number;
+        };
     };
     responses: {
         /** @description No content */
@@ -2624,6 +2740,7 @@ export interface components {
         NotificationRuleId: string;
         UserNotifyTargetId: string;
         WatchawareSourceId: string;
+        AdultSourceId: string;
     };
     requestBodies: never;
     headers: never;
@@ -5311,6 +5428,165 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WatchawareGateDecision"][];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listAdultSources: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Catalogue sources */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdultSource"][];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createAdultSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdultSourceInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdultSource"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getAdultSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sourceId: components["parameters"]["AdultSourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Catalogue source */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdultSource"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    updateAdultSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sourceId: components["parameters"]["AdultSourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdultSourceInput"];
+            };
+        };
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdultSource"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteAdultSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sourceId: components["parameters"]["AdultSourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    triggerAdultSync: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Synchronization summary */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdultSyncSummary"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getAdultSyncStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Synchronization status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdultSyncStatus"];
                 };
             };
             default: components["responses"]["Problem"];

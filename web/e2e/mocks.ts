@@ -114,10 +114,21 @@ export async function mockSignedInApi(
 		'runs',
 		'events',
 		'schedules',
-		'system/modules'
+		'system/modules',
+		'adult/sources'
 	]) {
 		await page.route(`**/api/v1/${path}*`, (route) => route.fulfill(json([])));
 	}
+	await page.route('**/api/v1/adult/sync/status*', (route) =>
+		route.fulfill(
+			json({
+				total_sources: 0,
+				enabled_sources: 0,
+				performers_synced: 0,
+				studios_synced: 0
+			})
+		)
+	);
 	await page.route('**/api/v1/configarr/status*', (route) =>
 		route.fulfill(json({ linked: false, watching: false }))
 	);

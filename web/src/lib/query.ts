@@ -43,5 +43,7 @@ export const keys = {
 	modules: ['system', 'modules'] as const,
 	module: (id: string) => ['system', 'modules', id] as const,
 	watchawareGateSeries: (id: string) => ['watchaware', 'gate', 'series', id] as const,
-	watchawareGateDecisions: (id: string) => ['watchaware', 'gate', 'decisions', id] as const
+	watchawareGateDecisions: (id: string) => ['watchaware', 'gate', 'decisions', id] as const,
+	adultSources: ['adult', 'sources'] as const,
+	adultSyncStatus: ['adult', 'sync', 'status'] as const
 };

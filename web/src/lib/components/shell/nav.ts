@@ -5,7 +5,14 @@
 import { m } from '#lib/paraglide/messages.js';
 
 export type AppRoute =
-	'/' | '/activity' | '/instances' | '/automation' | '/connections' | '/system' | '/account';
+	| '/'
+	| '/activity'
+	| '/instances'
+	| '/automation'
+	| '/connections'
+	| '/adult/sources'
+	| '/system'
+	| '/account';
 
 export interface NavItem {
 	href: AppRoute;
@@ -38,6 +45,7 @@ const PRIMARY_NAV_ITEMS: readonly NavItem[] = [
 	{ href: '/instances', label: m.nav_instances(), icon: 'server' },
 	{ href: '/automation', label: m.nav_automation(), icon: 'clock' },
 	{ href: '/connections', label: m.nav_connections(), icon: 'link' },
+	{ href: '/adult/sources', label: m.nav_adult_sources(), icon: 'heart', module: 'adult' },
 	{ href: '/system', label: m.nav_system(), icon: 'settings' }
 ];
 
@@ -65,7 +73,9 @@ export function isRouteActive(currentPath: string, targetPath: string): boolean 
  * Known route prefixes mapped to their governing optional module ID (ADR-0025 section 6).
  * The first module-owned route registers here, e.g. ADR-0024 watch-aware UI.
  */
-export const MODULE_ROUTES: Readonly<Record<string, string>> = {};
+export const MODULE_ROUTES: Readonly<Record<string, string>> = {
+	'/adult': 'adult'
+};
 
 /**
  * Resolves the controlling module ID for a pathname, if any.

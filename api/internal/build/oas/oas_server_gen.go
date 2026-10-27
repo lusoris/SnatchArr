@@ -32,6 +32,12 @@ type Handler interface {
 	//
 	// POST /auth/api-keys
 	CreateAPIKey(ctx context.Context, req *CreateApiKeyRequest) (CreateAPIKeyRes, error)
+	// CreateAdultSource implements createAdultSource operation.
+	//
+	// Add a catalogue source.
+	//
+	// POST /adult/sources
+	CreateAdultSource(ctx context.Context, req *AdultSourceInput) (*AdultSource, error)
 	// CreateDownloadClient implements createDownloadClient operation.
 	//
 	// Add a download client by hand.
@@ -92,6 +98,12 @@ type Handler interface {
 	//
 	// POST /watchaware/sources
 	CreateWatchawareSource(ctx context.Context, req *WatchawareSourceInput) (*WatchawareSource, error)
+	// DeleteAdultSource implements deleteAdultSource operation.
+	//
+	// Delete a catalogue source.
+	//
+	// DELETE /adult/sources/{sourceId}
+	DeleteAdultSource(ctx context.Context, params DeleteAdultSourceParams) error
 	// DeleteDownloadClient implements deleteDownloadClient operation.
 	//
 	// Delete a download client.
@@ -159,6 +171,18 @@ type Handler interface {
 	//
 	// POST /instances/{instanceId}/download-clients/discover
 	DiscoverDownloadClients(ctx context.Context, params DiscoverDownloadClientsParams) (*DiscoveryResult, error)
+	// GetAdultSource implements getAdultSource operation.
+	//
+	// Get a catalogue source.
+	//
+	// GET /adult/sources/{sourceId}
+	GetAdultSource(ctx context.Context, params GetAdultSourceParams) (*AdultSource, error)
+	// GetAdultSyncStatus implements getAdultSyncStatus operation.
+	//
+	// Get synchronization status across catalogue sources.
+	//
+	// GET /adult/sync/status
+	GetAdultSyncStatus(ctx context.Context) (*AdultSyncStatus, error)
 	// GetConfigarrStatus implements getConfigarrStatus operation.
 	//
 	// Linked-mode state and the last import.
@@ -358,6 +382,12 @@ type Handler interface {
 	//
 	// GET /auth/api-keys
 	ListAPIKeys(ctx context.Context) (ListAPIKeysRes, error)
+	// ListAdultSources implements listAdultSources operation.
+	//
+	// List configured catalogue sources.
+	//
+	// GET /adult/sources
+	ListAdultSources(ctx context.Context) ([]AdultSource, error)
 	// ListDownloadClients implements listDownloadClients operation.
 	//
 	// List download clients (secrets are never returned).
@@ -589,6 +619,12 @@ type Handler interface {
 	//
 	// POST /seerr/test
 	TestSeerrLinkInput(ctx context.Context, req *SeerrLinkInput) (*ProbeResult, error)
+	// TriggerAdultSync implements triggerAdultSync operation.
+	//
+	// Run favourite performer and studio synchronization across enabled catalogue sources.
+	//
+	// POST /adult/sync
+	TriggerAdultSync(ctx context.Context) (*AdultSyncSummary, error)
 	// TriggerRun implements triggerRun operation.
 	//
 	// Quickie - queue a snatch now (ignores the refractory period).
@@ -607,6 +643,12 @@ type Handler interface {
 	//
 	// DELETE /auth/identities/proxy
 	UnlinkProxyIdentity(ctx context.Context) (UnlinkProxyIdentityRes, error)
+	// UpdateAdultSource implements updateAdultSource operation.
+	//
+	// Update a catalogue source (omit api_key to keep stored key).
+	//
+	// PUT /adult/sources/{sourceId}
+	UpdateAdultSource(ctx context.Context, req *AdultSourceInput, params UpdateAdultSourceParams) (*AdultSource, error)
 	// UpdateDownloadClient implements updateDownloadClient operation.
 	//
 	// Update a download client (omit secret to keep it).

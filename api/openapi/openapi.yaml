@@ -35,6 +35,8 @@ tags:
     description: Channels and rules for dispatching failure, circuit, stamina and Seerr notifications
   - name: watchaware
     description: Watch-aware media server sources and watch state synchronization
+  - name: adult
+    description: Adult catalogue sources and favourite synchronization
 security:
   - cookieAuth: []
   - bearerAuth: []
@@ -2218,6 +2220,125 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
 
+  /adult/sources:
+    get:
+      tags: [adult]
+      operationId: listAdultSources
+      x-module: adult
+      summary: List configured catalogue sources
+      responses:
+        "200":
+          description: Catalogue sources
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdultSource"
+        default:
+          $ref: "#/components/responses/Problem"
+    post:
+      tags: [adult]
+      operationId: createAdultSource
+      x-module: adult
+      summary: Add a catalogue source
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdultSourceInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdultSource"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /adult/sources/{sourceId}:
+    parameters:
+      - $ref: "#/components/parameters/AdultSourceId"
+    get:
+      tags: [adult]
+      operationId: getAdultSource
+      x-module: adult
+      summary: Get a catalogue source
+      responses:
+        "200":
+          description: Catalogue source
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdultSource"
+        default:
+          $ref: "#/components/responses/Problem"
+    put:
+      tags: [adult]
+      operationId: updateAdultSource
+      x-module: adult
+      summary: Update a catalogue source (omit api_key to keep stored key)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdultSourceInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdultSource"
+        default:
+          $ref: "#/components/responses/Problem"
+    delete:
+      tags: [adult]
+      operationId: deleteAdultSource
+      x-module: adult
+      x-destructive: true
+      summary: Delete a catalogue source
+      responses:
+        "204":
+          description: Deleted
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /adult/sync:
+    post:
+      tags: [adult]
+      operationId: triggerAdultSync
+      x-module: adult
+      summary: Run favourite performer and studio synchronization across enabled catalogue sources
+      responses:
+        "200":
+          description: Synchronization summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdultSyncSummary"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /adult/sync/status:
+    get:
+      tags: [adult]
+      operationId: getAdultSyncStatus
+      x-module: adult
+      summary: Get synchronization status across catalogue sources
+      responses:
+        "200":
+          description: Synchronization status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdultSyncStatus"
+        default:
+          $ref: "#/components/responses/Problem"
+
 components:
   securitySchemes:
     cookieAuth:
@@ -2288,6 +2409,13 @@ components:
         type: string
         format: uuid
     WatchawareSourceId:
+      name: sourceId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AdultSourceId:
       name: sourceId
       in: path
       required: true
@@ -4468,5 +4596,94 @@ components:
           type: string
           format: date-time
           nullable: true
+
+    AdultSource:
+      type: object
+      required:
+        - id
+        - name
+        - endpoint
+        - has_api_key
+        - enabled
+        - sync_favorites
+        - priority
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        endpoint:
+          type: string
+        has_api_key:
+          type: boolean
+          description: True when an encrypted API key is stored (the key itself is write-only)
+        enabled:
+          type: boolean
+        sync_favorites:
+          type: boolean
+        priority:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    AdultSourceInput:
+      type: object
+      required: [name, endpoint]
+      properties:
+        name:
+          type: string
+          description: Display name of the catalogue source (1..128 characters)
+        endpoint:
+          type: string
+          description: GraphQL endpoint URL (http or https)
+        api_key:
+          type: string
+          description: Required on create; omit on update to keep stored key
+        enabled:
+          type: boolean
+          default: true
+        sync_favorites:
+          type: boolean
+          default: true
+        priority:
+          type: integer
+          default: 0
+
+    AdultSyncSummary:
+      type: object
+      required: [sources_synced, performers_synced, studios_synced]
+      properties:
+        sources_synced:
+          type: integer
+        performers_synced:
+          type: integer
+        studios_synced:
+          type: integer
+
+    AdultSyncStatus:
+      type: object
+      required: [total_sources, enabled_sources, performers_synced, studios_synced]
+      properties:
+        last_sync_at:
+          type: string
+          format: date-time
+        last_error:
+          type: string
+        total_sources:
+          type: integer
+        enabled_sources:
+          type: integer
+        performers_synced:
+          type: integer
+        studios_synced:
+          type: integer
+
 
 
