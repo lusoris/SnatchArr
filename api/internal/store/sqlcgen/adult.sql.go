@@ -12,6 +12,66 @@ import (
 	"github.com/google/uuid"
 )
 
+const clearUnfavoritedAdultPerformers = `-- name: ClearUnfavoritedAdultPerformers :execrows
+UPDATE adult_performers p
+SET is_favorite = FALSE,
+    updated_at = $1
+WHERE p.is_favorite = TRUE
+  AND NOT EXISTS (
+      SELECT 1 FROM adult_external_refs r
+      WHERE r.entity_type = 'performer'
+        AND r.entity_id = p.id
+        AND r.is_favorite = TRUE
+  )
+`
+
+func (q *Queries) ClearUnfavoritedAdultPerformers(ctx context.Context, updatedAt time.Time) (int64, error) {
+	result, err := q.db.Exec(ctx, clearUnfavoritedAdultPerformers, updatedAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const clearUnfavoritedAdultStudios = `-- name: ClearUnfavoritedAdultStudios :execrows
+UPDATE adult_studios s
+SET is_favorite = FALSE,
+    updated_at = $1
+WHERE s.is_favorite = TRUE
+  AND NOT EXISTS (
+      SELECT 1 FROM adult_external_refs r
+      WHERE r.entity_type = 'studio'
+        AND r.entity_id = s.id
+        AND r.is_favorite = TRUE
+  )
+`
+
+func (q *Queries) ClearUnfavoritedAdultStudios(ctx context.Context, updatedAt time.Time) (int64, error) {
+	result, err := q.db.Exec(ctx, clearUnfavoritedAdultStudios, updatedAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteAdultExternalRefsByEntity = `-- name: DeleteAdultExternalRefsByEntity :execrows
+DELETE FROM adult_external_refs
+WHERE entity_type = $1 AND entity_id = $2
+`
+
+type DeleteAdultExternalRefsByEntityParams struct {
+	EntityType string
+	EntityID   uuid.UUID
+}
+
+func (q *Queries) DeleteAdultExternalRefsByEntity(ctx context.Context, arg DeleteAdultExternalRefsByEntityParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteAdultExternalRefsByEntity, arg.EntityType, arg.EntityID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteAdultImageItemsNotInPaths = `-- name: DeleteAdultImageItemsNotInPaths :execrows
 DELETE FROM adult_image_items
 WHERE image_set_id = $1 AND NOT (file_path = ANY($2::text[]))
@@ -68,88 +128,44 @@ func (q *Queries) DeleteAllAdultImageSets(ctx context.Context) (int64, error) {
 	return result.RowsAffected(), nil
 }
 
-const getAdultFavoritePerformer = `-- name: GetAdultFavoritePerformer :one
-SELECT id, canonical_name, disambiguation, created_at, updated_at, urls FROM adult_favorite_performers
-WHERE id = $1
+const getAdultExternalRef = `-- name: GetAdultExternalRef :one
+SELECT id, entity_type, entity_id, source_kind, source_instance_id, foreign_id, secondary_id, canonical_url, extra_urls, is_favorite, confidence_score, match_method, fetched_at, last_seen_at FROM adult_external_refs
+WHERE source_kind = $1
+  AND source_instance_id IS NOT DISTINCT FROM $2
+  AND entity_type = $3
+  AND foreign_id = $4
 `
 
-func (q *Queries) GetAdultFavoritePerformer(ctx context.Context, id uuid.UUID) (AdultFavoritePerformer, error) {
-	row := q.db.QueryRow(ctx, getAdultFavoritePerformer, id)
-	var i AdultFavoritePerformer
-	err := row.Scan(
-		&i.ID,
-		&i.CanonicalName,
-		&i.Disambiguation,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.Urls,
+type GetAdultExternalRefParams struct {
+	SourceKind       string
+	SourceInstanceID *uuid.UUID
+	EntityType       string
+	ForeignID        string
+}
+
+func (q *Queries) GetAdultExternalRef(ctx context.Context, arg GetAdultExternalRefParams) (AdultExternalRef, error) {
+	row := q.db.QueryRow(ctx, getAdultExternalRef,
+		arg.SourceKind,
+		arg.SourceInstanceID,
+		arg.EntityType,
+		arg.ForeignID,
 	)
-	return i, err
-}
-
-const getAdultFavoritePerformerByLink = `-- name: GetAdultFavoritePerformerByLink :one
-SELECT f.id, f.canonical_name, f.disambiguation, f.created_at, f.updated_at, f.urls FROM adult_favorite_performers f
-JOIN adult_performer_links l ON l.favorite_id = f.id
-WHERE l.instance_id = $1 AND l.foreign_id = $2
-`
-
-type GetAdultFavoritePerformerByLinkParams struct {
-	InstanceID uuid.UUID
-	ForeignID  string
-}
-
-func (q *Queries) GetAdultFavoritePerformerByLink(ctx context.Context, arg GetAdultFavoritePerformerByLinkParams) (AdultFavoritePerformer, error) {
-	row := q.db.QueryRow(ctx, getAdultFavoritePerformerByLink, arg.InstanceID, arg.ForeignID)
-	var i AdultFavoritePerformer
+	var i AdultExternalRef
 	err := row.Scan(
 		&i.ID,
-		&i.CanonicalName,
-		&i.Disambiguation,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.Urls,
-	)
-	return i, err
-}
-
-const getAdultFavoriteStudio = `-- name: GetAdultFavoriteStudio :one
-SELECT id, canonical_name, created_at, updated_at, urls FROM adult_favorite_studios
-WHERE id = $1
-`
-
-func (q *Queries) GetAdultFavoriteStudio(ctx context.Context, id uuid.UUID) (AdultFavoriteStudio, error) {
-	row := q.db.QueryRow(ctx, getAdultFavoriteStudio, id)
-	var i AdultFavoriteStudio
-	err := row.Scan(
-		&i.ID,
-		&i.CanonicalName,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.Urls,
-	)
-	return i, err
-}
-
-const getAdultFavoriteStudioByLink = `-- name: GetAdultFavoriteStudioByLink :one
-SELECT f.id, f.canonical_name, f.created_at, f.updated_at, f.urls FROM adult_favorite_studios f
-JOIN adult_studio_links l ON l.favorite_id = f.id
-WHERE l.instance_id = $1 AND l.foreign_id = $2
-`
-
-type GetAdultFavoriteStudioByLinkParams struct {
-	InstanceID uuid.UUID
-	ForeignID  string
-}
-
-func (q *Queries) GetAdultFavoriteStudioByLink(ctx context.Context, arg GetAdultFavoriteStudioByLinkParams) (AdultFavoriteStudio, error) {
-	row := q.db.QueryRow(ctx, getAdultFavoriteStudioByLink, arg.InstanceID, arg.ForeignID)
-	var i AdultFavoriteStudio
-	err := row.Scan(
-		&i.ID,
-		&i.CanonicalName,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.Urls,
+		&i.EntityType,
+		&i.EntityID,
+		&i.SourceKind,
+		&i.SourceInstanceID,
+		&i.ForeignID,
+		&i.SecondaryID,
+		&i.CanonicalUrl,
+		&i.ExtraUrls,
+		&i.IsFavorite,
+		&i.ConfidenceScore,
+		&i.MatchMethod,
+		&i.FetchedAt,
+		&i.LastSeenAt,
 	)
 	return i, err
 }
@@ -225,25 +241,53 @@ func (q *Queries) GetAdultImageSetByDirectory(ctx context.Context, directoryPath
 	return i, err
 }
 
-const getAdultPerformerLink = `-- name: GetAdultPerformerLink :one
-SELECT favorite_id, instance_id, foreign_id, is_favorite, last_synced_at FROM adult_performer_links
-WHERE instance_id = $1 AND foreign_id = $2
+const getAdultPerformer = `-- name: GetAdultPerformer :one
+SELECT id, canonical_name, disambiguation, created_at, updated_at, urls, is_favorite, merged_into_id FROM adult_performers
+WHERE id = $1
 `
 
-type GetAdultPerformerLinkParams struct {
-	InstanceID uuid.UUID
-	ForeignID  string
+func (q *Queries) GetAdultPerformer(ctx context.Context, id uuid.UUID) (AdultPerformer, error) {
+	row := q.db.QueryRow(ctx, getAdultPerformer, id)
+	var i AdultPerformer
+	err := row.Scan(
+		&i.ID,
+		&i.CanonicalName,
+		&i.Disambiguation,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Urls,
+		&i.IsFavorite,
+		&i.MergedIntoID,
+	)
+	return i, err
 }
 
-func (q *Queries) GetAdultPerformerLink(ctx context.Context, arg GetAdultPerformerLinkParams) (AdultPerformerLink, error) {
-	row := q.db.QueryRow(ctx, getAdultPerformerLink, arg.InstanceID, arg.ForeignID)
-	var i AdultPerformerLink
+const getAdultPerformerByExternalRef = `-- name: GetAdultPerformerByExternalRef :one
+SELECT p.id, p.canonical_name, p.disambiguation, p.created_at, p.updated_at, p.urls, p.is_favorite, p.merged_into_id FROM adult_performers p
+JOIN adult_external_refs r ON r.entity_type = 'performer' AND r.entity_id = p.id
+WHERE r.source_kind = $1
+  AND r.source_instance_id IS NOT DISTINCT FROM $2
+  AND r.foreign_id = $3
+`
+
+type GetAdultPerformerByExternalRefParams struct {
+	SourceKind       string
+	SourceInstanceID *uuid.UUID
+	ForeignID        string
+}
+
+func (q *Queries) GetAdultPerformerByExternalRef(ctx context.Context, arg GetAdultPerformerByExternalRefParams) (AdultPerformer, error) {
+	row := q.db.QueryRow(ctx, getAdultPerformerByExternalRef, arg.SourceKind, arg.SourceInstanceID, arg.ForeignID)
+	var i AdultPerformer
 	err := row.Scan(
-		&i.FavoriteID,
-		&i.InstanceID,
-		&i.ForeignID,
+		&i.ID,
+		&i.CanonicalName,
+		&i.Disambiguation,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Urls,
 		&i.IsFavorite,
-		&i.LastSyncedAt,
+		&i.MergedIntoID,
 	)
 	return i, err
 }
@@ -270,43 +314,161 @@ func (q *Queries) GetAdultStashboxInstance(ctx context.Context, id uuid.UUID) (A
 	return i, err
 }
 
-const getAdultStudioLink = `-- name: GetAdultStudioLink :one
-SELECT favorite_id, instance_id, foreign_id, is_favorite, last_synced_at FROM adult_studio_links
-WHERE instance_id = $1 AND foreign_id = $2
+const getAdultStudio = `-- name: GetAdultStudio :one
+SELECT id, canonical_name, created_at, updated_at, urls, is_favorite, merged_into_id, parent_studio_id, network_studio_id FROM adult_studios
+WHERE id = $1
 `
 
-type GetAdultStudioLinkParams struct {
-	InstanceID uuid.UUID
-	ForeignID  string
-}
-
-func (q *Queries) GetAdultStudioLink(ctx context.Context, arg GetAdultStudioLinkParams) (AdultStudioLink, error) {
-	row := q.db.QueryRow(ctx, getAdultStudioLink, arg.InstanceID, arg.ForeignID)
-	var i AdultStudioLink
+func (q *Queries) GetAdultStudio(ctx context.Context, id uuid.UUID) (AdultStudio, error) {
+	row := q.db.QueryRow(ctx, getAdultStudio, id)
+	var i AdultStudio
 	err := row.Scan(
-		&i.FavoriteID,
-		&i.InstanceID,
-		&i.ForeignID,
+		&i.ID,
+		&i.CanonicalName,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Urls,
 		&i.IsFavorite,
-		&i.LastSyncedAt,
+		&i.MergedIntoID,
+		&i.ParentStudioID,
+		&i.NetworkStudioID,
 	)
 	return i, err
 }
 
+const getAdultStudioByExternalRef = `-- name: GetAdultStudioByExternalRef :one
+SELECT s.id, s.canonical_name, s.created_at, s.updated_at, s.urls, s.is_favorite, s.merged_into_id, s.parent_studio_id, s.network_studio_id FROM adult_studios s
+JOIN adult_external_refs r ON r.entity_type = 'studio' AND r.entity_id = s.id
+WHERE r.source_kind = $1
+  AND r.source_instance_id IS NOT DISTINCT FROM $2
+  AND r.foreign_id = $3
+`
+
+type GetAdultStudioByExternalRefParams struct {
+	SourceKind       string
+	SourceInstanceID *uuid.UUID
+	ForeignID        string
+}
+
+func (q *Queries) GetAdultStudioByExternalRef(ctx context.Context, arg GetAdultStudioByExternalRefParams) (AdultStudio, error) {
+	row := q.db.QueryRow(ctx, getAdultStudioByExternalRef, arg.SourceKind, arg.SourceInstanceID, arg.ForeignID)
+	var i AdultStudio
+	err := row.Scan(
+		&i.ID,
+		&i.CanonicalName,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Urls,
+		&i.IsFavorite,
+		&i.MergedIntoID,
+		&i.ParentStudioID,
+		&i.NetworkStudioID,
+	)
+	return i, err
+}
+
+const listAdultExternalRefsByEntity = `-- name: ListAdultExternalRefsByEntity :many
+SELECT id, entity_type, entity_id, source_kind, source_instance_id, foreign_id, secondary_id, canonical_url, extra_urls, is_favorite, confidence_score, match_method, fetched_at, last_seen_at FROM adult_external_refs
+WHERE entity_type = $1 AND entity_id = $2
+ORDER BY source_kind ASC, source_instance_id ASC, foreign_id ASC
+`
+
+type ListAdultExternalRefsByEntityParams struct {
+	EntityType string
+	EntityID   uuid.UUID
+}
+
+func (q *Queries) ListAdultExternalRefsByEntity(ctx context.Context, arg ListAdultExternalRefsByEntityParams) ([]AdultExternalRef, error) {
+	rows, err := q.db.Query(ctx, listAdultExternalRefsByEntity, arg.EntityType, arg.EntityID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AdultExternalRef{}
+	for rows.Next() {
+		var i AdultExternalRef
+		if err := rows.Scan(
+			&i.ID,
+			&i.EntityType,
+			&i.EntityID,
+			&i.SourceKind,
+			&i.SourceInstanceID,
+			&i.ForeignID,
+			&i.SecondaryID,
+			&i.CanonicalUrl,
+			&i.ExtraUrls,
+			&i.IsFavorite,
+			&i.ConfidenceScore,
+			&i.MatchMethod,
+			&i.FetchedAt,
+			&i.LastSeenAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAdultExternalRefsByEntityType = `-- name: ListAdultExternalRefsByEntityType :many
+SELECT id, entity_type, entity_id, source_kind, source_instance_id, foreign_id, secondary_id, canonical_url, extra_urls, is_favorite, confidence_score, match_method, fetched_at, last_seen_at FROM adult_external_refs
+WHERE entity_type = $1
+ORDER BY source_kind ASC, source_instance_id ASC, foreign_id ASC
+`
+
+func (q *Queries) ListAdultExternalRefsByEntityType(ctx context.Context, entityType string) ([]AdultExternalRef, error) {
+	rows, err := q.db.Query(ctx, listAdultExternalRefsByEntityType, entityType)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AdultExternalRef{}
+	for rows.Next() {
+		var i AdultExternalRef
+		if err := rows.Scan(
+			&i.ID,
+			&i.EntityType,
+			&i.EntityID,
+			&i.SourceKind,
+			&i.SourceInstanceID,
+			&i.ForeignID,
+			&i.SecondaryID,
+			&i.CanonicalUrl,
+			&i.ExtraUrls,
+			&i.IsFavorite,
+			&i.ConfidenceScore,
+			&i.MatchMethod,
+			&i.FetchedAt,
+			&i.LastSeenAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAdultFavoritePerformers = `-- name: ListAdultFavoritePerformers :many
-SELECT id, canonical_name, disambiguation, created_at, updated_at, urls FROM adult_favorite_performers
+SELECT id, canonical_name, disambiguation, created_at, updated_at, urls, is_favorite, merged_into_id FROM adult_performers
+WHERE is_favorite = TRUE
 ORDER BY canonical_name ASC
 `
 
-func (q *Queries) ListAdultFavoritePerformers(ctx context.Context) ([]AdultFavoritePerformer, error) {
+func (q *Queries) ListAdultFavoritePerformers(ctx context.Context) ([]AdultPerformer, error) {
 	rows, err := q.db.Query(ctx, listAdultFavoritePerformers)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []AdultFavoritePerformer{}
+	items := []AdultPerformer{}
 	for rows.Next() {
-		var i AdultFavoritePerformer
+		var i AdultPerformer
 		if err := rows.Scan(
 			&i.ID,
 			&i.CanonicalName,
@@ -314,6 +476,8 @@ func (q *Queries) ListAdultFavoritePerformers(ctx context.Context) ([]AdultFavor
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Urls,
+			&i.IsFavorite,
+			&i.MergedIntoID,
 		); err != nil {
 			return nil, err
 		}
@@ -326,25 +490,30 @@ func (q *Queries) ListAdultFavoritePerformers(ctx context.Context) ([]AdultFavor
 }
 
 const listAdultFavoriteStudios = `-- name: ListAdultFavoriteStudios :many
-SELECT id, canonical_name, created_at, updated_at, urls FROM adult_favorite_studios
+SELECT id, canonical_name, created_at, updated_at, urls, is_favorite, merged_into_id, parent_studio_id, network_studio_id FROM adult_studios
+WHERE is_favorite = TRUE
 ORDER BY canonical_name ASC
 `
 
-func (q *Queries) ListAdultFavoriteStudios(ctx context.Context) ([]AdultFavoriteStudio, error) {
+func (q *Queries) ListAdultFavoriteStudios(ctx context.Context) ([]AdultStudio, error) {
 	rows, err := q.db.Query(ctx, listAdultFavoriteStudios)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []AdultFavoriteStudio{}
+	items := []AdultStudio{}
 	for rows.Next() {
-		var i AdultFavoriteStudio
+		var i AdultStudio
 		if err := rows.Scan(
 			&i.ID,
 			&i.CanonicalName,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Urls,
+			&i.IsFavorite,
+			&i.MergedIntoID,
+			&i.ParentStudioID,
+			&i.NetworkStudioID,
 		); err != nil {
 			return nil, err
 		}
@@ -431,26 +600,29 @@ func (q *Queries) ListAdultImageSets(ctx context.Context) ([]AdultImageSet, erro
 	return items, nil
 }
 
-const listAdultPerformerLinks = `-- name: ListAdultPerformerLinks :many
-SELECT favorite_id, instance_id, foreign_id, is_favorite, last_synced_at FROM adult_performer_links
-ORDER BY instance_id, foreign_id
+const listAdultPerformers = `-- name: ListAdultPerformers :many
+SELECT id, canonical_name, disambiguation, created_at, updated_at, urls, is_favorite, merged_into_id FROM adult_performers
+ORDER BY canonical_name ASC
 `
 
-func (q *Queries) ListAdultPerformerLinks(ctx context.Context) ([]AdultPerformerLink, error) {
-	rows, err := q.db.Query(ctx, listAdultPerformerLinks)
+func (q *Queries) ListAdultPerformers(ctx context.Context) ([]AdultPerformer, error) {
+	rows, err := q.db.Query(ctx, listAdultPerformers)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []AdultPerformerLink{}
+	items := []AdultPerformer{}
 	for rows.Next() {
-		var i AdultPerformerLink
+		var i AdultPerformer
 		if err := rows.Scan(
-			&i.FavoriteID,
-			&i.InstanceID,
-			&i.ForeignID,
+			&i.ID,
+			&i.CanonicalName,
+			&i.Disambiguation,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Urls,
 			&i.IsFavorite,
-			&i.LastSyncedAt,
+			&i.MergedIntoID,
 		); err != nil {
 			return nil, err
 		}
@@ -462,90 +634,30 @@ func (q *Queries) ListAdultPerformerLinks(ctx context.Context) ([]AdultPerformer
 	return items, nil
 }
 
-const listAdultPerformerLinksForFavorite = `-- name: ListAdultPerformerLinksForFavorite :many
-SELECT favorite_id, instance_id, foreign_id, is_favorite, last_synced_at FROM adult_performer_links
-WHERE favorite_id = $1
-ORDER BY instance_id, foreign_id
+const listAdultStudios = `-- name: ListAdultStudios :many
+SELECT id, canonical_name, created_at, updated_at, urls, is_favorite, merged_into_id, parent_studio_id, network_studio_id FROM adult_studios
+ORDER BY canonical_name ASC
 `
 
-func (q *Queries) ListAdultPerformerLinksForFavorite(ctx context.Context, favoriteID uuid.UUID) ([]AdultPerformerLink, error) {
-	rows, err := q.db.Query(ctx, listAdultPerformerLinksForFavorite, favoriteID)
+func (q *Queries) ListAdultStudios(ctx context.Context) ([]AdultStudio, error) {
+	rows, err := q.db.Query(ctx, listAdultStudios)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []AdultPerformerLink{}
+	items := []AdultStudio{}
 	for rows.Next() {
-		var i AdultPerformerLink
+		var i AdultStudio
 		if err := rows.Scan(
-			&i.FavoriteID,
-			&i.InstanceID,
-			&i.ForeignID,
+			&i.ID,
+			&i.CanonicalName,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Urls,
 			&i.IsFavorite,
-			&i.LastSyncedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listAdultStudioLinks = `-- name: ListAdultStudioLinks :many
-SELECT favorite_id, instance_id, foreign_id, is_favorite, last_synced_at FROM adult_studio_links
-ORDER BY instance_id, foreign_id
-`
-
-func (q *Queries) ListAdultStudioLinks(ctx context.Context) ([]AdultStudioLink, error) {
-	rows, err := q.db.Query(ctx, listAdultStudioLinks)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []AdultStudioLink{}
-	for rows.Next() {
-		var i AdultStudioLink
-		if err := rows.Scan(
-			&i.FavoriteID,
-			&i.InstanceID,
-			&i.ForeignID,
-			&i.IsFavorite,
-			&i.LastSyncedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listAdultStudioLinksForFavorite = `-- name: ListAdultStudioLinksForFavorite :many
-SELECT favorite_id, instance_id, foreign_id, is_favorite, last_synced_at FROM adult_studio_links
-WHERE favorite_id = $1
-ORDER BY instance_id, foreign_id
-`
-
-func (q *Queries) ListAdultStudioLinksForFavorite(ctx context.Context, favoriteID uuid.UUID) ([]AdultStudioLink, error) {
-	rows, err := q.db.Query(ctx, listAdultStudioLinksForFavorite, favoriteID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []AdultStudioLink{}
-	for rows.Next() {
-		var i AdultStudioLink
-		if err := rows.Scan(
-			&i.FavoriteID,
-			&i.InstanceID,
-			&i.ForeignID,
-			&i.IsFavorite,
-			&i.LastSyncedAt,
+			&i.MergedIntoID,
+			&i.ParentStudioID,
+			&i.NetworkStudioID,
 		); err != nil {
 			return nil, err
 		}
@@ -629,38 +741,24 @@ func (q *Queries) ListSyncableAdultStashboxInstances(ctx context.Context) ([]Adu
 	return items, nil
 }
 
-const markStaleAdultPerformerLinksUnfavorite = `-- name: MarkStaleAdultPerformerLinksUnfavorite :execrows
-UPDATE adult_performer_links
+const markStaleAdultExternalRefsUnfavorite = `-- name: MarkStaleAdultExternalRefsUnfavorite :execrows
+UPDATE adult_external_refs
 SET is_favorite = FALSE
-WHERE instance_id = $1 AND last_synced_at < $2 AND is_favorite = TRUE
+WHERE source_kind = 'stashbox'
+  AND source_instance_id = $1
+  AND entity_type = $2
+  AND last_seen_at < $3
+  AND is_favorite = TRUE
 `
 
-type MarkStaleAdultPerformerLinksUnfavoriteParams struct {
-	InstanceID   uuid.UUID
-	LastSyncedAt time.Time
+type MarkStaleAdultExternalRefsUnfavoriteParams struct {
+	SourceInstanceID *uuid.UUID
+	EntityType       string
+	LastSeenAt       time.Time
 }
 
-func (q *Queries) MarkStaleAdultPerformerLinksUnfavorite(ctx context.Context, arg MarkStaleAdultPerformerLinksUnfavoriteParams) (int64, error) {
-	result, err := q.db.Exec(ctx, markStaleAdultPerformerLinksUnfavorite, arg.InstanceID, arg.LastSyncedAt)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const markStaleAdultStudioLinksUnfavorite = `-- name: MarkStaleAdultStudioLinksUnfavorite :execrows
-UPDATE adult_studio_links
-SET is_favorite = FALSE
-WHERE instance_id = $1 AND last_synced_at < $2 AND is_favorite = TRUE
-`
-
-type MarkStaleAdultStudioLinksUnfavoriteParams struct {
-	InstanceID   uuid.UUID
-	LastSyncedAt time.Time
-}
-
-func (q *Queries) MarkStaleAdultStudioLinksUnfavorite(ctx context.Context, arg MarkStaleAdultStudioLinksUnfavoriteParams) (int64, error) {
-	result, err := q.db.Exec(ctx, markStaleAdultStudioLinksUnfavorite, arg.InstanceID, arg.LastSyncedAt)
+func (q *Queries) MarkStaleAdultExternalRefsUnfavorite(ctx context.Context, arg MarkStaleAdultExternalRefsUnfavoriteParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markStaleAdultExternalRefsUnfavorite, arg.SourceInstanceID, arg.EntityType, arg.LastSeenAt)
 	if err != nil {
 		return 0, err
 	}
@@ -710,86 +808,79 @@ func (q *Queries) UpdateAdultImageSetSummary(ctx context.Context, arg UpdateAdul
 	return i, err
 }
 
-const upsertAdultFavoritePerformer = `-- name: UpsertAdultFavoritePerformer :one
-INSERT INTO adult_favorite_performers (
-    id, canonical_name, disambiguation, urls, created_at, updated_at
+const upsertAdultExternalRef = `-- name: UpsertAdultExternalRef :one
+INSERT INTO adult_external_refs (
+    id, entity_type, entity_id, source_kind, source_instance_id,
+    foreign_id, secondary_id, canonical_url, extra_urls,
+    is_favorite, confidence_score, match_method, fetched_at, last_seen_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6
+    $1, $2, $3, $4, $5,
+    $6, $7, $8, $9,
+    $10, $11, $12, $13, $14
 )
-ON CONFLICT (id) DO UPDATE SET
-    canonical_name = EXCLUDED.canonical_name,
-    disambiguation = COALESCE(EXCLUDED.disambiguation, adult_favorite_performers.disambiguation),
-    urls = EXCLUDED.urls,
-    updated_at = EXCLUDED.updated_at
-RETURNING id, canonical_name, disambiguation, created_at, updated_at, urls
+ON CONFLICT (source_kind, source_instance_id, entity_type, foreign_id) DO UPDATE SET
+    entity_id = EXCLUDED.entity_id,
+    secondary_id = COALESCE(EXCLUDED.secondary_id, adult_external_refs.secondary_id),
+    canonical_url = COALESCE(EXCLUDED.canonical_url, adult_external_refs.canonical_url),
+    extra_urls = EXCLUDED.extra_urls,
+    is_favorite = EXCLUDED.is_favorite,
+    confidence_score = COALESCE(EXCLUDED.confidence_score, adult_external_refs.confidence_score),
+    match_method = COALESCE(EXCLUDED.match_method, adult_external_refs.match_method),
+    fetched_at = EXCLUDED.fetched_at,
+    last_seen_at = EXCLUDED.last_seen_at
+RETURNING id, entity_type, entity_id, source_kind, source_instance_id, foreign_id, secondary_id, canonical_url, extra_urls, is_favorite, confidence_score, match_method, fetched_at, last_seen_at
 `
 
-type UpsertAdultFavoritePerformerParams struct {
-	ID             uuid.UUID
-	CanonicalName  string
-	Disambiguation *string
-	Urls           []string
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+type UpsertAdultExternalRefParams struct {
+	ID               uuid.UUID
+	EntityType       string
+	EntityID         uuid.UUID
+	SourceKind       string
+	SourceInstanceID *uuid.UUID
+	ForeignID        string
+	SecondaryID      *string
+	CanonicalUrl     *string
+	ExtraUrls        []string
+	IsFavorite       bool
+	ConfidenceScore  *int16
+	MatchMethod      *string
+	FetchedAt        time.Time
+	LastSeenAt       time.Time
 }
 
-func (q *Queries) UpsertAdultFavoritePerformer(ctx context.Context, arg UpsertAdultFavoritePerformerParams) (AdultFavoritePerformer, error) {
-	row := q.db.QueryRow(ctx, upsertAdultFavoritePerformer,
+func (q *Queries) UpsertAdultExternalRef(ctx context.Context, arg UpsertAdultExternalRefParams) (AdultExternalRef, error) {
+	row := q.db.QueryRow(ctx, upsertAdultExternalRef,
 		arg.ID,
-		arg.CanonicalName,
-		arg.Disambiguation,
-		arg.Urls,
-		arg.CreatedAt,
-		arg.UpdatedAt,
+		arg.EntityType,
+		arg.EntityID,
+		arg.SourceKind,
+		arg.SourceInstanceID,
+		arg.ForeignID,
+		arg.SecondaryID,
+		arg.CanonicalUrl,
+		arg.ExtraUrls,
+		arg.IsFavorite,
+		arg.ConfidenceScore,
+		arg.MatchMethod,
+		arg.FetchedAt,
+		arg.LastSeenAt,
 	)
-	var i AdultFavoritePerformer
+	var i AdultExternalRef
 	err := row.Scan(
 		&i.ID,
-		&i.CanonicalName,
-		&i.Disambiguation,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.Urls,
-	)
-	return i, err
-}
-
-const upsertAdultFavoriteStudio = `-- name: UpsertAdultFavoriteStudio :one
-INSERT INTO adult_favorite_studios (
-    id, canonical_name, urls, created_at, updated_at
-) VALUES (
-    $1, $2, $3, $4, $5
-)
-ON CONFLICT (id) DO UPDATE SET
-    canonical_name = EXCLUDED.canonical_name,
-    urls = EXCLUDED.urls,
-    updated_at = EXCLUDED.updated_at
-RETURNING id, canonical_name, created_at, updated_at, urls
-`
-
-type UpsertAdultFavoriteStudioParams struct {
-	ID            uuid.UUID
-	CanonicalName string
-	Urls          []string
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
-}
-
-func (q *Queries) UpsertAdultFavoriteStudio(ctx context.Context, arg UpsertAdultFavoriteStudioParams) (AdultFavoriteStudio, error) {
-	row := q.db.QueryRow(ctx, upsertAdultFavoriteStudio,
-		arg.ID,
-		arg.CanonicalName,
-		arg.Urls,
-		arg.CreatedAt,
-		arg.UpdatedAt,
-	)
-	var i AdultFavoriteStudio
-	err := row.Scan(
-		&i.ID,
-		&i.CanonicalName,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.Urls,
+		&i.EntityType,
+		&i.EntityID,
+		&i.SourceKind,
+		&i.SourceInstanceID,
+		&i.ForeignID,
+		&i.SecondaryID,
+		&i.CanonicalUrl,
+		&i.ExtraUrls,
+		&i.IsFavorite,
+		&i.ConfidenceScore,
+		&i.MatchMethod,
+		&i.FetchedAt,
+		&i.LastSeenAt,
 	)
 	return i, err
 }
@@ -904,42 +995,51 @@ func (q *Queries) UpsertAdultImageSet(ctx context.Context, arg UpsertAdultImageS
 	return i, err
 }
 
-const upsertAdultPerformerLink = `-- name: UpsertAdultPerformerLink :one
-INSERT INTO adult_performer_links (
-    favorite_id, instance_id, foreign_id, is_favorite, last_synced_at
+const upsertAdultPerformer = `-- name: UpsertAdultPerformer :one
+INSERT INTO adult_performers (
+    id, canonical_name, disambiguation, urls, is_favorite, created_at, updated_at
 ) VALUES (
-    $1, $2, $3, $4, $5
+    $1, $2, $3, $4, $5, $6, $7
 )
-ON CONFLICT (instance_id, foreign_id) DO UPDATE SET
-    favorite_id = EXCLUDED.favorite_id,
+ON CONFLICT (id) DO UPDATE SET
+    canonical_name = EXCLUDED.canonical_name,
+    disambiguation = COALESCE(EXCLUDED.disambiguation, adult_performers.disambiguation),
+    urls = EXCLUDED.urls,
     is_favorite = EXCLUDED.is_favorite,
-    last_synced_at = EXCLUDED.last_synced_at
-RETURNING favorite_id, instance_id, foreign_id, is_favorite, last_synced_at
+    updated_at = EXCLUDED.updated_at
+RETURNING id, canonical_name, disambiguation, created_at, updated_at, urls, is_favorite, merged_into_id
 `
 
-type UpsertAdultPerformerLinkParams struct {
-	FavoriteID   uuid.UUID
-	InstanceID   uuid.UUID
-	ForeignID    string
-	IsFavorite   bool
-	LastSyncedAt time.Time
+type UpsertAdultPerformerParams struct {
+	ID             uuid.UUID
+	CanonicalName  string
+	Disambiguation *string
+	Urls           []string
+	IsFavorite     bool
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }
 
-func (q *Queries) UpsertAdultPerformerLink(ctx context.Context, arg UpsertAdultPerformerLinkParams) (AdultPerformerLink, error) {
-	row := q.db.QueryRow(ctx, upsertAdultPerformerLink,
-		arg.FavoriteID,
-		arg.InstanceID,
-		arg.ForeignID,
+func (q *Queries) UpsertAdultPerformer(ctx context.Context, arg UpsertAdultPerformerParams) (AdultPerformer, error) {
+	row := q.db.QueryRow(ctx, upsertAdultPerformer,
+		arg.ID,
+		arg.CanonicalName,
+		arg.Disambiguation,
+		arg.Urls,
 		arg.IsFavorite,
-		arg.LastSyncedAt,
+		arg.CreatedAt,
+		arg.UpdatedAt,
 	)
-	var i AdultPerformerLink
+	var i AdultPerformer
 	err := row.Scan(
-		&i.FavoriteID,
-		&i.InstanceID,
-		&i.ForeignID,
+		&i.ID,
+		&i.CanonicalName,
+		&i.Disambiguation,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Urls,
 		&i.IsFavorite,
-		&i.LastSyncedAt,
+		&i.MergedIntoID,
 	)
 	return i, err
 }
@@ -1003,42 +1103,49 @@ func (q *Queries) UpsertAdultStashboxInstance(ctx context.Context, arg UpsertAdu
 	return i, err
 }
 
-const upsertAdultStudioLink = `-- name: UpsertAdultStudioLink :one
-INSERT INTO adult_studio_links (
-    favorite_id, instance_id, foreign_id, is_favorite, last_synced_at
+const upsertAdultStudio = `-- name: UpsertAdultStudio :one
+INSERT INTO adult_studios (
+    id, canonical_name, urls, is_favorite, created_at, updated_at
 ) VALUES (
-    $1, $2, $3, $4, $5
+    $1, $2, $3, $4, $5, $6
 )
-ON CONFLICT (instance_id, foreign_id) DO UPDATE SET
-    favorite_id = EXCLUDED.favorite_id,
+ON CONFLICT (id) DO UPDATE SET
+    canonical_name = EXCLUDED.canonical_name,
+    urls = EXCLUDED.urls,
     is_favorite = EXCLUDED.is_favorite,
-    last_synced_at = EXCLUDED.last_synced_at
-RETURNING favorite_id, instance_id, foreign_id, is_favorite, last_synced_at
+    updated_at = EXCLUDED.updated_at
+RETURNING id, canonical_name, created_at, updated_at, urls, is_favorite, merged_into_id, parent_studio_id, network_studio_id
 `
 
-type UpsertAdultStudioLinkParams struct {
-	FavoriteID   uuid.UUID
-	InstanceID   uuid.UUID
-	ForeignID    string
-	IsFavorite   bool
-	LastSyncedAt time.Time
+type UpsertAdultStudioParams struct {
+	ID            uuid.UUID
+	CanonicalName string
+	Urls          []string
+	IsFavorite    bool
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }
 
-func (q *Queries) UpsertAdultStudioLink(ctx context.Context, arg UpsertAdultStudioLinkParams) (AdultStudioLink, error) {
-	row := q.db.QueryRow(ctx, upsertAdultStudioLink,
-		arg.FavoriteID,
-		arg.InstanceID,
-		arg.ForeignID,
+func (q *Queries) UpsertAdultStudio(ctx context.Context, arg UpsertAdultStudioParams) (AdultStudio, error) {
+	row := q.db.QueryRow(ctx, upsertAdultStudio,
+		arg.ID,
+		arg.CanonicalName,
+		arg.Urls,
 		arg.IsFavorite,
-		arg.LastSyncedAt,
+		arg.CreatedAt,
+		arg.UpdatedAt,
 	)
-	var i AdultStudioLink
+	var i AdultStudio
 	err := row.Scan(
-		&i.FavoriteID,
-		&i.InstanceID,
-		&i.ForeignID,
+		&i.ID,
+		&i.CanonicalName,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Urls,
 		&i.IsFavorite,
-		&i.LastSyncedAt,
+		&i.MergedIntoID,
+		&i.ParentStudioID,
+		&i.NetworkStudioID,
 	)
 	return i, err
 }

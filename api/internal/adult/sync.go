@@ -31,6 +31,13 @@ const (
 	PageTimeout = 30 * time.Second
 	// MaxURLsPerEntity is the maximum number of URLs stored per favourite entity (HISS-02).
 	MaxURLsPerEntity = 64
+
+	// EntityTypePerformer is the polymorphic entity_type value for performers.
+	EntityTypePerformer = "performer"
+	// EntityTypeStudio is the polymorphic entity_type value for studios.
+	EntityTypeStudio = "studio"
+	// SourceKindStashbox is the external reference source_kind for stash-box instances.
+	SourceKindStashbox = "stashbox"
 )
 
 const (
@@ -212,22 +219,29 @@ func fetchFavoriteStudios(ctx context.Context, client *stashbox.Client) ([]stash
 	return all, truncated, nil
 }
 
+func mapStashboxRefs(refs []sqlcgen.AdultExternalRef, capHint int) map[uuid.UUID][]EntityLink {
+	linkMap := make(map[uuid.UUID][]EntityLink, capHint)
+	for _, r := range refs {
+		if r.SourceKind == SourceKindStashbox && r.SourceInstanceID != nil {
+			linkMap[r.EntityID] = append(linkMap[r.EntityID], EntityLink{
+				InstanceID: *r.SourceInstanceID,
+				ForeignID:  r.ForeignID,
+			})
+		}
+	}
+	return linkMap
+}
+
 func (s *Service) loadPerformerCandidates(ctx context.Context) ([]Candidate, error) {
-	rows, err := s.st.Q().ListAdultFavoritePerformers(ctx)
+	rows, err := s.st.Q().ListAdultPerformers(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("adult: list performers: %w", store.MapError(err))
 	}
-	links, err := s.st.Q().ListAdultPerformerLinks(ctx)
+	refs, err := s.st.Q().ListAdultExternalRefsByEntityType(ctx, EntityTypePerformer)
 	if err != nil {
-		return nil, fmt.Errorf("adult: list performer links: %w", store.MapError(err))
+		return nil, fmt.Errorf("adult: list performer refs: %w", store.MapError(err))
 	}
-	linkMap := make(map[uuid.UUID][]EntityLink, len(rows))
-	for _, l := range links {
-		linkMap[l.FavoriteID] = append(linkMap[l.FavoriteID], EntityLink{
-			InstanceID: l.InstanceID,
-			ForeignID:  l.ForeignID,
-		})
-	}
+	linkMap := mapStashboxRefs(refs, len(rows))
 	cands := make([]Candidate, 0, len(rows))
 	for _, r := range rows {
 		dis := ""
@@ -246,21 +260,15 @@ func (s *Service) loadPerformerCandidates(ctx context.Context) ([]Candidate, err
 }
 
 func (s *Service) loadStudioCandidates(ctx context.Context) ([]Candidate, error) {
-	rows, err := s.st.Q().ListAdultFavoriteStudios(ctx)
+	rows, err := s.st.Q().ListAdultStudios(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("adult: list studios: %w", store.MapError(err))
 	}
-	links, err := s.st.Q().ListAdultStudioLinks(ctx)
+	refs, err := s.st.Q().ListAdultExternalRefsByEntityType(ctx, EntityTypeStudio)
 	if err != nil {
-		return nil, fmt.Errorf("adult: list studio links: %w", store.MapError(err))
+		return nil, fmt.Errorf("adult: list studio refs: %w", store.MapError(err))
 	}
-	linkMap := make(map[uuid.UUID][]EntityLink, len(rows))
-	for _, l := range links {
-		linkMap[l.FavoriteID] = append(linkMap[l.FavoriteID], EntityLink{
-			InstanceID: l.InstanceID,
-			ForeignID:  l.ForeignID,
-		})
-	}
+	linkMap := mapStashboxRefs(refs, len(rows))
 	cands := make([]Candidate, 0, len(rows))
 	for _, r := range rows {
 		cands = append(cands, Candidate{
@@ -271,6 +279,37 @@ func (s *Service) loadStudioCandidates(ctx context.Context) ([]Candidate, error)
 		})
 	}
 	return cands, nil
+}
+
+func (s *Service) upsertStashboxRef(
+	ctx context.Context,
+	entityType string,
+	entityID uuid.UUID,
+	instID uuid.UUID,
+	foreignID string,
+	extraURLs []string,
+	sweepStart time.Time,
+) error {
+	refID, err := s.ids.NewUUID()
+	if err != nil {
+		return fmt.Errorf("adult: generate %s ref id: %w", entityType, err)
+	}
+	_, err = s.st.Q().UpsertAdultExternalRef(ctx, sqlcgen.UpsertAdultExternalRefParams{
+		ID:               refID,
+		EntityType:       entityType,
+		EntityID:         entityID,
+		SourceKind:       SourceKindStashbox,
+		SourceInstanceID: &instID,
+		ForeignID:        foreignID,
+		ExtraUrls:        extraURLs,
+		IsFavorite:       true,
+		FetchedAt:        sweepStart,
+		LastSeenAt:       sweepStart,
+	})
+	if err != nil {
+		return fmt.Errorf("adult: upsert %s ref: %w", entityType, store.MapError(err))
+	}
+	return nil
 }
 
 func (s *Service) resolvePerformerMatch(
@@ -335,11 +374,12 @@ func (s *Service) syncOnePerformer(
 		dis = &d
 	}
 
-	_, err = s.st.Q().UpsertAdultFavoritePerformer(ctx, sqlcgen.UpsertAdultFavoritePerformerParams{
+	_, err = s.st.Q().UpsertAdultPerformer(ctx, sqlcgen.UpsertAdultPerformerParams{
 		ID:             favID,
 		CanonicalName:  p.Name,
 		Disambiguation: dis,
 		Urls:           finalURLs,
+		IsFavorite:     true,
 		CreatedAt:      sweepStart,
 		UpdatedAt:      sweepStart,
 	})
@@ -347,17 +387,7 @@ func (s *Service) syncOnePerformer(
 		return fmt.Errorf("adult: upsert performer: %w", store.MapError(err))
 	}
 
-	_, err = s.st.Q().UpsertAdultPerformerLink(ctx, sqlcgen.UpsertAdultPerformerLinkParams{
-		FavoriteID:   favID,
-		InstanceID:   instID,
-		ForeignID:    p.ID,
-		IsFavorite:   true,
-		LastSyncedAt: sweepStart,
-	})
-	if err != nil {
-		return fmt.Errorf("adult: upsert performer link: %w", store.MapError(err))
-	}
-	return nil
+	return s.upsertStashboxRef(ctx, EntityTypePerformer, favID, instID, p.ID, unionURLs(nil, urls), sweepStart)
 }
 
 func (s *Service) resolveStudioMatch(
@@ -414,10 +444,11 @@ func (s *Service) syncOneStudio(
 		return err
 	}
 
-	_, err = s.st.Q().UpsertAdultFavoriteStudio(ctx, sqlcgen.UpsertAdultFavoriteStudioParams{
+	_, err = s.st.Q().UpsertAdultStudio(ctx, sqlcgen.UpsertAdultStudioParams{
 		ID:            favID,
 		CanonicalName: st.Name,
 		Urls:          finalURLs,
+		IsFavorite:    true,
 		CreatedAt:     sweepStart,
 		UpdatedAt:     sweepStart,
 	})
@@ -425,17 +456,7 @@ func (s *Service) syncOneStudio(
 		return fmt.Errorf("adult: upsert studio: %w", store.MapError(err))
 	}
 
-	_, err = s.st.Q().UpsertAdultStudioLink(ctx, sqlcgen.UpsertAdultStudioLinkParams{
-		FavoriteID:   favID,
-		InstanceID:   instID,
-		ForeignID:    st.ID,
-		IsFavorite:   true,
-		LastSyncedAt: sweepStart,
-	})
-	if err != nil {
-		return fmt.Errorf("adult: upsert studio link: %w", store.MapError(err))
-	}
-	return nil
+	return s.upsertStashboxRef(ctx, EntityTypeStudio, favID, instID, st.ID, unionURLs(nil, urls), sweepStart)
 }
 
 func (s *Service) syncPerformers(
@@ -459,19 +480,23 @@ func (s *Service) syncPerformers(
 		}
 	}
 	if truncated {
-		s.logger.InfoContext(ctx, "adult: performer sync reached cap; skipping stale link deactivation",
+		s.logger.InfoContext(ctx, "adult: performer sync reached cap; skipping stale ref deactivation",
 			slog.String("instance_id", instID.String()),
 			slog.Int("count", len(items)),
 			slog.Int("cap", MaxItemsPerSweep),
 		)
 		return nil
 	}
-	_, err = s.st.Q().MarkStaleAdultPerformerLinksUnfavorite(ctx, sqlcgen.MarkStaleAdultPerformerLinksUnfavoriteParams{
-		InstanceID:   instID,
-		LastSyncedAt: sweepStart,
+	_, err = s.st.Q().MarkStaleAdultExternalRefsUnfavorite(ctx, sqlcgen.MarkStaleAdultExternalRefsUnfavoriteParams{
+		SourceInstanceID: &instID,
+		EntityType:       EntityTypePerformer,
+		LastSeenAt:       sweepStart,
 	})
 	if err != nil {
-		return fmt.Errorf("adult: mark stale performer links: %w", store.MapError(err))
+		return fmt.Errorf("adult: mark stale performer refs: %w", store.MapError(err))
+	}
+	if _, err = s.st.Q().ClearUnfavoritedAdultPerformers(ctx, sweepStart); err != nil {
+		return fmt.Errorf("adult: clear unfavorited performers: %w", store.MapError(err))
 	}
 	return nil
 }
@@ -497,19 +522,23 @@ func (s *Service) syncStudios(
 		}
 	}
 	if truncated {
-		s.logger.InfoContext(ctx, "adult: studio sync reached cap; skipping stale link deactivation",
+		s.logger.InfoContext(ctx, "adult: studio sync reached cap; skipping stale ref deactivation",
 			slog.String("instance_id", instID.String()),
 			slog.Int("count", len(items)),
 			slog.Int("cap", MaxItemsPerSweep),
 		)
 		return nil
 	}
-	_, err = s.st.Q().MarkStaleAdultStudioLinksUnfavorite(ctx, sqlcgen.MarkStaleAdultStudioLinksUnfavoriteParams{
-		InstanceID:   instID,
-		LastSyncedAt: sweepStart,
+	_, err = s.st.Q().MarkStaleAdultExternalRefsUnfavorite(ctx, sqlcgen.MarkStaleAdultExternalRefsUnfavoriteParams{
+		SourceInstanceID: &instID,
+		EntityType:       EntityTypeStudio,
+		LastSeenAt:       sweepStart,
 	})
 	if err != nil {
-		return fmt.Errorf("adult: mark stale studio links: %w", store.MapError(err))
+		return fmt.Errorf("adult: mark stale studio refs: %w", store.MapError(err))
+	}
+	if _, err = s.st.Q().ClearUnfavoritedAdultStudios(ctx, sweepStart); err != nil {
+		return fmt.Errorf("adult: clear unfavorited studios: %w", store.MapError(err))
 	}
 	return nil
 }

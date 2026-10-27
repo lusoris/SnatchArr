@@ -31,116 +31,148 @@ SELECT * FROM adult_stashbox_instances
 WHERE enabled = TRUE
 ORDER BY priority ASC, name ASC;
 
--- name: UpsertAdultFavoritePerformer :one
-INSERT INTO adult_favorite_performers (
-    id, canonical_name, disambiguation, urls, created_at, updated_at
+-- name: UpsertAdultPerformer :one
+INSERT INTO adult_performers (
+    id, canonical_name, disambiguation, urls, is_favorite, created_at, updated_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7
+)
+ON CONFLICT (id) DO UPDATE SET
+    canonical_name = EXCLUDED.canonical_name,
+    disambiguation = COALESCE(EXCLUDED.disambiguation, adult_performers.disambiguation),
+    urls = EXCLUDED.urls,
+    is_favorite = EXCLUDED.is_favorite,
+    updated_at = EXCLUDED.updated_at
+RETURNING *;
+
+-- name: GetAdultPerformer :one
+SELECT * FROM adult_performers
+WHERE id = $1;
+
+-- name: GetAdultPerformerByExternalRef :one
+SELECT p.* FROM adult_performers p
+JOIN adult_external_refs r ON r.entity_type = 'performer' AND r.entity_id = p.id
+WHERE r.source_kind = $1
+  AND r.source_instance_id IS NOT DISTINCT FROM $2
+  AND r.foreign_id = $3;
+
+-- name: ListAdultPerformers :many
+SELECT * FROM adult_performers
+ORDER BY canonical_name ASC;
+
+-- name: ListAdultFavoritePerformers :many
+SELECT * FROM adult_performers
+WHERE is_favorite = TRUE
+ORDER BY canonical_name ASC;
+
+-- name: ClearUnfavoritedAdultPerformers :execrows
+UPDATE adult_performers p
+SET is_favorite = FALSE,
+    updated_at = $1
+WHERE p.is_favorite = TRUE
+  AND NOT EXISTS (
+      SELECT 1 FROM adult_external_refs r
+      WHERE r.entity_type = 'performer'
+        AND r.entity_id = p.id
+        AND r.is_favorite = TRUE
+  );
+
+-- name: UpsertAdultStudio :one
+INSERT INTO adult_studios (
+    id, canonical_name, urls, is_favorite, created_at, updated_at
 ) VALUES (
     $1, $2, $3, $4, $5, $6
 )
 ON CONFLICT (id) DO UPDATE SET
     canonical_name = EXCLUDED.canonical_name,
-    disambiguation = COALESCE(EXCLUDED.disambiguation, adult_favorite_performers.disambiguation),
     urls = EXCLUDED.urls,
-    updated_at = EXCLUDED.updated_at
-RETURNING *;
-
--- name: GetAdultFavoritePerformer :one
-SELECT * FROM adult_favorite_performers
-WHERE id = $1;
-
--- name: GetAdultFavoritePerformerByLink :one
-SELECT f.* FROM adult_favorite_performers f
-JOIN adult_performer_links l ON l.favorite_id = f.id
-WHERE l.instance_id = $1 AND l.foreign_id = $2;
-
--- name: ListAdultFavoritePerformers :many
-SELECT * FROM adult_favorite_performers
-ORDER BY canonical_name ASC;
-
--- name: UpsertAdultPerformerLink :one
-INSERT INTO adult_performer_links (
-    favorite_id, instance_id, foreign_id, is_favorite, last_synced_at
-) VALUES (
-    $1, $2, $3, $4, $5
-)
-ON CONFLICT (instance_id, foreign_id) DO UPDATE SET
-    favorite_id = EXCLUDED.favorite_id,
     is_favorite = EXCLUDED.is_favorite,
-    last_synced_at = EXCLUDED.last_synced_at
-RETURNING *;
-
--- name: GetAdultPerformerLink :one
-SELECT * FROM adult_performer_links
-WHERE instance_id = $1 AND foreign_id = $2;
-
--- name: ListAdultPerformerLinks :many
-SELECT * FROM adult_performer_links
-ORDER BY instance_id, foreign_id;
-
--- name: ListAdultPerformerLinksForFavorite :many
-SELECT * FROM adult_performer_links
-WHERE favorite_id = $1
-ORDER BY instance_id, foreign_id;
-
--- name: MarkStaleAdultPerformerLinksUnfavorite :execrows
-UPDATE adult_performer_links
-SET is_favorite = FALSE
-WHERE instance_id = $1 AND last_synced_at < $2 AND is_favorite = TRUE;
-
--- name: UpsertAdultFavoriteStudio :one
-INSERT INTO adult_favorite_studios (
-    id, canonical_name, urls, created_at, updated_at
-) VALUES (
-    $1, $2, $3, $4, $5
-)
-ON CONFLICT (id) DO UPDATE SET
-    canonical_name = EXCLUDED.canonical_name,
-    urls = EXCLUDED.urls,
     updated_at = EXCLUDED.updated_at
 RETURNING *;
 
--- name: GetAdultFavoriteStudio :one
-SELECT * FROM adult_favorite_studios
+-- name: GetAdultStudio :one
+SELECT * FROM adult_studios
 WHERE id = $1;
 
--- name: GetAdultFavoriteStudioByLink :one
-SELECT f.* FROM adult_favorite_studios f
-JOIN adult_studio_links l ON l.favorite_id = f.id
-WHERE l.instance_id = $1 AND l.foreign_id = $2;
+-- name: GetAdultStudioByExternalRef :one
+SELECT s.* FROM adult_studios s
+JOIN adult_external_refs r ON r.entity_type = 'studio' AND r.entity_id = s.id
+WHERE r.source_kind = $1
+  AND r.source_instance_id IS NOT DISTINCT FROM $2
+  AND r.foreign_id = $3;
+
+-- name: ListAdultStudios :many
+SELECT * FROM adult_studios
+ORDER BY canonical_name ASC;
 
 -- name: ListAdultFavoriteStudios :many
-SELECT * FROM adult_favorite_studios
+SELECT * FROM adult_studios
+WHERE is_favorite = TRUE
 ORDER BY canonical_name ASC;
 
--- name: UpsertAdultStudioLink :one
-INSERT INTO adult_studio_links (
-    favorite_id, instance_id, foreign_id, is_favorite, last_synced_at
+-- name: ClearUnfavoritedAdultStudios :execrows
+UPDATE adult_studios s
+SET is_favorite = FALSE,
+    updated_at = $1
+WHERE s.is_favorite = TRUE
+  AND NOT EXISTS (
+      SELECT 1 FROM adult_external_refs r
+      WHERE r.entity_type = 'studio'
+        AND r.entity_id = s.id
+        AND r.is_favorite = TRUE
+  );
+
+-- name: UpsertAdultExternalRef :one
+INSERT INTO adult_external_refs (
+    id, entity_type, entity_id, source_kind, source_instance_id,
+    foreign_id, secondary_id, canonical_url, extra_urls,
+    is_favorite, confidence_score, match_method, fetched_at, last_seen_at
 ) VALUES (
-    $1, $2, $3, $4, $5
+    $1, $2, $3, $4, $5,
+    $6, $7, $8, $9,
+    $10, $11, $12, $13, $14
 )
-ON CONFLICT (instance_id, foreign_id) DO UPDATE SET
-    favorite_id = EXCLUDED.favorite_id,
+ON CONFLICT (source_kind, source_instance_id, entity_type, foreign_id) DO UPDATE SET
+    entity_id = EXCLUDED.entity_id,
+    secondary_id = COALESCE(EXCLUDED.secondary_id, adult_external_refs.secondary_id),
+    canonical_url = COALESCE(EXCLUDED.canonical_url, adult_external_refs.canonical_url),
+    extra_urls = EXCLUDED.extra_urls,
     is_favorite = EXCLUDED.is_favorite,
-    last_synced_at = EXCLUDED.last_synced_at
+    confidence_score = COALESCE(EXCLUDED.confidence_score, adult_external_refs.confidence_score),
+    match_method = COALESCE(EXCLUDED.match_method, adult_external_refs.match_method),
+    fetched_at = EXCLUDED.fetched_at,
+    last_seen_at = EXCLUDED.last_seen_at
 RETURNING *;
 
--- name: GetAdultStudioLink :one
-SELECT * FROM adult_studio_links
-WHERE instance_id = $1 AND foreign_id = $2;
+-- name: GetAdultExternalRef :one
+SELECT * FROM adult_external_refs
+WHERE source_kind = $1
+  AND source_instance_id IS NOT DISTINCT FROM $2
+  AND entity_type = $3
+  AND foreign_id = $4;
 
--- name: ListAdultStudioLinks :many
-SELECT * FROM adult_studio_links
-ORDER BY instance_id, foreign_id;
+-- name: ListAdultExternalRefsByEntityType :many
+SELECT * FROM adult_external_refs
+WHERE entity_type = $1
+ORDER BY source_kind ASC, source_instance_id ASC, foreign_id ASC;
 
--- name: ListAdultStudioLinksForFavorite :many
-SELECT * FROM adult_studio_links
-WHERE favorite_id = $1
-ORDER BY instance_id, foreign_id;
+-- name: ListAdultExternalRefsByEntity :many
+SELECT * FROM adult_external_refs
+WHERE entity_type = $1 AND entity_id = $2
+ORDER BY source_kind ASC, source_instance_id ASC, foreign_id ASC;
 
--- name: MarkStaleAdultStudioLinksUnfavorite :execrows
-UPDATE adult_studio_links
+-- name: MarkStaleAdultExternalRefsUnfavorite :execrows
+UPDATE adult_external_refs
 SET is_favorite = FALSE
-WHERE instance_id = $1 AND last_synced_at < $2 AND is_favorite = TRUE;
+WHERE source_kind = 'stashbox'
+  AND source_instance_id = $1
+  AND entity_type = $2
+  AND last_seen_at < $3
+  AND is_favorite = TRUE;
+
+-- name: DeleteAdultExternalRefsByEntity :execrows
+DELETE FROM adult_external_refs
+WHERE entity_type = $1 AND entity_id = $2;
 
 -- name: UpsertAdultImageSet :one
 INSERT INTO adult_image_sets (
@@ -215,4 +247,3 @@ WHERE image_set_id = $1 AND NOT (file_path = ANY(@keep_paths::text[]));
 -- name: DeleteAllAdultImageItemsForSet :execrows
 DELETE FROM adult_image_items
 WHERE image_set_id = $1;
-
