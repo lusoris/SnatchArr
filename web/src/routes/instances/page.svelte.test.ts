@@ -41,7 +41,7 @@ describe('instance list', () => {
 		expect(rows).toHaveLength(1);
 		expect(rows[0]?.slice(0, 3)).toEqual([
 			'Library Readarr',
-			'readarr · Bookshelf',
+			'Readarr · Bookshelf',
 			'http://readarr.local:8787'
 		]);
 		expect(rows[0]?.[5]).toContain('0.4.21.182');
@@ -83,7 +83,7 @@ describe('instance list', () => {
 		const items = within(list).getAllByRole('listitem');
 		expect(items).toHaveLength(1);
 		expect(items[0].textContent).toContain('Library Readarr');
-		expect(items[0].textContent).toContain('readarr · Bookshelf');
+		expect(items[0].textContent).toContain('Readarr · Bookshelf');
 		expect(items[0].textContent).toContain('http://readarr.local:8787');
 		expect(items[0].textContent).toContain('manual');
 		expect(within(items[0]).getByRole('button', { name: m.instance_delete() })).toBeTruthy();
