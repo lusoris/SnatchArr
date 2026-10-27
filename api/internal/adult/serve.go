@@ -27,20 +27,16 @@ func (s *Service) ServeImage(w http.ResponseWriter, r *http.Request, itemID uuid
 	if err != nil {
 		return fmt.Errorf("adult: get image item: %w", store.MapError(err))
 	}
-	if checkErr := s.checkImageSetContainment(r.Context(), item.FilePath); checkErr != nil {
-		return checkErr
+	cleanBase, err := s.checkImageSetContainment(r.Context(), item.FilePath)
+	if err != nil {
+		return err
 	}
 
-	fi, err := os.Lstat(item.FilePath)
+	f, fi, err := openRegularInRoot(cleanBase, item.FilePath)
 	if err != nil {
-		return mapFileErr(err, "lstat")
-	}
-	if fi.Mode()&os.ModeSymlink != 0 || !fi.Mode().IsRegular() {
-		return fmt.Errorf("adult: file is symlink or not regular: %w", domain.ErrInvalid)
-	}
-
-	f, err := os.Open(item.FilePath) // #nosec G304 -- path verified within imageSetDir and Lstat confirms regular file
-	if err != nil {
+		if errors.Is(err, domain.ErrInvalid) {
+			return err
+		}
 		return mapFileErr(err, "open")
 	}
 	defer gerr.CloseInto(f, &err, "adult: close image")
@@ -53,23 +49,23 @@ func (s *Service) ServeImage(w http.ResponseWriter, r *http.Request, itemID uuid
 	return nil
 }
 
-func (s *Service) checkImageSetContainment(ctx context.Context, filePath string) error {
+func (s *Service) checkImageSetContainment(ctx context.Context, filePath string) (string, error) {
 	m, err := s.mod.Get(ctx, domain.ModuleAdult)
 	if err != nil {
-		return fmt.Errorf("adult: get module config: %w", err)
+		return "", fmt.Errorf("adult: get module config: %w", err)
 	}
 	cfg, err := parseAdultConfig(m.Config)
 	if err != nil {
-		return fmt.Errorf("adult: parse module config: %w", err)
+		return "", fmt.Errorf("adult: parse module config: %w", err)
 	}
 	if cfg.ImageSetDir == nil || *cfg.ImageSetDir == "" {
-		return fmt.Errorf("adult: image_set_dir not configured: %w", domain.ErrInvalid)
+		return "", fmt.Errorf("adult: image_set_dir not configured: %w", domain.ErrInvalid)
 	}
 	cleanBase := filepath.Clean(*cfg.ImageSetDir)
 	if !isCleanSubdir(cleanBase, filePath) {
-		return fmt.Errorf("adult: file path escapes image set dir: %w", domain.ErrInvalid)
+		return "", fmt.Errorf("adult: file path escapes image set dir: %w", domain.ErrInvalid)
 	}
-	return nil
+	return cleanBase, nil
 }
 
 func mapFileErr(err error, op string) error {
@@ -96,23 +92,18 @@ func (s *Service) ServeThumbnail(w http.ResponseWriter, r *http.Request, itemID 
 		return fmt.Errorf("adult: parse module config: %w", err)
 	}
 	thumbDir := resolveThumbnailDir(cfg)
-	if !isCleanSubdir(thumbDir, thumbPath) {
-		return fmt.Errorf("adult: thumbnail path escapes cache dir: %w", domain.ErrInvalid)
-	}
 
-	f, err := os.Open(thumbPath) // #nosec G304 -- path verified within thumbnail_cache_dir
+	f, fi, err := openRegularInRoot(thumbDir, thumbPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("adult: thumbnail missing: %w", domain.ErrNotFound)
 		}
+		if errors.Is(err, domain.ErrInvalid) {
+			return err
+		}
 		return fmt.Errorf("adult: open thumbnail: %w", err)
 	}
 	defer gerr.CloseInto(f, &err, "adult: close thumbnail")
-
-	fi, err := f.Stat()
-	if err != nil {
-		return fmt.Errorf("adult: stat thumbnail: %w", err)
-	}
 
 	w.Header().Set("Content-Type", "image/webp")
 	w.Header().Set("Cache-Control", "private, max-age=86400")

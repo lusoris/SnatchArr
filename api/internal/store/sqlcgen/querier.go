@@ -24,6 +24,7 @@ type Querier interface {
 	ClearUnfavoritedAdultStudios(ctx context.Context, updatedAt time.Time) (int64, error)
 	CompleteRun(ctx context.Context, arg CompleteRunParams) (SnatchRun, error)
 	CountActiveAPIKeysByOwner(ctx context.Context, ownerID uuid.UUID) (int64, error)
+	CountAdultImageSets(ctx context.Context) (int64, error)
 	CountInstancesByBaseURL(ctx context.Context, arg CountInstancesByBaseURLParams) (int64, error)
 	CountInstancesByBaseURLAndNotSource(ctx context.Context, arg CountInstancesByBaseURLAndNotSourceParams) (int64, error)
 	CountProcessed(ctx context.Context, arg CountProcessedParams) (int64, error)
