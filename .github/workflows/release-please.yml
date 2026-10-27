@@ -11,21 +11,6 @@ permissions: {}
 
 jobs:
   release-please:
-    runs-on: ubuntu-26.04
-    timeout-minutes: 10
-    steps:
-      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-        id: app-token
-        with:
-          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
-          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
-          permission-contents: write
-          permission-pull-requests: write
-          permission-issues: write
-      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
-        with:
-          token: ${{ steps.app-token.outputs.token }}
-          # No release-type input: with it set the action ignores the config file
-          # (initial-version, bump-minor-pre-major) and proposes 1.0.0.
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
+    uses: ./.github/workflows/release-please-app.yml
+    secrets:
+      private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
