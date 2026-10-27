@@ -28,6 +28,7 @@ import (
 	"github.com/golusoris/golusoris/core/crypto"
 	"github.com/golusoris/golusoris/core/id"
 
+	"github.com/lusoris/SnatchArr/api/internal/adult"
 	"github.com/lusoris/SnatchArr/api/internal/arrclient"
 	"github.com/lusoris/SnatchArr/api/internal/auth"
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
@@ -300,6 +301,7 @@ func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Genera
 		t.Fatalf("buildHandlers: modules.Ensure: %v", err)
 	}
 	watchawareSvc := watchaware.NewService(st, enc, clk, ids, logger, modulesSvc, instSvc, nil, nil, nil)
+	adultSvc := adult.NewService(st, enc, clk, ids, modulesSvc, logger)
 	build := buildinfo.Info{Version: "test-ver", Commit: "test-commit", Date: "2026-10-14"}
 	h := &Handlers{
 		build:      build,
@@ -328,6 +330,7 @@ func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Genera
 		prowlarr:   prowlarrSvc,
 		notify:     notifySvc,
 		watchaware: watchawareSvc,
+		adult:      adultSvc,
 		logs:       logring.New(logring.MinSize),
 		logger:     logger,
 	}

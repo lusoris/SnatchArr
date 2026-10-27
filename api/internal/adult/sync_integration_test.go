@@ -852,3 +852,70 @@ func assertUnfavoritePhase(
 		t.Fatalf("studioB.IsFavorite = %v, want %v (err: %v)", studioB.IsFavorite, wantStudioBFav, err)
 	}
 }
+
+func TestSync_DurableStatusAndUpsertPreservation(t *testing.T) {
+	ctx := context.Background()
+	env := setupTestEnv(ctx, t)
+
+	created, err := env.svc.CreateSource(ctx, SourceInput{
+		Name:          "Catalogue Durable",
+		Endpoint:      "http://127.0.0.1:1/graphql",
+		APIKey:        "fake-api-key-0123456789",
+		Enabled:       true,
+		SyncFavorites: true,
+		Priority:      10,
+	})
+	if err != nil {
+		t.Fatalf("CreateSource: %v", err)
+	}
+
+	if _, err := env.svc.SyncNow(ctx); err != nil {
+		t.Fatalf("SyncNow failed sweep: %v", err)
+	}
+	afterFail, err := env.svc.GetSource(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("GetSource after fail: %v", err)
+	}
+	if afterFail.LastSyncAt == nil || afterFail.LastSyncError == "" {
+		t.Fatalf("expected LastSyncAt and LastSyncError after unreachable sweep, got (%v, %q)", afterFail.LastSyncAt, afterFail.LastSyncError)
+	}
+
+	updated, err := env.svc.UpdateSource(ctx, created.ID, SourceInput{
+		Name:          "Catalogue Durable Renamed",
+		Endpoint:      "http://127.0.0.1:1/graphql",
+		Enabled:       true,
+		SyncFavorites: true,
+		Priority:      20,
+	})
+	if err != nil {
+		t.Fatalf("UpdateSource: %v", err)
+	}
+	if updated.LastSyncAt == nil || updated.LastSyncError == "" {
+		t.Fatalf("UpdateSource overwrote sync telemetry: (%v, %q)", updated.LastSyncAt, updated.LastSyncError)
+	}
+
+	srvOK := newUnfavoriteServer1(t, &atomic.Int32{})
+	_, err = env.svc.UpdateSource(ctx, created.ID, SourceInput{
+		Name:          "Catalogue Durable Renamed",
+		Endpoint:      srvOK.URL,
+		Enabled:       true,
+		SyncFavorites: true,
+		Priority:      20,
+	})
+	if err != nil {
+		t.Fatalf("UpdateSource to healthy endpoint: %v", err)
+	}
+	env.clk.Advance(10 * time.Minute)
+	if _, err := env.svc.SyncNow(ctx); err != nil {
+		t.Fatalf("SyncNow healthy sweep: %v", err)
+	}
+
+	replicaSvc := NewService(env.st, env.enc, env.clk, env.ids, env.modulesSvc, env.logger)
+	st, err := replicaSvc.GetSyncStatus(ctx)
+	if err != nil {
+		t.Fatalf("replicaSvc.GetSyncStatus: %v", err)
+	}
+	if st.LastSyncAt == nil || !st.LastSyncAt.Equal(env.clk.Now()) || st.LastError != "" || st.PerformersSynced != 2 || st.StudiosSynced != 2 {
+		t.Fatalf("unexpected durable sync status on replica: %+v", st)
+	}
+}

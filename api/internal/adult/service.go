@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/golusoris/goenvoy/metadata/adult/stashbox/v2"
@@ -45,6 +46,7 @@ type Service struct {
 	pool         *ClientBuilder
 	logger       *slog.Logger
 	mu           sync.Mutex
+	syncing      atomic.Bool
 	lastPass     time.Time
 	lastScanPass time.Time
 	thumbSem     chan struct{}

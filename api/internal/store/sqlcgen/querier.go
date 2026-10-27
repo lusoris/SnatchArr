@@ -62,6 +62,7 @@ type Querier interface {
 	DeleteAdultExternalRefsByEntity(ctx context.Context, arg DeleteAdultExternalRefsByEntityParams) (int64, error)
 	DeleteAdultImageItemsNotInPaths(ctx context.Context, arg DeleteAdultImageItemsNotInPathsParams) (int64, error)
 	DeleteAdultImageSetsNotInPaths(ctx context.Context, keepPaths []string) (int64, error)
+	DeleteAdultStashboxInstance(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteAllAdultImageItemsForSet(ctx context.Context, imageSetID uuid.UUID) (int64, error)
 	DeleteAllAdultImageSets(ctx context.Context) (int64, error)
 	DeleteConfigarrDownloadClientsNotIn(ctx context.Context, keys []string) (int64, error)
@@ -171,6 +172,7 @@ type Querier interface {
 	ListAdultImageItemsForSet(ctx context.Context, imageSetID uuid.UUID) ([]AdultImageItem, error)
 	ListAdultImageSets(ctx context.Context) ([]AdultImageSet, error)
 	ListAdultPerformers(ctx context.Context) ([]AdultPerformer, error)
+	ListAdultStashboxInstances(ctx context.Context) ([]AdultStashboxInstance, error)
 	ListAdultStudios(ctx context.Context) ([]AdultStudio, error)
 	ListDeadLetterDeliveries(ctx context.Context) ([]WebhookDelivery, error)
 	ListDownloadClients(ctx context.Context) ([]DownloadClient, error)
@@ -257,6 +259,7 @@ type Querier interface {
 	PurgeRunsBefore(ctx context.Context, arg PurgeRunsBeforeParams) (int64, error)
 	PurgeWorkersBefore(ctx context.Context, arg PurgeWorkersBeforeParams) (int64, error)
 	RecentRunStatuses(ctx context.Context, arg RecentRunStatusesParams) ([]string, error)
+	RecordAdultStashboxSyncResult(ctx context.Context, arg RecordAdultStashboxSyncResultParams) error
 	RecordDownloadClientCheck(ctx context.Context, arg RecordDownloadClientCheckParams) error
 	RecordInstanceCheck(ctx context.Context, arg RecordInstanceCheckParams) error
 	RecordLoginLockoutFailure(ctx context.Context, arg RecordLoginLockoutFailureParams) error

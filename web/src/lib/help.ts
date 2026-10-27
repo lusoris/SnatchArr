@@ -71,6 +71,10 @@ export const HELP_MAP: Record<string, HelpEntry> = {
 		summaryKey: 'help_connections_configarr',
 		docsPath: 'configuration.md#configarr'
 	},
+	'/adult/sources': {
+		summaryKey: 'help_adult_sources',
+		docsPath: 'modules.md'
+	},
 	'/system': {
 		summaryKey: 'help_system',
 		docsPath: 'configuration.md#runtime-settings'

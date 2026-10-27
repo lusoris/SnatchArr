@@ -49,6 +49,15 @@ func (UnimplementedHandler) CreateAPIKey(ctx context.Context, req *CreateApiKeyR
 	return r, ht.ErrNotImplemented
 }
 
+// CreateAdultSource implements createAdultSource operation.
+//
+// Add a catalogue source.
+//
+// POST /adult/sources
+func (UnimplementedHandler) CreateAdultSource(ctx context.Context, req *AdultSourceInput) (r *AdultSource, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // CreateDownloadClient implements createDownloadClient operation.
 //
 // Add a download client by hand.
@@ -137,6 +146,15 @@ func (UnimplementedHandler) CreateSeerrLink(ctx context.Context, req *SeerrLinkI
 // POST /watchaware/sources
 func (UnimplementedHandler) CreateWatchawareSource(ctx context.Context, req *WatchawareSourceInput) (r *WatchawareSource, _ error) {
 	return r, ht.ErrNotImplemented
+}
+
+// DeleteAdultSource implements deleteAdultSource operation.
+//
+// Delete a catalogue source.
+//
+// DELETE /adult/sources/{sourceId}
+func (UnimplementedHandler) DeleteAdultSource(ctx context.Context, params DeleteAdultSourceParams) error {
+	return ht.ErrNotImplemented
 }
 
 // DeleteDownloadClient implements deleteDownloadClient operation.
@@ -236,6 +254,24 @@ func (UnimplementedHandler) DeleteWatchawareSource(ctx context.Context, params D
 //
 // POST /instances/{instanceId}/download-clients/discover
 func (UnimplementedHandler) DiscoverDownloadClients(ctx context.Context, params DiscoverDownloadClientsParams) (r *DiscoveryResult, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// GetAdultSource implements getAdultSource operation.
+//
+// Get a catalogue source.
+//
+// GET /adult/sources/{sourceId}
+func (UnimplementedHandler) GetAdultSource(ctx context.Context, params GetAdultSourceParams) (r *AdultSource, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// GetAdultSyncStatus implements getAdultSyncStatus operation.
+//
+// Get synchronization status across catalogue sources.
+//
+// GET /adult/sync/status
+func (UnimplementedHandler) GetAdultSyncStatus(ctx context.Context) (r *AdultSyncStatus, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -534,6 +570,15 @@ func (UnimplementedHandler) LinkProxyIdentity(ctx context.Context) (r LinkProxyI
 //
 // GET /auth/api-keys
 func (UnimplementedHandler) ListAPIKeys(ctx context.Context) (r ListAPIKeysRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ListAdultSources implements listAdultSources operation.
+//
+// List configured catalogue sources.
+//
+// GET /adult/sources
+func (UnimplementedHandler) ListAdultSources(ctx context.Context) (r []AdultSource, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -882,6 +927,15 @@ func (UnimplementedHandler) TestSeerrLinkInput(ctx context.Context, req *SeerrLi
 	return r, ht.ErrNotImplemented
 }
 
+// TriggerAdultSync implements triggerAdultSync operation.
+//
+// Run favourite performer and studio synchronization across enabled catalogue sources.
+//
+// POST /adult/sync
+func (UnimplementedHandler) TriggerAdultSync(ctx context.Context) (r *AdultSyncSummary, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // TriggerRun implements triggerRun operation.
 //
 // Quickie - queue a snatch now (ignores the refractory period).
@@ -906,6 +960,15 @@ func (UnimplementedHandler) UnlinkJellyfinIdentity(ctx context.Context) (r Unlin
 //
 // DELETE /auth/identities/proxy
 func (UnimplementedHandler) UnlinkProxyIdentity(ctx context.Context) (r UnlinkProxyIdentityRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UpdateAdultSource implements updateAdultSource operation.
+//
+// Update a catalogue source (omit api_key to keep stored key).
+//
+// PUT /adult/sources/{sourceId}
+func (UnimplementedHandler) UpdateAdultSource(ctx context.Context, req *AdultSourceInput, params UpdateAdultSourceParams) (r *AdultSource, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
