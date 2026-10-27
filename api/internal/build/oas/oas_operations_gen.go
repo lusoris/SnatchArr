@@ -100,6 +100,7 @@ const (
 	RevokeAPIKeyOperation                     OperationName = "RevokeAPIKey"
 	SearchItemOperation                       OperationName = "SearchItem"
 	SnatchSeerrRequestOperation               OperationName = "SnatchSeerrRequest"
+	SweepInstanceQueueOperation               OperationName = "SweepInstanceQueue"
 	SyncSeerrLinkOperation                    OperationName = "SyncSeerrLink"
 	TestDownloadClientOperation               OperationName = "TestDownloadClient"
 	TestDownloadClientInputOperation          OperationName = "TestDownloadClientInput"

@@ -19,10 +19,12 @@ import (
 
 // stubProber answers every probe with one result and counts the probes.
 type stubProber struct {
-	res   arrclient.Result
-	err   error
-	asked int
-	items []queue.Item
+	res        arrclient.Result
+	err        error
+	asked      int
+	queueCalls int
+	imports    int
+	items      []queue.Item
 }
 
 func (p *stubProber) Probe(context.Context, domain.AppKind, string, string) (arrclient.Result, error) {
@@ -31,6 +33,7 @@ func (p *stubProber) Probe(context.Context, domain.AppKind, string, string) (arr
 }
 
 func (p *stubProber) Queue(context.Context, domain.AppKind, string, string, int, int) ([]queue.Item, error) {
+	p.queueCalls++
 	if p.err != nil {
 		return nil, p.err
 	}
@@ -42,7 +45,11 @@ func (p *stubProber) RemoveQueueItem(context.Context, domain.AppKind, string, st
 }
 
 func (p *stubProber) ForceImport(context.Context, domain.AppKind, string, string, string, queue.ImportMode) (int, error) {
-	return 0, p.err
+	if p.err != nil {
+		return 0, p.err
+	}
+	p.imports++
+	return 1, nil
 }
 
 // TestTestInstanceInput covers the probe of credentials that are not stored. That path asks

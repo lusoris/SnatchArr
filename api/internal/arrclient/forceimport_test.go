@@ -24,18 +24,24 @@ import (
 
 // Manual-import candidates in the shape each *arr returns them.
 const (
-	sonarrClean     = `{"path":"/dl/a.mkv","series":{"id":5},"episodes":[{"id":51},{"id":52}],"quality":{"quality":{"id":3}},"downloadId":"dl-1","releaseType":"multiEpisode","rejections":[]}`
-	sonarrRejected  = `{"path":"/dl/b.mkv","series":{"id":5},"episodes":[{"id":53}],"rejections":[{"reason":"Not an upgrade","type":"permanent"}]}`
-	sonarrUnmapped  = `{"path":"/dl/c.mkv","series":{"id":5},"episodes":[],"rejections":[]}`
-	radarrClean     = `{"path":"/dl/m.mkv","movie":{"id":9},"quality":{"quality":{"id":7}},"downloadId":"dl-1","rejections":[]}`
-	radarrRejected  = `{"path":"/dl/n.mkv","movie":{"id":9},"rejections":[{"reason":"Sample","type":"permanent"}]}`
-	radarrUnmapped  = `{"path":"/dl/o.mkv","rejections":[]}`
-	lidarrClean     = `{"path":"/dl/t1.flac","artist":{"id":3},"album":{"id":31},"tracks":[{"id":301}],"quality":{"quality":{"id":1}},"downloadId":"dl-1","rejections":[]}`
-	lidarrRejected  = `{"path":"/dl/t2.flac","artist":{"id":3},"album":{"id":31},"tracks":[{"id":302}],"rejections":[{"reason":"Sample","type":"permanent"}]}`
-	lidarrUnmapped  = `{"path":"/dl/t3.flac","artist":{"id":3},"album":{"id":31},"tracks":[],"rejections":[]}`
-	readarrClean    = `{"path":"/dl/b.epub","author":{"id":4},"book":{"id":41},"quality":{"quality":{"id":2}},"downloadId":"dl-1","rejections":[]}`
-	readarrRejected = `{"path":"/dl/b2.epub","author":{"id":4},"book":{"id":41},"rejections":[{"reason":"Sample","type":"permanent"}]}`
-	readarrUnmapped = `{"path":"/dl/b3.epub","author":{"id":4},"rejections":[]}`
+	sonarrClean        = `{"path":"/dl/a.mkv","series":{"id":5},"episodes":[{"id":51},{"id":52}],"quality":{"quality":{"id":3}},"downloadId":"dl-1","releaseType":"multiEpisode","rejections":[]}`
+	sonarrRejected     = `{"path":"/dl/b.mkv","series":{"id":5},"episodes":[{"id":53}],"rejections":[{"reason":"Not an upgrade","type":"permanent"}]}`
+	sonarrUnmapped     = `{"path":"/dl/c.mkv","series":{"id":5},"episodes":[],"rejections":[]}`
+	radarrClean        = `{"path":"/dl/m.mkv","movie":{"id":9},"quality":{"quality":{"id":7}},"downloadId":"dl-1","rejections":[]}`
+	radarrRejected     = `{"path":"/dl/n.mkv","movie":{"id":9},"rejections":[{"reason":"Sample","type":"permanent"}]}`
+	radarrUnmapped     = `{"path":"/dl/o.mkv","rejections":[]}`
+	lidarrClean        = `{"path":"/dl/t1.flac","artist":{"id":3},"album":{"id":31},"tracks":[{"id":301}],"quality":{"quality":{"id":1}},"downloadId":"dl-1","rejections":[]}`
+	lidarrRejected     = `{"path":"/dl/t2.flac","artist":{"id":3},"album":{"id":31},"tracks":[{"id":302}],"rejections":[{"reason":"Sample","type":"permanent"}]}`
+	lidarrUnmapped     = `{"path":"/dl/t3.flac","artist":{"id":3},"album":{"id":31},"tracks":[],"rejections":[]}`
+	readarrClean       = `{"path":"/dl/b.epub","author":{"id":4},"book":{"id":41},"quality":{"quality":{"id":2}},"downloadId":"dl-1","rejections":[]}`
+	readarrRejected    = `{"path":"/dl/b2.epub","author":{"id":4},"book":{"id":41},"rejections":[{"reason":"Sample","type":"permanent"}]}`
+	readarrUnmapped    = `{"path":"/dl/b3.epub","author":{"id":4},"rejections":[]}`
+	whisparrV2Clean    = `{"path":"/dl/w2.mkv","series":{"id":7},"episodes":[{"id":71}],"quality":{"quality":{"id":4}},"downloadId":"dl-1","rejections":[]}`
+	whisparrV2Rejected = `{"path":"/dl/w2_rej.mkv","series":{"id":7},"episodes":[{"id":71}],"rejections":[{"reason":"Sample","type":"permanent"}]}`
+	whisparrV2Unmapped = `{"path":"/dl/w2_unmap.mkv","series":{"id":7},"episodes":[],"rejections":[]}`
+	whisparrV3Clean    = `{"path":"/dl/w3.mkv","movie":{"id":8},"quality":{"quality":{"id":5}},"downloadId":"dl-1","indexerFlags":0,"rejections":[]}`
+	whisparrV3Rejected = `{"path":"/dl/w3_rej.mkv","movie":{"id":8},"rejections":[{"reason":"Sample","type":"permanent"}]}`
+	whisparrV3Unmapped = `{"path":"/dl/w3_unmap.mkv","rejections":[]}`
 )
 
 // fakeImportArr serves GET /api/v{1,3}/manualimport and POST /api/v{1,3}/command and
@@ -96,10 +102,14 @@ func TestForceImport(t *testing.T) {
 		{name: "positive/radarr_clean", kind: domain.KindRadarr, candidates: radarrClean, wantN: 1, wantPaths: []string{"/dl/m.mkv"}},
 		{name: "positive/lidarr_clean", kind: domain.KindLidarr, candidates: lidarrClean, wantN: 1, wantPaths: []string{"/dl/t1.flac"}},
 		{name: "positive/readarr_clean", kind: domain.KindReadarr, candidates: readarrClean, wantN: 1, wantPaths: []string{"/dl/b.epub"}},
+		{name: "positive/whisparr_v2_clean", kind: domain.KindWhisparrV2, candidates: whisparrV2Clean, wantN: 1, wantPaths: []string{"/dl/w2.mkv"}},
+		{name: "positive/whisparr_v3_clean", kind: domain.KindWhisparrV3, candidates: whisparrV3Clean, wantN: 1, wantPaths: []string{"/dl/w3.mkv"}},
 		{name: "positive/sonarr_only_clean_of_mixed", kind: domain.KindSonarr, candidates: sonarrRejected + "," + sonarrClean + "," + sonarrUnmapped, wantN: 1, wantPaths: []string{"/dl/a.mkv"}},
 		{name: "positive/radarr_only_clean_of_mixed", kind: domain.KindRadarr, candidates: radarrUnmapped + "," + radarrClean + "," + radarrRejected, wantN: 1, wantPaths: []string{"/dl/m.mkv"}},
 		{name: "positive/lidarr_only_clean_of_mixed", kind: domain.KindLidarr, candidates: lidarrRejected + "," + lidarrClean + "," + lidarrUnmapped, wantN: 1, wantPaths: []string{"/dl/t1.flac"}},
 		{name: "positive/readarr_only_clean_of_mixed", kind: domain.KindReadarr, candidates: readarrUnmapped + "," + readarrClean + "," + readarrRejected, wantN: 1, wantPaths: []string{"/dl/b.epub"}},
+		{name: "positive/whisparr_v2_only_clean_of_mixed", kind: domain.KindWhisparrV2, candidates: whisparrV2Rejected + "," + whisparrV2Clean + "," + whisparrV2Unmapped, wantN: 1, wantPaths: []string{"/dl/w2.mkv"}},
+		{name: "positive/whisparr_v3_only_clean_of_mixed", kind: domain.KindWhisparrV3, candidates: whisparrV3Unmapped + "," + whisparrV3Clean + "," + whisparrV3Rejected, wantN: 1, wantPaths: []string{"/dl/w3.mkv"}},
 		{name: "negative/sonarr_rejected_refused", kind: domain.KindSonarr, candidates: sonarrRejected, wantErr: queue.ErrNoCleanCandidate},
 		{name: "negative/sonarr_unmapped_refused", kind: domain.KindSonarr, candidates: sonarrUnmapped, wantErr: queue.ErrNoCleanCandidate},
 		{name: "negative/radarr_rejected_refused", kind: domain.KindRadarr, candidates: radarrRejected, wantErr: queue.ErrNoCleanCandidate},
@@ -108,14 +118,21 @@ func TestForceImport(t *testing.T) {
 		{name: "negative/lidarr_unmapped_refused", kind: domain.KindLidarr, candidates: lidarrUnmapped, wantErr: queue.ErrNoCleanCandidate},
 		{name: "negative/readarr_rejected_refused", kind: domain.KindReadarr, candidates: readarrRejected, wantErr: queue.ErrNoCleanCandidate},
 		{name: "negative/readarr_unmapped_refused", kind: domain.KindReadarr, candidates: readarrUnmapped, wantErr: queue.ErrNoCleanCandidate},
+		{name: "negative/whisparr_v2_rejected_refused", kind: domain.KindWhisparrV2, candidates: whisparrV2Rejected, wantErr: queue.ErrNoCleanCandidate},
+		{name: "negative/whisparr_v2_unmapped_refused", kind: domain.KindWhisparrV2, candidates: whisparrV2Unmapped, wantErr: queue.ErrNoCleanCandidate},
+		{name: "negative/whisparr_v3_rejected_refused", kind: domain.KindWhisparrV3, candidates: whisparrV3Rejected, wantErr: queue.ErrNoCleanCandidate},
+		{name: "negative/whisparr_v3_unmapped_refused", kind: domain.KindWhisparrV3, candidates: whisparrV3Unmapped, wantErr: queue.ErrNoCleanCandidate},
 		{name: "negative/unknown_kind_invalid", kind: domain.AppKind("bogus"), candidates: sonarrClean, wantErr: domain.ErrInvalid},
 		{name: "negative/candidates_error", kind: domain.KindSonarr, getStatus: http.StatusInternalServerError, wantAnyErr: true},
+		{name: "negative/whisparr_v2_candidates_error", kind: domain.KindWhisparrV2, getStatus: http.StatusInternalServerError, wantAnyErr: true},
+		{name: "negative/whisparr_v3_candidates_error", kind: domain.KindWhisparrV3, getStatus: http.StatusInternalServerError, wantAnyErr: true},
 		{name: "negative/command_error", kind: domain.KindRadarr, candidates: radarrClean, postStatus: http.StatusInternalServerError, wantAnyErr: true, wantPaths: []string{"/dl/m.mkv"}},
 		{name: "boundary/radarr_no_candidates_refused", kind: domain.KindRadarr, candidates: "", wantErr: queue.ErrNoCleanCandidate},
 		{name: "boundary/lidarr_no_candidates_refused", kind: domain.KindLidarr, candidates: "", wantErr: queue.ErrNoCleanCandidate},
 		{name: "boundary/readarr_no_candidates_refused", kind: domain.KindReadarr, candidates: "", wantErr: queue.ErrNoCleanCandidate},
-		{name: "boundary/whisparr_v2_unsupported", kind: domain.KindWhisparrV2, candidates: sonarrClean, wantErr: queue.ErrQueueUnsupported},
-		{name: "boundary/whisparr_v3_unsupported", kind: domain.KindWhisparrV3, candidates: radarrClean, wantErr: queue.ErrQueueUnsupported},
+		{name: "boundary/whisparr_v2_no_candidates_refused", kind: domain.KindWhisparrV2, candidates: "", wantErr: queue.ErrNoCleanCandidate},
+		{name: "boundary/whisparr_v3_no_candidates_refused", kind: domain.KindWhisparrV3, candidates: "", wantErr: queue.ErrNoCleanCandidate},
+		{name: "boundary/whisparr_v3_indexer_flags_zero_preserved", kind: domain.KindWhisparrV3, candidates: whisparrV3Clean, wantN: 1, wantPaths: []string{"/dl/w3.mkv"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -141,6 +158,8 @@ func TestForceImportFixableMode(t *testing.T) {
 	sonarrUnknownRejection := `{"path":"/dl/unk.mkv","series":{"id":5},"episodes":[{"id":52}],"quality":{"quality":{"id":3}},"downloadId":"dl-1","rejections":[{"reason":"Unknown weird rejection reason","type":"permanent"}]}`
 	sonarrBrokenRejection := `{"path":"/dl/brk.mkv","series":{"id":5},"episodes":[{"id":53}],"quality":{"quality":{"id":3}},"downloadId":"dl-1","rejections":[{"reason":"Sample","type":"permanent"}]}`
 	lidarrFixable := `{"path":"/dl/fix.flac","artist":{"id":3},"album":{"id":31},"tracks":[{"id":301}],"quality":{"quality":{"id":1}},"downloadId":"dl-1","rejections":[{"reason":"Has missing tracks","type":"permanent"}]}`
+	whisparrV2Fixable := `{"path":"/dl/w2_fix.mkv","series":{"id":7},"episodes":[{"id":71}],"quality":{"quality":{"id":4}},"downloadId":"dl-1","rejections":[{"reason":"Single episode split into multiple files","type":"permanent"}]}`
+	whisparrV3Fixable := `{"path":"/dl/w3_fix.mkv","movie":{"id":8},"quality":{"quality":{"id":5}},"downloadId":"dl-1","indexerFlags":0,"rejections":[{"reason":"Found matching movie via grab history, but release was matched to movie by ID. Manual Import required.","type":"permanent"}]}`
 
 	tests := []struct {
 		name       string
@@ -184,16 +203,18 @@ func TestForceImportFixableMode(t *testing.T) {
 			wantPaths:  []string{"/dl/fix.mkv"},
 		},
 		{
-			name:       "negative/whisparr_v2_unsupported_in_fixable_mode",
+			name:       "positive/whisparr_v2_fixable_qualifies",
 			kind:       domain.KindWhisparrV2,
-			candidates: sonarrFixable,
-			wantErr:    queue.ErrQueueUnsupported,
+			candidates: whisparrV2Fixable,
+			wantN:      1,
+			wantPaths:  []string{"/dl/w2_fix.mkv"},
 		},
 		{
-			name:       "negative/whisparr_v3_unsupported_in_fixable_mode",
+			name:       "positive/whisparr_v3_fixable_qualifies",
 			kind:       domain.KindWhisparrV3,
-			candidates: sonarrFixable,
-			wantErr:    queue.ErrQueueUnsupported,
+			candidates: whisparrV3Fixable,
+			wantN:      1,
+			wantPaths:  []string{"/dl/w3_fix.mkv"},
 		},
 	}
 
@@ -251,8 +272,30 @@ func checkCommands(t *testing.T, arr *fakeImportArr, wantPaths []string) {
 		t.Fatalf("command = %v, want ManualImport auto with %v", cmd, wantPaths)
 	}
 	for i, f := range files {
-		if m, _ := f.(map[string]any); m["path"] != wantPaths[i] {
+		m, _ := f.(map[string]any)
+		if m["path"] != wantPaths[i] {
 			t.Fatalf("file %d = %v, want path %s", i, f, wantPaths[i])
+		}
+		if m["path"] == "/dl/w3.mkv" {
+			flags, ok := m["indexerFlags"]
+			if !ok {
+				t.Fatalf("file %d omitted indexerFlags: %v", i, f)
+			}
+			if flags != float64(0) {
+				t.Fatalf("file %d indexerFlags = %v, want 0", i, flags)
+			}
+			if m["movieId"] != float64(8) {
+				t.Fatalf("file %d movieId = %v, want 8", i, m["movieId"])
+			}
+		}
+		if m["path"] == "/dl/w2.mkv" {
+			if m["seriesId"] != float64(7) {
+				t.Fatalf("file %d seriesId = %v, want 7", i, m["seriesId"])
+			}
+			eps, _ := m["episodeIds"].([]any)
+			if len(eps) != 1 || eps[0] != float64(71) {
+				t.Fatalf("file %d episodeIds = %v, want [71]", i, m["episodeIds"])
+			}
 		}
 	}
 }
@@ -278,6 +321,18 @@ func TestForceImportRejectionReasons(t *testing.T) {
 			name:        "positive/single_reason",
 			kind:        domain.KindRadarr,
 			candidates:  radarrRejected,
+			wantReasons: []string{"Sample"},
+		},
+		{
+			name:        "positive/whisparr_v2_single_reason",
+			kind:        domain.KindWhisparrV2,
+			candidates:  whisparrV2Rejected,
+			wantReasons: []string{"Sample"},
+		},
+		{
+			name:        "positive/whisparr_v3_single_reason",
+			kind:        domain.KindWhisparrV3,
+			candidates:  whisparrV3Rejected,
 			wantReasons: []string{"Sample"},
 		},
 		{

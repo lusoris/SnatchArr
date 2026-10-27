@@ -254,6 +254,8 @@
 	"queue_strike_strikes": "Strikes",
 	"queue_strike_last_seen": "Last seen",
 	"queue_strike_fraction": "{count} / {threshold}",
+	"queue_sweep_now": "Sweep now",
+	"queue_sweep_done": "Queue sweep completed",
 	"history_title": "History",
 	"history_when": "When",
 	"history_type": "Type",

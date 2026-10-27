@@ -193,8 +193,8 @@ github.com/golusoris/goenvoy/arr/sonarr v1.5.5 h1:O5en50iq/GlgfOoTEkFOUTkOUdfH8l
 github.com/golusoris/goenvoy/arr/sonarr v1.5.5/go.mod h1:0zGwSRbui5EJfFubweeHyMFXAtDYjWVbg9NdqIYvSBA=
 github.com/golusoris/goenvoy/arr/v2 v2.6.2 h1:9NBhlRbQ1UsqYu1wRUNtCCXcG9dGXPcHuMsRZApuFc8=
 github.com/golusoris/goenvoy/arr/v2 v2.6.2/go.mod h1:S8R0zggkT/1yLt+RGuovLG9Bhyg/geiaQPMq3MW46k8=
-github.com/golusoris/goenvoy/arr/whisparr v1.5.1 h1:EUBQ8GDdRYWHgww72RdkkQuS6yiLmOwHK47ZapBXDtc=
-github.com/golusoris/goenvoy/arr/whisparr v1.5.1/go.mod h1:ByIAAmTXLDV7aAuZHROf0pWFc38ievVJK9B2m0nE3lw=
+github.com/golusoris/goenvoy/arr/whisparr v1.6.0 h1:HdzSri0nf6793W7oNmlAzrP2S8/j2Do4jQG78ZatcCk=
+github.com/golusoris/goenvoy/arr/whisparr v1.6.0/go.mod h1:yQkvLEavvUaTobI9fjCtkS2HI8tauLKjwOtNkmyuoqg=
 github.com/golusoris/goenvoy/downloadclient/deluge/v2 v2.0.3 h1:ouOlW82Ob2cj3HsSozj6n6HKeCZKoVX5d7TgN32vPyA=
 github.com/golusoris/goenvoy/downloadclient/deluge/v2 v2.0.3/go.mod h1:qgVt2UG2ek1uL4BnPXuOfpe9eko0nl3iYD5qP4jkNCs=
 github.com/golusoris/goenvoy/downloadclient/nzbget/v2 v2.0.3 h1:pzbkMv25yhl5U5EYIvgC94VknA1DJBmeth6BowcOi4c=

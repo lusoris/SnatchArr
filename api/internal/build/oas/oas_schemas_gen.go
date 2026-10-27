@@ -9533,6 +9533,9 @@ func (s *StateResetResult) SetForgotten(val int64) {
 	s.Forgotten = val
 }
 
+// SweepInstanceQueueNoContent is response for SweepInstanceQueue operation.
+type SweepInstanceQueueNoContent struct{}
+
 // Ref: #/components/schemas/SystemStatus
 type SystemStatus struct {
 	Name          string              `json:"name"`

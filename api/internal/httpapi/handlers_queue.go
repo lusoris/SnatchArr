@@ -7,10 +7,17 @@ package httpapi
 import (
 	"context"
 
+	"github.com/google/uuid"
+
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/policyoas"
 	"github.com/lusoris/SnatchArr/api/internal/queue"
 )
+
+type queueService interface {
+	Inspect(ctx context.Context, instanceID uuid.UUID) (queue.Inspection, error)
+	SweepInstance(ctx context.Context, instanceID uuid.UUID) error
+}
 
 // GetQueuePolicy returns an instance's queue policy.
 func (h *Handlers) GetQueuePolicy(ctx context.Context, params oas.GetQueuePolicyParams) (*oas.QueuePolicy, error) {
@@ -106,6 +113,17 @@ func (h *Handlers) ListQueueStrikes(ctx context.Context, params oas.ListQueueStr
 		out = append(out, queueStrikeToOAS(item, queue.ResolveRule(cfg, item.Rule).Threshold))
 	}
 	return out, nil
+}
+
+// SweepInstanceQueue runs one download queue sweep of an instance now.
+func (h *Handlers) SweepInstanceQueue(ctx context.Context, params oas.SweepInstanceQueueParams) error {
+	if err := requireAdmin(ctx); err != nil {
+		return err
+	}
+	if _, err := h.instances.Get(ctx, params.InstanceId); err != nil {
+		return err
+	}
+	return h.queueSvc.SweepInstance(ctx, params.InstanceId)
 }
 
 func queuePolicyToOAS(s queue.Settings) *oas.QueuePolicy {
