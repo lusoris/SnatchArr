@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/golusoris/goenvoy/metadata/adult/stashbox/v2"
@@ -37,23 +38,20 @@ const (
 
 // Service provides Stash-box synchronization, pooling, federated search, and image set management.
 type Service struct {
-	st                   *store.Store
-	enc                  *crypto.Encryptor
-	clk                  clock.Clock
-	ids                  id.Generator
-	mod                  ModuleChecker
-	pool                 *ClientBuilder
-	logger               *slog.Logger
-	mu                   sync.Mutex
-	lastPass             time.Time
-	lastScanPass         time.Time
-	lastSyncAt           *time.Time
-	lastSyncErr          string
-	lastPerformersSynced int
-	lastStudiosSynced    int
-	thumbSem             chan struct{}
-	openFile             func(root *os.Root, rel string) (*os.File, error)
-	maxImageSets         int
+	st           *store.Store
+	enc          *crypto.Encryptor
+	clk          clock.Clock
+	ids          id.Generator
+	mod          ModuleChecker
+	pool         *ClientBuilder
+	logger       *slog.Logger
+	mu           sync.Mutex
+	syncing      atomic.Bool
+	lastPass     time.Time
+	lastScanPass time.Time
+	thumbSem     chan struct{}
+	openFile     func(root *os.Root, rel string) (*os.File, error)
+	maxImageSets int
 }
 
 func defaultRootOpen(root *os.Root, rel string) (*os.File, error) {

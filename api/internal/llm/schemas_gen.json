@@ -166,6 +166,8 @@
           },
           "priority": {
             "default": 0,
+            "maximum": 1000,
+            "minimum": 0,
             "type": "integer"
           },
           "sync_favorites": {
@@ -2332,6 +2334,8 @@
           },
           "priority": {
             "default": 0,
+            "maximum": 1000,
+            "minimum": 0,
             "type": "integer"
           },
           "sync_favorites": {

@@ -890,6 +890,9 @@
 	"adult_sources_status_counts": "{performers} Darstellende · {studios} Studios",
 	"adult_sources_status_last_sync": "Letzter Abgleich: {when}",
 	"adult_sources_status_never": "Noch nie abgeglichen",
+	"adult_sources_source_last_sync": "Letzter Abgleich: {when}",
+	"adult_sources_source_never": "Noch nie abgeglichen",
+	"adult_sources_source_error": "Abgleichsfehler: {error}",
 	"adult_sources_priority_badge": "Priorität {priority}",
 	"help_adult_sources": "Katalogquellen verbinden SnatchArr mit GraphQL-Metadatenverzeichnissen, um favorisierte Darstellende und Studios abzugleichen. Administratoren können Endpunkte mit verschlüsselten API-Schlüsseln hinterlegen, Prioritäten festlegen und manuelle Abgleiche starten."
 }

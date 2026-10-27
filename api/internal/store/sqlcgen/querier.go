@@ -259,6 +259,7 @@ type Querier interface {
 	PurgeRunsBefore(ctx context.Context, arg PurgeRunsBeforeParams) (int64, error)
 	PurgeWorkersBefore(ctx context.Context, arg PurgeWorkersBeforeParams) (int64, error)
 	RecentRunStatuses(ctx context.Context, arg RecentRunStatusesParams) ([]string, error)
+	RecordAdultStashboxSyncResult(ctx context.Context, arg RecordAdultStashboxSyncResultParams) error
 	RecordDownloadClientCheck(ctx context.Context, arg RecordDownloadClientCheckParams) error
 	RecordInstanceCheck(ctx context.Context, arg RecordInstanceCheckParams) error
 	RecordLoginLockoutFailure(ctx context.Context, arg RecordLoginLockoutFailureParams) error

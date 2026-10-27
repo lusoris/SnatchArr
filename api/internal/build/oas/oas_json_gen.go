@@ -52,6 +52,18 @@ func (s *AdultSource) encodeFields(e *jx.Encoder) {
 		e.Int(s.Priority)
 	}
 	{
+		if s.LastSyncAt.Set {
+			e.FieldStart("last_sync_at")
+			s.LastSyncAt.Encode(e, json.EncodeDateTime)
+		}
+	}
+	{
+		if s.LastSyncError.Set {
+			e.FieldStart("last_sync_error")
+			s.LastSyncError.Encode(e)
+		}
+	}
+	{
 		e.FieldStart("created_at")
 		json.EncodeDateTime(e, s.CreatedAt)
 	}
@@ -61,16 +73,18 @@ func (s *AdultSource) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfAdultSource = [9]string{
-	0: "id",
-	1: "name",
-	2: "endpoint",
-	3: "has_api_key",
-	4: "enabled",
-	5: "sync_favorites",
-	6: "priority",
-	7: "created_at",
-	8: "updated_at",
+var jsonFieldsNameOfAdultSource = [11]string{
+	0:  "id",
+	1:  "name",
+	2:  "endpoint",
+	3:  "has_api_key",
+	4:  "enabled",
+	5:  "sync_favorites",
+	6:  "priority",
+	7:  "last_sync_at",
+	8:  "last_sync_error",
+	9:  "created_at",
+	10: "updated_at",
 }
 
 // Decode decodes AdultSource from json.
@@ -166,8 +180,28 @@ func (s *AdultSource) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"priority\"")
 			}
+		case "last_sync_at":
+			if err := func() error {
+				s.LastSyncAt.Reset()
+				if err := s.LastSyncAt.Decode(d, json.DecodeDateTime); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"last_sync_at\"")
+			}
+		case "last_sync_error":
+			if err := func() error {
+				s.LastSyncError.Reset()
+				if err := s.LastSyncError.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"last_sync_error\"")
+			}
 		case "created_at":
-			requiredBitSet[0] |= 1 << 7
+			requiredBitSet[1] |= 1 << 1
 			if err := func() error {
 				v, err := json.DecodeDateTime(d)
 				s.CreatedAt = v
@@ -179,7 +213,7 @@ func (s *AdultSource) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"created_at\"")
 			}
 		case "updated_at":
-			requiredBitSet[1] |= 1 << 0
+			requiredBitSet[1] |= 1 << 2
 			if err := func() error {
 				v, err := json.DecodeDateTime(d)
 				s.UpdatedAt = v
@@ -200,8 +234,8 @@ func (s *AdultSource) Decode(d *jx.Decoder) error {
 	// Validate required fields.
 	var failures []validate.FieldError
 	for i, mask := range [2]uint8{
-		0b11111111,
-		0b00000001,
+		0b01111111,
+		0b00000110,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.

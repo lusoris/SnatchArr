@@ -39,6 +39,15 @@ ORDER BY priority ASC, name ASC;
 DELETE FROM adult_stashbox_instances
 WHERE id = $1;
 
+-- name: RecordAdultStashboxSyncResult :exec
+UPDATE adult_stashbox_instances
+SET
+    last_sync_at = $2,
+    last_sync_error = $3,
+    last_performers_synced = $4,
+    last_studios_synced = $5
+WHERE id = $1;
+
 -- name: UpsertAdultPerformer :one
 INSERT INTO adult_performers (
     id, canonical_name, disambiguation, urls, is_favorite, created_at, updated_at

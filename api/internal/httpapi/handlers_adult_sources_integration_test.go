@@ -6,6 +6,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/lusoris/SnatchArr/api/internal/adult"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 )
 
@@ -96,7 +98,21 @@ func assertProblemStatusAndType(t *testing.T, res httpResult, wantStatus int) {
 	}
 }
 
-func assertAdultSyncAndStatus(t *testing.T, f *routerFixture, adminCsrf string) {
+func assertProblemClientRejected(t *testing.T, res httpResult) {
+	t.Helper()
+	if res.statusCode != http.StatusBadRequest && res.statusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 400 or 422; body: %s", res.statusCode, string(res.body))
+	}
+	var prob map[string]any
+	if err := json.Unmarshal(res.body, &prob); err != nil {
+		t.Fatalf("decode problem json: %v; body: %s", err, string(res.body))
+	}
+	if int(prob["status"].(float64)) != res.statusCode {
+		t.Errorf("problem status = %v, want %d", prob["status"], res.statusCode)
+	}
+}
+
+func assertAdultSyncAndStatus(t *testing.T, f *routerFixture, adminCsrf, srcID string) {
 	t.Helper()
 	syncRes := doHTTP(t, f.client, http.MethodPost, f.srv.URL+PathPrefix+"/adult/sync", adminCsrf, nil)
 	if syncRes.statusCode != http.StatusOK {
@@ -124,6 +140,18 @@ func assertAdultSyncAndStatus(t *testing.T, f *routerFixture, adminCsrf string) 
 	if status["last_sync_at"] == nil || status["last_sync_at"] == "" {
 		t.Errorf("expected last_sync_at to be set: %+v", status)
 	}
+
+	srcRes := doHTTP(t, f.client, http.MethodGet, f.srv.URL+PathPrefix+"/adult/sources/"+srcID, "", nil)
+	if srcRes.statusCode != http.StatusOK {
+		t.Fatalf("get source after sync status = %d, want 200", srcRes.statusCode)
+	}
+	var syncedSrc map[string]any
+	if err := json.Unmarshal(srcRes.body, &syncedSrc); err != nil {
+		t.Fatalf("unmarshal synced source: %v", err)
+	}
+	if syncedSrc["last_sync_at"] == nil || syncedSrc["last_sync_at"] == "" {
+		t.Errorf("expected source last_sync_at to be set: %+v", syncedSrc)
+	}
 }
 
 func TestAdultSources_Positive_CRUDAndSync(t *testing.T) {
@@ -138,7 +166,7 @@ func TestAdultSources_Positive_CRUDAndSync(t *testing.T) {
 	createPayload := map[string]any{
 		"name":           "Primary Catalogue",
 		"endpoint":       gqlStub.URL + "/graphql",
-		"api_key":        "secret-catalogue-token-999",
+		"api_key":        "fake-api-key-0123456789",
 		"enabled":        true,
 		"sync_favorites": true,
 		"priority":       10,
@@ -147,7 +175,7 @@ func TestAdultSources_Positive_CRUDAndSync(t *testing.T) {
 	if createRes.statusCode != http.StatusCreated {
 		t.Fatalf("create source status = %d, want 201; body: %s", createRes.statusCode, string(createRes.body))
 	}
-	if strings.Contains(string(createRes.body), "secret-catalogue-token-999") {
+	if strings.Contains(string(createRes.body), "fake-api-key-0123456789") {
 		t.Fatalf("create response leaked api_key: %s", string(createRes.body))
 	}
 	var created map[string]any
@@ -160,7 +188,7 @@ func TestAdultSources_Positive_CRUDAndSync(t *testing.T) {
 	}
 
 	getRes := doHTTP(t, f.client, http.MethodGet, f.srv.URL+PathPrefix+"/adult/sources/"+srcID, "", nil)
-	if getRes.statusCode != http.StatusOK || strings.Contains(string(getRes.body), "secret-catalogue-token-999") {
+	if getRes.statusCode != http.StatusOK || strings.Contains(string(getRes.body), "fake-api-key-0123456789") {
 		t.Fatalf("get source failed or leaked key: status=%d body=%s", getRes.statusCode, string(getRes.body))
 	}
 
@@ -175,7 +203,7 @@ func TestAdultSources_Positive_CRUDAndSync(t *testing.T) {
 	if updateRes.statusCode != http.StatusOK {
 		t.Fatalf("update source status = %d, want 200; body: %s", updateRes.statusCode, string(updateRes.body))
 	}
-	assertAdultSyncAndStatus(t, f, adminCsrf)
+	assertAdultSyncAndStatus(t, f, adminCsrf, srcID)
 
 	delRes := doHTTP(t, f.client, http.MethodDelete, f.srv.URL+PathPrefix+"/adult/sources/"+srcID, adminCsrf, nil)
 	if delRes.statusCode != http.StatusNoContent {
@@ -197,21 +225,27 @@ func TestAdultSources_Negative_ValidationAndNotFound(t *testing.T) {
 		name string
 		body map[string]any
 	}{
-		{"bad scheme ftp", map[string]any{"name": "Bad Scheme", "endpoint": "ftp://catalogue.local/graphql", "api_key": "k"}},
-		{"missing host", map[string]any{"name": "No Host", "endpoint": "not-a-url", "api_key": "k"}},
-		{"missing api key on create", map[string]any{"name": "No Key", "endpoint": "https://catalogue.local/graphql"}},
-		{"whitespace api key", map[string]any{"name": "Blank Key", "endpoint": "https://catalogue.local/graphql", "api_key": "   "}},
+		{"bad scheme ftp", map[string]any{"name": "Bad Scheme", "endpoint": "ftp://127.0.0.1:1/graphql", "api_key": "fake-api-key-0123456789"}},
+		{"missing host", map[string]any{"name": "No Host", "endpoint": "not-a-url", "api_key": "fake-api-key-0123456789"}},
+		{"missing api key on create", map[string]any{"name": "No Key", "endpoint": "http://127.0.0.1:1/graphql"}},
+		{"whitespace api key", map[string]any{"name": "Blank Key", "endpoint": "http://127.0.0.1:1/graphql", "api_key": "   "}},
+		{"priority below min -1", map[string]any{"name": "Prio Neg", "endpoint": "http://127.0.0.1:1/graphql", "api_key": "fake-api-key-0123456789", "priority": -1}},
+		{"priority above max 1001", map[string]any{"name": "Prio High", "endpoint": "http://127.0.0.1:1/graphql", "api_key": "fake-api-key-0123456789", "priority": 1001}},
 	}
 	for _, tc := range badPayloads {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			res := doHTTP(t, f.client, http.MethodPost, f.srv.URL+PathPrefix+"/adult/sources", adminCsrf, tc.body)
-			assertProblemStatusAndType(t, res, http.StatusBadRequest)
+			assertProblemClientRejected(t, res)
 		})
 	}
 
+	if err := mapAdultError(adult.ErrSyncInProgress); !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("mapAdultError(ErrSyncInProgress) = %v, want domain.ErrConflict", err)
+	}
+
 	unknownID := uuid.New().String()
-	validBody := map[string]any{"name": "Valid", "endpoint": "https://catalogue.local/graphql", "api_key": "key"}
+	validBody := map[string]any{"name": "Valid", "endpoint": "http://127.0.0.1:1/graphql", "api_key": "fake-api-key-0123456789"}
 	assertProblemStatusAndType(t, doHTTP(t, f.client, http.MethodGet, f.srv.URL+PathPrefix+"/adult/sources/"+unknownID, "", nil), http.StatusNotFound)
 	assertProblemStatusAndType(t, doHTTP(t, f.client, http.MethodPut, f.srv.URL+PathPrefix+"/adult/sources/"+unknownID, adminCsrf, validBody), http.StatusNotFound)
 	assertProblemStatusAndType(t, doHTTP(t, f.client, http.MethodDelete, f.srv.URL+PathPrefix+"/adult/sources/"+unknownID, adminCsrf, nil), http.StatusNotFound)
@@ -230,7 +264,7 @@ func TestAdultSources_Negative_ModuleOffReturns404(t *testing.T) {
 	}
 
 	dummyID := uuid.New().String()
-	payload := map[string]any{"name": "Blocked", "endpoint": "https://catalogue.local/graphql", "api_key": "token"}
+	payload := map[string]any{"name": "Blocked", "endpoint": "http://127.0.0.1:1/graphql", "api_key": "fake-api-key-0123456789"}
 	endpoints := []struct {
 		name   string
 		method string
@@ -254,38 +288,37 @@ func TestAdultSources_Negative_ModuleOffReturns404(t *testing.T) {
 	}
 }
 
-func TestAdultSources_Boundary_NameLengthAndDisabledSync(t *testing.T) {
+func TestAdultSources_Boundary_NameLengthPriorityAndDisabledSync(t *testing.T) {
 	t.Parallel()
 	f := newRouterFixture(t)
 	setupFixtureStubs(f)
 	_ = completeInitialSetup(t, f)
 	adminCsrf := getAdminCsrfToken(t, f)
 	enableAdultModuleForTest(t, f, adminCsrf)
-	gqlStub := newAdultGraphQLStub(t)
 
 	// Boundary: empty name (0 chars) and 129 chars -> 400
 	emptyRes := doHTTP(t, f.client, http.MethodPost, f.srv.URL+PathPrefix+"/adult/sources", adminCsrf, map[string]any{
-		"name": "", "endpoint": gqlStub.URL + "/graphql", "api_key": "k",
+		"name": "", "endpoint": "http://127.0.0.1:1/graphql", "api_key": "fake-api-key-0123456789",
 	})
 	assertProblemStatusAndType(t, emptyRes, http.StatusBadRequest)
 
 	tooLongRes := doHTTP(t, f.client, http.MethodPost, f.srv.URL+PathPrefix+"/adult/sources", adminCsrf, map[string]any{
-		"name": strings.Repeat("x", 129), "endpoint": gqlStub.URL + "/graphql", "api_key": "k",
+		"name": strings.Repeat("x", 129), "endpoint": "http://127.0.0.1:1/graphql", "api_key": "fake-api-key-0123456789",
 	})
 	assertProblemStatusAndType(t, tooLongRes, http.StatusBadRequest)
 
-	// Boundary: 1 char and 128 chars -> 201, with enabled=false so sync returns 0
+	// Boundary: 1 char with priority 0, and 128 chars with priority 1000 -> 201, with enabled=false so sync returns 0
 	minRes := doHTTP(t, f.client, http.MethodPost, f.srv.URL+PathPrefix+"/adult/sources", adminCsrf, map[string]any{
-		"name": "a", "endpoint": gqlStub.URL + "/graphql", "api_key": "k", "enabled": false,
+		"name": "a", "endpoint": "http://127.0.0.1:1/graphql", "api_key": "fake-api-key-0123456789", "enabled": false, "priority": 0,
 	})
 	if minRes.statusCode != http.StatusCreated {
-		t.Fatalf("1-char name status = %d, want 201; body: %s", minRes.statusCode, string(minRes.body))
+		t.Fatalf("1-char priority-0 status = %d, want 201; body: %s", minRes.statusCode, string(minRes.body))
 	}
 	maxRes := doHTTP(t, f.client, http.MethodPost, f.srv.URL+PathPrefix+"/adult/sources", adminCsrf, map[string]any{
-		"name": strings.Repeat("b", 128), "endpoint": gqlStub.URL + "/graphql", "api_key": "k", "enabled": false,
+		"name": strings.Repeat("b", 128), "endpoint": "http://127.0.0.1:1/graphql", "api_key": "fake-api-key-0123456789", "enabled": false, "priority": 1000,
 	})
 	if maxRes.statusCode != http.StatusCreated {
-		t.Fatalf("128-char name status = %d, want 201; body: %s", maxRes.statusCode, string(maxRes.body))
+		t.Fatalf("128-char priority-1000 status = %d, want 201; body: %s", maxRes.statusCode, string(maxRes.body))
 	}
 
 	// Boundary: disabled sources -> sync summary 0
@@ -297,5 +330,57 @@ func TestAdultSources_Boundary_NameLengthAndDisabledSync(t *testing.T) {
 	_ = json.Unmarshal(syncRes.body, &summary)
 	if summary["sources_synced"] != float64(0) || summary["performers_synced"] != float64(0) || summary["studios_synced"] != float64(0) {
 		t.Errorf("disabled sources should yield 0 sync summary, got: %+v", summary)
+	}
+}
+
+func TestAdultSources_Negative_ConcurrentSyncReturns409(t *testing.T) {
+	t.Parallel()
+	f := newRouterFixture(t)
+	setupFixtureStubs(f)
+	_ = completeInitialSetup(t, f)
+	adminCsrf := getAdminCsrfToken(t, f)
+	enableAdultModuleForTest(t, f, adminCsrf)
+
+	started := make(chan struct{})
+	unblock := make(chan struct{})
+	blockingStub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		select {
+		case started <- struct{}{}:
+		default:
+		}
+		<-unblock
+		w.Header().Set("Content-Type", "application/json")
+		writeTestJSON(t, w, map[string]any{
+			"data": map[string]any{
+				"query_performers": map[string]any{"count": 0, "performers": []any{}},
+				"query_studios":    map[string]any{"count": 0, "studios": []any{}},
+			},
+		})
+	}))
+	t.Cleanup(blockingStub.Close)
+
+	createRes := doHTTP(t, f.client, http.MethodPost, f.srv.URL+PathPrefix+"/adult/sources", adminCsrf, map[string]any{
+		"name":     "Blocking Source",
+		"endpoint": blockingStub.URL + "/graphql",
+		"api_key":  "fake-api-key-0123456789",
+		"enabled":  true,
+	})
+	if createRes.statusCode != http.StatusCreated {
+		t.Fatalf("create source status = %d, want 201", createRes.statusCode)
+	}
+
+	firstDone := make(chan httpResult, 1)
+	go func() {
+		firstDone <- doHTTP(t, f.client, http.MethodPost, f.srv.URL+PathPrefix+"/adult/sync", adminCsrf, nil)
+	}()
+
+	<-started
+	secondRes := doHTTP(t, f.client, http.MethodPost, f.srv.URL+PathPrefix+"/adult/sync", adminCsrf, nil)
+	assertProblemStatusAndType(t, secondRes, http.StatusConflict)
+
+	close(unblock)
+	firstRes := <-firstDone
+	if firstRes.statusCode != http.StatusOK {
+		t.Fatalf("first sync status = %d, want 200; body: %s", firstRes.statusCode, string(firstRes.body))
 	}
 }

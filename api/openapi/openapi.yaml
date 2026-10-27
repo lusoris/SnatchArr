@@ -4626,6 +4626,13 @@ components:
           type: boolean
         priority:
           type: integer
+        last_sync_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_sync_error:
+          type: string
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -4654,6 +4661,8 @@ components:
           default: true
         priority:
           type: integer
+          minimum: 0
+          maximum: 1000
           default: 0
 
     AdultSyncSummary:

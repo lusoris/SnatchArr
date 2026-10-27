@@ -24,6 +24,10 @@ const (
 	MaxSourceNameLen = 128
 	// MaxSourceEndpointLen is the maximum character length of a catalogue source endpoint URL.
 	MaxSourceEndpointLen = 512
+	// MinSourcePriority is the minimum allowed priority rank for a catalogue source.
+	MinSourcePriority = 0
+	// MaxSourcePriority is the maximum allowed priority rank for a catalogue source.
+	MaxSourcePriority = 1000
 )
 
 // Source represents a configured catalogue source without exposing its secret API key.
@@ -35,6 +39,8 @@ type Source struct {
 	Enabled       bool
 	SyncFavorites bool
 	Priority      int
+	LastSyncAt    *time.Time
+	LastSyncError string
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
 }
@@ -67,6 +73,10 @@ type SyncStatus struct {
 }
 
 func toSource(row sqlcgen.AdultStashboxInstance) Source {
+	var lastErr string
+	if row.LastSyncError != nil {
+		lastErr = *row.LastSyncError
+	}
 	return Source{
 		ID:            row.ID,
 		Name:          row.Name,
@@ -75,6 +85,8 @@ func toSource(row sqlcgen.AdultStashboxInstance) Source {
 		Enabled:       row.Enabled,
 		SyncFavorites: row.SyncFavorites,
 		Priority:      int(row.Priority),
+		LastSyncAt:    row.LastSyncAt,
+		LastSyncError: lastErr,
 		CreatedAt:     row.CreatedAt,
 		UpdatedAt:     row.UpdatedAt,
 	}
@@ -108,6 +120,9 @@ func validateSourceInput(in SourceInput, requireKey bool) (SourceInput, error) {
 	in.APIKey = strings.TrimSpace(in.APIKey)
 	if requireKey && in.APIKey == "" {
 		return SourceInput{}, fmt.Errorf("%w: api_key is required", domain.ErrInvalid)
+	}
+	if in.Priority < MinSourcePriority || in.Priority > MaxSourcePriority {
+		return SourceInput{}, fmt.Errorf("%w: priority must be %d..%d", domain.ErrInvalid, MinSourcePriority, MaxSourcePriority)
 	}
 	return in, nil
 }
@@ -215,24 +230,42 @@ func (s *Service) DeleteSource(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
-// GetSyncStatus returns the current catalogue source counts and last synchronization telemetry.
-func (s *Service) GetSyncStatus(ctx context.Context) (SyncStatus, error) {
-	rows, err := s.st.Q().ListAdultStashboxInstances(ctx)
-	if err != nil {
-		return SyncStatus{}, fmt.Errorf("adult: list sources for status: %w", store.MapError(err))
+func updateLatestSyncError(r sqlcgen.AdultStashboxInstance, lastErrAt **time.Time, lastErr *string) {
+	if r.LastSyncError == nil || *r.LastSyncError == "" {
+		return
 	}
-	enabled := 0
+	if r.LastSyncAt != nil && (*lastErrAt == nil || !r.LastSyncAt.Before(**lastErrAt)) {
+		t := *r.LastSyncAt
+		*lastErrAt = &t
+		*lastErr = *r.LastSyncError
+		return
+	}
+	if *lastErr == "" {
+		*lastErr = *r.LastSyncError
+	}
+}
+
+func aggregateSyncStatus(rows []sqlcgen.AdultStashboxInstance) SyncStatus {
+	var (
+		enabled    int
+		perfSynced int
+		studSynced int
+		lastAt     *time.Time
+		lastErrAt  *time.Time
+		lastErr    string
+	)
 	for _, r := range rows {
 		if r.Enabled {
 			enabled++
 		}
+		perfSynced += int(r.LastPerformersSynced)
+		studSynced += int(r.LastStudiosSynced)
+		if r.LastSyncAt != nil && (lastAt == nil || r.LastSyncAt.After(*lastAt)) {
+			t := *r.LastSyncAt
+			lastAt = &t
+		}
+		updateLatestSyncError(r, &lastErrAt, &lastErr)
 	}
-	s.mu.Lock()
-	lastAt := s.lastSyncAt
-	lastErr := s.lastSyncErr
-	perfSynced := s.lastPerformersSynced
-	studSynced := s.lastStudiosSynced
-	s.mu.Unlock()
 	return SyncStatus{
 		TotalSources:     len(rows),
 		EnabledSources:   enabled,
@@ -240,5 +273,14 @@ func (s *Service) GetSyncStatus(ctx context.Context) (SyncStatus, error) {
 		StudiosSynced:    studSynced,
 		LastSyncAt:       lastAt,
 		LastError:        lastErr,
-	}, nil
+	}
+}
+
+// GetSyncStatus returns the current catalogue source counts and last synchronization telemetry.
+func (s *Service) GetSyncStatus(ctx context.Context) (SyncStatus, error) {
+	rows, err := s.st.Q().ListAdultStashboxInstances(ctx)
+	if err != nil {
+		return SyncStatus{}, fmt.Errorf("adult: list sources for status: %w", store.MapError(err))
+	}
+	return aggregateSyncStatus(rows), nil
 }

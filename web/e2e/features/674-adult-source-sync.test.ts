@@ -108,7 +108,7 @@ async function setAdultModuleState(
 	expect(res.ok()).toBeTruthy();
 }
 
-test('674: adult catalogue source CRUD, favourite sync, module-off 404, and disabled boundary', async ({
+test('674: adult catalogue source CRUD, favourite sync, unreachable last_sync_error, module-off 404, and disabled boundary', async ({
 	page
 }) => {
 	const stub = await startGraphQLStub();
@@ -131,7 +131,7 @@ test('674: adult catalogue source CRUD, favourite sync, module-off 404, and disa
 			data: {
 				name: 'e2e-catalogue-674',
 				endpoint: stub.url,
-				api_key: 'e2e-secret-key-674',
+				api_key: 'fake-api-key-0123456789',
 				enabled: true,
 				sync_favorites: true,
 				priority: 10
@@ -140,11 +140,21 @@ test('674: adult catalogue source CRUD, favourite sync, module-off 404, and disa
 		expect(createRes.status()).toBe(201);
 		const created = (await createRes.json()) as { id: string; name: string };
 
-		// Trigger sync and verify status counts > 0
+		// Trigger sync and verify status counts > 0 and per-source last_sync_at is set
 		const syncRes = await page.request.post('/api/v1/adult/sync', {
 			headers: { 'X-CSRF-Token': csrf }
 		});
 		expect(syncRes.ok()).toBeTruthy();
+
+		const syncedSourceRes = await page.request.get(`/api/v1/adult/sources/${created.id}`);
+		expect(syncedSourceRes.ok()).toBeTruthy();
+		const syncedSource = (await syncedSourceRes.json()) as {
+			id: string;
+			last_sync_at?: string;
+			last_sync_error?: string;
+		};
+		expect(syncedSource.last_sync_at).toBeTruthy();
+		expect(syncedSource.last_sync_error).toBeFalsy();
 
 		const statusRes = await page.request.get('/api/v1/adult/sync/status');
 		expect(statusRes.ok()).toBeTruthy();
@@ -153,15 +163,59 @@ test('674: adult catalogue source CRUD, favourite sync, module-off 404, and disa
 			enabled_sources: number;
 			performers_synced: number;
 			studios_synced: number;
+			last_sync_at?: string;
 		};
 		expect(status.total_sources).toBeGreaterThan(0);
 		expect(status.enabled_sources).toBeGreaterThan(0);
 		expect(status.performers_synced).toBeGreaterThan(0);
 		expect(status.studios_synced).toBeGreaterThan(0);
+		expect(status.last_sync_at).toBeTruthy();
 
-		// UI page lists the source
+		// Negative: source pointing at unreachable endpoint -> last_sync_at and last_sync_error set, status shows it
+		const unreachableCreate = await page.request.post('/api/v1/adult/sources', {
+			headers: { 'X-CSRF-Token': csrf },
+			data: {
+				name: 'e2e-unreachable-674',
+				endpoint: 'http://127.0.0.1:1/graphql',
+				api_key: 'fake-api-key-0123456789',
+				enabled: true,
+				sync_favorites: true,
+				priority: 20
+			}
+		});
+		expect(unreachableCreate.status()).toBe(201);
+		const unreachable = (await unreachableCreate.json()) as { id: string };
+
+		const syncWithUnreachable = await page.request.post('/api/v1/adult/sync', {
+			headers: { 'X-CSRF-Token': csrf }
+		});
+		expect(syncWithUnreachable.ok()).toBeTruthy();
+
+		const unreachableAfterSyncRes = await page.request.get(
+			`/api/v1/adult/sources/${unreachable.id}`
+		);
+		expect(unreachableAfterSyncRes.ok()).toBeTruthy();
+		const unreachableAfterSync = (await unreachableAfterSyncRes.json()) as {
+			last_sync_at?: string;
+			last_sync_error?: string;
+		};
+		expect(unreachableAfterSync.last_sync_at).toBeTruthy();
+		expect(unreachableAfterSync.last_sync_error).toBeTruthy();
+
+		const errStatusRes = await page.request.get('/api/v1/adult/sync/status');
+		expect(errStatusRes.ok()).toBeTruthy();
+		const errStatus = (await errStatusRes.json()) as { last_error?: string };
+		expect(errStatus.last_error).toBeTruthy();
+
+		// UI page lists the sources and shows the sync error
 		await page.goto('/adult/sources');
 		await expect(page.getByText('e2e-catalogue-674')).toBeVisible();
+		await expect(page.getByText('e2e-unreachable-674')).toBeVisible();
+		await expect(page.getByText(errStatus.last_error ?? '')).toBeVisible();
+
+		await page.request.delete(`/api/v1/adult/sources/${unreachable.id}`, {
+			headers: { 'X-CSRF-Token': csrf }
+		});
 
 		// Boundary: source disabled -> sync summary 0
 		const disableSrcRes = await page.request.put(`/api/v1/adult/sources/${created.id}`, {

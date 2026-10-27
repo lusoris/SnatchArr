@@ -31,6 +31,8 @@ const (
 	PageTimeout = 30 * time.Second
 	// MaxURLsPerEntity is the maximum number of URLs stored per favourite entity (HISS-02).
 	MaxURLsPerEntity = 64
+	// MaxSyncErrorLen is the maximum character length persisted for a per-source sync error.
+	MaxSyncErrorLen = 512
 
 	// EntityTypePerformer is the polymorphic entity_type value for performers.
 	EntityTypePerformer = "performer"
@@ -39,6 +41,9 @@ const (
 	// SourceKindStashbox is the external reference source_kind for stash-box instances.
 	SourceKindStashbox = "stashbox"
 )
+
+// ErrSyncInProgress is returned when a favourite synchronization sweep is already running on this replica.
+var ErrSyncInProgress = errors.New("adult: synchronization already in progress")
 
 const (
 	queryFavoritePerformers = `query ($input: PerformerQueryInput!) {
@@ -573,21 +578,59 @@ func (s *Service) syncInstanceCounts(
 }
 
 // SyncAll runs a sync sweep across all enabled stash-box instances that have sync_favorites enabled.
-// One bad instance never aborts the sweep.
+// One bad instance never aborts the sweep. When a sweep is already running, SyncAll logs at debug and skips.
 func (s *Service) SyncAll(ctx context.Context) error {
 	_, err := s.SyncNow(ctx)
+	if errors.Is(err, ErrSyncInProgress) {
+		s.logger.DebugContext(ctx, "adult: sync already in progress; skipping leader sweep")
+		return nil
+	}
 	return err
+}
+
+func truncateSyncError(msg string) string {
+	if len(msg) <= MaxSyncErrorLen {
+		return msg
+	}
+	// Drop a multi-byte character cut by the byte limit so the stored text stays valid UTF-8.
+	return strings.ToValidUTF8(msg[:MaxSyncErrorLen], "")
+}
+
+func (s *Service) recordInstanceSyncResult(ctx context.Context, instID uuid.UUID, pCount, sCount int, syncErr error) {
+	now := s.clk.Now()
+	var errPtr *string
+	if syncErr != nil {
+		msg := truncateSyncError(syncErr.Error())
+		errPtr = &msg
+	}
+	err := s.st.Q().RecordAdultStashboxSyncResult(ctx, sqlcgen.RecordAdultStashboxSyncResultParams{
+		ID:                   instID,
+		LastSyncAt:           &now,
+		LastSyncError:        errPtr,
+		LastPerformersSynced: int32(min(max(pCount, 0), MaxItemsPerSweep)), // #nosec G115 -- clamped to 0..MaxItemsPerSweep
+		LastStudiosSynced:    int32(min(max(sCount, 0), MaxItemsPerSweep)), // #nosec G115 -- clamped to 0..MaxItemsPerSweep
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "adult: record sync result failed",
+			slog.String("instance_id", instID.String()),
+			slog.String("error", err.Error()),
+		)
+	}
 }
 
 // SyncNow runs an immediate favourite synchronization pass across syncable catalogue sources.
 func (s *Service) SyncNow(ctx context.Context) (SyncSummary, error) {
+	if !s.syncing.CompareAndSwap(false, true) {
+		return SyncSummary{}, ErrSyncInProgress
+	}
+	defer s.syncing.Store(false)
+
 	rows, err := s.st.Q().ListSyncableAdultStashboxInstances(ctx)
 	if err != nil {
 		return SyncSummary{}, fmt.Errorf("adult: list syncable instances: %w", store.MapError(err))
 	}
 	var summary SyncSummary
 	if len(rows) == 0 {
-		s.recordSyncResult(summary, "")
 		return summary, nil
 	}
 
@@ -596,12 +639,11 @@ func (s *Service) SyncNow(ctx context.Context) (SyncSummary, error) {
 		endpoints = append(endpoints, StashboxEndpoint{InstanceID: r.ID, Endpoint: r.Endpoint})
 	}
 
-	var lastErr string
 	clients := s.pool.BuildClients(ctx, rows)
 	for _, ic := range clients {
 		pCount, sCount, syncErr := s.syncInstanceCounts(ctx, ic.Instance, ic.Client, endpoints)
+		s.recordInstanceSyncResult(ctx, ic.Instance.ID, pCount, sCount, syncErr)
 		if syncErr != nil {
-			lastErr = syncErr.Error()
 			s.logger.WarnContext(ctx, "adult: instance sweep failed",
 				slog.String("instance_id", ic.Instance.ID.String()),
 				slog.String("error", syncErr.Error()),
@@ -612,16 +654,5 @@ func (s *Service) SyncNow(ctx context.Context) (SyncSummary, error) {
 		summary.PerformersSynced += pCount
 		summary.StudiosSynced += sCount
 	}
-	s.recordSyncResult(summary, lastErr)
 	return summary, nil
-}
-
-func (s *Service) recordSyncResult(summary SyncSummary, lastErr string) {
-	now := s.clk.Now()
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.lastSyncAt = &now
-	s.lastSyncErr = lastErr
-	s.lastPerformersSynced = summary.PerformersSynced
-	s.lastStudiosSynced = summary.StudiosSynced
 }

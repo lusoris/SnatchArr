@@ -203,6 +203,18 @@ SPDX-License-Identifier: EUPL-1.2
 											</span>
 										</div>
 										<p class="text-sm text-subtle"><UrlText url={src.endpoint} /></p>
+										<p class="text-xs text-subtle">
+											{src.last_sync_at
+												? m.adult_sources_source_last_sync({
+														when: formatWhen(src.last_sync_at, getLocale())
+													})
+												: m.adult_sources_source_never()}
+										</p>
+										{#if src.last_sync_error}
+											<p class="text-xs text-danger">
+												{m.adult_sources_source_error({ error: src.last_sync_error })}
+											</p>
+										{/if}
 									</div>
 									{#if session.isAdmin}
 										<div
@@ -268,6 +280,8 @@ SPDX-License-Identifier: EUPL-1.2
 						id="adult-source-priority"
 						label={m.adult_sources_priority()}
 						type="number"
+						min={0}
+						max={1000}
 						step={1}
 						error={errors.priority}
 						bind:value={priority}

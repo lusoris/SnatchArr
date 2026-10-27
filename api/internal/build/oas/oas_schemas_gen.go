@@ -22,12 +22,14 @@ type AdultSource struct {
 	Name     string    `json:"name"`
 	Endpoint string    `json:"endpoint"`
 	// True when an encrypted API key is stored (the key itself is write-only).
-	HasAPIKey     bool      `json:"has_api_key"`
-	Enabled       bool      `json:"enabled"`
-	SyncFavorites bool      `json:"sync_favorites"`
-	Priority      int       `json:"priority"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	HasAPIKey     bool        `json:"has_api_key"`
+	Enabled       bool        `json:"enabled"`
+	SyncFavorites bool        `json:"sync_favorites"`
+	Priority      int         `json:"priority"`
+	LastSyncAt    OptDateTime `json:"last_sync_at"`
+	LastSyncError OptString   `json:"last_sync_error"`
+	CreatedAt     time.Time   `json:"created_at"`
+	UpdatedAt     time.Time   `json:"updated_at"`
 }
 
 // GetID returns the value of ID.
@@ -63,6 +65,16 @@ func (s *AdultSource) GetSyncFavorites() bool {
 // GetPriority returns the value of Priority.
 func (s *AdultSource) GetPriority() int {
 	return s.Priority
+}
+
+// GetLastSyncAt returns the value of LastSyncAt.
+func (s *AdultSource) GetLastSyncAt() OptDateTime {
+	return s.LastSyncAt
+}
+
+// GetLastSyncError returns the value of LastSyncError.
+func (s *AdultSource) GetLastSyncError() OptString {
+	return s.LastSyncError
 }
 
 // GetCreatedAt returns the value of CreatedAt.
@@ -108,6 +120,16 @@ func (s *AdultSource) SetSyncFavorites(val bool) {
 // SetPriority sets the value of Priority.
 func (s *AdultSource) SetPriority(val int) {
 	s.Priority = val
+}
+
+// SetLastSyncAt sets the value of LastSyncAt.
+func (s *AdultSource) SetLastSyncAt(val OptDateTime) {
+	s.LastSyncAt = val
+}
+
+// SetLastSyncError sets the value of LastSyncError.
+func (s *AdultSource) SetLastSyncError(val OptString) {
+	s.LastSyncError = val
 }
 
 // SetCreatedAt sets the value of CreatedAt.

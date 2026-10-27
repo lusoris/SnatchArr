@@ -1949,8 +1949,8 @@ func stepsAdult() []routerStep {
 			body: func(_ *idsState) any {
 				return map[string]any{
 					"name":           "catalogue-router-test",
-					"endpoint":       "http://catalogue.invalid/graphql",
-					"api_key":        "secret-catalogue-key",
+					"endpoint":       "http://127.0.0.1:1/graphql",
+					"api_key":        "fake-api-key-0123456789",
 					"enabled":        false,
 					"sync_favorites": true,
 					"priority":       10,
@@ -2000,7 +2000,7 @@ func stepsAdult() []routerStep {
 			body: func(_ *idsState) any {
 				return map[string]any{
 					"name":           "catalogue-router-updated",
-					"endpoint":       "http://catalogue.invalid/graphql",
+					"endpoint":       "http://127.0.0.1:1/graphql",
 					"enabled":        false,
 					"sync_favorites": true,
 					"priority":       5,

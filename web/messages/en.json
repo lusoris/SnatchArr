@@ -890,6 +890,9 @@
 	"adult_sources_status_counts": "{performers} performers · {studios} studios",
 	"adult_sources_status_last_sync": "Last sync: {when}",
 	"adult_sources_status_never": "Never synchronized",
+	"adult_sources_source_last_sync": "Last sync: {when}",
+	"adult_sources_source_never": "Never synchronized",
+	"adult_sources_source_error": "Sync error: {error}",
 	"adult_sources_priority_badge": "Priority {priority}",
 	"help_adult_sources": "Catalogue sources connect SnatchArr to GraphQL metadata directories to synchronize favourite performers and studios. Administrators can add endpoints with write-only encrypted API keys, set source priority, and trigger manual synchronization."
 }

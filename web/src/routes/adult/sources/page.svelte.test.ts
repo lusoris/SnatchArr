@@ -19,11 +19,13 @@ type AdultSyncStatus = components['schemas']['AdultSyncStatus'];
 const sampleSource: AdultSource = {
 	id: '018f0000-0000-7000-8000-000000000001',
 	name: 'Primary Catalogue',
-	endpoint: 'https://catalogue.example/graphql',
+	endpoint: 'http://127.0.0.1:1/graphql',
 	has_api_key: true,
 	enabled: true,
 	sync_favorites: true,
 	priority: 10,
+	last_sync_at: '2026-10-27T11:00:00Z',
+	last_sync_error: 'dial tcp 127.0.0.1:1: connect: connection refused',
 	created_at: '2026-10-27T10:00:00Z',
 	updated_at: '2026-10-27T10:00:00Z'
 };
@@ -33,7 +35,8 @@ const sampleStatus: AdultSyncStatus = {
 	enabled_sources: 1,
 	performers_synced: 4,
 	studios_synced: 2,
-	last_sync_at: '2026-10-27T11:00:00Z'
+	last_sync_at: '2026-10-27T11:00:00Z',
+	last_error: 'dial tcp 127.0.0.1:1: connect: connection refused'
 };
 
 describe('adult catalogue sources (/adult/sources)', () => {
@@ -42,7 +45,7 @@ describe('adult catalogue sources (/adult/sources)', () => {
 		vi.restoreAllMocks();
 	});
 
-	it('positive: renders catalogue sources, status counts, and triggers manual sync', async () => {
+	it('positive: renders catalogue sources, per-source sync telemetry, and triggers manual sync', async () => {
 		stubGet({
 			'/adult/sources': [sampleSource],
 			'/adult/sync/status': sampleStatus
@@ -58,9 +61,16 @@ describe('adult catalogue sources (/adult/sources)', () => {
 			await screen.findByRole('heading', { level: 1, name: m.adult_sources_title() })
 		).toBeTruthy();
 		expect(await screen.findByText('Primary Catalogue')).toBeTruthy();
-		expect(screen.getByTitle('https://catalogue.example/graphql')).toBeTruthy();
+		expect(screen.getByTitle('http://127.0.0.1:1/graphql')).toBeTruthy();
 		expect(
 			await screen.findByText(m.adult_sources_status_counts({ performers: 4, studios: 2 }))
+		).toBeTruthy();
+		expect(
+			await screen.findByText(
+				m.adult_sources_source_error({
+					error: 'dial tcp 127.0.0.1:1: connect: connection refused'
+				})
+			)
 		).toBeTruthy();
 
 		const syncBtn = screen.getByRole('button', { name: m.adult_sources_sync_now() });
@@ -105,8 +115,8 @@ describe('adult catalogue sources (/adult/sources)', () => {
 
 		await screen.findByText(m.adult_sources_none());
 		await fill(m.adult_sources_name(), 'Broken Source');
-		await fill(m.adult_sources_endpoint(), 'http://invalid');
-		await fill(m.adult_sources_api_key(), 'secret-key');
+		await fill(m.adult_sources_endpoint(), 'http://127.0.0.1:1/graphql');
+		await fill(m.adult_sources_api_key(), 'fake-api-key-0123456789');
 		await fireEvent.click(screen.getByRole('button', { name: m.action_save() }));
 
 		expect((await screen.findByRole('alert')).textContent).toContain('invalid endpoint url');

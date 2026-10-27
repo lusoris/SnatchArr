@@ -15,7 +15,7 @@ import (
 )
 
 func toOASAdultSource(s adult.Source) oas.AdultSource {
-	return oas.AdultSource{
+	out := oas.AdultSource{
 		ID:            s.ID,
 		Name:          s.Name,
 		Endpoint:      s.Endpoint,
@@ -26,6 +26,13 @@ func toOASAdultSource(s adult.Source) oas.AdultSource {
 		CreatedAt:     s.CreatedAt,
 		UpdatedAt:     s.UpdatedAt,
 	}
+	if s.LastSyncAt != nil {
+		out.LastSyncAt = oas.NewOptDateTime(*s.LastSyncAt)
+	}
+	if s.LastSyncError != "" {
+		out.LastSyncError = oas.NewOptString(s.LastSyncError)
+	}
+	return out
 }
 
 func fromOASAdultSourceInput(req *oas.AdultSourceInput) adult.SourceInput {
@@ -58,6 +65,9 @@ func fromOASAdultSourceInput(req *oas.AdultSourceInput) adult.SourceInput {
 func mapAdultError(err error) error {
 	if errors.Is(err, domain.ErrInvalid) {
 		return fmt.Errorf("%w: %s", domain.ErrBadRequest, err.Error())
+	}
+	if errors.Is(err, adult.ErrSyncInProgress) {
+		return fmt.Errorf("%w: %s", domain.ErrConflict, err.Error())
 	}
 	return err
 }

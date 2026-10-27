@@ -111,6 +111,7 @@ Every adult module feature and the community request settings model receive a fi
 ### Negative and trade-offs
 
 - **Multi-slice rollout**: while the full route table is fixed in this ADR, the performer/studio browser (`/adult/performers`, `/adult/studios`), image-set browser (`/adult/image-sets`, `/adult/scan`), and request settings (`/requests/settings`) ship in dedicated follow-up pull requests to keep each change reviewable.
+- **In-process single-flight only**: `Service.SyncNow` serializes concurrent sweeps within a single API replica (`409 Conflict` on overlap, leader tick skipped at debug), so a manual `POST /adult/sync` routed to a non-leader replica can still overlap with a leader sweep across replicas, which remains safe because performer, studio, external-ref, and sync-status writes are idempotent upserts.
 
 ---
 
