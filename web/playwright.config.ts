@@ -6,6 +6,7 @@ import { defineConfig } from '@playwright/test';
 
 const e2eApi = process.env.SNATCHARR_E2E_API;
 const authFile = 'e2e/.auth/admin.json';
+const e2eReport = process.env.SNATCHARR_E2E_REPORT;
 // Visual baseline (tools/e2e/web_visual.sh): runs only inside the pinned Playwright image.
 const visual = !!process.env.SNATCHARR_VISUAL;
 const visualProject = {
@@ -42,7 +43,14 @@ export default defineConfig({
 	workers: 2,
 	forbidOnly: !!process.env.CI,
 	retries: process.env.CI && !visual ? 1 : 0,
-	reporter: process.env.CI ? 'github' : 'list',
+	// The release check (tools/ci/release_e2e_check.py) reads this report to tell that every
+	// project ran and passed on the commit it names.
+	reporter: e2eReport
+		? [[process.env.CI ? 'github' : 'list'], ['json', { outputFile: e2eReport }]]
+		: process.env.CI
+			? 'github'
+			: 'list',
+	metadata: { commit: process.env.SNATCHARR_E2E_COMMIT ?? '' },
 	expect: {
 		timeout: 15_000,
 		toHaveScreenshot: { maxDiffPixels: 200, animations: 'disabled', caret: 'hide', scale: 'css' }
@@ -108,6 +116,14 @@ export default defineConfig({
 						{
 							name: 'flow',
 							testMatch: /(^|\/)flow\.test\.ts/,
+							dependencies: ['authenticated'],
+							use: { browserName: 'chromium', storageState: authFile }
+						},
+						// One file per released feat or fix, named <pr>-<slug>.test.ts, with a
+						// `covers: #<pr>` line; tools/ci/release_e2e_check.py maps release commits to them.
+						{
+							name: 'features',
+							testMatch: /(^|\/)features\/[^/]+\.test\.ts/,
 							dependencies: ['authenticated'],
 							use: { browserName: 'chromium', storageState: authFile }
 						}
