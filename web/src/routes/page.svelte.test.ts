@@ -163,51 +163,53 @@ describe('dashboard overview redo', () => {
 		expect(screen.getByRole('img', { name: m.instance_never_tested() })).toBeTruthy();
 	});
 
-	it('triggers quick snatch missing behind ConfirmAction', async () => {
+	async function expectQuickSnatch(button: string, confirm: string, kind: 'missing' | 'upgrade') {
 		const postSpy = vi.spyOn(api, 'POST').mockResolvedValue({ data: {} } as never);
 		stubGet(defaultDashboardStubs());
 		renderWithQuery(Dashboard);
 
-		const missingBtn = await screen.findByRole('button', { name: m.quickie_missing() });
-		await fireEvent.click(missingBtn);
+		const actionBtn = await screen.findByRole('button', { name: button });
+		await fireEvent.click(actionBtn);
 
 		// ConfirmAction prompt opened
-		expect(screen.getByText(m.overview_confirm_missing({ name: forkInstance.name }))).toBeTruthy();
+		expect(screen.getByText(confirm)).toBeTruthy();
 		const confirmBtn = screen.getByRole('button', { name: m.confirm_yes() });
 		await fireEvent.click(confirmBtn);
 
 		expect(postSpy).toHaveBeenCalledWith('/instances/{instanceId}/runs', {
 			params: { path: { instanceId: forkInstance.id } },
-			body: { kind: 'missing' }
+			body: { kind }
 		});
-	});
+	}
 
-	it('triggers quick snatch upgrade behind ConfirmAction', async () => {
-		const postSpy = vi.spyOn(api, 'POST').mockResolvedValue({ data: {} } as never);
-		stubGet(defaultDashboardStubs());
-		renderWithQuery(Dashboard);
-
-		const upgradeBtn = await screen.findByRole('button', { name: m.quickie_upgrade() });
-		await fireEvent.click(upgradeBtn);
-
-		// ConfirmAction prompt opened
-		expect(screen.getByText(m.overview_confirm_upgrade({ name: forkInstance.name }))).toBeTruthy();
-		const confirmBtn = screen.getByRole('button', { name: m.confirm_yes() });
-		await fireEvent.click(confirmBtn);
-
-		expect(postSpy).toHaveBeenCalledWith('/instances/{instanceId}/runs', {
-			params: { path: { instanceId: forkInstance.id } },
-			body: { kind: 'upgrade' }
-		});
-	});
-
-	it('renders 3-step onboarding guide when fleet has zero instances', async () => {
+	async function renderEmptyFleet() {
 		stubGet(defaultDashboardStubs({ '/instances': [] }));
 		renderWithQuery(Dashboard);
 
 		expect(
 			await screen.findByRole('heading', { level: 2, name: m.overview_onboarding_title() })
 		).toBeTruthy();
+	}
+
+	it('triggers quick snatch missing behind ConfirmAction', async () => {
+		await expectQuickSnatch(
+			m.quickie_missing(),
+			m.overview_confirm_missing({ name: forkInstance.name }),
+			'missing'
+		);
+	});
+
+	it('triggers quick snatch upgrade behind ConfirmAction', async () => {
+		await expectQuickSnatch(
+			m.quickie_upgrade(),
+			m.overview_confirm_upgrade({ name: forkInstance.name }),
+			'upgrade'
+		);
+	});
+
+	it('renders 3-step onboarding guide when fleet has zero instances', async () => {
+		await renderEmptyFleet();
+
 		expect(screen.getByRole('link', { name: m.overview_onboarding_step1_action() })).toBeTruthy();
 		expect(screen.getByRole('link', { name: m.overview_onboarding_step2_action() })).toBeTruthy();
 		expect(screen.getByRole('link', { name: m.overview_onboarding_step3_action() })).toBeTruthy();
@@ -409,12 +411,8 @@ describe('dashboard overview redo', () => {
 	});
 
 	it('renders no fleet table rows when instances list is empty', async () => {
-		stubGet(defaultDashboardStubs({ '/instances': [] }));
-		renderWithQuery(Dashboard);
+		await renderEmptyFleet();
 
-		expect(
-			await screen.findByRole('heading', { level: 2, name: m.overview_onboarding_title() })
-		).toBeTruthy();
 		expect(screen.queryByRole('table', { name: m.overview_fleet_title() })).toBeNull();
 	});
 });
