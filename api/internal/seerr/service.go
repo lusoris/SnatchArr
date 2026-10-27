@@ -292,7 +292,7 @@ func (s *Service) Requests(ctx context.Context) ([]RequestView, error) {
 	}
 	out := make([]RequestView, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, RequestView{SeerrRequest: store.SeerrRequestFromListRow(row), LinkName: row.LinkName, InstanceName: derefStr(row.InstanceName)})
+		out = append(out, RequestView{SeerrRequest: store.SeerrRequestFromRow(row.SeerrRequest), LinkName: row.LinkName, InstanceName: derefStr(row.InstanceName)})
 	}
 	return out, nil
 }
