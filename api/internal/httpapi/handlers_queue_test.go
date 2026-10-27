@@ -469,3 +469,125 @@ func TestQueueOptionalRuleMapping(t *testing.T) {
 		}
 	}
 }
+
+type sweepQueueCase struct {
+	name           string
+	user           func(f *integrationFixture) (domain.User, bool)
+	unknownID      bool
+	enablePolicy   bool
+	arrErr         error
+	wantErr        error
+	wantStatus     int
+	wantQueueCalls int
+	wantImports    int
+}
+
+func seedImportBlockedQueue(t *testing.T, f *integrationFixture, instID uuid.UUID, enabled bool) {
+	t.Helper()
+	f.probe.items = []queue.Item{
+		{
+			ID:                    841,
+			DownloadID:            "dl-whisparr-841",
+			Title:                 "Example.Scene",
+			Status:                "completed",
+			TrackedDownloadStatus: "warning",
+			TrackedDownloadState:  "importBlocked",
+			Added:                 f.clk.Now().Add(-10 * time.Minute),
+			StatusLines:           []string{"Movie title mismatch, automatic import is not possible. Manual Import required."},
+			Monitored:             true,
+		},
+	}
+	cfg := queuePolicyFromOAS(validQueuePolicyOAS())
+	cfg.Enabled = enabled
+	cfg.Grace = 0
+	cfg.Rules[queue.RuleImportFixable] = queue.RuleSettings{Mode: queue.ModeAct, Threshold: 1}
+	if err := f.h.queue.SaveSettings(t.Context(), instID, cfg); err != nil {
+		t.Fatalf("SaveSettings: %v", err)
+	}
+}
+
+func TestSweepInstanceQueue(t *testing.T) {
+	t.Parallel()
+	cases := []sweepQueueCase{
+		{
+			name:           "positive admin sweeps enabled queue and imports",
+			user:           func(f *integrationFixture) (domain.User, bool) { return f.admin, true },
+			enablePolicy:   true,
+			wantQueueCalls: 1,
+			wantImports:    1,
+		},
+		{
+			name:       "negative viewer rejected with forbidden",
+			user:       func(_ *integrationFixture) (domain.User, bool) { return domain.User{Role: domain.RoleViewer}, true },
+			wantErr:    domain.ErrForbidden,
+			wantStatus: http.StatusForbidden,
+		},
+		{
+			name:       "negative unauthenticated rejected with unauthorized",
+			user:       func(_ *integrationFixture) (domain.User, bool) { return domain.User{}, false },
+			wantErr:    domain.ErrUnauthorized,
+			wantStatus: http.StatusUnauthorized,
+		},
+		{
+			name:       "negative unknown instance returns not found",
+			user:       func(f *integrationFixture) (domain.User, bool) { return f.admin, true },
+			unknownID:  true,
+			wantErr:    domain.ErrNotFound,
+			wantStatus: http.StatusNotFound,
+		},
+		{
+			name:           "negative service error maps to problem response",
+			user:           func(f *integrationFixture) (domain.User, bool) { return f.admin, true },
+			enablePolicy:   true,
+			arrErr:         domain.ErrUnreachable,
+			wantErr:        domain.ErrUnreachable,
+			wantStatus:     http.StatusBadGateway,
+			wantQueueCalls: 1,
+		},
+		{
+			name:           "boundary disabled policy returns no content without import",
+			user:           func(f *integrationFixture) (domain.User, bool) { return f.admin, true },
+			enablePolicy:   false,
+			wantQueueCalls: 0,
+			wantImports:    0,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			runSweepInstanceQueueCase(t, tc)
+		})
+	}
+}
+
+func runSweepInstanceQueueCase(t *testing.T, tc sweepQueueCase) {
+	t.Helper()
+	f := newIntegrationFixture(t)
+	instID := seedTestInstance(t, f)
+	seedImportBlockedQueue(t, f, instID, tc.enablePolicy)
+	if tc.unknownID {
+		instID = uuid.New()
+	}
+	f.probe.err = tc.arrErr
+	ctx := t.Context()
+	if u, ok := tc.user(f); ok {
+		ctx = withUser(ctx, u)
+	}
+	err := f.h.SweepInstanceQueue(ctx, oas.SweepInstanceQueueParams{InstanceId: instID})
+	if tc.wantErr != nil {
+		if !errors.Is(err, tc.wantErr) {
+			t.Fatalf("SweepInstanceQueue() err = %v, want %v", err, tc.wantErr)
+		}
+		if prob := f.h.NewError(ctx, err); prob.StatusCode != tc.wantStatus {
+			t.Errorf("NewError status = %d, want %d", prob.StatusCode, tc.wantStatus)
+		}
+		return
+	}
+	if err != nil {
+		t.Fatalf("SweepInstanceQueue() unexpected err = %v", err)
+	}
+	if f.probe.queueCalls != tc.wantQueueCalls || f.probe.imports != tc.wantImports {
+		t.Errorf("probe queueCalls=%d imports=%d, want queueCalls=%d imports=%d", f.probe.queueCalls, f.probe.imports, tc.wantQueueCalls, tc.wantImports)
+	}
+}

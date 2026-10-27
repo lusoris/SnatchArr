@@ -700,3 +700,50 @@ func TestSweepAll_DownloadPriorityOrder(t *testing.T) {
 		})
 	}
 }
+
+func TestSweepInstance(t *testing.T) {
+	t.Parallel()
+	instID := uuid.New()
+	inst := queue.Instance{ID: instID, Name: "whisparr-test", Kind: domain.KindWhisparrV3, BaseURL: "http://whisparr.local"}
+	cases := []struct {
+		name      string
+		targetID  uuid.UUID
+		enabled   bool
+		wantErr   error
+		wantQueue int
+		wantSkip  int
+	}{
+		{name: "positive sweeps enabled instance", targetID: instID, enabled: true, wantQueue: 1},
+		{name: "negative unknown instance id returns not found", targetID: uuid.New(), enabled: true, wantErr: domain.ErrNotFound},
+		{name: "boundary disabled queue policy is no-op", targetID: instID, enabled: false, wantSkip: 1},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			st := newFakeStore()
+			st.settings[instID] = queue.Settings{Enabled: tc.enabled}
+			arr := newFakeArrClient()
+			is := &fakeInstanceSource{instances: []queue.Instance{inst}}
+			m := &fakeMetricsRecorder{}
+			svc := newTestService(st, is, arr, clock.NewFake(), &fakeEventPublisher{}, m)
+
+			err := svc.SweepInstance(t.Context(), tc.targetID)
+			if tc.wantErr != nil {
+				if !errors.Is(err, tc.wantErr) {
+					t.Fatalf("SweepInstance() err = %v, want %v", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("SweepInstance() err = %v", err)
+			}
+			if arr.queueCalls != tc.wantQueue {
+				t.Errorf("queueCalls = %d, want %d", arr.queueCalls, tc.wantQueue)
+			}
+			if len(m.skipped) != tc.wantSkip {
+				t.Errorf("len(skipped) = %d, want %d", len(m.skipped), tc.wantSkip)
+			}
+		})
+	}
+}

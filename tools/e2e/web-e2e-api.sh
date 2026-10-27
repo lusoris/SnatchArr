@@ -25,6 +25,8 @@ label="web-e2e-api"
 SONARR_PORT=$(free_port "${SMOKE_SONARR_PORT:-18989}")
 default_flow_port=$((SONARR_PORT >= 18990 ? SONARR_PORT + 1 : 18990))
 SONARR_FLOW_PORT=$(free_port "${SMOKE_SONARR_FLOW_PORT:-$default_flow_port}")
+default_whisparr_port=$((SONARR_FLOW_PORT >= 18991 ? SONARR_FLOW_PORT + 1 : 18991))
+WHISPARR_PORT=$(free_port "${SMOKE_WHISPARR_PORT:-$default_whisparr_port}")
 API_PORT=$(free_port "${SMOKE_API_PORT:-18080}")
 GRPC_PORT=$(free_port "${SMOKE_GRPC_PORT:-19090}")
 TOKEN=smoke-worker-token
@@ -69,6 +71,7 @@ wait_http() {
 
 start sonarr "$SMOKE_FAKEARR_BIN" -addr "127.0.0.1:$SONARR_PORT" -kind sonarr -api-key "$FAKE_KEY"
 start sonarr_flow "$SMOKE_FAKEARR_BIN" -addr "127.0.0.1:$SONARR_FLOW_PORT" -kind sonarr -api-key "$FAKE_KEY"
+start whisparr "$SMOKE_FAKEARR_BIN" -addr "127.0.0.1:$WHISPARR_PORT" -kind whisparr_v3 -import-blocked -api-key "$FAKE_KEY"
 # Enable reverse proxy authentication with a per-run random secret (>=32 bytes) for e2e tests.
 PROXY_SECRET=$(openssl rand -hex 32 2>/dev/null || od -vN 32 -An -tx1 /dev/urandom | tr -d ' \n')
 PROXY_HEADER="${SNATCHARR_E2E_PROXY_HEADER:-Remote-User}"
@@ -90,6 +93,7 @@ start api env APP_SNATCHARR_SESSION_SECURE=false \
 
 wait_http "http://127.0.0.1:$SONARR_PORT/healthz"
 wait_http "http://127.0.0.1:$SONARR_FLOW_PORT/healthz"
+wait_http "http://127.0.0.1:$WHISPARR_PORT/healthz"
 wait_http "http://127.0.0.1:$API_PORT/api/v1/system/status"
 
 cd web
@@ -100,6 +104,7 @@ export SNATCHARR_E2E_PROXY_SECRET_HEADER="$PROXY_SECRET_HEADER"
 SNATCHARR_E2E_API="http://127.0.0.1:$API_PORT" \
 SNATCHARR_E2E_FAKEARR="http://127.0.0.1:$SONARR_PORT" \
 SNATCHARR_E2E_FAKEARR_FLOW="http://127.0.0.1:$SONARR_FLOW_PORT" \
+SNATCHARR_E2E_FAKEARR_WHISPARR="http://127.0.0.1:$WHISPARR_PORT" \
 SNATCHARR_E2E_FAKEWORKER="$SMOKE_FAKEWORKER_BIN" \
 SNATCHARR_E2E_GRPC="127.0.0.1:$GRPC_PORT" \
 pnpm exec playwright test "$@"

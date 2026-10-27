@@ -56,7 +56,7 @@ type Handlers struct {
 	instances  *instances.Service
 	policies   *policies.Service
 	queue      *queue.Store
-	queueSvc   *queue.Service
+	queueSvc   queueService
 	options    *policies.Options
 	logs       *logring.Ring
 	runs       *snatch.Runs

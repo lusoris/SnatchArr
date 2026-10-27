@@ -795,6 +795,19 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
 
+  /instances/{instanceId}/queue/sweep:
+    parameters:
+      - $ref: "#/components/parameters/InstanceId"
+    post:
+      tags: [instances]
+      operationId: sweepInstanceQueue
+      summary: Run one download queue sweep of an instance now
+      responses:
+        "204":
+          description: Queue sweep completed
+        default:
+          $ref: "#/components/responses/Problem"
+
   /instances/{instanceId}/runs:
     parameters:
       - $ref: "#/components/parameters/InstanceId"

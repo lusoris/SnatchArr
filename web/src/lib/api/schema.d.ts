@@ -556,6 +556,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/instances/{instanceId}/queue/sweep": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instanceId: components["parameters"]["InstanceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run one download queue sweep of an instance now */
+        post: operations["sweepInstanceQueue"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/instances/{instanceId}/runs": {
         parameters: {
             query?: never;
@@ -3555,6 +3574,27 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["QueueStrike"][];
                 };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    sweepInstanceQueue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instanceId: components["parameters"]["InstanceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Queue sweep completed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             default: components["responses"]["Problem"];
         };

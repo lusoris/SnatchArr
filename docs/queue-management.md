@@ -155,6 +155,8 @@ A season pack lists one queue item per episode under one `downloadId`: its items
 - A removal that fails keeps the row and is retried next sweep without counting twice (`TestFailedDeleteKeepsRowAndRetries`).
 - Events on the SSE stream: `queue_item_struck` (`rule`, `count`, `threshold`, `mode`, `would_remove`, `would_import`), `queue_item_removed` (`rule`, `blocklist`), `queue_item_imported` and `queue_item_import_failed` (detail `no_clean_candidate`, `still_id_matched` or `error`). The metric `snatcharr_queue_imports_total{arr_instance,result}` counts the same import results, with `ok` for a sent import and `would_import` for an observed one.
 
+An administrator can trigger one immediate queue sweep for a single instance with `POST /api/v1/instances/{instanceId}/queue/sweep` (`sweepInstanceQueue` in `api/openapi/openapi.yaml`, `SweepInstanceQueue` in `api/internal/httpapi/handlers_queue.go`, **Sweep now** button in `web/src/lib/components/instance/InstanceQueueTab.svelte`). It runs one sweep pass of that instance (`Service.SweepInstance` in `api/internal/queue/service.go`, a no-op when queue management is disabled for the instance) and answers `204 No Content` (`TestSweepInstanceQueue`, `TestSweepInstance`).
+
 ## Settings
 
 Per instance, in the snatch policy (`QueuePolicy` in `api/openapi/openapi.yaml`, bounds in `Settings.Validate`, `api/internal/queue/rules.go`):

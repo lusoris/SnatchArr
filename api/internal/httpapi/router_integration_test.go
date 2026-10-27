@@ -701,6 +701,12 @@ func stepsPoliciesAndRuns() []routerStep {
 			},
 		},
 		{
+			op:     "sweepInstanceQueue",
+			method: http.MethodPost,
+			path:   func(ids *idsState) string { return "/instances/" + ids.instanceID + "/queue/sweep" },
+			want:   http.StatusNoContent,
+		},
+		{
 			op:     "triggerRun",
 			method: http.MethodPost,
 			path:   func(ids *idsState) string { return "/instances/" + ids.instanceID + "/runs" },
