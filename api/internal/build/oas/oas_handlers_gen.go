@@ -18796,7 +18796,7 @@ func (s *Server) handleTestMyNotifyTargetRequest(args [1]string, argsEscaped boo
 
 	var rawBody []byte
 
-	var response *TestMyNotifyTargetNoContent
+	var response *NoContent
 	if m := s.cfg.Middleware; m != nil {
 		mreq := middleware.Request{
 			Context:          ctx,
@@ -18817,7 +18817,7 @@ func (s *Server) handleTestMyNotifyTargetRequest(args [1]string, argsEscaped boo
 		type (
 			Request  = struct{}
 			Params   = TestMyNotifyTargetParams
-			Response = *TestMyNotifyTargetNoContent
+			Response = *NoContent
 		)
 		response, err = middleware.HookMiddleware[
 			Request,

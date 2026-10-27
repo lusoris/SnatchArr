@@ -3128,6 +3128,9 @@ func (o NilInt) Or(d int) int {
 	return d
 }
 
+// Ref: #/components/responses/NoContent
+type NoContent struct{}
+
 // Ref: #/components/schemas/NotificationChannel
 type NotificationChannel struct {
 	ID      uuid.UUID               `json:"id"`
@@ -8976,9 +8979,6 @@ func (s *SystemStatusProfile) UnmarshalText(data []byte) error {
 		return errors.Errorf("invalid value: %q", data)
 	}
 }
-
-// TestMyNotifyTargetNoContent is response for TestMyNotifyTarget operation.
-type TestMyNotifyTargetNoContent struct{}
 
 // TestNotificationChannelNoContent is response for TestNotificationChannel operation.
 type TestNotificationChannelNoContent struct{}
