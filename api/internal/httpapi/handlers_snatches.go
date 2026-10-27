@@ -26,8 +26,12 @@ func (h *Handlers) TriggerRun(ctx context.Context, req *oas.RunTrigger, params o
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	if _, err := h.instances.Get(ctx, params.InstanceId); err != nil {
+	inst, err := h.instances.Get(ctx, params.InstanceId)
+	if err != nil {
 		return nil, err
+	}
+	if !inst.Kind.IsArr() {
+		return nil, fmt.Errorf("%w: %s instance does not support snatching", domain.ErrInvalid, inst.Kind)
 	}
 	kind, err := domain.ParseSnatchKind(string(req.Kind))
 	if err != nil {
@@ -55,8 +59,12 @@ func (h *Handlers) SearchItem(ctx context.Context, req *oas.ItemSearchRequest, p
 	if err := requireRequester(ctx); err != nil {
 		return nil, err
 	}
-	if _, err := h.instances.Get(ctx, params.InstanceId); err != nil {
+	inst, err := h.instances.Get(ctx, params.InstanceId)
+	if err != nil {
 		return nil, err
+	}
+	if !inst.Kind.IsArr() {
+		return nil, fmt.Errorf("%w: %s instance does not support snatching", domain.ErrInvalid, inst.Kind)
 	}
 	focusEntity, focusGroup, err := parseItemFocus(req)
 	if err != nil {
@@ -136,8 +144,12 @@ func (h *Handlers) PreviewRun(ctx context.Context, params oas.PreviewRunParams) 
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	if _, err := h.instances.Get(ctx, params.InstanceId); err != nil {
+	inst, err := h.instances.Get(ctx, params.InstanceId)
+	if err != nil {
 		return nil, err
+	}
+	if !inst.Kind.IsArr() {
+		return nil, fmt.Errorf("%w: %s instance does not support snatching", domain.ErrInvalid, inst.Kind)
 	}
 	kind, err := domain.ParseSnatchKind(params.Kind)
 	if err != nil {
@@ -334,6 +346,9 @@ func (h *Handlers) GetHourlyCaps(ctx context.Context) ([]oas.CapStatus, error) {
 		out = append(out, global)
 	}
 	for _, inst := range list {
+		if !inst.Kind.IsArr() {
+			continue
+		}
 		policy, err := h.policies.Get(ctx, inst.ID)
 		if err != nil {
 			return nil, err

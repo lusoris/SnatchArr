@@ -2616,7 +2616,7 @@ components:
 
     AppKind:
       type: string
-      enum: [sonarr, radarr, lidarr, readarr, whisparr_v2, whisparr_v3]
+      enum: [sonarr, radarr, lidarr, readarr, whisparr_v2, whisparr_v3, stash]
 
     Instance:
       type: object

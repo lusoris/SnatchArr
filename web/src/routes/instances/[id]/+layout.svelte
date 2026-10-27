@@ -26,7 +26,7 @@ SPDX-License-Identifier: EUPL-1.2
 			(instance.isSuccess && !instance.data)
 	);
 
-	const tabs = $derived(getInstanceTabs(instanceId));
+	const tabs = $derived(getInstanceTabs(instanceId, instance.data?.kind));
 
 	const currentHelp = $derived.by(() => {
 		const path = page.url.pathname;

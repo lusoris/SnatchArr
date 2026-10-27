@@ -97,6 +97,7 @@
 	"quickie_queued": "Quickie queued for {name}",
 	"instance_kind": "Kind",
 	"instance_kind_legacy": "{kind} (legacy)",
+	"instance_kind_stash": "Stash",
 	"instance_legacy_hint": "Readarr was retired by its maintainers in June 2025. Existing installs keep working as they do today; SnatchArr adds no new Readarr features.",
 	"instance_name": "Name",
 	"instance_url": "URL",

@@ -46,6 +46,8 @@ func (p *GoenvoyProber) ForceImport(ctx context.Context, kind domain.AppKind, ba
 		n, err = ip.readarrForceImport(ctx, baseURL, apiKey, downloadID, mode)
 	case domain.KindWhisparrV2, domain.KindWhisparrV3:
 		return 0, fmt.Errorf("arrclient: %s force import: %w", kind, queue.ErrQueueUnsupported)
+	case domain.KindStash:
+		return 0, fmt.Errorf("arrclient: force import: %w: unsupported kind %q", domain.ErrInvalid, kind)
 	default:
 		return 0, fmt.Errorf("arrclient: force import: %w: unsupported kind %q", domain.ErrInvalid, kind)
 	}

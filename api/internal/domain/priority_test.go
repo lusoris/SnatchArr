@@ -52,6 +52,13 @@ func TestPriorityPresetValidate(t *testing.T) {
 			wantErr: domain.ErrInvalid,
 		},
 		{
+			name: "negative stash kind refused in preset",
+			preset: withMut(func(p domain.PriorityPreset) {
+				p[domain.KindStash] = 50
+			}),
+			wantErr: domain.ErrInvalid,
+		},
+		{
 			name: "negative rank 0 refused",
 			preset: withMut(func(p domain.PriorityPreset) {
 				p[domain.KindSonarr] = 0

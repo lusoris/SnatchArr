@@ -99,7 +99,7 @@ func (s *DBInstanceSource) EnabledInstance(ctx context.Context, id uuid.UUID) (I
 		}
 		return Instance{}, fmt.Errorf("queue: get instance: %w", mapped)
 	}
-	if !row.Enabled {
+	if !row.Enabled || !domain.AppKind(row.Kind).IsArr() {
 		return Instance{}, domain.ErrNotFound
 	}
 	key, err := s.enc.Open(row.ApiKeyEnc)

@@ -148,6 +148,8 @@ func (p *GoenvoyProber) queueOps(kind domain.AppKind, baseURL, apiKey string) (q
 		return whisparrQueue(baseURL, apiKey, o)
 	case domain.KindWhisparrV3:
 		return whisparrV3Queue(baseURL, apiKey, o)
+	case domain.KindStash:
+		return queueOps{}, fmt.Errorf("%w: unsupported kind %q", domain.ErrInvalid, kind)
 	default:
 		return queueOps{}, fmt.Errorf("%w: unsupported kind %q", domain.ErrInvalid, kind)
 	}

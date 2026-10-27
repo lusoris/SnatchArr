@@ -343,8 +343,8 @@ func (s *Server) addPriorities(ctx context.Context, run domain.Run, resp *snatch
 		resp.PriorityIds = ids
 	case domain.KindSonarr, domain.KindWhisparrV2:
 		resp.PriorityGroupIds = ids
-	case domain.KindLidarr, domain.KindReadarr:
-		// Seerr has no music or book requests.
+	case domain.KindLidarr, domain.KindReadarr, domain.KindStash:
+		// Seerr has no music, book or Stash requests.
 	}
 }
 

@@ -234,7 +234,8 @@
           "lidarr",
           "readarr",
           "whisparr_v2",
-          "whisparr_v3"
+          "whisparr_v3",
+          "stash"
         ],
         "type": "string"
       },
@@ -1963,7 +1964,8 @@
           "lidarr",
           "readarr",
           "whisparr_v2",
-          "whisparr_v3"
+          "whisparr_v3",
+          "stash"
         ],
         "type": "string"
       },
@@ -2305,7 +2307,8 @@
           "lidarr",
           "readarr",
           "whisparr_v2",
-          "whisparr_v3"
+          "whisparr_v3",
+          "stash"
         ],
         "type": "string"
       },

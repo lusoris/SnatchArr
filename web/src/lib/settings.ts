@@ -7,7 +7,7 @@ import { toast } from 'svelte-sonner';
 import { z } from 'zod';
 import { api, describeError } from './api/client.js';
 import type { components } from './api/schema.js';
-import { APP_KINDS, type AppKind } from './kinds.js';
+import { ARR_KINDS, type ArrKind } from './kinds.js';
 import { m } from './paraglide/messages.js';
 import { keys } from './query.js';
 
@@ -19,8 +19,8 @@ export type SfwMode = components['schemas']['SfwMode'];
 
 export const rankSchema = z.number().int().min(1).max(100);
 
-export const presetFields = Object.fromEntries(APP_KINDS.map((k) => [k, rankSchema])) as Record<
-	AppKind,
+export const presetFields = Object.fromEntries(ARR_KINDS.map((k) => [k, rankSchema])) as Record<
+	ArrKind,
 	typeof rankSchema
 >;
 

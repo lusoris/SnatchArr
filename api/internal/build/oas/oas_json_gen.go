@@ -297,6 +297,8 @@ func (s *AppKind) Decode(d *jx.Decoder) error {
 		*s = AppKindWhisparrV2
 	case AppKindWhisparrV3:
 		*s = AppKindWhisparrV3
+	case AppKindStash:
+		*s = AppKindStash
 	default:
 		*s = AppKind(v)
 	}

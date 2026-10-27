@@ -16,6 +16,13 @@ describe('getInstanceTabs', () => {
 		expect(tabs[3]?.href).toBe('/instances/inst-42/activity');
 		expect(tabs[4]?.href).toBe('/instances/inst-42/memory');
 	});
+
+	it('returns only overview for companion stash instances', () => {
+		const tabs = getInstanceTabs('inst-42', 'stash');
+		expect(tabs).toHaveLength(1);
+		expect(tabs.map((t) => t.key)).toEqual(['overview']);
+		expect(tabs[0]?.href).toBe('/instances/inst-42');
+	});
 });
 
 describe('isTabActive', () => {

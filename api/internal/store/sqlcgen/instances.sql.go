@@ -217,7 +217,7 @@ func (q *Queries) GetInstancePriority(ctx context.Context, id uuid.UUID) (GetIns
 }
 
 const listEnabledInstances = `-- name: ListEnabledInstances :many
-SELECT id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product, configarr_orphaned_at, planned_at, search_priority, download_priority FROM instances WHERE enabled ORDER BY kind, name
+SELECT id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product, configarr_orphaned_at, planned_at, search_priority, download_priority FROM instances WHERE enabled AND kind <> 'stash' ORDER BY kind, name
 `
 
 func (q *Queries) ListEnabledInstances(ctx context.Context) ([]Instance, error) {
@@ -303,7 +303,7 @@ func (q *Queries) ListInstances(ctx context.Context) ([]Instance, error) {
 }
 
 const listInstancesToPlan = `-- name: ListInstancesToPlan :many
-SELECT id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product, configarr_orphaned_at, planned_at, search_priority, download_priority FROM instances WHERE enabled ORDER BY planned_at NULLS FIRST, kind, name
+SELECT id, kind, name, base_url, api_key_enc, enabled, source, configarr_key, last_seen_version, last_check_at, last_error, created_at, updated_at, last_seen_product, configarr_orphaned_at, planned_at, search_priority, download_priority FROM instances WHERE enabled AND kind <> 'stash' ORDER BY planned_at NULLS FIRST, kind, name
 `
 
 // Instances never evaluated come first, then the one evaluated longest ago (#176).

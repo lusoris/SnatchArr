@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -27,12 +28,21 @@ const (
 	KindReadarr    AppKind = "readarr"
 	KindWhisparrV2 AppKind = "whisparr_v2"
 	KindWhisparrV3 AppKind = "whisparr_v3"
+	KindStash      AppKind = "stash"
 )
 
-// AllKinds lists every supported kind in display order.
+// AllKinds lists every supported *arr kind in display order.
 var AllKinds = []AppKind{KindSonarr, KindRadarr, KindLidarr, KindReadarr, KindWhisparrV2, KindWhisparrV3}
 
-// ParseAppKind validates a kind string.
+// InstanceKinds lists every supported instance kind in display order, including companion kinds.
+var InstanceKinds = []AppKind{KindSonarr, KindRadarr, KindLidarr, KindReadarr, KindWhisparrV2, KindWhisparrV3, KindStash}
+
+// IsArr reports whether k is one of the six *arr application kinds.
+func (k AppKind) IsArr() bool {
+	return slices.Contains(AllKinds, k)
+}
+
+// ParseAppKind validates an *arr kind string.
 func ParseAppKind(s string) (AppKind, error) {
 	for _, k := range AllKinds {
 		if string(k) == s {
@@ -40,6 +50,16 @@ func ParseAppKind(s string) (AppKind, error) {
 		}
 	}
 	return "", fmt.Errorf("%w: app kind %q", ErrInvalid, s)
+}
+
+// ParseInstanceKind validates an instance kind string, including companion kinds such as Stash.
+func ParseInstanceKind(s string) (AppKind, error) {
+	for _, k := range InstanceKinds {
+		if string(k) == s {
+			return k, nil
+		}
+	}
+	return "", fmt.Errorf("%w: instance kind %q", ErrInvalid, s)
 }
 
 // SnatchKind selects which wanted list a run walks.
@@ -132,7 +152,7 @@ func NormalizeBaseURL(raw string) (string, error) {
 
 // ValidateInstanceInput checks the user-supplied fields of an instance.
 func ValidateInstanceInput(kind AppKind, name, baseURL, apiKey string) error {
-	if _, err := ParseAppKind(string(kind)); err != nil {
+	if _, err := ParseInstanceKind(string(kind)); err != nil {
 		return err
 	}
 	name = strings.TrimSpace(name)

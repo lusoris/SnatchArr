@@ -28,6 +28,7 @@ require (
 	github.com/golusoris/goenvoy/downloadclient/transmission/v2 v2.0.2
 	github.com/golusoris/goenvoy/mediaserver/emby/v3 v3.2.0
 	github.com/golusoris/goenvoy/mediaserver/jellyfin/v3 v3.3.0
+	github.com/golusoris/goenvoy/mediaserver/stash/v2 v2.1.0
 	github.com/golusoris/goenvoy/metadata v1.4.1
 	github.com/golusoris/goenvoy/metadata/adult/stashbox/v2 v2.0.4
 	github.com/golusoris/golusoris v0.20.0

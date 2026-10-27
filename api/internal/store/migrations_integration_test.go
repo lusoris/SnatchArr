@@ -1145,3 +1145,67 @@ func testUsersPrefsConstraints(t *testing.T, st *store.Store, userID uuid.UUID) 
 		t.Fatalf("users_prefs count after user cascade delete = %d, want 0", count)
 	}
 }
+
+func TestMigration000045InstanceKindStash(t *testing.T) {
+	t.Parallel()
+	st := storetest.New(t)
+	m := storetest.Migrator(t, st)
+	ctx := t.Context()
+	now := time.Date(2026, 10, 27, 1, 0, 0, 0, time.UTC)
+
+	stepDownToVersion(t, m, 44)
+	const insInst = `INSERT INTO instances (id, kind, name, base_url, api_key_enc, enabled, source, created_at, updated_at) VALUES ($1, $2, $3, $4, '\x0102', true, 'manual', $5, $5)`
+	if _, err := st.Pool().Exec(ctx, insInst, uuid.New(), "stash", "stash-v44", "http://stash:9999", now); err == nil {
+		t.Fatal("insert kind=stash at v44 succeeded, want check violation")
+	}
+
+	if err := m.Steps(1); err != nil {
+		t.Fatalf("Steps(1) up to 45: %v", err)
+	}
+
+	stashID := uuid.New()
+	sonarrID := uuid.New()
+	if _, err := st.Pool().Exec(ctx, insInst, stashID, "stash", "stash-v45", "http://stash:9999", now); err != nil {
+		t.Fatalf("insert kind=stash at v45: %v", err)
+	}
+	if _, err := st.Pool().Exec(ctx, insInst, sonarrID, "sonarr", "sonarr-v45", "http://sonarr:8989", now); err != nil {
+		t.Fatalf("insert kind=sonarr at v45: %v", err)
+	}
+	if _, err := st.Pool().Exec(ctx, insInst, uuid.New(), "plex", "plex-v45", "http://plex:32400", now); err == nil {
+		t.Fatal("insert kind=plex at v45 succeeded, want check violation")
+	}
+
+	assertStashSkippedByArrQueries(t, st, sonarrID, stashID)
+
+	if _, err := st.Pool().Exec(ctx, "DELETE FROM instances WHERE id = $1", stashID); err != nil {
+		t.Fatalf("delete stash instance before down migration: %v", err)
+	}
+	if err := m.Steps(-1); err != nil {
+		t.Fatalf("Steps(-1) down to 44: %v", err)
+	}
+	if _, err := st.Pool().Exec(ctx, insInst, uuid.New(), "stash", "stash-after-down", "http://stash:9999", now); err == nil {
+		t.Fatal("insert kind=stash after down migration succeeded, want check violation")
+	}
+	if err := m.Steps(1); err != nil {
+		t.Fatalf("Steps(1) back up to 45: %v", err)
+	}
+}
+
+func assertStashSkippedByArrQueries(t *testing.T, st *store.Store, sonarrID, stashID uuid.UUID) {
+	t.Helper()
+	ctx := t.Context()
+	enabled, err := st.Q().ListEnabledInstances(ctx)
+	if err != nil {
+		t.Fatalf("ListEnabledInstances: %v", err)
+	}
+	if len(enabled) != 1 || enabled[0].ID != sonarrID {
+		t.Fatalf("ListEnabledInstances returned %d rows (first=%v), want only sonarr %v (stash %v skipped)", len(enabled), enabled, sonarrID, stashID)
+	}
+	toPlan, err := st.Q().ListInstancesToPlan(ctx)
+	if err != nil {
+		t.Fatalf("ListInstancesToPlan: %v", err)
+	}
+	if len(toPlan) != 1 || toPlan[0].ID != sonarrID {
+		t.Fatalf("ListInstancesToPlan returned %d rows (first=%v), want only sonarr %v (stash %v skipped)", len(toPlan), toPlan, sonarrID, stashID)
+	}
+}
