@@ -2596,6 +2596,13 @@ export interface components {
         };
     };
     responses: {
+        /** @description No content */
+        NoContent: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content?: never;
+        };
         /** @description RFC 9457 problem details */
         Problem: {
             headers: {
@@ -5072,13 +5079,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Test notification delivered successfully */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
+            204: components["responses"]["NoContent"];
             default: components["responses"]["Problem"];
         };
     };
