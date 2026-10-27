@@ -3555,6 +3555,71 @@ func decodeSnatchSeerrRequestParams(args [2]string, argsEscaped bool, r *http.Re
 	return params, nil
 }
 
+// SweepInstanceQueueParams is parameters of sweepInstanceQueue operation.
+type SweepInstanceQueueParams struct {
+	InstanceId uuid.UUID
+}
+
+func unpackSweepInstanceQueueParams(packed middleware.Parameters) (params SweepInstanceQueueParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "instanceId",
+			In:   "path",
+		}
+		params.InstanceId = packed[key].(uuid.UUID)
+	}
+	return params
+}
+
+func decodeSweepInstanceQueueParams(args [1]string, argsEscaped bool, r *http.Request) (params SweepInstanceQueueParams, _ error) {
+	// Decode path: instanceId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "instanceId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.InstanceId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "instanceId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
 // SyncSeerrLinkParams is parameters of syncSeerrLink operation.
 type SyncSeerrLinkParams struct {
 	LinkId uuid.UUID

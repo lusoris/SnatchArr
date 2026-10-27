@@ -828,6 +828,15 @@ func (UnimplementedHandler) SnatchSeerrRequest(ctx context.Context, params Snatc
 	return r, ht.ErrNotImplemented
 }
 
+// SweepInstanceQueue implements sweepInstanceQueue operation.
+//
+// Run one download queue sweep of an instance now.
+//
+// POST /instances/{instanceId}/queue/sweep
+func (UnimplementedHandler) SweepInstanceQueue(ctx context.Context, params SweepInstanceQueueParams) error {
+	return ht.ErrNotImplemented
+}
+
 // SyncSeerrLink implements syncSeerrLink operation.
 //
 // Refresh the request cache now (also runs every five minutes).

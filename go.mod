@@ -19,7 +19,7 @@ require (
 	github.com/golusoris/goenvoy/arr/seerr v1.6.1
 	github.com/golusoris/goenvoy/arr/sonarr v1.5.5
 	github.com/golusoris/goenvoy/arr/v2 v2.6.2
-	github.com/golusoris/goenvoy/arr/whisparr v1.5.1
+	github.com/golusoris/goenvoy/arr/whisparr v1.6.0
 	github.com/golusoris/goenvoy/downloadclient/deluge/v2 v2.0.3
 	github.com/golusoris/goenvoy/downloadclient/nzbget/v2 v2.0.3
 	github.com/golusoris/goenvoy/downloadclient/qbit/v2 v2.0.3

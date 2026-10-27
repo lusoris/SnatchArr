@@ -553,6 +553,12 @@ type Handler interface {
 	//
 	// POST /seerr/requests/{linkId}/{requestId}/snatch
 	SnatchSeerrRequest(ctx context.Context, params SnatchSeerrRequestParams) (*Run, error)
+	// SweepInstanceQueue implements sweepInstanceQueue operation.
+	//
+	// Run one download queue sweep of an instance now.
+	//
+	// POST /instances/{instanceId}/queue/sweep
+	SweepInstanceQueue(ctx context.Context, params SweepInstanceQueueParams) error
 	// SyncSeerrLink implements syncSeerrLink operation.
 	//
 	// Refresh the request cache now (also runs every five minutes).
