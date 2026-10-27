@@ -75,7 +75,7 @@ func (s *Service) Thumbnail(ctx context.Context, itemID uuid.UUID) (string, erro
 	destPath := filepath.Join(thumbDir, item.Sha256Checksum+".webp")
 
 	// Fast cache hit check
-	if _, err := os.Stat(destPath); err == nil {
+	if _, statErr := os.Stat(destPath); statErr == nil {
 		return destPath, nil
 	}
 
@@ -88,7 +88,7 @@ func (s *Service) Thumbnail(ctx context.Context, itemID uuid.UUID) (string, erro
 	}
 
 	// Double check cache hit after acquiring semaphore
-	if _, err := os.Stat(destPath); err == nil {
+	if _, statErr := os.Stat(destPath); statErr == nil {
 		return destPath, nil
 	}
 
