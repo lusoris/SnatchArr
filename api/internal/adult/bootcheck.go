@@ -27,29 +27,40 @@ func logWebPBackend(logger *slog.Logger) {
 	}
 }
 
-// CheckBoot verifies that if the adult module is enabled and image_set_dir is set,
-// image_set_dir exists and is a directory. It also creates the thumbnail cache directory.
-func CheckBoot(ctx context.Context, mod ModuleChecker, _ *slog.Logger) error {
-	ctxTimeout, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
-	enabled, err := mod.IsEnabled(ctxTimeout, domain.ModuleAdult)
+func loadAdultSettings(ctx context.Context, mod ModuleChecker) (adultSettings, bool, error) {
+	enabled, err := mod.IsEnabled(ctx, domain.ModuleAdult)
 	if err != nil {
-		return fmt.Errorf("adult: check module enabled: %w", err)
+		return adultSettings{}, false, fmt.Errorf("adult: check module enabled: %w", err)
 	}
 	if !enabled {
-		return nil
+		return adultSettings{}, false, nil
 	}
 
-	m, err := mod.Get(ctxTimeout, domain.ModuleAdult)
+	m, err := mod.Get(ctx, domain.ModuleAdult)
 	if err != nil {
-		return fmt.Errorf("adult: get module config: %w", err)
+		return adultSettings{}, false, fmt.Errorf("adult: get module config: %w", err)
 	}
 	cfg, err := parseAdultConfig(m.Config)
 	if err != nil {
-		return fmt.Errorf("adult: parse module config: %w", err)
+		return adultSettings{}, false, fmt.Errorf("adult: parse module config: %w", err)
 	}
-	if cfg.ImageSetDir == nil || *cfg.ImageSetDir == "" {
+	return cfg, true, nil
+}
+
+// CheckBoot verifies that if the adult module is enabled and image_set_dir is set,
+// image_set_dir exists and is a directory. It also creates the thumbnail cache directory.
+func CheckBoot(ctx context.Context, mod ModuleChecker, logger *slog.Logger) error {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	ctxTimeout, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	cfg, ok, err := loadAdultSettings(ctxTimeout, mod)
+	if err != nil {
+		return err
+	}
+	if !ok || cfg.ImageSetDir == nil || *cfg.ImageSetDir == "" {
 		return nil
 	}
 
@@ -60,6 +71,10 @@ func CheckBoot(ctx context.Context, mod ModuleChecker, _ *slog.Logger) error {
 	}
 	if !info.IsDir() {
 		return fmt.Errorf("%w: image_set_dir %q is not a directory", domain.ErrInvalid, dir)
+	}
+
+	if err := writeStashIgnore(dir, logger); err != nil {
+		return err
 	}
 
 	thumbDir := resolveThumbnailDir(cfg)
