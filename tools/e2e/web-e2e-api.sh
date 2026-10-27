@@ -11,6 +11,7 @@ set -euo pipefail
 : "${SMOKE_DSN:?set SMOKE_DSN to a Postgres DSN}"
 : "${SMOKE_API_BIN:?path to the snatcharr binary}"
 : "${SMOKE_FAKEARR_BIN:?path to the fakearr binary}"
+SMOKE_FAKEWORKER_BIN="${SMOKE_FAKEWORKER_BIN:-}"
 
 label="web-e2e-api"
 # shellcheck source=tools/e2e/live_lib.sh
@@ -94,4 +95,6 @@ export SNATCHARR_E2E_PROXY_SECRET_HEADER="$PROXY_SECRET_HEADER"
 SNATCHARR_E2E_API="http://127.0.0.1:$API_PORT" \
 SNATCHARR_E2E_FAKEARR="http://127.0.0.1:$SONARR_PORT" \
 SNATCHARR_E2E_FAKEARR_FLOW="http://127.0.0.1:$SONARR_FLOW_PORT" \
+SNATCHARR_E2E_FAKEWORKER="$SMOKE_FAKEWORKER_BIN" \
+SNATCHARR_E2E_GRPC="127.0.0.1:$GRPC_PORT" \
 pnpm exec playwright test "$@"
