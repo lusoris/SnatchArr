@@ -108,7 +108,7 @@ Removals triggered by `failed` (and `import_broken`) set `skipRedownload=false` 
 
 ### Import-fixable, import-broken, import-not-wanted, import-blocked
 
-- `import_fixable`: class `fixable`. Attempts manual import via `ForceImport` (subject to `max_imports_per_sweep` bound). On Sonarr, Radarr, Lidarr, and Readarr, candidates qualify if mapped and all rejections classify as `fixable`. On Whisparr, `ForceImport` returns `ErrQueueUnsupported` and the item is reported as `WouldImport` with `import_refused`, never removed.
+- `import_fixable`: class `fixable`. Attempts manual import via `ForceImport` (subject to `max_imports_per_sweep` bound). On Sonarr, Radarr, Lidarr, Readarr, and Whisparr (v2 needs a mapped series and episodes, v3 a mapped movie), candidates qualify if mapped and all rejections classify as `fixable`.
 - `import_broken`: class `broken`. Removes the item with `blocklist=true` and `skipRedownload=false` (re-search).
 - `import_not_wanted`: class `not_wanted`. Removes the item with `blocklist=true` and `skipRedownload=true` (no re-search).
 - `import_blocked`: class `unknown`. Strikes the item and records `Decision.Unknown = true` and `Pattern`. In `act` mode it removes the item at the threshold, within `max_removals_per_sweep`, only when `Pattern` is `rematch_pending` or `unrecognized`; the removal sets `blocklist=true` and `skipRedownload=true`, and the planner searches the item again. An item with an operational line or no line is never removed, in any mode (`IsRemovableUnknown`, `api/internal/queue/classify.go`).
