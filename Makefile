@@ -347,13 +347,15 @@ web-gen: ## OpenAPI -> src/lib/api/schema.d.ts
 web-e2e: ## Playwright + axe-core (zero violations; never suppressed)
 	cd web && pnpm test:e2e
 
-web-e2e-api: ## Postgres + api + fakearr + web e2e Playwright axe sweep (needs Docker unless SMOKE_DSN is set)
+web-e2e-api: ## Postgres + api + fakearr + fakeworker + web e2e Playwright axe sweep (needs Docker unless SMOKE_DSN is set)
 	mkdir -p $(E2E_BIN)
 	go build -o $(E2E_BIN)/snatcharr ./api/cmd/snatcharr
 	go build -o $(E2E_BIN)/fakearr ./api/cmd/fakearr
+	go build -o $(E2E_BIN)/fakeworker ./api/cmd/fakeworker
 	(cd web && pnpm install --frozen-lockfile && pnpm exec playwright install chromium)
 	E2E_POSTGRES=$(E2E_POSTGRES) tools/e2e/postgres.sh \
 	  env SMOKE_API_BIN=$(E2E_BIN)/snatcharr SMOKE_FAKEARR_BIN=$(E2E_BIN)/fakearr \
+	  SMOKE_FAKEWORKER_BIN=$(E2E_BIN)/fakeworker \
 	  tools/e2e/web-e2e-api.sh
 
 # Visual baseline of the public pages (/login, /setup) and the signed-in shell (desktop and
