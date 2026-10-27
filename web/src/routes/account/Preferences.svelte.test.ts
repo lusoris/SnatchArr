@@ -23,19 +23,29 @@ const baseStubs = {
 	'/me/preferences': samplePrefs
 };
 
+interface PreferencesControls {
+	container: HTMLElement;
+	brandMarkSelect: HTMLSelectElement;
+	sfwModeSelect: HTMLSelectElement;
+}
+
+async function renderPreferences(): Promise<PreferencesControls> {
+	stubGet(baseStubs);
+	const { container } = renderWithQuery(Preferences);
+	const brandMarkSelect = (await screen.findByLabelText(
+		m.preferences_brand_mark()
+	)) as HTMLSelectElement;
+	const sfwModeSelect = screen.getByLabelText(m.preferences_sfw_mode()) as HTMLSelectElement;
+	return { container, brandMarkSelect, sfwModeSelect };
+}
+
 describe('Preferences component', () => {
 	afterEach(() => {
 		vi.restoreAllMocks();
 	});
 
 	it('positive: renders selects with loaded values and passes WCAG', async () => {
-		stubGet(baseStubs);
-		const { container } = renderWithQuery(Preferences);
-
-		const brandMarkSelect = (await screen.findByLabelText(
-			m.preferences_brand_mark()
-		)) as HTMLSelectElement;
-		const sfwModeSelect = screen.getByLabelText(m.preferences_sfw_mode()) as HTMLSelectElement;
+		const { container, brandMarkSelect, sfwModeSelect } = await renderPreferences();
 
 		expect(brandMarkSelect.value).toBe('hand');
 		expect(sfwModeSelect.value).toBe('on');
@@ -47,17 +57,11 @@ describe('Preferences component', () => {
 	});
 
 	it('positive: updates preferences to new values on submit', async () => {
-		stubGet(baseStubs);
 		const putSpy = vi.spyOn(api, 'PUT').mockResolvedValue({
 			data: { brand_mark: 'penis', sfw_mode: 'off' }
 		} as never);
 
-		renderWithQuery(Preferences);
-
-		const brandMarkSelect = (await screen.findByLabelText(
-			m.preferences_brand_mark()
-		)) as HTMLSelectElement;
-		const sfwModeSelect = screen.getByLabelText(m.preferences_sfw_mode()) as HTMLSelectElement;
+		const { brandMarkSelect, sfwModeSelect } = await renderPreferences();
 
 		await fireEvent.change(brandMarkSelect, { target: { value: 'penis' } });
 		await fireEvent.change(sfwModeSelect, { target: { value: 'off' } });
@@ -71,17 +75,11 @@ describe('Preferences component', () => {
 	});
 
 	it('boundary: follow default option sends null', async () => {
-		stubGet(baseStubs);
 		const putSpy = vi.spyOn(api, 'PUT').mockResolvedValue({
 			data: { brand_mark: null, sfw_mode: null }
 		} as never);
 
-		renderWithQuery(Preferences);
-
-		const brandMarkSelect = (await screen.findByLabelText(
-			m.preferences_brand_mark()
-		)) as HTMLSelectElement;
-		const sfwModeSelect = screen.getByLabelText(m.preferences_sfw_mode()) as HTMLSelectElement;
+		const { brandMarkSelect, sfwModeSelect } = await renderPreferences();
 
 		await fireEvent.change(brandMarkSelect, { target: { value: '' } });
 		await fireEvent.change(sfwModeSelect, { target: { value: '' } });
