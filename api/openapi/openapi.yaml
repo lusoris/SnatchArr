@@ -2000,7 +2000,7 @@ paths:
       summary: Send a test notification to a user target
       responses:
         "204":
-          description: Test notification delivered successfully
+          $ref: "#/components/responses/NoContent"
         default:
           $ref: "#/components/responses/Problem"
 
@@ -2295,6 +2295,8 @@ components:
         type: string
         format: uuid
   responses:
+    NoContent:
+      description: No content
     Problem:
       description: RFC 9457 problem details
       content:

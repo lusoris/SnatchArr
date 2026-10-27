@@ -2059,7 +2059,7 @@ func encodeTestInstanceInputResponse(response *ProbeResult, w http.ResponseWrite
 	return nil
 }
 
-func encodeTestMyNotifyTargetResponse(response *TestMyNotifyTargetNoContent, w http.ResponseWriter, span trace.Span) error {
+func encodeTestMyNotifyTargetResponse(response *NoContent, w http.ResponseWriter, span trace.Span) error {
 	w.WriteHeader(204)
 	span.SetStatus(codes.Ok, http.StatusText(204))
 
