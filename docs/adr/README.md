@@ -48,3 +48,4 @@ This directory documents key architectural decisions following the HISS-14 immut
 | [0040](0040-audiobookshelf-integration.md) | 2026-10-26 | Audiobookshelf full integration | Accepted |
 | [0041](0041-rule-driven-library-processing.md) | 2026-10-26 | Rule-driven library processing (remux and re-encode by rules) | Accepted |
 | [0042](0042-brand-mark-choice-and-sfw-mode.md) | 2026-10-26 | Brand mark choice (vulva, penis, hand) and SFW mode | Accepted |
+| [0043](0043-adult-served-surface.md) | 2026-10-27 | Adult module served HTTP surface and UI screens | Accepted |

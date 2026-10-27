@@ -16,6 +16,312 @@ func (s *ProblemStatusCode) Error() string {
 	return fmt.Sprintf("code %d: %+v", s.StatusCode, s.Response)
 }
 
+// Ref: #/components/schemas/AdultSource
+type AdultSource struct {
+	ID       uuid.UUID `json:"id"`
+	Name     string    `json:"name"`
+	Endpoint string    `json:"endpoint"`
+	// True when an encrypted API key is stored (the key itself is write-only).
+	HasAPIKey     bool        `json:"has_api_key"`
+	Enabled       bool        `json:"enabled"`
+	SyncFavorites bool        `json:"sync_favorites"`
+	Priority      int         `json:"priority"`
+	LastSyncAt    OptDateTime `json:"last_sync_at"`
+	LastSyncError OptString   `json:"last_sync_error"`
+	CreatedAt     time.Time   `json:"created_at"`
+	UpdatedAt     time.Time   `json:"updated_at"`
+}
+
+// GetID returns the value of ID.
+func (s *AdultSource) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetName returns the value of Name.
+func (s *AdultSource) GetName() string {
+	return s.Name
+}
+
+// GetEndpoint returns the value of Endpoint.
+func (s *AdultSource) GetEndpoint() string {
+	return s.Endpoint
+}
+
+// GetHasAPIKey returns the value of HasAPIKey.
+func (s *AdultSource) GetHasAPIKey() bool {
+	return s.HasAPIKey
+}
+
+// GetEnabled returns the value of Enabled.
+func (s *AdultSource) GetEnabled() bool {
+	return s.Enabled
+}
+
+// GetSyncFavorites returns the value of SyncFavorites.
+func (s *AdultSource) GetSyncFavorites() bool {
+	return s.SyncFavorites
+}
+
+// GetPriority returns the value of Priority.
+func (s *AdultSource) GetPriority() int {
+	return s.Priority
+}
+
+// GetLastSyncAt returns the value of LastSyncAt.
+func (s *AdultSource) GetLastSyncAt() OptDateTime {
+	return s.LastSyncAt
+}
+
+// GetLastSyncError returns the value of LastSyncError.
+func (s *AdultSource) GetLastSyncError() OptString {
+	return s.LastSyncError
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *AdultSource) GetCreatedAt() time.Time {
+	return s.CreatedAt
+}
+
+// GetUpdatedAt returns the value of UpdatedAt.
+func (s *AdultSource) GetUpdatedAt() time.Time {
+	return s.UpdatedAt
+}
+
+// SetID sets the value of ID.
+func (s *AdultSource) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetName sets the value of Name.
+func (s *AdultSource) SetName(val string) {
+	s.Name = val
+}
+
+// SetEndpoint sets the value of Endpoint.
+func (s *AdultSource) SetEndpoint(val string) {
+	s.Endpoint = val
+}
+
+// SetHasAPIKey sets the value of HasAPIKey.
+func (s *AdultSource) SetHasAPIKey(val bool) {
+	s.HasAPIKey = val
+}
+
+// SetEnabled sets the value of Enabled.
+func (s *AdultSource) SetEnabled(val bool) {
+	s.Enabled = val
+}
+
+// SetSyncFavorites sets the value of SyncFavorites.
+func (s *AdultSource) SetSyncFavorites(val bool) {
+	s.SyncFavorites = val
+}
+
+// SetPriority sets the value of Priority.
+func (s *AdultSource) SetPriority(val int) {
+	s.Priority = val
+}
+
+// SetLastSyncAt sets the value of LastSyncAt.
+func (s *AdultSource) SetLastSyncAt(val OptDateTime) {
+	s.LastSyncAt = val
+}
+
+// SetLastSyncError sets the value of LastSyncError.
+func (s *AdultSource) SetLastSyncError(val OptString) {
+	s.LastSyncError = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *AdultSource) SetCreatedAt(val time.Time) {
+	s.CreatedAt = val
+}
+
+// SetUpdatedAt sets the value of UpdatedAt.
+func (s *AdultSource) SetUpdatedAt(val time.Time) {
+	s.UpdatedAt = val
+}
+
+// Ref: #/components/schemas/AdultSourceInput
+type AdultSourceInput struct {
+	// Display name of the catalogue source (1..128 characters).
+	Name string `json:"name"`
+	// GraphQL endpoint URL (http or https).
+	Endpoint string `json:"endpoint"`
+	// Required on create; omit on update to keep stored key.
+	APIKey        OptString `json:"api_key"`
+	Enabled       OptBool   `json:"enabled"`
+	SyncFavorites OptBool   `json:"sync_favorites"`
+	Priority      OptInt    `json:"priority"`
+}
+
+// GetName returns the value of Name.
+func (s *AdultSourceInput) GetName() string {
+	return s.Name
+}
+
+// GetEndpoint returns the value of Endpoint.
+func (s *AdultSourceInput) GetEndpoint() string {
+	return s.Endpoint
+}
+
+// GetAPIKey returns the value of APIKey.
+func (s *AdultSourceInput) GetAPIKey() OptString {
+	return s.APIKey
+}
+
+// GetEnabled returns the value of Enabled.
+func (s *AdultSourceInput) GetEnabled() OptBool {
+	return s.Enabled
+}
+
+// GetSyncFavorites returns the value of SyncFavorites.
+func (s *AdultSourceInput) GetSyncFavorites() OptBool {
+	return s.SyncFavorites
+}
+
+// GetPriority returns the value of Priority.
+func (s *AdultSourceInput) GetPriority() OptInt {
+	return s.Priority
+}
+
+// SetName sets the value of Name.
+func (s *AdultSourceInput) SetName(val string) {
+	s.Name = val
+}
+
+// SetEndpoint sets the value of Endpoint.
+func (s *AdultSourceInput) SetEndpoint(val string) {
+	s.Endpoint = val
+}
+
+// SetAPIKey sets the value of APIKey.
+func (s *AdultSourceInput) SetAPIKey(val OptString) {
+	s.APIKey = val
+}
+
+// SetEnabled sets the value of Enabled.
+func (s *AdultSourceInput) SetEnabled(val OptBool) {
+	s.Enabled = val
+}
+
+// SetSyncFavorites sets the value of SyncFavorites.
+func (s *AdultSourceInput) SetSyncFavorites(val OptBool) {
+	s.SyncFavorites = val
+}
+
+// SetPriority sets the value of Priority.
+func (s *AdultSourceInput) SetPriority(val OptInt) {
+	s.Priority = val
+}
+
+// Ref: #/components/schemas/AdultSyncStatus
+type AdultSyncStatus struct {
+	LastSyncAt       OptDateTime `json:"last_sync_at"`
+	LastError        OptString   `json:"last_error"`
+	TotalSources     int         `json:"total_sources"`
+	EnabledSources   int         `json:"enabled_sources"`
+	PerformersSynced int         `json:"performers_synced"`
+	StudiosSynced    int         `json:"studios_synced"`
+}
+
+// GetLastSyncAt returns the value of LastSyncAt.
+func (s *AdultSyncStatus) GetLastSyncAt() OptDateTime {
+	return s.LastSyncAt
+}
+
+// GetLastError returns the value of LastError.
+func (s *AdultSyncStatus) GetLastError() OptString {
+	return s.LastError
+}
+
+// GetTotalSources returns the value of TotalSources.
+func (s *AdultSyncStatus) GetTotalSources() int {
+	return s.TotalSources
+}
+
+// GetEnabledSources returns the value of EnabledSources.
+func (s *AdultSyncStatus) GetEnabledSources() int {
+	return s.EnabledSources
+}
+
+// GetPerformersSynced returns the value of PerformersSynced.
+func (s *AdultSyncStatus) GetPerformersSynced() int {
+	return s.PerformersSynced
+}
+
+// GetStudiosSynced returns the value of StudiosSynced.
+func (s *AdultSyncStatus) GetStudiosSynced() int {
+	return s.StudiosSynced
+}
+
+// SetLastSyncAt sets the value of LastSyncAt.
+func (s *AdultSyncStatus) SetLastSyncAt(val OptDateTime) {
+	s.LastSyncAt = val
+}
+
+// SetLastError sets the value of LastError.
+func (s *AdultSyncStatus) SetLastError(val OptString) {
+	s.LastError = val
+}
+
+// SetTotalSources sets the value of TotalSources.
+func (s *AdultSyncStatus) SetTotalSources(val int) {
+	s.TotalSources = val
+}
+
+// SetEnabledSources sets the value of EnabledSources.
+func (s *AdultSyncStatus) SetEnabledSources(val int) {
+	s.EnabledSources = val
+}
+
+// SetPerformersSynced sets the value of PerformersSynced.
+func (s *AdultSyncStatus) SetPerformersSynced(val int) {
+	s.PerformersSynced = val
+}
+
+// SetStudiosSynced sets the value of StudiosSynced.
+func (s *AdultSyncStatus) SetStudiosSynced(val int) {
+	s.StudiosSynced = val
+}
+
+// Ref: #/components/schemas/AdultSyncSummary
+type AdultSyncSummary struct {
+	SourcesSynced    int `json:"sources_synced"`
+	PerformersSynced int `json:"performers_synced"`
+	StudiosSynced    int `json:"studios_synced"`
+}
+
+// GetSourcesSynced returns the value of SourcesSynced.
+func (s *AdultSyncSummary) GetSourcesSynced() int {
+	return s.SourcesSynced
+}
+
+// GetPerformersSynced returns the value of PerformersSynced.
+func (s *AdultSyncSummary) GetPerformersSynced() int {
+	return s.PerformersSynced
+}
+
+// GetStudiosSynced returns the value of StudiosSynced.
+func (s *AdultSyncSummary) GetStudiosSynced() int {
+	return s.StudiosSynced
+}
+
+// SetSourcesSynced sets the value of SourcesSynced.
+func (s *AdultSyncSummary) SetSourcesSynced(val int) {
+	s.SourcesSynced = val
+}
+
+// SetPerformersSynced sets the value of PerformersSynced.
+func (s *AdultSyncSummary) SetPerformersSynced(val int) {
+	s.PerformersSynced = val
+}
+
+// SetStudiosSynced sets the value of StudiosSynced.
+func (s *AdultSyncSummary) SetStudiosSynced(val int) {
+	s.StudiosSynced = val
+}
+
 // Ref: #/components/schemas/ApiKey
 type ApiKey struct {
 	ID         string        `json:"id"`
@@ -977,6 +1283,9 @@ func (s *CreatedApiKey) SetSecret(val string) {
 }
 
 func (*CreatedApiKey) createAPIKeyRes() {}
+
+// DeleteAdultSourceNoContent is response for DeleteAdultSource operation.
+type DeleteAdultSourceNoContent struct{}
 
 // DeleteDownloadClientNoContent is response for DeleteDownloadClient operation.
 type DeleteDownloadClientNoContent struct{}

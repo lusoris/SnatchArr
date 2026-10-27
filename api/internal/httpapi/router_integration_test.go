@@ -197,6 +197,7 @@ type idsState struct {
 	userTargetID       string
 	ruleID             string
 	watchawareSourceID string
+	adultSourceID      string
 }
 
 func newIDsState(t *testing.T) *idsState {
@@ -1509,6 +1510,12 @@ func stepsDeletesAndAuth() []routerStep {
 			want:   http.StatusNoContent,
 		},
 		{
+			op:     "deleteAdultSource",
+			method: http.MethodDelete,
+			path:   func(ids *idsState) string { return "/adult/sources/" + ids.adultSourceID },
+			want:   http.StatusNoContent,
+		},
+		{
 			op:     "deleteInstance",
 			method: http.MethodDelete,
 			path:   func(ids *idsState) string { return "/instances/" + ids.instanceID },
@@ -1939,8 +1946,97 @@ func stepsWatchaware() []routerStep {
 	}
 }
 
+func stepsAdult() []routerStep {
+	return []routerStep{
+		{
+			op:     "createAdultSource",
+			method: http.MethodPost,
+			path:   func(_ *idsState) string { return "/adult/sources" },
+			body: func(_ *idsState) any {
+				return map[string]any{
+					"name":           "catalogue-router-test",
+					"endpoint":       "http://127.0.0.1:1/graphql",
+					"api_key":        "fake-api-key-0123456789",
+					"enabled":        false,
+					"sync_favorites": true,
+					"priority":       10,
+				}
+			},
+			want: http.StatusCreated,
+			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
+				t.Helper()
+				id, ok := decoded["id"].(string)
+				if !ok || id == "" {
+					t.Fatalf("createAdultSource id = %v, want valid uuid", decoded["id"])
+				}
+				ids.adultSourceID = id
+				if decoded["name"] != "catalogue-router-test" {
+					t.Fatalf("createAdultSource name = %v, want catalogue-router-test", decoded["name"])
+				}
+			},
+		},
+		{
+			op:     "listAdultSources",
+			method: http.MethodGet,
+			path:   func(_ *idsState) string { return "/adult/sources" },
+			want:   http.StatusOK,
+			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
+				t.Helper()
+				if !containsID(decoded["items"], ids.adultSourceID) {
+					t.Fatalf("listAdultSources missing source %s", ids.adultSourceID)
+				}
+			},
+		},
+		{
+			op:     "getAdultSource",
+			method: http.MethodGet,
+			path:   func(ids *idsState) string { return "/adult/sources/" + ids.adultSourceID },
+			want:   http.StatusOK,
+			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
+				t.Helper()
+				if decoded["id"] != ids.adultSourceID {
+					t.Fatalf("getAdultSource id = %v, want %s", decoded["id"], ids.adultSourceID)
+				}
+			},
+		},
+		{
+			op:     "updateAdultSource",
+			method: http.MethodPut,
+			path:   func(ids *idsState) string { return "/adult/sources/" + ids.adultSourceID },
+			body: func(_ *idsState) any {
+				return map[string]any{
+					"name":           "catalogue-router-updated",
+					"endpoint":       "http://127.0.0.1:1/graphql",
+					"enabled":        false,
+					"sync_favorites": true,
+					"priority":       5,
+				}
+			},
+			want: http.StatusOK,
+			capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
+				t.Helper()
+				if decoded["name"] != "catalogue-router-updated" {
+					t.Fatalf("updateAdultSource name = %v, want catalogue-router-updated", decoded["name"])
+				}
+			},
+		},
+		{
+			op:     "triggerAdultSync",
+			method: http.MethodPost,
+			path:   func(_ *idsState) string { return "/adult/sync" },
+			want:   http.StatusOK,
+		},
+		{
+			op:     "getAdultSyncStatus",
+			method: http.MethodGet,
+			path:   func(_ *idsState) string { return "/adult/sync/status" },
+			want:   http.StatusOK,
+		},
+	}
+}
+
 func buildRouterSteps(f *routerFixture) []routerStep {
-	steps := make([]routerStep, 0, 85)
+	steps := make([]routerStep, 0, 92)
 	steps = append(steps, stepsAuth()...)
 	steps = append(steps, stepsIdentities()...)
 	steps = append(steps, stepsAPIKeys()...)
@@ -1958,6 +2054,7 @@ func buildRouterSteps(f *routerFixture) []routerStep {
 	steps = append(steps, stepsUserPreferences()...)
 	steps = append(steps, stepsNotificationRules()...)
 	steps = append(steps, stepsWatchaware()...)
+	steps = append(steps, stepsAdult()...)
 	steps = append(steps, stepsDeletesAndAuth()...)
 	return steps
 }
@@ -2078,6 +2175,7 @@ func TestRouterOperations(t *testing.T) {
 	setupFixtureStubs(f)
 	if f.h.modules != nil {
 		_ = f.h.modules.SetEnabled(context.Background(), domain.ModuleWatchAware, true)
+		_ = f.h.modules.SetEnabled(context.Background(), domain.ModuleAdult, true)
 	}
 	steps := buildRouterSteps(f)
 	assertCoverageGuard(t, steps)
@@ -2294,6 +2392,7 @@ func initViewerIDsState(t *testing.T, csrfToken string) *idsState {
 	ids.channelID = dummyUUID
 	ids.ruleID = dummyUUID
 	ids.watchawareSourceID = dummyUUID
+	ids.adultSourceID = dummyUUID
 
 	pRaw, err := json.Marshal(policyToOAS(domain.DefaultPolicy(uuid.New())))
 	if err != nil {
@@ -2395,6 +2494,7 @@ func TestRouterRejectsViewerMutationsAndProbes(t *testing.T) {
 	setupFixtureStubs(f)
 	if f.h.modules != nil {
 		_ = f.h.modules.SetEnabled(context.Background(), domain.ModuleWatchAware, true)
+		_ = f.h.modules.SetEnabled(context.Background(), domain.ModuleAdult, true)
 	}
 	_ = completeInitialSetup(t, f)
 

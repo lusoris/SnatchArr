@@ -24,12 +24,12 @@ describe('KindSelect', () => {
 			'stash'
 		]);
 		expect(options.map((o) => o.textContent)).toEqual([
-			'sonarr',
-			'radarr',
-			'lidarr',
-			'readarr (legacy)',
-			'whisparr_v2',
-			'whisparr_v3',
+			'Sonarr',
+			'Radarr',
+			'Lidarr',
+			'Readarr (legacy)',
+			'Whisparr v2',
+			'Whisparr v3',
 			'Stash'
 		]);
 	});

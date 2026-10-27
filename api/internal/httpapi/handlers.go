@@ -23,6 +23,7 @@ import (
 	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/httpx/csrf"
 
+	"github.com/lusoris/SnatchArr/api/internal/adult"
 	"github.com/lusoris/SnatchArr/api/internal/auth"
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/buildinfo"
@@ -74,6 +75,7 @@ type Handlers struct {
 	configarr  *configarr.Service
 	notify     *notify.Service
 	watchaware *watchaware.Service
+	adult      *adult.Service
 	jellyfin   jellyfin.Authenticator
 	logger     *slog.Logger
 	qcCache    quickConnectCache
@@ -103,6 +105,7 @@ type Deps struct {
 	Configarr  *configarr.Service
 	Notify     *notify.Service
 	WatchAware *watchaware.Service
+	Adult      *adult.Service
 	Jellyfin   jellyfin.Authenticator
 	Options    *policies.Options
 	Logs       *logring.Ring
@@ -120,7 +123,7 @@ func NewHandlers(build buildinfo.Info, cfg config.Options, clk clock.Clock, auth
 	}
 	return &Handlers{
 		build: build, cfg: cfg, clk: clk, auth: authSvc, apiKeys: apiKeys, sessions: sessions, instances: inst, policies: pol,
-		queue: d.Queue, queueSvc: d.QueueSvc, runs: d.Runs, workers: d.Workers, rec: d.Rec, budget: d.Budget, memory: d.Memory, planner: d.Planner, schedules: d.Schedules, clients: d.Clients, settings: d.Settings, modules: d.Modules, seerr: d.Seerr, prowlarr: d.Prowlarr, configarr: d.Configarr, notify: d.Notify, watchaware: d.WatchAware, jellyfin: jf, options: d.Options, logs: d.Logs, logger: logger,
+		queue: d.Queue, queueSvc: d.QueueSvc, runs: d.Runs, workers: d.Workers, rec: d.Rec, budget: d.Budget, memory: d.Memory, planner: d.Planner, schedules: d.Schedules, clients: d.Clients, settings: d.Settings, modules: d.Modules, seerr: d.Seerr, prowlarr: d.Prowlarr, configarr: d.Configarr, notify: d.Notify, watchaware: d.WatchAware, adult: d.Adult, jellyfin: jf, options: d.Options, logs: d.Logs, logger: logger,
 	}
 }
 

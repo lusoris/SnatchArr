@@ -114,6 +114,19 @@ func (q *Queries) DeleteAdultImageSetsNotInPaths(ctx context.Context, keepPaths 
 	return result.RowsAffected(), nil
 }
 
+const deleteAdultStashboxInstance = `-- name: DeleteAdultStashboxInstance :execrows
+DELETE FROM adult_stashbox_instances
+WHERE id = $1
+`
+
+func (q *Queries) DeleteAdultStashboxInstance(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteAdultStashboxInstance, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteAllAdultImageItemsForSet = `-- name: DeleteAllAdultImageItemsForSet :execrows
 DELETE FROM adult_image_items
 WHERE image_set_id = $1
@@ -304,7 +317,7 @@ func (q *Queries) GetAdultPerformerByExternalRef(ctx context.Context, arg GetAdu
 }
 
 const getAdultStashboxInstance = `-- name: GetAdultStashboxInstance :one
-SELECT id, name, endpoint, api_key_enc, enabled, sync_favorites, priority, created_at, updated_at FROM adult_stashbox_instances
+SELECT id, name, endpoint, api_key_enc, enabled, sync_favorites, priority, created_at, updated_at, last_sync_at, last_sync_error, last_performers_synced, last_studios_synced FROM adult_stashbox_instances
 WHERE id = $1
 `
 
@@ -321,6 +334,10 @@ func (q *Queries) GetAdultStashboxInstance(ctx context.Context, id uuid.UUID) (A
 		&i.Priority,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LastSyncAt,
+		&i.LastSyncError,
+		&i.LastPerformersSynced,
+		&i.LastStudiosSynced,
 	)
 	return i, err
 }
@@ -645,6 +662,45 @@ func (q *Queries) ListAdultPerformers(ctx context.Context) ([]AdultPerformer, er
 	return items, nil
 }
 
+const listAdultStashboxInstances = `-- name: ListAdultStashboxInstances :many
+SELECT id, name, endpoint, api_key_enc, enabled, sync_favorites, priority, created_at, updated_at, last_sync_at, last_sync_error, last_performers_synced, last_studios_synced FROM adult_stashbox_instances
+ORDER BY priority ASC, name ASC
+`
+
+func (q *Queries) ListAdultStashboxInstances(ctx context.Context) ([]AdultStashboxInstance, error) {
+	rows, err := q.db.Query(ctx, listAdultStashboxInstances)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AdultStashboxInstance{}
+	for rows.Next() {
+		var i AdultStashboxInstance
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Endpoint,
+			&i.ApiKeyEnc,
+			&i.Enabled,
+			&i.SyncFavorites,
+			&i.Priority,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.LastSyncAt,
+			&i.LastSyncError,
+			&i.LastPerformersSynced,
+			&i.LastStudiosSynced,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAdultStudios = `-- name: ListAdultStudios :many
 SELECT id, canonical_name, created_at, updated_at, urls, is_favorite, merged_into_id, parent_studio_id, network_studio_id FROM adult_studios
 ORDER BY canonical_name ASC
@@ -681,7 +737,7 @@ func (q *Queries) ListAdultStudios(ctx context.Context) ([]AdultStudio, error) {
 }
 
 const listEnabledAdultStashboxInstances = `-- name: ListEnabledAdultStashboxInstances :many
-SELECT id, name, endpoint, api_key_enc, enabled, sync_favorites, priority, created_at, updated_at FROM adult_stashbox_instances
+SELECT id, name, endpoint, api_key_enc, enabled, sync_favorites, priority, created_at, updated_at, last_sync_at, last_sync_error, last_performers_synced, last_studios_synced FROM adult_stashbox_instances
 WHERE enabled = TRUE
 ORDER BY priority ASC, name ASC
 `
@@ -705,6 +761,10 @@ func (q *Queries) ListEnabledAdultStashboxInstances(ctx context.Context) ([]Adul
 			&i.Priority,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.LastSyncAt,
+			&i.LastSyncError,
+			&i.LastPerformersSynced,
+			&i.LastStudiosSynced,
 		); err != nil {
 			return nil, err
 		}
@@ -717,7 +777,7 @@ func (q *Queries) ListEnabledAdultStashboxInstances(ctx context.Context) ([]Adul
 }
 
 const listSyncableAdultStashboxInstances = `-- name: ListSyncableAdultStashboxInstances :many
-SELECT id, name, endpoint, api_key_enc, enabled, sync_favorites, priority, created_at, updated_at FROM adult_stashbox_instances
+SELECT id, name, endpoint, api_key_enc, enabled, sync_favorites, priority, created_at, updated_at, last_sync_at, last_sync_error, last_performers_synced, last_studios_synced FROM adult_stashbox_instances
 WHERE enabled = TRUE AND sync_favorites = TRUE
 ORDER BY priority ASC, name ASC
 `
@@ -741,6 +801,10 @@ func (q *Queries) ListSyncableAdultStashboxInstances(ctx context.Context) ([]Adu
 			&i.Priority,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.LastSyncAt,
+			&i.LastSyncError,
+			&i.LastPerformersSynced,
+			&i.LastStudiosSynced,
 		); err != nil {
 			return nil, err
 		}
@@ -774,6 +838,35 @@ func (q *Queries) MarkStaleAdultExternalRefsUnfavorite(ctx context.Context, arg 
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const recordAdultStashboxSyncResult = `-- name: RecordAdultStashboxSyncResult :exec
+UPDATE adult_stashbox_instances
+SET
+    last_sync_at = $2,
+    last_sync_error = $3,
+    last_performers_synced = $4,
+    last_studios_synced = $5
+WHERE id = $1
+`
+
+type RecordAdultStashboxSyncResultParams struct {
+	ID                   uuid.UUID
+	LastSyncAt           *time.Time
+	LastSyncError        *string
+	LastPerformersSynced int32
+	LastStudiosSynced    int32
+}
+
+func (q *Queries) RecordAdultStashboxSyncResult(ctx context.Context, arg RecordAdultStashboxSyncResultParams) error {
+	_, err := q.db.Exec(ctx, recordAdultStashboxSyncResult,
+		arg.ID,
+		arg.LastSyncAt,
+		arg.LastSyncError,
+		arg.LastPerformersSynced,
+		arg.LastStudiosSynced,
+	)
+	return err
 }
 
 const updateAdultImageSetSummary = `-- name: UpdateAdultImageSetSummary :one
@@ -1070,7 +1163,7 @@ ON CONFLICT (id) DO UPDATE SET
     sync_favorites = EXCLUDED.sync_favorites,
     priority = EXCLUDED.priority,
     updated_at = EXCLUDED.updated_at
-RETURNING id, name, endpoint, api_key_enc, enabled, sync_favorites, priority, created_at, updated_at
+RETURNING id, name, endpoint, api_key_enc, enabled, sync_favorites, priority, created_at, updated_at, last_sync_at, last_sync_error, last_performers_synced, last_studios_synced
 `
 
 type UpsertAdultStashboxInstanceParams struct {
@@ -1110,6 +1203,10 @@ func (q *Queries) UpsertAdultStashboxInstance(ctx context.Context, arg UpsertAdu
 		&i.Priority,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LastSyncAt,
+		&i.LastSyncError,
+		&i.LastPerformersSynced,
+		&i.LastStudiosSynced,
 	)
 	return i, err
 }

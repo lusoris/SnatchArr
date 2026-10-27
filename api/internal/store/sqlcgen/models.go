@@ -68,15 +68,19 @@ type AdultPerformer struct {
 }
 
 type AdultStashboxInstance struct {
-	ID            uuid.UUID
-	Name          string
-	Endpoint      string
-	ApiKeyEnc     []byte
-	Enabled       bool
-	SyncFavorites bool
-	Priority      int32
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ID                   uuid.UUID
+	Name                 string
+	Endpoint             string
+	ApiKeyEnc            []byte
+	Enabled              bool
+	SyncFavorites        bool
+	Priority             int32
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
+	LastSyncAt           *time.Time
+	LastSyncError        *string
+	LastPerformersSynced int32
+	LastStudiosSynced    int32
 }
 
 type AdultStudio struct {

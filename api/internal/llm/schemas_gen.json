@@ -144,6 +144,56 @@
     ],
     "type": "object"
   },
+  "createAdultSource": {
+    "$defs": {
+      "AdultSourceInput": {
+        "properties": {
+          "api_key": {
+            "description": "Required on create; omit on update to keep stored key",
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "type": "boolean"
+          },
+          "endpoint": {
+            "description": "GraphQL endpoint URL (http or https)",
+            "type": "string"
+          },
+          "name": {
+            "description": "Display name of the catalogue source (1..128 characters)",
+            "type": "string"
+          },
+          "priority": {
+            "default": 0,
+            "maximum": 1000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sync_favorites": {
+            "default": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "endpoint"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/AdultSourceInput"
+      }
+    },
+    "required": [
+      "body"
+    ],
+    "type": "object"
+  },
   "createDownloadClient": {
     "$defs": {
       "DownloadClientInput": {
@@ -853,6 +903,24 @@
     ],
     "type": "object"
   },
+  "deleteAdultSource": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "confirm": {
+        "description": "Must be true to confirm this destructive operation",
+        "type": "boolean"
+      },
+      "sourceId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "sourceId"
+    ],
+    "type": "object"
+  },
   "deleteDownloadClient": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -1045,6 +1113,26 @@
     "required": [
       "instanceId"
     ],
+    "type": "object"
+  },
+  "getAdultSource": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "sourceId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "sourceId"
+    ],
+    "type": "object"
+  },
+  "getAdultSyncStatus": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
     "type": "object"
   },
   "getConfigarrStatus": {
@@ -1447,6 +1535,12 @@
     "type": "object"
   },
   "listAPIKeys": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "listAdultSources": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
     "properties": {},
@@ -2176,6 +2270,12 @@
     ],
     "type": "object"
   },
+  "triggerAdultSync": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
   "triggerRun": {
     "$defs": {
       "RunTrigger": {
@@ -2224,6 +2324,61 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
     "properties": {},
+    "type": "object"
+  },
+  "updateAdultSource": {
+    "$defs": {
+      "AdultSourceInput": {
+        "properties": {
+          "api_key": {
+            "description": "Required on create; omit on update to keep stored key",
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "type": "boolean"
+          },
+          "endpoint": {
+            "description": "GraphQL endpoint URL (http or https)",
+            "type": "string"
+          },
+          "name": {
+            "description": "Display name of the catalogue source (1..128 characters)",
+            "type": "string"
+          },
+          "priority": {
+            "default": 0,
+            "maximum": 1000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sync_favorites": {
+            "default": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "endpoint"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/AdultSourceInput"
+      },
+      "sourceId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "body",
+      "sourceId"
+    ],
     "type": "object"
   },
   "updateDownloadClient": {

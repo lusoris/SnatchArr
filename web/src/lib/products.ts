@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 import type { components } from './api/schema.js';
-import { kindLabel } from './kinds.js';
+import { kindLabel, kindName } from './kinds.js';
 import { m } from './paraglide/messages.js';
 
 type ArrProduct = components['schemas']['ArrProduct'];
@@ -33,7 +33,7 @@ export function productName(product: string): string | undefined {
  */
 export function instanceKindLabel(kind: string, product: string | undefined): string {
 	if (product === undefined || product === 'readarr') return kindLabel(kind);
-	return `${kind} · ${productName(product) ?? m.instance_product_unknown()}`;
+	return `${kindName(kind)} · ${productName(product) ?? m.instance_product_unknown()}`;
 }
 
 /**

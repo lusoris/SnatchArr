@@ -128,7 +128,7 @@ describe('dashboard overview redo', () => {
 		expect(link.getAttribute('href')).toBe(`/instances/${forkInstance.id}`);
 
 		// Kind badge
-		expect(screen.getByText('readarr · Bookshelf')).toBeTruthy();
+		expect(screen.getByText('Readarr · Bookshelf')).toBeTruthy();
 
 		// StatusIcon
 		expect(screen.getByRole('img', { name: m.instance_last_check() })).toBeTruthy();

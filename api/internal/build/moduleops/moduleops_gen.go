@@ -3,12 +3,19 @@
 package moduleops
 
 var ByOperation = map[string]string{
+	"createAdultSource":           "adult",
 	"createWatchawareSource":      "watchaware",
+	"deleteAdultSource":           "adult",
 	"deleteWatchawareSource":      "watchaware",
+	"getAdultSource":              "adult",
+	"getAdultSyncStatus":          "adult",
 	"getWatchawareSyncStatus":     "watchaware",
+	"listAdultSources":            "adult",
 	"listWatchawareGateDecisions": "watchaware",
 	"listWatchawareGateSeries":    "watchaware",
 	"listWatchawareSources":       "watchaware",
 	"releaseWatchawareGateSeries": "watchaware",
+	"triggerAdultSync":            "adult",
+	"updateAdultSource":           "adult",
 	"updateWatchawareSource":      "watchaware",
 }
