@@ -1,0 +1,6 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+#
+# Paths the plurano/horistes merge train (ADR 0032) may commit from the
+# regenerated-<head sha> workflow artifact on dependency update pull requests.
+web/static/licences.json

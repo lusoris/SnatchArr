@@ -531,10 +531,11 @@ hooks-verify: ## The commit-message policy against its accepted and refused case
 secret-scan: ## gitleaks over every local ref, as CI job secret-scan (pinned release, cached in .cache/)
 	sh tools/ci/gitleaks_scan.sh .cache/gitleaks
 
-workflows-verify: ## The rule of "CI success", the Security Scan issue step, the Semgrep scan and the planted-case runner, against their cases
+workflows-verify: ## The rule of "CI success", the Security Scan issue step, the Semgrep scan, generated_files.py and the planted-case runner, against their cases
 	sh tools/ci/status_test.sh
 	sh tools/ci/security_issue_test.sh
 	sh tools/ci/semgrep_scan_test.sh
+	bash tools/ci/generated_files_test.sh
 	bash tools/e2e/planted_test.sh
 	bash tools/e2e/live_lib_test.sh
 

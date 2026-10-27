@@ -1,0 +1,42 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+name: Generated files
+
+on:
+  push:
+    branches:
+      - 'renovate/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: regen-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  regenerate:
+    name: Regenerate generated files
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-licences
+      - name: Regenerate third-party licences
+        run: make licences
+      - name: Collect changed generated files
+        run: python3 -B tools/ci/generated_files.py --out "$RUNNER_TEMP/regenerated"
+      - name: Upload regenerated files
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: regenerated-${{ github.sha }}
+          path: ${{ runner.temp }}/regenerated
+          if-no-files-found: ignore
+          retention-days: 7
