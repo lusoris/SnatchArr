@@ -16,29 +16,21 @@ async function getCsrfToken(page: Page): Promise<string> {
 async function getFakearrInstance(
 	page: Page,
 	csrfToken: string
-): Promise<{ id: string; cleanup?: () => Promise<void> }> {
+): Promise<{ id: string; cleanup: () => Promise<void> }> {
 	const fakearrUrl = process.env.SNATCHARR_E2E_FAKEARR;
 	if (!fakearrUrl) {
 		throw new Error('missing required environment variable: SNATCHARR_E2E_FAKEARR');
 	}
-	const listRes = await page.request.get('/api/v1/instances');
-	if (listRes.ok()) {
-		const instances = (await listRes.json()) as Array<{
-			id: string;
-			base_url: string;
-			kind: string;
-		}>;
-		const found = instances.find((i) => i.base_url === fakearrUrl && i.kind === 'sonarr');
-		if (found) {
-			return { id: found.id };
-		}
-	}
+	// An instance of its own: the seeded one can hold a queued run from another test, which
+	// refuses a new item search with 409. Base URLs are unique per instance; the item search
+	// only queues a run, so the path suffix is never requested.
+	const suffix = crypto.randomUUID().slice(0, 8);
 	const createRes = await page.request.post('/api/v1/instances', {
 		headers: { 'X-CSRF-Token': csrfToken },
 		data: {
 			kind: 'sonarr',
-			name: 'e2e-cooldown-sonarr',
-			base_url: fakearrUrl,
+			name: `e2e-cooldown-sonarr-${suffix}`,
+			base_url: `${fakearrUrl}/e2e-775-${suffix}`,
 			api_key: 'fake-api-key-0123456789',
 			enabled: true
 		}
