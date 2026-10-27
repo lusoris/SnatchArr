@@ -2,13 +2,11 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-import { WCAG_22_AA_TAGS } from '@sveltesentio/testing/a11y';
 import { fireEvent, screen } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { axe } from 'vitest-axe';
 import type { components } from '#lib/api/schema.js';
 import { m } from '#lib/paraglide/messages.js';
-import { renderWithQuery, stubGet } from '#lib/testing/harness.js';
+import { expectNoAxeViolations, renderWithQuery, stubGet } from '#lib/testing/harness.js';
 import AdultPerformersPage from './+page.svelte';
 
 type AdultPerformer = components['schemas']['AdultPerformer'];
@@ -68,10 +66,7 @@ describe('adult performers (/adult/performers)', () => {
 		expect(checkbox).toBeTruthy();
 		await fireEvent.click(checkbox);
 
-		const a11y = await axe(container, {
-			runOnly: { type: 'tag', values: [...WCAG_22_AA_TAGS] }
-		});
-		expect(a11y.violations).toEqual([]);
+		await expectNoAxeViolations(container);
 	});
 
 	it('boundary: renders empty state when no performers exist and passes axe audit', async () => {
@@ -85,9 +80,6 @@ describe('adult performers (/adult/performers)', () => {
 
 		expect(await screen.findByText(m.adult_performers_none())).toBeTruthy();
 
-		const a11y = await axe(container, {
-			runOnly: { type: 'tag', values: [...WCAG_22_AA_TAGS] }
-		});
-		expect(a11y.violations).toEqual([]);
+		await expectNoAxeViolations(container);
 	});
 });

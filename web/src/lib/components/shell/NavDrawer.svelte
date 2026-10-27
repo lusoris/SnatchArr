@@ -7,7 +7,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { FALLBACK_BRAND_MARK, type BrandMarkKind } from '#lib/brand-mark.js';
 	import BrandMark from '#lib/components/BrandMark.svelte';
 	import { m } from '#lib/paraglide/messages.js';
-	import { filterByModule, type ModuledItem } from './nav.js';
+	import { ADULT_NAV_ITEMS, filterByModule, type ModuledItem } from './nav.js';
 	import NavIcon from './NavIcon.svelte';
 	import NavList from './NavList.svelte';
 	import KofiLink from './KofiLink.svelte';
@@ -51,9 +51,7 @@ SPDX-License-Identifier: EUPL-1.2
 	const drawerItems: readonly DrawerItem[] = [
 		{ href: '/automation', label: m.nav_automation(), icon: 'clock' },
 		{ href: '/connections', label: m.nav_connections(), icon: 'link' },
-		{ href: '/adult/sources', label: m.nav_adult_sources(), icon: 'heart', module: 'adult' },
-		{ href: '/adult/performers', label: m.nav_adult_performers(), icon: 'user', module: 'adult' },
-		{ href: '/adult/studios', label: m.nav_adult_studios(), icon: 'film', module: 'adult' },
+		...ADULT_NAV_ITEMS,
 		{ href: '/system', label: m.nav_system(), icon: 'settings' },
 		{ href: '/account', label: m.nav_account(), icon: 'user' }
 	];
