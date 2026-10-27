@@ -12,6 +12,11 @@ set -euo pipefail
 : "${SMOKE_API_BIN:?path to the snatcharr binary}"
 : "${SMOKE_FAKEARR_BIN:?path to the fakearr binary}"
 SMOKE_FAKEWORKER_BIN="${SMOKE_FAKEWORKER_BIN:-}"
+# Playwright runs in web/, so a relative fakeworker path must be made absolute here.
+case "$SMOKE_FAKEWORKER_BIN" in
+    "" | /*) ;;
+    *) SMOKE_FAKEWORKER_BIN="$PWD/$SMOKE_FAKEWORKER_BIN" ;;
+esac
 
 label="web-e2e-api"
 # shellcheck source=tools/e2e/live_lib.sh
