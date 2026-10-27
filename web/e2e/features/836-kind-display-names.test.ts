@@ -50,7 +50,8 @@ test('positive: instances list renders product display names (Sonarr, Whisparr v
 				data: {
 					kind: item.kind,
 					name: item.name,
-					base_url: stub.url,
+					// Base URLs are unique per instance; one stub serves every path.
+					base_url: `${stub.url}/${item.name}`,
 					api_key: 'fake-api-key-0123456789',
 					enabled: true
 				}
@@ -99,7 +100,7 @@ test('negative: instances list does not render raw API ids for formatted or capi
 				data: {
 					kind: item.kind,
 					name: item.name,
-					base_url: stub.url,
+					base_url: `${stub.url}/${item.name}`,
 					api_key: 'fake-api-key-0123456789',
 					enabled: true
 				}
@@ -148,7 +149,7 @@ test('boundary: legacy qualification presence and non-arr display name boundarie
 				data: {
 					kind: inst.kind,
 					name: inst.name,
-					base_url: stub.url,
+					base_url: `${stub.url}/${inst.name}`,
 					api_key: 'fake-api-key-0123456789',
 					enabled: true
 				}
