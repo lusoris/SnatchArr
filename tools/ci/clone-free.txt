@@ -49,4 +49,10 @@ web/src/lib/auth-submit.svelte.test.ts
 web/src/lib/legacyRedirect.test.ts
 web/src/lib/prowlarr.test.ts
 web/src/routes/login/+page.svelte
+.github/actions/build-e2e-images/action.yml
+.github/workflows/image-smoke.yml
+.github/workflows/release.yml
+.github/workflows/report-failure.yml
+.github/workflows/security.yml
+.github/workflows/soak.yml
 web/src/routes/page.svelte.test.ts
