@@ -6,6 +6,8 @@ import { defineConfig } from '@playwright/test';
 
 const e2eApi = process.env.SNATCHARR_E2E_API;
 const authFile = 'e2e/.auth/admin.json';
+// Own session for the feature tests; flow.test.ts logs the admin session out (features-session.setup.ts).
+const featuresAuthFile = 'e2e/.auth/features.json';
 const e2eReport = process.env.SNATCHARR_E2E_REPORT;
 // Visual baseline (tools/e2e/web_visual.sh): runs only inside the pinned Playwright image.
 const visual = !!process.env.SNATCHARR_VISUAL;
@@ -122,10 +124,16 @@ export default defineConfig({
 						// One file per released feat or fix, named <pr>-<slug>.test.ts, with a
 						// `covers: #<pr>` line; tools/ci/release_e2e_check.py maps release commits to them.
 						{
+							name: 'features-auth',
+							testMatch: /features-session\.setup\.ts/,
+							dependencies: ['authenticated'],
+							use: { browserName: 'chromium' }
+						},
+						{
 							name: 'features',
 							testMatch: /(^|\/)features\/[^/]+\.test\.ts/,
-							dependencies: ['authenticated'],
-							use: { browserName: 'chromium', storageState: authFile }
+							dependencies: ['features-auth'],
+							use: { browserName: 'chromium', storageState: featuresAuthFile }
 						}
 					]
 });

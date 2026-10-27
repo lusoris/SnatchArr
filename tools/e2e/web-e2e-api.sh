@@ -63,9 +63,23 @@ wait_http() {
 
 start sonarr "$SMOKE_FAKEARR_BIN" -addr "127.0.0.1:$SONARR_PORT" -kind sonarr -api-key "$FAKE_KEY"
 start sonarr_flow "$SMOKE_FAKEARR_BIN" -addr "127.0.0.1:$SONARR_FLOW_PORT" -kind sonarr -api-key "$FAKE_KEY"
+# Enable reverse proxy authentication with a per-run random secret (>=32 bytes) for e2e tests.
+PROXY_SECRET=$(openssl rand -hex 32 2>/dev/null || od -vN 32 -An -tx1 /dev/urandom | tr -d ' \n')
+PROXY_HEADER="${SNATCHARR_E2E_PROXY_HEADER:-Remote-User}"
+PROXY_GROUPS_HEADER="${SNATCHARR_E2E_PROXY_GROUPS_HEADER:-X-authentik-groups}"
+PROXY_SECRET_HEADER="${SNATCHARR_E2E_PROXY_SECRET_HEADER:-X-SnatchArr-Proxy-Secret}"
+
 # The dev profile keeps the Secure flag on the session cookie, and Playwright's request client drops Secure cookies over plain http://127.0.0.1.
 start api env APP_SNATCHARR_SESSION_SECURE=false \
     APP_SNATCHARR_PROFILE=dev APP_DB_DSN="$SMOKE_DSN" APP_SNATCHARR_WORKER_TOKEN="$TOKEN" \
+    APP_SNATCHARR_PROXY_AUTH_ENABLED=true \
+    APP_SNATCHARR_PROXY_AUTH_SECRET="$PROXY_SECRET" \
+    APP_SNATCHARR_PROXY_AUTH_HEADER="$PROXY_HEADER" \
+    APP_SNATCHARR_PROXY_AUTH_GROUPS_HEADER="$PROXY_GROUPS_HEADER" \
+    APP_SNATCHARR_PROXY_AUTH_SECRET_HEADER="$PROXY_SECRET_HEADER" \
+    APP_SNATCHARR_PROXY_AUTH_TRUSTED_CIDRS="127.0.0.1/32,::1/128" \
+    APP_SNATCHARR_PROXY_AUTH_ADMIN_GROUPS="e2e-admins" \
+    APP_SNATCHARR_PROXY_AUTH_VIEWER_GROUPS="e2e-viewers" \
     APP_HTTP_ADDR="127.0.0.1:$API_PORT" APP_GRPC_LISTEN="127.0.0.1:$GRPC_PORT" "$SMOKE_API_BIN"
 
 wait_http "http://127.0.0.1:$SONARR_PORT/healthz"
@@ -73,6 +87,10 @@ wait_http "http://127.0.0.1:$SONARR_FLOW_PORT/healthz"
 wait_http "http://127.0.0.1:$API_PORT/api/v1/system/status"
 
 cd web
+export SNATCHARR_E2E_PROXY_SECRET="$PROXY_SECRET"
+export SNATCHARR_E2E_PROXY_HEADER="$PROXY_HEADER"
+export SNATCHARR_E2E_PROXY_GROUPS_HEADER="$PROXY_GROUPS_HEADER"
+export SNATCHARR_E2E_PROXY_SECRET_HEADER="$PROXY_SECRET_HEADER"
 SNATCHARR_E2E_API="http://127.0.0.1:$API_PORT" \
 SNATCHARR_E2E_FAKEARR="http://127.0.0.1:$SONARR_PORT" \
 SNATCHARR_E2E_FAKEARR_FLOW="http://127.0.0.1:$SONARR_FLOW_PORT" \
