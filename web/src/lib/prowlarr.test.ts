@@ -121,17 +121,11 @@ describe('indexer limit evaluations', () => {
 				exhausted: false
 			})
 		).toBe(true);
-		expect(
-			countExhausted([
-				{ id: 1, name: 'i', limits_unit: 0, used_queries: 0, used_grabs: 0, exhausted: true },
-				{ id: 2, name: 'j', limits_unit: 0, used_queries: 0, used_grabs: 0, exhausted: false }
-			])
-		).toBe(1);
-		expect(
-			countHeadroom([
-				{ id: 1, name: 'i', limits_unit: 0, used_queries: 0, used_grabs: 0, exhausted: true },
-				{ id: 2, name: 'j', limits_unit: 0, used_queries: 0, used_grabs: 0, exhausted: false }
-			])
-		).toBe(1);
+		const indexers = [
+			{ id: 1, name: 'i', limits_unit: 0, used_queries: 0, used_grabs: 0, exhausted: true },
+			{ id: 2, name: 'j', limits_unit: 0, used_queries: 0, used_grabs: 0, exhausted: false }
+		];
+		expect(countExhausted(indexers)).toBe(1);
+		expect(countHeadroom(indexers)).toBe(1);
 	});
 });

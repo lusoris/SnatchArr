@@ -46,4 +46,6 @@ web/src/lib/components/CredentialFields.svelte
 web/src/lib/auth-submit.svelte.ts
 web/src/lib/components/CredentialFields.svelte.test.ts
 web/src/lib/auth-submit.svelte.test.ts
+web/src/lib/legacyRedirect.test.ts
+web/src/lib/prowlarr.test.ts
 web/src/routes/login/+page.svelte
