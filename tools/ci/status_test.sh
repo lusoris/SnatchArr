@@ -166,4 +166,8 @@ mirror_refuses "anchored draft step names another step" \
 mirror_refuses "expectation of the commits job removed" "status: no COMMITS_EXPECTED expression" \
   '!/^ *COMMITS_EXPECTED: /'
 
+mirror_refuses "reusable commits workflow missing draft step" \
+  'job commits: the first step is not "Stop on a draft pull request"' \
+  '{ sub(/uses: \.\/\.github\/workflows\/commit-policy\.yml/, "uses: ./.github/workflows/nonexistent.yml"); print }'
+
 echo "status rule: $accepted accepted, $refused refused"
