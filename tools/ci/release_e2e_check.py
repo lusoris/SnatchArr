@@ -5,10 +5,14 @@
 Every non-merge `feat` or `fix` commit between the previous `v*` tag and HEAD must
 either add or modify a `web/e2e/features/*.test.ts` file in its own diff, or be
 named by a `covers: ... #N` line in a `web/e2e/features/*.test.ts` file at HEAD
-that contains at least one `test(` call.
+that contains at least one `test(` call. A `fix(deps)` commit has no feature of its
+own: it counts as covered by the suite only when the Playwright JSON report of the full
+web e2e suite shows every configured project passed on the release head commit.
 """
 
 import argparse
+import json
+import os
 import re
 import subprocess
 import sys
@@ -19,6 +23,10 @@ GIT_TIMEOUT_SECONDS = 60
 COUNTED_RE = re.compile(r"^(feat|fix)(\([^)]*\))?!?: ")
 PR_NUMBER_RE = re.compile(r"\(#([0-9]+)\)")
 FEATURE_TEST_RE = re.compile(r"^web/e2e/features/[^/]+\.test\.ts$")
+DEPS_RE = re.compile(r"^fix\(deps\)!?: ")
+NO_SUITE_REPORT = "no full e2e suite report"
+MAX_REPORT_SUITES = 100_000
+PASSED_TEST_STATUSES = ("expected", "flaky")
 
 
 class CheckError(Exception):
@@ -120,8 +128,79 @@ def find_covering_file(
     return None
 
 
+def report_tests(report: dict) -> list[dict]:
+    """Return every test entry of a Playwright JSON report, walking suites without recursion."""
+    pending = list(report.get("suites") or [])
+    tests: list[dict] = []
+    for _ in range(MAX_REPORT_SUITES):
+        if not pending:
+            return tests
+        suite = pending.pop()
+        for spec in suite.get("specs") or []:
+            tests.extend(spec.get("tests") or [])
+        pending.extend(suite.get("suites") or [])
+    raise CheckError("e2e suite report nests more suites than the check reads")
+
+
+def suite_verdict(report_path: Path | None, head_commit: str | None) -> str | None:
+    """Return None when the full e2e suite passed on head_commit, else why it does not count."""
+    if report_path is None or not head_commit:
+        return NO_SUITE_REPORT
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        return f"e2e suite report unreadable: {error}"
+    if not isinstance(report, dict):
+        return "e2e suite report is not a JSON object"
+    config = report.get("config") or {}
+    commit = (config.get("metadata") or {}).get("commit") or ""
+    if commit != head_commit:
+        return f"e2e suite ran on {commit[:12] or 'no commit'}, not on {head_commit[:12]}"
+    if report.get("errors") or (report.get("stats") or {}).get("unexpected", 1) != 0:
+        return "e2e suite has failed tests or errors"
+    passed = {
+        test.get("projectName")
+        for test in report_tests(report)
+        if test.get("status") in PASSED_TEST_STATUSES
+    }
+    projects = [project.get("name") for project in config.get("projects") or []]
+    skipped = [name for name in projects if name not in passed]
+    if not projects or skipped:
+        return f"e2e suite skipped project(s): {', '.join(skipped) or 'none configured'}"
+    return None
+
+
+def classify_commit(
+    repository: Path,
+    sha: str,
+    subject: str,
+    feature_tests: list[tuple[str, list[str]]],
+    suite_reason: str | None,
+) -> tuple[bool, str]:
+    """Return (covered, output line) for one counted feat/fix commit."""
+    sha12 = sha[:12]
+    prs = PR_NUMBER_RE.findall(subject)
+    pr_label = f"#{prs[-1]}" if prs else "#-"
+    diff_test = own_diff_feature_test(repository, sha)
+    if diff_test is not None:
+        return True, f"covered {sha12} {pr_label} {diff_test}"
+    marker_test = find_covering_file(prs[-1], feature_tests) if prs else None
+    if marker_test is not None:
+        return True, f"covered {sha12} {pr_label} {marker_test}"
+    if DEPS_RE.match(subject):
+        if suite_reason is None:
+            return True, f"covered-by-suite {sha12} {pr_label} full e2e suite passed on head"
+        return False, f"UNCOVERED {sha12} {subject} ({suite_reason})"
+    if not prs:
+        return False, f"UNCOVERED {sha12} {subject} (no PR number)"
+    return False, f"UNCOVERED {sha12} {subject}"
+
+
 def check_range(
-    repository: Path, base: str | None = None, head: str = "HEAD"
+    repository: Path,
+    base: str | None = None,
+    head: str = "HEAD",
+    suite_reason: str | None = NO_SUITE_REPORT,
 ) -> tuple[int, list[str]]:
     """Check commits in base..head and return (uncovered_count, output_lines)."""
     resolved_head = resolve_ref(repository, head)
@@ -147,25 +226,13 @@ def check_range(
         sha, subject = entry.split("\x1f", 1)
         if not COUNTED_RE.match(subject):
             continue
-        sha12 = sha[:12]
-        prs = PR_NUMBER_RE.findall(subject)
-        pr_number = prs[-1] if prs else None
-        diff_test = own_diff_feature_test(repository, sha)
-        if diff_test is not None:
-            pr_label = f"#{pr_number}" if pr_number is not None else "#-"
-            lines.append(f"covered {sha12} {pr_label} {diff_test}")
-            covered += 1
-            continue
-        if pr_number is None:
-            lines.append(f"UNCOVERED {sha12} {subject} (no PR number)")
-            uncovered += 1
-            continue
-        marker_test = find_covering_file(pr_number, feature_tests)
-        if marker_test is not None:
-            lines.append(f"covered {sha12} #{pr_number} {marker_test}")
+        is_covered, line = classify_commit(
+            repository, sha, subject, feature_tests, suite_reason
+        )
+        lines.append(line)
+        if is_covered:
             covered += 1
         else:
-            lines.append(f"UNCOVERED {sha12} {subject}")
             uncovered += 1
     total = covered + uncovered
     lines.append(
@@ -211,9 +278,31 @@ def write_commit(repo: Path, rel_path: str, content: str, message: str) -> None:
     git_fixture(repo, "commit", "--quiet", "--message", message)
 
 
-def expect_case(repo: Path, want_exit: int, needle: str) -> None:
+def write_suite_report(repo: Path, suite: str) -> str | None:
+    """Write a planted Playwright JSON report for repo and return the suite verdict."""
+    head = run_git(repo, "rev-parse", "HEAD").strip()
+    commit = "0" * 40 if suite == "older" else head
+    tests = [{"projectName": "public", "status": "expected"}]
+    if suite != "skipped":
+        tests.append({"projectName": "features", "status": "expected"})
+    report = {
+        "config": {
+            "metadata": {"commit": commit},
+            "projects": [{"name": "public"}, {"name": "features"}],
+        },
+        "suites": [{"specs": [], "suites": [{"specs": [{"tests": tests}]}]}],
+        "errors": [],
+        "stats": {"expected": len(tests), "unexpected": 0, "flaky": 0, "skipped": 0},
+    }
+    path = repo.parent / f"{repo.name}-report.json"
+    path.write_text(json.dumps(report), encoding="utf-8")
+    return suite_verdict(path, head)
+
+
+def expect_case(repo: Path, want_exit: int, needle: str, suite: str | None) -> None:
     """Run check_range on repo and verify exit code and output substring."""
-    uncovered, lines = check_range(repo)
+    suite_reason = write_suite_report(repo, suite) if suite else NO_SUITE_REPORT
+    uncovered, lines = check_range(repo, suite_reason=suite_reason)
     got_exit = 1 if uncovered else 0
     output = "\n".join(lines)
     if got_exit != want_exit:
@@ -228,15 +317,17 @@ def check_case(
     commits: list[tuple[str, str, str]],
     want_exit: int,
     needle: str,
+    suite: str | None = None,
 ) -> None:
     """Create a fixture repo, apply commits, and assert check_range verdict."""
     repo = create_fixture_repo(root, name)
     for rel_path, content, message in commits:
         write_commit(repo, rel_path, content, message)
-    expect_case(repo, want_exit, needle)
+    expect_case(repo, want_exit, needle, suite)
 
 
 FEAT_COMMIT = ("api/a.go", "package a\n", "feat(api): add endpoint (#1)")
+DEPS_COMMIT = ("go.sum", "example v2\n", "fix(deps): update module example to v2 (#7)")
 SELF_TEST_CASES = (
     ("feat without test", "feat_untested", [FEAT_COMMIT], 1, "UNCOVERED "),
     (
@@ -304,6 +395,32 @@ SELF_TEST_CASES = (
         1,
         "UNCOVERED ",
     ),
+    (
+        "fix(deps) with full suite green",
+        "deps_suite_green",
+        [DEPS_COMMIT],
+        0,
+        "covered-by-suite ",
+        "green",
+    ),
+    (
+        "fix(deps) with one suite project skipped",
+        "deps_suite_skipped",
+        [DEPS_COMMIT],
+        1,
+        "skipped project(s): features",
+        "skipped",
+    ),
+    (
+        "fix(deps) with suite on an older commit",
+        "deps_suite_older",
+        [DEPS_COMMIT],
+        1,
+        "e2e suite ran on 000000000000",
+        "older",
+    ),
+    ("fix(deps) without suite report", "deps_no_report", [DEPS_COMMIT], 1, NO_SUITE_REPORT),
+    ("feat not covered by green suite", "feat_suite_green", [FEAT_COMMIT], 1, "UNCOVERED ", "green"),
 )
 
 
@@ -311,9 +428,9 @@ def self_test() -> None:
     """Verify the release e2e check against planted positive and negative cases."""
     with tempfile.TemporaryDirectory() as scratch:
         root = Path(scratch)
-        for label, name, commits, want_exit, needle in SELF_TEST_CASES:
+        for label, name, commits, want_exit, needle, *suite in SELF_TEST_CASES:
             try:
-                check_case(root, name, commits, want_exit, needle)
+                check_case(root, name, commits, want_exit, needle, *suite)
             except (CheckError, SelfTestError) as error:
                 raise SelfTestError(f"self-test '{label}': {error}") from error
     print(f"release e2e self-test: {len(SELF_TEST_CASES)} cases behaved as required")
@@ -325,12 +442,18 @@ def main(arguments: list[str] | None = None) -> int:
     parser.add_argument("--base", default=None)
     parser.add_argument("--head", default="HEAD")
     parser.add_argument("--self-test", action="store_true")
+    report = os.environ.get("RELEASE_E2E_SUITE_REPORT")
+    parser.add_argument("--suite-report", type=Path, default=Path(report) if report else None)
+    parser.add_argument("--suite-commit", default=os.environ.get("RELEASE_E2E_SUITE_COMMIT"))
     options = parser.parse_args(arguments)
     try:
         if options.self_test:
             self_test()
             return 0
-        uncovered, lines = check_range(options.repo.resolve(), options.base, options.head)
+        suite_reason = suite_verdict(options.suite_report, options.suite_commit)
+        uncovered, lines = check_range(
+            options.repo.resolve(), options.base, options.head, suite_reason
+        )
     except SelfTestError as error:
         print(f"release e2e self-test failed: {error}", file=sys.stderr)
         return 1
