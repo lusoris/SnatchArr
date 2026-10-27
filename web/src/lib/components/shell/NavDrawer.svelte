@@ -14,7 +14,14 @@ SPDX-License-Identifier: EUPL-1.2
 	import NavFooter from './NavFooter.svelte';
 
 	interface DrawerItem extends ModuledItem {
-		href: '/automation' | '/connections' | '/adult/sources' | '/system' | '/account';
+		href:
+			| '/automation'
+			| '/connections'
+			| '/adult/sources'
+			| '/adult/performers'
+			| '/adult/studios'
+			| '/system'
+			| '/account';
 		label: string;
 		icon: string;
 	}
@@ -45,6 +52,8 @@ SPDX-License-Identifier: EUPL-1.2
 		{ href: '/automation', label: m.nav_automation(), icon: 'clock' },
 		{ href: '/connections', label: m.nav_connections(), icon: 'link' },
 		{ href: '/adult/sources', label: m.nav_adult_sources(), icon: 'heart', module: 'adult' },
+		{ href: '/adult/performers', label: m.nav_adult_performers(), icon: 'user', module: 'adult' },
+		{ href: '/adult/studios', label: m.nav_adult_studios(), icon: 'film', module: 'adult' },
 		{ href: '/system', label: m.nav_system(), icon: 'settings' },
 		{ href: '/account', label: m.nav_account(), icon: 'user' }
 	];

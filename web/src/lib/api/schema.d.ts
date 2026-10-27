@@ -1566,6 +1566,78 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/adult/performers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List synchronized performers with cursor pagination */
+        get: operations["listAdultPerformers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/adult/performers/{performerId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                performerId: components["parameters"]["AdultPerformerId"];
+            };
+            cookie?: never;
+        };
+        /** Get a synchronized performer by ID */
+        get: operations["getAdultPerformer"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/adult/studios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List synchronized studios with cursor pagination */
+        get: operations["listAdultStudios"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/adult/studios/{studioId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                studioId: components["parameters"]["AdultStudioId"];
+            };
+            cookie?: never;
+        };
+        /** Get a synchronized studio by ID */
+        get: operations["getAdultStudio"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2713,6 +2785,55 @@ export interface components {
             performers_synced: number;
             studios_synced: number;
         };
+        AdultExternalRef: {
+            /** Format: uuid */
+            id?: string;
+            source_kind: string;
+            /** Format: uuid */
+            source_instance_id?: string;
+            foreign_id: string;
+            is_favorite: boolean;
+            url?: string;
+        };
+        AdultPerformer: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            canonical_name?: string;
+            disambiguation?: string;
+            urls?: string[];
+            is_favorite: boolean;
+            ref_count?: number;
+            external_refs?: components["schemas"]["AdultExternalRef"][];
+            /** Format: date-time */
+            created_at?: string;
+            /** Format: date-time */
+            updated_at?: string;
+        };
+        AdultPerformerPage: {
+            items: components["schemas"]["AdultPerformer"][];
+            next_cursor?: string;
+            cursor?: string;
+        };
+        AdultStudio: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            canonical_name?: string;
+            urls?: string[];
+            is_favorite: boolean;
+            ref_count?: number;
+            external_refs?: components["schemas"]["AdultExternalRef"][];
+            /** Format: date-time */
+            created_at?: string;
+            /** Format: date-time */
+            updated_at?: string;
+        };
+        AdultStudioPage: {
+            items: components["schemas"]["AdultStudio"][];
+            next_cursor?: string;
+            cursor?: string;
+        };
     };
     responses: {
         /** @description No content */
@@ -2744,6 +2865,8 @@ export interface components {
         UserNotifyTargetId: string;
         WatchawareSourceId: string;
         AdultSourceId: string;
+        AdultPerformerId: string;
+        AdultStudioId: string;
     };
     requestBodies: never;
     headers: never;
@@ -5590,6 +5713,108 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdultSyncStatus"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listAdultPerformers: {
+        parameters: {
+            query?: {
+                /** @description Filter by favourite status */
+                favorite?: boolean;
+                /** @description Maximum performers to return */
+                limit?: number;
+                /** @description Opaque keyset pagination cursor */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Performers page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdultPerformerPage"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getAdultPerformer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                performerId: components["parameters"]["AdultPerformerId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Performer detail */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdultPerformer"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listAdultStudios: {
+        parameters: {
+            query?: {
+                /** @description Filter by favourite status */
+                favorite?: boolean;
+                /** @description Maximum studios to return */
+                limit?: number;
+                /** @description Opaque keyset pagination cursor */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Studios page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdultStudioPage"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getAdultStudio: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                studioId: components["parameters"]["AdultStudioId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Studio detail */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdultStudio"];
                 };
             };
             default: components["responses"]["Problem"];

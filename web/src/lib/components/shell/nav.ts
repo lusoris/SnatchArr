@@ -11,6 +11,8 @@ export type AppRoute =
 	| '/automation'
 	| '/connections'
 	| '/adult/sources'
+	| '/adult/performers'
+	| '/adult/studios'
 	| '/system'
 	| '/account';
 
@@ -46,6 +48,8 @@ const PRIMARY_NAV_ITEMS: readonly NavItem[] = [
 	{ href: '/automation', label: m.nav_automation(), icon: 'clock' },
 	{ href: '/connections', label: m.nav_connections(), icon: 'link' },
 	{ href: '/adult/sources', label: m.nav_adult_sources(), icon: 'heart', module: 'adult' },
+	{ href: '/adult/performers', label: m.nav_adult_performers(), icon: 'user', module: 'adult' },
+	{ href: '/adult/studios', label: m.nav_adult_studios(), icon: 'film', module: 'adult' },
 	{ href: '/system', label: m.nav_system(), icon: 'settings' }
 ];
 

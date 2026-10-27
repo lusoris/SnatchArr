@@ -21,7 +21,7 @@ describe('nav model', () => {
 		expect(items.map((i) => i.href)).toEqual(expectedOrder);
 	});
 
-	it('positive: production getNavItems returns the 6 core entries when adult module is off, and includes /adult/sources when adult module is active', () => {
+	it('positive: production getNavItems returns the 6 core entries when adult module is off, and includes adult entries when adult module is active', () => {
 		expect(getNavItems(new Set()).map((i) => i.href)).toEqual(expectedOrder);
 		expect(getNavItems(new Set(['fixture_mod'])).map((i) => i.href)).toEqual(expectedOrder);
 		expect(getNavItems(new Set(['unknown_mod', 'fixture_mod'])).map((i) => i.href)).toEqual(
@@ -34,6 +34,8 @@ describe('nav model', () => {
 			'/automation',
 			'/connections',
 			'/adult/sources',
+			'/adult/performers',
+			'/adult/studios',
 			'/system'
 		]);
 	});

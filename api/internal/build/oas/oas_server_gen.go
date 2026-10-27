@@ -171,12 +171,24 @@ type Handler interface {
 	//
 	// POST /instances/{instanceId}/download-clients/discover
 	DiscoverDownloadClients(ctx context.Context, params DiscoverDownloadClientsParams) (*DiscoveryResult, error)
+	// GetAdultPerformer implements getAdultPerformer operation.
+	//
+	// Get a synchronized performer by ID.
+	//
+	// GET /adult/performers/{performerId}
+	GetAdultPerformer(ctx context.Context, params GetAdultPerformerParams) (*AdultPerformer, error)
 	// GetAdultSource implements getAdultSource operation.
 	//
 	// Get a catalogue source.
 	//
 	// GET /adult/sources/{sourceId}
 	GetAdultSource(ctx context.Context, params GetAdultSourceParams) (*AdultSource, error)
+	// GetAdultStudio implements getAdultStudio operation.
+	//
+	// Get a synchronized studio by ID.
+	//
+	// GET /adult/studios/{studioId}
+	GetAdultStudio(ctx context.Context, params GetAdultStudioParams) (*AdultStudio, error)
 	// GetAdultSyncStatus implements getAdultSyncStatus operation.
 	//
 	// Get synchronization status across catalogue sources.
@@ -382,12 +394,24 @@ type Handler interface {
 	//
 	// GET /auth/api-keys
 	ListAPIKeys(ctx context.Context) (ListAPIKeysRes, error)
+	// ListAdultPerformers implements listAdultPerformers operation.
+	//
+	// List synchronized performers with cursor pagination.
+	//
+	// GET /adult/performers
+	ListAdultPerformers(ctx context.Context, params ListAdultPerformersParams) (*AdultPerformerPage, error)
 	// ListAdultSources implements listAdultSources operation.
 	//
 	// List configured catalogue sources.
 	//
 	// GET /adult/sources
 	ListAdultSources(ctx context.Context) ([]AdultSource, error)
+	// ListAdultStudios implements listAdultStudios operation.
+	//
+	// List synchronized studios with cursor pagination.
+	//
+	// GET /adult/studios
+	ListAdultStudios(ctx context.Context, params ListAdultStudiosParams) (*AdultStudioPage, error)
 	// ListDownloadClients implements listDownloadClients operation.
 	//
 	// List download clients (secrets are never returned).

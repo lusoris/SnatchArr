@@ -77,6 +77,21 @@ WHERE r.source_kind = $1
 SELECT * FROM adult_performers
 ORDER BY canonical_name ASC;
 
+-- name: ListAdultPerformersKeyset :many
+SELECT p.*,
+       COUNT(r.id)::int AS ref_count
+FROM adult_performers p
+LEFT JOIN adult_external_refs r ON r.entity_type = 'performer' AND r.entity_id = p.id
+WHERE (sqlc.narg(favorite)::boolean IS NULL OR p.is_favorite = sqlc.narg(favorite)::boolean)
+  AND (
+      sqlc.narg(after_canonical_name)::text IS NULL
+      OR (p.canonical_name > sqlc.narg(after_canonical_name)::text)
+      OR (p.canonical_name = sqlc.narg(after_canonical_name)::text AND p.id > sqlc.narg(after_id)::uuid)
+  )
+GROUP BY p.id
+ORDER BY p.canonical_name ASC, p.id ASC
+LIMIT sqlc.arg(limit_count);
+
 -- name: ListAdultFavoritePerformers :many
 SELECT * FROM adult_performers
 WHERE is_favorite = TRUE
@@ -121,6 +136,21 @@ WHERE r.source_kind = $1
 -- name: ListAdultStudios :many
 SELECT * FROM adult_studios
 ORDER BY canonical_name ASC;
+
+-- name: ListAdultStudiosKeyset :many
+SELECT s.*,
+       COUNT(r.id)::int AS ref_count
+FROM adult_studios s
+LEFT JOIN adult_external_refs r ON r.entity_type = 'studio' AND r.entity_id = s.id
+WHERE (sqlc.narg(favorite)::boolean IS NULL OR s.is_favorite = sqlc.narg(favorite)::boolean)
+  AND (
+      sqlc.narg(after_canonical_name)::text IS NULL
+      OR (s.canonical_name > sqlc.narg(after_canonical_name)::text)
+      OR (s.canonical_name = sqlc.narg(after_canonical_name)::text AND s.id > sqlc.narg(after_id)::uuid)
+  )
+GROUP BY s.id
+ORDER BY s.canonical_name ASC, s.id ASC
+LIMIT sqlc.arg(limit_count);
 
 -- name: ListAdultFavoriteStudios :many
 SELECT * FROM adult_studios

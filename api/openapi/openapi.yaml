@@ -2339,6 +2339,118 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
 
+  /adult/performers:
+    get:
+      tags: [adult]
+      operationId: listAdultPerformers
+      x-module: adult
+      summary: List synchronized performers with cursor pagination
+      parameters:
+        - name: favorite
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: Filter by favourite status
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+          description: Maximum performers to return
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Opaque keyset pagination cursor
+      responses:
+        "200":
+          description: Performers page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdultPerformerPage"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /adult/performers/{performerId}:
+    parameters:
+      - $ref: "#/components/parameters/AdultPerformerId"
+    get:
+      tags: [adult]
+      operationId: getAdultPerformer
+      x-module: adult
+      summary: Get a synchronized performer by ID
+      responses:
+        "200":
+          description: Performer detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdultPerformer"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /adult/studios:
+    get:
+      tags: [adult]
+      operationId: listAdultStudios
+      x-module: adult
+      summary: List synchronized studios with cursor pagination
+      parameters:
+        - name: favorite
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: Filter by favourite status
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+          description: Maximum studios to return
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Opaque keyset pagination cursor
+      responses:
+        "200":
+          description: Studios page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdultStudioPage"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /adult/studios/{studioId}:
+    parameters:
+      - $ref: "#/components/parameters/AdultStudioId"
+    get:
+      tags: [adult]
+      operationId: getAdultStudio
+      x-module: adult
+      summary: Get a synchronized studio by ID
+      responses:
+        "200":
+          description: Studio detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdultStudio"
+        default:
+          $ref: "#/components/responses/Problem"
+
 components:
   securitySchemes:
     cookieAuth:
@@ -2417,6 +2529,20 @@ components:
         format: uuid
     AdultSourceId:
       name: sourceId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AdultPerformerId:
+      name: performerId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AdultStudioId:
+      name: studioId
       in: path
       required: true
       schema:
@@ -4693,6 +4819,124 @@ components:
           type: integer
         studios_synced:
           type: integer
+
+    AdultExternalRef:
+      type: object
+      required:
+        - source_kind
+        - foreign_id
+        - is_favorite
+      properties:
+        id:
+          type: string
+          format: uuid
+        source_kind:
+          type: string
+        source_instance_id:
+          type: string
+          format: uuid
+        foreign_id:
+          type: string
+        is_favorite:
+          type: boolean
+        url:
+          type: string
+
+    AdultPerformer:
+      type: object
+      required:
+        - id
+        - name
+        - is_favorite
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        canonical_name:
+          type: string
+        disambiguation:
+          type: string
+        urls:
+          type: array
+          items:
+            type: string
+        is_favorite:
+          type: boolean
+        ref_count:
+          type: integer
+        external_refs:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdultExternalRef"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    AdultPerformerPage:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdultPerformer"
+        next_cursor:
+          type: string
+        cursor:
+          type: string
+
+    AdultStudio:
+      type: object
+      required:
+        - id
+        - name
+        - is_favorite
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        canonical_name:
+          type: string
+        urls:
+          type: array
+          items:
+            type: string
+        is_favorite:
+          type: boolean
+        ref_count:
+          type: integer
+        external_refs:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdultExternalRef"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    AdultStudioPage:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdultStudio"
+        next_cursor:
+          type: string
+        cursor:
+          type: string
 
 
 
