@@ -265,27 +265,9 @@ LIMIT $1
 `
 
 type ListSeerrRequestsRow struct {
-	LinkID                uuid.UUID
-	RequestID             int32
-	MediaType             string
-	TmdbID                int32
-	TvdbID                int32
-	Title                 string
-	RequestStatus         int32
-	MediaStatus           int32
-	Is4k                  bool
-	RequestedBy           string
-	Seasons               []int32
-	SeerrServerID         *int32
-	InstanceID            *uuid.UUID
-	EntityID              *int64
-	RequestedAt           *time.Time
-	LastSnatchedAt        *time.Time
-	LastSeenAt            time.Time
-	UpdatedAt             time.Time
-	RequestedByJellyfinID string
-	LinkName              string
-	InstanceName          *string
+	SeerrRequest SeerrRequest
+	LinkName     string
+	InstanceName *string
 }
 
 func (q *Queries) ListSeerrRequests(ctx context.Context, limit int32) ([]ListSeerrRequestsRow, error) {
@@ -298,25 +280,25 @@ func (q *Queries) ListSeerrRequests(ctx context.Context, limit int32) ([]ListSee
 	for rows.Next() {
 		var i ListSeerrRequestsRow
 		if err := rows.Scan(
-			&i.LinkID,
-			&i.RequestID,
-			&i.MediaType,
-			&i.TmdbID,
-			&i.TvdbID,
-			&i.Title,
-			&i.RequestStatus,
-			&i.MediaStatus,
-			&i.Is4k,
-			&i.RequestedBy,
-			&i.Seasons,
-			&i.SeerrServerID,
-			&i.InstanceID,
-			&i.EntityID,
-			&i.RequestedAt,
-			&i.LastSnatchedAt,
-			&i.LastSeenAt,
-			&i.UpdatedAt,
-			&i.RequestedByJellyfinID,
+			&i.SeerrRequest.LinkID,
+			&i.SeerrRequest.RequestID,
+			&i.SeerrRequest.MediaType,
+			&i.SeerrRequest.TmdbID,
+			&i.SeerrRequest.TvdbID,
+			&i.SeerrRequest.Title,
+			&i.SeerrRequest.RequestStatus,
+			&i.SeerrRequest.MediaStatus,
+			&i.SeerrRequest.Is4k,
+			&i.SeerrRequest.RequestedBy,
+			&i.SeerrRequest.Seasons,
+			&i.SeerrRequest.SeerrServerID,
+			&i.SeerrRequest.InstanceID,
+			&i.SeerrRequest.EntityID,
+			&i.SeerrRequest.RequestedAt,
+			&i.SeerrRequest.LastSnatchedAt,
+			&i.SeerrRequest.LastSeenAt,
+			&i.SeerrRequest.UpdatedAt,
+			&i.SeerrRequest.RequestedByJellyfinID,
 			&i.LinkName,
 			&i.InstanceName,
 		); err != nil {
