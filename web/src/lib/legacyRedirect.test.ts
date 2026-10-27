@@ -74,47 +74,33 @@ describe('legacyTarget', () => {
 });
 
 describe('legacyLoad', () => {
-	it('positive: throws a SvelteKit redirect with status 307 and mapped location with query merged', () => {
+	function expectRedirect(url: string, location: string): void {
 		try {
-			legacyLoad({ url: new URL('http://localhost/history?instance=sonarr-1&sort=desc') });
+			legacyLoad({ url: new URL(url) });
 			expect.unreachable();
 		} catch (err: unknown) {
 			const r = err as { status?: number; location?: string };
 			expect(r.status).toBe(307);
-			expect(r.location).toBe('/activity?instance=sonarr-1&sort=desc');
+			expect(r.location).toBe(location);
 		}
+	}
+
+	it('positive: throws a SvelteKit redirect with status 307 and mapped location with query merged', () => {
+		expectRedirect(
+			'http://localhost/history?instance=sonarr-1&sort=desc',
+			'/activity?instance=sonarr-1&sort=desc'
+		);
 	});
 
 	it('negative: unknown path keeps path', () => {
-		try {
-			legacyLoad({ url: new URL('http://localhost/unknown?foo=bar') });
-			expect.unreachable();
-		} catch (err: unknown) {
-			const r = err as { status?: number; location?: string };
-			expect(r.status).toBe(307);
-			expect(r.location).toBe('/unknown?foo=bar');
-		}
+		expectRedirect('http://localhost/unknown?foo=bar', '/unknown?foo=bar');
 	});
 
 	it('boundary: trailing slash in from path is normalized', () => {
-		try {
-			legacyLoad({ url: new URL('http://localhost/history/') });
-			expect.unreachable();
-		} catch (err: unknown) {
-			const r = err as { status?: number; location?: string };
-			expect(r.status).toBe(307);
-			expect(r.location).toBe('/activity');
-		}
+		expectRedirect('http://localhost/history/', '/activity');
 	});
 
 	it('boundary: empty query returns clean target without question mark', () => {
-		try {
-			legacyLoad({ url: new URL('http://localhost/about') });
-			expect.unreachable();
-		} catch (err: unknown) {
-			const r = err as { status?: number; location?: string };
-			expect(r.status).toBe(307);
-			expect(r.location).toBe('/system?tab=about');
-		}
+		expectRedirect('http://localhost/about', '/system?tab=about');
 	});
 });
