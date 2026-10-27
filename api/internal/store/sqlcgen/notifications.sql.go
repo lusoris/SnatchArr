@@ -277,6 +277,46 @@ func (q *Queries) GetUserNotifyTarget(ctx context.Context, arg GetUserNotifyTarg
 	return i, err
 }
 
+const instanceRunStatusesAsOf = `-- name: InstanceRunStatusesAsOf :many
+SELECT r.status FROM snatch_runs r
+CROSS JOIN (
+    SELECT t.finished_at, t.id
+    FROM snatch_runs t
+    WHERE t.id = $1 AND t.instance_id = $2
+) target
+WHERE r.instance_id = $2
+  AND r.status IN ('done', 'failed')
+  AND (r.finished_at, r.id) <= (target.finished_at, target.id)
+ORDER BY r.finished_at DESC, r.id DESC
+LIMIT $3
+`
+
+type InstanceRunStatusesAsOfParams struct {
+	RunID      uuid.UUID
+	InstanceID uuid.UUID
+	LimitCount int32
+}
+
+func (q *Queries) InstanceRunStatusesAsOf(ctx context.Context, arg InstanceRunStatusesAsOfParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, instanceRunStatusesAsOf, arg.RunID, arg.InstanceID, arg.LimitCount)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var status string
+		if err := rows.Scan(&status); err != nil {
+			return nil, err
+		}
+		items = append(items, status)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEnabledNotificationChannels = `-- name: ListEnabledNotificationChannels :many
 SELECT id, name, kind, enabled, config_enc, has_secret, created_at, updated_at FROM notification_channels WHERE enabled ORDER BY name
 `
@@ -536,38 +576,6 @@ func (q *Queries) ListUserNotifyTargets(ctx context.Context, userID uuid.UUID) (
 			return nil, err
 		}
 		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const recentInstanceRunStatuses = `-- name: RecentInstanceRunStatuses :many
-SELECT status FROM snatch_runs
-WHERE instance_id = $1 AND status IN ('done', 'failed')
-ORDER BY finished_at DESC
-LIMIT $2
-`
-
-type RecentInstanceRunStatusesParams struct {
-	InstanceID uuid.UUID
-	Limit      int32
-}
-
-func (q *Queries) RecentInstanceRunStatuses(ctx context.Context, arg RecentInstanceRunStatusesParams) ([]string, error) {
-	rows, err := q.db.Query(ctx, recentInstanceRunStatuses, arg.InstanceID, arg.Limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []string{}
-	for rows.Next() {
-		var status string
-		if err := rows.Scan(&status); err != nil {
-			return nil, err
-		}
-		items = append(items, status)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

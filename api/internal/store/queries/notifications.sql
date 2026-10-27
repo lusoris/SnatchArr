@@ -53,11 +53,18 @@ RETURNING *;
 -- name: DeleteNotificationRule :execrows
 DELETE FROM notification_rules WHERE id = $1;
 
--- name: RecentInstanceRunStatuses :many
-SELECT status FROM snatch_runs
-WHERE instance_id = $1 AND status IN ('done', 'failed')
-ORDER BY finished_at DESC
-LIMIT $2;
+-- name: InstanceRunStatusesAsOf :many
+SELECT r.status FROM snatch_runs r
+CROSS JOIN (
+    SELECT t.finished_at, t.id
+    FROM snatch_runs t
+    WHERE t.id = sqlc.arg(run_id) AND t.instance_id = sqlc.arg(instance_id)
+) target
+WHERE r.instance_id = sqlc.arg(instance_id)
+  AND r.status IN ('done', 'failed')
+  AND (r.finished_at, r.id) <= (target.finished_at, target.id)
+ORDER BY r.finished_at DESC, r.id DESC
+LIMIT sqlc.arg(limit_count);
 
 -- name: FindSeerrRequestForEntity :one
 SELECT * FROM seerr_requests

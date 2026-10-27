@@ -156,6 +156,7 @@ type Querier interface {
 	InsertEvent(ctx context.Context, arg InsertEventParams) (int64, error)
 	InsertGateBaseline(ctx context.Context, arg InsertGateBaselineParams) error
 	InsertUserIdentity(ctx context.Context, arg InsertUserIdentityParams) (UserIdentity, error)
+	InstanceRunStatusesAsOf(ctx context.Context, arg InstanceRunStatusesAsOfParams) ([]string, error)
 	LastFinishedAt(ctx context.Context, arg LastFinishedAtParams) (time.Time, error)
 	LastWorkerContact(ctx context.Context) (time.Time, error)
 	// An expired lease is handed out again only while the run has been leased fewer than
@@ -255,7 +256,6 @@ type Querier interface {
 	PurgeProwlarrBucketsBefore(ctx context.Context, arg PurgeProwlarrBucketsBeforeParams) (int64, error)
 	PurgeRunsBefore(ctx context.Context, arg PurgeRunsBeforeParams) (int64, error)
 	PurgeWorkersBefore(ctx context.Context, arg PurgeWorkersBeforeParams) (int64, error)
-	RecentInstanceRunStatuses(ctx context.Context, arg RecentInstanceRunStatusesParams) ([]string, error)
 	RecentRunStatuses(ctx context.Context, arg RecentRunStatusesParams) ([]string, error)
 	RecordDownloadClientCheck(ctx context.Context, arg RecordDownloadClientCheckParams) error
 	RecordInstanceCheck(ctx context.Context, arg RecordInstanceCheckParams) error
