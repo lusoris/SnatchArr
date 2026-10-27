@@ -116,3 +116,65 @@ func TestSettingsValidate(t *testing.T) {
 		}
 	}
 }
+
+func TestBrandMarkAndSfwModeValidate(t *testing.T) {
+	t.Parallel()
+	preset := domain.MediaFirstPreset()
+	marks := []domain.BrandMark{domain.BrandMarkVulva, domain.BrandMarkPenis, domain.BrandMarkHand}
+	modes := []domain.SfwMode{domain.SfwModeAuto, domain.SfwModeOn, domain.SfwModeOff}
+	for _, bm := range marks {
+		for _, sm := range modes {
+			s := domain.Settings{
+				HistoryRetentionDays:   90,
+				UserAgent:              "SnatchArr/1.0",
+				SearchPriorityPreset:   preset,
+				DownloadPriorityPreset: preset,
+				BrandMark:              bm,
+				SfwMode:                sm,
+			}
+			if err := s.Validate(); err != nil {
+				t.Fatalf("Validate(%q, %q) = %v, want nil", bm, sm, err)
+			}
+		}
+	}
+	bad := []domain.Settings{
+		{HistoryRetentionDays: 90, UserAgent: "x", SearchPriorityPreset: preset, DownloadPriorityPreset: preset, BrandMark: "bogus"},
+		{HistoryRetentionDays: 90, UserAgent: "x", SearchPriorityPreset: preset, DownloadPriorityPreset: preset, SfwMode: "bogus"},
+	}
+	for i, s := range bad {
+		if err := s.Validate(); !errors.Is(err, domain.ErrInvalid) {
+			t.Errorf("bad[%d]: expected ErrInvalid, got %v", i, err)
+		}
+	}
+}
+
+func TestUserPreferencesValidate(t *testing.T) {
+	t.Parallel()
+	vulva := domain.BrandMarkVulva
+	hand := domain.BrandMarkHand
+	on := domain.SfwModeOn
+	badMark := domain.BrandMark("invalid")
+	badMode := domain.SfwMode("invalid")
+
+	cases := []struct {
+		name    string
+		in      domain.UserPreferences
+		wantErr error
+	}{
+		{name: "both nil", in: domain.UserPreferences{}, wantErr: nil},
+		{name: "brand_mark set", in: domain.UserPreferences{BrandMark: &vulva}, wantErr: nil},
+		{name: "sfw_mode set", in: domain.UserPreferences{SfwMode: &on}, wantErr: nil},
+		{name: "both set", in: domain.UserPreferences{BrandMark: &hand, SfwMode: &on}, wantErr: nil},
+		{name: "invalid brand_mark", in: domain.UserPreferences{BrandMark: &badMark}, wantErr: domain.ErrInvalid},
+		{name: "invalid sfw_mode", in: domain.UserPreferences{SfwMode: &badMode}, wantErr: domain.ErrInvalid},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := tc.in.Validate()
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("Validate() = %v, want %v", err, tc.wantErr)
+			}
+		})
+	}
+}

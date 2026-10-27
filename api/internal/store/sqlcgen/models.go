@@ -314,6 +314,8 @@ type Setting struct {
 	SearchPriorityPreset   []byte
 	DownloadPriorityPreset []byte
 	LlmWriteTools          []string
+	BrandMark              string
+	SfwMode                string
 }
 
 type SnatchEvent struct {
@@ -403,6 +405,13 @@ type UserNotifyTarget struct {
 	ConfigEnc []byte
 	Enabled   bool
 	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+type UsersPref struct {
+	UserID    uuid.UUID
+	BrandMark *string
+	SfwMode   *string
 	UpdatedAt time.Time
 }
 

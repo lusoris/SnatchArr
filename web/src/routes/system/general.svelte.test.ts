@@ -38,7 +38,9 @@ const sampleSettings: Settings = {
 	search_priority_preset: { ...mediaFirstRanks },
 	download_priority_preset: { ...mediaFirstRanks },
 	llm_enabled: false,
-	llm_write_tools: []
+	llm_write_tools: [],
+	brand_mark: 'vulva',
+	sfw_mode: 'auto'
 };
 
 const baseStubs = {
@@ -108,7 +110,9 @@ describe('settings', () => {
 				search_priority_preset: mediaFirstRanks,
 				download_priority_preset: mediaFirstRanks,
 				llm_enabled: false,
-				llm_write_tools: []
+				llm_write_tools: [],
+				brand_mark: 'vulva',
+				sfw_mode: 'auto'
 			}
 		});
 	});
@@ -381,5 +385,35 @@ describe('settings', () => {
 		expect(
 			screen.getByText(m.settings_llm_write_tools_allowed({ count: 0, total: 1 }))
 		).toBeTruthy();
+	});
+
+	it('renders brand mark and sfw mode selects and submits updated values', async () => {
+		stubGet(baseStubs);
+		const putSpy = vi.spyOn(api, 'PUT').mockResolvedValue({
+			data: { ...sampleSettings, brand_mark: 'hand', sfw_mode: 'off' }
+		} as never);
+		renderWithQuery(GeneralTab);
+
+		const brandMarkSelect = (await screen.findByLabelText(
+			m.settings_brand_mark()
+		)) as HTMLSelectElement;
+		const sfwModeSelect = screen.getByLabelText(m.settings_sfw_mode()) as HTMLSelectElement;
+
+		expect(brandMarkSelect.value).toBe('vulva');
+		expect(sfwModeSelect.value).toBe('auto');
+
+		await fireEvent.change(brandMarkSelect, { target: { value: 'hand' } });
+		await fireEvent.change(sfwModeSelect, { target: { value: 'off' } });
+
+		const button = screen.getByRole('button', { name: m.instance_save() });
+		await fireEvent.click(button);
+
+		expect(putSpy).toHaveBeenCalledWith('/settings', {
+			body: {
+				...sampleSettings,
+				brand_mark: 'hand',
+				sfw_mode: 'off'
+			}
+		});
 	});
 });

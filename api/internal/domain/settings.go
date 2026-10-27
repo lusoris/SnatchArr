@@ -106,6 +106,71 @@ var validLLMWriteTools = map[string]struct{}{
 	LLMWriteToolDeleteNotificationRule:    {},
 }
 
+// BrandMark identifies the header and sidebar brand mark artwork.
+type BrandMark string
+
+// BrandMark values supported by the installation and per-user preferences.
+const (
+	BrandMarkVulva   BrandMark = "vulva"
+	BrandMarkPenis   BrandMark = "penis"
+	BrandMarkHand    BrandMark = "hand"
+	DefaultBrandMark BrandMark = BrandMarkVulva
+)
+
+// Validate checks that the brand mark is one of the supported values.
+func (b BrandMark) Validate() error {
+	switch b {
+	case BrandMarkVulva, BrandMarkPenis, BrandMarkHand:
+		return nil
+	default:
+		return fmt.Errorf("%w: invalid brand_mark %q", ErrInvalid, b)
+	}
+}
+
+// SfwMode controls whether neutral SFW branding is used automatically, always, or never.
+type SfwMode string
+
+// SfwMode values supported by the installation and per-user preferences.
+const (
+	SfwModeAuto    SfwMode = "auto"
+	SfwModeOn      SfwMode = "on"
+	SfwModeOff     SfwMode = "off"
+	DefaultSfwMode SfwMode = SfwModeAuto
+)
+
+// Validate checks that the SFW mode is one of the supported values.
+func (m SfwMode) Validate() error {
+	switch m {
+	case SfwModeAuto, SfwModeOn, SfwModeOff:
+		return nil
+	default:
+		return fmt.Errorf("%w: invalid sfw_mode %q", ErrInvalid, m)
+	}
+}
+
+// UserPreferences holds a user's optional overrides for installation-wide visual preferences.
+// A nil pointer means the user follows the installation default.
+type UserPreferences struct {
+	BrandMark *BrandMark
+	SfwMode   *SfwMode
+	UpdatedAt time.Time
+}
+
+// Validate checks that any non-nil preference override is a valid enum value.
+func (p UserPreferences) Validate() error {
+	if p.BrandMark != nil {
+		if err := p.BrandMark.Validate(); err != nil {
+			return err
+		}
+	}
+	if p.SfwMode != nil {
+		if err := p.SfwMode.Validate(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Settings is the singleton service configuration users edit at runtime.
 type Settings struct {
 	HistoryRetentionDays int
@@ -117,6 +182,8 @@ type Settings struct {
 	DownloadPriorityPreset PriorityPreset
 	LLMEnabled             bool
 	LLMWriteTools          []string
+	BrandMark              BrandMark
+	SfwMode                SfwMode
 	UpdatedAt              time.Time
 }
 
@@ -165,6 +232,16 @@ func (s Settings) validateSelections() error {
 	}
 	if _, err := ValidateLLMWriteTools(s.LLMWriteTools); err != nil {
 		return err
+	}
+	if s.BrandMark != "" {
+		if err := s.BrandMark.Validate(); err != nil {
+			return err
+		}
+	}
+	if s.SfwMode != "" {
+		if err := s.SfwMode.Validate(); err != nil {
+			return err
+		}
 	}
 	return nil
 }

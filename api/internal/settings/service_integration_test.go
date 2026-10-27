@@ -12,10 +12,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
+
 	"github.com/golusoris/golusoris/core/clock"
 
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/settings"
+	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
 	"github.com/lusoris/SnatchArr/api/internal/store/storetest"
 )
 
@@ -28,6 +31,8 @@ var defaults = domain.Settings{
 	GlobalHourlyCap:        0,
 	SearchPriorityPreset:   domain.MediaFirstPreset(),
 	DownloadPriorityPreset: domain.MediaFirstPreset(),
+	BrandMark:              domain.DefaultBrandMark,
+	SfwMode:                domain.DefaultSfwMode,
 }
 
 func newService(t *testing.T) *settings.Service {
@@ -44,14 +49,26 @@ func editable(s domain.Settings) domain.Settings {
 		DownloadPriorityPreset: s.DownloadPriorityPreset,
 		LLMEnabled:             s.LLMEnabled,
 		LLMWriteTools:          s.LLMWriteTools,
+		BrandMark:              s.BrandMark,
+		SfwMode:                s.SfwMode,
 	}
 }
 
 func settingsEqual(a, b domain.Settings) bool {
+	wantMark := b.BrandMark
+	if wantMark == "" {
+		wantMark = domain.DefaultBrandMark
+	}
+	wantMode := b.SfwMode
+	if wantMode == "" {
+		wantMode = domain.DefaultSfwMode
+	}
 	return a.HistoryRetentionDays == b.HistoryRetentionDays &&
 		a.UserAgent == b.UserAgent &&
 		a.GlobalHourlyCap == b.GlobalHourlyCap &&
 		a.LLMEnabled == b.LLMEnabled &&
+		a.BrandMark == wantMark &&
+		a.SfwMode == wantMode &&
 		maps.Equal(a.SearchPriorityPreset, b.SearchPriorityPreset) &&
 		maps.Equal(a.DownloadPriorityPreset, b.DownloadPriorityPreset) &&
 		slices.Equal(a.LLMWriteTools, b.LLMWriteTools)
@@ -109,6 +126,22 @@ func TestUpdate(t *testing.T) {
 			},
 			nil,
 		},
+		{
+			"positive brand_mark and sfw_mode round-trip",
+			domain.Settings{
+				HistoryRetentionDays: 30, UserAgent: "agent/brand", GlobalHourlyCap: 50,
+				BrandMark: domain.BrandMarkPenis, SfwMode: domain.SfwModeOn,
+				SearchPriorityPreset: preset, DownloadPriorityPreset: preset,
+			},
+			domain.Settings{
+				HistoryRetentionDays: 30, UserAgent: "agent/brand", GlobalHourlyCap: 50,
+				BrandMark: domain.BrandMarkPenis, SfwMode: domain.SfwModeOn,
+				SearchPriorityPreset: preset, DownloadPriorityPreset: preset,
+			},
+			nil,
+		},
+		{"negative invalid brand_mark", domain.Settings{HistoryRetentionDays: 30, UserAgent: "a", BrandMark: "invalid", SearchPriorityPreset: preset, DownloadPriorityPreset: preset}, defaults, domain.ErrInvalid},
+		{"negative invalid sfw_mode", domain.Settings{HistoryRetentionDays: 30, UserAgent: "a", SfwMode: "invalid", SearchPriorityPreset: preset, DownloadPriorityPreset: preset}, defaults, domain.ErrInvalid},
 		{"negative retention of zero days", domain.Settings{HistoryRetentionDays: 0, UserAgent: "a", SearchPriorityPreset: preset, DownloadPriorityPreset: preset}, defaults, domain.ErrInvalid},
 		{"negative user agent of spaces only", domain.Settings{HistoryRetentionDays: 30, UserAgent: "   ", SearchPriorityPreset: preset, DownloadPriorityPreset: preset}, defaults, domain.ErrInvalid},
 		{"negative user agent over two lines", domain.Settings{HistoryRetentionDays: 30, UserAgent: "a\nb", SearchPriorityPreset: preset, DownloadPriorityPreset: preset}, defaults, domain.ErrInvalid},
@@ -180,5 +213,56 @@ func TestLLMMirrorWithModules(t *testing.T) {
 	}
 	if got.LLMEnabled {
 		t.Errorf("Get().LLMEnabled = true after modules row set to false, want false")
+	}
+}
+
+func TestUserPreferences(t *testing.T) {
+	t.Parallel()
+	st := storetest.New(t)
+	clk := clock.NewFake()
+	svc := settings.New(st, clk)
+	ctx := t.Context()
+
+	userID := uuid.New()
+	_, err := st.Q().CreateUser(ctx, sqlcgen.CreateUserParams{
+		ID:           userID,
+		Username:     "prefuser",
+		PasswordHash: "hash",
+		Role:         "admin",
+		CreatedAt:    clk.Now(),
+	})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+
+	empty, err := svc.GetUserPreferences(ctx, userID)
+	if err != nil {
+		t.Fatalf("GetUserPreferences empty: %v", err)
+	}
+	if empty.BrandMark != nil || empty.SfwMode != nil {
+		t.Fatalf("expected nil preferences, got %+v", empty)
+	}
+
+	hand := domain.BrandMarkHand
+	off := domain.SfwModeOff
+	set, err := svc.UpdateUserPreferences(ctx, userID, domain.UserPreferences{BrandMark: &hand, SfwMode: &off})
+	if err != nil {
+		t.Fatalf("UpdateUserPreferences set: %v", err)
+	}
+	if set.BrandMark == nil || *set.BrandMark != domain.BrandMarkHand || set.SfwMode == nil || *set.SfwMode != domain.SfwModeOff {
+		t.Fatalf("UpdateUserPreferences set = %+v, want hand/off", set)
+	}
+
+	cleared, err := svc.UpdateUserPreferences(ctx, userID, domain.UserPreferences{})
+	if err != nil {
+		t.Fatalf("UpdateUserPreferences clear: %v", err)
+	}
+	if cleared.BrandMark != nil || cleared.SfwMode != nil {
+		t.Fatalf("UpdateUserPreferences clear = %+v, want both nil", cleared)
+	}
+
+	bad := domain.BrandMark("invalid")
+	if _, err := svc.UpdateUserPreferences(ctx, userID, domain.UserPreferences{BrandMark: &bad}); !errors.Is(err, domain.ErrInvalid) {
+		t.Fatalf("UpdateUserPreferences invalid = %v, want ErrInvalid", err)
 	}
 }

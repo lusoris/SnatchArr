@@ -8,10 +8,12 @@ SPDX-License-Identifier: EUPL-1.2
 	import { z } from 'zod';
 	import { api, describeError } from '#lib/api/client.js';
 	import AdminSaveButton from '#lib/components/AdminSaveButton.svelte';
+	import BrandMarkSelect from '#lib/components/BrandMarkSelect.svelte';
 	import Field from '#lib/components/Field.svelte';
 	import NewPasswordField from '#lib/components/NewPasswordField.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import QueryGuard from '#lib/components/QueryGuard.svelte';
+	import SfwModeSelect from '#lib/components/SfwModeSelect.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { keys } from '#lib/query.js';
 	import {
@@ -247,7 +249,9 @@ SPDX-License-Identifier: EUPL-1.2
 				history_retention_days: settings.data.history_retention_days,
 				user_agent: settings.data.user_agent,
 				llm_enabled: settings.data.llm_enabled,
-				llm_write_tools: [...(settings.data.llm_write_tools ?? [])]
+				llm_write_tools: [...(settings.data.llm_write_tools ?? [])],
+				brand_mark: settings.data.brand_mark ?? 'vulva',
+				sfw_mode: settings.data.sfw_mode ?? 'auto'
 			};
 		}
 	});
@@ -332,6 +336,8 @@ SPDX-License-Identifier: EUPL-1.2
 								bind:value={draft.user_agent}
 							/>
 						</Field>
+						<BrandMarkSelect bind:value={draft.brand_mark} />
+						<SfwModeSelect bind:value={draft.sfw_mode} />
 					</div>
 					<label class="flex items-center gap-2">
 						<input type="checkbox" data-field="llm_enabled" bind:checked={draft.llm_enabled} />

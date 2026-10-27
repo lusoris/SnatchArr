@@ -1710,6 +1710,29 @@ func stepsUserNotifyTargets(f *routerFixture) []routerStep {
 	}
 }
 
+func stepsUserPreferences() []routerStep {
+	return []routerStep{
+		{
+			op:     "getMyPreferences",
+			method: http.MethodGet,
+			path:   func(_ *idsState) string { return "/me/preferences" },
+			want:   http.StatusOK,
+		},
+		{
+			op:     "updateMyPreferences",
+			method: http.MethodPut,
+			path:   func(_ *idsState) string { return "/me/preferences" },
+			body: func(_ *idsState) any {
+				return map[string]any{
+					"brand_mark": "vulva",
+					"sfw_mode":   "auto",
+				}
+			},
+			want: http.StatusOK,
+		},
+	}
+}
+
 func stepsNotificationRules() []routerStep {
 	return []routerStep{
 		{
@@ -1926,6 +1949,7 @@ func buildRouterSteps(f *routerFixture) []routerStep {
 	steps = append(steps, stepsProwlarr(f)...)
 	steps = append(steps, stepsNotificationChannels(f)...)
 	steps = append(steps, stepsUserNotifyTargets(f)...)
+	steps = append(steps, stepsUserPreferences()...)
 	steps = append(steps, stepsNotificationRules()...)
 	steps = append(steps, stepsWatchaware()...)
 	steps = append(steps, stepsDeletesAndAuth()...)
@@ -2315,10 +2339,11 @@ func isViewerExemptSessionEndpoint(path string) bool {
 	case "/auth/setup", "/auth/login", "/auth/logout", "/auth/password", "/auth/proxy-session",
 		"/auth/jellyfin", "/auth/jellyfin/quickconnect/initiate", "/auth/jellyfin/quickconnect/authenticate",
 		"/auth/identities", "/auth/identities/jellyfin", "/auth/identities/proxy",
-		"/me/notify-targets", "/me/notify-targets/{targetId}", "/me/notify-targets/{targetId}/test":
+		"/me/notify-targets", "/me/notify-targets/{targetId}", "/me/notify-targets/{targetId}/test",
+		"/me/preferences":
 		return true
 	default:
-		return strings.HasPrefix(path, "/me/notify-targets")
+		return strings.HasPrefix(path, "/me/notify-targets") || strings.HasPrefix(path, "/me/preferences")
 	}
 }
 

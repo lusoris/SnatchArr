@@ -14,6 +14,8 @@ import { keys } from './query.js';
 export type Settings = components['schemas']['Settings'];
 export type PriorityPresetMap = components['schemas']['PriorityPresetMap'];
 export type LlmWriteTool = components['schemas']['LlmWriteTool'];
+export type BrandMark = components['schemas']['BrandMark'];
+export type SfwMode = components['schemas']['SfwMode'];
 
 export const rankSchema = z.number().int().min(1).max(100);
 
@@ -42,10 +44,14 @@ export const generalSettingsSchema = z.object({
 	history_retention_days: z.number().int().min(1).max(3650),
 	user_agent: z.string().min(1).max(200),
 	llm_enabled: z.boolean(),
-	llm_write_tools: z.array(z.string() as z.ZodType<LlmWriteTool>).optional()
+	llm_write_tools: z.array(z.string() as z.ZodType<LlmWriteTool>).optional(),
+	brand_mark: z.enum(['vulva', 'penis', 'hand']).optional(),
+	sfw_mode: z.enum(['auto', 'on', 'off']).optional()
 }) satisfies z.ZodType<
 	Pick<Settings, 'history_retention_days' | 'user_agent' | 'llm_enabled'> & {
 		llm_write_tools?: LlmWriteTool[];
+		brand_mark?: BrandMark;
+		sfw_mode?: SfwMode;
 	}
 >;
 
@@ -54,6 +60,8 @@ export type GeneralSettingsDraft = {
 	user_agent: string;
 	llm_enabled: boolean;
 	llm_write_tools?: LlmWriteTool[];
+	brand_mark?: BrandMark;
+	sfw_mode?: SfwMode;
 };
 
 /** Merges caps and preset draft into server settings, preserving all other fields. */
@@ -73,7 +81,9 @@ export function mergeGeneralSettings(server: Settings, draft: GeneralSettingsDra
 		history_retention_days: draft.history_retention_days,
 		user_agent: draft.user_agent,
 		llm_enabled: draft.llm_enabled,
-		llm_write_tools: draft.llm_write_tools ? [...draft.llm_write_tools] : undefined
+		llm_write_tools: draft.llm_write_tools ? [...draft.llm_write_tools] : undefined,
+		brand_mark: draft.brand_mark,
+		sfw_mode: draft.sfw_mode
 	};
 }
 

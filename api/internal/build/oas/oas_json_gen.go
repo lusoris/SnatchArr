@@ -363,6 +363,48 @@ func (s *ArrProduct) UnmarshalJSON(data []byte) error {
 	return s.Decode(d)
 }
 
+// Encode encodes BrandMark as json.
+func (s BrandMark) Encode(e *jx.Encoder) {
+	e.Str(string(s))
+}
+
+// Decode decodes BrandMark from json.
+func (s *BrandMark) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode BrandMark to nil")
+	}
+	v, err := d.StrBytes()
+	if err != nil {
+		return err
+	}
+	// Try to use constant string.
+	switch BrandMark(v) {
+	case BrandMarkVulva:
+		*s = BrandMarkVulva
+	case BrandMarkPenis:
+		*s = BrandMarkPenis
+	case BrandMarkHand:
+		*s = BrandMarkHand
+	default:
+		*s = BrandMark(v)
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s BrandMark) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *BrandMark) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
 // Encode implements json.Marshaler.
 func (s *CapStatus) Encode(e *jx.Encoder) {
 	e.ObjStart()
@@ -7335,6 +7377,39 @@ func (s *OptBool) UnmarshalJSON(data []byte) error {
 	return s.Decode(d)
 }
 
+// Encode encodes BrandMark as json.
+func (o OptBrandMark) Encode(e *jx.Encoder) {
+	if !o.Set {
+		return
+	}
+	e.Str(string(o.Value))
+}
+
+// Decode decodes BrandMark from json.
+func (o *OptBrandMark) Decode(d *jx.Decoder) error {
+	if o == nil {
+		return errors.New("invalid: unable to decode OptBrandMark to nil")
+	}
+	o.Set = true
+	if err := o.Value.Decode(d); err != nil {
+		return err
+	}
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s OptBrandMark) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *OptBrandMark) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
 // Encode encodes ConfigarrImportRequest as json.
 func (o OptConfigarrImportRequest) Encode(e *jx.Encoder) {
 	if !o.Set {
@@ -7610,6 +7685,55 @@ func (s *OptModuleUpdateConfig) UnmarshalJSON(data []byte) error {
 	return s.Decode(d)
 }
 
+// Encode encodes BrandMark as json.
+func (o OptNilBrandMark) Encode(e *jx.Encoder) {
+	if !o.Set {
+		return
+	}
+	if o.Null {
+		e.Null()
+		return
+	}
+	e.Str(string(o.Value))
+}
+
+// Decode decodes BrandMark from json.
+func (o *OptNilBrandMark) Decode(d *jx.Decoder) error {
+	if o == nil {
+		return errors.New("invalid: unable to decode OptNilBrandMark to nil")
+	}
+	if d.Next() == jx.Null {
+		if err := d.Null(); err != nil {
+			return err
+		}
+
+		var v BrandMark
+		o.Value = v
+		o.Set = true
+		o.Null = true
+		return nil
+	}
+	o.Set = true
+	o.Null = false
+	if err := o.Value.Decode(d); err != nil {
+		return err
+	}
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s OptNilBrandMark) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *OptNilBrandMark) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
 // Encode encodes time.Time as json.
 func (o OptNilDateTime) Encode(e *jx.Encoder, format func(*jx.Encoder, time.Time)) {
 	if !o.Set {
@@ -7712,6 +7836,55 @@ func (s *OptNilInt) UnmarshalJSON(data []byte) error {
 	return s.Decode(d)
 }
 
+// Encode encodes SfwMode as json.
+func (o OptNilSfwMode) Encode(e *jx.Encoder) {
+	if !o.Set {
+		return
+	}
+	if o.Null {
+		e.Null()
+		return
+	}
+	e.Str(string(o.Value))
+}
+
+// Decode decodes SfwMode from json.
+func (o *OptNilSfwMode) Decode(d *jx.Decoder) error {
+	if o == nil {
+		return errors.New("invalid: unable to decode OptNilSfwMode to nil")
+	}
+	if d.Next() == jx.Null {
+		if err := d.Null(); err != nil {
+			return err
+		}
+
+		var v SfwMode
+		o.Value = v
+		o.Set = true
+		o.Null = true
+		return nil
+	}
+	o.Set = true
+	o.Null = false
+	if err := o.Value.Decode(d); err != nil {
+		return err
+	}
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s OptNilSfwMode) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *OptNilSfwMode) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
 // Encode encodes NotificationChannelConfig as json.
 func (o OptNotificationChannelConfig) Encode(e *jx.Encoder) {
 	if !o.Set {
@@ -7807,6 +7980,39 @@ func (s OptQueueRuleSettings) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *OptQueueRuleSettings) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes SfwMode as json.
+func (o OptSfwMode) Encode(e *jx.Encoder) {
+	if !o.Set {
+		return
+	}
+	e.Str(string(o.Value))
+}
+
+// Decode decodes SfwMode from json.
+func (o *OptSfwMode) Decode(d *jx.Decoder) error {
+	if o == nil {
+		return errors.New("invalid: unable to decode OptSfwMode to nil")
+	}
+	o.Set = true
+	if err := o.Value.Decode(d); err != nil {
+		return err
+	}
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s OptSfwMode) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *OptSfwMode) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }
@@ -14256,6 +14462,18 @@ func (s *Settings) encodeFields(e *jx.Encoder) {
 		}
 	}
 	{
+		if s.BrandMark.Set {
+			e.FieldStart("brand_mark")
+			s.BrandMark.Encode(e)
+		}
+	}
+	{
+		if s.SfwMode.Set {
+			e.FieldStart("sfw_mode")
+			s.SfwMode.Encode(e)
+		}
+	}
+	{
 		if s.UpdatedAt.Set {
 			e.FieldStart("updated_at")
 			s.UpdatedAt.Encode(e, json.EncodeDateTime)
@@ -14263,7 +14481,7 @@ func (s *Settings) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfSettings = [8]string{
+var jsonFieldsNameOfSettings = [10]string{
 	0: "history_retention_days",
 	1: "user_agent",
 	2: "global_hourly_cap",
@@ -14271,7 +14489,9 @@ var jsonFieldsNameOfSettings = [8]string{
 	4: "download_priority_preset",
 	5: "llm_enabled",
 	6: "llm_write_tools",
-	7: "updated_at",
+	7: "brand_mark",
+	8: "sfw_mode",
+	9: "updated_at",
 }
 
 // Decode decodes Settings from json.
@@ -14279,7 +14499,7 @@ func (s *Settings) Decode(d *jx.Decoder) error {
 	if s == nil {
 		return errors.New("invalid: unable to decode Settings to nil")
 	}
-	var requiredBitSet [1]uint8
+	var requiredBitSet [2]uint8
 	s.setDefaults()
 
 	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
@@ -14367,6 +14587,26 @@ func (s *Settings) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"llm_write_tools\"")
 			}
+		case "brand_mark":
+			if err := func() error {
+				s.BrandMark.Reset()
+				if err := s.BrandMark.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"brand_mark\"")
+			}
+		case "sfw_mode":
+			if err := func() error {
+				s.SfwMode.Reset()
+				if err := s.SfwMode.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"sfw_mode\"")
+			}
 		case "updated_at":
 			if err := func() error {
 				s.UpdatedAt.Reset()
@@ -14386,8 +14626,9 @@ func (s *Settings) Decode(d *jx.Decoder) error {
 	}
 	// Validate required fields.
 	var failures []validate.FieldError
-	for i, mask := range [1]uint8{
+	for i, mask := range [2]uint8{
 		0b00011111,
+		0b00000000,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -14672,6 +14913,48 @@ func (s *SetupStatus) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *SetupStatus) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes SfwMode as json.
+func (s SfwMode) Encode(e *jx.Encoder) {
+	e.Str(string(s))
+}
+
+// Decode decodes SfwMode from json.
+func (s *SfwMode) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode SfwMode to nil")
+	}
+	v, err := d.StrBytes()
+	if err != nil {
+		return err
+	}
+	// Try to use constant string.
+	switch SfwMode(v) {
+	case SfwModeAuto:
+		*s = SfwModeAuto
+	case SfwModeOn:
+		*s = SfwModeOn
+	case SfwModeOff:
+		*s = SfwModeOff
+	default:
+		*s = SfwMode(v)
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s SfwMode) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *SfwMode) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }
@@ -16742,6 +17025,86 @@ func (s *UserNotifyTargetUpdate) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *UserNotifyTargetUpdate) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode implements json.Marshaler.
+func (s *UserPreferences) Encode(e *jx.Encoder) {
+	e.ObjStart()
+	s.encodeFields(e)
+	e.ObjEnd()
+}
+
+// encodeFields encodes fields.
+func (s *UserPreferences) encodeFields(e *jx.Encoder) {
+	{
+		if s.BrandMark.Set {
+			e.FieldStart("brand_mark")
+			s.BrandMark.Encode(e)
+		}
+	}
+	{
+		if s.SfwMode.Set {
+			e.FieldStart("sfw_mode")
+			s.SfwMode.Encode(e)
+		}
+	}
+}
+
+var jsonFieldsNameOfUserPreferences = [2]string{
+	0: "brand_mark",
+	1: "sfw_mode",
+}
+
+// Decode decodes UserPreferences from json.
+func (s *UserPreferences) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode UserPreferences to nil")
+	}
+
+	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
+		switch string(k) {
+		case "brand_mark":
+			if err := func() error {
+				s.BrandMark.Reset()
+				if err := s.BrandMark.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"brand_mark\"")
+			}
+		case "sfw_mode":
+			if err := func() error {
+				s.SfwMode.Reset()
+				if err := s.SfwMode.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"sfw_mode\"")
+			}
+		default:
+			return d.Skip()
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "decode UserPreferences")
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *UserPreferences) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *UserPreferences) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }

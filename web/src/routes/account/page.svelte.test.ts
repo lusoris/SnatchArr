@@ -39,7 +39,8 @@ const sampleCreatedKey: CreatedApiKey = {
 const baseStubs = {
 	'/auth/api-keys': [sampleApiKey],
 	'/auth/sso': { oidc: false, proxy: false, jellyfin: false },
-	'/auth/identities': { items: [] }
+	'/auth/identities': { items: [] },
+	'/me/preferences': { brand_mark: null, sfw_mode: null }
 };
 
 describe('account', () => {

@@ -2004,6 +2004,40 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
 
+  /me/preferences:
+    get:
+      tags: [auth]
+      operationId: getMyPreferences
+      summary: Preferences for the current user
+      responses:
+        "200":
+          description: User preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserPreferences"
+        default:
+          $ref: "#/components/responses/Problem"
+    put:
+      tags: [auth]
+      operationId: updateMyPreferences
+      summary: Replace preferences for the current user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserPreferences"
+      responses:
+        "200":
+          description: Updated user preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserPreferences"
+        default:
+          $ref: "#/components/responses/Problem"
+
   /watchaware/sources:
     get:
       tags: [watchaware]
@@ -3211,9 +3245,39 @@ components:
           description: "MCP write tools enabled by the administrator; an omitted list enables none."
           items:
             $ref: "#/components/schemas/LlmWriteTool"
+        brand_mark:
+          $ref: "#/components/schemas/BrandMark"
+          description: "Installation-wide brand mark shown when a user has no override."
+        sfw_mode:
+          $ref: "#/components/schemas/SfwMode"
+          description: "Installation-wide SFW mode applied when a user has no override."
         updated_at:
           type: string
           format: date-time
+
+    BrandMark:
+      type: string
+      default: vulva
+      enum: [vulva, penis, hand]
+
+    SfwMode:
+      type: string
+      default: "auto"
+      enum: ["auto", "on", "off"]
+
+    UserPreferences:
+      type: object
+      properties:
+        brand_mark:
+          allOf:
+            - $ref: "#/components/schemas/BrandMark"
+          nullable: true
+          description: "Per-user brand mark override; null or omitted follows the installation default."
+        sfw_mode:
+          allOf:
+            - $ref: "#/components/schemas/SfwMode"
+          nullable: true
+          description: "Per-user SFW mode override; null or omitted follows the installation default."
 
     StateReset:
       type: object

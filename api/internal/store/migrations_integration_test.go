@@ -1047,3 +1047,101 @@ func TestMigration000043ProwlarrLinkCap(t *testing.T) {
 	}
 	assertTableExists(t, st, "prowlarr_rate_buckets", true)
 }
+
+func TestMigration000044BrandMark(t *testing.T) {
+	t.Parallel()
+	st := storetest.New(t)
+	m := storetest.Migrator(t, st)
+
+	stepDownToVersion(t, m, 43)
+	assertTableExists(t, st, "users_prefs", false)
+
+	if err := m.Steps(1); err != nil {
+		t.Fatalf("Steps(1) up to 44: %v", err)
+	}
+	assertTableExists(t, st, "users_prefs", true)
+
+	testBrandMarkSettingsConstraints(t, st)
+	userID := uuid.New()
+	testUsersPrefsConstraints(t, st, userID)
+
+	if err := m.Steps(-1); err != nil {
+		t.Fatalf("Steps(-1) down to 43: %v", err)
+	}
+	assertTableExists(t, st, "users_prefs", false)
+
+	var colExists bool
+	err := st.Pool().QueryRow(t.Context(), "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='settings' AND column_name='brand_mark')").Scan(&colExists)
+	if err != nil {
+		t.Fatalf("check column exists after down: %v", err)
+	}
+	if colExists {
+		t.Fatalf("brand_mark column still exists after down migration")
+	}
+
+	if err := m.Steps(1); err != nil {
+		t.Fatalf("Steps(1) back up to 44: %v", err)
+	}
+	assertTableExists(t, st, "users_prefs", true)
+}
+
+func testBrandMarkSettingsConstraints(t *testing.T, st *store.Store) {
+	t.Helper()
+	ctx := t.Context()
+	var bm, sm string
+	if err := st.Pool().QueryRow(ctx, "SELECT brand_mark, sfw_mode FROM settings WHERE singleton").Scan(&bm, &sm); err != nil {
+		t.Fatalf("query settings brand_mark/sfw_mode: %v", err)
+	}
+	if bm != "vulva" || sm != "auto" {
+		t.Fatalf("settings defaults = (%q, %q), want (vulva, auto)", bm, sm)
+	}
+	if _, err := st.Pool().Exec(ctx, "UPDATE settings SET brand_mark = 'invalid' WHERE singleton"); err == nil {
+		t.Fatal("expected error updating settings.brand_mark = 'invalid', got nil")
+	}
+	if _, err := st.Pool().Exec(ctx, "UPDATE settings SET sfw_mode = 'invalid' WHERE singleton"); err == nil {
+		t.Fatal("expected error updating settings.sfw_mode = 'invalid', got nil")
+	}
+	for _, validMark := range []string{"vulva", "penis", "hand"} {
+		if _, err := st.Pool().Exec(ctx, "UPDATE settings SET brand_mark = $1 WHERE singleton", validMark); err != nil {
+			t.Fatalf("update settings.brand_mark = %q: %v", validMark, err)
+		}
+	}
+	for _, validMode := range []string{"auto", "on", "off"} {
+		if _, err := st.Pool().Exec(ctx, "UPDATE settings SET sfw_mode = $1 WHERE singleton", validMode); err != nil {
+			t.Fatalf("update settings.sfw_mode = %q: %v", validMode, err)
+		}
+	}
+}
+
+func testUsersPrefsConstraints(t *testing.T, st *store.Store, userID uuid.UUID) {
+	t.Helper()
+	ctx := t.Context()
+	now := time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC)
+	const insUser = `INSERT INTO users (id, username, password_hash, role, created_at, updated_at) VALUES ($1, 'pref-m44', 'unused', 'requester', $2, $2)`
+	if _, err := st.Pool().Exec(ctx, insUser, userID, now); err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+	const insPref = `INSERT INTO users_prefs (user_id, brand_mark, sfw_mode, updated_at) VALUES ($1, $2, $3, $4)`
+	if _, err := st.Pool().Exec(ctx, insPref, uuid.New(), nil, nil, now); err == nil {
+		t.Fatal("insert users_prefs with unknown user_id succeeded, want fk violation")
+	}
+	if _, err := st.Pool().Exec(ctx, insPref, userID, "invalid", nil, now); err == nil {
+		t.Fatal("insert users_prefs with invalid brand_mark succeeded, want check violation")
+	}
+	if _, err := st.Pool().Exec(ctx, insPref, userID, nil, "invalid", now); err == nil {
+		t.Fatal("insert users_prefs with invalid sfw_mode succeeded, want check violation")
+	}
+	if _, err := st.Pool().Exec(ctx, insPref, userID, "hand", "on", now); err != nil {
+		t.Fatalf("insert valid users_prefs: %v", err)
+	}
+	if _, err := st.Pool().Exec(ctx, "DELETE FROM users WHERE id = $1", userID); err != nil {
+		t.Fatalf("delete user: %v", err)
+	}
+	var count int
+	if err := st.Pool().QueryRow(ctx, "SELECT count(*) FROM users_prefs WHERE user_id = $1", userID).Scan(&count); err != nil {
+		t.Fatalf("count users_prefs: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("users_prefs count after user cascade delete = %d, want 0", count)
+	}
+}

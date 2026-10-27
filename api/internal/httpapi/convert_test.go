@@ -188,3 +188,57 @@ func TestDownloadClientConversions(t *testing.T) {
 		t.Fatal("emptyIfNil")
 	}
 }
+
+func TestSettingsAndUserPreferencesConversions(t *testing.T) {
+	t.Parallel()
+	now := time.Unix(1_700_000_000, 0).UTC()
+	preset := domain.MediaFirstPreset()
+
+	// Absent brand_mark and sfw_mode in PUT body default to vulva and auto.
+	fromEmpty := settingsFromOAS(&oas.Settings{
+		HistoryRetentionDays:   30,
+		UserAgent:              "SnatchArr/1.0",
+		SearchPriorityPreset:   priorityPresetToOAS(preset),
+		DownloadPriorityPreset: priorityPresetToOAS(preset),
+	})
+	if fromEmpty.BrandMark != domain.DefaultBrandMark || fromEmpty.SfwMode != domain.DefaultSfwMode {
+		t.Fatalf("settingsFromOAS absent defaults = (%q, %q), want (%q, %q)", fromEmpty.BrandMark, fromEmpty.SfwMode, domain.DefaultBrandMark, domain.DefaultSfwMode)
+	}
+
+	// Explicit brand_mark and sfw_mode round-trip through OAS.
+	in := domain.Settings{
+		HistoryRetentionDays:   45,
+		UserAgent:              "SnatchArr/2.0",
+		GlobalHourlyCap:        120,
+		SearchPriorityPreset:   preset,
+		DownloadPriorityPreset: preset,
+		BrandMark:              domain.BrandMarkHand,
+		SfwMode:                domain.SfwModeOn,
+		UpdatedAt:              now,
+	}
+	oasSettings := settingsToOAS(in)
+	if oasSettings.BrandMark.Value != oas.BrandMarkHand || oasSettings.SfwMode.Value != oas.SfwModeOn {
+		t.Fatalf("settingsToOAS = (%v, %v), want (hand, on)", oasSettings.BrandMark, oasSettings.SfwMode)
+	}
+	back := settingsFromOAS(oasSettings)
+	if back.BrandMark != domain.BrandMarkHand || back.SfwMode != domain.SfwModeOn {
+		t.Fatalf("settingsFromOAS round-trip = (%q, %q), want (hand, on)", back.BrandMark, back.SfwMode)
+	}
+
+	// UserPreferences nil -> null in OAS, and null/unset -> nil in domain.
+	emptyOAS := userPreferencesToOAS(domain.UserPreferences{})
+	if !emptyOAS.BrandMark.IsNull() || !emptyOAS.SfwMode.IsNull() {
+		t.Fatalf("userPreferencesToOAS(empty) = %+v, want both null", emptyOAS)
+	}
+	if got := userPreferencesFromOAS(emptyOAS); got.BrandMark != nil || got.SfwMode != nil {
+		t.Fatalf("userPreferencesFromOAS(null) = %+v, want both nil", got)
+	}
+
+	penis := domain.BrandMarkPenis
+	off := domain.SfwModeOff
+	setOAS := userPreferencesToOAS(domain.UserPreferences{BrandMark: &penis, SfwMode: &off})
+	gotSet := userPreferencesFromOAS(setOAS)
+	if gotSet.BrandMark == nil || *gotSet.BrandMark != domain.BrandMarkPenis || gotSet.SfwMode == nil || *gotSet.SfwMode != domain.SfwModeOff {
+		t.Fatalf("userPreferences round-trip = %+v, want (penis, off)", gotSet)
+	}
+}

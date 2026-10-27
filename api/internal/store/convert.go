@@ -159,6 +159,14 @@ func SettingsFromRow(r sqlcgen.Setting) domain.Settings {
 	if writeTools == nil {
 		writeTools = []string{}
 	}
+	brandMark := domain.BrandMark(r.BrandMark)
+	if brandMark == "" {
+		brandMark = domain.DefaultBrandMark
+	}
+	sfwMode := domain.SfwMode(r.SfwMode)
+	if sfwMode == "" {
+		sfwMode = domain.DefaultSfwMode
+	}
 	return domain.Settings{
 		HistoryRetentionDays:   int(r.HistoryRetentionDays),
 		UserAgent:              r.UserAgent,
@@ -167,8 +175,25 @@ func SettingsFromRow(r sqlcgen.Setting) domain.Settings {
 		DownloadPriorityPreset: presetFromJSON(r.DownloadPriorityPreset),
 		LLMEnabled:             r.LlmEnabled,
 		LLMWriteTools:          writeTools,
+		BrandMark:              brandMark,
+		SfwMode:                sfwMode,
 		UpdatedAt:              r.UpdatedAt,
 	}
+}
+
+// UserPreferencesFromRow converts a per-user preferences row.
+func UserPreferencesFromRow(r sqlcgen.UsersPref) domain.UserPreferences {
+	var out domain.UserPreferences
+	if r.BrandMark != nil {
+		bm := domain.BrandMark(*r.BrandMark)
+		out.BrandMark = &bm
+	}
+	if r.SfwMode != nil {
+		sm := domain.SfwMode(*r.SfwMode)
+		out.SfwMode = &sm
+	}
+	out.UpdatedAt = r.UpdatedAt
+	return out
 }
 
 // ProwlarrLinkFromRow converts a row; the API key is never carried.

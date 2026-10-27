@@ -208,6 +208,14 @@ func settingsToOAS(s domain.Settings) *oas.Settings {
 	for i, t := range s.LLMWriteTools {
 		tools[i] = oas.LlmWriteTool(t)
 	}
+	brandMark := s.BrandMark
+	if brandMark == "" {
+		brandMark = domain.DefaultBrandMark
+	}
+	sfwMode := s.SfwMode
+	if sfwMode == "" {
+		sfwMode = domain.DefaultSfwMode
+	}
 	return &oas.Settings{
 		HistoryRetentionDays:   s.HistoryRetentionDays,
 		UserAgent:              s.UserAgent,
@@ -216,6 +224,8 @@ func settingsToOAS(s domain.Settings) *oas.Settings {
 		DownloadPriorityPreset: priorityPresetToOAS(s.DownloadPriorityPreset),
 		LlmEnabled:             oas.NewOptBool(s.LLMEnabled),
 		LlmWriteTools:          tools,
+		BrandMark:              oas.NewOptBrandMark(oas.BrandMark(brandMark)),
+		SfwMode:                oas.NewOptSfwMode(oas.SfwMode(sfwMode)),
 		UpdatedAt:              oas.NewOptDateTime(s.UpdatedAt),
 	}
 }
@@ -233,7 +243,37 @@ func settingsFromOAS(in *oas.Settings) domain.Settings {
 		DownloadPriorityPreset: priorityPresetFromOAS(in.DownloadPriorityPreset),
 		LLMEnabled:             in.LlmEnabled.Or(false),
 		LLMWriteTools:          tools,
+		BrandMark:              domain.BrandMark(in.BrandMark.Or(oas.BrandMark(domain.DefaultBrandMark))),
+		SfwMode:                domain.SfwMode(in.SfwMode.Or(oas.SfwMode(domain.DefaultSfwMode))),
 	}
+}
+
+func userPreferencesToOAS(p domain.UserPreferences) *oas.UserPreferences {
+	var out oas.UserPreferences
+	if p.BrandMark == nil {
+		out.BrandMark.SetToNull()
+	} else {
+		out.BrandMark.SetTo(oas.BrandMark(*p.BrandMark))
+	}
+	if p.SfwMode == nil {
+		out.SfwMode.SetToNull()
+	} else {
+		out.SfwMode.SetTo(oas.SfwMode(*p.SfwMode))
+	}
+	return &out
+}
+
+func userPreferencesFromOAS(in *oas.UserPreferences) domain.UserPreferences {
+	var out domain.UserPreferences
+	if v, ok := in.BrandMark.Get(); ok {
+		bm := domain.BrandMark(v)
+		out.BrandMark = &bm
+	}
+	if v, ok := in.SfwMode.Get(); ok {
+		sm := domain.SfwMode(v)
+		out.SfwMode = &sm
+	}
+	return out
 }
 
 func userNotifyTargetToOAS(t domain.UserNotifyTarget) oas.UserNotifyTarget {

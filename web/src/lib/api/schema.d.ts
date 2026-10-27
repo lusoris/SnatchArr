@@ -1369,6 +1369,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Preferences for the current user */
+        get: operations["getMyPreferences"];
+        /** Replace preferences for the current user */
+        put: operations["updateMyPreferences"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/watchaware/sources": {
         parameters: {
             query?: never;
@@ -1938,8 +1956,28 @@ export interface components {
             llm_enabled: boolean;
             /** @description MCP write tools enabled by the administrator; an omitted list enables none. */
             llm_write_tools?: components["schemas"]["LlmWriteTool"][];
+            /** @description Installation-wide brand mark shown when a user has no override. */
+            brand_mark?: components["schemas"]["BrandMark"];
+            /** @description Installation-wide SFW mode applied when a user has no override. */
+            sfw_mode?: components["schemas"]["SfwMode"];
             /** Format: date-time */
             updated_at?: string;
+        };
+        /**
+         * @default vulva
+         * @enum {string}
+         */
+        BrandMark: "vulva" | "penis" | "hand";
+        /**
+         * @default auto
+         * @enum {string}
+         */
+        SfwMode: "auto" | "on" | "off";
+        UserPreferences: {
+            /** @description Per-user brand mark override; null or omitted follows the installation default. */
+            brand_mark?: components["schemas"]["BrandMark"] | null;
+            /** @description Per-user SFW mode override; null or omitted follows the installation default. */
+            sfw_mode?: components["schemas"]["SfwMode"] | null;
         };
         StateReset: {
             /** Format: uuid */
@@ -5040,6 +5078,52 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getMyPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description User preferences */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserPreferences"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    updateMyPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserPreferences"];
+            };
+        };
+        responses: {
+            /** @description Updated user preferences */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserPreferences"];
+                };
             };
             default: components["responses"]["Problem"];
         };
