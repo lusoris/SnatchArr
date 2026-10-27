@@ -609,7 +609,7 @@ jobs:
   web-e2e-api:
     name: web e2e (API + axe)
     needs: changes
-    if: needs.changes.outputs.api == 'true' || needs.changes.outputs.web == 'true'
+    if: needs.changes.outputs.api == 'true' || needs.changes.outputs.web == 'true' || startsWith(github.head_ref, 'release-please--')
     runs-on: ubuntu-26.04
     timeout-minutes: 20
     services:
@@ -891,6 +891,22 @@ jobs:
       - name: Third-party licences check
         run: make licences-check
 
+  release-e2e-map:
+    name: release e2e map
+    if: startsWith(github.head_ref, 'release-please--')
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    steps:
+      - *stop-draft
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check that every release feat/fix maps to an e2e test
+        run: |
+          git fetch --tags --force
+          make release-e2e-check
+
   # The required check that stands for every job of this workflow. A job the change filter
   # leaves out ends as skipped, and a skipped job satisfies a required check on its own, so this
   # job reads every result (tools/ci/status.sh). A new job needs a line here and a rule there;
@@ -925,6 +941,7 @@ jobs:
       - governance
       - docs
       - licences
+      - release-e2e-map
     runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
@@ -936,4 +953,6 @@ jobs:
           NEEDS: ${{ toJSON(needs) }}
           # The condition of the commits job, word for word.
           COMMITS_EXPECTED: ${{ github.event_name == 'pull_request' && github.event.pull_request.user.type != 'Bot' }}
+          # The release-please branch condition, word for word.
+          RELEASE_EXPECTED: ${{ startsWith(github.head_ref, 'release-please--') }}
         run: sh tools/ci/status.sh
