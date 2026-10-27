@@ -125,6 +125,17 @@ test('674: adult catalogue source CRUD, favourite sync, unreachable last_sync_er
 		// Enable adult module
 		await setAdultModuleState(page, csrf, true, tmpDir);
 
+		// A retry starts clean: sources left by a failed attempt would make the create 409.
+		const leftRes = await page.request.get('/api/v1/adult/sources');
+		expect(leftRes.ok()).toBeTruthy();
+		for (const left of (await leftRes.json()) as Array<{ id: string; name: string }>) {
+			if (left.name.endsWith('-674')) {
+				await page.request.delete(`/api/v1/adult/sources/${left.id}`, {
+					headers: { 'X-CSRF-Token': csrf }
+				});
+			}
+		}
+
 		// Positive: create source pointing at local GraphQL stub
 		const createRes = await page.request.post('/api/v1/adult/sources', {
 			headers: { 'X-CSRF-Token': csrf },
@@ -211,7 +222,11 @@ test('674: adult catalogue source CRUD, favourite sync, unreachable last_sync_er
 		await page.goto('/adult/sources');
 		await expect(page.getByText('e2e-catalogue-674')).toBeVisible();
 		await expect(page.getByText('e2e-unreachable-674')).toBeVisible();
-		await expect(page.getByText(errStatus.last_error ?? '')).toBeVisible();
+		// The status list shows the run error verbatim; the source card shows its own error.
+		await expect(page.getByText(errStatus.last_error ?? '', { exact: true })).toBeVisible();
+		await expect(page.locator('li.card').filter({ hasText: 'e2e-unreachable-674' })).toContainText(
+			unreachableAfterSync.last_sync_error ?? ''
+		);
 
 		await page.request.delete(`/api/v1/adult/sources/${unreachable.id}`, {
 			headers: { 'X-CSRF-Token': csrf }
