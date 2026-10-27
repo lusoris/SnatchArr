@@ -789,7 +789,7 @@ jobs:
       # runs in the operator's namespace (the plugin's installation docs). Renovate moves both.
       - name: cert-manager and the Barman Cloud plugin
         run: |
-          kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.21.2/cert-manager.yaml
+          kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.21.3/cert-manager.yaml
           kubectl -n cert-manager wait deploy --all --for=condition=Available --timeout=180s
           curl -fsSL --max-time 60 -o "$RUNNER_TEMP/barman-cloud.yaml" \
             https://github.com/cloudnative-pg/plugin-barman-cloud/releases/download/v0.15.1/manifest.yaml

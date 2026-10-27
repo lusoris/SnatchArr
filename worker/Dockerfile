@@ -25,7 +25,7 @@ WORKDIR /src
 # install` installs that toolchain before the sources land so the layer caches.
 COPY rust-toolchain.toml ./
 RUN rustup toolchain install
-RUN cargo install cargo-zigbuild@0.23.4 --locked
+RUN cargo install cargo-zigbuild@0.24.0 --locked
 COPY proto/ ./proto/
 COPY Cargo.toml Cargo.lock ./
 COPY worker/ ./worker/
