@@ -107,6 +107,19 @@ first_steps() {
   awk '
     /^jobs:$/ { in_jobs = 1; next }
     in_jobs && /^  [A-Za-z0-9_-]+:$/ { job = substr($0, 3, length($0) - 3); in_steps = 0; seen = 0; next }
+    in_jobs && job != "" && !seen && /^    uses: \.\// {
+      file = substr($0, 13)
+      while ((getline line < file) > 0) {
+        if (line ~ /^      - /) {
+          step = line; sub(/^      - (name: )?/, "", step)
+          print job "|" step
+          seen = 1
+          break
+        }
+      }
+      close(file)
+      next
+    }
     in_jobs && job != "" && /^    steps:$/ { in_steps = 1; next }
     # A step anchored as &stop-draft names itself on the next line; *stop-draft resolves to that name.
     anchored != "" {

@@ -19,12 +19,17 @@ concurrency:
 
 jobs:
   commits:
-    name: Commit messages (Conventional Commits + DCO)
     # Bots (release-please, Renovate) run no commit-msg hook and cannot certify a DCO; the
     # squash commit a maintainer merges carries the sign-off for them.
     if: github.event_name == 'pull_request' && github.event.pull_request.user.type != 'Bot'
+    uses: ./.github/workflows/commit-policy.yml
+
+  # Runs on every change, with no filter: a change that touches no component skips the jobs
+  # below, and the workflow files are then all that is left to gate.
+  workflows:
+    name: Workflows (actionlint, pinned actions)
     runs-on: ubuntu-26.04
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - &stop-draft
         name: Stop on a draft pull request
@@ -39,36 +44,6 @@ jobs:
           echo "::error title=$TITLE::$MESSAGE"
           echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
           exit 1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Check the policy against its cases
-        run: sh .config/hooks/commit-msg_test.sh
-      # The same script the commit-msg hook runs, applied to every commit of the pull request.
-      - name: Check every commit of the pull request
-        env:
-          BASE: ${{ github.event.pull_request.base.sha }}
-          HEAD: ${{ github.event.pull_request.head.sha }}
-        run: |
-          status=0
-          for c in $(git rev-list --no-merges --max-count=500 "$BASE..$HEAD"); do
-            git log -1 --format=%B "$c" > "$RUNNER_TEMP/msg"
-            if ! sh .config/hooks/commit-msg.sh "$RUNNER_TEMP/msg"; then
-              echo "::error title=Commit message::$c fails the commit-msg policy"
-              status=1
-            fi
-          done
-          exit "$status"
-
-  # Runs on every change, with no filter: a change that touches no component skips the jobs
-  # below, and the workflow files are then all that is left to gate.
-  workflows:
-    name: Workflows (actionlint, pinned actions)
-    runs-on: ubuntu-26.04
-    timeout-minutes: 10
-    steps:
-      - *stop-draft
       - &checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
