@@ -17,36 +17,14 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Reads the image-smoke build cache of CI; writes none, so the nightly run cannot evict it.
   soak:
     name: soak (image smoke, 10 min)
-    runs-on: ubuntu-26.04
-    timeout-minutes: 40
-    services:
-      # The Postgres the integration tests pin, through the Docker Hub mirror.
-      postgres:
-        image: mirror.gcr.io/library/postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
-        env:
-          POSTGRES_PASSWORD: smoke
-        options: >-
-          --health-cmd "pg_isready -h 127.0.0.1 -U postgres"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 12
-        ports:
-          - 5432:5432
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/setup-go
-      - uses: ./.github/actions/setup-buildx
-      # Reads the image-smoke build cache of CI; writes none, so the nightly run cannot evict it.
-      - uses: ./.github/actions/build-e2e-images
-      - name: make e2e-soak
-        env:
-          SMOKE_DSN: postgres://postgres:smoke@127.0.0.1:5432/postgres?sslmode=disable
-          SMOKE_SKIP_BUILD: '1'
-        run: make e2e-soak
+    permissions:
+      contents: read
+    uses: ./.github/workflows/image-smoke.yml
+    with:
+      target: e2e-soak
 
   # A failed soak on main opens the issue "Soak fails on main", or comments on it while it is open,
   # the way the Security Scan reports (tools/ci/security_issue.sh).
@@ -54,15 +32,9 @@ jobs:
     name: Open an issue on a failure on main
     needs: [soak]
     if: ${{ failure() && github.ref == 'refs/heads/main' }}
-    runs-on: ubuntu-26.04
-    timeout-minutes: 5
     permissions:
       contents: read
       issues: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/report-failure
-        with:
-          title-suffix: Soak
+    uses: ./.github/workflows/report-failure.yml
+    with:
+      title-suffix: Soak

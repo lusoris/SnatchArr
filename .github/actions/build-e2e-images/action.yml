@@ -1,7 +1,24 @@
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
 name: Build E2E Images
-description: Builds the local amd64 snatcharr-api and snatcharr-worker container images using Buildx cache.
+description: Builds the local snatcharr-api and snatcharr-worker container images using Buildx cache.
+inputs:
+  platform:
+    description: Target platform for the images
+    required: false
+    default: linux/amd64
+  tag:
+    description: Image tag suffix (snatcharr-api:<tag>, snatcharr-worker:<tag>)
+    required: false
+    default: e2e
+  cache-write:
+    description: Whether to write Buildx cache to GitHub Actions cache
+    required: false
+    default: 'false'
+  build-args:
+    description: Build arguments passed to docker/build-push-action
+    required: false
+    default: ''
 runs:
   using: composite
   steps:
@@ -10,18 +27,22 @@ runs:
       with:
         context: .
         file: Dockerfile
-        platforms: linux/amd64
+        platforms: ${{ inputs.platform }}
+        tags: snatcharr-api:${{ inputs.tag }}
         load: true
         push: false
-        tags: snatcharr-api:e2e
+        build-args: ${{ inputs.build-args }}
         cache-from: type=gha,scope=api
+        cache-to: ${{ inputs.cache-write == 'true' && 'type=gha,scope=api,mode=max' || '' }}
     - name: Build worker image
       uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
       with:
         context: .
         file: worker/Dockerfile
-        platforms: linux/amd64
+        platforms: ${{ inputs.platform }}
+        tags: snatcharr-worker:${{ inputs.tag }}
         load: true
         push: false
-        tags: snatcharr-worker:e2e
+        build-args: ${{ inputs.build-args }}
         cache-from: type=gha,scope=worker
+        cache-to: ${{ inputs.cache-write == 'true' && 'type=gha,scope=worker,mode=max' || '' }}
