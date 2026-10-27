@@ -282,13 +282,14 @@ func (e *Engine) ResetStaminaDedupe() {
 }
 
 func (e *Engine) matchStreak(ctx context.Context, rule domain.NotificationRule, ev domain.Event) bool {
-	if ev.Type != "run_finished" || ev.Level != "error" || ev.InstanceID == uuid.Nil {
+	if ev.Type != "run_finished" || ev.Level != "error" || ev.InstanceID == uuid.Nil || ev.RunID == nil || *ev.RunID == uuid.Nil {
 		return false
 	}
 	limit := int32(50)
-	statuses, err := e.st.Q().RecentInstanceRunStatuses(ctx, sqlcgen.RecentInstanceRunStatusesParams{
+	statuses, err := e.st.Q().InstanceRunStatusesAsOf(ctx, sqlcgen.InstanceRunStatusesAsOfParams{
+		RunID:      *ev.RunID,
 		InstanceID: ev.InstanceID,
-		Limit:      limit,
+		LimitCount: limit,
 	})
 	if err != nil {
 		e.logger.WarnContext(ctx, "notify: streak check query failed", slog.String("error", err.Error()))
