@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.7.1](https://github.com/lusoris/SnatchArr/compare/v0.7.0...v0.7.1) (2026-10-28)
+
+
+### Features
+
+* **adult:** serve catalogue sources and favourite sync ([#842](https://github.com/lusoris/SnatchArr/issues/842)) ([fa9ec45](https://github.com/lusoris/SnatchArr/commit/fa9ec4572acc9e906d5c41977107a0f4b17ddda6))
+* **adult:** serve synchronized performers and studios ([#843](https://github.com/lusoris/SnatchArr/issues/843)) ([06966c2](https://github.com/lusoris/SnatchArr/commit/06966c2de621701bb9045e1b933d4c1e280103e9))
+* **arrclient:** force-import Whisparr v2 and v3 queue items ([#841](https://github.com/lusoris/SnatchArr/issues/841)) ([e0d0a51](https://github.com/lusoris/SnatchArr/commit/e0d0a51dacc41bb13e239c46292fc2a8be0a6206))
+* **requests:** serve community request settings ([#846](https://github.com/lusoris/SnatchArr/issues/846)) ([1150310](https://github.com/lusoris/SnatchArr/commit/1150310ba35e6cc0ad39b52cb61b2c36f8459baa))
+
+
+### Bug Fixes
+
+* **adult:** serve image sets, item files and scans through the API ([#848](https://github.com/lusoris/SnatchArr/issues/848)) ([71327cb](https://github.com/lusoris/SnatchArr/commit/71327cbb73dc30a05f97379b3b4c9f6dd999d5c5))
+* **deps:** update golang.org/x/net to v0.62.0 ([#845](https://github.com/lusoris/SnatchArr/issues/845)) ([4736fcd](https://github.com/lusoris/SnatchArr/commit/4736fcd2e959b8e21bd19b6fa0b15a70e0a58774))
+* **deps:** update npm non-major ([#617](https://github.com/lusoris/SnatchArr/issues/617)) ([96f7e9a](https://github.com/lusoris/SnatchArr/commit/96f7e9a5b599fde0ab9d1add6212ef5819ac2ff2))
+* **notify:** read the failure streak as of the finishing run ([#834](https://github.com/lusoris/SnatchArr/issues/834)) ([5e34679](https://github.com/lusoris/SnatchArr/commit/5e346799092fb13edf9d0434bad746911582ba80)), closes [#612](https://github.com/lusoris/SnatchArr/issues/612)
+* **web:** show product display names for instance kinds ([#836](https://github.com/lusoris/SnatchArr/issues/836)) ([25a635c](https://github.com/lusoris/SnatchArr/commit/25a635ce1d080cbdf99283e8442519c5b90fd528))
+
+
+### Refactoring
+
+* **web:** share one catalogue list between adult pages ([#847](https://github.com/lusoris/SnatchArr/issues/847)) ([e5b0edb](https://github.com/lusoris/SnatchArr/commit/e5b0edb0588ca01323bb8f0b561c2a7c3af7a300))
+* **web:** share the requests settings control lookup and admin session setup ([#849](https://github.com/lusoris/SnatchArr/issues/849)) ([f263028](https://github.com/lusoris/SnatchArr/commit/f2630287a7fdabe624c11dbc2647f5cee9a249dd))
+
 ## [0.7.0](https://github.com/lusoris/SnatchArr/compare/v0.6.8...v0.7.0) (2026-10-27)
 
 
