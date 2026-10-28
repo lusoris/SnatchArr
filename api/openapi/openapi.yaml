@@ -2486,13 +2486,11 @@ paths:
             default: 0
       responses:
         "200":
-          description: Image sets list
+          description: Image sets page
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/AdultImageSet"
+                $ref: "#/components/schemas/AdultImageSetPage"
         default:
           $ref: "#/components/responses/Problem"
 
@@ -5023,6 +5021,20 @@ components:
           type: string
         cursor:
           type: string
+
+    AdultImageSetPage:
+      type: object
+      required:
+        - items
+        - total
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdultImageSet"
+        total:
+          type: integer
+          minimum: 0
 
     AdultImageSet:
       type: object

@@ -605,7 +605,7 @@ func (UnimplementedHandler) ListAPIKeys(ctx context.Context) (r ListAPIKeysRes, 
 // List discovered image sets.
 //
 // GET /adult/image-sets
-func (UnimplementedHandler) ListAdultImageSets(ctx context.Context, params ListAdultImageSetsParams) (r []AdultImageSet, _ error) {
+func (UnimplementedHandler) ListAdultImageSets(ctx context.Context, params ListAdultImageSetsParams) (r *AdultImageSetPage, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

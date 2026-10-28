@@ -84,7 +84,7 @@ func toOASAdultImageSetDetail(detail adult.ImageSetDetail) oas.AdultImageSetDeta
 }
 
 // ListAdultImageSets implements listAdultImageSets operation.
-func (h *Handlers) ListAdultImageSets(ctx context.Context, params oas.ListAdultImageSetsParams) ([]oas.AdultImageSet, error) {
+func (h *Handlers) ListAdultImageSets(ctx context.Context, params oas.ListAdultImageSetsParams) (*oas.AdultImageSetPage, error) {
 	if h.adult == nil {
 		return nil, fmt.Errorf("%w: module adult is disabled", domain.ErrNotFound)
 	}
@@ -100,11 +100,18 @@ func (h *Handlers) ListAdultImageSets(ctx context.Context, params oas.ListAdultI
 	if err != nil {
 		return nil, mapAdultError(err)
 	}
-	out := make([]oas.AdultImageSet, 0, len(sets))
-	for _, s := range sets {
-		out = append(out, toOASAdultImageSet(s))
+	total, err := h.adult.CountImageSets(ctx)
+	if err != nil {
+		return nil, mapAdultError(err)
 	}
-	return out, nil
+	items := make([]oas.AdultImageSet, 0, len(sets))
+	for _, s := range sets {
+		items = append(items, toOASAdultImageSet(s))
+	}
+	return &oas.AdultImageSetPage{
+		Items: items,
+		Total: total,
+	}, nil
 }
 
 // GetAdultImageSet implements getAdultImageSet operation.

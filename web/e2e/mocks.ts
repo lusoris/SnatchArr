@@ -115,14 +115,16 @@ export async function mockSignedInApi(
 		'events',
 		'schedules',
 		'system/modules',
-		'adult/sources',
-		'adult/image-sets'
+		'adult/sources'
 	]) {
 		await page.route(`**/api/v1/${path}*`, (route) => route.fulfill(json([])));
 	}
 	for (const path of ['adult/performers', 'adult/studios']) {
 		await page.route(`**/api/v1/${path}*`, (route) => route.fulfill(json({ items: [] })));
 	}
+	await page.route('**/api/v1/adult/image-sets*', (route) =>
+		route.fulfill(json({ items: [], total: 0 }))
+	);
 	await page.route('**/api/v1/adult/sync/status*', (route) =>
 		route.fulfill(
 			json({

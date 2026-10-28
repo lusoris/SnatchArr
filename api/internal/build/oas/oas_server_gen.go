@@ -405,7 +405,7 @@ type Handler interface {
 	// List discovered image sets.
 	//
 	// GET /adult/image-sets
-	ListAdultImageSets(ctx context.Context, params ListAdultImageSetsParams) ([]AdultImageSet, error)
+	ListAdultImageSets(ctx context.Context, params ListAdultImageSetsParams) (*AdultImageSetPage, error)
 	// ListAdultPerformers implements listAdultPerformers operation.
 	//
 	// List synchronized performers with cursor pagination.

@@ -462,6 +462,32 @@ func (s *AdultImageSetDetail) SetIgnoreFilePresent(val bool) {
 	s.IgnoreFilePresent = val
 }
 
+// Ref: #/components/schemas/AdultImageSetPage
+type AdultImageSetPage struct {
+	Items []AdultImageSet `json:"items"`
+	Total int             `json:"total"`
+}
+
+// GetItems returns the value of Items.
+func (s *AdultImageSetPage) GetItems() []AdultImageSet {
+	return s.Items
+}
+
+// GetTotal returns the value of Total.
+func (s *AdultImageSetPage) GetTotal() int {
+	return s.Total
+}
+
+// SetItems sets the value of Items.
+func (s *AdultImageSetPage) SetItems(val []AdultImageSet) {
+	s.Items = val
+}
+
+// SetTotal sets the value of Total.
+func (s *AdultImageSetPage) SetTotal(val int) {
+	s.Total = val
+}
+
 // Ref: #/components/schemas/AdultPerformer
 type AdultPerformer struct {
 	ID             uuid.UUID          `json:"id"`

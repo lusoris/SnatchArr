@@ -45,6 +45,15 @@ func (s *Service) ListImageSets(ctx context.Context, limit, offset int) ([]sqlcg
 	return rows, nil
 }
 
+// CountImageSets returns the total number of discovered image sets.
+func (s *Service) CountImageSets(ctx context.Context) (int, error) {
+	count, err := s.st.Q().CountAdultImageSets(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("adult: count image sets: %w", store.MapError(err))
+	}
+	return int(count), nil
+}
+
 // GetImageSetDetail loads an image set, its ordered items, and current .stashignore status.
 func (s *Service) GetImageSetDetail(ctx context.Context, id uuid.UUID) (ImageSetDetail, error) {
 	set, err := s.st.Q().GetAdultImageSet(ctx, id)

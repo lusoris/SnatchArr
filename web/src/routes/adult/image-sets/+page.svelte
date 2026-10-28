@@ -19,7 +19,7 @@ SPDX-License-Identifier: EUPL-1.2
 
 	const imageSets = createSentioQuery<AdultImageSet[]>({
 		queryKey: keys.adultImageSets,
-		queryFn: async () => (await api.GET('/adult/image-sets')).data ?? []
+		queryFn: async () => (await api.GET('/adult/image-sets')).data?.items ?? []
 	});
 
 	let selectedId = $state<string | null>(null);

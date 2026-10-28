@@ -2906,6 +2906,10 @@ export interface components {
             next_cursor?: string;
             cursor?: string;
         };
+        AdultImageSetPage: {
+            items: components["schemas"]["AdultImageSet"][];
+            total: number;
+        };
         AdultImageSet: {
             /** Format: uuid */
             id: string;
@@ -5969,13 +5973,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Image sets list */
+            /** @description Image sets page */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AdultImageSet"][];
+                    "application/json": components["schemas"]["AdultImageSetPage"];
                 };
             };
             default: components["responses"]["Problem"];

@@ -13534,7 +13534,7 @@ func (s *Server) handleListAdultImageSetsRequest(args [0]string, argsEscaped boo
 
 	var rawBody []byte
 
-	var response []AdultImageSet
+	var response *AdultImageSetPage
 	if m := s.cfg.Middleware; m != nil {
 		mreq := middleware.Request{
 			Context:          ctx,
@@ -13559,7 +13559,7 @@ func (s *Server) handleListAdultImageSetsRequest(args [0]string, argsEscaped boo
 		type (
 			Request  = struct{}
 			Params   = ListAdultImageSetsParams
-			Response = []AdultImageSet
+			Response = *AdultImageSetPage
 		)
 		response, err = middleware.HookMiddleware[
 			Request,

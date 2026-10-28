@@ -51,7 +51,7 @@ describe('adult image sets (/adult/image-sets)', () => {
 
 	it('positive: renders image sets list, ignore file status, triggers scan, and renders item thumbnails', async () => {
 		stubGet({
-			'/adult/image-sets': [sampleSet],
+			'/adult/image-sets': { items: [sampleSet], total: 1 },
 			'/adult/image-sets/{setId}': sampleDetail
 		});
 		const postSpy = vi.spyOn(api, 'POST').mockResolvedValue({
@@ -87,7 +87,7 @@ describe('adult image sets (/adult/image-sets)', () => {
 	it('negative: hides scan admin button for viewer user', async () => {
 		session.user = { id: 'u2', username: 'viewer', role: 'viewer' } as never;
 		stubGet({
-			'/adult/image-sets': [sampleSet],
+			'/adult/image-sets': { items: [sampleSet], total: 1 },
 			'/adult/image-sets/{setId}': sampleDetail
 		});
 
@@ -99,7 +99,7 @@ describe('adult image sets (/adult/image-sets)', () => {
 
 	it('boundary: renders empty placeholder when no image sets exist', async () => {
 		stubGet({
-			'/adult/image-sets': []
+			'/adult/image-sets': { items: [], total: 0 }
 		});
 
 		renderWithQuery(AdultImageSetsPage);

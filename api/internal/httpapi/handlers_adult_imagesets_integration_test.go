@@ -90,14 +90,22 @@ func TestAdultImageSets_Positive_ListGetAndFileStream(t *testing.T) {
 	if listRes.statusCode != http.StatusOK {
 		t.Fatalf("list status = %d, want 200; body: %s", listRes.statusCode, string(listRes.body))
 	}
-	var sets []map[string]any
-	if err := json.Unmarshal(listRes.body, &sets); err != nil {
-		t.Fatalf("unmarshal sets: %v", err)
+	var page map[string]any
+	if err := json.Unmarshal(listRes.body, &page); err != nil {
+		t.Fatalf("unmarshal page: %v", err)
 	}
-	if len(sets) != 1 {
-		t.Fatalf("sets len = %d, want 1", len(sets))
+	if page["total"] != float64(1) {
+		t.Fatalf("total = %v, want 1", page["total"])
 	}
-	setID := sets[0]["id"].(string)
+	rawSets, ok := page["items"].([]any)
+	if !ok || len(rawSets) != 1 {
+		t.Fatalf("items len = %d, want 1; items: %v", len(rawSets), page["items"])
+	}
+	firstSet, ok := rawSets[0].(map[string]any)
+	if !ok {
+		t.Fatalf("invalid first set format: %v", rawSets[0])
+	}
+	setID := firstSet["id"].(string)
 
 	getRes := doHTTP(t, f.client, http.MethodGet, f.srv.URL+PathPrefix+"/adult/image-sets/"+setID, "", nil)
 	if getRes.statusCode != http.StatusOK {
@@ -268,10 +276,16 @@ func TestAdultImageSets_Boundary_EmptyDirZeroItemsAndPagination(t *testing.T) {
 	if listEmpty.statusCode != http.StatusOK {
 		t.Fatalf("list empty status = %d, want 200", listEmpty.statusCode)
 	}
-	var emptyList []any
-	_ = json.Unmarshal(listEmpty.body, &emptyList)
-	if len(emptyList) != 0 {
-		t.Errorf("expected 0 image sets, got %d", len(emptyList))
+	var emptyPage map[string]any
+	if err := json.Unmarshal(listEmpty.body, &emptyPage); err != nil {
+		t.Fatalf("unmarshal empty page: %v", err)
+	}
+	if emptyPage["total"] != float64(0) {
+		t.Errorf("expected total 0, got %v", emptyPage["total"])
+	}
+	emptyItems, ok := emptyPage["items"].([]any)
+	if !ok || len(emptyItems) != 0 {
+		t.Errorf("expected 0 image sets, got %v", emptyPage["items"])
 	}
 
 	// 2. Boundary: set with zero image items
@@ -302,9 +316,15 @@ func TestAdultImageSets_Boundary_EmptyDirZeroItemsAndPagination(t *testing.T) {
 	if page1.statusCode != http.StatusOK {
 		t.Fatalf("page 1 status = %d, want 200", page1.statusCode)
 	}
-	var p1Sets []map[string]any
-	_ = json.Unmarshal(page1.body, &p1Sets)
-	if len(p1Sets) != 1 {
+	var p1 map[string]any
+	if err := json.Unmarshal(page1.body, &p1); err != nil {
+		t.Fatalf("unmarshal page 1: %v", err)
+	}
+	if p1["total"] != float64(2) {
+		t.Errorf("page 1 total = %v, want 2", p1["total"])
+	}
+	p1Sets, ok := p1["items"].([]any)
+	if !ok || len(p1Sets) != 1 {
 		t.Fatalf("page 1 sets = %d, want 1", len(p1Sets))
 	}
 
@@ -312,12 +332,20 @@ func TestAdultImageSets_Boundary_EmptyDirZeroItemsAndPagination(t *testing.T) {
 	if page2.statusCode != http.StatusOK {
 		t.Fatalf("page 2 status = %d, want 200", page2.statusCode)
 	}
-	var p2Sets []map[string]any
-	_ = json.Unmarshal(page2.body, &p2Sets)
-	if len(p2Sets) != 1 {
+	var p2 map[string]any
+	if err := json.Unmarshal(page2.body, &p2); err != nil {
+		t.Fatalf("unmarshal page 2: %v", err)
+	}
+	if p2["total"] != float64(2) {
+		t.Errorf("page 2 total = %v, want 2", p2["total"])
+	}
+	p2Sets, ok := p2["items"].([]any)
+	if !ok || len(p2Sets) != 1 {
 		t.Fatalf("page 2 sets = %d, want 1", len(p2Sets))
 	}
-	if p1Sets[0]["id"] == p2Sets[0]["id"] {
-		t.Errorf("page 1 and page 2 returned same set: %v", p1Sets[0]["id"])
+	p1First := p1Sets[0].(map[string]any)
+	p2First := p2Sets[0].(map[string]any)
+	if p1First["id"] == p2First["id"] {
+		t.Errorf("page 1 and page 2 returned same set: %v", p1First["id"])
 	}
 }
