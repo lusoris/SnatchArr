@@ -58,3 +58,7 @@ web/src/routes/login/+page.svelte
 .github/workflows/security.yml
 .github/workflows/soak.yml
 web/src/routes/page.svelte.test.ts
+web/src/routes/adult/performers/+page.svelte
+web/src/routes/adult/studios/+page.svelte
+web/src/lib/components/adult/AdultCatalogList.svelte
+web/src/lib/components/adult/AdultCatalogList.svelte.test.ts
