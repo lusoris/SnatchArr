@@ -932,5 +932,21 @@
 	"requests_settings_voting_ttl_days_hint": "Number of days voting remains open (0 for unlimited).",
 	"requests_settings_saved": "Request settings saved",
 	"requests_settings_readonly_note": "Viewer account: request settings are read-only.",
-	"help_requests_settings": "Configure community request voting calculation rules, viewer voting permissions, request visibility, and expiration periods."
+	"help_requests_settings": "Configure community request voting calculation rules, viewer voting permissions, request visibility, and expiration periods.",
+	"nav_adult_image_sets": "Image sets",
+	"adult_image_sets_title": "Image sets",
+	"adult_image_sets_subtitle": "Browse discovered image sets and inspect streamed item images.",
+	"adult_image_sets_scan_now": "Scan now",
+	"adult_image_sets_scanning": "Scanning…",
+	"adult_image_sets_scanned_toast": "Scanned {sets} image sets and {items} items",
+	"adult_image_sets_status_title": "Image set scanning",
+	"adult_image_sets_ignore_file_present": "Ignore file present",
+	"adult_image_sets_ignore_file_missing": "Ignore file missing",
+	"adult_image_sets_none": "No image sets discovered yet.",
+	"adult_image_sets_item_count": "{count} items",
+	"adult_image_sets_view_items": "View items",
+	"adult_image_sets_close": "Close",
+	"adult_image_sets_detail_title": "Image set items",
+	"adult_image_sets_empty_set": "This image set contains no images.",
+	"help_adult_image_sets": "Image sets display local picture sets scanned from the configured directory. Administrators can trigger a manual scan, which also writes the ignore file at the directory root."
 }

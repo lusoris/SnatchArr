@@ -54,6 +54,17 @@ func (q *Queries) ClearUnfavoritedAdultStudios(ctx context.Context, updatedAt ti
 	return result.RowsAffected(), nil
 }
 
+const countAdultImageItems = `-- name: CountAdultImageItems :one
+SELECT count(*) FROM adult_image_items
+`
+
+func (q *Queries) CountAdultImageItems(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countAdultImageItems)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countAdultImageSets = `-- name: CountAdultImageSets :one
 SELECT count(*) FROM adult_image_sets
 `
@@ -599,6 +610,48 @@ ORDER BY created_at DESC
 
 func (q *Queries) ListAdultImageSets(ctx context.Context) ([]AdultImageSet, error) {
 	rows, err := q.db.Query(ctx, listAdultImageSets)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AdultImageSet{}
+	for rows.Next() {
+		var i AdultImageSet
+		if err := rows.Scan(
+			&i.ID,
+			&i.Title,
+			&i.DirectoryPath,
+			&i.WhisparrSceneForeignID,
+			&i.PerformerID,
+			&i.ItemCount,
+			&i.TotalSizeBytes,
+			&i.CoverImagePath,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAdultImageSetsPaged = `-- name: ListAdultImageSetsPaged :many
+SELECT id, title, directory_path, whisparr_scene_foreign_id, performer_id, item_count, total_size_bytes, cover_image_path, created_at, updated_at FROM adult_image_sets
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2
+`
+
+type ListAdultImageSetsPagedParams struct {
+	Limit  int32
+	Offset int32
+}
+
+func (q *Queries) ListAdultImageSetsPaged(ctx context.Context, arg ListAdultImageSetsPagedParams) ([]AdultImageSet, error) {
+	rows, err := q.db.Query(ctx, listAdultImageSetsPaged, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}

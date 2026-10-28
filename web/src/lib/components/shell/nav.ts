@@ -11,6 +11,7 @@ export type AppRoute =
 	| '/automation'
 	| '/connections'
 	| '/adult/sources'
+	| '/adult/image-sets'
 	| '/adult/performers'
 	| '/adult/studios'
 	| '/system'
@@ -46,7 +47,8 @@ export function filterByModule<T extends object>(
 export const ADULT_NAV_ITEMS = [
 	{ href: '/adult/sources', label: m.nav_adult_sources(), icon: 'heart', module: 'adult' },
 	{ href: '/adult/performers', label: m.nav_adult_performers(), icon: 'user', module: 'adult' },
-	{ href: '/adult/studios', label: m.nav_adult_studios(), icon: 'film', module: 'adult' }
+	{ href: '/adult/studios', label: m.nav_adult_studios(), icon: 'film', module: 'adult' },
+	{ href: '/adult/image-sets', label: m.nav_adult_image_sets(), icon: 'images', module: 'adult' }
 ] as const satisfies readonly NavItem[];
 
 const PRIMARY_NAV_ITEMS: readonly NavItem[] = [

@@ -18,6 +18,7 @@ SPDX-License-Identifier: EUPL-1.2
 			| '/automation'
 			| '/connections'
 			| '/adult/sources'
+			| '/adult/image-sets'
 			| '/adult/performers'
 			| '/adult/studios'
 			| '/system'
