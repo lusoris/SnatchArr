@@ -456,6 +456,15 @@ func (UnimplementedHandler) GetQueuePolicy(ctx context.Context, params GetQueueP
 	return r, ht.ErrNotImplemented
 }
 
+// GetRequestsSettings implements getRequestsSettings operation.
+//
+// Read community request settings. Any authenticated user may access this endpoint.
+//
+// GET /requests/settings
+func (UnimplementedHandler) GetRequestsSettings(ctx context.Context) (r *RequestsSettings, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // GetRun implements getRun operation.
 //
 // Load a single snatch run by ID.
@@ -1140,6 +1149,15 @@ func (UnimplementedHandler) UpdateProwlarrLink(ctx context.Context, req *Prowlar
 //
 // PUT /instances/{instanceId}/queue-policy
 func (UnimplementedHandler) UpdateQueuePolicy(ctx context.Context, req *QueuePolicy, params UpdateQueuePolicyParams) (r *QueuePolicy, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UpdateRequestsSettings implements updateRequestsSettings operation.
+//
+// Validate and persist community request settings (admin only).
+//
+// PUT /requests/settings
+func (UnimplementedHandler) UpdateRequestsSettings(ctx context.Context, req *RequestsSettings) (r *RequestsSettings, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

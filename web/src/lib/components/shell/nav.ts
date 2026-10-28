@@ -15,6 +15,7 @@ export type AppRoute =
 	| '/adult/performers'
 	| '/adult/studios'
 	| '/system'
+	| '/settings/requests'
 	| '/account';
 
 export interface NavItem {

@@ -883,6 +883,38 @@ func stepsSettingsAndSchedules() []routerStep {
 			},
 		},
 		{
+			op:     "getRequestsSettings",
+			method: http.MethodGet,
+			path:   func(_ *idsState) string { return "/requests/settings" },
+			want:   http.StatusOK,
+			capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
+				t.Helper()
+				if decoded["voting_mode"] == nil {
+					t.Fatalf("getRequestsSettings missing voting_mode: %v", decoded)
+				}
+			},
+		},
+		{
+			op:     "updateRequestsSettings",
+			method: http.MethodPut,
+			path:   func(_ *idsState) string { return "/requests/settings" },
+			body: func(_ *idsState) any {
+				return map[string]any{
+					"voting_mode":        "upvotes_only",
+					"allow_viewer_votes": true,
+					"visibility":         "public_attributed",
+					"voting_ttl_days":    14,
+				}
+			},
+			want: http.StatusOK,
+			capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
+				t.Helper()
+				if ttl, ok := decoded["voting_ttl_days"].(float64); !ok || int(ttl) != 14 {
+					t.Fatalf("updateRequestsSettings voting_ttl_days = %v, want 14", decoded["voting_ttl_days"])
+				}
+			},
+		},
+		{
 			op:     "getHourlyCaps",
 			method: http.MethodGet,
 			path:   func(_ *idsState) string { return "/hourly-caps" },

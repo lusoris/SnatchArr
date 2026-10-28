@@ -7827,6 +7827,145 @@ func (s *QueueStrike) SetImportRefused(val OptBool) {
 	s.ImportRefused = val
 }
 
+// Ref: #/components/schemas/RequestsSettings
+type RequestsSettings struct {
+	VotingMode       RequestsVotingMode `json:"voting_mode"`
+	AllowViewerVotes bool               `json:"allow_viewer_votes"`
+	Visibility       RequestsVisibility `json:"visibility"`
+	VotingTTLDays    int                `json:"voting_ttl_days"`
+}
+
+// GetVotingMode returns the value of VotingMode.
+func (s *RequestsSettings) GetVotingMode() RequestsVotingMode {
+	return s.VotingMode
+}
+
+// GetAllowViewerVotes returns the value of AllowViewerVotes.
+func (s *RequestsSettings) GetAllowViewerVotes() bool {
+	return s.AllowViewerVotes
+}
+
+// GetVisibility returns the value of Visibility.
+func (s *RequestsSettings) GetVisibility() RequestsVisibility {
+	return s.Visibility
+}
+
+// GetVotingTTLDays returns the value of VotingTTLDays.
+func (s *RequestsSettings) GetVotingTTLDays() int {
+	return s.VotingTTLDays
+}
+
+// SetVotingMode sets the value of VotingMode.
+func (s *RequestsSettings) SetVotingMode(val RequestsVotingMode) {
+	s.VotingMode = val
+}
+
+// SetAllowViewerVotes sets the value of AllowViewerVotes.
+func (s *RequestsSettings) SetAllowViewerVotes(val bool) {
+	s.AllowViewerVotes = val
+}
+
+// SetVisibility sets the value of Visibility.
+func (s *RequestsSettings) SetVisibility(val RequestsVisibility) {
+	s.Visibility = val
+}
+
+// SetVotingTTLDays sets the value of VotingTTLDays.
+func (s *RequestsSettings) SetVotingTTLDays(val int) {
+	s.VotingTTLDays = val
+}
+
+// Ref: #/components/schemas/RequestsVisibility
+type RequestsVisibility string
+
+const (
+	RequestsVisibilityPublicAttributed           RequestsVisibility = "public_attributed"
+	RequestsVisibilityPublicAnonymous            RequestsVisibility = "public_anonymous"
+	RequestsVisibilityPrivateToRequesterAndAdmin RequestsVisibility = "private_to_requester_and_admin"
+)
+
+// AllValues returns all RequestsVisibility values.
+func (RequestsVisibility) AllValues() []RequestsVisibility {
+	return []RequestsVisibility{
+		RequestsVisibilityPublicAttributed,
+		RequestsVisibilityPublicAnonymous,
+		RequestsVisibilityPrivateToRequesterAndAdmin,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s RequestsVisibility) MarshalText() ([]byte, error) {
+	switch s {
+	case RequestsVisibilityPublicAttributed:
+		return []byte(s), nil
+	case RequestsVisibilityPublicAnonymous:
+		return []byte(s), nil
+	case RequestsVisibilityPrivateToRequesterAndAdmin:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *RequestsVisibility) UnmarshalText(data []byte) error {
+	switch RequestsVisibility(data) {
+	case RequestsVisibilityPublicAttributed:
+		*s = RequestsVisibilityPublicAttributed
+		return nil
+	case RequestsVisibilityPublicAnonymous:
+		*s = RequestsVisibilityPublicAnonymous
+		return nil
+	case RequestsVisibilityPrivateToRequesterAndAdmin:
+		*s = RequestsVisibilityPrivateToRequesterAndAdmin
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/RequestsVotingMode
+type RequestsVotingMode string
+
+const (
+	RequestsVotingModeUpvotesOnly RequestsVotingMode = "upvotes_only"
+	RequestsVotingModeNetScore    RequestsVotingMode = "net_score"
+)
+
+// AllValues returns all RequestsVotingMode values.
+func (RequestsVotingMode) AllValues() []RequestsVotingMode {
+	return []RequestsVotingMode{
+		RequestsVotingModeUpvotesOnly,
+		RequestsVotingModeNetScore,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s RequestsVotingMode) MarshalText() ([]byte, error) {
+	switch s {
+	case RequestsVotingModeUpvotesOnly:
+		return []byte(s), nil
+	case RequestsVotingModeNetScore:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *RequestsVotingMode) UnmarshalText(data []byte) error {
+	switch RequestsVotingMode(data) {
+	case RequestsVotingModeUpvotesOnly:
+		*s = RequestsVotingModeUpvotesOnly
+		return nil
+	case RequestsVotingModeNetScore:
+		*s = RequestsVotingModeNetScore
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
 // RevokeAPIKeyNoContent is response for RevokeAPIKey operation.
 type RevokeAPIKeyNoContent struct{}
 

@@ -51,5 +51,6 @@ export const keys = {
 	adultPerformers: (favorite?: boolean) => ['adult', 'performers', favorite] as const,
 	adultPerformer: (id: string) => ['adult', 'performers', 'detail', id] as const,
 	adultStudios: (favorite?: boolean) => ['adult', 'studios', favorite] as const,
-	adultStudio: (id: string) => ['adult', 'studios', 'detail', id] as const
+	adultStudio: (id: string) => ['adult', 'studios', 'detail', id] as const,
+	requestsSettings: ['requests', 'settings'] as const
 };

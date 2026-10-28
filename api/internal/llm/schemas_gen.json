@@ -1367,6 +1367,12 @@
     ],
     "type": "object"
   },
+  "getRequestsSettings": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
   "getRun": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -3559,6 +3565,64 @@
     "required": [
       "body",
       "instanceId"
+    ],
+    "type": "object"
+  },
+  "updateRequestsSettings": {
+    "$defs": {
+      "RequestsSettings": {
+        "properties": {
+          "allow_viewer_votes": {
+            "default": true,
+            "type": "boolean"
+          },
+          "visibility": {
+            "$ref": "#/$defs/RequestsVisibility"
+          },
+          "voting_mode": {
+            "$ref": "#/$defs/RequestsVotingMode"
+          },
+          "voting_ttl_days": {
+            "default": 0,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "voting_mode",
+          "allow_viewer_votes",
+          "visibility",
+          "voting_ttl_days"
+        ],
+        "type": "object"
+      },
+      "RequestsVisibility": {
+        "default": "public_attributed",
+        "enum": [
+          "public_attributed",
+          "public_anonymous",
+          "private_to_requester_and_admin"
+        ],
+        "type": "string"
+      },
+      "RequestsVotingMode": {
+        "default": "upvotes_only",
+        "enum": [
+          "upvotes_only",
+          "net_score"
+        ],
+        "type": "string"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/RequestsSettings"
+      }
+    },
+    "required": [
+      "body"
     ],
     "type": "object"
   },

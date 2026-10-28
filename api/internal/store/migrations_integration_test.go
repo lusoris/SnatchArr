@@ -1461,3 +1461,47 @@ func TestMigration000046AdultNormalizedModel(t *testing.T) {
 	}
 	assertPost000046Up(t, st, seed)
 }
+
+func TestMigration000048RequestsSettings(t *testing.T) {
+	t.Parallel()
+	st := storetest.New(t)
+	m := storetest.Migrator(t, st)
+
+	stepDownToVersion(t, m, 47)
+	assertTableExists(t, st, "requests_settings", false)
+
+	if err := m.Steps(1); err != nil {
+		t.Fatalf("Steps(1) up to 48: %v", err)
+	}
+	assertTableExists(t, st, "requests_settings", true)
+
+	ctx := t.Context()
+	now := time.Date(2026, 10, 27, 20, 0, 0, 0, time.UTC)
+	const ins = `INSERT INTO requests_settings (singleton, voting_mode, allow_viewer_votes, visibility, voting_ttl_days, updated_at) VALUES (TRUE, 'upvotes_only', TRUE, 'public_attributed', 0, $1)`
+	if _, err := st.Pool().Exec(ctx, ins, now); err != nil {
+		t.Fatalf("insert requests_settings: %v", err)
+	}
+
+	if _, err := st.Pool().Exec(ctx, `UPDATE requests_settings SET voting_mode = 'invalid' WHERE singleton`); err == nil {
+		t.Fatal("expected error updating invalid voting_mode, got nil")
+	}
+	if _, err := st.Pool().Exec(ctx, `UPDATE requests_settings SET visibility = 'invalid' WHERE singleton`); err == nil {
+		t.Fatal("expected error updating invalid visibility, got nil")
+	}
+	if _, err := st.Pool().Exec(ctx, `UPDATE requests_settings SET voting_ttl_days = -1 WHERE singleton`); err == nil {
+		t.Fatal("expected error updating negative voting_ttl_days, got nil")
+	}
+	if _, err := st.Pool().Exec(ctx, `INSERT INTO requests_settings (singleton, voting_mode, allow_viewer_votes, visibility, voting_ttl_days, updated_at) VALUES (FALSE, 'upvotes_only', TRUE, 'public_attributed', 0, $1)`, now); err == nil {
+		t.Fatal("expected error inserting singleton=FALSE, got nil")
+	}
+
+	if err := m.Steps(-1); err != nil {
+		t.Fatalf("Steps(-1) down to 47: %v", err)
+	}
+	assertTableExists(t, st, "requests_settings", false)
+
+	if err := m.Steps(1); err != nil {
+		t.Fatalf("Steps(1) back up to 48: %v", err)
+	}
+	assertTableExists(t, st, "requests_settings", true)
+}
