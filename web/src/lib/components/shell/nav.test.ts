@@ -34,9 +34,9 @@ describe('nav model', () => {
 			'/automation',
 			'/connections',
 			'/adult/sources',
-			'/adult/image-sets',
 			'/adult/performers',
 			'/adult/studios',
+			'/adult/image-sets',
 			'/system'
 		]);
 	});
