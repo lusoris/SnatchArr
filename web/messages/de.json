@@ -491,6 +491,8 @@
 	"confirm_yes": "Bestätigen",
 	"confirm_back": "Zurück",
 	"runs_title": "Läufe",
+	"runs_show_all": "Alle {count} Läufe anzeigen",
+	"runs_show_fewer": "Weniger Läufe anzeigen",
 	"runs_empty": "Noch keine Läufe.",
 	"run_kind": "Art",
 	"run_status": "Status",

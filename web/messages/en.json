@@ -491,6 +491,8 @@
 	"confirm_yes": "Confirm",
 	"confirm_back": "Go back",
 	"runs_title": "Runs",
+	"runs_show_all": "Show all {count} runs",
+	"runs_show_fewer": "Show fewer runs",
 	"runs_empty": "No runs yet.",
 	"run_kind": "Kind",
 	"run_status": "Status",

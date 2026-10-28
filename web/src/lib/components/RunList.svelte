@@ -36,6 +36,10 @@ SPDX-License-Identifier: EUPL-1.2
 		onSuccess: () => toast.success(m.run_cancelled())
 	});
 
+	/** Run cards shown on a phone before the show-all toggle; wider screens scroll a bounded table. */
+	const PHONE_CAP = 5;
+	let showAll = $state(false);
+
 	/** Only a run the worker has not finished can be cancelled. */
 	function cancellable(run: Run): boolean {
 		return run.status === 'queued' || run.status === 'leased';
@@ -59,7 +63,7 @@ SPDX-License-Identifier: EUPL-1.2
 			tabindex="0"
 			aria-label={m.runs_region_label()}
 		>
-			<table class="table-stack table">
+			<table class="table-stack run-cards table">
 				<caption class="sr-only">{m.runs_title()}</caption>
 				<thead>
 					<tr>
@@ -72,8 +76,8 @@ SPDX-License-Identifier: EUPL-1.2
 					</tr>
 				</thead>
 				<tbody>
-					{#each runs.data ?? [] as run (run.id)}
-						<tr>
+					{#each runs.data ?? [] as run, index (run.id)}
+						<tr class:capped={!showAll && index >= PHONE_CAP}>
 							<td data-label={m.run_kind()}>
 								<div>
 									{snatchKindLabel(run.kind)}
@@ -109,5 +113,46 @@ SPDX-License-Identifier: EUPL-1.2
 				</tbody>
 			</table>
 		</div>
+		{#if (runs.data ?? []).length > PHONE_CAP}
+			<button
+				type="button"
+				class="text-brand mt-2 text-sm hover:underline md:hidden"
+				aria-expanded={showAll}
+				onclick={() => (showAll = !showAll)}
+			>
+				{showAll ? m.runs_show_fewer() : m.runs_show_all({ count: (runs.data ?? []).length })}
+			</button>
+		{/if}
 	{/if}
 </section>
+
+<style>
+	/* Phone run cards: two label/value columns keep five cards inside two viewport heights. */
+	@media (width < 48rem) {
+		.run-cards tbody {
+			gap: 0.5rem;
+		}
+		.run-cards tr {
+			display: grid;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: 0.125rem 0.75rem;
+			padding: 0.5rem 0.75rem;
+		}
+		.run-cards td {
+			flex-wrap: wrap;
+			justify-content: flex-start;
+			gap: 0 0.375rem;
+			font-size: 0.875rem;
+			line-height: 1.25rem;
+		}
+		.run-cards td::before {
+			font-size: 0.75rem;
+		}
+		.run-cards tr.capped {
+			display: none;
+		}
+		.run-cards td[data-label='']:empty {
+			display: none;
+		}
+	}
+</style>

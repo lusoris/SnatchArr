@@ -368,7 +368,7 @@ SPDX-License-Identifier: EUPL-1.2
 			bind:this={scrollContainer}
 			onscroll={handleScroll}
 			class="feed-scroll-container overflow-y-auto p-2 pb-[calc(4rem+env(safe-area-inset-bottom,0px))] md:pb-2 {fixedInstanceId
-				? 'h-[max(20rem,calc(100dvh-16rem))] md:h-[16rem]'
+				? 'h-[20rem] md:h-[16rem]'
 				: 'h-[max(24rem,calc(100dvh-24.5rem))] md:h-full md:min-h-0 md:flex-1'}"
 			role="log"
 			aria-live="polite"

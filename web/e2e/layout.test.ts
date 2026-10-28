@@ -692,7 +692,7 @@ if (!served) {
 		await assertScrollBudget(page, '/instances/[id]/activity');
 	});
 
-	test('authenticated: layout /instances/[id]/activity long data keeps the log box bounded on phone', async ({
+	test('authenticated: layout /instances/[id]/activity long data keeps the log box and run cards bounded on phone', async ({
 		page
 	}) => {
 		await page.setViewportSize(VIEWPORTS.phone);
@@ -707,6 +707,17 @@ if (!served) {
 			VIEWPORTS.phone.height
 		);
 		expect(box.scroll, 'long fixture must overflow the log box').toBeGreaterThan(box.client);
+		// Phone shows five run cards and a show-all toggle instead of a nested scroll box.
+		const runs = page.getByRole('region', { name: 'Run history' }).locator('tbody tr');
+		await expect(runs.filter({ visible: true })).toHaveCount(5);
+		await assertScrollBudget(page, '/instances/[id]/activity', 2 * VIEWPORTS.phone.height);
+		const toggle = page.getByRole('button', { name: 'Show all 20 runs' });
+		await toggle.click();
+		await expect(runs.filter({ visible: true })).toHaveCount(20);
+		await expect(page.getByRole('button', { name: 'Show fewer runs' })).toHaveAttribute(
+			'aria-expanded',
+			'true'
+		);
 	});
 }
 
