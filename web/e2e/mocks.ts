@@ -245,3 +245,50 @@ export async function mockSettingsApi(
 	await page.route('**/api/v1/notifications/rules', (route) => route.fulfill(json([])));
 	await page.route('**/api/v1/priority-presets', (route) => route.fulfill(json([])));
 }
+
+const sampleLicences = {
+	generatedBy: { 'cargo-about': '0.9.2', 'go-licenses': '2.0.1', pnpm: '12.11.2' },
+	packages: [
+		{
+			ecosystem: 'go',
+			name: 'github.com/gin-gonic/gin',
+			version: 'v1.10.0',
+			licence: 'MIT',
+			url: 'https://github.com/gin-gonic/gin',
+			text: 'MIT License'
+		}
+	]
+};
+
+/**
+ * Mocks the signed-in API, the system status and the static licences.json the About tab reads.
+ * `delayMs` holds the licences response back, `status` >= 400 answers it with a problem document.
+ */
+export async function mockAboutApi(
+	page: Page,
+	options?: { delayMs?: number; status?: number }
+): Promise<void> {
+	await mockSignedInApi(page);
+	await page.route('**/api/v1/system/status', (route) =>
+		route.fulfill(
+			json({
+				name: 'SnatchArr',
+				version: '0.1.0',
+				commit: 'abc1234',
+				build_date: '2026-10-20',
+				profile: 'dev',
+				setup_complete: true
+			})
+		)
+	);
+	await page.route('**/licences.json', async (route) => {
+		if (options?.delayMs) {
+			await new Promise((r) => setTimeout(r, options.delayMs));
+		}
+		if (options?.status && options.status >= 400) {
+			await route.fulfill(problemJson(options.status, 'Licences unavailable'));
+			return;
+		}
+		await route.fulfill(json(sampleLicences));
+	});
+}

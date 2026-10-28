@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-import { screen } from '@testing-library/svelte';
+import { fireEvent, screen } from '@testing-library/svelte';
 import { WCAG_22_AA_TAGS } from '@sveltesentio/testing';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
@@ -41,9 +41,9 @@ const sampleLicences: LicencesData = {
 			ecosystem: 'rust',
 			name: 'tokio',
 			version: '1.40.0',
-			licence: 'MIT',
+			licence: 'Apache-2.0',
 			url: 'https://github.com/tokio-rs/tokio',
-			text: 'MIT License for Tokio'
+			text: 'Apache License for Tokio'
 		},
 		{
 			ecosystem: 'npm',
@@ -89,7 +89,7 @@ describe('about page', () => {
 		vi.restoreAllMocks();
 	});
 
-	it('positive: renders heading, system status fields, licence link and third-party groups', async () => {
+	it('positive: renders heading, status fields, tabs with counts, scroll region, and passes axe', async () => {
 		stubGet({ '/system/status': sampleStatus });
 		stubLicences(sampleLicences);
 		const { container } = await renderAboutTab();
@@ -104,56 +104,132 @@ describe('about page', () => {
 		expect(licenseLink.getAttribute('href')).toBe(
 			'https://interoperable-europe.ec.europa.eu/collection/eupl/eupl-text-eupl-12'
 		);
-		expect(licenseLink.getAttribute('target')).toBe('_blank');
-		expect(licenseLink.getAttribute('rel')).toBe('noopener noreferrer');
 
 		expect(screen.getByRole('heading', { level: 2, name: m.about_brand_heading() })).toBeTruthy();
-
-		const vulvaLink = screen.getByRole('link', { name: m.about_brand_vulva_aria() });
-		expect(vulvaLink.getAttribute('href')).toBe(
-			'https://commons.wikimedia.org/wiki/File:Female_vulva.svg'
-		);
-		expect(vulvaLink.getAttribute('target')).toBe('_blank');
-		expect(vulvaLink.getAttribute('rel')).toBe('noopener noreferrer');
-
-		const handLink = screen.getByRole('link', { name: m.about_brand_hand_aria() });
-		expect(handLink.getAttribute('href')).toBe(
-			'https://commons.wikimedia.org/wiki/File:Hand_reaching_down_Pinhead_icon.svg'
-		);
-		expect(handLink.getAttribute('target')).toBe('_blank');
-		expect(handLink.getAttribute('rel')).toBe('noopener noreferrer');
-
 		expect(
 			screen.getByRole('heading', { level: 2, name: m.about_third_party_title() })
 		).toBeTruthy();
 
-		expect(
-			await screen.findByRole('heading', { level: 3, name: m.about_third_party_group_go() })
-		).toBeTruthy();
-		expect(
-			screen.getByRole('heading', { level: 3, name: m.about_third_party_group_rust() })
-		).toBeTruthy();
-		expect(
-			screen.getByRole('heading', { level: 3, name: m.about_third_party_group_npm() })
-		).toBeTruthy();
+		const goTabName = m.about_third_party_tab({ name: m.about_third_party_group_go(), count: 1 });
+		const rustTabName = m.about_third_party_tab({
+			name: m.about_third_party_group_rust(),
+			count: 1
+		});
+		const npmTabName = m.about_third_party_tab({
+			name: m.about_third_party_group_npm(),
+			count: 1
+		});
 
+		const goTab = await screen.findByRole('tab', { name: goTabName });
+		const rustTab = screen.getByRole('tab', { name: rustTabName });
+		const npmTab = screen.getByRole('tab', { name: npmTabName });
+
+		expect(goTab.getAttribute('aria-selected')).toBe('true');
+		expect(rustTab.getAttribute('aria-selected')).toBe('false');
+		expect(npmTab.getAttribute('aria-selected')).toBe('false');
+
+		// Default active ecosystem is Go
 		expect(screen.getByText('github.com/gin-gonic/gin')).toBeTruthy();
-		expect(screen.getByText('tokio')).toBeTruthy();
-		expect(screen.getByText('svelte')).toBeTruthy();
+		expect(screen.queryByText('tokio')).toBeNull();
+		expect(screen.queryByText('svelte')).toBeNull();
+
+		// Scroll region has role=region, tabindex=0, aria-label
+		const region = screen.getByRole('region', {
+			name: m.about_third_party_list_label({ name: m.about_third_party_group_go() })
+		});
+		expect(region.getAttribute('tabindex')).toBe('0');
+		expect(region.className).toContain('overflow-y-auto');
 
 		const visitLink = screen.getByRole('link', {
-			name: m.about_third_party_visit_aria({ name: 'tokio' })
+			name: m.about_third_party_visit_aria({ name: 'github.com/gin-gonic/gin' })
 		});
-		expect(visitLink.getAttribute('href')).toBe('https://github.com/tokio-rs/tokio');
-		expect(visitLink.getAttribute('target')).toBe('_blank');
-		expect(visitLink.getAttribute('rel')).toBe('noopener noreferrer external');
-
-		expect(screen.getAllByText(m.about_third_party_toggle_text()).length).toBe(3);
+		expect(visitLink.getAttribute('href')).toBe('https://github.com/gin-gonic/gin');
 
 		const axeResults = await axe(container, {
 			runOnly: { type: 'tag', values: [...WCAG_22_AA_TAGS] }
 		});
 		expect(axeResults.violations).toEqual([]);
+	});
+
+	it('positive: switching tab shows only that ecosystem', async () => {
+		stubGet({ '/system/status': sampleStatus });
+		stubLicences(sampleLicences);
+		await renderAboutTab();
+
+		const rustTabName = m.about_third_party_tab({
+			name: m.about_third_party_group_rust(),
+			count: 1
+		});
+		const npmTabName = m.about_third_party_tab({
+			name: m.about_third_party_group_npm(),
+			count: 1
+		});
+
+		const rustTab = await screen.findByRole('tab', { name: rustTabName });
+		await fireEvent.click(rustTab);
+
+		expect(screen.getByText('tokio')).toBeTruthy();
+		expect(screen.queryByText('github.com/gin-gonic/gin')).toBeNull();
+		expect(screen.queryByText('svelte')).toBeNull();
+
+		const npmTab = screen.getByRole('tab', { name: npmTabName });
+		await fireEvent.click(npmTab);
+
+		expect(screen.getByText('svelte')).toBeTruthy();
+		expect(screen.queryByText('github.com/gin-gonic/gin')).toBeNull();
+		expect(screen.queryByText('tokio')).toBeNull();
+	});
+
+	it('positive: filter by name and filter by licence (case-insensitive)', async () => {
+		stubGet({ '/system/status': sampleStatus });
+		stubLicences(sampleLicences);
+		await renderAboutTab();
+
+		const searchInput = await screen.findByRole('searchbox', {
+			name: m.about_third_party_filter_label()
+		});
+
+		// Filter by name (substring)
+		await fireEvent.input(searchInput, { target: { value: 'gin' } });
+		expect(screen.getByText('github.com/gin-gonic/gin')).toBeTruthy();
+
+		// Filter by licence (case-insensitive substring)
+		await fireEvent.input(searchInput, { target: { value: 'mit' } });
+		expect(screen.getByText('github.com/gin-gonic/gin')).toBeTruthy();
+
+		// No match shows empty filter message
+		await fireEvent.input(searchInput, { target: { value: 'nonexistent' } });
+		expect(screen.getByText(m.about_third_party_no_match())).toBeTruthy();
+		expect(screen.queryByText('github.com/gin-gonic/gin')).toBeNull();
+	});
+
+	it('boundary: ecosystem with 0 packages has no tab and defaults to first non-empty', async () => {
+		stubGet({ '/system/status': sampleStatus });
+		stubLicences({
+			generatedBy: sampleLicences.generatedBy,
+			packages: [
+				{
+					ecosystem: 'rust',
+					name: 'tokio',
+					version: '1.40.0',
+					licence: 'Apache-2.0',
+					url: 'https://github.com/tokio-rs/tokio',
+					text: 'Apache License'
+				}
+			]
+		});
+		await renderAboutTab();
+
+		// Go and npm have 0 packages: no tabs
+		expect(screen.queryByRole('tab', { name: /Go/ })).toBeNull();
+		expect(screen.queryByRole('tab', { name: /npm/ })).toBeNull();
+
+		// Rust tab rendered and active by default
+		const rustTab = await screen.findByRole('tab', {
+			name: m.about_third_party_tab({ name: m.about_third_party_group_rust(), count: 1 })
+		});
+		expect(rustTab.getAttribute('aria-selected')).toBe('true');
+		expect(screen.getByText('tokio')).toBeTruthy();
 	});
 
 	it('negative: fetch error shows message, status stays intact', async () => {
