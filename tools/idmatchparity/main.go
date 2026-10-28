@@ -8,15 +8,22 @@
 // unblocker, which still imports. The command reads both logs and compares, for one UTC day,
 // the downloads SnatchArr would import with the downloads the unblocker imported:
 //
-//	idmatchparity -day 2026-10-19 -snatcharr api.log -unblocker unblocker.log
+//	idmatchparity -day 2026-10-19 -snatcharr api.log -unblocker unblocker.log -out 2026-10-19.txt
+//
+// Optional -out writes the same output to a file. Build the idmatchparity image target with
+// `docker build --target idmatchparity -t idmatchparity .`, then mount logs and evidence:
+//
+//	docker run --rm --read-only -v <logs>:/in:ro -v <evidence>:/out idmatchparity -day D -snatcharr /in/api.log -unblocker /in/unblocker.log -out /out/D.txt
 //
 // The SnatchArr log holds the api's JSON lines, the unblocker log the lines of
 // `kubectl logs --timestamps`. Both may span the day and the slack around it. The row is
 // printed as one line of key=value fields, each mismatch as a line of its own. The exit status
-// is 0 for a green day, 1 for a red one and 2 when an input cannot be read.
+// is 0 for a green day, 1 for a red one and 2 when an input cannot be read, either log's
+// timestamp span does not overlap the requested day, or the output file cannot be written.
 package main
 
 import (
+	"bytes"
 	"errors"
 	"flag"
 	"fmt"
@@ -45,6 +52,7 @@ func run(args []string, stdout, stderr io.Writer) (int, error) {
 	day := fs.String("day", "", "UTC day to compare, YYYY-MM-DD")
 	snatchPath := fs.String("snatcharr", "", "SnatchArr api log, JSON lines")
 	unblockerPath := fs.String("unblocker", "", "unblocker log, kubectl logs --timestamps")
+	outPath := fs.String("out", "", "also write the output to this file")
 	slack := fs.Duration("slack", 2*time.Hour, "how far apart the two sides of one download may lie")
 	if err := fs.Parse(args); err != nil {
 		return exitInput, fmt.Errorf("flags: %w", err)
@@ -55,7 +63,7 @@ func run(args []string, stdout, stderr io.Writer) (int, error) {
 	}
 	in.slack = *slack
 	r := compare(in)
-	if err := r.write(stdout); err != nil {
+	if err := writeOutput(r, stdout, *outPath); err != nil {
 		return exitInput, err
 	}
 	if r.red() {
@@ -79,13 +87,45 @@ func load(day, snatchPath, unblockerPath string) (input, error) {
 	}); err != nil {
 		return input{}, err
 	}
+	if err := in.snatch.span.check(start, "-snatcharr", snatchPath); err != nil {
+		return input{}, err
+	}
 	if err := readFile(unblockerPath, func(r io.Reader) (perr error) {
 		in.unblocker, perr = parseUnblocker(r)
 		return perr
 	}); err != nil {
 		return input{}, err
 	}
+	if err := in.unblocker.span.check(start, "-unblocker", unblockerPath); err != nil {
+		return input{}, err
+	}
 	return in, nil
+}
+
+func (s *logSpan) check(start time.Time, flagName, path string) error {
+	if !s.seen || s.last.Before(start) || !s.first.Before(start.Add(day)) {
+		return fmt.Errorf("%s log %s: no lines on %s", flagName, path, start.Format(time.DateOnly))
+	}
+	return nil
+}
+
+func writeOutput(r row, stdout io.Writer, path string) error {
+	var buf bytes.Buffer
+	w := stdout
+	if path != "" {
+		w = io.MultiWriter(stdout, &buf)
+	}
+	if err := r.write(w); err != nil {
+		return err
+	}
+	if path == "" {
+		return nil
+	}
+	// #nosec G306 -- parity evidence contains no secrets and permits shared read access
+	if err := os.WriteFile(path, buf.Bytes(), 0o644); err != nil {
+		return fmt.Errorf("write output %s: %w", path, err)
+	}
+	return nil
 }
 
 func readFile(path string, parse func(io.Reader) error) (err error) {

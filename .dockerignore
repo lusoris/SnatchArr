@@ -10,7 +10,8 @@
 docs
 site
 deploy
-tools
+tools/*
+!tools/idmatchparity/
 **/.DS_Store
 **/*.log
 **/tmp
