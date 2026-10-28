@@ -41,6 +41,18 @@ func (s *Service) RenewSSOSession(ctx context.Context, m *session.Manager, w htt
 	return s.renewSession(ctx, m, w, r, userID, &origin)
 }
 
+// PopulateSSOSession records userID and origin on an already renewed session and saves it.
+func (s *Service) PopulateSSOSession(ctx context.Context, m *session.Manager, w http.ResponseWriter, sess *session.Session, userID uuid.UUID, origin SSOOrigin) error {
+	sess.Set(SessionUserKey, userID.String())
+	if err := setSSOOrigin(sess, origin); err != nil {
+		return err
+	}
+	if err := m.SaveContext(ctx, w, sess); err != nil {
+		return fmt.Errorf("auth: save session: %w", err)
+	}
+	return nil
+}
+
 // RevokeSession deletes the session row identified by sessID.
 func (s *Service) RevokeSession(ctx context.Context, sessID string) error {
 	if err := s.st.Q().DeleteSession(ctx, sessID); err != nil {
