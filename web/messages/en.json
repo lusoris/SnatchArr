@@ -958,6 +958,8 @@
 	"overview_all_instances_count": "All instances ({count})",
 	"overview_all_schedules_count": "All schedules ({count})",
 	"overview_all_prowlarr_count": "All Prowlarr links ({count})",
+	"overview_scroll_more": "{count} more below",
+	"overview_scroll_region": "{title}, scrollable list",
 	"runs_region_label": "Run history",
 	"event_detail_title": "Event details",
 	"event_title": "Title",

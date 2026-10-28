@@ -783,3 +783,40 @@ export async function assertGridRowAlignment(page: Page, route: string): Promise
 		);
 	}
 }
+
+/**
+ * A capped dashboard card keeps every row in a bounded body that scrolls inside the card: the
+ * body is a labelled region in the tab order, it is shorter than its content, and after the
+ * keyboard scrolls it to the end the card's last row lies inside the body's box.
+ */
+export async function assertCardScrollsToLast(
+	page: Page,
+	region: string,
+	lastRow: string
+): Promise<void> {
+	const body = page.getByRole('region', { name: `${region}, scrollable list`, exact: true });
+	await expect(body, `${region}: no scrolling region`).toBeVisible();
+	await expect(body, `${region}: region is not in the tab order`).toHaveAttribute('tabindex', '0');
+	const sizes = await body.evaluate((el) => ({
+		scrollHeight: el.scrollHeight,
+		clientHeight: el.clientHeight
+	}));
+	expect(
+		sizes.scrollHeight,
+		`${region}: body does not scroll (${sizes.scrollHeight}px content in ${sizes.clientHeight}px)`
+	).toBeGreaterThan(sizes.clientHeight);
+	await body.focus();
+	await page.keyboard.press('End');
+	const row = body.getByText(lastRow, { exact: true }).first();
+	await expect(row, `${region}: last row "${lastRow}" missing from the card`).toBeAttached();
+	await expect
+		.poll(
+			async () => {
+				const [b, r] = await Promise.all([body.boundingBox(), row.boundingBox()]);
+				if (!b || !r) return false;
+				return r.y >= b.y - 1 && r.y + r.height <= b.y + b.height + 1;
+			},
+			{ message: `${region}: last row "${lastRow}" not reachable inside the card` }
+		)
+		.toBe(true);
+}
