@@ -1,7 +1,9 @@
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
 #
-# Runs when release-please publishes a GitHub release (tag vX.Y.Z). After the image smoke test
+# Runs when release-please publishes a GitHub release (tag vX.Y.Z). The dogfood gate
+# (release-dogfood-gate.yml) first refuses a tag whose parent commit lacks a successful
+# snatcharr/dogfood status. After the image smoke test
 # it calls release-build.yml, which builds and pushes both images (multi-arch, SBOM +
 # provenance attestations, cosign keyless) and the Helm chart as an OCI artifact (cosign
 # keyless + provenance attestation) in a reusable workflow of its own (SLSA Build Level 3,
@@ -49,9 +51,19 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
 
+  dogfood-gate:
+    name: dogfood gate
+    needs: meta
+    permissions:
+      contents: read
+      statuses: read
+    uses: ./.github/workflows/release-dogfood-gate.yml
+    with:
+      tag: ${{ needs.meta.outputs.tag }}
+
   image-smoke:
     name: image smoke (e2e amd64 + arm64 exec)
-    needs: meta
+    needs: [meta, dogfood-gate]
     permissions:
       contents: read
     uses: ./.github/workflows/image-smoke.yml

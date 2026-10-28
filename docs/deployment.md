@@ -87,6 +87,18 @@ the charts up to 0.1.4 are signed only. 0.1.1 was rebuilt by hand from `main`: v
 tag it builds (`gh workflow run release.yml --ref v0.2.1 -f tag=v0.2.1`); the workflow
 refuses to start on any other ref.
 
+### Release dogfood gate
+
+Before the release workflow builds or pushes an artifact (`job dogfood-gate`, `.github/workflows/release-dogfood-gate.yml`), `tools/release/dogfood_gate.py` checks the release-please tag commit against `release-please-config.json`. The tag commit must have one parent, touch only the manifest, changelog and `extra-files` paths declared in `release-please-config.json`, and its first-parent commit on `main` must carry a newest commit status `snatcharr/dogfood=success`. Release refuses the tag otherwise.
+
+After the cluster serves that `main` commit, record the live MCP dogfood pass (`SNATCHARR_URL` and `SNATCHARR_API_KEY` in the environment):
+
+```sh
+python3 -I tools/release/dogfood_pass.py --repository <owner>/<repository> --commit <main sha> --post
+```
+
+`dogfood_pass.py` checks `/api/v1/system/status` for `<main sha>`, exercises `/api/v1/mcp` over Streamable HTTP (`initialize`, `tools/list`, and `tools/call` on every read-only tool with no required inputs), and posts `snatcharr/dogfood=success` when at least one read-only tool ran and none failed (`make release-dogfood-check` runs the offline self-tests).
+
 ## Helm
 
 Requirements: Kubernetes 1.29+, and the

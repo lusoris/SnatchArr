@@ -1,0 +1,41 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+#
+# Refuses a release tag whose first-parent commit on main lacks a recorded live dogfood pass
+# (commit status snatcharr/dogfood=success) or whose release commit touches files outside
+# release-please-config.json.
+name: release dogfood gate
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag to check, e.g. v0.2.2
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to check, e.g. v0.2.2
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  dogfood-gate:
+    name: dogfood gate
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      statuses: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: verify live dogfood status on tag parent commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: python3 -I tools/release/dogfood_gate.py --self-test && python3 -I tools/release/dogfood_gate.py --repository "$GITHUB_REPOSITORY" --tag "$TAG"
