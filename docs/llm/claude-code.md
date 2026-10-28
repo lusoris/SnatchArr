@@ -108,6 +108,8 @@ Alternatively, define the HTTP server in `.mcp.json`:
 }
 ```
 
+This repository's own `.mcp.json` carries this entry with the URL read from `${SNATCHARR_URL:-http://localhost:8080}`, so the server started by `make dev` works without extra setup. Export `SNATCHARR_URL` and `SNATCHARR_API_KEY` in the shell that starts Claude Code; the key never goes into the file. With `SNATCHARR_API_KEY` unset, `claude mcp list` warns about the missing variable and the server answers `401`.
+
 ---
 
 ## Agent Skills Installation
