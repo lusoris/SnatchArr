@@ -7,6 +7,13 @@
       ],
       "command": "praetorctl",
       "type": "stdio"
+    },
+    "snatcharr": {
+      "type": "http",
+      "url": "${SNATCHARR_URL:-http://localhost:8080}/api/v1/mcp",
+      "headers": {
+        "Authorization": "Bearer ${SNATCHARR_API_KEY}"
+      }
     }
   }
 }
