@@ -3079,7 +3079,7 @@ components:
         probe tells them apart by `appName`, `packageAuthor` and `version` of
         `system/status`. `unknown` is an answer that matches none of the others. An instance
         carries the product of its last successful connection test as `last_seen_product`.
-      enum: [readarr, bookshelf, chaptarr, readarr_faustvii, unknown]
+      enum: [readarr, bookshelf, chaptarr, readarr_faustvii, readarr_rresurrected, unknown]
 
     ProbeResult:
       type: object

@@ -3159,6 +3159,8 @@ func (s *ArrProduct) Decode(d *jx.Decoder) error {
 		*s = ArrProductChaptarr
 	case ArrProductReadarrFaustvii:
 		*s = ArrProductReadarrFaustvii
+	case ArrProductReadarrRresurrected:
+		*s = ArrProductReadarrRresurrected
 	case ArrProductUnknown:
 		*s = ArrProductUnknown
 	default:
