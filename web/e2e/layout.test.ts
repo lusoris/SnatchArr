@@ -691,6 +691,23 @@ if (!served) {
 		await expect(page.getByRole('log').locator('li').first()).toBeVisible();
 		await assertScrollBudget(page, '/instances/[id]/activity');
 	});
+
+	test('authenticated: layout /instances/[id]/activity long data keeps the log box bounded on phone', async ({
+		page
+	}) => {
+		await page.setViewportSize(VIEWPORTS.phone);
+		const id = instanceId();
+		await mockInstanceActivityLongDataRoute(page, id);
+		await page.goto(`/instances/${id}/activity`);
+		await page.waitForLoadState('networkidle');
+		const log = page.getByRole('log');
+		await expect(log.locator('li').first()).toBeVisible();
+		const box = await log.evaluate((el) => ({ client: el.clientHeight, scroll: el.scrollHeight }));
+		expect(box.client, 'activity log box taller than the phone viewport').toBeLessThanOrEqual(
+			VIEWPORTS.phone.height
+		);
+		expect(box.scroll, 'long fixture must overflow the log box').toBeGreaterThan(box.client);
+	});
 }
 
 test('authenticated: layout scroll budget planted negative', async ({ page }) => {

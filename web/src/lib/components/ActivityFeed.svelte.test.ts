@@ -227,7 +227,7 @@ describe('ActivityFeed', () => {
 
 		expect(screen.queryByLabelText(m.activity_filter_instance())).toBeNull();
 		const log = await screen.findByRole('log');
-		expect(log.className).toContain('min-h-[20rem]');
+		expect(log.className).toContain('h-[max(20rem,calc(100dvh-16rem))]');
 		expect(log.className).toContain('md:h-[16rem]');
 	});
 });
