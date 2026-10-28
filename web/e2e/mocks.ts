@@ -135,6 +135,16 @@ export async function mockSignedInApi(
 	await page.route('**/api/v1/configarr/status*', (route) =>
 		route.fulfill(json({ linked: false, watching: false }))
 	);
+	await page.route('**/api/v1/requests/settings*', (route) =>
+		route.fulfill(
+			json({
+				voting_mode: 'upvotes_only',
+				allow_viewer_votes: true,
+				visibility: 'public_attributed',
+				voting_ttl_days: 0
+			})
+		)
+	);
 }
 
 export async function mockModulesApi(

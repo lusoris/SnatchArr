@@ -36,6 +36,7 @@ var coreTags = map[string]struct{}{
 	"prowlarr":         {},
 	"configarr":        {},
 	"notifications":    {},
+	"requests":         {},
 }
 
 var httpMethods = []string{"get", "put", "post", "delete", "options", "head", "patch", "trace"}

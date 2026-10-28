@@ -24,6 +24,11 @@ SPDX-License-Identifier: EUPL-1.2
 		label: string;
 	}
 
+	interface SettingsPageItem extends ModuledItem {
+		href: '/settings/requests';
+		label: string;
+	}
+
 	interface Props {
 		navItems?: NavItem[];
 		activeModules?: ReadonlySet<string>;
@@ -53,6 +58,12 @@ SPDX-License-Identifier: EUPL-1.2
 
 	const visibleConnectionPages = $derived(filterByModule(connectionPages, activeModules));
 
+	const settingsPages: readonly SettingsPageItem[] = [
+		{ href: '/settings/requests', label: m.requests_settings_title() }
+	];
+
+	const visibleSettingsPages = $derived(filterByModule(settingsPages, activeModules));
+
 	const registry = $derived.by(() => {
 		const cmds: Command[] = [];
 
@@ -75,6 +86,19 @@ SPDX-License-Identifier: EUPL-1.2
 				title: page.label,
 				subtitle: m.nav_connections(),
 				group: m.nav_connections(),
+				run: async () => {
+					await goto(resolve(page.href));
+				}
+			});
+		}
+
+		for (const page of visibleSettingsPages) {
+			cmds.push({
+				id: `nav-${page.href}`,
+				title: page.label,
+				subtitle: m.nav_system(),
+				group: m.nav_system(),
+				keywords: ['settings', 'requests', 'community', page.label.toLowerCase()],
 				run: async () => {
 					await goto(resolve(page.href));
 				}

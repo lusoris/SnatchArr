@@ -133,6 +133,9 @@ type Querier interface {
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
 	GetQueuePolicy(ctx context.Context, instanceID uuid.UUID) (QueuePolicy, error)
+	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+	// SPDX-License-Identifier: EUPL-1.2
+	GetRequestsSettings(ctx context.Context) (RequestsSetting, error)
 	GetRun(ctx context.Context, id uuid.UUID) (SnatchRun, error)
 	GetSchedule(ctx context.Context, id uuid.UUID) (Schedule, error)
 	GetSeerrLink(ctx context.Context, id uuid.UUID) (SeerrLink, error)
@@ -324,6 +327,7 @@ type Querier interface {
 	UpsertPolicy(ctx context.Context, arg UpsertPolicyParams) error
 	UpsertQueuePolicy(ctx context.Context, arg UpsertQueuePolicyParams) error
 	UpsertQueueStrikes(ctx context.Context, arg UpsertQueueStrikesParams) error
+	UpsertRequestsSettings(ctx context.Context, arg UpsertRequestsSettingsParams) (RequestsSetting, error)
 	UpsertSeerrRequest(ctx context.Context, arg UpsertSeerrRequestParams) error
 	UpsertUserPreferences(ctx context.Context, arg UpsertUserPreferencesParams) (UsersPref, error)
 	UpsertWatchAwareItemWatch(ctx context.Context, arg UpsertWatchAwareItemWatchParams) error

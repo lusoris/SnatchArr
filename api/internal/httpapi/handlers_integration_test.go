@@ -48,6 +48,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/prowlarr"
 	"github.com/lusoris/SnatchArr/api/internal/prowlarrclient"
 	"github.com/lusoris/SnatchArr/api/internal/queue"
+	"github.com/lusoris/SnatchArr/api/internal/requests"
 	"github.com/lusoris/SnatchArr/api/internal/seerr"
 	"github.com/lusoris/SnatchArr/api/internal/seerrclient"
 	"github.com/lusoris/SnatchArr/api/internal/settings"
@@ -302,6 +303,7 @@ func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Genera
 	}
 	watchawareSvc := watchaware.NewService(st, enc, clk, ids, logger, modulesSvc, instSvc, nil, nil, nil)
 	adultSvc := adult.NewService(st, enc, clk, ids, modulesSvc, logger)
+	requestsSvc := requests.NewService(requests.NewStore(st, clk))
 	build := buildinfo.Info{Version: "test-ver", Commit: "test-commit", Date: "2026-10-14"}
 	h := &Handlers{
 		build:      build,
@@ -324,6 +326,7 @@ func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Genera
 		schedules:  schedules,
 		clients:    clients,
 		settings:   settingsSvc,
+		requests:   requestsSvc,
 		modules:    modulesSvc,
 		configarr:  configarrSvc,
 		seerr:      seerrSvc,

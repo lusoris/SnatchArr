@@ -140,6 +140,26 @@ func (s *ProwlarrLinkInput) setDefaults() {
 }
 
 // setDefaults set default value of fields.
+func (s *RequestsSettings) setDefaults() {
+	{
+		val := RequestsVotingMode("upvotes_only")
+		s.VotingMode = val
+	}
+	{
+		val := bool(true)
+		s.AllowViewerVotes = val
+	}
+	{
+		val := RequestsVisibility("public_attributed")
+		s.Visibility = val
+	}
+	{
+		val := int(0)
+		s.VotingTTLDays = val
+	}
+}
+
+// setDefaults set default value of fields.
 func (s *SeerrLinkInput) setDefaults() {
 	{
 		val := bool(true)

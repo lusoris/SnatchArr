@@ -737,6 +737,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/requests/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read community request settings
+         * @description Read community request settings. Any authenticated user may access this endpoint.
+         */
+        get: operations["getRequestsSettings"];
+        /**
+         * Replace community request settings
+         * @description Validate and persist community request settings (admin only).
+         */
+        put: operations["updateRequestsSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/priority-presets": {
         parameters: {
             query?: never;
@@ -2142,6 +2166,24 @@ export interface components {
             brand_mark?: components["schemas"]["BrandMark"] | null;
             /** @description Per-user SFW mode override; null or omitted follows the installation default. */
             sfw_mode?: components["schemas"]["SfwMode"] | null;
+        };
+        /**
+         * @default upvotes_only
+         * @enum {string}
+         */
+        RequestsVotingMode: "upvotes_only" | "net_score";
+        /**
+         * @default public_attributed
+         * @enum {string}
+         */
+        RequestsVisibility: "public_attributed" | "public_anonymous" | "private_to_requester_and_admin";
+        RequestsSettings: {
+            voting_mode: components["schemas"]["RequestsVotingMode"];
+            /** @default true */
+            allow_viewer_votes: boolean;
+            visibility: components["schemas"]["RequestsVisibility"];
+            /** @default 0 */
+            voting_ttl_days: number;
         };
         StateReset: {
             /** Format: uuid */
@@ -4087,6 +4129,52 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Settings"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getRequestsSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Community request settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestsSettings"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    updateRequestsSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RequestsSettings"];
+            };
+        };
+        responses: {
+            /** @description Updated community request settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestsSettings"];
                 };
             };
             default: components["responses"]["Problem"];
