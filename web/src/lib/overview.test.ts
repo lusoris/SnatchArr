@@ -7,6 +7,7 @@ import { logLevelLabel } from '#lib/logs.js';
 import { m } from '#lib/paraglide/messages.js';
 import {
 	activePauseText,
+	capRows,
 	eventLevelLabel,
 	eventStatus,
 	formatScheduleWindow,
@@ -383,5 +384,36 @@ describe('overview helper: eventLevelLabel', () => {
 
 	it('boundary: safely handles undefined without throwing', () => {
 		expect(eventLevelLabel(undefined)).toBe('');
+	});
+});
+
+describe('overview helper: capRows', () => {
+	it('positive: returns all rows and cut=false when list is below cap', () => {
+		expect(capRows([1, 2, 3], 5)).toEqual({
+			shown: [1, 2, 3],
+			total: 3,
+			cut: false
+		});
+	});
+
+	it('boundary: returns all rows and cut=false when list length equals cap', () => {
+		expect(capRows(['a', 'b', 'c'], 3)).toEqual({
+			shown: ['a', 'b', 'c'],
+			total: 3,
+			cut: false
+		});
+	});
+
+	it('positive: slices to cap and reports cut=true with total when list exceeds cap', () => {
+		expect(capRows([1, 2, 3, 4, 5], 3)).toEqual({
+			shown: [1, 2, 3],
+			total: 5,
+			cut: true
+		});
+	});
+
+	it('negative: handles empty and undefined lists with cut=false and total=0', () => {
+		expect(capRows([], 4)).toEqual({ shown: [], total: 0, cut: false });
+		expect(capRows(undefined, 4)).toEqual({ shown: [], total: 0, cut: false });
 	});
 });

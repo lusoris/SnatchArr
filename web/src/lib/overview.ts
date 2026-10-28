@@ -15,6 +15,28 @@ export type ProwlarrStatus = components['schemas']['ProwlarrStatus'];
 export type Run = components['schemas']['Run'];
 export type Schedule = components['schemas']['Schedule'];
 
+export const OVERVIEW_FLEET_CAP = 5;
+export const OVERVIEW_EVENTS_CAP = 4;
+export const OVERVIEW_SCHEDULES_CAP = 3;
+export const OVERVIEW_PROWLARR_CAP = 2;
+
+export interface CappedRows<T> {
+	shown: T[];
+	total: number;
+	cut: boolean;
+}
+
+export function capRows<T>(list: readonly T[] | undefined, n: number): CappedRows<T> {
+	const items = list ?? [];
+	const total = items.length;
+	const cap = Math.max(0, n);
+	return {
+		shown: items.slice(0, cap),
+		total,
+		cut: total > cap
+	};
+}
+
 export interface SearchesKpi {
 	used: number;
 	cap: number;

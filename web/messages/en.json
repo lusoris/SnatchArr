@@ -491,6 +491,8 @@
 	"confirm_yes": "Confirm",
 	"confirm_back": "Go back",
 	"runs_title": "Runs",
+	"runs_show_all": "Show all {count} runs",
+	"runs_show_fewer": "Show fewer runs",
 	"runs_empty": "No runs yet.",
 	"run_kind": "Kind",
 	"run_status": "Status",
@@ -952,5 +954,9 @@
 	"adult_image_sets_close": "Close",
 	"adult_image_sets_detail_title": "Image set items",
 	"adult_image_sets_empty_set": "This image set contains no images.",
-	"help_adult_image_sets": "Image sets display local picture sets scanned from the configured directory. Administrators can trigger a manual scan, which also writes the ignore file at the directory root."
+	"help_adult_image_sets": "Image sets display local picture sets scanned from the configured directory. Administrators can trigger a manual scan, which also writes the ignore file at the directory root.",
+	"overview_all_instances_count": "All instances ({count})",
+	"overview_all_schedules_count": "All schedules ({count})",
+	"overview_all_prowlarr_count": "All Prowlarr links ({count})",
+	"runs_region_label": "Run history"
 }
