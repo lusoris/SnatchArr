@@ -179,14 +179,14 @@ test('679: adult image sets scan, stashignore creation, detail retrieval, file s
 
 		// UI: /adult/image-sets shows both sets, ignore-file status, and scan toast
 		await page.goto('/adult/image-sets');
-		await expect(page.getByText('set-one')).toBeVisible();
-		await expect(page.getByText('set-two')).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'set-one', exact: true })).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'set-two', exact: true })).toBeVisible();
 		await expect(page.getByText('Ignore file present')).toBeVisible();
 
 		const scanBtn = page.getByRole('button', { name: 'Scan now' });
 		await expect(scanBtn).toBeVisible();
 		await scanBtn.click();
-		await expect(page.getByText('Scan completed: 3 sets, 3 items')).toBeVisible();
+		await expect(page.getByText('Scanned 3 image sets and 3 items')).toBeVisible();
 
 		// Restore module off
 		await setAdultModuleState(page, csrf, false, tmpDir);
