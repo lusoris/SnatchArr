@@ -3,12 +3,12 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
-	import { resolve } from '$app/paths';
 	import { createSentioQuery } from '@sveltesentio/query';
 	import Dialog from '@sveltesentio/ui/dialog/component';
 	import { api } from '#lib/api/client.js';
 	import type { components } from '#lib/api/schema.js';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
+	import InstanceLink from '#lib/components/instance/InstanceLink.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
 	import { keys } from '#lib/query.js';
@@ -33,7 +33,7 @@ SPDX-License-Identifier: EUPL-1.2
 	bind:open
 	title={m.run_detail_title()}
 	idBase={dialogId}
-	class="max-h-[85dvh] overflow-y-auto border border-line bg-surface p-6"
+	class="max-h-[85dvh] grid-cols-[minmax(0,1fr)] overflow-y-auto border border-line bg-surface p-6"
 >
 	{#if run.isPending}
 		<p aria-live="polite">{m.loading()}</p>
@@ -48,11 +48,9 @@ SPDX-License-Identifier: EUPL-1.2
 			<dd>{runStatusLabel(data.status)}</dd>
 			<dt>{m.run_kind()}</dt>
 			<dd>{snatchKindLabel(data.kind)}</dd>
-			<dt>{m.instance_name()}</dt>
+			<dt>{m.activity_filter_instance()}</dt>
 			<dd>
-				<a class="hover:underline" href={resolve('/instances/[id]', { id: data.instance_id })}
-					>{data.instance_id}</a
-				>
+				<InstanceLink id={data.instance_id} />
 			</dd>
 			<dt>{m.run_queued()}</dt>
 			<dd>{formatWhen(data.queued_at, getLocale())}</dd>

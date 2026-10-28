@@ -17,7 +17,7 @@ describe('RunDialog', () => {
 	afterEach(() => vi.restoreAllMocks());
 
 	it('fetches and renders run fields and instance href', async () => {
-		const get = stubGet({ '/runs/{runId}': run });
+		const get = stubGet({ '/runs/{runId}': run, '/instances': [] });
 		renderWithQuery(RunDialog, { runId: run.id, open: true });
 		await screen.findByText(runStatusLabel(run.status));
 		const dialog = within(screen.getByRole('dialog'));
@@ -32,6 +32,7 @@ describe('RunDialog', () => {
 
 	it('announces an RFC 9457 problem', async () => {
 		stubGet({
+			'/instances': [],
 			'/runs/{runId}': new ProblemError({
 				type: 'about:blank',
 				status: 503,
@@ -75,10 +76,12 @@ describe('RunDialog selection', () => {
 	afterEach(() => vi.restoreAllMocks());
 	it('fetches the newly selected run when its id changes', async () => {
 		const next = sampleRuns[1];
+		const runs = [run, next];
 		const get = vi
 			.spyOn(api, 'GET')
-			.mockResolvedValueOnce({ data: run } as never)
-			.mockResolvedValueOnce({ data: next } as never);
+			.mockImplementation(async (path: string) =>
+				path === '/instances' ? ({ data: [] } as never) : ({ data: runs.shift() } as never)
+			);
 		const view = renderWithQuery(RunDialog, { runId: run.id, open: true });
 		expect(await screen.findByText(runStatusLabel(run.status))).toBeTruthy();
 		await view.rerender({ runId: next.id, open: true });

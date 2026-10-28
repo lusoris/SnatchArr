@@ -3,10 +3,10 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
-	import { resolve } from '$app/paths';
 	import Dialog from '@sveltesentio/ui/dialog/component';
 	import type { components } from '#lib/api/schema.js';
 	import StatusIcon from '#lib/components/StatusIcon.svelte';
+	import InstanceLink from '#lib/components/instance/InstanceLink.svelte';
 	import RunDialog from './RunDialog.svelte';
 	import { eventStatus, eventLevelLabel } from '#lib/overview.js';
 	import { m } from '#lib/paraglide/messages.js';
@@ -28,7 +28,7 @@ SPDX-License-Identifier: EUPL-1.2
 <Dialog
 	title={m.event_detail_title()}
 	idBase={dialogId}
-	class="max-h-[85dvh] overflow-y-auto border border-line bg-surface p-6"
+	class="max-h-[85dvh] grid-cols-[minmax(0,1fr)] overflow-y-auto border border-line bg-surface p-6"
 	bind:open={
 		() => open && !runOpen,
 		(value) => {
@@ -53,12 +53,9 @@ SPDX-License-Identifier: EUPL-1.2
 		<dt>{m.event_time()}</dt>
 		<dd>{formatWhen(event.ts, getLocale()) || '–'}</dd>
 		{#if event.instance_id}
-			<dt>{m.instance_name()}</dt>
+			<dt>{m.activity_filter_instance()}</dt>
 			<dd>
-				<a
-					class="break-all hover:underline"
-					href={resolve('/instances/[id]', { id: event.instance_id })}>{event.instance_id}</a
-				>
+				<InstanceLink id={event.instance_id} />
 			</dd>
 		{/if}
 		{#if event.run_id}

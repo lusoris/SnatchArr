@@ -7,7 +7,7 @@ import type { components } from '#lib/api/schema.js';
 import { eventLevelLabel } from '#lib/overview.js';
 import { formatWhen } from '#lib/stamina.js';
 import { getLocale } from '#lib/paraglide/runtime.js';
-import { renderWithQuery, stubGet } from '#lib/testing/harness.js';
+import { forkInstance, renderWithQuery, stubGet } from '#lib/testing/harness.js';
 import EventDialog from './EventDialog.svelte';
 
 const event: components['schemas']['Event'] = {
@@ -24,9 +24,13 @@ const event: components['schemas']['Event'] = {
 describe('EventDialog', () => {
 	afterEach(() => vi.restoreAllMocks());
 
-	it('renders fields, payload and instance href', () => {
+	it('renders fields, payload and instance href', async () => {
+		stubGet({ '/instances': [{ ...forkInstance, id: 'instance-1' }] });
 		renderWithQuery(EventDialog, { event, open: true });
 		const dialog = within(screen.getByRole('dialog'));
+		expect((await dialog.findByRole('link', { name: forkInstance.name })).textContent).toBe(
+			forkInstance.name
+		);
 		expect(dialog.getByText(event.type)).toBeTruthy();
 		expect(dialog.getByText(event.title!)).toBeTruthy();
 		expect(dialog.getByText(eventLevelLabel(event.level))).toBeTruthy();
@@ -38,6 +42,7 @@ describe('EventDialog', () => {
 
 	it('shows the problem from the linked run', async () => {
 		stubGet({
+			'/instances': [],
 			'/runs/{runId}': new ProblemError({
 				type: 'about:blank',
 				status: 404,
