@@ -960,6 +960,8 @@
 	"overview_all_instances_count": "Alle Instanzen ({count})",
 	"overview_all_schedules_count": "Alle Zeitpläne ({count})",
 	"overview_all_prowlarr_count": "Alle Prowlarr-Verknüpfungen ({count})",
+	"overview_scroll_more": "{count} weitere darunter",
+	"overview_scroll_region": "{title}, scrollbare Liste",
 	"runs_region_label": "Laufverlauf",
 	"event_detail_title": "Ereignisdetails",
 	"event_title": "Titel",

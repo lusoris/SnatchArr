@@ -15,26 +15,28 @@ export type ProwlarrStatus = components['schemas']['ProwlarrStatus'];
 export type Run = components['schemas']['Run'];
 export type Schedule = components['schemas']['Schedule'];
 
+// How many rows of each dashboard card show before its list scrolls inside the card.
 export const OVERVIEW_FLEET_CAP = 5;
 export const OVERVIEW_EVENTS_CAP = 4;
 export const OVERVIEW_SCHEDULES_CAP = 3;
 export const OVERVIEW_PROWLARR_CAP = 2;
 
 export interface CappedRows<T> {
-	shown: T[];
+	/** Every row; the card shows `cap` of them and scrolls to the rest. */
+	rows: T[];
 	total: number;
+	cap: number;
+	/** Rows below the visible cap, reached by scrolling the card's list. */
+	hidden: number;
 	cut: boolean;
 }
 
 export function capRows<T>(list: readonly T[] | undefined, n: number): CappedRows<T> {
-	const items = list ?? [];
-	const total = items.length;
+	const rows = [...(list ?? [])];
+	const total = rows.length;
 	const cap = Math.max(0, n);
-	return {
-		shown: items.slice(0, cap),
-		total,
-		cut: total > cap
-	};
+	const hidden = Math.max(0, total - cap);
+	return { rows, total, cap, hidden, cut: hidden > 0 };
 }
 
 export interface SearchesKpi {
