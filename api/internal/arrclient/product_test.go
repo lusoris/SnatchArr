@@ -19,6 +19,7 @@ const (
 	linuxserver   = "[linuxserver.io](https://www.linuxserver.io/)"
 	pennydreadful = "pennydreadful"
 	faustvii      = "[Faustvii](https://github.com/Faustvii)"
+	rresurrected  = "[ricetim](https://github.com/ricetim)"
 )
 
 // TestProbe_Product probes a fake that answers system/status the way each product does.
@@ -40,15 +41,20 @@ func TestProbe_Product(t *testing.T) {
 		{"bookshelf as recorded", domain.KindReadarr, "Readarr", "0.4.21.182", pennydreadful, domain.ProductBookshelf},
 		{"chaptarr as recorded", domain.KindReadarr, "Chaptarr", "0.9.965.0", "", domain.ProductChaptarr},
 		{"faustvii as recorded", domain.KindReadarr, "Readarr", "0.10.0.0", faustvii, domain.ProductReadarrFaustvii},
+		{"rresurrected as its image builds it", domain.KindReadarr, "Readarr", "11.3.1.0", rresurrected, domain.ProductReadarrRresurrected},
+		{"rresurrected packager in another case", domain.KindReadarr, "Readarr", "11.3.1.0", "[RiceTim](https://github.com/RiceTim)", domain.ProductReadarrRresurrected},
 		{"readarr from another packager", domain.KindReadarr, "Readarr", "0.4.18.2805", "", domain.ProductReadarr},
 		{"the packager in another case", domain.KindReadarr, "readarr", "0.4.21.182", "PennyDreadful", domain.ProductBookshelf},
 		{"the name in another case", domain.KindReadarr, "CHAPTARR", "0.9.965.0", "", domain.ProductChaptarr},
 		// The packager decides before the version: a fork may still carry a version Readarr built.
 		{"bookshelf at a version readarr built", domain.KindReadarr, "Readarr", "0.4.18.2805", pennydreadful, domain.ProductBookshelf},
 		{"faustvii at a version readarr built", domain.KindReadarr, "Readarr", "0.4.19.0", faustvii, domain.ProductReadarrFaustvii},
+		{"rresurrected at a version readarr built", domain.KindReadarr, "Readarr", "0.4.18.2805", rresurrected, domain.ProductReadarrRresurrected},
 		// Negative.
 		{"a newer readarr from nobody known", domain.KindReadarr, "Readarr", "0.4.21.182", linuxserver, domain.ProductUnknown},
 		{"another application", domain.KindReadarr, "Lidarr", "0.4.18.2805", linuxserver, domain.ProductUnknown},
+		{"a packager whose name starts like rresurrected's", domain.KindReadarr, "Readarr", "11.3.1.0", "[ricetimber](https://github.com/ricetimber)", domain.ProductUnknown},
+		{"rresurrected's packager on another application", domain.KindReadarr, "Lidarr", "11.3.1.0", rresurrected, domain.ProductUnknown},
 		{"another application from a known packager", domain.KindReadarr, "Lidarr", "0.4.21.182", pennydreadful, domain.ProductUnknown},
 		{"no name", domain.KindReadarr, "", "0.4.18.2805", "", domain.ProductUnknown},
 		{"no version", domain.KindReadarr, "Readarr", "", "", domain.ProductUnknown},

@@ -100,6 +100,7 @@ func TestProbeResultToOAS(t *testing.T) {
 		{"bookshelf", domain.ProductBookshelf, oas.NewOptArrProduct(oas.ArrProductBookshelf)},
 		{"chaptarr", domain.ProductChaptarr, oas.NewOptArrProduct(oas.ArrProductChaptarr)},
 		{"faustvii", domain.ProductReadarrFaustvii, oas.NewOptArrProduct(oas.ArrProductReadarrFaustvii)},
+		{"rresurrected", domain.ProductReadarrRresurrected, oas.NewOptArrProduct(oas.ArrProductReadarrRresurrected)},
 		// Negative: an answer the probe could not name is still an answer, and so is a value
 		// this build does not know (a row a newer build wrote).
 		{"unknown", domain.ProductUnknown, oas.NewOptArrProduct(oas.ArrProductUnknown)},

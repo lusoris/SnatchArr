@@ -121,6 +121,7 @@ difference.
 | not `Readarr` | any | any | not recognised |
 | `Readarr` | contains `pennydreadful` | any | Bookshelf |
 | `Readarr` | contains `Faustvii` | any | Readarr (Faustvii fork) |
+| `Readarr` | contains `(https://github.com/ricetim)` | any | Readarr (rresurrected) |
 | `Readarr` | anything else | 0.4.19 or lower | Readarr |
 | `Readarr` | anything else | higher, or not a version | not recognised |
 
@@ -135,7 +136,10 @@ Two limits follow from the fields:
   told from Readarr.
 
 A name is not a statement of support: the test succeeds for every row, also for "not
-recognised". The tested forks are the three in the table under [Forks](#forks). The rule
+recognised". The tested forks are the three in the table under [Forks](#forks).
+[readarr-rresurrected](https://github.com/ricetim/readarr-rresurrected) is named by the
+packager link its image writes (`[ricetim](https://github.com/ricetim)`, from the image's
+`Dockerfile`), but no contract test runs against it. The rule
 is `readarrProduct` in
 `api/internal/arrclient/product.go`; `TestProbe_Product` in the same directory holds the
 answers each product gave on 2026-10-11. The API carries the name as `product` of
@@ -153,6 +157,7 @@ show it next to the kind:
 | Bookshelf | `readarr · Bookshelf` |
 | Chaptarr | `readarr · Chaptarr` |
 | Readarr (Faustvii fork) | `readarr · Readarr (Faustvii fork)` |
+| Readarr (rresurrected) | `readarr · Readarr (rresurrected)` |
 | not recognised | `readarr · unknown product` |
 | Readarr, or no test yet | `readarr (legacy)` |
 
