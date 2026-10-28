@@ -1,0 +1,178 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+suite: networkpolicy public https egress
+templates:
+  - networkpolicy.yaml
+release:
+  name: snatcharr
+  namespace: snatcharr
+set:
+  networkPolicy:
+    enabled: true
+tests:
+  - it: positive - default allows the API TCP 443 to public IPv4 and IPv6, private ranges excluded
+    documentSelector:
+      path: metadata.name
+      value: snatcharr-api
+    asserts:
+      - contains:
+          path: spec.egress
+          content:
+            to:
+              - ipBlock:
+                  cidr: 0.0.0.0/0
+                  except:
+                    - 10.0.0.0/8
+                    - 172.16.0.0/12
+                    - 192.168.0.0/16
+                    - 100.64.0.0/10
+                    - 169.254.0.0/16
+              - ipBlock:
+                  cidr: ::/0
+                  except:
+                    - fc00::/7
+                    - fe80::/10
+            ports:
+              - port: 443
+                protocol: TCP
+
+  - it: negative - toggle off renders no public egress rule for the API
+    documentSelector:
+      path: metadata.name
+      value: snatcharr-api
+    set:
+      networkPolicy:
+        publicHttpsEgress:
+          enabled: false
+    asserts:
+      - notContains:
+          path: spec.egress
+          content:
+            ports:
+              - port: 443
+                protocol: TCP
+          any: true
+
+  - it: negative - the worker never gets the public egress rule
+    documentSelector:
+      path: metadata.name
+      value: snatcharr-worker
+    asserts:
+      - notContains:
+          path: spec.egress
+          content:
+            ports:
+              - port: 443
+                protocol: TCP
+          any: true
+
+  - it: boundary - an empty except list allows every public address without an except key
+    documentSelector:
+      path: metadata.name
+      value: snatcharr-api
+    set:
+      networkPolicy:
+        publicHttpsEgress:
+          except: []
+    asserts:
+      - contains:
+          path: spec.egress
+          content:
+            to:
+              - ipBlock:
+                  cidr: 0.0.0.0/0
+              - ipBlock:
+                  cidr: ::/0
+            ports:
+              - port: 443
+                protocol: TCP
+
+  - it: negative - an except entry that is no CIDR fails the schema
+    set:
+      networkPolicy:
+        publicHttpsEgress:
+          except:
+            - example.org
+    asserts:
+      - failedTemplate: {}
+
+  - it: negative - an IPv4 address out of range fails the schema
+    set:
+      networkPolicy:
+        publicHttpsEgress:
+          except:
+            - "999.999.999.999/8"
+    asserts:
+      - failedTemplate: {}
+
+  - it: negative - an IPv4 prefix above 32 fails the schema
+    set:
+      networkPolicy:
+        publicHttpsEgress:
+          except:
+            - "10.0.0.0/33"
+    asserts:
+      - failedTemplate: {}
+
+  - it: negative - an IPv4 /0 except, which Kubernetes refuses fails the schema
+    set:
+      networkPolicy:
+        publicHttpsEgress:
+          except:
+            - "10.0.0.0/0"
+    asserts:
+      - failedTemplate: {}
+
+  - it: negative - an IPv6 /0 except, which Kubernetes refuses fails the schema
+    set:
+      networkPolicy:
+        publicHttpsEgress:
+          except:
+            - "::/0"
+    asserts:
+      - failedTemplate: {}
+
+  - it: negative - a malformed IPv6 address fails the schema
+    set:
+      networkPolicy:
+        publicHttpsEgress:
+          except:
+            - "::::/64"
+    asserts:
+      - failedTemplate: {}
+
+  - it: negative - an IPv6 prefix above 128 fails the schema
+    set:
+      networkPolicy:
+        publicHttpsEgress:
+          except:
+            - "fc00::/129"
+    asserts:
+      - failedTemplate: {}
+
+  - it: boundary - the narrowest IPv4 and IPv6 except entries pass the schema
+    documentSelector:
+      path: metadata.name
+      value: snatcharr-api
+    set:
+      networkPolicy:
+        publicHttpsEgress:
+          except:
+            - 203.0.113.7/32
+            - 2001:db8::7/128
+    asserts:
+      - contains:
+          path: spec.egress
+          content:
+            to:
+              - ipBlock:
+                  cidr: 0.0.0.0/0
+                  except:
+                    - 203.0.113.7/32
+              - ipBlock:
+                  cidr: ::/0
+                  except:
+                    - 2001:db8::7/128
+            ports:
+              - port: 443
+                protocol: TCP

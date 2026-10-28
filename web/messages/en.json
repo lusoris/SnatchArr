@@ -901,6 +901,8 @@
 	"adult_sources_source_last_sync": "Last sync: {when}",
 	"adult_sources_source_never": "Never synchronized",
 	"adult_sources_source_error": "Sync error: {error}",
+	"egress_blocked_hint": "Egress may be blocked by network policy: the connection timed out while dialling.",
+	"egress_raw_error": "Raw error",
 	"adult_sources_priority_badge": "Priority {priority}",
 	"help_adult_sources": "Catalogue sources connect SnatchArr to GraphQL metadata directories to synchronize favourite performers and studios. Administrators can add endpoints with write-only encrypted API keys, set source priority, and trigger manual synchronization.",
 	"nav_adult_performers": "Performers",

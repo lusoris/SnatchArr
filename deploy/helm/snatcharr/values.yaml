@@ -269,6 +269,21 @@ networkPolicy:
   #       - port: 8686
   #         protocol: TCP
   arrPeers: []
+  # The API calls services on the internet over HTTPS: OIDC discovery, catalogue sources and
+  # update checks. This rule allows the API (not the worker) TCP 443 to every address outside
+  # `except`. Off, those calls time out unless extraEgress allows them.
+  publicHttpsEgress:
+    enabled: true
+    # Private (RFC 1918), shared (RFC 6598), link-local and IPv6 unique-local and link-local
+    # ranges. The cloud metadata address 169.254.169.254 lies in 169.254.0.0/16.
+    except:
+      - 10.0.0.0/8
+      - 172.16.0.0/12
+      - 192.168.0.0/16
+      - 100.64.0.0/10
+      - 169.254.0.0/16
+      - fc00::/7
+      - fe80::/10
   # Extra egress rules appended to both components.
   extraEgress: []
 
