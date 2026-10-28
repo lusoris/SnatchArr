@@ -165,6 +165,16 @@ test('679: adult image sets scan, stashignore creation, detail retrieval, file s
 		const fileBytes = await fileRes.body();
 		expect(fileBytes.equals(pngBytes)).toBe(true);
 
+		// Negative: an indexed file swapped for a symlink after the scan is refused (#825)
+		const secondItemId = detailData.items[1].id;
+		const secondPath = path.join(set1Dir, '002.png');
+		fs.unlinkSync(secondPath);
+		fs.symlinkSync(outsideFile, secondPath);
+		const swappedRes = await page.request.get(`/api/v1/adult/image-items/${secondItemId}/file`);
+		expect(swappedRes.ok()).toBe(false);
+		fs.unlinkSync(secondPath);
+		fs.writeFileSync(secondPath, pngBytes);
+
 		// Negative: unknown item ID -> 404
 		const unknownItemRes = await page.request.get(
 			'/api/v1/adult/image-items/00000000-0000-0000-0000-000000000000/file'
