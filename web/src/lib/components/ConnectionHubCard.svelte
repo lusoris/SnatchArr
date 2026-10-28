@@ -4,6 +4,7 @@ SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import AppLogo from '#lib/components/AppLogo.svelte';
 	import NavIcon from '#lib/components/shell/NavIcon.svelte';
 	import ProblemNote from './ProblemNote.svelte';
 	import StatusIcon from './StatusIcon.svelte';
@@ -25,9 +26,11 @@ SPDX-License-Identifier: EUPL-1.2
 		error: unknown;
 		summary: ServiceStatusSummary;
 		showAdd: boolean;
+		kind?: string;
 	}
 
-	const { icon, title, href, description, pending, error, summary, showAdd }: Props = $props();
+	const { icon, title, href, description, pending, error, summary, showAdd, kind }: Props =
+		$props();
 </script>
 
 {#if pending}
@@ -51,7 +54,11 @@ SPDX-License-Identifier: EUPL-1.2
 			<span
 				class="text-brand flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--color-secondary)]"
 			>
-				<NavIcon name={icon} size={22} />
+				{#if kind}
+					<AppLogo {kind} size={22} />
+				{:else}
+					<NavIcon name={icon} size={22} />
+				{/if}
 			</span>
 			<h3 class="text-base font-semibold text-fg">
 				<a href={resolve(href)} class="hover:underline">{title}</a>
@@ -68,7 +75,11 @@ SPDX-License-Identifier: EUPL-1.2
 				<span
 					class="text-brand flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--color-secondary)]"
 				>
-					<NavIcon name={icon} size={22} />
+					{#if kind}
+						<AppLogo {kind} size={22} />
+					{:else}
+						<NavIcon name={icon} size={22} />
+					{/if}
 				</span>
 				<h3 class="text-base font-semibold text-fg">
 					<a href={resolve(href)} class="hover:underline">{title}</a>

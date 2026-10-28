@@ -110,7 +110,7 @@ export default defineConfig({
 						{
 							name: 'authenticated',
 							testMatch:
-								/(a11y|phone-overflow|layout|nonblocking|keyboard-nav|inp|instance-tabs|redirects)\.test\.ts/,
+								/(a11y|phone-overflow|layout|nonblocking|keyboard-nav|inp|instance-tabs|app-logos|redirects)\.test\.ts/,
 							grep: /authenticated:|nonblocking:/,
 							dependencies: ['auth-setup'],
 							use: { browserName: 'chromium', storageState: authFile }

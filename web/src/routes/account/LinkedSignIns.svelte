@@ -7,6 +7,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { toast } from 'svelte-sonner';
 	import { api, describeError, problemStatus } from '#lib/api/client.js';
 	import type { components } from '#lib/api/schema.js';
+	import AppLogo from '#lib/components/AppLogo.svelte';
 	import ConfirmAction from '#lib/components/ConfirmAction.svelte';
 	import Field from '#lib/components/Field.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
@@ -149,9 +150,14 @@ SPDX-License-Identifier: EUPL-1.2
 	}
 </script>
 
-{#snippet providerHeader(providerLabel: string, identity: UserIdentity | undefined)}
+{#snippet providerHeader(providerLabel: string, identity: UserIdentity | undefined, kind?: string)}
 	<div>
-		<h3 class="font-medium text-fg">{providerLabel}</h3>
+		<div class="flex items-center gap-2">
+			{#if kind}
+				<AppLogo {kind} size={18} />
+			{/if}
+			<h3 class="font-medium text-fg">{providerLabel}</h3>
+		</div>
 		<p class="text-sm text-subtle">
 			{#if identity}
 				<span>{m.linked_sign_in_status_linked()}</span>
@@ -199,7 +205,7 @@ SPDX-License-Identifier: EUPL-1.2
 				{#if sso.data?.jellyfin}
 					<div class="flex flex-col gap-3 py-4 first:pt-0 last:pb-0">
 						<div class="flex flex-wrap items-center justify-between gap-4">
-							{@render providerHeader(m.linked_sign_in_provider_jellyfin(), jfIdentity)}
+							{@render providerHeader(m.linked_sign_in_provider_jellyfin(), jfIdentity, 'jellyfin')}
 							<div>
 								{#if jfIdentity}
 									{@render unlinkButton('jellyfin', m.linked_sign_in_provider_jellyfin())}

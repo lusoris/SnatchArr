@@ -14,6 +14,7 @@ import { renderWithQuery, stubGet } from '#lib/testing/harness.js';
 import ConnectionsHubPage from './+page.svelte';
 
 vi.mock('$app/paths', () => ({
+	asset: (path: string) => path,
 	resolve: (path: string) => path
 }));
 

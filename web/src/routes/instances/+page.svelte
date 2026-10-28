@@ -7,6 +7,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { createSentioQuery, createSentioMutation } from '@sveltesentio/query';
 	import { toast } from 'svelte-sonner';
 	import { api, describeError } from '#lib/api/client.js';
+	import AppLogo from '#lib/components/AppLogo.svelte';
 	import CheckState from '#lib/components/CheckState.svelte';
 	import Field from '#lib/components/Field.svelte';
 	import KindSelect from '#lib/components/KindSelect.svelte';
@@ -82,9 +83,12 @@ SPDX-License-Identifier: EUPL-1.2
 				<li class="card flex flex-col gap-2">
 					<div class="flex items-start justify-between gap-2">
 						<div class="flex flex-col gap-0.5">
-							<a class="font-semibold underline" href={resolve(`instances/${inst.id}`)}
-								>{inst.name}</a
-							>
+							<div class="flex items-center gap-2">
+								<AppLogo kind={inst.kind} size={18} />
+								<a class="font-semibold underline" href={resolve(`instances/${inst.id}`)}
+									>{inst.name}</a
+								>
+							</div>
 							<div class="flex flex-wrap items-center gap-1.5 text-xs text-subtle">
 								<span
 									><span class="sr-only">{m.instance_kind()}: </span>{instanceKindLabel(
@@ -145,6 +149,7 @@ SPDX-License-Identifier: EUPL-1.2
 					<tr>
 						<td>
 							<div class="flex items-center gap-2">
+								<AppLogo kind={inst.kind} size={18} />
 								<a class="underline" href={resolve(`instances/${inst.id}`)}>{inst.name}</a>
 							</div>
 						</td>

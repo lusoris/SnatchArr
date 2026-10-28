@@ -42,6 +42,7 @@ contracts contracts
 governance governance
 docs docs
 licences licences
+logos logos
 release-e2e-map release'
 
 DRAFT_STEP='Stop on a draft pull request'

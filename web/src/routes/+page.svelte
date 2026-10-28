@@ -8,6 +8,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { toast } from 'svelte-sonner';
 	import { api, describeError } from '#lib/api/client.js';
 	import type { components } from '#lib/api/schema.js';
+	import AppLogo from '#lib/components/AppLogo.svelte';
 	import ConfirmAction from '#lib/components/ConfirmAction.svelte';
 	import EmptyFleetOnboarding from '#lib/components/EmptyFleetOnboarding.svelte';
 	import { HELP_MAP } from '#lib/help.js';
@@ -254,18 +255,21 @@ SPDX-License-Identifier: EUPL-1.2
 											<StatusIcon status={instStatus.status} label={instStatus.label} size={16} />
 										</td>
 										<td data-label={m.instance_name()}>
-											<div class="min-w-0 text-right md:text-left">
-												<a
-													href={resolve('/instances/[id]', { id: inst.id })}
-													class="font-medium hover:underline"
-												>
-													{inst.name}
-												</a>
-												{#if inst.last_error}
-													<div class="truncate text-xs text-danger" title={inst.last_error}>
-														{inst.last_error}
-													</div>
-												{/if}
+											<div class="flex items-center justify-end gap-2 md:justify-start">
+												<AppLogo kind={inst.kind} size={18} />
+												<div class="min-w-0 text-right md:text-left">
+													<a
+														href={resolve('/instances/[id]', { id: inst.id })}
+														class="font-medium hover:underline"
+													>
+														{inst.name}
+													</a>
+													{#if inst.last_error}
+														<div class="truncate text-xs text-danger" title={inst.last_error}>
+															{inst.last_error}
+														</div>
+													{/if}
+												</div>
 											</div>
 										</td>
 										<td data-label={m.instance_kind()}>

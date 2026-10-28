@@ -5,8 +5,14 @@ SPDX-License-Identifier: EUPL-1.2
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import type { components } from '#lib/api/schema.js';
+	import {
+		DOWNLOAD_CLIENT_KINDS,
+		downloadClientName,
+		type DownloadClientKind
+	} from '#lib/kinds.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { fieldErrors, filledPart } from '#lib/problem.js';
+	import AppLogo from './AppLogo.svelte';
 	import FormCard from './FormCard.svelte';
 	import InstanceSelect from './InstanceSelect.svelte';
 	import SecretField from './SecretField.svelte';
@@ -14,7 +20,6 @@ SPDX-License-Identifier: EUPL-1.2
 
 	type DownloadClient = components['schemas']['DownloadClient'];
 	type DownloadClientInput = components['schemas']['DownloadClientInput'];
-	type DownloadClientKind = components['schemas']['DownloadClientKind'];
 	type Instance = components['schemas']['Instance'];
 
 	interface Props {
@@ -32,14 +37,7 @@ SPDX-License-Identifier: EUPL-1.2
 
 	const { client, instances, pending, error, onsave, oncancel, ontest, testing }: Props = $props();
 
-	const kinds: readonly { value: DownloadClientKind; label: string }[] = [
-		{ value: 'qbittorrent', label: 'qBittorrent' },
-		{ value: 'transmission', label: 'Transmission' },
-		{ value: 'deluge', label: 'Deluge' },
-		{ value: 'rtorrent', label: 'rTorrent' },
-		{ value: 'sabnzbd', label: 'SABnzbd' },
-		{ value: 'nzbget', label: 'NZBGet' }
-	];
+	const kinds = DOWNLOAD_CLIENT_KINDS.map((value) => ({ value, label: downloadClientName(value) }));
 
 	const initial = untrack(() => client);
 	let kind = $state<DownloadClientKind>(initial?.kind ?? 'qbittorrent');
@@ -82,7 +80,10 @@ SPDX-License-Identifier: EUPL-1.2
 	{testing}
 >
 	<div class="field flex flex-col gap-1">
-		<label for="dlclient-kind" class="text-sm font-medium">{m.dlclients_kind()}</label>
+		<div class="flex items-center gap-2">
+			<label for="dlclient-kind" class="text-sm font-medium">{m.dlclients_kind()}</label>
+			<AppLogo {kind} size={18} />
+		</div>
 		<select id="dlclient-kind" class="select" bind:value={kind}>
 			{#each kinds as k (k.value)}
 				<option value={k.value}>{k.label}</option>
