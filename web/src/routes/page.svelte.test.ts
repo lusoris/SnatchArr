@@ -245,7 +245,7 @@ describe('dashboard overview redo', () => {
 		expect(screen.getByText('10 / 100')).toBeTruthy();
 	});
 
-	it('caps recent events in right column with link to /activity', async () => {
+	it('keeps every recent event in the scrolling list with a more-rows hint and link to /activity', async () => {
 		const sampleEvents = Array.from({ length: 12 }, (_, i) => ({
 			id: i + 1,
 			instance_id: forkInstance.id,
@@ -263,11 +263,12 @@ describe('dashboard overview redo', () => {
 		expect(screen.getByRole('link', { name: m.overview_view_all_activity() })).toBeTruthy();
 
 		expect(screen.getByText('Event 1')).toBeTruthy();
-		expect(screen.getByText(`Event ${OVERVIEW_EVENTS_CAP}`)).toBeTruthy();
-		expect(screen.queryByText(`Event ${OVERVIEW_EVENTS_CAP + 1}`)).toBeNull();
-		expect(screen.getAllByRole('img', { name: logLevelLabel('info') }).length).toBe(
-			OVERVIEW_EVENTS_CAP
-		);
+		expect(screen.getByText(`Event ${OVERVIEW_EVENTS_CAP + 1}`)).toBeTruthy();
+		expect(screen.getByText('Event 12')).toBeTruthy();
+		expect(screen.getAllByRole('img', { name: logLevelLabel('info') }).length).toBe(12);
+		expect(
+			screen.getByText(m.overview_scroll_more({ count: 12 - OVERVIEW_EVENTS_CAP }))
+		).toBeTruthy();
 	});
 
 	it('renders active pause badge with instance target on schedules card and ignores non-pause or inactive', async () => {
@@ -423,7 +424,7 @@ describe('dashboard overview redo', () => {
 		expect(screen.queryByRole('table', { name: m.overview_fleet_title() })).toBeNull();
 	});
 
-	it('caps fleet table rows and shows total count link when instances exceed cap', async () => {
+	it('keeps every fleet row in the scrolling table and shows the total count link when instances exceed cap', async () => {
 		const manyInstances = Array.from({ length: 10 }, (_, i) => ({
 			...forkInstance,
 			id: `00000000-0000-0000-0000-${String(i + 1).padStart(12, '0')}`,
@@ -434,7 +435,10 @@ describe('dashboard overview redo', () => {
 
 		expect(await screen.findByRole('link', { name: 'Instance 1' })).toBeTruthy();
 		expect(screen.getByRole('link', { name: `Instance ${OVERVIEW_FLEET_CAP}` })).toBeTruthy();
-		expect(screen.queryByRole('link', { name: `Instance ${OVERVIEW_FLEET_CAP + 1}` })).toBeNull();
+		expect(screen.getByRole('link', { name: 'Instance 10' })).toBeTruthy();
+		expect(
+			screen.getByText(m.overview_scroll_more({ count: 10 - OVERVIEW_FLEET_CAP }))
+		).toBeTruthy();
 		const allLink = screen.getByRole('link', {
 			name: m.overview_all_instances_count({ count: 10 })
 		});
@@ -455,9 +459,10 @@ describe('dashboard overview redo', () => {
 		expect(
 			screen.queryByRole('link', { name: m.overview_all_instances_count({ count: 3 }) })
 		).toBeNull();
+		expect(screen.queryByTestId('card-scroll-hint')).toBeNull();
 	});
 
-	it('caps enabled schedules and Prowlarr meters with count links when cut', async () => {
+	it('keeps every enabled schedule and Prowlarr meter in scrolling lists with count links when cut', async () => {
 		const schedules = Array.from({ length: 6 }, (_, i) => ({
 			id: `sched-${i + 1}`,
 			name: `Sched ${i + 1}`,
@@ -488,14 +493,18 @@ describe('dashboard overview redo', () => {
 
 		expect(await screen.findByText('Sched 1')).toBeTruthy();
 		expect(screen.getByText(`Sched ${OVERVIEW_SCHEDULES_CAP}`)).toBeTruthy();
-		expect(screen.queryByText(`Sched ${OVERVIEW_SCHEDULES_CAP + 1}`)).toBeNull();
+		expect(screen.getByText('Sched 5')).toBeTruthy();
+		expect(screen.queryByText('Sched 6')).toBeNull();
 		expect(
 			screen.getByRole('link', { name: m.overview_all_schedules_count({ count: 5 }) })
 		).toBeTruthy();
 
 		expect(screen.getByText('Prowlarr Link 1')).toBeTruthy();
 		expect(screen.getByText(`Prowlarr Link ${OVERVIEW_PROWLARR_CAP}`)).toBeTruthy();
-		expect(screen.queryByText(`Prowlarr Link ${OVERVIEW_PROWLARR_CAP + 1}`)).toBeNull();
+		expect(screen.getByText('Prowlarr Link 5')).toBeTruthy();
+		expect(
+			screen.getByText(m.overview_scroll_more({ count: 5 - OVERVIEW_PROWLARR_CAP }))
+		).toBeTruthy();
 		expect(
 			screen.getByRole('link', { name: m.overview_all_prowlarr_count({ count: 5 }) })
 		).toBeTruthy();
