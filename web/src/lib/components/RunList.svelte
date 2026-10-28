@@ -8,6 +8,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { toast } from 'svelte-sonner';
 	import { api } from '#lib/api/client.js';
 	import type { components } from '#lib/api/schema.js';
+	import RunDialog from '#lib/components/activity/RunDialog.svelte';
 	import ConfirmAction from '#lib/components/ConfirmAction.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import { m } from '#lib/paraglide/messages.js';
@@ -38,6 +39,8 @@ SPDX-License-Identifier: EUPL-1.2
 
 	/** Run cards shown on a phone before the show-all toggle; wider screens scroll a bounded table. */
 	const PHONE_CAP = 5;
+	let selectedRunId = $state<string | null>(null);
+	let runOpen = $state(false);
 	let showAll = $state(false);
 
 	/** Only a run the worker has not finished can be cancelled. */
@@ -89,7 +92,14 @@ SPDX-License-Identifier: EUPL-1.2
 								</div>
 							</td>
 							<td data-label={m.run_status()}>
-								{runStatusLabel(run.status)}{run.error ? ` · ${run.error}` : ''}
+								<button
+									type="button"
+									class="hover:underline"
+									onclick={() => {
+										selectedRunId = run.id;
+										runOpen = true;
+									}}>{runStatusLabel(run.status)}{run.error ? ` · ${run.error}` : ''}</button
+								>
 							</td>
 							<td data-label={m.run_started()}>
 								{formatWhen(run.started_at ?? run.queued_at, getLocale())}
@@ -125,6 +135,10 @@ SPDX-License-Identifier: EUPL-1.2
 		{/if}
 	{/if}
 </section>
+
+{#if runOpen && selectedRunId}
+	<RunDialog runId={selectedRunId} bind:open={runOpen} />
+{/if}
 
 <style>
 	/* Phone run cards: two label/value columns keep five cards inside two viewport heights. */

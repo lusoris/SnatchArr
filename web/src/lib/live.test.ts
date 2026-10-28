@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	eventToLiveFrame,
+	liveFrameToEvent,
 	levelTokenClasses,
 	mergeLiveFrames,
 	parseFrame,
@@ -116,6 +117,32 @@ describe('live events helper', () => {
 			expect(levelTokenClasses('debug').textClass).toBe('text-subtle');
 			expect(levelTokenClasses('info').textClass).toBe('text-brand');
 			expect(levelTokenClasses(undefined).textClass).toBe('text-brand');
+		});
+	});
+});
+
+describe('liveFrameToEvent', () => {
+	it('preserves associated event fields', () => {
+		const frame: LiveFrame = {
+			event: 'search_dispatched',
+			id: 42,
+			instance_id: 'i1',
+			run_id: 'r1',
+			level: 'warn',
+			ts: '2026-10-28T12:00:00Z',
+			title: 'Movie'
+		};
+		expect(liveFrameToEvent(frame)).toMatchObject(frame);
+	});
+	it('defaults an unknown level to info', () => {
+		expect(liveFrameToEvent({ event: 'unknown', level: 'invalid' }).level).toBe('info');
+	});
+	it('retains absent associations and timestamps as empty values', () => {
+		expect(liveFrameToEvent({ event: 'worker_contact' })).toMatchObject({
+			id: 0,
+			type: 'worker_contact',
+			instance_id: '',
+			ts: ''
 		});
 	});
 });
