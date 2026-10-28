@@ -45,29 +45,36 @@ func buildRequestBody(rawBody any, comps Components, props map[string]any, req *
 	return nil
 }
 
-func resolveBodyRef(raw any, comps Components) (map[string]any, error) {
+func resolveComponentRef(raw any, kind, prefix string, store map[string]any) (map[string]any, error) {
 	m, ok := raw.(map[string]any)
 	if !ok {
-		return nil, fmt.Errorf("%w: requestBody must be an object", ErrInvalidRef)
+		return nil, fmt.Errorf("%w: %s must be an object", ErrInvalidRef, kind)
 	}
 	ref, _ := m["$ref"].(string)
 	if ref == "" {
 		return m, nil
 	}
-	const prefix = "#/components/requestBodies/"
 	name, ok := strings.CutPrefix(ref, prefix)
 	if !ok {
-		return nil, fmt.Errorf("%w: unsupported requestBody ref %q", ErrInvalidRef, ref)
+		return nil, fmt.Errorf("%w: unsupported %s ref %q", ErrInvalidRef, kind, ref)
 	}
-	target, exists := comps.RequestBodies[name]
+	target, exists := store[name]
 	if !exists {
-		return nil, fmt.Errorf("%w: unknown requestBody ref %q", ErrInvalidRef, ref)
+		return nil, fmt.Errorf("%w: unknown %s ref %q", ErrInvalidRef, kind, ref)
 	}
 	targetMap, ok := target.(map[string]any)
 	if !ok {
-		return nil, fmt.Errorf("%w: referenced requestBody %q is invalid", ErrInvalidRef, ref)
+		return nil, fmt.Errorf("%w: referenced %s %q is invalid", ErrInvalidRef, kind, ref)
 	}
 	return targetMap, nil
+}
+
+func resolveBodyRef(raw any, comps Components) (map[string]any, error) {
+	return resolveComponentRef(raw, "requestBody", "#/components/requestBodies/", comps.RequestBodies)
+}
+
+func resolveSchemaRef(raw any, comps Components) (map[string]any, error) {
+	return resolveComponentRef(raw, "schema", "#/components/schemas/", comps.Schemas)
 }
 
 func collectDefs(root any, comps Components, defs map[string]any) error {

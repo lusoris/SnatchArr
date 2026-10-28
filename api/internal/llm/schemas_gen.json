@@ -1243,6 +1243,8 @@
     "properties": {
       "id": {
         "description": "Unique module identifier",
+        "maxLength": 64,
+        "pattern": "^[a-z][a-z0-9_]{0,63}$",
         "type": "string"
       }
     },
@@ -1593,11 +1595,13 @@
     "additionalProperties": false,
     "properties": {
       "limit": {
+        "default": 50,
         "maximum": 200,
         "minimum": 1,
         "type": "integer"
       },
       "offset": {
+        "default": 0,
         "minimum": 0,
         "type": "integer"
       }
@@ -1617,6 +1621,7 @@
         "type": "boolean"
       },
       "limit": {
+        "default": 50,
         "description": "Maximum performers to return",
         "maximum": 200,
         "minimum": 1,
@@ -1644,6 +1649,7 @@
         "type": "boolean"
       },
       "limit": {
+        "default": 50,
         "description": "Maximum studios to return",
         "maximum": 200,
         "minimum": 1,
@@ -1671,6 +1677,7 @@
         "type": "string"
       },
       "page_size": {
+        "default": 100,
         "maximum": 1000,
         "minimum": 1,
         "type": "integer"
@@ -1699,19 +1706,28 @@
     "properties": {
       "level": {
         "description": "Minimum level; records below it are left out.",
+        "enum": [
+          "debug",
+          "info",
+          "warn",
+          "error"
+        ],
         "type": "string"
       },
       "limit": {
+        "default": 200,
         "maximum": 1000,
         "minimum": 1,
         "type": "integer"
       },
       "q": {
         "description": "Case-insensitive substring of the message, an attribute key or value.",
+        "maxLength": 200,
         "type": "string"
       },
       "source": {
         "description": "Source: api, worker for every worker, or worker:\u003cid\u003e for one worker.",
+        "maxLength": 160,
         "type": "string"
       }
     },
@@ -1784,11 +1800,13 @@
         "type": "string"
       },
       "limit": {
+        "default": 50,
         "maximum": 500,
         "minimum": 1,
         "type": "integer"
       },
       "offset": {
+        "default": 0,
         "minimum": 0,
         "type": "integer"
       }
@@ -1822,6 +1840,7 @@
         "type": "string"
       },
       "limit": {
+        "default": 100,
         "maximum": 500,
         "minimum": 1,
         "type": "integer"
@@ -1838,6 +1857,7 @@
         "type": "string"
       },
       "limit": {
+        "default": 100,
         "maximum": 500,
         "minimum": 1,
         "type": "integer"
@@ -2709,6 +2729,8 @@
       },
       "id": {
         "description": "Unique module identifier",
+        "maxLength": 64,
+        "pattern": "^[a-z][a-z0-9_]{0,63}$",
         "type": "string"
       }
     },
