@@ -9,6 +9,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { api, describeError } from '#lib/api/client.js';
 	import type { components } from '#lib/api/schema.js';
 	import AdminFormSlot from '#lib/components/AdminFormSlot.svelte';
+	import AppLogo from '#lib/components/AppLogo.svelte';
 	import ConfirmDelete from '#lib/components/ConfirmDelete.svelte';
 	import DownloadClientForm from '#lib/components/DownloadClientForm.svelte';
 	import PageHeader from '#lib/components/PageHeader.svelte';
@@ -18,6 +19,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { FormEditor } from '#lib/formEditor.svelte.js';
 	import { deleteCallbacks, probeFailed, saveSuccess } from '#lib/forms.js';
 	import { HELP_MAP } from '#lib/help.js';
+	import { downloadClientName } from '#lib/kinds.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { keys } from '#lib/query.js';
 	import { session } from '#lib/session.svelte.js';
@@ -180,15 +182,18 @@ SPDX-License-Identifier: EUPL-1.2
 								{@const st = statusFor(c.id)}
 								<tr>
 									<td data-label={m.instance_name()}>
-										<h2
-											class="text-sm font-semibold break-words md:max-w-28 md:truncate"
-											title={c.name}
-										>
-											{c.name}
-										</h2>
+										<div class="flex items-center gap-2">
+											<AppLogo kind={c.kind} size={18} />
+											<h2
+												class="text-sm font-semibold break-words md:max-w-28 md:truncate"
+												title={c.name}
+											>
+												{c.name}
+											</h2>
+										</div>
 									</td>
 									<td class="text-sm text-subtle" data-label={m.dlclients_kind()}
-										>{c.kind} · {c.protocol}</td
+										>{downloadClientName(c.kind)} · {c.protocol}</td
 									>
 									<td class="text-sm text-subtle" data-label={m.instance_url()}
 										><UrlText

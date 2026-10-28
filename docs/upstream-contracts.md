@@ -131,6 +131,21 @@ that there is one mechanism.
 - no `.gitignore` rule covers the cache directory, or
 - `.dockerignore` does not exclude it, or re-includes part of it.
 
+## Third-party logos
+
+Every integrated app shows its own logo beside its name. The logos live in `web/static/logos/`, unmodified copies of upstream files at a pinned commit. `web/src/lib/logos/logos.json` is the one record of each logo's source repository, commit, path, SHA-256, copyright, SPDX licence and trademark owner, and `REUSE.toml` carries the same copyright and licence per file.
+
+A few vendors' terms do not allow their mark as an integration icon. These apps are declared exceptions in the manifest: the UI shows a generic category icon (chat, torrent client, media server) next to the plain product name instead. The exceptions are Discord, Emby, Microsoft Teams, rTorrent, Slack and Telegram.
+
+`make logos-check` (CI job `logos`) runs `tools/logos/fetch.py --check` and its planted cases in `tools/logos/fetch_test.sh`. The check reads every app kind from `api/openapi/openapi.yaml` and fails, naming the app, when:
+
+- an app has neither a logo nor a declared exception,
+- a logo file is missing or its hash differs from the manifest,
+- the REUSE annotation of a logo disagrees with the manifest, or
+- an exception is added that is not on the declared list.
+
+`make logos` downloads the files again from the pinned commits; to move a logo to a newer commit, change `commit` and `sha256` in the manifest, run `make logos`, then `make logos-check`.
+
 ## Renewing a pin
 
 Renovate reads `source.repository` and `source.commit` (`customManagers` in `renovate.json`)

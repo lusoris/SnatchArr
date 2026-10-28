@@ -51,3 +51,42 @@ export function kindLabel(kind: string): string {
 	const name = kindName(kind);
 	return isLegacyKind(kind) ? m.instance_kind_legacy({ kind: name }) : name;
 }
+
+export type DownloadClientKind = components['schemas']['DownloadClientKind'];
+export type ChannelKind = components['schemas']['NotificationChannelKind'];
+
+// Product names, the same in every locale, in the order the forms offer them.
+const downloadClientNames = {
+	qbittorrent: 'qBittorrent',
+	transmission: 'Transmission',
+	deluge: 'Deluge',
+	rtorrent: 'rTorrent',
+	sabnzbd: 'SABnzbd',
+	nzbget: 'NZBGet'
+} as const satisfies Record<DownloadClientKind, string>;
+
+const channelNames = {
+	webhook: 'Webhook',
+	discord: 'Discord',
+	slack: 'Slack',
+	telegram: 'Telegram',
+	ntfy: 'ntfy',
+	gotify: 'Gotify',
+	teams: 'Microsoft Teams',
+	apprise: 'Apprise'
+} as const satisfies Record<ChannelKind, string>;
+
+export const DOWNLOAD_CLIENT_KINDS = Object.keys(downloadClientNames) as DownloadClientKind[];
+export const CHANNEL_KINDS = Object.keys(channelNames) as ChannelKind[];
+
+/** The product name of a download client kind. Unknown kinds are returned as given. */
+export function downloadClientName(kind: string): string {
+	return Object.hasOwn(downloadClientNames, kind)
+		? downloadClientNames[kind as DownloadClientKind]
+		: kind;
+}
+
+/** The product name of a notification channel kind. Unknown kinds are returned as given. */
+export function channelName(kind: string): string {
+	return Object.hasOwn(channelNames, kind) ? channelNames[kind as ChannelKind] : kind;
+}
