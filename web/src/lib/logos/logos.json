@@ -145,9 +145,9 @@
 		"commit": "bfbb3e9452756e66193d55d92b8a4d4da8bd7351",
 		"copyright": "2020 sct",
 		"file": "seerr.svg",
-		"path": "public/logo_full.svg",
+		"path": "public/os_icon.svg",
 		"repo": "https://github.com/seerr-team/seerr",
-		"sha256": "4818e9ece809ec5be71ecc7df0834d8cdced585d6b9cbceeb19d1776865585d4",
+		"sha256": "b063bcbcb04f780466bbe8f01b0523e5fb3ff67dc32cb0347ad7612fbdfa09f4",
 		"spdx": "MIT",
 		"trademark": "Seerr: no published policy"
 	},
