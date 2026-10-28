@@ -17,7 +17,12 @@ SPDX-License-Identifier: EUPL-1.2
 	import StaminaGauge from '#lib/components/StaminaGauge.svelte';
 	import StatusIcon from '#lib/components/StatusIcon.svelte';
 	import {
+		OVERVIEW_EVENTS_CAP,
+		OVERVIEW_FLEET_CAP,
+		OVERVIEW_PROWLARR_CAP,
+		OVERVIEW_SCHEDULES_CAP,
 		activePauseText,
+		capRows,
 		eventLevelLabel,
 		eventStatus,
 		formatScheduleWindow,
@@ -98,7 +103,25 @@ SPDX-License-Identifier: EUPL-1.2
 	const searchesKpi = $derived(kpiSearches(caps.data));
 	const fleetKpi = $derived(kpiFleet(instances.data));
 	const prowlarrKpi = $derived(kpiProwlarr(prowlarr.data));
+	const fleetRows = $derived(capRows(instances.data, OVERVIEW_FLEET_CAP));
+	const eventRows = $derived(capRows(events.data, OVERVIEW_EVENTS_CAP));
+	const scheduleRows = $derived(
+		capRows(
+			(schedules.data ?? []).filter((s) => s.enabled),
+			OVERVIEW_SCHEDULES_CAP
+		)
+	);
+	const prowlarrRows = $derived(capRows(prowlarr.data, OVERVIEW_PROWLARR_CAP));
 </script>
+
+{#snippet seeAllLink(
+	href: '/instances' | '/activity' | '/automation' | '/connections/prowlarr',
+	label: string
+)}
+	<a href={resolve(href)} class="text-brand text-xs hover:underline">
+		{label}
+	</a>
+{/snippet}
 
 <PageHeader title={m.nav_overview()} help={HELP_MAP['/']} />
 
@@ -189,7 +212,7 @@ SPDX-License-Identifier: EUPL-1.2
 				</div>
 			{:else if instances.isError}
 				<ProblemNote error={instances.error} />
-			{:else if (instances.data ?? []).length === 0}
+			{:else if fleetRows.total === 0}
 				<EmptyFleetOnboarding />
 			{:else}
 				<div class="card max-w-full min-w-0 overflow-hidden p-0">
@@ -197,9 +220,12 @@ SPDX-License-Identifier: EUPL-1.2
 						<h2 id="fleet-heading" class="text-base font-semibold">
 							{m.overview_fleet_title()}
 						</h2>
-						<a href={resolve('/instances')} class="text-brand text-xs hover:underline">
-							{m.nav_instances()}
-						</a>
+						{@render seeAllLink(
+							'/instances',
+							fleetRows.cut
+								? m.overview_all_instances_count({ count: fleetRows.total })
+								: m.nav_instances()
+						)}
 					</div>
 					<div class="relative w-full overflow-x-auto">
 						<table class="compact-table table-stack table w-full">
@@ -218,7 +244,7 @@ SPDX-License-Identifier: EUPL-1.2
 								</tr>
 							</thead>
 							<tbody>
-								{#each instances.data ?? [] as inst (inst.id)}
+								{#each fleetRows.shown as inst (inst.id)}
 									{@const instStatus = instanceStatus(inst)}
 									{@const cap = capFor(inst, caps.data)}
 									{@const lastRun = lastRunForInstance(runs.data, inst.id)}
@@ -314,9 +340,7 @@ SPDX-License-Identifier: EUPL-1.2
 					<h2 id="overview-activity-title" class="text-base font-semibold">
 						{m.overview_recent_activity()}
 					</h2>
-					<a href={resolve('/activity')} class="text-brand text-xs hover:underline">
-						{m.overview_view_all_activity()}
-					</a>
+					{@render seeAllLink('/activity', m.overview_view_all_activity())}
 				</div>
 				{#if events.isPending}
 					<div data-testid="skeleton" class="flex flex-col gap-2" aria-busy="true">
@@ -326,11 +350,11 @@ SPDX-License-Identifier: EUPL-1.2
 					</div>
 				{:else if events.isError}
 					<ProblemNote error={events.error} />
-				{:else if (events.data ?? []).length === 0}
+				{:else if eventRows.total === 0}
 					<p class="text-xs text-subtle">{m.overview_no_recent_events()}</p>
 				{:else}
 					<ul class="flex flex-col divide-y divide-line text-xs">
-						{#each (events.data ?? []).slice(0, 10) as ev (ev.id)}
+						{#each eventRows.shown as ev (ev.id)}
 							<li class="flex items-center justify-between gap-2 py-2">
 								<div class="flex min-w-0 items-center gap-2">
 									<StatusIcon
@@ -360,9 +384,12 @@ SPDX-License-Identifier: EUPL-1.2
 					<h2 id="overview-schedule-title" class="text-base font-semibold">
 						{m.automation_tab_schedules()}
 					</h2>
-					<a href={resolve('/automation')} class="text-brand text-xs hover:underline">
-						{m.overview_manage_schedules()}
-					</a>
+					{@render seeAllLink(
+						'/automation',
+						scheduleRows.cut
+							? m.overview_all_schedules_count({ count: scheduleRows.total })
+							: m.overview_manage_schedules()
+					)}
 				</div>
 				{#if schedules.isPending}
 					<div data-testid="skeleton" class="flex flex-col gap-2" aria-busy="true">
@@ -370,11 +397,11 @@ SPDX-License-Identifier: EUPL-1.2
 					</div>
 				{:else if schedules.isError}
 					<ProblemNote error={schedules.error} />
-				{:else if (schedules.data ?? []).length === 0}
+				{:else if scheduleRows.total === 0}
 					<p class="text-xs text-subtle">{m.schedules_empty()}</p>
 				{:else}
 					<ul class="flex flex-col divide-y divide-line text-xs">
-						{#each (schedules.data ?? []).filter((s) => s.enabled) as s (s.id)}
+						{#each scheduleRows.shown as s (s.id)}
 							{@const pauseText = activePauseText(s, instances.data)}
 							<li class="flex items-center justify-between gap-2 py-1.5">
 								<div class="flex min-w-0 flex-col">
@@ -404,7 +431,7 @@ SPDX-License-Identifier: EUPL-1.2
 				<div class="card min-w-0 p-4">
 					<ProblemNote error={prowlarr.error} />
 				</div>
-			{:else if (prowlarr.data ?? []).length > 0}
+			{:else if prowlarrRows.total > 0}
 				<section
 					class="card flex min-w-0 flex-col gap-3 p-4"
 					aria-labelledby="dashboard-prowlarr-title"
@@ -415,12 +442,15 @@ SPDX-License-Identifier: EUPL-1.2
 								{m.prowlarr_dashboard_title()}
 							</a>
 						</h2>
-						<a href={resolve('/connections/prowlarr')} class="text-brand text-xs hover:underline">
-							{m.overview_view_prowlarr()}
-						</a>
+						{@render seeAllLink(
+							'/connections/prowlarr',
+							prowlarrRows.cut
+								? m.overview_all_prowlarr_count({ count: prowlarrRows.total })
+								: m.overview_view_prowlarr()
+						)}
 					</div>
 					<ul class="flex flex-col gap-3">
-						{#each prowlarr.data ?? [] as link (link.link_id)}
+						{#each prowlarrRows.shown as link (link.link_id)}
 							{@const total = link.indexers.length}
 							{@const exhausted = countExhausted(link.indexers)}
 							{@const headroom = countHeadroom(link.indexers)}

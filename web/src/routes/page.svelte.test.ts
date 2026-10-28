@@ -7,6 +7,12 @@ import { ProblemError } from '@sveltesentio/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api } from '#lib/api/client.js';
 import { logLevelLabel } from '#lib/logs.js';
+import {
+	OVERVIEW_EVENTS_CAP,
+	OVERVIEW_FLEET_CAP,
+	OVERVIEW_PROWLARR_CAP,
+	OVERVIEW_SCHEDULES_CAP
+} from '#lib/overview.js';
 import { m } from '#lib/paraglide/messages.js';
 import {
 	expectStackedLabels,
@@ -239,7 +245,7 @@ describe('dashboard overview redo', () => {
 		expect(screen.getByText('10 / 100')).toBeTruthy();
 	});
 
-	it('renders 10 recent events in right column with link to /activity', async () => {
+	it('caps recent events in right column with link to /activity', async () => {
 		const sampleEvents = Array.from({ length: 12 }, (_, i) => ({
 			id: i + 1,
 			instance_id: forkInstance.id,
@@ -256,11 +262,12 @@ describe('dashboard overview redo', () => {
 		expect(await screen.findByText(m.overview_recent_activity())).toBeTruthy();
 		expect(screen.getByRole('link', { name: m.overview_view_all_activity() })).toBeTruthy();
 
-		// Exactly 10 events shown with translated level StatusIcon
 		expect(screen.getByText('Event 1')).toBeTruthy();
-		expect(screen.getByText('Event 10')).toBeTruthy();
-		expect(screen.queryByText('Event 11')).toBeNull();
-		expect(screen.getAllByRole('img', { name: logLevelLabel('info') }).length).toBe(10);
+		expect(screen.getByText(`Event ${OVERVIEW_EVENTS_CAP}`)).toBeTruthy();
+		expect(screen.queryByText(`Event ${OVERVIEW_EVENTS_CAP + 1}`)).toBeNull();
+		expect(screen.getAllByRole('img', { name: logLevelLabel('info') }).length).toBe(
+			OVERVIEW_EVENTS_CAP
+		);
 	});
 
 	it('renders active pause badge with instance target on schedules card and ignores non-pause or inactive', async () => {
@@ -414,5 +421,83 @@ describe('dashboard overview redo', () => {
 		await renderEmptyFleet();
 
 		expect(screen.queryByRole('table', { name: m.overview_fleet_title() })).toBeNull();
+	});
+
+	it('caps fleet table rows and shows total count link when instances exceed cap', async () => {
+		const manyInstances = Array.from({ length: 10 }, (_, i) => ({
+			...forkInstance,
+			id: `00000000-0000-0000-0000-${String(i + 1).padStart(12, '0')}`,
+			name: `Instance ${i + 1}`
+		}));
+		stubGet(defaultDashboardStubs({ '/instances': manyInstances }));
+		renderWithQuery(Dashboard);
+
+		expect(await screen.findByRole('link', { name: 'Instance 1' })).toBeTruthy();
+		expect(screen.getByRole('link', { name: `Instance ${OVERVIEW_FLEET_CAP}` })).toBeTruthy();
+		expect(screen.queryByRole('link', { name: `Instance ${OVERVIEW_FLEET_CAP + 1}` })).toBeNull();
+		const allLink = screen.getByRole('link', {
+			name: m.overview_all_instances_count({ count: 10 })
+		});
+		expect(allLink.getAttribute('href')).toBe('/instances');
+	});
+
+	it('shows plain instances header link without count when instances do not exceed cap', async () => {
+		const threeInstances = Array.from({ length: 3 }, (_, i) => ({
+			...forkInstance,
+			id: `00000000-0000-0000-0000-${String(i + 1).padStart(12, '0')}`,
+			name: `Instance ${i + 1}`
+		}));
+		stubGet(defaultDashboardStubs({ '/instances': threeInstances }));
+		renderWithQuery(Dashboard);
+
+		expect(await screen.findByRole('link', { name: 'Instance 3' })).toBeTruthy();
+		expect(screen.getByRole('link', { name: m.nav_instances() })).toBeTruthy();
+		expect(
+			screen.queryByRole('link', { name: m.overview_all_instances_count({ count: 3 }) })
+		).toBeNull();
+	});
+
+	it('caps enabled schedules and Prowlarr meters with count links when cut', async () => {
+		const schedules = Array.from({ length: 6 }, (_, i) => ({
+			id: `sched-${i + 1}`,
+			name: `Sched ${i + 1}`,
+			days: [1],
+			start: '01:00',
+			end: '02:00',
+			tz: 'UTC',
+			action: 'pause' as const,
+			enabled: i < 5,
+			active: false,
+			created_at: '2026-01-01T00:00:00Z',
+			updated_at: '2026-01-01T00:00:00Z'
+		}));
+		const prowlarrLinks = Array.from({ length: 5 }, (_, i) => ({
+			link_id: `prw-${i + 1}`,
+			name: `Prowlarr Link ${i + 1}`,
+			reachable: true,
+			checked_at: '2026-09-01T12:00:00Z',
+			indexers: [{ id: 1, name: 'Idx1', query_limit: 100, used_queries: 10, exhausted: false }]
+		}));
+		stubGet(
+			defaultDashboardStubs({
+				'/schedules': schedules,
+				'/prowlarr/status': prowlarrLinks
+			})
+		);
+		renderWithQuery(Dashboard);
+
+		expect(await screen.findByText('Sched 1')).toBeTruthy();
+		expect(screen.getByText(`Sched ${OVERVIEW_SCHEDULES_CAP}`)).toBeTruthy();
+		expect(screen.queryByText(`Sched ${OVERVIEW_SCHEDULES_CAP + 1}`)).toBeNull();
+		expect(
+			screen.getByRole('link', { name: m.overview_all_schedules_count({ count: 5 }) })
+		).toBeTruthy();
+
+		expect(screen.getByText('Prowlarr Link 1')).toBeTruthy();
+		expect(screen.getByText(`Prowlarr Link ${OVERVIEW_PROWLARR_CAP}`)).toBeTruthy();
+		expect(screen.queryByText(`Prowlarr Link ${OVERVIEW_PROWLARR_CAP + 1}`)).toBeNull();
+		expect(
+			screen.getByRole('link', { name: m.overview_all_prowlarr_count({ count: 5 }) })
+		).toBeTruthy();
 	});
 });
