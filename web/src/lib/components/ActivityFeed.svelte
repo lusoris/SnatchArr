@@ -364,6 +364,8 @@ SPDX-License-Identifier: EUPL-1.2
 			: 'md:min-h-0 md:flex-1'}"
 	>
 		<NewEventsPill count={unseenCount} onsnap={snapToBottom} />
+		<!-- The scrolling log takes focus so keyboard users can scroll it (axe scrollable-region-focusable). -->
+		<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 		<div
 			bind:this={scrollContainer}
 			onscroll={handleScroll}
@@ -371,6 +373,7 @@ SPDX-License-Identifier: EUPL-1.2
 				? 'h-[20rem] md:h-[16rem]'
 				: 'h-[max(24rem,calc(100dvh-24.5rem))] md:h-full md:min-h-0 md:flex-1'}"
 			role="log"
+			tabindex="0"
 			aria-live="polite"
 			aria-relevant="additions"
 		>

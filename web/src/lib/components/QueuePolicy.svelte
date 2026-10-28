@@ -192,9 +192,10 @@ SPDX-License-Identifier: EUPL-1.2
 
 			<fieldset class="border-border min-w-0 rounded border p-4 md:col-span-2" data-field="rules">
 				<legend class="px-2 text-sm font-semibold">{m.queue_policy_rules_title()}</legend>
+				<!-- Below sm each rule stacks (WCAG 1.4.10 reflow at 320 CSS px); every control carries its own label. -->
 				<div class="overflow-x-auto">
-					<table class="w-full text-left text-sm">
-						<thead>
+					<table class="w-full text-left text-sm max-sm:block">
+						<thead class="max-sm:sr-only">
 							<tr class="border-border border-b">
 								<th scope="col" class="py-2 pr-4">{m.queue_strike_rule()}</th>
 								<th scope="col" class="py-2 pr-4">{m.queue_rule_mode()}</th>
@@ -202,10 +203,14 @@ SPDX-License-Identifier: EUPL-1.2
 								<th scope="col" class="py-2">{m.queue_rule_blocklist()}</th>
 							</tr>
 						</thead>
-						<tbody>
+						<tbody class="max-sm:block">
 							{#each ruleKeys as r (r.key)}
-								<tr class="border-border border-b last:border-b-0">
-									<td class="py-2 pr-4 font-medium">{r.label()}</td>
+								<tr
+									class="border-border border-b last:border-b-0 max-sm:flex max-sm:flex-wrap max-sm:items-center max-sm:gap-x-3 max-sm:py-2"
+								>
+									<td class="py-2 pr-4 font-medium max-sm:block max-sm:w-full max-sm:py-0"
+										>{r.label()}</td
+									>
 									<td class="py-2 pr-4">
 										<select
 											class="select"
