@@ -22,6 +22,7 @@ SPDX-License-Identifier: EUPL-1.2
 </script>
 
 <ConnectionHubCard
+	kind="configarr"
 	icon="file-code"
 	title={m.nav_configarr()}
 	{href}

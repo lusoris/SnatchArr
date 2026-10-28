@@ -7,6 +7,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { problemStatus } from '#lib/api/client.js';
+	import AppLogo from '#lib/components/AppLogo.svelte';
 	import PageHeader from '#lib/components/PageHeader.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import UrlText from '#lib/components/UrlText.svelte';
@@ -58,8 +59,9 @@ SPDX-License-Identifier: EUPL-1.2
 		<PageHeader title={inst.name} sticky help={currentHelp}>
 			{#snippet status()}
 				<span
-					class="inline-block rounded-full border border-line px-2.5 py-0.5 text-xs text-subtle"
+					class="inline-flex items-center gap-1.5 rounded-full border border-line px-2.5 py-0.5 text-xs text-subtle"
 				>
+					<AppLogo kind={inst.kind} size={16} />
 					{instanceKindLabel(inst.kind, inst.last_seen_product)}
 				</span>
 			{/snippet}

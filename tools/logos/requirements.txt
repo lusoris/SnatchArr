@@ -1,0 +1,6 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+#
+# The logo check toolchain, read by the CI job logos: fetch.py reads the app kinds from
+# api/openapi/openapi.yaml.
+pyyaml==6.0.3

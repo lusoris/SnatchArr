@@ -56,3 +56,129 @@ path = [
 precedence = "override"
 SPDX-FileCopyrightText = ["2024 T. Kebert", "2026 lusoris <lusoris@pm.me>"]
 SPDX-License-Identifier = "CC-BY-SA-4.0"
+
+# Unmodified upstream logo from https://github.com/Sonarr/Sonarr at commit 58fe69664800283237cbca06ace87766dfc66615; trademark owner: Sonarr project
+[[annotations]]
+path = ["web/static/logos/sonarr.svg"]
+precedence = "override"
+SPDX-FileCopyrightText = "2010-2025 Sonarr Contributors"
+SPDX-License-Identifier = "GPL-3.0-or-later"
+
+# Unmodified upstream logo from https://github.com/Radarr/Radarr at commit c0a0be6dde11ec4c9576366a7623322ea2a08775; trademark owner: Radarr project
+[[annotations]]
+path = ["web/static/logos/radarr.svg"]
+precedence = "override"
+SPDX-FileCopyrightText = "2010-2025 Radarr Contributors"
+SPDX-License-Identifier = "GPL-3.0-only"
+
+# Unmodified upstream logo from https://github.com/Lidarr/Lidarr at commit 8581d76fa8e17e0706ce5be415fed38e099f8fc0; trademark owner: Lidarr project
+[[annotations]]
+path = ["web/static/logos/lidarr.svg"]
+precedence = "override"
+SPDX-FileCopyrightText = "2010-2021 Lidarr Contributors"
+SPDX-License-Identifier = "GPL-3.0-only"
+
+# Unmodified upstream logo from https://github.com/Readarr/Readarr at commit 0b79d3000d4e5f8425f499970b0190e2c421fceb; trademark owner: Readarr project
+[[annotations]]
+path = ["web/static/logos/readarr.svg"]
+precedence = "override"
+SPDX-FileCopyrightText = "2010-2022 Readarr Contributors"
+SPDX-License-Identifier = "GPL-3.0-only"
+
+# Unmodified upstream logo from https://github.com/Whisparr/Whisparr at commit c55fdc66a410ad94f2d09261ed2fbb5e00dbc8c0; trademark owner: Whisparr project
+[[annotations]]
+path = ["web/static/logos/whisparr_v2.svg", "web/static/logos/whisparr_v3.svg"]
+precedence = "override"
+SPDX-FileCopyrightText = "2010-2022 Whisparr Contributors"
+SPDX-License-Identifier = "GPL-3.0-or-later"
+
+# Unmodified upstream logo from https://github.com/stashapp/stash at commit 9e9ad972643320e737c711884f10e4285f0f3a88; trademark owner: Stash project
+[[annotations]]
+path = ["web/static/logos/stash.svg"]
+precedence = "override"
+SPDX-FileCopyrightText = "Stash Contributors"
+SPDX-License-Identifier = "AGPL-3.0-only"
+
+# Unmodified upstream logo from https://github.com/Prowlarr/Prowlarr at commit 23b38d77843c5430214a2808532995d4b30bd31a; trademark owner: Prowlarr project
+[[annotations]]
+path = ["web/static/logos/prowlarr.svg"]
+precedence = "override"
+SPDX-FileCopyrightText = "2010-2025 Prowlarr Contributors"
+SPDX-License-Identifier = "GPL-3.0-only"
+
+# Unmodified upstream logo from https://github.com/seerr-team/seerr at commit bfbb3e9452756e66193d55d92b8a4d4da8bd7351; trademark owner: Seerr team
+[[annotations]]
+path = ["web/static/logos/seerr.svg"]
+precedence = "override"
+SPDX-FileCopyrightText = "2020 sct"
+SPDX-License-Identifier = "MIT"
+
+# Unmodified upstream logo from https://github.com/raydak-labs/configarr at commit 36ad449edd50425741ccfc5a1682bec60d4781a8; trademark owner: Raydak Labs
+[[annotations]]
+path = ["web/static/logos/configarr.svg"]
+precedence = "override"
+SPDX-FileCopyrightText = "Raydak Labs"
+SPDX-License-Identifier = "AGPL-3.0-only"
+
+# Unmodified upstream logo from https://github.com/qbittorrent/qBittorrent at commit f6cf56c5fd85ce32c1af54566d43bb476dbcc4cd; trademark owner: The qBittorrent Project
+[[annotations]]
+path = ["web/static/logos/qbittorrent.svg"]
+precedence = "override"
+SPDX-FileCopyrightText = "The qBittorrent Project"
+SPDX-License-Identifier = "GPL-3.0-or-later"
+
+# Unmodified upstream logo from https://github.com/transmission/transmission at commit a648c293512ca55c03b530fb91051b97a93ceab9; trademark owner: Mnemosyne LLC
+[[annotations]]
+path = ["web/static/logos/transmission.svg"]
+precedence = "override"
+SPDX-FileCopyrightText = "2005-2026 Mnemosyne LLC and contributors"
+SPDX-License-Identifier = "GPL-2.0-or-later OR GPL-3.0-or-later"
+
+# Unmodified upstream logo from https://github.com/deluge-torrent/deluge at commit e58075416dedd53636e89b1cd240f86f2e7c2ee0; trademark owner: Deluge Team
+[[annotations]]
+path = ["web/static/logos/deluge.svg"]
+precedence = "override"
+SPDX-FileCopyrightText = "2007-2026 Andrew Resch and Deluge Team"
+SPDX-License-Identifier = "GPL-3.0-or-later"
+
+# Unmodified upstream logo from https://github.com/sabnzbd/sabnzbd at commit f5552c94393c9ff10be2730ec5a66d61b9a1352a; trademark owner: The SABnzbd-Team
+[[annotations]]
+path = ["web/static/logos/sabnzbd.svg"]
+precedence = "override"
+SPDX-FileCopyrightText = "2007-2026 The SABnzbd-Team"
+SPDX-License-Identifier = "GPL-2.0-or-later"
+
+# Unmodified upstream logo from https://github.com/nzbgetcom/nzbget at commit 82e07f021898639bded243e4f6ad77debae135b5; trademark owner: NZBGet Developers
+[[annotations]]
+path = ["web/static/logos/nzbget.svg"]
+precedence = "override"
+SPDX-FileCopyrightText = "2004-2026 Andrey Prygunkov, Denis and contributors"
+SPDX-License-Identifier = "GPL-2.0-or-later"
+
+# Unmodified upstream logo from https://github.com/binwiederhier/ntfy at commit 3cb7a98d0176c92407333bee1639c512dcd04220; trademark owner: Philipp C. Heckel
+[[annotations]]
+path = ["web/static/logos/ntfy.svg"]
+precedence = "override"
+SPDX-FileCopyrightText = "Philipp C. Heckel"
+SPDX-License-Identifier = "Apache-2.0"
+
+# Unmodified upstream logo from https://github.com/gotify/logo at commit 25c1d2c08894fcb0ed39c36a2816316a161c0e57; trademark owner: Gotify Contributors
+[[annotations]]
+path = ["web/static/logos/gotify.svg"]
+precedence = "override"
+SPDX-FileCopyrightText = "Gotify Contributors"
+SPDX-License-Identifier = "CC-BY-4.0"
+
+# Unmodified upstream logo from https://github.com/caronc/apprise at commit 31661d2fdf5e2572b07295ab8dcb2f0785de3e00; trademark owner: Chris Caron
+[[annotations]]
+path = ["web/static/logos/apprise.png"]
+precedence = "override"
+SPDX-FileCopyrightText = "2026 Chris Caron"
+SPDX-License-Identifier = "BSD-2-Clause"
+
+# Unmodified upstream logo from https://github.com/jellyfin/jellyfin-ux at commit 69a2b7b1237732a134dd501ff55b9404cf2d1601; trademark owner: Jellyfin project
+[[annotations]]
+path = ["web/static/logos/jellyfin.svg"]
+precedence = "override"
+SPDX-FileCopyrightText = "Jellyfin Contributors"
+SPDX-License-Identifier = "CC-BY-SA-4.0"

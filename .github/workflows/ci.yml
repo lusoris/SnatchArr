@@ -132,6 +132,7 @@ jobs:
       contracts: ${{ steps.filter.outputs.contracts }}
       docs: ${{ steps.filter.outputs.docs }}
       licences: ${{ steps.filter.outputs.licences }}
+      logos: ${{ steps.filter.outputs.logos }}
     steps:
       - *stop-draft
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -244,6 +245,14 @@ jobs:
               - 'web/pnpm-lock.yaml'
               - 'tools/licences/**'
               - 'web/static/licences.json'
+              - 'Makefile'
+              - '.github/workflows/ci.yml'
+            logos:
+              - 'tools/logos/**'
+              - 'web/src/lib/logos/**'
+              - 'web/static/logos/**'
+              - 'api/openapi/openapi.yaml'
+              - 'REUSE.toml'
               - 'Makefile'
               - '.github/workflows/ci.yml'
 
@@ -906,6 +915,23 @@ jobs:
       - name: Third-party licences check
         run: make licences-check
 
+  logos:
+    name: integrated-app logos
+    needs: changes
+    if: needs.changes.outputs.logos == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    steps:
+      - *stop-draft
+      - *checkout
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.15'
+      - name: Install the logo check toolchain
+        run: python -m pip install -r tools/logos/requirements.txt
+      - name: Logo manifest, files and planted cases
+        run: make logos-check
+
   release-e2e-map:
     name: release e2e map
     # Runs after a passing suite (a failed suite skips this job, which CI success refuses on a
@@ -970,6 +996,7 @@ jobs:
       - governance
       - docs
       - licences
+      - logos
       - release-e2e-map
     runs-on: ubuntu-26.04
     timeout-minutes: 5

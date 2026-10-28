@@ -18,9 +18,9 @@ trap 'rm -rf "$WORK"' EXIT
 # Every job ran and succeeded; the change filter selected every component.
 ALL="$(jq -n '
   [ "workflows", "secret-scan", "semgrep", "trivy", "changes", "commits", "api-lint", "api-test", "api-security", "api-openapi",
-    "worker", "e2e", "image-smoke", "dev-compose", "dlclients-live", "arr-forceimport-live", "integrations-live", "web", "web-e2e-api", "web-visual", "proto", "deploy", "contracts", "governance", "docs", "licences", "release-e2e-map" ]
+    "worker", "e2e", "image-smoke", "dev-compose", "dlclients-live", "arr-forceimport-live", "integrations-live", "web", "web-e2e-api", "web-visual", "proto", "deploy", "contracts", "governance", "docs", "licences", "logos", "release-e2e-map" ]
   | map({key: ., value: {result: "success", outputs: {}}}) | from_entries
-  | .changes.outputs = ( [ "api", "worker", "web", "proto", "deploy", "governance", "contracts", "docs", "licences" ]
+  | .changes.outputs = ( [ "api", "worker", "web", "proto", "deploy", "governance", "contracts", "docs", "licences", "logos" ]
                          | map({key: ., value: "true"}) | from_entries )
 ')"
 # No component selected: every filtered job is skipped.

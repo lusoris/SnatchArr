@@ -1,0 +1,216 @@
+{
+	"apprise": {
+		"commit": "31661d2fdf5e2572b07295ab8dcb2f0785de3e00",
+		"copyright": "2026 Chris Caron",
+		"file": "apprise.png",
+		"path": "apprise/assets/themes/default/apprise-logo.png",
+		"repo": "https://github.com/caronc/apprise",
+		"sha256": "f39b6d00bb9d2a42e68aa8a5253ee65102d45d116633500af3dae7c0b9b7d77b",
+		"spdx": "BSD-2-Clause",
+		"trademark": "Chris Caron: no published policy"
+	},
+	"configarr": {
+		"commit": "36ad449edd50425741ccfc5a1682bec60d4781a8",
+		"copyright": "Raydak Labs",
+		"file": "configarr.svg",
+		"path": "docs/static/img/logo.svg",
+		"repo": "https://github.com/raydak-labs/configarr",
+		"sha256": "43ca960997638a873452fc29e2934dff912db0ce6e5460ad8f31b02f9b2827ea",
+		"spdx": "AGPL-3.0-only",
+		"trademark": "Raydak Labs: no published policy"
+	},
+	"deluge": {
+		"commit": "e58075416dedd53636e89b1cd240f86f2e7c2ee0",
+		"copyright": "2007-2026 Andrew Resch and Deluge Team",
+		"file": "deluge.svg",
+		"path": "deluge/ui/data/icons/hicolor/scalable/apps/deluge.svg",
+		"repo": "https://github.com/deluge-torrent/deluge",
+		"sha256": "67ab9d5c03f646109bc6c2f15bb95bf36350dc89ce90d6ac5ec680bc3becf1db",
+		"spdx": "GPL-3.0-or-later",
+		"trademark": "Deluge Team: no published policy"
+	},
+	"discord": {
+		"exception": "chat",
+		"reason": "vendor terms bar integration-icon use"
+	},
+	"emby": {
+		"exception": "media-server",
+		"reason": "vendor terms bar integration-icon use"
+	},
+	"gotify": {
+		"commit": "25c1d2c08894fcb0ed39c36a2816316a161c0e57",
+		"copyright": "Gotify Contributors",
+		"file": "gotify.svg",
+		"path": "gotify-logo-small.svg",
+		"repo": "https://github.com/gotify/logo",
+		"sha256": "1b7d4e4f46d09950cb10ee98a5971b2ea1c10bf8d5970c198b8233380dcada63",
+		"spdx": "CC-BY-4.0",
+		"trademark": "Gotify Contributors: no published policy"
+	},
+	"jellyfin": {
+		"commit": "69a2b7b1237732a134dd501ff55b9404cf2d1601",
+		"copyright": "Jellyfin Contributors",
+		"file": "jellyfin.svg",
+		"path": "logos/SVG/jellyfin-icon--color-on-dark.svg",
+		"repo": "https://github.com/jellyfin/jellyfin-ux",
+		"sha256": "cf3262b0eee6a47b8a09515ef01dd9a2151cb58022645e68acbf09efc9d0ed20",
+		"spdx": "CC-BY-SA-4.0",
+		"trademark": "Jellyfin: https://jellyfin.org/docs/general/contributing/branding/"
+	},
+	"lidarr": {
+		"commit": "8581d76fa8e17e0706ce5be415fed38e099f8fc0",
+		"copyright": "2010-2021 Lidarr Contributors",
+		"file": "lidarr.svg",
+		"path": "Logo/Lidarr.svg",
+		"repo": "https://github.com/Lidarr/Lidarr",
+		"sha256": "21655693baccd6d69169f5429d7ca360be31796cc343624acb578751eb639fc7",
+		"spdx": "GPL-3.0-only",
+		"trademark": "Lidarr: no published policy"
+	},
+	"ntfy": {
+		"commit": "3cb7a98d0176c92407333bee1639c512dcd04220",
+		"copyright": "Philipp C. Heckel",
+		"file": "ntfy.svg",
+		"path": "web/src/img/ntfy.svg",
+		"repo": "https://github.com/binwiederhier/ntfy",
+		"sha256": "d7abf07b5a642261185699f4c2a69d9c64ff77492e2a18927783e9039a3ff65e",
+		"spdx": "Apache-2.0",
+		"trademark": "Philipp C. Heckel: no published policy"
+	},
+	"nzbget": {
+		"commit": "82e07f021898639bded243e4f6ad77debae135b5",
+		"copyright": "2004-2026 Andrey Prygunkov, Denis and contributors",
+		"file": "nzbget.svg",
+		"path": "webui/img/nzbget.svg",
+		"repo": "https://github.com/nzbgetcom/nzbget",
+		"sha256": "017a55819126a5b65e10339a518f7cea2c2d08f82f902db8398da033dd3850d1",
+		"spdx": "GPL-2.0-or-later",
+		"trademark": "NZBGet Developers: no published policy"
+	},
+	"prowlarr": {
+		"commit": "23b38d77843c5430214a2808532995d4b30bd31a",
+		"copyright": "2010-2025 Prowlarr Contributors",
+		"file": "prowlarr.svg",
+		"path": "Logo/Prowlarr.svg",
+		"repo": "https://github.com/Prowlarr/Prowlarr",
+		"sha256": "a8ed9073263696dcaec3c6dc477c82dae4fc83dd13914899def26388758784f0",
+		"spdx": "GPL-3.0-only",
+		"trademark": "Prowlarr: no published policy"
+	},
+	"qbittorrent": {
+		"commit": "f6cf56c5fd85ce32c1af54566d43bb476dbcc4cd",
+		"copyright": "The qBittorrent Project",
+		"file": "qbittorrent.svg",
+		"path": "dist/unix/menuicons/scalable/apps/qbittorrent.svg",
+		"repo": "https://github.com/qbittorrent/qBittorrent",
+		"sha256": "1930d0ce62e017f677d39150ee5b8746600938c5be27d75a326d631cc87a535b",
+		"spdx": "GPL-3.0-or-later",
+		"trademark": "The qBittorrent Project: no published policy"
+	},
+	"radarr": {
+		"commit": "c0a0be6dde11ec4c9576366a7623322ea2a08775",
+		"copyright": "2010-2025 Radarr Contributors",
+		"file": "radarr.svg",
+		"path": "Logo/Radarr.svg",
+		"repo": "https://github.com/Radarr/Radarr",
+		"sha256": "ad9c1d2e34ed7d03e7dd288a12e49f6a2f5f5d1d49176bf3fbfd2f4a9c7dc0c1",
+		"spdx": "GPL-3.0-only",
+		"trademark": "Radarr: no published policy"
+	},
+	"readarr": {
+		"commit": "0b79d3000d4e5f8425f499970b0190e2c421fceb",
+		"copyright": "2010-2022 Readarr Contributors",
+		"file": "readarr.svg",
+		"path": "Logo/Readarr.svg",
+		"repo": "https://github.com/Readarr/Readarr",
+		"sha256": "bb2748b6adf431c5f7cbf946836d660d75602389df505620241c28d0abad3b24",
+		"spdx": "GPL-3.0-only",
+		"trademark": "Readarr: no published policy"
+	},
+	"rtorrent": {
+		"exception": "torrent",
+		"reason": "vendor terms bar integration-icon use"
+	},
+	"sabnzbd": {
+		"commit": "f5552c94393c9ff10be2730ec5a66d61b9a1352a",
+		"copyright": "2007-2026 The SABnzbd-Team",
+		"file": "sabnzbd.svg",
+		"path": "icons/logo-arrow.svg",
+		"repo": "https://github.com/sabnzbd/sabnzbd",
+		"sha256": "7568bb862c70372f43bf2acbb4f012333b3fe57fbdb9ad4956a271344e2afe54",
+		"spdx": "GPL-2.0-or-later",
+		"trademark": "The SABnzbd-Team: no published policy"
+	},
+	"seerr": {
+		"commit": "bfbb3e9452756e66193d55d92b8a4d4da8bd7351",
+		"copyright": "2020 sct",
+		"file": "seerr.svg",
+		"path": "public/os_icon.svg",
+		"repo": "https://github.com/seerr-team/seerr",
+		"sha256": "b063bcbcb04f780466bbe8f01b0523e5fb3ff67dc32cb0347ad7612fbdfa09f4",
+		"spdx": "MIT",
+		"trademark": "Seerr: no published policy"
+	},
+	"slack": {
+		"exception": "chat",
+		"reason": "vendor terms bar integration-icon use"
+	},
+	"sonarr": {
+		"commit": "58fe69664800283237cbca06ace87766dfc66615",
+		"copyright": "2010-2025 Sonarr Contributors",
+		"file": "sonarr.svg",
+		"path": "Logo/Sonarr.svg",
+		"repo": "https://github.com/Sonarr/Sonarr",
+		"sha256": "e75b18bbf2f662788214437e47bacf6393676231ceddae32e6d02cffabc50c75",
+		"spdx": "GPL-3.0-or-later",
+		"trademark": "Sonarr: no published policy"
+	},
+	"stash": {
+		"commit": "9e9ad972643320e737c711884f10e4285f0f3a88",
+		"copyright": "Stash Contributors",
+		"file": "stash.svg",
+		"path": "ui/v2.5/public/stash_icon.svg",
+		"repo": "https://github.com/stashapp/stash",
+		"sha256": "dce360d91a985a54212f5a17de711bbfcb98068a086bc6efb1c1289bd1a9ded2",
+		"spdx": "AGPL-3.0-only",
+		"trademark": "Stash: no published policy"
+	},
+	"teams": {
+		"exception": "chat",
+		"reason": "vendor terms bar integration-icon use"
+	},
+	"telegram": {
+		"exception": "chat",
+		"reason": "vendor terms bar integration-icon use"
+	},
+	"transmission": {
+		"commit": "a648c293512ca55c03b530fb91051b97a93ceab9",
+		"copyright": "2005-2026 Mnemosyne LLC and contributors",
+		"file": "transmission.svg",
+		"path": "icons/hicolor_apps_scalable_transmission.svg",
+		"repo": "https://github.com/transmission/transmission",
+		"sha256": "3e4d67e348c5f99498bcdfdd7608ec3e4a6d42a57a7418ca25c4b6348a21093a",
+		"spdx": "GPL-2.0-or-later OR GPL-3.0-or-later",
+		"trademark": "Mnemosyne LLC: no published policy"
+	},
+	"whisparr_v2": {
+		"commit": "c55fdc66a410ad94f2d09261ed2fbb5e00dbc8c0",
+		"copyright": "2010-2022 Whisparr Contributors",
+		"file": "whisparr_v2.svg",
+		"path": "Logo/Whisparr.svg",
+		"repo": "https://github.com/Whisparr/Whisparr",
+		"sha256": "bdc1b44dd5437ebb8695d19b26e4785c182e0a24e5d11415608f809e7b27681d",
+		"spdx": "GPL-3.0-or-later",
+		"trademark": "Whisparr: no published policy"
+	},
+	"whisparr_v3": {
+		"commit": "c55fdc66a410ad94f2d09261ed2fbb5e00dbc8c0",
+		"copyright": "2010-2022 Whisparr Contributors",
+		"file": "whisparr_v3.svg",
+		"path": "Logo/Whisparr.svg",
+		"repo": "https://github.com/Whisparr/Whisparr",
+		"sha256": "bdc1b44dd5437ebb8695d19b26e4785c182e0a24e5d11415608f809e7b27681d",
+		"spdx": "GPL-3.0-or-later",
+		"trademark": "Whisparr: no published policy"
+	}
+}
