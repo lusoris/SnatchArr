@@ -52,7 +52,13 @@ SPDX-License-Identifier: EUPL-1.2
 	{:else if (runs.data ?? []).length === 0}
 		<p class="text-sm text-subtle">{m.runs_empty()}</p>
 	{:else}
-		<div class="relative overflow-x-auto">
+		<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+		<div
+			class="relative overflow-x-auto md:max-h-[11rem] md:overflow-y-auto"
+			role="region"
+			tabindex="0"
+			aria-label={m.runs_region_label()}
+		>
 			<table class="table-stack table">
 				<caption class="sr-only">{m.runs_title()}</caption>
 				<thead>

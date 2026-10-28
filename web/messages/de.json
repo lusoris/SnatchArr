@@ -948,5 +948,9 @@
 	"adult_image_sets_close": "Schließen",
 	"adult_image_sets_detail_title": "Bilderset-Elemente",
 	"adult_image_sets_empty_set": "Dieses Bilderset enthält keine Bilder.",
-	"help_adult_image_sets": "Bildersets zeigt lokale Bilderserien aus dem konfigurierten Verzeichnis an. Administratoren können einen manuellen Scan auslösen, der auch die Ignore-Datei im Stammverzeichnis schreibt."
+	"help_adult_image_sets": "Bildersets zeigt lokale Bilderserien aus dem konfigurierten Verzeichnis an. Administratoren können einen manuellen Scan auslösen, der auch die Ignore-Datei im Stammverzeichnis schreibt.",
+	"overview_all_instances_count": "Alle Instanzen ({count})",
+	"overview_all_schedules_count": "Alle Zeitpläne ({count})",
+	"overview_all_prowlarr_count": "Alle Prowlarr-Verknüpfungen ({count})",
+	"runs_region_label": "Laufverlauf"
 }

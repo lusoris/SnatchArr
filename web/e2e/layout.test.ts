@@ -251,6 +251,136 @@ async function mockDashboardRoute(page: Page): Promise<void> {
 	});
 }
 
+const longDashboardInstances = Array.from({ length: 30 }, (_, i) => ({
+	id: `00000000-0000-0000-0000-${String(i + 1).padStart(12, '0')}`,
+	name: `sonarr-${i + 1}`,
+	kind: 'sonarr' as const,
+	base_url: `http://sonarr-${i + 1}.media.svc.cluster.local:8989`,
+	source: 'manual' as const,
+	enabled: true,
+	created_at: '2026-01-01T00:00:00Z',
+	updated_at: '2026-01-01T00:00:00Z',
+	last_check_at: '2026-10-21T06:19:00Z'
+}));
+
+const longDashboardHourlyCaps = longDashboardInstances.map((inst, i) => ({
+	scope: 'instance' as const,
+	instance_id: inst.id,
+	used: (i % 15) + 1,
+	cap: 15,
+	resets_at: '2026-10-21T07:00:00Z'
+}));
+
+const longDashboardSchedules = Array.from({ length: 30 }, (_, i) => ({
+	id: `00000000-0000-0000-0001-${String(i + 1).padStart(12, '0')}`,
+	instance_id: longDashboardInstances[i]?.id,
+	name: `Schedule ${i + 1}`,
+	days: [1, 2, 3, 4, 5],
+	start: '00:00',
+	end: '06:00',
+	tz: 'UTC',
+	action: 'pause' as const,
+	enabled: true,
+	active: i === 0,
+	created_at: '2026-10-21T06:19:00Z',
+	updated_at: '2026-10-21T06:19:00Z'
+}));
+
+const longDashboardProwlarrStatus = Array.from({ length: 30 }, (_, i) => ({
+	link_id: `00000000-0000-0000-0002-${String(i + 1).padStart(12, '0')}`,
+	name: `Prowlarr ${i + 1}`,
+	reachable: true,
+	checked_at: '2026-10-21T06:19:00Z',
+	indexers: dashboardProwlarrStatus[0].indexers
+}));
+
+function makeLongRuns(instId?: string) {
+	return Array.from({ length: 20 }, (_, i) => ({
+		id: `00000000-0000-0000-0003-${String(i + 1).padStart(12, '0')}`,
+		instance_id: instId ?? longDashboardInstances[i % longDashboardInstances.length].id,
+		kind: (i % 2 === 0 ? 'missing' : 'upgrade') as 'missing' | 'upgrade',
+		status: 'done' as const,
+		dry_run: i % 3 === 0,
+		queued_at: '2026-10-21T06:19:00Z',
+		started_at: '2026-10-21T06:19:00Z',
+		finished_at: '2026-10-21T06:20:00Z',
+		searched_count: i + 1
+	}));
+}
+
+function makeLongEvents(count: number, instId: string) {
+	return Array.from({ length: count }, (_, i) => ({
+		id: i + 1,
+		instance_id: instId,
+		ts: '2026-10-21T06:19:00Z',
+		level: (i % 4 === 0 ? 'warn' : 'info') as 'warn' | 'info',
+		type: i % 2 === 0 ? 'search_dispatched' : 'candidates_filtered',
+		title: `Event ${i + 1} S01E${String((i % 20) + 1).padStart(2, '0')}`,
+		detail: `command ${700000 + i}`
+	}));
+}
+
+async function mockCommonLongDataShell(page: Page): Promise<void> {
+	await mockSettingsApi(page);
+	await page.route('**/api/v1/me/preferences', (route) =>
+		route.fulfill(json({ theme: 'dark', locale: 'en' }))
+	);
+	await page.route('**/api/v1/system/status', (route) =>
+		route.fulfill(json({ worker_connected: true, worker_last_contact_at: '2026-10-21T06:19:00Z' }))
+	);
+	await page.route('**/api/v1/events/stream*', (route) =>
+		route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' })
+	);
+}
+
+async function mockDashboardLongDataRoute(page: Page): Promise<void> {
+	await mockCommonLongDataShell(page);
+	await page.route('**/api/v1/instances', (route) => {
+		if (route.request().method() !== 'GET') return route.fallback();
+		return route.fulfill(json(longDashboardInstances));
+	});
+	await page.route('**/api/v1/hourly-caps', (route) => {
+		if (route.request().method() !== 'GET') return route.fallback();
+		return route.fulfill(json(longDashboardHourlyCaps));
+	});
+	await page.route('**/api/v1/prowlarr/status*', (route) => {
+		if (route.request().method() !== 'GET') return route.fallback();
+		return route.fulfill(json(longDashboardProwlarrStatus));
+	});
+	await page.route('**/api/v1/runs*', (route) => {
+		if (route.request().method() !== 'GET') return route.fallback();
+		return route.fulfill(json(makeLongRuns()));
+	});
+	await page.route('**/api/v1/events*', (route) => {
+		if (route.request().method() !== 'GET') return route.fallback();
+		return route.fulfill(json(makeLongEvents(20, longDashboardInstances[0].id)));
+	});
+	await page.route('**/api/v1/schedules*', (route) => {
+		if (route.request().method() !== 'GET') return route.fallback();
+		return route.fulfill(json(longDashboardSchedules));
+	});
+}
+
+async function mockInstanceActivityLongDataRoute(page: Page, id: string): Promise<void> {
+	await mockCommonLongDataShell(page);
+	await page.route(`**/api/v1/instances/${id}`, (route) => {
+		if (route.request().method() !== 'GET') return route.fallback();
+		return route.fulfill(json({ ...longDashboardInstances[0], id }));
+	});
+	await page.route('**/api/v1/instances', (route) => {
+		if (route.request().method() !== 'GET') return route.fallback();
+		return route.fulfill(json([{ ...longDashboardInstances[0], id }]));
+	});
+	await page.route('**/api/v1/runs?*', (route) => {
+		if (route.request().method() !== 'GET') return route.fallback();
+		return route.fulfill(json(makeLongRuns(id)));
+	});
+	await page.route('**/api/v1/events*', (route) => {
+		if (route.request().method() !== 'GET') return route.fallback();
+		return route.fulfill(json(makeLongEvents(50, id)));
+	});
+}
+
 for (const [viewportName, viewport] of Object.entries(VIEWPORTS)) {
 	for (const pattern of AUTH_ROUTES) {
 		test(`authenticated: layout ${pattern} ${viewportName}`, async ({ page }, testInfo) => {
@@ -530,6 +660,30 @@ for (const pattern of SCROLL_BUDGET_ROUTES) {
 		await page.goto(route);
 		await page.waitForLoadState('networkidle');
 		await assertScrollBudget(page, pattern);
+	});
+}
+
+if (!served) {
+	test('authenticated: layout scroll budget / long data at 1280x800', async ({ page }) => {
+		await page.setViewportSize({ width: 1280, height: 800 });
+		await mockDashboardLongDataRoute(page);
+		await page.goto('/');
+		await page.waitForLoadState('networkidle');
+		await expect(page.locator('table tbody tr').first()).toBeVisible();
+		await assertScrollBudget(page, '/');
+	});
+
+	test('authenticated: layout scroll budget /instances/[id]/activity long data at 1280x800', async ({
+		page
+	}) => {
+		await page.setViewportSize({ width: 1280, height: 800 });
+		const id = instanceId();
+		await mockInstanceActivityLongDataRoute(page, id);
+		await page.goto(`/instances/${id}/activity`);
+		await page.waitForLoadState('networkidle');
+		await expect(page.locator('table tbody tr').first()).toBeVisible();
+		await expect(page.getByRole('log').locator('li').first()).toBeVisible();
+		await assertScrollBudget(page, '/instances/[id]/activity');
 	});
 }
 
