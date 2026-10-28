@@ -112,16 +112,6 @@ SPDX-License-Identifier: EUPL-1.2
 					? m.adult_image_sets_ignore_file_present()
 					: m.adult_image_sets_ignore_file_missing()}
 			</span>
-		{:else if selectedSet.data}
-			<span class={selectedSet.data.ignore_file_present ? 'text-success' : 'text-danger'}>
-				{selectedSet.data.ignore_file_present
-					? m.adult_image_sets_ignore_file_present()
-					: m.adult_image_sets_ignore_file_missing()}
-			</span>
-		{:else}
-			<span class="text-subtle">
-				{m.adult_image_sets_ignore_file_present()}
-			</span>
 		{/if}
 	</div>
 </section>

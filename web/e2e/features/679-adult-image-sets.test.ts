@@ -181,7 +181,7 @@ test('679: adult image sets scan, stashignore creation, detail retrieval, file s
 		await page.goto('/adult/image-sets');
 		await expect(page.getByText('set-one')).toBeVisible();
 		await expect(page.getByText('set-two')).toBeVisible();
-		await expect(page.getByText('.stashignore present')).toBeVisible();
+		await expect(page.getByText('Ignore file present')).toBeVisible();
 
 		const scanBtn = page.getByRole('button', { name: 'Scan now' });
 		await expect(scanBtn).toBeVisible();

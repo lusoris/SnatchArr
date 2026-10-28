@@ -2,10 +2,12 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
+import { WCAG_22_AA_TAGS } from '@sveltesentio/testing/a11y';
 import { fireEvent, render as svelteRender, screen, within } from '@testing-library/svelte';
 import { QueryClient, QueryClientProvider } from '@tanstack/svelte-query';
 import type { Component } from 'svelte';
 import { expect, vi } from 'vitest';
+import { axe } from 'vitest-axe';
 import { api } from '#lib/api/client.js';
 import type { components } from '#lib/api/schema.js';
 import { m } from '#lib/paraglide/messages.js';
@@ -29,6 +31,12 @@ function createTestQueryClient(): QueryClient {
 			}
 		}
 	});
+}
+
+/** Fails when the rendered view breaks a WCAG 2.2 AA rule. */
+export async function expectNoAxeViolations(container: Element) {
+	const a11y = await axe(container, { runOnly: { type: 'tag', values: [...WCAG_22_AA_TAGS] } });
+	expect(a11y.violations).toEqual([]);
 }
 
 /** Renders a view inside its own query client. */

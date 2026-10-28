@@ -2087,6 +2087,30 @@ func stepsAdult() []routerStep {
 				}
 			},
 		},
+		{
+			op:     "listAdultPerformers",
+			method: http.MethodGet,
+			path:   func(_ *idsState) string { return "/adult/performers" },
+			want:   http.StatusOK,
+		},
+		{
+			op:     "getAdultPerformer",
+			method: http.MethodGet,
+			path:   func(_ *idsState) string { return "/adult/performers/00000000-0000-0000-0000-000000000001" },
+			want:   http.StatusNotFound,
+		},
+		{
+			op:     "listAdultStudios",
+			method: http.MethodGet,
+			path:   func(_ *idsState) string { return "/adult/studios" },
+			want:   http.StatusOK,
+		},
+		{
+			op:     "getAdultStudio",
+			method: http.MethodGet,
+			path:   func(_ *idsState) string { return "/adult/studios/00000000-0000-0000-0000-000000000001" },
+			want:   http.StatusNotFound,
+		},
 	}
 }
 

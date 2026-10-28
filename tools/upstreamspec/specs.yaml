@@ -24,7 +24,7 @@
 # it receives with them. An entry with a `POST .../command` operation must list its classes.
 source:
   repository: golusoris/goenvoy
-  commit: d81c0c1874df545e7f9b83a76e34ae5eb96fda44
+  commit: 8c974b72b9575e140ebcc5a4074e4929deed5abe
   path: upstream/specs.yaml
   sha256: 683252ee1d4386e520540a13cf1d8a6fe24ad20f4184c89cafcba0f073e73b68
 specs:

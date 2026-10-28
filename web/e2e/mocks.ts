@@ -120,6 +120,9 @@ export async function mockSignedInApi(
 	]) {
 		await page.route(`**/api/v1/${path}*`, (route) => route.fulfill(json([])));
 	}
+	for (const path of ['adult/performers', 'adult/studios']) {
+		await page.route(`**/api/v1/${path}*`, (route) => route.fulfill(json({ items: [] })));
+	}
 	await page.route('**/api/v1/adult/sync/status*', (route) =>
 		route.fulfill(
 			json({

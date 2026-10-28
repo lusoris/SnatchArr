@@ -132,7 +132,17 @@ export default defineConfig({
 						{
 							name: 'features',
 							testMatch: /(^|\/)features\/[^/]+\.test\.ts/,
+							testIgnore: /(^|\/)features\/\d+-adult-[^/]+\.test\.ts/,
 							dependencies: ['features-auth'],
+							use: { browserName: 'chromium', storageState: featuresAuthFile }
+						},
+						// Adult feature tests share one module switch and one global sync, so
+						// they run one at a time: <pr>-adult-<slug>.test.ts.
+						{
+							name: 'features-adult',
+							testMatch: /(^|\/)features\/\d+-adult-[^/]+\.test\.ts/,
+							dependencies: ['features-auth'],
+							workers: 1,
 							use: { browserName: 'chromium', storageState: featuresAuthFile }
 						}
 					]

@@ -715,6 +715,76 @@ func (q *Queries) ListAdultPerformers(ctx context.Context) ([]AdultPerformer, er
 	return items, nil
 }
 
+const listAdultPerformersKeyset = `-- name: ListAdultPerformersKeyset :many
+SELECT p.id, p.canonical_name, p.disambiguation, p.created_at, p.updated_at, p.urls, p.is_favorite, p.merged_into_id,
+       COUNT(r.id)::int AS ref_count
+FROM adult_performers p
+LEFT JOIN adult_external_refs r ON r.entity_type = 'performer' AND r.entity_id = p.id
+WHERE ($1::boolean IS NULL OR p.is_favorite = $1::boolean)
+  AND (
+      $2::text IS NULL
+      OR (p.canonical_name > $2::text)
+      OR (p.canonical_name = $2::text AND p.id > $3::uuid)
+  )
+GROUP BY p.id
+ORDER BY p.canonical_name ASC, p.id ASC
+LIMIT $4
+`
+
+type ListAdultPerformersKeysetParams struct {
+	Favorite           *bool
+	AfterCanonicalName *string
+	AfterID            *uuid.UUID
+	LimitCount         int32
+}
+
+type ListAdultPerformersKeysetRow struct {
+	ID             uuid.UUID
+	CanonicalName  string
+	Disambiguation *string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	Urls           []string
+	IsFavorite     bool
+	MergedIntoID   *uuid.UUID
+	RefCount       int32
+}
+
+func (q *Queries) ListAdultPerformersKeyset(ctx context.Context, arg ListAdultPerformersKeysetParams) ([]ListAdultPerformersKeysetRow, error) {
+	rows, err := q.db.Query(ctx, listAdultPerformersKeyset,
+		arg.Favorite,
+		arg.AfterCanonicalName,
+		arg.AfterID,
+		arg.LimitCount,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAdultPerformersKeysetRow{}
+	for rows.Next() {
+		var i ListAdultPerformersKeysetRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.CanonicalName,
+			&i.Disambiguation,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Urls,
+			&i.IsFavorite,
+			&i.MergedIntoID,
+			&i.RefCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAdultStashboxInstances = `-- name: ListAdultStashboxInstances :many
 SELECT id, name, endpoint, api_key_enc, enabled, sync_favorites, priority, created_at, updated_at, last_sync_at, last_sync_error, last_performers_synced, last_studios_synced FROM adult_stashbox_instances
 ORDER BY priority ASC, name ASC
@@ -778,6 +848,78 @@ func (q *Queries) ListAdultStudios(ctx context.Context) ([]AdultStudio, error) {
 			&i.MergedIntoID,
 			&i.ParentStudioID,
 			&i.NetworkStudioID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAdultStudiosKeyset = `-- name: ListAdultStudiosKeyset :many
+SELECT s.id, s.canonical_name, s.created_at, s.updated_at, s.urls, s.is_favorite, s.merged_into_id, s.parent_studio_id, s.network_studio_id,
+       COUNT(r.id)::int AS ref_count
+FROM adult_studios s
+LEFT JOIN adult_external_refs r ON r.entity_type = 'studio' AND r.entity_id = s.id
+WHERE ($1::boolean IS NULL OR s.is_favorite = $1::boolean)
+  AND (
+      $2::text IS NULL
+      OR (s.canonical_name > $2::text)
+      OR (s.canonical_name = $2::text AND s.id > $3::uuid)
+  )
+GROUP BY s.id
+ORDER BY s.canonical_name ASC, s.id ASC
+LIMIT $4
+`
+
+type ListAdultStudiosKeysetParams struct {
+	Favorite           *bool
+	AfterCanonicalName *string
+	AfterID            *uuid.UUID
+	LimitCount         int32
+}
+
+type ListAdultStudiosKeysetRow struct {
+	ID              uuid.UUID
+	CanonicalName   string
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	Urls            []string
+	IsFavorite      bool
+	MergedIntoID    *uuid.UUID
+	ParentStudioID  *uuid.UUID
+	NetworkStudioID *uuid.UUID
+	RefCount        int32
+}
+
+func (q *Queries) ListAdultStudiosKeyset(ctx context.Context, arg ListAdultStudiosKeysetParams) ([]ListAdultStudiosKeysetRow, error) {
+	rows, err := q.db.Query(ctx, listAdultStudiosKeyset,
+		arg.Favorite,
+		arg.AfterCanonicalName,
+		arg.AfterID,
+		arg.LimitCount,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAdultStudiosKeysetRow{}
+	for rows.Next() {
+		var i ListAdultStudiosKeysetRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.CanonicalName,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Urls,
+			&i.IsFavorite,
+			&i.MergedIntoID,
+			&i.ParentStudioID,
+			&i.NetworkStudioID,
+			&i.RefCount,
 		); err != nil {
 			return nil, err
 		}
