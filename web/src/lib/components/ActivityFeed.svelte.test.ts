@@ -222,9 +222,12 @@ describe('ActivityFeed', () => {
 		expect(await screen.findByRole('alert')).toBeTruthy();
 	});
 
-	it('fixedInstanceId prop omits instance filter dropdown', async () => {
+	it('fixedInstanceId prop omits instance filter dropdown and bounds desktop log height', async () => {
 		renderWithQuery(ActivityFeed, { fixedInstanceId: sampleInstance.id });
 
 		expect(screen.queryByLabelText(m.activity_filter_instance())).toBeNull();
+		const log = await screen.findByRole('log');
+		expect(log.className).toContain('h-[20rem]');
+		expect(log.className).toContain('md:h-[16rem]');
 	});
 });

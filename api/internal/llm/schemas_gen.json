@@ -1670,6 +1670,7 @@
     "properties": {
       "before_id": {
         "format": "int64",
+        "minimum": 1,
         "type": "integer"
       },
       "instance_id": {
@@ -1728,6 +1729,7 @@
       "source": {
         "description": "Source: api, worker for every worker, or worker:\u003cid\u003e for one worker.",
         "maxLength": 160,
+        "pattern": "^(api|worker(:[^\\s:]+)?)$",
         "type": "string"
       }
     },
