@@ -2,8 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-// Package sso implements OIDC single sign-on and trusted proxy-header authentication.
-// golusoris auth/oidc is not used because its AuthURL sends no nonce and Exchange discards the parsed ID token.
+// Package sso implements OIDC single sign-on via golusoris auth/oidc and trusted proxy-header authentication.
 package sso
 
 import (
