@@ -7,7 +7,6 @@ package main
 import (
 	"fmt"
 	"slices"
-	"strings"
 )
 
 func buildOperationSchema(method, path string, opMap map[string]any, commonParams []any, comps Components) (string, map[string]any, error) {
@@ -72,7 +71,10 @@ func buildParams(params []any, comps Components, props map[string]any, req *[]st
 		if name == "" || (in != "path" && in != "query") {
 			continue
 		}
-		paramProp := buildParamProperty(pMap)
+		paramProp, err := buildParamProperty(pMap, comps)
+		if err != nil {
+			return err
+		}
 		props[name] = paramProp
 		isReq, _ := pMap["required"].(bool)
 		if in == "path" || isReq {
@@ -82,12 +84,34 @@ func buildParams(params []any, comps Components, props map[string]any, req *[]st
 	return nil
 }
 
-func buildParamProperty(pMap map[string]any) map[string]any {
+// allowedParamProps are the scalar schema keywords a parameter keeps. No keyword
+// that can hold a nested $ref (items, properties) is copied: it would leave an
+// unresolved reference in the tool schema.
+var allowedParamProps = []string{
+	"type",
+	"format",
+	"description",
+	"minimum",
+	"maximum",
+	"exclusiveMinimum",
+	"exclusiveMaximum",
+	"enum",
+	"pattern",
+	"minLength",
+	"maxLength",
+	"default",
+}
+
+func buildParamProperty(pMap map[string]any, comps Components) (map[string]any, error) {
 	prop := make(map[string]any)
-	rawSchema, _ := pMap["schema"].(map[string]any)
+	rawSchema := pMap["schema"]
 	if rawSchema != nil {
-		for _, k := range []string{"type", "format", "description", "minimum", "maximum"} {
-			if v, ok := rawSchema[k]; ok {
+		schemaMap, err := resolveSchemaRef(rawSchema, comps)
+		if err != nil {
+			return nil, err
+		}
+		for _, k := range allowedParamProps {
+			if v, ok := schemaMap[k]; ok {
 				prop[k] = v
 			}
 		}
@@ -98,30 +122,9 @@ func buildParamProperty(pMap map[string]any) map[string]any {
 	if desc, ok := pMap["description"].(string); ok && desc != "" {
 		prop["description"] = desc
 	}
-	return prop
+	return prop, nil
 }
 
 func resolveParamRef(raw any, comps Components) (map[string]any, error) {
-	m, ok := raw.(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("%w: parameter must be an object", ErrInvalidRef)
-	}
-	ref, _ := m["$ref"].(string)
-	if ref == "" {
-		return m, nil
-	}
-	const prefix = "#/components/parameters/"
-	name, ok := strings.CutPrefix(ref, prefix)
-	if !ok {
-		return nil, fmt.Errorf("%w: unsupported parameter ref %q", ErrInvalidRef, ref)
-	}
-	target, exists := comps.Parameters[name]
-	if !exists {
-		return nil, fmt.Errorf("%w: unknown parameter ref %q", ErrInvalidRef, ref)
-	}
-	targetMap, ok := target.(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("%w: referenced parameter %q is invalid", ErrInvalidRef, ref)
-	}
-	return targetMap, nil
+	return resolveComponentRef(raw, "parameter", "#/components/parameters/", comps.Parameters)
 }

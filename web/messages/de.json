@@ -958,5 +958,13 @@
 	"overview_all_instances_count": "Alle Instanzen ({count})",
 	"overview_all_schedules_count": "Alle Zeitpläne ({count})",
 	"overview_all_prowlarr_count": "Alle Prowlarr-Verknüpfungen ({count})",
-	"runs_region_label": "Laufverlauf"
+	"runs_region_label": "Laufverlauf",
+	"event_detail_title": "Ereignisdetails",
+	"event_title": "Titel",
+	"event_time": "Zeitpunkt",
+	"run_detail_title": "Laufdetails",
+	"run_detail_id": "Lauf-ID",
+	"run_queued": "Eingereiht",
+	"entity_details": "Details",
+	"action_close": "Schließen"
 }

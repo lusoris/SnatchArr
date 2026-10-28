@@ -415,7 +415,10 @@ SPDX-License-Identifier: EUPL-1.2
 										<ul class="flex flex-col gap-1">
 											{#each instances.data ?? [] as inst (inst.id)}
 												<li class="flex items-center justify-between text-xs">
-													<span class="font-medium">{inst.name}</span>
+													<a
+														href={resolve('/instances/[id]', { id: inst.id })}
+														class="font-medium hover:underline">{inst.name}</a
+													>
 													<span class="text-subtle">{scheduleStatusText(inst.id)}</span>
 												</li>
 											{/each}

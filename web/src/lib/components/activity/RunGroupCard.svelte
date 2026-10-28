@@ -8,6 +8,9 @@ SPDX-License-Identifier: EUPL-1.2
 	import LinkText from '#lib/components/LinkText.svelte';
 	import StatusIcon from '#lib/components/StatusIcon.svelte';
 	import { m } from '#lib/paraglide/messages.js';
+	import EventDialog from './EventDialog.svelte';
+	import RunDialog from './RunDialog.svelte';
+	import { liveFrameToEvent, type LiveFrame } from '#lib/live.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
 	import { formatRelativeTime, formatWhen } from '#lib/stamina.js';
 
@@ -20,6 +23,9 @@ SPDX-License-Identifier: EUPL-1.2
 
 	const { group, instanceName, expanded = false, ontoggle }: Props = $props();
 
+	let runOpen = $state(false);
+	let selectedEvent = $state<LiveFrame | null>(null);
+	let eventOpen = $state(false);
 	let internalExpanded = $state(false);
 	const isExpanded = $derived(ontoggle ? expanded : internalExpanded);
 
@@ -83,6 +89,13 @@ SPDX-License-Identifier: EUPL-1.2
 				{isExpanded ? '▲' : '▼'}
 			</span>
 		</button>
+		{#if group.run_id}
+			<button
+				type="button"
+				class="text-brand text-xs hover:underline"
+				onclick={() => (runOpen = true)}>{m.entity_details()}</button
+			>
+		{/if}
 	</div>
 
 	{#if isExpanded}
@@ -106,6 +119,14 @@ SPDX-License-Identifier: EUPL-1.2
 							/>
 						{/if}
 					</button>
+					<button
+						type="button"
+						class="text-brand self-start text-xs hover:underline"
+						onclick={() => {
+							selectedEvent = evt;
+							eventOpen = true;
+						}}>{m.entity_details()}</button
+					>
 					{#if expandedEvtKey === evtKey}
 						<pre
 							class="max-w-full overflow-x-auto rounded bg-surface p-2 font-mono text-xs">{JSON.stringify(
@@ -119,3 +140,10 @@ SPDX-License-Identifier: EUPL-1.2
 		</ol>
 	{/if}
 </li>
+
+{#if runOpen && group.run_id}
+	<RunDialog runId={group.run_id} bind:open={runOpen} />
+{/if}
+{#if eventOpen && selectedEvent}
+	<EventDialog event={liveFrameToEvent(selectedEvent)} bind:open={eventOpen} />
+{/if}

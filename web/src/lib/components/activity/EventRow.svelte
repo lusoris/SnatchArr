@@ -7,7 +7,9 @@ SPDX-License-Identifier: EUPL-1.2
 	import type { StatusKind } from '#lib/activity.js';
 	import LinkText from '#lib/components/LinkText.svelte';
 	import StatusIcon from '#lib/components/StatusIcon.svelte';
-	import type { LiveFrame } from '#lib/live.js';
+	import { liveFrameToEvent, type LiveFrame } from '#lib/live.js';
+	import EventDialog from './EventDialog.svelte';
+	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
 	import { formatRelativeTime, formatWhen } from '#lib/stamina.js';
 
@@ -21,6 +23,7 @@ SPDX-License-Identifier: EUPL-1.2
 
 	const { event, status = 'info', instanceName, expanded = false, ontoggle }: Props = $props();
 
+	let detailsOpen = $state(false);
 	let internalExpanded = $state(false);
 
 	const isExpanded = $derived(ontoggle ? expanded : internalExpanded);
@@ -81,6 +84,11 @@ SPDX-License-Identifier: EUPL-1.2
 				/>
 			{/if}
 		</button>
+		<button
+			type="button"
+			class="text-brand text-xs hover:underline"
+			onclick={() => (detailsOpen = true)}>{m.entity_details()}</button
+		>
 	</div>
 	{#if isExpanded}
 		<div class="mt-1 border-t border-line pt-1 text-xs">
@@ -93,3 +101,7 @@ SPDX-License-Identifier: EUPL-1.2
 		</div>
 	{/if}
 </li>
+
+{#if detailsOpen}
+	<EventDialog event={liveFrameToEvent(event)} bind:open={detailsOpen} />
+{/if}

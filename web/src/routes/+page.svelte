@@ -8,6 +8,8 @@ SPDX-License-Identifier: EUPL-1.2
 	import { toast } from 'svelte-sonner';
 	import { api, describeError } from '#lib/api/client.js';
 	import type { components } from '#lib/api/schema.js';
+	import EventDialog from '#lib/components/activity/EventDialog.svelte';
+	import RunDialog from '#lib/components/activity/RunDialog.svelte';
 	import AppLogo from '#lib/components/AppLogo.svelte';
 	import ConfirmAction from '#lib/components/ConfirmAction.svelte';
 	import EmptyFleetOnboarding from '#lib/components/EmptyFleetOnboarding.svelte';
@@ -47,6 +49,11 @@ SPDX-License-Identifier: EUPL-1.2
 	type Run = components['schemas']['Run'];
 	type Event = components['schemas']['Event'];
 	type Schedule = components['schemas']['Schedule'];
+
+	let selectedEvent = $state<Event | null>(null);
+	let eventOpen = $state(false);
+	let selectedRunId = $state<string | null>(null);
+	let runOpen = $state(false);
 
 	const instances = createSentioQuery<Instance[]>({
 		queryKey: keys.instances,
@@ -290,15 +297,28 @@ SPDX-License-Identifier: EUPL-1.2
 											class="text-xs whitespace-nowrap text-subtle"
 											data-label={m.overview_last_run()}
 										>
-											{lastRun
-												? formatWhen(lastRun.started_at ?? lastRun.queued_at, getLocale())
-												: '—'}
+											{#if lastRun}
+												<button
+													type="button"
+													class="hover:underline"
+													onclick={() => {
+														selectedRunId = lastRun.id;
+														runOpen = true;
+													}}
+													>{formatWhen(
+														lastRun.started_at ?? lastRun.queued_at,
+														getLocale()
+													)}</button
+												>
+											{:else}—{/if}
 										</td>
 										<td
 											class="text-xs whitespace-nowrap text-subtle"
 											data-label={m.overview_next_window()}
 										>
-											{formatScheduleWindow(nextSchedule)}
+											{#if nextSchedule}<a href={resolve('/automation')} class="hover:underline"
+													>{formatScheduleWindow(nextSchedule)}</a
+												>{:else}—{/if}
 										</td>
 										<td data-label="">
 											<div
@@ -359,20 +379,31 @@ SPDX-License-Identifier: EUPL-1.2
 				{:else}
 					<ul class="flex flex-col divide-y divide-line text-xs">
 						{#each eventRows.shown as ev (ev.id)}
-							<li class="flex items-center justify-between gap-2 py-2">
-								<div class="flex min-w-0 items-center gap-2">
-									<StatusIcon
-										status={eventStatus(ev.level)}
-										label={eventLevelLabel(ev.level)}
-										size={14}
-									/>
-									<span class="truncate font-medium text-fg" title={ev.title ?? ev.type}>
-										{ev.title ?? ev.type}
+							<li>
+								<button
+									type="button"
+									data-testid="dashboard-event"
+									data-event-type={ev.type}
+									class="flex w-full items-center justify-between gap-2 py-2 text-left hover:bg-surface"
+									onclick={() => {
+										selectedEvent = ev;
+										eventOpen = true;
+									}}
+								>
+									<span class="flex min-w-0 items-center gap-2">
+										<StatusIcon
+											status={eventStatus(ev.level)}
+											label={eventLevelLabel(ev.level)}
+											size={14}
+										/>
+										<span class="truncate font-medium text-fg" title={ev.title ?? ev.type}>
+											{ev.title ?? ev.type}
+										</span>
 									</span>
-								</div>
-								<span class="shrink-0 whitespace-nowrap text-subtle">
-									{formatWhen(ev.ts, getLocale())}
-								</span>
+									<span class="shrink-0 whitespace-nowrap text-subtle">
+										{formatWhen(ev.ts, getLocale())}
+									</span>
+								</button>
 							</li>
 						{/each}
 					</ul>
@@ -409,7 +440,10 @@ SPDX-License-Identifier: EUPL-1.2
 							{@const pauseText = activePauseText(s, instances.data)}
 							<li class="flex items-center justify-between gap-2 py-1.5">
 								<div class="flex min-w-0 flex-col">
-									<span class="truncate font-medium text-fg">{s.name}</span>
+									<a
+										href={resolve('/automation')}
+										class="truncate font-medium text-fg hover:underline">{s.name}</a
+									>
 									<span class="text-subtle">{s.start}–{s.end} {s.tz}</span>
 								</div>
 								{#if pauseText}
@@ -463,7 +497,9 @@ SPDX-License-Identifier: EUPL-1.2
 									class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-sm"
 									data-label-value
 								>
-									<span class="font-medium">{link.name}</span>
+									<a href={resolve('/connections/prowlarr')} class="font-medium hover:underline"
+										>{link.name}</a
+									>
 									<span class="text-subtle">
 										{m.prowlarr_headroom_count({ count: headroom, total })} · {m.prowlarr_exhausted_count(
 											{ count: exhausted }
@@ -493,3 +529,10 @@ SPDX-License-Identifier: EUPL-1.2
 		</div>
 	</div>
 </div>
+
+{#if eventOpen && selectedEvent}
+	<EventDialog event={selectedEvent} bind:open={eventOpen} />
+{/if}
+{#if runOpen && selectedRunId}
+	<RunDialog runId={selectedRunId} bind:open={runOpen} />
+{/if}

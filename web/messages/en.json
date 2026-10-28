@@ -958,5 +958,13 @@
 	"overview_all_instances_count": "All instances ({count})",
 	"overview_all_schedules_count": "All schedules ({count})",
 	"overview_all_prowlarr_count": "All Prowlarr links ({count})",
-	"runs_region_label": "Run history"
+	"runs_region_label": "Run history",
+	"event_detail_title": "Event details",
+	"event_title": "Title",
+	"event_time": "Time",
+	"run_detail_title": "Run details",
+	"run_detail_id": "Run ID",
+	"run_queued": "Queued",
+	"entity_details": "Details",
+	"action_close": "Close"
 }

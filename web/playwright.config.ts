@@ -78,7 +78,7 @@ export default defineConfig({
 						{
 							name: 'chromium',
 							testMatch:
-								/(a11y|theme|btn-layer|security|nonblocking|keyboard-nav|inp|instance-tabs|session-expiry|live|modules|settle|jellyfin-signin)\.test\.ts/,
+								/(a11y|theme|btn-layer|security|nonblocking|keyboard-nav|inp|instance-tabs|entity-links|session-expiry|live|modules|settle|jellyfin-signin)\.test\.ts/,
 							use: { browserName: 'chromium' }
 						}
 					]
@@ -110,7 +110,7 @@ export default defineConfig({
 						{
 							name: 'authenticated',
 							testMatch:
-								/(a11y|phone-overflow|layout|nonblocking|keyboard-nav|inp|instance-tabs|app-logos|redirects)\.test\.ts/,
+								/(a11y|phone-overflow|layout|nonblocking|keyboard-nav|inp|instance-tabs|entity-links|app-logos|redirects)\.test\.ts/,
 							grep: /authenticated:|nonblocking:/,
 							dependencies: ['auth-setup'],
 							use: { browserName: 'chromium', storageState: authFile }
