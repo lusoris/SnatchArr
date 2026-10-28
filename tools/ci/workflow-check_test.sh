@@ -7,9 +7,11 @@
 # release, and a go install pinned by a variable. Refused: a tag pin, a comment that names
 # another tag, a missing comment, a broken workflow, a missing token, a repository without
 # workflow files, a zizmor run that fails or writes no report, a gate image without a digest,
-# a zizmor requirements file without hashes, and a go install at @latest, at @main or without
-# a package. Last: Renovate reads the actionlint image pin, zizmor-requirements.txt and every
-# go install pin in the workflows, and neither @latest nor a variable.
+# a zizmor requirements file without hashes, a go install at @latest, at @main or without a
+# package, and azure/setup-helm without a version, at latest, or with the version in the next
+# step (accepted: setup-helm pinned to a release). Last: Renovate reads the actionlint image
+# pin, zizmor-requirements.txt, every go install pin and every setup-helm version in the
+# workflows, and neither @latest, a variable nor a helm version of latest.
 # Adapted from github.com/golusoris/goenvoy.
 #
 #   tools/ci/workflow-check_test.sh
@@ -24,6 +26,8 @@ trap 'rm -rf "$WORK"' EXIT
 
 # The commit of the v7.0.1 tag. The master branch of that repository is frozen on another commit.
 CHECKOUT=actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+# The commit of the azure/setup-helm v5.0.1 tag.
+SETUP_HELM=azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310
 
 # plant CASE USES [RUNS_ON_KEY]: one workflow whose only step uses USES.
 plant() {
@@ -95,6 +99,28 @@ jobs:
 YAML
 }
 
+# plant_helm CASE [WITH...]: one workflow whose step uses azure/setup-helm, then the WITH lines.
+plant_helm() {
+  local name="$1"
+  shift
+  mkdir -p "$WORK/$name/.github/workflows"
+  {
+    cat <<YAML
+name: planted
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  planted:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: $SETUP_HELM # v5.0.1
+YAML
+    printf '%s\n' "$@"
+  } > "$WORK/$name/.github/workflows/planted.yml"
+}
+
 # expect_accepted CASE NEEDLE: the check must pass and its output must name NEEDLE.
 expect_accepted() {
   local name="$1" needle="$2" out
@@ -164,6 +190,19 @@ expect_accepted go-install-pinned "no version comment names another tag"
 plant_install go-install-variable "go install \"github.com/cordanaLLM/praetor/cmd/standardsctl@\${PRAETOR_REF}\""
 expect_accepted go-install-variable "no version comment names another tag"
 
+plant_helm helm-pinned "        with:" "          version: v4.3.1"
+expect_accepted helm-pinned "no version comment names another tag"
+
+plant_helm helm-no-version
+expect_refusal helm-no-version "refused .github/workflows/planted.yml:10: azure/setup-helm without a pinned version input"
+
+plant_helm helm-latest "        with:" "          version: latest"
+expect_refusal helm-latest "refused .github/workflows/planted.yml:10: azure/setup-helm without a pinned version input"
+
+# A version in the next step does not pin this one.
+plant_helm helm-next-step "      - run: echo" "        with:" "          version: v4.3.1"
+expect_refusal helm-next-step "refused .github/workflows/planted.yml:10: azure/setup-helm without a pinned version input"
+
 plant_action action-pinned "$CHECKOUT # v7.0.1"
 expect_accepted action-pinned "no version comment names another tag"
 
@@ -228,7 +267,7 @@ echo "ok   renovate: a pin without a digest is not read"
 renovate_go_reads() {
   jq -r -n --slurpfile cfg "$REPO_ROOT/renovate.json" '
     [ $cfg[0].customManagers[]
-      | select(.managerFilePatterns == ["/^\\.github/workflows/[^/]+\\.ya?ml$/"])
+      | select(.managerFilePatterns == ["/^\\.github/workflows/[^/]+\\.ya?ml$/"] and .datasourceTemplate == "go")
       | .matchStrings[] ] as $patterns
     | [ $ARGS.positional[] as $text | $patterns[] as $p | $text | match($p; "g") ] | length
   ' --args "$(cat "$@")"
@@ -246,6 +285,25 @@ if [ "$(renovate_go_reads "$WORK/go-install-latest/.github/workflows/planted.yml
   exit 1
 fi
 echo "ok   renovate: a go install at @latest or at a variable is not read"
+# renovate_helm_reads FILE...: matches of the Renovate manager for the setup-helm version, summed.
+renovate_helm_reads() {
+  jq -r -n --slurpfile cfg "$REPO_ROOT/renovate.json" '
+    [ $cfg[0].customManagers[] | select(.depNameTemplate == "helm/helm" and .datasourceTemplate == "github-releases")
+      | select(.managerFilePatterns == ["/^\\.github/workflows/[^/]+\\.ya?ml$/"]) | .matchStrings[] ] as $patterns
+    | [ $ARGS.positional[] as $text | $patterns[] as $p | $text | match($p; "g") ] | length
+  ' --args "$(cat "$@")"
+}
+helm_steps=$(cat "$REPO_ROOT"/.github/workflows/*.yml | grep -cE 'uses: azure/setup-helm@')
+if [ "$helm_steps" -lt 1 ] || [ "$(renovate_helm_reads "$REPO_ROOT"/.github/workflows/*.yml)" != "$helm_steps" ]; then
+  echo "FAIL renovate: renovate.json does not read all $helm_steps setup-helm versions in the workflows" >&2
+  exit 1
+fi
+echo "ok   renovate: all $helm_steps setup-helm versions in the workflows are read"
+if [ "$(renovate_helm_reads "$WORK/helm-latest/.github/workflows/planted.yml")" != 0 ]; then
+  echo "FAIL renovate: a setup-helm version of latest is read" >&2
+  exit 1
+fi
+echo "ok   renovate: a setup-helm version of latest is not read"
 
 # Renovate's pip_requirements manager must be enabled and its default file pattern must
 # match tools/ci/zizmor-requirements.txt; a file named zizmor.txt would be skipped.
@@ -264,4 +322,4 @@ if jq -e -n --arg file "tools/ci/zizmor.txt" --arg pat "$PIP_PATTERN" '$file | t
 fi
 echo "ok   renovate: pip_requirements reads tools/ci/zizmor-requirements.txt and ignores zizmor.txt"
 
-echo "workflow check: 6 accepted, 15 refused; Renovate reads 1 image pin, zizmor-requirements.txt and $pinned go install pins"
+echo "workflow check: 7 accepted, 18 refused; Renovate reads 1 image pin, zizmor-requirements.txt, $pinned go install pins and $helm_steps setup-helm versions"

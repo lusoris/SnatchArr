@@ -72,6 +72,18 @@
       "datasourceTemplate": "go"
     },
     {
+      "description": "helm of azure/setup-helm in workflows, pinned to a release (tools/ci/workflow-check.sh)",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/[^/]+\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "uses: azure/setup-helm@[^\\n]*\\n(?:\\s+#[^\\n]*\\n)*\\s+with:\\n\\s+version: (?<currentValue>v[0-9]+(?:\\.[0-9]+)+)"
+      ],
+      "depNameTemplate": "helm/helm",
+      "datasourceTemplate": "github-releases"
+    },
+    {
       "description": "Go tools of the devcontainer, pinned to semver; the module path ends before /cmd/ (.devcontainer/snatcharr/post-create.sh)",
       "customType": "regex",
       "managerFilePatterns": [
