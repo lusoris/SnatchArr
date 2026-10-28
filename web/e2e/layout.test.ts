@@ -529,6 +529,12 @@ for (const pattern of SCROLL_BUDGET_ROUTES) {
 		const route = pattern.replace('[id]', instanceId());
 		await page.goto(route);
 		await page.waitForLoadState('networkidle');
+		// networkidle comes before the queries render; measuring then sees the loading state, so
+		// a page whose data overflows the budget would pass.
+		// SvelteKit's fallback error page (status as heading) is short and would pass the budget.
+		await expect(page.getByRole('heading', { level: 1, name: /^\d{3}$/ })).toHaveCount(0);
+		await expect(page.getByText(/^(Loading…|Lädt …)$/)).toHaveCount(0);
+		await expect(page.locator('[data-testid="skeleton"]')).toHaveCount(0);
 		await assertScrollBudget(page, pattern);
 	});
 }

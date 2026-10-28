@@ -6,22 +6,13 @@ SPDX-License-Identifier: EUPL-1.2
 	import QueryGuard from '#lib/components/QueryGuard.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
-	import { licencesQuery, type Ecosystem, type LicencePackage } from '#lib/queries/licences.js';
+	import { licencesQuery } from '#lib/queries/licences.js';
 	import { systemStatusQuery } from '#lib/queries/system.js';
 	import { formatWhen } from '#lib/stamina.js';
+	import LicenceList from './LicenceList.svelte';
 
 	const systemStatus = systemStatusQuery();
 	const licences = licencesQuery();
-
-	const ecosystems: { key: Ecosystem; label: () => string }[] = [
-		{ key: 'go', label: () => m.about_third_party_group_go() },
-		{ key: 'rust', label: () => m.about_third_party_group_rust() },
-		{ key: 'npm', label: () => m.about_third_party_group_npm() }
-	];
-
-	function getPackagesForEcosystem(packages: LicencePackage[], eco: Ecosystem): LicencePackage[] {
-		return packages.filter((p) => p.ecosystem === eco);
-	}
 </script>
 
 <section class="w-full" aria-labelledby="about-tab-title">
@@ -133,67 +124,7 @@ SPDX-License-Identifier: EUPL-1.2
 								{m.about_third_party_empty()}
 							</p>
 						{:else}
-							<div class="flex flex-col gap-6">
-								{#each ecosystems as eco (eco.key)}
-									{@const pkgs = getPackagesForEcosystem(data.packages, eco.key)}
-									{#if pkgs.length > 0}
-										<div class="flex flex-col gap-3">
-											<div class="border-border flex items-baseline justify-between border-b pb-1">
-												<h3 class="text-base font-semibold text-fg">
-													{eco.label()}
-												</h3>
-												<span class="text-xs text-subtle">
-													{m.about_third_party_count({ count: pkgs.length })}
-												</span>
-											</div>
-
-											<ul class="divide-border/40 flex flex-col gap-3 divide-y">
-												{#each pkgs as pkg (`${pkg.name}@${pkg.version}`)}
-													<li class="flex flex-col gap-1 pt-2 first:pt-0">
-														<div
-															class="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1"
-														>
-															<div class="flex min-w-0 flex-wrap items-baseline gap-2">
-																<span class="min-w-0 font-medium break-all text-fg">{pkg.name}</span
-																>
-																<span class="font-mono text-xs text-subtle">{pkg.version}</span>
-															</div>
-															<div class="flex min-w-0 items-center gap-2">
-																<span
-																	class="bg-muted min-w-0 rounded px-1.5 py-0.5 font-mono text-xs font-medium break-words text-fg"
-																>
-																	{pkg.licence}
-																</span>
-																{#if pkg.url}
-																	<a
-																		href={pkg.url}
-																		target="_blank"
-																		rel="noopener noreferrer external"
-																		aria-label={m.about_third_party_visit_aria({ name: pkg.name })}
-																		class="text-brand text-xs underline hover:opacity-80"
-																	>
-																		{m.about_third_party_visit_link()}
-																	</a>
-																{/if}
-															</div>
-														</div>
-
-														{#if pkg.text}
-															<details class="mt-1 text-xs">
-																<summary class="cursor-pointer text-subtle hover:text-fg">
-																	{m.about_third_party_toggle_text()}
-																</summary>
-																<pre
-																	class="bg-muted mt-2 max-h-60 overflow-auto rounded p-2 font-mono text-[0.75rem] break-all whitespace-pre-wrap text-subtle">{pkg.text}</pre>
-															</details>
-														{/if}
-													</li>
-												{/each}
-											</ul>
-										</div>
-									{/if}
-								{/each}
-							</div>
+							<LicenceList packages={data.packages} />
 						{/if}
 					{/snippet}
 				</QueryGuard>
