@@ -995,6 +995,7 @@ paths:
           schema:
             type: integer
             format: int64
+            minimum: 1
         - name: type
           in: query
           schema:
@@ -1133,6 +1134,7 @@ paths:
           description: "Source: api, worker for every worker, or worker:<id> for one worker."
           schema:
             type: string
+            pattern: '^(api|worker(:[^\s:]+)?)$'
             maxLength: 160
         - name: limit
           in: query
