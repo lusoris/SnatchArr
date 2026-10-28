@@ -16,6 +16,10 @@ import (
 // versionParts is how many leading numbers of a version order two builds.
 const versionParts = 3
 
+// rresurrectedPackager is how the readarr-rresurrected image names its packager, a link to
+// the maintainer's profile; the whole link keeps a similar name from matching.
+const rresurrectedPackager = "(https://github.com/ricetim)"
+
 // lastReadarr is the last version line the retired Readarr built; its nightly reports 0.4.19.
 var lastReadarr = [versionParts]int{0, 4, 19}
 
@@ -41,6 +45,8 @@ func readarrProduct(st *arr.StatusResponse) domain.Product {
 		return domain.ProductBookshelf
 	case strings.Contains(author, "faustvii"):
 		return domain.ProductReadarrFaustvii
+	case strings.Contains(author, rresurrectedPackager):
+		return domain.ProductReadarrRresurrected
 	case builtByReadarr(st.Version):
 		return domain.ProductReadarr
 	default:
