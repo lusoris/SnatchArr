@@ -2747,6 +2747,31 @@ func decodeListEventsParams(args [0]string, argsEscaped bool, r *http.Request) (
 			}); err != nil {
 				return err
 			}
+			if err := func() error {
+				if value, ok := params.BeforeID.Get(); ok {
+					if err := func() error {
+						if err := (validate.Int{
+							MinSet:        true,
+							Min:           1,
+							MaxSet:        false,
+							Max:           0,
+							MinExclusive:  false,
+							MaxExclusive:  false,
+							MultipleOfSet: false,
+							MultipleOf:    0,
+							Pattern:       nil,
+						}).Validate(int64(value)); err != nil {
+							return errors.Wrap(err, "int")
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
 		}
 		return nil
 	}(); err != nil {
@@ -3090,7 +3115,7 @@ func decodeListLogsParams(args [0]string, argsEscaped bool, r *http.Request) (pa
 							MaxLengthSet:  true,
 							Email:         false,
 							Hostname:      false,
-							Regex:         nil,
+							Regex:         regexMap["^(api|worker(:[^\\s:]+)?)$"],
 							MinNumeric:    0,
 							MinNumericSet: false,
 							MaxNumeric:    0,

@@ -22,6 +22,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/lusoris/SnatchArr/api/internal/events"
+	snatcharrv1 "github.com/lusoris/SnatchArr/api/internal/gen/snatcharr/v1"
 )
 
 func TestEventName(t *testing.T) {
@@ -41,6 +42,47 @@ func TestEventName(t *testing.T) {
 	for _, tc := range tests {
 		if got := events.EventName(tc.in); got != tc.want {
 			t.Fatalf("EventName(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestIsKnownType(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		want bool
+	}{
+		{"run_queued", true},
+		{"snatch_paced", true},
+		{"stamina_exhausted", true},
+		{"seerr_request_snatched", true},
+		{"events_unconfirmed", true},
+		{"snatch_backoff", true},
+		{"notification_failed", true},
+		{"snatch_deferred", true},
+		{"snatch_resumed", true},
+		{"nope", false},
+		{"", false},
+		{"EVENT_TYPE_SEARCH_DISPATCHED", false},
+		{"SEARCH_DISPATCHED", false},
+		{"search_dispatched ", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := events.IsKnownType(tc.name); got != tc.want {
+				t.Errorf("IsKnownType(%q) = %t, want %t", tc.name, got, tc.want)
+			}
+		})
+	}
+}
+
+// Every proto event type is known under its SSE name.
+func TestIsKnownTypeCoversProtoTypes(t *testing.T) {
+	t.Parallel()
+	for _, name := range snatcharrv1.EventType_name {
+		if sse := events.EventName(name); !events.IsKnownType(sse) {
+			t.Errorf("IsKnownType(%q) = false, want true", sse)
 		}
 	}
 }

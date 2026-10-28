@@ -7,6 +7,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -15,18 +16,25 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 )
 
+type positiveTestCase struct {
+	name          string
+	yaml          string
+	wantOp        string
+	wantRequired  []string
+	wantDef       string
+	wantConfirm   bool
+	checkProperty string
+	checkFormat   string
+	checkEnum     []string
+	checkPattern  string
+	checkMaxLen   int
+	checkDesc     string
+	checkDefault  any
+}
+
 func TestGeneratePositive(t *testing.T) {
 	t.Parallel()
-	cases := []struct {
-		name          string
-		yaml          string
-		wantOp        string
-		wantRequired  []string
-		wantDef       string
-		wantConfirm   bool
-		checkProperty string
-		checkFormat   string
-	}{
+	cases := []positiveTestCase{
 		{
 			name: "ref resolved and required body",
 			yaml: `
@@ -93,6 +101,55 @@ paths:
 			wantConfirm:   true,
 			checkProperty: "widgetId",
 		},
+		{
+			name: "query param with ref enum schema and description override",
+			yaml: `
+paths:
+  /logs:
+    get:
+      operationId: listLogs
+      parameters:
+        - name: level
+          in: query
+          description: Log level filter
+          schema:
+            $ref: "#/components/schemas/LogLevel"
+components:
+  schemas:
+    LogLevel:
+      type: string
+      description: Schema level description
+      enum: [debug, info, warn, error]
+`,
+			wantOp:        "listLogs",
+			checkProperty: "level",
+			checkEnum:     []string{"debug", "info", "warn", "error"},
+			checkDesc:     "Log level filter",
+		},
+		{
+			name: "inline enum pattern maxLength default kept",
+			yaml: `
+paths:
+  /items:
+    get:
+      operationId: listItems
+      parameters:
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            pattern: "^[a-z]+$"
+            maxLength: 10
+            default: asc
+`,
+			wantOp:        "listItems",
+			checkProperty: "sort",
+			checkEnum:     []string{"asc", "desc"},
+			checkPattern:  "^[a-z]+$",
+			checkMaxLen:   10,
+			checkDefault:  "asc",
+		},
 	}
 
 	for _, tc := range cases {
@@ -114,17 +171,17 @@ paths:
 			if err := json.Unmarshal(raw, &parsed); err != nil {
 				t.Fatalf("unmarshal operation schema: %v", err)
 			}
-			assertGeneratedSchema(t, parsed, tc.wantRequired, tc.wantDef, tc.wantConfirm, tc.checkProperty, tc.checkFormat)
+			assertGeneratedSchema(t, parsed, tc)
 		})
 	}
 }
 
-func assertGeneratedSchema(t *testing.T, parsed map[string]any, wantReq []string, wantDef string, wantConfirm bool, prop, format string) {
+func assertGeneratedSchema(t *testing.T, parsed map[string]any, tc positiveTestCase) {
 	t.Helper()
 	if addProps, ok := parsed["additionalProperties"].(bool); !ok || addProps {
 		t.Fatalf("expected additionalProperties=false, got %v", parsed["additionalProperties"])
 	}
-	if len(wantReq) > 0 {
+	if len(tc.wantRequired) > 0 {
 		rawReq, ok := parsed["required"].([]any)
 		if !ok {
 			t.Fatalf("expected required list, got %v", parsed["required"])
@@ -133,30 +190,57 @@ func assertGeneratedSchema(t *testing.T, parsed map[string]any, wantReq []string
 		for i, v := range rawReq {
 			gotReq[i] = v.(string)
 		}
-		if !slices.Equal(gotReq, wantReq) {
-			t.Fatalf("required = %v, want %v", gotReq, wantReq)
+		if !slices.Equal(gotReq, tc.wantRequired) {
+			t.Fatalf("required = %v, want %v", gotReq, tc.wantRequired)
 		}
 	}
-	if wantDef != "" {
+	if tc.wantDef != "" {
 		defs, ok := parsed["$defs"].(map[string]any)
-		if !ok || defs[wantDef] == nil {
-			t.Fatalf("expected $defs[%q], got %v", wantDef, parsed["$defs"])
+		if !ok || defs[tc.wantDef] == nil {
+			t.Fatalf("expected $defs[%q], got %v", tc.wantDef, parsed["$defs"])
 		}
 	}
 	props, ok := parsed["properties"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected properties map, got %v", parsed["properties"])
 	}
-	if wantConfirm && props["confirm"] == nil {
+	if tc.wantConfirm && props["confirm"] == nil {
 		t.Fatal("expected confirm property for destructive operation")
 	}
-	if prop != "" {
-		pObj, ok := props[prop].(map[string]any)
+	if tc.checkProperty != "" {
+		pObj, ok := props[tc.checkProperty].(map[string]any)
 		if !ok {
-			t.Fatalf("missing property %q", prop)
+			t.Fatalf("missing property %q", tc.checkProperty)
 		}
-		if format != "" && pObj["format"] != format {
-			t.Fatalf("property %q format = %v, want %v", prop, pObj["format"], format)
+		if tc.checkFormat != "" && pObj["format"] != tc.checkFormat {
+			t.Fatalf("property %q format = %v, want %v", tc.checkProperty, pObj["format"], tc.checkFormat)
+		}
+		if len(tc.checkEnum) > 0 {
+			rawEnum, ok := pObj["enum"].([]any)
+			if !ok {
+				t.Fatalf("property %q missing enum list", tc.checkProperty)
+			}
+			gotEnum := make([]string, len(rawEnum))
+			for i, v := range rawEnum {
+				gotEnum[i] = fmt.Sprint(v)
+			}
+			if !slices.Equal(gotEnum, tc.checkEnum) {
+				t.Fatalf("property %q enum = %v, want %v", tc.checkProperty, gotEnum, tc.checkEnum)
+			}
+		}
+		if tc.checkPattern != "" && pObj["pattern"] != tc.checkPattern {
+			t.Fatalf("property %q pattern = %v, want %v", tc.checkProperty, pObj["pattern"], tc.checkPattern)
+		}
+		if tc.checkMaxLen > 0 {
+			if maxLenVal, ok := pObj["maxLength"].(float64); !ok || int(maxLenVal) != tc.checkMaxLen {
+				t.Fatalf("property %q maxLength = %v, want %v", tc.checkProperty, pObj["maxLength"], tc.checkMaxLen)
+			}
+		}
+		if tc.checkDesc != "" && pObj["description"] != tc.checkDesc {
+			t.Fatalf("property %q description = %v, want %v", tc.checkProperty, pObj["description"], tc.checkDesc)
+		}
+		if tc.checkDefault != nil && pObj["default"] != tc.checkDefault {
+			t.Fatalf("property %q default = %v, want %v", tc.checkProperty, pObj["default"], tc.checkDefault)
 		}
 	}
 }
@@ -180,6 +264,23 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/NonExistent"
+`,
+			wantErr: ErrInvalidRef,
+		},
+		{
+			name: "unknown param schema ref fails",
+			yaml: `
+paths:
+  /logs:
+    get:
+      operationId: listLogs
+      parameters:
+        - name: level
+          in: query
+          schema:
+            $ref: "#/components/schemas/NonExistentParamSchema"
+components:
+  schemas: {}
 `,
 			wantErr: ErrInvalidRef,
 		},
@@ -214,7 +315,14 @@ paths:
 
 func TestGenerateBoundary(t *testing.T) {
 	t.Parallel()
-	yaml := `
+	cases := []struct {
+		name   string
+		yaml   string
+		wantOp string
+	}{
+		{
+			name: "ping without params or body",
+			yaml: `
 paths:
   /ping:
     get:
@@ -223,25 +331,57 @@ paths:
       responses:
         "200":
           description: Pong
-`
-	out, err := Generate([]byte(yaml))
-	if err != nil {
-		t.Fatalf("Generate: %v", err)
+`,
+			wantOp: "ping",
+		},
+		{
+			name: "boundary parameter schemas with items and limits",
+			yaml: `
+paths:
+  /boundary:
+    get:
+      operationId: boundaryOp
+      parameters:
+        - name: noSchema
+          in: query
+        - name: arrayParam
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+            minLength: 0
+            maxLength: 0
+            exclusiveMinimum: 0
+            exclusiveMaximum: 10
+`,
+			wantOp: "boundaryOp",
+		},
 	}
-	var m map[string]json.RawMessage
-	if err := json.Unmarshal(out, &m); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	raw, ok := m["ping"]
-	if !ok {
-		t.Fatal("missing operation 'ping'")
-	}
-	var s jsonschema.Schema
-	if err := json.Unmarshal(raw, &s); err != nil {
-		t.Fatalf("unmarshal into jsonschema.Schema: %v", err)
-	}
-	if _, err := s.Resolve(&jsonschema.ResolveOptions{ValidateDefaults: true}); err != nil {
-		t.Fatalf("Resolve boundary schema: %v", err)
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			out, err := Generate([]byte(tc.yaml))
+			if err != nil {
+				t.Fatalf("Generate: %v", err)
+			}
+			var m map[string]json.RawMessage
+			if err := json.Unmarshal(out, &m); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			raw, ok := m[tc.wantOp]
+			if !ok {
+				t.Fatalf("missing operation %q", tc.wantOp)
+			}
+			var s jsonschema.Schema
+			if err := json.Unmarshal(raw, &s); err != nil {
+				t.Fatalf("unmarshal into jsonschema.Schema: %v", err)
+			}
+			if _, err := s.Resolve(&jsonschema.ResolveOptions{ValidateDefaults: true}); err != nil {
+				t.Fatalf("Resolve boundary schema: %v", err)
+			}
+		})
 	}
 }
 

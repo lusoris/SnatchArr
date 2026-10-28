@@ -9,6 +9,7 @@ package events
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -17,6 +18,8 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/realtime/sse"
+
+	snatcharrv1 "github.com/lusoris/SnatchArr/api/internal/gen/snatcharr/v1"
 )
 
 // Frame is the JSON payload of every SSE event.
@@ -61,6 +64,27 @@ func (b *Bus) Publish(ctx context.Context, f Frame) {
 func EventName(protoName string) string {
 	n := strings.TrimPrefix(protoName, "EVENT_TYPE_")
 	return strings.ToLower(n)
+}
+
+// EventTypes lists the SSE name of every defined proto event type.
+func EventTypes() []string {
+	names := make([]string, 0, len(snatcharrv1.EventType_name))
+	for _, name := range snatcharrv1.EventType_name {
+		names = append(names, EventName(name))
+	}
+	return names
+}
+
+// apiTypes are the event types the API records itself, outside
+// snatcharr.v1.EventType. web/src/lib/live-events.ts mirrors this list.
+var apiTypes = []string{
+	"run_queued", "snatch_paced", "stamina_exhausted", "seerr_request_snatched",
+	"events_unconfirmed", "snatch_backoff", "notification_failed", "snatch_deferred", "snatch_resumed",
+}
+
+// IsKnownType reports whether name is an event type a worker or the API records.
+func IsKnownType(name string) bool {
+	return slices.Contains(apiTypes, name) || slices.Contains(EventTypes(), name)
 }
 
 // Module provides the Bus.
