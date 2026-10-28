@@ -12,6 +12,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import PageHeader from '#lib/components/PageHeader.svelte';
 	import QueryGuard from '#lib/components/QueryGuard.svelte';
 	import SecretField from '#lib/components/SecretField.svelte';
+	import SyncError from '#lib/components/SyncError.svelte';
 	import TextField from '#lib/components/TextField.svelte';
 	import UrlText from '#lib/components/UrlText.svelte';
 	import { FormEditor } from '#lib/formEditor.svelte.js';
@@ -171,7 +172,7 @@ SPDX-License-Identifier: EUPL-1.2
 						: m.adult_sources_status_never()}
 				</li>
 				{#if st.last_error}
-					<li class="text-danger">{st.last_error}</li>
+					<li><SyncError error={st.last_error} /></li>
 				{/if}
 			</ul>
 		{/snippet}
@@ -211,9 +212,12 @@ SPDX-License-Identifier: EUPL-1.2
 												: m.adult_sources_source_never()}
 										</p>
 										{#if src.last_sync_error}
-											<p class="text-xs text-danger">
-												{m.adult_sources_source_error({ error: src.last_sync_error })}
-											</p>
+											<div class="text-xs">
+												<SyncError
+													error={src.last_sync_error}
+													format={(error) => m.adult_sources_source_error({ error })}
+												/>
+											</div>
 										{/if}
 									</div>
 									{#if session.isAdmin}
