@@ -388,32 +388,39 @@ describe('overview helper: eventLevelLabel', () => {
 });
 
 describe('overview helper: capRows', () => {
-	it('positive: returns all rows and cut=false when list is below cap', () => {
+	it('positive: keeps all rows and cut=false when list is below cap', () => {
 		expect(capRows([1, 2, 3], 5)).toEqual({
-			shown: [1, 2, 3],
+			rows: [1, 2, 3],
 			total: 3,
+			cap: 5,
+			hidden: 0,
 			cut: false
 		});
 	});
 
-	it('boundary: returns all rows and cut=false when list length equals cap', () => {
+	it('boundary: keeps all rows and cut=false when list length equals cap', () => {
 		expect(capRows(['a', 'b', 'c'], 3)).toEqual({
-			shown: ['a', 'b', 'c'],
+			rows: ['a', 'b', 'c'],
 			total: 3,
+			cap: 3,
+			hidden: 0,
 			cut: false
 		});
 	});
 
-	it('positive: slices to cap and reports cut=true with total when list exceeds cap', () => {
+	it('positive: keeps every row and counts the rows below the cap when list exceeds cap', () => {
 		expect(capRows([1, 2, 3, 4, 5], 3)).toEqual({
-			shown: [1, 2, 3],
+			rows: [1, 2, 3, 4, 5],
 			total: 5,
+			cap: 3,
+			hidden: 2,
 			cut: true
 		});
 	});
 
-	it('negative: handles empty and undefined lists with cut=false and total=0', () => {
-		expect(capRows([], 4)).toEqual({ shown: [], total: 0, cut: false });
-		expect(capRows(undefined, 4)).toEqual({ shown: [], total: 0, cut: false });
+	it('negative: handles empty and undefined lists and a negative cap', () => {
+		expect(capRows([], 4)).toEqual({ rows: [], total: 0, cap: 4, hidden: 0, cut: false });
+		expect(capRows(undefined, 4)).toEqual({ rows: [], total: 0, cap: 4, hidden: 0, cut: false });
+		expect(capRows([1], -1)).toEqual({ rows: [1], total: 1, cap: 0, hidden: 1, cut: true });
 	});
 });
