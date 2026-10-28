@@ -2352,6 +2352,72 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
 
+  /adult/image-sets:
+    get:
+      tags: [adult]
+      operationId: listAdultImageSets
+      x-module: adult
+      summary: List discovered image sets
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Image sets list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdultImageSet"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /adult/image-sets/{setId}:
+    parameters:
+      - $ref: "#/components/parameters/AdultSetId"
+    get:
+      tags: [adult]
+      operationId: getAdultImageSet
+      x-module: adult
+      summary: Get an image set with ordered items and ignore-file status
+      responses:
+        "200":
+          description: Image set detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdultImageSetDetail"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /adult/scan:
+    post:
+      tags: [adult]
+      operationId: triggerAdultScan
+      x-module: adult
+      summary: Trigger on-demand image set scan
+      responses:
+        "200":
+          description: Scan summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdultScanSummary"
+        default:
+          $ref: "#/components/responses/Problem"
+
 components:
   securitySchemes:
     cookieAuth:
@@ -2430,6 +2496,13 @@ components:
         format: uuid
     AdultSourceId:
       name: sourceId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AdultSetId:
+      name: setId
       in: path
       required: true
       schema:
@@ -4706,6 +4779,112 @@ components:
           type: integer
         studios_synced:
           type: integer
+
+    AdultImageSet:
+      type: object
+      required:
+        - id
+        - title
+        - directory_path
+        - item_count
+        - total_size_bytes
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        directory_path:
+          type: string
+        whisparr_scene_foreign_id:
+          type: string
+        performer_id:
+          type: string
+          format: uuid
+        item_count:
+          type: integer
+        total_size_bytes:
+          type: integer
+          format: int64
+        cover_image_path:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    AdultImageItem:
+      type: object
+      required:
+        - id
+        - image_set_id
+        - file_path
+        - file_name
+        - file_size_bytes
+        - mime_type
+        - sha256_checksum
+        - sort_order
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        image_set_id:
+          type: string
+          format: uuid
+        file_path:
+          type: string
+        file_name:
+          type: string
+        file_size_bytes:
+          type: integer
+          format: int64
+        mime_type:
+          type: string
+        width:
+          type: integer
+        height:
+          type: integer
+        sha256_checksum:
+          type: string
+        sort_order:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+
+    AdultImageSetDetail:
+      allOf:
+        - $ref: "#/components/schemas/AdultImageSet"
+        - type: object
+          required:
+            - items
+            - ignore_file_present
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/AdultImageItem"
+            ignore_file_present:
+              type: boolean
+
+    AdultScanSummary:
+      type: object
+      required:
+        - sets_found
+        - items_found
+        - ignore_file_present
+      properties:
+        sets_found:
+          type: integer
+        items_found:
+          type: integer
+        ignore_file_present:
+          type: boolean
 
 
 

@@ -46,6 +46,12 @@ func Mount(r chi.Router, p MountParams) error {
 	if err != nil {
 		return fmt.Errorf("httpapi: new server: %w", err)
 	}
+	r.With(
+		withHTTP,
+		p.Security.RequireUser(p.Logger),
+		csrfUnlessBearer(p.CSRF),
+	).Get(PathPrefix+"/adult/image-items/{itemId}/file", p.Handlers.ServeAdultImageItemFile())
+
 	r.With(withHTTP, csrfUnlessBearer(p.CSRF)).Handle(PathPrefix+"/*", srv)
 	return nil
 }

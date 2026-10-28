@@ -896,5 +896,21 @@
 	"adult_sources_source_never": "Never synchronized",
 	"adult_sources_source_error": "Sync error: {error}",
 	"adult_sources_priority_badge": "Priority {priority}",
-	"help_adult_sources": "Catalogue sources connect SnatchArr to GraphQL metadata directories to synchronize favourite performers and studios. Administrators can add endpoints with write-only encrypted API keys, set source priority, and trigger manual synchronization."
+	"help_adult_sources": "Catalogue sources connect SnatchArr to GraphQL metadata directories to synchronize favourite performers and studios. Administrators can add endpoints with write-only encrypted API keys, set source priority, and trigger manual synchronization.",
+	"nav_adult_image_sets": "Image sets",
+	"adult_image_sets_title": "Image sets",
+	"adult_image_sets_subtitle": "Browse discovered image sets and inspect streamed item images.",
+	"adult_image_sets_scan_now": "Scan now",
+	"adult_image_sets_scanning": "Scanning…",
+	"adult_image_sets_scanned_toast": "Scanned {sets} image sets and {items} items",
+	"adult_image_sets_status_title": "Image set scanning",
+	"adult_image_sets_ignore_file_present": "Stash ignore marker present",
+	"adult_image_sets_ignore_file_missing": "Stash ignore marker missing",
+	"adult_image_sets_none": "No image sets discovered yet.",
+	"adult_image_sets_item_count": "{count} items",
+	"adult_image_sets_view_items": "View items",
+	"adult_image_sets_close": "Close",
+	"adult_image_sets_detail_title": "Image set items",
+	"adult_image_sets_empty_set": "This image set contains no images.",
+	"help_adult_image_sets": "Image sets display local picture sets scanned from the configured directory. Administrators can trigger a manual scan, which also verifies the .stashignore marker at the directory root."
 }

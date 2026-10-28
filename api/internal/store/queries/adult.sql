@@ -214,6 +214,11 @@ WHERE id = $1;
 SELECT * FROM adult_image_sets
 ORDER BY created_at DESC;
 
+-- name: ListAdultImageSetsPaged :many
+SELECT * FROM adult_image_sets
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2;
+
 -- name: UpdateAdultImageSetSummary :one
 UPDATE adult_image_sets
 SET
@@ -267,3 +272,6 @@ WHERE image_set_id = $1 AND NOT (file_path = ANY(@keep_paths::text[]));
 -- name: DeleteAllAdultImageItemsForSet :execrows
 DELETE FROM adult_image_items
 WHERE image_set_id = $1;
+
+-- name: CountAdultImageItems :one
+SELECT count(*) FROM adult_image_items;

@@ -171,6 +171,12 @@ type Handler interface {
 	//
 	// POST /instances/{instanceId}/download-clients/discover
 	DiscoverDownloadClients(ctx context.Context, params DiscoverDownloadClientsParams) (*DiscoveryResult, error)
+	// GetAdultImageSet implements getAdultImageSet operation.
+	//
+	// Get an image set with ordered items and ignore-file status.
+	//
+	// GET /adult/image-sets/{setId}
+	GetAdultImageSet(ctx context.Context, params GetAdultImageSetParams) (*AdultImageSetDetail, error)
 	// GetAdultSource implements getAdultSource operation.
 	//
 	// Get a catalogue source.
@@ -382,6 +388,12 @@ type Handler interface {
 	//
 	// GET /auth/api-keys
 	ListAPIKeys(ctx context.Context) (ListAPIKeysRes, error)
+	// ListAdultImageSets implements listAdultImageSets operation.
+	//
+	// List discovered image sets.
+	//
+	// GET /adult/image-sets
+	ListAdultImageSets(ctx context.Context, params ListAdultImageSetsParams) ([]AdultImageSet, error)
 	// ListAdultSources implements listAdultSources operation.
 	//
 	// List configured catalogue sources.
@@ -625,6 +637,12 @@ type Handler interface {
 	//
 	// POST /seerr/test
 	TestSeerrLinkInput(ctx context.Context, req *SeerrLinkInput) (*ProbeResult, error)
+	// TriggerAdultScan implements triggerAdultScan operation.
+	//
+	// Trigger on-demand image set scan.
+	//
+	// POST /adult/scan
+	TriggerAdultScan(ctx context.Context) (*AdultScanSummary, error)
 	// TriggerAdultSync implements triggerAdultSync operation.
 	//
 	// Run favourite performer and studio synchronization across enabled catalogue sources.

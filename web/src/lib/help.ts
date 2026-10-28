@@ -75,6 +75,10 @@ export const HELP_MAP: Record<string, HelpEntry> = {
 		summaryKey: 'help_adult_sources',
 		docsPath: 'modules.md'
 	},
+	'/adult/image-sets': {
+		summaryKey: 'help_adult_image_sets',
+		docsPath: 'modules.md'
+	},
 	'/system': {
 		summaryKey: 'help_system',
 		docsPath: 'configuration.md#runtime-settings'

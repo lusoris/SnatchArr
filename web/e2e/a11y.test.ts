@@ -20,6 +20,7 @@ const ALL_ROUTES = [
 	'/',
 	'/account',
 	'/activity',
+	'/adult/image-sets',
 	'/adult/sources',
 	'/automation',
 	'/connections',

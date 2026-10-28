@@ -257,6 +257,15 @@ func (UnimplementedHandler) DiscoverDownloadClients(ctx context.Context, params 
 	return r, ht.ErrNotImplemented
 }
 
+// GetAdultImageSet implements getAdultImageSet operation.
+//
+// Get an image set with ordered items and ignore-file status.
+//
+// GET /adult/image-sets/{setId}
+func (UnimplementedHandler) GetAdultImageSet(ctx context.Context, params GetAdultImageSetParams) (r *AdultImageSetDetail, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // GetAdultSource implements getAdultSource operation.
 //
 // Get a catalogue source.
@@ -570,6 +579,15 @@ func (UnimplementedHandler) LinkProxyIdentity(ctx context.Context) (r LinkProxyI
 //
 // GET /auth/api-keys
 func (UnimplementedHandler) ListAPIKeys(ctx context.Context) (r ListAPIKeysRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ListAdultImageSets implements listAdultImageSets operation.
+//
+// List discovered image sets.
+//
+// GET /adult/image-sets
+func (UnimplementedHandler) ListAdultImageSets(ctx context.Context, params ListAdultImageSetsParams) (r []AdultImageSet, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -933,6 +951,15 @@ func (UnimplementedHandler) TestSeerrLink(ctx context.Context, params TestSeerrL
 //
 // POST /seerr/test
 func (UnimplementedHandler) TestSeerrLinkInput(ctx context.Context, req *SeerrLinkInput) (r *ProbeResult, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// TriggerAdultScan implements triggerAdultScan operation.
+//
+// Trigger on-demand image set scan.
+//
+// POST /adult/scan
+func (UnimplementedHandler) TriggerAdultScan(ctx context.Context) (r *AdultScanSummary, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

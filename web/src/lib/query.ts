@@ -45,5 +45,7 @@ export const keys = {
 	watchawareGateSeries: (id: string) => ['watchaware', 'gate', 'series', id] as const,
 	watchawareGateDecisions: (id: string) => ['watchaware', 'gate', 'decisions', id] as const,
 	adultSources: ['adult', 'sources'] as const,
-	adultSyncStatus: ['adult', 'sync', 'status'] as const
+	adultSyncStatus: ['adult', 'sync', 'status'] as const,
+	adultImageSets: ['adult', 'image-sets'] as const,
+	adultImageSet: (id: string) => ['adult', 'image-sets', id] as const
 };

@@ -115,7 +115,8 @@ export async function mockSignedInApi(
 		'events',
 		'schedules',
 		'system/modules',
-		'adult/sources'
+		'adult/sources',
+		'adult/image-sets'
 	]) {
 		await page.route(`**/api/v1/${path}*`, (route) => route.fulfill(json([])));
 	}
