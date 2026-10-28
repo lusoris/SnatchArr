@@ -3,6 +3,7 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { createSentioMutation } from '@sveltesentio/query';
 	import { toast } from 'svelte-sonner';
 	import { api, describeError } from '#lib/api/client.js';
@@ -77,9 +78,11 @@ SPDX-License-Identifier: EUPL-1.2
 						<div>
 							<div>{s.name}</div>
 							{#if s.instance_id}
-								<div class="text-xs text-subtle">
-									{instanceName(s.instance_id) ?? s.instance_id}
-								</div>
+								<a
+									href={resolve('/instances/[id]', { id: s.instance_id })}
+									class="text-xs text-subtle hover:underline"
+									>{instanceName(s.instance_id) ?? s.instance_id}</a
+								>
 							{/if}
 						</div>
 					</td>

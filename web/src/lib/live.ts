@@ -67,6 +67,19 @@ export function eventToLiveFrame(e: ApiEvent): LiveFrame {
 	};
 }
 
+/** Adapts partial SSE frames for the same detail view as persisted events. */
+export function liveFrameToEvent(frame: LiveFrame): ApiEvent {
+	const level = frame.level;
+	return {
+		...frame,
+		id: frame.id ?? 0,
+		instance_id: frame.instance_id ?? '',
+		ts: frame.ts ?? '',
+		type: frame.type ?? frame.event,
+		level: level === 'error' || level === 'warn' || level === 'debug' ? level : 'info'
+	};
+}
+
 function parseTime(ts?: string): number {
 	if (!ts) return 0;
 	const parsed = Date.parse(ts);

@@ -2,6 +2,9 @@
 /* SPDX-License-Identifier: EUPL-1.2 */
 @import 'tailwindcss';
 @import './lib/theme.css';
+/* sveltesentio components ship Svelte source with Tailwind classes; scan them so their
+   utilities (dialog overlay, centring) are generated. */
+@source '../node_modules/@sveltesentio/ui/src';
 
 /* Aliases over sveltesentio's tokens. Names deliberately differ from the token names
    (--color-muted, --color-card, ...) so no custom property references itself. --color-control
