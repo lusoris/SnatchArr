@@ -6,7 +6,7 @@ import { WCAG_22_AA_TAGS } from '@sveltesentio/testing/a11y';
 import { fireEvent, render as svelteRender, screen, within } from '@testing-library/svelte';
 import { QueryClient, QueryClientProvider } from '@tanstack/svelte-query';
 import type { Component } from 'svelte';
-import { expect, vi } from 'vitest';
+import { afterEach, beforeEach, expect, vi } from 'vitest';
 import { axe } from 'vitest-axe';
 import { api } from '#lib/api/client.js';
 import type { components } from '#lib/api/schema.js';
@@ -20,6 +20,18 @@ export type PolicyFilterOptions = components['schemas']['PolicyFilterOptions'];
 export type QueuePolicy = components['schemas']['QueuePolicy'];
 export type QueueStrike = components['schemas']['QueueStrike'];
 export type InstancePriority = components['schemas']['InstancePriority'];
+
+/** Signs in an admin before each test; signs out and restores mocks after it. */
+export function useAdminSession(): void {
+	beforeEach(() => {
+		session.user = { id: 'u1', username: 'admin', role: 'admin' } as never;
+	});
+
+	afterEach(() => {
+		session.user = null;
+		vi.restoreAllMocks();
+	});
+}
 
 /** A query client per test: no retry, so a refused request shows at once; nothing cached. */
 function createTestQueryClient(): QueryClient {
