@@ -78,7 +78,7 @@ export default defineConfig({
 						{
 							name: 'chromium',
 							testMatch:
-								/(a11y|theme|btn-layer|security|nonblocking|keyboard-nav|inp|instance-tabs|entity-links|session-expiry|live|modules|settle|jellyfin-signin)\.test\.ts/,
+								/(a11y|theme|btn-layer|security|nonblocking|keyboard-nav|inp|instance-tabs|entity-links|app-logos|session-expiry|live|modules|settle|jellyfin-signin)\.test\.ts/,
 							use: { browserName: 'chromium' }
 						}
 					]
