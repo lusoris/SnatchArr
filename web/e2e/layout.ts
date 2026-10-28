@@ -636,7 +636,8 @@ export const SCROLL_BUDGET_ROUTES = [
 	'/instances/[id]/activity',
 	'/system',
 	'/system?tab=modules',
-	'/system?tab=notifications'
+	'/system?tab=notifications',
+	'/system?tab=about'
 ] as const;
 
 export async function assertScrollBudget(
