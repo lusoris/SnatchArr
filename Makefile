@@ -21,7 +21,7 @@ GOMODCACHE       = $(subst \,/,$(shell go env GOMODCACHE))
 GOLUSORIS_VER    = $(shell go list -m -f '{{.Version}}' github.com/golusoris/golusoris)
 GOLUSORIS_SHARED = $(GOMODCACHE)/github.com/golusoris/golusoris@$(GOLUSORIS_VER)/tools/Makefile.shared
 
-.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-soak e2e-compose-smoke e2e-compose-pg-upgrade e2e-dev-compose-smoke dlclients-live arr-forceimport-live integrations-live e2e-cnpg-pg-upgrade e2e-cnpg-backup-restore e2e-chart-install web-verify web-e2e web-e2e-api web-visual web-visual-update proto-verify deploy-verify chart-package governance-verify hooks-verify contracts-verify workflows-verify workflows-lint release-e2e-check secret-scan licences licences-check \
+.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-soak e2e-compose-smoke e2e-compose-pg-upgrade e2e-dev-compose-smoke dlclients-live arr-forceimport-live integrations-live e2e-cnpg-pg-upgrade e2e-cnpg-backup-restore e2e-chart-install web-verify web-e2e web-e2e-api web-visual web-visual-update proto-verify deploy-verify chart-package governance-verify hooks-verify contracts-verify workflows-verify workflows-lint release-e2e-check release-dogfood-check secret-scan licences licences-check \
 	images kind-up kind-deploy kind-keda-proof kind-down \
         api-gen api-gosec api-vuln gosec-install govulncheck-install sqlc-install tools-verify tools-lint tools-test tools-gosec web-gen proto-gen dev hooks setup api-openapi-breaking
 
@@ -537,6 +537,10 @@ release-e2e-check: ## Release feat/fix commits since the previous tag each map t
 	python3 -I tools/ci/release_e2e_check.py --self-test
 	python3 -I tools/ci/release_e2e_check.py
 
+release-dogfood-check: ## Release dogfood gate and live MCP dogfood pass recorder against their planted cases
+	python3 -I tools/release/dogfood_gate.py --self-test
+	python3 -I tools/release/dogfood_pass.py --self-test
+
 workflows-verify: ## The rule of "CI success", the Security Scan issue step, the Semgrep scan, generated_files.py and the planted-case runner, against their cases
 	sh tools/ci/status_test.sh
 	sh tools/ci/security_issue_test.sh
@@ -544,6 +548,8 @@ workflows-verify: ## The rule of "CI success", the Security Scan issue step, the
 	bash tools/ci/generated_files_test.sh
 	bash tools/e2e/planted_test.sh
 	bash tools/e2e/live_lib_test.sh
+	python3 -I tools/release/dogfood_gate.py --self-test
+	python3 -I tools/release/dogfood_pass.py --self-test
 
 # Not part of verify-all: needs Docker, the network and a forge token (GH_TOKEN, read access).
 # The CI job "workflows" runs it on every pull request.
