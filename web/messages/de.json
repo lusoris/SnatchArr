@@ -932,5 +932,21 @@
 	"requests_settings_voting_ttl_days_hint": "Anzahl der Tage, die eine Abstimmung offen bleibt (0 für unbegrenzt).",
 	"requests_settings_saved": "Anfrageeinstellungen gespeichert",
 	"requests_settings_readonly_note": "Betrachterkonto: Anfrageeinstellungen sind schreibgeschützt.",
-	"help_requests_settings": "Konfigurieren Sie Abstimmungsregeln, Betrachterrechte, Sichtbarkeit und Fristen für Community-Anfragen."
+	"help_requests_settings": "Konfigurieren Sie Abstimmungsregeln, Betrachterrechte, Sichtbarkeit und Fristen für Community-Anfragen.",
+	"nav_adult_image_sets": "Bildersets",
+	"adult_image_sets_title": "Bildersets",
+	"adult_image_sets_subtitle": "Entdeckte Bildersets durchsuchen und gestreamte Bilder anzeigen.",
+	"adult_image_sets_scan_now": "Jetzt scannen",
+	"adult_image_sets_scanning": "Scanne…",
+	"adult_image_sets_scanned_toast": "{sets} Bildersets und {items} Bilder gescannt",
+	"adult_image_sets_status_title": "Bilderset-Überprüfung",
+	"adult_image_sets_ignore_file_present": "Ignore-Datei vorhanden",
+	"adult_image_sets_ignore_file_missing": "Ignore-Datei fehlt",
+	"adult_image_sets_none": "Noch keine Bildersets entdeckt.",
+	"adult_image_sets_item_count": "{count} Elemente",
+	"adult_image_sets_view_items": "Bilder anzeigen",
+	"adult_image_sets_close": "Schließen",
+	"adult_image_sets_detail_title": "Bilderset-Elemente",
+	"adult_image_sets_empty_set": "Dieses Bilderset enthält keine Bilder.",
+	"help_adult_image_sets": "Bildersets zeigt lokale Bilderserien aus dem konfigurierten Verzeichnis an. Administratoren können einen manuellen Scan auslösen, der auch die Ignore-Datei im Stammverzeichnis schreibt."
 }

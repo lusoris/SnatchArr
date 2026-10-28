@@ -1681,6 +1681,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/adult/image-sets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List discovered image sets */
+        get: operations["listAdultImageSets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/adult/image-sets/{setId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                setId: components["parameters"]["AdultSetId"];
+            };
+            cookie?: never;
+        };
+        /** Get an image set with ordered items and ignore-file status */
+        get: operations["getAdultImageSet"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/adult/scan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Trigger on-demand image set scan */
+        post: operations["triggerAdultScan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2895,6 +2948,53 @@ export interface components {
             next_cursor?: string;
             cursor?: string;
         };
+        AdultImageSetPage: {
+            items: components["schemas"]["AdultImageSet"][];
+            total: number;
+        };
+        AdultImageSet: {
+            /** Format: uuid */
+            id: string;
+            title: string;
+            directory_path: string;
+            whisparr_scene_foreign_id?: string;
+            /** Format: uuid */
+            performer_id?: string;
+            item_count: number;
+            /** Format: int64 */
+            total_size_bytes: number;
+            cover_image_path?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        AdultImageItem: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            image_set_id: string;
+            file_path: string;
+            file_name: string;
+            /** Format: int64 */
+            file_size_bytes: number;
+            mime_type: string;
+            width?: number;
+            height?: number;
+            sha256_checksum: string;
+            sort_order: number;
+            /** Format: date-time */
+            created_at: string;
+        };
+        AdultImageSetDetail: components["schemas"]["AdultImageSet"] & {
+            items: components["schemas"]["AdultImageItem"][];
+            ignore_file_present: boolean;
+        };
+        AdultScanSummary: {
+            sets_found: number;
+            items_found: number;
+            ignore_file_present: boolean;
+        };
     };
     responses: {
         /** @description No content */
@@ -2928,6 +3028,7 @@ export interface components {
         AdultSourceId: string;
         AdultPerformerId: string;
         AdultStudioId: string;
+        AdultSetId: string;
     };
     requestBodies: never;
     headers: never;
@@ -5943,6 +6044,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdultStudio"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listAdultImageSets: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Image sets page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdultImageSetPage"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getAdultImageSet: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                setId: components["parameters"]["AdultSetId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Image set detail */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdultImageSetDetail"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    triggerAdultScan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scan summary */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdultScanSummary"];
                 };
             };
             default: components["responses"]["Problem"];

@@ -36,6 +36,7 @@ describe('nav model', () => {
 			'/adult/sources',
 			'/adult/performers',
 			'/adult/studios',
+			'/adult/image-sets',
 			'/system'
 		]);
 	});

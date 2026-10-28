@@ -125,6 +125,10 @@ func (s *Service) ScanImageSets(ctx context.Context) error {
 }
 
 func (s *Service) scanDir(ctx context.Context, baseDir string) error {
+	if err := writeStashIgnore(baseDir, s.logger); err != nil {
+		s.logger.WarnContext(ctx, "adult: write .stashignore error", "error", logSafeErr(err))
+	}
+
 	entries, err := os.ReadDir(baseDir)
 	if err != nil {
 		return fmt.Errorf("adult: read image set dir: %w", err)

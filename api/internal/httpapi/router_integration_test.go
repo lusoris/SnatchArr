@@ -198,6 +198,7 @@ type idsState struct {
 	ruleID             string
 	watchawareSourceID string
 	adultSourceID      string
+	adultImageSetID    string
 }
 
 func newIDsState(t *testing.T) *idsState {
@@ -265,6 +266,13 @@ func setupFixtureStubs(f *routerFixture) {
 	f.seerrClient.servers = []seerrclient.Server{
 		{Kind: domain.KindSonarr, Name: "ImportedTV", BaseURL: "http://imported-tv.invalid:8989", APIKey: "imported-key-0001"},
 	}
+	_, _ = f.st.Q().UpsertAdultImageSet(context.Background(), sqlcgen.UpsertAdultImageSetParams{
+		ID:            uuid.MustParse("00000000-0000-0000-0000-000000000001"),
+		Title:         "fixture-image-set",
+		DirectoryPath: "/tmp/fixture-image-set",
+		CreatedAt:     f.clk.Now(),
+		UpdatedAt:     f.clk.Now(),
+	})
 }
 
 func stepsAuth() []routerStep {
@@ -2065,6 +2073,53 @@ func stepsAdult() []routerStep {
 			want:   http.StatusOK,
 		},
 		{
+			op:     "triggerAdultScan",
+			method: http.MethodPost,
+			path:   func(_ *idsState) string { return "/adult/scan" },
+			want:   http.StatusOK,
+		},
+		{
+			op:     "listAdultImageSets",
+			method: http.MethodGet,
+			path:   func(_ *idsState) string { return "/adult/image-sets" },
+			want:   http.StatusOK,
+			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
+				t.Helper()
+				items, ok := decoded["items"].([]any)
+				if !ok || len(items) == 0 {
+					t.Fatalf("listAdultImageSets empty or invalid items: %v", decoded)
+				}
+				first, ok := items[0].(map[string]any)
+				if !ok {
+					t.Fatalf("listAdultImageSets invalid item format: %v", items[0])
+				}
+				if id, ok := first["id"].(string); ok {
+					ids.adultImageSetID = id
+				}
+			},
+		},
+		{
+			op:     "getAdultImageSet",
+			method: http.MethodGet,
+			path: func(ids *idsState) string {
+				if ids.adultImageSetID != "" {
+					return "/adult/image-sets/" + ids.adultImageSetID
+				}
+				return "/adult/image-sets/00000000-0000-0000-0000-000000000001"
+			},
+			want: http.StatusOK,
+			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
+				t.Helper()
+				wantID := ids.adultImageSetID
+				if wantID == "" {
+					wantID = "00000000-0000-0000-0000-000000000001"
+				}
+				if decoded["id"] != wantID {
+					t.Fatalf("getAdultImageSet id = %v, want %s", decoded["id"], wantID)
+				}
+			},
+		},
+		{
 			op:     "listAdultPerformers",
 			method: http.MethodGet,
 			path:   func(_ *idsState) string { return "/adult/performers" },
@@ -2449,6 +2504,7 @@ func initViewerIDsState(t *testing.T, csrfToken string) *idsState {
 	ids.ruleID = dummyUUID
 	ids.watchawareSourceID = dummyUUID
 	ids.adultSourceID = dummyUUID
+	ids.adultImageSetID = dummyUUID
 
 	pRaw, err := json.Marshal(policyToOAS(domain.DefaultPolicy(uuid.New())))
 	if err != nil {

@@ -1115,6 +1115,20 @@
     ],
     "type": "object"
   },
+  "getAdultImageSet": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "setId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "setId"
+    ],
+    "type": "object"
+  },
   "getAdultPerformer": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -1572,6 +1586,22 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
     "properties": {},
+    "type": "object"
+  },
+  "listAdultImageSets": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "limit": {
+        "maximum": 200,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "offset": {
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
     "type": "object"
   },
   "listAdultPerformers": {
@@ -2344,6 +2374,12 @@
     "required": [
       "body"
     ],
+    "type": "object"
+  },
+  "triggerAdultScan": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
     "type": "object"
   },
   "triggerAdultSync": {

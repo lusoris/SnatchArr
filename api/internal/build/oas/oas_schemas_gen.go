@@ -86,6 +86,408 @@ func (s *AdultExternalRef) SetURL(val OptString) {
 	s.URL = val
 }
 
+// Ref: #/components/schemas/AdultImageItem
+type AdultImageItem struct {
+	ID             uuid.UUID `json:"id"`
+	ImageSetID     uuid.UUID `json:"image_set_id"`
+	FilePath       string    `json:"file_path"`
+	FileName       string    `json:"file_name"`
+	FileSizeBytes  int64     `json:"file_size_bytes"`
+	MimeType       string    `json:"mime_type"`
+	Width          OptInt    `json:"width"`
+	Height         OptInt    `json:"height"`
+	SHA256Checksum string    `json:"sha256_checksum"`
+	SortOrder      int       `json:"sort_order"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
+// GetID returns the value of ID.
+func (s *AdultImageItem) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetImageSetID returns the value of ImageSetID.
+func (s *AdultImageItem) GetImageSetID() uuid.UUID {
+	return s.ImageSetID
+}
+
+// GetFilePath returns the value of FilePath.
+func (s *AdultImageItem) GetFilePath() string {
+	return s.FilePath
+}
+
+// GetFileName returns the value of FileName.
+func (s *AdultImageItem) GetFileName() string {
+	return s.FileName
+}
+
+// GetFileSizeBytes returns the value of FileSizeBytes.
+func (s *AdultImageItem) GetFileSizeBytes() int64 {
+	return s.FileSizeBytes
+}
+
+// GetMimeType returns the value of MimeType.
+func (s *AdultImageItem) GetMimeType() string {
+	return s.MimeType
+}
+
+// GetWidth returns the value of Width.
+func (s *AdultImageItem) GetWidth() OptInt {
+	return s.Width
+}
+
+// GetHeight returns the value of Height.
+func (s *AdultImageItem) GetHeight() OptInt {
+	return s.Height
+}
+
+// GetSHA256Checksum returns the value of SHA256Checksum.
+func (s *AdultImageItem) GetSHA256Checksum() string {
+	return s.SHA256Checksum
+}
+
+// GetSortOrder returns the value of SortOrder.
+func (s *AdultImageItem) GetSortOrder() int {
+	return s.SortOrder
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *AdultImageItem) GetCreatedAt() time.Time {
+	return s.CreatedAt
+}
+
+// SetID sets the value of ID.
+func (s *AdultImageItem) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetImageSetID sets the value of ImageSetID.
+func (s *AdultImageItem) SetImageSetID(val uuid.UUID) {
+	s.ImageSetID = val
+}
+
+// SetFilePath sets the value of FilePath.
+func (s *AdultImageItem) SetFilePath(val string) {
+	s.FilePath = val
+}
+
+// SetFileName sets the value of FileName.
+func (s *AdultImageItem) SetFileName(val string) {
+	s.FileName = val
+}
+
+// SetFileSizeBytes sets the value of FileSizeBytes.
+func (s *AdultImageItem) SetFileSizeBytes(val int64) {
+	s.FileSizeBytes = val
+}
+
+// SetMimeType sets the value of MimeType.
+func (s *AdultImageItem) SetMimeType(val string) {
+	s.MimeType = val
+}
+
+// SetWidth sets the value of Width.
+func (s *AdultImageItem) SetWidth(val OptInt) {
+	s.Width = val
+}
+
+// SetHeight sets the value of Height.
+func (s *AdultImageItem) SetHeight(val OptInt) {
+	s.Height = val
+}
+
+// SetSHA256Checksum sets the value of SHA256Checksum.
+func (s *AdultImageItem) SetSHA256Checksum(val string) {
+	s.SHA256Checksum = val
+}
+
+// SetSortOrder sets the value of SortOrder.
+func (s *AdultImageItem) SetSortOrder(val int) {
+	s.SortOrder = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *AdultImageItem) SetCreatedAt(val time.Time) {
+	s.CreatedAt = val
+}
+
+// Ref: #/components/schemas/AdultImageSet
+type AdultImageSet struct {
+	ID                     uuid.UUID `json:"id"`
+	Title                  string    `json:"title"`
+	DirectoryPath          string    `json:"directory_path"`
+	WhisparrSceneForeignID OptString `json:"whisparr_scene_foreign_id"`
+	PerformerID            OptUUID   `json:"performer_id"`
+	ItemCount              int       `json:"item_count"`
+	TotalSizeBytes         int64     `json:"total_size_bytes"`
+	CoverImagePath         OptString `json:"cover_image_path"`
+	CreatedAt              time.Time `json:"created_at"`
+	UpdatedAt              time.Time `json:"updated_at"`
+}
+
+// GetID returns the value of ID.
+func (s *AdultImageSet) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetTitle returns the value of Title.
+func (s *AdultImageSet) GetTitle() string {
+	return s.Title
+}
+
+// GetDirectoryPath returns the value of DirectoryPath.
+func (s *AdultImageSet) GetDirectoryPath() string {
+	return s.DirectoryPath
+}
+
+// GetWhisparrSceneForeignID returns the value of WhisparrSceneForeignID.
+func (s *AdultImageSet) GetWhisparrSceneForeignID() OptString {
+	return s.WhisparrSceneForeignID
+}
+
+// GetPerformerID returns the value of PerformerID.
+func (s *AdultImageSet) GetPerformerID() OptUUID {
+	return s.PerformerID
+}
+
+// GetItemCount returns the value of ItemCount.
+func (s *AdultImageSet) GetItemCount() int {
+	return s.ItemCount
+}
+
+// GetTotalSizeBytes returns the value of TotalSizeBytes.
+func (s *AdultImageSet) GetTotalSizeBytes() int64 {
+	return s.TotalSizeBytes
+}
+
+// GetCoverImagePath returns the value of CoverImagePath.
+func (s *AdultImageSet) GetCoverImagePath() OptString {
+	return s.CoverImagePath
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *AdultImageSet) GetCreatedAt() time.Time {
+	return s.CreatedAt
+}
+
+// GetUpdatedAt returns the value of UpdatedAt.
+func (s *AdultImageSet) GetUpdatedAt() time.Time {
+	return s.UpdatedAt
+}
+
+// SetID sets the value of ID.
+func (s *AdultImageSet) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetTitle sets the value of Title.
+func (s *AdultImageSet) SetTitle(val string) {
+	s.Title = val
+}
+
+// SetDirectoryPath sets the value of DirectoryPath.
+func (s *AdultImageSet) SetDirectoryPath(val string) {
+	s.DirectoryPath = val
+}
+
+// SetWhisparrSceneForeignID sets the value of WhisparrSceneForeignID.
+func (s *AdultImageSet) SetWhisparrSceneForeignID(val OptString) {
+	s.WhisparrSceneForeignID = val
+}
+
+// SetPerformerID sets the value of PerformerID.
+func (s *AdultImageSet) SetPerformerID(val OptUUID) {
+	s.PerformerID = val
+}
+
+// SetItemCount sets the value of ItemCount.
+func (s *AdultImageSet) SetItemCount(val int) {
+	s.ItemCount = val
+}
+
+// SetTotalSizeBytes sets the value of TotalSizeBytes.
+func (s *AdultImageSet) SetTotalSizeBytes(val int64) {
+	s.TotalSizeBytes = val
+}
+
+// SetCoverImagePath sets the value of CoverImagePath.
+func (s *AdultImageSet) SetCoverImagePath(val OptString) {
+	s.CoverImagePath = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *AdultImageSet) SetCreatedAt(val time.Time) {
+	s.CreatedAt = val
+}
+
+// SetUpdatedAt sets the value of UpdatedAt.
+func (s *AdultImageSet) SetUpdatedAt(val time.Time) {
+	s.UpdatedAt = val
+}
+
+// Merged schema.
+// Ref: #/components/schemas/AdultImageSetDetail
+type AdultImageSetDetail struct {
+	ID                     uuid.UUID        `json:"id"`
+	Title                  string           `json:"title"`
+	DirectoryPath          string           `json:"directory_path"`
+	WhisparrSceneForeignID OptString        `json:"whisparr_scene_foreign_id"`
+	PerformerID            OptUUID          `json:"performer_id"`
+	ItemCount              int              `json:"item_count"`
+	TotalSizeBytes         int64            `json:"total_size_bytes"`
+	CoverImagePath         OptString        `json:"cover_image_path"`
+	CreatedAt              time.Time        `json:"created_at"`
+	UpdatedAt              time.Time        `json:"updated_at"`
+	Items                  []AdultImageItem `json:"items"`
+	IgnoreFilePresent      bool             `json:"ignore_file_present"`
+}
+
+// GetID returns the value of ID.
+func (s *AdultImageSetDetail) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetTitle returns the value of Title.
+func (s *AdultImageSetDetail) GetTitle() string {
+	return s.Title
+}
+
+// GetDirectoryPath returns the value of DirectoryPath.
+func (s *AdultImageSetDetail) GetDirectoryPath() string {
+	return s.DirectoryPath
+}
+
+// GetWhisparrSceneForeignID returns the value of WhisparrSceneForeignID.
+func (s *AdultImageSetDetail) GetWhisparrSceneForeignID() OptString {
+	return s.WhisparrSceneForeignID
+}
+
+// GetPerformerID returns the value of PerformerID.
+func (s *AdultImageSetDetail) GetPerformerID() OptUUID {
+	return s.PerformerID
+}
+
+// GetItemCount returns the value of ItemCount.
+func (s *AdultImageSetDetail) GetItemCount() int {
+	return s.ItemCount
+}
+
+// GetTotalSizeBytes returns the value of TotalSizeBytes.
+func (s *AdultImageSetDetail) GetTotalSizeBytes() int64 {
+	return s.TotalSizeBytes
+}
+
+// GetCoverImagePath returns the value of CoverImagePath.
+func (s *AdultImageSetDetail) GetCoverImagePath() OptString {
+	return s.CoverImagePath
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *AdultImageSetDetail) GetCreatedAt() time.Time {
+	return s.CreatedAt
+}
+
+// GetUpdatedAt returns the value of UpdatedAt.
+func (s *AdultImageSetDetail) GetUpdatedAt() time.Time {
+	return s.UpdatedAt
+}
+
+// GetItems returns the value of Items.
+func (s *AdultImageSetDetail) GetItems() []AdultImageItem {
+	return s.Items
+}
+
+// GetIgnoreFilePresent returns the value of IgnoreFilePresent.
+func (s *AdultImageSetDetail) GetIgnoreFilePresent() bool {
+	return s.IgnoreFilePresent
+}
+
+// SetID sets the value of ID.
+func (s *AdultImageSetDetail) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetTitle sets the value of Title.
+func (s *AdultImageSetDetail) SetTitle(val string) {
+	s.Title = val
+}
+
+// SetDirectoryPath sets the value of DirectoryPath.
+func (s *AdultImageSetDetail) SetDirectoryPath(val string) {
+	s.DirectoryPath = val
+}
+
+// SetWhisparrSceneForeignID sets the value of WhisparrSceneForeignID.
+func (s *AdultImageSetDetail) SetWhisparrSceneForeignID(val OptString) {
+	s.WhisparrSceneForeignID = val
+}
+
+// SetPerformerID sets the value of PerformerID.
+func (s *AdultImageSetDetail) SetPerformerID(val OptUUID) {
+	s.PerformerID = val
+}
+
+// SetItemCount sets the value of ItemCount.
+func (s *AdultImageSetDetail) SetItemCount(val int) {
+	s.ItemCount = val
+}
+
+// SetTotalSizeBytes sets the value of TotalSizeBytes.
+func (s *AdultImageSetDetail) SetTotalSizeBytes(val int64) {
+	s.TotalSizeBytes = val
+}
+
+// SetCoverImagePath sets the value of CoverImagePath.
+func (s *AdultImageSetDetail) SetCoverImagePath(val OptString) {
+	s.CoverImagePath = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *AdultImageSetDetail) SetCreatedAt(val time.Time) {
+	s.CreatedAt = val
+}
+
+// SetUpdatedAt sets the value of UpdatedAt.
+func (s *AdultImageSetDetail) SetUpdatedAt(val time.Time) {
+	s.UpdatedAt = val
+}
+
+// SetItems sets the value of Items.
+func (s *AdultImageSetDetail) SetItems(val []AdultImageItem) {
+	s.Items = val
+}
+
+// SetIgnoreFilePresent sets the value of IgnoreFilePresent.
+func (s *AdultImageSetDetail) SetIgnoreFilePresent(val bool) {
+	s.IgnoreFilePresent = val
+}
+
+// Ref: #/components/schemas/AdultImageSetPage
+type AdultImageSetPage struct {
+	Items []AdultImageSet `json:"items"`
+	Total int             `json:"total"`
+}
+
+// GetItems returns the value of Items.
+func (s *AdultImageSetPage) GetItems() []AdultImageSet {
+	return s.Items
+}
+
+// GetTotal returns the value of Total.
+func (s *AdultImageSetPage) GetTotal() int {
+	return s.Total
+}
+
+// SetItems sets the value of Items.
+func (s *AdultImageSetPage) SetItems(val []AdultImageSet) {
+	s.Items = val
+}
+
+// SetTotal sets the value of Total.
+func (s *AdultImageSetPage) SetTotal(val int) {
+	s.Total = val
+}
+
 // Ref: #/components/schemas/AdultPerformer
 type AdultPerformer struct {
 	ID             uuid.UUID          `json:"id"`
@@ -235,6 +637,43 @@ func (s *AdultPerformerPage) SetNextCursor(val OptString) {
 // SetCursor sets the value of Cursor.
 func (s *AdultPerformerPage) SetCursor(val OptString) {
 	s.Cursor = val
+}
+
+// Ref: #/components/schemas/AdultScanSummary
+type AdultScanSummary struct {
+	SetsFound         int  `json:"sets_found"`
+	ItemsFound        int  `json:"items_found"`
+	IgnoreFilePresent bool `json:"ignore_file_present"`
+}
+
+// GetSetsFound returns the value of SetsFound.
+func (s *AdultScanSummary) GetSetsFound() int {
+	return s.SetsFound
+}
+
+// GetItemsFound returns the value of ItemsFound.
+func (s *AdultScanSummary) GetItemsFound() int {
+	return s.ItemsFound
+}
+
+// GetIgnoreFilePresent returns the value of IgnoreFilePresent.
+func (s *AdultScanSummary) GetIgnoreFilePresent() bool {
+	return s.IgnoreFilePresent
+}
+
+// SetSetsFound sets the value of SetsFound.
+func (s *AdultScanSummary) SetSetsFound(val int) {
+	s.SetsFound = val
+}
+
+// SetItemsFound sets the value of ItemsFound.
+func (s *AdultScanSummary) SetItemsFound(val int) {
+	s.ItemsFound = val
+}
+
+// SetIgnoreFilePresent sets the value of IgnoreFilePresent.
+func (s *AdultScanSummary) SetIgnoreFilePresent(val bool) {
+	s.IgnoreFilePresent = val
 }
 
 // Ref: #/components/schemas/AdultSource
