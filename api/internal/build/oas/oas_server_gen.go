@@ -298,6 +298,12 @@ type Handler interface {
 	//
 	// GET /instances/{instanceId}/queue-policy
 	GetQueuePolicy(ctx context.Context, params GetQueuePolicyParams) (*QueuePolicy, error)
+	// GetRequestsSettings implements getRequestsSettings operation.
+	//
+	// Read community request settings. Any authenticated user may access this endpoint.
+	//
+	// GET /requests/settings
+	GetRequestsSettings(ctx context.Context) (*RequestsSettings, error)
 	// GetRun implements getRun operation.
 	//
 	// Load a single snatch run by ID.
@@ -745,6 +751,12 @@ type Handler interface {
 	//
 	// PUT /instances/{instanceId}/queue-policy
 	UpdateQueuePolicy(ctx context.Context, req *QueuePolicy, params UpdateQueuePolicyParams) (*QueuePolicy, error)
+	// UpdateRequestsSettings implements updateRequestsSettings operation.
+	//
+	// Validate and persist community request settings (admin only).
+	//
+	// PUT /requests/settings
+	UpdateRequestsSettings(ctx context.Context, req *RequestsSettings) (*RequestsSettings, error)
 	// UpdateSchedule implements updateSchedule operation.
 	//
 	// Replace a schedule window.

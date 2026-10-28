@@ -36,6 +36,7 @@ const ALL_ROUTES = [
 	'/instances/[id]/policy',
 	'/instances/[id]/queue',
 	'/login',
+	'/settings/requests',
 	'/setup',
 	'/system'
 ] as const;

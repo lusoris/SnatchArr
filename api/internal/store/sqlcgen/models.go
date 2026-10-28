@@ -256,6 +256,15 @@ type RateBucket struct {
 	Used        int32
 }
 
+type RequestsSetting struct {
+	Singleton        bool
+	VotingMode       string
+	AllowViewerVotes bool
+	Visibility       string
+	VotingTtlDays    int32
+	UpdatedAt        time.Time
+}
+
 type Schedule struct {
 	ID         uuid.UUID
 	InstanceID *uuid.UUID

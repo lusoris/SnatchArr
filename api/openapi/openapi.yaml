@@ -37,6 +37,8 @@ tags:
     description: Watch-aware media server sources and watch state synchronization
   - name: adult
     description: Adult catalogue sources and favourite synchronization
+  - name: requests
+    description: Community requests and voting settings (ADR-0036)
 security:
   - cookieAuth: []
   - bearerAuth: []
@@ -1047,6 +1049,42 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Settings"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /requests/settings:
+    get:
+      tags: [requests]
+      operationId: getRequestsSettings
+      summary: Read community request settings
+      description: Read community request settings. Any authenticated user may access this endpoint.
+      responses:
+        "200":
+          description: Community request settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RequestsSettings"
+        default:
+          $ref: "#/components/responses/Problem"
+    put:
+      tags: [requests]
+      operationId: updateRequestsSettings
+      summary: Replace community request settings
+      description: Validate and persist community request settings (admin only).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequestsSettings"
+      responses:
+        "200":
+          description: Updated community request settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RequestsSettings"
         default:
           $ref: "#/components/responses/Problem"
 
@@ -3547,6 +3585,41 @@ components:
             - $ref: "#/components/schemas/SfwMode"
           nullable: true
           description: "Per-user SFW mode override; null or omitted follows the installation default."
+
+    RequestsVotingMode:
+      type: string
+      enum:
+        - upvotes_only
+        - net_score
+      default: upvotes_only
+
+    RequestsVisibility:
+      type: string
+      enum:
+        - public_attributed
+        - public_anonymous
+        - private_to_requester_and_admin
+      default: public_attributed
+
+    RequestsSettings:
+      type: object
+      required:
+        - voting_mode
+        - allow_viewer_votes
+        - visibility
+        - voting_ttl_days
+      properties:
+        voting_mode:
+          $ref: "#/components/schemas/RequestsVotingMode"
+        allow_viewer_votes:
+          type: boolean
+          default: true
+        visibility:
+          $ref: "#/components/schemas/RequestsVisibility"
+        voting_ttl_days:
+          type: integer
+          minimum: 0
+          default: 0
 
     StateReset:
       type: object
