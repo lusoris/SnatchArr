@@ -18,6 +18,7 @@ import (
 
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
+	"github.com/lusoris/SnatchArr/api/internal/events"
 	"github.com/lusoris/SnatchArr/api/internal/snatch"
 )
 
@@ -303,6 +304,9 @@ func (h *Handlers) CancelRun(ctx context.Context, params oas.CancelRunParams) er
 
 // ListEvents pages history.
 func (h *Handlers) ListEvents(ctx context.Context, params oas.ListEventsParams) ([]oas.Event, error) {
+	if typ, ok := params.Type.Get(); ok && !events.IsKnownType(typ) {
+		return nil, fmt.Errorf("%w: unknown event type %q", domain.ErrBadRequest, typ)
+	}
 	p := snatch.ListParams{PageSize: params.PageSize.Or(100), Type: params.Type.Or("")}
 	if v, ok := params.InstanceID.Get(); ok {
 		p.InstanceID = &v

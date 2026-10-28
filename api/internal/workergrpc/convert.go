@@ -156,12 +156,3 @@ func eventType(t snatcharrv1.EventType) string {
 	}
 	return events.EventName(t.String())
 }
-
-// eventTypes lists the label of every defined event type.
-func eventTypes() []string {
-	names := make([]string, 0, len(snatcharrv1.EventType_name))
-	for _, name := range snatcharrv1.EventType_name {
-		names = append(names, events.EventName(name))
-	}
-	return names
-}

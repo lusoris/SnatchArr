@@ -1664,6 +1664,7 @@
     "properties": {
       "before_id": {
         "format": "int64",
+        "minimum": 1,
         "type": "integer"
       },
       "instance_id": {
