@@ -4,12 +4,17 @@
 
 import { fireEvent, screen } from '@testing-library/svelte';
 import { ProblemError } from '@sveltesentio/core';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { api } from '#lib/api/client.js';
 import type { RequestsSettings } from '#lib/requestsSettings.js';
 import { m } from '#lib/paraglide/messages.js';
 import { session } from '#lib/session.svelte.js';
-import { assertProblemAlert, renderWithQuery, stubGet } from '#lib/testing/harness.js';
+import {
+	assertProblemAlert,
+	renderWithQuery,
+	stubGet,
+	useAdminSession
+} from '#lib/testing/harness.js';
 import RequestsSettingsPage from './+page.svelte';
 
 const defaultSettings: RequestsSettings = {
@@ -19,15 +24,20 @@ const defaultSettings: RequestsSettings = {
 	voting_ttl_days: 0
 };
 
-describe('RequestsSettingsPage', () => {
-	beforeEach(() => {
-		session.user = { id: 'u1', username: 'admin', role: 'admin' } as never;
-	});
+async function findControls() {
+	const votingMode = (await screen.findByLabelText(
+		m.requests_settings_voting_mode()
+	)) as HTMLSelectElement;
+	const allowViewer = screen.getByLabelText(
+		m.requests_settings_allow_viewer_votes()
+	) as HTMLInputElement;
+	const visibility = screen.getByLabelText(m.requests_settings_visibility()) as HTMLSelectElement;
+	const ttl = screen.getByLabelText(m.requests_settings_voting_ttl_days()) as HTMLInputElement;
+	return { votingMode, allowViewer, visibility, ttl };
+}
 
-	afterEach(() => {
-		session.user = null;
-		vi.restoreAllMocks();
-	});
+describe('RequestsSettingsPage', () => {
+	useAdminSession();
 
 	it('renders heading and form controls with default settings', async () => {
 		stubGet({
@@ -39,14 +49,7 @@ describe('RequestsSettingsPage', () => {
 			await screen.findByRole('heading', { level: 1, name: m.requests_settings_title() })
 		).toBeTruthy();
 
-		const votingMode = (await screen.findByLabelText(
-			m.requests_settings_voting_mode()
-		)) as HTMLSelectElement;
-		const allowViewer = screen.getByLabelText(
-			m.requests_settings_allow_viewer_votes()
-		) as HTMLInputElement;
-		const visibility = screen.getByLabelText(m.requests_settings_visibility()) as HTMLSelectElement;
-		const ttl = screen.getByLabelText(m.requests_settings_voting_ttl_days()) as HTMLInputElement;
+		const { votingMode, allowViewer, visibility, ttl } = await findControls();
 
 		expect(votingMode.value).toBe('upvotes_only');
 		expect(allowViewer.checked).toBe(true);
@@ -82,14 +85,7 @@ describe('RequestsSettingsPage', () => {
 		} as never);
 		renderWithQuery(RequestsSettingsPage);
 
-		const votingMode = (await screen.findByLabelText(
-			m.requests_settings_voting_mode()
-		)) as HTMLSelectElement;
-		const allowViewer = screen.getByLabelText(
-			m.requests_settings_allow_viewer_votes()
-		) as HTMLInputElement;
-		const visibility = screen.getByLabelText(m.requests_settings_visibility()) as HTMLSelectElement;
-		const ttl = screen.getByLabelText(m.requests_settings_voting_ttl_days()) as HTMLInputElement;
+		const { votingMode, allowViewer, visibility, ttl } = await findControls();
 
 		await fireEvent.change(votingMode, { target: { value: 'net_score' } });
 		await fireEvent.click(allowViewer);
@@ -116,14 +112,7 @@ describe('RequestsSettingsPage', () => {
 		});
 		renderWithQuery(RequestsSettingsPage);
 
-		const votingMode = (await screen.findByLabelText(
-			m.requests_settings_voting_mode()
-		)) as HTMLSelectElement;
-		const allowViewer = screen.getByLabelText(
-			m.requests_settings_allow_viewer_votes()
-		) as HTMLInputElement;
-		const visibility = screen.getByLabelText(m.requests_settings_visibility()) as HTMLSelectElement;
-		const ttl = screen.getByLabelText(m.requests_settings_voting_ttl_days()) as HTMLInputElement;
+		const { votingMode, allowViewer, visibility, ttl } = await findControls();
 
 		expect(votingMode.disabled).toBe(true);
 		expect(allowViewer.disabled).toBe(true);
