@@ -79,82 +79,85 @@ SPDX-License-Identifier: EUPL-1.2
 	ontest={initial || !ontest ? undefined : () => ontest(body())}
 	{testing}
 >
-	<div class="field flex flex-col gap-1">
-		<div class="flex items-center gap-2">
-			<label for="dlclient-kind" class="text-sm font-medium">{m.dlclients_kind()}</label>
-			<AppLogo {kind} size={18} />
+	<!-- Two field columns from md: the add form fits the 1280x800 scroll budget. -->
+	<div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+		<div class="field flex flex-col gap-1">
+			<div class="flex items-center gap-2">
+				<label for="dlclient-kind" class="text-sm font-medium">{m.dlclients_kind()}</label>
+				<AppLogo {kind} size={18} />
+			</div>
+			<select id="dlclient-kind" class="select" bind:value={kind}>
+				{#each kinds as k (k.value)}
+					<option value={k.value}>{k.label}</option>
+				{/each}
+			</select>
 		</div>
-		<select id="dlclient-kind" class="select" bind:value={kind}>
-			{#each kinds as k (k.value)}
-				<option value={k.value}>{k.label}</option>
-			{/each}
-		</select>
+		<TextField
+			id="dlclient-name"
+			label={m.instance_name()}
+			required
+			maxlength={64}
+			error={errors.name}
+			bind:value={name}
+		/>
+		<TextField
+			id="dlclient-base-url"
+			label={m.instance_url()}
+			required
+			inputmode="url"
+			hint="http://qbittorrent:8080"
+			error={errors.base_url}
+			bind:value={baseUrl}
+		/>
+		<TextField
+			id="dlclient-username"
+			label={m.username()}
+			autocomplete="off"
+			error={errors.username}
+			bind:value={username}
+		/>
+		<SecretField
+			id="dlclient-secret"
+			label={m.dlclients_secret()}
+			editing={initial !== null}
+			error={errors.secret}
+			bind:value={secret}
+		/>
+		<InstanceSelect
+			id="dlclient-instance"
+			label={m.dlclients_instance()}
+			{instances}
+			noneLabel={m.dlclients_all_instances()}
+			error={errors.instance_id}
+			bind:value={instanceId}
+		/>
+		<TextField
+			id="dlclient-max-active"
+			label={m.dlclients_max_active()}
+			type="number"
+			min={0}
+			max={1000}
+			error={errors.max_active}
+			bind:value={maxActive}
+		/>
+		<TextField
+			id="dlclient-max-queued"
+			label={m.dlclients_max_queued()}
+			type="number"
+			min={0}
+			max={1000}
+			error={errors.max_queued}
+			bind:value={maxQueued}
+		/>
+		<TextField
+			id="dlclient-bandwidth"
+			label={m.dlclients_bandwidth()}
+			type="number"
+			min={0}
+			error={errors.bandwidth_budget_bps}
+			bind:value={bandwidth}
+		/>
 	</div>
-	<TextField
-		id="dlclient-name"
-		label={m.instance_name()}
-		required
-		maxlength={64}
-		error={errors.name}
-		bind:value={name}
-	/>
-	<TextField
-		id="dlclient-base-url"
-		label={m.instance_url()}
-		required
-		inputmode="url"
-		hint="http://qbittorrent:8080"
-		error={errors.base_url}
-		bind:value={baseUrl}
-	/>
-	<TextField
-		id="dlclient-username"
-		label={m.username()}
-		autocomplete="off"
-		error={errors.username}
-		bind:value={username}
-	/>
-	<SecretField
-		id="dlclient-secret"
-		label={m.dlclients_secret()}
-		editing={initial !== null}
-		error={errors.secret}
-		bind:value={secret}
-	/>
-	<InstanceSelect
-		id="dlclient-instance"
-		label={m.dlclients_instance()}
-		{instances}
-		noneLabel={m.dlclients_all_instances()}
-		error={errors.instance_id}
-		bind:value={instanceId}
-	/>
-	<TextField
-		id="dlclient-max-active"
-		label={m.dlclients_max_active()}
-		type="number"
-		min={0}
-		max={1000}
-		error={errors.max_active}
-		bind:value={maxActive}
-	/>
-	<TextField
-		id="dlclient-max-queued"
-		label={m.dlclients_max_queued()}
-		type="number"
-		min={0}
-		max={1000}
-		error={errors.max_queued}
-		bind:value={maxQueued}
-	/>
-	<TextField
-		id="dlclient-bandwidth"
-		label={m.dlclients_bandwidth()}
-		type="number"
-		min={0}
-		error={errors.bandwidth_budget_bps}
-		bind:value={bandwidth}
-	/>
 	<label class="flex items-center gap-2 text-sm">
 		<input type="checkbox" bind:checked={enabled} />
 		<span>{m.form_enabled()}</span>

@@ -758,21 +758,55 @@ export async function assertPhoneFit(page: Page, route: string): Promise<void> {
 	}
 }
 
-export const SCROLL_BUDGET_ROUTES = [
-	'/',
-	'/automation',
-	'/automation?tab=caps',
-	'/connections',
-	'/instances',
-	'/instances/[id]',
-	'/activity',
-	'/activity?source=log',
-	'/instances/[id]/activity',
-	'/system',
-	'/system?tab=modules',
-	'/system?tab=notifications',
-	'/system?tab=about'
-] as const;
+// Scroll budget by route class (ADR-0029 section 4). Main pages (overviews, lists, hubs, tabs)
+// fit 1.25x a 1280x800 screen. Edit forms (the settings of one entity or one user) and the
+// public pages sit outside the budget by class, never by a per-route ceiling. Every page route
+// under src/routes carries a class; layout.test.ts fails on an unclassified or stale entry.
+export type RouteClass = 'main' | 'edit-form' | 'public';
+
+export const ROUTE_CLASS: Record<string, RouteClass> = {
+	'/': 'main',
+	'/activity': 'main',
+	'/activity?source=live': 'main',
+	'/activity?source=log': 'main',
+	'/adult/image-sets': 'main',
+	'/adult/performers': 'main',
+	'/adult/sources': 'main',
+	'/adult/studios': 'main',
+	'/automation': 'main',
+	'/automation?tab=caps': 'main',
+	'/connections': 'main',
+	'/connections/configarr': 'main',
+	'/connections/download-clients': 'main',
+	'/connections/prowlarr': 'main',
+	'/connections/seerr': 'main',
+	'/instances': 'main',
+	'/instances/[id]': 'main',
+	'/instances/[id]/activity': 'main',
+	'/instances/[id]/memory': 'main',
+	'/system': 'main',
+	'/system?tab=modules': 'main',
+	'/system?tab=notifications': 'main',
+	'/system?tab=about': 'main',
+	'/account': 'edit-form',
+	'/instances/[id]/policy': 'edit-form',
+	'/instances/[id]/queue': 'edit-form',
+	'/settings/requests': 'edit-form',
+	'/login': 'public',
+	'/setup': 'public'
+};
+
+function routesOfClass(cls: RouteClass): string[] {
+	return Object.entries(ROUTE_CLASS)
+		.filter(([, c]) => c === cls)
+		.map(([route]) => route);
+}
+
+export const SCROLL_BUDGET_ROUTES = routesOfClass('main');
+export const EDIT_FORM_ROUTES = routesOfClass('edit-form');
+
+// Activity views scroll inside their feed, so the document itself never scrolls.
+const FEED_ROUTES = new Set(['/activity', '/activity?source=live', '/activity?source=log']);
 
 export async function assertScrollBudget(
 	page: Page,
@@ -783,11 +817,7 @@ export async function assertScrollBudget(
 		scrollHeight: document.documentElement.scrollHeight,
 		innerHeight: window.innerHeight
 	}));
-	const limit =
-		maxBudget ??
-		(route === '/activity' || route === '/activity?source=log'
-			? innerHeight + 2
-			: 1.25 * innerHeight);
+	const limit = maxBudget ?? (FEED_ROUTES.has(route) ? innerHeight + 2 : 1.25 * innerHeight);
 	expect(
 		scrollHeight,
 		`${route}: scroll height (${scrollHeight}px) exceeds budget (${limit}px)`
