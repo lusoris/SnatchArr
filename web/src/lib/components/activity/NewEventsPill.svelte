@@ -16,7 +16,7 @@ SPDX-License-Identifier: EUPL-1.2
 {#if count > 0}
 	<button
 		type="button"
-		class="bg-brand text-on-brand absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 cursor-pointer items-center gap-1.5 rounded-full px-3.5 py-1 text-xs font-semibold shadow-md transition hover:opacity-90"
+		class="bg-brand absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 cursor-pointer items-center gap-1.5 rounded-full px-3.5 py-1 text-xs font-semibold text-brand-fg shadow-md transition hover:opacity-90"
 		onclick={onsnap}
 		aria-label={m.activity_new_events({ count })}
 	>

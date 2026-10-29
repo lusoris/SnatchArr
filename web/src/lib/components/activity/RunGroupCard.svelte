@@ -67,7 +67,7 @@ SPDX-License-Identifier: EUPL-1.2
 		<button
 			type="button"
 			aria-expanded={isExpanded}
-			class="focus:ring-brand flex flex-1 cursor-pointer flex-wrap items-center gap-2 rounded text-left select-none focus:ring-1 focus:outline-none"
+			class="flex flex-1 cursor-pointer flex-wrap items-center gap-2 rounded text-left select-none focus:ring-1 focus:ring-(--color-brand) focus:outline-none"
 			onclick={toggleGroup}
 		>
 			<span class="text-xs font-semibold md:text-sm">

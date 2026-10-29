@@ -43,7 +43,7 @@ SPDX-License-Identifier: EUPL-1.2
 					<button
 						type="button"
 						aria-expanded={expandedSeq === rec.seq}
-						class="focus:ring-brand flex min-w-0 flex-[1_1_12rem] cursor-pointer flex-wrap items-center gap-2 rounded text-left select-none focus:ring-1 focus:outline-none"
+						class="flex min-w-0 flex-[1_1_12rem] cursor-pointer flex-wrap items-center gap-2 rounded text-left select-none focus:ring-1 focus:ring-(--color-brand) focus:outline-none"
 						onclick={() => toggleRow(rec.seq)}
 					>
 						<span class="text-xs font-semibold">{logLevelLabel(rec.level)}</span>

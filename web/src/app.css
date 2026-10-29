@@ -8,7 +8,8 @@
 
 /* Aliases over sveltesentio's tokens. Names deliberately differ from the token names
    (--color-muted, --color-card, ...) so no custom property references itself. --color-control
-   is the boundary of a control (3:1, WCAG 2.2 SC 1.4.11); --color-line only draws dividers.
+   is the boundary of a control (3:1, WCAG 2.2 SC 1.4.11); --color-line only draws dividers;
+   --color-sunken fills skeleton bars and placeholder slots.
    The palette already names --color-brand, --color-brand-foreground, --color-warning,
    --color-success, --color-info and --color-running in theme.css, so they get no alias here
    (it would reference itself): text-brand, bg-brand, text-warning, bg-warning, text-success,
@@ -19,6 +20,7 @@
 	--color-fg: var(--color-foreground);
 	--color-subtle: var(--color-muted-foreground);
 	--color-surface: var(--color-card);
+	--color-sunken: var(--color-muted);
 	--color-line: var(--color-border);
 	--color-control: var(--color-input);
 	--color-brand-fg: var(--color-brand-foreground);

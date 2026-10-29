@@ -107,7 +107,7 @@ SPDX-License-Identifier: EUPL-1.2
 
 	{#if quickConnectEnabled}
 		{#if qcCode}
-			<div class="border-border flex flex-col gap-2 rounded border p-3" aria-live="polite">
+			<div class="flex flex-col gap-2 rounded border border-line p-3" aria-live="polite">
 				<p class="font-mono text-base font-semibold">
 					{m.login_jellyfin_quick_connect_code({ code: qcCode })}
 				</p>

@@ -216,9 +216,9 @@ SPDX-License-Identifier: EUPL-1.2
 		>
 			{#if instances.isPending}
 				<div data-testid="skeleton" class="card flex flex-col gap-3 p-4" aria-busy="true">
-					<div class="bg-muted h-6 w-32 animate-pulse rounded"></div>
-					<div class="bg-muted h-10 w-full animate-pulse rounded"></div>
-					<div class="bg-muted h-10 w-full animate-pulse rounded"></div>
+					<div class="h-6 w-32 animate-pulse rounded bg-sunken"></div>
+					<div class="h-10 w-full animate-pulse rounded bg-sunken"></div>
+					<div class="h-10 w-full animate-pulse rounded bg-sunken"></div>
 				</div>
 			{:else if instances.isError}
 				<ProblemNote error={instances.error} />
@@ -248,7 +248,7 @@ SPDX-License-Identifier: EUPL-1.2
 					>
 						<table class="compact-table table-stack table w-full">
 							<caption class="sr-only">{m.overview_fleet_title()}</caption>
-							<thead class="bg-card md:sticky md:top-0 md:z-10">
+							<thead class="bg-surface md:sticky md:top-0 md:z-10">
 								<tr>
 									<th scope="col" class="w-10 text-center">
 										<span class="sr-only">{m.schedule_status()}</span>
@@ -378,9 +378,9 @@ SPDX-License-Identifier: EUPL-1.2
 				</div>
 				{#if events.isPending}
 					<div data-testid="skeleton" class="flex flex-col gap-2" aria-busy="true">
-						<div class="bg-muted h-6 w-full animate-pulse rounded"></div>
-						<div class="bg-muted h-6 w-full animate-pulse rounded"></div>
-						<div class="bg-muted h-6 w-full animate-pulse rounded"></div>
+						<div class="h-6 w-full animate-pulse rounded bg-sunken"></div>
+						<div class="h-6 w-full animate-pulse rounded bg-sunken"></div>
+						<div class="h-6 w-full animate-pulse rounded bg-sunken"></div>
 					</div>
 				{:else if events.isError}
 					<ProblemNote error={events.error} />
@@ -448,7 +448,7 @@ SPDX-License-Identifier: EUPL-1.2
 				</div>
 				{#if schedules.isPending}
 					<div data-testid="skeleton" class="flex flex-col gap-2" aria-busy="true">
-						<div class="bg-muted h-6 w-full animate-pulse rounded"></div>
+						<div class="h-6 w-full animate-pulse rounded bg-sunken"></div>
 					</div>
 				{:else if schedules.isError}
 					<ProblemNote error={schedules.error} />
@@ -489,8 +489,8 @@ SPDX-License-Identifier: EUPL-1.2
 			<!-- Prowlarr meters -->
 			{#if prowlarr.isPending}
 				<div data-testid="skeleton" class="card flex min-w-0 flex-col gap-2 p-4" aria-busy="true">
-					<div class="bg-muted h-5 w-32 animate-pulse rounded"></div>
-					<div class="bg-muted h-4 w-full animate-pulse rounded"></div>
+					<div class="h-5 w-32 animate-pulse rounded bg-sunken"></div>
+					<div class="h-4 w-full animate-pulse rounded bg-sunken"></div>
 				</div>
 			{:else if prowlarr.isError}
 				<div class="card min-w-0 p-4">
