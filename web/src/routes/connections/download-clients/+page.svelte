@@ -180,7 +180,7 @@ SPDX-License-Identifier: EUPL-1.2
 						<tbody>
 							{#each clients.data ?? [] as c (c.id)}
 								{@const st = statusFor(c.id)}
-								<tr>
+								<tr class:target={session.isAdmin && c.source !== 'configarr'}>
 									<td data-label={m.instance_name()}>
 										<div class="flex items-center gap-2">
 											<AppLogo kind={c.kind} size={18} />
@@ -239,7 +239,7 @@ SPDX-License-Identifier: EUPL-1.2
 											<div class="flex flex-wrap items-center gap-1.5">
 												<button
 													type="button"
-													class="btn"
+													class="btn target-link"
 													disabled={c.source === 'configarr'}
 													onclick={() => edit(c)}>{m.action_edit()}</button
 												>

@@ -2,10 +2,26 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
+/** True for an `a.target-link[href]` or an enabled `button.target-link[type=button]`. */
+function isValidTargetLink(el: Element): boolean {
+	if (el.tagName === 'A' && el.hasAttribute('href')) {
+		return true;
+	}
+	if (
+		el.tagName === 'BUTTON' &&
+		el.getAttribute('type') === 'button' &&
+		!el.hasAttribute('disabled') &&
+		!(el as HTMLButtonElement).disabled
+	) {
+		return true;
+	}
+	return false;
+}
+
 /**
  * Validates that each `.target` in the given root contains exactly one
- * `a.target-link[href]`, has no nested `.target` elements, and has no invalid
- * `.target-link` elements.
+ * `a.target-link[href]` or `button.target-link[type=button]:not([disabled])`,
+ * has no nested `.target` elements, and has no invalid `.target-link` elements.
  *
  * @param root DOM subtree to validate.
  * @returns Array of human-readable problem descriptions (empty if valid).
@@ -31,15 +47,15 @@ export function targetProblems(root: ParentNode): string[] {
 			(el) => el.closest('.target') === target
 		);
 
-		const validLinks = allTargetLinks.filter(
-			(el): el is HTMLAnchorElement => el.tagName === 'A' && el.hasAttribute('href')
-		);
+		const validLinks = allTargetLinks.filter(isValidTargetLink);
 
 		if (validLinks.length === 0) {
-			problems.push('Target element must contain exactly one a.target-link[href], found 0');
+			problems.push(
+				'Target element must contain exactly one a.target-link[href] or button.target-link[type=button]:not([disabled]), found 0'
+			);
 		} else if (validLinks.length > 1) {
 			problems.push(
-				`Target element must contain exactly one a.target-link[href], found ${validLinks.length}`
+				`Target element must contain exactly one a.target-link[href] or button.target-link[type=button]:not([disabled]), found ${validLinks.length}`
 			);
 		}
 	}

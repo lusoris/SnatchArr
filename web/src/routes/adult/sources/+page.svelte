@@ -226,7 +226,10 @@ SPDX-License-Identifier: EUPL-1.2
 					{:else}
 						<ul class="grid grid-cols-1 gap-3 xl:grid-cols-2">
 							{#each items as src (src.id)}
-								<li class="card flex flex-col justify-between">
+								<li
+									class="card flex flex-col justify-between"
+									class:target={session.isAdmin && !saveSyncFavorites.isPending}
+								>
 									<div class="flex flex-col gap-1.5">
 										<div class="flex flex-wrap items-center gap-2">
 											<h3 class="font-semibold">{src.name}</h3>
@@ -268,7 +271,7 @@ SPDX-License-Identifier: EUPL-1.2
 											/>
 											<button
 												type="button"
-												class="btn"
+												class="btn target-link"
 												disabled={saveSyncFavorites.isPending}
 												onclick={() => loadEdit(src)}
 											>
