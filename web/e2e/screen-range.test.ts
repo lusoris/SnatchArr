@@ -210,7 +210,12 @@ for (const mode of ACCESSIBILITY_MODES) {
 			test(`authenticated: accessibility ${route}`, async ({ page }, info) => {
 				// The live log tail appends records the other workers cause, so the text never
 				// stands still to be measured. Hold the stream; the list keeps its loaded records.
-				if (route.includes('source=log')) await page.route('**/api/v1/logs/stream*', () => {});
+				if (route.includes('source=log')) {
+					await page.route('**/api/v1/logs/stream*', () => {});
+					// By the time this runs the ring holds up to 500 records from the other tests, about
+					// 8,500 nodes; axe, the clip scan and the focus walk each scale with them.
+					test.slow();
+				}
 				await visit(page, route);
 				await assertReflow(page);
 				const aria = await assertLandmarksAndNames(page);
