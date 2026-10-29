@@ -144,6 +144,12 @@ export default defineConfig({
 							dependencies: ['features-auth'],
 							workers: 1,
 							use: { browserName: 'chromium', storageState: featuresAuthFile }
+						},
+						{
+							name: 'sweep',
+							testMatch: /(^|\/)sweep\.test\.ts/,
+							dependencies: ['auth-setup'],
+							use: { browserName: 'chromium', storageState: authFile }
 						}
 					]
 });
