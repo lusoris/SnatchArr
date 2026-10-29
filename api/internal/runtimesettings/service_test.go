@@ -500,3 +500,35 @@ func TestLoadOverridesMissingTable(t *testing.T) {
 		t.Error("LoadOverrides with a cancelled context = nil error, want failure")
 	}
 }
+
+func TestListLockedFlag(t *testing.T) {
+	t.Parallel()
+	h := newTestHarness(t)
+	list, err := h.svc.List(t.Context())
+	if err != nil {
+		t.Fatalf("svc.List: %v", err)
+	}
+	byKey := make(map[string]runtimesettings.SettingItem, len(list))
+	for _, item := range list {
+		byKey[item.Key] = item
+	}
+	tests := []struct {
+		name   string
+		key    string
+		locked bool
+	}{
+		{name: "environment-only secret with its variable unset", key: "snatcharr.worker.token", locked: true},
+		{name: "writable runtime setting", key: "snatcharr.public.url", locked: false},
+		{name: "database variable, environment only", key: "db.dsn", locked: true},
+	}
+	for _, tc := range tests {
+		item, ok := byKey[tc.key]
+		if !ok {
+			t.Errorf("%s: %q not listed", tc.name, tc.key)
+			continue
+		}
+		if item.Locked != tc.locked {
+			t.Errorf("%s: %q locked = %v, want %v", tc.name, tc.key, item.Locked, tc.locked)
+		}
+	}
+}
