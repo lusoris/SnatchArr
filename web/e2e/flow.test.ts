@@ -8,6 +8,7 @@ import type net from 'node:net';
 import path from 'node:path';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, request, test, type Page } from '@playwright/test';
+import { submitAdminLogin } from './mocks.js';
 import { settleToasts } from './settle.js';
 
 const WCAG_22_AA = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
@@ -42,13 +43,7 @@ test('C9-04: create instance through UI, read back from API, logout and login', 
 	await page.getByRole('button', { name: /log out|abmelden/i }).click();
 	await expect(page).toHaveURL(/.*\/login/);
 	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-
-	await page.locator('#username').fill('admin');
-	await page.locator('#password').fill('smoke-password-1234');
-	await page.locator('button[type="submit"]').click();
-
-	await expect(page).toHaveURL(/.*\/$/);
-	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+	await submitAdminLogin(page);
 });
 
 test('notifications: create channel, test delivery, create rule, read back from API', async ({

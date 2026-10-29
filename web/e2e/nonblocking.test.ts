@@ -130,20 +130,27 @@ test.describe('nonblocking', () => {
 		await expect(page).toHaveURL(/\/instances/, { timeout: 1000 });
 	});
 
-	test('system: 503 renders problem note and form recovers', async ({ page }) => {
-		await mockSettingsApi(page, { status: 503 });
-		await page.goto('/system');
-
+	async function assertProblemNoteRecovers(
+		page: Page,
+		fieldSelector: string,
+		value: string
+	): Promise<void> {
 		const problem = page.locator('.problem-note, [role="alert"]').first();
 		await expect(problem).toBeVisible({ timeout: 12_000 });
 
 		// API recovers, reload brings usable form
 		await mockSettingsApi(page);
 		await page.reload();
-		const field = page.locator('[data-field="history_retention_days"]');
+		const field = page.locator(`[data-field="${fieldSelector}"]`);
 		await expect(field).toBeVisible({ timeout: 3000 });
-		await field.fill('60');
-		await expect(field).toHaveValue('60');
+		await field.fill(value);
+		await expect(field).toHaveValue(value);
+	}
+
+	test('system: 503 renders problem note and form recovers', async ({ page }) => {
+		await mockSettingsApi(page, { status: 503 });
+		await page.goto('/system');
+		await assertProblemNoteRecovers(page, 'history_retention_days', '60');
 	});
 
 	test('about: delayed 10s licences response shows loading and remains interactive', async ({
@@ -211,16 +218,7 @@ test.describe('nonblocking', () => {
 		await expect(page).toHaveURL(/\/instances/, { timeout: 1000 });
 
 		await page.goto('/automation?tab=caps');
-		const problem = page.locator('.problem-note, [role="alert"]').first();
-		await expect(problem).toBeVisible({ timeout: 12_000 });
-
-		// API recovers, reload brings usable form
-		await mockSettingsApi(page);
-		await page.reload();
-		const field = page.locator('[data-field="global_hourly_cap"]');
-		await expect(field).toBeVisible({ timeout: 3000 });
-		await field.fill('75');
-		await expect(field).toHaveValue('75');
+		await assertProblemNoteRecovers(page, 'global_hourly_cap', '75');
 	});
 
 	test('system: save action shows pending state and recovers on 503', async ({ page }) => {

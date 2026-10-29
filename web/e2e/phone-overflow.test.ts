@@ -88,27 +88,29 @@ test.beforeAll(async ({ request }) => {
 	}
 });
 
-test('authenticated: phone overflow /instances', async ({ page }) => {
+async function assertInstancesOverflow(
+	page: Page,
+	viewport?: { width: number; height: number }
+): Promise<void> {
+	if (viewport) {
+		await page.setViewportSize(viewport);
+	}
 	await page.goto('/instances');
 	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 	await expect(page.getByRole('list', { name: 'Instances' })).toBeVisible();
 	await assertNoHorizontalOverflow(page, '/instances');
+}
+
+test('authenticated: phone overflow /instances', async ({ page }) => {
+	await assertInstancesOverflow(page);
 });
 
 test('authenticated: phone overflow /instances at 375px', async ({ page }) => {
-	await page.setViewportSize({ width: 375, height: 812 });
-	await page.goto('/instances');
-	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-	await expect(page.getByRole('list', { name: 'Instances' })).toBeVisible();
-	await assertNoHorizontalOverflow(page, '/instances');
+	await assertInstancesOverflow(page, { width: 375, height: 812 });
 });
 
 test('authenticated: phone overflow /instances at 414px', async ({ page }) => {
-	await page.setViewportSize({ width: 414, height: 896 });
-	await page.goto('/instances');
-	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-	await expect(page.getByRole('list', { name: 'Instances' })).toBeVisible();
-	await assertNoHorizontalOverflow(page, '/instances');
+	await assertInstancesOverflow(page, { width: 414, height: 896 });
 });
 
 test('authenticated: phone overflow /account', async ({ page }) => {
