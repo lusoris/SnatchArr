@@ -856,7 +856,7 @@ jobs:
       # (.config/lefthook/engine.sh) and run the same engine CI installs. One value only.
       - name: Install praetorctl
         env:
-          PRAETOR_REF: 96e22a033467109d559054bbc31dab9889fba5aa
+          PRAETOR_REF: e7c0f2f95a9037c136dd7fd9b096d2c2bb937c25
         run: |
           go install "github.com/cordanaLLM/praetor/cmd/standardsctl@${PRAETOR_REF}"
           ln -s "$(go env GOPATH)/bin/standardsctl" "$(go env GOPATH)/bin/praetorctl"
