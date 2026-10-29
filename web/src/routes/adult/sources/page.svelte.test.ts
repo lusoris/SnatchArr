@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 import { ProblemError } from '@sveltesentio/core';
-import { fireEvent, screen, waitFor } from '@testing-library/svelte';
+import { fireEvent, screen, waitFor, within } from '@testing-library/svelte';
 import { toast } from 'svelte-sonner';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api } from '#lib/api/client.js';
@@ -137,5 +137,32 @@ describe('adult catalogue sources (/adult/sources)', () => {
 
 		expect(await screen.findByText(m.adult_sources_none())).toBeTruthy();
 		expect(await screen.findByText(m.adult_sources_status_never())).toBeTruthy();
+	});
+
+	it('positive: admin source card has class target and edit button has class target-link', async () => {
+		session.user = { id: 'u1', username: 'admin', role: 'admin' } as never;
+		stubGet({
+			'/adult/sources': [sampleSource],
+			'/adult/sync/status': sampleStatus
+		});
+		renderWithQuery(AdultSourcesPage);
+
+		const card = (await screen.findByText('Primary Catalogue')).closest('li') as HTMLElement;
+		expect(card.classList.contains('target')).toBe(true);
+
+		const editBtn = within(card).getByRole('button', { name: m.action_edit() });
+		expect(editBtn.classList.contains('target-link')).toBe(true);
+	});
+
+	it('negative: viewer source card has no class target', async () => {
+		session.user = { id: 'u2', username: 'viewer', role: 'viewer' } as never;
+		stubGet({
+			'/adult/sources': [sampleSource],
+			'/adult/sync/status': sampleStatus
+		});
+		renderWithQuery(AdultSourcesPage);
+
+		const card = (await screen.findByText('Primary Catalogue')).closest('li') as HTMLElement;
+		expect(card.classList.contains('target')).toBe(false);
 	});
 });

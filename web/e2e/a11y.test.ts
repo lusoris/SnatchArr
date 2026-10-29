@@ -309,6 +309,86 @@ if (!process.env.SNATCHARR_E2E_API) {
 		expect(results.violations).toEqual([]);
 	});
 
+	test('/automation (schedules) has no axe violations', async ({ page }) => {
+		await mockSignedInApi(page);
+		await page.route('**/api/v1/schedules*', (route) =>
+			route.fulfill(
+				json([
+					{
+						id: '00000000-0000-0000-0000-000000000020',
+						name: 'Night Quiet Hours',
+						days: [1, 2, 3, 4, 5],
+						start: '23:00',
+						end: '07:00',
+						tz: 'UTC',
+						action: 'pause',
+						enabled: true,
+						active: false,
+						created_at: '2026-01-01T00:00:00Z',
+						updated_at: '2026-01-01T00:00:00Z'
+					}
+				])
+			)
+		);
+		await page.goto('/automation');
+		await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+		await expect(page.getByRole('table')).toBeVisible();
+
+		await settleToasts(page);
+		const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
+		expect(results.violations).toEqual([]);
+	});
+
+	test('/connections/download-clients has no axe violations', async ({ page }) => {
+		await mockSignedInApi(page);
+		await page.route('**/api/v1/download-clients/status*', (route) =>
+			route.fulfill(
+				json([
+					{
+						client_id: '00000000-0000-0000-0000-000000000040',
+						name: 'qBittorrent Primary',
+						kind: 'qbittorrent',
+						reachable: true,
+						paused: false,
+						checked_at: '2026-09-01T12:00:00Z',
+						active: 2,
+						queued: 1,
+						download_rate_bps: 204800,
+						upload_rate_bps: 102400
+					}
+				])
+			)
+		);
+		await page.route('**/api/v1/download-clients*', (route) =>
+			route.fulfill(
+				json([
+					{
+						id: '00000000-0000-0000-0000-000000000040',
+						name: 'qBittorrent Primary',
+						kind: 'qbittorrent',
+						protocol: 'torrent',
+						base_url: 'http://qbittorrent.local:8080',
+						username: 'admin',
+						enabled: true,
+						source: 'manual',
+						max_active: 5,
+						max_queued: 0,
+						bandwidth_budget_bps: 0,
+						created_at: '2026-01-01T00:00:00Z',
+						updated_at: '2026-01-01T00:00:00Z'
+					}
+				])
+			)
+		);
+		await page.goto('/connections/download-clients');
+		await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+		await expect(page.getByRole('table')).toBeVisible();
+
+		await settleToasts(page);
+		const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
+		expect(results.violations).toEqual([]);
+	});
+
 	test('/automation?tab=caps has no axe violations', async ({ page }) => {
 		await mockSettingsApi(page);
 		await page.goto('/automation?tab=caps');

@@ -73,7 +73,7 @@ SPDX-License-Identifier: EUPL-1.2
 		</thead>
 		<tbody>
 			{#each schedules as s (s.id)}
-				<tr>
+				<tr class:target={session.isAdmin && deletingId !== s.id}>
 					<td data-label={m.schedule_name()}>
 						<div>
 							<div>{s.name}</div>
@@ -128,7 +128,7 @@ SPDX-License-Identifier: EUPL-1.2
 								</div>
 							{:else}
 								<div class="flex items-center gap-2">
-									<button type="button" class="btn" onclick={() => onedit(s)}>
+									<button type="button" class="btn target-link" onclick={() => onedit(s)}>
 										{m.schedule_edit()}
 									</button>
 									<button type="button" class="btn" onclick={() => (deletingId = s.id)}>

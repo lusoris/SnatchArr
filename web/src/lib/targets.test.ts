@@ -62,6 +62,54 @@ describe('targetProblems DOM validation', () => {
 		expect(problems[0]).toContain('found 2');
 	});
 
+	it('positive: reports 0 problems for a target with button.target-link[type=button]', () => {
+		const container = document.createElement('div');
+		container.innerHTML = `
+			<div class="card target">
+				<button type="button" class="btn target-link">Edit</button>
+				<button type="button" class="btn">Delete</button>
+			</div>
+		`;
+		expect(targetProblems(container)).toEqual([]);
+	});
+
+	it('negative: reports problem for a disabled button.target-link', () => {
+		const container = document.createElement('div');
+		container.innerHTML = `
+			<div class="card target">
+				<button type="button" class="btn target-link" disabled>Edit</button>
+			</div>
+		`;
+		const problems = targetProblems(container);
+		expect(problems.length).toBe(1);
+		expect(problems[0]).toContain('found 0');
+	});
+
+	it('negative: reports problem for a button.target-link without type=button', () => {
+		const container = document.createElement('div');
+		container.innerHTML = `
+			<div class="card target">
+				<button class="btn target-link">Edit</button>
+			</div>
+		`;
+		const problems = targetProblems(container);
+		expect(problems.length).toBe(1);
+		expect(problems[0]).toContain('found 0');
+	});
+
+	it('boundary: reports problem for a target containing both an anchor and a button target-link', () => {
+		const container = document.createElement('div');
+		container.innerHTML = `
+			<div class="card target">
+				<a class="target-link" href="/instances/1">Instance 1</a>
+				<button type="button" class="btn target-link">Edit</button>
+			</div>
+		`;
+		const problems = targetProblems(container);
+		expect(problems.length).toBe(1);
+		expect(problems[0]).toContain('found 2');
+	});
+
 	it('boundary: reports problem for nested .target elements', () => {
 		const container = document.createElement('div');
 		container.innerHTML = `

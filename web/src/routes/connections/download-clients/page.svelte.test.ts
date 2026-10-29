@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api } from '#lib/api/client.js';
 import type { components } from '#lib/api/schema.js';
 import { m } from '#lib/paraglide/messages.js';
+import { session } from '#lib/session.svelte.js';
 import {
 	cancelDeleteInCard,
 	expectStackedLabels,
@@ -203,6 +204,7 @@ function renderWithTestProbe() {
 
 describe('download-clients management', () => {
 	afterEach(() => {
+		session.user = { id: 'u1', username: 'admin', role: 'admin' } as never;
 		vi.restoreAllMocks();
 	});
 
@@ -452,5 +454,48 @@ describe('download-clients management', () => {
 		expect(editBtn.disabled).toBe(true);
 		const deleteBtn = card.getByRole('button', { name: m.action_delete() }) as HTMLButtonElement;
 		expect(deleteBtn.disabled).toBe(true);
+	});
+
+	it('positive: admin row has class target and edit button has class target-link', async () => {
+		session.user = { id: 'u1', username: 'admin', role: 'admin' } as never;
+		stubGet(listStubs);
+		renderWithQuery(DownloadClientsPage);
+
+		const heading = await screen.findByRole('heading', { level: 2, name: /qBittorrent Primary/ });
+		const row = heading.closest('tr') as HTMLTableRowElement;
+		expect(row.classList.contains('target')).toBe(true);
+
+		const editBtn = within(row).getByRole('button', { name: m.action_edit() });
+		expect(editBtn.classList.contains('target-link')).toBe(true);
+	});
+
+	it('negative: viewer row has no class target', async () => {
+		session.user = { id: 'u2', username: 'viewer', role: 'viewer' } as never;
+		stubGet(listStubs);
+		renderWithQuery(DownloadClientsPage);
+
+		const heading = await screen.findByRole('heading', { level: 2, name: /qBittorrent Primary/ });
+		const row = heading.closest('tr') as HTMLTableRowElement;
+		expect(row.classList.contains('target')).toBe(false);
+	});
+
+	it('negative: configarr-source download client row has no class target', async () => {
+		session.user = { id: 'u1', username: 'admin', role: 'admin' } as never;
+		const configarrClient: DownloadClient = {
+			...sampleClient,
+			id: '00000000-0000-0000-0000-000000000099',
+			name: 'Configarr qBit',
+			source: 'configarr'
+		};
+		stubGet({
+			'/download-clients': [configarrClient],
+			'/download-clients/status': [],
+			'/instances': []
+		});
+		renderWithQuery(DownloadClientsPage);
+
+		const heading = await screen.findByRole('heading', { level: 2, name: /Configarr qBit/ });
+		const row = heading.closest('tr') as HTMLTableRowElement;
+		expect(row.classList.contains('target')).toBe(false);
 	});
 });

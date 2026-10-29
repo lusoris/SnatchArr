@@ -156,7 +156,9 @@
 		}
 	}
 
-	.target-link::after {
+	/* Scoped to .target, so a target-link in a row that is not a target (a disabled edit button)
+	   never stretches over the nearest positioned ancestor. */
+	.target .target-link::after {
 		content: '';
 		position: absolute;
 		inset: 0;

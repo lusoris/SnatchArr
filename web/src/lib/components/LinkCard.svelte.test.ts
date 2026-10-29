@@ -75,7 +75,12 @@ describe('LinkCard', () => {
 		expect(screen.getByTestId('extra-action')).toBeTruthy();
 		expect(container.querySelector('[data-status="ok"]')).toBeTruthy();
 
-		await fireEvent.click(screen.getByRole('button', { name: m.action_edit() }));
+		const card = container.querySelector('li') as HTMLElement;
+		expect(card.classList.contains('target')).toBe(true);
+		const editBtn = screen.getByRole('button', { name: m.action_edit() });
+		expect(editBtn.classList.contains('target-link')).toBe(true);
+
+		await fireEvent.click(editBtn);
 		expect(onedit).toHaveBeenCalledTimes(1);
 
 		await fireEvent.click(screen.getByRole('button', { name: m.action_test() }));
@@ -105,6 +110,7 @@ describe('LinkCard', () => {
 
 		expect(screen.getAllByText(m.instance_never_tested()).length).toBeGreaterThanOrEqual(1);
 		expect(container.querySelector('[data-status="idle"]')).toBeTruthy();
+		expect(container.querySelector('.target')).toBeNull();
 		expect(screen.queryByRole('button', { name: m.action_edit() })).toBeNull();
 		expect(screen.queryByRole('button', { name: m.action_test() })).toBeNull();
 		expect(screen.queryByRole('button', { name: m.action_delete() })).toBeNull();
