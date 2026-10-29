@@ -23,7 +23,7 @@ GOLUSORIS_SHARED = $(GOMODCACHE)/github.com/golusoris/golusoris@$(GOLUSORIS_VER)
 
 .PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-soak e2e-compose-smoke e2e-compose-pg-upgrade e2e-dev-compose-smoke dlclients-live arr-forceimport-live integrations-live e2e-cnpg-pg-upgrade e2e-cnpg-backup-restore e2e-chart-install web-verify web-e2e web-e2e-api web-visual web-visual-update proto-verify deploy-verify chart-package governance-verify hooks-verify contracts-verify workflows-verify workflows-lint release-e2e-check release-dogfood-check secret-scan licences licences-check logos logos-check \
 	images kind-up kind-deploy kind-keda-proof kind-down \
-        api-gen api-gosec api-vuln gosec-install govulncheck-install sqlc-install tools-verify tools-lint tools-test tools-gosec web-gen proto-gen dev hooks setup api-openapi-breaking
+        api-gen api-gosec api-vuln gosec-install govulncheck-install sqlc-install tools-verify tools-lint tools-test tools-gosec web-gen proto-gen dev hooks setup api-openapi-breaking settings-parity settings-parity-check
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-18s %s\n", $$1, $$2}'
@@ -62,6 +62,7 @@ api-verify: ## golangci-lint + go fix + gosec + govulncheck + go test -race + ge
 	sh tools/spectral/lint.sh api/openapi/openapi.yaml
 	$(MAKE) api-openapi-breaking
 	go run ./tools/moduleroutes check -in api/openapi/openapi.yaml
+	$(MAKE) settings-parity-check
 
 api-openapi-breaking: ## OpenAPI breaking change check vs origin/main (HISS-14 append-only API)
 	if ! git rev-parse --verify -q origin/main >/dev/null; then
@@ -72,6 +73,12 @@ api-openapi-breaking: ## OpenAPI breaking change check vs origin/main (HISS-14 a
 	git show origin/main:api/openapi/openapi.yaml >"$$base"
 	sh tools/oasdiff/breaking_test.sh
 	sh tools/oasdiff/breaking.sh "$$base" api/openapi/openapi.yaml "$$(git log -1 --format=%s)"
+
+settings-parity: ## Generate docs/settings-parity.tsv from config registry
+	go run ./api/cmd/settingsparity
+
+settings-parity-check: ## Verify docs/settings-parity.tsv matches config registry
+	go run ./api/cmd/settingsparity -check
 
 api-gen: ## Regenerate the ogen server and the sqlc queries (go generate in api/, pinned versions)
 	cd api && go generate ./...
