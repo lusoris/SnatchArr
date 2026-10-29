@@ -5,12 +5,20 @@
 import path from 'node:path';
 import 'tsx/esm';
 import { ESLint } from 'eslint';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 
 const webDir = path.resolve(import.meta.dirname, '../..');
 const eslint = new ESLint({ cwd: webDir });
 const sampleRouteFile = 'src/routes/+page.svelte';
 const sampleTsFile = 'src/routes/+layout.ts';
+
+// The first lint loads the type-aware project service for the whole web tree, which takes
+// longer than the per-test timeout under a parallel verify run. Warm it once here so each
+// test below measures only its own lint.
+beforeAll(async () => {
+	await eslint.lintText('export {};\n', { filePath: sampleTsFile });
+	await eslint.lintText('<p>warm</p>\n', { filePath: sampleRouteFile });
+}, 120_000);
 
 describe('entities lint rules: planted negatives', () => {
 	it('rejects a planted internal href literal starting with "/"', async () => {
