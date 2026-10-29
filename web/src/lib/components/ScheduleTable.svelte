@@ -58,7 +58,7 @@ SPDX-License-Identifier: EUPL-1.2
 </script>
 
 <div class="relative overflow-x-auto">
-	<table class="table-stack table">
+	<table class="compact-table table-stack table">
 		<caption class="sr-only">{m.schedules_title()}</caption>
 		<thead>
 			<tr>
@@ -143,23 +143,3 @@ SPDX-License-Identifier: EUPL-1.2
 		</tbody>
 	</table>
 </div>
-
-<style>
-	tbody tr {
-		height: 2.75rem;
-	}
-	@media (min-width: 1280px) {
-		tbody tr {
-			height: 2.25rem;
-		}
-		tbody :global(.btn) {
-			min-height: 1.75rem;
-			padding: 0.15rem 0.5rem;
-			font-size: 0.75rem;
-		}
-	}
-	th,
-	td {
-		vertical-align: middle;
-	}
-</style>

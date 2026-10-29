@@ -757,6 +757,8 @@ if (!served) {
 		// Phone shows five run cards and a show-all toggle instead of a nested scroll box.
 		const runs = page.getByRole('region', { name: 'Run history' }).locator('tbody tr');
 		await expect(runs.filter({ visible: true })).toHaveCount(5);
+		// The capped cards render no box; the stacked checks must skip them, not flag the fifth card.
+		await assertRenderedLayout(page, '/instances/[id]/activity');
 		await assertScrollBudget(page, '/instances/[id]/activity', 2 * VIEWPORTS.phone.height);
 		const toggle = page.getByRole('button', { name: 'Show all 20 runs' });
 		await toggle.click();

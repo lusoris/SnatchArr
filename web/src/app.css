@@ -284,8 +284,11 @@
 		}
 	}
 
-	.compact-table tbody tr {
-		height: 2.75rem;
+	/* Only on a real table: a stacked card grows with its fields. */
+	@media (width >= 48rem) {
+		.compact-table tbody tr {
+			height: 2.75rem;
+		}
 	}
 	@media (min-width: 1280px) {
 		.compact-table tbody tr {
