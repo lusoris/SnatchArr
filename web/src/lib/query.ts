@@ -32,6 +32,7 @@ export const keys = {
 	configarr: ['configarr', 'status'] as const,
 	prowlarr: ['prowlarr', 'status'] as const,
 	settings: ['settings'] as const,
+	runtimeSettings: ['settings', 'runtime'] as const,
 	preferences: ['me', 'preferences'] as const,
 	channels: ['notification-channels'] as const,
 	rules: ['notification-rules'] as const,

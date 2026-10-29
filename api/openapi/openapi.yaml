@@ -3737,7 +3737,7 @@ components:
           $ref: "#/components/schemas/RuntimeSettingSource"
         locked:
           type: boolean
-          description: "True when set by an environment variable override."
+          description: "True when the setting is written only through its environment variable: set there, or an environment-only secret."
         apply:
           $ref: "#/components/schemas/RuntimeSettingApply"
 

@@ -126,7 +126,9 @@ func (s *Service) buildSettingItem(item config.Setting, dbRow sqlcgen.RuntimeSet
 	dbSet := dbRow.Key != ""
 
 	source := "default"
-	locked := false
+	// An environment-only secret is never writable through the API, so it reads as locked even
+	// while its variable is unset.
+	locked := isEnvOnlySecret(item.Key, item.Env)
 	if envSet {
 		source = "env"
 		locked = true
