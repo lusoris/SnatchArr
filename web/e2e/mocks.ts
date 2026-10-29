@@ -83,6 +83,42 @@ export const sampleSettingsData = {
 	}
 };
 
+export const sampleRuntimeSettingsData = [
+	{
+		key: 'port',
+		env: 'APP_PORT',
+		class: 'bootstrap',
+		type: 'int',
+		default: '8080',
+		value: '8080',
+		source: 'default',
+		locked: true,
+		apply: 'restart'
+	},
+	{
+		key: 'log_level',
+		env: 'APP_LOG_LEVEL',
+		class: 'runtime',
+		type: 'string',
+		default: 'info',
+		value: 'info',
+		source: 'db',
+		locked: false,
+		apply: 'live'
+	},
+	{
+		key: 'api_secret',
+		env: 'APP_API_SECRET',
+		class: 'secret',
+		type: 'string',
+		default: '',
+		is_set: true,
+		source: 'env',
+		locked: true,
+		apply: 'restart'
+	}
+];
+
 /** Signed-in endpoints whose mock body is a fixed object. */
 const FIXED_BODIES: Record<string, unknown> = {
 	'adult/image-sets': { items: [], total: 0 },
@@ -244,6 +280,14 @@ export async function mockSettingsApi(
 	await page.route('**/api/v1/notifications/channels', (route) => route.fulfill(json([])));
 	await page.route('**/api/v1/notifications/rules', (route) => route.fulfill(json([])));
 	await page.route('**/api/v1/priority-presets', (route) => route.fulfill(json([])));
+	await mockRuntimeSettingsApi(page);
+}
+
+export async function mockRuntimeSettingsApi(
+	page: Page,
+	settings = sampleRuntimeSettingsData
+): Promise<void> {
+	await page.route('**/api/v1/settings/runtime', (route) => route.fulfill(json(settings)));
 }
 
 const sampleLicences = {

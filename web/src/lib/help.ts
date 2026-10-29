@@ -95,6 +95,10 @@ export const HELP_MAP: Record<string, HelpEntry> = {
 		summaryKey: 'help_requests_settings',
 		docsPath: 'configuration.md#runtime-settings'
 	},
+	'/system?tab=environment': {
+		summaryKey: 'help_system_environment',
+		docsPath: 'configuration.md#runtime-settings'
+	},
 	'/system?tab=modules': {
 		summaryKey: 'help_system_modules',
 		docsPath: 'modules.md'

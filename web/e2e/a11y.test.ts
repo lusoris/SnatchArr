@@ -309,6 +309,18 @@ if (!process.env.SNATCHARR_E2E_API) {
 		expect(results.violations).toEqual([]);
 	});
 
+	test('/system?tab=environment has no axe violations', async ({ page }) => {
+		await mockSettingsApi(page);
+		await page.goto('/system?tab=environment');
+		await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+		await expect(
+			page.getByRole('heading', { level: 2, name: 'Environment settings' })
+		).toBeVisible();
+
+		const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
+		expect(results.violations).toEqual([]);
+	});
+
 	test('/automation?tab=caps has no axe violations', async ({ page }) => {
 		await mockSettingsApi(page);
 		await page.goto('/automation?tab=caps');
