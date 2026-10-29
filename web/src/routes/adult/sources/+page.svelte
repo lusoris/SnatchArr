@@ -7,11 +7,13 @@ SPDX-License-Identifier: EUPL-1.2
 	import { toast } from 'svelte-sonner';
 	import { api, describeError } from '#lib/api/client.js';
 	import type { components } from '#lib/api/schema.js';
+	import AutosaveCheckbox from '#lib/components/AutosaveCheckbox.svelte';
 	import ConfirmDelete from '#lib/components/ConfirmDelete.svelte';
 	import FormCard from '#lib/components/FormCard.svelte';
 	import PageHeader from '#lib/components/PageHeader.svelte';
 	import QueryGuard from '#lib/components/QueryGuard.svelte';
 	import SecretField from '#lib/components/SecretField.svelte';
+	import SyncError from '#lib/components/SyncError.svelte';
 	import TextField from '#lib/components/TextField.svelte';
 	import UrlText from '#lib/components/UrlText.svelte';
 	import { FormEditor } from '#lib/formEditor.svelte.js';
@@ -20,7 +22,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
 	import { fieldErrors, filledPart } from '#lib/problem.js';
-	import { keys } from '#lib/query.js';
+	import { keys, queryClient } from '#lib/query.js';
 	import { session } from '#lib/session.svelte.js';
 	import { formatWhen } from '#lib/stamina.js';
 
@@ -66,13 +68,20 @@ SPDX-License-Identifier: EUPL-1.2
 		editor.close();
 	}
 
+	// On an edit the card's checkbox owns sync_favorites and saves it on change, so the form
+	// sends the stored value, never the one it copied when it opened.
+	function storedSyncFavorites(id: string): boolean {
+		return sources.data?.find((src) => src.id === id)?.sync_favorites ?? syncFavorites;
+	}
+
 	function buildBody(): AdultSourceInput {
+		const target = editor.editing;
 		return {
 			name,
 			endpoint,
 			priority: Number(priority),
 			enabled,
-			sync_favorites: syncFavorites,
+			sync_favorites: target ? storedSyncFavorites(target.id) : syncFavorites,
 			...filledPart('api_key', apiKey)
 		};
 	}
@@ -91,6 +100,32 @@ SPDX-License-Identifier: EUPL-1.2
 		},
 		invalidates: [keys.adultSources, keys.adultSyncStatus],
 		onSuccess: saveSuccess(resetForm)
+	});
+
+	// Saves one source's sync_favorites through the same PUT as the form, keeping its other fields.
+	const saveSyncFavorites = createSentioMutation({
+		mutationFn: async ({ src, value }: { src: AdultSource; value: boolean }) =>
+			(
+				await api.PUT('/adult/sources/{sourceId}', {
+					params: { path: { sourceId: src.id } },
+					body: {
+						name: src.name,
+						endpoint: src.endpoint,
+						priority: src.priority,
+						enabled: src.enabled,
+						sync_favorites: value
+					}
+				})
+			).data,
+		invalidates: [keys.adultSources, keys.adultSyncStatus],
+		// The stored row replaces the cached one at once, so an edit opened before the refetch
+		// lands sends the saved value.
+		onSuccess: (stored) => {
+			if (!stored) return;
+			queryClient.setQueryData<AdultSource[]>(keys.adultSources, (rows) =>
+				rows?.map((row) => (row.id === stored.id ? stored : row))
+			);
+		}
 	});
 
 	const remove = createSentioMutation({
@@ -171,7 +206,7 @@ SPDX-License-Identifier: EUPL-1.2
 						: m.adult_sources_status_never()}
 				</li>
 				{#if st.last_error}
-					<li class="text-danger">{st.last_error}</li>
+					<li><SyncError error={st.last_error} /></li>
 				{/if}
 			</ul>
 		{/snippet}
@@ -211,16 +246,32 @@ SPDX-License-Identifier: EUPL-1.2
 												: m.adult_sources_source_never()}
 										</p>
 										{#if src.last_sync_error}
-											<p class="text-xs text-danger">
-												{m.adult_sources_source_error({ error: src.last_sync_error })}
-											</p>
+											<div class="text-xs">
+												<SyncError
+													error={src.last_sync_error}
+													format={(error) => m.adult_sources_source_error({ error })}
+												/>
+											</div>
 										{/if}
 									</div>
 									{#if session.isAdmin}
 										<div
 											class="mt-3 flex flex-wrap items-center gap-2 border-t border-line/40 pt-2"
 										>
-											<button type="button" class="btn" onclick={() => loadEdit(src)}>
+											<AutosaveCheckbox
+												id={`adult-source-sync-favorites-${src.id}`}
+												label={m.adult_sources_sync_favorites()}
+												checked={src.sync_favorites}
+												disabled={editor.editing?.id === src.id}
+												save={async (value) =>
+													(await saveSyncFavorites.mutateAsync({ src, value }))?.sync_favorites}
+											/>
+											<button
+												type="button"
+												class="btn"
+												disabled={saveSyncFavorites.isPending}
+												onclick={() => loadEdit(src)}
+											>
 												{m.action_edit()}
 											</button>
 											<ConfirmDelete
@@ -290,10 +341,12 @@ SPDX-License-Identifier: EUPL-1.2
 						<input type="checkbox" bind:checked={enabled} />
 						<span>{m.form_enabled()}</span>
 					</label>
-					<label class="flex items-center gap-2 text-sm">
-						<input type="checkbox" bind:checked={syncFavorites} />
-						<span>{m.adult_sources_sync_favorites()}</span>
-					</label>
+					{#if editor.editing === null}
+						<label class="flex items-center gap-2 text-sm">
+							<input type="checkbox" bind:checked={syncFavorites} />
+							<span>{m.adult_sources_sync_favorites()}</span>
+						</label>
+					{/if}
 				</FormCard>
 			</div>
 		{/if}

@@ -437,13 +437,15 @@ deploy-verify: ## helm unittest + render.sh + chart_checks.sh planted cases + he
 	sh tools/deploy/chart_checks.sh netpol "$$render/all.yaml"
 	tools/deploy/render.sh "$$render/no-peers.yaml" snatcharr deploy/helm/snatcharr \
 	  --set networkPolicy.enabled=true --set-json 'networkPolicy.arrCidrs=[]'
-	sh tools/deploy/chart_checks.sh netpol "$$render/no-peers.yaml" "2 with a to, 0 of them without ports, 0 with an empty to"
+	# Without *arr peers: the API's database and public HTTPS rules and the worker's API rule.
+	sh tools/deploy/chart_checks.sh netpol "$$render/no-peers.yaml" "3 with a to, 0 of them without ports, 0 with an empty to"
 	# With one arrPeers entry that has `ports` as the only *arr peer, both policies hold two egress
-	# rules with a `to` (database or API, and the peer), and each of the four carries `ports`.
+	# rules with a `to` (database or API, and the peer), the API a third for public HTTPS, and each
+	# of the five carries `ports`.
 	tools/deploy/render.sh "$$render/peer.yaml" snatcharr deploy/helm/snatcharr \
 	  --set networkPolicy.enabled=true --set-json 'networkPolicy.arrCidrs=[]' \
 	  --set-json 'networkPolicy.arrPeers=[{"podSelector":{"matchLabels":{"app.kubernetes.io/name":"lidarr"}},"ports":[{"port":8686,"protocol":"TCP"}]}]'
-	sh tools/deploy/chart_checks.sh netpol "$$render/peer.yaml" "4 with a to, 0 of them without ports, 0 with an empty to"
+	sh tools/deploy/chart_checks.sh netpol "$$render/peer.yaml" "5 with a to, 0 of them without ports, 0 with an empty to"
 	app=$$(helm show chart deploy/helm/snatcharr | sed -n 's/^appVersion: *//p' | tr -d "\"'")
 	sh tools/deploy/chart_checks.sh chart deploy/helm/snatcharr/Chart.yaml "$$app"
 	# Every object in the release namespace, also through the kind overlay: kustomize 5.8 no
