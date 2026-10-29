@@ -297,8 +297,8 @@ SPDX-License-Identifier: EUPL-1.2
 					aria-selected={activeSource === 'events'}
 					class="btn-segmented min-h-11 rounded-md px-3 py-1 text-xs font-medium transition md:min-h-0 {activeSource ===
 					'events'
-						? 'bg-card font-semibold shadow-xs'
-						: 'hover:text-foreground text-subtle'}"
+						? 'bg-surface font-semibold shadow-xs'
+						: 'text-subtle hover:text-fg'}"
 					onclick={() => selectSource('events')}>{m.activity_source_events()}</button
 				>
 				{#if session.isAdmin}
@@ -309,8 +309,8 @@ SPDX-License-Identifier: EUPL-1.2
 						aria-selected={activeSource === 'log'}
 						class="btn-segmented min-h-11 rounded-md px-3 py-1 text-xs font-medium transition md:min-h-0 {activeSource ===
 						'log'
-							? 'bg-card font-semibold shadow-xs'
-							: 'hover:text-foreground text-subtle'}"
+							? 'bg-surface font-semibold shadow-xs'
+							: 'text-subtle hover:text-fg'}"
 						onclick={() => selectSource('log')}>{m.activity_source_log()}</button
 					>
 				{/if}
