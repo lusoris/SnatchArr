@@ -801,6 +801,7 @@
 	"modules_help_config_title": "Konfiguration",
 	"modules_help_config_desc": "Ein aktiviertes Modul ergänzt seine Einstellungen und API-Endpunkte. Solange ein Modul aus ist, antworten seine Endpunkte mit 404 und seine Hintergrundschleifen ruhen.",
 	"environment_title": "Laufzeiteinstellungen",
+	"environment_admin_only": "Nur Administratoren sehen und ändern die Laufzeiteinstellungen.",
 	"environment_empty": "Keine Laufzeiteinstellungen gefunden.",
 	"environment_col_env": "Umgebungsvariable",
 	"environment_col_key": "Schlüssel",

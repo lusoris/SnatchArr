@@ -801,6 +801,7 @@
 	"modules_help_config_title": "Configuration",
 	"modules_help_config_desc": "An enabled module adds its settings and API endpoints. While a module is off, its endpoints answer 404 and its background loops do nothing.",
 	"environment_title": "Environment settings",
+	"environment_admin_only": "Only administrators can see and change the runtime settings.",
 	"environment_empty": "No runtime settings found.",
 	"environment_col_env": "Environment variable",
 	"environment_col_key": "Key",

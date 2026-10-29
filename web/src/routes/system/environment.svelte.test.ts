@@ -171,16 +171,36 @@ describe('EnvironmentTab boundary', () => {
 		expect(screen.queryByRole('button', { name: m.instance_save() })).toBeNull();
 	});
 
-	it('non-admin sees no save button', async () => {
+	it('asks a viewer for no admin-only settings and offers no form', async () => {
 		session.user = { id: 'u2', username: 'viewer', role: 'viewer' } as never;
-		stubGet({ '/settings/runtime': sampleSettings });
+		const get = stubGet({});
 		renderWithQuery(EnvironmentTab);
 
-		expect(await screen.findByText('APP_PORT')).toBeTruthy();
+		expect(await screen.findByText(m.environment_admin_only())).toBeTruthy();
+		expect(get.mock.calls.map((c) => c[0])).not.toContain('/settings/runtime');
 		expect(screen.queryByRole('button', { name: m.instance_save() })).toBeNull();
+	});
 
-		const input = screen.getByLabelText('log_level') as HTMLInputElement;
-		expect(input.disabled).toBe(true);
+	it('treats a requester, the highest role below admin, as a viewer', async () => {
+		session.user = { id: 'u3', username: 'requester', role: 'requester' } as never;
+		const get = stubGet({});
+		renderWithQuery(EnvironmentTab);
+
+		expect(await screen.findByText(m.environment_admin_only())).toBeTruthy();
+		expect(get.mock.calls.map((c) => c[0])).not.toContain('/settings/runtime');
+	});
+
+	it('asks for the settings once a viewer becomes admin', async () => {
+		session.user = { id: 'u2', username: 'viewer', role: 'viewer' } as never;
+		const get = stubGet({ '/settings/runtime': sampleSettings });
+		renderWithQuery(EnvironmentTab);
+		expect(await screen.findByText(m.environment_admin_only())).toBeTruthy();
+
+		session.user = { id: 'u2', username: 'viewer', role: 'admin' } as never;
+
+		expect(await screen.findByText('APP_PORT')).toBeTruthy();
+		expect(get.mock.calls.map((c) => c[0])).toContain('/settings/runtime');
+		expect(screen.queryByText(m.environment_admin_only())).toBeNull();
 	});
 });
 
