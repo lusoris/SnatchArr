@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -51,7 +52,7 @@ var ErrMemberDisabled = errors.New("jellyfin member disabled")
 // Service handles setup and login.
 type Service struct {
 	st        *store.Store
-	hasher    *crypto.PasswordHasher
+	hasher    Hasher
 	clk       clock.Clock
 	ids       id.Generator
 	logger    *slog.Logger
@@ -61,10 +62,29 @@ type Service struct {
 	testHookPostPasswordUpdate func(ctx context.Context)
 }
 
+// dummyHash is computed once per process: each argon2id hash holds 64 MiB, and every
+// NewService call (one per test fixture) used to pay that again outside any hasher bound.
+var dummyHash = sync.OnceValues(func() (string, error) {
+	return crypto.HashPassword("snatcharr-dummy-password-for-timing")
+})
+
+// Hasher hashes a new password; [crypto.PasswordHasher] is the production one. Verification
+// reads the argon2id parameters from the stored hash, so a hasher with other parameters
+// still verifies.
+type Hasher interface {
+	Hash(ctx context.Context, plain string) (string, error)
+}
+
 // NewService wires the service. A dummy hash is precomputed so a login against an
 // unknown username costs the same as a wrong password (no user enumeration by timing).
 func NewService(st *store.Store, hasher *crypto.PasswordHasher, clk clock.Clock, ids id.Generator, logger *slog.Logger) (*Service, error) {
-	dummy, err := crypto.HashPassword("snatcharr-dummy-password-for-timing")
+	return NewServiceWithHasher(st, hasher, clk, ids, logger)
+}
+
+// NewServiceWithHasher is [NewService] with any [Hasher], so tests can hash with cheap
+// argon2id parameters.
+func NewServiceWithHasher(st *store.Store, hasher Hasher, clk clock.Clock, ids id.Generator, logger *slog.Logger) (*Service, error) {
+	dummy, err := dummyHash()
 	if err != nil {
 		return nil, fmt.Errorf("auth: dummy hash: %w", err)
 	}

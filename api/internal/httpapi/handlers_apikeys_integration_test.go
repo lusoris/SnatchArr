@@ -17,8 +17,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/golusoris/golusoris/core/crypto"
-
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
@@ -616,7 +614,7 @@ func createRequesterUser(t *testing.T, f *routerFixture) (string, string) {
 	t.Helper()
 	username := "requester-" + uuid.NewString()[:8]
 	password := "requester-pass-1234"
-	hasher := crypto.NewPasswordHasher(1)
+	hasher := testHasher
 	hash, err := hasher.Hash(t.Context(), password)
 	if err != nil {
 		t.Fatalf("hash password: %v", err)

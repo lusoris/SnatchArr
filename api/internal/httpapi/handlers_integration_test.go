@@ -345,10 +345,10 @@ func newIntegrationFixture(t *testing.T) *integrationFixture {
 	st := storetest.New(t)
 	clk := clock.NewFake()
 	ids := id.New()
-	hasher := crypto.NewPasswordHasher(1)
+	hasher := testHasher
 	logs := testdiag.NewLogBuffer(slog.LevelWarn, 64<<10)
 	logger := slog.New(logs)
-	authSvc, err := auth.NewService(st, hasher, clk, ids, logger)
+	authSvc, err := auth.NewServiceWithHasher(st, hasher, clk, ids, logger)
 	if err != nil {
 		t.Fatalf("newIntegrationFixture: auth.NewService: %v", err)
 	}
