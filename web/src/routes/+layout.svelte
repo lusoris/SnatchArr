@@ -6,7 +6,6 @@ SPDX-License-Identifier: EUPL-1.2
 	import '../app.css';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { resolve } from '$app/paths';
 	import { QueryClientProvider, setQueryClientContext } from '@tanstack/svelte-query';
 	import { Toaster } from 'svelte-sonner';
 	import { toastPreset } from '@sveltesentio/ui/toast';
@@ -22,6 +21,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import NavDrawer from '#lib/components/shell/NavDrawer.svelte';
 	import Sidebar from '#lib/components/shell/Sidebar.svelte';
 	import TopBar from '#lib/components/shell/TopBar.svelte';
+	import { pageHref } from '#lib/entities.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { api, PUBLIC_ROUTES } from '#lib/api/client.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
@@ -119,11 +119,11 @@ SPDX-License-Identifier: EUPL-1.2
 		const state = await session.refresh();
 		const here = page.url.pathname;
 		if (state === 'setup' && here !== '/setup') {
-			await goto(resolve('setup'));
+			await goto(pageHref('/setup'));
 		} else if (state === 'anonymous' && !session.error && !PUBLIC_ROUTES.has(here)) {
-			await goto(resolve('login'));
+			await goto(pageHref('/login'));
 		} else if (state === 'authenticated' && PUBLIC_ROUTES.has(here)) {
-			await goto(resolve('/'));
+			await goto(pageHref('/'));
 		}
 	}
 
@@ -138,13 +138,13 @@ SPDX-License-Identifier: EUPL-1.2
 		const here = page.url.pathname;
 		drawerOpen = false;
 		if (session.state === 'anonymous' && !session.error && !PUBLIC_ROUTES.has(here)) {
-			void goto(resolve('login'));
+			void goto(pageHref('/login'));
 		}
 	});
 
 	async function logout(): Promise<void> {
 		await session.logout();
-		await goto(resolve('login'));
+		await goto(pageHref('/login'));
 	}
 </script>
 
@@ -221,7 +221,7 @@ SPDX-License-Identifier: EUPL-1.2
 								<p class="text-sm text-subtle">{m.page_not_found_text()}</p>
 								<ProblemNote error={disabledRouteProblem} />
 								<div>
-									<a href={resolve('/')} class="btn btn-outline inline-flex items-center gap-2">
+									<a href={pageHref('/')} class="btn btn-outline inline-flex items-center gap-2">
 										{m.page_not_found_back()}
 									</a>
 								</div>

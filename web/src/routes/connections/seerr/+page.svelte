@@ -3,7 +3,6 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
-	import { resolve } from '$app/paths';
 	import { createSentioQuery, createSentioMutation } from '@sveltesentio/query';
 	import { toast } from 'svelte-sonner';
 	import { api, describeError } from '#lib/api/client.js';
@@ -13,6 +12,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import PageHeader from '#lib/components/PageHeader.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import SeerrLinkForm from '#lib/components/SeerrLinkForm.svelte';
+	import { entityHref } from '#lib/entities.js';
 	import { FormEditor } from '#lib/formEditor.svelte.js';
 	import { deleteCallbacks, probeCallbacks, saveSuccess } from '#lib/forms.js';
 	import { HELP_MAP } from '#lib/help.js';
@@ -178,7 +178,7 @@ SPDX-License-Identifier: EUPL-1.2
 						<td>{r.requestedByUsername || r.requested_by}</td>
 						<td>
 							{#if r.instance_id}
-								<a href={resolve('/instances/[id]', { id: r.instance_id })} class="hover:underline"
+								<a href={entityHref('instance', r.instance_id)} class="hover:underline"
 									>{r.instance_name ?? r.instance_id}</a
 								>
 							{:else if r.instance_name}

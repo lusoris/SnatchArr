@@ -3,11 +3,11 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
-	import { resolve } from '$app/paths';
 	import { createSentioMutation } from '@sveltesentio/query';
 	import { toast } from 'svelte-sonner';
 	import { api, describeError } from '#lib/api/client.js';
 	import type { components } from '#lib/api/schema.js';
+	import { entityHref } from '#lib/entities.js';
 	import { activePauseText } from '#lib/overview.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { keys } from '#lib/query.js';
@@ -79,7 +79,7 @@ SPDX-License-Identifier: EUPL-1.2
 							<div>{s.name}</div>
 							{#if s.instance_id}
 								<a
-									href={resolve('/instances/[id]', { id: s.instance_id })}
+									href={entityHref('instance', s.instance_id)}
 									class="text-xs text-subtle hover:underline"
 									>{instanceName(s.instance_id) ?? s.instance_id}</a
 								>

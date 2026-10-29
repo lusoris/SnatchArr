@@ -3,7 +3,6 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
-	import { resolve } from '$app/paths';
 	import { createSentioQuery, createSentioMutation } from '@sveltesentio/query';
 	import { toast } from 'svelte-sonner';
 	import { api, describeError } from '#lib/api/client.js';
@@ -15,6 +14,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import PageHeader from '#lib/components/PageHeader.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import UrlText from '#lib/components/UrlText.svelte';
+	import { entityHref } from '#lib/entities.js';
 	import { downloadClientQueries } from '#lib/queries/connections.js';
 	import { FormEditor } from '#lib/formEditor.svelte.js';
 	import { deleteCallbacks, probeFailed, saveSuccess } from '#lib/forms.js';
@@ -204,7 +204,7 @@ SPDX-License-Identifier: EUPL-1.2
 									>
 									<td class="text-sm text-subtle" data-label={m.dlclients_instance()}
 										>{#if c.instance_id}<a
-												href={resolve('/instances/[id]', { id: c.instance_id })}
+												href={entityHref('instance', c.instance_id)}
 												class="hover:underline">{instanceName(c.instance_id)}</a
 											>{:else}{instanceName(c.instance_id)}{/if}</td
 									>

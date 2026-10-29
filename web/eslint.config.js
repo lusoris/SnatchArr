@@ -51,5 +51,55 @@ export default defineConfig(
 			'@sveltesentio/chart-a11y-wrapper': 'error',
 			'svelte/button-has-type': 'error'
 		}
+	},
+	{
+		files: ['src/**/*.ts', 'src/**/*.svelte'],
+		ignores: ['src/lib/entities.ts', '**/*.test.ts'],
+		rules: {
+			'no-restricted-imports': [
+				'error',
+				{
+					paths: [
+						{
+							name: '$app/paths',
+							importNames: ['resolve'],
+							message: 'Import pageHref or entityHref from #lib/entities.js instead of resolve.'
+						}
+					]
+				}
+			],
+			'no-restricted-syntax': [
+				'error',
+				{
+					selector: "SvelteAttribute[key.name='href'] > SvelteLiteral[value=/^\\/(?!api\\/)/]",
+					message:
+						'Use pageHref, entityHref, or EntityLink from #lib/entities.js for internal hrefs.'
+				},
+				{
+					selector:
+						"SvelteAttribute[key.name='href'] > SvelteMustacheTag > Literal[value=/^\\/(?!api\\/)/]",
+					message:
+						'Use pageHref, entityHref, or EntityLink from #lib/entities.js for internal hrefs.'
+				},
+				{
+					selector:
+						"SvelteAttribute[key.name='href'] > SvelteMustacheTag > TemplateLiteral > TemplateElement:first-child[value.raw=/^\\/(?!api\\/)/]",
+					message:
+						'Use pageHref, entityHref, or EntityLink from #lib/entities.js for internal hrefs.'
+				},
+				{
+					selector:
+						"CallExpression[callee.name='goto'] > Literal:first-child[value=/^\\/(?!api\\/)/]",
+					message:
+						'Use pageHref, entityHref, or EntityLink from #lib/entities.js for internal routes in goto().'
+				},
+				{
+					selector:
+						"CallExpression[callee.name='goto'] > TemplateLiteral:first-child > TemplateElement:first-child[value.raw=/^\\/(?!api\\/)/]",
+					message:
+						'Use pageHref, entityHref, or EntityLink from #lib/entities.js for internal routes in goto().'
+				}
+			]
+		}
 	}
 );

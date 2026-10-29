@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 import { goto } from '$app/navigation';
-import { resolve } from '$app/paths';
 import { describeError } from './api/client.js';
+import { pageHref } from './entities.js';
 
 export interface AuthSubmit {
 	readonly busy: boolean;
@@ -27,7 +27,7 @@ export function createAuthSubmit(action: () => Promise<unknown>): AuthSubmit {
 		error = '';
 		try {
 			await action();
-			await goto(resolve('/'));
+			await goto(pageHref('/'));
 		} catch (err) {
 			error = describeError(err);
 		} finally {

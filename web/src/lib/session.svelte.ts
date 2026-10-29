@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 import { goto } from '$app/navigation';
-import { resolve } from '$app/paths';
 import { api, problemStatus, setExpiryHandler } from './api/client.js';
 import type { components } from './api/schema.js';
+import { pageHref } from './entities.js';
 import { queryClient } from './query.js';
 
 type User = components['schemas']['User'];
@@ -99,7 +99,7 @@ class Session {
 		this.state = 'anonymous';
 		void queryClient.cancelQueries();
 		queryClient.clear();
-		await goto(resolve('login'));
+		await goto(pageHref('/login'));
 	}
 }
 

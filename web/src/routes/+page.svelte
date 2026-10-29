@@ -3,7 +3,6 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
-	import { resolve } from '$app/paths';
 	import { createSentioMutation, createSentioQuery } from '@sveltesentio/query';
 	import { toast } from 'svelte-sonner';
 	import { api, describeError } from '#lib/api/client.js';
@@ -15,6 +14,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import CardScrollHint from '#lib/components/CardScrollHint.svelte';
 	import ConfirmAction from '#lib/components/ConfirmAction.svelte';
 	import EmptyFleetOnboarding from '#lib/components/EmptyFleetOnboarding.svelte';
+	import { entityHref, pageHref } from '#lib/entities.js';
 	import { HELP_MAP } from '#lib/help.js';
 	import KpiTile from '#lib/components/KpiTile.svelte';
 	import PageHeader from '#lib/components/PageHeader.svelte';
@@ -128,7 +128,7 @@ SPDX-License-Identifier: EUPL-1.2
 	href: '/instances' | '/activity' | '/automation' | '/connections/prowlarr',
 	label: string
 )}
-	<a href={resolve(href)} class="text-brand text-xs hover:underline">
+	<a href={pageHref(href)} class="text-brand text-xs hover:underline">
 		{label}
 	</a>
 {/snippet}
@@ -276,7 +276,7 @@ SPDX-License-Identifier: EUPL-1.2
 												<AppLogo kind={inst.kind} size={18} />
 												<div class="min-w-0 text-right md:text-left">
 													<a
-														href={resolve('/instances/[id]', { id: inst.id })}
+														href={entityHref('instance', inst.id)}
 														class="font-medium hover:underline"
 													>
 														{inst.name}
@@ -323,7 +323,7 @@ SPDX-License-Identifier: EUPL-1.2
 											{:else}—{/if}
 										</td>
 										<td class="text-xs text-subtle" data-label={m.overview_next_window()}>
-											{#if nextSchedule}<a href={resolve('/automation')} class="hover:underline"
+											{#if nextSchedule}<a href={pageHref('/automation')} class="hover:underline"
 													>{formatScheduleWindow(nextSchedule)}</a
 												>{:else}—{/if}
 										</td>
@@ -467,7 +467,7 @@ SPDX-License-Identifier: EUPL-1.2
 								<li class="flex items-center justify-between gap-2 py-1.5">
 									<div class="flex min-w-0 flex-col">
 										<a
-											href={resolve('/automation')}
+											href={pageHref('/automation')}
 											class="truncate font-medium text-fg hover:underline">{s.name}</a
 										>
 										<span class="text-subtle">{s.start}–{s.end} {s.tz}</span>
@@ -504,7 +504,7 @@ SPDX-License-Identifier: EUPL-1.2
 					<div class="flex items-center justify-between">
 						<div class="flex min-w-0 items-baseline gap-2">
 							<h2 id="dashboard-prowlarr-title" class="text-base font-semibold">
-								<a href={resolve('/connections/prowlarr')} class="hover:underline">
+								<a href={pageHref('/connections/prowlarr')} class="hover:underline">
 									{m.prowlarr_dashboard_title()}
 								</a>
 							</h2>
@@ -533,7 +533,7 @@ SPDX-License-Identifier: EUPL-1.2
 										class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-sm"
 										data-label-value
 									>
-										<a href={resolve('/connections/prowlarr')} class="font-medium hover:underline"
+										<a href={pageHref('/connections/prowlarr')} class="font-medium hover:underline"
 											>{link.name}</a
 										>
 										<span class="text-subtle">

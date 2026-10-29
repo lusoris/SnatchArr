@@ -2,6 +2,8 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
+import type { ResolvedPathname } from '$app/types';
+import { entityHref } from '#lib/entities.js';
 import { isArrKind } from '#lib/kinds.js';
 import { m } from '#lib/paraglide/messages.js';
 
@@ -9,23 +11,42 @@ export type InstanceTabKey = 'overview' | 'policy' | 'queue' | 'activity' | 'mem
 
 export interface InstanceTab {
 	key: InstanceTabKey;
-	href: string;
+	href: ResolvedPathname;
 	label: string;
 }
 
 /** Returns the instance subtabs defined by ADR-0015 section 4 (overview-only for companion kinds). */
 export function getInstanceTabs(instanceId: string, kind?: string): InstanceTab[] {
-	const base = `/instances/${instanceId}`;
-	const overview: InstanceTab = { key: 'overview', href: base, label: m.instance_tab_overview() };
+	const overview: InstanceTab = {
+		key: 'overview',
+		href: entityHref('instance', instanceId),
+		label: m.instance_tab_overview()
+	};
 	if (kind !== undefined && !isArrKind(kind)) {
 		return [overview];
 	}
 	return [
 		overview,
-		{ key: 'policy', href: `${base}/policy`, label: m.instance_tab_policy() },
-		{ key: 'queue', href: `${base}/queue`, label: m.instance_tab_queue() },
-		{ key: 'activity', href: `${base}/activity`, label: m.instance_tab_activity() },
-		{ key: 'memory', href: `${base}/memory`, label: m.instance_tab_memory() }
+		{
+			key: 'policy',
+			href: entityHref('instance', instanceId, 'policy'),
+			label: m.instance_tab_policy()
+		},
+		{
+			key: 'queue',
+			href: entityHref('instance', instanceId, 'queue'),
+			label: m.instance_tab_queue()
+		},
+		{
+			key: 'activity',
+			href: entityHref('instance', instanceId, 'activity'),
+			label: m.instance_tab_activity()
+		},
+		{
+			key: 'memory',
+			href: entityHref('instance', instanceId, 'memory'),
+			label: m.instance_tab_memory()
+		}
 	];
 }
 
