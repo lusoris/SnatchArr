@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api } from '#lib/api/client.js';
 import type { components } from '#lib/api/schema.js';
 import { m } from '#lib/paraglide/messages.js';
+import { session } from '#lib/session.svelte.js';
 import { fill, renderWithQuery, stubGet } from '#lib/testing/harness.js';
 import ConfigarrPage from './+page.svelte';
 
@@ -40,7 +41,18 @@ const unlinkedStatus: ConfigarrStatus = { linked: false, watching: false };
 
 describe('configarr', () => {
 	afterEach(() => {
+		session.user = null;
 		vi.restoreAllMocks();
+	});
+
+	it('asks a viewer for no admin-only status and offers no import', async () => {
+		session.user = { id: 'u2', username: 'viewer', role: 'viewer' } as never;
+		const get = stubGet({});
+		renderWithQuery(ConfigarrPage);
+
+		expect(await screen.findByText(m.configarr_admin_only())).toBeTruthy();
+		expect(get.mock.calls.map((c) => c[0])).not.toContain('/configarr/status');
+		expect(screen.queryByRole('button', { name: m.configarr_import() })).toBeNull();
 	});
 
 	it('shows the linked-mode status with the last import, its warnings and error', async () => {

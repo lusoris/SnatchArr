@@ -7,6 +7,7 @@ import { ProblemError } from '@sveltesentio/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api } from '#lib/api/client.js';
 import { m } from '#lib/paraglide/messages.js';
+import { session } from '#lib/session.svelte.js';
 import {
 	forkInstance,
 	renderWithQuery,
@@ -43,7 +44,23 @@ async function saveAndExpectBody(put: ReturnType<typeof vi.spyOn>): Promise<Snat
 
 describe('InstancePolicyTab', () => {
 	afterEach(() => {
+		session.user = null;
 		vi.restoreAllMocks();
+	});
+
+	it('asks a viewer for no admin-only filter options', async () => {
+		session.user = { id: 'u2', username: 'viewer', role: 'viewer' } as never;
+		const get = stubGet({
+			'/instances/{instanceId}': forkInstance,
+			'/instances/{instanceId}/policy': samplePolicy
+		});
+		renderWithQuery(InstancePolicyTab, { id: forkInstance.id });
+
+		expect(await screen.findByRole('form', { name: m.policy_title() })).toBeTruthy();
+		expect(get.mock.calls.map((c) => c[0])).not.toContain(
+			'/instances/{instanceId}/policy/filter-options'
+		);
+		expect(screen.queryByText(m.policy_filters_title())).toBeNull();
 	});
 
 	it('announces the problem document when the policy is refused', async () => {
