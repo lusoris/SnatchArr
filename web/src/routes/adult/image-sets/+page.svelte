@@ -131,7 +131,7 @@ SPDX-License-Identifier: EUPL-1.2
 							{#each items as set (set.id)}
 								<li
 									class="card flex flex-col justify-between {selectedId === set.id
-										? 'ring-focus ring-2'
+										? 'ring-2 ring-(--color-brand)'
 										: ''}"
 								>
 									<div class="flex flex-col gap-1.5">
@@ -178,7 +178,7 @@ SPDX-License-Identifier: EUPL-1.2
 							{:else}
 								<ul class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
 									{#each detail.items as item (item.id)}
-										<li class="border-border flex flex-col gap-1 rounded border p-2">
+										<li class="flex flex-col gap-1 rounded border border-line p-2">
 											<img
 												src="/api/v1/adult/image-items/{item.id}/file"
 												alt={item.file_name}

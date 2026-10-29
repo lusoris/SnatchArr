@@ -358,7 +358,7 @@ SPDX-License-Identifier: EUPL-1.2
 
 	<section
 		aria-label={activeSource === 'log' ? m.logs_title() : m.nav_activity()}
-		class="bg-card relative flex w-full flex-col overflow-hidden rounded-lg border border-line {fixedInstanceId
+		class="relative flex w-full flex-col overflow-hidden rounded-lg border border-line bg-surface {fixedInstanceId
 			? ''
 			: 'md:min-h-0 md:flex-1'}"
 	>

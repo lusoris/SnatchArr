@@ -190,13 +190,13 @@ SPDX-License-Identifier: EUPL-1.2
 				</label>
 			</div>
 
-			<fieldset class="border-border min-w-0 rounded border p-4 md:col-span-2" data-field="rules">
+			<fieldset class="min-w-0 rounded border border-line p-4 md:col-span-2" data-field="rules">
 				<legend class="px-2 text-sm font-semibold">{m.queue_policy_rules_title()}</legend>
 				<!-- Below md each rule stacks into a labelled card (WCAG 1.4.10 reflow at 320 CSS px). -->
 				<div class="overflow-x-auto">
 					<table class="table-stack w-full text-left text-sm">
 						<thead>
-							<tr class="border-border border-b">
+							<tr class="border-b border-line">
 								<th scope="col" class="py-2 pr-4">{m.queue_strike_rule()}</th>
 								<th scope="col" class="py-2 pr-4">{m.queue_rule_mode()}</th>
 								<th scope="col" class="py-2 pr-4">{m.queue_rule_threshold()}</th>
@@ -205,7 +205,7 @@ SPDX-License-Identifier: EUPL-1.2
 						</thead>
 						<tbody>
 							{#each ruleKeys as r (r.key)}
-								<tr class="border-border border-b last:border-b-0">
+								<tr class="border-b border-line last:border-b-0">
 									<td class="py-2 pr-4 font-medium" data-label="">{r.label()}</td>
 									<td class="py-2 pr-4" data-label={m.queue_rule_mode()}>
 										<select

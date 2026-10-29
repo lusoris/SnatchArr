@@ -347,7 +347,7 @@ SPDX-License-Identifier: EUPL-1.2
 						<span class="text-sm font-medium">{m.settings_llm_write_tools()}</span>
 						<div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
 							{#each writeToolGroups as group (group.field)}
-								<details class="border-border rounded border p-3">
+								<details class="rounded border border-line p-3">
 									<summary
 										class="flex cursor-pointer items-center justify-between gap-2 text-sm font-medium select-none"
 									>
