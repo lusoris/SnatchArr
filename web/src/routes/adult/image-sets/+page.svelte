@@ -3,11 +3,17 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
-	import { createSentioMutation, createSentioQuery } from '@sveltesentio/query';
+	import {
+		createInfiniteItems,
+		createSentioMutation,
+		createSentioQuery,
+		flattenPages
+	} from '@sveltesentio/query';
 	import { toast } from 'svelte-sonner';
 	import { api, describeError } from '#lib/api/client.js';
 	import type { components } from '#lib/api/schema.js';
 	import PageHeader from '#lib/components/PageHeader.svelte';
+	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import QueryGuard from '#lib/components/QueryGuard.svelte';
 	import { HELP_MAP } from '#lib/help.js';
 	import { m } from '#lib/paraglide/messages.js';
@@ -17,9 +23,30 @@ SPDX-License-Identifier: EUPL-1.2
 	type AdultImageSet = components['schemas']['AdultImageSet'];
 	type AdultImageSetDetail = components['schemas']['AdultImageSetDetail'];
 
-	const imageSets = createSentioQuery<AdultImageSet[]>({
+	const PAGE_SIZE = 50;
+
+	const imageSets = createInfiniteItems<AdultImageSet>({
 		queryKey: keys.adultImageSets,
-		queryFn: async () => (await api.GET('/adult/image-sets')).data?.items ?? []
+		queryFn: async (cursor) => {
+			const offset = cursor ? Number(cursor) : 0;
+			const res = await api.GET('/adult/image-sets', {
+				params: { query: { limit: PAGE_SIZE, offset } }
+			});
+			const items = res.data?.items ?? [];
+			const total = res.data?.total ?? 0;
+			const nextCursor = offset + items.length < total ? String(offset + items.length) : null;
+			return { items, nextCursor, total };
+		}
+	});
+
+	const list = $derived(flattenPages(imageSets.data));
+	const total = $derived(imageSets.data?.pages.at(-1)?.total ?? 0);
+	// A failed "load more" keeps the loaded pages on screen; the error shows below the list.
+	const firstPage = $derived({
+		isPending: imageSets.isPending,
+		isError: imageSets.isError && !imageSets.isFetchNextPageError,
+		error: imageSets.error,
+		data: imageSets.data
 	});
 
 	let selectedId = $state<string | null>(null);
@@ -47,8 +74,8 @@ SPDX-License-Identifier: EUPL-1.2
 	});
 
 	$effect(() => {
-		if (selectedId === null && imageSets.data && imageSets.data.length > 0) {
-			selectedId = imageSets.data[0].id;
+		if (selectedId === null && list.length > 0) {
+			selectedId = list[0].id;
 		}
 	});
 
@@ -122,41 +149,60 @@ SPDX-License-Identifier: EUPL-1.2
 			<h2 id="adult-image-sets-list-title" class="text-lg font-semibold">
 				{m.adult_image_sets_title()}
 			</h2>
-			<QueryGuard query={imageSets}>
-				{#snippet children(items)}
-					{#if items.length === 0}
-						<p class="card">{m.adult_image_sets_none()}</p>
-					{:else}
-						<ul class="flex flex-col gap-3">
-							{#each items as set (set.id)}
-								<li
-									class="card flex flex-col justify-between {selectedId === set.id
-										? 'ring-2 ring-(--color-brand)'
-										: ''}"
-								>
-									<div class="flex flex-col gap-1.5">
-										<h3 class="font-semibold">{set.title}</h3>
-										<span class="text-xs break-all text-subtle">{set.directory_path}</span>
-										<div class="flex flex-wrap items-center gap-3 text-xs text-subtle">
-											<span>{m.adult_image_sets_item_count({ count: set.item_count })}</span>
-											<span>{formatBytes(set.total_size_bytes)}</span>
-										</div>
+			<QueryGuard query={firstPage}>
+				{#if list.length === 0}
+					<p class="card">{m.adult_image_sets_none()}</p>
+				{:else}
+					<ul class="flex flex-col gap-3">
+						{#each list as set (set.id)}
+							<li
+								class="card flex flex-col justify-between {selectedId === set.id
+									? 'ring-2 ring-(--color-brand)'
+									: ''}"
+							>
+								<div class="flex flex-col gap-1.5">
+									<h3 class="font-semibold">{set.title}</h3>
+									<span class="text-xs break-all text-subtle">{set.directory_path}</span>
+									<div class="flex flex-wrap items-center gap-3 text-xs text-subtle">
+										<span>{m.adult_image_sets_item_count({ count: set.item_count })}</span>
+										<span>{formatBytes(set.total_size_bytes)}</span>
 									</div>
-									<div class="mt-3 flex justify-end">
-										<button
-											type="button"
-											class="btn btn-sm"
-											aria-label="{m.adult_image_sets_view_items()} {set.title}"
-											onclick={() => selectSet(set.id)}
-										>
-											{m.adult_image_sets_view_items()}
-										</button>
-									</div>
-								</li>
-							{/each}
-						</ul>
+								</div>
+								<div class="mt-3 flex justify-end">
+									<button
+										type="button"
+										class="btn btn-sm"
+										aria-label="{m.adult_image_sets_view_items()} {set.title}"
+										onclick={() => selectSet(set.id)}
+									>
+										{m.adult_image_sets_view_items()}
+									</button>
+								</div>
+							</li>
+						{/each}
+					</ul>
+
+					<p aria-live="polite" class="text-xs text-subtle">
+						{m.adult_image_sets_shown({ shown: list.length, total })}
+					</p>
+
+					{#if imageSets.hasNextPage}
+						<button
+							type="button"
+							class="btn"
+							onclick={() => imageSets.fetchNextPage()}
+							disabled={imageSets.isFetchingNextPage}
+						>
+							{imageSets.isFetchingNextPage
+								? m.adult_image_sets_loading_more()
+								: m.adult_image_sets_load_more()}
+						</button>
 					{/if}
-				{/snippet}
+
+					{#if imageSets.isFetchNextPageError}
+						<ProblemNote error={imageSets.error} />
+					{/if}
+				{/if}
 			</QueryGuard>
 		</div>
 
