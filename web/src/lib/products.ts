@@ -17,6 +17,7 @@ const names = {
 	bookshelf: () => 'Bookshelf',
 	chaptarr: () => 'Chaptarr',
 	readarr_faustvii: () => m.instance_product_readarr_faustvii(),
+	readarr_rresurrected: () => m.instance_product_readarr_rresurrected(),
 	unknown: undefined
 } as const satisfies Record<ArrProduct, (() => string) | undefined>;
 

@@ -141,7 +141,7 @@ error named.
 | Ingress or HTTPRoute | `api.ingress.*` or `api.httpRoute.*` |
 | CNPG `Cluster` `-db` | `postgres.cnpg.*`; the API reads the DSN from the operator's `-db-app` Secret |
 | Secret `-secrets` | crypto key, CSRF secret, API-key HMAC secret, worker token |
-| NetworkPolicy | worker may only reach the API, `networkPolicy.arrCidrs` and `networkPolicy.arrPeers` (both empty allow no *arr egress, never all of it); gRPC only from the worker |
+| NetworkPolicy | worker may only reach the API, `networkPolicy.arrCidrs` and `networkPolicy.arrPeers` (both empty allow no *arr egress, never all of it); the API also reaches public HTTPS (`networkPolicy.publicHttpsEgress`); gRPC only from the worker |
 | ServiceMonitor | `serviceMonitor.enabled` scrapes `/metrics` on the API |
 | PodDisruptionBudget | per component, opt-in |
 
@@ -224,6 +224,37 @@ Each `ports` entry needs a `port` (number or port name) and may set `protocol` (
 default) and `endPort`. `arrPeers` accepts `podSelector`, `namespaceSelector` and `ports`
 only; IP ranges belong in `arrCidrs`, which always excludes the cloud metadata address and
 allows every port. A rule for one port of an IP range belongs in `networkPolicy.extraEgress`.
+
+### NetworkPolicy and public HTTPS
+
+The API calls services on the internet: OIDC discovery of your identity provider, catalogue
+sources and update checks. With `networkPolicy.enabled=true` the chart allows the API, not
+the worker, TCP 443 to every IPv4 and IPv6 address outside `networkPolicy.publicHttpsEgress.except`:
+
+| Range | Why it is excluded |
+| --- | --- |
+| `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` | private networks (RFC 1918); *arr apps there go through `arrCidrs` |
+| `100.64.0.0/10` | shared address space (RFC 6598), used by carrier NAT and some overlay networks |
+| `169.254.0.0/16` | link-local, which holds the cloud metadata address `169.254.169.254` |
+| `fc00::/7`, `fe80::/10` | IPv6 unique-local and link-local |
+
+Without this rule a call to a public service waits until its timeout; the UI then says that
+a network policy may be blocking egress. To keep the API off the internet, set:
+
+```yaml
+networkPolicy:
+  enabled: true
+  publicHttpsEgress:
+    enabled: false
+```
+
+A narrower rule, for example to your identity provider's address only, belongs in
+`networkPolicy.extraEgress`. `tests/networkpolicy_test.yaml` in the chart holds the rule with
+the toggle on and off.
+
+When a policy drops the packets, the API sees a dial timeout. The catalogue sources page then
+shows the hint "egress may be blocked by network policy" with the raw error behind an expander
+(`web/src/lib/egress.ts` decides which errors count).
 
 ### Secrets
 

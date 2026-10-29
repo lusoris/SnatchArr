@@ -66,6 +66,11 @@ spec:
     # (#120). A peer with `ports` has its own rule (#145).
     {{- . | nindent 4 }}
     {{- end }}
+    {{- with include "snatcharr.publicHttpsEgressRule" . }}
+    # Public HTTPS: OIDC discovery, catalogue sources and other services the API calls on the
+    # internet. Private, shared, link-local and unique-local ranges stay excluded.
+    {{- . | nindent 4 }}
+    {{- end }}
     {{- with .Values.networkPolicy.extraEgress }}
     {{- toYaml . | nindent 4 }}
     {{- end }}

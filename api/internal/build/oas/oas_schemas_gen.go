@@ -1406,11 +1406,12 @@ func (s *AppKind) UnmarshalText(data []byte) error {
 type ArrProduct string
 
 const (
-	ArrProductReadarr         ArrProduct = "readarr"
-	ArrProductBookshelf       ArrProduct = "bookshelf"
-	ArrProductChaptarr        ArrProduct = "chaptarr"
-	ArrProductReadarrFaustvii ArrProduct = "readarr_faustvii"
-	ArrProductUnknown         ArrProduct = "unknown"
+	ArrProductReadarr             ArrProduct = "readarr"
+	ArrProductBookshelf           ArrProduct = "bookshelf"
+	ArrProductChaptarr            ArrProduct = "chaptarr"
+	ArrProductReadarrFaustvii     ArrProduct = "readarr_faustvii"
+	ArrProductReadarrRresurrected ArrProduct = "readarr_rresurrected"
+	ArrProductUnknown             ArrProduct = "unknown"
 )
 
 // AllValues returns all ArrProduct values.
@@ -1420,6 +1421,7 @@ func (ArrProduct) AllValues() []ArrProduct {
 		ArrProductBookshelf,
 		ArrProductChaptarr,
 		ArrProductReadarrFaustvii,
+		ArrProductReadarrRresurrected,
 		ArrProductUnknown,
 	}
 }
@@ -1434,6 +1436,8 @@ func (s ArrProduct) MarshalText() ([]byte, error) {
 	case ArrProductChaptarr:
 		return []byte(s), nil
 	case ArrProductReadarrFaustvii:
+		return []byte(s), nil
+	case ArrProductReadarrRresurrected:
 		return []byte(s), nil
 	case ArrProductUnknown:
 		return []byte(s), nil
@@ -1456,6 +1460,9 @@ func (s *ArrProduct) UnmarshalText(data []byte) error {
 		return nil
 	case ArrProductReadarrFaustvii:
 		*s = ArrProductReadarrFaustvii
+		return nil
+	case ArrProductReadarrRresurrected:
+		*s = ArrProductReadarrRresurrected
 		return nil
 	case ArrProductUnknown:
 		*s = ArrProductUnknown

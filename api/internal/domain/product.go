@@ -20,6 +20,8 @@ const (
 	ProductChaptarr Product = "chaptarr"
 	// ProductReadarrFaustvii is github.com/Faustvii/Readarr.
 	ProductReadarrFaustvii Product = "readarr_faustvii"
+	// ProductReadarrRresurrected is github.com/ricetim/readarr-rresurrected.
+	ProductReadarrRresurrected Product = "readarr_rresurrected"
 	// ProductUnknown is an answer that matches none of the products above.
 	ProductUnknown Product = "unknown"
 )
