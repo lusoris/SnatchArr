@@ -2245,7 +2245,7 @@ export interface components {
             /** @description True when a secret has a configured value; omitted for non-secrets. */
             is_set?: boolean;
             source: components["schemas"]["RuntimeSettingSource"];
-            /** @description True when set by an environment variable override. */
+            /** @description True when the setting is written only through its environment variable: set there, or an environment-only secret. */
             locked: boolean;
             apply: components["schemas"]["RuntimeSettingApply"];
         };

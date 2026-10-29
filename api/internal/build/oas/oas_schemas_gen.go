@@ -8279,7 +8279,8 @@ type RuntimeSetting struct {
 	// True when a secret has a configured value; omitted for non-secrets.
 	IsSet  OptBool              `json:"is_set"`
 	Source RuntimeSettingSource `json:"source"`
-	// True when set by an environment variable override.
+	// True when the setting is written only through its environment variable: set there, or an
+	// environment-only secret.
 	Locked bool                `json:"locked"`
 	Apply  RuntimeSettingApply `json:"apply"`
 }
