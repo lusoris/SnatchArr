@@ -267,7 +267,7 @@ SPDX-License-Identifier: EUPL-1.2
 									{@const cap = capFor(inst, caps.data)}
 									{@const lastRun = lastRunForInstance(runs.data, inst.id)}
 									{@const nextSchedule = nextScheduleForInstance(schedules.data, inst.id)}
-									<tr>
+									<tr class="target">
 										<td class="md:w-10 md:text-center" data-label={m.schedule_status()}>
 											<StatusIcon status={instStatus.status} label={instStatus.label} size={16} />
 										</td>
@@ -277,7 +277,7 @@ SPDX-License-Identifier: EUPL-1.2
 												<div class="min-w-0 text-right md:text-left">
 													<a
 														href={entityHref('instance', inst.id)}
-														class="font-medium hover:underline"
+														class="target-link font-medium hover:underline"
 													>
 														{inst.name}
 													</a>

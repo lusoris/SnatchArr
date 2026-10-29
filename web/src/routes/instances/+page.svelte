@@ -80,13 +80,14 @@ SPDX-License-Identifier: EUPL-1.2
 	{#if (instances.data ?? []).length > 0}
 		<ul class="space-y-3 md:hidden" aria-label={m.nav_instances()}>
 			{#each instances.data ?? [] as inst (inst.id)}
-				<li class="card flex flex-col gap-2">
+				<li class="card target flex flex-col gap-2">
 					<div class="flex items-start justify-between gap-2">
 						<div class="flex flex-col gap-0.5">
 							<div class="flex items-center gap-2">
 								<AppLogo kind={inst.kind} size={18} />
-								<a class="font-semibold underline" href={entityHref('instance', inst.id)}
-									>{inst.name}</a
+								<a
+									class="target-link font-semibold underline"
+									href={entityHref('instance', inst.id)}>{inst.name}</a
 								>
 							</div>
 							<div class="flex flex-wrap items-center gap-1.5 text-xs text-subtle">
@@ -146,11 +147,13 @@ SPDX-License-Identifier: EUPL-1.2
 			</thead>
 			<tbody>
 				{#each instances.data ?? [] as inst (inst.id)}
-					<tr>
+					<tr class="target">
 						<td>
 							<div class="flex items-center gap-2">
 								<AppLogo kind={inst.kind} size={18} />
-								<a class="underline" href={entityHref('instance', inst.id)}>{inst.name}</a>
+								<a class="target-link underline" href={entityHref('instance', inst.id)}
+									>{inst.name}</a
+								>
 							</div>
 						</td>
 						<td>{instanceKindLabel(inst.kind, inst.last_seen_product)}</td>
