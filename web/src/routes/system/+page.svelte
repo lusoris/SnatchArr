@@ -4,11 +4,10 @@ SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { resolve } from '$app/paths';
-	import type { ResolvedPathname } from '$app/types';
 	import { page } from '$app/state';
 	import PageHeader from '#lib/components/PageHeader.svelte';
 	import Tabs, { type Tab } from '#lib/components/Tabs.svelte';
+	import { pageHref } from '#lib/entities.js';
 	import { HELP_MAP } from '#lib/help.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import AboutTab from './AboutTab.svelte';
@@ -43,8 +42,7 @@ SPDX-License-Identifier: EUPL-1.2
 	function handleTabChange(newTab: SystemTabKey): void {
 		const newUrl = new URL(page.url.href);
 		newUrl.searchParams.set('tab', newTab);
-		const target = `${resolve('/system')}${newUrl.search}` as ResolvedPathname;
-		void goto(target);
+		void goto(pageHref('/system', newUrl.search));
 	}
 </script>
 

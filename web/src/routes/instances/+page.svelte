@@ -3,7 +3,6 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
-	import { resolve } from '$app/paths';
 	import { createSentioQuery, createSentioMutation } from '@sveltesentio/query';
 	import { toast } from 'svelte-sonner';
 	import { api, describeError } from '#lib/api/client.js';
@@ -12,6 +11,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import Field from '#lib/components/Field.svelte';
 	import KindSelect from '#lib/components/KindSelect.svelte';
 	import PageHeader from '#lib/components/PageHeader.svelte';
+	import { entityHref } from '#lib/entities.js';
 	import { HELP_MAP } from '#lib/help.js';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import ResetMemory from '#lib/components/ResetMemory.svelte';
@@ -85,7 +85,7 @@ SPDX-License-Identifier: EUPL-1.2
 						<div class="flex flex-col gap-0.5">
 							<div class="flex items-center gap-2">
 								<AppLogo kind={inst.kind} size={18} />
-								<a class="font-semibold underline" href={resolve(`instances/${inst.id}`)}
+								<a class="font-semibold underline" href={entityHref('instance', inst.id)}
 									>{inst.name}</a
 								>
 							</div>
@@ -150,7 +150,7 @@ SPDX-License-Identifier: EUPL-1.2
 						<td>
 							<div class="flex items-center gap-2">
 								<AppLogo kind={inst.kind} size={18} />
-								<a class="underline" href={resolve(`instances/${inst.id}`)}>{inst.name}</a>
+								<a class="underline" href={entityHref('instance', inst.id)}>{inst.name}</a>
 							</div>
 						</td>
 						<td>{instanceKindLabel(inst.kind, inst.last_seen_product)}</td>

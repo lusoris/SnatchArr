@@ -4,14 +4,13 @@ SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { resolve } from '$app/paths';
-	import type { ResolvedPathname } from '$app/types';
 	import { page } from '$app/state';
 	import { createSentioQuery } from '@sveltesentio/query';
 	import { api } from '#lib/api/client.js';
 	import type { components } from '#lib/api/schema.js';
 	import CapsPresetsForm from '#lib/components/CapsPresetsForm.svelte';
 	import PageHeader from '#lib/components/PageHeader.svelte';
+	import { pageHref } from '#lib/entities.js';
 	import { HELP_MAP } from '#lib/help.js';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import ScheduleForm from '#lib/components/ScheduleForm.svelte';
@@ -72,8 +71,7 @@ SPDX-License-Identifier: EUPL-1.2
 	function handleTabChange(newTab: AutomationTabKey): void {
 		const newUrl = new URL(page.url.href);
 		newUrl.searchParams.set('tab', newTab);
-		const target = `${resolve('/automation')}${newUrl.search}` as ResolvedPathname;
-		void goto(target, { replaceState: true });
+		void goto(pageHref('/automation', newUrl.search), { replaceState: true });
 	}
 </script>
 

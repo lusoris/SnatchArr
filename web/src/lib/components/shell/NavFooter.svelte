@@ -3,9 +3,9 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
-	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { docsUrl } from '#lib/docs.js';
+	import { pageHref } from '#lib/entities.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { isRouteActive } from './nav.js';
 	import NavIcon from './NavIcon.svelte';
@@ -44,7 +44,7 @@ SPDX-License-Identifier: EUPL-1.2
 
 	<div class="flex items-center justify-between gap-2 pt-1">
 		<a
-			href={resolve('/account')}
+			href={pageHref('/account')}
 			aria-current={isRouteActive(page.url.pathname, '/account') ? 'page' : undefined}
 			onclick={onNavigate}
 			class="nav-link flex items-center gap-2 rounded px-2 py-1.5 text-sm text-fg"

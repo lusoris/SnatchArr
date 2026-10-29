@@ -113,7 +113,7 @@ describe('session', () => {
 		await session.expire();
 		expect(session.state).toBe('anonymous');
 		expect(session.user).toBeNull();
-		expect(mocks.goto).toHaveBeenCalledWith('login');
+		expect(mocks.goto).toHaveBeenCalledWith('/login');
 	});
 
 	it('keeps a live session when a 401 was a wrong credential, not an expiry', async () => {

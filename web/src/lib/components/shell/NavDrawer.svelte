@@ -3,9 +3,9 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
-	import { resolve } from '$app/paths';
 	import { FALLBACK_BRAND_MARK, type BrandMarkKind } from '#lib/brand-mark.js';
 	import BrandMark from '#lib/components/BrandMark.svelte';
+	import { pageHref } from '#lib/entities.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { ADULT_NAV_ITEMS, filterByModule, type ModuledItem } from './nav.js';
 	import NavIcon from './NavIcon.svelte';
@@ -98,7 +98,7 @@ SPDX-License-Identifier: EUPL-1.2
 >
 	<div class="flex h-14 items-center justify-between border-b border-line px-4">
 		<a
-			href={resolve('/')}
+			href={pageHref('/')}
 			class="flex items-center gap-2.5 font-sans text-base font-semibold tracking-[-0.01em] text-fg"
 			onclick={onClose}
 		>
