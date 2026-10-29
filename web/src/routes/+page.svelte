@@ -248,7 +248,7 @@ SPDX-License-Identifier: EUPL-1.2
 					>
 						<table class="compact-table table-stack table w-full">
 							<caption class="sr-only">{m.overview_fleet_title()}</caption>
-							<thead class="bg-card sticky top-0 z-10">
+							<thead class="bg-card md:sticky md:top-0 md:z-10">
 								<tr>
 									<th scope="col" class="w-10 text-center">
 										<span class="sr-only">{m.schedule_status()}</span>
