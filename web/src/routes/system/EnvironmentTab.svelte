@@ -21,10 +21,12 @@ SPDX-License-Identifier: EUPL-1.2
 
 	const CLASSES: readonly RuntimeSettingClass[] = ['bootstrap', 'runtime', 'secret'];
 
-	const runtimeSettingsQuery = createSentioQuery<RuntimeSetting[]>({
+	// Only admins may read the settings; a viewer is told so instead of being refused.
+	const runtimeSettingsQuery = createSentioQuery<RuntimeSetting[]>(() => ({
 		queryKey: keys.runtimeSettings,
-		queryFn: async () => (await api.GET('/settings/runtime')).data ?? []
-	});
+		queryFn: async () => (await api.GET('/settings/runtime')).data ?? [],
+		enabled: session.isAdmin
+	}));
 
 	let draftValues = $state<Record<string, string>>({});
 	let secretDrafts = $state<Record<string, string>>({});
@@ -152,72 +154,99 @@ SPDX-License-Identifier: EUPL-1.2
 		{m.environment_title()}
 	</h2>
 
-	<QueryGuard query={runtimeSettingsQuery}>
-		{#snippet children(settings)}
-			{#if settings.length === 0}
-				<section class="card w-full" aria-labelledby="environment-main-title">
-					<p class="text-sm text-subtle">{m.environment_empty()}</p>
-				</section>
-			{:else if initialized}
-				<form class="flex w-full flex-col gap-6" onsubmit={(e) => handleSubmit(e, settings)}>
-					{#if hasPendingRestart}
-						<div role="status" class="rounded-md border border-line bg-surface p-4 text-sm text-fg">
-							{m.environment_restart_notice()}
-						</div>
-					{/if}
+	{#if !session.isAdmin}
+		<p class="card text-sm text-subtle">{m.environment_admin_only()}</p>
+	{:else}
+		<QueryGuard query={runtimeSettingsQuery}>
+			{#snippet children(settings)}
+				{#if settings.length === 0}
+					<section class="card w-full" aria-labelledby="environment-main-title">
+						<p class="text-sm text-subtle">{m.environment_empty()}</p>
+					</section>
+				{:else if initialized}
+					<form class="flex w-full flex-col gap-6" onsubmit={(e) => handleSubmit(e, settings)}>
+						{#if hasPendingRestart}
+							<div
+								role="status"
+								class="rounded-md border border-line bg-surface p-4 text-sm text-fg"
+							>
+								{m.environment_restart_notice()}
+							</div>
+						{/if}
 
-					{#if saveError}
-						<ProblemNote error={saveError} />
-					{/if}
+						{#if saveError}
+							<ProblemNote error={saveError} />
+						{/if}
 
-					{#each CLASSES as cls (cls)}
-						{@const items = settings.filter((s) => s.class === cls)}
-						{#if items.length > 0}
-							<section class="card flex flex-col gap-3" aria-labelledby={`class-${cls}-heading`}>
-								<h3 id={`class-${cls}-heading`} class="text-lg font-semibold">
-									{classHeading(cls)}
-								</h3>
-								<div class="relative overflow-x-auto">
-									<table class="table-stack table">
-										<caption class="sr-only">{classHeading(cls)}</caption>
-										<thead>
-											<tr>
-												<th scope="col">{m.environment_col_env()}</th>
-												<th scope="col">{m.environment_col_key()}</th>
-												<th scope="col">{m.environment_col_source()}</th>
-												<th scope="col">{m.environment_col_value()}</th>
-											</tr>
-										</thead>
-										<tbody>
-											{#each items as setting (setting.key)}
+						{#each CLASSES as cls (cls)}
+							{@const items = settings.filter((s) => s.class === cls)}
+							{#if items.length > 0}
+								<section class="card flex flex-col gap-3" aria-labelledby={`class-${cls}-heading`}>
+									<h3 id={`class-${cls}-heading`} class="text-lg font-semibold">
+										{classHeading(cls)}
+									</h3>
+									<div class="relative overflow-x-auto">
+										<table class="table-stack table">
+											<caption class="sr-only">{classHeading(cls)}</caption>
+											<thead>
 												<tr>
-													<td class="font-medium" data-label={m.environment_col_env()}>
-														<span class="font-mono text-sm text-fg">{setting.env}</span>
-													</td>
-													<td data-label={m.environment_col_key()}>
-														<span class="font-mono text-xs text-subtle">{setting.key}</span>
-													</td>
-													<td data-label={m.environment_col_source()}>
-														<span
-															class="rounded-full border border-line px-2 py-0.5 text-xs text-subtle"
-														>
-															{sourceLabel(setting.source)}
-														</span>
-													</td>
-													<td data-label={m.environment_col_value()}>
-														{#if setting.class === 'secret'}
-															<div class="flex flex-col gap-1.5">
-																<div class="flex items-center gap-2">
-																	<span
-																		class="rounded-full border border-line px-2 py-0.5 text-xs {setting.is_set
-																			? 'font-medium text-fg'
-																			: 'text-subtle'}"
-																	>
-																		{setting.is_set
-																			? m.environment_secret_set()
-																			: m.environment_secret_unset()}
-																	</span>
+													<th scope="col">{m.environment_col_env()}</th>
+													<th scope="col">{m.environment_col_key()}</th>
+													<th scope="col">{m.environment_col_source()}</th>
+													<th scope="col">{m.environment_col_value()}</th>
+												</tr>
+											</thead>
+											<tbody>
+												{#each items as setting (setting.key)}
+													<tr>
+														<td class="font-medium" data-label={m.environment_col_env()}>
+															<span class="font-mono text-sm text-fg">{setting.env}</span>
+														</td>
+														<td data-label={m.environment_col_key()}>
+															<span class="font-mono text-xs text-subtle">{setting.key}</span>
+														</td>
+														<td data-label={m.environment_col_source()}>
+															<span
+																class="rounded-full border border-line px-2 py-0.5 text-xs text-subtle"
+															>
+																{sourceLabel(setting.source)}
+															</span>
+														</td>
+														<td data-label={m.environment_col_value()}>
+															{#if setting.class === 'secret'}
+																<div class="flex flex-col gap-1.5">
+																	<div class="flex items-center gap-2">
+																		<span
+																			class="rounded-full border border-line px-2 py-0.5 text-xs {setting.is_set
+																				? 'font-medium text-fg'
+																				: 'text-subtle'}"
+																		>
+																			{setting.is_set
+																				? m.environment_secret_set()
+																				: m.environment_secret_unset()}
+																		</span>
+																	</div>
+																	<div class="[&_label]:sr-only">
+																		<Field
+																			id={`setting-${setting.key}`}
+																			label={setting.key}
+																			hint={getReason(setting)}
+																		>
+																			<input
+																				id={`setting-${setting.key}`}
+																				class="input text-sm"
+																				type="password"
+																				autocomplete="new-password"
+																				placeholder={setting.locked || !session.isAdmin
+																					? undefined
+																					: m.secret_keep_hint()}
+																				disabled={!session.isAdmin || setting.locked}
+																				bind:value={secretDrafts[setting.key]}
+																			/>
+																		</Field>
+																	</div>
 																</div>
+															{:else}
 																<div class="[&_label]:sr-only">
 																	<Field
 																		id={`setting-${setting.key}`}
@@ -227,51 +256,31 @@ SPDX-License-Identifier: EUPL-1.2
 																		<input
 																			id={`setting-${setting.key}`}
 																			class="input text-sm"
-																			type="password"
-																			autocomplete="new-password"
-																			placeholder={setting.locked || !session.isAdmin
-																				? undefined
-																				: m.secret_keep_hint()}
-																			disabled={!session.isAdmin || setting.locked}
-																			bind:value={secretDrafts[setting.key]}
+																			type="text"
+																			disabled={!session.isAdmin ||
+																				setting.locked ||
+																				setting.class === 'bootstrap'}
+																			bind:value={draftValues[setting.key]}
 																		/>
 																	</Field>
 																</div>
-															</div>
-														{:else}
-															<div class="[&_label]:sr-only">
-																<Field
-																	id={`setting-${setting.key}`}
-																	label={setting.key}
-																	hint={getReason(setting)}
-																>
-																	<input
-																		id={`setting-${setting.key}`}
-																		class="input text-sm"
-																		type="text"
-																		disabled={!session.isAdmin ||
-																			setting.locked ||
-																			setting.class === 'bootstrap'}
-																		bind:value={draftValues[setting.key]}
-																	/>
-																</Field>
-															</div>
-														{/if}
-													</td>
-												</tr>
-											{/each}
-										</tbody>
-									</table>
-								</div>
-							</section>
-						{/if}
-					{/each}
+															{/if}
+														</td>
+													</tr>
+												{/each}
+											</tbody>
+										</table>
+									</div>
+								</section>
+							{/if}
+						{/each}
 
-					<div>
-						<AdminSaveButton disabled={isSaving} />
-					</div>
-				</form>
-			{/if}
-		{/snippet}
-	</QueryGuard>
+						<div>
+							<AdminSaveButton disabled={isSaving} />
+						</div>
+					</form>
+				{/if}
+			{/snippet}
+		</QueryGuard>
+	{/if}
 </section>
