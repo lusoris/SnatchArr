@@ -49,6 +49,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/prowlarrclient"
 	"github.com/lusoris/SnatchArr/api/internal/queue"
 	"github.com/lusoris/SnatchArr/api/internal/requests"
+	"github.com/lusoris/SnatchArr/api/internal/runtimesettings"
 	"github.com/lusoris/SnatchArr/api/internal/seerr"
 	"github.com/lusoris/SnatchArr/api/internal/seerrclient"
 	"github.com/lusoris/SnatchArr/api/internal/settings"
@@ -235,27 +236,28 @@ func newFakeProwlarrServer(t *testing.T) *fakeProwlarrServer {
 }
 
 type integrationFixture struct {
-	h              *Handlers
-	st             *store.Store
-	clk            *clockwork.FakeClock
-	probe          *stubProber
-	sessMgr        *session.Manager
-	keys           *apikey.Service
-	apiKeys        *auth.APIKeys
-	admin          domain.User
-	viewer         domain.User
-	dlSnap         *stubSnapshotter
-	dlDisc         *stubDiscoverer
-	seerrClient    *stubSeerrClient
-	prowlarrServer *fakeProwlarrServer
-	prowlarrSvc    *prowlarr.Service
-	seerrResolver  *stubResolver
-	notifySvc      *notify.Service
-	webhookStore   *notify.WebhookStore
-	notifyEngine   *notify.Engine
-	rec            *snatch.Recorder
-	enc            *crypto.Encryptor
-	logs           *testdiag.LogBuffer
+	h               *Handlers
+	st              *store.Store
+	clk             *clockwork.FakeClock
+	probe           *stubProber
+	sessMgr         *session.Manager
+	keys            *apikey.Service
+	apiKeys         *auth.APIKeys
+	admin           domain.User
+	viewer          domain.User
+	dlSnap          *stubSnapshotter
+	dlDisc          *stubDiscoverer
+	seerrClient     *stubSeerrClient
+	prowlarrServer  *fakeProwlarrServer
+	prowlarrSvc     *prowlarr.Service
+	seerrResolver   *stubResolver
+	notifySvc       *notify.Service
+	webhookStore    *notify.WebhookStore
+	notifyEngine    *notify.Engine
+	rec             *snatch.Recorder
+	enc             *crypto.Encryptor
+	logs            *testdiag.LogBuffer
+	runtimeSettings *runtimesettings.Service
 }
 
 func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Generator, authSvc *auth.Service, apiKeys *auth.APIKeys, sessMgr *session.Manager, probe *stubProber, dlSnap dlclients.Snapshotter, dlDisc arrclient.Discoverer, m *metrics.Metrics, logger *slog.Logger, seerrClient *stubSeerrClient, res *stubResolver) (*Handlers, *notify.Service, *notify.WebhookStore, *notify.Engine, *snatch.Recorder, *crypto.Encryptor, *prowlarr.Service) {
@@ -306,36 +308,37 @@ func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Genera
 	requestsSvc := requests.NewService(requests.NewStore(st, clk))
 	build := buildinfo.Info{Version: "test-ver", Commit: "test-commit", Date: "2026-10-14"}
 	h := &Handlers{
-		build:      build,
-		cfg:        cfg,
-		clk:        clk,
-		auth:       authSvc,
-		apiKeys:    apiKeys,
-		sessions:   sessMgr,
-		instances:  instSvc,
-		policies:   polSvc,
-		queue:      queueStore,
-		queueSvc:   queueSvc,
-		options:    policies.NewOptions(instSvc, labeler),
-		runs:       runs,
-		workers:    workers,
-		rec:        rec,
-		budget:     budget,
-		memory:     memory,
-		planner:    planner,
-		schedules:  schedules,
-		clients:    clients,
-		settings:   settingsSvc,
-		requests:   requestsSvc,
-		modules:    modulesSvc,
-		configarr:  configarrSvc,
-		seerr:      seerrSvc,
-		prowlarr:   prowlarrSvc,
-		notify:     notifySvc,
-		watchaware: watchawareSvc,
-		adult:      adultSvc,
-		logs:       logring.New(logring.MinSize),
-		logger:     logger,
+		build:           build,
+		cfg:             cfg,
+		clk:             clk,
+		auth:            authSvc,
+		apiKeys:         apiKeys,
+		sessions:        sessMgr,
+		instances:       instSvc,
+		policies:        polSvc,
+		queue:           queueStore,
+		queueSvc:        queueSvc,
+		options:         policies.NewOptions(instSvc, labeler),
+		runs:            runs,
+		workers:         workers,
+		rec:             rec,
+		budget:          budget,
+		memory:          memory,
+		planner:         planner,
+		schedules:       schedules,
+		clients:         clients,
+		settings:        settingsSvc,
+		requests:        requestsSvc,
+		modules:         modulesSvc,
+		configarr:       configarrSvc,
+		seerr:           seerrSvc,
+		prowlarr:        prowlarrSvc,
+		notify:          notifySvc,
+		watchaware:      watchawareSvc,
+		adult:           adultSvc,
+		runtimeSettings: runtimesettings.New(st, enc, clk, config.BaseOptions{Options: cfg}, logger),
+		logs:            logring.New(logring.MinSize),
+		logger:          logger,
 	}
 	return h, notifySvc, webhookStore, notifyEngine, rec, enc, prowlarrSvc
 }
@@ -387,27 +390,28 @@ func newIntegrationFixture(t *testing.T) *integrationFixture {
 	res := &stubResolver{entityID: 42, found: true}
 	h, nSvc, ws, nEngine, rec, enc, pSvc := buildHandlers(t, st, clk, ids, authSvc, apiKeys, sessMgr, probe, dlSnap, dlDisc, m, logger, seerrClient, res)
 	return &integrationFixture{
-		h:              h,
-		st:             st,
-		clk:            clk,
-		probe:          probe,
-		sessMgr:        sessMgr,
-		keys:           keys,
-		apiKeys:        apiKeys,
-		admin:          domain.User{ID: uuid.New(), Username: "admin", Role: domain.RoleAdmin},
-		viewer:         domain.User{ID: uuid.New(), Username: "viewer", Role: domain.RoleViewer},
-		dlSnap:         dlSnap,
-		dlDisc:         dlDisc,
-		seerrClient:    seerrClient,
-		prowlarrServer: prowlarrServer,
-		prowlarrSvc:    pSvc,
-		seerrResolver:  res,
-		notifySvc:      nSvc,
-		webhookStore:   ws,
-		notifyEngine:   nEngine,
-		rec:            rec,
-		enc:            enc,
-		logs:           logs,
+		h:               h,
+		st:              st,
+		clk:             clk,
+		probe:           probe,
+		sessMgr:         sessMgr,
+		keys:            keys,
+		apiKeys:         apiKeys,
+		admin:           domain.User{ID: uuid.New(), Username: "admin", Role: domain.RoleAdmin},
+		viewer:          domain.User{ID: uuid.New(), Username: "viewer", Role: domain.RoleViewer},
+		dlSnap:          dlSnap,
+		dlDisc:          dlDisc,
+		seerrClient:     seerrClient,
+		prowlarrServer:  prowlarrServer,
+		prowlarrSvc:     pSvc,
+		seerrResolver:   res,
+		notifySvc:       nSvc,
+		webhookStore:    ws,
+		notifyEngine:    nEngine,
+		rec:             rec,
+		enc:             enc,
+		logs:            logs,
+		runtimeSettings: h.runtimeSettings,
 	}
 }
 

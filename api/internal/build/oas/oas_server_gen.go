@@ -316,6 +316,13 @@ type Handler interface {
 	//
 	// GET /runs/{runId}
 	GetRun(ctx context.Context, params GetRunParams) (*Run, error)
+	// GetRuntimeSettings implements getRuntimeSettings operation.
+	//
+	// Returns all runtime settings with their current source, values, and lock states (admin only).
+	// Secret values are omitted.
+	//
+	// GET /settings/runtime
+	GetRuntimeSettings(ctx context.Context) (GetRuntimeSettingsRes, error)
 	// GetSSO implements getSSO operation.
 	//
 	// SSO configuration status.
@@ -775,6 +782,12 @@ type Handler interface {
 	//
 	// PUT /requests/settings
 	UpdateRequestsSettings(ctx context.Context, req *RequestsSettings) (*RequestsSettings, error)
+	// UpdateRuntimeSettings implements updateRuntimeSettings operation.
+	//
+	// Validate and persist overrides for runtime settings (admin only).
+	//
+	// PUT /settings/runtime
+	UpdateRuntimeSettings(ctx context.Context, req *RuntimeSettingsUpdateRequest) (UpdateRuntimeSettingsRes, error)
 	// UpdateSchedule implements updateSchedule operation.
 	//
 	// Replace a schedule window.

@@ -474,6 +474,16 @@ func (UnimplementedHandler) GetRun(ctx context.Context, params GetRunParams) (r 
 	return r, ht.ErrNotImplemented
 }
 
+// GetRuntimeSettings implements getRuntimeSettings operation.
+//
+// Returns all runtime settings with their current source, values, and lock states (admin only).
+// Secret values are omitted.
+//
+// GET /settings/runtime
+func (UnimplementedHandler) GetRuntimeSettings(ctx context.Context) (r GetRuntimeSettingsRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // GetSSO implements getSSO operation.
 //
 // SSO configuration status.
@@ -1158,6 +1168,15 @@ func (UnimplementedHandler) UpdateQueuePolicy(ctx context.Context, req *QueuePol
 //
 // PUT /requests/settings
 func (UnimplementedHandler) UpdateRequestsSettings(ctx context.Context, req *RequestsSettings) (r *RequestsSettings, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UpdateRuntimeSettings implements updateRuntimeSettings operation.
+//
+// Validate and persist overrides for runtime settings (admin only).
+//
+// PUT /settings/runtime
+func (UnimplementedHandler) UpdateRuntimeSettings(ctx context.Context, req *RuntimeSettingsUpdateRequest) (r UpdateRuntimeSettingsRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

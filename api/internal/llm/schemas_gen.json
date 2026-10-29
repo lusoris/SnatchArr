@@ -1389,6 +1389,12 @@
     ],
     "type": "object"
   },
+  "getRuntimeSettings": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
   "getSSO": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -3643,6 +3649,35 @@
     "properties": {
       "body": {
         "$ref": "#/$defs/RequestsSettings"
+      }
+    },
+    "required": [
+      "body"
+    ],
+    "type": "object"
+  },
+  "updateRuntimeSettings": {
+    "$defs": {
+      "RuntimeSettingsUpdateRequest": {
+        "properties": {
+          "values": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "values"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/RuntimeSettingsUpdateRequest"
       }
     },
     "required": [

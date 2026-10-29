@@ -2956,6 +2956,18 @@ func (s *EventLevel) UnmarshalText(data []byte) error {
 	}
 }
 
+type GetRuntimeSettingsForbidden ProblemStatusCode
+
+func (*GetRuntimeSettingsForbidden) getRuntimeSettingsRes() {}
+
+type GetRuntimeSettingsOKApplicationJSON []RuntimeSetting
+
+func (*GetRuntimeSettingsOKApplicationJSON) getRuntimeSettingsRes() {}
+
+type GetRuntimeSettingsUnauthorized ProblemStatusCode
+
+func (*GetRuntimeSettingsUnauthorized) getRuntimeSettingsRes() {}
+
 // Ref: #/components/schemas/Instance
 type Instance struct {
 	ID              uuid.UUID      `json:"id"`
@@ -8255,6 +8267,318 @@ func (s *RunTrigger) SetKind(val SnatchKind) {
 	s.Kind = val
 }
 
+// Ref: #/components/schemas/RuntimeSetting
+type RuntimeSetting struct {
+	Key     string              `json:"key"`
+	Env     string              `json:"env"`
+	Class   RuntimeSettingClass `json:"class"`
+	Type    string              `json:"type"`
+	Default string              `json:"default"`
+	// Current effective value; omitted for secrets.
+	Value OptString `json:"value"`
+	// True when a secret has a configured value; omitted for non-secrets.
+	IsSet  OptBool              `json:"is_set"`
+	Source RuntimeSettingSource `json:"source"`
+	// True when set by an environment variable override.
+	Locked bool                `json:"locked"`
+	Apply  RuntimeSettingApply `json:"apply"`
+}
+
+// GetKey returns the value of Key.
+func (s *RuntimeSetting) GetKey() string {
+	return s.Key
+}
+
+// GetEnv returns the value of Env.
+func (s *RuntimeSetting) GetEnv() string {
+	return s.Env
+}
+
+// GetClass returns the value of Class.
+func (s *RuntimeSetting) GetClass() RuntimeSettingClass {
+	return s.Class
+}
+
+// GetType returns the value of Type.
+func (s *RuntimeSetting) GetType() string {
+	return s.Type
+}
+
+// GetDefault returns the value of Default.
+func (s *RuntimeSetting) GetDefault() string {
+	return s.Default
+}
+
+// GetValue returns the value of Value.
+func (s *RuntimeSetting) GetValue() OptString {
+	return s.Value
+}
+
+// GetIsSet returns the value of IsSet.
+func (s *RuntimeSetting) GetIsSet() OptBool {
+	return s.IsSet
+}
+
+// GetSource returns the value of Source.
+func (s *RuntimeSetting) GetSource() RuntimeSettingSource {
+	return s.Source
+}
+
+// GetLocked returns the value of Locked.
+func (s *RuntimeSetting) GetLocked() bool {
+	return s.Locked
+}
+
+// GetApply returns the value of Apply.
+func (s *RuntimeSetting) GetApply() RuntimeSettingApply {
+	return s.Apply
+}
+
+// SetKey sets the value of Key.
+func (s *RuntimeSetting) SetKey(val string) {
+	s.Key = val
+}
+
+// SetEnv sets the value of Env.
+func (s *RuntimeSetting) SetEnv(val string) {
+	s.Env = val
+}
+
+// SetClass sets the value of Class.
+func (s *RuntimeSetting) SetClass(val RuntimeSettingClass) {
+	s.Class = val
+}
+
+// SetType sets the value of Type.
+func (s *RuntimeSetting) SetType(val string) {
+	s.Type = val
+}
+
+// SetDefault sets the value of Default.
+func (s *RuntimeSetting) SetDefault(val string) {
+	s.Default = val
+}
+
+// SetValue sets the value of Value.
+func (s *RuntimeSetting) SetValue(val OptString) {
+	s.Value = val
+}
+
+// SetIsSet sets the value of IsSet.
+func (s *RuntimeSetting) SetIsSet(val OptBool) {
+	s.IsSet = val
+}
+
+// SetSource sets the value of Source.
+func (s *RuntimeSetting) SetSource(val RuntimeSettingSource) {
+	s.Source = val
+}
+
+// SetLocked sets the value of Locked.
+func (s *RuntimeSetting) SetLocked(val bool) {
+	s.Locked = val
+}
+
+// SetApply sets the value of Apply.
+func (s *RuntimeSetting) SetApply(val RuntimeSettingApply) {
+	s.Apply = val
+}
+
+// Ref: #/components/schemas/RuntimeSettingApply
+type RuntimeSettingApply string
+
+const (
+	RuntimeSettingApplyRestart RuntimeSettingApply = "restart"
+	RuntimeSettingApplyLive    RuntimeSettingApply = "live"
+)
+
+// AllValues returns all RuntimeSettingApply values.
+func (RuntimeSettingApply) AllValues() []RuntimeSettingApply {
+	return []RuntimeSettingApply{
+		RuntimeSettingApplyRestart,
+		RuntimeSettingApplyLive,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s RuntimeSettingApply) MarshalText() ([]byte, error) {
+	switch s {
+	case RuntimeSettingApplyRestart:
+		return []byte(s), nil
+	case RuntimeSettingApplyLive:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *RuntimeSettingApply) UnmarshalText(data []byte) error {
+	switch RuntimeSettingApply(data) {
+	case RuntimeSettingApplyRestart:
+		*s = RuntimeSettingApplyRestart
+		return nil
+	case RuntimeSettingApplyLive:
+		*s = RuntimeSettingApplyLive
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/RuntimeSettingClass
+type RuntimeSettingClass string
+
+const (
+	RuntimeSettingClassBootstrap RuntimeSettingClass = "bootstrap"
+	RuntimeSettingClassRuntime   RuntimeSettingClass = "runtime"
+	RuntimeSettingClassSecret    RuntimeSettingClass = "secret"
+)
+
+// AllValues returns all RuntimeSettingClass values.
+func (RuntimeSettingClass) AllValues() []RuntimeSettingClass {
+	return []RuntimeSettingClass{
+		RuntimeSettingClassBootstrap,
+		RuntimeSettingClassRuntime,
+		RuntimeSettingClassSecret,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s RuntimeSettingClass) MarshalText() ([]byte, error) {
+	switch s {
+	case RuntimeSettingClassBootstrap:
+		return []byte(s), nil
+	case RuntimeSettingClassRuntime:
+		return []byte(s), nil
+	case RuntimeSettingClassSecret:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *RuntimeSettingClass) UnmarshalText(data []byte) error {
+	switch RuntimeSettingClass(data) {
+	case RuntimeSettingClassBootstrap:
+		*s = RuntimeSettingClassBootstrap
+		return nil
+	case RuntimeSettingClassRuntime:
+		*s = RuntimeSettingClassRuntime
+		return nil
+	case RuntimeSettingClassSecret:
+		*s = RuntimeSettingClassSecret
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/RuntimeSettingSource
+type RuntimeSettingSource string
+
+const (
+	RuntimeSettingSourceEnv     RuntimeSettingSource = "env"
+	RuntimeSettingSourceDb      RuntimeSettingSource = "db"
+	RuntimeSettingSourceDefault RuntimeSettingSource = "default"
+)
+
+// AllValues returns all RuntimeSettingSource values.
+func (RuntimeSettingSource) AllValues() []RuntimeSettingSource {
+	return []RuntimeSettingSource{
+		RuntimeSettingSourceEnv,
+		RuntimeSettingSourceDb,
+		RuntimeSettingSourceDefault,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s RuntimeSettingSource) MarshalText() ([]byte, error) {
+	switch s {
+	case RuntimeSettingSourceEnv:
+		return []byte(s), nil
+	case RuntimeSettingSourceDb:
+		return []byte(s), nil
+	case RuntimeSettingSourceDefault:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *RuntimeSettingSource) UnmarshalText(data []byte) error {
+	switch RuntimeSettingSource(data) {
+	case RuntimeSettingSourceEnv:
+		*s = RuntimeSettingSourceEnv
+		return nil
+	case RuntimeSettingSourceDb:
+		*s = RuntimeSettingSourceDb
+		return nil
+	case RuntimeSettingSourceDefault:
+		*s = RuntimeSettingSourceDefault
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/RuntimeSettingsUpdateRequest
+type RuntimeSettingsUpdateRequest struct {
+	Values RuntimeSettingsUpdateRequestValues `json:"values"`
+}
+
+// GetValues returns the value of Values.
+func (s *RuntimeSettingsUpdateRequest) GetValues() RuntimeSettingsUpdateRequestValues {
+	return s.Values
+}
+
+// SetValues sets the value of Values.
+func (s *RuntimeSettingsUpdateRequest) SetValues(val RuntimeSettingsUpdateRequestValues) {
+	s.Values = val
+}
+
+type RuntimeSettingsUpdateRequestValues map[string]string
+
+func (s *RuntimeSettingsUpdateRequestValues) init() RuntimeSettingsUpdateRequestValues {
+	m := *s
+	if m == nil {
+		m = map[string]string{}
+		*s = m
+	}
+	return m
+}
+
+// Ref: #/components/schemas/RuntimeSettingsUpdateResult
+type RuntimeSettingsUpdateResult struct {
+	// True when changed settings take effect only after a restart.
+	PendingRestart bool             `json:"pending_restart"`
+	Settings       []RuntimeSetting `json:"settings"`
+}
+
+// GetPendingRestart returns the value of PendingRestart.
+func (s *RuntimeSettingsUpdateResult) GetPendingRestart() bool {
+	return s.PendingRestart
+}
+
+// GetSettings returns the value of Settings.
+func (s *RuntimeSettingsUpdateResult) GetSettings() []RuntimeSetting {
+	return s.Settings
+}
+
+// SetPendingRestart sets the value of PendingRestart.
+func (s *RuntimeSettingsUpdateResult) SetPendingRestart(val bool) {
+	s.PendingRestart = val
+}
+
+// SetSettings sets the value of Settings.
+func (s *RuntimeSettingsUpdateResult) SetSettings(val []RuntimeSetting) {
+	s.Settings = val
+}
+
+func (*RuntimeSettingsUpdateResult) updateRuntimeSettingsRes() {}
+
 // Ref: #/components/schemas/SSOStatus
 type SSOStatus struct {
 	Oidc                 bool    `json:"oidc"`
@@ -10288,6 +10612,22 @@ func (*UnlinkProxyIdentityNotFound) unlinkProxyIdentityRes() {}
 type UnlinkProxyIdentityUnauthorized ProblemStatusCode
 
 func (*UnlinkProxyIdentityUnauthorized) unlinkProxyIdentityRes() {}
+
+type UpdateRuntimeSettingsConflict ProblemStatusCode
+
+func (*UpdateRuntimeSettingsConflict) updateRuntimeSettingsRes() {}
+
+type UpdateRuntimeSettingsForbidden ProblemStatusCode
+
+func (*UpdateRuntimeSettingsForbidden) updateRuntimeSettingsRes() {}
+
+type UpdateRuntimeSettingsUnauthorized ProblemStatusCode
+
+func (*UpdateRuntimeSettingsUnauthorized) updateRuntimeSettingsRes() {}
+
+type UpdateRuntimeSettingsUnprocessableEntity ProblemStatusCode
+
+func (*UpdateRuntimeSettingsUnprocessableEntity) updateRuntimeSettingsRes() {}
 
 // Ref: #/components/schemas/User
 type User struct {

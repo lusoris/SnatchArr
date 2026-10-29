@@ -737,6 +737,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/settings/runtime": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read runtime settings
+         * @description Returns all runtime settings with their current source, values, and lock states (admin only). Secret values are omitted.
+         */
+        get: operations["getRuntimeSettings"];
+        /**
+         * Replace runtime settings
+         * @description Validate and persist overrides for runtime settings (admin only).
+         */
+        put: operations["updateRuntimeSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/requests/settings": {
         parameters: {
             query?: never;
@@ -2203,6 +2227,37 @@ export interface components {
             sfw_mode?: components["schemas"]["SfwMode"];
             /** Format: date-time */
             updated_at?: string;
+        };
+        /** @enum {string} */
+        RuntimeSettingClass: "bootstrap" | "runtime" | "secret";
+        /** @enum {string} */
+        RuntimeSettingSource: "env" | "db" | "default";
+        /** @enum {string} */
+        RuntimeSettingApply: "restart" | "live";
+        RuntimeSetting: {
+            key: string;
+            env: string;
+            class: components["schemas"]["RuntimeSettingClass"];
+            type: string;
+            default: string;
+            /** @description Current effective value; omitted for secrets. */
+            value?: string;
+            /** @description True when a secret has a configured value; omitted for non-secrets. */
+            is_set?: boolean;
+            source: components["schemas"]["RuntimeSettingSource"];
+            /** @description True when set by an environment variable override. */
+            locked: boolean;
+            apply: components["schemas"]["RuntimeSettingApply"];
+        };
+        RuntimeSettingsUpdateRequest: {
+            values: {
+                [key: string]: string;
+            };
+        };
+        RuntimeSettingsUpdateResult: {
+            /** @description True when changed settings take effect only after a restart. */
+            pending_restart: boolean;
+            settings?: components["schemas"]["RuntimeSetting"][];
         };
         /**
          * @default vulva
@@ -4232,6 +4287,58 @@ export interface operations {
                     "application/json": components["schemas"]["Settings"];
                 };
             };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getRuntimeSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Runtime settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuntimeSetting"][];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    updateRuntimeSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RuntimeSettingsUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated runtime settings result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuntimeSettingsUpdateResult"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };

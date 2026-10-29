@@ -75,6 +75,7 @@ type Querier interface {
 	DeleteNotificationRule(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteProwlarrLink(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteQueueStrike(ctx context.Context, arg DeleteQueueStrikeParams) error
+	DeleteRuntimeSetting(ctx context.Context, key string) error
 	DeleteSchedule(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteSeerrLink(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteSession(ctx context.Context, id string) error
@@ -138,6 +139,7 @@ type Querier interface {
 	// SPDX-License-Identifier: EUPL-1.2
 	GetRequestsSettings(ctx context.Context) (RequestsSetting, error)
 	GetRun(ctx context.Context, id uuid.UUID) (SnatchRun, error)
+	GetRuntimeSetting(ctx context.Context, key string) (RuntimeSetting, error)
 	GetSchedule(ctx context.Context, id uuid.UUID) (Schedule, error)
 	GetSeerrLink(ctx context.Context, id uuid.UUID) (SeerrLink, error)
 	GetSeerrRequest(ctx context.Context, arg GetSeerrRequestParams) (SeerrRequest, error)
@@ -214,6 +216,9 @@ type Querier interface {
 	ListProwlarrLinks(ctx context.Context) ([]ProwlarrLink, error)
 	ListQueueStrikes(ctx context.Context, instanceID uuid.UUID) ([]QueueStrike, error)
 	ListRuns(ctx context.Context, arg ListRunsParams) ([]SnatchRun, error)
+	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+	// SPDX-License-Identifier: EUPL-1.2
+	ListRuntimeSettings(ctx context.Context) ([]RuntimeSetting, error)
 	ListSchedules(ctx context.Context) ([]Schedule, error)
 	ListSeerrLinks(ctx context.Context) ([]SeerrLink, error)
 	ListSeerrRequests(ctx context.Context, limit int32) ([]ListSeerrRequestsRow, error)
@@ -330,6 +335,7 @@ type Querier interface {
 	UpsertQueuePolicy(ctx context.Context, arg UpsertQueuePolicyParams) error
 	UpsertQueueStrikes(ctx context.Context, arg UpsertQueueStrikesParams) error
 	UpsertRequestsSettings(ctx context.Context, arg UpsertRequestsSettingsParams) (RequestsSetting, error)
+	UpsertRuntimeSetting(ctx context.Context, arg UpsertRuntimeSettingParams) (RuntimeSetting, error)
 	UpsertSeerrRequest(ctx context.Context, arg UpsertSeerrRequestParams) error
 	UpsertUserPreferences(ctx context.Context, arg UpsertUserPreferencesParams) (UsersPref, error)
 	UpsertWatchAwareItemWatch(ctx context.Context, arg UpsertWatchAwareItemWatchParams) error

@@ -499,10 +499,53 @@ func Default() Options {
 	}
 }
 
+// Choice: Two-phase configuration startup.
+//
+// In fx, newEncryptor requires bootstrap settings (Profile, crypto.key) to construct
+// *crypto.Encryptor. In turn, decrypting stored secret settings requires *crypto.Encryptor
+// and *store.Store. To prevent circular dependencies:
+// 1. config.LoadBase loads the environment-and-defaults configuration into BaseOptions.
+// 2. newEncryptor consumes BaseOptions to build *crypto.Encryptor.
+// 3. runtimesettings loads persisted runtime_settings rows through *store.Store,
+//    decrypts secret settings with *crypto.Encryptor, and builds effective config.Options
+//    using config.LoadWithSettings (precedence: env > DB > default).
+//
+// Per ADR-0044 item 6, apply timing is restart-first (the open operator decision is not final;
+// never call it final in comments).
+
 // Load reads the "snatcharr" subtree and validates it for the selected profile, including
-// which crypto.key the profile may run on (CryptoKey).
+// which crypto.key the profile may run on (CryptoKey). Precedence is env > default.
 func Load(cfg *config.Config) (Options, error) {
+	return LoadWithSettings(cfg, nil)
+}
+
+// BaseOptions holds the bootstrap environment-and-defaults configuration loaded before the
+// database is opened. Bootstrap settings (such as profile and encryption parameters) are
+// verified here and consumed by the encryptor.
+type BaseOptions struct {
+	Options
+}
+
+// LoadBase reads the "snatcharr" subtree and validates it for the selected profile, returning
+// BaseOptions. Precedence is env > default.
+func LoadBase(cfg *config.Config) (BaseOptions, error) {
+	o, err := Load(cfg)
+	if err != nil {
+		return BaseOptions{}, err
+	}
+	return BaseOptions{Options: o}, nil
+}
+
+// LoadWithSettings reads the "snatcharr" subtree, merges any persisted overrides between
+// defaults and environment variables (precedence: env > DB > default), and validates it
+// for the selected profile.
+func LoadWithSettings(cfg *config.Config, overrides map[string]string) (Options, error) {
 	o := Default()
+	for k, v := range overrides {
+		if err := ApplySetting(&o, k, v); err != nil {
+			return Options{}, fmt.Errorf("config: apply override %q: %w", k, err)
+		}
+	}
 	if err := cfg.Unmarshal("snatcharr", &o); err != nil {
 		return Options{}, fmt.Errorf("config: unmarshal snatcharr: %w", err)
 	}
@@ -697,5 +740,5 @@ func CompoundKeys() []string {
 	}
 }
 
-// Module provides Options to the fx graph.
-var Module = fx.Module("snatcharr.config", fx.Provide(Load))
+// Module provides BaseOptions to the fx graph.
+var Module = fx.Module("snatcharr.config", fx.Provide(LoadBase))
