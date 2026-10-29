@@ -11,6 +11,9 @@ permissions: {}
 
 jobs:
   release-please:
-    uses: ./.github/workflows/release-please-app.yml
+    name: Release
+    uses: plurano/horistes/.github/workflows/release-please.yml@c9632c6f9a06ccd560ffe4e1637649bcf19221db # main
+    with:
+      app_client_id: ${{ vars.RELEASE_APP_CLIENT_ID }}
     secrets:
-      private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+      app_private_key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}

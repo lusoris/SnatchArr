@@ -63,6 +63,9 @@
             "context": "Workflows (actionlint, pinned actions)"
           },
           {
+            "context": "Hooks / Hook copy"
+          },
+          {
             "context": "Go API Compatibility"
           },
           {
