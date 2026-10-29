@@ -379,20 +379,23 @@ web-visual-update: ## Rewrite the visual baseline in the pinned Playwright image
 	bash tools/e2e/web_visual.sh --update
 
 # ── proto/ ────────────────────────────────────────────────────────────────────
+# buf at the tools/go/go.mod pin, run through go tool: no buf on PATH needed, and none is used.
+# := so an environment BUF cannot swap in another binary.
+BUF := go tool -modfile=$(CURDIR)/tools/go/go.mod buf
 proto-verify: ## buf lint + breaking (vs main) + generation drift
 	cd proto
-	buf lint
+	$(BUF) lint
 	# Against origin/main, which must exist: without it the check was skipped and passed (A2-05).
 	if ! git rev-parse --verify -q origin/main >/dev/null; then
 	  echo "proto-verify: no origin/main to check breaking changes against; run git fetch origin main" >&2; exit 1
 	fi
-	buf breaking --against '../.git#ref=origin/main,subdir=proto'
+	$(BUF) breaking --against '../.git#ref=origin/main,subdir=proto'
 	cd ..
 	$(MAKE) proto-gen
 	git diff --exit-code -- api/internal/gen
 
 proto-gen: ## buf generate (Go stubs; Rust stubs build via tonic-build)
-	cd proto && buf generate
+	cd proto && $(BUF) generate
 	cd ..
 	# HISS-09 wants a SAFETY proof before every unsafe call; protoc-gen-go emits two. Deterministic post-pass.
 	# If protoc-gen-go changes shape and the sed matches nothing, the CI job semgrep fails on the
