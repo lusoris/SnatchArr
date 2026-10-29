@@ -150,6 +150,12 @@ export default defineConfig({
 							testMatch: /(^|\/)sweep\.test\.ts/,
 							dependencies: ['auth-setup'],
 							use: { browserName: 'chromium', storageState: authFile }
+						},
+						{
+							name: 'mcp-sweep',
+							testMatch: /(^|\/)mcp-sweep\.test\.ts/,
+							dependencies: ['auth-setup'],
+							use: { browserName: 'chromium', storageState: authFile }
 						}
 					]
 });
