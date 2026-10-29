@@ -30,6 +30,6 @@ func Middleware(r *Ring) corelog.HandlerMiddleware {
 // Module provides the ring, sized by snatcharr.logs.ring_size, and hooks it into the
 // golusoris logger.
 var Module = fx.Module("snatcharr.logring",
-	fx.Provide(func(o config.Options) *Ring { return New(o.Logs.RingSize) }),
+	fx.Provide(func(o config.BaseOptions) *Ring { return New(o.Logs.RingSize) }),
 	fx.Provide(corelog.AsMiddleware(Middleware)),
 )

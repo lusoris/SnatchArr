@@ -1053,6 +1053,56 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
 
+  /settings/runtime:
+    get:
+      tags: [system]
+      operationId: getRuntimeSettings
+      summary: Read runtime settings
+      description: Returns all runtime settings with their current source, values, and lock states (admin only). Secret values are omitted.
+      responses:
+        "200":
+          description: Runtime settings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RuntimeSetting"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        default:
+          $ref: "#/components/responses/Problem"
+    put:
+      tags: [system]
+      operationId: updateRuntimeSettings
+      summary: Replace runtime settings
+      description: Validate and persist overrides for runtime settings (admin only).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RuntimeSettingsUpdateRequest"
+      responses:
+        "200":
+          description: Updated runtime settings result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeSettingsUpdateResult"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "409":
+          $ref: "#/components/responses/Problem"
+        "422":
+          $ref: "#/components/responses/Problem"
+        default:
+          $ref: "#/components/responses/Problem"
+
   /requests/settings:
     get:
       tags: [requests]
@@ -3634,6 +3684,85 @@ components:
         updated_at:
           type: string
           format: date-time
+
+    RuntimeSettingClass:
+      type: string
+      enum:
+        - bootstrap
+        - runtime
+        - secret
+
+    RuntimeSettingSource:
+      type: string
+      enum:
+        - env
+        - db
+        - default
+
+    RuntimeSettingApply:
+      type: string
+      enum:
+        - restart
+        - live
+
+    RuntimeSetting:
+      type: object
+      required:
+        - key
+        - env
+        - class
+        - type
+        - default
+        - source
+        - locked
+        - apply
+      properties:
+        key:
+          type: string
+        env:
+          type: string
+        class:
+          $ref: "#/components/schemas/RuntimeSettingClass"
+        type:
+          type: string
+        default:
+          type: string
+        value:
+          type: string
+          description: "Current effective value; omitted for secrets."
+        is_set:
+          type: boolean
+          description: "True when a secret has a configured value; omitted for non-secrets."
+        source:
+          $ref: "#/components/schemas/RuntimeSettingSource"
+        locked:
+          type: boolean
+          description: "True when set by an environment variable override."
+        apply:
+          $ref: "#/components/schemas/RuntimeSettingApply"
+
+    RuntimeSettingsUpdateRequest:
+      type: object
+      required:
+        - values
+      properties:
+        values:
+          type: object
+          additionalProperties:
+            type: string
+
+    RuntimeSettingsUpdateResult:
+      type: object
+      required:
+        - pending_restart
+      properties:
+        pending_restart:
+          type: boolean
+          description: "True when changed settings take effect only after a restart."
+        settings:
+          type: array
+          items:
+            $ref: "#/components/schemas/RuntimeSetting"
 
     BrandMark:
       type: string

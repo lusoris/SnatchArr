@@ -265,6 +265,13 @@ type RequestsSetting struct {
 	UpdatedAt        time.Time
 }
 
+type RuntimeSetting struct {
+	Key       string
+	Value     string
+	UpdatedBy *uuid.UUID
+	UpdatedAt time.Time
+}
+
 type Schedule struct {
 	ID         uuid.UUID
 	InstanceID *uuid.UUID

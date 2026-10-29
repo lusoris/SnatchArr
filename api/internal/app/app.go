@@ -46,6 +46,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/queue"
 	"github.com/lusoris/SnatchArr/api/internal/requests"
 	"github.com/lusoris/SnatchArr/api/internal/retention"
+	"github.com/lusoris/SnatchArr/api/internal/runtimesettings"
 	"github.com/lusoris/SnatchArr/api/internal/seerr"
 	"github.com/lusoris/SnatchArr/api/internal/settings"
 	"github.com/lusoris/SnatchArr/api/internal/snatch"
@@ -87,6 +88,7 @@ var Module = fx.Options(
 	modules.Module,
 	settings.Module,
 	requests.Module,
+	runtimesettings.Module,
 	auth.Module,
 	events.Module,
 	snatch.Module,

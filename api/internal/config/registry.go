@@ -67,6 +67,15 @@ func Registry() []Setting {
 	return slices.Clone(registry)
 }
 
+// RegistryMap returns a map from setting key to Setting.
+func RegistryMap() map[string]Setting {
+	m := make(map[string]Setting, len(registry))
+	for _, s := range registry {
+		m[s.Key] = s
+	}
+	return m
+}
+
 var registry = []Setting{
 	{
 		Key:     "snatcharr.profile",
@@ -423,7 +432,7 @@ var registry = []Setting{
 	{
 		Key:     "snatcharr.logs.ring_size",
 		Env:     "APP_SNATCHARR_LOGS_RING_SIZE",
-		Class:   ClassRuntime,
+		Class:   ClassBootstrap,
 		Type:    "int",
 		Default: "2000",
 		Apply:   ApplyRestart,

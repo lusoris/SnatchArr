@@ -914,6 +914,33 @@ func stepsSettingsAndSchedules() []routerStep {
 			},
 		},
 		{
+			op:     "getRuntimeSettings",
+			method: http.MethodGet,
+			path:   func(_ *idsState) string { return "/settings/runtime" },
+			want:   http.StatusOK,
+			capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
+				t.Helper()
+				if items, ok := decoded["items"].([]any); !ok || len(items) == 0 {
+					t.Fatalf("getRuntimeSettings items = %v, want a non-empty list", decoded["items"])
+				}
+			},
+		},
+		{
+			op:     "updateRuntimeSettings",
+			method: http.MethodPut,
+			path:   func(_ *idsState) string { return "/settings/runtime" },
+			body: func(_ *idsState) any {
+				return map[string]any{"values": map[string]string{"snatcharr.public.url": "https://snatcharr.example.test"}}
+			},
+			want: http.StatusOK,
+			capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
+				t.Helper()
+				if pending, ok := decoded["pending_restart"].(bool); !ok || !pending {
+					t.Fatalf("updateRuntimeSettings pending_restart = %v, want true", decoded["pending_restart"])
+				}
+			},
+		},
+		{
 			op:     "getHourlyCaps",
 			method: http.MethodGet,
 			path:   func(_ *idsState) string { return "/hourly-caps" },
