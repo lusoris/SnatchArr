@@ -37,6 +37,7 @@
 	"configarr_help_linked_title": "Verknüpfter Modus",
 	"configarr_help_linked_desc": "Im konfigurierten Modus werden Instanzen und Clients automatisch aus den deklarativen YAML-Dateien verwaltet.",
 	"configarr_help_readonly_title": "Schreibgeschützte Instanzen",
+	"configarr_admin_only": "Nur Administratoren sehen die Configarr-Verknüpfung und können einen Import starten.",
 	"configarr_help_readonly_desc": "Aus Configarr importierte Instanzen sind in SnatchArr schreibgeschützt, ausgenommen ihre Snatch-Richtlinien.",
 	"system_tab_general": "Allgemein",
 	"system_tab_modules": "Module",

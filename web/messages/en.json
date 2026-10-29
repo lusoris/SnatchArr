@@ -37,6 +37,7 @@
 	"configarr_help_linked_title": "Linked mode",
 	"configarr_help_linked_desc": "When configured, instances and clients are automatically managed from your declarative YAML files.",
 	"configarr_help_readonly_title": "Read-only instances",
+	"configarr_admin_only": "Only administrators can see the Configarr link and run an import.",
 	"configarr_help_readonly_desc": "Instances imported from Configarr are read-only in SnatchArr, except for their snatch policies.",
 	"system_tab_general": "General",
 	"system_tab_modules": "Modules",
