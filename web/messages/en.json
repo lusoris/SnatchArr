@@ -116,6 +116,7 @@
 	"instance_probe_unknown": "{app} {version} answered. It is neither Readarr nor a fork SnatchArr knows.",
 	"instance_product_readarr_faustvii": "Readarr (Faustvii fork)",
 	"instance_product_readarr_rresurrected": "Readarr (rresurrected)",
+	"instance_product_readarr_fork": "Readarr fork (unidentified)",
 	"instance_product_unknown": "unknown product",
 	"policy_title": "Snatch policy",
 	"policy_missing_per_cycle": "Missing items searched per cycle",

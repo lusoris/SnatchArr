@@ -34,6 +34,8 @@ func detectProduct(kind domain.AppKind, st *arr.StatusResponse) domain.Product {
 // readarrProduct reads the product from a system/status answer. Chaptarr reports its own
 // name. The other forks report `Readarr`, so their packager and, last, the version decide:
 // a Readarr that is newer than the retired project ever was is a fork nobody named here.
+// Without a packager such a build is shown as an unidentified fork; a packager that is not
+// known here leaves it unknown.
 func readarrProduct(st *arr.StatusResponse) domain.Product {
 	author := strings.ToLower(st.PackageAuthor)
 	switch {
@@ -47,30 +49,40 @@ func readarrProduct(st *arr.StatusResponse) domain.Product {
 		return domain.ProductReadarrFaustvii
 	case strings.Contains(author, rresurrectedPackager):
 		return domain.ProductReadarrRresurrected
-	case builtByReadarr(st.Version):
+	}
+	switch cmp, ok := compareReadarr(st.Version); {
+	case !ok:
+		return domain.ProductUnknown
+	case cmp <= 0:
 		return domain.ProductReadarr
+	case strings.TrimSpace(author) == "":
+		return domain.ProductReadarrFork
 	default:
 		return domain.ProductUnknown
 	}
 }
 
-// builtByReadarr reports whether the retired Readarr built a version, which is one that is
-// not above lastReadarr. A missing trailing number counts as zero; anything that is not a
-// number makes the version unreadable, and an unreadable version is not Readarr's.
-func builtByReadarr(version string) bool {
+// compareReadarr orders a version against lastReadarr: below zero when the retired Readarr
+// built an older line, zero for its last line and above zero for a newer one. A missing
+// trailing number counts as zero; a leading part that is not a number makes the version
+// unreadable, and ok is false then.
+func compareReadarr(version string) (cmp int, ok bool) {
 	parts := strings.SplitN(version, ".", versionParts+1)
-	for i, last := range lastReadarr {
-		n := 0
-		if i < len(parts) {
-			parsed, err := strconv.Atoi(parts[i])
-			if err != nil || parsed < 0 {
-				return false
-			}
-			n = parsed
+	var nums [versionParts]int
+	for i := range nums {
+		if i >= len(parts) {
+			break
 		}
-		if n != last {
-			return n < last
+		parsed, err := strconv.Atoi(parts[i])
+		if err != nil || parsed < 0 {
+			return 0, false
+		}
+		nums[i] = parsed
+	}
+	for i, last := range lastReadarr {
+		if nums[i] != last {
+			return nums[i] - last, true
 		}
 	}
-	return true
+	return 0, true
 }

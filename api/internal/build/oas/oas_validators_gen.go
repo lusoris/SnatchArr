@@ -270,6 +270,8 @@ func (s ArrProduct) Validate() error {
 		return nil
 	case "readarr_rresurrected":
 		return nil
+	case "readarr_fork":
+		return nil
 	case "unknown":
 		return nil
 	default:

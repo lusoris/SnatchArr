@@ -1939,7 +1939,7 @@ export interface components {
          * @description The product that answered the probe of an instance kind several products serve. That is the kind `readarr` alone: forks of the retired Readarr keep its API layout. The probe tells them apart by `appName`, `packageAuthor` and `version` of `system/status`. `unknown` is an answer that matches none of the others. An instance carries the product of its last successful connection test as `last_seen_product`.
          * @enum {string}
          */
-        ArrProduct: "readarr" | "bookshelf" | "chaptarr" | "readarr_faustvii" | "readarr_rresurrected" | "unknown";
+        ArrProduct: "readarr" | "bookshelf" | "chaptarr" | "readarr_faustvii" | "readarr_rresurrected" | "readarr_fork" | "unknown";
         ProbeResult: {
             app_name: string;
             version: string;

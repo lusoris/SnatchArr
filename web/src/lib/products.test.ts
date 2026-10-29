@@ -11,7 +11,8 @@ describe('productName', () => {
 		['bookshelf', 'Bookshelf'],
 		['chaptarr', 'Chaptarr'],
 		['readarr_faustvii', 'Readarr (Faustvii fork)'],
-		['readarr_rresurrected', 'Readarr (rresurrected)']
+		['readarr_rresurrected', 'Readarr (rresurrected)'],
+		['readarr_fork', 'Readarr fork (unidentified)']
 	])('names %s', (product, name) => {
 		expect(productName(product)).toBe(name);
 	});
@@ -53,7 +54,8 @@ describe('instanceKindLabel', () => {
 		['readarr', 'bookshelf', 'Readarr · Bookshelf'],
 		['readarr', 'chaptarr', 'Readarr · Chaptarr'],
 		['readarr', 'readarr_faustvii', 'Readarr · Readarr (Faustvii fork)'],
-		['readarr', 'readarr_rresurrected', 'Readarr · Readarr (rresurrected)']
+		['readarr', 'readarr_rresurrected', 'Readarr · Readarr (rresurrected)'],
+		['readarr', 'readarr_fork', 'Readarr · Readarr fork (unidentified)']
 	])('names the fork behind %s: %s', (kind, product, label) => {
 		expect(instanceKindLabel(kind, product)).toBe(label);
 	});
