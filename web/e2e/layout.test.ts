@@ -19,15 +19,17 @@ import {
 	assertTouchTargetHeights,
 	AUTH_ROUTES,
 	collectLists,
+	EDIT_FORM_ROUTES,
 	expectedTables,
 	measureContentSpan,
 	PHONE_FIT_ROUTES,
 	measureTouchTargets,
+	ROUTE_CLASS,
 	SCROLL_BUDGET_ROUTES,
 	VIEWPORTS,
 	WIDTH_PENDING
 } from './layout.js';
-import { json, mockSettingsApi } from './mocks.js';
+import { json, mockModulesApi, mockSettingsApi, mockSignedInApi } from './mocks.js';
 
 const served = !!process.env.SNATCHARR_SERVED_URL;
 if (served && !process.env.SNATCHARR_SERVED_STATE) {
@@ -648,26 +650,122 @@ if (!served) {
 	}
 }
 
+async function gotoBudgetRoute(page: Page, pattern: string): Promise<void> {
+	if (pattern === '/' && !served) {
+		await mockDashboardRoute(page);
+	}
+	if (pattern in urlRowFixtures) {
+		await mockUrlRows(page, pattern as (typeof AUTH_ROUTES)[number]);
+	}
+	// The seeded stack keeps the adult module off; its pages render from the shared mocks.
+	if (pattern.startsWith('/adult/')) {
+		await mockSignedInApi(page);
+		await mockModulesApi(page, [{ id: 'adult', enabled: true }]);
+	}
+	const route = pattern.replace('[id]', instanceId());
+	await page.goto(route);
+	await page.waitForLoadState('networkidle');
+	// networkidle comes before the queries render; measuring then sees the loading state, so
+	// a page whose data overflows the budget would pass.
+	// The error page (status as heading, e.g. "404 - Page not found") is short and would pass.
+	await expect(page.getByRole('heading', { level: 1, name: /^\d{3}\b/ })).toHaveCount(0);
+	await expect(page.getByText(/^(Loading…|Lädt …)$/)).toHaveCount(0);
+	await expect(page.locator('[data-testid="skeleton"]')).toHaveCount(0);
+}
+
+function pageRoutes(dir: string, prefix = ''): string[] {
+	const found: string[] = [];
+	for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+		if (entry.isFile() && entry.name === '+page.svelte') found.push(prefix || '/');
+		if (entry.isDirectory()) {
+			// Route groups such as (app) add no URL segment.
+			const segment = /^\(.*\)$/.test(entry.name) ? '' : `/${entry.name}`;
+			found.push(...pageRoutes(path.join(dir, entry.name), prefix + segment));
+		}
+	}
+	return found;
+}
+
+test('authenticated: layout scroll budget classifies every page route', () => {
+	const routes = pageRoutes(path.resolve(import.meta.dirname, '../src/routes')).sort();
+	const classified = new Set(Object.keys(ROUTE_CLASS).map((r) => r.split('?')[0]));
+	expect(
+		routes.filter((r) => !classified.has(r)),
+		'page routes without a scroll class in ROUTE_CLASS'
+	).toEqual([]);
+	expect(
+		[...classified].filter((r) => !routes.includes(r)),
+		'ROUTE_CLASS entries without a page route'
+	).toEqual([]);
+});
+
 for (const pattern of SCROLL_BUDGET_ROUTES) {
 	test(`authenticated: layout scroll budget ${pattern} at 1280x800`, async ({ page }) => {
 		await page.setViewportSize({ width: 1280, height: 800 });
-		if (pattern === '/' && !served) {
-			await mockDashboardRoute(page);
-		}
-		if (pattern in urlRowFixtures) {
-			await mockUrlRows(page, pattern as (typeof AUTH_ROUTES)[number]);
-		}
-		const route = pattern.replace('[id]', instanceId());
-		await page.goto(route);
-		await page.waitForLoadState('networkidle');
-		// networkidle comes before the queries render; measuring then sees the loading state, so
-		// a page whose data overflows the budget would pass.
-		// SvelteKit's fallback error page (status as heading) is short and would pass the budget.
-		await expect(page.getByRole('heading', { level: 1, name: /^\d{3}$/ })).toHaveCount(0);
-		await expect(page.getByText(/^(Loading…|Lädt …)$/)).toHaveCount(0);
-		await expect(page.locator('[data-testid="skeleton"]')).toHaveCount(0);
+		await gotoBudgetRoute(page, pattern);
 		await assertScrollBudget(page, pattern);
 	});
+}
+
+// Edit forms sit outside the budget by class; the run reports their height instead.
+for (const pattern of EDIT_FORM_ROUTES) {
+	test(`authenticated: layout scroll class ${pattern} is edit-form at 1280x800`, async ({
+		page
+	}, testInfo) => {
+		expect(ROUTE_CLASS[pattern]).toBe('edit-form');
+		await page.setViewportSize({ width: 1280, height: 800 });
+		await gotoBudgetRoute(page, pattern);
+		const height = await page.evaluate(() => document.documentElement.scrollHeight);
+		testInfo.annotations.push({
+			type: 'scroll-class',
+			description: `${pattern}: edit-form, ${height}px, outside the main-page budget`
+		});
+	});
+}
+
+test('authenticated: layout scroll budget planted negative: a main page over budget fails', async ({
+	page
+}) => {
+	await page.setViewportSize({ width: 1280, height: 800 });
+	await gotoBudgetRoute(page, '/connections');
+	await assertScrollBudget(page, '/connections');
+	// Plant a main page grown past 1.25x the screen.
+	await page.evaluate(() => {
+		const filler = document.createElement('div');
+		filler.style.height = '600px';
+		document.querySelector('main')?.append(filler);
+	});
+	await expect(assertScrollBudget(page, '/connections')).rejects.toThrow(
+		/\/connections: scroll height \(\d+px\) exceeds budget/
+	);
+});
+
+// Review screenshots of every main and edit-form route, on request (SNATCHARR_LAYOUT_SHOTS=1):
+// laptop, desktop and phone, light and dark, each file named with its scroll height.
+const shotViewports = [
+	{ name: 'd1280', width: 1280, height: 800 },
+	{ name: 'd1920', width: 1920, height: 1080 },
+	{ name: 'p390', width: 390, height: 844 }
+] as const;
+for (const pattern of [...SCROLL_BUDGET_ROUTES, ...EDIT_FORM_ROUTES]) {
+	for (const viewport of shotViewports) {
+		for (const scheme of ['light', 'dark'] as const) {
+			test(`authenticated: layout screenshot ${pattern} ${viewport.name} ${scheme}`, async ({
+				page
+			}, testInfo) => {
+				test.skip(!process.env.SNATCHARR_LAYOUT_SHOTS, 'screenshots on request only');
+				await page.setViewportSize({ width: viewport.width, height: viewport.height });
+				await page.emulateMedia({ colorScheme: scheme });
+				await gotoBudgetRoute(page, pattern);
+				const height = await page.evaluate(() => document.documentElement.scrollHeight);
+				const slug = pattern.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || 'root';
+				await page.screenshot({
+					path: testInfo.outputPath(`${slug}-${viewport.name}-${scheme}-h${height}.png`),
+					fullPage: true
+				});
+			});
+		}
+	}
 }
 
 if (!served) {
