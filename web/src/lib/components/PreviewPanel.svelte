@@ -69,10 +69,11 @@ SPDX-License-Identifier: EUPL-1.2
 
 <section class="card mb-6" aria-labelledby="preview-title">
 	<h2 id="preview-title" class="mb-3 text-lg font-semibold">{m.preview_title()}</h2>
-	<div class="mb-4 flex flex-wrap gap-2">
+	<!-- On a phone both buttons share one row; the margin only separates a note or result below. -->
+	<div class="mb-4 flex flex-wrap gap-2 last:mb-0">
 		<button
 			type="button"
-			class="btn"
+			class="btn flex-1 justify-center sm:flex-none"
 			onclick={() => previewMutation.mutate('missing')}
 			disabled={previewMutation.isPending}
 		>
@@ -80,7 +81,7 @@ SPDX-License-Identifier: EUPL-1.2
 		</button>
 		<button
 			type="button"
-			class="btn"
+			class="btn flex-1 justify-center sm:flex-none"
 			onclick={() => previewMutation.mutate('upgrade')}
 			disabled={previewMutation.isPending}
 		>

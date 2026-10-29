@@ -175,7 +175,8 @@ describe('ActivityFeed', () => {
 		renderWithQuery(ActivityFeed);
 
 		expect(await screen.findByText('API server ready')).toBeTruthy();
-		expect(screen.getByText('port=8080')).toBeTruthy();
+		// The value renders through LinkText, so key and value are separate text nodes.
+		expect(screen.getByText((_, el) => el?.textContent === 'port=8080')).toBeTruthy();
 	});
 
 	it('omits server log tab for viewers and never queries logs', async () => {

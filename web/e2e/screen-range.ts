@@ -206,13 +206,47 @@ function measureClippingBounds(elements: Element[]): TextBox[] {
 	});
 }
 
-function textCollisions(items: TextGeometry[]): string[] {
+// Browser callback: the part of the page each element's scroll and clip ancestors show.
+// Text scrolled out of a scroller (an older log line) sits outside it and overlaps nothing.
+function measureShownArea(elements: Element[]): TextBox[] {
+	return elements.map((el) => {
+		const area = { left: -1e9, top: -1e9, right: 1e9, bottom: 1e9 };
+		let ancestor = el.parentElement;
+		for (let depth = 0; ancestor && depth < 100; depth++, ancestor = ancestor.parentElement) {
+			const style = getComputedStyle(ancestor);
+			const rect = ancestor.getBoundingClientRect();
+			if (style.overflowX !== 'visible') {
+				area.left = Math.max(area.left, rect.left);
+				area.right = Math.min(area.right, rect.right);
+			}
+			if (style.overflowY !== 'visible') {
+				area.top = Math.max(area.top, rect.top);
+				area.bottom = Math.min(area.bottom, rect.bottom);
+			}
+		}
+		return area;
+	});
+}
+
+function shownBoxes(boxes: TextBox[], area: TextBox): TextBox[] {
+	return boxes
+		.map((b) => ({
+			left: Math.max(b.left, area.left),
+			right: Math.min(b.right, area.right),
+			top: Math.max(b.top, area.top),
+			bottom: Math.min(b.bottom, area.bottom)
+		}))
+		.filter((b) => b.right - b.left > 2 && b.bottom - b.top > 2);
+}
+
+function textCollisions(items: TextGeometry[], areas: TextBox[]): string[] {
 	const collisions: string[] = [];
+	const shown = items.map((item, i) => shownBoxes(item.boxes, areas[i]));
 	for (let i = 0; i < items.length; i++) {
 		for (let j = i + 1; j < items.length; j++) {
 			if (items[i].layer !== items[j].layer) continue;
-			const overlaps = items[i].boxes.some((a) =>
-				items[j].boxes.some(
+			const overlaps = shown[i].some((a) =>
+				shown[j].some(
 					(b) =>
 						Math.min(a.right, b.right) - Math.max(a.left, b.left) > 2 &&
 						Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 2
@@ -224,30 +258,74 @@ function textCollisions(items: TextGeometry[]): string[] {
 	return collisions;
 }
 
+// The three measurements run as separate calls. A live page (the log stream) can move its
+// text between them, so measure again until the text stands still across one round.
+async function measureStableText(
+	targets: Locator
+): Promise<{ items: TextGeometry[]; bounds: TextBox[]; areas: TextBox[] }> {
+	let items = await targets.evaluateAll(measureTextGeometry, TEXT_TARGETS);
+	for (let attempt = 0; attempt < 5; attempt++) {
+		const bounds = await targets.evaluateAll(measureClippingBounds);
+		const areas = await targets.evaluateAll(measureShownArea);
+		const after = await targets.evaluateAll(measureTextGeometry, TEXT_TARGETS);
+		if (JSON.stringify(after) === JSON.stringify(items)) return { items, bounds, areas };
+		items = after;
+	}
+	throw new Error('text kept moving while it was measured');
+}
+
 export async function assertTextNotClipped(page: Page): Promise<void> {
-	const targets = page.locator(TEXT_TARGETS);
-	const items = await targets.evaluateAll(measureTextGeometry, TEXT_TARGETS);
-	const bounds = await targets.evaluateAll(measureClippingBounds);
-	const clipped = items.filter((item, i) =>
-		item.boxes.some(
-			(r) =>
-				r.left < bounds[i].left - 2 ||
-				r.right > bounds[i].right + 2 ||
-				r.top < bounds[i].top - 2 ||
-				r.bottom > bounds[i].bottom + 2
-		)
-	);
+	const { items, bounds, areas } = await measureStableText(page.locator(TEXT_TARGETS));
+	// A failure names the bounds each text left, so the clipping ancestor can be found.
+	const clipped = items
+		.map((item, i) => ({ ...item, bounds: bounds[i] }))
+		.filter((item) =>
+			item.boxes.some(
+				(r) =>
+					r.left < item.bounds.left - 2 ||
+					r.right > item.bounds.right + 2 ||
+					r.top < item.bounds.top - 2 ||
+					r.bottom > item.bounds.bottom + 2
+			)
+		);
 	expect(items.length, 'text-spacing check requires text targets').toBeGreaterThan(0);
 	expect(clipped, 'text clipped after spacing override').toEqual([]);
-	expect(textCollisions(items), 'text overlaps after spacing override').toEqual([]);
+	expect(textCollisions(items, areas), 'text overlaps after spacing override').toEqual([]);
 }
 
 // WCAG 2.4.11 (AA): a focused control must not be entirely hidden. One that fits the
 // viewport must be fully visible; a larger one (a tab panel, a scroll region) only in part.
+// Fully visible allows one CSS pixel at an edge: focus scrolling lands on whole device pixels,
+// so a control at a fractional offset can end a fraction of a pixel past the viewport.
 async function focusVisibleRatio(focused: Locator): Promise<number> {
 	return focused.evaluate((el) => {
 		const r = el.getBoundingClientRect();
-		return r.width <= window.innerWidth && r.height <= window.innerHeight ? 1 : 0;
+		if (r.width > window.innerWidth || r.height > window.innerHeight) return 0;
+		return Math.max(0.5, 1 - 1 / Math.min(r.width, r.height));
+	});
+}
+
+// WCAG 2.4.11 again: author overlays (a sticky top bar, a fixed bottom bar) must not cover
+// the whole control. Probe its centre and four inset corners, clamped to the viewport.
+async function focusUnobscured(focused: Locator): Promise<boolean> {
+	return focused.evaluate((el) => {
+		const r = el.getBoundingClientRect();
+		const left = Math.max(r.left, 0) + 2;
+		const right = Math.min(r.right, window.innerWidth) - 2;
+		const top = Math.max(r.top, 0) + 2;
+		const bottom = Math.min(r.bottom, window.innerHeight) - 2;
+		if (left > right || top > bottom) return false;
+		const points = [
+			[(left + right) / 2, (top + bottom) / 2],
+			[left, top],
+			[right, top],
+			[left, bottom],
+			[right, bottom]
+		];
+		return points.some(([x, y]) => {
+			const hit = document.elementFromPoint(x, y);
+			return hit !== null && (el.contains(hit) || hit.contains(el));
+		});
 	});
 }
 
@@ -278,6 +356,9 @@ export async function assertFocusVisible(page: Page, limit = 12): Promise<void> 
 		await expect(focused, `Tab ${i + 1}: focus outside viewport`).toBeInViewport({
 			ratio: await focusVisibleRatio(focused)
 		});
+		expect(await focusUnobscured(focused), `Tab ${i + 1}: focus hidden under an overlay`).toBe(
+			true
+		);
 		const indicator = await focused.evaluate((el) => {
 			const style = getComputedStyle(el);
 			return {

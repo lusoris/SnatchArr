@@ -208,6 +208,9 @@ for (const mode of ACCESSIBILITY_MODES) {
 		test.use({ viewport: { width: mode.width, height: mode.height }, deviceScaleFactor: mode.dpr });
 		for (const route of apiMode ? AUTH_ROUTES : MOCK_ROUTES) {
 			test(`authenticated: accessibility ${route}`, async ({ page }, info) => {
+				// The live log tail appends records the other workers cause, so the text never
+				// stands still to be measured. Hold the stream; the list keeps its loaded records.
+				if (route.includes('source=log')) await page.route('**/api/v1/logs/stream*', () => {});
 				await visit(page, route);
 				await assertReflow(page);
 				const aria = await assertLandmarksAndNames(page);
@@ -242,5 +245,73 @@ test.describe('screen-range planted negatives', () => {
 			main.append(button);
 		});
 		await expect(assertLandmarksAndNames(page)).rejects.toThrow(/missing accessible name/);
+	});
+	test('authenticated: planted negative focus under overlay', async ({ page }) => {
+		await visit(page, '/');
+		await assertFocusVisible(page, 3);
+		await page.locator('body').evaluate((body) => {
+			const cover = document.createElement('div');
+			cover.style.cssText = 'position:fixed;inset:0;z-index:9999;background:white';
+			body.append(cover);
+		});
+		await expect(assertFocusVisible(page, 3)).rejects.toThrow(/focus hidden under an overlay/);
+	});
+	test('authenticated: focus past the viewport edge fails beyond one pixel', async ({ page }) => {
+		await visit(page, '/');
+		// A fixed control first in the tab order; focus scrolling cannot move it into view.
+		const plant = async (bottom: string) =>
+			page.locator('body').evaluate((body, offset) => {
+				document.getElementById('planted-edge')?.remove();
+				const button = document.createElement('button');
+				button.id = 'planted-edge';
+				button.type = 'button';
+				button.textContent = 'Planted edge';
+				button.style.cssText = `position:fixed;left:8px;bottom:${offset};height:40px;z-index:9999`;
+				body.prepend(button);
+			}, bottom);
+		await plant('-0.5px');
+		await assertFocusVisible(page, 1);
+		await plant('-4px');
+		await expect(assertFocusVisible(page, 1)).rejects.toThrow(/focus outside viewport/);
+	});
+	test('authenticated: planted negative text overlap', async ({ page }) => {
+		await visit(page, '/');
+		await assertTextNotClipped(page);
+		await page.locator('main').evaluate((main) => {
+			const box = document.createElement('div');
+			box.style.cssText = 'position:relative;height:40px';
+			for (const name of ['Planted one', 'Planted two']) {
+				const button = document.createElement('button');
+				button.type = 'button';
+				button.textContent = name;
+				button.style.cssText = 'position:absolute;left:0;top:0';
+				box.append(button);
+			}
+			main.prepend(box);
+		});
+		await expect(assertTextNotClipped(page)).rejects.toThrow(/text overlaps/);
+	});
+	// Boundary: a button scrolled out of its scroll box shares no visible area with the
+	// heading its box rect would cover, so it is no collision.
+	test('authenticated: scrolled-out text is no overlap', async ({ page }) => {
+		await visit(page, '/');
+		await page.locator('main').evaluate((main) => {
+			const heading = document.createElement('h2');
+			heading.textContent = 'Planted heading';
+			const box = document.createElement('div');
+			box.style.cssText = 'height:40px;overflow-y:auto';
+			const button = document.createElement('button');
+			button.type = 'button';
+			button.textContent = 'Scrolled away';
+			const pad = document.createElement('div');
+			pad.style.height = '400px';
+			box.append(button, pad);
+			main.prepend(heading, box);
+			// Scroll the button exactly onto the heading's place above the box.
+			box.scrollTop = Math.ceil(
+				box.getBoundingClientRect().top - heading.getBoundingClientRect().top
+			);
+		});
+		await assertTextNotClipped(page);
 	});
 });

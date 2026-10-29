@@ -73,7 +73,7 @@ SPDX-License-Identifier: EUPL-1.2
 						<p class="text-sm text-subtle">{m.modules_empty()}</p>
 					{:else}
 						<div class="relative overflow-x-auto">
-							<table class="table">
+							<table class="table-stack table">
 								<caption class="sr-only">{m.modules_title()}</caption>
 								<thead>
 									<tr>
@@ -87,12 +87,12 @@ SPDX-License-Identifier: EUPL-1.2
 								<tbody>
 									{#each modulesQuery.data ?? [] as mod (mod.id)}
 										<tr>
-											<td class="font-medium">
+											<td class="font-medium" data-label="">
 												<div class="flex flex-col">
 													<span class="font-mono text-sm text-fg">{mod.id}</span>
 												</div>
 											</td>
-											<td>
+											<td data-label={m.modules_col_status()}>
 												<div class="flex items-center gap-2">
 													<StatusIcon
 														status={mod.enabled ? 'ok' : 'disabled'}
@@ -106,7 +106,7 @@ SPDX-License-Identifier: EUPL-1.2
 												</div>
 											</td>
 											{#if session.isAdmin}
-												<td class="text-end">
+												<td class="text-end" data-label="">
 													<button
 														type="button"
 														class="btn min-h-11 px-3 py-1.5 text-xs md:min-h-0 {mod.enabled

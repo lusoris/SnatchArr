@@ -43,20 +43,18 @@ SPDX-License-Identifier: EUPL-1.2
 					<button
 						type="button"
 						aria-expanded={expandedSeq === rec.seq}
-						class="focus:ring-brand flex flex-1 cursor-pointer flex-wrap items-center gap-2 rounded text-left select-none focus:ring-1 focus:outline-none"
+						class="focus:ring-brand flex min-w-0 flex-[1_1_12rem] cursor-pointer flex-wrap items-center gap-2 rounded text-left select-none focus:ring-1 focus:outline-none"
 						onclick={() => toggleRow(rec.seq)}
 					>
 						<span class="text-xs font-semibold">{logLevelLabel(rec.level)}</span>
-						<span class="text-xs [overflow-wrap:anywhere] break-words text-subtle">
+						<span class="min-w-0 text-xs [overflow-wrap:anywhere] break-words text-subtle">
 							{rec.source}
 						</span>
-						<LinkText
-							class="min-w-0 text-xs [overflow-wrap:anywhere] break-words md:text-sm"
-							text={rec.message}
-						/>
+						<LinkText class="text-xs break-words md:text-sm" text={rec.message} />
 						{#each rec.attrs as attr, i (i)}
-							<span class="text-xs [overflow-wrap:anywhere] break-words text-subtle">
-								{attr.key}={attr.value}
+							<!-- A URL value breaks only at its separators (UrlText); other long tokens anywhere. -->
+							<span class="min-w-0 text-xs [overflow-wrap:anywhere] break-words text-subtle">
+								{attr.key}=<LinkText text={attr.value} />
 							</span>
 						{/each}
 					</button>

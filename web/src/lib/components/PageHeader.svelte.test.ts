@@ -173,7 +173,9 @@ describe('PageHeader', () => {
 		});
 
 		const header = container.querySelector('header');
-		expect(header?.className).toContain('sticky');
+		// Sticky only from a 40rem viewport height; a short screen keeps the header in the flow.
+		expect(header?.classList).toContain('[@media(height>=40rem)]:sticky');
+		expect(header?.classList).not.toContain('sticky');
 		expect(header?.className).toContain('top-0');
 		expect(screen.getByTestId('test-nav').textContent).toBe('Subtabs');
 	});

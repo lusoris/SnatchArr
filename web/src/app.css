@@ -26,6 +26,14 @@
 }
 
 @layer utilities {
+	/* A stacked table also carries the `table` display utility; this layer lets the card layout win. */
+	@media (width < 48rem) {
+		table.table-stack {
+			display: flex;
+			flex-direction: column;
+			width: 100%;
+		}
+	}
 	.text-brand {
 		color: var(--color-brand);
 	}
@@ -92,6 +100,19 @@
 	:focus-visible {
 		outline: 3px solid var(--color-brand);
 		outline-offset: 2px;
+	}
+
+	/* Focus and anchor scrolling keep their target clear of the sticky top bar (below lg) and
+	   the fixed bottom bar (below md), WCAG 2.4.11. */
+	@media (width < 64rem) {
+		html {
+			scroll-padding-top: 3.5rem;
+		}
+	}
+	@media (width < 48rem) {
+		html {
+			scroll-padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
+		}
 	}
 }
 

@@ -192,10 +192,10 @@ SPDX-License-Identifier: EUPL-1.2
 
 			<fieldset class="border-border min-w-0 rounded border p-4 md:col-span-2" data-field="rules">
 				<legend class="px-2 text-sm font-semibold">{m.queue_policy_rules_title()}</legend>
-				<!-- Below sm each rule stacks (WCAG 1.4.10 reflow at 320 CSS px); every control carries its own label. -->
+				<!-- Below md each rule stacks into a labelled card (WCAG 1.4.10 reflow at 320 CSS px). -->
 				<div class="overflow-x-auto">
-					<table class="w-full text-left text-sm max-sm:block">
-						<thead class="max-sm:sr-only">
+					<table class="table-stack w-full text-left text-sm">
+						<thead>
 							<tr class="border-border border-b">
 								<th scope="col" class="py-2 pr-4">{m.queue_strike_rule()}</th>
 								<th scope="col" class="py-2 pr-4">{m.queue_rule_mode()}</th>
@@ -203,15 +203,11 @@ SPDX-License-Identifier: EUPL-1.2
 								<th scope="col" class="py-2">{m.queue_rule_blocklist()}</th>
 							</tr>
 						</thead>
-						<tbody class="max-sm:block">
+						<tbody>
 							{#each ruleKeys as r (r.key)}
-								<tr
-									class="border-border border-b last:border-b-0 max-sm:flex max-sm:flex-wrap max-sm:items-center max-sm:gap-x-3 max-sm:py-2"
-								>
-									<td class="py-2 pr-4 font-medium max-sm:block max-sm:w-full max-sm:py-0"
-										>{r.label()}</td
-									>
-									<td class="py-2 pr-4">
+								<tr class="border-border border-b last:border-b-0">
+									<td class="py-2 pr-4 font-medium" data-label="">{r.label()}</td>
+									<td class="py-2 pr-4" data-label={m.queue_rule_mode()}>
 										<select
 											class="select"
 											aria-label={`${r.label()} ${m.queue_rule_mode()}`}
@@ -221,7 +217,7 @@ SPDX-License-Identifier: EUPL-1.2
 											<option value="act">{m.queue_rule_mode_act()}</option>
 										</select>
 									</td>
-									<td class="py-2 pr-4">
+									<td class="py-2 pr-4" data-label={m.queue_rule_threshold()}>
 										<input
 											class="input w-24"
 											type="number"
@@ -231,7 +227,7 @@ SPDX-License-Identifier: EUPL-1.2
 											bind:value={draft.rules[r.key].threshold}
 										/>
 									</td>
-									<td class="py-2">
+									<td class="py-2" data-label={m.queue_rule_blocklist()}>
 										<!-- id_matched and import_fixable import and never remove, so they have nothing to blocklist. -->
 										{#if r.key !== 'id_matched' && r.key !== 'import_fixable'}
 											<input

@@ -128,8 +128,8 @@ SPDX-License-Identifier: EUPL-1.2
 />
 
 <section aria-label={m.dlclients_title()} class="w-full">
-	<div class="grid w-full grid-cols-1 items-start gap-6 xl:grid-cols-12">
-		<div class="flex flex-col gap-4 xl:col-span-7">
+	<div class="grid w-full grid-cols-1 items-start gap-6 2xl:grid-cols-12">
+		<div class="flex flex-col gap-4 2xl:col-span-7">
 			{#if session.isAdmin}
 				<form
 					class="flex flex-wrap items-end gap-2"
@@ -210,7 +210,7 @@ SPDX-License-Identifier: EUPL-1.2
 									>
 									<td data-label={m.instance_last_check()}>
 										{#if st}
-											<div class="text-sm" role="status">
+											<div class="min-w-0 text-sm" role="status">
 												<div>
 													{st.reachable ? m.dlclients_reachable() : m.dlclients_unreachable()}
 													{#if st.reachable}· {m.dlclients_active({
@@ -221,7 +221,7 @@ SPDX-License-Identifier: EUPL-1.2
 												{#if st.error}
 													<details class="text-xs text-danger md:max-w-24">
 														<summary
-															class="line-clamp-2 cursor-pointer break-words"
+															class="line-clamp-2 cursor-pointer [overflow-wrap:anywhere]"
 															title={st.error}
 														>
 															{st.error}
@@ -265,7 +265,7 @@ SPDX-License-Identifier: EUPL-1.2
 			{/if}
 		</div>
 
-		<div class="xl:col-span-5">
+		<div class="2xl:col-span-5">
 			<AdminFormSlot {editor} {save} probe={probeInput}>
 				{#snippet form(props)}
 					<DownloadClientForm client={editor.editing} instances={instances.data ?? []} {...props} />
