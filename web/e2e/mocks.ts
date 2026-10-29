@@ -188,6 +188,119 @@ export async function mockModulesApi(
 	await page.route('**/api/v1/system/modules', (route) => route.fulfill(json(modules)));
 }
 
+// A few rows, the scale of the seeded stack: the budget measures page density, not list length.
+const ADULT_ROWS = 3;
+
+export const sampleAdultSources = Array.from({ length: ADULT_ROWS }, (_, i) => ({
+	id: `00000000-0000-0000-0004-${String(i + 1).padStart(12, '0')}`,
+	name: `Adult Source ${i + 1}`,
+	endpoint: `https://source-${i + 1}.example.com/graphql`,
+	has_api_key: true,
+	enabled: true,
+	sync_favorites: true,
+	priority: i + 1,
+	last_sync_at: '2026-10-21T06:19:00Z',
+	created_at: '2026-10-21T06:19:00Z',
+	updated_at: '2026-10-21T06:19:00Z'
+}));
+
+export const sampleAdultPerformers = Array.from({ length: ADULT_ROWS }, (_, i) => ({
+	id: `00000000-0000-0000-0005-${String(i + 1).padStart(12, '0')}`,
+	name: `Performer ${i + 1}`,
+	canonical_name: `Performer ${i + 1}`,
+	disambiguation: `Stage ${i + 1}`,
+	urls: [`https://example.com/performer/${i + 1}`],
+	is_favorite: i % 2 === 0,
+	ref_count: (i + 1) * 3,
+	created_at: '2026-10-21T06:19:00Z',
+	updated_at: '2026-10-21T06:19:00Z'
+}));
+
+export const sampleAdultStudios = Array.from({ length: ADULT_ROWS }, (_, i) => ({
+	id: `00000000-0000-0000-0006-${String(i + 1).padStart(12, '0')}`,
+	name: `Studio ${i + 1}`,
+	canonical_name: `Studio ${i + 1}`,
+	urls: [`https://example.com/studio/${i + 1}`],
+	is_favorite: i % 2 === 0,
+	ref_count: (i + 1) * 2,
+	created_at: '2026-10-21T06:19:00Z',
+	updated_at: '2026-10-21T06:19:00Z'
+}));
+
+export const sampleAdultImageSets = Array.from({ length: ADULT_ROWS }, (_, i) => ({
+	id: `00000000-0000-0000-0007-${String(i + 1).padStart(12, '0')}`,
+	title: `Image Set ${i + 1}`,
+	directory_path: `/data/adult/images/set-${i + 1}`,
+	item_count: 10 + i,
+	total_size_bytes: (i + 1) * 1024 * 1024 * 5,
+	created_at: '2026-10-21T06:19:00Z',
+	updated_at: '2026-10-21T06:19:00Z'
+}));
+
+export const sampleAdultImageItems = Array.from({ length: 12 }, (_, i) => ({
+	id: `00000000-0000-0000-0008-${String(i + 1).padStart(12, '0')}`,
+	image_set_id: sampleAdultImageSets[0].id,
+	file_path: `/data/adult/images/set-1/${String(i + 1).padStart(3, '0')}.png`,
+	file_name: `${String(i + 1).padStart(3, '0')}.png`,
+	file_size_bytes: 1024 * 500,
+	mime_type: 'image/png',
+	sha256_checksum: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+	sort_order: i,
+	created_at: '2026-10-21T06:19:00Z'
+}));
+
+export const sampleAdultImageSetDetail = {
+	...sampleAdultImageSets[0],
+	items: sampleAdultImageItems,
+	ignore_file_present: true
+};
+
+export const adultRowExpectations: Record<string, string> = {
+	'/adult/image-sets': 'Image Set 1',
+	'/adult/performers': 'Performer 1',
+	'/adult/sources': 'Adult Source 1',
+	'/adult/studios': 'Studio 1'
+};
+
+export async function mockAdultListApi(page: Page): Promise<void> {
+	await page.route('**/api/v1/adult/sources*', (route) => {
+		if (route.request().method() !== 'GET') return route.fallback();
+		return route.fulfill(json(sampleAdultSources));
+	});
+	await page.route('**/api/v1/adult/performers*', (route) => {
+		if (route.request().method() !== 'GET') return route.fallback();
+		return route.fulfill(json({ items: sampleAdultPerformers }));
+	});
+	await page.route('**/api/v1/adult/studios*', (route) => {
+		if (route.request().method() !== 'GET') return route.fallback();
+		return route.fulfill(json({ items: sampleAdultStudios }));
+	});
+	await page.route('**/api/v1/adult/image-sets*', (route) => {
+		if (route.request().method() !== 'GET') return route.fallback();
+		return route.fulfill(json({ items: sampleAdultImageSets, total: sampleAdultImageSets.length }));
+	});
+	// A glob `*` stops at `/`, so the detail path needs its own route.
+	await page.route('**/api/v1/adult/image-sets/*', (route) => {
+		if (route.request().method() !== 'GET') return route.fallback();
+		return route.fulfill(json(sampleAdultImageSetDetail));
+	});
+	await page.route('**/api/v1/adult/sync/status*', (route) => {
+		if (route.request().method() !== 'GET') return route.fallback();
+		return route.fulfill(
+			json({
+				total_sources: sampleAdultSources.length,
+				enabled_sources: sampleAdultSources.length,
+				performers_synced: sampleAdultPerformers.length,
+				studios_synced: sampleAdultStudios.length,
+				last_sync_at: '2026-10-21T06:19:00Z'
+			})
+		);
+	});
+	await page.route('**/api/v1/adult/image-items/*/file', (route) =>
+		route.fulfill({ status: 200, contentType: 'image/png', body: '' })
+	);
+}
+
 export async function mockInstancePolicyApi(
 	page: Page,
 	instanceId: string,
