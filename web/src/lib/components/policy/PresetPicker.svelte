@@ -32,7 +32,7 @@ SPDX-License-Identifier: EUPL-1.2
 				title={preset.description()}
 			>
 				<span class="text-xs font-semibold">{preset.label()}</span>
-				<span class="line-clamp-2 text-xs text-subtle">{preset.description()}</span>
+				<span class="text-xs text-subtle">{preset.description()}</span>
 			</button>
 		{/each}
 	</div>

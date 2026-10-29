@@ -208,10 +208,10 @@ SPDX-License-Identifier: EUPL-1.2
 	</section>
 
 	<!-- Row 2: 12-col grid desktop, 2-col tablet, 1-col phone -->
-	<div class="grid min-w-0 grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-12">
+	<div class="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-12">
 		<!-- Left: 8 col desktop -->
 		<section
-			class="col-span-1 flex min-w-0 flex-col gap-4 md:col-span-1 xl:col-span-8"
+			class="col-span-1 flex min-w-0 flex-col gap-4 xl:col-span-8"
 			aria-labelledby="fleet-heading"
 		>
 			{#if instances.isPending}
@@ -322,10 +322,7 @@ SPDX-License-Identifier: EUPL-1.2
 												>
 											{:else}—{/if}
 										</td>
-										<td
-											class="text-xs whitespace-nowrap text-subtle"
-											data-label={m.overview_next_window()}
-										>
+										<td class="text-xs text-subtle" data-label={m.overview_next_window()}>
 											{#if nextSchedule}<a href={pageHref('/automation')} class="hover:underline"
 													>{formatScheduleWindow(nextSchedule)}</a
 												>{:else}—{/if}
@@ -364,7 +361,7 @@ SPDX-License-Identifier: EUPL-1.2
 		</section>
 
 		<!-- Right: 4 col desktop -->
-		<div class="col-span-1 flex min-w-0 flex-col gap-6 md:col-span-1 xl:col-span-4">
+		<div class="col-span-1 flex min-w-0 flex-col gap-6 xl:col-span-4">
 			<!-- Recent activity -->
 			<section
 				class="card flex min-w-0 flex-col gap-3 p-4"

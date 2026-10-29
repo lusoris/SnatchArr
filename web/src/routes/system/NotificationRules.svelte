@@ -114,7 +114,10 @@ SPDX-License-Identifier: EUPL-1.2
 	<p class="card">{m.notifications_empty_rules()}</p>
 {:else}
 	<div class="relative overflow-x-auto">
-		<table class="table-stack table">
+		<!-- From xl the rules share a 5/12 column; under WCAG text spacing long words break so they fit it. -->
+		<table
+			class="table-stack table xl:[&_td]:[overflow-wrap:anywhere] xl:[&_th]:[overflow-wrap:anywhere]"
+		>
 			<caption class="sr-only">{m.notifications_rules_title()}</caption>
 			<thead>
 				<tr>
