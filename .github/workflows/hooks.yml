@@ -1,0 +1,19 @@
+name: hooks
+
+# Fails when the commit-msg hook copies in .config/hooks drift from the plurano/horistes files at
+# the pinned commit, then runs the hook's own test against the copy.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions: {}
+
+jobs:
+  hooks:
+    name: Hooks
+    permissions:
+      contents: read
+    uses: plurano/horistes/.github/workflows/hook-copy.yml@c9632c6f9a06ccd560ffe4e1637649bcf19221db # main
