@@ -50,6 +50,10 @@ func TestProbe_Product(t *testing.T) {
 		{"bookshelf at a version readarr built", domain.KindReadarr, "Readarr", "0.4.18.2805", pennydreadful, domain.ProductBookshelf},
 		{"faustvii at a version readarr built", domain.KindReadarr, "Readarr", "0.4.19.0", faustvii, domain.ProductReadarrFaustvii},
 		{"rresurrected at a version readarr built", domain.KindReadarr, "Readarr", "0.4.18.2805", rresurrected, domain.ProductReadarrRresurrected},
+		// A newer Readarr without a packager is a fork that cannot be told apart; the
+		// readarr-rresurrected image ships its package_info where Servarr does not read it.
+		{"a newer readarr without a packager", domain.KindReadarr, "Readarr", "11.3.1.0", "", domain.ProductReadarrFork},
+		{"a newer readarr with a blank packager", domain.KindReadarr, "Readarr", "0.4.21.182", "  ", domain.ProductReadarrFork},
 		// Negative.
 		{"a newer readarr from nobody known", domain.KindReadarr, "Readarr", "0.4.21.182", linuxserver, domain.ProductUnknown},
 		{"another application", domain.KindReadarr, "Lidarr", "0.4.18.2805", linuxserver, domain.ProductUnknown},
@@ -58,6 +62,7 @@ func TestProbe_Product(t *testing.T) {
 		{"another application from a known packager", domain.KindReadarr, "Lidarr", "0.4.21.182", pennydreadful, domain.ProductUnknown},
 		{"no name", domain.KindReadarr, "", "0.4.18.2805", "", domain.ProductUnknown},
 		{"no version", domain.KindReadarr, "Readarr", "", "", domain.ProductUnknown},
+		{"an unreadable version without a packager", domain.KindReadarr, "Readarr", "11.x", "", domain.ProductUnknown},
 		{"a version that is no number", domain.KindReadarr, "Readarr", "nightly", "", domain.ProductUnknown},
 		{"a version with a letter in it", domain.KindReadarr, "Readarr", "0.4.x", "", domain.ProductUnknown},
 		{"a negative version", domain.KindReadarr, "Readarr", "0.-4.18", "", domain.ProductUnknown},
@@ -66,12 +71,12 @@ func TestProbe_Product(t *testing.T) {
 		// Boundary: 0.4.19 is the last line the retired Readarr built.
 		{"the last readarr line", domain.KindReadarr, "Readarr", "0.4.19", "", domain.ProductReadarr},
 		{"the last readarr line, any build", domain.KindReadarr, "Readarr", "0.4.19.99999", "", domain.ProductReadarr},
-		{"one patch above", domain.KindReadarr, "Readarr", "0.4.20.0", "", domain.ProductUnknown},
-		{"one minor above", domain.KindReadarr, "Readarr", "0.5.0.0", "", domain.ProductUnknown},
-		{"one major above", domain.KindReadarr, "Readarr", "1.0.0.0", "", domain.ProductUnknown},
+		{"one patch above", domain.KindReadarr, "Readarr", "0.4.20.0", "", domain.ProductReadarrFork},
+		{"one minor above", domain.KindReadarr, "Readarr", "0.5.0.0", "", domain.ProductReadarrFork},
+		{"one major above", domain.KindReadarr, "Readarr", "1.0.0.0", "", domain.ProductReadarrFork},
 		{"a lower minor with a higher patch", domain.KindReadarr, "Readarr", "0.3.99.1", "", domain.ProductReadarr},
 		{"two numbers only", domain.KindReadarr, "Readarr", "0.4", "", domain.ProductReadarr},
-		{"one number only", domain.KindReadarr, "Readarr", "1", "", domain.ProductUnknown},
+		{"one number only", domain.KindReadarr, "Readarr", "1", "", domain.ProductReadarrFork},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

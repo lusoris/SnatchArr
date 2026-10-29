@@ -18,6 +18,7 @@ const names = {
 	chaptarr: () => 'Chaptarr',
 	readarr_faustvii: () => m.instance_product_readarr_faustvii(),
 	readarr_rresurrected: () => m.instance_product_readarr_rresurrected(),
+	readarr_fork: () => m.instance_product_readarr_fork(),
 	unknown: undefined
 } as const satisfies Record<ArrProduct, (() => string) | undefined>;
 
