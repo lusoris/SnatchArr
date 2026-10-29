@@ -7,7 +7,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # ADR-0044: Runtime Settings Parity Between Environment, API and UI
 
-- **Status**: Accepted
+- **Status**: Accepted (item 6 pending an operator decision)
 - **Date**: 2026-10-29
 - **Deciders**: lusoris
 
@@ -34,13 +34,13 @@ The operator asked for parity (paraphrased): every non-secret setting gets a UI 
 3. **Bootstrap values are read-only.** They are returned with `source` and value (never a DSN password, which is redacted) and cannot be written through the API, because they are needed before the store is open.
 4. **Secrets are write-only.** A storable secret is encrypted at rest with the existing `core/crypto` AES-GCM encryptor (`api/internal/app/crypto.go`). Reads return only `{set: bool, source}`; writes replace or clear the value. Secrets the store or its encryption depends on stay environment-only: `APP_DB_*`, `APP_CRYPTO_KEY`, the worker token and the API key signing secret.
 5. **Writes are validated as a whole.** `PUT /api/v1/settings/runtime` merges the patch into the effective options and runs `Options.Validate`; a failing merge returns a `422` problem naming the key, and nothing is stored. Admin role only; every write records the key, the acting user and the time in `runtime_settings`, never a secret value, and logs the key name.
-6. **Apply on restart first.** Most consumers (OIDC provider, session manager, proxy trust) are built once by fx. A key marked `restart` returns `pending_restart: true` after a write, and the UI says so. Keys are moved to live apply one at a time as their consumers learn to reload.
+6. **Apply timing is open.** When a changed value takes effect is an open operator decision. Options under review: apply on restart, live apply for all runtime settings, or live apply for a named set. The first implementation applies stored values at the next start, because most consumers (OIDC provider, session manager, proxy trust) are built once by fx; that path is the base the other options build on, not the final behaviour. Until the decision is recorded, a write returns `pending_restart: true` for every key and the UI says so.
 7. **Parity is a test.** A generated parity table (`docs/configuration.md` section and a committed TSV) lists each key with its class, UI field and docs row. A Go test fails when a registry key lacks a UI field (non-secret runtime), a docs row, or a class, and when a variable read by the code is missing from the registry. Its negative case is a planted key without a UI field.
 
 ## Consequences
 
 - Administrators see every setting and its source in the UI and can change runtime settings without editing deployment files.
 - Deployments that set everything through the environment keep working unchanged: every such field shows as locked.
-- Changes to most keys need a restart until their consumers reload; the UI states this per key.
+- Until the apply-timing decision is recorded, changes take effect at the next start; this record is amended when it is.
 - Adding a setting now means a registry entry; the parity test refuses a key without a UI field and docs row.
 - A database restore also restores runtime overrides; the environment still wins over them.

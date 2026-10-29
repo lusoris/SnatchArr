@@ -68,6 +68,77 @@ UI.
 | `APP_SNATCHARR_METRICS_ADDR` | | Dedicated HTTP listen address for Prometheus `/metrics` (e.g. `:9464`); empty leaves `/metrics` on main HTTP port |
 | `APP_OTEL_ENABLED` | `true` | OpenTelemetry export (no-op without an endpoint) |
 | `APP_LOG_FORMAT` | `json` | `json` or `text` |
+| `APP_SNATCHARR_OIDC_ALLOWED_SUBJECTS` | | Deprecated; rejected if set |
+| `APP_SNATCHARR_OIDC_ALLOWED_EMAILS` | | Deprecated; rejected if set |
+| `APP_SNATCHARR_PROXY_AUTH_ALLOWED_USERS` | | Deprecated; rejected if set |
+| `APP_SNATCHARR_ITEM_SEARCH_COOLDOWN_SECONDS` | `60` | Per-user item search cooldown in seconds (0 = off) |
+| `APP_HTTP_TIMEOUTS_READ` | `30s` | HTTP server read timeout |
+| `APP_HTTP_TIMEOUTS_HEADER` | `5s` | HTTP server header read timeout |
+| `APP_HTTP_TIMEOUTS_WRITE` | `60s` | HTTP server write timeout |
+| `APP_HTTP_TIMEOUTS_IDLE` | `120s` | HTTP server keep-alive idle timeout |
+| `APP_HTTP_TIMEOUTS_SHUTDOWN` | `30s` | HTTP server graceful shutdown timeout |
+| `APP_HTTP_LIMITS_HEADER` | `1048576` | HTTP server maximum header size in bytes |
+| `APP_HTTP_LIMITS_BODY` | `10485760` | HTTP server maximum request body size in bytes |
+| `APP_HTTP_LIMITS_UNLIMITED` | `false` | Disable HTTP server request body limit |
+| `APP_HTTP_TLS_CERT` | | Path to TLS certificate file for HTTP server |
+| `APP_HTTP_TLS_KEY` | | Path to TLS private key file for HTTP server |
+| `APP_HTTP_TLS_CA` | | Path to TLS client CA bundle for HTTP server |
+| `APP_HTTP_TLS_CLIENTAUTH` | | Client certificate validation policy for HTTP server |
+| `APP_GRPC_TLS` | `false` | Enable TLS on gRPC worker listener |
+| `APP_GRPC_CERT_FILE` | | Path to TLS certificate file for gRPC worker listener |
+| `APP_GRPC_KEY_FILE` | | Path to TLS private key file for gRPC worker listener |
+| `APP_GRPC_MAX_RECV_SIZE` | `4194304` | Maximum incoming gRPC message size in bytes |
+| `APP_GRPC_MAX_SEND_SIZE` | `4194304` | Maximum outgoing gRPC message size in bytes |
+| `APP_GRPC_CA_FILE` | | Path to TLS CA bundle for gRPC client certificate verification |
+| `APP_GRPC_CLIENT_AUTH` | | Client certificate authentication policy for gRPC worker listener |
+| `APP_GRPC_KEEPALIVE_TIME` | `1m` | gRPC server keepalive ping interval |
+| `APP_GRPC_KEEPALIVE_TIMEOUT` | `20s` | gRPC server keepalive ping acknowledgement timeout |
+| `APP_GRPC_KEEPALIVE_MIN_TIME` | `5m` | Minimum client ping interval accepted by gRPC server |
+| `APP_GRPC_KEEPALIVE_PERMIT_WITHOUT_STREAM` | `false` | Permit gRPC client pings when there are no active streams |
+| `APP_GRPC_HEALTH` | `false` | Register standard gRPC health checking service |
+| `APP_GRPC_CLIENT_TLS` | `false` | Enable TLS for outgoing gRPC client connections |
+| `APP_GRPC_CLIENT_CERT_FILE` | | Path to TLS certificate file for gRPC client |
+| `APP_GRPC_CLIENT_KEY_FILE` | | Path to TLS private key file for gRPC client |
+| `APP_GRPC_CLIENT_CA_FILE` | | Path to TLS CA bundle for gRPC client |
+| `APP_GRPC_CLIENT_SERVER_NAME` | | Server name override for gRPC client TLS verification |
+| `APP_GRPC_CLIENT_KEEPALIVE_TIME` | | gRPC client keepalive ping interval |
+| `APP_GRPC_CLIENT_KEEPALIVE_TIMEOUT` | | gRPC client keepalive ping timeout |
+| `APP_GRPC_CLIENT_KEEPALIVE_PERMIT_WITHOUT_STREAM` | `false` | Permit gRPC client pings without active streams |
+| `APP_GRPC_CLIENT_RETRY_MAX_ATTEMPTS` | `0` | Maximum retry attempts for gRPC client calls |
+| `APP_GRPC_CLIENT_RETRY_INITIAL_BACKOFF` | `100ms` | Initial backoff duration for gRPC client retries |
+| `APP_GRPC_CLIENT_RETRY_MAX_BACKOFF` | `1s` | Maximum backoff duration for gRPC client retries |
+| `APP_GRPC_CLIENT_RETRY_BACKOFF_MULTIPLIER` | `2` | Backoff multiplier for gRPC client retries |
+| `APP_DB_PASSWORD_FILE` | | Path to file containing database password |
+| `APP_DB_READ_DSN` | | Postgres DSN for read-only replica queries |
+| `APP_DB_SSL_MODE` | | Postgres SSL connection mode (disable, require, verify-ca, verify-full) |
+| `APP_DB_SSL_ROOTCERT` | | Path to root certificate for Postgres SSL verification |
+| `APP_DB_SSL_CERT` | | Path to client certificate for Postgres SSL authentication |
+| `APP_DB_SSL_KEY` | | Path to client private key for Postgres SSL authentication |
+| `APP_DB_POOL_MIN` | `0` | Minimum number of connections in database connection pool |
+| `APP_DB_POOL_MAX` | `10` | Maximum number of connections in database connection pool |
+| `APP_DB_POOL_LIFETIME` | `1h` | Maximum lifetime of connections in database pool |
+| `APP_DB_POOL_IDLE` | `30m` | Maximum idle duration before closing a database pool connection |
+| `APP_DB_POOL_HEALTHCHECK` | `1m` | Healthcheck interval for connections in database pool |
+| `APP_DB_CONNECT_TIMEOUT` | `5s` | Timeout for establishing a database connection |
+| `APP_DB_RETRY_ATTEMPTS` | `10` | Maximum retry attempts when connecting to database |
+| `APP_DB_RETRY_INITIAL` | `50ms` | Initial retry backoff when connecting to database |
+| `APP_DB_RETRY_MAX` | `5s` | Maximum retry backoff when connecting to database |
+| `APP_DB_TRACING_SLOW` | `200ms` | Execution threshold above which database queries are logged as slow |
+| `APP_DB_MIGRATE_PATH` | | Filesystem path to database migration files (overridden by embedded migrations) |
+| `APP_DB_MIGRATE_AUTO` | `false` | Automatically run database migrations at startup |
+| `APP_DB_MIGRATE_DSN` | | Dedicated Postgres DSN for running database migrations |
+| `APP_OTEL_ENDPOINT` | | OpenTelemetry collector gRPC/HTTP endpoint |
+| `APP_OTEL_INSECURE` | `true` | Allow insecure communication with OpenTelemetry collector |
+| `APP_OTEL_SERVICE_NAME` | | Service name reported in OpenTelemetry resource attributes |
+| `APP_OTEL_SERVICE_VERSION` | | Service version reported in OpenTelemetry resource attributes |
+| `APP_OTEL_SERVICE_NAMESPACE` | | Service namespace reported in OpenTelemetry resource attributes |
+| `APP_OTEL_SAMPLE_RATIO` | `1.0` | Trace sampling ratio between 0.0 and 1.0 |
+| `APP_OTEL_EXPORT_TRACES` | `true` | Export OpenTelemetry distributed trace spans |
+| `APP_OTEL_EXPORT_METRICS` | `true` | Export OpenTelemetry metric points |
+| `APP_OTEL_EXPORT_LOGS` | `true` | Export OpenTelemetry log records |
+| `APP_OTEL_EXPORT_PROMETHEUS` | `false` | Enable OpenTelemetry Prometheus exporter |
+| `APP_OTEL_LOGS_TRACE_IDS` | `true` | Include active trace and span IDs in application logs |
+| `APP_LOG_LEVEL` | `info` | Root logger minimum severity level (debug, info, warn, error) |
 
 ## Worker (`snatch-worker`)
 
