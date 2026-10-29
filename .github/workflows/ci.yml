@@ -180,6 +180,10 @@ jobs:
               - '.github/workflows/ci.yml'
             proto:
               - 'proto/**'
+              - 'Makefile'
+              # The buf pin: make proto-gen runs it from there.
+              - 'tools/go/go.mod'
+              - 'tools/go/go.sum'
               - '.github/workflows/ci.yml'
             deploy:
               - 'deploy/**'
@@ -693,6 +697,8 @@ jobs:
           archive: false
           # The workflow token is read-only; results go to the job log instead of a PR comment.
           pr_comment: false
+      # make proto-gen runs buf at the tools/go/go.mod pin through go tool, not the action's buf.
+      - uses: ./.github/actions/setup-go
       - name: Generated Go stubs are committed
         # make proto-gen = buf generate + the HISS-09 SAFETY post-pass; raw buf generate would drift.
         run: make proto-gen && git diff --exit-code -- api/internal/gen
