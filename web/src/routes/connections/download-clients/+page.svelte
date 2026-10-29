@@ -185,7 +185,7 @@ SPDX-License-Identifier: EUPL-1.2
 										<div class="flex items-center gap-2">
 											<AppLogo kind={c.kind} size={18} />
 											<h2
-												class="text-sm font-semibold break-words md:max-w-28 md:truncate"
+												class="text-sm font-semibold break-words md:max-w-22 md:truncate"
 												title={c.name}
 											>
 												{c.name}

@@ -102,7 +102,10 @@ SPDX-License-Identifier: EUPL-1.2
 				<LimitsSection bind:policy={draft} />
 			</div>
 			<div class="flex flex-col gap-6">
-				<PolicyFilters {instanceId} bind:policy={draft} />
+				<!-- The filter options are read from the *arr app, which only admins may ask. -->
+				{#if session.isAdmin}
+					<PolicyFilters {instanceId} bind:policy={draft} />
+				{/if}
 				<AppSpecificSection bind:policy={draft} kind={instance.data?.kind} />
 				<SafetySection bind:policy={draft} />
 			</div>
