@@ -29,7 +29,14 @@ import {
 	VIEWPORTS,
 	WIDTH_PENDING
 } from './layout.js';
-import { json, mockModulesApi, mockSettingsApi, mockSignedInApi } from './mocks.js';
+import {
+	adultRowExpectations,
+	json,
+	mockAdultListApi,
+	mockModulesApi,
+	mockSettingsApi,
+	mockSignedInApi
+} from './mocks.js';
 
 const served = !!process.env.SNATCHARR_SERVED_URL;
 if (served && !process.env.SNATCHARR_SERVED_STATE) {
@@ -661,16 +668,30 @@ async function gotoBudgetRoute(page: Page, pattern: string): Promise<void> {
 	if (pattern.startsWith('/adult/')) {
 		await mockSignedInApi(page);
 		await mockModulesApi(page, [{ id: 'adult', enabled: true }]);
+		await mockAdultListApi(page);
 	}
 	const route = pattern.replace('[id]', instanceId());
 	await page.goto(route);
 	await page.waitForLoadState('networkidle');
-	// networkidle comes before the queries render; measuring then sees the loading state, so
-	// a page whose data overflows the budget would pass.
+	// Auth drop: an unauthenticated session redirects to /login and would pass as a short page.
+	expect(new URL(page.url()).pathname).toBe(route.split('?')[0]);
 	// The error page (status as heading, e.g. "404 - Page not found") is short and would pass.
 	await expect(page.getByRole('heading', { level: 1, name: /^\d{3}\b/ })).toHaveCount(0);
+	// Instance not-found: a missing instance renders a short error card and would pass.
+	await expect(
+		page.getByRole('heading', { level: 1, name: /^(Instance not found|Instanz nicht gefunden)$/ })
+	).toHaveCount(0);
+	// A failed query renders a one-line ProblemNote in place of the page and would pass.
+	await expect(page.locator('main p[role="alert"].border-danger')).toHaveCount(0);
+	// Instance loading: pending instance query shows a pulse placeholder and would pass.
+	await expect(page.locator('[role="status"].animate-pulse')).toHaveCount(0);
 	await expect(page.getByText(/^(Loading…|Lädt …)$/)).toHaveCount(0);
 	await expect(page.locator('[data-testid="skeleton"]')).toHaveCount(0);
+	// Adult empty state: list endpoints must render populated rows so the budget measures content.
+	const expectedAdultRow = adultRowExpectations[pattern];
+	if (expectedAdultRow) {
+		await expect(page.getByText(expectedAdultRow).first()).toBeVisible();
+	}
 }
 
 function pageRoutes(dir: string, prefix = ''): string[] {
