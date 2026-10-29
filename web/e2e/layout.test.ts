@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import {
+	assertCardScrollsToLast,
 	assertDesktopWidth,
 	assertPhoneFit,
 	assertGridRowAlignment,
@@ -333,11 +334,11 @@ async function mockCommonLongDataShell(page: Page): Promise<void> {
 	);
 }
 
-async function mockDashboardLongDataRoute(page: Page): Promise<void> {
+async function mockDashboardLongDataRoute(page: Page, instanceCount = 30): Promise<void> {
 	await mockCommonLongDataShell(page);
 	await page.route('**/api/v1/instances', (route) => {
 		if (route.request().method() !== 'GET') return route.fallback();
-		return route.fulfill(json(longDashboardInstances));
+		return route.fulfill(json(longDashboardInstances.slice(0, instanceCount)));
 	});
 	await page.route('**/api/v1/hourly-caps', (route) => {
 		if (route.request().method() !== 'GET') return route.fallback();
@@ -679,6 +680,52 @@ if (!served) {
 		await assertScrollBudget(page, '/');
 	});
 
+	// Every capped dashboard card scrolls inside the card to its last row; eight instances is
+	// the fleet that showed five rows and no way to the other three.
+	for (const viewport of [
+		{ name: 'desktop', size: { width: 1280, height: 800 } },
+		{ name: 'phone', size: VIEWPORTS.phone }
+	]) {
+		test(`authenticated: dashboard cards scroll to their last row inside the card (${viewport.name})`, async ({
+			page
+		}) => {
+			await page.setViewportSize(viewport.size);
+			await mockDashboardLongDataRoute(page, 8);
+			await page.goto('/');
+			await page.waitForLoadState('networkidle');
+			await expect(page.getByRole('link', { name: 'sonarr-1', exact: true })).toBeVisible();
+			await expect(page.getByTestId('card-scroll-hint').first()).toHaveText(/\+3\s*3 more below/);
+			await assertCardScrollsToLast(page, 'Instance fleet', 'sonarr-8');
+			await assertCardScrollsToLast(page, 'Recent activity', 'Event 20 S01E20');
+			await assertCardScrollsToLast(page, 'Schedules', 'Schedule 30');
+			await assertCardScrollsToLast(page, 'Prowlarr indexer stamina', 'Prowlarr 30');
+		});
+	}
+
+	test('authenticated: dashboard card scroll planted negative: a cap without scroll fails', async ({
+		page
+	}) => {
+		await page.setViewportSize({ width: 1280, height: 800 });
+		await mockDashboardLongDataRoute(page, 8);
+		await page.goto('/');
+		await page.waitForLoadState('networkidle');
+		await expect(page.getByRole('link', { name: 'sonarr-1', exact: true })).toBeVisible();
+		// Plant the old card: rows past the cap removed and the body clipped instead of scrolled.
+		await page.evaluate(() => {
+			const body = document.querySelector<HTMLElement>(
+				'[aria-label="Instance fleet, scrollable list"][role=region]'
+			);
+			if (!body) throw new Error('no fleet region');
+			body.querySelectorAll('tbody > tr').forEach((tr, i) => {
+				if (i >= 5) tr.remove();
+			});
+			body.style.overflow = 'hidden';
+		});
+		await expect(assertCardScrollsToLast(page, 'Instance fleet', 'sonarr-8')).rejects.toThrow(
+			/Instance fleet: (no scrolling region|region is not in the tab order|body does not scroll|last row "sonarr-8")/
+		);
+	});
+
 	test('authenticated: layout scroll budget /instances/[id]/activity long data at 1280x800', async ({
 		page
 	}) => {
@@ -710,6 +757,8 @@ if (!served) {
 		// Phone shows five run cards and a show-all toggle instead of a nested scroll box.
 		const runs = page.getByRole('region', { name: 'Run history' }).locator('tbody tr');
 		await expect(runs.filter({ visible: true })).toHaveCount(5);
+		// The capped cards render no box; the stacked checks must skip them, not flag the fifth card.
+		await assertRenderedLayout(page, '/instances/[id]/activity');
 		await assertScrollBudget(page, '/instances/[id]/activity', 2 * VIEWPORTS.phone.height);
 		const toggle = page.getByRole('button', { name: 'Show all 20 runs' });
 		await toggle.click();

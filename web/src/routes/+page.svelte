@@ -11,6 +11,8 @@ SPDX-License-Identifier: EUPL-1.2
 	import EventDialog from '#lib/components/activity/EventDialog.svelte';
 	import RunDialog from '#lib/components/activity/RunDialog.svelte';
 	import AppLogo from '#lib/components/AppLogo.svelte';
+	import CardScroll from '#lib/components/CardScroll.svelte';
+	import CardScrollHint from '#lib/components/CardScrollHint.svelte';
 	import ConfirmAction from '#lib/components/ConfirmAction.svelte';
 	import EmptyFleetOnboarding from '#lib/components/EmptyFleetOnboarding.svelte';
 	import { HELP_MAP } from '#lib/help.js';
@@ -225,9 +227,12 @@ SPDX-License-Identifier: EUPL-1.2
 			{:else}
 				<div class="card max-w-full min-w-0 overflow-hidden p-0">
 					<div class="flex items-center justify-between border-b border-line px-4 py-3">
-						<h2 id="fleet-heading" class="text-base font-semibold">
-							{m.overview_fleet_title()}
-						</h2>
+						<div class="flex min-w-0 items-baseline gap-2">
+							<h2 id="fleet-heading" class="text-base font-semibold">
+								{m.overview_fleet_title()}
+							</h2>
+							<CardScrollHint hidden={fleetRows.hidden} />
+						</div>
 						{@render seeAllLink(
 							'/instances',
 							fleetRows.cut
@@ -235,10 +240,15 @@ SPDX-License-Identifier: EUPL-1.2
 								: m.nav_instances()
 						)}
 					</div>
-					<div class="relative w-full overflow-x-auto">
+					<CardScroll
+						label={m.overview_fleet_title()}
+						cap={fleetRows.cap}
+						total={fleetRows.total}
+						rowSelector="tbody > tr"
+					>
 						<table class="compact-table table-stack table w-full">
 							<caption class="sr-only">{m.overview_fleet_title()}</caption>
-							<thead>
+							<thead class="bg-card md:sticky md:top-0 md:z-10">
 								<tr>
 									<th scope="col" class="w-10 text-center">
 										<span class="sr-only">{m.schedule_status()}</span>
@@ -252,7 +262,7 @@ SPDX-License-Identifier: EUPL-1.2
 								</tr>
 							</thead>
 							<tbody>
-								{#each fleetRows.shown as inst (inst.id)}
+								{#each fleetRows.rows as inst (inst.id)}
 									{@const instStatus = instanceStatus(inst)}
 									{@const cap = capFor(inst, caps.data)}
 									{@const lastRun = lastRunForInstance(runs.data, inst.id)}
@@ -348,7 +358,7 @@ SPDX-License-Identifier: EUPL-1.2
 								{/each}
 							</tbody>
 						</table>
-					</div>
+					</CardScroll>
 				</div>
 			{/if}
 		</section>
@@ -361,9 +371,12 @@ SPDX-License-Identifier: EUPL-1.2
 				aria-labelledby="overview-activity-title"
 			>
 				<div class="flex items-center justify-between">
-					<h2 id="overview-activity-title" class="text-base font-semibold">
-						{m.overview_recent_activity()}
-					</h2>
+					<div class="flex min-w-0 items-baseline gap-2">
+						<h2 id="overview-activity-title" class="text-base font-semibold">
+							{m.overview_recent_activity()}
+						</h2>
+						<CardScrollHint hidden={eventRows.hidden} />
+					</div>
 					{@render seeAllLink('/activity', m.overview_view_all_activity())}
 				</div>
 				{#if events.isPending}
@@ -377,36 +390,43 @@ SPDX-License-Identifier: EUPL-1.2
 				{:else if eventRows.total === 0}
 					<p class="text-xs text-subtle">{m.overview_no_recent_events()}</p>
 				{:else}
-					<ul class="flex flex-col divide-y divide-line text-xs">
-						{#each eventRows.shown as ev (ev.id)}
-							<li>
-								<button
-									type="button"
-									data-testid="dashboard-event"
-									data-event-type={ev.type}
-									class="flex w-full items-center justify-between gap-2 py-2 text-left hover:bg-surface"
-									onclick={() => {
-										selectedEvent = ev;
-										eventOpen = true;
-									}}
-								>
-									<span class="flex min-w-0 items-center gap-2">
-										<StatusIcon
-											status={eventStatus(ev.level)}
-											label={eventLevelLabel(ev.level)}
-											size={14}
-										/>
-										<span class="truncate font-medium text-fg" title={ev.title ?? ev.type}>
-											{ev.title ?? ev.type}
+					<CardScroll
+						label={m.overview_recent_activity()}
+						cap={eventRows.cap}
+						total={eventRows.total}
+						rowSelector="li"
+					>
+						<ul class="flex flex-col divide-y divide-line text-xs">
+							{#each eventRows.rows as ev (ev.id)}
+								<li>
+									<button
+										type="button"
+										data-testid="dashboard-event"
+										data-event-type={ev.type}
+										class="flex w-full items-center justify-between gap-2 py-2 text-left hover:bg-surface"
+										onclick={() => {
+											selectedEvent = ev;
+											eventOpen = true;
+										}}
+									>
+										<span class="flex min-w-0 items-center gap-2">
+											<StatusIcon
+												status={eventStatus(ev.level)}
+												label={eventLevelLabel(ev.level)}
+												size={14}
+											/>
+											<span class="truncate font-medium text-fg" title={ev.title ?? ev.type}>
+												{ev.title ?? ev.type}
+											</span>
 										</span>
-									</span>
-									<span class="shrink-0 whitespace-nowrap text-subtle">
-										{formatWhen(ev.ts, getLocale())}
-									</span>
-								</button>
-							</li>
-						{/each}
-					</ul>
+										<span class="shrink-0 whitespace-nowrap text-subtle">
+											{formatWhen(ev.ts, getLocale())}
+										</span>
+									</button>
+								</li>
+							{/each}
+						</ul>
+					</CardScroll>
 				{/if}
 			</section>
 
@@ -416,9 +436,12 @@ SPDX-License-Identifier: EUPL-1.2
 				aria-labelledby="overview-schedule-title"
 			>
 				<div class="flex items-center justify-between">
-					<h2 id="overview-schedule-title" class="text-base font-semibold">
-						{m.automation_tab_schedules()}
-					</h2>
+					<div class="flex min-w-0 items-baseline gap-2">
+						<h2 id="overview-schedule-title" class="text-base font-semibold">
+							{m.automation_tab_schedules()}
+						</h2>
+						<CardScrollHint hidden={scheduleRows.hidden} />
+					</div>
 					{@render seeAllLink(
 						'/automation',
 						scheduleRows.cut
@@ -435,27 +458,34 @@ SPDX-License-Identifier: EUPL-1.2
 				{:else if scheduleRows.total === 0}
 					<p class="text-xs text-subtle">{m.schedules_empty()}</p>
 				{:else}
-					<ul class="flex flex-col divide-y divide-line text-xs">
-						{#each scheduleRows.shown as s (s.id)}
-							{@const pauseText = activePauseText(s, instances.data)}
-							<li class="flex items-center justify-between gap-2 py-1.5">
-								<div class="flex min-w-0 flex-col">
-									<a
-										href={resolve('/automation')}
-										class="truncate font-medium text-fg hover:underline">{s.name}</a
-									>
-									<span class="text-subtle">{s.start}–{s.end} {s.tz}</span>
-								</div>
-								{#if pauseText}
-									<span
-										class="bg-brand/10 text-brand shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold"
-									>
-										{pauseText}
-									</span>
-								{/if}
-							</li>
-						{/each}
-					</ul>
+					<CardScroll
+						label={m.automation_tab_schedules()}
+						cap={scheduleRows.cap}
+						total={scheduleRows.total}
+						rowSelector="li"
+					>
+						<ul class="flex flex-col divide-y divide-line text-xs">
+							{#each scheduleRows.rows as s (s.id)}
+								{@const pauseText = activePauseText(s, instances.data)}
+								<li class="flex items-center justify-between gap-2 py-1.5">
+									<div class="flex min-w-0 flex-col">
+										<a
+											href={resolve('/automation')}
+											class="truncate font-medium text-fg hover:underline">{s.name}</a
+										>
+										<span class="text-subtle">{s.start}–{s.end} {s.tz}</span>
+									</div>
+									{#if pauseText}
+										<span
+											class="bg-brand/10 text-brand shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold"
+										>
+											{pauseText}
+										</span>
+									{/if}
+								</li>
+							{/each}
+						</ul>
+					</CardScroll>
 				{/if}
 			</section>
 
@@ -475,11 +505,14 @@ SPDX-License-Identifier: EUPL-1.2
 					aria-labelledby="dashboard-prowlarr-title"
 				>
 					<div class="flex items-center justify-between">
-						<h2 id="dashboard-prowlarr-title" class="text-base font-semibold">
-							<a href={resolve('/connections/prowlarr')} class="hover:underline">
-								{m.prowlarr_dashboard_title()}
-							</a>
-						</h2>
+						<div class="flex min-w-0 items-baseline gap-2">
+							<h2 id="dashboard-prowlarr-title" class="text-base font-semibold">
+								<a href={resolve('/connections/prowlarr')} class="hover:underline">
+									{m.prowlarr_dashboard_title()}
+								</a>
+							</h2>
+							<CardScrollHint hidden={prowlarrRows.hidden} />
+						</div>
 						{@render seeAllLink(
 							'/connections/prowlarr',
 							prowlarrRows.cut
@@ -487,43 +520,50 @@ SPDX-License-Identifier: EUPL-1.2
 								: m.overview_view_prowlarr()
 						)}
 					</div>
-					<ul class="flex flex-col gap-3">
-						{#each prowlarrRows.shown as link (link.link_id)}
-							{@const total = link.indexers.length}
-							{@const exhausted = countExhausted(link.indexers)}
-							{@const headroom = countHeadroom(link.indexers)}
-							<li class="flex flex-col gap-1">
-								<div
-									class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-sm"
-									data-label-value
-								>
-									<a href={resolve('/connections/prowlarr')} class="font-medium hover:underline"
-										>{link.name}</a
-									>
-									<span class="text-subtle">
-										{m.prowlarr_headroom_count({ count: headroom, total })} · {m.prowlarr_exhausted_count(
-											{ count: exhausted }
-										)}
-									</span>
-								</div>
-								<div
-									role="meter"
-									aria-label={m.prowlarr_headroom_label({ name: link.name })}
-									aria-valuemin={0}
-									aria-valuemax={total}
-									aria-valuenow={headroom}
-									aria-valuetext={`${headroom} / ${total}`}
-									class="h-2 w-full overflow-hidden rounded-full border border-line bg-surface"
-								>
+					<CardScroll
+						label={m.prowlarr_dashboard_title()}
+						cap={prowlarrRows.cap}
+						total={prowlarrRows.total}
+						rowSelector="li"
+					>
+						<ul class="flex flex-col gap-3">
+							{#each prowlarrRows.rows as link (link.link_id)}
+								{@const total = link.indexers.length}
+								{@const exhausted = countExhausted(link.indexers)}
+								{@const headroom = countHeadroom(link.indexers)}
+								<li class="flex flex-col gap-1">
 									<div
-										class="h-full rounded-full"
-										style:background="var(--color-brand)"
-										style:width={`${total > 0 ? Math.round((headroom / total) * 100) : 0}%`}
-									></div>
-								</div>
-							</li>
-						{/each}
-					</ul>
+										class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-sm"
+										data-label-value
+									>
+										<a href={resolve('/connections/prowlarr')} class="font-medium hover:underline"
+											>{link.name}</a
+										>
+										<span class="text-subtle">
+											{m.prowlarr_headroom_count({ count: headroom, total })} · {m.prowlarr_exhausted_count(
+												{ count: exhausted }
+											)}
+										</span>
+									</div>
+									<div
+										role="meter"
+										aria-label={m.prowlarr_headroom_label({ name: link.name })}
+										aria-valuemin={0}
+										aria-valuemax={total}
+										aria-valuenow={headroom}
+										aria-valuetext={`${headroom} / ${total}`}
+										class="h-2 w-full overflow-hidden rounded-full border border-line bg-surface"
+									>
+										<div
+											class="h-full rounded-full"
+											style:background="var(--color-brand)"
+											style:width={`${total > 0 ? Math.round((headroom / total) * 100) : 0}%`}
+										></div>
+									</div>
+								</li>
+							{/each}
+						</ul>
+					</CardScroll>
 				</section>
 			{/if}
 		</div>

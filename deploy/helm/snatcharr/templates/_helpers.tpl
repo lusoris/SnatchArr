@@ -132,6 +132,27 @@ accepts an `except` only as a strict subset of its `cidr`, so a CIDR that does n
 address (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16) gets no `except`, and a /32 on the address
 itself is refused. An IPv6 CIDR cannot contain it and gets none either.
 */}}
+{{/*
+Egress of the API to public HTTPS: TCP 443 to every IPv4 and IPv6 address outside
+networkPolicy.publicHttpsEgress.except. Renders nothing when the toggle is off.
+*/}}
+{{- define "snatcharr.publicHttpsEgressRule" -}}
+{{- $cfg := .Values.networkPolicy.publicHttpsEgress -}}
+{{- if $cfg.enabled -}}
+{{- $v4 := list -}}
+{{- $v6 := list -}}
+{{- range $cfg.except -}}
+{{- if contains ":" . -}}{{- $v6 = append $v6 . -}}{{- else -}}{{- $v4 = append $v4 . -}}{{- end -}}
+{{- end -}}
+{{- $v4block := dict "cidr" "0.0.0.0/0" -}}
+{{- if $v4 -}}{{- $_ := set $v4block "except" $v4 -}}{{- end -}}
+{{- $v6block := dict "cidr" "::/0" -}}
+{{- if $v6 -}}{{- $_ := set $v6block "except" $v6 -}}{{- end -}}
+{{- $to := list (dict "ipBlock" $v4block) (dict "ipBlock" $v6block) -}}
+{{- toYaml (list (dict "to" $to "ports" (list (dict "port" 443 "protocol" "TCP")))) -}}
+{{- end -}}
+{{- end -}}
+
 {{- define "snatcharr.arrEgressRules" -}}
 {{- $meta := 0 -}}
 {{- range list 169 254 169 254 -}}{{- $meta = add (mul $meta 256) . -}}{{- end -}}

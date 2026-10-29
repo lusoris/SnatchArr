@@ -24,3 +24,8 @@ Values are documented inline in [values.yaml](values.yaml); the full guide lives
 Optional worker autoscaling on queued runs (`worker.autoscaling.keda`) needs
 [KEDA](https://keda.sh) and a Prometheus that scrapes the API; see "Worker
 autoscaling" in the deployment guide.
+
+With `networkPolicy.enabled=true` the API may reach public HTTPS (TCP 443 outside
+private, shared, link-local and unique-local ranges) for OIDC discovery, catalogue
+sources and update checks; `networkPolicy.publicHttpsEgress.enabled=false` turns that
+off. See "NetworkPolicy and public HTTPS" in the deployment guide.
