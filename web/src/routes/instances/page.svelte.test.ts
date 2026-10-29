@@ -2,11 +2,13 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-import { screen, within } from '@testing-library/svelte';
+import { fireEvent, screen, within } from '@testing-library/svelte';
 import { ProblemError } from '@sveltesentio/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { api } from '#lib/api/client.js';
 import { m } from '#lib/paraglide/messages.js';
 import {
+	assertCancelDelete,
 	failedInstance,
 	forkInstance,
 	renderWithQuery,
@@ -86,7 +88,34 @@ describe('instance list', () => {
 		expect(items[0].textContent).toContain('Readarr · Bookshelf');
 		expect(items[0].textContent).toContain('http://readarr.local:8787');
 		expect(items[0].textContent).toContain('manual');
-		expect(within(items[0]).getByRole('button', { name: m.instance_delete() })).toBeTruthy();
+		expect(within(items[0]).getByRole('button', { name: m.action_delete() })).toBeTruthy();
+	});
+
+	it('deletes an instance only after the in-page confirmation', async () => {
+		stubGet({ '/instances': [forkInstance] });
+		const deleteSpy = vi.spyOn(api, 'DELETE').mockResolvedValue({ data: undefined } as never);
+		renderWithQuery(InstancesPage);
+
+		const table = await screen.findByRole('table');
+		const row = within(within(table).getAllByRole('row')[1]);
+		await fireEvent.click(row.getByRole('button', { name: m.action_delete() }));
+		expect(deleteSpy).not.toHaveBeenCalled();
+		const question = row.getByRole('group', {
+			name: m.confirm_delete({ name: forkInstance.name })
+		});
+		await fireEvent.click(within(question).getByRole('button', { name: m.confirm_delete_yes() }));
+		expect(deleteSpy).toHaveBeenCalledWith('/instances/{instanceId}', {
+			params: { path: { instanceId: forkInstance.id } }
+		});
+	});
+
+	it('keeps an instance when the delete question in its card is cancelled', async () => {
+		stubGet({ '/instances': [forkInstance] });
+		const deleteSpy = vi.spyOn(api, 'DELETE');
+		renderWithQuery(InstancesPage);
+
+		const list = await screen.findByRole('list', { name: m.nav_instances() });
+		await assertCancelDelete(within(within(list).getAllByRole('listitem')[0]), deleteSpy);
 	});
 
 	it('shows the table without a body row when there is no instance', async () => {
