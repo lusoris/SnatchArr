@@ -124,6 +124,49 @@
 		padding: 1rem;
 	}
 
+	/* Interactive targets: stretched-link whole-card / row clickability */
+	.target {
+		position: relative;
+		cursor: pointer;
+		transition:
+			background-color 150ms ease,
+			border-color 150ms ease,
+			box-shadow 150ms ease,
+			transform 150ms ease;
+	}
+	/* The link keeps its own focus ring; the container only takes the hover tint. */
+	.target:hover,
+	.target:has(.target-link:focus-visible) {
+		background-color: var(--color-secondary);
+		border-color: var(--color-brand);
+	}
+	.target:active {
+		transform: scale(0.995);
+	}
+	tr.target:active {
+		transform: none;
+		background-color: var(--color-nav-active);
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.target {
+			transition: none;
+		}
+		.target:active {
+			transform: none;
+		}
+	}
+
+	.target-link::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+	}
+
+	.target :is(a, button, input, select, textarea, label, summary):not(.target-link) {
+		position: relative;
+		z-index: 1;
+	}
+
 	/* Navigation entries (sidebar, drawer, footer): ADR-0015 section 3. */
 	.nav-link {
 		min-height: 44px;
