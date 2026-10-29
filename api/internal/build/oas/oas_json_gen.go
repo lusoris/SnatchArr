@@ -3161,6 +3161,8 @@ func (s *ArrProduct) Decode(d *jx.Decoder) error {
 		*s = ArrProductReadarrFaustvii
 	case ArrProductReadarrRresurrected:
 		*s = ArrProductReadarrRresurrected
+	case ArrProductReadarrFork:
+		*s = ArrProductReadarrFork
 	case ArrProductUnknown:
 		*s = ArrProductUnknown
 	default:

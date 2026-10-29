@@ -1411,6 +1411,7 @@ const (
 	ArrProductChaptarr            ArrProduct = "chaptarr"
 	ArrProductReadarrFaustvii     ArrProduct = "readarr_faustvii"
 	ArrProductReadarrRresurrected ArrProduct = "readarr_rresurrected"
+	ArrProductReadarrFork         ArrProduct = "readarr_fork"
 	ArrProductUnknown             ArrProduct = "unknown"
 )
 
@@ -1422,6 +1423,7 @@ func (ArrProduct) AllValues() []ArrProduct {
 		ArrProductChaptarr,
 		ArrProductReadarrFaustvii,
 		ArrProductReadarrRresurrected,
+		ArrProductReadarrFork,
 		ArrProductUnknown,
 	}
 }
@@ -1438,6 +1440,8 @@ func (s ArrProduct) MarshalText() ([]byte, error) {
 	case ArrProductReadarrFaustvii:
 		return []byte(s), nil
 	case ArrProductReadarrRresurrected:
+		return []byte(s), nil
+	case ArrProductReadarrFork:
 		return []byte(s), nil
 	case ArrProductUnknown:
 		return []byte(s), nil
@@ -1463,6 +1467,9 @@ func (s *ArrProduct) UnmarshalText(data []byte) error {
 		return nil
 	case ArrProductReadarrRresurrected:
 		*s = ArrProductReadarrRresurrected
+		return nil
+	case ArrProductReadarrFork:
+		*s = ArrProductReadarrFork
 		return nil
 	case ArrProductUnknown:
 		*s = ArrProductUnknown

@@ -22,6 +22,9 @@ const (
 	ProductReadarrFaustvii Product = "readarr_faustvii"
 	// ProductReadarrRresurrected is github.com/ricetim/readarr-rresurrected.
 	ProductReadarrRresurrected Product = "readarr_rresurrected"
+	// ProductReadarrFork is a Readarr newer than the retired project that names no packager,
+	// a fork that cannot be told apart.
+	ProductReadarrFork Product = "readarr_fork"
 	// ProductUnknown is an answer that matches none of the products above.
 	ProductUnknown Product = "unknown"
 )
