@@ -63,6 +63,34 @@ describe('InstancePolicyTab', () => {
 		expect(screen.queryByText(m.policy_filters_title())).toBeNull();
 	});
 
+	it('treats a requester, the highest role below admin, as a viewer', async () => {
+		session.user = { id: 'u3', username: 'requester', role: 'requester' } as never;
+		const get = stubGet({
+			'/instances/{instanceId}': forkInstance,
+			'/instances/{instanceId}/policy': samplePolicy
+		});
+		renderWithQuery(InstancePolicyTab, { id: forkInstance.id });
+
+		expect(await screen.findByRole('form', { name: m.policy_title() })).toBeTruthy();
+		expect(get.mock.calls.map((c) => c[0])).not.toContain(
+			'/instances/{instanceId}/policy/filter-options'
+		);
+	});
+
+	it('asks an admin for the filter options and shows them', async () => {
+		const get = stubGet({
+			'/instances/{instanceId}': forkInstance,
+			'/instances/{instanceId}/policy': samplePolicy,
+			'/instances/{instanceId}/policy/filter-options': sampleFilterOptions
+		});
+		renderWithQuery(InstancePolicyTab, { id: forkInstance.id });
+
+		expect(await screen.findByText(m.policy_filters_title())).toBeTruthy();
+		expect(get.mock.calls.map((c) => c[0])).toContain(
+			'/instances/{instanceId}/policy/filter-options'
+		);
+	});
+
 	it('announces the problem document when the policy is refused', async () => {
 		stubGet({
 			'/instances/{instanceId}': forkInstance,

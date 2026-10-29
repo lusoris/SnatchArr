@@ -55,6 +55,28 @@ describe('configarr', () => {
 		expect(screen.queryByRole('button', { name: m.configarr_import() })).toBeNull();
 	});
 
+	it('treats a requester, the highest role below admin, as a viewer', async () => {
+		session.user = { id: 'u3', username: 'requester', role: 'requester' } as never;
+		const get = stubGet({});
+		renderWithQuery(ConfigarrPage);
+
+		expect(await screen.findByText(m.configarr_admin_only())).toBeTruthy();
+		expect(get.mock.calls.map((c) => c[0])).not.toContain('/configarr/status');
+	});
+
+	it('asks for the status and offers the import once a viewer becomes admin', async () => {
+		session.user = { id: 'u2', username: 'viewer', role: 'viewer' } as never;
+		const get = stubGet({ '/configarr/status': linkedStatus });
+		renderWithQuery(ConfigarrPage);
+		expect(await screen.findByText(m.configarr_admin_only())).toBeTruthy();
+
+		session.user = { id: 'u2', username: 'viewer', role: 'admin' } as never;
+
+		expect(await screen.findByRole('button', { name: m.configarr_import() })).toBeTruthy();
+		expect(get.mock.calls.map((c) => c[0])).toContain('/configarr/status');
+		expect(screen.queryByText(m.configarr_admin_only())).toBeNull();
+	});
+
 	it('shows the linked-mode status with the last import, its warnings and error', async () => {
 		stubGet({ '/configarr/status': linkedStatus });
 		renderWithQuery(ConfigarrPage);
