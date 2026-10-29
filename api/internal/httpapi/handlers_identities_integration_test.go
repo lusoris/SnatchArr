@@ -19,7 +19,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	"github.com/golusoris/golusoris/core/crypto"
 	"github.com/golusoris/golusoris/httpx/csrf"
 	"github.com/golusoris/golusoris/httpx/middleware"
 
@@ -109,7 +108,7 @@ type authenticatedSession struct {
 
 func createAndLoginUser(t *testing.T, f *identitiesFixture, username, password string) authenticatedSession {
 	t.Helper()
-	hasher := crypto.NewPasswordHasher(1)
+	hasher := testHasher
 	hash, err := hasher.Hash(t.Context(), password)
 	if err != nil {
 		t.Fatalf("Hash: %v", err)

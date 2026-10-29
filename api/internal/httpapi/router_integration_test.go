@@ -30,7 +30,6 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/golusoris/golusoris/auth/apikey"
-	"github.com/golusoris/golusoris/core/crypto"
 
 	"github.com/lusoris/SnatchArr/api/internal/arrclient"
 	"github.com/lusoris/SnatchArr/api/internal/auth"
@@ -2402,7 +2401,7 @@ func createAdminUser(t *testing.T, f *routerFixture) (string, string) {
 	t.Helper()
 	username := "admin-" + uuid.NewString()[:8]
 	password := "admin-pass-1234"
-	hasher := crypto.NewPasswordHasher(1)
+	hasher := testHasher
 	hash, err := hasher.Hash(t.Context(), password)
 	if err != nil {
 		t.Fatalf("hash password: %v", err)
@@ -2425,7 +2424,7 @@ func createViewerUser(t *testing.T, f *routerFixture) (string, string) {
 	t.Helper()
 	username := "viewer-" + uuid.NewString()[:8]
 	password := "viewer-pass-1234"
-	hasher := crypto.NewPasswordHasher(1)
+	hasher := testHasher
 	hash, err := hasher.Hash(t.Context(), password)
 	if err != nil {
 		t.Fatalf("hash password: %v", err)
