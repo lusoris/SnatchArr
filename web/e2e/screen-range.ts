@@ -301,7 +301,14 @@ async function focusVisibleRatio(focused: Locator): Promise<number> {
 	return focused.evaluate((el) => {
 		const r = el.getBoundingClientRect();
 		if (r.width > window.innerWidth || r.height > window.innerHeight) return 0;
-		return Math.max(0.5, 1 - 1 / Math.min(r.width, r.height));
+		// Focus scrolling keeps the html scroll padding clear of a sticky top bar and a fixed
+		// bottom bar, so a control taller than the room between them can show only that room.
+		const style = getComputedStyle(document.documentElement);
+		const padding =
+			(Number.parseFloat(style.scrollPaddingTop) || 0) +
+			(Number.parseFloat(style.scrollPaddingBottom) || 0);
+		const room = Math.min(1, (window.innerHeight - padding) / r.height);
+		return room * Math.max(0.5, 1 - 1 / Math.min(r.width, r.height));
 	});
 }
 

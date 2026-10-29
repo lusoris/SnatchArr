@@ -274,6 +274,31 @@ test.describe('screen-range planted negatives', () => {
 		await plant('-4px');
 		await expect(assertFocusVisible(page, 1)).rejects.toThrow(/focus outside viewport/);
 	});
+	test('authenticated: focus taller than the scroll-padding room shows only that room', async ({
+		page
+	}) => {
+		await visit(page, '/');
+		// A fixed control taller than the room the html scroll padding leaves, but shorter than
+		// the viewport: it can never show whole, so only the room is owed.
+		const plant = async (top: number) =>
+			page.locator('body').evaluate((body, offset) => {
+				document.getElementById('planted-tall')?.remove();
+				document.documentElement.style.scrollPaddingTop = '100px';
+				document.documentElement.style.scrollPaddingBottom = '100px';
+				const button = document.createElement('button');
+				button.id = 'planted-tall';
+				button.type = 'button';
+				button.textContent = 'Planted tall';
+				const height = window.innerHeight - 50;
+				button.style.cssText = `position:fixed;left:8px;top:${offset}px;height:${height}px;z-index:9999`;
+				body.prepend(button);
+			}, top);
+		await plant(100);
+		await assertFocusVisible(page, 1);
+		const viewport = page.viewportSize();
+		await plant((viewport?.height ?? 800) - 100);
+		await expect(assertFocusVisible(page, 1)).rejects.toThrow(/focus outside viewport/);
+	});
 	test('authenticated: planted negative text overlap', async ({ page }) => {
 		await visit(page, '/');
 		await assertTextNotClipped(page);
