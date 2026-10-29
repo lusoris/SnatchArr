@@ -7,6 +7,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { toast } from 'svelte-sonner';
 	import { api, describeError } from '#lib/api/client.js';
 	import AppLogo from '#lib/components/AppLogo.svelte';
+	import ConfirmDelete from '#lib/components/ConfirmDelete.svelte';
 	import CreateForm from '#lib/components/CreateForm.svelte';
 	import Field from '#lib/components/Field.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
@@ -173,14 +174,11 @@ SPDX-License-Identifier: EUPL-1.2
 								>
 									{m.channel_test()}
 								</button>
-								<button
-									type="button"
-									class="btn"
+								<ConfirmDelete
+									name={ch.name}
 									disabled={remove.isPending}
-									onclick={() => remove.mutate(ch.id)}
-								>
-									{m.channel_delete()}
-								</button>
+									onconfirm={() => remove.mutate(ch.id)}
+								/>
 							</td>
 						{/if}
 					</tr>

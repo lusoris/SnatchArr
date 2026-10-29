@@ -7,6 +7,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { toast } from 'svelte-sonner';
 	import { api, describeError } from '#lib/api/client.js';
 	import type { components } from '#lib/api/schema.js';
+	import ConfirmDelete from '#lib/components/ConfirmDelete.svelte';
 	import CreateForm from '#lib/components/CreateForm.svelte';
 	import Field from '#lib/components/Field.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
@@ -139,14 +140,11 @@ SPDX-License-Identifier: EUPL-1.2
 						<td data-label={m.rule_channels()}>{formatChannels(r.channel_ids)}</td>
 						{#if session.isAdmin}
 							<td data-label="">
-								<button
-									type="button"
-									class="btn"
+								<ConfirmDelete
+									name={r.name}
 									disabled={remove.isPending}
-									onclick={() => remove.mutate(r.id)}
-								>
-									{m.rule_delete()}
-								</button>
+									onconfirm={() => remove.mutate(r.id)}
+								/>
 							</td>
 						{/if}
 					</tr>

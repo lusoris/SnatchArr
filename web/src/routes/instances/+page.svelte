@@ -8,6 +8,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { api, describeError } from '#lib/api/client.js';
 	import AppLogo from '#lib/components/AppLogo.svelte';
 	import CheckState from '#lib/components/CheckState.svelte';
+	import ConfirmDelete from '#lib/components/ConfirmDelete.svelte';
 	import Field from '#lib/components/Field.svelte';
 	import KindSelect from '#lib/components/KindSelect.svelte';
 	import PageHeader from '#lib/components/PageHeader.svelte';
@@ -116,12 +117,11 @@ SPDX-License-Identifier: EUPL-1.2
 					</div>
 					{#if session.isAdmin}
 						<div class="mt-1 flex">
-							<button
-								type="button"
-								class="btn"
-								onclick={() => remove.mutate(inst.id)}
-								disabled={inst.source === 'configarr'}>{m.instance_delete()}</button
-							>
+							<ConfirmDelete
+								name={inst.name}
+								disabled={inst.source === 'configarr' || remove.isPending}
+								onconfirm={() => remove.mutate(inst.id)}
+							/>
 						</div>
 					{/if}
 				</li>
@@ -169,12 +169,11 @@ SPDX-License-Identifier: EUPL-1.2
 						<td><CheckState instance={inst} /></td>
 						{#if session.isAdmin}
 							<td>
-								<button
-									type="button"
-									class="btn"
-									onclick={() => remove.mutate(inst.id)}
-									disabled={inst.source === 'configarr'}>{m.instance_delete()}</button
-								>
+								<ConfirmDelete
+									name={inst.name}
+									disabled={inst.source === 'configarr' || remove.isPending}
+									onconfirm={() => remove.mutate(inst.id)}
+								/>
 							</td>
 						{/if}
 					</tr>
