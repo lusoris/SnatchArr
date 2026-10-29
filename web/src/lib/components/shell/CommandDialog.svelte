@@ -4,12 +4,12 @@ SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { resolve } from '$app/paths';
 	import { createSentioQuery } from '@sveltesentio/query';
 	import { CommandRegistry, type Command } from '@sveltesentio/ui/cmd';
 	import CommandPalette from '@sveltesentio/ui/cmd/palette';
 	import { api } from '#lib/api/client.js';
 	import { docsUrl } from '#lib/docs.js';
+	import { entityHref, pageHref } from '#lib/entities.js';
 	import { DOCS_ENTRIES } from '#lib/help.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { keys } from '#lib/query.js';
@@ -75,7 +75,7 @@ SPDX-License-Identifier: EUPL-1.2
 				group: m.nav_overview(),
 				keywords: [item.href.replace('/', ''), item.label.toLowerCase()],
 				run: async () => {
-					await goto(resolve(item.href));
+					await goto(pageHref(item.href));
 				}
 			});
 		}
@@ -87,7 +87,7 @@ SPDX-License-Identifier: EUPL-1.2
 				subtitle: m.nav_connections(),
 				group: m.nav_connections(),
 				run: async () => {
-					await goto(resolve(page.href));
+					await goto(pageHref(page.href));
 				}
 			});
 		}
@@ -100,7 +100,7 @@ SPDX-License-Identifier: EUPL-1.2
 				group: m.nav_system(),
 				keywords: ['settings', 'requests', 'community', page.label.toLowerCase()],
 				run: async () => {
-					await goto(resolve(page.href));
+					await goto(pageHref(page.href));
 				}
 			});
 		}
@@ -111,7 +111,7 @@ SPDX-License-Identifier: EUPL-1.2
 			subtitle: m.nav_account(),
 			group: m.nav_account(),
 			run: async () => {
-				await goto(resolve('/account'));
+				await goto(pageHref('/account'));
 			}
 		});
 
@@ -123,7 +123,7 @@ SPDX-License-Identifier: EUPL-1.2
 				group: m.nav_instances(),
 				keywords: [inst.kind, inst.name],
 				run: async () => {
-					await goto(resolve('/instances/[id]', { id: inst.id }));
+					await goto(entityHref('instance', inst.id));
 				}
 			});
 		}

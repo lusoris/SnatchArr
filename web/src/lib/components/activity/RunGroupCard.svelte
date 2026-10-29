@@ -3,10 +3,10 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
-	import { resolve } from '$app/paths';
 	import type { ActivityGroup } from '#lib/activity.js';
 	import LinkText from '#lib/components/LinkText.svelte';
 	import StatusIcon from '#lib/components/StatusIcon.svelte';
+	import { entityHref } from '#lib/entities.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import EventDialog from './EventDialog.svelte';
 	import RunDialog from './RunDialog.svelte';
@@ -58,7 +58,7 @@ SPDX-License-Identifier: EUPL-1.2
 		</time>
 		{#if group.instance_id}
 			<a
-				href={resolve('/instances/[id]', { id: group.instance_id })}
+				href={entityHref('instance', group.instance_id)}
 				class="rounded border border-line px-1.5 py-0.5 text-xs text-subtle hover:underline"
 			>
 				{instanceName ?? group.instance_id.slice(0, 8)}

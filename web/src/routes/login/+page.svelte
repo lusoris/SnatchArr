@@ -4,10 +4,10 @@ SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { api } from '#lib/api/client.js';
 	import AuthCard from '#lib/components/AuthCard.svelte';
+	import { pageHref } from '#lib/entities.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { session } from '#lib/session.svelte.js';
 	import JellyfinLoginCard from './JellyfinLoginCard.svelte';
@@ -42,7 +42,7 @@ SPDX-License-Identifier: EUPL-1.2
 			const res = await api.POST('/auth/proxy-session');
 			if (res.data) {
 				await session.refresh();
-				await goto(resolve('/'));
+				await goto(pageHref('/'));
 			}
 		} catch (err) {
 			console.debug('proxy auth session failed', err);

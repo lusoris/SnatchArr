@@ -5,9 +5,7 @@ SPDX-License-Identifier: EUPL-1.2
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import type { ResolvedPathname } from '$app/types';
 	import { createSentioQuery } from '@sveltesentio/query';
 	import { useSSE } from '@sveltesentio/realtime/use-sse';
 	import {
@@ -27,6 +25,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import RunGroupCard from '#lib/components/activity/RunGroupCard.svelte';
 	import ConnectionStatus from '#lib/components/ConnectionStatus.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
+	import { entityHref, pageHref } from '#lib/entities.js';
 	import Pause from '@lucide/svelte/icons/pause';
 	import { LIVE_EVENTS } from '#lib/live-events.js';
 	import { eventToLiveFrame, mergeLiveFrames, parseFrame, type LiveFrame } from '#lib/live.js';
@@ -76,10 +75,10 @@ SPDX-License-Identifier: EUPL-1.2
 			if (v !== undefined && v !== null && v !== '') newUrl.searchParams.set(k, v);
 			else newUrl.searchParams.delete(k);
 		}
-		const basePath = fixedInstanceId
-			? resolve('/instances/[id]/activity', { id: fixedInstanceId })
-			: resolve('/activity');
-		void goto(`${basePath}${newUrl.search}` as ResolvedPathname, {
+		const target = fixedInstanceId
+			? entityHref('instance', fixedInstanceId, 'activity', newUrl.search)
+			: pageHref('/activity', newUrl.search);
+		void goto(target, {
 			replaceState: replace,
 			reset: false
 		});
@@ -416,7 +415,7 @@ SPDX-License-Identifier: EUPL-1.2
 											{#each instances.data ?? [] as inst (inst.id)}
 												<li class="flex items-center justify-between text-xs">
 													<a
-														href={resolve('/instances/[id]', { id: inst.id })}
+														href={entityHref('instance', inst.id)}
 														class="font-medium hover:underline">{inst.name}</a
 													>
 													<span class="text-subtle">{scheduleStatusText(inst.id)}</span>
@@ -428,7 +427,7 @@ SPDX-License-Identifier: EUPL-1.2
 							</div>
 						</div>
 						<div class="flex flex-wrap gap-2 pt-2">
-							<a href={resolve('/automation')} class="btn">{m.live_link_schedules()}</a>
+							<a href={pageHref('/automation')} class="btn">{m.live_link_schedules()}</a>
 						</div>
 					</div>
 				{:else if eventGroups.length === 0}

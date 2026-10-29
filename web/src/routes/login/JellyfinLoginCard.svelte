@@ -5,9 +5,9 @@ SPDX-License-Identifier: EUPL-1.2
 <script lang="ts">
 	import { onDestroy } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { resolve } from '$app/paths';
 	import { api, describeError } from '#lib/api/client.js';
 	import CredentialFields from '#lib/components/CredentialFields.svelte';
+	import { pageHref } from '#lib/entities.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { session } from '#lib/session.svelte.js';
 	import { pollQuickConnect } from './quick-connect.js';
@@ -48,7 +48,7 @@ SPDX-License-Identifier: EUPL-1.2
 			const res = await api.POST('/auth/jellyfin', { body: { username, password } });
 			if (res.data) {
 				await session.refresh();
-				await goto(resolve('/'));
+				await goto(pageHref('/'));
 			}
 		} catch (err) {
 			error = describeError(err);
@@ -70,7 +70,7 @@ SPDX-License-Identifier: EUPL-1.2
 			const outcome = await pollQuickConnect(init.data.secret, controller.signal);
 			if (outcome === 'authenticated') {
 				await session.refresh();
-				await goto(resolve('/'));
+				await goto(pageHref('/'));
 			} else if (outcome === 'timeout') {
 				qcCode = '';
 				error = m.login_jellyfin_quick_connect_timeout();
