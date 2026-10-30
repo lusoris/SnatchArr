@@ -8,6 +8,7 @@
 # (3) one version changed -> exit 1
 # (4) label corrections and URL normalisation: labels_test.py (positive, negative, boundary)
 # (5) uncollapsed gobreaker v2 url -> exit 1
+# (6) failed Go licence URL lookup on vanity path: labels_test.py holds it
 set -eu
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
