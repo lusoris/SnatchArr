@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 // Signed-in admin over an empty fleet: the API state the mocked e2e suites share.
-import type { Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 
 export function json(
 	body: unknown,
@@ -58,6 +58,24 @@ export const samplePolicyData = {
 	exclude_tags: [],
 	include_quality_profiles: [],
 	exclude_quality_profiles: []
+};
+
+export const sampleQueuePolicyData = {
+	enabled: true,
+	rules: {
+		stalled: { mode: 'observe', threshold: 3 },
+		slow: { mode: 'observe', threshold: 5 },
+		failed: { mode: 'act', threshold: 1 },
+		import_blocked: { mode: 'act', threshold: 2 },
+		id_matched: { mode: 'observe', threshold: 1 },
+		unwanted_score: { mode: 'observe', threshold: 3 },
+		unwanted_unmonitored: { mode: 'observe', threshold: 3 }
+	},
+	grace_seconds: 3600,
+	min_bytes_per_second: 1024,
+	min_custom_format_score: null,
+	max_removals_per_sweep: 5,
+	max_imports_per_sweep: 10
 };
 
 export const sampleSettingsData = {
@@ -137,9 +155,10 @@ const FIXED_BODIES: Record<string, unknown> = {
 	}
 };
 
-export async function mockSignedInApi(
+export async function mockAuthSetupRoutes(
 	page: Page,
-	role: 'admin' | 'requester' | 'viewer' = 'admin'
+	role: 'admin' | 'requester' | 'viewer' = 'admin',
+	jellyfin = true
 ): Promise<void> {
 	await page.route('**/api/v1/auth/setup/status', (route) =>
 		route.fulfill(json({ setup_complete: true }))
@@ -154,9 +173,16 @@ export async function mockSignedInApi(
 		)
 	);
 	await page.route('**/api/v1/auth/sso', (route) =>
-		route.fulfill(json({ oidc: false, proxy: false, jellyfin: true }))
+		route.fulfill(json({ oidc: false, proxy: false, jellyfin }))
 	);
 	await page.route('**/api/v1/auth/identities', (route) => route.fulfill(json({ items: [] })));
+}
+
+export async function mockSignedInApi(
+	page: Page,
+	role: 'admin' | 'requester' | 'viewer' = 'admin'
+): Promise<void> {
+	await mockAuthSetupRoutes(page, role);
 	for (const path of [
 		'instances',
 		'hourly-caps',
@@ -448,4 +474,39 @@ export async function mockAboutApi(
 		}
 		await route.fulfill(json(sampleLicences));
 	});
+}
+
+export async function mockInstanceQueueApi(page: Page, instanceId: string): Promise<void> {
+	await page.route(`**/api/v1/instances/${instanceId}/queue-policy`, (route) =>
+		route.fulfill(json(sampleQueuePolicyData))
+	);
+	await page.route(`**/api/v1/instances/${instanceId}/queue-strikes`, (route) =>
+		route.fulfill(json([]))
+	);
+}
+
+export async function mockInstanceNotFound(page: Page, instanceId: string): Promise<void> {
+	await page.route(`**/api/v1/instances/${instanceId}`, (route) =>
+		route.fulfill({
+			status: 404,
+			contentType: 'application/problem+json',
+			body: JSON.stringify({
+				type: 'about:blank',
+				title: 'Not Found',
+				status: 404,
+				detail: 'Instance not found'
+			})
+		})
+	);
+}
+
+export async function submitAdminLogin(
+	page: Page,
+	password = 'smoke-password-1234'
+): Promise<void> {
+	await page.locator('#username').fill('admin');
+	await page.locator('#password').fill(password);
+	await page.locator('button[type="submit"]').click();
+	await expect(page).toHaveURL(/.*\/$/);
+	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 }

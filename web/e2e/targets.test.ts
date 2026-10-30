@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 import { expect, test, type Page } from '@playwright/test';
+import { targetProblems } from '../src/lib/targets.js';
 import { json, mockSignedInApi } from './mocks.js';
 
 const instance1 = {
@@ -41,59 +42,6 @@ async function mockTargetsApi(page: Page): Promise<void> {
 		}
 		return route.fulfill(json(testInstances));
 	});
-}
-
-/** In-browser evaluator validating target contracts on the live DOM tree. */
-function evalTargetProblems(root: Element | Document = document): string[] {
-	function isValidTargetLink(el: Element): boolean {
-		if (el.tagName === 'A') {
-			return el.hasAttribute('href');
-		}
-		if (
-			el.tagName === 'BUTTON' &&
-			el.getAttribute('type') === 'button' &&
-			!el.hasAttribute('disabled') &&
-			!(el as HTMLButtonElement).disabled
-		) {
-			return true;
-		}
-		return false;
-	}
-
-	const problems: string[] = [];
-	const targets: Element[] = [];
-
-	if (root instanceof Element && root.matches('.target')) {
-		targets.push(root);
-	}
-	targets.push(...Array.from(root.querySelectorAll('.target')));
-
-	for (const target of targets) {
-		const nested = target.querySelectorAll('.target');
-		if (nested.length > 0) {
-			problems.push(
-				`Nested .target elements are prohibited: found ${nested.length} nested target(s)`
-			);
-		}
-
-		const allTargetLinks = Array.from(target.querySelectorAll('.target-link')).filter(
-			(el) => el.closest('.target') === target
-		);
-
-		const validLinks = allTargetLinks.filter(isValidTargetLink);
-
-		if (validLinks.length === 0) {
-			problems.push(
-				'Target element must contain exactly one a.target-link[href] or button.target-link[type=button]:not([disabled]), found 0'
-			);
-		} else if (validLinks.length > 1) {
-			problems.push(
-				`Target element must contain exactly one a.target-link[href] or button.target-link[type=button]:not([disabled]), found ${validLinks.length}`
-			);
-		}
-	}
-
-	return problems;
 }
 
 async function verifyTargetHoverAndFocus(page: Page, index: number): Promise<void> {
@@ -140,7 +88,7 @@ for (const path of ['/', '/instances']) {
 		await page.goto(path);
 		await page.waitForLoadState('networkidle');
 
-		const problems = await page.evaluate(evalTargetProblems);
+		const problems = await page.evaluate(targetProblems);
 		expect(problems).toEqual([]);
 
 		const totalTargets = await page.locator('.target:visible').count();
@@ -171,7 +119,7 @@ test('authenticated: planted negative target without target-link reports problem
 		document.body.appendChild(orphan);
 	});
 
-	const problems = await page.evaluate(evalTargetProblems);
+	const problems = await page.evaluate(targetProblems);
 	expect(problems.length).toBe(1);
 	expect(problems[0]).toContain('found 0');
 });
@@ -232,7 +180,7 @@ test('authenticated: admin on /connections/download-clients opens edit form on r
 	await page.goto('/connections/download-clients');
 	await page.waitForLoadState('networkidle');
 
-	const problems = await page.evaluate(evalTargetProblems);
+	const problems = await page.evaluate(targetProblems);
 	expect(problems).toEqual([]);
 
 	const row = page.locator('tr.target').first();
@@ -268,7 +216,7 @@ test('authenticated: admin on /automation opens edit form on row click and has n
 	await page.goto('/automation');
 	await page.waitForLoadState('networkidle');
 
-	const problems = await page.evaluate(evalTargetProblems);
+	const problems = await page.evaluate(targetProblems);
 	expect(problems).toEqual([]);
 
 	const row = page.locator('tr.target').first();
@@ -311,7 +259,7 @@ test('authenticated: a configarr row is no target and does not cover the editabl
 	await expect(page.locator('tbody tr')).toHaveCount(2);
 
 	await expect(page.locator('tbody tr').nth(1)).not.toHaveClass(/\btarget\b/);
-	expect(await page.evaluate(evalTargetProblems)).toEqual([]);
+	expect(await page.evaluate(targetProblems)).toEqual([]);
 
 	await page
 		.locator('tbody tr')

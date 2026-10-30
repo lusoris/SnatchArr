@@ -5,6 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test as setup, type Page } from '@playwright/test';
+import { submitAdminLogin } from './mocks.js';
 
 const authDir = path.resolve(import.meta.dirname, '.auth');
 const authFile = path.join(authDir, 'admin.json');
@@ -71,13 +72,7 @@ async function seedData(page: Page, csrfToken: string): Promise<string> {
 setup('complete setup and seed data', async ({ page }) => {
 	await page.goto('/setup');
 	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-
-	await page.locator('#username').fill('admin');
-	await page.locator('#password').fill('smoke-password-1234');
-	await page.locator('button[type="submit"]').click();
-
-	await expect(page).toHaveURL(/.*\/$/);
-	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+	await submitAdminLogin(page);
 
 	const sessionRes = await page.request.get('/api/v1/auth/session');
 	if (!sessionRes.ok()) {

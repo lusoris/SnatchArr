@@ -11,10 +11,25 @@ import fs from 'node:fs';
 import path from 'node:path';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { json, mockModulesApi, mockSettingsApi, mockSignedInApi } from './mocks.js';
+import {
+	json,
+	mockAuthSetupRoutes,
+	mockInstanceNotFound,
+	mockInstanceQueueApi,
+	mockModulesApi,
+	mockSettingsApi,
+	mockSignedInApi,
+	samplePolicyData
+} from './mocks.js';
 import { settleToasts } from './settle.js';
 
 const WCAG_22_AA = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
+
+async function expectNoAxeViolations(page: Page): Promise<void> {
+	await settleToasts(page);
+	const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
+	expect(results.violations).toEqual([]);
+}
 
 const ALL_ROUTES = [
 	'/',
@@ -92,49 +107,12 @@ if (!process.env.SNATCHARR_E2E_API) {
 		test(`${route} has no axe violations`, async ({ page }) => {
 			await page.goto(route);
 			await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-			await settleToasts(page);
-			const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
-			expect(results.violations).toEqual([]);
+			await expectNoAxeViolations(page);
 		});
 	}
 
 	async function setupAuthRoutes(page: Page) {
-		await page.route('**/api/v1/auth/setup/status', (route) =>
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({ setup_complete: true })
-			})
-		);
-		await page.route('**/api/v1/auth/session', (route) =>
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({
-					user: {
-						id: '00000000-0000-0000-0000-000000000099',
-						username: 'admin',
-						role: 'admin'
-					},
-					csrf_token: 'test-token',
-					expires_at: '2099-01-01T00:00:00Z'
-				})
-			})
-		);
-		await page.route('**/api/v1/auth/sso', (route) =>
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({ oidc: false, proxy: false })
-			})
-		);
-		await page.route('**/api/v1/auth/identities', (route) =>
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({ items: [] })
-			})
-		);
+		await mockAuthSetupRoutes(page);
 	}
 
 	async function setupInstanceDetailRoutes(page: Page, id: string) {
@@ -155,30 +133,7 @@ if (!process.env.SNATCHARR_E2E_API) {
 			})
 		);
 		await page.route(`**/api/v1/instances/${id}/policy`, (route) =>
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({
-					missing_per_cycle: 10,
-					upgrade_per_cycle: 5,
-					cycle_interval_s: 300,
-					hourly_cap: 50,
-					selection: 'recent',
-					monitored_only: true,
-					skip_future_releases: true,
-					radarr_release_type: 'physical',
-					sonarr_missing_mode: 'episodes',
-					sonarr_upgrade_mode: 'episodes',
-					lidarr_missing_mode: 'album',
-					processed_ttl_h: 24,
-					max_queue_size: 100,
-					await_command: false,
-					page_size: 50,
-					recent_grab_window_h: 48,
-					afterglow_max_h: 168,
-					dry_run: false
-				})
-			})
+			route.fulfill(json(samplePolicyData))
 		);
 		await page.route(`**/api/v1/instances/${id}/policy/filter-options`, (route) =>
 			route.fulfill({
@@ -190,36 +145,7 @@ if (!process.env.SNATCHARR_E2E_API) {
 	}
 
 	async function setupInstanceQueueRoutes(page: Page, id: string) {
-		await page.route(`**/api/v1/instances/${id}/queue-policy`, (route) =>
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({
-					enabled: true,
-					rules: {
-						stalled: { mode: 'observe', threshold: 3 },
-						slow: { mode: 'observe', threshold: 5 },
-						failed: { mode: 'act', threshold: 1 },
-						import_blocked: { mode: 'act', threshold: 2 },
-						id_matched: { mode: 'observe', threshold: 1 },
-						unwanted_score: { mode: 'observe', threshold: 3 },
-						unwanted_unmonitored: { mode: 'observe', threshold: 3 }
-					},
-					grace_seconds: 3600,
-					min_bytes_per_second: 1024,
-					min_custom_format_score: null,
-					max_removals_per_sweep: 5,
-					max_imports_per_sweep: 10
-				})
-			})
-		);
-		await page.route(`**/api/v1/instances/${id}/queue-strikes`, (route) =>
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify([])
-			})
-		);
+		await mockInstanceQueueApi(page, id);
 	}
 
 	async function setupInstanceActivityRoutes(page: Page, id: string) {
@@ -269,6 +195,47 @@ if (!process.env.SNATCHARR_E2E_API) {
 		await setupInstanceDetailRoutes(page, id);
 		await setupInstanceQueueRoutes(page, id);
 		await setupInstanceActivityRoutes(page, id);
+	}
+
+	async function setupLiveActivityRoutes(
+		page: Page,
+		options: {
+			instances?: unknown[];
+			systemStatus?: Record<string, unknown>;
+			events?: unknown[];
+		} = {}
+	): Promise<void> {
+		await setupAuthRoutes(page);
+		await page.route('**/api/v1/instances', (route) =>
+			route.fulfill(json(options.instances ?? []))
+		);
+		await page.route('**/api/v1/schedules', (route) => route.fulfill(json([])));
+		await page.route('**/api/v1/system/status', (route) =>
+			route.fulfill(
+				json(
+					options.systemStatus ?? {
+						name: 'SnatchArr',
+						version: '0.1.0',
+						commit: 'abc1234',
+						build_date: '2026-10-20',
+						profile: 'dev',
+						setup_complete: true
+					}
+				)
+			)
+		);
+		await page.route('**/api/v1/events?*', (route) => route.fulfill(json(options.events ?? [])));
+		await page.route('**/api/v1/events/stream', (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'text/event-stream',
+				headers: {
+					'Cache-Control': 'no-cache',
+					Connection: 'keep-alive'
+				},
+				body: ': keepalive\n\n'
+			})
+		);
 	}
 
 	const instanceId = '00000000-0000-0000-0000-000000000001';
@@ -534,103 +501,20 @@ if (!process.env.SNATCHARR_E2E_API) {
 
 	test('/instances/[id] not-found (404 problem+json) has no axe violations', async ({ page }) => {
 		const unknownId = '00000000-0000-0000-0000-000000000404';
-		await page.route('**/api/v1/auth/setup/status', (route) =>
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({ setup_complete: true })
-			})
-		);
-		await page.route('**/api/v1/auth/session', (route) =>
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({
-					user: {
-						id: '00000000-0000-0000-0000-000000000099',
-						username: 'admin',
-						role: 'admin'
-					},
-					csrf_token: 'test-token',
-					expires_at: '2099-01-01T00:00:00Z'
-				})
-			})
-		);
-		await page.route('**/api/v1/auth/sso', (route) =>
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({ oidc: false, proxy: false })
-			})
-		);
-		await page.route('**/api/v1/auth/identities', (route) =>
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({ items: [] })
-			})
-		);
-		await page.route(`**/api/v1/instances/${unknownId}`, (route) =>
-			route.fulfill({
-				status: 404,
-				contentType: 'application/problem+json',
-				body: JSON.stringify({
-					type: 'about:blank',
-					title: 'Not Found',
-					status: 404,
-					detail: 'Instance not found'
-				})
-			})
-		);
+		await setupAuthRoutes(page);
+		await mockInstanceNotFound(page, unknownId);
 
 		await page.goto(`/instances/${unknownId}`);
 		await expect(
 			page.getByRole('heading', { level: 1, name: /Instance not found|Instanz nicht gefunden/i })
 		).toBeVisible();
 
-		await settleToasts(page);
-		const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
-		expect(results.violations).toEqual([]);
+		await expectNoAxeViolations(page);
 	});
 
 	test('mobile navigation drawer open has no axe violations', async ({ page }) => {
 		await page.setViewportSize({ width: 390, height: 844 });
-		await page.route('**/api/v1/auth/setup/status', (route) =>
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({ setup_complete: true })
-			})
-		);
-		await page.route('**/api/v1/auth/session', (route) =>
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({
-					user: {
-						id: '00000000-0000-0000-0000-000000000099',
-						username: 'admin',
-						role: 'admin'
-					},
-					csrf_token: 'test-token',
-					expires_at: '2099-01-01T00:00:00Z'
-				})
-			})
-		);
-		await page.route('**/api/v1/auth/sso', (route) =>
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({ oidc: false, proxy: false })
-			})
-		);
-		await page.route('**/api/v1/auth/identities', (route) =>
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({ items: [] })
-			})
-		);
+		await setupAuthRoutes(page);
 		await page.route('**/api/v1/instances', (route) =>
 			route.fulfill({
 				status: 200,
@@ -662,59 +546,11 @@ if (!process.env.SNATCHARR_E2E_API) {
 		const dialog = page.locator('dialog#mobile-nav-dialog');
 		await expect(dialog).toBeVisible();
 
-		await settleToasts(page);
-		const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
-		expect(results.violations).toEqual([]);
+		await expectNoAxeViolations(page);
 	});
 
 	test('/activity?source=live empty state has no axe violations', async ({ page }) => {
-		await setupAuthRoutes(page);
-		await page.route('**/api/v1/instances', (route) =>
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify([])
-			})
-		);
-		await page.route('**/api/v1/schedules', (route) =>
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify([])
-			})
-		);
-		await page.route('**/api/v1/system/status', (route) =>
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({
-					name: 'SnatchArr',
-					version: '0.1.0',
-					commit: 'abc1234',
-					build_date: '2026-10-20',
-					profile: 'dev',
-					setup_complete: true
-				})
-			})
-		);
-		await page.route('**/api/v1/events?*', (route) =>
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify([])
-			})
-		);
-		await page.route('**/api/v1/events/stream', (route) =>
-			route.fulfill({
-				status: 200,
-				contentType: 'text/event-stream',
-				headers: {
-					'Cache-Control': 'no-cache',
-					Connection: 'keep-alive'
-				},
-				body: ': keepalive\n\n'
-			})
-		);
+		await setupLiveActivityRoutes(page);
 
 		await page.goto('/activity?source=live');
 		await expect(
@@ -724,97 +560,56 @@ if (!process.env.SNATCHARR_E2E_API) {
 			})
 		).toBeVisible();
 
-		await settleToasts(page);
-		const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
-		expect(results.violations).toEqual([]);
+		await expectNoAxeViolations(page);
 	});
 
 	test('/activity?source=live with backlog rows has no axe violations', async ({ page }) => {
-		await setupAuthRoutes(page);
-		await page.route('**/api/v1/instances', (route) =>
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify([
-					{
-						id: '00000000-0000-0000-0000-000000000001',
-						name: 'Library Sonarr',
-						kind: 'sonarr',
-						base_url: 'http://sonarr.local:8989',
-						source: 'manual',
-						enabled: true,
-						created_at: '2026-01-01T00:00:00Z',
-						updated_at: '2026-01-01T00:00:00Z'
-					}
-				])
-			})
-		);
-		await page.route('**/api/v1/schedules', (route) =>
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify([])
-			})
-		);
-		await page.route('**/api/v1/system/status', (route) =>
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({
-					name: 'SnatchArr',
-					version: '0.1.0',
-					commit: 'abc1234',
-					build_date: '2026-10-20',
-					profile: 'dev',
-					setup_complete: true,
-					worker_last_contact_at: '2026-10-20T12:30:00Z'
-				})
-			})
-		);
-		await page.route('**/api/v1/events?*', (route) =>
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify([
-					{
-						id: 101,
-						instance_id: '00000000-0000-0000-0000-000000000001',
-						ts: '2026-10-20T12:00:00Z',
-						level: 'info',
-						type: 'search_dispatched',
-						title: 'Searching Sonarr',
-						detail: '10 items'
-					}
-				])
-			})
-		);
-		await page.route('**/api/v1/events/stream', (route) =>
-			route.fulfill({
-				status: 200,
-				contentType: 'text/event-stream',
-				headers: {
-					'Cache-Control': 'no-cache',
-					Connection: 'keep-alive'
-				},
-				body: ': keepalive\n\n'
-			})
-		);
+		await setupLiveActivityRoutes(page, {
+			instances: [
+				{
+					id: '00000000-0000-0000-0000-000000000001',
+					name: 'Library Sonarr',
+					kind: 'sonarr',
+					base_url: 'http://sonarr.local:8989',
+					source: 'manual',
+					enabled: true,
+					created_at: '2026-01-01T00:00:00Z',
+					updated_at: '2026-01-01T00:00:00Z'
+				}
+			],
+			systemStatus: {
+				name: 'SnatchArr',
+				version: '0.1.0',
+				commit: 'abc1234',
+				build_date: '2026-10-20',
+				profile: 'dev',
+				setup_complete: true,
+				worker_last_contact_at: '2026-10-20T12:30:00Z'
+			},
+			events: [
+				{
+					id: 101,
+					instance_id: '00000000-0000-0000-0000-000000000001',
+					ts: '2026-10-20T12:00:00Z',
+					level: 'info',
+					type: 'search_dispatched',
+					title: 'Searching Sonarr',
+					detail: '10 items'
+				}
+			]
+		});
 
 		await page.goto('/activity?source=live');
 		await expect(page.getByRole('log')).toBeVisible();
 
-		await settleToasts(page);
-		const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
-		expect(results.violations).toEqual([]);
+		await expectNoAxeViolations(page);
 	});
 } else {
 	test.describe('public', () => {
 		test('public: /setup has no axe violations', async ({ page }) => {
 			await page.goto('/setup');
 			await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-			await settleToasts(page);
-			const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
-			expect(results.violations).toEqual([]);
+			await expectNoAxeViolations(page);
 		});
 	});
 
@@ -822,9 +617,7 @@ if (!process.env.SNATCHARR_E2E_API) {
 		test('anonymous: /login has no axe violations', async ({ page }) => {
 			await page.goto('/login');
 			await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-			await settleToasts(page);
-			const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
-			expect(results.violations).toEqual([]);
+			await expectNoAxeViolations(page);
 		});
 	});
 
@@ -834,9 +627,7 @@ if (!process.env.SNATCHARR_E2E_API) {
 				const target = resolvePath(routePattern);
 				await page.goto(target);
 				await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-				await settleToasts(page);
-				const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
-				expect(results.violations).toEqual([]);
+				await expectNoAxeViolations(page);
 			});
 		}
 	});
