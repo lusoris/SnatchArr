@@ -216,5 +216,38 @@ class ReconcileGoUrl(unittest.TestCase):
         self.assertIn("Kept committed licence URL", err)
 
 
+class CollectGoLookupFailure(unittest.TestCase):
+    URL = "https://github.com/FiloSottile/csrf/blob/v0.2.1/LICENSE"
+    REPORT = "filippo.io/csrf\tv0.2.1\tBSD-3-Clause\tUnknown\tUnknown\n"
+
+    def collect(self, committed_packages, check):
+        with tempfile.TemporaryDirectory() as tmp:
+            committed = Path(tmp) / "licences.json"
+            committed.write_text(json.dumps({"packages": committed_packages}), encoding="utf-8")
+            with (
+                patch.object(generate, "run_cmd", return_value=tmp),
+                patch.object(generate, "run_go_licenses", return_value=self.REPORT),
+                patch("sys.stderr", io.StringIO()),
+            ):
+                return generate.collect_go(Path(tmp), committed_path=committed, check=check)
+
+    def committed(self, version):
+        return [{"ecosystem": "go", "name": "filippo.io/csrf", "version": version, "url": self.URL}]
+
+    def test_positive_check_keeps_committed_url(self):
+        self.assertEqual(self.collect(self.committed("v0.2.1"), check=True)[0]["url"], self.URL)
+
+    def test_positive_generate_refuses_failed_lookup(self):
+        with self.assertRaises(generate.LicenceError) as ctx:
+            self.collect(self.committed("v0.2.1"), check=False)
+        self.assertEqual(ctx.exception.status, 2)
+
+    def test_negative_other_version_stays_empty(self):
+        self.assertEqual(self.collect(self.committed("v0.2.0"), check=False)[0]["url"], "")
+
+    def test_boundary_no_committed_packages(self):
+        self.assertEqual(self.collect([], check=True)[0]["url"], "")
+
+
 if __name__ == "__main__":
     unittest.main()
