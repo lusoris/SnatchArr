@@ -7,6 +7,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { toast } from 'svelte-sonner';
 	import { api, describeError } from '#lib/api/client.js';
 	import type { components } from '#lib/api/schema.js';
+	import AdminActionHeader from '#lib/components/AdminActionHeader.svelte';
 	import AdminFormSlot from '#lib/components/AdminFormSlot.svelte';
 	import AppLogo from '#lib/components/AppLogo.svelte';
 	import ConfirmDelete from '#lib/components/ConfirmDelete.svelte';
@@ -172,9 +173,7 @@ SPDX-License-Identifier: EUPL-1.2
 								<th scope="col">{m.instance_url()}</th>
 								<th scope="col">{m.dlclients_instance()}</th>
 								<th scope="col">{m.instance_last_check()}</th>
-								{#if session.isAdmin}
-									<th scope="col"><span class="sr-only">{m.action_actions()}</span></th>
-								{/if}
+								<AdminActionHeader />
 							</tr>
 						</thead>
 						<tbody>

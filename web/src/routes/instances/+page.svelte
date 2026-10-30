@@ -6,6 +6,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { createSentioQuery, createSentioMutation } from '@sveltesentio/query';
 	import { toast } from 'svelte-sonner';
 	import { api, describeError } from '#lib/api/client.js';
+	import AdminActionHeader from '#lib/components/AdminActionHeader.svelte';
 	import AppLogo from '#lib/components/AppLogo.svelte';
 	import CheckState from '#lib/components/CheckState.svelte';
 	import ConfirmDelete from '#lib/components/ConfirmDelete.svelte';
@@ -140,9 +141,7 @@ SPDX-License-Identifier: EUPL-1.2
 					<th scope="col">{m.instance_source()}</th>
 					<th scope="col">{m.instance_enabled()}</th>
 					<th scope="col">{m.instance_last_check()}</th>
-					{#if session.isAdmin}
-						<th scope="col"><span class="sr-only">{m.action_actions()}</span></th>
-					{/if}
+					<AdminActionHeader />
 				</tr>
 			</thead>
 			<tbody>
