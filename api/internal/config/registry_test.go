@@ -293,3 +293,74 @@ func TestDocsEnvs(t *testing.T) {
 		t.Errorf("DocsEnvs = %v, want exactly APP_A and APP_C", got)
 	}
 }
+
+func sampleSettingValue(s Setting) string {
+	if s.Default != "" {
+		return s.Default
+	}
+	switch s.Type {
+	case "bool":
+		return "true"
+	case "duration":
+		return "10s"
+	case "int":
+		return "1"
+	case "float64":
+		return "1.0"
+	default:
+		return "sample"
+	}
+}
+
+func unhandledRegistryKeys(reg []Setting) []string {
+	var unhandled []string
+	for _, s := range reg {
+		if s.Class == ClassRuntime || (s.Class == ClassSecret && !IsEnvOnlySecret(s.Key, s.Env)) {
+			o := Default()
+			err := ApplySetting(&o, s.Key, sampleSettingValue(s))
+			if err != nil && strings.Contains(err.Error(), "unknown option") {
+				unhandled = append(unhandled, s.Key)
+			}
+		}
+	}
+	return unhandled
+}
+
+func TestRuntimeSettingsAcceptedByApplySetting(t *testing.T) {
+	t.Parallel()
+	reg := Registry()
+
+	tests := []struct {
+		name    string
+		reg     []Setting
+		wantBad []string
+	}{
+		{
+			name:    "positive_all_runtime_and_writable_secrets_accepted",
+			reg:     reg,
+			wantBad: nil,
+		},
+		{
+			name: "negative_planted_unhandled_runtime_key",
+			reg: []Setting{
+				{Key: "snatcharr.planted.unknown", Class: ClassRuntime, Type: "string"},
+			},
+			wantBad: []string{"snatcharr.planted.unknown"},
+		},
+		{
+			name:    "boundary_bootstrap_and_env_secrets_ignored",
+			reg:     []Setting{{Key: "http.addr", Class: ClassBootstrap, Type: "string"}},
+			wantBad: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := unhandledRegistryKeys(tt.reg)
+			if !slices.Equal(got, tt.wantBad) {
+				t.Fatalf("unhandledRegistryKeys() = %v, want %v", got, tt.wantBad)
+			}
+		})
+	}
+}

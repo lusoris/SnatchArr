@@ -392,6 +392,64 @@ func TestLoadOverridesUndecryptableSecret(t *testing.T) {
 	}
 }
 
+func TestPutWithFrameworkEnv(t *testing.T) {
+	tests := []struct {
+		name       string
+		values     map[string]string
+		wantErr    bool
+		errIs      error
+		errContain string
+		checkRes   func(t *testing.T, res runtimesettings.PutResult)
+	}{
+		{
+			name:   "positive_valid_runtime_key_with_framework_env",
+			values: map[string]string{"snatcharr.item_search.cooldown_seconds": "300"},
+			checkRes: func(t *testing.T, res runtimesettings.PutResult) {
+				t.Helper()
+				if !res.PendingRestart {
+					t.Errorf("expected PendingRestart = true")
+				}
+			},
+		},
+		{
+			name:       "negative_otel_enabled_read_only",
+			values:     map[string]string{"otel.enabled": "false"},
+			wantErr:    true,
+			errIs:      domain.ErrInvalid,
+			errContain: "read-only",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("APP_HTTP_ADDR", ":8080")
+			t.Setenv("APP_GRPC_LISTEN", ":9090")
+			h := newTestHarness(t)
+			uID := uuid.New()
+			ctx := t.Context()
+			res, err := h.svc.Put(ctx, &uID, tt.values)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected error, got nil")
+				}
+				if tt.errIs != nil && !errors.Is(err, tt.errIs) {
+					t.Fatalf("expected error %v, got %v", tt.errIs, err)
+				}
+				if tt.errContain != "" && !strings.Contains(err.Error(), tt.errContain) {
+					t.Fatalf("expected error containing %q, got %v", tt.errContain, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tt.checkRes != nil {
+				tt.checkRes(t, res)
+			}
+		})
+	}
+}
+
 func TestPutInvalidEnvSettingFails(t *testing.T) {
 	t.Setenv("APP_SNATCHARR_SESSION_TTL", "invalid-duration-value")
 	h := newTestHarness(t)
