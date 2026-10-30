@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -80,7 +79,7 @@ func LoadOverrides(ctx context.Context, st *store.Store, enc *crypto.Encryptor) 
 	current := make(map[string]string, len(rows))
 	for _, r := range rows {
 		item, exists := regMap[r.Key]
-		if !exists || item.Class == config.ClassBootstrap || isEnvOnlySecret(item.Key, item.Env) {
+		if !exists || item.Class == config.ClassBootstrap || config.IsEnvOnlySecret(item.Key, item.Env) {
 			continue
 		}
 		val, err := storedValue(item, r.Value, enc)
@@ -128,7 +127,7 @@ func (s *Service) buildSettingItem(item config.Setting, dbRow sqlcgen.RuntimeSet
 	source := "default"
 	// An environment-only secret is never writable through the API, so it reads as locked even
 	// while its variable is unset.
-	locked := isEnvOnlySecret(item.Key, item.Env)
+	locked := config.IsEnvOnlySecret(item.Key, item.Env)
 	if envSet {
 		source = "env"
 		locked = true
@@ -200,7 +199,7 @@ func (s *Service) validateKeys(regMap map[string]config.Setting, values map[stri
 		if !exists {
 			return fmt.Errorf("%w: unknown setting %q", domain.ErrInvalid, k)
 		}
-		if item.Class == config.ClassBootstrap || isEnvOnlySecret(item.Key, item.Env) {
+		if item.Class == config.ClassBootstrap || config.IsEnvOnlySecret(item.Key, item.Env) {
 			return fmt.Errorf("%w: setting %q is read-only", domain.ErrInvalid, k)
 		}
 		if _, envSet := os.LookupEnv(item.Env); envSet {
@@ -250,6 +249,9 @@ func applyStored(o *config.Options, overrides map[string]string) error {
 // applyEnv applies every set environment variable on top, so env wins over stored values.
 func applyEnv(o *config.Options) error {
 	for _, item := range config.Registry() {
+		if !config.OwnsSetting(item.Key) {
+			continue
+		}
 		envVal, envSet := os.LookupEnv(item.Env)
 		if !envSet {
 			continue
@@ -346,13 +348,6 @@ func (s *Service) auditLog(ctx context.Context, userID *uuid.UUID, k, v string, 
 		slog.Any("user_id", userID),
 		slog.Time("time", now),
 	)
-}
-
-func isEnvOnlySecret(key, env string) bool {
-	if strings.HasPrefix(env, "APP_DB_") || env == "APP_CRYPTO_KEY" {
-		return true
-	}
-	return key == "snatcharr.worker.token" || key == "snatcharr.apikey.secret"
 }
 
 // isUndefinedTable reports a schema that predates migration 000051: the start-up load runs

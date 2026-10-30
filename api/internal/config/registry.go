@@ -4,7 +4,10 @@
 
 package config
 
-import "slices"
+import (
+	"slices"
+	"strings"
+)
 
 // Class identifies the lifecycle and mutation safety tier of a configuration setting.
 type Class string
@@ -60,6 +63,14 @@ func missing(keys []string, reg []Setting) []string {
 		}
 	}
 	return notFound
+}
+
+// IsEnvOnlySecret reports whether a secret setting cannot be overridden through the API.
+func IsEnvOnlySecret(key, env string) bool {
+	if strings.HasPrefix(env, "APP_DB_") || env == "APP_CRYPTO_KEY" {
+		return true
+	}
+	return key == "snatcharr.worker.token" || key == "snatcharr.apikey.secret"
 }
 
 // Registry returns the static list of all server configuration settings read by the API.
@@ -672,7 +683,7 @@ var registry = []Setting{
 	{
 		Key:     "grpc.client.tls",
 		Env:     "APP_GRPC_CLIENT_TLS",
-		Class:   ClassRuntime,
+		Class:   ClassBootstrap,
 		Type:    "bool",
 		Default: "false",
 		Apply:   ApplyRestart,
@@ -680,7 +691,7 @@ var registry = []Setting{
 	{
 		Key:     "grpc.client.cert_file",
 		Env:     "APP_GRPC_CLIENT_CERT_FILE",
-		Class:   ClassRuntime,
+		Class:   ClassBootstrap,
 		Type:    "string",
 		Default: "",
 		Apply:   ApplyRestart,
@@ -688,7 +699,7 @@ var registry = []Setting{
 	{
 		Key:     "grpc.client.key_file",
 		Env:     "APP_GRPC_CLIENT_KEY_FILE",
-		Class:   ClassRuntime,
+		Class:   ClassBootstrap,
 		Type:    "string",
 		Default: "",
 		Apply:   ApplyRestart,
@@ -696,7 +707,7 @@ var registry = []Setting{
 	{
 		Key:     "grpc.client.ca_file",
 		Env:     "APP_GRPC_CLIENT_CA_FILE",
-		Class:   ClassRuntime,
+		Class:   ClassBootstrap,
 		Type:    "string",
 		Default: "",
 		Apply:   ApplyRestart,
@@ -704,7 +715,7 @@ var registry = []Setting{
 	{
 		Key:     "grpc.client.server_name",
 		Env:     "APP_GRPC_CLIENT_SERVER_NAME",
-		Class:   ClassRuntime,
+		Class:   ClassBootstrap,
 		Type:    "string",
 		Default: "",
 		Apply:   ApplyRestart,
@@ -712,7 +723,7 @@ var registry = []Setting{
 	{
 		Key:     "grpc.client.keepalive.time",
 		Env:     "APP_GRPC_CLIENT_KEEPALIVE_TIME",
-		Class:   ClassRuntime,
+		Class:   ClassBootstrap,
 		Type:    "duration",
 		Default: "",
 		Apply:   ApplyRestart,
@@ -720,7 +731,7 @@ var registry = []Setting{
 	{
 		Key:     "grpc.client.keepalive.timeout",
 		Env:     "APP_GRPC_CLIENT_KEEPALIVE_TIMEOUT",
-		Class:   ClassRuntime,
+		Class:   ClassBootstrap,
 		Type:    "duration",
 		Default: "",
 		Apply:   ApplyRestart,
@@ -728,7 +739,7 @@ var registry = []Setting{
 	{
 		Key:     "grpc.client.keepalive.permit_without_stream",
 		Env:     "APP_GRPC_CLIENT_KEEPALIVE_PERMIT_WITHOUT_STREAM",
-		Class:   ClassRuntime,
+		Class:   ClassBootstrap,
 		Type:    "bool",
 		Default: "false",
 		Apply:   ApplyRestart,
@@ -736,7 +747,7 @@ var registry = []Setting{
 	{
 		Key:     "grpc.client.retry.max_attempts",
 		Env:     "APP_GRPC_CLIENT_RETRY_MAX_ATTEMPTS",
-		Class:   ClassRuntime,
+		Class:   ClassBootstrap,
 		Type:    "int",
 		Default: "0",
 		Apply:   ApplyRestart,
@@ -744,7 +755,7 @@ var registry = []Setting{
 	{
 		Key:     "grpc.client.retry.initial_backoff",
 		Env:     "APP_GRPC_CLIENT_RETRY_INITIAL_BACKOFF",
-		Class:   ClassRuntime,
+		Class:   ClassBootstrap,
 		Type:    "duration",
 		Default: "100ms",
 		Apply:   ApplyRestart,
@@ -752,7 +763,7 @@ var registry = []Setting{
 	{
 		Key:     "grpc.client.retry.max_backoff",
 		Env:     "APP_GRPC_CLIENT_RETRY_MAX_BACKOFF",
-		Class:   ClassRuntime,
+		Class:   ClassBootstrap,
 		Type:    "duration",
 		Default: "1s",
 		Apply:   ApplyRestart,
@@ -760,7 +771,7 @@ var registry = []Setting{
 	{
 		Key:     "grpc.client.retry.backoff_multiplier",
 		Env:     "APP_GRPC_CLIENT_RETRY_BACKOFF_MULTIPLIER",
-		Class:   ClassRuntime,
+		Class:   ClassBootstrap,
 		Type:    "float64",
 		Default: "2",
 		Apply:   ApplyRestart,
@@ -960,7 +971,7 @@ var registry = []Setting{
 	{
 		Key:     "otel.enabled",
 		Env:     "APP_OTEL_ENABLED",
-		Class:   ClassRuntime,
+		Class:   ClassBootstrap,
 		Type:    "bool",
 		Default: "true",
 		Apply:   ApplyRestart,
@@ -968,7 +979,7 @@ var registry = []Setting{
 	{
 		Key:     "otel.endpoint",
 		Env:     "APP_OTEL_ENDPOINT",
-		Class:   ClassRuntime,
+		Class:   ClassBootstrap,
 		Type:    "string",
 		Default: "",
 		Apply:   ApplyRestart,
@@ -976,7 +987,7 @@ var registry = []Setting{
 	{
 		Key:     "otel.insecure",
 		Env:     "APP_OTEL_INSECURE",
-		Class:   ClassRuntime,
+		Class:   ClassBootstrap,
 		Type:    "bool",
 		Default: "true",
 		Apply:   ApplyRestart,
@@ -984,7 +995,7 @@ var registry = []Setting{
 	{
 		Key:     "otel.service.name",
 		Env:     "APP_OTEL_SERVICE_NAME",
-		Class:   ClassRuntime,
+		Class:   ClassBootstrap,
 		Type:    "string",
 		Default: "",
 		Apply:   ApplyRestart,
@@ -992,7 +1003,7 @@ var registry = []Setting{
 	{
 		Key:     "otel.service.version",
 		Env:     "APP_OTEL_SERVICE_VERSION",
-		Class:   ClassRuntime,
+		Class:   ClassBootstrap,
 		Type:    "string",
 		Default: "",
 		Apply:   ApplyRestart,
@@ -1000,7 +1011,7 @@ var registry = []Setting{
 	{
 		Key:     "otel.service.namespace",
 		Env:     "APP_OTEL_SERVICE_NAMESPACE",
-		Class:   ClassRuntime,
+		Class:   ClassBootstrap,
 		Type:    "string",
 		Default: "",
 		Apply:   ApplyRestart,
@@ -1008,7 +1019,7 @@ var registry = []Setting{
 	{
 		Key:     "otel.sample.ratio",
 		Env:     "APP_OTEL_SAMPLE_RATIO",
-		Class:   ClassRuntime,
+		Class:   ClassBootstrap,
 		Type:    "float64",
 		Default: "1.0",
 		Apply:   ApplyRestart,
@@ -1016,7 +1027,7 @@ var registry = []Setting{
 	{
 		Key:     "otel.export.traces",
 		Env:     "APP_OTEL_EXPORT_TRACES",
-		Class:   ClassRuntime,
+		Class:   ClassBootstrap,
 		Type:    "bool",
 		Default: "true",
 		Apply:   ApplyRestart,
@@ -1024,7 +1035,7 @@ var registry = []Setting{
 	{
 		Key:     "otel.export.metrics",
 		Env:     "APP_OTEL_EXPORT_METRICS",
-		Class:   ClassRuntime,
+		Class:   ClassBootstrap,
 		Type:    "bool",
 		Default: "true",
 		Apply:   ApplyRestart,
@@ -1032,7 +1043,7 @@ var registry = []Setting{
 	{
 		Key:     "otel.export.logs",
 		Env:     "APP_OTEL_EXPORT_LOGS",
-		Class:   ClassRuntime,
+		Class:   ClassBootstrap,
 		Type:    "bool",
 		Default: "true",
 		Apply:   ApplyRestart,
@@ -1040,7 +1051,7 @@ var registry = []Setting{
 	{
 		Key:     "otel.export.prometheus",
 		Env:     "APP_OTEL_EXPORT_PROMETHEUS",
-		Class:   ClassRuntime,
+		Class:   ClassBootstrap,
 		Type:    "bool",
 		Default: "false",
 		Apply:   ApplyRestart,
@@ -1048,7 +1059,7 @@ var registry = []Setting{
 	{
 		Key:     "otel.logs.trace_ids",
 		Env:     "APP_OTEL_LOGS_TRACE_IDS",
-		Class:   ClassRuntime,
+		Class:   ClassBootstrap,
 		Type:    "bool",
 		Default: "true",
 		Apply:   ApplyRestart,

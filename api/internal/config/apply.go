@@ -13,6 +13,12 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 )
 
+// OwnsSetting reports whether ApplySetting handles key; other registry keys belong to golusoris
+// modules, which read them from koanf.
+func OwnsSetting(key string) bool {
+	return strings.HasPrefix(key, "snatcharr.")
+}
+
 // ApplySetting parses val and sets the corresponding field on o for key.
 func ApplySetting(o *Options, key, val string) error {
 	switch {
