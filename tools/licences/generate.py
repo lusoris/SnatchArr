@@ -209,9 +209,9 @@ def load_committed_go_packages(committed_path):
         with open(committed_path, "r", encoding="utf-8") as f:
             data = json.load(f)
         return {
-            p["name"]: p
+            (p["name"], p["version"]): p
             for p in data.get("packages", [])
-            if p.get("ecosystem") == "go" and "name" in p
+            if p.get("ecosystem") == "go" and "name" in p and "version" in p
         }
     except (OSError, json.JSONDecodeError, KeyError):
         return {}
@@ -226,29 +226,13 @@ def reconcile_go_url(pkg, committed):
     if not committed:
         return ""
 
-    committed_pkg = (
-        committed
-        if ("version" in committed or "url" in committed)
-        else committed.get(pkg.get("name"))
-    )
-    if not committed_pkg:
-        return ""
-
-    if committed_pkg.get("version") == pkg.get("version"):
-        return committed_pkg.get("url") or ""
-
-    return ""
+    return committed.get("url") or ""
 
 
 def reconcile_go_package(pkg, committed, check=False):
     """Reconcile Go package licence URL, reporting or erroring on failed lookup."""
     raw_url = pkg.get("url") or ""
-    committed_pkg = (
-        committed
-        if (not committed or "version" in committed or "url" in committed)
-        else committed.get(pkg.get("name"))
-    )
-    url = reconcile_go_url(pkg, committed_pkg)
+    url = reconcile_go_url(pkg, committed)
     if (not raw_url or raw_url == "Unknown") and url:
         name = pkg.get("name", "")
         ver = pkg.get("version", "")
@@ -285,7 +269,7 @@ def collect_go(repo_root, committed_path=None, check=False):
             "url": info.get("url") or "",
             "text": text,
         }
-        reconciled = reconcile_go_package(pkg, committed_pkgs.get(name), check=check)
+        reconciled = reconcile_go_package(pkg, committed_pkgs.get((name, ver)), check=check)
         go_pkgs.append(reconciled)
     return go_pkgs
 

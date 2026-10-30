@@ -3,7 +3,9 @@
 """Positive, negative and boundary cases for the go-licenses label corrections."""
 
 import io
+import json
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -109,14 +111,58 @@ class ReconcileGoUrl(unittest.TestCase):
 
     def test_negative_unknown_with_other_version_empty(self):
         pkg = {"name": "filippo.io/csrf", "version": "v0.2.1", "url": "Unknown"}
-        committed = {
-            "name": "filippo.io/csrf",
-            "version": "v0.3.0",
-            "url": "https://github.com/FiloSottile/csrf/blob/v0.3.0/LICENSE",
-        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "licences.json"
+            path.write_text(
+                json.dumps({
+                    "packages": [{
+                        "ecosystem": "go",
+                        "name": "filippo.io/csrf",
+                        "version": "v0.3.0",
+                        "url": "https://github.com/FiloSottile/csrf/blob/v0.3.0/LICENSE",
+                    }]
+                }),
+                encoding="utf-8",
+            )
+            committed_pkgs = generate.load_committed_go_packages(path)
+        committed = committed_pkgs.get((pkg["name"], pkg["version"]))
+        self.assertIsNone(committed)
         self.assertEqual(generate.reconcile_go_url(pkg, committed), "")
         res = generate.reconcile_go_package(pkg, committed, check=True)
         self.assertEqual(res["url"], "")
+
+    def test_two_versions_one_module_keeps_first_version_url(self):
+        pkg1 = {"name": "filippo.io/csrf", "version": "v0.2.1", "url": "Unknown"}
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "licences.json"
+            path.write_text(
+                json.dumps({
+                    "packages": [
+                        {
+                            "ecosystem": "go",
+                            "name": "filippo.io/csrf",
+                            "version": "v0.2.1",
+                            "url": "https://github.com/FiloSottile/csrf/blob/v0.2.1/LICENSE",
+                        },
+                        {
+                            "ecosystem": "go",
+                            "name": "filippo.io/csrf",
+                            "version": "v0.3.0",
+                            "url": "https://github.com/FiloSottile/csrf/blob/v0.3.0/LICENSE",
+                        },
+                    ]
+                }),
+                encoding="utf-8",
+            )
+            committed_pkgs = generate.load_committed_go_packages(path)
+        committed1 = committed_pkgs.get((pkg1["name"], pkg1["version"]))
+        self.assertEqual(
+            generate.reconcile_go_url(pkg1, committed1),
+            "https://github.com/FiloSottile/csrf/blob/v0.2.1/LICENSE",
+        )
+        with patch("sys.stderr", io.StringIO()):
+            res = generate.reconcile_go_package(pkg1, committed1, check=True)
+        self.assertEqual(res["url"], "https://github.com/FiloSottile/csrf/blob/v0.2.1/LICENSE")
 
     def test_boundary_resolved_differing_from_committed_resolved_wins(self):
         pkg = {
