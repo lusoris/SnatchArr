@@ -909,6 +909,10 @@ async fn circuit_opens_after_consecutive_failures() -> TestResult {
     );
 
     assert_single_completed_outcome(&api, RunOutcome::Failed).await?;
+    assert_eq!(
+        some(api.completed_requests.lock().await.first(), "CompleteRun")?.eligible_items,
+        Some(4)
+    );
     Ok(())
 }
 
@@ -1480,4 +1484,67 @@ fn preview_costs_sum_to_the_query_cost() {
         let sum: u32 = got.iter().map(|(_, c)| c).sum();
         assert_eq!(sum, target.query_cost(), "{target:?}");
     }
+}
+
+/// The pool survives selection and exhausted budget, including preview runs.
+#[tokio::test]
+async fn eligible_pool_before_limit_and_budget_reaches_api() -> TestResult {
+    for dry_run in [false, true] {
+        let api = FakeApi {
+            budget_granted: 0,
+            filter_unprocessed: vec![1, 2, 3],
+            ..Default::default()
+        };
+        let _run = run_wanted_cycle(
+            &api,
+            episodes(&[(1, 10), (2, 11), (3, 12), (4, 13)]),
+            queued_command(),
+            |run| {
+                run.dry_run = dry_run;
+                some(run.policy.as_mut(), "policy")?.per_cycle = 1;
+                Ok(())
+            },
+        )
+        .await?;
+        let complete = api.completed_requests.lock().await;
+        assert_eq!(complete.len(), 1);
+        let sent = some(complete.first(), "CompleteRun")?;
+        assert_eq!(sent.eligible_items, Some(3), "dry_run={dry_run}");
+        assert!(sent.searched.is_empty());
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn eligible_pool_all_processed_reports_zero() -> TestResult {
+    let api = FakeApi {
+        filter_unprocessed: vec![],
+        ..Default::default()
+    };
+    let _run = run_sonarr_cycle(&api, episodes(&[(1, 10), (2, 11)]), None).await?;
+    let complete = api.completed_requests.lock().await;
+    assert_eq!(complete.len(), 1);
+    let sent = some(complete.first(), "CompleteRun")?;
+    assert_eq!(sent.eligible_items, Some(0));
+    assert_eq!(sent.outcome, RunOutcome::Done as i32);
+    Ok(())
+}
+
+#[tokio::test]
+async fn eligible_pool_wanted_fetch_failure_is_absent() -> TestResult {
+    let api = FakeApi::default();
+    let (client, _) = start_fake_api(api.clone()).await?;
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/v3/wanted/missing"))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(&server)
+        .await;
+    run_short_polling(client, default_run(&server.uri())).await;
+    let complete = api.completed_requests.lock().await;
+    assert_eq!(complete.len(), 1);
+    let sent = some(complete.first(), "CompleteRun")?;
+    assert_eq!(sent.eligible_items, None);
+    assert_eq!(sent.outcome, RunOutcome::Failed as i32);
+    Ok(())
 }

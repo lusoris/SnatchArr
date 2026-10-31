@@ -22,7 +22,7 @@ func newPriorityFixture(t *testing.T) completeFixture {
 	if _, err := f.st.Q().EnsureSettings(t.Context(), f.clk.Now()); err != nil {
 		t.Fatalf("EnsureSettings: %v", err)
 	}
-	if _, err := f.srv.runs.Complete(t.Context(), f.run.ID, "worker", domain.RunDone, 0, ""); err != nil {
+	if _, err := f.srv.runs.Complete(t.Context(), f.run.ID, "worker", domain.RunDone, 0, "", nil); err != nil {
 		t.Fatalf("Complete initial fixture run: %v", err)
 	}
 	return f
@@ -165,7 +165,7 @@ func TestLeasePriority(t *testing.T) {
 	t.Run("boundary no settings row leases in queued_at order", func(t *testing.T) {
 		t.Parallel()
 		f := newCompleteFixture(t)
-		if _, err := f.srv.runs.Complete(t.Context(), f.run.ID, "worker", domain.RunDone, 0, ""); err != nil {
+		if _, err := f.srv.runs.Complete(t.Context(), f.run.ID, "worker", domain.RunDone, 0, "", nil); err != nil {
 			t.Fatalf("Complete initial fixture run: %v", err)
 		}
 		if _, err := f.st.Pool().Exec(t.Context(), "DELETE FROM settings"); err != nil {
