@@ -13,7 +13,7 @@ const e2eReport = process.env.SNATCHARR_E2E_REPORT;
 const visual = !!process.env.SNATCHARR_VISUAL;
 const visualProject = {
 	name: 'visual',
-	testMatch: /visual\.test\.ts/,
+	testMatch: /\/e2e\/visual\.test\.ts$/,
 	// The comparison freezes animations and plants its diffs with inline style tags, which the
 	// page CSP refuses; e2e/security.test.ts holds the policy itself.
 	use: {
@@ -31,7 +31,7 @@ if (servedUrl && !servedState) {
 }
 const servedProject = {
 	name: 'served-layout',
-	testMatch: /layout\.test\.ts/,
+	testMatch: /\/e2e\/layout\.test\.ts$/,
 	use: {
 		browserName: 'chromium' as const,
 		baseURL: servedUrl,
@@ -39,6 +39,8 @@ const servedProject = {
 	}
 };
 
+// Project patterns name files directly under e2e/, so a feature test's slug cannot pull it into
+// a project that runs without the features session.
 export default defineConfig({
 	testDir: 'e2e',
 	fullyParallel: true,
@@ -78,19 +80,19 @@ export default defineConfig({
 						{
 							name: 'chromium',
 							testMatch:
-								/(a11y|theme|btn-layer|security|nonblocking|keyboard-nav|inp|instance-tabs|entity-links|(?:^|\/)targets|app-logos|session-expiry|live|modules|settle|jellyfin-signin|screen-range)\.test\.ts/,
+								/\/e2e\/(a11y|theme|btn-layer|security|nonblocking|keyboard-nav|inp|instance-tabs|entity-links|targets|app-logos|session-expiry|live|modules|settle|jellyfin-signin|screen-range)\.test\.ts$/,
 							use: { browserName: 'chromium' }
 						}
 					]
 				: [
 						{
 							name: 'security',
-							testMatch: /security\.test\.ts/,
+							testMatch: /\/e2e\/security\.test\.ts$/,
 							use: { browserName: 'chromium' }
 						},
 						{
 							name: 'public',
-							testMatch: /(a11y|theme)\.test\.ts/,
+							testMatch: /\/e2e\/(a11y|theme)\.test\.ts$/,
 							grep: /public:|routes:/,
 							use: { browserName: 'chromium' }
 						},
@@ -102,7 +104,7 @@ export default defineConfig({
 						},
 						{
 							name: 'anonymous',
-							testMatch: /a11y\.test\.ts/,
+							testMatch: /\/e2e\/a11y\.test\.ts$/,
 							grep: /anonymous:/,
 							dependencies: ['auth-setup'],
 							use: { browserName: 'chromium' }
@@ -110,7 +112,7 @@ export default defineConfig({
 						{
 							name: 'authenticated',
 							testMatch:
-								/(a11y|phone-overflow|layout|nonblocking|keyboard-nav|inp|instance-tabs|entity-links|(?:^|\/)targets|app-logos|redirects|screen-range)\.test\.ts/,
+								/\/e2e\/(a11y|phone-overflow|layout|nonblocking|keyboard-nav|inp|instance-tabs|entity-links|targets|app-logos|redirects|screen-range)\.test\.ts$/,
 							grep: /authenticated:|nonblocking:/,
 							dependencies: ['auth-setup'],
 							use: { browserName: 'chromium', storageState: authFile }
