@@ -15,8 +15,8 @@ current state; this page names them.
 | Milestone | Scope | Epics |
 | :--- | :--- | :--- |
 | [0.7](https://github.com/lusoris/SnatchArr/milestone/12) | Search and priorities, Settings and the Live page. Reported problems come first. | [#568](https://github.com/lusoris/SnatchArr/issues/568), [#569](https://github.com/lusoris/SnatchArr/issues/569) |
-| 0.8 | Module design and switches. | [#570](https://github.com/lusoris/SnatchArr/issues/570) |
-| 0.9 | The first optional modules and the LLM access module. | [#570](https://github.com/lusoris/SnatchArr/issues/570), [#571](https://github.com/lusoris/SnatchArr/issues/571) |
+| [0.8](https://github.com/lusoris/SnatchArr/milestone/13) | Released as 0.8.0: the module switch mechanism and named instance priority presets. The open module and backlog work moved to 0.9. | [#570](https://github.com/lusoris/SnatchArr/issues/570) |
+| [0.9](https://github.com/lusoris/SnatchArr/milestone/14) | The first optional modules, the LLM access module, and the open work moved from 0.8. | [#570](https://github.com/lusoris/SnatchArr/issues/570), [#571](https://github.com/lusoris/SnatchArr/issues/571) |
 | [Backlog](https://github.com/lusoris/SnatchArr/milestone/10) | Work without a version yet. | [#572](https://github.com/lusoris/SnatchArr/issues/572) |
 
 The [milestone list](https://github.com/lusoris/SnatchArr/milestones) shows every
@@ -33,7 +33,7 @@ the order you set.
   \*arr family (season packs, seasons, episode groups or episodes).
 - [#559](https://github.com/lusoris/SnatchArr/issues/559): instance priority with named
   presets and separate search and download orders
-  ([ADR-0022](adr/0022-instance-priority.md)).
+  ([ADR-0022](adr/0022-instance-priority.md)); shipped in 0.8.0.
 - [#560](https://github.com/lusoris/SnatchArr/issues/560): apply instance priority
   inside download-client queues.
 
@@ -54,8 +54,8 @@ the UI in plain words, and a Live page that is useful as soon as it opens.
 Epic [#570](https://github.com/lusoris/SnatchArr/issues/570). The product architecture is
 settled in [ADR-0018](adr/0018-product-front-door.md).
 
-- [#563](https://github.com/lusoris/SnatchArr/issues/563) (0.8): one switch mechanism
-  that turns every optional module on or off, with hard boundaries.
+- [#563](https://github.com/lusoris/SnatchArr/issues/563) (0.8, shipped in 0.8.0): one
+  switch mechanism that turns every optional module on or off, with hard boundaries.
 - [#565](https://github.com/lusoris/SnatchArr/issues/565) (0.9): a request portal module
   for media types Seerr does not cover.
 - [#566](https://github.com/lusoris/SnatchArr/issues/566) (0.9): an adult content module
