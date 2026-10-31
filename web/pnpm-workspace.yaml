@@ -9,3 +9,10 @@ allowBuilds:
 # Outside packages keep the hold.
 minimumReleaseAgeExclude:
   - '@sveltesentio/*'
+# GHSA-g3hv-75wg-m249: replace vulnerable minimatch versions with the patched release.
+overrides:
+  'minimatch@<11.0.1': 11.0.3
+# Redocly calls the old CommonJS default; minimatch 11 requires its named export.
+# Drop or refresh this compatibility patch when bumping @redocly/openapi-core.
+patchedDependencies:
+  '@redocly/openapi-core@1.34.20': patches/@redocly__openapi-core@1.34.20.patch
