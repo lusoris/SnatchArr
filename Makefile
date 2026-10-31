@@ -277,6 +277,7 @@ e2e-compose-app-upgrade: ## Homelab compose bundle: application upgrade from pre
 	  docker build -t $(E2E_API_IMAGE) -f Dockerfile . ; \
 	  docker build -t $(E2E_WORKER_IMAGE) -f worker/Dockerfile . ; \
 	fi
+	bash tools/e2e/schema_check_test.sh
 	SMOKE_API_IMAGE=$(E2E_API_IMAGE) SMOKE_WORKER_IMAGE=$(E2E_WORKER_IMAGE) \
 	  bash tools/e2e/planted.sh UPGRADE_PLANT tools/e2e/compose_app_upgrade.sh \
 	  "drop-row:api read-back differs" \
@@ -590,6 +591,7 @@ workflows-verify: ## The rule of "CI success", the Security Scan issue step, the
 	sh tools/ci/semgrep_scan_test.sh
 	bash tools/ci/generated_files_test.sh
 	bash tools/e2e/planted_test.sh
+	bash tools/e2e/schema_check_test.sh
 	bash tools/e2e/live_lib_test.sh
 	python3 -I tools/release/dogfood_gate.py --self-test
 	python3 -I tools/release/dogfood_pass.py --self-test
