@@ -37,6 +37,14 @@ function setupApiDir(tempDir: string): string {
 	return configPath;
 }
 
+function runGate(gateScript: string, tempDir: string, configPath: string) {
+	return spawnSync(
+		'python3',
+		[gateScript, '--repository', REPO, '--tag', TAG, '--api-dir', tempDir, '--config', configPath],
+		{ timeout: 15_000, encoding: 'utf-8' }
+	);
+}
+
 test('878: dogfood gate refuses release without dogfood pass and accepts valid pass', () => {
 	const repoRoot = path.resolve(import.meta.dirname, '../../..');
 	const gateScript = path.join(repoRoot, 'tools/release/dogfood_gate.py');
@@ -51,45 +59,45 @@ test('878: dogfood gate refuses release without dogfood pass and accepts valid p
 
 		// Negative direction: parent commit lacks dogfood success status -> gate refuses with exit 3.
 		fs.writeFileSync(statusFile, JSON.stringify({ statuses: [] }), 'utf-8');
-		const refused = spawnSync(
-			'python3',
-			[
-				gateScript,
-				'--repository',
-				REPO,
-				'--tag',
-				TAG,
-				'--api-dir',
-				tempDir,
-				'--config',
-				configPath
-			],
-			{ timeout: 15_000, encoding: 'utf-8' }
-		);
+		const refused = runGate(gateScript, tempDir, configPath);
 		expect(refused.status).toBe(3);
 		expect(refused.stdout + refused.stderr).toContain('dogfood gate: refused');
+
+		// Negative direction: success from dev-compose cannot satisfy the cluster gate.
+		fs.writeFileSync(
+			statusFile,
+			JSON.stringify({
+				statuses: [
+					{
+						context: 'snatcharr/dogfood',
+						state: 'success',
+						description: 'MCP dogfood on dev-compose: 18 read-only calls passed'
+					}
+				]
+			}),
+			'utf-8'
+		);
+		const wrongInstance = runGate(gateScript, tempDir, configPath);
+		expect(wrongInstance.status).toBe(3);
+		expect(wrongInstance.stdout + wrongInstance.stderr).toContain(
+			"is from instance 'dev-compose', not 'cluster'"
+		);
 
 		// Positive direction: parent commit has dogfood success status -> gate passes with exit 0.
 		fs.writeFileSync(
 			statusFile,
-			JSON.stringify({ statuses: [{ context: 'snatcharr/dogfood', state: 'success' }] }),
+			JSON.stringify({
+				statuses: [
+					{
+						context: 'snatcharr/dogfood',
+						state: 'success',
+						description: 'MCP dogfood on cluster: 18 read-only calls passed'
+					}
+				]
+			}),
 			'utf-8'
 		);
-		const passed = spawnSync(
-			'python3',
-			[
-				gateScript,
-				'--repository',
-				REPO,
-				'--tag',
-				TAG,
-				'--api-dir',
-				tempDir,
-				'--config',
-				configPath
-			],
-			{ timeout: 15_000, encoding: 'utf-8' }
-		);
+		const passed = runGate(gateScript, tempDir, configPath);
 		expect(passed.status).toBe(0);
 		expect(passed.stdout).toContain('dogfood gate: pass');
 	} finally {
