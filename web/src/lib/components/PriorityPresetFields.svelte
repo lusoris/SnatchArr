@@ -28,7 +28,7 @@ SPDX-License-Identifier: EUPL-1.2
 
 <div class="flex flex-col gap-4 rounded-lg border border-line p-4">
 	<div class="flex flex-wrap items-start justify-between gap-3">
-		<div>
+		<div class="min-w-0 flex-1 basis-60">
 			<h2 class="text-base font-semibold">{m.settings_priority_presets_title()}</h2>
 			<p class="text-xs text-subtle">{m.settings_priority_presets_hint()}</p>
 		</div>
@@ -37,6 +37,8 @@ SPDX-License-Identifier: EUPL-1.2
 		</button>
 	</div>
 
-	<PriorityOrderFields bind:preset={searchPreset} order="search" {disabled} />
-	<PriorityOrderFields bind:preset={downloadPreset} order="download" {disabled} />
+	<div class="grid min-w-0 gap-4 sm:grid-cols-2">
+		<PriorityOrderFields bind:preset={searchPreset} order="search" {disabled} />
+		<PriorityOrderFields bind:preset={downloadPreset} order="download" {disabled} />
+	</div>
 </div>

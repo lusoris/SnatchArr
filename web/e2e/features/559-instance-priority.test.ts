@@ -272,6 +272,44 @@ async function overridesAndClearsSearch({ page }: PageFixture): Promise<void> {
 	});
 }
 
+async function dragsDownloadKind({ page }: PageFixture): Promise<void> {
+	const headers = await csrfHeaders(page);
+	const original = await readSettings(page);
+	const preset = await mediaFirst(page);
+	try {
+		await putSettings(page, headers, {
+			...original,
+			download_priority_preset: preset.download
+		});
+		await page.setViewportSize({ width: 1280, height: 800 });
+		await openPresets(page);
+		const height = await page.evaluate(() => document.documentElement.scrollHeight);
+		console.info(`caps scroll height at 1280x800: ${height}px`);
+		expect(height).toBeLessThanOrEqual(1000);
+		const download = page.locator('[data-field="download_priority_preset"]');
+		await download
+			.locator('[data-kind="lidarr"]')
+			.dragTo(download.locator('[data-kind="sonarr"]'), {
+				sourcePosition: { x: 10, y: 10 },
+				targetPosition: { x: 10, y: 10 }
+			});
+		await saveForm(page, SETTINGS, page.getByRole('button', { name: 'Save', exact: true }));
+		const saved = await readSettings(page);
+		expect(saved.download_priority_preset.lidarr).toBeLessThan(
+			saved.download_priority_preset.sonarr
+		);
+		expect(saved.search_priority_preset).toEqual(original.search_priority_preset);
+		await page.reload();
+		await expectRank(page, 'download', 'lidarr', 10);
+		await expectRank(page, 'download', 'sonarr', 20);
+		await settleToasts(page);
+		const axe = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
+		expect(axe.violations).toEqual([]);
+	} finally {
+		await restorePresets(page, headers, original);
+	}
+}
+
 async function rejectsInvalidOverride({ page }: PageFixture): Promise<void> {
 	await withInstance(page, async (id, headers) => {
 		const before = await readPriority(page, id);
@@ -541,6 +579,10 @@ async function rejectsNamedPresetLimits({ page }: PageFixture): Promise<void> {
 test.describe('559: shipped instance priority UI', () => {
 	test.describe.configure({ mode: 'serial' });
 	test('edits search independently and resets both orders to media_first', editsAndResetsPresets);
+	test(
+		'drags Lidarr above Sonarr in downloads and persists an accessible order',
+		dragsDownloadKind
+	);
 	test(
 		'saves and clears a search override while downloads follow the preset',
 		overridesAndClearsSearch

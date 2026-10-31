@@ -49,6 +49,17 @@ export function movePriorityKind(
 	return next;
 }
 
+/** Drops a kind at a position; like a keyboard move, the dropped row loses its tie. */
+export function dropPriorityKind(
+	rows: readonly PriorityRow[],
+	kind: string,
+	targetIndex: number
+): PriorityRow[] {
+	const index = rows.findIndex((row) => row.kind === kind);
+	if (index < 0 || index === targetIndex || !Number.isInteger(targetIndex)) return [...rows];
+	return movePriorityKind(rows, kind, targetIndex - index);
+}
+
 /** Sets an explicit tie, except at the first position where there is no preceding row. */
 export function tiePriorityKind(
 	rows: readonly PriorityRow[],

@@ -94,27 +94,32 @@ SPDX-License-Identifier: EUPL-1.2
 	</h3>
 	<p class="text-sm text-subtle">{m.settings_named_presets_hint()}</p>
 	<ProblemNote error={save.error ?? apply.error ?? rename.error ?? remove.error} />
-	<form class="flex flex-col gap-2" onsubmit={saveCurrent}>
-		<Field id="priority-preset-name" label={m.settings_named_preset_name()}>
-			<input
-				id="priority-preset-name"
-				class="input"
-				required
-				minlength="1"
-				maxlength="40"
-				disabled={busy || count >= 20}
-				bind:value={name}
-			/>
-		</Field>
-		<button type="submit" class="btn" disabled={busy || count >= 20}
+	<form class="flex flex-wrap items-end gap-2" onsubmit={saveCurrent}>
+		<div class="min-w-0 grow basis-40">
+			<Field id="priority-preset-name" label={m.settings_named_preset_name()}>
+				<input
+					id="priority-preset-name"
+					class="input"
+					required
+					minlength="1"
+					maxlength="40"
+					disabled={busy || count >= 20}
+					bind:value={name}
+				/>
+			</Field>
+		</div>
+		<button type="submit" class="btn btn-sm" disabled={busy || count >= 20}
 			>{m.settings_named_preset_save()}</button
 		>
-		<p class="text-xs text-subtle">{m.settings_named_presets_count({ count })}</p>
+		<p class="basis-full text-xs text-subtle">{m.settings_named_presets_count({ count })}</p>
 	</form>
-	<ul class="flex flex-col gap-3">
+	<ul class="flex flex-col gap-2">
 		{#each presets as preset (preset.id ?? preset.name)}
-			<li class="flex min-w-0 flex-col gap-2 border-t border-line pt-3" data-preset={preset.name}>
-				<div class="flex flex-wrap items-center gap-2">
+			<li
+				class="flex min-w-0 flex-wrap items-center gap-2 border-t border-line pt-2"
+				data-preset={preset.name}
+			>
+				<div class="flex min-w-0 grow flex-wrap items-center gap-2">
 					<span class="min-w-0 grow font-medium break-words">{preset.name}</span>
 					{#if preset.builtin}<span class="text-xs text-subtle"
 							>{m.settings_named_preset_builtin()}</span
@@ -123,7 +128,7 @@ SPDX-License-Identifier: EUPL-1.2
 				<div class="flex flex-wrap gap-2">
 					<button
 						type="button"
-						class="btn"
+						class="btn btn-sm"
 						disabled={busy}
 						aria-label={m.settings_named_preset_apply_label({ name: preset.name })}
 						onclick={() => apply.mutate(preset)}>{m.settings_named_preset_apply()}</button
@@ -131,7 +136,7 @@ SPDX-License-Identifier: EUPL-1.2
 					{#if !preset.builtin}
 						<button
 							type="button"
-							class="btn"
+							class="btn btn-sm"
 							disabled={busy}
 							aria-label={m.settings_named_preset_rename_label({ name: preset.name })}
 							onclick={() => {
@@ -141,7 +146,7 @@ SPDX-License-Identifier: EUPL-1.2
 						>
 						<button
 							type="button"
-							class="btn"
+							class="btn btn-sm"
 							disabled={busy}
 							aria-label={m.settings_named_preset_delete_label({ name: preset.name })}
 							onclick={() => remove.mutate(preset)}>{m.settings_named_preset_delete()}</button
@@ -149,7 +154,10 @@ SPDX-License-Identifier: EUPL-1.2
 					{/if}
 				</div>
 				{#if editing && editing === preset.id}
-					<form class="flex flex-col gap-2" onsubmit={(event) => submitRename(event, preset)}>
+					<form
+						class="flex basis-full flex-wrap items-end gap-2"
+						onsubmit={(event) => submitRename(event, preset)}
+					>
 						<Field id={`rename-${preset.id}`} label={m.settings_named_preset_name()}>
 							<input
 								id={`rename-${preset.id}`}
@@ -161,12 +169,12 @@ SPDX-License-Identifier: EUPL-1.2
 								bind:value={renamed}
 							/>
 						</Field>
-						<button type="submit" class="btn" disabled={busy}
+						<button type="submit" class="btn btn-sm" disabled={busy}
 							>{m.settings_named_preset_rename_save()}</button
 						>
 						<button
 							type="button"
-							class="btn"
+							class="btn btn-sm"
 							disabled={busy}
 							onclick={() => {
 								editing = null;

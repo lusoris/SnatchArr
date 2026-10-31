@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { ARR_KINDS } from './kinds.js';
 import {
+	dropPriorityKind,
 	movePriorityKind,
 	priorityRows,
 	ranksFromRows,
@@ -21,6 +22,54 @@ const shipped = {
 };
 
 describe('priority order', () => {
+	it('drops Lidarr above Sonarr with positional ranks without mutating the input', () => {
+		const rows = priorityRows(shipped);
+		const before = structuredClone(rows);
+		const dropped = dropPriorityKind(rows, 'lidarr', 0);
+		expect(dropped.map((row) => row.kind)).toEqual([
+			'lidarr',
+			'sonarr',
+			'radarr',
+			'readarr',
+			'whisparr_v2',
+			'whisparr_v3'
+		]);
+		expect(ranksFromRows(dropped)).toMatchObject({ lidarr: 10, sonarr: 20, radarr: 20 });
+		expect(rows).toEqual(before);
+	});
+
+	it('clears the dropped row tie, as a keyboard move does, and keeps the first row untied', () => {
+		const rows = priorityRows(shipped);
+		expect(dropPriorityKind(rows, 'radarr', 3)[3]).toEqual({ kind: 'radarr', tied: false });
+		expect(dropPriorityKind(rows, 'radarr', 3)).toEqual(movePriorityKind(rows, 'radarr', 2));
+		expect(dropPriorityKind(rows, 'radarr', 0)[0]).toEqual({ kind: 'radarr', tied: false });
+		expect(dropPriorityKind(rows, 'sonarr', 5)[0]).toEqual({ kind: 'radarr', tied: false });
+		expect(rows[1].tied).toBe(true);
+	});
+
+	it('drops a kind at the last index', () => {
+		const dropped = dropPriorityKind(priorityRows(shipped), 'lidarr', 5);
+		expect(dropped.at(-1)).toEqual({ kind: 'lidarr', tied: false });
+		expect(ranksFromRows(dropped).lidarr).toBe(60);
+	});
+
+	it.each([
+		['unknown', 1],
+		['radarr', 1],
+		['lidarr', -1],
+		['lidarr', 6],
+		['lidarr', 1.5],
+		['lidarr', Number.NaN]
+	] as const)(
+		'returns an unchanged copy for an invalid or same-index drop: %s %s',
+		(kind, index) => {
+			const rows = priorityRows(shipped);
+			const dropped = dropPriorityKind(rows, kind, index);
+			expect(dropped).toEqual(rows);
+			expect(dropped).not.toBe(rows);
+		}
+	);
+
 	it('preserves stable kind order and explicit ties when reading a preset', () => {
 		const rows = priorityRows(shipped);
 		expect(rows.map((row) => row.kind)).toEqual(ARR_KINDS);

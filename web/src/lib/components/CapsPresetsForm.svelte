@@ -75,8 +75,8 @@ SPDX-License-Identifier: EUPL-1.2
 
 <QueryGuard query={settings}>
 	{#if draft}
-		<section class="grid min-w-0 gap-6 xl:grid-cols-12">
-			<form class="card flex min-w-0 flex-col gap-4 xl:col-span-7" onsubmit={handleSubmit}>
+		<section class="flex min-w-0 flex-col items-start gap-6 xl:flex-row">
+			<form class="card flex w-full min-w-0 flex-col gap-4 xl:w-7/12" onsubmit={handleSubmit}>
 				{#if save.isError}
 					<ProblemNote error={save.error} />
 				{/if}
@@ -106,7 +106,7 @@ SPDX-License-Identifier: EUPL-1.2
 				<AdminSaveButton disabled={save.isPending} />
 			</form>
 
-			<aside class="card flex h-fit min-w-0 flex-col gap-3 xl:col-span-5">
+			<aside class="card flex h-fit w-full min-w-0 flex-col gap-3 xl:w-5/12">
 				<ProblemNote error={presets.error} />
 				<NamedPriorityPresets
 					presets={presets.data ?? []}
