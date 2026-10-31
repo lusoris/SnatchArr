@@ -9,6 +9,13 @@ precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 lusoris <lusoris@pm.me>"
 SPDX-License-Identifier = "EUPL-1.2"
 
+# Compatibility patch contains context from the MIT-licensed Redocly package.
+[[annotations]]
+path = ["web/patches/@redocly__openapi-core@1.34.20.patch"]
+precedence = "override"
+SPDX-FileCopyrightText = ["Redocly", "2026 lusoris <lusoris@pm.me>"]
+SPDX-License-Identifier = "MIT"
+
 [[annotations]]
 path = ["**/*.md", "docs/**", "web/messages/**"]
 precedence = "aggregate"
