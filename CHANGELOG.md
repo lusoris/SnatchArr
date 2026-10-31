@@ -1,5 +1,75 @@
 # Changelog
 
+## [0.8.0](https://github.com/lusoris/SnatchArr/compare/v0.7.1...v0.8.0) (2026-10-31)
+
+
+### ⚠ BREAKING CHANGES
+
+* **api:** name an unidentified Readarr fork ([#896](https://github.com/lusoris/SnatchArr/issues/896))
+* **api:** name the readarr-rresurrected fork ([#891](https://github.com/lusoris/SnatchArr/issues/891))
+* **api:** reject list filters that can never match ([#882](https://github.com/lusoris/SnatchArr/issues/882))
+
+### Features
+
+* **api:** add a settings registry and a parity table (ADR-0044) ([#904](https://github.com/lusoris/SnatchArr/issues/904)) ([97a5fd3](https://github.com/lusoris/SnatchArr/commit/97a5fd3abbfa2b1c6300fb70daed80bf758c97c9))
+* **api:** name an unidentified Readarr fork ([#896](https://github.com/lusoris/SnatchArr/issues/896)) ([967596e](https://github.com/lusoris/SnatchArr/commit/967596eaa58acd6fd1849b8a2bba276f2e5ea6cc))
+* **api:** name the readarr-rresurrected fork ([#891](https://github.com/lusoris/SnatchArr/issues/891)) ([5bedd68](https://github.com/lusoris/SnatchArr/commit/5bedd6808461019fb983a4024280ef456fdcdd3a))
+* **api:** store runtime settings overrides in the database (ADR-0044) ([#907](https://github.com/lusoris/SnatchArr/issues/907)) ([7d1bac3](https://github.com/lusoris/SnatchArr/commit/7d1bac3f41ace9e5f9444731632cea3528136b81))
+* **chart:** allow API egress to public HTTPS by default ([#892](https://github.com/lusoris/SnatchArr/issues/892)) ([7eba3fb](https://github.com/lusoris/SnatchArr/commit/7eba3fbf3dcfab2e1d69143a4e3eeedcdc705a1c))
+* **idmatchparity:** ship the parity check as a read-only container image ([#885](https://github.com/lusoris/SnatchArr/issues/885)) ([37c1966](https://github.com/lusoris/SnatchArr/commit/37c1966fdbbfc1f484882f6c5be3be904309d4ab))
+* **mcp:** wire the SnatchArr MCP server into the project .mcp.json ([#854](https://github.com/lusoris/SnatchArr/issues/854)) ([f6b59b1](https://github.com/lusoris/SnatchArr/commit/f6b59b170c539df28c70a67f9a5c4a6491880ad1))
+* **metrics:** expose per-instance last finished run and run interval ([#945](https://github.com/lusoris/SnatchArr/issues/945)) ([2a252a1](https://github.com/lusoris/SnatchArr/commit/2a252a1fda2a3d89b573495bb616cd3b0bc0bf93))
+* **metrics:** expose the per-instance eligible item pool ([#952](https://github.com/lusoris/SnatchArr/issues/952)) ([51e1667](https://github.com/lusoris/SnatchArr/commit/51e16670f80987e7d02ad4440f32b1d52b7516f7))
+* **priority:** add named priority presets and a reorderable kind list ([#954](https://github.com/lusoris/SnatchArr/issues/954)) ([c5c1554](https://github.com/lusoris/SnatchArr/commit/c5c1554a3c85089a4dcfdafc78d0ff98c6611b2d))
+* **release:** refuse a release without a recorded live dogfood pass ([#878](https://github.com/lusoris/SnatchArr/issues/878)) ([d19f3b4](https://github.com/lusoris/SnatchArr/commit/d19f3b4e51f509a412d3b4ffd7d39b7f86473564))
+* **web:** add an Environment tab for runtime settings (ADR-0044) ([5fad17b](https://github.com/lusoris/SnatchArr/commit/5fad17bc28f0be57d5f39e1b1e90e9b875aad63c))
+* **web:** derive internal links from one entity registry ([#902](https://github.com/lusoris/SnatchArr/issues/902)) ([518baab](https://github.com/lusoris/SnatchArr/commit/518baab9ecdaf57ff743a842fa1713ef5cf8dbc7))
+* **web:** make instance cards and rows one click target ([#903](https://github.com/lusoris/SnatchArr/issues/903)) ([4a0a7af](https://github.com/lusoris/SnatchArr/commit/4a0a7afd133b1218d229b33a8e7dbf55402eca05))
+* **web:** open events and runs in detail dialogs ([#884](https://github.com/lusoris/SnatchArr/issues/884)) ([b58bb49](https://github.com/lusoris/SnatchArr/commit/b58bb497e555c0b92c927a5620f89d6935ed9681))
+* **web:** open the edit form from rows without a detail page ([ab2a6dd](https://github.com/lusoris/SnatchArr/commit/ab2a6ddfa33caf149ae50ada7f9512d3ad831355))
+* **web:** show each integrated app's own logo ([#886](https://github.com/lusoris/SnatchArr/issues/886)) ([554367a](https://github.com/lusoris/SnatchArr/commit/554367a70083a1b3da09fd780f22b5c63fc8f3e7))
+
+
+### Bug Fixes
+
+* **api:** keep stored values on an update that omits an optional field ([#947](https://github.com/lusoris/SnatchArr/issues/947)) ([46e1222](https://github.com/lusoris/SnatchArr/commit/46e1222fb654fd0ba701947e672608b149b6ccdb))
+* **api:** reject list filters that can never match ([#882](https://github.com/lusoris/SnatchArr/issues/882)) ([0078818](https://github.com/lusoris/SnatchArr/commit/007881861ced92a4aef35f2310f27ee0973c86a2))
+* **api:** report environment-only secrets as locked ([5fad17b](https://github.com/lusoris/SnatchArr/commit/5fad17bc28f0be57d5f39e1b1e90e9b875aad63c))
+* **api:** save runtime settings under framework environment variables ([#936](https://github.com/lusoris/SnatchArr/issues/936)) ([956716a](https://github.com/lusoris/SnatchArr/commit/956716a8c20cf7d9863db27af72040f9f3a66c65))
+* **ci:** count non-served fixes and declared exceptions in the release e2e map ([#955](https://github.com/lusoris/SnatchArr/issues/955)) ([f35ffd1](https://github.com/lusoris/SnatchArr/commit/f35ffd1f3dd00aaf581445e3fbd89e6b9c5cb343))
+* **deps:** update pulldown-cmark to 0.13.5 for RUSTSEC-2026-0414 ([#851](https://github.com/lusoris/SnatchArr/issues/851)) ([914d659](https://github.com/lusoris/SnatchArr/commit/914d6594b5a1469eba09549ece8f91f860197396))
+* **notify:** keep the stored configuration on an update without config ([#942](https://github.com/lusoris/SnatchArr/issues/942)) ([b317bc5](https://github.com/lusoris/SnatchArr/commit/b317bc5db634b8d1b3ce749a6a412f79cf47f640)), closes [#940](https://github.com/lusoris/SnatchArr/issues/940)
+* **release:** accept only a live cluster dogfood status in the release gate ([#948](https://github.com/lusoris/SnatchArr/issues/948)) ([6309a5b](https://github.com/lusoris/SnatchArr/commit/6309a5b0a398555586bc6736596efe46d8a4aa11))
+* **tools:** keep parameter enums and referenced schemas in MCP tools ([#883](https://github.com/lusoris/SnatchArr/issues/883)) ([fbad667](https://github.com/lusoris/SnatchArr/commit/fbad6677594bf6403be7d6b54435626e0dbcf72b)), closes [#880](https://github.com/lusoris/SnatchArr/issues/880)
+* **tools:** keep the committed licence URL when a lookup fails ([#933](https://github.com/lusoris/SnatchArr/issues/933)) ([f07c422](https://github.com/lusoris/SnatchArr/commit/f07c42251c6aeb633d5a0d1bb351f7b425e23b8c))
+* **web:** ask before deleting instances, notification channels and rules ([#913](https://github.com/lusoris/SnatchArr/issues/913)) ([bfb0991](https://github.com/lusoris/SnatchArr/commit/bfb0991893339c68764c353c8b6526c2dd449d58))
+* **web:** ask only admins for runtime settings on the Environment tab ([#911](https://github.com/lusoris/SnatchArr/issues/911)) ([3b4f357](https://github.com/lusoris/SnatchArr/commit/3b4f357a5add0d153a572ebf0844dc280a314e56))
+* **web:** ask viewers for no admin-only data ([#900](https://github.com/lusoris/SnatchArr/issues/900)) ([74e46da](https://github.com/lusoris/SnatchArr/commit/74e46da10f9b83cb521095bcb20689059550f68d))
+* **web:** classify routes for the scroll budget and fit download clients at 1280 ([#917](https://github.com/lusoris/SnatchArr/issues/917)) ([78b3c1a](https://github.com/lusoris/SnatchArr/commit/78b3c1af8b13d0e40541aa7ecb35236ee3f2aa97))
+* **web:** fill skeleton bars and gate utility classes on the built CSS ([#924](https://github.com/lusoris/SnatchArr/issues/924)) ([f688792](https://github.com/lusoris/SnatchArr/commit/f688792767450826577e0e45ef2ccae51799d129))
+* **web:** fit the About tab licence list into one screen ([#853](https://github.com/lusoris/SnatchArr/issues/853)) ([dd1615f](https://github.com/lusoris/SnatchArr/commit/dd1615f0b117d1a4a406b3068a589bc31e1f9f2c))
+* **web:** fit the download client table at 1280px ([#898](https://github.com/lusoris/SnatchArr/issues/898)) ([ed53105](https://github.com/lusoris/SnatchArr/commit/ed531055df7954686ebc30da989ac409fc177a3b))
+* **web:** gate utility classes inside Svelte expressions ([#926](https://github.com/lusoris/SnatchArr/issues/926)) ([73d85e5](https://github.com/lusoris/SnatchArr/commit/73d85e50bcf2990043bac2fc2158f248f8127e3b))
+* **web:** keep dashboard and instance activity inside the scroll budget ([#879](https://github.com/lusoris/SnatchArr/issues/879)) ([ec780d4](https://github.com/lusoris/SnatchArr/commit/ec780d45f5f4176bc8fb1f9f2c56d4cb1442a549))
+* **web:** keep stacked phone tables readable ([#895](https://github.com/lusoris/SnatchArr/issues/895)) ([1c37a55](https://github.com/lusoris/SnatchArr/commit/1c37a551b9808ce05c2edc47c25badac98090e84))
+* **web:** page through image sets with a load more button ([#925](https://github.com/lusoris/SnatchArr/issues/925)) ([1bd0112](https://github.com/lusoris/SnatchArr/commit/1bd01126531d7c90d1830a08d323d5d8997e22bd)), closes [#918](https://github.com/lusoris/SnatchArr/issues/918)
+* **web:** reflow at 320 px and add a screen-range a11y matrix ([#889](https://github.com/lusoris/SnatchArr/issues/889)) ([f845ad7](https://github.com/lusoris/SnatchArr/commit/f845ad77b3c752c86f47db3351ed626b4d959efe))
+* **web:** resolve every minimatch to 11.0.3 for GHSA-g3hv-75wg-m249 ([#951](https://github.com/lusoris/SnatchArr/issues/951)) ([29776eb](https://github.com/lusoris/SnatchArr/commit/29776eb980bf57b81b3080803e01dc8fd3a9f954))
+* **web:** save the favourite-sync checkbox on change ([#893](https://github.com/lusoris/SnatchArr/issues/893)) ([d57f998](https://github.com/lusoris/SnatchArr/commit/d57f9982cd44f66e12511deb15e3f05f3845b0c2))
+* **web:** scroll every dashboard card to all of its rows ([#890](https://github.com/lusoris/SnatchArr/issues/890)) ([355a06b](https://github.com/lusoris/SnatchArr/commit/355a06bbf4663a15a9b33c301ecce1fb911843ae))
+* **web:** use the Seerr square icon for the app logo ([#887](https://github.com/lusoris/SnatchArr/issues/887)) ([8b0dc1b](https://github.com/lusoris/SnatchArr/commit/8b0dc1b3561899ad26b603c2b4533cf6dbf8371e))
+
+
+### Refactoring
+
+* **sso:** adopt golusoris auth/oidc session flow ([#888](https://github.com/lusoris/SnatchArr/issues/888)) ([6c213fd](https://github.com/lusoris/SnatchArr/commit/6c213fd5b12fcd73e00b4c152daca4571391897b))
+
+
+### Documentation
+
+* **adr:** add ADR-0045 quality availability and split-quality series ([#922](https://github.com/lusoris/SnatchArr/issues/922)) ([c33404f](https://github.com/lusoris/SnatchArr/commit/c33404f06847fe517da1f9e3d5bbc3e4895644de))
+* **adr:** correct ADR-0045 code symbols and contract scope ([#923](https://github.com/lusoris/SnatchArr/issues/923)) ([a740faa](https://github.com/lusoris/SnatchArr/commit/a740faa9ffa4ff86e8d471e08440a4d5342d0c79)), closes [#921](https://github.com/lusoris/SnatchArr/issues/921)
+
 ## [0.7.1](https://github.com/lusoris/SnatchArr/compare/v0.7.0...v0.7.1) (2026-10-28)
 
 
