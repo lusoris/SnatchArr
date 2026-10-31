@@ -28,6 +28,7 @@ type Querier interface {
 	CountAdultImageSets(ctx context.Context) (int64, error)
 	CountInstancesByBaseURL(ctx context.Context, arg CountInstancesByBaseURLParams) (int64, error)
 	CountInstancesByBaseURLAndNotSource(ctx context.Context, arg CountInstancesByBaseURLAndNotSourceParams) (int64, error)
+	CountPriorityPresets(ctx context.Context) (int64, error)
 	CountProcessed(ctx context.Context, arg CountProcessedParams) (int64, error)
 	CountRunsByStatus(ctx context.Context) ([]CountRunsByStatusRow, error)
 	CountSeerrRequests(ctx context.Context, linkID uuid.UUID) (int64, error)
@@ -46,6 +47,7 @@ type Querier interface {
 	// SPDX-License-Identifier: EUPL-1.2
 	CreateNotificationChannel(ctx context.Context, arg CreateNotificationChannelParams) (NotificationChannel, error)
 	CreateNotificationRule(ctx context.Context, arg CreateNotificationRuleParams) (NotificationRule, error)
+	CreatePriorityPreset(ctx context.Context, arg CreatePriorityPresetParams) (PriorityPreset, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
 	CreateProwlarrLink(ctx context.Context, arg CreateProwlarrLinkParams) (ProwlarrLink, error)
@@ -73,6 +75,7 @@ type Querier interface {
 	DeleteLoginLockout(ctx context.Context, key string) error
 	DeleteNotificationChannel(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteNotificationRule(ctx context.Context, id uuid.UUID) (int64, error)
+	DeletePriorityPreset(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteProwlarrLink(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteQueueStrike(ctx context.Context, arg DeleteQueueStrikeParams) error
 	DeleteRuntimeSetting(ctx context.Context, key string) error
@@ -131,6 +134,7 @@ type Querier interface {
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
 	GetPolicy(ctx context.Context, instanceID uuid.UUID) (SnatchPolicy, error)
+	GetPriorityPreset(ctx context.Context, id uuid.UUID) (PriorityPreset, error)
 	GetProwlarrLink(ctx context.Context, id uuid.UUID) (ProwlarrLink, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
@@ -219,6 +223,10 @@ type Querier interface {
 	ListNotificationRules(ctx context.Context) ([]NotificationRule, error)
 	ListNotificationRulesByEvent(ctx context.Context, eventKind string) ([]NotificationRule, error)
 	ListPendingGateDecisions(ctx context.Context, arg ListPendingGateDecisionsParams) ([]WatchawareGateDecision, error)
+	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+	//
+	// SPDX-License-Identifier: EUPL-1.2
+	ListPriorityPresets(ctx context.Context) ([]PriorityPreset, error)
 	ListProwlarrLinks(ctx context.Context) ([]ProwlarrLink, error)
 	ListQueueStrikes(ctx context.Context, instanceID uuid.UUID) ([]QueueStrike, error)
 	ListRuns(ctx context.Context, arg ListRunsParams) ([]SnatchRun, error)
@@ -244,6 +252,8 @@ type Querier interface {
 	// runs under this transaction-scoped lock, so two grants on either side of a minute
 	// boundary (different bucket rows) still see each other.
 	LockInstanceBudget(ctx context.Context, instanceID uuid.UUID) error
+	// Serialize count and insert across API replicas so concurrent saves respect the cap.
+	LockPriorityPresets(ctx context.Context) error
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
 	// Prowlarr link stamina is a rolling window of one-minute buckets (#777). Every grab for a link
@@ -314,6 +324,7 @@ type Querier interface {
 	UpdateInstancePriority(ctx context.Context, arg UpdateInstancePriorityParams) (UpdateInstancePriorityRow, error)
 	UpdateNotificationChannel(ctx context.Context, arg UpdateNotificationChannelParams) (NotificationChannel, error)
 	UpdateNotificationRule(ctx context.Context, arg UpdateNotificationRuleParams) (NotificationRule, error)
+	UpdatePriorityPreset(ctx context.Context, arg UpdatePriorityPresetParams) (PriorityPreset, error)
 	UpdateProwlarrLink(ctx context.Context, arg UpdateProwlarrLinkParams) (ProwlarrLink, error)
 	UpdateSchedule(ctx context.Context, arg UpdateScheduleParams) (Schedule, error)
 	UpdateSeerrLink(ctx context.Context, arg UpdateSeerrLinkParams) (SeerrLink, error)

@@ -195,6 +195,15 @@ type NotificationRule struct {
 	UpdatedAt  time.Time
 }
 
+type PriorityPreset struct {
+	ID        uuid.UUID
+	Name      string
+	Search    []byte
+	Download  []byte
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
 type ProcessedItem struct {
 	InstanceID     uuid.UUID
 	Kind           string

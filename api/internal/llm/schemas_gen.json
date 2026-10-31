@@ -1,4 +1,18 @@
 {
+  "applyPriorityPreset": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "presetId": {
+        "description": "UUID of a saved preset, or media_first for the shipped preset.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "presetId"
+    ],
+    "type": "object"
+  },
   "cancelRun": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -674,6 +688,53 @@
     ],
     "type": "object"
   },
+  "createPriorityPreset": {
+    "$defs": {
+      "PriorityPresetInput": {
+        "description": "Both maps must contain exactly sonarr, radarr, lidarr, readarr, whisparr_v2 and whisparr_v3, with ranks from 1 to 100.",
+        "properties": {
+          "download": {
+            "$ref": "#/$defs/PriorityPresetMap"
+          },
+          "name": {
+            "description": "Unique ignoring case; leading and trailing whitespace is trimmed. The name media_first is reserved.",
+            "maxLength": 40,
+            "minLength": 1,
+            "type": "string"
+          },
+          "search": {
+            "$ref": "#/$defs/PriorityPresetMap"
+          }
+        },
+        "required": [
+          "name",
+          "search",
+          "download"
+        ],
+        "type": "object"
+      },
+      "PriorityPresetMap": {
+        "additionalProperties": {
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "description": "Priority rank (1..100, lower goes first) per *arr application kind.",
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/PriorityPresetInput"
+      }
+    },
+    "required": [
+      "body"
+    ],
+    "type": "object"
+  },
   "createProwlarrLink": {
     "$defs": {
       "ProwlarrLinkInput": {
@@ -1026,6 +1087,20 @@
     },
     "required": [
       "ruleId"
+    ],
+    "type": "object"
+  },
+  "deletePriorityPreset": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "presetId": {
+        "description": "UUID of a saved preset. The shipped media_first preset is read-only.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "presetId"
     ],
     "type": "object"
   },
@@ -3362,6 +3437,58 @@
     "required": [
       "body",
       "instanceId"
+    ],
+    "type": "object"
+  },
+  "updatePriorityPreset": {
+    "$defs": {
+      "PriorityPresetInput": {
+        "description": "Both maps must contain exactly sonarr, radarr, lidarr, readarr, whisparr_v2 and whisparr_v3, with ranks from 1 to 100.",
+        "properties": {
+          "download": {
+            "$ref": "#/$defs/PriorityPresetMap"
+          },
+          "name": {
+            "description": "Unique ignoring case; leading and trailing whitespace is trimmed. The name media_first is reserved.",
+            "maxLength": 40,
+            "minLength": 1,
+            "type": "string"
+          },
+          "search": {
+            "$ref": "#/$defs/PriorityPresetMap"
+          }
+        },
+        "required": [
+          "name",
+          "search",
+          "download"
+        ],
+        "type": "object"
+      },
+      "PriorityPresetMap": {
+        "additionalProperties": {
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "description": "Priority rank (1..100, lower goes first) per *arr application kind.",
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/PriorityPresetInput"
+      },
+      "presetId": {
+        "description": "UUID of a saved preset. The shipped media_first preset is read-only.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "body",
+      "presetId"
     ],
     "type": "object"
   },

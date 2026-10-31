@@ -13,6 +13,16 @@ type UnimplementedHandler struct{}
 
 var _ Handler = UnimplementedHandler{}
 
+// ApplyPriorityPreset implements applyPriorityPreset operation.
+//
+// Later preset edits do not affect settings. POST /priority-presets/media_first/apply restores the
+// shipped orders.
+//
+// POST /priority-presets/{presetId}/apply
+func (UnimplementedHandler) ApplyPriorityPreset(ctx context.Context, params ApplyPriorityPresetParams) (r *Settings, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // CancelRun implements cancelRun operation.
 //
 // Cancel a queued or leased run.
@@ -100,6 +110,15 @@ func (UnimplementedHandler) CreateNotificationChannel(ctx context.Context, req *
 //
 // POST /notifications/rules
 func (UnimplementedHandler) CreateNotificationRule(ctx context.Context, req *NotificationRuleInput) (r *NotificationRule, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// CreatePriorityPreset implements createPriorityPreset operation.
+//
+// Up to 20 user presets; names are unique ignoring case. The media_first name is reserved.
+//
+// POST /priority-presets
+func (UnimplementedHandler) CreatePriorityPreset(ctx context.Context, req *PriorityPresetInput) (r *PriorityPreset, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -209,6 +228,15 @@ func (UnimplementedHandler) DeleteNotificationChannel(ctx context.Context, param
 //
 // DELETE /notifications/rules/{ruleId}
 func (UnimplementedHandler) DeleteNotificationRule(ctx context.Context, params DeleteNotificationRuleParams) error {
+	return ht.ErrNotImplemented
+}
+
+// DeletePriorityPreset implements deletePriorityPreset operation.
+//
+// Delete a saved preset without changing the active settings (admin only).
+//
+// DELETE /priority-presets/{presetId}
+func (UnimplementedHandler) DeletePriorityPreset(ctx context.Context, params DeletePriorityPresetParams) error {
 	return ht.ErrNotImplemented
 }
 
@@ -422,7 +450,7 @@ func (UnimplementedHandler) GetPolicyFilterOptions(ctx context.Context, params G
 
 // GetPriorityPresets implements getPriorityPresets operation.
 //
-// Shipped search and download priority presets.
+// Shipped and saved search and download priority presets.
 //
 // GET /priority-presets
 func (UnimplementedHandler) GetPriorityPresets(ctx context.Context) (r []PriorityPreset, _ error) {
@@ -1141,6 +1169,15 @@ func (UnimplementedHandler) UpdateNotificationRule(ctx context.Context, req *Not
 //
 // PUT /instances/{instanceId}/policy
 func (UnimplementedHandler) UpdatePolicy(ctx context.Context, req *SnatchPolicy, params UpdatePolicyParams) (r *SnatchPolicy, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UpdatePriorityPreset implements updatePriorityPreset operation.
+//
+// Replace a saved preset without changing the active settings (admin only).
+//
+// PUT /priority-presets/{presetId}
+func (UnimplementedHandler) UpdatePriorityPreset(ctx context.Context, req *PriorityPresetInput, params UpdatePriorityPresetParams) (r *PriorityPreset, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

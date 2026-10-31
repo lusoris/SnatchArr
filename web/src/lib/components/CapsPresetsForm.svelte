@@ -8,6 +8,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import type { components } from '#lib/api/schema.js';
 	import AdminSaveButton from '#lib/components/AdminSaveButton.svelte';
 	import Field from '#lib/components/Field.svelte';
+	import NamedPriorityPresets from '#lib/components/NamedPriorityPresets.svelte';
 	import PriorityPresetFields from '#lib/components/PriorityPresetFields.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import QueryGuard from '#lib/components/QueryGuard.svelte';
@@ -18,7 +19,8 @@ SPDX-License-Identifier: EUPL-1.2
 		capsSettingsSchema,
 		createSettingsSave,
 		mergeCapsSettings,
-		type CapsSettingsDraft
+		type CapsSettingsDraft,
+		type Settings
 	} from '#lib/settings.js';
 
 	type PriorityPreset = components['schemas']['PriorityPreset'];
@@ -51,6 +53,12 @@ SPDX-License-Identifier: EUPL-1.2
 		if (!draft || !mediaFirst) return;
 		draft.search_priority_preset = { ...mediaFirst.search };
 		draft.download_priority_preset = { ...mediaFirst.download };
+	}
+
+	function receiveAppliedPreset(settings: Settings): void {
+		if (!draft) return;
+		draft.search_priority_preset = { ...settings.search_priority_preset };
+		draft.download_priority_preset = { ...settings.download_priority_preset };
 	}
 
 	const save = createSettingsSave(mergeCapsSettings);
@@ -99,6 +107,13 @@ SPDX-License-Identifier: EUPL-1.2
 			</form>
 
 			<aside class="card flex h-fit min-w-0 flex-col gap-3 xl:col-span-5">
+				<ProblemNote error={presets.error} />
+				<NamedPriorityPresets
+					presets={presets.data ?? []}
+					{draft}
+					disabled={!session.isAdmin || presets.isPending}
+					onApply={receiveAppliedPreset}
+				/>
 				<h3 class="text-base font-semibold">{m.automation_caps_help_title()}</h3>
 				<p class="text-sm leading-relaxed text-subtle">
 					{m.automation_caps_help_desc()}

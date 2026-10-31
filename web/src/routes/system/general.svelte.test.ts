@@ -26,6 +26,7 @@ const mediaFirstRanks = {
 const samplePresets: PriorityPreset[] = [
 	{
 		name: 'media_first',
+		builtin: true,
 		search: { ...mediaFirstRanks },
 		download: { ...mediaFirstRanks }
 	}

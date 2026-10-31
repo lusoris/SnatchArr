@@ -409,18 +409,6 @@ func (h *Handlers) UpdateSettings(ctx context.Context, req *oas.Settings) (*oas.
 	return settingsToOAS(s), nil
 }
 
-// GetPriorityPresets returns the shipped search and download priority presets.
-func (h *Handlers) GetPriorityPresets(_ context.Context) ([]oas.PriorityPreset, error) {
-	preset := priorityPresetToOAS(domain.MediaFirstPreset())
-	return []oas.PriorityPreset{
-		{
-			Name:     domain.PresetMediaFirst,
-			Search:   preset,
-			Download: preset,
-		},
-	}, nil
-}
-
 // ResetState forgets processed items.
 func (h *Handlers) ResetState(ctx context.Context, req oas.OptStateReset) (*oas.StateResetResult, error) {
 	if err := requireAdmin(ctx); err != nil {

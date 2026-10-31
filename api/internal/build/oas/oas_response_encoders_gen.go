@@ -14,6 +14,20 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+func encodeApplyPriorityPresetResponse(response *Settings, w http.ResponseWriter, span trace.Span) error {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(200)
+	span.SetStatus(codes.Ok, http.StatusText(200))
+
+	e := new(jx.Encoder)
+	response.Encode(e)
+	if _, err := e.WriteTo(w); err != nil {
+		return errors.Wrap(err, "write")
+	}
+
+	return nil
+}
+
 func encodeCancelRunResponse(response *CancelRunNoContent, w http.ResponseWriter, span trace.Span) error {
 	w.WriteHeader(204)
 	span.SetStatus(codes.Ok, http.StatusText(204))
@@ -408,6 +422,20 @@ func encodeCreateNotificationRuleResponse(response *NotificationRule, w http.Res
 	return nil
 }
 
+func encodeCreatePriorityPresetResponse(response *PriorityPreset, w http.ResponseWriter, span trace.Span) error {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(201)
+	span.SetStatus(codes.Ok, http.StatusText(201))
+
+	e := new(jx.Encoder)
+	response.Encode(e)
+	if _, err := e.WriteTo(w); err != nil {
+		return errors.Wrap(err, "write")
+	}
+
+	return nil
+}
+
 func encodeCreateProwlarrLinkResponse(response *ProwlarrLink, w http.ResponseWriter, span trace.Span) error {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(201)
@@ -633,6 +661,13 @@ func encodeDeleteNotificationChannelResponse(response *DeleteNotificationChannel
 }
 
 func encodeDeleteNotificationRuleResponse(response *DeleteNotificationRuleNoContent, w http.ResponseWriter, span trace.Span) error {
+	w.WriteHeader(204)
+	span.SetStatus(codes.Ok, http.StatusText(204))
+
+	return nil
+}
+
+func encodeDeletePriorityPresetResponse(response *DeletePriorityPresetNoContent, w http.ResponseWriter, span trace.Span) error {
 	w.WriteHeader(204)
 	span.SetStatus(codes.Ok, http.StatusText(204))
 
@@ -2685,6 +2720,20 @@ func encodeUpdateNotificationRuleResponse(response *NotificationRule, w http.Res
 }
 
 func encodeUpdatePolicyResponse(response *SnatchPolicy, w http.ResponseWriter, span trace.Span) error {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(200)
+	span.SetStatus(codes.Ok, http.StatusText(200))
+
+	e := new(jx.Encoder)
+	response.Encode(e)
+	if _, err := e.WriteTo(w); err != nil {
+		return errors.Wrap(err, "write")
+	}
+
+	return nil
+}
+
+func encodeUpdatePriorityPresetResponse(response *PriorityPreset, w http.ResponseWriter, span trace.Span) error {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(200)
 	span.SetStatus(codes.Ok, http.StatusText(200))

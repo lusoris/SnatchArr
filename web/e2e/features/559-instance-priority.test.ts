@@ -63,7 +63,35 @@ async function openPresets(page: Page): Promise<void> {
 	await expect(
 		page.getByRole('heading', { name: 'Instance priority presets', exact: true })
 	).toBeVisible();
-	await expect(page.locator('#search-priority-lidarr')).toBeEnabled();
+	await expect(
+		searchOrder(page).getByRole('button', { name: 'Move Lidarr up', exact: true })
+	).toBeVisible();
+}
+
+function searchOrder(page: Page): Locator {
+	return page.locator('[data-field="search_priority_preset"]');
+}
+
+async function keyboardMove(
+	page: Page,
+	order: 'search' | 'download',
+	kind: string,
+	steps: number
+): Promise<void> {
+	const button = page
+		.locator(`[data-field="${order}_priority_preset"]`)
+		.getByRole('button', { name: `Move ${kind} up`, exact: true });
+	for (let step = 0; step < steps; step++) {
+		await button.focus();
+		await button.press('Enter');
+	}
+}
+
+async function expectRank(page: Page, order: string, kind: string, rank: number): Promise<void> {
+	await expect(page.locator(`#${order}-priority-${kind}`)).toHaveAttribute(
+		'data-rank',
+		String(rank)
+	);
 }
 
 function priorityCard(page: Page): Locator {
@@ -190,20 +218,26 @@ async function editsAndResetsPresets({ page }: PageFixture): Promise<void> {
 			download_priority_preset: { ...preset.download, lidarr: 37 }
 		});
 		await openPresets(page);
-		await page.locator('#search-priority-lidarr').fill('5');
+		await keyboardMove(page, 'search', 'Lidarr', 2);
 		const save = page.getByRole('button', { name: 'Save', exact: true });
 		await saveForm(page, SETTINGS, save);
 		const edited = await readSettings(page);
-		expect(edited.search_priority_preset).toEqual({ ...preset.search, lidarr: 5 });
+		expect(edited.search_priority_preset).toEqual({
+			lidarr: 10,
+			sonarr: 20,
+			radarr: 20,
+			readarr: 40,
+			whisparr_v2: 50,
+			whisparr_v3: 50
+		});
+		expect(edited.search_priority_preset.lidarr).toBeLessThan(edited.search_priority_preset.sonarr);
 		expect(edited.download_priority_preset).toEqual({ ...preset.download, lidarr: 37 });
 		await page.reload();
-		await expect(page.locator('#search-priority-lidarr')).toHaveValue('5');
-		await expect(page.locator('#download-priority-lidarr')).toHaveValue('37');
+		await expectRank(page, 'search', 'lidarr', 10);
+		await expectRank(page, 'download', 'lidarr', 37);
 		await page.getByRole('button', { name: 'Reset to shipped preset', exact: true }).click();
-		await expect(page.locator('#search-priority-lidarr')).toHaveValue(String(preset.search.lidarr));
-		await expect(page.locator('#download-priority-lidarr')).toHaveValue(
-			String(preset.download.lidarr)
-		);
+		await expectRank(page, 'search', 'lidarr', preset.search.lidarr);
+		await expectRank(page, 'download', 'lidarr', preset.download.lidarr);
 		await saveForm(page, SETTINGS, save);
 		const reset = await readSettings(page);
 		expect(reset.search_priority_preset).toEqual(preset.search);
@@ -274,15 +308,17 @@ async function rejectsIncompletePreset({ page }: PageFixture): Promise<void> {
 		await expectProblem(response);
 		expect(await readSettings(page)).toEqual(before);
 		await openPresets(page);
-		await expectInvalidInput(
-			page.locator('#search-priority-lidarr'),
-			page.getByRole('button', { name: 'Save', exact: true })
-		);
+		// The list editor cannot express incomplete or out-of-range maps.
+		await expect(searchOrder(page).getByRole('listitem')).toHaveCount(6);
+		await expect(searchOrder(page).getByRole('spinbutton')).toHaveCount(0);
+		const first = searchOrder(page).getByRole('listitem').first();
+		const last = searchOrder(page).getByRole('listitem').last();
+		await expect(first.getByRole('button', { name: / up$/ })).toBeDisabled();
+		await expect(first.getByRole('checkbox')).toBeDisabled();
+		await expect(last.getByRole('button', { name: / down$/ })).toBeDisabled();
 		expect(await readSettings(page)).toEqual(before);
 		await page.reload();
-		await expect(page.locator('#search-priority-lidarr')).toHaveValue(
-			String(before.search_priority_preset.lidarr)
-		);
+		await expectRank(page, 'search', 'lidarr', before.search_priority_preset.lidarr);
 	} finally {
 		await restorePresets(page, headers, before);
 	}
@@ -325,6 +361,183 @@ async function accessibleInstance({ page }: PageFixture): Promise<void> {
 	});
 }
 
+const NIGHT_SEARCH = {
+	lidarr: 10,
+	sonarr: 20,
+	radarr: 20,
+	readarr: 40,
+	whisparr_v2: 50,
+	whisparr_v3: 50
+};
+const NIGHT_DOWNLOAD = {
+	readarr: 10,
+	sonarr: 20,
+	radarr: 20,
+	lidarr: 40,
+	whisparr_v2: 50,
+	whisparr_v3: 50
+};
+
+async function createNightPreset(page: Page): Promise<PriorityPreset> {
+	await keyboardMove(page, 'search', 'Lidarr', 2);
+	await keyboardMove(page, 'download', 'Readarr (legacy)', 3);
+	await page.getByLabel('Preset name', { exact: true }).fill('night');
+	const [created] = await Promise.all([
+		page.waitForResponse(
+			(response) =>
+				new URL(response.url()).pathname === '/api/v1/priority-presets' &&
+				response.request().method() === 'POST'
+		),
+		page.getByRole('button', { name: 'Save current orders as preset', exact: true }).click()
+	]);
+	expect(created.status(), await created.text()).toBe(201);
+	return (await created.json()) as PriorityPreset;
+}
+
+async function applyNightPreset(page: Page, saved: PriorityPreset): Promise<void> {
+	const [applied] = await Promise.all([
+		page.waitForResponse(
+			(response) =>
+				new URL(response.url()).pathname === `/api/v1/priority-presets/${saved.id}/apply`
+		),
+		page.getByRole('button', { name: 'Apply preset night', exact: true }).click()
+	]);
+	expect(applied.status(), await applied.text()).toBe(200);
+	const active = await readSettings(page);
+	expect(active.search_priority_preset).toEqual(saved.search);
+	expect(active.download_priority_preset).toEqual(saved.download);
+	await expectRank(page, 'search', 'lidarr', 10);
+}
+
+async function renameAndDeleteNight(page: Page, saved: PriorityPreset): Promise<void> {
+	await page.getByRole('button', { name: 'Rename preset night', exact: true }).click();
+	await page.locator(`#rename-${saved.id}`).fill('evening');
+	const [renamed] = await Promise.all([
+		page.waitForResponse(
+			(response) =>
+				new URL(response.url()).pathname === `/api/v1/priority-presets/${saved.id}` &&
+				response.request().method() === 'PUT'
+		),
+		page.getByRole('button', { name: 'Save preset name', exact: true }).click()
+	]);
+	expect(renamed.status(), await renamed.text()).toBe(200);
+	expect((await readSettings(page)).search_priority_preset).toEqual(saved.search);
+	const shippedRow = page.locator('[data-preset="media_first"]');
+	await expect(shippedRow.getByText('Shipped · read-only', { exact: true })).toBeVisible();
+	await expect(shippedRow.getByRole('button', { name: /Rename|Delete/ })).toHaveCount(0);
+	await settleToasts(page);
+	const axe = await new AxeBuilder({ page }).include('#panel-caps').withTags(WCAG_22_AA).analyze();
+	expect(axe.violations).toEqual([]);
+	const [deleted] = await Promise.all([
+		page.waitForResponse(
+			(response) =>
+				new URL(response.url()).pathname === `/api/v1/priority-presets/${saved.id}` &&
+				response.request().method() === 'DELETE'
+		),
+		page.getByRole('button', { name: 'Delete preset evening', exact: true }).click()
+	]);
+	expect(deleted.status()).toBe(204);
+	expect((await readSettings(page)).download_priority_preset).toEqual(saved.download);
+}
+
+async function savesAndAppliesNamedPreset({ page }: PageFixture): Promise<void> {
+	const headers = await csrfHeaders(page);
+	const original = await readSettings(page);
+	const preset = await mediaFirst(page);
+	let savedId: string | undefined;
+	try {
+		await putSettings(page, headers, {
+			...original,
+			search_priority_preset: preset.search,
+			download_priority_preset: preset.download
+		});
+		await openPresets(page);
+		const saved = await createNightPreset(page);
+		savedId = saved.id;
+		expect(savedId).toBeTruthy();
+		expect(saved.search).toEqual(NIGHT_SEARCH);
+		expect(saved.download).toEqual(NIGHT_DOWNLOAD);
+		expect((await readSettings(page)).search_priority_preset).toEqual(preset.search);
+		await applyNightPreset(page, saved);
+		await renameAndDeleteNight(page, saved);
+		savedId = undefined;
+	} finally {
+		try {
+			if (savedId)
+				expect(
+					(await page.request.delete(`/api/v1/priority-presets/${savedId}`, { headers })).status()
+				).toBe(204);
+		} finally {
+			await restorePresets(page, headers, original);
+		}
+	}
+}
+
+async function fillPresetSlots(
+	page: Page,
+	headers: Headers,
+	preset: PriorityPreset,
+	createdIds: string[]
+): Promise<void> {
+	const listed = await page.request.get('/api/v1/priority-presets');
+	expect(listed.status()).toBe(200);
+	const existing = ((await listed.json()) as PriorityPreset[]).filter(
+		(entry) => !entry.builtin
+	).length;
+	for (let index = existing; index < 20; index++) {
+		const created = await page.request.post('/api/v1/priority-presets', {
+			headers,
+			data: {
+				name: `p-${crypto.randomUUID()}`,
+				search: preset.search,
+				download: preset.download
+			}
+		});
+		expect(created.status(), await created.text()).toBe(201);
+		const saved = (await created.json()) as PriorityPreset;
+		if (!saved.id) throw new Error('created preset has no UUID');
+		createdIds.push(saved.id);
+	}
+}
+
+async function rejectsNamedPresetLimits({ page }: PageFixture): Promise<void> {
+	const headers = await csrfHeaders(page);
+	const preset = await mediaFirst(page);
+	const createdIds: string[] = [];
+	try {
+		const longName = await page.request.post('/api/v1/priority-presets', {
+			headers,
+			data: {
+				name: 'a'.repeat(41),
+				search: preset.search,
+				download: preset.download
+			}
+		});
+		expect(longName.status()).toBe(422);
+		await expectProblem(longName);
+		await fillPresetSlots(page, headers, preset, createdIds);
+		const overflow = await page.request.post('/api/v1/priority-presets', {
+			headers,
+			data: {
+				name: 'twenty-first',
+				search: preset.search,
+				download: preset.download
+			}
+		});
+		expect(overflow.status()).toBe(422);
+		await expectProblem(overflow);
+		await openPresets(page);
+		await expect(
+			page.getByRole('button', { name: 'Save current orders as preset', exact: true })
+		).toBeDisabled();
+	} finally {
+		for (const id of createdIds) {
+			const removed = await page.request.delete(`/api/v1/priority-presets/${id}`, { headers });
+			expect(removed.status()).toBe(204);
+		}
+	}
+}
+
 test.describe('559: shipped instance priority UI', () => {
 	test.describe.configure({ mode: 'serial' });
 	test('edits search independently and resets both orders to media_first', editsAndResetsPresets);
@@ -334,13 +547,18 @@ test.describe('559: shipped instance priority UI', () => {
 	);
 	test('rejects rank 101 through the API and UI without persisting it', rejectsInvalidOverride);
 	test(
-		'rejects an incomplete preset and an invalid UI rank without persisting',
+		'rejects an incomplete preset and keeps list edits bounded without persisting',
 		rejectsIncompletePreset
 	);
 	test(
 		'accepts ranks 1 and 100 and keeps an equal rank as an instance override',
 		acceptsBoundaryAndEqualRanks
 	);
+	test(
+		'saves night, applies both maps and preserves active settings after rename and deletion',
+		savesAndAppliesNamedPreset
+	);
+	test('rejects a 41-character name and the 21st user preset', rejectsNamedPresetLimits);
 	test('has no axe violations in the preset settings section', accessiblePresets);
 	test('has no axe violations on the instance page with its priority card', accessibleInstance);
 });

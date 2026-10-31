@@ -183,6 +183,7 @@ type idsState struct {
 	csrfToken          string
 	apiKeyID           string
 	instanceID         string
+	priorityPresetID   string
 	runID              string
 	scheduleID         string
 	clientID           string
@@ -1925,6 +1926,79 @@ func stepsPriority() []routerStep {
 	}
 }
 
+func stepsPriorityPresetWrites() []routerStep {
+	return []routerStep{
+		{
+			op:     "createPriorityPreset",
+			method: http.MethodPost,
+			path:   func(_ *idsState) string { return "/priority-presets" },
+			body:   func(_ *idsState) any { return namedPresetBody("router-priority") },
+			want:   http.StatusCreated,
+			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
+				t.Helper()
+				id, ok := decoded["id"].(string)
+				if _, err := uuid.Parse(id); !ok || err != nil {
+					t.Fatalf("createPriorityPreset id = %v, want UUID", decoded["id"])
+				}
+				ids.priorityPresetID = id
+				if decoded["name"] != "router-priority" || decoded["builtin"] != false {
+					t.Fatalf("createPriorityPreset = %v, want name=router-priority, builtin=false", decoded)
+				}
+				assertRouterPriorityRanks(t, decoded, "search", "download", 10, 10)
+			},
+		},
+		{
+			op:     "updatePriorityPreset",
+			method: http.MethodPut,
+			path:   func(ids *idsState) string { return "/priority-presets/" + ids.priorityPresetID },
+			body: func(_ *idsState) any {
+				in := namedPresetBody("router-priority-updated")
+				in.Search["sonarr"], in.Download["sonarr"] = 15, 25
+				return in
+			},
+			want: http.StatusOK,
+			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
+				t.Helper()
+				if decoded["id"] != ids.priorityPresetID || decoded["name"] != "router-priority-updated" || decoded["builtin"] != false {
+					t.Fatalf("updatePriorityPreset = %v, want id=%s, name=router-priority-updated, builtin=false", decoded, ids.priorityPresetID)
+				}
+				assertRouterPriorityRanks(t, decoded, "search", "download", 15, 25)
+			},
+		},
+	}
+}
+
+func stepsPriorityPresetApplyDelete() []routerStep {
+	return []routerStep{
+		{
+			op:     "applyPriorityPreset",
+			method: http.MethodPost,
+			path:   func(ids *idsState) string { return "/priority-presets/" + ids.priorityPresetID + "/apply" },
+			want:   http.StatusOK,
+			capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
+				t.Helper()
+				assertRouterPriorityRanks(t, decoded, "search_priority_preset", "download_priority_preset", 15, 25)
+			},
+		},
+		{
+			op:     "deletePriorityPreset",
+			method: http.MethodDelete,
+			path:   func(ids *idsState) string { return "/priority-presets/" + ids.priorityPresetID },
+			want:   http.StatusNoContent,
+		},
+	}
+}
+
+func assertRouterPriorityRanks(t *testing.T, decoded map[string]any, searchKey, downloadKey string, search, download float64) {
+	t.Helper()
+	for key, want := range map[string]float64{searchKey: search, downloadKey: download} {
+		ranks, ok := decoded[key].(map[string]any)
+		if !ok || ranks["sonarr"] != want {
+			t.Fatalf("%s = %v, want sonarr=%v", key, decoded[key], want)
+		}
+	}
+}
+
 func stepsWatchaware() []routerStep {
 	return []routerStep{
 		{
@@ -2181,6 +2255,8 @@ func buildRouterSteps(f *routerFixture) []routerStep {
 	steps = append(steps, stepsInstances()...)
 	steps = append(steps, stepsPoliciesAndRuns()...)
 	steps = append(steps, stepsPriority()...)
+	steps = append(steps, stepsPriorityPresetWrites()...)
+	steps = append(steps, stepsPriorityPresetApplyDelete()...)
 	steps = append(steps, stepsSettingsAndSchedules()...)
 	steps = append(steps, stepsModules()...)
 	steps = append(steps, stepsDownloadClients()...)
@@ -2521,6 +2597,7 @@ func initViewerIDsState(t *testing.T, csrfToken string) *idsState {
 	ids.csrfToken = csrfToken
 	ids.apiKeyID = dummyUUID
 	ids.instanceID = dummyUUID
+	ids.priorityPresetID = dummyUUID
 	ids.runID = dummyUUID
 	ids.scheduleID = dummyUUID
 	ids.clientID = dummyUUID

@@ -6,6 +6,7 @@ package oas
 type OperationName = string
 
 const (
+	ApplyPriorityPresetOperation              OperationName = "ApplyPriorityPreset"
 	CancelRunOperation                        OperationName = "CancelRun"
 	ChangePasswordOperation                   OperationName = "ChangePassword"
 	CompleteSetupOperation                    OperationName = "CompleteSetup"
@@ -16,6 +17,7 @@ const (
 	CreateMyNotifyTargetOperation             OperationName = "CreateMyNotifyTarget"
 	CreateNotificationChannelOperation        OperationName = "CreateNotificationChannel"
 	CreateNotificationRuleOperation           OperationName = "CreateNotificationRule"
+	CreatePriorityPresetOperation             OperationName = "CreatePriorityPreset"
 	CreateProwlarrLinkOperation               OperationName = "CreateProwlarrLink"
 	CreateProxySessionOperation               OperationName = "CreateProxySession"
 	CreateScheduleOperation                   OperationName = "CreateSchedule"
@@ -28,6 +30,7 @@ const (
 	DeleteMyNotifyTargetOperation             OperationName = "DeleteMyNotifyTarget"
 	DeleteNotificationChannelOperation        OperationName = "DeleteNotificationChannel"
 	DeleteNotificationRuleOperation           OperationName = "DeleteNotificationRule"
+	DeletePriorityPresetOperation             OperationName = "DeletePriorityPreset"
 	DeleteProwlarrLinkOperation               OperationName = "DeleteProwlarrLink"
 	DeleteScheduleOperation                   OperationName = "DeleteSchedule"
 	DeleteSeerrLinkOperation                  OperationName = "DeleteSeerrLink"
@@ -131,6 +134,7 @@ const (
 	UpdateNotificationChannelOperation        OperationName = "UpdateNotificationChannel"
 	UpdateNotificationRuleOperation           OperationName = "UpdateNotificationRule"
 	UpdatePolicyOperation                     OperationName = "UpdatePolicy"
+	UpdatePriorityPresetOperation             OperationName = "UpdatePriorityPreset"
 	UpdateProwlarrLinkOperation               OperationName = "UpdateProwlarrLink"
 	UpdateQueuePolicyOperation                OperationName = "UpdateQueuePolicy"
 	UpdateRequestsSettingsOperation           OperationName = "UpdateRequestsSettings"
