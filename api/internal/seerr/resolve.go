@@ -100,6 +100,8 @@ func sameFamily(have, want domain.AppKind) bool {
 		return have == domain.KindSonarr || have == domain.KindWhisparrV2
 	case domain.KindLidarr, domain.KindReadarr, domain.KindWhisparrV2, domain.KindWhisparrV3:
 		return have == want
+	case domain.KindStash:
+		return false
 	default:
 		return false
 	}

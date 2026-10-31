@@ -6,29 +6,30 @@ go 1.27.3
 ignore ./web/node_modules
 
 require (
-	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/gen2brain/webp v0.6.4
 	github.com/go-chi/chi/v5 v5.5.0
 	github.com/go-faster/errors v0.8.0
 	github.com/go-faster/jx v1.2.0
 	github.com/go-jose/go-jose/v4 v4.1.6
-	github.com/golusoris/goenvoy/arr/lidarr v1.6.1
-	github.com/golusoris/goenvoy/arr/radarr v1.5.4
-	github.com/golusoris/goenvoy/arr/readarr v1.5.1
+	github.com/golusoris/goenvoy/arr/lidarr v1.6.2
+	github.com/golusoris/goenvoy/arr/prowlarr/v2 v2.1.6
+	github.com/golusoris/goenvoy/arr/radarr v1.5.5
+	github.com/golusoris/goenvoy/arr/readarr v1.5.2
 	github.com/golusoris/goenvoy/arr/seerr v1.6.1
-	github.com/golusoris/goenvoy/arr/sonarr v1.5.4
-	github.com/golusoris/goenvoy/arr/v2 v2.6.1
-	github.com/golusoris/goenvoy/arr/whisparr v1.5.1
-	github.com/golusoris/goenvoy/downloadclient/deluge/v2 v2.0.2
-	github.com/golusoris/goenvoy/downloadclient/nzbget/v2 v2.0.2
-	github.com/golusoris/goenvoy/downloadclient/qbit/v2 v2.0.2
-	github.com/golusoris/goenvoy/downloadclient/rtorrent/v2 v2.1.1
-	github.com/golusoris/goenvoy/downloadclient/sabnzbd/v2 v2.0.2
-	github.com/golusoris/goenvoy/downloadclient/transmission/v2 v2.0.2
-	github.com/golusoris/goenvoy/mediaserver/emby/v3 v3.2.0
+	github.com/golusoris/goenvoy/arr/sonarr v1.5.5
+	github.com/golusoris/goenvoy/arr/v2 v2.6.2
+	github.com/golusoris/goenvoy/arr/whisparr v1.6.0
+	github.com/golusoris/goenvoy/downloadclient/deluge/v2 v2.0.3
+	github.com/golusoris/goenvoy/downloadclient/nzbget/v2 v2.0.3
+	github.com/golusoris/goenvoy/downloadclient/qbit/v2 v2.0.3
+	github.com/golusoris/goenvoy/downloadclient/rtorrent/v2 v2.1.2
+	github.com/golusoris/goenvoy/downloadclient/sabnzbd/v2 v2.0.3
+	github.com/golusoris/goenvoy/downloadclient/transmission/v2 v2.0.3
+	github.com/golusoris/goenvoy/mediaserver/emby/v3 v3.2.1
 	github.com/golusoris/goenvoy/mediaserver/jellyfin/v3 v3.3.0
-	github.com/golusoris/goenvoy/metadata v1.4.1
-	github.com/golusoris/goenvoy/metadata/adult/stashbox/v2 v2.0.4
+	github.com/golusoris/goenvoy/mediaserver/stash/v2 v2.1.0
+	github.com/golusoris/goenvoy/metadata v1.4.3
+	github.com/golusoris/goenvoy/metadata/adult/stashbox/v2 v2.1.0
 	github.com/golusoris/golusoris v0.20.0
 	github.com/golusoris/golusoris/core v0.12.1
 	github.com/google/jsonschema-go v0.4.3
@@ -68,6 +69,7 @@ require (
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
 	github.com/containerd/log v0.2.0 // indirect
 	github.com/containerd/platforms v0.2.1 // indirect
+	github.com/coreos/go-oidc/v3 v3.21.0 // indirect
 	github.com/cpuguy83/dockercfg v0.3.2 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/dlclark/regexp2 v1.12.0 // indirect
@@ -162,7 +164,7 @@ require (
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/crypto v0.58.0 // indirect
 	golang.org/x/exp v0.0.0-20261014143641-f0251eb4aa3e // indirect
-	golang.org/x/net v0.61.0 // indirect
+	golang.org/x/net v0.62.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.43.0 // indirect

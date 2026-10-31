@@ -46,7 +46,7 @@ SPDX-License-Identifier: EUPL-1.2
 	const st = $derived(deriveLinkStatus(link));
 </script>
 
-<li class="card flex flex-col justify-between">
+<li class="card flex flex-col justify-between" class:target={session.isAdmin}>
 	<div class="flex flex-col gap-1.5">
 		<div class="flex items-center gap-2">
 			<StatusIcon status={st.status} label={st.label} />
@@ -67,7 +67,7 @@ SPDX-License-Identifier: EUPL-1.2
 		<div
 			class="compact-actions mt-3 flex flex-wrap items-center gap-2 border-t border-line/40 pt-2"
 		>
-			<button type="button" class="btn" onclick={onedit}>{m.action_edit()}</button>
+			<button type="button" class="btn target-link" onclick={onedit}>{m.action_edit()}</button>
 			<button type="button" class="btn" disabled={testPending} onclick={ontest}
 				>{m.action_test()}</button
 			>

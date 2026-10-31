@@ -71,8 +71,32 @@ export const HELP_MAP: Record<string, HelpEntry> = {
 		summaryKey: 'help_connections_configarr',
 		docsPath: 'configuration.md#configarr'
 	},
+	'/adult/sources': {
+		summaryKey: 'help_adult_sources',
+		docsPath: 'modules.md'
+	},
+	'/adult/image-sets': {
+		summaryKey: 'help_adult_image_sets',
+		docsPath: 'modules.md'
+	},
+	'/adult/performers': {
+		summaryKey: 'help_adult_performers',
+		docsPath: 'modules.md'
+	},
+	'/adult/studios': {
+		summaryKey: 'help_adult_studios',
+		docsPath: 'modules.md'
+	},
 	'/system': {
 		summaryKey: 'help_system',
+		docsPath: 'configuration.md#runtime-settings'
+	},
+	'/settings/requests': {
+		summaryKey: 'help_requests_settings',
+		docsPath: 'configuration.md#runtime-settings'
+	},
+	'/system?tab=environment': {
+		summaryKey: 'help_system_environment',
 		docsPath: 'configuration.md#runtime-settings'
 	},
 	'/system?tab=modules': {

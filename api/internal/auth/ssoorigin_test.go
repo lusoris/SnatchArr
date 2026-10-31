@@ -11,6 +11,8 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/google/uuid"
+
 	"github.com/golusoris/golusoris/auth/session"
 
 	"github.com/lusoris/SnatchArr/api/internal/domain"
@@ -217,5 +219,43 @@ func TestSSOOriginFrom_Table(t *testing.T) {
 				t.Errorf("wantOK = %v, got ok = %v", tc.wantOK, ok)
 			}
 		})
+	}
+}
+
+func TestPopulateSSOSession(t *testing.T) {
+	t.Parallel()
+	mgr, mErr := session.NewManager(session.NewMemoryStore(), session.Options{CookieName: "test_sid"})
+	if mErr != nil {
+		t.Fatalf("session.NewManager: %v", mErr)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	sess, lErr := mgr.Load(req)
+	if lErr != nil {
+		t.Fatalf("mgr.Load: %v", lErr)
+	}
+
+	userID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	origin := SSOOrigin{
+		Source:  "oidc",
+		Subject: "oidc-sub-123",
+		Groups:  []string{"admins"},
+		Role:    domain.RoleAdmin,
+	}
+
+	svc := &Service{}
+	rec := httptest.NewRecorder()
+	if pErr := svc.PopulateSSOSession(t.Context(), mgr, rec, sess, userID, origin); pErr != nil {
+		t.Fatalf("PopulateSSOSession: %v", pErr)
+	}
+
+	if got := sess.Get(SessionUserKey); got != userID.String() {
+		t.Errorf("got user ID = %v, want %s", got, userID)
+	}
+	gotOrigin, ok, oErr := SSOOriginFrom(sess)
+	if oErr != nil || !ok {
+		t.Fatalf("SSOOriginFrom: ok=%v, err=%v", ok, oErr)
+	}
+	if gotOrigin.Subject != origin.Subject || gotOrigin.Role != origin.Role {
+		t.Errorf("got origin = %+v, want %+v", gotOrigin, origin)
 	}
 }

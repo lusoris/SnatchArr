@@ -100,6 +100,41 @@ for file in "${FILES[@]}" "${ACTION_FILES[@]}"; do
     fi
   done < "$ROOT/$file"
 done
+
+# Actions that install a tool and fall back to a floating default when `with: version` is
+# missing. azure/setup-helm asks the GitHub API for the newest release and, when that call
+# fails, installs its built-in default: 3.18.4 broke `helm plugin install --verify` on main
+# 6a83713996. Allow-list: an action listed here must carry a semver `version` in its step.
+VERSION_INPUT_ACTIONS=(azure/setup-helm)
+
+# step_version_pinned INDEX COL: whether the step whose `uses:` key sits at column COL on
+# STEP_LINES[INDEX] sets `version:` to a release. The step ends at the first non-empty line
+# indented less than COL.
+step_version_pinned() {
+  local i line indent
+  for ((i = $1 + 1; i < ${#STEP_LINES[@]}; i++)); do
+    line="${STEP_LINES[i]}"
+    [[ "$line" =~ ^[[:space:]]*$ ]] && continue
+    indent="${line%%[![:space:]]*}"
+    [ "${#indent}" -lt "$2" ] && return 1
+    [[ "$line" =~ ^[[:space:]]+version:[[:space:]]*[\"\']?v?[0-9]+(\.[0-9]+)+[\"\']?[[:space:]]*(#.*)?$ ]] && return 0
+  done
+  return 1
+}
+
+for file in "${FILES[@]}" "${ACTION_FILES[@]}"; do
+  mapfile -t STEP_LINES < "$ROOT/$file"
+  for ((idx = 0; idx < ${#STEP_LINES[@]}; idx++)); do
+    [[ "${STEP_LINES[idx]}" =~ ^([[:space:]]*(-[[:space:]]+)?)uses:[[:space:]]*([^@[:space:]]+)@ ]] || continue
+    for action in "${VERSION_INPUT_ACTIONS[@]}"; do
+      [ "${BASH_REMATCH[3]}" = "$action" ] || continue
+      if ! step_version_pinned "$idx" "${#BASH_REMATCH[1]}"; then
+        echo "refused $file:$((idx + 1)): $action without a pinned version input" >&2
+        floating=1
+      fi
+    done
+  done
+done
 if [ "$floating" -ne 0 ]; then
   exit 1
 fi

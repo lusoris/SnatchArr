@@ -41,9 +41,11 @@ SPDX-License-Identifier: EUPL-1.2
 	{/if}
 </svelte:head>
 
+<!-- Sticky only on screens tall enough to keep it short: at 400% zoom or in phone landscape the
+     header with its tabs would cover the content and the focused control (WCAG 1.4.10, 2.4.11). -->
 <header
 	class="mb-6 flex flex-col gap-3 {sticky
-		? 'sticky top-0 z-10 -mx-4 bg-bg/95 px-4 pt-1 pb-2 backdrop-blur-md md:-mx-6 md:px-6'
+		? 'top-0 z-10 -mx-4 bg-bg/95 px-4 pt-1 pb-2 backdrop-blur-md md:-mx-6 md:px-6 [@media(height>=40rem)]:sticky'
 		: ''} {className}"
 >
 	<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

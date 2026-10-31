@@ -269,6 +269,8 @@ message CompleteRunRequest {
   // dropped on a closed channel, or sent on a stream the API refused or the reporter lost.
   // Non-zero means the run's event history may be incomplete.
   uint32 events_unconfirmed = 7;
+  // Pool size before the per-cycle limit and hourly budget; absent when the run failed before filtering.
+  optional uint32 eligible_items = 8;
 }
 
 message CompleteRunResponse {}

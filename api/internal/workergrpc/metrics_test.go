@@ -127,16 +127,16 @@ func TestEventType(t *testing.T) {
 	}
 }
 
-// eventTypes names every defined type once and never "unknown".
+// EventTypes names every defined type once and never "unknown".
 func TestEventTypes(t *testing.T) {
 	t.Parallel()
-	got := eventTypes()
+	got := events.EventTypes()
 	if len(got) != len(snatcharrv1.EventType_name) {
-		t.Fatalf("eventTypes() has %d names, want %d", len(got), len(snatcharrv1.EventType_name))
+		t.Fatalf("EventTypes() has %d names, want %d", len(got), len(snatcharrv1.EventType_name))
 	}
 	slices.Sort(got)
 	if len(slices.Compact(slices.Clone(got))) != len(got) || slices.Contains(got, "unknown") || !slices.Contains(got, "search_dispatched") {
-		t.Errorf("eventTypes() = %v, want each defined name once", got)
+		t.Errorf("EventTypes() = %v, want each defined name once", got)
 	}
 }
 
@@ -145,7 +145,7 @@ func TestNewCreatesTheEventSeries(t *testing.T) {
 	t.Parallel()
 	m, reg := metricstest.New(t)
 	New(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, m, Options{})
-	for _, name := range eventTypes() {
+	for _, name := range events.EventTypes() {
 		if got, ok := metricstest.Value(t, reg, workerEvents, "type", name); !ok || got != 0 {
 			t.Errorf("%s{%s} = %v (present %t), want 0", workerEvents, name, got, ok)
 		}

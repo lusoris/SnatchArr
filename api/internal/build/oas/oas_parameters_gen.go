@@ -15,6 +15,72 @@ import (
 	"github.com/ogen-go/ogen/validate"
 )
 
+// ApplyPriorityPresetParams is parameters of applyPriorityPreset operation.
+type ApplyPriorityPresetParams struct {
+	// UUID of a saved preset, or media_first for the shipped preset.
+	PresetId string
+}
+
+func unpackApplyPriorityPresetParams(packed middleware.Parameters) (params ApplyPriorityPresetParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "presetId",
+			In:   "path",
+		}
+		params.PresetId = packed[key].(string)
+	}
+	return params
+}
+
+func decodeApplyPriorityPresetParams(args [1]string, argsEscaped bool, r *http.Request) (params ApplyPriorityPresetParams, _ error) {
+	// Decode path: presetId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "presetId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToString(val)
+				if err != nil {
+					return err
+				}
+
+				params.PresetId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "presetId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
 // CancelRunParams is parameters of cancelRun operation.
 type CancelRunParams struct {
 	RunId uuid.UUID
@@ -73,6 +139,71 @@ func decodeCancelRunParams(args [1]string, argsEscaped bool, r *http.Request) (p
 	}(); err != nil {
 		return params, &ogenerrors.DecodeParamError{
 			Name: "runId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
+// DeleteAdultSourceParams is parameters of deleteAdultSource operation.
+type DeleteAdultSourceParams struct {
+	SourceId uuid.UUID
+}
+
+func unpackDeleteAdultSourceParams(packed middleware.Parameters) (params DeleteAdultSourceParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "sourceId",
+			In:   "path",
+		}
+		params.SourceId = packed[key].(uuid.UUID)
+	}
+	return params
+}
+
+func decodeDeleteAdultSourceParams(args [1]string, argsEscaped bool, r *http.Request) (params DeleteAdultSourceParams, _ error) {
+	// Decode path: sourceId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "sourceId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.SourceId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "sourceId",
 			In:   "path",
 			Err:  err,
 		}
@@ -470,6 +601,72 @@ func decodeDeleteNotificationRuleParams(args [1]string, argsEscaped bool, r *htt
 	return params, nil
 }
 
+// DeletePriorityPresetParams is parameters of deletePriorityPreset operation.
+type DeletePriorityPresetParams struct {
+	// UUID of a saved preset. The shipped media_first preset is read-only.
+	PresetId string
+}
+
+func unpackDeletePriorityPresetParams(packed middleware.Parameters) (params DeletePriorityPresetParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "presetId",
+			In:   "path",
+		}
+		params.PresetId = packed[key].(string)
+	}
+	return params
+}
+
+func decodeDeletePriorityPresetParams(args [1]string, argsEscaped bool, r *http.Request) (params DeletePriorityPresetParams, _ error) {
+	// Decode path: presetId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "presetId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToString(val)
+				if err != nil {
+					return err
+				}
+
+				params.PresetId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "presetId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
 // DeleteProwlarrLinkParams is parameters of deleteProwlarrLink operation.
 type DeleteProwlarrLinkParams struct {
 	LinkId uuid.UUID
@@ -788,6 +985,266 @@ func decodeDiscoverDownloadClientsParams(args [1]string, argsEscaped bool, r *ht
 	}(); err != nil {
 		return params, &ogenerrors.DecodeParamError{
 			Name: "instanceId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
+// GetAdultImageSetParams is parameters of getAdultImageSet operation.
+type GetAdultImageSetParams struct {
+	SetId uuid.UUID
+}
+
+func unpackGetAdultImageSetParams(packed middleware.Parameters) (params GetAdultImageSetParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "setId",
+			In:   "path",
+		}
+		params.SetId = packed[key].(uuid.UUID)
+	}
+	return params
+}
+
+func decodeGetAdultImageSetParams(args [1]string, argsEscaped bool, r *http.Request) (params GetAdultImageSetParams, _ error) {
+	// Decode path: setId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "setId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.SetId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "setId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
+// GetAdultPerformerParams is parameters of getAdultPerformer operation.
+type GetAdultPerformerParams struct {
+	PerformerId uuid.UUID
+}
+
+func unpackGetAdultPerformerParams(packed middleware.Parameters) (params GetAdultPerformerParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "performerId",
+			In:   "path",
+		}
+		params.PerformerId = packed[key].(uuid.UUID)
+	}
+	return params
+}
+
+func decodeGetAdultPerformerParams(args [1]string, argsEscaped bool, r *http.Request) (params GetAdultPerformerParams, _ error) {
+	// Decode path: performerId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "performerId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.PerformerId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "performerId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
+// GetAdultSourceParams is parameters of getAdultSource operation.
+type GetAdultSourceParams struct {
+	SourceId uuid.UUID
+}
+
+func unpackGetAdultSourceParams(packed middleware.Parameters) (params GetAdultSourceParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "sourceId",
+			In:   "path",
+		}
+		params.SourceId = packed[key].(uuid.UUID)
+	}
+	return params
+}
+
+func decodeGetAdultSourceParams(args [1]string, argsEscaped bool, r *http.Request) (params GetAdultSourceParams, _ error) {
+	// Decode path: sourceId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "sourceId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.SourceId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "sourceId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
+// GetAdultStudioParams is parameters of getAdultStudio operation.
+type GetAdultStudioParams struct {
+	StudioId uuid.UUID
+}
+
+func unpackGetAdultStudioParams(packed middleware.Parameters) (params GetAdultStudioParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "studioId",
+			In:   "path",
+		}
+		params.StudioId = packed[key].(uuid.UUID)
+	}
+	return params
+}
+
+func decodeGetAdultStudioParams(args [1]string, argsEscaped bool, r *http.Request) (params GetAdultStudioParams, _ error) {
+	// Decode path: studioId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "studioId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.StudioId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "studioId",
 			In:   "path",
 			Err:  err,
 		}
@@ -1726,6 +2183,579 @@ func decodeImportSeerrInstancesParams(args [1]string, argsEscaped bool, r *http.
 	return params, nil
 }
 
+// ListAdultImageSetsParams is parameters of listAdultImageSets operation.
+type ListAdultImageSetsParams struct {
+	Limit  OptInt `json:",omitempty,omitzero"`
+	Offset OptInt `json:",omitempty,omitzero"`
+}
+
+func unpackListAdultImageSetsParams(packed middleware.Parameters) (params ListAdultImageSetsParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "limit",
+			In:   "query",
+		}
+		if v, ok := packed[key]; ok {
+			params.Limit = v.(OptInt)
+		}
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "offset",
+			In:   "query",
+		}
+		if v, ok := packed[key]; ok {
+			params.Offset = v.(OptInt)
+		}
+	}
+	return params
+}
+
+func decodeListAdultImageSetsParams(args [0]string, argsEscaped bool, r *http.Request) (params ListAdultImageSetsParams, _ error) {
+	q := uri.NewQueryDecoder(r.URL.Query())
+	// Set default value for query: limit.
+	{
+		val := int(50)
+		params.Limit.SetTo(val)
+	}
+	// Decode query: limit.
+	if err := func() error {
+		cfg := uri.QueryParameterDecodingConfig{
+			Name:    "limit",
+			Style:   uri.QueryStyleForm,
+			Explode: true,
+		}
+
+		if err := q.HasParam(cfg); err == nil {
+			if err := q.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotLimitVal int
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToInt(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotLimitVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.Limit.SetTo(paramsDotLimitVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if value, ok := params.Limit.Get(); ok {
+					if err := func() error {
+						if err := (validate.Int{
+							MinSet:        true,
+							Min:           1,
+							MaxSet:        true,
+							Max:           200,
+							MinExclusive:  false,
+							MaxExclusive:  false,
+							MultipleOfSet: false,
+							MultipleOf:    0,
+							Pattern:       nil,
+						}).Validate(int64(value)); err != nil {
+							return errors.Wrap(err, "int")
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "limit",
+			In:   "query",
+			Err:  err,
+		}
+	}
+	// Set default value for query: offset.
+	{
+		val := int(0)
+		params.Offset.SetTo(val)
+	}
+	// Decode query: offset.
+	if err := func() error {
+		cfg := uri.QueryParameterDecodingConfig{
+			Name:    "offset",
+			Style:   uri.QueryStyleForm,
+			Explode: true,
+		}
+
+		if err := q.HasParam(cfg); err == nil {
+			if err := q.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotOffsetVal int
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToInt(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotOffsetVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.Offset.SetTo(paramsDotOffsetVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if value, ok := params.Offset.Get(); ok {
+					if err := func() error {
+						if err := (validate.Int{
+							MinSet:        true,
+							Min:           0,
+							MaxSet:        false,
+							Max:           0,
+							MinExclusive:  false,
+							MaxExclusive:  false,
+							MultipleOfSet: false,
+							MultipleOf:    0,
+							Pattern:       nil,
+						}).Validate(int64(value)); err != nil {
+							return errors.Wrap(err, "int")
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "offset",
+			In:   "query",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
+// ListAdultPerformersParams is parameters of listAdultPerformers operation.
+type ListAdultPerformersParams struct {
+	// Filter by favourite status.
+	Favorite OptBool `json:",omitempty,omitzero"`
+	// Maximum performers to return.
+	Limit OptInt `json:",omitempty,omitzero"`
+	// Opaque keyset pagination cursor.
+	Cursor OptString `json:",omitempty,omitzero"`
+}
+
+func unpackListAdultPerformersParams(packed middleware.Parameters) (params ListAdultPerformersParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "favorite",
+			In:   "query",
+		}
+		if v, ok := packed[key]; ok {
+			params.Favorite = v.(OptBool)
+		}
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "limit",
+			In:   "query",
+		}
+		if v, ok := packed[key]; ok {
+			params.Limit = v.(OptInt)
+		}
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "cursor",
+			In:   "query",
+		}
+		if v, ok := packed[key]; ok {
+			params.Cursor = v.(OptString)
+		}
+	}
+	return params
+}
+
+func decodeListAdultPerformersParams(args [0]string, argsEscaped bool, r *http.Request) (params ListAdultPerformersParams, _ error) {
+	q := uri.NewQueryDecoder(r.URL.Query())
+	// Decode query: favorite.
+	if err := func() error {
+		cfg := uri.QueryParameterDecodingConfig{
+			Name:    "favorite",
+			Style:   uri.QueryStyleForm,
+			Explode: true,
+		}
+
+		if err := q.HasParam(cfg); err == nil {
+			if err := q.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotFavoriteVal bool
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToBool(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotFavoriteVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.Favorite.SetTo(paramsDotFavoriteVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "favorite",
+			In:   "query",
+			Err:  err,
+		}
+	}
+	// Set default value for query: limit.
+	{
+		val := int(50)
+		params.Limit.SetTo(val)
+	}
+	// Decode query: limit.
+	if err := func() error {
+		cfg := uri.QueryParameterDecodingConfig{
+			Name:    "limit",
+			Style:   uri.QueryStyleForm,
+			Explode: true,
+		}
+
+		if err := q.HasParam(cfg); err == nil {
+			if err := q.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotLimitVal int
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToInt(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotLimitVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.Limit.SetTo(paramsDotLimitVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if value, ok := params.Limit.Get(); ok {
+					if err := func() error {
+						if err := (validate.Int{
+							MinSet:        true,
+							Min:           1,
+							MaxSet:        true,
+							Max:           200,
+							MinExclusive:  false,
+							MaxExclusive:  false,
+							MultipleOfSet: false,
+							MultipleOf:    0,
+							Pattern:       nil,
+						}).Validate(int64(value)); err != nil {
+							return errors.Wrap(err, "int")
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "limit",
+			In:   "query",
+			Err:  err,
+		}
+	}
+	// Decode query: cursor.
+	if err := func() error {
+		cfg := uri.QueryParameterDecodingConfig{
+			Name:    "cursor",
+			Style:   uri.QueryStyleForm,
+			Explode: true,
+		}
+
+		if err := q.HasParam(cfg); err == nil {
+			if err := q.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotCursorVal string
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToString(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotCursorVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.Cursor.SetTo(paramsDotCursorVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "cursor",
+			In:   "query",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
+// ListAdultStudiosParams is parameters of listAdultStudios operation.
+type ListAdultStudiosParams struct {
+	// Filter by favourite status.
+	Favorite OptBool `json:",omitempty,omitzero"`
+	// Maximum studios to return.
+	Limit OptInt `json:",omitempty,omitzero"`
+	// Opaque keyset pagination cursor.
+	Cursor OptString `json:",omitempty,omitzero"`
+}
+
+func unpackListAdultStudiosParams(packed middleware.Parameters) (params ListAdultStudiosParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "favorite",
+			In:   "query",
+		}
+		if v, ok := packed[key]; ok {
+			params.Favorite = v.(OptBool)
+		}
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "limit",
+			In:   "query",
+		}
+		if v, ok := packed[key]; ok {
+			params.Limit = v.(OptInt)
+		}
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "cursor",
+			In:   "query",
+		}
+		if v, ok := packed[key]; ok {
+			params.Cursor = v.(OptString)
+		}
+	}
+	return params
+}
+
+func decodeListAdultStudiosParams(args [0]string, argsEscaped bool, r *http.Request) (params ListAdultStudiosParams, _ error) {
+	q := uri.NewQueryDecoder(r.URL.Query())
+	// Decode query: favorite.
+	if err := func() error {
+		cfg := uri.QueryParameterDecodingConfig{
+			Name:    "favorite",
+			Style:   uri.QueryStyleForm,
+			Explode: true,
+		}
+
+		if err := q.HasParam(cfg); err == nil {
+			if err := q.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotFavoriteVal bool
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToBool(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotFavoriteVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.Favorite.SetTo(paramsDotFavoriteVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "favorite",
+			In:   "query",
+			Err:  err,
+		}
+	}
+	// Set default value for query: limit.
+	{
+		val := int(50)
+		params.Limit.SetTo(val)
+	}
+	// Decode query: limit.
+	if err := func() error {
+		cfg := uri.QueryParameterDecodingConfig{
+			Name:    "limit",
+			Style:   uri.QueryStyleForm,
+			Explode: true,
+		}
+
+		if err := q.HasParam(cfg); err == nil {
+			if err := q.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotLimitVal int
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToInt(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotLimitVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.Limit.SetTo(paramsDotLimitVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if value, ok := params.Limit.Get(); ok {
+					if err := func() error {
+						if err := (validate.Int{
+							MinSet:        true,
+							Min:           1,
+							MaxSet:        true,
+							Max:           200,
+							MinExclusive:  false,
+							MaxExclusive:  false,
+							MultipleOfSet: false,
+							MultipleOf:    0,
+							Pattern:       nil,
+						}).Validate(int64(value)); err != nil {
+							return errors.Wrap(err, "int")
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "limit",
+			In:   "query",
+			Err:  err,
+		}
+	}
+	// Decode query: cursor.
+	if err := func() error {
+		cfg := uri.QueryParameterDecodingConfig{
+			Name:    "cursor",
+			Style:   uri.QueryStyleForm,
+			Explode: true,
+		}
+
+		if err := q.HasParam(cfg); err == nil {
+			if err := q.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotCursorVal string
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToString(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotCursorVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.Cursor.SetTo(paramsDotCursorVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "cursor",
+			In:   "query",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
 // ListEventsParams is parameters of listEvents operation.
 type ListEventsParams struct {
 	InstanceID OptUUID   `json:",omitempty,omitzero"`
@@ -1847,6 +2877,31 @@ func decodeListEventsParams(args [0]string, argsEscaped bool, r *http.Request) (
 				params.BeforeID.SetTo(paramsDotBeforeIDVal)
 				return nil
 			}); err != nil {
+				return err
+			}
+			if err := func() error {
+				if value, ok := params.BeforeID.Get(); ok {
+					if err := func() error {
+						if err := (validate.Int{
+							MinSet:        true,
+							Min:           1,
+							MaxSet:        false,
+							Max:           0,
+							MinExclusive:  false,
+							MaxExclusive:  false,
+							MultipleOfSet: false,
+							MultipleOf:    0,
+							Pattern:       nil,
+						}).Validate(int64(value)); err != nil {
+							return errors.Wrap(err, "int")
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}(); err != nil {
 				return err
 			}
 		}
@@ -2192,7 +3247,7 @@ func decodeListLogsParams(args [0]string, argsEscaped bool, r *http.Request) (pa
 							MaxLengthSet:  true,
 							Email:         false,
 							Hostname:      false,
-							Regex:         nil,
+							Regex:         regexMap["^(api|worker(:[^\\s:]+)?)$"],
 							MinNumeric:    0,
 							MinNumericSet: false,
 							MaxNumeric:    0,
@@ -3425,6 +4480,71 @@ func decodeSnatchSeerrRequestParams(args [2]string, argsEscaped bool, r *http.Re
 	return params, nil
 }
 
+// SweepInstanceQueueParams is parameters of sweepInstanceQueue operation.
+type SweepInstanceQueueParams struct {
+	InstanceId uuid.UUID
+}
+
+func unpackSweepInstanceQueueParams(packed middleware.Parameters) (params SweepInstanceQueueParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "instanceId",
+			In:   "path",
+		}
+		params.InstanceId = packed[key].(uuid.UUID)
+	}
+	return params
+}
+
+func decodeSweepInstanceQueueParams(args [1]string, argsEscaped bool, r *http.Request) (params SweepInstanceQueueParams, _ error) {
+	// Decode path: instanceId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "instanceId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.InstanceId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "instanceId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
 // SyncSeerrLinkParams is parameters of syncSeerrLink operation.
 type SyncSeerrLinkParams struct {
 	LinkId uuid.UUID
@@ -3938,6 +5058,71 @@ func decodeTriggerRunParams(args [1]string, argsEscaped bool, r *http.Request) (
 	}(); err != nil {
 		return params, &ogenerrors.DecodeParamError{
 			Name: "instanceId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
+// UpdateAdultSourceParams is parameters of updateAdultSource operation.
+type UpdateAdultSourceParams struct {
+	SourceId uuid.UUID
+}
+
+func unpackUpdateAdultSourceParams(packed middleware.Parameters) (params UpdateAdultSourceParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "sourceId",
+			In:   "path",
+		}
+		params.SourceId = packed[key].(uuid.UUID)
+	}
+	return params
+}
+
+func decodeUpdateAdultSourceParams(args [1]string, argsEscaped bool, r *http.Request) (params UpdateAdultSourceParams, _ error) {
+	// Decode path: sourceId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "sourceId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.SourceId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "sourceId",
 			In:   "path",
 			Err:  err,
 		}
@@ -4479,6 +5664,72 @@ func decodeUpdatePolicyParams(args [1]string, argsEscaped bool, r *http.Request)
 	}(); err != nil {
 		return params, &ogenerrors.DecodeParamError{
 			Name: "instanceId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
+// UpdatePriorityPresetParams is parameters of updatePriorityPreset operation.
+type UpdatePriorityPresetParams struct {
+	// UUID of a saved preset. The shipped media_first preset is read-only.
+	PresetId string
+}
+
+func unpackUpdatePriorityPresetParams(packed middleware.Parameters) (params UpdatePriorityPresetParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "presetId",
+			In:   "path",
+		}
+		params.PresetId = packed[key].(string)
+	}
+	return params
+}
+
+func decodeUpdatePriorityPresetParams(args [1]string, argsEscaped bool, r *http.Request) (params UpdatePriorityPresetParams, _ error) {
+	// Decode path: presetId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "presetId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToString(val)
+				if err != nil {
+					return err
+				}
+
+				params.PresetId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "presetId",
 			In:   "path",
 			Err:  err,
 		}

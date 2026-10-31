@@ -108,7 +108,7 @@ Removals triggered by `failed` (and `import_broken`) set `skipRedownload=false` 
 
 ### Import-fixable, import-broken, import-not-wanted, import-blocked
 
-- `import_fixable`: class `fixable`. Attempts manual import via `ForceImport` (subject to `max_imports_per_sweep` bound). On Sonarr, Radarr, Lidarr, and Readarr, candidates qualify if mapped and all rejections classify as `fixable`. On Whisparr, `ForceImport` returns `ErrQueueUnsupported` and the item is reported as `WouldImport` with `import_refused`, never removed.
+- `import_fixable`: class `fixable`. Attempts manual import via `ForceImport` (subject to `max_imports_per_sweep` bound). On Sonarr, Radarr, Lidarr, Readarr, and Whisparr (v2 needs a mapped series and episodes, v3 a mapped movie), candidates qualify if mapped and all rejections classify as `fixable`.
 - `import_broken`: class `broken`. Removes the item with `blocklist=true` and `skipRedownload=false` (re-search).
 - `import_not_wanted`: class `not_wanted`. Removes the item with `blocklist=true` and `skipRedownload=true` (no re-search).
 - `import_blocked`: class `unknown`. Strikes the item and records `Decision.Unknown = true` and `Pattern`. In `act` mode it removes the item at the threshold, within `max_removals_per_sweep`, only when `Pattern` is `rematch_pending` or `unrecognized`; the removal sets `blocklist=true` and `skipRedownload=true`, and the planner searches the item again. An item with an operational line or no line is never removed, in any mode (`IsRemovableUnknown`, `api/internal/queue/classify.go`).
@@ -154,6 +154,8 @@ A season pack lists one queue item per episode under one `downloadId`: its items
 - The sweep runs every 10 minutes on the elected leader (`leader_loops`). Per instance it reads at most 10 pages of 200 items plus at most 50 file scores, and removes at most `max_removals_per_sweep` items (default 10); the rest wait for the next sweep without an extra strike (`TestRemovalBoundExhaustion`, `TestMaxRemovalsBound`).
 - A removal that fails keeps the row and is retried next sweep without counting twice (`TestFailedDeleteKeepsRowAndRetries`).
 - Events on the SSE stream: `queue_item_struck` (`rule`, `count`, `threshold`, `mode`, `would_remove`, `would_import`), `queue_item_removed` (`rule`, `blocklist`), `queue_item_imported` and `queue_item_import_failed` (detail `no_clean_candidate`, `still_id_matched` or `error`). The metric `snatcharr_queue_imports_total{arr_instance,result}` counts the same import results, with `ok` for a sent import and `would_import` for an observed one.
+
+An administrator can trigger one immediate queue sweep for a single instance with `POST /api/v1/instances/{instanceId}/queue/sweep` (`sweepInstanceQueue` in `api/openapi/openapi.yaml`, `SweepInstanceQueue` in `api/internal/httpapi/handlers_queue.go`, **Sweep now** button in `web/src/lib/components/instance/InstanceQueueTab.svelte`). It runs one sweep pass of that instance (`Service.SweepInstance` in `api/internal/queue/service.go`, a no-op when queue management is disabled for the instance) and answers `204 No Content` (`TestSweepInstanceQueue`, `TestSweepInstance`).
 
 ## Settings
 

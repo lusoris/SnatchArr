@@ -13,8 +13,9 @@
 # Exit status: 0 passed, 1 refused, 2 usage. Needs jq (first form) and awk (second form).
 set -eu
 
-# One job per line with what selects it: "always", "commits" (COMMITS_EXPECTED), or the outputs
-# of the changes job, any of which selects the job. The mirror form holds ci.yml to this table.
+# One job per line with what selects it: "always", "commits" (COMMITS_EXPECTED), "release"
+# (RELEASE_EXPECTED), or the outputs of the changes job, any of which selects the job.
+# The mirror form holds ci.yml to this table.
 RULES='workflows always
 secret-scan always
 semgrep always
@@ -33,26 +34,28 @@ dlclients-live api
 arr-forceimport-live api
 integrations-live api,web
 web web
-web-e2e-api api,web
+web-e2e-api api,web,release
 web-visual web
 proto proto
 deploy deploy
 contracts contracts
 governance governance
 docs docs
-licences licences'
+licences licences
+logos logos
+release-e2e-map release'
 
 DRAFT_STEP='Stop on a draft pull request'
 
 decide() {
-  case "${COMMITS_EXPECTED:-}" in
-    true | false) ;;
+  case "${COMMITS_EXPECTED:-}:${RELEASE_EXPECTED-false}" in
+    true:true | true:false | false:true | false:false) ;;
     *)
-      echo "usage: NEEDS=<json> COMMITS_EXPECTED=true|false ${0##*/}" >&2
+      echo "usage: NEEDS=<json> COMMITS_EXPECTED=true|false [RELEASE_EXPECTED=true|false] ${0##*/}" >&2
       return 2
       ;;
   esac
-  if ! refused="$(jq -n -r --arg needs "${NEEDS:-}" --arg rules "$RULES" --arg commits "$COMMITS_EXPECTED" '
+  if ! refused="$(jq -n -r --arg needs "${NEEDS:-}" --arg rules "$RULES" --arg commits "$COMMITS_EXPECTED" --arg release "${RELEASE_EXPECTED-false}" '
     ($needs | fromjson) as $needs
     | ($needs.changes.outputs // {}) as $selected
     | ($rules | split("\n") | map(split(" ") | {job: .[0], on: .[1]})) as $table
@@ -62,7 +65,7 @@ decide() {
         | ($needs[$rule.job].result // "not in needs") as $got
         | (if $rule.on == "always" then true
            elif $rule.on == "commits" then $commits == "true"
-           else any($rule.on | split(",")[]; $selected[.] == "true") end) as $must
+           else any($rule.on | split(",")[]; if . == "release" then $release == "true" else $selected[.] == "true" end) end) as $must
         | select(($got == "success" or (($must | not) and $got == "skipped")) | not)
         | "job \($rule.job): \($got)" + (if $must then ", must succeed" else ", may only be skipped" end)
       ),
@@ -107,6 +110,19 @@ first_steps() {
   awk '
     /^jobs:$/ { in_jobs = 1; next }
     in_jobs && /^  [A-Za-z0-9_-]+:$/ { job = substr($0, 3, length($0) - 3); in_steps = 0; seen = 0; next }
+    in_jobs && job != "" && !seen && /^    uses: \.\// {
+      file = substr($0, 13)
+      while ((getline line < file) > 0) {
+        if (line ~ /^      - /) {
+          step = line; sub(/^      - (name: )?/, "", step)
+          print job "|" step
+          seen = 1
+          break
+        }
+      }
+      close(file)
+      next
+    }
     in_jobs && job != "" && /^    steps:$/ { in_steps = 1; next }
     # A step anchored as &stop-draft names itself on the next line; *stop-draft resolves to that name.
     anchored != "" {
@@ -123,14 +139,18 @@ first_steps() {
   ' "$1"
 }
 
-# expected_if ON COMMITS_EXPRESSION: the job-level condition a rule stands for.
+# expected_if ON COMMITS_EXPRESSION RELEASE_EXPRESSION: the job-level condition a rule stands for.
 expected_if() {
   case "$1" in
     always) echo "" ;;
     commits) echo "$2" ;;
+    release) echo "$3" ;;
     *)
-      echo "$1" | awk -F, '{
-        for (i = 1; i <= NF; i++) printf "%s%s", (i > 1 ? " || " : ""), "needs.changes.outputs." $i " == \047true\047"
+      echo "$1" | awk -F, -v rel="$3" '{
+        for (i = 1; i <= NF; i++) {
+          cond = ($i == "release" ? rel : "needs.changes.outputs." $i " == \047true\047")
+          printf "%s%s", (i > 1 ? " || " : ""), cond
+        }
         print ""
       }'
       ;;
@@ -142,9 +162,14 @@ mirror() {
   jobs="$(workflow_jobs "$file")"
   needs="$(status_needs "$file")"
   commits_expr="$(sed -n 's/^ *COMMITS_EXPECTED: \${{ \(.*\) }}$/\1/p' "$file")"
+  release_expr="$(sed -n 's/^ *RELEASE_EXPECTED: \${{ \(.*\) }}$/\1/p' "$file")"
   status=0
   if [ -z "$commits_expr" ]; then
     echo "status: no COMMITS_EXPECTED expression" >&2
+    status=1
+  fi
+  if [ -z "$release_expr" ]; then
+    echo "status: no RELEASE_EXPECTED expression" >&2
     status=1
   fi
   if ! printf '%s\n' "$jobs" | grep -qx 'status|always()'; then
@@ -156,14 +181,14 @@ mirror() {
     # A draft runs no gate: a job the change filter decides needs the changes job, which stops
     # the draft in its first step, so GitHub skips it; every other job stops the draft itself.
     case "$on" in
-      always | commits)
+      always | commits | release)
         if ! printf '%s\n' "$steps" | grep -qxF "$job|$DRAFT_STEP"; then
           echo "job $job: the first step is not \"$DRAFT_STEP\"" >&2
           status=1
         fi
         ;;
     esac
-    want="$(expected_if "$on" "$commits_expr")"
+    want="$(expected_if "$on" "$commits_expr" "$release_expr")"
     if ! printf '%s\n' "$jobs" | grep -qxF "$job|$want"; then
       echo "job $job: the workflow does not carry the condition of its rule ($on)" >&2
       status=1

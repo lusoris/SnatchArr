@@ -16,6 +16,1115 @@ func (s *ProblemStatusCode) Error() string {
 	return fmt.Sprintf("code %d: %+v", s.StatusCode, s.Response)
 }
 
+// Ref: #/components/schemas/AdultExternalRef
+type AdultExternalRef struct {
+	ID               OptUUID   `json:"id"`
+	SourceKind       string    `json:"source_kind"`
+	SourceInstanceID OptUUID   `json:"source_instance_id"`
+	ForeignID        string    `json:"foreign_id"`
+	IsFavorite       bool      `json:"is_favorite"`
+	URL              OptString `json:"url"`
+}
+
+// GetID returns the value of ID.
+func (s *AdultExternalRef) GetID() OptUUID {
+	return s.ID
+}
+
+// GetSourceKind returns the value of SourceKind.
+func (s *AdultExternalRef) GetSourceKind() string {
+	return s.SourceKind
+}
+
+// GetSourceInstanceID returns the value of SourceInstanceID.
+func (s *AdultExternalRef) GetSourceInstanceID() OptUUID {
+	return s.SourceInstanceID
+}
+
+// GetForeignID returns the value of ForeignID.
+func (s *AdultExternalRef) GetForeignID() string {
+	return s.ForeignID
+}
+
+// GetIsFavorite returns the value of IsFavorite.
+func (s *AdultExternalRef) GetIsFavorite() bool {
+	return s.IsFavorite
+}
+
+// GetURL returns the value of URL.
+func (s *AdultExternalRef) GetURL() OptString {
+	return s.URL
+}
+
+// SetID sets the value of ID.
+func (s *AdultExternalRef) SetID(val OptUUID) {
+	s.ID = val
+}
+
+// SetSourceKind sets the value of SourceKind.
+func (s *AdultExternalRef) SetSourceKind(val string) {
+	s.SourceKind = val
+}
+
+// SetSourceInstanceID sets the value of SourceInstanceID.
+func (s *AdultExternalRef) SetSourceInstanceID(val OptUUID) {
+	s.SourceInstanceID = val
+}
+
+// SetForeignID sets the value of ForeignID.
+func (s *AdultExternalRef) SetForeignID(val string) {
+	s.ForeignID = val
+}
+
+// SetIsFavorite sets the value of IsFavorite.
+func (s *AdultExternalRef) SetIsFavorite(val bool) {
+	s.IsFavorite = val
+}
+
+// SetURL sets the value of URL.
+func (s *AdultExternalRef) SetURL(val OptString) {
+	s.URL = val
+}
+
+// Ref: #/components/schemas/AdultImageItem
+type AdultImageItem struct {
+	ID             uuid.UUID `json:"id"`
+	ImageSetID     uuid.UUID `json:"image_set_id"`
+	FilePath       string    `json:"file_path"`
+	FileName       string    `json:"file_name"`
+	FileSizeBytes  int64     `json:"file_size_bytes"`
+	MimeType       string    `json:"mime_type"`
+	Width          OptInt    `json:"width"`
+	Height         OptInt    `json:"height"`
+	SHA256Checksum string    `json:"sha256_checksum"`
+	SortOrder      int       `json:"sort_order"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
+// GetID returns the value of ID.
+func (s *AdultImageItem) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetImageSetID returns the value of ImageSetID.
+func (s *AdultImageItem) GetImageSetID() uuid.UUID {
+	return s.ImageSetID
+}
+
+// GetFilePath returns the value of FilePath.
+func (s *AdultImageItem) GetFilePath() string {
+	return s.FilePath
+}
+
+// GetFileName returns the value of FileName.
+func (s *AdultImageItem) GetFileName() string {
+	return s.FileName
+}
+
+// GetFileSizeBytes returns the value of FileSizeBytes.
+func (s *AdultImageItem) GetFileSizeBytes() int64 {
+	return s.FileSizeBytes
+}
+
+// GetMimeType returns the value of MimeType.
+func (s *AdultImageItem) GetMimeType() string {
+	return s.MimeType
+}
+
+// GetWidth returns the value of Width.
+func (s *AdultImageItem) GetWidth() OptInt {
+	return s.Width
+}
+
+// GetHeight returns the value of Height.
+func (s *AdultImageItem) GetHeight() OptInt {
+	return s.Height
+}
+
+// GetSHA256Checksum returns the value of SHA256Checksum.
+func (s *AdultImageItem) GetSHA256Checksum() string {
+	return s.SHA256Checksum
+}
+
+// GetSortOrder returns the value of SortOrder.
+func (s *AdultImageItem) GetSortOrder() int {
+	return s.SortOrder
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *AdultImageItem) GetCreatedAt() time.Time {
+	return s.CreatedAt
+}
+
+// SetID sets the value of ID.
+func (s *AdultImageItem) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetImageSetID sets the value of ImageSetID.
+func (s *AdultImageItem) SetImageSetID(val uuid.UUID) {
+	s.ImageSetID = val
+}
+
+// SetFilePath sets the value of FilePath.
+func (s *AdultImageItem) SetFilePath(val string) {
+	s.FilePath = val
+}
+
+// SetFileName sets the value of FileName.
+func (s *AdultImageItem) SetFileName(val string) {
+	s.FileName = val
+}
+
+// SetFileSizeBytes sets the value of FileSizeBytes.
+func (s *AdultImageItem) SetFileSizeBytes(val int64) {
+	s.FileSizeBytes = val
+}
+
+// SetMimeType sets the value of MimeType.
+func (s *AdultImageItem) SetMimeType(val string) {
+	s.MimeType = val
+}
+
+// SetWidth sets the value of Width.
+func (s *AdultImageItem) SetWidth(val OptInt) {
+	s.Width = val
+}
+
+// SetHeight sets the value of Height.
+func (s *AdultImageItem) SetHeight(val OptInt) {
+	s.Height = val
+}
+
+// SetSHA256Checksum sets the value of SHA256Checksum.
+func (s *AdultImageItem) SetSHA256Checksum(val string) {
+	s.SHA256Checksum = val
+}
+
+// SetSortOrder sets the value of SortOrder.
+func (s *AdultImageItem) SetSortOrder(val int) {
+	s.SortOrder = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *AdultImageItem) SetCreatedAt(val time.Time) {
+	s.CreatedAt = val
+}
+
+// Ref: #/components/schemas/AdultImageSet
+type AdultImageSet struct {
+	ID                     uuid.UUID `json:"id"`
+	Title                  string    `json:"title"`
+	DirectoryPath          string    `json:"directory_path"`
+	WhisparrSceneForeignID OptString `json:"whisparr_scene_foreign_id"`
+	PerformerID            OptUUID   `json:"performer_id"`
+	ItemCount              int       `json:"item_count"`
+	TotalSizeBytes         int64     `json:"total_size_bytes"`
+	CoverImagePath         OptString `json:"cover_image_path"`
+	CreatedAt              time.Time `json:"created_at"`
+	UpdatedAt              time.Time `json:"updated_at"`
+}
+
+// GetID returns the value of ID.
+func (s *AdultImageSet) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetTitle returns the value of Title.
+func (s *AdultImageSet) GetTitle() string {
+	return s.Title
+}
+
+// GetDirectoryPath returns the value of DirectoryPath.
+func (s *AdultImageSet) GetDirectoryPath() string {
+	return s.DirectoryPath
+}
+
+// GetWhisparrSceneForeignID returns the value of WhisparrSceneForeignID.
+func (s *AdultImageSet) GetWhisparrSceneForeignID() OptString {
+	return s.WhisparrSceneForeignID
+}
+
+// GetPerformerID returns the value of PerformerID.
+func (s *AdultImageSet) GetPerformerID() OptUUID {
+	return s.PerformerID
+}
+
+// GetItemCount returns the value of ItemCount.
+func (s *AdultImageSet) GetItemCount() int {
+	return s.ItemCount
+}
+
+// GetTotalSizeBytes returns the value of TotalSizeBytes.
+func (s *AdultImageSet) GetTotalSizeBytes() int64 {
+	return s.TotalSizeBytes
+}
+
+// GetCoverImagePath returns the value of CoverImagePath.
+func (s *AdultImageSet) GetCoverImagePath() OptString {
+	return s.CoverImagePath
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *AdultImageSet) GetCreatedAt() time.Time {
+	return s.CreatedAt
+}
+
+// GetUpdatedAt returns the value of UpdatedAt.
+func (s *AdultImageSet) GetUpdatedAt() time.Time {
+	return s.UpdatedAt
+}
+
+// SetID sets the value of ID.
+func (s *AdultImageSet) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetTitle sets the value of Title.
+func (s *AdultImageSet) SetTitle(val string) {
+	s.Title = val
+}
+
+// SetDirectoryPath sets the value of DirectoryPath.
+func (s *AdultImageSet) SetDirectoryPath(val string) {
+	s.DirectoryPath = val
+}
+
+// SetWhisparrSceneForeignID sets the value of WhisparrSceneForeignID.
+func (s *AdultImageSet) SetWhisparrSceneForeignID(val OptString) {
+	s.WhisparrSceneForeignID = val
+}
+
+// SetPerformerID sets the value of PerformerID.
+func (s *AdultImageSet) SetPerformerID(val OptUUID) {
+	s.PerformerID = val
+}
+
+// SetItemCount sets the value of ItemCount.
+func (s *AdultImageSet) SetItemCount(val int) {
+	s.ItemCount = val
+}
+
+// SetTotalSizeBytes sets the value of TotalSizeBytes.
+func (s *AdultImageSet) SetTotalSizeBytes(val int64) {
+	s.TotalSizeBytes = val
+}
+
+// SetCoverImagePath sets the value of CoverImagePath.
+func (s *AdultImageSet) SetCoverImagePath(val OptString) {
+	s.CoverImagePath = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *AdultImageSet) SetCreatedAt(val time.Time) {
+	s.CreatedAt = val
+}
+
+// SetUpdatedAt sets the value of UpdatedAt.
+func (s *AdultImageSet) SetUpdatedAt(val time.Time) {
+	s.UpdatedAt = val
+}
+
+// Merged schema.
+// Ref: #/components/schemas/AdultImageSetDetail
+type AdultImageSetDetail struct {
+	ID                     uuid.UUID        `json:"id"`
+	Title                  string           `json:"title"`
+	DirectoryPath          string           `json:"directory_path"`
+	WhisparrSceneForeignID OptString        `json:"whisparr_scene_foreign_id"`
+	PerformerID            OptUUID          `json:"performer_id"`
+	ItemCount              int              `json:"item_count"`
+	TotalSizeBytes         int64            `json:"total_size_bytes"`
+	CoverImagePath         OptString        `json:"cover_image_path"`
+	CreatedAt              time.Time        `json:"created_at"`
+	UpdatedAt              time.Time        `json:"updated_at"`
+	Items                  []AdultImageItem `json:"items"`
+	IgnoreFilePresent      bool             `json:"ignore_file_present"`
+}
+
+// GetID returns the value of ID.
+func (s *AdultImageSetDetail) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetTitle returns the value of Title.
+func (s *AdultImageSetDetail) GetTitle() string {
+	return s.Title
+}
+
+// GetDirectoryPath returns the value of DirectoryPath.
+func (s *AdultImageSetDetail) GetDirectoryPath() string {
+	return s.DirectoryPath
+}
+
+// GetWhisparrSceneForeignID returns the value of WhisparrSceneForeignID.
+func (s *AdultImageSetDetail) GetWhisparrSceneForeignID() OptString {
+	return s.WhisparrSceneForeignID
+}
+
+// GetPerformerID returns the value of PerformerID.
+func (s *AdultImageSetDetail) GetPerformerID() OptUUID {
+	return s.PerformerID
+}
+
+// GetItemCount returns the value of ItemCount.
+func (s *AdultImageSetDetail) GetItemCount() int {
+	return s.ItemCount
+}
+
+// GetTotalSizeBytes returns the value of TotalSizeBytes.
+func (s *AdultImageSetDetail) GetTotalSizeBytes() int64 {
+	return s.TotalSizeBytes
+}
+
+// GetCoverImagePath returns the value of CoverImagePath.
+func (s *AdultImageSetDetail) GetCoverImagePath() OptString {
+	return s.CoverImagePath
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *AdultImageSetDetail) GetCreatedAt() time.Time {
+	return s.CreatedAt
+}
+
+// GetUpdatedAt returns the value of UpdatedAt.
+func (s *AdultImageSetDetail) GetUpdatedAt() time.Time {
+	return s.UpdatedAt
+}
+
+// GetItems returns the value of Items.
+func (s *AdultImageSetDetail) GetItems() []AdultImageItem {
+	return s.Items
+}
+
+// GetIgnoreFilePresent returns the value of IgnoreFilePresent.
+func (s *AdultImageSetDetail) GetIgnoreFilePresent() bool {
+	return s.IgnoreFilePresent
+}
+
+// SetID sets the value of ID.
+func (s *AdultImageSetDetail) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetTitle sets the value of Title.
+func (s *AdultImageSetDetail) SetTitle(val string) {
+	s.Title = val
+}
+
+// SetDirectoryPath sets the value of DirectoryPath.
+func (s *AdultImageSetDetail) SetDirectoryPath(val string) {
+	s.DirectoryPath = val
+}
+
+// SetWhisparrSceneForeignID sets the value of WhisparrSceneForeignID.
+func (s *AdultImageSetDetail) SetWhisparrSceneForeignID(val OptString) {
+	s.WhisparrSceneForeignID = val
+}
+
+// SetPerformerID sets the value of PerformerID.
+func (s *AdultImageSetDetail) SetPerformerID(val OptUUID) {
+	s.PerformerID = val
+}
+
+// SetItemCount sets the value of ItemCount.
+func (s *AdultImageSetDetail) SetItemCount(val int) {
+	s.ItemCount = val
+}
+
+// SetTotalSizeBytes sets the value of TotalSizeBytes.
+func (s *AdultImageSetDetail) SetTotalSizeBytes(val int64) {
+	s.TotalSizeBytes = val
+}
+
+// SetCoverImagePath sets the value of CoverImagePath.
+func (s *AdultImageSetDetail) SetCoverImagePath(val OptString) {
+	s.CoverImagePath = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *AdultImageSetDetail) SetCreatedAt(val time.Time) {
+	s.CreatedAt = val
+}
+
+// SetUpdatedAt sets the value of UpdatedAt.
+func (s *AdultImageSetDetail) SetUpdatedAt(val time.Time) {
+	s.UpdatedAt = val
+}
+
+// SetItems sets the value of Items.
+func (s *AdultImageSetDetail) SetItems(val []AdultImageItem) {
+	s.Items = val
+}
+
+// SetIgnoreFilePresent sets the value of IgnoreFilePresent.
+func (s *AdultImageSetDetail) SetIgnoreFilePresent(val bool) {
+	s.IgnoreFilePresent = val
+}
+
+// Ref: #/components/schemas/AdultImageSetPage
+type AdultImageSetPage struct {
+	Items []AdultImageSet `json:"items"`
+	Total int             `json:"total"`
+}
+
+// GetItems returns the value of Items.
+func (s *AdultImageSetPage) GetItems() []AdultImageSet {
+	return s.Items
+}
+
+// GetTotal returns the value of Total.
+func (s *AdultImageSetPage) GetTotal() int {
+	return s.Total
+}
+
+// SetItems sets the value of Items.
+func (s *AdultImageSetPage) SetItems(val []AdultImageSet) {
+	s.Items = val
+}
+
+// SetTotal sets the value of Total.
+func (s *AdultImageSetPage) SetTotal(val int) {
+	s.Total = val
+}
+
+// Ref: #/components/schemas/AdultPerformer
+type AdultPerformer struct {
+	ID             uuid.UUID          `json:"id"`
+	Name           string             `json:"name"`
+	CanonicalName  OptString          `json:"canonical_name"`
+	Disambiguation OptString          `json:"disambiguation"`
+	Urls           []string           `json:"urls"`
+	IsFavorite     bool               `json:"is_favorite"`
+	RefCount       OptInt             `json:"ref_count"`
+	ExternalRefs   []AdultExternalRef `json:"external_refs"`
+	CreatedAt      OptDateTime        `json:"created_at"`
+	UpdatedAt      OptDateTime        `json:"updated_at"`
+}
+
+// GetID returns the value of ID.
+func (s *AdultPerformer) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetName returns the value of Name.
+func (s *AdultPerformer) GetName() string {
+	return s.Name
+}
+
+// GetCanonicalName returns the value of CanonicalName.
+func (s *AdultPerformer) GetCanonicalName() OptString {
+	return s.CanonicalName
+}
+
+// GetDisambiguation returns the value of Disambiguation.
+func (s *AdultPerformer) GetDisambiguation() OptString {
+	return s.Disambiguation
+}
+
+// GetUrls returns the value of Urls.
+func (s *AdultPerformer) GetUrls() []string {
+	return s.Urls
+}
+
+// GetIsFavorite returns the value of IsFavorite.
+func (s *AdultPerformer) GetIsFavorite() bool {
+	return s.IsFavorite
+}
+
+// GetRefCount returns the value of RefCount.
+func (s *AdultPerformer) GetRefCount() OptInt {
+	return s.RefCount
+}
+
+// GetExternalRefs returns the value of ExternalRefs.
+func (s *AdultPerformer) GetExternalRefs() []AdultExternalRef {
+	return s.ExternalRefs
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *AdultPerformer) GetCreatedAt() OptDateTime {
+	return s.CreatedAt
+}
+
+// GetUpdatedAt returns the value of UpdatedAt.
+func (s *AdultPerformer) GetUpdatedAt() OptDateTime {
+	return s.UpdatedAt
+}
+
+// SetID sets the value of ID.
+func (s *AdultPerformer) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetName sets the value of Name.
+func (s *AdultPerformer) SetName(val string) {
+	s.Name = val
+}
+
+// SetCanonicalName sets the value of CanonicalName.
+func (s *AdultPerformer) SetCanonicalName(val OptString) {
+	s.CanonicalName = val
+}
+
+// SetDisambiguation sets the value of Disambiguation.
+func (s *AdultPerformer) SetDisambiguation(val OptString) {
+	s.Disambiguation = val
+}
+
+// SetUrls sets the value of Urls.
+func (s *AdultPerformer) SetUrls(val []string) {
+	s.Urls = val
+}
+
+// SetIsFavorite sets the value of IsFavorite.
+func (s *AdultPerformer) SetIsFavorite(val bool) {
+	s.IsFavorite = val
+}
+
+// SetRefCount sets the value of RefCount.
+func (s *AdultPerformer) SetRefCount(val OptInt) {
+	s.RefCount = val
+}
+
+// SetExternalRefs sets the value of ExternalRefs.
+func (s *AdultPerformer) SetExternalRefs(val []AdultExternalRef) {
+	s.ExternalRefs = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *AdultPerformer) SetCreatedAt(val OptDateTime) {
+	s.CreatedAt = val
+}
+
+// SetUpdatedAt sets the value of UpdatedAt.
+func (s *AdultPerformer) SetUpdatedAt(val OptDateTime) {
+	s.UpdatedAt = val
+}
+
+// Ref: #/components/schemas/AdultPerformerPage
+type AdultPerformerPage struct {
+	Items      []AdultPerformer `json:"items"`
+	NextCursor OptString        `json:"next_cursor"`
+	Cursor     OptString        `json:"cursor"`
+}
+
+// GetItems returns the value of Items.
+func (s *AdultPerformerPage) GetItems() []AdultPerformer {
+	return s.Items
+}
+
+// GetNextCursor returns the value of NextCursor.
+func (s *AdultPerformerPage) GetNextCursor() OptString {
+	return s.NextCursor
+}
+
+// GetCursor returns the value of Cursor.
+func (s *AdultPerformerPage) GetCursor() OptString {
+	return s.Cursor
+}
+
+// SetItems sets the value of Items.
+func (s *AdultPerformerPage) SetItems(val []AdultPerformer) {
+	s.Items = val
+}
+
+// SetNextCursor sets the value of NextCursor.
+func (s *AdultPerformerPage) SetNextCursor(val OptString) {
+	s.NextCursor = val
+}
+
+// SetCursor sets the value of Cursor.
+func (s *AdultPerformerPage) SetCursor(val OptString) {
+	s.Cursor = val
+}
+
+// Ref: #/components/schemas/AdultScanSummary
+type AdultScanSummary struct {
+	SetsFound         int  `json:"sets_found"`
+	ItemsFound        int  `json:"items_found"`
+	IgnoreFilePresent bool `json:"ignore_file_present"`
+}
+
+// GetSetsFound returns the value of SetsFound.
+func (s *AdultScanSummary) GetSetsFound() int {
+	return s.SetsFound
+}
+
+// GetItemsFound returns the value of ItemsFound.
+func (s *AdultScanSummary) GetItemsFound() int {
+	return s.ItemsFound
+}
+
+// GetIgnoreFilePresent returns the value of IgnoreFilePresent.
+func (s *AdultScanSummary) GetIgnoreFilePresent() bool {
+	return s.IgnoreFilePresent
+}
+
+// SetSetsFound sets the value of SetsFound.
+func (s *AdultScanSummary) SetSetsFound(val int) {
+	s.SetsFound = val
+}
+
+// SetItemsFound sets the value of ItemsFound.
+func (s *AdultScanSummary) SetItemsFound(val int) {
+	s.ItemsFound = val
+}
+
+// SetIgnoreFilePresent sets the value of IgnoreFilePresent.
+func (s *AdultScanSummary) SetIgnoreFilePresent(val bool) {
+	s.IgnoreFilePresent = val
+}
+
+// Ref: #/components/schemas/AdultSource
+type AdultSource struct {
+	ID       uuid.UUID `json:"id"`
+	Name     string    `json:"name"`
+	Endpoint string    `json:"endpoint"`
+	// True when an encrypted API key is stored (the key itself is write-only).
+	HasAPIKey     bool        `json:"has_api_key"`
+	Enabled       bool        `json:"enabled"`
+	SyncFavorites bool        `json:"sync_favorites"`
+	Priority      int         `json:"priority"`
+	LastSyncAt    OptDateTime `json:"last_sync_at"`
+	LastSyncError OptString   `json:"last_sync_error"`
+	CreatedAt     time.Time   `json:"created_at"`
+	UpdatedAt     time.Time   `json:"updated_at"`
+}
+
+// GetID returns the value of ID.
+func (s *AdultSource) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetName returns the value of Name.
+func (s *AdultSource) GetName() string {
+	return s.Name
+}
+
+// GetEndpoint returns the value of Endpoint.
+func (s *AdultSource) GetEndpoint() string {
+	return s.Endpoint
+}
+
+// GetHasAPIKey returns the value of HasAPIKey.
+func (s *AdultSource) GetHasAPIKey() bool {
+	return s.HasAPIKey
+}
+
+// GetEnabled returns the value of Enabled.
+func (s *AdultSource) GetEnabled() bool {
+	return s.Enabled
+}
+
+// GetSyncFavorites returns the value of SyncFavorites.
+func (s *AdultSource) GetSyncFavorites() bool {
+	return s.SyncFavorites
+}
+
+// GetPriority returns the value of Priority.
+func (s *AdultSource) GetPriority() int {
+	return s.Priority
+}
+
+// GetLastSyncAt returns the value of LastSyncAt.
+func (s *AdultSource) GetLastSyncAt() OptDateTime {
+	return s.LastSyncAt
+}
+
+// GetLastSyncError returns the value of LastSyncError.
+func (s *AdultSource) GetLastSyncError() OptString {
+	return s.LastSyncError
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *AdultSource) GetCreatedAt() time.Time {
+	return s.CreatedAt
+}
+
+// GetUpdatedAt returns the value of UpdatedAt.
+func (s *AdultSource) GetUpdatedAt() time.Time {
+	return s.UpdatedAt
+}
+
+// SetID sets the value of ID.
+func (s *AdultSource) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetName sets the value of Name.
+func (s *AdultSource) SetName(val string) {
+	s.Name = val
+}
+
+// SetEndpoint sets the value of Endpoint.
+func (s *AdultSource) SetEndpoint(val string) {
+	s.Endpoint = val
+}
+
+// SetHasAPIKey sets the value of HasAPIKey.
+func (s *AdultSource) SetHasAPIKey(val bool) {
+	s.HasAPIKey = val
+}
+
+// SetEnabled sets the value of Enabled.
+func (s *AdultSource) SetEnabled(val bool) {
+	s.Enabled = val
+}
+
+// SetSyncFavorites sets the value of SyncFavorites.
+func (s *AdultSource) SetSyncFavorites(val bool) {
+	s.SyncFavorites = val
+}
+
+// SetPriority sets the value of Priority.
+func (s *AdultSource) SetPriority(val int) {
+	s.Priority = val
+}
+
+// SetLastSyncAt sets the value of LastSyncAt.
+func (s *AdultSource) SetLastSyncAt(val OptDateTime) {
+	s.LastSyncAt = val
+}
+
+// SetLastSyncError sets the value of LastSyncError.
+func (s *AdultSource) SetLastSyncError(val OptString) {
+	s.LastSyncError = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *AdultSource) SetCreatedAt(val time.Time) {
+	s.CreatedAt = val
+}
+
+// SetUpdatedAt sets the value of UpdatedAt.
+func (s *AdultSource) SetUpdatedAt(val time.Time) {
+	s.UpdatedAt = val
+}
+
+// Ref: #/components/schemas/AdultSourceInput
+type AdultSourceInput struct {
+	// Display name of the catalogue source (1..128 characters).
+	Name string `json:"name"`
+	// GraphQL endpoint URL (http or https).
+	Endpoint string `json:"endpoint"`
+	// Required on create; omit on update to keep stored key.
+	APIKey OptString `json:"api_key"`
+	// On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.
+	Enabled OptBool `json:"enabled"`
+	// On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.
+	SyncFavorites OptBool `json:"sync_favorites"`
+	// On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it.
+	Priority OptInt `json:"priority"`
+}
+
+// GetName returns the value of Name.
+func (s *AdultSourceInput) GetName() string {
+	return s.Name
+}
+
+// GetEndpoint returns the value of Endpoint.
+func (s *AdultSourceInput) GetEndpoint() string {
+	return s.Endpoint
+}
+
+// GetAPIKey returns the value of APIKey.
+func (s *AdultSourceInput) GetAPIKey() OptString {
+	return s.APIKey
+}
+
+// GetEnabled returns the value of Enabled.
+func (s *AdultSourceInput) GetEnabled() OptBool {
+	return s.Enabled
+}
+
+// GetSyncFavorites returns the value of SyncFavorites.
+func (s *AdultSourceInput) GetSyncFavorites() OptBool {
+	return s.SyncFavorites
+}
+
+// GetPriority returns the value of Priority.
+func (s *AdultSourceInput) GetPriority() OptInt {
+	return s.Priority
+}
+
+// SetName sets the value of Name.
+func (s *AdultSourceInput) SetName(val string) {
+	s.Name = val
+}
+
+// SetEndpoint sets the value of Endpoint.
+func (s *AdultSourceInput) SetEndpoint(val string) {
+	s.Endpoint = val
+}
+
+// SetAPIKey sets the value of APIKey.
+func (s *AdultSourceInput) SetAPIKey(val OptString) {
+	s.APIKey = val
+}
+
+// SetEnabled sets the value of Enabled.
+func (s *AdultSourceInput) SetEnabled(val OptBool) {
+	s.Enabled = val
+}
+
+// SetSyncFavorites sets the value of SyncFavorites.
+func (s *AdultSourceInput) SetSyncFavorites(val OptBool) {
+	s.SyncFavorites = val
+}
+
+// SetPriority sets the value of Priority.
+func (s *AdultSourceInput) SetPriority(val OptInt) {
+	s.Priority = val
+}
+
+// Ref: #/components/schemas/AdultStudio
+type AdultStudio struct {
+	ID            uuid.UUID          `json:"id"`
+	Name          string             `json:"name"`
+	CanonicalName OptString          `json:"canonical_name"`
+	Urls          []string           `json:"urls"`
+	IsFavorite    bool               `json:"is_favorite"`
+	RefCount      OptInt             `json:"ref_count"`
+	ExternalRefs  []AdultExternalRef `json:"external_refs"`
+	CreatedAt     OptDateTime        `json:"created_at"`
+	UpdatedAt     OptDateTime        `json:"updated_at"`
+}
+
+// GetID returns the value of ID.
+func (s *AdultStudio) GetID() uuid.UUID {
+	return s.ID
+}
+
+// GetName returns the value of Name.
+func (s *AdultStudio) GetName() string {
+	return s.Name
+}
+
+// GetCanonicalName returns the value of CanonicalName.
+func (s *AdultStudio) GetCanonicalName() OptString {
+	return s.CanonicalName
+}
+
+// GetUrls returns the value of Urls.
+func (s *AdultStudio) GetUrls() []string {
+	return s.Urls
+}
+
+// GetIsFavorite returns the value of IsFavorite.
+func (s *AdultStudio) GetIsFavorite() bool {
+	return s.IsFavorite
+}
+
+// GetRefCount returns the value of RefCount.
+func (s *AdultStudio) GetRefCount() OptInt {
+	return s.RefCount
+}
+
+// GetExternalRefs returns the value of ExternalRefs.
+func (s *AdultStudio) GetExternalRefs() []AdultExternalRef {
+	return s.ExternalRefs
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *AdultStudio) GetCreatedAt() OptDateTime {
+	return s.CreatedAt
+}
+
+// GetUpdatedAt returns the value of UpdatedAt.
+func (s *AdultStudio) GetUpdatedAt() OptDateTime {
+	return s.UpdatedAt
+}
+
+// SetID sets the value of ID.
+func (s *AdultStudio) SetID(val uuid.UUID) {
+	s.ID = val
+}
+
+// SetName sets the value of Name.
+func (s *AdultStudio) SetName(val string) {
+	s.Name = val
+}
+
+// SetCanonicalName sets the value of CanonicalName.
+func (s *AdultStudio) SetCanonicalName(val OptString) {
+	s.CanonicalName = val
+}
+
+// SetUrls sets the value of Urls.
+func (s *AdultStudio) SetUrls(val []string) {
+	s.Urls = val
+}
+
+// SetIsFavorite sets the value of IsFavorite.
+func (s *AdultStudio) SetIsFavorite(val bool) {
+	s.IsFavorite = val
+}
+
+// SetRefCount sets the value of RefCount.
+func (s *AdultStudio) SetRefCount(val OptInt) {
+	s.RefCount = val
+}
+
+// SetExternalRefs sets the value of ExternalRefs.
+func (s *AdultStudio) SetExternalRefs(val []AdultExternalRef) {
+	s.ExternalRefs = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *AdultStudio) SetCreatedAt(val OptDateTime) {
+	s.CreatedAt = val
+}
+
+// SetUpdatedAt sets the value of UpdatedAt.
+func (s *AdultStudio) SetUpdatedAt(val OptDateTime) {
+	s.UpdatedAt = val
+}
+
+// Ref: #/components/schemas/AdultStudioPage
+type AdultStudioPage struct {
+	Items      []AdultStudio `json:"items"`
+	NextCursor OptString     `json:"next_cursor"`
+	Cursor     OptString     `json:"cursor"`
+}
+
+// GetItems returns the value of Items.
+func (s *AdultStudioPage) GetItems() []AdultStudio {
+	return s.Items
+}
+
+// GetNextCursor returns the value of NextCursor.
+func (s *AdultStudioPage) GetNextCursor() OptString {
+	return s.NextCursor
+}
+
+// GetCursor returns the value of Cursor.
+func (s *AdultStudioPage) GetCursor() OptString {
+	return s.Cursor
+}
+
+// SetItems sets the value of Items.
+func (s *AdultStudioPage) SetItems(val []AdultStudio) {
+	s.Items = val
+}
+
+// SetNextCursor sets the value of NextCursor.
+func (s *AdultStudioPage) SetNextCursor(val OptString) {
+	s.NextCursor = val
+}
+
+// SetCursor sets the value of Cursor.
+func (s *AdultStudioPage) SetCursor(val OptString) {
+	s.Cursor = val
+}
+
+// Ref: #/components/schemas/AdultSyncStatus
+type AdultSyncStatus struct {
+	LastSyncAt       OptDateTime `json:"last_sync_at"`
+	LastError        OptString   `json:"last_error"`
+	TotalSources     int         `json:"total_sources"`
+	EnabledSources   int         `json:"enabled_sources"`
+	PerformersSynced int         `json:"performers_synced"`
+	StudiosSynced    int         `json:"studios_synced"`
+}
+
+// GetLastSyncAt returns the value of LastSyncAt.
+func (s *AdultSyncStatus) GetLastSyncAt() OptDateTime {
+	return s.LastSyncAt
+}
+
+// GetLastError returns the value of LastError.
+func (s *AdultSyncStatus) GetLastError() OptString {
+	return s.LastError
+}
+
+// GetTotalSources returns the value of TotalSources.
+func (s *AdultSyncStatus) GetTotalSources() int {
+	return s.TotalSources
+}
+
+// GetEnabledSources returns the value of EnabledSources.
+func (s *AdultSyncStatus) GetEnabledSources() int {
+	return s.EnabledSources
+}
+
+// GetPerformersSynced returns the value of PerformersSynced.
+func (s *AdultSyncStatus) GetPerformersSynced() int {
+	return s.PerformersSynced
+}
+
+// GetStudiosSynced returns the value of StudiosSynced.
+func (s *AdultSyncStatus) GetStudiosSynced() int {
+	return s.StudiosSynced
+}
+
+// SetLastSyncAt sets the value of LastSyncAt.
+func (s *AdultSyncStatus) SetLastSyncAt(val OptDateTime) {
+	s.LastSyncAt = val
+}
+
+// SetLastError sets the value of LastError.
+func (s *AdultSyncStatus) SetLastError(val OptString) {
+	s.LastError = val
+}
+
+// SetTotalSources sets the value of TotalSources.
+func (s *AdultSyncStatus) SetTotalSources(val int) {
+	s.TotalSources = val
+}
+
+// SetEnabledSources sets the value of EnabledSources.
+func (s *AdultSyncStatus) SetEnabledSources(val int) {
+	s.EnabledSources = val
+}
+
+// SetPerformersSynced sets the value of PerformersSynced.
+func (s *AdultSyncStatus) SetPerformersSynced(val int) {
+	s.PerformersSynced = val
+}
+
+// SetStudiosSynced sets the value of StudiosSynced.
+func (s *AdultSyncStatus) SetStudiosSynced(val int) {
+	s.StudiosSynced = val
+}
+
+// Ref: #/components/schemas/AdultSyncSummary
+type AdultSyncSummary struct {
+	SourcesSynced    int `json:"sources_synced"`
+	PerformersSynced int `json:"performers_synced"`
+	StudiosSynced    int `json:"studios_synced"`
+}
+
+// GetSourcesSynced returns the value of SourcesSynced.
+func (s *AdultSyncSummary) GetSourcesSynced() int {
+	return s.SourcesSynced
+}
+
+// GetPerformersSynced returns the value of PerformersSynced.
+func (s *AdultSyncSummary) GetPerformersSynced() int {
+	return s.PerformersSynced
+}
+
+// GetStudiosSynced returns the value of StudiosSynced.
+func (s *AdultSyncSummary) GetStudiosSynced() int {
+	return s.StudiosSynced
+}
+
+// SetSourcesSynced sets the value of SourcesSynced.
+func (s *AdultSyncSummary) SetSourcesSynced(val int) {
+	s.SourcesSynced = val
+}
+
+// SetPerformersSynced sets the value of PerformersSynced.
+func (s *AdultSyncSummary) SetPerformersSynced(val int) {
+	s.PerformersSynced = val
+}
+
+// SetStudiosSynced sets the value of StudiosSynced.
+func (s *AdultSyncSummary) SetStudiosSynced(val int) {
+	s.StudiosSynced = val
+}
+
 // Ref: #/components/schemas/ApiKey
 type ApiKey struct {
 	ID         string        `json:"id"`
@@ -224,6 +1333,7 @@ const (
 	AppKindReadarr    AppKind = "readarr"
 	AppKindWhisparrV2 AppKind = "whisparr_v2"
 	AppKindWhisparrV3 AppKind = "whisparr_v3"
+	AppKindStash      AppKind = "stash"
 )
 
 // AllValues returns all AppKind values.
@@ -235,6 +1345,7 @@ func (AppKind) AllValues() []AppKind {
 		AppKindReadarr,
 		AppKindWhisparrV2,
 		AppKindWhisparrV3,
+		AppKindStash,
 	}
 }
 
@@ -252,6 +1363,8 @@ func (s AppKind) MarshalText() ([]byte, error) {
 	case AppKindWhisparrV2:
 		return []byte(s), nil
 	case AppKindWhisparrV3:
+		return []byte(s), nil
+	case AppKindStash:
 		return []byte(s), nil
 	default:
 		return nil, errors.Errorf("invalid value: %q", s)
@@ -279,6 +1392,9 @@ func (s *AppKind) UnmarshalText(data []byte) error {
 	case AppKindWhisparrV3:
 		*s = AppKindWhisparrV3
 		return nil
+	case AppKindStash:
+		*s = AppKindStash
+		return nil
 	default:
 		return errors.Errorf("invalid value: %q", data)
 	}
@@ -293,11 +1409,13 @@ func (s *AppKind) UnmarshalText(data []byte) error {
 type ArrProduct string
 
 const (
-	ArrProductReadarr         ArrProduct = "readarr"
-	ArrProductBookshelf       ArrProduct = "bookshelf"
-	ArrProductChaptarr        ArrProduct = "chaptarr"
-	ArrProductReadarrFaustvii ArrProduct = "readarr_faustvii"
-	ArrProductUnknown         ArrProduct = "unknown"
+	ArrProductReadarr             ArrProduct = "readarr"
+	ArrProductBookshelf           ArrProduct = "bookshelf"
+	ArrProductChaptarr            ArrProduct = "chaptarr"
+	ArrProductReadarrFaustvii     ArrProduct = "readarr_faustvii"
+	ArrProductReadarrRresurrected ArrProduct = "readarr_rresurrected"
+	ArrProductReadarrFork         ArrProduct = "readarr_fork"
+	ArrProductUnknown             ArrProduct = "unknown"
 )
 
 // AllValues returns all ArrProduct values.
@@ -307,6 +1425,8 @@ func (ArrProduct) AllValues() []ArrProduct {
 		ArrProductBookshelf,
 		ArrProductChaptarr,
 		ArrProductReadarrFaustvii,
+		ArrProductReadarrRresurrected,
+		ArrProductReadarrFork,
 		ArrProductUnknown,
 	}
 }
@@ -321,6 +1441,10 @@ func (s ArrProduct) MarshalText() ([]byte, error) {
 	case ArrProductChaptarr:
 		return []byte(s), nil
 	case ArrProductReadarrFaustvii:
+		return []byte(s), nil
+	case ArrProductReadarrRresurrected:
+		return []byte(s), nil
+	case ArrProductReadarrFork:
 		return []byte(s), nil
 	case ArrProductUnknown:
 		return []byte(s), nil
@@ -343,6 +1467,12 @@ func (s *ArrProduct) UnmarshalText(data []byte) error {
 		return nil
 	case ArrProductReadarrFaustvii:
 		*s = ArrProductReadarrFaustvii
+		return nil
+	case ArrProductReadarrRresurrected:
+		*s = ArrProductReadarrRresurrected
+		return nil
+	case ArrProductReadarrFork:
+		*s = ArrProductReadarrFork
 		return nil
 	case ArrProductUnknown:
 		*s = ArrProductUnknown
@@ -375,6 +1505,55 @@ func (s *BearerAuth) SetToken(val string) {
 // SetRoles sets the value of Roles.
 func (s *BearerAuth) SetRoles(val []string) {
 	s.Roles = val
+}
+
+// Ref: #/components/schemas/BrandMark
+type BrandMark string
+
+const (
+	BrandMarkVulva BrandMark = "vulva"
+	BrandMarkPenis BrandMark = "penis"
+	BrandMarkHand  BrandMark = "hand"
+)
+
+// AllValues returns all BrandMark values.
+func (BrandMark) AllValues() []BrandMark {
+	return []BrandMark{
+		BrandMarkVulva,
+		BrandMarkPenis,
+		BrandMarkHand,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s BrandMark) MarshalText() ([]byte, error) {
+	switch s {
+	case BrandMarkVulva:
+		return []byte(s), nil
+	case BrandMarkPenis:
+		return []byte(s), nil
+	case BrandMarkHand:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *BrandMark) UnmarshalText(data []byte) error {
+	switch BrandMark(data) {
+	case BrandMarkVulva:
+		*s = BrandMarkVulva
+		return nil
+	case BrandMarkPenis:
+		*s = BrandMarkPenis
+		return nil
+	case BrandMarkHand:
+		*s = BrandMarkHand
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
 }
 
 // CancelRunNoContent is response for CancelRun operation.
@@ -922,6 +2101,9 @@ func (s *CreatedApiKey) SetSecret(val string) {
 
 func (*CreatedApiKey) createAPIKeyRes() {}
 
+// DeleteAdultSourceNoContent is response for DeleteAdultSource operation.
+type DeleteAdultSourceNoContent struct{}
+
 // DeleteDownloadClientNoContent is response for DeleteDownloadClient operation.
 type DeleteDownloadClientNoContent struct{}
 
@@ -941,6 +2123,9 @@ type DeleteNotificationChannelNoContent struct{}
 
 // DeleteNotificationRuleNoContent is response for DeleteNotificationRule operation.
 type DeleteNotificationRuleNoContent struct{}
+
+// DeletePriorityPresetNoContent is response for DeletePriorityPreset operation.
+type DeletePriorityPresetNoContent struct{}
 
 // DeleteProwlarrLinkNoContent is response for DeleteProwlarrLink operation.
 type DeleteProwlarrLinkNoContent struct{}
@@ -1206,11 +2391,15 @@ type DownloadClientInput struct {
 	BaseURL    string             `json:"base_url"`
 	Username   OptString          `json:"username"`
 	// Password, or the API key for SABnzbd. On update, omit to keep the stored one.
-	Secret             OptString `json:"secret"`
-	Enabled            OptBool   `json:"enabled"`
-	MaxActive          OptInt    `json:"max_active"`
-	MaxQueued          OptInt    `json:"max_queued"`
-	BandwidthBudgetBps OptInt64  `json:"bandwidth_budget_bps"`
+	Secret OptString `json:"secret"`
+	// On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.
+	Enabled OptBool `json:"enabled"`
+	// On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it.
+	MaxActive OptInt `json:"max_active"`
+	// On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it.
+	MaxQueued OptInt `json:"max_queued"`
+	// On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it.
+	BandwidthBudgetBps OptInt64 `json:"bandwidth_budget_bps"`
 }
 
 // GetInstanceID returns the value of InstanceID.
@@ -1777,6 +2966,18 @@ func (s *EventLevel) UnmarshalText(data []byte) error {
 	}
 }
 
+type GetRuntimeSettingsForbidden ProblemStatusCode
+
+func (*GetRuntimeSettingsForbidden) getRuntimeSettingsRes() {}
+
+type GetRuntimeSettingsOKApplicationJSON []RuntimeSetting
+
+func (*GetRuntimeSettingsOKApplicationJSON) getRuntimeSettingsRes() {}
+
+type GetRuntimeSettingsUnauthorized ProblemStatusCode
+
+func (*GetRuntimeSettingsUnauthorized) getRuntimeSettingsRes() {}
+
 // Ref: #/components/schemas/Instance
 type Instance struct {
 	ID              uuid.UUID      `json:"id"`
@@ -2137,8 +3338,9 @@ type InstanceUpdate struct {
 	Name    string  `json:"name"`
 	BaseURL string  `json:"base_url"`
 	// Omit or leave empty to keep the stored key.
-	APIKey  OptString `json:"api_key"`
-	Enabled OptBool   `json:"enabled"`
+	APIKey OptString `json:"api_key"`
+	// On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.
+	Enabled OptBool `json:"enabled"`
 }
 
 // GetKind returns the value of Kind.
@@ -3079,6 +4281,9 @@ func (o NilInt) Or(d int) int {
 	return d
 }
 
+// Ref: #/components/responses/NoContent
+type NoContent struct{}
+
 // Ref: #/components/schemas/NotificationChannel
 type NotificationChannel struct {
 	ID      uuid.UUID               `json:"id"`
@@ -3552,10 +4757,12 @@ func (s *NotificationChannelKind) UnmarshalText(data []byte) error {
 
 // Ref: #/components/schemas/NotificationChannelUpdate
 type NotificationChannelUpdate struct {
-	Name    string                       `json:"name"`
-	Kind    NotificationChannelKind      `json:"kind"`
-	Enabled OptBool                      `json:"enabled"`
-	Config  OptNotificationChannelConfig `json:"config"`
+	Name string                  `json:"name"`
+	Kind NotificationChannelKind `json:"kind"`
+	// On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.
+	Enabled OptBool `json:"enabled"`
+	// Omitted = stored configuration stays; sent = replaces it, omitted secret fields stay.
+	Config OptNotificationChannelConfig `json:"config"`
 }
 
 // GetName returns the value of Name.
@@ -3822,11 +5029,12 @@ func (s *NotificationRuleInput) SetChannelIds(val []uuid.UUID) {
 
 // Ref: #/components/schemas/NotificationRuleUpdate
 type NotificationRuleUpdate struct {
-	Name       string                    `json:"name"`
-	EventKind  NotificationRuleEventKind `json:"event_kind"`
-	Threshold  int                       `json:"threshold"`
-	Enabled    OptBool                   `json:"enabled"`
-	ChannelIds []uuid.UUID               `json:"channel_ids"`
+	Name      string                    `json:"name"`
+	EventKind NotificationRuleEventKind `json:"event_kind"`
+	Threshold int                       `json:"threshold"`
+	// On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.
+	Enabled    OptBool     `json:"enabled"`
+	ChannelIds []uuid.UUID `json:"channel_ids"`
 }
 
 // GetName returns the value of Name.
@@ -3965,6 +5173,52 @@ func (o OptBool) Get() (v bool, ok bool) {
 
 // Or returns value if set, or given parameter if does not.
 func (o OptBool) Or(d bool) bool {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptBrandMark returns new OptBrandMark with value set to v.
+func NewOptBrandMark(v BrandMark) OptBrandMark {
+	return OptBrandMark{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptBrandMark is optional BrandMark.
+type OptBrandMark struct {
+	Value BrandMark
+	Set   bool
+}
+
+// IsSet returns true if OptBrandMark was set.
+func (o OptBrandMark) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptBrandMark) Reset() {
+	var v BrandMark
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptBrandMark) SetTo(v BrandMark) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptBrandMark) Get() (v BrandMark, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptBrandMark) Or(d BrandMark) BrandMark {
 	if v, ok := o.Get(); ok {
 		return v
 	}
@@ -4385,6 +5639,69 @@ func (o OptModuleUpdateConfig) Or(d ModuleUpdateConfig) ModuleUpdateConfig {
 	return d
 }
 
+// NewOptNilBrandMark returns new OptNilBrandMark with value set to v.
+func NewOptNilBrandMark(v BrandMark) OptNilBrandMark {
+	return OptNilBrandMark{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptNilBrandMark is optional nullable BrandMark.
+type OptNilBrandMark struct {
+	Value BrandMark
+	Set   bool
+	Null  bool
+}
+
+// IsSet returns true if OptNilBrandMark was set.
+func (o OptNilBrandMark) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptNilBrandMark) Reset() {
+	var v BrandMark
+	o.Value = v
+	o.Set = false
+	o.Null = false
+}
+
+// SetTo sets value to v.
+func (o *OptNilBrandMark) SetTo(v BrandMark) {
+	o.Set = true
+	o.Null = false
+	o.Value = v
+}
+
+// IsNull returns true if value is Null.
+func (o OptNilBrandMark) IsNull() bool { return o.Null }
+
+// SetToNull sets value to null.
+func (o *OptNilBrandMark) SetToNull() {
+	o.Set = true
+	o.Null = true
+	var v BrandMark
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptNilBrandMark) Get() (v BrandMark, ok bool) {
+	if o.Null {
+		return v, false
+	}
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptNilBrandMark) Or(d BrandMark) BrandMark {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
 // NewOptNilDateTime returns new OptNilDateTime with value set to v.
 func NewOptNilDateTime(v time.Time) OptNilDateTime {
 	return OptNilDateTime{
@@ -4505,6 +5822,69 @@ func (o OptNilInt) Get() (v int, ok bool) {
 
 // Or returns value if set, or given parameter if does not.
 func (o OptNilInt) Or(d int) int {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptNilSfwMode returns new OptNilSfwMode with value set to v.
+func NewOptNilSfwMode(v SfwMode) OptNilSfwMode {
+	return OptNilSfwMode{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptNilSfwMode is optional nullable SfwMode.
+type OptNilSfwMode struct {
+	Value SfwMode
+	Set   bool
+	Null  bool
+}
+
+// IsSet returns true if OptNilSfwMode was set.
+func (o OptNilSfwMode) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptNilSfwMode) Reset() {
+	var v SfwMode
+	o.Value = v
+	o.Set = false
+	o.Null = false
+}
+
+// SetTo sets value to v.
+func (o *OptNilSfwMode) SetTo(v SfwMode) {
+	o.Set = true
+	o.Null = false
+	o.Value = v
+}
+
+// IsNull returns true if value is Null.
+func (o OptNilSfwMode) IsNull() bool { return o.Null }
+
+// SetToNull sets value to null.
+func (o *OptNilSfwMode) SetToNull() {
+	o.Set = true
+	o.Null = true
+	var v SfwMode
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptNilSfwMode) Get() (v SfwMode, ok bool) {
+	if o.Null {
+		return v, false
+	}
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptNilSfwMode) Or(d SfwMode) SfwMode {
 	if v, ok := o.Get(); ok {
 		return v
 	}
@@ -4643,6 +6023,52 @@ func (o OptQueueRuleSettings) Get() (v QueueRuleSettings, ok bool) {
 
 // Or returns value if set, or given parameter if does not.
 func (o OptQueueRuleSettings) Or(d QueueRuleSettings) QueueRuleSettings {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptSfwMode returns new OptSfwMode with value set to v.
+func NewOptSfwMode(v SfwMode) OptSfwMode {
+	return OptSfwMode{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptSfwMode is optional SfwMode.
+type OptSfwMode struct {
+	Value SfwMode
+	Set   bool
+}
+
+// IsSet returns true if OptSfwMode was set.
+func (o OptSfwMode) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptSfwMode) Reset() {
+	var v SfwMode
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptSfwMode) SetTo(v SfwMode) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptSfwMode) Get() (v SfwMode, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptSfwMode) Or(d SfwMode) SfwMode {
 	if v, ok := o.Get(); ok {
 		return v
 	}
@@ -4919,10 +6345,24 @@ func (s *PreviewTarget) SetCost(val int) {
 
 // Ref: #/components/schemas/PriorityPreset
 type PriorityPreset struct {
-	// Identifier of the shipped preset (e.g. media_first).
+	// UUID of a saved user preset; omitted for builtin presets.
+	ID OptUUID `json:"id"`
+	// Whether this preset is shipped and read-only.
+	Builtin bool `json:"builtin"`
+	// Name of a saved preset, or media_first for the shipped preset.
 	Name     string            `json:"name"`
 	Search   PriorityPresetMap `json:"search"`
 	Download PriorityPresetMap `json:"download"`
+}
+
+// GetID returns the value of ID.
+func (s *PriorityPreset) GetID() OptUUID {
+	return s.ID
+}
+
+// GetBuiltin returns the value of Builtin.
+func (s *PriorityPreset) GetBuiltin() bool {
+	return s.Builtin
 }
 
 // GetName returns the value of Name.
@@ -4940,6 +6380,16 @@ func (s *PriorityPreset) GetDownload() PriorityPresetMap {
 	return s.Download
 }
 
+// SetID sets the value of ID.
+func (s *PriorityPreset) SetID(val OptUUID) {
+	s.ID = val
+}
+
+// SetBuiltin sets the value of Builtin.
+func (s *PriorityPreset) SetBuiltin(val bool) {
+	s.Builtin = val
+}
+
 // SetName sets the value of Name.
 func (s *PriorityPreset) SetName(val string) {
 	s.Name = val
@@ -4952,6 +6402,46 @@ func (s *PriorityPreset) SetSearch(val PriorityPresetMap) {
 
 // SetDownload sets the value of Download.
 func (s *PriorityPreset) SetDownload(val PriorityPresetMap) {
+	s.Download = val
+}
+
+// Both maps must contain exactly sonarr, radarr, lidarr, readarr, whisparr_v2 and whisparr_v3, with
+// ranks from 1 to 100.
+// Ref: #/components/schemas/PriorityPresetInput
+type PriorityPresetInput struct {
+	// Unique ignoring case; leading and trailing whitespace is trimmed. The name media_first is reserved.
+	Name     string            `json:"name"`
+	Search   PriorityPresetMap `json:"search"`
+	Download PriorityPresetMap `json:"download"`
+}
+
+// GetName returns the value of Name.
+func (s *PriorityPresetInput) GetName() string {
+	return s.Name
+}
+
+// GetSearch returns the value of Search.
+func (s *PriorityPresetInput) GetSearch() PriorityPresetMap {
+	return s.Search
+}
+
+// GetDownload returns the value of Download.
+func (s *PriorityPresetInput) GetDownload() PriorityPresetMap {
+	return s.Download
+}
+
+// SetName sets the value of Name.
+func (s *PriorityPresetInput) SetName(val string) {
+	s.Name = val
+}
+
+// SetSearch sets the value of Search.
+func (s *PriorityPresetInput) SetSearch(val PriorityPresetMap) {
+	s.Search = val
+}
+
+// SetDownload sets the value of Download.
+func (s *PriorityPresetInput) SetDownload(val PriorityPresetMap) {
 	s.Download = val
 }
 
@@ -5342,6 +6832,7 @@ type ProwlarrLink struct {
 	ID              uuid.UUID   `json:"id"`
 	Name            string      `json:"name"`
 	BaseURL         string      `json:"base_url"`
+	HourlyCap       int         `json:"hourly_cap"`
 	Enabled         bool        `json:"enabled"`
 	LastSeenVersion OptString   `json:"last_seen_version"`
 	LastCheckAt     OptDateTime `json:"last_check_at"`
@@ -5363,6 +6854,11 @@ func (s *ProwlarrLink) GetName() string {
 // GetBaseURL returns the value of BaseURL.
 func (s *ProwlarrLink) GetBaseURL() string {
 	return s.BaseURL
+}
+
+// GetHourlyCap returns the value of HourlyCap.
+func (s *ProwlarrLink) GetHourlyCap() int {
+	return s.HourlyCap
 }
 
 // GetEnabled returns the value of Enabled.
@@ -5410,6 +6906,11 @@ func (s *ProwlarrLink) SetBaseURL(val string) {
 	s.BaseURL = val
 }
 
+// SetHourlyCap sets the value of HourlyCap.
+func (s *ProwlarrLink) SetHourlyCap(val int) {
+	s.HourlyCap = val
+}
+
 // SetEnabled sets the value of Enabled.
 func (s *ProwlarrLink) SetEnabled(val bool) {
 	s.Enabled = val
@@ -5445,8 +6946,11 @@ type ProwlarrLinkInput struct {
 	Name    string `json:"name"`
 	BaseURL string `json:"base_url"`
 	// Required on create; omit on update to keep the stored key.
-	APIKey  OptString `json:"api_key"`
-	Enabled OptBool   `json:"enabled"`
+	APIKey OptString `json:"api_key"`
+	// On create, omitted = 15. On update, omitted = stored value stays; sent = replaces it.
+	HourlyCap OptInt `json:"hourly_cap"`
+	// On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.
+	Enabled OptBool `json:"enabled"`
 }
 
 // GetName returns the value of Name.
@@ -5462,6 +6966,11 @@ func (s *ProwlarrLinkInput) GetBaseURL() string {
 // GetAPIKey returns the value of APIKey.
 func (s *ProwlarrLinkInput) GetAPIKey() OptString {
 	return s.APIKey
+}
+
+// GetHourlyCap returns the value of HourlyCap.
+func (s *ProwlarrLinkInput) GetHourlyCap() OptInt {
+	return s.HourlyCap
 }
 
 // GetEnabled returns the value of Enabled.
@@ -5482,6 +6991,11 @@ func (s *ProwlarrLinkInput) SetBaseURL(val string) {
 // SetAPIKey sets the value of APIKey.
 func (s *ProwlarrLinkInput) SetAPIKey(val OptString) {
 	s.APIKey = val
+}
+
+// SetHourlyCap sets the value of HourlyCap.
+func (s *ProwlarrLinkInput) SetHourlyCap(val OptInt) {
+	s.HourlyCap = val
 }
 
 // SetEnabled sets the value of Enabled.
@@ -6419,6 +7933,145 @@ func (s *QueueStrike) SetImportRefused(val OptBool) {
 	s.ImportRefused = val
 }
 
+// Ref: #/components/schemas/RequestsSettings
+type RequestsSettings struct {
+	VotingMode       RequestsVotingMode `json:"voting_mode"`
+	AllowViewerVotes bool               `json:"allow_viewer_votes"`
+	Visibility       RequestsVisibility `json:"visibility"`
+	VotingTTLDays    int                `json:"voting_ttl_days"`
+}
+
+// GetVotingMode returns the value of VotingMode.
+func (s *RequestsSettings) GetVotingMode() RequestsVotingMode {
+	return s.VotingMode
+}
+
+// GetAllowViewerVotes returns the value of AllowViewerVotes.
+func (s *RequestsSettings) GetAllowViewerVotes() bool {
+	return s.AllowViewerVotes
+}
+
+// GetVisibility returns the value of Visibility.
+func (s *RequestsSettings) GetVisibility() RequestsVisibility {
+	return s.Visibility
+}
+
+// GetVotingTTLDays returns the value of VotingTTLDays.
+func (s *RequestsSettings) GetVotingTTLDays() int {
+	return s.VotingTTLDays
+}
+
+// SetVotingMode sets the value of VotingMode.
+func (s *RequestsSettings) SetVotingMode(val RequestsVotingMode) {
+	s.VotingMode = val
+}
+
+// SetAllowViewerVotes sets the value of AllowViewerVotes.
+func (s *RequestsSettings) SetAllowViewerVotes(val bool) {
+	s.AllowViewerVotes = val
+}
+
+// SetVisibility sets the value of Visibility.
+func (s *RequestsSettings) SetVisibility(val RequestsVisibility) {
+	s.Visibility = val
+}
+
+// SetVotingTTLDays sets the value of VotingTTLDays.
+func (s *RequestsSettings) SetVotingTTLDays(val int) {
+	s.VotingTTLDays = val
+}
+
+// Ref: #/components/schemas/RequestsVisibility
+type RequestsVisibility string
+
+const (
+	RequestsVisibilityPublicAttributed           RequestsVisibility = "public_attributed"
+	RequestsVisibilityPublicAnonymous            RequestsVisibility = "public_anonymous"
+	RequestsVisibilityPrivateToRequesterAndAdmin RequestsVisibility = "private_to_requester_and_admin"
+)
+
+// AllValues returns all RequestsVisibility values.
+func (RequestsVisibility) AllValues() []RequestsVisibility {
+	return []RequestsVisibility{
+		RequestsVisibilityPublicAttributed,
+		RequestsVisibilityPublicAnonymous,
+		RequestsVisibilityPrivateToRequesterAndAdmin,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s RequestsVisibility) MarshalText() ([]byte, error) {
+	switch s {
+	case RequestsVisibilityPublicAttributed:
+		return []byte(s), nil
+	case RequestsVisibilityPublicAnonymous:
+		return []byte(s), nil
+	case RequestsVisibilityPrivateToRequesterAndAdmin:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *RequestsVisibility) UnmarshalText(data []byte) error {
+	switch RequestsVisibility(data) {
+	case RequestsVisibilityPublicAttributed:
+		*s = RequestsVisibilityPublicAttributed
+		return nil
+	case RequestsVisibilityPublicAnonymous:
+		*s = RequestsVisibilityPublicAnonymous
+		return nil
+	case RequestsVisibilityPrivateToRequesterAndAdmin:
+		*s = RequestsVisibilityPrivateToRequesterAndAdmin
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/RequestsVotingMode
+type RequestsVotingMode string
+
+const (
+	RequestsVotingModeUpvotesOnly RequestsVotingMode = "upvotes_only"
+	RequestsVotingModeNetScore    RequestsVotingMode = "net_score"
+)
+
+// AllValues returns all RequestsVotingMode values.
+func (RequestsVotingMode) AllValues() []RequestsVotingMode {
+	return []RequestsVotingMode{
+		RequestsVotingModeUpvotesOnly,
+		RequestsVotingModeNetScore,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s RequestsVotingMode) MarshalText() ([]byte, error) {
+	switch s {
+	case RequestsVotingModeUpvotesOnly:
+		return []byte(s), nil
+	case RequestsVotingModeNetScore:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *RequestsVotingMode) UnmarshalText(data []byte) error {
+	switch RequestsVotingMode(data) {
+	case RequestsVotingModeUpvotesOnly:
+		*s = RequestsVotingModeUpvotesOnly
+		return nil
+	case RequestsVotingModeNetScore:
+		*s = RequestsVotingModeNetScore
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
 // RevokeAPIKeyNoContent is response for RevokeAPIKey operation.
 type RevokeAPIKeyNoContent struct{}
 
@@ -6693,6 +8346,319 @@ func (s *RunTrigger) GetKind() SnatchKind {
 func (s *RunTrigger) SetKind(val SnatchKind) {
 	s.Kind = val
 }
+
+// Ref: #/components/schemas/RuntimeSetting
+type RuntimeSetting struct {
+	Key     string              `json:"key"`
+	Env     string              `json:"env"`
+	Class   RuntimeSettingClass `json:"class"`
+	Type    string              `json:"type"`
+	Default string              `json:"default"`
+	// Current effective value; omitted for secrets.
+	Value OptString `json:"value"`
+	// True when a secret has a configured value; omitted for non-secrets.
+	IsSet  OptBool              `json:"is_set"`
+	Source RuntimeSettingSource `json:"source"`
+	// True when the setting is written only through its environment variable: set there, or an
+	// environment-only secret.
+	Locked bool                `json:"locked"`
+	Apply  RuntimeSettingApply `json:"apply"`
+}
+
+// GetKey returns the value of Key.
+func (s *RuntimeSetting) GetKey() string {
+	return s.Key
+}
+
+// GetEnv returns the value of Env.
+func (s *RuntimeSetting) GetEnv() string {
+	return s.Env
+}
+
+// GetClass returns the value of Class.
+func (s *RuntimeSetting) GetClass() RuntimeSettingClass {
+	return s.Class
+}
+
+// GetType returns the value of Type.
+func (s *RuntimeSetting) GetType() string {
+	return s.Type
+}
+
+// GetDefault returns the value of Default.
+func (s *RuntimeSetting) GetDefault() string {
+	return s.Default
+}
+
+// GetValue returns the value of Value.
+func (s *RuntimeSetting) GetValue() OptString {
+	return s.Value
+}
+
+// GetIsSet returns the value of IsSet.
+func (s *RuntimeSetting) GetIsSet() OptBool {
+	return s.IsSet
+}
+
+// GetSource returns the value of Source.
+func (s *RuntimeSetting) GetSource() RuntimeSettingSource {
+	return s.Source
+}
+
+// GetLocked returns the value of Locked.
+func (s *RuntimeSetting) GetLocked() bool {
+	return s.Locked
+}
+
+// GetApply returns the value of Apply.
+func (s *RuntimeSetting) GetApply() RuntimeSettingApply {
+	return s.Apply
+}
+
+// SetKey sets the value of Key.
+func (s *RuntimeSetting) SetKey(val string) {
+	s.Key = val
+}
+
+// SetEnv sets the value of Env.
+func (s *RuntimeSetting) SetEnv(val string) {
+	s.Env = val
+}
+
+// SetClass sets the value of Class.
+func (s *RuntimeSetting) SetClass(val RuntimeSettingClass) {
+	s.Class = val
+}
+
+// SetType sets the value of Type.
+func (s *RuntimeSetting) SetType(val string) {
+	s.Type = val
+}
+
+// SetDefault sets the value of Default.
+func (s *RuntimeSetting) SetDefault(val string) {
+	s.Default = val
+}
+
+// SetValue sets the value of Value.
+func (s *RuntimeSetting) SetValue(val OptString) {
+	s.Value = val
+}
+
+// SetIsSet sets the value of IsSet.
+func (s *RuntimeSetting) SetIsSet(val OptBool) {
+	s.IsSet = val
+}
+
+// SetSource sets the value of Source.
+func (s *RuntimeSetting) SetSource(val RuntimeSettingSource) {
+	s.Source = val
+}
+
+// SetLocked sets the value of Locked.
+func (s *RuntimeSetting) SetLocked(val bool) {
+	s.Locked = val
+}
+
+// SetApply sets the value of Apply.
+func (s *RuntimeSetting) SetApply(val RuntimeSettingApply) {
+	s.Apply = val
+}
+
+// Ref: #/components/schemas/RuntimeSettingApply
+type RuntimeSettingApply string
+
+const (
+	RuntimeSettingApplyRestart RuntimeSettingApply = "restart"
+	RuntimeSettingApplyLive    RuntimeSettingApply = "live"
+)
+
+// AllValues returns all RuntimeSettingApply values.
+func (RuntimeSettingApply) AllValues() []RuntimeSettingApply {
+	return []RuntimeSettingApply{
+		RuntimeSettingApplyRestart,
+		RuntimeSettingApplyLive,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s RuntimeSettingApply) MarshalText() ([]byte, error) {
+	switch s {
+	case RuntimeSettingApplyRestart:
+		return []byte(s), nil
+	case RuntimeSettingApplyLive:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *RuntimeSettingApply) UnmarshalText(data []byte) error {
+	switch RuntimeSettingApply(data) {
+	case RuntimeSettingApplyRestart:
+		*s = RuntimeSettingApplyRestart
+		return nil
+	case RuntimeSettingApplyLive:
+		*s = RuntimeSettingApplyLive
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/RuntimeSettingClass
+type RuntimeSettingClass string
+
+const (
+	RuntimeSettingClassBootstrap RuntimeSettingClass = "bootstrap"
+	RuntimeSettingClassRuntime   RuntimeSettingClass = "runtime"
+	RuntimeSettingClassSecret    RuntimeSettingClass = "secret"
+)
+
+// AllValues returns all RuntimeSettingClass values.
+func (RuntimeSettingClass) AllValues() []RuntimeSettingClass {
+	return []RuntimeSettingClass{
+		RuntimeSettingClassBootstrap,
+		RuntimeSettingClassRuntime,
+		RuntimeSettingClassSecret,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s RuntimeSettingClass) MarshalText() ([]byte, error) {
+	switch s {
+	case RuntimeSettingClassBootstrap:
+		return []byte(s), nil
+	case RuntimeSettingClassRuntime:
+		return []byte(s), nil
+	case RuntimeSettingClassSecret:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *RuntimeSettingClass) UnmarshalText(data []byte) error {
+	switch RuntimeSettingClass(data) {
+	case RuntimeSettingClassBootstrap:
+		*s = RuntimeSettingClassBootstrap
+		return nil
+	case RuntimeSettingClassRuntime:
+		*s = RuntimeSettingClassRuntime
+		return nil
+	case RuntimeSettingClassSecret:
+		*s = RuntimeSettingClassSecret
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/RuntimeSettingSource
+type RuntimeSettingSource string
+
+const (
+	RuntimeSettingSourceEnv     RuntimeSettingSource = "env"
+	RuntimeSettingSourceDb      RuntimeSettingSource = "db"
+	RuntimeSettingSourceDefault RuntimeSettingSource = "default"
+)
+
+// AllValues returns all RuntimeSettingSource values.
+func (RuntimeSettingSource) AllValues() []RuntimeSettingSource {
+	return []RuntimeSettingSource{
+		RuntimeSettingSourceEnv,
+		RuntimeSettingSourceDb,
+		RuntimeSettingSourceDefault,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s RuntimeSettingSource) MarshalText() ([]byte, error) {
+	switch s {
+	case RuntimeSettingSourceEnv:
+		return []byte(s), nil
+	case RuntimeSettingSourceDb:
+		return []byte(s), nil
+	case RuntimeSettingSourceDefault:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *RuntimeSettingSource) UnmarshalText(data []byte) error {
+	switch RuntimeSettingSource(data) {
+	case RuntimeSettingSourceEnv:
+		*s = RuntimeSettingSourceEnv
+		return nil
+	case RuntimeSettingSourceDb:
+		*s = RuntimeSettingSourceDb
+		return nil
+	case RuntimeSettingSourceDefault:
+		*s = RuntimeSettingSourceDefault
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/RuntimeSettingsUpdateRequest
+type RuntimeSettingsUpdateRequest struct {
+	Values RuntimeSettingsUpdateRequestValues `json:"values"`
+}
+
+// GetValues returns the value of Values.
+func (s *RuntimeSettingsUpdateRequest) GetValues() RuntimeSettingsUpdateRequestValues {
+	return s.Values
+}
+
+// SetValues sets the value of Values.
+func (s *RuntimeSettingsUpdateRequest) SetValues(val RuntimeSettingsUpdateRequestValues) {
+	s.Values = val
+}
+
+type RuntimeSettingsUpdateRequestValues map[string]string
+
+func (s *RuntimeSettingsUpdateRequestValues) init() RuntimeSettingsUpdateRequestValues {
+	m := *s
+	if m == nil {
+		m = map[string]string{}
+		*s = m
+	}
+	return m
+}
+
+// Ref: #/components/schemas/RuntimeSettingsUpdateResult
+type RuntimeSettingsUpdateResult struct {
+	// True when changed settings take effect only after a restart.
+	PendingRestart bool             `json:"pending_restart"`
+	Settings       []RuntimeSetting `json:"settings"`
+}
+
+// GetPendingRestart returns the value of PendingRestart.
+func (s *RuntimeSettingsUpdateResult) GetPendingRestart() bool {
+	return s.PendingRestart
+}
+
+// GetSettings returns the value of Settings.
+func (s *RuntimeSettingsUpdateResult) GetSettings() []RuntimeSetting {
+	return s.Settings
+}
+
+// SetPendingRestart sets the value of PendingRestart.
+func (s *RuntimeSettingsUpdateResult) SetPendingRestart(val bool) {
+	s.PendingRestart = val
+}
+
+// SetSettings sets the value of Settings.
+func (s *RuntimeSettingsUpdateResult) SetSettings(val []RuntimeSetting) {
+	s.Settings = val
+}
+
+func (*RuntimeSettingsUpdateResult) updateRuntimeSettingsRes() {}
 
 // Ref: #/components/schemas/SSOStatus
 type SSOStatus struct {
@@ -7249,10 +9215,11 @@ type SeerrLinkInput struct {
 	Name    string `json:"name"`
 	BaseURL string `json:"base_url"`
 	// Required on create; omit on update to keep the stored key.
-	APIKey           OptString `json:"api_key"`
-	Enabled          OptBool   `json:"enabled"`
-	SonarrInstanceID OptUUID   `json:"sonarr_instance_id"`
-	RadarrInstanceID OptUUID   `json:"radarr_instance_id"`
+	APIKey OptString `json:"api_key"`
+	// On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.
+	Enabled          OptBool `json:"enabled"`
+	SonarrInstanceID OptUUID `json:"sonarr_instance_id"`
+	RadarrInstanceID OptUUID `json:"radarr_instance_id"`
 }
 
 // GetName returns the value of Name.
@@ -7731,11 +9698,18 @@ type Settings struct {
 	GlobalHourlyCap        int               `json:"global_hourly_cap"`
 	SearchPriorityPreset   PriorityPresetMap `json:"search_priority_preset"`
 	DownloadPriorityPreset PriorityPresetMap `json:"download_priority_preset"`
-	// Whether the Model Context Protocol (MCP) server at /api/v1/mcp is enabled.
+	// Whether the Model Context Protocol (MCP) server at /api/v1/mcp is enabled. On update, omitted =
+	// stored value stays; sent = replaces it.
 	LlmEnabled OptBool `json:"llm_enabled"`
 	// MCP write tools enabled by the administrator; an omitted list enables none.
 	LlmWriteTools []LlmWriteTool `json:"llm_write_tools"`
-	UpdatedAt     OptDateTime    `json:"updated_at"`
+	// Installation-wide brand mark shown when a user has no override. On update, omitted = stored value
+	// stays; sent = replaces it.
+	BrandMark OptBrandMark `json:"brand_mark"`
+	// Installation-wide SFW mode applied when a user has no override. On update, omitted = stored value
+	// stays; sent = replaces it.
+	SfwMode   OptSfwMode  `json:"sfw_mode"`
+	UpdatedAt OptDateTime `json:"updated_at"`
 }
 
 // GetHistoryRetentionDays returns the value of HistoryRetentionDays.
@@ -7771,6 +9745,16 @@ func (s *Settings) GetLlmEnabled() OptBool {
 // GetLlmWriteTools returns the value of LlmWriteTools.
 func (s *Settings) GetLlmWriteTools() []LlmWriteTool {
 	return s.LlmWriteTools
+}
+
+// GetBrandMark returns the value of BrandMark.
+func (s *Settings) GetBrandMark() OptBrandMark {
+	return s.BrandMark
+}
+
+// GetSfwMode returns the value of SfwMode.
+func (s *Settings) GetSfwMode() OptSfwMode {
+	return s.SfwMode
 }
 
 // GetUpdatedAt returns the value of UpdatedAt.
@@ -7811,6 +9795,16 @@ func (s *Settings) SetLlmEnabled(val OptBool) {
 // SetLlmWriteTools sets the value of LlmWriteTools.
 func (s *Settings) SetLlmWriteTools(val []LlmWriteTool) {
 	s.LlmWriteTools = val
+}
+
+// SetBrandMark sets the value of BrandMark.
+func (s *Settings) SetBrandMark(val OptBrandMark) {
+	s.BrandMark = val
+}
+
+// SetSfwMode sets the value of SfwMode.
+func (s *Settings) SetSfwMode(val OptSfwMode) {
+	s.SfwMode = val
 }
 
 // SetUpdatedAt sets the value of UpdatedAt.
@@ -7881,6 +9875,55 @@ func (s *SetupStatus) SetSetupComplete(val bool) {
 // SetSecretRequired sets the value of SecretRequired.
 func (s *SetupStatus) SetSecretRequired(val bool) {
 	s.SecretRequired = val
+}
+
+// Ref: #/components/schemas/SfwMode
+type SfwMode string
+
+const (
+	SfwModeAuto SfwMode = "auto"
+	SfwModeOn   SfwMode = "on"
+	SfwModeOff  SfwMode = "off"
+)
+
+// AllValues returns all SfwMode values.
+func (SfwMode) AllValues() []SfwMode {
+	return []SfwMode{
+		SfwModeAuto,
+		SfwModeOn,
+		SfwModeOff,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s SfwMode) MarshalText() ([]byte, error) {
+	switch s {
+	case SfwModeAuto:
+		return []byte(s), nil
+	case SfwModeOn:
+		return []byte(s), nil
+	case SfwModeOff:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *SfwMode) UnmarshalText(data []byte) error {
+	switch SfwMode(data) {
+	case SfwModeAuto:
+		*s = SfwModeAuto
+		return nil
+	case SfwModeOn:
+		*s = SfwModeOn
+		return nil
+	case SfwModeOff:
+		*s = SfwModeOff
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
 }
 
 // Ref: #/components/schemas/SnatchKind
@@ -7973,11 +10016,12 @@ type SnatchPolicy struct {
 	// date is the one of the app kind: air date (Sonarr, Whisparr v2), the date of radarr_release_type
 	// (Radarr, Whisparr v3), the album or book release date. Items without a date are kept.
 	ReleaseDelayH OptInt `json:"release_delay_h"`
-	// When true, planner creates preview / dry-run runs that do not dispatch searches.
+	// When true, planner creates preview / dry-run runs that do not dispatch searches. On update,
+	// omitted = stored value stays; sent = replaces it.
 	DryRun OptBool `json:"dry_run"`
 	// Radarr only: skip movies Radarr reports as not yet available (isAvailable false, the movie's
 	// minimum availability is not reached). They are not searched and cost no stamina. Movies without
-	// the flag are searched. Absent = true.
+	// the flag are searched. On update, omitted = stored value stays; sent = replaces it.
 	SkipUnavailableMovies OptBool     `json:"skip_unavailable_movies"`
 	UpdatedAt             OptDateTime `json:"updated_at"`
 }
@@ -8491,6 +10535,9 @@ func (s *StateResetResult) SetForgotten(val int64) {
 	s.Forgotten = val
 }
 
+// SweepInstanceQueueNoContent is response for SweepInstanceQueue operation.
+type SweepInstanceQueueNoContent struct{}
+
 // Ref: #/components/schemas/SystemStatus
 type SystemStatus struct {
 	Name          string              `json:"name"`
@@ -8615,9 +10662,6 @@ func (s *SystemStatusProfile) UnmarshalText(data []byte) error {
 	}
 }
 
-// TestMyNotifyTargetNoContent is response for TestMyNotifyTarget operation.
-type TestMyNotifyTargetNoContent struct{}
-
 // TestNotificationChannelNoContent is response for TestNotificationChannel operation.
 type TestNotificationChannelNoContent struct{}
 
@@ -8654,6 +10698,22 @@ func (*UnlinkProxyIdentityNotFound) unlinkProxyIdentityRes() {}
 type UnlinkProxyIdentityUnauthorized ProblemStatusCode
 
 func (*UnlinkProxyIdentityUnauthorized) unlinkProxyIdentityRes() {}
+
+type UpdateRuntimeSettingsConflict ProblemStatusCode
+
+func (*UpdateRuntimeSettingsConflict) updateRuntimeSettingsRes() {}
+
+type UpdateRuntimeSettingsForbidden ProblemStatusCode
+
+func (*UpdateRuntimeSettingsForbidden) updateRuntimeSettingsRes() {}
+
+type UpdateRuntimeSettingsUnauthorized ProblemStatusCode
+
+func (*UpdateRuntimeSettingsUnauthorized) updateRuntimeSettingsRes() {}
+
+type UpdateRuntimeSettingsUnprocessableEntity ProblemStatusCode
+
+func (*UpdateRuntimeSettingsUnprocessableEntity) updateRuntimeSettingsRes() {}
 
 // Ref: #/components/schemas/User
 type User struct {
@@ -8875,7 +10935,8 @@ func (s *UserNotifyTargetInput) SetConfig(val NotificationChannelConfig) {
 
 // Ref: #/components/schemas/UserNotifyTargetUpdate
 type UserNotifyTargetUpdate struct {
-	Kind    NotificationChannelKind      `json:"kind"`
+	Kind NotificationChannelKind `json:"kind"`
+	// On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.
 	Enabled OptBool                      `json:"enabled"`
 	Config  OptNotificationChannelConfig `json:"config"`
 }
@@ -8908,6 +10969,34 @@ func (s *UserNotifyTargetUpdate) SetEnabled(val OptBool) {
 // SetConfig sets the value of Config.
 func (s *UserNotifyTargetUpdate) SetConfig(val OptNotificationChannelConfig) {
 	s.Config = val
+}
+
+// Ref: #/components/schemas/UserPreferences
+type UserPreferences struct {
+	// Per-user brand mark override; null or omitted follows the installation default.
+	BrandMark OptNilBrandMark `json:"brand_mark"`
+	// Per-user SFW mode override; null or omitted follows the installation default.
+	SfwMode OptNilSfwMode `json:"sfw_mode"`
+}
+
+// GetBrandMark returns the value of BrandMark.
+func (s *UserPreferences) GetBrandMark() OptNilBrandMark {
+	return s.BrandMark
+}
+
+// GetSfwMode returns the value of SfwMode.
+func (s *UserPreferences) GetSfwMode() OptNilSfwMode {
+	return s.SfwMode
+}
+
+// SetBrandMark sets the value of BrandMark.
+func (s *UserPreferences) SetBrandMark(val OptNilBrandMark) {
+	s.BrandMark = val
+}
+
+// SetSfwMode sets the value of SfwMode.
+func (s *UserPreferences) SetSfwMode(val OptNilSfwMode) {
+	s.SfwMode = val
 }
 
 type UserRole string
@@ -9399,8 +11488,9 @@ type WatchawareSourceInput struct {
 	Name string               `json:"name"`
 	URL  url.URL              `json:"url"`
 	// Required on create; omit on update to keep stored key.
-	APIKey  OptString `json:"api_key"`
-	Enabled OptBool   `json:"enabled"`
+	APIKey OptString `json:"api_key"`
+	// On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.
+	Enabled OptBool `json:"enabled"`
 }
 
 // GetKind returns the value of Kind.

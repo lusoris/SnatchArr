@@ -5,13 +5,13 @@
 import { fireEvent, screen } from '@testing-library/svelte';
 import { ProblemError } from '@sveltesentio/core';
 import { toast } from 'svelte-sonner';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { api } from '#lib/api/client.js';
 import type { components } from '#lib/api/schema.js';
 import { m } from '#lib/paraglide/messages.js';
 import { queryClient } from '#lib/query.js';
 import { session } from '#lib/session.svelte.js';
-import { renderWithQuery, stubGet } from '#lib/testing/harness.js';
+import { renderWithQuery, stubGet, useAdminSession } from '#lib/testing/harness.js';
 import ModulesTab from './ModulesTab.svelte';
 
 type ModuleState = components['schemas']['ModuleState'];
@@ -30,14 +30,7 @@ const sampleModuleDetail: Module = {
 };
 
 describe('ModulesTab', () => {
-	beforeEach(() => {
-		session.user = { id: 'u1', username: 'admin', role: 'admin' } as never;
-	});
-
-	afterEach(() => {
-		session.user = null;
-		vi.restoreAllMocks();
-	});
+	useAdminSession();
 
 	it('renders module list with status and toggle buttons for admin', async () => {
 		stubGet({

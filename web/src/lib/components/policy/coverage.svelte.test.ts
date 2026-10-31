@@ -145,7 +145,9 @@ describe('Field coverage against openapi.yaml', () => {
 			'search_priority_preset',
 			'download_priority_preset',
 			'llm_enabled',
-			'llm_write_tools'
+			'llm_write_tools',
+			'brand_mark',
+			'sfw_mode'
 		]);
 
 		const mediaFirst = {
@@ -165,7 +167,9 @@ describe('Field coverage against openapi.yaml', () => {
 				search_priority_preset: mediaFirst,
 				download_priority_preset: mediaFirst,
 				llm_enabled: false,
-				llm_write_tools: []
+				llm_write_tools: [],
+				brand_mark: 'vulva',
+				sfw_mode: 'auto'
 			},
 			'/priority-presets': [
 				{

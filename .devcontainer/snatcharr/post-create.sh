@@ -9,7 +9,7 @@ go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
 # cannot load Go 1.27.2 packages.
 make gosec-install govulncheck-install
 go install github.com/air-verse/air@v1.67.4
-go install github.com/bufbuild/buf/cmd/buf@v1.74.0
+# No buf install: make proto-verify and make proto-gen run buf at the tools/go/go.mod pin via go tool.
 go install github.com/evilmartians/lefthook/v2@v2.2.2
 # sqlc at the tools/go/go.mod pin, the version go generate runs (#178).
 make sqlc-install

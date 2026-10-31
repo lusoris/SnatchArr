@@ -1695,8 +1695,10 @@ type CompleteRunRequest struct {
 	// dropped on a closed channel, or sent on a stream the API refused or the reporter lost.
 	// Non-zero means the run's event history may be incomplete.
 	EventsUnconfirmed uint32 `protobuf:"varint,7,opt,name=events_unconfirmed,json=eventsUnconfirmed,proto3" json:"events_unconfirmed,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Pool size before the per-cycle limit and hourly budget; absent when the run failed before filtering.
+	EligibleItems *uint32 `protobuf:"varint,8,opt,name=eligible_items,json=eligibleItems,proto3,oneof" json:"eligible_items,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CompleteRunRequest) Reset() {
@@ -1774,6 +1776,13 @@ func (x *CompleteRunRequest) GetError() string {
 func (x *CompleteRunRequest) GetEventsUnconfirmed() uint32 {
 	if x != nil {
 		return x.EventsUnconfirmed
+	}
+	return 0
+}
+
+func (x *CompleteRunRequest) GetEligibleItems() uint32 {
+	if x != nil && x.EligibleItems != nil {
+		return *x.EligibleItems
 	}
 	return 0
 }
@@ -2149,7 +2158,7 @@ const file_snatcharr_v1_worker_proto_rawDesc = "" +
 	"entityType\x12\x1b\n" +
 	"\tentity_id\x18\x02 \x01(\x03R\bentityId\x12\x14\n" +
 	"\x05title\x18\x03 \x01(\tR\x05title\x12\x19\n" +
-	"\bgroup_id\x18\x04 \x01(\x03R\agroupId\"\x91\x02\n" +
+	"\bgroup_id\x18\x04 \x01(\x03R\agroupId\"\xd0\x02\n" +
 	"\x12CompleteRunRequest\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12\x1b\n" +
 	"\tworker_id\x18\x02 \x01(\tR\bworkerId\x122\n" +
@@ -2157,7 +2166,9 @@ const file_snatcharr_v1_worker_proto_rawDesc = "" +
 	"\bsearched\x18\x04 \x03(\v2\x1a.snatcharr.v1.SearchedItemR\bsearched\x12\x16\n" +
 	"\x06cursor\x18\x05 \x01(\tR\x06cursor\x12\x14\n" +
 	"\x05error\x18\x06 \x01(\tR\x05error\x12-\n" +
-	"\x12events_unconfirmed\x18\a \x01(\rR\x11eventsUnconfirmed\"\x15\n" +
+	"\x12events_unconfirmed\x18\a \x01(\rR\x11eventsUnconfirmed\x12*\n" +
+	"\x0eeligible_items\x18\b \x01(\rH\x00R\religibleItems\x88\x01\x01B\x11\n" +
+	"\x0f_eligible_items\"\x15\n" +
 	"\x13CompleteRunResponse\"2\n" +
 	"\bLogField\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
@@ -2352,6 +2363,7 @@ func file_snatcharr_v1_worker_proto_init() {
 		return
 	}
 	file_snatcharr_v1_worker_proto_msgTypes[2].OneofWrappers = []any{}
+	file_snatcharr_v1_worker_proto_msgTypes[15].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

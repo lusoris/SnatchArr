@@ -4,8 +4,8 @@
 
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { expect, test } from '@playwright/test';
-import { mockSignedInApi } from './mocks.js';
+import { expect, test, type Page } from '@playwright/test';
+import { json, mockSignedInApi } from './mocks.js';
 
 const instanceA = {
 	id: '00000000-0000-0000-0000-0000000000a1',
@@ -38,42 +38,39 @@ const pauseA = {
 	updated_at: '2026-10-20T00:00:00Z'
 };
 
+async function setupLiveBaseMocks(
+	page: Page,
+	options?: {
+		instances?: unknown[];
+		workerLastContact?: string;
+		schedules?: unknown[];
+	}
+): Promise<void> {
+	await mockSignedInApi(page);
+	await page.route('**/api/v1/instances', (route) =>
+		route.fulfill(json(options?.instances ?? [instanceA]))
+	);
+	await page.route('**/api/v1/system/status', (route) =>
+		route.fulfill(
+			json({
+				name: 'SnatchArr',
+				version: '0.1.0',
+				commit: 'abc1234',
+				build_date: '2026-10-20',
+				profile: 'dev',
+				setup_complete: true,
+				...(options?.workerLastContact ? { worker_last_contact_at: options.workerLastContact } : {})
+			})
+		)
+	);
+	await page.route('**/api/v1/schedules', (route) => route.fulfill(json(options?.schedules ?? [])));
+}
+
 test.describe('live', () => {
 	test('live backlog: mocked /events returns rows -> rows visible before any SSE frame', async ({
 		page
 	}) => {
-		await mockSignedInApi(page);
-		await page.route('**/api/v1/instances', (route) =>
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify([instanceA])
-			})
-		);
-
-		await page.route('**/api/v1/system/status', (route) =>
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({
-					name: 'SnatchArr',
-					version: '0.1.0',
-					commit: 'abc1234',
-					build_date: '2026-10-20',
-					profile: 'dev',
-					setup_complete: true,
-					worker_last_contact_at: '2026-10-20T12:30:00Z'
-				})
-			})
-		);
-
-		await page.route('**/api/v1/schedules', (route) =>
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify([])
-			})
-		);
+		await setupLiveBaseMocks(page, { workerLastContact: '2026-10-20T12:30:00Z' });
 
 		await page.route('**/api/v1/events?*', (route) =>
 			route.fulfill({
@@ -110,45 +107,9 @@ test.describe('live', () => {
 	});
 
 	test('live empty state visible with empty backlog', async ({ page }) => {
-		await mockSignedInApi(page);
-		await page.route('**/api/v1/instances', (route) =>
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify([instanceA, instanceB])
-			})
-		);
+		await setupLiveBaseMocks(page, { instances: [instanceA, instanceB], schedules: [pauseA] });
 
-		await page.route('**/api/v1/system/status', (route) =>
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({
-					name: 'SnatchArr',
-					version: '0.1.0',
-					commit: 'abc1234',
-					build_date: '2026-10-20',
-					profile: 'dev',
-					setup_complete: true
-				})
-			})
-		);
-
-		await page.route('**/api/v1/schedules', (route) =>
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify([pauseA])
-			})
-		);
-
-		await page.route('**/api/v1/events?*', (route) =>
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify([])
-			})
-		);
+		await page.route('**/api/v1/events?*', (route) => route.fulfill(json([])));
 
 		// Stream stalls and never responds / sends frames
 		await page.route('**/api/v1/events/stream', async () => {
@@ -178,38 +139,9 @@ test.describe('live', () => {
 	test('reconnect: mocked stream that ends after 2 s -> client opens a second stream request within 10 s and status returns to connected', async ({
 		page
 	}) => {
-		await mockSignedInApi(page);
+		await setupLiveBaseMocks(page);
 
-		await page.route('**/api/v1/system/status', (route) =>
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({
-					name: 'SnatchArr',
-					version: '0.1.0',
-					commit: 'abc1234',
-					build_date: '2026-10-20',
-					profile: 'dev',
-					setup_complete: true
-				})
-			})
-		);
-
-		await page.route('**/api/v1/schedules', (route) =>
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify([])
-			})
-		);
-
-		await page.route('**/api/v1/events?*', (route) =>
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify([])
-			})
-		);
+		await page.route('**/api/v1/events?*', (route) => route.fulfill(json([])));
 
 		let streamRequests = 0;
 		const sseServer = http.createServer((_req, res) => {
@@ -263,36 +195,7 @@ test.describe('live', () => {
 			page
 		}) => {
 			await page.setViewportSize(viewport);
-			await mockSignedInApi(page);
-			await page.route('**/api/v1/instances', (route) =>
-				route.fulfill({
-					status: 200,
-					contentType: 'application/json',
-					body: JSON.stringify([instanceA])
-				})
-			);
-			await page.route('**/api/v1/system/status', (route) =>
-				route.fulfill({
-					status: 200,
-					contentType: 'application/json',
-					body: JSON.stringify({
-						name: 'SnatchArr',
-						version: '0.1.0',
-						commit: 'abc1234',
-						build_date: '2026-10-20',
-						profile: 'dev',
-						setup_complete: true,
-						worker_last_contact_at: '2026-10-20T12:30:00Z'
-					})
-				})
-			);
-			await page.route('**/api/v1/schedules', (route) =>
-				route.fulfill({
-					status: 200,
-					contentType: 'application/json',
-					body: JSON.stringify([])
-				})
-			);
+			await setupLiveBaseMocks(page, { workerLastContact: '2026-10-20T12:30:00Z' });
 			await page.route('**/api/v1/events?*', (route) =>
 				route.fulfill({
 					status: 200,

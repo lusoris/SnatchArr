@@ -2,20 +2,26 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-import { render, screen } from '@testing-library/svelte';
+import { render, within } from '@testing-library/svelte';
 import { describe, expect, it } from 'vitest';
+import { ARR_KINDS } from '#lib/kinds.js';
 import PriorityPresetFields from './PriorityPresetFields.svelte';
 
 describe('PriorityPresetFields', () => {
-	it('positive: labels search-priority-readarr input as "readarr (legacy)" exactly', () => {
-		render(PriorityPresetFields, {
+	it('positive: names the search-priority readarr row "Readarr (legacy)" exactly', () => {
+		const { container } = render(PriorityPresetFields, {
 			searchPreset: { readarr: 30 },
 			downloadPreset: {},
 			onReset: () => {}
 		});
-		const input = screen.getByLabelText('readarr (legacy)', { exact: true });
-		expect(input).toBeInstanceOf(HTMLInputElement);
-		expect(input.id).toBe('search-priority-readarr');
+		const row = container.querySelector(
+			'[data-field="search_priority_preset"] li[data-kind="readarr"]'
+		);
+		expect(row).toBeInstanceOf(HTMLLIElement);
+		expect(within(row as HTMLElement).getByText('Readarr (legacy)', { exact: true })).toBeTruthy();
+		expect(container.querySelector('#search-priority-readarr')?.getAttribute('data-rank')).toBe(
+			'30'
+		);
 	});
 
 	it('negative: no label contains "priority preset ("', () => {
@@ -39,17 +45,20 @@ describe('PriorityPresetFields', () => {
 		}
 	});
 
-	it('boundary: kind absent from preset renders no input', () => {
+	it('boundary: every kind on one rank renders one row per kind, all after the first tied', () => {
+		const sameRank = Object.fromEntries(ARR_KINDS.map((kind) => [kind, 10]));
 		const { container } = render(PriorityPresetFields, {
-			searchPreset: { sonarr: 10 },
-			downloadPreset: { radarr: 10 },
+			searchPreset: { ...sameRank },
+			downloadPreset: { ...sameRank },
 			onReset: () => {}
 		});
-		expect(container.querySelector('#search-priority-sonarr')).toBeInstanceOf(HTMLInputElement);
-		expect(container.querySelector('#download-priority-sonarr')).toBeNull();
-		expect(container.querySelector('#search-priority-radarr')).toBeNull();
-		expect(container.querySelector('#download-priority-radarr')).toBeInstanceOf(HTMLInputElement);
-		expect(container.querySelector('#search-priority-readarr')).toBeNull();
-		expect(container.querySelector('#download-priority-readarr')).toBeNull();
+		const search = container.querySelector('[data-field="search_priority_preset"]') as HTMLElement;
+		const rows = Array.from(search.querySelectorAll('li[data-kind]'));
+		expect(rows).toHaveLength(ARR_KINDS.length);
+		const ties = rows.map(
+			(row) => row.querySelector<HTMLInputElement>('input[type="checkbox"]')?.checked ?? false
+		);
+		expect(ties).toEqual(ARR_KINDS.map((_, index) => index > 0));
+		expect(container.querySelectorAll('[data-rank="10"]')).toHaveLength(2 * ARR_KINDS.length);
 	});
 });

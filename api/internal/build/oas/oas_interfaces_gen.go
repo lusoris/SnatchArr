@@ -21,6 +21,10 @@ type DeleteInstanceRes interface {
 	deleteInstanceRes()
 }
 
+type GetRuntimeSettingsRes interface {
+	getRuntimeSettingsRes()
+}
+
 type JellyfinLoginRes interface {
 	jellyfinLoginRes()
 }
@@ -59,4 +63,8 @@ type UnlinkJellyfinIdentityRes interface {
 
 type UnlinkProxyIdentityRes interface {
 	unlinkProxyIdentityRes()
+}
+
+type UpdateRuntimeSettingsRes interface {
+	updateRuntimeSettingsRes()
 }

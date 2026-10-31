@@ -13,6 +13,7 @@ import (
 	"github.com/golusoris/goenvoy/arr/radarr"
 	"github.com/golusoris/goenvoy/arr/readarr"
 	"github.com/golusoris/goenvoy/arr/sonarr"
+	"github.com/golusoris/goenvoy/arr/whisparr"
 
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/queue"
@@ -24,9 +25,9 @@ import (
 // In ImportModeFixable (import_fixable), a candidate qualifies when every rejection
 // classifies as fixable via queue.ClassifyRejection.
 // All modes require a mapping from grab history: a series and at least one episode
-// on Sonarr, a movie on Radarr, an artist, an album, and at least one track on Lidarr,
-// or an author and book on Readarr. Without a qualifying candidate it sends nothing and
-// returns queue.ErrNoCleanCandidate.
+// on Sonarr or Whisparr v2, a movie on Radarr or Whisparr v3, an artist, an album,
+// and at least one track on Lidarr, or an author and book on Readarr. Without a
+// qualifying candidate it sends nothing and returns queue.ErrNoCleanCandidate.
 // The command runs asynchronously; the next sweep reads the result back.
 // Listing and sending use Options.ImportTimeout.
 func (p *GoenvoyProber) ForceImport(ctx context.Context, kind domain.AppKind, baseURL, apiKey, downloadID string, mode queue.ImportMode) (int, error) {
@@ -44,8 +45,12 @@ func (p *GoenvoyProber) ForceImport(ctx context.Context, kind domain.AppKind, ba
 		n, err = ip.lidarrForceImport(ctx, baseURL, apiKey, downloadID, mode)
 	case domain.KindReadarr:
 		n, err = ip.readarrForceImport(ctx, baseURL, apiKey, downloadID, mode)
-	case domain.KindWhisparrV2, domain.KindWhisparrV3:
-		return 0, fmt.Errorf("arrclient: %s force import: %w", kind, queue.ErrQueueUnsupported)
+	case domain.KindWhisparrV2:
+		n, err = ip.whisparrV2ForceImport(ctx, baseURL, apiKey, downloadID, mode)
+	case domain.KindWhisparrV3:
+		n, err = ip.whisparrV3ForceImport(ctx, baseURL, apiKey, downloadID, mode)
+	case domain.KindStash:
+		return 0, fmt.Errorf("arrclient: force import: %w: unsupported kind %q", domain.ErrInvalid, kind)
 	default:
 		return 0, fmt.Errorf("arrclient: force import: %w: unsupported kind %q", domain.ErrInvalid, kind)
 	}
@@ -189,10 +194,11 @@ func qualifies[R any](rejections []R, reason func(R) string, mode queue.ImportMo
 	return true
 }
 
-func sonarrReason(r sonarr.ImportRejection) string   { return r.Reason }
-func radarrReason(r radarr.ImportRejection) string   { return r.Reason }
-func lidarrReason(r lidarr.ImportRejection) string   { return r.Reason }
-func readarrReason(r readarr.ImportRejection) string { return r.Reason }
+func sonarrReason(r sonarr.ImportRejection) string     { return r.Reason }
+func radarrReason(r radarr.ImportRejection) string     { return r.Reason }
+func lidarrReason(r lidarr.ImportRejection) string     { return r.Reason }
+func readarrReason(r readarr.ImportRejection) string   { return r.Reason }
+func whisparrReason(r whisparr.ImportRejection) string { return r.Reason }
 
 func (p *GoenvoyProber) radarrForceImport(ctx context.Context, baseURL, apiKey, downloadID string, mode queue.ImportMode) (int, error) {
 	c, err := radarr.New(baseURL, apiKey, p.clientOptions()...)
@@ -255,6 +261,52 @@ func (p *GoenvoyProber) readarrForceImport(ctx context.Context, baseURL, apiKey,
 		func(c *readarr.ManualImportCandidate) (readarr.ManualImportFile, bool) { return c.ImportFile() },
 		func(ctx context.Context, files []readarr.ManualImportFile) error {
 			if _, err := c.SendManualImport(ctx, readarr.ImportModeAuto, files); err != nil {
+				return fmt.Errorf("send manual import: %w", err)
+			}
+			return nil
+		},
+		mode,
+	)
+}
+
+func (p *GoenvoyProber) whisparrV2ForceImport(ctx context.Context, baseURL, apiKey, downloadID string, mode queue.ImportMode) (int, error) {
+	c, err := whisparr.New(baseURL, apiKey, p.clientOptions()...)
+	if err != nil {
+		return 0, fmt.Errorf("new client: %w", err)
+	}
+	return forceImport(
+		ctx, p,
+		func(ctx context.Context) ([]whisparr.ManualImportCandidate, error) {
+			return c.GetManualImportCandidates(ctx, whisparr.ManualImportOptions{DownloadID: downloadID, FilterExistingFiles: true})
+		},
+		func(c *whisparr.ManualImportCandidate) []whisparr.ImportRejection { return c.Rejections },
+		whisparrReason,
+		func(c *whisparr.ManualImportCandidate) (whisparr.ManualImportFile, bool) { return c.ImportFile() },
+		func(ctx context.Context, files []whisparr.ManualImportFile) error {
+			if _, err := c.SendManualImport(ctx, whisparr.ImportModeAuto, files); err != nil {
+				return fmt.Errorf("send manual import: %w", err)
+			}
+			return nil
+		},
+		mode,
+	)
+}
+
+func (p *GoenvoyProber) whisparrV3ForceImport(ctx context.Context, baseURL, apiKey, downloadID string, mode queue.ImportMode) (int, error) {
+	c, err := whisparr.NewV3(baseURL, apiKey, p.clientOptions()...)
+	if err != nil {
+		return 0, fmt.Errorf("new client: %w", err)
+	}
+	return forceImport(
+		ctx, p,
+		func(ctx context.Context) ([]whisparr.ManualImportCandidateV3, error) {
+			return c.GetManualImportCandidates(ctx, whisparr.ManualImportOptionsV3{DownloadID: downloadID, FilterExistingFiles: true})
+		},
+		func(c *whisparr.ManualImportCandidateV3) []whisparr.ImportRejection { return c.Rejections },
+		whisparrReason,
+		func(c *whisparr.ManualImportCandidateV3) (whisparr.ManualImportFileV3, bool) { return c.ImportFile() },
+		func(ctx context.Context, files []whisparr.ManualImportFileV3) error {
+			if _, err := c.SendManualImport(ctx, whisparr.ImportModeAuto, files); err != nil {
 				return fmt.Errorf("send manual import: %w", err)
 			}
 			return nil

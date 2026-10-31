@@ -6,6 +6,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -30,22 +31,130 @@ func skipped(at, title string) string {
 	return fmt.Sprintf("%s [sonarr] SKIP '%s': no clean mapped candidate (of 2 file(s)) — leaving for operator", at, title)
 }
 
-func runCase(t *testing.T, snatch, unblocker []string) (int, string) {
+func logFiles(t *testing.T, snatch, unblocker []string) (string, string) {
 	t.Helper()
 	dir := t.TempDir()
 	sp, up := filepath.Join(dir, "api.log"), filepath.Join(dir, "unblocker.log")
-	if err := os.WriteFile(sp, []byte(strings.Join(snatch, "\n")+"\n"), 0o600); err != nil {
+	if err := os.WriteFile(sp, []byte(strings.Join(snatch, "\n")), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(up, []byte(strings.Join(unblocker, "\n")+"\n"), 0o600); err != nil {
+	if err := os.WriteFile(up, []byte(strings.Join(unblocker, "\n")), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	return sp, up
+}
+
+func runCase(t *testing.T, snatch, unblocker []string) (int, string) {
+	t.Helper()
+	snatch = append(append([]string{}, snatch...), `{"time":"2026-10-19T00:00:00Z","msg":"startup"}`)
+	unblocker = append(append([]string{}, unblocker...), "2026-10-19T00:00:00Z startup")
+	sp, up := logFiles(t, snatch, unblocker)
 	var out, errOut bytes.Buffer
 	code, err := run([]string{"-day", "2026-10-19", "-snatcharr", sp, "-unblocker", up}, &out, &errOut)
 	if err != nil {
 		errOut.WriteString(err.Error())
 	}
 	return code, out.String() + errOut.String()
+}
+
+func TestRunDayCoverage(t *testing.T) {
+	t.Parallel()
+	inside := `{"time":"2026-10-19T00:00:00Z","msg":"startup"}`
+	stamp := "2026-10-19T00:00:00Z startup"
+	tests := []struct {
+		name      string
+		snatch    string
+		unblocker string
+		wantCode  int
+		wantFlag  string
+	}{
+		{"negative/empty_snatcharr", "", stamp, exitInput, "-snatcharr"},
+		{"negative/empty_unblocker", inside, "", exitInput, "-unblocker"},
+		{"negative/both_empty_snatcharr_first", "", "", exitInput, "-snatcharr"},
+		{"negative/snatcharr_other_day", `{"time":"2026-10-18T12:00:00Z"}`, stamp, exitInput, "-snatcharr"},
+		{"negative/unblocker_other_day", inside, "2026-10-18T12:00:00Z startup", exitInput, "-unblocker"},
+		{"negative/untimestamped_snatcharr", `{"msg":"startup"}`, stamp, exitInput, "-snatcharr"},
+		{"negative/untimestamped_unblocker", inside, "startup", exitInput, "-unblocker"},
+		{"negative/snatcharr_prefix_only", "2026-10-19T00:00:00Z " + `{"msg":"startup"}`, stamp, exitInput, "-snatcharr"},
+		{"positive/ignored_unblocker_bad_stamp", inside, "not-a-timestamp startup\n" + stamp, 0, ""},
+		{"boundary/day_start", inside, stamp, 0, ""},
+		{"boundary/snatcharr_next_day", `{"time":"2026-10-20T00:00:00Z"}`, stamp, exitInput, "-snatcharr"},
+		{"boundary/unblocker_next_day", inside, "2026-10-20T00:00:00Z startup", exitInput, "-unblocker"},
+		{
+			"boundary/span_overlaps_day", "{\"time\":\"2026-10-20T00:00:00Z\"}\n{\"time\":\"2026-10-18T23:59:59Z\"}",
+			"2026-10-20T00:00:00Z startup\n2026-10-18T23:59:59Z startup", 0, "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			sp, up := logFiles(t, []string{tt.snatch}, []string{tt.unblocker})
+			var out, errOut bytes.Buffer
+			code, err := run([]string{"-day", "2026-10-19", "-snatcharr", sp, "-unblocker", up}, &out, &errOut)
+			if tt.wantFlag == "" {
+				if code != tt.wantCode || err != nil || !strings.Contains(out.String(), "verdict=green") {
+					t.Fatalf("exit %d, err %v, stdout %q", code, err, out.String())
+				}
+				return
+			}
+			path := sp
+			if tt.wantFlag == "-unblocker" {
+				path = up
+			}
+			want := fmt.Sprintf("%s log %s: no lines on 2026-10-19", tt.wantFlag, path)
+			if code != tt.wantCode || err == nil || err.Error() != want || out.Len() != 0 {
+				t.Fatalf("exit %d, err %v, stdout %q; want exit %d, err %q", code, err, out.String(), tt.wantCode, want)
+			}
+		})
+	}
+}
+
+func TestRunOutFailure(t *testing.T) {
+	t.Parallel()
+	sp, up := logFiles(t, []string{`{"time":"2026-10-19T00:00:00Z"}`}, []string{"2026-10-19T00:00:00Z startup"})
+	path := filepath.Join(t.TempDir(), "missing", "day.txt")
+	var out, errOut bytes.Buffer
+	code, err := run([]string{"-day", "2026-10-19", "-snatcharr", sp, "-unblocker", up, "-out", path}, &out, &errOut)
+	if code != exitInput || !errors.Is(err, os.ErrNotExist) || !strings.Contains(err.Error(), path) {
+		t.Fatalf("exit %d, err %v; want exit 2 and wrapped file error for %s", code, err, path)
+	}
+	if !strings.Contains(out.String(), "verdict=green") {
+		t.Fatalf("stdout %q, want unchanged row", out.String())
+	}
+}
+
+func TestRunOut(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name      string
+		unblocker string
+		wantCode  int
+	}{
+		{"positive/green", imported("2026-10-19T12:00:00Z", "abc", "Show"), 0},
+		{"positive/red_with_mismatch", "2026-10-19T12:00:00Z startup", exitRed},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			sp, up := logFiles(t, []string{would("2026-10-19T12:00:00Z", "abc", "Show")}, []string{tt.unblocker})
+			path := filepath.Join(t.TempDir(), "day.txt")
+			args := []string{"-day", "2026-10-19", "-snatcharr", sp, "-unblocker", up}
+			var out, plain, errOut bytes.Buffer
+			if code, err := run(args, &plain, &errOut); code != tt.wantCode || err != nil {
+				t.Fatalf("without -out: exit %d, err %v", code, err)
+			}
+			if code, err := run(append(args, "-out", path), &out, &errOut); code != tt.wantCode || err != nil {
+				t.Fatalf("with -out: exit %d, err %v", code, err)
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(data) != out.String() || out.String() != plain.String() {
+				t.Fatalf("file %q, stdout %q, plain stdout %q", data, out.String(), plain.String())
+			}
+		})
+	}
 }
 
 func TestParity(t *testing.T) {

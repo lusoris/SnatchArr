@@ -3,11 +3,11 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
-	import { resolve } from '$app/paths';
 	import BookOpen from '@lucide/svelte/icons/book-open';
 	import Search from '@lucide/svelte/icons/search';
 	import Server from '@lucide/svelte/icons/server';
 	import { docsUrl } from '#lib/docs.js';
+	import { pageHref } from '#lib/entities.js';
 	import { m } from '#lib/paraglide/messages.js';
 
 	const DOCS_URL = docsUrl('');
@@ -31,7 +31,7 @@ SPDX-License-Identifier: EUPL-1.2
 				<p class="text-xs text-subtle">{m.overview_onboarding_step1_desc()}</p>
 			</div>
 			<div class="mt-4">
-				<a href={resolve('/instances')} class="btn btn-primary w-full justify-center">
+				<a href={pageHref('/instances')} class="btn btn-primary w-full justify-center">
 					{m.overview_onboarding_step1_action()}
 				</a>
 			</div>
@@ -48,7 +48,7 @@ SPDX-License-Identifier: EUPL-1.2
 				<p class="text-xs text-subtle">{m.overview_onboarding_step2_desc()}</p>
 			</div>
 			<div class="mt-4">
-				<a href={resolve('/connections/prowlarr')} class="btn w-full justify-center">
+				<a href={pageHref('/connections/prowlarr')} class="btn w-full justify-center">
 					{m.overview_onboarding_step2_action()}
 				</a>
 			</div>

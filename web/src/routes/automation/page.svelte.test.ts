@@ -105,6 +105,30 @@ async function openFirstDeleteConfirm(): Promise<void> {
 	expect(screen.getByText(m.schedule_delete_confirm({ name: sampleSchedule.name }))).toBeTruthy();
 }
 
+async function expectEmptySchedules(): Promise<void> {
+	stubGet({
+		'/schedules': [],
+		'/instances': [],
+		'/settings': sampleSettings,
+		'/priority-presets': []
+	});
+	renderWithQuery(SchedulesPage);
+
+	expect(await screen.findByText(m.schedules_empty())).toBeTruthy();
+	expect(screen.queryByRole('table')).toBeNull();
+}
+
+async function renderAdminTargetRow(): Promise<HTMLTableRowElement> {
+	session.user = { id: 'u1', username: 'admin', role: 'admin' } as never;
+	stubGet(baseStubs);
+	renderWithQuery(SchedulesPage);
+
+	const table = await screen.findByRole('table');
+	const row = within(table).getByText('Night Quiet Hours').closest('tr') as HTMLTableRowElement;
+	expect(row.classList.contains('target')).toBe(true);
+	return row;
+}
+
 describe('automation page tabs', () => {
 	beforeEach(() => {
 		pageMock.url = new URL('http://localhost/automation');
@@ -277,16 +301,7 @@ describe('schedules', () => {
 	});
 
 	it('shows empty message when no schedules exist', async () => {
-		stubGet({
-			'/schedules': [],
-			'/instances': [],
-			'/settings': sampleSettings,
-			'/priority-presets': []
-		});
-		renderWithQuery(SchedulesPage);
-
-		expect(await screen.findByText(m.schedules_empty())).toBeTruthy();
-		expect(screen.queryByRole('table')).toBeNull();
+		await expectEmptySchedules();
 	});
 
 	it('announces the problem document when the schedules query fails', async () => {
@@ -485,15 +500,34 @@ describe('schedules', () => {
 	});
 
 	it('renders no schedules table rows when schedule list is empty', async () => {
-		stubGet({
-			'/schedules': [],
-			'/instances': [],
-			'/settings': sampleSettings,
-			'/priority-presets': []
-		});
+		await expectEmptySchedules();
+	});
+
+	it('positive: admin schedule row has class target and edit button has class target-link', async () => {
+		const row = await renderAdminTargetRow();
+
+		const editBtn = within(row).getByRole('button', { name: m.schedule_edit() });
+		expect(editBtn.classList.contains('target-link')).toBe(true);
+	});
+
+	it('negative: viewer schedule row has no class target', async () => {
+		session.user = { id: 'u2', username: 'viewer', role: 'viewer' } as never;
+		stubGet(baseStubs);
 		renderWithQuery(SchedulesPage);
 
-		expect(await screen.findByText(m.schedules_empty())).toBeTruthy();
-		expect(screen.queryByRole('table')).toBeNull();
+		const table = await screen.findByRole('table');
+		const rows = table.querySelectorAll('tbody tr');
+		expect(rows.length).toBeGreaterThan(0);
+		for (const row of rows) {
+			expect(row.classList.contains('target')).toBe(false);
+		}
+	});
+
+	it('negative: schedule row loses class target when in deleting confirmation state', async () => {
+		const row = await renderAdminTargetRow();
+
+		await openFirstDeleteConfirm();
+
+		expect(row.classList.contains('target')).toBe(false);
 	});
 });

@@ -515,3 +515,117 @@ func TestListSeerrRequests_JellyfinMapping(t *testing.T) {
 		})
 	}
 }
+
+func TestUpdateSeerrLink_TableDriven(t *testing.T) {
+	t.Parallel()
+	f := newIntegrationFixture(t)
+	ctx := withUser(t.Context(), f.admin)
+
+	created, err := f.h.CreateSeerrLink(ctx, &oas.SeerrLinkInput{
+		Name:    "seerr-943",
+		BaseURL: "http://seerr:5055",
+		APIKey:  oas.NewOptString("test-api-key"),
+	})
+	if err != nil || !created.Enabled {
+		t.Fatalf("CreateSeerrLink() = %+v, %v, want enabled:true", created, err)
+	}
+
+	disabled, err := f.h.UpdateSeerrLink(ctx, &oas.SeerrLinkInput{
+		Name:    "seerr-943",
+		BaseURL: "http://seerr:5055",
+		Enabled: oas.NewOptBool(false),
+	}, oas.UpdateSeerrLinkParams{LinkId: created.ID})
+	if err != nil || disabled.Enabled {
+		t.Fatalf("UpdateSeerrLink() initial disable = %+v, %v", disabled, err)
+	}
+
+	tests := []struct {
+		name        string
+		createInit  bool
+		linkID      uuid.UUID
+		req         oas.SeerrLinkInput
+		wantEnabled bool
+		wantErr     error
+	}{
+		{
+			name:       "positive: omitted enabled keeps stored disabled value",
+			createInit: true,
+			req: oas.SeerrLinkInput{
+				Name:    "seerr-943-renamed",
+				BaseURL: "http://seerr:5055",
+			},
+			wantEnabled: false,
+		},
+		{
+			name:       "negative: explicit true replaces stored disabled value",
+			createInit: true,
+			req: oas.SeerrLinkInput{
+				Name:    "seerr-943-renamed",
+				BaseURL: "http://seerr:5055",
+				Enabled: oas.NewOptBool(true),
+			},
+			wantEnabled: true,
+		},
+		{
+			name:       "boundary: explicit false replaces stored true value",
+			createInit: true,
+			req: oas.SeerrLinkInput{
+				Name:    "seerr-943-renamed",
+				BaseURL: "http://seerr:5055",
+				Enabled: oas.NewOptBool(false),
+			},
+			wantEnabled: false,
+		},
+		{
+			name:   "boundary: unknown link id returns not found",
+			linkID: uuid.New(),
+			req: oas.SeerrLinkInput{
+				Name:    "unknown",
+				BaseURL: "http://seerr:5055",
+			},
+			wantErr: domain.ErrNotFound,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			linkID := tc.linkID
+			if tc.createInit {
+				c, err := f.h.CreateSeerrLink(ctx, &oas.SeerrLinkInput{
+					Name:    "seerr-943-" + uuid.NewString()[:8],
+					BaseURL: "http://seerr:5055",
+					APIKey:  oas.NewOptString("seerr-secret-key-1234"),
+				})
+				if err != nil {
+					t.Fatalf("CreateSeerrLink: %v", err)
+				}
+				dis, err := f.h.UpdateSeerrLink(ctx, &oas.SeerrLinkInput{
+					Name:    c.Name,
+					BaseURL: c.BaseURL,
+					Enabled: oas.NewOptBool(false),
+				}, oas.UpdateSeerrLinkParams{LinkId: c.ID})
+				if err != nil || dis.Enabled {
+					t.Fatalf("initial disable: %v", err)
+				}
+				linkID = c.ID
+			}
+			req := tc.req
+			if tc.createInit {
+				req.Name = "seerr-943-" + uuid.NewString()[:8]
+			}
+			got, err := f.h.UpdateSeerrLink(ctx, &req, oas.UpdateSeerrLinkParams{LinkId: linkID})
+			if tc.wantErr != nil {
+				if !errors.Is(err, tc.wantErr) {
+					t.Fatalf("UpdateSeerrLink() err = %v, want %v", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("UpdateSeerrLink() err = %v", err)
+			}
+			if got.Enabled != tc.wantEnabled {
+				t.Fatalf("UpdateSeerrLink() Enabled = %v, want %v", got.Enabled, tc.wantEnabled)
+			}
+		})
+	}
+}

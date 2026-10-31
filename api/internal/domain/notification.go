@@ -153,10 +153,12 @@ func (c ChannelConfig) MergeSecrets(existing ChannelConfig) ChannelConfig {
 
 // NotificationChannelInput is input for creating or updating a channel.
 type NotificationChannelInput struct {
-	Name    string
-	Kind    ChannelKind
-	Enabled bool
-	Config  ChannelConfig
+	Name        string
+	Kind        ChannelKind
+	Enabled     bool
+	Config      ChannelConfig
+	KeepConfig  bool // KeepConfig preserves stored configuration (including secrets) on update.
+	KeepEnabled bool // KeepEnabled preserves stored enabled flag on update.
 }
 
 // NotificationRuleInput is input for creating or updating a rule.

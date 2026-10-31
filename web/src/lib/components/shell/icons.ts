@@ -12,6 +12,7 @@ import ExternalLink from '@lucide/svelte/icons/external-link';
 import FileCode from '@lucide/svelte/icons/file-code';
 import Film from '@lucide/svelte/icons/film';
 import Heart from '@lucide/svelte/icons/heart';
+import Images from '@lucide/svelte/icons/images';
 import History from '@lucide/svelte/icons/history';
 import Info from '@lucide/svelte/icons/info';
 import LayoutDashboard from '@lucide/svelte/icons/layout-dashboard';
@@ -42,6 +43,7 @@ export const shellIconLoader = createLucideLoader({
 	FileCode,
 	Film,
 	Heart,
+	Images,
 	History,
 	Info,
 	LayoutDashboard,

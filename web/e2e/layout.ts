@@ -79,6 +79,7 @@ export const MIN_TABLES: Record<(typeof AUTH_ROUTES)[number], number> = {
 // Routes whose table count follows the signed-in role and the data, not a fixed number: each
 // list below renders one table when it is non-empty and an empty-state line otherwise.
 const ROUTE_LISTS = {
+	'/': ['/api/v1/instances'],
 	'/automation': ['/api/v1/schedules'],
 	'/system?tab=notifications': ['/api/v1/notifications/channels', '/api/v1/notifications/rules'],
 	'/account': ['/api/v1/auth/api-keys']
@@ -176,6 +177,23 @@ export interface ExtractedCell extends Box {
 export interface ExtractedRow {
 	cells: ExtractedCell[];
 	spans: boolean;
+	/** Card geometry; measured only on stacked tables (extractStackedGeometry). */
+	card?: StackedCard;
+}
+
+export interface StackedCard {
+	top: number;
+	bottom: number;
+	scrollHeight: number;
+	clientHeight: number;
+	/** The row renders no box (display: none), as a capped list row does. */
+	hidden: boolean;
+}
+
+export interface StackedGeometry {
+	table: number;
+	headerHeight: number;
+	cards: StackedCard[];
 }
 
 export interface ExtractedTable {
@@ -183,6 +201,8 @@ export interface ExtractedTable {
 	headers: Box[];
 	rows: ExtractedRow[];
 	stacked?: boolean;
+	/** Rendered height of the header row of a stacked table, which app.css hides. */
+	stackedHeaderHeight?: number;
 }
 
 export interface Misaligned {
@@ -248,6 +268,46 @@ export function extractTables(): ExtractedTable[] {
 	});
 }
 
+// Card geometry of every stacked table, indexed like extractTables: the hidden header's height
+// and each row's extent, so a card that clips its fields or runs into the next one is caught.
+export function extractStackedGeometry(): StackedGeometry[] {
+	if (!window.matchMedia('(width < 48rem)').matches) return [];
+	const tables = Array.from(document.querySelectorAll('table, [role="grid"]')).slice(0, 50);
+	return tables.flatMap((t, table) => {
+		if (t.getAttribute('role') === 'grid' || !t.classList.contains('table-stack')) return [];
+		const head = t.querySelector(':scope > thead');
+		const rows = Array.from(t.querySelectorAll('tbody > tr')).filter(
+			(r) => r.closest('table') === t
+		);
+		const cards = rows.slice(0, 500).map((row) => {
+			const g = row.getBoundingClientRect();
+			return {
+				top: Math.round(g.top),
+				bottom: Math.round(g.bottom),
+				scrollHeight: row.scrollHeight,
+				clientHeight: row.clientHeight,
+				hidden: row.getClientRects().length === 0
+			};
+		});
+		return [{ table, headerHeight: Math.round(head?.getBoundingClientRect().height ?? 0), cards }];
+	});
+}
+
+export function withStackedGeometry(
+	tables: ExtractedTable[],
+	geometry: StackedGeometry[]
+): ExtractedTable[] {
+	return tables.map((t, i) => {
+		const g = geometry.find((x) => x.table === i);
+		if (!g || !t.stacked) return t;
+		return {
+			...t,
+			stackedHeaderHeight: g.headerHeight,
+			rows: t.rows.map((row, r) => ({ ...row, card: g.cards[r] }))
+		};
+	});
+}
+
 function checkMissingHeaders(table: ExtractedTable, index: number): Misaligned | null {
 	if (table.headers.length > 0) return null;
 	return {
@@ -303,6 +363,86 @@ function checkCellAlignment(
 	return null;
 }
 
+function stackedFinding(index: number, row: number, column: number, reason: string): Misaligned {
+	return {
+		table: index,
+		row,
+		column,
+		header: { x: 0, width: 0 },
+		cell: { x: 0, width: 0 },
+		reason
+	};
+}
+
+// A stacked row is a card: its header row stays hidden, every cell carries its label, and each
+// card holds all of its cells without running into the next card.
+function checkStackedRow(
+	table: ExtractedTable,
+	index: number,
+	r: number,
+	tolerance: number
+): Misaligned[] {
+	const row = table.rows[r];
+	const findings = row.cells.flatMap((cell, c) =>
+		cell.hasDataLabel === false
+			? [
+					{
+						...stackedFinding(index, r, c, 'stacked table cell missing data-label attribute'),
+						header: table.headers[c] ?? { x: 0, width: 0 },
+						cell: { x: cell.x, width: cell.width }
+					}
+				]
+			: []
+	);
+	const card = row.card;
+	if (!card || card.hidden) return findings;
+	if (card.scrollHeight > card.clientHeight + tolerance) {
+		findings.push(
+			stackedFinding(
+				index,
+				r,
+				-1,
+				`stacked row content (${card.scrollHeight}px) overflows its card (${card.clientHeight}px)`
+			)
+		);
+	}
+	// The next card that renders a box; a capped row hidden between them has none.
+	const next = table.rows.slice(r + 1).find((n) => n.card && !n.card.hidden)?.card;
+	if (next && card.bottom > next.top + tolerance) {
+		findings.push(
+			stackedFinding(
+				index,
+				r,
+				-1,
+				`stacked row ends at ${card.bottom}px, below the next row's top at ${next.top}px`
+			)
+		);
+	}
+	return findings;
+}
+
+function checkStackedTable(
+	table: ExtractedTable,
+	index: number,
+	tolerance: number
+): { measuredRows: number; findings: Misaligned[] } {
+	const findings: Misaligned[] = [];
+	if ((table.stackedHeaderHeight ?? 0) > 1) {
+		findings.push(
+			stackedFinding(
+				index,
+				-1,
+				-1,
+				`stacked table header is visible (${table.stackedHeaderHeight}px tall)`
+			)
+		);
+	}
+	for (let r = 0; r < table.rows.length; r++) {
+		findings.push(...checkStackedRow(table, index, r, tolerance));
+	}
+	return { measuredRows: table.rows.length, findings };
+}
+
 export function checkTable(
 	table: ExtractedTable,
 	index: number,
@@ -315,24 +455,7 @@ export function checkTable(
 	let measuredRows = 0;
 	const findings: Misaligned[] = [];
 	if (table.stacked) {
-		for (let r = 0; r < table.rows.length; r++) {
-			const row = table.rows[r];
-			measuredRows++;
-			for (let c = 0; c < row.cells.length; c++) {
-				const cell = row.cells[c];
-				if (cell.hasDataLabel === false) {
-					findings.push({
-						table: index,
-						row: r,
-						column: c,
-						header: table.headers[c] ?? { x: 0, width: 0 },
-						cell: { x: cell.x, width: cell.width },
-						reason: 'stacked table cell missing data-label attribute'
-					});
-				}
-			}
-		}
-		return { measuredRows, findings };
+		return checkStackedTable(table, index, tolerance);
 	}
 	for (let r = 0; r < table.rows.length; r++) {
 		const row = table.rows[r];
@@ -513,9 +636,20 @@ export async function assertRenderedLayout(
 	const urlOffenders = await page.evaluate(checkUrlBreaks);
 	expect(urlOffenders, `${route}: URL wrapped mid-token`).toEqual([]);
 
-	const tables = await page.evaluate(extractTables);
-	const { tableCount, measuredRows, misaligned } = checkAllTables(tables, TOLERANCE_PX);
+	// A list arrives after the first paint, so wait for the tables it must render before measuring.
 	const exact = await minTablesFor(route, lists);
+	if (exact) {
+		await expect
+			.poll(() => page.locator('table, [role="grid"]').count(), {
+				message: `${route}: expected ${exact} table(s) to render`
+			})
+			.toBeGreaterThanOrEqual(exact);
+	}
+	const tables = withStackedGeometry(
+		await page.evaluate(extractTables),
+		await page.evaluate(extractStackedGeometry)
+	);
+	const { tableCount, measuredRows, misaligned } = checkAllTables(tables, TOLERANCE_PX);
 	const minTables = exact ?? MIN_TABLES[route as keyof typeof MIN_TABLES] ?? 0;
 	if (exact === undefined) {
 		expect(
@@ -624,20 +758,55 @@ export async function assertPhoneFit(page: Page, route: string): Promise<void> {
 	}
 }
 
-export const SCROLL_BUDGET_ROUTES = [
-	'/',
-	'/automation',
-	'/automation?tab=caps',
-	'/connections',
-	'/instances',
-	'/instances/[id]',
-	'/activity',
-	'/activity?source=log',
-	'/instances/[id]/activity',
-	'/system',
-	'/system?tab=modules',
-	'/system?tab=notifications'
-] as const;
+// Scroll budget by route class (ADR-0029 section 4). Main pages (overviews, lists, hubs, tabs)
+// fit 1.25x a 1280x800 screen. Edit forms (the settings of one entity or one user) and the
+// public pages sit outside the budget by class, never by a per-route ceiling. Every page route
+// under src/routes carries a class; layout.test.ts fails on an unclassified or stale entry.
+export type RouteClass = 'main' | 'edit-form' | 'public';
+
+export const ROUTE_CLASS: Record<string, RouteClass> = {
+	'/': 'main',
+	'/activity': 'main',
+	'/activity?source=live': 'main',
+	'/activity?source=log': 'main',
+	'/adult/image-sets': 'main',
+	'/adult/performers': 'main',
+	'/adult/sources': 'main',
+	'/adult/studios': 'main',
+	'/automation': 'main',
+	'/automation?tab=caps': 'main',
+	'/connections': 'main',
+	'/connections/configarr': 'main',
+	'/connections/download-clients': 'main',
+	'/connections/prowlarr': 'main',
+	'/connections/seerr': 'main',
+	'/instances': 'main',
+	'/instances/[id]': 'main',
+	'/instances/[id]/activity': 'main',
+	'/instances/[id]/memory': 'main',
+	'/system': 'main',
+	'/system?tab=modules': 'main',
+	'/system?tab=notifications': 'main',
+	'/system?tab=about': 'main',
+	'/account': 'edit-form',
+	'/instances/[id]/policy': 'edit-form',
+	'/instances/[id]/queue': 'edit-form',
+	'/settings/requests': 'edit-form',
+	'/login': 'public',
+	'/setup': 'public'
+};
+
+function routesOfClass(cls: RouteClass): string[] {
+	return Object.entries(ROUTE_CLASS)
+		.filter(([, c]) => c === cls)
+		.map(([route]) => route);
+}
+
+export const SCROLL_BUDGET_ROUTES = routesOfClass('main');
+export const EDIT_FORM_ROUTES = routesOfClass('edit-form');
+
+// Activity views scroll inside their feed, so the document itself never scrolls.
+const FEED_ROUTES = new Set(['/activity', '/activity?source=live', '/activity?source=log']);
 
 export async function assertScrollBudget(
 	page: Page,
@@ -648,11 +817,7 @@ export async function assertScrollBudget(
 		scrollHeight: document.documentElement.scrollHeight,
 		innerHeight: window.innerHeight
 	}));
-	const limit =
-		maxBudget ??
-		(route === '/activity' || route === '/activity?source=log'
-			? innerHeight + 2
-			: 1.25 * innerHeight);
+	const limit = maxBudget ?? (FEED_ROUTES.has(route) ? innerHeight + 2 : 1.25 * innerHeight);
 	expect(
 		scrollHeight,
 		`${route}: scroll height (${scrollHeight}px) exceeds budget (${limit}px)`
@@ -781,4 +946,41 @@ export async function assertGridRowAlignment(page: Page, route: string): Promise
 			`${route}: inputs misaligned in grid row (${offenders.length} row(s)): ${list}`
 		);
 	}
+}
+
+/**
+ * A capped dashboard card keeps every row in a bounded body that scrolls inside the card: the
+ * body is a labelled region in the tab order, it is shorter than its content, and after the
+ * keyboard scrolls it to the end the card's last row lies inside the body's box.
+ */
+export async function assertCardScrollsToLast(
+	page: Page,
+	region: string,
+	lastRow: string
+): Promise<void> {
+	const body = page.getByRole('region', { name: `${region}, scrollable list`, exact: true });
+	await expect(body, `${region}: no scrolling region`).toBeVisible();
+	await expect(body, `${region}: region is not in the tab order`).toHaveAttribute('tabindex', '0');
+	const sizes = await body.evaluate((el) => ({
+		scrollHeight: el.scrollHeight,
+		clientHeight: el.clientHeight
+	}));
+	expect(
+		sizes.scrollHeight,
+		`${region}: body does not scroll (${sizes.scrollHeight}px content in ${sizes.clientHeight}px)`
+	).toBeGreaterThan(sizes.clientHeight);
+	await body.focus();
+	await page.keyboard.press('End');
+	const row = body.getByText(lastRow, { exact: true }).first();
+	await expect(row, `${region}: last row "${lastRow}" missing from the card`).toBeAttached();
+	await expect
+		.poll(
+			async () => {
+				const [b, r] = await Promise.all([body.boundingBox(), row.boundingBox()]);
+				if (!b || !r) return false;
+				return r.y >= b.y - 1 && r.y + r.height <= b.y + b.height + 1;
+			},
+			{ message: `${region}: last row "${lastRow}" not reachable inside the card` }
+		)
+		.toBe(true);
 }

@@ -10,7 +10,9 @@ describe('productName', () => {
 		['readarr', 'Readarr'],
 		['bookshelf', 'Bookshelf'],
 		['chaptarr', 'Chaptarr'],
-		['readarr_faustvii', 'Readarr (Faustvii fork)']
+		['readarr_faustvii', 'Readarr (Faustvii fork)'],
+		['readarr_rresurrected', 'Readarr (rresurrected)'],
+		['readarr_fork', 'Readarr fork (unidentified)']
 	])('names %s', (product, name) => {
 		expect(productName(product)).toBe(name);
 	});
@@ -49,23 +51,25 @@ describe('probeMessage', () => {
 
 describe('instanceKindLabel', () => {
 	it.each([
-		['readarr', 'bookshelf', 'readarr · Bookshelf'],
-		['readarr', 'chaptarr', 'readarr · Chaptarr'],
-		['readarr', 'readarr_faustvii', 'readarr · Readarr (Faustvii fork)']
+		['readarr', 'bookshelf', 'Readarr · Bookshelf'],
+		['readarr', 'chaptarr', 'Readarr · Chaptarr'],
+		['readarr', 'readarr_faustvii', 'Readarr · Readarr (Faustvii fork)'],
+		['readarr', 'readarr_rresurrected', 'Readarr · Readarr (rresurrected)'],
+		['readarr', 'readarr_fork', 'Readarr · Readarr fork (unidentified)']
 	])('names the fork behind %s: %s', (kind, product, label) => {
 		expect(instanceKindLabel(kind, product)).toBe(label);
 	});
 
 	it('keeps the legacy label for Readarr itself', () => {
-		expect(instanceKindLabel('readarr', 'readarr')).toBe('readarr (legacy)');
+		expect(instanceKindLabel('readarr', 'readarr')).toBe('Readarr (legacy)');
 	});
 
 	it('keeps the label of the kind while no test has named a product', () => {
-		expect(instanceKindLabel('readarr', undefined)).toBe('readarr (legacy)');
-		expect(instanceKindLabel('sonarr', undefined)).toBe('sonarr');
+		expect(instanceKindLabel('readarr', undefined)).toBe('Readarr (legacy)');
+		expect(instanceKindLabel('sonarr', undefined)).toBe('Sonarr');
 	});
 
 	it.each(['unknown', 'a_later_product', ''])('does not call "%s" Readarr', (product) => {
-		expect(instanceKindLabel('readarr', product)).toBe('readarr · unknown product');
+		expect(instanceKindLabel('readarr', product)).toBe('Readarr · unknown product');
 	});
 });

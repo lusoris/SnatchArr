@@ -27,6 +27,14 @@ describe('activity grouping', () => {
 	const run1 = '11111111-1111-1111-1111-111111111111';
 	const run2 = '22222222-2222-2222-2222-222222222222';
 
+	const frame = (id: number, instance_id: string, type: string, ts: string): LiveFrame => ({
+		id,
+		instance_id,
+		type,
+		event: type,
+		ts
+	});
+
 	it('positive: groups consecutive events with identical run_id', () => {
 		const events: LiveFrame[] = [
 			{
@@ -79,34 +87,10 @@ describe('activity grouping', () => {
 	});
 
 	it('boundary: missing run_id groups at 59s and 60s, but splits at 61s', () => {
-		const e1: LiveFrame = {
-			id: 1,
-			instance_id: inst1,
-			type: 'search_dispatched',
-			event: 'search_dispatched',
-			ts: baseTs
-		};
-		const e2_59s: LiveFrame = {
-			id: 2,
-			instance_id: inst1,
-			type: 'search_dispatched',
-			event: 'search_dispatched',
-			ts: ts59s
-		};
-		const e2_60s: LiveFrame = {
-			id: 2,
-			instance_id: inst1,
-			type: 'search_dispatched',
-			event: 'search_dispatched',
-			ts: ts60s
-		};
-		const e2_61s: LiveFrame = {
-			id: 2,
-			instance_id: inst1,
-			type: 'search_dispatched',
-			event: 'search_dispatched',
-			ts: ts61s
-		};
+		const e1 = frame(1, inst1, 'search_dispatched', baseTs);
+		const e2_59s = frame(2, inst1, 'search_dispatched', ts59s);
+		const e2_60s = frame(2, inst1, 'search_dispatched', ts60s);
+		const e2_61s = frame(2, inst1, 'search_dispatched', ts61s);
 
 		// 59s -> grouped
 		expect(shouldGroup(e1, e2_59s)).toBe(true);
@@ -128,20 +112,8 @@ describe('activity grouping', () => {
 	});
 
 	it('negative: missing run_id with mixed instances does not group', () => {
-		const e1: LiveFrame = {
-			id: 1,
-			instance_id: inst1,
-			type: 'search_dispatched',
-			event: 'search_dispatched',
-			ts: baseTs
-		};
-		const e2: LiveFrame = {
-			id: 2,
-			instance_id: inst2,
-			type: 'search_dispatched',
-			event: 'search_dispatched',
-			ts: ts59s
-		};
+		const e1 = frame(1, inst1, 'search_dispatched', baseTs);
+		const e2 = frame(2, inst2, 'search_dispatched', ts59s);
 
 		expect(shouldGroup(e1, e2)).toBe(false);
 		const groups = groupActivityEvents([e1, e2]);
@@ -149,20 +121,8 @@ describe('activity grouping', () => {
 	});
 
 	it('negative: missing run_id with mixed types does not group', () => {
-		const e1: LiveFrame = {
-			id: 1,
-			instance_id: inst1,
-			type: 'candidates_filtered',
-			event: 'candidates_filtered',
-			ts: baseTs
-		};
-		const e2: LiveFrame = {
-			id: 2,
-			instance_id: inst1,
-			type: 'search_dispatched',
-			event: 'search_dispatched',
-			ts: ts59s
-		};
+		const e1 = frame(1, inst1, 'candidates_filtered', baseTs);
+		const e2 = frame(2, inst1, 'search_dispatched', ts59s);
 
 		expect(shouldGroup(e1, e2)).toBe(false);
 		const groups = groupActivityEvents([e1, e2]);
@@ -170,13 +130,7 @@ describe('activity grouping', () => {
 	});
 
 	it('single event yields single item group', () => {
-		const e1: LiveFrame = {
-			id: 1,
-			instance_id: inst1,
-			type: 'search_dispatched',
-			event: 'search_dispatched',
-			ts: baseTs
-		};
+		const e1 = frame(1, inst1, 'search_dispatched', baseTs);
 		const groups = groupActivityEvents([e1]);
 		expect(groups).toHaveLength(1);
 		expect(groups[0].isGroup).toBe(false);

@@ -8,43 +8,19 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api } from '#lib/api/client.js';
 import type { components } from '#lib/api/schema.js';
 import { m } from '#lib/paraglide/messages.js';
-import { renderWithQuery, stubGet } from '#lib/testing/harness.js';
+import { assertProblemAlert, renderWithQuery, stubGet } from '#lib/testing/harness.js';
+import {
+	mediaFirstRanks,
+	settingsOnShippedPreset,
+	settingsStubs
+} from '#lib/testing/priority-fixtures.js';
 import GeneralTab from './GeneralTab.svelte';
 
 type Settings = components['schemas']['Settings'];
-type PriorityPreset = components['schemas']['PriorityPreset'];
 
-const mediaFirstRanks = {
-	sonarr: 10,
-	radarr: 10,
-	lidarr: 20,
-	readarr: 30,
-	whisparr_v2: 40,
-	whisparr_v3: 40
-};
+const sampleSettings = settingsOnShippedPreset({ brand_mark: 'vulva', sfw_mode: 'auto' });
 
-const samplePresets: PriorityPreset[] = [
-	{
-		name: 'media_first',
-		search: { ...mediaFirstRanks },
-		download: { ...mediaFirstRanks }
-	}
-];
-
-const sampleSettings: Settings = {
-	history_retention_days: 30,
-	user_agent: 'SnatchArr/1.0',
-	global_hourly_cap: 100,
-	search_priority_preset: { ...mediaFirstRanks },
-	download_priority_preset: { ...mediaFirstRanks },
-	llm_enabled: false,
-	llm_write_tools: []
-};
-
-const baseStubs = {
-	'/settings': sampleSettings,
-	'/priority-presets': samplePresets
-};
+const baseStubs = settingsStubs(sampleSettings);
 
 function expectedSettingsWithTools(tools: Settings['llm_write_tools']): Settings {
 	return {
@@ -84,9 +60,7 @@ describe('settings', () => {
 			})
 		});
 		renderWithQuery(GeneralTab);
-
-		expect((await screen.findByRole('alert')).textContent).toContain('failed to read settings');
-		expect(screen.queryByRole('button', { name: m.instance_save() })).toBeNull();
+		await assertProblemAlert('failed to read settings');
 	});
 
 	it('submits updated settings when save button is clicked', async () => {
@@ -110,7 +84,9 @@ describe('settings', () => {
 				search_priority_preset: mediaFirstRanks,
 				download_priority_preset: mediaFirstRanks,
 				llm_enabled: false,
-				llm_write_tools: []
+				llm_write_tools: [],
+				brand_mark: 'vulva',
+				sfw_mode: 'auto'
 			}
 		});
 	});
@@ -383,5 +359,35 @@ describe('settings', () => {
 		expect(
 			screen.getByText(m.settings_llm_write_tools_allowed({ count: 0, total: 1 }))
 		).toBeTruthy();
+	});
+
+	it('renders brand mark and sfw mode selects and submits updated values', async () => {
+		stubGet(baseStubs);
+		const putSpy = vi.spyOn(api, 'PUT').mockResolvedValue({
+			data: { ...sampleSettings, brand_mark: 'hand', sfw_mode: 'off' }
+		} as never);
+		renderWithQuery(GeneralTab);
+
+		const brandMarkSelect = (await screen.findByLabelText(
+			m.settings_brand_mark()
+		)) as HTMLSelectElement;
+		const sfwModeSelect = screen.getByLabelText(m.settings_sfw_mode()) as HTMLSelectElement;
+
+		expect(brandMarkSelect.value).toBe('vulva');
+		expect(sfwModeSelect.value).toBe('auto');
+
+		await fireEvent.change(brandMarkSelect, { target: { value: 'hand' } });
+		await fireEvent.change(sfwModeSelect, { target: { value: 'off' } });
+
+		const button = screen.getByRole('button', { name: m.instance_save() });
+		await fireEvent.click(button);
+
+		expect(putSpy).toHaveBeenCalledWith('/settings', {
+			body: {
+				...sampleSettings,
+				brand_mark: 'hand',
+				sfw_mode: 'off'
+			}
+		});
 	});
 });

@@ -1,0 +1,32 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+#
+# Opens or comments on the main-branch failure issue for a workflow (tools/ci/security_issue.sh).
+name: Report Failure
+
+on:
+  workflow_call:
+    inputs:
+      title-suffix:
+        description: Suffix for the issue title (e.g. Soak)
+        required: false
+        type: string
+        default: ''
+
+permissions: {}
+
+jobs:
+  report:
+    name: Open an issue on a failure on main
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/report-failure
+        with:
+          title-suffix: ${{ inputs.title-suffix }}

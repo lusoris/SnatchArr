@@ -3,11 +3,11 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 import { describe, expect, it } from 'vitest';
-import type { components } from '#lib/api/schema.js';
 import { logLevelLabel } from '#lib/logs.js';
 import { m } from '#lib/paraglide/messages.js';
 import {
 	activePauseText,
+	capRows,
 	eventLevelLabel,
 	eventStatus,
 	formatScheduleWindow,
@@ -16,14 +16,13 @@ import {
 	kpiProwlarr,
 	kpiSearches,
 	lastRunForInstance,
-	nextScheduleForInstance
+	nextScheduleForInstance,
+	type CapStatus,
+	type Instance,
+	type ProwlarrStatus,
+	type Run,
+	type Schedule
 } from './overview.js';
-
-type Instance = components['schemas']['Instance'];
-type CapStatus = components['schemas']['CapStatus'];
-type ProwlarrStatus = components['schemas']['ProwlarrStatus'];
-type Run = components['schemas']['Run'];
-type Schedule = components['schemas']['Schedule'];
 
 const baseInstance: Instance = {
 	id: '00000000-0000-0000-0000-000000000001',
@@ -167,35 +166,26 @@ describe('overview helper: kpiFleet', () => {
 });
 
 describe('overview helper: kpiProwlarr', () => {
+	type Indexer = NonNullable<ProwlarrStatus['indexers']>[number];
+	const indexer = (id: number, used: number, exhausted: boolean): Indexer => ({
+		id,
+		name: `Idx ${id}`,
+		query_limit: 100,
+		limits_unit: 0,
+		used_queries: used,
+		used_grabs: 0,
+		exhausted
+	});
+	const link = (indexers: Indexer[]): ProwlarrStatus => ({
+		link_id: 'link1',
+		name: 'Prowlarr 1',
+		reachable: true,
+		checked_at: '2026-01-01T00:00:00Z',
+		indexers
+	});
+
 	it('positive: reports ok when all indexers have headroom', () => {
-		const links: ProwlarrStatus[] = [
-			{
-				link_id: 'link1',
-				name: 'Prowlarr 1',
-				reachable: true,
-				checked_at: '2026-01-01T00:00:00Z',
-				indexers: [
-					{
-						id: 1,
-						name: 'Idx 1',
-						query_limit: 100,
-						limits_unit: 0,
-						used_queries: 10,
-						used_grabs: 0,
-						exhausted: false
-					},
-					{
-						id: 2,
-						name: 'Idx 2',
-						query_limit: 100,
-						limits_unit: 0,
-						used_queries: 20,
-						used_grabs: 0,
-						exhausted: false
-					}
-				]
-			}
-		];
+		const links: ProwlarrStatus[] = [link([indexer(1, 10, false), indexer(2, 20, false)])];
 		const res = kpiProwlarr(links);
 		expect(res.status).toBe('ok');
 		expect(res.total).toBe(2);
@@ -204,34 +194,7 @@ describe('overview helper: kpiProwlarr', () => {
 	});
 
 	it('negative: reports warn when some indexers are exhausted', () => {
-		const links: ProwlarrStatus[] = [
-			{
-				link_id: 'link1',
-				name: 'Prowlarr 1',
-				reachable: true,
-				checked_at: '2026-01-01T00:00:00Z',
-				indexers: [
-					{
-						id: 1,
-						name: 'Idx 1',
-						query_limit: 100,
-						limits_unit: 0,
-						used_queries: 10,
-						used_grabs: 0,
-						exhausted: false
-					},
-					{
-						id: 2,
-						name: 'Idx 2',
-						query_limit: 100,
-						limits_unit: 0,
-						used_queries: 100,
-						used_grabs: 0,
-						exhausted: true
-					}
-				]
-			}
-		];
+		const links: ProwlarrStatus[] = [link([indexer(1, 10, false), indexer(2, 100, true)])];
 		const res = kpiProwlarr(links);
 		expect(res.status).toBe('warn');
 		expect(res.headroom).toBe(1);
@@ -239,25 +202,7 @@ describe('overview helper: kpiProwlarr', () => {
 	});
 
 	it('boundary: reports danger when all indexers are exhausted', () => {
-		const links: ProwlarrStatus[] = [
-			{
-				link_id: 'link1',
-				name: 'Prowlarr 1',
-				reachable: true,
-				checked_at: '2026-01-01T00:00:00Z',
-				indexers: [
-					{
-						id: 1,
-						name: 'Idx 1',
-						query_limit: 100,
-						limits_unit: 0,
-						used_queries: 100,
-						used_grabs: 0,
-						exhausted: true
-					}
-				]
-			}
-		];
+		const links: ProwlarrStatus[] = [link([indexer(1, 100, true)])];
 		const res = kpiProwlarr(links);
 		expect(res.status).toBe('danger');
 		expect(res.headroom).toBe(0);
@@ -439,5 +384,43 @@ describe('overview helper: eventLevelLabel', () => {
 
 	it('boundary: safely handles undefined without throwing', () => {
 		expect(eventLevelLabel(undefined)).toBe('');
+	});
+});
+
+describe('overview helper: capRows', () => {
+	it('positive: keeps all rows and cut=false when list is below cap', () => {
+		expect(capRows([1, 2, 3], 5)).toEqual({
+			rows: [1, 2, 3],
+			total: 3,
+			cap: 5,
+			hidden: 0,
+			cut: false
+		});
+	});
+
+	it('boundary: keeps all rows and cut=false when list length equals cap', () => {
+		expect(capRows(['a', 'b', 'c'], 3)).toEqual({
+			rows: ['a', 'b', 'c'],
+			total: 3,
+			cap: 3,
+			hidden: 0,
+			cut: false
+		});
+	});
+
+	it('positive: keeps every row and counts the rows below the cap when list exceeds cap', () => {
+		expect(capRows([1, 2, 3, 4, 5], 3)).toEqual({
+			rows: [1, 2, 3, 4, 5],
+			total: 5,
+			cap: 3,
+			hidden: 2,
+			cut: true
+		});
+	});
+
+	it('negative: handles empty and undefined lists and a negative cap', () => {
+		expect(capRows([], 4)).toEqual({ rows: [], total: 0, cap: 4, hidden: 0, cut: false });
+		expect(capRows(undefined, 4)).toEqual({ rows: [], total: 0, cap: 4, hidden: 0, cut: false });
+		expect(capRows([1], -1)).toEqual({ rows: [1], total: 1, cap: 0, hidden: 1, cut: true });
 	});
 });

@@ -32,6 +32,7 @@ const baseStubs = {
 	'/notifications/channels': [],
 	'/notifications/rules': [],
 	'/system/modules': [],
+	'/settings/runtime': [],
 	'/system/status': {
 		name: 'SnatchArr',
 		version: '0.1.0',
@@ -58,6 +59,16 @@ describe('system page tabs', () => {
 		expect(await screen.findByRole('heading', { level: 1, name: m.nav_system() })).toBeTruthy();
 		expect(screen.getByRole('tab', { name: m.system_tab_general(), selected: true })).toBeTruthy();
 		expect(screen.getByRole('heading', { level: 2, name: m.settings_title() })).toBeTruthy();
+	});
+
+	it('renders environment tab when tab=environment', async () => {
+		pageMock.url = new URL('http://localhost/system?tab=environment');
+		renderWithQuery(SystemPage);
+
+		expect(
+			await screen.findByRole('tab', { name: m.system_tab_environment(), selected: true })
+		).toBeTruthy();
+		expect(screen.getByRole('heading', { level: 2, name: m.environment_title() })).toBeTruthy();
 	});
 
 	it('renders modules tab when tab=modules', async () => {

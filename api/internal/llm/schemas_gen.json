@@ -1,4 +1,18 @@
 {
+  "applyPriorityPreset": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "presetId": {
+        "description": "UUID of a saved preset, or media_first for the shipped preset.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "presetId"
+    ],
+    "type": "object"
+  },
   "cancelRun": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -144,12 +158,62 @@
     ],
     "type": "object"
   },
+  "createAdultSource": {
+    "$defs": {
+      "AdultSourceInput": {
+        "properties": {
+          "api_key": {
+            "description": "Required on create; omit on update to keep stored key",
+            "type": "string"
+          },
+          "enabled": {
+            "description": "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.",
+            "type": "boolean"
+          },
+          "endpoint": {
+            "description": "GraphQL endpoint URL (http or https)",
+            "type": "string"
+          },
+          "name": {
+            "description": "Display name of the catalogue source (1..128 characters)",
+            "type": "string"
+          },
+          "priority": {
+            "description": "On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it.",
+            "maximum": 1000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sync_favorites": {
+            "description": "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "endpoint"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/AdultSourceInput"
+      }
+    },
+    "required": [
+      "body"
+    ],
+    "type": "object"
+  },
   "createDownloadClient": {
     "$defs": {
       "DownloadClientInput": {
         "properties": {
           "bandwidth_budget_bps": {
-            "default": 0,
+            "description": "On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it.",
             "format": "int64",
             "minimum": 0,
             "type": "integer"
@@ -158,7 +222,7 @@
             "type": "string"
           },
           "enabled": {
-            "default": true,
+            "description": "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.",
             "type": "boolean"
           },
           "instance_id": {
@@ -170,13 +234,13 @@
             "$ref": "#/$defs/DownloadClientKind"
           },
           "max_active": {
-            "default": 0,
+            "description": "On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it.",
             "maximum": 1000,
             "minimum": 0,
             "type": "integer"
           },
           "max_queued": {
-            "default": 0,
+            "description": "On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it.",
             "maximum": 1000,
             "minimum": 0,
             "type": "integer"
@@ -234,7 +298,8 @@
           "lidarr",
           "readarr",
           "whisparr_v2",
-          "whisparr_v3"
+          "whisparr_v3",
+          "stash"
         ],
         "type": "string"
       },
@@ -623,6 +688,53 @@
     ],
     "type": "object"
   },
+  "createPriorityPreset": {
+    "$defs": {
+      "PriorityPresetInput": {
+        "description": "Both maps must contain exactly sonarr, radarr, lidarr, readarr, whisparr_v2 and whisparr_v3, with ranks from 1 to 100.",
+        "properties": {
+          "download": {
+            "$ref": "#/$defs/PriorityPresetMap"
+          },
+          "name": {
+            "description": "Unique ignoring case; leading and trailing whitespace is trimmed. The name media_first is reserved.",
+            "maxLength": 40,
+            "minLength": 1,
+            "type": "string"
+          },
+          "search": {
+            "$ref": "#/$defs/PriorityPresetMap"
+          }
+        },
+        "required": [
+          "name",
+          "search",
+          "download"
+        ],
+        "type": "object"
+      },
+      "PriorityPresetMap": {
+        "additionalProperties": {
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "description": "Priority rank (1..100, lower goes first) per *arr application kind.",
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/PriorityPresetInput"
+      }
+    },
+    "required": [
+      "body"
+    ],
+    "type": "object"
+  },
   "createProwlarrLink": {
     "$defs": {
       "ProwlarrLinkInput": {
@@ -635,8 +747,14 @@
             "type": "string"
           },
           "enabled": {
-            "default": true,
+            "description": "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.",
             "type": "boolean"
+          },
+          "hourly_cap": {
+            "description": "On create, omitted = 15. On update, omitted = stored value stays; sent = replaces it.",
+            "maximum": 500,
+            "minimum": 1,
+            "type": "integer"
           },
           "name": {
             "maxLength": 64,
@@ -758,7 +876,7 @@
             "type": "string"
           },
           "enabled": {
-            "default": true,
+            "description": "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.",
             "type": "boolean"
           },
           "name": {
@@ -803,7 +921,7 @@
             "type": "string"
           },
           "enabled": {
-            "default": true,
+            "description": "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.",
             "type": "boolean"
           },
           "kind": {
@@ -843,6 +961,24 @@
     },
     "required": [
       "body"
+    ],
+    "type": "object"
+  },
+  "deleteAdultSource": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "confirm": {
+        "description": "Must be true to confirm this destructive operation",
+        "type": "boolean"
+      },
+      "sourceId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "sourceId"
     ],
     "type": "object"
   },
@@ -954,6 +1090,20 @@
     ],
     "type": "object"
   },
+  "deletePriorityPreset": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "presetId": {
+        "description": "UUID of a saved preset. The shipped media_first preset is read-only.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "presetId"
+    ],
+    "type": "object"
+  },
   "deleteProwlarrLink": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -1040,6 +1190,68 @@
     ],
     "type": "object"
   },
+  "getAdultImageSet": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "setId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "setId"
+    ],
+    "type": "object"
+  },
+  "getAdultPerformer": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "performerId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "performerId"
+    ],
+    "type": "object"
+  },
+  "getAdultSource": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "sourceId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "sourceId"
+    ],
+    "type": "object"
+  },
+  "getAdultStudio": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "studioId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "studioId"
+    ],
+    "type": "object"
+  },
+  "getAdultSyncStatus": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
   "getConfigarrStatus": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -1106,6 +1318,8 @@
     "properties": {
       "id": {
         "description": "Unique module identifier",
+        "maxLength": 64,
+        "pattern": "^[a-z][a-z0-9_]{0,63}$",
         "type": "string"
       }
     },
@@ -1126,6 +1340,12 @@
     "required": [
       "targetId"
     ],
+    "type": "object"
+  },
+  "getMyPreferences": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
     "type": "object"
   },
   "getNotificationChannel": {
@@ -1224,6 +1444,12 @@
     ],
     "type": "object"
   },
+  "getRequestsSettings": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
   "getRun": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -1236,6 +1462,12 @@
     "required": [
       "runId"
     ],
+    "type": "object"
+  },
+  "getRuntimeSettings": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
     "type": "object"
   },
   "getSSO": {
@@ -1439,6 +1671,74 @@
     "properties": {},
     "type": "object"
   },
+  "listAdultImageSets": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "limit": {
+        "default": 50,
+        "maximum": 200,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "offset": {
+        "default": 0,
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "type": "object"
+  },
+  "listAdultPerformers": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "cursor": {
+        "description": "Opaque keyset pagination cursor",
+        "type": "string"
+      },
+      "favorite": {
+        "description": "Filter by favourite status",
+        "type": "boolean"
+      },
+      "limit": {
+        "default": 50,
+        "description": "Maximum performers to return",
+        "maximum": 200,
+        "minimum": 1,
+        "type": "integer"
+      }
+    },
+    "type": "object"
+  },
+  "listAdultSources": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "listAdultStudios": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "cursor": {
+        "description": "Opaque keyset pagination cursor",
+        "type": "string"
+      },
+      "favorite": {
+        "description": "Filter by favourite status",
+        "type": "boolean"
+      },
+      "limit": {
+        "default": 50,
+        "description": "Maximum studios to return",
+        "maximum": 200,
+        "minimum": 1,
+        "type": "integer"
+      }
+    },
+    "type": "object"
+  },
   "listDownloadClients": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -1451,6 +1751,7 @@
     "properties": {
       "before_id": {
         "format": "int64",
+        "minimum": 1,
         "type": "integer"
       },
       "instance_id": {
@@ -1458,6 +1759,7 @@
         "type": "string"
       },
       "page_size": {
+        "default": 100,
         "maximum": 1000,
         "minimum": 1,
         "type": "integer"
@@ -1486,19 +1788,29 @@
     "properties": {
       "level": {
         "description": "Minimum level; records below it are left out.",
+        "enum": [
+          "debug",
+          "info",
+          "warn",
+          "error"
+        ],
         "type": "string"
       },
       "limit": {
+        "default": 200,
         "maximum": 1000,
         "minimum": 1,
         "type": "integer"
       },
       "q": {
         "description": "Case-insensitive substring of the message, an attribute key or value.",
+        "maxLength": 200,
         "type": "string"
       },
       "source": {
         "description": "Source: api, worker for every worker, or worker:\u003cid\u003e for one worker.",
+        "maxLength": 160,
+        "pattern": "^(api|worker(:[^\\s:]+)?)$",
         "type": "string"
       }
     },
@@ -1571,11 +1883,13 @@
         "type": "string"
       },
       "limit": {
+        "default": 50,
         "maximum": 500,
         "minimum": 1,
         "type": "integer"
       },
       "offset": {
+        "default": 0,
         "minimum": 0,
         "type": "integer"
       }
@@ -1609,6 +1923,7 @@
         "type": "string"
       },
       "limit": {
+        "default": 100,
         "maximum": 500,
         "minimum": 1,
         "type": "integer"
@@ -1625,6 +1940,7 @@
         "type": "string"
       },
       "limit": {
+        "default": 100,
         "maximum": 500,
         "minimum": 1,
         "type": "integer"
@@ -1819,6 +2135,20 @@
     ],
     "type": "object"
   },
+  "sweepInstanceQueue": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "instanceId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "instanceId"
+    ],
+    "type": "object"
+  },
   "syncSeerrLink": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -1852,7 +2182,7 @@
       "DownloadClientInput": {
         "properties": {
           "bandwidth_budget_bps": {
-            "default": 0,
+            "description": "On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it.",
             "format": "int64",
             "minimum": 0,
             "type": "integer"
@@ -1861,7 +2191,7 @@
             "type": "string"
           },
           "enabled": {
-            "default": true,
+            "description": "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.",
             "type": "boolean"
           },
           "instance_id": {
@@ -1873,13 +2203,13 @@
             "$ref": "#/$defs/DownloadClientKind"
           },
           "max_active": {
-            "default": 0,
+            "description": "On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it.",
             "maximum": 1000,
             "minimum": 0,
             "type": "integer"
           },
           "max_queued": {
-            "default": 0,
+            "description": "On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it.",
             "maximum": 1000,
             "minimum": 0,
             "type": "integer"
@@ -1951,7 +2281,8 @@
           "lidarr",
           "readarr",
           "whisparr_v2",
-          "whisparr_v3"
+          "whisparr_v3",
+          "stash"
         ],
         "type": "string"
       },
@@ -2052,8 +2383,14 @@
             "type": "string"
           },
           "enabled": {
-            "default": true,
+            "description": "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.",
             "type": "boolean"
+          },
+          "hourly_cap": {
+            "description": "On create, omitted = 15. On update, omitted = stored value stays; sent = replaces it.",
+            "maximum": 500,
+            "minimum": 1,
+            "type": "integer"
           },
           "name": {
             "maxLength": 64,
@@ -2106,7 +2443,7 @@
             "type": "string"
           },
           "enabled": {
-            "default": true,
+            "description": "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.",
             "type": "boolean"
           },
           "name": {
@@ -2140,6 +2477,18 @@
     "required": [
       "body"
     ],
+    "type": "object"
+  },
+  "triggerAdultScan": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "triggerAdultSync": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {},
     "type": "object"
   },
   "triggerRun": {
@@ -2192,12 +2541,67 @@
     "properties": {},
     "type": "object"
   },
+  "updateAdultSource": {
+    "$defs": {
+      "AdultSourceInput": {
+        "properties": {
+          "api_key": {
+            "description": "Required on create; omit on update to keep stored key",
+            "type": "string"
+          },
+          "enabled": {
+            "description": "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.",
+            "type": "boolean"
+          },
+          "endpoint": {
+            "description": "GraphQL endpoint URL (http or https)",
+            "type": "string"
+          },
+          "name": {
+            "description": "Display name of the catalogue source (1..128 characters)",
+            "type": "string"
+          },
+          "priority": {
+            "description": "On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it.",
+            "maximum": 1000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sync_favorites": {
+            "description": "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "endpoint"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/AdultSourceInput"
+      },
+      "sourceId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "body",
+      "sourceId"
+    ],
+    "type": "object"
+  },
   "updateDownloadClient": {
     "$defs": {
       "DownloadClientInput": {
         "properties": {
           "bandwidth_budget_bps": {
-            "default": 0,
+            "description": "On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it.",
             "format": "int64",
             "minimum": 0,
             "type": "integer"
@@ -2206,7 +2610,7 @@
             "type": "string"
           },
           "enabled": {
-            "default": true,
+            "description": "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.",
             "type": "boolean"
           },
           "instance_id": {
@@ -2218,13 +2622,13 @@
             "$ref": "#/$defs/DownloadClientKind"
           },
           "max_active": {
-            "default": 0,
+            "description": "On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it.",
             "maximum": 1000,
             "minimum": 0,
             "type": "integer"
           },
           "max_queued": {
-            "default": 0,
+            "description": "On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it.",
             "maximum": 1000,
             "minimum": 0,
             "type": "integer"
@@ -2287,7 +2691,8 @@
           "lidarr",
           "readarr",
           "whisparr_v2",
-          "whisparr_v3"
+          "whisparr_v3",
+          "stash"
         ],
         "type": "string"
       },
@@ -2301,7 +2706,7 @@
             "type": "string"
           },
           "enabled": {
-            "default": true,
+            "description": "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.",
             "type": "boolean"
           },
           "kind": {
@@ -2407,6 +2812,8 @@
       },
       "id": {
         "description": "Unique module identifier",
+        "maxLength": 64,
+        "pattern": "^[a-z][a-z0-9_]{0,63}$",
         "type": "string"
       }
     },
@@ -2527,7 +2934,7 @@
             "$ref": "#/$defs/NotificationChannelConfig"
           },
           "enabled": {
-            "default": true,
+            "description": "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.",
             "type": "boolean"
           },
           "kind": {
@@ -2554,6 +2961,60 @@
     "required": [
       "body",
       "targetId"
+    ],
+    "type": "object"
+  },
+  "updateMyPreferences": {
+    "$defs": {
+      "BrandMark": {
+        "enum": [
+          "vulva",
+          "penis",
+          "hand"
+        ],
+        "type": "string"
+      },
+      "SfwMode": {
+        "enum": [
+          "auto",
+          "on",
+          "off"
+        ],
+        "type": "string"
+      },
+      "UserPreferences": {
+        "properties": {
+          "brand_mark": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/BrandMark"
+              }
+            ],
+            "description": "Per-user brand mark override; null or omitted follows the installation default.",
+            "nullable": true
+          },
+          "sfw_mode": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/SfwMode"
+              }
+            ],
+            "description": "Per-user SFW mode override; null or omitted follows the installation default.",
+            "nullable": true
+          }
+        },
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/UserPreferences"
+      }
+    },
+    "required": [
+      "body"
     ],
     "type": "object"
   },
@@ -2665,10 +3126,11 @@
       "NotificationChannelUpdate": {
         "properties": {
           "config": {
-            "$ref": "#/$defs/NotificationChannelConfig"
+            "$ref": "#/$defs/NotificationChannelConfig",
+            "description": "Omitted = stored configuration stays; sent = replaces it, omitted secret fields stay."
           },
           "enabled": {
-            "default": true,
+            "description": "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.",
             "type": "boolean"
           },
           "kind": {
@@ -2727,7 +3189,7 @@
             "type": "array"
           },
           "enabled": {
-            "default": true,
+            "description": "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.",
             "type": "boolean"
           },
           "event_kind": {
@@ -2790,8 +3252,7 @@
             "type": "integer"
           },
           "dry_run": {
-            "default": false,
-            "description": "When true, planner creates preview / dry-run runs that do not dispatch searches.",
+            "description": "When true, planner creates preview / dry-run runs that do not dispatch searches. On update, omitted = stored value stays; sent = replaces it.",
             "type": "boolean"
           },
           "exclude_quality_profiles": {
@@ -2910,8 +3371,7 @@
             "type": "boolean"
           },
           "skip_unavailable_movies": {
-            "default": true,
-            "description": "Radarr only: skip movies Radarr reports as not yet available (isAvailable false, the movie's minimum availability is not reached). They are not searched and cost no stamina. Movies without the flag are searched. Absent = true.",
+            "description": "Radarr only: skip movies Radarr reports as not yet available (isAvailable false, the movie's minimum availability is not reached). They are not searched and cost no stamina. Movies without the flag are searched. On update, omitted = stored value stays; sent = replaces it.",
             "type": "boolean"
           },
           "sonarr_missing_mode": {
@@ -2980,6 +3440,58 @@
     ],
     "type": "object"
   },
+  "updatePriorityPreset": {
+    "$defs": {
+      "PriorityPresetInput": {
+        "description": "Both maps must contain exactly sonarr, radarr, lidarr, readarr, whisparr_v2 and whisparr_v3, with ranks from 1 to 100.",
+        "properties": {
+          "download": {
+            "$ref": "#/$defs/PriorityPresetMap"
+          },
+          "name": {
+            "description": "Unique ignoring case; leading and trailing whitespace is trimmed. The name media_first is reserved.",
+            "maxLength": 40,
+            "minLength": 1,
+            "type": "string"
+          },
+          "search": {
+            "$ref": "#/$defs/PriorityPresetMap"
+          }
+        },
+        "required": [
+          "name",
+          "search",
+          "download"
+        ],
+        "type": "object"
+      },
+      "PriorityPresetMap": {
+        "additionalProperties": {
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "description": "Priority rank (1..100, lower goes first) per *arr application kind.",
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/PriorityPresetInput"
+      },
+      "presetId": {
+        "description": "UUID of a saved preset. The shipped media_first preset is read-only.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "body",
+      "presetId"
+    ],
+    "type": "object"
+  },
   "updateProwlarrLink": {
     "$defs": {
       "ProwlarrLinkInput": {
@@ -2992,8 +3504,14 @@
             "type": "string"
           },
           "enabled": {
-            "default": true,
+            "description": "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.",
             "type": "boolean"
+          },
+          "hourly_cap": {
+            "description": "On create, omitted = 15. On update, omitted = stored value stays; sent = replaces it.",
+            "maximum": 500,
+            "minimum": 1,
+            "type": "integer"
           },
           "name": {
             "maxLength": 64,
@@ -3204,6 +3722,93 @@
     ],
     "type": "object"
   },
+  "updateRequestsSettings": {
+    "$defs": {
+      "RequestsSettings": {
+        "properties": {
+          "allow_viewer_votes": {
+            "default": true,
+            "type": "boolean"
+          },
+          "visibility": {
+            "$ref": "#/$defs/RequestsVisibility"
+          },
+          "voting_mode": {
+            "$ref": "#/$defs/RequestsVotingMode"
+          },
+          "voting_ttl_days": {
+            "default": 0,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "voting_mode",
+          "allow_viewer_votes",
+          "visibility",
+          "voting_ttl_days"
+        ],
+        "type": "object"
+      },
+      "RequestsVisibility": {
+        "default": "public_attributed",
+        "enum": [
+          "public_attributed",
+          "public_anonymous",
+          "private_to_requester_and_admin"
+        ],
+        "type": "string"
+      },
+      "RequestsVotingMode": {
+        "default": "upvotes_only",
+        "enum": [
+          "upvotes_only",
+          "net_score"
+        ],
+        "type": "string"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/RequestsSettings"
+      }
+    },
+    "required": [
+      "body"
+    ],
+    "type": "object"
+  },
+  "updateRuntimeSettings": {
+    "$defs": {
+      "RuntimeSettingsUpdateRequest": {
+        "properties": {
+          "values": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "values"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "$ref": "#/$defs/RuntimeSettingsUpdateRequest"
+      }
+    },
+    "required": [
+      "body"
+    ],
+    "type": "object"
+  },
   "updateSchedule": {
     "$defs": {
       "ScheduleInput": {
@@ -3298,7 +3903,7 @@
             "type": "string"
           },
           "enabled": {
-            "default": true,
+            "description": "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.",
             "type": "boolean"
           },
           "name": {
@@ -3341,6 +3946,14 @@
   },
   "updateSettings": {
     "$defs": {
+      "BrandMark": {
+        "enum": [
+          "vulva",
+          "penis",
+          "hand"
+        ],
+        "type": "string"
+      },
       "LlmWriteTool": {
         "enum": [
           "snatcharr_trigger_run",
@@ -3400,6 +4013,10 @@
       },
       "Settings": {
         "properties": {
+          "brand_mark": {
+            "$ref": "#/$defs/BrandMark",
+            "description": "Installation-wide brand mark shown when a user has no override. On update, omitted = stored value stays; sent = replaces it."
+          },
           "download_priority_preset": {
             "$ref": "#/$defs/PriorityPresetMap"
           },
@@ -3415,8 +4032,7 @@
             "type": "integer"
           },
           "llm_enabled": {
-            "default": false,
-            "description": "Whether the Model Context Protocol (MCP) server at /api/v1/mcp is enabled.",
+            "description": "Whether the Model Context Protocol (MCP) server at /api/v1/mcp is enabled. On update, omitted = stored value stays; sent = replaces it.",
             "type": "boolean"
           },
           "llm_write_tools": {
@@ -3429,6 +4045,10 @@
           },
           "search_priority_preset": {
             "$ref": "#/$defs/PriorityPresetMap"
+          },
+          "sfw_mode": {
+            "$ref": "#/$defs/SfwMode",
+            "description": "Installation-wide SFW mode applied when a user has no override. On update, omitted = stored value stays; sent = replaces it."
           },
           "updated_at": {
             "format": "date-time",
@@ -3448,6 +4068,14 @@
           "download_priority_preset"
         ],
         "type": "object"
+      },
+      "SfwMode": {
+        "enum": [
+          "auto",
+          "on",
+          "off"
+        ],
+        "type": "string"
       }
     },
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -3471,7 +4099,7 @@
             "type": "string"
           },
           "enabled": {
-            "default": true,
+            "description": "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.",
             "type": "boolean"
           },
           "kind": {

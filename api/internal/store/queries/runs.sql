@@ -62,7 +62,7 @@ RETURNING *;
 
 -- name: CompleteRun :one
 UPDATE snatch_runs
-SET status = $3, finished_at = $4, searched_count = $5, error = $6, lease_expires_at = NULL
+SET status = $3, finished_at = $4, searched_count = $5, error = $6, eligible_items = $7, lease_expires_at = NULL
 WHERE id = $1 AND leased_by = $2 AND status IN ('leased', 'cancelled')
 RETURNING *;
 
@@ -93,3 +93,18 @@ SELECT status, count(*) AS count
 FROM snatch_runs
 GROUP BY status;
 
+-- name: ListInstanceLastRunFinished :many
+-- Latest finish per enabled non-stash instance and terminal status, for the state gauges.
+SELECT i.name AS instance_name, r.status, max(r.finished_at)::timestamptz AS last_finished
+FROM snatch_runs r JOIN instances i ON i.id = r.instance_id
+WHERE i.enabled AND i.kind <> 'stash' AND r.finished_at IS NOT NULL AND r.status IN ('done','failed','cancelled')
+GROUP BY i.name, r.status;
+
+
+-- name: ListInstanceEligibleItems :many
+-- Newest finished non-preview pool per enabled non-stash instance and snatch kind.
+SELECT DISTINCT ON (r.instance_id, r.kind) i.name AS instance_name, r.kind, r.eligible_items
+FROM snatch_runs r JOIN instances i ON i.id = r.instance_id
+WHERE i.enabled AND i.kind <> 'stash' AND r.finished_at IS NOT NULL
+    AND NOT r.dry_run AND r.eligible_items IS NOT NULL
+ORDER BY r.instance_id, r.kind, r.finished_at DESC;

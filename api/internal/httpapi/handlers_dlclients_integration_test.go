@@ -681,3 +681,146 @@ func TestConfigarrOperations(t *testing.T) {
 		}
 	})
 }
+
+func TestUpdateDownloadClient_TableDriven(t *testing.T) {
+	t.Parallel()
+	f := newIntegrationFixture(t)
+	ctx := withUser(t.Context(), f.admin)
+
+	created, err := f.h.CreateDownloadClient(ctx, &oas.DownloadClientInput{
+		Name:    "qb-943",
+		Kind:    oas.DownloadClientKindQbittorrent,
+		BaseURL: "http://qb:8080",
+	})
+	if err != nil {
+		t.Fatalf("CreateDownloadClient() err = %v", err)
+	}
+	if !created.Enabled || created.MaxActive != 0 || created.MaxQueued != 0 || created.BandwidthBudgetBps != 0 {
+		t.Fatalf("CreateDownloadClient() defaults = %+v, want enabled:true, max_active:0, max_queued:0, bw:0", created)
+	}
+
+	updated, err := f.h.UpdateDownloadClient(ctx, &oas.DownloadClientInput{
+		Name:               "qb-943",
+		Kind:               oas.DownloadClientKindQbittorrent,
+		BaseURL:            "http://qb:8080",
+		Enabled:            oas.NewOptBool(false),
+		MaxActive:          oas.NewOptInt(10),
+		MaxQueued:          oas.NewOptInt(20),
+		BandwidthBudgetBps: oas.NewOptInt64(5000),
+	}, oas.UpdateDownloadClientParams{ClientId: created.ID})
+	if err != nil || updated.Enabled || updated.MaxActive != 10 || updated.MaxQueued != 20 || updated.BandwidthBudgetBps != 5000 {
+		t.Fatalf("initial update = %+v, %v", updated, err)
+	}
+
+	tests := []struct {
+		name       string
+		createInit bool
+		clientID   uuid.UUID
+		req        oas.DownloadClientInput
+		wantEn     bool
+		wantAct    int
+		wantQ      int
+		wantBw     int64
+		wantErr    error
+	}{
+		{
+			name:       "positive: omitted optional fields keep stored non-default values",
+			createInit: true,
+			req: oas.DownloadClientInput{
+				Name:    "qb-943-renamed",
+				Kind:    oas.DownloadClientKindQbittorrent,
+				BaseURL: "http://qb:8080",
+			},
+			wantEn:  false,
+			wantAct: 10,
+			wantQ:   20,
+			wantBw:  5000,
+		},
+		{
+			name:       "negative: sent values replace stored values",
+			createInit: true,
+			req: oas.DownloadClientInput{
+				Name:               "qb-943-renamed",
+				Kind:               oas.DownloadClientKindQbittorrent,
+				BaseURL:            "http://qb:8080",
+				Enabled:            oas.NewOptBool(true),
+				MaxActive:          oas.NewOptInt(15),
+				MaxQueued:          oas.NewOptInt(25),
+				BandwidthBudgetBps: oas.NewOptInt64(10000),
+			},
+			wantEn:  true,
+			wantAct: 15,
+			wantQ:   25,
+			wantBw:  10000,
+		},
+		{
+			name:       "boundary: explicit false and zeros are honoured, not treated as omitted",
+			createInit: true,
+			req: oas.DownloadClientInput{
+				Name:               "qb-943-renamed",
+				Kind:               oas.DownloadClientKindQbittorrent,
+				BaseURL:            "http://qb:8080",
+				Enabled:            oas.NewOptBool(false),
+				MaxActive:          oas.NewOptInt(0),
+				MaxQueued:          oas.NewOptInt(0),
+				BandwidthBudgetBps: oas.NewOptInt64(0),
+			},
+			wantEn:  false,
+			wantAct: 0,
+			wantQ:   0,
+			wantBw:  0,
+		},
+		{
+			name:     "boundary: unknown client id returns not found",
+			clientID: uuid.New(),
+			req: oas.DownloadClientInput{
+				Name:    "unknown",
+				Kind:    oas.DownloadClientKindQbittorrent,
+				BaseURL: "http://qb:8080",
+			},
+			wantErr: domain.ErrNotFound,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			clientID := tc.clientID
+			if tc.createInit {
+				c, err := f.h.CreateDownloadClient(ctx, &oas.DownloadClientInput{
+					Name:    "qb-943-" + uuid.NewString()[:8],
+					Kind:    oas.DownloadClientKindQbittorrent,
+					BaseURL: "http://qb:8080",
+				})
+				if err != nil {
+					t.Fatalf("CreateDownloadClient() err = %v", err)
+				}
+				dis, err := f.h.UpdateDownloadClient(ctx, &oas.DownloadClientInput{
+					Name:               c.Name,
+					Kind:               oas.DownloadClientKindQbittorrent,
+					BaseURL:            "http://qb:8080",
+					Enabled:            oas.NewOptBool(false),
+					MaxActive:          oas.NewOptInt(10),
+					MaxQueued:          oas.NewOptInt(20),
+					BandwidthBudgetBps: oas.NewOptInt64(5000),
+				}, oas.UpdateDownloadClientParams{ClientId: c.ID})
+				if err != nil || dis.Enabled || dis.MaxActive != 10 || dis.MaxQueued != 20 || dis.BandwidthBudgetBps != 5000 {
+					t.Fatalf("initial disable err = %v", err)
+				}
+				clientID = c.ID
+			}
+			got, err := f.h.UpdateDownloadClient(ctx, &tc.req, oas.UpdateDownloadClientParams{ClientId: clientID})
+			if tc.wantErr != nil {
+				if !errors.Is(err, tc.wantErr) {
+					t.Fatalf("UpdateDownloadClient() err = %v, want %v", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("UpdateDownloadClient() err = %v", err)
+			}
+			if got.Enabled != tc.wantEn || got.MaxActive != tc.wantAct || got.MaxQueued != tc.wantQ || got.BandwidthBudgetBps != tc.wantBw {
+				t.Fatalf("UpdateDownloadClient() = %+v, want en=%v act=%d q=%d bw=%d", got, tc.wantEn, tc.wantAct, tc.wantQ, tc.wantBw)
+			}
+		})
+	}
+}

@@ -2,10 +2,12 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
+import { WCAG_22_AA_TAGS } from '@sveltesentio/testing/a11y';
 import { fireEvent, render as svelteRender, screen, within } from '@testing-library/svelte';
 import { QueryClient, QueryClientProvider } from '@tanstack/svelte-query';
 import type { Component } from 'svelte';
-import { expect, vi } from 'vitest';
+import { afterEach, beforeEach, expect, vi } from 'vitest';
+import { axe } from 'vitest-axe';
 import { api } from '#lib/api/client.js';
 import type { components } from '#lib/api/schema.js';
 import { m } from '#lib/paraglide/messages.js';
@@ -19,6 +21,18 @@ export type QueuePolicy = components['schemas']['QueuePolicy'];
 export type QueueStrike = components['schemas']['QueueStrike'];
 export type InstancePriority = components['schemas']['InstancePriority'];
 
+/** Signs in an admin before each test; signs out and restores mocks after it. */
+export function useAdminSession(): void {
+	beforeEach(() => {
+		session.user = { id: 'u1', username: 'admin', role: 'admin' } as never;
+	});
+
+	afterEach(() => {
+		session.user = null;
+		vi.restoreAllMocks();
+	});
+}
+
 /** A query client per test: no retry, so a refused request shows at once; nothing cached. */
 function createTestQueryClient(): QueryClient {
 	return new QueryClient({
@@ -29,6 +43,12 @@ function createTestQueryClient(): QueryClient {
 			}
 		}
 	});
+}
+
+/** Fails when the rendered view breaks a WCAG 2.2 AA rule. */
+export async function expectNoAxeViolations(container: Element) {
+	const a11y = await axe(container, { runOnly: { type: 'tag', values: [...WCAG_22_AA_TAGS] } });
+	expect(a11y.violations).toEqual([]);
 }
 
 /** Renders a view inside its own query client. */
@@ -260,6 +280,12 @@ export async function assertCancelDelete(
 	expect(card.getByRole('button', { name: m.action_delete() })).toBeTruthy();
 }
 
+/** Verifies that a problem alert with the given detail is displayed and no save button is present. */
+export async function assertProblemAlert(detail: string): Promise<void> {
+	expect((await screen.findByRole('alert')).textContent).toContain(detail);
+	expect(screen.queryByRole('button', { name: m.instance_save() })).toBeNull();
+}
+
 /**
  * Verifies that a table has the `table-stack` class and that every tbody row has `data-label`
  * attributes matching the corresponding thead `th` text content. For the actions column
@@ -290,4 +316,18 @@ export function expectStackedLabels(table: HTMLElement): void {
 			}
 		});
 	}
+}
+
+/**
+ * jsdom has no modal dialog API: open and close the way a browser does, firing the close
+ * event. Focus trapping and Escape run in a real browser in e2e/flow.test.ts.
+ */
+export function installDialogPolyfill(): void {
+	HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {
+		this.setAttribute('open', '');
+	};
+	HTMLDialogElement.prototype.close ??= function (this: HTMLDialogElement) {
+		this.removeAttribute('open');
+		this.dispatchEvent(new Event('close'));
+	};
 }

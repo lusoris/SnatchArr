@@ -29,6 +29,7 @@ SPDX-License-Identifier: EUPL-1.2
 </script>
 
 <ConnectionHubCard
+	kind="seerr"
 	icon="film"
 	title={m.nav_seerr()}
 	{href}

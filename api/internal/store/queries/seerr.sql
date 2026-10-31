@@ -56,7 +56,7 @@ SELECT title FROM seerr_requests WHERE link_id = $1 AND request_id = $2;
 DELETE FROM seerr_requests WHERE link_id = $1 AND last_seen_at < $2;
 
 -- name: ListSeerrRequests :many
-SELECT r.*, l.name AS link_name, i.name AS instance_name
+SELECT sqlc.embed(r), l.name AS link_name, i.name AS instance_name
 FROM seerr_requests r
 JOIN seerr_links l ON l.id = r.link_id
 LEFT JOIN instances i ON i.id = r.instance_id

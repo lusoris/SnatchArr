@@ -35,6 +35,10 @@ tags:
     description: Channels and rules for dispatching failure, circuit, stamina and Seerr notifications
   - name: watchaware
     description: Watch-aware media server sources and watch state synchronization
+  - name: adult
+    description: Adult catalogue sources and favourite synchronization
+  - name: requests
+    description: Community requests and voting settings (ADR-0036)
 security:
   - cookieAuth: []
   - bearerAuth: []
@@ -795,6 +799,19 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
 
+  /instances/{instanceId}/queue/sweep:
+    parameters:
+      - $ref: "#/components/parameters/InstanceId"
+    post:
+      tags: [instances]
+      operationId: sweepInstanceQueue
+      summary: Run one download queue sweep of an instance now
+      responses:
+        "204":
+          description: Queue sweep completed
+        default:
+          $ref: "#/components/responses/Problem"
+
   /instances/{instanceId}/runs:
     parameters:
       - $ref: "#/components/parameters/InstanceId"
@@ -978,6 +995,7 @@ paths:
           schema:
             type: integer
             format: int64
+            minimum: 1
         - name: type
           in: query
           schema:
@@ -1035,20 +1053,187 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
 
+  /settings/runtime:
+    get:
+      tags: [system]
+      operationId: getRuntimeSettings
+      summary: Read runtime settings
+      description: Returns all runtime settings with their current source, values, and lock states (admin only). Secret values are omitted.
+      responses:
+        "200":
+          description: Runtime settings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RuntimeSetting"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        default:
+          $ref: "#/components/responses/Problem"
+    put:
+      tags: [system]
+      operationId: updateRuntimeSettings
+      summary: Replace runtime settings
+      description: Validate and persist overrides for runtime settings (admin only).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RuntimeSettingsUpdateRequest"
+      responses:
+        "200":
+          description: Updated runtime settings result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeSettingsUpdateResult"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "409":
+          $ref: "#/components/responses/Problem"
+        "422":
+          $ref: "#/components/responses/Problem"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /requests/settings:
+    get:
+      tags: [requests]
+      operationId: getRequestsSettings
+      summary: Read community request settings
+      description: Read community request settings. Any authenticated user may access this endpoint.
+      responses:
+        "200":
+          description: Community request settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RequestsSettings"
+        default:
+          $ref: "#/components/responses/Problem"
+    put:
+      tags: [requests]
+      operationId: updateRequestsSettings
+      summary: Replace community request settings
+      description: Validate and persist community request settings (admin only).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequestsSettings"
+      responses:
+        "200":
+          description: Updated community request settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RequestsSettings"
+        default:
+          $ref: "#/components/responses/Problem"
+
   /priority-presets:
     get:
       tags: [system]
       operationId: getPriorityPresets
-      summary: Shipped search and download priority presets
+      summary: Shipped and saved search and download priority presets
       responses:
         "200":
-          description: Shipped priority presets
+          description: Shipped preset first, then saved user presets ordered by name
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: "#/components/schemas/PriorityPreset"
+        default:
+          $ref: "#/components/responses/Problem"
+
+    post:
+      tags: [system]
+      operationId: createPriorityPreset
+      summary: Save both priority orders as a named preset (admin only)
+      description: Up to 20 user presets; names are unique ignoring case. The media_first name is reserved.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PriorityPresetInput"
+      responses:
+        "201":
+          description: Saved preset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PriorityPreset"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /priority-presets/{presetId}:
+    parameters:
+      - name: presetId
+        in: path
+        required: true
+        description: UUID of a saved preset. The shipped media_first preset is read-only.
+        schema:
+          type: string
+    put:
+      tags: [system]
+      operationId: updatePriorityPreset
+      summary: Replace a saved preset without changing the active settings (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PriorityPresetInput"
+      responses:
+        "200":
+          description: Updated preset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PriorityPreset"
+        default:
+          $ref: "#/components/responses/Problem"
+    delete:
+      tags: [system]
+      operationId: deletePriorityPreset
+      summary: Delete a saved preset without changing the active settings (admin only)
+      responses:
+        "204":
+          description: Preset deleted
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /priority-presets/{presetId}/apply:
+    parameters:
+      - name: presetId
+        in: path
+        required: true
+        description: UUID of a saved preset, or media_first for the shipped preset.
+        schema:
+          type: string
+    post:
+      tags: [system]
+      operationId: applyPriorityPreset
+      summary: Copy both preset maps into the active settings (admin only)
+      description: Later preset edits do not affect settings. POST /priority-presets/media_first/apply restores the shipped orders.
+      responses:
+        "200":
+          description: Settings with the applied priority orders
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
         default:
           $ref: "#/components/responses/Problem"
 
@@ -1080,6 +1265,7 @@ paths:
           description: "Source: api, worker for every worker, or worker:<id> for one worker."
           schema:
             type: string
+            pattern: '^(api|worker(:[^\s:]+)?)$'
             maxLength: 160
         - name: limit
           in: query
@@ -2000,7 +2186,41 @@ paths:
       summary: Send a test notification to a user target
       responses:
         "204":
-          description: Test notification delivered successfully
+          $ref: "#/components/responses/NoContent"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /me/preferences:
+    get:
+      tags: [auth]
+      operationId: getMyPreferences
+      summary: Preferences for the current user
+      responses:
+        "200":
+          description: User preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserPreferences"
+        default:
+          $ref: "#/components/responses/Problem"
+    put:
+      tags: [auth]
+      operationId: updateMyPreferences
+      summary: Replace preferences for the current user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserPreferences"
+      responses:
+        "200":
+          description: Updated user preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserPreferences"
         default:
           $ref: "#/components/responses/Problem"
 
@@ -2184,6 +2404,301 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
 
+  /adult/sources:
+    get:
+      tags: [adult]
+      operationId: listAdultSources
+      x-module: adult
+      summary: List configured catalogue sources
+      responses:
+        "200":
+          description: Catalogue sources
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdultSource"
+        default:
+          $ref: "#/components/responses/Problem"
+    post:
+      tags: [adult]
+      operationId: createAdultSource
+      x-module: adult
+      summary: Add a catalogue source
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdultSourceInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdultSource"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /adult/sources/{sourceId}:
+    parameters:
+      - $ref: "#/components/parameters/AdultSourceId"
+    get:
+      tags: [adult]
+      operationId: getAdultSource
+      x-module: adult
+      summary: Get a catalogue source
+      responses:
+        "200":
+          description: Catalogue source
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdultSource"
+        default:
+          $ref: "#/components/responses/Problem"
+    put:
+      tags: [adult]
+      operationId: updateAdultSource
+      x-module: adult
+      summary: Update a catalogue source (omit api_key to keep stored key)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdultSourceInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdultSource"
+        default:
+          $ref: "#/components/responses/Problem"
+    delete:
+      tags: [adult]
+      operationId: deleteAdultSource
+      x-module: adult
+      x-destructive: true
+      summary: Delete a catalogue source
+      responses:
+        "204":
+          description: Deleted
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /adult/sync:
+    post:
+      tags: [adult]
+      operationId: triggerAdultSync
+      x-module: adult
+      summary: Run favourite performer and studio synchronization across enabled catalogue sources
+      responses:
+        "200":
+          description: Synchronization summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdultSyncSummary"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /adult/sync/status:
+    get:
+      tags: [adult]
+      operationId: getAdultSyncStatus
+      x-module: adult
+      summary: Get synchronization status across catalogue sources
+      responses:
+        "200":
+          description: Synchronization status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdultSyncStatus"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /adult/performers:
+    get:
+      tags: [adult]
+      operationId: listAdultPerformers
+      x-module: adult
+      summary: List synchronized performers with cursor pagination
+      parameters:
+        - name: favorite
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: Filter by favourite status
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+          description: Maximum performers to return
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Opaque keyset pagination cursor
+      responses:
+        "200":
+          description: Performers page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdultPerformerPage"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /adult/performers/{performerId}:
+    parameters:
+      - $ref: "#/components/parameters/AdultPerformerId"
+    get:
+      tags: [adult]
+      operationId: getAdultPerformer
+      x-module: adult
+      summary: Get a synchronized performer by ID
+      responses:
+        "200":
+          description: Performer detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdultPerformer"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /adult/studios:
+    get:
+      tags: [adult]
+      operationId: listAdultStudios
+      x-module: adult
+      summary: List synchronized studios with cursor pagination
+      parameters:
+        - name: favorite
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: Filter by favourite status
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+          description: Maximum studios to return
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Opaque keyset pagination cursor
+      responses:
+        "200":
+          description: Studios page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdultStudioPage"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /adult/studios/{studioId}:
+    parameters:
+      - $ref: "#/components/parameters/AdultStudioId"
+    get:
+      tags: [adult]
+      operationId: getAdultStudio
+      x-module: adult
+      summary: Get a synchronized studio by ID
+      responses:
+        "200":
+          description: Studio detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdultStudio"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /adult/image-sets:
+    get:
+      tags: [adult]
+      operationId: listAdultImageSets
+      x-module: adult
+      summary: List discovered image sets
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Image sets page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdultImageSetPage"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /adult/image-sets/{setId}:
+    parameters:
+      - $ref: "#/components/parameters/AdultSetId"
+    get:
+      tags: [adult]
+      operationId: getAdultImageSet
+      x-module: adult
+      summary: Get an image set with ordered items and ignore-file status
+      responses:
+        "200":
+          description: Image set detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdultImageSetDetail"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /adult/scan:
+    post:
+      tags: [adult]
+      operationId: triggerAdultScan
+      x-module: adult
+      summary: Trigger on-demand image set scan
+      responses:
+        "200":
+          description: Scan summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdultScanSummary"
+        default:
+          $ref: "#/components/responses/Problem"
+
 components:
   securitySchemes:
     cookieAuth:
@@ -2260,7 +2775,37 @@ components:
       schema:
         type: string
         format: uuid
+    AdultSourceId:
+      name: sourceId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AdultPerformerId:
+      name: performerId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AdultStudioId:
+      name: studioId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AdultSetId:
+      name: setId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
   responses:
+    NoContent:
+      description: No content
     Problem:
       description: RFC 9457 problem details
       content:
@@ -2580,7 +3125,7 @@ components:
 
     AppKind:
       type: string
-      enum: [sonarr, radarr, lidarr, readarr, whisparr_v2, whisparr_v3]
+      enum: [sonarr, radarr, lidarr, readarr, whisparr_v2, whisparr_v3, stash]
 
     Instance:
       type: object
@@ -2655,7 +3200,7 @@ components:
           description: Omit or leave empty to keep the stored key
         enabled:
           type: boolean
-          default: true
+          description: "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it."
 
     ArrProduct:
       type: string
@@ -2665,7 +3210,7 @@ components:
         probe tells them apart by `appName`, `packageAuthor` and `version` of
         `system/status`. `unknown` is an answer that matches none of the others. An instance
         carries the product of its last successful connection test as `last_seen_product`.
-      enum: [readarr, bookshelf, chaptarr, readarr_faustvii, unknown]
+      enum: [readarr, bookshelf, chaptarr, readarr_faustvii, readarr_rresurrected, readarr_fork, unknown]
 
     ProbeResult:
       type: object
@@ -2834,12 +3379,10 @@ components:
           description: "Skip items released less than this many hours ago; 0 (or absent) turns the delay off. The release date is the one of the app kind: air date (Sonarr, Whisparr v2), the date of radarr_release_type (Radarr, Whisparr v3), the album or book release date. Items without a date are kept."
         dry_run:
           type: boolean
-          default: false
-          description: "When true, planner creates preview / dry-run runs that do not dispatch searches."
+          description: "When true, planner creates preview / dry-run runs that do not dispatch searches. On update, omitted = stored value stays; sent = replaces it."
         skip_unavailable_movies:
           type: boolean
-          default: true
-          description: "Radarr only: skip movies Radarr reports as not yet available (isAvailable false, the movie's minimum availability is not reached). They are not searched and cost no stamina. Movies without the flag are searched. Absent = true."
+          description: "Radarr only: skip movies Radarr reports as not yet available (isAvailable false, the movie's minimum availability is not reached). They are not searched and cost no stamina. Movies without the flag are searched. On update, omitted = stored value stays; sent = replaces it."
         updated_at:
           type: string
           format: date-time
@@ -3066,11 +3609,33 @@ components:
 
     PriorityPreset:
       type: object
+      required: [name, search, download, builtin]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: UUID of a saved user preset; omitted for builtin presets.
+        builtin:
+          type: boolean
+          description: Whether this preset is shipped and read-only.
+        name:
+          type: string
+          description: Name of a saved preset, or media_first for the shipped preset.
+        search:
+          $ref: "#/components/schemas/PriorityPresetMap"
+        download:
+          $ref: "#/components/schemas/PriorityPresetMap"
+
+    PriorityPresetInput:
+      type: object
+      description: Both maps must contain exactly sonarr, radarr, lidarr, readarr, whisparr_v2 and whisparr_v3, with ranks from 1 to 100.
       required: [name, search, download]
       properties:
         name:
           type: string
-          description: Identifier of the shipped preset (e.g. media_first).
+          minLength: 1
+          maxLength: 40
+          description: Unique ignoring case; leading and trailing whitespace is trimmed. The name media_first is reserved.
         search:
           $ref: "#/components/schemas/PriorityPresetMap"
         download:
@@ -3203,17 +3768,158 @@ components:
           $ref: "#/components/schemas/PriorityPresetMap"
         llm_enabled:
           type: boolean
-          default: false
-          description: "Whether the Model Context Protocol (MCP) server at /api/v1/mcp is enabled."
+          description: "Whether the Model Context Protocol (MCP) server at /api/v1/mcp is enabled. On update, omitted = stored value stays; sent = replaces it."
         llm_write_tools:
           type: array
           uniqueItems: true
           description: "MCP write tools enabled by the administrator; an omitted list enables none."
           items:
             $ref: "#/components/schemas/LlmWriteTool"
+        brand_mark:
+          $ref: "#/components/schemas/BrandMark"
+          description: "Installation-wide brand mark shown when a user has no override. On update, omitted = stored value stays; sent = replaces it."
+        sfw_mode:
+          $ref: "#/components/schemas/SfwMode"
+          description: "Installation-wide SFW mode applied when a user has no override. On update, omitted = stored value stays; sent = replaces it."
         updated_at:
           type: string
           format: date-time
+
+    RuntimeSettingClass:
+      type: string
+      enum:
+        - bootstrap
+        - runtime
+        - secret
+
+    RuntimeSettingSource:
+      type: string
+      enum:
+        - env
+        - db
+        - default
+
+    RuntimeSettingApply:
+      type: string
+      enum:
+        - restart
+        - live
+
+    RuntimeSetting:
+      type: object
+      required:
+        - key
+        - env
+        - class
+        - type
+        - default
+        - source
+        - locked
+        - apply
+      properties:
+        key:
+          type: string
+        env:
+          type: string
+        class:
+          $ref: "#/components/schemas/RuntimeSettingClass"
+        type:
+          type: string
+        default:
+          type: string
+        value:
+          type: string
+          description: "Current effective value; omitted for secrets."
+        is_set:
+          type: boolean
+          description: "True when a secret has a configured value; omitted for non-secrets."
+        source:
+          $ref: "#/components/schemas/RuntimeSettingSource"
+        locked:
+          type: boolean
+          description: "True when the setting is written only through its environment variable: set there, or an environment-only secret."
+        apply:
+          $ref: "#/components/schemas/RuntimeSettingApply"
+
+    RuntimeSettingsUpdateRequest:
+      type: object
+      required:
+        - values
+      properties:
+        values:
+          type: object
+          additionalProperties:
+            type: string
+
+    RuntimeSettingsUpdateResult:
+      type: object
+      required:
+        - pending_restart
+      properties:
+        pending_restart:
+          type: boolean
+          description: "True when changed settings take effect only after a restart."
+        settings:
+          type: array
+          items:
+            $ref: "#/components/schemas/RuntimeSetting"
+
+    BrandMark:
+      type: string
+      enum: [vulva, penis, hand]
+
+    SfwMode:
+      type: string
+      enum: ["auto", "on", "off"]
+
+    UserPreferences:
+      type: object
+      properties:
+        brand_mark:
+          allOf:
+            - $ref: "#/components/schemas/BrandMark"
+          nullable: true
+          description: "Per-user brand mark override; null or omitted follows the installation default."
+        sfw_mode:
+          allOf:
+            - $ref: "#/components/schemas/SfwMode"
+          nullable: true
+          description: "Per-user SFW mode override; null or omitted follows the installation default."
+
+    RequestsVotingMode:
+      type: string
+      enum:
+        - upvotes_only
+        - net_score
+      default: upvotes_only
+
+    RequestsVisibility:
+      type: string
+      enum:
+        - public_attributed
+        - public_anonymous
+        - private_to_requester_and_admin
+      default: public_attributed
+
+    RequestsSettings:
+      type: object
+      required:
+        - voting_mode
+        - allow_viewer_votes
+        - visibility
+        - voting_ttl_days
+      properties:
+        voting_mode:
+          $ref: "#/components/schemas/RequestsVotingMode"
+        allow_viewer_votes:
+          type: boolean
+          default: true
+        visibility:
+          $ref: "#/components/schemas/RequestsVisibility"
+        voting_ttl_days:
+          type: integer
+          minimum: 0
+          default: 0
 
     StateReset:
       type: object
@@ -3365,22 +4071,22 @@ components:
           description: Password, or the API key for SABnzbd. On update, omit to keep the stored one.
         enabled:
           type: boolean
-          default: true
+          description: "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it."
         max_active:
           type: integer
           minimum: 0
           maximum: 1000
-          default: 0
+          description: "On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it."
         max_queued:
           type: integer
           minimum: 0
           maximum: 1000
-          default: 0
+          description: "On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it."
         bandwidth_budget_bps:
           type: integer
           format: int64
           minimum: 0
-          default: 0
+          description: "On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it."
 
     DownloadClientStatus:
       type: object
@@ -3487,7 +4193,7 @@ components:
           description: Required on create; omit on update to keep the stored key
         enabled:
           type: boolean
-          default: true
+          description: "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it."
         sonarr_instance_id:
           type: string
           format: uuid
@@ -3586,7 +4292,7 @@ components:
 
     ProwlarrLink:
       type: object
-      required: [id, name, base_url, enabled, created_at, updated_at]
+      required: [id, name, base_url, hourly_cap, enabled, created_at, updated_at]
       properties:
         id:
           type: string
@@ -3595,6 +4301,11 @@ components:
           type: string
         base_url:
           type: string
+        hourly_cap:
+          type: integer
+          minimum: 1
+          maximum: 500
+          default: 15
         enabled:
           type: boolean
         last_seen_version:
@@ -3624,9 +4335,14 @@ components:
         api_key:
           type: string
           description: Required on create; omit on update to keep the stored key
+        hourly_cap:
+          type: integer
+          minimum: 1
+          maximum: 500
+          description: "On create, omitted = 15. On update, omitted = stored value stays; sent = replaces it."
         enabled:
           type: boolean
-          default: true
+          description: "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it."
 
     ProwlarrStatus:
       type: object
@@ -3839,8 +4555,9 @@ components:
           $ref: "#/components/schemas/NotificationChannelKind"
         enabled:
           type: boolean
-          default: true
+          description: "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it."
         config:
+          description: Omitted = stored configuration stays; sent = replaces it, omitted secret fields stay.
           $ref: "#/components/schemas/NotificationChannelConfig"
 
     NotificationChannel:
@@ -3888,7 +4605,7 @@ components:
           $ref: "#/components/schemas/NotificationChannelKind"
         enabled:
           type: boolean
-          default: true
+          description: "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it."
         config:
           $ref: "#/components/schemas/NotificationChannelConfig"
 
@@ -3954,7 +4671,7 @@ components:
           default: 1
         enabled:
           type: boolean
-          default: true
+          description: "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it."
         channel_ids:
           type: array
           items:
@@ -4297,7 +5014,7 @@ components:
           description: Required on create; omit on update to keep stored key
         enabled:
           type: boolean
-          default: true
+          description: "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it."
 
     WatchawareSyncStatus:
       type: object
@@ -4392,5 +5109,341 @@ components:
           type: string
           format: date-time
           nullable: true
+
+    AdultSource:
+      type: object
+      required:
+        - id
+        - name
+        - endpoint
+        - has_api_key
+        - enabled
+        - sync_favorites
+        - priority
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        endpoint:
+          type: string
+        has_api_key:
+          type: boolean
+          description: True when an encrypted API key is stored (the key itself is write-only)
+        enabled:
+          type: boolean
+        sync_favorites:
+          type: boolean
+        priority:
+          type: integer
+        last_sync_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_sync_error:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    AdultSourceInput:
+      type: object
+      required: [name, endpoint]
+      properties:
+        name:
+          type: string
+          description: Display name of the catalogue source (1..128 characters)
+        endpoint:
+          type: string
+          description: GraphQL endpoint URL (http or https)
+        api_key:
+          type: string
+          description: Required on create; omit on update to keep stored key
+        enabled:
+          type: boolean
+          description: "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it."
+        sync_favorites:
+          type: boolean
+          description: "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it."
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 1000
+          description: "On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it."
+
+    AdultSyncSummary:
+      type: object
+      required: [sources_synced, performers_synced, studios_synced]
+      properties:
+        sources_synced:
+          type: integer
+        performers_synced:
+          type: integer
+        studios_synced:
+          type: integer
+
+    AdultSyncStatus:
+      type: object
+      required: [total_sources, enabled_sources, performers_synced, studios_synced]
+      properties:
+        last_sync_at:
+          type: string
+          format: date-time
+        last_error:
+          type: string
+        total_sources:
+          type: integer
+        enabled_sources:
+          type: integer
+        performers_synced:
+          type: integer
+        studios_synced:
+          type: integer
+
+    AdultExternalRef:
+      type: object
+      required:
+        - source_kind
+        - foreign_id
+        - is_favorite
+      properties:
+        id:
+          type: string
+          format: uuid
+        source_kind:
+          type: string
+        source_instance_id:
+          type: string
+          format: uuid
+        foreign_id:
+          type: string
+        is_favorite:
+          type: boolean
+        url:
+          type: string
+
+    AdultPerformer:
+      type: object
+      required:
+        - id
+        - name
+        - is_favorite
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        canonical_name:
+          type: string
+        disambiguation:
+          type: string
+        urls:
+          type: array
+          items:
+            type: string
+        is_favorite:
+          type: boolean
+        ref_count:
+          type: integer
+        external_refs:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdultExternalRef"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    AdultPerformerPage:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdultPerformer"
+        next_cursor:
+          type: string
+        cursor:
+          type: string
+
+    AdultStudio:
+      type: object
+      required:
+        - id
+        - name
+        - is_favorite
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        canonical_name:
+          type: string
+        urls:
+          type: array
+          items:
+            type: string
+        is_favorite:
+          type: boolean
+        ref_count:
+          type: integer
+        external_refs:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdultExternalRef"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    AdultStudioPage:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdultStudio"
+        next_cursor:
+          type: string
+        cursor:
+          type: string
+
+    AdultImageSetPage:
+      type: object
+      required:
+        - items
+        - total
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdultImageSet"
+        total:
+          type: integer
+          minimum: 0
+
+    AdultImageSet:
+      type: object
+      required:
+        - id
+        - title
+        - directory_path
+        - item_count
+        - total_size_bytes
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        directory_path:
+          type: string
+        whisparr_scene_foreign_id:
+          type: string
+        performer_id:
+          type: string
+          format: uuid
+        item_count:
+          type: integer
+        total_size_bytes:
+          type: integer
+          format: int64
+        cover_image_path:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    AdultImageItem:
+      type: object
+      required:
+        - id
+        - image_set_id
+        - file_path
+        - file_name
+        - file_size_bytes
+        - mime_type
+        - sha256_checksum
+        - sort_order
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        image_set_id:
+          type: string
+          format: uuid
+        file_path:
+          type: string
+        file_name:
+          type: string
+        file_size_bytes:
+          type: integer
+          format: int64
+        mime_type:
+          type: string
+        width:
+          type: integer
+        height:
+          type: integer
+        sha256_checksum:
+          type: string
+        sort_order:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+
+    AdultImageSetDetail:
+      allOf:
+        - $ref: "#/components/schemas/AdultImageSet"
+        - type: object
+          required:
+            - items
+            - ignore_file_present
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/AdultImageItem"
+            ignore_file_present:
+              type: boolean
+
+    AdultScanSummary:
+      type: object
+      required:
+        - sets_found
+        - items_found
+        - ignore_file_present
+      properties:
+        sets_found:
+          type: integer
+        items_found:
+          type: integer
+        ignore_file_present:
+          type: boolean
+
 
 

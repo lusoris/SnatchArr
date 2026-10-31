@@ -1,0 +1,100 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+#
+# Builds the local e2e container images against the pinned Postgres service container and runs
+# the given smoke make target (e2e-image-smoke for release.yml, e2e-soak for soak.yml). When
+# arm64 is enabled, also builds the linux/arm64 images and verifies execution under QEMU.
+name: Image Smoke
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Git ref to check out (defaults to the triggering ref)
+        required: false
+        type: string
+        default: ''
+      target:
+        description: Make target to run (e.g. e2e-image-smoke or e2e-soak)
+        required: false
+        type: string
+        default: e2e-image-smoke
+      arm64:
+        description: Whether to also build and verify arm64 execution under QEMU
+        required: false
+        type: boolean
+        default: false
+      cache-write:
+        description: Whether to write Buildx cache to GitHub Actions cache
+        required: false
+        type: boolean
+        default: false
+      build-args:
+        description: Build arguments for the container images
+        required: false
+        type: string
+        default: ''
+
+permissions: {}
+
+jobs:
+  smoke:
+    name: ${{ inputs.target }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    services:
+      # The Postgres the integration tests pin, through the Docker Hub mirror.
+      postgres:
+        image: mirror.gcr.io/library/postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_PASSWORD: smoke
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - if: inputs.build-args != ''
+        id: args
+        env:
+          BUILD_ARGS: ${{ inputs.build-args }}
+        run: |
+          commit_date=$(git log -1 --format=%cI)
+          {
+            echo "build-args<<EOF"
+            printf '%s\n' "$BUILD_ARGS" | sed "s|^DATE=$|DATE=$commit_date|"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+      - uses: ./.github/actions/setup-go
+      - uses: ./.github/actions/setup-buildx
+        with:
+          qemu: ${{ inputs.arm64 && 'true' || 'false' }}
+      - uses: ./.github/actions/build-e2e-images
+        with:
+          cache-write: ${{ inputs.cache-write && 'true' || 'false' }}
+          build-args: ${{ steps.args.outputs.build-args || inputs.build-args }}
+      - name: make ${{ inputs.target }}
+        env:
+          SMOKE_DSN: postgres://postgres:smoke@127.0.0.1:5432/postgres?sslmode=disable
+          SMOKE_SKIP_BUILD: '1'
+          MAKE_TARGET: ${{ inputs.target }}
+        run: make "$MAKE_TARGET"
+      - if: inputs.arm64
+        uses: ./.github/actions/build-e2e-images
+        with:
+          platform: linux/arm64
+          tag: arm64-test
+          cache-write: ${{ inputs.cache-write && 'true' || 'false' }}
+          build-args: ${{ steps.args.outputs.build-args || inputs.build-args }}
+      - if: inputs.arm64
+        name: Verify arm64 execution
+        run: tools/e2e/arm64-check.sh snatcharr-api:arm64-test snatcharr-worker:arm64-test

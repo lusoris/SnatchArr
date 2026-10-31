@@ -288,13 +288,24 @@ func (s *Service) GetPriority(ctx context.Context, instID uuid.UUID) (domain.App
 	if err != nil {
 		return "", domain.InstancePriority{}, fmt.Errorf("instances: get priority: %w", store.MapError(err))
 	}
-	return domain.AppKind(row.Kind), store.InstancePriorityFromValues(row.SearchPriority, row.DownloadPriority), nil
+	kind := domain.AppKind(row.Kind)
+	if !kind.IsArr() {
+		return "", domain.InstancePriority{}, fmt.Errorf("%w: priority does not apply to %s instances", domain.ErrInvalid, kind)
+	}
+	return kind, store.InstancePriorityFromValues(row.SearchPriority, row.DownloadPriority), nil
 }
 
 // UpdatePriority validates and updates the per-instance priority overrides (allowed for both manual and configarr instances).
 func (s *Service) UpdatePriority(ctx context.Context, instID uuid.UUID, prio domain.InstancePriority) (domain.AppKind, domain.InstancePriority, error) {
 	if err := prio.Validate(); err != nil {
 		return "", domain.InstancePriority{}, fmt.Errorf("instances: %w", err)
+	}
+	current, err := s.st.Q().GetInstancePriority(ctx, instID)
+	if err != nil {
+		return "", domain.InstancePriority{}, fmt.Errorf("instances: update priority: %w", store.MapError(err))
+	}
+	if !domain.AppKind(current.Kind).IsArr() {
+		return "", domain.InstancePriority{}, fmt.Errorf("%w: priority does not apply to %s instances", domain.ErrInvalid, current.Kind)
 	}
 	searchVal, downloadVal := store.InstancePriorityToValues(prio)
 	row, err := s.st.Q().UpdateInstancePriority(ctx, sqlcgen.UpdateInstancePriorityParams{

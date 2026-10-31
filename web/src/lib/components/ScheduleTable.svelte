@@ -7,6 +7,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { toast } from 'svelte-sonner';
 	import { api, describeError } from '#lib/api/client.js';
 	import type { components } from '#lib/api/schema.js';
+	import { entityHref } from '#lib/entities.js';
 	import { activePauseText } from '#lib/overview.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { keys } from '#lib/query.js';
@@ -57,7 +58,7 @@ SPDX-License-Identifier: EUPL-1.2
 </script>
 
 <div class="relative overflow-x-auto">
-	<table class="table-stack table">
+	<table class="compact-table table-stack table">
 		<caption class="sr-only">{m.schedules_title()}</caption>
 		<thead>
 			<tr>
@@ -72,14 +73,16 @@ SPDX-License-Identifier: EUPL-1.2
 		</thead>
 		<tbody>
 			{#each schedules as s (s.id)}
-				<tr>
+				<tr class:target={session.isAdmin && deletingId !== s.id}>
 					<td data-label={m.schedule_name()}>
 						<div>
 							<div>{s.name}</div>
 							{#if s.instance_id}
-								<div class="text-xs text-subtle">
-									{instanceName(s.instance_id) ?? s.instance_id}
-								</div>
+								<a
+									href={entityHref('instance', s.instance_id)}
+									class="text-xs text-subtle hover:underline"
+									>{instanceName(s.instance_id) ?? s.instance_id}</a
+								>
 							{/if}
 						</div>
 					</td>
@@ -125,7 +128,7 @@ SPDX-License-Identifier: EUPL-1.2
 								</div>
 							{:else}
 								<div class="flex items-center gap-2">
-									<button type="button" class="btn" onclick={() => onedit(s)}>
+									<button type="button" class="btn target-link" onclick={() => onedit(s)}>
 										{m.schedule_edit()}
 									</button>
 									<button type="button" class="btn" onclick={() => (deletingId = s.id)}>
@@ -140,23 +143,3 @@ SPDX-License-Identifier: EUPL-1.2
 		</tbody>
 	</table>
 </div>
-
-<style>
-	tbody tr {
-		height: 2.75rem;
-	}
-	@media (min-width: 1280px) {
-		tbody tr {
-			height: 2.25rem;
-		}
-		tbody :global(.btn) {
-			min-height: 1.75rem;
-			padding: 0.15rem 0.5rem;
-			font-size: 0.75rem;
-		}
-	}
-	th,
-	td {
-		vertical-align: middle;
-	}
-</style>

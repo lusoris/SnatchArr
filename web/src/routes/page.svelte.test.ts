@@ -7,6 +7,12 @@ import { ProblemError } from '@sveltesentio/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api } from '#lib/api/client.js';
 import { logLevelLabel } from '#lib/logs.js';
+import {
+	OVERVIEW_EVENTS_CAP,
+	OVERVIEW_FLEET_CAP,
+	OVERVIEW_PROWLARR_CAP,
+	OVERVIEW_SCHEDULES_CAP
+} from '#lib/overview.js';
 import { m } from '#lib/paraglide/messages.js';
 import {
 	expectStackedLabels,
@@ -128,7 +134,7 @@ describe('dashboard overview redo', () => {
 		expect(link.getAttribute('href')).toBe(`/instances/${forkInstance.id}`);
 
 		// Kind badge
-		expect(screen.getByText('readarr · Bookshelf')).toBeTruthy();
+		expect(screen.getByText('Readarr · Bookshelf')).toBeTruthy();
 
 		// StatusIcon
 		expect(screen.getByRole('img', { name: m.instance_last_check() })).toBeTruthy();
@@ -163,51 +169,53 @@ describe('dashboard overview redo', () => {
 		expect(screen.getByRole('img', { name: m.instance_never_tested() })).toBeTruthy();
 	});
 
-	it('triggers quick snatch missing behind ConfirmAction', async () => {
+	async function expectQuickSnatch(button: string, confirm: string, kind: 'missing' | 'upgrade') {
 		const postSpy = vi.spyOn(api, 'POST').mockResolvedValue({ data: {} } as never);
 		stubGet(defaultDashboardStubs());
 		renderWithQuery(Dashboard);
 
-		const missingBtn = await screen.findByRole('button', { name: m.quickie_missing() });
-		await fireEvent.click(missingBtn);
+		const actionBtn = await screen.findByRole('button', { name: button });
+		await fireEvent.click(actionBtn);
 
 		// ConfirmAction prompt opened
-		expect(screen.getByText(m.overview_confirm_missing({ name: forkInstance.name }))).toBeTruthy();
+		expect(screen.getByText(confirm)).toBeTruthy();
 		const confirmBtn = screen.getByRole('button', { name: m.confirm_yes() });
 		await fireEvent.click(confirmBtn);
 
 		expect(postSpy).toHaveBeenCalledWith('/instances/{instanceId}/runs', {
 			params: { path: { instanceId: forkInstance.id } },
-			body: { kind: 'missing' }
+			body: { kind }
 		});
-	});
+	}
 
-	it('triggers quick snatch upgrade behind ConfirmAction', async () => {
-		const postSpy = vi.spyOn(api, 'POST').mockResolvedValue({ data: {} } as never);
-		stubGet(defaultDashboardStubs());
-		renderWithQuery(Dashboard);
-
-		const upgradeBtn = await screen.findByRole('button', { name: m.quickie_upgrade() });
-		await fireEvent.click(upgradeBtn);
-
-		// ConfirmAction prompt opened
-		expect(screen.getByText(m.overview_confirm_upgrade({ name: forkInstance.name }))).toBeTruthy();
-		const confirmBtn = screen.getByRole('button', { name: m.confirm_yes() });
-		await fireEvent.click(confirmBtn);
-
-		expect(postSpy).toHaveBeenCalledWith('/instances/{instanceId}/runs', {
-			params: { path: { instanceId: forkInstance.id } },
-			body: { kind: 'upgrade' }
-		});
-	});
-
-	it('renders 3-step onboarding guide when fleet has zero instances', async () => {
+	async function renderEmptyFleet() {
 		stubGet(defaultDashboardStubs({ '/instances': [] }));
 		renderWithQuery(Dashboard);
 
 		expect(
 			await screen.findByRole('heading', { level: 2, name: m.overview_onboarding_title() })
 		).toBeTruthy();
+	}
+
+	it('triggers quick snatch missing behind ConfirmAction', async () => {
+		await expectQuickSnatch(
+			m.quickie_missing(),
+			m.overview_confirm_missing({ name: forkInstance.name }),
+			'missing'
+		);
+	});
+
+	it('triggers quick snatch upgrade behind ConfirmAction', async () => {
+		await expectQuickSnatch(
+			m.quickie_upgrade(),
+			m.overview_confirm_upgrade({ name: forkInstance.name }),
+			'upgrade'
+		);
+	});
+
+	it('renders 3-step onboarding guide when fleet has zero instances', async () => {
+		await renderEmptyFleet();
+
 		expect(screen.getByRole('link', { name: m.overview_onboarding_step1_action() })).toBeTruthy();
 		expect(screen.getByRole('link', { name: m.overview_onboarding_step2_action() })).toBeTruthy();
 		expect(screen.getByRole('link', { name: m.overview_onboarding_step3_action() })).toBeTruthy();
@@ -237,7 +245,7 @@ describe('dashboard overview redo', () => {
 		expect(screen.getByText('10 / 100')).toBeTruthy();
 	});
 
-	it('renders 10 recent events in right column with link to /activity', async () => {
+	it('keeps every recent event in the scrolling list with a more-rows hint and link to /activity', async () => {
 		const sampleEvents = Array.from({ length: 12 }, (_, i) => ({
 			id: i + 1,
 			instance_id: forkInstance.id,
@@ -254,11 +262,13 @@ describe('dashboard overview redo', () => {
 		expect(await screen.findByText(m.overview_recent_activity())).toBeTruthy();
 		expect(screen.getByRole('link', { name: m.overview_view_all_activity() })).toBeTruthy();
 
-		// Exactly 10 events shown with translated level StatusIcon
 		expect(screen.getByText('Event 1')).toBeTruthy();
-		expect(screen.getByText('Event 10')).toBeTruthy();
-		expect(screen.queryByText('Event 11')).toBeNull();
-		expect(screen.getAllByRole('img', { name: logLevelLabel('info') }).length).toBe(10);
+		expect(screen.getByText(`Event ${OVERVIEW_EVENTS_CAP + 1}`)).toBeTruthy();
+		expect(screen.getByText('Event 12')).toBeTruthy();
+		expect(screen.getAllByRole('img', { name: logLevelLabel('info') }).length).toBe(12);
+		expect(
+			screen.getByText(m.overview_scroll_more({ count: 12 - OVERVIEW_EVENTS_CAP }))
+		).toBeTruthy();
 	});
 
 	it('renders active pause badge with instance target on schedules card and ignores non-pause or inactive', async () => {
@@ -409,12 +419,94 @@ describe('dashboard overview redo', () => {
 	});
 
 	it('renders no fleet table rows when instances list is empty', async () => {
-		stubGet(defaultDashboardStubs({ '/instances': [] }));
+		await renderEmptyFleet();
+
+		expect(screen.queryByRole('table', { name: m.overview_fleet_title() })).toBeNull();
+	});
+
+	it('keeps every fleet row in the scrolling table and shows the total count link when instances exceed cap', async () => {
+		const manyInstances = Array.from({ length: 10 }, (_, i) => ({
+			...forkInstance,
+			id: `00000000-0000-0000-0000-${String(i + 1).padStart(12, '0')}`,
+			name: `Instance ${i + 1}`
+		}));
+		stubGet(defaultDashboardStubs({ '/instances': manyInstances }));
 		renderWithQuery(Dashboard);
 
+		expect(await screen.findByRole('link', { name: 'Instance 1' })).toBeTruthy();
+		expect(screen.getByRole('link', { name: `Instance ${OVERVIEW_FLEET_CAP}` })).toBeTruthy();
+		expect(screen.getByRole('link', { name: 'Instance 10' })).toBeTruthy();
 		expect(
-			await screen.findByRole('heading', { level: 2, name: m.overview_onboarding_title() })
+			screen.getByText(m.overview_scroll_more({ count: 10 - OVERVIEW_FLEET_CAP }))
 		).toBeTruthy();
-		expect(screen.queryByRole('table', { name: m.overview_fleet_title() })).toBeNull();
+		const allLink = screen.getByRole('link', {
+			name: m.overview_all_instances_count({ count: 10 })
+		});
+		expect(allLink.getAttribute('href')).toBe('/instances');
+	});
+
+	it('shows plain instances header link without count when instances do not exceed cap', async () => {
+		const threeInstances = Array.from({ length: 3 }, (_, i) => ({
+			...forkInstance,
+			id: `00000000-0000-0000-0000-${String(i + 1).padStart(12, '0')}`,
+			name: `Instance ${i + 1}`
+		}));
+		stubGet(defaultDashboardStubs({ '/instances': threeInstances }));
+		renderWithQuery(Dashboard);
+
+		expect(await screen.findByRole('link', { name: 'Instance 3' })).toBeTruthy();
+		expect(screen.getByRole('link', { name: m.nav_instances() })).toBeTruthy();
+		expect(
+			screen.queryByRole('link', { name: m.overview_all_instances_count({ count: 3 }) })
+		).toBeNull();
+		expect(screen.queryByTestId('card-scroll-hint')).toBeNull();
+	});
+
+	it('keeps every enabled schedule and Prowlarr meter in scrolling lists with count links when cut', async () => {
+		const schedules = Array.from({ length: 6 }, (_, i) => ({
+			id: `sched-${i + 1}`,
+			name: `Sched ${i + 1}`,
+			days: [1],
+			start: '01:00',
+			end: '02:00',
+			tz: 'UTC',
+			action: 'pause' as const,
+			enabled: i < 5,
+			active: false,
+			created_at: '2026-01-01T00:00:00Z',
+			updated_at: '2026-01-01T00:00:00Z'
+		}));
+		const prowlarrLinks = Array.from({ length: 5 }, (_, i) => ({
+			link_id: `prw-${i + 1}`,
+			name: `Prowlarr Link ${i + 1}`,
+			reachable: true,
+			checked_at: '2026-09-01T12:00:00Z',
+			indexers: [{ id: 1, name: 'Idx1', query_limit: 100, used_queries: 10, exhausted: false }]
+		}));
+		stubGet(
+			defaultDashboardStubs({
+				'/schedules': schedules,
+				'/prowlarr/status': prowlarrLinks
+			})
+		);
+		renderWithQuery(Dashboard);
+
+		expect(await screen.findByText('Sched 1')).toBeTruthy();
+		expect(screen.getByText(`Sched ${OVERVIEW_SCHEDULES_CAP}`)).toBeTruthy();
+		expect(screen.getByText('Sched 5')).toBeTruthy();
+		expect(screen.queryByText('Sched 6')).toBeNull();
+		expect(
+			screen.getByRole('link', { name: m.overview_all_schedules_count({ count: 5 }) })
+		).toBeTruthy();
+
+		expect(screen.getByText('Prowlarr Link 1')).toBeTruthy();
+		expect(screen.getByText(`Prowlarr Link ${OVERVIEW_PROWLARR_CAP}`)).toBeTruthy();
+		expect(screen.getByText('Prowlarr Link 5')).toBeTruthy();
+		expect(
+			screen.getByText(m.overview_scroll_more({ count: 5 - OVERVIEW_PROWLARR_CAP }))
+		).toBeTruthy();
+		expect(
+			screen.getByRole('link', { name: m.overview_all_prowlarr_count({ count: 5 }) })
+		).toBeTruthy();
 	});
 });

@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/golusoris/goenvoy/arr/sonarr"
 	"github.com/golusoris/goenvoy/arr/v2"
 	"github.com/golusoris/goenvoy/arr/whisparr"
+	"github.com/golusoris/goenvoy/mediaserver/stash/v2"
 	"go.uber.org/fx"
 
 	"github.com/lusoris/SnatchArr/api/internal/domain"
@@ -101,11 +103,14 @@ func NewGoenvoyProber(opts Options) *GoenvoyProber {
 	return &GoenvoyProber{opts: opts}
 }
 
-// Probe calls GET /api/v{1,3}/system/status and validates the API generation for
-// Whisparr, whose v2 and v3 share a URL shape but not a data model.
+// Probe calls GET /api/v{1,3}/system/status for *arr instances (validating the API
+// generation for Whisparr) or GraphQL version for Stash (requiring >= 0.31.0).
 func (p *GoenvoyProber) Probe(ctx context.Context, kind domain.AppKind, baseURL, apiKey string) (Result, error) {
 	ctx, cancel := context.WithTimeout(ctx, p.opts.Timeout)
 	defer cancel()
+	if kind == domain.KindStash {
+		return p.probeStash(ctx, baseURL, apiKey)
+	}
 	st, err := p.status(ctx, kind, baseURL, apiKey)
 	if err != nil {
 		return Result{}, fmt.Errorf("%w: %w", domain.ErrUnreachable, HintAPIError(err, string(kind)))
@@ -115,6 +120,62 @@ func (p *GoenvoyProber) Probe(ctx context.Context, kind domain.AppKind, baseURL,
 		return res, err
 	}
 	return res, nil
+}
+
+func (p *GoenvoyProber) probeStash(ctx context.Context, baseURL, apiKey string) (Result, error) {
+	c, err := stash.New(
+		stashEndpoint(baseURL),
+		apiKey,
+		stash.WithHTTPClient(p.opts.httpClient()),
+		stash.WithUserAgent(p.opts.UserAgent),
+	)
+	if err != nil {
+		return Result{}, fmt.Errorf("%w: %w", domain.ErrInvalid, err)
+	}
+	ver, err := c.GetVersion(ctx)
+	if err != nil {
+		return Result{}, fmt.Errorf("%w: %w", domain.ErrUnreachable, HintAPIError(err, string(domain.KindStash)))
+	}
+	res := Result{AppName: "Stash", Version: ver.Version, Product: domain.ProductNone}
+	return res, checkStashVersion(ver.Version)
+}
+
+func stashEndpoint(baseURL string) string {
+	trimmed := strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if strings.HasSuffix(trimmed, "/graphql") {
+		return trimmed
+	}
+	return trimmed + "/graphql"
+}
+
+func parseStashSemver(version string) (int, int, error) {
+	trimmed := strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(version), "v"), "V")
+	core, _, _ := strings.Cut(trimmed, "-")
+	core, _, _ = strings.Cut(core, "+")
+	parts := strings.Split(core, ".")
+	if len(parts) < 2 || len(parts) > 3 {
+		return 0, 0, fmt.Errorf("%w: Stash version %q is malformed (minimum 0.31.0 required)", domain.ErrInvalid, version)
+	}
+	nums := make([]int, len(parts))
+	for i, part := range parts {
+		n, err := strconv.Atoi(part)
+		if err != nil || n < 0 {
+			return 0, 0, fmt.Errorf("%w: Stash version %q is malformed (minimum 0.31.0 required)", domain.ErrInvalid, version)
+		}
+		nums[i] = n
+	}
+	return nums[0], nums[1], nil
+}
+
+func checkStashVersion(version string) error {
+	major, minor, err := parseStashSemver(version)
+	if err != nil {
+		return err
+	}
+	if major == 0 && minor < 31 {
+		return fmt.Errorf("%w: Stash %s is below minimum 0.31.0 (.stashignore support)", domain.ErrInvalid, version)
+	}
+	return nil
 }
 
 func (p *GoenvoyProber) clientOptions() []arr.Option {
@@ -148,6 +209,8 @@ func (p *GoenvoyProber) newClient(kind domain.AppKind, baseURL, apiKey string) (
 		return wrapNew(whisparr.New(baseURL, apiKey, o...))
 	case domain.KindWhisparrV3:
 		return wrapNew(whisparr.NewV3(baseURL, apiKey, o...))
+	case domain.KindStash:
+		return nil, fmt.Errorf("%w: unsupported kind %q", domain.ErrInvalid, kind)
 	default:
 		return nil, fmt.Errorf("%w: unsupported kind %q", domain.ErrInvalid, kind)
 	}
@@ -256,7 +319,7 @@ func checkWhisparrGeneration(kind domain.AppKind, version string) error {
 		if major != "3" {
 			return fmt.Errorf("%w: expected Whisparr v3 (Eros), instance reports %s", domain.ErrInvalid, version)
 		}
-	case domain.KindSonarr, domain.KindRadarr, domain.KindLidarr, domain.KindReadarr:
+	case domain.KindSonarr, domain.KindRadarr, domain.KindLidarr, domain.KindReadarr, domain.KindStash:
 		// Only Whisparr has two incompatible API generations behind one URL shape.
 	}
 	return nil

@@ -6,11 +6,14 @@ import { defineConfig } from '@playwright/test';
 
 const e2eApi = process.env.SNATCHARR_E2E_API;
 const authFile = 'e2e/.auth/admin.json';
+// Own session for the feature tests; flow.test.ts logs the admin session out (features-session.setup.ts).
+const featuresAuthFile = 'e2e/.auth/features.json';
+const e2eReport = process.env.SNATCHARR_E2E_REPORT;
 // Visual baseline (tools/e2e/web_visual.sh): runs only inside the pinned Playwright image.
 const visual = !!process.env.SNATCHARR_VISUAL;
 const visualProject = {
 	name: 'visual',
-	testMatch: /visual\.test\.ts/,
+	testMatch: /\/e2e\/visual\.test\.ts$/,
 	// The comparison freezes animations and plants its diffs with inline style tags, which the
 	// page CSP refuses; e2e/security.test.ts holds the policy itself.
 	use: {
@@ -28,7 +31,7 @@ if (servedUrl && !servedState) {
 }
 const servedProject = {
 	name: 'served-layout',
-	testMatch: /layout\.test\.ts/,
+	testMatch: /\/e2e\/layout\.test\.ts$/,
 	use: {
 		browserName: 'chromium' as const,
 		baseURL: servedUrl,
@@ -36,13 +39,22 @@ const servedProject = {
 	}
 };
 
+// Project patterns name files directly under e2e/, so a feature test's slug cannot pull it into
+// a project that runs without the features session.
 export default defineConfig({
 	testDir: 'e2e',
 	fullyParallel: true,
 	workers: 2,
 	forbidOnly: !!process.env.CI,
 	retries: process.env.CI && !visual ? 1 : 0,
-	reporter: process.env.CI ? 'github' : 'list',
+	// The release check (tools/ci/release_e2e_check.py) reads this report to tell that every
+	// project ran and passed on the commit it names.
+	reporter: e2eReport
+		? [[process.env.CI ? 'github' : 'list'], ['json', { outputFile: e2eReport }]]
+		: process.env.CI
+			? 'github'
+			: 'list',
+	metadata: { commit: process.env.SNATCHARR_E2E_COMMIT ?? '' },
 	expect: {
 		timeout: 15_000,
 		toHaveScreenshot: { maxDiffPixels: 200, animations: 'disabled', caret: 'hide', scale: 'css' }
@@ -68,19 +80,19 @@ export default defineConfig({
 						{
 							name: 'chromium',
 							testMatch:
-								/(a11y|theme|btn-layer|security|nonblocking|keyboard-nav|inp|instance-tabs|session-expiry|live|modules|settle|jellyfin-signin)\.test\.ts/,
+								/\/e2e\/(a11y|theme|btn-layer|security|nonblocking|keyboard-nav|inp|instance-tabs|entity-links|targets|app-logos|session-expiry|live|modules|settle|jellyfin-signin|screen-range)\.test\.ts$/,
 							use: { browserName: 'chromium' }
 						}
 					]
 				: [
 						{
 							name: 'security',
-							testMatch: /security\.test\.ts/,
+							testMatch: /\/e2e\/security\.test\.ts$/,
 							use: { browserName: 'chromium' }
 						},
 						{
 							name: 'public',
-							testMatch: /(a11y|theme)\.test\.ts/,
+							testMatch: /\/e2e\/(a11y|theme)\.test\.ts$/,
 							grep: /public:|routes:/,
 							use: { browserName: 'chromium' }
 						},
@@ -92,7 +104,7 @@ export default defineConfig({
 						},
 						{
 							name: 'anonymous',
-							testMatch: /a11y\.test\.ts/,
+							testMatch: /\/e2e\/a11y\.test\.ts$/,
 							grep: /anonymous:/,
 							dependencies: ['auth-setup'],
 							use: { browserName: 'chromium' }
@@ -100,7 +112,7 @@ export default defineConfig({
 						{
 							name: 'authenticated',
 							testMatch:
-								/(a11y|phone-overflow|layout|nonblocking|keyboard-nav|inp|instance-tabs|redirects)\.test\.ts/,
+								/\/e2e\/(a11y|phone-overflow|layout|nonblocking|keyboard-nav|inp|instance-tabs|entity-links|targets|app-logos|redirects|screen-range)\.test\.ts$/,
 							grep: /authenticated:|nonblocking:/,
 							dependencies: ['auth-setup'],
 							use: { browserName: 'chromium', storageState: authFile }
@@ -109,6 +121,42 @@ export default defineConfig({
 							name: 'flow',
 							testMatch: /(^|\/)flow\.test\.ts/,
 							dependencies: ['authenticated'],
+							use: { browserName: 'chromium', storageState: authFile }
+						},
+						// One file per released feat or fix, named <pr>-<slug>.test.ts, with a
+						// `covers: #<pr>` line; tools/ci/release_e2e_check.py maps release commits to them.
+						{
+							name: 'features-auth',
+							testMatch: /features-session\.setup\.ts/,
+							dependencies: ['authenticated'],
+							use: { browserName: 'chromium' }
+						},
+						{
+							name: 'features',
+							testMatch: /(^|\/)features\/[^/]+\.test\.ts/,
+							testIgnore: /(^|\/)features\/\d+-adult-[^/]+\.test\.ts/,
+							dependencies: ['features-auth'],
+							use: { browserName: 'chromium', storageState: featuresAuthFile }
+						},
+						// Adult feature tests share one module switch and one global sync, so
+						// they run one at a time: <pr>-adult-<slug>.test.ts.
+						{
+							name: 'features-adult',
+							testMatch: /(^|\/)features\/\d+-adult-[^/]+\.test\.ts/,
+							dependencies: ['features-auth'],
+							workers: 1,
+							use: { browserName: 'chromium', storageState: featuresAuthFile }
+						},
+						{
+							name: 'sweep',
+							testMatch: /(^|\/)sweep\.test\.ts/,
+							dependencies: ['auth-setup'],
+							use: { browserName: 'chromium', storageState: authFile }
+						},
+						{
+							name: 'mcp-sweep',
+							testMatch: /(^|\/)mcp-sweep\.test\.ts/,
+							dependencies: ['auth-setup'],
 							use: { browserName: 'chromium', storageState: authFile }
 						}
 					]

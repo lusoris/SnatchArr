@@ -21,14 +21,14 @@ GOMODCACHE       = $(subst \,/,$(shell go env GOMODCACHE))
 GOLUSORIS_VER    = $(shell go list -m -f '{{.Version}}' github.com/golusoris/golusoris)
 GOLUSORIS_SHARED = $(GOMODCACHE)/github.com/golusoris/golusoris@$(GOLUSORIS_VER)/tools/Makefile.shared
 
-.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-soak e2e-compose-smoke e2e-compose-pg-upgrade e2e-dev-compose-smoke dlclients-live arr-forceimport-live integrations-live e2e-cnpg-pg-upgrade e2e-cnpg-backup-restore e2e-chart-install web-verify web-e2e web-e2e-api web-visual web-visual-update proto-verify deploy-verify chart-package governance-verify hooks-verify contracts-verify workflows-verify workflows-lint secret-scan licences licences-check \
+.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-soak e2e-compose-smoke e2e-compose-pg-upgrade e2e-compose-app-upgrade e2e-dev-compose-smoke dlclients-live arr-forceimport-live integrations-live e2e-cnpg-pg-upgrade e2e-cnpg-backup-restore e2e-chart-install web-verify web-e2e web-e2e-api web-visual web-visual-update proto-verify deploy-verify chart-package governance-verify hooks-verify contracts-verify workflows-verify workflows-lint release-e2e-check release-dogfood-check secret-scan licences licences-check logos logos-check \
 	images kind-up kind-deploy kind-keda-proof kind-down \
-        api-gen api-gosec api-vuln gosec-install govulncheck-install sqlc-install tools-verify tools-lint tools-test tools-gosec web-gen proto-gen dev hooks setup api-openapi-breaking
+        api-gen api-gosec api-vuln gosec-install govulncheck-install sqlc-install tools-verify tools-lint tools-test tools-gosec web-gen proto-gen dev hooks setup api-openapi-breaking settings-parity settings-parity-check
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-18s %s\n", $$1, $$2}'
 
-verify-all: governance-verify hooks-verify workflows-verify secret-scan proto-verify api-verify worker-verify web-verify deploy-verify contracts-verify licences-check ## Every gate (praetor universal verification)
+verify-all: governance-verify hooks-verify workflows-verify secret-scan proto-verify api-verify worker-verify web-verify deploy-verify contracts-verify licences-check logos-check ## Every gate (praetor universal verification)
 	@echo "All SnatchArr verification gates passed."
 
 # ── api/ (Go, golusoris) ──────────────────────────────────────────────────────
@@ -62,6 +62,7 @@ api-verify: ## golangci-lint + go fix + gosec + govulncheck + go test -race + ge
 	sh tools/spectral/lint.sh api/openapi/openapi.yaml
 	$(MAKE) api-openapi-breaking
 	go run ./tools/moduleroutes check -in api/openapi/openapi.yaml
+	$(MAKE) settings-parity-check
 
 api-openapi-breaking: ## OpenAPI breaking change check vs origin/main (HISS-14 append-only API)
 	if ! git rev-parse --verify -q origin/main >/dev/null; then
@@ -72,6 +73,12 @@ api-openapi-breaking: ## OpenAPI breaking change check vs origin/main (HISS-14 a
 	git show origin/main:api/openapi/openapi.yaml >"$$base"
 	sh tools/oasdiff/breaking_test.sh
 	sh tools/oasdiff/breaking.sh "$$base" api/openapi/openapi.yaml "$$(git log -1 --format=%s)"
+
+settings-parity: ## Generate docs/settings-parity.tsv from config registry
+	go run ./api/cmd/settingsparity
+
+settings-parity-check: ## Verify docs/settings-parity.tsv matches config registry
+	go run ./api/cmd/settingsparity -check
 
 api-gen: ## Regenerate the ogen server and the sqlc queries (go generate in api/, pinned versions)
 	cd api && go generate ./...
@@ -259,6 +266,29 @@ e2e-compose-pg-upgrade: ## Homelab compose bundle: Postgres previous major -> pi
 	  bash tools/e2e/planted.sh UPGRADE_PLANT tools/e2e/compose_pg_upgrade.sh \
 	  "skip-move:the new postgres" "skip-restore:data read-back differs"
 
+# A homelab install on the previous release moved to the candidate build: schema
+# migrations advance, settings and data read back unchanged, the admin logs in and stored
+# credentials decrypt. The planted cases delete a row, change a setting, start with the
+# wrong crypto key, upgrade to old images, change an unread table, leave out the worker, delete
+# the API key and replace the password hash; the test must refuse all eight. Not in verify-all
+# (slow, needs Docker).
+e2e-compose-app-upgrade: ## Homelab compose bundle: application upgrade from previous release with data read-back (needs Docker)
+	if [ "$${SMOKE_SKIP_BUILD:-0}" != "1" ]; then \
+	  docker build -t $(E2E_API_IMAGE) -f Dockerfile . ; \
+	  docker build -t $(E2E_WORKER_IMAGE) -f worker/Dockerfile . ; \
+	fi
+	bash tools/e2e/schema_check_test.sh
+	SMOKE_API_IMAGE=$(E2E_API_IMAGE) SMOKE_WORKER_IMAGE=$(E2E_WORKER_IMAGE) \
+	  bash tools/e2e/planted.sh UPGRADE_PLANT tools/e2e/compose_app_upgrade.sh \
+	  "drop-row:api read-back differs" \
+	  "change-setting:settings differ" \
+	  "wrong-crypto-key:stored key" \
+	  "old-image:did not advance" \
+	  "touch-table:data read-back differs" \
+	  "no-worker:worker did not register" \
+	  "drop-key:old API key" \
+	  "reset-password:login with password"
+
 # The development stack of deploy/compose (`make dev` with the arr and observability profiles,
 # docs/metrics.md): Postgres healthy, Sonarr and Radarr answer, Prometheus scrapes the collector,
 # Grafana has its data source and the provisioned dashboard. The planted cases mount an empty
@@ -330,6 +360,8 @@ e2e-chart-install: ## Chart install + upgrade from the last published chart unti
 web-verify: ## pnpm lint/typecheck/test(+coverage)/build + OpenAPI type drift
 	cd web
 	pnpm install --frozen-lockfile
+	sh ../tools/ci/clones_check_test.sh
+	PRAETORCTL='$(PRAETORCTL)' python3 ../tools/ci/clones_check.py
 	pnpm gen:api
 	git diff --exit-code -- src/lib/api/schema.d.ts
 	sh ../tools/ci/prettier_ignore_test.sh
@@ -338,6 +370,7 @@ web-verify: ## pnpm lint/typecheck/test(+coverage)/build + OpenAPI type drift
 	pnpm test -- --coverage
 	pnpm build
 	python3 ../tools/ci/web_strings_scan.py
+	python3 ../tools/ci/web_css_classes_check.py
 
 web-gen: ## OpenAPI -> src/lib/api/schema.d.ts
 	cd web && pnpm gen:api
@@ -345,13 +378,15 @@ web-gen: ## OpenAPI -> src/lib/api/schema.d.ts
 web-e2e: ## Playwright + axe-core (zero violations; never suppressed)
 	cd web && pnpm test:e2e
 
-web-e2e-api: ## Postgres + api + fakearr + web e2e Playwright axe sweep (needs Docker unless SMOKE_DSN is set)
+web-e2e-api: ## Postgres + api + fakearr + fakeworker + web e2e Playwright axe sweep (needs Docker unless SMOKE_DSN is set)
 	mkdir -p $(E2E_BIN)
 	go build -o $(E2E_BIN)/snatcharr ./api/cmd/snatcharr
 	go build -o $(E2E_BIN)/fakearr ./api/cmd/fakearr
+	go build -o $(E2E_BIN)/fakeworker ./api/cmd/fakeworker
 	(cd web && pnpm install --frozen-lockfile && pnpm exec playwright install chromium)
 	E2E_POSTGRES=$(E2E_POSTGRES) tools/e2e/postgres.sh \
 	  env SMOKE_API_BIN=$(E2E_BIN)/snatcharr SMOKE_FAKEARR_BIN=$(E2E_BIN)/fakearr \
+	  SMOKE_FAKEWORKER_BIN=$(E2E_BIN)/fakeworker \
 	  tools/e2e/web-e2e-api.sh
 
 # Visual baseline of the public pages (/login, /setup) and the signed-in shell (desktop and
@@ -368,20 +403,23 @@ web-visual-update: ## Rewrite the visual baseline in the pinned Playwright image
 	bash tools/e2e/web_visual.sh --update
 
 # ── proto/ ────────────────────────────────────────────────────────────────────
+# buf at the tools/go/go.mod pin, run through go tool: no buf on PATH needed, and none is used.
+# := so an environment BUF cannot swap in another binary.
+BUF := go tool -modfile=$(CURDIR)/tools/go/go.mod buf
 proto-verify: ## buf lint + breaking (vs main) + generation drift
 	cd proto
-	buf lint
+	$(BUF) lint
 	# Against origin/main, which must exist: without it the check was skipped and passed (A2-05).
 	if ! git rev-parse --verify -q origin/main >/dev/null; then
 	  echo "proto-verify: no origin/main to check breaking changes against; run git fetch origin main" >&2; exit 1
 	fi
-	buf breaking --against '../.git#ref=origin/main,subdir=proto'
+	$(BUF) breaking --against '../.git#ref=origin/main,subdir=proto'
 	cd ..
 	$(MAKE) proto-gen
 	git diff --exit-code -- api/internal/gen
 
 proto-gen: ## buf generate (Go stubs; Rust stubs build via tonic-build)
-	cd proto && buf generate
+	cd proto && $(BUF) generate
 	cd ..
 	# HISS-09 wants a SAFETY proof before every unsafe call; protoc-gen-go emits two. Deterministic post-pass.
 	# If protoc-gen-go changes shape and the sed matches nothing, the CI job semgrep fails on the
@@ -433,13 +471,15 @@ deploy-verify: ## helm unittest + render.sh + chart_checks.sh planted cases + he
 	sh tools/deploy/chart_checks.sh netpol "$$render/all.yaml"
 	tools/deploy/render.sh "$$render/no-peers.yaml" snatcharr deploy/helm/snatcharr \
 	  --set networkPolicy.enabled=true --set-json 'networkPolicy.arrCidrs=[]'
-	sh tools/deploy/chart_checks.sh netpol "$$render/no-peers.yaml" "2 with a to, 0 of them without ports, 0 with an empty to"
+	# Without *arr peers: the API's database and public HTTPS rules and the worker's API rule.
+	sh tools/deploy/chart_checks.sh netpol "$$render/no-peers.yaml" "3 with a to, 0 of them without ports, 0 with an empty to"
 	# With one arrPeers entry that has `ports` as the only *arr peer, both policies hold two egress
-	# rules with a `to` (database or API, and the peer), and each of the four carries `ports`.
+	# rules with a `to` (database or API, and the peer), the API a third for public HTTPS, and each
+	# of the five carries `ports`.
 	tools/deploy/render.sh "$$render/peer.yaml" snatcharr deploy/helm/snatcharr \
 	  --set networkPolicy.enabled=true --set-json 'networkPolicy.arrCidrs=[]' \
 	  --set-json 'networkPolicy.arrPeers=[{"podSelector":{"matchLabels":{"app.kubernetes.io/name":"lidarr"}},"ports":[{"port":8686,"protocol":"TCP"}]}]'
-	sh tools/deploy/chart_checks.sh netpol "$$render/peer.yaml" "4 with a to, 0 of them without ports, 0 with an empty to"
+	sh tools/deploy/chart_checks.sh netpol "$$render/peer.yaml" "5 with a to, 0 of them without ports, 0 with an empty to"
 	app=$$(helm show chart deploy/helm/snatcharr | sed -n 's/^appVersion: *//p' | tr -d "\"'")
 	sh tools/deploy/chart_checks.sh chart deploy/helm/snatcharr/Chart.yaml "$$app"
 	# Every object in the release namespace, also through the kind overlay: kustomize 5.8 no
@@ -517,6 +557,14 @@ licences-check: ## Verify web/static/licences.json is up to date and test plante
 	python3 tools/licences/generate.py --check
 	bash tools/licences/generate_test.sh
 
+# ── Integrated-app logos ──────────────────────────────────────────────────────
+logos: ## Download integrated-app logos to web/static/logos/
+	python3 tools/logos/fetch.py
+
+logos-check: ## Verify logos manifest, hashes, and planted mutations
+	python3 tools/logos/fetch.py --check
+	bash tools/logos/fetch_test.sh
+
 governance-verify: ## compile-context --verify, audit, state audit, flavor audit (go-service)
 	$(PRAETORCTL) compile-context --verify
 	$(PRAETORCTL) audit
@@ -529,12 +577,24 @@ hooks-verify: ## The commit-message policy against its accepted and refused case
 secret-scan: ## gitleaks over every local ref, as CI job secret-scan (pinned release, cached in .cache/)
 	sh tools/ci/gitleaks_scan.sh .cache/gitleaks
 
-workflows-verify: ## The rule of "CI success", the Security Scan issue step, the Semgrep scan and the planted-case runner, against their cases
+release-e2e-check: ## Release feat/fix commits since the previous tag each map to a web/e2e/features test
+	python3 -I tools/ci/release_e2e_check.py --self-test
+	python3 -I tools/ci/release_e2e_check.py
+
+release-dogfood-check: ## Release dogfood gate and MCP dogfood pass recorder against their planted cases
+	python3 -I tools/release/dogfood_gate.py --self-test
+	python3 -I tools/release/dogfood_pass.py --self-test
+
+workflows-verify: ## The rule of "CI success", the Security Scan issue step, the Semgrep scan, generated_files.py and the planted-case runner, against their cases
 	sh tools/ci/status_test.sh
 	sh tools/ci/security_issue_test.sh
 	sh tools/ci/semgrep_scan_test.sh
+	bash tools/ci/generated_files_test.sh
 	bash tools/e2e/planted_test.sh
+	bash tools/e2e/schema_check_test.sh
 	bash tools/e2e/live_lib_test.sh
+	python3 -I tools/release/dogfood_gate.py --self-test
+	python3 -I tools/release/dogfood_pass.py --self-test
 
 # Not part of verify-all: needs Docker, the network and a forge token (GH_TOKEN, read access).
 # The CI job "workflows" runs it on every pull request.

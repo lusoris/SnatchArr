@@ -18,16 +18,16 @@ trap 'rm -rf "$WORK"' EXIT
 # Every job ran and succeeded; the change filter selected every component.
 ALL="$(jq -n '
   [ "workflows", "secret-scan", "semgrep", "trivy", "changes", "commits", "api-lint", "api-test", "api-security", "api-openapi",
-    "worker", "e2e", "image-smoke", "dev-compose", "dlclients-live", "arr-forceimport-live", "integrations-live", "web", "web-e2e-api", "web-visual", "proto", "deploy", "contracts", "governance", "docs", "licences" ]
+    "worker", "e2e", "image-smoke", "dev-compose", "dlclients-live", "arr-forceimport-live", "integrations-live", "web", "web-e2e-api", "web-visual", "proto", "deploy", "contracts", "governance", "docs", "licences", "logos", "release-e2e-map" ]
   | map({key: ., value: {result: "success", outputs: {}}}) | from_entries
-  | .changes.outputs = ( [ "api", "worker", "web", "proto", "deploy", "governance", "contracts", "docs", "licences" ]
+  | .changes.outputs = ( [ "api", "worker", "web", "proto", "deploy", "governance", "contracts", "docs", "licences", "logos" ]
                          | map({key: ., value: "true"}) | from_entries )
 ')"
 # No component selected: every filtered job is skipped.
 NONE="$(printf '%s' "$ALL" | jq '
   .changes.outputs |= map_values("false")
   | (.["api-lint"], .["api-test"], .["api-security"], .["api-openapi"], .worker, .e2e, .["image-smoke"], .["dev-compose"], .["dlclients-live"], .["arr-forceimport-live"], .["integrations-live"], .web, .["web-e2e-api"], .["web-visual"],
-     .proto, .deploy, .contracts, .governance, .docs, .licences).result = "skipped"
+     .proto, .deploy, .contracts, .governance, .docs, .licences, .["release-e2e-map"]).result = "skipped"
 ')"
 
 accepted=0
@@ -59,6 +59,12 @@ expect 0 "no component changed" true "$NONE"
 expect 0 "bot pull request or push: commits skipped" false "$NONE" '.commits.result = "skipped"'
 expect 0 "only proto changed: e2e ran, the api jobs did not" true "$NONE" \
   '.changes.outputs.proto = "true" | (.proto, .e2e, .["image-smoke"]).result = "success"'
+RELEASE_EXPECTED=true expect 0 "release-please pull request: release-e2e-map and web-e2e-api ran" false "$NONE" \
+  '.commits.result = "skipped" | (.["release-e2e-map"], .["web-e2e-api"]).result = "success"'
+RELEASE_EXPECTED=true expect 1 "release-please pull request, release-e2e-map skipped" false "$NONE" \
+  '.commits.result = "skipped" | .["web-e2e-api"].result = "success"' "job release-e2e-map: skipped, must succeed"
+RELEASE_EXPECTED=true expect 1 "release-please pull request, web-e2e-api skipped" false "$NONE" \
+  '.commits.result = "skipped" | .["release-e2e-map"].result = "success"' "job web-e2e-api: skipped, must succeed"
 
 expect 1 "workflows failed" true "$ALL" '.workflows.result = "failure"' "job workflows: failure, must succeed"
 expect 1 "workflows skipped" true "$NONE" '.workflows.result = "skipped"' "job workflows: skipped, must succeed"
@@ -165,5 +171,11 @@ mirror_refuses "anchored draft step names another step" \
    { print; prev = $0 }'
 mirror_refuses "expectation of the commits job removed" "status: no COMMITS_EXPECTED expression" \
   '!/^ *COMMITS_EXPECTED: /'
+mirror_refuses "expectation of the release job removed" "status: no RELEASE_EXPECTED expression" \
+  '!/^ *RELEASE_EXPECTED: /'
+
+mirror_refuses "reusable commits workflow missing draft step" \
+  'job commits: the first step is not "Stop on a draft pull request"' \
+  '{ sub(/uses: \.\/\.github\/workflows\/commit-policy\.yml/, "uses: ./.github/workflows/nonexistent.yml"); print }'
 
 echo "status rule: $accepted accepted, $refused refused"

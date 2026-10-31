@@ -8,6 +8,13 @@ import (
 
 // Handler handles operations described by OpenAPI v3 specification.
 type Handler interface {
+	// ApplyPriorityPreset implements applyPriorityPreset operation.
+	//
+	// Later preset edits do not affect settings. POST /priority-presets/media_first/apply restores the
+	// shipped orders.
+	//
+	// POST /priority-presets/{presetId}/apply
+	ApplyPriorityPreset(ctx context.Context, params ApplyPriorityPresetParams) (*Settings, error)
 	// CancelRun implements cancelRun operation.
 	//
 	// Cancel a queued or leased run.
@@ -32,6 +39,12 @@ type Handler interface {
 	//
 	// POST /auth/api-keys
 	CreateAPIKey(ctx context.Context, req *CreateApiKeyRequest) (CreateAPIKeyRes, error)
+	// CreateAdultSource implements createAdultSource operation.
+	//
+	// Add a catalogue source.
+	//
+	// POST /adult/sources
+	CreateAdultSource(ctx context.Context, req *AdultSourceInput) (*AdultSource, error)
 	// CreateDownloadClient implements createDownloadClient operation.
 	//
 	// Add a download client by hand.
@@ -62,6 +75,12 @@ type Handler interface {
 	//
 	// POST /notifications/rules
 	CreateNotificationRule(ctx context.Context, req *NotificationRuleInput) (*NotificationRule, error)
+	// CreatePriorityPreset implements createPriorityPreset operation.
+	//
+	// Up to 20 user presets; names are unique ignoring case. The media_first name is reserved.
+	//
+	// POST /priority-presets
+	CreatePriorityPreset(ctx context.Context, req *PriorityPresetInput) (*PriorityPreset, error)
 	// CreateProwlarrLink implements createProwlarrLink operation.
 	//
 	// Add a Prowlarr link.
@@ -92,6 +111,12 @@ type Handler interface {
 	//
 	// POST /watchaware/sources
 	CreateWatchawareSource(ctx context.Context, req *WatchawareSourceInput) (*WatchawareSource, error)
+	// DeleteAdultSource implements deleteAdultSource operation.
+	//
+	// Delete a catalogue source.
+	//
+	// DELETE /adult/sources/{sourceId}
+	DeleteAdultSource(ctx context.Context, params DeleteAdultSourceParams) error
 	// DeleteDownloadClient implements deleteDownloadClient operation.
 	//
 	// Delete a download client.
@@ -129,6 +154,12 @@ type Handler interface {
 	//
 	// DELETE /notifications/rules/{ruleId}
 	DeleteNotificationRule(ctx context.Context, params DeleteNotificationRuleParams) error
+	// DeletePriorityPreset implements deletePriorityPreset operation.
+	//
+	// Delete a saved preset without changing the active settings (admin only).
+	//
+	// DELETE /priority-presets/{presetId}
+	DeletePriorityPreset(ctx context.Context, params DeletePriorityPresetParams) error
 	// DeleteProwlarrLink implements deleteProwlarrLink operation.
 	//
 	// Delete a Prowlarr link.
@@ -159,6 +190,36 @@ type Handler interface {
 	//
 	// POST /instances/{instanceId}/download-clients/discover
 	DiscoverDownloadClients(ctx context.Context, params DiscoverDownloadClientsParams) (*DiscoveryResult, error)
+	// GetAdultImageSet implements getAdultImageSet operation.
+	//
+	// Get an image set with ordered items and ignore-file status.
+	//
+	// GET /adult/image-sets/{setId}
+	GetAdultImageSet(ctx context.Context, params GetAdultImageSetParams) (*AdultImageSetDetail, error)
+	// GetAdultPerformer implements getAdultPerformer operation.
+	//
+	// Get a synchronized performer by ID.
+	//
+	// GET /adult/performers/{performerId}
+	GetAdultPerformer(ctx context.Context, params GetAdultPerformerParams) (*AdultPerformer, error)
+	// GetAdultSource implements getAdultSource operation.
+	//
+	// Get a catalogue source.
+	//
+	// GET /adult/sources/{sourceId}
+	GetAdultSource(ctx context.Context, params GetAdultSourceParams) (*AdultSource, error)
+	// GetAdultStudio implements getAdultStudio operation.
+	//
+	// Get a synchronized studio by ID.
+	//
+	// GET /adult/studios/{studioId}
+	GetAdultStudio(ctx context.Context, params GetAdultStudioParams) (*AdultStudio, error)
+	// GetAdultSyncStatus implements getAdultSyncStatus operation.
+	//
+	// Get synchronization status across catalogue sources.
+	//
+	// GET /adult/sync/status
+	GetAdultSyncStatus(ctx context.Context) (*AdultSyncStatus, error)
 	// GetConfigarrStatus implements getConfigarrStatus operation.
 	//
 	// Linked-mode state and the last import.
@@ -207,6 +268,12 @@ type Handler interface {
 	//
 	// GET /me/notify-targets/{targetId}
 	GetMyNotifyTarget(ctx context.Context, params GetMyNotifyTargetParams) (*UserNotifyTarget, error)
+	// GetMyPreferences implements getMyPreferences operation.
+	//
+	// Preferences for the current user.
+	//
+	// GET /me/preferences
+	GetMyPreferences(ctx context.Context) (*UserPreferences, error)
 	// GetNotificationChannel implements getNotificationChannel operation.
 	//
 	// Get one notification channel.
@@ -234,7 +301,7 @@ type Handler interface {
 	GetPolicyFilterOptions(ctx context.Context, params GetPolicyFilterOptionsParams) (*PolicyFilterOptions, error)
 	// GetPriorityPresets implements getPriorityPresets operation.
 	//
-	// Shipped search and download priority presets.
+	// Shipped and saved search and download priority presets.
 	//
 	// GET /priority-presets
 	GetPriorityPresets(ctx context.Context) ([]PriorityPreset, error)
@@ -256,12 +323,25 @@ type Handler interface {
 	//
 	// GET /instances/{instanceId}/queue-policy
 	GetQueuePolicy(ctx context.Context, params GetQueuePolicyParams) (*QueuePolicy, error)
+	// GetRequestsSettings implements getRequestsSettings operation.
+	//
+	// Read community request settings. Any authenticated user may access this endpoint.
+	//
+	// GET /requests/settings
+	GetRequestsSettings(ctx context.Context) (*RequestsSettings, error)
 	// GetRun implements getRun operation.
 	//
 	// Load a single snatch run by ID.
 	//
 	// GET /runs/{runId}
 	GetRun(ctx context.Context, params GetRunParams) (*Run, error)
+	// GetRuntimeSettings implements getRuntimeSettings operation.
+	//
+	// Returns all runtime settings with their current source, values, and lock states (admin only).
+	// Secret values are omitted.
+	//
+	// GET /settings/runtime
+	GetRuntimeSettings(ctx context.Context) (GetRuntimeSettingsRes, error)
 	// GetSSO implements getSSO operation.
 	//
 	// SSO configuration status.
@@ -352,6 +432,30 @@ type Handler interface {
 	//
 	// GET /auth/api-keys
 	ListAPIKeys(ctx context.Context) (ListAPIKeysRes, error)
+	// ListAdultImageSets implements listAdultImageSets operation.
+	//
+	// List discovered image sets.
+	//
+	// GET /adult/image-sets
+	ListAdultImageSets(ctx context.Context, params ListAdultImageSetsParams) (*AdultImageSetPage, error)
+	// ListAdultPerformers implements listAdultPerformers operation.
+	//
+	// List synchronized performers with cursor pagination.
+	//
+	// GET /adult/performers
+	ListAdultPerformers(ctx context.Context, params ListAdultPerformersParams) (*AdultPerformerPage, error)
+	// ListAdultSources implements listAdultSources operation.
+	//
+	// List configured catalogue sources.
+	//
+	// GET /adult/sources
+	ListAdultSources(ctx context.Context) ([]AdultSource, error)
+	// ListAdultStudios implements listAdultStudios operation.
+	//
+	// List synchronized studios with cursor pagination.
+	//
+	// GET /adult/studios
+	ListAdultStudios(ctx context.Context, params ListAdultStudiosParams) (*AdultStudioPage, error)
 	// ListDownloadClients implements listDownloadClients operation.
 	//
 	// List download clients (secrets are never returned).
@@ -517,6 +621,12 @@ type Handler interface {
 	//
 	// POST /seerr/requests/{linkId}/{requestId}/snatch
 	SnatchSeerrRequest(ctx context.Context, params SnatchSeerrRequestParams) (*Run, error)
+	// SweepInstanceQueue implements sweepInstanceQueue operation.
+	//
+	// Run one download queue sweep of an instance now.
+	//
+	// POST /instances/{instanceId}/queue/sweep
+	SweepInstanceQueue(ctx context.Context, params SweepInstanceQueueParams) error
 	// SyncSeerrLink implements syncSeerrLink operation.
 	//
 	// Refresh the request cache now (also runs every five minutes).
@@ -583,6 +693,18 @@ type Handler interface {
 	//
 	// POST /seerr/test
 	TestSeerrLinkInput(ctx context.Context, req *SeerrLinkInput) (*ProbeResult, error)
+	// TriggerAdultScan implements triggerAdultScan operation.
+	//
+	// Trigger on-demand image set scan.
+	//
+	// POST /adult/scan
+	TriggerAdultScan(ctx context.Context) (*AdultScanSummary, error)
+	// TriggerAdultSync implements triggerAdultSync operation.
+	//
+	// Run favourite performer and studio synchronization across enabled catalogue sources.
+	//
+	// POST /adult/sync
+	TriggerAdultSync(ctx context.Context) (*AdultSyncSummary, error)
 	// TriggerRun implements triggerRun operation.
 	//
 	// Quickie - queue a snatch now (ignores the refractory period).
@@ -601,6 +723,12 @@ type Handler interface {
 	//
 	// DELETE /auth/identities/proxy
 	UnlinkProxyIdentity(ctx context.Context) (UnlinkProxyIdentityRes, error)
+	// UpdateAdultSource implements updateAdultSource operation.
+	//
+	// Update a catalogue source (omit api_key to keep stored key).
+	//
+	// PUT /adult/sources/{sourceId}
+	UpdateAdultSource(ctx context.Context, req *AdultSourceInput, params UpdateAdultSourceParams) (*AdultSource, error)
 	// UpdateDownloadClient implements updateDownloadClient operation.
 	//
 	// Update a download client (omit secret to keep it).
@@ -631,6 +759,12 @@ type Handler interface {
 	//
 	// PUT /me/notify-targets/{targetId}
 	UpdateMyNotifyTarget(ctx context.Context, req *UserNotifyTargetUpdate, params UpdateMyNotifyTargetParams) (*UserNotifyTarget, error)
+	// UpdateMyPreferences implements updateMyPreferences operation.
+	//
+	// Replace preferences for the current user.
+	//
+	// PUT /me/preferences
+	UpdateMyPreferences(ctx context.Context, req *UserPreferences) (*UserPreferences, error)
 	// UpdateNotificationChannel implements updateNotificationChannel operation.
 	//
 	// Update a notification channel.
@@ -649,6 +783,12 @@ type Handler interface {
 	//
 	// PUT /instances/{instanceId}/policy
 	UpdatePolicy(ctx context.Context, req *SnatchPolicy, params UpdatePolicyParams) (*SnatchPolicy, error)
+	// UpdatePriorityPreset implements updatePriorityPreset operation.
+	//
+	// Replace a saved preset without changing the active settings (admin only).
+	//
+	// PUT /priority-presets/{presetId}
+	UpdatePriorityPreset(ctx context.Context, req *PriorityPresetInput, params UpdatePriorityPresetParams) (*PriorityPreset, error)
 	// UpdateProwlarrLink implements updateProwlarrLink operation.
 	//
 	// Update a Prowlarr link (omit api_key to keep it).
@@ -661,6 +801,18 @@ type Handler interface {
 	//
 	// PUT /instances/{instanceId}/queue-policy
 	UpdateQueuePolicy(ctx context.Context, req *QueuePolicy, params UpdateQueuePolicyParams) (*QueuePolicy, error)
+	// UpdateRequestsSettings implements updateRequestsSettings operation.
+	//
+	// Validate and persist community request settings (admin only).
+	//
+	// PUT /requests/settings
+	UpdateRequestsSettings(ctx context.Context, req *RequestsSettings) (*RequestsSettings, error)
+	// UpdateRuntimeSettings implements updateRuntimeSettings operation.
+	//
+	// Validate and persist overrides for runtime settings (admin only).
+	//
+	// PUT /settings/runtime
+	UpdateRuntimeSettings(ctx context.Context, req *RuntimeSettingsUpdateRequest) (UpdateRuntimeSettingsRes, error)
 	// UpdateSchedule implements updateSchedule operation.
 	//
 	// Replace a schedule window.

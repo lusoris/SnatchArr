@@ -556,6 +556,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/instances/{instanceId}/queue/sweep": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instanceId: components["parameters"]["InstanceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run one download queue sweep of an instance now */
+        post: operations["sweepInstanceQueue"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/instances/{instanceId}/runs": {
         parameters: {
             query?: never;
@@ -718,6 +737,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/settings/runtime": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read runtime settings
+         * @description Returns all runtime settings with their current source, values, and lock states (admin only). Secret values are omitted.
+         */
+        get: operations["getRuntimeSettings"];
+        /**
+         * Replace runtime settings
+         * @description Validate and persist overrides for runtime settings (admin only).
+         */
+        put: operations["updateRuntimeSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/requests/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read community request settings
+         * @description Read community request settings. Any authenticated user may access this endpoint.
+         */
+        get: operations["getRequestsSettings"];
+        /**
+         * Replace community request settings
+         * @description Validate and persist community request settings (admin only).
+         */
+        put: operations["updateRequestsSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/priority-presets": {
         parameters: {
             query?: never;
@@ -725,10 +792,58 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Shipped search and download priority presets */
+        /** Shipped and saved search and download priority presets */
         get: operations["getPriorityPresets"];
         put?: never;
+        /**
+         * Save both priority orders as a named preset (admin only)
+         * @description Up to 20 user presets; names are unique ignoring case. The media_first name is reserved.
+         */
+        post: operations["createPriorityPreset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/priority-presets/{presetId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID of a saved preset. The shipped media_first preset is read-only. */
+                presetId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace a saved preset without changing the active settings (admin only) */
+        put: operations["updatePriorityPreset"];
         post?: never;
+        /** Delete a saved preset without changing the active settings (admin only) */
+        delete: operations["deletePriorityPreset"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/priority-presets/{presetId}/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID of a saved preset, or media_first for the shipped preset. */
+                presetId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Copy both preset maps into the active settings (admin only)
+         * @description Later preset edits do not affect settings. POST /priority-presets/media_first/apply restores the shipped orders.
+         */
+        post: operations["applyPriorityPreset"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1369,6 +1484,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Preferences for the current user */
+        get: operations["getMyPreferences"];
+        /** Replace preferences for the current user */
+        put: operations["updateMyPreferences"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/watchaware/sources": {
         parameters: {
             query?: never;
@@ -1469,6 +1602,204 @@ export interface paths {
         get: operations["listWatchawareGateDecisions"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/adult/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List configured catalogue sources */
+        get: operations["listAdultSources"];
+        put?: never;
+        /** Add a catalogue source */
+        post: operations["createAdultSource"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/adult/sources/{sourceId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sourceId: components["parameters"]["AdultSourceId"];
+            };
+            cookie?: never;
+        };
+        /** Get a catalogue source */
+        get: operations["getAdultSource"];
+        /** Update a catalogue source (omit api_key to keep stored key) */
+        put: operations["updateAdultSource"];
+        post?: never;
+        /** Delete a catalogue source */
+        delete: operations["deleteAdultSource"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/adult/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run favourite performer and studio synchronization across enabled catalogue sources */
+        post: operations["triggerAdultSync"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/adult/sync/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get synchronization status across catalogue sources */
+        get: operations["getAdultSyncStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/adult/performers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List synchronized performers with cursor pagination */
+        get: operations["listAdultPerformers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/adult/performers/{performerId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                performerId: components["parameters"]["AdultPerformerId"];
+            };
+            cookie?: never;
+        };
+        /** Get a synchronized performer by ID */
+        get: operations["getAdultPerformer"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/adult/studios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List synchronized studios with cursor pagination */
+        get: operations["listAdultStudios"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/adult/studios/{studioId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                studioId: components["parameters"]["AdultStudioId"];
+            };
+            cookie?: never;
+        };
+        /** Get a synchronized studio by ID */
+        get: operations["getAdultStudio"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/adult/image-sets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List discovered image sets */
+        get: operations["listAdultImageSets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/adult/image-sets/{setId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                setId: components["parameters"]["AdultSetId"];
+            };
+            cookie?: never;
+        };
+        /** Get an image set with ordered items and ignore-file status */
+        get: operations["getAdultImageSet"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/adult/scan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Trigger on-demand image set scan */
+        post: operations["triggerAdultScan"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1637,7 +1968,7 @@ export interface components {
             expires_at?: string;
         };
         /** @enum {string} */
-        AppKind: "sonarr" | "radarr" | "lidarr" | "readarr" | "whisparr_v2" | "whisparr_v3";
+        AppKind: "sonarr" | "radarr" | "lidarr" | "readarr" | "whisparr_v2" | "whisparr_v3" | "stash";
         Instance: {
             /** Format: uuid */
             id: string;
@@ -1673,14 +2004,14 @@ export interface components {
             base_url: string;
             /** @description Omit or leave empty to keep the stored key */
             api_key?: string;
-            /** @default true */
-            enabled: boolean;
+            /** @description On create, omitted = true. On update, omitted = stored value stays; sent = replaces it. */
+            enabled?: boolean;
         };
         /**
          * @description The product that answered the probe of an instance kind several products serve. That is the kind `readarr` alone: forks of the retired Readarr keep its API layout. The probe tells them apart by `appName`, `packageAuthor` and `version` of `system/status`. `unknown` is an answer that matches none of the others. An instance carries the product of its last successful connection test as `last_seen_product`.
          * @enum {string}
          */
-        ArrProduct: "readarr" | "bookshelf" | "chaptarr" | "readarr_faustvii" | "unknown";
+        ArrProduct: "readarr" | "bookshelf" | "chaptarr" | "readarr_faustvii" | "readarr_rresurrected" | "readarr_fork" | "unknown";
         ProbeResult: {
             app_name: string;
             version: string;
@@ -1743,16 +2074,10 @@ export interface components {
             exclude_quality_profiles?: number[];
             /** @description Skip items released less than this many hours ago; 0 (or absent) turns the delay off. The release date is the one of the app kind: air date (Sonarr, Whisparr v2), the date of radarr_release_type (Radarr, Whisparr v3), the album or book release date. Items without a date are kept. */
             release_delay_h?: number;
-            /**
-             * @description When true, planner creates preview / dry-run runs that do not dispatch searches.
-             * @default false
-             */
-            dry_run: boolean;
-            /**
-             * @description Radarr only: skip movies Radarr reports as not yet available (isAvailable false, the movie's minimum availability is not reached). They are not searched and cost no stamina. Movies without the flag are searched. Absent = true.
-             * @default true
-             */
-            skip_unavailable_movies: boolean;
+            /** @description When true, planner creates preview / dry-run runs that do not dispatch searches. On update, omitted = stored value stays; sent = replaces it. */
+            dry_run?: boolean;
+            /** @description Radarr only: skip movies Radarr reports as not yet available (isAvailable false, the movie's minimum availability is not reached). They are not searched and cost no stamina. Movies without the flag are searched. On update, omitted = stored value stays; sent = replaces it. */
+            skip_unavailable_movies?: boolean;
             /** Format: date-time */
             readonly updated_at?: string;
         };
@@ -1901,7 +2226,21 @@ export interface components {
             [key: string]: number;
         };
         PriorityPreset: {
-            /** @description Identifier of the shipped preset (e.g. media_first). */
+            /**
+             * Format: uuid
+             * @description UUID of a saved user preset; omitted for builtin presets.
+             */
+            id?: string;
+            /** @description Whether this preset is shipped and read-only. */
+            builtin: boolean;
+            /** @description Name of a saved preset, or media_first for the shipped preset. */
+            name: string;
+            search: components["schemas"]["PriorityPresetMap"];
+            download: components["schemas"]["PriorityPresetMap"];
+        };
+        /** @description Both maps must contain exactly sonarr, radarr, lidarr, readarr, whisparr_v2 and whisparr_v3, with ranks from 1 to 100. */
+        PriorityPresetInput: {
+            /** @description Unique ignoring case; leading and trailing whitespace is trimmed. The name media_first is reserved. */
             name: string;
             search: components["schemas"]["PriorityPresetMap"];
             download: components["schemas"]["PriorityPresetMap"];
@@ -1931,15 +2270,75 @@ export interface components {
             global_hourly_cap: number;
             search_priority_preset: components["schemas"]["PriorityPresetMap"];
             download_priority_preset: components["schemas"]["PriorityPresetMap"];
-            /**
-             * @description Whether the Model Context Protocol (MCP) server at /api/v1/mcp is enabled.
-             * @default false
-             */
-            llm_enabled: boolean;
+            /** @description Whether the Model Context Protocol (MCP) server at /api/v1/mcp is enabled. On update, omitted = stored value stays; sent = replaces it. */
+            llm_enabled?: boolean;
             /** @description MCP write tools enabled by the administrator; an omitted list enables none. */
             llm_write_tools?: components["schemas"]["LlmWriteTool"][];
+            /** @description Installation-wide brand mark shown when a user has no override. On update, omitted = stored value stays; sent = replaces it. */
+            brand_mark?: components["schemas"]["BrandMark"];
+            /** @description Installation-wide SFW mode applied when a user has no override. On update, omitted = stored value stays; sent = replaces it. */
+            sfw_mode?: components["schemas"]["SfwMode"];
             /** Format: date-time */
             updated_at?: string;
+        };
+        /** @enum {string} */
+        RuntimeSettingClass: "bootstrap" | "runtime" | "secret";
+        /** @enum {string} */
+        RuntimeSettingSource: "env" | "db" | "default";
+        /** @enum {string} */
+        RuntimeSettingApply: "restart" | "live";
+        RuntimeSetting: {
+            key: string;
+            env: string;
+            class: components["schemas"]["RuntimeSettingClass"];
+            type: string;
+            default: string;
+            /** @description Current effective value; omitted for secrets. */
+            value?: string;
+            /** @description True when a secret has a configured value; omitted for non-secrets. */
+            is_set?: boolean;
+            source: components["schemas"]["RuntimeSettingSource"];
+            /** @description True when the setting is written only through its environment variable: set there, or an environment-only secret. */
+            locked: boolean;
+            apply: components["schemas"]["RuntimeSettingApply"];
+        };
+        RuntimeSettingsUpdateRequest: {
+            values: {
+                [key: string]: string;
+            };
+        };
+        RuntimeSettingsUpdateResult: {
+            /** @description True when changed settings take effect only after a restart. */
+            pending_restart: boolean;
+            settings?: components["schemas"]["RuntimeSetting"][];
+        };
+        /** @enum {string} */
+        BrandMark: "vulva" | "penis" | "hand";
+        /** @enum {string} */
+        SfwMode: "auto" | "on" | "off";
+        UserPreferences: {
+            /** @description Per-user brand mark override; null or omitted follows the installation default. */
+            brand_mark?: components["schemas"]["BrandMark"] | null;
+            /** @description Per-user SFW mode override; null or omitted follows the installation default. */
+            sfw_mode?: components["schemas"]["SfwMode"] | null;
+        };
+        /**
+         * @default upvotes_only
+         * @enum {string}
+         */
+        RequestsVotingMode: "upvotes_only" | "net_score";
+        /**
+         * @default public_attributed
+         * @enum {string}
+         */
+        RequestsVisibility: "public_attributed" | "public_anonymous" | "private_to_requester_and_admin";
+        RequestsSettings: {
+            voting_mode: components["schemas"]["RequestsVotingMode"];
+            /** @default true */
+            allow_viewer_votes: boolean;
+            visibility: components["schemas"]["RequestsVisibility"];
+            /** @default 0 */
+            voting_ttl_days: number;
         };
         StateReset: {
             /** Format: uuid */
@@ -2024,17 +2423,17 @@ export interface components {
             username?: string;
             /** @description Password, or the API key for SABnzbd. On update, omit to keep the stored one. */
             secret?: string;
-            /** @default true */
-            enabled: boolean;
-            /** @default 0 */
-            max_active: number;
-            /** @default 0 */
-            max_queued: number;
+            /** @description On create, omitted = true. On update, omitted = stored value stays; sent = replaces it. */
+            enabled?: boolean;
+            /** @description On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it. */
+            max_active?: number;
+            /** @description On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it. */
+            max_queued?: number;
             /**
              * Format: int64
-             * @default 0
+             * @description On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it.
              */
-            bandwidth_budget_bps: number;
+            bandwidth_budget_bps?: number;
         };
         DownloadClientStatus: {
             /** Format: uuid */
@@ -2093,8 +2492,8 @@ export interface components {
             base_url: string;
             /** @description Required on create; omit on update to keep the stored key */
             api_key?: string;
-            /** @default true */
-            enabled: boolean;
+            /** @description On create, omitted = true. On update, omitted = stored value stays; sent = replaces it. */
+            enabled?: boolean;
             /** Format: uuid */
             sonarr_instance_id?: string;
             /** Format: uuid */
@@ -2153,6 +2552,8 @@ export interface components {
             id: string;
             name: string;
             base_url: string;
+            /** @default 15 */
+            hourly_cap: number;
             enabled: boolean;
             last_seen_version?: string;
             /** Format: date-time */
@@ -2168,8 +2569,10 @@ export interface components {
             base_url: string;
             /** @description Required on create; omit on update to keep the stored key */
             api_key?: string;
-            /** @default true */
-            enabled: boolean;
+            /** @description On create, omitted = 15. On update, omitted = stored value stays; sent = replaces it. */
+            hourly_cap?: number;
+            /** @description On create, omitted = true. On update, omitted = stored value stays; sent = replaces it. */
+            enabled?: boolean;
         };
         ProwlarrStatus: {
             /** Format: uuid */
@@ -2290,8 +2693,9 @@ export interface components {
         NotificationChannelUpdate: {
             name: string;
             kind: components["schemas"]["NotificationChannelKind"];
-            /** @default true */
-            enabled: boolean;
+            /** @description On create, omitted = true. On update, omitted = stored value stays; sent = replaces it. */
+            enabled?: boolean;
+            /** @description Omitted = stored configuration stays; sent = replaces it, omitted secret fields stay. */
             config?: components["schemas"]["NotificationChannelConfig"];
         };
         NotificationChannel: {
@@ -2316,8 +2720,8 @@ export interface components {
         };
         UserNotifyTargetUpdate: {
             kind: components["schemas"]["NotificationChannelKind"];
-            /** @default true */
-            enabled: boolean;
+            /** @description On create, omitted = true. On update, omitted = stored value stays; sent = replaces it. */
+            enabled?: boolean;
             config?: components["schemas"]["NotificationChannelConfig"];
         };
         UserNotifyTarget: {
@@ -2349,8 +2753,8 @@ export interface components {
             event_kind: components["schemas"]["NotificationRuleEventKind"];
             /** @default 1 */
             threshold: number;
-            /** @default true */
-            enabled: boolean;
+            /** @description On create, omitted = true. On update, omitted = stored value stays; sent = replaces it. */
+            enabled?: boolean;
             channel_ids: string[];
         };
         NotificationRule: {
@@ -2509,8 +2913,8 @@ export interface components {
             url: string;
             /** @description Required on create; omit on update to keep stored key */
             api_key?: string;
-            /** @default true */
-            enabled: boolean;
+            /** @description On create, omitted = true. On update, omitted = stored value stays; sent = replaces it. */
+            enabled?: boolean;
         };
         WatchawareSyncStatus: {
             /** Format: date-time */
@@ -2552,8 +2956,157 @@ export interface components {
             /** Format: date-time */
             applied_at?: string | null;
         };
+        AdultSource: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            endpoint: string;
+            /** @description True when an encrypted API key is stored (the key itself is write-only) */
+            has_api_key: boolean;
+            enabled: boolean;
+            sync_favorites: boolean;
+            priority: number;
+            /** Format: date-time */
+            readonly last_sync_at?: string;
+            readonly last_sync_error?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        AdultSourceInput: {
+            /** @description Display name of the catalogue source (1..128 characters) */
+            name: string;
+            /** @description GraphQL endpoint URL (http or https) */
+            endpoint: string;
+            /** @description Required on create; omit on update to keep stored key */
+            api_key?: string;
+            /** @description On create, omitted = true. On update, omitted = stored value stays; sent = replaces it. */
+            enabled?: boolean;
+            /** @description On create, omitted = true. On update, omitted = stored value stays; sent = replaces it. */
+            sync_favorites?: boolean;
+            /** @description On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it. */
+            priority?: number;
+        };
+        AdultSyncSummary: {
+            sources_synced: number;
+            performers_synced: number;
+            studios_synced: number;
+        };
+        AdultSyncStatus: {
+            /** Format: date-time */
+            last_sync_at?: string;
+            last_error?: string;
+            total_sources: number;
+            enabled_sources: number;
+            performers_synced: number;
+            studios_synced: number;
+        };
+        AdultExternalRef: {
+            /** Format: uuid */
+            id?: string;
+            source_kind: string;
+            /** Format: uuid */
+            source_instance_id?: string;
+            foreign_id: string;
+            is_favorite: boolean;
+            url?: string;
+        };
+        AdultPerformer: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            canonical_name?: string;
+            disambiguation?: string;
+            urls?: string[];
+            is_favorite: boolean;
+            ref_count?: number;
+            external_refs?: components["schemas"]["AdultExternalRef"][];
+            /** Format: date-time */
+            created_at?: string;
+            /** Format: date-time */
+            updated_at?: string;
+        };
+        AdultPerformerPage: {
+            items: components["schemas"]["AdultPerformer"][];
+            next_cursor?: string;
+            cursor?: string;
+        };
+        AdultStudio: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            canonical_name?: string;
+            urls?: string[];
+            is_favorite: boolean;
+            ref_count?: number;
+            external_refs?: components["schemas"]["AdultExternalRef"][];
+            /** Format: date-time */
+            created_at?: string;
+            /** Format: date-time */
+            updated_at?: string;
+        };
+        AdultStudioPage: {
+            items: components["schemas"]["AdultStudio"][];
+            next_cursor?: string;
+            cursor?: string;
+        };
+        AdultImageSetPage: {
+            items: components["schemas"]["AdultImageSet"][];
+            total: number;
+        };
+        AdultImageSet: {
+            /** Format: uuid */
+            id: string;
+            title: string;
+            directory_path: string;
+            whisparr_scene_foreign_id?: string;
+            /** Format: uuid */
+            performer_id?: string;
+            item_count: number;
+            /** Format: int64 */
+            total_size_bytes: number;
+            cover_image_path?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        AdultImageItem: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            image_set_id: string;
+            file_path: string;
+            file_name: string;
+            /** Format: int64 */
+            file_size_bytes: number;
+            mime_type: string;
+            width?: number;
+            height?: number;
+            sha256_checksum: string;
+            sort_order: number;
+            /** Format: date-time */
+            created_at: string;
+        };
+        AdultImageSetDetail: components["schemas"]["AdultImageSet"] & {
+            items: components["schemas"]["AdultImageItem"][];
+            ignore_file_present: boolean;
+        };
+        AdultScanSummary: {
+            sets_found: number;
+            items_found: number;
+            ignore_file_present: boolean;
+        };
     };
     responses: {
+        /** @description No content */
+        NoContent: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content?: never;
+        };
         /** @description RFC 9457 problem details */
         Problem: {
             headers: {
@@ -2575,6 +3128,10 @@ export interface components {
         NotificationRuleId: string;
         UserNotifyTargetId: string;
         WatchawareSourceId: string;
+        AdultSourceId: string;
+        AdultPerformerId: string;
+        AdultStudioId: string;
+        AdultSetId: string;
     };
     requestBodies: never;
     headers: never;
@@ -3510,6 +4067,27 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    sweepInstanceQueue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instanceId: components["parameters"]["InstanceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Queue sweep completed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     triggerRun: {
         parameters: {
             query?: never;
@@ -3760,6 +4338,104 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    getRuntimeSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Runtime settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuntimeSetting"][];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    updateRuntimeSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RuntimeSettingsUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated runtime settings result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuntimeSettingsUpdateResult"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    getRequestsSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Community request settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestsSettings"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    updateRequestsSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RequestsSettings"];
+            };
+        };
+        responses: {
+            /** @description Updated community request settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestsSettings"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     getPriorityPresets: {
         parameters: {
             query?: never;
@@ -3769,13 +4445,112 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Shipped priority presets */
+            /** @description Shipped preset first, then saved user presets ordered by name */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["PriorityPreset"][];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createPriorityPreset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PriorityPresetInput"];
+            };
+        };
+        responses: {
+            /** @description Saved preset */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PriorityPreset"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    updatePriorityPreset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID of a saved preset. The shipped media_first preset is read-only. */
+                presetId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PriorityPresetInput"];
+            };
+        };
+        responses: {
+            /** @description Updated preset */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PriorityPreset"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    deletePriorityPreset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID of a saved preset. The shipped media_first preset is read-only. */
+                presetId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Preset deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    applyPriorityPreset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID of a saved preset, or media_first for the shipped preset. */
+                presetId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Settings with the applied priority orders */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Settings"];
                 };
             };
             default: components["responses"]["Problem"];
@@ -5030,12 +5805,52 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Test notification delivered successfully */
-            204: {
+            204: components["responses"]["NoContent"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    getMyPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description User preferences */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["UserPreferences"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    updateMyPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserPreferences"];
+            };
+        };
+        responses: {
+            /** @description Updated user preferences */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserPreferences"];
+                };
             };
             default: components["responses"]["Problem"];
         };
@@ -5222,6 +6037,335 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WatchawareGateDecision"][];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listAdultSources: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Catalogue sources */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdultSource"][];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createAdultSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdultSourceInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdultSource"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getAdultSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sourceId: components["parameters"]["AdultSourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Catalogue source */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdultSource"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    updateAdultSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sourceId: components["parameters"]["AdultSourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdultSourceInput"];
+            };
+        };
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdultSource"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteAdultSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sourceId: components["parameters"]["AdultSourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    triggerAdultSync: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Synchronization summary */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdultSyncSummary"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getAdultSyncStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Synchronization status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdultSyncStatus"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listAdultPerformers: {
+        parameters: {
+            query?: {
+                /** @description Filter by favourite status */
+                favorite?: boolean;
+                /** @description Maximum performers to return */
+                limit?: number;
+                /** @description Opaque keyset pagination cursor */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Performers page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdultPerformerPage"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getAdultPerformer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                performerId: components["parameters"]["AdultPerformerId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Performer detail */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdultPerformer"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listAdultStudios: {
+        parameters: {
+            query?: {
+                /** @description Filter by favourite status */
+                favorite?: boolean;
+                /** @description Maximum studios to return */
+                limit?: number;
+                /** @description Opaque keyset pagination cursor */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Studios page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdultStudioPage"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getAdultStudio: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                studioId: components["parameters"]["AdultStudioId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Studio detail */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdultStudio"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listAdultImageSets: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Image sets page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdultImageSetPage"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getAdultImageSet: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                setId: components["parameters"]["AdultSetId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Image set detail */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdultImageSetDetail"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    triggerAdultScan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scan summary */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdultScanSummary"];
                 };
             };
             default: components["responses"]["Problem"];

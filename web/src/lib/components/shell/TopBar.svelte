@@ -3,8 +3,9 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
-	import { resolve } from '$app/paths';
+	import { FALLBACK_BRAND_MARK, type BrandMarkKind } from '#lib/brand-mark.js';
 	import BrandMark from '#lib/components/BrandMark.svelte';
+	import { pageHref } from '#lib/entities.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import NavIcon from './NavIcon.svelte';
 
@@ -13,9 +14,17 @@ SPDX-License-Identifier: EUPL-1.2
 		onOpenDrawer: () => void;
 		onOpenSearch?: () => void;
 		menuButtonEl?: HTMLButtonElement | null;
+		/** Effective brand mark, resolved by the layout (ADR-0042). Defaults to the fail-closed fallback. */
+		mark?: BrandMarkKind;
 	}
 
-	let { drawerOpen, onOpenDrawer, onOpenSearch, menuButtonEl = $bindable(null) }: Props = $props();
+	let {
+		drawerOpen,
+		onOpenDrawer,
+		onOpenSearch,
+		menuButtonEl = $bindable(null),
+		mark = FALLBACK_BRAND_MARK
+	}: Props = $props();
 </script>
 
 <header
@@ -23,12 +32,12 @@ SPDX-License-Identifier: EUPL-1.2
 	data-testid="header-band"
 >
 	<a
-		href={resolve('/')}
+		href={pageHref('/')}
 		class="flex items-center gap-2.5 font-sans text-base font-semibold tracking-[-0.01em] text-fg"
 		aria-label={m.app_name()}
 	>
 		<span class="text-brand flex items-center">
-			<BrandMark size={24} />
+			<BrandMark size={24} {mark} />
 		</span>
 		<span>{m.app_name()}</span>
 	</a>

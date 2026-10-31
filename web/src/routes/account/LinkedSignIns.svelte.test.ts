@@ -2,11 +2,11 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-import { fireEvent, screen } from '@testing-library/svelte';
 import { ProblemError } from '@sveltesentio/core';
 import { WCAG_22_AA_TAGS } from '@sveltesentio/testing';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, screen } from '@testing-library/svelte';
 import { axe } from 'vitest-axe';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api } from '#lib/api/client.js';
 import type { components } from '#lib/api/schema.js';
 import { m } from '#lib/paraglide/messages.js';
@@ -14,6 +14,12 @@ import { renderWithQuery, stubGet } from '#lib/testing/harness.js';
 import LinkedSignIns from './LinkedSignIns.svelte';
 
 type UserIdentity = components['schemas']['UserIdentity'];
+
+interface SsoFlags {
+	oidc?: boolean;
+	proxy?: boolean;
+	jellyfin?: boolean;
+}
 
 const sampleJfIdentity: UserIdentity = {
 	provider: 'jellyfin',
@@ -25,91 +31,97 @@ const sampleProxyIdentity: UserIdentity = {
 	linked_at: '2026-10-21T14:30:00Z'
 };
 
+function renderLinkedSignIns(sso: SsoFlags, identities: UserIdentity[] = []) {
+	stubGet({
+		'/auth/sso': { oidc: false, proxy: false, jellyfin: false, ...sso },
+		'/auth/identities': { items: identities }
+	});
+	return renderWithQuery(LinkedSignIns);
+}
+
+function queryHeading(): HTMLElement | null {
+	return screen.queryByRole('heading', { level: 2, name: m.linked_sign_ins_title() });
+}
+
+async function findHeading(): Promise<HTMLElement> {
+	return await screen.findByRole('heading', { level: 2, name: m.linked_sign_ins_title() });
+}
+
+async function openJellyfinForm(username = 'user', password = 'pass'): Promise<HTMLElement> {
+	const openBtn = await screen.findByRole('button', { name: m.linked_sign_in_link_jellyfin() });
+	await fireEvent.click(openBtn);
+
+	const userInput = screen.getByLabelText(m.linked_sign_in_username());
+	const passInput = screen.getByLabelText(m.linked_sign_in_password());
+	await fireEvent.input(userInput, { target: { value: username } });
+	await fireEvent.input(passInput, { target: { value: password } });
+
+	return screen.getByRole('button', { name: m.linked_sign_in_link_submit() });
+}
+
+async function submitJellyfin(username: string, password: string): Promise<void> {
+	const submitBtn = await openJellyfinForm(username, password);
+	await fireEvent.click(submitBtn);
+}
+
+async function confirmUnlink(providerName: string): Promise<void> {
+	const unlinkBtn = await screen.findByRole('button', { name: m.linked_sign_in_unlink() });
+	await fireEvent.click(unlinkBtn);
+
+	const confirmBtn = screen.getByRole('button', {
+		name: m.linked_sign_in_unlink_confirm_btn({
+			provider: providerName
+		})
+	});
+	await fireEvent.click(confirmBtn);
+}
+
 describe('LinkedSignIns', () => {
 	afterEach(() => {
 		vi.restoreAllMocks();
 	});
 
 	it('hidden when both providers disabled', async () => {
-		stubGet({
-			'/auth/sso': { oidc: true, proxy: false, jellyfin: false },
-			'/auth/identities': { items: [] }
-		});
-		renderWithQuery(LinkedSignIns);
+		renderLinkedSignIns({ oidc: true });
 
-		expect(screen.queryByRole('heading', { level: 2, name: m.linked_sign_ins_title() })).toBeNull();
+		expect(queryHeading()).toBeNull();
 	});
 
 	it('hidden boundary when all sso providers disabled', async () => {
-		stubGet({
-			'/auth/sso': { oidc: false, proxy: false, jellyfin: false },
-			'/auth/identities': { items: [] }
-		});
-		renderWithQuery(LinkedSignIns);
+		renderLinkedSignIns({});
 
-		expect(screen.queryByRole('heading', { level: 2, name: m.linked_sign_ins_title() })).toBeNull();
+		expect(queryHeading()).toBeNull();
 	});
 
 	it('shows only enabled providers: jellyfin only', async () => {
-		stubGet({
-			'/auth/sso': { oidc: false, proxy: false, jellyfin: true },
-			'/auth/identities': { items: [] }
-		});
-		renderWithQuery(LinkedSignIns);
+		renderLinkedSignIns({ jellyfin: true });
 
-		expect(
-			await screen.findByRole('heading', { level: 2, name: m.linked_sign_ins_title() })
-		).toBeTruthy();
+		expect(await findHeading()).toBeTruthy();
 		expect(screen.getByText(m.linked_sign_in_provider_jellyfin())).toBeTruthy();
 		expect(screen.queryByText(m.linked_sign_in_provider_proxy())).toBeNull();
 	});
 
 	it('shows only enabled providers: proxy only', async () => {
-		stubGet({
-			'/auth/sso': { oidc: false, proxy: true, jellyfin: false },
-			'/auth/identities': { items: [] }
-		});
-		renderWithQuery(LinkedSignIns);
+		renderLinkedSignIns({ proxy: true });
 
-		expect(
-			await screen.findByRole('heading', { level: 2, name: m.linked_sign_ins_title() })
-		).toBeTruthy();
+		expect(await findHeading()).toBeTruthy();
 		expect(screen.getByText(m.linked_sign_in_provider_proxy())).toBeTruthy();
 		expect(screen.queryByText(m.linked_sign_in_provider_jellyfin())).toBeNull();
 	});
 
 	it('shows only enabled providers: both jellyfin and proxy', async () => {
-		stubGet({
-			'/auth/sso': { oidc: false, proxy: true, jellyfin: true },
-			'/auth/identities': { items: [] }
-		});
-		renderWithQuery(LinkedSignIns);
+		renderLinkedSignIns({ jellyfin: true, proxy: true });
 
-		expect(
-			await screen.findByRole('heading', { level: 2, name: m.linked_sign_ins_title() })
-		).toBeTruthy();
+		expect(await findHeading()).toBeTruthy();
 		expect(screen.getByText(m.linked_sign_in_provider_jellyfin())).toBeTruthy();
 		expect(screen.getByText(m.linked_sign_in_provider_proxy())).toBeTruthy();
 	});
 
 	it('link jellyfin success reloads list and clears password', async () => {
-		stubGet({
-			'/auth/sso': { oidc: false, proxy: false, jellyfin: true },
-			'/auth/identities': { items: [] }
-		});
 		const postSpy = vi.spyOn(api, 'POST').mockResolvedValue({ data: undefined } as never);
-		renderWithQuery(LinkedSignIns);
+		renderLinkedSignIns({ jellyfin: true });
 
-		const openBtn = await screen.findByRole('button', { name: m.linked_sign_in_link_jellyfin() });
-		await fireEvent.click(openBtn);
-
-		const userInput = screen.getByLabelText(m.linked_sign_in_username());
-		const passInput = screen.getByLabelText(m.linked_sign_in_password());
-		await fireEvent.input(userInput, { target: { value: 'jellyuser' } });
-		await fireEvent.input(passInput, { target: { value: 'jellypass' } });
-
-		const submitBtn = screen.getByRole('button', { name: m.linked_sign_in_link_submit() });
-		await fireEvent.click(submitBtn);
+		await submitJellyfin('jellyuser', 'jellypass');
 
 		expect(postSpy).toHaveBeenCalledWith('/auth/identities/jellyfin', {
 			body: { username: 'jellyuser', password: 'jellypass' }
@@ -117,10 +129,6 @@ describe('LinkedSignIns', () => {
 	});
 
 	it('409 shows conflict message', async () => {
-		stubGet({
-			'/auth/sso': { oidc: false, proxy: false, jellyfin: true },
-			'/auth/identities': { items: [] }
-		});
 		vi.spyOn(api, 'POST').mockRejectedValue(
 			new ProblemError({
 				type: 'about:blank',
@@ -128,50 +136,25 @@ describe('LinkedSignIns', () => {
 				detail: 'conflict'
 			})
 		);
-		renderWithQuery(LinkedSignIns);
+		renderLinkedSignIns({ jellyfin: true });
 
-		const openBtn = await screen.findByRole('button', { name: m.linked_sign_in_link_jellyfin() });
-		await fireEvent.click(openBtn);
-
-		const userInput = screen.getByLabelText(m.linked_sign_in_username());
-		const passInput = screen.getByLabelText(m.linked_sign_in_password());
-		await fireEvent.input(userInput, { target: { value: 'jellyadmin' } });
-		await fireEvent.input(passInput, { target: { value: 'secret' } });
-
-		const submitBtn = screen.getByRole('button', { name: m.linked_sign_in_link_submit() });
-		await fireEvent.click(submitBtn);
+		await submitJellyfin('jellyadmin', 'secret');
 
 		expect(await screen.findByText(m.linked_sign_in_error_409_jellyfin())).toBeTruthy();
 	});
 
 	it('unlink calls DELETE after confirm', async () => {
-		stubGet({
-			'/auth/sso': { oidc: false, proxy: false, jellyfin: true },
-			'/auth/identities': { items: [sampleJfIdentity] }
-		});
 		const deleteSpy = vi.spyOn(api, 'DELETE').mockResolvedValue({ data: undefined } as never);
-		renderWithQuery(LinkedSignIns);
+		renderLinkedSignIns({ jellyfin: true }, [sampleJfIdentity]);
 
 		expect(await screen.findByText(m.linked_sign_in_status_linked())).toBeTruthy();
 
-		const unlinkBtn = screen.getByRole('button', { name: m.linked_sign_in_unlink() });
-		await fireEvent.click(unlinkBtn);
-
-		const confirmBtn = screen.getByRole('button', {
-			name: m.linked_sign_in_unlink_confirm_btn({
-				provider: m.linked_sign_in_provider_jellyfin()
-			})
-		});
-		await fireEvent.click(confirmBtn);
+		await confirmUnlink(m.linked_sign_in_provider_jellyfin());
 
 		expect(deleteSpy).toHaveBeenCalledWith('/auth/identities/jellyfin');
 	});
 
 	it('429 shows retry message', async () => {
-		stubGet({
-			'/auth/sso': { oidc: false, proxy: false, jellyfin: true },
-			'/auth/identities': { items: [] }
-		});
 		vi.spyOn(api, 'POST').mockRejectedValue(
 			new ProblemError({
 				type: 'about:blank',
@@ -179,29 +162,16 @@ describe('LinkedSignIns', () => {
 				detail: 'too many requests'
 			})
 		);
-		renderWithQuery(LinkedSignIns);
+		renderLinkedSignIns({ jellyfin: true });
 
-		const openBtn = await screen.findByRole('button', { name: m.linked_sign_in_link_jellyfin() });
-		await fireEvent.click(openBtn);
-
-		const userInput = screen.getByLabelText(m.linked_sign_in_username());
-		const passInput = screen.getByLabelText(m.linked_sign_in_password());
-		await fireEvent.input(userInput, { target: { value: 'jellyuser' } });
-		await fireEvent.input(passInput, { target: { value: 'wrongpass' } });
-
-		const submitBtn = screen.getByRole('button', { name: m.linked_sign_in_link_submit() });
-		await fireEvent.click(submitBtn);
+		await submitJellyfin('jellyuser', 'wrongpass');
 
 		expect(await screen.findByText(m.linked_sign_in_error_429())).toBeTruthy();
 	});
 
 	it('handles proxy link success and conflict', async () => {
-		stubGet({
-			'/auth/sso': { oidc: false, proxy: true, jellyfin: false },
-			'/auth/identities': { items: [] }
-		});
 		const postSpy = vi.spyOn(api, 'POST').mockResolvedValue({ data: undefined } as never);
-		renderWithQuery(LinkedSignIns);
+		renderLinkedSignIns({ proxy: true });
 
 		const linkBtn = await screen.findByRole('button', { name: m.linked_sign_in_link_proxy() });
 		await fireEvent.click(linkBtn);
@@ -220,43 +190,19 @@ describe('LinkedSignIns', () => {
 	});
 
 	it('handles unlink for proxy provider', async () => {
-		stubGet({
-			'/auth/sso': { oidc: false, proxy: true, jellyfin: false },
-			'/auth/identities': { items: [sampleProxyIdentity] }
-		});
 		const deleteSpy = vi.spyOn(api, 'DELETE').mockResolvedValue({ data: undefined } as never);
-		renderWithQuery(LinkedSignIns);
+		renderLinkedSignIns({ proxy: true }, [sampleProxyIdentity]);
 
-		const unlinkBtn = await screen.findByRole('button', { name: m.linked_sign_in_unlink() });
-		await fireEvent.click(unlinkBtn);
-
-		const confirmBtn = screen.getByRole('button', {
-			name: m.linked_sign_in_unlink_confirm_btn({
-				provider: m.linked_sign_in_provider_proxy()
-			})
-		});
-		await fireEvent.click(confirmBtn);
+		await confirmUnlink(m.linked_sign_in_provider_proxy());
 
 		expect(deleteSpy).toHaveBeenCalledWith('/auth/identities/proxy');
 	});
 
 	it('displays 401, 403, and 404 status messages', async () => {
-		stubGet({
-			'/auth/sso': { oidc: false, proxy: false, jellyfin: true },
-			'/auth/identities': { items: [] }
-		});
 		const postSpy = vi.spyOn(api, 'POST');
-		renderWithQuery(LinkedSignIns);
+		renderLinkedSignIns({ jellyfin: true });
 
-		const openBtn = await screen.findByRole('button', { name: m.linked_sign_in_link_jellyfin() });
-		await fireEvent.click(openBtn);
-
-		const userInput = screen.getByLabelText(m.linked_sign_in_username());
-		const passInput = screen.getByLabelText(m.linked_sign_in_password());
-		await fireEvent.input(userInput, { target: { value: 'user' } });
-		await fireEvent.input(passInput, { target: { value: 'pass' } });
-
-		const submitBtn = screen.getByRole('button', { name: m.linked_sign_in_link_submit() });
+		const submitBtn = await openJellyfinForm('user', 'pass');
 
 		// 401
 		postSpy.mockRejectedValueOnce(
@@ -281,15 +227,9 @@ describe('LinkedSignIns', () => {
 	});
 
 	it('positive: passes WCAG 2.2 AA accessibility scan', async () => {
-		stubGet({
-			'/auth/sso': { oidc: false, proxy: true, jellyfin: true },
-			'/auth/identities': { items: [sampleJfIdentity] }
-		});
-		const { container } = renderWithQuery(LinkedSignIns);
+		const { container } = renderLinkedSignIns({ jellyfin: true, proxy: true }, [sampleJfIdentity]);
 
-		expect(
-			await screen.findByRole('heading', { level: 2, name: m.linked_sign_ins_title() })
-		).toBeTruthy();
+		expect(await findHeading()).toBeTruthy();
 
 		const a11y = await axe(container, {
 			runOnly: { type: 'tag', values: [...WCAG_22_AA_TAGS] }

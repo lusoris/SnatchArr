@@ -103,6 +103,40 @@ func (q *Queries) GetPolicy(ctx context.Context, instanceID uuid.UUID) (SnatchPo
 	return i, err
 }
 
+const listInstanceRunIntervals = `-- name: ListInstanceRunIntervals :many
+SELECT i.id AS instance_id, i.name AS instance_name, p.cycle_interval_s
+FROM instances i JOIN snatch_policies p ON p.instance_id = i.id
+WHERE i.enabled AND i.kind <> 'stash' AND (p.missing_per_cycle > 0 OR p.upgrade_per_cycle > 0)
+ORDER BY i.name
+`
+
+type ListInstanceRunIntervalsRow struct {
+	InstanceID     uuid.UUID
+	InstanceName   string
+	CycleIntervalS int32
+}
+
+// Cycle interval of each enabled non-stash instance whose policy schedules any run.
+func (q *Queries) ListInstanceRunIntervals(ctx context.Context) ([]ListInstanceRunIntervalsRow, error) {
+	rows, err := q.db.Query(ctx, listInstanceRunIntervals)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListInstanceRunIntervalsRow{}
+	for rows.Next() {
+		var i ListInstanceRunIntervalsRow
+		if err := rows.Scan(&i.InstanceID, &i.InstanceName, &i.CycleIntervalS); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const savePolicyCursor = `-- name: SavePolicyCursor :exec
 UPDATE snatch_policies
 SET cursor_missing = CASE WHEN $1::text = 'missing' THEN $2::text ELSE cursor_missing END,

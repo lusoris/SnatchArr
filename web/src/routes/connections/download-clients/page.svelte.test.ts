@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api } from '#lib/api/client.js';
 import type { components } from '#lib/api/schema.js';
 import { m } from '#lib/paraglide/messages.js';
+import { session } from '#lib/session.svelte.js';
 import {
 	cancelDeleteInCard,
 	expectStackedLabels,
@@ -201,8 +202,30 @@ function renderWithTestProbe() {
 	return { success, postSpy };
 }
 
+/** Submits the add-client form with name and optional url, then waits for the validation alert. */
+async function submitInvalidClient(name: string, url = 'http://qb:8080'): Promise<void> {
+	await screen.findByLabelText(m.dlclients_instance());
+	await fill(m.instance_name(), name);
+	await fill(m.instance_url(), url);
+	await fireEvent.click(screen.getByRole('button', { name: m.action_save() }));
+	expect((await screen.findByRole('alert')).textContent).toContain('request validation failed');
+}
+
+/** Sets session user, stubs list endpoints, renders page, and returns the table row for a client. */
+async function renderClientRow(
+	role: 'admin' | 'viewer',
+	headingName: RegExp | string = /qBittorrent Primary/
+): Promise<HTMLTableRowElement> {
+	session.user = { id: role === 'admin' ? 'u1' : 'u2', username: role, role } as never;
+	stubGet(listStubs);
+	renderWithQuery(DownloadClientsPage);
+	const heading = await screen.findByRole('heading', { level: 2, name: headingName });
+	return heading.closest('tr') as HTMLTableRowElement;
+}
+
 describe('download-clients management', () => {
 	afterEach(() => {
+		session.user = { id: 'u1', username: 'admin', role: 'admin' } as never;
 		vi.restoreAllMocks();
 	});
 
@@ -392,12 +415,8 @@ describe('download-clients management', () => {
 		);
 		renderWithQuery(DownloadClientsPage);
 
-		await screen.findByLabelText(m.dlclients_instance());
-		await fill(m.instance_name(), 'Too many');
-		await fill(m.instance_url(), 'http://qb:8080');
-		await fireEvent.click(screen.getByRole('button', { name: m.action_save() }));
+		await submitInvalidClient('Too many');
 
-		expect((await screen.findByRole('alert')).textContent).toContain('request validation failed');
 		const field = screen.getByLabelText(m.dlclients_max_active());
 		expect(field.getAttribute('aria-invalid')).toBe('true');
 		expect(field.getAttribute('aria-describedby')).toBe('dlclient-max-active-error');
@@ -417,12 +436,8 @@ describe('download-clients management', () => {
 		);
 		renderWithQuery(DownloadClientsPage);
 
-		await screen.findByLabelText(m.dlclients_instance());
-		await fill(m.instance_name(), 'Too many queued');
-		await fill(m.instance_url(), 'http://qb:8080');
-		await fireEvent.click(screen.getByRole('button', { name: m.action_save() }));
+		await submitInvalidClient('Too many queued');
 
-		expect((await screen.findByRole('alert')).textContent).toContain('request validation failed');
 		const field = screen.getByLabelText(m.dlclients_max_queued());
 		expect(field.getAttribute('aria-invalid')).toBe('true');
 		expect(field.getAttribute('aria-describedby')).toBe('dlclient-max-queued-error');
@@ -452,5 +467,38 @@ describe('download-clients management', () => {
 		expect(editBtn.disabled).toBe(true);
 		const deleteBtn = card.getByRole('button', { name: m.action_delete() }) as HTMLButtonElement;
 		expect(deleteBtn.disabled).toBe(true);
+	});
+
+	it('positive: admin row has class target and edit button has class target-link', async () => {
+		const row = await renderClientRow('admin');
+		expect(row.classList.contains('target')).toBe(true);
+
+		const editBtn = within(row).getByRole('button', { name: m.action_edit() });
+		expect(editBtn.classList.contains('target-link')).toBe(true);
+	});
+
+	it('negative: viewer row has no class target', async () => {
+		const row = await renderClientRow('viewer');
+		expect(row.classList.contains('target')).toBe(false);
+	});
+
+	it('negative: configarr-source download client row has no class target', async () => {
+		session.user = { id: 'u1', username: 'admin', role: 'admin' } as never;
+		const configarrClient: DownloadClient = {
+			...sampleClient,
+			id: '00000000-0000-0000-0000-000000000099',
+			name: 'Configarr qBit',
+			source: 'configarr'
+		};
+		stubGet({
+			'/download-clients': [configarrClient],
+			'/download-clients/status': [],
+			'/instances': []
+		});
+		renderWithQuery(DownloadClientsPage);
+
+		const heading = await screen.findByRole('heading', { level: 2, name: /Configarr qBit/ });
+		const row = heading.closest('tr') as HTMLTableRowElement;
+		expect(row.classList.contains('target')).toBe(false);
 	});
 });

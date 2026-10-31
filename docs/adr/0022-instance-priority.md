@@ -6,7 +6,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # ADR-0022: Per-instance priority for searches and downloads
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-10-21
 
 ## Context
@@ -27,7 +27,7 @@ Every instance carries two ranks: a search rank and a download rank. A rank is a
 - **Search order** decides which queued run a worker leases next, and so which instance spends the indexer budget and the shared stamina first.
 - **Download order** decides the order in which the queue sweep visits instances, so imports, removals and re-searches of a higher instance run first in each sweep. Ordering inside download clients follows in node `SNX-DLCLIENT-PRIO`, which reads the same rank; this record does not change any download client.
 
-### 2. Shipped preset, editable
+### 2. Shipped preset and editable active defaults
 
 The ranks come from a preset keyed by instance kind. SnatchArr ships one preset, `media_first`:
 
@@ -45,17 +45,30 @@ Books are not named in the request; they sit after music and before adult conten
 - An instance may override either rank through `GET`/`PUT /api/v1/instances/{instanceId}/priority` (`search_priority`, `download_priority`, null = follow the preset). The response carries the effective rank and its source (`preset` or `instance`) for each order. Clearing an override returns the instance to the preset.
 - The priority endpoint is separate from the instance definition, like the snatch policy, so Configarr-managed instances accept it while their definition stays read-only.
 
-### 3. No starvation
+### 3. Named snapshots and accessible reordering
+
+Accepted on 2026-10-31; decision ledger entries `snatcharr-prio-named-presets-model` and `snatcharr-prio-reorder-semantics`.
+
+A named preset stores both the search and download maps in `priority_presets` (migration `000053_priority_presets`). Up to 20 user presets may exist. Names contain 1–40 characters after trimming and are unique ignoring case. The shipped `media_first` preset remains read-only, is listed with `builtin: true`, and does not occupy a user slot. User presets have UUIDs; the builtin has no UUID.
+
+`POST /api/v1/priority-presets/{presetId}/apply` copies both maps through the settings service's existing update path. A user snapshot is addressed by UUID; `POST /api/v1/priority-presets/media_first/apply` applies the shipped snapshot by name. Editing, renaming or deleting a saved snapshot does not change active settings. Applying it again explicitly replaces both active maps. Mutations require the same administrator authorization as settings updates. The existing list response retains `name`, `search` and `download` and adds `builtin` and user `id` fields.
+
+The caps editor shows separate search and download lists. Moving a kind assigns ranks of `10 × position` (one-based). An explicit tie uses the rank of the immediately preceding row; the first row cannot tie. Moving a tied row clears that row's tie. Up and down buttons with localized accessible names provide keyboard operation, and a live region announces the new position and rank. The Save action persists the edited maps. Instance overrides keep their existing numeric behavior; instances without overrides follow the active maps. See `PriorityOrderFields.svelte` and `priority-order.test.ts`.
+
+### 4. No starvation
 
 Rank ordering alone could hold a low-ranked run back for as long as higher runs keep arriving. A queued run older than `priority_max_wait` (one hour, a constant in `api/internal/snatch`) sorts before every younger run regardless of rank. Inside each group the order is rank, then `queued_at`. The bound keeps the wait of the lowest instance finite (HISS-02) while the preset still decides every ordinary contention.
 
-### 4. Tests
+### 5. Tests
 
 Each consumer ships positive, negative and boundary tests:
 
 - Positive: with `media_first`, a Sonarr run queued after a Whisparr run is leased first; the sweep visits Sonarr before Whisparr.
 - Negative: ranks outside 1–100, unknown kinds in a preset and malformed overrides are refused with RFC 9457 problem details; a cleared override falls back to the preset.
 - Boundary: equal ranks keep `queued_at` order; a run past `priority_max_wait` overtakes a higher rank; ranks 1 and 100 are accepted.
+- Named preset regressions: names at 0/1/40/41 characters, case-insensitive duplicates, the 20th and 21st saves, complete maps, read-only builtin and administrator authorization. Applying copies both maps; later edits and deletion leave the active settings unchanged (`handlers_priority_presets_integration_test.go`).
+- Keyboard reordering and saving are checked through the served settings API; the named `night` snapshot is saved, applied and read back. Both lists and the named panel retain zero axe violations (`web/e2e/features/559-instance-priority.test.ts`).
+- Planted case: skipping the apply copy or the reorder map write makes the corresponding regression fail.
 - Planted case: a lease query that ignores the rank (back to `ORDER BY queued_at`) turns the positive test red.
 
 ## Consequences

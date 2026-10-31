@@ -8,12 +8,14 @@ package sqlcgen
 import (
 	"context"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 const ensureSettings = `-- name: EnsureSettings :one
 INSERT INTO settings (singleton, updated_at) VALUES (TRUE, $1)
 ON CONFLICT (singleton) DO UPDATE SET singleton = TRUE
-RETURNING singleton, history_retention_days, user_agent, updated_at, global_hourly_cap, llm_enabled, search_priority_preset, download_priority_preset, llm_write_tools
+RETURNING singleton, history_retention_days, user_agent, updated_at, global_hourly_cap, llm_enabled, search_priority_preset, download_priority_preset, llm_write_tools, brand_mark, sfw_mode
 `
 
 func (q *Queries) EnsureSettings(ctx context.Context, updatedAt time.Time) (Setting, error) {
@@ -29,13 +31,15 @@ func (q *Queries) EnsureSettings(ctx context.Context, updatedAt time.Time) (Sett
 		&i.SearchPriorityPreset,
 		&i.DownloadPriorityPreset,
 		&i.LlmWriteTools,
+		&i.BrandMark,
+		&i.SfwMode,
 	)
 	return i, err
 }
 
 const getSettings = `-- name: GetSettings :one
 
-SELECT singleton, history_retention_days, user_agent, updated_at, global_hourly_cap, llm_enabled, search_priority_preset, download_priority_preset, llm_write_tools FROM settings WHERE singleton
+SELECT singleton, history_retention_days, user_agent, updated_at, global_hourly_cap, llm_enabled, search_priority_preset, download_priority_preset, llm_write_tools, brand_mark, sfw_mode FROM settings WHERE singleton
 `
 
 // SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
@@ -53,6 +57,24 @@ func (q *Queries) GetSettings(ctx context.Context) (Setting, error) {
 		&i.SearchPriorityPreset,
 		&i.DownloadPriorityPreset,
 		&i.LlmWriteTools,
+		&i.BrandMark,
+		&i.SfwMode,
+	)
+	return i, err
+}
+
+const getUserPreferences = `-- name: GetUserPreferences :one
+SELECT user_id, brand_mark, sfw_mode, updated_at FROM users_prefs WHERE user_id = $1
+`
+
+func (q *Queries) GetUserPreferences(ctx context.Context, userID uuid.UUID) (UsersPref, error) {
+	row := q.db.QueryRow(ctx, getUserPreferences, userID)
+	var i UsersPref
+	err := row.Scan(
+		&i.UserID,
+		&i.BrandMark,
+		&i.SfwMode,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -66,9 +88,11 @@ SET history_retention_days = $1,
     download_priority_preset = $5,
     llm_enabled = $6,
     llm_write_tools = $7,
-    updated_at = $8
+    brand_mark = $8,
+    sfw_mode = $9,
+    updated_at = $10
 WHERE singleton
-RETURNING singleton, history_retention_days, user_agent, updated_at, global_hourly_cap, llm_enabled, search_priority_preset, download_priority_preset, llm_write_tools
+RETURNING singleton, history_retention_days, user_agent, updated_at, global_hourly_cap, llm_enabled, search_priority_preset, download_priority_preset, llm_write_tools, brand_mark, sfw_mode
 `
 
 type UpdateSettingsParams struct {
@@ -79,6 +103,8 @@ type UpdateSettingsParams struct {
 	DownloadPriorityPreset []byte
 	LlmEnabled             bool
 	LlmWriteTools          []string
+	BrandMark              string
+	SfwMode                string
 	UpdatedAt              time.Time
 }
 
@@ -91,6 +117,8 @@ func (q *Queries) UpdateSettings(ctx context.Context, arg UpdateSettingsParams) 
 		arg.DownloadPriorityPreset,
 		arg.LlmEnabled,
 		arg.LlmWriteTools,
+		arg.BrandMark,
+		arg.SfwMode,
 		arg.UpdatedAt,
 	)
 	var i Setting
@@ -104,6 +132,42 @@ func (q *Queries) UpdateSettings(ctx context.Context, arg UpdateSettingsParams) 
 		&i.SearchPriorityPreset,
 		&i.DownloadPriorityPreset,
 		&i.LlmWriteTools,
+		&i.BrandMark,
+		&i.SfwMode,
+	)
+	return i, err
+}
+
+const upsertUserPreferences = `-- name: UpsertUserPreferences :one
+INSERT INTO users_prefs (user_id, brand_mark, sfw_mode, updated_at)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (user_id) DO UPDATE
+SET brand_mark = EXCLUDED.brand_mark,
+    sfw_mode = EXCLUDED.sfw_mode,
+    updated_at = EXCLUDED.updated_at
+RETURNING user_id, brand_mark, sfw_mode, updated_at
+`
+
+type UpsertUserPreferencesParams struct {
+	UserID    uuid.UUID
+	BrandMark *string
+	SfwMode   *string
+	UpdatedAt time.Time
+}
+
+func (q *Queries) UpsertUserPreferences(ctx context.Context, arg UpsertUserPreferencesParams) (UsersPref, error) {
+	row := q.db.QueryRow(ctx, upsertUserPreferences,
+		arg.UserID,
+		arg.BrandMark,
+		arg.SfwMode,
+		arg.UpdatedAt,
+	)
+	var i UsersPref
+	err := row.Scan(
+		&i.UserID,
+		&i.BrandMark,
+		&i.SfwMode,
+		&i.UpdatedAt,
 	)
 	return i, err
 }

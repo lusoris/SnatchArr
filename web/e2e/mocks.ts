@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 // Signed-in admin over an empty fleet: the API state the mocked e2e suites share.
-import type { Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 
 export function json(
 	body: unknown,
@@ -60,6 +60,24 @@ export const samplePolicyData = {
 	exclude_quality_profiles: []
 };
 
+export const sampleQueuePolicyData = {
+	enabled: true,
+	rules: {
+		stalled: { mode: 'observe', threshold: 3 },
+		slow: { mode: 'observe', threshold: 5 },
+		failed: { mode: 'act', threshold: 1 },
+		import_blocked: { mode: 'act', threshold: 2 },
+		id_matched: { mode: 'observe', threshold: 1 },
+		unwanted_score: { mode: 'observe', threshold: 3 },
+		unwanted_unmonitored: { mode: 'observe', threshold: 3 }
+	},
+	grace_seconds: 3600,
+	min_bytes_per_second: 1024,
+	min_custom_format_score: null,
+	max_removals_per_sweep: 5,
+	max_imports_per_sweep: 10
+};
+
 export const sampleSettingsData = {
 	history_retention_days: 30,
 	user_agent: 'SnatchArr/1.0',
@@ -83,9 +101,64 @@ export const sampleSettingsData = {
 	}
 };
 
-export async function mockSignedInApi(
+export const sampleRuntimeSettingsData = [
+	{
+		key: 'port',
+		env: 'APP_PORT',
+		class: 'bootstrap',
+		type: 'int',
+		default: '8080',
+		value: '8080',
+		source: 'default',
+		locked: true,
+		apply: 'restart'
+	},
+	{
+		key: 'log_level',
+		env: 'APP_LOG_LEVEL',
+		class: 'runtime',
+		type: 'string',
+		default: 'info',
+		value: 'info',
+		source: 'db',
+		locked: false,
+		apply: 'live'
+	},
+	{
+		key: 'api_secret',
+		env: 'APP_API_SECRET',
+		class: 'secret',
+		type: 'string',
+		default: '',
+		is_set: true,
+		source: 'env',
+		locked: true,
+		apply: 'restart'
+	}
+];
+
+/** Signed-in endpoints whose mock body is a fixed object. */
+const FIXED_BODIES: Record<string, unknown> = {
+	'adult/image-sets': { items: [], total: 0 },
+	'adult/sync/status': {
+		total_sources: 0,
+		enabled_sources: 0,
+		performers_synced: 0,
+		studios_synced: 0
+	},
+	'configarr/status': { linked: false, watching: false },
+	'requests/settings': {
+		voting_mode: 'upvotes_only',
+		allow_viewer_votes: true,
+		visibility: 'public_attributed',
+		voting_ttl_days: 0
+	}
+};
+
+export async function mockAuthSetupRoutes(
 	page: Page,
-	role: 'admin' | 'requester' | 'viewer' = 'admin'
+	role: 'admin' | 'requester' | 'viewer' = 'admin',
+	jellyfin = true
 ): Promise<void> {
 	await page.route('**/api/v1/auth/setup/status', (route) =>
 		route.fulfill(json({ setup_complete: true }))
@@ -100,9 +173,16 @@ export async function mockSignedInApi(
 		)
 	);
 	await page.route('**/api/v1/auth/sso', (route) =>
-		route.fulfill(json({ oidc: false, proxy: false, jellyfin: true }))
+		route.fulfill(json({ oidc: false, proxy: false, jellyfin }))
 	);
 	await page.route('**/api/v1/auth/identities', (route) => route.fulfill(json({ items: [] })));
+}
+
+export async function mockSignedInApi(
+	page: Page,
+	role: 'admin' | 'requester' | 'viewer' = 'admin'
+): Promise<void> {
+	await mockAuthSetupRoutes(page, role);
 	for (const path of [
 		'instances',
 		'hourly-caps',
@@ -114,13 +194,17 @@ export async function mockSignedInApi(
 		'runs',
 		'events',
 		'schedules',
-		'system/modules'
+		'system/modules',
+		'adult/sources'
 	]) {
 		await page.route(`**/api/v1/${path}*`, (route) => route.fulfill(json([])));
 	}
-	await page.route('**/api/v1/configarr/status*', (route) =>
-		route.fulfill(json({ linked: false, watching: false }))
-	);
+	for (const path of ['adult/performers', 'adult/studios']) {
+		await page.route(`**/api/v1/${path}*`, (route) => route.fulfill(json({ items: [] })));
+	}
+	for (const [path, body] of Object.entries(FIXED_BODIES)) {
+		await page.route(`**/api/v1/${path}*`, (route) => route.fulfill(json(body)));
+	}
 }
 
 export async function mockModulesApi(
@@ -128,6 +212,119 @@ export async function mockModulesApi(
 	modules: Array<{ id: string; enabled: boolean }>
 ): Promise<void> {
 	await page.route('**/api/v1/system/modules', (route) => route.fulfill(json(modules)));
+}
+
+// A few rows, the scale of the seeded stack: the budget measures page density, not list length.
+const ADULT_ROWS = 3;
+
+export const sampleAdultSources = Array.from({ length: ADULT_ROWS }, (_, i) => ({
+	id: `00000000-0000-0000-0004-${String(i + 1).padStart(12, '0')}`,
+	name: `Adult Source ${i + 1}`,
+	endpoint: `https://source-${i + 1}.example.com/graphql`,
+	has_api_key: true,
+	enabled: true,
+	sync_favorites: true,
+	priority: i + 1,
+	last_sync_at: '2026-10-21T06:19:00Z',
+	created_at: '2026-10-21T06:19:00Z',
+	updated_at: '2026-10-21T06:19:00Z'
+}));
+
+export const sampleAdultPerformers = Array.from({ length: ADULT_ROWS }, (_, i) => ({
+	id: `00000000-0000-0000-0005-${String(i + 1).padStart(12, '0')}`,
+	name: `Performer ${i + 1}`,
+	canonical_name: `Performer ${i + 1}`,
+	disambiguation: `Stage ${i + 1}`,
+	urls: [`https://example.com/performer/${i + 1}`],
+	is_favorite: i % 2 === 0,
+	ref_count: (i + 1) * 3,
+	created_at: '2026-10-21T06:19:00Z',
+	updated_at: '2026-10-21T06:19:00Z'
+}));
+
+export const sampleAdultStudios = Array.from({ length: ADULT_ROWS }, (_, i) => ({
+	id: `00000000-0000-0000-0006-${String(i + 1).padStart(12, '0')}`,
+	name: `Studio ${i + 1}`,
+	canonical_name: `Studio ${i + 1}`,
+	urls: [`https://example.com/studio/${i + 1}`],
+	is_favorite: i % 2 === 0,
+	ref_count: (i + 1) * 2,
+	created_at: '2026-10-21T06:19:00Z',
+	updated_at: '2026-10-21T06:19:00Z'
+}));
+
+export const sampleAdultImageSets = Array.from({ length: ADULT_ROWS }, (_, i) => ({
+	id: `00000000-0000-0000-0007-${String(i + 1).padStart(12, '0')}`,
+	title: `Image Set ${i + 1}`,
+	directory_path: `/data/adult/images/set-${i + 1}`,
+	item_count: 10 + i,
+	total_size_bytes: (i + 1) * 1024 * 1024 * 5,
+	created_at: '2026-10-21T06:19:00Z',
+	updated_at: '2026-10-21T06:19:00Z'
+}));
+
+export const sampleAdultImageItems = Array.from({ length: 12 }, (_, i) => ({
+	id: `00000000-0000-0000-0008-${String(i + 1).padStart(12, '0')}`,
+	image_set_id: sampleAdultImageSets[0].id,
+	file_path: `/data/adult/images/set-1/${String(i + 1).padStart(3, '0')}.png`,
+	file_name: `${String(i + 1).padStart(3, '0')}.png`,
+	file_size_bytes: 1024 * 500,
+	mime_type: 'image/png',
+	sha256_checksum: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+	sort_order: i,
+	created_at: '2026-10-21T06:19:00Z'
+}));
+
+export const sampleAdultImageSetDetail = {
+	...sampleAdultImageSets[0],
+	items: sampleAdultImageItems,
+	ignore_file_present: true
+};
+
+export const adultRowExpectations: Record<string, string> = {
+	'/adult/image-sets': 'Image Set 1',
+	'/adult/performers': 'Performer 1',
+	'/adult/sources': 'Adult Source 1',
+	'/adult/studios': 'Studio 1'
+};
+
+export async function mockAdultListApi(page: Page): Promise<void> {
+	await page.route('**/api/v1/adult/sources*', (route) => {
+		if (route.request().method() !== 'GET') return route.fallback();
+		return route.fulfill(json(sampleAdultSources));
+	});
+	await page.route('**/api/v1/adult/performers*', (route) => {
+		if (route.request().method() !== 'GET') return route.fallback();
+		return route.fulfill(json({ items: sampleAdultPerformers }));
+	});
+	await page.route('**/api/v1/adult/studios*', (route) => {
+		if (route.request().method() !== 'GET') return route.fallback();
+		return route.fulfill(json({ items: sampleAdultStudios }));
+	});
+	await page.route('**/api/v1/adult/image-sets*', (route) => {
+		if (route.request().method() !== 'GET') return route.fallback();
+		return route.fulfill(json({ items: sampleAdultImageSets, total: sampleAdultImageSets.length }));
+	});
+	// A glob `*` stops at `/`, so the detail path needs its own route.
+	await page.route('**/api/v1/adult/image-sets/*', (route) => {
+		if (route.request().method() !== 'GET') return route.fallback();
+		return route.fulfill(json(sampleAdultImageSetDetail));
+	});
+	await page.route('**/api/v1/adult/sync/status*', (route) => {
+		if (route.request().method() !== 'GET') return route.fallback();
+		return route.fulfill(
+			json({
+				total_sources: sampleAdultSources.length,
+				enabled_sources: sampleAdultSources.length,
+				performers_synced: sampleAdultPerformers.length,
+				studios_synced: sampleAdultStudios.length,
+				last_sync_at: '2026-10-21T06:19:00Z'
+			})
+		);
+	});
+	await page.route('**/api/v1/adult/image-items/*/file', (route) =>
+		route.fulfill({ status: 200, contentType: 'image/png', body: '' })
+	);
 }
 
 export async function mockInstancePolicyApi(
@@ -222,4 +419,94 @@ export async function mockSettingsApi(
 	await page.route('**/api/v1/notifications/channels', (route) => route.fulfill(json([])));
 	await page.route('**/api/v1/notifications/rules', (route) => route.fulfill(json([])));
 	await page.route('**/api/v1/priority-presets', (route) => route.fulfill(json([])));
+	await mockRuntimeSettingsApi(page);
+}
+
+export async function mockRuntimeSettingsApi(
+	page: Page,
+	settings = sampleRuntimeSettingsData
+): Promise<void> {
+	await page.route('**/api/v1/settings/runtime', (route) => route.fulfill(json(settings)));
+}
+
+const sampleLicences = {
+	generatedBy: { 'cargo-about': '0.9.2', 'go-licenses': '2.0.1', pnpm: '12.11.2' },
+	packages: [
+		{
+			ecosystem: 'go',
+			name: 'github.com/gin-gonic/gin',
+			version: 'v1.10.0',
+			licence: 'MIT',
+			url: 'https://github.com/gin-gonic/gin',
+			text: 'MIT License'
+		}
+	]
+};
+
+/**
+ * Mocks the signed-in API, the system status and the static licences.json the About tab reads.
+ * `delayMs` holds the licences response back, `status` >= 400 answers it with a problem document.
+ */
+export async function mockAboutApi(
+	page: Page,
+	options?: { delayMs?: number; status?: number }
+): Promise<void> {
+	await mockSignedInApi(page);
+	await page.route('**/api/v1/system/status', (route) =>
+		route.fulfill(
+			json({
+				name: 'SnatchArr',
+				version: '0.1.0',
+				commit: 'abc1234',
+				build_date: '2026-10-20',
+				profile: 'dev',
+				setup_complete: true
+			})
+		)
+	);
+	await page.route('**/licences.json', async (route) => {
+		if (options?.delayMs) {
+			await new Promise((r) => setTimeout(r, options.delayMs));
+		}
+		if (options?.status && options.status >= 400) {
+			await route.fulfill(problemJson(options.status, 'Licences unavailable'));
+			return;
+		}
+		await route.fulfill(json(sampleLicences));
+	});
+}
+
+export async function mockInstanceQueueApi(page: Page, instanceId: string): Promise<void> {
+	await page.route(`**/api/v1/instances/${instanceId}/queue-policy`, (route) =>
+		route.fulfill(json(sampleQueuePolicyData))
+	);
+	await page.route(`**/api/v1/instances/${instanceId}/queue-strikes`, (route) =>
+		route.fulfill(json([]))
+	);
+}
+
+export async function mockInstanceNotFound(page: Page, instanceId: string): Promise<void> {
+	await page.route(`**/api/v1/instances/${instanceId}`, (route) =>
+		route.fulfill({
+			status: 404,
+			contentType: 'application/problem+json',
+			body: JSON.stringify({
+				type: 'about:blank',
+				title: 'Not Found',
+				status: 404,
+				detail: 'Instance not found'
+			})
+		})
+	);
+}
+
+export async function submitAdminLogin(
+	page: Page,
+	password = 'smoke-password-1234'
+): Promise<void> {
+	await page.locator('#username').fill('admin');
+	await page.locator('#password').fill(password);
+	await page.locator('button[type="submit"]').click();
+	await expect(page).toHaveURL(/.*\/$/);
+	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 }

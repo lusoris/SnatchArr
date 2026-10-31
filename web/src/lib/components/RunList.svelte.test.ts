@@ -160,4 +160,13 @@ describe('RunList', () => {
 		renderWithQuery(RunList, { instanceId: forkInstance.id });
 		expect(screen.queryByRole('table')).toBeNull();
 	});
+
+	it('wraps runs table in a keyboard-focusable bounded region', async () => {
+		stubGet({ '/runs': sampleRuns });
+		renderWithQuery(RunList, { instanceId: forkInstance.id });
+		const region = await screen.findByRole('region', { name: m.runs_region_label() });
+		expect(region.getAttribute('tabindex')).toBe('0');
+		expect(region.className).toContain('md:max-h-[11rem]');
+		expect(region.className).toContain('md:overflow-y-auto');
+	});
 });

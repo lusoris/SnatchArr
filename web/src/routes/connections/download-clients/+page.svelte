@@ -7,15 +7,20 @@ SPDX-License-Identifier: EUPL-1.2
 	import { toast } from 'svelte-sonner';
 	import { api, describeError } from '#lib/api/client.js';
 	import type { components } from '#lib/api/schema.js';
+	import AdminActionHeader from '#lib/components/AdminActionHeader.svelte';
 	import AdminFormSlot from '#lib/components/AdminFormSlot.svelte';
+	import AppLogo from '#lib/components/AppLogo.svelte';
 	import ConfirmDelete from '#lib/components/ConfirmDelete.svelte';
 	import DownloadClientForm from '#lib/components/DownloadClientForm.svelte';
 	import PageHeader from '#lib/components/PageHeader.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import UrlText from '#lib/components/UrlText.svelte';
+	import { entityHref } from '#lib/entities.js';
+	import { downloadClientQueries } from '#lib/queries/connections.js';
 	import { FormEditor } from '#lib/formEditor.svelte.js';
 	import { deleteCallbacks, probeFailed, saveSuccess } from '#lib/forms.js';
 	import { HELP_MAP } from '#lib/help.js';
+	import { downloadClientName } from '#lib/kinds.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { keys } from '#lib/query.js';
 	import { session } from '#lib/session.svelte.js';
@@ -24,15 +29,7 @@ SPDX-License-Identifier: EUPL-1.2
 	type DownloadClientInput = components['schemas']['DownloadClientInput'];
 	type DownloadClientStatus = components['schemas']['DownloadClientStatus'];
 
-	const clients = createSentioQuery({
-		queryKey: keys.dlclients,
-		queryFn: async () => (await api.GET('/download-clients')).data ?? []
-	});
-	const status = createSentioQuery({
-		queryKey: keys.dlstatus,
-		queryFn: async () => (await api.GET('/download-clients/status')).data ?? [],
-		refetchInterval: 30_000
-	});
+	const { clients, status } = downloadClientQueries();
 	const instances = createSentioQuery({
 		queryKey: keys.instances,
 		queryFn: async () => (await api.GET('/instances')).data ?? []
@@ -132,8 +129,8 @@ SPDX-License-Identifier: EUPL-1.2
 />
 
 <section aria-label={m.dlclients_title()} class="w-full">
-	<div class="grid w-full grid-cols-1 items-start gap-6 xl:grid-cols-12">
-		<div class="flex flex-col gap-4 xl:col-span-7">
+	<div class="grid w-full grid-cols-1 items-start gap-6 2xl:grid-cols-12">
+		<div class="flex flex-col gap-4 2xl:col-span-7">
 			{#if session.isAdmin}
 				<form
 					class="flex flex-wrap items-end gap-2"
@@ -176,25 +173,26 @@ SPDX-License-Identifier: EUPL-1.2
 								<th scope="col">{m.instance_url()}</th>
 								<th scope="col">{m.dlclients_instance()}</th>
 								<th scope="col">{m.instance_last_check()}</th>
-								{#if session.isAdmin}
-									<th scope="col"><span class="sr-only">{m.action_actions()}</span></th>
-								{/if}
+								<AdminActionHeader />
 							</tr>
 						</thead>
 						<tbody>
 							{#each clients.data ?? [] as c (c.id)}
 								{@const st = statusFor(c.id)}
-								<tr>
+								<tr class:target={session.isAdmin && c.source !== 'configarr'}>
 									<td data-label={m.instance_name()}>
-										<h2
-											class="text-sm font-semibold break-words md:max-w-28 md:truncate"
-											title={c.name}
-										>
-											{c.name}
-										</h2>
+										<div class="flex items-center gap-2">
+											<AppLogo kind={c.kind} size={18} />
+											<h2
+												class="text-sm font-semibold break-words md:max-w-22 md:truncate"
+												title={c.name}
+											>
+												{c.name}
+											</h2>
+										</div>
 									</td>
 									<td class="text-sm text-subtle" data-label={m.dlclients_kind()}
-										>{c.kind} · {c.protocol}</td
+										>{downloadClientName(c.kind)} · {c.protocol}</td
 									>
 									<td class="text-sm text-subtle" data-label={m.instance_url()}
 										><UrlText
@@ -204,11 +202,14 @@ SPDX-License-Identifier: EUPL-1.2
 										/></td
 									>
 									<td class="text-sm text-subtle" data-label={m.dlclients_instance()}
-										>{instanceName(c.instance_id)}</td
+										>{#if c.instance_id}<a
+												href={entityHref('instance', c.instance_id)}
+												class="hover:underline">{instanceName(c.instance_id)}</a
+											>{:else}{instanceName(c.instance_id)}{/if}</td
 									>
 									<td data-label={m.instance_last_check()}>
 										{#if st}
-											<div class="text-sm" role="status">
+											<div class="min-w-0 text-sm" role="status">
 												<div>
 													{st.reachable ? m.dlclients_reachable() : m.dlclients_unreachable()}
 													{#if st.reachable}· {m.dlclients_active({
@@ -219,7 +220,7 @@ SPDX-License-Identifier: EUPL-1.2
 												{#if st.error}
 													<details class="text-xs text-danger md:max-w-24">
 														<summary
-															class="line-clamp-2 cursor-pointer break-words"
+															class="line-clamp-2 cursor-pointer [overflow-wrap:anywhere]"
 															title={st.error}
 														>
 															{st.error}
@@ -237,7 +238,7 @@ SPDX-License-Identifier: EUPL-1.2
 											<div class="flex flex-wrap items-center gap-1.5">
 												<button
 													type="button"
-													class="btn"
+													class="btn target-link"
 													disabled={c.source === 'configarr'}
 													onclick={() => edit(c)}>{m.action_edit()}</button
 												>
@@ -263,7 +264,7 @@ SPDX-License-Identifier: EUPL-1.2
 			{/if}
 		</div>
 
-		<div class="xl:col-span-5">
+		<div class="2xl:col-span-5">
 			<AdminFormSlot {editor} {save} probe={probeInput}>
 				{#snippet form(props)}
 					<DownloadClientForm client={editor.editing} instances={instances.data ?? []} {...props} />
@@ -274,25 +275,10 @@ SPDX-License-Identifier: EUPL-1.2
 </section>
 
 <style>
-	.compact-table tbody tr {
-		height: 2.75rem;
-	}
 	@media (min-width: 1280px) {
-		.compact-table tbody tr {
-			height: 2.25rem;
-		}
 		.compact-table th,
 		.compact-table td {
 			padding: 0.35rem 0.5rem;
 		}
-		.compact-table :global(.btn) {
-			min-height: 1.75rem;
-			padding: 0.15rem 0.5rem;
-			font-size: 0.75rem;
-		}
-	}
-	.compact-table th,
-	.compact-table td {
-		vertical-align: middle;
 	}
 </style>

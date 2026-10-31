@@ -8,8 +8,6 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
 )
@@ -159,6 +157,14 @@ func SettingsFromRow(r sqlcgen.Setting) domain.Settings {
 	if writeTools == nil {
 		writeTools = []string{}
 	}
+	brandMark := domain.BrandMark(r.BrandMark)
+	if brandMark == "" {
+		brandMark = domain.DefaultBrandMark
+	}
+	sfwMode := domain.SfwMode(r.SfwMode)
+	if sfwMode == "" {
+		sfwMode = domain.DefaultSfwMode
+	}
 	return domain.Settings{
 		HistoryRetentionDays:   int(r.HistoryRetentionDays),
 		UserAgent:              r.UserAgent,
@@ -167,14 +173,31 @@ func SettingsFromRow(r sqlcgen.Setting) domain.Settings {
 		DownloadPriorityPreset: presetFromJSON(r.DownloadPriorityPreset),
 		LLMEnabled:             r.LlmEnabled,
 		LLMWriteTools:          writeTools,
+		BrandMark:              brandMark,
+		SfwMode:                sfwMode,
 		UpdatedAt:              r.UpdatedAt,
 	}
+}
+
+// UserPreferencesFromRow converts a per-user preferences row.
+func UserPreferencesFromRow(r sqlcgen.UsersPref) domain.UserPreferences {
+	var out domain.UserPreferences
+	if r.BrandMark != nil {
+		bm := domain.BrandMark(*r.BrandMark)
+		out.BrandMark = &bm
+	}
+	if r.SfwMode != nil {
+		sm := domain.SfwMode(*r.SfwMode)
+		out.SfwMode = &sm
+	}
+	out.UpdatedAt = r.UpdatedAt
+	return out
 }
 
 // ProwlarrLinkFromRow converts a row; the API key is never carried.
 func ProwlarrLinkFromRow(r sqlcgen.ProwlarrLink) domain.ProwlarrLink {
 	return domain.ProwlarrLink{
-		ID: r.ID, Name: r.Name, BaseURL: r.BaseUrl, Enabled: r.Enabled,
+		ID: r.ID, Name: r.Name, BaseURL: r.BaseUrl, HourlyCap: int(r.HourlyCap), Enabled: r.Enabled,
 		LastSeenVersion: deref(r.LastSeenVersion), LastCheckAt: r.LastCheckAt, LastError: deref(r.LastError),
 		CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
 	}
@@ -192,33 +215,17 @@ func SeerrLinkFromRow(r sqlcgen.SeerrLink) domain.SeerrLink {
 
 // SeerrRequestFromRow converts a cached request row.
 func SeerrRequestFromRow(r sqlcgen.SeerrRequest) domain.SeerrRequest {
-	out := seerrRequest(r.LinkID, r.RequestID, r.MediaType, r.TmdbID, r.TvdbID, r.Title, r.RequestStatus, r.MediaStatus, r.Is4k,
-		r.RequestedBy, r.Seasons, r.SeerrServerID, r.InstanceID, r.EntityID, r.RequestedAt, r.LastSnatchedAt, r.LastSeenAt, r.UpdatedAt)
-	out.RequestedByJellyfinID = r.RequestedByJellyfinID
-	return out
-}
-
-// SeerrRequestFromListRow converts a dashboard row (same columns plus names).
-func SeerrRequestFromListRow(r sqlcgen.ListSeerrRequestsRow) domain.SeerrRequest {
-	out := seerrRequest(r.LinkID, r.RequestID, r.MediaType, r.TmdbID, r.TvdbID, r.Title, r.RequestStatus, r.MediaStatus, r.Is4k,
-		r.RequestedBy, r.Seasons, r.SeerrServerID, r.InstanceID, r.EntityID, r.RequestedAt, r.LastSnatchedAt, r.LastSeenAt, r.UpdatedAt)
-	out.RequestedByJellyfinID = r.RequestedByJellyfinID
-	return out
-}
-
-func seerrRequest(linkID uuid.UUID, requestID int32, mediaType string, tmdb, tvdb int32, title string, reqStatus, mediaStatus int32, is4k bool,
-	requestedBy string, seasons []int32, serverID *int32, instanceID *uuid.UUID, entityID *int64, requestedAt, lastSnatched *time.Time, lastSeen, updated time.Time,
-) domain.SeerrRequest {
 	out := domain.SeerrRequest{
-		LinkID: linkID, RequestID: int(requestID), MediaType: domain.SeerrMediaType(mediaType), TmdbID: int(tmdb), TvdbID: int(tvdb),
-		Title: title, RequestStatus: int(reqStatus), MediaStatus: int(mediaStatus), Is4K: is4k, RequestedBy: requestedBy,
-		InstanceID: instanceID, EntityID: entityID, RequestedAt: requestedAt, LastSnatchedAt: lastSnatched, LastSeenAt: lastSeen, UpdatedAt: updated,
+		LinkID: r.LinkID, RequestID: int(r.RequestID), MediaType: domain.SeerrMediaType(r.MediaType), TmdbID: int(r.TmdbID), TvdbID: int(r.TvdbID),
+		Title: r.Title, RequestStatus: int(r.RequestStatus), MediaStatus: int(r.MediaStatus), Is4K: r.Is4k, RequestedBy: r.RequestedBy,
+		RequestedByJellyfinID: r.RequestedByJellyfinID, InstanceID: r.InstanceID, EntityID: r.EntityID,
+		RequestedAt: r.RequestedAt, LastSnatchedAt: r.LastSnatchedAt, LastSeenAt: r.LastSeenAt, UpdatedAt: r.UpdatedAt,
 	}
-	if serverID != nil {
-		out.SeerrServerID = int(*serverID)
+	if r.SeerrServerID != nil {
+		out.SeerrServerID = int(*r.SeerrServerID)
 	}
-	out.Seasons = make([]int, 0, len(seasons))
-	for _, s := range seasons {
+	out.Seasons = make([]int, 0, len(r.Seasons))
+	for _, s := range r.Seasons {
 		out.Seasons = append(out.Seasons, int(s))
 	}
 	return out

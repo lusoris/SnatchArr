@@ -1,7 +1,9 @@
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
 #
-# Runs when release-please publishes a GitHub release (tag vX.Y.Z). After the image smoke test
+# Runs when release-please publishes a GitHub release (tag vX.Y.Z). The dogfood gate
+# (release-dogfood-gate.yml) first refuses a tag whose parent commit lacks a successful
+# snatcharr/dogfood status. After the image smoke test
 # it calls release-build.yml, which builds and pushes both images (multi-arch, SBOM +
 # provenance attestations, cosign keyless) and the Helm chart as an OCI artifact (cosign
 # keyless + provenance attestation) in a reusable workflow of its own (SLSA Build Level 3,
@@ -49,101 +51,31 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
 
+  dogfood-gate:
+    name: dogfood gate
+    needs: meta
+    permissions:
+      contents: read
+      statuses: read
+    uses: ./.github/workflows/release-dogfood-gate.yml
+    with:
+      tag: ${{ needs.meta.outputs.tag }}
+
   image-smoke:
     name: image smoke (e2e amd64 + arm64 exec)
-    needs: meta
-    runs-on: ubuntu-26.04
-    timeout-minutes: 40
-    services:
-      postgres:
-        image: mirror.gcr.io/library/postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
-        env:
-          POSTGRES_PASSWORD: smoke
-        options: >-
-          --health-cmd "pg_isready -h 127.0.0.1 -U postgres"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 12
-        ports:
-          - 5432:5432
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ needs.meta.outputs.tag }}
-          persist-credentials: false
-      - id: date
-        run: echo "commit=$(git log -1 --format=%cI)" >> "$GITHUB_OUTPUT"
-      - uses: ./.github/actions/setup-go
-      - uses: ./.github/actions/setup-buildx
-        with:
-          qemu: 'true'
-      - name: Build api image (amd64)
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          file: Dockerfile
-          platforms: linux/amd64
-          load: true
-          push: false
-          tags: snatcharr-api:e2e
-          build-args: |
-            VERSION=${{ needs.meta.outputs.version }}
-            COMMIT=${{ github.sha }}
-            DATE=${{ github.event.release.published_at || steps.date.outputs.commit }}
-          cache-from: type=gha,scope=api
-          cache-to: type=gha,scope=api,mode=max
-      - name: Build worker image (amd64)
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          file: worker/Dockerfile
-          platforms: linux/amd64
-          load: true
-          push: false
-          tags: snatcharr-worker:e2e
-          build-args: |
-            VERSION=${{ needs.meta.outputs.version }}
-            COMMIT=${{ github.sha }}
-            DATE=${{ github.event.release.published_at || steps.date.outputs.commit }}
-          cache-from: type=gha,scope=worker
-          cache-to: type=gha,scope=worker,mode=max
-      - name: make e2e-image-smoke
-        env:
-          SMOKE_DSN: postgres://postgres:smoke@127.0.0.1:5432/postgres?sslmode=disable
-          SMOKE_SKIP_BUILD: '1'
-        run: make e2e-image-smoke
-      - name: Build api image (arm64)
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          file: Dockerfile
-          platforms: linux/arm64
-          load: true
-          push: false
-          tags: snatcharr-api:arm64-test
-          build-args: |
-            VERSION=${{ needs.meta.outputs.version }}
-            COMMIT=${{ github.sha }}
-            DATE=${{ github.event.release.published_at || steps.date.outputs.commit }}
-          cache-from: type=gha,scope=api
-          cache-to: type=gha,scope=api,mode=max
-      - name: Build worker image (arm64)
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          file: worker/Dockerfile
-          platforms: linux/arm64
-          load: true
-          push: false
-          tags: snatcharr-worker:arm64-test
-          build-args: |
-            VERSION=${{ needs.meta.outputs.version }}
-            COMMIT=${{ github.sha }}
-            DATE=${{ github.event.release.published_at || steps.date.outputs.commit }}
-          cache-from: type=gha,scope=worker
-          cache-to: type=gha,scope=worker,mode=max
-      - name: Verify arm64 execution
-        run: tools/e2e/arm64-check.sh snatcharr-api:arm64-test snatcharr-worker:arm64-test
+    needs: [meta, dogfood-gate]
+    permissions:
+      contents: read
+    uses: ./.github/workflows/image-smoke.yml
+    with:
+      ref: ${{ needs.meta.outputs.tag }}
+      target: e2e-image-smoke
+      arm64: true
+      cache-write: true
+      build-args: |
+        VERSION=${{ needs.meta.outputs.version }}
+        COMMIT=${{ github.sha }}
+        DATE=${{ github.event.release.published_at }}
 
   # The images and the chart are built, signed and attested in release-build.yml, a reusable
   # workflow of its own, so their certificates name a workflow that only builds (#42).

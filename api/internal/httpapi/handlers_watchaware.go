@@ -44,7 +44,12 @@ func (h *Handlers) UpdateWatchawareSource(ctx context.Context, req *oas.Watchawa
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
+	stored, err := h.watchaware.Get(ctx, params.SourceId)
+	if err != nil {
+		return nil, err
+	}
 	in := watchawareInputFromOAS(req)
+	in.Enabled = req.Enabled.Or(stored.Enabled)
 	src, err := h.watchaware.Update(ctx, params.SourceId, in)
 	if err != nil {
 		return nil, err
@@ -116,15 +121,11 @@ func watchawareInputFromOAS(req *oas.WatchawareSourceInput) watchaware.SourceInp
 	if req.APIKey.IsSet() {
 		apiKey = req.APIKey.Value
 	}
-	enabled := true
-	if req.Enabled.IsSet() {
-		enabled = req.Enabled.Value
-	}
 	return watchaware.SourceInput{
 		Kind:    watchaware.Kind(req.Kind),
 		Name:    req.Name,
 		URL:     req.URL.String(),
 		APIKey:  apiKey,
-		Enabled: enabled,
+		Enabled: req.Enabled.Or(true),
 	}
 }

@@ -4,12 +4,13 @@ SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { problemStatus } from '#lib/api/client.js';
+	import AppLogo from '#lib/components/AppLogo.svelte';
 	import PageHeader from '#lib/components/PageHeader.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import UrlText from '#lib/components/UrlText.svelte';
+	import { pageHref } from '#lib/entities.js';
 	import { HELP_MAP } from '#lib/help.js';
 	import { instanceQuery } from '#lib/components/instance/instance-query.svelte.js';
 	import { getInstanceTabs, isTabActive } from '#lib/components/instance/tabs.js';
@@ -26,7 +27,7 @@ SPDX-License-Identifier: EUPL-1.2
 			(instance.isSuccess && !instance.data)
 	);
 
-	const tabs = $derived(getInstanceTabs(instanceId));
+	const tabs = $derived(getInstanceTabs(instanceId, instance.data?.kind));
 
 	const currentHelp = $derived.by(() => {
 		const path = page.url.pathname;
@@ -49,7 +50,7 @@ SPDX-License-Identifier: EUPL-1.2
 		<div class="card">
 			<h1 class="mb-2 text-2xl font-semibold">{m.instance_not_found_title()}</h1>
 			<p class="mb-4 text-sm text-subtle">{m.instance_not_found_text()}</p>
-			<a href={resolve('/instances')} class="btn btn-primary">{m.instance_not_found_back()}</a>
+			<a href={pageHref('/instances')} class="btn btn-primary">{m.instance_not_found_back()}</a>
 		</div>
 	{:else if instance.isError}
 		<ProblemNote error={instance.error} />
@@ -58,8 +59,9 @@ SPDX-License-Identifier: EUPL-1.2
 		<PageHeader title={inst.name} sticky help={currentHelp}>
 			{#snippet status()}
 				<span
-					class="inline-block rounded-full border border-line px-2.5 py-0.5 text-xs text-subtle"
+					class="inline-flex items-center gap-1.5 rounded-full border border-line px-2.5 py-0.5 text-xs text-subtle"
 				>
+					<AppLogo kind={inst.kind} size={16} />
 					{instanceKindLabel(inst.kind, inst.last_seen_product)}
 				</span>
 			{/snippet}
@@ -71,47 +73,9 @@ SPDX-License-Identifier: EUPL-1.2
 			<nav aria-label={m.instance_tabs_label()} class="subtab-bar">
 				{#each tabs as tab (tab.key)}
 					{@const active = isTabActive(page.url.pathname, tab.href, tab.key === 'overview')}
-					{#if tab.key === 'overview'}
-						<a
-							href={resolve('/instances/[id]', { id: instanceId })}
-							class="subtab-link"
-							aria-current={active ? 'page' : undefined}
-						>
-							{tab.label}
-						</a>
-					{:else if tab.key === 'policy'}
-						<a
-							href={resolve('/instances/[id]/policy', { id: instanceId })}
-							class="subtab-link"
-							aria-current={active ? 'page' : undefined}
-						>
-							{tab.label}
-						</a>
-					{:else if tab.key === 'queue'}
-						<a
-							href={resolve('/instances/[id]/queue', { id: instanceId })}
-							class="subtab-link"
-							aria-current={active ? 'page' : undefined}
-						>
-							{tab.label}
-						</a>
-					{:else if tab.key === 'activity'}
-						<a
-							href={resolve('/instances/[id]/activity', { id: instanceId })}
-							class="subtab-link"
-							aria-current={active ? 'page' : undefined}
-						>
-							{tab.label}
-						</a>
-					{:else}
-						<a
-							href={resolve('/instances/[id]/memory', { id: instanceId })}
-							class="subtab-link"
-							aria-current={active ? 'page' : undefined}
-						>
-							{tab.label}
-						</a>
-					{/if}
+					<a href={tab.href} class="subtab-link" aria-current={active ? 'page' : undefined}>
+						{tab.label}
+					</a>
 				{/each}
 			</nav>
 		</PageHeader>

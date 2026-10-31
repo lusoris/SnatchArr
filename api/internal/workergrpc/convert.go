@@ -33,6 +33,8 @@ func appKind(k domain.AppKind) snatcharrv1.AppKind {
 		return snatcharrv1.AppKind_APP_KIND_WHISPARR_V2
 	case domain.KindWhisparrV3:
 		return snatcharrv1.AppKind_APP_KIND_WHISPARR_V3
+	case domain.KindStash:
+		return snatcharrv1.AppKind_APP_KIND_UNSPECIFIED
 	default:
 		return snatcharrv1.AppKind_APP_KIND_UNSPECIFIED
 	}
@@ -153,13 +155,4 @@ func eventType(t snatcharrv1.EventType) string {
 		return "unknown"
 	}
 	return events.EventName(t.String())
-}
-
-// eventTypes lists the label of every defined event type.
-func eventTypes() []string {
-	names := make([]string, 0, len(snatcharrv1.EventType_name))
-	for _, name := range snatcharrv1.EventType_name {
-		names = append(names, events.EventName(name))
-	}
-	return names
 }

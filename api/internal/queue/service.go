@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,6 +23,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/events"
 	"github.com/lusoris/SnatchArr/api/internal/store"
+	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
 )
 
 // Sweep bounds: pages per instance, records per page, expired strike rows
@@ -70,20 +72,12 @@ func (s *DBInstanceSource) ListEnabledInstances(ctx context.Context) ([]Instance
 	out := make([]Instance, 0, len(rows))
 	var errs []error
 	for _, row := range rows {
-		key, err := s.enc.Open(row.ApiKeyEnc)
+		inst, err := s.decodeInstance(row)
 		if err != nil {
-			errs = append(errs, fmt.Errorf("queue: open api key of %s: %w", row.Name, err))
+			errs = append(errs, err)
 			continue
 		}
-		prio := store.InstancePriorityFromValues(row.SearchPriority, row.DownloadPriority)
-		out = append(out, Instance{
-			ID:               row.ID,
-			Name:             row.Name,
-			Kind:             domain.AppKind(row.Kind),
-			BaseURL:          row.BaseUrl,
-			APIKey:           string(key),
-			DownloadPriority: prio.Download,
-		})
+		out = append(out, inst)
 	}
 	return out, errors.Join(errs...)
 }
@@ -99,9 +93,13 @@ func (s *DBInstanceSource) EnabledInstance(ctx context.Context, id uuid.UUID) (I
 		}
 		return Instance{}, fmt.Errorf("queue: get instance: %w", mapped)
 	}
-	if !row.Enabled {
+	if !row.Enabled || !domain.AppKind(row.Kind).IsArr() {
 		return Instance{}, domain.ErrNotFound
 	}
+	return s.decodeInstance(row)
+}
+
+func (s *DBInstanceSource) decodeInstance(row sqlcgen.Instance) (Instance, error) {
 	key, err := s.enc.Open(row.ApiKeyEnc)
 	if err != nil {
 		return Instance{}, fmt.Errorf("queue: open api key of %s: %w", row.Name, err)
@@ -139,6 +137,7 @@ type MetricsRecorder interface {
 
 // Service manages download queues across *arr instances.
 type Service struct {
+	sweepMu   sync.Mutex
 	store     StoreInterface
 	instances InstanceSource
 	arr       ArrClient
@@ -227,7 +226,23 @@ func (s *Service) SweepAll(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
+// SweepInstance performs one queue sweep for the enabled instance with the given ID.
+// When the instance's queue policy is disabled, sweepInstance records a skipped metric
+// and returns nil without calling the *arr API. Concurrent sweeps serialize on sweepMu
+// and processImports stamps ImportedAt on queue_strikes rows, preventing a second sweep
+// within the strike cooldown from double-importing or exceeding MaxImportsPerSweep.
+func (s *Service) SweepInstance(ctx context.Context, instanceID uuid.UUID) error {
+	inst, err := s.instances.EnabledInstance(ctx, instanceID)
+	if err != nil {
+		return fmt.Errorf("queue: sweep instance: %w", err)
+	}
+	return s.sweepInstance(ctx, inst)
+}
+
 func (s *Service) sweepInstance(ctx context.Context, inst Instance) error {
+	s.sweepMu.Lock()
+	defer s.sweepMu.Unlock()
+
 	cfg, err := s.store.Settings(ctx, inst.ID)
 	if err != nil {
 		return fmt.Errorf("queue settings for %s: %w", inst.Name, err)

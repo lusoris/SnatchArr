@@ -175,7 +175,8 @@ describe('ActivityFeed', () => {
 		renderWithQuery(ActivityFeed);
 
 		expect(await screen.findByText('API server ready')).toBeTruthy();
-		expect(screen.getByText('port=8080')).toBeTruthy();
+		// The value renders through LinkText, so key and value are separate text nodes.
+		expect(screen.getByText((_, el) => el?.textContent === 'port=8080')).toBeTruthy();
 	});
 
 	it('omits server log tab for viewers and never queries logs', async () => {
@@ -222,9 +223,12 @@ describe('ActivityFeed', () => {
 		expect(await screen.findByRole('alert')).toBeTruthy();
 	});
 
-	it('fixedInstanceId prop omits instance filter dropdown', async () => {
+	it('fixedInstanceId prop omits instance filter dropdown and bounds desktop log height', async () => {
 		renderWithQuery(ActivityFeed, { fixedInstanceId: sampleInstance.id });
 
 		expect(screen.queryByLabelText(m.activity_filter_instance())).toBeNull();
+		const log = await screen.findByRole('log');
+		expect(log.className).toContain('h-[20rem]');
+		expect(log.className).toContain('md:h-[16rem]');
 	});
 });

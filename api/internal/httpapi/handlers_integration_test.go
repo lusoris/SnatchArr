@@ -28,6 +28,7 @@ import (
 	"github.com/golusoris/golusoris/core/crypto"
 	"github.com/golusoris/golusoris/core/id"
 
+	"github.com/lusoris/SnatchArr/api/internal/adult"
 	"github.com/lusoris/SnatchArr/api/internal/arrclient"
 	"github.com/lusoris/SnatchArr/api/internal/auth"
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
@@ -47,6 +48,8 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/prowlarr"
 	"github.com/lusoris/SnatchArr/api/internal/prowlarrclient"
 	"github.com/lusoris/SnatchArr/api/internal/queue"
+	"github.com/lusoris/SnatchArr/api/internal/requests"
+	"github.com/lusoris/SnatchArr/api/internal/runtimesettings"
 	"github.com/lusoris/SnatchArr/api/internal/seerr"
 	"github.com/lusoris/SnatchArr/api/internal/seerrclient"
 	"github.com/lusoris/SnatchArr/api/internal/settings"
@@ -233,27 +236,28 @@ func newFakeProwlarrServer(t *testing.T) *fakeProwlarrServer {
 }
 
 type integrationFixture struct {
-	h              *Handlers
-	st             *store.Store
-	clk            *clockwork.FakeClock
-	probe          *stubProber
-	sessMgr        *session.Manager
-	keys           *apikey.Service
-	apiKeys        *auth.APIKeys
-	admin          domain.User
-	viewer         domain.User
-	dlSnap         *stubSnapshotter
-	dlDisc         *stubDiscoverer
-	seerrClient    *stubSeerrClient
-	prowlarrServer *fakeProwlarrServer
-	prowlarrSvc    *prowlarr.Service
-	seerrResolver  *stubResolver
-	notifySvc      *notify.Service
-	webhookStore   *notify.WebhookStore
-	notifyEngine   *notify.Engine
-	rec            *snatch.Recorder
-	enc            *crypto.Encryptor
-	logs           *testdiag.LogBuffer
+	h               *Handlers
+	st              *store.Store
+	clk             *clockwork.FakeClock
+	probe           *stubProber
+	sessMgr         *session.Manager
+	keys            *apikey.Service
+	apiKeys         *auth.APIKeys
+	admin           domain.User
+	viewer          domain.User
+	dlSnap          *stubSnapshotter
+	dlDisc          *stubDiscoverer
+	seerrClient     *stubSeerrClient
+	prowlarrServer  *fakeProwlarrServer
+	prowlarrSvc     *prowlarr.Service
+	seerrResolver   *stubResolver
+	notifySvc       *notify.Service
+	webhookStore    *notify.WebhookStore
+	notifyEngine    *notify.Engine
+	rec             *snatch.Recorder
+	enc             *crypto.Encryptor
+	logs            *testdiag.LogBuffer
+	runtimeSettings *runtimesettings.Service
 }
 
 func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Generator, authSvc *auth.Service, apiKeys *auth.APIKeys, sessMgr *session.Manager, probe *stubProber, dlSnap dlclients.Snapshotter, dlDisc arrclient.Discoverer, m *metrics.Metrics, logger *slog.Logger, seerrClient *stubSeerrClient, res *stubResolver) (*Handlers, *notify.Service, *notify.WebhookStore, *notify.Engine, *snatch.Recorder, *crypto.Encryptor, *prowlarr.Service) {
@@ -300,36 +304,41 @@ func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Genera
 		t.Fatalf("buildHandlers: modules.Ensure: %v", err)
 	}
 	watchawareSvc := watchaware.NewService(st, enc, clk, ids, logger, modulesSvc, instSvc, nil, nil, nil)
+	adultSvc := adult.NewService(st, enc, clk, ids, modulesSvc, logger)
+	requestsSvc := requests.NewService(requests.NewStore(st, clk))
 	build := buildinfo.Info{Version: "test-ver", Commit: "test-commit", Date: "2026-10-14"}
 	h := &Handlers{
-		build:      build,
-		cfg:        cfg,
-		clk:        clk,
-		auth:       authSvc,
-		apiKeys:    apiKeys,
-		sessions:   sessMgr,
-		instances:  instSvc,
-		policies:   polSvc,
-		queue:      queueStore,
-		queueSvc:   queueSvc,
-		options:    policies.NewOptions(instSvc, labeler),
-		runs:       runs,
-		workers:    workers,
-		rec:        rec,
-		budget:     budget,
-		memory:     memory,
-		planner:    planner,
-		schedules:  schedules,
-		clients:    clients,
-		settings:   settingsSvc,
-		modules:    modulesSvc,
-		configarr:  configarrSvc,
-		seerr:      seerrSvc,
-		prowlarr:   prowlarrSvc,
-		notify:     notifySvc,
-		watchaware: watchawareSvc,
-		logs:       logring.New(logring.MinSize),
-		logger:     logger,
+		build:           build,
+		cfg:             cfg,
+		clk:             clk,
+		auth:            authSvc,
+		apiKeys:         apiKeys,
+		sessions:        sessMgr,
+		instances:       instSvc,
+		policies:        polSvc,
+		queue:           queueStore,
+		queueSvc:        queueSvc,
+		options:         policies.NewOptions(instSvc, labeler),
+		runs:            runs,
+		workers:         workers,
+		rec:             rec,
+		budget:          budget,
+		memory:          memory,
+		planner:         planner,
+		schedules:       schedules,
+		clients:         clients,
+		settings:        settingsSvc,
+		requests:        requestsSvc,
+		modules:         modulesSvc,
+		configarr:       configarrSvc,
+		seerr:           seerrSvc,
+		prowlarr:        prowlarrSvc,
+		notify:          notifySvc,
+		watchaware:      watchawareSvc,
+		adult:           adultSvc,
+		runtimeSettings: runtimesettings.New(st, enc, clk, config.BaseOptions{Options: cfg}, logger),
+		logs:            logring.New(logring.MinSize),
+		logger:          logger,
 	}
 	return h, notifySvc, webhookStore, notifyEngine, rec, enc, prowlarrSvc
 }
@@ -339,10 +348,10 @@ func newIntegrationFixture(t *testing.T) *integrationFixture {
 	st := storetest.New(t)
 	clk := clock.NewFake()
 	ids := id.New()
-	hasher := crypto.NewPasswordHasher(1)
+	hasher := testHasher
 	logs := testdiag.NewLogBuffer(slog.LevelWarn, 64<<10)
 	logger := slog.New(logs)
-	authSvc, err := auth.NewService(st, hasher, clk, ids, logger)
+	authSvc, err := auth.NewServiceWithHasher(st, hasher, clk, ids, logger)
 	if err != nil {
 		t.Fatalf("newIntegrationFixture: auth.NewService: %v", err)
 	}
@@ -381,27 +390,28 @@ func newIntegrationFixture(t *testing.T) *integrationFixture {
 	res := &stubResolver{entityID: 42, found: true}
 	h, nSvc, ws, nEngine, rec, enc, pSvc := buildHandlers(t, st, clk, ids, authSvc, apiKeys, sessMgr, probe, dlSnap, dlDisc, m, logger, seerrClient, res)
 	return &integrationFixture{
-		h:              h,
-		st:             st,
-		clk:            clk,
-		probe:          probe,
-		sessMgr:        sessMgr,
-		keys:           keys,
-		apiKeys:        apiKeys,
-		admin:          domain.User{ID: uuid.New(), Username: "admin", Role: domain.RoleAdmin},
-		viewer:         domain.User{ID: uuid.New(), Username: "viewer", Role: domain.RoleViewer},
-		dlSnap:         dlSnap,
-		dlDisc:         dlDisc,
-		seerrClient:    seerrClient,
-		prowlarrServer: prowlarrServer,
-		prowlarrSvc:    pSvc,
-		seerrResolver:  res,
-		notifySvc:      nSvc,
-		webhookStore:   ws,
-		notifyEngine:   nEngine,
-		rec:            rec,
-		enc:            enc,
-		logs:           logs,
+		h:               h,
+		st:              st,
+		clk:             clk,
+		probe:           probe,
+		sessMgr:         sessMgr,
+		keys:            keys,
+		apiKeys:         apiKeys,
+		admin:           domain.User{ID: uuid.New(), Username: "admin", Role: domain.RoleAdmin},
+		viewer:          domain.User{ID: uuid.New(), Username: "viewer", Role: domain.RoleViewer},
+		dlSnap:          dlSnap,
+		dlDisc:          dlDisc,
+		seerrClient:     seerrClient,
+		prowlarrServer:  prowlarrServer,
+		prowlarrSvc:     pSvc,
+		seerrResolver:   res,
+		notifySvc:       nSvc,
+		webhookStore:    ws,
+		notifyEngine:    nEngine,
+		rec:             rec,
+		enc:             enc,
+		logs:            logs,
+		runtimeSettings: h.runtimeSettings,
 	}
 }
 
@@ -2191,5 +2201,383 @@ func TestResetStateDetails(t *testing.T) {
 	unprocessed2, err := f.h.memory.FilterUnprocessed(ctx, inst2, domain.SnatchMissing, "episode", []int64{201, 202, 203})
 	if err != nil || len(unprocessed2) != 0 {
 		t.Fatalf("FilterUnprocessed() inst2 len = %d, %v; want 0 forgotten (retained)", len(unprocessed2), err)
+	}
+}
+
+func TestCreateStashInstanceEncryptedKeyAndExclusions(t *testing.T) {
+	t.Parallel()
+	f := newIntegrationFixture(t)
+	adminCtx := withUser(t.Context(), f.admin)
+	const secretKey = "stash-super-secret-api-key-9999"
+
+	created, err := f.h.CreateInstance(adminCtx, &oas.InstanceInput{
+		Kind:    oas.AppKindStash,
+		Name:    "Companion Stash",
+		BaseURL: "http://stash.invalid:9999",
+		APIKey:  secretKey,
+		Enabled: oas.NewOptBool(true),
+	})
+	if err != nil {
+		t.Fatalf("CreateInstance(stash) = %v", err)
+	}
+	if created.Kind != oas.AppKindStash {
+		t.Fatalf("created.Kind = %q, want %q", created.Kind, oas.AppKindStash)
+	}
+	rawJSON, err := json.Marshal(created)
+	if err != nil {
+		t.Fatalf("json.Marshal(created) = %v", err)
+	}
+	if strings.Contains(string(rawJSON), secretKey) {
+		t.Fatal("HTTP response leaked plaintext stash API key")
+	}
+
+	assertStashEncryptedAtRest(t, f, created.ID, secretKey)
+	assertStashExcludedFromArrEndpoints(t, f, adminCtx, created.ID)
+}
+
+func assertStashEncryptedAtRest(t *testing.T, f *integrationFixture, instID uuid.UUID, wantPlaintext string) {
+	t.Helper()
+	row, err := f.st.Q().GetInstance(t.Context(), instID)
+	if err != nil {
+		t.Fatalf("GetInstance(stash) = %v", err)
+	}
+	if len(row.ApiKeyEnc) == 0 || bytes.Contains(row.ApiKeyEnc, []byte(wantPlaintext)) {
+		t.Fatal("stored api_key_enc is empty or contains plaintext secret")
+	}
+	opened, err := f.enc.Open(row.ApiKeyEnc)
+	if err != nil {
+		t.Fatalf("enc.Open(api_key_enc) = %v", err)
+	}
+	if string(opened) != wantPlaintext {
+		t.Fatalf("decrypted key = %q, want %q", string(opened), wantPlaintext)
+	}
+}
+
+func assertStashExcludedFromArrEndpoints(t *testing.T, f *integrationFixture, adminCtx context.Context, stashID uuid.UUID) {
+	t.Helper()
+	caps, err := f.h.GetHourlyCaps(adminCtx)
+	if err != nil {
+		t.Fatalf("GetHourlyCaps() = %v", err)
+	}
+	if len(caps) != 0 {
+		t.Fatalf("GetHourlyCaps() len = %d, want 0 (stash excluded)", len(caps))
+	}
+	if _, err := f.h.TriggerRun(adminCtx, &oas.RunTrigger{Kind: oas.SnatchKindMissing}, oas.TriggerRunParams{InstanceId: stashID}); !errors.Is(err, domain.ErrInvalid) {
+		t.Fatalf("TriggerRun(stash) err = %v, want ErrInvalid", err)
+	}
+	if _, err := f.h.PreviewRun(adminCtx, oas.PreviewRunParams{InstanceId: stashID, Kind: "missing"}); !errors.Is(err, domain.ErrInvalid) {
+		t.Fatalf("PreviewRun(stash) err = %v, want ErrInvalid", err)
+	}
+	if _, err := f.h.GetInstancePriority(adminCtx, oas.GetInstancePriorityParams{InstanceId: stashID}); !errors.Is(err, domain.ErrInvalid) {
+		t.Fatalf("GetInstancePriority(stash) err = %v, want ErrInvalid", err)
+	}
+}
+
+func TestUpdateInstance_TableDriven(t *testing.T) {
+	t.Parallel()
+	f := newIntegrationFixture(t)
+	ctx := withUser(t.Context(), f.admin)
+
+	created, err := f.h.CreateInstance(ctx, &oas.InstanceInput{
+		Kind:    oas.AppKindSonarr,
+		Name:    "tv-943",
+		BaseURL: "http://sonarr:8989",
+		APIKey:  "test-api-key-943",
+	})
+	if err != nil || !created.Enabled {
+		t.Fatalf("CreateInstance() = %+v, %v, want enabled:true", created, err)
+	}
+
+	disabled, err := f.h.UpdateInstance(ctx, &oas.InstanceUpdate{
+		Kind:    oas.AppKindSonarr,
+		Name:    "tv-943",
+		BaseURL: "http://sonarr:8989",
+		Enabled: oas.NewOptBool(false),
+	}, oas.UpdateInstanceParams{InstanceId: created.ID})
+	if err != nil || disabled.Enabled {
+		t.Fatalf("UpdateInstance() initial disable = %+v, %v", disabled, err)
+	}
+
+	tests := []struct {
+		name        string
+		createInit  bool
+		instID      uuid.UUID
+		req         oas.InstanceUpdate
+		wantEnabled bool
+		wantErr     error
+	}{
+		{
+			name:       "positive: omitted enabled keeps stored disabled value",
+			createInit: true,
+			req: oas.InstanceUpdate{
+				Kind:    oas.AppKindSonarr,
+				Name:    "tv-943-renamed",
+				BaseURL: "http://sonarr:8989",
+			},
+			wantEnabled: false,
+		},
+		{
+			name:       "negative: explicit true replaces stored disabled value",
+			createInit: true,
+			req: oas.InstanceUpdate{
+				Kind:    oas.AppKindSonarr,
+				Name:    "tv-943-renamed",
+				BaseURL: "http://sonarr:8989",
+				Enabled: oas.NewOptBool(true),
+			},
+			wantEnabled: true,
+		},
+		{
+			name:       "boundary: explicit false replaces stored true value",
+			createInit: true,
+			req: oas.InstanceUpdate{
+				Kind:    oas.AppKindSonarr,
+				Name:    "tv-943-renamed",
+				BaseURL: "http://sonarr:8989",
+				Enabled: oas.NewOptBool(false),
+			},
+			wantEnabled: false,
+		},
+		{
+			name:   "boundary: unknown instance id returns not found",
+			instID: uuid.New(),
+			req: oas.InstanceUpdate{
+				Kind:    oas.AppKindSonarr,
+				Name:    "unknown",
+				BaseURL: "http://sonarr:8989",
+			},
+			wantErr: domain.ErrNotFound,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			instID := tc.instID
+			req := tc.req
+			if tc.createInit {
+				baseURL := "http://sonarr-" + uuid.NewString()[:8] + ":8989"
+				c, err := f.h.CreateInstance(ctx, &oas.InstanceInput{
+					Kind:    oas.AppKindSonarr,
+					Name:    "tv-943-" + uuid.NewString()[:8],
+					BaseURL: baseURL,
+					APIKey:  "test-api-key-943",
+				})
+				if err != nil {
+					t.Fatalf("CreateInstance() = %v", err)
+				}
+				dis, err := f.h.UpdateInstance(ctx, &oas.InstanceUpdate{
+					Kind:    oas.AppKindSonarr,
+					Name:    c.Name,
+					BaseURL: baseURL,
+					Enabled: oas.NewOptBool(false),
+				}, oas.UpdateInstanceParams{InstanceId: c.ID})
+				if err != nil || dis.Enabled {
+					t.Fatalf("initial disable = %v", err)
+				}
+				instID = c.ID
+				req.BaseURL = baseURL
+				req.Name = "tv-943-" + uuid.NewString()[:8]
+			}
+			got, err := f.h.UpdateInstance(ctx, &req, oas.UpdateInstanceParams{InstanceId: instID})
+			if tc.wantErr != nil {
+				if !errors.Is(err, tc.wantErr) {
+					t.Fatalf("UpdateInstance() err = %v, want %v", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("UpdateInstance() err = %v", err)
+			}
+			if got.Enabled != tc.wantEnabled {
+				t.Fatalf("UpdateInstance() Enabled = %v, want %v", got.Enabled, tc.wantEnabled)
+			}
+		})
+	}
+}
+
+func TestUpdatePolicy_TableDriven(t *testing.T) {
+	t.Parallel()
+	f := newIntegrationFixture(t)
+	ctx := withUser(t.Context(), f.admin)
+
+	inst, err := f.h.CreateInstance(ctx, &oas.InstanceInput{
+		Kind:    oas.AppKindRadarr,
+		Name:    "movies-943",
+		BaseURL: "http://radarr:7878",
+		APIKey:  "test-api-key-943",
+	})
+	if err != nil {
+		t.Fatalf("CreateInstance() = %v", err)
+	}
+
+	pol, err := f.h.GetPolicy(ctx, oas.GetPolicyParams{InstanceId: inst.ID})
+	if err != nil {
+		t.Fatalf("GetPolicy() = %v", err)
+	}
+	pol.DryRun = oas.NewOptBool(true)
+	pol.SkipUnavailableMovies = oas.NewOptBool(false)
+	initialUpd, err := f.h.UpdatePolicy(ctx, pol, oas.UpdatePolicyParams{InstanceId: inst.ID})
+	if err != nil || !initialUpd.DryRun.Or(false) || initialUpd.SkipUnavailableMovies.Or(true) {
+		t.Fatalf("initial UpdatePolicy() = %+v, %v", initialUpd, err)
+	}
+
+	tests := []struct {
+		name        string
+		createInit  bool
+		instID      uuid.UUID
+		dryRun      oas.OptBool
+		skipUnavail oas.OptBool
+		wantDry     bool
+		wantSkip    bool
+		wantErr     error
+	}{
+		{
+			name:        "positive: omitted dry_run and skip_unavailable keep stored non-default values",
+			createInit:  true,
+			dryRun:      oas.OptBool{},
+			skipUnavail: oas.OptBool{},
+			wantDry:     true,
+			wantSkip:    false,
+		},
+		{
+			name:        "negative: sent values replace stored values",
+			createInit:  true,
+			dryRun:      oas.NewOptBool(false),
+			skipUnavail: oas.NewOptBool(true),
+			wantDry:     false,
+			wantSkip:    true,
+		},
+		{
+			name:        "boundary: explicit false dry_run and false skip_unavailable are honoured",
+			createInit:  true,
+			dryRun:      oas.NewOptBool(false),
+			skipUnavail: oas.NewOptBool(false),
+			wantDry:     false,
+			wantSkip:    false,
+		},
+		{
+			name:    "boundary: unknown instance id returns not found",
+			instID:  uuid.New(),
+			wantErr: domain.ErrNotFound,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			instID := tc.instID
+			var req oas.SnatchPolicy
+			if tc.createInit {
+				inst, err := f.h.CreateInstance(ctx, &oas.InstanceInput{
+					Kind:    oas.AppKindRadarr,
+					Name:    "movies-943-" + uuid.NewString()[:8],
+					BaseURL: "http://radarr-" + uuid.NewString()[:8] + ":7878",
+					APIKey:  "test-api-key-943",
+				})
+				if err != nil {
+					t.Fatalf("CreateInstance() = %v", err)
+				}
+				p, err := f.h.GetPolicy(ctx, oas.GetPolicyParams{InstanceId: inst.ID})
+				if err != nil {
+					t.Fatalf("GetPolicy() = %v", err)
+				}
+				p.DryRun = oas.NewOptBool(true)
+				p.SkipUnavailableMovies = oas.NewOptBool(false)
+				upd, err := f.h.UpdatePolicy(ctx, p, oas.UpdatePolicyParams{InstanceId: inst.ID})
+				if err != nil || !upd.DryRun.Or(false) || upd.SkipUnavailableMovies.Or(true) {
+					t.Fatalf("initial UpdatePolicy() = %+v, %v", upd, err)
+				}
+				instID = inst.ID
+				req = *p
+			}
+			req.DryRun = tc.dryRun
+			req.SkipUnavailableMovies = tc.skipUnavail
+			got, err := f.h.UpdatePolicy(ctx, &req, oas.UpdatePolicyParams{InstanceId: instID})
+			if tc.wantErr != nil {
+				if !errors.Is(err, tc.wantErr) {
+					t.Fatalf("UpdatePolicy() err = %v, want %v", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("UpdatePolicy() err = %v", err)
+			}
+			if got.DryRun.Or(false) != tc.wantDry || got.SkipUnavailableMovies.Or(true) != tc.wantSkip {
+				t.Fatalf("UpdatePolicy() = %+v, want dry=%v skip=%v", got, tc.wantDry, tc.wantSkip)
+			}
+		})
+	}
+}
+
+func TestUpdateSettings_TableDriven(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		llm       oas.OptBool
+		brand     oas.OptBrandMark
+		sfw       oas.OptSfwMode
+		wantLlm   bool
+		wantBrand oas.BrandMark
+		wantSfw   oas.SfwMode
+	}{
+		{
+			name:      "positive: omitted optional fields keep stored non-default values",
+			llm:       oas.OptBool{},
+			brand:     oas.OptBrandMark{},
+			sfw:       oas.OptSfwMode{},
+			wantLlm:   true,
+			wantBrand: oas.BrandMarkPenis,
+			wantSfw:   oas.SfwModeOff,
+		},
+		{
+			name:      "negative: sent values replace stored values",
+			llm:       oas.NewOptBool(false),
+			brand:     oas.NewOptBrandMark(oas.BrandMarkHand),
+			sfw:       oas.NewOptSfwMode(oas.SfwModeOn),
+			wantLlm:   false,
+			wantBrand: oas.BrandMarkHand,
+			wantSfw:   oas.SfwModeOn,
+		},
+		{
+			name:      "boundary: explicit false and default enum values are honoured",
+			llm:       oas.NewOptBool(false),
+			brand:     oas.NewOptBrandMark(oas.BrandMarkVulva),
+			sfw:       oas.NewOptSfwMode(oas.SfwModeAuto),
+			wantLlm:   false,
+			wantBrand: oas.BrandMarkVulva,
+			wantSfw:   oas.SfwModeAuto,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			f := newIntegrationFixture(t)
+			ctx := withUser(t.Context(), f.admin)
+
+			current, err := f.h.GetSettings(ctx)
+			if err != nil {
+				t.Fatalf("GetSettings() = %v", err)
+			}
+
+			current.LlmEnabled = oas.NewOptBool(true)
+			current.BrandMark = oas.NewOptBrandMark(oas.BrandMarkPenis)
+			current.SfwMode = oas.NewOptSfwMode(oas.SfwModeOff)
+			initUpd, err := f.h.UpdateSettings(ctx, current)
+			if err != nil || !initUpd.LlmEnabled.Or(false) || initUpd.BrandMark.Or("") != oas.BrandMarkPenis || initUpd.SfwMode.Or("") != oas.SfwModeOff {
+				t.Fatalf("initial UpdateSettings() = %+v, %v", initUpd, err)
+			}
+
+			req := *current
+			req.LlmEnabled = tc.llm
+			req.BrandMark = tc.brand
+			req.SfwMode = tc.sfw
+			got, err := f.h.UpdateSettings(ctx, &req)
+			if err != nil {
+				t.Fatalf("UpdateSettings() err = %v", err)
+			}
+			if got.LlmEnabled.Or(false) != tc.wantLlm || got.BrandMark.Or("") != tc.wantBrand || got.SfwMode.Or("") != tc.wantSfw {
+				t.Fatalf("UpdateSettings() = %+v, want llm=%v brand=%v sfw=%v", got, tc.wantLlm, tc.wantBrand, tc.wantSfw)
+			}
+		})
 	}
 }

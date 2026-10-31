@@ -16,15 +16,15 @@ import (
 )
 
 // newEncryptor builds the encryptor for *arr API keys and download-client secrets from the
-// key the profile may run on (config.Options.CryptoKey). It replaces golusoris' provider,
+// key the profile may run on (config.BaseOptions.CryptoKey). It replaces golusoris' provider,
 // which refuses an empty crypto.key in every profile: as an fx decorator that does not take
 // the original value, it keeps that provider from running at all (#138).
 //
 // The dev profile without a key runs on the published development key and says so on every
 // start; prod never reaches this with an empty or development key, because config.Load
 // refuses both.
-func newEncryptor(cfg *gconfig.Config, o config.Options, logger *slog.Logger) (*crypto.Encryptor, error) {
-	hexKey, development, err := o.CryptoKey(cfg.String("crypto.key"))
+func newEncryptor(cfg *gconfig.Config, base config.BaseOptions, logger *slog.Logger) (*crypto.Encryptor, error) {
+	hexKey, development, err := base.CryptoKey(cfg.String("crypto.key"))
 	if err != nil {
 		return nil, fmt.Errorf("app: %w", err)
 	}

@@ -18,6 +18,7 @@ import (
 
 var regexMap = map[string]ogenregex.Regexp{
 	"^([01][0-9]|2[0-3]):[0-5][0-9]$": ogenregex.MustCompile("^([01][0-9]|2[0-3]):[0-5][0-9]$"),
+	"^(api|worker(:[^\\s:]+)?)$":      ogenregex.MustCompile("^(api|worker(:[^\\s:]+)?)$"),
 	"^[a-z][a-z0-9_]{0,63}$":          ogenregex.MustCompile("^[a-z][a-z0-9_]{0,63}$"),
 }
 var (

@@ -21,12 +21,24 @@ describe('nav model', () => {
 		expect(items.map((i) => i.href)).toEqual(expectedOrder);
 	});
 
-	it('positive: production getNavItems returns exactly the 6 ADR-0029 entries for any active modules set', () => {
+	it('positive: production getNavItems returns the 6 core entries when adult module is off, and includes adult entries when adult module is active', () => {
 		expect(getNavItems(new Set()).map((i) => i.href)).toEqual(expectedOrder);
 		expect(getNavItems(new Set(['fixture_mod'])).map((i) => i.href)).toEqual(expectedOrder);
 		expect(getNavItems(new Set(['unknown_mod', 'fixture_mod'])).map((i) => i.href)).toEqual(
 			expectedOrder
 		);
+		expect(getNavItems(new Set(['adult'])).map((i) => i.href)).toEqual([
+			'/',
+			'/activity',
+			'/instances',
+			'/automation',
+			'/connections',
+			'/adult/sources',
+			'/adult/performers',
+			'/adult/studios',
+			'/adult/image-sets',
+			'/system'
+		]);
 	});
 
 	it('positive: every nav item carries its designated icon from ADR-0029 route table', () => {
@@ -127,8 +139,11 @@ describe('nav model', () => {
 			expect(res.moduleId).toBe('fixture_mod');
 		});
 
-		it('boundary: production MODULE_ROUTES map is empty and never disables any route', () => {
-			expect(Object.keys(MODULE_ROUTES)).toHaveLength(0);
+		it('boundary: production MODULE_ROUTES maps /adult to adult module and leaves unmapped routes enabled', () => {
+			expect(MODULE_ROUTES['/adult']).toBe('adult');
+			expect(moduleForRoute('/adult/sources')).toBe('adult');
+			expect(isRouteDisabled('/adult/sources', new Set()).disabled).toBe(true);
+			expect(isRouteDisabled('/adult/sources', new Set(['adult'])).disabled).toBe(false);
 			expect(moduleForRoute('/watchaware')).toBeUndefined();
 			expect(isRouteDisabled('/watchaware', new Set()).disabled).toBe(false);
 		});

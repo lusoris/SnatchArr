@@ -11,21 +11,21 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type AdultFavoritePerformer struct {
-	ID             uuid.UUID
-	CanonicalName  string
-	Disambiguation *string
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
-	Urls           []string
-}
-
-type AdultFavoriteStudio struct {
-	ID            uuid.UUID
-	CanonicalName string
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
-	Urls          []string
+type AdultExternalRef struct {
+	ID               uuid.UUID
+	EntityType       string
+	EntityID         uuid.UUID
+	SourceKind       string
+	SourceInstanceID *uuid.UUID
+	ForeignID        string
+	SecondaryID      *string
+	CanonicalUrl     *string
+	ExtraUrls        []string
+	IsFavorite       bool
+	ConfidenceScore  *int16
+	MatchMethod      *string
+	FetchedAt        time.Time
+	LastSeenAt       time.Time
 }
 
 type AdultImageItem struct {
@@ -56,32 +56,43 @@ type AdultImageSet struct {
 	UpdatedAt              time.Time
 }
 
-type AdultPerformerLink struct {
-	FavoriteID   uuid.UUID
-	InstanceID   uuid.UUID
-	ForeignID    string
-	IsFavorite   bool
-	LastSyncedAt time.Time
+type AdultPerformer struct {
+	ID             uuid.UUID
+	CanonicalName  string
+	Disambiguation *string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	Urls           []string
+	IsFavorite     bool
+	MergedIntoID   *uuid.UUID
 }
 
 type AdultStashboxInstance struct {
-	ID            uuid.UUID
-	Name          string
-	Endpoint      string
-	ApiKeyEnc     []byte
-	Enabled       bool
-	SyncFavorites bool
-	Priority      int32
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ID                   uuid.UUID
+	Name                 string
+	Endpoint             string
+	ApiKeyEnc            []byte
+	Enabled              bool
+	SyncFavorites        bool
+	Priority             int32
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
+	LastSyncAt           *time.Time
+	LastSyncError        *string
+	LastPerformersSynced int32
+	LastStudiosSynced    int32
 }
 
-type AdultStudioLink struct {
-	FavoriteID   uuid.UUID
-	InstanceID   uuid.UUID
-	ForeignID    string
-	IsFavorite   bool
-	LastSyncedAt time.Time
+type AdultStudio struct {
+	ID              uuid.UUID
+	CanonicalName   string
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	Urls            []string
+	IsFavorite      bool
+	MergedIntoID    *uuid.UUID
+	ParentStudioID  *uuid.UUID
+	NetworkStudioID *uuid.UUID
 }
 
 type ApiKey struct {
@@ -184,6 +195,15 @@ type NotificationRule struct {
 	UpdatedAt  time.Time
 }
 
+type PriorityPreset struct {
+	ID        uuid.UUID
+	Name      string
+	Search    []byte
+	Download  []byte
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
 type ProcessedItem struct {
 	InstanceID     uuid.UUID
 	Kind           string
@@ -205,6 +225,13 @@ type ProwlarrLink struct {
 	LastError       *string
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
+	HourlyCap       int32
+}
+
+type ProwlarrRateBucket struct {
+	LinkID      uuid.UUID
+	WindowStart time.Time
+	Used        int32
 }
 
 type QueuePolicy struct {
@@ -236,6 +263,22 @@ type RateBucket struct {
 	InstanceID  uuid.UUID
 	WindowStart time.Time
 	Used        int32
+}
+
+type RequestsSetting struct {
+	Singleton        bool
+	VotingMode       string
+	AllowViewerVotes bool
+	Visibility       string
+	VotingTtlDays    int32
+	UpdatedAt        time.Time
+}
+
+type RuntimeSetting struct {
+	Key       string
+	Value     string
+	UpdatedBy *uuid.UUID
+	UpdatedAt time.Time
 }
 
 type Schedule struct {
@@ -307,6 +350,8 @@ type Setting struct {
 	SearchPriorityPreset   []byte
 	DownloadPriorityPreset []byte
 	LlmWriteTools          []string
+	BrandMark              string
+	SfwMode                string
 }
 
 type SnatchEvent struct {
@@ -370,6 +415,7 @@ type SnatchRun struct {
 	LeaseCount     int32
 	DryRun         bool
 	Seed           int64
+	EligibleItems  *int32
 }
 
 type User struct {
@@ -396,6 +442,13 @@ type UserNotifyTarget struct {
 	ConfigEnc []byte
 	Enabled   bool
 	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+type UsersPref struct {
+	UserID    uuid.UUID
+	BrandMark *string
+	SfwMode   *string
 	UpdatedAt time.Time
 }
 

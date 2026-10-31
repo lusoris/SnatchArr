@@ -8,35 +8,7 @@ import (
 )
 
 // setDefaults set default value of fields.
-func (s *DownloadClientInput) setDefaults() {
-	{
-		val := bool(true)
-		s.Enabled.SetTo(val)
-	}
-	{
-		val := int(0)
-		s.MaxActive.SetTo(val)
-	}
-	{
-		val := int(0)
-		s.MaxQueued.SetTo(val)
-	}
-	{
-		val := int64(0)
-		s.BandwidthBudgetBps.SetTo(val)
-	}
-}
-
-// setDefaults set default value of fields.
 func (s *InstanceInput) setDefaults() {
-	{
-		val := bool(true)
-		s.Enabled.SetTo(val)
-	}
-}
-
-// setDefaults set default value of fields.
-func (s *InstanceUpdate) setDefaults() {
 	{
 		val := bool(true)
 		s.Enabled.SetTo(val)
@@ -64,14 +36,6 @@ func (s *NotificationChannelInput) setDefaults() {
 }
 
 // setDefaults set default value of fields.
-func (s *NotificationChannelUpdate) setDefaults() {
-	{
-		val := bool(true)
-		s.Enabled.SetTo(val)
-	}
-}
-
-// setDefaults set default value of fields.
 func (s *NotificationRuleInput) setDefaults() {
 	{
 		val := int(1)
@@ -89,10 +53,6 @@ func (s *NotificationRuleUpdate) setDefaults() {
 		val := int(1)
 		s.Threshold = val
 	}
-	{
-		val := bool(true)
-		s.Enabled.SetTo(val)
-	}
 }
 
 // setDefaults set default value of fields.
@@ -104,59 +64,35 @@ func (s *Problem) setDefaults() {
 }
 
 // setDefaults set default value of fields.
-func (s *ProwlarrLinkInput) setDefaults() {
+func (s *ProwlarrLink) setDefaults() {
 	{
-		val := bool(true)
-		s.Enabled.SetTo(val)
+		val := int(15)
+		s.HourlyCap = val
 	}
 }
 
 // setDefaults set default value of fields.
-func (s *SeerrLinkInput) setDefaults() {
+func (s *RequestsSettings) setDefaults() {
 	{
-		val := bool(true)
-		s.Enabled.SetTo(val)
-	}
-}
-
-// setDefaults set default value of fields.
-func (s *Settings) setDefaults() {
-	{
-		val := bool(false)
-		s.LlmEnabled.SetTo(val)
-	}
-}
-
-// setDefaults set default value of fields.
-func (s *SnatchPolicy) setDefaults() {
-	{
-		val := bool(false)
-		s.DryRun.SetTo(val)
+		val := RequestsVotingMode("upvotes_only")
+		s.VotingMode = val
 	}
 	{
 		val := bool(true)
-		s.SkipUnavailableMovies.SetTo(val)
+		s.AllowViewerVotes = val
+	}
+	{
+		val := RequestsVisibility("public_attributed")
+		s.Visibility = val
+	}
+	{
+		val := int(0)
+		s.VotingTTLDays = val
 	}
 }
 
 // setDefaults set default value of fields.
 func (s *UserNotifyTargetInput) setDefaults() {
-	{
-		val := bool(true)
-		s.Enabled.SetTo(val)
-	}
-}
-
-// setDefaults set default value of fields.
-func (s *UserNotifyTargetUpdate) setDefaults() {
-	{
-		val := bool(true)
-		s.Enabled.SetTo(val)
-	}
-}
-
-// setDefaults set default value of fields.
-func (s *WatchawareSourceInput) setDefaults() {
 	{
 		val := bool(true)
 		s.Enabled.SetTo(val)

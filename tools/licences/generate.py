@@ -201,7 +201,51 @@ def read_file_or_empty(path):
     return ""
 
 
-def collect_go(repo_root):
+def load_committed_go_packages(committed_path):
+    """Load map of Go packages from committed file, or empty dict if missing."""
+    if not committed_path or not os.path.exists(committed_path):
+        return {}
+    try:
+        with open(committed_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return {
+            (p["name"], p["version"]): p
+            for p in data.get("packages", [])
+            if p.get("ecosystem") == "go" and "name" in p and "version" in p
+        }
+    except (OSError, json.JSONDecodeError, KeyError):
+        return {}
+
+
+def reconcile_go_url(pkg, committed):
+    """Reconcile resolved Go package URL with committed metadata on lookup failure."""
+    resolved_url = pkg.get("url") or ""
+    if resolved_url and resolved_url != "Unknown":
+        return resolved_url
+
+    if not committed:
+        return ""
+
+    return committed.get("url") or ""
+
+
+def reconcile_go_package(pkg, committed, check=False):
+    """Reconcile Go package licence URL, reporting or erroring on failed lookup."""
+    raw_url = pkg.get("url") or ""
+    url = reconcile_go_url(pkg, committed)
+    if (not raw_url or raw_url == "Unknown") and url:
+        name = pkg.get("name", "")
+        ver = pkg.get("version", "")
+        if check:
+            print(f"Kept committed licence URL for {name}@{ver}", file=sys.stderr)
+        else:
+            raise LicenceError(f"Failed licence URL lookup for {name}@{ver}; rerun to retry", 2)
+    reconciled = dict(pkg)
+    reconciled["url"] = url
+    return reconciled
+
+
+def collect_go(repo_root, committed_path=None, check=False):
     """Collect third-party Go dependencies using go-licenses v2.0.1."""
     env = os.environ.copy()
     env["GOOS"] = "linux"
@@ -210,21 +254,23 @@ def collect_go(repo_root):
 
     out = run_go_licenses(repo_root, env)
     by_pkg = parse_go_report(out, gomodcache)
+    committed_pkgs = load_committed_go_packages(committed_path)
 
     go_pkgs = []
     for (name, ver), info in by_pkg.items():
         text = read_file_or_empty(info.get("path"))
         corrected = sorted({correct_go_licence(lic, text) or "Unknown" for lic in info["licences"]})
         lic_str = " AND ".join(corrected) if corrected else "Unknown"
-        url = info["url"] if info["url"] != "Unknown" else ""
-        go_pkgs.append({
+        pkg = {
             "ecosystem": "go",
             "name": name,
             "version": ver,
             "licence": lic_str,
-            "url": url,
+            "url": info.get("url") or "",
             "text": text,
-        })
+        }
+        reconciled = reconcile_go_package(pkg, committed_pkgs.get((name, ver)), check=check)
+        go_pkgs.append(reconciled)
     return go_pkgs
 
 
@@ -272,10 +318,12 @@ def collect_npm(repo_root):
     return pnpm_ver, npm_pkgs
 
 
-def build_payload(repo_root):
+def build_payload(repo_root, committed_path=None, check=False):
     """Build the complete sorted payload dictionary and validate licenses."""
+    if committed_path is None:
+        committed_path = repo_root / "web" / "static" / "licences.json"
     rust_pkgs = collect_rust(repo_root)
-    go_pkgs = collect_go(repo_root)
+    go_pkgs = collect_go(repo_root, committed_path=committed_path, check=check)
     pnpm_ver, npm_pkgs = collect_npm(repo_root)
 
     all_pkgs = go_pkgs + rust_pkgs + npm_pkgs
@@ -309,17 +357,17 @@ def main():
     repo_root = Path(__file__).resolve().parent.parent.parent
     committed_path = Path(args.committed) if args.committed else repo_root / "web" / "static" / "licences.json"
 
+    if args.check and not committed_path.exists():
+        print(f"Check failed: committed file '{committed_path}' does not exist", file=sys.stderr)
+        sys.exit(1)
+
     try:
-        new_content = build_payload(repo_root)
+        new_content = build_payload(repo_root, committed_path=committed_path, check=args.check)
     except LicenceError as err:
         print(err, file=sys.stderr)
         sys.exit(err.status)
 
     if args.check:
-        if not committed_path.exists():
-            print(f"Check failed: committed file '{committed_path}' does not exist", file=sys.stderr)
-            sys.exit(1)
-
         committed_content = committed_path.read_text(encoding="utf-8")
         if new_content == committed_content:
             print("Licences check passed: committed licences.json is up to date.")

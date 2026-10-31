@@ -31,7 +31,19 @@ const (
 	PageTimeout = 30 * time.Second
 	// MaxURLsPerEntity is the maximum number of URLs stored per favourite entity (HISS-02).
 	MaxURLsPerEntity = 64
+	// MaxSyncErrorLen is the maximum character length persisted for a per-source sync error.
+	MaxSyncErrorLen = 512
+
+	// EntityTypePerformer is the polymorphic entity_type value for performers.
+	EntityTypePerformer = "performer"
+	// EntityTypeStudio is the polymorphic entity_type value for studios.
+	EntityTypeStudio = "studio"
+	// SourceKindStashbox is the external reference source_kind for stash-box instances.
+	SourceKindStashbox = "stashbox"
 )
+
+// ErrSyncInProgress is returned when a favourite synchronization sweep is already running on this replica.
+var ErrSyncInProgress = errors.New("adult: synchronization already in progress")
 
 const (
 	queryFavoritePerformers = `query ($input: PerformerQueryInput!) {
@@ -212,22 +224,29 @@ func fetchFavoriteStudios(ctx context.Context, client *stashbox.Client) ([]stash
 	return all, truncated, nil
 }
 
+func mapStashboxRefs(refs []sqlcgen.AdultExternalRef, capHint int) map[uuid.UUID][]EntityLink {
+	linkMap := make(map[uuid.UUID][]EntityLink, capHint)
+	for _, r := range refs {
+		if r.SourceKind == SourceKindStashbox && r.SourceInstanceID != nil {
+			linkMap[r.EntityID] = append(linkMap[r.EntityID], EntityLink{
+				InstanceID: *r.SourceInstanceID,
+				ForeignID:  r.ForeignID,
+			})
+		}
+	}
+	return linkMap
+}
+
 func (s *Service) loadPerformerCandidates(ctx context.Context) ([]Candidate, error) {
-	rows, err := s.st.Q().ListAdultFavoritePerformers(ctx)
+	rows, err := s.st.Q().ListAdultPerformers(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("adult: list performers: %w", store.MapError(err))
 	}
-	links, err := s.st.Q().ListAdultPerformerLinks(ctx)
+	refs, err := s.st.Q().ListAdultExternalRefsByEntityType(ctx, EntityTypePerformer)
 	if err != nil {
-		return nil, fmt.Errorf("adult: list performer links: %w", store.MapError(err))
+		return nil, fmt.Errorf("adult: list performer refs: %w", store.MapError(err))
 	}
-	linkMap := make(map[uuid.UUID][]EntityLink, len(rows))
-	for _, l := range links {
-		linkMap[l.FavoriteID] = append(linkMap[l.FavoriteID], EntityLink{
-			InstanceID: l.InstanceID,
-			ForeignID:  l.ForeignID,
-		})
-	}
+	linkMap := mapStashboxRefs(refs, len(rows))
 	cands := make([]Candidate, 0, len(rows))
 	for _, r := range rows {
 		dis := ""
@@ -246,21 +265,15 @@ func (s *Service) loadPerformerCandidates(ctx context.Context) ([]Candidate, err
 }
 
 func (s *Service) loadStudioCandidates(ctx context.Context) ([]Candidate, error) {
-	rows, err := s.st.Q().ListAdultFavoriteStudios(ctx)
+	rows, err := s.st.Q().ListAdultStudios(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("adult: list studios: %w", store.MapError(err))
 	}
-	links, err := s.st.Q().ListAdultStudioLinks(ctx)
+	refs, err := s.st.Q().ListAdultExternalRefsByEntityType(ctx, EntityTypeStudio)
 	if err != nil {
-		return nil, fmt.Errorf("adult: list studio links: %w", store.MapError(err))
+		return nil, fmt.Errorf("adult: list studio refs: %w", store.MapError(err))
 	}
-	linkMap := make(map[uuid.UUID][]EntityLink, len(rows))
-	for _, l := range links {
-		linkMap[l.FavoriteID] = append(linkMap[l.FavoriteID], EntityLink{
-			InstanceID: l.InstanceID,
-			ForeignID:  l.ForeignID,
-		})
-	}
+	linkMap := mapStashboxRefs(refs, len(rows))
 	cands := make([]Candidate, 0, len(rows))
 	for _, r := range rows {
 		cands = append(cands, Candidate{
@@ -271,6 +284,37 @@ func (s *Service) loadStudioCandidates(ctx context.Context) ([]Candidate, error)
 		})
 	}
 	return cands, nil
+}
+
+func (s *Service) upsertStashboxRef(
+	ctx context.Context,
+	entityType string,
+	entityID uuid.UUID,
+	instID uuid.UUID,
+	foreignID string,
+	extraURLs []string,
+	sweepStart time.Time,
+) error {
+	refID, err := s.ids.NewUUID()
+	if err != nil {
+		return fmt.Errorf("adult: generate %s ref id: %w", entityType, err)
+	}
+	_, err = s.st.Q().UpsertAdultExternalRef(ctx, sqlcgen.UpsertAdultExternalRefParams{
+		ID:               refID,
+		EntityType:       entityType,
+		EntityID:         entityID,
+		SourceKind:       SourceKindStashbox,
+		SourceInstanceID: &instID,
+		ForeignID:        foreignID,
+		ExtraUrls:        extraURLs,
+		IsFavorite:       true,
+		FetchedAt:        sweepStart,
+		LastSeenAt:       sweepStart,
+	})
+	if err != nil {
+		return fmt.Errorf("adult: upsert %s ref: %w", entityType, store.MapError(err))
+	}
+	return nil
 }
 
 func (s *Service) resolvePerformerMatch(
@@ -335,11 +379,12 @@ func (s *Service) syncOnePerformer(
 		dis = &d
 	}
 
-	_, err = s.st.Q().UpsertAdultFavoritePerformer(ctx, sqlcgen.UpsertAdultFavoritePerformerParams{
+	_, err = s.st.Q().UpsertAdultPerformer(ctx, sqlcgen.UpsertAdultPerformerParams{
 		ID:             favID,
 		CanonicalName:  p.Name,
 		Disambiguation: dis,
 		Urls:           finalURLs,
+		IsFavorite:     true,
 		CreatedAt:      sweepStart,
 		UpdatedAt:      sweepStart,
 	})
@@ -347,17 +392,7 @@ func (s *Service) syncOnePerformer(
 		return fmt.Errorf("adult: upsert performer: %w", store.MapError(err))
 	}
 
-	_, err = s.st.Q().UpsertAdultPerformerLink(ctx, sqlcgen.UpsertAdultPerformerLinkParams{
-		FavoriteID:   favID,
-		InstanceID:   instID,
-		ForeignID:    p.ID,
-		IsFavorite:   true,
-		LastSyncedAt: sweepStart,
-	})
-	if err != nil {
-		return fmt.Errorf("adult: upsert performer link: %w", store.MapError(err))
-	}
-	return nil
+	return s.upsertStashboxRef(ctx, EntityTypePerformer, favID, instID, p.ID, unionURLs(nil, urls), sweepStart)
 }
 
 func (s *Service) resolveStudioMatch(
@@ -414,10 +449,11 @@ func (s *Service) syncOneStudio(
 		return err
 	}
 
-	_, err = s.st.Q().UpsertAdultFavoriteStudio(ctx, sqlcgen.UpsertAdultFavoriteStudioParams{
+	_, err = s.st.Q().UpsertAdultStudio(ctx, sqlcgen.UpsertAdultStudioParams{
 		ID:            favID,
 		CanonicalName: st.Name,
 		Urls:          finalURLs,
+		IsFavorite:    true,
 		CreatedAt:     sweepStart,
 		UpdatedAt:     sweepStart,
 	})
@@ -425,17 +461,7 @@ func (s *Service) syncOneStudio(
 		return fmt.Errorf("adult: upsert studio: %w", store.MapError(err))
 	}
 
-	_, err = s.st.Q().UpsertAdultStudioLink(ctx, sqlcgen.UpsertAdultStudioLinkParams{
-		FavoriteID:   favID,
-		InstanceID:   instID,
-		ForeignID:    st.ID,
-		IsFavorite:   true,
-		LastSyncedAt: sweepStart,
-	})
-	if err != nil {
-		return fmt.Errorf("adult: upsert studio link: %w", store.MapError(err))
-	}
-	return nil
+	return s.upsertStashboxRef(ctx, EntityTypeStudio, favID, instID, st.ID, unionURLs(nil, urls), sweepStart)
 }
 
 func (s *Service) syncPerformers(
@@ -444,36 +470,40 @@ func (s *Service) syncPerformers(
 	client *stashbox.Client,
 	endpoints []StashboxEndpoint,
 	sweepStart time.Time,
-) error {
+) (int, error) {
 	items, truncated, err := fetchFavoritePerformers(ctx, client)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	cands, err := s.loadPerformerCandidates(ctx)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	for _, p := range items {
 		if syncErr := s.syncOnePerformer(ctx, instID, p, &cands, endpoints, sweepStart); syncErr != nil {
-			return syncErr
+			return 0, syncErr
 		}
 	}
 	if truncated {
-		s.logger.InfoContext(ctx, "adult: performer sync reached cap; skipping stale link deactivation",
+		s.logger.InfoContext(ctx, "adult: performer sync reached cap; skipping stale ref deactivation",
 			slog.String("instance_id", instID.String()),
 			slog.Int("count", len(items)),
 			slog.Int("cap", MaxItemsPerSweep),
 		)
-		return nil
+		return len(items), nil
 	}
-	_, err = s.st.Q().MarkStaleAdultPerformerLinksUnfavorite(ctx, sqlcgen.MarkStaleAdultPerformerLinksUnfavoriteParams{
-		InstanceID:   instID,
-		LastSyncedAt: sweepStart,
+	_, err = s.st.Q().MarkStaleAdultExternalRefsUnfavorite(ctx, sqlcgen.MarkStaleAdultExternalRefsUnfavoriteParams{
+		SourceInstanceID: &instID,
+		EntityType:       EntityTypePerformer,
+		LastSeenAt:       sweepStart,
 	})
 	if err != nil {
-		return fmt.Errorf("adult: mark stale performer links: %w", store.MapError(err))
+		return 0, fmt.Errorf("adult: mark stale performer refs: %w", store.MapError(err))
 	}
-	return nil
+	if _, err = s.st.Q().ClearUnfavoritedAdultPerformers(ctx, sweepStart); err != nil {
+		return 0, fmt.Errorf("adult: clear unfavorited performers: %w", store.MapError(err))
+	}
+	return len(items), nil
 }
 
 func (s *Service) syncStudios(
@@ -482,36 +512,40 @@ func (s *Service) syncStudios(
 	client *stashbox.Client,
 	endpoints []StashboxEndpoint,
 	sweepStart time.Time,
-) error {
+) (int, error) {
 	items, truncated, err := fetchFavoriteStudios(ctx, client)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	cands, err := s.loadStudioCandidates(ctx)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	for _, st := range items {
 		if syncErr := s.syncOneStudio(ctx, instID, st, &cands, endpoints, sweepStart); syncErr != nil {
-			return syncErr
+			return 0, syncErr
 		}
 	}
 	if truncated {
-		s.logger.InfoContext(ctx, "adult: studio sync reached cap; skipping stale link deactivation",
+		s.logger.InfoContext(ctx, "adult: studio sync reached cap; skipping stale ref deactivation",
 			slog.String("instance_id", instID.String()),
 			slog.Int("count", len(items)),
 			slog.Int("cap", MaxItemsPerSweep),
 		)
-		return nil
+		return len(items), nil
 	}
-	_, err = s.st.Q().MarkStaleAdultStudioLinksUnfavorite(ctx, sqlcgen.MarkStaleAdultStudioLinksUnfavoriteParams{
-		InstanceID:   instID,
-		LastSyncedAt: sweepStart,
+	_, err = s.st.Q().MarkStaleAdultExternalRefsUnfavorite(ctx, sqlcgen.MarkStaleAdultExternalRefsUnfavoriteParams{
+		SourceInstanceID: &instID,
+		EntityType:       EntityTypeStudio,
+		LastSeenAt:       sweepStart,
 	})
 	if err != nil {
-		return fmt.Errorf("adult: mark stale studio links: %w", store.MapError(err))
+		return 0, fmt.Errorf("adult: mark stale studio refs: %w", store.MapError(err))
 	}
-	return nil
+	if _, err = s.st.Q().ClearUnfavoritedAdultStudios(ctx, sweepStart); err != nil {
+		return 0, fmt.Errorf("adult: clear unfavorited studios: %w", store.MapError(err))
+	}
+	return len(items), nil
 }
 
 // SyncInstance synchronizes favorite performers and studios for a single stashbox instance.
@@ -521,25 +555,83 @@ func (s *Service) SyncInstance(
 	client *stashbox.Client,
 	endpoints []StashboxEndpoint,
 ) error {
+	_, _, err := s.syncInstanceCounts(ctx, inst, client, endpoints)
+	return err
+}
+
+func (s *Service) syncInstanceCounts(
+	ctx context.Context,
+	inst sqlcgen.AdultStashboxInstance,
+	client *stashbox.Client,
+	endpoints []StashboxEndpoint,
+) (int, int, error) {
 	sweepStart := s.clk.Now()
-	if err := s.syncPerformers(ctx, inst.ID, client, endpoints, sweepStart); err != nil {
-		return s.wrapSyncError(inst.Name, err)
+	pCount, err := s.syncPerformers(ctx, inst.ID, client, endpoints, sweepStart)
+	if err != nil {
+		return 0, 0, s.wrapSyncError(inst.Name, err)
 	}
-	if err := s.syncStudios(ctx, inst.ID, client, endpoints, sweepStart); err != nil {
-		return s.wrapSyncError(inst.Name, err)
+	sCount, err := s.syncStudios(ctx, inst.ID, client, endpoints, sweepStart)
+	if err != nil {
+		return 0, 0, s.wrapSyncError(inst.Name, err)
 	}
-	return nil
+	return pCount, sCount, nil
 }
 
 // SyncAll runs a sync sweep across all enabled stash-box instances that have sync_favorites enabled.
-// One bad instance never aborts the sweep.
+// One bad instance never aborts the sweep. When a sweep is already running, SyncAll logs at debug and skips.
 func (s *Service) SyncAll(ctx context.Context) error {
+	_, err := s.SyncNow(ctx)
+	if errors.Is(err, ErrSyncInProgress) {
+		s.logger.DebugContext(ctx, "adult: sync already in progress; skipping leader sweep")
+		return nil
+	}
+	return err
+}
+
+func truncateSyncError(msg string) string {
+	if len(msg) <= MaxSyncErrorLen {
+		return msg
+	}
+	// Drop a multi-byte character cut by the byte limit so the stored text stays valid UTF-8.
+	return strings.ToValidUTF8(msg[:MaxSyncErrorLen], "")
+}
+
+func (s *Service) recordInstanceSyncResult(ctx context.Context, instID uuid.UUID, pCount, sCount int, syncErr error) {
+	now := s.clk.Now()
+	var errPtr *string
+	if syncErr != nil {
+		msg := truncateSyncError(syncErr.Error())
+		errPtr = &msg
+	}
+	err := s.st.Q().RecordAdultStashboxSyncResult(ctx, sqlcgen.RecordAdultStashboxSyncResultParams{
+		ID:                   instID,
+		LastSyncAt:           &now,
+		LastSyncError:        errPtr,
+		LastPerformersSynced: int32(min(max(pCount, 0), MaxItemsPerSweep)), // #nosec G115 -- clamped to 0..MaxItemsPerSweep
+		LastStudiosSynced:    int32(min(max(sCount, 0), MaxItemsPerSweep)), // #nosec G115 -- clamped to 0..MaxItemsPerSweep
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "adult: record sync result failed",
+			slog.String("instance_id", instID.String()),
+			slog.String("error", err.Error()),
+		)
+	}
+}
+
+// SyncNow runs an immediate favourite synchronization pass across syncable catalogue sources.
+func (s *Service) SyncNow(ctx context.Context) (SyncSummary, error) {
+	if !s.syncing.CompareAndSwap(false, true) {
+		return SyncSummary{}, ErrSyncInProgress
+	}
+	defer s.syncing.Store(false)
+
 	rows, err := s.st.Q().ListSyncableAdultStashboxInstances(ctx)
 	if err != nil {
-		return fmt.Errorf("adult: list syncable instances: %w", store.MapError(err))
+		return SyncSummary{}, fmt.Errorf("adult: list syncable instances: %w", store.MapError(err))
 	}
+	var summary SyncSummary
 	if len(rows) == 0 {
-		return nil
+		return summary, nil
 	}
 
 	endpoints := make([]StashboxEndpoint, 0, len(rows))
@@ -549,13 +641,18 @@ func (s *Service) SyncAll(ctx context.Context) error {
 
 	clients := s.pool.BuildClients(ctx, rows)
 	for _, ic := range clients {
-		if err := s.SyncInstance(ctx, ic.Instance, ic.Client, endpoints); err != nil {
+		pCount, sCount, syncErr := s.syncInstanceCounts(ctx, ic.Instance, ic.Client, endpoints)
+		s.recordInstanceSyncResult(ctx, ic.Instance.ID, pCount, sCount, syncErr)
+		if syncErr != nil {
 			s.logger.WarnContext(ctx, "adult: instance sweep failed",
 				slog.String("instance_id", ic.Instance.ID.String()),
-				slog.String("instance_name", ic.Instance.Name),
-				slog.String("error", err.Error()),
+				slog.String("error", syncErr.Error()),
 			)
+			continue
 		}
+		summary.SourcesSynced++
+		summary.PerformersSynced += pCount
+		summary.StudiosSynced += sCount
 	}
-	return nil
+	return summary, nil
 }

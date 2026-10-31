@@ -3,11 +3,14 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
-	import { resolve } from '$app/paths';
 	import type { ActivityGroup } from '#lib/activity.js';
 	import LinkText from '#lib/components/LinkText.svelte';
 	import StatusIcon from '#lib/components/StatusIcon.svelte';
+	import { entityHref } from '#lib/entities.js';
 	import { m } from '#lib/paraglide/messages.js';
+	import EventDialog from './EventDialog.svelte';
+	import RunDialog from './RunDialog.svelte';
+	import { liveFrameToEvent, type LiveFrame } from '#lib/live.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
 	import { formatRelativeTime, formatWhen } from '#lib/stamina.js';
 
@@ -20,6 +23,9 @@ SPDX-License-Identifier: EUPL-1.2
 
 	const { group, instanceName, expanded = false, ontoggle }: Props = $props();
 
+	let runOpen = $state(false);
+	let selectedEvent = $state<LiveFrame | null>(null);
+	let eventOpen = $state(false);
 	let internalExpanded = $state(false);
 	const isExpanded = $derived(ontoggle ? expanded : internalExpanded);
 
@@ -52,7 +58,7 @@ SPDX-License-Identifier: EUPL-1.2
 		</time>
 		{#if group.instance_id}
 			<a
-				href={resolve('/instances/[id]', { id: group.instance_id })}
+				href={entityHref('instance', group.instance_id)}
 				class="rounded border border-line px-1.5 py-0.5 text-xs text-subtle hover:underline"
 			>
 				{instanceName ?? group.instance_id.slice(0, 8)}
@@ -61,7 +67,7 @@ SPDX-License-Identifier: EUPL-1.2
 		<button
 			type="button"
 			aria-expanded={isExpanded}
-			class="focus:ring-brand flex flex-1 cursor-pointer flex-wrap items-center gap-2 rounded text-left select-none focus:ring-1 focus:outline-none"
+			class="flex flex-1 cursor-pointer flex-wrap items-center gap-2 rounded text-left select-none focus:ring-1 focus:ring-(--color-brand) focus:outline-none"
 			onclick={toggleGroup}
 		>
 			<span class="text-xs font-semibold md:text-sm">
@@ -83,6 +89,13 @@ SPDX-License-Identifier: EUPL-1.2
 				{isExpanded ? '▲' : '▼'}
 			</span>
 		</button>
+		{#if group.run_id}
+			<button
+				type="button"
+				class="text-brand text-xs hover:underline"
+				onclick={() => (runOpen = true)}>{m.entity_details()}</button
+			>
+		{/if}
 	</div>
 
 	{#if isExpanded}
@@ -106,6 +119,14 @@ SPDX-License-Identifier: EUPL-1.2
 							/>
 						{/if}
 					</button>
+					<button
+						type="button"
+						class="text-brand self-start text-xs hover:underline"
+						onclick={() => {
+							selectedEvent = evt;
+							eventOpen = true;
+						}}>{m.entity_details()}</button
+					>
 					{#if expandedEvtKey === evtKey}
 						<pre
 							class="max-w-full overflow-x-auto rounded bg-surface p-2 font-mono text-xs">{JSON.stringify(
@@ -119,3 +140,10 @@ SPDX-License-Identifier: EUPL-1.2
 		</ol>
 	{/if}
 </li>
+
+{#if runOpen && group.run_id}
+	<RunDialog runId={group.run_id} bind:open={runOpen} />
+{/if}
+{#if eventOpen && selectedEvent}
+	<EventDialog event={liveFrameToEvent(selectedEvent)} bind:open={eventOpen} />
+{/if}

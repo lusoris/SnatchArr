@@ -446,3 +446,44 @@ func storedEventIDs(t *testing.T, st *store.Store, eventType string, instanceID 
 	slices.Sort(ids)
 	return ids
 }
+
+func TestPlannerSkipsStashInstances(t *testing.T) {
+	t.Parallel()
+	f := newPlannerFixture(t, AllowAll{})
+	ctx := t.Context()
+	now := f.clk.Now()
+	sonarrID := storetest.Instance(t, f.st, now)
+	stashID := uuid.New()
+	_, err := f.st.Q().CreateInstance(ctx, sqlcgen.CreateInstanceParams{
+		ID:        stashID,
+		Kind:      string(domain.KindStash),
+		Name:      "stash-companion",
+		BaseUrl:   "http://stash.invalid:9999",
+		ApiKeyEnc: []byte("ciphertext"),
+		Enabled:   true,
+		Source:    string(domain.SourceManual),
+		CreatedAt: now,
+	})
+	if err != nil {
+		t.Fatalf("CreateInstance(stash): %v", err)
+	}
+	if _, err = f.st.Q().EnsureDefaultPolicy(ctx, sqlcgen.EnsureDefaultPolicyParams{InstanceID: stashID, UpdatedAt: now}); err != nil {
+		t.Fatalf("EnsureDefaultPolicy(stash): %v", err)
+	}
+
+	queued, err := f.planner.Tick(ctx)
+	if err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+	if queued != 2 {
+		t.Fatalf("queued = %d, want 2 (only sonarr %s, never stash %s)", queued, sonarrID, stashID)
+	}
+	assertQueued(t, f.st, queued)
+	var stashRuns int
+	if err := f.st.Pool().QueryRow(ctx, `SELECT count(*) FROM snatch_runs WHERE instance_id = $1`, stashID).Scan(&stashRuns); err != nil {
+		t.Fatalf("count stash runs: %v", err)
+	}
+	if stashRuns != 0 {
+		t.Fatalf("stash runs = %d, want 0", stashRuns)
+	}
+}

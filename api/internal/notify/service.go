@@ -166,7 +166,16 @@ func (s *Service) UpdateChannel(ctx context.Context, chID uuid.UUID, in domain.N
 	if err != nil {
 		return domain.NotificationChannel{}, err
 	}
-	cfg := in.Config.MergeSecrets(existing.Config)
+	var cfg domain.ChannelConfig
+	if in.KeepConfig {
+		cfg = existing.Config
+	} else {
+		cfg = in.Config.MergeSecrets(existing.Config)
+	}
+	enabled := in.Enabled
+	if in.KeepEnabled {
+		enabled = existing.Enabled
+	}
 	cfgBytes, err := json.Marshal(cfg) // #nosec G117 -- sealed immediately with crypto.Encryptor AES-GCM at rest
 	if err != nil {
 		return domain.NotificationChannel{}, fmt.Errorf("notify: marshal config: %w", err)
@@ -179,7 +188,7 @@ func (s *Service) UpdateChannel(ctx context.Context, chID uuid.UUID, in domain.N
 		ID:        chID,
 		Name:      in.Name,
 		Kind:      string(in.Kind),
-		Enabled:   in.Enabled,
+		Enabled:   enabled,
 		ConfigEnc: sealed,
 		HasSecret: cfg.HasSecret(),
 		UpdatedAt: s.clk.Now(),
@@ -187,7 +196,7 @@ func (s *Service) UpdateChannel(ctx context.Context, chID uuid.UUID, in domain.N
 	if err != nil {
 		return domain.NotificationChannel{}, fmt.Errorf("notify: update channel: %w", store.MapError(err))
 	}
-	if err = s.syncWebhookEndpoint(ctx, chID, in.Kind, existing.Kind, cfg, in.Enabled); err != nil {
+	if err = s.syncWebhookEndpoint(ctx, chID, in.Kind, existing.Kind, cfg, enabled); err != nil {
 		return domain.NotificationChannel{}, err
 	}
 	res, err := s.channelFromRow(row)

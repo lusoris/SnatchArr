@@ -7,9 +7,17 @@ import {
 	deriveConfigarrStatus,
 	deriveLinkStatus,
 	deriveServiceStatus,
-	type HealthItem
+	type HealthItem,
+	type ServiceStatusSummary
 } from './connections.js';
 import { m } from '#lib/paraglide/messages.js';
+
+const expectNotLinked = (res: ServiceStatusSummary) => {
+	expect(res.status).toBe('idle');
+	expect(res.counts).toEqual({ total: 0, healthy: 0, failing: 0, untested: 0 });
+	expect(res.label).toBe(m.connections_health_not_linked());
+	expect(res.countLine).toBe('');
+};
 
 describe('deriveServiceStatus', () => {
 	it('positive: all healthy items return ok status and counts', () => {
@@ -40,11 +48,7 @@ describe('deriveServiceStatus', () => {
 
 	it('boundary: empty list returns idle status with not linked label', () => {
 		const res = deriveServiceStatus([]);
-
-		expect(res.status).toBe('idle');
-		expect(res.counts).toEqual({ total: 0, healthy: 0, failing: 0, untested: 0 });
-		expect(res.label).toBe(m.connections_health_not_linked());
-		expect(res.countLine).toBe('');
+		expectNotLinked(res);
 	});
 
 	it('boundary: mixed healthy and failing items return warn status', () => {
@@ -130,10 +134,7 @@ describe('deriveConfigarrStatus', () => {
 
 	it('boundary: unlinked configarr returns idle status', () => {
 		const res = deriveConfigarrStatus({ linked: false }, 'en');
-		expect(res.status).toBe('idle');
-		expect(res.counts).toEqual({ total: 0, healthy: 0, failing: 0, untested: 0 });
-		expect(res.label).toBe(m.connections_health_not_linked());
-		expect(res.countLine).toBe('');
+		expectNotLinked(res);
 	});
 
 	it('boundary: linked configarr with no previous import returns idle status', () => {

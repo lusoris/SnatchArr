@@ -17,6 +17,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import SafetySection from '#lib/components/policy/SafetySection.svelte';
 	import SearchSection from '#lib/components/policy/SearchSection.svelte';
 	import TimingSection from '#lib/components/policy/TimingSection.svelte';
+	import { isArrKind } from '#lib/kinds.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { keys } from '#lib/query.js';
 	import { session } from '#lib/session.svelte.js';
@@ -77,7 +78,7 @@ SPDX-License-Identifier: EUPL-1.2
 	<ProblemNote error={policy.error} />
 {:else if instance.isError}
 	<ProblemNote error={instance.error} />
-{:else if draft}
+{:else if draft && (!instance.data || isArrKind(instance.data.kind))}
 	<form class="flex flex-col gap-6" aria-labelledby="policy-title" onsubmit={handleSubmit}>
 		<h2 id="policy-title" class="text-lg font-semibold">{m.policy_title()}</h2>
 
@@ -101,7 +102,10 @@ SPDX-License-Identifier: EUPL-1.2
 				<LimitsSection bind:policy={draft} />
 			</div>
 			<div class="flex flex-col gap-6">
-				<PolicyFilters {instanceId} bind:policy={draft} />
+				<!-- The filter options are read from the *arr app, which only admins may ask. -->
+				{#if session.isAdmin}
+					<PolicyFilters {instanceId} bind:policy={draft} />
+				{/if}
 				<AppSpecificSection bind:policy={draft} kind={instance.data?.kind} />
 				<SafetySection bind:policy={draft} />
 			</div>

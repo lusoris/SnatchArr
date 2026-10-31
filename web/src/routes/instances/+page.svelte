@@ -3,14 +3,17 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
-	import { resolve } from '$app/paths';
 	import { createSentioQuery, createSentioMutation } from '@sveltesentio/query';
 	import { toast } from 'svelte-sonner';
 	import { api, describeError } from '#lib/api/client.js';
+	import AdminActionHeader from '#lib/components/AdminActionHeader.svelte';
+	import AppLogo from '#lib/components/AppLogo.svelte';
 	import CheckState from '#lib/components/CheckState.svelte';
+	import ConfirmDelete from '#lib/components/ConfirmDelete.svelte';
 	import Field from '#lib/components/Field.svelte';
 	import KindSelect from '#lib/components/KindSelect.svelte';
 	import PageHeader from '#lib/components/PageHeader.svelte';
+	import { entityHref } from '#lib/entities.js';
 	import { HELP_MAP } from '#lib/help.js';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import ResetMemory from '#lib/components/ResetMemory.svelte';
@@ -79,12 +82,16 @@ SPDX-License-Identifier: EUPL-1.2
 	{#if (instances.data ?? []).length > 0}
 		<ul class="space-y-3 md:hidden" aria-label={m.nav_instances()}>
 			{#each instances.data ?? [] as inst (inst.id)}
-				<li class="card flex flex-col gap-2">
+				<li class="card target flex flex-col gap-2">
 					<div class="flex items-start justify-between gap-2">
 						<div class="flex flex-col gap-0.5">
-							<a class="font-semibold underline" href={resolve(`instances/${inst.id}`)}
-								>{inst.name}</a
-							>
+							<div class="flex items-center gap-2">
+								<AppLogo kind={inst.kind} size={18} />
+								<a
+									class="target-link font-semibold underline"
+									href={entityHref('instance', inst.id)}>{inst.name}</a
+								>
+							</div>
 							<div class="flex flex-wrap items-center gap-1.5 text-xs text-subtle">
 								<span
 									><span class="sr-only">{m.instance_kind()}: </span>{instanceKindLabel(
@@ -111,12 +118,11 @@ SPDX-License-Identifier: EUPL-1.2
 					</div>
 					{#if session.isAdmin}
 						<div class="mt-1 flex">
-							<button
-								type="button"
-								class="btn"
-								onclick={() => remove.mutate(inst.id)}
-								disabled={inst.source === 'configarr'}>{m.instance_delete()}</button
-							>
+							<ConfirmDelete
+								name={inst.name}
+								disabled={inst.source === 'configarr' || remove.isPending}
+								onconfirm={() => remove.mutate(inst.id)}
+							/>
 						</div>
 					{/if}
 				</li>
@@ -135,17 +141,18 @@ SPDX-License-Identifier: EUPL-1.2
 					<th scope="col">{m.instance_source()}</th>
 					<th scope="col">{m.instance_enabled()}</th>
 					<th scope="col">{m.instance_last_check()}</th>
-					{#if session.isAdmin}
-						<th scope="col"><span class="sr-only">{m.action_actions()}</span></th>
-					{/if}
+					<AdminActionHeader />
 				</tr>
 			</thead>
 			<tbody>
 				{#each instances.data ?? [] as inst (inst.id)}
-					<tr>
+					<tr class="target">
 						<td>
 							<div class="flex items-center gap-2">
-								<a class="underline" href={resolve(`instances/${inst.id}`)}>{inst.name}</a>
+								<AppLogo kind={inst.kind} size={18} />
+								<a class="target-link underline" href={entityHref('instance', inst.id)}
+									>{inst.name}</a
+								>
 							</div>
 						</td>
 						<td>{instanceKindLabel(inst.kind, inst.last_seen_product)}</td>
@@ -161,12 +168,11 @@ SPDX-License-Identifier: EUPL-1.2
 						<td><CheckState instance={inst} /></td>
 						{#if session.isAdmin}
 							<td>
-								<button
-									type="button"
-									class="btn"
-									onclick={() => remove.mutate(inst.id)}
-									disabled={inst.source === 'configarr'}>{m.instance_delete()}</button
-								>
+								<ConfirmDelete
+									name={inst.name}
+									disabled={inst.source === 'configarr' || remove.isPending}
+									onconfirm={() => remove.mutate(inst.id)}
+								/>
 							</td>
 						{/if}
 					</tr>
@@ -235,23 +241,3 @@ SPDX-License-Identifier: EUPL-1.2
 		</div>
 	</div>
 {/if}
-
-<style>
-	.compact-table tbody tr {
-		height: 2.75rem;
-	}
-	@media (min-width: 1280px) {
-		.compact-table tbody tr {
-			height: 2.25rem;
-		}
-		.compact-table :global(.btn) {
-			min-height: 1.75rem;
-			padding: 0.15rem 0.5rem;
-			font-size: 0.75rem;
-		}
-	}
-	.compact-table th,
-	.compact-table td {
-		vertical-align: middle;
-	}
-</style>

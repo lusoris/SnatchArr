@@ -42,7 +42,7 @@ func cryptoGraph(t *testing.T, configJSON string, bare bool) (*crypto.Encryptor,
 	var enc *crypto.Encryptor
 	opts := []fx.Option{
 		fx.NopLogger, fx.Supply(cfg, slog.New(slog.NewTextHandler(&logs, nil))),
-		fx.Provide(config.Load), crypto.Module, fx.Populate(&enc),
+		fx.Provide(config.LoadBase), crypto.Module, fx.Populate(&enc),
 	}
 	if !bare {
 		opts = append(opts, fx.Decorate(newEncryptor))

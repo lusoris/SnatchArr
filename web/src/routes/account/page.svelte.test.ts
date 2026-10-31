@@ -9,20 +9,15 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { api } from '#lib/api/client.js';
 import type { components } from '#lib/api/schema.js';
 import { m } from '#lib/paraglide/messages.js';
-import { expectStackedLabels, renderWithQuery, stubGet } from '#lib/testing/harness.js';
+import {
+	expectStackedLabels,
+	installDialogPolyfill,
+	renderWithQuery,
+	stubGet
+} from '#lib/testing/harness.js';
 import AccountPage from './+page.svelte';
 
-// jsdom has no modal dialog API: open and close the way a browser does, firing the close
-// event. Focus trapping and Escape run in a real browser in e2e/flow.test.ts.
-beforeAll(() => {
-	HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {
-		this.setAttribute('open', '');
-	};
-	HTMLDialogElement.prototype.close ??= function (this: HTMLDialogElement) {
-		this.removeAttribute('open');
-		this.dispatchEvent(new Event('close'));
-	};
-});
+beforeAll(installDialogPolyfill);
 
 type ApiKey = components['schemas']['ApiKey'];
 type CreatedApiKey = components['schemas']['CreatedApiKey'];
@@ -44,7 +39,8 @@ const sampleCreatedKey: CreatedApiKey = {
 const baseStubs = {
 	'/auth/api-keys': [sampleApiKey],
 	'/auth/sso': { oidc: false, proxy: false, jellyfin: false },
-	'/auth/identities': { items: [] }
+	'/auth/identities': { items: [] },
+	'/me/preferences': { brand_mark: null, sfw_mode: null }
 };
 
 describe('account', () => {

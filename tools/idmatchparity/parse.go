@@ -38,6 +38,7 @@ type event struct {
 type snatchLog struct {
 	would   []event
 	strikes []event
+	span    logSpan
 }
 
 // unblockerLog holds the unblocker's IMPORT (or dry-run WOULD import) and SKIP lines. A SKIP
@@ -45,6 +46,24 @@ type snatchLog struct {
 type unblockerLog struct {
 	imports []event
 	skips   []event
+	span    logSpan
+}
+
+// logSpan tracks the earliest and latest timestamps, including non-event lines.
+type logSpan struct {
+	first time.Time
+	last  time.Time
+	seen  bool
+}
+
+func (s *logSpan) record(at time.Time) {
+	if !s.seen || at.Before(s.first) {
+		s.first = at
+	}
+	if !s.seen || at.After(s.last) {
+		s.last = at
+	}
+	s.seen = true
 }
 
 var errTooLong = errors.New("log exceeds the line bound")
@@ -81,16 +100,21 @@ func parseSnatchArr(r io.Reader) (snatchLog, error) {
 			return nil
 		}
 		var rec struct {
-			Time       time.Time `json:"time"`
-			Msg        string    `json:"msg"`
-			Rule       string    `json:"rule"`
-			DownloadID string    `json:"download_id"`
-			Title      string    `json:"title"`
+			Time       *time.Time `json:"time"`
+			Msg        string     `json:"msg"`
+			Rule       string     `json:"rule"`
+			DownloadID string     `json:"download_id"`
+			Title      string     `json:"title"`
 		}
 		if err := json.Unmarshal(line[i:], &rec); err != nil {
 			return fmt.Errorf("line %d: %w", n, err)
 		}
-		ev := event{ID: strings.ToLower(rec.DownloadID), Title: rec.Title, Rule: rec.Rule, At: rec.Time}
+		var at time.Time
+		if rec.Time != nil {
+			at = *rec.Time
+			out.span.record(at)
+		}
+		ev := event{ID: strings.ToLower(rec.DownloadID), Title: rec.Title, Rule: rec.Rule, At: at}
 		switch rec.Msg {
 		case msgWouldImport:
 			out.would = append(out.would, ev)
@@ -109,19 +133,22 @@ func parseUnblocker(r io.Reader) (unblockerLog, error) {
 	err := eachLine(r, func(n int, line []byte) error {
 		s := string(line)
 		imp, skip := unblockerImport.FindStringSubmatch(s), unblockerSkip.FindStringSubmatch(s)
-		if imp == nil && skip == nil {
-			return nil
-		}
 		stamp, _, _ := strings.Cut(s, " ")
 		at, err := time.Parse(time.RFC3339Nano, stamp)
 		if err != nil {
-			return fmt.Errorf("line %d: no timestamp: %w", n, err)
+			if imp != nil || skip != nil {
+				return fmt.Errorf("line %d: no timestamp: %w", n, err)
+			}
+			return nil
 		}
+		out.span.record(at)
 		if imp != nil {
 			out.imports = append(out.imports, event{ID: strings.ToLower(imp[2]), Title: imp[1], At: at})
 			return nil
 		}
-		out.skips = append(out.skips, event{Title: skip[1], At: at})
+		if skip != nil {
+			out.skips = append(out.skips, event{Title: skip[1], At: at})
+		}
 		return nil
 	})
 	return out, err

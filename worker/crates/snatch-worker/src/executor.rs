@@ -77,6 +77,8 @@ pub enum ExecError {
 pub struct Outcome {
     /// Items whose search command was accepted.
     pub searched: Vec<SearchedItem>,
+    /// Filtered pool before the per-cycle limit and hourly budget.
+    pub eligible: Option<u32>,
     /// Sequential cursor to persist.
     pub cursor: String,
     /// Set when the run was cut short (circuit breaker); the items already searched still
@@ -86,9 +88,10 @@ pub struct Outcome {
 
 impl Outcome {
     /// An outcome with nothing searched yet that persists `cursor`.
-    fn at(cursor: String) -> Self {
+    fn at(cursor: String, eligible: u32) -> Self {
         Self {
             cursor,
+            eligible: Some(eligible),
             ..Self::default()
         }
     }
@@ -375,7 +378,7 @@ pub(crate) async fn execute_with(
         emitted: AtomicU64::new(0),
     };
     let run_start = std::time::Instant::now();
-    let (outcome, searched, cursor, error) =
+    let (outcome, searched, cursor, error, eligible_items) =
         handle_snatch(&mut client, &run, arr_timeout, &events, polling, health).await;
     record_run_metrics(health, run.snatch, outcome, run_start.elapsed());
     let emitted = u32::try_from(events.emitted.load(Ordering::Relaxed)).unwrap_or(u32::MAX);
@@ -392,6 +395,7 @@ pub(crate) async fn execute_with(
         cursor,
         error,
         events_unconfirmed,
+        eligible_items,
     };
     complete(&mut client, &req, retry, health).await;
 }
@@ -417,20 +421,22 @@ async fn handle_snatch(
     events: &Events,
     polling: Polling,
     health: &Health,
-) -> (RunOutcome, Vec<SearchedItem>, String, String) {
+) -> (RunOutcome, Vec<SearchedItem>, String, String, Option<u32>) {
     match snatch(client, run, arr_timeout, events, polling, health).await {
         Ok(Outcome {
             searched,
             cursor,
+            eligible,
             error: None,
-        }) => (RunOutcome::Done, searched, cursor, String::new()),
+        }) => (RunOutcome::Done, searched, cursor, String::new(), eligible),
         Ok(Outcome {
             searched,
             cursor,
+            eligible,
             error: Some(e),
         }) => {
             tracing::warn!(run = %run.run_id, error = %e, "run cut short");
-            (RunOutcome::Failed, searched, cursor, e)
+            (RunOutcome::Failed, searched, cursor, e, eligible)
         }
         Err(e) => {
             tracing::warn!(run = %run.run_id, error = %e, "run failed");
@@ -440,7 +446,13 @@ async fn handle_snatch(
                         .detail(e.to_string()),
                 )
                 .await;
-            (RunOutcome::Failed, Vec::new(), String::new(), e.to_string())
+            (
+                RunOutcome::Failed,
+                Vec::new(),
+                String::new(),
+                e.to_string(),
+                None,
+            )
         }
     }
 }
@@ -556,6 +568,7 @@ async fn snatch(
         .emit(Ev::run(Level::Debug, EventType::PageFetched, msg))
         .await;
     let c = collect_candidates(client, &p, run, &plan.pages, first).await?;
+    let eligible = u32::try_from(c.keep.len()).unwrap_or(u32::MAX);
     let msg = format!(
         "{} candidate(s) after filters and afterglow; {} skipped as queued or grabbed within {} h; {} skipped as not yet available; {} requested via Seerr",
         c.keep.len(),
@@ -580,9 +593,9 @@ async fn snatch(
     let by_id: HashMap<i64, Candidate> = selected.iter().map(|c| (c.id, c.clone())).collect();
     if run.dry_run {
         preview_all(&p, &dispatch, &by_id, events).await;
-        return Ok(Outcome::at(p.policy.cursor.clone()));
+        return Ok(Outcome::at(p.policy.cursor.clone(), eligible));
     }
-    let mut outcome = Outcome::at(plan.next_cursor.to_string());
+    let mut outcome = Outcome::at(plan.next_cursor.to_string(), eligible);
     dispatch_all(&p, &dispatch, &by_id, events, &mut outcome, health).await;
     Ok(outcome)
 }

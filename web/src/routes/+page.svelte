@@ -3,13 +3,18 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
-	import { resolve } from '$app/paths';
 	import { createSentioMutation, createSentioQuery } from '@sveltesentio/query';
 	import { toast } from 'svelte-sonner';
 	import { api, describeError } from '#lib/api/client.js';
 	import type { components } from '#lib/api/schema.js';
+	import EventDialog from '#lib/components/activity/EventDialog.svelte';
+	import RunDialog from '#lib/components/activity/RunDialog.svelte';
+	import AppLogo from '#lib/components/AppLogo.svelte';
+	import CardScroll from '#lib/components/CardScroll.svelte';
+	import CardScrollHint from '#lib/components/CardScrollHint.svelte';
 	import ConfirmAction from '#lib/components/ConfirmAction.svelte';
 	import EmptyFleetOnboarding from '#lib/components/EmptyFleetOnboarding.svelte';
+	import { entityHref, pageHref } from '#lib/entities.js';
 	import { HELP_MAP } from '#lib/help.js';
 	import KpiTile from '#lib/components/KpiTile.svelte';
 	import PageHeader from '#lib/components/PageHeader.svelte';
@@ -17,7 +22,12 @@ SPDX-License-Identifier: EUPL-1.2
 	import StaminaGauge from '#lib/components/StaminaGauge.svelte';
 	import StatusIcon from '#lib/components/StatusIcon.svelte';
 	import {
+		OVERVIEW_EVENTS_CAP,
+		OVERVIEW_FLEET_CAP,
+		OVERVIEW_PROWLARR_CAP,
+		OVERVIEW_SCHEDULES_CAP,
 		activePauseText,
+		capRows,
 		eventLevelLabel,
 		eventStatus,
 		formatScheduleWindow,
@@ -41,6 +51,11 @@ SPDX-License-Identifier: EUPL-1.2
 	type Run = components['schemas']['Run'];
 	type Event = components['schemas']['Event'];
 	type Schedule = components['schemas']['Schedule'];
+
+	let selectedEvent = $state<Event | null>(null);
+	let eventOpen = $state(false);
+	let selectedRunId = $state<string | null>(null);
+	let runOpen = $state(false);
 
 	const instances = createSentioQuery<Instance[]>({
 		queryKey: keys.instances,
@@ -98,7 +113,25 @@ SPDX-License-Identifier: EUPL-1.2
 	const searchesKpi = $derived(kpiSearches(caps.data));
 	const fleetKpi = $derived(kpiFleet(instances.data));
 	const prowlarrKpi = $derived(kpiProwlarr(prowlarr.data));
+	const fleetRows = $derived(capRows(instances.data, OVERVIEW_FLEET_CAP));
+	const eventRows = $derived(capRows(events.data, OVERVIEW_EVENTS_CAP));
+	const scheduleRows = $derived(
+		capRows(
+			(schedules.data ?? []).filter((s) => s.enabled),
+			OVERVIEW_SCHEDULES_CAP
+		)
+	);
+	const prowlarrRows = $derived(capRows(prowlarr.data, OVERVIEW_PROWLARR_CAP));
 </script>
+
+{#snippet seeAllLink(
+	href: '/instances' | '/activity' | '/automation' | '/connections/prowlarr',
+	label: string
+)}
+	<a href={pageHref(href)} class="text-brand text-xs hover:underline">
+		{label}
+	</a>
+{/snippet}
 
 <PageHeader title={m.nav_overview()} help={HELP_MAP['/']} />
 
@@ -175,36 +208,47 @@ SPDX-License-Identifier: EUPL-1.2
 	</section>
 
 	<!-- Row 2: 12-col grid desktop, 2-col tablet, 1-col phone -->
-	<div class="grid min-w-0 grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-12">
+	<div class="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-12">
 		<!-- Left: 8 col desktop -->
 		<section
-			class="col-span-1 flex min-w-0 flex-col gap-4 md:col-span-1 xl:col-span-8"
+			class="col-span-1 flex min-w-0 flex-col gap-4 xl:col-span-8"
 			aria-labelledby="fleet-heading"
 		>
 			{#if instances.isPending}
 				<div data-testid="skeleton" class="card flex flex-col gap-3 p-4" aria-busy="true">
-					<div class="bg-muted h-6 w-32 animate-pulse rounded"></div>
-					<div class="bg-muted h-10 w-full animate-pulse rounded"></div>
-					<div class="bg-muted h-10 w-full animate-pulse rounded"></div>
+					<div class="h-6 w-32 animate-pulse rounded bg-sunken"></div>
+					<div class="h-10 w-full animate-pulse rounded bg-sunken"></div>
+					<div class="h-10 w-full animate-pulse rounded bg-sunken"></div>
 				</div>
 			{:else if instances.isError}
 				<ProblemNote error={instances.error} />
-			{:else if (instances.data ?? []).length === 0}
+			{:else if fleetRows.total === 0}
 				<EmptyFleetOnboarding />
 			{:else}
 				<div class="card max-w-full min-w-0 overflow-hidden p-0">
 					<div class="flex items-center justify-between border-b border-line px-4 py-3">
-						<h2 id="fleet-heading" class="text-base font-semibold">
-							{m.overview_fleet_title()}
-						</h2>
-						<a href={resolve('/instances')} class="text-brand text-xs hover:underline">
-							{m.nav_instances()}
-						</a>
+						<div class="flex min-w-0 items-baseline gap-2">
+							<h2 id="fleet-heading" class="text-base font-semibold">
+								{m.overview_fleet_title()}
+							</h2>
+							<CardScrollHint hidden={fleetRows.hidden} />
+						</div>
+						{@render seeAllLink(
+							'/instances',
+							fleetRows.cut
+								? m.overview_all_instances_count({ count: fleetRows.total })
+								: m.nav_instances()
+						)}
 					</div>
-					<div class="relative w-full overflow-x-auto">
+					<CardScroll
+						label={m.overview_fleet_title()}
+						cap={fleetRows.cap}
+						total={fleetRows.total}
+						rowSelector="tbody > tr"
+					>
 						<table class="compact-table table-stack table w-full">
 							<caption class="sr-only">{m.overview_fleet_title()}</caption>
-							<thead>
+							<thead class="bg-surface md:sticky md:top-0 md:z-10">
 								<tr>
 									<th scope="col" class="w-10 text-center">
 										<span class="sr-only">{m.schedule_status()}</span>
@@ -218,28 +262,31 @@ SPDX-License-Identifier: EUPL-1.2
 								</tr>
 							</thead>
 							<tbody>
-								{#each instances.data ?? [] as inst (inst.id)}
+								{#each fleetRows.rows as inst (inst.id)}
 									{@const instStatus = instanceStatus(inst)}
 									{@const cap = capFor(inst, caps.data)}
 									{@const lastRun = lastRunForInstance(runs.data, inst.id)}
 									{@const nextSchedule = nextScheduleForInstance(schedules.data, inst.id)}
-									<tr>
+									<tr class="target">
 										<td class="md:w-10 md:text-center" data-label={m.schedule_status()}>
 											<StatusIcon status={instStatus.status} label={instStatus.label} size={16} />
 										</td>
 										<td data-label={m.instance_name()}>
-											<div class="min-w-0 text-right md:text-left">
-												<a
-													href={resolve('/instances/[id]', { id: inst.id })}
-													class="font-medium hover:underline"
-												>
-													{inst.name}
-												</a>
-												{#if inst.last_error}
-													<div class="truncate text-xs text-danger" title={inst.last_error}>
-														{inst.last_error}
-													</div>
-												{/if}
+											<div class="flex items-center justify-end gap-2 md:justify-start">
+												<AppLogo kind={inst.kind} size={18} />
+												<div class="min-w-0 text-right md:text-left">
+													<a
+														href={entityHref('instance', inst.id)}
+														class="target-link font-medium hover:underline"
+													>
+														{inst.name}
+													</a>
+													{#if inst.last_error}
+														<div class="truncate text-xs text-danger" title={inst.last_error}>
+															{inst.last_error}
+														</div>
+													{/if}
+												</div>
 											</div>
 										</td>
 										<td data-label={m.instance_kind()}>
@@ -260,15 +307,25 @@ SPDX-License-Identifier: EUPL-1.2
 											class="text-xs whitespace-nowrap text-subtle"
 											data-label={m.overview_last_run()}
 										>
-											{lastRun
-												? formatWhen(lastRun.started_at ?? lastRun.queued_at, getLocale())
-												: '—'}
+											{#if lastRun}
+												<button
+													type="button"
+													class="hover:underline"
+													onclick={() => {
+														selectedRunId = lastRun.id;
+														runOpen = true;
+													}}
+													>{formatWhen(
+														lastRun.started_at ?? lastRun.queued_at,
+														getLocale()
+													)}</button
+												>
+											{:else}—{/if}
 										</td>
-										<td
-											class="text-xs whitespace-nowrap text-subtle"
-											data-label={m.overview_next_window()}
-										>
-											{formatScheduleWindow(nextSchedule)}
+										<td class="text-xs text-subtle" data-label={m.overview_next_window()}>
+											{#if nextSchedule}<a href={pageHref('/automation')} class="hover:underline"
+													>{formatScheduleWindow(nextSchedule)}</a
+												>{:else}—{/if}
 										</td>
 										<td data-label="">
 											<div
@@ -298,56 +355,75 @@ SPDX-License-Identifier: EUPL-1.2
 								{/each}
 							</tbody>
 						</table>
-					</div>
+					</CardScroll>
 				</div>
 			{/if}
 		</section>
 
 		<!-- Right: 4 col desktop -->
-		<div class="col-span-1 flex min-w-0 flex-col gap-6 md:col-span-1 xl:col-span-4">
+		<div class="col-span-1 flex min-w-0 flex-col gap-6 xl:col-span-4">
 			<!-- Recent activity -->
 			<section
 				class="card flex min-w-0 flex-col gap-3 p-4"
 				aria-labelledby="overview-activity-title"
 			>
 				<div class="flex items-center justify-between">
-					<h2 id="overview-activity-title" class="text-base font-semibold">
-						{m.overview_recent_activity()}
-					</h2>
-					<a href={resolve('/activity')} class="text-brand text-xs hover:underline">
-						{m.overview_view_all_activity()}
-					</a>
+					<div class="flex min-w-0 items-baseline gap-2">
+						<h2 id="overview-activity-title" class="text-base font-semibold">
+							{m.overview_recent_activity()}
+						</h2>
+						<CardScrollHint hidden={eventRows.hidden} />
+					</div>
+					{@render seeAllLink('/activity', m.overview_view_all_activity())}
 				</div>
 				{#if events.isPending}
 					<div data-testid="skeleton" class="flex flex-col gap-2" aria-busy="true">
-						<div class="bg-muted h-6 w-full animate-pulse rounded"></div>
-						<div class="bg-muted h-6 w-full animate-pulse rounded"></div>
-						<div class="bg-muted h-6 w-full animate-pulse rounded"></div>
+						<div class="h-6 w-full animate-pulse rounded bg-sunken"></div>
+						<div class="h-6 w-full animate-pulse rounded bg-sunken"></div>
+						<div class="h-6 w-full animate-pulse rounded bg-sunken"></div>
 					</div>
 				{:else if events.isError}
 					<ProblemNote error={events.error} />
-				{:else if (events.data ?? []).length === 0}
+				{:else if eventRows.total === 0}
 					<p class="text-xs text-subtle">{m.overview_no_recent_events()}</p>
 				{:else}
-					<ul class="flex flex-col divide-y divide-line text-xs">
-						{#each (events.data ?? []).slice(0, 10) as ev (ev.id)}
-							<li class="flex items-center justify-between gap-2 py-2">
-								<div class="flex min-w-0 items-center gap-2">
-									<StatusIcon
-										status={eventStatus(ev.level)}
-										label={eventLevelLabel(ev.level)}
-										size={14}
-									/>
-									<span class="truncate font-medium text-fg" title={ev.title ?? ev.type}>
-										{ev.title ?? ev.type}
-									</span>
-								</div>
-								<span class="shrink-0 whitespace-nowrap text-subtle">
-									{formatWhen(ev.ts, getLocale())}
-								</span>
-							</li>
-						{/each}
-					</ul>
+					<CardScroll
+						label={m.overview_recent_activity()}
+						cap={eventRows.cap}
+						total={eventRows.total}
+						rowSelector="li"
+					>
+						<ul class="flex flex-col divide-y divide-line text-xs">
+							{#each eventRows.rows as ev (ev.id)}
+								<li>
+									<button
+										type="button"
+										data-testid="dashboard-event"
+										data-event-type={ev.type}
+										class="flex w-full items-center justify-between gap-2 py-2 text-left hover:bg-surface"
+										onclick={() => {
+											selectedEvent = ev;
+											eventOpen = true;
+										}}
+									>
+										<span class="flex min-w-0 items-center gap-2">
+											<StatusIcon
+												status={eventStatus(ev.level)}
+												label={eventLevelLabel(ev.level)}
+												size={14}
+											/>
+											<span class="truncate font-medium text-fg" title={ev.title ?? ev.type}>
+												{ev.title ?? ev.type}
+											</span>
+										</span>
+										<span class="shrink-0 whitespace-nowrap text-subtle">
+											{formatWhen(ev.ts, getLocale())}
+										</span>
+									</button>
+								</li>
+							{/each}
+						</ul>
+					</CardScroll>
 				{/if}
 			</section>
 
@@ -357,125 +433,143 @@ SPDX-License-Identifier: EUPL-1.2
 				aria-labelledby="overview-schedule-title"
 			>
 				<div class="flex items-center justify-between">
-					<h2 id="overview-schedule-title" class="text-base font-semibold">
-						{m.automation_tab_schedules()}
-					</h2>
-					<a href={resolve('/automation')} class="text-brand text-xs hover:underline">
-						{m.overview_manage_schedules()}
-					</a>
+					<div class="flex min-w-0 items-baseline gap-2">
+						<h2 id="overview-schedule-title" class="text-base font-semibold">
+							{m.automation_tab_schedules()}
+						</h2>
+						<CardScrollHint hidden={scheduleRows.hidden} />
+					</div>
+					{@render seeAllLink(
+						'/automation',
+						scheduleRows.cut
+							? m.overview_all_schedules_count({ count: scheduleRows.total })
+							: m.overview_manage_schedules()
+					)}
 				</div>
 				{#if schedules.isPending}
 					<div data-testid="skeleton" class="flex flex-col gap-2" aria-busy="true">
-						<div class="bg-muted h-6 w-full animate-pulse rounded"></div>
+						<div class="h-6 w-full animate-pulse rounded bg-sunken"></div>
 					</div>
 				{:else if schedules.isError}
 					<ProblemNote error={schedules.error} />
-				{:else if (schedules.data ?? []).length === 0}
+				{:else if scheduleRows.total === 0}
 					<p class="text-xs text-subtle">{m.schedules_empty()}</p>
 				{:else}
-					<ul class="flex flex-col divide-y divide-line text-xs">
-						{#each (schedules.data ?? []).filter((s) => s.enabled) as s (s.id)}
-							{@const pauseText = activePauseText(s, instances.data)}
-							<li class="flex items-center justify-between gap-2 py-1.5">
-								<div class="flex min-w-0 flex-col">
-									<span class="truncate font-medium text-fg">{s.name}</span>
-									<span class="text-subtle">{s.start}–{s.end} {s.tz}</span>
-								</div>
-								{#if pauseText}
-									<span
-										class="bg-brand/10 text-brand shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold"
-									>
-										{pauseText}
-									</span>
-								{/if}
-							</li>
-						{/each}
-					</ul>
+					<CardScroll
+						label={m.automation_tab_schedules()}
+						cap={scheduleRows.cap}
+						total={scheduleRows.total}
+						rowSelector="li"
+					>
+						<ul class="flex flex-col divide-y divide-line text-xs">
+							{#each scheduleRows.rows as s (s.id)}
+								{@const pauseText = activePauseText(s, instances.data)}
+								<li class="flex items-center justify-between gap-2 py-1.5">
+									<div class="flex min-w-0 flex-col">
+										<a
+											href={pageHref('/automation')}
+											class="truncate font-medium text-fg hover:underline">{s.name}</a
+										>
+										<span class="text-subtle">{s.start}–{s.end} {s.tz}</span>
+									</div>
+									{#if pauseText}
+										<span
+											class="bg-brand/10 text-brand shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold"
+										>
+											{pauseText}
+										</span>
+									{/if}
+								</li>
+							{/each}
+						</ul>
+					</CardScroll>
 				{/if}
 			</section>
 
 			<!-- Prowlarr meters -->
 			{#if prowlarr.isPending}
 				<div data-testid="skeleton" class="card flex min-w-0 flex-col gap-2 p-4" aria-busy="true">
-					<div class="bg-muted h-5 w-32 animate-pulse rounded"></div>
-					<div class="bg-muted h-4 w-full animate-pulse rounded"></div>
+					<div class="h-5 w-32 animate-pulse rounded bg-sunken"></div>
+					<div class="h-4 w-full animate-pulse rounded bg-sunken"></div>
 				</div>
 			{:else if prowlarr.isError}
 				<div class="card min-w-0 p-4">
 					<ProblemNote error={prowlarr.error} />
 				</div>
-			{:else if (prowlarr.data ?? []).length > 0}
+			{:else if prowlarrRows.total > 0}
 				<section
 					class="card flex min-w-0 flex-col gap-3 p-4"
 					aria-labelledby="dashboard-prowlarr-title"
 				>
 					<div class="flex items-center justify-between">
-						<h2 id="dashboard-prowlarr-title" class="text-base font-semibold">
-							<a href={resolve('/connections/prowlarr')} class="hover:underline">
-								{m.prowlarr_dashboard_title()}
-							</a>
-						</h2>
-						<a href={resolve('/connections/prowlarr')} class="text-brand text-xs hover:underline">
-							{m.overview_view_prowlarr()}
-						</a>
+						<div class="flex min-w-0 items-baseline gap-2">
+							<h2 id="dashboard-prowlarr-title" class="text-base font-semibold">
+								<a href={pageHref('/connections/prowlarr')} class="hover:underline">
+									{m.prowlarr_dashboard_title()}
+								</a>
+							</h2>
+							<CardScrollHint hidden={prowlarrRows.hidden} />
+						</div>
+						{@render seeAllLink(
+							'/connections/prowlarr',
+							prowlarrRows.cut
+								? m.overview_all_prowlarr_count({ count: prowlarrRows.total })
+								: m.overview_view_prowlarr()
+						)}
 					</div>
-					<ul class="flex flex-col gap-3">
-						{#each prowlarr.data ?? [] as link (link.link_id)}
-							{@const total = link.indexers.length}
-							{@const exhausted = countExhausted(link.indexers)}
-							{@const headroom = countHeadroom(link.indexers)}
-							<li class="flex flex-col gap-1">
-								<div
-									class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-sm"
-									data-label-value
-								>
-									<span class="font-medium">{link.name}</span>
-									<span class="text-subtle">
-										{m.prowlarr_headroom_count({ count: headroom, total })} · {m.prowlarr_exhausted_count(
-											{ count: exhausted }
-										)}
-									</span>
-								</div>
-								<div
-									role="meter"
-									aria-label={m.prowlarr_headroom_label({ name: link.name })}
-									aria-valuemin={0}
-									aria-valuemax={total}
-									aria-valuenow={headroom}
-									aria-valuetext={`${headroom} / ${total}`}
-									class="h-2 w-full overflow-hidden rounded-full border border-line bg-surface"
-								>
+					<CardScroll
+						label={m.prowlarr_dashboard_title()}
+						cap={prowlarrRows.cap}
+						total={prowlarrRows.total}
+						rowSelector="li"
+					>
+						<ul class="flex flex-col gap-3">
+							{#each prowlarrRows.rows as link (link.link_id)}
+								{@const total = link.indexers.length}
+								{@const exhausted = countExhausted(link.indexers)}
+								{@const headroom = countHeadroom(link.indexers)}
+								<li class="flex flex-col gap-1">
 									<div
-										class="h-full rounded-full"
-										style:background="var(--color-brand)"
-										style:width={`${total > 0 ? Math.round((headroom / total) * 100) : 0}%`}
-									></div>
-								</div>
-							</li>
-						{/each}
-					</ul>
+										class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-sm"
+										data-label-value
+									>
+										<a href={pageHref('/connections/prowlarr')} class="font-medium hover:underline"
+											>{link.name}</a
+										>
+										<span class="text-subtle">
+											{m.prowlarr_headroom_count({ count: headroom, total })} · {m.prowlarr_exhausted_count(
+												{ count: exhausted }
+											)}
+										</span>
+									</div>
+									<div
+										role="meter"
+										aria-label={m.prowlarr_headroom_label({ name: link.name })}
+										aria-valuemin={0}
+										aria-valuemax={total}
+										aria-valuenow={headroom}
+										aria-valuetext={`${headroom} / ${total}`}
+										class="h-2 w-full overflow-hidden rounded-full border border-line bg-surface"
+									>
+										<div
+											class="h-full rounded-full"
+											style:background="var(--color-brand)"
+											style:width={`${total > 0 ? Math.round((headroom / total) * 100) : 0}%`}
+										></div>
+									</div>
+								</li>
+							{/each}
+						</ul>
+					</CardScroll>
 				</section>
 			{/if}
 		</div>
 	</div>
 </div>
 
-<style>
-	.compact-table tbody tr {
-		height: 2.75rem;
-	}
-	@media (min-width: 1280px) {
-		.compact-table tbody tr {
-			height: 2.25rem;
-		}
-		.compact-table :global(.btn) {
-			min-height: 1.75rem;
-			padding: 0.15rem 0.5rem;
-			font-size: 0.75rem;
-		}
-	}
-	.compact-table th,
-	.compact-table td {
-		vertical-align: middle;
-	}
-</style>
+{#if eventOpen && selectedEvent}
+	<EventDialog event={selectedEvent} bind:open={eventOpen} />
+{/if}
+{#if runOpen && selectedRunId}
+	<RunDialog runId={selectedRunId} bind:open={runOpen} />
+{/if}

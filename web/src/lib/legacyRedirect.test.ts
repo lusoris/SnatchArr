@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 import { describe, expect, it } from 'vitest';
-import { legacyTarget } from './legacyRedirect.js';
+import { legacyLoad, legacyTarget } from './legacyRedirect.js';
 
 describe('legacyTarget', () => {
 	const tableCases: [string, string][] = [
@@ -70,5 +70,37 @@ describe('legacyTarget', () => {
 
 	it('boundary: unknown route returns itself', () => {
 		expect(legacyTarget('/custom', 'http://localhost/custom?a=1')).toBe('/custom?a=1');
+	});
+});
+
+describe('legacyLoad', () => {
+	function expectRedirect(url: string, location: string): void {
+		try {
+			legacyLoad({ url: new URL(url) });
+			expect.unreachable();
+		} catch (err: unknown) {
+			const r = err as { status?: number; location?: string };
+			expect(r.status).toBe(307);
+			expect(r.location).toBe(location);
+		}
+	}
+
+	it('positive: throws a SvelteKit redirect with status 307 and mapped location with query merged', () => {
+		expectRedirect(
+			'http://localhost/history?instance=sonarr-1&sort=desc',
+			'/activity?instance=sonarr-1&sort=desc'
+		);
+	});
+
+	it('negative: unknown path keeps path', () => {
+		expectRedirect('http://localhost/unknown?foo=bar', '/unknown?foo=bar');
+	});
+
+	it('boundary: trailing slash in from path is normalized', () => {
+		expectRedirect('http://localhost/history/', '/activity');
+	});
+
+	it('boundary: empty query returns clean target without question mark', () => {
+		expectRedirect('http://localhost/about', '/system?tab=about');
 	});
 });

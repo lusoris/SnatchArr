@@ -5,9 +5,9 @@ SPDX-License-Identifier: EUPL-1.2
 <script lang="ts">
 	import { onDestroy } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { resolve } from '$app/paths';
 	import { api, describeError } from '#lib/api/client.js';
-	import Field from '#lib/components/Field.svelte';
+	import CredentialFields from '#lib/components/CredentialFields.svelte';
+	import { pageHref } from '#lib/entities.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { session } from '#lib/session.svelte.js';
 	import { pollQuickConnect } from './quick-connect.js';
@@ -48,7 +48,7 @@ SPDX-License-Identifier: EUPL-1.2
 			const res = await api.POST('/auth/jellyfin', { body: { username, password } });
 			if (res.data) {
 				await session.refresh();
-				await goto(resolve('/'));
+				await goto(pageHref('/'));
 			}
 		} catch (err) {
 			error = describeError(err);
@@ -70,7 +70,7 @@ SPDX-License-Identifier: EUPL-1.2
 			const outcome = await pollQuickConnect(init.data.secret, controller.signal);
 			if (outcome === 'authenticated') {
 				await session.refresh();
-				await goto(resolve('/'));
+				await goto(pageHref('/'));
 			} else if (outcome === 'timeout') {
 				qcCode = '';
 				error = m.login_jellyfin_quick_connect_timeout();
@@ -91,28 +91,15 @@ SPDX-License-Identifier: EUPL-1.2
 
 <div class="card flex flex-col gap-4">
 	<form class="flex flex-col gap-4" onsubmit={submitJellyfin}>
-		<Field id="jellyfin-username" label={m.login_jellyfin_username()}>
-			<input
-				id="jellyfin-username"
-				class="input"
-				autocomplete="username"
-				required
-				bind:value={username}
-			/>
-		</Field>
-		<Field id="jellyfin-password" label={m.login_jellyfin_password()}>
-			<input
-				id="jellyfin-password"
-				class="input"
-				type="password"
-				autocomplete="current-password"
-				required
-				bind:value={password}
-			/>
-		</Field>
-		{#if error}
-			<p role="alert" class="text-sm text-danger">{error}</p>
-		{/if}
+		<CredentialFields
+			usernameId="jellyfin-username"
+			passwordId="jellyfin-password"
+			usernameLabel={m.login_jellyfin_username()}
+			passwordLabel={m.login_jellyfin_password()}
+			bind:username
+			bind:password
+			{error}
+		/>
 		<button type="submit" class="btn btn-primary" disabled={busy}>
 			{m.login_jellyfin_submit()}
 		</button>
@@ -120,7 +107,7 @@ SPDX-License-Identifier: EUPL-1.2
 
 	{#if quickConnectEnabled}
 		{#if qcCode}
-			<div class="border-border flex flex-col gap-2 rounded border p-3" aria-live="polite">
+			<div class="flex flex-col gap-2 rounded border border-line p-3" aria-live="polite">
 				<p class="font-mono text-base font-semibold">
 					{m.login_jellyfin_quick_connect_code({ code: qcCode })}
 				</p>

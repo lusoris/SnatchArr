@@ -14,15 +14,21 @@ import (
 type Querier interface {
 	AddBucketUsed(ctx context.Context, arg AddBucketUsedParams) error
 	AddGlobalBucketUsed(ctx context.Context, arg AddGlobalBucketUsedParams) error
+	AddProwlarrBucketUsed(ctx context.Context, arg AddProwlarrBucketUsedParams) error
 	BucketUsage(ctx context.Context, arg BucketUsageParams) (BucketUsageRow, error)
 	CancelRun(ctx context.Context, arg CancelRunParams) (int64, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
 	CheckAndRecordItemSearch(ctx context.Context, arg CheckAndRecordItemSearchParams) (time.Time, error)
+	ClearUnfavoritedAdultPerformers(ctx context.Context, updatedAt time.Time) (int64, error)
+	ClearUnfavoritedAdultStudios(ctx context.Context, updatedAt time.Time) (int64, error)
 	CompleteRun(ctx context.Context, arg CompleteRunParams) (SnatchRun, error)
 	CountActiveAPIKeysByOwner(ctx context.Context, ownerID uuid.UUID) (int64, error)
+	CountAdultImageItems(ctx context.Context) (int64, error)
+	CountAdultImageSets(ctx context.Context) (int64, error)
 	CountInstancesByBaseURL(ctx context.Context, arg CountInstancesByBaseURLParams) (int64, error)
 	CountInstancesByBaseURLAndNotSource(ctx context.Context, arg CountInstancesByBaseURLAndNotSourceParams) (int64, error)
+	CountPriorityPresets(ctx context.Context) (int64, error)
 	CountProcessed(ctx context.Context, arg CountProcessedParams) (int64, error)
 	CountRunsByStatus(ctx context.Context) ([]CountRunsByStatusRow, error)
 	CountSeerrRequests(ctx context.Context, linkID uuid.UUID) (int64, error)
@@ -41,6 +47,7 @@ type Querier interface {
 	// SPDX-License-Identifier: EUPL-1.2
 	CreateNotificationChannel(ctx context.Context, arg CreateNotificationChannelParams) (NotificationChannel, error)
 	CreateNotificationRule(ctx context.Context, arg CreateNotificationRuleParams) (NotificationRule, error)
+	CreatePriorityPreset(ctx context.Context, arg CreatePriorityPresetParams) (PriorityPreset, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
 	CreateProwlarrLink(ctx context.Context, arg CreateProwlarrLinkParams) (ProwlarrLink, error)
@@ -55,8 +62,10 @@ type Querier interface {
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
 	CreateWatchAwareSource(ctx context.Context, arg CreateWatchAwareSourceParams) (WatchawareSource, error)
+	DeleteAdultExternalRefsByEntity(ctx context.Context, arg DeleteAdultExternalRefsByEntityParams) (int64, error)
 	DeleteAdultImageItemsNotInPaths(ctx context.Context, arg DeleteAdultImageItemsNotInPathsParams) (int64, error)
 	DeleteAdultImageSetsNotInPaths(ctx context.Context, keepPaths []string) (int64, error)
+	DeleteAdultStashboxInstance(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteAllAdultImageItemsForSet(ctx context.Context, imageSetID uuid.UUID) (int64, error)
 	DeleteAllAdultImageSets(ctx context.Context) (int64, error)
 	DeleteConfigarrDownloadClientsNotIn(ctx context.Context, keys []string) (int64, error)
@@ -66,8 +75,10 @@ type Querier interface {
 	DeleteLoginLockout(ctx context.Context, key string) error
 	DeleteNotificationChannel(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteNotificationRule(ctx context.Context, id uuid.UUID) (int64, error)
+	DeletePriorityPreset(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteProwlarrLink(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteQueueStrike(ctx context.Context, arg DeleteQueueStrikeParams) error
+	DeleteRuntimeSetting(ctx context.Context, key string) error
 	DeleteSchedule(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteSeerrLink(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteSession(ctx context.Context, id string) error
@@ -96,16 +107,15 @@ type Querier interface {
 	FindWebhookDelivery(ctx context.Context, id string) (WebhookDelivery, error)
 	FindWebhookEndpoint(ctx context.Context, id string) (WebhookEndpoint, error)
 	GetAPIKey(ctx context.Context, id string) (ApiKey, error)
-	GetAdultFavoritePerformer(ctx context.Context, id uuid.UUID) (AdultFavoritePerformer, error)
-	GetAdultFavoritePerformerByLink(ctx context.Context, arg GetAdultFavoritePerformerByLinkParams) (AdultFavoritePerformer, error)
-	GetAdultFavoriteStudio(ctx context.Context, id uuid.UUID) (AdultFavoriteStudio, error)
-	GetAdultFavoriteStudioByLink(ctx context.Context, arg GetAdultFavoriteStudioByLinkParams) (AdultFavoriteStudio, error)
+	GetAdultExternalRef(ctx context.Context, arg GetAdultExternalRefParams) (AdultExternalRef, error)
 	GetAdultImageItem(ctx context.Context, id uuid.UUID) (AdultImageItem, error)
 	GetAdultImageSet(ctx context.Context, id uuid.UUID) (AdultImageSet, error)
 	GetAdultImageSetByDirectory(ctx context.Context, directoryPath string) (AdultImageSet, error)
-	GetAdultPerformerLink(ctx context.Context, arg GetAdultPerformerLinkParams) (AdultPerformerLink, error)
+	GetAdultPerformer(ctx context.Context, id uuid.UUID) (AdultPerformer, error)
+	GetAdultPerformerByExternalRef(ctx context.Context, arg GetAdultPerformerByExternalRefParams) (AdultPerformer, error)
 	GetAdultStashboxInstance(ctx context.Context, id uuid.UUID) (AdultStashboxInstance, error)
-	GetAdultStudioLink(ctx context.Context, arg GetAdultStudioLinkParams) (AdultStudioLink, error)
+	GetAdultStudio(ctx context.Context, id uuid.UUID) (AdultStudio, error)
+	GetAdultStudioByExternalRef(ctx context.Context, arg GetAdultStudioByExternalRefParams) (AdultStudio, error)
 	GetDownloadClient(ctx context.Context, id uuid.UUID) (DownloadClient, error)
 	GetFirstAdmin(ctx context.Context) (User, error)
 	GetGateBaseline(ctx context.Context, instanceID uuid.UUID) (WatchawareGateBaseline, error)
@@ -124,11 +134,16 @@ type Querier interface {
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
 	GetPolicy(ctx context.Context, instanceID uuid.UUID) (SnatchPolicy, error)
+	GetPriorityPreset(ctx context.Context, id uuid.UUID) (PriorityPreset, error)
 	GetProwlarrLink(ctx context.Context, id uuid.UUID) (ProwlarrLink, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
 	GetQueuePolicy(ctx context.Context, instanceID uuid.UUID) (QueuePolicy, error)
+	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+	// SPDX-License-Identifier: EUPL-1.2
+	GetRequestsSettings(ctx context.Context) (RequestsSetting, error)
 	GetRun(ctx context.Context, id uuid.UUID) (SnatchRun, error)
+	GetRuntimeSetting(ctx context.Context, key string) (RuntimeSetting, error)
 	GetSchedule(ctx context.Context, id uuid.UUID) (Schedule, error)
 	GetSeerrLink(ctx context.Context, id uuid.UUID) (SeerrLink, error)
 	GetSeerrRequest(ctx context.Context, arg GetSeerrRequestParams) (SeerrRequest, error)
@@ -141,6 +156,7 @@ type Querier interface {
 	GetUserByUsername(ctx context.Context, username string) (User, error)
 	GetUserIdentity(ctx context.Context, arg GetUserIdentityParams) (UserIdentity, error)
 	GetUserNotifyTarget(ctx context.Context, arg GetUserNotifyTargetParams) (UserNotifyTarget, error)
+	GetUserPreferences(ctx context.Context, userID uuid.UUID) (UsersPref, error)
 	GetWatchAwareSource(ctx context.Context, id uuid.UUID) (WatchawareSource, error)
 	GetWatchAwareSyncSummary(ctx context.Context) (GetWatchAwareSyncSummaryRow, error)
 	GlobalBucketUsage(ctx context.Context, since time.Time) (GlobalBucketUsageRow, error)
@@ -151,6 +167,7 @@ type Querier interface {
 	InsertEvent(ctx context.Context, arg InsertEventParams) (int64, error)
 	InsertGateBaseline(ctx context.Context, arg InsertGateBaselineParams) error
 	InsertUserIdentity(ctx context.Context, arg InsertUserIdentityParams) (UserIdentity, error)
+	InstanceRunStatusesAsOf(ctx context.Context, arg InstanceRunStatusesAsOfParams) ([]string, error)
 	LastFinishedAt(ctx context.Context, arg LastFinishedAtParams) (time.Time, error)
 	LastWorkerContact(ctx context.Context) (time.Time, error)
 	// An expired lease is handed out again only while the run has been leased fewer than
@@ -158,14 +175,18 @@ type Querier interface {
 	LeaseRun(ctx context.Context, arg LeaseRunParams) (SnatchRun, error)
 	ListAPIKeysByOwner(ctx context.Context, ownerID uuid.UUID) ([]ApiKey, error)
 	ListAPIKeysForOwner(ctx context.Context, ownerID uuid.UUID) ([]ListAPIKeysForOwnerRow, error)
-	ListAdultFavoritePerformers(ctx context.Context) ([]AdultFavoritePerformer, error)
-	ListAdultFavoriteStudios(ctx context.Context) ([]AdultFavoriteStudio, error)
+	ListAdultExternalRefsByEntity(ctx context.Context, arg ListAdultExternalRefsByEntityParams) ([]AdultExternalRef, error)
+	ListAdultExternalRefsByEntityType(ctx context.Context, entityType string) ([]AdultExternalRef, error)
+	ListAdultFavoritePerformers(ctx context.Context) ([]AdultPerformer, error)
+	ListAdultFavoriteStudios(ctx context.Context) ([]AdultStudio, error)
 	ListAdultImageItemsForSet(ctx context.Context, imageSetID uuid.UUID) ([]AdultImageItem, error)
 	ListAdultImageSets(ctx context.Context) ([]AdultImageSet, error)
-	ListAdultPerformerLinks(ctx context.Context) ([]AdultPerformerLink, error)
-	ListAdultPerformerLinksForFavorite(ctx context.Context, favoriteID uuid.UUID) ([]AdultPerformerLink, error)
-	ListAdultStudioLinks(ctx context.Context) ([]AdultStudioLink, error)
-	ListAdultStudioLinksForFavorite(ctx context.Context, favoriteID uuid.UUID) ([]AdultStudioLink, error)
+	ListAdultImageSetsPaged(ctx context.Context, arg ListAdultImageSetsPagedParams) ([]AdultImageSet, error)
+	ListAdultPerformers(ctx context.Context) ([]AdultPerformer, error)
+	ListAdultPerformersKeyset(ctx context.Context, arg ListAdultPerformersKeysetParams) ([]ListAdultPerformersKeysetRow, error)
+	ListAdultStashboxInstances(ctx context.Context) ([]AdultStashboxInstance, error)
+	ListAdultStudios(ctx context.Context) ([]AdultStudio, error)
+	ListAdultStudiosKeyset(ctx context.Context, arg ListAdultStudiosKeysetParams) ([]ListAdultStudiosKeysetRow, error)
 	ListDeadLetterDeliveries(ctx context.Context) ([]WebhookDelivery, error)
 	ListDownloadClients(ctx context.Context) ([]DownloadClient, error)
 	ListDownloadClientsForInstance(ctx context.Context, instanceID *uuid.UUID) ([]DownloadClient, error)
@@ -186,6 +207,12 @@ type Querier interface {
 	ListGateSeries(ctx context.Context, arg ListGateSeriesParams) ([]WatchawareGateSeries, error)
 	ListGateSeriesIDsForInstance(ctx context.Context, instanceID uuid.UUID) ([]int32, error)
 	ListGatedSeriesWithHeldSeasons(ctx context.Context, arg ListGatedSeriesWithHeldSeasonsParams) ([]WatchawareGateSeries, error)
+	// Newest finished non-preview pool per enabled non-stash instance and snatch kind.
+	ListInstanceEligibleItems(ctx context.Context) ([]ListInstanceEligibleItemsRow, error)
+	// Latest finish per enabled non-stash instance and terminal status, for the state gauges.
+	ListInstanceLastRunFinished(ctx context.Context) ([]ListInstanceLastRunFinishedRow, error)
+	// Cycle interval of each enabled non-stash instance whose policy schedules any run.
+	ListInstanceRunIntervals(ctx context.Context) ([]ListInstanceRunIntervalsRow, error)
 	ListInstances(ctx context.Context) ([]Instance, error)
 	// Instances never evaluated come first, then the one evaluated longest ago (#176).
 	ListInstancesToPlan(ctx context.Context) ([]Instance, error)
@@ -196,9 +223,16 @@ type Querier interface {
 	ListNotificationRules(ctx context.Context) ([]NotificationRule, error)
 	ListNotificationRulesByEvent(ctx context.Context, eventKind string) ([]NotificationRule, error)
 	ListPendingGateDecisions(ctx context.Context, arg ListPendingGateDecisionsParams) ([]WatchawareGateDecision, error)
+	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+	//
+	// SPDX-License-Identifier: EUPL-1.2
+	ListPriorityPresets(ctx context.Context) ([]PriorityPreset, error)
 	ListProwlarrLinks(ctx context.Context) ([]ProwlarrLink, error)
 	ListQueueStrikes(ctx context.Context, instanceID uuid.UUID) ([]QueueStrike, error)
 	ListRuns(ctx context.Context, arg ListRunsParams) ([]SnatchRun, error)
+	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+	// SPDX-License-Identifier: EUPL-1.2
+	ListRuntimeSettings(ctx context.Context) ([]RuntimeSetting, error)
 	ListSchedules(ctx context.Context) ([]Schedule, error)
 	ListSeerrLinks(ctx context.Context) ([]SeerrLink, error)
 	ListSeerrRequests(ctx context.Context, limit int32) ([]ListSeerrRequestsRow, error)
@@ -218,16 +252,25 @@ type Querier interface {
 	// runs under this transaction-scoped lock, so two grants on either side of a minute
 	// boundary (different bucket rows) still see each other.
 	LockInstanceBudget(ctx context.Context, instanceID uuid.UUID) error
+	// Serialize count and insert across API replicas so concurrent saves respect the cap.
+	LockPriorityPresets(ctx context.Context) error
+	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+	// SPDX-License-Identifier: EUPL-1.2
+	// Prowlarr link stamina is a rolling window of one-minute buckets (#777). Every grab for a link
+	// runs under this transaction-scoped lock, so two grabs on either side of a minute
+	// boundary still see each other.
+	// Lock order: LockProwlarrLinkBudget first, then LockGlobalBudget.
+	LockProwlarrLinkBudget(ctx context.Context, linkID uuid.UUID) error
 	MarkGateDecisionsApplied(ctx context.Context, arg MarkGateDecisionsAppliedParams) error
 	MarkInstancesPlanned(ctx context.Context, arg MarkInstancesPlannedParams) error
 	// Afterglow backoff: the first snatch rests base_s seconds, every further snatch of the
 	// same item doubles the rest, capped at max_s.
 	MarkProcessed(ctx context.Context, arg MarkProcessedParams) error
 	MarkSeerrRequestsSnatched(ctx context.Context, arg MarkSeerrRequestsSnatchedParams) (int64, error)
-	MarkStaleAdultPerformerLinksUnfavorite(ctx context.Context, arg MarkStaleAdultPerformerLinksUnfavoriteParams) (int64, error)
-	MarkStaleAdultStudioLinksUnfavorite(ctx context.Context, arg MarkStaleAdultStudioLinksUnfavoriteParams) (int64, error)
+	MarkStaleAdultExternalRefsUnfavorite(ctx context.Context, arg MarkStaleAdultExternalRefsUnfavoriteParams) (int64, error)
 	PriorityEntityIDs(ctx context.Context, instanceID *uuid.UUID) ([]int64, error)
 	ProcessedAttempts(ctx context.Context, arg ProcessedAttemptsParams) (int32, error)
+	ProwlarrBucketUsage(ctx context.Context, arg ProwlarrBucketUsageParams) (ProwlarrBucketUsageRow, error)
 	PruneGateDecisions(ctx context.Context, arg PruneGateDecisionsParams) (int64, error)
 	PurgeBucketsBefore(ctx context.Context, arg PurgeBucketsBeforeParams) (int64, error)
 	PurgeEventsBefore(ctx context.Context, arg PurgeEventsBeforeParams) (int64, error)
@@ -240,10 +283,11 @@ type Querier interface {
 	PurgeExpiredQueueStrikes(ctx context.Context, arg PurgeExpiredQueueStrikesParams) (int64, error)
 	PurgeExpiredSessions(ctx context.Context, arg PurgeExpiredSessionsParams) (int64, error)
 	PurgeGlobalBucketsBefore(ctx context.Context, arg PurgeGlobalBucketsBeforeParams) (int64, error)
+	PurgeProwlarrBucketsBefore(ctx context.Context, arg PurgeProwlarrBucketsBeforeParams) (int64, error)
 	PurgeRunsBefore(ctx context.Context, arg PurgeRunsBeforeParams) (int64, error)
 	PurgeWorkersBefore(ctx context.Context, arg PurgeWorkersBeforeParams) (int64, error)
-	RecentInstanceRunStatuses(ctx context.Context, arg RecentInstanceRunStatusesParams) ([]string, error)
 	RecentRunStatuses(ctx context.Context, arg RecentRunStatusesParams) ([]string, error)
+	RecordAdultStashboxSyncResult(ctx context.Context, arg RecordAdultStashboxSyncResultParams) error
 	RecordDownloadClientCheck(ctx context.Context, arg RecordDownloadClientCheckParams) error
 	RecordInstanceCheck(ctx context.Context, arg RecordInstanceCheckParams) error
 	RecordLoginLockoutFailure(ctx context.Context, arg RecordLoginLockoutFailureParams) error
@@ -280,6 +324,7 @@ type Querier interface {
 	UpdateInstancePriority(ctx context.Context, arg UpdateInstancePriorityParams) (UpdateInstancePriorityRow, error)
 	UpdateNotificationChannel(ctx context.Context, arg UpdateNotificationChannelParams) (NotificationChannel, error)
 	UpdateNotificationRule(ctx context.Context, arg UpdateNotificationRuleParams) (NotificationRule, error)
+	UpdatePriorityPreset(ctx context.Context, arg UpdatePriorityPresetParams) (PriorityPreset, error)
 	UpdateProwlarrLink(ctx context.Context, arg UpdateProwlarrLinkParams) (ProwlarrLink, error)
 	UpdateSchedule(ctx context.Context, arg UpdateScheduleParams) (Schedule, error)
 	UpdateSeerrLink(ctx context.Context, arg UpdateSeerrLinkParams) (SeerrLink, error)
@@ -287,15 +332,14 @@ type Querier interface {
 	UpdateUserNotifyTarget(ctx context.Context, arg UpdateUserNotifyTargetParams) (UserNotifyTarget, error)
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
 	UpdateWatchAwareSource(ctx context.Context, arg UpdateWatchAwareSourceParams) (WatchawareSource, error)
-	UpsertAdultFavoritePerformer(ctx context.Context, arg UpsertAdultFavoritePerformerParams) (AdultFavoritePerformer, error)
-	UpsertAdultFavoriteStudio(ctx context.Context, arg UpsertAdultFavoriteStudioParams) (AdultFavoriteStudio, error)
+	UpsertAdultExternalRef(ctx context.Context, arg UpsertAdultExternalRefParams) (AdultExternalRef, error)
 	UpsertAdultImageItem(ctx context.Context, arg UpsertAdultImageItemParams) (AdultImageItem, error)
 	UpsertAdultImageSet(ctx context.Context, arg UpsertAdultImageSetParams) (AdultImageSet, error)
-	UpsertAdultPerformerLink(ctx context.Context, arg UpsertAdultPerformerLinkParams) (AdultPerformerLink, error)
+	UpsertAdultPerformer(ctx context.Context, arg UpsertAdultPerformerParams) (AdultPerformer, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
 	UpsertAdultStashboxInstance(ctx context.Context, arg UpsertAdultStashboxInstanceParams) (AdultStashboxInstance, error)
-	UpsertAdultStudioLink(ctx context.Context, arg UpsertAdultStudioLinkParams) (AdultStudioLink, error)
+	UpsertAdultStudio(ctx context.Context, arg UpsertAdultStudioParams) (AdultStudio, error)
 	UpsertConfigarrDownloadClient(ctx context.Context, arg UpsertConfigarrDownloadClientParams) (UpsertConfigarrDownloadClientRow, error)
 	UpsertConfigarrInstance(ctx context.Context, arg UpsertConfigarrInstanceParams) (UpsertConfigarrInstanceRow, error)
 	UpsertDiscoveredDownloadClient(ctx context.Context, arg UpsertDiscoveredDownloadClientParams) (UpsertDiscoveredDownloadClientRow, error)
@@ -307,7 +351,10 @@ type Querier interface {
 	UpsertPolicy(ctx context.Context, arg UpsertPolicyParams) error
 	UpsertQueuePolicy(ctx context.Context, arg UpsertQueuePolicyParams) error
 	UpsertQueueStrikes(ctx context.Context, arg UpsertQueueStrikesParams) error
+	UpsertRequestsSettings(ctx context.Context, arg UpsertRequestsSettingsParams) (RequestsSetting, error)
+	UpsertRuntimeSetting(ctx context.Context, arg UpsertRuntimeSettingParams) (RuntimeSetting, error)
 	UpsertSeerrRequest(ctx context.Context, arg UpsertSeerrRequestParams) error
+	UpsertUserPreferences(ctx context.Context, arg UpsertUserPreferencesParams) (UsersPref, error)
 	UpsertWatchAwareItemWatch(ctx context.Context, arg UpsertWatchAwareItemWatchParams) error
 }
 

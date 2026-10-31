@@ -6,7 +6,6 @@ SPDX-License-Identifier: EUPL-1.2
 	import '../app.css';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { resolve } from '$app/paths';
 	import { QueryClientProvider, setQueryClientContext } from '@tanstack/svelte-query';
 	import { Toaster } from 'svelte-sonner';
 	import { toastPreset } from '@sveltesentio/ui/toast';
@@ -14,6 +13,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { ProblemError } from '@sveltesentio/core';
 	import { onMount } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
+	import { FALLBACK_BRAND_MARK, effectiveBrandInputs, resolveBrandMark } from '#lib/brand-mark.js';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import { getNavItems, isRouteDisabled } from '#lib/components/shell/nav.js';
 	import BottomBar from '#lib/components/shell/BottomBar.svelte';
@@ -21,6 +21,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import NavDrawer from '#lib/components/shell/NavDrawer.svelte';
 	import Sidebar from '#lib/components/shell/Sidebar.svelte';
 	import TopBar from '#lib/components/shell/TopBar.svelte';
+	import { pageHref } from '#lib/entities.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { api, PUBLIC_ROUTES } from '#lib/api/client.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
@@ -50,6 +51,18 @@ SPDX-License-Identifier: EUPL-1.2
 		}
 	}));
 
+	const settingsQuery = createSentioQuery(() => ({
+		queryKey: keys.settings,
+		enabled: session.state === 'authenticated',
+		queryFn: async () => (await api.GET('/settings')).data
+	}));
+
+	const preferencesQuery = createSentioQuery(() => ({
+		queryKey: keys.preferences,
+		enabled: session.state === 'authenticated',
+		queryFn: async () => (await api.GET('/me/preferences')).data
+	}));
+
 	const activeModules = $derived.by(() => {
 		const list = modulesQuery.data;
 		if (!list || modulesQuery.isError) {
@@ -64,6 +77,16 @@ SPDX-License-Identifier: EUPL-1.2
 		return set;
 	});
 
+	const brandMark = $derived.by(() => {
+		if (session.state !== 'authenticated') {
+			return FALLBACK_BRAND_MARK;
+		}
+		if (modulesQuery.isLoading || settingsQuery.isLoading || preferencesQuery.isLoading) {
+			return FALLBACK_BRAND_MARK;
+		}
+		const inputs = effectiveBrandInputs(settingsQuery.data, preferencesQuery.data);
+		return resolveBrandMark(inputs.brandMark, inputs.sfwMode, activeModules.has('adult'), false);
+	});
 	const navItems = $derived(getNavItems(activeModules));
 	const routeGuard = $derived(isRouteDisabled(page.url.pathname, activeModules));
 
@@ -96,11 +119,11 @@ SPDX-License-Identifier: EUPL-1.2
 		const state = await session.refresh();
 		const here = page.url.pathname;
 		if (state === 'setup' && here !== '/setup') {
-			await goto(resolve('setup'));
+			await goto(pageHref('/setup'));
 		} else if (state === 'anonymous' && !session.error && !PUBLIC_ROUTES.has(here)) {
-			await goto(resolve('login'));
+			await goto(pageHref('/login'));
 		} else if (state === 'authenticated' && PUBLIC_ROUTES.has(here)) {
-			await goto(resolve('/'));
+			await goto(pageHref('/'));
 		}
 	}
 
@@ -115,13 +138,13 @@ SPDX-License-Identifier: EUPL-1.2
 		const here = page.url.pathname;
 		drawerOpen = false;
 		if (session.state === 'anonymous' && !session.error && !PUBLIC_ROUTES.has(here)) {
-			void goto(resolve('login'));
+			void goto(pageHref('/login'));
 		}
 	});
 
 	async function logout(): Promise<void> {
 		await session.logout();
-		await goto(resolve('login'));
+		await goto(pageHref('/login'));
 	}
 </script>
 
@@ -142,9 +165,21 @@ SPDX-License-Identifier: EUPL-1.2
 		</main>
 	{:else}
 		<div class="min-h-screen bg-bg text-fg">
-			<TopBar {drawerOpen} onOpenDrawer={openDrawer} onOpenSearch={openSearch} bind:menuButtonEl />
+			<TopBar
+				{drawerOpen}
+				onOpenDrawer={openDrawer}
+				onOpenSearch={openSearch}
+				bind:menuButtonEl
+				mark={brandMark}
+			/>
 
-			<Sidebar {navItems} {activeModules} onLogout={logout} onOpenSearch={openSearch} />
+			<Sidebar
+				{navItems}
+				{activeModules}
+				onLogout={logout}
+				onOpenSearch={openSearch}
+				mark={brandMark}
+			/>
 
 			<NavDrawer
 				open={drawerOpen}
@@ -152,6 +187,7 @@ SPDX-License-Identifier: EUPL-1.2
 				onLogout={logout}
 				{menuButtonEl}
 				{activeModules}
+				mark={brandMark}
 			/>
 
 			<BottomBar onOpenDrawer={openDrawer} {activeModules} />
@@ -163,7 +199,7 @@ SPDX-License-Identifier: EUPL-1.2
 				class="min-h-screen p-4 pb-[calc(4rem+env(safe-area-inset-bottom,0px))] md:p-6 md:pb-6 lg:pl-[16.5rem]"
 				tabindex="-1"
 			>
-				<div class="max-w-[100rem]">
+				<div class="mx-auto max-w-[100rem]">
 					<svelte:boundary>
 						{#if session.state === 'unknown' || session.state === 'anonymous'}
 							<div
@@ -185,7 +221,7 @@ SPDX-License-Identifier: EUPL-1.2
 								<p class="text-sm text-subtle">{m.page_not_found_text()}</p>
 								<ProblemNote error={disabledRouteProblem} />
 								<div>
-									<a href={resolve('/')} class="btn btn-outline inline-flex items-center gap-2">
+									<a href={pageHref('/')} class="btn btn-outline inline-flex items-center gap-2">
 										{m.page_not_found_back()}
 									</a>
 								</div>

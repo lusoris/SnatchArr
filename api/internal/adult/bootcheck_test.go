@@ -117,4 +117,29 @@ func TestCheckBoot(t *testing.T) {
 			t.Fatalf("CheckBoot() want nil for disabled module, got: %v", err)
 		}
 	})
+
+	t.Run("enabled module + existing dir -> .stashignore present", func(t *testing.T) {
+		t.Parallel()
+		imgDir := filepath.Join(t.TempDir(), "imagesets")
+		if err := os.MkdirAll(imgDir, 0o750); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		customThumb := filepath.Join(t.TempDir(), "thumbs")
+		checker := &mockBootModuleChecker{
+			enabled: true,
+			cfg:     fmt.Sprintf(`{"image_set_dir":%q,"thumbnail_cache_dir":%q}`, imgDir, customThumb),
+		}
+		err := adult.CheckBoot(ctx, checker, logger)
+		if err != nil {
+			t.Fatalf("CheckBoot() want nil, got: %v", err)
+		}
+		ignorePath := filepath.Join(imgDir, ".stashignore")
+		fi, err := os.Stat(ignorePath)
+		if err != nil {
+			t.Fatalf("CheckBoot() did not create .stashignore %q: %v", ignorePath, err)
+		}
+		if fi.IsDir() {
+			t.Fatalf("CheckBoot() .stashignore %q is a directory", ignorePath)
+		}
+	})
 }

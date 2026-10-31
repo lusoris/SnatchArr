@@ -23,6 +23,7 @@ import (
 	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/httpx/csrf"
 
+	"github.com/lusoris/SnatchArr/api/internal/adult"
 	"github.com/lusoris/SnatchArr/api/internal/auth"
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/buildinfo"
@@ -38,6 +39,8 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/policies"
 	"github.com/lusoris/SnatchArr/api/internal/prowlarr"
 	"github.com/lusoris/SnatchArr/api/internal/queue"
+	"github.com/lusoris/SnatchArr/api/internal/requests"
+	"github.com/lusoris/SnatchArr/api/internal/runtimesettings"
 	"github.com/lusoris/SnatchArr/api/internal/seerr"
 	"github.com/lusoris/SnatchArr/api/internal/settings"
 	"github.com/lusoris/SnatchArr/api/internal/snatch"
@@ -47,36 +50,39 @@ import (
 
 // Handlers implements oas.Handler.
 type Handlers struct {
-	build      buildinfo.Info
-	cfg        config.Options
-	clk        clock.Clock
-	auth       *auth.Service
-	apiKeys    *auth.APIKeys
-	sessions   *session.Manager
-	instances  *instances.Service
-	policies   *policies.Service
-	queue      *queue.Store
-	queueSvc   *queue.Service
-	options    *policies.Options
-	logs       *logring.Ring
-	runs       *snatch.Runs
-	workers    *snatch.Workers
-	rec        *snatch.Recorder
-	budget     *snatch.Budget
-	memory     *snatch.Memory
-	planner    *snatch.Planner
-	schedules  *snatch.Schedules
-	clients    *dlclients.Service
-	settings   *settings.Service
-	modules    *modules.Service
-	seerr      *seerr.Service
-	prowlarr   *prowlarr.Service
-	configarr  *configarr.Service
-	notify     *notify.Service
-	watchaware *watchaware.Service
-	jellyfin   jellyfin.Authenticator
-	logger     *slog.Logger
-	qcCache    quickConnectCache
+	build           buildinfo.Info
+	cfg             config.Options
+	clk             clock.Clock
+	auth            *auth.Service
+	apiKeys         *auth.APIKeys
+	sessions        *session.Manager
+	instances       *instances.Service
+	policies        *policies.Service
+	queue           *queue.Store
+	queueSvc        queueService
+	options         *policies.Options
+	logs            *logring.Ring
+	runs            *snatch.Runs
+	workers         *snatch.Workers
+	rec             *snatch.Recorder
+	budget          *snatch.Budget
+	memory          *snatch.Memory
+	planner         *snatch.Planner
+	schedules       *snatch.Schedules
+	clients         *dlclients.Service
+	settings        *settings.Service
+	requests        *requests.Service
+	modules         *modules.Service
+	seerr           *seerr.Service
+	prowlarr        *prowlarr.Service
+	configarr       *configarr.Service
+	notify          *notify.Service
+	watchaware      *watchaware.Service
+	adult           *adult.Service
+	jellyfin        jellyfin.Authenticator
+	runtimeSettings *runtimesettings.Service
+	logger          *slog.Logger
+	qcCache         quickConnectCache
 }
 
 type quickConnectCache struct {
@@ -88,26 +94,29 @@ type quickConnectCache struct {
 // Deps groups the snatch services the handlers need.
 type Deps struct {
 	fx.In
-	Runs       *snatch.Runs
-	Workers    *snatch.Workers
-	Rec        *snatch.Recorder
-	Budget     *snatch.Budget
-	Memory     *snatch.Memory
-	Planner    *snatch.Planner
-	Schedules  *snatch.Schedules
-	Clients    *dlclients.Service
-	Settings   *settings.Service
-	Modules    *modules.Service
-	Seerr      *seerr.Service
-	Prowlarr   *prowlarr.Service
-	Configarr  *configarr.Service
-	Notify     *notify.Service
-	WatchAware *watchaware.Service
-	Jellyfin   jellyfin.Authenticator
-	Options    *policies.Options
-	Logs       *logring.Ring
-	Queue      *queue.Store
-	QueueSvc   *queue.Service
+	Runs            *snatch.Runs
+	Workers         *snatch.Workers
+	Rec             *snatch.Recorder
+	Budget          *snatch.Budget
+	Memory          *snatch.Memory
+	Planner         *snatch.Planner
+	Schedules       *snatch.Schedules
+	Clients         *dlclients.Service
+	Settings        *settings.Service
+	Requests        *requests.Service
+	Modules         *modules.Service
+	Seerr           *seerr.Service
+	Prowlarr        *prowlarr.Service
+	Configarr       *configarr.Service
+	Notify          *notify.Service
+	WatchAware      *watchaware.Service
+	Adult           *adult.Service
+	Jellyfin        jellyfin.Authenticator
+	Options         *policies.Options
+	Logs            *logring.Ring
+	Queue           *queue.Store
+	QueueSvc        *queue.Service
+	RuntimeSettings *runtimesettings.Service
 }
 
 // NewHandlers wires the operation handlers.
@@ -120,7 +129,7 @@ func NewHandlers(build buildinfo.Info, cfg config.Options, clk clock.Clock, auth
 	}
 	return &Handlers{
 		build: build, cfg: cfg, clk: clk, auth: authSvc, apiKeys: apiKeys, sessions: sessions, instances: inst, policies: pol,
-		queue: d.Queue, queueSvc: d.QueueSvc, runs: d.Runs, workers: d.Workers, rec: d.Rec, budget: d.Budget, memory: d.Memory, planner: d.Planner, schedules: d.Schedules, clients: d.Clients, settings: d.Settings, modules: d.Modules, seerr: d.Seerr, prowlarr: d.Prowlarr, configarr: d.Configarr, notify: d.Notify, watchaware: d.WatchAware, jellyfin: jf, options: d.Options, logs: d.Logs, logger: logger,
+		queue: d.Queue, queueSvc: d.QueueSvc, runs: d.Runs, workers: d.Workers, rec: d.Rec, budget: d.Budget, memory: d.Memory, planner: d.Planner, schedules: d.Schedules, clients: d.Clients, settings: d.Settings, requests: d.Requests, modules: d.Modules, seerr: d.Seerr, prowlarr: d.Prowlarr, configarr: d.Configarr, notify: d.Notify, watchaware: d.WatchAware, adult: d.Adult, jellyfin: jf, options: d.Options, logs: d.Logs, runtimeSettings: d.RuntimeSettings, logger: logger,
 	}
 }
 

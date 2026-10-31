@@ -59,3 +59,10 @@ SET cursor_missing = CASE WHEN sqlc.arg(kind)::text = 'missing' THEN sqlc.arg(cu
     cursor_upgrade = CASE WHEN sqlc.arg(kind)::text = 'upgrade' THEN sqlc.arg(cursor)::text ELSE cursor_upgrade END,
     updated_at = sqlc.arg(updated_at)
 WHERE instance_id = sqlc.arg(instance_id);
+
+-- name: ListInstanceRunIntervals :many
+-- Cycle interval of each enabled non-stash instance whose policy schedules any run.
+SELECT i.id AS instance_id, i.name AS instance_name, p.cycle_interval_s
+FROM instances i JOIN snatch_policies p ON p.instance_id = i.id
+WHERE i.enabled AND i.kind <> 'stash' AND (p.missing_per_cycle > 0 OR p.upgrade_per_cycle > 0)
+ORDER BY i.name;

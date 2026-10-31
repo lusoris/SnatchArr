@@ -3,24 +3,13 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
-	import { createSentioQuery } from '@sveltesentio/query';
-	import { api } from '#lib/api/client.js';
 	import ConnectionHubCard from '#lib/components/ConnectionHubCard.svelte';
+	import { prowlarrQueries } from '#lib/queries/connections.js';
 	import { deriveServiceStatus } from '#lib/connections.js';
 	import { m } from '#lib/paraglide/messages.js';
-	import { keys } from '#lib/query.js';
 	import { session } from '#lib/session.svelte.js';
 
-	const links = createSentioQuery({
-		queryKey: keys.prowlarrLinks,
-		queryFn: async () => (await api.GET('/prowlarr')).data ?? []
-	});
-
-	const status = createSentioQuery({
-		queryKey: keys.prowlarr,
-		queryFn: async () => (await api.GET('/prowlarr/status')).data ?? [],
-		refetchInterval: 30_000
-	});
+	const { links, status } = prowlarrQueries();
 
 	const summary = $derived.by(() => {
 		const linkList = links.data ?? [];
@@ -40,6 +29,7 @@ SPDX-License-Identifier: EUPL-1.2
 </script>
 
 <ConnectionHubCard
+	kind="prowlarr"
 	icon="search"
 	title={m.nav_prowlarr()}
 	{href}

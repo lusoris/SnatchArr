@@ -23,6 +23,7 @@ import (
 
 	"github.com/lusoris/SnatchArr/api/internal/dlclients"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
+	"github.com/lusoris/SnatchArr/api/internal/events"
 	snatcharrv1 "github.com/lusoris/SnatchArr/api/internal/gen/snatcharr/v1"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
 	"github.com/lusoris/SnatchArr/api/internal/logring"
@@ -91,7 +92,7 @@ func New(runs *snatch.Runs, workers *snatch.Workers, budget *snatch.Budget, memo
 	inst *instances.Service, pol *policies.Service, cfg *settings.Service, requests *seerr.Service, clk clock.Clock, logger *slog.Logger, m *metrics.Metrics,
 	opts Options,
 ) *Server {
-	m.WorkerEventTypes(eventTypes()...)
+	m.WorkerEventTypes(events.EventTypes()...)
 	return &Server{
 		runs: runs, workers: workers, budget: budget, memory: memory, rec: rec, planner: planner, instances: inst, policies: pol,
 		settings: cfg, seerr: requests, pacer: opts.Pacer, logs: opts.Logs, clk: clk, logger: logger, m: m,
@@ -343,8 +344,8 @@ func (s *Server) addPriorities(ctx context.Context, run domain.Run, resp *snatch
 		resp.PriorityIds = ids
 	case domain.KindSonarr, domain.KindWhisparrV2:
 		resp.PriorityGroupIds = ids
-	case domain.KindLidarr, domain.KindReadarr:
-		// Seerr has no music or book requests.
+	case domain.KindLidarr, domain.KindReadarr, domain.KindStash:
+		// Seerr has no music, book or Stash requests.
 	}
 }
 
@@ -593,7 +594,7 @@ func (s *Server) CompleteRun(ctx context.Context, req *snatcharrv1.CompleteRunRe
 	if err := s.persistRunProgress(ctx, run, policy, req, searched); err != nil {
 		return nil, toStatus(err)
 	}
-	if _, err := s.runs.Complete(ctx, run.ID, req.GetWorkerId(), outcome(req.GetOutcome()), len(searched), req.GetError()); err != nil {
+	if _, err := s.runs.Complete(ctx, run.ID, req.GetWorkerId(), outcome(req.GetOutcome()), len(searched), req.GetError(), req.EligibleItems); err != nil {
 		return nil, toStatus(err)
 	}
 	if !run.DryRun {

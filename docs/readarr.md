@@ -121,21 +121,32 @@ difference.
 | not `Readarr` | any | any | not recognised |
 | `Readarr` | contains `pennydreadful` | any | Bookshelf |
 | `Readarr` | contains `Faustvii` | any | Readarr (Faustvii fork) |
+| `Readarr` | contains `(https://github.com/ricetim)` | any | Readarr (rresurrected) |
+| `Readarr` | any | not a version | not recognised |
 | `Readarr` | anything else | 0.4.19 or lower | Readarr |
-| `Readarr` | anything else | higher, or not a version | not recognised |
+| `Readarr` | empty | higher | Readarr fork (unidentified) |
+| `Readarr` | anything else | higher | not recognised |
 
-The retired Readarr never built a version above 0.4.19, which is what the last two rows
+The retired Readarr never built a version above 0.4.19, which is what the last three rows
 rest on.
 
-Two limits follow from the fields:
+Three limits follow from the fields:
 
 - `packageAuthor` is written by whoever builds the image. Bookshelf or the Faustvii fork
-  from a build without that field is named "not recognised".
+  from a build without that field is named "Readarr fork (unidentified)", or Readarr at
+  a version up to 0.4.19.
 - A fork that reports `Readarr`, a version up to 0.4.19 and no known packager cannot be
   told from Readarr.
+- A fork that reports a newer version and no packager at all is named "Readarr fork
+  (unidentified)". The readarr-rresurrected image is one today: it ships its
+  `package_info` in `/app/bin/`, where Servarr does not read it, so its answer carries
+  no packager.
 
 A name is not a statement of support: the test succeeds for every row, also for "not
-recognised". The tested forks are the three in the table under [Forks](#forks). The rule
+recognised". The tested forks are the three in the table under [Forks](#forks).
+[readarr-rresurrected](https://github.com/ricetim/readarr-rresurrected) is named by the
+packager link its image writes (`[ricetim](https://github.com/ricetim)`, from the image's
+`Dockerfile`), but no contract test runs against it. The rule
 is `readarrProduct` in
 `api/internal/arrclient/product.go`; `TestProbe_Product` in the same directory holds the
 answers each product gave on 2026-10-11. The API carries the name as `product` of
@@ -153,6 +164,8 @@ show it next to the kind:
 | Bookshelf | `readarr · Bookshelf` |
 | Chaptarr | `readarr · Chaptarr` |
 | Readarr (Faustvii fork) | `readarr · Readarr (Faustvii fork)` |
+| Readarr (rresurrected) | `readarr · Readarr (rresurrected)` |
+| Readarr fork (unidentified) | `readarr · Readarr fork (unidentified)` |
 | not recognised | `readarr · unknown product` |
 | Readarr, or no test yet | `readarr (legacy)` |
 

@@ -7,7 +7,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api } from '#lib/api/client.js';
 import type { components } from '#lib/api/schema.js';
 import { m } from '#lib/paraglide/messages.js';
-import { expectStackedLabels, renderWithQuery, stubGet } from '#lib/testing/harness.js';
+import {
+	assertCancelDelete,
+	expectStackedLabels,
+	renderWithQuery,
+	stubGet
+} from '#lib/testing/harness.js';
 import NotificationsTab from './NotificationsTab.svelte';
 
 type NotificationChannel = components['schemas']['NotificationChannel'];
@@ -38,6 +43,27 @@ const sampleRule: NotificationRule = {
 	updated_at: '2026-10-16T10:00:00Z'
 };
 
+/** The table row that names the record and carries its actions. */
+async function actionRow(name: string): Promise<ReturnType<typeof within>> {
+	await screen.findAllByText(name);
+	const row = screen
+		.getAllByRole('row')
+		.find((r) => r.textContent?.includes(name) && within(r).queryAllByRole('button').length > 0);
+	if (!row) throw new Error(`no action row for ${name}`);
+	return within(row);
+}
+
+/** Presses Delete, checks nothing was sent, then confirms and returns the spy. */
+async function deleteAfterConfirm(name: string): Promise<ReturnType<typeof vi.spyOn>> {
+	const deleteSpy = vi.spyOn(api, 'DELETE').mockResolvedValue({ data: undefined } as never);
+	const row = await actionRow(name);
+	await fireEvent.click(row.getByRole('button', { name: m.action_delete() }));
+	expect(deleteSpy).not.toHaveBeenCalled();
+	const question = row.getByRole('group', { name: m.confirm_delete({ name }) });
+	await fireEvent.click(within(question).getByRole('button', { name: m.confirm_delete_yes() }));
+	return deleteSpy;
+}
+
 const baseStubs = {
 	'/notifications/channels': [],
 	'/notifications/rules': []
@@ -61,6 +87,35 @@ describe('NotificationsTab', () => {
 		expect(screen.getAllByText('Discord Alerts').length).toBeGreaterThanOrEqual(1);
 		expect(screen.getByText('Streak Rule')).toBeTruthy();
 		expect(screen.getByRole('button', { name: m.channel_test() })).toBeTruthy();
+	});
+
+	it('deletes a channel only after the in-page confirmation', async () => {
+		stubGet({ '/notifications/channels': [sampleChannel], '/notifications/rules': [] });
+		renderWithQuery(NotificationsTab);
+
+		const deleteSpy = await deleteAfterConfirm(sampleChannel.name);
+		expect(deleteSpy).toHaveBeenCalledWith('/notifications/channels/{channelId}', {
+			params: { path: { channelId: sampleChannel.id } }
+		});
+	});
+
+	it('deletes a rule only after the in-page confirmation', async () => {
+		stubGet({ '/notifications/channels': [], '/notifications/rules': [sampleRule] });
+		renderWithQuery(NotificationsTab);
+
+		const deleteSpy = await deleteAfterConfirm(sampleRule.name);
+		expect(deleteSpy).toHaveBeenCalledWith('/notifications/rules/{ruleId}', {
+			params: { path: { ruleId: sampleRule.id } }
+		});
+	});
+
+	it('keeps a channel and a rule when the delete question is cancelled', async () => {
+		stubGet({ '/notifications/channels': [sampleChannel], '/notifications/rules': [sampleRule] });
+		const deleteSpy = vi.spyOn(api, 'DELETE');
+		renderWithQuery(NotificationsTab);
+
+		await assertCancelDelete(await actionRow(sampleChannel.name), deleteSpy);
+		await assertCancelDelete(await actionRow(sampleRule.name), deleteSpy);
 	});
 
 	it('tests notification channel when test button clicked', async () => {

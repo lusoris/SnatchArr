@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 import { expect, test } from '@playwright/test';
-import { mockInstancePolicyApi, mockSettingsApi, mockSignedInApi } from './mocks.js';
+import { mockAboutApi, mockInstancePolicyApi, mockSettingsApi, mockSignedInApi } from './mocks.js';
 
 const testInstanceId = '00000000-0000-0000-0000-000000000001';
 
@@ -130,20 +130,57 @@ test.describe('nonblocking', () => {
 		await expect(page).toHaveURL(/\/instances/, { timeout: 1000 });
 	});
 
-	test('system: 503 renders problem note and form recovers', async ({ page }) => {
-		await mockSettingsApi(page, { status: 503 });
-		await page.goto('/system');
-
+	async function assertProblemNoteRecovers(
+		page: Page,
+		fieldSelector: string,
+		value: string
+	): Promise<void> {
 		const problem = page.locator('.problem-note, [role="alert"]').first();
 		await expect(problem).toBeVisible({ timeout: 12_000 });
 
 		// API recovers, reload brings usable form
 		await mockSettingsApi(page);
 		await page.reload();
-		const field = page.locator('[data-field="history_retention_days"]');
+		const field = page.locator(`[data-field="${fieldSelector}"]`);
 		await expect(field).toBeVisible({ timeout: 3000 });
-		await field.fill('60');
-		await expect(field).toHaveValue('60');
+		await field.fill(value);
+		await expect(field).toHaveValue(value);
+	}
+
+	test('system: 503 renders problem note and form recovers', async ({ page }) => {
+		await mockSettingsApi(page, { status: 503 });
+		await page.goto('/system');
+		await assertProblemNoteRecovers(page, 'history_retention_days', '60');
+	});
+
+	test('about: delayed 10s licences response shows loading and remains interactive', async ({
+		page
+	}) => {
+		await mockAboutApi(page, { delayMs: 10_000 });
+		await page.goto('/system?tab=about');
+
+		// Loading indicator visible within 1000 ms
+		const loading = page.locator('[aria-live="polite"]').first();
+		await expect(loading).toBeVisible({ timeout: 1000 });
+
+		// Navigation stays interactive: click instances link within 1000 ms
+		const instancesLink = page.getByRole('link', { name: /Instances|Instanzen/i }).first();
+		await instancesLink.click();
+		await expect(page).toHaveURL(/\/instances/, { timeout: 1000 });
+	});
+
+	test('about: licences 503 renders problem note and tab recovers on reload', async ({ page }) => {
+		await mockAboutApi(page, { status: 503 });
+		await page.goto('/system?tab=about');
+
+		// Problem note visible after retries exhaust
+		const problem = page.locator('.problem-note, [role="alert"]').first();
+		await expect(problem).toBeVisible({ timeout: 12_000 });
+
+		// Licences recover, reload shows the ecosystem tabs
+		await mockAboutApi(page);
+		await page.reload();
+		await expect(page.getByRole('tab', { name: /Go \(1\)/ })).toBeVisible({ timeout: 3000 });
 	});
 
 	test('automation caps: delayed 10s API response shows loading, remains interactive, and 503 renders problem note', async ({
@@ -181,16 +218,7 @@ test.describe('nonblocking', () => {
 		await expect(page).toHaveURL(/\/instances/, { timeout: 1000 });
 
 		await page.goto('/automation?tab=caps');
-		const problem = page.locator('.problem-note, [role="alert"]').first();
-		await expect(problem).toBeVisible({ timeout: 12_000 });
-
-		// API recovers, reload brings usable form
-		await mockSettingsApi(page);
-		await page.reload();
-		const field = page.locator('[data-field="global_hourly_cap"]');
-		await expect(field).toBeVisible({ timeout: 3000 });
-		await field.fill('75');
-		await expect(field).toHaveValue('75');
+		await assertProblemNoteRecovers(page, 'global_hourly_cap', '75');
 	});
 
 	test('system: save action shows pending state and recovers on 503', async ({ page }) => {

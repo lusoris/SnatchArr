@@ -3,11 +3,13 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
-	import { resolve } from '$app/paths';
 	import type { StatusKind } from '#lib/activity.js';
 	import LinkText from '#lib/components/LinkText.svelte';
 	import StatusIcon from '#lib/components/StatusIcon.svelte';
-	import type { LiveFrame } from '#lib/live.js';
+	import { entityHref } from '#lib/entities.js';
+	import { liveFrameToEvent, type LiveFrame } from '#lib/live.js';
+	import EventDialog from './EventDialog.svelte';
+	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
 	import { formatRelativeTime, formatWhen } from '#lib/stamina.js';
 
@@ -21,6 +23,7 @@ SPDX-License-Identifier: EUPL-1.2
 
 	const { event, status = 'info', instanceName, expanded = false, ontoggle }: Props = $props();
 
+	let detailsOpen = $state(false);
 	let internalExpanded = $state(false);
 
 	const isExpanded = $derived(ontoggle ? expanded : internalExpanded);
@@ -56,7 +59,7 @@ SPDX-License-Identifier: EUPL-1.2
 		</time>
 		{#if event.instance_id}
 			<a
-				href={resolve('/instances/[id]', { id: event.instance_id })}
+				href={entityHref('instance', event.instance_id)}
 				class="rounded border border-line px-1.5 py-0.5 text-xs text-subtle hover:underline"
 			>
 				{instanceName ?? event.instance_id.slice(0, 8)}
@@ -65,7 +68,7 @@ SPDX-License-Identifier: EUPL-1.2
 		<button
 			type="button"
 			aria-expanded={isExpanded}
-			class="focus:ring-brand flex flex-1 cursor-pointer flex-wrap items-center gap-2 rounded text-left select-none focus:ring-1 focus:outline-none"
+			class="flex flex-1 cursor-pointer flex-wrap items-center gap-2 rounded text-left select-none focus:ring-1 focus:ring-(--color-brand) focus:outline-none"
 			onclick={toggle}
 			onkeydown={handleKeyDown}
 		>
@@ -81,6 +84,11 @@ SPDX-License-Identifier: EUPL-1.2
 				/>
 			{/if}
 		</button>
+		<button
+			type="button"
+			class="text-brand text-xs hover:underline"
+			onclick={() => (detailsOpen = true)}>{m.entity_details()}</button
+		>
 	</div>
 	{#if isExpanded}
 		<div class="mt-1 border-t border-line pt-1 text-xs">
@@ -93,3 +101,7 @@ SPDX-License-Identifier: EUPL-1.2
 		</div>
 	{/if}
 </li>
+
+{#if detailsOpen}
+	<EventDialog event={liveFrameToEvent(event)} bind:open={detailsOpen} />
+{/if}

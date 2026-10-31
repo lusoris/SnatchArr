@@ -5,12 +5,11 @@ SPDX-License-Identifier: EUPL-1.2
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import type { ResolvedPathname } from '$app/types';
 	import { createSentioQuery } from '@sveltesentio/query';
 	import { useSSE } from '@sveltesentio/realtime/use-sse';
 	import {
+		createTimerOptions,
 		groupActivityEvents,
 		matchesActivityFilters,
 		resolveScheduleState,
@@ -26,6 +25,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import RunGroupCard from '#lib/components/activity/RunGroupCard.svelte';
 	import ConnectionStatus from '#lib/components/ConnectionStatus.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
+	import { entityHref, pageHref } from '#lib/entities.js';
 	import Pause from '@lucide/svelte/icons/pause';
 	import { LIVE_EVENTS } from '#lib/live-events.js';
 	import { eventToLiveFrame, mergeLiveFrames, parseFrame, type LiveFrame } from '#lib/live.js';
@@ -75,10 +75,10 @@ SPDX-License-Identifier: EUPL-1.2
 			if (v !== undefined && v !== null && v !== '') newUrl.searchParams.set(k, v);
 			else newUrl.searchParams.delete(k);
 		}
-		const basePath = fixedInstanceId
-			? resolve('/instances/[id]/activity', { id: fixedInstanceId })
-			: resolve('/activity');
-		void goto(`${basePath}${newUrl.search}` as ResolvedPathname, {
+		const target = fixedInstanceId
+			? entityHref('instance', fixedInstanceId, 'activity', newUrl.search)
+			: pageHref('/activity', newUrl.search);
+		void goto(target, {
 			replaceState: replace,
 			reset: false
 		});
@@ -126,23 +126,13 @@ SPDX-License-Identifier: EUPL-1.2
 		return m.live_cycle_continuous();
 	}
 
-	// The client calls its default timers with itself as receiver, which browsers
-	// refuse, so it never reconnects (golusoris/sveltesentio#424); bound wrappers
-	// avoid that until a fixed release is out.
-	const timerOpts = {
-		setTimeoutImpl: ((cb: TimerHandler, ms?: number) =>
-			setTimeout(cb, ms)) as unknown as typeof setTimeout,
-		clearTimeoutImpl: ((id?: number | NodeJS.Timeout) =>
-			clearTimeout(id)) as unknown as typeof clearTimeout
-	};
-
 	const eventsSSE = useSSE({
 		url: '/api/v1/events/stream',
 		withCredentials: true,
 		events: LIVE_EVENTS,
 		bufferMs: 100,
 		historyLimit: 500,
-		...timerOpts
+		...createTimerOptions()
 	});
 	let backlogFrames = $state<LiveFrame[]>([]);
 
@@ -230,7 +220,7 @@ SPDX-License-Identifier: EUPL-1.2
 		autoConnect: false,
 		bufferMs: 250,
 		historyLimit: 500,
-		...timerOpts
+		...createTimerOptions()
 	});
 	$effect(() => {
 		if (session.isAdmin && activeSource === 'log') logsSSE.connect();
@@ -307,8 +297,8 @@ SPDX-License-Identifier: EUPL-1.2
 					aria-selected={activeSource === 'events'}
 					class="btn-segmented min-h-11 rounded-md px-3 py-1 text-xs font-medium transition md:min-h-0 {activeSource ===
 					'events'
-						? 'bg-card font-semibold shadow-xs'
-						: 'hover:text-foreground text-subtle'}"
+						? 'bg-surface font-semibold shadow-xs'
+						: 'text-subtle hover:text-fg'}"
 					onclick={() => selectSource('events')}>{m.activity_source_events()}</button
 				>
 				{#if session.isAdmin}
@@ -319,8 +309,8 @@ SPDX-License-Identifier: EUPL-1.2
 						aria-selected={activeSource === 'log'}
 						class="btn-segmented min-h-11 rounded-md px-3 py-1 text-xs font-medium transition md:min-h-0 {activeSource ===
 						'log'
-							? 'bg-card font-semibold shadow-xs'
-							: 'hover:text-foreground text-subtle'}"
+							? 'bg-surface font-semibold shadow-xs'
+							: 'text-subtle hover:text-fg'}"
 						onclick={() => selectSource('log')}>{m.activity_source_log()}</button
 					>
 				{/if}
@@ -368,18 +358,21 @@ SPDX-License-Identifier: EUPL-1.2
 
 	<section
 		aria-label={activeSource === 'log' ? m.logs_title() : m.nav_activity()}
-		class="bg-card relative flex w-full flex-col overflow-hidden rounded-lg border border-line {fixedInstanceId
+		class="relative flex w-full flex-col overflow-hidden rounded-lg border border-line bg-surface {fixedInstanceId
 			? ''
 			: 'md:min-h-0 md:flex-1'}"
 	>
 		<NewEventsPill count={unseenCount} onsnap={snapToBottom} />
+		<!-- The scrolling log takes focus so keyboard users can scroll it (axe scrollable-region-focusable). -->
+		<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 		<div
 			bind:this={scrollContainer}
 			onscroll={handleScroll}
 			class="feed-scroll-container overflow-y-auto p-2 pb-[calc(4rem+env(safe-area-inset-bottom,0px))] md:pb-2 {fixedInstanceId
-				? 'min-h-[20rem]'
+				? 'h-[20rem] md:h-[16rem]'
 				: 'h-[max(24rem,calc(100dvh-24.5rem))] md:h-full md:min-h-0 md:flex-1'}"
 			role="log"
+			tabindex="0"
 			aria-live="polite"
 			aria-relevant="additions"
 		>
@@ -424,7 +417,10 @@ SPDX-License-Identifier: EUPL-1.2
 										<ul class="flex flex-col gap-1">
 											{#each instances.data ?? [] as inst (inst.id)}
 												<li class="flex items-center justify-between text-xs">
-													<span class="font-medium">{inst.name}</span>
+													<a
+														href={entityHref('instance', inst.id)}
+														class="font-medium hover:underline">{inst.name}</a
+													>
 													<span class="text-subtle">{scheduleStatusText(inst.id)}</span>
 												</li>
 											{/each}
@@ -434,7 +430,7 @@ SPDX-License-Identifier: EUPL-1.2
 							</div>
 						</div>
 						<div class="flex flex-wrap gap-2 pt-2">
-							<a href={resolve('/automation')} class="btn">{m.live_link_schedules()}</a>
+							<a href={pageHref('/automation')} class="btn">{m.live_link_schedules()}</a>
 						</div>
 					</div>
 				{:else if eventGroups.length === 0}

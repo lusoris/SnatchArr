@@ -3,9 +3,7 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
-	import { goto } from '$app/navigation';
-	import { resolve } from '$app/paths';
-	import { describeError } from '#lib/api/client.js';
+	import { createAuthSubmit } from '#lib/auth-submit.svelte.js';
 	import AuthCard from '#lib/components/AuthCard.svelte';
 	import Field from '#lib/components/Field.svelte';
 	import { m } from '#lib/paraglide/messages.js';
@@ -14,26 +12,14 @@ SPDX-License-Identifier: EUPL-1.2
 	let username = $state('admin');
 	let password = $state('');
 	let setupSecret = $state('');
-	let error = $state('');
-	let busy = $state(false);
 
-	async function submit(event: SubmitEvent): Promise<void> {
-		event.preventDefault();
-		busy = true;
-		error = '';
-		try {
-			await session.setup(username, password, session.secretRequired ? setupSecret : undefined);
-			await goto(resolve('/'));
-		} catch (err) {
-			error = describeError(err);
-		} finally {
-			busy = false;
-		}
-	}
+	const auth = createAuthSubmit(() =>
+		session.setup(username, password, session.secretRequired ? setupSecret : undefined)
+	);
 </script>
 
 <AuthCard title={m.setup_title()} intro={m.setup_intro()}>
-	<form class="card flex flex-col gap-4" onsubmit={submit}>
+	<form class="card flex flex-col gap-4" onsubmit={auth.submit}>
 		<Field id="username" label={m.username()}>
 			<input
 				id="username"
@@ -67,9 +53,9 @@ SPDX-License-Identifier: EUPL-1.2
 				/>
 			</Field>
 		{/if}
-		{#if error}
-			<p role="alert" class="text-sm text-danger">{error}</p>
+		{#if auth.error}
+			<p role="alert" class="text-sm text-danger">{auth.error}</p>
 		{/if}
-		<button type="submit" class="btn btn-primary" disabled={busy}>{m.setup_submit()}</button>
+		<button type="submit" class="btn btn-primary" disabled={auth.busy}>{m.setup_submit()}</button>
 	</form>
 </AuthCard>

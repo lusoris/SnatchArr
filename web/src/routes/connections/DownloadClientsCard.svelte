@@ -3,24 +3,13 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
-	import { createSentioQuery } from '@sveltesentio/query';
-	import { api } from '#lib/api/client.js';
 	import ConnectionHubCard from '#lib/components/ConnectionHubCard.svelte';
+	import { downloadClientQueries } from '#lib/queries/connections.js';
 	import { deriveServiceStatus } from '#lib/connections.js';
 	import { m } from '#lib/paraglide/messages.js';
-	import { keys } from '#lib/query.js';
 	import { session } from '#lib/session.svelte.js';
 
-	const clients = createSentioQuery({
-		queryKey: keys.dlclients,
-		queryFn: async () => (await api.GET('/download-clients')).data ?? []
-	});
-
-	const status = createSentioQuery({
-		queryKey: keys.dlstatus,
-		queryFn: async () => (await api.GET('/download-clients/status')).data ?? [],
-		refetchInterval: 30_000
-	});
+	const { clients, status } = downloadClientQueries();
 
 	const summary = $derived.by(() => {
 		const clientList = clients.data ?? [];

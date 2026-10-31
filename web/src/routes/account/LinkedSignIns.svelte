@@ -7,6 +7,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { toast } from 'svelte-sonner';
 	import { api, describeError, problemStatus } from '#lib/api/client.js';
 	import type { components } from '#lib/api/schema.js';
+	import AppLogo from '#lib/components/AppLogo.svelte';
 	import ConfirmAction from '#lib/components/ConfirmAction.svelte';
 	import Field from '#lib/components/Field.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
@@ -149,6 +150,46 @@ SPDX-License-Identifier: EUPL-1.2
 	}
 </script>
 
+{#snippet providerHeader(providerLabel: string, identity: UserIdentity | undefined, kind?: string)}
+	<div>
+		<div class="flex items-center gap-2">
+			{#if kind}
+				<AppLogo {kind} size={18} />
+			{/if}
+			<h3 class="font-medium text-fg">{providerLabel}</h3>
+		</div>
+		<p class="text-sm text-subtle">
+			{#if identity}
+				<span>{m.linked_sign_in_status_linked()}</span>
+				<span>·</span>
+				<span
+					>{m.linked_sign_in_linked_at({
+						when: formatWhen(identity.linked_at, getLocale())
+					})}</span
+				>
+			{:else}
+				<span>{m.linked_sign_in_status_unlinked()}</span>
+			{/if}
+		</p>
+	</div>
+{/snippet}
+
+{#snippet unlinkButton(provider: 'jellyfin' | 'proxy', providerLabel: string)}
+	<ConfirmAction
+		inline
+		label={m.linked_sign_in_unlink()}
+		message={m.linked_sign_in_unlink_confirm({
+			provider: providerLabel
+		})}
+		onconfirm={() => unlinkIdentity.mutate(provider)}
+		pending={unlinkIdentity.isPending}
+		confirmLabel={m.linked_sign_in_unlink_confirm_btn({
+			provider: providerLabel
+		})}
+		backLabel={m.action_cancel()}
+	/>
+{/snippet}
+
 {#if isEnabled}
 	<section aria-labelledby="linked-sign-ins-heading">
 		<h2 id="linked-sign-ins-heading" class="mb-4 text-xl font-semibold">
@@ -164,37 +205,10 @@ SPDX-License-Identifier: EUPL-1.2
 				{#if sso.data?.jellyfin}
 					<div class="flex flex-col gap-3 py-4 first:pt-0 last:pb-0">
 						<div class="flex flex-wrap items-center justify-between gap-4">
-							<div>
-								<h3 class="font-medium text-fg">{m.linked_sign_in_provider_jellyfin()}</h3>
-								<p class="text-sm text-subtle">
-									{#if jfIdentity}
-										<span>{m.linked_sign_in_status_linked()}</span>
-										<span>·</span>
-										<span
-											>{m.linked_sign_in_linked_at({
-												when: formatWhen(jfIdentity.linked_at, getLocale())
-											})}</span
-										>
-									{:else}
-										<span>{m.linked_sign_in_status_unlinked()}</span>
-									{/if}
-								</p>
-							</div>
+							{@render providerHeader(m.linked_sign_in_provider_jellyfin(), jfIdentity, 'jellyfin')}
 							<div>
 								{#if jfIdentity}
-									<ConfirmAction
-										inline
-										label={m.linked_sign_in_unlink()}
-										message={m.linked_sign_in_unlink_confirm({
-											provider: m.linked_sign_in_provider_jellyfin()
-										})}
-										onconfirm={() => unlinkIdentity.mutate('jellyfin')}
-										pending={unlinkIdentity.isPending}
-										confirmLabel={m.linked_sign_in_unlink_confirm_btn({
-											provider: m.linked_sign_in_provider_jellyfin()
-										})}
-										backLabel={m.action_cancel()}
-									/>
+									{@render unlinkButton('jellyfin', m.linked_sign_in_provider_jellyfin())}
 								{:else if !jfFormOpen}
 									<button
 										type="button"
@@ -259,37 +273,10 @@ SPDX-License-Identifier: EUPL-1.2
 				{#if sso.data?.proxy}
 					<div class="flex flex-col gap-3 py-4 first:pt-0 last:pb-0">
 						<div class="flex flex-wrap items-center justify-between gap-4">
-							<div>
-								<h3 class="font-medium text-fg">{m.linked_sign_in_provider_proxy()}</h3>
-								<p class="text-sm text-subtle">
-									{#if proxyIdentity}
-										<span>{m.linked_sign_in_status_linked()}</span>
-										<span>·</span>
-										<span
-											>{m.linked_sign_in_linked_at({
-												when: formatWhen(proxyIdentity.linked_at, getLocale())
-											})}</span
-										>
-									{:else}
-										<span>{m.linked_sign_in_status_unlinked()}</span>
-									{/if}
-								</p>
-							</div>
+							{@render providerHeader(m.linked_sign_in_provider_proxy(), proxyIdentity)}
 							<div>
 								{#if proxyIdentity}
-									<ConfirmAction
-										inline
-										label={m.linked_sign_in_unlink()}
-										message={m.linked_sign_in_unlink_confirm({
-											provider: m.linked_sign_in_provider_proxy()
-										})}
-										onconfirm={() => unlinkIdentity.mutate('proxy')}
-										pending={unlinkIdentity.isPending}
-										confirmLabel={m.linked_sign_in_unlink_confirm_btn({
-											provider: m.linked_sign_in_provider_proxy()
-										})}
-										backLabel={m.action_cancel()}
-									/>
+									{@render unlinkButton('proxy', m.linked_sign_in_provider_proxy())}
 								{:else}
 									<button
 										type="button"

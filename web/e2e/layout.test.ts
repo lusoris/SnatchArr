@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import {
+	assertCardScrollsToLast,
 	assertDesktopWidth,
 	assertPhoneFit,
 	assertGridRowAlignment,
@@ -18,15 +19,24 @@ import {
 	assertTouchTargetHeights,
 	AUTH_ROUTES,
 	collectLists,
+	EDIT_FORM_ROUTES,
 	expectedTables,
 	measureContentSpan,
 	PHONE_FIT_ROUTES,
 	measureTouchTargets,
+	ROUTE_CLASS,
 	SCROLL_BUDGET_ROUTES,
 	VIEWPORTS,
 	WIDTH_PENDING
 } from './layout.js';
-import { json, mockSettingsApi } from './mocks.js';
+import {
+	adultRowExpectations,
+	json,
+	mockAdultListApi,
+	mockModulesApi,
+	mockSettingsApi,
+	mockSignedInApi
+} from './mocks.js';
 
 const served = !!process.env.SNATCHARR_SERVED_URL;
 if (served && !process.env.SNATCHARR_SERVED_STATE) {
@@ -248,6 +258,136 @@ async function mockDashboardRoute(page: Page): Promise<void> {
 			return route.fallback();
 		}
 		return route.fulfill(json([]));
+	});
+}
+
+const longDashboardInstances = Array.from({ length: 30 }, (_, i) => ({
+	id: `00000000-0000-0000-0000-${String(i + 1).padStart(12, '0')}`,
+	name: `sonarr-${i + 1}`,
+	kind: 'sonarr' as const,
+	base_url: `http://sonarr-${i + 1}.media.svc.cluster.local:8989`,
+	source: 'manual' as const,
+	enabled: true,
+	created_at: '2026-01-01T00:00:00Z',
+	updated_at: '2026-01-01T00:00:00Z',
+	last_check_at: '2026-10-21T06:19:00Z'
+}));
+
+const longDashboardHourlyCaps = longDashboardInstances.map((inst, i) => ({
+	scope: 'instance' as const,
+	instance_id: inst.id,
+	used: (i % 15) + 1,
+	cap: 15,
+	resets_at: '2026-10-21T07:00:00Z'
+}));
+
+const longDashboardSchedules = Array.from({ length: 30 }, (_, i) => ({
+	id: `00000000-0000-0000-0001-${String(i + 1).padStart(12, '0')}`,
+	instance_id: longDashboardInstances[i]?.id,
+	name: `Schedule ${i + 1}`,
+	days: [1, 2, 3, 4, 5],
+	start: '00:00',
+	end: '06:00',
+	tz: 'UTC',
+	action: 'pause' as const,
+	enabled: true,
+	active: i === 0,
+	created_at: '2026-10-21T06:19:00Z',
+	updated_at: '2026-10-21T06:19:00Z'
+}));
+
+const longDashboardProwlarrStatus = Array.from({ length: 30 }, (_, i) => ({
+	link_id: `00000000-0000-0000-0002-${String(i + 1).padStart(12, '0')}`,
+	name: `Prowlarr ${i + 1}`,
+	reachable: true,
+	checked_at: '2026-10-21T06:19:00Z',
+	indexers: dashboardProwlarrStatus[0].indexers
+}));
+
+function makeLongRuns(instId?: string) {
+	return Array.from({ length: 20 }, (_, i) => ({
+		id: `00000000-0000-0000-0003-${String(i + 1).padStart(12, '0')}`,
+		instance_id: instId ?? longDashboardInstances[i % longDashboardInstances.length].id,
+		kind: (i % 2 === 0 ? 'missing' : 'upgrade') as 'missing' | 'upgrade',
+		status: 'done' as const,
+		dry_run: i % 3 === 0,
+		queued_at: '2026-10-21T06:19:00Z',
+		started_at: '2026-10-21T06:19:00Z',
+		finished_at: '2026-10-21T06:20:00Z',
+		searched_count: i + 1
+	}));
+}
+
+function makeLongEvents(count: number, instId: string) {
+	return Array.from({ length: count }, (_, i) => ({
+		id: i + 1,
+		instance_id: instId,
+		ts: '2026-10-21T06:19:00Z',
+		level: (i % 4 === 0 ? 'warn' : 'info') as 'warn' | 'info',
+		type: i % 2 === 0 ? 'search_dispatched' : 'candidates_filtered',
+		title: `Event ${i + 1} S01E${String((i % 20) + 1).padStart(2, '0')}`,
+		detail: `command ${700000 + i}`
+	}));
+}
+
+async function mockCommonLongDataShell(page: Page): Promise<void> {
+	await mockSettingsApi(page);
+	await page.route('**/api/v1/me/preferences', (route) =>
+		route.fulfill(json({ theme: 'dark', locale: 'en' }))
+	);
+	await page.route('**/api/v1/system/status', (route) =>
+		route.fulfill(json({ worker_connected: true, worker_last_contact_at: '2026-10-21T06:19:00Z' }))
+	);
+	await page.route('**/api/v1/events/stream*', (route) =>
+		route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' })
+	);
+}
+
+async function mockDashboardLongDataRoute(page: Page, instanceCount = 30): Promise<void> {
+	await mockCommonLongDataShell(page);
+	await page.route('**/api/v1/instances', (route) => {
+		if (route.request().method() !== 'GET') return route.fallback();
+		return route.fulfill(json(longDashboardInstances.slice(0, instanceCount)));
+	});
+	await page.route('**/api/v1/hourly-caps', (route) => {
+		if (route.request().method() !== 'GET') return route.fallback();
+		return route.fulfill(json(longDashboardHourlyCaps));
+	});
+	await page.route('**/api/v1/prowlarr/status*', (route) => {
+		if (route.request().method() !== 'GET') return route.fallback();
+		return route.fulfill(json(longDashboardProwlarrStatus));
+	});
+	await page.route('**/api/v1/runs*', (route) => {
+		if (route.request().method() !== 'GET') return route.fallback();
+		return route.fulfill(json(makeLongRuns()));
+	});
+	await page.route('**/api/v1/events*', (route) => {
+		if (route.request().method() !== 'GET') return route.fallback();
+		return route.fulfill(json(makeLongEvents(20, longDashboardInstances[0].id)));
+	});
+	await page.route('**/api/v1/schedules*', (route) => {
+		if (route.request().method() !== 'GET') return route.fallback();
+		return route.fulfill(json(longDashboardSchedules));
+	});
+}
+
+async function mockInstanceActivityLongDataRoute(page: Page, id: string): Promise<void> {
+	await mockCommonLongDataShell(page);
+	await page.route(`**/api/v1/instances/${id}`, (route) => {
+		if (route.request().method() !== 'GET') return route.fallback();
+		return route.fulfill(json({ ...longDashboardInstances[0], id }));
+	});
+	await page.route('**/api/v1/instances', (route) => {
+		if (route.request().method() !== 'GET') return route.fallback();
+		return route.fulfill(json([{ ...longDashboardInstances[0], id }]));
+	});
+	await page.route('**/api/v1/runs?*', (route) => {
+		if (route.request().method() !== 'GET') return route.fallback();
+		return route.fulfill(json(makeLongRuns(id)));
+	});
+	await page.route('**/api/v1/events*', (route) => {
+		if (route.request().method() !== 'GET') return route.fallback();
+		return route.fulfill(json(makeLongEvents(50, id)));
 	});
 }
 
@@ -517,19 +657,235 @@ if (!served) {
 	}
 }
 
+async function gotoBudgetRoute(page: Page, pattern: string): Promise<void> {
+	if (pattern === '/' && !served) {
+		await mockDashboardRoute(page);
+	}
+	if (pattern in urlRowFixtures) {
+		await mockUrlRows(page, pattern as (typeof AUTH_ROUTES)[number]);
+	}
+	// The seeded stack keeps the adult module off; its pages render from the shared mocks.
+	if (pattern.startsWith('/adult/')) {
+		await mockSignedInApi(page);
+		await mockModulesApi(page, [{ id: 'adult', enabled: true }]);
+		await mockAdultListApi(page);
+	}
+	const route = pattern.replace('[id]', instanceId());
+	await page.goto(route);
+	await page.waitForLoadState('networkidle');
+	// Auth drop: an unauthenticated session redirects to /login and would pass as a short page.
+	expect(new URL(page.url()).pathname).toBe(route.split('?')[0]);
+	// The error page (status as heading, e.g. "404 - Page not found") is short and would pass.
+	await expect(page.getByRole('heading', { level: 1, name: /^\d{3}\b/ })).toHaveCount(0);
+	// Instance not-found: a missing instance renders a short error card and would pass.
+	await expect(
+		page.getByRole('heading', { level: 1, name: /^(Instance not found|Instanz nicht gefunden)$/ })
+	).toHaveCount(0);
+	// A failed query renders a one-line ProblemNote in place of the page and would pass.
+	await expect(page.locator('main p[role="alert"].border-danger')).toHaveCount(0);
+	// Instance loading: pending instance query shows a pulse placeholder and would pass.
+	await expect(page.locator('[role="status"].animate-pulse')).toHaveCount(0);
+	await expect(page.getByText(/^(Loading…|Lädt …)$/)).toHaveCount(0);
+	await expect(page.locator('[data-testid="skeleton"]')).toHaveCount(0);
+	// Adult empty state: list endpoints must render populated rows so the budget measures content.
+	const expectedAdultRow = adultRowExpectations[pattern];
+	if (expectedAdultRow) {
+		await expect(page.getByText(expectedAdultRow).first()).toBeVisible();
+	}
+}
+
+function pageRoutes(dir: string, prefix = ''): string[] {
+	const found: string[] = [];
+	for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+		if (entry.isFile() && entry.name === '+page.svelte') found.push(prefix || '/');
+		if (entry.isDirectory()) {
+			// Route groups such as (app) add no URL segment.
+			const segment = /^\(.*\)$/.test(entry.name) ? '' : `/${entry.name}`;
+			found.push(...pageRoutes(path.join(dir, entry.name), prefix + segment));
+		}
+	}
+	return found;
+}
+
+test('authenticated: layout scroll budget classifies every page route', () => {
+	const routes = pageRoutes(path.resolve(import.meta.dirname, '../src/routes')).sort();
+	const classified = new Set(Object.keys(ROUTE_CLASS).map((r) => r.split('?')[0]));
+	expect(
+		routes.filter((r) => !classified.has(r)),
+		'page routes without a scroll class in ROUTE_CLASS'
+	).toEqual([]);
+	expect(
+		[...classified].filter((r) => !routes.includes(r)),
+		'ROUTE_CLASS entries without a page route'
+	).toEqual([]);
+});
+
 for (const pattern of SCROLL_BUDGET_ROUTES) {
 	test(`authenticated: layout scroll budget ${pattern} at 1280x800`, async ({ page }) => {
 		await page.setViewportSize({ width: 1280, height: 800 });
-		if (pattern === '/' && !served) {
-			await mockDashboardRoute(page);
-		}
-		if (pattern in urlRowFixtures) {
-			await mockUrlRows(page, pattern as (typeof AUTH_ROUTES)[number]);
-		}
-		const route = pattern.replace('[id]', instanceId());
-		await page.goto(route);
-		await page.waitForLoadState('networkidle');
+		await gotoBudgetRoute(page, pattern);
 		await assertScrollBudget(page, pattern);
+	});
+}
+
+// Edit forms sit outside the budget by class; the run reports their height instead.
+for (const pattern of EDIT_FORM_ROUTES) {
+	test(`authenticated: layout scroll class ${pattern} is edit-form at 1280x800`, async ({
+		page
+	}, testInfo) => {
+		expect(ROUTE_CLASS[pattern]).toBe('edit-form');
+		await page.setViewportSize({ width: 1280, height: 800 });
+		await gotoBudgetRoute(page, pattern);
+		const height = await page.evaluate(() => document.documentElement.scrollHeight);
+		testInfo.annotations.push({
+			type: 'scroll-class',
+			description: `${pattern}: edit-form, ${height}px, outside the main-page budget`
+		});
+	});
+}
+
+test('authenticated: layout scroll budget planted negative: a main page over budget fails', async ({
+	page
+}) => {
+	await page.setViewportSize({ width: 1280, height: 800 });
+	await gotoBudgetRoute(page, '/connections');
+	await assertScrollBudget(page, '/connections');
+	// Plant a main page grown past 1.25x the screen.
+	await page.evaluate(() => {
+		const filler = document.createElement('div');
+		filler.style.height = '600px';
+		document.querySelector('main')?.append(filler);
+	});
+	await expect(assertScrollBudget(page, '/connections')).rejects.toThrow(
+		/\/connections: scroll height \(\d+px\) exceeds budget/
+	);
+});
+
+// Review screenshots of every main and edit-form route, on request (SNATCHARR_LAYOUT_SHOTS=1):
+// laptop, desktop and phone, light and dark, each file named with its scroll height.
+const shotViewports = [
+	{ name: 'd1280', width: 1280, height: 800 },
+	{ name: 'd1920', width: 1920, height: 1080 },
+	{ name: 'p390', width: 390, height: 844 }
+] as const;
+for (const pattern of [...SCROLL_BUDGET_ROUTES, ...EDIT_FORM_ROUTES]) {
+	for (const viewport of shotViewports) {
+		for (const scheme of ['light', 'dark'] as const) {
+			test(`authenticated: layout screenshot ${pattern} ${viewport.name} ${scheme}`, async ({
+				page
+			}, testInfo) => {
+				test.skip(!process.env.SNATCHARR_LAYOUT_SHOTS, 'screenshots on request only');
+				await page.setViewportSize({ width: viewport.width, height: viewport.height });
+				await page.emulateMedia({ colorScheme: scheme });
+				await gotoBudgetRoute(page, pattern);
+				const height = await page.evaluate(() => document.documentElement.scrollHeight);
+				const slug = pattern.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || 'root';
+				await page.screenshot({
+					path: testInfo.outputPath(`${slug}-${viewport.name}-${scheme}-h${height}.png`),
+					fullPage: true
+				});
+			});
+		}
+	}
+}
+
+if (!served) {
+	test('authenticated: layout scroll budget / long data at 1280x800', async ({ page }) => {
+		await page.setViewportSize({ width: 1280, height: 800 });
+		await mockDashboardLongDataRoute(page);
+		await page.goto('/');
+		await page.waitForLoadState('networkidle');
+		await expect(page.locator('table tbody tr').first()).toBeVisible();
+		await assertScrollBudget(page, '/');
+	});
+
+	// Every capped dashboard card scrolls inside the card to its last row; eight instances is
+	// the fleet that showed five rows and no way to the other three.
+	for (const viewport of [
+		{ name: 'desktop', size: { width: 1280, height: 800 } },
+		{ name: 'phone', size: VIEWPORTS.phone }
+	]) {
+		test(`authenticated: dashboard cards scroll to their last row inside the card (${viewport.name})`, async ({
+			page
+		}) => {
+			await page.setViewportSize(viewport.size);
+			await mockDashboardLongDataRoute(page, 8);
+			await page.goto('/');
+			await page.waitForLoadState('networkidle');
+			await expect(page.getByRole('link', { name: 'sonarr-1', exact: true })).toBeVisible();
+			await expect(page.getByTestId('card-scroll-hint').first()).toHaveText(/\+3\s*3 more below/);
+			await assertCardScrollsToLast(page, 'Instance fleet', 'sonarr-8');
+			await assertCardScrollsToLast(page, 'Recent activity', 'Event 20 S01E20');
+			await assertCardScrollsToLast(page, 'Schedules', 'Schedule 30');
+			await assertCardScrollsToLast(page, 'Prowlarr indexer stamina', 'Prowlarr 30');
+		});
+	}
+
+	test('authenticated: dashboard card scroll planted negative: a cap without scroll fails', async ({
+		page
+	}) => {
+		await page.setViewportSize({ width: 1280, height: 800 });
+		await mockDashboardLongDataRoute(page, 8);
+		await page.goto('/');
+		await page.waitForLoadState('networkidle');
+		await expect(page.getByRole('link', { name: 'sonarr-1', exact: true })).toBeVisible();
+		// Plant the old card: rows past the cap removed and the body clipped instead of scrolled.
+		await page.evaluate(() => {
+			const body = document.querySelector<HTMLElement>(
+				'[aria-label="Instance fleet, scrollable list"][role=region]'
+			);
+			if (!body) throw new Error('no fleet region');
+			body.querySelectorAll('tbody > tr').forEach((tr, i) => {
+				if (i >= 5) tr.remove();
+			});
+			body.style.overflow = 'hidden';
+		});
+		await expect(assertCardScrollsToLast(page, 'Instance fleet', 'sonarr-8')).rejects.toThrow(
+			/Instance fleet: (no scrolling region|region is not in the tab order|body does not scroll|last row "sonarr-8")/
+		);
+	});
+
+	test('authenticated: layout scroll budget /instances/[id]/activity long data at 1280x800', async ({
+		page
+	}) => {
+		await page.setViewportSize({ width: 1280, height: 800 });
+		const id = instanceId();
+		await mockInstanceActivityLongDataRoute(page, id);
+		await page.goto(`/instances/${id}/activity`);
+		await page.waitForLoadState('networkidle');
+		await expect(page.locator('table tbody tr').first()).toBeVisible();
+		await expect(page.getByRole('log').locator('li').first()).toBeVisible();
+		await assertScrollBudget(page, '/instances/[id]/activity');
+	});
+
+	test('authenticated: layout /instances/[id]/activity long data keeps the log box and run cards bounded on phone', async ({
+		page
+	}) => {
+		await page.setViewportSize(VIEWPORTS.phone);
+		const id = instanceId();
+		await mockInstanceActivityLongDataRoute(page, id);
+		await page.goto(`/instances/${id}/activity`);
+		await page.waitForLoadState('networkidle');
+		const log = page.getByRole('log');
+		await expect(log.locator('li').first()).toBeVisible();
+		const box = await log.evaluate((el) => ({ client: el.clientHeight, scroll: el.scrollHeight }));
+		expect(box.client, 'activity log box taller than the phone viewport').toBeLessThanOrEqual(
+			VIEWPORTS.phone.height
+		);
+		expect(box.scroll, 'long fixture must overflow the log box').toBeGreaterThan(box.client);
+		// Phone shows five run cards and a show-all toggle instead of a nested scroll box.
+		const runs = page.getByRole('region', { name: 'Run history' }).locator('tbody tr');
+		await expect(runs.filter({ visible: true })).toHaveCount(5);
+		// The capped cards render no box; the stacked checks must skip them, not flag the fifth card.
+		await assertRenderedLayout(page, '/instances/[id]/activity');
+		await assertScrollBudget(page, '/instances/[id]/activity', 2 * VIEWPORTS.phone.height);
+		const toggle = page.getByRole('button', { name: 'Show all 20 runs' });
+		await toggle.click();
+		await expect(runs.filter({ visible: true })).toHaveCount(20);
+		await expect(page.getByRole('button', { name: 'Show fewer runs' })).toHaveAttribute(
+			'aria-expanded',
+			'true'
+		);
 	});
 }
 

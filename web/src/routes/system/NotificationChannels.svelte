@@ -6,26 +6,17 @@ SPDX-License-Identifier: EUPL-1.2
 	import { createSentioQuery, createSentioMutation } from '@sveltesentio/query';
 	import { toast } from 'svelte-sonner';
 	import { api, describeError } from '#lib/api/client.js';
-	import type { components } from '#lib/api/schema.js';
+	import AppLogo from '#lib/components/AppLogo.svelte';
+	import ConfirmDelete from '#lib/components/ConfirmDelete.svelte';
 	import CreateForm from '#lib/components/CreateForm.svelte';
 	import Field from '#lib/components/Field.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
+	import { CHANNEL_KINDS, channelName, type ChannelKind } from '#lib/kinds.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { keys } from '#lib/query.js';
 	import { session } from '#lib/session.svelte.js';
 
-	type ChannelKind = components['schemas']['NotificationChannelKind'];
-	// Product names, the same in every locale.
-	const channelKinds: readonly { value: ChannelKind; label: string }[] = [
-		{ value: 'webhook', label: 'Webhook' },
-		{ value: 'discord', label: 'Discord' },
-		{ value: 'slack', label: 'Slack' },
-		{ value: 'telegram', label: 'Telegram' },
-		{ value: 'ntfy', label: 'ntfy' },
-		{ value: 'gotify', label: 'Gotify' },
-		{ value: 'teams', label: 'Microsoft Teams' },
-		{ value: 'apprise', label: 'Apprise' }
-	];
+	const channelKinds = CHANNEL_KINDS.map((value) => ({ value, label: channelName(value) }));
 
 	const channels = createSentioQuery({
 		queryKey: keys.channels,
@@ -162,8 +153,15 @@ SPDX-License-Identifier: EUPL-1.2
 			<tbody>
 				{#each channels.data ?? [] as ch (ch.id)}
 					<tr>
-						<td data-label={m.channel_name()}>{ch.name}</td>
-						<td data-label={m.channel_kind()}>{ch.kind}</td>
+						<td data-label={m.channel_name()}>
+							<div class="flex items-center gap-2">
+								{#if ch.kind !== 'webhook'}
+									<AppLogo kind={ch.kind} size={18} />
+								{/if}
+								<span>{ch.name}</span>
+							</div>
+						</td>
+						<td data-label={m.channel_kind()}>{channelName(ch.kind)}</td>
 						<td data-label={m.channel_enabled()}>{ch.enabled ? '✓' : '–'}</td>
 						<td data-label={m.channel_has_secret()}>{ch.has_secret ? '✓' : '–'}</td>
 						{#if session.isAdmin}
@@ -176,14 +174,11 @@ SPDX-License-Identifier: EUPL-1.2
 								>
 									{m.channel_test()}
 								</button>
-								<button
-									type="button"
-									class="btn"
+								<ConfirmDelete
+									name={ch.name}
 									disabled={remove.isPending}
-									onclick={() => remove.mutate(ch.id)}
-								>
-									{m.channel_delete()}
-								</button>
+									onconfirm={() => remove.mutate(ch.id)}
+								/>
 							</td>
 						{/if}
 					</tr>

@@ -32,6 +32,8 @@ export const keys = {
 	configarr: ['configarr', 'status'] as const,
 	prowlarr: ['prowlarr', 'status'] as const,
 	settings: ['settings'] as const,
+	runtimeSettings: ['settings', 'runtime'] as const,
+	preferences: ['me', 'preferences'] as const,
 	channels: ['notification-channels'] as const,
 	rules: ['notification-rules'] as const,
 	apiKeys: ['api-keys'] as const,
@@ -42,5 +44,14 @@ export const keys = {
 	modules: ['system', 'modules'] as const,
 	module: (id: string) => ['system', 'modules', id] as const,
 	watchawareGateSeries: (id: string) => ['watchaware', 'gate', 'series', id] as const,
-	watchawareGateDecisions: (id: string) => ['watchaware', 'gate', 'decisions', id] as const
+	watchawareGateDecisions: (id: string) => ['watchaware', 'gate', 'decisions', id] as const,
+	adultSources: ['adult', 'sources'] as const,
+	adultSyncStatus: ['adult', 'sync', 'status'] as const,
+	adultImageSets: ['adult', 'image-sets'] as const,
+	adultImageSet: (id: string) => ['adult', 'image-sets', id] as const,
+	adultPerformers: (favorite?: boolean) => ['adult', 'performers', favorite] as const,
+	adultPerformer: (id: string) => ['adult', 'performers', 'detail', id] as const,
+	adultStudios: (favorite?: boolean) => ['adult', 'studios', favorite] as const,
+	adultStudio: (id: string) => ['adult', 'studios', 'detail', id] as const,
+	requestsSettings: ['requests', 'settings'] as const
 };

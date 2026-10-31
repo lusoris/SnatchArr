@@ -13,6 +13,16 @@ type UnimplementedHandler struct{}
 
 var _ Handler = UnimplementedHandler{}
 
+// ApplyPriorityPreset implements applyPriorityPreset operation.
+//
+// Later preset edits do not affect settings. POST /priority-presets/media_first/apply restores the
+// shipped orders.
+//
+// POST /priority-presets/{presetId}/apply
+func (UnimplementedHandler) ApplyPriorityPreset(ctx context.Context, params ApplyPriorityPresetParams) (r *Settings, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // CancelRun implements cancelRun operation.
 //
 // Cancel a queued or leased run.
@@ -46,6 +56,15 @@ func (UnimplementedHandler) CompleteSetup(ctx context.Context, req *SetupRequest
 //
 // POST /auth/api-keys
 func (UnimplementedHandler) CreateAPIKey(ctx context.Context, req *CreateApiKeyRequest) (r CreateAPIKeyRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// CreateAdultSource implements createAdultSource operation.
+//
+// Add a catalogue source.
+//
+// POST /adult/sources
+func (UnimplementedHandler) CreateAdultSource(ctx context.Context, req *AdultSourceInput) (r *AdultSource, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -94,6 +113,15 @@ func (UnimplementedHandler) CreateNotificationRule(ctx context.Context, req *Not
 	return r, ht.ErrNotImplemented
 }
 
+// CreatePriorityPreset implements createPriorityPreset operation.
+//
+// Up to 20 user presets; names are unique ignoring case. The media_first name is reserved.
+//
+// POST /priority-presets
+func (UnimplementedHandler) CreatePriorityPreset(ctx context.Context, req *PriorityPresetInput) (r *PriorityPreset, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // CreateProwlarrLink implements createProwlarrLink operation.
 //
 // Add a Prowlarr link.
@@ -137,6 +165,15 @@ func (UnimplementedHandler) CreateSeerrLink(ctx context.Context, req *SeerrLinkI
 // POST /watchaware/sources
 func (UnimplementedHandler) CreateWatchawareSource(ctx context.Context, req *WatchawareSourceInput) (r *WatchawareSource, _ error) {
 	return r, ht.ErrNotImplemented
+}
+
+// DeleteAdultSource implements deleteAdultSource operation.
+//
+// Delete a catalogue source.
+//
+// DELETE /adult/sources/{sourceId}
+func (UnimplementedHandler) DeleteAdultSource(ctx context.Context, params DeleteAdultSourceParams) error {
+	return ht.ErrNotImplemented
 }
 
 // DeleteDownloadClient implements deleteDownloadClient operation.
@@ -194,6 +231,15 @@ func (UnimplementedHandler) DeleteNotificationRule(ctx context.Context, params D
 	return ht.ErrNotImplemented
 }
 
+// DeletePriorityPreset implements deletePriorityPreset operation.
+//
+// Delete a saved preset without changing the active settings (admin only).
+//
+// DELETE /priority-presets/{presetId}
+func (UnimplementedHandler) DeletePriorityPreset(ctx context.Context, params DeletePriorityPresetParams) error {
+	return ht.ErrNotImplemented
+}
+
 // DeleteProwlarrLink implements deleteProwlarrLink operation.
 //
 // Delete a Prowlarr link.
@@ -236,6 +282,51 @@ func (UnimplementedHandler) DeleteWatchawareSource(ctx context.Context, params D
 //
 // POST /instances/{instanceId}/download-clients/discover
 func (UnimplementedHandler) DiscoverDownloadClients(ctx context.Context, params DiscoverDownloadClientsParams) (r *DiscoveryResult, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// GetAdultImageSet implements getAdultImageSet operation.
+//
+// Get an image set with ordered items and ignore-file status.
+//
+// GET /adult/image-sets/{setId}
+func (UnimplementedHandler) GetAdultImageSet(ctx context.Context, params GetAdultImageSetParams) (r *AdultImageSetDetail, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// GetAdultPerformer implements getAdultPerformer operation.
+//
+// Get a synchronized performer by ID.
+//
+// GET /adult/performers/{performerId}
+func (UnimplementedHandler) GetAdultPerformer(ctx context.Context, params GetAdultPerformerParams) (r *AdultPerformer, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// GetAdultSource implements getAdultSource operation.
+//
+// Get a catalogue source.
+//
+// GET /adult/sources/{sourceId}
+func (UnimplementedHandler) GetAdultSource(ctx context.Context, params GetAdultSourceParams) (r *AdultSource, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// GetAdultStudio implements getAdultStudio operation.
+//
+// Get a synchronized studio by ID.
+//
+// GET /adult/studios/{studioId}
+func (UnimplementedHandler) GetAdultStudio(ctx context.Context, params GetAdultStudioParams) (r *AdultStudio, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// GetAdultSyncStatus implements getAdultSyncStatus operation.
+//
+// Get synchronization status across catalogue sources.
+//
+// GET /adult/sync/status
+func (UnimplementedHandler) GetAdultSyncStatus(ctx context.Context) (r *AdultSyncStatus, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -311,6 +402,15 @@ func (UnimplementedHandler) GetMyNotifyTarget(ctx context.Context, params GetMyN
 	return r, ht.ErrNotImplemented
 }
 
+// GetMyPreferences implements getMyPreferences operation.
+//
+// Preferences for the current user.
+//
+// GET /me/preferences
+func (UnimplementedHandler) GetMyPreferences(ctx context.Context) (r *UserPreferences, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // GetNotificationChannel implements getNotificationChannel operation.
 //
 // Get one notification channel.
@@ -350,7 +450,7 @@ func (UnimplementedHandler) GetPolicyFilterOptions(ctx context.Context, params G
 
 // GetPriorityPresets implements getPriorityPresets operation.
 //
-// Shipped search and download priority presets.
+// Shipped and saved search and download priority presets.
 //
 // GET /priority-presets
 func (UnimplementedHandler) GetPriorityPresets(ctx context.Context) (r []PriorityPreset, _ error) {
@@ -384,12 +484,31 @@ func (UnimplementedHandler) GetQueuePolicy(ctx context.Context, params GetQueueP
 	return r, ht.ErrNotImplemented
 }
 
+// GetRequestsSettings implements getRequestsSettings operation.
+//
+// Read community request settings. Any authenticated user may access this endpoint.
+//
+// GET /requests/settings
+func (UnimplementedHandler) GetRequestsSettings(ctx context.Context) (r *RequestsSettings, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // GetRun implements getRun operation.
 //
 // Load a single snatch run by ID.
 //
 // GET /runs/{runId}
 func (UnimplementedHandler) GetRun(ctx context.Context, params GetRunParams) (r *Run, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// GetRuntimeSettings implements getRuntimeSettings operation.
+//
+// Returns all runtime settings with their current source, values, and lock states (admin only).
+// Secret values are omitted.
+//
+// GET /settings/runtime
+func (UnimplementedHandler) GetRuntimeSettings(ctx context.Context) (r GetRuntimeSettingsRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -525,6 +644,42 @@ func (UnimplementedHandler) LinkProxyIdentity(ctx context.Context) (r LinkProxyI
 //
 // GET /auth/api-keys
 func (UnimplementedHandler) ListAPIKeys(ctx context.Context) (r ListAPIKeysRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ListAdultImageSets implements listAdultImageSets operation.
+//
+// List discovered image sets.
+//
+// GET /adult/image-sets
+func (UnimplementedHandler) ListAdultImageSets(ctx context.Context, params ListAdultImageSetsParams) (r *AdultImageSetPage, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ListAdultPerformers implements listAdultPerformers operation.
+//
+// List synchronized performers with cursor pagination.
+//
+// GET /adult/performers
+func (UnimplementedHandler) ListAdultPerformers(ctx context.Context, params ListAdultPerformersParams) (r *AdultPerformerPage, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ListAdultSources implements listAdultSources operation.
+//
+// List configured catalogue sources.
+//
+// GET /adult/sources
+func (UnimplementedHandler) ListAdultSources(ctx context.Context) (r []AdultSource, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ListAdultStudios implements listAdultStudios operation.
+//
+// List synchronized studios with cursor pagination.
+//
+// GET /adult/studios
+func (UnimplementedHandler) ListAdultStudios(ctx context.Context, params ListAdultStudiosParams) (r *AdultStudioPage, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -774,6 +929,15 @@ func (UnimplementedHandler) SnatchSeerrRequest(ctx context.Context, params Snatc
 	return r, ht.ErrNotImplemented
 }
 
+// SweepInstanceQueue implements sweepInstanceQueue operation.
+//
+// Run one download queue sweep of an instance now.
+//
+// POST /instances/{instanceId}/queue/sweep
+func (UnimplementedHandler) SweepInstanceQueue(ctx context.Context, params SweepInstanceQueueParams) error {
+	return ht.ErrNotImplemented
+}
+
 // SyncSeerrLink implements syncSeerrLink operation.
 //
 // Refresh the request cache now (also runs every five minutes).
@@ -873,6 +1037,24 @@ func (UnimplementedHandler) TestSeerrLinkInput(ctx context.Context, req *SeerrLi
 	return r, ht.ErrNotImplemented
 }
 
+// TriggerAdultScan implements triggerAdultScan operation.
+//
+// Trigger on-demand image set scan.
+//
+// POST /adult/scan
+func (UnimplementedHandler) TriggerAdultScan(ctx context.Context) (r *AdultScanSummary, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// TriggerAdultSync implements triggerAdultSync operation.
+//
+// Run favourite performer and studio synchronization across enabled catalogue sources.
+//
+// POST /adult/sync
+func (UnimplementedHandler) TriggerAdultSync(ctx context.Context) (r *AdultSyncSummary, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // TriggerRun implements triggerRun operation.
 //
 // Quickie - queue a snatch now (ignores the refractory period).
@@ -897,6 +1079,15 @@ func (UnimplementedHandler) UnlinkJellyfinIdentity(ctx context.Context) (r Unlin
 //
 // DELETE /auth/identities/proxy
 func (UnimplementedHandler) UnlinkProxyIdentity(ctx context.Context) (r UnlinkProxyIdentityRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UpdateAdultSource implements updateAdultSource operation.
+//
+// Update a catalogue source (omit api_key to keep stored key).
+//
+// PUT /adult/sources/{sourceId}
+func (UnimplementedHandler) UpdateAdultSource(ctx context.Context, req *AdultSourceInput, params UpdateAdultSourceParams) (r *AdultSource, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
@@ -945,6 +1136,15 @@ func (UnimplementedHandler) UpdateMyNotifyTarget(ctx context.Context, req *UserN
 	return r, ht.ErrNotImplemented
 }
 
+// UpdateMyPreferences implements updateMyPreferences operation.
+//
+// Replace preferences for the current user.
+//
+// PUT /me/preferences
+func (UnimplementedHandler) UpdateMyPreferences(ctx context.Context, req *UserPreferences) (r *UserPreferences, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // UpdateNotificationChannel implements updateNotificationChannel operation.
 //
 // Update a notification channel.
@@ -972,6 +1172,15 @@ func (UnimplementedHandler) UpdatePolicy(ctx context.Context, req *SnatchPolicy,
 	return r, ht.ErrNotImplemented
 }
 
+// UpdatePriorityPreset implements updatePriorityPreset operation.
+//
+// Replace a saved preset without changing the active settings (admin only).
+//
+// PUT /priority-presets/{presetId}
+func (UnimplementedHandler) UpdatePriorityPreset(ctx context.Context, req *PriorityPresetInput, params UpdatePriorityPresetParams) (r *PriorityPreset, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // UpdateProwlarrLink implements updateProwlarrLink operation.
 //
 // Update a Prowlarr link (omit api_key to keep it).
@@ -987,6 +1196,24 @@ func (UnimplementedHandler) UpdateProwlarrLink(ctx context.Context, req *Prowlar
 //
 // PUT /instances/{instanceId}/queue-policy
 func (UnimplementedHandler) UpdateQueuePolicy(ctx context.Context, req *QueuePolicy, params UpdateQueuePolicyParams) (r *QueuePolicy, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UpdateRequestsSettings implements updateRequestsSettings operation.
+//
+// Validate and persist community request settings (admin only).
+//
+// PUT /requests/settings
+func (UnimplementedHandler) UpdateRequestsSettings(ctx context.Context, req *RequestsSettings) (r *RequestsSettings, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UpdateRuntimeSettings implements updateRuntimeSettings operation.
+//
+// Validate and persist overrides for runtime settings (admin only).
+//
+// PUT /settings/runtime
+func (UnimplementedHandler) UpdateRuntimeSettings(ctx context.Context, req *RuntimeSettingsUpdateRequest) (r UpdateRuntimeSettingsRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

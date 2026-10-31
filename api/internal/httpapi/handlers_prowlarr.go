@@ -53,7 +53,14 @@ func (h *Handlers) UpdateProwlarrLink(ctx context.Context, req *oas.ProwlarrLink
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	l, err := h.prowlarr.Update(ctx, params.LinkId, prowlarrInputFromOAS(req))
+	stored, err := h.prowlarr.Get(ctx, params.LinkId)
+	if err != nil {
+		return nil, err
+	}
+	in := prowlarrInputFromOAS(req)
+	in.HourlyCap = req.HourlyCap.Or(stored.HourlyCap)
+	in.Enabled = req.Enabled.Or(stored.Enabled)
+	l, err := h.prowlarr.Update(ctx, params.LinkId, in)
 	if err != nil {
 		return nil, err
 	}
@@ -111,6 +118,7 @@ func prowlarrLinkToOAS(l domain.ProwlarrLink) oas.ProwlarrLink {
 		ID:              l.ID,
 		Name:            l.Name,
 		BaseURL:         l.BaseURL,
+		HourlyCap:       l.HourlyCap,
 		Enabled:         l.Enabled,
 		LastSeenVersion: optString(l.LastSeenVersion),
 		LastCheckAt:     optTime(l.LastCheckAt),
@@ -121,7 +129,13 @@ func prowlarrLinkToOAS(l domain.ProwlarrLink) oas.ProwlarrLink {
 }
 
 func prowlarrInputFromOAS(in *oas.ProwlarrLinkInput) prowlarr.Input {
-	return prowlarr.Input{Name: in.Name, BaseURL: in.BaseURL, APIKey: in.APIKey.Or(""), Enabled: in.Enabled.Or(true)}
+	return prowlarr.Input{
+		Name:      in.Name,
+		BaseURL:   in.BaseURL,
+		APIKey:    in.APIKey.Or(""),
+		HourlyCap: in.HourlyCap.Or(15),
+		Enabled:   in.Enabled.Or(true),
+	}
 }
 
 func prowlarrStatusToOAS(v prowlarr.LinkStatus) oas.ProwlarrStatus {

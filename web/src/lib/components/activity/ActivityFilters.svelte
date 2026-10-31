@@ -79,7 +79,7 @@ SPDX-License-Identifier: EUPL-1.2
 			{#if activeDisclosedCount > 0}
 				<span
 					data-testid="filter-badge"
-					class="bg-surface-active rounded-full px-1.5 py-0.5 text-[10px] font-semibold text-fg"
+					class="rounded-full bg-sunken px-1.5 py-0.5 text-[10px] font-semibold text-fg"
 				>
 					{activeDisclosedCount}
 				</span>
@@ -166,7 +166,7 @@ SPDX-License-Identifier: EUPL-1.2
 	{#if hasActiveFilters}
 		<button
 			type="button"
-			class="btn btn-sm hover:text-foreground rounded border border-line text-subtle"
+			class="btn btn-sm rounded border border-line text-subtle hover:text-fg"
 			onclick={onclear}
 		>
 			{m.activity_clear_filters()}

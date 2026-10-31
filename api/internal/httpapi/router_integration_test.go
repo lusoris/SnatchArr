@@ -21,6 +21,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -30,7 +31,6 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/golusoris/golusoris/auth/apikey"
-	"github.com/golusoris/golusoris/core/crypto"
 
 	"github.com/lusoris/SnatchArr/api/internal/arrclient"
 	"github.com/lusoris/SnatchArr/api/internal/auth"
@@ -183,6 +183,7 @@ type idsState struct {
 	csrfToken          string
 	apiKeyID           string
 	instanceID         string
+	priorityPresetID   string
 	runID              string
 	scheduleID         string
 	clientID           string
@@ -197,6 +198,8 @@ type idsState struct {
 	userTargetID       string
 	ruleID             string
 	watchawareSourceID string
+	adultSourceID      string
+	adultImageSetID    string
 }
 
 func newIDsState(t *testing.T) *idsState {
@@ -264,6 +267,13 @@ func setupFixtureStubs(f *routerFixture) {
 	f.seerrClient.servers = []seerrclient.Server{
 		{Kind: domain.KindSonarr, Name: "ImportedTV", BaseURL: "http://imported-tv.invalid:8989", APIKey: "imported-key-0001"},
 	}
+	_, _ = f.st.Q().UpsertAdultImageSet(context.Background(), sqlcgen.UpsertAdultImageSetParams{
+		ID:            uuid.MustParse("00000000-0000-0000-0000-000000000001"),
+		Title:         "fixture-image-set",
+		DirectoryPath: "/tmp/fixture-image-set",
+		CreatedAt:     f.clk.Now(),
+		UpdatedAt:     f.clk.Now(),
+	})
 }
 
 func stepsAuth() []routerStep {
@@ -701,6 +711,12 @@ func stepsPoliciesAndRuns() []routerStep {
 			},
 		},
 		{
+			op:     "sweepInstanceQueue",
+			method: http.MethodPost,
+			path:   func(ids *idsState) string { return "/instances/" + ids.instanceID + "/queue/sweep" },
+			want:   http.StatusNoContent,
+		},
+		{
 			op:     "triggerRun",
 			method: http.MethodPost,
 			path:   func(ids *idsState) string { return "/instances/" + ids.instanceID + "/runs" },
@@ -864,6 +880,65 @@ func stepsSettingsAndSchedules() []routerStep {
 				t.Helper()
 				if capVal, ok := decoded["global_hourly_cap"].(float64); !ok || int(capVal) != 50 {
 					t.Fatalf("updateSettings global_hourly_cap = %v, want 50", decoded["global_hourly_cap"])
+				}
+			},
+		},
+		{
+			op:     "getRequestsSettings",
+			method: http.MethodGet,
+			path:   func(_ *idsState) string { return "/requests/settings" },
+			want:   http.StatusOK,
+			capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
+				t.Helper()
+				if decoded["voting_mode"] == nil {
+					t.Fatalf("getRequestsSettings missing voting_mode: %v", decoded)
+				}
+			},
+		},
+		{
+			op:     "updateRequestsSettings",
+			method: http.MethodPut,
+			path:   func(_ *idsState) string { return "/requests/settings" },
+			body: func(_ *idsState) any {
+				return map[string]any{
+					"voting_mode":        "upvotes_only",
+					"allow_viewer_votes": true,
+					"visibility":         "public_attributed",
+					"voting_ttl_days":    14,
+				}
+			},
+			want: http.StatusOK,
+			capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
+				t.Helper()
+				if ttl, ok := decoded["voting_ttl_days"].(float64); !ok || int(ttl) != 14 {
+					t.Fatalf("updateRequestsSettings voting_ttl_days = %v, want 14", decoded["voting_ttl_days"])
+				}
+			},
+		},
+		{
+			op:     "getRuntimeSettings",
+			method: http.MethodGet,
+			path:   func(_ *idsState) string { return "/settings/runtime" },
+			want:   http.StatusOK,
+			capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
+				t.Helper()
+				if items, ok := decoded["items"].([]any); !ok || len(items) == 0 {
+					t.Fatalf("getRuntimeSettings items = %v, want a non-empty list", decoded["items"])
+				}
+			},
+		},
+		{
+			op:     "updateRuntimeSettings",
+			method: http.MethodPut,
+			path:   func(_ *idsState) string { return "/settings/runtime" },
+			body: func(_ *idsState) any {
+				return map[string]any{"values": map[string]string{"snatcharr.public.url": "https://snatcharr.example.test"}}
+			},
+			want: http.StatusOK,
+			capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
+				t.Helper()
+				if pending, ok := decoded["pending_restart"].(bool); !ok || !pending {
+					t.Fatalf("updateRuntimeSettings pending_restart = %v, want true", decoded["pending_restart"])
 				}
 			},
 		},
@@ -1503,6 +1578,12 @@ func stepsDeletesAndAuth() []routerStep {
 			want:   http.StatusNoContent,
 		},
 		{
+			op:     "deleteAdultSource",
+			method: http.MethodDelete,
+			path:   func(ids *idsState) string { return "/adult/sources/" + ids.adultSourceID },
+			want:   http.StatusNoContent,
+		},
+		{
 			op:     "deleteInstance",
 			method: http.MethodDelete,
 			path:   func(ids *idsState) string { return "/instances/" + ids.instanceID },
@@ -1710,6 +1791,29 @@ func stepsUserNotifyTargets(f *routerFixture) []routerStep {
 	}
 }
 
+func stepsUserPreferences() []routerStep {
+	return []routerStep{
+		{
+			op:     "getMyPreferences",
+			method: http.MethodGet,
+			path:   func(_ *idsState) string { return "/me/preferences" },
+			want:   http.StatusOK,
+		},
+		{
+			op:     "updateMyPreferences",
+			method: http.MethodPut,
+			path:   func(_ *idsState) string { return "/me/preferences" },
+			body: func(_ *idsState) any {
+				return map[string]any{
+					"brand_mark": "vulva",
+					"sfw_mode":   "auto",
+				}
+			},
+			want: http.StatusOK,
+		},
+	}
+}
+
 func stepsNotificationRules() []routerStep {
 	return []routerStep{
 		{
@@ -1822,6 +1926,79 @@ func stepsPriority() []routerStep {
 	}
 }
 
+func stepsPriorityPresetWrites() []routerStep {
+	return []routerStep{
+		{
+			op:     "createPriorityPreset",
+			method: http.MethodPost,
+			path:   func(_ *idsState) string { return "/priority-presets" },
+			body:   func(_ *idsState) any { return namedPresetBody("router-priority") },
+			want:   http.StatusCreated,
+			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
+				t.Helper()
+				id, ok := decoded["id"].(string)
+				if _, err := uuid.Parse(id); !ok || err != nil {
+					t.Fatalf("createPriorityPreset id = %v, want UUID", decoded["id"])
+				}
+				ids.priorityPresetID = id
+				if decoded["name"] != "router-priority" || decoded["builtin"] != false {
+					t.Fatalf("createPriorityPreset = %v, want name=router-priority, builtin=false", decoded)
+				}
+				assertRouterPriorityRanks(t, decoded, "search", "download", 10, 10)
+			},
+		},
+		{
+			op:     "updatePriorityPreset",
+			method: http.MethodPut,
+			path:   func(ids *idsState) string { return "/priority-presets/" + ids.priorityPresetID },
+			body: func(_ *idsState) any {
+				in := namedPresetBody("router-priority-updated")
+				in.Search["sonarr"], in.Download["sonarr"] = 15, 25
+				return in
+			},
+			want: http.StatusOK,
+			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
+				t.Helper()
+				if decoded["id"] != ids.priorityPresetID || decoded["name"] != "router-priority-updated" || decoded["builtin"] != false {
+					t.Fatalf("updatePriorityPreset = %v, want id=%s, name=router-priority-updated, builtin=false", decoded, ids.priorityPresetID)
+				}
+				assertRouterPriorityRanks(t, decoded, "search", "download", 15, 25)
+			},
+		},
+	}
+}
+
+func stepsPriorityPresetApplyDelete() []routerStep {
+	return []routerStep{
+		{
+			op:     "applyPriorityPreset",
+			method: http.MethodPost,
+			path:   func(ids *idsState) string { return "/priority-presets/" + ids.priorityPresetID + "/apply" },
+			want:   http.StatusOK,
+			capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
+				t.Helper()
+				assertRouterPriorityRanks(t, decoded, "search_priority_preset", "download_priority_preset", 15, 25)
+			},
+		},
+		{
+			op:     "deletePriorityPreset",
+			method: http.MethodDelete,
+			path:   func(ids *idsState) string { return "/priority-presets/" + ids.priorityPresetID },
+			want:   http.StatusNoContent,
+		},
+	}
+}
+
+func assertRouterPriorityRanks(t *testing.T, decoded map[string]any, searchKey, downloadKey string, search, download float64) {
+	t.Helper()
+	for key, want := range map[string]float64{searchKey: search, downloadKey: download} {
+		ranks, ok := decoded[key].(map[string]any)
+		if !ok || ranks["sonarr"] != want {
+			t.Fatalf("%s = %v, want sonarr=%v", key, decoded[key], want)
+		}
+	}
+}
+
 func stepsWatchaware() []routerStep {
 	return []routerStep{
 		{
@@ -1910,14 +2087,176 @@ func stepsWatchaware() []routerStep {
 	}
 }
 
+func stepsAdult() []routerStep {
+	return []routerStep{
+		{
+			op:     "createAdultSource",
+			method: http.MethodPost,
+			path:   func(_ *idsState) string { return "/adult/sources" },
+			body: func(_ *idsState) any {
+				return map[string]any{
+					"name":           "catalogue-router-test",
+					"endpoint":       "http://127.0.0.1:1/graphql",
+					"api_key":        "fake-api-key-0123456789",
+					"enabled":        false,
+					"sync_favorites": true,
+					"priority":       10,
+				}
+			},
+			want: http.StatusCreated,
+			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
+				t.Helper()
+				id, ok := decoded["id"].(string)
+				if !ok || id == "" {
+					t.Fatalf("createAdultSource id = %v, want valid uuid", decoded["id"])
+				}
+				ids.adultSourceID = id
+				if decoded["name"] != "catalogue-router-test" {
+					t.Fatalf("createAdultSource name = %v, want catalogue-router-test", decoded["name"])
+				}
+			},
+		},
+		{
+			op:     "listAdultSources",
+			method: http.MethodGet,
+			path:   func(_ *idsState) string { return "/adult/sources" },
+			want:   http.StatusOK,
+			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
+				t.Helper()
+				if !containsID(decoded["items"], ids.adultSourceID) {
+					t.Fatalf("listAdultSources missing source %s", ids.adultSourceID)
+				}
+			},
+		},
+		{
+			op:     "getAdultSource",
+			method: http.MethodGet,
+			path:   func(ids *idsState) string { return "/adult/sources/" + ids.adultSourceID },
+			want:   http.StatusOK,
+			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
+				t.Helper()
+				if decoded["id"] != ids.adultSourceID {
+					t.Fatalf("getAdultSource id = %v, want %s", decoded["id"], ids.adultSourceID)
+				}
+			},
+		},
+		{
+			op:     "updateAdultSource",
+			method: http.MethodPut,
+			path:   func(ids *idsState) string { return "/adult/sources/" + ids.adultSourceID },
+			body: func(_ *idsState) any {
+				return map[string]any{
+					"name":           "catalogue-router-updated",
+					"endpoint":       "http://127.0.0.1:1/graphql",
+					"enabled":        false,
+					"sync_favorites": true,
+					"priority":       5,
+				}
+			},
+			want: http.StatusOK,
+			capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
+				t.Helper()
+				if decoded["name"] != "catalogue-router-updated" {
+					t.Fatalf("updateAdultSource name = %v, want catalogue-router-updated", decoded["name"])
+				}
+			},
+		},
+		{
+			op:     "triggerAdultSync",
+			method: http.MethodPost,
+			path:   func(_ *idsState) string { return "/adult/sync" },
+			want:   http.StatusOK,
+		},
+		{
+			op:     "getAdultSyncStatus",
+			method: http.MethodGet,
+			path:   func(_ *idsState) string { return "/adult/sync/status" },
+			want:   http.StatusOK,
+		},
+		{
+			op:     "triggerAdultScan",
+			method: http.MethodPost,
+			path:   func(_ *idsState) string { return "/adult/scan" },
+			want:   http.StatusOK,
+		},
+		{
+			op:     "listAdultImageSets",
+			method: http.MethodGet,
+			path:   func(_ *idsState) string { return "/adult/image-sets" },
+			want:   http.StatusOK,
+			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
+				t.Helper()
+				items, ok := decoded["items"].([]any)
+				if !ok || len(items) == 0 {
+					t.Fatalf("listAdultImageSets empty or invalid items: %v", decoded)
+				}
+				first, ok := items[0].(map[string]any)
+				if !ok {
+					t.Fatalf("listAdultImageSets invalid item format: %v", items[0])
+				}
+				if id, ok := first["id"].(string); ok {
+					ids.adultImageSetID = id
+				}
+			},
+		},
+		{
+			op:     "getAdultImageSet",
+			method: http.MethodGet,
+			path: func(ids *idsState) string {
+				if ids.adultImageSetID != "" {
+					return "/adult/image-sets/" + ids.adultImageSetID
+				}
+				return "/adult/image-sets/00000000-0000-0000-0000-000000000001"
+			},
+			want: http.StatusOK,
+			capture: func(t *testing.T, ids *idsState, decoded map[string]any) {
+				t.Helper()
+				wantID := ids.adultImageSetID
+				if wantID == "" {
+					wantID = "00000000-0000-0000-0000-000000000001"
+				}
+				if decoded["id"] != wantID {
+					t.Fatalf("getAdultImageSet id = %v, want %s", decoded["id"], wantID)
+				}
+			},
+		},
+		{
+			op:     "listAdultPerformers",
+			method: http.MethodGet,
+			path:   func(_ *idsState) string { return "/adult/performers" },
+			want:   http.StatusOK,
+		},
+		{
+			op:     "getAdultPerformer",
+			method: http.MethodGet,
+			path:   func(_ *idsState) string { return "/adult/performers/00000000-0000-0000-0000-000000000001" },
+			want:   http.StatusNotFound,
+		},
+		{
+			op:     "listAdultStudios",
+			method: http.MethodGet,
+			path:   func(_ *idsState) string { return "/adult/studios" },
+			want:   http.StatusOK,
+		},
+		{
+			op:     "getAdultStudio",
+			method: http.MethodGet,
+			path:   func(_ *idsState) string { return "/adult/studios/00000000-0000-0000-0000-000000000001" },
+			want:   http.StatusNotFound,
+		},
+	}
+}
+
 func buildRouterSteps(f *routerFixture) []routerStep {
-	steps := make([]routerStep, 0, 85)
+	steps := make([]routerStep, 0, 92)
 	steps = append(steps, stepsAuth()...)
 	steps = append(steps, stepsIdentities()...)
 	steps = append(steps, stepsAPIKeys()...)
 	steps = append(steps, stepsInstances()...)
 	steps = append(steps, stepsPoliciesAndRuns()...)
 	steps = append(steps, stepsPriority()...)
+	steps = append(steps, stepsPriorityPresetWrites()...)
+	steps = append(steps, stepsPriorityPresetApplyDelete()...)
 	steps = append(steps, stepsSettingsAndSchedules()...)
 	steps = append(steps, stepsModules()...)
 	steps = append(steps, stepsDownloadClients()...)
@@ -1926,8 +2265,10 @@ func buildRouterSteps(f *routerFixture) []routerStep {
 	steps = append(steps, stepsProwlarr(f)...)
 	steps = append(steps, stepsNotificationChannels(f)...)
 	steps = append(steps, stepsUserNotifyTargets(f)...)
+	steps = append(steps, stepsUserPreferences()...)
 	steps = append(steps, stepsNotificationRules()...)
 	steps = append(steps, stepsWatchaware()...)
+	steps = append(steps, stepsAdult()...)
 	steps = append(steps, stepsDeletesAndAuth()...)
 	return steps
 }
@@ -2048,6 +2389,7 @@ func TestRouterOperations(t *testing.T) {
 	setupFixtureStubs(f)
 	if f.h.modules != nil {
 		_ = f.h.modules.SetEnabled(context.Background(), domain.ModuleWatchAware, true)
+		_ = f.h.modules.SetEnabled(context.Background(), domain.ModuleAdult, true)
 	}
 	steps := buildRouterSteps(f)
 	assertCoverageGuard(t, steps)
@@ -2163,7 +2505,7 @@ func createAdminUser(t *testing.T, f *routerFixture) (string, string) {
 	t.Helper()
 	username := "admin-" + uuid.NewString()[:8]
 	password := "admin-pass-1234"
-	hasher := crypto.NewPasswordHasher(1)
+	hasher := testHasher
 	hash, err := hasher.Hash(t.Context(), password)
 	if err != nil {
 		t.Fatalf("hash password: %v", err)
@@ -2186,7 +2528,7 @@ func createViewerUser(t *testing.T, f *routerFixture) (string, string) {
 	t.Helper()
 	username := "viewer-" + uuid.NewString()[:8]
 	password := "viewer-pass-1234"
-	hasher := crypto.NewPasswordHasher(1)
+	hasher := testHasher
 	hash, err := hasher.Hash(t.Context(), password)
 	if err != nil {
 		t.Fatalf("hash password: %v", err)
@@ -2255,6 +2597,7 @@ func initViewerIDsState(t *testing.T, csrfToken string) *idsState {
 	ids.csrfToken = csrfToken
 	ids.apiKeyID = dummyUUID
 	ids.instanceID = dummyUUID
+	ids.priorityPresetID = dummyUUID
 	ids.runID = dummyUUID
 	ids.scheduleID = dummyUUID
 	ids.clientID = dummyUUID
@@ -2264,6 +2607,8 @@ func initViewerIDsState(t *testing.T, csrfToken string) *idsState {
 	ids.channelID = dummyUUID
 	ids.ruleID = dummyUUID
 	ids.watchawareSourceID = dummyUUID
+	ids.adultSourceID = dummyUUID
+	ids.adultImageSetID = dummyUUID
 
 	pRaw, err := json.Marshal(policyToOAS(domain.DefaultPolicy(uuid.New())))
 	if err != nil {
@@ -2315,10 +2660,11 @@ func isViewerExemptSessionEndpoint(path string) bool {
 	case "/auth/setup", "/auth/login", "/auth/logout", "/auth/password", "/auth/proxy-session",
 		"/auth/jellyfin", "/auth/jellyfin/quickconnect/initiate", "/auth/jellyfin/quickconnect/authenticate",
 		"/auth/identities", "/auth/identities/jellyfin", "/auth/identities/proxy",
-		"/me/notify-targets", "/me/notify-targets/{targetId}", "/me/notify-targets/{targetId}/test":
+		"/me/notify-targets", "/me/notify-targets/{targetId}", "/me/notify-targets/{targetId}/test",
+		"/me/preferences":
 		return true
 	default:
-		return strings.HasPrefix(path, "/me/notify-targets")
+		return strings.HasPrefix(path, "/me/notify-targets") || strings.HasPrefix(path, "/me/preferences")
 	}
 }
 
@@ -2364,6 +2710,7 @@ func TestRouterRejectsViewerMutationsAndProbes(t *testing.T) {
 	setupFixtureStubs(f)
 	if f.h.modules != nil {
 		_ = f.h.modules.SetEnabled(context.Background(), domain.ModuleWatchAware, true)
+		_ = f.h.modules.SetEnabled(context.Background(), domain.ModuleAdult, true)
 	}
 	_ = completeInitialSetup(t, f)
 
@@ -2823,5 +3170,303 @@ func TestRouterProbeAuthProxyRedirect(t *testing.T) {
 			}
 			executeRouterStep(t, f, newIDsState(t), step)
 		})
+	}
+}
+
+func TestRouterNotificationChannelUpdate_KeepConfig(t *testing.T) {
+	t.Parallel()
+	f := newRouterFixture(t)
+	adminUser := completeInitialSetup(t, f)
+	apiKey, _, err := f.keys.Issue(t.Context(), adminUser.ID.String(), []string{"admin"})
+	if err != nil {
+		t.Fatalf("keys.Issue: %v", err)
+	}
+
+	var ntfyHits atomic.Int32
+	var authHeader atomic.Value
+	ntfySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ntfyHits.Add(1)
+		authHeader.Store(r.Header.Get("Authorization"))
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(ntfySrv.Close)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	chID := routerCreateNtfyChannel(t, f, client, apiKey, ntfySrv.URL)
+
+	testCases := []struct {
+		name string
+		run  func(t *testing.T)
+	}{
+		{
+			name: "positive: rename without config preserves config and secret",
+			run: func(t *testing.T) {
+				t.Helper()
+				routerTestRenameKeepConfig(t, f, client, apiKey, chID, ntfySrv.URL, &ntfyHits, &authHeader)
+			},
+		},
+		{
+			name: "positive: update with config replaces public fields and merges secret",
+			run: func(t *testing.T) {
+				t.Helper()
+				routerTestReplaceConfig(t, f, client, apiKey, chID)
+			},
+		},
+		{
+			name: "boundary: update with empty config removes public fields",
+			run: func(t *testing.T) {
+				t.Helper()
+				routerTestEmptyConfig(t, f, client, apiKey, chID)
+			},
+		},
+		{
+			name: "negative: update without config on unknown channel returns 404",
+			run: func(t *testing.T) {
+				t.Helper()
+				routerTestUnknownChannel404(t, f, client, apiKey)
+			},
+		},
+	}
+
+	//nolint:paralleltest // sequential scenario: each case modifies channel state
+	for _, tc := range testCases {
+		t.Run(tc.name, tc.run)
+	}
+}
+
+func routerDoJSON(t *testing.T, client *http.Client, req *http.Request, wantStatus int) map[string]any {
+	t.Helper()
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("%s %s: client.Do: %v", req.Method, req.URL.Path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != wantStatus {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("%s %s: status = %d, want %d; body: %s", req.Method, req.URL.Path, resp.StatusCode, wantStatus, string(body))
+	}
+	if wantStatus == http.StatusNoContent {
+		return nil
+	}
+	var res map[string]any
+	if decErr := json.NewDecoder(resp.Body).Decode(&res); decErr != nil {
+		t.Fatalf("%s %s: decode response: %v", req.Method, req.URL.Path, decErr)
+	}
+	return res
+}
+
+func routerCreateNtfyChannel(t *testing.T, f *routerFixture, client *http.Client, apiKey, ntfyURL string) string {
+	t.Helper()
+	createBody := map[string]any{
+		"name":    "initial-ntfy",
+		"kind":    "ntfy",
+		"enabled": true,
+		"config": map[string]any{
+			"server_url": ntfyURL,
+			"topic":      "alerts",
+			"token":      "secret-token-12345",
+		},
+	}
+	raw, err := json.Marshal(createBody)
+	if err != nil {
+		t.Fatalf("marshal create body: %v", err)
+	}
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, f.srv.URL+PathPrefix+"/notifications/channels", bytes.NewReader(raw))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Content-Type", "application/json")
+	created := routerDoJSON(t, client, req, http.StatusCreated)
+
+	chID, ok := created["id"].(string)
+	if !ok || chID == "" {
+		t.Fatalf("created channel id = %v, want non-empty string", created["id"])
+	}
+	if created["name"] != "initial-ntfy" {
+		t.Fatalf("created name = %v, want initial-ntfy", created["name"])
+	}
+	if created["has_secret"] != true {
+		t.Fatalf("created has_secret = %v, want true", created["has_secret"])
+	}
+	return chID
+}
+
+func routerTestRenameKeepConfig(t *testing.T, f *routerFixture, client *http.Client, apiKey, chID, ntfyURL string, hits *atomic.Int32, authHeader *atomic.Value) {
+	t.Helper()
+	putBody := map[string]any{
+		"name": "renamed-ntfy",
+		"kind": "ntfy",
+	}
+	raw, err := json.Marshal(putBody)
+	if err != nil {
+		t.Fatalf("marshal put body: %v", err)
+	}
+	putReq, err := http.NewRequestWithContext(t.Context(), http.MethodPut, f.srv.URL+PathPrefix+"/notifications/channels/"+chID, bytes.NewReader(raw))
+	if err != nil {
+		t.Fatalf("new put request: %v", err)
+	}
+	putReq.Header.Set("Authorization", "Bearer "+apiKey)
+	putReq.Header.Set("Content-Type", "application/json")
+	_ = routerDoJSON(t, client, putReq, http.StatusOK)
+
+	getReq, err := http.NewRequestWithContext(t.Context(), http.MethodGet, f.srv.URL+PathPrefix+"/notifications/channels/"+chID, nil)
+	if err != nil {
+		t.Fatalf("new get request: %v", err)
+	}
+	getReq.Header.Set("Authorization", "Bearer "+apiKey)
+	got := routerDoJSON(t, client, getReq, http.StatusOK)
+
+	if got["name"] != "renamed-ntfy" {
+		t.Fatalf("name = %v, want renamed-ntfy", got["name"])
+	}
+	if got["kind"] != "ntfy" {
+		t.Fatalf("kind = %v, want ntfy", got["kind"])
+	}
+	if got["has_secret"] != true {
+		t.Fatalf("has_secret = %v, want true", got["has_secret"])
+	}
+	cfg, ok := got["config"].(map[string]any)
+	if !ok {
+		t.Fatalf("config = %v, want map", got["config"])
+	}
+	if cfg["server_url"] != ntfyURL {
+		t.Fatalf("server_url = %v, want %s", cfg["server_url"], ntfyURL)
+	}
+	if cfg["topic"] != "alerts" {
+		t.Fatalf("topic = %v, want alerts", cfg["topic"])
+	}
+
+	testReq, err := http.NewRequestWithContext(t.Context(), http.MethodPost, f.srv.URL+PathPrefix+"/notifications/channels/"+chID+"/test", nil)
+	if err != nil {
+		t.Fatalf("new test request: %v", err)
+	}
+	testReq.Header.Set("Authorization", "Bearer "+apiKey)
+	_ = routerDoJSON(t, client, testReq, http.StatusNoContent)
+
+	if hits.Load() != 1 {
+		t.Fatalf("ntfy hits = %d, want 1", hits.Load())
+	}
+	if authHeader.Load() != "Bearer secret-token-12345" {
+		t.Fatalf("auth header = %v, want 'Bearer secret-token-12345'", authHeader.Load())
+	}
+}
+
+func routerTestReplaceConfig(t *testing.T, f *routerFixture, client *http.Client, apiKey, chID string) {
+	t.Helper()
+	putBody := map[string]any{
+		"name": "replaced-ntfy",
+		"kind": "ntfy",
+		"config": map[string]any{
+			"server_url": "http://127.0.0.1:54321",
+			"topic":      "other-topic",
+		},
+	}
+	raw, err := json.Marshal(putBody)
+	if err != nil {
+		t.Fatalf("marshal put body: %v", err)
+	}
+	putReq, err := http.NewRequestWithContext(t.Context(), http.MethodPut, f.srv.URL+PathPrefix+"/notifications/channels/"+chID, bytes.NewReader(raw))
+	if err != nil {
+		t.Fatalf("new put request: %v", err)
+	}
+	putReq.Header.Set("Authorization", "Bearer "+apiKey)
+	putReq.Header.Set("Content-Type", "application/json")
+	_ = routerDoJSON(t, client, putReq, http.StatusOK)
+
+	getReq, err := http.NewRequestWithContext(t.Context(), http.MethodGet, f.srv.URL+PathPrefix+"/notifications/channels/"+chID, nil)
+	if err != nil {
+		t.Fatalf("new get request: %v", err)
+	}
+	getReq.Header.Set("Authorization", "Bearer "+apiKey)
+	got := routerDoJSON(t, client, getReq, http.StatusOK)
+
+	if got["name"] != "replaced-ntfy" {
+		t.Fatalf("name = %v, want replaced-ntfy", got["name"])
+	}
+	if got["has_secret"] != true {
+		t.Fatalf("has_secret = %v, want true (secret merged)", got["has_secret"])
+	}
+	cfg, ok := got["config"].(map[string]any)
+	if !ok {
+		t.Fatalf("config = %v, want map", got["config"])
+	}
+	if cfg["server_url"] != "http://127.0.0.1:54321" {
+		t.Fatalf("server_url = %v, want http://127.0.0.1:54321", cfg["server_url"])
+	}
+	if cfg["topic"] != "other-topic" {
+		t.Fatalf("topic = %v, want other-topic", cfg["topic"])
+	}
+
+	secCh, err := f.h.notify.GetChannelWithSecrets(t.Context(), uuid.MustParse(chID))
+	if err != nil {
+		t.Fatalf("GetChannelWithSecrets: %v", err)
+	}
+	if secCh.Config.Token != "secret-token-12345" {
+		t.Fatalf("secret token = %q, want secret-token-12345", secCh.Config.Token)
+	}
+}
+
+func routerTestEmptyConfig(t *testing.T, f *routerFixture, client *http.Client, apiKey, chID string) {
+	t.Helper()
+	putBody := map[string]any{
+		"name":   "empty-config-ntfy",
+		"kind":   "ntfy",
+		"config": map[string]any{},
+	}
+	raw, err := json.Marshal(putBody)
+	if err != nil {
+		t.Fatalf("marshal put body: %v", err)
+	}
+	putReq, err := http.NewRequestWithContext(t.Context(), http.MethodPut, f.srv.URL+PathPrefix+"/notifications/channels/"+chID, bytes.NewReader(raw))
+	if err != nil {
+		t.Fatalf("new put request: %v", err)
+	}
+	putReq.Header.Set("Authorization", "Bearer "+apiKey)
+	putReq.Header.Set("Content-Type", "application/json")
+	_ = routerDoJSON(t, client, putReq, http.StatusOK)
+
+	getReq, err := http.NewRequestWithContext(t.Context(), http.MethodGet, f.srv.URL+PathPrefix+"/notifications/channels/"+chID, nil)
+	if err != nil {
+		t.Fatalf("new get request: %v", err)
+	}
+	getReq.Header.Set("Authorization", "Bearer "+apiKey)
+	got := routerDoJSON(t, client, getReq, http.StatusOK)
+
+	if got["has_secret"] != true {
+		t.Fatalf("has_secret = %v, want true (secret merged)", got["has_secret"])
+	}
+	cfg, ok := got["config"].(map[string]any)
+	if !ok {
+		t.Fatalf("config = %v, want map", got["config"])
+	}
+	if sURL, has := cfg["server_url"]; has && sURL != "" {
+		t.Fatalf("server_url = %v, want empty or omitted", sURL)
+	}
+	if top, has := cfg["topic"]; has && top != "" {
+		t.Fatalf("topic = %v, want empty or omitted", top)
+	}
+}
+
+func routerTestUnknownChannel404(t *testing.T, f *routerFixture, client *http.Client, apiKey string) {
+	t.Helper()
+	putBody := map[string]any{
+		"name": "ghost",
+		"kind": "ntfy",
+	}
+	raw, err := json.Marshal(putBody)
+	if err != nil {
+		t.Fatalf("marshal put body: %v", err)
+	}
+	unknownID := "00000000-0000-0000-0000-000000000099"
+	putReq, err := http.NewRequestWithContext(t.Context(), http.MethodPut, f.srv.URL+PathPrefix+"/notifications/channels/"+unknownID, bytes.NewReader(raw))
+	if err != nil {
+		t.Fatalf("new put request: %v", err)
+	}
+	putReq.Header.Set("Authorization", "Bearer "+apiKey)
+	putReq.Header.Set("Content-Type", "application/json")
+	resp := routerDoJSON(t, client, putReq, http.StatusNotFound)
+	if resp["title"] == nil || resp["title"] == "" {
+		t.Fatalf("404 problem title = %v, want non-empty", resp["title"])
 	}
 }

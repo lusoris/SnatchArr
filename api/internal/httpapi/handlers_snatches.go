@@ -18,6 +18,7 @@ import (
 
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
+	"github.com/lusoris/SnatchArr/api/internal/events"
 	"github.com/lusoris/SnatchArr/api/internal/snatch"
 )
 
@@ -26,8 +27,12 @@ func (h *Handlers) TriggerRun(ctx context.Context, req *oas.RunTrigger, params o
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	if _, err := h.instances.Get(ctx, params.InstanceId); err != nil {
+	inst, err := h.instances.Get(ctx, params.InstanceId)
+	if err != nil {
 		return nil, err
+	}
+	if !inst.Kind.IsArr() {
+		return nil, fmt.Errorf("%w: %s instance does not support snatching", domain.ErrInvalid, inst.Kind)
 	}
 	kind, err := domain.ParseSnatchKind(string(req.Kind))
 	if err != nil {
@@ -55,8 +60,12 @@ func (h *Handlers) SearchItem(ctx context.Context, req *oas.ItemSearchRequest, p
 	if err := requireRequester(ctx); err != nil {
 		return nil, err
 	}
-	if _, err := h.instances.Get(ctx, params.InstanceId); err != nil {
+	inst, err := h.instances.Get(ctx, params.InstanceId)
+	if err != nil {
 		return nil, err
+	}
+	if !inst.Kind.IsArr() {
+		return nil, fmt.Errorf("%w: %s instance does not support snatching", domain.ErrInvalid, inst.Kind)
 	}
 	focusEntity, focusGroup, err := parseItemFocus(req)
 	if err != nil {
@@ -136,8 +145,12 @@ func (h *Handlers) PreviewRun(ctx context.Context, params oas.PreviewRunParams) 
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	if _, err := h.instances.Get(ctx, params.InstanceId); err != nil {
+	inst, err := h.instances.Get(ctx, params.InstanceId)
+	if err != nil {
 		return nil, err
+	}
+	if !inst.Kind.IsArr() {
+		return nil, fmt.Errorf("%w: %s instance does not support snatching", domain.ErrInvalid, inst.Kind)
 	}
 	kind, err := domain.ParseSnatchKind(params.Kind)
 	if err != nil {
@@ -291,6 +304,9 @@ func (h *Handlers) CancelRun(ctx context.Context, params oas.CancelRunParams) er
 
 // ListEvents pages history.
 func (h *Handlers) ListEvents(ctx context.Context, params oas.ListEventsParams) ([]oas.Event, error) {
+	if typ, ok := params.Type.Get(); ok && !events.IsKnownType(typ) {
+		return nil, fmt.Errorf("%w: unknown event type %q", domain.ErrBadRequest, typ)
+	}
 	p := snatch.ListParams{PageSize: params.PageSize.Or(100), Type: params.Type.Or("")}
 	if v, ok := params.InstanceID.Get(); ok {
 		p.InstanceID = &v
@@ -334,6 +350,9 @@ func (h *Handlers) GetHourlyCaps(ctx context.Context) ([]oas.CapStatus, error) {
 		out = append(out, global)
 	}
 	for _, inst := range list {
+		if !inst.Kind.IsArr() {
+			continue
+		}
 		policy, err := h.policies.Get(ctx, inst.ID)
 		if err != nil {
 			return nil, err
@@ -378,24 +397,16 @@ func (h *Handlers) UpdateSettings(ctx context.Context, req *oas.Settings) (*oas.
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	in := settingsFromOAS(req)
+	stored, err := h.settings.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	in := settingsUpdateFromOAS(req, stored)
 	s, err := h.settings.Update(ctx, in)
 	if err != nil {
 		return nil, err
 	}
 	return settingsToOAS(s), nil
-}
-
-// GetPriorityPresets returns the shipped search and download priority presets.
-func (h *Handlers) GetPriorityPresets(_ context.Context) ([]oas.PriorityPreset, error) {
-	preset := priorityPresetToOAS(domain.MediaFirstPreset())
-	return []oas.PriorityPreset{
-		{
-			Name:     domain.PresetMediaFirst,
-			Search:   preset,
-			Download: preset,
-		},
-	}, nil
 }
 
 // ResetState forgets processed items.
