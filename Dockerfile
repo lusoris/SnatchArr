@@ -10,6 +10,8 @@ FROM --platform=$BUILDPLATFORM node:24-bookworm-slim@sha256:55fb5f5a527ea2c5c4a9
 WORKDIR /src/web
 RUN corepack enable
 COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml ./
+# patchedDependencies in pnpm-workspace.yaml points here; install fails without it.
+COPY web/patches/ ./patches/
 RUN pnpm install --frozen-lockfile
 COPY web/ ./
 COPY api/openapi/openapi.yaml /src/api/openapi/openapi.yaml
