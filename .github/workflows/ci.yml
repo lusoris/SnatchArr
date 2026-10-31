@@ -554,9 +554,7 @@ jobs:
         env:
           SMOKE_SKIP_BUILD: '1'
           SMOKE_POSTGRES_MIRROR: mirror.gcr.io/library
-        run: |
-          git fetch --tags --force
-          make e2e-compose-app-upgrade
+        run: make e2e-compose-app-upgrade
 
   dev-compose:
     name: dev compose (make dev stack)

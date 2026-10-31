@@ -34,15 +34,16 @@ label="compose-app-upgrade"
 . "$(dirname "$0")/pull_retry.sh"
 
 resolve_images() {
-    if ! git describe --tags --abbrev=0 --match 'v*' HEAD >/dev/null 2>&1; then
-        if ! git fetch --tags --force >/dev/null 2>&1; then
-            echo "$label: warning: could not fetch tags" >&2
-        fi
+    # A shallow CI checkout holds no tags and no history, so the version order decides, not ancestry.
+    if [ -z "$(git tag --list 'v[0-9]*')" ] && ! git fetch --quiet --tags --force; then
+        echo "$label: warning: could not fetch tags" >&2
     fi
     local prev_tag=""
-    if ! prev_tag=$(git describe --tags --abbrev=0 --match 'v*' HEAD 2>/dev/null); then
-        fail "could not describe previous release tag"
-    fi
+    prev_tag=$(git tag --list 'v[0-9]*' --sort=-version:refname |
+        awk -v own="$(git tag --points-at HEAD | tr '\n' ' ')" '
+            BEGIN { n = split(own, o, " "); for (i = 1; i <= n; i++) skip[o[i]] = 1 }
+            /^v[0-9]+\.[0-9]+\.[0-9]+$/ && !($0 in skip) && !found { found = 1; print }')
+    [ -n "$prev_tag" ] || fail "could not find the previous release tag"
     prev_ver="${UPGRADE_FROM:-${prev_tag#v}}"
     old_api_image="ghcr.io/lusoris/snatcharr-api:$prev_ver"
     old_worker_image="ghcr.io/lusoris/snatcharr-worker:$prev_ver"
