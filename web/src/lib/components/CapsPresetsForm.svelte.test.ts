@@ -7,50 +7,21 @@ import { ProblemError } from '@sveltesentio/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
 import { api } from '#lib/api/client.js';
-import type { components } from '#lib/api/schema.js';
 import { m } from '#lib/paraglide/messages.js';
 import { session } from '#lib/session.svelte.js';
 import { assertProblemAlert, renderWithQuery, stubGet } from '#lib/testing/harness.js';
+import {
+	mediaFirstRanks,
+	settingsOnShippedPreset,
+	settingsStubs
+} from '#lib/testing/priority-fixtures.js';
 import CapsPresetsForm from './CapsPresetsForm.svelte';
-
-type Settings = components['schemas']['Settings'];
-type PriorityPreset = components['schemas']['PriorityPreset'];
 
 const WCAG_22_AA_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 
-const mediaFirstRanks = {
-	sonarr: 10,
-	radarr: 10,
-	lidarr: 20,
-	readarr: 30,
-	whisparr_v2: 40,
-	whisparr_v3: 40
-};
+const sampleSettings = settingsOnShippedPreset({ updated_at: '2026-10-25T05:00:00Z' });
 
-const samplePresets: PriorityPreset[] = [
-	{
-		name: 'media_first',
-		builtin: true,
-		search: mediaFirstRanks,
-		download: mediaFirstRanks
-	}
-];
-
-const sampleSettings: Settings = {
-	history_retention_days: 30,
-	user_agent: 'SnatchArr/1.0',
-	global_hourly_cap: 100,
-	search_priority_preset: { ...mediaFirstRanks },
-	download_priority_preset: { ...mediaFirstRanks },
-	llm_enabled: false,
-	llm_write_tools: [],
-	updated_at: '2026-10-25T05:00:00Z'
-};
-
-const baseStubs = {
-	'/settings': sampleSettings,
-	'/priority-presets': samplePresets
-};
+const baseStubs = settingsStubs(sampleSettings);
 
 async function getPriorityFieldsets(): Promise<{
 	search: HTMLElement;
