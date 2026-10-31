@@ -30,8 +30,9 @@ const (
 	sourceDSN = "postgres://test:test@pg-source:5432/snatcharr?sslmode=disable"
 	targetDSN = "postgres://test:test@localhost:5432/snatcharr?sslmode=disable"
 	// Bounds (HISS-02): container boot including the image pull, and dump plus restore.
-	upgradeBootTimeout = 3 * time.Minute
-	upgradeOpTimeout   = time.Minute
+	upgradeBootTimeout      = 3 * time.Minute
+	upgradeOpTimeout        = time.Minute
+	upgradeTerminateTimeout = 30 * time.Second
 )
 
 // runPostgres starts one Postgres of the given image on nw under the alias and returns it.
@@ -56,7 +57,18 @@ func runPostgres(t *testing.T, nw *testcontainers.DockerNetwork, image, alias st
 	c, err := tcpostgres.Run(ctx, image, tcpostgres.WithDatabase("snatcharr"),
 		tcpostgres.WithUsername("test"), tcpostgres.WithPassword("test"),
 		tcpostgres.BasicWaitStrategies(), storetest.QuickInit(), network.WithNetwork([]string{alias}, nw))
-	testcontainers.CleanupContainer(t, c)
+	t.Cleanup(func() {
+		if c == nil {
+			return
+		}
+		// Terminate directly: TerminateContainer bounds only the stop and removes the container
+		// under context.Background, the call that hung until the package timeout.
+		ctx, cancel := context.WithTimeout(context.Background(), upgradeTerminateTimeout)
+		defer cancel()
+		if termErr := c.Terminate(ctx, testcontainers.StopTimeout(0)); termErr != nil {
+			t.Errorf("terminate %s: %v", image, termErr)
+		}
+	})
 	if err != nil {
 		t.Fatalf("run %s: %v", image, err)
 	}
