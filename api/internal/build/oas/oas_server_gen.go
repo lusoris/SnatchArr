@@ -8,6 +8,13 @@ import (
 
 // Handler handles operations described by OpenAPI v3 specification.
 type Handler interface {
+	// ApplyPriorityPreset implements applyPriorityPreset operation.
+	//
+	// Later preset edits do not affect settings. POST /priority-presets/media_first/apply restores the
+	// shipped orders.
+	//
+	// POST /priority-presets/{presetId}/apply
+	ApplyPriorityPreset(ctx context.Context, params ApplyPriorityPresetParams) (*Settings, error)
 	// CancelRun implements cancelRun operation.
 	//
 	// Cancel a queued or leased run.
@@ -68,6 +75,12 @@ type Handler interface {
 	//
 	// POST /notifications/rules
 	CreateNotificationRule(ctx context.Context, req *NotificationRuleInput) (*NotificationRule, error)
+	// CreatePriorityPreset implements createPriorityPreset operation.
+	//
+	// Up to 20 user presets; names are unique ignoring case. The media_first name is reserved.
+	//
+	// POST /priority-presets
+	CreatePriorityPreset(ctx context.Context, req *PriorityPresetInput) (*PriorityPreset, error)
 	// CreateProwlarrLink implements createProwlarrLink operation.
 	//
 	// Add a Prowlarr link.
@@ -141,6 +154,12 @@ type Handler interface {
 	//
 	// DELETE /notifications/rules/{ruleId}
 	DeleteNotificationRule(ctx context.Context, params DeleteNotificationRuleParams) error
+	// DeletePriorityPreset implements deletePriorityPreset operation.
+	//
+	// Delete a saved preset without changing the active settings (admin only).
+	//
+	// DELETE /priority-presets/{presetId}
+	DeletePriorityPreset(ctx context.Context, params DeletePriorityPresetParams) error
 	// DeleteProwlarrLink implements deleteProwlarrLink operation.
 	//
 	// Delete a Prowlarr link.
@@ -282,7 +301,7 @@ type Handler interface {
 	GetPolicyFilterOptions(ctx context.Context, params GetPolicyFilterOptionsParams) (*PolicyFilterOptions, error)
 	// GetPriorityPresets implements getPriorityPresets operation.
 	//
-	// Shipped search and download priority presets.
+	// Shipped and saved search and download priority presets.
 	//
 	// GET /priority-presets
 	GetPriorityPresets(ctx context.Context) ([]PriorityPreset, error)
@@ -764,6 +783,12 @@ type Handler interface {
 	//
 	// PUT /instances/{instanceId}/policy
 	UpdatePolicy(ctx context.Context, req *SnatchPolicy, params UpdatePolicyParams) (*SnatchPolicy, error)
+	// UpdatePriorityPreset implements updatePriorityPreset operation.
+	//
+	// Replace a saved preset without changing the active settings (admin only).
+	//
+	// PUT /priority-presets/{presetId}
+	UpdatePriorityPreset(ctx context.Context, req *PriorityPresetInput, params UpdatePriorityPresetParams) (*PriorityPreset, error)
 	// UpdateProwlarrLink implements updateProwlarrLink operation.
 	//
 	// Update a Prowlarr link (omit api_key to keep it).

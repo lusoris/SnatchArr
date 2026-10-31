@@ -792,10 +792,58 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Shipped search and download priority presets */
+        /** Shipped and saved search and download priority presets */
         get: operations["getPriorityPresets"];
         put?: never;
+        /**
+         * Save both priority orders as a named preset (admin only)
+         * @description Up to 20 user presets; names are unique ignoring case. The media_first name is reserved.
+         */
+        post: operations["createPriorityPreset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/priority-presets/{presetId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID of a saved preset. The shipped media_first preset is read-only. */
+                presetId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace a saved preset without changing the active settings (admin only) */
+        put: operations["updatePriorityPreset"];
         post?: never;
+        /** Delete a saved preset without changing the active settings (admin only) */
+        delete: operations["deletePriorityPreset"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/priority-presets/{presetId}/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID of a saved preset, or media_first for the shipped preset. */
+                presetId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Copy both preset maps into the active settings (admin only)
+         * @description Later preset edits do not affect settings. POST /priority-presets/media_first/apply restores the shipped orders.
+         */
+        post: operations["applyPriorityPreset"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2178,7 +2226,21 @@ export interface components {
             [key: string]: number;
         };
         PriorityPreset: {
-            /** @description Identifier of the shipped preset (e.g. media_first). */
+            /**
+             * Format: uuid
+             * @description UUID of a saved user preset; omitted for builtin presets.
+             */
+            id?: string;
+            /** @description Whether this preset is shipped and read-only. */
+            builtin: boolean;
+            /** @description Name of a saved preset, or media_first for the shipped preset. */
+            name: string;
+            search: components["schemas"]["PriorityPresetMap"];
+            download: components["schemas"]["PriorityPresetMap"];
+        };
+        /** @description Both maps must contain exactly sonarr, radarr, lidarr, readarr, whisparr_v2 and whisparr_v3, with ranks from 1 to 100. */
+        PriorityPresetInput: {
+            /** @description Unique ignoring case; leading and trailing whitespace is trimmed. The name media_first is reserved. */
             name: string;
             search: components["schemas"]["PriorityPresetMap"];
             download: components["schemas"]["PriorityPresetMap"];
@@ -4383,13 +4445,112 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Shipped priority presets */
+            /** @description Shipped preset first, then saved user presets ordered by name */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["PriorityPreset"][];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createPriorityPreset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PriorityPresetInput"];
+            };
+        };
+        responses: {
+            /** @description Saved preset */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PriorityPreset"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    updatePriorityPreset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID of a saved preset. The shipped media_first preset is read-only. */
+                presetId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PriorityPresetInput"];
+            };
+        };
+        responses: {
+            /** @description Updated preset */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PriorityPreset"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    deletePriorityPreset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID of a saved preset. The shipped media_first preset is read-only. */
+                presetId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Preset deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    applyPriorityPreset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID of a saved preset, or media_first for the shipped preset. */
+                presetId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Settings with the applied priority orders */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Settings"];
                 };
             };
             default: components["responses"]["Problem"];

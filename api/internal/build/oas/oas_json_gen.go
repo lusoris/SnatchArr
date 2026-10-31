@@ -11504,6 +11504,16 @@ func (s *PriorityPreset) Encode(e *jx.Encoder) {
 // encodeFields encodes fields.
 func (s *PriorityPreset) encodeFields(e *jx.Encoder) {
 	{
+		if s.ID.Set {
+			e.FieldStart("id")
+			s.ID.Encode(e)
+		}
+	}
+	{
+		e.FieldStart("builtin")
+		e.Bool(s.Builtin)
+	}
+	{
 		e.FieldStart("name")
 		e.Str(s.Name)
 	}
@@ -11517,16 +11527,166 @@ func (s *PriorityPreset) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfPriorityPreset = [3]string{
-	0: "name",
-	1: "search",
-	2: "download",
+var jsonFieldsNameOfPriorityPreset = [5]string{
+	0: "id",
+	1: "builtin",
+	2: "name",
+	3: "search",
+	4: "download",
 }
 
 // Decode decodes PriorityPreset from json.
 func (s *PriorityPreset) Decode(d *jx.Decoder) error {
 	if s == nil {
 		return errors.New("invalid: unable to decode PriorityPreset to nil")
+	}
+	var requiredBitSet [1]uint8
+
+	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
+		switch string(k) {
+		case "id":
+			if err := func() error {
+				s.ID.Reset()
+				if err := s.ID.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"id\"")
+			}
+		case "builtin":
+			requiredBitSet[0] |= 1 << 1
+			if err := func() error {
+				v, err := d.Bool()
+				s.Builtin = bool(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"builtin\"")
+			}
+		case "name":
+			requiredBitSet[0] |= 1 << 2
+			if err := func() error {
+				v, err := d.Str()
+				s.Name = string(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"name\"")
+			}
+		case "search":
+			requiredBitSet[0] |= 1 << 3
+			if err := func() error {
+				if err := s.Search.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"search\"")
+			}
+		case "download":
+			requiredBitSet[0] |= 1 << 4
+			if err := func() error {
+				if err := s.Download.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"download\"")
+			}
+		default:
+			return d.Skip()
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "decode PriorityPreset")
+	}
+	// Validate required fields.
+	var failures []validate.FieldError
+	for i, mask := range [1]uint8{
+		0b00011110,
+	} {
+		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
+			// Mask only required fields and check equality to mask using XOR.
+			//
+			// If XOR result is not zero, result is not equal to expected, so some fields are missed.
+			// Bits of fields which would be set are actually bits of missed fields.
+			missed := bits.OnesCount8(result)
+			for bitN := 0; bitN < missed; bitN++ {
+				bitIdx := bits.TrailingZeros8(result)
+				fieldIdx := i*8 + bitIdx
+				var name string
+				if fieldIdx < len(jsonFieldsNameOfPriorityPreset) {
+					name = jsonFieldsNameOfPriorityPreset[fieldIdx]
+				} else {
+					name = strconv.Itoa(fieldIdx)
+				}
+				failures = append(failures, validate.FieldError{
+					Name:  name,
+					Error: validate.ErrFieldRequired,
+				})
+				// Reset bit.
+				result &^= 1 << bitIdx
+			}
+		}
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *PriorityPreset) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *PriorityPreset) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode implements json.Marshaler.
+func (s *PriorityPresetInput) Encode(e *jx.Encoder) {
+	e.ObjStart()
+	s.encodeFields(e)
+	e.ObjEnd()
+}
+
+// encodeFields encodes fields.
+func (s *PriorityPresetInput) encodeFields(e *jx.Encoder) {
+	{
+		e.FieldStart("name")
+		e.Str(s.Name)
+	}
+	{
+		e.FieldStart("search")
+		s.Search.Encode(e)
+	}
+	{
+		e.FieldStart("download")
+		s.Download.Encode(e)
+	}
+}
+
+var jsonFieldsNameOfPriorityPresetInput = [3]string{
+	0: "name",
+	1: "search",
+	2: "download",
+}
+
+// Decode decodes PriorityPresetInput from json.
+func (s *PriorityPresetInput) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode PriorityPresetInput to nil")
 	}
 	var requiredBitSet [1]uint8
 
@@ -11569,7 +11729,7 @@ func (s *PriorityPreset) Decode(d *jx.Decoder) error {
 		}
 		return nil
 	}); err != nil {
-		return errors.Wrap(err, "decode PriorityPreset")
+		return errors.Wrap(err, "decode PriorityPresetInput")
 	}
 	// Validate required fields.
 	var failures []validate.FieldError
@@ -11586,8 +11746,8 @@ func (s *PriorityPreset) Decode(d *jx.Decoder) error {
 				bitIdx := bits.TrailingZeros8(result)
 				fieldIdx := i*8 + bitIdx
 				var name string
-				if fieldIdx < len(jsonFieldsNameOfPriorityPreset) {
-					name = jsonFieldsNameOfPriorityPreset[fieldIdx]
+				if fieldIdx < len(jsonFieldsNameOfPriorityPresetInput) {
+					name = jsonFieldsNameOfPriorityPresetInput[fieldIdx]
 				} else {
 					name = strconv.Itoa(fieldIdx)
 				}
@@ -11608,14 +11768,14 @@ func (s *PriorityPreset) Decode(d *jx.Decoder) error {
 }
 
 // MarshalJSON implements stdjson.Marshaler.
-func (s *PriorityPreset) MarshalJSON() ([]byte, error) {
+func (s *PriorityPresetInput) MarshalJSON() ([]byte, error) {
 	e := jx.Encoder{}
 	s.Encode(&e)
 	return e.Bytes(), nil
 }
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
-func (s *PriorityPreset) UnmarshalJSON(data []byte) error {
+func (s *PriorityPresetInput) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }

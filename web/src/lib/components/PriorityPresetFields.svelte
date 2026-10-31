@@ -4,8 +4,7 @@ SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
 	import type { components } from '#lib/api/schema.js';
-	import Field from '#lib/components/Field.svelte';
-	import { ARR_KINDS, kindLabel } from '#lib/kinds.js';
+	import PriorityOrderFields from '#lib/components/PriorityOrderFields.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 
 	type PriorityPresetMap = components['schemas']['PriorityPresetMap'];
@@ -29,7 +28,7 @@ SPDX-License-Identifier: EUPL-1.2
 
 <div class="flex flex-col gap-4 rounded-lg border border-line p-4">
 	<div class="flex flex-wrap items-start justify-between gap-3">
-		<div>
+		<div class="min-w-0 flex-1 basis-60">
 			<h2 class="text-base font-semibold">{m.settings_priority_presets_title()}</h2>
 			<p class="text-xs text-subtle">{m.settings_priority_presets_hint()}</p>
 		</div>
@@ -38,47 +37,8 @@ SPDX-License-Identifier: EUPL-1.2
 		</button>
 	</div>
 
-	<fieldset class="flex flex-col gap-2" data-field="search_priority_preset" {disabled}>
-		<legend class="text-sm font-medium">{m.settings_search_priority_preset()}</legend>
-		<div class="grid items-end gap-3 sm:grid-cols-2 md:grid-cols-3">
-			{#each ARR_KINDS as kind (kind)}
-				{#if searchPreset[kind] !== undefined}
-					<Field id={`search-priority-${kind}`} label={kindLabel(kind)}>
-						<input
-							id={`search-priority-${kind}`}
-							class="input"
-							type="number"
-							min="1"
-							max="100"
-							required
-							{disabled}
-							bind:value={searchPreset[kind]}
-						/>
-					</Field>
-				{/if}
-			{/each}
-		</div>
-	</fieldset>
-
-	<fieldset class="flex flex-col gap-2" data-field="download_priority_preset" {disabled}>
-		<legend class="text-sm font-medium">{m.settings_download_priority_preset()}</legend>
-		<div class="grid items-end gap-3 sm:grid-cols-2 md:grid-cols-3">
-			{#each ARR_KINDS as kind (kind)}
-				{#if downloadPreset[kind] !== undefined}
-					<Field id={`download-priority-${kind}`} label={kindLabel(kind)}>
-						<input
-							id={`download-priority-${kind}`}
-							class="input"
-							type="number"
-							min="1"
-							max="100"
-							required
-							{disabled}
-							bind:value={downloadPreset[kind]}
-						/>
-					</Field>
-				{/if}
-			{/each}
-		</div>
-	</fieldset>
+	<div class="grid min-w-0 gap-4 sm:grid-cols-2">
+		<PriorityOrderFields bind:preset={searchPreset} order="search" {disabled} />
+		<PriorityOrderFields bind:preset={downloadPreset} order="download" {disabled} />
+	</div>
 </div>

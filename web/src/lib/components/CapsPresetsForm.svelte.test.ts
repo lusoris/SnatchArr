@@ -4,53 +4,23 @@
 
 import { fireEvent, screen, within } from '@testing-library/svelte';
 import { ProblemError } from '@sveltesentio/core';
+import { WCAG_22_AA_TAGS } from '@sveltesentio/testing/a11y';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
 import { api } from '#lib/api/client.js';
-import type { components } from '#lib/api/schema.js';
-import { kindLabel } from '#lib/kinds.js';
 import { m } from '#lib/paraglide/messages.js';
 import { session } from '#lib/session.svelte.js';
 import { assertProblemAlert, renderWithQuery, stubGet } from '#lib/testing/harness.js';
+import {
+	mediaFirstRanks,
+	settingsOnShippedPreset,
+	settingsStubs
+} from '#lib/testing/priority-fixtures.js';
 import CapsPresetsForm from './CapsPresetsForm.svelte';
 
-type Settings = components['schemas']['Settings'];
-type PriorityPreset = components['schemas']['PriorityPreset'];
+const sampleSettings = settingsOnShippedPreset({ updated_at: '2026-10-25T05:00:00Z' });
 
-const WCAG_22_AA_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
-
-const mediaFirstRanks = {
-	sonarr: 10,
-	radarr: 10,
-	lidarr: 20,
-	readarr: 30,
-	whisparr_v2: 40,
-	whisparr_v3: 40
-};
-
-const samplePresets: PriorityPreset[] = [
-	{
-		name: 'media_first',
-		search: mediaFirstRanks,
-		download: mediaFirstRanks
-	}
-];
-
-const sampleSettings: Settings = {
-	history_retention_days: 30,
-	user_agent: 'SnatchArr/1.0',
-	global_hourly_cap: 100,
-	search_priority_preset: { ...mediaFirstRanks },
-	download_priority_preset: { ...mediaFirstRanks },
-	llm_enabled: false,
-	llm_write_tools: [],
-	updated_at: '2026-10-25T05:00:00Z'
-};
-
-const baseStubs = {
-	'/settings': sampleSettings,
-	'/priority-presets': samplePresets
-};
+const baseStubs = settingsStubs(sampleSettings);
 
 async function getPriorityFieldsets(): Promise<{
 	search: HTMLElement;
@@ -71,7 +41,7 @@ describe('CapsPresetsForm', () => {
 		session.user = { id: 'u1', username: 'admin', role: 'admin' } as never;
 	});
 
-	it('renders cap field, priority preset sliders, and context help panel', async () => {
+	it('renders cap field, priority order lists, and context help panel', async () => {
 		stubGet(baseStubs);
 		renderWithQuery(CapsPresetsForm);
 
@@ -132,20 +102,16 @@ describe('CapsPresetsForm', () => {
 
 		const { search: searchFieldset, download: downloadFieldset } = await getPriorityFieldsets();
 
-		const sonarrSearch = within(searchFieldset).getByLabelText(
-			kindLabel('sonarr')
-		) as HTMLInputElement;
-		const whisparrDownload = within(downloadFieldset).getByLabelText(
-			kindLabel('whisparr_v3')
-		) as HTMLInputElement;
-		expect(sonarrSearch.value).toBe('55');
-		expect(whisparrDownload.value).toBe('5');
+		const sonarrSearch = searchFieldset.querySelector('#search-priority-sonarr')!;
+		const whisparrDownload = downloadFieldset.querySelector('#download-priority-whisparr_v3')!;
+		expect(sonarrSearch.getAttribute('data-rank')).toBe('55');
+		expect(whisparrDownload.getAttribute('data-rank')).toBe('5');
 
 		const resetBtn = await screen.findByRole('button', { name: m.settings_priority_reset() });
 		await fireEvent.click(resetBtn);
 
-		expect(sonarrSearch.value).toBe('10');
-		expect(whisparrDownload.value).toBe('40');
+		expect(sonarrSearch.getAttribute('data-rank')).toBe('10');
+		expect(whisparrDownload.getAttribute('data-rank')).toBe('40');
 
 		await fireEvent.click(screen.getByRole('button', { name: m.instance_save() }));
 		expect(putSpy).toHaveBeenCalledWith('/settings', {
@@ -157,47 +123,75 @@ describe('CapsPresetsForm', () => {
 		});
 	});
 
-	it('rejects out-of-bounds priority rank (0 and 101) and accepts boundary ranks (1 and 100) under axe', async () => {
-		stubGet(baseStubs);
-		const putSpy = vi.spyOn(api, 'PUT').mockResolvedValue({
-			data: sampleSettings
-		} as never);
+	it('preserves boundary ranks and provides bounded accessible list edits that save new ranks', async () => {
+		const boundary = {
+			...sampleSettings,
+			search_priority_preset: { ...mediaFirstRanks, sonarr: 1 },
+			download_priority_preset: { ...mediaFirstRanks, radarr: 100 }
+		};
+		stubGet({ ...baseStubs, '/settings': boundary });
+		const putSpy = vi.spyOn(api, 'PUT').mockResolvedValue({ data: boundary } as never);
 		const { container } = renderWithQuery(CapsPresetsForm);
-
-		const { search: searchFieldset, download: downloadFieldset } = await getPriorityFieldsets();
-
-		const sonarrSearch = within(searchFieldset).getByLabelText(
-			kindLabel('sonarr')
-		) as HTMLInputElement;
-		const radarrDownload = within(downloadFieldset).getByLabelText(
-			kindLabel('radarr')
-		) as HTMLInputElement;
-
+		const { search, download } = await getPriorityFieldsets();
+		expect(search.querySelector('#search-priority-sonarr')?.getAttribute('data-rank')).toBe('1');
+		expect(download.querySelector('#download-priority-radarr')?.getAttribute('data-rank')).toBe(
+			'100'
+		);
+		expect(within(search).queryByRole('spinbutton')).toBeNull();
+		expect(
+			(within(search).getAllByRole('listitem')[0].querySelector('button') as HTMLButtonElement)
+				.disabled
+		).toBe(true);
 		const axeResults = await axe(container, {
 			runOnly: { type: 'tag', values: [...WCAG_22_AA_TAGS] }
 		});
 		expect(axeResults.violations).toEqual([]);
-
-		// Negative: 0 and 101 refused
-		for (const invalid of ['0', '101']) {
-			await fireEvent.input(sonarrSearch, { target: { value: invalid } });
-			expect(sonarrSearch.checkValidity()).toBe(false);
-			await fireEvent.click(screen.getByRole('button', { name: m.instance_save() }));
-			expect(putSpy).not.toHaveBeenCalled();
-		}
-
-		// Boundary: 1 and 100 accepted
-		await fireEvent.input(sonarrSearch, { target: { value: '1' } });
-		await fireEvent.input(radarrDownload, { target: { value: '100' } });
-		expect(sonarrSearch.checkValidity()).toBe(true);
-		expect(radarrDownload.checkValidity()).toBe(true);
-
 		await fireEvent.click(screen.getByRole('button', { name: m.instance_save() }));
-		expect(putSpy).toHaveBeenCalledWith('/settings', {
+		expect(putSpy).toHaveBeenLastCalledWith('/settings', { body: boundary });
+		const move = within(search).getByRole('button', {
+			name: m.settings_priority_move_up({ kind: 'Lidarr' })
+		});
+		await fireEvent.click(move);
+		await fireEvent.click(move);
+		await fireEvent.click(screen.getByRole('button', { name: m.instance_save() }));
+		expect(putSpy).toHaveBeenLastCalledWith('/settings', {
+			body: {
+				...boundary,
+				search_priority_preset: {
+					lidarr: 10,
+					sonarr: 20,
+					radarr: 30,
+					readarr: 40,
+					whisparr_v2: 50,
+					whisparr_v3: 50
+				}
+			}
+		});
+	});
+
+	it('moves Lidarr above the shipped Sonarr/Radarr tie and saves the new search order', async () => {
+		stubGet(baseStubs);
+		const put = vi.spyOn(api, 'PUT').mockResolvedValue({ data: sampleSettings } as never);
+		renderWithQuery(CapsPresetsForm);
+		const { search } = await getPriorityFieldsets();
+		const move = within(search).getByRole('button', {
+			name: m.settings_priority_move_up({ kind: 'Lidarr' })
+		});
+		await fireEvent.click(move);
+		await fireEvent.click(move);
+		expect(within(search).getAllByRole('listitem')[0].getAttribute('data-kind')).toBe('lidarr');
+		await fireEvent.click(screen.getByRole('button', { name: m.instance_save() }));
+		expect(put).toHaveBeenCalledWith('/settings', {
 			body: {
 				...sampleSettings,
-				search_priority_preset: { ...mediaFirstRanks, sonarr: 1 },
-				download_priority_preset: { ...mediaFirstRanks, radarr: 100 }
+				search_priority_preset: {
+					lidarr: 10,
+					sonarr: 20,
+					radarr: 20,
+					readarr: 40,
+					whisparr_v2: 50,
+					whisparr_v3: 50
+				}
 			}
 		});
 	});
@@ -244,10 +238,10 @@ describe('CapsPresetsForm', () => {
 		const searchFieldset = (await screen.findByRole('group', {
 			name: m.settings_search_priority_preset()
 		})) as HTMLElement;
-		const sonarrSearch = within(searchFieldset).getByLabelText(
-			kindLabel('sonarr')
-		) as HTMLInputElement;
-		expect(sonarrSearch.disabled).toBe(true);
+		const sonarrMove = within(searchFieldset).getByRole('button', {
+			name: m.settings_priority_move_down({ kind: 'Sonarr' })
+		}) as HTMLButtonElement;
+		expect(sonarrMove.disabled).toBe(true);
 
 		const resetBtn = screen.getByRole('button', {
 			name: m.settings_priority_reset()

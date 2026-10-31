@@ -36,6 +36,7 @@ func findAuthorization(h http.Header, prefix string) (string, bool) {
 
 // operationRolesBearerAuth is a private map storing roles per operation.
 var operationRolesBearerAuth = map[string][]string{
+	ApplyPriorityPresetOperation:         []string{},
 	CancelRunOperation:                   []string{},
 	CreateAdultSourceOperation:           []string{},
 	CreateDownloadClientOperation:        []string{},
@@ -43,6 +44,7 @@ var operationRolesBearerAuth = map[string][]string{
 	CreateMyNotifyTargetOperation:        []string{},
 	CreateNotificationChannelOperation:   []string{},
 	CreateNotificationRuleOperation:      []string{},
+	CreatePriorityPresetOperation:        []string{},
 	CreateProwlarrLinkOperation:          []string{},
 	CreateScheduleOperation:              []string{},
 	CreateSeerrLinkOperation:             []string{},
@@ -54,6 +56,7 @@ var operationRolesBearerAuth = map[string][]string{
 	DeleteMyNotifyTargetOperation:        []string{},
 	DeleteNotificationChannelOperation:   []string{},
 	DeleteNotificationRuleOperation:      []string{},
+	DeletePriorityPresetOperation:        []string{},
 	DeleteProwlarrLinkOperation:          []string{},
 	DeleteScheduleOperation:              []string{},
 	DeleteSeerrLinkOperation:             []string{},
@@ -143,6 +146,7 @@ var operationRolesBearerAuth = map[string][]string{
 	UpdateNotificationChannelOperation:   []string{},
 	UpdateNotificationRuleOperation:      []string{},
 	UpdatePolicyOperation:                []string{},
+	UpdatePriorityPresetOperation:        []string{},
 	UpdateProwlarrLinkOperation:          []string{},
 	UpdateQueuePolicyOperation:           []string{},
 	UpdateRequestsSettingsOperation:      []string{},
@@ -176,6 +180,7 @@ func GetRolesForBearerAuth(operation string) []string {
 
 // operationRolesCookieAuth is a private map storing roles per operation.
 var operationRolesCookieAuth = map[string][]string{
+	ApplyPriorityPresetOperation:         []string{},
 	CancelRunOperation:                   []string{},
 	ChangePasswordOperation:              []string{},
 	CreateAPIKeyOperation:                []string{},
@@ -185,6 +190,7 @@ var operationRolesCookieAuth = map[string][]string{
 	CreateMyNotifyTargetOperation:        []string{},
 	CreateNotificationChannelOperation:   []string{},
 	CreateNotificationRuleOperation:      []string{},
+	CreatePriorityPresetOperation:        []string{},
 	CreateProwlarrLinkOperation:          []string{},
 	CreateScheduleOperation:              []string{},
 	CreateSeerrLinkOperation:             []string{},
@@ -196,6 +202,7 @@ var operationRolesCookieAuth = map[string][]string{
 	DeleteMyNotifyTargetOperation:        []string{},
 	DeleteNotificationChannelOperation:   []string{},
 	DeleteNotificationRuleOperation:      []string{},
+	DeletePriorityPresetOperation:        []string{},
 	DeleteProwlarrLinkOperation:          []string{},
 	DeleteScheduleOperation:              []string{},
 	DeleteSeerrLinkOperation:             []string{},
@@ -292,6 +299,7 @@ var operationRolesCookieAuth = map[string][]string{
 	UpdateNotificationChannelOperation:   []string{},
 	UpdateNotificationRuleOperation:      []string{},
 	UpdatePolicyOperation:                []string{},
+	UpdatePriorityPresetOperation:        []string{},
 	UpdateProwlarrLinkOperation:          []string{},
 	UpdateQueuePolicyOperation:           []string{},
 	UpdateRequestsSettingsOperation:      []string{},

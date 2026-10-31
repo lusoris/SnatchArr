@@ -1143,16 +1143,97 @@ paths:
     get:
       tags: [system]
       operationId: getPriorityPresets
-      summary: Shipped search and download priority presets
+      summary: Shipped and saved search and download priority presets
       responses:
         "200":
-          description: Shipped priority presets
+          description: Shipped preset first, then saved user presets ordered by name
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: "#/components/schemas/PriorityPreset"
+        default:
+          $ref: "#/components/responses/Problem"
+
+    post:
+      tags: [system]
+      operationId: createPriorityPreset
+      summary: Save both priority orders as a named preset (admin only)
+      description: Up to 20 user presets; names are unique ignoring case. The media_first name is reserved.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PriorityPresetInput"
+      responses:
+        "201":
+          description: Saved preset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PriorityPreset"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /priority-presets/{presetId}:
+    parameters:
+      - name: presetId
+        in: path
+        required: true
+        description: UUID of a saved preset. The shipped media_first preset is read-only.
+        schema:
+          type: string
+    put:
+      tags: [system]
+      operationId: updatePriorityPreset
+      summary: Replace a saved preset without changing the active settings (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PriorityPresetInput"
+      responses:
+        "200":
+          description: Updated preset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PriorityPreset"
+        default:
+          $ref: "#/components/responses/Problem"
+    delete:
+      tags: [system]
+      operationId: deletePriorityPreset
+      summary: Delete a saved preset without changing the active settings (admin only)
+      responses:
+        "204":
+          description: Preset deleted
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /priority-presets/{presetId}/apply:
+    parameters:
+      - name: presetId
+        in: path
+        required: true
+        description: UUID of a saved preset, or media_first for the shipped preset.
+        schema:
+          type: string
+    post:
+      tags: [system]
+      operationId: applyPriorityPreset
+      summary: Copy both preset maps into the active settings (admin only)
+      description: Later preset edits do not affect settings. POST /priority-presets/media_first/apply restores the shipped orders.
+      responses:
+        "200":
+          description: Settings with the applied priority orders
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
         default:
           $ref: "#/components/responses/Problem"
 
@@ -3528,11 +3609,33 @@ components:
 
     PriorityPreset:
       type: object
+      required: [name, search, download, builtin]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: UUID of a saved user preset; omitted for builtin presets.
+        builtin:
+          type: boolean
+          description: Whether this preset is shipped and read-only.
+        name:
+          type: string
+          description: Name of a saved preset, or media_first for the shipped preset.
+        search:
+          $ref: "#/components/schemas/PriorityPresetMap"
+        download:
+          $ref: "#/components/schemas/PriorityPresetMap"
+
+    PriorityPresetInput:
+      type: object
+      description: Both maps must contain exactly sonarr, radarr, lidarr, readarr, whisparr_v2 and whisparr_v3, with ranks from 1 to 100.
       required: [name, search, download]
       properties:
         name:
           type: string
-          description: Identifier of the shipped preset (e.g. media_first).
+          minLength: 1
+          maxLength: 40
+          description: Unique ignoring case; leading and trailing whitespace is trimmed. The name media_first is reserved.
         search:
           $ref: "#/components/schemas/PriorityPresetMap"
         download:

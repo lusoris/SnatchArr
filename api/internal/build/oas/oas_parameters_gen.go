@@ -15,6 +15,72 @@ import (
 	"github.com/ogen-go/ogen/validate"
 )
 
+// ApplyPriorityPresetParams is parameters of applyPriorityPreset operation.
+type ApplyPriorityPresetParams struct {
+	// UUID of a saved preset, or media_first for the shipped preset.
+	PresetId string
+}
+
+func unpackApplyPriorityPresetParams(packed middleware.Parameters) (params ApplyPriorityPresetParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "presetId",
+			In:   "path",
+		}
+		params.PresetId = packed[key].(string)
+	}
+	return params
+}
+
+func decodeApplyPriorityPresetParams(args [1]string, argsEscaped bool, r *http.Request) (params ApplyPriorityPresetParams, _ error) {
+	// Decode path: presetId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "presetId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToString(val)
+				if err != nil {
+					return err
+				}
+
+				params.PresetId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "presetId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
 // CancelRunParams is parameters of cancelRun operation.
 type CancelRunParams struct {
 	RunId uuid.UUID
@@ -528,6 +594,72 @@ func decodeDeleteNotificationRuleParams(args [1]string, argsEscaped bool, r *htt
 	}(); err != nil {
 		return params, &ogenerrors.DecodeParamError{
 			Name: "ruleId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
+// DeletePriorityPresetParams is parameters of deletePriorityPreset operation.
+type DeletePriorityPresetParams struct {
+	// UUID of a saved preset. The shipped media_first preset is read-only.
+	PresetId string
+}
+
+func unpackDeletePriorityPresetParams(packed middleware.Parameters) (params DeletePriorityPresetParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "presetId",
+			In:   "path",
+		}
+		params.PresetId = packed[key].(string)
+	}
+	return params
+}
+
+func decodeDeletePriorityPresetParams(args [1]string, argsEscaped bool, r *http.Request) (params DeletePriorityPresetParams, _ error) {
+	// Decode path: presetId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "presetId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToString(val)
+				if err != nil {
+					return err
+				}
+
+				params.PresetId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "presetId",
 			In:   "path",
 			Err:  err,
 		}
@@ -5532,6 +5664,72 @@ func decodeUpdatePolicyParams(args [1]string, argsEscaped bool, r *http.Request)
 	}(); err != nil {
 		return params, &ogenerrors.DecodeParamError{
 			Name: "instanceId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
+// UpdatePriorityPresetParams is parameters of updatePriorityPreset operation.
+type UpdatePriorityPresetParams struct {
+	// UUID of a saved preset. The shipped media_first preset is read-only.
+	PresetId string
+}
+
+func unpackUpdatePriorityPresetParams(packed middleware.Parameters) (params UpdatePriorityPresetParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "presetId",
+			In:   "path",
+		}
+		params.PresetId = packed[key].(string)
+	}
+	return params
+}
+
+func decodeUpdatePriorityPresetParams(args [1]string, argsEscaped bool, r *http.Request) (params UpdatePriorityPresetParams, _ error) {
+	// Decode path: presetId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "presetId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToString(val)
+				if err != nil {
+					return err
+				}
+
+				params.PresetId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "presetId",
 			In:   "path",
 			Err:  err,
 		}

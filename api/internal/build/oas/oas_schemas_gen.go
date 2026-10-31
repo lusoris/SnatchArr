@@ -2124,6 +2124,9 @@ type DeleteNotificationChannelNoContent struct{}
 // DeleteNotificationRuleNoContent is response for DeleteNotificationRule operation.
 type DeleteNotificationRuleNoContent struct{}
 
+// DeletePriorityPresetNoContent is response for DeletePriorityPreset operation.
+type DeletePriorityPresetNoContent struct{}
+
 // DeleteProwlarrLinkNoContent is response for DeleteProwlarrLink operation.
 type DeleteProwlarrLinkNoContent struct{}
 
@@ -6342,10 +6345,24 @@ func (s *PreviewTarget) SetCost(val int) {
 
 // Ref: #/components/schemas/PriorityPreset
 type PriorityPreset struct {
-	// Identifier of the shipped preset (e.g. media_first).
+	// UUID of a saved user preset; omitted for builtin presets.
+	ID OptUUID `json:"id"`
+	// Whether this preset is shipped and read-only.
+	Builtin bool `json:"builtin"`
+	// Name of a saved preset, or media_first for the shipped preset.
 	Name     string            `json:"name"`
 	Search   PriorityPresetMap `json:"search"`
 	Download PriorityPresetMap `json:"download"`
+}
+
+// GetID returns the value of ID.
+func (s *PriorityPreset) GetID() OptUUID {
+	return s.ID
+}
+
+// GetBuiltin returns the value of Builtin.
+func (s *PriorityPreset) GetBuiltin() bool {
+	return s.Builtin
 }
 
 // GetName returns the value of Name.
@@ -6363,6 +6380,16 @@ func (s *PriorityPreset) GetDownload() PriorityPresetMap {
 	return s.Download
 }
 
+// SetID sets the value of ID.
+func (s *PriorityPreset) SetID(val OptUUID) {
+	s.ID = val
+}
+
+// SetBuiltin sets the value of Builtin.
+func (s *PriorityPreset) SetBuiltin(val bool) {
+	s.Builtin = val
+}
+
 // SetName sets the value of Name.
 func (s *PriorityPreset) SetName(val string) {
 	s.Name = val
@@ -6375,6 +6402,46 @@ func (s *PriorityPreset) SetSearch(val PriorityPresetMap) {
 
 // SetDownload sets the value of Download.
 func (s *PriorityPreset) SetDownload(val PriorityPresetMap) {
+	s.Download = val
+}
+
+// Both maps must contain exactly sonarr, radarr, lidarr, readarr, whisparr_v2 and whisparr_v3, with
+// ranks from 1 to 100.
+// Ref: #/components/schemas/PriorityPresetInput
+type PriorityPresetInput struct {
+	// Unique ignoring case; leading and trailing whitespace is trimmed. The name media_first is reserved.
+	Name     string            `json:"name"`
+	Search   PriorityPresetMap `json:"search"`
+	Download PriorityPresetMap `json:"download"`
+}
+
+// GetName returns the value of Name.
+func (s *PriorityPresetInput) GetName() string {
+	return s.Name
+}
+
+// GetSearch returns the value of Search.
+func (s *PriorityPresetInput) GetSearch() PriorityPresetMap {
+	return s.Search
+}
+
+// GetDownload returns the value of Download.
+func (s *PriorityPresetInput) GetDownload() PriorityPresetMap {
+	return s.Download
+}
+
+// SetName sets the value of Name.
+func (s *PriorityPresetInput) SetName(val string) {
+	s.Name = val
+}
+
+// SetSearch sets the value of Search.
+func (s *PriorityPresetInput) SetSearch(val PriorityPresetMap) {
+	s.Search = val
+}
+
+// SetDownload sets the value of Download.
+func (s *PriorityPresetInput) SetDownload(val PriorityPresetMap) {
 	s.Download = val
 }
 
