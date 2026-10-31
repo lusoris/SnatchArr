@@ -75,7 +75,7 @@ func TestStateLoop_RunsByStatus(t *testing.T) {
 	if _, err = f.runs.Lease(t.Context(), "worker-1"); err != nil {
 		t.Fatalf("Lease() = %v", err)
 	}
-	if _, err = f.runs.Complete(t.Context(), r1.ID, "worker-1", domain.RunDone, 5, ""); err != nil {
+	if _, err = f.runs.Complete(t.Context(), r1.ID, "worker-1", domain.RunDone, 5, "", nil); err != nil {
 		t.Fatalf("Complete() = %v", err)
 	}
 

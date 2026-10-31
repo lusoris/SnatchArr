@@ -594,7 +594,7 @@ func (s *Server) CompleteRun(ctx context.Context, req *snatcharrv1.CompleteRunRe
 	if err := s.persistRunProgress(ctx, run, policy, req, searched); err != nil {
 		return nil, toStatus(err)
 	}
-	if _, err := s.runs.Complete(ctx, run.ID, req.GetWorkerId(), outcome(req.GetOutcome()), len(searched), req.GetError()); err != nil {
+	if _, err := s.runs.Complete(ctx, run.ID, req.GetWorkerId(), outcome(req.GetOutcome()), len(searched), req.GetError(), req.EligibleItems); err != nil {
 		return nil, toStatus(err)
 	}
 	if !run.DryRun {

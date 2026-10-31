@@ -13,6 +13,7 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"time"
 
@@ -31,6 +32,7 @@ type config struct {
 	timeout  time.Duration
 	token    string
 	instance string
+	eligible int64
 }
 
 const (
@@ -50,6 +52,7 @@ var (
 	errBadOutcome  = errors.New("outcome must be 'failed' or 'done'")
 	errBadCount    = errors.New("count must be > 0")
 	errBadTimeout  = errors.New("timeout must be > 0")
+	errBadEligible = errors.New("eligible must fit uint32")
 )
 
 func parseFlags(args []string) (config, error) {
@@ -71,6 +74,8 @@ func parseFlags(args []string) (config, error) {
 	fs.StringVar(&cfg.token, "token", defaultToken, "worker bearer token")
 	fs.StringVar(&cfg.instance, "instance", "", "complete only runs of this instance id; a run of another instance is held until its lease expires")
 
+	fs.Int64Var(&cfg.eligible, "eligible", -1, "eligible pool size; negative means absent")
+
 	if err := fs.Parse(args); err != nil {
 		return config{}, fmt.Errorf("parse flags: %w", err)
 	}
@@ -82,6 +87,9 @@ func parseFlags(args []string) (config, error) {
 	}
 	if cfg.timeout <= 0 {
 		return config{}, fmt.Errorf("%w: got %v", errBadTimeout, cfg.timeout)
+	}
+	if cfg.eligible > math.MaxUint32 {
+		return config{}, fmt.Errorf("%w: got %d", errBadEligible, cfg.eligible)
 	}
 	return cfg, nil
 }
@@ -119,7 +127,7 @@ func leaseRun(ctx context.Context, client snatcharrv1.WorkerServiceClient, worke
 	return "", errNoRunLeased
 }
 
-func completeRun(ctx context.Context, client snatcharrv1.WorkerServiceClient, workerID, runID, outcome string) error {
+func completeRun(ctx context.Context, client snatcharrv1.WorkerServiceClient, workerID, runID, outcome string, eligible int64) error {
 	protoOutcome := snatcharrv1.RunOutcome_RUN_OUTCOME_FAILED
 	errMsg := "simulated failure by fakeworker"
 	if outcome == "done" {
@@ -130,11 +138,16 @@ func completeRun(ctx context.Context, client snatcharrv1.WorkerServiceClient, wo
 	callCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
+	var eligibleItems *uint32
+	if eligible >= 0 {
+		eligibleItems = new(uint32(min(eligible, math.MaxUint32))) // #nosec G115 -- clamped
+	}
 	_, err := client.CompleteRun(callCtx, &snatcharrv1.CompleteRunRequest{
-		RunId:    runID,
-		WorkerId: workerID,
-		Outcome:  protoOutcome,
-		Error:    errMsg,
+		RunId:         runID,
+		WorkerId:      workerID,
+		Outcome:       protoOutcome,
+		Error:         errMsg,
+		EligibleItems: eligibleItems,
 	})
 	if err != nil {
 		return fmt.Errorf("complete rpc for run %s: %w", runID, err)
@@ -151,7 +164,7 @@ func processRuns(ctx context.Context, client snatcharrv1.WorkerServiceClient, cf
 		}
 		logger.InfoContext(ctx, "leased run", slog.String("run_id", runID), slog.String("outcome", cfg.outcome))
 
-		if err := completeRun(ctx, client, cfg.workerID, runID, cfg.outcome); err != nil {
+		if err := completeRun(ctx, client, cfg.workerID, runID, cfg.outcome, cfg.eligible); err != nil {
 			return fmt.Errorf("run %d of %d complete failed: %w", i+1, cfg.count, err)
 		}
 		logger.InfoContext(ctx, "completed run", slog.String("run_id", runID), slog.String("outcome", cfg.outcome))

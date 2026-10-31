@@ -406,6 +406,7 @@ type SnatchRun struct {
 	LeaseCount     int32
 	DryRun         bool
 	Seed           int64
+	EligibleItems  *int32
 }
 
 type User struct {

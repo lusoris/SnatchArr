@@ -35,6 +35,7 @@ type Metrics struct {
 	searchLastDispatched    *prometheus.GaugeVec
 	instanceLastRunFinished *prometheus.GaugeVec
 	instanceRunInterval     *prometheus.GaugeVec
+	instanceEligibleItems   *prometheus.GaugeVec
 	staminaUsed             *prometheus.GaugeVec
 	staminaRemaining        *prometheus.GaugeVec
 	runsCount               *prometheus.GaugeVec
@@ -112,6 +113,7 @@ func New(reg prometheus.Registerer) (*Metrics, error) {
 		searchesDispatched:      b.counter("snatcharr_searches_dispatched_total", "Items dispatched to *arr instances, by instance name and snatch kind.", "arr_instance", "kind"),
 		searchLastDispatched:    b.gauge("snatcharr_search_last_dispatched_timestamp_seconds", "Unix time of the last search dispatched to an *arr instance, by instance name.", "arr_instance"),
 		instanceLastRunFinished: b.gauge("snatcharr_instance_last_run_finished_timestamp_seconds", "Unix time of the last terminal run finished for an *arr instance, by instance name and outcome.", "arr_instance", "outcome"),
+		instanceEligibleItems:   b.gauge("snatcharr_instance_eligible_items", "Wanted items on pages read by the newest finished non-dry-run snatch run of an instance and kind that passed policy filters, queued/recent-grab skips and processed memory (afterglow), before the per-cycle limit and hourly budget.", "arr_instance", "kind"),
 		instanceRunInterval:     b.gauge("snatcharr_instance_run_interval_seconds", "Configured cycle interval in seconds for an *arr instance, by instance name.", "arr_instance"),
 		staminaUsed:             b.gauge("snatcharr_stamina_used_items", "Stamina spent in the current rolling hourly span, by instance name.", "arr_instance"),
 		staminaRemaining:        b.gauge("snatcharr_stamina_remaining_items", "Stamina remaining in the current rolling hourly span under effective cap, by instance name.", "arr_instance"),
@@ -297,6 +299,14 @@ func (m *Metrics) SetInstanceRunInterval(instance string, seconds float64) {
 	m.instanceRunInterval.WithLabelValues(instance).Set(seconds)
 }
 
+// SetInstanceEligibleItems records the filtered pool before selection and budget.
+func (m *Metrics) SetInstanceEligibleItems(instance, kind string, items float64) {
+	if m == nil || m.instanceEligibleItems == nil {
+		return
+	}
+	m.instanceEligibleItems.WithLabelValues(instance, kind).Set(items)
+}
+
 // ResetInstanceRuns clears all instance run gauges so disabled or deleted instances do not linger.
 func (m *Metrics) ResetInstanceRuns() {
 	if m == nil {
@@ -307,6 +317,9 @@ func (m *Metrics) ResetInstanceRuns() {
 	}
 	if m.instanceRunInterval != nil {
 		m.instanceRunInterval.Reset()
+	}
+	if m.instanceEligibleItems != nil {
+		m.instanceEligibleItems.Reset()
 	}
 }
 

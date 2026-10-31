@@ -223,7 +223,7 @@ func (r *Runs) Get(ctx context.Context, runID uuid.UUID) (domain.Run, error) {
 }
 
 // Complete closes a leased run.
-func (r *Runs) Complete(ctx context.Context, runID uuid.UUID, workerID string, status domain.RunStatus, searched int, errMsg string) (domain.Run, error) {
+func (r *Runs) Complete(ctx context.Context, runID uuid.UUID, workerID string, status domain.RunStatus, searched int, errMsg string, eligible *uint32) (domain.Run, error) {
 	if status != domain.RunDone && status != domain.RunFailed && status != domain.RunCancelled {
 		return domain.Run{}, fmt.Errorf("%w: run status %q is not terminal", domain.ErrInvalid, status)
 	}
@@ -231,10 +231,16 @@ func (r *Runs) Complete(ctx context.Context, runID uuid.UUID, workerID string, s
 	if errMsg != "" {
 		errPtr = &errMsg
 	}
+	var eligibleItems *int32
+	if eligible != nil {
+		// PostgreSQL INTEGER cannot represent the upper half of uint32.
+		eligibleItems = new(int32(min(*eligible, math.MaxInt32))) // #nosec G115 -- clamped to INTEGER range
+	}
 	row, err := r.st.Q().CompleteRun(ctx, sqlcgen.CompleteRunParams{
 		ID: runID, LeasedBy: &workerID, Status: string(status), FinishedAt: new(r.clk.Now()),
 		SearchedCount: int32(min(searched, 1<<30)), // #nosec G115 -- clamped
 		Error:         errPtr,
+		EligibleItems: eligibleItems,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Run{}, fmt.Errorf("%w: run %s is not leased by %s", domain.ErrConflict, runID, workerID)
