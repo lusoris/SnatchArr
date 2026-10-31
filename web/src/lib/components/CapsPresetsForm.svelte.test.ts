@@ -4,6 +4,7 @@
 
 import { fireEvent, screen, within } from '@testing-library/svelte';
 import { ProblemError } from '@sveltesentio/core';
+import { WCAG_22_AA_TAGS } from '@sveltesentio/testing/a11y';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
 import { api } from '#lib/api/client.js';
@@ -16,8 +17,6 @@ import {
 	settingsStubs
 } from '#lib/testing/priority-fixtures.js';
 import CapsPresetsForm from './CapsPresetsForm.svelte';
-
-const WCAG_22_AA_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 
 const sampleSettings = settingsOnShippedPreset({ updated_at: '2026-10-25T05:00:00Z' });
 
