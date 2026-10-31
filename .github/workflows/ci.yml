@@ -25,7 +25,7 @@ jobs:
     uses: ./.github/workflows/commit-policy.yml
 
   # Runs on every change, with no filter: a change that touches no component skips the jobs
-  # below, and the workflow files are then all that is left to gate.
+  # below, so workflow lint and CI/release script self-tests still gate it.
   workflows:
     name: Workflows (actionlint, pinned actions)
     runs-on: ubuntu-26.04
@@ -52,6 +52,9 @@ jobs:
         run: sh tools/ci/status_test.sh
       - name: The Security Scan issue step behaves on its planted cases
         run: sh tools/ci/security_issue_test.sh
+      # These run at tag time only otherwise, so a pull request that breaks either script would land green.
+      - name: The release dogfood gate and pass recorder refuse their planted cases
+        run: make release-dogfood-check
       - name: The workflow check refuses its planted cases
         env:
           GH_TOKEN: ${{ github.token }}
