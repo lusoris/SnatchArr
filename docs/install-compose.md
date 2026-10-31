@@ -71,6 +71,11 @@ docker compose up -d --wait
 The API applies its database migrations on start. Do not skip the backup: migrations only
 move forward, and a downgrade needs the backup taken before the upgrade.
 
+`make e2e-compose-app-upgrade` tests this path: seeds an install on the previous release,
+restarts on candidate images, and verifies that schema migrations advance, settings and data
+read back unchanged, the admin logs in and stored credentials decrypt. CI runs it on every
+pull request.
+
 A new Postgres major does not start on a data volume of the previous major. Move the database
 across as below.
 
