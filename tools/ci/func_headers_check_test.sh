@@ -136,6 +136,43 @@ edit_18() {
     :
 }
 
+# edit_19: shell function with comment after opening brace recognized.
+edit_19() {
+    printf "%s\n" "" "new_fn() { # why" "    :" "}" >>lib.sh
+}
+
+# edit_20: committed file with quoted non-ASCII name in diff checked.
+edit_20() {
+    printf '%s\n' '#!/usr/bin/env bash' 'bare_naive() {' '    echo naive' '}' >"naïve.sh"
+    git add "naïve.sh" && git commit -q -m naive
+    sed -i "s/echo naive/echo changed/" "naïve.sh"
+}
+
+# edit_21: untracked file with quoted non-ASCII name checked.
+edit_21() {
+    printf '%s\n' '#!/usr/bin/env bash' 'bare_uber() {' '    echo uber' '}' >"über.sh"
+}
+
+# edit_22: closing brace inside heredoc body does not end function early.
+edit_22() {
+    printf '%s\n' '' 'undoc() {' "    cat <<'EOF'" '}' 'EOF' '    echo changed' '}' >>lib.sh
+    git add lib.sh && git commit -q -m undoc
+    sed -i "s/echo changed/echo touched/" lib.sh
+}
+
+# edit_23: arithmetic left shift is no heredoc, so the function end is still found.
+# shellcheck disable=SC2016 # literal $((...)) is the fixture text
+edit_23() {
+    printf '%s\n' '' 'undoc_shift() {' '    echo $((1 << 2))' '    echo a' '}' >>lib.sh
+    git add lib.sh && git commit -q -m shift
+    sed -i "s/echo a$/echo b/" lib.sh
+}
+
+# edit_24: untracked file whose name starts with a space keeps its name.
+edit_24() {
+    printf '%s\n' '#!/usr/bin/env bash' 'bare_space() {' '    echo space' '}' >" lead.sh"
+}
+
 expect "untouched bare function passes" 0 "ok (" edit_1
 expect "new shell function without header refused" 1 "shell function new_fn has no header comment" edit_2
 expect "edit inside a bare shell function refused" 1 "shell function bare_fn has no header comment" edit_3
@@ -154,6 +191,12 @@ expect "untracked shell file with bare function refused" 1 "new.sh:2: shell func
 expect "untracked shell file with header passes" 0 "ok (" edit_16
 expect "shell function closed with semicolon does not run on" 0 "ok (" edit_17
 expect "option-like base ref refused" 2 "starts with '-'" edit_18 "--output=/dev/null"
+expect "comment after opening brace recognized as shell function" 1 "shell function new_fn has no header comment" edit_19
+expect "committed file with quoted non-ASCII name in diff checked" 1 "shell function bare_naive has no header comment" edit_20
+expect "untracked file with quoted non-ASCII name checked" 1 "shell function bare_uber has no header comment" edit_21
+expect "closing brace inside heredoc body does not end function early" 1 "shell function undoc has no header comment" edit_22
+expect "arithmetic shift is not a heredoc" 1 "shell function undoc_shift has no header comment" edit_23
+expect "untracked name with leading space checked" 1 "shell function bare_space has no header comment" edit_24
 
 if [ "$failed" -ne 0 ]; then
     exit 1
