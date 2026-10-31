@@ -7,12 +7,14 @@ manifest, changelog, and `extra-files` declared in `release-please-config.json`.
 Before the release workflow builds images or charts, this gate verifies through the
 GitHub REST API (or an offline `--api-dir` fixture directory) that:
 1. the tag commit has exactly one parent;
-2. the parent commit's newest `snatcharr/dogfood` status is `success`;
+2. the parent commit's newest `snatcharr/dogfood` status is `success` and its
+   description names the live instance (`cluster` by default);
 3. every file changed between the parent commit and the tag commit belongs to the
    allowed set derived from `release-please-config.json`.
 """
 
 import argparse
+import importlib.util
 import json
 import re
 import subprocess
@@ -22,12 +24,15 @@ from pathlib import Path
 
 GH_TIMEOUT_SECONDS = 60
 DOGFOOD_CONTEXT = "snatcharr/dogfood"
+LIVE_INSTANCE = "cluster"
 DEFAULT_CONFIG = "release-please-config.json"
 DEFAULT_MANIFEST = ".release-please-manifest.json"
 DEFAULT_CHANGELOG = "CHANGELOG.md"
 MAX_REFUSED_FILES = 10
 REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 TAG_RE = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+([+-][A-Za-z0-9._-]+)?$")
+INSTANCE_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,31}$")
+STATUS_INSTANCE_RE = re.compile(r"^MCP dogfood on ([a-z0-9][a-z0-9-]{0,31}): ")
 
 
 class CheckError(Exception):
@@ -144,10 +149,22 @@ def resolve_tag_parent(
     return sha, parent, None
 
 
+def status_instance(description: object) -> str | None:
+    """Extract the instance label from a dogfood status description, if present."""
+    if not isinstance(description, str):
+        return None
+    match = STATUS_INSTANCE_RE.match(description)
+    return match.group(1) if match else None
+
+
 def verify_parent_status(
-    repository: str, tag: str, parent_sha: str, api_dir: Path | None
+    repository: str,
+    tag: str,
+    parent_sha: str,
+    api_dir: Path | None,
+    live_instance: str = LIVE_INSTANCE,
 ) -> str | None:
-    """Return None when newest snatcharr/dogfood status on parent_sha is success, else refusal."""
+    """Require the newest dogfood status to be successful and name the live instance."""
     status_data = read_api(f"repos/{repository}/commits/{parent_sha}/status", api_dir)
     statuses = status_data.get("statuses")
     if not isinstance(statuses, list):
@@ -157,12 +174,24 @@ def verify_parent_status(
             raise CheckError(f"invalid status entry for {parent_sha[:12]}")
         if entry.get("context") == DOGFOOD_CONTEXT:
             state = entry.get("state")
-            if state == "success":
-                return None
-            return (
-                f"dogfood gate: refused {tag}: parent {parent_sha[:12]} "
-                f"latest {DOGFOOD_CONTEXT} status is {state!r}, not 'success'"
-            )
+            if state != "success":
+                return (
+                    f"dogfood gate: refused {tag}: parent {parent_sha[:12]} "
+                    f"latest {DOGFOOD_CONTEXT} status is {state!r}, not 'success'"
+                )
+            description = entry.get("description")
+            instance = status_instance(description)
+            if instance is None:
+                return (
+                    f"dogfood gate: refused {tag}: parent {parent_sha[:12]} "
+                    f"{DOGFOOD_CONTEXT} status names no instance (description {description!r})"
+                )
+            if instance != live_instance:
+                return (
+                    f"dogfood gate: refused {tag}: parent {parent_sha[:12]} "
+                    f"{DOGFOOD_CONTEXT} status is from instance {instance!r}, not {live_instance!r}"
+                )
+            return None
     return f"dogfood gate: refused {tag}: parent {parent_sha[:12]} has no {DOGFOOD_CONTEXT} status"
 
 
@@ -195,18 +224,24 @@ def verify_changed_files(
 
 
 def evaluate_gate(
-    repository: str, tag: str, config_path: Path, api_dir: Path | None = None
+    repository: str,
+    tag: str,
+    config_path: Path,
+    api_dir: Path | None = None,
+    live_instance: str = LIVE_INSTANCE,
 ) -> tuple[int, str]:
     """Check tag against dogfood status and allowed files; return (exit_code, message)."""
-    if not repository or not REPO_RE.fullmatch(repository):
+    if not REPO_RE.fullmatch(repository):
         raise CheckError(f"invalid repository: {repository!r}")
-    if not tag or not TAG_RE.fullmatch(tag):
+    if not TAG_RE.fullmatch(tag):
         raise CheckError(f"invalid tag: {tag!r}")
+    if not INSTANCE_RE.fullmatch(live_instance):
+        raise CheckError(f"invalid instance label: {live_instance!r}")
     allowed = allowed_files(config_path)
     tag_sha, parent_sha, parent_refusal = resolve_tag_parent(repository, tag, api_dir)
     if parent_refusal is not None or parent_sha is None:
         return 3, parent_refusal or "dogfood gate: refused"
-    status_refusal = verify_parent_status(repository, tag, parent_sha, api_dir)
+    status_refusal = verify_parent_status(repository, tag, parent_sha, api_dir, live_instance)
     if status_refusal is not None:
         return 3, status_refusal
     diff_refusal = verify_changed_files(
@@ -275,10 +310,110 @@ SELF_TEST_CASES = (
         "pass with dogfood success and allowed files",
         "pass_case",
         [FIXTURE_PARENT_SHA],
-        [{"context": DOGFOOD_CONTEXT, "state": "success"}],
+        [{
+            "context": DOGFOOD_CONTEXT,
+            "state": "success",
+            "description": "MCP dogfood on cluster: 18 read-only calls passed",
+        }],
         DEFAULT_DIFF_FILES,
         0,
         f"dogfood gate: pass {FIXTURE_TAG} parent {FIXTURE_PARENT_SHA[:12]}",
+    ),
+    (
+        "dev compose success is refused",
+        "dev_compose",
+        [FIXTURE_PARENT_SHA],
+        [{
+            "context": DOGFOOD_CONTEXT,
+            "state": "success",
+            "description": "MCP dogfood on dev-compose: 18 read-only calls passed",
+        }],
+        DEFAULT_DIFF_FILES,
+        3,
+        "is from instance 'dev-compose', not 'cluster'",
+    ),
+    (
+        "old description names no instance",
+        "old_description",
+        [FIXTURE_PARENT_SHA],
+        [{
+            "context": DOGFOOD_CONTEXT,
+            "state": "success",
+            "description": "live MCP dogfood: 18 read-only calls passed",
+        }],
+        DEFAULT_DIFF_FILES,
+        3,
+        "status names no instance (description 'live MCP dogfood: 18 read-only calls passed')",
+    ),
+    (
+        "missing description names no instance",
+        "missing_description",
+        [FIXTURE_PARENT_SHA],
+        [{"context": DOGFOOD_CONTEXT, "state": "success"}],
+        DEFAULT_DIFF_FILES,
+        3,
+        "status names no instance (description None)",
+    ),
+    (
+        "malformed description names no instance",
+        "malformed_description",
+        [FIXTURE_PARENT_SHA],
+        [{
+            "context": DOGFOOD_CONTEXT,
+            "state": "success",
+            "description": "MCP dogfood on Cluster: 18 read-only calls passed",
+        }],
+        DEFAULT_DIFF_FILES,
+        3,
+        "names no instance",
+    ),
+    (
+        "newer dev compose success over older cluster success is refused",
+        "newer_dev_compose",
+        [FIXTURE_PARENT_SHA],
+        [
+            {
+                "context": DOGFOOD_CONTEXT,
+                "state": "success",
+                "description": "MCP dogfood on dev-compose: 18 read-only calls passed",
+            },
+            {
+                "context": DOGFOOD_CONTEXT,
+                "state": "success",
+                "description": "MCP dogfood on cluster: 18 read-only calls passed",
+            },
+        ],
+        DEFAULT_DIFF_FILES,
+        3,
+        "is from instance 'dev-compose', not 'cluster'",
+    ),
+    (
+        "live instance override accepts dev compose",
+        "override_dev_compose",
+        [FIXTURE_PARENT_SHA],
+        [{
+            "context": DOGFOOD_CONTEXT,
+            "state": "success",
+            "description": "MCP dogfood on dev-compose: 18 read-only calls passed",
+        }],
+        DEFAULT_DIFF_FILES,
+        0,
+        "dogfood gate: pass",
+        ["--live-instance", "dev-compose"],
+    ),
+    (
+        "malformed live instance is refused",
+        "malformed_live_instance",
+        [FIXTURE_PARENT_SHA],
+        [{
+            "context": DOGFOOD_CONTEXT,
+            "state": "success",
+            "description": "MCP dogfood on cluster: 18 read-only calls passed",
+        }],
+        DEFAULT_DIFF_FILES,
+        1,
+        "invalid instance label: 'Bad Label'",
+        ["--live-instance", "Bad Label"],
     ),
     (
         "no snatcharr/dogfood status on parent",
@@ -293,7 +428,11 @@ SELF_TEST_CASES = (
         "snatcharr/dogfood status is failure",
         "status_failure",
         [FIXTURE_PARENT_SHA],
-        [{"context": DOGFOOD_CONTEXT, "state": "failure"}],
+        [{
+            "context": DOGFOOD_CONTEXT,
+            "state": "failure",
+            "description": "MCP dogfood on cluster: 1 read-only calls, 1 failed",
+        }],
         DEFAULT_DIFF_FILES,
         3,
         "latest snatcharr/dogfood status is 'failure'",
@@ -303,8 +442,16 @@ SELF_TEST_CASES = (
         "newer_failure",
         [FIXTURE_PARENT_SHA],
         [
-            {"context": DOGFOOD_CONTEXT, "state": "failure"},
-            {"context": DOGFOOD_CONTEXT, "state": "success"},
+            {
+                "context": DOGFOOD_CONTEXT,
+                "state": "failure",
+                "description": "MCP dogfood on cluster: 1 read-only calls, 1 failed",
+            },
+            {
+                "context": DOGFOOD_CONTEXT,
+                "state": "success",
+                "description": "MCP dogfood on cluster: 18 read-only calls passed",
+            },
         ],
         DEFAULT_DIFF_FILES,
         3,
@@ -314,7 +461,11 @@ SELF_TEST_CASES = (
         "extra file api/main.go in diff is refused",
         "extra_file",
         [FIXTURE_PARENT_SHA],
-        [{"context": DOGFOOD_CONTEXT, "state": "success"}],
+        [{
+            "context": DOGFOOD_CONTEXT,
+            "state": "success",
+            "description": "MCP dogfood on cluster: 18 read-only calls passed",
+        }],
         [*DEFAULT_DIFF_FILES, "api/main.go"],
         3,
         "api/main.go",
@@ -323,7 +474,11 @@ SELF_TEST_CASES = (
         "merge commit with 2 parents is refused",
         "merge_commit",
         [FIXTURE_PARENT_SHA, FIXTURE_SECOND_PARENT],
-        [{"context": DOGFOOD_CONTEXT, "state": "success"}],
+        [{
+            "context": DOGFOOD_CONTEXT,
+            "state": "success",
+            "description": "MCP dogfood on cluster: 18 read-only calls passed",
+        }],
         DEFAULT_DIFF_FILES,
         3,
         "has 2 parents, want 1",
@@ -347,28 +502,77 @@ def self_test_config_parse(root: Path) -> None:
     print("ok   config parse with extra-files as object and string")
 
 
+def self_test_description_contract() -> None:
+    """Parse descriptions built by the pass recorder's production formatter."""
+    path = Path(__file__).with_name("dogfood_pass.py")
+    spec = importlib.util.spec_from_file_location("dogfood_pass_contract", path)
+    if spec is None or spec.loader is None:
+        raise SelfTestError(f"cannot load dogfood pass from {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    for instance in ("cluster", "dev-compose"):
+        for summary in (
+            "18 read-only calls passed",
+            "commit mismatch",
+            "18 read-only calls, 1 failed",
+        ):
+            description = module.status_description(instance, summary)
+            if status_instance(description) != instance:
+                raise SelfTestError(f"description contract mismatch: {description!r}")
+    print("ok   status description contract for cluster and dev-compose")
+
+
+def self_test_gate_case(
+    root: Path,
+    label: str,
+    name: str,
+    parents: list[str],
+    statuses: list[dict[str, str]],
+    diff_files: list[str],
+    want_exit: int,
+    needle: str,
+    arguments: list[str] | None = None,
+) -> None:
+    """Run one CLI fixture case and check its exit code and diagnostic."""
+    api_dir, cfg_path = write_fixture_dir(root, name, parents, statuses, diff_files)
+    command = [
+        "--repository", FIXTURE_REPO,
+        "--tag", FIXTURE_TAG,
+        "--config", str(cfg_path),
+        "--api-dir", str(api_dir),
+        *(arguments or []),
+    ]
+    try:
+        result = subprocess.run(
+            [sys.executable, "-I", str(Path(__file__)), *command],
+            capture_output=True,
+            text=True,
+            timeout=GH_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise SelfTestError(f"{label}: CLI did not complete: {error}") from error
+    got_exit = result.returncode
+    message = result.stdout + result.stderr
+    if got_exit != want_exit:
+        raise SelfTestError(
+            f"{label}: expected exit {want_exit}, got {got_exit} ({message.strip()})"
+        )
+    if needle not in message:
+        raise SelfTestError(f"{label}: expected {needle!r} in {message!r}")
+    print(f"ok   {label}: exit {got_exit}")
+
+
 def self_test() -> None:
     """Run planted positive and negative cases for the release dogfood gate."""
     with tempfile.TemporaryDirectory() as scratch:
         root = Path(scratch)
         self_test_config_parse(root)
-        for label, name, parents, statuses, diff_files, want_exit, needle in SELF_TEST_CASES:
-            api_dir, cfg_path = write_fixture_dir(
-                root, name, parents, statuses, diff_files
-            )
-            got_exit, message = evaluate_gate(
-                FIXTURE_REPO, FIXTURE_TAG, cfg_path, api_dir
-            )
-            if got_exit != want_exit:
-                raise SelfTestError(
-                    f"{label}: expected exit {want_exit}, got {got_exit} ({message})"
-                )
-            if needle not in message:
-                raise SelfTestError(
-                    f"{label}: expected {needle!r} in {message!r}"
-                )
-            print(f"ok   {label}: exit {got_exit}")
-    print(f"dogfood gate self-test: {len(SELF_TEST_CASES) + 1} cases behaved as required")
+        self_test_description_contract()
+        for case in SELF_TEST_CASES:
+            self_test_gate_case(root, *case)
+    print(f"dogfood gate self-test: {len(SELF_TEST_CASES) + 2} cases behaved as required")
 
 
 def main(arguments: list[str] | None = None) -> int:
@@ -378,6 +582,11 @@ def main(arguments: list[str] | None = None) -> int:
     parser.add_argument("--tag", default="")
     parser.add_argument("--api-dir", type=Path, default=None)
     parser.add_argument("--config", type=Path, default=Path(DEFAULT_CONFIG))
+    parser.add_argument(
+        "--live-instance",
+        default=LIVE_INSTANCE,
+        help="instance label required for a live dogfood pass (default: cluster)",
+    )
     parser.add_argument("--self-test", action="store_true")
     options = parser.parse_args(arguments)
     try:
@@ -385,7 +594,8 @@ def main(arguments: list[str] | None = None) -> int:
             self_test()
             return 0
         exit_code, message = evaluate_gate(
-            options.repository, options.tag, options.config, options.api_dir
+            options.repository, options.tag, options.config, options.api_dir,
+            options.live_instance,
         )
     except SelfTestError as error:
         print(f"dogfood gate self-test failed: {error}", file=sys.stderr)

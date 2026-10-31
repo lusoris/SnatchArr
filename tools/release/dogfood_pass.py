@@ -274,6 +274,11 @@ def validate_target(
         raise CheckError("SNATCHARR_URL and SNATCHARR_API_KEY must be set")
 
 
+def status_description(instance: str, summary: str) -> str:
+    """Format the instance label and summary for a dogfood commit status."""
+    return f"MCP dogfood on {instance}: {summary}"
+
+
 def run_dogfood(
     repository: str,
     commit: str,
@@ -296,7 +301,7 @@ def run_dogfood(
             repository,
             commit,
             "failure",
-            f"MCP dogfood on {instance}: commit mismatch",
+            status_description(instance, "commit mismatch"),
             post,
         )
         return 3
@@ -313,7 +318,7 @@ def run_dogfood(
             repository,
             commit,
             "success",
-            f"MCP dogfood on {instance}: {called} read-only calls passed",
+            status_description(instance, f"{called} read-only calls passed"),
             post,
         )
         return 0
@@ -321,7 +326,7 @@ def run_dogfood(
         repository,
         commit,
         "failure",
-        f"MCP dogfood on {instance}: {called} read-only calls, {failed} failed",
+        status_description(instance, f"{called} read-only calls, {failed} failed"),
         post,
     )
     return 3

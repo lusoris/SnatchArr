@@ -97,7 +97,7 @@ After the cluster serves that `main` commit, record the MCP dogfood pass (`SNATC
 python3 -I tools/release/dogfood_pass.py --repository <owner>/<repository> --commit <main sha> --instance <label> --post
 ```
 
-`dogfood_pass.py` checks `/api/v1/system/status` for `<main sha>`, exercises `/api/v1/mcp` over Streamable HTTP (`initialize`, `tools/list`, and `tools/call` on every read-only tool with no required inputs), and posts `snatcharr/dogfood=success` when at least one read-only tool ran and none failed (`make release-dogfood-check` runs the offline self-tests). `--instance` names the instance the pass ran on (for example `cluster`) in the status description and the output; the pass refuses to run without it. The release gate reads only the state of the status, so use `--post` only on the instance the release rests on.
+`dogfood_pass.py` checks `/api/v1/system/status` for `<main sha>`, exercises `/api/v1/mcp` over Streamable HTTP (`initialize`, `tools/list`, and `tools/call` on every read-only tool with no required inputs), and posts `snatcharr/dogfood=success` when at least one read-only tool ran and none failed (`make release-dogfood-check` runs the offline self-tests). `--instance` names the instance the pass ran on (for example `cluster`) in the status description and the output; the pass refuses to run without it. The gate accepts only a success whose description names the live instance (`cluster` by default, `--live-instance` to change), so post with `--instance cluster` from the live cluster only; a pass on another instance records its own label and does not satisfy the gate.
 
 ## Helm
 
