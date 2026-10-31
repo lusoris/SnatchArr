@@ -153,7 +153,7 @@
             "type": "string"
           },
           "enabled": {
-            "default": true,
+            "description": "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.",
             "type": "boolean"
           },
           "endpoint": {
@@ -165,13 +165,13 @@
             "type": "string"
           },
           "priority": {
-            "default": 0,
+            "description": "On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it.",
             "maximum": 1000,
             "minimum": 0,
             "type": "integer"
           },
           "sync_favorites": {
-            "default": true,
+            "description": "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.",
             "type": "boolean"
           }
         },
@@ -199,7 +199,7 @@
       "DownloadClientInput": {
         "properties": {
           "bandwidth_budget_bps": {
-            "default": 0,
+            "description": "On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it.",
             "format": "int64",
             "minimum": 0,
             "type": "integer"
@@ -208,7 +208,7 @@
             "type": "string"
           },
           "enabled": {
-            "default": true,
+            "description": "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.",
             "type": "boolean"
           },
           "instance_id": {
@@ -220,13 +220,13 @@
             "$ref": "#/$defs/DownloadClientKind"
           },
           "max_active": {
-            "default": 0,
+            "description": "On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it.",
             "maximum": 1000,
             "minimum": 0,
             "type": "integer"
           },
           "max_queued": {
-            "default": 0,
+            "description": "On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it.",
             "maximum": 1000,
             "minimum": 0,
             "type": "integer"
@@ -686,11 +686,11 @@
             "type": "string"
           },
           "enabled": {
-            "default": true,
+            "description": "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.",
             "type": "boolean"
           },
           "hourly_cap": {
-            "default": 15,
+            "description": "On create, omitted = 15. On update, omitted = stored value stays; sent = replaces it.",
             "maximum": 500,
             "minimum": 1,
             "type": "integer"
@@ -815,7 +815,7 @@
             "type": "string"
           },
           "enabled": {
-            "default": true,
+            "description": "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.",
             "type": "boolean"
           },
           "name": {
@@ -860,7 +860,7 @@
             "type": "string"
           },
           "enabled": {
-            "default": true,
+            "description": "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.",
             "type": "boolean"
           },
           "kind": {
@@ -2107,7 +2107,7 @@
       "DownloadClientInput": {
         "properties": {
           "bandwidth_budget_bps": {
-            "default": 0,
+            "description": "On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it.",
             "format": "int64",
             "minimum": 0,
             "type": "integer"
@@ -2116,7 +2116,7 @@
             "type": "string"
           },
           "enabled": {
-            "default": true,
+            "description": "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.",
             "type": "boolean"
           },
           "instance_id": {
@@ -2128,13 +2128,13 @@
             "$ref": "#/$defs/DownloadClientKind"
           },
           "max_active": {
-            "default": 0,
+            "description": "On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it.",
             "maximum": 1000,
             "minimum": 0,
             "type": "integer"
           },
           "max_queued": {
-            "default": 0,
+            "description": "On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it.",
             "maximum": 1000,
             "minimum": 0,
             "type": "integer"
@@ -2308,11 +2308,11 @@
             "type": "string"
           },
           "enabled": {
-            "default": true,
+            "description": "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.",
             "type": "boolean"
           },
           "hourly_cap": {
-            "default": 15,
+            "description": "On create, omitted = 15. On update, omitted = stored value stays; sent = replaces it.",
             "maximum": 500,
             "minimum": 1,
             "type": "integer"
@@ -2368,7 +2368,7 @@
             "type": "string"
           },
           "enabled": {
-            "default": true,
+            "description": "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.",
             "type": "boolean"
           },
           "name": {
@@ -2475,7 +2475,7 @@
             "type": "string"
           },
           "enabled": {
-            "default": true,
+            "description": "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.",
             "type": "boolean"
           },
           "endpoint": {
@@ -2487,13 +2487,13 @@
             "type": "string"
           },
           "priority": {
-            "default": 0,
+            "description": "On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it.",
             "maximum": 1000,
             "minimum": 0,
             "type": "integer"
           },
           "sync_favorites": {
-            "default": true,
+            "description": "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.",
             "type": "boolean"
           }
         },
@@ -2526,7 +2526,7 @@
       "DownloadClientInput": {
         "properties": {
           "bandwidth_budget_bps": {
-            "default": 0,
+            "description": "On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it.",
             "format": "int64",
             "minimum": 0,
             "type": "integer"
@@ -2535,7 +2535,7 @@
             "type": "string"
           },
           "enabled": {
-            "default": true,
+            "description": "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.",
             "type": "boolean"
           },
           "instance_id": {
@@ -2547,13 +2547,13 @@
             "$ref": "#/$defs/DownloadClientKind"
           },
           "max_active": {
-            "default": 0,
+            "description": "On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it.",
             "maximum": 1000,
             "minimum": 0,
             "type": "integer"
           },
           "max_queued": {
-            "default": 0,
+            "description": "On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it.",
             "maximum": 1000,
             "minimum": 0,
             "type": "integer"
@@ -2631,7 +2631,7 @@
             "type": "string"
           },
           "enabled": {
-            "default": true,
+            "description": "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.",
             "type": "boolean"
           },
           "kind": {
@@ -2859,7 +2859,7 @@
             "$ref": "#/$defs/NotificationChannelConfig"
           },
           "enabled": {
-            "default": true,
+            "description": "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.",
             "type": "boolean"
           },
           "kind": {
@@ -2892,7 +2892,6 @@
   "updateMyPreferences": {
     "$defs": {
       "BrandMark": {
-        "default": "vulva",
         "enum": [
           "vulva",
           "penis",
@@ -2901,7 +2900,6 @@
         "type": "string"
       },
       "SfwMode": {
-        "default": "auto",
         "enum": [
           "auto",
           "on",
@@ -3057,7 +3055,7 @@
             "description": "Omitted = stored configuration stays; sent = replaces it, omitted secret fields stay."
           },
           "enabled": {
-            "default": true,
+            "description": "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.",
             "type": "boolean"
           },
           "kind": {
@@ -3116,7 +3114,7 @@
             "type": "array"
           },
           "enabled": {
-            "default": true,
+            "description": "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.",
             "type": "boolean"
           },
           "event_kind": {
@@ -3179,8 +3177,7 @@
             "type": "integer"
           },
           "dry_run": {
-            "default": false,
-            "description": "When true, planner creates preview / dry-run runs that do not dispatch searches.",
+            "description": "When true, planner creates preview / dry-run runs that do not dispatch searches. On update, omitted = stored value stays; sent = replaces it.",
             "type": "boolean"
           },
           "exclude_quality_profiles": {
@@ -3299,8 +3296,7 @@
             "type": "boolean"
           },
           "skip_unavailable_movies": {
-            "default": true,
-            "description": "Radarr only: skip movies Radarr reports as not yet available (isAvailable false, the movie's minimum availability is not reached). They are not searched and cost no stamina. Movies without the flag are searched. Absent = true.",
+            "description": "Radarr only: skip movies Radarr reports as not yet available (isAvailable false, the movie's minimum availability is not reached). They are not searched and cost no stamina. Movies without the flag are searched. On update, omitted = stored value stays; sent = replaces it.",
             "type": "boolean"
           },
           "sonarr_missing_mode": {
@@ -3381,11 +3377,11 @@
             "type": "string"
           },
           "enabled": {
-            "default": true,
+            "description": "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.",
             "type": "boolean"
           },
           "hourly_cap": {
-            "default": 15,
+            "description": "On create, omitted = 15. On update, omitted = stored value stays; sent = replaces it.",
             "maximum": 500,
             "minimum": 1,
             "type": "integer"
@@ -3780,7 +3776,7 @@
             "type": "string"
           },
           "enabled": {
-            "default": true,
+            "description": "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.",
             "type": "boolean"
           },
           "name": {
@@ -3824,7 +3820,6 @@
   "updateSettings": {
     "$defs": {
       "BrandMark": {
-        "default": "vulva",
         "enum": [
           "vulva",
           "penis",
@@ -3893,7 +3888,7 @@
         "properties": {
           "brand_mark": {
             "$ref": "#/$defs/BrandMark",
-            "description": "Installation-wide brand mark shown when a user has no override."
+            "description": "Installation-wide brand mark shown when a user has no override. On update, omitted = stored value stays; sent = replaces it."
           },
           "download_priority_preset": {
             "$ref": "#/$defs/PriorityPresetMap"
@@ -3910,8 +3905,7 @@
             "type": "integer"
           },
           "llm_enabled": {
-            "default": false,
-            "description": "Whether the Model Context Protocol (MCP) server at /api/v1/mcp is enabled.",
+            "description": "Whether the Model Context Protocol (MCP) server at /api/v1/mcp is enabled. On update, omitted = stored value stays; sent = replaces it.",
             "type": "boolean"
           },
           "llm_write_tools": {
@@ -3927,7 +3921,7 @@
           },
           "sfw_mode": {
             "$ref": "#/$defs/SfwMode",
-            "description": "Installation-wide SFW mode applied when a user has no override."
+            "description": "Installation-wide SFW mode applied when a user has no override. On update, omitted = stored value stays; sent = replaces it."
           },
           "updated_at": {
             "format": "date-time",
@@ -3949,7 +3943,6 @@
         "type": "object"
       },
       "SfwMode": {
-        "default": "auto",
         "enum": [
           "auto",
           "on",
@@ -3979,7 +3972,7 @@
             "type": "string"
           },
           "enabled": {
-            "default": true,
+            "description": "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.",
             "type": "boolean"
           },
           "kind": {

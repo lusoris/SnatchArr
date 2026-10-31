@@ -3119,7 +3119,7 @@ components:
           description: Omit or leave empty to keep the stored key
         enabled:
           type: boolean
-          default: true
+          description: "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it."
 
     ArrProduct:
       type: string
@@ -3298,12 +3298,10 @@ components:
           description: "Skip items released less than this many hours ago; 0 (or absent) turns the delay off. The release date is the one of the app kind: air date (Sonarr, Whisparr v2), the date of radarr_release_type (Radarr, Whisparr v3), the album or book release date. Items without a date are kept."
         dry_run:
           type: boolean
-          default: false
-          description: "When true, planner creates preview / dry-run runs that do not dispatch searches."
+          description: "When true, planner creates preview / dry-run runs that do not dispatch searches. On update, omitted = stored value stays; sent = replaces it."
         skip_unavailable_movies:
           type: boolean
-          default: true
-          description: "Radarr only: skip movies Radarr reports as not yet available (isAvailable false, the movie's minimum availability is not reached). They are not searched and cost no stamina. Movies without the flag are searched. Absent = true."
+          description: "Radarr only: skip movies Radarr reports as not yet available (isAvailable false, the movie's minimum availability is not reached). They are not searched and cost no stamina. Movies without the flag are searched. On update, omitted = stored value stays; sent = replaces it."
         updated_at:
           type: string
           format: date-time
@@ -3667,8 +3665,7 @@ components:
           $ref: "#/components/schemas/PriorityPresetMap"
         llm_enabled:
           type: boolean
-          default: false
-          description: "Whether the Model Context Protocol (MCP) server at /api/v1/mcp is enabled."
+          description: "Whether the Model Context Protocol (MCP) server at /api/v1/mcp is enabled. On update, omitted = stored value stays; sent = replaces it."
         llm_write_tools:
           type: array
           uniqueItems: true
@@ -3677,10 +3674,10 @@ components:
             $ref: "#/components/schemas/LlmWriteTool"
         brand_mark:
           $ref: "#/components/schemas/BrandMark"
-          description: "Installation-wide brand mark shown when a user has no override."
+          description: "Installation-wide brand mark shown when a user has no override. On update, omitted = stored value stays; sent = replaces it."
         sfw_mode:
           $ref: "#/components/schemas/SfwMode"
-          description: "Installation-wide SFW mode applied when a user has no override."
+          description: "Installation-wide SFW mode applied when a user has no override. On update, omitted = stored value stays; sent = replaces it."
         updated_at:
           type: string
           format: date-time
@@ -3766,12 +3763,10 @@ components:
 
     BrandMark:
       type: string
-      default: vulva
       enum: [vulva, penis, hand]
 
     SfwMode:
       type: string
-      default: "auto"
       enum: ["auto", "on", "off"]
 
     UserPreferences:
@@ -3973,22 +3968,22 @@ components:
           description: Password, or the API key for SABnzbd. On update, omit to keep the stored one.
         enabled:
           type: boolean
-          default: true
+          description: "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it."
         max_active:
           type: integer
           minimum: 0
           maximum: 1000
-          default: 0
+          description: "On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it."
         max_queued:
           type: integer
           minimum: 0
           maximum: 1000
-          default: 0
+          description: "On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it."
         bandwidth_budget_bps:
           type: integer
           format: int64
           minimum: 0
-          default: 0
+          description: "On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it."
 
     DownloadClientStatus:
       type: object
@@ -4095,7 +4090,7 @@ components:
           description: Required on create; omit on update to keep the stored key
         enabled:
           type: boolean
-          default: true
+          description: "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it."
         sonarr_instance_id:
           type: string
           format: uuid
@@ -4241,10 +4236,10 @@ components:
           type: integer
           minimum: 1
           maximum: 500
-          default: 15
+          description: "On create, omitted = 15. On update, omitted = stored value stays; sent = replaces it."
         enabled:
           type: boolean
-          default: true
+          description: "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it."
 
     ProwlarrStatus:
       type: object
@@ -4457,7 +4452,7 @@ components:
           $ref: "#/components/schemas/NotificationChannelKind"
         enabled:
           type: boolean
-          default: true
+          description: "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it."
         config:
           description: Omitted = stored configuration stays; sent = replaces it, omitted secret fields stay.
           $ref: "#/components/schemas/NotificationChannelConfig"
@@ -4507,7 +4502,7 @@ components:
           $ref: "#/components/schemas/NotificationChannelKind"
         enabled:
           type: boolean
-          default: true
+          description: "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it."
         config:
           $ref: "#/components/schemas/NotificationChannelConfig"
 
@@ -4573,7 +4568,7 @@ components:
           default: 1
         enabled:
           type: boolean
-          default: true
+          description: "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it."
         channel_ids:
           type: array
           items:
@@ -4916,7 +4911,7 @@ components:
           description: Required on create; omit on update to keep stored key
         enabled:
           type: boolean
-          default: true
+          description: "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it."
 
     WatchawareSyncStatus:
       type: object
@@ -5070,15 +5065,15 @@ components:
           description: Required on create; omit on update to keep stored key
         enabled:
           type: boolean
-          default: true
+          description: "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it."
         sync_favorites:
           type: boolean
-          default: true
+          description: "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it."
         priority:
           type: integer
           minimum: 0
           maximum: 1000
-          default: 0
+          description: "On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it."
 
     AdultSyncSummary:
       type: object

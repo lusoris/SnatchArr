@@ -10,6 +10,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -878,4 +879,258 @@ func logBufferOutput(t *testing.T, logs *testdiag.LogBuffer) {
 		return
 	}
 	t.Logf("%s", out)
+}
+
+func TestUpdateNotificationChannel_TableDriven(t *testing.T) {
+	t.Parallel()
+	f := newIntegrationFixture(t)
+	ctx := withUser(t.Context(), f.admin)
+
+	created, err := f.h.CreateNotificationChannel(ctx, &oas.NotificationChannelInput{
+		Name: "test-channel-943",
+		Kind: oas.NotificationChannelKindNtfy,
+		Config: oas.NotificationChannelConfig{
+			ServerURL: oas.NewOptString("https://ntfy.sh"),
+			Topic:     oas.NewOptString("snatcharr-943"),
+		},
+	})
+	if err != nil || !created.Enabled {
+		t.Fatalf("CreateNotificationChannel() = %+v, %v, want enabled true", created, err)
+	}
+
+	disabled, err := f.h.UpdateNotificationChannel(ctx, &oas.NotificationChannelUpdate{
+		Name:    "test-channel-943",
+		Kind:    oas.NotificationChannelKindNtfy,
+		Enabled: oas.NewOptBool(false),
+	}, oas.UpdateNotificationChannelParams{ChannelId: created.ID})
+	if err != nil || disabled.Enabled {
+		t.Fatalf("UpdateNotificationChannel() initial disable = %+v, %v", disabled, err)
+	}
+
+	tests := []struct {
+		name        string
+		createInit  bool
+		chID        uuid.UUID
+		req         oas.NotificationChannelUpdate
+		wantEnabled bool
+		wantErr     error
+	}{
+		{
+			name:       "positive: omitted enabled keeps stored disabled value",
+			createInit: true,
+			req: oas.NotificationChannelUpdate{
+				Name: "test-channel-943-renamed",
+				Kind: oas.NotificationChannelKindNtfy,
+			},
+			wantEnabled: false,
+		},
+		{
+			name:       "negative: explicit true replaces stored disabled value",
+			createInit: true,
+			req: oas.NotificationChannelUpdate{
+				Name:    "test-channel-943-renamed",
+				Kind:    oas.NotificationChannelKindNtfy,
+				Enabled: oas.NewOptBool(true),
+			},
+			wantEnabled: true,
+		},
+		{
+			name:       "boundary: explicit false replaces stored true value",
+			createInit: true,
+			req: oas.NotificationChannelUpdate{
+				Name:    "test-channel-943-renamed",
+				Kind:    oas.NotificationChannelKindNtfy,
+				Enabled: oas.NewOptBool(false),
+			},
+			wantEnabled: false,
+		},
+		{
+			name: "boundary: unknown id returns not found",
+			chID: uuid.New(),
+			req: oas.NotificationChannelUpdate{
+				Name: "unknown",
+				Kind: oas.NotificationChannelKindNtfy,
+			},
+			wantErr: domain.ErrNotFound,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			chID := tc.chID
+			if tc.createInit {
+				ch, err := f.h.CreateNotificationChannel(ctx, &oas.NotificationChannelInput{
+					Name: "ch-" + uuid.NewString()[:8],
+					Kind: oas.NotificationChannelKindNtfy,
+					Config: oas.NotificationChannelConfig{
+						ServerURL: oas.NewOptString("https://ntfy.sh"),
+						Topic:     oas.NewOptString("snatcharr-943"),
+					},
+				})
+				if err != nil {
+					t.Fatalf("CreateNotificationChannel: %v", err)
+				}
+				dis, err := f.h.UpdateNotificationChannel(ctx, &oas.NotificationChannelUpdate{
+					Name:    ch.Name,
+					Kind:    oas.NotificationChannelKindNtfy,
+					Enabled: oas.NewOptBool(false),
+				}, oas.UpdateNotificationChannelParams{ChannelId: ch.ID})
+				if err != nil || dis.Enabled {
+					t.Fatalf("initial disable: %v", err)
+				}
+				chID = ch.ID
+			}
+			got, err := f.h.UpdateNotificationChannel(ctx, &tc.req, oas.UpdateNotificationChannelParams{ChannelId: chID})
+			if tc.wantErr != nil {
+				if !errors.Is(err, tc.wantErr) {
+					t.Fatalf("UpdateNotificationChannel() err = %v, want %v", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("UpdateNotificationChannel() err = %v", err)
+			}
+			if got.Enabled != tc.wantEnabled {
+				t.Fatalf("UpdateNotificationChannel() Enabled = %v, want %v", got.Enabled, tc.wantEnabled)
+			}
+		})
+	}
+}
+
+func TestUpdateNotificationRule_TableDriven(t *testing.T) {
+	t.Parallel()
+	f := newIntegrationFixture(t)
+	ctx := withUser(t.Context(), f.admin)
+
+	ch, err := f.h.CreateNotificationChannel(ctx, &oas.NotificationChannelInput{
+		Name: "rule-ch-943",
+		Kind: oas.NotificationChannelKindNtfy,
+		Config: oas.NotificationChannelConfig{
+			ServerURL: oas.NewOptString("https://ntfy.sh"),
+			Topic:     oas.NewOptString("rule-943"),
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateNotificationChannel: %v", err)
+	}
+
+	created, err := f.h.CreateNotificationRule(ctx, &oas.NotificationRuleInput{
+		Name:       "rule-943",
+		EventKind:  oas.NotificationRuleEventKindRunFailureStreak,
+		Threshold:  3,
+		ChannelIds: []uuid.UUID{ch.ID},
+	})
+	if err != nil || !created.Enabled {
+		t.Fatalf("CreateNotificationRule() = %+v, %v, want enabled true", created, err)
+	}
+
+	disabled, err := f.h.UpdateNotificationRule(ctx, &oas.NotificationRuleUpdate{
+		Name:       "rule-943",
+		EventKind:  oas.NotificationRuleEventKindRunFailureStreak,
+		Threshold:  3,
+		Enabled:    oas.NewOptBool(false),
+		ChannelIds: []uuid.UUID{ch.ID},
+	}, oas.UpdateNotificationRuleParams{RuleId: created.ID})
+	if err != nil || disabled.Enabled {
+		t.Fatalf("UpdateNotificationRule() initial disable = %+v, %v", disabled, err)
+	}
+
+	tests := []struct {
+		name        string
+		createInit  bool
+		ruleID      uuid.UUID
+		req         oas.NotificationRuleUpdate
+		wantEnabled bool
+		wantErr     error
+	}{
+		{
+			name:       "positive: omitted enabled keeps stored disabled value",
+			createInit: true,
+			req: oas.NotificationRuleUpdate{
+				Name:       "rule-943-renamed",
+				EventKind:  oas.NotificationRuleEventKindRunFailureStreak,
+				Threshold:  3,
+				ChannelIds: []uuid.UUID{ch.ID},
+			},
+			wantEnabled: false,
+		},
+		{
+			name:       "negative: explicit true replaces stored disabled value",
+			createInit: true,
+			req: oas.NotificationRuleUpdate{
+				Name:       "rule-943-renamed",
+				EventKind:  oas.NotificationRuleEventKindRunFailureStreak,
+				Threshold:  3,
+				Enabled:    oas.NewOptBool(true),
+				ChannelIds: []uuid.UUID{ch.ID},
+			},
+			wantEnabled: true,
+		},
+		{
+			name:       "boundary: explicit false replaces stored true value",
+			createInit: true,
+			req: oas.NotificationRuleUpdate{
+				Name:       "rule-943-renamed",
+				EventKind:  oas.NotificationRuleEventKindRunFailureStreak,
+				Threshold:  3,
+				Enabled:    oas.NewOptBool(false),
+				ChannelIds: []uuid.UUID{ch.ID},
+			},
+			wantEnabled: false,
+		},
+		{
+			name:   "boundary: unknown id returns not found",
+			ruleID: uuid.New(),
+			req: oas.NotificationRuleUpdate{
+				Name:       "unknown",
+				EventKind:  oas.NotificationRuleEventKindRunFailureStreak,
+				Threshold:  1,
+				ChannelIds: []uuid.UUID{ch.ID},
+			},
+			wantErr: domain.ErrNotFound,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ruleID := tc.ruleID
+			if tc.createInit {
+				r, err := f.h.CreateNotificationRule(ctx, &oas.NotificationRuleInput{
+					Name:       "rule-" + uuid.NewString()[:8],
+					EventKind:  oas.NotificationRuleEventKindRunFailureStreak,
+					Threshold:  3,
+					ChannelIds: []uuid.UUID{ch.ID},
+				})
+				if err != nil {
+					t.Fatalf("CreateNotificationRule: %v", err)
+				}
+				dis, err := f.h.UpdateNotificationRule(ctx, &oas.NotificationRuleUpdate{
+					Name:       r.Name,
+					EventKind:  oas.NotificationRuleEventKindRunFailureStreak,
+					Threshold:  3,
+					Enabled:    oas.NewOptBool(false),
+					ChannelIds: []uuid.UUID{ch.ID},
+				}, oas.UpdateNotificationRuleParams{RuleId: r.ID})
+				if err != nil || dis.Enabled {
+					t.Fatalf("initial disable: %v", err)
+				}
+				ruleID = r.ID
+			}
+			req := tc.req
+			req.ChannelIds = []uuid.UUID{ch.ID}
+			got, err := f.h.UpdateNotificationRule(ctx, &req, oas.UpdateNotificationRuleParams{RuleId: ruleID})
+			if tc.wantErr != nil {
+				if !errors.Is(err, tc.wantErr) {
+					t.Fatalf("UpdateNotificationRule() err = %v, want %v", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("UpdateNotificationRule() err = %v", err)
+			}
+			if got.Enabled != tc.wantEnabled {
+				t.Fatalf("UpdateNotificationRule() Enabled = %v, want %v", got.Enabled, tc.wantEnabled)
+			}
+		})
+	}
 }

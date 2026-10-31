@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/lusoris/SnatchArr/api/internal/adult"
+	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 )
 
@@ -382,5 +383,144 @@ func TestAdultSources_Negative_ConcurrentSyncReturns409(t *testing.T) {
 	firstRes := <-firstDone
 	if firstRes.statusCode != http.StatusOK {
 		t.Fatalf("first sync status = %d, want 200; body: %s", firstRes.statusCode, string(firstRes.body))
+	}
+}
+
+func TestUpdateAdultSource_TableDriven(t *testing.T) {
+	t.Parallel()
+	f := newRouterFixture(t)
+	setupFixtureStubs(f)
+	_ = completeInitialSetup(t, f)
+	adminCsrf := getAdminCsrfToken(t, f)
+	enableAdultModuleForTest(t, f, adminCsrf)
+	ctx := withUser(t.Context(), f.admin)
+
+	// Create with omitted optional fields gets defaults (enabled: true, sync_favorites: true, priority: 0).
+	created, err := f.h.CreateAdultSource(ctx, &oas.AdultSourceInput{
+		Name:     "adult-943",
+		Endpoint: "http://stash:9999/graphql",
+		APIKey:   oas.NewOptString("test-api-key"),
+	})
+	if err != nil {
+		t.Fatalf("CreateAdultSource() = %v", err)
+	}
+	if !created.Enabled || !created.SyncFavorites || created.Priority != 0 {
+		t.Fatalf("CreateAdultSource() defaults = %+v, want enabled:true, sync_favorites:true, priority:0", created)
+	}
+
+	// Update to non-default values first (disabled, sync_fav: false, priority: 25).
+	updated, err := f.h.UpdateAdultSource(ctx, &oas.AdultSourceInput{
+		Name:          "adult-943",
+		Endpoint:      "http://stash:9999/graphql",
+		Enabled:       oas.NewOptBool(false),
+		SyncFavorites: oas.NewOptBool(false),
+		Priority:      oas.NewOptInt(25),
+	}, oas.UpdateAdultSourceParams{SourceId: created.ID})
+	if err != nil || updated.Enabled || updated.SyncFavorites || updated.Priority != 25 {
+		t.Fatalf("initial update = %+v, %v", updated, err)
+	}
+
+	tests := []struct {
+		name        string
+		createInit  bool
+		srcID       uuid.UUID
+		req         oas.AdultSourceInput
+		wantEnabled bool
+		wantFavs    bool
+		wantPrio    int
+		wantErr     error
+	}{
+		{
+			name:       "positive: omitted optional fields keep stored non-default values",
+			createInit: true,
+			req: oas.AdultSourceInput{
+				Name:     "adult-943-renamed",
+				Endpoint: "http://stash:9999/graphql",
+			},
+			wantEnabled: false,
+			wantFavs:    false,
+			wantPrio:    25,
+		},
+		{
+			name:       "negative: sent values replace stored values",
+			createInit: true,
+			req: oas.AdultSourceInput{
+				Name:          "adult-943-renamed",
+				Endpoint:      "http://stash:9999/graphql",
+				Enabled:       oas.NewOptBool(true),
+				SyncFavorites: oas.NewOptBool(true),
+				Priority:      oas.NewOptInt(50),
+			},
+			wantEnabled: true,
+			wantFavs:    true,
+			wantPrio:    50,
+		},
+		{
+			name:       "boundary: explicit false and zero priority are honoured, not treated as omitted",
+			createInit: true,
+			req: oas.AdultSourceInput{
+				Name:          "adult-943-renamed",
+				Endpoint:      "http://stash:9999/graphql",
+				Enabled:       oas.NewOptBool(false),
+				SyncFavorites: oas.NewOptBool(false),
+				Priority:      oas.NewOptInt(0),
+			},
+			wantEnabled: false,
+			wantFavs:    false,
+			wantPrio:    0,
+		},
+		{
+			name:  "boundary: unknown source id returns not found",
+			srcID: uuid.New(),
+			req: oas.AdultSourceInput{
+				Name:     "unknown",
+				Endpoint: "http://stash:9999/graphql",
+			},
+			wantErr: domain.ErrNotFound,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			srcID := tc.srcID
+			if tc.createInit {
+				c, err := f.h.CreateAdultSource(ctx, &oas.AdultSourceInput{
+					Name:     "adult-943-" + uuid.NewString()[:8],
+					Endpoint: "http://stash:9999/graphql",
+					APIKey:   oas.NewOptString("test-api-key"),
+				})
+				if err != nil {
+					t.Fatalf("CreateAdultSource() err = %v", err)
+				}
+				dis, err := f.h.UpdateAdultSource(ctx, &oas.AdultSourceInput{
+					Name:          c.Name,
+					Endpoint:      c.Endpoint,
+					Enabled:       oas.NewOptBool(false),
+					SyncFavorites: oas.NewOptBool(false),
+					Priority:      oas.NewOptInt(25),
+				}, oas.UpdateAdultSourceParams{SourceId: c.ID})
+				if err != nil || dis.Enabled || dis.SyncFavorites || dis.Priority != 25 {
+					t.Fatalf("initial disable err = %v", err)
+				}
+				srcID = c.ID
+			}
+			req := tc.req
+			if tc.createInit {
+				req.Name = "adult-943-" + uuid.NewString()[:8]
+			}
+			got, err := f.h.UpdateAdultSource(ctx, &req, oas.UpdateAdultSourceParams{SourceId: srcID})
+			if tc.wantErr != nil {
+				if !errors.Is(err, tc.wantErr) {
+					t.Fatalf("UpdateAdultSource() err = %v, want %v", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("UpdateAdultSource() err = %v", err)
+			}
+			if got.Enabled != tc.wantEnabled || got.SyncFavorites != tc.wantFavs || got.Priority != tc.wantPrio {
+				t.Fatalf("UpdateAdultSource() = %+v, want enabled=%v favs=%v prio=%d", got, tc.wantEnabled, tc.wantFavs, tc.wantPrio)
+			}
+		})
 	}
 }

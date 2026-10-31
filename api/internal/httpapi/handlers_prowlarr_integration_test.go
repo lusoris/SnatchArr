@@ -364,3 +364,125 @@ func TestProwlarrNoWrites(t *testing.T) {
 		f.prowlarrServer.assertNoWrites(t)
 	})
 }
+
+func TestUpdateProwlarrLink_TableDriven(t *testing.T) {
+	t.Parallel()
+	f := newIntegrationFixture(t)
+	ctx := withUser(t.Context(), f.admin)
+
+	created, err := f.h.CreateProwlarrLink(ctx, &oas.ProwlarrLinkInput{
+		Name:    "prowlarr-943",
+		BaseURL: "http://prowlarr:9696",
+		APIKey:  oas.NewOptString("test-api-key"),
+	})
+	if err != nil || !created.Enabled || created.HourlyCap != 15 {
+		t.Fatalf("CreateProwlarrLink() defaults = %+v, %v, want enabled:true, cap:15", created, err)
+	}
+
+	updated, err := f.h.UpdateProwlarrLink(ctx, &oas.ProwlarrLinkInput{
+		Name:      "prowlarr-943",
+		BaseURL:   "http://prowlarr:9696",
+		HourlyCap: oas.NewOptInt(50),
+		Enabled:   oas.NewOptBool(false),
+	}, oas.UpdateProwlarrLinkParams{LinkId: created.ID})
+	if err != nil || updated.Enabled || updated.HourlyCap != 50 {
+		t.Fatalf("initial update = %+v, %v", updated, err)
+	}
+
+	tests := []struct {
+		name        string
+		createInit  bool
+		linkID      uuid.UUID
+		req         oas.ProwlarrLinkInput
+		wantEnabled bool
+		wantCap     int
+		wantErr     error
+	}{
+		{
+			name:       "positive: omitted enabled and cap keep stored non-default values",
+			createInit: true,
+			req: oas.ProwlarrLinkInput{
+				Name:    "prowlarr-943-renamed",
+				BaseURL: "http://prowlarr:9696",
+			},
+			wantEnabled: false,
+			wantCap:     50,
+		},
+		{
+			name:       "negative: sent values replace stored values",
+			createInit: true,
+			req: oas.ProwlarrLinkInput{
+				Name:      "prowlarr-943-renamed",
+				BaseURL:   "http://prowlarr:9696",
+				HourlyCap: oas.NewOptInt(100),
+				Enabled:   oas.NewOptBool(true),
+			},
+			wantEnabled: true,
+			wantCap:     100,
+		},
+		{
+			name:       "boundary: explicit false and default cap 15 are honoured",
+			createInit: true,
+			req: oas.ProwlarrLinkInput{
+				Name:      "prowlarr-943-renamed",
+				BaseURL:   "http://prowlarr:9696",
+				HourlyCap: oas.NewOptInt(15),
+				Enabled:   oas.NewOptBool(false),
+			},
+			wantEnabled: false,
+			wantCap:     15,
+		},
+		{
+			name:   "boundary: unknown link id returns not found",
+			linkID: uuid.New(),
+			req: oas.ProwlarrLinkInput{
+				Name:    "unknown",
+				BaseURL: "http://prowlarr:9696",
+			},
+			wantErr: domain.ErrNotFound,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			linkID := tc.linkID
+			if tc.createInit {
+				c, err := f.h.CreateProwlarrLink(ctx, &oas.ProwlarrLinkInput{
+					Name:    "prowlarr-943-" + uuid.NewString()[:8],
+					BaseURL: "http://prowlarr:9696",
+					APIKey:  oas.NewOptString("prowlarr-secret-key-1234"),
+				})
+				if err != nil {
+					t.Fatalf("CreateProwlarrLink: %v", err)
+				}
+				dis, err := f.h.UpdateProwlarrLink(ctx, &oas.ProwlarrLinkInput{
+					Name:      c.Name,
+					BaseURL:   c.BaseURL,
+					HourlyCap: oas.NewOptInt(50),
+					Enabled:   oas.NewOptBool(false),
+				}, oas.UpdateProwlarrLinkParams{LinkId: c.ID})
+				if err != nil || dis.Enabled || dis.HourlyCap != 50 {
+					t.Fatalf("initial disable: %v", err)
+				}
+				linkID = c.ID
+			}
+			req := tc.req
+			if tc.createInit {
+				req.Name = "prowlarr-943-" + uuid.NewString()[:8]
+			}
+			got, err := f.h.UpdateProwlarrLink(ctx, &req, oas.UpdateProwlarrLinkParams{LinkId: linkID})
+			if tc.wantErr != nil {
+				if !errors.Is(err, tc.wantErr) {
+					t.Fatalf("UpdateProwlarrLink() err = %v, want %v", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("UpdateProwlarrLink() err = %v", err)
+			}
+			if got.Enabled != tc.wantEnabled || got.HourlyCap != tc.wantCap {
+				t.Fatalf("UpdateProwlarrLink() = %+v, want enabled=%v, cap=%d", got, tc.wantEnabled, tc.wantCap)
+			}
+		})
+	}
+}

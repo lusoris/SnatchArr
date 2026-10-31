@@ -42,11 +42,8 @@ func (h *Handlers) CreateNotificationChannel(ctx context.Context, req *oas.Notif
 	in := domain.NotificationChannelInput{
 		Name:    req.Name,
 		Kind:    domain.ChannelKind(req.Kind),
-		Enabled: req.Enabled.Value,
+		Enabled: req.Enabled.Or(true),
 		Config:  notificationConfigFromOAS(req.Config),
-	}
-	if !req.Enabled.IsSet() {
-		in.Enabled = true
 	}
 	ch, err := h.notify.CreateChannel(ctx, in)
 	if err != nil {
@@ -62,14 +59,12 @@ func (h *Handlers) UpdateNotificationChannel(ctx context.Context, req *oas.Notif
 		return nil, err
 	}
 	in := domain.NotificationChannelInput{
-		Name:       req.Name,
-		Kind:       domain.ChannelKind(req.Kind),
-		Enabled:    req.Enabled.Value,
-		Config:     notificationConfigFromOAS(req.Config.Value),
-		KeepConfig: !req.Config.IsSet(),
-	}
-	if !req.Enabled.IsSet() {
-		in.Enabled = true
+		Name:        req.Name,
+		Kind:        domain.ChannelKind(req.Kind),
+		Enabled:     req.Enabled.Value,
+		Config:      notificationConfigFromOAS(req.Config.Value),
+		KeepConfig:  !req.Config.IsSet(),
+		KeepEnabled: !req.Enabled.IsSet(),
 	}
 	ch, err := h.notify.UpdateChannel(ctx, params.ChannelId, in)
 	if err != nil {
@@ -127,15 +122,11 @@ func (h *Handlers) CreateNotificationRule(ctx context.Context, req *oas.Notifica
 	if thresh <= 0 {
 		thresh = 1
 	}
-	enabled := req.Enabled.Value
-	if !req.Enabled.IsSet() {
-		enabled = true
-	}
 	in := domain.NotificationRuleInput{
 		Name:       req.Name,
 		EventKind:  domain.RuleEventKind(req.EventKind),
 		Threshold:  thresh,
-		Enabled:    enabled,
+		Enabled:    req.Enabled.Or(true),
 		ChannelIDs: req.ChannelIds,
 	}
 	r, err := h.notify.CreateRule(ctx, in)
@@ -151,19 +142,19 @@ func (h *Handlers) UpdateNotificationRule(ctx context.Context, req *oas.Notifica
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
+	stored, err := h.notify.GetRule(ctx, params.RuleId)
+	if err != nil {
+		return nil, err
+	}
 	thresh := req.Threshold
 	if thresh <= 0 {
 		thresh = 1
-	}
-	enabled := req.Enabled.Value
-	if !req.Enabled.IsSet() {
-		enabled = true
 	}
 	in := domain.NotificationRuleInput{
 		Name:       req.Name,
 		EventKind:  domain.RuleEventKind(req.EventKind),
 		Threshold:  thresh,
-		Enabled:    enabled,
+		Enabled:    req.Enabled.Or(stored.Enabled),
 		ChannelIDs: req.ChannelIds,
 	}
 	r, err := h.notify.UpdateRule(ctx, params.RuleId, in)

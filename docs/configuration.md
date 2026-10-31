@@ -172,7 +172,7 @@ A `stash` instance is a companion only:
 
 ## Snatch policy
 
-Every instance has one policy (`GET/PUT /api/v1/instances/{id}/policy`).
+Every instance has one policy (`GET/PUT /api/v1/instances/{id}/policy`). On `PUT`, an omitted `dry_run` or `skip_unavailable_movies` keeps the stored value; a sent value replaces it. The same holds for `enabled` and the other optional fields whose create default the API reference names on instances, download clients, Seerr and Prowlarr links, notification channels, rules and targets, watch-aware sources and adult sources.
 
 | Field | Default | Range |
 | --- | --- | --- |
@@ -246,7 +246,7 @@ the grace period are never evaluated.
 
 ## Runtime settings
 
-`GET/PUT /api/v1/settings`:
+`GET/PUT /api/v1/settings` (on `PUT`, an omitted `llm_enabled`, `brand_mark` or `sfw_mode` keeps the stored value):
 
 | Field | Default | Meaning |
 | --- | --- | --- |

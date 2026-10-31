@@ -103,13 +103,13 @@ func inputFromOAS(in *oas.InstanceInput) instances.Input {
 	}
 }
 
-func updateFromOAS(in *oas.InstanceUpdate) instances.Input {
+func updateFromOAS(in *oas.InstanceUpdate, storedEnabled bool) instances.Input {
 	return instances.Input{
 		Kind:    domain.AppKind(in.Kind),
 		Name:    in.Name,
 		BaseURL: in.BaseURL,
 		APIKey:  in.APIKey.Or(""),
-		Enabled: in.Enabled.Or(true),
+		Enabled: in.Enabled.Or(storedEnabled),
 	}
 }
 
@@ -246,6 +246,14 @@ func settingsFromOAS(in *oas.Settings) domain.Settings {
 		BrandMark:              domain.BrandMark(in.BrandMark.Or(oas.BrandMark(domain.DefaultBrandMark))),
 		SfwMode:                domain.SfwMode(in.SfwMode.Or(oas.SfwMode(domain.DefaultSfwMode))),
 	}
+}
+
+func settingsUpdateFromOAS(in *oas.Settings, stored domain.Settings) domain.Settings {
+	out := settingsFromOAS(in)
+	out.LLMEnabled = in.LlmEnabled.Or(stored.LLMEnabled)
+	out.BrandMark = domain.BrandMark(in.BrandMark.Or(oas.BrandMark(stored.BrandMark)))
+	out.SfwMode = domain.SfwMode(in.SfwMode.Or(oas.SfwMode(stored.SfwMode)))
+	return out
 }
 
 func userPreferencesToOAS(p domain.UserPreferences) *oas.UserPreferences {

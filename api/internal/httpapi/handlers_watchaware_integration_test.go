@@ -6,13 +6,16 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 
+	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
 	"github.com/lusoris/SnatchArr/api/internal/watchaware"
@@ -401,5 +404,131 @@ func TestReleaseWatchawareGateSeries_Integration(t *testing.T) {
 	}
 	if resBody["state"] != "released" {
 		t.Errorf("state = %v, want released", resBody["state"])
+	}
+}
+
+func TestUpdateWatchawareSource_TableDriven(t *testing.T) {
+	t.Parallel()
+	f := newIntegrationFixture(t)
+	ctx := withUser(t.Context(), f.admin)
+	u, err := url.Parse("http://jellyfin:8096")
+	if err != nil {
+		t.Fatalf("url.Parse: %v", err)
+	}
+
+	created, err := f.h.CreateWatchawareSource(ctx, &oas.WatchawareSourceInput{
+		Kind:   oas.WatchawareSourceKindJellyfin,
+		Name:   "watch-943",
+		URL:    *u,
+		APIKey: oas.NewOptString("my-api-key"),
+	})
+	if err != nil || !created.Enabled {
+		t.Fatalf("CreateWatchawareSource() = %+v, %v, want enabled:true", created, err)
+	}
+
+	disabled, err := f.h.UpdateWatchawareSource(ctx, &oas.WatchawareSourceInput{
+		Kind:    oas.WatchawareSourceKindJellyfin,
+		Name:    "watch-943",
+		URL:     *u,
+		Enabled: oas.NewOptBool(false),
+	}, oas.UpdateWatchawareSourceParams{SourceId: created.ID})
+	if err != nil || disabled.Enabled {
+		t.Fatalf("UpdateWatchawareSource() initial disable = %+v, %v", disabled, err)
+	}
+
+	tests := []struct {
+		name        string
+		createInit  bool
+		srcID       uuid.UUID
+		req         oas.WatchawareSourceInput
+		wantEnabled bool
+		wantErr     error
+	}{
+		{
+			name:       "positive: omitted enabled keeps stored disabled value",
+			createInit: true,
+			req: oas.WatchawareSourceInput{
+				Kind: oas.WatchawareSourceKindJellyfin,
+				Name: "watch-943-renamed",
+				URL:  *u,
+			},
+			wantEnabled: false,
+		},
+		{
+			name:       "negative: explicit true replaces stored disabled value",
+			createInit: true,
+			req: oas.WatchawareSourceInput{
+				Kind:    oas.WatchawareSourceKindJellyfin,
+				Name:    "watch-943-renamed",
+				URL:     *u,
+				Enabled: oas.NewOptBool(true),
+			},
+			wantEnabled: true,
+		},
+		{
+			name:       "boundary: explicit false replaces stored true value",
+			createInit: true,
+			req: oas.WatchawareSourceInput{
+				Kind:    oas.WatchawareSourceKindJellyfin,
+				Name:    "watch-943-renamed",
+				URL:     *u,
+				Enabled: oas.NewOptBool(false),
+			},
+			wantEnabled: false,
+		},
+		{
+			name:  "boundary: unknown source id returns not found",
+			srcID: uuid.New(),
+			req: oas.WatchawareSourceInput{
+				Kind: oas.WatchawareSourceKindJellyfin,
+				Name: "unknown",
+				URL:  *u,
+			},
+			wantErr: domain.ErrNotFound,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			srcID := tc.srcID
+			if tc.createInit {
+				c, err := f.h.CreateWatchawareSource(ctx, &oas.WatchawareSourceInput{
+					Kind:   oas.WatchawareSourceKindJellyfin,
+					Name:   "watch-" + uuid.NewString()[:8],
+					URL:    *u,
+					APIKey: oas.NewOptString("my-api-key"),
+				})
+				if err != nil {
+					t.Fatalf("CreateWatchawareSource: %v", err)
+				}
+				dis, err := f.h.UpdateWatchawareSource(ctx, &oas.WatchawareSourceInput{
+					Kind:    c.Kind,
+					Name:    c.Name,
+					URL:     *u,
+					Enabled: oas.NewOptBool(false),
+				}, oas.UpdateWatchawareSourceParams{SourceId: c.ID})
+				if err != nil || dis.Enabled {
+					t.Fatalf("initial disable: %v", err)
+				}
+				srcID = c.ID
+			}
+			req := tc.req
+			if tc.createInit {
+				req.Name = "watch-" + uuid.NewString()[:8]
+			}
+			got, err := f.h.UpdateWatchawareSource(ctx, &req, oas.UpdateWatchawareSourceParams{SourceId: srcID})
+			if tc.wantErr != nil {
+				if !errors.Is(err, tc.wantErr) {
+					t.Fatalf("UpdateWatchawareSource() err = %v, want %v", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("UpdateWatchawareSource() err = %v", err)
+			}
+			if got.Enabled != tc.wantEnabled {
+				t.Fatalf("UpdateWatchawareSource() Enabled = %v, want %v", got.Enabled, tc.wantEnabled)
+			}
+		})
 	}
 }
