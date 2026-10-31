@@ -269,7 +269,8 @@ e2e-compose-pg-upgrade: ## Homelab compose bundle: Postgres previous major -> pi
 # A homelab install on the previous release moved to the candidate build: schema
 # migrations advance, settings and data read back unchanged, the admin logs in and stored
 # credentials decrypt. The planted cases delete a row, change a setting, start with the
-# wrong crypto key and upgrade to old images; the test must refuse all four. Not in verify-all
+# wrong crypto key, upgrade to old images, change an unread table, leave out the worker, delete
+# the API key and replace the password hash; the test must refuse all eight. Not in verify-all
 # (slow, needs Docker).
 e2e-compose-app-upgrade: ## Homelab compose bundle: application upgrade from previous release with data read-back (needs Docker)
 	if [ "$${SMOKE_SKIP_BUILD:-0}" != "1" ]; then \
@@ -281,7 +282,11 @@ e2e-compose-app-upgrade: ## Homelab compose bundle: application upgrade from pre
 	  "drop-row:api read-back differs" \
 	  "change-setting:settings differ" \
 	  "wrong-crypto-key:stored key" \
-	  "old-image:did not advance"
+	  "old-image:did not advance" \
+	  "touch-table:data read-back differs" \
+	  "no-worker:worker did not register" \
+	  "drop-key:old API key" \
+	  "reset-password:login with password"
 
 # The development stack of deploy/compose (`make dev` with the arr and observability profiles,
 # docs/metrics.md): Postgres healthy, Sonarr and Radarr answer, Prometheus scrapes the collector,

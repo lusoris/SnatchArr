@@ -20,6 +20,10 @@
 #   change-setting    modify a seeded setting before candidate start ("settings differ")
 #   wrong-crypto-key  restart candidate with different SNATCHARR_CRYPTO_KEY ("stored key")
 #   old-image         start candidate with old release images ("did not advance")
+#   touch-table       change a table no read-back shows ("data read-back differs")
+#   no-worker         start the candidate without its worker ("worker did not register")
+#   drop-key          delete the seeded API key ("old API key")
+#   reset-password    replace the admin password hash ("login with password")
 # Needs docker compose, curl, jq and openssl.
 set -euo pipefail
 
@@ -84,25 +88,6 @@ write_override() {
     local target=$1 api_img=$2 worker_img=$3
     cat >"$target" <<EOF
 services:
-  fake-arr:
-    image: $fake_arr_image
-    restart: unless-stopped
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        rm -f /tmp/pipe && mkfifo /tmp/pipe
-        exec 3<>/tmp/pipe
-        touch /tmp/fake-arr-ready
-        while true; do
-          nc -l -p 8989 < /tmp/pipe | while IFS= read -r line; do
-            printf '%s\n' "\$\$line" >> /tmp/fake-arr-headers.log
-            clean=\$\$(printf '%s' "\$\$line" | tr -d '\r')
-            if [ -z "\$\$clean" ]; then
-              printf 'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 70\r\nConnection: close\r\n\r\n{"appName":"Sonarr","version":"4.0.10.2544","instanceName":"fakearr"}\r\n' > /tmp/pipe
-              break
-            fi
-          done
-        done
   api:
     image: $api_img
     pull_policy: never
@@ -121,6 +106,27 @@ services:
       timeout: 5s
       retries: 6
       start_period: 30s
+  fake-arr:
+    image: $fake_arr_image
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+EOF
+    cat >>"$target" <<'EOF'
+      - |
+        cat >/tmp/handler.sh <<'HANDLER'
+        #!/bin/sh
+        for _ in $$(seq 1 64); do
+          IFS= read -r line || break
+          printf '%s\n' "$$line" >>/tmp/fake-arr-headers.log
+          [ -n "$$(printf '%s' "$$line" | tr -d '\r')" ] || break
+        done
+        body='{"appName":"Sonarr","version":"4.0.10.2544","instanceName":"fakearr"}'
+        printf 'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: %s\r\nConnection: close\r\n\r\n%s' "$${#body}" "$$body"
+        HANDLER
+        chmod +x /tmp/handler.sh
+        touch /tmp/fake-arr-headers.log /tmp/fake-arr-ready
+        exec nc -lk -p 8989 -e /tmp/handler.sh
 EOF
 }
 
@@ -250,9 +256,7 @@ seed_modules_sources_and_keys() {
     watch_payload=$(jq -n \
         --arg key "watch-$(secret)" \
         '{name: "upgrade-watchaware", kind: "jellyfin", url: "http://jellyfin.invalid:8096", api_key: $key, enabled: false}')
-    local watch_res
-    watch_res=$(api_req POST /watchaware/sources "$watch_payload")
-    watchaware_id=$(jq -r '.id' <<<"$watch_res")
+    api_req POST /watchaware/sources "$watch_payload" >/dev/null
     seed_count=$((seed_count + 1))
 
     api_req PUT /system/modules/adult '{"enabled": true}' >/dev/null
@@ -287,7 +291,6 @@ save_all_readbacks() {
     save_readback_item "/settings" "settings.json"
     save_readback_item "/requests/settings" "requests-settings.json"
     save_readback_item "/schedules" "schedules.json"
-    save_readback_item "/schedules/$schedule_id" "schedule.json"
     save_readback_item "/download-clients" "download-clients.json"
     save_readback_item "/download-clients/$dlclient_id" "download-client.json"
     save_readback_item "/seerr" "seerr.json"
@@ -301,7 +304,6 @@ save_all_readbacks() {
     save_readback_item "/me/preferences" "me-preferences.json"
     save_readback_item "/system/modules" "modules.json"
     save_readback_item "/watchaware/sources" "watchaware.json"
-    save_readback_item "/watchaware/sources/$watchaware_id" "watchaware-source.json"
     save_readback_item "/adult/sources" "adult.json"
     save_readback_item "/adult/sources/$adult_id" "adult-source.json"
     save_readback_item "/auth/api-keys" "api-keys.json"
@@ -311,13 +313,16 @@ save_all_readbacks() {
 compare_json() {
     local name=$1 old_file=$2 new_file=$3
     # shellcheck disable=SC2016
+    # The periodic instance check moves updated_at together with last_check_at.
     local jq_diff='
 def diff_subset(old; new; path):
   if (old | type) != (new | type) then
     "\(path): type mismatch (old \(old | type), new \(new | type))"
   elif (old | type) == "object" then
+    (old | has("last_check_at")) as $checked |
     old | to_entries[] | .key as $k | .value as $v |
-    if ($k == "last_check_at" or $k == "last_used_at" or $k == "last_sync_at") then
+    if ($k == "last_check_at" or $k == "last_used_at" or $k == "last_sync_at") or
+       ($checked and $k == "updated_at") then
       empty
     elif (new | has($k) | not) then
       "\(path).\($k): missing in new"
@@ -336,15 +341,11 @@ def diff_subset(old; new; path):
   else
     empty
   end;
-diff_subset($old; $new; "$")
+diff_subset($old[0]; $new[0]; "$")
 '
     local diff=""
-    if ! diff=$(jq -r -n \
-        --argjson old "$(cat "$old_file")" \
-        --argjson new "$(cat "$new_file")" \
-        "$jq_diff" 2>/dev/null); then
-        diff=""
-    fi
+    diff=$(jq -r -n --slurpfile old "$old_file" --slurpfile new "$new_file" \
+        "$jq_diff") || fail "api read-back differs for $name: comparison failed"
     if [ -n "$diff" ]; then
         fail "api read-back differs for $name: $diff"
     fi
@@ -366,7 +367,6 @@ verify_all_readbacks() {
     check_readback_item "/instances/$instance_id/queue-policy" "queue-policy.json"
     check_readback_item "/requests/settings" "requests-settings.json"
     check_readback_item "/schedules" "schedules.json"
-    check_readback_item "/schedules/$schedule_id" "schedule.json"
     check_readback_item "/download-clients" "download-clients.json"
     check_readback_item "/download-clients/$dlclient_id" "download-client.json"
     check_readback_item "/seerr" "seerr.json"
@@ -380,7 +380,6 @@ verify_all_readbacks() {
     check_readback_item "/me/preferences" "me-preferences.json"
     check_readback_item "/system/modules" "modules.json"
     check_readback_item "/watchaware/sources" "watchaware.json"
-    check_readback_item "/watchaware/sources/$watchaware_id" "watchaware-source.json"
     check_readback_item "/adult/sources" "adult.json"
     check_readback_item "/adult/sources/$adult_id" "adult-source.json"
     check_readback_item "/auth/api-keys" "api-keys.json"
@@ -402,6 +401,18 @@ apply_upgrade_plant() {
             cand_api="$old_api_image"
             cand_worker="$old_worker_image"
             write_override "$work/override-candidate.yaml" "$cand_api" "$cand_worker"
+            ;;
+        touch-table)
+            psql_at "UPDATE users SET updated_at = updated_at + interval '1 second'" >/dev/null
+            ;;
+        no-worker)
+            up_args+=(--scale worker=0)
+            ;;
+        drop-key)
+            psql_at "DELETE FROM api_keys" >/dev/null
+            ;;
+        reset-password)
+            psql_at "UPDATE users SET password_hash = 'planted'" >/dev/null
             ;;
         "") ;;
         *) fail "unknown UPGRADE_PLANT: $UPGRADE_PLANT" ;;
@@ -469,15 +480,13 @@ check_auth() {
     cookies_file="$work/cookies-new.txt"
     csrf_token="$new_csrf"
 
-    curl -fsS --max-time 10 -H "Authorization: Bearer $api_key" "$api/api/v1/system/status" >/dev/null ||
+    curl -fsS --max-time 10 -H "Authorization: Bearer $api_key" "$api/api/v1/settings" >/dev/null ||
         fail "authenticated request with old API key failed"
     echo "ok   admin logs in with old password, old API key authenticates"
 }
 
 check_instance_test() {
-    if ! dc exec -T fake-arr truncate -s 0 /tmp/fake-arr-headers.log >/dev/null 2>&1; then
-        echo "$label: note: truncate headers log not needed or failed" >&2
-    fi
+    dc exec -T fake-arr sh -c ': >/tmp/fake-arr-headers.log' || fail "could not clear the fake-arr log"
     if ! api_req POST "/instances/$instance_id/test" >/dev/null 2>&1; then
         echo "$label: note: instance test returned non-zero status" >&2
     fi
@@ -485,48 +494,47 @@ check_instance_test() {
     if ! headers=$(dc exec -T fake-arr cat /tmp/fake-arr-headers.log 2>/dev/null); then
         headers=""
     fi
-    if ! grep -q "X-Api-Key: $seeded_sonarr_key" <<<"$headers"; then
+    if ! grep -qi "X-Api-Key: $seeded_sonarr_key" <<<"$headers"; then
         fail "stored key did not decrypt: X-Api-Key missing from fake-arr after upgrade"
     fi
     echo "ok   instance test: stored key decrypted and sent to fake-arr"
 }
 
 check_worker() {
-    local contact=""
-    for _ in $(seq 1 30); do
+    # Contacts persist across the upgrade, so only one newer than the candidate's start counts.
+    # A worker's lease long-poll lasts up to 30 s, which sets the wait.
+    local contact="" fresh=""
+    for _ in $(seq 1 60); do
         local status_json=""
         if ! status_json=$(curl -fsS --max-time 10 "$api/api/v1/system/status" 2>/dev/null); then
             status_json="{}"
         fi
         contact=$(jq -r '.worker_last_contact_at // empty' <<<"$status_json")
         if [ -n "$contact" ]; then
-            break
+            fresh=$(psql_at "SELECT '$contact'::timestamptz > '$candidate_up_at'::timestamptz")
+            [ "$fresh" = "t" ] && break
         fi
         sleep 1
     done
-    [ -n "$contact" ] || fail "worker did not register in API (no worker_last_contact_at)"
-    echo "ok   worker healthy and registered in API (last contact: $contact)"
+    [ "$fresh" = "t" ] ||
+        fail "worker did not register in API after the upgrade (last contact '$contact', candidate up at $candidate_up_at)"
+    echo "ok   candidate worker registered in API (last contact: $contact)"
 }
 
 check_runtime_settings() {
     [ "$(psql_at "SELECT to_regclass('public.runtime_settings')")" = "runtime_settings" ] ||
         fail "table runtime_settings does not exist"
 
-    if curl -fsS --max-time 10 -b "$cookies_file" "$api/api/v1/settings/runtime" >/dev/null 2>&1; then
-        curl -fsS --max-time 10 -b "$cookies_file" -H "X-Csrf-Token: $new_csrf" \
-            -H 'Content-Type: application/json' -X PUT \
-            -d '{"values":{"snatcharr.public.url":"http://127.0.0.1:18080"}}' \
-            "$api/api/v1/settings/runtime" >/dev/null || fail "PUT /settings/runtime failed"
-        dc restart api >/dev/null
-        dc up -d --wait api || fail "api did not turn healthy after restart"
-        local val
-        val=$(curl -fsS --max-time 10 -b "$cookies_file" "$api/api/v1/settings/runtime" | \
-            jq -r '.settings[]? | select(.key == "snatcharr.public.url") | .value // empty')
-        [ "$val" = "http://127.0.0.1:18080" ] || fail "runtime setting did not survive restart: got '$val'"
-        echo "ok   new migration effect: runtime_settings updated and survived restart"
-    else
-        echo "ok   new migration effect: table runtime_settings verified in Postgres"
-    fi
+    api_req PUT /settings/runtime '{"values":{"snatcharr.item_search.cooldown_seconds":"1000"}}' >/dev/null ||
+        fail "PUT /settings/runtime failed"
+    dc restart api >/dev/null
+    dc up -d --wait --wait-timeout 240 api || fail "api did not turn healthy after restart"
+    local val
+    val=$(api_req GET /settings/runtime |
+        jq -r '.[] | select(.key == "snatcharr.item_search.cooldown_seconds") | .value // empty') ||
+        fail "GET /settings/runtime failed"
+    [ "$val" = "1000" ] || fail "runtime setting did not survive restart: got '$val'"
+    echo "ok   new migration effect: runtime setting saved and survived restart"
 }
 
 check_database_fingerprint() {
@@ -646,6 +654,7 @@ old_schema_dirty=$(psql_at 'SELECT dirty FROM schema_migrations')
 echo "ok   saved fingerprint and schema migration ($old_schema_version)"
 
 # Apply planted defect if requested.
+up_args=(-d --wait --wait-timeout 240)
 apply_upgrade_plant
 
 # 7. Switch to candidate images.
@@ -654,15 +663,16 @@ if [ -f "$work/postgres.yaml" ]; then
     files+=(-f "$work/postgres.yaml")
 fi
 dc config --quiet
-dc up -d --wait --wait-timeout 240 || fail "services did not turn healthy on candidate images"
+dc up "${up_args[@]}" || fail "services did not turn healthy on candidate images"
+candidate_up_at=$(psql_at "SELECT now()")
 
 # 8. Assertions: status, migrations, settings, auth, read-backs, instance probe, worker, table fingerprint.
 check_candidate_status
 check_migrations
 check_settings
 check_auth
-verify_all_readbacks
 check_instance_test
+verify_all_readbacks
 check_worker
 check_runtime_settings
 check_database_fingerprint
