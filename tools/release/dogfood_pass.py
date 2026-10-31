@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
-"""Run a live MCP dogfood pass against a deployed SnatchArr instance and record its status.
+"""Run an MCP dogfood pass against a deployed SnatchArr instance and record its status.
 
 Checks `/api/v1/system/status` to confirm the running instance serves the target commit,
 exercises the MCP Streamable HTTP endpoint (`/api/v1/mcp`) by listing all tools and
@@ -9,7 +9,9 @@ status `snatcharr/dogfood` when `--post` is set. Never logs the API key or tool 
 """
 
 import argparse
+import contextlib
 import http.server
+import io
 import json
 import os
 import re
@@ -31,6 +33,7 @@ MCP_PROTOCOL_VERSION = "2025-06-18"
 MCP_CLIENT_NAME = "snatcharr-dogfood"
 REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 COMMIT_RE = re.compile(r"^[0-9a-f]{7,40}$")
+INSTANCE_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,31}$")
 
 
 class CheckError(Exception):
@@ -257,38 +260,60 @@ def record_status(
         raise CheckError(f"gh api statuses failed: {detail}")
 
 
-def run_dogfood(
-    repository: str, commit: str, base_url: str, api_key: str, post: bool
-) -> int:
-    """Verify served commit, run MCP read-only dogfood calls, and record status."""
+def validate_target(
+    repository: str, commit: str, instance: str, base_url: str, api_key: str
+) -> None:
+    """Validate repository, commit SHA, instance label, and credentials."""
     if not REPO_RE.fullmatch(repository):
         raise CheckError(f"invalid repository: {repository!r}")
     if not COMMIT_RE.fullmatch(commit):
         raise CheckError(f"invalid commit SHA: {commit!r}")
+    if not INSTANCE_RE.fullmatch(instance):
+        raise CheckError(f"invalid instance label: {instance!r}")
     if not base_url or not api_key:
         raise CheckError("SNATCHARR_URL and SNATCHARR_API_KEY must be set")
+
+
+def run_dogfood(
+    repository: str,
+    commit: str,
+    instance: str,
+    base_url: str,
+    api_key: str,
+    post: bool,
+) -> int:
+    """Verify served commit, run MCP read-only dogfood calls, and record status."""
+    validate_target(repository, commit, instance, base_url, api_key)
     clean_url = base_url.rstrip("/")
     status_data = http_get_json(f"{clean_url}/api/v1/system/status", api_key)
     served_commit = status_data.get("commit")
     if not isinstance(served_commit, str) or not commit_matches(served_commit, commit):
         print(
-            f"dogfood: served commit {served_commit!r} does not match {commit[:12]}"
+            f"dogfood: instance={instance} served commit {served_commit!r} "
+            f"does not match {commit[:12]}"
         )
         record_status(
-            repository, commit, "failure", "live MCP dogfood: commit mismatch", post
+            repository,
+            commit,
+            "failure",
+            f"MCP dogfood on {instance}: commit mismatch",
+            post,
         )
         return 3
     session = MCPSession(base_url=clean_url, api_key=api_key)
     mcp_initialize(session)
     tools = mcp_list_tools(session)
     called, failed = call_readonly_tools(session, tools)
-    print(f"dogfood: {len(tools)} tools listed, {called} read-only calls, {failed} failed")
+    print(
+        f"dogfood: instance={instance} served_commit={served_commit} "
+        f"{len(tools)} tools listed, {called} read-only calls, {failed} failed"
+    )
     if called >= 1 and failed == 0:
         record_status(
             repository,
             commit,
             "success",
-            f"live MCP dogfood: {called} read-only calls passed",
+            f"MCP dogfood on {instance}: {called} read-only calls passed",
             post,
         )
         return 0
@@ -296,7 +321,7 @@ def run_dogfood(
         repository,
         commit,
         "failure",
-        f"live MCP dogfood: {called} read-only calls, {failed} failed",
+        f"MCP dogfood on {instance}: {called} read-only calls, {failed} failed",
         post,
     )
     return 3
@@ -459,48 +484,117 @@ def make_stub_handler(mode: str) -> type[http.server.BaseHTTPRequestHandler]:
 
 
 SELF_TEST_CASES = (
-    ("pass with read-only tools", "pass", 0),
-    ("served commit mismatch", "mismatch", 3),
-    ("a tool returning isError", "tool_error", 3),
-    ("zero callable read-only tools", "zero_readonly", 3),
+    (
+        "pass with read-only tools",
+        "pass",
+        "cluster",
+        0,
+        "MCP dogfood on cluster: 2 read-only calls passed",
+    ),
+    (
+        "served commit mismatch",
+        "mismatch",
+        "cluster",
+        3,
+        "MCP dogfood on cluster: commit mismatch",
+    ),
+    (
+        "a tool returning isError",
+        "tool_error",
+        "cluster",
+        3,
+        "MCP dogfood on cluster: 2 read-only calls, 1 failed",
+    ),
+    (
+        "zero callable read-only tools",
+        "zero_readonly",
+        "cluster",
+        3,
+        "MCP dogfood on cluster: 0 read-only calls, 0 failed",
+    ),
+    (
+        "pass names another instance",
+        "pass",
+        "dev-compose",
+        0,
+        "MCP dogfood on dev-compose: 2 read-only calls passed",
+    ),
+    (
+        "failure names another instance",
+        "mismatch",
+        "dev-compose",
+        3,
+        "MCP dogfood on dev-compose: commit mismatch",
+    ),
+)
+REFUSED_LABEL_CASES = (
+    ("missing --instance refused", []),
+    ("malformed --instance refused", ["--instance", "Bad Label"]),
 )
 
 
-def run_stub_case(label: str, mode: str, want_exit: int) -> None:
-    """Start a local HTTP stub on an ephemeral port and assert run_dogfood exit code."""
+def run_stub_case(
+    label: str, mode: str, instance: str, want_exit: int, want_desc: str
+) -> None:
+    """Start a local HTTP stub and assert the exit code and recorded description."""
     server = http.server.HTTPServer(("127.0.0.1", 0), make_stub_handler(mode))
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
+    output = io.StringIO()
     try:
         port = server.server_address[1]
-        got_exit = run_dogfood(
-            "lusoris/SnatchArr",
-            STUB_COMMIT,
-            f"http://127.0.0.1:{port}",
-            STUB_TOKEN,
-            post=False,
-        )
+        with contextlib.redirect_stdout(output):
+            got_exit = run_dogfood(
+                "lusoris/SnatchArr",
+                STUB_COMMIT,
+                instance,
+                f"http://127.0.0.1:{port}",
+                STUB_TOKEN,
+                post=False,
+            )
     finally:
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
     if got_exit != want_exit:
         raise SelfTestError(f"{label}: expected exit {want_exit}, got {got_exit}")
+    if f"description={want_desc}" not in output.getvalue():
+        raise SelfTestError(f"{label}: no status description {want_desc!r}")
+    if f"instance={instance} " not in output.getvalue():
+        raise SelfTestError(f"{label}: output does not name instance {instance!r}")
+    print(f"ok   {label}: exit {got_exit}")
+
+
+def run_refused_label(label: str, instance_args: list[str]) -> None:
+    """Assert that the command line refuses a missing or malformed instance label."""
+    arguments = ["--repository", "lusoris/SnatchArr", "--commit", STUB_COMMIT]
+    with contextlib.redirect_stderr(io.StringIO()) as errors:
+        got_exit = main(arguments + instance_args)
+    if got_exit != 1 or "invalid instance label" not in errors.getvalue():
+        raise SelfTestError(f"{label}: expected refusal, got exit {got_exit}")
     print(f"ok   {label}: exit {got_exit}")
 
 
 def self_test() -> None:
     """Run planted positive and negative cases against a local HTTP stub."""
-    for label, mode, want_exit in SELF_TEST_CASES:
-        run_stub_case(label, mode, want_exit)
-    print(f"dogfood pass self-test: {len(SELF_TEST_CASES)} cases behaved as required")
+    for label, mode, instance, want_exit, want_desc in SELF_TEST_CASES:
+        run_stub_case(label, mode, instance, want_exit, want_desc)
+    for label, instance_args in REFUSED_LABEL_CASES:
+        run_refused_label(label, instance_args)
+    total = len(SELF_TEST_CASES) + len(REFUSED_LABEL_CASES)
+    print(f"dogfood pass self-test: {total} cases behaved as required")
 
 
 def main(arguments: list[str] | None = None) -> int:
-    """CLI entrypoint for recording a live MCP dogfood pass."""
+    """CLI entrypoint for recording an MCP dogfood pass."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repository", default="")
     parser.add_argument("--commit", default="")
+    parser.add_argument(
+        "--instance",
+        default="",
+        help="deployment instance label (e.g. cluster, dev-compose)",
+    )
     parser.add_argument("--post", action="store_true")
     parser.add_argument("--self-test", action="store_true")
     options = parser.parse_args(arguments)
@@ -511,6 +605,7 @@ def main(arguments: list[str] | None = None) -> int:
         return run_dogfood(
             options.repository,
             options.commit,
+            options.instance,
             os.environ.get("SNATCHARR_URL", ""),
             os.environ.get("SNATCHARR_API_KEY", ""),
             options.post,
