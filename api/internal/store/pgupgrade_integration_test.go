@@ -44,9 +44,14 @@ func runPostgres(t *testing.T, nw *testcontainers.DockerNetwork, image, alias st
 		tcpostgres.WithUsername("test"), tcpostgres.WithPassword("test"),
 		tcpostgres.BasicWaitStrategies(), storetest.QuickInit(), network.WithNetwork([]string{alias}, nw))
 	t.Cleanup(func() {
+		if c == nil {
+			return
+		}
+		// Terminate directly: TerminateContainer bounds only the stop and removes the container
+		// under context.Background, the call that hung until the package timeout.
 		ctx, cancel := context.WithTimeout(context.Background(), upgradeTerminateTimeout)
 		defer cancel()
-		if termErr := testcontainers.TerminateContainer(c, testcontainers.StopContext(ctx), testcontainers.StopTimeout(0)); termErr != nil {
+		if termErr := c.Terminate(ctx, testcontainers.StopTimeout(0)); termErr != nil {
 			t.Errorf("terminate %s: %v", image, termErr)
 		}
 	})

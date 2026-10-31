@@ -47,7 +47,7 @@ api-verify: ## golangci-lint + go fix + gosec + govulncheck + go test -race + ge
 	# The shared `vuln` goal runs whatever govulncheck the PATH holds; api-vuln runs the pinned one
 	# that CI runs, and the scanners are installed at their pins first (#161).
 	$(MAKE) -C api -f "$(GOLUSORIS_SHARED)" lint GOLANGCI_CONFIG=../.golangci.yml
-	env GOFLAGS="$${GOFLAGS:+$$GOFLAGS }-p=$(API_TEST_PARALLEL)" $(MAKE) -C api -f "$(GOLUSORIS_SHARED)" test
+	env GOFLAGS="$$(go env GOFLAGS) -p=$(API_TEST_PARALLEL)" $(MAKE) -C api -f "$(GOLUSORIS_SHARED)" test
 	$(MAKE) api-vuln
 	$(MAKE) gosec-install
 	$(MAKE) api-gosec
