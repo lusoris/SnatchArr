@@ -32,6 +32,13 @@ verify-all: governance-verify hooks-verify workflows-verify secret-scan proto-ve
 	@echo "All SnatchArr verification gates passed."
 
 # ── api/ (Go, golusoris) ──────────────────────────────────────────────────────
+# How many api test packages run at once. About 24 of them boot a Postgres container each;
+# at the default -p (one per core, 32 here) they all stop together, Docker kills 16 of them
+# after the 10 s stop timeout, and the store upgrade test, whose two containers start in
+# that window, took 89 s of the 120 s package budget. At -p 16 under the same host load
+# (2026-10-31): 2 forced stops, upgrade test 24 s, whole run 77 s instead of 104 s.
+API_TEST_PARALLEL ?= 16
+
 api-verify: ## golangci-lint + go fix + gosec + govulncheck + go test -race + generated-code drift + spectral + tools-verify
 	# go.mod and go.sum hold exactly what the code needs: prints the missing changes and fails.
 	go mod tidy -diff
@@ -39,7 +46,8 @@ api-verify: ## golangci-lint + go fix + gosec + govulncheck + go test -race + ge
 	# package (see api-gosec), so the three other goals run here and gosec runs from the module root.
 	# The shared `vuln` goal runs whatever govulncheck the PATH holds; api-vuln runs the pinned one
 	# that CI runs, and the scanners are installed at their pins first (#161).
-	$(MAKE) -C api -f "$(GOLUSORIS_SHARED)" lint test GOLANGCI_CONFIG=../.golangci.yml
+	$(MAKE) -C api -f "$(GOLUSORIS_SHARED)" lint GOLANGCI_CONFIG=../.golangci.yml
+	env GOFLAGS="$${GOFLAGS:+$$GOFLAGS }-p=$(API_TEST_PARALLEL)" $(MAKE) -C api -f "$(GOLUSORIS_SHARED)" test
 	$(MAKE) api-vuln
 	$(MAKE) gosec-install
 	$(MAKE) api-gosec
