@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.1](https://github.com/lusoris/SnatchArr/compare/v0.8.0...v0.8.1) (2026-10-31)
+
+
+### Documentation
+
+* **roadmap:** record the 0.8.0 scope and the work moved to 0.9 ([#956](https://github.com/lusoris/SnatchArr/issues/956)) ([b3d3993](https://github.com/lusoris/SnatchArr/commit/b3d3993233e09a6f4132b64ec4b8773a2d4ec8a5))
+
 ## [0.8.0](https://github.com/lusoris/SnatchArr/compare/v0.7.1...v0.8.0) (2026-10-31)
 
 
