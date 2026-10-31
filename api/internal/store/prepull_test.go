@@ -15,8 +15,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/moby/moby/api/pkg/authconfig"
 	"github.com/moby/moby/api/types/jsonstream"
 	"github.com/moby/moby/client"
+	"github.com/testcontainers/testcontainers-go"
 )
 
 // prePullAttempts is the maximum number of attempts to pull a container image.
@@ -28,6 +30,57 @@ var prePullBaseDelay = 2 * time.Second
 // imagePuller defines the subset of the Docker client needed to pull an image.
 type imagePuller interface {
 	ImagePull(ctx context.Context, ref string, opts client.ImagePullOptions) (client.ImagePullResponse, error)
+}
+
+// authResolver resolves and encodes Docker registry authentication for an image reference.
+type authResolver func(ctx context.Context, ref string) (string, error)
+
+// defaultAuthResolver resolves Docker registry authentication for the given image reference,
+// mirroring testcontainers-go attemptToPullImage.
+func defaultAuthResolver(ctx context.Context, ref string) (string, error) {
+	_, imageAuth, err := testcontainers.DockerImageAuth(ctx, ref)
+	if err == nil {
+		encoded, encodeErr := authconfig.Encode(imageAuth)
+		if encodeErr != nil {
+			return "", fmt.Errorf("encode registry auth: %w", encodeErr)
+		}
+		return encoded, nil
+	}
+	return "", nil
+}
+
+// prePullOptions configures prePull retry delays and authentication resolution.
+type prePullOptions struct {
+	baseDelay    time.Duration
+	authResolver authResolver
+}
+
+// resolvePrePullOptions applies defaults to optional prePull settings.
+func resolvePrePullOptions(opts []prePullOptions) (time.Duration, authResolver) {
+	if len(opts) == 0 {
+		return prePullBaseDelay, defaultAuthResolver
+	}
+	delay := opts[0].baseDelay
+	resolver := defaultAuthResolver
+	if opts[0].authResolver != nil {
+		resolver = opts[0].authResolver
+	}
+	return delay, resolver
+}
+
+// waitDelay sleeps for d or until ctx is canceled.
+func waitDelay(ctx context.Context, d time.Duration) error {
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return ctxErr
+	}
+	timer := time.NewTimer(d)
+	select {
+	case <-ctx.Done():
+		timer.Stop()
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 // hubRef mirrors testcontainers prependHubRegistry for registry-less images.
@@ -43,21 +96,27 @@ func hubRef(prefix, image string) string {
 }
 
 // prePull pulls the given image reference with explicit error checking and retries.
-// An optional base delay can be passed as a seam for testing; if omitted, prePullBaseDelay is used.
-func prePull(ctx context.Context, p imagePuller, ref string, delays ...time.Duration) error {
-	baseDelay := prePullBaseDelay
-	if len(delays) > 0 {
-		baseDelay = delays[0]
+// Test seams for base delay and registry authentication can be passed via opts.
+func prePull(ctx context.Context, p imagePuller, ref string, opts ...prePullOptions) error {
+	baseDelay, resolver := resolvePrePullOptions(opts)
+
+	auth, err := resolver(ctx, ref)
+	if err != nil {
+		return fmt.Errorf("resolve auth for %s: %w", ref, err)
+	}
+	pullOpts := client.ImagePullOptions{
+		RegistryAuth: auth,
 	}
 
 	var lastErr error
 	for attempt := 1; attempt <= prePullAttempts; attempt++ {
-		resp, err := p.ImagePull(ctx, ref, client.ImagePullOptions{})
-		if err != nil {
-			lastErr = err
+		resp, pullErr := p.ImagePull(ctx, ref, pullOpts)
+		if pullErr != nil {
+			lastErr = pullErr
 		} else {
-			lastErr = resp.Wait(ctx)
-			_ = resp.Close()
+			waitErr := resp.Wait(ctx)
+			closeErr := resp.Close()
+			lastErr = errors.Join(waitErr, closeErr)
 			if lastErr == nil {
 				return nil
 			}
@@ -66,15 +125,8 @@ func prePull(ctx context.Context, p imagePuller, ref string, delays ...time.Dura
 		if attempt == prePullAttempts {
 			break
 		}
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			return ctxErr
-		}
-		timer := time.NewTimer(time.Duration(attempt) * baseDelay)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return ctx.Err()
-		case <-timer.C:
+		if waitErr := waitDelay(ctx, time.Duration(attempt)*baseDelay); waitErr != nil {
+			return waitErr
 		}
 	}
 	return fmt.Errorf("pull %s after %d attempts: %w", ref, prePullAttempts, lastErr)
@@ -82,7 +134,8 @@ func prePull(ctx context.Context, p imagePuller, ref string, delays ...time.Dura
 
 // fakeResponse implements client.ImagePullResponse for tests.
 type fakeResponse struct {
-	waitErr error
+	waitErr  error
+	closeErr error
 }
 
 // Read implements io.Reader.
@@ -92,7 +145,7 @@ func (f *fakeResponse) Read(_ []byte) (int, error) {
 
 // Close implements io.Closer.
 func (f *fakeResponse) Close() error {
-	return nil
+	return f.closeErr
 }
 
 // JSONMessages implements client.ImagePullResponse.
@@ -107,15 +160,18 @@ func (f *fakeResponse) Wait(_ context.Context) error {
 
 // fakePuller implements imagePuller for testing prePull retry behavior.
 type fakePuller struct {
-	pullErrs []error
-	waitErrs []error
-	calls    int
-	onPull   func(call int)
+	pullErrs  []error
+	waitErrs  []error
+	closeErrs []error
+	lastOpts  client.ImagePullOptions
+	calls     int
+	onPull    func(call int)
 }
 
 // ImagePull simulates pulling an image and returns configured responses or errors.
-func (f *fakePuller) ImagePull(_ context.Context, _ string, _ client.ImagePullOptions) (client.ImagePullResponse, error) {
+func (f *fakePuller) ImagePull(_ context.Context, _ string, opts client.ImagePullOptions) (client.ImagePullResponse, error) {
 	f.calls++
+	f.lastOpts = opts
 	if f.onPull != nil {
 		f.onPull(f.calls)
 	}
@@ -135,7 +191,14 @@ func (f *fakePuller) ImagePull(_ context.Context, _ string, _ client.ImagePullOp
 			f.waitErrs = f.waitErrs[1:]
 		}
 	}
-	return &fakeResponse{waitErr: waitErr}, nil
+	var closeErr error
+	if len(f.closeErrs) > 0 {
+		closeErr = f.closeErrs[0]
+		if len(f.closeErrs) > 1 {
+			f.closeErrs = f.closeErrs[1:]
+		}
+	}
+	return &fakeResponse{waitErr: waitErr, closeErr: closeErr}, nil
 }
 
 // TestHubRef tests image reference resolution with and without custom registry prefixes.
@@ -194,17 +257,24 @@ type prePullTestCase struct {
 	name          string
 	pullErrs      []error
 	waitErrs      []error
+	closeErrs     []error
+	authResolver  authResolver
 	cancelOnPull  int
 	wantCalls     int
+	wantAuth      string
+	checkAuth     bool
 	wantErrSub    string
 	wantCtxCancel bool
 }
 
 // checkPrePullResult validates test expectations for prePull test cases.
-func checkPrePullResult(t *testing.T, tc prePullTestCase, err error, calls int, ref string) {
+func checkPrePullResult(t *testing.T, tc prePullTestCase, err error, fake *fakePuller, ref string) {
 	t.Helper()
-	if calls != tc.wantCalls {
-		t.Errorf("call count = %d, want %d", calls, tc.wantCalls)
+	if fake.calls != tc.wantCalls {
+		t.Errorf("call count = %d, want %d", fake.calls, tc.wantCalls)
+	}
+	if tc.checkAuth && fake.lastOpts.RegistryAuth != tc.wantAuth {
+		t.Errorf("registry auth = %q, want %q", fake.lastOpts.RegistryAuth, tc.wantAuth)
 	}
 	if tc.wantCtxCancel {
 		if !errors.Is(err, context.Canceled) {
@@ -263,6 +333,37 @@ func TestPrePull(t *testing.T) {
 			wantCalls:     1,
 			wantCtxCancel: true,
 		},
+		{
+			name:         "F1 resolver returning encoded auth passes it to pull options",
+			authResolver: func(_ context.Context, _ string) (string, error) { return "abc", nil },
+			wantCalls:    1,
+			checkAuth:    true,
+			wantAuth:     "abc",
+		},
+		{
+			name: "F1 resolver error on docker image auth yields empty auth and pull proceeds",
+			authResolver: func(_ context.Context, _ string) (string, error) {
+				return "", nil
+			},
+			wantCalls: 1,
+			checkAuth: true,
+			wantAuth:  "",
+		},
+		{
+			name: "F1 resolver error on encode returns wrapped error promptly",
+			authResolver: func(_ context.Context, _ string) (string, error) {
+				return "", errors.New("encode registry auth failed")
+			},
+			wantCalls:  0,
+			wantErrSub: "encode registry auth failed",
+		},
+		{
+			name:       "F2 close error with wait nil retries and fails with close error text",
+			waitErrs:   []error{nil},
+			closeErrs:  []error{errors.New("stream close failed")},
+			wantCalls:  3,
+			wantErrSub: "stream close failed",
+		},
 	}
 
 	for _, tt := range tests {
@@ -272,8 +373,9 @@ func TestPrePull(t *testing.T) {
 			defer cancel()
 
 			fake := &fakePuller{
-				pullErrs: tt.pullErrs,
-				waitErrs: tt.waitErrs,
+				pullErrs:  tt.pullErrs,
+				waitErrs:  tt.waitErrs,
+				closeErrs: tt.closeErrs,
 				onPull: func(call int) {
 					if tt.cancelOnPull > 0 && call == tt.cancelOnPull {
 						cancel()
@@ -282,8 +384,38 @@ func TestPrePull(t *testing.T) {
 			}
 
 			const ref = "postgres:17-alpine"
-			err := prePull(ctx, fake, ref, 0)
-			checkPrePullResult(t, tt, err, fake.calls, ref)
+			err := prePull(ctx, fake, ref, prePullOptions{
+				baseDelay:    0,
+				authResolver: tt.authResolver,
+			})
+			checkPrePullResult(t, tt, err, fake, ref)
+		})
+	}
+}
+
+// TestDefaultAuthResolver checks the real resolver against controlled Docker auth configs, never the host's.
+func TestDefaultAuthResolver(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   string
+		ref      string
+		wantAuth bool
+	}{
+		{name: "credentials for the mirror are sent", config: `{"auths":{"mirror.example":{"auth":"dTpw"}}}`, ref: "mirror.example/postgres:17-alpine", wantAuth: true},
+		{name: "registry without credentials pulls anonymously", config: `{"auths":{"mirror.example":{"auth":"dTpw"}}}`, ref: "other.example/postgres:17-alpine"},
+		{name: "unreadable auth config pulls anonymously", config: `{`, ref: "mirror.example/postgres:17-alpine"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("DOCKER_CONFIG", t.TempDir())
+			t.Setenv("DOCKER_AUTH_CONFIG", tt.config)
+			auth, err := defaultAuthResolver(t.Context(), tt.ref)
+			if err != nil {
+				t.Fatalf("defaultAuthResolver(%s): %v", tt.ref, err)
+			}
+			if got := auth != ""; got != tt.wantAuth {
+				t.Errorf("defaultAuthResolver(%s) auth set = %v, want %v", tt.ref, got, tt.wantAuth)
+			}
 		})
 	}
 }
