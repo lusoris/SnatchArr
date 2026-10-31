@@ -8,7 +8,7 @@ import difflib
 import io
 import json
 import re
-import subprocess
+import subprocess  # nosec B404 -- runs only git and gh with fixed argument lists, never a shell
 import sys
 import tempfile
 from pathlib import Path
@@ -49,7 +49,7 @@ def get_repo(repo_override: str | None, git_cwd: Path | None = None) -> str:
             )
         return cleaned
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B603 -- fixed git argv list, no shell
             ["git", "remote", "get-url", "origin"],
             cwd=git_cwd,
             capture_output=True,
@@ -69,7 +69,7 @@ def fetch_milestones_from_gh(repo: str) -> str:
     """Fetch open milestones JSON from GitHub CLI via gh api."""
     endpoint = f"repos/{repo}/milestones?state=open&per_page=100"
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B603 -- fixed gh argv list, no shell; repo validated as owner/name
             ["gh", "api", endpoint],
             capture_output=True,
             text=True,
