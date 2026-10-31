@@ -89,7 +89,8 @@ def shell_functions(lines: list[str]) -> list[tuple[str, int, int]]:
         end = idx
         if not is_one_line:
             for j in range(idx + 1, len(lines)):
-                if lines[j].rstrip() == f"{indent}}}" or lines[j].startswith(f"{indent}}} "):
+                r = lines[j].rstrip()
+                if r in (f"{indent}}}", f"{indent}}};") or lines[j].startswith((f"{indent}}} ", f"{indent}}}; ")):
                     end = j
                     break
         funcs.append((name, idx + 1, end + 1))
@@ -147,6 +148,8 @@ def file_findings(root: Path, path: str, touched: set[int], gaps: set[int]) -> l
 
 def run(root: Path, base: str) -> list[str]:
     """Return every finding for the change between the merge base with base and the work tree."""
+    if base.startswith("-"):
+        raise CheckError(f"base ref {base} starts with '-'")
     merge_base = git(root, "merge-base", base, "HEAD").strip()
     diff = git(root, "diff", "-U0", "--no-color", "--no-ext-diff", merge_base, "--",
                "*.sh", "*.bash", "*.py")

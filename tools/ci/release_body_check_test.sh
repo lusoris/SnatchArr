@@ -39,16 +39,26 @@ variant no-header 'd.pop("pull-request-header")'
 variant one-item 'd["pull-request-footer"]=d["pull-request-footer"].replace("Commit messages adhere","Commits follow")'
 variant checked-item 'd["pull-request-footer"]=d["pull-request-footer"].replace("- [ ] Commit messages adhere","- [x] Commit messages adhere")'
 variant prose-item 'd["pull-request-footer"]=d["pull-request-footer"].replace("- [ ] Commit messages adhere","Commit messages adhere")'
+variant empty-package-footer 'd["packages"]["."]["pull-request-footer"] = ""'
+variant null-package-footer 'd["packages"]["."]["pull-request-footer"] = None'
+variant bad-packages 'd["packages"] = "not-a-dict"'
+variant bad-pkg-entry 'd["packages"]["."] = "not-a-dict"'
+variant root-only-no-footer 'd.pop("packages"); d.pop("pull-request-footer")'
 printf '{"a": 1, "a": 2}\n' >"$work/dup.json"
 printf '[]\n' >"$work/array.json"
 printf 'no headings here\n' >"$work/empty.md"
 
 expect "real config covers the template" 0 "ok (" "$root/release-please-config.json"
-expect "missing footer refused" 1 "lacks template line: ## Pre-Merge Verification Checklist" "$work/no-footer.json"
-expect "missing header refused" 1 "lacks template line: ## Description" "$work/no-header.json"
+expect "missing footer refused" 1 "lacks template line (package .): ## Pre-Merge Verification Checklist" "$work/no-footer.json"
+expect "missing header refused" 1 "lacks template line (package .): ## Description" "$work/no-header.json"
 expect "one reworded checklist item refused" 1 "Commit messages adhere to Conventional Commits format" "$work/one-item.json"
 expect "checked checklist item refused" 1 "Commit messages adhere to Conventional Commits format" "$work/checked-item.json"
 expect "prose checklist item refused" 1 "Commit messages adhere to Conventional Commits format" "$work/prose-item.json"
+expect "package empty footer overrides root" 1 "lacks template line (package .): ## Pre-Merge Verification Checklist" "$work/empty-package-footer.json"
+expect "package null footer falls back to root" 0 "ok (" "$work/null-package-footer.json"
+expect "packages not a dict cannot run" 2 "packages must be a dict of dicts" "$work/bad-packages.json"
+expect "package entry not a dict cannot run" 2 "packages must be a dict of dicts" "$work/bad-pkg-entry.json"
+expect "root-only config missing footer refused" 1 "lacks template line: ## Pre-Merge Verification Checklist" "$work/root-only-no-footer.json"
 expect "duplicate key cannot run" 2 "duplicate key" "$work/dup.json"
 expect "array config cannot run" 2 "not a JSON object" "$work/array.json"
 expect "template without sections cannot run" 2 "no heading or checklist item" "$root/release-please-config.json" "$work/empty.md"

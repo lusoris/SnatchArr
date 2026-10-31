@@ -26,14 +26,14 @@ new_repo() {
     git -C "$dir" commit -q -m base
 }
 
-# expect NAME WANT_STATUS WANT_TEXT EDIT: the function EDIT changes the repository in $repo, then the check runs.
+# expect NAME WANT_STATUS WANT_TEXT EDIT [BASE]: the function EDIT changes the repository in $repo, then the check runs.
 expect() {
-    local name=$1 want=$2 text=$3 edit=$4 out status
+    local name=$1 want=$2 text=$3 edit=$4 base=${5:-main} out status
     repo="$work/$(printf '%s' "$name" | tr -c 'a-z0-9' '-')"
     new_repo "$repo"
     (cd "$repo" && "$edit")
     set +e
-    out=$(python3 -I "$check" --root "$repo" --base main 2>&1)
+    out=$(python3 -I "$check" --root "$repo" "--base=$base" 2>&1)
     status=$?
     set -e
     if [ "$status" -ne "$want" ] || ! printf '%s' "$out" | grep -qF -- "$text"; then
@@ -124,6 +124,18 @@ edit_16() {
     printf "%s\n" "#!/usr/bin/env bash" "# documented." "good_untracked() {" "    :" "}" >new.sh
 }
 
+# edit_17: shell function closed with semicolon does not run on into next function.
+edit_17() {
+    printf "%s\n" "" "undoc() {" "    :" "};" "" "# doc_fn is documented." "doc_fn() {" "    echo doc_hi" "}" >>lib.sh
+    git add -A && git commit -q -m base2
+    sed -i "s/echo doc_hi/echo doc_hello/" lib.sh
+}
+
+# edit_18: option-like base ref refused.
+edit_18() {
+    :
+}
+
 expect "untouched bare function passes" 0 "ok (" edit_1
 expect "new shell function without header refused" 1 "shell function new_fn has no header comment" edit_2
 expect "edit inside a bare shell function refused" 1 "shell function bare_fn has no header comment" edit_3
@@ -140,6 +152,8 @@ expect "one-line shell function with header passes" 0 "ok (" edit_13
 expect "deleting blank line before bare function passes" 0 "ok (" edit_14
 expect "untracked shell file with bare function refused" 1 "new.sh:2: shell function bare_untracked has no header comment" edit_15
 expect "untracked shell file with header passes" 0 "ok (" edit_16
+expect "shell function closed with semicolon does not run on" 0 "ok (" edit_17
+expect "option-like base ref refused" 2 "starts with '-'" edit_18 "--output=/dev/null"
 
 if [ "$failed" -ne 0 ]; then
     exit 1

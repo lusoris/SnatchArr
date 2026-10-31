@@ -40,12 +40,41 @@ def required_lines(template: str) -> list[str]:
     return out
 
 
-def missing(config: dict[str, object], template: str) -> list[str]:
-    """List template lines that neither the release pull request header nor footer carries."""
-    header = str(config.get("pull-request-header") or "")
-    footer = str(config.get("pull-request-footer") or "")
-    body_lines = {line.strip() for text in (header, footer) for line in text.splitlines()}
-    return [line for line in required_lines(template) if line not in body_lines]
+def effective(config: dict[str, object], pkg: str | None, key: str) -> str:
+    """Return the effective header or footer string for pkg, falling back to root config."""
+    if pkg is not None:
+        packages = config.get("packages")
+        if isinstance(packages, dict):
+            pkg_config = packages.get(pkg)
+            if isinstance(pkg_config, dict) and key in pkg_config and pkg_config[key] is not None:
+                return str(pkg_config[key])
+    return str(config.get(key) or "")
+
+
+def validate_packages(config: dict[str, object], config_path: str) -> str | None:
+    """Validate that packages is a dict of dicts if present."""
+    packages = config.get("packages")
+    if packages is not None and (
+        not isinstance(packages, dict) or any(not isinstance(v, dict) for v in packages.values())
+    ):
+        return f"{config_path} packages must be a dict of dicts"
+    return None
+
+
+def missing(config: dict[str, object], template: str) -> list[tuple[str | None, str]]:
+    """List (package or None, template line) for template lines missing from header or footer."""
+    packages = config.get("packages")
+    req = required_lines(template)
+    target_pkgs: list[str | None] = list(packages.keys()) if isinstance(packages, dict) and packages else [None]
+    gaps: list[tuple[str | None, str]] = []
+    for pkg in target_pkgs:
+        header = effective(config, pkg, "pull-request-header")
+        footer = effective(config, pkg, "pull-request-footer")
+        body_lines = {line.strip() for text in (header, footer) for line in text.splitlines()}
+        for line in req:
+            if line not in body_lines:
+                gaps.append((pkg, line))
+    return gaps
 
 
 def main() -> int:
@@ -63,12 +92,17 @@ def main() -> int:
     if not isinstance(config, dict):
         print(f"release_body_check: cannot run: {args.config} is not a JSON object", file=sys.stderr)
         return 2
+    err = validate_packages(config, args.config)
+    if err:
+        print(f"release_body_check: cannot run: {err}", file=sys.stderr)
+        return 2
     if not required_lines(template):
         print("release_body_check: cannot run: the template has no heading or checklist item", file=sys.stderr)
         return 2
     gaps = missing(config, template)
-    for gap in gaps:
-        print(f"{args.config}: release pull request body lacks template line: {gap}")
+    for pkg, gap in gaps:
+        scope = f" (package {pkg})" if pkg is not None else ""
+        print(f"{args.config}: release pull request body lacks template line{scope}: {gap}")
     if gaps:
         return 1
     print("release_body_check: ok (release pull request body carries every template section)")
