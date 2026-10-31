@@ -180,6 +180,8 @@ jobs:
               - 'tools/ci/web_strings_scan.py'
               - 'tools/e2e/web_visual.sh'
               - 'tools/e2e/planted.sh'
+              # web/e2e/features/878-dogfood-gate.test.ts runs the release gate.
+              - 'tools/release/**'
               - '.github/workflows/ci.yml'
             proto:
               - 'proto/**'
