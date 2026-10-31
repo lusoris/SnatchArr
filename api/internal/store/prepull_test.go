@@ -369,7 +369,7 @@ func TestPrePull(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			ctx, cancel := context.WithCancel(t.Context())
+			ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 			defer cancel()
 
 			fake := &fakePuller{
@@ -409,7 +409,9 @@ func TestDefaultAuthResolver(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv("DOCKER_CONFIG", t.TempDir())
 			t.Setenv("DOCKER_AUTH_CONFIG", tt.config)
-			auth, err := defaultAuthResolver(t.Context(), tt.ref)
+			ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+			defer cancel()
+			auth, err := defaultAuthResolver(ctx, tt.ref)
 			if err != nil {
 				t.Fatalf("defaultAuthResolver(%s): %v", tt.ref, err)
 			}
