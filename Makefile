@@ -580,7 +580,7 @@ release-e2e-check: ## Release feat/fix commits since the previous tag each map t
 	python3 -I tools/ci/release_e2e_check.py --self-test
 	python3 -I tools/ci/release_e2e_check.py
 
-release-dogfood-check: ## Release dogfood gate and live MCP dogfood pass recorder against their planted cases
+release-dogfood-check: ## Release dogfood gate and MCP dogfood pass recorder against their planted cases
 	python3 -I tools/release/dogfood_gate.py --self-test
 	python3 -I tools/release/dogfood_pass.py --self-test
 
