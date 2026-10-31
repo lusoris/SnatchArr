@@ -21,7 +21,7 @@ GOMODCACHE       = $(subst \,/,$(shell go env GOMODCACHE))
 GOLUSORIS_VER    = $(shell go list -m -f '{{.Version}}' github.com/golusoris/golusoris)
 GOLUSORIS_SHARED = $(GOMODCACHE)/github.com/golusoris/golusoris@$(GOLUSORIS_VER)/tools/Makefile.shared
 
-.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-soak e2e-compose-smoke e2e-compose-pg-upgrade e2e-dev-compose-smoke dlclients-live arr-forceimport-live integrations-live e2e-cnpg-pg-upgrade e2e-cnpg-backup-restore e2e-chart-install web-verify web-e2e web-e2e-api web-visual web-visual-update proto-verify deploy-verify chart-package governance-verify hooks-verify contracts-verify workflows-verify workflows-lint release-e2e-check release-dogfood-check secret-scan licences licences-check logos logos-check \
+.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-soak e2e-compose-smoke e2e-compose-pg-upgrade e2e-compose-app-upgrade e2e-dev-compose-smoke dlclients-live arr-forceimport-live integrations-live e2e-cnpg-pg-upgrade e2e-cnpg-backup-restore e2e-chart-install web-verify web-e2e web-e2e-api web-visual web-visual-update proto-verify deploy-verify chart-package governance-verify hooks-verify contracts-verify workflows-verify workflows-lint release-e2e-check release-dogfood-check secret-scan licences licences-check logos logos-check \
 	images kind-up kind-deploy kind-keda-proof kind-down \
         api-gen api-gosec api-vuln gosec-install govulncheck-install sqlc-install tools-verify tools-lint tools-test tools-gosec web-gen proto-gen dev hooks setup api-openapi-breaking settings-parity settings-parity-check
 
@@ -265,6 +265,28 @@ e2e-compose-pg-upgrade: ## Homelab compose bundle: Postgres previous major -> pi
 	SMOKE_API_IMAGE=$(E2E_API_IMAGE) SMOKE_WORKER_IMAGE=$(E2E_WORKER_IMAGE) \
 	  bash tools/e2e/planted.sh UPGRADE_PLANT tools/e2e/compose_pg_upgrade.sh \
 	  "skip-move:the new postgres" "skip-restore:data read-back differs"
+
+# A homelab install on the previous release moved to the candidate build: schema
+# migrations advance, settings and data read back unchanged, the admin logs in and stored
+# credentials decrypt. The planted cases delete a row, change a setting, start with the
+# wrong crypto key, upgrade to old images, change an unread table, leave out the worker, delete
+# the API key and replace the password hash; the test must refuse all eight. Not in verify-all
+# (slow, needs Docker).
+e2e-compose-app-upgrade: ## Homelab compose bundle: application upgrade from previous release with data read-back (needs Docker)
+	if [ "$${SMOKE_SKIP_BUILD:-0}" != "1" ]; then \
+	  docker build -t $(E2E_API_IMAGE) -f Dockerfile . ; \
+	  docker build -t $(E2E_WORKER_IMAGE) -f worker/Dockerfile . ; \
+	fi
+	SMOKE_API_IMAGE=$(E2E_API_IMAGE) SMOKE_WORKER_IMAGE=$(E2E_WORKER_IMAGE) \
+	  bash tools/e2e/planted.sh UPGRADE_PLANT tools/e2e/compose_app_upgrade.sh \
+	  "drop-row:api read-back differs" \
+	  "change-setting:settings differ" \
+	  "wrong-crypto-key:stored key" \
+	  "old-image:did not advance" \
+	  "touch-table:data read-back differs" \
+	  "no-worker:worker did not register" \
+	  "drop-key:old API key" \
+	  "reset-password:login with password"
 
 # The development stack of deploy/compose (`make dev` with the arr and observability profiles,
 # docs/metrics.md): Postgres healthy, Sonarr and Radarr answer, Prometheus scrapes the collector,
