@@ -6,7 +6,7 @@
 # on the previous release (UPGRADE_FROM or the latest v* git tag), seeds resources across
 # the API, saves read-back JSON and database fingerprint, then restarts on candidate
 # images (SMOKE_API_IMAGE, SMOKE_WORKER_IMAGE) and verifies:
-#   a. schema migrations advance to candidate version and dirty is false;
+#   a. schema migrations match candidate version (advanced or unchanged) and dirty is false;
 #   b. tables differ only from an explicit allow-list with runtime justifications;
 #   c. JSON read-backs match (jq subset equality on every seeded resource);
 #   d. runtime settings are preserved (/settings non-default value);
@@ -32,6 +32,8 @@ label="compose-app-upgrade"
 . "$(dirname "$0")/compose_lib.sh"
 # shellcheck source=tools/e2e/pull_retry.sh
 . "$(dirname "$0")/pull_retry.sh"
+# shellcheck source=tools/e2e/schema_check.sh
+. "$(dirname "$0")/schema_check.sh"
 
 resolve_images() {
     # A shallow CI checkout holds no tags and no history, so the version order decides, not ancestry.
@@ -453,12 +455,14 @@ check_migrations() {
         sed -n 's/^\([0-9]\+\)_.*/\1/p' | sort -n | tail -n 1)
     highest_migration=$((10#$highest_migration))
 
-    if [ "$cand_schema_version" -le "$old_schema_version" ] || \
-       [ "$cand_schema_version" -ne "$highest_migration" ] || \
-       [ "$cand_schema_dirty" != "f" ]; then
-        fail "schema_migrations did not advance: got $cand_schema_version (dirty $cand_schema_dirty), want > $old_schema_version and == $highest_migration"
+    if ! schema_after_upgrade_ok "$old_schema_version" "$cand_schema_version" "$highest_migration" "$cand_schema_dirty"; then
+        fail "schema_migrations not at the candidate version: got $cand_schema_version (dirty $cand_schema_dirty), want >= $old_schema_version and == $highest_migration"
     fi
-    echo "ok   schema migrations advanced: $old_schema_version -> $cand_schema_version (dirty: false)"
+    if [ "$cand_schema_version" -gt "$old_schema_version" ]; then
+        echo "ok   schema migrations advanced: $old_schema_version -> $cand_schema_version (dirty: false)"
+    else
+        echo "ok   schema migrations unchanged at $cand_schema_version (no migration since $prev_ver)"
+    fi
 }
 
 check_settings() {

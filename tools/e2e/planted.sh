@@ -31,6 +31,11 @@ bounded() {
     return "$status"
 }
 
+# print_reasons prints reason lines (FAIL or <label>: <msg>) preceding container logs.
+print_reasons() {
+    awk '/^FAIL |^[a-z0-9][a-z0-9-]*: /'
+}
+
 for case in "$@"; do
     plant=${case%%:*}
     want=${case#*:}
@@ -41,16 +46,16 @@ for case in "$@"; do
         exit 1
     fi
     if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then
-        # Reason line precedes container logs; print it before the tail.
-        printf '%s\n' "$out" | awk '/^FAIL /' >&2
+        # Reason lines precede container logs; print them before the tail.
+        printf '%s\n' "$out" | print_reasons >&2
         printf '%s\n' "$out" | tail -20 >&2
         exit 1
     fi
     case "$out" in
     *"$want"*) echo "ok   planted case $plant refused: $want" ;;
     *)
-        # Reason line precedes container logs; print it before the tail.
-        printf '%s\n' "$out" | awk '/^FAIL /' >&2
+        # Reason lines precede container logs; print them before the tail.
+        printf '%s\n' "$out" | print_reasons >&2
         printf '%s\n' "$out" | tail -20 >&2
         echo "planted: case $plant failed without '$want'" >&2
         exit 1

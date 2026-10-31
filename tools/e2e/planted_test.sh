@@ -13,12 +13,14 @@ trap 'rm -rf "$work"' EXIT
 failed=0
 
 # The script under test: PLANT=bad fails with "refused bad", PLANT=quiet passes, PLANT=hang and
-# HANG_CLEAN=1 sleep far past the bound; the clean run passes.
+# HANG_CLEAN=1 sleep far past the bound, PLANT=labelled fails with a reason line followed by
+# container log noise; the clean run passes.
 cat >"$work/check.sh" <<'SCRIPT'
 case "${PLANT:-}" in
 bad) echo "refused bad" >&2; exit 1 ;;
 quiet) exit 0 ;;
 hang) sleep 120 ;;
+labelled) echo "check: the real reason" >&2; for i in $(seq 30); do echo "api-1 | noise $i"; done; exit 1 ;;
 esac
 [ "${HANG_CLEAN:-0}" = 1 ] && sleep 120
 exit 0
@@ -56,5 +58,8 @@ expect "a plant that passes is refused" 1 "case quiet passed" -- "quiet:anything
 expect "a wrong message is refused" 1 "failed without 'other text'" -- "bad:other text"
 expect "a hung planted case ends at the bound" 1 "case hang of $work/check.sh did not end within 2s" -- "hang:never"
 expect "a hung clean run ends at the bound" 1 "clean run of $work/check.sh did not end within 2s" HANG_CLEAN=1 -- "bad:refused bad"
+# A script that reports through compose_lib.sh fail() prints "<label>: <reason>"; a wrong
+# message must still show that reason, though 30 container log lines push it out of the tail.
+expect "a label reason line survives the log tail" 1 "check: the real reason" -- "labelled:other text"
 expect "no planted case is refused" 1 "no planted case" --
 exit "$failed"
