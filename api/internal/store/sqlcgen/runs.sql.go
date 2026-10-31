@@ -386,6 +386,40 @@ func (q *Queries) LeaseRun(ctx context.Context, arg LeaseRunParams) (SnatchRun, 
 	return i, err
 }
 
+const listInstanceLastRunFinished = `-- name: ListInstanceLastRunFinished :many
+SELECT i.name AS instance_name, r.status, max(r.finished_at)::timestamptz AS last_finished
+FROM snatch_runs r JOIN instances i ON i.id = r.instance_id
+WHERE i.enabled AND i.kind <> 'stash' AND r.finished_at IS NOT NULL AND r.status IN ('done','failed','cancelled')
+GROUP BY i.name, r.status
+`
+
+type ListInstanceLastRunFinishedRow struct {
+	InstanceName string
+	Status       string
+	LastFinished time.Time
+}
+
+// Latest finish per enabled non-stash instance and terminal status, for the state gauges.
+func (q *Queries) ListInstanceLastRunFinished(ctx context.Context) ([]ListInstanceLastRunFinishedRow, error) {
+	rows, err := q.db.Query(ctx, listInstanceLastRunFinished)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListInstanceLastRunFinishedRow{}
+	for rows.Next() {
+		var i ListInstanceLastRunFinishedRow
+		if err := rows.Scan(&i.InstanceName, &i.Status, &i.LastFinished); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRuns = `-- name: ListRuns :many
 SELECT id, instance_id, kind, status, leased_by, lease_expires_at, queued_at, started_at, finished_at, searched_count, error, focus_entity_id, focus_group_id, lease_count, dry_run, seed FROM snatch_runs
 WHERE ($3::uuid IS NULL OR instance_id = $3::uuid)
