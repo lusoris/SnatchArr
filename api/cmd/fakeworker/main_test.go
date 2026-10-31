@@ -76,6 +76,7 @@ func TestParseFlags(t *testing.T) {
 				count:    defaultCount,
 				timeout:  defaultTimeout,
 				token:    defaultWorkerToken,
+				eligible: -1,
 			},
 			wantErr: nil,
 		},
@@ -88,6 +89,7 @@ func TestParseFlags(t *testing.T) {
 				"-count", "3",
 				"-timeout", "15s",
 				"-token", "custom-token",
+				"-eligible", "7",
 			},
 			want: config{
 				grpcAddr: "127.0.0.1:29090",
@@ -96,6 +98,7 @@ func TestParseFlags(t *testing.T) {
 				count:    3,
 				timeout:  15 * time.Second,
 				token:    "custom-token",
+				eligible: 7,
 			},
 			wantErr: nil,
 		},
@@ -124,6 +127,7 @@ func TestParseFlags(t *testing.T) {
 				count:    1,
 				timeout:  defaultTimeout,
 				token:    defaultWorkerToken,
+				eligible: -1,
 			},
 			wantErr: nil,
 		},
@@ -343,5 +347,49 @@ func TestProcessRuns_BoundaryTimeout(t *testing.T) {
 	err := processRuns(ctx, client, cfg, logger)
 	if err == nil {
 		t.Fatal("processRuns() expected timeout error, got nil")
+	}
+}
+
+func TestEligibleFlagReachesCompleteRun(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		args []string
+		want *uint32
+	}{
+		{"positive", []string{"-eligible", "7"}, new(uint32(7))},
+		{"boundary", []string{"-eligible", "0"}, new(uint32(0))},
+		{"absent", nil, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cfg, err := parseFlags(tc.args)
+			if err != nil {
+				t.Fatalf("parseFlags: %v", err)
+			}
+			called := false
+			client := &mockWorkerServiceClient{
+				completeFunc: func(_ context.Context, req *snatcharrv1.CompleteRunRequest) (*snatcharrv1.CompleteRunResponse, error) {
+					called = true
+					if (req.EligibleItems == nil) != (tc.want == nil) || (tc.want != nil && req.GetEligibleItems() != *tc.want) {
+						t.Errorf("eligible_items = %v, want %v", req.EligibleItems, tc.want)
+					}
+					return &snatcharrv1.CompleteRunResponse{}, nil
+				},
+			}
+			if err := completeRun(t.Context(), client, cfg.workerID, "run", cfg.outcome, cfg.eligible); err != nil {
+				t.Fatalf("completeRun: %v", err)
+			}
+			if !called {
+				t.Fatal("CompleteRun was not called")
+			}
+		})
+	}
+}
+
+func TestEligibleFlagRejectsOverflow(t *testing.T) {
+	t.Parallel()
+	if _, err := parseFlags([]string{"-eligible", "4294967296"}); !errors.Is(err, errBadEligible) {
+		t.Fatalf("parseFlags overflow = %v, want errBadEligible", err)
 	}
 }

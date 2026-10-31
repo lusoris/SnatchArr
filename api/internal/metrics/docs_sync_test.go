@@ -150,6 +150,7 @@ func populateRegistry(m *metrics.Metrics) {
 	m.SearchDispatchedAt("sonarr-main", time.Now())
 	m.SetInstanceLastRunFinished("sonarr-main", "done", time.Now())
 	m.SetInstanceRunInterval("sonarr-main", 1800)
+	m.SetInstanceEligibleItems("sonarr-main", "missing", 7)
 	m.SetStaminaUsed("sonarr-main", 10)
 	m.SetStaminaRemaining("sonarr-main", 40)
 	m.SetRuns("queued", 1)

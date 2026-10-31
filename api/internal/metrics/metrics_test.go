@@ -425,6 +425,7 @@ func TestInstanceRunGauges(t *testing.T) {
 	const (
 		lastRunMetric  = "snatcharr_instance_last_run_finished_timestamp_seconds"
 		intervalMetric = "snatcharr_instance_run_interval_seconds"
+		eligibleMetric = "snatcharr_instance_eligible_items"
 	)
 	t1 := time.Date(2026, 10, 19, 10, 0, 0, 0, time.UTC)
 	t2 := time.Date(2026, 10, 19, 11, 30, 0, 0, time.UTC)
@@ -434,6 +435,8 @@ func TestInstanceRunGauges(t *testing.T) {
 	m.SetInstanceLastRunFinished("radarr-4k", "done", t2)
 	m.SetInstanceRunInterval("sonarr-main", 1800)
 	m.SetInstanceRunInterval("radarr-4k", 3600)
+	m.SetInstanceEligibleItems("sonarr-main", "missing", 7)
+	m.SetInstanceEligibleItems("sonarr-main", "upgrade", 0)
 
 	cases := []struct {
 		name     string
@@ -447,6 +450,9 @@ func TestInstanceRunGauges(t *testing.T) {
 		{"positive radarr done", lastRunMetric, map[string]string{"arr_instance": "radarr-4k", "outcome": "done"}, float64(t2.Unix()), true},
 		{"positive sonarr interval", intervalMetric, map[string]string{"arr_instance": "sonarr-main"}, 1800, true},
 		{"positive radarr interval", intervalMetric, map[string]string{"arr_instance": "radarr-4k"}, 3600, true},
+		{"positive eligible", eligibleMetric, map[string]string{"arr_instance": "sonarr-main", "kind": "missing"}, 7, true},
+		{"boundary zero eligible", eligibleMetric, map[string]string{"arr_instance": "sonarr-main", "kind": "upgrade"}, 0, true},
+		{"negative absent eligible", eligibleMetric, map[string]string{"arr_instance": "radarr-4k", "kind": "missing"}, 0, false},
 		{"negative missing instance", intervalMetric, map[string]string{"arr_instance": "lidarr"}, 0, false},
 	}
 	for _, tc := range cases {
@@ -459,7 +465,7 @@ func TestInstanceRunGauges(t *testing.T) {
 		}
 	}
 
-	// ResetInstanceRuns clears both vecs.
+	// ResetInstanceRuns clears all instance run vecs.
 	m.ResetInstanceRuns()
 	for _, tc := range cases {
 		if !tc.expected {
@@ -474,5 +480,6 @@ func TestInstanceRunGauges(t *testing.T) {
 	var nilM *metrics.Metrics
 	nilM.SetInstanceLastRunFinished("sonarr-main", "done", t1)
 	nilM.SetInstanceRunInterval("sonarr-main", 1800)
+	nilM.SetInstanceEligibleItems("sonarr-main", "missing", 7)
 	nilM.ResetInstanceRuns()
 }

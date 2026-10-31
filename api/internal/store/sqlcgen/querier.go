@@ -203,6 +203,8 @@ type Querier interface {
 	ListGateSeries(ctx context.Context, arg ListGateSeriesParams) ([]WatchawareGateSeries, error)
 	ListGateSeriesIDsForInstance(ctx context.Context, instanceID uuid.UUID) ([]int32, error)
 	ListGatedSeriesWithHeldSeasons(ctx context.Context, arg ListGatedSeriesWithHeldSeasonsParams) ([]WatchawareGateSeries, error)
+	// Newest finished non-preview pool per enabled non-stash instance and snatch kind.
+	ListInstanceEligibleItems(ctx context.Context) ([]ListInstanceEligibleItemsRow, error)
 	// Latest finish per enabled non-stash instance and terminal status, for the state gauges.
 	ListInstanceLastRunFinished(ctx context.Context) ([]ListInstanceLastRunFinishedRow, error)
 	// Cycle interval of each enabled non-stash instance whose policy schedules any run.

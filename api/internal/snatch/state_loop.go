@@ -88,6 +88,9 @@ func (l *StateLoop) Tick(ctx context.Context) error {
 	if err := l.refreshInstanceRuns(ctx); err != nil {
 		return fmt.Errorf("state metrics: instance runs: %w", err)
 	}
+	if err := l.refreshInstanceEligibleItems(ctx); err != nil {
+		return fmt.Errorf("state metrics: instance eligible items: %w", err)
+	}
 	if err := l.refreshSeerr(ctx); err != nil {
 		return fmt.Errorf("state metrics: seerr: %w", err)
 	}
@@ -281,6 +284,21 @@ func (l *StateLoop) isScheduleOpen(ctx context.Context, instanceID uuid.UUID) (b
 		return false, err
 	}
 	return !d.Paused, nil
+}
+
+func (l *StateLoop) refreshInstanceEligibleItems(ctx context.Context) error {
+	qCtx, cancel := context.WithTimeout(ctx, stateQueryTimeout)
+	defer cancel()
+	rows, err := l.st.Q().ListInstanceEligibleItems(qCtx)
+	if err != nil {
+		return store.MapError(err)
+	}
+	for _, row := range rows {
+		if row.EligibleItems != nil {
+			l.m.SetInstanceEligibleItems(row.InstanceName, row.Kind, float64(*row.EligibleItems))
+		}
+	}
+	return nil
 }
 
 func (l *StateLoop) refreshSeerr(ctx context.Context) error {
