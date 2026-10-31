@@ -397,7 +397,11 @@ func (h *Handlers) UpdateSettings(ctx context.Context, req *oas.Settings) (*oas.
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	in := settingsFromOAS(req)
+	stored, err := h.settings.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	in := settingsUpdateFromOAS(req, stored)
 	s, err := h.settings.Update(ctx, in)
 	if err != nil {
 		return nil, err

@@ -82,9 +82,13 @@ func TestInstanceAndInputConversions(t *testing.T) {
 	if in.Kind != domain.KindSonarr || !in.Enabled || in.APIKey != "k" {
 		t.Fatalf("inputFromOAS: %+v", in)
 	}
-	up := updateFromOAS(&oas.InstanceUpdate{Kind: oas.AppKindSonarr, Name: "tv", BaseURL: "http://s", Enabled: oas.NewOptBool(false)})
+	up := updateFromOAS(&oas.InstanceUpdate{Kind: oas.AppKindSonarr, Name: "tv", BaseURL: "http://s", Enabled: oas.NewOptBool(false)}, true)
 	if up.APIKey != "" || up.Enabled {
 		t.Fatalf("updateFromOAS: %+v", up)
+	}
+	upKept := updateFromOAS(&oas.InstanceUpdate{Kind: oas.AppKindSonarr, Name: "tv", BaseURL: "http://s"}, false)
+	if upKept.Enabled {
+		t.Fatalf("updateFromOAS omitted should keep false: %+v", upKept)
 	}
 }
 

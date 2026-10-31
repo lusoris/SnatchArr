@@ -282,3 +282,107 @@ func TestUserNotifyTargetsDeliveryFencing(t *testing.T) {
 		t.Fatalf("deliverCount after user B event = %d, want 1 (user B event must not reach user A)", got)
 	}
 }
+
+func TestUpdateMyNotifyTarget_TableDriven(t *testing.T) {
+	t.Parallel()
+	f := newIntegrationFixture(t)
+	user := domain.User{ID: uuid.New(), Username: "tester943", Role: domain.RoleViewer}
+	seedTestUser(t, f, user)
+	ctx := withUser(t.Context(), user)
+
+	created, err := f.h.CreateMyNotifyTarget(ctx, &oas.UserNotifyTargetInput{
+		Kind: oas.NotificationChannelKindDiscord,
+		Config: oas.NotificationChannelConfig{
+			WebhookURL: oas.NewOptString("https://discord.com/api/webhooks/123/initial"),
+		},
+	})
+	if err != nil || !created.Enabled {
+		t.Fatalf("CreateMyNotifyTarget() with omitted enabled = %+v, %v, want enabled true", created, err)
+	}
+
+	disabled, err := f.h.UpdateMyNotifyTarget(ctx, &oas.UserNotifyTargetUpdate{
+		Kind:    oas.NotificationChannelKindDiscord,
+		Enabled: oas.NewOptBool(false),
+	}, oas.UpdateMyNotifyTargetParams{TargetId: created.ID})
+	if err != nil || disabled.Enabled {
+		t.Fatalf("UpdateMyNotifyTarget() initial disable = %+v, %v", disabled, err)
+	}
+
+	tests := []struct {
+		name        string
+		createInit  bool
+		targetID    uuid.UUID
+		req         oas.UserNotifyTargetUpdate
+		wantEnabled bool
+		wantErr     error
+	}{
+		{
+			name:        "positive: omitted enabled keeps stored disabled value",
+			createInit:  true,
+			req:         oas.UserNotifyTargetUpdate{Kind: oas.NotificationChannelKindDiscord},
+			wantEnabled: false,
+		},
+		{
+			name:       "negative: explicit true replaces stored disabled value",
+			createInit: true,
+			req: oas.UserNotifyTargetUpdate{
+				Kind:    oas.NotificationChannelKindDiscord,
+				Enabled: oas.NewOptBool(true),
+			},
+			wantEnabled: true,
+		},
+		{
+			name:       "boundary: explicit false replaces stored true value",
+			createInit: true,
+			req: oas.UserNotifyTargetUpdate{
+				Kind:    oas.NotificationChannelKindDiscord,
+				Enabled: oas.NewOptBool(false),
+			},
+			wantEnabled: false,
+		},
+		{
+			name:     "boundary: unknown id returns not found",
+			targetID: uuid.New(),
+			req:      oas.UserNotifyTargetUpdate{Kind: oas.NotificationChannelKindDiscord},
+			wantErr:  domain.ErrNotFound,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			targetID := tc.targetID
+			if tc.createInit {
+				c, err := f.h.CreateMyNotifyTarget(ctx, &oas.UserNotifyTargetInput{
+					Kind: oas.NotificationChannelKindDiscord,
+					Config: oas.NotificationChannelConfig{
+						WebhookURL: oas.NewOptString("https://discord.com/api/webhooks/123/" + uuid.NewString()[:8]),
+					},
+				})
+				if err != nil {
+					t.Fatalf("CreateMyNotifyTarget() err = %v", err)
+				}
+				dis, err := f.h.UpdateMyNotifyTarget(ctx, &oas.UserNotifyTargetUpdate{
+					Kind:    oas.NotificationChannelKindDiscord,
+					Enabled: oas.NewOptBool(false),
+				}, oas.UpdateMyNotifyTargetParams{TargetId: c.ID})
+				if err != nil || dis.Enabled {
+					t.Fatalf("initial disable err = %v", err)
+				}
+				targetID = c.ID
+			}
+			got, err := f.h.UpdateMyNotifyTarget(ctx, &tc.req, oas.UpdateMyNotifyTargetParams{TargetId: targetID})
+			if tc.wantErr != nil {
+				if !errors.Is(err, tc.wantErr) {
+					t.Fatalf("UpdateMyNotifyTarget() err = %v, want %v", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("UpdateMyNotifyTarget() err = %v", err)
+			}
+			if got.Enabled != tc.wantEnabled {
+				t.Fatalf("UpdateMyNotifyTarget() Enabled = %v, want %v", got.Enabled, tc.wantEnabled)
+			}
+		})
+	}
+}

@@ -36,18 +36,6 @@ func toOASAdultSource(s adult.Source) oas.AdultSource {
 }
 
 func fromOASAdultSourceInput(req *oas.AdultSourceInput) adult.SourceInput {
-	enabled := true
-	if req.Enabled.IsSet() {
-		enabled = req.Enabled.Value
-	}
-	syncFavs := true
-	if req.SyncFavorites.IsSet() {
-		syncFavs = req.SyncFavorites.Value
-	}
-	priority := 0
-	if req.Priority.IsSet() {
-		priority = req.Priority.Value
-	}
 	apiKey := ""
 	if req.APIKey.IsSet() {
 		apiKey = req.APIKey.Value
@@ -56,9 +44,9 @@ func fromOASAdultSourceInput(req *oas.AdultSourceInput) adult.SourceInput {
 		Name:          req.Name,
 		Endpoint:      req.Endpoint,
 		APIKey:        apiKey,
-		Enabled:       enabled,
-		SyncFavorites: syncFavs,
-		Priority:      priority,
+		Enabled:       req.Enabled.Or(true),
+		SyncFavorites: req.SyncFavorites.Or(true),
+		Priority:      req.Priority.Or(0),
 	}
 }
 
@@ -125,7 +113,15 @@ func (h *Handlers) UpdateAdultSource(ctx context.Context, req *oas.AdultSourceIn
 	if h.adult == nil {
 		return nil, fmt.Errorf("%w: module adult is disabled", domain.ErrNotFound)
 	}
-	src, err := h.adult.UpdateSource(ctx, params.SourceId, fromOASAdultSourceInput(req))
+	stored, err := h.adult.GetSource(ctx, params.SourceId)
+	if err != nil {
+		return nil, mapAdultError(err)
+	}
+	in := fromOASAdultSourceInput(req)
+	in.Enabled = req.Enabled.Or(stored.Enabled)
+	in.SyncFavorites = req.SyncFavorites.Or(stored.SyncFavorites)
+	in.Priority = req.Priority.Or(stored.Priority)
+	src, err := h.adult.UpdateSource(ctx, params.SourceId, in)
 	if err != nil {
 		return nil, mapAdultError(err)
 	}

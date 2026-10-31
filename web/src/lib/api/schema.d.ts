@@ -1956,8 +1956,8 @@ export interface components {
             base_url: string;
             /** @description Omit or leave empty to keep the stored key */
             api_key?: string;
-            /** @default true */
-            enabled: boolean;
+            /** @description On create, omitted = true. On update, omitted = stored value stays; sent = replaces it. */
+            enabled?: boolean;
         };
         /**
          * @description The product that answered the probe of an instance kind several products serve. That is the kind `readarr` alone: forks of the retired Readarr keep its API layout. The probe tells them apart by `appName`, `packageAuthor` and `version` of `system/status`. `unknown` is an answer that matches none of the others. An instance carries the product of its last successful connection test as `last_seen_product`.
@@ -2026,16 +2026,10 @@ export interface components {
             exclude_quality_profiles?: number[];
             /** @description Skip items released less than this many hours ago; 0 (or absent) turns the delay off. The release date is the one of the app kind: air date (Sonarr, Whisparr v2), the date of radarr_release_type (Radarr, Whisparr v3), the album or book release date. Items without a date are kept. */
             release_delay_h?: number;
-            /**
-             * @description When true, planner creates preview / dry-run runs that do not dispatch searches.
-             * @default false
-             */
-            dry_run: boolean;
-            /**
-             * @description Radarr only: skip movies Radarr reports as not yet available (isAvailable false, the movie's minimum availability is not reached). They are not searched and cost no stamina. Movies without the flag are searched. Absent = true.
-             * @default true
-             */
-            skip_unavailable_movies: boolean;
+            /** @description When true, planner creates preview / dry-run runs that do not dispatch searches. On update, omitted = stored value stays; sent = replaces it. */
+            dry_run?: boolean;
+            /** @description Radarr only: skip movies Radarr reports as not yet available (isAvailable false, the movie's minimum availability is not reached). They are not searched and cost no stamina. Movies without the flag are searched. On update, omitted = stored value stays; sent = replaces it. */
+            skip_unavailable_movies?: boolean;
             /** Format: date-time */
             readonly updated_at?: string;
         };
@@ -2214,16 +2208,13 @@ export interface components {
             global_hourly_cap: number;
             search_priority_preset: components["schemas"]["PriorityPresetMap"];
             download_priority_preset: components["schemas"]["PriorityPresetMap"];
-            /**
-             * @description Whether the Model Context Protocol (MCP) server at /api/v1/mcp is enabled.
-             * @default false
-             */
-            llm_enabled: boolean;
+            /** @description Whether the Model Context Protocol (MCP) server at /api/v1/mcp is enabled. On update, omitted = stored value stays; sent = replaces it. */
+            llm_enabled?: boolean;
             /** @description MCP write tools enabled by the administrator; an omitted list enables none. */
             llm_write_tools?: components["schemas"]["LlmWriteTool"][];
-            /** @description Installation-wide brand mark shown when a user has no override. */
+            /** @description Installation-wide brand mark shown when a user has no override. On update, omitted = stored value stays; sent = replaces it. */
             brand_mark?: components["schemas"]["BrandMark"];
-            /** @description Installation-wide SFW mode applied when a user has no override. */
+            /** @description Installation-wide SFW mode applied when a user has no override. On update, omitted = stored value stays; sent = replaces it. */
             sfw_mode?: components["schemas"]["SfwMode"];
             /** Format: date-time */
             updated_at?: string;
@@ -2259,15 +2250,9 @@ export interface components {
             pending_restart: boolean;
             settings?: components["schemas"]["RuntimeSetting"][];
         };
-        /**
-         * @default vulva
-         * @enum {string}
-         */
+        /** @enum {string} */
         BrandMark: "vulva" | "penis" | "hand";
-        /**
-         * @default auto
-         * @enum {string}
-         */
+        /** @enum {string} */
         SfwMode: "auto" | "on" | "off";
         UserPreferences: {
             /** @description Per-user brand mark override; null or omitted follows the installation default. */
@@ -2376,17 +2361,17 @@ export interface components {
             username?: string;
             /** @description Password, or the API key for SABnzbd. On update, omit to keep the stored one. */
             secret?: string;
-            /** @default true */
-            enabled: boolean;
-            /** @default 0 */
-            max_active: number;
-            /** @default 0 */
-            max_queued: number;
+            /** @description On create, omitted = true. On update, omitted = stored value stays; sent = replaces it. */
+            enabled?: boolean;
+            /** @description On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it. */
+            max_active?: number;
+            /** @description On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it. */
+            max_queued?: number;
             /**
              * Format: int64
-             * @default 0
+             * @description On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it.
              */
-            bandwidth_budget_bps: number;
+            bandwidth_budget_bps?: number;
         };
         DownloadClientStatus: {
             /** Format: uuid */
@@ -2445,8 +2430,8 @@ export interface components {
             base_url: string;
             /** @description Required on create; omit on update to keep the stored key */
             api_key?: string;
-            /** @default true */
-            enabled: boolean;
+            /** @description On create, omitted = true. On update, omitted = stored value stays; sent = replaces it. */
+            enabled?: boolean;
             /** Format: uuid */
             sonarr_instance_id?: string;
             /** Format: uuid */
@@ -2522,10 +2507,10 @@ export interface components {
             base_url: string;
             /** @description Required on create; omit on update to keep the stored key */
             api_key?: string;
-            /** @default 15 */
-            hourly_cap: number;
-            /** @default true */
-            enabled: boolean;
+            /** @description On create, omitted = 15. On update, omitted = stored value stays; sent = replaces it. */
+            hourly_cap?: number;
+            /** @description On create, omitted = true. On update, omitted = stored value stays; sent = replaces it. */
+            enabled?: boolean;
         };
         ProwlarrStatus: {
             /** Format: uuid */
@@ -2646,8 +2631,8 @@ export interface components {
         NotificationChannelUpdate: {
             name: string;
             kind: components["schemas"]["NotificationChannelKind"];
-            /** @default true */
-            enabled: boolean;
+            /** @description On create, omitted = true. On update, omitted = stored value stays; sent = replaces it. */
+            enabled?: boolean;
             /** @description Omitted = stored configuration stays; sent = replaces it, omitted secret fields stay. */
             config?: components["schemas"]["NotificationChannelConfig"];
         };
@@ -2673,8 +2658,8 @@ export interface components {
         };
         UserNotifyTargetUpdate: {
             kind: components["schemas"]["NotificationChannelKind"];
-            /** @default true */
-            enabled: boolean;
+            /** @description On create, omitted = true. On update, omitted = stored value stays; sent = replaces it. */
+            enabled?: boolean;
             config?: components["schemas"]["NotificationChannelConfig"];
         };
         UserNotifyTarget: {
@@ -2706,8 +2691,8 @@ export interface components {
             event_kind: components["schemas"]["NotificationRuleEventKind"];
             /** @default 1 */
             threshold: number;
-            /** @default true */
-            enabled: boolean;
+            /** @description On create, omitted = true. On update, omitted = stored value stays; sent = replaces it. */
+            enabled?: boolean;
             channel_ids: string[];
         };
         NotificationRule: {
@@ -2866,8 +2851,8 @@ export interface components {
             url: string;
             /** @description Required on create; omit on update to keep stored key */
             api_key?: string;
-            /** @default true */
-            enabled: boolean;
+            /** @description On create, omitted = true. On update, omitted = stored value stays; sent = replaces it. */
+            enabled?: boolean;
         };
         WatchawareSyncStatus: {
             /** Format: date-time */
@@ -2934,12 +2919,12 @@ export interface components {
             endpoint: string;
             /** @description Required on create; omit on update to keep stored key */
             api_key?: string;
-            /** @default true */
-            enabled: boolean;
-            /** @default true */
-            sync_favorites: boolean;
-            /** @default 0 */
-            priority: number;
+            /** @description On create, omitted = true. On update, omitted = stored value stays; sent = replaces it. */
+            enabled?: boolean;
+            /** @description On create, omitted = true. On update, omitted = stored value stays; sent = replaces it. */
+            sync_favorites?: boolean;
+            /** @description On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it. */
+            priority?: number;
         };
         AdultSyncSummary: {
             sources_synced: number;

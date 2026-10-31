@@ -248,7 +248,7 @@ SPDX-License-Identifier: EUPL-1.2
 			draft = {
 				history_retention_days: settings.data.history_retention_days,
 				user_agent: settings.data.user_agent,
-				llm_enabled: settings.data.llm_enabled,
+				llm_enabled: settings.data.llm_enabled ?? false,
 				llm_write_tools: [...(settings.data.llm_write_tools ?? [])],
 				brand_mark: settings.data.brand_mark ?? 'vulva',
 				sfw_mode: settings.data.sfw_mode ?? 'auto'

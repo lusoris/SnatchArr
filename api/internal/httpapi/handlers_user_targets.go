@@ -48,13 +48,9 @@ func (h *Handlers) CreateMyNotifyTarget(ctx context.Context, req *oas.UserNotify
 	if !ok {
 		return nil, domain.ErrUnauthorized
 	}
-	enabled := true
-	if req.Enabled.IsSet() {
-		enabled = req.Enabled.Value
-	}
 	in := domain.UserNotifyTargetInput{
 		Kind:    domain.ChannelKind(req.Kind),
-		Enabled: enabled,
+		Enabled: req.Enabled.Or(true),
 		Config:  notificationConfigFromOAS(req.Config),
 	}
 	t, err := h.notify.CreateUserTarget(ctx, u.ID, in)
@@ -71,9 +67,9 @@ func (h *Handlers) UpdateMyNotifyTarget(ctx context.Context, req *oas.UserNotify
 	if !ok {
 		return nil, domain.ErrUnauthorized
 	}
-	enabled := true
-	if req.Enabled.IsSet() {
-		enabled = req.Enabled.Value
+	stored, err := h.notify.GetUserTarget(ctx, u.ID, params.TargetId)
+	if err != nil {
+		return nil, err
 	}
 	var cfg *domain.ChannelConfig
 	if req.Config.IsSet() {
@@ -82,7 +78,7 @@ func (h *Handlers) UpdateMyNotifyTarget(ctx context.Context, req *oas.UserNotify
 	}
 	in := domain.UserNotifyTargetUpdateInput{
 		Kind:    domain.ChannelKind(req.Kind),
-		Enabled: enabled,
+		Enabled: req.Enabled.Or(stored.Enabled),
 		Config:  cfg,
 	}
 	t, err := h.notify.UpdateUserTarget(ctx, u.ID, params.TargetId, in)

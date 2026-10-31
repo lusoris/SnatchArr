@@ -809,10 +809,13 @@ type AdultSourceInput struct {
 	// GraphQL endpoint URL (http or https).
 	Endpoint string `json:"endpoint"`
 	// Required on create; omit on update to keep stored key.
-	APIKey        OptString `json:"api_key"`
-	Enabled       OptBool   `json:"enabled"`
-	SyncFavorites OptBool   `json:"sync_favorites"`
-	Priority      OptInt    `json:"priority"`
+	APIKey OptString `json:"api_key"`
+	// On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.
+	Enabled OptBool `json:"enabled"`
+	// On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.
+	SyncFavorites OptBool `json:"sync_favorites"`
+	// On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it.
+	Priority OptInt `json:"priority"`
 }
 
 // GetName returns the value of Name.
@@ -2385,11 +2388,15 @@ type DownloadClientInput struct {
 	BaseURL    string             `json:"base_url"`
 	Username   OptString          `json:"username"`
 	// Password, or the API key for SABnzbd. On update, omit to keep the stored one.
-	Secret             OptString `json:"secret"`
-	Enabled            OptBool   `json:"enabled"`
-	MaxActive          OptInt    `json:"max_active"`
-	MaxQueued          OptInt    `json:"max_queued"`
-	BandwidthBudgetBps OptInt64  `json:"bandwidth_budget_bps"`
+	Secret OptString `json:"secret"`
+	// On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.
+	Enabled OptBool `json:"enabled"`
+	// On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it.
+	MaxActive OptInt `json:"max_active"`
+	// On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it.
+	MaxQueued OptInt `json:"max_queued"`
+	// On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it.
+	BandwidthBudgetBps OptInt64 `json:"bandwidth_budget_bps"`
 }
 
 // GetInstanceID returns the value of InstanceID.
@@ -3328,8 +3335,9 @@ type InstanceUpdate struct {
 	Name    string  `json:"name"`
 	BaseURL string  `json:"base_url"`
 	// Omit or leave empty to keep the stored key.
-	APIKey  OptString `json:"api_key"`
-	Enabled OptBool   `json:"enabled"`
+	APIKey OptString `json:"api_key"`
+	// On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.
+	Enabled OptBool `json:"enabled"`
 }
 
 // GetKind returns the value of Kind.
@@ -4746,9 +4754,10 @@ func (s *NotificationChannelKind) UnmarshalText(data []byte) error {
 
 // Ref: #/components/schemas/NotificationChannelUpdate
 type NotificationChannelUpdate struct {
-	Name    string                  `json:"name"`
-	Kind    NotificationChannelKind `json:"kind"`
-	Enabled OptBool                 `json:"enabled"`
+	Name string                  `json:"name"`
+	Kind NotificationChannelKind `json:"kind"`
+	// On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.
+	Enabled OptBool `json:"enabled"`
 	// Omitted = stored configuration stays; sent = replaces it, omitted secret fields stay.
 	Config OptNotificationChannelConfig `json:"config"`
 }
@@ -5017,11 +5026,12 @@ func (s *NotificationRuleInput) SetChannelIds(val []uuid.UUID) {
 
 // Ref: #/components/schemas/NotificationRuleUpdate
 type NotificationRuleUpdate struct {
-	Name       string                    `json:"name"`
-	EventKind  NotificationRuleEventKind `json:"event_kind"`
-	Threshold  int                       `json:"threshold"`
-	Enabled    OptBool                   `json:"enabled"`
-	ChannelIds []uuid.UUID               `json:"channel_ids"`
+	Name      string                    `json:"name"`
+	EventKind NotificationRuleEventKind `json:"event_kind"`
+	Threshold int                       `json:"threshold"`
+	// On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.
+	Enabled    OptBool     `json:"enabled"`
+	ChannelIds []uuid.UUID `json:"channel_ids"`
 }
 
 // GetName returns the value of Name.
@@ -6869,9 +6879,11 @@ type ProwlarrLinkInput struct {
 	Name    string `json:"name"`
 	BaseURL string `json:"base_url"`
 	// Required on create; omit on update to keep the stored key.
-	APIKey    OptString `json:"api_key"`
-	HourlyCap OptInt    `json:"hourly_cap"`
-	Enabled   OptBool   `json:"enabled"`
+	APIKey OptString `json:"api_key"`
+	// On create, omitted = 15. On update, omitted = stored value stays; sent = replaces it.
+	HourlyCap OptInt `json:"hourly_cap"`
+	// On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.
+	Enabled OptBool `json:"enabled"`
 }
 
 // GetName returns the value of Name.
@@ -9136,10 +9148,11 @@ type SeerrLinkInput struct {
 	Name    string `json:"name"`
 	BaseURL string `json:"base_url"`
 	// Required on create; omit on update to keep the stored key.
-	APIKey           OptString `json:"api_key"`
-	Enabled          OptBool   `json:"enabled"`
-	SonarrInstanceID OptUUID   `json:"sonarr_instance_id"`
-	RadarrInstanceID OptUUID   `json:"radarr_instance_id"`
+	APIKey OptString `json:"api_key"`
+	// On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.
+	Enabled          OptBool `json:"enabled"`
+	SonarrInstanceID OptUUID `json:"sonarr_instance_id"`
+	RadarrInstanceID OptUUID `json:"radarr_instance_id"`
 }
 
 // GetName returns the value of Name.
@@ -9618,13 +9631,16 @@ type Settings struct {
 	GlobalHourlyCap        int               `json:"global_hourly_cap"`
 	SearchPriorityPreset   PriorityPresetMap `json:"search_priority_preset"`
 	DownloadPriorityPreset PriorityPresetMap `json:"download_priority_preset"`
-	// Whether the Model Context Protocol (MCP) server at /api/v1/mcp is enabled.
+	// Whether the Model Context Protocol (MCP) server at /api/v1/mcp is enabled. On update, omitted =
+	// stored value stays; sent = replaces it.
 	LlmEnabled OptBool `json:"llm_enabled"`
 	// MCP write tools enabled by the administrator; an omitted list enables none.
 	LlmWriteTools []LlmWriteTool `json:"llm_write_tools"`
-	// Installation-wide brand mark shown when a user has no override.
+	// Installation-wide brand mark shown when a user has no override. On update, omitted = stored value
+	// stays; sent = replaces it.
 	BrandMark OptBrandMark `json:"brand_mark"`
-	// Installation-wide SFW mode applied when a user has no override.
+	// Installation-wide SFW mode applied when a user has no override. On update, omitted = stored value
+	// stays; sent = replaces it.
 	SfwMode   OptSfwMode  `json:"sfw_mode"`
 	UpdatedAt OptDateTime `json:"updated_at"`
 }
@@ -9933,11 +9949,12 @@ type SnatchPolicy struct {
 	// date is the one of the app kind: air date (Sonarr, Whisparr v2), the date of radarr_release_type
 	// (Radarr, Whisparr v3), the album or book release date. Items without a date are kept.
 	ReleaseDelayH OptInt `json:"release_delay_h"`
-	// When true, planner creates preview / dry-run runs that do not dispatch searches.
+	// When true, planner creates preview / dry-run runs that do not dispatch searches. On update,
+	// omitted = stored value stays; sent = replaces it.
 	DryRun OptBool `json:"dry_run"`
 	// Radarr only: skip movies Radarr reports as not yet available (isAvailable false, the movie's
 	// minimum availability is not reached). They are not searched and cost no stamina. Movies without
-	// the flag are searched. Absent = true.
+	// the flag are searched. On update, omitted = stored value stays; sent = replaces it.
 	SkipUnavailableMovies OptBool     `json:"skip_unavailable_movies"`
 	UpdatedAt             OptDateTime `json:"updated_at"`
 }
@@ -10851,7 +10868,8 @@ func (s *UserNotifyTargetInput) SetConfig(val NotificationChannelConfig) {
 
 // Ref: #/components/schemas/UserNotifyTargetUpdate
 type UserNotifyTargetUpdate struct {
-	Kind    NotificationChannelKind      `json:"kind"`
+	Kind NotificationChannelKind `json:"kind"`
+	// On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.
 	Enabled OptBool                      `json:"enabled"`
 	Config  OptNotificationChannelConfig `json:"config"`
 }
@@ -11403,8 +11421,9 @@ type WatchawareSourceInput struct {
 	Name string               `json:"name"`
 	URL  url.URL              `json:"url"`
 	// Required on create; omit on update to keep stored key.
-	APIKey  OptString `json:"api_key"`
-	Enabled OptBool   `json:"enabled"`
+	APIKey OptString `json:"api_key"`
+	// On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.
+	Enabled OptBool `json:"enabled"`
 }
 
 // GetKind returns the value of Kind.

@@ -8,51 +8,7 @@ import (
 )
 
 // setDefaults set default value of fields.
-func (s *AdultSourceInput) setDefaults() {
-	{
-		val := bool(true)
-		s.Enabled.SetTo(val)
-	}
-	{
-		val := bool(true)
-		s.SyncFavorites.SetTo(val)
-	}
-	{
-		val := int(0)
-		s.Priority.SetTo(val)
-	}
-}
-
-// setDefaults set default value of fields.
-func (s *DownloadClientInput) setDefaults() {
-	{
-		val := bool(true)
-		s.Enabled.SetTo(val)
-	}
-	{
-		val := int(0)
-		s.MaxActive.SetTo(val)
-	}
-	{
-		val := int(0)
-		s.MaxQueued.SetTo(val)
-	}
-	{
-		val := int64(0)
-		s.BandwidthBudgetBps.SetTo(val)
-	}
-}
-
-// setDefaults set default value of fields.
 func (s *InstanceInput) setDefaults() {
-	{
-		val := bool(true)
-		s.Enabled.SetTo(val)
-	}
-}
-
-// setDefaults set default value of fields.
-func (s *InstanceUpdate) setDefaults() {
 	{
 		val := bool(true)
 		s.Enabled.SetTo(val)
@@ -80,14 +36,6 @@ func (s *NotificationChannelInput) setDefaults() {
 }
 
 // setDefaults set default value of fields.
-func (s *NotificationChannelUpdate) setDefaults() {
-	{
-		val := bool(true)
-		s.Enabled.SetTo(val)
-	}
-}
-
-// setDefaults set default value of fields.
 func (s *NotificationRuleInput) setDefaults() {
 	{
 		val := int(1)
@@ -105,10 +53,6 @@ func (s *NotificationRuleUpdate) setDefaults() {
 		val := int(1)
 		s.Threshold = val
 	}
-	{
-		val := bool(true)
-		s.Enabled.SetTo(val)
-	}
 }
 
 // setDefaults set default value of fields.
@@ -124,18 +68,6 @@ func (s *ProwlarrLink) setDefaults() {
 	{
 		val := int(15)
 		s.HourlyCap = val
-	}
-}
-
-// setDefaults set default value of fields.
-func (s *ProwlarrLinkInput) setDefaults() {
-	{
-		val := int(15)
-		s.HourlyCap.SetTo(val)
-	}
-	{
-		val := bool(true)
-		s.Enabled.SetTo(val)
 	}
 }
 
@@ -160,59 +92,7 @@ func (s *RequestsSettings) setDefaults() {
 }
 
 // setDefaults set default value of fields.
-func (s *SeerrLinkInput) setDefaults() {
-	{
-		val := bool(true)
-		s.Enabled.SetTo(val)
-	}
-}
-
-// setDefaults set default value of fields.
-func (s *Settings) setDefaults() {
-	{
-		val := bool(false)
-		s.LlmEnabled.SetTo(val)
-	}
-	{
-		val := BrandMark("vulva")
-		s.BrandMark.SetTo(val)
-	}
-	{
-		val := SfwMode("auto")
-		s.SfwMode.SetTo(val)
-	}
-}
-
-// setDefaults set default value of fields.
-func (s *SnatchPolicy) setDefaults() {
-	{
-		val := bool(false)
-		s.DryRun.SetTo(val)
-	}
-	{
-		val := bool(true)
-		s.SkipUnavailableMovies.SetTo(val)
-	}
-}
-
-// setDefaults set default value of fields.
 func (s *UserNotifyTargetInput) setDefaults() {
-	{
-		val := bool(true)
-		s.Enabled.SetTo(val)
-	}
-}
-
-// setDefaults set default value of fields.
-func (s *UserNotifyTargetUpdate) setDefaults() {
-	{
-		val := bool(true)
-		s.Enabled.SetTo(val)
-	}
-}
-
-// setDefaults set default value of fields.
-func (s *WatchawareSourceInput) setDefaults() {
 	{
 		val := bool(true)
 		s.Enabled.SetTo(val)

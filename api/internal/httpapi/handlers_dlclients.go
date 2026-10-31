@@ -53,7 +53,11 @@ func (h *Handlers) UpdateDownloadClient(ctx context.Context, req *oas.DownloadCl
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	c, err := h.clients.Update(ctx, params.ClientId, downloadClientInputFromOAS(req))
+	stored, err := h.clients.Get(ctx, params.ClientId)
+	if err != nil {
+		return nil, err
+	}
+	c, err := h.clients.Update(ctx, params.ClientId, downloadClientUpdateFromOAS(req, stored))
 	if err != nil {
 		return nil, err
 	}
@@ -148,6 +152,21 @@ func downloadClientInputFromOAS(in *oas.DownloadClientInput) dlclients.Input {
 		Kind: domain.DownloadClientKind(in.Kind), Name: in.Name, BaseURL: in.BaseURL,
 		Username: in.Username.Or(""), Secret: in.Secret.Or(""), Enabled: in.Enabled.Or(true),
 		MaxActive: in.MaxActive.Or(0), MaxQueued: in.MaxQueued.Or(0), BandwidthBudgetBPS: in.BandwidthBudgetBps.Or(0),
+	}
+	if v, ok := in.InstanceID.Get(); ok {
+		out.InstanceID = &v
+	}
+	return out
+}
+
+func downloadClientUpdateFromOAS(in *oas.DownloadClientInput, stored domain.DownloadClient) dlclients.Input {
+	out := dlclients.Input{
+		Kind: domain.DownloadClientKind(in.Kind), Name: in.Name, BaseURL: in.BaseURL,
+		Username: in.Username.Or(""), Secret: in.Secret.Or(""),
+		Enabled:            in.Enabled.Or(stored.Enabled),
+		MaxActive:          in.MaxActive.Or(stored.MaxActive),
+		MaxQueued:          in.MaxQueued.Or(stored.MaxQueued),
+		BandwidthBudgetBPS: in.BandwidthBudgetBps.Or(stored.BandwidthBudgetBPS),
 	}
 	if v, ok := in.InstanceID.Get(); ok {
 		out.InstanceID = &v

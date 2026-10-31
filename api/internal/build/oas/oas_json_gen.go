@@ -1998,7 +1998,6 @@ func (s *AdultSourceInput) Decode(d *jx.Decoder) error {
 		return errors.New("invalid: unable to decode AdultSourceInput to nil")
 	}
 	var requiredBitSet [1]uint8
-	s.setDefaults()
 
 	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
 		switch string(k) {
@@ -5014,7 +5013,6 @@ func (s *DownloadClientInput) Decode(d *jx.Decoder) error {
 		return errors.New("invalid: unable to decode DownloadClientInput to nil")
 	}
 	var requiredBitSet [2]uint8
-	s.setDefaults()
 
 	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
 		switch string(k) {
@@ -6737,7 +6735,6 @@ func (s *InstanceUpdate) Decode(d *jx.Decoder) error {
 		return errors.New("invalid: unable to decode InstanceUpdate to nil")
 	}
 	var requiredBitSet [1]uint8
-	s.setDefaults()
 
 	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
 		switch string(k) {
@@ -9456,7 +9453,6 @@ func (s *NotificationChannelUpdate) Decode(d *jx.Decoder) error {
 		return errors.New("invalid: unable to decode NotificationChannelUpdate to nil")
 	}
 	var requiredBitSet [1]uint8
-	s.setDefaults()
 
 	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
 		switch string(k) {
@@ -12750,7 +12746,6 @@ func (s *ProwlarrLinkInput) Decode(d *jx.Decoder) error {
 		return errors.New("invalid: unable to decode ProwlarrLinkInput to nil")
 	}
 	var requiredBitSet [1]uint8
-	s.setDefaults()
 
 	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
 		switch string(k) {
@@ -17252,7 +17247,6 @@ func (s *SeerrLinkInput) Decode(d *jx.Decoder) error {
 		return errors.New("invalid: unable to decode SeerrLinkInput to nil")
 	}
 	var requiredBitSet [1]uint8
-	s.setDefaults()
 
 	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
 		switch string(k) {
@@ -18240,7 +18234,6 @@ func (s *Settings) Decode(d *jx.Decoder) error {
 		return errors.New("invalid: unable to decode Settings to nil")
 	}
 	var requiredBitSet [2]uint8
-	s.setDefaults()
 
 	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
 		switch string(k) {
@@ -18916,7 +18909,6 @@ func (s *SnatchPolicy) Decode(d *jx.Decoder) error {
 		return errors.New("invalid: unable to decode SnatchPolicy to nil")
 	}
 	var requiredBitSet [4]uint8
-	s.setDefaults()
 
 	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
 		switch string(k) {
@@ -20679,7 +20671,6 @@ func (s *UserNotifyTargetUpdate) Decode(d *jx.Decoder) error {
 		return errors.New("invalid: unable to decode UserNotifyTargetUpdate to nil")
 	}
 	var requiredBitSet [1]uint8
-	s.setDefaults()
 
 	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
 		switch string(k) {
@@ -21765,7 +21756,6 @@ func (s *WatchawareSourceInput) Decode(d *jx.Decoder) error {
 		return errors.New("invalid: unable to decode WatchawareSourceInput to nil")
 	}
 	var requiredBitSet [1]uint8
-	s.setDefaults()
 
 	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
 		switch string(k) {

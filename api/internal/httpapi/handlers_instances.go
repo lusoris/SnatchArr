@@ -7,6 +7,8 @@ package httpapi
 import (
 	"context"
 
+	"github.com/google/uuid"
+
 	"github.com/lusoris/SnatchArr/api/internal/arrclient"
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
@@ -71,7 +73,11 @@ func (h *Handlers) UpdateInstance(ctx context.Context, req *oas.InstanceUpdate, 
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	inst, err := h.instances.Update(ctx, params.InstanceId, updateFromOAS(req))
+	stored, err := h.instances.Get(ctx, params.InstanceId)
+	if err != nil {
+		return nil, err
+	}
+	inst, err := h.instances.Update(ctx, params.InstanceId, updateFromOAS(req, stored.Enabled))
 	if err != nil {
 		return nil, err
 	}
@@ -148,11 +154,22 @@ func (h *Handlers) UpdatePolicy(ctx context.Context, req *oas.SnatchPolicy, para
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	p, err := h.policies.Update(ctx, policyFromOAS(params.InstanceId, req))
+	stored, err := h.policies.Get(ctx, params.InstanceId)
+	if err != nil {
+		return nil, err
+	}
+	p, err := h.policies.Update(ctx, policyUpdateFromOAS(params.InstanceId, req, stored))
 	if err != nil {
 		return nil, err
 	}
 	return policyToOAS(p), nil
+}
+
+func policyUpdateFromOAS(instanceID uuid.UUID, in *oas.SnatchPolicy, stored domain.Policy) domain.Policy {
+	p := policyFromOAS(instanceID, in)
+	p.DryRun = in.DryRun.Or(stored.DryRun)
+	p.SkipUnavailableMovies = in.SkipUnavailableMovies.Or(stored.SkipUnavailableMovies)
+	return p
 }
 
 // GetInstancePriority returns an instance's search and download priority overrides and effective ranks.

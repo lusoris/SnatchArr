@@ -54,7 +54,13 @@ func (h *Handlers) UpdateSeerrLink(ctx context.Context, req *oas.SeerrLinkInput,
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
-	l, err := h.seerr.Update(ctx, params.LinkId, seerrInputFromOAS(req))
+	stored, err := h.seerr.Get(ctx, params.LinkId)
+	if err != nil {
+		return nil, err
+	}
+	in := seerrInputFromOAS(req)
+	in.Enabled = req.Enabled.Or(stored.Enabled)
+	l, err := h.seerr.Update(ctx, params.LinkId, in)
 	if err != nil {
 		return nil, err
 	}
