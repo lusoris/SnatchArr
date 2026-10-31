@@ -93,3 +93,10 @@ SELECT status, count(*) AS count
 FROM snatch_runs
 GROUP BY status;
 
+-- name: ListInstanceLastRunFinished :many
+-- Latest finish per enabled non-stash instance and terminal status, for the state gauges.
+SELECT i.name AS instance_name, r.status, max(r.finished_at)::timestamptz AS last_finished
+FROM snatch_runs r JOIN instances i ON i.id = r.instance_id
+WHERE i.enabled AND i.kind <> 'stash' AND r.finished_at IS NOT NULL AND r.status IN ('done','failed','cancelled')
+GROUP BY i.name, r.status;
+

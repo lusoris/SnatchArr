@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/clock"
@@ -20,6 +21,7 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/metrics"
 	"github.com/lusoris/SnatchArr/api/internal/settings"
 	"github.com/lusoris/SnatchArr/api/internal/store"
+	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
 )
 
 const (
@@ -82,6 +84,9 @@ func (l *StateLoop) Tick(ctx context.Context) error {
 	}
 	if err := l.refreshStamina(ctx); err != nil {
 		return fmt.Errorf("state metrics: stamina: %w", err)
+	}
+	if err := l.refreshInstanceRuns(ctx); err != nil {
+		return fmt.Errorf("state metrics: instance runs: %w", err)
 	}
 	if err := l.refreshSeerr(ctx); err != nil {
 		return fmt.Errorf("state metrics: seerr: %w", err)
@@ -200,6 +205,82 @@ func (l *StateLoop) computeGlobalStamina(ctx context.Context) (staminaValues, bo
 		used:      float64(used),
 		remaining: float64(remaining),
 	}, true, nil
+}
+
+type runIntervalValue struct {
+	instance string
+	seconds  float64
+}
+
+func (l *StateLoop) refreshInstanceRuns(ctx context.Context) error {
+	lastRuns, err := l.queryLastRuns(ctx)
+	if err != nil {
+		return err
+	}
+	intervalRows, err := l.queryRunIntervals(ctx)
+	if err != nil {
+		return err
+	}
+	intervals := l.computeRunIntervals(ctx, intervalRows)
+
+	l.m.ResetInstanceRuns()
+	for _, r := range lastRuns {
+		l.m.SetInstanceLastRunFinished(r.InstanceName, r.Status, r.LastFinished)
+	}
+	for _, iv := range intervals {
+		l.m.SetInstanceRunInterval(iv.instance, iv.seconds)
+	}
+	return nil
+}
+
+func (l *StateLoop) queryLastRuns(ctx context.Context) ([]sqlcgen.ListInstanceLastRunFinishedRow, error) {
+	qCtx, cancel := context.WithTimeout(ctx, stateQueryTimeout)
+	defer cancel()
+	rows, err := l.st.Q().ListInstanceLastRunFinished(qCtx)
+	if err != nil {
+		return nil, store.MapError(err)
+	}
+	return rows, nil
+}
+
+func (l *StateLoop) queryRunIntervals(ctx context.Context) ([]sqlcgen.ListInstanceRunIntervalsRow, error) {
+	qCtx, cancel := context.WithTimeout(ctx, stateQueryTimeout)
+	defer cancel()
+	rows, err := l.st.Q().ListInstanceRunIntervals(qCtx)
+	if err != nil {
+		return nil, store.MapError(err)
+	}
+	return rows, nil
+}
+
+func (l *StateLoop) computeRunIntervals(ctx context.Context, rows []sqlcgen.ListInstanceRunIntervalsRow) []runIntervalValue {
+	var intervals []runIntervalValue
+	for _, row := range rows {
+		open, err := l.isScheduleOpen(ctx, row.InstanceID)
+		if err != nil {
+			l.logger.WarnContext(ctx, "snatch: run interval schedule check failed",
+				slog.String("instance", row.InstanceName), slog.String("error", err.Error()))
+			continue
+		}
+		if !open {
+			continue
+		}
+		intervals = append(intervals, runIntervalValue{
+			instance: row.InstanceName,
+			seconds:  float64(row.CycleIntervalS),
+		})
+	}
+	return intervals
+}
+
+func (l *StateLoop) isScheduleOpen(ctx context.Context, instanceID uuid.UUID) (bool, error) {
+	qCtx, cancel := context.WithTimeout(ctx, stateQueryTimeout)
+	defer cancel()
+	d, err := l.planner.decision(qCtx, instanceID)
+	if err != nil {
+		return false, err
+	}
+	return !d.Paused, nil
 }
 
 func (l *StateLoop) refreshSeerr(ctx context.Context) error {

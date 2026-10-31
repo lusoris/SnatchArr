@@ -21,28 +21,30 @@ import (
 
 // Metrics records the outcomes the logs alone used to carry (gap audit A1-02..A1-10).
 type Metrics struct {
-	loopFailures         *prometheus.CounterVec
-	loopLastSuccess      *prometheus.GaugeVec
-	loopInterval         *prometheus.GaugeVec
-	planFailures         *prometheus.CounterVec
-	runsQueued           *prometheus.CounterVec
-	runsLeased           *prometheus.CounterVec
-	runsFinished         *prometheus.CounterVec
-	workerEvents         *prometheus.CounterVec
-	unconfirmed          *prometheus.CounterVec
-	budgetRequests       *prometheus.CounterVec
-	searchesDispatched   *prometheus.CounterVec
-	searchLastDispatched *prometheus.GaugeVec
-	staminaUsed          *prometheus.GaugeVec
-	staminaRemaining     *prometheus.GaugeVec
-	runsCount            *prometheus.GaugeVec
-	seerrPending         prometheus.Gauge
-	runLeaseWait         *prometheus.HistogramVec
-	plannerDeferrals     *prometheus.CounterVec
-	queueStrikes         *prometheus.CounterVec
-	queueRemovals        *prometheus.CounterVec
-	queueSkipped         *prometheus.CounterVec
-	queueImports         *prometheus.CounterVec
+	loopFailures            *prometheus.CounterVec
+	loopLastSuccess         *prometheus.GaugeVec
+	loopInterval            *prometheus.GaugeVec
+	planFailures            *prometheus.CounterVec
+	runsQueued              *prometheus.CounterVec
+	runsLeased              *prometheus.CounterVec
+	runsFinished            *prometheus.CounterVec
+	workerEvents            *prometheus.CounterVec
+	unconfirmed             *prometheus.CounterVec
+	budgetRequests          *prometheus.CounterVec
+	searchesDispatched      *prometheus.CounterVec
+	searchLastDispatched    *prometheus.GaugeVec
+	instanceLastRunFinished *prometheus.GaugeVec
+	instanceRunInterval     *prometheus.GaugeVec
+	staminaUsed             *prometheus.GaugeVec
+	staminaRemaining        *prometheus.GaugeVec
+	runsCount               *prometheus.GaugeVec
+	seerrPending            prometheus.Gauge
+	runLeaseWait            *prometheus.HistogramVec
+	plannerDeferrals        *prometheus.CounterVec
+	queueStrikes            *prometheus.CounterVec
+	queueRemovals           *prometheus.CounterVec
+	queueSkipped            *prometheus.CounterVec
+	queueImports            *prometheus.CounterVec
 }
 
 // Run outcomes the finished-runs counter carries next to the worker's own (done, failed,
@@ -97,28 +99,30 @@ var leaseWaitBuckets = []float64{1, 5, 15, 30, 60, 120, 300, 600, 1800, 3600}
 func New(reg prometheus.Registerer) (*Metrics, error) {
 	b := &builder{reg: reg}
 	m := &Metrics{
-		loopFailures:         b.counter("snatcharr_loop_failures_total", "Ticks of a leader loop that returned an error, by loop.", "loop"),
-		loopLastSuccess:      b.gauge("snatcharr_loop_last_success_timestamp_seconds", "Unix time of the last tick of a leader loop that returned no error, by loop.", "loop"),
-		loopInterval:         b.gauge("snatcharr_loop_interval_seconds", "Interval between two ticks of a leader loop, by loop.", "loop"),
-		planFailures:         b.counter("snatcharr_planner_instance_failures_total", "Planner passes that skipped an instance because planning it failed, by instance name.", "arr_instance"),
-		runsQueued:           b.counter("snatcharr_runs_queued_total", "Runs the planner queued."),
-		runsLeased:           b.counter("snatcharr_runs_leased_total", "Runs a worker leased, by snatch kind.", "kind"),
-		runsFinished:         b.counter("snatcharr_runs_finished_total", "Runs that ended, by outcome.", "outcome"),
-		workerEvents:         b.counter("snatcharr_worker_events_total", "Events workers reported, by event type.", "type"),
-		unconfirmed:          b.counter("snatcharr_worker_events_unconfirmed_total", "Events workers emitted for a completed run that ReportEvents did not confirm."),
-		budgetRequests:       b.counter("snatcharr_budget_requests_total", "Budget requests of workers, by result.", "result"),
-		searchesDispatched:   b.counter("snatcharr_searches_dispatched_total", "Items dispatched to *arr instances, by instance name and snatch kind.", "arr_instance", "kind"),
-		searchLastDispatched: b.gauge("snatcharr_search_last_dispatched_timestamp_seconds", "Unix time of the last search dispatched to an *arr instance, by instance name.", "arr_instance"),
-		staminaUsed:          b.gauge("snatcharr_stamina_used_items", "Stamina spent in the current rolling hourly span, by instance name.", "arr_instance"),
-		staminaRemaining:     b.gauge("snatcharr_stamina_remaining_items", "Stamina remaining in the current rolling hourly span under effective cap, by instance name.", "arr_instance"),
-		runsCount:            b.gauge("snatcharr_runs", "Current count of runs, by lifecycle status.", "status"),
-		seerrPending:         b.gaugeScalar("snatcharr_seerr_requests_pending", "Current count of active/pending processing Seerr requests across enabled links."),
-		runLeaseWait:         b.histogram("snatcharr_run_lease_wait_seconds", "Wait time between run enqueued and leased by worker, by snatch kind.", leaseWaitBuckets, "kind"),
-		plannerDeferrals:     b.counter("snatcharr_planner_deferrals_total", "Planner passes that decided not to enqueue a run, by reason.", "reason"),
-		queueStrikes:         b.counter("snatcharr_queue_strikes_total", "Queue items struck, by instance name, rule and evaluation mode.", "arr_instance", "rule", "mode"),
-		queueRemovals:        b.counter("snatcharr_queue_removals_total", "Queue items removed from *arr instances, by instance name, rule and result.", "arr_instance", "rule", "result"),
-		queueSkipped:         b.counter("snatcharr_queue_skipped_total", "Queue sweeps skipped, by instance name and reason.", "arr_instance", "reason"),
-		queueImports:         b.counter("snatcharr_queue_imports_total", "Force imports of ID-matched queue items and their read-back, by instance name and result.", "arr_instance", "result"),
+		loopFailures:            b.counter("snatcharr_loop_failures_total", "Ticks of a leader loop that returned an error, by loop.", "loop"),
+		loopLastSuccess:         b.gauge("snatcharr_loop_last_success_timestamp_seconds", "Unix time of the last tick of a leader loop that returned no error, by loop.", "loop"),
+		loopInterval:            b.gauge("snatcharr_loop_interval_seconds", "Interval between two ticks of a leader loop, by loop.", "loop"),
+		planFailures:            b.counter("snatcharr_planner_instance_failures_total", "Planner passes that skipped an instance because planning it failed, by instance name.", "arr_instance"),
+		runsQueued:              b.counter("snatcharr_runs_queued_total", "Runs the planner queued."),
+		runsLeased:              b.counter("snatcharr_runs_leased_total", "Runs a worker leased, by snatch kind.", "kind"),
+		runsFinished:            b.counter("snatcharr_runs_finished_total", "Runs that ended, by outcome.", "outcome"),
+		workerEvents:            b.counter("snatcharr_worker_events_total", "Events workers reported, by event type.", "type"),
+		unconfirmed:             b.counter("snatcharr_worker_events_unconfirmed_total", "Events workers emitted for a completed run that ReportEvents did not confirm."),
+		budgetRequests:          b.counter("snatcharr_budget_requests_total", "Budget requests of workers, by result.", "result"),
+		searchesDispatched:      b.counter("snatcharr_searches_dispatched_total", "Items dispatched to *arr instances, by instance name and snatch kind.", "arr_instance", "kind"),
+		searchLastDispatched:    b.gauge("snatcharr_search_last_dispatched_timestamp_seconds", "Unix time of the last search dispatched to an *arr instance, by instance name.", "arr_instance"),
+		instanceLastRunFinished: b.gauge("snatcharr_instance_last_run_finished_timestamp_seconds", "Unix time of the last terminal run finished for an *arr instance, by instance name and outcome.", "arr_instance", "outcome"),
+		instanceRunInterval:     b.gauge("snatcharr_instance_run_interval_seconds", "Configured cycle interval in seconds for an *arr instance, by instance name.", "arr_instance"),
+		staminaUsed:             b.gauge("snatcharr_stamina_used_items", "Stamina spent in the current rolling hourly span, by instance name.", "arr_instance"),
+		staminaRemaining:        b.gauge("snatcharr_stamina_remaining_items", "Stamina remaining in the current rolling hourly span under effective cap, by instance name.", "arr_instance"),
+		runsCount:               b.gauge("snatcharr_runs", "Current count of runs, by lifecycle status.", "status"),
+		seerrPending:            b.gaugeScalar("snatcharr_seerr_requests_pending", "Current count of active/pending processing Seerr requests across enabled links."),
+		runLeaseWait:            b.histogram("snatcharr_run_lease_wait_seconds", "Wait time between run enqueued and leased by worker, by snatch kind.", leaseWaitBuckets, "kind"),
+		plannerDeferrals:        b.counter("snatcharr_planner_deferrals_total", "Planner passes that decided not to enqueue a run, by reason.", "reason"),
+		queueStrikes:            b.counter("snatcharr_queue_strikes_total", "Queue items struck, by instance name, rule and evaluation mode.", "arr_instance", "rule", "mode"),
+		queueRemovals:           b.counter("snatcharr_queue_removals_total", "Queue items removed from *arr instances, by instance name, rule and result.", "arr_instance", "rule", "result"),
+		queueSkipped:            b.counter("snatcharr_queue_skipped_total", "Queue sweeps skipped, by instance name and reason.", "arr_instance", "reason"),
+		queueImports:            b.counter("snatcharr_queue_imports_total", "Force imports of ID-matched queue items and their read-back, by instance name and result.", "arr_instance", "result"),
 	}
 	if b.err != nil {
 		return nil, b.err
@@ -275,6 +279,35 @@ func (m *Metrics) SearchDispatchedAt(instance string, at time.Time) {
 		return
 	}
 	m.searchLastDispatched.WithLabelValues(instance).Set(float64(at.Unix()))
+}
+
+// SetInstanceLastRunFinished records the timestamp of the last terminal run finished for instance and outcome.
+func (m *Metrics) SetInstanceLastRunFinished(instance, outcome string, at time.Time) {
+	if m == nil || m.instanceLastRunFinished == nil {
+		return
+	}
+	m.instanceLastRunFinished.WithLabelValues(instance, outcome).Set(float64(at.Unix()))
+}
+
+// SetInstanceRunInterval records the policy cycle interval in seconds for instance.
+func (m *Metrics) SetInstanceRunInterval(instance string, seconds float64) {
+	if m == nil || m.instanceRunInterval == nil {
+		return
+	}
+	m.instanceRunInterval.WithLabelValues(instance).Set(seconds)
+}
+
+// ResetInstanceRuns clears all instance run gauges so disabled or deleted instances do not linger.
+func (m *Metrics) ResetInstanceRuns() {
+	if m == nil {
+		return
+	}
+	if m.instanceLastRunFinished != nil {
+		m.instanceLastRunFinished.Reset()
+	}
+	if m.instanceRunInterval != nil {
+		m.instanceRunInterval.Reset()
+	}
 }
 
 // SetStaminaUsed records the used hourly stamina for instance.

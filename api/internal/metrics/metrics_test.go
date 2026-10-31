@@ -418,3 +418,61 @@ func TestSearchDispatchedAt(t *testing.T) {
 	var nilM *metrics.Metrics
 	nilM.SearchDispatchedAt("sonarr-main", t1)
 }
+
+func TestInstanceRunGauges(t *testing.T) {
+	t.Parallel()
+	m, reg := metricstest.New(t)
+	const (
+		lastRunMetric  = "snatcharr_instance_last_run_finished_timestamp_seconds"
+		intervalMetric = "snatcharr_instance_run_interval_seconds"
+	)
+	t1 := time.Date(2026, 10, 19, 10, 0, 0, 0, time.UTC)
+	t2 := time.Date(2026, 10, 19, 11, 30, 0, 0, time.UTC)
+
+	m.SetInstanceLastRunFinished("sonarr-main", "done", t1)
+	m.SetInstanceLastRunFinished("sonarr-main", "failed", t2)
+	m.SetInstanceLastRunFinished("radarr-4k", "done", t2)
+	m.SetInstanceRunInterval("sonarr-main", 1800)
+	m.SetInstanceRunInterval("radarr-4k", 3600)
+
+	cases := []struct {
+		name     string
+		metric   string
+		labels   map[string]string
+		want     float64
+		expected bool
+	}{
+		{"positive sonarr done", lastRunMetric, map[string]string{"arr_instance": "sonarr-main", "outcome": "done"}, float64(t1.Unix()), true},
+		{"positive sonarr failed", lastRunMetric, map[string]string{"arr_instance": "sonarr-main", "outcome": "failed"}, float64(t2.Unix()), true},
+		{"positive radarr done", lastRunMetric, map[string]string{"arr_instance": "radarr-4k", "outcome": "done"}, float64(t2.Unix()), true},
+		{"positive sonarr interval", intervalMetric, map[string]string{"arr_instance": "sonarr-main"}, 1800, true},
+		{"positive radarr interval", intervalMetric, map[string]string{"arr_instance": "radarr-4k"}, 3600, true},
+		{"negative missing instance", intervalMetric, map[string]string{"arr_instance": "lidarr"}, 0, false},
+	}
+	for _, tc := range cases {
+		got, ok := metricstest.ValueLabels(t, reg, tc.metric, tc.labels)
+		if ok != tc.expected {
+			t.Errorf("%s: ValueLabels(%s, %v) present = %t, want %t", tc.name, tc.metric, tc.labels, ok, tc.expected)
+		}
+		if ok && got != tc.want {
+			t.Errorf("%s: %s%v = %v, want %v", tc.name, tc.metric, tc.labels, got, tc.want)
+		}
+	}
+
+	// ResetInstanceRuns clears both vecs.
+	m.ResetInstanceRuns()
+	for _, tc := range cases {
+		if !tc.expected {
+			continue
+		}
+		if _, ok := metricstest.ValueLabels(t, reg, tc.metric, tc.labels); ok {
+			t.Errorf("%s%v still present after ResetInstanceRuns", tc.metric, tc.labels)
+		}
+	}
+
+	// Boundary: nil receiver does not panic.
+	var nilM *metrics.Metrics
+	nilM.SetInstanceLastRunFinished("sonarr-main", "done", t1)
+	nilM.SetInstanceRunInterval("sonarr-main", 1800)
+	nilM.ResetInstanceRuns()
+}

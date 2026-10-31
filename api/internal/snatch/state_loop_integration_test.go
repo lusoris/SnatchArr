@@ -8,6 +8,7 @@ import (
 	"context"
 	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jonboulle/clockwork"
@@ -318,5 +319,262 @@ func TestStateLoop_RefreshStamina_RemovesSeriesForDisabledInstance(t *testing.T)
 	}
 	if _, ok := metricstest.Value(t, f.reg, "snatcharr_stamina_used_items", "arr_instance", inst.Name); ok {
 		t.Errorf("snatcharr_stamina_used_items{%s} still present after instance was disabled", inst.Name)
+	}
+}
+
+const (
+	lastRunMetric  = "snatcharr_instance_last_run_finished_timestamp_seconds"
+	intervalMetric = "snatcharr_instance_run_interval_seconds"
+)
+
+func TestStateLoop_InstanceRuns(t *testing.T) {
+	t.Parallel()
+	t.Run("positive and restart-proof", testInstanceRunsPositiveAndRestart)
+	t.Run("negative", testInstanceRunsNegative)
+	t.Run("boundary", testInstanceRunsBoundary)
+	t.Run("schedule closed skips interval", testInstanceRunsScheduleClosed)
+}
+
+func TestStateLoop_InstanceRuns_StashExcluded(t *testing.T) {
+	t.Parallel()
+	f := newStateLoopFixture(t)
+	stashID := uuid.New()
+	_, err := f.st.Pool().Exec(t.Context(), `
+		INSERT INTO instances (id, kind, name, base_url, api_key_enc, enabled, source, created_at, updated_at)
+		VALUES ($1, 'stash', $2, 'http://stash.invalid', 'placeholder', true, 'manual', $3, $3)
+	`, stashID, "stash-"+stashID.String(), f.clk.Now())
+	if err != nil {
+		t.Fatalf("insert stash instance: %v", err)
+	}
+	name := "stash-" + stashID.String()
+	insertTestPolicy(t, f.st, stashID, 1, 900, f.clk.Now())
+	insertTestRun(t, f.st, uuid.New(), stashID, "done", f.clk.Now())
+
+	if err := f.loop.Tick(t.Context()); err != nil {
+		t.Fatalf("Tick() = %v", err)
+	}
+	assertNoMetric(t, f.reg, lastRunMetric, map[string]string{"arr_instance": name, "outcome": "done"})
+	assertNoMetric(t, f.reg, intervalMetric, map[string]string{"arr_instance": name})
+}
+
+func testInstanceRunsPositiveAndRestart(t *testing.T) {
+	t.Parallel()
+	f := newStateLoopFixture(t)
+	instID := storetest.Instance(t, f.st, f.clk.Now())
+	inst, err := f.st.Q().GetInstance(t.Context(), instID)
+	if err != nil {
+		t.Fatalf("GetInstance: %v", err)
+	}
+
+	tDone := f.clk.Now().Add(-10 * time.Minute)
+	tFailed := f.clk.Now().Add(-5 * time.Minute)
+
+	insertTestPolicy(t, f.st, instID, 1, 1800, f.clk.Now())
+	insertTestRun(t, f.st, uuid.New(), instID, "done", tDone)
+	insertTestRun(t, f.st, uuid.New(), instID, "failed", tFailed)
+
+	if err := f.loop.Tick(t.Context()); err != nil {
+		t.Fatalf("Tick() = %v", err)
+	}
+
+	cases := []metricTestCase{
+		{"done run", lastRunMetric, map[string]string{"arr_instance": inst.Name, "outcome": "done"}, float64(tDone.Unix())},
+		{"failed run", lastRunMetric, map[string]string{"arr_instance": inst.Name, "outcome": "failed"}, float64(tFailed.Unix())},
+		{"interval", intervalMetric, map[string]string{"arr_instance": inst.Name}, 1800},
+	}
+	assertMetricValues(t, f.reg, cases)
+
+	// Restart-proof: second fresh StateLoop with new registry, same DB, Tick, same value.
+	m2, reg2 := metricstest.New(t)
+	loop2 := &StateLoop{
+		st: f.st, clk: f.clk, budget: f.budget, planner: f.planner,
+		settings: f.settings, logger: f.loop.logger, m: m2,
+	}
+	if err := loop2.Tick(t.Context()); err != nil {
+		t.Fatalf("loop2.Tick() = %v", err)
+	}
+	assertMetricValues(t, reg2, cases)
+}
+
+func testInstanceRunsNegative(t *testing.T) {
+	t.Parallel()
+	f := newStateLoopFixture(t)
+	instID := storetest.Instance(t, f.st, f.clk.Now())
+	inst, err := f.st.Q().GetInstance(t.Context(), instID)
+	if err != nil {
+		t.Fatalf("GetInstance: %v", err)
+	}
+
+	insertTestPolicy(t, f.st, instID, 1, 900, f.clk.Now())
+	insertTestRun(t, f.st, uuid.New(), instID, "done", f.clk.Now())
+
+	if err = f.loop.Tick(t.Context()); err != nil {
+		t.Fatalf("Tick 1: %v", err)
+	}
+	if _, ok := metricstest.ValueLabels(t, f.reg, lastRunMetric, map[string]string{"arr_instance": inst.Name, "outcome": "done"}); !ok {
+		t.Fatal("lastRunMetric missing before disable")
+	}
+
+	// Disabled instance has no series after Tick (series set before disable vanishes).
+	setInstanceEnabled(t, f.st, instID, false, f.clk.Now())
+	if err = f.loop.Tick(t.Context()); err != nil {
+		t.Fatalf("Tick 2: %v", err)
+	}
+	assertNoMetric(t, f.reg, lastRunMetric, map[string]string{"arr_instance": inst.Name, "outcome": "done"})
+	assertNoMetric(t, f.reg, intervalMetric, map[string]string{"arr_instance": inst.Name})
+
+	// Queued and leased runs (finished_at NULL) give no series.
+	instQID := storetest.Instance(t, f.st, f.clk.Now())
+	instQ, err := f.st.Q().GetInstance(t.Context(), instQID)
+	if err != nil {
+		t.Fatalf("GetInstance instQ: %v", err)
+	}
+	insertTestRunNullFinished(t, f.st, uuid.New(), instQID, "queued")
+	insertTestRunNullFinished(t, f.st, uuid.New(), instQID, "leased")
+
+	// Policy with missing_per_cycle=0 and upgrade_per_cycle=0 gives no interval series.
+	instZeroID := storetest.Instance(t, f.st, f.clk.Now())
+	instZero, err := f.st.Q().GetInstance(t.Context(), instZeroID)
+	if err != nil {
+		t.Fatalf("GetInstance instZero: %v", err)
+	}
+	insertTestPolicy(t, f.st, instZeroID, 0, 1200, f.clk.Now())
+
+	if err = f.loop.Tick(t.Context()); err != nil {
+		t.Fatalf("Tick 3: %v", err)
+	}
+	assertNoMetric(t, f.reg, lastRunMetric, map[string]string{"arr_instance": instQ.Name, "outcome": "queued"})
+	assertNoMetric(t, f.reg, lastRunMetric, map[string]string{"arr_instance": instQ.Name, "outcome": "leased"})
+	assertNoMetric(t, f.reg, intervalMetric, map[string]string{"arr_instance": instZero.Name})
+}
+
+func testInstanceRunsBoundary(t *testing.T) {
+	t.Parallel()
+	f := newStateLoopFixture(t)
+
+	// Instance with no finished run has interval series but no last-run series.
+	instID := storetest.Instance(t, f.st, f.clk.Now())
+	inst, err := f.st.Q().GetInstance(t.Context(), instID)
+	if err != nil {
+		t.Fatalf("GetInstance: %v", err)
+	}
+	insertTestPolicy(t, f.st, instID, 2, 600, f.clk.Now())
+
+	if err := f.loop.Tick(t.Context()); err != nil {
+		t.Fatalf("Tick 1: %v", err)
+	}
+	if got, ok := metricstest.ValueLabels(t, f.reg, intervalMetric, map[string]string{"arr_instance": inst.Name}); !ok || got != 600 {
+		t.Errorf("intervalMetric = %v (present %t), want 600", got, ok)
+	}
+	assertNoMetric(t, f.reg, lastRunMetric, map[string]string{"arr_instance": inst.Name, "outcome": "done"})
+
+	// Latest of two done runs wins.
+	t1 := f.clk.Now().Add(-20 * time.Minute)
+	t2 := f.clk.Now().Add(-5 * time.Minute)
+	insertTestRun(t, f.st, uuid.New(), instID, "done", t1)
+	insertTestRun(t, f.st, uuid.New(), instID, "done", t2)
+
+	if err := f.loop.Tick(t.Context()); err != nil {
+		t.Fatalf("Tick 2: %v", err)
+	}
+	if got, ok := metricstest.ValueLabels(t, f.reg, lastRunMetric, map[string]string{"arr_instance": inst.Name, "outcome": "done"}); !ok || got != float64(t2.Unix()) {
+		t.Errorf("latest done run = %v (present %t), want %v", got, ok, float64(t2.Unix()))
+	}
+}
+
+func testInstanceRunsScheduleClosed(t *testing.T) {
+	t.Parallel()
+	f := newStateLoopFixture(t)
+	instID := storetest.Instance(t, f.st, f.clk.Now())
+	inst, err := f.st.Q().GetInstance(t.Context(), instID)
+	if err != nil {
+		t.Fatalf("GetInstance: %v", err)
+	}
+	insertTestPolicy(t, f.st, instID, 1, 900, f.clk.Now())
+	pauseStateLoopAlways(t, f.st, f.clk.Now())
+
+	if err := f.loop.Tick(t.Context()); err != nil {
+		t.Fatalf("Tick(): %v", err)
+	}
+	assertNoMetric(t, f.reg, intervalMetric, map[string]string{"arr_instance": inst.Name})
+}
+
+func pauseStateLoopAlways(t *testing.T, st *store.Store, now time.Time) {
+	t.Helper()
+	_, err := st.Pool().Exec(t.Context(), `
+		INSERT INTO schedules (id, name, days_mask, start_time, end_time, tz, action, enabled, created_at, updated_at)
+		VALUES ($1, 'always paused', 127, '00:00:00'::time, '24:00:00'::time, 'UTC', 'pause', true, $2, $2)
+	`, uuid.New(), now)
+	if err != nil {
+		t.Fatalf("create pause schedule: %v", err)
+	}
+}
+
+type metricTestCase struct {
+	name   string
+	metric string
+	labels map[string]string
+	want   float64
+}
+
+func assertMetricValues(t *testing.T, reg prometheus.Gatherer, cases []metricTestCase) {
+	t.Helper()
+	for _, tc := range cases {
+		got, ok := metricstest.ValueLabels(t, reg, tc.metric, tc.labels)
+		if !ok || got != tc.want {
+			t.Errorf("%s: ValueLabels(%s, %v) = %v (present %t), want %v", tc.name, tc.metric, tc.labels, got, ok, tc.want)
+		}
+	}
+}
+
+func assertNoMetric(t *testing.T, reg prometheus.Gatherer, metric string, labels map[string]string) {
+	t.Helper()
+	if _, ok := metricstest.ValueLabels(t, reg, metric, labels); ok {
+		t.Errorf("metric %s%v unexpectedly present", metric, labels)
+	}
+}
+
+func insertTestPolicy(t *testing.T, st *store.Store, instID uuid.UUID, missing, interval int, now time.Time) {
+	t.Helper()
+	_, err := st.Pool().Exec(t.Context(), `
+		INSERT INTO snatch_policies (instance_id, missing_per_cycle, upgrade_per_cycle, cycle_interval_s, updated_at)
+		VALUES ($1, $2, 0, $3, $4)
+		ON CONFLICT (instance_id) DO UPDATE
+		SET missing_per_cycle = $2, upgrade_per_cycle = 0, cycle_interval_s = $3, updated_at = $4
+	`, instID, missing, interval, now)
+	if err != nil {
+		t.Fatalf("insert policy: %v", err)
+	}
+}
+
+func insertTestRun(t *testing.T, st *store.Store, runID, instID uuid.UUID, status string, finishedAt time.Time) {
+	t.Helper()
+	_, err := st.Pool().Exec(t.Context(), `
+		INSERT INTO snatch_runs (id, instance_id, kind, status, queued_at, finished_at)
+		VALUES ($1, $2, 'missing', $3, $4, $5)
+	`, runID, instID, status, finishedAt, finishedAt)
+	if err != nil {
+		t.Fatalf("insert run: %v", err)
+	}
+}
+
+func insertTestRunNullFinished(t *testing.T, st *store.Store, runID, instID uuid.UUID, status string) {
+	t.Helper()
+	_, err := st.Pool().Exec(t.Context(), `
+		INSERT INTO snatch_runs (id, instance_id, kind, status, queued_at, finished_at)
+		VALUES ($1, $2, 'missing', $3, NOW(), NULL)
+	`, runID, instID, status)
+	if err != nil {
+		t.Fatalf("insert run with null finished: %v", err)
+	}
+}
+
+func setInstanceEnabled(t *testing.T, st *store.Store, instID uuid.UUID, enabled bool, now time.Time) {
+	t.Helper()
+	_, err := st.Pool().Exec(t.Context(), `
+		UPDATE instances SET enabled = $2, updated_at = $3 WHERE id = $1
+	`, instID, enabled, now)
+	if err != nil {
+		t.Fatalf("update instance enabled: %v", err)
 	}
 }
