@@ -1333,3 +1333,141 @@ func TestMCPOptionalBodyBoundary(t *testing.T) {
 		})
 	}
 }
+
+func TestMCPNotificationChannelUpdate_KeepConfig(t *testing.T) {
+	t.Parallel()
+	f := newMCPFixture(t)
+	enableLLM(t, f, testAllWriteTools...)
+	token := issueKey(t, f, "mcp-notify-keep-config", testAllScopes...)
+	assertInitializeOK(t, f, token, f.srv.URL)
+
+	var ntfyHits atomic.Int32
+	var authHeader atomic.Value
+	ntfySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ntfyHits.Add(1)
+		authHeader.Store(r.Header.Get("Authorization"))
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(ntfySrv.Close)
+
+	chID := mcpCreateNtfyChannel(t, f, token, ntfySrv.URL)
+
+	cases := []struct {
+		name string
+		run  func(t *testing.T)
+	}{
+		{
+			name: "positive: update without config preserves config and secret",
+			run: func(t *testing.T) {
+				t.Helper()
+				mcpTestRenameKeepConfig(t, f, token, chID, ntfySrv.URL, &ntfyHits, &authHeader)
+			},
+		},
+		{
+			name: "negative: update without config on unknown channel returns error",
+			run: func(t *testing.T) {
+				t.Helper()
+				mcpTestUnknownChannelError(t, f, token)
+			},
+		},
+	}
+
+	//nolint:paralleltest // sequential scenario: test cases verify channel state
+	for _, tc := range cases {
+		t.Run(tc.name, tc.run)
+	}
+}
+
+func mcpCreateNtfyChannel(t *testing.T, f *mcpFixture, token, ntfyURL string) string {
+	t.Helper()
+	res := callToolWithParams(t, f, token, domain.LLMWriteToolCreateNotificationChannel, map[string]any{
+		"body": map[string]any{
+			"name":    "Ntfy MCP",
+			"kind":    "ntfy",
+			"enabled": true,
+			"config": map[string]any{
+				"server_url": ntfyURL,
+				"topic":      "alerts",
+				"token":      "secret-mcp-token",
+			},
+		},
+	})
+	if res.IsError {
+		t.Fatalf("create_notification_channel: %s", res.ContentText)
+	}
+	var ch oas.NotificationChannel
+	if err := json.Unmarshal(res.StructuredContent, &ch); err != nil {
+		t.Fatalf("decode created: %v", err)
+	}
+	if ch.Name != "Ntfy MCP" || !ch.HasSecret {
+		t.Fatalf("unexpected created channel: name=%q has_secret=%v", ch.Name, ch.HasSecret)
+	}
+	return ch.ID.String()
+}
+
+func mcpTestRenameKeepConfig(t *testing.T, f *mcpFixture, token, chID, ntfyURL string, hits *atomic.Int32, authHeader *atomic.Value) {
+	t.Helper()
+	upRes := callToolWithParams(t, f, token, domain.LLMWriteToolUpdateNotificationChannel, map[string]any{
+		"channelId": chID,
+		"body": map[string]any{
+			"name":    "Ntfy MCP Renamed",
+			"kind":    "ntfy",
+			"enabled": true,
+		},
+	})
+	if upRes.IsError {
+		t.Fatalf("update_notification_channel: %s", upRes.ContentText)
+	}
+	getRes := callToolWithParams(t, f, token, "snatcharr_get_notification_channel", map[string]any{
+		"channelId": chID,
+	})
+	if getRes.IsError {
+		t.Fatalf("get_notification_channel: %s", getRes.ContentText)
+	}
+	var readBack oas.NotificationChannel
+	if err := json.Unmarshal(getRes.StructuredContent, &readBack); err != nil {
+		t.Fatalf("decode readBack: %v", err)
+	}
+	if readBack.Name != "Ntfy MCP Renamed" {
+		t.Fatalf("readBack name = %q, want 'Ntfy MCP Renamed'", readBack.Name)
+	}
+	if readBack.Kind != oas.NotificationChannelKindNtfy {
+		t.Fatalf("readBack kind = %q, want 'ntfy'", readBack.Kind)
+	}
+	if !readBack.HasSecret {
+		t.Fatal("readBack has_secret = false, want true")
+	}
+	if readBack.Config.ServerURL.Value != ntfyURL {
+		t.Fatalf("server_url = %q, want %q", readBack.Config.ServerURL.Value, ntfyURL)
+	}
+	if readBack.Config.Topic.Value != "alerts" {
+		t.Fatalf("topic = %q, want 'alerts'", readBack.Config.Topic.Value)
+	}
+	testRes := callToolWithParams(t, f, token, domain.LLMWriteToolTestNotificationChannel, map[string]any{
+		"channelId": chID,
+	})
+	if testRes.IsError {
+		t.Fatalf("test_notification_channel: %s", testRes.ContentText)
+	}
+	if hits.Load() != 1 {
+		t.Fatalf("ntfy hits = %d, want 1", hits.Load())
+	}
+	if gotAuth := authHeader.Load().(string); gotAuth != "Bearer secret-mcp-token" {
+		t.Fatalf("auth = %q, want 'Bearer secret-mcp-token'", gotAuth)
+	}
+}
+
+func mcpTestUnknownChannelError(t *testing.T, f *mcpFixture, token string) {
+	t.Helper()
+	res := callToolWithParams(t, f, token, domain.LLMWriteToolUpdateNotificationChannel, map[string]any{
+		"channelId": uuid.NewString(),
+		"body": map[string]any{
+			"name":    "Ghost",
+			"kind":    "ntfy",
+			"enabled": true,
+		},
+	})
+	if !res.IsError {
+		t.Fatal("update_notification_channel with unknown ID expected IsError=true")
+	}
+}

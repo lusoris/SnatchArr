@@ -62,10 +62,11 @@ func (h *Handlers) UpdateNotificationChannel(ctx context.Context, req *oas.Notif
 		return nil, err
 	}
 	in := domain.NotificationChannelInput{
-		Name:    req.Name,
-		Kind:    domain.ChannelKind(req.Kind),
-		Enabled: req.Enabled.Value,
-		Config:  notificationConfigFromOAS(req.Config.Value),
+		Name:       req.Name,
+		Kind:       domain.ChannelKind(req.Kind),
+		Enabled:    req.Enabled.Value,
+		Config:     notificationConfigFromOAS(req.Config.Value),
+		KeepConfig: !req.Config.IsSet(),
 	}
 	if !req.Enabled.IsSet() {
 		in.Enabled = true

@@ -4746,10 +4746,11 @@ func (s *NotificationChannelKind) UnmarshalText(data []byte) error {
 
 // Ref: #/components/schemas/NotificationChannelUpdate
 type NotificationChannelUpdate struct {
-	Name    string                       `json:"name"`
-	Kind    NotificationChannelKind      `json:"kind"`
-	Enabled OptBool                      `json:"enabled"`
-	Config  OptNotificationChannelConfig `json:"config"`
+	Name    string                  `json:"name"`
+	Kind    NotificationChannelKind `json:"kind"`
+	Enabled OptBool                 `json:"enabled"`
+	// Omitted = stored configuration stays; sent = replaces it, omitted secret fields stay.
+	Config OptNotificationChannelConfig `json:"config"`
 }
 
 // GetName returns the value of Name.

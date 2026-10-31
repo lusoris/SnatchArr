@@ -2648,6 +2648,7 @@ export interface components {
             kind: components["schemas"]["NotificationChannelKind"];
             /** @default true */
             enabled: boolean;
+            /** @description Omitted = stored configuration stays; sent = replaces it, omitted secret fields stay. */
             config?: components["schemas"]["NotificationChannelConfig"];
         };
         NotificationChannel: {

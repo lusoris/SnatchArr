@@ -166,7 +166,12 @@ func (s *Service) UpdateChannel(ctx context.Context, chID uuid.UUID, in domain.N
 	if err != nil {
 		return domain.NotificationChannel{}, err
 	}
-	cfg := in.Config.MergeSecrets(existing.Config)
+	var cfg domain.ChannelConfig
+	if in.KeepConfig {
+		cfg = existing.Config
+	} else {
+		cfg = in.Config.MergeSecrets(existing.Config)
+	}
 	cfgBytes, err := json.Marshal(cfg) // #nosec G117 -- sealed immediately with crypto.Encryptor AES-GCM at rest
 	if err != nil {
 		return domain.NotificationChannel{}, fmt.Errorf("notify: marshal config: %w", err)
