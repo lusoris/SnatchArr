@@ -99,6 +99,31 @@ edit_11() {
     git branch -q -m main other
 }
 
+# edit_12: one-line shell function without header refused.
+edit_12() {
+    printf "%s\n" "" "new_fn() { :; }" >>lib.sh
+}
+
+# edit_13: one-line shell function with header passes.
+edit_13() {
+    printf "%s\n" "" "# new_fn is documented." "new_fn() { :; }" >>lib.sh
+}
+
+# edit_14: deleting blank line before bare function passes.
+edit_14() {
+    sed -i "6{/^$/d}" lib.sh
+}
+
+# edit_15: untracked shell file with bare function refused.
+edit_15() {
+    printf "%s\n" "#!/usr/bin/env bash" "bare_untracked() {" "    :" "}" >new.sh
+}
+
+# edit_16: untracked shell file with header passes.
+edit_16() {
+    printf "%s\n" "#!/usr/bin/env bash" "# documented." "good_untracked() {" "    :" "}" >new.sh
+}
+
 expect "untouched bare function passes" 0 "ok (" edit_1
 expect "new shell function without header refused" 1 "shell function new_fn has no header comment" edit_2
 expect "edit inside a bare shell function refused" 1 "shell function bare_fn has no header comment" edit_3
@@ -110,6 +135,11 @@ expect "edit inside a documented shell function passes" 0 "ok (" edit_8
 expect "python function without docstring refused" 1 "Python function bare has no docstring" edit_9
 expect "python function with docstring passes" 0 "ok (" edit_10
 expect "unknown base cannot run" 2 "cannot run" edit_11
+expect "one-line shell function without header refused" 1 "shell function new_fn has no header comment" edit_12
+expect "one-line shell function with header passes" 0 "ok (" edit_13
+expect "deleting blank line before bare function passes" 0 "ok (" edit_14
+expect "untracked shell file with bare function refused" 1 "new.sh:2: shell function bare_untracked has no header comment" edit_15
+expect "untracked shell file with header passes" 0 "ok (" edit_16
 
 if [ "$failed" -ne 0 ]; then
     exit 1

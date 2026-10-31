@@ -23,7 +23,10 @@ from pathlib import Path
 GIT_TIMEOUT_SECONDS = 30
 MAX_FILE_LINES = 20000
 SHELL_SUFFIXES = (".sh", ".bash")
-SHELL_DEF = re.compile(r"^(\s*)(?:function\s+)?([A-Za-z_][A-Za-z0-9_:.-]*)\s*\(\)\s*\{?\s*$|^(\s*)function\s+([A-Za-z_][A-Za-z0-9_:.-]*)\s*\{?\s*$")
+SHELL_DEF = re.compile(
+    r"^(\s*)(?:function\s+)?([A-Za-z_][A-Za-z0-9_:.-]*)\s*\(\)\s*(?:(\{.*\})\s*$|\{?\s*$)|"
+    r"^(\s*)function\s+([A-Za-z_][A-Za-z0-9_:.-]*)\s*(?:(\{.*\})\s*$|\{?\s*$)"
+)
 HUNK = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
 
 
@@ -43,23 +46,26 @@ def git(root: Path, *args: str) -> str:
     return res.stdout
 
 
-def changed_lines(diff: str) -> dict[str, set[int]]:
-    """Map each file in a -U0 diff to the new-side line numbers it adds or deletes beside."""
-    out: dict[str, set[int]] = {}
+def changed_lines(diff: str) -> tuple[dict[str, set[int]], dict[str, set[int]]]:
+    """Map each file in a -U0 diff to added line numbers and pure-deletion gap positions."""
+    touched: dict[str, set[int]] = {}
+    gaps: dict[str, set[int]] = {}
     current = None
     for line in diff.splitlines():
         if line.startswith("+++ "):
             current = line[6:] if line.startswith("+++ b/") else None
             if current is not None:
-                out.setdefault(current, set())
+                touched.setdefault(current, set())
+                gaps.setdefault(current, set())
             continue
         m = HUNK.match(line)
         if m and current is not None:
             start, count = int(m.group(1)), int(m.group(2) or "1")
-            # A pure deletion touches the lines around the gap.
-            span = range(start, start + count) if count else range(max(start, 1), start + 2)
-            out[current].update(span)
-    return out
+            if count:
+                touched[current].update(range(start, start + count))
+            else:
+                gaps[current].add(start)
+    return touched, gaps
 
 
 def shell_header_ok(lines: list[str], def_idx: int) -> bool:
@@ -77,27 +83,33 @@ def shell_functions(lines: list[str]) -> list[tuple[str, int, int]]:
         m = SHELL_DEF.match(text)
         if not m:
             continue
-        indent = m.group(1) if m.group(1) is not None else m.group(3)
-        name = m.group(2) or m.group(4)
+        indent = m.group(1) if m.group(1) is not None else m.group(4)
+        name = m.group(2) or m.group(5)
+        is_one_line = bool(m.group(3) or m.group(6))
         end = idx
-        for j in range(idx + 1, len(lines)):
-            if lines[j].rstrip() == f"{indent}}}" or lines[j].startswith(f"{indent}}} "):
-                end = j
-                break
-        funcs.append((name, idx, end))
+        if not is_one_line:
+            for j in range(idx + 1, len(lines)):
+                if lines[j].rstrip() == f"{indent}}}" or lines[j].startswith(f"{indent}}} "):
+                    end = j
+                    break
+        funcs.append((name, idx + 1, end + 1))
     return funcs
 
 
-def shell_findings(path: str, lines: list[str], touched: set[int]) -> list[str]:
+def shell_findings(path: str, lines: list[str], touched: set[int], gaps: set[int]) -> list[str]:
     """List touched shell functions in path that lack a header comment."""
     found = []
     for name, start, end in shell_functions(lines):
-        if touched.intersection(range(start + 1, end + 2)) and not shell_header_ok(lines, start):
-            found.append(f"{path}:{start + 1}: shell function {name} has no header comment")
+        is_touched = (
+            bool(touched.intersection(range(start, end + 1)))
+            or any(start <= s < end for s in gaps)
+        )
+        if is_touched and not shell_header_ok(lines, start - 1):
+            found.append(f"{path}:{start}: shell function {name} has no header comment")
     return found
 
 
-def python_findings(path: str, source: str, touched: set[int]) -> list[str]:
+def python_findings(path: str, source: str, touched: set[int], gaps: set[int]) -> list[str]:
     """List touched Python functions in path that lack a docstring."""
     try:
         tree = ast.parse(source, filename=path)
@@ -109,12 +121,16 @@ def python_findings(path: str, source: str, touched: set[int]) -> list[str]:
             continue
         first = min([node.lineno, *(d.lineno for d in node.decorator_list)])
         last = node.end_lineno or node.lineno
-        if touched.intersection(range(first, last + 1)) and ast.get_docstring(node) is None:
+        is_touched = (
+            bool(touched.intersection(range(first, last + 1)))
+            or any(first <= s < last for s in gaps)
+        )
+        if is_touched and ast.get_docstring(node) is None:
             found.append(f"{path}:{node.lineno}: Python function {node.name} has no docstring")
     return found
 
 
-def file_findings(root: Path, path: str, touched: set[int]) -> list[str]:
+def file_findings(root: Path, path: str, touched: set[int], gaps: set[int]) -> list[str]:
     """Read one changed file from the working tree and check the functions the change touched."""
     full = root / path
     if not full.is_file() or not path.endswith((*SHELL_SUFFIXES, ".py")):
@@ -125,8 +141,8 @@ def file_findings(root: Path, path: str, touched: set[int]) -> list[str]:
         raise CheckError(f"{path}: {exc}") from exc
     lines = source.splitlines()[:MAX_FILE_LINES]
     if path.endswith(".py"):
-        return python_findings(path, source, touched)
-    return shell_findings(path, lines, touched)
+        return python_findings(path, source, touched, gaps)
+    return shell_findings(path, lines, touched, gaps)
 
 
 def run(root: Path, base: str) -> list[str]:
@@ -134,9 +150,26 @@ def run(root: Path, base: str) -> list[str]:
     merge_base = git(root, "merge-base", base, "HEAD").strip()
     diff = git(root, "diff", "-U0", "--no-color", "--no-ext-diff", merge_base, "--",
                "*.sh", "*.bash", "*.py")
+    touched_by_file, gaps_by_file = changed_lines(diff)
+    untracked = git(root, "ls-files", "--others", "--exclude-standard", "--",
+                    "*.sh", "*.bash", "*.py")
+    for raw in untracked.splitlines():
+        path = raw.strip()
+        if not path:
+            continue
+        full = root / path
+        if not full.is_file():
+            continue
+        try:
+            line_count = len(full.read_text(encoding="utf-8").splitlines()[:MAX_FILE_LINES])
+        except (OSError, UnicodeDecodeError) as exc:
+            raise CheckError(f"{path}: {exc}") from exc
+        touched_by_file.setdefault(path, set()).update(range(1, line_count + 1))
+        gaps_by_file.setdefault(path, set())
     findings = []
-    for path, touched in sorted(changed_lines(diff).items()):
-        findings.extend(file_findings(root, path, touched))
+    for path in sorted(touched_by_file.keys() | gaps_by_file.keys()):
+        findings.extend(file_findings(root, path, touched_by_file.get(path, set()),
+                                      gaps_by_file.get(path, set())))
     return findings
 
 

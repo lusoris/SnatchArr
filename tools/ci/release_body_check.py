@@ -31,21 +31,21 @@ def unique_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
 
 
 def required_lines(template: str) -> list[str]:
-    """Return the template's level-two headings and checklist item texts."""
+    """Return the template's level-two headings and checklist items."""
     out = []
     for line in template.splitlines()[:MAX_TEMPLATE_LINES]:
         text = line.strip()
-        if text.startswith("## "):
+        if text.startswith(("## ", "- [ ] ", "- [x] ")):
             out.append(text)
-        elif text.startswith(("- [ ] ", "- [x] ")):
-            out.append(text[6:])
     return out
 
 
 def missing(config: dict[str, object], template: str) -> list[str]:
     """List template lines that neither the release pull request header nor footer carries."""
-    body = f"{config.get('pull-request-header', '')}\n{config.get('pull-request-footer', '')}"
-    return [line for line in required_lines(template) if line not in body]
+    header = str(config.get("pull-request-header") or "")
+    footer = str(config.get("pull-request-footer") or "")
+    body_lines = {line.strip() for text in (header, footer) for line in text.splitlines()}
+    return [line for line in required_lines(template) if line not in body_lines]
 
 
 def main() -> int:
@@ -60,10 +60,13 @@ def main() -> int:
     except (OSError, ValueError) as exc:
         print(f"release_body_check: cannot run: {exc}", file=sys.stderr)
         return 2
-    gaps = missing(config, template)
+    if not isinstance(config, dict):
+        print(f"release_body_check: cannot run: {args.config} is not a JSON object", file=sys.stderr)
+        return 2
     if not required_lines(template):
         print("release_body_check: cannot run: the template has no heading or checklist item", file=sys.stderr)
         return 2
+    gaps = missing(config, template)
     for gap in gaps:
         print(f"{args.config}: release pull request body lacks template line: {gap}")
     if gaps:
