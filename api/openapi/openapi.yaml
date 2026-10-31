@@ -4459,6 +4459,7 @@ components:
           type: boolean
           default: true
         config:
+          description: Omitted = stored configuration stays; sent = replaces it, omitted secret fields stay.
           $ref: "#/components/schemas/NotificationChannelConfig"
 
     NotificationChannel:

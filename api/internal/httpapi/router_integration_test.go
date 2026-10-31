@@ -21,6 +21,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -3092,5 +3093,303 @@ func TestRouterProbeAuthProxyRedirect(t *testing.T) {
 			}
 			executeRouterStep(t, f, newIDsState(t), step)
 		})
+	}
+}
+
+func TestRouterNotificationChannelUpdate_KeepConfig(t *testing.T) {
+	t.Parallel()
+	f := newRouterFixture(t)
+	adminUser := completeInitialSetup(t, f)
+	apiKey, _, err := f.keys.Issue(t.Context(), adminUser.ID.String(), []string{"admin"})
+	if err != nil {
+		t.Fatalf("keys.Issue: %v", err)
+	}
+
+	var ntfyHits atomic.Int32
+	var authHeader atomic.Value
+	ntfySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ntfyHits.Add(1)
+		authHeader.Store(r.Header.Get("Authorization"))
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(ntfySrv.Close)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	chID := routerCreateNtfyChannel(t, f, client, apiKey, ntfySrv.URL)
+
+	testCases := []struct {
+		name string
+		run  func(t *testing.T)
+	}{
+		{
+			name: "positive: rename without config preserves config and secret",
+			run: func(t *testing.T) {
+				t.Helper()
+				routerTestRenameKeepConfig(t, f, client, apiKey, chID, ntfySrv.URL, &ntfyHits, &authHeader)
+			},
+		},
+		{
+			name: "positive: update with config replaces public fields and merges secret",
+			run: func(t *testing.T) {
+				t.Helper()
+				routerTestReplaceConfig(t, f, client, apiKey, chID)
+			},
+		},
+		{
+			name: "boundary: update with empty config removes public fields",
+			run: func(t *testing.T) {
+				t.Helper()
+				routerTestEmptyConfig(t, f, client, apiKey, chID)
+			},
+		},
+		{
+			name: "negative: update without config on unknown channel returns 404",
+			run: func(t *testing.T) {
+				t.Helper()
+				routerTestUnknownChannel404(t, f, client, apiKey)
+			},
+		},
+	}
+
+	//nolint:paralleltest // sequential scenario: each case modifies channel state
+	for _, tc := range testCases {
+		t.Run(tc.name, tc.run)
+	}
+}
+
+func routerDoJSON(t *testing.T, client *http.Client, req *http.Request, wantStatus int) map[string]any {
+	t.Helper()
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("%s %s: client.Do: %v", req.Method, req.URL.Path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != wantStatus {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("%s %s: status = %d, want %d; body: %s", req.Method, req.URL.Path, resp.StatusCode, wantStatus, string(body))
+	}
+	if wantStatus == http.StatusNoContent {
+		return nil
+	}
+	var res map[string]any
+	if decErr := json.NewDecoder(resp.Body).Decode(&res); decErr != nil {
+		t.Fatalf("%s %s: decode response: %v", req.Method, req.URL.Path, decErr)
+	}
+	return res
+}
+
+func routerCreateNtfyChannel(t *testing.T, f *routerFixture, client *http.Client, apiKey, ntfyURL string) string {
+	t.Helper()
+	createBody := map[string]any{
+		"name":    "initial-ntfy",
+		"kind":    "ntfy",
+		"enabled": true,
+		"config": map[string]any{
+			"server_url": ntfyURL,
+			"topic":      "alerts",
+			"token":      "secret-token-12345",
+		},
+	}
+	raw, err := json.Marshal(createBody)
+	if err != nil {
+		t.Fatalf("marshal create body: %v", err)
+	}
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, f.srv.URL+PathPrefix+"/notifications/channels", bytes.NewReader(raw))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Content-Type", "application/json")
+	created := routerDoJSON(t, client, req, http.StatusCreated)
+
+	chID, ok := created["id"].(string)
+	if !ok || chID == "" {
+		t.Fatalf("created channel id = %v, want non-empty string", created["id"])
+	}
+	if created["name"] != "initial-ntfy" {
+		t.Fatalf("created name = %v, want initial-ntfy", created["name"])
+	}
+	if created["has_secret"] != true {
+		t.Fatalf("created has_secret = %v, want true", created["has_secret"])
+	}
+	return chID
+}
+
+func routerTestRenameKeepConfig(t *testing.T, f *routerFixture, client *http.Client, apiKey, chID, ntfyURL string, hits *atomic.Int32, authHeader *atomic.Value) {
+	t.Helper()
+	putBody := map[string]any{
+		"name": "renamed-ntfy",
+		"kind": "ntfy",
+	}
+	raw, err := json.Marshal(putBody)
+	if err != nil {
+		t.Fatalf("marshal put body: %v", err)
+	}
+	putReq, err := http.NewRequestWithContext(t.Context(), http.MethodPut, f.srv.URL+PathPrefix+"/notifications/channels/"+chID, bytes.NewReader(raw))
+	if err != nil {
+		t.Fatalf("new put request: %v", err)
+	}
+	putReq.Header.Set("Authorization", "Bearer "+apiKey)
+	putReq.Header.Set("Content-Type", "application/json")
+	_ = routerDoJSON(t, client, putReq, http.StatusOK)
+
+	getReq, err := http.NewRequestWithContext(t.Context(), http.MethodGet, f.srv.URL+PathPrefix+"/notifications/channels/"+chID, nil)
+	if err != nil {
+		t.Fatalf("new get request: %v", err)
+	}
+	getReq.Header.Set("Authorization", "Bearer "+apiKey)
+	got := routerDoJSON(t, client, getReq, http.StatusOK)
+
+	if got["name"] != "renamed-ntfy" {
+		t.Fatalf("name = %v, want renamed-ntfy", got["name"])
+	}
+	if got["kind"] != "ntfy" {
+		t.Fatalf("kind = %v, want ntfy", got["kind"])
+	}
+	if got["has_secret"] != true {
+		t.Fatalf("has_secret = %v, want true", got["has_secret"])
+	}
+	cfg, ok := got["config"].(map[string]any)
+	if !ok {
+		t.Fatalf("config = %v, want map", got["config"])
+	}
+	if cfg["server_url"] != ntfyURL {
+		t.Fatalf("server_url = %v, want %s", cfg["server_url"], ntfyURL)
+	}
+	if cfg["topic"] != "alerts" {
+		t.Fatalf("topic = %v, want alerts", cfg["topic"])
+	}
+
+	testReq, err := http.NewRequestWithContext(t.Context(), http.MethodPost, f.srv.URL+PathPrefix+"/notifications/channels/"+chID+"/test", nil)
+	if err != nil {
+		t.Fatalf("new test request: %v", err)
+	}
+	testReq.Header.Set("Authorization", "Bearer "+apiKey)
+	_ = routerDoJSON(t, client, testReq, http.StatusNoContent)
+
+	if hits.Load() != 1 {
+		t.Fatalf("ntfy hits = %d, want 1", hits.Load())
+	}
+	if authHeader.Load() != "Bearer secret-token-12345" {
+		t.Fatalf("auth header = %v, want 'Bearer secret-token-12345'", authHeader.Load())
+	}
+}
+
+func routerTestReplaceConfig(t *testing.T, f *routerFixture, client *http.Client, apiKey, chID string) {
+	t.Helper()
+	putBody := map[string]any{
+		"name": "replaced-ntfy",
+		"kind": "ntfy",
+		"config": map[string]any{
+			"server_url": "http://127.0.0.1:54321",
+			"topic":      "other-topic",
+		},
+	}
+	raw, err := json.Marshal(putBody)
+	if err != nil {
+		t.Fatalf("marshal put body: %v", err)
+	}
+	putReq, err := http.NewRequestWithContext(t.Context(), http.MethodPut, f.srv.URL+PathPrefix+"/notifications/channels/"+chID, bytes.NewReader(raw))
+	if err != nil {
+		t.Fatalf("new put request: %v", err)
+	}
+	putReq.Header.Set("Authorization", "Bearer "+apiKey)
+	putReq.Header.Set("Content-Type", "application/json")
+	_ = routerDoJSON(t, client, putReq, http.StatusOK)
+
+	getReq, err := http.NewRequestWithContext(t.Context(), http.MethodGet, f.srv.URL+PathPrefix+"/notifications/channels/"+chID, nil)
+	if err != nil {
+		t.Fatalf("new get request: %v", err)
+	}
+	getReq.Header.Set("Authorization", "Bearer "+apiKey)
+	got := routerDoJSON(t, client, getReq, http.StatusOK)
+
+	if got["name"] != "replaced-ntfy" {
+		t.Fatalf("name = %v, want replaced-ntfy", got["name"])
+	}
+	if got["has_secret"] != true {
+		t.Fatalf("has_secret = %v, want true (secret merged)", got["has_secret"])
+	}
+	cfg, ok := got["config"].(map[string]any)
+	if !ok {
+		t.Fatalf("config = %v, want map", got["config"])
+	}
+	if cfg["server_url"] != "http://127.0.0.1:54321" {
+		t.Fatalf("server_url = %v, want http://127.0.0.1:54321", cfg["server_url"])
+	}
+	if cfg["topic"] != "other-topic" {
+		t.Fatalf("topic = %v, want other-topic", cfg["topic"])
+	}
+
+	secCh, err := f.h.notify.GetChannelWithSecrets(t.Context(), uuid.MustParse(chID))
+	if err != nil {
+		t.Fatalf("GetChannelWithSecrets: %v", err)
+	}
+	if secCh.Config.Token != "secret-token-12345" {
+		t.Fatalf("secret token = %q, want secret-token-12345", secCh.Config.Token)
+	}
+}
+
+func routerTestEmptyConfig(t *testing.T, f *routerFixture, client *http.Client, apiKey, chID string) {
+	t.Helper()
+	putBody := map[string]any{
+		"name":   "empty-config-ntfy",
+		"kind":   "ntfy",
+		"config": map[string]any{},
+	}
+	raw, err := json.Marshal(putBody)
+	if err != nil {
+		t.Fatalf("marshal put body: %v", err)
+	}
+	putReq, err := http.NewRequestWithContext(t.Context(), http.MethodPut, f.srv.URL+PathPrefix+"/notifications/channels/"+chID, bytes.NewReader(raw))
+	if err != nil {
+		t.Fatalf("new put request: %v", err)
+	}
+	putReq.Header.Set("Authorization", "Bearer "+apiKey)
+	putReq.Header.Set("Content-Type", "application/json")
+	_ = routerDoJSON(t, client, putReq, http.StatusOK)
+
+	getReq, err := http.NewRequestWithContext(t.Context(), http.MethodGet, f.srv.URL+PathPrefix+"/notifications/channels/"+chID, nil)
+	if err != nil {
+		t.Fatalf("new get request: %v", err)
+	}
+	getReq.Header.Set("Authorization", "Bearer "+apiKey)
+	got := routerDoJSON(t, client, getReq, http.StatusOK)
+
+	if got["has_secret"] != true {
+		t.Fatalf("has_secret = %v, want true (secret merged)", got["has_secret"])
+	}
+	cfg, ok := got["config"].(map[string]any)
+	if !ok {
+		t.Fatalf("config = %v, want map", got["config"])
+	}
+	if sURL, has := cfg["server_url"]; has && sURL != "" {
+		t.Fatalf("server_url = %v, want empty or omitted", sURL)
+	}
+	if top, has := cfg["topic"]; has && top != "" {
+		t.Fatalf("topic = %v, want empty or omitted", top)
+	}
+}
+
+func routerTestUnknownChannel404(t *testing.T, f *routerFixture, client *http.Client, apiKey string) {
+	t.Helper()
+	putBody := map[string]any{
+		"name": "ghost",
+		"kind": "ntfy",
+	}
+	raw, err := json.Marshal(putBody)
+	if err != nil {
+		t.Fatalf("marshal put body: %v", err)
+	}
+	unknownID := "00000000-0000-0000-0000-000000000099"
+	putReq, err := http.NewRequestWithContext(t.Context(), http.MethodPut, f.srv.URL+PathPrefix+"/notifications/channels/"+unknownID, bytes.NewReader(raw))
+	if err != nil {
+		t.Fatalf("new put request: %v", err)
+	}
+	putReq.Header.Set("Authorization", "Bearer "+apiKey)
+	putReq.Header.Set("Content-Type", "application/json")
+	resp := routerDoJSON(t, client, putReq, http.StatusNotFound)
+	if resp["title"] == nil || resp["title"] == "" {
+		t.Fatalf("404 problem title = %v, want non-empty", resp["title"])
 	}
 }

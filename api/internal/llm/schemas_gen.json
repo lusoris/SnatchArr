@@ -3053,7 +3053,8 @@
       "NotificationChannelUpdate": {
         "properties": {
           "config": {
-            "$ref": "#/$defs/NotificationChannelConfig"
+            "$ref": "#/$defs/NotificationChannelConfig",
+            "description": "Omitted = stored configuration stays; sent = replaces it, omitted secret fields stay."
           },
           "enabled": {
             "default": true,

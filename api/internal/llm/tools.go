@@ -1219,7 +1219,7 @@ var toolRegistry = []toolSpec{
 		Scope:       domain.ScopeNotificationsWrite,
 		ReadOnly:    false,
 		Destructive: false,
-		Description: "Update a notification channel.",
+		Description: "Update a notification channel (omitted config stays; sent replaces it, omitted secret fields stay).",
 		Register: registerWriteIDBody[oas.NotificationChannelUpdate]("channelId", func(ctx context.Context, h *httpapi.Handlers, id uuid.UUID, body *oas.NotificationChannelUpdate) (any, error) {
 			return h.UpdateNotificationChannel(ctx, body, oas.UpdateNotificationChannelParams{ChannelId: id})
 		}),
