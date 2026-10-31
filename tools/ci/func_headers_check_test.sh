@@ -173,6 +173,15 @@ edit_24() {
     printf '%s\n' '#!/usr/bin/env bash' 'bare_space() {' '    echo space' '}' >" lead.sh"
 }
 
+# edit_25: committed file with space in name checked when undocumented function touched.
+edit_25() {
+    printf '%s\n' '#!/usr/bin/env bash' \
+        '# doc_fn is documented.' 'doc_fn() {' '    echo doc' '}' \
+        '' 'bare_fn() {' '    echo bare' '}' >"my script.sh"
+    git add "my script.sh" && git commit -q -m "space"
+    sed -i "s/echo bare/echo changed/" "my script.sh"
+}
+
 expect "untouched bare function passes" 0 "ok (" edit_1
 expect "new shell function without header refused" 1 "shell function new_fn has no header comment" edit_2
 expect "edit inside a bare shell function refused" 1 "shell function bare_fn has no header comment" edit_3
@@ -197,6 +206,7 @@ expect "untracked file with quoted non-ASCII name checked" 1 "shell function bar
 expect "closing brace inside heredoc body does not end function early" 1 "shell function undoc has no header comment" edit_22
 expect "arithmetic shift is not a heredoc" 1 "shell function undoc_shift has no header comment" edit_23
 expect "untracked name with leading space checked" 1 "shell function bare_space has no header comment" edit_24
+expect "committed file with space in name in diff checked" 1 "my script.sh" edit_25
 
 if [ "$failed" -ne 0 ]; then
     exit 1

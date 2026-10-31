@@ -76,7 +76,7 @@ def changed_lines(diff: str) -> tuple[dict[str, set[int]], dict[str, set[int]]]:
     current = None
     for line in diff.splitlines():
         if line.startswith("+++ "):
-            target = line[4:]
+            target = line[4:].rstrip("\t")
             if target.startswith('"b/') and target.endswith('"'):
                 current = unquote_git_path(target[3:-1])
             elif target.startswith("b/"):
