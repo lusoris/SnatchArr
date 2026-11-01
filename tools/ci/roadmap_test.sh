@@ -37,7 +37,9 @@ exit 0
 EOF
 chmod +x "$WORK/bin/gh"
 
+# pass records a case that behaved as recorded.
 pass() { echo "ok   $1"; }
+# fail records a case that did not and marks the run failed.
 fail() { echo "FAIL $1"; failed=1; }
 
 # Case 1: forge unreachable, shape check offline.
@@ -72,7 +74,9 @@ refresh() {
     >"$WORK/$name.out" 2>&1) || rc=$?
   [ "$rc" -eq "$want" ]
 }
+# called <case> <pattern>: the stub gh logged a matching call in that case.
 called() { grep -q -- "$2" "$WORK/$1.log"; }
+# writes <case>: prints how many write calls the stub gh logged in that case.
 writes() { awk '/-X |^pr c/ { n++ } END { print n + 0 }' "$WORK/$1.log"; }
 tmp_ref="repos/o/r/git/refs/heads/bot/roadmap-refresh-tmp-7"
 bot_ref="repos/o/r/git/refs/heads/bot/roadmap-refresh "

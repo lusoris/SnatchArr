@@ -65,6 +65,7 @@ fi
 blob="$(git rev-parse "$base:$doc")" || exit 1
 content="$(base64 <"$doc" | tr -d '\n')"
 
+# drop_tmp deletes the temporary branch the file was written on.
 drop_tmp() {
   send api -X DELETE "repos/$repo/git/refs/heads/$tmp" >/dev/null
 }
