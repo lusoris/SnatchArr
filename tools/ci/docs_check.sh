@@ -8,6 +8,7 @@
 #   tools/ci/docs_check.sh CACHE_DIR [ROOT]
 #
 # MKDOCS_BIN overrides the virtual environment's executable for tests only.
+# DOCS_LOCK_SECONDS bounds the wait for another check holding the environment (default 900).
 set -eu
 
 cache="${1:?usage: docs_check.sh CACHE_DIR [ROOT]}"
@@ -34,6 +35,28 @@ mkdir -p "$cache"
 cache="$(cd "$cache" && pwd)"
 req_hash="$(sha256sum "$requirements" | cut -c1-12)"
 venv="$cache/docs-$req_hash"
+# One check at a time per environment: a second check on a cold cache would otherwise
+# clear the environment while the first installs into it. mkdir is atomic on every
+# platform, unlike flock, which macOS lacks.
+lock="$venv.lock"
+lock_seconds="${DOCS_LOCK_SECONDS:-900}"
+waited=0
+until mkdir "$lock" 2>/dev/null; do
+  if [ "$waited" -ge "$lock_seconds" ]; then
+    echo "error: $lock held for ${lock_seconds}s; remove it if no docs check is running" >&2
+    exit 1
+  fi
+  sleep 1
+  waited=$((waited + 1))
+done
+tmp=""
+# cleanup releases the environment lock and removes the build output.
+cleanup() {
+  [ -z "$tmp" ] || rm -rf "$tmp"
+  rmdir "$lock"
+}
+trap cleanup 0
+trap 'exit 1' HUP INT TERM
 # The marker is written only after pip succeeds and records the interpreter that
 # built the environment: an interrupted install, or one made by a different
 # python3, is rebuilt from scratch instead of trusted because bin/mkdocs exists.
@@ -55,7 +78,5 @@ if [ ! -x "$mkdocs" ]; then
 fi
 
 tmp="$(mktemp -d)"
-trap 'rm -rf "$tmp"' 0
-trap 'exit 1' HUP INT TERM
 cd "$root"
 NO_MKDOCS_2_WARNING=1 "$mkdocs" build --strict -d "$tmp"

@@ -74,6 +74,25 @@ run_case 'marker == is not a version pin' 1 'exact == version pin' "$stub"
 cp "$REPO_ROOT/tools/docs/requirements.txt" "$root/tools/docs/requirements.txt"
 printf '%s\n' 'wildcard-package==9.*' >> "$root/tools/docs/requirements.txt"
 run_case 'wildcard == is not an exact pin' 1 'exact == version pin' "$stub"
+cp "$REPO_ROOT/tools/docs/requirements.txt" "$root/tools/docs/requirements.txt"
+# A held environment lock blocks a second check until released, and fails it after the bound.
+lock="$cache/docs-$req_hash.lock"
+mkdir "$lock"
+out=$(DOCS_LOCK_SECONDS=1 MKDOCS_BIN="$stub" sh "$check" "$cache" "$root" 2>&1) && status=0 || status=$?
+if (check_case 'held lock refused after bound' 1 "$([ "$status" -ne 0 ] && echo 1 || echo 0)" 'held for 1s' "$out"); then
+    echo "ok   held lock refused after bound"
+else
+    failed=1
+fi
+(sleep 2 && rmdir "$lock") &
+out=$(DOCS_LOCK_SECONDS=20 MKDOCS_BIN="$stub" sh "$check" "$cache" "$root" 2>&1) && status=0 || status=$?
+wait
+if (check_case 'released lock taken and freed' 0 "$status" 'unexpected build reached' "$out") && [ ! -d "$lock" ]; then
+    echo "ok   released lock taken and freed"
+else
+    echo "FAIL released lock taken and freed: lock left or run failed" >&2
+    failed=1
+fi
 rm "$root/tools/docs/requirements.txt"
 run_case 'missing requirements refused before build' 1 'requirements file missing' "$stub"
 
