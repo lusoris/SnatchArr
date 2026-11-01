@@ -8,6 +8,9 @@ import (
 	"time"
 )
 
+// testSubsecondRunDeadline holds the calls the test-subsecond-run-deadline
+// rule must refuse (sub-second deadlines over t.Context()) and the calls it
+// must allow (deadlines of one second or more).
 func testSubsecondRunDeadline(t *testing.T) {
 	// ruleid: test-subsecond-run-deadline
 	_, _ = context.WithTimeout(t.Context(), 50*time.Millisecond)

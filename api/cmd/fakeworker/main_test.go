@@ -323,6 +323,9 @@ func TestProcessRuns_NegativeCompleteError(t *testing.T) {
 	}
 }
 
+// TestProcessRuns_BoundaryTimeout checks that processRuns stops at once and
+// returns context.Canceled when its context is already cancelled, so the
+// test needs no wall-clock deadline.
 func TestProcessRuns_BoundaryTimeout(t *testing.T) {
 	t.Parallel()
 
