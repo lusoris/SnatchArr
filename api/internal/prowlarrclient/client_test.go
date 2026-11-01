@@ -7,12 +7,14 @@ package prowlarrclient_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/prowlarrclient"
 )
 
@@ -181,6 +183,64 @@ func TestHTTPClient_Usage(t *testing.T) {
 	}
 }
 
+// TestHTTPClient_Usage_Table verifies that Usage rejects payloads missing a
+// non-null indexers array with domain.ErrInvalid and accepts an empty slice.
+func TestHTTPClient_Usage_Table(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	now := time.Date(2026, 10, 16, 12, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name      string
+		payload   any
+		wantErr   bool
+		wantCount int
+	}{
+		{
+			name:    "negative empty object missing indexers",
+			payload: map[string]any{},
+			wantErr: true,
+		},
+		{
+			name:    "negative null indexers field",
+			payload: map[string]any{"indexers": nil},
+			wantErr: true,
+		},
+		{
+			name:      "boundary empty indexers slice returns empty map",
+			payload:   map[string]any{"indexers": []any{}},
+			wantErr:   false,
+			wantCount: 0,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(tc.payload)
+			}))
+			t.Cleanup(srv.Close)
+
+			c := prowlarrclient.New(5*time.Second, "SnatchArr-test")
+			got, err := c.Usage(ctx, srv.URL, "any", now.Add(-time.Hour), now)
+			if tc.wantErr {
+				if err == nil || !errors.Is(err, domain.ErrInvalid) {
+					t.Fatalf("Usage() err = %v, want wrapping domain.ErrInvalid", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Usage() unexpected error: %v", err)
+			}
+			if len(got) != tc.wantCount {
+				t.Errorf("Usage() count = %d, want %d", len(got), tc.wantCount)
+			}
+		})
+	}
+}
+
 func TestHTTPClient_Statuses(t *testing.T) {
 	t.Parallel()
 	srv := fakeProwlarr(t)
@@ -205,6 +265,102 @@ func TestHTTPClient_Statuses(t *testing.T) {
 	expected := time.Date(2026, 10, 16, 22, 0, 0, 0, time.UTC)
 	if !dt2.Equal(expected) {
 		t.Errorf("disabledTill = %v, want %v", dt2, expected)
+	}
+}
+
+// TestHTTPClient_Statuses_Table verifies Statuses handling of null and empty
+// responses, malformed disabledTill timestamps, and non-positive indexer IDs.
+func TestHTTPClient_Statuses_Table(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	tests := []struct {
+		name      string
+		payload   any
+		wantErr   bool
+		wantCount int
+		wantTimes map[int]time.Time
+	}{
+		{
+			name:    "negative null response returns error",
+			payload: nil,
+			wantErr: true,
+		},
+		{
+			name:      "boundary empty slice returns empty map",
+			payload:   []map[string]any{},
+			wantCount: 0,
+		},
+		{
+			name: "negative bad disabledTill string returns error",
+			payload: []map[string]any{
+				{"id": 1, "indexerId": 10, "disabledTill": "invalid-timestamp"},
+			},
+			wantErr: true,
+		},
+		{
+			name: "negative indexerId 0 with garbage disabledTill returns error",
+			payload: []map[string]any{
+				{"id": 1, "indexerId": 0, "disabledTill": "garbage"},
+			},
+			wantErr: true,
+		},
+		{
+			name: "boundary indexerId 0 with valid disabledTill skipped",
+			payload: []map[string]any{
+				{"id": 1, "indexerId": 0, "disabledTill": "2026-10-16T22:00:00Z"},
+			},
+			wantCount: 0,
+		},
+		{
+			name: "boundary empty disabledTill produces no entry",
+			payload: []map[string]any{
+				{"id": 1, "indexerId": 11, "disabledTill": ""},
+				{"id": 2, "indexerId": 0, "disabledTill": "2026-10-16T22:00:00Z"},
+			},
+			wantCount: 0,
+		},
+		{
+			name: "positive RFC3339 with fraction parses",
+			payload: []map[string]any{
+				{"id": 1, "indexerId": 12, "disabledTill": "2026-10-16T22:00:00.123456Z"},
+			},
+			wantCount: 1,
+			wantTimes: map[int]time.Time{
+				12: time.Date(2026, 10, 16, 22, 0, 0, 123456000, time.UTC),
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(tc.payload)
+			}))
+			t.Cleanup(srv.Close)
+
+			c := prowlarrclient.New(5*time.Second, "SnatchArr-test")
+			got, err := c.Statuses(ctx, srv.URL, "any")
+			if tc.wantErr {
+				if err == nil || !errors.Is(err, domain.ErrInvalid) {
+					t.Fatalf("Statuses() err = %v, want wrapping domain.ErrInvalid", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Statuses() unexpected error: %v", err)
+			}
+			if len(got) != tc.wantCount {
+				t.Errorf("Statuses() count = %d, want %d", len(got), tc.wantCount)
+			}
+			for id, wantTime := range tc.wantTimes {
+				if gotTime, ok := got[id]; !ok || !gotTime.Equal(wantTime) {
+					t.Errorf("Statuses()[%d] = %v, want %v", id, gotTime, wantTime)
+				}
+			}
+		})
 	}
 }
 
