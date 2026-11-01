@@ -593,9 +593,10 @@ release-dogfood-check: ## Release dogfood gate and MCP dogfood pass recorder aga
 	python3 -I tools/release/dogfood_gate.py --self-test
 	python3 -I tools/release/dogfood_pass.py --self-test
 
-roadmap-check: ## docs/roadmap.md milestone table against live GitHub milestones, with planted cases
+roadmap-check: ## docs/roadmap.md milestone table shape (offline) and the scheduled refresh's bot pull-request step, with planted cases
 	python3 -I tools/ci/roadmap_render.py --self-test
-	python3 -I tools/ci/roadmap_render.py --check
+	python3 -I tools/ci/roadmap_render.py --check-shape
+	sh tools/ci/roadmap_test.sh
 
 workflows-verify: ## The rule of "CI success", the Security Scan issue step, the Semgrep scan, generated_files.py, the planted-case runner, touched-function headers, inline nosec reasons and the release pull request body, against their cases
 	sh tools/ci/status_test.sh

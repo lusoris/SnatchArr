@@ -6,7 +6,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 # Roadmap
 
 This page lists the open version milestones. The table between the markers is generated from GitHub by
-tools/ci/roadmap_render.py. Issue lists and their blocking order live on GitHub only: open a milestone to see its
+tools/ci/roadmap_render.py; the daily Roadmap refresh workflow proposes a bot pull request when a count moves. Issue lists and their blocking order live on GitHub only: open a milestone to see its
 issues in the [milestone list](https://github.com/lusoris/SnatchArr/milestones).
 
 ## Milestones

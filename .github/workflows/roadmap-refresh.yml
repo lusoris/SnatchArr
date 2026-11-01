@@ -1,0 +1,72 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+#
+# Keeps the docs/roadmap.md milestone table in step with the GitHub milestones without a hand run:
+# every day it renders the table from the open milestones on the default branch and, when an open
+# count or a scope moved, proposes the change as a bot pull request
+# (tools/ci/roadmap_refresh_pr.sh); when nothing moved it closes the bot's stale one. make
+# verify-all checks only the table's shape, offline, so a moved count never turns it red.
+#
+# Each run first replays the pull-request step against a stub gh with a planted stale count
+# (tools/ci/roadmap_test.sh), so its log shows the bot path even on a day with no change.
+name: Roadmap refresh
+
+on:
+  schedule:
+    - cron: '23 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+concurrency:
+  group: roadmap-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    name: Roadmap milestone table
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    steps:
+      # The default branch, whatever ref a manual run names: the bot pull request is based on it.
+      # Read from the API, since a scheduled run's event carries no repository object.
+      - name: Read the default branch
+        id: repo
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          branch="$(gh api "repos/$GITHUB_REPOSITORY" --jq .default_branch)"
+          [ -n "$branch" ]
+          echo "default_branch=$branch" >>"$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.repo.outputs.default_branch }}
+          persist-credentials: false
+      - name: Replay the bot pull-request path against a stub (planted stale count)
+        run: sh tools/ci/roadmap_test.sh
+      - name: Render the table from the open milestones
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -I tools/ci/roadmap_render.py --write --repo "$GITHUB_REPOSITORY"
+      # A token from the GitHub App, not GITHUB_TOKEN: a pull request opened with GITHUB_TOKEN
+      # starts no workflow, so its required checks would never run.
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+      - name: Propose the change as a bot pull request
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO: ${{ github.repository }}
+          BASE_BRANCH: ${{ steps.repo.outputs.default_branch }}
+          RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          BASE_SHA="$(git rev-parse HEAD)"
+          export BASE_SHA
+          sh tools/ci/roadmap_refresh_pr.sh
