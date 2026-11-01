@@ -30,6 +30,7 @@ var (
 	ClassifySAB          = classifySAB
 	ClassifySABStatus    = classifySABStatus
 	ClassifyNZBGet       = classifyNZBGet
+	TransmissionClient   = transmissionClient
 )
 
 // NewGoenvoyWithTimeout builds the adapter set with a shorter observation bound, so a test can
