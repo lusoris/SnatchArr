@@ -17,7 +17,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 1. **Safe-for-work (`SFW`) and general-audience surfaces**: Adopters running SnatchArr for general household media (**Radarr**, **Sonarr**, **Lidarr**, **Readarr**) with the `adult` module disabled ([ADR-0025](0025-module-switches.md)), or opening the web interface on shared displays, work laptops, or living-room screens, need an unintrusive, general-audience mark that still plays directly on the verb *snatch* (a hand snatching a media disc).
 2. **Anatomical parity**: Where anatomical branding is active, offering a companion anatomical penis mark alongside the existing vulva mark lets each user or household choose the anatomical study they prefer while keeping the vulva mark as the default anatomical mark.
-3. **External client surfaces**: The **Jellyfin** companion plugin ([ADR-0028](0028-jellyfin-plugin.md), `lusoris/jellyfin-plugin-snatcharr`) runs inside a general-audience media server shared by household members of all ages and parental-rating policies; embedding adult anatomical vector assets in the plugin binary or catalogue thumbnail is inappropriate for that distribution channel.
+3. **External client surfaces**: The **Jellyfin** companion plugin ([ADR-0028](0028-jellyfin-plugin.md), `jellysin/plugin-snatcharr`) runs inside a general-audience media server shared by household members of all ages and parental-rating policies; embedding adult anatomical vector assets in the plugin binary or catalogue thumbnail is inappropriate for that distribution channel.
 
 ### Glossary of referenced projects (meaning, origin, pronunciation)
 
@@ -107,7 +107,7 @@ Under [ADR-0025](0025-module-switches.md), the `adult` module (**Whisparr** + **
 
 ### 5. Jellyfin companion plugin ([ADR-0028](0028-jellyfin-plugin.md)) ships `hand` only
 
-The **Jellyfin** companion plugin (`lusoris/jellyfin-plugin-snatcharr`, [ADR-0028](0028-jellyfin-plugin.md)) embeds and serves **only the SFW `hand` mark**:
+The **Jellyfin** companion plugin (`jellysin/plugin-snatcharr`, [ADR-0028](0028-jellyfin-plugin.md)) embeds and serves **only the SFW `hand` mark**:
 
 - The plugin catalogue thumbnail (`thumb.png` / `mark-hand.svg`) and any in-client badge inside **Jellyfin** web/TV clients never bundle `vulva` or `penis` SVG/PNG assets.
 - Rationale: **Jellyfin** plugin catalogue pages and client script bundles are readable by all household profiles before per-user parental controls are evaluated.
