@@ -11,7 +11,7 @@ This directory documents key architectural decisions following the HISS-14 immut
 | [0003](0003-configarr-as-instance-source.md) | 2026-09-20 | Configarr as an instance source | Accepted |
 | [0004](0004-no-swaparr-cleanuparr-deferred.md) | 2026-09-20 | No Swaparr; Cleanuparr complementary | Superseded by 0012 |
 | [0005](0005-static-spa-embedded-in-api-image.md) | 2026-09-20 | Static SPA embedded in the API image | Accepted |
-| [0006](0006-download-client-backpressure.md) | 2026-09-21 | Download clients observed for backpressure, never driven | Accepted |
+| [0006](0006-download-client-backpressure.md) | 2026-09-21 | Download clients observed for backpressure, never driven | Accepted; partially superseded by 0046 |
 | [0007](0007-read-only-cleanuparr-link.md) | 2026-10-09 | Read-only Cleanuparr link in v1 | Superseded by 0012 |
 | [0008](0008-readarr-frozen-legacy-target.md) | 2026-10-11 | Readarr stays a supported target, frozen | Accepted |
 | [0009](0009-detect-cleanuparr-seeker.md) | 2026-10-16 | Detect Cleanuparr Seeker and warn on double searching | Superseded by 0012 |
@@ -51,3 +51,4 @@ This directory documents key architectural decisions following the HISS-14 immut
 | [0043](0043-adult-served-surface.md) | 2026-10-27 | Adult module served HTTP surface and UI screens | Accepted |
 | [0044](0044-runtime-settings-parity.md) | 2026-10-29 | Runtime settings parity between environment, API and UI | Accepted |
 | [0045](0045-quality-availability-and-split-series.md) | 2026-10-29 | Quality availability, profile mismatch and split-quality series | Accepted |
+| [0046](0046-download-client-priority-writes.md) | 2026-11-01 | Download client priority and queue-order writes | Accepted |
