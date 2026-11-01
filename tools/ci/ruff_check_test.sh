@@ -166,11 +166,56 @@ test_exceptions() {
     expect_exception_case "key the check cannot read refused" 1 "the exception check read 0" "$work/exc-squote"
 }
 
+# test_exception_parse_cases: refuse multiline arrays (both TOML string forms)
+# with an entry-specific one-line hint, and refuse empty rule lists.
+test_exception_parse_cases() {
+    local good='# category A, entered 2026-11-01, expires 2026-12-31: planted'
+    local name repo rules needle out status
+    for name in multiline multiline-single-quoted empty; do
+        repo="$work/exc-$name"
+        if [ "$name" != empty ]; then
+            rules='
+  "F401",
+'
+            if [ "$name" = multiline-single-quoted ]; then
+                rules="
+  'F401',
+"
+            fi
+            exception_repo "$repo" "$good" "$rules"
+            needle='write each as "path" = ["RULE", ...] on one line'
+        else
+            exception_repo "$repo" "$good" '' '"x.py"'
+            printf '%s\n' 'x = 1' > "$repo/x.py"
+            printf '%s\n' 'x = 1' > "$repo/main.py"
+            git -C "$repo" add main.py x.py
+            needle='exception for x.py has an empty rule list'
+        fi
+        set +e
+        out=$(RUFF_CHECK_TODAY=2026-11-01 sh "$check" "$cache" "$repo" 2>&1)
+        status=$?
+        set -e
+        if (
+            # shellcheck source=tools/ci/test_lib.sh
+            . "$HERE/test_lib.sh"
+            check_case "$name exception refused" 1 "$status" "$needle" "$out"
+            if [ "$name" != empty ]; then
+                check_case "$name exception named" 1 "$status" 'main.py' "$out"
+            fi
+        ); then
+            echo "ok   $name exception refused"
+        else
+            failed=1
+        fi
+    done
+}
+
 test_planted_isc004
 test_clean
 test_req_without_hash
 test_version_mismatch
 test_exceptions
+test_exception_parse_cases
 
 if [ "$failed" -ne 0 ]; then
     exit 1
