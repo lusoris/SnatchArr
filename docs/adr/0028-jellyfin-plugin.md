@@ -296,7 +296,7 @@ Deep link / API to Seerr   Forward to SnatchArr
 | **Option 6B: Dedicated repository `lusoris/jellyfin-plugin-snatcharr` (Recommended)** | Dedicated repository under the `lusoris` GitHub organization. | Clean separation of C# build tooling, independent release cadence, isolated GPL licensing boundary, standard Jellyfin plugin manifest hosting. Requires multi-repo issue tracking. | **Adopted**. Standard Jellyfin community practice. |
 | **Option 6C: Multi-client companion plugins repository** | Combined repository for all future media server plugins (Jellyfin, Plex, Emby). | Premature abstraction before other platform plugins exist. | Rejected. |
 
-The repository was created as `lusoris/jellyfin-plugin-snatcharr` beside SnatchArr, with fleet adoption, after the licence answer (per answered question `snatcharr-jellyfin-plugin-repo-name`). On 2026-11-01 it moved to `jellysin/plugin-snatcharr` in the jellysin organisation, which hosts the fleet's Jellyfin plugins and the `jellysin/repo` plugin catalogue (controller ledger `snatcharr-jellyfin-plugin-move-jellysin-20261101`). Its rulesets, secrets and licence moved with it; releases follow the jellysin release flow (`jellysin/release-helper`, ledger `snatcharr-jfplugin-release-path`), and the plugin GUID stays unchanged.
+The repository was created as `lusoris/jellyfin-plugin-snatcharr` beside SnatchArr, with fleet adoption, after the licence answer (per answered question `snatcharr-jellyfin-plugin-repo-name`). On 2026-11-01 it moved to [`jellysin/plugin-snatcharr`](https://github.com/jellysin/plugin-snatcharr) in the jellysin organisation, which hosts the fleet's Jellyfin plugins and the [`jellysin/repo`](https://github.com/jellysin/repo) plugin catalogue; the old address redirects. Its rulesets and licence moved with it. Releases follow the jellysin release flow: [`.github/workflows/release-please.yml`](https://github.com/jellysin/plugin-snatcharr/blob/main/.github/workflows/release-please.yml) calls `jellysin/release-helper` on the job token, adopted in [jellysin/plugin-snatcharr#12](https://github.com/jellysin/plugin-snatcharr/pull/12). The plugin GUID above stays unchanged.
 
 #### Build and release pipeline
 
@@ -320,7 +320,7 @@ The repository was created as `lusoris/jellyfin-plugin-snatcharr` beside SnatchA
            "framework": "net10.0",
            "sourceUrl": "https://github.com/jellysin/plugin-snatcharr/releases/download/v1.0.0.0/snatcharr-jellyfin-1.0.0.0.zip",
            "checksum": "<sha256-hex-digest>",
-           "timestamp": "2026-10-24T05:15:00Z"
+           "timestamp": "<release-time-utc>"
          }
        ]
      }
@@ -373,7 +373,7 @@ A three-tier testing strategy guarantees contract correctness and security bound
 
 | Item | Issue | Milestone |
 | :--- | :--- | :--- |
-| Create `jellysin/plugin-snatcharr` with fleet adoption, rulesets/secrets/release setup as SnatchArr, GPL-3.0-or-later LICENSE + REUSE headers + template notice (created 2026-10-25; adoption in jellysin/plugin-snatcharr#1; the release app private key was stored on 2026-10-25, and the release-please workflow has run green on main since). | done in [#656](https://github.com/lusoris/SnatchArr/pull/656) and [#657](https://github.com/lusoris/SnatchArr/pull/657) | - |
+| Create `jellysin/plugin-snatcharr` with fleet adoption, rulesets/secrets/release setup as SnatchArr, GPL-3.0-or-later LICENSE + REUSE headers + template notice (created 2026-10-25 as `lusoris/jellyfin-plugin-snatcharr`; adoption in [jellysin/plugin-snatcharr#1](https://github.com/jellysin/plugin-snatcharr/pull/1); releases first ran through a GitHub App and, since [jellysin/plugin-snatcharr#12](https://github.com/jellysin/plugin-snatcharr/pull/12), run on the job token with no App key). | done in [#656](https://github.com/lusoris/SnatchArr/pull/656) and [#657](https://github.com/lusoris/SnatchArr/pull/657) | - |
 | Record the GPL-3.0-or-later licence choice: it is a permanent operator decision (2026-10-24), not a standards exception with a category and expiry, so it is stated in the plugin repository's [licence section](https://github.com/jellysin/plugin-snatcharr#licence) instead of the fleet exception list. | done in [#603](https://github.com/lusoris/SnatchArr/pull/603) | - |
 | Add an OpenAPI diff check against the base revision (HISS-14) before the plugin contract ships. (`tools/oasdiff/breaking.sh` runs the pinned oasdiff from `tools/go/go.mod` and fails on an error-level change unless the subject declares a break with `!`; `make api-openapi-breaking` in `make api-verify` compares with `origin/main`, the CI job `api-openapi` with the pull request base; `tools/oasdiff/breaking_test.sh` holds the planted cases.) | done in [#662](https://github.com/lusoris/SnatchArr/pull/662) | - |
 | Add plugin API client endpoints to `api/openapi/openapi.yaml` and regenerate server bindings via `make api-gen`. | [#768](https://github.com/lusoris/SnatchArr/issues/768) | **0.10** |
@@ -395,7 +395,7 @@ A three-tier testing strategy guarantees contract correctness and security bound
   - c) `lusoris/snatcharr-companion-jellyfin` (Explicit descriptor).
     - *Risk*: Overly verbose repository identifier.
 - **Recommended**: Option a (`lusoris/jellyfin-plugin-snatcharr`). Matches the standard convention followed by virtually all community Jellyfin plugins, simplifying catalog discovery.
-- **Answered (2026-10-24, controller ledger `snatcharr-jellyfin-plugin-repo-name` and `snatcharr-jellyfin-plugin-org`)**: Option a. Repository `lusoris/jellyfin-plugin-snatcharr` in the lusoris organisation beside SnatchArr, same rulesets, secrets and release setup as SnatchArr; created after the licence answer and with fleet adoption. Superseded on 2026-11-01: the repository moved to `jellysin/plugin-snatcharr` (see Option 6B note above).
+- **Answered (2026-10-24, controller ledger `snatcharr-jellyfin-plugin-repo-name` and `snatcharr-jellyfin-plugin-org`)**: Option a. Repository `lusoris/jellyfin-plugin-snatcharr` in the lusoris organisation beside SnatchArr, same rulesets, secrets and release setup as SnatchArr; created after the licence answer and with fleet adoption. Superseded on 2026-11-01: the repository moved to [`jellysin/plugin-snatcharr`](https://github.com/jellysin/plugin-snatcharr) (see the note under the Option 6 table).
 
 ### Question 2: Plugin open-source license (`jellyfin-plugin-license`)
 
