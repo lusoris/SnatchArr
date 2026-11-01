@@ -65,17 +65,37 @@ rules:
     languages: [go]
     severity: ERROR
     message: >-
-      a sub-second deadline over a whole test run flakes under host load; bound
-      the operation under test (client Timeout, server delay, per-call ctx) and
-      give the run a backstop of seconds.
+      a sub-second context deadline derived from t.Context() counts host wall
+      time, so it flakes under load whether it spans the run or one call; bound
+      the operation under test (http.Client Timeout, server delay) and give the
+      context a backstop of seconds.
     pattern-either:
       - patterns:
-          - pattern: context.WithTimeout($T.Context(), $N * time.Millisecond)
+          - pattern-either:
+              - pattern: context.WithTimeout($T.Context(), $N * time.Millisecond)
+              - pattern: context.WithTimeout($T.Context(), time.Millisecond * $N)
           - metavariable-comparison:
               metavariable: $N
               comparison: int($N) < 1000
-      - pattern: context.WithTimeout($T.Context(), $N * time.Microsecond)
-      - pattern: context.WithTimeout($T.Context(), $N * time.Nanosecond)
+      - patterns:
+          - pattern-either:
+              - pattern: context.WithTimeout($T.Context(), $N * time.Microsecond)
+              - pattern: context.WithTimeout($T.Context(), time.Microsecond * $N)
+          - metavariable-comparison:
+              metavariable: $N
+              comparison: int($N) < 1000000
+      - patterns:
+          - pattern-either:
+              - pattern: context.WithTimeout($T.Context(), $N * time.Nanosecond)
+              - pattern: context.WithTimeout($T.Context(), time.Nanosecond * $N)
+          - metavariable-comparison:
+              metavariable: $N
+              comparison: int($N) < 1000000000
+      - patterns:
+          - pattern: context.WithTimeout($T.Context(), time.Second / $D)
+          - metavariable-comparison:
+              metavariable: $D
+              comparison: int($D) > 1
       - pattern: context.WithTimeout($T.Context(), time.Millisecond)
       - pattern: context.WithTimeout($T.Context(), time.Microsecond)
       - pattern: context.WithTimeout($T.Context(), time.Nanosecond)

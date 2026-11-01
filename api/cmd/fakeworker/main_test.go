@@ -353,6 +353,28 @@ func TestProcessRuns_BoundaryTimeout(t *testing.T) {
 	}
 }
 
+// TestProcessRuns_BoundaryDeadline covers the expired-deadline path next to
+// the cancelled one: the zero time is already past, so no wall-clock budget
+// is involved and host load cannot change the outcome.
+func TestProcessRuns_BoundaryDeadline(t *testing.T) {
+	t.Parallel()
+
+	client := &mockWorkerServiceClient{
+		leaseFunc: func(_ context.Context, _ *snatcharrv1.LeaseRunRequest) (*snatcharrv1.LeaseRunResponse, error) {
+			return &snatcharrv1.LeaseRunResponse{}, nil
+		},
+	}
+	cfg := config{workerID: "test-worker", outcome: "failed", count: 1, timeout: time.Second}
+
+	ctx, cancel := context.WithDeadline(t.Context(), time.Time{})
+	defer cancel()
+
+	err := processRuns(ctx, client, cfg, slog.New(slog.DiscardHandler))
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("processRuns() error = %v, want %v", err, context.DeadlineExceeded)
+	}
+}
+
 func TestEligibleFlagReachesCompleteRun(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {

@@ -18,8 +18,23 @@ func testSubsecondRunDeadline(t *testing.T) {
 	// ruleid: test-subsecond-run-deadline
 	_, _ = context.WithTimeout(t.Context(), 100*time.Nanosecond)
 
+	// ruleid: test-subsecond-run-deadline
+	_, _ = context.WithTimeout(t.Context(), time.Millisecond*50)
+
+	// ruleid: test-subsecond-run-deadline
+	_, _ = context.WithTimeout(t.Context(), time.Second/2)
+
 	// ok: test-subsecond-run-deadline
 	_, _ = context.WithTimeout(t.Context(), 10*time.Second)
+
+	// ok: test-subsecond-run-deadline
+	_, _ = context.WithTimeout(t.Context(), 1000000*time.Microsecond)
+
+	// ok: test-subsecond-run-deadline
+	_, _ = context.WithTimeout(t.Context(), 2000000000*time.Nanosecond)
+
+	// ok: test-subsecond-run-deadline
+	_, _ = context.WithTimeout(t.Context(), time.Second/1)
 
 	// ok: test-subsecond-run-deadline
 	_, _ = context.WithTimeout(t.Context(), 1000*time.Millisecond)

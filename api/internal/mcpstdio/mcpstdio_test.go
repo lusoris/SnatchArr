@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -518,7 +519,9 @@ const timeoutInput = `{"jsonrpc":"2.0","id":"timeout-id","method":"slow"}` + "\n
 func assertRequestTimeout(t *testing.T, startDelay time.Duration) {
 	t.Helper()
 	release := make(chan struct{})
+	var reached atomic.Bool
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reached.Store(true)
 		select {
 		case <-r.Context().Done():
 		case <-release:
@@ -545,6 +548,9 @@ func assertRequestTimeout(t *testing.T, startDelay time.Duration) {
 	var stdout, stderr bytes.Buffer
 	_ = RunWithClient(ctx, client, []string{"stdio"}, getenv, strings.NewReader(timeoutInput), &stdout, &stderr)
 
+	if !reached.Load() {
+		t.Error("request never reached the test server, so the error is not a timeout")
+	}
 	if !strings.Contains(stdout.String(), `"timeout-id"`) {
 		t.Errorf("stdout %q does not contain timeout-id", stdout.String())
 	}
