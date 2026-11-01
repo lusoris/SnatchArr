@@ -40,6 +40,20 @@ func runPostgres(t *testing.T, nw *testcontainers.DockerNetwork, image, alias st
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), upgradeBootTimeout)
 	defer cancel()
+
+	// Upstream testcontainers-go #3948: attemptToPullImage drains pull stream with io.Copy
+	// and swallows HTTP-200 stream errors (e.g. mirror 404), leading to silent success.
+	// Pre-pull explicitly and verify stream response before creating the container.
+	cli, err := testcontainers.NewDockerClientWithOpts(ctx)
+	if err != nil {
+		t.Fatalf("docker client: %v", err)
+	}
+	defer cli.Close()
+
+	if pullErr := prePull(ctx, cli, hubRef(testcontainers.ReadConfig().Config.HubImageNamePrefix, image)); pullErr != nil {
+		t.Fatalf("pre-pull %s: %v", image, pullErr)
+	}
+
 	c, err := tcpostgres.Run(ctx, image, tcpostgres.WithDatabase("snatcharr"),
 		tcpostgres.WithUsername("test"), tcpostgres.WithPassword("test"),
 		tcpostgres.BasicWaitStrategies(), storetest.QuickInit(), network.WithNetwork([]string{alias}, nw))
