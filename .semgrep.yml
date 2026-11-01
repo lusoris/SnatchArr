@@ -64,6 +64,9 @@ rules:
   - id: test-subsecond-run-deadline
     languages: [go]
     severity: ERROR
+    paths:
+      include:
+        - "*_test.go"
     message: >-
       a sub-second context deadline derived from t.Context() counts host wall
       time, so it flakes under load whether it spans the run or one call; bound
