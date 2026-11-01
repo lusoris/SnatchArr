@@ -5,20 +5,12 @@
 // covers: #671
 
 import { expect, request, test, type Page } from '@playwright/test';
-
-const proxySecret = process.env.SNATCHARR_E2E_PROXY_SECRET ?? '';
-const proxyUserHeader = process.env.SNATCHARR_E2E_PROXY_HEADER ?? 'Remote-User';
-const proxyGroupsHeader = process.env.SNATCHARR_E2E_PROXY_GROUPS_HEADER ?? 'X-authentik-groups';
-const proxySecretHeader =
-	process.env.SNATCHARR_E2E_PROXY_SECRET_HEADER ?? 'X-SnatchArr-Proxy-Secret';
-
-function proxyHeaders(user: string, groups: string, secret = proxySecret): Record<string, string> {
-	return {
-		[proxyUserHeader]: user,
-		[proxyGroupsHeader]: groups,
-		[proxySecretHeader]: secret
-	};
-}
+import {
+	proxyHeaders,
+	proxySecret,
+	proxySecretHeader,
+	proxyUserHeader
+} from './feature-helpers.js';
 
 async function getCsrfToken(page: Page): Promise<string> {
 	const res = await page.request.get('/api/v1/auth/session');

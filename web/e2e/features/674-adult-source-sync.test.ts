@@ -5,10 +5,10 @@
 // covers: #674
 import fs from 'node:fs';
 import http from 'node:http';
-import type net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
+import { listenStub } from './feature-helpers.js';
 
 interface StubServer {
 	url: string;
@@ -74,12 +74,7 @@ async function startGraphQLStub(): Promise<StubServer> {
 			res.end(JSON.stringify(payload));
 		});
 	});
-	await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
-	const port = (server.address() as net.AddressInfo).port;
-	return {
-		url: `http://127.0.0.1:${port}/graphql`,
-		close: () => new Promise<void>((resolve) => server.close(() => resolve()))
-	};
+	return listenStub(server, '/graphql');
 }
 
 async function loginAndGetCsrf(page: Page): Promise<string> {

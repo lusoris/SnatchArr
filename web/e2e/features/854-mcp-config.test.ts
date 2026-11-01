@@ -6,7 +6,9 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { enableMcp } from './feature-helpers.js';
+import { signIn } from './layout-fixtures.js';
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
@@ -18,30 +20,6 @@ interface McpServerConfig {
 
 interface McpConfig {
 	mcpServers?: Record<string, McpServerConfig>;
-}
-
-async function loginAndGetCsrf(page: Page): Promise<string> {
-	await page.context().clearCookies();
-	const login = await page.request.post('/api/v1/auth/login', {
-		data: { username: 'admin', password: 'smoke-password-1234' }
-	});
-	expect(login.ok(), `login status: ${login.status()}`).toBeTruthy();
-	return ((await login.json()) as { csrf_token: string }).csrf_token;
-}
-
-// mcp-sweep.test.ts also switches the MCP route on and leaves it on; restoring the flag here
-// would race with that project, which runs beside the feature tests.
-async function enableMcp(page: Page, csrf: string): Promise<void> {
-	const settingsRes = await page.request.get('/api/v1/settings');
-	expect(settingsRes.ok()).toBeTruthy();
-	const settings = (await settingsRes.json()) as Record<string, unknown>;
-	if (settings.llm_enabled) return;
-	settings.llm_enabled = true;
-	const putRes = await page.request.put('/api/v1/settings', {
-		data: settings,
-		headers: { 'X-CSRF-Token': csrf }
-	});
-	expect(putRes.ok()).toBeTruthy();
 }
 
 test('854: project .mcp.json declares the snatcharr http server pointing to a live route', async ({
@@ -62,7 +40,7 @@ test('854: project .mcp.json declares the snatcharr http server pointing to a li
 	const endpointPath = `/${urlMatch?.[1]}`;
 	expect(endpointPath).toBe('/api/v1/mcp');
 
-	const csrf = await loginAndGetCsrf(page);
+	const csrf = await signIn(page);
 	await enableMcp(page, csrf);
 	await page.context().clearCookies();
 	const res = await page.request.get(endpointPath);

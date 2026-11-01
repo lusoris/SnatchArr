@@ -5,6 +5,8 @@
 // covers: #883
 
 import { expect, test, type Page } from '@playwright/test';
+import { enableMcp } from './feature-helpers.js';
+import { signIn } from './layout-fixtures.js';
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
@@ -20,30 +22,6 @@ interface McpTool {
 	inputSchema?: {
 		properties?: Record<string, PropertyDef>;
 	};
-}
-
-async function loginAndGetCsrf(page: Page): Promise<string> {
-	await page.context().clearCookies();
-	const login = await page.request.post('/api/v1/auth/login', {
-		data: { username: 'admin', password: 'smoke-password-1234' }
-	});
-	expect(login.ok(), `login status: ${login.status()}`).toBeTruthy();
-	return ((await login.json()) as { csrf_token: string }).csrf_token;
-}
-
-// mcp-sweep.test.ts also switches the MCP route on and leaves it on; restoring the flag here
-// would race with that project, which runs beside the feature tests.
-async function enableMcp(page: Page, csrf: string): Promise<void> {
-	const settingsRes = await page.request.get('/api/v1/settings');
-	expect(settingsRes.ok()).toBeTruthy();
-	const settings = (await settingsRes.json()) as Record<string, unknown>;
-	if (settings.llm_enabled) return;
-	settings.llm_enabled = true;
-	const putRes = await page.request.put('/api/v1/settings', {
-		data: settings,
-		headers: { 'X-CSRF-Token': csrf }
-	});
-	expect(putRes.ok()).toBeTruthy();
 }
 
 async function requestMcpTools(page: Page, secret: string): Promise<McpTool[]> {
@@ -81,7 +59,7 @@ async function requestMcpTools(page: Page, secret: string): Promise<McpTool[]> {
 test('883: MCP tool schemas preserve parameter enums, patterns and defaults on live route', async ({
 	page
 }) => {
-	const csrf = await loginAndGetCsrf(page);
+	const csrf = await signIn(page);
 	await enableMcp(page, csrf);
 	let keyId = '';
 
