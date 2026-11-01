@@ -2,19 +2,16 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-// Package prowlarrclient interacts with a Prowlarr server (X-Api-Key auth,
-// /api/v1/system/status, /api/v1/indexer, /api/v1/indexerstats, and goenvoy
-// typed endpoints). Grab posts a chosen release to /api/v1/search so Prowlarr
-// hands it to its own download client; SnatchArr adds no download itself
-// (ADR-0006 amendment, ledger snatcharr-oq-0036-14-grab-path).
+// Package prowlarrclient interacts with a Prowlarr server via goenvoy typed
+// client calls (X-Api-Key auth). Grab posts a chosen release to /api/v1/search
+// so Prowlarr hands it to its own download client; SnatchArr adds no download
+// itself (ADR-0006 amendment, ledger snatcharr-oq-0036-14-grab-path).
 package prowlarrclient
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -175,54 +172,23 @@ func parseJSONInt(v any) (int, bool) {
 	}
 }
 
-//nolint:tagliatelle // Prowlarr speaks camelCase
-type indexerStatItem struct {
-	IndexerID          int `json:"indexerId"`
-	NumberOfQueries    int `json:"numberOfQueries"`
-	NumberOfRssQueries int `json:"numberOfRssQueries"`
-	NumberOfGrabs      int `json:"numberOfGrabs"`
-}
-
-type indexerStatsPayload struct {
-	Indexers *[]indexerStatItem `json:"indexers"`
-}
-
 // Usage implements Client.
 func (h *HTTP) Usage(ctx context.Context, baseURL, apiKey string, start, end time.Time) (map[int]Usage, error) {
-	c, err := h.Base(baseURL, apiKey)
+	pc, err := prowlarr.New(baseURL, apiKey, h.Options()...)
 	if err != nil {
 		return nil, fmt.Errorf("prowlarr: client: %w", err)
 	}
-	q := url.Values{}
-	q.Set("startDate", start.UTC().Format(time.RFC3339))
-	q.Set("endDate", end.UTC().Format(time.RFC3339))
-	var raw json.RawMessage
-	if getErr := c.Get(ctx, "/api/v1/indexerstats?"+q.Encode(), &raw); getErr != nil {
-		return nil, fmt.Errorf("%w: prowlarr stats: %w", domain.ErrUnreachable, arrclient.HintAPIError(getErr, "Prowlarr"))
-	}
-	items, err := parseStatsItems(raw)
+	stats, err := pc.GetIndexerStats(ctx, start.UTC().Format(time.RFC3339), end.UTC().Format(time.RFC3339))
 	if err != nil {
-		return nil, fmt.Errorf("prowlarr: parse stats: %w", err)
+		return nil, fmt.Errorf("%w: prowlarr stats: %w", domain.ErrUnreachable, arrclient.HintAPIError(err, "Prowlarr"))
 	}
-	return aggregateStats(items), nil
-}
-
-func parseStatsItems(raw []byte) ([]indexerStatItem, error) {
-	trimmed := bytes.TrimSpace(raw)
-	if len(trimmed) == 0 || trimmed[0] != '{' {
-		return nil, fmt.Errorf("%w: prowlarr stats payload must be a JSON object", domain.ErrInvalid)
-	}
-	var obj indexerStatsPayload
-	if err := json.Unmarshal(trimmed, &obj); err != nil {
-		return nil, fmt.Errorf("prowlarr: unmarshal stats payload: %w", err)
-	}
-	if obj.Indexers == nil {
+	if stats.Indexers == nil {
 		return nil, fmt.Errorf("%w: prowlarr stats payload missing indexers field", domain.ErrInvalid)
 	}
-	return *obj.Indexers, nil
+	return aggregateStats(stats.Indexers), nil
 }
 
-func aggregateStats(items []indexerStatItem) map[int]Usage {
+func aggregateStats(items []prowlarr.IndexerStatistic) map[int]Usage {
 	out := make(map[int]Usage, len(items))
 	for _, it := range items {
 		if it.IndexerID <= 0 {

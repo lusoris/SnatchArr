@@ -183,6 +183,62 @@ func TestHTTPClient_Usage(t *testing.T) {
 	}
 }
 
+func TestHTTPClient_Usage_Table(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	now := time.Date(2026, 10, 16, 12, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name      string
+		payload   any
+		wantErr   bool
+		wantCount int
+	}{
+		{
+			name:    "negative empty object missing indexers",
+			payload: map[string]any{},
+			wantErr: true,
+		},
+		{
+			name:    "negative null indexers field",
+			payload: map[string]any{"indexers": nil},
+			wantErr: true,
+		},
+		{
+			name:      "boundary empty indexers slice returns empty map",
+			payload:   map[string]any{"indexers": []any{}},
+			wantErr:   false,
+			wantCount: 0,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(tc.payload)
+			}))
+			t.Cleanup(srv.Close)
+
+			c := prowlarrclient.New(5*time.Second, "SnatchArr-test")
+			got, err := c.Usage(ctx, srv.URL, "any", now.Add(-time.Hour), now)
+			if tc.wantErr {
+				if err == nil || !errors.Is(err, domain.ErrInvalid) {
+					t.Fatalf("Usage() err = %v, want wrapping domain.ErrInvalid", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Usage() unexpected error: %v", err)
+			}
+			if len(got) != tc.wantCount {
+				t.Errorf("Usage() count = %d, want %d", len(got), tc.wantCount)
+			}
+		})
+	}
+}
+
 func TestHTTPClient_Statuses(t *testing.T) {
 	t.Parallel()
 	srv := fakeProwlarr(t)
