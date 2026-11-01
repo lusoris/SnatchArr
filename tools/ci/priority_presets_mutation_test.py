@@ -10,10 +10,9 @@ Backups and full command output remain under .workingdir/evidence/priority-mutat
 """
 
 import argparse
-from pathlib import Path
 import subprocess
 import time
-
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 EVIDENCE = ROOT / ".workingdir/evidence/priority-mutations"
@@ -86,6 +85,7 @@ def wait_for_memory():
 
 
 def replay(case):
+    """Apply one mutation, run its command, require the planted failure, then restore the file."""
     label, relative, before, after, command, failure = case
     path = ROOT / relative
     original = path.read_text()
@@ -95,7 +95,9 @@ def replay(case):
     (EVIDENCE / f"{label}.source").write_text(original)
     try:
         path.write_text(original.replace(before, after, 1))
-        result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, timeout=180)
+        result = subprocess.run(
+            command, cwd=ROOT, capture_output=True, text=True, timeout=180, check=False
+        )
         output = result.stdout + result.stderr
         (EVIDENCE / f"{label}.log").write_text(f"command: {command!r}\nexit: {result.returncode}\n{output}")
         if result.returncode == 0 or failure not in output or "[build failed]" in output:
