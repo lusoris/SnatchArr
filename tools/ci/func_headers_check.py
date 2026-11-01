@@ -16,7 +16,7 @@ import argparse
 import ast
 import os
 import re
-import subprocess
+import subprocess  # nosec B404 -- runs only git with a fixed argument list, never a shell
 import sys
 from pathlib import Path
 
@@ -43,7 +43,7 @@ class CheckError(Exception):
 def git(root: Path, *args: str) -> str:
     """Run git in root with a deadline and return stdout, raising CheckError on failure."""
     try:
-        res = subprocess.run(["git", *args], cwd=root, capture_output=True, text=True,
+        res = subprocess.run(["git", *args], cwd=root, capture_output=True, text=True,  # nosec B603 -- fixed git argv list, no shell; option-like refs are refused before the call
                              timeout=GIT_TIMEOUT_SECONDS, check=False)
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise CheckError(f"git {' '.join(args)}: {exc}") from exc

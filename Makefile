@@ -602,6 +602,8 @@ workflows-verify: ## The rule of "CI success", the Security Scan issue step, the
 	bash tools/e2e/schema_check_test.sh
 	bash tools/ci/func_headers_check_test.sh
 	python3 -I tools/ci/func_headers_check.py
+	bash tools/ci/nosec_check_test.sh
+	python3 -I tools/ci/nosec_check.py
 	bash tools/ci/release_body_check_test.sh
 	bash tools/e2e/live_lib_test.sh
 	python3 -I tools/release/dogfood_gate.py --self-test
