@@ -25,7 +25,7 @@ GH_TIMEOUT_SECONDS = 60
 HEADER_LINE = "| Milestone | Scope | Open issues |"
 SEPARATOR_LINE = "| :--- | :--- | ---: |"
 ROW_PATTERN = re.compile(
-    r"^\| \[([^\]]+)\]\((https://github\.com/[^/\s]+/[^/\s]+/milestone/\d+)\) \| (.+) \| (\d+) \|$"
+    r"^\| \[((?:\\.|[^\]\\])+)\]\((https://github\.com/[^/\s]+/[^/\s]+/milestone/\d+)\) \| (.+) \| (\d+) \|$"
 )
 
 
@@ -139,9 +139,21 @@ def parse_sort_key(item: dict) -> tuple[int, tuple[int, ...], int, str]:
     return (1, (), number, title)
 
 
-def escape_cell(text: str) -> str:
-    """Escape a table cell: backslashes first, then pipes, so check_shape reads every pipe as escaped."""
-    return text.replace("\\", "\\\\").replace("|", r"\|")
+def escape_cell(text: str, chars: str = "|") -> str:
+    """Backslash-escape each of chars that is not escaped yet; keep existing backslashes.
+
+    A character counts as escaped when an odd run of backslashes precedes it, the rule
+    has_unescaped_pipe reads, so Markdown escapes and code-span paths in a milestone
+    description stay as written.
+    """
+    out: list[str] = []
+    run = 0
+    for char in text:
+        if char in chars and run % 2 == 0:
+            out.append("\\")
+        out.append(char)
+        run = run + 1 if char == "\\" else 0
+    return "".join(out)
 
 
 def format_description(desc_raw: object) -> str:
@@ -164,7 +176,7 @@ def render_table(milestones: list[dict]) -> str:
         "| :--- | :--- | ---: |",
     ]
     for item in sorted_ms:
-        title = escape_cell(str(item["title"]).strip())
+        title = escape_cell(str(item["title"]).strip(), "|[]")
         html_url = str(item["html_url"]).strip()
         desc = format_description(item.get("description"))
         open_issues = item["open_issues"]
@@ -581,23 +593,27 @@ def test_case_title_pipe(tmp_path: Path) -> list[tuple[str, bool]]:
         f"{END_MARKER}\n"
     )
 
-    backslash = [
+    escapes = [
         {
-            "title": "A \\| B",
+            "title": "[beta] A \\| B",
             "html_url": "https://github.com/o/r/milestone/2",
-            "description": "C \\| D",
+            "description": "Path `C:\\temp`, C \\| D | E",
             "open_issues": 1,
         }
     ]
+    esc_table = render_table(escapes)
     bs_doc = tmp_path / "title_backslash.md"
-    bs_doc.write_text(
-        f"{BEGIN_MARKER}\n{render_table(backslash)}\n{END_MARKER}\n", encoding="utf-8"
+    bs_doc.write_text(f"{BEGIN_MARKER}\n{esc_table}\n{END_MARKER}\n", encoding="utf-8")
+    want_row = (
+        "| [\\[beta\\] A \\| B](https://github.com/o/r/milestone/2) "
+        "| Path `C:\\temp`, C \\| D \\| E | 1 |"
     )
 
     return [
         (
-            "rendered title and scope holding a backslash before a pipe pass check_shape -> 0",
-            check_shape(bs_doc) == 0,
+            "brackets and an escaped pipe in the title, a code-span path in the scope: "
+            "existing escapes kept, row as recorded, check_shape -> 0",
+            want_row in esc_table and check_shape(bs_doc) == 0,
         ),
         (
             'render_table with title "Phase 1 | Phase 2" contains "Phase 1 \\| Phase 2"',
