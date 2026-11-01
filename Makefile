@@ -316,7 +316,8 @@ dlclients-live: ## Real qBittorrent, Transmission, Deluge, rTorrent, SABnzbd, NZ
 	bash tools/e2e/planted_test.sh
 	bash tools/e2e/live_lib_test.sh
 	bash tools/e2e/planted.sh SNATCHARR_DLCLIENTS_PLANT tools/e2e/dlclients_live.sh \
-	  "secret:not reachable with the right secret" "pause:paused = false; the client was left with paused = true"
+	  "secret:not reachable with the right secret" "pause:paused = false; the client was left with paused = true" \
+	  "priority:priority capability mismatch"
 
 # Rule id_matched (ADR-0013) on real Sonarr and Radarr (tools/e2e/forceimport): each grabs a
 # release by ID under a title it cannot parse, and the production client force-imports it and
