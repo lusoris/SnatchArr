@@ -101,6 +101,7 @@ def by_type(report, kind):
 
 
 def planted_tree(directory):
+    """Write the planted vulnerable and secret-bearing files into directory; return their names."""
     # The key pair is joined from pieces here, so that neither the key nor a
     # keyword next to a long literal is in the source for gitleaks to report.
     key_id = "AKIA" + "Z7Q3XWERT5YUIOPA"

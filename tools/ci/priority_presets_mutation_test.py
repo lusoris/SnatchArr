@@ -85,6 +85,7 @@ def wait_for_memory():
 
 
 def replay(case):
+    """Apply one mutation, run its command, require the planted failure, then restore the file."""
     label, relative, before, after, command, failure = case
     path = ROOT / relative
     original = path.read_text()
