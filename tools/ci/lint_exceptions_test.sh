@@ -12,6 +12,8 @@
 set -eu
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=tools/ci/test_lib.sh
+. "$HERE/test_lib.sh"
 REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 SCRIPT="$HERE/lint_exceptions.sh"
 
@@ -59,6 +61,7 @@ EOF
 
 INIT_SHA="$(cksum < "$FIXTURE")"
 
+# run_case NAME WANT_RC NEEDLE REPORT TODAY: run the exception check on one report and assert its exit and output.
 run_case() {
   name="$1"
   want_rc="$2"
@@ -69,18 +72,7 @@ run_case() {
   got_rc=0
   out="$(LINT_EXCEPTIONS_TODAY="$today" sh "$SCRIPT" "$FIXTURE" "$report" 1226 2>&1)" || got_rc=$?
 
-  if [ "$got_rc" -ne "$want_rc" ]; then
-    printf 'FAIL %s: exit %s, want %s\n%s\n' "$name" "$got_rc" "$want_rc" "$out" >&2
-    exit 1
-  fi
-
-  case "$out" in
-    *"$needle"*) ;;
-    *)
-      printf 'FAIL %s: output did not contain "%s"\n%s\n' "$name" "$needle" "$out" >&2
-      exit 1
-      ;;
-  esac
+  check_case "$name" "$want_rc" "$got_rc" "$needle" "$out"
 
   current_sha="$(cksum < "$FIXTURE")"
   if [ "$current_sha" != "$INIT_SHA" ]; then

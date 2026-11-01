@@ -6,19 +6,19 @@
 # one change in the working tree and checks the exit status and the named function.
 set -euo pipefail
 
-check=$(cd "$(dirname "$0")" && pwd)/func_headers_check.py
+HERE=$(cd "$(dirname "$0")" && pwd)
+check=$HERE/func_headers_check.py
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 failed=0
 
-# new_repo DIR: a repository whose base commit holds lib.sh and lib.py, both with headers.
-new_repo() {
+# shellcheck source=tools/ci/test_lib.sh
+. "$HERE/test_lib.sh"
+
+# seed_repo DIR: a repository whose base commit holds lib.sh and lib.py, both with headers.
+seed_repo() {
     local dir=$1
-    mkdir -p "$dir"
-    git -C "$dir" init -q -b main
-    git -C "$dir" config user.email t@example.invalid
-    git -C "$dir" config user.name t
-    git -C "$dir" config commit.gpgsign false
+    new_repo "$dir"
     printf '%s\n' '#!/usr/bin/env bash' '# old_fn says hi.' 'old_fn() {' '    echo hi' '}' \
         '' 'bare_fn() {' '    echo bare' '}' >"$dir/lib.sh"
     printf '%s\n' 'def old():' '    """Say hi."""' '    return 1' '' 'def bare():' '    return 2' >"$dir/lib.py"
@@ -30,7 +30,7 @@ new_repo() {
 expect() {
     local name=$1 want=$2 text=$3 edit=$4 base=${5:-main} out status
     repo="$work/$(printf '%s' "$name" | tr -c 'a-z0-9' '-')"
-    new_repo "$repo"
+    seed_repo "$repo"
     (cd "$repo" && "$edit")
     set +e
     out=$(python3 -I "$check" --root "$repo" "--base=$base" 2>&1)

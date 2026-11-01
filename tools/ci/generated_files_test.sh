@@ -14,6 +14,8 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=tools/ci/test_lib.sh
+. "$HERE/test_lib.sh"
 REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 TOOL="$HERE/generated_files.py"
 WORK="$(mktemp -d)"
@@ -22,19 +24,17 @@ trap 'rm -rf "$WORK"' EXIT
 accepted=0
 refused=0
 
+# fresh_repo DIR: recreate DIR as a repository holding a generated-files list and its files.
 fresh_repo() {
   local dir="$1"
   rm -rf "$dir"
+  new_repo "$dir"
   mkdir -p "$dir/.github" "$dir/web/static"
   cat > "$dir/.github/generated-files" <<'EOF'
 # comment line
 web/static/licences.json
 EOF
   printf '{"packages":[]}\n' > "$dir/web/static/licences.json"
-  git -C "$dir" init --quiet
-  git -C "$dir" config user.name "Test"
-  git -C "$dir" config user.email "test@example.invalid"
-  git -C "$dir" config commit.gpgsign false
   git -C "$dir" add .
   git -C "$dir" commit --quiet -m "initial"
 }
