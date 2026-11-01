@@ -37,22 +37,39 @@ req_hash="$(sha256sum "$requirements" | cut -c1-12)"
 venv="$cache/docs-$req_hash"
 # One check at a time per environment: a second check on a cold cache would otherwise
 # clear the environment while the first installs into it. mkdir is atomic on every
-# platform, unlike flock, which macOS lacks.
+# platform, unlike flock, which macOS lacks. The lock records its owner's process id,
+# so a lock left by a killed check (SIGKILL, reboot) is taken over instead of waited on.
 lock="$venv.lock"
 lock_seconds="${DOCS_LOCK_SECONDS:-900}"
 waited=0
 until mkdir "$lock" 2>/dev/null; do
+  owner=""
+  if [ -f "$lock/pid" ]; then
+    read -r owner < "$lock/pid" || owner=""
+  fi
+  # A lock without a pid file is still being written by its owner: wait for it.
+  if [ -n "$owner" ] && ! kill -0 "$owner" 2>/dev/null; then
+    # mv is atomic: of several waiters, one moves the stale lock aside, the rest retry.
+    stale="$lock.stale.$$"
+    if mv "$lock" "$stale" 2>/dev/null; then
+      rm -rf "$stale"
+      echo "note: took over $lock left by process $owner" >&2
+    fi
+    continue
+  fi
   if [ "$waited" -ge "$lock_seconds" ]; then
-    echo "error: $lock held for ${lock_seconds}s; remove it if no docs check is running" >&2
+    echo "error: $lock held for ${lock_seconds}s by process ${owner:-unknown}" >&2
     exit 1
   fi
   sleep 1
   waited=$((waited + 1))
 done
+printf '%s\n' "$$" > "$lock/pid"
 tmp=""
 # cleanup releases the environment lock and removes the build output.
 cleanup() {
   [ -z "$tmp" ] || rm -rf "$tmp"
+  rm -f "$lock/pid"
   rmdir "$lock"
 }
 trap cleanup 0
