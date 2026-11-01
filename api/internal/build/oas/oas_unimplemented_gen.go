@@ -348,6 +348,17 @@ func (UnimplementedHandler) GetDownloadClient(ctx context.Context, params GetDow
 	return r, ht.ErrNotImplemented
 }
 
+// GetDownloadClientPriorityPlan implements getDownloadClientPriorityPlan operation.
+//
+// No client writes occur, including when mode is act. Returns 404 when no observation exists.
+// Shared-client categories participate in one plan. A failed read retains the last successful
+// observation; observedAt identifies its age.
+//
+// GET /download-clients/{clientId}/priority-plan
+func (UnimplementedHandler) GetDownloadClientPriorityPlan(ctx context.Context, params GetDownloadClientPriorityPlanParams) (r *DownloadClientPriorityPlan, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // GetDownloadClientStatus implements getDownloadClientStatus operation.
 //
 // Latest observation of every enabled download client (cached 20 s).

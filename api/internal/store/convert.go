@@ -243,6 +243,8 @@ func DownloadClientFromRow(r sqlcgen.DownloadClient) domain.DownloadClient {
 		Kind:               domain.DownloadClientKind(r.Kind),
 		Name:               r.Name,
 		BaseURL:            r.BaseUrl,
+		Category:           deref(r.Category),
+		PriorityMode:       r.PriorityMode,
 		Username:           r.Username,
 		Enabled:            r.Enabled,
 		Source:             domain.DownloadClientSource(r.Source),

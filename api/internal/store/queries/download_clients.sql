@@ -34,13 +34,14 @@ RETURNING *;
 
 -- name: UpsertDiscoveredDownloadClient :one
 INSERT INTO download_clients (
-    id, instance_id, kind, name, base_url, username, secret_enc, enabled, source, remote_id, created_at, updated_at
+    id, instance_id, kind, name, base_url, username, secret_enc, enabled, source, remote_id, created_at, updated_at, category
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, 'discovered', $9, $10, $10
+    $1, $2, $3, $4, $5, $6, $7, $8, 'discovered', $9, $10, $10, $11
 )
 ON CONFLICT (instance_id, remote_id) WHERE remote_id IS NOT NULL DO UPDATE
 SET kind = EXCLUDED.kind, name = EXCLUDED.name, base_url = EXCLUDED.base_url, username = EXCLUDED.username,
-    secret_enc = EXCLUDED.secret_enc, enabled = EXCLUDED.enabled, updated_at = EXCLUDED.updated_at
+    secret_enc = EXCLUDED.secret_enc, enabled = EXCLUDED.enabled, updated_at = EXCLUDED.updated_at,
+    category = EXCLUDED.category
 RETURNING *, (xmax = 0) AS inserted;
 
 -- name: DeleteStaleDiscoveredDownloadClients :execrows

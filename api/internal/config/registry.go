@@ -441,6 +441,11 @@ var registry = []Setting{
 		Apply:   ApplyRestart,
 	},
 	{
+		Key:   "snatcharr.download_priority.interval_seconds",
+		Env:   "APP_SNATCHARR_DOWNLOAD_PRIORITY_INTERVAL_SECONDS",
+		Class: ClassRuntime, Type: "int", Default: "60", Apply: ApplyRestart,
+	},
+	{
 		Key:     "snatcharr.logs.ring_size",
 		Env:     "APP_SNATCHARR_LOGS_RING_SIZE",
 		Class:   ClassBootstrap,

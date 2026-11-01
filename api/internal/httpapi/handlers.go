@@ -70,6 +70,7 @@ type Handlers struct {
 	planner         *snatch.Planner
 	schedules       *snatch.Schedules
 	clients         *dlclients.Service
+	priorityPlans   priorityPlanReader
 	settings        *settings.Service
 	requests        *requests.Service
 	modules         *modules.Service
@@ -102,6 +103,7 @@ type Deps struct {
 	Planner         *snatch.Planner
 	Schedules       *snatch.Schedules
 	Clients         *dlclients.Service
+	PriorityPlans   *dlclients.Reconciler
 	Settings        *settings.Service
 	Requests        *requests.Service
 	Modules         *modules.Service
@@ -127,9 +129,13 @@ func NewHandlers(build buildinfo.Info, cfg config.Options, clk clock.Clock, auth
 	if jf == nil {
 		jf, _ = jellyfin.ProvideAuthenticator(config.Options{})
 	}
+	var plans priorityPlanReader
+	if d.PriorityPlans != nil {
+		plans = d.PriorityPlans
+	}
 	return &Handlers{
 		build: build, cfg: cfg, clk: clk, auth: authSvc, apiKeys: apiKeys, sessions: sessions, instances: inst, policies: pol,
-		queue: d.Queue, queueSvc: d.QueueSvc, runs: d.Runs, workers: d.Workers, rec: d.Rec, budget: d.Budget, memory: d.Memory, planner: d.Planner, schedules: d.Schedules, clients: d.Clients, settings: d.Settings, requests: d.Requests, modules: d.Modules, seerr: d.Seerr, prowlarr: d.Prowlarr, configarr: d.Configarr, notify: d.Notify, watchaware: d.WatchAware, adult: d.Adult, jellyfin: jf, options: d.Options, logs: d.Logs, runtimeSettings: d.RuntimeSettings, logger: logger,
+		queue: d.Queue, queueSvc: d.QueueSvc, runs: d.Runs, workers: d.Workers, rec: d.Rec, budget: d.Budget, memory: d.Memory, planner: d.Planner, schedules: d.Schedules, clients: d.Clients, priorityPlans: plans, settings: d.Settings, requests: d.Requests, modules: d.Modules, seerr: d.Seerr, prowlarr: d.Prowlarr, configarr: d.Configarr, notify: d.Notify, watchaware: d.WatchAware, adult: d.Adult, jellyfin: jf, options: d.Options, logs: d.Logs, runtimeSettings: d.RuntimeSettings, logger: logger,
 	}
 }
 

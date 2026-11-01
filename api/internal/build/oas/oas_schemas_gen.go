@@ -2572,6 +2572,190 @@ func (s *DownloadClientKind) UnmarshalText(data []byte) error {
 	}
 }
 
+// Configured intent only; act remains read-only until execution is implemented.
+// Ref: #/components/schemas/DownloadClientPriorityMode
+type DownloadClientPriorityMode string
+
+const (
+	DownloadClientPriorityModeObserve DownloadClientPriorityMode = "observe"
+	DownloadClientPriorityModeAct     DownloadClientPriorityMode = "act"
+)
+
+// AllValues returns all DownloadClientPriorityMode values.
+func (DownloadClientPriorityMode) AllValues() []DownloadClientPriorityMode {
+	return []DownloadClientPriorityMode{
+		DownloadClientPriorityModeObserve,
+		DownloadClientPriorityModeAct,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s DownloadClientPriorityMode) MarshalText() ([]byte, error) {
+	switch s {
+	case DownloadClientPriorityModeObserve:
+		return []byte(s), nil
+	case DownloadClientPriorityModeAct:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *DownloadClientPriorityMode) UnmarshalText(data []byte) error {
+	switch DownloadClientPriorityMode(data) {
+	case DownloadClientPriorityModeObserve:
+		*s = DownloadClientPriorityModeObserve
+		return nil
+	case DownloadClientPriorityModeAct:
+		*s = DownloadClientPriorityModeAct
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/DownloadClientPriorityMove
+type DownloadClientPriorityMove struct {
+	ID   string `json:"id"`
+	From int    `json:"from"`
+	To   int    `json:"to"`
+}
+
+// GetID returns the value of ID.
+func (s *DownloadClientPriorityMove) GetID() string {
+	return s.ID
+}
+
+// GetFrom returns the value of From.
+func (s *DownloadClientPriorityMove) GetFrom() int {
+	return s.From
+}
+
+// GetTo returns the value of To.
+func (s *DownloadClientPriorityMove) GetTo() int {
+	return s.To
+}
+
+// SetID sets the value of ID.
+func (s *DownloadClientPriorityMove) SetID(val string) {
+	s.ID = val
+}
+
+// SetFrom sets the value of From.
+func (s *DownloadClientPriorityMove) SetFrom(val int) {
+	s.From = val
+}
+
+// SetTo sets the value of To.
+func (s *DownloadClientPriorityMove) SetTo(val int) {
+	s.To = val
+}
+
+// Ref: #/components/schemas/DownloadClientPriorityPlan
+type DownloadClientPriorityPlan struct {
+	ClientId   uuid.UUID                  `json:"clientId"`
+	Mode       DownloadClientPriorityMode `json:"mode"`
+	ObservedAt time.Time                  `json:"observedAt"`
+	// QBittorrent queueing disabled; order is empty. Preferences are never changed.
+	QueueingDisabled bool                         `json:"queueingDisabled"`
+	Unattributed     int                          `json:"unattributed"`
+	Priority         []DownloadClientPriorityMove `json:"priority"`
+	Order            []string                     `json:"order"`
+	Pause            []string                     `json:"pause"`
+	Resume           []string                     `json:"resume"`
+}
+
+// GetClientId returns the value of ClientId.
+func (s *DownloadClientPriorityPlan) GetClientId() uuid.UUID {
+	return s.ClientId
+}
+
+// GetMode returns the value of Mode.
+func (s *DownloadClientPriorityPlan) GetMode() DownloadClientPriorityMode {
+	return s.Mode
+}
+
+// GetObservedAt returns the value of ObservedAt.
+func (s *DownloadClientPriorityPlan) GetObservedAt() time.Time {
+	return s.ObservedAt
+}
+
+// GetQueueingDisabled returns the value of QueueingDisabled.
+func (s *DownloadClientPriorityPlan) GetQueueingDisabled() bool {
+	return s.QueueingDisabled
+}
+
+// GetUnattributed returns the value of Unattributed.
+func (s *DownloadClientPriorityPlan) GetUnattributed() int {
+	return s.Unattributed
+}
+
+// GetPriority returns the value of Priority.
+func (s *DownloadClientPriorityPlan) GetPriority() []DownloadClientPriorityMove {
+	return s.Priority
+}
+
+// GetOrder returns the value of Order.
+func (s *DownloadClientPriorityPlan) GetOrder() []string {
+	return s.Order
+}
+
+// GetPause returns the value of Pause.
+func (s *DownloadClientPriorityPlan) GetPause() []string {
+	return s.Pause
+}
+
+// GetResume returns the value of Resume.
+func (s *DownloadClientPriorityPlan) GetResume() []string {
+	return s.Resume
+}
+
+// SetClientId sets the value of ClientId.
+func (s *DownloadClientPriorityPlan) SetClientId(val uuid.UUID) {
+	s.ClientId = val
+}
+
+// SetMode sets the value of Mode.
+func (s *DownloadClientPriorityPlan) SetMode(val DownloadClientPriorityMode) {
+	s.Mode = val
+}
+
+// SetObservedAt sets the value of ObservedAt.
+func (s *DownloadClientPriorityPlan) SetObservedAt(val time.Time) {
+	s.ObservedAt = val
+}
+
+// SetQueueingDisabled sets the value of QueueingDisabled.
+func (s *DownloadClientPriorityPlan) SetQueueingDisabled(val bool) {
+	s.QueueingDisabled = val
+}
+
+// SetUnattributed sets the value of Unattributed.
+func (s *DownloadClientPriorityPlan) SetUnattributed(val int) {
+	s.Unattributed = val
+}
+
+// SetPriority sets the value of Priority.
+func (s *DownloadClientPriorityPlan) SetPriority(val []DownloadClientPriorityMove) {
+	s.Priority = val
+}
+
+// SetOrder sets the value of Order.
+func (s *DownloadClientPriorityPlan) SetOrder(val []string) {
+	s.Order = val
+}
+
+// SetPause sets the value of Pause.
+func (s *DownloadClientPriorityPlan) SetPause(val []string) {
+	s.Pause = val
+}
+
+// SetResume sets the value of Resume.
+func (s *DownloadClientPriorityPlan) SetResume(val []string) {
+	s.Resume = val
+}
+
 type DownloadClientProtocol string
 
 const (
