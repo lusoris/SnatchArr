@@ -1,0 +1,20 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+#
+# Ruff configuration, shared by `make py-lint` (tools/ci/ruff_check.sh) and Codacy
+# (Codacy's Ruff tool reads this file when "use configuration file" is on).
+# No `select`: the default rule set of the version pinned in
+# tools/ci/ruff-requirements.txt, so a Renovate bump brings its new defaults.
+# target-version: the lowest Python CI runs (ubuntu-26.04 ships 3.14).
+
+target-version = "py314"
+
+# Exceptions: one file and its rules per entry. The comment above each entry
+# names its category, entry date, expiry and reason. tools/ci/ruff_check.sh
+# refuses an entry without that comment, an expired entry, and an entry whose
+# rules no longer fire (stale).
+[lint.per-file-ignores]
+# category A, entered 2026-11-01, expires 2026-12-31: written by praetorctl adopt, refreshed only while unedited; engine fix cordanaLLM/praetor#1204
+".config/agent/hooks/block_evasion.py" = ["EXE001", "ISC004", "TRY004"]
+# category A, entered 2026-11-01, expires 2026-12-31: written by praetorctl adopt, refreshed only while unedited; engine fix cordanaLLM/praetor#1204
+".config/lefthook/scripts/checkpoint.py" = ["EXE001", "PIE810"]

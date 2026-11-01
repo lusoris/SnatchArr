@@ -55,6 +55,8 @@ jobs:
       # These run at tag time only otherwise, so a pull request that breaks either script would land green.
       - name: The release dogfood gate and pass recorder refuse their planted cases
         run: make release-dogfood-check
+      - name: Python lint (ruff, pinned) and its planted cases
+        run: bash tools/ci/ruff_check_test.sh && sh tools/ci/ruff_check.sh "$RUNNER_TEMP/ruff"
       - name: The workflow check refuses its planted cases
         env:
           GH_TOKEN: ${{ github.token }}

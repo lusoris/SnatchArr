@@ -103,8 +103,8 @@ def by_type(report, kind):
 def planted_tree(directory):
     # The key pair is joined from pieces here, so that neither the key nor a
     # keyword next to a long literal is in the source for gitleaks to report.
-    key_id = "".join(("AKIA", "Z7Q3XWERT5YUIOPA"))
-    key_value = "/".join(("wJalrXUtnFEMI", "K7MDENG", "bPxRfiCYZXAMPLEKEYQ"))
+    key_id = "AKIA" + "Z7Q3XWERT5YUIOPA"
+    key_value = "wJalrXUtnFEMI" + "/" + "K7MDENG" + "/" + "bPxRfiCYZXAMPLEKEYQ"
     files = {
         "go.mod": "module example.com/planted\n\ngo 1.22\n\nrequire golang.org/x/text v0.3.0\n",
         "Dockerfile": "FROM debian:13\nRUN apt-get update\n",

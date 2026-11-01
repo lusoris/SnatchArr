@@ -14,6 +14,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
+
 import yaml
 
 EXPECTED_EXCEPTIONS = {
@@ -129,7 +130,7 @@ def verify_exceptions(manifest: dict) -> None:
         if "exception" in entry:
             manifest_exceptions[key] = entry["exception"]
             if key not in EXPECTED_EXCEPTIONS:
-                raise LogoError(key, f"unexpected exception (not in allowed 6)")
+                raise LogoError(key, "unexpected exception (not in allowed 6)")
             expected_kind = EXPECTED_EXCEPTIONS[key]
             if entry["exception"] != expected_kind:
                 raise LogoError(
@@ -141,14 +142,14 @@ def verify_exceptions(manifest: dict) -> None:
 
     for expected_key in EXPECTED_EXCEPTIONS:
         if expected_key not in manifest_exceptions:
-            raise LogoError(expected_key, f"missing expected exception")
+            raise LogoError(expected_key, "missing expected exception")
 
 
 def verify_manifest_keys(manifest: dict, expected_keys: set[str]) -> None:
     """Verify all expected enum and integration keys are present in manifest."""
     for key in sorted(expected_keys):
         if key not in manifest:
-            raise LogoError(key, f"manifest missing required key")
+            raise LogoError(key, "manifest missing required key")
 
 
 def verify_logo_files(
