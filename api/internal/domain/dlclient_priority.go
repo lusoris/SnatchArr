@@ -197,10 +197,10 @@ func compareDownloadQueueItems(a, b DownloadQueueItem) int {
 	return cmp.Compare(a.ID, b.ID)
 }
 
-// Items arrive sorted by ID. Only queued items justify pausing active work;
-// both queued and active work block resumption, preventing pause/resume flaps.
-func planDownloadPauseResume(items []DownloadQueueItem) DownloadClientPlan {
-	bestQueued, bestUnfinished := MaxPriorityRank+1, MaxPriorityRank+1
+// bestWaitingRanks returns the best rank among queued items and among queued
+// or active items; MaxPriorityRank+1 means none.
+func bestWaitingRanks(items []DownloadQueueItem) (bestQueued, bestUnfinished int) {
+	bestQueued, bestUnfinished = MaxPriorityRank+1, MaxPriorityRank+1
 	for _, item := range items {
 		switch item.State {
 		case DownloadItemQueued:
@@ -213,6 +213,13 @@ func planDownloadPauseResume(items []DownloadQueueItem) DownloadClientPlan {
 			// pause nor block a resume.
 		}
 	}
+	return bestQueued, bestUnfinished
+}
+
+// Items arrive sorted by ID. Only queued items justify pausing active work;
+// both queued and active work block resumption, preventing pause/resume flaps.
+func planDownloadPauseResume(items []DownloadQueueItem) DownloadClientPlan {
+	bestQueued, bestUnfinished := bestWaitingRanks(items)
 	var plan DownloadClientPlan
 	for _, item := range items {
 		if item.State == DownloadItemActive && bestQueued < item.Rank {
