@@ -72,6 +72,7 @@ UI.
 | `APP_SNATCHARR_OIDC_ALLOWED_EMAILS` | | Deprecated; rejected if set |
 | `APP_SNATCHARR_PROXY_AUTH_ALLOWED_USERS` | | Deprecated; rejected if set |
 | `APP_SNATCHARR_ITEM_SEARCH_COOLDOWN_SECONDS` | `60` | Per-user item search cooldown in seconds (0 = off) |
+| `APP_SNATCHARR_DOWNLOAD_PRIORITY_INTERVAL_SECONDS` | `60` | Leader priority observation interval in seconds (15..3600; restart to apply; defined in `api/internal/config/download_priority.go`) |
 | `APP_HTTP_TIMEOUTS_READ` | `30s` | HTTP server read timeout |
 | `APP_HTTP_TIMEOUTS_HEADER` | `5s` | HTTP server header read timeout |
 | `APP_HTTP_TIMEOUTS_WRITE` | `60s` | HTTP server write timeout |

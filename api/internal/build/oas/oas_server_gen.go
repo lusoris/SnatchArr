@@ -232,6 +232,14 @@ type Handler interface {
 	//
 	// GET /download-clients/{clientId}
 	GetDownloadClient(ctx context.Context, params GetDownloadClientParams) (*DownloadClient, error)
+	// GetDownloadClientPriorityPlan implements getDownloadClientPriorityPlan operation.
+	//
+	// No client writes occur, including when mode is act. Returns 404 when no observation exists.
+	// Shared-client categories participate in one plan. A failed read retains the last successful
+	// observation; observedAt identifies its age.
+	//
+	// GET /download-clients/{clientId}/priority-plan
+	GetDownloadClientPriorityPlan(ctx context.Context, params GetDownloadClientPriorityPlanParams) (*DownloadClientPriorityPlan, error)
 	// GetDownloadClientStatus implements getDownloadClientStatus operation.
 	//
 	// Latest observation of every enabled download client (cached 20 s).

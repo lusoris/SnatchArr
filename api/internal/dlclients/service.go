@@ -32,6 +32,7 @@ type Input struct {
 	Kind               domain.DownloadClientKind
 	Name               string
 	BaseURL            string
+	Category           string
 	Username           string
 	Secret             string // password, or API key for SABnzbd
 	Enabled            bool
@@ -368,9 +369,14 @@ func (s *Service) upsertDiscovered(ctx context.Context, d Discovered, res *Disco
 		return fmt.Errorf("dlclients: seal secret: %w", err)
 	}
 	remote := int32(d.RemoteID) // #nosec G115 -- *arr ids are small integers
+	var category *string
+	if in.Category != "" {
+		category = &in.Category
+	}
 	row, err := s.st.Q().UpsertDiscoveredDownloadClient(ctx, sqlcgen.UpsertDiscoveredDownloadClientParams{
 		ID: clientID, InstanceID: in.InstanceID, Kind: string(in.Kind), Name: strings.TrimSpace(in.Name), BaseUrl: normalized,
 		Username: strings.TrimSpace(in.Username), SecretEnc: sealed, Enabled: in.Enabled, RemoteID: &remote, CreatedAt: s.clk.Now(),
+		Category: category,
 	})
 	if err != nil {
 		return fmt.Errorf("dlclients: upsert discovered: %w", store.MapError(err))

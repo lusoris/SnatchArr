@@ -43,6 +43,10 @@ func FromProvider(instanceID uuid.UUID, r arr.ProviderResource) (Discovered, boo
 		return Discovered{}, false
 	}
 	f := fieldMap(r.Fields)
+	category := ""
+	if priorityKind(kind) {
+		category = providerCategory(f)
+	}
 	secret := f.str("password")
 	if kind == domain.ClientSABnzbd {
 		secret = f.str("apiKey")
@@ -50,6 +54,7 @@ func FromProvider(instanceID uuid.UUID, r arr.ProviderResource) (Discovered, boo
 	d := Discovered{
 		Input: Input{
 			InstanceID: &instanceID, Kind: kind, Name: r.Name, BaseURL: providerURL(kind, f),
+			Category: category,
 			Username: f.str("username"), Secret: secret, Enabled: r.Enable == nil || *r.Enable,
 		},
 		RemoteID:       r.ID,
@@ -59,6 +64,31 @@ func FromProvider(instanceID uuid.UUID, r arr.ProviderResource) (Discovered, boo
 		d.Input.Secret = ""
 	}
 	return d, true
+}
+
+// providerCategory accepts only the download category, never the post-import category.
+// Upstream checked 2026-11-01: src/NzbDrone.Core/Download/Clients/{client}/{client}Settings.cs,
+// classes QBittorrentSettings, NzbgetSettings and SabnzbdSettings in each repository:
+// https://github.com/Radarr/Radarr/tree/develop/src/NzbDrone.Core/Download/Clients (MovieCategory)
+// https://github.com/Sonarr/Sonarr/tree/develop/src/NzbDrone.Core/Download/Clients (TvCategory)
+// https://github.com/Lidarr/Lidarr/tree/develop/src/NzbDrone.Core/Download/Clients (MusicCategory)
+// https://github.com/Readarr/Readarr/tree/develop/src/NzbDrone.Core/Download/Clients (MusicCategory)
+// https://github.com/Whisparr/Whisparr/tree/develop/src/NzbDrone.Core/Download/Clients (TvCategory)
+// https://github.com/Whisparr/Whisparr/tree/eros/src/NzbDrone.Core/Download/Clients (MovieCategory).
+// ProviderResource field names use camelCase. Ambiguous definitions fail attribution closed.
+func providerCategory(f fields) string {
+	category, found := "", false
+	for _, key := range []string{"movieCategory", "tvCategory", "musicCategory"} {
+		if _, ok := f[key]; !ok {
+			continue
+		}
+		if found {
+			return ""
+		}
+		category, _ = f[key].(string)
+		found = true
+	}
+	return category
 }
 
 // isRedacted recognises the mask *arr apps substitute for privacy fields.
