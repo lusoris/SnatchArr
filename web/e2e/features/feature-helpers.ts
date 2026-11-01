@@ -29,15 +29,36 @@ export async function enableMcp(page: Page, csrf: string): Promise<void> {
 	expect(putRes.ok()).toBeTruthy();
 }
 
-// Bind an HTTP server to 127.0.0.1:0 and return its URL and a close handle that rejects on error.
+// Bind a server to 127.0.0.1:0, resolve assigned port on listening, or reject on error.
+export function listenLocal(server: net.Server | http.Server): Promise<number> {
+	return new Promise<number>((resolve, reject) => {
+		// Handle successful server bind by resolving the assigned port.
+		const onListening = () => {
+			server.off('error', onError);
+			const addr = server.address() as net.AddressInfo;
+			resolve(addr.port);
+		};
+		// Handle server bind failure by rejecting with the error.
+		const onError = (err: Error) => {
+			server.off('listening', onListening);
+			reject(err);
+		};
+		server.once('listening', onListening);
+		server.once('error', onError);
+		server.listen(0, '127.0.0.1');
+	});
+}
+
+// Bind an HTTP server to 127.0.0.1:0 via listenLocal and return its URL and close handle.
 export async function listenStub(server: http.Server, path = ''): Promise<StubHandle> {
-	await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
-	const port = (server.address() as net.AddressInfo).port;
+	const port = await listenLocal(server);
 	const suffix = path && !path.startsWith('/') ? `/${path}` : path;
+	// Close the server and resolve once all connections terminate.
+	const close = () =>
+		new Promise<void>((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
 	return {
 		url: `http://127.0.0.1:${port}${suffix}`,
-		close: () =>
-			new Promise<void>((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())))
+		close
 	};
 }
 

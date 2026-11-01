@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 import http from 'node:http';
-import type { AddressInfo } from 'node:net';
 import { expect, test, type Page } from '@playwright/test';
+import { listenLocal } from './features/feature-helpers.js';
 import { json, mockSignedInApi } from './mocks.js';
 
 const instanceA = {
@@ -161,8 +161,7 @@ test.describe('live', () => {
 			}
 		});
 
-		await new Promise<void>((resolve) => sseServer.listen(0, '127.0.0.1', resolve));
-		const port = (sseServer.address() as AddressInfo).port;
+		const port = await listenLocal(sseServer);
 
 		try {
 			await page.route('**/api/v1/events/stream', async (route) => {
