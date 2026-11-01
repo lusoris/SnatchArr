@@ -172,11 +172,23 @@ func parseJSONInt(v any) (int, bool) {
 	}
 }
 
-// Usage implements Client.
-func (h *HTTP) Usage(ctx context.Context, baseURL, apiKey string, start, end time.Time) (map[int]Usage, error) {
+// typed constructs a goenvoy Prowlarr client configured with h's HTTP options,
+// returning a wrapped error when baseURL or client options are invalid.
+func (h *HTTP) typed(baseURL, apiKey string) (*prowlarr.Client, error) {
 	pc, err := prowlarr.New(baseURL, apiKey, h.Options()...)
 	if err != nil {
 		return nil, fmt.Errorf("prowlarr: client: %w", err)
+	}
+	return pc, nil
+}
+
+// Usage fetches indexer query and grab statistics between start and end in UTC.
+// It returns an error wrapping domain.ErrUnreachable on transport or API failures
+// and domain.ErrInvalid when the response omits the indexers list.
+func (h *HTTP) Usage(ctx context.Context, baseURL, apiKey string, start, end time.Time) (map[int]Usage, error) {
+	pc, err := h.typed(baseURL, apiKey)
+	if err != nil {
+		return nil, err
 	}
 	stats, err := pc.GetIndexerStats(ctx, start.UTC().Format(time.RFC3339), end.UTC().Format(time.RFC3339))
 	if err != nil {
@@ -188,6 +200,8 @@ func (h *HTTP) Usage(ctx context.Context, baseURL, apiKey string, start, end tim
 	return aggregateStats(stats.Indexers), nil
 }
 
+// aggregateStats sums standard queries, RSS queries, and grabs per positive
+// indexer ID, skipping entries whose IndexerID is zero or negative.
 func aggregateStats(items []prowlarr.IndexerStatistic) map[int]Usage {
 	out := make(map[int]Usage, len(items))
 	for _, it := range items {
@@ -202,24 +216,38 @@ func aggregateStats(items []prowlarr.IndexerStatistic) map[int]Usage {
 	return out
 }
 
-// Statuses implements Client.
+// Statuses fetches active indexer backoff timestamps keyed by indexer ID.
+// It returns an error wrapping domain.ErrUnreachable on transport or API failures
+// and domain.ErrInvalid if the response is null or contains a malformed timestamp.
 func (h *HTTP) Statuses(ctx context.Context, baseURL, apiKey string) (map[int]time.Time, error) {
-	pc, err := prowlarr.New(baseURL, apiKey, h.Options()...)
+	pc, err := h.typed(baseURL, apiKey)
 	if err != nil {
-		return nil, fmt.Errorf("prowlarr: client: %w", err)
+		return nil, err
 	}
 	items, err := pc.GetIndexerStatuses(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("%w: prowlarr indexerstatus: %w", domain.ErrUnreachable, arrclient.HintAPIError(err, "Prowlarr"))
 	}
+	if items == nil {
+		return nil, fmt.Errorf("%w: prowlarr indexerstatus: response is null", domain.ErrInvalid)
+	}
+	return collectDisabledStatuses(items)
+}
+
+// collectDisabledStatuses parses non-empty DisabledTill timestamps as UTC and
+// maps them by positive IndexerID, returning an error wrapping domain.ErrInvalid on parse failure.
+func collectDisabledStatuses(items []prowlarr.IndexerStatus) (map[int]time.Time, error) {
 	out := make(map[int]time.Time, len(items))
 	for _, it := range items {
-		if it.IndexerID <= 0 || it.DisabledTill == "" {
+		if it.DisabledTill == "" {
 			continue
 		}
 		t, parseErr := time.Parse(time.RFC3339Nano, it.DisabledTill)
 		if parseErr != nil {
 			return nil, fmt.Errorf("%w: prowlarr indexerstatus: indexer %d: invalid disabledTill %q: %w", domain.ErrInvalid, it.IndexerID, it.DisabledTill, parseErr)
+		}
+		if it.IndexerID <= 0 {
+			continue
 		}
 		out[it.IndexerID] = t.UTC()
 	}
@@ -228,6 +256,8 @@ func (h *HTTP) Statuses(ctx context.Context, baseURL, apiKey string) (map[int]ti
 
 const maxApplications = 100
 
+// extractAppProwlarrURL returns the trimmed string value of the application's
+// prowlarrUrl field matched case-insensitively, or an empty string if absent.
 func extractAppProwlarrURL(app prowlarr.Application) string {
 	for _, f := range app.Fields {
 		if strings.EqualFold(f.Name, "prowlarrUrl") {
@@ -239,11 +269,13 @@ func extractAppProwlarrURL(app prowlarr.Application) string {
 	return ""
 }
 
-// ProwlarrURLs implements Client: GET /api/v1/applications.
+// ProwlarrURLs reads the first maxApplications application entries and returns
+// their unique, non-empty prowlarrUrl values in order. It returns an error
+// wrapping domain.ErrUnreachable on client or transport failures.
 func (h *HTTP) ProwlarrURLs(ctx context.Context, baseURL, apiKey string) ([]string, error) {
-	pc, err := prowlarr.New(baseURL, apiKey, h.Options()...)
+	pc, err := h.typed(baseURL, apiKey)
 	if err != nil {
-		return nil, fmt.Errorf("prowlarr: client: %w", err)
+		return nil, err
 	}
 	list, err := pc.GetApplications(ctx)
 	if err != nil {

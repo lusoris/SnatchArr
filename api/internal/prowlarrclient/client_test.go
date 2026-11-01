@@ -183,6 +183,8 @@ func TestHTTPClient_Usage(t *testing.T) {
 	}
 }
 
+// TestHTTPClient_Usage_Table verifies that Usage rejects payloads missing a
+// non-null indexers array with domain.ErrInvalid and accepts an empty slice.
 func TestHTTPClient_Usage_Table(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -266,6 +268,8 @@ func TestHTTPClient_Statuses(t *testing.T) {
 	}
 }
 
+// TestHTTPClient_Statuses_Table verifies Statuses handling of null and empty
+// responses, malformed disabledTill timestamps, and non-positive indexer IDs.
 func TestHTTPClient_Statuses_Table(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -278,11 +282,35 @@ func TestHTTPClient_Statuses_Table(t *testing.T) {
 		wantTimes map[int]time.Time
 	}{
 		{
+			name:    "negative null response returns error",
+			payload: nil,
+			wantErr: true,
+		},
+		{
+			name:      "boundary empty slice returns empty map",
+			payload:   []map[string]any{},
+			wantCount: 0,
+		},
+		{
 			name: "negative bad disabledTill string returns error",
 			payload: []map[string]any{
 				{"id": 1, "indexerId": 10, "disabledTill": "invalid-timestamp"},
 			},
 			wantErr: true,
+		},
+		{
+			name: "negative indexerId 0 with garbage disabledTill returns error",
+			payload: []map[string]any{
+				{"id": 1, "indexerId": 0, "disabledTill": "garbage"},
+			},
+			wantErr: true,
+		},
+		{
+			name: "boundary indexerId 0 with valid disabledTill skipped",
+			payload: []map[string]any{
+				{"id": 1, "indexerId": 0, "disabledTill": "2026-10-16T22:00:00Z"},
+			},
+			wantCount: 0,
 		},
 		{
 			name: "boundary empty disabledTill produces no entry",
