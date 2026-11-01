@@ -96,6 +96,16 @@ setup_unrelated_nosecret() {
     git commit -q -m "initial"
 }
 
+# setup_self: the check's own source, committed, so a comment or pattern in it that reads as a
+# reasonless directive is caught before the file lands in the real tree.
+setup_self() {
+    mkdir -p tools/ci
+    cp "$check" tools/ci/nosec_check.py
+    git add tools/ci/nosec_check.py
+    git commit -q -m "initial"
+}
+
+expect "own source committed scans clean" 0 setup_self
 expect "clean repo (valid py + valid go)" 0 setup_clean
 expect "py # nosec bare" 1 setup_py_bare
 expect "py # nosec B603 no reason" 1 setup_py_no_reason

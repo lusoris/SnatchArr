@@ -80,7 +80,7 @@ def check_go_file(path_str: str, content: str) -> tuple[int, list[str]]:
     annotated = 0
     findings: list[str] = []
     for line_no, line in enumerate(content.splitlines(), 1):
-        # Strip string literals so quotes containing // #nosec are not treated as comments.
+        # Strip string literals so quotes containing a Go suppression directive are not treated as comments.
         code = GO_STRINGS_RE.sub("", line)
         if GO_DIRECTIVE_RE.search(code):
             if GO_VALID_RE.search(code):
