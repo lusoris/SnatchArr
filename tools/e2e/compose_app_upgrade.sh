@@ -417,6 +417,7 @@ verify_all_readbacks() {
     echo "ok   all read-backs match (fields preserved, subset equality verified)"
 }
 
+# apply_upgrade_plant plants the defect named by UPGRADE_PLANT before the candidate starts.
 apply_upgrade_plant() {
     case "${UPGRADE_PLANT:-}" in
         drop-row)
@@ -576,6 +577,8 @@ check_runtime_settings() {
     echo "ok   new migration effect: runtime setting saved and survived restart"
 }
 
+# check_database_fingerprint fails on any table change outside the runtime allow-list; a table
+# whose migration only added columns is compared on its pre-upgrade columns.
 check_database_fingerprint() {
     dc stop api worker >/dev/null
     fingerprint >"$work/after.txt"
