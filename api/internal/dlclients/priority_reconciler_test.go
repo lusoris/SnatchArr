@@ -54,8 +54,10 @@ func TestPriorityGroupCredentials(t *testing.T) {
 		{name: "secret on later row is used", secrets: map[uuid.UUID]string{second: "s2"}, wantRow: second, wantSecret: "s2"},
 		{name: "first row with a secret wins", secrets: map[uuid.UUID]string{first: "s1", second: "s2"}, wantRow: first, wantSecret: "s1"},
 		{name: "no secret falls back to first row", wantRow: first},
-		{name: "failed lookup skipped when another row has a secret", secrets: map[uuid.UUID]string{second: "s2"},
-			secretErrs: map[uuid.UUID]error{first: failed}, wantRow: second, wantSecret: "s2"},
+		{
+			name: "failed lookup skipped when another row has a secret", secrets: map[uuid.UUID]string{second: "s2"},
+			secretErrs: map[uuid.UUID]error{first: failed}, wantRow: second, wantSecret: "s2",
+		},
 		{name: "failed lookup without any secret fails", secretErrs: map[uuid.UUID]error{second: failed}, wantErr: true},
 	}
 	for _, tt := range tests {
