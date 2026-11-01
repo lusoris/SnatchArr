@@ -496,41 +496,61 @@ func TestRun_Boundary(t *testing.T) {
 		}
 	})
 
+	// The request, not the whole run, carries the 50ms deadline: a run-wide
+	// deadline that short can expire before stdin is read on a loaded host.
 	t.Run("server timeout returns error with id", func(t *testing.T) {
 		t.Parallel()
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			select {
-			case <-r.Context().Done():
-			case <-time.After(500 * time.Millisecond):
-				w.WriteHeader(http.StatusOK)
-			}
-		}))
-		t.Cleanup(srv.Close)
-
-		getenv := func(key string) string {
-			if key == "SNATCHARR_URL" {
-				return srv.URL
-			}
-			if key == "SNATCHARR_API_KEY" {
-				return "test-key"
-			}
-			return ""
-		}
-
-		ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
-		defer cancel()
-
-		var stdout, stderr bytes.Buffer
-		input := `{"jsonrpc":"2.0","id":"timeout-id","method":"slow"}` + "\n"
-		_ = RunWithClient(ctx, srv.Client(), []string{"stdio"}, getenv, strings.NewReader(input), &stdout, &stderr)
-
-		if !strings.Contains(stdout.String(), `"timeout-id"`) {
-			t.Errorf("stdout %q does not contain timeout-id", stdout.String())
-		}
-		if !strings.Contains(stdout.String(), `code":-32000`) {
-			t.Errorf("stdout %q does not contain code -32000", stdout.String())
-		}
+		assertRequestTimeout(t, 0)
 	})
+
+	t.Run("server timeout survives slow start", func(t *testing.T) {
+		t.Parallel()
+		assertRequestTimeout(t, 200*time.Millisecond)
+	})
+}
+
+const timeoutInput = `{"jsonrpc":"2.0","id":"timeout-id","method":"slow"}` + "\n"
+
+// assertRequestTimeout runs one request against a server that never answers
+// in time and checks the JSON-RPC error keeps the request id. startDelay
+// passes between creating the run context and starting the run, standing in
+// for a host too loaded to schedule the run promptly.
+func assertRequestTimeout(t *testing.T, startDelay time.Duration) {
+	t.Helper()
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-r.Context().Done():
+		case <-release:
+		}
+	}))
+	t.Cleanup(srv.Close)
+	t.Cleanup(func() { close(release) }) // runs first, so Close never waits on the handler
+
+	getenv := func(key string) string {
+		switch key {
+		case "SNATCHARR_URL":
+			return srv.URL
+		case "SNATCHARR_API_KEY":
+			return "test-key"
+		}
+		return ""
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	client := &http.Client{Transport: srv.Client().Transport, Timeout: 50 * time.Millisecond}
+
+	time.Sleep(startDelay)
+	var stdout, stderr bytes.Buffer
+	_ = RunWithClient(ctx, client, []string{"stdio"}, getenv, strings.NewReader(timeoutInput), &stdout, &stderr)
+
+	if !strings.Contains(stdout.String(), `"timeout-id"`) {
+		t.Errorf("stdout %q does not contain timeout-id", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), `code":-32000`) {
+		t.Errorf("stdout %q does not contain code -32000", stdout.String())
+	}
 }
 
 func TestRun_OKResponseInvalidJSON(t *testing.T) {

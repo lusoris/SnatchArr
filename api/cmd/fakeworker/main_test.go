@@ -341,12 +341,15 @@ func TestProcessRuns_BoundaryTimeout(t *testing.T) {
 		timeout:  150 * time.Millisecond,
 	}
 
-	ctx, cancel := context.WithTimeout(t.Context(), 150*time.Millisecond)
-	defer cancel()
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
 
 	err := processRuns(ctx, client, cfg, logger)
 	if err == nil {
-		t.Fatal("processRuns() expected timeout error, got nil")
+		t.Fatal("processRuns() with a cancelled context: expected an error, got nil")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("processRuns() error = %v, want %v", err, context.Canceled)
 	}
 }
 
