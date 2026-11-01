@@ -101,5 +101,19 @@ export default defineConfig(
 				}
 			]
 		}
+	},
+	{
+		files: ['e2e/**/*.ts'],
+		ignores: ['e2e/features/feature-helpers.ts'],
+		rules: {
+			'no-restricted-syntax': [
+				'error',
+				{
+					selector: "CallExpression[callee.property.name='listen']",
+					message:
+						'bind e2e stub servers with listenLocal or listenStub from e2e/features/feature-helpers.ts (they reject on a bind error).'
+				}
+			]
+		}
 	}
 );

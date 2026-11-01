@@ -4,10 +4,10 @@
 
 import fs from 'node:fs';
 import http from 'node:http';
-import type net from 'node:net';
 import path from 'node:path';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, request, test, type Page } from '@playwright/test';
+import { listenLocal } from './features/feature-helpers.js';
 import { submitAdminLogin } from './mocks.js';
 import { settleToasts } from './settle.js';
 
@@ -53,8 +53,7 @@ test('notifications: create channel, test delivery, create rule, read back from 
 		res.writeHead(200, { 'Content-Type': 'application/json' });
 		res.end('{}');
 	});
-	await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
-	const port = (server.address() as net.AddressInfo).port;
+	const port = await listenLocal(server);
 	const webhookUrl = `http://127.0.0.1:${port}/webhook`;
 
 	try {

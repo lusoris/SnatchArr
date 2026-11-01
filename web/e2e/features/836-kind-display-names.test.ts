@@ -5,8 +5,8 @@
 // covers: #836
 
 import http from 'node:http';
-import type net from 'node:net';
 import { expect, test, type Page } from '@playwright/test';
+import { listenStub } from './feature-helpers.js';
 
 async function getCsrfToken(page: Page): Promise<string> {
 	const res = await page.request.get('/api/v1/auth/session');
@@ -20,13 +20,7 @@ async function startDummyStub(): Promise<{ url: string; close: () => Promise<voi
 		res.writeHead(200, { 'Content-Type': 'application/json' });
 		res.end(JSON.stringify({ version: '1.0.0' }));
 	});
-	await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
-	const port = (server.address() as net.AddressInfo).port;
-	return {
-		url: `http://127.0.0.1:${port}`,
-		close: () =>
-			new Promise<void>((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())))
-	};
+	return listenStub(server);
 }
 
 test('positive: instances list renders product display names (Sonarr, Whisparr v3, Readarr (legacy), Stash)', async ({

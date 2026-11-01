@@ -6,9 +6,9 @@
 
 import { execFile } from 'node:child_process';
 import http from 'node:http';
-import type net from 'node:net';
 import { promisify } from 'node:util';
 import { expect, test, type Page } from '@playwright/test';
+import { listenStub } from './feature-helpers.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -50,13 +50,11 @@ async function startWebhookSink(): Promise<{
 			res.end(JSON.stringify({ ok: true }));
 		});
 	});
-	await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
-	const port = (server.address() as net.AddressInfo).port;
+	const stub = await listenStub(server, '/webhook');
 	return {
-		url: `http://127.0.0.1:${port}/webhook`,
+		url: stub.url,
 		deliveries,
-		close: () =>
-			new Promise<void>((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())))
+		close: stub.close
 	};
 }
 

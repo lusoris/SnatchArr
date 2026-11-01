@@ -5,8 +5,8 @@
 // covers: #777
 
 import http from 'node:http';
-import type net from 'node:net';
 import { expect, test, type Page } from '@playwright/test';
+import { listenStub, type StubHandle } from './feature-helpers.js';
 
 // The Prowlarr stub accepts any key; this one is only a placeholder.
 const STUB_KEY = 'fake-api-key-0123456789';
@@ -18,7 +18,8 @@ async function getCsrfToken(page: Page): Promise<string> {
 	return data.csrf_token;
 }
 
-async function startProwlarrStub(): Promise<{ url: string; close: () => Promise<void> }> {
+// Start a stub Prowlarr server on an ephemeral port.
+async function startProwlarrStub(): Promise<StubHandle> {
 	const server = http.createServer((req, res) => {
 		res.writeHead(200, { 'Content-Type': 'application/json' });
 		if (req.url?.startsWith('/api/v1/system/status')) {
@@ -52,13 +53,7 @@ async function startProwlarrStub(): Promise<{ url: string; close: () => Promise<
 			res.end(JSON.stringify([]));
 		}
 	});
-	await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
-	const port = (server.address() as net.AddressInfo).port;
-	return {
-		url: `http://127.0.0.1:${port}`,
-		close: () =>
-			new Promise<void>((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())))
-	};
+	return listenStub(server);
 }
 
 test('positive: create prowlarr link with default hourly_cap 15 and custom cap, probe stub, and verify UI form', async ({

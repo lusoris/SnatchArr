@@ -5,8 +5,8 @@
 // covers: #891 #896
 
 import http from 'node:http';
-import type net from 'node:net';
 import { expect, test, type Page } from '@playwright/test';
+import { listenLocal } from './feature-helpers.js';
 
 interface StoredInstance {
 	last_seen_product?: string;
@@ -46,6 +46,7 @@ const statusRoutes: Record<string, StubStatus> = {
 	}
 };
 
+// Start Readarr fork stub servers for each supported status route.
 async function startReadarrStub(): Promise<{
 	baseUrl: (segment: string) => string;
 	close: () => Promise<void>;
@@ -58,8 +59,7 @@ async function startReadarrStub(): Promise<{
 			res.writeHead(200, { 'Content-Type': 'application/json' });
 			res.end(JSON.stringify(payload));
 		});
-		await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
-		const port = (server.address() as net.AddressInfo).port;
+		const port = await listenLocal(server);
 		baseUrls[segment] = `http://127.0.0.1:${port}`;
 		servers.push(server);
 	}

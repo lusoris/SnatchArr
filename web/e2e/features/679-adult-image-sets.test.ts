@@ -8,12 +8,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { expect, request, test, type Page } from '@playwright/test';
-
-const proxySecret = process.env.SNATCHARR_E2E_PROXY_SECRET ?? '';
-const proxyUserHeader = process.env.SNATCHARR_E2E_PROXY_HEADER ?? 'Remote-User';
-const proxyGroupsHeader = process.env.SNATCHARR_E2E_PROXY_GROUPS_HEADER ?? 'X-authentik-groups';
-const proxySecretHeader =
-	process.env.SNATCHARR_E2E_PROXY_SECRET_HEADER ?? 'X-SnatchArr-Proxy-Secret';
+import {
+	proxyGroupsHeader,
+	proxySecret,
+	proxySecretHeader,
+	proxyUserHeader
+} from './feature-helpers.js';
 
 // 1x1 valid PNG image bytes
 const png1x1Base64 =

@@ -59,13 +59,17 @@ async function expectTokens(page: Page, tokens: Readonly<Record<string, string>>
 	}
 }
 
+async function setupLightInstancesPage(page: Page): Promise<void> {
+	await page.emulateMedia({ colorScheme: 'light' });
+	await page.goto('/instances');
+	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+}
+
 test('positive: violet amber brand and accent tokens match theme.css in light and dark mode', async ({
 	page
 }) => {
 	// 1. Light mode
-	await page.emulateMedia({ colorScheme: 'light' });
-	await page.goto('/instances');
-	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+	await setupLightInstancesPage(page);
 
 	await expectTokens(page, EXPECTED_LIGHT_TOKENS, 'light');
 
@@ -99,9 +103,7 @@ test('negative: unknown and non-existent custom properties return empty string',
 test('boundary: forced theme handling and class-based theme boundary toggling', async ({
 	page
 }) => {
-	await page.emulateMedia({ colorScheme: 'light' });
-	await page.goto('/instances');
-	await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+	await setupLightInstancesPage(page);
 
 	// In web/src, theme is driven by html.dark via prefers-color-scheme (theme-init.js).
 	// Setting data-theme does not override tokens because data-theme is not bound in theme.css.
