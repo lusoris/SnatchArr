@@ -21,14 +21,14 @@ GOMODCACHE       = $(subst \,/,$(shell go env GOMODCACHE))
 GOLUSORIS_VER    = $(shell go list -m -f '{{.Version}}' github.com/golusoris/golusoris)
 GOLUSORIS_SHARED = $(GOMODCACHE)/github.com/golusoris/golusoris@$(GOLUSORIS_VER)/tools/Makefile.shared
 
-.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-soak e2e-compose-smoke e2e-compose-pg-upgrade e2e-compose-app-upgrade e2e-dev-compose-smoke dlclients-live arr-forceimport-live integrations-live e2e-cnpg-pg-upgrade e2e-cnpg-backup-restore e2e-chart-install web-verify web-e2e web-e2e-api web-visual web-visual-update proto-verify deploy-verify chart-package governance-verify hooks-verify contracts-verify workflows-verify workflows-lint release-e2e-check release-dogfood-check secret-scan licences licences-check logos logos-check \
+.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-soak e2e-compose-smoke e2e-compose-pg-upgrade e2e-compose-app-upgrade e2e-dev-compose-smoke dlclients-live arr-forceimport-live integrations-live e2e-cnpg-pg-upgrade e2e-cnpg-backup-restore e2e-chart-install web-verify web-e2e web-e2e-api web-visual web-visual-update proto-verify deploy-verify chart-package governance-verify hooks-verify contracts-verify workflows-verify workflows-lint release-e2e-check release-dogfood-check secret-scan py-lint licences licences-check logos logos-check \
 	images kind-up kind-deploy kind-keda-proof kind-down \
         api-gen api-gosec api-vuln gosec-install govulncheck-install sqlc-install tools-verify tools-lint tools-test tools-gosec web-gen proto-gen dev hooks setup api-openapi-breaking settings-parity settings-parity-check roadmap-check
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-18s %s\n", $$1, $$2}'
 
-verify-all: governance-verify hooks-verify workflows-verify secret-scan proto-verify api-verify worker-verify web-verify deploy-verify contracts-verify licences-check logos-check roadmap-check ## Every gate (praetor universal verification)
+verify-all: governance-verify hooks-verify workflows-verify secret-scan py-lint proto-verify api-verify worker-verify web-verify deploy-verify contracts-verify licences-check logos-check roadmap-check ## Every gate (praetor universal verification)
 	@echo "All SnatchArr verification gates passed."
 
 # ── api/ (Go, golusoris) ──────────────────────────────────────────────────────
@@ -316,7 +316,8 @@ dlclients-live: ## Real qBittorrent, Transmission, Deluge, rTorrent, SABnzbd, NZ
 	bash tools/e2e/planted_test.sh
 	bash tools/e2e/live_lib_test.sh
 	bash tools/e2e/planted.sh SNATCHARR_DLCLIENTS_PLANT tools/e2e/dlclients_live.sh \
-	  "secret:not reachable with the right secret" "pause:paused = false; the client was left with paused = true"
+	  "secret:not reachable with the right secret" "pause:paused = false; the client was left with paused = true" \
+	  "priority:priority capability mismatch"
 
 # Rule id_matched (ADR-0013) on real Sonarr and Radarr (tools/e2e/forceimport): each grabs a
 # release by ID under a title it cannot parse, and the production client force-imports it and
@@ -584,6 +585,10 @@ hooks-verify: ## The commit-message policy against its accepted and refused case
 
 secret-scan: ## gitleaks over every local ref, as CI job secret-scan (pinned release, cached in .cache/)
 	sh tools/ci/gitleaks_scan.sh .cache/gitleaks
+
+py-lint: ## ruff over every tracked Python file, pinned, config shared with Codacy (ruff.toml), with planted cases
+	bash tools/ci/ruff_check_test.sh
+	sh tools/ci/ruff_check.sh .cache/ruff
 
 release-e2e-check: ## Release feat/fix commits since the previous tag each map to a web/e2e/features test
 	python3 -I tools/ci/release_e2e_check.py --self-test

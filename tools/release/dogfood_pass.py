@@ -60,9 +60,7 @@ def commit_matches(served: str, expected: str) -> bool:
         return False
     if served == expected:
         return True
-    if len(served) >= MIN_COMMIT_PREFIX and expected.startswith(served):
-        return True
-    return False
+    return len(served) >= MIN_COMMIT_PREFIX and expected.startswith(served)
 
 
 def parse_mcp_body(content_type: str, raw_body: str) -> dict[str, Any]:
@@ -411,7 +409,7 @@ def send_stub_tool_call(
     is_err = mode == "tool_error" and name == "snatcharr_list_instances"
     res = {"content": [{"type": "text", "text": "stub"}], "isError": is_err}
     line = json.dumps({"jsonrpc": "2.0", "id": body.get("id"), "result": res})
-    sse = f"event: message\ndata: {line}\n\n".encode("utf-8")
+    sse = f"event: message\ndata: {line}\n\n".encode()
     handler.send_response(200)
     handler.send_header("Content-Type", "text/event-stream")
     handler.end_headers()

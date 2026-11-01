@@ -13,12 +13,15 @@
 set -eu
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=tools/ci/test_lib.sh
+. "$HERE/test_lib.sh"
 REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 SCRIPT="$HERE/dependency_snapshot.py"
 FIXTURES="$HERE/testdata/dependency_snapshot"
 
 cd "$REPO_ROOT"
 
+# run_case NAME WANT_RC NEEDLE SNAPSHOT PKG: run the snapshot check on one fixture and assert its exit and output.
 run_case() {
   name="$1"
   want_rc="$2"
@@ -29,18 +32,7 @@ run_case() {
   got_rc=0
   out="$(python3 -I "$SCRIPT" --check-fixture "$snap" "$pkg" 2>&1)" || got_rc=$?
 
-  if [ "$got_rc" -ne "$want_rc" ]; then
-    printf 'FAIL %s: exit %s, want %s\n%s\n' "$name" "$got_rc" "$want_rc" "$out" >&2
-    exit 1
-  fi
-
-  case "$out" in
-    *"$needle"*) ;;
-    *)
-      printf 'FAIL %s: output did not contain "%s"\n%s\n' "$name" "$needle" "$out" >&2
-      exit 1
-      ;;
-  esac
+  check_case "$name" "$want_rc" "$got_rc" "$needle" "$out"
 
   printf 'ok   %s\n' "$name"
 }

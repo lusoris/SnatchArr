@@ -32,6 +32,7 @@ def run_cmd(cmd, cwd=None, env=None):
         env=env,
         capture_output=True,
         text=True,
+        check=False,
     )
     if res.returncode != 0:
         tail = "\n".join(res.stderr.strip().splitlines()[-20:])

@@ -39,18 +39,27 @@ type liveClient struct {
 // It runs in `make dlclients-live`, which starts the clients and fails when this test skipped.
 func TestLiveDownloadClients(t *testing.T) {
 	t.Parallel()
+	g := dlclients.NewGoenvoy(clock.NewFake())
+	forEachLiveClient(t, func(t *testing.T, c liveClient) {
+		t.Helper()
+		checkLiveClient(t, g, c)
+	})
+}
+
+// forEachLiveClient discovers running live clients from the environment and executes fn for each in parallel.
+func forEachLiveClient(t *testing.T, fn func(t *testing.T, c liveClient)) {
+	t.Helper()
 	path := os.Getenv(liveEnv)
 	if path == "" {
 		t.Skip(liveEnv + " is not set; run make dlclients-live")
 	}
 	clients := readLiveClients(t, path)
 	seen := map[domain.DownloadClientKind]bool{}
-	g := dlclients.NewGoenvoy(clock.NewFake())
 	for _, c := range clients {
 		seen[c.Kind] = true
 		t.Run(string(c.Kind), func(t *testing.T) {
 			t.Parallel()
-			checkLiveClient(t, g, c)
+			fn(t, c)
 		})
 	}
 	for _, kind := range domain.AllDownloadClientKinds {
@@ -60,6 +69,7 @@ func TestLiveDownloadClients(t *testing.T) {
 	}
 }
 
+// readLiveClients reads and unmarshals the live clients inventory JSON file from path.
 func readLiveClients(t *testing.T, path string) []liveClient {
 	t.Helper()
 	raw, err := os.ReadFile(path) // #nosec G304 -- the path is the test's own input file
@@ -73,6 +83,7 @@ func readLiveClients(t *testing.T, path string) []liveClient {
 	return clients
 }
 
+// checkLiveClient verifies snapshot behavior and authentication refusal against a real download client.
 func checkLiveClient(t *testing.T, g *dlclients.Goenvoy, c liveClient) {
 	t.Helper()
 	dc := domain.DownloadClient{Kind: c.Kind, Name: string(c.Kind), BaseURL: c.URL, Username: c.Username}
