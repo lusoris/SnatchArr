@@ -6,7 +6,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 # ADR-0006: Download clients are observed for backpressure, never driven
 
 - Status: accepted
-- Partially superseded by [ADR-0046](0046-download-client-priority-writes.md) (2026-11-01): priority and queue-order writes, and pause and resume of lower-rank items, for qBittorrent, NZBGet and SABnzbd.
+- Partially superseded by [ADR-0046](0046-download-client-priority-writes.md) (2026-11-01): priority and queue-order writes, and pause and resume of lower-rank items, for qBittorrent, NZBGet and SABnzbd. Adding, removing or deleting items and whole-queue operations stay forbidden; everything else below still binds.
 - Date: 2026-09-21
 
 ## Context
