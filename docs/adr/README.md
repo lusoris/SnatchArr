@@ -51,3 +51,4 @@ This directory documents key architectural decisions following the HISS-14 immut
 | [0043](0043-adult-served-surface.md) | 2026-10-27 | Adult module served HTTP surface and UI screens | Accepted |
 | [0044](0044-runtime-settings-parity.md) | 2026-10-29 | Runtime settings parity between environment, API and UI | Accepted |
 | [0045](0045-quality-availability-and-split-series.md) | 2026-10-29 | Quality availability, profile mismatch and split-quality series | Accepted |
+| [0046](0046-download-client-priority-writes.md) | 2026-11-01 | Download client priority and queue-order writes | Proposed |
