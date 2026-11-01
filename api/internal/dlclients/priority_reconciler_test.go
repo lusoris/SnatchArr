@@ -27,12 +27,55 @@ import (
 )
 
 type prioritySourceFake struct {
-	inputs priorityInputs
-	err    error
+	inputs     priorityInputs
+	err        error
+	secrets    map[uuid.UUID]string
+	secretErrs map[uuid.UUID]error
 }
 
-func (f prioritySourceFake) Load(context.Context) (priorityInputs, error)      { return f.inputs, f.err }
-func (f prioritySourceFake) Secret(context.Context, uuid.UUID) (string, error) { return "", nil }
+func (f prioritySourceFake) Load(context.Context) (priorityInputs, error) { return f.inputs, f.err }
+func (f prioritySourceFake) Secret(_ context.Context, id uuid.UUID) (string, error) {
+	return f.secrets[id], f.secretErrs[id]
+}
+
+func TestPriorityGroupCredentials(t *testing.T) {
+	t.Parallel()
+	rows := priorityTestInputs(domain.ClientQBittorrent, "observe", "http://qbit", "http://other").Clients[:2]
+	first, second := rows[0].ID, rows[1].ID
+	failed := errors.New("decrypt failed")
+	tests := []struct {
+		name       string
+		secrets    map[uuid.UUID]string
+		secretErrs map[uuid.UUID]error
+		wantRow    uuid.UUID
+		wantSecret string
+		wantErr    bool
+	}{
+		{name: "secret on later row is used", secrets: map[uuid.UUID]string{second: "s2"}, wantRow: second, wantSecret: "s2"},
+		{name: "first row with a secret wins", secrets: map[uuid.UUID]string{first: "s1", second: "s2"}, wantRow: first, wantSecret: "s1"},
+		{name: "no secret falls back to first row", wantRow: first},
+		{name: "failed lookup skipped when another row has a secret", secrets: map[uuid.UUID]string{second: "s2"},
+			secretErrs: map[uuid.UUID]error{first: failed}, wantRow: second, wantSecret: "s2"},
+		{name: "failed lookup without any secret fails", secretErrs: map[uuid.UUID]error{second: failed}, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			source := prioritySourceFake{secrets: tt.secrets, secretErrs: tt.secretErrs}
+			r := newPriorityReconciler(source, nil, clock.NewFake(), slog.New(slog.DiscardHandler))
+			row, secret, err := r.groupCredentials(t.Context(), rows)
+			if tt.wantErr {
+				if !errors.Is(err, failed) {
+					t.Fatalf("err = %v, want %v", err, failed)
+				}
+				return
+			}
+			if err != nil || row.ID != tt.wantRow || secret != tt.wantSecret {
+				t.Fatalf("row = %v, secret = %q, err = %v; want %v, %q", row.ID, secret, err, tt.wantRow, tt.wantSecret)
+			}
+		})
+	}
+}
 
 func TestPriorityReconcilerReadOnly(t *testing.T) {
 	t.Parallel()

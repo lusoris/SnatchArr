@@ -6,6 +6,7 @@ package dlclients
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -88,18 +89,20 @@ func (r *Reconciler) Tick(ctx context.Context) error {
 	sem := make(chan struct{}, maxPriorityWorkers)
 	var wg sync.WaitGroup
 	for _, rows := range groups {
-		select {
-		case sem <- struct{}{}:
-		case <-ctx.Done():
-			wg.Wait()
-			return fmt.Errorf("priority tick: %w", ctx.Err())
+		if ctx.Err() != nil {
+			break
 		}
+		// Each observation ends within ObserveTimeout, so a full semaphore frees a slot in bounded time.
+		sem <- struct{}{}
 		wg.Go(func() {
 			defer func() { <-sem }()
 			r.observePriorityGroup(ctx, rows, inputs)
 		})
 	}
 	wg.Wait()
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("priority tick: %w", err)
+	}
 	return nil
 }
 
@@ -149,11 +152,33 @@ func priorityKind(kind domain.DownloadClientKind) bool {
 	return kind == domain.ClientQBittorrent || kind == domain.ClientNZBGet || kind == domain.ClientSABnzbd
 }
 
+// groupCredentials returns the first row of a group that holds a stored secret,
+// with that row's username. Rows of one group share a physical client but each
+// keeps its own credentials, and discovery leaves new rows without a secret.
+// Without any secret it falls back to rows[0]; it fails only when no row has a
+// secret and a lookup failed.
+func (r *Reconciler) groupCredentials(ctx context.Context, rows []domain.DownloadClient) (domain.DownloadClient, string, error) {
+	var lookupErr error
+	for _, row := range rows {
+		secret, err := r.source.Secret(ctx, row.ID)
+		if err != nil {
+			lookupErr = errors.Join(lookupErr, err)
+			continue
+		}
+		if secret != "" {
+			return row, secret, nil
+		}
+	}
+	if lookupErr != nil {
+		return domain.DownloadClient{}, "", lookupErr
+	}
+	return rows[0], "", nil
+}
+
 func (r *Reconciler) observePriorityGroup(ctx context.Context, rows []domain.DownloadClient, inputs priorityInputs) {
-	client := rows[0]
 	ctx, cancel := context.WithTimeout(ctx, ObserveTimeout)
 	defer cancel()
-	secret, err := r.source.Secret(ctx, client.ID)
+	client, secret, err := r.groupCredentials(ctx, rows)
 	if err != nil {
 		r.priorityFailed(ctx, rows, "credentials")
 		return

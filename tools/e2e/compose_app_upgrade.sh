@@ -7,7 +7,8 @@
 # the API, saves read-back JSON and database fingerprint, then restarts on candidate
 # images (SMOKE_API_IMAGE, SMOKE_WORKER_IMAGE) and verifies:
 #   a. schema migrations match candidate version (advanced or unchanged) and dirty is false;
-#   b. tables differ only from an explicit allow-list with runtime justifications;
+#   b. tables differ only from an explicit allow-list with runtime justifications; a table
+#      whose migration only added columns must still match on its pre-upgrade columns;
 #   c. JSON read-backs match (jq subset equality on every seeded resource);
 #   d. runtime settings are preserved (/settings non-default value);
 #   e. admin logs in with password set before upgrade; old API key authenticates;
@@ -24,6 +25,7 @@
 #   no-worker         start the candidate without its worker ("worker did not register")
 #   drop-key          delete the seeded API key ("old API key")
 #   reset-password    replace the admin password hash ("login with password")
+#   touch-dlclient    change a download client row on its pre-upgrade columns ("data read-back differs")
 # Needs docker compose, curl, jq and openssl.
 set -euo pipefail
 
@@ -140,6 +142,32 @@ psql_at() {
 fingerprint() {
     dc exec -T postgres psql -U snatcharr -d snatcharr -v ON_ERROR_STOP=1 -At \
         <"$root/tools/e2e/fingerprint.sql"
+}
+
+# columns_of TABLE prints the table's live columns in order, quoted and comma separated.
+columns_of() {
+    psql_at "SELECT string_agg(quote_ident(attname), ',' ORDER BY attnum) FROM pg_attribute
+        WHERE attrelid = 'public.$1'::regclass AND attnum > 0 AND NOT attisdropped" </dev/null
+}
+
+# save_columns records every table's columns next to the pre-upgrade fingerprint.
+save_columns() {
+    local tbl _rest
+    while read -r tbl _rest; do
+        printf '%s %s\n' "$tbl" "$(columns_of "$tbl")"
+    done <"$work/before.txt" >"$work/columns.txt"
+}
+
+# same_on_old_columns TABLE WANT succeeds when the upgrade added columns to TABLE and its rows,
+# read on the pre-upgrade columns only, still give the pre-upgrade count and hash WANT.
+same_on_old_columns() {
+    local tbl=$1 want=$2 cols got
+    cols=$(grep "^$tbl " "$work/columns.txt") || return 1
+    cols=${cols#"$tbl "}
+    [ "$cols" != "$(columns_of "$tbl")" ] || return 1
+    got=$(psql_at "SELECT count(*) || ' ' || md5(coalesce(string_agg(t::text, '|' ORDER BY t::text), ''))
+        FROM (SELECT $cols FROM public.$tbl) t" </dev/null) || return 1
+    [ "$got" = "$want" ]
 }
 
 api_req() {
@@ -417,6 +445,9 @@ apply_upgrade_plant() {
         reset-password)
             psql_at "UPDATE users SET password_hash = 'planted'" >/dev/null
             ;;
+        touch-dlclient)
+            psql_at "UPDATE download_clients SET updated_at = updated_at + interval '1 second'" >/dev/null
+            ;;
         "") ;;
         *) fail "unknown UPGRADE_PLANT: $UPGRADE_PLANT" ;;
     esac
@@ -556,7 +587,7 @@ check_database_fingerprint() {
         if ! after_line=$(grep "^$tbl " "$work/after.txt"); then
             after_line=""
         fi
-        if [ "$tbl $count $hash" != "$after_line" ]; then
+        if [ "$tbl $count $hash" != "$after_line" ] && ! same_on_old_columns "$tbl" "$count $hash"; then
             case "$tbl" in
                 schema_migrations) ;;     # schema migration advanced to highest numbered version
                 workers) ;;               # worker heartbeats update last_contact_at
@@ -656,6 +687,7 @@ save_all_readbacks
 # 6. Stop api, worker; save fingerprint and schema migrations.
 dc stop api worker >/dev/null
 fingerprint >"$work/before.txt"
+save_columns
 old_schema_version=$(psql_at 'SELECT version FROM schema_migrations')
 old_schema_dirty=$(psql_at 'SELECT dirty FROM schema_migrations')
 [ "$old_schema_dirty" = "f" ] || fail "schema_migrations dirty before upgrade"
