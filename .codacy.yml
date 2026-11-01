@@ -1,0 +1,18 @@
+---
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+#
+# Codacy analysis scope. Generated code is fixed at its generator, never in place, so Codacy
+# skips it; tools/ci/codacy_config.py fails when a file with a generated-code header sits
+# outside these paths.
+exclude_paths:
+  - "api/internal/build/**"
+  - "api/internal/gen/**"
+  - "api/internal/store/sqlcgen/**"
+  - "web/src/lib/api/schema.d.ts"
+engines:
+  # TSQLLint checks SQL Server dialect; the migrations are PostgreSQL. SQLFluff and the other
+  # SQL tools keep reading them.
+  tsqllint:
+    exclude_paths:
+      - "api/internal/store/migrations/postgres/**"
