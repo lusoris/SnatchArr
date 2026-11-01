@@ -447,6 +447,9 @@ check_candidate_status() {
     fi
 }
 
+# check_migrations reads schema_migrations after the candidate started and fails unless the
+# version is at least the old release's, equals the highest migration file in this tree, and is
+# not dirty (rules in schema_check.sh). It prints whether the schema advanced or stayed unchanged.
 check_migrations() {
     local cand_schema_version cand_schema_dirty highest_migration
     cand_schema_version=$(psql_at 'SELECT version FROM schema_migrations')

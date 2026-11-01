@@ -8,6 +8,6 @@ package store
 // migrations (api/sqlc.yaml), so the "generated code is committed" check of make api-verify and
 // CI finds a query or migration changed without its generated code (#178). go -C runs it in the
 // tools module; the config path is relative to that directory. gennosec then puts back the
-// #nosec annotations sqlc drops; go generate reaches this package after internal/httpapi.
+// nosec annotations sqlc drops; go generate reaches this package after internal/httpapi.
 //go:generate go -C ../../../tools/go run github.com/sqlc-dev/sqlc/cmd/sqlc generate -f ../../api/sqlc.yaml
 //go:generate go run github.com/lusoris/SnatchArr/tools/gennosec apply
