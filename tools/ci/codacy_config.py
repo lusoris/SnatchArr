@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import argparse
 import re
-import subprocess
+import subprocess  # nosec B404 -- runs only git with a fixed argument list, never a shell
 import sys
 from pathlib import Path
 
@@ -90,7 +90,7 @@ def problems(config_text: str, files: dict[str, str]) -> list[str]:
 
 def tracked_files() -> dict[str, str]:
     """Read the head of every tracked text file, from the repository root whatever the caller's directory."""
-    names = subprocess.run(
+    names = subprocess.run(  # nosec B603 -- fixed git argv list, no shell, no caller input
         ["git", "ls-files", "-z"], check=True, capture_output=True, timeout=GIT_TIMEOUT_SECONDS, cwd=ROOT
     ).stdout.decode().split("\0")
     out: dict[str, str] = {}
