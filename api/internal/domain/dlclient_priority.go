@@ -208,6 +208,9 @@ func planDownloadPauseResume(items []DownloadQueueItem) DownloadClientPlan {
 			bestUnfinished = min(bestUnfinished, item.Rank)
 		case DownloadItemActive:
 			bestUnfinished = min(bestUnfinished, item.Rank)
+		case DownloadItemPaused, DownloadItemFinished:
+			// Paused and finished items hold no slot, so they neither justify a
+			// pause nor block a resume.
 		}
 	}
 	var plan DownloadClientPlan
