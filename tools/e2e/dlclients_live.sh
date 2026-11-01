@@ -27,9 +27,13 @@ sab="http://127.0.0.1:${SABNZBD_PORT:-18105}"
 nzbget="http://127.0.0.1:${NZBGET_PORT:-18106}"
 
 case "$plant" in
-'' | secret | pause) ;;
+'' | secret | pause | priority) ;;
 *) echo "dlclients-live: unknown SNATCHARR_DLCLIENTS_PLANT '$plant'" >&2; exit 1 ;;
 esac
+
+if [ "$plant" = priority ]; then
+    export SNATCHARR_DLCLIENTS_PRIORITY_FLIP="${SNATCHARR_DLCLIENTS_PRIORITY_FLIP:-qbittorrent}"
+fi
 
 # shellcheck source=tools/e2e/pull_retry.sh
 . "$root/tools/e2e/pull_retry.sh"
@@ -123,6 +127,21 @@ observe() {
     esac
 }
 
+# observe_priority: runs TestLivePriorityCapabilities; it must pass and must not skip.
+observe_priority() {
+    local out
+    if ! out=$(cd "$root" && SNATCHARR_DLCLIENTS_LIVE="$work/clients.json" \
+        go test -count=1 -run '^TestLivePriorityCapabilities$' -v ./api/internal/dlclients/ 2>&1); then
+        printf '%s\n' "$out" >&2
+        fail "priority capability discovery failed"
+    fi
+    case "$out" in
+    *"--- SKIP"*) printf '%s\n' "$out" >&2; fail "TestLivePriorityCapabilities skipped" ;;
+    *"--- PASS: TestLivePriorityCapabilities "*) echo "ok   priority capabilities observed" ;;
+    *) printf '%s\n' "$out" >&2; fail "TestLivePriorityCapabilities did not run" ;;
+    esac
+}
+
 pull_retry dc pull --quiet
 dc up -d --pull never
 for url in "$qbit" "$transmission/transmission/rpc" "$deluge/json" "$rtorrent/RPC2" "$sab/api" "$nzbget/jsonrpc"; do
@@ -134,5 +153,6 @@ deluge_connect
 
 usenet_paused false
 observe false
+observe_priority
 if [ "$plant" != pause ]; then usenet_paused true; fi
 observe true
