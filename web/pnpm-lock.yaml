@@ -179,17 +179,17 @@ importers:
         specifier: 1.61.0
         version: 1.61.0(svelte@5.57.2(@typescript-eslint/types@8.72.0))
       '@sveltesentio/api':
-        specifier: 0.6.0
-        version: 0.6.0(@sveltejs/kit@3.1.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(@typescript-eslint/types@8.72.0))(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(esm-env@1.2.2)(openapi-fetch@0.17.0)(openapi-typescript@7.13.0(typescript@6.0.3))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(uuid@14.0.2)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))(zod@4.6.7)
+        specifier: 0.6.2
+        version: 0.6.2(@sveltejs/kit@3.1.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(@typescript-eslint/types@8.72.0))(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(eslint@10.13.0(jiti@2.7.0)(supports-color@10.2.2))(esm-env@1.2.2)(openapi-fetch@0.17.0)(openapi-typescript@7.13.0(typescript@6.0.3))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(uuid@14.0.2)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))(zod@4.6.7)
       '@sveltesentio/core':
-        specifier: 0.5.0
-        version: 0.5.0(@sveltejs/kit@3.1.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(@typescript-eslint/types@8.72.0))(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(esm-env@1.2.2)(openapi-fetch@0.17.0)(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(uuid@14.0.2)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))(zod@4.6.7)
-      '@sveltesentio/query':
-        specifier: 0.5.0
-        version: 0.5.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.16.0))(@sveltejs/kit@3.1.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(@typescript-eslint/types@8.72.0))(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(@tanstack/svelte-query@6.3.5(svelte@5.57.2(@typescript-eslint/types@8.72.0)))(esm-env@1.2.2)(openapi-fetch@0.17.0)(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(uuid@14.0.2)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))(zod@4.6.7)
-      '@sveltesentio/realtime':
         specifier: 0.7.0
-        version: 0.7.0(0adc1413f767e4489913339a6de10281)
+        version: 0.7.0(@sveltejs/kit@3.1.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(@typescript-eslint/types@8.72.0))(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(eslint@10.13.0(jiti@2.7.0)(supports-color@10.2.2))(esm-env@1.2.2)(openapi-fetch@0.17.0)(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(uuid@14.0.2)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))(zod@4.6.7)
+      '@sveltesentio/query':
+        specifier: 0.6.0
+        version: 0.6.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.16.0))(@sveltejs/kit@3.1.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(@typescript-eslint/types@8.72.0))(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(@tanstack/svelte-query@6.3.5(svelte@5.57.2(@typescript-eslint/types@8.72.0)))(eslint@10.13.0(jiti@2.7.0)(supports-color@10.2.2))(esm-env@1.2.2)(openapi-fetch@0.17.0)(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(uuid@14.0.2)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))(zod@4.6.7)
+      '@sveltesentio/realtime':
+        specifier: 0.8.0
+        version: 0.8.0(662f37971da503ab665c22723224cd32)
       '@sveltesentio/ui':
         specifier: 0.9.0
         version: 0.9.0(@lucide/svelte@1.61.0(svelte@5.57.2(@typescript-eslint/types@8.72.0)))(svelte-sonner@1.2.1(svelte@5.57.2(@typescript-eslint/types@8.72.0)))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(tailwindcss@4.3.3)(typescript@6.0.3)
@@ -231,8 +231,8 @@ importers:
         specifier: ^7.1.2
         version: 7.3.1(svelte@5.57.2(@typescript-eslint/types@8.72.0))(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
       '@sveltesentio/testing':
-        specifier: 0.4.0
-        version: 0.4.0(@sveltesentio/core@0.5.0(@sveltejs/kit@3.1.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(@typescript-eslint/types@8.72.0))(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(esm-env@1.2.2)(openapi-fetch@0.17.0)(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(uuid@14.0.2)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))(zod@4.6.7))(typescript@6.0.3)(vitest@5.0.5)
+        specifier: 0.4.2
+        version: 0.4.2(@sveltesentio/core@0.7.0(@sveltejs/kit@3.1.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(@typescript-eslint/types@8.72.0))(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(eslint@10.13.0(jiti@2.7.0)(supports-color@10.2.2))(esm-env@1.2.2)(openapi-fetch@0.17.0)(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(uuid@14.0.2)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))(zod@4.6.7))(typescript@6.0.3)(vitest@5.0.5)
       '@tailwindcss/vite':
         specifier: ^4.3.0
         version: 4.3.3(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
@@ -1058,8 +1058,8 @@ packages:
       svelte: ^5.46.4
       vite: ^8.0.0-beta.7 || ^8.0.0
 
-  '@sveltesentio/api@0.6.0':
-    resolution: {integrity: sha512-4rXkdxhdFsrLK07CTb4p0BFjcLt+cErVjgpgw1aK/4b5Gy/gCe9b9X8nKAI5Qwn09tiMiOlLPvZ+VjhD8PsTdA==}
+  '@sveltesentio/api@0.6.2':
+    resolution: {integrity: sha512-YCep3swShr8aGawe4rP0RRclHLV7nkFgdqNUhPGnu8U8X8PXSZg2hN9lep/0vps5cyibaoiVpPw+yXMrv5w8ww==}
     engines: {node: '>=24'}
     peerDependencies:
       openapi-fetch: '>=0.17.0'
@@ -1069,11 +1069,12 @@ packages:
       openapi-typescript:
         optional: true
 
-  '@sveltesentio/core@0.5.0':
-    resolution: {integrity: sha512-nL3eTlqpZ7dCAGDM8125rNp0fkb5CKqkEaXohmDQc3ZfYHcdaw5k8/IDOsnm5UZQx4ES/ieBs5TcoPbLlBITPg==}
+  '@sveltesentio/core@0.7.0':
+    resolution: {integrity: sha512-XmhU+IWbBP49A4EMGaJq276Ygn2inIapgzA4j84Gy3AfsGm3+51sTFWjEXi0hbKqdy3IAZUQL7JYf+XI/4vjMQ==}
     engines: {node: '>=24'}
     peerDependencies:
-      '@sveltejs/kit': '>=2.70.2'
+      '@sveltejs/kit': ^3.0.0
+      eslint: '>=9.10.0'
       esm-env: '>=1.0.0'
       openapi-fetch: '>=0.17.0'
       svelte: '>=5.56.4'
@@ -1082,16 +1083,18 @@ packages:
       vite: '>=8.0.16'
       zod: '>=4.0.0'
     peerDependenciesMeta:
+      eslint:
+        optional: true
       openapi-fetch:
         optional: true
 
-  '@sveltesentio/query@0.5.0':
-    resolution: {integrity: sha512-MOkkjcMgJdmE0j6cg0LXXQgn4GrElLkqMJc6Lz+1Wz1ZIIo5JPpc1+nnb38StgPYrsCoO6LSTPKO5sMZ7UD5jg==}
+  '@sveltesentio/query@0.6.0':
+    resolution: {integrity: sha512-H+sEw2B38ZmieSyhZx6mmZLI5JmTukV8FCi6XuMxYU9L2iA+gBSJ6kmbYwRGp/jfFrilnmIHKiPBKa6+UVTIhQ==}
     engines: {node: '>=24'}
     peerDependencies:
       '@bufbuild/protobuf': '>=2.0.0'
       '@connectrpc/connect': '>=2.0.0'
-      '@sveltejs/kit': '>=2.70.2'
+      '@sveltejs/kit': ^3.0.0
       '@tanstack/svelte-query': '>=6.0.0'
       svelte: '>=5.56.4'
       typescript: '>=5.5 <7'
@@ -1101,15 +1104,15 @@ packages:
       '@connectrpc/connect':
         optional: true
 
-  '@sveltesentio/realtime@0.7.0':
-    resolution: {integrity: sha512-rjmh/Dw4rDJf6KfaMT6ySvtBgm/zzYHaGt7Wk5mShmnjO3rL8YLdS6RUIOskLBWb0IY4VHuso0WIFnJw5qC7iQ==}
+  '@sveltesentio/realtime@0.8.0':
+    resolution: {integrity: sha512-nc4fvJINfQYbj5/SlVvy8bdw5yHXGF8v2nXkgwDpTq1Ah73m1UD5HuB0vRAkgCvfRvR09sKYA6gTTUedVtkE+g==}
     engines: {node: '>=24'}
     peerDependencies:
       '@bufbuild/protobuf': '>=2.0.0'
       '@connectrpc/connect': '>=2.0.0'
       '@connectrpc/connect-web': '>=2.0.0'
-      '@sveltejs/kit': '>=2.70.2'
-      '@sveltesentio/core': 0.5.0
+      '@sveltejs/kit': ^3.0.0
+      '@sveltesentio/core': 0.7.0
       svelte: '>=5.56.4'
       typescript: '>=5.5 <7'
     peerDependenciesMeta:
@@ -1122,11 +1125,11 @@ packages:
       '@sveltesentio/core':
         optional: true
 
-  '@sveltesentio/testing@0.4.0':
-    resolution: {integrity: sha512-L+nHeiP0chBHLBkDDCShVRLKteDY7ZtjSayXCtMlLjTCdM3fER9SQGkuOdYQPx5e6KvVJKXupoaX/+drA7cx5g==}
+  '@sveltesentio/testing@0.4.2':
+    resolution: {integrity: sha512-4yu37sTAAa+XClC3Xu2yVDyAEcnO4eAWFsHeYhqG8CqBWkGOL+LP6Jneg5cRcCkNj3XuuhoiIhzcsHKGzM7guw==}
     engines: {node: '>=24'}
     peerDependencies:
-      '@sveltesentio/core': 0.6.0
+      '@sveltesentio/core': 0.7.0
       typescript: '>=5.5 <7'
       vitest: '>=4.0.0'
     peerDependenciesMeta:
@@ -3208,22 +3211,23 @@ snapshots:
       vite: 8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)
       vitefu: 1.1.3(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
 
-  '@sveltesentio/api@0.6.0(@sveltejs/kit@3.1.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(@typescript-eslint/types@8.72.0))(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(esm-env@1.2.2)(openapi-fetch@0.17.0)(openapi-typescript@7.13.0(typescript@6.0.3))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(uuid@14.0.2)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))(zod@4.6.7)':
+  '@sveltesentio/api@0.6.2(@sveltejs/kit@3.1.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(@typescript-eslint/types@8.72.0))(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(eslint@10.13.0(jiti@2.7.0)(supports-color@10.2.2))(esm-env@1.2.2)(openapi-fetch@0.17.0)(openapi-typescript@7.13.0(typescript@6.0.3))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(uuid@14.0.2)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))(zod@4.6.7)':
     dependencies:
-      '@sveltesentio/core': 0.5.0(@sveltejs/kit@3.1.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(@typescript-eslint/types@8.72.0))(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(esm-env@1.2.2)(openapi-fetch@0.17.0)(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(uuid@14.0.2)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))(zod@4.6.7)
+      '@sveltesentio/core': 0.7.0(@sveltejs/kit@3.1.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(@typescript-eslint/types@8.72.0))(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(eslint@10.13.0(jiti@2.7.0)(supports-color@10.2.2))(esm-env@1.2.2)(openapi-fetch@0.17.0)(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(uuid@14.0.2)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))(zod@4.6.7)
       openapi-fetch: 0.17.0
       typescript: 6.0.3
     optionalDependencies:
       openapi-typescript: 7.13.0(typescript@6.0.3)
     transitivePeerDependencies:
       - '@sveltejs/kit'
+      - eslint
       - esm-env
       - svelte
       - uuid
       - vite
       - zod
 
-  '@sveltesentio/core@0.5.0(@sveltejs/kit@3.1.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(@typescript-eslint/types@8.72.0))(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(esm-env@1.2.2)(openapi-fetch@0.17.0)(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(uuid@14.0.2)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))(zod@4.6.7)':
+  '@sveltesentio/core@0.7.0(@sveltejs/kit@3.1.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(@typescript-eslint/types@8.72.0))(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(eslint@10.13.0(jiti@2.7.0)(supports-color@10.2.2))(esm-env@1.2.2)(openapi-fetch@0.17.0)(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(uuid@14.0.2)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))(zod@4.6.7)':
     dependencies:
       '@sveltejs/kit': 3.1.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(@typescript-eslint/types@8.72.0))(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
       esm-env: 1.2.2
@@ -3233,12 +3237,13 @@ snapshots:
       vite: 8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)
       zod: 4.6.7
     optionalDependencies:
+      eslint: 10.13.0(jiti@2.7.0)(supports-color@10.2.2)
       openapi-fetch: 0.17.0
 
-  '@sveltesentio/query@0.5.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.16.0))(@sveltejs/kit@3.1.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(@typescript-eslint/types@8.72.0))(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(@tanstack/svelte-query@6.3.5(svelte@5.57.2(@typescript-eslint/types@8.72.0)))(esm-env@1.2.2)(openapi-fetch@0.17.0)(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(uuid@14.0.2)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))(zod@4.6.7)':
+  '@sveltesentio/query@0.6.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.16.0))(@sveltejs/kit@3.1.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(@typescript-eslint/types@8.72.0))(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(@tanstack/svelte-query@6.3.5(svelte@5.57.2(@typescript-eslint/types@8.72.0)))(eslint@10.13.0(jiti@2.7.0)(supports-color@10.2.2))(esm-env@1.2.2)(openapi-fetch@0.17.0)(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(uuid@14.0.2)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))(zod@4.6.7)':
     dependencies:
       '@sveltejs/kit': 3.1.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(@typescript-eslint/types@8.72.0))(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
-      '@sveltesentio/core': 0.5.0(@sveltejs/kit@3.1.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(@typescript-eslint/types@8.72.0))(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(esm-env@1.2.2)(openapi-fetch@0.17.0)(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(uuid@14.0.2)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))(zod@4.6.7)
+      '@sveltesentio/core': 0.7.0(@sveltejs/kit@3.1.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(@typescript-eslint/types@8.72.0))(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(eslint@10.13.0(jiti@2.7.0)(supports-color@10.2.2))(esm-env@1.2.2)(openapi-fetch@0.17.0)(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(uuid@14.0.2)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))(zod@4.6.7)
       '@tanstack/svelte-query': 6.3.5(svelte@5.57.2(@typescript-eslint/types@8.72.0))
       svelte: 5.57.2(@typescript-eslint/types@8.72.0)
       typescript: 6.0.3
@@ -3246,13 +3251,14 @@ snapshots:
       '@bufbuild/protobuf': 2.16.0
       '@connectrpc/connect': 2.2.0(@bufbuild/protobuf@2.16.0)
     transitivePeerDependencies:
+      - eslint
       - esm-env
       - openapi-fetch
       - uuid
       - vite
       - zod
 
-  '@sveltesentio/realtime@0.7.0(0adc1413f767e4489913339a6de10281)':
+  '@sveltesentio/realtime@0.8.0(662f37971da503ab665c22723224cd32)':
     dependencies:
       '@sveltejs/kit': 3.1.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(@typescript-eslint/types@8.72.0))(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
       svelte: 5.57.2(@typescript-eslint/types@8.72.0)
@@ -3260,11 +3266,11 @@ snapshots:
     optionalDependencies:
       '@bufbuild/protobuf': 2.16.0
       '@connectrpc/connect': 2.2.0(@bufbuild/protobuf@2.16.0)
-      '@sveltesentio/core': 0.5.0(@sveltejs/kit@3.1.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(@typescript-eslint/types@8.72.0))(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(esm-env@1.2.2)(openapi-fetch@0.17.0)(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(uuid@14.0.2)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))(zod@4.6.7)
+      '@sveltesentio/core': 0.7.0(@sveltejs/kit@3.1.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(@typescript-eslint/types@8.72.0))(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(eslint@10.13.0(jiti@2.7.0)(supports-color@10.2.2))(esm-env@1.2.2)(openapi-fetch@0.17.0)(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(uuid@14.0.2)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))(zod@4.6.7)
 
-  '@sveltesentio/testing@0.4.0(@sveltesentio/core@0.5.0(@sveltejs/kit@3.1.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(@typescript-eslint/types@8.72.0))(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(esm-env@1.2.2)(openapi-fetch@0.17.0)(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(uuid@14.0.2)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))(zod@4.6.7))(typescript@6.0.3)(vitest@5.0.5)':
+  '@sveltesentio/testing@0.4.2(@sveltesentio/core@0.7.0(@sveltejs/kit@3.1.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(@typescript-eslint/types@8.72.0))(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(eslint@10.13.0(jiti@2.7.0)(supports-color@10.2.2))(esm-env@1.2.2)(openapi-fetch@0.17.0)(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(uuid@14.0.2)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))(zod@4.6.7))(typescript@6.0.3)(vitest@5.0.5)':
     dependencies:
-      '@sveltesentio/core': 0.5.0(@sveltejs/kit@3.1.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(@typescript-eslint/types@8.72.0))(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(esm-env@1.2.2)(openapi-fetch@0.17.0)(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(uuid@14.0.2)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))(zod@4.6.7)
+      '@sveltesentio/core': 0.7.0(@sveltejs/kit@3.1.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(@typescript-eslint/types@8.72.0))(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))(eslint@10.13.0(jiti@2.7.0)(supports-color@10.2.2))(esm-env@1.2.2)(openapi-fetch@0.17.0)(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(uuid@14.0.2)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))(zod@4.6.7)
       typescript: 6.0.3
     optionalDependencies:
       vitest: 5.0.5(@types/node@24.19.2)(@vitest/coverage-v8@5.0.5)(jsdom@30.1.3)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
