@@ -159,7 +159,7 @@ def render_table(milestones: list[dict]) -> str:
         "| :--- | :--- | ---: |",
     ]
     for item in sorted_ms:
-        title = str(item["title"]).strip()
+        title = str(item["title"]).strip().replace("|", r"\|")
         html_url = str(item["html_url"]).strip()
         desc = format_description(item.get("description"))
         open_issues = item["open_issues"]
@@ -290,6 +290,8 @@ def validate_row_content(
     if not match:
         return (line_num, "invalid data row format"), None
     title, url, scope, _ = match.groups()
+    if has_unescaped_pipe(title):
+        return (line_num, "milestone title contains unescaped pipe"), None
     if not scope.strip():
         return (line_num, "scope cell must not be empty"), None
     if has_unescaped_pipe(scope):
@@ -553,6 +555,43 @@ def test_case_shape(tmp_path: Path) -> list[tuple[str, bool]]:
     ]
 
 
+def test_case_title_pipe(tmp_path: Path) -> list[tuple[str, bool]]:
+    """Test milestone title pipe escaping in render_table and check_shape."""
+    data = [
+        {
+            "title": "Phase 1 | Phase 2",
+            "html_url": "https://github.com/o/r/milestone/1",
+            "open_issues": 0,
+        }
+    ]
+    table = render_table(data)
+    doc = tmp_path / "title_pipe.md"
+    doc.write_text(f"{BEGIN_MARKER}\n{table}\n{END_MARKER}\n", encoding="utf-8")
+    raw_row = (
+        "| [Phase 1 | Phase 2](https://github.com/o/r/milestone/1) "
+        "| No description. | 0 |"
+    )
+    raw_doc = (
+        f"{BEGIN_MARKER}\n{HEADER_LINE}\n{SEPARATOR_LINE}\n{raw_row}\n"
+        f"{END_MARKER}\n"
+    )
+
+    return [
+        (
+            'render_table with title "Phase 1 | Phase 2" contains "Phase 1 \\| Phase 2"',
+            r"Phase 1 \| Phase 2" in table,
+        ),
+        (
+            "rendered table with that title passes check_shape -> 0",
+            check_shape(doc) == 0,
+        ),
+        (
+            'planted row with raw "Phase 1 | Phase 2" title -> check_shape 1',
+            check_planted_shape(tmp_path, "raw_title.md", raw_doc),
+        ),
+    ]
+
+
 def self_test() -> int:
     """Run internal test suite with planted cases; exit 1 on any failure."""
     with tempfile.TemporaryDirectory() as tmp_str:
@@ -562,6 +601,7 @@ def self_test() -> int:
         cases.extend(test_case_errors_and_formatting(tmp_path))
         cases.extend(test_case_order_and_outside(tmp_path))
         cases.extend(test_case_shape(tmp_path))
+        cases.extend(test_case_title_pipe(tmp_path))
 
     failed = False
     for name, ok in cases:

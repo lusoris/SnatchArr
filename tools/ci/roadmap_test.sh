@@ -5,10 +5,12 @@
 # Planted cases for the roadmap table, against a stub gh that records its calls:
 #   1. `roadmap_render.py --check-shape` passes on the committed doc with the forge unreachable
 #      (the stub gh fails every call) and calls neither gh nor git.
-#   2. roadmap_refresh_pr.sh: an unchanged doc proposes nothing; a planted stale count creates
-#      the branch, writes the file and opens the pull request; with the branch and a pull request
-#      already there it resets the branch and opens none; a dry run sends no write; a failed write
-#      fails the run.
+#   2. roadmap_refresh_pr.sh: an unchanged doc proposes nothing and closes the bot's stale pull
+#      request; a planted stale count writes the file on a temporary branch, points the bot branch
+#      at the new commit (never at the base commit) and opens the pull request against the base
+#      branch; with the bot's pull request open it opens none; the open lookup matches only the
+#      bot's own head repository and base; a dry run sends no write; a failed write fails the run
+#      and drops the temporary branch.
 #
 #   tools/ci/roadmap_test.sh
 #
@@ -27,9 +29,9 @@ cat >"$WORK/bin/gh" <<'EOF'
 echo "$*" >>"$STUB_LOG"
 [ -z "${STUB_DOWN:-}" ] || exit 1
 case "$*" in
+  "api repos/o/r/pulls?"*) printf '%s\n' "${STUB_OPEN:-}" ;;
   "api repos/o/r/git/ref/heads/"*) [ -n "${STUB_BRANCH:-}" ] || exit 1; echo abc ;;
-  "pr list"*) printf '%s\n' "${STUB_OPEN:-}" ;;
-  "api -X PUT"*) [ -z "${STUB_FAIL_PUT:-}" ] || exit 1 ;;
+  "api -X PUT"*) [ -z "${STUB_FAIL_PUT:-}" ] || exit 1; echo newsha ;;
 esac
 exit 0
 EOF
@@ -66,51 +68,70 @@ refresh() {
   : >"$WORK/$name.log"
   rc=0
   (cd "$repo" && env STUB_LOG="$WORK/$name.log" PATH="$WORK/bin:$PATH" REPO=o/r \
-    BASE_SHA="$base" "$@" sh "$HERE/roadmap_refresh_pr.sh" >"$WORK/$name.out" 2>&1) || rc=$?
+    BASE_SHA="$base" BASE_BRANCH=trunk RUN_ID=7 "$@" sh "$HERE/roadmap_refresh_pr.sh" \
+    >"$WORK/$name.out" 2>&1) || rc=$?
   [ "$rc" -eq "$want" ]
 }
 called() { grep -q -- "$2" "$WORK/$1.log"; }
+writes() { awk '/-X |^pr c/ { n++ } END { print n + 0 }' "$WORK/$1.log"; }
+tmp_ref="repos/o/r/git/refs/heads/bot/roadmap-refresh-tmp-7"
+bot_ref="repos/o/r/git/refs/heads/bot/roadmap-refresh "
 
-if refresh unchanged 0 && [ ! -s "$WORK/unchanged.log" ]; then
-  pass "unchanged doc: no gh call"
+if refresh unchanged 0 && [ "$(writes unchanged)" -eq 0 ] \
+  && called unchanged "pulls?head=o:bot/roadmap-refresh&base=trunk&state=open"; then
+  pass "unchanged doc, no pull request: no write; lookup limited to own head and base"
 else
-  fail "unchanged doc"
+  fail "unchanged doc"; cat "$WORK/unchanged.out"
+fi
+
+if refresh unchanged_open 0 STUB_OPEN=42 && called unchanged_open "^pr close 42" \
+  && [ "$(writes unchanged_open)" -eq 1 ]; then
+  pass "unchanged doc, bot pull request open: stale pull request closed"
+else
+  fail "unchanged doc with an open pull request"; cat "$WORK/unchanged_open.out"
 fi
 
 # Planted stale count: the render moved 87 to 88.
-sed 's/| 87 |/| 88 |/' "$repo/docs/roadmap.md" >"$WORK/stale" && cp "$WORK/stale" "$repo/docs/roadmap.md"
+sed 's/| 87 |/| 88 |/' "$repo/docs/roadmap.md" >"$WORK/stale"
+cp "$WORK/stale" "$repo/docs/roadmap.md"
 
-if refresh fresh 0 && called fresh "api -X POST repos/o/r/git/refs" \
-  && called fresh "api -X PUT repos/o/r/contents/docs/roadmap.md" && called fresh "pr create"; then
-  pass "planted stale count: branch created, file written, pull request opened"
+if refresh fresh 0 \
+  && called fresh "-X POST repos/o/r/git/refs -f ref=refs/heads/bot/roadmap-refresh-tmp-7 -f sha=$base" \
+  && called fresh "-X PUT repos/o/r/contents/docs/roadmap.md .* -f branch=bot/roadmap-refresh-tmp-7" \
+  && called fresh "-X POST repos/o/r/git/refs -f ref=refs/heads/bot/roadmap-refresh -f sha=newsha" \
+  && called fresh "-X DELETE $tmp_ref" \
+  && called fresh "^pr create --repo o/r --base trunk"; then
+  pass "planted stale count: commit on a temporary branch, bot branch created at it, pull request opened"
 else
-  fail "planted stale count, no branch"; cat "$WORK/fresh.out"
+  fail "planted stale count, no bot branch"; cat "$WORK/fresh.out"
 fi
 
-if refresh update 0 STUB_BRANCH=1 STUB_OPEN=42 && called update "api -X PATCH repos/o/r/git/refs/heads/bot/roadmap-refresh" \
-  && called update "api -X PUT" && ! called update "pr create"; then
-  pass "planted stale count, branch and pull request open: branch reset, no second pull request"
+if refresh update 0 STUB_BRANCH=1 STUB_OPEN=42 \
+  && called update "-X PATCH ${bot_ref}-f sha=newsha" \
+  && ! called update "${bot_ref}-f sha=$base" && ! called update "^pr create"; then
+  pass "planted stale count, bot pull request open: bot branch moved to the new commit only, no second pull request"
 else
   fail "planted stale count, pull request open"; cat "$WORK/update.out"
 fi
 
-if refresh dry 0 DRY_RUN=1 && ! called dry "-X P" && ! called dry "pr create" \
+if refresh dry 0 DRY_RUN=1 && [ "$(writes dry)" -eq 0 ] \
   && grep -q "dry-run: gh pr create" "$WORK/dry.out"; then
   pass "dry run: writes printed, none sent"
 else
   fail "dry run"; cat "$WORK/dry.out"
 fi
 
-if refresh putfail 1 STUB_FAIL_PUT=1 && ! called putfail "pr create"; then
-  pass "failed file write fails the run, no pull request"
+if refresh putfail 1 STUB_FAIL_PUT=1 && ! called putfail "^pr create" \
+  && called putfail "-X DELETE $tmp_ref" && ! called putfail "$bot_ref"; then
+  pass "failed file write fails the run, drops the temporary branch, leaves the bot branch"
 else
-  fail "failed file write"
+  fail "failed file write"; cat "$WORK/putfail.out"
 fi
 
-if refresh badrepo 2 REPO=bad; then
-  pass "bad REPO refused"
+if refresh badrepo 2 REPO=bad && refresh nobase 2 BASE_BRANCH=; then
+  pass "bad REPO and empty BASE_BRANCH refused"
 else
-  fail "bad REPO"
+  fail "bad input"
 fi
 
 exit "$failed"
