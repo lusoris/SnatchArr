@@ -25,7 +25,7 @@
 #   no-worker         start the candidate without its worker ("worker did not register")
 #   drop-key          delete the seeded API key ("old API key")
 #   reset-password    replace the admin password hash ("login with password")
-#   touch-dlclient    change a download client row on its pre-upgrade columns ("data read-back differs")
+#   touch-dlclient    change a download client column the API omits ("data read-back differs")
 # Needs docker compose, curl, jq and openssl.
 set -euo pipefail
 
@@ -447,7 +447,9 @@ apply_upgrade_plant() {
             psql_at "UPDATE users SET password_hash = 'planted'" >/dev/null
             ;;
         touch-dlclient)
-            psql_at "UPDATE download_clients SET updated_at = updated_at + interval '1 second'" >/dev/null
+            # remote_id is a pre-upgrade column the API never returns, so only the
+            # database fingerprint can see it; -1 is no id an *arr instance hands out.
+            psql_at "UPDATE download_clients SET remote_id = -1" >/dev/null
             ;;
         "") ;;
         *) fail "unknown UPGRADE_PLANT: $UPGRADE_PLANT" ;;
