@@ -22,6 +22,13 @@ DEFAULT_DOC = Path("docs/roadmap.md")
 GH_TIMEOUT_SECONDS = 60
 
 
+HEADER_LINE = "| Milestone | Scope | Open issues |"
+SEPARATOR_LINE = "| :--- | :--- | ---: |"
+ROW_PATTERN = re.compile(
+    r"^\| \[([^\]]+)\]\((https://github\.com/[^/\s]+/[^/\s]+/milestone/\d+)\) \| (.+) \| (\d+) \|$"
+)
+
+
 class RenderError(Exception):
     """Execution error in roadmap renderer."""
 
@@ -233,6 +240,127 @@ def check_roadmap(doc_path: Path, table_text: str) -> int:
     return 0
 
 
+def has_unescaped_pipe(text: str) -> bool:
+    """Return True if text contains a pipe character not escaped with backslash."""
+    idx = 0
+    while idx < len(text):
+        if text[idx] == "|":
+            bs_count = 0
+            back_idx = idx - 1
+            while back_idx >= 0 and text[back_idx] == "\\":
+                bs_count += 1
+                back_idx -= 1
+            if bs_count % 2 == 0:
+                return True
+        idx += 1
+    return False
+
+
+def check_block_ending(block: str, line_count: int) -> tuple[int, str] | None:
+    """Verify block ends with exactly one newline before END_MARKER."""
+    if not block.endswith(("\n", "\r\n")):
+        return (
+            max(1, line_count),
+            "block does not end with a newline before END_MARKER",
+        )
+    trimmed = block[:-2] if block.endswith("\r\n") else block[:-1]
+    if trimmed.endswith(("\n", "\r")):
+        return (
+            max(1, line_count),
+            "block ends with multiple newlines before END_MARKER",
+        )
+    return None
+
+
+def validate_headers(lines: list[str]) -> list[tuple[int, str]]:
+    """Validate table header and separator lines."""
+    findings: list[tuple[int, str]] = []
+    if not lines or lines[0] != HEADER_LINE:
+        findings.append((1, f"unexpected header, expected '{HEADER_LINE}'"))
+    if len(lines) < 2 or lines[1] != SEPARATOR_LINE:
+        findings.append((2, f"unexpected separator, expected '{SEPARATOR_LINE}'"))
+    return findings
+
+
+def validate_row_content(
+    line: str, line_num: int, seen_titles: set[str], seen_urls: set[str]
+) -> tuple[tuple[int, str] | None, dict | None]:
+    """Validate data row format, scope cell, duplicates, and return milestone dict."""
+    match = ROW_PATTERN.match(line)
+    if not match:
+        return (line_num, "invalid data row format"), None
+    title, url, scope, _ = match.groups()
+    if not scope.strip():
+        return (line_num, "scope cell must not be empty"), None
+    if has_unescaped_pipe(scope):
+        return (line_num, "scope cell contains unescaped pipe"), None
+    if title in seen_titles:
+        return (line_num, f"duplicate milestone title: {title!r}"), None
+    if url in seen_urls:
+        return (line_num, f"duplicate milestone URL: {url!r}"), None
+    seen_titles.add(title)
+    seen_urls.add(url)
+    number = int(url.rsplit("/", 1)[-1])
+    return None, {"title": title, "number": number}
+
+
+def validate_data_rows(lines: list[str]) -> list[tuple[int, str]]:
+    """Validate data rows format, uniqueness, and ordering."""
+    if len(lines) < 3:
+        return [(max(1, len(lines) + 1), "expected at least one milestone data row")]
+
+    findings: list[tuple[int, str]] = []
+    seen_titles: set[str] = set()
+    seen_urls: set[str] = set()
+    max_key: tuple[int, tuple[int, ...], int, str] | None = None
+
+    for idx, line in enumerate(lines[2:], start=3):
+        err, item = validate_row_content(line, idx, seen_titles, seen_urls)
+        if err is not None:
+            findings.append(err)
+            continue
+        key = parse_sort_key(item)
+        if max_key is not None and key < max_key:
+            findings.append((idx, f"row out of order: {item['title']!r}"))
+            continue
+        max_key = key
+    return findings
+
+
+def check_shape(doc_path: Path) -> int:
+    """Verify roadmap block conforms to shape rules without network access."""
+    doc = Path(doc_path)
+    try:
+        content = doc.read_text(encoding="utf-8")
+    except OSError as error:
+        raise RenderError(f"cannot read {doc}: {error}") from error
+
+    start, end = locate_block(content)
+    block = content[start:end]
+    lines = block.splitlines()
+
+    findings: list[tuple[int, str]] = []
+    ending_err = check_block_ending(block, len(lines))
+    if ending_err is not None:
+        findings.append(ending_err)
+
+    data_lines = lines
+    while data_lines and data_lines[-1] == "":
+        data_lines = data_lines[:-1]
+
+    findings.extend(validate_headers(data_lines))
+    findings.extend(validate_data_rows(data_lines))
+
+    if not findings:
+        return 0
+
+    doc_str = str(doc)
+    findings.sort(key=lambda item: item[0])
+    for line_num, reason in findings:
+        print(f"roadmap_render: {doc_str}: {reason} (line {line_num} of block)")
+    return 1
+
+
 def test_case_render_and_stale(tmp_path: Path) -> list[tuple[str, bool]]:
     """Test render then check green, planted stale count, and planted extra row."""
     doc = tmp_path / "roadmap.md"
@@ -378,6 +506,53 @@ def test_case_order_and_outside(tmp_path: Path) -> list[tuple[str, bool]]:
     ]
 
 
+def check_planted_shape(tmp_path: Path, filename: str, content: str) -> bool:
+    """Write content to doc in tmp_path and check that check_shape fails with 1."""
+    doc = tmp_path / filename
+    doc.write_text(content, encoding="utf-8")
+    with contextlib.redirect_stdout(io.StringIO()):
+        return check_shape(doc) == 1
+
+
+def test_case_shape(tmp_path: Path) -> list[tuple[str, bool]]:
+    """Test check_shape with valid rendered table and planted invalid cases."""
+    data = [
+        {"title": "0.9", "html_url": "https://github.com/o/r/milestone/14", "open_issues": 1},
+        {"title": "0.10", "html_url": "https://github.com/o/r/milestone/15", "open_issues": 2},
+    ]
+    doc = tmp_path / "shape.md"
+    doc.write_text(f"{BEGIN_MARKER}\n{END_MARKER}\n", encoding="utf-8")
+    table = render_table(data)
+    write_roadmap(doc, table)
+    valid_text = doc.read_text(encoding="utf-8")
+    lines = table.splitlines()
+
+    order_table = "\n".join([lines[0], lines[1], lines[3], lines[2]])
+    dup_table = "\n".join([lines[0], lines[1], lines[2], lines[2]])
+    order_doc = f"{BEGIN_MARKER}\n{order_table}\n{END_MARKER}\n"
+    dup_doc = f"{BEGIN_MARKER}\n{dup_table}\n{END_MARKER}\n"
+    hdr_text = valid_text.replace(HEADER_LINE, "| Milestone | Scope | Issues |")
+
+    return [
+        ("rendered table (from render_table) passes check_shape -> 0", check_shape(doc) == 0),
+        ('planted non-numeric count ("| 8x |") -> 1', check_planted_shape(
+            tmp_path, "nonnum.md", valid_text.replace("| 1 |", "| 8x |")
+        )),
+        ("planted out-of-order rows (0.10 before 0.9) -> 1", check_planted_shape(
+            tmp_path, "order.md", order_doc
+        )),
+        ("planted unescaped pipe in scope -> 1", check_planted_shape(
+            tmp_path, "pipe.md", valid_text.replace("No description.", "A | B")
+        )),
+        ("planted duplicate row -> 1", check_planted_shape(
+            tmp_path, "dup.md", dup_doc
+        )),
+        ("planted wrong header -> 1", check_planted_shape(
+            tmp_path, "hdr.md", hdr_text
+        )),
+    ]
+
+
 def self_test() -> int:
     """Run internal test suite with planted cases; exit 1 on any failure."""
     with tempfile.TemporaryDirectory() as tmp_str:
@@ -386,6 +561,7 @@ def self_test() -> int:
         cases.extend(test_case_render_and_stale(tmp_path))
         cases.extend(test_case_errors_and_formatting(tmp_path))
         cases.extend(test_case_order_and_outside(tmp_path))
+        cases.extend(test_case_shape(tmp_path))
 
     failed = False
     for name, ok in cases:
@@ -408,6 +584,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     group.add_argument(
         "--check", action="store_true", help="check roadmap block"
+    )
+    group.add_argument(
+        "--check-shape",
+        action="store_true",
+        help="verify roadmap block conforms to shape rules without network",
     )
     group.add_argument(
         "--self-test", action="store_true", help="run self-test suite"
@@ -434,6 +615,8 @@ def main(argv: list[str] | None = None) -> int:
         return self_test()
 
     try:
+        if args.check_shape:
+            return check_shape(args.doc)
         repo = get_repo(args.repo)
         milestones = load_milestones(repo, args.milestones_json)
         table = render_table(milestones)
