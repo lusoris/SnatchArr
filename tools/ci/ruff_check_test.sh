@@ -117,12 +117,12 @@ test_version_mismatch() {
     fi
 }
 
-# exception_repo DIR HEADER RULES: throwaway repo whose ruff.toml excepts RULES
+# exception_repo DIR HEADER RULES [KEY]: throwaway repo whose ruff.toml excepts RULES
 # for main.py (which fires F401) under the comment line HEADER.
 exception_repo() {
-    local dir=$1 header=$2 rules=$3
+    local dir=$1 header=$2 rules=$3 key=${4:-'"main.py"'}
     new_repo "$dir"
-    printf '%s\n' 'target-version = "py314"' '' '[lint.per-file-ignores]' "$header" "\"main.py\" = [$rules]" > "$dir/ruff.toml"
+    printf '%s\n' 'target-version = "py314"' '' '[lint.per-file-ignores]' "$header" "$key = [$rules]" > "$dir/ruff.toml"
     printf '%s\n' 'import os' > "$dir/main.py"
     git -C "$dir" add ruff.toml main.py
     git -C "$dir" commit -q -m "initial"
@@ -148,7 +148,8 @@ expect_exception_case() {
 }
 
 # test_exceptions: a valid exception passes; a missing comment, an expired
-# entry and a rule that no longer fires are each refused.
+# entry, a rule that no longer fires, an indented key without its comment and a
+# key the check cannot read are each refused.
 test_exceptions() {
     local good='# category A, entered 2026-11-01, expires 2026-12-31: planted'
     exception_repo "$work/exc-valid" "$good" '"F401"'
@@ -159,6 +160,10 @@ test_exceptions() {
     expect_exception_case "expired exception refused" 1 "expired on 2026-10-31" "$work/exc-expired"
     exception_repo "$work/exc-stale" "$good" '"F401", "E501"'
     expect_exception_case "stale exception refused" 1 "E501 for main.py is stale" "$work/exc-stale"
+    exception_repo "$work/exc-indent" '# planted without category' '"F401"' '  "main.py"'
+    expect_exception_case "indented key without category line refused" 1 "lacks its" "$work/exc-indent"
+    exception_repo "$work/exc-squote" "$good" '"F401"' "'main.py'"
+    expect_exception_case "key the check cannot read refused" 1 "the exception check read 0" "$work/exc-squote"
 }
 
 test_planted_isc004

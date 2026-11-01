@@ -55,6 +55,7 @@ fi
 check_exceptions() {
   [ -f ruff.toml ] || return 0
   entries="$(awk '
+    { sub(/^[ \t]+/, ""); sub(/[ \t]+$/, "") }
     /^\[/ { in_pfi = ($0 == "[lint.per-file-ignores]"); prev = ""; next }
     in_pfi && /^"/ {
       split($0, kv, "\"")
@@ -67,6 +68,17 @@ check_exceptions() {
     }
     { prev = $0 }
   ' ruff.toml)" || { echo "error: ruff.toml: reading [lint.per-file-ignores] failed" >&2; exit 1; }
+  # Cross-check against a real TOML parser: an entry the parse above missed
+  # (single-quoted or bare key, multi-line array) fails instead of escaping the check.
+  parsed="$(printf '%s\n' "$entries" | awk 'NF { n++ } END { print n + 0 }')"
+  want="$(python3 -I -c 'import sys, tomllib; print(len(tomllib.load(open(sys.argv[1], "rb")).get("lint", {}).get("per-file-ignores", {})))' ruff.toml)" || {
+    echo "error: ruff.toml: TOML parse failed" >&2
+    exit 1
+  }
+  if [ "$parsed" != "$want" ]; then
+    echo "error: ruff.toml: [lint.per-file-ignores] holds $want entries, the exception check read $parsed; write each as \"path\" = [\"RULE\", ...] on one line" >&2
+    exit 1
+  fi
   [ -n "$entries" ] || return 0
   printf '%s\n' "$entries" | while IFS='|' read -r file expires rules; do
     if [ "$expires" = none ]; then
