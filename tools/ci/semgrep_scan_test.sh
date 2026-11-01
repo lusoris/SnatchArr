@@ -13,6 +13,8 @@
 set -eu
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=tools/ci/test_lib.sh
+. "$HERE/test_lib.sh"
 SCAN="$HERE/semgrep_scan.py"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -89,17 +91,7 @@ expect() {
   got=0
   out="$(STUB_MODE="$mode" STUB_LOG="$WORK/calls" python3 -I "$SCAN" --root "$root" --docker "$STUB" \
     --image "$image" 2>&1)" || got=$?
-  if [ "$got" -ne "$want" ]; then
-    printf 'FAIL %s: exit %s, want %s\n%s\n' "$name" "$got" "$want" "$out" >&2
-    exit 1
-  fi
-  case "$out" in
-    *"$needle"*) ;;
-    *)
-      printf 'FAIL %s: output lacks "%s"\n%s\n' "$name" "$needle" "$out" >&2
-      exit 1
-      ;;
-  esac
+  check_case "$name" "$want" "$got" "$needle" "$out" "output lacks"
   if [ "$called" = no ] && [ -s "$WORK/calls" ]; then
     printf 'FAIL %s: refused only after running docker\n' "$name" >&2
     exit 1

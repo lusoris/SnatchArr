@@ -5,20 +5,14 @@
 # Unit tests for nosec_check.py verifying inline security suppression validation.
 set -euo pipefail
 
-check=$(cd "$(dirname "$0")" && pwd)/nosec_check.py
+HERE=$(cd "$(dirname "$0")" && pwd)
+check=$HERE/nosec_check.py
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 failed=0
 
-# new_repo DIR: initialize a throwaway git repository at DIR.
-new_repo() {
-    local dir=$1
-    mkdir -p "$dir"
-    git -C "$dir" init -q -b main
-    git -C "$dir" config user.email t@example.invalid
-    git -C "$dir" config user.name t
-    git -C "$dir" config commit.gpgsign false
-}
+# shellcheck source=tools/ci/test_lib.sh
+. "$HERE/test_lib.sh"
 
 # expect NAME WANT_STATUS SETUP: run SETUP inside a new repository, then run nosec_check.py with cwd there.
 expect() {
