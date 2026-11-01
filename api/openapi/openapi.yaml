@@ -1517,6 +1517,24 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
 
+  /download-clients/{clientId}/priority-plan:
+    parameters:
+      - $ref: "#/components/parameters/ClientId"
+    get:
+      tags: [download-clients]
+      operationId: getDownloadClientPriorityPlan
+      summary: Latest read-only priority plan for this physical client
+      description: No client writes occur, including when mode is act. Returns 404 when no observation exists. Shared-client categories participate in one plan. A failed read retains the last successful observation; observedAt identifies its age.
+      responses:
+        "200":
+          description: Latest observed plan, with item identifiers only
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DownloadClientPriorityPlan"
+        default:
+          $ref: "#/components/responses/Problem"
+
   /download-clients/{clientId}/test:
     parameters:
       - $ref: "#/components/parameters/ClientId"
@@ -3994,6 +4012,57 @@ components:
             active:
               type: boolean
               description: Whether this schedule window matches the current evaluation time.
+
+    DownloadClientPriorityMode:
+      type: string
+      enum: [observe, act]
+      description: Configured intent only; act remains read-only until execution is implemented.
+
+    DownloadClientPriorityMove:
+      type: object
+      required: [id, from, to]
+      properties:
+        id:
+          type: string
+        from:
+          type: integer
+        to:
+          type: integer
+
+    DownloadClientPriorityPlan:
+      type: object
+      required: [clientId, mode, observedAt, queueingDisabled, unattributed, priority, order, pause, resume]
+      properties:
+        clientId:
+          type: string
+          format: uuid
+        mode:
+          $ref: "#/components/schemas/DownloadClientPriorityMode"
+        observedAt:
+          type: string
+          format: date-time
+        queueingDisabled:
+          type: boolean
+          description: qBittorrent queueing disabled; order is empty. Preferences are never changed.
+        unattributed:
+          type: integer
+          minimum: 0
+        priority:
+          type: array
+          items:
+            $ref: "#/components/schemas/DownloadClientPriorityMove"
+        order:
+          type: array
+          items:
+            type: string
+        pause:
+          type: array
+          items:
+            type: string
+        resume:
+          type: array
+          items:
+            type: string
 
     DownloadClientKind:
       type: string

@@ -1317,6 +1317,71 @@ func decodeGetDownloadClientParams(args [1]string, argsEscaped bool, r *http.Req
 	return params, nil
 }
 
+// GetDownloadClientPriorityPlanParams is parameters of getDownloadClientPriorityPlan operation.
+type GetDownloadClientPriorityPlanParams struct {
+	ClientId uuid.UUID
+}
+
+func unpackGetDownloadClientPriorityPlanParams(packed middleware.Parameters) (params GetDownloadClientPriorityPlanParams) {
+	{
+		key := middleware.ParameterKey{
+			Name: "clientId",
+			In:   "path",
+		}
+		params.ClientId = packed[key].(uuid.UUID)
+	}
+	return params
+}
+
+func decodeGetDownloadClientPriorityPlanParams(args [1]string, argsEscaped bool, r *http.Request) (params GetDownloadClientPriorityPlanParams, _ error) {
+	// Decode path: clientId.
+	if err := func() error {
+		param := args[0]
+		if argsEscaped {
+			unescaped, err := url.PathUnescape(args[0])
+			if err != nil {
+				return errors.Wrap(err, "unescape path")
+			}
+			param = unescaped
+		}
+		if len(param) > 0 {
+			d := uri.NewPathDecoder(uri.PathDecoderConfig{
+				Param:   "clientId",
+				Value:   param,
+				Style:   uri.PathStyleSimple,
+				Explode: false,
+			})
+
+			if err := func() error {
+				val, err := d.DecodeValue()
+				if err != nil {
+					return err
+				}
+
+				c, err := conv.ToUUID(val)
+				if err != nil {
+					return err
+				}
+
+				params.ClientId = c
+				return nil
+			}(); err != nil {
+				return err
+			}
+		} else {
+			return validate.ErrFieldRequired
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "clientId",
+			In:   "path",
+			Err:  err,
+		}
+	}
+	return params, nil
+}
+
 // GetInstanceParams is parameters of getInstance operation.
 type GetInstanceParams struct {
 	InstanceId uuid.UUID

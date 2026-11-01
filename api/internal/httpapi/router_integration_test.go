@@ -1204,6 +1204,19 @@ func stepsDownloadClients() []routerStep {
 				}
 			},
 		},
+		{
+			// No reconciler tick has run in the fixture, so no plan exists yet.
+			op:     "getDownloadClientPriorityPlan",
+			method: http.MethodGet,
+			path:   func(ids *idsState) string { return "/download-clients/" + ids.clientID + "/priority-plan" },
+			want:   http.StatusNotFound,
+			capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
+				t.Helper()
+				if decoded["status"] != float64(http.StatusNotFound) {
+					t.Fatalf("getDownloadClientPriorityPlan problem status = %v, want 404", decoded["status"])
+				}
+			},
+		},
 	}
 }
 
