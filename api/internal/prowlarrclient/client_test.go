@@ -7,12 +7,14 @@ package prowlarrclient_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/prowlarrclient"
 )
 
@@ -205,6 +207,76 @@ func TestHTTPClient_Statuses(t *testing.T) {
 	expected := time.Date(2026, 10, 16, 22, 0, 0, 0, time.UTC)
 	if !dt2.Equal(expected) {
 		t.Errorf("disabledTill = %v, want %v", dt2, expected)
+	}
+}
+
+func TestHTTPClient_Statuses_Table(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	tests := []struct {
+		name      string
+		payload   any
+		wantErr   bool
+		wantCount int
+		wantTimes map[int]time.Time
+	}{
+		{
+			name: "negative bad disabledTill string returns error",
+			payload: []map[string]any{
+				{"id": 1, "indexerId": 10, "disabledTill": "invalid-timestamp"},
+			},
+			wantErr: true,
+		},
+		{
+			name: "boundary empty disabledTill produces no entry",
+			payload: []map[string]any{
+				{"id": 1, "indexerId": 11, "disabledTill": ""},
+				{"id": 2, "indexerId": 0, "disabledTill": "2026-10-16T22:00:00Z"},
+			},
+			wantCount: 0,
+		},
+		{
+			name: "positive RFC3339 with fraction parses",
+			payload: []map[string]any{
+				{"id": 1, "indexerId": 12, "disabledTill": "2026-10-16T22:00:00.123456Z"},
+			},
+			wantCount: 1,
+			wantTimes: map[int]time.Time{
+				12: time.Date(2026, 10, 16, 22, 0, 0, 123456000, time.UTC),
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(tc.payload)
+			}))
+			t.Cleanup(srv.Close)
+
+			c := prowlarrclient.New(5*time.Second, "SnatchArr-test")
+			got, err := c.Statuses(ctx, srv.URL, "any")
+			if tc.wantErr {
+				if err == nil || !errors.Is(err, domain.ErrInvalid) {
+					t.Fatalf("Statuses() err = %v, want wrapping domain.ErrInvalid", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Statuses() unexpected error: %v", err)
+			}
+			if len(got) != tc.wantCount {
+				t.Errorf("Statuses() count = %d, want %d", len(got), tc.wantCount)
+			}
+			for id, wantTime := range tc.wantTimes {
+				if gotTime, ok := got[id]; !ok || !gotTime.Equal(wantTime) {
+					t.Errorf("Statuses()[%d] = %v, want %v", id, gotTime, wantTime)
+				}
+			}
+		})
 	}
 }
 

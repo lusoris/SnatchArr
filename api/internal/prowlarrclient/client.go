@@ -3,11 +3,10 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 // Package prowlarrclient interacts with a Prowlarr server (X-Api-Key auth,
-// /api/v1/system/status, /api/v1/indexer, /api/v1/indexerstats,
-// /api/v1/indexerstatus, /api/v1/search). Grab posts a chosen release to
-// /api/v1/search so Prowlarr hands it to its own download client; SnatchArr
-// adds no download itself (ADR-0006 amendment, ledger
-// snatcharr-oq-0036-14-grab-path).
+// /api/v1/system/status, /api/v1/indexer, /api/v1/indexerstats, and goenvoy
+// typed endpoints). Grab posts a chosen release to /api/v1/search so Prowlarr
+// hands it to its own download client; SnatchArr adds no download itself
+// (ADR-0006 amendment, ledger snatcharr-oq-0036-14-grab-path).
 package prowlarrclient
 
 import (
@@ -237,59 +236,33 @@ func aggregateStats(items []indexerStatItem) map[int]Usage {
 	return out
 }
 
-//nolint:tagliatelle // Prowlarr speaks camelCase
-type indexerStatusItem struct {
-	IndexerID    int        `json:"indexerId"`
-	DisabledTill *time.Time `json:"disabledTill"`
-}
-
 // Statuses implements Client.
 func (h *HTTP) Statuses(ctx context.Context, baseURL, apiKey string) (map[int]time.Time, error) {
-	c, err := h.Base(baseURL, apiKey)
+	pc, err := prowlarr.New(baseURL, apiKey, h.Options()...)
 	if err != nil {
 		return nil, fmt.Errorf("prowlarr: client: %w", err)
 	}
-	var raw json.RawMessage
-	if getErr := c.Get(ctx, "/api/v1/indexerstatus", &raw); getErr != nil {
-		return nil, fmt.Errorf("%w: prowlarr indexerstatus: %w", domain.ErrUnreachable, arrclient.HintAPIError(getErr, "Prowlarr"))
-	}
-	items, err := parseStatusItems(raw)
+	items, err := pc.GetIndexerStatuses(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("prowlarr: parse indexerstatus: %w", err)
+		return nil, fmt.Errorf("%w: prowlarr indexerstatus: %w", domain.ErrUnreachable, arrclient.HintAPIError(err, "Prowlarr"))
 	}
 	out := make(map[int]time.Time, len(items))
 	for _, it := range items {
-		if it.IndexerID > 0 && it.DisabledTill != nil {
-			out[it.IndexerID] = it.DisabledTill.UTC()
+		if it.IndexerID <= 0 || it.DisabledTill == "" {
+			continue
 		}
+		t, parseErr := time.Parse(time.RFC3339Nano, it.DisabledTill)
+		if parseErr != nil {
+			return nil, fmt.Errorf("%w: prowlarr indexerstatus: indexer %d: invalid disabledTill %q: %w", domain.ErrInvalid, it.IndexerID, it.DisabledTill, parseErr)
+		}
+		out[it.IndexerID] = t.UTC()
 	}
 	return out, nil
 }
 
-func parseStatusItems(raw []byte) ([]indexerStatusItem, error) {
-	trimmed := bytes.TrimSpace(raw)
-	if len(trimmed) == 0 || trimmed[0] != '[' {
-		return nil, fmt.Errorf("%w: prowlarr indexerstatus payload must be a JSON array", domain.ErrInvalid)
-	}
-	var list []indexerStatusItem
-	if err := json.Unmarshal(trimmed, &list); err != nil {
-		return nil, fmt.Errorf("prowlarr: unmarshal status list: %w", err)
-	}
-	return list, nil
-}
-
 const maxApplications = 100
 
-type applicationFieldJSON struct {
-	Name  string `json:"name"`
-	Value any    `json:"value"`
-}
-
-type applicationJSON struct {
-	Fields []applicationFieldJSON `json:"fields"`
-}
-
-func extractAppProwlarrURL(app applicationJSON) string {
+func extractAppProwlarrURL(app prowlarr.Application) string {
 	for _, f := range app.Fields {
 		if strings.EqualFold(f.Name, "prowlarrUrl") {
 			if s, ok := f.Value.(string); ok {
@@ -302,12 +275,12 @@ func extractAppProwlarrURL(app applicationJSON) string {
 
 // ProwlarrURLs implements Client: GET /api/v1/applications.
 func (h *HTTP) ProwlarrURLs(ctx context.Context, baseURL, apiKey string) ([]string, error) {
-	c, err := h.Base(baseURL, apiKey)
+	pc, err := prowlarr.New(baseURL, apiKey, h.Options()...)
 	if err != nil {
 		return nil, fmt.Errorf("prowlarr: client: %w", err)
 	}
-	var list []applicationJSON
-	if err := c.Get(ctx, "/api/v1/applications", &list); err != nil {
+	list, err := pc.GetApplications(ctx)
+	if err != nil {
 		return nil, fmt.Errorf("%w: prowlarr applications: %w", domain.ErrUnreachable, arrclient.HintAPIError(err, "Prowlarr"))
 	}
 	if len(list) > maxApplications {
