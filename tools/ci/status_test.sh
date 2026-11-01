@@ -41,7 +41,7 @@ expect() {
   want="$1" name="$2" commits="$3" needs="$(printf '%s' "$4" | jq -c "${5:-.}")" needle="${6:-}"
   got=0
   out="$(NEEDS="$needs" COMMITS_EXPECTED="$commits" sh "$HERE/status.sh" 2>&1)" || got=$?
-  check_case "$name" "$want" "$got" "$needle" "$out"
+  check_case "$name" "$want" "$got" "$needle" "$out" "refused without"
   if [ "$want" -eq 0 ]; then accepted=$((accepted + 1)); else refused=$((refused + 1)); fi
   echo "ok   $name"
 }

@@ -91,7 +91,7 @@ expect() {
   got=0
   out="$(STUB_MODE="$mode" STUB_LOG="$WORK/calls" python3 -I "$SCAN" --root "$root" --docker "$STUB" \
     --image "$image" 2>&1)" || got=$?
-  check_case "$name" "$want" "$got" "$needle" "$out"
+  check_case "$name" "$want" "$got" "$needle" "$out" "output lacks"
   if [ "$called" = no ] && [ -s "$WORK/calls" ]; then
     printf 'FAIL %s: refused only after running docker\n' "$name" >&2
     exit 1
