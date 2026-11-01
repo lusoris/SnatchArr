@@ -341,12 +341,37 @@ func TestProcessRuns_BoundaryTimeout(t *testing.T) {
 		timeout:  150 * time.Millisecond,
 	}
 
-	ctx, cancel := context.WithTimeout(t.Context(), 150*time.Millisecond)
-	defer cancel()
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
 
 	err := processRuns(ctx, client, cfg, logger)
 	if err == nil {
-		t.Fatal("processRuns() expected timeout error, got nil")
+		t.Fatal("processRuns() with a cancelled context: expected an error, got nil")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("processRuns() error = %v, want %v", err, context.Canceled)
+	}
+}
+
+// TestProcessRuns_BoundaryDeadline covers the expired-deadline path next to
+// the cancelled one: the zero time is already past, so no wall-clock budget
+// is involved and host load cannot change the outcome.
+func TestProcessRuns_BoundaryDeadline(t *testing.T) {
+	t.Parallel()
+
+	client := &mockWorkerServiceClient{
+		leaseFunc: func(_ context.Context, _ *snatcharrv1.LeaseRunRequest) (*snatcharrv1.LeaseRunResponse, error) {
+			return &snatcharrv1.LeaseRunResponse{}, nil
+		},
+	}
+	cfg := config{workerID: "test-worker", outcome: "failed", count: 1, timeout: time.Second}
+
+	ctx, cancel := context.WithDeadline(t.Context(), time.Time{})
+	defer cancel()
+
+	err := processRuns(ctx, client, cfg, slog.New(slog.DiscardHandler))
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("processRuns() error = %v, want %v", err, context.DeadlineExceeded)
 	}
 }
 
