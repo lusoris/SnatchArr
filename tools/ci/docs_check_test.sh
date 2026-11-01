@@ -24,10 +24,10 @@ cp "$REPO_ROOT/mkdocs.yml" "$root/mkdocs.yml"
 cp -R "$REPO_ROOT/docs" "$root/docs"
 cp "$REPO_ROOT/tools/docs/requirements.txt" "$root/tools/docs/requirements.txt"
 
-# run_case NAME WANT_RC NEEDLE [BIN]: negative cases accept any nonzero status.
+# run_case NAME WANT_RC NEEDLE [BIN [CACHE]]: negative cases accept any nonzero status.
 run_case() {
     local name=$1 want=$2 needle=$3 out status=0 result
-    out=$(MKDOCS_BIN="${4:-}" sh "$check" "$cache" "$root" 2>&1) || status=$?
+    out=$(MKDOCS_BIN="${4:-}" sh "$check" "${5:-$cache}" "$root" 2>&1) || status=$?
     result=$status
     if [ "$want" -ne 0 ] && [ "$status" -ne 0 ]; then
         result=1
@@ -40,6 +40,14 @@ run_case() {
 }
 
 run_case 'clean copy passes' 0 ''
+# An environment whose install stopped after bin/mkdocs appeared has no
+# completion marker; the check must rebuild it, not run the stale executable.
+stale="$work/stale-cache"
+req_hash="$(sha256sum "$root/tools/docs/requirements.txt" | cut -c1-12)"
+mkdir -p "$stale/docs-$req_hash/bin"
+printf '%s\n' '#!/bin/sh' 'echo "stale environment used"' 'exit 1' > "$stale/docs-$req_hash/bin/mkdocs"
+chmod +x "$stale/docs-$req_hash/bin/mkdocs"
+run_case 'interrupted install rebuilt' 0 '' '' "$stale"
 printf '\n[x](../../go.mod)\n' >> "$root/docs/index.md"
 run_case 'link outside docs refused' 1 'go.mod'
 cp "$REPO_ROOT/docs/index.md" "$root/docs/index.md"
@@ -53,6 +61,9 @@ printf '%s\n' '#!/bin/sh' 'echo "unexpected build reached"' 'exit 0' > "$stub"
 chmod +x "$stub"
 printf '%s\n' 'unpinned-package # == is only a comment' >> "$root/tools/docs/requirements.txt"
 run_case 'unpinned requirements refused before build' 1 '== version pin' "$stub"
+cp "$REPO_ROOT/tools/docs/requirements.txt" "$root/tools/docs/requirements.txt"
+printf '%s\n' 'marker-only>=1; python_version == "3.15"' >> "$root/tools/docs/requirements.txt"
+run_case 'marker == is not a version pin' 1 '== version pin' "$stub"
 rm "$root/tools/docs/requirements.txt"
 run_case 'missing requirements refused before build' 1 'requirements file missing' "$stub"
 

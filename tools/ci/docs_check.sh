@@ -22,7 +22,7 @@ if [ ! -f "$requirements" ]; then
 fi
 if ! awk '
   /^[[:space:]]*(#|$)/ { next }
-  { sub(/[[:space:]]+#.*/, ""); if (index($0, "==") == 0) exit 1 }
+  { sub(/[[:space:]]+#.*/, ""); sub(/;.*/, ""); if (index($0, "==") == 0) exit 1 }
 ' "$requirements"; then
   echo "error: $requirements: every requirement must have a == version pin" >&2
   exit 1
@@ -32,9 +32,12 @@ mkdir -p "$cache"
 cache="$(cd "$cache" && pwd)"
 req_hash="$(sha256sum "$requirements" | cut -c1-12)"
 venv="$cache/docs-$req_hash"
-if [ -z "${MKDOCS_BIN:-}" ] && [ ! -x "$venv/bin/mkdocs" ]; then
-  python3 -m venv "$venv"
+# The marker is written only after pip succeeds, so an interrupted install is
+# rebuilt from scratch instead of trusted because bin/mkdocs exists.
+if [ -z "${MKDOCS_BIN:-}" ] && [ ! -f "$venv/.installed" ]; then
+  python3 -m venv --clear "$venv"
   "$venv/bin/pip" install --quiet --disable-pip-version-check -r "$requirements"
+  touch "$venv/.installed"
 fi
 
 mkdocs="${MKDOCS_BIN:-$venv/bin/mkdocs}"
