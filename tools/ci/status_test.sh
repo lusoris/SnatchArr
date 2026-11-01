@@ -11,6 +11,8 @@
 set -eu
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=tools/ci/test_lib.sh
+. "$HERE/test_lib.sh"
 WORKFLOW="$HERE/../../.github/workflows/ci.yml"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -39,17 +41,7 @@ expect() {
   want="$1" name="$2" commits="$3" needs="$(printf '%s' "$4" | jq -c "${5:-.}")" needle="${6:-}"
   got=0
   out="$(NEEDS="$needs" COMMITS_EXPECTED="$commits" sh "$HERE/status.sh" 2>&1)" || got=$?
-  if [ "$got" -ne "$want" ]; then
-    printf 'FAIL %s: exit %s, want %s\n%s\n' "$name" "$got" "$want" "$out" >&2
-    exit 1
-  fi
-  case "$out" in
-    *"$needle"*) ;;
-    *)
-      printf 'FAIL %s: refused without "%s"\n%s\n' "$name" "$needle" "$out" >&2
-      exit 1
-      ;;
-  esac
+  check_case "$name" "$want" "$got" "$needle" "$out"
   if [ "$want" -eq 0 ]; then accepted=$((accepted + 1)); else refused=$((refused + 1)); fi
   echo "ok   $name"
 }
