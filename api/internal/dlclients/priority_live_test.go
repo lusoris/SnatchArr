@@ -154,7 +154,7 @@ func probeQBittorrent(ctx context.Context, c liveClient) (priorityResult, error)
 		return priorityResult{}, fmt.Errorf("probe qbittorrent client: %w", err)
 	}
 	if c.Username != "" || c.Secret != "" {
-		if err := cl.Login(callCtx, c.Username, c.Secret); err != nil {
+		if err = cl.Login(callCtx, c.Username, c.Secret); err != nil {
 			return priorityResult{}, fmt.Errorf("probe qbittorrent login: %w", err)
 		}
 	}
@@ -199,7 +199,7 @@ func probeDeluge(ctx context.Context, c liveClient) (priorityResult, error) {
 	if err != nil {
 		return priorityResult{}, fmt.Errorf("probe deluge client: %w", err)
 	}
-	if err := cl.Login(callCtx, c.Secret); err != nil {
+	if err = cl.Login(callCtx, c.Secret); err != nil {
 		return priorityResult{}, fmt.Errorf("probe deluge login: %w", err)
 	}
 	connected, err := cl.Connected(callCtx)
