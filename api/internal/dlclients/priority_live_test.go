@@ -15,7 +15,6 @@ import (
 	"os"
 	"slices"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -36,7 +35,6 @@ type capability struct {
 	Method    string `json:"method"`
 	Supported bool   `json:"supported"`
 	Source    string `json:"source"`
-	Version   string `json:"version,omitempty"`
 }
 
 // priorityResult holds discovered runtime priority details for a client.
@@ -59,49 +57,15 @@ var wantPriority = map[domain.DownloadClientKind]capability{
 // TestLivePriorityCapabilities discovers whether each running download client exposes priority APIs.
 func TestLivePriorityCapabilities(t *testing.T) {
 	t.Parallel()
-	path := os.Getenv(liveEnv)
-	if path == "" {
-		t.Skip(liveEnv + " is not set; run make dlclients-live")
-	}
-	clients := readLiveClients(t, path)
-	seen := map[domain.DownloadClientKind]bool{}
 	flipKind := domain.DownloadClientKind(os.Getenv("SNATCHARR_DLCLIENTS_PRIORITY_FLIP"))
-	var (
-		mu       sync.Mutex
-		observed = make(map[domain.DownloadClientKind]capability)
-	)
-	t.Cleanup(func() {
-		outPath := os.Getenv("SNATCHARR_DLCLIENTS_PRIORITY_OUT")
-		if outPath == "" {
-			return
-		}
-		mu.Lock()
-		defer mu.Unlock()
-		data, err := json.MarshalIndent(observed, "", "  ")
-		if err != nil {
-			t.Errorf("marshal observed priority table: %v", err)
-			return
-		}
-		if err := os.WriteFile(outPath, data, 0o600); err != nil { // #nosec G304 -- test output destination configured by test runner
-			t.Errorf("write %s: %v", outPath, err)
-		}
+	forEachLiveClient(t, func(t *testing.T, c liveClient) {
+		t.Helper()
+		checkPriorityClient(t, c, flipKind)
 	})
-	for _, c := range clients {
-		seen[c.Kind] = true
-		t.Run(string(c.Kind), func(t *testing.T) {
-			t.Parallel()
-			checkPriorityClient(t, c, flipKind, &mu, observed)
-		})
-	}
-	for _, kind := range domain.AllDownloadClientKinds {
-		if !seen[kind] {
-			t.Errorf("%s: no running client in %s", kind, path)
-		}
-	}
 }
 
 // checkPriorityClient probes one live download client for priority capabilities and compares against wantPriority.
-func checkPriorityClient(t *testing.T, c liveClient, flipKind domain.DownloadClientKind, mu *sync.Mutex, observed map[domain.DownloadClientKind]capability) {
+func checkPriorityClient(t *testing.T, c liveClient, flipKind domain.DownloadClientKind) {
 	t.Helper()
 	got, err := probeClient(t.Context(), c)
 	if err != nil {
@@ -119,9 +83,6 @@ func checkPriorityClient(t *testing.T, c liveClient, flipKind domain.DownloadCli
 		t.Fatalf("priority capability mismatch for %s: got supported=%t method=%q, want supported=%t method=%q",
 			c.Kind, got.Supported, got.Method, want.Supported, want.Method)
 	}
-	mu.Lock()
-	observed[c.Kind] = capability{Method: got.Method, Supported: got.Supported, Source: want.Source, Version: got.Version}
-	mu.Unlock()
 }
 
 // probeClient dispatches discovery probes to the matching client probe implementation.
@@ -268,43 +229,52 @@ func probeRTorrent(ctx context.Context, c liveClient) (priorityResult, error) {
 	if err != nil {
 		return priorityResult{}, fmt.Errorf("probe rtorrent system info: %w", err)
 	}
-	methods, rawXML, err := rtorrentListMethods(callCtx, c.URL, c.Username, c.Secret)
+	methods, err := rtorrentListMethods(callCtx, c.URL, c.Username, c.Secret)
 	if err != nil {
 		return priorityResult{}, fmt.Errorf("probe rtorrent method list: %w", err)
 	}
 	wantMethod := wantPriority[c.Kind].Method
-	supported := slices.Contains(methods, wantMethod) || strings.Contains(rawXML, wantMethod)
+	supported := slices.Contains(methods, wantMethod)
 	return priorityResult{Version: info.ClientVersion, Method: wantMethod, Supported: supported}, nil
 }
 
 // rtorrentListMethods queries system.listMethods because goenvoy rtorrent/v2 exports no generic XML-RPC call or method list.
-func rtorrentListMethods(ctx context.Context, endpoint, username, secret string) ([]string, string, error) {
+func rtorrentListMethods(ctx context.Context, endpoint, username, secret string) ([]string, error) {
 	reqXML := `<?xml version="1.0"?><methodCall><methodName>system.listMethods</methodName><params/></methodCall>`
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(reqXML))
 	if err != nil {
-		return nil, "", fmt.Errorf("rtorrent create request: %w", err)
+		return nil, fmt.Errorf("rtorrent create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "text/xml")
 	if username != "" || secret != "" {
 		req.SetBasicAuth(username, secret)
 	}
-	resp, err := (&http.Client{}).Do(req)
+	client := &http.Client{Timeout: probeTimeout}
+	resp, err := client.Do(req)
 	if err != nil {
-		return nil, "", fmt.Errorf("rtorrent post listMethods: %w", err)
+		return nil, fmt.Errorf("rtorrent post listMethods: %w", err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("rtorrent listMethods HTTP %d: %w", resp.StatusCode, domain.ErrInvalid)
+	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, "", fmt.Errorf("rtorrent read listMethods: %w", err)
+		return nil, fmt.Errorf("rtorrent read listMethods: %w", err)
 	}
 	var listResp struct {
 		Methods []string `xml:"params>param>value>array>data>value>string"`
 	}
-	_ = xml.Unmarshal(body, &listResp)
-	return listResp.Methods, string(body), nil
+	if err = xml.Unmarshal(body, &listResp); err != nil {
+		return nil, fmt.Errorf("rtorrent decode listMethods: %w", err)
+	}
+	if len(listResp.Methods) == 0 {
+		return nil, fmt.Errorf("rtorrent method list empty: %w", domain.ErrInvalid)
+	}
+	return listResp.Methods, nil
 }
 
-// probeSABnzbd queries SABnzbd version to verify queue priority API availability.
+// probeSABnzbd queries SABnzbd version and authenticated queue read; the priority call itself comes from the API docs (SABnzbd lists no methods).
 func probeSABnzbd(ctx context.Context, c liveClient) (priorityResult, error) {
 	callCtx, cancel := context.WithTimeout(ctx, probeTimeout)
 	defer cancel()
@@ -317,10 +287,14 @@ func probeSABnzbd(ctx context.Context, c liveClient) (priorityResult, error) {
 	if err != nil {
 		return priorityResult{}, fmt.Errorf("probe sabnzbd version: %w", err)
 	}
-	return priorityResult{Version: version, Method: wantPriority[c.Kind].Method, Supported: version != ""}, nil
+	queue, err := cl.GetQueue(callCtx)
+	if err != nil {
+		return priorityResult{}, fmt.Errorf("probe sabnzbd queue: %w", err)
+	}
+	return priorityResult{Version: version, Method: wantPriority[c.Kind].Method, Supported: queue != nil}, nil
 }
 
-// probeNZBGet queries NZBGet version to verify queue priority API availability.
+// probeNZBGet queries NZBGet version and authenticated status read; the priority call itself comes from the API docs (NZBGet lists no methods).
 func probeNZBGet(ctx context.Context, c liveClient) (priorityResult, error) {
 	callCtx, cancel := context.WithTimeout(ctx, probeTimeout)
 	defer cancel()
@@ -333,5 +307,9 @@ func probeNZBGet(ctx context.Context, c liveClient) (priorityResult, error) {
 	if err != nil {
 		return priorityResult{}, fmt.Errorf("probe nzbget version: %w", err)
 	}
-	return priorityResult{Version: version, Method: wantPriority[c.Kind].Method, Supported: version != ""}, nil
+	status, err := cl.GetStatus(callCtx)
+	if err != nil {
+		return priorityResult{}, fmt.Errorf("probe nzbget status: %w", err)
+	}
+	return priorityResult{Version: version, Method: wantPriority[c.Kind].Method, Supported: status != nil}, nil
 }

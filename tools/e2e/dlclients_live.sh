@@ -33,6 +33,8 @@ esac
 
 if [ "$plant" = priority ]; then
     export SNATCHARR_DLCLIENTS_PRIORITY_FLIP="${SNATCHARR_DLCLIENTS_PRIORITY_FLIP:-qbittorrent}"
+else
+    unset SNATCHARR_DLCLIENTS_PRIORITY_FLIP
 fi
 
 # shellcheck source=tools/e2e/pull_retry.sh
