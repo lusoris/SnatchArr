@@ -70,7 +70,10 @@ drop_tmp() {
   send api -X DELETE "repos/$repo/git/refs/heads/$tmp" >/dev/null
 }
 
-send api -X POST "repos/$repo/git/refs" -f "ref=refs/heads/$tmp" -f "sha=$base" >/dev/null || exit 1
+# A rerun attempt may find the temporary branch an earlier attempt left; reset it to the base.
+send api -X POST "repos/$repo/git/refs" -f "ref=refs/heads/$tmp" -f "sha=$base" >/dev/null \
+  || send api -X PATCH "repos/$repo/git/refs/heads/$tmp" -f "sha=$base" -F force=true >/dev/null \
+  || exit 1
 commit="$(send api -X PUT "repos/$repo/contents/$doc" -f "message=$title" -f "branch=$tmp" \
   -f "sha=$blob" -f "content=$content" --jq .commit.sha)" || { drop_tmp; exit 1; }
 [ -n "$commit" ] || { echo "roadmap_refresh: contents API returned no commit" >&2; drop_tmp; exit 1; }

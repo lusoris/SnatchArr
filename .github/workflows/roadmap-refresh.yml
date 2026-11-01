@@ -65,7 +65,7 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           REPO: ${{ github.repository }}
           BASE_BRANCH: ${{ steps.repo.outputs.default_branch }}
-          RUN_ID: ${{ github.run_id }}
+          RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           BASE_SHA="$(git rev-parse HEAD)"
           export BASE_SHA

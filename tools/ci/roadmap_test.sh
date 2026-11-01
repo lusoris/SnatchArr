@@ -10,7 +10,7 @@
 #      at the new commit (never at the base commit) and opens the pull request against the base
 #      branch; with the bot's pull request open it opens none; the open lookup matches only the
 #      bot's own head repository and base; a dry run sends no write; a failed write fails the run
-#      and drops the temporary branch.
+#      and drops the temporary branch; a rerun resets a temporary branch an earlier attempt left.
 #
 #   tools/ci/roadmap_test.sh
 #
@@ -31,6 +31,8 @@ echo "$*" >>"$STUB_LOG"
 case "$*" in
   "api repos/o/r/pulls?"*) printf '%s\n' "${STUB_OPEN:-}" ;;
   "api repos/o/r/git/ref/heads/"*) [ -n "${STUB_BRANCH:-}" ] || exit 1; echo abc ;;
+  "api -X POST repos/o/r/git/refs -f ref=refs/heads/bot/roadmap-refresh-tmp-"*)
+    [ -z "${STUB_TMP_LEFT:-}" ] || exit 1 ;;
   "api -X PUT"*) [ -z "${STUB_FAIL_PUT:-}" ] || exit 1; echo newsha ;;
 esac
 exit 0
@@ -116,6 +118,14 @@ if refresh update 0 STUB_BRANCH=1 STUB_OPEN=42 \
   pass "planted stale count, bot pull request open: bot branch moved to the new commit only, no second pull request"
 else
   fail "planted stale count, pull request open"; cat "$WORK/update.out"
+fi
+
+if refresh rerun 0 STUB_TMP_LEFT=1 \
+  && called rerun "-X PATCH $tmp_ref -f sha=$base -F force=true" \
+  && called rerun "^pr create --repo o/r --base trunk"; then
+  pass "rerun with a leftover temporary branch: branch reset to the base, pull request proposed"
+else
+  fail "rerun with a leftover temporary branch"; cat "$WORK/rerun.out"
 fi
 
 if refresh dry 0 DRY_RUN=1 && [ "$(writes dry)" -eq 0 ] \

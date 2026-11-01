@@ -139,13 +139,18 @@ def parse_sort_key(item: dict) -> tuple[int, tuple[int, ...], int, str]:
     return (1, (), number, title)
 
 
+def escape_cell(text: str) -> str:
+    """Escape a table cell: backslashes first, then pipes, so check_shape reads every pipe as escaped."""
+    return text.replace("\\", "\\\\").replace("|", r"\|")
+
+
 def format_description(desc_raw: object) -> str:
     """Format scope description: collapse whitespace, escape pipe, default on empty."""
     if desc_raw is None:
         return "No description."
     text = str(desc_raw)
     collapsed = " ".join(text.split())
-    escaped = collapsed.replace("|", r"\|")
+    escaped = escape_cell(collapsed)
     if not escaped:
         return "No description."
     return escaped
@@ -159,7 +164,7 @@ def render_table(milestones: list[dict]) -> str:
         "| :--- | :--- | ---: |",
     ]
     for item in sorted_ms:
-        title = str(item["title"]).strip().replace("|", r"\|")
+        title = escape_cell(str(item["title"]).strip())
         html_url = str(item["html_url"]).strip()
         desc = format_description(item.get("description"))
         open_issues = item["open_issues"]
@@ -576,7 +581,24 @@ def test_case_title_pipe(tmp_path: Path) -> list[tuple[str, bool]]:
         f"{END_MARKER}\n"
     )
 
+    backslash = [
+        {
+            "title": "A \\| B",
+            "html_url": "https://github.com/o/r/milestone/2",
+            "description": "C \\| D",
+            "open_issues": 1,
+        }
+    ]
+    bs_doc = tmp_path / "title_backslash.md"
+    bs_doc.write_text(
+        f"{BEGIN_MARKER}\n{render_table(backslash)}\n{END_MARKER}\n", encoding="utf-8"
+    )
+
     return [
+        (
+            "rendered title and scope holding a backslash before a pipe pass check_shape -> 0",
+            check_shape(bs_doc) == 0,
+        ),
         (
             'render_table with title "Phase 1 | Phase 2" contains "Phase 1 \\| Phase 2"',
             r"Phase 1 \| Phase 2" in table,
