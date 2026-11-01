@@ -611,8 +611,7 @@ def test_case_title_pipe(tmp_path: Path) -> list[tuple[str, bool]]:
 
     return [
         (
-            "brackets and an escaped pipe in the title, a code-span path in the scope: "
-            "existing escapes kept, row as recorded, check_shape -> 0",
+            "title brackets, escaped pipe, code-span path: escapes kept, check_shape -> 0",
             want_row in esc_table and check_shape(bs_doc) == 0,
         ),
         (
