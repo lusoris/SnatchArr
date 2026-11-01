@@ -1015,6 +1015,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/download-clients/{clientId}/priority-plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                clientId: components["parameters"]["ClientId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Latest read-only priority plan for this physical client
+         * @description No client writes occur, including when mode is act. Returns 404 when no observation exists. Shared-client categories participate in one plan. A failed read retains the last successful observation; observedAt identifies its age.
+         */
+        get: operations["getDownloadClientPriorityPlan"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/download-clients/{clientId}/test": {
         parameters: {
             query?: never;
@@ -2374,6 +2396,30 @@ export interface components {
             updated_at: string;
             /** @description Whether this schedule window matches the current evaluation time. */
             active: boolean;
+        };
+        /**
+         * @description Configured intent only; act remains read-only until execution is implemented.
+         * @enum {string}
+         */
+        DownloadClientPriorityMode: "observe" | "act";
+        DownloadClientPriorityMove: {
+            id: string;
+            from: number;
+            to: number;
+        };
+        DownloadClientPriorityPlan: {
+            /** Format: uuid */
+            clientId: string;
+            mode: components["schemas"]["DownloadClientPriorityMode"];
+            /** Format: date-time */
+            observedAt: string;
+            /** @description qBittorrent queueing disabled; order is empty. Preferences are never changed. */
+            queueingDisabled: boolean;
+            unattributed: number;
+            priority: components["schemas"]["DownloadClientPriorityMove"][];
+            order: string[];
+            pause: string[];
+            resume: string[];
         };
         /** @enum {string} */
         DownloadClientKind: "qbittorrent" | "transmission" | "deluge" | "rtorrent" | "sabnzbd" | "nzbget";
@@ -4884,6 +4930,29 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getDownloadClientPriorityPlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                clientId: components["parameters"]["ClientId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Latest observed plan, with item identifiers only */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DownloadClientPriorityPlan"];
+                };
             };
             default: components["responses"]["Problem"];
         };

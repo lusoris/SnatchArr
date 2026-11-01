@@ -50,6 +50,8 @@
 //	snatcharr.jellyfin.timeout   APP_SNATCHARR_JELLYFIN_TIMEOUT   Jellyfin HTTP request timeout (default 10s)
 //	snatcharr.jellyfin.default_role APP_SNATCHARR_JELLYFIN_DEFAULT_ROLE default role for new Jellyfin members (default requester)
 //	snatcharr.item_search.cooldown_seconds APP_SNATCHARR_ITEM_SEARCH_COOLDOWN_SECONDS per-user item search cooldown in seconds (default 60, 0..3600, 0 = off)
+//	snatcharr.download_priority.interval_seconds APP_SNATCHARR_DOWNLOAD_PRIORITY_INTERVAL_SECONDS observe interval (default 60, 15..3600)
+//
 //	snatcharr.metrics.addr       APP_SNATCHARR_METRICS_ADDR       separate HTTP listen address for Prometheus /metrics
 package config
 
@@ -81,22 +83,23 @@ const (
 
 // Options is SnatchArr's typed configuration.
 type Options struct {
-	Profile    Profile           `koanf:"profile"`
-	Public     PublicOptions     `koanf:"public"`
-	Web        WebOptions        `koanf:"web"`
-	Worker     WorkerOptions     `koanf:"worker"`
-	Configarr  ConfigarrOptions  `koanf:"configarr"`
-	Session    SessionOptions    `koanf:"session"`
-	APIKey     APIKeyOptions     `koanf:"apikey"`
-	Proxy      ProxyOptions      `koanf:"proxy"`
-	Setup      SetupOptions      `koanf:"setup"`
-	OIDC       OIDCOptions       `koanf:"oidc"`
-	ProxyAuth  ProxyAuthOptions  `koanf:"proxy_auth"`
-	Prowlarr   ProwlarrOptions   `koanf:"prowlarr"`
-	Jellyfin   JellyfinOptions   `koanf:"jellyfin"`
-	ItemSearch ItemSearchOptions `koanf:"item_search"`
-	Logs       LogsOptions       `koanf:"logs"`
-	Metrics    MetricsOptions    `koanf:"metrics"`
+	Profile          Profile                 `koanf:"profile"`
+	Public           PublicOptions           `koanf:"public"`
+	Web              WebOptions              `koanf:"web"`
+	Worker           WorkerOptions           `koanf:"worker"`
+	Configarr        ConfigarrOptions        `koanf:"configarr"`
+	Session          SessionOptions          `koanf:"session"`
+	APIKey           APIKeyOptions           `koanf:"apikey"`
+	Proxy            ProxyOptions            `koanf:"proxy"`
+	Setup            SetupOptions            `koanf:"setup"`
+	OIDC             OIDCOptions             `koanf:"oidc"`
+	ProxyAuth        ProxyAuthOptions        `koanf:"proxy_auth"`
+	Prowlarr         ProwlarrOptions         `koanf:"prowlarr"`
+	Jellyfin         JellyfinOptions         `koanf:"jellyfin"`
+	ItemSearch       ItemSearchOptions       `koanf:"item_search"`
+	Logs             LogsOptions             `koanf:"logs"`
+	DownloadPriority DownloadPriorityOptions `koanf:"download_priority"`
+	Metrics          MetricsOptions          `koanf:"metrics"`
 }
 
 // MetricsOptions configures Prometheus /metrics endpoint exposure.
@@ -494,8 +497,9 @@ func Default() Options {
 			Timeout:     10 * time.Second,
 			DefaultRole: domain.RoleRequester,
 		},
-		ItemSearch: ItemSearchOptions{CooldownSeconds: DefaultItemSearchCooldownSeconds},
-		Logs:       LogsOptions{RingSize: 2000},
+		DownloadPriority: DownloadPriorityOptions{IntervalSeconds: 60},
+		ItemSearch:       ItemSearchOptions{CooldownSeconds: DefaultItemSearchCooldownSeconds},
+		Logs:             LogsOptions{RingSize: 2000},
 	}
 }
 
@@ -677,6 +681,9 @@ func (o Options) Validate() error {
 	if err := o.ItemSearch.Validate(); err != nil {
 		return err
 	}
+	if err := o.DownloadPriority.Validate(); err != nil {
+		return err
+	}
 	if err := o.Metrics.Validate(); err != nil {
 		return err
 	}
@@ -735,6 +742,7 @@ func CompoundKeys() []string {
 		"snatcharr.jellyfin.api_key",
 		"snatcharr.jellyfin.default_role",
 		"snatcharr.item_search.cooldown_seconds",
+		"snatcharr.download_priority.interval_seconds",
 		"snatcharr.logs.ring_size",
 		"snatcharr.configarr.download_clients",
 	}

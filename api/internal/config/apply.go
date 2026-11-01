@@ -106,6 +106,12 @@ func applyOperationalScalars(o *Options, key, val string) error {
 			return fmt.Errorf("%w: invalid int for %s", domain.ErrInvalid, key)
 		}
 		o.ItemSearch.CooldownSeconds = n
+	case "snatcharr.download_priority.interval_seconds":
+		n, err := strconv.Atoi(val)
+		if err != nil {
+			return fmt.Errorf("%w: invalid int for %s", domain.ErrInvalid, key)
+		}
+		o.DownloadPriority.IntervalSeconds = n
 	case "snatcharr.logs.ring_size":
 		n, err := strconv.Atoi(val)
 		if err != nil {

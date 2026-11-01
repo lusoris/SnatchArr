@@ -43,6 +43,7 @@ APP_SNATCHARR_JELLYFIN_API_KEY	snatcharr.jellyfin.api_key	secret	restart	yes
 APP_SNATCHARR_JELLYFIN_TIMEOUT	snatcharr.jellyfin.timeout	runtime	restart	yes
 APP_SNATCHARR_JELLYFIN_DEFAULT_ROLE	snatcharr.jellyfin.default_role	runtime	restart	yes
 APP_SNATCHARR_ITEM_SEARCH_COOLDOWN_SECONDS	snatcharr.item_search.cooldown_seconds	runtime	restart	yes
+APP_SNATCHARR_DOWNLOAD_PRIORITY_INTERVAL_SECONDS	snatcharr.download_priority.interval_seconds	runtime	restart	yes
 APP_SNATCHARR_LOGS_RING_SIZE	snatcharr.logs.ring_size	bootstrap	restart	yes
 APP_SNATCHARR_METRICS_ADDR	snatcharr.metrics.addr	bootstrap	restart	yes
 APP_HTTP_ADDR	http.addr	bootstrap	restart	yes

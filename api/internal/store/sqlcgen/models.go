@@ -126,6 +126,8 @@ type DownloadClient struct {
 	UpdatedAt          time.Time
 	ConfigarrKey       *string
 	MaxQueued          int32
+	Category           *string
+	PriorityMode       string
 }
 
 type GlobalRateBucket struct {

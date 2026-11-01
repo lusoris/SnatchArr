@@ -43,6 +43,7 @@ const (
 	GetAdultSyncStatusOperation               OperationName = "GetAdultSyncStatus"
 	GetConfigarrStatusOperation               OperationName = "GetConfigarrStatus"
 	GetDownloadClientOperation                OperationName = "GetDownloadClient"
+	GetDownloadClientPriorityPlanOperation    OperationName = "GetDownloadClientPriorityPlan"
 	GetDownloadClientStatusOperation          OperationName = "GetDownloadClientStatus"
 	GetHourlyCapsOperation                    OperationName = "GetHourlyCaps"
 	GetInstanceOperation                      OperationName = "GetInstance"

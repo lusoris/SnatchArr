@@ -8,6 +8,7 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/clock"
+	"github.com/golusoris/golusoris/leader/gate"
 
 	"github.com/lusoris/SnatchArr/api/internal/snatch"
 )
@@ -16,7 +17,9 @@ import (
 var Module = fx.Module("snatcharr.dlclients",
 	fx.Provide(
 		New,
+		NewReconciler,
 		func(clk clock.Clock) Snapshotter { return NewGoenvoy(clk) },
 		fx.Annotate(NewPlannerGate, fx.As(new(snatch.Gate)), fx.ResultTags(snatch.GateGroup)),
 	),
+	fx.Provide(gate.Provide[*Reconciler]()),
 )

@@ -1272,6 +1272,20 @@
     ],
     "type": "object"
   },
+  "getDownloadClientPriorityPlan": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "clientId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "clientId"
+    ],
+    "type": "object"
+  },
   "getDownloadClientStatus": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,

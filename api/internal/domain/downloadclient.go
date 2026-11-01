@@ -82,6 +82,8 @@ type DownloadClient struct {
 	Kind               DownloadClientKind
 	Name               string
 	BaseURL            string
+	Category           string
+	PriorityMode       string
 	Username           string
 	Enabled            bool
 	Source             DownloadClientSource
