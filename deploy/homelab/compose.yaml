@@ -23,7 +23,7 @@ x-hardening: &hardening
 
 services:
   postgres:
-    image: postgres:18.6-alpine@sha256:898c60cb390d1085bc97bdd6a1ae968757421df394b071848b52b1c09c89d6a5
+    image: postgres:18.6-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
     restart: unless-stopped
     environment:
       POSTGRES_USER: snatcharr
@@ -40,7 +40,7 @@ services:
 
   api:
     <<: *hardening
-    image: ghcr.io/lusoris/snatcharr-api:0.1.9@sha256:06a4082e299a0d852e7f7bc7c9b63fa13c88b63a4fa90de09b86fc38e863090e
+    image: ghcr.io/lusoris/snatcharr-api:0.8.0@sha256:1b93f5958669aba5c96a306e7c16a26e1fddfb2c6e266a44c9cf11d1bb31e174
     restart: unless-stopped
     depends_on:
       postgres:
@@ -59,7 +59,7 @@ services:
 
   worker:
     <<: *hardening
-    image: ghcr.io/lusoris/snatcharr-worker:0.1.9@sha256:0dd8ef874e70736591875c03a32d200ce4c8e205ac3fe9258d3e854155efef68
+    image: ghcr.io/lusoris/snatcharr-worker:0.8.0@sha256:2bd7c3a608202bf7a9bd833f137d2f29eae5fd6bec43d69a2adaf41824b21a6a
     restart: unless-stopped
     depends_on:
       - api
