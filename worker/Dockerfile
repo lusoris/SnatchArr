@@ -3,7 +3,7 @@
 #
 # snatcharr-worker: Rust snatch data-plane. Static musl build via cargo-zigbuild → distroless static.
 
-FROM --platform=$BUILDPLATFORM rust:1-bookworm@sha256:48b7f435b8fc6378ce43b44f15e3a47fd8919b2825f835c39bd4bd3da50af5b8 AS build
+FROM --platform=$BUILDPLATFORM rust:1-bookworm@sha256:9181b56c2a21ab1d5e73cffe04fc762426d30aa7fac3c91141dd033f49a7fc8b AS build
 ARG TARGETARCH
 RUN apt-get update && apt-get install -y --no-install-recommends xz-utils curl ca-certificates \
  && rm -rf /var/lib/apt/lists/*
