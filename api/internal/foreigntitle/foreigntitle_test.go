@@ -12,6 +12,7 @@ import (
 	"testing/quick"
 )
 
+// TestLoad checks that the embedded rule files load and that validate refuses malformed rules.
 func TestLoad(t *testing.T) {
 	t.Parallel()
 
@@ -60,6 +61,7 @@ func TestLoad(t *testing.T) {
 	})
 }
 
+// TestVariants_PositiveGerman checks German diacritic expansion and article stripping.
 func TestVariants_PositiveGerman(t *testing.T) {
 	t.Parallel()
 	rules, err := Load()
@@ -99,6 +101,7 @@ func TestVariants_PositiveGerman(t *testing.T) {
 	}
 }
 
+// TestVariants_PositiveFrench checks French variants, including both elision apostrophes.
 func TestVariants_PositiveFrench(t *testing.T) {
 	t.Parallel()
 	rules, err := Load()
@@ -148,6 +151,7 @@ func TestVariants_PositiveFrench(t *testing.T) {
 	}
 }
 
+// TestVariants_Negative checks titles that yield no variant.
 func TestVariants_Negative(t *testing.T) {
 	t.Parallel()
 	rules, err := Load()
@@ -178,6 +182,7 @@ func TestVariants_Negative(t *testing.T) {
 	}
 }
 
+// TestVariants_BoundaryGerman checks the variant cap and a title that is only an article.
 func TestVariants_BoundaryGerman(t *testing.T) {
 	t.Parallel()
 	rules, err := Load()
@@ -230,6 +235,7 @@ func TestVariants_BoundaryGerman(t *testing.T) {
 	}
 }
 
+// TestVariants_BoundaryFrench checks the variant cap on elided titles with both apostrophes.
 func TestVariants_BoundaryFrench(t *testing.T) {
 	t.Parallel()
 	rules, err := Load()
@@ -269,6 +275,7 @@ func TestVariants_BoundaryFrench(t *testing.T) {
 	}
 }
 
+// TestRewriteTitle_PositiveSeparators checks rewrites across dot, space, underscore and dash separators.
 func TestRewriteTitle_PositiveSeparators(t *testing.T) {
 	t.Parallel()
 
@@ -323,6 +330,7 @@ func TestRewriteTitle_PositiveSeparators(t *testing.T) {
 	}
 }
 
+// TestRewriteTitle_PositiveWords checks rewrites of multi-word foreign and canonical titles.
 func TestRewriteTitle_PositiveWords(t *testing.T) {
 	t.Parallel()
 
@@ -363,6 +371,7 @@ func TestRewriteTitle_PositiveWords(t *testing.T) {
 	}
 }
 
+// TestRewriteTitle_Negative checks releases that do not start with the foreign title.
 func TestRewriteTitle_Negative(t *testing.T) {
 	t.Parallel()
 
@@ -390,6 +399,7 @@ func TestRewriteTitle_Negative(t *testing.T) {
 	}
 }
 
+// TestRewriteTitle_Boundary checks a release that is exactly the foreign title.
 func TestRewriteTitle_Boundary(t *testing.T) {
 	t.Parallel()
 
@@ -423,6 +433,7 @@ func TestRewriteTitle_Boundary(t *testing.T) {
 	}
 }
 
+// TestRewriteTitle_KeepsGroup is the planted case: the release group suffix must survive the rewrite.
 func TestRewriteTitle_KeepsGroup(t *testing.T) {
 	t.Parallel()
 	release := "Kaefer.S01E01.720p-GROUP"
@@ -438,6 +449,7 @@ func TestRewriteTitle_KeepsGroup(t *testing.T) {
 	}
 }
 
+// TestRewriteTitle_WordLimits checks titles at and one past the word and byte limits.
 func TestRewriteTitle_WordLimits(t *testing.T) {
 	t.Parallel()
 
@@ -480,6 +492,7 @@ func TestRewriteTitle_WordLimits(t *testing.T) {
 	})
 }
 
+// TestClassify_Positive checks releases classified as dubbed or subtitle-only.
 func TestClassify_Positive(t *testing.T) {
 	t.Parallel()
 	rules, err := Load()
@@ -518,6 +531,7 @@ func TestClassify_Positive(t *testing.T) {
 	}
 }
 
+// TestClassify_Negative checks releases that must stay unknown, such as WEB-DL and title words.
 func TestClassify_Negative(t *testing.T) {
 	t.Parallel()
 	rules, err := Load()
@@ -555,6 +569,7 @@ func TestClassify_Negative(t *testing.T) {
 	}
 }
 
+// TestClassify_Boundary checks tag precedence and untagged groups at the edge of the terminal position.
 func TestClassify_Boundary(t *testing.T) {
 	t.Parallel()
 	rules, err := Load()
@@ -584,6 +599,7 @@ func TestClassify_Boundary(t *testing.T) {
 	}
 }
 
+// TestClassify_TagMutation checks that changed tags are recompiled rather than served from a stale cache.
 func TestClassify_TagMutation(t *testing.T) {
 	t.Parallel()
 	rules, err := Load()
@@ -603,6 +619,7 @@ func TestClassify_TagMutation(t *testing.T) {
 	}
 }
 
+// TestClassify_PatternLimitIndex50 checks that a tag past index 49 still matches.
 func TestClassify_PatternLimitIndex50(t *testing.T) {
 	t.Parallel()
 	tags := make([]string, 51)
@@ -616,6 +633,7 @@ func TestClassify_PatternLimitIndex50(t *testing.T) {
 	}
 }
 
+// TestParse_MultipleDocuments checks that a rule file with a second YAML document is refused.
 func TestParse_MultipleDocuments(t *testing.T) {
 	t.Parallel()
 	_, err := parse([]byte("code: de\n---\ncode: fr\n"))
@@ -624,6 +642,7 @@ func TestParse_MultipleDocuments(t *testing.T) {
 	}
 }
 
+// TestAudio_String checks the names of every Audio value, including out-of-range ones.
 func TestAudio_String(t *testing.T) {
 	t.Parallel()
 	if AudioUnknown.String() != "unknown" {
@@ -643,6 +662,7 @@ func TestAudio_String(t *testing.T) {
 	}
 }
 
+// TestProperties_RewriteTitle checks that a rewrite keeps every release token after the title.
 func TestProperties_RewriteTitle(t *testing.T) {
 	t.Parallel()
 	f := func(ep uint16, qualIdx uint8) bool {
@@ -661,6 +681,7 @@ func TestProperties_RewriteTitle(t *testing.T) {
 	}
 }
 
+// TestProperties_Variants checks that Variants never exceeds its cap or returns the input.
 func TestProperties_Variants(t *testing.T) {
 	t.Parallel()
 	rulesMap, err := Load()
