@@ -38,13 +38,13 @@ SnatchArr implements a language-generic search and release push architecture tha
 
 SnatchArr derives title variants from local cached metadata and declarative language definition files embedded in the binary:
 
-- **Local \*arr cache first**: SnatchArr harvests title aliases directly from the \*arr instance: series `alternateTitles` (Sonarr `GET /api/v3/series/{id}`) and movie `alternativeTitles` and `translations` (Radarr `GET /api/v3/movie/{id}`). No new third-party credentials (TheTVDB, TheMovieDB, MusicBrainz) are required; SnatchArr queries what the \*arr already caches locally.
-- **Declarative language rules**: Language expansion rules are specified declaratively in embedded configuration files (`rules/languages/<lang>.yaml`). Each language definition provides:
+- **Local \*arr cache first**: SnatchArr harvests title aliases directly from the \*arr instance: series `alternateTitles` (Sonarr `GET /api/v3/series/{id}`) and movie `alternateTitles` and `originalTitle` (Radarr `GET /api/v3/movie/{id}`; Radarr 6.4.4 returns no `translations` field there). Neither alias list carries a language field, so the language rules decide which aliases belong to a target language. No new third-party credentials (TheTVDB, TheMovieDB, MusicBrainz) are required; SnatchArr queries what the \*arr already caches locally.
+- **Declarative language rules**: Language expansion rules are specified declaratively in embedded configuration files (`api/internal/foreigntitle/rules/languages/<lang>.yaml`, embedded with `go:embed`). Each language definition provides:
   - Diacritic expansion variants for query generation (e.g. `ä` expanding to `ae` and `a`; `ö` expanding to `oe` and `o`; `ü` expanding to `ue` and `u`; `ß` expanding to `ss` and `s`) and reverse contractions for title parsing.
-  - Positive audio tags (`GERMAN`, `DEUTSCH`, `DUBBED`, `\bDL\b`, `\bML\b`, `\bGL\b`).
-  - Subtitle-only tags (`\bOmU\b`, `\bOmeU\b`) to prevent importing subtitled releases when dubbed audio is required.
+  - Positive audio tags: language-naming tags only (e.g. `GERMAN`, `DEUTSCH` for German; `FRENCH`, `TRUEFRENCH`, `VFF`, `VFQ`, `VF2` for French). Tags match as whole release tokens (separators `.`, space, `_`, `-`, `[`, `]`, `(`, `)`, `{`, `}`). Generic `DL`, `ML`, `MULTi`, `DUBBED` do not count as target-language audio (following Sonarr `LanguageParser` rule where dual/multi-language and dubbed tags are qualifiers rather than target-language evidence).
+  - Subtitle-only tags (`OmU`, `OmeU`, `VOSTFR`) to prevent importing subtitled releases when dubbed audio is required.
   - Bad-naming scene group exceptions (e.g. group `TvR` which omits language tags).
-- **Phased language rollout**: German (`de`) is supported first, as it encompasses diacritic transliteration, TVDB English vs German title differences, scene group tag omissions, and dual-language (`DL`) requirements. Romance languages (`fr`, `es`, `it`, `pt`), Slavic and extended Latin languages (`pl`, `cs`, `sk`), and non-Latin romanization classes (`ja`, `ko`, `zh`, `ru`) follow the same declarative rule schema.
+- **Phased language rollout**: German (`de`) is supported first, as it encompasses diacritic transliteration, TVDB English vs German title differences, and scene group tag omissions. Romance languages (`fr`, `es`, `it`, `pt`), Slavic and extended Latin languages (`pl`, `cs`, `sk`), and non-Latin romanization classes (`ja`, `ko`, `zh`, `ru`) follow the same declarative rule schema.
 
 ### 2. Search path: Prowlarr direct search
 
@@ -75,7 +75,7 @@ For downloads grabbed prior to SnatchArr's intervention that remain in the \*arr
 
 In accordance with SnatchArr's core stamina invariant (issue #180, [AGENTS.md](https://github.com/lusoris/SnatchArr/blob/main/AGENTS.md)), search limits count queries sent per indexer, not raw HTTP requests:
 
-- Every query sent through Prowlarr's search API debits the hourly search stamina bucket of each targeted indexer (1 search per query per indexer), with a warning emitted at 80% utilization.
+- Every variant query sent through Prowlarr's search API debits the hourly bucket of its Prowlarr link and the instance's global stamina by N, where N is the number of indexers the query targets (1 search per query per indexer). A warning is emitted at 80% utilization. No separate per-indexer table is added; the link bucket is the one introduced for the Prowlarr grab path (migration `000043_prowlarr_link_cap`, `snatcharr-grabpath-cap-debit`). Amended by `snatcharr-int204-search-debit`.
 - Search queries are limited to at most 2 title variants per missing item per cycle.
 - Prowlarr search results are cached in SnatchArr for 1 hour to prevent redundant variant queries across subsequent search cycles.
 
@@ -170,4 +170,6 @@ The implementation must pass an end-to-end live verification check:
 - [ADR-0011](0011-product-definition.md): Product definition: parity with Huntarr and newtarr.
 - [ADR-0012](0012-queue-management-replaces-cleanuparr-link.md): SnatchArr manages the download queue; the Cleanuparr link goes.
 - [ADR-0018](0018-product-front-door.md): Product front door of the media stack.
+- `snatcharr-int204-search-debit` (2026-11-02) (paraphrased): Variant searches debit the Prowlarr link bucket and global stamina once per targeted indexer, with an 80% warning and no new table.
+- `snatcharr-int204-second-language` (2026-11-02) (paraphrased): French rules ship next to German as the first non-German language.
 - Hourly search stamina rule: [AGENTS.md](https://github.com/lusoris/SnatchArr/blob/main/AGENTS.md), issue #180.
