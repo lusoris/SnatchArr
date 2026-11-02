@@ -33,11 +33,11 @@ services:
 
   deluge:
     <<: *linuxserver
-    image: docker.io/linuxserver/deluge:2.2.0@sha256:bf306ddd5e6d4a85d3d05ce1b947ab6e344e7fca1b7740b77c58ce170118c7ff
+    image: docker.io/linuxserver/deluge:2.2.0@sha256:1dbf9663387f85bb5805fcb1418a246f877e01374bb2a6cd9e632c72fb2e1ebc
     ports: ["127.0.0.1:${DELUGE_PORT:-18103}:8112"]
 
   rtorrent:
-    image: crazymax/rtorrent-rutorrent:5.3.16-0.16.25@sha256:07c8b8ed5c27aca95ebb0e438e799c7cc2cef99e04fc1ba6de43ac69020b649b
+    image: crazymax/rtorrent-rutorrent:5.3.18-0.16.25@sha256:a6577938d9b2d1e9038a9989c395990738c984ff6d7a2037a082a06bb4ab8a2d
     ports: ["127.0.0.1:${RTORRENT_PORT:-18104}:8000"]
 
   sabnzbd:
