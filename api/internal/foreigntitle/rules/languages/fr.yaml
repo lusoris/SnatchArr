@@ -1,0 +1,112 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+code: fr
+name: French
+expansions:
+  - from: "é"
+    to:
+      - "e"
+  - from: "è"
+    to:
+      - "e"
+  - from: "ê"
+    to:
+      - "e"
+  - from: "ë"
+    to:
+      - "e"
+  - from: "à"
+    to:
+      - "a"
+  - from: "â"
+    to:
+      - "a"
+  - from: "î"
+    to:
+      - "i"
+  - from: "ï"
+    to:
+      - "i"
+  - from: "ô"
+    to:
+      - "o"
+  - from: "ù"
+    to:
+      - "u"
+  - from: "û"
+    to:
+      - "u"
+  - from: "ü"
+    to:
+      - "u"
+  - from: "ç"
+    to:
+      - "c"
+  - from: "œ"
+    to:
+      - "oe"
+  - from: "æ"
+    to:
+      - "ae"
+  - from: "É"
+    to:
+      - "E"
+  - from: "È"
+    to:
+      - "E"
+  - from: "Ê"
+    to:
+      - "E"
+  - from: "Ë"
+    to:
+      - "E"
+  - from: "À"
+    to:
+      - "A"
+  - from: "Â"
+    to:
+      - "A"
+  - from: "Î"
+    to:
+      - "I"
+  - from: "Ï"
+    to:
+      - "I"
+  - from: "Ô"
+    to:
+      - "O"
+  - from: "Ù"
+    to:
+      - "U"
+  - from: "Û"
+    to:
+      - "U"
+  - from: "Ü"
+    to:
+      - "U"
+  - from: "Ç"
+    to:
+      - "C"
+  - from: "Œ"
+    to:
+      - "Oe"
+  - from: "Æ"
+    to:
+      - "Ae"
+audio_tags:
+  - 'FRENCH'
+  - 'TRUEFRENCH'
+  - 'VFF'
+  - 'VFQ'
+  - 'VF2'
+  - 'MULTi'
+subtitle_only_tags:
+  - 'VOSTFR'
+untagged_groups: []
+strip_articles:
+  - le
+  - la
+  - les
+  - "l'"

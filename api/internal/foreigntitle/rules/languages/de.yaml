@@ -1,0 +1,50 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+code: de
+name: German
+expansions:
+  - from: "ä"
+    to:
+      - "ae"
+      - "a"
+  - from: "ö"
+    to:
+      - "oe"
+      - "o"
+  - from: "ü"
+    to:
+      - "ue"
+      - "u"
+  - from: "ß"
+    to:
+      - "ss"
+      - "s"
+  - from: "Ä"
+    to:
+      - "Ae"
+      - "A"
+  - from: "Ö"
+    to:
+      - "Oe"
+      - "O"
+  - from: "Ü"
+    to:
+      - "Ue"
+      - "U"
+audio_tags:
+  - 'GERMAN'
+  - 'DEUTSCH'
+  - 'DUBBED'
+  - 'DL'
+  - 'ML'
+subtitle_only_tags:
+  - 'OmU'
+  - 'OmeU'
+untagged_groups:
+  - TvR
+strip_articles:
+  - der
+  - die
+  - das
