@@ -455,11 +455,20 @@ function buildClientToolArgs(name: string, state: FixtureState): ToolArgResult {
 	return { args: { clientId: state.clientId } };
 }
 
+/**
+ * Builds the arguments for the schedule create and update tools. Every schedule the sweep writes
+ * names the seeded instance: a global pause window would pause the instances other e2e tests
+ * create while it is open (instance-run-gauge.test.ts).
+ * @throws when the seeded instance id or, for an update, the seeded schedule is missing.
+ */
 function buildScheduleToolArgs(name: string, state: FixtureState): ToolArgResult {
+	// Fail rather than skip: a schedule write without an instance would be a global window.
+	if (!state.instanceId) throw new Error(`${name}: seeded instance id missing (.auth/seed.json)`);
 	if (name === 'snatcharr_create_schedule') {
 		return {
 			args: {
 				body: {
+					instance_id: state.instanceId,
 					name: 'mcp-sweep-sched',
 					days: [1, 2, 3],
 					start: '09:00',
@@ -471,11 +480,12 @@ function buildScheduleToolArgs(name: string, state: FixtureState): ToolArgResult
 			}
 		};
 	}
-	if (!state.scheduleId) return { skip: 'no schedule fixture' };
+	if (!state.scheduleId) throw new Error(`${name}: seeded schedule 'seeded-schedule' not listed`);
 	return {
 		args: {
 			scheduleId: state.scheduleId,
 			body: {
+				instance_id: state.instanceId,
 				name: 'seeded-schedule',
 				days: [1, 2, 3, 4, 5],
 				start: '08:00',
@@ -753,6 +763,10 @@ function extractStructuredData(data: unknown): unknown {
 	return null;
 }
 
+/**
+ * Records the id a create tool returned, so the destructive phase deletes only what the sweep
+ * created. The instance and schedule fixtures keep the seeded ids.
+ */
 function recordCreated(toolName: string, data: unknown, state: FixtureState): void {
 	const key = CREATE_TOOLS[toolName];
 	const id = (data as { id?: string } | null)?.id;
@@ -768,12 +782,14 @@ function recordCreated(toolName: string, data: unknown, state: FixtureState): vo
 		seerr: 'seerrLinkId'
 	};
 	const field = ids[key];
-	if (key !== 'instance' && !state[field]) Object.assign(state, { [field]: id });
+	// The schedule update targets only the seeded window (seededScheduleId), never this one.
+	if (key !== 'instance' && key !== 'schedule' && !state[field]) {
+		Object.assign(state, { [field]: id });
+	}
 }
 
 // List tool -> state field that takes the first listed id.
 const LIST_FIRST_ID: Record<string, keyof FixtureState> = {
-	snatcharr_list_schedules: 'scheduleId',
 	snatcharr_list_download_clients: 'clientId',
 	snatcharr_list_notification_channels: 'channelId',
 	snatcharr_list_notification_rules: 'ruleId',
@@ -782,6 +798,20 @@ const LIST_FIRST_ID: Record<string, keyof FixtureState> = {
 	snatcharr_list_runs: 'runId'
 };
 
+/**
+ * Returns the id of the schedule named seeded-schedule, or undefined when the list lacks it.
+ * The update fixture rewrites the seeded window, so it targets that schedule by name and never
+ * whichever schedule the list returns first (the sweep's own schedule may come first).
+ */
+function seededScheduleId(data: unknown[]): string | undefined {
+	const seeded = data.find((s) => (s as { name?: string } | null)?.name === 'seeded-schedule');
+	return (seeded as { id?: string } | undefined)?.id;
+}
+
+/**
+ * Records ids from a list tool's result as fixtures for later tools: the seeded schedule by name,
+ * the first listed id for the tools in LIST_FIRST_ID, and an instance only when none is set yet.
+ */
 function recordListed(toolName: string, data: unknown, state: FixtureState): void {
 	if (!Array.isArray(data) || data.length === 0) return;
 	const id = (data[0] as { id?: string } | null)?.id;
@@ -790,10 +820,15 @@ function recordListed(toolName: string, data: unknown, state: FixtureState): voi
 		state.instanceId ??= id;
 		return;
 	}
+	if (toolName === 'snatcharr_list_schedules') {
+		state.scheduleId = seededScheduleId(data) ?? state.scheduleId;
+		return;
+	}
 	const field = LIST_FIRST_ID[toolName];
 	if (field) Object.assign(state, { [field]: id });
 }
 
+/** Updates the fixture state from one tool result: created ids, listed ids, run and policies. */
 function updateFixtureState(toolName: string, data: unknown, state: FixtureState): void {
 	recordCreated(toolName, data, state);
 	recordListed(toolName, data, state);
@@ -808,6 +843,7 @@ function updateFixtureState(toolName: string, data: unknown, state: FixtureState
 	}
 }
 
+/** Reads the seeded instance id from .auth/seed.json; undefined when the file or field is missing. */
 async function loadSeedInstanceId(): Promise<string | undefined> {
 	try {
 		const seedPath = path.resolve(import.meta.dirname, '.auth/seed.json');
@@ -817,6 +853,16 @@ async function loadSeedInstanceId(): Promise<string | undefined> {
 	} catch {
 		return undefined;
 	}
+}
+
+/**
+ * Returns the seeded instance id or throws. Without it the instance fixture would fall back to
+ * whichever instance the list returns first, and the schedule fixtures would bind the seeded
+ * pause window to that instance.
+ */
+function requireSeedInstanceId(id: string | undefined): string {
+	if (!id) throw new Error('seeded instance id missing (.auth/seed.json)');
+	return id;
 }
 
 async function writeTsvReport(allTools: McpTool[], rows: SweepRow[]): Promise<void> {
@@ -869,7 +915,7 @@ test.describe('mcp sweep', () => {
 		const sorted = [...tools].sort((a, b) => getToolPriority(a.name) - getToolPriority(b.name));
 
 		const state: FixtureState = {
-			instanceId: await loadSeedInstanceId(),
+			instanceId: requireSeedInstanceId(await loadSeedInstanceId()),
 			settings: initialSettings,
 			created: {}
 		};
@@ -930,6 +976,30 @@ test.describe('mcp sweep', () => {
 		}
 
 		await writeTsvReport(tools, rows);
+	});
+
+	test('planted negative: schedule writes need the seeded instance and schedule', () => {
+		expect(() => requireSeedInstanceId(undefined)).toThrow('seeded instance id missing');
+		expect(requireSeedInstanceId('i')).toBe('i');
+		const update = 'snatcharr_update_schedule';
+		expect(() => buildScheduleToolArgs(update, { created: {} })).toThrow(
+			'seeded instance id missing'
+		);
+		expect(() => buildScheduleToolArgs(update, { instanceId: 'i', created: {} })).toThrow(
+			'seeded-schedule'
+		);
+		const listed = [
+			{ id: 'other', name: 'mcp-sweep-sched' },
+			{ id: 's', name: 'seeded-schedule' }
+		];
+		const state: FixtureState = { instanceId: 'i', created: {} };
+		updateFixtureState('snatcharr_list_schedules', listed, state);
+		updateFixtureState('snatcharr_create_schedule', { id: 'mine' }, state);
+		expect(state.scheduleId).toBe('s');
+		const built = buildScheduleToolArgs(update, state);
+		expect(built.args).toMatchObject({ scheduleId: 's', body: { instance_id: 'i' } });
+		const create = buildScheduleToolArgs('snatcharr_create_schedule', state);
+		expect(create.args).toMatchObject({ body: { instance_id: 'i' } });
 	});
 
 	test('planted negative: guard refuses off-host and unparsable urls', () => {
