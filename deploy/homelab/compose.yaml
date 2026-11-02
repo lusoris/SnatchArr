@@ -10,9 +10,10 @@
 # Images are pinned by version and digest; Renovate moves the pins. Secrets come from .env next
 # to this file, and compose refuses to start while one of them is unset.
 #
-# Health: Postgres reports its health here. The API and worker images from 0.1.9 have no
-# shell and no probe command, so they get their health checks with the first release that
-# ships `healthcheck` in both binaries.
+# Health: Postgres reports its health through pg_isready. The API and worker images are
+# distroless, so each probes itself with its own `healthcheck` subcommand (since 0.2.0): the
+# API asks /readyz, the worker /livez. The API waits for a healthy Postgres, the worker for a
+# healthy API.
 
 name: snatcharr
 
@@ -42,6 +43,12 @@ services:
     <<: *hardening
     image: ghcr.io/lusoris/snatcharr-api:0.8.0@sha256:1b93f5958669aba5c96a306e7c16a26e1fddfb2c6e266a44c9cf11d1bb31e174
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/snatcharr-api", "healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
     depends_on:
       postgres:
         condition: service_healthy
@@ -62,7 +69,14 @@ services:
     image: ghcr.io/lusoris/snatcharr-worker:0.8.0@sha256:2bd7c3a608202bf7a9bd833f137d2f29eae5fd6bec43d69a2adaf41824b21a6a
     restart: unless-stopped
     depends_on:
-      - api
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/snatch-worker", "healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
     environment:
       SNATCH_API_GRPC: http://api:9090
       SNATCH_WORKER_TOKEN: ${SNATCHARR_WORKER_TOKEN:?set SNATCHARR_WORKER_TOKEN in .env}

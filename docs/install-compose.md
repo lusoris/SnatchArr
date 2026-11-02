@@ -50,9 +50,9 @@ Postgres reports its health through `pg_isready`, and the API starts only once P
 healthy. The API and worker images are distroless: they carry no shell and no `curl`, so a
 health check has to be a command of the binary itself. Both binaries answer a `healthcheck`
 subcommand (`/snatcharr-api healthcheck` asks `/readyz`, `/snatch-worker healthcheck` asks
-`/livez`; exit 0 = healthy). The images pinned in `compose.yaml` (0.1.9) predate that
-subcommand, so the bundle gets API and worker health checks with the first release that ships
-it; Renovate moves the pins to that release.
+`/livez`; exit 0 = healthy). `compose.yaml` runs both as health checks, and the worker starts
+only once the API is healthy, so `docker compose up -d --wait` returns when the whole bundle is
+ready.
 
 `make e2e-compose-smoke` starts this bundle with images built from the checkout, adds both
 health checks, and checks that every service turns healthy, that `/setup` serves the UI and
