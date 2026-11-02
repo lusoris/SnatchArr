@@ -101,7 +101,6 @@ audio_tags:
   - 'VFF'
   - 'VFQ'
   - 'VF2'
-  - 'MULTi'
 subtitle_only_tags:
   - 'VOSTFR'
 untagged_groups: []
@@ -110,3 +109,4 @@ strip_articles:
   - la
   - les
   - "l'"
+  - "l’"

@@ -36,9 +36,6 @@ expansions:
 audio_tags:
   - 'GERMAN'
   - 'DEUTSCH'
-  - 'DUBBED'
-  - 'DL'
-  - 'ML'
 subtitle_only_tags:
   - 'OmU'
   - 'OmeU'

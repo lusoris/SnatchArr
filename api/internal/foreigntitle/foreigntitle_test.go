@@ -37,81 +37,85 @@ func TestLoad(t *testing.T) {
 		}
 	})
 
-	t.Run("negative unknown field", func(t *testing.T) {
+	t.Run("negative validation cases", func(t *testing.T) {
 		t.Parallel()
-		invalid := []byte("code: de\nname: German\nunknown_field: true\n")
-		if _, err := parse(invalid); err == nil {
+		if _, err := parse([]byte("code: de\nname: German\nunknown_field: true\n")); err == nil {
 			t.Fatalf("parse() should reject unknown fields")
 		}
-	})
-
-	t.Run("negative code mismatch", func(t *testing.T) {
-		t.Parallel()
 		r := Rules{Code: "en"}
 		if err := validate(&r, "de"); err == nil {
 			t.Fatalf("validate() should fail on code stem mismatch")
 		}
-	})
-
-	t.Run("negative empty to-list", func(t *testing.T) {
-		t.Parallel()
-		r := Rules{Code: "de", Expansions: []Expansion{{From: "ä", To: []string{}}}}
-		if err := validate(&r, "de"); err == nil {
+		rEmpty := Rules{Code: "de", Expansions: []Expansion{{From: "ä", To: []string{}}}}
+		if err := validate(&rEmpty, "de"); err == nil {
 			t.Fatalf("validate() should fail on empty to-list")
 		}
-	})
-
-	t.Run("negative invalid regex", func(t *testing.T) {
-		t.Parallel()
-		r := Rules{Code: "de", AudioTags: []string{"[unclosed"}}
-		if err := validate(&r, "de"); err == nil {
+		rRegex := Rules{Code: "de", AudioTags: []string{"[unclosed"}}
+		if err := validate(&rRegex, "de"); err == nil {
 			t.Fatalf("validate() should fail on invalid regex")
 		}
-	})
-
-	t.Run("boundary empty data", func(t *testing.T) {
-		t.Parallel()
 		if _, err := parse([]byte("")); err == nil {
 			t.Fatalf("parse() should fail on empty input")
 		}
 	})
 }
 
-func TestVariants(t *testing.T) {
+func TestVariants_PositiveGerman(t *testing.T) {
 	t.Parallel()
 	rules, err := Load()
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
 	}
 	de := rules["de"]
-	fr := rules["fr"]
 
 	tests := []struct {
-		name     string
-		title    string
-		rules    Rules
-		max      int
-		want     []string
-		wantNone bool
+		name  string
+		title string
+		max   int
+		want  []string
 	}{
 		{
 			name:  "positive de umlaut Käfer",
 			title: "Käfer",
-			rules: de,
 			max:   5,
 			want:  []string{"Kaefer", "Kafer"},
 		},
 		{
 			name:  "positive de Die Ärzte full and stripped",
 			title: "Die Ärzte",
-			rules: de,
 			max:   5,
 			want:  []string{"Die Aerzte", "Die Arzte", "Aerzte", "Arzte", "Ärzte"},
 		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := Variants(tc.title, de, tc.max)
+			if !slices.Equal(got, tc.want) {
+				t.Fatalf("Variants(%q) = %v, want %v", tc.title, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestVariants_PositiveFrench(t *testing.T) {
+	t.Parallel()
+	rules, err := Load()
+	if err != nil {
+		t.Fatalf("Load() unexpected error: %v", err)
+	}
+	fr := rules["fr"]
+
+	tests := []struct {
+		name  string
+		title string
+		max   int
+		want  []string
+	}{
 		{
 			name:  "positive fr accent and article",
 			title: "Le Fabuleux Destin d'Amélie Poulain",
-			rules: fr,
 			max:   5,
 			want: []string{
 				"Le Fabuleux Destin d'Amelie Poulain",
@@ -122,56 +126,88 @@ func TestVariants(t *testing.T) {
 		{
 			name:  "positive fr elision L'Amour Ouf",
 			title: "L'Amour Ouf",
-			rules: fr,
 			max:   5,
-			want:  []string{"Amour Ouf"},
+			want:  []string{"Amour Ouf", "L Amour Ouf"},
 		},
 		{
-			name:     "negative max zero",
-			title:    "Käfer",
-			rules:    de,
-			max:      0,
-			wantNone: true,
+			name:  "positive fr elision U+2019 L’Amour Ouf",
+			title: "L’Amour Ouf",
+			max:   5,
+			want:  []string{"Amour Ouf", "L Amour Ouf"},
 		},
-		{
-			name:     "negative max negative",
-			title:    "Käfer",
-			rules:    de,
-			max:      -2,
-			wantNone: true,
-		},
-		{
-			name:     "negative empty title",
-			title:    "  ",
-			rules:    de,
-			max:      5,
-			wantNone: true,
-		},
-		{
-			name:     "negative no variants possible",
-			title:    "Inception",
-			rules:    de,
-			max:      5,
-			wantNone: true,
-		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := Variants(tc.title, fr, tc.max)
+			if !slices.Equal(got, tc.want) {
+				t.Fatalf("Variants(%q) = %v, want %v", tc.title, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestVariants_Negative(t *testing.T) {
+	t.Parallel()
+	rules, err := Load()
+	if err != nil {
+		t.Fatalf("Load() unexpected error: %v", err)
+	}
+	de := rules["de"]
+
+	tests := []struct {
+		name  string
+		title string
+		rules Rules
+		max   int
+	}{
+		{name: "negative max zero", title: "Käfer", rules: de, max: 0},
+		{name: "negative max negative", title: "Käfer", rules: de, max: -2},
+		{name: "negative empty title", title: "  ", rules: de, max: 5},
+		{name: "negative no variants possible", title: "Inception", rules: de, max: 5},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := Variants(tc.title, tc.rules, tc.max); got != nil {
+				t.Fatalf("Variants(%q) = %v, want nil", tc.title, got)
+			}
+		})
+	}
+}
+
+func TestVariants_BoundaryGerman(t *testing.T) {
+	t.Parallel()
+	rules, err := Load()
+	if err != nil {
+		t.Fatalf("Load() unexpected error: %v", err)
+	}
+	de := rules["de"]
+
+	tests := []struct {
+		name     string
+		title    string
+		max      int
+		want     []string
+		wantNone bool
+	}{
 		{
 			name:  "boundary max 1 cap",
 			title: "Die Ärzte",
-			rules: de,
 			max:   1,
 			want:  []string{"Die Aerzte"},
 		},
 		{
 			name:  "boundary max 2 cap",
 			title: "Die Ärzte",
-			rules: de,
 			max:   2,
 			want:  []string{"Die Aerzte", "Die Arzte"},
 		},
 		{
 			name:     "boundary only article der",
 			title:    "Der",
-			rules:    de,
 			max:      5,
 			wantNone: true,
 		},
@@ -180,7 +216,7 @@ func TestVariants(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got := Variants(tc.title, tc.rules, tc.max)
+			got := Variants(tc.title, de, tc.max)
 			if tc.wantNone {
 				if got != nil {
 					t.Fatalf("Variants(%q) = %v, want nil", tc.title, got)
@@ -194,7 +230,46 @@ func TestVariants(t *testing.T) {
 	}
 }
 
-func TestRewriteTitle(t *testing.T) {
+func TestVariants_BoundaryFrench(t *testing.T) {
+	t.Parallel()
+	rules, err := Load()
+	if err != nil {
+		t.Fatalf("Load() unexpected error: %v", err)
+	}
+	fr := rules["fr"]
+
+	tests := []struct {
+		name  string
+		title string
+		max   int
+		want  []string
+	}{
+		{
+			name:  "boundary fr elision max 1 cap",
+			title: "L'Amour Ouf",
+			max:   1,
+			want:  []string{"Amour Ouf"},
+		},
+		{
+			name:  "boundary fr elision U+2019 max 1 cap",
+			title: "L’Amour Ouf",
+			max:   1,
+			want:  []string{"Amour Ouf"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := Variants(tc.title, fr, tc.max)
+			if !slices.Equal(got, tc.want) {
+				t.Fatalf("Variants(%q) = %v, want %v", tc.title, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRewriteTitle_PositiveSeparators(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -203,7 +278,6 @@ func TestRewriteTitle(t *testing.T) {
 		foreign   string
 		canonical string
 		want      string
-		wantErr   bool
 	}{
 		{
 			name:      "positive dots separator",
@@ -233,6 +307,32 @@ func TestRewriteTitle(t *testing.T) {
 			canonical: "Alone Germany",
 			want:      "Alone-Germany-S01E01-720p-TvR",
 		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := RewriteTitle(tc.release, tc.foreign, tc.canonical)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("RewriteTitle() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRewriteTitle_PositiveWords(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		release   string
+		foreign   string
+		canonical string
+		want      string
+	}{
 		{
 			name:      "positive single word foreign title",
 			release:   "Kaefer.S01E01.720p-GRP",
@@ -247,34 +347,59 @@ func TestRewriteTitle(t *testing.T) {
 			canonical: "Alone Germany",
 			want:      "Alone.Germany.S01E01",
 		},
-		{
-			name:      "negative prefix mismatch",
-			release:   "Other.Show.S01E01",
-			foreign:   "Alone",
-			canonical: "Alone Germany",
-			wantErr:   true,
-		},
-		{
-			name:      "negative partial word mismatch",
-			release:   "Aloneness.S01E01",
-			foreign:   "Alone",
-			canonical: "Alone Germany",
-			wantErr:   true,
-		},
-		{
-			name:      "negative release too short",
-			release:   "Alone",
-			foreign:   "Alone Germany",
-			canonical: "Alone",
-			wantErr:   true,
-		},
-		{
-			name:      "negative empty release",
-			release:   "",
-			foreign:   "Alone",
-			canonical: "Alone Germany",
-			wantErr:   true,
-		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := RewriteTitle(tc.release, tc.foreign, tc.canonical)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("RewriteTitle() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRewriteTitle_Negative(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		release   string
+		foreign   string
+		canonical string
+	}{
+		{name: "negative prefix mismatch", release: "Other.Show.S01E01", foreign: "Alone", canonical: "Alone Germany"},
+		{name: "negative partial word mismatch", release: "Aloneness.S01E01", foreign: "Alone", canonical: "Alone Germany"},
+		{name: "negative release too short", release: "Alone", foreign: "Alone Germany", canonical: "Alone"},
+		{name: "negative empty release", release: "", foreign: "Alone", canonical: "Alone Germany"},
+		{name: "negative empty foreign", release: "Show.S01E01", foreign: "   ", canonical: "Alone"},
+		{name: "negative empty canonical", release: "Show.S01E01", foreign: "Show", canonical: "   "},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got, err := RewriteTitle(tc.release, tc.foreign, tc.canonical); err == nil {
+				t.Fatalf("expected error, got %q", got)
+			}
+		})
+	}
+}
+
+func TestRewriteTitle_Boundary(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		release   string
+		foreign   string
+		canonical string
+		want      string
+	}{
 		{
 			name:      "boundary exact title match without suffix",
 			release:   "Alone.Ueberlebe",
@@ -288,14 +413,8 @@ func TestRewriteTitle(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			got, err := RewriteTitle(tc.release, tc.foreign, tc.canonical)
-			if tc.wantErr {
-				if err == nil {
-					t.Fatalf("RewriteTitle() expected error, got %q", got)
-				}
-				return
-			}
 			if err != nil {
-				t.Fatalf("RewriteTitle() unexpected error: %v", err)
+				t.Fatalf("unexpected error: %v", err)
 			}
 			if got != tc.want {
 				t.Fatalf("RewriteTitle() = %q, want %q", got, tc.want)
@@ -319,7 +438,49 @@ func TestRewriteTitle_KeepsGroup(t *testing.T) {
 	}
 }
 
-func TestClassify(t *testing.T) {
+func TestRewriteTitle_WordLimits(t *testing.T) {
+	t.Parallel()
+
+	words100 := make([]string, 0, 100)
+	for i := range 100 {
+		words100 = append(words100, fmt.Sprintf("w%d", i))
+	}
+	title100 := strings.Join(words100, ".")
+	words101 := make([]string, 0, 101)
+	words101 = append(words101, words100...)
+	words101 = append(words101, "w100")
+	title101 := strings.Join(words101, ".")
+
+	t.Run("boundary 100 words foreign succeeds", func(t *testing.T) {
+		t.Parallel()
+		rel := title100 + ".S01E01-GRP"
+		got, err := RewriteTitle(rel, title100, "Canonical")
+		if err != nil {
+			t.Fatalf("expected success for 100 words, got error: %v", err)
+		}
+		if got != "Canonical.S01E01-GRP" {
+			t.Fatalf("RewriteTitle() = %q, want Canonical.S01E01-GRP", got)
+		}
+	})
+
+	t.Run("boundary 101 words foreign fails", func(t *testing.T) {
+		t.Parallel()
+		rel := title101 + ".S01E01-GRP"
+		if _, err := RewriteTitle(rel, title101, "Canonical"); err == nil {
+			t.Fatalf("expected error for 101 words in foreign title")
+		}
+	})
+
+	t.Run("boundary 101 words canonical fails", func(t *testing.T) {
+		t.Parallel()
+		rel := "Show.S01E01-GRP"
+		if _, err := RewriteTitle(rel, "Show", title101); err == nil {
+			t.Fatalf("expected error for 101 words in canonical title")
+		}
+	})
+}
+
+func TestClassify_Positive(t *testing.T) {
 	t.Parallel()
 	rules, err := Load()
 	if err != nil {
@@ -334,106 +495,132 @@ func TestClassify(t *testing.T) {
 		rules   Rules
 		want    Audio
 	}{
-		{
-			name:    "negative WEB-DL source is not the DL audio tag",
-			release: "Show.S01E01.1080p.WEB-DL.x264-GRP",
-			rules:   de,
-			want:    AudioUnknown,
-		},
-		{
-			name:    "negative Germany in title is not the GERMAN tag",
-			release: "Alone.Germany.S01E01.720p.HDTV-GRP",
-			rules:   de,
-			want:    AudioUnknown,
-		},
-		{
-			name:    "positive DL token before group dash",
-			release: "Show.S01E01.GERMAN.DL-GRP",
-			rules:   de,
-			want:    AudioDubbed,
-		},
-		{
-			name:    "positive VOSTFR with WEB-DL stays sub-only",
-			release: "Le.Film.2020.VOSTFR.1080p.WEB-DL-GRP",
-			rules:   fr,
-			want:    AudioSubOnly,
-		},
-		{
-			name:    "positive German dubbed tag",
-			release: "Kaefer.S01E01.GERMAN.720p-GRP",
-			rules:   de,
-			want:    AudioDubbed,
-		},
-		{
-			name:    "positive French dubbed tag",
-			release: "Movie.FRENCH.1080p-GRP",
-			rules:   fr,
-			want:    AudioDubbed,
-		},
-		{
-			name:    "positive French VOSTFR subtitle only",
-			release: "Movie.VOSTFR.1080p-GRP",
-			rules:   fr,
-			want:    AudioSubOnly,
-		},
-		{
-			name:    "positive German OmU subtitle only",
-			release: "Movie.OmU.1080p-GRP",
-			rules:   de,
-			want:    AudioSubOnly,
-		},
-		{
-			name:    "negative unknown audio",
-			release: "Movie.1080p-GRP",
-			rules:   de,
-			want:    AudioUnknown,
-		},
-		{
-			name:    "negative English audio",
-			release: "Movie.ENGLISH.1080p-GRP",
-			rules:   de,
-			want:    AudioUnknown,
-		},
-		{
-			name:    "boundary DL plus OmU dubbed wins",
-			release: "Movie.DL.OmU.1080p-GRP",
-			rules:   de,
-			want:    AudioDubbed,
-		},
-		{
-			name:    "boundary untagged group TvR dubbed",
-			release: "Alone.Ueberlebe.die.Wildnis.S01E01.720p-TvR",
-			rules:   de,
-			want:    AudioDubbed,
-		},
-		{
-			name:    "boundary untagged group with mkv extension",
-			release: "Alone.S01E01.720p-TvR.mkv",
-			rules:   de,
-			want:    AudioDubbed,
-		},
-		{
-			name:    "boundary untagged group with brackets",
-			release: "[TvR] Alone.S01E01.720p",
-			rules:   de,
-			want:    AudioDubbed,
-		},
-		{
-			name:    "boundary untagged group not in group position",
-			release: "TvR.Movie.1080p-OTHER",
-			rules:   de,
-			want:    AudioUnknown,
-		},
+		{name: "positive German dubbed tag", release: "Kaefer.S01E01.GERMAN.720p-GRP", rules: de, want: AudioDubbed},
+		{name: "positive French dubbed tag", release: "Movie.FRENCH.1080p-GRP", rules: fr, want: AudioDubbed},
+		{name: "positive French VOSTFR subtitle only", release: "Movie.VOSTFR.1080p-GRP", rules: fr, want: AudioSubOnly},
+		{name: "positive German OmU subtitle only", release: "Movie.OmU.1080p-GRP", rules: de, want: AudioSubOnly},
+		{name: "positive VOSTFR with WEB-DL stays sub-only", release: "Le.Film.2020.VOSTFR.1080p.WEB-DL-GRP", rules: fr, want: AudioSubOnly},
+		{name: "positive German DL token stays dubbed", release: "Show.S01E01.GERMAN.DL-GRP", rules: de, want: AudioDubbed},
+		{name: "positive dash as left boundary", release: "Show.S01E01-GERMAN-GRP", rules: de, want: AudioDubbed},
+		{name: "positive untagged group with mkv extension", release: "Show.S01E01.1080p-TvR.mkv", rules: de, want: AudioDubbed},
+		{name: "positive untagged group with brackets and mkv", release: "Show.S01E01.1080p.[TvR].mkv", rules: de, want: AudioDubbed},
+		{name: "positive untagged group with brackets at start", release: "[TvR] Alone.S01E01.720p", rules: de, want: AudioDubbed},
+		{name: "positive untagged group terminal dash", release: "Alone.Ueberlebe.die.Wildnis.S01E01.720p-TvR", rules: de, want: AudioDubbed},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got := Classify(tc.release, tc.rules)
-			if got != tc.want {
+			if got := Classify(tc.release, tc.rules); got != tc.want {
 				t.Fatalf("Classify(%q) = %v, want %v", tc.release, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestClassify_Negative(t *testing.T) {
+	t.Parallel()
+	rules, err := Load()
+	if err != nil {
+		t.Fatalf("Load() unexpected error: %v", err)
+	}
+	de := rules["de"]
+	fr := rules["fr"]
+
+	tests := []struct {
+		name    string
+		release string
+		rules   Rules
+		want    Audio
+	}{
+		{name: "negative WEB-DL source is not DL audio", release: "Show.S01E01.1080p.WEB-DL.x264-GRP", rules: de, want: AudioUnknown},
+		{name: "negative Germany in title is not GERMAN tag", release: "Alone.Germany.S01E01.720p.HDTV-GRP", rules: de, want: AudioUnknown},
+		{name: "negative unknown audio", release: "Movie.1080p-GRP", rules: de, want: AudioUnknown},
+		{name: "negative English audio", release: "Movie.ENGLISH.1080p-GRP", rules: de, want: AudioUnknown},
+		{name: "negative MULTi tag alone in fr", release: "Show.S01E01.MULTi.1080p-GRP", rules: fr, want: AudioUnknown},
+		{name: "negative DL tag alone in de", release: "Show.S01E01.DL.1080p-GRP", rules: de, want: AudioUnknown},
+		{name: "negative WEB.DL tag alone in de", release: "Show.S01E01.WEB.DL-GRP", rules: de, want: AudioUnknown},
+		{name: "negative untagged group in title", release: "Show-TvR.Movie.1080p-OTHER", rules: de, want: AudioUnknown},
+		{name: "negative title word after group is not an extension", release: "Show.S01E01-TvR.Movie", rules: de, want: AudioUnknown},
+		{name: "negative untagged group not in group pos", release: "TvR.Movie.1080p-OTHER", rules: de, want: AudioUnknown},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := Classify(tc.release, tc.rules); got != tc.want {
+				t.Fatalf("Classify(%q) = %v, want %v", tc.release, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestClassify_Boundary(t *testing.T) {
+	t.Parallel()
+	rules, err := Load()
+	if err != nil {
+		t.Fatalf("Load() unexpected error: %v", err)
+	}
+	de := rules["de"]
+
+	tests := []struct {
+		name    string
+		release string
+		rules   Rules
+		want    Audio
+	}{
+		{name: "boundary GERMAN plus OmU dubbed wins", release: "Movie.GERMAN.OmU.1080p-GRP", rules: de, want: AudioDubbed},
+		{name: "boundary untagged group with brackets no extension", release: "Show.S01E01.1080p.[TvR]", rules: de, want: AudioDubbed},
+		{name: "boundary untagged group with torrent extension", release: "Show.S01E01.1080p-TvR.torrent", rules: de, want: AudioDubbed},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := Classify(tc.release, tc.rules); got != tc.want {
+				t.Fatalf("Classify(%q) = %v, want %v", tc.release, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestClassify_TagMutation(t *testing.T) {
+	t.Parallel()
+	rules, err := Load()
+	if err != nil {
+		t.Fatalf("Load() unexpected error: %v", err)
+	}
+	de := rules["de"]
+	de.AudioTags[0] = "MEINNEUERTAG"
+
+	got := Classify("Show.S01E01.MEINNEUERTAG.1080p-GRP", de)
+	if got != AudioDubbed {
+		t.Fatalf("Classify with mutated AudioTags[0] = %v, want AudioDubbed", got)
+	}
+	gotOld := Classify("Show.S01E01.GERMAN.1080p-GRP", de)
+	if gotOld != AudioUnknown {
+		t.Fatalf("Classify with old tag after mutation = %v, want AudioUnknown", gotOld)
+	}
+}
+
+func TestClassify_PatternLimitIndex50(t *testing.T) {
+	t.Parallel()
+	tags := make([]string, 51)
+	for i := range 51 {
+		tags[i] = fmt.Sprintf("TAG%02d", i)
+	}
+	r := Rules{AudioTags: tags}
+	got := Classify("Show.S01E01.TAG50.1080p-GRP", r)
+	if got != AudioDubbed {
+		t.Fatalf("Classify matching tag at index 50 = %v, want AudioDubbed", got)
+	}
+}
+
+func TestParse_MultipleDocuments(t *testing.T) {
+	t.Parallel()
+	_, err := parse([]byte("code: de\n---\ncode: fr\n"))
+	if err == nil || !strings.Contains(err.Error(), "multiple YAML documents") {
+		t.Fatalf("expected 'multiple YAML documents' error, got %v", err)
 	}
 }
 
@@ -447,6 +634,12 @@ func TestAudio_String(t *testing.T) {
 	}
 	if AudioSubOnly.String() != "sub_only" {
 		t.Fatalf("AudioSubOnly.String() = %q, want %q", AudioSubOnly.String(), "sub_only")
+	}
+	if Audio(-1).String() != "unknown" {
+		t.Fatalf("Audio(-1).String() = %q, want %q", Audio(-1).String(), "unknown")
+	}
+	if Audio(99).String() != "unknown" {
+		t.Fatalf("Audio(99).String() = %q, want %q", Audio(99).String(), "unknown")
 	}
 }
 
