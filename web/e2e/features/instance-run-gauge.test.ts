@@ -67,9 +67,12 @@ async function driveRun(
 
 type ScheduleRow = { name: string; instance_id?: string; action: string; enabled: boolean };
 
-// A global pause window pauses the instance this test creates while the window is open, and the
-// state loop reports the interval gauge only for open schedules. Failing on any such window at
-// every hour keeps a time-dependent failure from reaching CI only during the window.
+/**
+ * Fails when an enabled pause schedule without an instance exists. A global pause window pauses
+ * the instance this test creates while the window is open, and the state loop reports the
+ * interval gauge only for open schedules. Failing on any such window at every hour keeps a
+ * time-dependent failure from reaching CI only during the window.
+ */
 async function expectNoGlobalPause(page: Page): Promise<void> {
 	const res = await page.request.get('/api/v1/schedules');
 	expect(res.ok()).toBeTruthy();
