@@ -52,16 +52,19 @@ mkdir -p "$root/web/e2e/visual" "$results"
 # host's install is never touched; only the baseline (read-only unless --update) and
 # web/test-results (Playwright replaces its visual directory) are mounted writable.
 docker run --rm --ipc=host --user "$(id -u):$(id -g)" \
-    -e HOME=/tmp -e CI=1 -e COREPACK_HOME=/tmp/corepack \
+    -e HOME=/tmp -e CI=1 \
     -e SNATCHARR_VISUAL=1 -e SNATCHARR_VISUAL_DIR=/baseline -e SNATCHARR_VISUAL_OUT=/results/visual \
     -e SNATCHARR_VISUAL_PLANT="${SNATCHARR_VISUAL_PLANT:-}" -e UPDATE="$update" \
     -v "$root/web:/src:ro" -v "$root/web/e2e/visual:/baseline:$mode" -v "$results:/results" \
     "$PLAYWRIGHT_IMAGE" bash -euo pipefail -c '
-        mkdir /tmp/web /tmp/bin
+        mkdir /tmp/web
         tar -C /src --exclude=./node_modules --exclude=./build --exclude=./.svelte-kit \
             --exclude=./test-results --exclude=./playwright-report -cf - . | tar -C /tmp/web -xf -
         cd /tmp/web
-        corepack enable --install-directory /tmp/bin
-        export PATH=/tmp/bin:$PATH
+        # Node 25 and later ship no corepack, so pnpm is installed through npm at the version
+        # web/package.json names in packageManager (a "+sha..." suffix is dropped for npm).
+        pm=$(node -p "require(\"./package.json\").packageManager")
+        npm install --global --prefix /tmp/pm --no-audit --no-fund --loglevel=error "${pm%%+*}"
+        export PATH=/tmp/pm/bin:$PATH
         pnpm install --frozen-lockfile --reporter=silent
         pnpm exec playwright test --project visual $UPDATE'
