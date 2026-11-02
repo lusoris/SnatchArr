@@ -40,7 +40,11 @@ async function seedData(page: Page, csrfToken: string): Promise<string> {
 		base_url: 'http://127.0.0.1:9091',
 		enabled: true
 	});
+	// Scoped to the seeded instance: a global pause window would pause every instance the
+	// feature tests create while it is open (weekdays 08:00-17:00 UTC), and the run-interval
+	// gauge reports only instances whose schedule is open.
 	await postSeed(page, csrfToken, '/api/v1/schedules', {
+		instance_id: inst.id,
 		name: 'seeded-schedule',
 		days: [1, 2, 3, 4, 5],
 		start: '08:00',

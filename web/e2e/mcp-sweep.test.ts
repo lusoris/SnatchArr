@@ -476,6 +476,8 @@ function buildScheduleToolArgs(name: string, state: FixtureState): ToolArgResult
 		args: {
 			scheduleId: state.scheduleId,
 			body: {
+				// Keep the seeded window on the seeded instance (auth.setup.ts).
+				...(state.instanceId ? { instance_id: state.instanceId } : {}),
 				name: 'seeded-schedule',
 				days: [1, 2, 3, 4, 5],
 				start: '08:00',
