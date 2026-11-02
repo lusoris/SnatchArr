@@ -65,10 +65,30 @@ async function driveRun(
 	]);
 }
 
+type ScheduleRow = { name: string; instance_id?: string; action: string; enabled: boolean };
+
+/**
+ * Fails when an enabled pause schedule without an instance exists. A global pause window pauses
+ * the instance this test creates while the window is open, and the state loop reports the
+ * interval gauge only for open schedules. Failing on any such window at every hour keeps a
+ * time-dependent failure from reaching CI only during the window.
+ */
+async function expectNoGlobalPause(page: Page): Promise<void> {
+	const res = await page.request.get('/api/v1/schedules');
+	expect(res.ok()).toBeTruthy();
+	const rows = (await res.json()) as ScheduleRow[];
+	const global = rows.filter((s) => s.enabled && s.action === 'pause' && !s.instance_id);
+	expect(
+		global.map((s) => s.name),
+		'e2e fixtures must scope pause schedules to an instance'
+	).toEqual([]);
+}
+
 test('instance run gauges follow the database and leave with the instance', async ({ page }) => {
 	// The state loop ticks every 30 s and the planner writes a missing policy within 60 s.
 	test.setTimeout(240_000);
 	const poll = { timeout: 100_000, intervals: [2_000] };
+	await expectNoGlobalPause(page);
 	const csrfToken = await getCsrfToken(page);
 	const suffix = crypto.randomUUID().slice(0, 8);
 	const name = `e2e-gauge-${suffix}`;
