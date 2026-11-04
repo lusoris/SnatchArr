@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -31,11 +32,96 @@ type prioritySourceFake struct {
 	err        error
 	secrets    map[uuid.UUID]string
 	secretErrs map[uuid.UUID]error
+	mu         sync.Mutex
+	ownership  map[string]PriorityOwnership
 }
 
-func (f prioritySourceFake) Load(context.Context) (priorityInputs, error) { return f.inputs, f.err }
-func (f prioritySourceFake) Secret(_ context.Context, id uuid.UUID) (string, error) {
+func (f *prioritySourceFake) Load(context.Context) (priorityInputs, error) {
+	inputs := f.inputs
+	inputs.Clients = slices.Clone(inputs.Clients)
+	inputs.Instances = slices.Clone(inputs.Instances)
+	return inputs, f.err
+}
+
+func (f *prioritySourceFake) Secret(_ context.Context, id uuid.UUID) (string, error) {
 	return f.secrets[id], f.secretErrs[id]
+}
+
+func (f *prioritySourceFake) ListOwnership(_ context.Context, ids []uuid.UUID) ([]PriorityOwnership, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []PriorityOwnership
+	for _, o := range f.ownership {
+		if slices.Contains(ids, o.ClientID) {
+			out = append(out, o)
+		}
+	}
+	return out, nil
+}
+
+func (f *prioritySourceFake) UpsertPriority(_ context.Context, clientID uuid.UUID, itemID string, prio int) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.ownership == nil {
+		f.ownership = make(map[string]PriorityOwnership)
+	}
+	k := clientID.String() + "\n" + itemID
+	o := f.ownership[k]
+	o.ClientID = clientID
+	o.ItemID = itemID
+	o.LastWrittenPriority = &prio
+	o.PendingAction = ""
+	o.PendingPriority = nil
+	f.ownership[k] = o
+	return nil
+}
+
+func (f *prioritySourceFake) SetPaused(_ context.Context, clientID uuid.UUID, itemID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.ownership == nil {
+		f.ownership = make(map[string]PriorityOwnership)
+	}
+	k := clientID.String() + "\n" + itemID
+	o := f.ownership[k]
+	o.ClientID = clientID
+	o.ItemID = itemID
+	o.PausedBySnatchArr = true
+	o.PendingAction = ""
+	o.PendingPriority = nil
+	f.ownership[k] = o
+	return nil
+}
+
+func (f *prioritySourceFake) ClearPaused(_ context.Context, clientID uuid.UUID, itemID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.ownership == nil {
+		return nil
+	}
+	k := clientID.String() + "\n" + itemID
+	if o, ok := f.ownership[k]; ok {
+		o.PausedBySnatchArr = false
+		o.PendingAction = ""
+		o.PendingPriority = nil
+		f.ownership[k] = o
+	}
+	return nil
+}
+
+func (f *prioritySourceFake) DeleteNotIn(_ context.Context, clientID uuid.UUID, keepItemIDs []string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	keep := make(map[string]bool, len(keepItemIDs))
+	for _, id := range keepItemIDs {
+		keep[id] = true
+	}
+	for k, o := range f.ownership {
+		if o.ClientID == clientID && !keep[o.ItemID] {
+			delete(f.ownership, k)
+		}
+	}
+	return nil
 }
 
 func TestPriorityGroupCredentials(t *testing.T) {
@@ -63,8 +149,8 @@ func TestPriorityGroupCredentials(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			source := prioritySourceFake{secrets: tt.secrets, secretErrs: tt.secretErrs}
-			r := newPriorityReconciler(source, nil, clock.NewFake(), slog.New(slog.DiscardHandler))
+			source := &prioritySourceFake{secrets: tt.secrets, secretErrs: tt.secretErrs}
+			r := newPriorityReconciler(source, nil, nil, clock.NewFake(), slog.New(slog.DiscardHandler))
 			row, secret, err := r.groupCredentials(t.Context(), rows)
 			if tt.wantErr {
 				if !errors.Is(err, failed) {
@@ -82,7 +168,7 @@ func TestPriorityGroupCredentials(t *testing.T) {
 func TestPriorityReconcilerReadOnly(t *testing.T) {
 	t.Parallel()
 	for _, kind := range []domain.DownloadClientKind{domain.ClientQBittorrent, domain.ClientNZBGet, domain.ClientSABnzbd} {
-		for _, mode := range []string{"observe", "act"} {
+		for _, mode := range []string{"observe"} {
 			t.Run(string(kind)+"/"+mode, func(t *testing.T) {
 				t.Parallel()
 				good, bad := &priorityFake{}, &priorityFake{fail: true}
@@ -93,7 +179,8 @@ func TestPriorityReconcilerReadOnly(t *testing.T) {
 				inputs := priorityTestInputs(kind, mode, goodServer.URL, badServer.URL)
 				clk := clock.NewFake()
 				var logs bytes.Buffer
-				r := newPriorityReconciler(prioritySourceFake{inputs: inputs}, NewGoenvoy(clk), clk, slog.New(slog.NewJSONHandler(&logs, nil)))
+				envoy := NewGoenvoy(clk)
+				r := newPriorityReconciler(&prioritySourceFake{inputs: inputs}, envoy, envoy, clk, slog.New(slog.NewJSONHandler(&logs, nil)))
 				if err := r.Tick(t.Context()); err != nil {
 					t.Fatal(err)
 				}
@@ -119,9 +206,9 @@ func priorityTestInputs(kind domain.DownloadClientKind, mode, goodURL, badURL st
 	first, second := uuid.New(), uuid.New()
 	return priorityInputs{
 		Clients: []domain.DownloadClient{
-			{ID: uuid.New(), InstanceID: &first, Category: "movies", PriorityMode: mode, Kind: kind, BaseURL: goodURL, Enabled: true},
-			{ID: uuid.New(), InstanceID: &second, Category: "tv", PriorityMode: mode, Kind: kind, BaseURL: goodURL + "/", Enabled: true},
-			{ID: uuid.New(), InstanceID: &first, Category: "movies", PriorityMode: mode, Kind: kind, BaseURL: badURL, Enabled: true},
+			{ID: uuid.New(), Name: "good-movies", InstanceID: &first, Category: "movies", PriorityMode: mode, Kind: kind, BaseURL: goodURL, Enabled: true},
+			{ID: uuid.New(), Name: "good-tv", InstanceID: &second, Category: "tv", PriorityMode: mode, Kind: kind, BaseURL: goodURL + "/", Enabled: true},
+			{ID: uuid.New(), Name: "bad-movies", InstanceID: &first, Category: "movies", PriorityMode: mode, Kind: kind, BaseURL: badURL, Enabled: true},
 		},
 		Instances: []domain.Instance{{ID: first, Kind: domain.KindRadarr}, {ID: second, Kind: domain.KindSonarr, DownloadPriority: new(100)}},
 		Preset:    domain.PriorityPreset{domain.KindRadarr: 1},
@@ -137,7 +224,16 @@ func assertPriorityPlan(t *testing.T, r *Reconciler, inputs priorityInputs, clk 
 		}
 		metadata := plan
 		metadata.Plan = domain.DownloadClientPlan{}
-		want := PriorityPlan{ClientID: row.ID, Mode: row.PriorityMode, ObservedAt: clk.Now(), Unattributed: 1}
+		want := PriorityPlan{
+			ClientID:        row.ID,
+			Mode:            row.PriorityMode,
+			ObservedAt:      clk.Now(),
+			Unattributed:    1,
+			ObserveRowNames: []string{inputs.Clients[0].Name, inputs.Clients[1].Name},
+		}
+		if row.PriorityMode == "act" {
+			want.ObserveRowNames = nil
+		}
 		if !reflect.DeepEqual(metadata, want) {
 			t.Fatalf("metadata = %+v, want %+v", metadata, want)
 		}
@@ -154,7 +250,7 @@ func assertPriorityPlan(t *testing.T, r *Reconciler, inputs priorityInputs, clk 
 
 func TestPriorityReconcilerSourceFailure(t *testing.T) {
 	t.Parallel()
-	r := newPriorityReconciler(prioritySourceFake{err: errors.New("failed")}, nil, clock.NewFake(), slog.New(slog.DiscardHandler))
+	r := newPriorityReconciler(&prioritySourceFake{err: errors.New("failed")}, nil, nil, clock.NewFake(), slog.New(slog.DiscardHandler))
 	if err := r.Tick(t.Context()); err == nil {
 		t.Fatal("expected load failure")
 	}
@@ -199,7 +295,8 @@ func TestPriorityReconcilerRetainsLatest(t *testing.T) {
 	inputs := priorityTestInputs(domain.ClientSABnzbd, "observe", srv.URL, srv.URL)
 	clk := clock.NewFake()
 	source := &prioritySourceFake{inputs: inputs}
-	r := newPriorityReconciler(source, NewGoenvoy(clk), clk, slog.New(slog.DiscardHandler))
+	envoy := NewGoenvoy(clk)
+	r := newPriorityReconciler(source, envoy, envoy, clk, slog.New(slog.DiscardHandler))
 	if err := r.Tick(t.Context()); err != nil {
 		t.Fatal(err)
 	}
@@ -238,7 +335,7 @@ func TestPriorityReconcilerWorkerBound(t *testing.T) {
 	for i := range clients {
 		clients[i] = domain.DownloadClient{ID: uuid.New(), Kind: domain.ClientNZBGet, BaseURL: fmt.Sprintf("http://client/%d", i), Enabled: true}
 	}
-	r := newPriorityReconciler(prioritySourceFake{inputs: priorityInputs{Clients: clients}}, observer, clock.NewFake(), slog.New(slog.DiscardHandler))
+	r := newPriorityReconciler(&prioritySourceFake{inputs: priorityInputs{Clients: clients}}, observer, nil, clock.NewFake(), slog.New(slog.DiscardHandler))
 	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
 	done := make(chan error, 1)
@@ -290,4 +387,27 @@ func priorityWorkerObserver(t *testing.T, entered chan<- struct{}, release <-cha
 		total.Add(1)
 		return PriorityObservation{}, nil
 	})
+}
+
+func (f *prioritySourceFake) PrepareWrite(_ context.Context, clientID uuid.UUID, itemID, action string, priority *int) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.ownership == nil {
+		f.ownership = make(map[string]PriorityOwnership)
+	}
+	key := clientID.String() + "\n" + itemID
+	own := f.ownership[key]
+	own.ClientID, own.ItemID, own.PendingAction, own.PendingPriority = clientID, itemID, action, priority
+	f.ownership[key] = own
+	return nil
+}
+
+func (f *prioritySourceFake) CancelWrite(_ context.Context, clientID uuid.UUID, itemID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	key := clientID.String() + "\n" + itemID
+	own := f.ownership[key]
+	own.PendingAction, own.PendingPriority = "", nil
+	f.ownership[key] = own
+	return nil
 }

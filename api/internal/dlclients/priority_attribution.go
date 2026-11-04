@@ -7,26 +7,66 @@ package dlclients
 import (
 	"fmt"
 
+	"github.com/google/uuid"
+
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 )
 
-func attributePriorityItems(items []PriorityItem, rows []domain.DownloadClient, instances []domain.Instance, preset domain.PriorityPreset) ([]domain.DownloadQueueItem, int) {
+func attributePriorityItems(
+	items []PriorityItem,
+	rows []domain.DownloadClient,
+	instances []domain.Instance,
+	preset domain.PriorityPreset,
+	ownership []PriorityOwnership,
+) ([]domain.DownloadQueueItem, int, map[string]uuid.UUID) {
 	ranks := categoryRanks(rows, instances, preset)
+	catClients := categoryClients(rows)
+	ownMap := make(map[string]PriorityOwnership, len(ownership))
+	for _, o := range ownership {
+		key := o.ClientID.String() + "\n" + o.ItemID
+		ownMap[key] = o
+	}
 	ranked := make([]domain.DownloadQueueItem, 0, len(items))
+	itemClients := make(map[string]uuid.UUID, len(items))
 	unattributed := 0
 	for _, item := range items {
 		rank, known := ranks[item.Category]
-		if !known || rank < domain.MinPriorityRank || rank > domain.MaxPriorityRank {
+		clientID, hasClient := catClients[item.Category]
+		if !known || !hasClient || rank < domain.MinPriorityRank || rank > domain.MaxPriorityRank {
 			unattributed++
 			continue
 		}
 		queueItem := item.DownloadQueueItem
 		queueItem.Rank = rank
-		queueItem.LastWrittenPriority = nil
-		queueItem.PausedBySnatchArr = false
+		key := clientID.String() + "\n" + item.ID
+		if o, ok := ownMap[key]; ok {
+			queueItem.LastWrittenPriority = o.LastWrittenPriority
+			queueItem.PausedBySnatchArr = o.PausedBySnatchArr
+		} else {
+			queueItem.LastWrittenPriority = nil
+			queueItem.PausedBySnatchArr = false
+		}
 		ranked = append(ranked, queueItem)
+		itemClients[item.ID] = clientID
 	}
-	return ranked, unattributed
+	return ranked, unattributed, itemClients
+}
+
+func categoryClients(rows []domain.DownloadClient) map[string]uuid.UUID {
+	clients := make(map[string]uuid.UUID, len(rows))
+	ambiguous := make(map[string]bool, len(rows))
+	for _, row := range rows {
+		if row.Category == "" || ambiguous[row.Category] {
+			continue
+		}
+		if _, exists := clients[row.Category]; exists {
+			ambiguous[row.Category] = true
+			delete(clients, row.Category)
+			continue
+		}
+		clients[row.Category] = row.ID
+	}
+	return clients
 }
 
 func categoryRanks(rows []domain.DownloadClient, instances []domain.Instance, preset domain.PriorityPreset) map[string]int {

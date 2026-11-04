@@ -140,7 +140,8 @@ test('909: download client rows, schedule rows and Prowlarr cards open their edi
 			instance_id: instanceId,
 			max_active: 0,
 			max_queued: 0,
-			bandwidth_budget_bps: 0
+			bandwidth_budget_bps: 0,
+			priority_mode: 'observe'
 		});
 		await create(page, csrf, created, '/api/v1/schedules', {
 			name: names.sched,

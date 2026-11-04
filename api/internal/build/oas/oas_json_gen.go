@@ -4631,6 +4631,10 @@ func (s *DownloadClient) encodeFields(e *jx.Encoder) {
 		s.Source.Encode(e)
 	}
 	{
+		e.FieldStart("priority_mode")
+		s.PriorityMode.Encode(e)
+	}
+	{
 		e.FieldStart("max_active")
 		e.Int(s.MaxActive)
 	}
@@ -4664,7 +4668,7 @@ func (s *DownloadClient) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfDownloadClient = [16]string{
+var jsonFieldsNameOfDownloadClient = [17]string{
 	0:  "id",
 	1:  "instance_id",
 	2:  "kind",
@@ -4674,13 +4678,14 @@ var jsonFieldsNameOfDownloadClient = [16]string{
 	6:  "username",
 	7:  "enabled",
 	8:  "source",
-	9:  "max_active",
-	10: "max_queued",
-	11: "bandwidth_budget_bps",
-	12: "last_check_at",
-	13: "last_error",
-	14: "created_at",
-	15: "updated_at",
+	9:  "priority_mode",
+	10: "max_active",
+	11: "max_queued",
+	12: "bandwidth_budget_bps",
+	13: "last_check_at",
+	14: "last_error",
+	15: "created_at",
+	16: "updated_at",
 }
 
 // Decode decodes DownloadClient from json.
@@ -4688,7 +4693,7 @@ func (s *DownloadClient) Decode(d *jx.Decoder) error {
 	if s == nil {
 		return errors.New("invalid: unable to decode DownloadClient to nil")
 	}
-	var requiredBitSet [2]uint8
+	var requiredBitSet [3]uint8
 
 	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
 		switch string(k) {
@@ -4792,8 +4797,18 @@ func (s *DownloadClient) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"source\"")
 			}
-		case "max_active":
+		case "priority_mode":
 			requiredBitSet[1] |= 1 << 1
+			if err := func() error {
+				if err := s.PriorityMode.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"priority_mode\"")
+			}
+		case "max_active":
+			requiredBitSet[1] |= 1 << 2
 			if err := func() error {
 				v, err := d.Int()
 				s.MaxActive = int(v)
@@ -4805,7 +4820,7 @@ func (s *DownloadClient) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"max_active\"")
 			}
 		case "max_queued":
-			requiredBitSet[1] |= 1 << 2
+			requiredBitSet[1] |= 1 << 3
 			if err := func() error {
 				v, err := d.Int()
 				s.MaxQueued = int(v)
@@ -4817,7 +4832,7 @@ func (s *DownloadClient) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"max_queued\"")
 			}
 		case "bandwidth_budget_bps":
-			requiredBitSet[1] |= 1 << 3
+			requiredBitSet[1] |= 1 << 4
 			if err := func() error {
 				v, err := d.Int64()
 				s.BandwidthBudgetBps = int64(v)
@@ -4849,7 +4864,7 @@ func (s *DownloadClient) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"last_error\"")
 			}
 		case "created_at":
-			requiredBitSet[1] |= 1 << 6
+			requiredBitSet[1] |= 1 << 7
 			if err := func() error {
 				v, err := json.DecodeDateTime(d)
 				s.CreatedAt = v
@@ -4861,7 +4876,7 @@ func (s *DownloadClient) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"created_at\"")
 			}
 		case "updated_at":
-			requiredBitSet[1] |= 1 << 7
+			requiredBitSet[2] |= 1 << 0
 			if err := func() error {
 				v, err := json.DecodeDateTime(d)
 				s.UpdatedAt = v
@@ -4881,9 +4896,10 @@ func (s *DownloadClient) Decode(d *jx.Decoder) error {
 	}
 	// Validate required fields.
 	var failures []validate.FieldError
-	for i, mask := range [2]uint8{
+	for i, mask := range [3]uint8{
 		0b11111101,
-		0b11001111,
+		0b10011111,
+		0b00000001,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -4975,6 +4991,12 @@ func (s *DownloadClientInput) encodeFields(e *jx.Encoder) {
 		}
 	}
 	{
+		if s.PriorityMode.Set {
+			e.FieldStart("priority_mode")
+			s.PriorityMode.Encode(e)
+		}
+	}
+	{
 		if s.MaxActive.Set {
 			e.FieldStart("max_active")
 			s.MaxActive.Encode(e)
@@ -4994,17 +5016,18 @@ func (s *DownloadClientInput) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfDownloadClientInput = [10]string{
-	0: "instance_id",
-	1: "kind",
-	2: "name",
-	3: "base_url",
-	4: "username",
-	5: "secret",
-	6: "enabled",
-	7: "max_active",
-	8: "max_queued",
-	9: "bandwidth_budget_bps",
+var jsonFieldsNameOfDownloadClientInput = [11]string{
+	0:  "instance_id",
+	1:  "kind",
+	2:  "name",
+	3:  "base_url",
+	4:  "username",
+	5:  "secret",
+	6:  "enabled",
+	7:  "priority_mode",
+	8:  "max_active",
+	9:  "max_queued",
+	10: "bandwidth_budget_bps",
 }
 
 // Decode decodes DownloadClientInput from json.
@@ -5089,6 +5112,16 @@ func (s *DownloadClientInput) Decode(d *jx.Decoder) error {
 				return nil
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"enabled\"")
+			}
+		case "priority_mode":
+			if err := func() error {
+				s.PriorityMode.Reset()
+				if err := s.PriorityMode.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"priority_mode\"")
 			}
 		case "max_active":
 			if err := func() error {
@@ -5425,6 +5458,14 @@ func (s *DownloadClientPriorityPlan) encodeFields(e *jx.Encoder) {
 		e.Int(s.Unattributed)
 	}
 	{
+		e.FieldStart("observeRowNames")
+		e.ArrStart()
+		for _, elem := range s.ObserveRowNames {
+			e.Str(elem)
+		}
+		e.ArrEnd()
+	}
+	{
 		e.FieldStart("priority")
 		e.ArrStart()
 		for _, elem := range s.Priority {
@@ -5458,16 +5499,17 @@ func (s *DownloadClientPriorityPlan) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfDownloadClientPriorityPlan = [9]string{
+var jsonFieldsNameOfDownloadClientPriorityPlan = [10]string{
 	0: "clientId",
 	1: "mode",
 	2: "observedAt",
 	3: "queueingDisabled",
 	4: "unattributed",
-	5: "priority",
-	6: "order",
-	7: "pause",
-	8: "resume",
+	5: "observeRowNames",
+	6: "priority",
+	7: "order",
+	8: "pause",
+	9: "resume",
 }
 
 // Decode decodes DownloadClientPriorityPlan from json.
@@ -5537,8 +5579,28 @@ func (s *DownloadClientPriorityPlan) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"unattributed\"")
 			}
-		case "priority":
+		case "observeRowNames":
 			requiredBitSet[0] |= 1 << 5
+			if err := func() error {
+				s.ObserveRowNames = make([]string, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem string
+					v, err := d.Str()
+					elem = string(v)
+					if err != nil {
+						return err
+					}
+					s.ObserveRowNames = append(s.ObserveRowNames, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"observeRowNames\"")
+			}
+		case "priority":
+			requiredBitSet[0] |= 1 << 6
 			if err := func() error {
 				s.Priority = make([]DownloadClientPriorityMove, 0)
 				if err := d.Arr(func(d *jx.Decoder) error {
@@ -5556,7 +5618,7 @@ func (s *DownloadClientPriorityPlan) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"priority\"")
 			}
 		case "order":
-			requiredBitSet[0] |= 1 << 6
+			requiredBitSet[0] |= 1 << 7
 			if err := func() error {
 				s.Order = make([]string, 0)
 				if err := d.Arr(func(d *jx.Decoder) error {
@@ -5576,7 +5638,7 @@ func (s *DownloadClientPriorityPlan) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"order\"")
 			}
 		case "pause":
-			requiredBitSet[0] |= 1 << 7
+			requiredBitSet[1] |= 1 << 0
 			if err := func() error {
 				s.Pause = make([]string, 0)
 				if err := d.Arr(func(d *jx.Decoder) error {
@@ -5596,7 +5658,7 @@ func (s *DownloadClientPriorityPlan) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"pause\"")
 			}
 		case "resume":
-			requiredBitSet[1] |= 1 << 0
+			requiredBitSet[1] |= 1 << 1
 			if err := func() error {
 				s.Resume = make([]string, 0)
 				if err := d.Arr(func(d *jx.Decoder) error {
@@ -5626,7 +5688,7 @@ func (s *DownloadClientPriorityPlan) Decode(d *jx.Decoder) error {
 	var failures []validate.FieldError
 	for i, mask := range [2]uint8{
 		0b11111111,
-		0b00000001,
+		0b00000011,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -10824,6 +10886,39 @@ func (s OptDateTime) MarshalJSON() ([]byte, error) {
 func (s *OptDateTime) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d, json.DecodeDateTime)
+}
+
+// Encode encodes DownloadClientPriorityMode as json.
+func (o OptDownloadClientPriorityMode) Encode(e *jx.Encoder) {
+	if !o.Set {
+		return
+	}
+	e.Str(string(o.Value))
+}
+
+// Decode decodes DownloadClientPriorityMode from json.
+func (o *OptDownloadClientPriorityMode) Decode(d *jx.Decoder) error {
+	if o == nil {
+		return errors.New("invalid: unable to decode OptDownloadClientPriorityMode to nil")
+	}
+	o.Set = true
+	if err := o.Value.Decode(d); err != nil {
+		return err
+	}
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s OptDownloadClientPriorityMode) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *OptDownloadClientPriorityMode) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
 }
 
 // Encode encodes float64 as json.

@@ -237,6 +237,10 @@ func DownloadClientFromRow(r sqlcgen.DownloadClient) domain.DownloadClient {
 	if r.RemoteID != nil {
 		remote = int(*r.RemoteID)
 	}
+	mode := r.PriorityMode
+	if mode == "" {
+		mode = "observe"
+	}
 	return domain.DownloadClient{
 		ID:                 r.ID,
 		InstanceID:         r.InstanceID,
@@ -244,7 +248,7 @@ func DownloadClientFromRow(r sqlcgen.DownloadClient) domain.DownloadClient {
 		Name:               r.Name,
 		BaseURL:            r.BaseUrl,
 		Category:           deref(r.Category),
-		PriorityMode:       r.PriorityMode,
+		PriorityMode:       mode,
 		Username:           r.Username,
 		Enabled:            r.Enabled,
 		Source:             domain.DownloadClientSource(r.Source),

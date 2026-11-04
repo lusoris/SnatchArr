@@ -36,6 +36,7 @@ type Input struct {
 	Username           string
 	Secret             string // password, or API key for SABnzbd
 	Enabled            bool
+	PriorityMode       string
 	MaxActive          int
 	MaxQueued          int
 	BandwidthBudgetBPS int64
@@ -121,6 +122,7 @@ func (s *Service) Create(ctx context.Context, in Input) (domain.DownloadClient, 
 		MaxQueued:          int32(in.MaxQueued), // #nosec G115 -- validated 0..1000
 		BandwidthBudgetBps: in.BandwidthBudgetBPS,
 		CreatedAt:          s.clk.Now(),
+		PriorityMode:       in.PriorityMode,
 	})
 	if err != nil {
 		return domain.DownloadClient{}, fmt.Errorf("dlclients: create: %w", store.MapError(err))
@@ -157,6 +159,7 @@ func (s *Service) Update(ctx context.Context, clientID uuid.UUID, in Input) (dom
 		MaxQueued:          int32(in.MaxQueued), // #nosec G115 -- validated 0..1000
 		BandwidthBudgetBps: in.BandwidthBudgetBPS,
 		UpdatedAt:          s.clk.Now(),
+		PriorityMode:       in.PriorityMode,
 	})
 	if err != nil {
 		return domain.DownloadClient{}, fmt.Errorf("dlclients: update: %w", store.MapError(err))
@@ -308,6 +311,11 @@ func (s *Service) normalize(ctx context.Context, in Input) (Input, error) {
 	in.BaseURL = normalized
 	in.Name = strings.TrimSpace(in.Name)
 	in.Username = strings.TrimSpace(in.Username)
+	if in.PriorityMode == "" {
+		in.PriorityMode = "observe"
+	} else if in.PriorityMode != "observe" && in.PriorityMode != "act" {
+		return Input{}, fmt.Errorf("dlclients: %w: priority mode must be observe or act", domain.ErrInvalid)
+	}
 	return in, nil
 }
 

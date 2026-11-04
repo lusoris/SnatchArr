@@ -2202,14 +2202,15 @@ func (s *DiscoveryResult) SetWarnings(val []string) {
 type DownloadClient struct {
 	ID uuid.UUID `json:"id"`
 	// Absent when the client applies to every instance.
-	InstanceID OptUUID                `json:"instance_id"`
-	Kind       DownloadClientKind     `json:"kind"`
-	Protocol   DownloadClientProtocol `json:"protocol"`
-	Name       string                 `json:"name"`
-	BaseURL    string                 `json:"base_url"`
-	Username   string                 `json:"username"`
-	Enabled    bool                   `json:"enabled"`
-	Source     DownloadClientSource   `json:"source"`
+	InstanceID   OptUUID                    `json:"instance_id"`
+	Kind         DownloadClientKind         `json:"kind"`
+	Protocol     DownloadClientProtocol     `json:"protocol"`
+	Name         string                     `json:"name"`
+	BaseURL      string                     `json:"base_url"`
+	Username     string                     `json:"username"`
+	Enabled      bool                       `json:"enabled"`
+	Source       DownloadClientSource       `json:"source"`
+	PriorityMode DownloadClientPriorityMode `json:"priority_mode"`
 	// Foreplay - defer snatches once this many downloads are active (0 = no limit).
 	MaxActive int `json:"max_active"`
 	// Foreplay - defer snatches once this many downloads are queued (0 = no limit).
@@ -2265,6 +2266,11 @@ func (s *DownloadClient) GetEnabled() bool {
 // GetSource returns the value of Source.
 func (s *DownloadClient) GetSource() DownloadClientSource {
 	return s.Source
+}
+
+// GetPriorityMode returns the value of PriorityMode.
+func (s *DownloadClient) GetPriorityMode() DownloadClientPriorityMode {
+	return s.PriorityMode
 }
 
 // GetMaxActive returns the value of MaxActive.
@@ -2347,6 +2353,11 @@ func (s *DownloadClient) SetSource(val DownloadClientSource) {
 	s.Source = val
 }
 
+// SetPriorityMode sets the value of PriorityMode.
+func (s *DownloadClient) SetPriorityMode(val DownloadClientPriorityMode) {
+	s.PriorityMode = val
+}
+
 // SetMaxActive sets the value of MaxActive.
 func (s *DownloadClient) SetMaxActive(val int) {
 	s.MaxActive = val
@@ -2394,6 +2405,13 @@ type DownloadClientInput struct {
 	Secret OptString `json:"secret"`
 	// On create, omitted = true. On update, omitted = stored value stays; sent = replaces it.
 	Enabled OptBool `json:"enabled"`
+	// Priority mode for this download client. Optional (enum observe|act). On create, omitted = observe.
+	// On update, omitted = stored value stays; sent = replaces it. Act priority and ordering writes
+	// target queued SnatchArr-attributed items; pause and resume writes may target active (downloading)
+	// lower-rank items; on qBittorrent with at least two distinct attributed ranks, SnatchArr items move
+	// ahead of unattributed queued items; hand-set NZBGet/SABnzbd priorities are kept; SnatchArr pauses
+	// lower-rank active items while higher-rank items wait and resumes only items it paused.
+	PriorityMode OptDownloadClientPriorityMode `json:"priority_mode"`
 	// On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it.
 	MaxActive OptInt `json:"max_active"`
 	// On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it.
@@ -2435,6 +2453,11 @@ func (s *DownloadClientInput) GetSecret() OptString {
 // GetEnabled returns the value of Enabled.
 func (s *DownloadClientInput) GetEnabled() OptBool {
 	return s.Enabled
+}
+
+// GetPriorityMode returns the value of PriorityMode.
+func (s *DownloadClientInput) GetPriorityMode() OptDownloadClientPriorityMode {
+	return s.PriorityMode
 }
 
 // GetMaxActive returns the value of MaxActive.
@@ -2485,6 +2508,11 @@ func (s *DownloadClientInput) SetSecret(val OptString) {
 // SetEnabled sets the value of Enabled.
 func (s *DownloadClientInput) SetEnabled(val OptBool) {
 	s.Enabled = val
+}
+
+// SetPriorityMode sets the value of PriorityMode.
+func (s *DownloadClientInput) SetPriorityMode(val OptDownloadClientPriorityMode) {
+	s.PriorityMode = val
 }
 
 // SetMaxActive sets the value of MaxActive.
@@ -2572,7 +2600,13 @@ func (s *DownloadClientKind) UnmarshalText(data []byte) error {
 	}
 }
 
-// Configured intent only; act remains read-only until execution is implemented.
+// Priority mode for this download client: observe plans moves without scheduling writes; act
+// executes them. Previously SnatchArr-owned pauses are released when act mode or attribution is
+// withdrawn. In act mode, SnatchArr priority and ordering writes target queued SnatchArr-attributed
+// items; pause and resume writes may target active (downloading) lower-rank items; on qBittorrent
+// with at least two distinct attributed ranks, SnatchArr items move ahead of unattributed queued
+// items; hand-set NZBGet/SABnzbd priorities are kept; SnatchArr pauses lower-rank active items while
+// higher-rank items wait and resumes only items it paused.
 // Ref: #/components/schemas/DownloadClientPriorityMode
 type DownloadClientPriorityMode string
 
@@ -2658,12 +2692,14 @@ type DownloadClientPriorityPlan struct {
 	Mode       DownloadClientPriorityMode `json:"mode"`
 	ObservedAt time.Time                  `json:"observedAt"`
 	// QBittorrent queueing disabled; order is empty. Preferences are never changed.
-	QueueingDisabled bool                         `json:"queueingDisabled"`
-	Unattributed     int                          `json:"unattributed"`
-	Priority         []DownloadClientPriorityMove `json:"priority"`
-	Order            []string                     `json:"order"`
-	Pause            []string                     `json:"pause"`
-	Resume           []string                     `json:"resume"`
+	QueueingDisabled bool `json:"queueingDisabled"`
+	Unattributed     int  `json:"unattributed"`
+	// Names of download client rows in this physical group that are still configured on observe.
+	ObserveRowNames []string                     `json:"observeRowNames"`
+	Priority        []DownloadClientPriorityMove `json:"priority"`
+	Order           []string                     `json:"order"`
+	Pause           []string                     `json:"pause"`
+	Resume          []string                     `json:"resume"`
 }
 
 // GetClientId returns the value of ClientId.
@@ -2689,6 +2725,11 @@ func (s *DownloadClientPriorityPlan) GetQueueingDisabled() bool {
 // GetUnattributed returns the value of Unattributed.
 func (s *DownloadClientPriorityPlan) GetUnattributed() int {
 	return s.Unattributed
+}
+
+// GetObserveRowNames returns the value of ObserveRowNames.
+func (s *DownloadClientPriorityPlan) GetObserveRowNames() []string {
+	return s.ObserveRowNames
 }
 
 // GetPriority returns the value of Priority.
@@ -2734,6 +2775,11 @@ func (s *DownloadClientPriorityPlan) SetQueueingDisabled(val bool) {
 // SetUnattributed sets the value of Unattributed.
 func (s *DownloadClientPriorityPlan) SetUnattributed(val int) {
 	s.Unattributed = val
+}
+
+// SetObserveRowNames sets the value of ObserveRowNames.
+func (s *DownloadClientPriorityPlan) SetObserveRowNames(val []string) {
+	s.ObserveRowNames = val
 }
 
 // SetPriority sets the value of Priority.
@@ -5541,6 +5587,52 @@ func (o OptDateTime) Get() (v time.Time, ok bool) {
 
 // Or returns value if set, or given parameter if does not.
 func (o OptDateTime) Or(d time.Time) time.Time {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptDownloadClientPriorityMode returns new OptDownloadClientPriorityMode with value set to v.
+func NewOptDownloadClientPriorityMode(v DownloadClientPriorityMode) OptDownloadClientPriorityMode {
+	return OptDownloadClientPriorityMode{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptDownloadClientPriorityMode is optional DownloadClientPriorityMode.
+type OptDownloadClientPriorityMode struct {
+	Value DownloadClientPriorityMode
+	Set   bool
+}
+
+// IsSet returns true if OptDownloadClientPriorityMode was set.
+func (o OptDownloadClientPriorityMode) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptDownloadClientPriorityMode) Reset() {
+	var v DownloadClientPriorityMode
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptDownloadClientPriorityMode) SetTo(v DownloadClientPriorityMode) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptDownloadClientPriorityMode) Get() (v DownloadClientPriorityMode, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptDownloadClientPriorityMode) Or(d DownloadClientPriorityMode) DownloadClientPriorityMode {
 	if v, ok := o.Get(); ok {
 		return v
 	}

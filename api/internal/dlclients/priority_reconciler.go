@@ -21,17 +21,38 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 )
 
-const maxPriorityWorkers = 4
+const (
+	maxPriorityWorkers           = 4
+	maxPriorityRowsPerTick       = 256
+	maxPriorityInstancesPerTick  = 512
+	maxPriorityGroupsPerTick     = 16
+	maxPriorityItemsPerGroup     = 1024
+	maxPriorityMutationsPerGroup = 128
+	// Group bounds also cap total items and item mutations per tick.
+	maxPriorityItemsPerTick     = maxPriorityGroupsPerTick * maxPriorityItemsPerGroup
+	maxPriorityMutationsPerTick = maxPriorityGroupsPerTick * maxPriorityMutationsPerGroup
+)
 
-// PriorityPlan is the latest successful observation. Mode describes configuration;
-// even act computes a plan only in S3a. No item mutation capability is held here.
+// PriorityPlan is the latest successful observation. Mode describes effective group mode;
+// in act mode, allow-listed priority, order and pause/resume mutations are executed.
 type PriorityPlan struct {
 	ClientID         uuid.UUID
 	Mode             string
 	ObservedAt       time.Time
 	QueueingDisabled bool
 	Unattributed     int
+	ObserveRowNames  []string
 	Plan             domain.DownloadClientPlan
+}
+
+// PriorityOwnership records SnatchArr's ownership state for an item in a download client.
+type PriorityOwnership struct {
+	ClientID            uuid.UUID
+	ItemID              string
+	LastWrittenPriority *int
+	PausedBySnatchArr   bool
+	PendingAction       string
+	PendingPriority     *int
 }
 
 type priorityInputs struct {
@@ -43,6 +64,13 @@ type priorityInputs struct {
 type prioritySource interface {
 	Load(context.Context) (priorityInputs, error)
 	Secret(context.Context, uuid.UUID) (string, error)
+	ListOwnership(context.Context, []uuid.UUID) ([]PriorityOwnership, error)
+	UpsertPriority(context.Context, uuid.UUID, string, int) error
+	SetPaused(context.Context, uuid.UUID, string) error
+	ClearPaused(context.Context, uuid.UUID, string) error
+	DeleteNotIn(context.Context, uuid.UUID, []string) error
+	PrepareWrite(context.Context, uuid.UUID, string, string, *int) error
+	CancelWrite(context.Context, uuid.UUID, string) error
 }
 
 // Reconciler is started exclusively by leader/gate as a leader_loops member.
@@ -50,14 +78,18 @@ type Reconciler struct {
 	*gate.Periodic
 	source   prioritySource
 	observer PriorityObserver
+	writer   PriorityWriter
 	clk      clock.Clock
 	logger   *slog.Logger
 	mu       sync.RWMutex
 	plans    map[uuid.UUID]PriorityPlan
+	// tickMu serializes observations and protects groupCursor, including direct Tick calls.
+	tickMu      sync.Mutex
+	groupCursor int
 }
 
-func newPriorityReconciler(source prioritySource, observer PriorityObserver, clk clock.Clock, logger *slog.Logger) *Reconciler {
-	return &Reconciler{source: source, observer: observer, clk: clk, logger: logger, plans: make(map[uuid.UUID]PriorityPlan)}
+func newPriorityReconciler(source prioritySource, observer PriorityObserver, writer PriorityWriter, clk clock.Clock, logger *slog.Logger) *Reconciler {
+	return &Reconciler{source: source, observer: observer, writer: writer, clk: clk, logger: logger, plans: make(map[uuid.UUID]PriorityPlan)}
 }
 
 // Latest returns an owned copy, preventing HTTP consumers from mutating the cache.
@@ -72,11 +104,14 @@ func (r *Reconciler) Latest(clientID uuid.UUID) (PriorityPlan, error) {
 	plan.Plan.Order = slices.Clone(plan.Plan.Order)
 	plan.Plan.Pause = slices.Clone(plan.Plan.Pause)
 	plan.Plan.Resume = slices.Clone(plan.Plan.Resume)
+	plan.ObserveRowNames = slices.Clone(plan.ObserveRowNames)
 	return plan, nil
 }
 
 // Tick snapshots configuration once and isolates physical client failures.
 func (r *Reconciler) Tick(ctx context.Context) error {
+	r.tickMu.Lock()
+	defer r.tickMu.Unlock()
 	loadCtx, cancel := context.WithTimeout(ctx, ObserveTimeout)
 	inputs, err := r.source.Load(loadCtx)
 	cancel()
@@ -84,7 +119,12 @@ func (r *Reconciler) Tick(ctx context.Context) error {
 		r.logger.WarnContext(ctx, "download priority inputs failed")
 		return fmt.Errorf("priority inputs: %w", err)
 	}
+	if len(inputs.Clients) > maxPriorityRowsPerTick || len(inputs.Instances) > maxPriorityInstancesPerTick {
+		r.logger.WarnContext(ctx, "download priority inputs truncated")
+		return nil
+	}
 	groups := priorityGroups(inputs.Clients)
+	groups = r.priorityBatch(ctx, groups)
 	r.prunePlans(inputs.Clients)
 	sem := make(chan struct{}, maxPriorityWorkers)
 	var wg sync.WaitGroup
@@ -94,6 +134,7 @@ func (r *Reconciler) Tick(ctx context.Context) error {
 		}
 		// Each observation ends within ObserveTimeout, so a full semaphore frees a slot in bounded time.
 		sem <- struct{}{}
+		r.groupCursor++
 		wg.Go(func() {
 			defer func() { <-sem }()
 			r.observePriorityGroup(ctx, rows, inputs)
@@ -104,6 +145,19 @@ func (r *Reconciler) Tick(ctx context.Context) error {
 		return fmt.Errorf("priority tick: %w", err)
 	}
 	return nil
+}
+
+// priorityBatch preserves group order; tickMu protects the cursor through the whole tick.
+// The last batch stops at the end, so every group gets one turn before the next pass.
+func (r *Reconciler) priorityBatch(ctx context.Context, groups [][]domain.DownloadClient) [][]domain.DownloadClient {
+	if r.groupCursor >= len(groups) {
+		r.groupCursor = 0
+	}
+	if len(groups) > maxPriorityGroupsPerTick {
+		r.logger.WarnContext(ctx, "download priority groups rotated", slog.Int("limit", maxPriorityGroupsPerTick), slog.Int("item_limit_per_tick", maxPriorityItemsPerTick), slog.Int("mutation_limit_per_tick", maxPriorityMutationsPerTick))
+	}
+	end := min(r.groupCursor+maxPriorityGroupsPerTick, len(groups))
+	return groups[r.groupCursor:end]
 }
 
 func (r *Reconciler) prunePlans(clients []domain.DownloadClient) {
@@ -188,28 +242,285 @@ func (r *Reconciler) observePriorityGroup(ctx context.Context, rows []domain.Dow
 		r.priorityFailed(ctx, rows, "read")
 		return
 	}
-	items, unattributed := attributePriorityItems(obs.Items, rows, inputs.Instances, inputs.Preset)
+	if obs.ItemsTruncated || priorityObservationTooLarge(len(obs.Items)) {
+		r.logger.WarnContext(ctx, "download priority items truncated", slog.Int("limit", maxPriorityItemsPerGroup))
+		return
+	}
+	ownership, stage := r.refreshOwnership(ctx, rows, obs.Items)
+	if stage != "" {
+		r.priorityFailed(ctx, rows, stage)
+		return
+	}
+	if !r.recoverPriorityOwnership(ctx, obs.Items, ownership) {
+		return
+	}
+	ownership, err = r.source.ListOwnership(ctx, rowIDs(rows))
+	if err != nil {
+		r.priorityFailed(ctx, rows, "reload_ownership")
+		return
+	}
+	items, unattributed, itemClients := attributePriorityItems(obs.Items, rows, inputs.Instances, inputs.Preset, ownership)
 	plan, err := planPriorityObservation(client.Kind, obs.QueueingDisabled, items)
 	if err != nil {
 		r.priorityFailed(ctx, rows, "plan")
 		return
 	}
-	observedAt := r.clk.Now()
-	r.mu.Lock()
-	for _, row := range rows {
-		mode := row.PriorityMode
-		if mode == "" {
-			mode = "observe"
-		}
-		r.plans[row.ID] = PriorityPlan{
-			ClientID: row.ID, Mode: mode, ObservedAt: observedAt,
-			QueueingDisabled: obs.QueueingDisabled, Unattributed: unattributed, Plan: plan,
-		}
-	}
-	r.mu.Unlock()
+	plan, mode, observeRowNames := r.applyPriorityPlan(ctx, rows, client, secret, obs, items, itemClients, ownership, plan)
+	r.storeGroupPlans(rows, PriorityPlan{
+		Mode:             mode,
+		ObservedAt:       r.clk.Now(),
+		QueueingDisabled: obs.QueueingDisabled,
+		Unattributed:     unattributed,
+		ObserveRowNames:  observeRowNames,
+		Plan:             plan,
+	})
 	for _, row := range rows {
 		r.logPriorityPlan(ctx, row.ID)
 	}
+}
+
+// refreshOwnership drops ownership of items the client no longer lists, then loads what remains.
+// The keep set is every observed item of the physical client, whatever its category: a row whose
+// category turned empty or ambiguous must keep its paused-by-SnatchArr markers so those items resume.
+// A non-empty stage names the failed step.
+func (r *Reconciler) refreshOwnership(ctx context.Context, rows []domain.DownloadClient, items []PriorityItem) ([]PriorityOwnership, string) {
+	observed := make([]string, 0, len(items))
+	for _, item := range items {
+		observed = append(observed, item.ID)
+	}
+	clientIDs := make([]uuid.UUID, len(rows))
+	for i, row := range rows {
+		if err := r.source.DeleteNotIn(ctx, row.ID, observed); err != nil {
+			return nil, "prune_ownership"
+		}
+		clientIDs[i] = row.ID
+	}
+	ownership, err := r.source.ListOwnership(ctx, clientIDs)
+	if err != nil {
+		return nil, "load_ownership"
+	}
+	return ownership, ""
+}
+
+// groupPriorityMode applies the group mode rule: act only when every row of the physical client is act.
+// It returns the effective mode and the names of the rows still on observe.
+func groupPriorityMode(rows []domain.DownloadClient) (string, []string) {
+	var observeRowNames []string
+	for _, row := range rows {
+		if row.PriorityMode != "act" {
+			observeRowNames = append(observeRowNames, row.Name)
+		}
+	}
+	if len(observeRowNames) > 0 {
+		return "observe", observeRowNames
+	}
+	return "act", nil
+}
+
+// storeGroupPlans caches one copy of the group plan per row.
+func (r *Reconciler) storeGroupPlans(rows []domain.DownloadClient, plan PriorityPlan) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, row := range rows {
+		rowPlan := plan
+		rowPlan.ClientID = row.ID
+		rowPlan.ObserveRowNames = slices.Clone(plan.ObserveRowNames)
+		r.plans[row.ID] = rowPlan
+	}
+}
+
+// executeActPlan executes mutations across priority, order, pause and resume.
+func (r *Reconciler) executeActPlan(
+	ctx context.Context, client domain.DownloadClient, secret string, plan domain.DownloadClientPlan,
+	queueingDisabled bool, items []domain.DownloadQueueItem, itemClients map[string]uuid.UUID, ownership []PriorityOwnership,
+) {
+	if !r.priorityPlanAllowed(ctx, plan) {
+		return
+	}
+	if !r.executePriorityWrites(ctx, client, secret, plan, itemClients) {
+		return
+	}
+	if !r.executeOrderWrites(ctx, client, secret, plan, queueingDisabled, items, itemClients) {
+		return
+	}
+	if !r.executePauseWrites(ctx, client, secret, plan, itemClients) {
+		return
+	}
+	r.executeResumeWrites(ctx, client, secret, plan, itemClients, ownership)
+}
+
+// executePriorityWrites mutates priority levels on NZBGet and SABnzbd items.
+func (r *Reconciler) executePriorityWrites(
+	ctx context.Context, client domain.DownloadClient, secret string,
+	plan domain.DownloadClientPlan, itemClients map[string]uuid.UUID,
+) bool {
+	if client.Kind != domain.ClientNZBGet && client.Kind != domain.ClientSABnzbd {
+		return true
+	}
+	for _, m := range plan.Priority {
+		targetID := itemClients[m.ID]
+		if !r.prepareWrite(ctx, targetID, m.ID, "priority", &m.To) {
+			return false
+		}
+		callCtx, cancel := context.WithTimeout(ctx, ObserveTimeout)
+		err := r.writer.SetItemPriority(callCtx, client, secret, m.ID, m.To)
+		cancel()
+		if err != nil {
+			r.cancelUnwritten(ctx, []string{m.ID}, err, itemClients)
+			r.priorityWriteFailed(ctx, targetID, "priority")
+			return false
+		}
+		recordCtx, recordCancel := ownershipContext(ctx)
+		err = r.source.UpsertPriority(recordCtx, targetID, m.ID, m.To)
+		recordCancel()
+		if err != nil {
+			r.priorityWriteFailed(ctx, targetID, "priority")
+			return false
+		}
+	}
+	return true
+}
+
+// executeOrderWrites orders eligible queued qBittorrent torrents with MoveToTop in reverse plan order.
+func (r *Reconciler) executeOrderWrites(
+	ctx context.Context, client domain.DownloadClient, secret string,
+	plan domain.DownloadClientPlan, queueingDisabled bool, items []domain.DownloadQueueItem, itemClients map[string]uuid.UUID,
+) bool {
+	if client.Kind != domain.ClientQBittorrent || queueingDisabled {
+		return true
+	}
+	queuedAttributed := make(map[string]bool, len(items))
+	for _, it := range items {
+		if it.State == domain.DownloadItemQueued {
+			queuedAttributed[it.ID] = true
+		}
+	}
+	var hashes []string
+	for _, id := range plan.Order {
+		if queuedAttributed[id] {
+			hashes = append(hashes, id)
+		}
+	}
+	for _, hash := range slices.Backward(hashes) {
+		targetID := itemClients[hash]
+		callCtx, cancel := context.WithTimeout(ctx, ObserveTimeout)
+		err := r.writer.MoveToTop(callCtx, client, secret, []string{hash})
+		cancel()
+		if err != nil {
+			r.priorityWriteFailed(ctx, targetID, "order")
+			return false
+		}
+	}
+	return true
+}
+
+// executePauseWrites pauses active lower-rank transfers while higher-rank work waits.
+func (r *Reconciler) executePauseWrites(
+	ctx context.Context, client domain.DownloadClient, secret string,
+	plan domain.DownloadClientPlan, itemClients map[string]uuid.UUID,
+) bool {
+	if len(plan.Pause) == 0 {
+		return true
+	}
+	if !r.prepareItems(ctx, plan.Pause, itemClients, "pause") {
+		return false
+	}
+	callCtx, cancel := context.WithTimeout(ctx, ObserveTimeout)
+	err := r.writer.PauseItems(callCtx, client, secret, plan.Pause)
+	cancel()
+	if err != nil {
+		r.cancelUnwritten(ctx, plan.Pause, err, itemClients)
+		r.markPartial(ctx, err, itemClients, r.source.SetPaused, "pause_record")
+		r.priorityWriteFailed(ctx, writeTarget(client.ID, itemClients, plan.Pause), "pause")
+		return false
+	}
+	return r.markAll(ctx, plan.Pause, itemClients, r.source.SetPaused, "pause")
+}
+
+// executeResumeWrites resumes transfers SnatchArr paused once higher-rank work is no longer waiting or downloading.
+func (r *Reconciler) executeResumeWrites(
+	ctx context.Context, client domain.DownloadClient, secret string,
+	plan domain.DownloadClientPlan, itemClients map[string]uuid.UUID, ownership []PriorityOwnership,
+) bool {
+	eligible := pausedBySnatchArr(plan.Resume, ownership)
+	if len(eligible) == 0 {
+		return true
+	}
+	if !r.prepareItems(ctx, eligible, itemClients, "resume") {
+		return false
+	}
+	callCtx, cancel := context.WithTimeout(ctx, ObserveTimeout)
+	err := r.writer.ResumeItems(callCtx, client, secret, eligible)
+	cancel()
+	if err != nil {
+		r.cancelUnwritten(ctx, eligible, err, itemClients)
+		r.markPartial(ctx, err, itemClients, r.source.ClearPaused, "resume_record")
+		r.priorityWriteFailed(ctx, writeTarget(client.ID, itemClients, eligible), "resume")
+		return false
+	}
+	return r.markAll(ctx, eligible, itemClients, r.source.ClearPaused, "resume")
+}
+
+// ownershipMark records one ownership change for an item of a download client row.
+type ownershipMark func(ctx context.Context, clientID uuid.UUID, itemID string) error
+
+// pausedBySnatchArr keeps the resume candidates whose stored ownership says SnatchArr paused them.
+func pausedBySnatchArr(resume []string, ownership []PriorityOwnership) []string {
+	stored := make(map[string]bool, len(ownership))
+	for _, o := range ownership {
+		if o.PausedBySnatchArr {
+			stored[o.ItemID] = true
+		}
+	}
+	var eligible []string
+	for _, id := range resume {
+		if stored[id] {
+			eligible = append(eligible, id)
+		}
+	}
+	return eligible
+}
+
+// markPartial records ownership for the items a partially failed write completed; a failed record is logged.
+func (r *Reconciler) markPartial(ctx context.Context, err error, itemClients map[string]uuid.UUID, mark ownershipMark, stage string) {
+	var partial *PartialWriteError
+	if !errors.As(err, &partial) {
+		return
+	}
+	recordCtx, cancel := ownershipContext(ctx)
+	defer cancel()
+	for _, id := range partial.Done {
+		if markErr := mark(recordCtx, itemClients[id], id); markErr != nil {
+			r.priorityWriteFailed(ctx, itemClients[id], stage)
+		}
+	}
+}
+
+// markAll records ownership for every written item and stops at the first failed record.
+func (r *Reconciler) markAll(ctx context.Context, ids []string, itemClients map[string]uuid.UUID, mark ownershipMark, stage string) bool {
+	recordCtx, cancel := ownershipContext(ctx)
+	defer cancel()
+	for _, id := range ids {
+		if err := mark(recordCtx, itemClients[id], id); err != nil {
+			r.priorityWriteFailed(ctx, itemClients[id], stage)
+			return false
+		}
+	}
+	return true
+}
+
+// writeTarget names the row a failed write is logged against: the first item's row, else the physical client.
+func writeTarget(fallback uuid.UUID, itemClients map[string]uuid.UUID, ids []string) uuid.UUID {
+	if len(ids) > 0 {
+		if id := itemClients[ids[0]]; id != uuid.Nil {
+			return id
+		}
+	}
+	return fallback
+}
+
+func (r *Reconciler) priorityWriteFailed(ctx context.Context, clientID uuid.UUID, stage string) {
+	r.logger.WarnContext(ctx, "download priority write failed", slog.String("client_id", clientID.String()), slog.String("stage", stage))
 }
 
 func (r *Reconciler) priorityFailed(ctx context.Context, rows []domain.DownloadClient, stage string) {

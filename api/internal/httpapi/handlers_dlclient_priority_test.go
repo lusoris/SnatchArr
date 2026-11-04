@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/google/uuid"
@@ -65,9 +66,16 @@ func TestPriorityPlanToOAS(t *testing.T) {
 	t.Parallel()
 	plan := dlclients.PriorityPlan{
 		ClientID: uuid.New(), Mode: "act", ObservedAt: clock.NewFake().Now(), QueueingDisabled: true, Unattributed: 3,
-		Plan: domain.DownloadClientPlan{Priority: []domain.PriorityWrite{{ID: "id", From: 0, To: 1}}, Pause: []string{"pause"}, Resume: []string{"resume"}},
+		ObserveRowNames: []string{"row-b"},
+		Plan:            domain.DownloadClientPlan{Priority: []domain.PriorityWrite{{ID: "id", From: 0, To: 1}}, Pause: []string{"pause"}, Resume: []string{"resume"}},
 	}
 	got := priorityPlanToOAS(plan)
+	if !slices.Equal(got.ObserveRowNames, []string{"row-b"}) {
+		t.Fatalf("observeRowNames = %v", got.ObserveRowNames)
+	}
+	if empty := priorityPlanToOAS(dlclients.PriorityPlan{}); empty.ObserveRowNames == nil {
+		t.Fatal("observeRowNames must encode as [] when every row is act")
+	}
 	if got.ClientId != plan.ClientID || string(got.Mode) != plan.Mode || !got.ObservedAt.Equal(plan.ObservedAt) || !got.QueueingDisabled || got.Unattributed != 3 || !reflect.DeepEqual(got.Priority, []oas.DownloadClientPriorityMove{{ID: "id", From: 0, To: 1}}) {
 		t.Fatalf("response = %+v", got)
 	}
