@@ -181,12 +181,47 @@ func (g *Goenvoy) qbittorrent(ctx context.Context, c domain.DownloadClient, secr
 	return obs, nil
 }
 
+func (g *Goenvoy) qbitClient(ctx context.Context, c domain.DownloadClient, secret string) (*qbit.Client, error) {
+	cl, err := qbit.New(c.BaseURL, qbit.WithTimeout(g.timeout), qbit.WithUserAgent(g.userAgent))
+	if err != nil {
+		return nil, fmt.Errorf("qbittorrent client: %w", err)
+	}
+	if err := qbittorrentLogin(ctx, cl, c.Username, secret); err != nil {
+		return nil, err
+	}
+	return cl, nil
+}
+
+func (g *Goenvoy) sabnzbdClient(c domain.DownloadClient, secret string) (*sabnzbd.Client, error) {
+	cl, err := sabnzbd.New(c.BaseURL, secret, sabnzbd.WithTimeout(g.timeout), sabnzbd.WithUserAgent(g.userAgent))
+	if err != nil {
+		return nil, fmt.Errorf("sabnzbd client: %w", err)
+	}
+	return cl, nil
+}
+
+func (g *Goenvoy) nzbgetClient(c domain.DownloadClient, secret string) (*nzbget.Client, error) {
+	cl, err := nzbget.New(c.BaseURL, c.Username, secret, nzbget.WithTimeout(g.timeout), nzbget.WithUserAgent(g.userAgent))
+	if err != nil {
+		return nil, fmt.Errorf("nzbget client: %w", err)
+	}
+	return cl, nil
+}
+
+func qbittorrentLogin(ctx context.Context, cl *qbit.Client, username, secret string) error {
+	if username == "" && secret == "" {
+		return nil
+	}
+	if err := cl.Login(ctx, username, secret); err != nil {
+		return qbittorrentLoginError(err)
+	}
+	return nil
+}
+
 func qbittorrentVersion(ctx context.Context, cl *qbit.Client, username, secret string) (string, error) {
 	hasCredentials := username != "" || secret != ""
-	if hasCredentials {
-		if err := cl.Login(ctx, username, secret); err != nil {
-			return "", qbittorrentLoginError(err)
-		}
+	if err := qbittorrentLogin(ctx, cl, username, secret); err != nil {
+		return "", err
 	}
 	version, err := cl.Version(ctx)
 	if err != nil {
@@ -538,9 +573,9 @@ func classifySAB(slots []sabnzbd.Slot) (active, queued int) {
 }
 
 func (g *Goenvoy) sabnzbd(ctx context.Context, c domain.DownloadClient, secret string) (observation, error) {
-	cl, err := sabnzbd.New(c.BaseURL, secret, sabnzbd.WithTimeout(g.timeout), sabnzbd.WithUserAgent(g.userAgent))
+	cl, err := g.sabnzbdClient(c, secret)
 	if err != nil {
-		return observation{}, fmt.Errorf("sabnzbd client: %w", err)
+		return observation{}, err
 	}
 	version, err := cl.GetVersion(ctx)
 	if err != nil {
@@ -609,9 +644,9 @@ func classifyNZBGet(status string) dlClass {
 }
 
 func (g *Goenvoy) nzbget(ctx context.Context, c domain.DownloadClient, secret string) (observation, error) {
-	cl, err := nzbget.New(c.BaseURL, c.Username, secret, nzbget.WithTimeout(g.timeout), nzbget.WithUserAgent(g.userAgent))
+	cl, err := g.nzbgetClient(c, secret)
 	if err != nil {
-		return observation{}, fmt.Errorf("nzbget client: %w", err)
+		return observation{}, err
 	}
 	version, err := cl.GetVersion(ctx)
 	if err != nil {

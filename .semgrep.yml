@@ -312,3 +312,202 @@ rules:
                 $G.Go(...)
                 ...
               }
+
+  # ── ADR-0046 · download client write allow-list ─────────────────────────────
+  # Only allow-listed download client methods may be called across api/.
+  # ADR-0046 Decision 1 narrows ADR-0006's read-only boundary for qBittorrent,
+  # NZBGet and SABnzbd priority, queue-order and per-item pause/resume writes.
+  # Whole-queue pause/resume, add/delete/remove, force start, and other EditQueue
+  # commands remain forbidden. Transmission, Deluge and rTorrent remain observe-only.
+  # Reference: docs/adr/0046-download-client-priority-writes.md#class-defence
+  - id: dlclient-write-allow-list
+    languages: [go]
+    severity: ERROR
+    message: >-
+      Method call on download client is not in the ADR-0046 allow-list. Only
+      approved read/setup/probe methods and Decision 1 priority/pause/resume writes
+      are permitted. Whole-queue operations, deletion, and unapproved actions are forbidden.
+    paths:
+      exclude:
+        - "*_test.go"
+    pattern-either:
+      - patterns:
+          - pattern-either:
+              - pattern: '($CL : *qbit.Client).$METHOD(...)'
+              - pattern: '($CL : qbit.Client).$METHOD(...)'
+          - pattern-not: '$CL.Login(...)'
+          - pattern-not: '$CL.Version(...)'
+          - pattern-not: '$CL.ListTorrents(...)'
+          - pattern-not: '$CL.GetPreferences(...)'
+          - pattern-not: '$CL.TopPriority(...)'
+          - pattern-not: '$CL.BottomPriority(...)'
+          - pattern-not: '$CL.IncreasePriority(...)'
+          - pattern-not: '$CL.DecreasePriority(...)'
+          - pattern-not: '$CL.StopTorrents(...)'
+          - pattern-not: '$CL.StartTorrents(...)'
+      - patterns:
+          - pattern-either:
+              - pattern: '($CL : *qbit.Client).$METHOD($CTX, $HASHES)'
+              - pattern: '($CL : qbit.Client).$METHOD($CTX, $HASHES)'
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(TopPriority|BottomPriority|IncreasePriority|DecreasePriority|StopTorrents|StartTorrents)$
+          - pattern-either:
+              - pattern: '$CL.$METHOD($CTX, []string{"all"})'
+              - pattern: '$CL.$METHOD($CTX, []string{})'
+              - pattern: '$CL.$METHOD($CTX, nil)'
+      - patterns:
+          - pattern-either:
+              - pattern: '($CL : *qbit.Client).$METHOD'
+              - pattern: '($CL : qbit.Client).$METHOD'
+          - pattern-not-inside: '$CL.$METHOD(...)'
+          - pattern-not: '$CL.Login'
+          - pattern-not: '$CL.Version'
+          - pattern-not: '$CL.ListTorrents'
+          - pattern-not: '$CL.GetPreferences'
+          - pattern-not: '$CL.TopPriority'
+          - pattern-not: '$CL.BottomPriority'
+          - pattern-not: '$CL.IncreasePriority'
+          - pattern-not: '$CL.DecreasePriority'
+          - pattern-not: '$CL.StopTorrents'
+          - pattern-not: '$CL.StartTorrents'
+      - patterns:
+          - pattern-either:
+              - pattern: '(*qbit.Client).$METHOD'
+              - pattern: '(qbit.Client).$METHOD'
+              - pattern: 'qbit.Client.$METHOD'
+          - pattern-not: '(*qbit.Client).Login'
+          - pattern-not: '(*qbit.Client).Version'
+          - pattern-not: '(*qbit.Client).ListTorrents'
+          - pattern-not: '(*qbit.Client).GetPreferences'
+          - pattern-not: '(*qbit.Client).TopPriority'
+          - pattern-not: '(*qbit.Client).BottomPriority'
+          - pattern-not: '(*qbit.Client).IncreasePriority'
+          - pattern-not: '(*qbit.Client).DecreasePriority'
+          - pattern-not: '(*qbit.Client).StopTorrents'
+          - pattern-not: '(*qbit.Client).StartTorrents'
+          - pattern-not: '(qbit.Client).Login'
+          - pattern-not: '(qbit.Client).Version'
+          - pattern-not: '(qbit.Client).ListTorrents'
+          - pattern-not: '(qbit.Client).GetPreferences'
+          - pattern-not: '(qbit.Client).TopPriority'
+          - pattern-not: '(qbit.Client).BottomPriority'
+          - pattern-not: '(qbit.Client).IncreasePriority'
+          - pattern-not: '(qbit.Client).DecreasePriority'
+          - pattern-not: '(qbit.Client).StopTorrents'
+          - pattern-not: '(qbit.Client).StartTorrents'
+          - pattern-not: 'qbit.Client.Login'
+          - pattern-not: 'qbit.Client.Version'
+          - pattern-not: 'qbit.Client.ListTorrents'
+          - pattern-not: 'qbit.Client.GetPreferences'
+          - pattern-not: 'qbit.Client.TopPriority'
+          - pattern-not: 'qbit.Client.BottomPriority'
+          - pattern-not: 'qbit.Client.IncreasePriority'
+          - pattern-not: 'qbit.Client.DecreasePriority'
+          - pattern-not: 'qbit.Client.StopTorrents'
+          - pattern-not: 'qbit.Client.StartTorrents'
+      - patterns:
+          - pattern-either:
+              - pattern: '($CL : *sabnzbd.Client).$METHOD(...)'
+              - pattern: '($CL : sabnzbd.Client).$METHOD(...)'
+          - pattern-not: '$CL.GetVersion(...)'
+          - pattern-not: '$CL.GetQueue(...)'
+          - pattern-not: '$CL.SetPriority(...)'
+          - pattern-not: '$CL.PauseItem(...)'
+          - pattern-not: '$CL.ResumeItem(...)'
+      - patterns:
+          - pattern-either:
+              - pattern: '($CL : *sabnzbd.Client).$METHOD'
+              - pattern: '($CL : sabnzbd.Client).$METHOD'
+          - pattern-not-inside: '$CL.$METHOD(...)'
+          - pattern-not: '$CL.GetVersion'
+          - pattern-not: '$CL.GetQueue'
+          - pattern-not: '$CL.SetPriority'
+          - pattern-not: '$CL.PauseItem'
+          - pattern-not: '$CL.ResumeItem'
+      - patterns:
+          - pattern-either:
+              - pattern: '(*sabnzbd.Client).$METHOD'
+              - pattern: '(sabnzbd.Client).$METHOD'
+              - pattern: 'sabnzbd.Client.$METHOD'
+          - pattern-not: '(*sabnzbd.Client).GetVersion'
+          - pattern-not: '(*sabnzbd.Client).GetQueue'
+          - pattern-not: '(*sabnzbd.Client).SetPriority'
+          - pattern-not: '(*sabnzbd.Client).PauseItem'
+          - pattern-not: '(*sabnzbd.Client).ResumeItem'
+          - pattern-not: '(sabnzbd.Client).GetVersion'
+          - pattern-not: '(sabnzbd.Client).GetQueue'
+          - pattern-not: '(sabnzbd.Client).SetPriority'
+          - pattern-not: '(sabnzbd.Client).PauseItem'
+          - pattern-not: '(sabnzbd.Client).ResumeItem'
+          - pattern-not: 'sabnzbd.Client.GetVersion'
+          - pattern-not: 'sabnzbd.Client.GetQueue'
+          - pattern-not: 'sabnzbd.Client.SetPriority'
+          - pattern-not: 'sabnzbd.Client.PauseItem'
+          - pattern-not: 'sabnzbd.Client.ResumeItem'
+      - patterns:
+          - pattern-either:
+              - pattern: '($CL : *nzbget.Client).$METHOD(...)'
+              - pattern: '($CL : nzbget.Client).$METHOD(...)'
+          - pattern-not: '$CL.GetVersion(...)'
+          - pattern-not: '$CL.GetStatus(...)'
+          - pattern-not: '$CL.ListGroups(...)'
+          - pattern-not: '$CL.SetPriority(...)'
+          - pattern-not: '$CL.EditQueue($CTX, "GroupPause", ...)'
+          - pattern-not: '$CL.EditQueue($CTX, "GroupResume", ...)'
+      - patterns:
+          - pattern-either:
+              - pattern: '($CL : *nzbget.Client).EditQueue($CTX, $ACTION, $PARAM, $IDS)'
+              - pattern: '($CL : nzbget.Client).EditQueue($CTX, $ACTION, $PARAM, $IDS)'
+          - metavariable-regex:
+              metavariable: $ACTION
+              regex: ^("GroupPause"|"GroupResume")$
+          - pattern-either:
+              - pattern: '$CL.EditQueue($CTX, $ACTION, $PARAM, []int{})'
+              - pattern: '$CL.EditQueue($CTX, $ACTION, $PARAM, nil)'
+      - patterns:
+          - pattern-either:
+              - pattern: '($CL : *nzbget.Client).$METHOD'
+              - pattern: '($CL : nzbget.Client).$METHOD'
+          - pattern-not-inside: '$CL.$METHOD(...)'
+          - pattern-not: '$CL.GetVersion'
+          - pattern-not: '$CL.GetStatus'
+          - pattern-not: '$CL.ListGroups'
+          - pattern-not: '$CL.SetPriority'
+      - patterns:
+          - pattern-either:
+              - pattern: '(*nzbget.Client).$METHOD'
+              - pattern: '(nzbget.Client).$METHOD'
+              - pattern: 'nzbget.Client.$METHOD'
+          - pattern-not: '(*nzbget.Client).GetVersion'
+          - pattern-not: '(*nzbget.Client).GetStatus'
+          - pattern-not: '(*nzbget.Client).ListGroups'
+          - pattern-not: '(*nzbget.Client).SetPriority'
+          - pattern-not: '(nzbget.Client).GetVersion'
+          - pattern-not: '(nzbget.Client).GetStatus'
+          - pattern-not: '(nzbget.Client).ListGroups'
+          - pattern-not: '(nzbget.Client).SetPriority'
+          - pattern-not: 'nzbget.Client.GetVersion'
+          - pattern-not: 'nzbget.Client.GetStatus'
+          - pattern-not: 'nzbget.Client.ListGroups'
+          - pattern-not: 'nzbget.Client.SetPriority'
+      - patterns:
+          - pattern-either:
+              - pattern: '($CL : *transmission.Client).$METHOD(...)'
+              - pattern: '($CL : transmission.Client).$METHOD(...)'
+          - pattern-not: '$CL.GetSession(...)'
+          - pattern-not: '$CL.GetTorrents(...)'
+      - patterns:
+          - pattern-either:
+              - pattern: '($CL : *deluge.Client).$METHOD(...)'
+              - pattern: '($CL : deluge.Client).$METHOD(...)'
+          - pattern-not: '$CL.Login(...)'
+          - pattern-not: '$CL.Connected(...)'
+          - pattern-not: '$CL.GetTorrentsStatus(...)'
+          - pattern-not: '$CL.GetVersion(...)'
+      - patterns:
+          - pattern-either:
+              - pattern: '($CL : *rtorrent.Client).$METHOD(...)'
+              - pattern: '($CL : rtorrent.Client).$METHOD(...)'
+          - pattern-not: '$CL.GetSystemInfo(...)'
+          - pattern-not: '$CL.GetTorrents(...)'
