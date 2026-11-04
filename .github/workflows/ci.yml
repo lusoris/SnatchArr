@@ -956,6 +956,9 @@ jobs:
 
   release-e2e-map:
     name: release e2e map
+    permissions:
+      contents: read
+      issues: read
     # Runs after a passing suite (a failed suite skips this job, which CI success refuses on a
     # release pull request): a fix(deps) commit counts as covered only when the suite report
     # names the head commit and every project passed.
@@ -983,6 +986,10 @@ jobs:
         run: |
           git fetch --tags --force
           make release-e2e-check
+      - name: Refuse release notes that claim an open issue is closed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: make release-closes-check
 
   # The required check that stands for every job of this workflow. A job the change filter
   # leaves out ends as skipped, and a skipped job satisfies a required check on its own, so this
