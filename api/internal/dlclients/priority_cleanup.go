@@ -124,10 +124,10 @@ func (r *Reconciler) executeActWithCleanup(ctx context.Context, rows []domain.Do
 	plan domain.DownloadClientPlan, disabled bool, items []domain.DownloadQueueItem, clients map[string]uuid.UUID,
 	ownership []PriorityOwnership, withdrawn []string,
 ) (string, []string) {
-	if !r.priorityPlanAllowed(ctx, plan) {
+	cleanup := domain.DownloadClientPlan{Resume: withdrawn}
+	if !r.priorityPlanAllowed(ctx, cleanup) {
 		return "act", nil
 	}
-	cleanup := domain.DownloadClientPlan{Resume: withdrawn}
 	if !r.executeResumeWrites(ctx, client, secret, cleanup, clients, ownership) {
 		return "act", nil
 	}

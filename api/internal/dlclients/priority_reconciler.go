@@ -83,6 +83,9 @@ type Reconciler struct {
 	logger   *slog.Logger
 	mu       sync.RWMutex
 	plans    map[uuid.UUID]PriorityPlan
+	// tickMu serializes observations and protects groupCursor, including direct Tick calls.
+	tickMu      sync.Mutex
+	groupCursor int
 }
 
 func newPriorityReconciler(source prioritySource, observer PriorityObserver, writer PriorityWriter, clk clock.Clock, logger *slog.Logger) *Reconciler {
@@ -107,6 +110,8 @@ func (r *Reconciler) Latest(clientID uuid.UUID) (PriorityPlan, error) {
 
 // Tick snapshots configuration once and isolates physical client failures.
 func (r *Reconciler) Tick(ctx context.Context) error {
+	r.tickMu.Lock()
+	defer r.tickMu.Unlock()
 	loadCtx, cancel := context.WithTimeout(ctx, ObserveTimeout)
 	inputs, err := r.source.Load(loadCtx)
 	cancel()
@@ -119,10 +124,7 @@ func (r *Reconciler) Tick(ctx context.Context) error {
 		return nil
 	}
 	groups := priorityGroups(inputs.Clients)
-	if len(groups) > maxPriorityGroupsPerTick {
-		r.logger.WarnContext(ctx, "download priority groups truncated", slog.Int("limit", maxPriorityGroupsPerTick), slog.Int("item_limit_per_tick", maxPriorityItemsPerTick), slog.Int("mutation_limit_per_tick", maxPriorityMutationsPerTick))
-		groups = groups[:maxPriorityGroupsPerTick]
-	}
+	groups = r.priorityBatch(ctx, groups)
 	r.prunePlans(inputs.Clients)
 	sem := make(chan struct{}, maxPriorityWorkers)
 	var wg sync.WaitGroup
@@ -132,6 +134,7 @@ func (r *Reconciler) Tick(ctx context.Context) error {
 		}
 		// Each observation ends within ObserveTimeout, so a full semaphore frees a slot in bounded time.
 		sem <- struct{}{}
+		r.groupCursor++
 		wg.Go(func() {
 			defer func() { <-sem }()
 			r.observePriorityGroup(ctx, rows, inputs)
@@ -142,6 +145,19 @@ func (r *Reconciler) Tick(ctx context.Context) error {
 		return fmt.Errorf("priority tick: %w", err)
 	}
 	return nil
+}
+
+// priorityBatch preserves group order; tickMu protects the cursor through the whole tick.
+// The last batch stops at the end, so every group gets one turn before the next pass.
+func (r *Reconciler) priorityBatch(ctx context.Context, groups [][]domain.DownloadClient) [][]domain.DownloadClient {
+	if r.groupCursor >= len(groups) {
+		r.groupCursor = 0
+	}
+	if len(groups) > maxPriorityGroupsPerTick {
+		r.logger.WarnContext(ctx, "download priority groups rotated", slog.Int("limit", maxPriorityGroupsPerTick), slog.Int("item_limit_per_tick", maxPriorityItemsPerTick), slog.Int("mutation_limit_per_tick", maxPriorityMutationsPerTick))
+	}
+	end := min(r.groupCursor+maxPriorityGroupsPerTick, len(groups))
+	return groups[r.groupCursor:end]
 }
 
 func (r *Reconciler) prunePlans(clients []domain.DownloadClient) {
