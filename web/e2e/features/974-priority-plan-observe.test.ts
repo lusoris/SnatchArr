@@ -40,6 +40,21 @@ interface DownloadClientPriorityPlan {
 	resume: string[];
 }
 
+// SABnzbd read calls use GET or HEAD with an empty name parameter and one of these
+// modes (goenvoy downloadclient/sabnzbd/v2@v2.1.0). Everything else is a write.
+const SAB_READ_MODES = new Set([
+	'version',
+	'queue',
+	'history',
+	'server_stats',
+	'warnings',
+	'fullstatus'
+]);
+
+function isSabRead(method: string, mode: string, name: string): boolean {
+	return (method === 'GET' || method === 'HEAD') && name === '' && SAB_READ_MODES.has(mode);
+}
+
 function startSabStub(): Promise<SabStubHandle> {
 	const requests: RecordedRequest[] = [];
 	const server = http.createServer((req, res) => {
@@ -49,13 +64,7 @@ function startSabStub(): Promise<SabStubHandle> {
 		const mode = parsed.searchParams.get('mode') ?? '';
 		const name = parsed.searchParams.get('name') ?? '';
 
-		// SABnzbd mutations occur through POST or specific write actions (pause, resume, priority, delete).
-		const isWrite =
-			(method !== 'GET' && method !== 'HEAD') ||
-			mode === 'pause' ||
-			mode === 'resume' ||
-			name === 'priority' ||
-			name === 'delete';
+		const isWrite = !isSabRead(method, mode, name);
 
 		requests.push({ method, url: reqUrl, isWrite });
 
@@ -221,7 +230,7 @@ test('974: negative - unknown or malformed client id returns problem+json', asyn
 	expect([400, 404, 422]).toContain(malformedRes.status());
 	expect(malformedRes.headers()['content-type']).toContain('application/problem+json');
 	const malformedProblem = (await malformedRes.json()) as { status: number };
-	expect([400, 404, 422]).toContain(malformedProblem.status);
+	expect(malformedProblem.status).toBe(malformedRes.status());
 });
 
 test('974: boundary - disabled client returns 404 pending/unobserved shape without contacting stub writes', async ({

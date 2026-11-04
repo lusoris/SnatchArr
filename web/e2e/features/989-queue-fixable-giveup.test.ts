@@ -266,12 +266,12 @@ test('989: boundary - import_fixable accepts minimum threshold 1 and maximum thr
 		expect(minRead.rules.import_fixable?.threshold).toBe(1);
 		expect(minRead.rules.import_fixable?.blocklist).toBe(true);
 
-		// Boundary max: threshold 100
+		// Boundary max: threshold 1440
 		const maxPolicy = {
 			...basePolicy,
 			rules: {
 				...basePolicy.rules,
-				import_fixable: { mode: 'act' as const, threshold: 100, blocklist: true }
+				import_fixable: { mode: 'act' as const, threshold: 1440, blocklist: true }
 			}
 		};
 		const maxRes = await page.request.put(`/api/v1/instances/${instanceId}/queue-policy`, {
@@ -281,7 +281,7 @@ test('989: boundary - import_fixable accepts minimum threshold 1 and maximum thr
 		});
 		expect(maxRes.status()).toBe(200);
 		const maxRead = (await maxRes.json()) as QueuePolicyPayload;
-		expect(maxRead.rules.import_fixable?.threshold).toBe(100);
+		expect(maxRead.rules.import_fixable?.threshold).toBe(1440);
 		expect(maxRead.rules.import_fixable?.blocklist).toBe(true);
 	} finally {
 		await deleteRows(page, csrf, 'instances', [instanceId]);
@@ -295,9 +295,17 @@ test('989: give-up - aged import_fixable item (>24h) is removed with blocklist=t
 	const instanceId = await createFixableInstance(page, csrf);
 
 	try {
-		await setFixableActPolicy(page, csrf, instanceId);
+		// Reset the fake so retries see the record again, and take the baseline before the
+		// act policy exists, so no sweep can delete between reset and baseline.
+		const resetRes = await page.request.post(`${fixableAgedUrl}/_fake/reset`, {
+			timeout: REQUEST_TIMEOUT_MS
+		});
+		expect(resetRes.status()).toBe(204);
+
 		// Baseline: the fake keeps deletes from earlier tests, so only a new record counts.
 		const before = (await fetchFakeDeletes(page, fixableAgedUrl)).length;
+
+		await setFixableActPolicy(page, csrf, instanceId);
 
 		// Trigger queue sweep through served API.
 		const sweepRes = await page.request.post(`/api/v1/instances/${instanceId}/queue/sweep`, {

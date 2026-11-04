@@ -35,11 +35,33 @@ CONST_RE = re.compile(
 CONFIG_TIMEOUT_RE = re.compile(
     rf"^(?:\t| {{2}})timeout:\s*({NUMBER})\s*,?\s*$", re.MULTILINE
 )
-TEST_RAISE_RE = re.compile(r"\btest\.(?:setTimeout|slow)\s*\(")
-FILE_RAISE_RE = re.compile(
-    r"\btest\.describe\.configure\(\s*\{[^}]*\btimeout\b"
-    r"|\btest\.beforeEach\([^)]*\)?[\s\S]{0,400}?\btest\.setTimeout\s*\("
+TOP_CONFIGURE_RE = re.compile(
+    rf"^test\.describe\.configure\(\s*\{{[^}}]*?\btimeout:\s*({NUMBER}|[A-Za-z_$][\w$]*)\b",
+    re.MULTILINE,
 )
+TOP_CONFIGURE_ANY_RE = re.compile(
+    r"^test\.describe\.configure\(\s*\{[^}]*?\btimeout\b",
+    re.MULTILINE,
+)
+TOP_BEFORE_EACH_RE = re.compile(
+    rf"^test\.beforeEach\([^)]*\)?[\s\S]{{0,500}}?\btest\.setTimeout\s*\(\s*({NUMBER}|[A-Za-z_$][\w$]*)\s*\)",
+    re.MULTILINE,
+)
+TOP_BEFORE_EACH_ANY_RE = re.compile(
+    r"^test\.beforeEach\([^)]*\)?[\s\S]{0,500}?\btest\.setTimeout\s*\(",
+    re.MULTILINE,
+)
+SEG_CONFIGURE_RE = re.compile(
+    rf"\btest\.describe\.configure\(\s*\{{[^}}]*?\btimeout:\s*({NUMBER}|[A-Za-z_$][\w$]*)\b"
+)
+SEG_CONFIGURE_ANY_RE = re.compile(
+    r"\btest\.describe\.configure\(\s*\{[^}]*?\btimeout\b"
+)
+SET_TIMEOUT_RE = re.compile(
+    rf"\btest\.setTimeout\s*\(\s*({NUMBER}|[A-Za-z_$][\w$]*)\s*\)"
+)
+SET_TIMEOUT_ANY_RE = re.compile(r"\btest\.setTimeout\s*\(")
+SLOW_RE = re.compile(r"\btest\.slow\s*\(")
 TEST_START_RE = re.compile(
     r"^test(?:\.describe)?(?:\.(?:serial|parallel|only|skip|fixme))?\s*\("
 )
@@ -118,11 +140,94 @@ def callers(segs: list[Segment], helper: str) -> list[Segment]:
     return [s for s in segs if s.is_test and any(c.search(s.text) for c in calls)]
 
 
+def resolve_token(token: str, consts: dict[str, int]) -> int | None:
+    """Resolve a numeric literal or constant identifier to milliseconds."""
+    if token and token[0].isdigit():
+        return int(token.replace("_", ""))
+    return consts.get(token)
+
+
+def file_level_budget(
+    text: str, consts: dict[str, int], limit_ms: int
+) -> tuple[int, bool]:
+    """Resolve top-level file budget from describe.configure or beforeEach."""
+    budget = limit_ms
+    unresolvable = False
+
+    cfg_any = len(TOP_CONFIGURE_ANY_RE.findall(text))
+    cfg_matches = list(TOP_CONFIGURE_RE.finditer(text))
+    if cfg_any > len(cfg_matches):
+        unresolvable = True
+    for match in cfg_matches:
+        val = resolve_token(match.group(1), consts)
+        if val is not None:
+            budget = max(budget, val)
+        else:
+            unresolvable = True
+
+    be_any = len(TOP_BEFORE_EACH_ANY_RE.findall(text))
+    be_matches = list(TOP_BEFORE_EACH_RE.finditer(text))
+    if be_any > len(be_matches):
+        unresolvable = True
+    for match in be_matches:
+        val = resolve_token(match.group(1), consts)
+        if val is not None:
+            budget = max(budget, val)
+        else:
+            unresolvable = True
+
+    return budget, unresolvable
+
+
+def resolve_test_budget(
+    seg: Segment,
+    consts: dict[str, int],
+    file_budget: int,
+    file_unresolvable: bool,
+    limit_ms: int,
+) -> tuple[int, bool]:
+    """Resolve effective budget for a test segment, taking the maximum raise."""
+    if file_unresolvable:
+        return file_budget, True
+
+    budget = file_budget
+    unresolvable = False
+
+    cfg_any = len(SEG_CONFIGURE_ANY_RE.findall(seg.text))
+    cfg_matches = list(SEG_CONFIGURE_RE.finditer(seg.text))
+    if cfg_any > len(cfg_matches):
+        unresolvable = True
+    for match in cfg_matches:
+        val = resolve_token(match.group(1), consts)
+        if val is not None:
+            budget = max(budget, val)
+        else:
+            unresolvable = True
+
+    to_any = len(SET_TIMEOUT_ANY_RE.findall(seg.text))
+    to_matches = list(SET_TIMEOUT_RE.finditer(seg.text))
+    if to_any > len(to_matches):
+        unresolvable = True
+    for match in to_matches:
+        val = resolve_token(match.group(1), consts)
+        if val is not None:
+            budget = max(budget, val)
+        else:
+            unresolvable = True
+
+    if SLOW_RE.search(seg.text):
+        budget = max(budget, 3 * limit_ms)
+
+    return budget, unresolvable
+
+
 def file_findings(path: Path, limit_ms: int) -> list[str]:
     """Return one finding per long wait whose test budget is not raised."""
     text = strip_comments(path.read_text(encoding="utf-8"))
-    if FILE_RAISE_RE.search(text):
-        return []
+    consts = {
+        name: int(value.replace("_", "")) for name, value in CONST_RE.findall(text)
+    }
+    file_budget, file_unresolvable = file_level_budget(text, consts, limit_ms)
     segs = segments(text)
     findings = []
     for line, value in long_waits(text, limit_ms):
@@ -131,9 +236,16 @@ def file_findings(path: Path, limit_ms: int) -> list[str]:
             continue
         tests = [owner] if owner.is_test else callers(segs, owner.helper or "")
         for test in tests:
-            if not TEST_RAISE_RE.search(test.text):
+            budget, unresolvable = resolve_test_budget(
+                test, consts, file_budget, file_unresolvable, limit_ms
+            )
+            if unresolvable:
                 findings.append(
-                    f"{path}:{line}: timeout {value} ms exceeds the {limit_ms} ms test timeout "
+                    f"{path}:{line}: test budget not resolvable in the test at line {test.start_line}"
+                )
+            elif value > budget:
+                findings.append(
+                    f"{path}:{line}: timeout {value} ms exceeds the {budget} ms test timeout "
                     f"in the test at line {test.start_line}; raise it with test.setTimeout"
                 )
     return findings
@@ -188,7 +300,44 @@ SELF_TEST_CASES = {
         "test('a', async () => {\n\tawait expect.poll(f, { timeout: REQUEST_TIMEOUT_MS });\n});\n",
         0,
     ),
+    "describe-scoped": (
+        "test.describe('A', () => {\n"
+        "\ttest.describe.configure({ timeout: 90_000 });\n"
+        "\ttest('sub', async () => {\n" + POLL + "\t});\n"
+        "});\n"
+        "test('b', async () => {\n" + POLL + "});\n",
+        1,
+    ),
+    "raised-too-low": (
+        "test('a', async () => {\n\ttest.setTimeout(35_000);\n" + POLL + "});\n",
+        1,
+    ),
+    "slow": (
+        "test('a', async () => {\n\ttest.slow();\n" + POLL + "});\n",
+        0,
+    ),
+    "raised-const": (
+        "const B = 120_000;\ntest('a', async () => {\n\ttest.setTimeout(B);\n"
+        + POLL
+        + "});\n",
+        0,
+    ),
+    "unresolvable": (
+        "test('a', async () => {\n\ttest.setTimeout(UNKNOWN_TIMEOUT);\n"
+        + POLL
+        + "});\n",
+        1,
+    ),
+    "configure-unresolvable": (
+        "test.describe('A', () => {\n"
+        "\ttest.describe.configure({ timeout: (B) });\n"
+        "\ttest('sub', async () => {\n" + POLL + "\t});\n"
+        "});\n",
+        1,
+    ),
 }
+
+UNRESOLVABLE_CASES = ("unresolvable", "configure-unresolvable")
 
 
 def self_test() -> int:
@@ -197,10 +346,19 @@ def self_test() -> int:
         for name, (body, want) in SELF_TEST_CASES.items():
             path = Path(tmp) / f"{name}.test.ts"
             path.write_text(body, encoding="utf-8")
-            got = len(file_findings(path, PLAYWRIGHT_DEFAULT_TIMEOUT_MS))
+            findings = file_findings(path, PLAYWRIGHT_DEFAULT_TIMEOUT_MS)
+            got = len(findings)
             if got != want:
                 print(
                     f"e2e timeout self-test: {name} gave {got} findings, want {want}",
+                    file=sys.stderr,
+                )
+                return 1
+            if name in UNRESOLVABLE_CASES and not any(
+                "test budget not resolvable" in f for f in findings
+            ):
+                print(
+                    f"e2e timeout self-test: {name} finding text missing",
                     file=sys.stderr,
                 )
                 return 1

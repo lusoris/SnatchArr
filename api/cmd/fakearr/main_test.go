@@ -518,3 +518,75 @@ func TestImportFixableAgedBoundarySweep(t *testing.T) {
 		})
 	}
 }
+
+func TestFakeReset(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name        string
+		method      string
+		preDelete   bool
+		wantStatus  int
+		wantTotal   int
+		wantDeletes int
+	}{
+		{
+			name:        "positive",
+			method:      http.MethodPost,
+			preDelete:   true,
+			wantStatus:  http.StatusNoContent,
+			wantTotal:   1,
+			wantDeletes: 1,
+		},
+		{
+			name:        "negative",
+			method:      http.MethodGet,
+			preDelete:   false,
+			wantStatus:  http.StatusMethodNotAllowed,
+			wantTotal:   1,
+			wantDeletes: 0,
+		},
+		{
+			name:        "boundary",
+			method:      http.MethodPost,
+			preDelete:   false,
+			wantStatus:  http.StatusNoContent,
+			wantTotal:   1,
+			wantDeletes: 0,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			srv := newTestServerWithFlags(t, "sonarr", false, true)
+			if tt.preDelete {
+				status := doJSON(t, srv, http.MethodDelete, "/api/v3/queue/1?blocklist=true", nil, nil)
+				if status != http.StatusOK {
+					t.Fatalf("DELETE /queue/1 status = %d, want %d", status, http.StatusOK)
+				}
+				var qResp map[string]any
+				doJSON(t, srv, http.MethodGet, "/api/v3/queue", nil, &qResp)
+				if total, _ := parseQueueRecords(t, qResp); total != 0 {
+					t.Fatalf("preDelete total = %d, want 0", total)
+				}
+			}
+
+			status := doJSON(t, srv, tt.method, "/_fake/reset", nil, nil)
+			if status != tt.wantStatus {
+				t.Fatalf("%s /_fake/reset status = %d, want %d", tt.method, status, tt.wantStatus)
+			}
+
+			var qResp map[string]any
+			doJSON(t, srv, http.MethodGet, "/api/v3/queue", nil, &qResp)
+			total, recs := parseQueueRecords(t, qResp)
+			if total != tt.wantTotal || len(recs) != tt.wantTotal {
+				t.Fatalf("queue total = %d, want %d", total, tt.wantTotal)
+			}
+
+			var recordedDeletes []deleteRecord
+			doJSON(t, srv, http.MethodGet, "/_fake/deletes", nil, &recordedDeletes)
+			if len(recordedDeletes) != tt.wantDeletes {
+				t.Fatalf("recordedDeletes len = %d, want %d", len(recordedDeletes), tt.wantDeletes)
+			}
+		})
+	}
+}

@@ -140,6 +140,7 @@ func (f *fake) routes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE "+prefix+"/queue/{id}", f.auth(f.deleteQueueItem))
 	mux.HandleFunc("GET /_fake/commands", f.listCommands)
 	mux.HandleFunc("GET /_fake/deletes", f.listDeletes)
+	mux.HandleFunc("POST /_fake/reset", f.resetState)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 }
 
@@ -383,6 +384,16 @@ func (f *fake) listDeletes(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 	writeJSON(w, f.deletes)
+}
+
+// resetState clears imported and deleted state so subsequent test runs or retries
+// observe queue items again, while keeping recorded command and delete histories intact.
+func (f *fake) resetState(w http.ResponseWriter, _ *http.Request) {
+	f.mu.Lock()
+	f.imported = false
+	f.deleted = false
+	f.mu.Unlock()
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (f *fake) listCommands(w http.ResponseWriter, _ *http.Request) {
