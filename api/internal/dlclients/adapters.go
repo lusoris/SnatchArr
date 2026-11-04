@@ -181,6 +181,8 @@ func (g *Goenvoy) qbittorrent(ctx context.Context, c domain.DownloadClient, secr
 	return obs, nil
 }
 
+// qbitClient builds a qBittorrent client with the adapter timeout and user agent, and logs in
+// when the row carries credentials.
 func (g *Goenvoy) qbitClient(ctx context.Context, c domain.DownloadClient, secret string) (*qbit.Client, error) {
 	cl, err := qbit.New(c.BaseURL, qbit.WithTimeout(g.timeout), qbit.WithUserAgent(g.userAgent))
 	if err != nil {
@@ -192,6 +194,7 @@ func (g *Goenvoy) qbitClient(ctx context.Context, c domain.DownloadClient, secre
 	return cl, nil
 }
 
+// sabnzbdClient builds a SABnzbd client with the API key, the adapter timeout and user agent.
 func (g *Goenvoy) sabnzbdClient(c domain.DownloadClient, secret string) (*sabnzbd.Client, error) {
 	cl, err := sabnzbd.New(c.BaseURL, secret, sabnzbd.WithTimeout(g.timeout), sabnzbd.WithUserAgent(g.userAgent))
 	if err != nil {
@@ -200,6 +203,7 @@ func (g *Goenvoy) sabnzbdClient(c domain.DownloadClient, secret string) (*sabnzb
 	return cl, nil
 }
 
+// nzbgetClient builds an NZBGet client with the row's credentials, the adapter timeout and user agent.
 func (g *Goenvoy) nzbgetClient(c domain.DownloadClient, secret string) (*nzbget.Client, error) {
 	cl, err := nzbget.New(c.BaseURL, c.Username, secret, nzbget.WithTimeout(g.timeout), nzbget.WithUserAgent(g.userAgent))
 	if err != nil {
@@ -208,6 +212,7 @@ func (g *Goenvoy) nzbgetClient(c domain.DownloadClient, secret string) (*nzbget.
 	return cl, nil
 }
 
+// qbittorrentLogin logs in when a username or secret is set; without credentials it does nothing.
 func qbittorrentLogin(ctx context.Context, cl *qbit.Client, username, secret string) error {
 	if username == "" && secret == "" {
 		return nil
@@ -218,6 +223,8 @@ func qbittorrentLogin(ctx context.Context, cl *qbit.Client, username, secret str
 	return nil
 }
 
+// qbittorrentVersion logs in and reads the version; a 403 after a login with credentials is
+// reported as wrong credentials.
 func qbittorrentVersion(ctx context.Context, cl *qbit.Client, username, secret string) (string, error) {
 	hasCredentials := username != "" || secret != ""
 	if err := qbittorrentLogin(ctx, cl, username, secret); err != nil {
@@ -234,6 +241,7 @@ func qbittorrentVersion(ctx context.Context, cl *qbit.Client, username, secret s
 	return version, nil
 }
 
+// qbittorrentLoginError explains the 401 (Host header validation) and 403 (IP ban) login refusals.
 func qbittorrentLoginError(err error) error {
 	if apiErr, ok := errors.AsType[*qbit.APIError](err); ok {
 		switch apiErr.StatusCode {
@@ -572,6 +580,7 @@ func classifySAB(slots []sabnzbd.Slot) (active, queued int) {
 	return active, queued
 }
 
+// sabnzbd observes a SABnzbd instance: version, paused flag, queue counts and download rate.
 func (g *Goenvoy) sabnzbd(ctx context.Context, c domain.DownloadClient, secret string) (observation, error) {
 	cl, err := g.sabnzbdClient(c, secret)
 	if err != nil {
@@ -643,6 +652,7 @@ func classifyNZBGet(status string) dlClass {
 	return nzbgetStateClasses[status]
 }
 
+// nzbget observes an NZBGet instance: version, paused flag, queue counts and download rate.
 func (g *Goenvoy) nzbget(ctx context.Context, c domain.DownloadClient, secret string) (observation, error) {
 	cl, err := g.nzbgetClient(c, secret)
 	if err != nil {
