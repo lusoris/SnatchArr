@@ -26,6 +26,8 @@
 #   drop-key          delete the seeded API key ("old API key")
 #   reset-password    replace the admin password hash ("login with password")
 #   touch-dlclient    change a download client column the API omits ("data read-back differs")
+#   revert-fixable-blocklist revert migrated queue-policy blocklist to false ("api read-back differs")
+#   queue-policy-extra-change change a queue-policy field migration 55 does not touch ("unallowed change in table queue_policies")
 # Needs docker compose, curl, jq and openssl.
 set -euo pipefail
 
@@ -390,6 +392,115 @@ check_readback_item() {
     compare_json "$file" "$work/readbacks-old/$file" "$work/readbacks-new/$file"
 }
 
+# Intended data-migration effects on seeded read-backs:
+# version | table | file | jq path | from | to | reason
+# The table is the one the migration rewrites; check_database_fingerprint allows a change to it
+# only when the entry applies to this upgrade.
+migration_effects=(
+    '55|queue_policies|queue-policy.json|["rules","import_fixable","blocklist"]|false|true|migration 000055 turns the hidden-toggle false on'
+)
+
+declare -A migration_effect_sql=(
+    [55]="rules=CASE WHEN rules->'import_fixable'->'blocklist' = 'false'::jsonb THEN jsonb_set(rules, '{import_fixable,blocklist}', 'true'::jsonb) ELSE rules END"
+)
+
+# migration_effect_applies VERSION succeeds when the old release is below VERSION and the
+# candidate schema has reached it.
+migration_effect_applies() {
+    local v=$((10#$1))
+    [ "$((10#$old_schema_version))" -lt "$v" ] && [ "$v" -le "$((10#$cand_schema_version))" ]
+}
+
+# save_migration_expectations computes expected fingerprints for tables rewritten by migrations.
+save_migration_expectations() {
+    : >"$work/expected-effects.txt"
+    [ -n "${old_schema_version:-}" ] || old_schema_version=$(psql_at 'SELECT version FROM schema_migrations')
+    local entry version tbl file path from to reason
+    for entry in "${migration_effects[@]}"; do
+        IFS='|' read -r version tbl file path from to reason <<<"$entry"
+        : "$file" "$path" "$from" "$to" "$reason"
+        local v=$((10#$version))
+        [ "$v" -gt "$((10#$old_schema_version))" ] || continue
+        local sql="${migration_effect_sql[$v]:-}"
+        [ -n "$sql" ] || continue
+        local col="${sql%%=*}" expr="${sql#*=}"
+        local raw_entry cols
+        raw_entry=$(grep -m 1 "^$tbl " "$work/columns.txt") || fail "no saved columns for $tbl"
+        cols=${raw_entry#"$tbl "}
+        local raw_cols=()
+        IFS=, read -r -a raw_cols <<<"$cols"
+        local out=() c
+        for c in "${raw_cols[@]}"; do
+            if [ "$c" = "$col" ] || [ "$c" = "\"$col\"" ]; then
+                out+=("$expr AS $col")
+            else
+                out+=("$c")
+            fi
+        done
+        local list exp
+        list=$(IFS=,; echo "${out[*]}")
+        exp=$(psql_at "SELECT count(*) || ' ' || md5(coalesce(string_agg(t::text, '|' ORDER BY t::text), ''))
+            FROM (SELECT $list FROM public.$tbl) t" </dev/null) ||
+            fail "failed to compute expected migration effects for $tbl"
+        printf '%s %s\n' "$tbl" "$exp" >>"$work/expected-effects.txt"
+    done
+}
+
+# migration_effect_matches TABLE succeeds when an applying migration effect rewrites TABLE
+# and the post-upgrade rows read on the saved old columns match the pre-computed expected effect.
+migration_effect_matches() {
+    local tbl=$1
+    local entry version table rest covered=0
+    for entry in "${migration_effects[@]}"; do
+        IFS='|' read -r version table rest <<<"$entry"
+        : "$rest"
+        if [ "$table" = "$tbl" ] && migration_effect_applies "$version"; then
+            covered=1
+            break
+        fi
+    done
+    [ "$covered" -eq 1 ] || return 1
+
+    local exp cols got
+    exp=$(grep -m 1 "^$tbl " "$work/expected-effects.txt") || return 1
+    cols=$(grep -m 1 "^$tbl " "$work/columns.txt") || return 1
+    cols=${cols#"$tbl "}
+    got=$(psql_at "SELECT count(*) || ' ' || md5(coalesce(string_agg(t::text, '|' ORDER BY t::text), ''))
+        FROM (SELECT $cols FROM public.$tbl) t" </dev/null) || return 1
+    [ "$tbl $got" = "$exp" ]
+}
+
+# apply_migration_effects rewrites old read-backs with expected data-migration transforms.
+apply_migration_effects() {
+    if [ -z "${cand_schema_version:-}" ]; then
+        cand_schema_version=$(psql_at 'SELECT version FROM schema_migrations')
+    fi
+    local entry version table file path from to reason
+    for entry in "${migration_effects[@]}"; do
+        IFS='|' read -r version table file path from to reason <<<"$entry"
+        : "$table" "$reason"
+        if ! [[ "$version" =~ ^[0-9]+$ ]]; then
+            fail "migration effect version is not a number: $version"
+        fi
+        local v=$((10#$version))
+        if migration_effect_applies "$v"; then
+            local target="$work/readbacks-old/$file"
+            [ -f "$target" ] || fail "readback file for migration effect missing: $file"
+            local tmp="$target.tmp"
+            jq -S \
+                --argjson p "$path" \
+                --argjson from "$from" \
+                --argjson to "$to" \
+                'if getpath($p) == $from then setpath($p; $to) else . end' \
+                "$target" >"$tmp" || fail "failed to rewrite $file for migration $v"
+            mv "$tmp" "$target"
+            echo "ok   expected change: $file $path $from -> $to (migration $v)"
+        else
+            echo "ok   expected change does not apply: $file $path (migration $v)"
+        fi
+    done
+}
+
 verify_all_readbacks() {
     check_readback_item "/instances" "instances.json"
     check_readback_item "/instances/$instance_id" "instance.json"
@@ -451,8 +562,34 @@ apply_upgrade_plant() {
             # database fingerprint can see it; -1 is no id an *arr instance hands out.
             psql_at "UPDATE download_clients SET remote_id = -1" >/dev/null
             ;;
+        revert-fixable-blocklist)
+            # Acts after the candidate migrated, see apply_post_upgrade_plant.
+            ;;
+        queue-policy-extra-change)
+            # Acts right before database fingerprint, see apply_pre_fingerprint_plant.
+            ;;
         "") ;;
         *) fail "unknown UPGRADE_PLANT: $UPGRADE_PLANT" ;;
+    esac
+}
+
+# apply_post_upgrade_plant plants defects that must act after the candidate has started and migrated.
+apply_post_upgrade_plant() {
+    case "${UPGRADE_PLANT:-}" in
+        revert-fixable-blocklist)
+            psql_at "UPDATE queue_policies SET rules = jsonb_set(rules, '{import_fixable,blocklist}', 'false'::jsonb)" >/dev/null
+            ;;
+        *) ;;
+    esac
+}
+
+# apply_pre_fingerprint_plant plants defects after read-backs and right before database fingerprint.
+apply_pre_fingerprint_plant() {
+    case "${UPGRADE_PLANT:-}" in
+        queue-policy-extra-change)
+            psql_at "UPDATE queue_policies SET grace_s = grace_s + 1" >/dev/null
+            ;;
+        *) ;;
     esac
 }
 
@@ -485,7 +622,7 @@ check_candidate_status() {
 # version is at least the old release's, equals the highest migration file in this tree, and is
 # not dirty (rules in schema_check.sh). It prints whether the schema advanced or stayed unchanged.
 check_migrations() {
-    local cand_schema_version cand_schema_dirty highest_migration
+    local cand_schema_dirty highest_migration
     cand_schema_version=$(psql_at 'SELECT version FROM schema_migrations')
     cand_schema_dirty=$(psql_at 'SELECT dirty FROM schema_migrations')
     highest_migration=$(find "$root/api/internal/store/migrations/postgres" -name '*.up.sql' -exec basename {} \; | \
@@ -607,7 +744,10 @@ check_database_fingerprint() {
                 item_search_cooldowns) ;; # search cooldown timestamps
                 runtime_settings) ;;      # written during runtime_settings test
                 *)
-                    fail "data read-back differs: unallowed change in table $tbl ($count $hash -> ${after_line#"$tbl" })"
+                    # A declared migration effect may rewrite its table; verify that the rows
+                    # on saved old columns match the expected data migration effect.
+                    migration_effect_matches "$tbl" ||
+                        fail "data read-back differs: unallowed change in table $tbl ($count $hash -> ${after_line#"$tbl" })"
                     ;;
             esac
         fi
@@ -696,6 +836,7 @@ save_columns
 old_schema_version=$(psql_at 'SELECT version FROM schema_migrations')
 old_schema_dirty=$(psql_at 'SELECT dirty FROM schema_migrations')
 [ "$old_schema_dirty" = "f" ] || fail "schema_migrations dirty before upgrade"
+save_migration_expectations
 echo "ok   saved fingerprint and schema migration ($old_schema_version)"
 
 # Apply planted defect if requested.
@@ -717,9 +858,12 @@ check_migrations
 check_settings
 check_auth
 check_instance_test
+apply_post_upgrade_plant
+apply_migration_effects
 verify_all_readbacks
 check_worker
 check_runtime_settings
+apply_pre_fingerprint_plant
 check_database_fingerprint
 
 # 9. Final restart and re-check.

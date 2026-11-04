@@ -2,6 +2,9 @@
 --
 -- SPDX-License-Identifier: EUPL-1.2
 
--- No-op: after the up migration a stored true cannot be told apart from a true the user
--- chose, so stepping down keeps every import_fixable blocklist value as it is.
-SELECT 1;
+-- After the up migration every stored import_fixable blocklist false is an operator choice.
+-- Stepping down keeps each value and marks such a false with blocklist_kept, so a later up
+-- migration preserves it. Version 54 decodes rules leniently and ignores the marker.
+UPDATE queue_policies
+SET rules = jsonb_set(rules, '{import_fixable,blocklist_kept}', 'true'::jsonb)
+WHERE (rules->'import_fixable'->'blocklist') = 'false'::jsonb;
