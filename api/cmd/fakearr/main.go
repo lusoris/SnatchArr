@@ -32,35 +32,46 @@ type command struct {
 	Body   json.RawMessage `json:"body"`
 }
 
+type deleteRecord struct {
+	ID               int64 `json:"id"`
+	Blocklist        bool  `json:"blocklist"`
+	RemoveFromClient bool  `json:"remove_from_client"`
+	SkipRedownload   bool  `json:"skip_redownload"`
+}
+
 type fake struct {
-	mu            sync.Mutex
-	kind          string
-	apiKey        string
-	missing       int
-	cutoff        int
-	importBlocked bool
-	imported      bool
-	commands      []command
-	nextID        int64
-	logger        *slog.Logger
-	clk           clockwork.Clock
+	mu                sync.Mutex
+	kind              string
+	apiKey            string
+	missing           int
+	cutoff            int
+	importBlocked     bool
+	importFixableAged bool
+	imported          bool
+	deleted           bool
+	commands          []command
+	deletes           []deleteRecord
+	nextID            int64
+	logger            *slog.Logger
+	clk               clockwork.Clock
 }
 
 // newFake returns a fake *arr of the given kind with a real clock; tests swap
 // clk for a fake clock.
-func newFake(kind, apiKey string, missing, cutoff int, importBlocked bool, logger *slog.Logger) *fake {
+func newFake(kind, apiKey string, missing, cutoff int, importBlocked, importFixableAged bool, logger *slog.Logger) *fake {
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
 	}
 	return &fake{
-		kind:          kind,
-		apiKey:        apiKey,
-		missing:       missing,
-		cutoff:        cutoff,
-		importBlocked: importBlocked,
-		nextID:        100,
-		logger:        logger,
-		clk:           clockwork.NewRealClock(),
+		kind:              kind,
+		apiKey:            apiKey,
+		missing:           missing,
+		cutoff:            cutoff,
+		importBlocked:     importBlocked,
+		importFixableAged: importFixableAged,
+		nextID:            100,
+		logger:            logger,
+		clk:               clockwork.NewRealClock(),
 	}
 }
 
@@ -71,9 +82,10 @@ func main() {
 	missing := flag.Int("missing", 250, "number of missing items")
 	cutoff := flag.Int("cutoff", 40, "number of cutoff-unmet items")
 	importBlocked := flag.Bool("import-blocked", false, "serve import-blocked queue item and manual import candidate")
+	importFixableAged := flag.Bool("import-fixable-aged", false, "serve aged (>24h) import_fixable queue item to test give-up removal")
 	flag.Parse()
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	f := newFake(*kind, *apiKey, *missing, *cutoff, *importBlocked, logger)
+	f := newFake(*kind, *apiKey, *missing, *cutoff, *importBlocked, *importFixableAged, logger)
 	mux := http.NewServeMux()
 	f.routes(mux)
 	srv := &http.Server{Addr: *addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
@@ -125,7 +137,10 @@ func (f *fake) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET "+prefix+"/history/since", f.auth(func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, []any{}) }))
 	mux.HandleFunc("POST "+prefix+"/command", f.auth(f.postCommand))
 	mux.HandleFunc("GET "+prefix+"/command/{id}", f.auth(f.getCommand))
+	mux.HandleFunc("DELETE "+prefix+"/queue/{id}", f.auth(f.deleteQueueItem))
 	mux.HandleFunc("GET /_fake/commands", f.listCommands)
+	mux.HandleFunc("GET /_fake/deletes", f.listDeletes)
+	mux.HandleFunc("POST /_fake/reset", f.resetState)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 }
 
@@ -183,16 +198,16 @@ func (f *fake) item(id int64, i int) map[string]any {
 	}
 }
 
-// queue serves the queue page: empty without importBlocked, one import-blocked
-// record until a manual import was posted, then empty again.
+// queue serves the queue page: empty without importBlocked or importFixableAged,
+// one queue record until imported or deleted, then empty again.
 func (f *fake) queue(w http.ResponseWriter, _ *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if !f.importBlocked {
+	if !f.importBlocked && !f.importFixableAged {
 		writeJSON(w, map[string]any{"page": 1, "pageSize": 1, "totalRecords": 3, "records": []any{}})
 		return
 	}
-	if f.imported {
+	if f.imported || f.deleted {
 		writeJSON(w, map[string]any{"page": 1, "pageSize": 1, "totalRecords": 0, "records": []any{}})
 		return
 	}
@@ -208,10 +223,18 @@ func (f *fake) queue(w http.ResponseWriter, _ *http.Request) {
 // below the 24 h import_fixable budget, so a sweep imports the item instead of giving up.
 const queueAddedAge = time.Minute
 
-// queueAdded returns the added time of the import-blocked download, queueAddedAge
+// queueAgedAge is how long ago the aged import_fixable download was added. At 25 h it
+// exceeds the 24 h import_fixable budget, so a sweep gives up and removes the item.
+const queueAgedAge = 25 * time.Hour
+
+// queueAdded returns the added time of the import-blocked or aged download,
 // before the fake's clock, in RFC 3339.
 func (f *fake) queueAdded() string {
-	return f.clk.Now().Add(-queueAddedAge).UTC().Format(time.RFC3339)
+	age := queueAddedAge
+	if f.importFixableAged {
+		age = queueAgedAge
+	}
+	return f.clk.Now().Add(-age).UTC().Format(time.RFC3339)
 }
 
 // queueRecord builds the one import-blocked queue record for the fake's kind, with
@@ -257,7 +280,7 @@ func (f *fake) queueRecord() map[string]any {
 func (f *fake) manualImport(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if !f.importBlocked || r.URL.Query().Get("downloadId") != "fake-dl-1" {
+	if (!f.importBlocked && !f.importFixableAged) || r.URL.Query().Get("downloadId") != "fake-dl-1" {
 		writeJSON(w, []any{})
 		return
 	}
@@ -329,10 +352,58 @@ func (f *fake) getCommand(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, `{"error":"not found"}`, http.StatusNotFound)
 }
 
+// deleteQueueItem records a queue DELETE with its removeFromClient, blocklist and
+// skipRedownload flags and empties the queue. Like the real *arr, it sends no search
+// command itself: skipRedownload=false is the re-search request, which the *arr runs.
+func (f *fake) deleteQueueItem(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || id <= 0 {
+		http.Error(w, `{"error":"invalid id"}`, http.StatusBadRequest)
+		return
+	}
+	q := r.URL.Query()
+	f.mu.Lock()
+	f.deletes = append(f.deletes, deleteRecord{
+		ID:               id,
+		Blocklist:        q.Get("blocklist") == "true",
+		RemoveFromClient: q.Get("removeFromClient") == "true",
+		SkipRedownload:   q.Get("skipRedownload") == "true",
+	})
+	f.deleted = true
+	f.mu.Unlock()
+	w.WriteHeader(http.StatusOK)
+}
+
+// listDeletes serves the recorded queue DELETEs, an empty array when there are none.
+func (f *fake) listDeletes(w http.ResponseWriter, _ *http.Request) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	w.Header().Set("Content-Type", "application/json")
+	if f.deletes == nil {
+		writeJSON(w, []deleteRecord{})
+		return
+	}
+	writeJSON(w, f.deletes)
+}
+
+// resetState clears imported and deleted state so subsequent test runs or retries
+// observe queue items again, while keeping recorded command and delete histories intact.
+func (f *fake) resetState(w http.ResponseWriter, _ *http.Request) {
+	f.mu.Lock()
+	f.imported = false
+	f.deleted = false
+	f.mu.Unlock()
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (f *fake) listCommands(w http.ResponseWriter, _ *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
+	if f.commands == nil {
+		writeJSON(w, []command{})
+		return
+	}
 	writeJSON(w, f.commands)
 }
 

@@ -384,6 +384,7 @@ web-verify: ## pnpm lint/typecheck/test(+coverage)/build + OpenAPI type drift
 	pnpm build
 	python3 ../tools/ci/web_strings_scan.py
 	python3 ../tools/ci/web_css_classes_check.py
+	python3 -I ../tools/ci/e2e_timeout_check.py --web .
 
 web-gen: ## OpenAPI -> src/lib/api/schema.d.ts
 	cd web && pnpm gen:api
