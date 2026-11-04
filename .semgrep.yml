@@ -312,3 +312,63 @@ rules:
                 $G.Go(...)
                 ...
               }
+
+  # ── ADR-0046 · download client write allow-list ─────────────────────────────
+  # Only allow-listed download client methods may be called across api/.
+  # ADR-0046 Decision 1 narrows ADR-0006's read-only boundary for qBittorrent,
+  # NZBGet and SABnzbd priority, queue-order and per-item pause/resume writes.
+  # Whole-queue pause/resume, add/delete/remove, force start, and other EditQueue
+  # commands remain forbidden. Transmission, Deluge and rTorrent remain observe-only.
+  # Reference: docs/adr/0046-download-client-priority-writes.md#class-defence
+  - id: dlclient-write-allow-list
+    languages: [go]
+    severity: ERROR
+    message: >-
+      Method call on download client is not in the ADR-0046 allow-list. Only
+      approved read/setup/probe methods and Decision 1 priority/pause/resume writes
+      are permitted. Whole-queue operations, deletion, and unapproved actions are forbidden.
+    paths:
+      exclude:
+        - "*_test.go"
+    pattern-either:
+      - patterns:
+          - pattern: '($CL : *qbit.Client).$METHOD(...)'
+          - pattern-not: '($CL : *qbit.Client).Login(...)'
+          - pattern-not: '($CL : *qbit.Client).Version(...)'
+          - pattern-not: '($CL : *qbit.Client).ListTorrents(...)'
+          - pattern-not: '($CL : *qbit.Client).GetPreferences(...)'
+          - pattern-not: '($CL : *qbit.Client).TopPriority(...)'
+          - pattern-not: '($CL : *qbit.Client).BottomPriority(...)'
+          - pattern-not: '($CL : *qbit.Client).IncreasePriority(...)'
+          - pattern-not: '($CL : *qbit.Client).DecreasePriority(...)'
+          - pattern-not: '($CL : *qbit.Client).StopTorrents(...)'
+          - pattern-not: '($CL : *qbit.Client).StartTorrents(...)'
+      - patterns:
+          - pattern: '($CL : *sabnzbd.Client).$METHOD(...)'
+          - pattern-not: '($CL : *sabnzbd.Client).GetVersion(...)'
+          - pattern-not: '($CL : *sabnzbd.Client).GetQueue(...)'
+          - pattern-not: '($CL : *sabnzbd.Client).SetPriority(...)'
+          - pattern-not: '($CL : *sabnzbd.Client).PauseItem(...)'
+          - pattern-not: '($CL : *sabnzbd.Client).ResumeItem(...)'
+      - patterns:
+          - pattern: '($CL : *nzbget.Client).$METHOD(...)'
+          - pattern-not: '($CL : *nzbget.Client).GetVersion(...)'
+          - pattern-not: '($CL : *nzbget.Client).GetStatus(...)'
+          - pattern-not: '($CL : *nzbget.Client).ListGroups(...)'
+          - pattern-not: '($CL : *nzbget.Client).SetPriority(...)'
+          - pattern-not: '($CL : *nzbget.Client).EditQueue($CTX, "GroupPause", ...)'
+          - pattern-not: '($CL : *nzbget.Client).EditQueue($CTX, "GroupResume", ...)'
+      - patterns:
+          - pattern: '($CL : *transmission.Client).$METHOD(...)'
+          - pattern-not: '($CL : *transmission.Client).GetSession(...)'
+          - pattern-not: '($CL : *transmission.Client).GetTorrents(...)'
+      - patterns:
+          - pattern: '($CL : *deluge.Client).$METHOD(...)'
+          - pattern-not: '($CL : *deluge.Client).Login(...)'
+          - pattern-not: '($CL : *deluge.Client).Connected(...)'
+          - pattern-not: '($CL : *deluge.Client).GetTorrentsStatus(...)'
+          - pattern-not: '($CL : *deluge.Client).GetVersion(...)'
+      - patterns:
+          - pattern: '($CL : *rtorrent.Client).$METHOD(...)'
+          - pattern-not: '($CL : *rtorrent.Client).GetSystemInfo(...)'
+          - pattern-not: '($CL : *rtorrent.Client).GetTorrents(...)'
