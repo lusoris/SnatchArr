@@ -12,6 +12,8 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/queue"
 )
 
+// TestClassifierTaxonomyPositive pins the class of every known *arr import status line, per
+// application, so a classifier change that moves a line to another class fails here.
 func TestClassifierTaxonomyPositive(t *testing.T) {
 	t.Parallel()
 
