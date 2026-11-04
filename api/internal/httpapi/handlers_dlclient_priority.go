@@ -39,6 +39,7 @@ func priorityPlanToOAS(p dlclients.PriorityPlan) oas.DownloadClientPriorityPlan 
 	return oas.DownloadClientPriorityPlan{
 		ClientId: p.ClientID, Mode: oas.DownloadClientPriorityMode(p.Mode), ObservedAt: p.ObservedAt,
 		QueueingDisabled: p.QueueingDisabled, Unattributed: p.Unattributed, Priority: moves,
-		Order: append([]string{}, p.Plan.Order...), Pause: append([]string{}, p.Plan.Pause...), Resume: append([]string{}, p.Plan.Resume...),
+		ObserveRowNames: append([]string{}, p.ObserveRowNames...),
+		Order:           append([]string{}, p.Plan.Order...), Pause: append([]string{}, p.Plan.Pause...), Resume: append([]string{}, p.Plan.Resume...),
 	}
 }

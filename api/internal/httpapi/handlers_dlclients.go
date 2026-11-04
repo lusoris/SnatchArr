@@ -135,11 +135,16 @@ func emptyIfNil(list []string) []string {
 }
 
 func downloadClientToOAS(c domain.DownloadClient) oas.DownloadClient {
+	mode := oas.DownloadClientPriorityMode(c.PriorityMode)
+	if mode == "" {
+		mode = oas.DownloadClientPriorityModeObserve
+	}
 	out := oas.DownloadClient{
 		ID: c.ID, Kind: oas.DownloadClientKind(c.Kind), Protocol: oas.DownloadClientProtocol(c.Kind.Protocol()),
 		Name: c.Name, BaseURL: c.BaseURL, Username: c.Username, Enabled: c.Enabled,
 		Source: oas.DownloadClientSource(c.Source), MaxActive: c.MaxActive, MaxQueued: c.MaxQueued, BandwidthBudgetBps: c.BandwidthBudgetBPS,
 		LastCheckAt: optTime(c.LastCheckAt), LastError: optString(c.LastError), CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt,
+		PriorityMode: mode,
 	}
 	if c.InstanceID != nil {
 		out.InstanceID = oas.NewOptUUID(*c.InstanceID)
@@ -148,10 +153,17 @@ func downloadClientToOAS(c domain.DownloadClient) oas.DownloadClient {
 }
 
 func downloadClientInputFromOAS(in *oas.DownloadClientInput) dlclients.Input {
+	mode := "observe"
+	if in.PriorityMode.IsSet() {
+		mode = string(in.PriorityMode.Value)
+	}
 	out := dlclients.Input{
 		Kind: domain.DownloadClientKind(in.Kind), Name: in.Name, BaseURL: in.BaseURL,
 		Username: in.Username.Or(""), Secret: in.Secret.Or(""), Enabled: in.Enabled.Or(true),
-		MaxActive: in.MaxActive.Or(0), MaxQueued: in.MaxQueued.Or(0), BandwidthBudgetBPS: in.BandwidthBudgetBps.Or(0),
+		PriorityMode:       mode,
+		MaxActive:          in.MaxActive.Or(0),
+		MaxQueued:          in.MaxQueued.Or(0),
+		BandwidthBudgetBPS: in.BandwidthBudgetBps.Or(0),
 	}
 	if v, ok := in.InstanceID.Get(); ok {
 		out.InstanceID = &v
@@ -160,10 +172,18 @@ func downloadClientInputFromOAS(in *oas.DownloadClientInput) dlclients.Input {
 }
 
 func downloadClientUpdateFromOAS(in *oas.DownloadClientInput, stored domain.DownloadClient) dlclients.Input {
+	mode := stored.PriorityMode
+	if mode == "" {
+		mode = "observe"
+	}
+	if in.PriorityMode.IsSet() {
+		mode = string(in.PriorityMode.Value)
+	}
 	out := dlclients.Input{
 		Kind: domain.DownloadClientKind(in.Kind), Name: in.Name, BaseURL: in.BaseURL,
 		Username: in.Username.Or(""), Secret: in.Secret.Or(""),
 		Enabled:            in.Enabled.Or(stored.Enabled),
+		PriorityMode:       mode,
 		MaxActive:          in.MaxActive.Or(stored.MaxActive),
 		MaxQueued:          in.MaxQueued.Or(stored.MaxQueued),
 		BandwidthBudgetBPS: in.BandwidthBudgetBps.Or(stored.BandwidthBudgetBPS),

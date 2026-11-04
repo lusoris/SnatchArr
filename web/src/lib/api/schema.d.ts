@@ -1025,8 +1025,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Latest read-only priority plan for this physical client
-         * @description No client writes occur, including when mode is act. Returns 404 when no observation exists. Shared-client categories participate in one plan. A failed read retains the last successful observation; observedAt identifies its age.
+         * Latest priority plan for this physical client
+         * @description Priority and queue order plan computed from the latest observation; this plan is what act executes. Returns 404 when no observation exists. Shared-client categories participate in one plan. A failed read retains the last successful observation; observedAt identifies its age.
          */
         get: operations["getDownloadClientPriorityPlan"];
         put?: never;
@@ -2398,7 +2398,7 @@ export interface components {
             active: boolean;
         };
         /**
-         * @description Configured intent only; act remains read-only until execution is implemented.
+         * @description Priority mode for this download client: observe plans moves without modifying the client; act executes them. In act mode, SnatchArr writes queued SnatchArr-attributed items only; on qBittorrent SnatchArr items move ahead of unattributed queued items; hand-set NZBGet/SABnzbd priorities are kept; SnatchArr pauses lower-rank active items while higher-rank items wait and resumes only items it paused.
          * @enum {string}
          */
         DownloadClientPriorityMode: "observe" | "act";
@@ -2416,6 +2416,8 @@ export interface components {
             /** @description qBittorrent queueing disabled; order is empty. Preferences are never changed. */
             queueingDisabled: boolean;
             unattributed: number;
+            /** @description Names of download client rows in this physical group that are still configured on observe. */
+            observeRowNames: string[];
             priority: components["schemas"]["DownloadClientPriorityMove"][];
             order: string[];
             pause: string[];
@@ -2440,6 +2442,7 @@ export interface components {
             enabled: boolean;
             /** @enum {string} */
             source: "manual" | "discovered" | "configarr";
+            priority_mode: components["schemas"]["DownloadClientPriorityMode"];
             /** @description Foreplay - defer snatches once this many downloads are active (0 = no limit) */
             max_active: number;
             /** @description Foreplay - defer snatches once this many downloads are queued (0 = no limit) */
@@ -2471,6 +2474,8 @@ export interface components {
             secret?: string;
             /** @description On create, omitted = true. On update, omitted = stored value stays; sent = replaces it. */
             enabled?: boolean;
+            /** @description Priority mode for this download client. Optional (enum observe|act). On create, omitted = observe. On update, omitted = stored value stays; sent = replaces it. Act writes queued SnatchArr-attributed items only; on qBittorrent SnatchArr items move ahead of unattributed queued items; hand-set NZBGet/SABnzbd priorities are kept; SnatchArr pauses lower-rank active items while higher-rank items wait and resumes only items it paused. */
+            priority_mode?: components["schemas"]["DownloadClientPriorityMode"];
             /** @description On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it. */
             max_active?: number;
             /** @description On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it. */

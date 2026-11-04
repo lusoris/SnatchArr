@@ -14,19 +14,21 @@ import (
 func TestDownloadClientPriorityFields(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name       string
-		category   *string
-		mode, want string
+		name           string
+		category       *string
+		mode, wantMode string
+		wantCat        string
 	}{
-		{"discovered category", new("movies"), "observe", "movies"},
-		{"category absent", nil, "observe", ""},
-		{"configured act", new("tv"), "act", "tv"},
+		{"discovered category", new("movies"), "observe", "observe", "movies"},
+		{"category absent", nil, "observe", "observe", ""},
+		{"configured act", new("tv"), "act", "act", "tv"},
+		{"upgrade defaults empty to observe", new("tv"), "", "observe", "tv"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			got := store.DownloadClientFromRow(sqlcgen.DownloadClient{Category: tc.category, PriorityMode: tc.mode})
-			if got.Category != tc.want || got.PriorityMode != tc.mode {
-				t.Fatalf("category/mode = %q/%q", got.Category, got.PriorityMode)
+			if got.Category != tc.wantCat || got.PriorityMode != tc.wantMode {
+				t.Fatalf("category/mode = %q/%q, want %q/%q", got.Category, got.PriorityMode, tc.wantCat, tc.wantMode)
 			}
 		})
 	}

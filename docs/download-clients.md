@@ -6,7 +6,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 # Download clients
 
 SnatchArr watches the clients your *arr apps hand grabs to, so it stops snatching when the
-grabs would only pile up. It never adds, pauses, resumes, removes or reorders a download.
+grabs would only pile up. In observe mode, it never adds, pauses, resumes, removes or reorders a download.
 
 Supported out of the box: **qBittorrent**, **Transmission**, **Deluge**, **rTorrent**,
 **SABnzbd** and **NZBGet**.
@@ -71,3 +71,27 @@ lease is recorded as a foreplay event naming the old and new per-cycle count. A 
 has never been observed does not block anything.
 
 See [ADR-0006](adr/0006-download-client-backpressure.md) for the reasoning.
+
+## Priority and queue ordering
+
+SnatchArr coordinates queue priority across clients according to instance download ranks
+([ADR-0022](adr/0022-instance-priority.md), [ADR-0046](adr/0046-download-client-priority-writes.md)).
+Each client operates in either `observe` or `act` mode via `priority_mode`:
+
+| Mode | Behaviour |
+| --- | --- |
+| `observe` (default) | Computes the priority plan, observes queue positions, and surfaces the intended mutations via the API and UI; executes zero writes. |
+| `act` | Executes the plan for attributed transfers when every row in the client group is configured for act mode. |
+
+### Act mode rules
+
+When `act` mode is enabled:
+
+- **Queued SnatchArr-attributed items only**: writes affect items mapped to an instance category; unattributed transfers are never modified.
+- **qBittorrent ordering**: SnatchArr items move ahead of unattributed queued items via `MoveToTop`. Note that hand-moved qBittorrent items cannot be detected because qBittorrent does not provide a default queue position, so they are reordered alongside other eligible queued items. Queueing must be enabled in qBittorrent preferences.
+- **NZBGet and SABnzbd priority**: hand-set priorities (values differing from default that were not set by SnatchArr) are preserved. SnatchArr-written priorities are updated as relative ranks shift.
+- **Active transfer pausing**: lower-rank active items are paused while higher-rank items wait in queue on the same client.
+- **Resumption**: SnatchArr resumes only items it previously paused, and only once higher-rank items on that client finish downloading. User-paused items are never resumed.
+- **Group mode rule**: when multiple download client configurations resolve to the same physical client, writing occurs only when every row in that group has `priority_mode: act`. If any row is `observe`, the entire group remains in observe mode and zero write calls are made.
+
+Adding, removing, whole-queue pause/resume, and force starts remain strictly prohibited.

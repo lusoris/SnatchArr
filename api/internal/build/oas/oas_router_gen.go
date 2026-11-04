@@ -4945,7 +4945,7 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 								switch method {
 								case "GET":
 									r.name = GetDownloadClientPriorityPlanOperation
-									r.summary = "Latest read-only priority plan for this physical client"
+									r.summary = "Latest priority plan for this physical client"
 									r.operationID = "getDownloadClientPriorityPlan"
 									r.operationGroup = ""
 									r.pathPattern = "/download-clients/{clientId}/priority-plan"

@@ -16,8 +16,9 @@ import (
 func TestPriorityAttribution(t *testing.T) {
 	t.Parallel()
 	first, second := uuid.New(), uuid.New()
+	c1, c2 := uuid.New(), uuid.New()
 	instances := []domain.Instance{{ID: first, Kind: domain.KindRadarr}, {ID: second, Kind: domain.KindSonarr, DownloadPriority: new(90)}}
-	rows := []domain.DownloadClient{{InstanceID: &first, Category: "movies"}, {InstanceID: &second, Category: "tv"}}
+	rows := []domain.DownloadClient{{ID: c1, InstanceID: &first, Category: "movies"}, {ID: c2, InstanceID: &second, Category: "tv"}}
 	for _, tc := range []struct {
 		name          string
 		category      string
@@ -29,14 +30,14 @@ func TestPriorityAttribution(t *testing.T) {
 		{"unknown category", "other", rows, 0, 1},
 		{"case sensitive", "Movies", rows, 0, 1},
 		{"missing category", "", rows, 0, 1},
-		{"unknown instance", "movies", []domain.DownloadClient{{InstanceID: new(uuid.New()), Category: "movies"}}, 0, 1},
-		{"global row", "movies", []domain.DownloadClient{{Category: "movies"}}, 0, 1},
+		{"unknown instance", "movies", []domain.DownloadClient{{ID: uuid.New(), InstanceID: new(uuid.New()), Category: "movies"}}, 0, 1},
+		{"global row", "movies", []domain.DownloadClient{{ID: uuid.New(), Category: "movies"}}, 0, 1},
 		{"ambiguous", "movies", append(append([]domain.DownloadClient{}, rows...), rows[0]), 0, 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			item := PriorityItem{Category: tc.category, ID: "id", State: domain.DownloadItemQueued, LastWrittenPriority: new(1), PausedBySnatchArr: true}
-			got, unknown := attributePriorityItems([]PriorityItem{item}, tc.rows, instances, domain.PriorityPreset{domain.KindRadarr: 7})
+			got, unknown, _ := attributePriorityItems([]PriorityItem{item}, tc.rows, instances, domain.PriorityPreset{domain.KindRadarr: 7}, nil)
 			if unknown != tc.unknown || len(got) != 1-tc.unknown {
 				t.Fatalf("ranked = %+v, unattributed = %d", got, unknown)
 			}
@@ -44,6 +45,40 @@ func TestPriorityAttribution(t *testing.T) {
 				t.Fatalf("ranked = %+v", got)
 			}
 		})
+	}
+}
+
+func TestPriorityAttributionWithOwnership(t *testing.T) {
+	t.Parallel()
+	instID := uuid.New()
+	clientID := uuid.New()
+	instances := []domain.Instance{{ID: instID, Kind: domain.KindRadarr}}
+	rows := []domain.DownloadClient{{ID: clientID, InstanceID: &instID, Category: "movies"}}
+	prio := 50
+	ownership := []PriorityOwnership{
+		{ClientID: clientID, ItemID: "owned-item", LastWrittenPriority: &prio, PausedBySnatchArr: true},
+		{ClientID: uuid.New(), ItemID: "other-client", LastWrittenPriority: &prio, PausedBySnatchArr: true},
+	}
+	items := []PriorityItem{
+		{Category: "movies", ID: "owned-item", State: domain.DownloadItemQueued},
+		{Category: "movies", ID: "unowned-item", State: domain.DownloadItemQueued},
+		{Category: "movies", ID: "other-client", State: domain.DownloadItemQueued},
+	}
+	got, unknown, itemClients := attributePriorityItems(items, rows, instances, domain.PriorityPreset{domain.KindRadarr: 1}, ownership)
+	if unknown != 0 || len(got) != 3 {
+		t.Fatalf("got = %+v, unknown = %d", got, unknown)
+	}
+	if itemClients["owned-item"] != clientID {
+		t.Fatalf("itemClients = %+v", itemClients)
+	}
+	if got[0].LastWrittenPriority == nil || *got[0].LastWrittenPriority != 50 || !got[0].PausedBySnatchArr {
+		t.Fatalf("owned item ownership not fed: %+v", got[0])
+	}
+	if got[1].LastWrittenPriority != nil || got[1].PausedBySnatchArr {
+		t.Fatalf("unowned item should be nil/false: %+v", got[1])
+	}
+	if got[2].LastWrittenPriority != nil || got[2].PausedBySnatchArr {
+		t.Fatalf("other client item should not match: %+v", got[2])
 	}
 }
 

@@ -1523,8 +1523,8 @@ paths:
     get:
       tags: [download-clients]
       operationId: getDownloadClientPriorityPlan
-      summary: Latest read-only priority plan for this physical client
-      description: No client writes occur, including when mode is act. Returns 404 when no observation exists. Shared-client categories participate in one plan. A failed read retains the last successful observation; observedAt identifies its age.
+      summary: Latest priority plan for this physical client
+      description: Priority and queue order plan computed from the latest observation; this plan is what act executes. Returns 404 when no observation exists. Shared-client categories participate in one plan. A failed read retains the last successful observation; observedAt identifies its age.
       responses:
         "200":
           description: Latest observed plan, with item identifiers only
@@ -4016,7 +4016,7 @@ components:
     DownloadClientPriorityMode:
       type: string
       enum: [observe, act]
-      description: Configured intent only; act remains read-only until execution is implemented.
+      description: "Priority mode for this download client: observe plans moves without modifying the client; act executes them. In act mode, SnatchArr writes queued SnatchArr-attributed items only; on qBittorrent SnatchArr items move ahead of unattributed queued items; hand-set NZBGet/SABnzbd priorities are kept; SnatchArr pauses lower-rank active items while higher-rank items wait and resumes only items it paused."
 
     DownloadClientPriorityMove:
       type: object
@@ -4031,7 +4031,7 @@ components:
 
     DownloadClientPriorityPlan:
       type: object
-      required: [clientId, mode, observedAt, queueingDisabled, unattributed, priority, order, pause, resume]
+      required: [clientId, mode, observedAt, queueingDisabled, unattributed, observeRowNames, priority, order, pause, resume]
       properties:
         clientId:
           type: string
@@ -4047,6 +4047,11 @@ components:
         unattributed:
           type: integer
           minimum: 0
+        observeRowNames:
+          type: array
+          items:
+            type: string
+          description: Names of download client rows in this physical group that are still configured on observe.
         priority:
           type: array
           items:
@@ -4070,7 +4075,7 @@ components:
 
     DownloadClient:
       type: object
-      required: [id, kind, protocol, name, base_url, username, enabled, source, max_active, max_queued, bandwidth_budget_bps, created_at, updated_at]
+      required: [id, kind, protocol, name, base_url, username, enabled, source, max_active, max_queued, bandwidth_budget_bps, created_at, updated_at, priority_mode]
       properties:
         id:
           type: string
@@ -4095,6 +4100,8 @@ components:
         source:
           type: string
           enum: [manual, discovered, configarr]
+        priority_mode:
+          $ref: "#/components/schemas/DownloadClientPriorityMode"
         max_active:
           type: integer
           description: Foreplay - defer snatches once this many downloads are active (0 = no limit)
@@ -4141,6 +4148,9 @@ components:
         enabled:
           type: boolean
           description: "On create, omitted = true. On update, omitted = stored value stays; sent = replaces it."
+        priority_mode:
+          $ref: "#/components/schemas/DownloadClientPriorityMode"
+          description: "Priority mode for this download client. Optional (enum observe|act). On create, omitted = observe. On update, omitted = stored value stays; sent = replaces it. Act writes queued SnatchArr-attributed items only; on qBittorrent SnatchArr items move ahead of unattributed queued items; hand-set NZBGet/SABnzbd priorities are kept; SnatchArr pauses lower-rank active items while higher-rank items wait and resumes only items it paused."
         max_active:
           type: integer
           minimum: 0

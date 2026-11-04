@@ -7923,9 +7923,11 @@ func (s *Server) handleGetDownloadClientRequest(args [1]string, argsEscaped bool
 
 // handleGetDownloadClientPriorityPlanRequest handles getDownloadClientPriorityPlan operation.
 //
-// No client writes occur, including when mode is act. Returns 404 when no observation exists.
-// Shared-client categories participate in one plan. A failed read retains the last successful
-// observation; observedAt identifies its age.
+// Priority and queue order plan computed from the latest observation; this plan is what act executes.
+//
+//	Returns 404 when no observation exists. Shared-client categories participate in one plan. A
+//
+// failed read retains the last successful observation; observedAt identifies its age.
 //
 // GET /download-clients/{clientId}/priority-plan
 func (s *Server) handleGetDownloadClientPriorityPlanRequest(args [1]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
@@ -8082,7 +8084,7 @@ func (s *Server) handleGetDownloadClientPriorityPlanRequest(args [1]string, args
 		mreq := middleware.Request{
 			Context:          ctx,
 			OperationName:    GetDownloadClientPriorityPlanOperation,
-			OperationSummary: "Latest read-only priority plan for this physical client",
+			OperationSummary: "Latest priority plan for this physical client",
 			OperationID:      "getDownloadClientPriorityPlan",
 			Body:             nil,
 			RawBody:          rawBody,

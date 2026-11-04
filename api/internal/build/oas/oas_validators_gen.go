@@ -691,6 +691,17 @@ func (s *DownloadClient) Validate() error {
 			Error: err,
 		})
 	}
+	if err := func() error {
+		if err := s.PriorityMode.Validate(); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		failures = append(failures, validate.FieldError{
+			Name:  "priority_mode",
+			Error: err,
+		})
+	}
 	if len(failures) > 0 {
 		return &validate.Error{Fields: failures}
 	}
@@ -734,6 +745,24 @@ func (s *DownloadClientInput) Validate() error {
 	}(); err != nil {
 		failures = append(failures, validate.FieldError{
 			Name:  "name",
+			Error: err,
+		})
+	}
+	if err := func() error {
+		if value, ok := s.PriorityMode.Get(); ok {
+			if err := func() error {
+				if err := value.Validate(); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		failures = append(failures, validate.FieldError{
+			Name:  "priority_mode",
 			Error: err,
 		})
 	}
@@ -892,6 +921,17 @@ func (s *DownloadClientPriorityPlan) Validate() error {
 	}(); err != nil {
 		failures = append(failures, validate.FieldError{
 			Name:  "unattributed",
+			Error: err,
+		})
+	}
+	if err := func() error {
+		if s.ObserveRowNames == nil {
+			return errors.New("nil is invalid value")
+		}
+		return nil
+	}(); err != nil {
+		failures = append(failures, validate.FieldError{
+			Name:  "observeRowNames",
 			Error: err,
 		})
 	}

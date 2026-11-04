@@ -4,10 +4,10 @@
 -- name: CreateDownloadClient :one
 INSERT INTO download_clients (
     id, instance_id, kind, name, base_url, username, secret_enc, enabled, source, remote_id,
-    max_active, max_queued, bandwidth_budget_bps, created_at, updated_at
+    max_active, max_queued, bandwidth_budget_bps, created_at, updated_at, priority_mode
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-    $11, $12, $13, $14, $14
+    $11, $12, $13, $14, $14, $15
 )
 RETURNING *;
 
@@ -28,7 +28,8 @@ ORDER BY name, created_at;
 -- name: UpdateDownloadClient :one
 UPDATE download_clients
 SET instance_id = $2, kind = $3, name = $4, base_url = $5, username = $6, secret_enc = $7,
-    enabled = $8, max_active = $9, max_queued = $10, bandwidth_budget_bps = $11, updated_at = $12
+    enabled = $8, max_active = $9, max_queued = $10, bandwidth_budget_bps = $11, updated_at = $12,
+    priority_mode = $13
 WHERE id = $1
 RETURNING *;
 

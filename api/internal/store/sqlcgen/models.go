@@ -130,6 +130,14 @@ type DownloadClient struct {
 	PriorityMode       string
 }
 
+type DownloadClientPriorityOwnership struct {
+	ClientID            uuid.UUID
+	ItemID              string
+	LastWrittenPriority *int32
+	PausedBySnatcharr   bool
+	UpdatedAt           time.Time
+}
+
 type GlobalRateBucket struct {
 	WindowStart time.Time
 	Used        int32

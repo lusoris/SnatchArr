@@ -20,6 +20,7 @@ type Querier interface {
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
 	CheckAndRecordItemSearch(ctx context.Context, arg CheckAndRecordItemSearchParams) (time.Time, error)
+	ClearPriorityOwnershipPaused(ctx context.Context, arg ClearPriorityOwnershipPausedParams) error
 	ClearUnfavoritedAdultPerformers(ctx context.Context, updatedAt time.Time) (int64, error)
 	ClearUnfavoritedAdultStudios(ctx context.Context, updatedAt time.Time) (int64, error)
 	CompleteRun(ctx context.Context, arg CompleteRunParams) (SnatchRun, error)
@@ -75,6 +76,7 @@ type Querier interface {
 	DeleteLoginLockout(ctx context.Context, key string) error
 	DeleteNotificationChannel(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteNotificationRule(ctx context.Context, id uuid.UUID) (int64, error)
+	DeletePriorityOwnershipNotIn(ctx context.Context, arg DeletePriorityOwnershipNotInParams) (int64, error)
 	DeletePriorityPreset(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteProwlarrLink(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteQueueStrike(ctx context.Context, arg DeleteQueueStrikeParams) error
@@ -224,6 +226,9 @@ type Querier interface {
 	ListNotificationRulesByEvent(ctx context.Context, eventKind string) ([]NotificationRule, error)
 	ListPendingGateDecisions(ctx context.Context, arg ListPendingGateDecisionsParams) ([]WatchawareGateDecision, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+	// SPDX-License-Identifier: EUPL-1.2
+	ListPriorityOwnershipByClientIDs(ctx context.Context, clientIds []uuid.UUID) ([]DownloadClientPriorityOwnership, error)
+	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	//
 	// SPDX-License-Identifier: EUPL-1.2
 	ListPriorityPresets(ctx context.Context) ([]PriorityPreset, error)
@@ -311,6 +316,7 @@ type Querier interface {
 	SetAPIKeyMeta(ctx context.Context, arg SetAPIKeyMetaParams) (int64, error)
 	SetModuleConfig(ctx context.Context, arg SetModuleConfigParams) (Module, error)
 	SetModuleEnabled(ctx context.Context, arg SetModuleEnabledParams) (Module, error)
+	SetPriorityOwnershipPaused(ctx context.Context, arg SetPriorityOwnershipPausedParams) error
 	TouchAPIKey(ctx context.Context, arg TouchAPIKeyParams) error
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
@@ -349,6 +355,7 @@ type Querier interface {
 	// The caller reads the row back with GetPolicy in the same transaction: scanning RETURNING *
 	// here would push the generated function past the HISS-04 length limit.
 	UpsertPolicy(ctx context.Context, arg UpsertPolicyParams) error
+	UpsertPriorityOwnershipPriority(ctx context.Context, arg UpsertPriorityOwnershipPriorityParams) error
 	UpsertQueuePolicy(ctx context.Context, arg UpsertQueuePolicyParams) error
 	UpsertQueueStrikes(ctx context.Context, arg UpsertQueueStrikesParams) error
 	UpsertRequestsSettings(ctx context.Context, arg UpsertRequestsSettingsParams) (RequestsSetting, error)
