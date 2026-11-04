@@ -29,12 +29,18 @@ type Status struct {
 
 // Indexer is one indexer configured in Prowlarr.
 type Indexer struct {
-	ID         int
-	Name       string
-	Enabled    bool
-	QueryLimit *int
-	GrabLimit  *int
-	LimitsUnit int // 0=day, 1=hour
+	ID                int
+	Name              string
+	Enabled           bool
+	QueryLimit        *int
+	GrabLimit         *int
+	LimitsUnit        int // 0=day, 1=hour
+	Language          string
+	Privacy           string
+	Protocol          string
+	Tags              []int
+	SupportsRawSearch bool
+	Categories        []int
 }
 
 // Usage counts queries and grabs over a time window.
@@ -63,6 +69,12 @@ type Release struct {
 	DownloadURL string
 	InfoHash    string
 	Categories  []int
+	MagnetURL   string
+	Protocol    string
+	PublishDate string
+	ImdbID      int
+	TmdbID      int
+	TvdbID      int
 }
 
 // Client is the subset of the Prowlarr API SnatchArr reads and dispatches.
@@ -105,10 +117,15 @@ type indexerFieldJSON struct {
 }
 
 type indexerJSON struct {
-	ID     int                `json:"id"`
-	Name   string             `json:"name"`
-	Enable *bool              `json:"enable"`
-	Fields []indexerFieldJSON `json:"fields"`
+	ID           int                         `json:"id"`
+	Name         string                      `json:"name"`
+	Enable       *bool                       `json:"enable"`
+	Language     string                      `json:"language"`
+	Privacy      string                      `json:"privacy"`
+	Protocol     string                      `json:"protocol"`
+	Tags         []int                       `json:"tags"`
+	Capabilities *prowlarr.IndexerCapability `json:"capabilities"`
+	Fields       []indexerFieldJSON          `json:"fields"`
 }
 
 // Indexers implements Client.
@@ -128,12 +145,35 @@ func (h *HTTP) Indexers(ctx context.Context, baseURL, apiKey string) ([]Indexer,
 	return out, nil
 }
 
+// mapCapabilities returns the raw-search flag and the release category ids of an
+// indexer. An indexer without capabilities maps to false and an empty list.
+func mapCapabilities(caps *prowlarr.IndexerCapability) (bool, []int) {
+	if caps == nil {
+		return false, make([]int, 0)
+	}
+	return caps.SupportsRawSearch, mapReleaseCategories(caps.Categories)
+}
+
+// parseIndexer maps one Prowlarr indexer record to Indexer. A missing enable flag
+// counts as enabled; query limit, grab limit and limits unit come from the
+// baseSettings fields when they parse as integers.
 func parseIndexer(idx indexerJSON) Indexer {
 	enabled := true
 	if idx.Enable != nil {
 		enabled = *idx.Enable
 	}
-	item := Indexer{ID: idx.ID, Name: idx.Name, Enabled: enabled}
+	supportsRawSearch, categories := mapCapabilities(idx.Capabilities)
+	item := Indexer{
+		ID:                idx.ID,
+		Name:              idx.Name,
+		Enabled:           enabled,
+		Language:          idx.Language,
+		Privacy:           idx.Privacy,
+		Protocol:          idx.Protocol,
+		Tags:              idx.Tags,
+		SupportsRawSearch: supportsRawSearch,
+		Categories:        categories,
+	}
 	for _, f := range idx.Fields {
 		switch f.Name {
 		case "baseSettings.queryLimit":
@@ -336,6 +376,12 @@ func (h *HTTP) Search(ctx context.Context, baseURL, apiKey string, q SearchQuery
 			DownloadURL: r.DownloadURL,
 			InfoHash:    r.InfoHash,
 			Categories:  mapReleaseCategories(r.Categories),
+			MagnetURL:   r.MagnetURL,
+			Protocol:    r.Protocol,
+			PublishDate: r.PublishDate,
+			ImdbID:      r.ImdbID,
+			TmdbID:      r.TmdbID,
+			TvdbID:      r.TvdbID,
 		})
 	}
 	return out, nil
@@ -361,6 +407,8 @@ func (h *HTTP) Grab(ctx context.Context, baseURL, apiKey string, r Release) erro
 		Indexer:     r.Indexer,
 		DownloadURL: r.DownloadURL,
 		InfoHash:    r.InfoHash,
+		MagnetURL:   r.MagnetURL,
+		Protocol:    r.Protocol,
 	}
 	if _, err := pc.GrabRelease(ctx, req); err != nil {
 		return fmt.Errorf("%w: prowlarr grab: %w", domain.ErrUnreachable, arrclient.HintAPIError(err, "Prowlarr"))
