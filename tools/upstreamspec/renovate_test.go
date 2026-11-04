@@ -30,13 +30,16 @@ const (
 )
 
 // renovateConfig is the part of renovate.json that decides whether Renovate keeps the source pin of
-// the manifest current.
+// the manifest current and renews transitive dependencies across lock files.
 //
 //nolint:tagliatelle // renovate.json is camelCase
 type renovateConfig struct {
-	EnabledManagers []string        `json:"enabledManagers"`
-	CustomManagers  []customManager `json:"customManagers"`
-	PackageRules    []packageRule   `json:"packageRules"`
+	EnabledManagers     []string        `json:"enabledManagers"`
+	CustomManagers      []customManager `json:"customManagers"`
+	PackageRules        []packageRule   `json:"packageRules"`
+	LockFileMaintenance *struct {
+		Enabled bool `json:"enabled"`
+	} `json:"lockFileMaintenance"`
 }
 
 //nolint:tagliatelle // renovate.json is camelCase
@@ -376,6 +379,64 @@ func TestRenovateKeepsEveryPinCurrent(t *testing.T) {
 				if !strings.Contains(got[i], want) {
 					t.Errorf("problem %d = %q; want it to contain %q", i, got[i], want)
 				}
+			}
+		})
+	}
+}
+
+// lockFileProblems reports why Renovate would not renew transitive dependencies in lock files:
+// lock file maintenance is missing or not enabled. OSV vulnerability alerts cover direct
+// dependencies only, so transitive dependency updates rely on periodic lock file maintenance.
+func lockFileProblems(config renovateConfig) []string {
+	if config.LockFileMaintenance == nil || !config.LockFileMaintenance.Enabled {
+		return []string{"lockFileMaintenance is not enabled (OSV alerts cover direct dependencies only)"}
+	}
+	return nil
+}
+
+// TestRenovateLockFileMaintenance checks that renovate.json enables periodic lock file maintenance
+// so that transitive dependencies in lock files are renewed, and verifies that missing or disabled
+// lock file maintenance configurations are reported as defects.
+func TestRenovateLockFileMaintenance(t *testing.T) {
+	t.Parallel()
+	raw, _, _ := committed(t)
+	committedConfig := decoded(t, raw)
+
+	withNil := *committedConfig
+	withNil.LockFileMaintenance = nil
+
+	withDisabled := *committedConfig
+	withDisabled.LockFileMaintenance = &struct {
+		Enabled bool `json:"enabled"`
+	}{Enabled: false}
+
+	cases := []struct {
+		name         string
+		config       renovateConfig
+		wantProblems int
+	}{
+		{
+			name:         "the committed renovate.json",
+			config:       *committedConfig,
+			wantProblems: 0,
+		},
+		{
+			name:         "planted nil lockFileMaintenance",
+			config:       withNil,
+			wantProblems: 1,
+		},
+		{
+			name:         "planted disabled lockFileMaintenance",
+			config:       withDisabled,
+			wantProblems: 1,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := lockFileProblems(tc.config)
+			if len(got) != tc.wantProblems {
+				t.Fatalf("lockFileProblems() = %v (len %d); want %d problem(s)", got, len(got), tc.wantProblems)
 			}
 		})
 	}
