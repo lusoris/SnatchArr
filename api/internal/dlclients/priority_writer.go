@@ -28,10 +28,12 @@ type PartialWriteError struct {
 	Err  error
 }
 
+// Error reports how many items completed before the batch failed, and the cause.
 func (e *PartialWriteError) Error() string {
 	return fmt.Sprintf("partial write completed %d item(s) before failure: %v", len(e.Done), e.Err)
 }
 
+// Unwrap returns the error of the request that stopped the batch.
 func (e *PartialWriteError) Unwrap() error {
 	return e.Err
 }
@@ -73,6 +75,7 @@ func (g *Goenvoy) SetItemPriority(ctx context.Context, c domain.DownloadClient, 
 	}
 }
 
+// setNZBGetItemPriority checks the level and the positive item ID, then sets the NZBGet item priority.
 func (g *Goenvoy) setNZBGetItemPriority(ctx context.Context, c domain.DownloadClient, secret, itemID string, level int) error {
 	if !slices.Contains(domain.NZBGetPriorityLevels().Best2Worst, level) {
 		return fmt.Errorf("%w: invalid nzbget priority level %d", domain.ErrInvalid, level)
@@ -95,6 +98,7 @@ func (g *Goenvoy) setNZBGetItemPriority(ctx context.Context, c domain.DownloadCl
 	return nil
 }
 
+// setSABnzbdItemPriority checks the level and the item ID, then sets the SABnzbd item priority.
 func (g *Goenvoy) setSABnzbdItemPriority(ctx context.Context, c domain.DownloadClient, secret, itemID string, level int) error {
 	if !slices.Contains(domain.SABnzbdPriorityLevels().Best2Worst, level) {
 		return fmt.Errorf("%w: invalid sabnzbd priority level %d", domain.ErrInvalid, level)
@@ -121,6 +125,8 @@ const (
 	qbitOpStartTorrents  qbitQueueOp = "start torrents"
 )
 
+// execQbitQueueOp runs one allow-listed qBittorrent queue operation on validated hashes;
+// an operation outside the closed set fails with domain.ErrInvalid.
 func (g *Goenvoy) execQbitQueueOp(ctx context.Context, c domain.DownloadClient, secret string, ids []string, op qbitQueueOp) error {
 	cl, err := g.qbitClient(ctx, c, secret)
 	if err != nil {
@@ -198,6 +204,9 @@ const (
 	opResume
 )
 
+// dispatchPauseResume applies op to ids on the client kind's adapter under the writer timeout.
+// Transmission, Deluge and rTorrent fail with ErrPriorityUnsupported; an unknown kind fails
+// with domain.ErrInvalid.
 func (g *Goenvoy) dispatchPauseResume(ctx context.Context, c domain.DownloadClient, secret string, ids []string, op pauseResumeOp) error {
 	if len(ids) == 0 {
 		return fmt.Errorf("%w: item IDs must not be empty", domain.ErrInvalid)
@@ -223,6 +232,7 @@ func (g *Goenvoy) dispatchPauseResume(ctx context.Context, c domain.DownloadClie
 	}
 }
 
+// dispatchQbitPauseResume validates the hashes and stops or starts those torrents.
 func (g *Goenvoy) dispatchQbitPauseResume(ctx context.Context, c domain.DownloadClient, secret string, ids []string, op pauseResumeOp) error {
 	if err := validateQbitIDs(ids); err != nil {
 		return err
@@ -234,6 +244,7 @@ func (g *Goenvoy) dispatchQbitPauseResume(ctx context.Context, c domain.Download
 	return g.execQbitQueueOp(ctx, c, secret, ids, qbitOp)
 }
 
+// dispatchNZBGetPauseResume maps op to the NZBGet GroupPause or GroupResume command.
 func (g *Goenvoy) dispatchNZBGetPauseResume(ctx context.Context, c domain.DownloadClient, secret string, ids []string, op pauseResumeOp) error {
 	cmd := nzbgetGroupPause
 	if op == opResume {
@@ -242,6 +253,7 @@ func (g *Goenvoy) dispatchNZBGetPauseResume(ctx context.Context, c domain.Downlo
 	return g.editNZBGetQueue(ctx, c, secret, cmd, ids)
 }
 
+// dispatchSABnzbdPauseResume validates the IDs and pauses or resumes each SABnzbd item.
 func (g *Goenvoy) dispatchSABnzbdPauseResume(ctx context.Context, c domain.DownloadClient, secret string, ids []string, op pauseResumeOp) error {
 	if err := validateSABnzbdIDs(ids); err != nil {
 		return err
@@ -269,6 +281,8 @@ const (
 	nzbgetGroupResume nzbgetQueueCommand = "GroupResume"
 )
 
+// editNZBGetQueue sends one allow-listed EditQueue command for validated item IDs and fails
+// when NZBGet rejects it.
 func (g *Goenvoy) editNZBGetQueue(ctx context.Context, c domain.DownloadClient, secret string, command nzbgetQueueCommand, ids []string) error {
 	intIDs, err := validateNZBGetIDs(ids)
 	if err != nil {
@@ -299,6 +313,8 @@ func (g *Goenvoy) editNZBGetQueue(ctx context.Context, c domain.DownloadClient, 
 	return nil
 }
 
+// pauseSABnzbdItems pauses the items one request at a time; a failure after the first success
+// returns a *PartialWriteError naming the paused items.
 func (g *Goenvoy) pauseSABnzbdItems(ctx context.Context, c domain.DownloadClient, secret string, ids []string) error {
 	cl, err := g.sabnzbdClient(c, secret)
 	if err != nil {
@@ -318,6 +334,8 @@ func (g *Goenvoy) pauseSABnzbdItems(ctx context.Context, c domain.DownloadClient
 	return nil
 }
 
+// resumeSABnzbdItems resumes the items one request at a time; a failure after the first success
+// returns a *PartialWriteError naming the resumed items.
 func (g *Goenvoy) resumeSABnzbdItems(ctx context.Context, c domain.DownloadClient, secret string, ids []string) error {
 	cl, err := g.sabnzbdClient(c, secret)
 	if err != nil {
@@ -339,6 +357,8 @@ func (g *Goenvoy) resumeSABnzbdItems(ctx context.Context, c domain.DownloadClien
 
 var qbitHashRegex = regexp.MustCompile(`^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$`)
 
+// validateQbitIDs accepts a non-empty list of distinct 40- or 64-hex info hashes, so selectors
+// such as "all" or "a|b" never reach qBittorrent.
 func validateQbitIDs(ids []string) error {
 	if len(ids) == 0 {
 		return fmt.Errorf("%w: item IDs must not be empty", domain.ErrInvalid)
@@ -357,6 +377,7 @@ func validateQbitIDs(ids []string) error {
 	return nil
 }
 
+// validateNZBGetID parses id as a positive NZBGet item ID.
 func validateNZBGetID(id string) (int, error) {
 	if strings.TrimSpace(id) == "" {
 		return 0, fmt.Errorf("%w: nzbget item ID must not be empty", domain.ErrInvalid)
@@ -371,6 +392,7 @@ func validateNZBGetID(id string) (int, error) {
 	return parsed, nil
 }
 
+// validateNZBGetIDs parses a non-empty list of distinct positive NZBGet item IDs.
 func validateNZBGetIDs(ids []string) ([]int, error) {
 	if len(ids) == 0 {
 		return nil, fmt.Errorf("%w: item IDs must not be empty", domain.ErrInvalid)
@@ -391,6 +413,7 @@ func validateNZBGetIDs(ids []string) ([]int, error) {
 	return intIDs, nil
 }
 
+// validateSABnzbdID rejects an empty SABnzbd item ID and one with whitespace or control characters.
 func validateSABnzbdID(id string) error {
 	if strings.TrimSpace(id) == "" {
 		return fmt.Errorf("%w: sabnzbd item ID must not be empty", domain.ErrInvalid)
@@ -403,6 +426,7 @@ func validateSABnzbdID(id string) error {
 	return nil
 }
 
+// validateSABnzbdIDs accepts a non-empty list of distinct valid SABnzbd item IDs.
 func validateSABnzbdIDs(ids []string) error {
 	if len(ids) == 0 {
 		return fmt.Errorf("%w: item IDs must not be empty", domain.ErrInvalid)

@@ -47,6 +47,7 @@ type writerFakeServer struct {
 	failOnItem  string
 }
 
+// record copies the method, path, query and body of r for later assertions.
 func (s *writerFakeServer) record(r *http.Request) writerRecordedReq {
 	rec := writerRecordedReq{
 		Method: r.Method,
@@ -67,6 +68,8 @@ func (s *writerFakeServer) record(r *http.Request) writerRecordedReq {
 	return rec
 }
 
+// serveHTTP records every request and answers it by request endpoint: /jsonrpc as NZBGet, /api
+// as SABnzbd, everything else as qBittorrent.
 func (s *writerFakeServer) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	req := s.record(r)
@@ -99,6 +102,7 @@ func (s *writerFakeServer) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// serveNZBGet answers a JSON-RPC call with true, or false when falseRes is set.
 func (s *writerFakeServer) serveNZBGet(w http.ResponseWriter, req writerRecordedReq, falseRes bool) {
 	id := 1
 	if req.JSON != nil {
@@ -111,6 +115,8 @@ func (s *writerFakeServer) serveNZBGet(w http.ResponseWriter, req writerRecorded
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
+// serveSABnzbd answers a SABnzbd priority call with position 1, or -1 when falseRes is set, and
+// any other call with status true, or false when falseRes is set.
 func (s *writerFakeServer) serveSABnzbd(w http.ResponseWriter, req writerRecordedReq, falseRes bool) {
 	name := req.Query.Get("name")
 	if name == "priority" {
@@ -124,12 +130,14 @@ func (s *writerFakeServer) serveSABnzbd(w http.ResponseWriter, req writerRecorde
 	_ = json.NewEncoder(w).Encode(map[string]any{"status": !falseRes})
 }
 
+// getRequests returns a copy of the recorded requests.
 func (s *writerFakeServer) getRequests() []writerRecordedReq {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return slices.Clone(s.requests)
 }
 
+// setupWriterTest starts a fake client server and returns it with a writer and a client row aimed at it.
 func setupWriterTest(t *testing.T) (*writerFakeServer, *Goenvoy, domain.DownloadClient) {
 	t.Helper()
 	fake := &writerFakeServer{}
@@ -147,6 +155,7 @@ func setupWriterTest(t *testing.T) (*writerFakeServer, *Goenvoy, domain.Download
 	return fake, g, client
 }
 
+// TestPriorityWriter_Positive checks that each allow-listed write sends exactly the expected request.
 func TestPriorityWriter_Positive(t *testing.T) {
 	t.Parallel()
 	type testCase struct {
@@ -378,6 +387,8 @@ func TestPriorityWriter_Positive(t *testing.T) {
 	}
 }
 
+// TestPriorityWriter_Negative checks that invalid IDs, levels and kinds fail before any request,
+// and that a server 500 or a false result fails after its one request.
 func TestPriorityWriter_Negative(t *testing.T) {
 	t.Parallel()
 	type testCase struct {
@@ -695,6 +706,7 @@ func TestPriorityWriter_Negative(t *testing.T) {
 	}
 }
 
+// TestPriorityWriter_Boundary checks the edges of the accepted ID and level ranges.
 func TestPriorityWriter_Boundary(t *testing.T) {
 	t.Parallel()
 	type testCase struct {
@@ -794,6 +806,7 @@ func TestPriorityWriter_Boundary(t *testing.T) {
 	}
 }
 
+// TestPriorityWriter_PartialWrite checks that a failed later SABnzbd request reports the completed items.
 func TestPriorityWriter_PartialWrite(t *testing.T) {
 	t.Parallel()
 
