@@ -1578,13 +1578,36 @@ func assertMigration000055Sweep(
 	}
 }
 
-func assertMigration000055RoundTrip(t *testing.T, m *dbmigrate.Migrator) {
+// assertMigration000055RoundTrip sets an operator's explicit blocklist false after the upgrade,
+// steps down to 54 and up to 55 again, and requires the false to survive without the marker.
+func assertMigration000055RoundTrip(
+	ctx context.Context, t *testing.T, st *store.Store, m *dbmigrate.Migrator, instID uuid.UUID,
+) {
 	t.Helper()
+	const setFalse = `UPDATE queue_policies
+		SET rules = jsonb_set(rules, '{import_fixable,blocklist}', 'false'::jsonb)
+		WHERE instance_id = $1`
+	if _, err := st.Pool().Exec(ctx, setFalse, instID); err != nil {
+		t.Fatalf("set explicit blocklist false: %v", err)
+	}
 	if err := m.Steps(-1); err != nil {
 		t.Fatalf("Steps(-1) down to 54: %v", err)
 	}
 	if err := m.Steps(1); err != nil {
 		t.Fatalf("Steps(1) back up to 55: %v", err)
+	}
+	const read = `SELECT (rules->'import_fixable'->'blocklist')::bool,
+		rules->'import_fixable' ? 'blocklist_kept'
+		FROM queue_policies WHERE instance_id = $1`
+	var blocklist, marker bool
+	if err := st.Pool().QueryRow(ctx, read, instID).Scan(&blocklist, &marker); err != nil {
+		t.Fatalf("read blocklist after re-upgrade: %v", err)
+	}
+	if blocklist {
+		t.Errorf("explicit blocklist false became true after down 54 and up 55")
+	}
+	if marker {
+		t.Errorf("blocklist_kept marker survived the re-upgrade")
 	}
 }
 
@@ -1635,7 +1658,8 @@ func migration000055Cases() []struct {
 
 // TestMigration000055QueueFixableBlocklist verifies migration 000055 sets import_fixable blocklist
 // false to true, leaves blocklist true and missing keys unchanged, preserves other rules,
-// and enables 25 h give-up removals with Blocklist=true through the real store path.
+// enables 25 h give-up removals with Blocklist=true through the real store path, and keeps
+// an operator's explicit false set after the upgrade across a down 54 and up 55 sequence.
 //
 //nolint:tparallel // sequential subtests share migrator state
 func TestMigration000055QueueFixableBlocklist(t *testing.T) {
@@ -1673,5 +1697,5 @@ func TestMigration000055QueueFixableBlocklist(t *testing.T) {
 	}
 
 	assertMigration000055Sweep(ctx, t, st, ids[0], now)
-	assertMigration000055RoundTrip(t, m)
+	assertMigration000055RoundTrip(ctx, t, st, m, ids[0])
 }
