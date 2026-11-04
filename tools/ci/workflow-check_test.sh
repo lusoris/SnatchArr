@@ -9,7 +9,8 @@
 # workflow files, a zizmor run that fails or writes no report, a gate image without a digest,
 # a zizmor requirements file without hashes, a go install at @latest, at @main or without a
 # package, and azure/setup-helm without a version, at latest, or with the version in the next
-# step (accepted: setup-helm pinned to a release). Last: Renovate reads the actionlint image
+# step, and a ${{ }} expression expanded into a run script (accepted: setup-helm pinned to a
+# release). Last: Renovate reads the actionlint image
 # pin, zizmor-requirements.txt, every go install pin and every setup-helm version in the
 # workflows, and neither @latest, a variable nor a helm version of latest.
 # Adapted from github.com/golusoris/goenvoy.
@@ -190,6 +191,9 @@ expect_accepted go-install-pinned "no version comment names another tag"
 plant_install go-install-variable "go install \"github.com/cordanaLLM/praetor/cmd/standardsctl@\${PRAETOR_REF}\""
 expect_accepted go-install-variable "no version comment names another tag"
 
+plant_install template-injection "echo \${{ github.event.inputs.tag }}"
+expect_refusal template-injection "refused .github/workflows/planted.yml:14: template-injection"
+
 plant_helm helm-pinned "        with:" "          version: v4.3.1"
 expect_accepted helm-pinned "no version comment names another tag"
 
@@ -322,4 +326,4 @@ if jq -e -n --arg file "tools/ci/zizmor.txt" --arg pat "$PIP_PATTERN" '$file | t
 fi
 echo "ok   renovate: pip_requirements reads tools/ci/zizmor-requirements.txt and ignores zizmor.txt"
 
-echo "workflow check: 7 accepted, 18 refused; Renovate reads 1 image pin, zizmor-requirements.txt, $pinned go install pins and $helm_steps setup-helm versions"
+echo "workflow check: 7 accepted, 19 refused; Renovate reads 1 image pin, zizmor-requirements.txt, $pinned go install pins and $helm_steps setup-helm versions"
