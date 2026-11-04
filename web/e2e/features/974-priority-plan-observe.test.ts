@@ -5,9 +5,12 @@
 // covers: #974 #971
 
 import http from 'node:http';
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { listenStub, type StubHandle } from './feature-helpers.js';
 import { createRow, deleteRows, signIn, uniqueSuffix } from './layout-fixtures.js';
+
+const REQUEST_TIMEOUT_MS = 10_000;
+const MAX_RECORDED = 200;
 
 interface RecordedRequest {
 	method: string;
@@ -96,72 +99,119 @@ function startSabStub(): Promise<SabStubHandle> {
 	}));
 }
 
+// expectReadOnly asserts the stub saw at least one request and that every request was a read.
+function expectReadOnly(stub: SabStubHandle): void {
+	expect(stub.requests.length).toBeGreaterThanOrEqual(1);
+	expect(stub.requests.length).toBeLessThanOrEqual(MAX_RECORDED);
+	for (const req of stub.requests.slice(0, MAX_RECORDED)) {
+		expect(req.method).toBe('GET');
+		expect(req.isWrite).toBe(false);
+	}
+}
+
+// createSab registers a SABnzbd download client that points at a stub and returns its id.
+async function createSab(
+	page: Page,
+	csrf: string,
+	prefix: string,
+	url: string,
+	enabled: boolean
+): Promise<string> {
+	return createRow(page, csrf, 'download-clients', {
+		kind: 'sabnzbd',
+		name: `${prefix}-${uniqueSuffix()}`,
+		base_url: url,
+		secret: 'fake-sab-api-key',
+		enabled
+	});
+}
+
+// waitForPlan polls the client's priority plan until a reconcile tick has served it. The
+// leader reconciler observes every 15 s in this suite (tools/e2e/web-e2e-api.sh).
+async function waitForPlan(page: Page, clientId: string): Promise<DownloadClientPriorityPlan> {
+	const planUrl = `/api/v1/download-clients/${clientId}/priority-plan`;
+	await expect
+		.poll(async () => (await page.request.get(planUrl, { timeout: REQUEST_TIMEOUT_MS })).status(), {
+			timeout: 45_000,
+			intervals: [1_000]
+		})
+		.toBe(200);
+	const res = await page.request.get(planUrl, { timeout: REQUEST_TIMEOUT_MS });
+	return (await res.json()) as DownloadClientPriorityPlan;
+}
+
+// expectProblem404 asserts that a GET of url answers 404 with an RFC 9457 problem body.
+async function expectProblem404(page: Page, url: string): Promise<void> {
+	const res = await page.request.get(url, { timeout: REQUEST_TIMEOUT_MS });
+	expect(res.status()).toBe(404);
+	expect(res.headers()['content-type']).toContain('application/problem+json');
+	expect(((await res.json()) as { status: number }).status).toBe(404);
+}
+
+// cleanup deletes the created client rows, then closes every stub even if the delete fails.
+async function cleanup(
+	page: Page,
+	csrf: string,
+	ids: Array<string | undefined>,
+	stubs: SabStubHandle[]
+): Promise<void> {
+	try {
+		const toDelete = ids.filter((id): id is string => Boolean(id));
+		if (toDelete.length > 0) {
+			await deleteRows(page, csrf, 'download-clients', toDelete);
+		}
+	} finally {
+		await Promise.allSettled(stubs.map((s) => s.close()));
+	}
+}
+
 test('974: positive - download client priority-plan read returns plan or pending 404, and writes nothing', async ({
 	page
 }) => {
 	const stub = await startSabStub();
-	const csrf = await signIn(page);
-	const name = `e2e-sab-974-${uniqueSuffix()}`;
-
-	const clientId = await createRow(page, csrf, 'download-clients', {
-		kind: 'sabnzbd',
-		name,
-		base_url: stub.url,
-		secret: 'fake-sab-api-key',
-		enabled: true
-	});
-
+	let csrf = '';
+	let clientId: string | undefined;
 	try {
+		csrf = await signIn(page);
+		clientId = await createSab(page, csrf, 'e2e-sab-974', stub.url, true);
+
 		// Test/probe endpoint contacts client in read-only mode to verify reachability.
 		const probeRes = await page.request.post(`/api/v1/download-clients/${clientId}/test`, {
-			headers: { 'X-CSRF-Token': csrf }
+			headers: { 'X-CSRF-Token': csrf },
+			timeout: REQUEST_TIMEOUT_MS
 		});
 		expect(probeRes.status()).toBe(200);
-		const probeData = (await probeRes.json()) as { reachable: boolean };
-		expect(probeData.reachable).toBe(true);
+		expect(((await probeRes.json()) as { reachable: boolean }).reachable).toBe(true);
 
-		// The leader reconciler observes every 15 s in this suite (tools/e2e/web-e2e-api.sh); the
-		// plan exists only after a tick, so poll until it is served.
-		const planUrl = `/api/v1/download-clients/${clientId}/priority-plan`;
-		await expect
-			.poll(async () => (await page.request.get(planUrl)).status(), {
-				timeout: 45_000,
-				intervals: [1_000]
-			})
-			.toBe(200);
-		const plan = (await (await page.request.get(planUrl)).json()) as DownloadClientPriorityPlan;
+		// A client created through the API has no category map, so attribution counts both
+		// queued stub items as unattributed and every action list stays empty.
+		const plan = await waitForPlan(page, clientId);
 		expect(plan.clientId).toBe(clientId);
 		expect(plan.mode).toBe('observe');
 		expect(typeof plan.observedAt).toBe('string');
-		expect(typeof plan.queueingDisabled).toBe('boolean');
-		expect(plan.unattributed).toBeGreaterThanOrEqual(0);
-		expect(Array.isArray(plan.priority)).toBe(true);
-		expect(Array.isArray(plan.order)).toBe(true);
-		expect(Array.isArray(plan.pause)).toBe(true);
-		expect(Array.isArray(plan.resume)).toBe(true);
+		expect(plan.queueingDisabled).toBe(false);
+		expect(plan.unattributed).toBe(2);
+		expect(plan.priority).toEqual([]);
+		expect(plan.order).toEqual([]);
+		expect(plan.pause).toEqual([]);
+		expect(plan.resume).toEqual([]);
 
 		// Read-only invariant: every request hitting the stub was a GET, with zero write calls.
-		expect(stub.requests.length).toBeGreaterThanOrEqual(1);
-		for (const req of stub.requests) {
-			expect(req.method).toBe('GET');
-			expect(req.isWrite).toBe(false);
-		}
+		expectReadOnly(stub);
 	} finally {
-		await deleteRows(page, csrf, 'download-clients', [clientId]);
-		await stub.close();
+		await cleanup(page, csrf, [clientId], [stub]);
 	}
 });
 
 test('974: negative - unknown or malformed client id returns problem+json', async ({ page }) => {
-	const unknownId = '00000000-0000-0000-0000-000000000000';
-	const unknownRes = await page.request.get(`/api/v1/download-clients/${unknownId}/priority-plan`);
-	expect(unknownRes.status()).toBe(404);
-	expect(unknownRes.headers()['content-type']).toContain('application/problem+json');
-	const unknownProblem = (await unknownRes.json()) as { status: number };
-	expect(unknownProblem.status).toBe(404);
+	await expectProblem404(
+		page,
+		'/api/v1/download-clients/00000000-0000-0000-0000-000000000000/priority-plan'
+	);
 
 	const malformedRes = await page.request.get(
-		'/api/v1/download-clients/not-a-valid-uuid/priority-plan'
+		'/api/v1/download-clients/not-a-valid-uuid/priority-plan',
+		{ timeout: REQUEST_TIMEOUT_MS }
 	);
 	expect([400, 404, 422]).toContain(malformedRes.status());
 	expect(malformedRes.headers()['content-type']).toContain('application/problem+json');
@@ -172,32 +222,27 @@ test('974: negative - unknown or malformed client id returns problem+json', asyn
 test('974: boundary - disabled client returns 404 pending/unobserved shape without contacting stub writes', async ({
 	page
 }) => {
-	const stub = await startSabStub();
-	const csrf = await signIn(page);
-	const name = `e2e-sab-dis-${uniqueSuffix()}`;
-
-	const clientId = await createRow(page, csrf, 'download-clients', {
-		kind: 'sabnzbd',
-		name,
-		base_url: stub.url,
-		secret: 'fake-sab-api-key',
-		enabled: false
-	});
-
+	const stubA = await startSabStub();
+	const stubB = await startSabStub();
+	let csrf = '';
+	let clientAId: string | undefined;
+	let clientBId: string | undefined;
 	try {
-		const planRes = await page.request.get(`/api/v1/download-clients/${clientId}/priority-plan`);
-		// A disabled client is never observed, so no plan is ever served for it.
-		expect(planRes.status()).toBe(404);
-		expect(planRes.headers()['content-type']).toContain('application/problem+json');
-		const problem = (await planRes.json()) as { status: number };
-		expect(problem.status).toBe(404);
+		csrf = await signIn(page);
+		// The disabled client A exists before the enabled client B, so the tick that first
+		// serves B's plan necessarily ran with A in the table.
+		clientAId = await createSab(page, csrf, 'e2e-sab-dis', stubA.url, false);
+		clientBId = await createSab(page, csrf, 'e2e-sab-en', stubB.url, true);
 
-		for (const req of stub.requests) {
-			expect(req.method).toBe('GET');
-			expect(req.isWrite).toBe(false);
-		}
+		await waitForPlan(page, clientBId);
+
+		// A disabled client is never contacted and never observed: zero requests, plan 404.
+		expect(stubA.requests.length).toBe(0);
+		await expectProblem404(page, `/api/v1/download-clients/${clientAId}/priority-plan`);
+
+		// Stub B was contacted via read-only GET requests.
+		expectReadOnly(stubB);
 	} finally {
-		await deleteRows(page, csrf, 'download-clients', [clientId]);
-		await stub.close();
+		await cleanup(page, csrf, [clientAId, clientBId], [stubA, stubB]);
 	}
 });

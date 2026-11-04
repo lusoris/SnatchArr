@@ -28,7 +28,12 @@ var testNow = time.Date(2026, 10, 27, 12, 0, 0, 0, time.UTC)
 // newTestServer starts the fake behind httptest with its clock pinned at testNow.
 func newTestServer(t *testing.T, kind string, importBlocked bool) *httptest.Server {
 	t.Helper()
-	f := newFake(kind, testAPIKey, 10, 5, importBlocked, nil)
+	return newTestServerWithFlags(t, kind, importBlocked, false)
+}
+
+func newTestServerWithFlags(t *testing.T, kind string, importBlocked, importFixableAged bool) *httptest.Server {
+	t.Helper()
+	f := newFake(kind, testAPIKey, 10, 5, importBlocked, importFixableAged, nil)
 	f.clk = clockwork.NewFakeClockAt(testNow)
 	mux := http.NewServeMux()
 	f.routes(mux)
@@ -371,6 +376,144 @@ func TestArrClientAndSweepIntegration(t *testing.T) {
 			}
 			if len(itemsAfter) != 0 {
 				t.Errorf("items after import = %d, want 0", len(itemsAfter))
+			}
+		})
+	}
+}
+
+func TestImportFixableAgedPositive(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"sonarr", "radarr"} {
+		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
+			srv := newTestServerWithFlags(t, kind, false, true)
+
+			var qResp map[string]any
+			status := doJSON(t, srv, http.MethodGet, "/api/v3/queue", nil, &qResp)
+			if status != http.StatusOK {
+				t.Fatalf("GET /queue status = %d, want %d", status, http.StatusOK)
+			}
+			total, recs := parseQueueRecords(t, qResp)
+			if total != 1 || len(recs) != 1 {
+				t.Fatalf("total = %d, len(records) = %d; want 1", total, len(recs))
+			}
+			addedStr, ok := recs[0]["added"].(string)
+			if !ok {
+				t.Fatalf("added is not string: %v", recs[0]["added"])
+			}
+			added, err := time.Parse(time.RFC3339, addedStr)
+			if err != nil {
+				t.Fatalf("parse added time: %v", err)
+			}
+			if age := testNow.Sub(added); age != queueAgedAge {
+				t.Errorf("age = %v, want %v", age, queueAgedAge)
+			}
+
+			delStatus := doJSON(t, srv, http.MethodDelete, "/api/v3/queue/1?removeFromClient=true&blocklist=true&skipRedownload=false", nil, nil)
+			if delStatus != http.StatusOK {
+				t.Fatalf("DELETE /queue/1 status = %d, want %d", delStatus, http.StatusOK)
+			}
+
+			var recordedDeletes []deleteRecord
+			if doJSON(t, srv, http.MethodGet, "/_fake/deletes", nil, &recordedDeletes) != http.StatusOK || len(recordedDeletes) != 1 {
+				t.Fatalf("deletes = %+v, want 1 record", recordedDeletes)
+			}
+			del := recordedDeletes[0]
+			if del.ID != 1 || !del.Blocklist || !del.RemoveFromClient || del.SkipRedownload {
+				t.Errorf("unexpected delete record: %+v", del)
+			}
+
+			var recordedCmds []command
+			if doJSON(t, srv, http.MethodGet, "/_fake/commands", nil, &recordedCmds) != http.StatusOK || len(recordedCmds) != 0 {
+				t.Fatalf("commands = %+v, want none: the *arr re-searches on skipRedownload=false itself", recordedCmds)
+			}
+
+			doJSON(t, srv, http.MethodGet, "/api/v3/queue", nil, &qResp)
+			if tot, left := parseQueueRecords(t, qResp); tot != 0 || len(left) != 0 {
+				t.Fatalf("after delete: total = %d, left = %d; want 0", tot, len(left))
+			}
+		})
+	}
+}
+
+func TestImportFixableAgedNegative(t *testing.T) {
+	t.Parallel()
+	srv := newTestServerWithFlags(t, "sonarr", false, false)
+
+	var qResp map[string]any
+	status := doJSON(t, srv, http.MethodGet, "/api/v3/queue", nil, &qResp)
+	if status != http.StatusOK {
+		t.Fatalf("GET /queue status = %d, want %d", status, http.StatusOK)
+	}
+	total, recs := parseQueueRecords(t, qResp)
+	if total != 3 || len(recs) != 0 {
+		t.Fatalf("totalRecords = %d, len(records) = %d; want 3 and 0", total, len(recs))
+	}
+
+	var recordedDeletes []deleteRecord
+	status = doJSON(t, srv, http.MethodGet, "/_fake/deletes", nil, &recordedDeletes)
+	if status != http.StatusOK || len(recordedDeletes) != 0 {
+		t.Fatalf("GET /_fake/deletes status=%d len=%d; want 200 and 0", status, len(recordedDeletes))
+	}
+
+	for _, id := range []string{"0", "-1", "abc"} {
+		if got := doJSON(t, srv, http.MethodDelete, "/api/v3/queue/"+id+"?blocklist=true", nil, nil); got != http.StatusBadRequest {
+			t.Errorf("DELETE /queue/%s status = %d, want %d", id, got, http.StatusBadRequest)
+		}
+	}
+	status = doJSON(t, srv, http.MethodGet, "/_fake/deletes", nil, &recordedDeletes)
+	if status != http.StatusOK || len(recordedDeletes) != 0 {
+		t.Fatalf("after invalid DELETEs: status=%d len=%d; want 200 and 0", status, len(recordedDeletes))
+	}
+}
+
+func TestImportFixableAgedBoundarySweep(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name domain.AppKind
+		kind string
+	}{
+		{name: domain.KindSonarr, kind: "sonarr"},
+		{name: domain.KindRadarr, kind: "radarr"},
+	}
+	for _, tc := range cases {
+		t.Run(string(tc.name), func(t *testing.T) {
+			t.Parallel()
+			srv := newTestServerWithFlags(t, tc.kind, false, true)
+			prober := arrclient.NewGoenvoyProber(arrclient.Options{Timeout: 5 * time.Second})
+
+			items, err := prober.Queue(t.Context(), tc.name, srv.URL, testAPIKey, 1, 10)
+			if err != nil || len(items) != 1 {
+				t.Fatalf("prober.Queue: err=%v, len=%d", err, len(items))
+			}
+			item := items[0]
+			if age := testNow.Sub(item.Added); age < 24*time.Hour {
+				t.Fatalf("item age = %v, want >= 24h", age)
+			}
+
+			settings := queue.DefaultSettings()
+			settings.Enabled = true
+			settings.Grace = 0
+			blocklist := true
+			settings.Rules[queue.RuleImportFixable] = queue.RuleSettings{
+				Mode: queue.ModeAct, Threshold: 1, Blocklist: &blocklist,
+			}
+
+			decisions := queue.Sweep(settings, items, nil, testNow)
+			if len(decisions) != 1 {
+				t.Fatalf("len(decisions) = %d, want 1", len(decisions))
+			}
+			dec := decisions[0]
+			if dec.Rule != queue.RuleImportFixable || !dec.Remove || !dec.Blocklist || !dec.Research {
+				t.Fatalf("unexpected decision for aged fixable: %+v", dec)
+			}
+
+			if removeErr := prober.RemoveQueueItem(t.Context(), tc.name, srv.URL, testAPIKey, dec.ItemID, dec.Blocklist, dec.Research); removeErr != nil {
+				t.Fatalf("prober.RemoveQueueItem: %v", removeErr)
+			}
+			after, err := prober.Queue(t.Context(), tc.name, srv.URL, testAPIKey, 1, 10)
+			if err != nil || len(after) != 0 {
+				t.Fatalf("items after removal: err=%v, len=%d", err, len(after))
 			}
 		})
 	}
