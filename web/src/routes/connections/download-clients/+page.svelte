@@ -12,6 +12,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import AppLogo from '#lib/components/AppLogo.svelte';
 	import ConfirmDelete from '#lib/components/ConfirmDelete.svelte';
 	import DownloadClientForm from '#lib/components/DownloadClientForm.svelte';
+	import DownloadClientPriorityPlan from '#lib/components/DownloadClientPriorityPlan.svelte';
 	import PageHeader from '#lib/components/PageHeader.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import UrlText from '#lib/components/UrlText.svelte';
@@ -35,6 +36,8 @@ SPDX-License-Identifier: EUPL-1.2
 		queryFn: async () => (await api.GET('/instances')).data ?? []
 	});
 	let discoverFrom = $state('');
+	let priorityClient = $state<DownloadClient | null>(null);
+	let priorityOpen = $state(false);
 	const discover = createSentioMutation({
 		mutationFn: async (instanceId: string) =>
 			(
@@ -115,6 +118,11 @@ SPDX-License-Identifier: EUPL-1.2
 		return status.data?.find((s) => s.client_id === id);
 	}
 
+	function showPriorityPlan(client: DownloadClient): void {
+		priorityClient = client;
+		priorityOpen = true;
+	}
+
 	function instanceName(id: string | undefined): string {
 		if (!id) return m.dlclients_all_instances();
 		const name = instances.data?.find((i) => i.id === id)?.name ?? id;
@@ -190,6 +198,15 @@ SPDX-License-Identifier: EUPL-1.2
 												{c.name}
 											</h2>
 										</div>
+										<button
+											type="button"
+											class="btn mt-2"
+											aria-haspopup="dialog"
+											aria-label={m.dlclients_priority_plan_open({ name: c.name })}
+											onclick={() => showPriorityPlan(c)}
+										>
+											{m.dlclients_priority_plan()}
+										</button>
 									</td>
 									<td class="text-sm text-subtle" data-label={m.dlclients_kind()}
 										>{downloadClientName(c.kind)} · {c.protocol}</td
@@ -273,6 +290,10 @@ SPDX-License-Identifier: EUPL-1.2
 		</div>
 	</div>
 </section>
+
+{#if priorityClient}
+	<DownloadClientPriorityPlan client={priorityClient} bind:open={priorityOpen} />
+{/if}
 
 <style>
 	@media (min-width: 1280px) {

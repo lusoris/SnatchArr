@@ -50,7 +50,15 @@ SPDX-License-Identifier: EUPL-1.2
 	let maxActive = $state<number | null>(initial?.max_active ?? 0);
 	let maxQueued = $state<number | null>(initial?.max_queued ?? 0);
 	let bandwidth = $state<number | null>(initial?.bandwidth_budget_bps ?? 0);
+	let priorityMode = $state<components['schemas']['DownloadClientPriorityMode']>(
+		initial?.priority_mode ?? 'observe'
+	);
+	const supportsPriority = $derived(['qbittorrent', 'nzbget', 'sabnzbd'].includes(kind));
 	const errors = $derived(fieldErrors(error));
+
+	$effect(() => {
+		if (!supportsPriority) priorityMode = 'observe';
+	});
 
 	function body(): DownloadClientInput {
 		return {
@@ -62,6 +70,7 @@ SPDX-License-Identifier: EUPL-1.2
 			max_active: maxActive ?? 0,
 			max_queued: maxQueued ?? 0,
 			bandwidth_budget_bps: bandwidth ?? 0,
+			priority_mode: supportsPriority ? priorityMode : 'observe',
 			...filledPart('secret', secret),
 			...filledPart('instance_id', instanceId)
 		};
@@ -157,6 +166,32 @@ SPDX-License-Identifier: EUPL-1.2
 			error={errors.bandwidth_budget_bps}
 			bind:value={bandwidth}
 		/>
+		<div class="field flex flex-col gap-1">
+			<label for="dlclient-priority-mode" class="text-sm font-medium">
+				{m.dlclients_priority_mode()}
+			</label>
+			<select
+				id="dlclient-priority-mode"
+				class="select"
+				bind:value={priorityMode}
+				disabled={!supportsPriority}
+				aria-invalid={errors.priority_mode ? 'true' : undefined}
+				aria-describedby={errors.priority_mode
+					? 'dlclient-priority-mode-hint dlclient-priority-mode-error'
+					: 'dlclient-priority-mode-hint'}
+			>
+				<option value="observe">{m.queue_rule_mode_observe()}</option>
+				<option value="act">{m.queue_rule_mode_act()}</option>
+			</select>
+			<p id="dlclient-priority-mode-hint" class="text-xs text-subtle">
+				{supportsPriority ? m.dlclients_priority_help() : m.dlclients_priority_unsupported()}
+			</p>
+			{#if errors.priority_mode}
+				<p id="dlclient-priority-mode-error" class="text-sm text-danger">
+					{errors.priority_mode}
+				</p>
+			{/if}
+		</div>
 	</div>
 	<label class="flex items-center gap-2 text-sm">
 		<input type="checkbox" bind:checked={enabled} />

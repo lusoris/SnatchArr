@@ -31,6 +31,29 @@ async function expectNoAxeViolations(page: Page): Promise<void> {
 	expect(results.violations).toEqual([]);
 }
 
+async function expectDownloadClientPriorityPlanAccessible(page: Page): Promise<void> {
+	await page.route('**/api/v1/download-clients/*/priority-plan', (route) =>
+		route.fulfill(
+			json({
+				clientId: '00000000-0000-0000-0000-000000000040',
+				mode: 'observe',
+				observedAt: '2026-11-04T12:30:00Z',
+				queueingDisabled: false,
+				unattributed: 2,
+				observeRowNames: ['qBittorrent Primary'],
+				priority: [{ id: 'priority-item', from: 0, to: 100 }],
+				order: ['order-first', 'order-second'],
+				pause: ['pause-item'],
+				resume: ['resume-item']
+			})
+		)
+	);
+	await page.getByRole('button', { name: /View priority plan|Prioritätsplan.*anzeigen/ }).click();
+	await expect(page.getByRole('dialog')).toBeVisible();
+	await expect(page.getByRole('dialog').getByText('priority-item', { exact: false })).toBeVisible();
+	await expectNoAxeViolations(page);
+}
+
 const ALL_ROUTES = [
 	'/',
 	'/account',
@@ -355,6 +378,8 @@ if (!process.env.SNATCHARR_E2E_API) {
 		await settleToasts(page);
 		const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
 		expect(results.violations).toEqual([]);
+
+		await expectDownloadClientPriorityPlanAccessible(page);
 	});
 
 	test('/system?tab=environment has no axe violations', async ({ page }) => {

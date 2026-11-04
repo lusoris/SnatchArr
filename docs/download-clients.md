@@ -83,6 +83,22 @@ Each client operates in either `observe` or `act` mode via `priority_mode`:
 | `observe` (default) | Computes the priority plan, observes queue positions, and surfaces the intended mutations via the API and UI; executes zero writes. |
 | `act` | Executes the plan for attributed transfers when every row in the client group is configured for act mode. |
 
+### View and change the mode in the UI
+
+Open **Connections → Download clients**, then choose **Priority plan** beneath a client's
+name. The dialog refreshes every 30 seconds while open. It shows the effective mode,
+observation time, priority levels before and after each move, queue order, and items to
+pause or resume. Item identifiers come from the client. A client without an observation
+shows **No observation yet**; an observed plan without moves shows an empty state.
+
+As an administrator, choose **Edit**, select **Act** under **Priority mode**, then **Save**
+to opt in for qBittorrent, NZBGet or SABnzbd. New clients default to **Observe**.
+Transmission, Deluge and rTorrent remain observe only; their mode control is disabled.
+Configarr-managed rows keep their existing read-only form behavior. The dialog names any
+rows that keep a shared physical client in observe mode and warns when qBittorrent
+queueing is disabled. Hand-moved qBittorrent items cannot be detected and are reordered
+with other eligible queued items. See [ADR-0046](adr/0046-download-client-priority-writes.md).
+
 ### Act mode rules
 
 When `act` mode is enabled:
