@@ -278,9 +278,9 @@ e2e-compose-pg-upgrade: ## Homelab compose bundle: Postgres previous major -> pi
 # migrations advance, settings and data read back unchanged, the admin logs in and stored
 # credentials decrypt. The planted cases delete a row, change a setting, start with the
 # wrong crypto key, upgrade to old images, change an unread table, leave out the worker, delete
-# the API key, replace the password hash and change a download client on its pre-upgrade
-# columns; the test must refuse all nine. Not in verify-all
-# (slow, needs Docker).
+# the API key, replace the password hash, change a download client on its pre-upgrade columns,
+# revert the migrated queue-policy blocklist and change an untouched queue-policy field; the test
+# must refuse all eleven. Not in verify-all (slow, needs Docker).
 e2e-compose-app-upgrade: ## Homelab compose bundle: application upgrade from previous release with data read-back (needs Docker)
 	if [ "$${SMOKE_SKIP_BUILD:-0}" != "1" ]; then \
 	  docker build -t $(E2E_API_IMAGE) -f Dockerfile . ; \
@@ -297,7 +297,9 @@ e2e-compose-app-upgrade: ## Homelab compose bundle: application upgrade from pre
 	  "no-worker:worker did not register" \
 	  "drop-key:old API key" \
 	  "reset-password:login with password" \
-	  "touch-dlclient:data read-back differs"
+	  "touch-dlclient:data read-back differs" \
+	  "revert-fixable-blocklist:api read-back differs" \
+	  "queue-policy-extra-change:unallowed change in table queue_policies"
 
 # The development stack of deploy/compose (`make dev` with the arr and observability profiles,
 # docs/metrics.md): Postgres healthy, Sonarr and Radarr answer, Prometheus scrapes the collector,

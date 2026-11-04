@@ -14,8 +14,10 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/golusoris/golusoris/core/clock"
 	dbmigrate "github.com/golusoris/golusoris/db/migrate"
 
+	"github.com/lusoris/SnatchArr/api/internal/queue"
 	"github.com/lusoris/SnatchArr/api/internal/store"
 	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
 	"github.com/lusoris/SnatchArr/api/internal/store/storetest"
@@ -1504,4 +1506,196 @@ func TestMigration000048RequestsSettings(t *testing.T) {
 		t.Fatalf("Steps(1) back up to 48: %v", err)
 	}
 	assertTableExists(t, st, "requests_settings", true)
+}
+
+func seedMigration000055Policy(
+	ctx context.Context, t *testing.T, st *store.Store, id uuid.UUID, name, rules string, now time.Time,
+) {
+	t.Helper()
+	const insInst = `INSERT INTO instances (
+		id, kind, name, base_url, api_key_enc, enabled, source, created_at, updated_at
+	) VALUES ($1, $2, $3, $4, '\x0102', true, 'manual', $5, $5)`
+	if _, err := st.Pool().Exec(ctx, insInst, id, "lidarr", name, "http://127.0.0.1:8686", now); err != nil {
+		t.Fatalf("insert instance %s: %v", name, err)
+	}
+	const insPolicy = `INSERT INTO queue_policies (
+		instance_id, enabled, rules, grace_s, min_bytes_per_second, max_removals_per_sweep, updated_at
+	) VALUES ($1, true, $2::jsonb, 900, 0, 10, $3)`
+	if _, err := st.Pool().Exec(ctx, insPolicy, id, rules, now); err != nil {
+		t.Fatalf("insert policy %s: %v", name, err)
+	}
+}
+
+func assertMigration000055Sweep(
+	ctx context.Context, t *testing.T, st *store.Store, instID uuid.UUID, now time.Time,
+) {
+	t.Helper()
+	qStore := queue.NewStore(st, clock.NewFake())
+	settingsA, err := qStore.Settings(ctx, instID)
+	if err != nil {
+		t.Fatalf("qStore.Settings(instA) error = %v", err)
+	}
+	if rs := settingsA.Rules[queue.RuleImportFixable]; rs.Blocklist == nil || !*rs.Blocklist {
+		t.Fatalf("instA RuleImportFixable blocklist unset or false (set=%t), want true", rs.Blocklist != nil)
+	}
+
+	item := queue.Item{
+		ID:                    101,
+		DownloadID:            "dl-fixable-migrated-25h",
+		Title:                 "Artist - Album",
+		Added:                 now.Add(-25 * time.Hour),
+		TrackedDownloadState:  "importBlocked",
+		TrackedDownloadStatus: "warning",
+		StatusLines: []string{
+			"Album match is not close enough: 77.0% vs 80%",
+		},
+	}
+	refusedPrev := map[string]queue.Strike{
+		item.DownloadID: {
+			Rule:          queue.RuleImportFixable,
+			Count:         1,
+			ImportedAt:    now.Add(-10 * time.Minute),
+			ImportRefused: true,
+			LastSeen:      now.Add(-15 * time.Minute),
+		},
+	}
+	decisions := queue.Sweep(settingsA, []queue.Item{item}, refusedPrev, now)
+	if len(decisions) != 1 {
+		t.Fatalf("Sweep decisions len = %d, want 1", len(decisions))
+	}
+	d := decisions[0]
+	if d.Rule != queue.RuleImportFixable {
+		t.Errorf("decision Rule = %q, want %q", d.Rule, queue.RuleImportFixable)
+	}
+	if !d.Remove {
+		t.Errorf("decision Remove = false, want true")
+	}
+	if !d.Blocklist {
+		t.Errorf("decision Blocklist = false, want true")
+	}
+	if !d.Research {
+		t.Errorf("decision Research = false, want true")
+	}
+}
+
+// assertMigration000055RoundTrip sets an operator's explicit blocklist false after the upgrade,
+// steps down to 54 and up to 55 again, and requires the false to survive without the marker.
+func assertMigration000055RoundTrip(
+	ctx context.Context, t *testing.T, st *store.Store, m *dbmigrate.Migrator, instID uuid.UUID,
+) {
+	t.Helper()
+	const setFalse = `UPDATE queue_policies
+		SET rules = jsonb_set(rules, '{import_fixable,blocklist}', 'false'::jsonb)
+		WHERE instance_id = $1`
+	if _, err := st.Pool().Exec(ctx, setFalse, instID); err != nil {
+		t.Fatalf("set explicit blocklist false: %v", err)
+	}
+	if err := m.Steps(-1); err != nil {
+		t.Fatalf("Steps(-1) down to 54: %v", err)
+	}
+	if err := m.Steps(1); err != nil {
+		t.Fatalf("Steps(1) back up to 55: %v", err)
+	}
+	const read = `SELECT (rules->'import_fixable'->'blocklist')::bool,
+		rules->'import_fixable' ? 'blocklist_kept'
+		FROM queue_policies WHERE instance_id = $1`
+	var blocklist, marker bool
+	if err := st.Pool().QueryRow(ctx, read, instID).Scan(&blocklist, &marker); err != nil {
+		t.Fatalf("read blocklist after re-upgrade: %v", err)
+	}
+	if blocklist {
+		t.Errorf("explicit blocklist false became true after down 54 and up 55")
+	}
+	if marker {
+		t.Errorf("blocklist_kept marker survived the re-upgrade")
+	}
+}
+
+func migration000055Cases() []struct {
+	name  string
+	rules string
+	check string
+	want  bool
+} {
+	return []struct {
+		name  string
+		rules string
+		check string
+		want  bool
+	}{
+		{
+			name:  "import_fixable blocklist false to true",
+			rules: `{"import_fixable": {"mode": "act", "threshold": 1, "blocklist": false}}`,
+			check: "SELECT (rules->'import_fixable'->'blocklist')::bool FROM queue_policies WHERE instance_id = $1",
+			want:  true,
+		},
+		{
+			name:  "import_fixable mode and threshold preserved",
+			rules: `{"import_fixable": {"mode": "act", "threshold": 1, "blocklist": false}}`,
+			check: "SELECT rules->'import_fixable'->>'mode' = 'act' AND (rules->'import_fixable'->>'threshold')::int = 1 FROM queue_policies WHERE instance_id = $1",
+			want:  true,
+		},
+		{
+			name:  "import_fixable blocklist true stays true",
+			rules: `{"import_fixable": {"mode": "observe", "threshold": 2, "blocklist": true}}`,
+			check: "SELECT (rules->'import_fixable'->'blocklist')::bool FROM queue_policies WHERE instance_id = $1",
+			want:  true,
+		},
+		{
+			name:  "no import_fixable key stays absent",
+			rules: `{"stalled": {"mode": "observe", "threshold": 1}}`,
+			check: "SELECT rules ? 'import_fixable' FROM queue_policies WHERE instance_id = $1",
+			want:  false,
+		},
+		{
+			name:  "failed blocklist false stays false",
+			rules: `{"failed": {"mode": "act", "threshold": 3, "blocklist": false}}`,
+			check: "SELECT (rules->'failed'->'blocklist')::bool FROM queue_policies WHERE instance_id = $1",
+			want:  false,
+		},
+	}
+}
+
+// TestMigration000055QueueFixableBlocklist verifies migration 000055 sets import_fixable blocklist
+// false to true, leaves blocklist true and missing keys unchanged, preserves other rules,
+// enables 25 h give-up removals with Blocklist=true through the real store path, and keeps
+// an operator's explicit false set after the upgrade across a down 54 and up 55 sequence.
+//
+//nolint:tparallel // sequential subtests share migrator state
+func TestMigration000055QueueFixableBlocklist(t *testing.T) {
+	t.Parallel()
+	st := storetest.New(t)
+	m := storetest.Migrator(t, st)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	now := time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
+
+	stepDownToVersion(t, m, 54)
+
+	cases := migration000055Cases()
+	ids := make([]uuid.UUID, len(cases))
+	for i, tc := range cases {
+		ids[i] = uuid.New()
+		seedMigration000055Policy(ctx, t, st, ids[i], tc.name, tc.rules, now)
+	}
+
+	if err := m.Steps(1); err != nil {
+		t.Fatalf("Steps(1) up to 55: %v", err)
+	}
+
+	//nolint:paralleltest // sequential subtests share migrator state
+	for i, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var got bool
+			if err := st.Pool().QueryRow(ctx, tc.check, ids[i]).Scan(&got); err != nil {
+				t.Fatalf("query %s: %v", tc.name, err)
+			}
+			if got != tc.want {
+				t.Errorf("%s got %t, want %t", tc.name, got, tc.want)
+			}
+		})
+	}
+
+	assertMigration000055Sweep(ctx, t, st, ids[0], now)
+	assertMigration000055RoundTrip(ctx, t, st, m, ids[0])
 }
