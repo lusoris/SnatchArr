@@ -2173,6 +2173,51 @@ func TestHourlyCapsDetails(t *testing.T) {
 	}
 }
 
+func TestHourlyCapsDeletedInstance(t *testing.T) {
+	t.Parallel()
+	f := newIntegrationFixture(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	liveID := seedTestInstance(t, f)
+	deletedID := seedTestInstance(t, f)
+	list, err := f.h.instances.List(ctx)
+	if err != nil {
+		t.Fatalf("instances.List() = %v", err)
+	}
+	if n, deleteErr := f.st.Q().DeleteInstanceUnlessDeclared(ctx, deletedID); deleteErr != nil || n != 1 {
+		t.Fatalf("delete instance = %d, %v; want 1 deleted", n, deleteErr)
+	}
+	if _, getErr := f.h.policies.Get(ctx, deletedID); !errors.Is(getErr, domain.ErrNotFound) {
+		t.Fatalf("policies.Get(deleted) = %v, want ErrNotFound", getErr)
+	}
+	caps, err := f.h.hourlyInstanceCaps(ctx, list)
+	if err != nil || len(caps) != 1 {
+		t.Fatalf("hourlyInstanceCaps(stale list) = %+v, %v; want one live row", caps, err)
+	}
+	if got, ok := caps[0].InstanceID.Get(); !ok || got != liveID {
+		t.Fatalf("hourlyInstanceCaps() instance ID = %v, want %v", got, liveID)
+	}
+	caps, err = f.h.hourlyInstanceCaps(ctx, []domain.Instance{{ID: deletedID, Kind: domain.KindSonarr}})
+	if err != nil || len(caps) != 0 {
+		t.Fatalf("hourlyInstanceCaps(deleted only) = %+v, %v; want no rows", caps, err)
+	}
+	caps, err = f.h.GetHourlyCaps(ctx)
+	if err != nil || len(caps) != 1 {
+		t.Fatalf("GetHourlyCaps() = %+v, %v; want one live row", caps, err)
+	}
+}
+
+func TestHourlyCapsInstanceError(t *testing.T) {
+	t.Parallel()
+	f := newIntegrationFixture(t)
+	instID := seedTestInstance(t, f)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := f.h.hourlyInstanceCaps(ctx, []domain.Instance{{ID: instID, Kind: domain.KindSonarr}}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("hourlyInstanceCaps(canceled) = %v, want context.Canceled", err)
+	}
+}
+
 func TestResetStateDetails(t *testing.T) {
 	t.Parallel()
 	f := newIntegrationFixture(t)

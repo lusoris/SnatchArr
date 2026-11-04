@@ -2398,7 +2398,7 @@ export interface components {
             active: boolean;
         };
         /**
-         * @description Priority mode for this download client: observe plans moves without modifying the client; act executes them. In act mode, SnatchArr writes queued SnatchArr-attributed items only; on qBittorrent SnatchArr items move ahead of unattributed queued items; hand-set NZBGet/SABnzbd priorities are kept; SnatchArr pauses lower-rank active items while higher-rank items wait and resumes only items it paused.
+         * @description Priority mode for this download client: observe plans moves without scheduling writes; act executes them. Previously SnatchArr-owned pauses are released when act mode or attribution is withdrawn. In act mode, SnatchArr priority and ordering writes target queued SnatchArr-attributed items; pause and resume writes may target active (downloading) lower-rank items; on qBittorrent with at least two distinct attributed ranks, SnatchArr items move ahead of unattributed queued items; hand-set NZBGet/SABnzbd priorities are kept; SnatchArr pauses lower-rank active items while higher-rank items wait and resumes only items it paused.
          * @enum {string}
          */
         DownloadClientPriorityMode: "observe" | "act";
@@ -2474,7 +2474,7 @@ export interface components {
             secret?: string;
             /** @description On create, omitted = true. On update, omitted = stored value stays; sent = replaces it. */
             enabled?: boolean;
-            /** @description Priority mode for this download client. Optional (enum observe|act). On create, omitted = observe. On update, omitted = stored value stays; sent = replaces it. Act writes queued SnatchArr-attributed items only; on qBittorrent SnatchArr items move ahead of unattributed queued items; hand-set NZBGet/SABnzbd priorities are kept; SnatchArr pauses lower-rank active items while higher-rank items wait and resumes only items it paused. */
+            /** @description Priority mode for this download client. Optional (enum observe|act). On create, omitted = observe. On update, omitted = stored value stays; sent = replaces it. Act priority and ordering writes target queued SnatchArr-attributed items; pause and resume writes may target active (downloading) lower-rank items; on qBittorrent with at least two distinct attributed ranks, SnatchArr items move ahead of unattributed queued items; hand-set NZBGet/SABnzbd priorities are kept; SnatchArr pauses lower-rank active items while higher-rank items wait and resumes only items it paused. */
             priority_mode?: components["schemas"]["DownloadClientPriorityMode"];
             /** @description On create, omitted = 0. On update, omitted = stored value stays; sent = replaces it. */
             max_active?: number;

@@ -73,6 +73,8 @@ func (s storedPrioritySource) ListOwnership(ctx context.Context, clientIDs []uui
 			ItemID:              r.ItemID,
 			LastWrittenPriority: lastPrio,
 			PausedBySnatchArr:   r.PausedBySnatcharr,
+			PendingAction:       r.PendingAction,
+			PendingPriority:     priorityInt(r.PendingPriority),
 		}
 	}
 	return out, nil
@@ -143,4 +145,34 @@ func NewReconciler(clients *Service, inst *instances.Service, settings *settings
 	interval := time.Duration(cfg.DownloadPriority.IntervalSeconds) * time.Second
 	r.Periodic = gate.NewPeriodic("download_priority_observe", interval, clk, m, r.Tick)
 	return r, nil
+}
+
+func priorityInt(value *int32) *int {
+	if value == nil {
+		return nil
+	}
+	return new(int(*value))
+}
+
+func (s storedPrioritySource) PrepareWrite(ctx context.Context, clientID uuid.UUID, itemID, action string, priority *int) error {
+	var value *int32
+	if priority != nil {
+		p := int32(*priority) // #nosec G115 -- planned ordinary priority levels are -100..100.
+		value = &p
+	}
+	if err := s.clients.st.Q().PreparePriorityIntent(ctx, sqlcgen.PreparePriorityIntentParams{
+		ClientID: clientID, ItemID: itemID, PendingAction: action, PendingPriority: value, UpdatedAt: s.clients.clk.Now(),
+	}); err != nil {
+		return fmt.Errorf("prepare priority ownership: %w", err)
+	}
+	return nil
+}
+
+func (s storedPrioritySource) CancelWrite(ctx context.Context, clientID uuid.UUID, itemID string) error {
+	if err := s.clients.st.Q().CancelPriorityIntent(ctx, sqlcgen.CancelPriorityIntentParams{
+		ClientID: clientID, ItemID: itemID, UpdatedAt: s.clients.clk.Now(),
+	}); err != nil {
+		return fmt.Errorf("cancel priority ownership: %w", err)
+	}
+	return nil
 }

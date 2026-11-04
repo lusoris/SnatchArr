@@ -16,6 +16,7 @@ type Querier interface {
 	AddGlobalBucketUsed(ctx context.Context, arg AddGlobalBucketUsedParams) error
 	AddProwlarrBucketUsed(ctx context.Context, arg AddProwlarrBucketUsedParams) error
 	BucketUsage(ctx context.Context, arg BucketUsageParams) (BucketUsageRow, error)
+	CancelPriorityIntent(ctx context.Context, arg CancelPriorityIntentParams) error
 	CancelRun(ctx context.Context, arg CancelRunParams) (int64, error)
 	// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 	// SPDX-License-Identifier: EUPL-1.2
@@ -273,6 +274,7 @@ type Querier interface {
 	MarkProcessed(ctx context.Context, arg MarkProcessedParams) error
 	MarkSeerrRequestsSnatched(ctx context.Context, arg MarkSeerrRequestsSnatchedParams) (int64, error)
 	MarkStaleAdultExternalRefsUnfavorite(ctx context.Context, arg MarkStaleAdultExternalRefsUnfavoriteParams) (int64, error)
+	PreparePriorityIntent(ctx context.Context, arg PreparePriorityIntentParams) error
 	PriorityEntityIDs(ctx context.Context, instanceID *uuid.UUID) ([]int64, error)
 	ProcessedAttempts(ctx context.Context, arg ProcessedAttemptsParams) (int32, error)
 	ProwlarrBucketUsage(ctx context.Context, arg ProwlarrBucketUsageParams) (ProwlarrBucketUsageRow, error)

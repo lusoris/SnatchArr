@@ -36,7 +36,12 @@ type prioritySourceFake struct {
 	ownership  map[string]PriorityOwnership
 }
 
-func (f *prioritySourceFake) Load(context.Context) (priorityInputs, error) { return f.inputs, f.err }
+func (f *prioritySourceFake) Load(context.Context) (priorityInputs, error) {
+	inputs := f.inputs
+	inputs.Clients = slices.Clone(inputs.Clients)
+	inputs.Instances = slices.Clone(inputs.Instances)
+	return inputs, f.err
+}
 
 func (f *prioritySourceFake) Secret(_ context.Context, id uuid.UUID) (string, error) {
 	return f.secrets[id], f.secretErrs[id]
@@ -65,6 +70,8 @@ func (f *prioritySourceFake) UpsertPriority(_ context.Context, clientID uuid.UUI
 	o.ClientID = clientID
 	o.ItemID = itemID
 	o.LastWrittenPriority = &prio
+	o.PendingAction = ""
+	o.PendingPriority = nil
 	f.ownership[k] = o
 	return nil
 }
@@ -80,6 +87,8 @@ func (f *prioritySourceFake) SetPaused(_ context.Context, clientID uuid.UUID, it
 	o.ClientID = clientID
 	o.ItemID = itemID
 	o.PausedBySnatchArr = true
+	o.PendingAction = ""
+	o.PendingPriority = nil
 	f.ownership[k] = o
 	return nil
 }
@@ -93,6 +102,8 @@ func (f *prioritySourceFake) ClearPaused(_ context.Context, clientID uuid.UUID, 
 	k := clientID.String() + "\n" + itemID
 	if o, ok := f.ownership[k]; ok {
 		o.PausedBySnatchArr = false
+		o.PendingAction = ""
+		o.PendingPriority = nil
 		f.ownership[k] = o
 	}
 	return nil
@@ -376,4 +387,27 @@ func priorityWorkerObserver(t *testing.T, entered chan<- struct{}, release <-cha
 		total.Add(1)
 		return PriorityObservation{}, nil
 	})
+}
+
+func (f *prioritySourceFake) PrepareWrite(_ context.Context, clientID uuid.UUID, itemID, action string, priority *int) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.ownership == nil {
+		f.ownership = make(map[string]PriorityOwnership)
+	}
+	key := clientID.String() + "\n" + itemID
+	own := f.ownership[key]
+	own.ClientID, own.ItemID, own.PendingAction, own.PendingPriority = clientID, itemID, action, priority
+	f.ownership[key] = own
+	return nil
+}
+
+func (f *prioritySourceFake) CancelWrite(_ context.Context, clientID uuid.UUID, itemID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	key := clientID.String() + "\n" + itemID
+	own := f.ownership[key]
+	own.PendingAction, own.PendingPriority = "", nil
+	f.ownership[key] = own
+	return nil
 }

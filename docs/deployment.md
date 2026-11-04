@@ -87,6 +87,12 @@ the charts up to 0.1.4 are signed only. 0.1.1 was rebuilt by hand from `main`: v
 tag it builds (`gh workflow run release.yml --ref v0.2.1 -f tag=v0.2.1`); the workflow
 refuses to start on any other ref.
 
+### Release notes closing claims
+
+Release pull requests also run `make release-closes-check` in the `release-e2e-map` CI job. After offline planted cases, `tools/ci/release_closes_check.py` checks linked or bare `closes #N` claims in the newest `CHANGELOG.md` version section against GitHub issue states (`--repository` or `GITHUB_REPOSITORY`; `--api-dir` for offline fixtures). Exit 0 means all claimed issues are closed or no claims exist; exit 3 lists each open issue with its changelog line and the commit that line links to; exit 1 means an input or API failure, including more than 500 closing claims.
+
+Cross-repository claims (`closes owner/repo#N` or links naming another GitHub repository) are checked against their own repository. The release workflow re-checks the tagged changelog at release time in case an issue was reopened after the pull request check. In the `release-e2e-map` job the step that holds the GitHub token is skipped for fork heads, because that job runs pull request code.
+
 ### Release dogfood gate
 
 Before the release workflow builds or pushes an artifact (`job dogfood-gate`, `.github/workflows/release-dogfood-gate.yml`), `tools/release/dogfood_gate.py` checks the release-please tag commit against `release-please-config.json`. The tag commit must have one parent, touch only the manifest, changelog and `extra-files` paths declared in `release-please-config.json`, and its first-parent commit on `main` must carry a newest commit status `snatcharr/dogfood=success`. Release refuses the tag otherwise.
@@ -98,6 +104,29 @@ python3 -I tools/release/dogfood_pass.py --repository <owner>/<repository> --com
 ```
 
 `dogfood_pass.py` checks `/api/v1/system/status` for `<main sha>`, exercises `/api/v1/mcp` over Streamable HTTP (`initialize`, `tools/list`, and `tools/call` on every read-only tool with no required inputs), and posts `snatcharr/dogfood=success` when at least one read-only tool ran and none failed (`make release-dogfood-check` runs the offline self-tests). `--instance` names the instance the pass ran on (for example `cluster`) in the status description and the output; the pass refuses to run without it. The gate accepts only a success whose description names the live instance (`cluster` by default, `--live-instance` to change), so post with `--instance cluster` from the live cluster only; a pass on another instance records its own label and does not satisfy the gate.
+
+### Release page stays a draft until the gates pass
+
+When a release pull request merges, release-please (`release-please-config.json`: `"draft": true`, `"force-tag-creation": true`) creates a draft GitHub release and pushes the `vX.Y.Z` tag immediately with the release GitHub App token (`.github/workflows/release-please.yml`). The tag push (`on: push: tags: ['v*']`) starts `.github/workflows/release.yml`, which runs `dogfood-gate`, `image-smoke`, `build`, `release-files`, and `verify` while the release page is still a draft (`release-files` and `verify` hold `permissions: contents: write` because GitHub exposes draft releases only to callers with push access). Only after every gate succeeds does the final job `publish` (`needs: [meta, dogfood-gate, image-smoke, build, release-files, verify]`) run `gh release edit "$TAG" --draft=false --verify-tag` and confirm via `gh release view "$TAG" --json isDraft,publishedAt` that `isDraft` is `false`.
+
+To rebuild or re-verify an existing release tag by manual dispatch (idempotent when the tag's release is already published):
+
+```sh
+gh workflow run release.yml --ref vX.Y.Z -f tag=vX.Y.Z
+```
+
+`tools/ci/release_publish_order_check.py` runs in the CI `workflows` job on every pull request and in `make workflows-verify`, enforcing this ordering across `release-please-config.json` and `.github/workflows/*.yml` and `*.yaml`. It allow-lists release actions and `gh release` subcommands, and treats mutating release REST calls through `gh api`, `curl`, or `wget` as publishing. It also scans relative repository `.sh` and `.py` files named in run commands one level deep, including literal Python subprocess and shell commands; calls from those scripts to further scripts are not followed:
+
+```sh
+python3 -I tools/ci/release_publish_order_check.py --self-test
+python3 -I tools/ci/release_publish_order_check.py
+```
+
+Exit codes:
+
+- `0`: `release-please-config.json` sets `"draft": true` and `"force-tag-creation": true`, `release.yml` does not trigger on `release` (`published` or `created`), only `release.yml` publishes a release, and every publishing job transitively `needs` `dogfood-gate`, `image-smoke`, `build`, `release-files`, and `verify`.
+- `1`: an input or parse error (missing or unreadable file, invalid JSON, YAML, shell quoting or Python, a duplicate mapping key, invalid release trigger types, or an exceeded scan bound).
+- `3`: a policy violation (missing `draft: true` or `force-tag-creation: true`, a `release` `published`/`created` trigger, a workflow without a publishing job, an operation outside the allow-lists, publishing outside `release.yml`, or a publishing job that does not transitively depend on every required gate).
 
 ## Helm
 

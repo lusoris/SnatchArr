@@ -21,7 +21,17 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 )
 
-const maxPriorityWorkers = 4
+const (
+	maxPriorityWorkers           = 4
+	maxPriorityRowsPerTick       = 256
+	maxPriorityInstancesPerTick  = 512
+	maxPriorityGroupsPerTick     = 16
+	maxPriorityItemsPerGroup     = 1024
+	maxPriorityMutationsPerGroup = 128
+	// Group bounds also cap total items and item mutations per tick.
+	maxPriorityItemsPerTick     = maxPriorityGroupsPerTick * maxPriorityItemsPerGroup
+	maxPriorityMutationsPerTick = maxPriorityGroupsPerTick * maxPriorityMutationsPerGroup
+)
 
 // PriorityPlan is the latest successful observation. Mode describes effective group mode;
 // in act mode, allow-listed priority, order and pause/resume mutations are executed.
@@ -41,6 +51,8 @@ type PriorityOwnership struct {
 	ItemID              string
 	LastWrittenPriority *int
 	PausedBySnatchArr   bool
+	PendingAction       string
+	PendingPriority     *int
 }
 
 type priorityInputs struct {
@@ -57,6 +69,8 @@ type prioritySource interface {
 	SetPaused(context.Context, uuid.UUID, string) error
 	ClearPaused(context.Context, uuid.UUID, string) error
 	DeleteNotIn(context.Context, uuid.UUID, []string) error
+	PrepareWrite(context.Context, uuid.UUID, string, string, *int) error
+	CancelWrite(context.Context, uuid.UUID, string) error
 }
 
 // Reconciler is started exclusively by leader/gate as a leader_loops member.
@@ -69,6 +83,9 @@ type Reconciler struct {
 	logger   *slog.Logger
 	mu       sync.RWMutex
 	plans    map[uuid.UUID]PriorityPlan
+	// tickMu serializes observations and protects groupCursor, including direct Tick calls.
+	tickMu      sync.Mutex
+	groupCursor int
 }
 
 func newPriorityReconciler(source prioritySource, observer PriorityObserver, writer PriorityWriter, clk clock.Clock, logger *slog.Logger) *Reconciler {
@@ -93,6 +110,8 @@ func (r *Reconciler) Latest(clientID uuid.UUID) (PriorityPlan, error) {
 
 // Tick snapshots configuration once and isolates physical client failures.
 func (r *Reconciler) Tick(ctx context.Context) error {
+	r.tickMu.Lock()
+	defer r.tickMu.Unlock()
 	loadCtx, cancel := context.WithTimeout(ctx, ObserveTimeout)
 	inputs, err := r.source.Load(loadCtx)
 	cancel()
@@ -100,7 +119,12 @@ func (r *Reconciler) Tick(ctx context.Context) error {
 		r.logger.WarnContext(ctx, "download priority inputs failed")
 		return fmt.Errorf("priority inputs: %w", err)
 	}
+	if len(inputs.Clients) > maxPriorityRowsPerTick || len(inputs.Instances) > maxPriorityInstancesPerTick {
+		r.logger.WarnContext(ctx, "download priority inputs truncated")
+		return nil
+	}
 	groups := priorityGroups(inputs.Clients)
+	groups = r.priorityBatch(ctx, groups)
 	r.prunePlans(inputs.Clients)
 	sem := make(chan struct{}, maxPriorityWorkers)
 	var wg sync.WaitGroup
@@ -110,6 +134,7 @@ func (r *Reconciler) Tick(ctx context.Context) error {
 		}
 		// Each observation ends within ObserveTimeout, so a full semaphore frees a slot in bounded time.
 		sem <- struct{}{}
+		r.groupCursor++
 		wg.Go(func() {
 			defer func() { <-sem }()
 			r.observePriorityGroup(ctx, rows, inputs)
@@ -120,6 +145,19 @@ func (r *Reconciler) Tick(ctx context.Context) error {
 		return fmt.Errorf("priority tick: %w", err)
 	}
 	return nil
+}
+
+// priorityBatch preserves group order; tickMu protects the cursor through the whole tick.
+// The last batch stops at the end, so every group gets one turn before the next pass.
+func (r *Reconciler) priorityBatch(ctx context.Context, groups [][]domain.DownloadClient) [][]domain.DownloadClient {
+	if r.groupCursor >= len(groups) {
+		r.groupCursor = 0
+	}
+	if len(groups) > maxPriorityGroupsPerTick {
+		r.logger.WarnContext(ctx, "download priority groups rotated", slog.Int("limit", maxPriorityGroupsPerTick), slog.Int("item_limit_per_tick", maxPriorityItemsPerTick), slog.Int("mutation_limit_per_tick", maxPriorityMutationsPerTick))
+	}
+	end := min(r.groupCursor+maxPriorityGroupsPerTick, len(groups))
+	return groups[r.groupCursor:end]
 }
 
 func (r *Reconciler) prunePlans(clients []domain.DownloadClient) {
@@ -204,9 +242,21 @@ func (r *Reconciler) observePriorityGroup(ctx context.Context, rows []domain.Dow
 		r.priorityFailed(ctx, rows, "read")
 		return
 	}
+	if obs.ItemsTruncated || priorityObservationTooLarge(len(obs.Items)) {
+		r.logger.WarnContext(ctx, "download priority items truncated", slog.Int("limit", maxPriorityItemsPerGroup))
+		return
+	}
 	ownership, stage := r.refreshOwnership(ctx, rows, obs.Items)
 	if stage != "" {
 		r.priorityFailed(ctx, rows, stage)
+		return
+	}
+	if !r.recoverPriorityOwnership(ctx, obs.Items, ownership) {
+		return
+	}
+	ownership, err = r.source.ListOwnership(ctx, rowIDs(rows))
+	if err != nil {
+		r.priorityFailed(ctx, rows, "reload_ownership")
 		return
 	}
 	items, unattributed, itemClients := attributePriorityItems(obs.Items, rows, inputs.Instances, inputs.Preset, ownership)
@@ -215,10 +265,7 @@ func (r *Reconciler) observePriorityGroup(ctx context.Context, rows []domain.Dow
 		r.priorityFailed(ctx, rows, "plan")
 		return
 	}
-	mode, observeRowNames := groupPriorityMode(rows)
-	if mode == "act" && r.writer != nil {
-		r.executeActPlan(ctx, client, secret, plan, obs.QueueingDisabled, items, itemClients, ownership)
-	}
+	plan, mode, observeRowNames := r.applyPriorityPlan(ctx, rows, client, secret, obs, items, itemClients, ownership, plan)
 	r.storeGroupPlans(rows, PriorityPlan{
 		Mode:             mode,
 		ObservedAt:       r.clk.Now(),
@@ -287,6 +334,9 @@ func (r *Reconciler) executeActPlan(
 	ctx context.Context, client domain.DownloadClient, secret string, plan domain.DownloadClientPlan,
 	queueingDisabled bool, items []domain.DownloadQueueItem, itemClients map[string]uuid.UUID, ownership []PriorityOwnership,
 ) {
+	if !r.priorityPlanAllowed(ctx, plan) {
+		return
+	}
 	if !r.executePriorityWrites(ctx, client, secret, plan, itemClients) {
 		return
 	}
@@ -309,14 +359,21 @@ func (r *Reconciler) executePriorityWrites(
 	}
 	for _, m := range plan.Priority {
 		targetID := itemClients[m.ID]
+		if !r.prepareWrite(ctx, targetID, m.ID, "priority", &m.To) {
+			return false
+		}
 		callCtx, cancel := context.WithTimeout(ctx, ObserveTimeout)
 		err := r.writer.SetItemPriority(callCtx, client, secret, m.ID, m.To)
 		cancel()
 		if err != nil {
+			r.cancelUnwritten(ctx, []string{m.ID}, err, itemClients)
 			r.priorityWriteFailed(ctx, targetID, "priority")
 			return false
 		}
-		if err := r.source.UpsertPriority(ctx, targetID, m.ID, m.To); err != nil {
+		recordCtx, recordCancel := ownershipContext(ctx)
+		err = r.source.UpsertPriority(recordCtx, targetID, m.ID, m.To)
+		recordCancel()
+		if err != nil {
 			r.priorityWriteFailed(ctx, targetID, "priority")
 			return false
 		}
@@ -365,10 +422,14 @@ func (r *Reconciler) executePauseWrites(
 	if len(plan.Pause) == 0 {
 		return true
 	}
+	if !r.prepareItems(ctx, plan.Pause, itemClients, "pause") {
+		return false
+	}
 	callCtx, cancel := context.WithTimeout(ctx, ObserveTimeout)
 	err := r.writer.PauseItems(callCtx, client, secret, plan.Pause)
 	cancel()
 	if err != nil {
+		r.cancelUnwritten(ctx, plan.Pause, err, itemClients)
 		r.markPartial(ctx, err, itemClients, r.source.SetPaused, "pause_record")
 		r.priorityWriteFailed(ctx, writeTarget(client.ID, itemClients, plan.Pause), "pause")
 		return false
@@ -385,10 +446,14 @@ func (r *Reconciler) executeResumeWrites(
 	if len(eligible) == 0 {
 		return true
 	}
+	if !r.prepareItems(ctx, eligible, itemClients, "resume") {
+		return false
+	}
 	callCtx, cancel := context.WithTimeout(ctx, ObserveTimeout)
 	err := r.writer.ResumeItems(callCtx, client, secret, eligible)
 	cancel()
 	if err != nil {
+		r.cancelUnwritten(ctx, eligible, err, itemClients)
 		r.markPartial(ctx, err, itemClients, r.source.ClearPaused, "resume_record")
 		r.priorityWriteFailed(ctx, writeTarget(client.ID, itemClients, eligible), "resume")
 		return false
@@ -422,8 +487,10 @@ func (r *Reconciler) markPartial(ctx context.Context, err error, itemClients map
 	if !errors.As(err, &partial) {
 		return
 	}
+	recordCtx, cancel := ownershipContext(ctx)
+	defer cancel()
 	for _, id := range partial.Done {
-		if markErr := mark(ctx, itemClients[id], id); markErr != nil {
+		if markErr := mark(recordCtx, itemClients[id], id); markErr != nil {
 			r.priorityWriteFailed(ctx, itemClients[id], stage)
 		}
 	}
@@ -431,8 +498,10 @@ func (r *Reconciler) markPartial(ctx context.Context, err error, itemClients map
 
 // markAll records ownership for every written item and stops at the first failed record.
 func (r *Reconciler) markAll(ctx context.Context, ids []string, itemClients map[string]uuid.UUID, mark ownershipMark, stage string) bool {
+	recordCtx, cancel := ownershipContext(ctx)
+	defer cancel()
 	for _, id := range ids {
-		if err := mark(ctx, itemClients[id], id); err != nil {
+		if err := mark(recordCtx, itemClients[id], id); err != nil {
 			r.priorityWriteFailed(ctx, itemClients[id], stage)
 			return false
 		}
