@@ -23,16 +23,16 @@ func TestImportFixableGiveUp(t *testing.T) {
 	refusedPrev := queue.Strike{
 		Rule:          queue.RuleImportFixable,
 		Count:         1,
-		ImportedAt:    now.Add(-10 * time.Minute),
+		ImportedAt:    now.Add(-queue.RefusedRetry / 2),
 		ImportRefused: true,
-		LastSeen:      now.Add(-15 * time.Minute),
+		LastSeen:      now.Add(-queue.RefusedRetry),
 	}
 	retryPrev := queue.Strike{
 		Rule:          queue.RuleImportFixable,
 		Count:         1,
-		ImportedAt:    now.Add(-20 * time.Minute),
+		ImportedAt:    now.Add(-2 * queue.RefusedRetry),
 		ImportRefused: true,
-		LastSeen:      now.Add(-20 * time.Minute),
+		LastSeen:      now.Add(-2 * queue.RefusedRetry),
 	}
 	erroredPrev := queue.Strike{
 		Rule:     queue.RuleImportFixable,
@@ -268,6 +268,55 @@ func TestImportFixableGiveUpMaxRemovalsBound(t *testing.T) {
 	}
 	if decisions[1].Remove || !decisions[1].Deferred {
 		t.Errorf("item2: remove %v, deferred %v, want false, true", decisions[1].Remove, decisions[1].Deferred)
+	}
+}
+
+// TestImportFixableGiveUpAtMaxGrace checks that the general grace period
+// cannot hold back the give-up: Validate caps grace at 24 h, which equals
+// the import budget, so an item old enough to give up is never in grace.
+func TestImportFixableGiveUpAtMaxGrace(t *testing.T) {
+	t.Parallel()
+
+	now := fixedNow
+	tests := []struct {
+		name       string
+		grace      time.Duration
+		age        time.Duration
+		wantRemove bool
+		wantValid  bool
+	}{
+		{name: "positive/max_grace_at_budget_removes", grace: 24 * time.Hour, age: 24 * time.Hour, wantRemove: true, wantValid: true},
+		{name: "negative/max_grace_under_budget_keeps", grace: 24 * time.Hour, age: 24*time.Hour - time.Second, wantRemove: false, wantValid: true},
+		{name: "boundary/grace_over_24h_rejected", grace: 24*time.Hour + time.Second, age: 25 * time.Hour, wantRemove: false, wantValid: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			s := queue.DefaultSettings()
+			s.Enabled = true
+			s.Grace = tt.grace
+			s.Rules[queue.RuleImportFixable] = queue.RuleSettings{Mode: queue.ModeAct, Threshold: 1}
+			if err := s.Validate(); (err == nil) != tt.wantValid {
+				t.Fatalf("Validate() error = %v, want valid %v", err, tt.wantValid)
+			}
+			if !tt.wantValid {
+				return
+			}
+			item := queue.Item{
+				ID:                    101,
+				DownloadID:            "dl-fixable-grace",
+				Title:                 "Artist - Album",
+				Added:                 now.Add(-tt.age),
+				TrackedDownloadState:  "importBlocked",
+				TrackedDownloadStatus: "warning",
+				StatusLines:           []string{"Album match is not close enough: 77.0% vs 80%"},
+			}
+			d := sweepOne(t, s, item, nil, now)
+			if d.Remove != tt.wantRemove {
+				t.Errorf("remove = %v, want %v", d.Remove, tt.wantRemove)
+			}
+		})
 	}
 }
 

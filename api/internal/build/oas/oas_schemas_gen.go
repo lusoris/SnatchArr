@@ -7871,8 +7871,9 @@ type QueueRules struct {
 	IDMatched OptQueueRuleSettings `json:"id_matched"`
 	// Force-imports a download whose import rejections are fixable (e.g. Lidarr/Readarr track/album
 	// match above floor, scene numbering mismatch); a download still not imported 24 h after it was
-	// added is removed with blocklist (per-rule switch) and re-search. Optional on write; left out, the
-	// rule takes its default settings. Reads always return it.
+	// added is given up. In act mode it is removed with blocklist (per-rule switch) and re-search; in
+	// observe mode the sweep only reports it as would-remove. Optional on write; left out, the rule
+	// takes its default settings. Reads always return it.
 	ImportFixable OptQueueRuleSettings `json:"import_fixable"`
 	// Strikes and removes a download whose release is broken (e.g. no tracks matched, corrupt container,
 	// parser error) with blocklist and re-search. Optional on write; left out, the rule takes its
