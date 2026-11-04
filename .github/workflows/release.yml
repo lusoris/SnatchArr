@@ -56,6 +56,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ steps.v.outputs.tag }}
+          # full history: an open claim without a commit link is named by the commit carrying it
+          fetch-depth: 0
           persist-credentials: false
       - name: refuse release notes that claim an open issue is closed
         env:

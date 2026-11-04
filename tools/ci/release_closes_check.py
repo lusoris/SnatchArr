@@ -21,6 +21,7 @@ import tempfile
 from pathlib import Path
 
 GH_TIMEOUT_SECONDS = 60
+GIT_TIMEOUT_SECONDS = 60
 MAX_CLAIMS = 500
 MAX_CHANGELOG_BYTES = 8_388_608
 MAX_CHANGELOG_LINES = 100_000
@@ -40,10 +41,45 @@ COMMIT_RE = re.compile(
 )
 
 
-def line_commit(line: str) -> str:
-    """Name the commit a release-please changelog line links to."""
+def history_commit(reference: str, repo_dir: Path) -> str:
+    """Name the newest commit whose message carries the closing claim."""
+    pattern = r"closes[[:space:]]+\[?" + reference.replace(".", r"\.") + "([^0-9]|$)"
+    try:
+        result = subprocess.run(  # nosec B603 -- fixed git argv list, no shell; pattern built from a regex-matched issue reference
+            [
+                "git",
+                "-C",
+                str(repo_dir),
+                "log",
+                "-n",
+                "1",
+                "--format=%h",
+                "--regexp-ignore-case",
+                "--extended-regexp",
+                f"--grep={pattern}",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=GIT_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise CheckError(
+            f"git log for {reference} did not complete: {error}"
+        ) from error
+    if result.returncode != 0:
+        detail = result.stderr.strip() or f"exit {result.returncode}"
+        raise CheckError(f"git log for {reference} failed: {detail}")
+    commit = result.stdout.strip()
+    if not commit:
+        return f"no commit in the history carries 'closes {reference}'"
+    return f"commit {commit}"
+
+
+def line_commit(line: str, reference: str, repo_dir: Path) -> str:
+    """Name the commit a changelog line links to, else the commit carrying its claim."""
     match = COMMIT_RE.search(line)
-    return f"commit {match.group(1)}" if match else "no commit linked in the line"
+    return f"commit {match.group(1)}" if match else history_commit(reference, repo_dir)
 
 
 class CheckError(Exception):
@@ -73,8 +109,10 @@ def claim_key(match: re.Match[str], default_repository: str) -> tuple[str, int]:
     return repository, int(number)
 
 
-def newest_claims(changelog: Path, repository: str) -> dict[tuple[str, int], str]:
-    """Collect bounded, distinct closing claims and their first changelog lines."""
+def newest_claims(
+    changelog: Path, repository: str
+) -> dict[tuple[str, int], tuple[str, str]]:
+    """Collect bounded, distinct closing claims, their first lines and references."""
     with changelog.open("rb") as source:
         raw = source.read(MAX_CHANGELOG_BYTES + 1)
     if len(raw) > MAX_CHANGELOG_BYTES:
@@ -83,7 +121,7 @@ def newest_claims(changelog: Path, repository: str) -> dict[tuple[str, int], str
     if len(lines) > MAX_CHANGELOG_LINES:
         raise CheckError(f"changelog exceeds {MAX_CHANGELOG_LINES} lines")
     in_section = False
-    claims: dict[tuple[str, int], str] = {}
+    claims: dict[tuple[str, int], tuple[str, str]] = {}
     count = 0
     for line in lines:
         if line.startswith("## "):
@@ -96,7 +134,8 @@ def newest_claims(changelog: Path, repository: str) -> dict[tuple[str, int], str
             count += 1
             if count > MAX_CLAIMS:
                 raise CheckError(f"newest section exceeds {MAX_CLAIMS} closing claims")
-            claims.setdefault(claim_key(match, repository), line.strip())
+            reference = match["linked"] or match["bare"]
+            claims.setdefault(claim_key(match, repository), (line.strip(), reference))
     if not in_section:
         raise CheckError("changelog has no level-two version heading")
     return claims
@@ -144,11 +183,11 @@ def evaluate_check(
     if claims and not REPO_RE.fullmatch(repository):
         raise CheckError("--repository or GITHUB_REPOSITORY must name owner/repository")
     offenders = []
-    for (claim_repository, number), line in claims.items():
+    for (claim_repository, number), (line, reference) in claims.items():
         if issue_state(claim_repository, number, api_dir) == "open":
             prefix = "" if claim_repository == repository else claim_repository
             offenders.append(
-                f"release closes check: open {prefix}#{number}: {line} ({line_commit(line)})"
+                f"release closes check: open {prefix}#{number}: {line} ({line_commit(line, reference, changelog.resolve().parent)})"
             )
     if offenders:
         return 3, "\n".join(offenders)
@@ -349,7 +388,71 @@ SELF_TEST_CASES = (
         "exceeds 500 closing claims",
     ),
     ("missing section refused", "# Changelog\n", {}, 1, "no level-two version heading"),
+    (
+        "unlinked open claim names the commit carrying it",
+        "## 1.0.1\n* fix, closes #9\n",
+        {9: '{"state":"open"}'},
+        3,
+        "open #9: * fix, closes #9 (commit {commit9})",
+    ),
+    (
+        "unlinked claim lookup ignores a longer issue number",
+        "## 1.0.1\n* fix, closes #90\n",
+        {90: '{"state":"open"}'},
+        3,
+        "(commit {commit90})",
+    ),
+    (
+        "unlinked claim without a carrying commit says so",
+        "## 1.0.1\n* fix, closes #11\n",
+        {11: '{"state":"open"}'},
+        3,
+        "no commit in the history carries 'closes #11'",
+    ),
 )
+
+SELF_TEST_COMMITS = (
+    ("9", "fix: first\n\ncloses #9"),
+    ("90", "fix: second\n\ncloses #90"),
+)
+
+
+def run_git_step(argv: list[str]) -> str:
+    """Run one self-test git step and return its stripped standard output."""
+    try:
+        result = subprocess.run(  # nosec B603 -- fixed git argv list in a throwaway self-test repository
+            argv,
+            capture_output=True,
+            text=True,
+            timeout=GIT_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise SelfTestError(f"git fixture did not complete: {error}") from error
+    if result.returncode != 0:
+        raise SelfTestError(f"git fixture failed: {result.stderr.strip()}")
+    return result.stdout.strip()
+
+
+def git_fixture(root: Path) -> dict[str, str]:
+    """Create a throwaway repository whose commits carry planted closing claims."""
+    base = [
+        "git",
+        "-C",
+        str(root),
+        "-c",
+        "user.name=self-test",
+        "-c",
+        "user.email=self-test@example.invalid",
+        "-c",
+        "commit.gpgsign=false",
+    ]
+    run_git_step([*base, "init", "-q"])
+    commits = {}
+    for key, message in SELF_TEST_COMMITS:
+        run_git_step([*base, "commit", "-q", "--allow-empty", "-m", message])
+        commits[f"commit{key}"] = run_git_step([*base, "log", "-n", "1", "--format=%h"])
+    return commits
 
 
 def self_test_case(
@@ -361,6 +464,7 @@ def self_test_case(
     needles: str | tuple[str, ...],
 ) -> None:
     """Run one isolated CLI fixture case and assert exit code and diagnostic."""
+    commits = git_fixture(root)
     changelog_path = root / "CHANGELOG.md"
     changelog_path.write_text(changelog, encoding="utf-8")
     api_dir = root / "api"
@@ -385,7 +489,10 @@ def self_test_case(
     with contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
         exit_code = run_check(options)
     message = output.getvalue()
-    expected = (needles,) if isinstance(needles, str) else needles
+    expected = tuple(
+        needle.format_map(commits)
+        for needle in ((needles,) if isinstance(needles, str) else needles)
+    )
     if exit_code != want_exit or any(needle not in message for needle in expected):
         raise SelfTestError(
             f"{label}: expected exit {want_exit} with {expected!r}, "
