@@ -27,41 +27,34 @@ from pathlib import Path
 # Playwright's documented default when the config sets no top-level `timeout`.
 PLAYWRIGHT_DEFAULT_TIMEOUT_MS = 30_000
 
-NUMBER = r"[0-9][0-9_]*"
-TIMEOUT_RE = re.compile(rf"\btimeout:\s*({NUMBER}|[A-Za-z_$][\w$]*)\b")
+TIMEOUT_RE = re.compile(r"\btimeout:\s*([0-9][0-9_]*|[A-Za-z_$][\w$]*)\b")
 CONST_RE = re.compile(
-    rf"^(?:export\s+)?const\s+([A-Za-z_$][\w$]*)\s*=\s*({NUMBER})\s*;", re.MULTILINE
+    r"^(?:export\s+)?const\s+([A-Za-z_$][\w$]*)\s*=\s*([0-9][0-9_]*)\s*;",
+    re.MULTILINE,
 )
 CONFIG_TIMEOUT_RE = re.compile(
-    rf"^(?:\t| {{2}})timeout:\s*({NUMBER})\s*,?\s*$", re.MULTILINE
+    r"^(?:\t| {2})timeout:\s*([0-9][0-9_]*)\s*,?\s*$", re.MULTILINE
 )
 TOP_CONFIGURE_RE = re.compile(
-    rf"^test\.describe\.configure\(\s*\{{[^}}]*?\btimeout:\s*({NUMBER}|[A-Za-z_$][\w$]*)\b",
+    r"^test\.describe\.configure\(\s*\{[^}]*?\btimeout:\s*([0-9][0-9_]*|[A-Za-z_$][\w$]*)\b",
     re.MULTILINE,
 )
 TOP_CONFIGURE_ANY_RE = re.compile(
     r"^test\.describe\.configure\(\s*\{[^}]*?\btimeout\b",
     re.MULTILINE,
 )
-TOP_BEFORE_EACH_RE = re.compile(
-    rf"^test\.beforeEach\([^)]*\)?[\s\S]{{0,500}}?\btest\.setTimeout\s*\(\s*({NUMBER}|[A-Za-z_$][\w$]*)\s*\)",
-    re.MULTILINE,
-)
-TOP_BEFORE_EACH_ANY_RE = re.compile(
-    r"^test\.beforeEach\([^)]*\)?[\s\S]{0,500}?\btest\.setTimeout\s*\(",
-    re.MULTILINE,
-)
 SEG_CONFIGURE_RE = re.compile(
-    rf"\btest\.describe\.configure\(\s*\{{[^}}]*?\btimeout:\s*({NUMBER}|[A-Za-z_$][\w$]*)\b"
+    r"\btest\.describe\.configure\(\s*\{[^}]*?\btimeout:\s*([0-9][0-9_]*|[A-Za-z_$][\w$]*)\b"
 )
 SEG_CONFIGURE_ANY_RE = re.compile(
     r"\btest\.describe\.configure\(\s*\{[^}]*?\btimeout\b"
 )
 SET_TIMEOUT_RE = re.compile(
-    rf"\btest\.setTimeout\s*\(\s*({NUMBER}|[A-Za-z_$][\w$]*)\s*\)"
+    r"\b(?:test|testInfo)\.setTimeout\s*\(\s*([0-9][0-9_]*|[A-Za-z_$][\w$]*)\s*\)"
 )
-SET_TIMEOUT_ANY_RE = re.compile(r"\btest\.setTimeout\s*\(")
-SLOW_RE = re.compile(r"\btest\.slow\s*\(")
+SET_TIMEOUT_ANY_RE = re.compile(r"\b(?:test|testInfo)\.setTimeout\s*\(")
+SLOW_RE = re.compile(r"\b(?:test|testInfo)\.slow\s*\(")
+SLOW_PLAIN_RE = re.compile(r"\b(?:test|testInfo)\.slow\s*\(\s*\)")
 TEST_START_RE = re.compile(
     r"^test(?:\.describe)?(?:\.(?:serial|parallel|only|skip|fixme))?\s*\("
 )
@@ -147,35 +140,40 @@ def resolve_token(token: str, consts: dict[str, int]) -> int | None:
     return consts.get(token)
 
 
+def scan_raises(
+    text: str,
+    any_re: re.Pattern[str],
+    val_re: re.Pattern[str],
+    consts: dict[str, int],
+) -> tuple[int, bool]:
+    """Return the highest resolved timeout raise in text and whether any call was unresolvable."""
+    matches = list(val_re.finditer(text))
+    unresolvable = len(any_re.findall(text)) > len(matches)
+    raised = 0
+    for match in matches:
+        val = resolve_token(match.group(1), consts)
+        if val is not None:
+            raised = max(raised, val)
+        else:
+            unresolvable = True
+    return raised, unresolvable
+
+
 def file_level_budget(
-    text: str, consts: dict[str, int], limit_ms: int
+    text: str, segs: list[Segment], consts: dict[str, int], limit_ms: int
 ) -> tuple[int, bool]:
     """Resolve top-level file budget from describe.configure or beforeEach."""
-    budget = limit_ms
-    unresolvable = False
-
-    cfg_any = len(TOP_CONFIGURE_ANY_RE.findall(text))
-    cfg_matches = list(TOP_CONFIGURE_RE.finditer(text))
-    if cfg_any > len(cfg_matches):
-        unresolvable = True
-    for match in cfg_matches:
-        val = resolve_token(match.group(1), consts)
-        if val is not None:
-            budget = max(budget, val)
-        else:
-            unresolvable = True
-
-    be_any = len(TOP_BEFORE_EACH_ANY_RE.findall(text))
-    be_matches = list(TOP_BEFORE_EACH_RE.finditer(text))
-    if be_any > len(be_matches):
-        unresolvable = True
-    for match in be_matches:
-        val = resolve_token(match.group(1), consts)
-        if val is not None:
-            budget = max(budget, val)
-        else:
-            unresolvable = True
-
+    cfg_val, unresolvable = scan_raises(
+        text, TOP_CONFIGURE_ANY_RE, TOP_CONFIGURE_RE, consts
+    )
+    budget = max(limit_ms, cfg_val)
+    for seg in segs:
+        if seg.text.startswith("test.beforeEach("):
+            be_val, be_unres = scan_raises(
+                seg.text, SET_TIMEOUT_ANY_RE, SET_TIMEOUT_RE, consts
+            )
+            budget = max(budget, be_val)
+            unresolvable = unresolvable or be_unres
     return budget, unresolvable
 
 
@@ -190,32 +188,18 @@ def resolve_test_budget(
     if file_unresolvable:
         return file_budget, True
 
-    budget = file_budget
-    unresolvable = False
+    cfg_val, cfg_unres = scan_raises(
+        seg.text, SEG_CONFIGURE_ANY_RE, SEG_CONFIGURE_RE, consts
+    )
+    to_val, to_unres = scan_raises(seg.text, SET_TIMEOUT_ANY_RE, SET_TIMEOUT_RE, consts)
+    budget = max(file_budget, cfg_val, to_val)
+    unresolvable = cfg_unres or to_unres
 
-    cfg_any = len(SEG_CONFIGURE_ANY_RE.findall(seg.text))
-    cfg_matches = list(SEG_CONFIGURE_RE.finditer(seg.text))
-    if cfg_any > len(cfg_matches):
+    slow_any = len(SLOW_RE.findall(seg.text))
+    slow_plain = len(SLOW_PLAIN_RE.findall(seg.text))
+    if slow_any > slow_plain:
         unresolvable = True
-    for match in cfg_matches:
-        val = resolve_token(match.group(1), consts)
-        if val is not None:
-            budget = max(budget, val)
-        else:
-            unresolvable = True
-
-    to_any = len(SET_TIMEOUT_ANY_RE.findall(seg.text))
-    to_matches = list(SET_TIMEOUT_RE.finditer(seg.text))
-    if to_any > len(to_matches):
-        unresolvable = True
-    for match in to_matches:
-        val = resolve_token(match.group(1), consts)
-        if val is not None:
-            budget = max(budget, val)
-        else:
-            unresolvable = True
-
-    if SLOW_RE.search(seg.text):
+    elif slow_plain > 0:
         budget = max(budget, 3 * limit_ms)
 
     return budget, unresolvable
@@ -227,8 +211,8 @@ def file_findings(path: Path, limit_ms: int) -> list[str]:
     consts = {
         name: int(value.replace("_", "")) for name, value in CONST_RE.findall(text)
     }
-    file_budget, file_unresolvable = file_level_budget(text, consts, limit_ms)
     segs = segments(text)
+    file_budget, file_unresolvable = file_level_budget(text, segs, consts, limit_ms)
     findings = []
     for line, value in long_waits(text, limit_ms):
         owner = next((s for s in reversed(segs) if s.start_line <= line), None)
@@ -335,9 +319,38 @@ SELF_TEST_CASES = {
         "});\n",
         1,
     ),
+    "before-each-testinfo": (
+        "test.beforeEach(async ({ page }, testInfo) => {\n"
+        "\ttestInfo.setTimeout(90_000);\n"
+        "});\n"
+        "test('a', async () => {\n" + POLL + "});\n",
+        0,
+    ),
+    "before-each-boundary": (
+        "test.beforeEach(async () => {\n"
+        "\tawait setup();\n"
+        "});\n"
+        "test('a', async () => {\n"
+        "\ttest.setTimeout(90_000);\n"
+        "});\n"
+        "test('b', async () => {\n" + POLL + "});\n",
+        1,
+    ),
+    "before-each-raised": (
+        "test.beforeEach(async () => {\n"
+        "\ttest.setTimeout(90_000);\n"
+        "});\n"
+        "test('a', async () => {\n" + POLL + "});\n",
+        0,
+    ),
+    "slow-conditional": (
+        "test('a', async () => {\n"
+        "\ttest.slow(browserName === 'webkit');\n" + POLL + "});\n",
+        1,
+    ),
 }
 
-UNRESOLVABLE_CASES = ("unresolvable", "configure-unresolvable")
+UNRESOLVABLE_CASES = ("unresolvable", "configure-unresolvable", "slow-conditional")
 
 
 def self_test() -> int:
