@@ -1508,116 +1508,30 @@ func TestMigration000048RequestsSettings(t *testing.T) {
 	assertTableExists(t, st, "requests_settings", true)
 }
 
-// TestMigration000055QueueFixableBlocklist verifies migration 000055 sets import_fixable blocklist
-// false to true, leaves blocklist true and missing keys unchanged, preserves other rules,
-// and enables 25 h give-up removals with Blocklist=true through the real store path.
-func TestMigration000055QueueFixableBlocklist(t *testing.T) {
-	t.Parallel()
-	st := storetest.New(t)
-	m := storetest.Migrator(t, st)
-	ctx := t.Context()
-	now := time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
-
-	stepDownToVersion(t, m, 54)
-
-	instA := uuid.New()
-	instB := uuid.New()
-	instC := uuid.New()
-	instD := uuid.New()
-	const insInst = `INSERT INTO instances (id, kind, name, base_url, api_key_enc, enabled, source, created_at, updated_at) VALUES ($1, $2, $3, $4, '\x0102', true, 'manual', $5, $5)`
-	for _, inst := range []struct {
-		id   uuid.UUID
-		name string
-	}{
-		{instA, "inst-fixable-false"},
-		{instB, "inst-fixable-true"},
-		{instC, "inst-no-fixable"},
-		{instD, "inst-failed-false"},
-	} {
-		if _, err := st.Pool().Exec(ctx, insInst, inst.id, "lidarr", inst.name, "http://127.0.0.1:8686", now); err != nil {
-			t.Fatalf("insert instance %s: %v", inst.name, err)
-		}
+func seedMigration000055Policy(
+	ctx context.Context, t *testing.T, st *store.Store, id uuid.UUID, name, rules string, now time.Time,
+) {
+	t.Helper()
+	const insInst = `INSERT INTO instances (
+		id, kind, name, base_url, api_key_enc, enabled, source, created_at, updated_at
+	) VALUES ($1, $2, $3, $4, '\x0102', true, 'manual', $5, $5)`
+	if _, err := st.Pool().Exec(ctx, insInst, id, "lidarr", name, "http://127.0.0.1:8686", now); err != nil {
+		t.Fatalf("insert instance %s: %v", name, err)
 	}
-
 	const insPolicy = `INSERT INTO queue_policies (
 		instance_id, enabled, rules, grace_s, min_bytes_per_second, max_removals_per_sweep, updated_at
 	) VALUES ($1, true, $2::jsonb, 900, 0, 10, $3)`
+	if _, err := st.Pool().Exec(ctx, insPolicy, id, rules, now); err != nil {
+		t.Fatalf("insert policy %s: %v", name, err)
+	}
+}
 
-	// (a) import_fixable blocklist false -> true after
-	const rulesA = `{"import_fixable": {"mode": "act", "threshold": 1, "blocklist": false}}`
-	if _, err := st.Pool().Exec(ctx, insPolicy, instA, rulesA, now); err != nil {
-		t.Fatalf("insert policy A: %v", err)
-	}
-
-	// (b) import_fixable blocklist true -> unchanged
-	const rulesB = `{"import_fixable": {"mode": "observe", "threshold": 2, "blocklist": true}}`
-	if _, err := st.Pool().Exec(ctx, insPolicy, instB, rulesB, now); err != nil {
-		t.Fatalf("insert policy B: %v", err)
-	}
-
-	// (c) no import_fixable key -> unchanged
-	const rulesC = `{"stalled": {"mode": "observe", "threshold": 1}}`
-	if _, err := st.Pool().Exec(ctx, insPolicy, instC, rulesC, now); err != nil {
-		t.Fatalf("insert policy C: %v", err)
-	}
-
-	// (d) other rule (e.g. failed) blocklist false -> stays false (boundary: migration touches only import_fixable)
-	const rulesD = `{"failed": {"mode": "act", "threshold": 3, "blocklist": false}}`
-	if _, err := st.Pool().Exec(ctx, insPolicy, instD, rulesD, now); err != nil {
-		t.Fatalf("insert policy D: %v", err)
-	}
-
-	if err := m.Steps(1); err != nil {
-		t.Fatalf("Steps(1) up to 55: %v", err)
-	}
-
-	// (a) import_fixable blocklist false -> true
-	var valA bool
-	if err := st.Pool().QueryRow(ctx, "SELECT (rules->'import_fixable'->'blocklist')::bool FROM queue_policies WHERE instance_id = $1", instA).Scan(&valA); err != nil {
-		t.Fatalf("query policy A blocklist: %v", err)
-	}
-	if !valA {
-		t.Errorf("policy A import_fixable blocklist = false, want true")
-	}
-	var modeA string
-	var threshA int
-	if err := st.Pool().QueryRow(ctx, "SELECT rules->'import_fixable'->>'mode', (rules->'import_fixable'->>'threshold')::int FROM queue_policies WHERE instance_id = $1", instA).Scan(&modeA, &threshA); err != nil {
-		t.Fatalf("query policy A mode/threshold: %v", err)
-	}
-	if modeA != "act" || threshA != 1 {
-		t.Errorf("policy A mode/thresh = %s/%d, want act/1", modeA, threshA)
-	}
-
-	// (b) import_fixable blocklist true -> unchanged
-	var valB bool
-	if err := st.Pool().QueryRow(ctx, "SELECT (rules->'import_fixable'->'blocklist')::bool FROM queue_policies WHERE instance_id = $1", instB).Scan(&valB); err != nil {
-		t.Fatalf("query policy B blocklist: %v", err)
-	}
-	if !valB {
-		t.Errorf("policy B import_fixable blocklist = false, want true")
-	}
-
-	// (c) no import_fixable key -> unchanged
-	var hasFixableC bool
-	if err := st.Pool().QueryRow(ctx, "SELECT rules ? 'import_fixable' FROM queue_policies WHERE instance_id = $1", instC).Scan(&hasFixableC); err != nil {
-		t.Fatalf("query policy C rules: %v", err)
-	}
-	if hasFixableC {
-		t.Errorf("policy C has import_fixable key, want none")
-	}
-
-	// (d) other rule (failed) blocklist false -> stays false
-	var valD bool
-	if err := st.Pool().QueryRow(ctx, "SELECT (rules->'failed'->'blocklist')::bool FROM queue_policies WHERE instance_id = $1", instD).Scan(&valD); err != nil {
-		t.Fatalf("query policy D failed blocklist: %v", err)
-	}
-	if valD {
-		t.Errorf("policy D failed blocklist = true, want false")
-	}
-
-	// Step 3 sweep test: stored policy reaches queue.Sweep through the real store path
+func assertMigration000055Sweep(
+	ctx context.Context, t *testing.T, st *store.Store, instID uuid.UUID, now time.Time,
+) {
+	t.Helper()
 	qStore := queue.NewStore(st, clock.NewFake())
-	settingsA, err := qStore.Settings(ctx, instA)
+	settingsA, err := qStore.Settings(ctx, instID)
 	if err != nil {
 		t.Fatalf("qStore.Settings(instA) error = %v", err)
 	}
@@ -1662,11 +1576,102 @@ func TestMigration000055QueueFixableBlocklist(t *testing.T) {
 	if !d.Research {
 		t.Errorf("decision Research = false, want true")
 	}
+}
 
+func assertMigration000055RoundTrip(t *testing.T, m *dbmigrate.Migrator) {
+	t.Helper()
 	if err := m.Steps(-1); err != nil {
 		t.Fatalf("Steps(-1) down to 54: %v", err)
 	}
 	if err := m.Steps(1); err != nil {
 		t.Fatalf("Steps(1) back up to 55: %v", err)
 	}
+}
+
+func migration000055Cases() []struct {
+	name  string
+	rules string
+	check string
+	want  bool
+} {
+	return []struct {
+		name  string
+		rules string
+		check string
+		want  bool
+	}{
+		{
+			name:  "import_fixable blocklist false to true",
+			rules: `{"import_fixable": {"mode": "act", "threshold": 1, "blocklist": false}}`,
+			check: "SELECT (rules->'import_fixable'->'blocklist')::bool FROM queue_policies WHERE instance_id = $1",
+			want:  true,
+		},
+		{
+			name:  "import_fixable mode and threshold preserved",
+			rules: `{"import_fixable": {"mode": "act", "threshold": 1, "blocklist": false}}`,
+			check: "SELECT rules->'import_fixable'->>'mode' = 'act' AND (rules->'import_fixable'->>'threshold')::int = 1 FROM queue_policies WHERE instance_id = $1",
+			want:  true,
+		},
+		{
+			name:  "import_fixable blocklist true stays true",
+			rules: `{"import_fixable": {"mode": "observe", "threshold": 2, "blocklist": true}}`,
+			check: "SELECT (rules->'import_fixable'->'blocklist')::bool FROM queue_policies WHERE instance_id = $1",
+			want:  true,
+		},
+		{
+			name:  "no import_fixable key stays absent",
+			rules: `{"stalled": {"mode": "observe", "threshold": 1}}`,
+			check: "SELECT rules ? 'import_fixable' FROM queue_policies WHERE instance_id = $1",
+			want:  false,
+		},
+		{
+			name:  "failed blocklist false stays false",
+			rules: `{"failed": {"mode": "act", "threshold": 3, "blocklist": false}}`,
+			check: "SELECT (rules->'failed'->'blocklist')::bool FROM queue_policies WHERE instance_id = $1",
+			want:  false,
+		},
+	}
+}
+
+// TestMigration000055QueueFixableBlocklist verifies migration 000055 sets import_fixable blocklist
+// false to true, leaves blocklist true and missing keys unchanged, preserves other rules,
+// and enables 25 h give-up removals with Blocklist=true through the real store path.
+//
+//nolint:tparallel // sequential subtests share migrator state
+func TestMigration000055QueueFixableBlocklist(t *testing.T) {
+	t.Parallel()
+	st := storetest.New(t)
+	m := storetest.Migrator(t, st)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	now := time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
+
+	stepDownToVersion(t, m, 54)
+
+	cases := migration000055Cases()
+	ids := make([]uuid.UUID, len(cases))
+	for i, tc := range cases {
+		ids[i] = uuid.New()
+		seedMigration000055Policy(ctx, t, st, ids[i], tc.name, tc.rules, now)
+	}
+
+	if err := m.Steps(1); err != nil {
+		t.Fatalf("Steps(1) up to 55: %v", err)
+	}
+
+	//nolint:paralleltest // sequential subtests share migrator state
+	for i, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var got bool
+			if err := st.Pool().QueryRow(ctx, tc.check, ids[i]).Scan(&got); err != nil {
+				t.Fatalf("query %s: %v", tc.name, err)
+			}
+			if got != tc.want {
+				t.Errorf("%s got %t, want %t", tc.name, got, tc.want)
+			}
+		})
+	}
+
+	assertMigration000055Sweep(ctx, t, st, ids[0], now)
+	assertMigration000055RoundTrip(t, m)
 }
