@@ -65,6 +65,9 @@ ALLOWED_RELEASE_COMMANDS = frozenset(
         "verify-asset",
     )
 )
+# Values Go's strconv.ParseBool accepts (pkg.go.dev/strconv#ParseBool); gh parses --draft with it.
+PARSEBOOL_TRUE = frozenset(("1", "t", "T", "TRUE", "true", "True"))
+PARSEBOOL_FALSE = frozenset(("0", "f", "F", "FALSE", "false", "False"))
 PYTHON_COMMAND_CALLS = frozenset(
     ("run", "call", "check_call", "check_output", "Popen", "system", "popen")
 )
@@ -251,18 +254,37 @@ def option_tokens(tokens: list[str]) -> list[str]:
     return flags
 
 
+def draft_state(flags: list[str]) -> bool | None:
+    """Return the last --draft value as gh parses it (strconv.ParseBool), None if absent.
+
+    An unparsable value raises CheckError: gh would refuse it, and the check fails closed.
+    """
+    state = None
+    for flag in flags[:MAX_TOKENS]:
+        if flag in ("--draft", "-d"):
+            state = True
+            continue
+        name, sep, value = flag.partition("=")
+        if not sep or name not in ("--draft", "-d"):
+            continue
+        if value in PARSEBOOL_TRUE:
+            state = True
+        elif value in PARSEBOOL_FALSE:
+            state = False
+        else:
+            raise CheckError(f"--draft value {value!r} is not a boolean gh accepts")
+    return state
+
+
 def gh_release_reason(args: list[str]) -> str | None:
     """Allow known gh release operations, counting create/edit publication."""
     sub = args[0] if args else ""
     if sub not in ALLOWED_RELEASE_COMMANDS:
         return f"runs 'gh release {sub}' (not on the allow-list)"
-    flags = option_tokens(args[1:])
-    if sub == "create" and (
-        "--draft=false" in flags
-        or not any(flag in flags for flag in ("--draft", "--draft=true", "-d"))
-    ):
+    draft = draft_state(option_tokens(args[1:]))
+    if sub == "create" and draft is not True:
         return "runs 'gh release create' without --draft"
-    if sub == "edit" and "--draft=false" in flags:
+    if sub == "edit" and draft is False:
         return "runs 'gh release edit --draft=false'"
     return None
 
@@ -347,7 +369,7 @@ def command_publish_reason(tokens: list[str]) -> str | None:
         if token not in ("gh", "curl", "wget"):
             continue
         args = command_arguments(tokens, index)
-        if token == "gh":
+        if token == "gh":  # nosec B105 -- command name, not a password
             reason = gh_command_reason(args)
         else:
             reason = None
@@ -908,6 +930,13 @@ COMMAND_CASES = (
     ),
     ("draft long flag", "gh release create v1 --draft", 0, "ok"),
     ("draft true flag", "gh release create v1 --draft=true", 0, "ok"),
+    ("draft one flag", "gh release create v1 --draft=1", 0, "ok"),
+    ("draft zero flag", "gh release create v1 --draft --draft=0", 3, "without --draft"),
+    ("draft False flag", "gh release create v1 --draft=False", 3, "without --draft"),
+    ("edit draft zero", "gh release edit v1 --draft=0", 3, "edit --draft=false"),
+    ("edit draft F", "gh release edit v1 --draft=F", 3, "edit --draft=false"),
+    ("edit draft one", "gh release edit v1 --draft=1", 0, "ok"),
+    ("draft unparsable", "gh release create v1 --draft=yes", 1, "not a boolean"),
     ("draft short flag", "gh release create v1 -d", 0, "ok"),
     (
         "draft false wins",
