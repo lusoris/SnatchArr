@@ -10,6 +10,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -158,6 +159,150 @@ func TestHTTPClient_Indexers(t *testing.T) {
 	// Indexer 3: unlimited
 	if indexers[2].ID != 3 || !indexers[2].Enabled || indexers[2].QueryLimit != nil || indexers[2].GrabLimit != nil {
 		t.Errorf("Indexer 2 unexpected: %+v", indexers[2])
+	}
+}
+
+// TestHTTPClient_Indexers_Table verifies mapping of indexer metadata, tags,
+// and capabilities (supportsRawSearch and categories).
+func TestHTTPClient_Indexers_Table(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	tests := []struct {
+		name                  string
+		payload               []map[string]any
+		wantLanguage          string
+		wantPrivacy           string
+		wantProtocol          string
+		wantTags              []int
+		wantSupportsRawSearch bool
+		wantCategories        []int
+		expectEmptyCategories bool
+		expectEmptyTags       bool
+	}{
+		{
+			name: "positive indexer with capabilities and tags",
+			payload: []map[string]any{
+				{
+					"id":       1,
+					"name":     "HD-Space",
+					"enable":   true,
+					"language": "de-DE",
+					"privacy":  "private",
+					"protocol": "torrent",
+					"tags":     []any{3, 7},
+					"capabilities": map[string]any{
+						"supportsRawSearch": true,
+						"categories": []map[string]any{
+							{"id": 2000},
+							{"id": 5000},
+						},
+					},
+					"fields": []map[string]any{},
+				},
+			},
+			wantLanguage:          "de-DE",
+			wantPrivacy:           "private",
+			wantProtocol:          "torrent",
+			wantTags:              []int{3, 7},
+			wantSupportsRawSearch: true,
+			wantCategories:        []int{2000, 5000},
+		},
+		{
+			name: "negative capabilities null and tags absent",
+			payload: []map[string]any{
+				{
+					"id":           2,
+					"name":         "Null Caps",
+					"enable":       true,
+					"capabilities": nil,
+					"fields":       []map[string]any{},
+				},
+			},
+			wantSupportsRawSearch: false,
+			expectEmptyCategories: true,
+			expectEmptyTags:       true,
+		},
+		{
+			name: "negative capabilities absent",
+			payload: []map[string]any{
+				{
+					"id":     3,
+					"name":   "Absent Caps",
+					"enable": true,
+					"fields": []map[string]any{},
+				},
+			},
+			wantSupportsRawSearch: false,
+			expectEmptyCategories: true,
+			expectEmptyTags:       true,
+		},
+		{
+			name: "boundary empty language string kept empty",
+			payload: []map[string]any{
+				{
+					"id":       4,
+					"name":     "Empty Lang",
+					"enable":   true,
+					"language": "",
+					"fields":   []map[string]any{},
+				},
+			},
+			wantLanguage:          "",
+			wantSupportsRawSearch: false,
+			expectEmptyCategories: true,
+			expectEmptyTags:       true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(tc.payload)
+			}))
+			t.Cleanup(srv.Close)
+
+			c := prowlarrclient.New(5*time.Second, "SnatchArr-test")
+			got, err := c.Indexers(ctx, srv.URL, "any")
+			if err != nil {
+				t.Fatalf("Indexers() err = %v", err)
+			}
+			if len(got) != 1 {
+				t.Fatalf("Indexers() len = %d, want 1", len(got))
+			}
+			idx := got[0]
+			if idx.Language != tc.wantLanguage {
+				t.Errorf("Language = %q, want %q", idx.Language, tc.wantLanguage)
+			}
+			if idx.Privacy != tc.wantPrivacy {
+				t.Errorf("Privacy = %q, want %q", idx.Privacy, tc.wantPrivacy)
+			}
+			if idx.Protocol != tc.wantProtocol {
+				t.Errorf("Protocol = %q, want %q", idx.Protocol, tc.wantProtocol)
+			}
+			if idx.SupportsRawSearch != tc.wantSupportsRawSearch {
+				t.Errorf("SupportsRawSearch = %v, want %v", idx.SupportsRawSearch, tc.wantSupportsRawSearch)
+			}
+			if tc.expectEmptyCategories {
+				if idx.Categories == nil {
+					t.Error("Categories is nil, want empty non-nil slice")
+				}
+				if len(idx.Categories) != 0 {
+					t.Errorf("len(Categories) = %d, want 0", len(idx.Categories))
+				}
+			} else if !slices.Equal(idx.Categories, tc.wantCategories) {
+				t.Errorf("Categories = %v, want %v", idx.Categories, tc.wantCategories)
+			}
+			if tc.expectEmptyTags {
+				if len(idx.Tags) != 0 {
+					t.Errorf("len(Tags) = %d, want 0", len(idx.Tags))
+				}
+			} else if !slices.Equal(idx.Tags, tc.wantTags) {
+				t.Errorf("Tags = %v, want %v", idx.Tags, tc.wantTags)
+			}
+		})
 	}
 }
 
@@ -434,6 +579,20 @@ func TestHTTPClient_Grab(t *testing.T) {
 			wantReq:    true,
 		},
 		{
+			name: "boundary grab sends magnetUrl and protocol in POST body",
+			release: prowlarrclient.Release{
+				GUID:      "release-guid-boundary",
+				IndexerID: 2,
+				Title:     "Boundary Release",
+				MagnetURL: "magnet:?xt=urn:btih:feedbeef",
+				Protocol:  "torrent",
+			},
+			key:        "prowl-key",
+			serverCode: http.StatusOK,
+			wantErr:    false,
+			wantReq:    true,
+		},
+		{
 			name: "negative empty guid refused before HTTP call",
 			release: prowlarrclient.Release{
 				GUID:      "",
@@ -553,6 +712,18 @@ func TestHTTPClient_Grab(t *testing.T) {
 				if int(idxID) != tc.release.IndexerID {
 					t.Errorf("body indexerId = %v, want %d", req.body["indexerId"], tc.release.IndexerID)
 				}
+				if tc.release.MagnetURL != "" {
+					mag, _ := req.body["magnetUrl"].(string)
+					if mag != tc.release.MagnetURL {
+						t.Errorf("body magnetUrl = %v, want %q", req.body["magnetUrl"], tc.release.MagnetURL)
+					}
+				}
+				if tc.release.Protocol != "" {
+					proto, _ := req.body["protocol"].(string)
+					if proto != tc.release.Protocol {
+						t.Errorf("body protocol = %v, want %q", req.body["protocol"], tc.release.Protocol)
+					}
+				}
 			}
 		})
 	}
@@ -597,6 +768,12 @@ func TestHTTPClient_Search(t *testing.T) {
 					"downloadUrl": "http://prowlarr/dl/1",
 					"infoHash":    "abc1",
 					"categories":  []map[string]any{{"id": 1000, "name": "Console"}},
+					"magnetUrl":   "magnet:?xt=urn:btih:abc1",
+					"protocol":    "torrent",
+					"publishDate": "2026-10-15T10:00:00Z",
+					"imdbId":      123456,
+					"tmdbId":      789,
+					"tvdbId":      101112,
 				},
 				{
 					"guid":        "guid-2",
@@ -622,6 +799,34 @@ func TestHTTPClient_Search(t *testing.T) {
 			releases:   []map[string]any{},
 			wantErr:    false,
 			wantCount:  0,
+		},
+		{
+			name: "boundary release with tvdbId 0 and imdbId 0 and magnetUrl and protocol mapped",
+			q: prowlarrclient.SearchQuery{
+				Query: "boundary-release",
+			},
+			key:        "prowl-key",
+			serverCode: http.StatusOK,
+			releases: []map[string]any{
+				{
+					"guid":        "guid-boundary",
+					"indexerId":   3,
+					"title":       "Boundary Release",
+					"size":        1024,
+					"indexer":     "Tracker",
+					"downloadUrl": "http://prowlarr/dl/3",
+					"infoHash":    "abc3",
+					"categories":  []map[string]any{},
+					"magnetUrl":   "magnet:?xt=urn:btih:boundary",
+					"protocol":    "torrent",
+					"publishDate": "2026-10-16T00:00:00Z",
+					"imdbId":      0,
+					"tmdbId":      0,
+					"tvdbId":      0,
+				},
+			},
+			wantErr:   false,
+			wantCount: 1,
 		},
 		{
 			name: "negative search 500 error",
@@ -672,12 +877,28 @@ func TestHTTPClient_Search(t *testing.T) {
 				if tc.q.Query != "" && recorded.query != tc.q.Query {
 					t.Errorf("query = %q, want %q", recorded.query, tc.q.Query)
 				}
-				if len(rels) > 0 {
+				if len(rels) > 0 && tc.name == "positive search returns mapped releases" {
 					if rels[0].GUID != "guid-1" || rels[0].IndexerID != 1 || rels[0].Title != "Chrono Trigger SNES" {
 						t.Errorf("rels[0] mismatch: %+v", rels[0])
 					}
 					if len(rels[0].Categories) != 1 || rels[0].Categories[0] != 1000 {
 						t.Errorf("rels[0].Categories mismatch: %+v", rels[0].Categories)
+					}
+					if rels[0].MagnetURL != "magnet:?xt=urn:btih:abc1" || rels[0].Protocol != "torrent" ||
+						rels[0].PublishDate != "2026-10-15T10:00:00Z" || rels[0].ImdbID != 123456 ||
+						rels[0].TmdbID != 789 || rels[0].TvdbID != 101112 {
+						t.Errorf("rels[0] new fields mismatch: %+v", rels[0])
+					}
+				}
+				if len(rels) > 0 && tc.name == "boundary release with tvdbId 0 and imdbId 0 and magnetUrl and protocol mapped" {
+					if rels[0].TvdbID != 0 || rels[0].ImdbID != 0 || rels[0].TmdbID != 0 {
+						t.Errorf("rels[0] expected 0 IDs, got tvdb=%d imdb=%d tmdb=%d", rels[0].TvdbID, rels[0].ImdbID, rels[0].TmdbID)
+					}
+					if rels[0].MagnetURL != "magnet:?xt=urn:btih:boundary" || rels[0].Protocol != "torrent" {
+						t.Errorf("rels[0] magnet/protocol mismatch: magnet=%q protocol=%q", rels[0].MagnetURL, rels[0].Protocol)
+					}
+					if rels[0].PublishDate != "2026-10-16T00:00:00Z" {
+						t.Errorf("rels[0] publishDate mismatch: %q", rels[0].PublishDate)
 					}
 				}
 			}
