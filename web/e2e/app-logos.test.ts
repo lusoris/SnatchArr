@@ -41,6 +41,7 @@ async function mockLogoApi(page: Page): Promise<void> {
 					max_active: 0,
 					max_queued: 0,
 					bandwidth_budget_bps: 0,
+					priority_mode: 'observe',
 					created_at: stamp,
 					updated_at: stamp
 				}))

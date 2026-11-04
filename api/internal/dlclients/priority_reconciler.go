@@ -344,8 +344,7 @@ func (r *Reconciler) executeOrderWrites(
 			hashes = append(hashes, id)
 		}
 	}
-	for i := len(hashes) - 1; i >= 0; i-- {
-		hash := hashes[i]
+	for _, hash := range slices.Backward(hashes) {
 		targetID := itemClients[hash]
 		callCtx, cancel := context.WithTimeout(ctx, ObserveTimeout)
 		err := r.writer.MoveToTop(callCtx, client, secret, []string{hash})

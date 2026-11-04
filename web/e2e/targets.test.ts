@@ -136,6 +136,7 @@ const dlClient = {
 	max_active: 5,
 	max_queued: 0,
 	bandwidth_budget_bps: 0,
+	priority_mode: 'observe',
 	created_at: '2026-01-01T00:00:00Z',
 	updated_at: '2026-01-01T00:00:00Z'
 };

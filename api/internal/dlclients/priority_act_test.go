@@ -137,8 +137,8 @@ func TestPriorityReconcilerGroupModeRule_Mixed(t *testing.T) {
 	}
 	obs := PriorityObservation{
 		Items: []PriorityItem{
-			{Category: "movies", DownloadQueueItem: domain.DownloadQueueItem{ID: "m1", State: domain.DownloadItemQueued, Priority: 1}},
-			{Category: "tv", DownloadQueueItem: domain.DownloadQueueItem{ID: "t1", State: domain.DownloadItemQueued, Priority: 2}},
+			{Category: "movies", ID: "m1", State: domain.DownloadItemQueued, Priority: 1},
+			{Category: "tv", ID: "t1", State: domain.DownloadItemQueued, Priority: 2},
 		},
 	}
 	writer := &fakePriorityWriter{}
@@ -173,8 +173,8 @@ func TestPriorityReconcilerGroupModeRule_AllAct(t *testing.T) {
 	}
 	obs := PriorityObservation{
 		Items: []PriorityItem{
-			{Category: "movies", DownloadQueueItem: domain.DownloadQueueItem{ID: "m1", State: domain.DownloadItemQueued, Priority: 1}},
-			{Category: "tv", DownloadQueueItem: domain.DownloadQueueItem{ID: "t1", State: domain.DownloadItemQueued, Priority: 2}},
+			{Category: "movies", ID: "m1", State: domain.DownloadItemQueued, Priority: 1},
+			{Category: "tv", ID: "t1", State: domain.DownloadItemQueued, Priority: 2},
 		},
 	}
 	writer := &fakePriorityWriter{}
@@ -212,8 +212,8 @@ func TestPriorityReconcilerObserveZeroWrites(t *testing.T) {
 			}
 			obs := PriorityObservation{
 				Items: []PriorityItem{
-					{Category: "movies", DownloadQueueItem: domain.DownloadQueueItem{ID: "item1", State: domain.DownloadItemQueued, Priority: 1}},
-					{Category: "tv", DownloadQueueItem: domain.DownloadQueueItem{ID: "item2", State: domain.DownloadItemQueued, Priority: 2}},
+					{Category: "movies", ID: "item1", State: domain.DownloadItemQueued, Priority: 1},
+					{Category: "tv", ID: "item2", State: domain.DownloadItemQueued, Priority: 2},
 				},
 			}
 			writer := &fakePriorityWriter{}
@@ -245,10 +245,10 @@ func TestPriorityReconcilerActQBit(t *testing.T) {
 	}
 	obs := PriorityObservation{
 		Items: []PriorityItem{
-			{Category: "movies", DownloadQueueItem: domain.DownloadQueueItem{ID: "movie-queued", State: domain.DownloadItemQueued, Priority: 1}},
-			{Category: "tv", DownloadQueueItem: domain.DownloadQueueItem{ID: "tv-queued", State: domain.DownloadItemQueued, Priority: 2}},
-			{Category: "other", DownloadQueueItem: domain.DownloadQueueItem{ID: "unattributed-queued", State: domain.DownloadItemQueued, Priority: 3}},
-			{Category: "movies", DownloadQueueItem: domain.DownloadQueueItem{ID: "movie-active", State: domain.DownloadItemActive, Priority: 0}},
+			{Category: "movies", ID: "movie-queued", State: domain.DownloadItemQueued, Priority: 1},
+			{Category: "tv", ID: "tv-queued", State: domain.DownloadItemQueued, Priority: 2},
+			{Category: "other", ID: "unattributed-queued", State: domain.DownloadItemQueued, Priority: 3},
+			{Category: "movies", ID: "movie-active", State: domain.DownloadItemActive, Priority: 0},
 		},
 	}
 	writer := &fakePriorityWriter{}
@@ -327,10 +327,10 @@ func TestPriorityReconcilerActNZBGetSAB(t *testing.T) {
 			}
 			obs := PriorityObservation{
 				Items: []PriorityItem{
-					{Category: "movies", DownloadQueueItem: domain.DownloadQueueItem{ID: "item1", State: domain.DownloadItemQueued, Priority: tc.def}},
-					{Category: "movies", DownloadQueueItem: domain.DownloadQueueItem{ID: "item2", State: domain.DownloadItemQueued, Priority: tc.hand}},
-					{Category: "movies", DownloadQueueItem: domain.DownloadQueueItem{ID: "item3", State: domain.DownloadItemQueued, Priority: lastWritten}},
-					{Category: "tv", DownloadQueueItem: domain.DownloadQueueItem{ID: "item4", State: domain.DownloadItemQueued, Priority: tc.def}},
+					{Category: "movies", ID: "item1", State: domain.DownloadItemQueued, Priority: tc.def},
+					{Category: "movies", ID: "item2", State: domain.DownloadItemQueued, Priority: tc.hand},
+					{Category: "movies", ID: "item3", State: domain.DownloadItemQueued, Priority: lastWritten},
+					{Category: "tv", ID: "item4", State: domain.DownloadItemQueued, Priority: tc.def},
 				},
 			}
 			writer := &fakePriorityWriter{}
@@ -390,9 +390,9 @@ func TestPriorityReconcilerPauseResumeLifecycle(t *testing.T) {
 	writer := &fakePriorityWriter{}
 
 	currentItems := []PriorityItem{
-		{Category: "tv", DownloadQueueItem: domain.DownloadQueueItem{ID: "low", State: domain.DownloadItemActive}},
-		{Category: "movies", DownloadQueueItem: domain.DownloadQueueItem{ID: "high", State: domain.DownloadItemQueued}},
-		{Category: "tv", DownloadQueueItem: domain.DownloadQueueItem{ID: "user-paused", State: domain.DownloadItemPaused}},
+		{Category: "tv", ID: "low", State: domain.DownloadItemActive},
+		{Category: "movies", ID: "high", State: domain.DownloadItemQueued},
+		{Category: "tv", ID: "user-paused", State: domain.DownloadItemPaused},
 	}
 	obsFn := priorityObserverFunc(func(context.Context, domain.DownloadClient, string) (PriorityObservation, error) {
 		return PriorityObservation{Items: currentItems}, nil
@@ -409,9 +409,9 @@ func TestPriorityReconcilerPauseResumeLifecycle(t *testing.T) {
 
 	writer.calls = nil
 	currentItems = []PriorityItem{
-		{Category: "tv", DownloadQueueItem: domain.DownloadQueueItem{ID: "low", State: domain.DownloadItemPaused}},
-		{Category: "movies", DownloadQueueItem: domain.DownloadQueueItem{ID: "high", State: domain.DownloadItemActive}},
-		{Category: "tv", DownloadQueueItem: domain.DownloadQueueItem{ID: "user-paused", State: domain.DownloadItemPaused}},
+		{Category: "tv", ID: "low", State: domain.DownloadItemPaused},
+		{Category: "movies", ID: "high", State: domain.DownloadItemActive},
+		{Category: "tv", ID: "user-paused", State: domain.DownloadItemPaused},
 	}
 	if err := r.Tick(t.Context()); err != nil {
 		t.Fatal(err)
@@ -424,8 +424,8 @@ func TestPriorityReconcilerPauseResumeLifecycle(t *testing.T) {
 
 	writer.calls = nil
 	currentItems = []PriorityItem{
-		{Category: "tv", DownloadQueueItem: domain.DownloadQueueItem{ID: "low", State: domain.DownloadItemPaused}},
-		{Category: "tv", DownloadQueueItem: domain.DownloadQueueItem{ID: "user-paused", State: domain.DownloadItemPaused}},
+		{Category: "tv", ID: "low", State: domain.DownloadItemPaused},
+		{Category: "tv", ID: "user-paused", State: domain.DownloadItemPaused},
 	}
 	if err := r.Tick(t.Context()); err != nil {
 		t.Fatal(err)
@@ -455,9 +455,9 @@ func TestPriorityReconcilerWriteErrorMidPlan(t *testing.T) {
 	}
 	obs := PriorityObservation{
 		Items: []PriorityItem{
-			{Category: "movies", DownloadQueueItem: domain.DownloadQueueItem{ID: "m1", State: domain.DownloadItemQueued, Priority: 0}},
-			{Category: "movies", DownloadQueueItem: domain.DownloadQueueItem{ID: "m2", State: domain.DownloadItemActive, Priority: 0}},
-			{Category: "tv", DownloadQueueItem: domain.DownloadQueueItem{ID: "t1", State: domain.DownloadItemQueued, Priority: 0}},
+			{Category: "movies", ID: "m1", State: domain.DownloadItemQueued, Priority: 0},
+			{Category: "movies", ID: "m2", State: domain.DownloadItemActive, Priority: 0},
+			{Category: "tv", ID: "t1", State: domain.DownloadItemQueued, Priority: 0},
 		},
 	}
 	source := &prioritySourceFake{inputs: inputs}
@@ -518,7 +518,7 @@ func TestPriorityReconcilerOwnershipPrune(t *testing.T) {
 			}
 			var items []PriorityItem
 			if tc.listed {
-				items = []PriorityItem{{Category: "tv", DownloadQueueItem: domain.DownloadQueueItem{ID: "low", State: domain.DownloadItemPaused}}}
+				items = []PriorityItem{{Category: "tv", ID: "low", State: domain.DownloadItemPaused}}
 			}
 			obsFn := priorityObserverFunc(func(context.Context, domain.DownloadClient, string) (PriorityObservation, error) {
 				return PriorityObservation{Items: items}, nil
