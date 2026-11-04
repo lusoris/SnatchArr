@@ -145,6 +145,8 @@ func (h *HTTP) Indexers(ctx context.Context, baseURL, apiKey string) ([]Indexer,
 	return out, nil
 }
 
+// mapCapabilities returns the raw-search flag and the release category ids of an
+// indexer. An indexer without capabilities maps to false and an empty list.
 func mapCapabilities(caps *prowlarr.IndexerCapability) (bool, []int) {
 	if caps == nil {
 		return false, make([]int, 0)
@@ -152,6 +154,9 @@ func mapCapabilities(caps *prowlarr.IndexerCapability) (bool, []int) {
 	return caps.SupportsRawSearch, mapReleaseCategories(caps.Categories)
 }
 
+// parseIndexer maps one Prowlarr indexer record to Indexer. A missing enable flag
+// counts as enabled; query limit, grab limit and limits unit come from the
+// baseSettings fields when they parse as integers.
 func parseIndexer(idx indexerJSON) Indexer {
 	enabled := true
 	if idx.Enable != nil {

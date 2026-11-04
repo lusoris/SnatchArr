@@ -133,6 +133,8 @@ func TestHTTPClient_Status(t *testing.T) {
 	}
 }
 
+// TestHTTPClient_Indexers checks the query limit, grab limit and limits unit of a
+// day-limited, an hour-limited and an unlimited indexer.
 func TestHTTPClient_Indexers(t *testing.T) {
 	t.Parallel()
 	srv := fakeProwlarr(t)
@@ -550,6 +552,8 @@ func TestHTTPClient_InvalidShapes(t *testing.T) {
 	}
 }
 
+// TestHTTPClient_Grab checks the grab request body, with and without magnet link
+// and protocol, and that an invalid guid or indexer id or an error status fails.
 func TestHTTPClient_Grab(t *testing.T) {
 	t.Parallel()
 
@@ -729,6 +733,8 @@ func TestHTTPClient_Grab(t *testing.T) {
 	}
 }
 
+// TestHTTPClient_Search checks release mapping, an empty result, zero ids with
+// magnet link and protocol, and a server error.
 func TestHTTPClient_Search(t *testing.T) {
 	t.Parallel()
 
