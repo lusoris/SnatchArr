@@ -87,6 +87,12 @@ the charts up to 0.1.4 are signed only. 0.1.1 was rebuilt by hand from `main`: v
 tag it builds (`gh workflow run release.yml --ref v0.2.1 -f tag=v0.2.1`); the workflow
 refuses to start on any other ref.
 
+### Release notes closing claims
+
+Release pull requests also run `make release-closes-check` in the `release-e2e-map` CI job. After offline planted cases, `tools/ci/release_closes_check.py` checks linked or bare `closes #N` claims in the newest `CHANGELOG.md` version section against GitHub issue states (`--repository` or `GITHUB_REPOSITORY`; `--api-dir` for offline fixtures). Exit 0 means all claimed issues are closed or no claims exist; exit 3 lists each open issue with its changelog line and the commit that line links to; exit 1 means an input or API failure, including more than 500 closing claims.
+
+Cross-repository claims (`closes owner/repo#N` or links naming another GitHub repository) are checked against their own repository. The release workflow re-checks the tagged changelog at release time in case an issue was reopened after the pull request check. In the `release-e2e-map` job the step that holds the GitHub token is skipped for fork heads, because that job runs pull request code.
+
 ### Release dogfood gate
 
 Before the release workflow builds or pushes an artifact (`job dogfood-gate`, `.github/workflows/release-dogfood-gate.yml`), `tools/release/dogfood_gate.py` checks the release-please tag commit against `release-please-config.json`. The tag commit must have one parent, touch only the manifest, changelog and `extra-files` paths declared in `release-please-config.json`, and its first-parent commit on `main` must carry a newest commit status `snatcharr/dogfood=success`. Release refuses the tag otherwise.
