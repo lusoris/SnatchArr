@@ -1,5 +1,43 @@
 # Changelog
 
+## [0.8.1](https://github.com/lusoris/SnatchArr/compare/v0.8.0...v0.8.1) (2026-11-04)
+
+
+### Features
+
+* **dlclients:** add allow-listed priority and pause writers ([#992](https://github.com/lusoris/SnatchArr/issues/992)) ([bac0ff9](https://github.com/lusoris/SnatchArr/commit/bac0ff9d5eedc09d90677274e5954bdc87fdee7d))
+* **dlclients:** observe download-client priority plans read-only ([#974](https://github.com/lusoris/SnatchArr/issues/974)) ([a3be3da](https://github.com/lusoris/SnatchArr/commit/a3be3da89ebe53dc16ade7a5d02a6dedba996741))
+* **domain:** plan download-client priority, order and pause per ADR-0046 ([#971](https://github.com/lusoris/SnatchArr/issues/971)) ([cbb8628](https://github.com/lusoris/SnatchArr/commit/cbb862805f235727bfdf1887043e6787f8d80aaf))
+* **foreigntitle:** add German and French title rules, variants and rewrite ([#980](https://github.com/lusoris/SnatchArr/issues/980)) ([8f7e2cd](https://github.com/lusoris/SnatchArr/commit/8f7e2cd30b45fd367f5d0b89547eacf332be8909))
+* **prowlarr:** carry indexer language, privacy, tags and release ids ([#991](https://github.com/lusoris/SnatchArr/issues/991)) ([05b34da](https://github.com/lusoris/SnatchArr/commit/05b34da7dfd640844a9570f82e2d47fa053a236a))
+
+
+### Bug Fixes
+
+* **ci:** check the roadmap offline and refresh it by a bot pull request ([#964](https://github.com/lusoris/SnatchArr/issues/964)) ([7bb88ab](https://github.com/lusoris/SnatchArr/commit/7bb88ab6167ab5ccae589e0e61af969c76efcf24))
+* **deps:** update pulldown-cmark to 0.13.6 for RUSTSEC-2026-0433 ([#988](https://github.com/lusoris/SnatchArr/issues/988)) ([7b851c3](https://github.com/lusoris/SnatchArr/commit/7b851c37e949e02cac0b10163ce77901206fb21a))
+* **deps:** update sveltesentio ([#517](https://github.com/lusoris/SnatchArr/issues/517)) ([6e8ff97](https://github.com/lusoris/SnatchArr/commit/6e8ff9791e80c807862be555c227b34326560003))
+* **e2e:** accept an unchanged schema in the application upgrade test ([#960](https://github.com/lusoris/SnatchArr/issues/960)) ([5345cea](https://github.com/lusoris/SnatchArr/commit/5345cea100827c8a8b534d643187b54a8baa4119))
+* **queue:** remove import_fixable downloads after 24 h without import ([#989](https://github.com/lusoris/SnatchArr/issues/989)) ([9a0d12a](https://github.com/lusoris/SnatchArr/commit/9a0d12ac71d1d74f6a37eb002224a123a751e0f6))
+* **test:** cap api test package parallelism and bound upgrade cleanup ([#959](https://github.com/lusoris/SnatchArr/issues/959)) ([77e43ea](https://github.com/lusoris/SnatchArr/commit/77e43ea592aa0338d108d9239d8311030ab421da))
+
+
+### Refactoring
+
+* **ci:** share the test helpers of the tools/ci scripts ([#968](https://github.com/lusoris/SnatchArr/issues/968)) ([4a4b221](https://github.com/lusoris/SnatchArr/commit/4a4b2214578c6b3c332a7685985acd9efde76c09))
+* **e2e:** share stub-server, proxy and MCP helpers across feature tests ([#965](https://github.com/lusoris/SnatchArr/issues/965)) ([6d44efa](https://github.com/lusoris/SnatchArr/commit/6d44efa30ced3c89aeb63e64f075e18cb9272cd7))
+* **prowlarrclient:** read stats, statuses and applications through goenvoy typed calls ([#979](https://github.com/lusoris/SnatchArr/issues/979)) ([cf81a9c](https://github.com/lusoris/SnatchArr/commit/cf81a9cbad6867598663cc94c8ea3ce47245712a))
+
+
+### Documentation
+
+* **adr:** accept ADR-0046 download-client priority and pause control ([#966](https://github.com/lusoris/SnatchArr/issues/966)) ([3255c6b](https://github.com/lusoris/SnatchArr/commit/3255c6bc08131542ab99c168bd245b259449d93e))
+* **adr:** record the Jellyfin plugin move to jellysin/plugin-snatcharr ([#973](https://github.com/lusoris/SnatchArr/issues/973)) ([706a95d](https://github.com/lusoris/SnatchArr/commit/706a95dcbdc2f76f3ffd1e334403d0212c72d00a))
+* **dlclients:** document the priority writer and observer helpers ([#996](https://github.com/lusoris/SnatchArr/issues/996)) ([5878154](https://github.com/lusoris/SnatchArr/commit/5878154fe167f3b24a9e9a7f57038db65cc3722b))
+* **readme:** add Codacy grade and CodeRabbit review badges ([#976](https://github.com/lusoris/SnatchArr/issues/976)) ([f0d2396](https://github.com/lusoris/SnatchArr/commit/f0d2396dd48eee417f0aa951bf8eabe644a0fd35))
+* **roadmap:** generate the milestone table from the GitHub milestones ([#704](https://github.com/lusoris/SnatchArr/issues/704)) ([a281d1d](https://github.com/lusoris/SnatchArr/commit/a281d1d8219f1ebb13fb91993e1edc609a22cb87))
+* **roadmap:** record the 0.8.0 scope and the work moved to 0.9 ([#956](https://github.com/lusoris/SnatchArr/issues/956)) ([b3d3993](https://github.com/lusoris/SnatchArr/commit/b3d3993233e09a6f4132b64ec4b8773a2d4ec8a5))
+
 ## [0.8.0](https://github.com/lusoris/SnatchArr/compare/v0.7.1...v0.8.0) (2026-10-31)
 
 
