@@ -14,6 +14,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -21,6 +22,12 @@ import (
 	"github.com/golusoris/golusoris/core/clock"
 
 	"github.com/lusoris/SnatchArr/api/internal/domain"
+)
+
+const (
+	testHash40a = "0123456789abcdef0123456789abcdef01234567"
+	testHash40b = "abcdef0123456789abcdef0123456789abcdef01"
+	testHash64  = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 )
 
 type writerRecordedReq struct {
@@ -37,6 +44,7 @@ type writerFakeServer struct {
 	requests    []writerRecordedReq
 	failStatus  int
 	falseResult bool
+	failOnItem  string
 }
 
 func (s *writerFakeServer) record(r *http.Request) writerRecordedReq {
@@ -65,6 +73,7 @@ func (s *writerFakeServer) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	s.requests = append(s.requests, req)
 	fail := s.failStatus
 	falseRes := s.falseResult
+	failItem := s.failOnItem
 	s.mu.Unlock()
 
 	if fail > 0 {
@@ -77,6 +86,10 @@ func (s *writerFakeServer) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	case "/jsonrpc":
 		s.serveNZBGet(w, req, falseRes)
 	case "/api":
+		if failItem != "" && req.Query.Get("value") == failItem {
+			http.Error(w, "item error", http.StatusInternalServerError)
+			return
+		}
 		s.serveSABnzbd(w, req, falseRes)
 	case "/api/v2/auth/login":
 		fmt.Fprint(w, "Ok.")
@@ -150,14 +163,15 @@ func TestPriorityWriter_Positive(t *testing.T) {
 			name: "qbit top priority",
 			kind: domain.ClientQBittorrent,
 			call: func(ctx context.Context, g *Goenvoy, c domain.DownloadClient) error {
-				return g.MoveToTop(ctx, c, "", []string{"hash1", "hash2"})
+				return g.MoveToTop(ctx, c, "", []string{testHash40a, testHash40b})
 			},
 			wantPath:   "/api/v2/torrents/topPrio",
 			wantMethod: http.MethodPost,
 			verify: func(t *testing.T, req writerRecordedReq) {
 				t.Helper()
-				if got := req.Form.Get("hashes"); got != "hash1|hash2" {
-					t.Errorf("hashes form = %q, want 'hash1|hash2'", got)
+				wantHashes := testHash40a + "|" + testHash40b
+				if got := req.Form.Get("hashes"); got != wantHashes {
+					t.Errorf("hashes form = %q, want %q", got, wantHashes)
 				}
 			},
 		},
@@ -165,14 +179,15 @@ func TestPriorityWriter_Positive(t *testing.T) {
 			name: "qbit bottom priority",
 			kind: domain.ClientQBittorrent,
 			call: func(ctx context.Context, g *Goenvoy, c domain.DownloadClient) error {
-				return g.MoveToBottom(ctx, c, "", []string{"hash1", "hash2"})
+				return g.MoveToBottom(ctx, c, "", []string{testHash40a, testHash40b})
 			},
 			wantPath:   "/api/v2/torrents/bottomPrio",
 			wantMethod: http.MethodPost,
 			verify: func(t *testing.T, req writerRecordedReq) {
 				t.Helper()
-				if got := req.Form.Get("hashes"); got != "hash1|hash2" {
-					t.Errorf("hashes form = %q, want 'hash1|hash2'", got)
+				wantHashes := testHash40a + "|" + testHash40b
+				if got := req.Form.Get("hashes"); got != wantHashes {
+					t.Errorf("hashes form = %q, want %q", got, wantHashes)
 				}
 			},
 		},
@@ -180,14 +195,15 @@ func TestPriorityWriter_Positive(t *testing.T) {
 			name: "qbit pause items (stop torrents)",
 			kind: domain.ClientQBittorrent,
 			call: func(ctx context.Context, g *Goenvoy, c domain.DownloadClient) error {
-				return g.PauseItems(ctx, c, "", []string{"hash1", "hash2"})
+				return g.PauseItems(ctx, c, "", []string{testHash40a, testHash40b})
 			},
 			wantPath:   "/api/v2/torrents/stop",
 			wantMethod: http.MethodPost,
 			verify: func(t *testing.T, req writerRecordedReq) {
 				t.Helper()
-				if got := req.Form.Get("hashes"); got != "hash1|hash2" {
-					t.Errorf("hashes form = %q, want 'hash1|hash2'", got)
+				wantHashes := testHash40a + "|" + testHash40b
+				if got := req.Form.Get("hashes"); got != wantHashes {
+					t.Errorf("hashes form = %q, want %q", got, wantHashes)
 				}
 			},
 		},
@@ -195,14 +211,15 @@ func TestPriorityWriter_Positive(t *testing.T) {
 			name: "qbit resume items (start torrents)",
 			kind: domain.ClientQBittorrent,
 			call: func(ctx context.Context, g *Goenvoy, c domain.DownloadClient) error {
-				return g.ResumeItems(ctx, c, "", []string{"hash1", "hash2"})
+				return g.ResumeItems(ctx, c, "", []string{testHash40a, testHash40b})
 			},
 			wantPath:   "/api/v2/torrents/start",
 			wantMethod: http.MethodPost,
 			verify: func(t *testing.T, req writerRecordedReq) {
 				t.Helper()
-				if got := req.Form.Get("hashes"); got != "hash1|hash2" {
-					t.Errorf("hashes form = %q, want 'hash1|hash2'", got)
+				wantHashes := testHash40a + "|" + testHash40b
+				if got := req.Form.Get("hashes"); got != wantHashes {
+					t.Errorf("hashes form = %q, want %q", got, wantHashes)
 				}
 			},
 		},
@@ -274,6 +291,10 @@ func TestPriorityWriter_Positive(t *testing.T) {
 				if params[0] != "GroupSetPriority" || params[1] != "50" {
 					t.Errorf("unexpected command/param: %v, %v", params[0], params[1])
 				}
+				ids, ok := params[2].([]any)
+				if !ok || !slices.Equal(ids, []any{float64(10)}) {
+					t.Errorf("unexpected item IDs param: %v", params[2])
+				}
 			},
 		},
 		{
@@ -296,6 +317,10 @@ func TestPriorityWriter_Positive(t *testing.T) {
 				if params[0] != "GroupPause" || params[1] != "" {
 					t.Errorf("unexpected command/param: %v, %v", params[0], params[1])
 				}
+				ids, ok := params[2].([]any)
+				if !ok || !slices.Equal(ids, []any{float64(10), float64(20)}) {
+					t.Errorf("unexpected item IDs param: %v", params[2])
+				}
 			},
 		},
 		{
@@ -317,6 +342,10 @@ func TestPriorityWriter_Positive(t *testing.T) {
 				}
 				if params[0] != "GroupResume" || params[1] != "" {
 					t.Errorf("unexpected command/param: %v, %v", params[0], params[1])
+				}
+				ids, ok := params[2].([]any)
+				if !ok || !slices.Equal(ids, []any{float64(10), float64(20)}) {
+					t.Errorf("unexpected item IDs param: %v", params[2])
 				}
 			},
 		},
@@ -370,6 +399,174 @@ func TestPriorityWriter_Negative(t *testing.T) {
 			wantErr: domain.ErrInvalid,
 		},
 		{
+			name: "whitespace item ID in SetItemPriority nzbget",
+			kind: domain.ClientNZBGet,
+			call: func(ctx context.Context, g *Goenvoy, c domain.DownloadClient) error {
+				return g.SetItemPriority(ctx, c, "", "   ", 0)
+			},
+			wantErr: domain.ErrInvalid,
+		},
+		{
+			name: "tab item ID in SetItemPriority nzbget",
+			kind: domain.ClientNZBGet,
+			call: func(ctx context.Context, g *Goenvoy, c domain.DownloadClient) error {
+				return g.SetItemPriority(ctx, c, "", "\t", 0)
+			},
+			wantErr: domain.ErrInvalid,
+		},
+		{
+			name: "nzbget 0 item ID in SetItemPriority",
+			kind: domain.ClientNZBGet,
+			call: func(ctx context.Context, g *Goenvoy, c domain.DownloadClient) error {
+				return g.SetItemPriority(ctx, c, "", "0", 0)
+			},
+			wantErr: domain.ErrInvalid,
+		},
+		{
+			name: "nzbget negative item ID in SetItemPriority",
+			kind: domain.ClientNZBGet,
+			call: func(ctx context.Context, g *Goenvoy, c domain.DownloadClient) error {
+				return g.SetItemPriority(ctx, c, "", "-1", 0)
+			},
+			wantErr: domain.ErrInvalid,
+		},
+		{
+			name: "nzbget 0 item ID in PauseItems",
+			kind: domain.ClientNZBGet,
+			call: func(ctx context.Context, g *Goenvoy, c domain.DownloadClient) error {
+				return g.PauseItems(ctx, c, "", []string{"0"})
+			},
+			wantErr: domain.ErrInvalid,
+		},
+		{
+			name: "nzbget negative item ID in ResumeItems",
+			kind: domain.ClientNZBGet,
+			call: func(ctx context.Context, g *Goenvoy, c domain.DownloadClient) error {
+				return g.ResumeItems(ctx, c, "", []string{"-1"})
+			},
+			wantErr: domain.ErrInvalid,
+		},
+		{
+			name: "nzbget whitespace item ID in PauseItems",
+			kind: domain.ClientNZBGet,
+			call: func(ctx context.Context, g *Goenvoy, c domain.DownloadClient) error {
+				return g.PauseItems(ctx, c, "", []string{" "})
+			},
+			wantErr: domain.ErrInvalid,
+		},
+		{
+			name: "nzbget tab item ID in PauseItems",
+			kind: domain.ClientNZBGet,
+			call: func(ctx context.Context, g *Goenvoy, c domain.DownloadClient) error {
+				return g.PauseItems(ctx, c, "", []string{"\t"})
+			},
+			wantErr: domain.ErrInvalid,
+		},
+		{
+			name: "whitespace item ID in SetItemPriority sabnzbd",
+			kind: domain.ClientSABnzbd,
+			call: func(ctx context.Context, g *Goenvoy, c domain.DownloadClient) error {
+				return g.SetItemPriority(ctx, c, "", " ", 0)
+			},
+			wantErr: domain.ErrInvalid,
+		},
+		{
+			name: "tab item ID in SetItemPriority sabnzbd",
+			kind: domain.ClientSABnzbd,
+			call: func(ctx context.Context, g *Goenvoy, c domain.DownloadClient) error {
+				return g.SetItemPriority(ctx, c, "", "\t", 0)
+			},
+			wantErr: domain.ErrInvalid,
+		},
+		{
+			name: "sabnzbd whitespace item ID in PauseItems",
+			kind: domain.ClientSABnzbd,
+			call: func(ctx context.Context, g *Goenvoy, c domain.DownloadClient) error {
+				return g.PauseItems(ctx, c, "", []string{" "})
+			},
+			wantErr: domain.ErrInvalid,
+		},
+		{
+			name: "sabnzbd tab item ID in PauseItems",
+			kind: domain.ClientSABnzbd,
+			call: func(ctx context.Context, g *Goenvoy, c domain.DownloadClient) error {
+				return g.PauseItems(ctx, c, "", []string{"\t"})
+			},
+			wantErr: domain.ErrInvalid,
+		},
+		{
+			name: "sabnzbd space within item ID in PauseItems",
+			kind: domain.ClientSABnzbd,
+			call: func(ctx context.Context, g *Goenvoy, c domain.DownloadClient) error {
+				return g.PauseItems(ctx, c, "", []string{"a b"})
+			},
+			wantErr: domain.ErrInvalid,
+		},
+		{
+			name: "sabnzbd control char in item ID in PauseItems",
+			kind: domain.ClientSABnzbd,
+			call: func(ctx context.Context, g *Goenvoy, c domain.DownloadClient) error {
+				return g.PauseItems(ctx, c, "", []string{"a\x00b"})
+			},
+			wantErr: domain.ErrInvalid,
+		},
+		{
+			name: "qbit all rejected in MoveToTop",
+			kind: domain.ClientQBittorrent,
+			call: func(ctx context.Context, g *Goenvoy, c domain.DownloadClient) error {
+				return g.MoveToTop(ctx, c, "", []string{"all"})
+			},
+			wantErr: domain.ErrInvalid,
+		},
+		{
+			name: "qbit pipe rejected in MoveToTop",
+			kind: domain.ClientQBittorrent,
+			call: func(ctx context.Context, g *Goenvoy, c domain.DownloadClient) error {
+				return g.MoveToTop(ctx, c, "", []string{"a|b"})
+			},
+			wantErr: domain.ErrInvalid,
+		},
+		{
+			name: "qbit space rejected in MoveToTop",
+			kind: domain.ClientQBittorrent,
+			call: func(ctx context.Context, g *Goenvoy, c domain.DownloadClient) error {
+				return g.MoveToTop(ctx, c, "", []string{" "})
+			},
+			wantErr: domain.ErrInvalid,
+		},
+		{
+			name: "qbit tab rejected in MoveToTop",
+			kind: domain.ClientQBittorrent,
+			call: func(ctx context.Context, g *Goenvoy, c domain.DownloadClient) error {
+				return g.MoveToTop(ctx, c, "", []string{"\t"})
+			},
+			wantErr: domain.ErrInvalid,
+		},
+		{
+			name: "qbit 39 hex refused",
+			kind: domain.ClientQBittorrent,
+			call: func(ctx context.Context, g *Goenvoy, c domain.DownloadClient) error {
+				return g.MoveToTop(ctx, c, "", []string{strings.Repeat("a", 39)})
+			},
+			wantErr: domain.ErrInvalid,
+		},
+		{
+			name: "qbit 41 hex refused",
+			kind: domain.ClientQBittorrent,
+			call: func(ctx context.Context, g *Goenvoy, c domain.DownloadClient) error {
+				return g.MoveToTop(ctx, c, "", []string{strings.Repeat("a", 41)})
+			},
+			wantErr: domain.ErrInvalid,
+		},
+		{
+			name: "qbit case insensitive duplicate hash rejected",
+			kind: domain.ClientQBittorrent,
+			call: func(ctx context.Context, g *Goenvoy, c domain.DownloadClient) error {
+				return g.MoveToTop(ctx, c, "", []string{testHash40a, strings.ToUpper(testHash40a)})
+			},
+			wantErr: domain.ErrInvalid,
+		},
+		{
 			name: "empty IDs in MoveToTop",
 			kind: domain.ClientQBittorrent,
 			call: func(ctx context.Context, g *Goenvoy, c domain.DownloadClient) error {
@@ -389,7 +586,7 @@ func TestPriorityWriter_Negative(t *testing.T) {
 			name: "duplicate IDs in MoveToTop",
 			kind: domain.ClientQBittorrent,
 			call: func(ctx context.Context, g *Goenvoy, c domain.DownloadClient) error {
-				return g.MoveToTop(ctx, c, "", []string{"h1", "h1"})
+				return g.MoveToTop(ctx, c, "", []string{testHash40a, testHash40a})
 			},
 			wantErr: domain.ErrInvalid,
 		},
@@ -429,7 +626,7 @@ func TestPriorityWriter_Negative(t *testing.T) {
 			name: "deluge unsupported for MoveToTop",
 			kind: domain.ClientDeluge,
 			call: func(ctx context.Context, g *Goenvoy, c domain.DownloadClient) error {
-				return g.MoveToTop(ctx, c, "", []string{"id1"})
+				return g.MoveToTop(ctx, c, "", []string{testHash40a})
 			},
 			wantErr: ErrPriorityUnsupported,
 		},
@@ -437,7 +634,7 @@ func TestPriorityWriter_Negative(t *testing.T) {
 			name: "rtorrent unsupported for PauseItems",
 			kind: domain.ClientRTorrent,
 			call: func(ctx context.Context, g *Goenvoy, c domain.DownloadClient) error {
-				return g.PauseItems(ctx, c, "", []string{"id1"})
+				return g.PauseItems(ctx, c, "", []string{testHash40a})
 			},
 			wantErr: ErrPriorityUnsupported,
 		},
@@ -445,7 +642,7 @@ func TestPriorityWriter_Negative(t *testing.T) {
 			name: "qbit unsupported for SetItemPriority",
 			kind: domain.ClientQBittorrent,
 			call: func(ctx context.Context, g *Goenvoy, c domain.DownloadClient) error {
-				return g.SetItemPriority(ctx, c, "", "id1", 0)
+				return g.SetItemPriority(ctx, c, "", testHash40a, 0)
 			},
 			wantErr: ErrPriorityUnsupported,
 		},
@@ -454,7 +651,7 @@ func TestPriorityWriter_Negative(t *testing.T) {
 			kind:       domain.ClientQBittorrent,
 			failStatus: http.StatusInternalServerError,
 			call: func(ctx context.Context, g *Goenvoy, c domain.DownloadClient) error {
-				return g.MoveToTop(ctx, c, "", []string{"id1"})
+				return g.MoveToTop(ctx, c, "", []string{testHash40a})
 			},
 		},
 		{
@@ -514,10 +711,18 @@ func TestPriorityWriter_Boundary(t *testing.T) {
 
 	tests := []testCase{
 		{
-			name: "single id in MoveToTop",
+			name: "single 40-hex id in MoveToTop",
 			kind: domain.ClientQBittorrent,
 			call: func(ctx context.Context, g *Goenvoy, c domain.DownloadClient) error {
-				return g.MoveToTop(ctx, c, "", []string{"single"})
+				return g.MoveToTop(ctx, c, "", []string{testHash40a})
+			},
+			wantReqCnt: 1,
+		},
+		{
+			name: "single 64-hex id in MoveToTop",
+			kind: domain.ClientQBittorrent,
+			call: func(ctx context.Context, g *Goenvoy, c domain.DownloadClient) error {
+				return g.MoveToTop(ctx, c, "", []string{testHash64})
 			},
 			wantReqCnt: 1,
 		},
@@ -525,7 +730,7 @@ func TestPriorityWriter_Boundary(t *testing.T) {
 			name: "single id in MoveToBottom",
 			kind: domain.ClientQBittorrent,
 			call: func(ctx context.Context, g *Goenvoy, c domain.DownloadClient) error {
-				return g.MoveToBottom(ctx, c, "", []string{"single"})
+				return g.MoveToBottom(ctx, c, "", []string{testHash40a})
 			},
 			wantReqCnt: 1,
 		},
@@ -533,7 +738,7 @@ func TestPriorityWriter_Boundary(t *testing.T) {
 			name: "single id in PauseItems",
 			kind: domain.ClientQBittorrent,
 			call: func(ctx context.Context, g *Goenvoy, c domain.DownloadClient) error {
-				return g.PauseItems(ctx, c, "", []string{"single"})
+				return g.PauseItems(ctx, c, "", []string{testHash40a})
 			},
 			wantReqCnt: 1,
 		},
@@ -587,4 +792,62 @@ func TestPriorityWriter_Boundary(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestPriorityWriter_PartialWrite(t *testing.T) {
+	t.Parallel()
+
+	t.Run("sabnzbd pause second request fails", func(t *testing.T) {
+		t.Parallel()
+		fake, g, client := setupWriterTest(t)
+		client.Kind = domain.ClientSABnzbd
+		fake.failOnItem = "nzo2"
+
+		ctx := t.Context()
+		err := g.PauseItems(ctx, client, "", []string{"nzo1", "nzo2"})
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+
+		var partialErr *PartialWriteError
+		if !errors.As(err, &partialErr) {
+			t.Fatalf("expected *PartialWriteError, got %T: %v", err, err)
+		}
+		if len(partialErr.Done) != 1 || partialErr.Done[0] != "nzo1" {
+			t.Errorf("Done = %v, want ['nzo1']", partialErr.Done)
+		}
+		if partialErr.Unwrap() == nil {
+			t.Error("expected non-nil unwrapped error")
+		}
+		if len(fake.getRequests()) != 2 {
+			t.Errorf("recorded %d requests, want 2", len(fake.getRequests()))
+		}
+	})
+
+	t.Run("sabnzbd resume second request fails", func(t *testing.T) {
+		t.Parallel()
+		fake, g, client := setupWriterTest(t)
+		client.Kind = domain.ClientSABnzbd
+		fake.failOnItem = "nzo2"
+
+		ctx := t.Context()
+		err := g.ResumeItems(ctx, client, "", []string{"nzo1", "nzo2"})
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+
+		var partialErr *PartialWriteError
+		if !errors.As(err, &partialErr) {
+			t.Fatalf("expected *PartialWriteError, got %T: %v", err, err)
+		}
+		if len(partialErr.Done) != 1 || partialErr.Done[0] != "nzo1" {
+			t.Errorf("Done = %v, want ['nzo1']", partialErr.Done)
+		}
+		if partialErr.Unwrap() == nil {
+			t.Error("expected non-nil unwrapped error")
+		}
+		if len(fake.getRequests()) != 2 {
+			t.Errorf("recorded %d requests, want 2", len(fake.getRequests()))
+		}
+	})
 }
