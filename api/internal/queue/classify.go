@@ -88,7 +88,7 @@ var staticPatterns = []patternRule{
 	// src/NzbDrone.Core/Download/CompletedDownloadService.cs:96
 	{re: regexp.MustCompile(`(?i)^Artist name mismatch, automatic import is not possible.*`), class: ClassFixable},
 	// src/NzbDrone.Core/Download/CompletedDownloadService.cs:156
-	{re: regexp.MustCompile(`(?i)^One or more tracks expected in this release were not imported or missing from the release$`), class: ClassFixable},
+	{re: regexp.MustCompile(`(?i)^One or more tracks expected in this release were not imported or missing from the release$`), class: ClassBroken},
 
 	// Sonarr fixed specifications.
 	// src/NzbDrone.Core/MediaFiles/EpisodeImport/Specifications/UpgradeSpecification.cs:48
