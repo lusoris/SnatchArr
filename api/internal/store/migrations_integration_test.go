@@ -14,8 +14,10 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/golusoris/golusoris/core/clock"
 	dbmigrate "github.com/golusoris/golusoris/db/migrate"
 
+	"github.com/lusoris/SnatchArr/api/internal/queue"
 	"github.com/lusoris/SnatchArr/api/internal/store"
 	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
 	"github.com/lusoris/SnatchArr/api/internal/store/storetest"
@@ -1504,4 +1506,167 @@ func TestMigration000048RequestsSettings(t *testing.T) {
 		t.Fatalf("Steps(1) back up to 48: %v", err)
 	}
 	assertTableExists(t, st, "requests_settings", true)
+}
+
+// TestMigration000055QueueFixableBlocklist verifies migration 000055 sets import_fixable blocklist
+// false to true, leaves blocklist true and missing keys unchanged, preserves other rules,
+// and enables 25 h give-up removals with Blocklist=true through the real store path.
+func TestMigration000055QueueFixableBlocklist(t *testing.T) {
+	t.Parallel()
+	st := storetest.New(t)
+	m := storetest.Migrator(t, st)
+	ctx := t.Context()
+	now := time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
+
+	stepDownToVersion(t, m, 54)
+
+	instA := uuid.New()
+	instB := uuid.New()
+	instC := uuid.New()
+	instD := uuid.New()
+	const insInst = `INSERT INTO instances (id, kind, name, base_url, api_key_enc, enabled, source, created_at, updated_at) VALUES ($1, $2, $3, $4, '\x0102', true, 'manual', $5, $5)`
+	for _, inst := range []struct {
+		id   uuid.UUID
+		name string
+	}{
+		{instA, "inst-fixable-false"},
+		{instB, "inst-fixable-true"},
+		{instC, "inst-no-fixable"},
+		{instD, "inst-failed-false"},
+	} {
+		if _, err := st.Pool().Exec(ctx, insInst, inst.id, "lidarr", inst.name, "http://127.0.0.1:8686", now); err != nil {
+			t.Fatalf("insert instance %s: %v", inst.name, err)
+		}
+	}
+
+	const insPolicy = `INSERT INTO queue_policies (
+		instance_id, enabled, rules, grace_s, min_bytes_per_second, max_removals_per_sweep, updated_at
+	) VALUES ($1, true, $2::jsonb, 900, 0, 10, $3)`
+
+	// (a) import_fixable blocklist false -> true after
+	const rulesA = `{"import_fixable": {"mode": "act", "threshold": 1, "blocklist": false}}`
+	if _, err := st.Pool().Exec(ctx, insPolicy, instA, rulesA, now); err != nil {
+		t.Fatalf("insert policy A: %v", err)
+	}
+
+	// (b) import_fixable blocklist true -> unchanged
+	const rulesB = `{"import_fixable": {"mode": "observe", "threshold": 2, "blocklist": true}}`
+	if _, err := st.Pool().Exec(ctx, insPolicy, instB, rulesB, now); err != nil {
+		t.Fatalf("insert policy B: %v", err)
+	}
+
+	// (c) no import_fixable key -> unchanged
+	const rulesC = `{"stalled": {"mode": "observe", "threshold": 1}}`
+	if _, err := st.Pool().Exec(ctx, insPolicy, instC, rulesC, now); err != nil {
+		t.Fatalf("insert policy C: %v", err)
+	}
+
+	// (d) other rule (e.g. failed) blocklist false -> stays false (boundary: migration touches only import_fixable)
+	const rulesD = `{"failed": {"mode": "act", "threshold": 3, "blocklist": false}}`
+	if _, err := st.Pool().Exec(ctx, insPolicy, instD, rulesD, now); err != nil {
+		t.Fatalf("insert policy D: %v", err)
+	}
+
+	if err := m.Steps(1); err != nil {
+		t.Fatalf("Steps(1) up to 55: %v", err)
+	}
+
+	// (a) import_fixable blocklist false -> true
+	var valA bool
+	if err := st.Pool().QueryRow(ctx, "SELECT (rules->'import_fixable'->'blocklist')::bool FROM queue_policies WHERE instance_id = $1", instA).Scan(&valA); err != nil {
+		t.Fatalf("query policy A blocklist: %v", err)
+	}
+	if !valA {
+		t.Errorf("policy A import_fixable blocklist = false, want true")
+	}
+	var modeA string
+	var threshA int
+	if err := st.Pool().QueryRow(ctx, "SELECT rules->'import_fixable'->>'mode', (rules->'import_fixable'->>'threshold')::int FROM queue_policies WHERE instance_id = $1", instA).Scan(&modeA, &threshA); err != nil {
+		t.Fatalf("query policy A mode/threshold: %v", err)
+	}
+	if modeA != "act" || threshA != 1 {
+		t.Errorf("policy A mode/thresh = %s/%d, want act/1", modeA, threshA)
+	}
+
+	// (b) import_fixable blocklist true -> unchanged
+	var valB bool
+	if err := st.Pool().QueryRow(ctx, "SELECT (rules->'import_fixable'->'blocklist')::bool FROM queue_policies WHERE instance_id = $1", instB).Scan(&valB); err != nil {
+		t.Fatalf("query policy B blocklist: %v", err)
+	}
+	if !valB {
+		t.Errorf("policy B import_fixable blocklist = false, want true")
+	}
+
+	// (c) no import_fixable key -> unchanged
+	var hasFixableC bool
+	if err := st.Pool().QueryRow(ctx, "SELECT rules ? 'import_fixable' FROM queue_policies WHERE instance_id = $1", instC).Scan(&hasFixableC); err != nil {
+		t.Fatalf("query policy C rules: %v", err)
+	}
+	if hasFixableC {
+		t.Errorf("policy C has import_fixable key, want none")
+	}
+
+	// (d) other rule (failed) blocklist false -> stays false
+	var valD bool
+	if err := st.Pool().QueryRow(ctx, "SELECT (rules->'failed'->'blocklist')::bool FROM queue_policies WHERE instance_id = $1", instD).Scan(&valD); err != nil {
+		t.Fatalf("query policy D failed blocklist: %v", err)
+	}
+	if valD {
+		t.Errorf("policy D failed blocklist = true, want false")
+	}
+
+	// Step 3 sweep test: stored policy reaches queue.Sweep through the real store path
+	qStore := queue.NewStore(st, clock.NewFake())
+	settingsA, err := qStore.Settings(ctx, instA)
+	if err != nil {
+		t.Fatalf("qStore.Settings(instA) error = %v", err)
+	}
+	if rs := settingsA.Rules[queue.RuleImportFixable]; rs.Blocklist == nil || !*rs.Blocklist {
+		t.Fatalf("instA RuleImportFixable blocklist unset or false (set=%t), want true", rs.Blocklist != nil)
+	}
+
+	item := queue.Item{
+		ID:                    101,
+		DownloadID:            "dl-fixable-migrated-25h",
+		Title:                 "Artist - Album",
+		Added:                 now.Add(-25 * time.Hour),
+		TrackedDownloadState:  "importBlocked",
+		TrackedDownloadStatus: "warning",
+		StatusLines: []string{
+			"Album match is not close enough: 77.0% vs 80%",
+		},
+	}
+	refusedPrev := map[string]queue.Strike{
+		item.DownloadID: {
+			Rule:          queue.RuleImportFixable,
+			Count:         1,
+			ImportedAt:    now.Add(-10 * time.Minute),
+			ImportRefused: true,
+			LastSeen:      now.Add(-15 * time.Minute),
+		},
+	}
+	decisions := queue.Sweep(settingsA, []queue.Item{item}, refusedPrev, now)
+	if len(decisions) != 1 {
+		t.Fatalf("Sweep decisions len = %d, want 1", len(decisions))
+	}
+	d := decisions[0]
+	if d.Rule != queue.RuleImportFixable {
+		t.Errorf("decision Rule = %q, want %q", d.Rule, queue.RuleImportFixable)
+	}
+	if !d.Remove {
+		t.Errorf("decision Remove = false, want true")
+	}
+	if !d.Blocklist {
+		t.Errorf("decision Blocklist = false, want true")
+	}
+	if !d.Research {
+		t.Errorf("decision Research = false, want true")
+	}
+
+	if err := m.Steps(-1); err != nil {
+		t.Fatalf("Steps(-1) down to 54: %v", err)
+	}
+	if err := m.Steps(1); err != nil {
+		t.Fatalf("Steps(1) back up to 55: %v", err)
+	}
 }
