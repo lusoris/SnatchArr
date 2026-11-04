@@ -32,7 +32,7 @@ SPDX-License-Identifier: EUPL-1.2
 	const optionalImportFixableDefault: components['schemas']['QueueRuleSettings'] = {
 		mode: 'observe',
 		threshold: 1,
-		blocklist: false
+		blocklist: true
 	};
 	const optionalImportBrokenDefault: components['schemas']['QueueRuleSettings'] = {
 		mode: 'observe',
@@ -228,8 +228,8 @@ SPDX-License-Identifier: EUPL-1.2
 										/>
 									</td>
 									<td class="py-2" data-label={m.queue_rule_blocklist()}>
-										<!-- id_matched and import_fixable import and never remove, so they have nothing to blocklist. -->
-										{#if r.key !== 'id_matched' && r.key !== 'import_fixable'}
+										<!-- id_matched imports and never removes, so it has nothing to blocklist. -->
+										{#if r.key !== 'id_matched'}
 											<input
 												type="checkbox"
 												aria-label={`${r.label()} ${m.queue_rule_blocklist()}`}

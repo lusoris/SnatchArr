@@ -168,19 +168,28 @@ func applyRuleMatch(s Settings, item Item, prev Strike, r Rule, pattern string, 
 		ImportRefused: prev.ImportRefused,
 	}
 	thresholdMet := isThresholdMet(r, item, rs, next, now)
+	giveUp := r == RuleImportFixable && fixableGaveUp(item, now)
 	var d Decision
-	if r == RuleIDMatched || r == RuleImportFixable {
+	if (r == RuleIDMatched || r == RuleImportFixable) && !giveUp {
 		d = applyImportMatch(s, item, prev, rs, next, now, spent)
 	} else {
 		d = applyRemovalMatch(s, item, rs, next, pattern, thresholdMet, spent)
 	}
-	if r == RuleFailed || r == RuleImportBroken {
+	if r == RuleFailed || r == RuleImportBroken || giveUp {
 		d.Research = true
 	}
 	d.NewStrike = prev.Rule != r || prev.Count == 0
 	d.Reached = isThresholdReached(r, item, prev, rs, thresholdMet)
 	d.Title = item.Title
 	return d
+}
+
+// fixableImportBudget is how long an import_fixable download is retried before
+// giving up on import and removing it instead.
+const fixableImportBudget = strikeTTL
+
+func fixableGaveUp(item Item, now time.Time) bool {
+	return !item.Added.IsZero() && itemAge(item, now) >= fixableImportBudget
 }
 
 func itemAge(item Item, now time.Time) time.Duration {
@@ -359,10 +368,10 @@ func ResolveRule(s Settings, r Rule) RuleSettings {
 
 // isBlocklistRule reports the blocklist default: a release that is no
 // upgrade, a duplicate or belongs to an unmonitored item is not defective,
-// so those rules remove it without a blocklist entry; id_matched and
-// import_fixable import and never remove.
+// so those rules remove it without a blocklist entry; id_matched imports
+// and never removes.
 func isBlocklistRule(r Rule) bool {
-	return r != RuleNotAnUpgrade && r != RuleDuplicate && r != RuleUnwantedUnmonitored && r != RuleIDMatched && r != RuleImportFixable
+	return r != RuleNotAnUpgrade && r != RuleDuplicate && r != RuleUnwantedUnmonitored && r != RuleIDMatched
 }
 
 func isNeverTouched(item Item, grace time.Duration, now time.Time) bool {

@@ -68,6 +68,26 @@ describe('QueuePolicy', () => {
 		expect(body.max_imports_per_sweep).toBe(100);
 	});
 
+	it('sends the import-fixable rule with its blocklist switch', async () => {
+		const put = vi.spyOn(api, 'PUT').mockResolvedValue({ data: sampleQueuePolicy } as never);
+		stubGet({
+			'/instances/{instanceId}/queue-policy': sampleQueuePolicy
+		});
+		renderWithQuery(QueuePolicy, { instanceId: forkInstance.id });
+
+		await screen.findByRole('heading', { level: 2, name: m.queue_policy_title() });
+		const blocklist = screen.getByLabelText(
+			`${m.queue_rule_import_fixable()} ${m.queue_rule_blocklist()}`
+		) as HTMLInputElement;
+		expect(blocklist.checked).toBe(true);
+		await fireEvent.click(blocklist);
+
+		await fireEvent.click(screen.getByRole('button', { name: m.queue_policy_save() }));
+
+		const body = (put.mock.calls[0]![1] as { body: QueuePolicyType }).body;
+		expect(body.rules.import_fixable).toEqual({ mode: 'observe', threshold: 1, blocklist: false });
+	});
+
 	it('saves the edited payload converting grace minutes to seconds', async () => {
 		const put = vi.spyOn(api, 'PUT').mockResolvedValue({ data: sampleQueuePolicy } as never);
 		stubGet({
@@ -194,6 +214,7 @@ describe('QueuePolicy', () => {
 		delete olderRules.not_an_upgrade;
 		delete olderRules.duplicate;
 		delete olderRules.id_matched;
+		delete olderRules.import_fixable;
 		const older = { ...sampleQueuePolicy, rules: olderRules };
 		delete older.max_imports_per_sweep;
 		stubGet({
@@ -210,6 +231,7 @@ describe('QueuePolicy', () => {
 		expect(body.rules.not_an_upgrade).toEqual(fallback);
 		expect(body.rules.duplicate).toEqual(fallback);
 		expect(body.rules.id_matched).toEqual(fallback);
+		expect(body.rules.import_fixable).toEqual({ mode: 'observe', threshold: 1, blocklist: true });
 		expect(body.max_imports_per_sweep).toBe(25);
 	});
 
