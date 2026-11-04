@@ -4,7 +4,7 @@
 
 // covers: #989
 
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type APIResponse, type Locator, type Page } from '@playwright/test';
 import { createInstance, deleteRows, signIn, uniqueSuffix } from './layout-fixtures.js';
 
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -234,6 +234,29 @@ test('989: negative - queue policy rejects unknown instance or invalid threshold
 	}
 });
 
+// putFixableThreshold writes the import_fixable rule with the given mode and threshold.
+async function putFixableThreshold(
+	page: Page,
+	csrf: string,
+	instanceId: string,
+	basePolicy: QueuePolicyPayload,
+	mode: 'observe' | 'act',
+	threshold: number
+): Promise<APIResponse> {
+	const policy = {
+		...basePolicy,
+		rules: {
+			...basePolicy.rules,
+			import_fixable: { mode, threshold, blocklist: true }
+		}
+	};
+	return page.request.put(`/api/v1/instances/${instanceId}/queue-policy`, {
+		headers: { 'X-CSRF-Token': csrf },
+		data: policy,
+		timeout: REQUEST_TIMEOUT_MS
+	});
+}
+
 test('989: boundary - import_fixable accepts minimum threshold 1 and maximum threshold 100', async ({
 	page
 }) => {
@@ -248,41 +271,24 @@ test('989: boundary - import_fixable accepts minimum threshold 1 and maximum thr
 		expect(getRes.status()).toBe(200);
 		const basePolicy = (await getRes.json()) as QueuePolicyPayload;
 
-		// Boundary min: threshold 1
-		const minPolicy = {
-			...basePolicy,
-			rules: {
-				...basePolicy.rules,
-				import_fixable: { mode: 'observe' as const, threshold: 1, blocklist: true }
-			}
-		};
-		const minRes = await page.request.put(`/api/v1/instances/${instanceId}/queue-policy`, {
-			headers: { 'X-CSRF-Token': csrf },
-			data: minPolicy,
-			timeout: REQUEST_TIMEOUT_MS
-		});
+		// Rule thresholds other than metadata_stuck are bounded 1..100 by the API
+		// (api/internal/queue/rules.go validateRuleEntry); the schema maximum 1440 is
+		// the metadata_stuck bound in minutes.
+		const minRes = await putFixableThreshold(page, csrf, instanceId, basePolicy, 'observe', 1);
 		expect(minRes.status()).toBe(200);
 		const minRead = (await minRes.json()) as QueuePolicyPayload;
 		expect(minRead.rules.import_fixable?.threshold).toBe(1);
 		expect(minRead.rules.import_fixable?.blocklist).toBe(true);
 
-		// Boundary max: threshold 1440
-		const maxPolicy = {
-			...basePolicy,
-			rules: {
-				...basePolicy.rules,
-				import_fixable: { mode: 'act' as const, threshold: 1440, blocklist: true }
-			}
-		};
-		const maxRes = await page.request.put(`/api/v1/instances/${instanceId}/queue-policy`, {
-			headers: { 'X-CSRF-Token': csrf },
-			data: maxPolicy,
-			timeout: REQUEST_TIMEOUT_MS
-		});
+		const maxRes = await putFixableThreshold(page, csrf, instanceId, basePolicy, 'act', 100);
 		expect(maxRes.status()).toBe(200);
 		const maxRead = (await maxRes.json()) as QueuePolicyPayload;
-		expect(maxRead.rules.import_fixable?.threshold).toBe(1440);
+		expect(maxRead.rules.import_fixable?.threshold).toBe(100);
 		expect(maxRead.rules.import_fixable?.blocklist).toBe(true);
+
+		const overRes = await putFixableThreshold(page, csrf, instanceId, basePolicy, 'act', 101);
+		expect(overRes.status()).toBe(422);
+		expect(overRes.headers()['content-type']).toContain('application/problem+json');
 	} finally {
 		await deleteRows(page, csrf, 'instances', [instanceId]);
 	}
