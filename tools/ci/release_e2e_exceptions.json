@@ -1,3 +1,46 @@
 {
-  "exceptions": []
+  "exceptions": [
+    {
+      "commit": "bac0ff9d5eedc09d90677274e5954bdc87fdee7d",
+      "pr": 992,
+      "reason": "Category B. Nothing served: the priority and pause writers in api/internal/dlclients/priority_writer.go have no caller outside their own package until the act-mode slice (#997) wires them, so no e2e test can reach them. Evidence: api/internal/dlclients/priority_writer_test.go.",
+      "category": "B",
+      "expires": "2026-11-07"
+    },
+    {
+      "commit": "05b34da7dfd640844a9570f82e2d47fa053a236a",
+      "pr": 991,
+      "reason": "Category B. Nothing served: the new Prowlarr indexer and release fields are parsed in api/internal/prowlarrclient but no handler, MCP tool or UI reads them yet, so no e2e test can reach them. Evidence: api/internal/prowlarrclient/client_test.go.",
+      "category": "B",
+      "expires": "2026-11-07"
+    },
+    {
+      "commit": "8f7e2cd30b45fd367f5d0b89547eacf332be8909",
+      "pr": 980,
+      "reason": "Category B. Nothing served: api/internal/foreigntitle has no caller outside its own package yet, so no e2e test can reach the German and French rules. Evidence: api/internal/foreigntitle/foreigntitle_test.go.",
+      "category": "B",
+      "expires": "2026-11-07"
+    },
+    {
+      "commit": "7bb88ab6167ab5ccae589e0e61af969c76efcf24",
+      "pr": 964,
+      "reason": "Category B. CI only: roadmap check and scheduled bot refresh (workflow, Makefile target, tools/ci, docs/roadmap.md); nothing served. Evidence: tools/ci/roadmap_test.sh via make roadmap-check.",
+      "category": "B",
+      "expires": "2026-11-07"
+    },
+    {
+      "commit": "77e43ea592aa0338d108d9239d8311030ab421da",
+      "pr": 959,
+      "reason": "Category B. Test harness only: Makefile test parallelism cap and a bounded cleanup in api/internal/store/pgupgrade_integration_test.go; nothing served.",
+      "category": "B",
+      "expires": "2026-11-07"
+    },
+    {
+      "commit": "5345cea100827c8a8b534d643187b54a8baa4119",
+      "pr": 960,
+      "reason": "Category B. Test harness only: application upgrade e2e script and planted-case runner under tools/e2e plus a Makefile hook; nothing served. Evidence: tools/e2e/schema_check_test.sh, tools/e2e/planted_test.sh.",
+      "category": "B",
+      "expires": "2026-11-07"
+    }
+  ]
 }
