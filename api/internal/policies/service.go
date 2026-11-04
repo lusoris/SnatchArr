@@ -7,9 +7,11 @@ package policies
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/clock"
@@ -37,9 +39,16 @@ func (s *Service) Get(ctx context.Context, instanceID uuid.UUID) (domain.Policy,
 	}
 	row, err := s.st.Q().EnsureDefaultPolicy(ctx, sqlcgen.EnsureDefaultPolicyParams{InstanceID: instanceID, UpdatedAt: s.clk.Now()})
 	if err != nil {
-		return domain.Policy{}, fmt.Errorf("policies: ensure default: %w", store.MapError(err))
+		return domain.Policy{}, fmt.Errorf("policies: ensure default: %w", ensureErr(err))
 	}
 	return store.PolicyFromRow(row), nil
+}
+
+func ensureErr(err error) error {
+	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok && pgErr.Code == "23503" {
+		return fmt.Errorf("%w: instance deleted while creating policy", domain.ErrNotFound)
+	}
+	return store.MapError(err)
 }
 
 // Update validates and replaces the policy.
