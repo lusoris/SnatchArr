@@ -38,7 +38,7 @@ func TestClassifierTaxonomyPositive(t *testing.T) {
 		{"lidarr/album_already_imported", "Album already imported at 10/23/2026 8:12:01 AM", queue.ClassNotWanted},
 		{"lidarr/couldnt_find_similar_album", "Couldn't find similar album for Artist - Album", queue.ClassBroken},
 		{"lidarr/artist_name_mismatch", "Artist name mismatch, automatic import is not possible for Artist", queue.ClassFixable},
-		{"lidarr/missing_tracks_expected", "One or more tracks expected in this release were not imported or missing from the release", queue.ClassFixable},
+		{"lidarr/missing_tracks_expected", "One or more tracks expected in this release were not imported or missing from the release", queue.ClassBroken},
 
 		// Sonarr fixed specifications.
 		{"sonarr/not_upgrade_episode", "Not an upgrade for existing episode file(s)", queue.ClassNotWanted},
