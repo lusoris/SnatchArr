@@ -8,7 +8,7 @@
 * **dlclients:** add allow-listed priority and pause writers ([#992](https://github.com/lusoris/SnatchArr/issues/992)) ([bac0ff9](https://github.com/lusoris/SnatchArr/commit/bac0ff9d5eedc09d90677274e5954bdc87fdee7d))
 * **dlclients:** observe download-client priority plans read-only ([#974](https://github.com/lusoris/SnatchArr/issues/974)) ([a3be3da](https://github.com/lusoris/SnatchArr/commit/a3be3da89ebe53dc16ade7a5d02a6dedba996741))
 * **domain:** plan download-client priority, order and pause per ADR-0046 ([#971](https://github.com/lusoris/SnatchArr/issues/971)) ([cbb8628](https://github.com/lusoris/SnatchArr/commit/cbb862805f235727bfdf1887043e6787f8d80aaf))
-* **foreigntitle:** add German and French title rules, variants and rewrite ([#980](https://github.com/lusoris/SnatchArr/issues/980)) ([8f7e2cd](https://github.com/lusoris/SnatchArr/commit/8f7e2cd30b45fd367f5d0b89547eacf332be8909)), closes [#696](https://github.com/lusoris/SnatchArr/issues/696)
+* **foreigntitle:** add German and French title rules, variants and rewrite ([#980](https://github.com/lusoris/SnatchArr/issues/980)) ([8f7e2cd](https://github.com/lusoris/SnatchArr/commit/8f7e2cd30b45fd367f5d0b89547eacf332be8909))
 * **prowlarr:** carry indexer language, privacy, tags and release ids ([#991](https://github.com/lusoris/SnatchArr/issues/991)) ([05b34da](https://github.com/lusoris/SnatchArr/commit/05b34da7dfd640844a9570f82e2d47fa053a236a))
 
 
@@ -31,7 +31,7 @@
 
 ### Documentation
 
-* **adr:** accept ADR-0046 download-client priority and pause control ([#966](https://github.com/lusoris/SnatchArr/issues/966)) ([3255c6b](https://github.com/lusoris/SnatchArr/commit/3255c6bc08131542ab99c168bd245b259449d93e)), closes [#560](https://github.com/lusoris/SnatchArr/issues/560)
+* **adr:** accept ADR-0046 download-client priority and pause control ([#966](https://github.com/lusoris/SnatchArr/issues/966)) ([3255c6b](https://github.com/lusoris/SnatchArr/commit/3255c6bc08131542ab99c168bd245b259449d93e))
 * **adr:** record the Jellyfin plugin move to jellysin/plugin-snatcharr ([#973](https://github.com/lusoris/SnatchArr/issues/973)) ([706a95d](https://github.com/lusoris/SnatchArr/commit/706a95dcbdc2f76f3ffd1e334403d0212c72d00a))
 * **dlclients:** document the priority writer and observer helpers ([#996](https://github.com/lusoris/SnatchArr/issues/996)) ([5878154](https://github.com/lusoris/SnatchArr/commit/5878154fe167f3b24a9e9a7f57038db65cc3722b))
 * **readme:** add Codacy grade and CodeRabbit review badges ([#976](https://github.com/lusoris/SnatchArr/issues/976)) ([f0d2396](https://github.com/lusoris/SnatchArr/commit/f0d2396dd48eee417f0aa951bf8eabe644a0fd35))
