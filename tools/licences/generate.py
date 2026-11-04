@@ -40,6 +40,28 @@ def run_cmd(cmd, cwd=None, env=None):
     return res.stdout
 
 
+# Rust source lines that never occur in a licence text. cargo-about reads a file whose
+# MIT or Apache header it recognises as a licence and keeps the code after the header
+# (tonic and tonic-prost 0.14.9); about.toml clarifications then pin the real file.
+RUST_SOURCE_LINE = re.compile(
+    r"^[ \t]*(#!\[|(pub(\([a-z]+\))?[ \t]+)?(use[ \t]+[A-Za-z_][\w:]*(::|;)|mod[ \t]+\w+[ \t]*[;{]|fn[ \t]+\w+[ \t]*[(<]))",
+    re.MULTILINE,
+)
+
+
+def check_rust_text(txt, used_by):
+    """Refuse a cargo-about licence text that contains Rust source code."""
+    match = RUST_SOURCE_LINE.search(txt)
+    if match is None:
+        return
+    crates = ", ".join(sorted(f"{u.get('crate', {}).get('name')}@{u.get('crate', {}).get('version')}" for u in used_by))
+    raise LicenceError(
+        f"Error: licence text for {crates} contains Rust source ({match.group(0).strip()!r}); "
+        "add an about.toml clarification that pins the LICENSE file",
+        1,
+    )
+
+
 def build_rust_license_map(licenses):
     """Build a mapping of (crate_name, crate_ver) -> list of unique license texts."""
     crate_texts = {}
@@ -47,6 +69,7 @@ def build_rust_license_map(licenses):
         txt = lic.get("text")
         if not txt:
             continue
+        check_rust_text(txt, lic.get("used_by", []))
         for u in lic.get("used_by", []):
             crate = u.get("crate", {})
             key = (crate.get("name"), crate.get("version"))

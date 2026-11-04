@@ -249,5 +249,30 @@ class CollectGoLookupFailure(unittest.TestCase):
         self.assertEqual(self.collect([], check=True)[0]["url"], "")
 
 
+MIT_TEXT = (
+    "Copyright 2019 gRPC authors.\n\n"
+    "Permission is hereby granted, free of charge, to any person obtaining a copy\n"
+    "of this software, to use, copy, modify, merge, publish, distribute.\n"
+)
+USED_BY = [{"crate": {"name": "tonic-prost", "version": "0.14.9"}}]
+
+
+class RustSourceInLicenceText(unittest.TestCase):
+    def test_positive_plain_mit_text_passes(self):
+        self.assertEqual(generate.build_rust_license_map([{"text": MIT_TEXT, "used_by": USED_BY}]),
+                         {("tonic-prost", "0.14.9"): [MIT_TEXT]})
+
+    def test_negative_source_after_header_refused(self):
+        for tail in ("#![doc(html_root_url = \"x\")]\n", "mod codec;\n", "pub use codec::ProstCodec;\n",
+                     "pub(crate) fn decode(buf: &[u8]) {}\n"):
+            with self.subTest(tail=tail), self.assertRaises(generate.LicenceError) as ctx:
+                generate.build_rust_license_map([{"text": MIT_TEXT + "*/\n\n" + tail, "used_by": USED_BY}])
+            self.assertIn("tonic-prost@0.14.9", str(ctx.exception))
+
+    def test_boundary_prose_use_and_indented_words_pass(self):
+        prose = MIT_TEXT + "use of this software is at your own risk;\n   fn is not a keyword here\n"
+        generate.check_rust_text(prose, USED_BY)
+
+
 if __name__ == "__main__":
     unittest.main()
