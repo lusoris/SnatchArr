@@ -441,3 +441,68 @@ func TestRenovateLockFileMaintenance(t *testing.T) {
 		})
 	}
 }
+
+// packageDependencies holds the dependency maps of a package.json.
+//
+//nolint:tagliatelle // package.json is camelCase
+type packageDependencies struct {
+	DevDependencies map[string]string `json:"devDependencies"`
+	Dependencies    map[string]string `json:"dependencies"`
+}
+
+// exactVersion matches a dependency specifier that names one version and no range.
+var exactVersion = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
+
+// playwrightPinProblems reports why lock file maintenance could move @playwright/test alone:
+// tools/e2e/web_visual.sh refuses a lock version that differs from the Playwright image, and a
+// lock refresh moves any version a range allows without touching web/e2e/visual-image.env. An
+// exact specifier leaves the move to the "playwright" group, which updates both.
+func playwrightPinProblems(packageJSON []byte) ([]string, error) {
+	var pkg packageDependencies
+	if err := json.Unmarshal(packageJSON, &pkg); err != nil {
+		return nil, fmt.Errorf("decode web/package.json: %w", err)
+	}
+	spec, ok := pkg.DevDependencies["@playwright/test"]
+	if !ok {
+		spec, ok = pkg.Dependencies["@playwright/test"]
+	}
+	if !ok {
+		return []string{"@playwright/test is missing from web/package.json"}, nil
+	}
+	if !exactVersion.MatchString(spec) {
+		return []string{fmt.Sprintf("@playwright/test specifier %q is a range; lock file maintenance can move it without the image", spec)}, nil
+	}
+	return nil, nil
+}
+
+// TestPlaywrightPinnedForLockFileMaintenance checks that web/package.json pins @playwright/test to one
+// version, and that a caret range, a tilde range and a missing entry are reported.
+func TestPlaywrightPinnedForLockFileMaintenance(t *testing.T) {
+	t.Parallel()
+	committedPackage, err := os.ReadFile("../../web/package.json")
+	if err != nil {
+		t.Fatalf("read web/package.json: %v", err)
+	}
+	cases := []struct {
+		name         string
+		packageJSON  []byte
+		wantProblems int
+	}{
+		{name: "the committed web/package.json", packageJSON: committedPackage, wantProblems: 0},
+		{name: "planted caret range", packageJSON: []byte(`{"devDependencies":{"@playwright/test":"^1.64.1"}}`), wantProblems: 1},
+		{name: "planted tilde range", packageJSON: []byte(`{"devDependencies":{"@playwright/test":"~1.64.1"}}`), wantProblems: 1},
+		{name: "planted missing entry", packageJSON: []byte(`{"devDependencies":{}}`), wantProblems: 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := playwrightPinProblems(tc.packageJSON)
+			if err != nil {
+				t.Fatalf("playwrightPinProblems: %v", err)
+			}
+			if len(got) != tc.wantProblems {
+				t.Fatalf("playwrightPinProblems() = %v (len %d); want %d problem(s)", got, len(got), tc.wantProblems)
+			}
+		})
+	}
+}
