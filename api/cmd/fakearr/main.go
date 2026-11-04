@@ -20,6 +20,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jonboulle/clockwork"
+
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 )
 
@@ -41,6 +43,7 @@ type fake struct {
 	commands      []command
 	nextID        int64
 	logger        *slog.Logger
+	clk           clockwork.Clock
 }
 
 func newFake(kind, apiKey string, missing, cutoff int, importBlocked bool, logger *slog.Logger) *fake {
@@ -55,6 +58,7 @@ func newFake(kind, apiKey string, missing, cutoff int, importBlocked bool, logge
 		importBlocked: importBlocked,
 		nextID:        100,
 		logger:        logger,
+		clk:           clockwork.NewRealClock(),
 	}
 }
 
@@ -196,6 +200,14 @@ func (f *fake) queue(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
+// queueAddedAge is how long ago the import-blocked download was added. It stays far
+// below the 24 h import_fixable budget, so a sweep imports the item instead of giving up.
+const queueAddedAge = time.Minute
+
+func (f *fake) queueAdded() string {
+	return f.clk.Now().Add(-queueAddedAge).UTC().Format(time.RFC3339)
+}
+
 func (f *fake) queueRecord() map[string]any {
 	rec := map[string]any{
 		"id":                    1,
@@ -206,7 +218,7 @@ func (f *fake) queueRecord() map[string]any {
 		"protocol":              "usenet",
 		"size":                  1048576,
 		"sizeleft":              0,
-		"added":                 "2020-01-01T00:00:00Z",
+		"added":                 f.queueAdded(),
 	}
 	if f.isMovieKind() {
 		rec["title"] = "Fake.Movie.2020"

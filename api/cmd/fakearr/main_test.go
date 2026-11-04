@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jonboulle/clockwork"
+
 	"github.com/lusoris/SnatchArr/api/internal/arrclient"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/queue"
@@ -20,9 +22,13 @@ import (
 
 const testAPIKey = "fake-api-key-0123456789"
 
+// testNow is the fixed clock of every test server; the sweep integration test sweeps at it.
+var testNow = time.Date(2026, 10, 27, 12, 0, 0, 0, time.UTC)
+
 func newTestServer(t *testing.T, kind string, importBlocked bool) *httptest.Server {
 	t.Helper()
 	f := newFake(kind, testAPIKey, 10, 5, importBlocked, nil)
+	f.clk = clockwork.NewFakeClockAt(testNow)
 	mux := http.NewServeMux()
 	f.routes(mux)
 	srv := httptest.NewServer(mux)
@@ -330,17 +336,21 @@ func TestArrClientAndSweepIntegration(t *testing.T) {
 			settings := queue.DefaultSettings()
 			settings.Enabled = true
 			settings.ForceImport = true
-			fakeNow, err := time.Parse(time.RFC3339, "2026-10-27T12:00:00Z")
-			if err != nil {
-				t.Fatalf("parse fakeNow: %v", err)
+			settings.Grace = 0 // as the #841 e2e policy sets grace_seconds 0
+			if age := testNow.Sub(item.Added); age != queueAddedAge {
+				t.Fatalf("item age = %v, want %v (added %v)", age, queueAddedAge, item.Added)
 			}
-			decisions := queue.Sweep(settings, items, nil, fakeNow)
+			decisions := queue.Sweep(settings, items, nil, testNow)
 			if len(decisions) != 1 {
 				t.Fatalf("len(decisions) = %d, want 1", len(decisions))
 			}
 			dec := decisions[0]
 			if dec.Rule != queue.RuleImportFixable {
 				t.Fatalf("dec.Rule = %q, want %q (status lines: %v)", dec.Rule, queue.RuleImportFixable, item.StatusLines)
+			}
+			// A fresh import-blocked download stays on the import path; re-search marks a give-up.
+			if dec.Research || dec.Remove || dec.WouldRemove {
+				t.Fatalf("fresh item gave up: research=%v remove=%v would_remove=%v", dec.Research, dec.Remove, dec.WouldRemove)
 			}
 
 			n, err := prober.ForceImport(t.Context(), tc.name, srv.URL, testAPIKey, "fake-dl-1", queue.ImportModeFixable)
