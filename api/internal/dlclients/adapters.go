@@ -223,8 +223,8 @@ func qbittorrentLogin(ctx context.Context, cl *qbit.Client, username, secret str
 	return nil
 }
 
-// qbittorrentVersion logs in and reads the version; a 403 after a login with credentials is
-// reported as wrong credentials.
+// qbittorrentVersion logs in when credentials are present, then reads the version; a 403 after
+// a login with credentials is reported as wrong credentials.
 func qbittorrentVersion(ctx context.Context, cl *qbit.Client, username, secret string) (string, error) {
 	hasCredentials := username != "" || secret != ""
 	if err := qbittorrentLogin(ctx, cl, username, secret); err != nil {

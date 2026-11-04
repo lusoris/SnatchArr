@@ -204,8 +204,9 @@ const (
 	opResume
 )
 
-// dispatchPauseResume applies op to ids on the client kind's adapter under the writer timeout;
-// kinds without per-item pause fail with ErrPriorityUnsupported.
+// dispatchPauseResume applies op to ids on the client kind's adapter under the writer timeout.
+// Transmission, Deluge and rTorrent fail with ErrPriorityUnsupported; an unknown kind fails
+// with domain.ErrInvalid.
 func (g *Goenvoy) dispatchPauseResume(ctx context.Context, c domain.DownloadClient, secret string, ids []string, op pauseResumeOp) error {
 	if len(ids) == 0 {
 		return fmt.Errorf("%w: item IDs must not be empty", domain.ErrInvalid)

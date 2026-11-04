@@ -68,7 +68,8 @@ func (s *writerFakeServer) record(r *http.Request) writerRecordedReq {
 	return rec
 }
 
-// serveHTTP records every request and answers it as the configured client kind.
+// serveHTTP records every request and answers it by request endpoint: /jsonrpc as NZBGet, /api
+// as SABnzbd, everything else as qBittorrent.
 func (s *writerFakeServer) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	req := s.record(r)
@@ -114,7 +115,8 @@ func (s *writerFakeServer) serveNZBGet(w http.ResponseWriter, req writerRecorded
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
-// serveSABnzbd answers a SABnzbd API call with status true, or false when falseRes is set.
+// serveSABnzbd answers a SABnzbd priority call with position 1, or -1 when falseRes is set, and
+// any other call with status true, or false when falseRes is set.
 func (s *writerFakeServer) serveSABnzbd(w http.ResponseWriter, req writerRecordedReq, falseRes bool) {
 	name := req.Query.Get("name")
 	if name == "priority" {
@@ -385,7 +387,8 @@ func TestPriorityWriter_Positive(t *testing.T) {
 	}
 }
 
-// TestPriorityWriter_Negative checks that invalid IDs, levels and kinds fail before any request.
+// TestPriorityWriter_Negative checks that invalid IDs, levels and kinds fail before any request,
+// and that a server 500 or a false result fails after its one request.
 func TestPriorityWriter_Negative(t *testing.T) {
 	t.Parallel()
 	type testCase struct {
