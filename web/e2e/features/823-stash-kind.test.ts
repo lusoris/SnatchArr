@@ -23,6 +23,39 @@ async function startStashStub(): Promise<{ url: string; close: () => Promise<voi
 	return listenStub(server);
 }
 
+async function deleteNamedInstances(page: Page, csrfToken: string, name: string): Promise<void> {
+	const listRes = await page.request.get('/api/v1/instances');
+	expect(listRes.status()).toBe(200);
+	const instances = (await listRes.json()) as Array<{ id: string; name: string }>;
+	for (const instance of instances.filter((item) => item.name === name)) {
+		const deleteRes = await page.request.delete(`/api/v1/instances/${instance.id}`, {
+			headers: { 'X-CSRF-Token': csrfToken }
+		});
+		expect(deleteRes.ok()).toBeTruthy();
+	}
+}
+
+async function createStashInstance(
+	page: Page,
+	csrfToken: string,
+	name: string,
+	baseUrl: string
+): Promise<{ id: string; kind: string; name: string }> {
+	await deleteNamedInstances(page, csrfToken, name);
+	const createRes = await page.request.post('/api/v1/instances', {
+		headers: { 'X-CSRF-Token': csrfToken },
+		data: {
+			kind: 'stash',
+			name,
+			base_url: baseUrl,
+			api_key: 'stash-secret-token-823',
+			enabled: true
+		}
+	});
+	expect(createRes.status()).toBe(201);
+	return (await createRes.json()) as { id: string; kind: string; name: string };
+}
+
 test('positive: create stash instance and read kind=stash back from get and list', async ({
 	page
 }) => {
@@ -31,18 +64,7 @@ test('positive: create stash instance and read kind=stash back from get and list
 	const stashName = 'e2e-stash-positive';
 
 	try {
-		const createRes = await page.request.post('/api/v1/instances', {
-			headers: { 'X-CSRF-Token': csrfToken },
-			data: {
-				kind: 'stash',
-				name: stashName,
-				base_url: stub.url,
-				api_key: 'stash-secret-token-823',
-				enabled: true
-			}
-		});
-		expect(createRes.status()).toBe(201);
-		const created = (await createRes.json()) as { id: string; kind: string; name: string };
+		const created = await createStashInstance(page, csrfToken, stashName, stub.url);
 		expect(created.kind).toBe('stash');
 		expect(created.name).toBe(stashName);
 
@@ -72,18 +94,7 @@ test('negative: snatch and wanted operations on stash instance are refused with 
 	const csrfToken = await getCsrfToken(page);
 
 	try {
-		const createRes = await page.request.post('/api/v1/instances', {
-			headers: { 'X-CSRF-Token': csrfToken },
-			data: {
-				kind: 'stash',
-				name: 'e2e-stash-negative',
-				base_url: stub.url,
-				api_key: 'stash-secret-token-823',
-				enabled: true
-			}
-		});
-		expect(createRes.status()).toBe(201);
-		const created = (await createRes.json()) as { id: string };
+		const created = await createStashInstance(page, csrfToken, 'e2e-stash-negative', stub.url);
 
 		const previewRes = await page.request.post(
 			`/api/v1/instances/${created.id}/preview?kind=missing`,
@@ -134,18 +145,7 @@ test('boundary: stash instance priority and hourly cap exclusions, invalid kind 
 	const csrfToken = await getCsrfToken(page);
 
 	try {
-		const createRes = await page.request.post('/api/v1/instances', {
-			headers: { 'X-CSRF-Token': csrfToken },
-			data: {
-				kind: 'stash',
-				name: 'e2e-stash-boundary',
-				base_url: stub.url,
-				api_key: 'stash-secret-token-823',
-				enabled: true
-			}
-		});
-		expect(createRes.status()).toBe(201);
-		const created = (await createRes.json()) as { id: string };
+		const created = await createStashInstance(page, csrfToken, 'e2e-stash-boundary', stub.url);
 
 		const priorityRes = await page.request.get(`/api/v1/instances/${created.id}/priority`);
 		expect(priorityRes.status()).toBe(422);
@@ -158,6 +158,7 @@ test('boundary: stash instance priority and hourly cap exclusions, invalid kind 
 		const caps = (await capsRes.json()) as Array<{ instance_id: string }>;
 		expect(caps.some((c) => c.instance_id === created.id)).toBe(false);
 
+		await deleteNamedInstances(page, csrfToken, 'e2e-stash-invalid-kind');
 		const invalidKindRes = await page.request.post('/api/v1/instances', {
 			headers: { 'X-CSRF-Token': csrfToken },
 			data: {
