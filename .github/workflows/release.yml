@@ -35,6 +35,9 @@ env:
 jobs:
   meta:
     name: resolve tag
+    permissions:
+      contents: read
+      issues: read
     runs-on: ubuntu-26.04
     outputs:
       tag: ${{ steps.v.outputs.tag }}
@@ -50,6 +53,16 @@ jobs:
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.v.outputs.tag }}
+          # full history: an open claim without a commit link is named by the commit carrying it
+          fetch-depth: 0
+          persist-credentials: false
+      - name: refuse release notes that claim an open issue is closed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -I tools/ci/release_closes_check.py --repository "$GITHUB_REPOSITORY"
 
   dogfood-gate:
     name: dogfood gate
