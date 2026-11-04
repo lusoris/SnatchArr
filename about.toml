@@ -24,3 +24,20 @@ targets = [
 
 ignore-dev-dependencies = true
 ignore-build-dependencies = true
+
+# tonic 0.14.9 and tonic-prost 0.14.9 carry MIT headers in their source files, which
+# cargo-about otherwise reads as licence texts. Pin the grpc-rust LICENSE instead.
+[tonic.clarify]
+license = "MIT"
+
+[[tonic.clarify.files]]
+path = "LICENSE"
+checksum = "5c686e0f7978412b49187ae0e9f77e9b52eea9d8d2e6c0de8694b35817d873b1"
+
+# The tonic-prost crate ships no LICENSE file; take it from the repository root.
+[tonic-prost.clarify]
+license = "MIT"
+
+[[tonic-prost.clarify.git]]
+path = "LICENSE"
+checksum = "5c686e0f7978412b49187ae0e9f77e9b52eea9d8d2e6c0de8694b35817d873b1"
