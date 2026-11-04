@@ -1,15 +1,18 @@
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
 #
-# Runs when release-please publishes a GitHub release (tag vX.Y.Z). The dogfood gate
-# (release-dogfood-gate.yml) first refuses a tag whose parent commit lacks a successful
-# snatcharr/dogfood status. After the image smoke test
-# it calls release-build.yml, which builds and pushes both images (multi-arch, SBOM +
-# provenance attestations, cosign keyless) and the Helm chart as an OCI artifact (cosign
-# keyless + provenance attestation) in a reusable workflow of its own (SLSA Build Level 3,
-# #42). This workflow then attaches chart, SBOMs, a checksum file and one provenance bundle
-# covering all of them to the release. The last job verifies every artifact against the
-# commit of the tag and fails the release when one is not covered. Every `uses:` is SHA-pinned.
+# Runs when release-please pushes a release tag (vX.Y.Z) and creates a draft GitHub release.
+# The dogfood gate (release-dogfood-gate.yml) first refuses a tag whose parent commit lacks a
+# successful snatcharr/dogfood status. After the image smoke test it calls release-build.yml,
+# which builds and pushes both images (multi-arch, SBOM + provenance attestations, cosign
+# keyless) and the Helm chart as an OCI artifact (cosign keyless + provenance attestation) in a
+# reusable workflow of its own (SLSA Build Level 3, #42). This workflow then attaches chart,
+# SBOMs, a checksum file and one provenance bundle covering all of them to the draft release,
+# and `verify` checks every artifact against the commit of the tag.
+#
+# The GitHub release stays a draft until `publish`, the last job, which makes the release page
+# public only after every gate (`dogfood-gate`, `image-smoke`, `build`, `release-files`,
+# `verify`) has passed. Every `uses:` is SHA-pinned.
 #
 # A rebuild by workflow_dispatch runs on the tag itself (gh workflow run release.yml
 # --ref vX.Y.Z -f tag=vX.Y.Z): the signing certificates name the commit the workflow ran on,
@@ -17,8 +20,8 @@
 name: release
 
 on:
-  release:
-    types: [published]
+  push:
+    tags: ['v*']
   workflow_dispatch:
     inputs:
       tag:
@@ -42,7 +45,7 @@ jobs:
     steps:
       - id: v
         run: |
-          TAG="${{ github.event.inputs.tag || github.event.release.tag_name }}"
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
           case "$TAG" in v[0-9]*) ;; *) echo "::error::tag must look like vX.Y.Z, got '$TAG'"; exit 1 ;; esac
           if [ "$GITHUB_REF" != "refs/tags/$TAG" ]; then
             echo "::error::run the release workflow on the tag it builds (--ref $TAG), not on $GITHUB_REF"
@@ -151,7 +154,8 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     permissions:
-      contents: read
+      # Reads the draft page; drafts are visible only with push access.
+      contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -201,3 +205,25 @@ jobs:
           printf 'x' >> "tampered/snatcharr-${VERSION}.tgz"
           sha256sum -- tampered/*.tgz tampered/*.spdx.json | sed 's| tampered/| |' > "tampered/snatcharr-${VERSION}-SHA256SUMS"
           expect 4 "a changed chart with a rewritten checksum file is refused" tampered "$COMMIT"
+
+  publish:
+    name: publish the release page
+    needs: [meta, dogfood-gate, image-smoke, build, release-files, verify]
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: publish the draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.meta.outputs.tag }}
+        run: |
+          gh release edit "$TAG" --draft=false --verify-tag
+          view=$(gh release view "$TAG" --json isDraft,publishedAt)
+          echo "$view"
+          if [ "$(printf '%s\n' "$view" | jq -r '.isDraft')" != "false" ]; then
+            echo "::error::release $TAG is still a draft after gh release edit"
+            exit 1
+          fi

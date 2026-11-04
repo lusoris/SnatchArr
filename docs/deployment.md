@@ -99,6 +99,29 @@ python3 -I tools/release/dogfood_pass.py --repository <owner>/<repository> --com
 
 `dogfood_pass.py` checks `/api/v1/system/status` for `<main sha>`, exercises `/api/v1/mcp` over Streamable HTTP (`initialize`, `tools/list`, and `tools/call` on every read-only tool with no required inputs), and posts `snatcharr/dogfood=success` when at least one read-only tool ran and none failed (`make release-dogfood-check` runs the offline self-tests). `--instance` names the instance the pass ran on (for example `cluster`) in the status description and the output; the pass refuses to run without it. The gate accepts only a success whose description names the live instance (`cluster` by default, `--live-instance` to change), so post with `--instance cluster` from the live cluster only; a pass on another instance records its own label and does not satisfy the gate.
 
+### Release page stays a draft until the gates pass
+
+When a release pull request merges, release-please (`release-please-config.json`: `"draft": true`, `"force-tag-creation": true`) creates a draft GitHub release and pushes the `vX.Y.Z` tag immediately with the release GitHub App token (`.github/workflows/release-please.yml`). The tag push (`on: push: tags: ['v*']`) starts `.github/workflows/release.yml`, which runs `dogfood-gate`, `image-smoke`, `build`, `release-files`, and `verify` while the release page is still a draft (`release-files` and `verify` hold `permissions: contents: write` because GitHub exposes draft releases only to callers with push access). Only after every gate succeeds does the final job `publish` (`needs: [meta, dogfood-gate, image-smoke, build, release-files, verify]`) run `gh release edit "$TAG" --draft=false --verify-tag` and confirm via `gh release view "$TAG" --json isDraft,publishedAt` that `isDraft` is `false`.
+
+To rebuild or re-verify an existing release tag by manual dispatch (idempotent when the tag's release is already published):
+
+```sh
+gh workflow run release.yml --ref vX.Y.Z -f tag=vX.Y.Z
+```
+
+`tools/ci/release_publish_order_check.py` (part of `make workflows-verify`) enforces this ordering across `release-please-config.json` and `.github/workflows/*.yml`:
+
+```sh
+python3 -I tools/ci/release_publish_order_check.py --self-test
+python3 -I tools/ci/release_publish_order_check.py
+```
+
+Exit codes:
+
+- `0`: `release-please-config.json` sets `"draft": true` and `"force-tag-creation": true`, `release.yml` does not trigger on `release` (`published` or `created`), only `release.yml` publishes a release, and every publishing job transitively `needs` `dogfood-gate`, `image-smoke`, `build`, `release-files`, and `verify`.
+- `1`: an input or parse error (missing or unreadable file, invalid JSON or YAML, or a duplicate mapping key).
+- `3`: a policy violation (missing `draft: true` or `force-tag-creation: true`, a `release` `published`/`created` trigger, a workflow without a publishing job, publishing outside `release.yml`, or a publishing job that does not transitively depend on every required gate).
+
 ## Helm
 
 Requirements: Kubernetes 1.29+, and the

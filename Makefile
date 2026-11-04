@@ -627,6 +627,8 @@ workflows-verify: ## The rule of "CI success", the Security Scan issue step, the
 	bash tools/e2e/live_lib_test.sh
 	python3 -I tools/release/dogfood_gate.py --self-test
 	python3 -I tools/release/dogfood_pass.py --self-test
+	python3 -I tools/ci/release_publish_order_check.py --self-test
+	python3 -I tools/ci/release_publish_order_check.py
 
 # Not part of verify-all: needs Docker, the network and a forge token (GH_TOKEN, read access).
 # The CI job "workflows" runs it on every pull request.
