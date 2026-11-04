@@ -10,6 +10,8 @@ Exit 0 = all claims closed (including no claims),
 """
 
 import argparse
+import contextlib
+import io
 import json
 import os
 import re
@@ -369,33 +371,27 @@ def self_test_case(
         )
         endpoint = f"repos/{repository}/issues/{number}"
         (api_dir / endpoint_filename(endpoint)).write_text(payload, encoding="utf-8")
-    result = subprocess.run(
+    options = build_parser().parse_args(
         [
-            sys.executable,
-            "-I",
-            str(Path(__file__).resolve()),
             "--repository",
             FIXTURE_REPO,
             "--changelog",
             str(changelog_path),
             "--api-dir",
             str(api_dir),
-        ],
-        capture_output=True,
-        text=True,
-        timeout=GH_TIMEOUT_SECONDS,
-        check=False,
+        ]
     )
-    message = result.stdout + result.stderr
+    output = io.StringIO()
+    with contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
+        exit_code = run_check(options)
+    message = output.getvalue()
     expected = (needles,) if isinstance(needles, str) else needles
-    if result.returncode != want_exit or any(
-        needle not in message for needle in expected
-    ):
+    if exit_code != want_exit or any(needle not in message for needle in expected):
         raise SelfTestError(
             f"{label}: expected exit {want_exit} with {expected!r}, "
-            f"got {result.returncode} ({message.strip()})"
+            f"got {exit_code} ({message.strip()})"
         )
-    print(f"ok   {label}: exit {result.returncode}")
+    print(f"ok   {label}: exit {exit_code}")
 
 
 def self_test() -> None:
@@ -414,32 +410,40 @@ def self_test() -> None:
     print(f"release closes self-test: {len(SELF_TEST_CASES)} cases behaved as required")
 
 
-def main(arguments: list[str] | None = None) -> int:
-    """Parse arguments and fail closed on changelog, API, or self-test errors."""
+def build_parser() -> argparse.ArgumentParser:
+    """Return the command-line parser shared by main and the self-test."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--changelog", type=Path, default=Path("CHANGELOG.md"))
     parser.add_argument("--repository", default=os.environ.get("GITHUB_REPOSITORY", ""))
     parser.add_argument("--api-dir", type=Path, default=None)
     parser.add_argument("--self-test", action="store_true")
-    options = parser.parse_args(arguments)
+    return parser
+
+
+def run_check(options: argparse.Namespace) -> int:
+    """Evaluate the changelog and fail closed on changelog or API errors."""
     try:
-        if options.self_test:
-            self_test()
-            return 0
         exit_code, message = evaluate_check(
             options.repository, options.changelog, options.api_dir
         )
-    except (
-        CheckError,
-        SelfTestError,
-        OSError,
-        ValueError,
-        subprocess.SubprocessError,
-    ) as error:
+    except (CheckError, OSError, ValueError, subprocess.SubprocessError) as error:
         print(f"release closes check error: {error}", file=sys.stderr)
         return 1
     print(message)
     return exit_code
+
+
+def main(arguments: list[str] | None = None) -> int:
+    """Run the self-test or the check; a failed self-test exits 1."""
+    options = build_parser().parse_args(arguments)
+    if not options.self_test:
+        return run_check(options)
+    try:
+        self_test()
+    except (SelfTestError, OSError) as error:
+        print(f"release closes check error: {error}", file=sys.stderr)
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
