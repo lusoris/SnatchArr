@@ -109,7 +109,7 @@ To rebuild or re-verify an existing release tag by manual dispatch (idempotent w
 gh workflow run release.yml --ref vX.Y.Z -f tag=vX.Y.Z
 ```
 
-`tools/ci/release_publish_order_check.py` (part of `make workflows-verify`) enforces this ordering across `release-please-config.json` and `.github/workflows/*.yml`:
+`tools/ci/release_publish_order_check.py` runs in the CI `workflows` job on every pull request and in `make workflows-verify`, enforcing this ordering across `release-please-config.json` and `.github/workflows/*.yml` and `*.yaml`. It allow-lists release actions and `gh release` subcommands, and treats mutating release REST calls through `gh api`, `curl`, or `wget` as publishing. It also scans relative repository `.sh` and `.py` files named in run commands one level deep, including literal Python subprocess and shell commands; calls from those scripts to further scripts are not followed:
 
 ```sh
 python3 -I tools/ci/release_publish_order_check.py --self-test
@@ -119,8 +119,8 @@ python3 -I tools/ci/release_publish_order_check.py
 Exit codes:
 
 - `0`: `release-please-config.json` sets `"draft": true` and `"force-tag-creation": true`, `release.yml` does not trigger on `release` (`published` or `created`), only `release.yml` publishes a release, and every publishing job transitively `needs` `dogfood-gate`, `image-smoke`, `build`, `release-files`, and `verify`.
-- `1`: an input or parse error (missing or unreadable file, invalid JSON or YAML, or a duplicate mapping key).
-- `3`: a policy violation (missing `draft: true` or `force-tag-creation: true`, a `release` `published`/`created` trigger, a workflow without a publishing job, publishing outside `release.yml`, or a publishing job that does not transitively depend on every required gate).
+- `1`: an input or parse error (missing or unreadable file, invalid JSON, YAML, shell quoting or Python, a duplicate mapping key, invalid release trigger types, or an exceeded scan bound).
+- `3`: a policy violation (missing `draft: true` or `force-tag-creation: true`, a `release` `published`/`created` trigger, a workflow without a publishing job, an operation outside the allow-lists, publishing outside `release.yml`, or a publishing job that does not transitively depend on every required gate).
 
 ## Helm
 

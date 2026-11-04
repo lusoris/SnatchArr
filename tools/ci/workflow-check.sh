@@ -178,13 +178,14 @@ if ! jq -e -s 'length == 1 and (.[0] | type == "array")' "$WORK/report.json" > /
   exit 1
 fi
 
-# One line per pin finding: "<verdict> <file>:<line>: <audit>: <annotation>". Only the two pin
-# audits are read; zizmor's other audits are not adopted here yet. A comment that names a branch
-# cannot decide: the branch moves upstream without a change here, and the next update pull
-# request is what moves the pin. Such a pin is printed and passes.
+# One line per finding: "<verdict> <file>:<line>: <audit>: <annotation>". Read: the two pin
+# audits and template-injection (a ${{ }} expression expanded into a run script, at any
+# severity: pass it through env instead). zizmor's other audits are not adopted here yet. A
+# comment that names a branch cannot decide: the branch moves upstream without a change here,
+# and the next update pull request is what moves the pin. Such a pin is printed and passes.
 jq -r '
   .[]
-  | select(.ident == "unpinned-uses" or .ident == "ref-version-mismatch")
+  | select(.ident == "unpinned-uses" or .ident == "ref-version-mismatch" or .ident == "template-injection")
   | (.locations | map(select(.symbolic.kind == "Primary")) | .[0]) as $at
   | (if .ident == "ref-version-mismatch" and ($at.symbolic.annotation | startswith("branch points to commit "))
      then "note" else "refused" end) as $verdict
@@ -193,7 +194,7 @@ jq -r '
 
 sed -n '/^note /p' "$WORK/findings.txt"
 if grep '^refused ' "$WORK/findings.txt" >&2; then
-  echo "error: pin every action to a commit and keep its version comment on that commit's tag" >&2
+  echo "error: pin every action to a commit and keep its version comment on that commit's tag; pass expressions to run scripts through env" >&2
   exit 1
 fi
 if [ ${#ACTION_FILES[@]} -gt 0 ]; then

@@ -55,6 +55,8 @@ jobs:
       # These run at tag time only otherwise, so a pull request that breaks either script would land green.
       - name: The Codacy configuration excludes generated code, after its planted cases
         run: python3 -I tools/ci/codacy_config.py --self-test && python3 -I tools/ci/codacy_config.py
+      - name: The release publish order check refuses its planted cases
+        run: python3 -I tools/ci/release_publish_order_check.py --self-test && python3 -I tools/ci/release_publish_order_check.py
       - name: The release dogfood gate and pass recorder refuse their planted cases
         run: make release-dogfood-check
       - name: Python lint (ruff, pinned) and its planted cases

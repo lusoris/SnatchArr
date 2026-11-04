@@ -2,22 +2,30 @@
 # SPDX-License-Identifier: EUPL-1.2
 """Refuse release workflows or configs that publish the release page before all gates pass.
 
-Checks .github/workflows/*.yml and release-please-config.json:
+Checks .github/workflows/*.yml, *.yaml and release-please-config.json:
 1. release-please-config.json must set draft: true and force-tag-creation: true.
 2. release.yml must not trigger on release events of type published or created.
 3. Only release.yml may publish a GitHub release, at least one job in release.yml must
    publish, and every publishing job must transitively need dogfood-gate, image-smoke,
    build, release-files, and verify.
+Release actions and gh release subcommands use allow-lists. Mutating release REST
+calls count as publishing. Relative .sh/.py files referenced by run steps are scanned
+one level deep; scripts called by those files are not followed (non-recursive DAG).
+Python scanning covers literal subprocess/os shell commands, not arbitrary evaluation.
 Exit 0 = ok, 1 = input or parse error, 3 = refused.
 """
 
 from __future__ import annotations
 
 import argparse
+import ast
 import contextlib
+import copy
 import io
+import itertools
 import json
 import re
+import shlex
 import sys
 import tempfile
 from pathlib import Path
@@ -33,21 +41,33 @@ MAX_FILES = 64
 MAX_JOBS = 64
 MAX_STEPS = 64
 MAX_PACKAGES = 64
-MAX_LINES = 500
-MAX_CASES = 32
+MAX_LINES = 4096
+MAX_TOKENS = 16384
+MAX_PYTHON_NODES = 65536
+MAX_CASES = 128
 RELEASE_ACTIONS = (
     "softprops/action-gh-release",
     "actions/create-release",
     "ncipollo/release-action",
     "marvinpinto/action-automatic-releases",
-    "elgohr/Github-Release-Action",
+    "elgohr/github-release-action",
 )
-GH_CREATE_RE = re.compile(r"\bgh\s+release\s+create\b")
-GH_DRAFT_FLAG_RE = re.compile(r"(?:^|\s)(?:--draft(?:=true)?|-d)(?:\s|$)")
-GH_DRAFT_FALSE_RE = re.compile(r"(?:^|\s)--draft=false(?:\s|$)")
-GH_EDIT_RE = re.compile(r"\bgh\s+release\s+edit\b")
-GH_API_RELEASES_RE = re.compile(r"\bgh\s+api\b.*\breleases\b")
-GH_API_DRAFT_FALSE_RE = re.compile(r"\bdraft\s*[=:]\s*false\b")
+ALLOWED_RELEASE_ACTIONS = frozenset(("googleapis/release-please-action",))
+ALLOWED_RELEASE_COMMANDS = frozenset(
+    (
+        "view",
+        "list",
+        "download",
+        "upload",
+        "create",
+        "edit",
+        "delete-asset",
+        "verify-asset",
+    )
+)
+PYTHON_COMMAND_CALLS = frozenset(
+    ("run", "call", "check_call", "check_output", "Popen", "system", "popen")
+)
 GATE_BYPASS_RE = re.compile(r"\b(?:always|failure|cancelled)\s*\(")
 
 
@@ -142,11 +162,17 @@ def check_release_triggers(workflow: dict[str, object], path: Path) -> list[str]
         return []
     if not isinstance(on_cfg, dict) or "release" not in on_cfg:
         return []
-    rel_cfg = on_cfg.get("release")
+    return check_release_event_types(on_cfg.get("release"), path)
+
+
+def check_release_event_types(rel_cfg: object, path: Path) -> list[str]:
+    """Validate release event types and refuse created/published triggers."""
     if not isinstance(rel_cfg, dict) or "types" not in rel_cfg:
         return [f"{path}: triggers on release event (default types include published)"]
     raw_types = rel_cfg.get("types")
-    types = [raw_types] if isinstance(raw_types, str) else list(raw_types or [])
+    if not isinstance(raw_types, (str, list)):
+        raise CheckError(f"{path}: release types must be a string or list")
+    types = [raw_types] if isinstance(raw_types, str) else raw_types
     bad = [
         str(item) for item in types[:MAX_STEPS] if str(item) in FORBIDDEN_RELEASE_TYPES
     ]
@@ -160,46 +186,290 @@ def check_release_triggers(workflow: dict[str, object], path: Path) -> list[str]
     return []
 
 
+def bounded_lines(script: str) -> list[str]:
+    """Reject input exceeding the scan bound rather than ignoring its tail."""
+    lines = script.splitlines()
+    if len(lines) > MAX_LINES:
+        raise CheckError(f"script exceeds MAX_LINES ({MAX_LINES})")
+    return lines
+
+
 def shell_commands(script: str) -> list[str]:
-    """Strip comment lines and join backslash-continued lines in a shell snippet."""
+    """Join continuations and multiline quoted strings; refuse incomplete quoting."""
     commands: list[str] = []
     current = ""
-    for raw_line in script.splitlines()[:MAX_LINES]:
+    for raw_line in bounded_lines(script)[:MAX_LINES]:
         stripped = raw_line.strip()
-        if not stripped or stripped.startswith("#"):
+        if not current and (not stripped or stripped.startswith("#")):
             continue
         if stripped.endswith("\\"):
             current += stripped[:-1] + " "
-        else:
-            commands.append(current + stripped)
-            current = ""
+            continue
+        current += raw_line
+        try:
+            shlex.split(current, comments=True, posix=True)
+        except ValueError:
+            current += "\n"
+            continue
+        commands.append(current)
+        current = ""
     if current:
+        try:
+            shlex.split(current, comments=True, posix=True)
+        except ValueError as error:
+            raise CheckError(f"shell parse error: {error}") from error
         commands.append(current)
     return commands
 
 
-def step_publish_reason(step: dict[str, object]) -> str | None:
-    """Return a description when step publishes a GitHub release, else None."""
+def command_tokens(command: str) -> list[str]:
+    """Use POSIX quoting and separate shell operators without executing anything."""
+    try:
+        shlex.split(command, comments=True, posix=True)
+        lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|()<>")
+        lexer.whitespace_split = True
+        tokens = list(itertools.islice(lexer, MAX_TOKENS + 1))
+    except ValueError as error:
+        raise CheckError(f"shell parse error: {error}") from error
+    if len(tokens) > MAX_TOKENS:
+        raise CheckError(f"command exceeds MAX_TOKENS ({MAX_TOKENS})")
+    return tokens
+
+
+def option_tokens(tokens: list[str]) -> list[str]:
+    """Keep flags while excluding values of release notes and title options."""
+    flags: list[str] = []
+    skip = False
+    for token in tokens[:MAX_TOKENS]:
+        if skip:
+            skip = False
+            continue
+        if token in ("--notes", "--notes-file", "--title", "-n", "-F", "-t"):
+            skip = True
+        else:
+            flags.append(token)
+    return flags
+
+
+def gh_release_reason(args: list[str]) -> str | None:
+    """Allow known gh release operations, counting create/edit publication."""
+    sub = args[0] if args else ""
+    if sub not in ALLOWED_RELEASE_COMMANDS:
+        return f"runs 'gh release {sub}' (not on the allow-list)"
+    flags = option_tokens(args[1:])
+    if sub == "create" and (
+        "--draft=false" in flags
+        or not any(flag in flags for flag in ("--draft", "--draft=true", "-d"))
+    ):
+        return "runs 'gh release create' without --draft"
+    if sub == "edit" and "--draft=false" in flags:
+        return "runs 'gh release edit --draft=false'"
+    return None
+
+
+def request_method(tokens: list[str], index: int) -> str | None:
+    """Read separate, equals and attached forms of HTTP method flags."""
+    token = tokens[index]
+    option, _, value = token.partition("=")
+    if token.startswith("-X"):
+        value = token[2:]
+    elif option not in ("--method", "--request"):
+        return None
+    return value or (tokens[index + 1] if index + 1 < len(tokens) else "")
+
+
+def body_option(token: str, api: bool) -> bool:
+    """Identify flags that make a release request mutating even with explicit GET."""
+    option = token.partition("=")[0]
+    if api:
+        return option in ("--field", "--raw-field", "--input") or token.startswith(
+            ("-f", "-F")
+        )
+    return (
+        option.startswith("--data")
+        or option
+        in ("--upload-file", "--post-data", "--post-file", "--body-data", "--body-file")
+        or token.startswith(("-d", "-T"))
+    )
+
+
+def mutating_options(tokens: list[str], api: bool = False) -> bool:
+    """Recognise explicit non-read methods and flags that imply a request body."""
+    for index, token in enumerate(tokens[:MAX_TOKENS]):
+        if body_option(token, api):
+            return True
+        method = request_method(tokens, index)
+        if method is not None and method.upper() != "GET":
+            return True
+    return False
+
+
+def gh_command_reason(args: list[str]) -> str | None:
+    """Check a gh release or release REST operation."""
+    if not args:
+        return None
+    if args[0] == "release":
+        return gh_release_reason(args[1:])
+    if (
+        args[0] == "api"
+        and any("releases" in arg for arg in args[:MAX_TOKENS])
+        and mutating_options(args[1:], api=True)
+    ):
+        return "runs 'gh api' on releases with a mutating request"
+    return None
+
+
+def command_arguments(tokens: list[str], index: int) -> list[str]:
+    """Stop at a shell operator, keeping another command's flags out of this one."""
+    tail = tokens[index + 1 :]
+    end = next(
+        (
+            i
+            for i, item in enumerate(tail[:MAX_TOKENS])
+            if item in (";", "&&", "||", "|", ")", ">", ">>")
+        ),
+        len(tail),
+    )
+    return tail[:end]
+
+
+def preferred_reason(first: str | None, found: str | None) -> str | None:
+    """Keep the first publisher, prioritising an unconditional allow-list refusal."""
+    if found and "(not on the allow-list)" in found:
+        return found
+    return first or found
+
+
+def command_publish_reason(tokens: list[str]) -> str | None:
+    """Apply the same gh and REST rules to direct and indirect commands."""
+    first = None
+    for index, token in enumerate(tokens[:MAX_TOKENS]):
+        if token not in ("gh", "curl", "wget"):
+            continue
+        args = command_arguments(tokens, index)
+        if token == "gh":
+            reason = gh_command_reason(args)
+        else:
+            reason = None
+            if any(
+                "/releases" in arg for arg in args[:MAX_TOKENS]
+            ) and mutating_options(args):
+                reason = f"runs '{token}' on /releases with a mutating request"
+        first = preferred_reason(first, reason)
+    return first
+
+
+def python_command_argument(arg: ast.expr) -> str | None:
+    """Read a literal shell command or literal argv without evaluating Python."""
+    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+        return arg.value
+    if isinstance(arg, (ast.List, ast.Tuple)):
+        parts = [
+            item.value
+            for item in arg.elts[:MAX_PYTHON_NODES]
+            if isinstance(item, ast.Constant) and isinstance(item.value, str)
+        ]
+        if len(parts) == len(arg.elts):
+            return shlex.join(parts)
+    return None
+
+
+def python_call_name(func: ast.expr) -> str:
+    """Recognise qualified and imported process/shell call names."""
+    if isinstance(func, ast.Attribute):
+        return func.attr
+    return func.id if isinstance(func, ast.Name) else ""
+
+
+def python_commands(script: str) -> list[str]:
+    """Extract literal command arguments from Python process/shell calls, without execution."""
+    bounded_lines(script)
+    try:
+        tree = ast.parse(script)
+    except SyntaxError as error:
+        raise CheckError(f"Python parse error: {error}") from error
+    commands: list[str] = []
+    nodes = list(itertools.islice(ast.walk(tree), MAX_PYTHON_NODES + 1))
+    if len(nodes) > MAX_PYTHON_NODES:
+        raise CheckError("script exceeds MAX_PYTHON_NODES")
+    for node in nodes[:MAX_PYTHON_NODES]:
+        if not isinstance(node, ast.Call) or not node.args:
+            continue
+        name = python_call_name(node.func)
+        if name not in PYTHON_COMMAND_CALLS:
+            continue
+        command = python_command_argument(node.args[0])
+        if command is not None:
+            commands.append(command)
+    return commands
+
+
+def repository_script(token: str, root: Path) -> tuple[Path, str] | None:
+    """Read an existing relative repository script without following external paths."""
+    path = Path(token)
+    if path.is_absolute() or path.suffix not in (".sh", ".py"):
+        return None
+    target = (root / path).resolve()
+    if not target.is_relative_to(root) or not target.is_file():
+        return None
+    try:
+        script = target.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as error:
+        raise CheckError(f"{path}: {error}") from error
+    return path, script
+
+
+def script_publish_reason(script: str) -> str | None:
+    """Scan one snippet completely, keeping allow-list refusals ahead of publishers."""
+    first = None
+    for command in shell_commands(script)[:MAX_LINES]:
+        first = preferred_reason(first, command_publish_reason(command_tokens(command)))
+    return first
+
+
+def indirect_publish_reason(tokens: list[str], repo_root: Path) -> str | None:
+    """Scan repository .sh/.py arguments once; never follow their script calls."""
+    root = repo_root.resolve()
+    first = None
+    for token in tokens[:MAX_TOKENS]:
+        item = repository_script(token, root)
+        if item is None:
+            continue
+        path, script = item
+        chunks = python_commands(script) if path.suffix == ".py" else [script]
+        for chunk in chunks[:MAX_PYTHON_NODES]:
+            reason = script_publish_reason(chunk)
+            if reason:
+                first = preferred_reason(first, f"runs {path} which {reason}")
+    return first
+
+
+def action_publish_reason(uses: str, with_cfg: object) -> str | None:
+    """Allow release-please and recognised draft actions; refuse unknown release actions."""
+    action = uses.split("@", 1)[0].strip()
+    owner_repo = "/".join(action.split("/")[:2]).lower()
+    if owner_repo in RELEASE_ACTIONS:
+        draft = with_cfg.get("draft") if isinstance(with_cfg, dict) else None
+        if draft is not True and str(draft).lower() != "true":
+            return f"uses {action} without draft: true"
+    elif "release" in owner_repo and owner_repo not in ALLOWED_RELEASE_ACTIONS:
+        return f"uses {action} (not on the allow-list)"
+    return None
+
+
+def step_publish_reason(step: dict[str, object], repo_root: Path) -> str | None:
+    """Find publishing actions/commands, giving unknown operations priority."""
     uses = step.get("uses")
-    if isinstance(uses, str):
-        action = uses.split("@", 1)[0].strip()
-        if action in RELEASE_ACTIONS:
-            with_cfg = step.get("with")
-            draft_val = with_cfg.get("draft") if isinstance(with_cfg, dict) else None
-            if draft_val is not True and str(draft_val).lower() != "true":
-                return f"uses {action} without draft: true"
+    first = (
+        action_publish_reason(uses, step.get("with")) if isinstance(uses, str) else None
+    )
     run_script = step.get("run")
     if isinstance(run_script, str):
-        for cmd in shell_commands(run_script):
-            if GH_CREATE_RE.search(cmd) and (
-                GH_DRAFT_FALSE_RE.search(cmd) or not GH_DRAFT_FLAG_RE.search(cmd)
-            ):
-                return "runs 'gh release create' without --draft"
-            if GH_EDIT_RE.search(cmd) and GH_DRAFT_FALSE_RE.search(cmd):
-                return "runs 'gh release edit --draft=false'"
-            if GH_API_RELEASES_RE.search(cmd) and GH_API_DRAFT_FALSE_RE.search(cmd):
-                return "runs 'gh api' on releases with draft=false"
-    return None
+        for command in shell_commands(run_script)[:MAX_LINES]:
+            tokens = command_tokens(command)
+            first = preferred_reason(first, command_publish_reason(tokens))
+            first = preferred_reason(first, indirect_publish_reason(tokens, repo_root))
+    return first
 
 
 def job_publish_reasons(job_id: str, job: dict[str, object], path: Path) -> list[str]:
@@ -213,7 +483,7 @@ def job_publish_reasons(job_id: str, job: dict[str, object], path: Path) -> list
     for step in steps[:MAX_STEPS]:
         if not isinstance(step, dict):
             raise CheckError(f"{path}: job {job_id}: step is not a mapping")
-        reason = step_publish_reason(step)
+        reason = step_publish_reason(step, path.parent.parent.parent)
         if reason is not None:
             reasons.append(reason)
     return reasons
@@ -276,6 +546,35 @@ def load_workflow_jobs(
     return doc, jobs
 
 
+def publish_job_refusals(
+    job_id: str,
+    job: dict[str, object],
+    jobs: dict[str, dict[str, object]],
+    path: Path,
+    reasons: list[str],
+) -> list[str]:
+    """Require gates for publishers and refuse operations outside the allow-lists."""
+    refusals = [
+        f"{path}: job {job_id}: {reason}"
+        for reason in reasons[:MAX_STEPS]
+        if "(not on the allow-list)" in reason
+    ]
+    condition = job.get("if")
+    if isinstance(condition, str) and GATE_BYPASS_RE.search(condition):
+        refusals.append(
+            f"{path}: job {job_id}: condition {condition!r} runs it after a failed gate"
+        )
+    reached = transitive_needs(jobs, job_id, path)
+    missing = [gate for gate in REQUIRED_GATES if gate not in reached]
+    if missing:
+        for reason in reasons[:MAX_STEPS]:
+            refusals.append(
+                f"{path}: job {job_id}: {reason} without needing gate(s): "
+                f"{', '.join(missing)}"
+            )
+    return refusals
+
+
 def check_workflow_file(path: Path) -> list[str]:
     """Check one workflow file for release trigger and publish ordering violations."""
     doc, jobs = load_workflow_jobs(path)
@@ -293,33 +592,21 @@ def check_workflow_file(path: Path) -> list[str]:
                     f"{path}: job {job_id}: {reason} in workflow other than {RELEASE_WORKFLOW}"
                 )
             continue
-        condition = job_cfg.get("if")
-        if isinstance(condition, str) and GATE_BYPASS_RE.search(condition):
-            refusals.append(
-                f"{path}: job {job_id}: condition {condition!r} runs it after a failed gate"
-            )
-        reached = transitive_needs(jobs, job_id, path)
-        missing = [gate for gate in REQUIRED_GATES if gate not in reached]
-        if missing:
-            for reason in reasons[:MAX_STEPS]:
-                refusals.append(
-                    f"{path}: job {job_id}: {reason} without needing gate(s): "
-                    f"{', '.join(missing)}"
-                )
+        refusals.extend(publish_job_refusals(job_id, job_cfg, jobs, path, reasons))
     if is_release and publish_count == 0:
         refusals.append(f"{path}: no job publishes the draft release")
     return refusals
 
 
 def evaluate(workflows_dir: Path, config_path: Path) -> tuple[int, list[str]]:
-    """Evaluate config_path and all *.yml workflows in workflows_dir."""
+    """Evaluate config_path and all *.yml and *.yaml workflows in workflows_dir."""
     refusals = check_release_please_config(config_path)
     if not workflows_dir.is_dir():
         raise CheckError(f"{workflows_dir}: workflow directory does not exist")
-    files = sorted(workflows_dir.glob("*.yml"))
+    files = sorted((*workflows_dir.glob("*.yml"), *workflows_dir.glob("*.yaml")))
     if not files or len(files) > MAX_FILES:
         raise CheckError(
-            f"{workflows_dir}: expected 1..{MAX_FILES} *.yml files, found {len(files)}"
+            f"{workflows_dir}: expected 1..{MAX_FILES} *.yml or *.yaml files, found {len(files)}"
         )
     if not (workflows_dir / RELEASE_WORKFLOW).is_file():
         raise CheckError(
@@ -388,13 +675,16 @@ jobs:
 def write_fixture(
     root: Path,
     name: str,
-    config: dict[str, object] | str = GOOD_CONFIG,
+    config: dict[str, object] | str | None = None,
     release_yml: str = GOOD_RELEASE_YML,
     extra_workflows: dict[str, str] | None = None,
+    repo_files: dict[str, str] | None = None,
 ) -> tuple[Path, Path]:
     """Create a temporary workflows directory and release-please config for one test case."""
+    if config is None:
+        config = copy.deepcopy(GOOD_CONFIG)
     case_dir = root / name
-    wf_dir = case_dir / "workflows"
+    wf_dir = case_dir / ".github" / "workflows"
     wf_dir.mkdir(parents=True, exist_ok=True)
     cfg_path = case_dir / "release-please-config.json"
     cfg_text = config if isinstance(config, str) else json.dumps(config)
@@ -402,6 +692,10 @@ def write_fixture(
     (wf_dir / RELEASE_WORKFLOW).write_text(release_yml, encoding="utf-8")
     for filename, content in list((extra_workflows or {}).items())[:MAX_FILES]:
         (wf_dir / filename).write_text(content, encoding="utf-8")
+    for filename, content in list((repo_files or {}).items())[:MAX_FILES]:
+        target = case_dir / filename
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
     return wf_dir, cfg_path
 
 
@@ -557,7 +851,7 @@ SELF_TEST_CASES: tuple[
             )
         },
         3,
-        "runs 'gh api' on releases with draft=false",
+        "runs 'gh api' on releases with a mutating request",
     ),
     (
         "duplicate YAML key",
@@ -571,24 +865,320 @@ SELF_TEST_CASES: tuple[
 )
 
 
+def command_case(
+    name: str,
+    command: str,
+    want_exit: int,
+    needle: str = "release_publish_order_check: ok",
+) -> tuple:
+    """Exercise a command in a workflow that cannot publish."""
+    workflow = {
+        "on": "push",
+        "jobs": {"test": {"runs-on": "ubuntu-26.04", "steps": [{"run": command}]}},
+    }
+    return (
+        name,
+        name,
+        GOOD_CONFIG,
+        GOOD_RELEASE_YML,
+        {
+            "other.yaml"
+            if name == "yaml publishes early"
+            else "other.yml": yaml.safe_dump(workflow)
+        },
+        want_exit,
+        needle,
+    )
+
+
+COMMAND_CASES = (
+    (
+        "yaml publishes early",
+        "gh release edit v1 --draft=false",
+        3,
+        "in workflow other than",
+    ),
+    ("script too long", "# comment\n" * (MAX_LINES + 1), 1, "exceeds MAX_LINES"),
+    ("script at line limit", "# comment\n" * (MAX_LINES - 1) + "echo ok", 0, "ok"),
+    (
+        "quoted draft notes",
+        'gh release create v1 --notes "use --draft later"',
+        3,
+        "without --draft",
+    ),
+    ("draft long flag", "gh release create v1 --draft", 0, "ok"),
+    ("draft true flag", "gh release create v1 --draft=true", 0, "ok"),
+    ("draft short flag", "gh release create v1 -d", 0, "ok"),
+    (
+        "draft false wins",
+        "gh release create v1 --draft --draft=false",
+        3,
+        "without --draft",
+    ),
+    ("invalid quoting", 'gh release create v1 "', 1, "shell parse error"),
+    ("unknown subcommand", "gh release surprise v1", 3, "not on the allow-list"),
+    ("release view", "gh release view v1", 0, "ok"),
+    ("release list", "gh release list", 0, "ok"),
+    ("release download", "gh release download v1", 0, "ok"),
+    ("release upload", "gh release upload v1 file", 0, "ok"),
+    ("release edit", "gh release edit v1 --title title", 0, "ok"),
+    ("release delete asset", "gh release delete-asset v1 asset", 0, "ok"),
+    ("release verify asset", "gh release verify-asset v1 asset", 0, "ok"),
+    (
+        "api patch",
+        "gh api -X PATCH repos/o/r/releases/1 -f draft=false",
+        3,
+        "runs 'gh api'",
+    ),
+    ("api post", "gh api --method=POST repos/o/r/releases", 3, "runs 'gh api'"),
+    ("api field", "gh api repos/o/r/releases/1 --field name=x", 3, "runs 'gh api'"),
+    (
+        "api raw field",
+        "gh api repos/o/r/releases/1 --raw-field=name=x",
+        3,
+        "runs 'gh api'",
+    ),
+    (
+        "api input",
+        "gh api repos/o/r/releases/1 --input payload.json",
+        3,
+        "runs 'gh api'",
+    ),
+    ("api get", "gh api repos/o/r/releases/1", 0, "ok"),
+    ("api explicit get", "gh api --method GET repos/o/r/releases/1", 0, "ok"),
+    ("api unrelated", "gh api -X POST repos/o/r/issues -f title=x", 0, "ok"),
+    (
+        "curl patch",
+        "curl -X PATCH https://api.github.com/repos/o/r/releases/1",
+        3,
+        "runs 'curl'",
+    ),
+    (
+        "curl request",
+        "curl --request=PUT https://api.github.com/repos/o/r/releases/1",
+        3,
+        "runs 'curl'",
+    ),
+    (
+        "curl data",
+        "curl --data-raw '{}' https://api.github.com/repos/o/r/releases",
+        3,
+        "runs 'curl'",
+    ),
+    (
+        "curl upload",
+        "curl -T payload.json https://api.github.com/repos/o/r/releases/1",
+        3,
+        "runs 'curl'",
+    ),
+    ("curl get", "curl https://api.github.com/repos/o/r/releases/1", 0, "ok"),
+    (
+        "wget request",
+        "wget --method=PATCH https://api.github.com/repos/o/r/releases/1",
+        3,
+        "runs 'wget'",
+    ),
+    (
+        "wget post",
+        "wget --post-data='{}' https://api.github.com/repos/o/r/releases",
+        3,
+        "runs 'wget'",
+    ),
+    ("wget get", "wget https://api.github.com/repos/o/r/releases/1", 0, "ok"),
+    (
+        "indirect publisher",
+        "bash tools/x.sh",
+        3,
+        "runs tools/x.sh which runs 'gh release create'",
+    ),
+    ("indirect reader", "bash tools/read.sh", 0, "ok"),
+    ("indirect too long", "sh tools/long.sh", 1, "exceeds MAX_LINES"),
+    ("indirect at limit", "sh tools/limit.sh", 0, "ok"),
+    (
+        "indirect python",
+        "python3 tools/x.py",
+        3,
+        "runs tools/x.py which runs 'gh release create'",
+    ),
+    ("indirect python reader", "python3 tools/read.py", 0, "ok"),
+    (
+        "notes equal draft flag",
+        'gh release create v1 --notes "--draft"',
+        3,
+        "without --draft",
+    ),
+    ("edit notes false flag", 'gh release edit v1 --notes "--draft=false"', 0, "ok"),
+    ("token overflow", "echo " + "word " * MAX_TOKENS, 1, "exceeds MAX_TOKENS"),
+    ("token boundary", "echo " + "word " * (MAX_TOKENS - 1), 0, "ok"),
+    ("python node overflow", "python3 tools/nodes.py", 1, "exceeds MAX_PYTHON_NODES"),
+    ("python invalid", "python3 tools/invalid.py", 1, "Python parse error"),
+    (
+        "python argv publisher",
+        "python3 tools/argv.py",
+        3,
+        "runs tools/argv.py which runs 'gh release create'",
+    ),
+    ("python argv reader", "python3 tools/argv-read.py", 0, "ok"),
+    ("quoted multiline", 'echo "first\nsecond"\ngh release view v1', 0, "ok"),
+    (
+        "chained publisher",
+        "gh release edit v1 --draft=false; echo ok",
+        3,
+        "runs 'gh release edit --draft=false'",
+    ),
+    ("chained reader", "gh release view v1; echo ok", 0, "ok"),
+    ("comment draft flag", "gh release create v1 # --draft", 3, "without --draft"),
+    ("comment reader", "gh release view v1 # a comment", 0, "ok"),
+    (
+        "python imported call",
+        "python3 tools/imported.py",
+        3,
+        "runs tools/imported.py which runs 'gh release create'",
+    ),
+    ("one level only", "sh tools/outer.sh", 0, "ok"),
+)
+
+SELF_TEST_FILES = {
+    "python imported call": {
+        "tools/imported.py": 'from os import system\nsystem("gh release create v1")\n'
+    },
+    "one level only": {
+        "tools/outer.sh": "sh tools/nested.sh\n",
+        "tools/nested.sh": "gh release create v1\n",
+    },
+    "gated indirect unknown": {
+        "tools/x.sh": "gh release create v1\ngh release surprise v1\n"
+    },
+    "python node overflow": {"tools/nodes.py": "x=0;" * (MAX_PYTHON_NODES // 4 + 1)},
+    "python invalid": {"tools/invalid.py": "def invalid(:\n"},
+    "python argv publisher": {
+        "tools/argv.py": 'import subprocess\nsubprocess.run(["gh", "release", "create", "v1"])\n'
+    },
+    "python argv reader": {
+        "tools/argv-read.py": 'import subprocess\nsubprocess.run(["gh", "release", "view", "v1"])\n'
+    },
+    "indirect publisher": {"tools/x.sh": "gh release create v1\n"},
+    "indirect reader": {"tools/read.sh": "gh release view v1\n"},
+    "indirect too long": {"tools/long.sh": "# comment\n" * (MAX_LINES + 1)},
+    "indirect at limit": {
+        "tools/limit.sh": "# comment\n" * (MAX_LINES - 1) + "echo ok\n"
+    },
+    "indirect python": {"tools/x.py": 'import os\nos.system("gh release create v1")\n'},
+    "indirect python reader": {
+        "tools/read.py": 'import os\nos.system("gh release view v1")\n'
+    },
+}
+
+
+def review_cases() -> tuple:
+    """Plant action and malformed-trigger cases alongside command cases."""
+    cases = [command_case(*case) for case in COMMAND_CASES[:MAX_CASES]]
+    for action, draft, want in (
+        ("unknown/release-action", None, 3),
+        ("unknown/release-action", True, 3),
+        ("UNKNOWN/Release-Action", None, 3),
+        ("googleapis/release-please-action", None, 0),
+        ("softprops/action-gh-release", True, 0),
+        ("SOFTPROPS/Action-Gh-Release", True, 0),
+        ("actions/checkout", None, 0),
+    )[:MAX_CASES]:
+        name = f"action {action} draft {draft}"
+        case = list(
+            command_case(
+                name, "echo ok", want, "not on the allow-list" if want else "ok"
+            )
+        )
+        step = {"uses": action + "@deadbeef", "with": {"draft": draft}}
+        case[4] = {
+            "other.yml": yaml.safe_dump(
+                {"on": "push", "jobs": {"test": {"steps": [step]}}}
+            )
+        }
+        cases.append(tuple(case))
+    for types, want in (({}, 1), (42, 1), (None, 1), ("edited", 0), (["edited"], 0))[
+        :MAX_CASES
+    ]:
+        name = f"trigger types {types}"
+        release = GOOD_RELEASE_YML.replace(
+            "  push:\n    tags: ['v*']", "  release:\n    types: " + json.dumps(types)
+        )
+        cases.append(
+            (
+                name,
+                name,
+                GOOD_CONFIG,
+                release,
+                None,
+                want,
+                "types must be a string or list" if want else "ok",
+            )
+        )
+    return tuple(cases)
+
+
+def gated_allowlist_cases() -> tuple:
+    """An unknown publisher remains refused even after all gates."""
+    cases = []
+    for name, replacement, want in (
+        ("gated unknown command", "run: gh release surprise v1", 3),
+        ("gated unknown action", "uses: unknown/release-action@deadbeef", 3),
+        ("gated allowed command", "run: gh release edit v1 --draft=false", 0),
+        (
+            "gated later unknown",
+            "run: |\n          gh release edit v1 --draft=false\n          gh release surprise v1",
+            3,
+        ),
+        (
+            "gated chained unknown",
+            "run: gh release edit v1 --draft=false; gh release surprise v1",
+            3,
+        ),
+        ("gated indirect unknown", "run: bash tools/x.sh", 3),
+    )[:MAX_CASES]:
+        release = GOOD_RELEASE_YML.replace(
+            'run: gh release edit "$TAG" --draft=false --verify-tag', replacement
+        )
+        cases.append(
+            (
+                name,
+                name,
+                GOOD_CONFIG,
+                release,
+                None,
+                want,
+                "not on the allow-list" if want else "ok",
+            )
+        )
+    return tuple(cases)
+
+
 def self_test() -> None:
     """Run planted positive, refusal, and error cases."""
     with tempfile.TemporaryDirectory() as scratch:
         root = Path(scratch)
-        for label, name, cfg, rel_yml, extra, want_exit, needle in SELF_TEST_CASES[
-            :MAX_CASES
-        ]:
-            wf_dir, cfg_path = write_fixture(root, name, cfg, rel_yml, extra)
-            run_cli_case(label, wf_dir, cfg_path, want_exit, needle)
+        cases = SELF_TEST_CASES + review_cases() + gated_allowlist_cases()
+        if len(cases) > MAX_CASES:
+            raise SelfTestError("self-test cases exceed MAX_CASES")
+        failures: list[str] = []
+        for label, name, cfg, rel_yml, extra, want_exit, needle in cases[:MAX_CASES]:
+            wf_dir, cfg_path = write_fixture(
+                root, name, cfg, rel_yml, extra, SELF_TEST_FILES.get(name)
+            )
+            try:
+                run_cli_case(label, wf_dir, cfg_path, want_exit, needle)
+            except (SelfTestError, TypeError) as error:
+                failures.append(str(error))
         run_cli_case(
             "unreadable file",
-            root / "ok_current" / "workflows",
+            root / "ok_current" / ".github" / "workflows",
             root / "nonexistent-config.json",
             1,
             "nonexistent-config.json",
         )
+    if failures:
+        raise SelfTestError("\n".join(failures))
     print(
-        f"release_publish_order_check self-test: {len(SELF_TEST_CASES) + 1} cases behaved "
+        f"release_publish_order_check self-test: {len(cases) + 1} cases behaved "
         "as required"
     )
 
@@ -600,7 +1190,7 @@ def main(argv: list[str] | None = None) -> int:
         "--workflows-dir",
         type=Path,
         default=DEFAULT_WORKFLOWS_DIR,
-        help="directory containing GitHub workflow *.yml files",
+        help="directory containing GitHub workflow *.yml and *.yaml files",
     )
     parser.add_argument(
         "--config",
