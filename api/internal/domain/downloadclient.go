@@ -73,9 +73,10 @@ const MaxActiveDownloadsLimit = 1000
 // MaxQueuedDownloadsLimit bounds max_queued.
 const MaxQueuedDownloadsLimit = 1000
 
-// DownloadClient is a torrent or Usenet client SnatchArr observes for backpressure. It is
-// never used to add, remove or reorder downloads. InstanceID nil means the client applies
-// to every instance; discovered clients always belong to the instance that listed them.
+// DownloadClient is a torrent or Usenet client SnatchArr observes for backpressure and manages
+// via allow-listed priority, queue-order and per-item pause/resume writes (ADR-0046). It is never
+// used to delete/remove downloads or perform whole-queue operations. InstanceID nil means the
+// client applies to every instance; discovered clients always belong to the instance that listed them.
 type DownloadClient struct {
 	ID                 uuid.UUID
 	InstanceID         *uuid.UUID

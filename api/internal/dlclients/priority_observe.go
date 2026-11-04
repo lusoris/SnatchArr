@@ -10,9 +10,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/golusoris/goenvoy/downloadclient/nzbget/v2"
 	"github.com/golusoris/goenvoy/downloadclient/qbit/v2"
-	"github.com/golusoris/goenvoy/downloadclient/sabnzbd/v2"
 
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 )
@@ -52,15 +50,11 @@ func (g *Goenvoy) PriorityItems(ctx context.Context, c domain.DownloadClient, se
 	return PriorityObservation{}, fmt.Errorf("%w: unsupported priority client kind %q", domain.ErrInvalid, c.Kind)
 }
 
+// qbitPriorityItems reads the qBittorrent queueing preferences and torrents as priority items.
 func (g *Goenvoy) qbitPriorityItems(ctx context.Context, c domain.DownloadClient, secret string) (PriorityObservation, error) {
-	cl, err := qbit.New(c.BaseURL, qbit.WithTimeout(g.timeout), qbit.WithUserAgent(g.userAgent))
+	cl, err := g.qbitClient(ctx, c, secret)
 	if err != nil {
-		return PriorityObservation{}, fmt.Errorf("qbit priority client: %w", err)
-	}
-	if c.Username != "" || secret != "" {
-		if loginErr := cl.Login(ctx, c.Username, secret); loginErr != nil {
-			return PriorityObservation{}, fmt.Errorf("qbit priority login: %w", loginErr)
-		}
+		return PriorityObservation{}, err
 	}
 	prefs, err := cl.GetPreferences(ctx)
 	if err != nil {
@@ -81,10 +75,11 @@ func (g *Goenvoy) qbitPriorityItems(ctx context.Context, c domain.DownloadClient
 	return obs, nil
 }
 
+// nzbgetPriorityItems reads the NZBGet groups as priority items.
 func (g *Goenvoy) nzbgetPriorityItems(ctx context.Context, c domain.DownloadClient, secret string) (PriorityObservation, error) {
-	cl, err := nzbget.New(c.BaseURL, c.Username, secret, nzbget.WithTimeout(g.timeout), nzbget.WithUserAgent(g.userAgent))
+	cl, err := g.nzbgetClient(c, secret)
 	if err != nil {
-		return PriorityObservation{}, fmt.Errorf("nzbget priority client: %w", err)
+		return PriorityObservation{}, err
 	}
 	groups, err := cl.ListGroups(ctx)
 	if err != nil {
@@ -103,10 +98,11 @@ func (g *Goenvoy) nzbgetPriorityItems(ctx context.Context, c domain.DownloadClie
 	return obs, nil
 }
 
+// sabPriorityItems reads the SABnzbd queue slots as priority items.
 func (g *Goenvoy) sabPriorityItems(ctx context.Context, c domain.DownloadClient, secret string) (PriorityObservation, error) {
-	cl, err := sabnzbd.New(c.BaseURL, secret, sabnzbd.WithTimeout(g.timeout), sabnzbd.WithUserAgent(g.userAgent))
+	cl, err := g.sabnzbdClient(c, secret)
 	if err != nil {
-		return PriorityObservation{}, fmt.Errorf("sab priority client: %w", err)
+		return PriorityObservation{}, err
 	}
 	queue, err := cl.GetQueue(ctx)
 	if err != nil {
@@ -146,6 +142,7 @@ func sabPriority(value string) (int, error) {
 	return level, nil
 }
 
+// priorityItemState maps an adapter class and the paused flag to a download item state.
 func priorityItemState(class dlClass, paused bool) domain.DownloadItemState {
 	if paused {
 		return domain.DownloadItemPaused
