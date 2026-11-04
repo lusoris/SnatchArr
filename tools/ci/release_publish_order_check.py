@@ -65,6 +65,23 @@ ALLOWED_RELEASE_COMMANDS = frozenset(
         "verify-asset",
     )
 )
+# gh release create/edit flags that take a value (gh 2.102.1 --help); pflag consumes the next token.
+GH_RELEASE_VALUE_FLAGS = frozenset(
+    (
+        "--discussion-category",
+        "--notes",
+        "-n",
+        "--notes-file",
+        "-F",
+        "--notes-start-tag",
+        "--repo",
+        "-R",
+        "--tag",
+        "--target",
+        "--title",
+        "-t",
+    )
+)
 # Values Go's strconv.ParseBool accepts (pkg.go.dev/strconv#ParseBool); gh parses --draft with it.
 PARSEBOOL_TRUE = frozenset(("1", "t", "T", "TRUE", "true", "True"))
 PARSEBOOL_FALSE = frozenset(("0", "f", "F", "FALSE", "false", "False"))
@@ -240,14 +257,20 @@ def command_tokens(command: str) -> list[str]:
 
 
 def option_tokens(tokens: list[str]) -> list[str]:
-    """Keep flags while excluding values of release notes and title options."""
+    """Keep flags as gh's pflag parser sees them.
+
+    The token after a value-taking flag is its value, whatever it looks like, and
+    everything after "--" is a positional argument (an asset file name).
+    """
     flags: list[str] = []
     skip = False
     for token in tokens[:MAX_TOKENS]:
         if skip:
             skip = False
             continue
-        if token in ("--notes", "--notes-file", "--title", "-n", "-F", "-t"):
+        if token == "--":
+            break
+        if token in GH_RELEASE_VALUE_FLAGS:
             skip = True
         else:
             flags.append(token)
@@ -937,6 +960,21 @@ COMMAND_CASES = (
     ("edit draft F", "gh release edit v1 --draft=F", 3, "edit --draft=false"),
     ("edit draft one", "gh release edit v1 --draft=1", 0, "ok"),
     ("draft unparsable", "gh release create v1 --draft=yes", 1, "not a boolean"),
+    (
+        "draft after separator",
+        "gh release create v1 -- --draft=1",
+        3,
+        "without --draft",
+    ),
+    (
+        "draft as target value",
+        "gh release create v1 --target --draft",
+        3,
+        "without --draft",
+    ),
+    ("draft as repo value", "gh release create v1 -R --draft", 3, "without --draft"),
+    ("draft after repo value", "gh release create v1 --repo o/r --draft", 0, "ok"),
+    ("draft before separator", "gh release create v1 --draft -- a.tgz", 0, "ok"),
     ("draft short flag", "gh release create v1 -d", 0, "ok"),
     (
         "draft false wins",
