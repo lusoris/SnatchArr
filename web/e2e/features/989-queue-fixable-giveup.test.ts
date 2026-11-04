@@ -296,6 +296,8 @@ test('989: give-up - aged import_fixable item (>24h) is removed with blocklist=t
 
 	try {
 		await setFixableActPolicy(page, csrf, instanceId);
+		// Baseline: the fake keeps deletes from earlier tests, so only a new record counts.
+		const before = (await fetchFakeDeletes(page, fixableAgedUrl)).length;
 
 		// Trigger queue sweep through served API.
 		const sweepRes = await page.request.post(`/api/v1/instances/${instanceId}/queue/sweep`, {
@@ -307,7 +309,7 @@ test('989: give-up - aged import_fixable item (>24h) is removed with blocklist=t
 		// Assert item was removed via DELETE with blocklist=true and skip_redownload=false:
 		// skipRedownload=false is the re-search request the *arr runs itself (arrclient/queue.go).
 		const deletes = await fetchFakeDeletes(page, fixableAgedUrl);
-		expect(deletes.length).toBeGreaterThanOrEqual(1);
+		expect(deletes.length).toBeGreaterThan(before);
 		const del = deletes.at(-1)!;
 		expect(del.id).toBe(1);
 		expect(del.blocklist).toBe(true);

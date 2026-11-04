@@ -126,6 +126,9 @@ async function createSab(
 	});
 }
 
+// PLAN_TEST_TIMEOUT_MS covers setup, the 45 s waitForPlan poll, the assertions and cleanup.
+const PLAN_TEST_TIMEOUT_MS = 120_000;
+
 // waitForPlan polls the client's priority plan until a reconcile tick has served it. The
 // leader reconciler observes every 15 s in this suite (tools/e2e/web-e2e-api.sh).
 async function waitForPlan(page: Page, clientId: string): Promise<DownloadClientPriorityPlan> {
@@ -168,6 +171,8 @@ async function cleanup(
 test('974: positive - download client priority-plan read returns plan or pending 404, and writes nothing', async ({
 	page
 }) => {
+	// waitForPlan polls for up to 45 s; the default 30 s test timeout would end the test first.
+	test.setTimeout(PLAN_TEST_TIMEOUT_MS);
 	const stub = await startSabStub();
 	let csrf = '';
 	let clientId: string | undefined;
@@ -222,6 +227,8 @@ test('974: negative - unknown or malformed client id returns problem+json', asyn
 test('974: boundary - disabled client returns 404 pending/unobserved shape without contacting stub writes', async ({
 	page
 }) => {
+	// waitForPlan polls for up to 45 s; the default 30 s test timeout would end the test first.
+	test.setTimeout(PLAN_TEST_TIMEOUT_MS);
 	const stubA = await startSabStub();
 	const stubB = await startSabStub();
 	let csrf = '';
