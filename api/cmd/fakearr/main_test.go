@@ -25,6 +25,7 @@ const testAPIKey = "fake-api-key-0123456789"
 // testNow is the fixed clock of every test server; the sweep integration test sweeps at it.
 var testNow = time.Date(2026, 10, 27, 12, 0, 0, 0, time.UTC)
 
+// newTestServer starts the fake behind httptest with its clock pinned at testNow.
 func newTestServer(t *testing.T, kind string, importBlocked bool) *httptest.Server {
 	t.Helper()
 	f := newFake(kind, testAPIKey, 10, 5, importBlocked, nil)
@@ -303,6 +304,9 @@ func TestManualImportCommandBoundary(t *testing.T) {
 	}
 }
 
+// TestArrClientAndSweepIntegration reads the fake queue through the real *arr
+// client, checks that a fresh import-blocked item stays on the import path, and
+// force-imports it.
 func TestArrClientAndSweepIntegration(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

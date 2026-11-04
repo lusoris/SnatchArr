@@ -156,6 +156,9 @@ func nextStrikeCount(prev Strike, r Rule, threshold int) int {
 	return 1
 }
 
+// applyRuleMatch decides what to do with item once rule r matched it: id_matched
+// and import_fixable import, every other rule and an import_fixable item past its
+// import budget take the removal path; failed, import_broken and give-up re-search.
 func applyRuleMatch(s Settings, item Item, prev Strike, r Rule, pattern string, now time.Time, spent *budget) Decision {
 	rs := ResolveRule(s, r)
 	count := nextStrikeCount(prev, r, rs.Threshold)
@@ -188,6 +191,8 @@ func applyRuleMatch(s Settings, item Item, prev Strike, r Rule, pattern string, 
 // giving up on import and removing it instead.
 const fixableImportBudget = strikeTTL
 
+// fixableGaveUp reports whether an import_fixable item was added at least
+// fixableImportBudget ago. An item without an added time never gives up.
 func fixableGaveUp(item Item, now time.Time) bool {
 	return !item.Added.IsZero() && itemAge(item, now) >= fixableImportBudget
 }

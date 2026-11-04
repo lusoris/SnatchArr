@@ -16,6 +16,8 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/queue"
 )
 
+// TestImportFixableGiveUp covers the give-up boundary: past the 24 h budget the
+// item is removed with blocklist and re-search, below it the item is imported.
 func TestImportFixableGiveUp(t *testing.T) {
 	t.Parallel()
 
@@ -218,6 +220,8 @@ func TestImportFixableGiveUp(t *testing.T) {
 	}
 }
 
+// TestImportFixableGiveUpMaxRemovalsBound checks that give-up removals count
+// against MaxRemovalsPerSweep: with a cap of 1 the second item is deferred.
 func TestImportFixableGiveUpMaxRemovalsBound(t *testing.T) {
 	t.Parallel()
 
@@ -320,6 +324,9 @@ func TestImportFixableGiveUpAtMaxGrace(t *testing.T) {
 	}
 }
 
+// TestServiceImportFixableGiveUpRemoves runs the give-up through the service sweep
+// and checks that the *arr client gets one removal with blocklist and re-search
+// and no import.
 func TestServiceImportFixableGiveUpRemoves(t *testing.T) {
 	t.Parallel()
 

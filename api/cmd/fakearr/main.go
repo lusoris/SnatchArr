@@ -46,6 +46,8 @@ type fake struct {
 	clk           clockwork.Clock
 }
 
+// newFake returns a fake *arr of the given kind with a real clock; tests swap
+// clk for a fake clock.
 func newFake(kind, apiKey string, missing, cutoff int, importBlocked bool, logger *slog.Logger) *fake {
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
@@ -181,6 +183,8 @@ func (f *fake) item(id int64, i int) map[string]any {
 	}
 }
 
+// queue serves the queue page: empty without importBlocked, one import-blocked
+// record until a manual import was posted, then empty again.
 func (f *fake) queue(w http.ResponseWriter, _ *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -204,10 +208,14 @@ func (f *fake) queue(w http.ResponseWriter, _ *http.Request) {
 // below the 24 h import_fixable budget, so a sweep imports the item instead of giving up.
 const queueAddedAge = time.Minute
 
+// queueAdded returns the added time of the import-blocked download, queueAddedAge
+// before the fake's clock, in RFC 3339.
 func (f *fake) queueAdded() string {
 	return f.clk.Now().Add(-queueAddedAge).UTC().Format(time.RFC3339)
 }
 
+// queueRecord builds the one import-blocked queue record for the fake's kind, with
+// the status message the import_fixable rule matches.
 func (f *fake) queueRecord() map[string]any {
 	rec := map[string]any{
 		"id":                    1,
