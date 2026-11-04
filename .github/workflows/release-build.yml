@@ -151,7 +151,10 @@ jobs:
           output-file: snatcharr-${{ matrix.component }}-${{ inputs.version }}.spdx.json
           upload-release-assets: false
       - id: out
-        run: echo "digest-${{ matrix.component }}=${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT"
+        env:
+          COMPONENT: ${{ matrix.component }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: echo "digest-${COMPONENT}=${DIGEST}" >> "$GITHUB_OUTPUT"
 
   chart:
     name: helm chart
@@ -184,13 +187,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: make chart-package
-        run: make chart-package CHART_VERSION="${{ inputs.version }}"
+        env:
+          VERSION: ${{ inputs.version }}
+        run: make chart-package CHART_VERSION="$VERSION"
       - name: push to ${{ env.CHART_REPO }}
         id: push
         env:
           VERSION: ${{ inputs.version }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
         run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login "$REGISTRY" -u "${{ github.actor }}" --password-stdin
+          printf '%s' "$REGISTRY_TOKEN" | helm registry login "$REGISTRY" -u "$ACTOR" --password-stdin
           helm push "dist/snatcharr-${VERSION}.tgz" "$CHART_REPO" 2>&1 | tee push.log
           DIGEST=$(sed -n 's/^Digest: //p' push.log)
           case "$DIGEST" in sha256:?*) ;; *) echo "::error::helm push printed no digest"; exit 1 ;; esac
