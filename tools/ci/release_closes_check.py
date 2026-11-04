@@ -29,8 +29,19 @@ CLAIM_RE = re.compile(
     re.IGNORECASE,
 )
 ISSUE_URL_RE = re.compile(
-    r"https://github\.com/([^/\s]+)/([^/\s]+)/(?:issues|pull)/[0-9]+(?:[/?#].*)?"
+    r"https://github\.com/([^/\s]+)/([^/\s]+)/(?:issues|pull)/[0-9]+(?:[/?#].*)?",
+    re.IGNORECASE,
 )
+COMMIT_RE = re.compile(
+    r"\[([0-9a-f]{7,40})\]\(https://github\.com/[^)\s]+/commit/[0-9a-f]{7,40}\)",
+    re.IGNORECASE,
+)
+
+
+def line_commit(line: str) -> str:
+    """Name the commit a release-please changelog line links to."""
+    match = COMMIT_RE.search(line)
+    return f"commit {match.group(1)}" if match else "no commit linked in the line"
 
 
 class CheckError(Exception):
@@ -134,7 +145,9 @@ def evaluate_check(
     for (claim_repository, number), line in claims.items():
         if issue_state(claim_repository, number, api_dir) == "open":
             prefix = "" if claim_repository == repository else claim_repository
-            offenders.append(f"release closes check: open {prefix}#{number}: {line}")
+            offenders.append(
+                f"release closes check: open {prefix}#{number}: {line} ({line_commit(line)})"
+            )
     if offenders:
         return 3, "\n".join(offenders)
     return 0, f"release closes check: checked {len(claims)} issue(s), all closed"
@@ -159,6 +172,23 @@ SELF_TEST_CASES = (
         {("other/lib", 7): '{"state":"open"}'},
         3,
         "open other/lib#7",
+    ),
+    (
+        "linked URL with differently cased host refused",
+        "## 1.0.1\ncloses [#7](https://GitHub.com/other/lib/issues/7)\n",
+        {("other/lib", 7): '{"state":"open"}', 7: '{"state":"closed"}'},
+        3,
+        "open other/lib#7",
+    ),
+    (
+        "open claim names the linked commit",
+        (
+            "## 1.0.1\n* fix, closes #9 ([abc1234](https://github.com/example/project/commit/"
+            "abc1234def5678))\n"
+        ),
+        {9: '{"state":"open"}'},
+        3,
+        "(commit abc1234)",
     ),
     (
         "linked text cross-repository open claim refused",
