@@ -344,16 +344,30 @@ func (h *Handlers) GetHourlyCaps(ctx context.Context) ([]oas.CapStatus, error) {
 		return nil, err
 	}
 	out := make([]oas.CapStatus, 0, len(list)+1)
-	if global, ok, err := h.globalCap(ctx); err != nil {
+	global, ok, err := h.globalCap(ctx)
+	if err != nil {
 		return nil, err
-	} else if ok {
+	}
+	if ok {
 		out = append(out, global)
 	}
+	instanceCaps, err := h.hourlyInstanceCaps(ctx, list)
+	if err != nil {
+		return nil, err
+	}
+	return append(out, instanceCaps...), nil
+}
+
+func (h *Handlers) hourlyInstanceCaps(ctx context.Context, list []domain.Instance) ([]oas.CapStatus, error) {
+	out := make([]oas.CapStatus, 0, len(list))
 	for _, inst := range list {
 		if !inst.Kind.IsArr() {
 			continue
 		}
 		policy, err := h.policies.Get(ctx, inst.ID)
+		if errors.Is(err, domain.ErrNotFound) {
+			continue
+		}
 		if err != nil {
 			return nil, err
 		}
