@@ -13,7 +13,7 @@ import argparse
 import json
 import os
 import re
-import subprocess
+import subprocess  # nosec B404 -- runs only gh api with a fixed argument list, never a shell
 import sys
 import tempfile
 from pathlib import Path
@@ -116,7 +116,7 @@ def issue_state(repository: str, number: int, api_dir: Path | None) -> str:
         state = payload.get("state")
     else:
         try:
-            result = subprocess.run(
+            result = subprocess.run(  # nosec B603 -- fixed gh argv list, no shell; endpoint built from regex-matched owner, repo and issue number
                 ["gh", "api", endpoint, "--jq", ".state"],
                 capture_output=True,
                 text=True,
