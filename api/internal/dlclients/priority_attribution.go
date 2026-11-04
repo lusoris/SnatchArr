@@ -54,11 +54,13 @@ func attributePriorityItems(
 
 func categoryClients(rows []domain.DownloadClient) map[string]uuid.UUID {
 	clients := make(map[string]uuid.UUID, len(rows))
+	ambiguous := make(map[string]bool, len(rows))
 	for _, row := range rows {
-		if row.Category == "" {
+		if row.Category == "" || ambiguous[row.Category] {
 			continue
 		}
 		if _, exists := clients[row.Category]; exists {
+			ambiguous[row.Category] = true
 			delete(clients, row.Category)
 			continue
 		}

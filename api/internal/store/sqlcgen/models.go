@@ -135,6 +135,8 @@ type DownloadClientPriorityOwnership struct {
 	ItemID              string
 	LastWrittenPriority *int32
 	PausedBySnatcharr   bool
+	PendingAction       string
+	PendingPriority     *int32
 	UpdatedAt           time.Time
 }
 

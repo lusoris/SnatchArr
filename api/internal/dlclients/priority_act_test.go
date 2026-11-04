@@ -126,27 +126,8 @@ func assertCall(t *testing.T, calls []writerCall, method string, ids []string) {
 // TestPriorityReconcilerGroupModeRule_Mixed verifies that any row on observe puts the whole group on observe with zero writes.
 func TestPriorityReconcilerGroupModeRule_Mixed(t *testing.T) {
 	t.Parallel()
-	firstInst, secondInst := uuid.New(), uuid.New()
-	goodURL := "http://qbit:8080"
-	c1 := domain.DownloadClient{ID: uuid.New(), Name: "qbit-act", InstanceID: &firstInst, Category: "movies", PriorityMode: "act", Kind: domain.ClientQBittorrent, BaseURL: goodURL, Enabled: true}
-	c2 := domain.DownloadClient{ID: uuid.New(), Name: "qbit-obs", InstanceID: &secondInst, Category: "tv", PriorityMode: "observe", Kind: domain.ClientQBittorrent, BaseURL: goodURL, Enabled: true}
-	inputs := priorityInputs{
-		Clients:   []domain.DownloadClient{c1, c2},
-		Instances: []domain.Instance{{ID: firstInst, Kind: domain.KindRadarr}, {ID: secondInst, Kind: domain.KindSonarr, DownloadPriority: new(100)}},
-		Preset:    domain.PriorityPreset{domain.KindRadarr: 1},
-	}
-	obs := PriorityObservation{
-		Items: []PriorityItem{
-			{Category: "movies", ID: "m1", State: domain.DownloadItemQueued, Priority: 1},
-			{Category: "tv", ID: "t1", State: domain.DownloadItemQueued, Priority: 2},
-		},
-	}
-	writer := &fakePriorityWriter{}
-	clk := clock.NewFake()
-	observer := priorityObserverFunc(func(context.Context, domain.DownloadClient, string) (PriorityObservation, error) {
-		return obs, nil
-	})
-	r := newPriorityReconciler(&prioritySourceFake{inputs: inputs}, observer, writer, clk, slog.New(slog.DiscardHandler))
+	r, writer, inputs := actGroupFixture("observe")
+	c1 := inputs.Clients[0]
 	if err := r.Tick(t.Context()); err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +135,7 @@ func TestPriorityReconcilerGroupModeRule_Mixed(t *testing.T) {
 		t.Fatalf("expected 0 writer calls for mixed group, got %d: %+v", len(writer.calls), writer.calls)
 	}
 	p1, err := r.Latest(c1.ID)
-	if err != nil || p1.Mode != "observe" || !slices.Equal(p1.ObserveRowNames, []string{"qbit-obs"}) {
+	if err != nil || p1.Mode != "observe" || !slices.Equal(p1.ObserveRowNames, []string{"tv"}) {
 		t.Fatalf("p1 = %+v, err = %v", p1, err)
 	}
 }
@@ -162,27 +143,8 @@ func TestPriorityReconcilerGroupModeRule_Mixed(t *testing.T) {
 // TestPriorityReconcilerGroupModeRule_AllAct verifies that when all rows are act, allow-listed writes execute and ObserveRowNames is empty.
 func TestPriorityReconcilerGroupModeRule_AllAct(t *testing.T) {
 	t.Parallel()
-	firstInst, secondInst := uuid.New(), uuid.New()
-	goodURL := "http://qbit:8080"
-	c1 := domain.DownloadClient{ID: uuid.New(), Name: "qbit-act1", InstanceID: &firstInst, Category: "movies", PriorityMode: "act", Kind: domain.ClientQBittorrent, BaseURL: goodURL, Enabled: true}
-	c2 := domain.DownloadClient{ID: uuid.New(), Name: "qbit-act2", InstanceID: &secondInst, Category: "tv", PriorityMode: "act", Kind: domain.ClientQBittorrent, BaseURL: goodURL, Enabled: true}
-	inputs := priorityInputs{
-		Clients:   []domain.DownloadClient{c1, c2},
-		Instances: []domain.Instance{{ID: firstInst, Kind: domain.KindRadarr}, {ID: secondInst, Kind: domain.KindSonarr, DownloadPriority: new(100)}},
-		Preset:    domain.PriorityPreset{domain.KindRadarr: 1},
-	}
-	obs := PriorityObservation{
-		Items: []PriorityItem{
-			{Category: "movies", ID: "m1", State: domain.DownloadItemQueued, Priority: 1},
-			{Category: "tv", ID: "t1", State: domain.DownloadItemQueued, Priority: 2},
-		},
-	}
-	writer := &fakePriorityWriter{}
-	clk := clock.NewFake()
-	observer := priorityObserverFunc(func(context.Context, domain.DownloadClient, string) (PriorityObservation, error) {
-		return obs, nil
-	})
-	r := newPriorityReconciler(&prioritySourceFake{inputs: inputs}, observer, writer, clk, slog.New(slog.DiscardHandler))
+	r, writer, inputs := actGroupFixture("act")
+	c1 := inputs.Clients[0]
 	if err := r.Tick(t.Context()); err != nil {
 		t.Fatal(err)
 	}
@@ -235,14 +197,7 @@ func TestPriorityReconcilerObserveZeroWrites(t *testing.T) {
 // TestPriorityReconcilerActQBit verifies qBittorrent calls MoveToTop in reverse plan order of queued attributed items and skips unattributed items or when queueing is disabled.
 func TestPriorityReconcilerActQBit(t *testing.T) {
 	t.Parallel()
-	firstInst, secondInst := uuid.New(), uuid.New()
-	c1 := domain.DownloadClient{ID: uuid.New(), Name: "qbit1", InstanceID: &firstInst, Category: "movies", PriorityMode: "act", Kind: domain.ClientQBittorrent, BaseURL: "http://qbit:8080", Enabled: true}
-	c2 := domain.DownloadClient{ID: uuid.New(), Name: "qbit2", InstanceID: &secondInst, Category: "tv", PriorityMode: "act", Kind: domain.ClientQBittorrent, BaseURL: "http://qbit:8080", Enabled: true}
-	inputs := priorityInputs{
-		Clients:   []domain.DownloadClient{c1, c2},
-		Instances: []domain.Instance{{ID: firstInst, Kind: domain.KindRadarr}, {ID: secondInst, Kind: domain.KindSonarr, DownloadPriority: new(100)}},
-		Preset:    domain.PriorityPreset{domain.KindRadarr: 1},
-	}
+	inputs := actTestInputs(domain.ClientQBittorrent, "act")
 	obs := PriorityObservation{
 		Items: []PriorityItem{
 			{Category: "movies", ID: "movie-queued", State: domain.DownloadItemQueued, Priority: 1},
@@ -252,11 +207,7 @@ func TestPriorityReconcilerActQBit(t *testing.T) {
 		},
 	}
 	writer := &fakePriorityWriter{}
-	clk := clock.NewFake()
-	observer := priorityObserverFunc(func(context.Context, domain.DownloadClient, string) (PriorityObservation, error) {
-		return obs, nil
-	})
-	r := newPriorityReconciler(&prioritySourceFake{inputs: inputs}, observer, writer, clk, slog.New(slog.DiscardHandler))
+	r := newActTestReconciler(&prioritySourceFake{inputs: inputs}, &obs, writer)
 	if err := r.Tick(t.Context()); err != nil {
 		t.Fatal(err)
 	}
@@ -279,21 +230,7 @@ func TestPriorityReconcilerActQBit(t *testing.T) {
 	}
 	assertAllowListedCallsOnly(t, writer.calls)
 
-	writerDisabled := &fakePriorityWriter{}
-	obsDisabled := obs
-	obsDisabled.QueueingDisabled = true
-	obsFn := priorityObserverFunc(func(context.Context, domain.DownloadClient, string) (PriorityObservation, error) {
-		return obsDisabled, nil
-	})
-	rDisabled := newPriorityReconciler(&prioritySourceFake{inputs: inputs}, obsFn, writerDisabled, clk, slog.New(slog.DiscardHandler))
-	if err := rDisabled.Tick(t.Context()); err != nil {
-		t.Fatal(err)
-	}
-	for _, call := range writerDisabled.calls {
-		if call.Method == "MoveToTop" {
-			t.Fatalf("expected 0 MoveToTop calls when queueing disabled, got: %+v", call)
-		}
-	}
+	assertQueueingDisabled(t, inputs, obs)
 }
 
 // TestPriorityReconcilerActNZBGetSAB verifies priority mutations, hand-set retention and rewrites for leveled clients.
@@ -310,14 +247,8 @@ func TestPriorityReconcilerActNZBGetSAB(t *testing.T) {
 	for _, tc := range kinds {
 		t.Run(string(tc.kind), func(t *testing.T) {
 			t.Parallel()
-			firstInst, secondInst := uuid.New(), uuid.New()
-			client := domain.DownloadClient{ID: uuid.New(), Name: "client", InstanceID: &firstInst, Category: "movies", PriorityMode: "act", Kind: tc.kind, BaseURL: "http://nzb:8080", Enabled: true}
-			client2 := domain.DownloadClient{ID: uuid.New(), Name: "client2", InstanceID: &secondInst, Category: "tv", PriorityMode: "act", Kind: tc.kind, BaseURL: "http://nzb:8080", Enabled: true}
-			inputs := priorityInputs{
-				Clients:   []domain.DownloadClient{client, client2},
-				Instances: []domain.Instance{{ID: firstInst, Kind: domain.KindRadarr}, {ID: secondInst, Kind: domain.KindSonarr, DownloadPriority: new(100)}},
-				Preset:    domain.PriorityPreset{domain.KindRadarr: 1},
-			}
+			inputs := actTestInputs(tc.kind, "act")
+			client := inputs.Clients[0]
 			lastWritten := -50
 			source := &prioritySourceFake{
 				inputs: inputs,
@@ -334,42 +265,19 @@ func TestPriorityReconcilerActNZBGetSAB(t *testing.T) {
 				},
 			}
 			writer := &fakePriorityWriter{}
-			clk := clock.NewFake()
-			observer := priorityObserverFunc(func(context.Context, domain.DownloadClient, string) (PriorityObservation, error) {
-				return obs, nil
-			})
-			r := newPriorityReconciler(source, observer, writer, clk, slog.New(slog.DiscardHandler))
+			r := newActTestReconciler(source, &obs, writer)
 			if err := r.Tick(t.Context()); err != nil {
 				t.Fatal(err)
 			}
-			for _, call := range writer.calls {
-				if call.Method == "SetItemPriority" && call.ItemID == "item2" {
-					t.Fatalf("hand-set item2 was mutated: %+v", call)
-				}
-			}
-			foundItem1, foundItem3 := false, false
-			for _, call := range writer.calls {
-				if call.Method == "SetItemPriority" && call.ItemID == "item1" {
-					foundItem1 = true
-				}
-				if call.Method == "SetItemPriority" && call.ItemID == "item3" {
-					foundItem3 = true
-				}
-			}
-			if !foundItem1 || !foundItem3 {
-				t.Fatalf("expected item1 and item3 mutated, got calls: %+v", writer.calls)
-			}
+			assertHandSetUntouched(t, writer.calls, "item2")
+			assertPlannedPriorityCalls(t, r, client.ID, writer.calls, []string{"item1", "item3"})
 			assertAllowListedCallsOnly(t, writer.calls)
 
 			writer.calls = nil
 			if err := r.Tick(t.Context()); err != nil {
 				t.Fatal(err)
 			}
-			for _, call := range writer.calls {
-				if call.Method == "SetItemPriority" && call.ItemID == "item2" {
-					t.Fatalf("hand-set item2 mutated on tick 2: %+v", call)
-				}
-			}
+			assertHandSetUntouched(t, writer.calls, "item2")
 		})
 	}
 }
@@ -377,14 +285,8 @@ func TestPriorityReconcilerActNZBGetSAB(t *testing.T) {
 // TestPriorityReconcilerPauseResumeLifecycle tests pause when higher-rank waits, pause retention during download, and resume when higher-rank finishes.
 func TestPriorityReconcilerPauseResumeLifecycle(t *testing.T) {
 	t.Parallel()
-	firstInst, secondInst := uuid.New(), uuid.New()
-	c1 := domain.DownloadClient{ID: uuid.New(), Name: "c1", InstanceID: &firstInst, Category: "movies", PriorityMode: "act", Kind: domain.ClientQBittorrent, BaseURL: "http://qbit:8080", Enabled: true}
-	c2 := domain.DownloadClient{ID: uuid.New(), Name: "c2", InstanceID: &secondInst, Category: "tv", PriorityMode: "act", Kind: domain.ClientQBittorrent, BaseURL: "http://qbit:8080", Enabled: true}
-	inputs := priorityInputs{
-		Clients:   []domain.DownloadClient{c1, c2},
-		Instances: []domain.Instance{{ID: firstInst, Kind: domain.KindRadarr}, {ID: secondInst, Kind: domain.KindSonarr, DownloadPriority: new(100)}},
-		Preset:    domain.PriorityPreset{domain.KindRadarr: 1},
-	}
+	inputs := actTestInputs(domain.ClientQBittorrent, "act")
+	c2 := inputs.Clients[1]
 	source := &prioritySourceFake{inputs: inputs}
 	clk := clock.NewFake()
 	writer := &fakePriorityWriter{}
@@ -416,11 +318,7 @@ func TestPriorityReconcilerPauseResumeLifecycle(t *testing.T) {
 	if err := r.Tick(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	for _, call := range writer.calls {
-		if call.Method == "ResumeItems" {
-			t.Fatalf("unexpected ResumeItems during high downloading: %+v", call)
-		}
-	}
+	assertNoWriterMethod(t, writer.calls, "ResumeItems")
 
 	writer.calls = nil
 	currentItems = []PriorityItem{
@@ -480,6 +378,15 @@ func TestPriorityReconcilerWriteErrorMidPlan(t *testing.T) {
 			t.Fatalf("expected PauseItems to be skipped after priority error, got call: %+v", call)
 		}
 	}
+	count := 0
+	for _, call := range writer.calls {
+		if call.Method == "SetItemPriority" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("priority calls = %d, want exactly one", count)
+	}
 	logStr := logs.String()
 	if !strings.Contains(logStr, `"msg":"download priority write failed"`) || !strings.Contains(logStr, `"stage":"priority"`) {
 		t.Fatalf("expected write failed log with stage priority, got: %s", logStr)
@@ -531,5 +438,95 @@ func TestPriorityReconcilerOwnershipPrune(t *testing.T) {
 				t.Fatalf("ownership kept = %v, want %v", kept, tc.wantKept)
 			}
 		})
+	}
+}
+
+func newActTestReconciler(source prioritySource, obs *PriorityObservation, writer PriorityWriter) *Reconciler {
+	observer := priorityObserverFunc(func(context.Context, domain.DownloadClient, string) (PriorityObservation, error) { return *obs, nil })
+	return newPriorityReconciler(source, observer, writer, clock.NewFake(), slog.New(slog.DiscardHandler))
+}
+
+func actTestInputs(kind domain.DownloadClientKind, mode string) priorityInputs {
+	first, second := uuid.New(), uuid.New()
+	return priorityInputs{
+		Clients: []domain.DownloadClient{
+			{ID: uuid.New(), Name: "movies", InstanceID: &first, Category: "movies", PriorityMode: mode, Kind: kind, BaseURL: "http://client:8080", Enabled: true},
+			{ID: uuid.New(), Name: "tv", InstanceID: &second, Category: "tv", PriorityMode: mode, Kind: kind, BaseURL: "http://client:8080", Enabled: true},
+		},
+		Instances: []domain.Instance{{ID: first, Kind: domain.KindRadarr, DownloadPriority: new(1)}, {ID: second, Kind: domain.KindSonarr, DownloadPriority: new(100)}},
+	}
+}
+
+func actGroupFixture(secondMode string) (*Reconciler, *fakePriorityWriter, priorityInputs) {
+	inputs := actTestInputs(domain.ClientQBittorrent, "act")
+	inputs.Clients[1].PriorityMode = secondMode
+	obs := PriorityObservation{Items: []PriorityItem{
+		{Category: "movies", ID: "m1", State: domain.DownloadItemQueued, Priority: 1},
+		{Category: "tv", ID: "t1", State: domain.DownloadItemQueued, Priority: 2},
+	}}
+	writer := &fakePriorityWriter{}
+	r := newActTestReconciler(&prioritySourceFake{inputs: inputs}, &obs, writer)
+	return r, writer, inputs
+}
+
+func assertQueueingDisabled(t *testing.T, inputs priorityInputs, obs PriorityObservation) {
+	t.Helper()
+	writerDisabled := &fakePriorityWriter{}
+	obsDisabled := obs
+	obsDisabled.QueueingDisabled = true
+	obsFn := priorityObserverFunc(func(context.Context, domain.DownloadClient, string) (PriorityObservation, error) {
+		return obsDisabled, nil
+	})
+	rDisabled := newPriorityReconciler(&prioritySourceFake{inputs: inputs}, obsFn, writerDisabled, clock.NewFake(), slog.New(slog.DiscardHandler))
+	if err := rDisabled.Tick(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	for _, call := range writerDisabled.calls {
+		if call.Method == "MoveToTop" {
+			t.Fatalf("expected 0 MoveToTop calls when queueing disabled, got: %+v", call)
+		}
+	}
+}
+
+func assertHandSetUntouched(t *testing.T, calls []writerCall, id string) {
+	t.Helper()
+	for _, call := range calls {
+		if call.Method == "SetItemPriority" && call.ItemID == id {
+			t.Fatalf("hand-set %s mutated: %+v", id, call)
+		}
+	}
+}
+
+func assertPlannedPriorityCalls(t *testing.T, r *Reconciler, clientID uuid.UUID, calls []writerCall, required []string) {
+	t.Helper()
+	plan, err := r.Latest(clientID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	levels := make(map[string]int)
+	for _, call := range calls {
+		if call.Method == "SetItemPriority" {
+			levels[call.ItemID] = call.Level
+		}
+	}
+	for _, move := range plan.Plan.Priority {
+		level, found := levels[move.ID]
+		if !found || level != move.To {
+			t.Fatalf("%s recorded level=%d found=%v planned To=%d", move.ID, level, found, move.To)
+		}
+	}
+	for _, id := range required {
+		if _, found := levels[id]; !found {
+			t.Fatalf("missing priority call for %s", id)
+		}
+	}
+}
+
+func assertNoWriterMethod(t *testing.T, calls []writerCall, method string) {
+	t.Helper()
+	for _, call := range calls {
+		if call.Method == method {
+			t.Fatalf("unexpected %s: %+v", method, call)
+		}
 	}
 }

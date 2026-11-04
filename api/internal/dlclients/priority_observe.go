@@ -26,6 +26,7 @@ type PriorityItem struct {
 type PriorityObservation struct {
 	Items            []PriorityItem
 	QueueingDisabled bool
+	ItemsTruncated   bool
 }
 
 // PriorityObserver deliberately exposes no client mutation capability.
@@ -64,6 +65,9 @@ func (g *Goenvoy) qbitPriorityItems(ctx context.Context, c domain.DownloadClient
 	if err != nil {
 		return PriorityObservation{}, fmt.Errorf("qbit priority torrents: %w", err)
 	}
+	if priorityObservationTooLarge(len(torrents)) {
+		return PriorityObservation{ItemsTruncated: true}, nil
+	}
 	obs := PriorityObservation{QueueingDisabled: !prefs.QueueingEnabled}
 	for _, item := range torrents {
 		obs.Items = append(obs.Items, PriorityItem{
@@ -84,6 +88,9 @@ func (g *Goenvoy) nzbgetPriorityItems(ctx context.Context, c domain.DownloadClie
 	groups, err := cl.ListGroups(ctx)
 	if err != nil {
 		return PriorityObservation{}, fmt.Errorf("nzbget priority groups: %w", err)
+	}
+	if priorityObservationTooLarge(len(groups)) {
+		return PriorityObservation{ItemsTruncated: true}, nil
 	}
 	var obs PriorityObservation
 	for _, item := range groups {
@@ -107,6 +114,9 @@ func (g *Goenvoy) sabPriorityItems(ctx context.Context, c domain.DownloadClient,
 	queue, err := cl.GetQueue(ctx)
 	if err != nil {
 		return PriorityObservation{}, fmt.Errorf("sab priority queue: %w", err)
+	}
+	if priorityObservationTooLarge(len(queue.Slots)) {
+		return PriorityObservation{ItemsTruncated: true}, nil
 	}
 	var obs PriorityObservation
 	activeSeen := false
@@ -167,4 +177,8 @@ func sabPriorityState(status string, globallyPaused, activeSeen bool) (domain.Do
 	}
 	state := priorityItemState(class, paused)
 	return state, activeSeen || state == domain.DownloadItemActive
+}
+
+func priorityObservationTooLarge(count int) bool {
+	return count > maxPriorityItemsPerGroup
 }

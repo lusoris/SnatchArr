@@ -12,9 +12,27 @@ import (
 	"github.com/google/uuid"
 )
 
+const cancelPriorityIntent = `-- name: CancelPriorityIntent :exec
+UPDATE download_client_priority_ownership
+SET pending_action = '', pending_priority = NULL, updated_at = $3
+WHERE client_id = $1 AND item_id = $2
+`
+
+type CancelPriorityIntentParams struct {
+	ClientID  uuid.UUID
+	ItemID    string
+	UpdatedAt time.Time
+}
+
+func (q *Queries) CancelPriorityIntent(ctx context.Context, arg CancelPriorityIntentParams) error {
+	_, err := q.db.Exec(ctx, cancelPriorityIntent, arg.ClientID, arg.ItemID, arg.UpdatedAt)
+	return err
+}
+
 const clearPriorityOwnershipPaused = `-- name: ClearPriorityOwnershipPaused :exec
 UPDATE download_client_priority_ownership
-SET paused_by_snatcharr = false,
+SET pending_action = '', pending_priority = NULL,
+    paused_by_snatcharr = false,
     updated_at = $3
 WHERE client_id = $1 AND item_id = $2
 `
@@ -51,7 +69,7 @@ func (q *Queries) DeletePriorityOwnershipNotIn(ctx context.Context, arg DeletePr
 
 const listPriorityOwnershipByClientIDs = `-- name: ListPriorityOwnershipByClientIDs :many
 
-SELECT client_id, item_id, last_written_priority, paused_by_snatcharr, updated_at
+SELECT client_id, item_id, last_written_priority, paused_by_snatcharr, pending_action, pending_priority, updated_at
 FROM download_client_priority_ownership
 WHERE client_id = ANY($1::uuid[])
 ORDER BY client_id, item_id
@@ -73,6 +91,8 @@ func (q *Queries) ListPriorityOwnershipByClientIDs(ctx context.Context, clientId
 			&i.ItemID,
 			&i.LastWrittenPriority,
 			&i.PausedBySnatcharr,
+			&i.PendingAction,
+			&i.PendingPriority,
 			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
@@ -85,6 +105,34 @@ func (q *Queries) ListPriorityOwnershipByClientIDs(ctx context.Context, clientId
 	return items, nil
 }
 
+const preparePriorityIntent = `-- name: PreparePriorityIntent :exec
+INSERT INTO download_client_priority_ownership (client_id, item_id, pending_action, pending_priority, updated_at)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (client_id, item_id) DO UPDATE
+SET pending_action = EXCLUDED.pending_action,
+    pending_priority = EXCLUDED.pending_priority,
+    updated_at = EXCLUDED.updated_at
+`
+
+type PreparePriorityIntentParams struct {
+	ClientID        uuid.UUID
+	ItemID          string
+	PendingAction   string
+	PendingPriority *int32
+	UpdatedAt       time.Time
+}
+
+func (q *Queries) PreparePriorityIntent(ctx context.Context, arg PreparePriorityIntentParams) error {
+	_, err := q.db.Exec(ctx, preparePriorityIntent,
+		arg.ClientID,
+		arg.ItemID,
+		arg.PendingAction,
+		arg.PendingPriority,
+		arg.UpdatedAt,
+	)
+	return err
+}
+
 const setPriorityOwnershipPaused = `-- name: SetPriorityOwnershipPaused :exec
 INSERT INTO download_client_priority_ownership (
     client_id, item_id, last_written_priority, paused_by_snatcharr, updated_at
@@ -92,7 +140,8 @@ INSERT INTO download_client_priority_ownership (
     $1, $2, NULL, true, $3
 )
 ON CONFLICT (client_id, item_id) DO UPDATE
-SET paused_by_snatcharr = true,
+SET pending_action = '', pending_priority = NULL,
+    paused_by_snatcharr = true,
     updated_at = EXCLUDED.updated_at
 `
 
@@ -114,7 +163,8 @@ INSERT INTO download_client_priority_ownership (
     $1, $2, $3, false, $4
 )
 ON CONFLICT (client_id, item_id) DO UPDATE
-SET last_written_priority = EXCLUDED.last_written_priority,
+SET pending_action = '', pending_priority = NULL,
+    last_written_priority = EXCLUDED.last_written_priority,
     updated_at = EXCLUDED.updated_at
 `
 
