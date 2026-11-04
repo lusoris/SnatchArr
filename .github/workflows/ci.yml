@@ -986,7 +986,10 @@ jobs:
         run: |
           git fetch --tags --force
           make release-e2e-check
+      # A fork head runs its own code here, so the step that holds the token runs only for a
+      # head branch of this repository; release-please opens its pull requests from here.
       - name: Refuse release notes that claim an open issue is closed
+        if: github.event.pull_request.head.repo.full_name == github.repository
         env:
           GH_TOKEN: ${{ github.token }}
         run: make release-closes-check
