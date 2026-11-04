@@ -207,7 +207,7 @@ export const sampleQueuePolicy: QueuePolicy = {
 		failed: { mode: 'act', threshold: 1, blocklist: true },
 		import_blocked: { mode: 'act', threshold: 2, blocklist: true },
 		id_matched: { mode: 'observe', threshold: 1, blocklist: false },
-		import_fixable: { mode: 'observe', threshold: 1, blocklist: false },
+		import_fixable: { mode: 'observe', threshold: 1, blocklist: true },
 		import_broken: { mode: 'observe', threshold: 2, blocklist: true },
 		import_not_wanted: { mode: 'observe', threshold: 1, blocklist: true },
 		unwanted_score: { mode: 'observe', threshold: 3, blocklist: true },

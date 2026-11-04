@@ -786,6 +786,8 @@ func TestRuleBlocklistDefaultsMatchTable(t *testing.T) {
 		queue.RuleMetadataStuck:       true,
 		queue.RuleSlow:                true,
 		queue.RuleFailed:              true,
+		queue.RuleIDMatched:           false,
+		queue.RuleImportFixable:       true,
 		queue.RuleImportBlocked:       true,
 		queue.RuleUnwantedScore:       true,
 		queue.RuleNotAnUpgrade:        false,

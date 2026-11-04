@@ -2835,7 +2835,7 @@ export interface components {
             import_blocked: components["schemas"]["QueueRuleSettings"];
             /** @description Force-imports a Sonarr or Radarr download the *arr matched to its series or movie by ID only, through a ManualImport of its clean, mapped candidates; it never removes or blocklists (ADR-0013). Optional on write so older clients keep working; left out, the rule takes its default settings. Reads always return it. */
             id_matched?: components["schemas"]["QueueRuleSettings"];
-            /** @description Force-imports a download whose import rejections are fixable (e.g. Lidarr/Readarr track/album match above floor, scene numbering mismatch); never removes or blocklists. Optional on write; left out, the rule takes its default settings. Reads always return it. */
+            /** @description Force-imports a download whose import rejections are fixable (e.g. Lidarr/Readarr track/album match above floor, scene numbering mismatch); a download still not imported 24 h after it was added is given up. In act mode it is removed with blocklist (per-rule switch) and re-search; in observe mode the sweep only reports it as would-remove. Optional on write; left out, the rule takes its default settings. Reads always return it. */
             import_fixable?: components["schemas"]["QueueRuleSettings"];
             /** @description Strikes and removes a download whose release is broken (e.g. no tracks matched, corrupt container, parser error) with blocklist and re-search. Optional on write; left out, the rule takes its default settings. Reads always return it. */
             import_broken?: components["schemas"]["QueueRuleSettings"];

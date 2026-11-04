@@ -20,6 +20,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jonboulle/clockwork"
+
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 )
 
@@ -41,8 +43,11 @@ type fake struct {
 	commands      []command
 	nextID        int64
 	logger        *slog.Logger
+	clk           clockwork.Clock
 }
 
+// newFake returns a fake *arr of the given kind with a real clock; tests swap
+// clk for a fake clock.
 func newFake(kind, apiKey string, missing, cutoff int, importBlocked bool, logger *slog.Logger) *fake {
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
@@ -55,6 +60,7 @@ func newFake(kind, apiKey string, missing, cutoff int, importBlocked bool, logge
 		importBlocked: importBlocked,
 		nextID:        100,
 		logger:        logger,
+		clk:           clockwork.NewRealClock(),
 	}
 }
 
@@ -177,6 +183,8 @@ func (f *fake) item(id int64, i int) map[string]any {
 	}
 }
 
+// queue serves the queue page: empty without importBlocked, one import-blocked
+// record until a manual import was posted, then empty again.
 func (f *fake) queue(w http.ResponseWriter, _ *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -196,6 +204,18 @@ func (f *fake) queue(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
+// queueAddedAge is how long ago the import-blocked download was added. It stays far
+// below the 24 h import_fixable budget, so a sweep imports the item instead of giving up.
+const queueAddedAge = time.Minute
+
+// queueAdded returns the added time of the import-blocked download, queueAddedAge
+// before the fake's clock, in RFC 3339.
+func (f *fake) queueAdded() string {
+	return f.clk.Now().Add(-queueAddedAge).UTC().Format(time.RFC3339)
+}
+
+// queueRecord builds the one import-blocked queue record for the fake's kind, with
+// the status message the import_fixable rule matches.
 func (f *fake) queueRecord() map[string]any {
 	rec := map[string]any{
 		"id":                    1,
@@ -206,7 +226,7 @@ func (f *fake) queueRecord() map[string]any {
 		"protocol":              "usenet",
 		"size":                  1048576,
 		"sizeleft":              0,
-		"added":                 "2020-01-01T00:00:00Z",
+		"added":                 f.queueAdded(),
 	}
 	if f.isMovieKind() {
 		rec["title"] = "Fake.Movie.2020"
