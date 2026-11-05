@@ -61,34 +61,34 @@ def logical_lines(content: str) -> Iterator[tuple[int, str]]:
         yield start, pending
 
 
-def shell_tokens(line: str) -> Iterator[str]:
+def shell_words(line: str) -> Iterator[str]:
     """Preserve redirect operators and fragments; stop at shell comment words."""
     lexer = shlex.shlex(line, posix=True, punctuation_chars=";&|()>")
     lexer.whitespace_split = True
     lexer.commenters = ""
-    for token in lexer:
-        if token.startswith("#"):
+    for word in lexer:
+        if word.startswith("#"):
             break
         # shlex reads one character ahead: only adjacent digits name a descriptor.
         position = lexer.instream.tell()
-        if re.fullmatch(r"[0-9]+", token) and line[position - 1:position] == ">":
-            token += next(lexer)
-        yield token
+        if re.fullmatch(r"[0-9]+", word) and line[position - 1:position] == ">":
+            word += next(lexer)
+        yield word
 
 
 def curl_arguments(command: list[str]) -> list[str] | None:
     """Skip shell control words, assignments and command wrappers before curl.
 
     After a wrapper word, its own options and their values (`sudo -u root`,
-    `nice -n 10`) come before the wrapped command, so the first `curl` token wins.
+    `nice -n 10`) come before the wrapped command, so the first `curl` word wins.
     """
     wrapped = False
-    for index, token in enumerate(command):
-        if token == "curl":
+    for index, word in enumerate(command):
+        if word == "curl":
             return command[index + 1:]
-        if token in COMMAND_WRAPPERS:
+        if word in COMMAND_WRAPPERS:
             wrapped = True
-        elif not (wrapped or token in COMMAND_PREFIXES or ASSIGNMENT.match(token)):
+        elif not (wrapped or word in COMMAND_PREFIXES or ASSIGNMENT.match(word)):
             return None
     return None
 
@@ -98,31 +98,31 @@ def curl_commands(line: str) -> Iterator[list[str]]:
     if not COMMAND_START.search(line):
         return
     command: list[str] = []
-    for token in [*shell_tokens(line), ";"]:
-        if token in COMMAND_SEPARATORS:
+    for word in [*shell_words(line), ";"]:
+        if word in COMMAND_SEPARATORS:
             arguments = curl_arguments(command)
             if arguments is not None:
                 yield arguments
             command = []
         else:
-            command.append(token)
+            command.append(word)
 
 
-def output_file(token: str, tokens: Iterator[str]) -> bool | None:
+def output_file(word: str, words: Iterator[str]) -> bool | None:
     """Classify curl outputs and shell redirects, consuming their filenames."""
-    if token in {"--remote-name", "-O"}:
+    if word in {"--remote-name", "-O"}:
         return True
-    if token.startswith("--output="):
-        return token.partition("=")[2] not in {"/dev/null", "-"}
-    if token.startswith("-o") and token != "-o":
-        return token[2:] not in {"/dev/null", "-"}
-    if token in {"--output", "-o"} or REDIRECT.fullmatch(token):
-        target = next(tokens, None)
+    if word.startswith("--output="):
+        return word.partition("=")[2] not in {"/dev/null", "-"}
+    if word.startswith("-o") and word != "-o":
+        return word[2:] not in {"/dev/null", "-"}
+    if word in {"--output", "-o"} or REDIRECT.fullmatch(word):
+        target = next(words, None)
         if target is None:
             raise ValueError("curl output option or redirect missing filename")
-        if token in STDOUT_REDIRECTS:
+        if word in STDOUT_REDIRECTS:
             return target != "/dev/null"
-        return token in {"--output", "-o"} and target not in {"/dev/null", "-"}
+        return word in {"--output", "-o"} and target not in {"/dev/null", "-"}
     return None
 
 
@@ -130,11 +130,11 @@ def is_download(arguments: list[str]) -> bool:
     """Identify file outputs with an HTTPS or variable URL, excluding stdout polls."""
     output = False
     urls: list[str] = []
-    tokens = iter(arguments)
-    for token in tokens:
-        file_output = output_file(token, tokens)
+    words = iter(arguments)
+    for word in words:
+        file_output = output_file(word, words)
         if file_output is None:
-            urls.append(token)
+            urls.append(word)
         else:
             output |= file_output
     return output and any(url.startswith(("https://", "$")) for url in urls)
@@ -143,12 +143,12 @@ def is_download(arguments: list[str]) -> bool:
 def has_positive_retry(arguments: list[str]) -> bool:
     """Require a positive decimal integer in the last retry option."""
     value = None
-    tokens = iter(arguments)
-    for token in tokens:
-        if token == "--retry":
-            value = next(tokens, "")
-        elif token.startswith("--retry="):
-            value = token.partition("=")[2]
+    words = iter(arguments)
+    for word in words:
+        if word == "--retry":
+            value = next(words, "")
+        elif word.startswith("--retry="):
+            value = word.partition("=")[2]
     try:
         return (
             value is not None
