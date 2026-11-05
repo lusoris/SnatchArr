@@ -13,6 +13,7 @@ export const keys = {
 	instance: (id: string) => ['instances', id] as const,
 	policy: (id: string) => ['instances', id, 'policy'] as const,
 	policyFilterOptions: (id: string) => ['instances', id, 'policy', 'filter-options'] as const,
+	foreignSearchPreflight: (id: string) => ['instances', id, 'foreign-search', 'preflight'] as const,
 	queuePolicy: (id: string) => ['instances', id, 'queue-policy'] as const,
 	queueStrikes: (id: string) => ['instances', id, 'queue-strikes'] as const,
 	instancePriority: (id: string) => ['instances', id, 'priority'] as const,

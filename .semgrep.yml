@@ -511,3 +511,20 @@ rules:
               - pattern: '($CL : rtorrent.Client).$METHOD(...)'
           - pattern-not: '$CL.GetSystemInfo(...)'
           - pattern-not: '$CL.GetTorrents(...)'
+
+  # ── HISS-02 · no unbounded HTTP body read ──────────────────────────────────
+  # An upstream (*arr, Prowlarr, LLM) response read whole without a bound lets
+  # one oversized reply exhaust memory. Bodies goenvoy buffers internally are
+  # capped per client through arrclient.BaseFactory.BaseCapped. The ogen
+  # request decoders under api/internal/build are generated and change only
+  # through their generator.
+  - id: no-unbounded-http-body-read
+    languages: [go]
+    severity: ERROR
+    message: >-
+      Bound HTTP body reads with io.LimitReader or http.MaxBytesReader before io.ReadAll.
+    paths:
+      exclude:
+        - "*_test.go"
+        - "api/internal/build/**"
+    pattern: io.ReadAll($X.Body)

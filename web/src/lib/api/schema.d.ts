@@ -492,6 +492,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/instances/{instanceId}/foreign-search/preflight": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instanceId: components["parameters"]["InstanceId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Foreign-title search language compatibility preflight
+         * @description Read-only preflight check evaluating whether an instance's quality profiles allow
+         *     foreign-title searches across supported rule languages. SnatchArr never changes
+         *     the quality profile.
+         */
+        get: operations["getForeignSearchPreflight"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/instances/{instanceId}/queue-policy": {
         parameters: {
             query?: never;
@@ -2049,6 +2073,35 @@ export interface components {
             tags: components["schemas"]["PolicyFilterOption"][];
             /** @description Quality profiles of the instance, sorted by name. */
             quality_profiles: components["schemas"]["PolicyFilterOption"][];
+        };
+        /** @description Read-only foreign-title search preflight report for an instance. SnatchArr never changes the profile. */
+        ForeignSearchPreflight: {
+            /** @description True when the instance is Radarr and foreign-title language preflight applies. */
+            applies: boolean;
+            /** @description Supported foreign-title rule language codes, sorted. */
+            languages: string[];
+            /** @description Quality profiles of the instance with per-language preflight verdicts. */
+            profiles: components["schemas"]["ForeignSearchProfile"][];
+        };
+        ForeignSearchProfile: {
+            /** Format: int32 */
+            id: number;
+            name: string;
+            profile_language: components["schemas"]["RadarrLanguage"] | null;
+            /** @description Preflight verdicts per supported foreign-title language. */
+            verdicts: components["schemas"]["ForeignSearchVerdict"][];
+        };
+        RadarrLanguage: {
+            /** Format: int32 */
+            id: number;
+            name: string;
+        };
+        ForeignSearchVerdict: {
+            language: string;
+            /** @enum {string} */
+            verdict: "allowed" | "original_only" | "skipped";
+            /** @enum {string} */
+            reason: "profile_any" | "profile_language_match" | "profile_original" | "profile_language_mismatch" | "profile_language_missing" | "language_unmapped" | "original_language_match" | "original_language_mismatch";
         };
         SnatchPolicy: {
             /** @description How many missing items one snatch goes after (0 disables missing snatches). */
@@ -4017,6 +4070,29 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PolicyFilterOptions"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getForeignSearchPreflight: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instanceId: components["parameters"]["InstanceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Foreign-search preflight report */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ForeignSearchPreflight"];
                 };
             };
             default: components["responses"]["Problem"];

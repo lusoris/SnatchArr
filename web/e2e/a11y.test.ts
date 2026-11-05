@@ -19,7 +19,8 @@ import {
 	mockModulesApi,
 	mockSettingsApi,
 	mockSignedInApi,
-	samplePolicyData
+	samplePolicyData,
+	samplePreflightData
 } from './mocks.js';
 import { settleToasts } from './settle.js';
 
@@ -138,16 +139,20 @@ if (!process.env.SNATCHARR_E2E_API) {
 		await mockAuthSetupRoutes(page);
 	}
 
-	async function setupInstanceDetailRoutes(page: Page, id: string) {
+	async function setupInstanceDetailRoutes(
+		page: Page,
+		id: string,
+		kind: 'sonarr' | 'radarr' = 'sonarr'
+	) {
 		await page.route(`**/api/v1/instances/${id}`, (route) =>
 			route.fulfill({
 				status: 200,
 				contentType: 'application/json',
 				body: JSON.stringify({
 					id,
-					name: 'Library Sonarr',
-					kind: 'sonarr',
-					base_url: 'http://sonarr.local:8989',
+					name: kind === 'radarr' ? 'Library Radarr' : 'Library Sonarr',
+					kind,
+					base_url: kind === 'radarr' ? 'http://radarr.local:7878' : 'http://sonarr.local:8989',
 					source: 'manual',
 					enabled: true,
 					created_at: '2026-01-01T00:00:00Z',
@@ -213,9 +218,9 @@ if (!process.env.SNATCHARR_E2E_API) {
 		);
 	}
 
-	async function setupInstanceMocks(page: Page, id: string) {
+	async function setupInstanceMocks(page: Page, id: string, kind: 'sonarr' | 'radarr' = 'sonarr') {
 		await setupAuthRoutes(page);
-		await setupInstanceDetailRoutes(page, id);
+		await setupInstanceDetailRoutes(page, id, kind);
 		await setupInstanceQueueRoutes(page, id);
 		await setupInstanceActivityRoutes(page, id);
 	}
@@ -277,13 +282,19 @@ if (!process.env.SNATCHARR_E2E_API) {
 	});
 
 	test('/instances/[id]/policy has no axe violations', async ({ page }) => {
-		await setupInstanceMocks(page, instanceId);
+		await setupInstanceMocks(page, instanceId, 'radarr');
+		await page.route(`**/api/v1/instances/${instanceId}/foreign-search/preflight`, (route) =>
+			route.fulfill(json(samplePreflightData))
+		);
 		await page.goto(`/instances/${instanceId}/policy`);
-		await expect(page.getByRole('heading', { level: 1, name: 'Library Sonarr' })).toBeVisible();
+		await expect(page.getByRole('heading', { level: 1, name: 'Library Radarr' })).toBeVisible();
 		await expect(
 			page.getByRole('heading', { level: 2, name: /Snatch policy|Snatch-Regeln/i })
 		).toBeVisible();
 
+		await expect(
+			page.getByRole('table', { name: /Foreign-title search check|Prüfung der Fremdtitelsuche/ })
+		).toBeVisible();
 		await settleToasts(page);
 		const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
 		expect(results.violations).toEqual([]);

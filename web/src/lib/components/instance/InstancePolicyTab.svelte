@@ -12,6 +12,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import PolicyFilters from '#lib/components/PolicyFilters.svelte';
 	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import AppSpecificSection from '#lib/components/policy/AppSpecificSection.svelte';
+	import ForeignSearchPreflight from '#lib/components/policy/ForeignSearchPreflight.svelte';
 	import LimitsSection from '#lib/components/policy/LimitsSection.svelte';
 	import PresetPicker from '#lib/components/policy/PresetPicker.svelte';
 	import SafetySection from '#lib/components/policy/SafetySection.svelte';
@@ -105,6 +106,9 @@ SPDX-License-Identifier: EUPL-1.2
 				<!-- The filter options are read from the *arr app, which only admins may ask. -->
 				{#if session.isAdmin}
 					<PolicyFilters {instanceId} bind:policy={draft} />
+					{#if instance.data?.kind === 'radarr'}
+						<ForeignSearchPreflight {instanceId} />
+					{/if}
 				{/if}
 				<AppSpecificSection bind:policy={draft} kind={instance.data?.kind} />
 				<SafetySection bind:policy={draft} />

@@ -725,6 +725,27 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
 
+  /instances/{instanceId}/foreign-search/preflight:
+    parameters:
+      - $ref: "#/components/parameters/InstanceId"
+    get:
+      tags: [instances]
+      operationId: getForeignSearchPreflight
+      summary: Foreign-title search language compatibility preflight
+      description: |
+        Read-only preflight check evaluating whether an instance's quality profiles allow
+        foreign-title searches across supported rule languages. SnatchArr never changes
+        the quality profile.
+      responses:
+        "200":
+          description: Foreign-search preflight report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ForeignSearchPreflight"
+        default:
+          $ref: "#/components/responses/Problem"
+
   /instances/{instanceId}/queue-policy:
     parameters:
       - $ref: "#/components/parameters/InstanceId"
@@ -3266,6 +3287,79 @@ components:
           description: Quality profiles of the instance, sorted by name.
           items:
             $ref: "#/components/schemas/PolicyFilterOption"
+
+    ForeignSearchPreflight:
+      type: object
+      description: Read-only foreign-title search preflight report for an instance. SnatchArr never changes the profile.
+      required: [applies, languages, profiles]
+      properties:
+        applies:
+          type: boolean
+          description: True when the instance is Radarr and foreign-title language preflight applies.
+        languages:
+          type: array
+          description: Supported foreign-title rule language codes, sorted.
+          items:
+            type: string
+        profiles:
+          type: array
+          description: Quality profiles of the instance with per-language preflight verdicts.
+          items:
+            $ref: "#/components/schemas/ForeignSearchProfile"
+
+    ForeignSearchProfile:
+      type: object
+      required: [id, name, profile_language, verdicts]
+      properties:
+        id:
+          type: integer
+          format: int32
+        name:
+          type: string
+        profile_language:
+          allOf:
+            - $ref: "#/components/schemas/RadarrLanguage"
+          nullable: true
+        verdicts:
+          type: array
+          description: Preflight verdicts per supported foreign-title language.
+          items:
+            $ref: "#/components/schemas/ForeignSearchVerdict"
+
+    RadarrLanguage:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: integer
+          format: int32
+        name:
+          type: string
+
+    ForeignSearchVerdict:
+      type: object
+      required: [language, verdict, reason]
+      properties:
+        language:
+          type: string
+          pattern: ^[a-z]{2}$
+        verdict:
+          type: string
+          enum:
+            - allowed
+            - original_only
+            - skipped
+        reason:
+          type: string
+          enum:
+            - profile_any
+            - profile_language_match
+            - profile_original
+            - profile_language_mismatch
+            - profile_language_missing
+            - language_unmapped
+            - original_language_match
+            - original_language_mismatch
 
     SnatchPolicy:
       type: object

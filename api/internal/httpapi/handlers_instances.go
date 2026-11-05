@@ -6,12 +6,15 @@ package httpapi
 
 import (
 	"context"
+	"math"
+	"slices"
 
 	"github.com/google/uuid"
 
 	"github.com/lusoris/SnatchArr/api/internal/arrclient"
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
+	"github.com/lusoris/SnatchArr/api/internal/policies"
 )
 
 func requireAdmin(ctx context.Context) error {
@@ -139,6 +142,56 @@ func (h *Handlers) GetPolicyFilterOptions(ctx context.Context, params oas.GetPol
 		return nil, err
 	}
 	return &oas.PolicyFilterOptions{Tags: labelsToOAS(labels.Tags), QualityProfiles: labelsToOAS(labels.Profiles)}, nil
+}
+
+// GetForeignSearchPreflight returns language compatibility preflight checks for Radarr quality profiles.
+func (h *Handlers) GetForeignSearchPreflight(ctx context.Context, params oas.GetForeignSearchPreflightParams) (*oas.ForeignSearchPreflight, error) {
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
+	}
+	preflight, err := h.options.ForeignPreflight(ctx, params.InstanceId)
+	if err != nil {
+		return nil, err
+	}
+	return foreignPreflightToOAS(preflight), nil
+}
+
+func foreignPreflightToOAS(p policies.Preflight) *oas.ForeignSearchPreflight {
+	profiles := make([]oas.ForeignSearchProfile, 0, len(p.Profiles))
+	for _, prof := range p.Profiles {
+		profiles = append(profiles, foreignProfileToOAS(prof))
+	}
+	return &oas.ForeignSearchPreflight{
+		Applies:   p.Applies,
+		Languages: slices.Clone(p.Languages),
+		Profiles:  profiles,
+	}
+}
+
+func foreignProfileToOAS(p policies.ProfilePreflight) oas.ForeignSearchProfile {
+	verdicts := make([]oas.ForeignSearchVerdict, 0, len(p.Verdicts))
+	for _, v := range p.Verdicts {
+		verdicts = append(verdicts, oas.ForeignSearchVerdict{
+			Language: v.Language,
+			Verdict:  oas.ForeignSearchVerdictVerdict(v.Verdict),
+			Reason:   oas.ForeignSearchVerdictReason(v.Reason),
+		})
+	}
+	var profLang oas.NilRadarrLanguage
+	if p.Language != nil && p.Language.ID >= math.MinInt32 && p.Language.ID <= math.MaxInt32 {
+		profLang = oas.NewNilRadarrLanguage(oas.RadarrLanguage{
+			ID:   int32(p.Language.ID),
+			Name: p.Language.Name,
+		})
+	} else {
+		profLang.SetToNull()
+	}
+	return oas.ForeignSearchProfile{
+		ID:              p.ID,
+		Name:            p.Name,
+		ProfileLanguage: profLang,
+		Verdicts:        verdicts,
+	}
 }
 
 func labelsToOAS(list []arrclient.Label) []oas.PolicyFilterOption {
