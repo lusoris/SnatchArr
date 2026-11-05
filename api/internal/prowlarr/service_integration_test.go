@@ -187,9 +187,7 @@ func newFixture(t *testing.T) fixture {
 	client := &stubClient{}
 	discover := &stubDiscoverer{}
 	instSvc := instances.New(st, enc, clk, id.New(), stubProber{}, slog.New(slog.DiscardHandler))
-	cfg := config.Options{
-		Prowlarr: config.ProwlarrOptions{LimitThreshold: 0.9},
-	}
+	cfg := config.Default()
 	svc := prowlarr.New(st, enc, clk, id.New(), client, discover, instSvc, slog.New(slog.DiscardHandler), cfg)
 	return fixture{svc: svc, st: st, clk: clk, client: client, discover: discover, instSvc: instSvc}
 }

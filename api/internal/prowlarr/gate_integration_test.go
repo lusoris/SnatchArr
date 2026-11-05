@@ -166,9 +166,7 @@ func runGateTestCase(t *testing.T, tc gateTestCase) {
 	prober := arrclient.NewGoenvoyProber(arrclient.DefaultOptions())
 	instSvc := instances.New(st, enc, clk, id.New(), prober, slog.New(slog.DiscardHandler))
 	prowlClient := prowlarrclient.New(5*time.Second, "gate-test")
-	cfg := config.Options{
-		Prowlarr: config.ProwlarrOptions{LimitThreshold: 0.9},
-	}
+	cfg := config.Default()
 	svc := prowlarr.New(st, enc, clk, id.New(), prowlClient, prober, instSvc, slog.New(slog.DiscardHandler), cfg)
 
 	inst, err := instSvc.Create(t.Context(), instances.Input{
@@ -870,9 +868,7 @@ func TestGate_F6_WarnWhenMatchingMisses(t *testing.T) {
 	prober := arrclient.NewGoenvoyProber(arrclient.DefaultOptions())
 	instSvc := instances.New(st, enc, clk, id.New(), prober, slog.New(slog.DiscardHandler))
 	prowlClient := prowlarrclient.New(5*time.Second, "gate-test")
-	cfg := config.Options{
-		Prowlarr: config.ProwlarrOptions{LimitThreshold: 0.9},
-	}
+	cfg := config.Default()
 	handler := &recordLogHandler{}
 	logger := slog.New(handler)
 	svc := prowlarr.New(st, enc, clk, id.New(), prowlClient, prober, instSvc, logger, cfg)
@@ -963,9 +959,7 @@ func TestGate_F7_ArrIndexerCaching(t *testing.T) {
 	prober := arrclient.NewGoenvoyProber(arrclient.DefaultOptions())
 	instSvc := instances.New(st, enc, clk, id.New(), prober, slog.New(slog.DiscardHandler))
 	prowlClient := prowlarrclient.New(5*time.Second, "gate-test")
-	cfg := config.Options{
-		Prowlarr: config.ProwlarrOptions{LimitThreshold: 0.9},
-	}
+	cfg := config.Default()
 	svc := prowlarr.New(st, enc, clk, id.New(), prowlClient, prober, instSvc, slog.New(slog.DiscardHandler), cfg)
 
 	inst, err := instSvc.Create(t.Context(), instances.Input{
