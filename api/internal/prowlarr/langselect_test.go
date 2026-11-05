@@ -5,9 +5,12 @@
 package prowlarr_test
 
 import (
+	"errors"
 	"slices"
+	"strings"
 	"testing"
 
+	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/prowlarr"
 	"github.com/lusoris/SnatchArr/api/internal/prowlarrclient"
 )
@@ -17,7 +20,7 @@ func TestIndexersForLanguage(t *testing.T) {
 	t.Parallel()
 	labels := map[int]string{
 		1: "lang-de", 2: "lang-fr", 3: "lang-en", 4: " \tLANG-DE\n",
-		5: "lang-", 6: "lang-deu", 7: "lang-d1", 8: "other", 9: "lang-dé",
+		5: "lang-", 6: "lang-deu", 7: "lang-d1", 8: "other", 9: "lang-dé", 10: "lang-Ko",
 	}
 	tests := []struct {
 		name, locale, lang string
@@ -42,6 +45,8 @@ func TestIndexersForLanguage(t *testing.T) {
 		{name: "malformed long tag", locale: "de-DE", tags: []int{6}, lang: "de", want: true},
 		{name: "malformed digit tag", locale: "de-DE", tags: []int{7}, lang: "de", want: true},
 		{name: "malformed unicode tag", locale: "de-DE", tags: []int{9}, lang: "de", want: true},
+		{name: "Kelvin sign tag preserves locale", locale: "de-DE", tags: []int{10}, lang: "de", want: true},
+		{name: "Kelvin sign tag does not select Korean", locale: "en-US", tags: []int{10}, lang: "ko"},
 		{name: "malformed tags do not select", locale: "en-US", tags: []int{5, 6, 7, 9}, lang: "de"},
 		{name: "unrelated tag", locale: "de-DE", tags: []int{8}, lang: "de", want: true},
 		{name: "unknown tag", locale: "de-DE", tags: []int{99}, lang: "de", want: true},
@@ -53,6 +58,7 @@ func TestIndexersForLanguage(t *testing.T) {
 		{name: "short language", locale: "de-DE", lang: "D"},
 		{name: "digit language", locale: "d1-DE", tags: []int{7}, lang: "d1"},
 		{name: "unicode language", locale: "dé-DE", tags: []int{9}, lang: "dé"},
+		{name: "Kelvin sign language", locale: "ko-KR", lang: "Ko"},
 		{name: "padded language", locale: "de-DE", lang: " de "},
 		{name: "empty locale", lang: "de"},
 		{name: "empty locale overridden", tags: []int{1}, lang: "de", want: true},
@@ -65,11 +71,20 @@ func TestIndexersForLanguage(t *testing.T) {
 			if tc.want {
 				want = []int{7}
 			}
-			got := prowlarr.IndexersForLanguage(indexers, labels, tc.lang)
-			if got == nil || !slices.Equal(got, want) {
-				t.Fatalf("IndexersForLanguage() = %#v, want %#v", got, want)
-			}
+			assertLanguageSelection(t, indexers, labels, tc.lang, want)
 		})
+	}
+}
+
+// assertLanguageSelection checks successful selection and non-nil empty results.
+func assertLanguageSelection(t *testing.T, indexers []prowlarrclient.Indexer, labels map[int]string, lang string, want []int) {
+	t.Helper()
+	got, err := prowlarr.IndexersForLanguage(indexers, labels, lang)
+	if err != nil {
+		t.Fatalf("IndexersForLanguage() error = %v", err)
+	}
+	if got == nil || !slices.Equal(got, want) {
+		t.Fatalf("IndexersForLanguage() = %#v, want %#v", got, want)
 	}
 }
 
@@ -103,9 +118,76 @@ func TestIndexersForLanguage_Collection(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got := prowlarr.IndexersForLanguage(tc.indexers, nil, "de")
-			if got == nil || !slices.Equal(got, tc.want) {
-				t.Fatalf("IndexersForLanguage() = %#v, want %#v", got, tc.want)
+			assertLanguageSelection(t, tc.indexers, nil, "de", tc.want)
+		})
+	}
+}
+
+// TestIndexersForLanguage_IndexerLimit verifies inclusive bounds without truncation.
+func TestIndexersForLanguage_IndexerLimit(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		count   int
+		wantErr error
+	}{
+		{name: "at limit", count: 1000},
+		{name: "over limit", count: 1001, wantErr: domain.ErrInvalid},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			indexers := make([]prowlarrclient.Indexer, tc.count)
+			indexers[tc.count-1] = prowlarrclient.Indexer{ID: 7, Enabled: true, Language: "de-DE"}
+			got, err := prowlarr.IndexersForLanguage(indexers, nil, "de")
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("IndexersForLanguage() error = %v, want %v", err, tc.wantErr)
+			}
+			if tc.wantErr != nil {
+				if got != nil || !strings.Contains(err.Error(), "1001 indexers exceed the limit of 1000") {
+					t.Fatalf("IndexersForLanguage() = %v, %v; want no partial result and limit diagnostic", got, err)
+				}
+			} else if !slices.Equal(got, []int{7}) {
+				t.Fatalf("IndexersForLanguage() = %v, want [7]", got)
+			}
+		})
+	}
+}
+
+// TestIndexersForLanguage_TagLimit verifies bounds even for disabled or unselected indexers.
+func TestIndexersForLanguage_TagLimit(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		count    int
+		disabled bool
+		lang     string
+		wantErr  error
+	}{
+		{name: "at limit", count: 100, lang: "de"},
+		{name: "over limit", count: 101, lang: "de", wantErr: domain.ErrInvalid},
+		{name: "disabled over limit", count: 101, disabled: true, lang: "de", wantErr: domain.ErrInvalid},
+		{name: "invalid language over limit", count: 101, lang: "Ko", wantErr: domain.ErrInvalid},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			tags := make([]int, tc.count)
+			tags[tc.count-1] = 1
+			indexers := []prowlarrclient.Indexer{
+				{ID: 2, Enabled: true, Language: "de-DE"},
+				{ID: 7, Enabled: !tc.disabled, Language: "en-US", Tags: tags},
+			}
+			got, err := prowlarr.IndexersForLanguage(indexers, map[int]string{1: "LANG-DE"}, tc.lang)
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("IndexersForLanguage() error = %v, want %v", err, tc.wantErr)
+			}
+			if tc.wantErr != nil {
+				if got != nil || !strings.Contains(err.Error(), "indexer 7: 101 tags exceed the limit of 100") {
+					t.Fatalf("IndexersForLanguage() = %v, %v; want no partial result and indexer limit diagnostic", got, err)
+				}
+			} else if !slices.Equal(got, []int{2, 7}) {
+				t.Fatalf("IndexersForLanguage() = %v, want [2 7]", got)
 			}
 		})
 	}

@@ -147,8 +147,12 @@ func (h *HTTP) Indexers(ctx context.Context, baseURL, apiKey string) ([]Indexer,
 	return out, nil
 }
 
+// maxTags bounds the tag records accepted from a Prowlarr response.
+const maxTags = 1000
+
 // Tags fetches tag labels keyed by ID. Transport or API failures wrap
-// domain.ErrUnreachable; a null response wraps domain.ErrInvalid.
+// domain.ErrUnreachable; a null response or more than maxTags records wraps
+// domain.ErrInvalid.
 func (h *HTTP) Tags(ctx context.Context, baseURL, apiKey string) (map[int]string, error) {
 	pc, err := h.typed(baseURL, apiKey)
 	if err != nil {
@@ -160,6 +164,9 @@ func (h *HTTP) Tags(ctx context.Context, baseURL, apiKey string) (map[int]string
 	}
 	if items == nil {
 		return nil, fmt.Errorf("%w: prowlarr tags: response is null", domain.ErrInvalid)
+	}
+	if len(items) > maxTags {
+		return nil, fmt.Errorf("%w: prowlarr tags: %d tags exceed the limit of %d", domain.ErrInvalid, len(items), maxTags)
 	}
 	out := make(map[int]string, len(items))
 	for _, tag := range items {

@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -58,6 +59,49 @@ func TestHTTPClient_Tags(t *testing.T) {
 			}
 			if !maps.Equal(got, tc.want) || (got == nil) != (tc.want == nil) {
 				t.Errorf("Tags() = %#v, want %#v", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestHTTPClient_Tags_Limits verifies inclusive tag bounds and rejects overflow without partial results.
+func TestHTTPClient_Tags_Limits(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		count   int
+		wantErr error
+	}{
+		{name: "at limit", count: 1000},
+		{name: "over limit", count: 1001, wantErr: domain.ErrInvalid},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			items := make([]map[string]any, tc.count)
+			for id := range tc.count {
+				items[id] = map[string]any{"id": id + 1, "label": "lang-de"}
+			}
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if err := json.NewEncoder(w).Encode(items); err != nil {
+					t.Errorf("encode tags: %v", err)
+				}
+			}))
+			t.Cleanup(srv.Close)
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+			c := prowlarrclient.New(5*time.Second, "SnatchArr-test")
+			got, err := c.Tags(ctx, srv.URL, "prowl-key")
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("Tags() error = %v, want %v", err, tc.wantErr)
+			}
+			if tc.wantErr != nil {
+				if got != nil || !strings.Contains(err.Error(), "prowlarr tags: 1001 tags exceed the limit of 1000") {
+					t.Fatalf("Tags() = %v, %v; want no partial result and limit diagnostic", got, err)
+				}
+			} else if len(got) != tc.count || got[1] != "lang-de" || got[tc.count] != "lang-de" {
+				t.Fatalf("Tags() mapped %d tags, want all %d", len(got), tc.count)
 			}
 		})
 	}
