@@ -99,11 +99,14 @@ GOSEC_SARIF ?= api/tmp/gosec.sarif
 GOSEC_PKG   ?= ./...
 GOSEC_TAGS  ?=
 api-gosec: ## gosec over the whole module (zero exclusions); fails on a finding or when no file was scanned
+	sh tools/ci/gosec_packages_test.sh
 	mkdir -p "$(dir $(GOSEC_SARIF))"
 	log=$$(mktemp)
 	trap 'rm -f "$$log"' EXIT
 	status=0
-	gosec -conf .gosec.json -exclude-generated $(if $(GOSEC_TAGS),-tags $(GOSEC_TAGS)) -fmt sarif -out "$(GOSEC_SARIF)" -stdout -verbose text $(GOSEC_PKG) >"$$log" 2>&1 || status=$$?
+	# Tracked + untracked non-ignored packages; refuse ignored Go files gosec would load.
+	pkgs=$$(sh tools/ci/gosec_packages.sh $(if $(GOSEC_TAGS),-tags $(GOSEC_TAGS)) $(GOSEC_PKG)) || exit 1
+	gosec -conf .gosec.json -exclude-generated $(if $(GOSEC_TAGS),-tags $(GOSEC_TAGS)) -fmt sarif -out "$(GOSEC_SARIF)" -stdout -verbose text $$pkgs >"$$log" 2>&1 || status=$$?
 	cat "$$log"
 	if ! grep -q -E '^[[:space:]]*Files[[:space:]]*:[[:space:]]*[1-9]' "$$log"; then
 	  echo "api-gosec: gosec scanned no file ($(GOSEC_PKG), started in $$(pwd)); a scan of nothing is not a pass" >&2
@@ -619,6 +622,7 @@ roadmap-check: ## docs/roadmap.md milestone table shape (offline) and the schedu
 workflows-verify: ## The rule of "CI success", the Security Scan issue step, the Semgrep scan, generated_files.py, the planted-case runner, touched-function headers, Codacy exclusions of generated code, inline nosec reasons and the release pull request body, against their cases
 	sh tools/ci/status_test.sh
 	sh tools/ci/security_issue_test.sh
+	sh tools/ci/squash_merge_test.sh
 	sh tools/ci/semgrep_scan_test.sh
 	bash tools/ci/generated_files_test.sh
 	bash tools/e2e/planted_test.sh
