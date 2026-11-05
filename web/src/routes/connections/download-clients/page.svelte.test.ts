@@ -533,6 +533,7 @@ const emptyPlan: PriorityPlan = {
 	resume: []
 };
 
+/** Renders the page with an act client, opens its plan dialog and returns the GET spy. */
 async function openPriorityPlan(answer: PriorityPlan | Error = samplePlan) {
 	const getSpy = stubGet({
 		...listStubs,
