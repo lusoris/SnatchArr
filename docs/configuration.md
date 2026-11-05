@@ -206,6 +206,18 @@ An episode, album or book has the tags and quality profile of its series, artist
 `GET /api/v1/instances/{id}/policy/filter-options` lists the tags and quality profiles the
 instance offers (admins only); the policy form picks from that list.
 
+### Foreign-search preflight
+
+`GET /api/v1/instances/{id}/foreign-search/preflight` provides a read-only compatibility check for Radarr instances (admins only). It evaluates whether each configured quality profile accepts releases found by foreign-title searches across supported rule languages (`de`, `fr`).
+
+The preflight reports one of three verdicts per profile and target language:
+
+- `allowed`: The profile language is `Any` (-1) or explicitly matches the target language.
+- `original_only`: The profile language is `Original` (-2); searches pass only when the target language matches the movie's original language.
+- `skipped`: The profile language differs from the target language, is unmapped, or missing.
+
+SnatchArr never changes or writes quality profile configurations in any *arr instance; the endpoint is strictly read-only.
+
 ## Queue policy
 
 Each instance has a queue policy (`GET/PUT /api/v1/instances/{id}/queue-policy`; `PUT` is
