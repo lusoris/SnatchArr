@@ -52,11 +52,14 @@ case "$1" in
     before="${1%%..*}"
     after="${1#*..}"
     after="$(git -C "$ROOT" rev-parse --verify "$after^{commit}")" || exit 1
-    if [ "$before" = 0000000000000000000000000000000000000000 ] ||
-      ! git -C "$ROOT" merge-base --is-ancestor "$before" "$after"; then
-      echo "main_commit_check: before is zero or not an ancestor; checking only $after"
+    if [ "$before" = 0000000000000000000000000000000000000000 ]; then
+      echo "main_commit_check: before is zero; checking only $after"
       printf '%s\n' "$after" >"$work/commits"
+    elif ! git -C "$ROOT" rev-parse -q --verify "$before^{commit}" >/dev/null; then
+      echo "main_commit_check: before $before is not in this checkout; cannot check the pushed range" >&2
+      exit 1
     else
+      # A rewritten push still checks every commit reachable from after but not from before.
       git -C "$ROOT" rev-list --no-merges --max-count=201 "$before..$after" >"$work/commits" || exit 1
       if [ "$(wc -l <"$work/commits")" -gt 200 ]; then
         echo "main_commit_check: range too long (more than 200 commits)" >&2

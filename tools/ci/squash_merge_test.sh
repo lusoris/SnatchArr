@@ -188,7 +188,12 @@ main_check "unsigned maintainer squash on main" 1 "fails the commit-msg policy" 
 tip="$(printf '%s\n\nBody.\n\nSigned-off-by: t <t@example.invalid>\n' "$SUBJECT" | commit Kilian k@example.invalid)"
 main_check "range unsigned middle, signed tip" 1 "$unsigned fails the commit-msg policy" "$base..$tip"
 main_check "zero before checks tip only" 0 "checking only $tip" "0000000000000000000000000000000000000000..$tip"
-main_check "non-ancestor before checks tip only" 0 "checking only $base" "$tip..$base"
+# A rewritten push: before is a side commit, not an ancestor; the unsigned commit still fails.
+git -C "$WORK/repo" checkout -q -b side "$base"
+side="$(printf '%s\n\nBody.\n\nSigned-off-by: t <t@example.invalid>\n' "$SUBJECT" | commit Kilian k@example.invalid)"
+git -C "$WORK/repo" checkout -q -
+main_check "non-ancestor before checks the range" 1 "$unsigned fails the commit-msg policy" "$side..$tip"
+main_check "unknown before refused" 1 "is not in this checkout" "1111111111111111111111111111111111111111..$tip"
 c="$(printf 'chore(main): release 0.8.1 (#7)\n' | commit 'evil[bot]' 'evil[bot]@users.noreply.github.com' noreply@github.com)"
 main_check "fake bot author" 1 "fails the commit-msg policy" "$c"
 c="$(printf 'chore(main): release 0.8.1 (#7)\n' | commit 'snatcharr-release[bot]' '340302165+snatcharr-release[bot]@users.noreply.github.com' evil@example.invalid)"

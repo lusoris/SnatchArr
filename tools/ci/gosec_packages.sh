@@ -27,10 +27,17 @@ fi
 root="$(git rev-parse --show-toplevel)"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' 0
-if ! go list -e ${tags:+-tags "$tags"} -f '{{.Dir}}' "$@" >"$work/listed"; then
+# The dir= prefix keeps a line for every package: go list prints nothing for an empty template
+# result, so a missing package (empty Dir under -e) would drop out of the scan unseen.
+if ! go list -e ${tags:+-tags "$tags"} -f 'dir={{.Dir}}' "$@" >"$work/raw"; then
   echo "gosec_packages: go list failed for $*" >&2
   exit 1
 fi
+if grep -qx 'dir=' "$work/raw"; then
+  echo "gosec_packages: go list returned a package without a directory for $*" >&2
+  exit 1
+fi
+sed -n 's|^dir=||p' "$work/raw" >"$work/listed"
 git -C "$root" ls-files -z --cached --others --exclude-standard -- '*.go' >"$work/kept-files"
 tr '\0' '\n' <"$work/kept-files" | sed -e 's|/[^/]*$||' -e 's|^[^/]*\.go$|.|' |
   sort -u >"$work/kept"

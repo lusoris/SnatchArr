@@ -76,6 +76,11 @@ run ./...
 check_case "ignored file inside listed package" 1 "$rc" "gosec would load git-ignored a/ignored.go; move or delete it" "$out"
 check_case "all ignored files named" 1 "$rc" "gosec would load git-ignored m-ignored.go; move or delete it" "$out"
 rm "$M/a/ignored.go" "$M/m-ignored.go"
+# A missing package has an empty Dir: refused, never dropped beside a listed one or read as ./.
+run ./nonexistent
+check_case "missing package refused" 1 "$rc" "go list returned a package without a directory" "$out"
+run ./a/... ./nonexistent
+check_case "missing package beside a listed one refused" 1 "$rc" "go list returned a package without a directory" "$out"
 run
 check_case "no pattern" 2 "$rc" "usage" "$out"
 
