@@ -223,6 +223,48 @@ func TestReviewT6WithdrawnPauseCleanup(t *testing.T) {
 	}
 }
 
+func TestReviewManualResumeRepairFailure(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"act", "observe"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			inputs := actTestInputs(domain.ClientQBittorrent, mode)
+			owner := inputs.Clients[1].ID
+			key := owner.String() + "\nlow"
+			base := &prioritySourceFake{inputs: inputs, ownership: map[string]PriorityOwnership{
+				key:                         {ClientID: owner, ItemID: "low", PausedBySnatchArr: true},
+				owner.String() + "\npaused": {ClientID: owner, ItemID: "paused", PausedBySnatchArr: true},
+			}}
+			checked := false
+			source := ownershipFaultSource{prioritySourceFake: base, check: func(context.Context, string) error {
+				checked = true
+				return errors.New("ownership database unavailable")
+			}}
+			obs := PriorityObservation{Items: []PriorityItem{
+				{ID: "low", Category: "tv", State: domain.DownloadItemActive},
+				{ID: "high", Category: "movies", State: domain.DownloadItemQueued, Priority: 1},
+				{ID: "paused", Category: "tv", State: domain.DownloadItemPaused},
+			}}
+			writer := &fakePriorityWriter{}
+			r := newActTestReconciler(source, &obs, writer)
+			var logs bytes.Buffer
+			r.logger = slog.New(slog.NewTextHandler(&logs, nil))
+			if err := r.Tick(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			if !checked || len(writer.calls) != 0 || !base.ownership[key].PausedBySnatchArr {
+				t.Fatalf("repair failure not contained: checked=%v calls=%+v ownership=%+v", checked, writer.calls, base.ownership[key])
+			}
+			if !strings.Contains(logs.String(), "stage=repair_ownership") {
+				t.Fatalf("missing repair failure diagnostic: %s", logs.String())
+			}
+			if _, err := r.Latest(owner); err == nil {
+				t.Fatal("failed ownership repair published a plan")
+			}
+		})
+	}
+}
+
 func TestReviewT7SingleRankNoOrdering(t *testing.T) {
 	t.Parallel()
 	for _, count := range []int{0, 1, 2} {
