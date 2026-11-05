@@ -117,9 +117,21 @@ def parse_finding(fingerprint):
     return commit, path, rule, line
 
 
+def git_environment():
+    """Remove Git's repository-local hook environment before targeting another repo."""
+    local = subprocess.run(
+        ["git", "rev-parse", "--local-env-vars"], capture_output=True, text=True,
+        timeout=60, check=True,
+    )
+    # Receive hooks also export the quarantine object directory, which the list leaves out.
+    names = {*local.stdout.splitlines(), "GIT_QUARANTINE_PATH"}
+    return {name: value for name, value in os.environ.items() if name not in names}
+
+
 def findings(gitleaks, repository, log_opts=None):
     """Return unfiltered fingerprints from full history or selected git log arguments."""
-    located = subprocess.run(["git", "rev-parse", "--absolute-git-dir"], cwd=repository, capture_output=True, text=True, timeout=60, check=True)
+    environment = git_environment()
+    located = subprocess.run(["git", "rev-parse", "--absolute-git-dir"], cwd=repository, env=environment, capture_output=True, text=True, timeout=60, check=True)
     with tempfile.TemporaryDirectory() as scratch:
         # Gitleaks applies a .gitleaksignore in its source directory without regard to expiry,
         # so it reads the history through GIT_DIR from a directory that holds no list.
@@ -132,7 +144,7 @@ def findings(gitleaks, repository, log_opts=None):
         ]
         if log_opts is not None:
             command.extend(["--log-opts", log_opts])
-        environment = {**os.environ, "GIT_DIR": located.stdout.strip()}
+        environment["GIT_DIR"] = located.stdout.strip()
         result = subprocess.run(command, cwd=source, env=environment, capture_output=True, text=True, timeout=SCAN_TIMEOUT_SECONDS, check=False)
         if result.returncode not in (0, LEAK_EXIT):
             raise ScanError(f"Gitleaks did not complete (exit {result.returncode}): {result.stderr.strip()[-400:]}")
@@ -161,8 +173,9 @@ def scan(gitleaks, repository, today, log_opts=None):
 
 
 def git(repository, *arguments):
+    """Run fixture Git commands without inheriting the calling hook's repository."""
     identity = ["-c", "user.name=fixture", "-c", "user.email=fixture@invalid", "-c", "commit.gpgsign=false"]
-    subprocess.run(["git", *identity, *arguments], cwd=repository, capture_output=True, text=True, timeout=60, check=True)
+    subprocess.run(["git", *identity, *arguments], cwd=repository, env=git_environment(), capture_output=True, text=True, timeout=60, check=True)
 
 
 def planted_line():

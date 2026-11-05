@@ -21,8 +21,19 @@ ran=0
 
 # fixture_git ARGS: run git with a disposable author and unsigned fixture commits.
 fixture_git() {
-    timeout 60 git -C "$repo" -c user.name=fixture -c user.email=fixture@invalid \
-        -c commit.gpgsign=false "$@"
+    python3 -I -B - "$HERE" "$repo" "$@" <<'PY'
+import subprocess
+import sys
+
+sys.path.insert(0, sys.argv[1])
+from secret_scan import git_environment
+
+subprocess.run(
+    ["git", "-C", sys.argv[2], "-c", "user.name=fixture", "-c", "user.email=fixture@invalid",
+     "-c", "commit.gpgsign=false", *sys.argv[3:]],
+    env=git_environment(), timeout=60, check=True,
+)
+PY
 }
 
 # update LOCAL REMOTE: emit a complete pre-push ref update.
@@ -79,6 +90,49 @@ check_setup_failure() {
     check="$HERE/prepush_secret_scan.sh"
 }
 
+# check_hook_cases: replay ranges and fixture writes with throwaway hook variables.
+check_hook_cases() (
+    export GIT_DIR="$hook_gitdir" GIT_INDEX_FILE="$hook_gitdir/index"
+    before_failed="$failed"
+    expect 1 'hook environment: planted range' "$blocked_input" "$planted:settings.py:generic-api-key:1"
+    expect 0 'hook environment: clean range' "$clean_input" '0 blocking'
+    mkdir -p "$work/hook-fixture" || exit 1
+    fixture_git -C "$work/hook-fixture" init --quiet --initial-branch main || exit 1
+    printf 'fixture\n' > "$work/hook-fixture/README.md"
+    fixture_git -C "$work/hook-fixture" add README.md || exit 1
+    fixture_git -C "$work/hook-fixture" commit --quiet --message fixture || exit 1
+    [ -d "$work/hook-fixture/.git" ] && [ "$failed" -eq "$before_failed" ]
+)
+
+# check_hook_environment: hook runs must preserve the outer config, refs and indexes.
+check_hook_environment() {
+    fixture_git worktree add --quiet -b hook "$work/hook"
+    hook_gitdir="$(fixture_git -C "$work/hook" rev-parse --absolute-git-dir)"
+    hook_heads="$(fixture_git rev-parse HEAD refs/heads/main refs/heads/hook)"
+    cp "$repo/.git/config" "$work/config.before"
+    cp "$repo/.git/HEAD" "$work/head.before"
+    cp "$repo/.git/index" "$work/index.before"
+    cp "$hook_gitdir/HEAD" "$work/hook-head.before"
+    cp "$hook_gitdir/index" "$work/hook-index.before"
+    ran=$((ran + 3))
+    if ! check_hook_cases; then
+        echo 'FAIL hook environment: ranges or fixture writes' >&2
+        failed=$((failed + 1))
+    fi
+    if ! cmp -s "$work/config.before" "$repo/.git/config" ||
+        [ "$(fixture_git config --get core.bare)" != false ] ||
+        ! cmp -s "$work/head.before" "$repo/.git/HEAD" ||
+        ! cmp -s "$work/hook-head.before" "$hook_gitdir/HEAD" ||
+        [ "$(fixture_git rev-parse HEAD refs/heads/main refs/heads/hook)" != "$hook_heads" ] ||
+        ! cmp -s "$work/index.before" "$repo/.git/index" ||
+        ! cmp -s "$work/hook-index.before" "$hook_gitdir/index"; then
+        echo 'FAIL hook environment: outer config, HEAD, branch or index changed' >&2
+        failed=$((failed + 1))
+    else
+        echo 'ok   hook environment: outer config, HEAD, branches and indexes unchanged'
+    fi
+}
+
 fixture_git init --quiet --initial-branch main
 printf 'fixture\n' > "$repo/README.md"
 fixture_git add README.md
@@ -130,6 +184,7 @@ fixture_git add check-fixture.sh
 fixture_git commit --quiet --message 'test source'
 source_tip="$(fixture_git rev-parse HEAD)"
 expect 0 'test source contains no matching literal' "$(update "$source_tip" "$tip")" '0 blocking'
+check_hook_environment
 
 if [ "$failed" -ne 0 ]; then
     echo "pre-push scan tests: $failed of $ran cases failed" >&2
