@@ -16,7 +16,7 @@
 # `ports` is reachable on those ports only).
 #
 # chart checks Chart.yaml: the four x-release-please markers are still there (a yaml updater
-# drops them), and artifacthub.io/images lists the api and worker image at APP_VERSION (#122).
+# drops them), and artifacthub.io/images lists the api and worker image at APP_VERSION (#122), each pinned as tag@sha256:<64 lower-case hex> (HISS-11).
 #
 # namespace reads every object of a rendered file and refuses one whose top-level
 # metadata.namespace is missing or other than NAMESPACE. Kustomize 5.8 no longer moves helmCharts
@@ -92,19 +92,23 @@ chart() {
   re='^ +image: ghcr\.io/lusoris/snatcharr-(api|worker):'
   export re
   images=$(awk '$0 ~ ENVIRON["re"] { n++ } END { print n + 0 }' "$1")
+  # Each image is tag@sha256:<64 hex> (HISS-11: no reference without an immutable digest).
   # The tag is compared as a string, not a pattern: the dots of a version are regex wildcards.
   # api and worker count once each, so two api lines do not stand in for the worker.
   current=$(awk -v want="$app" '
     $0 !~ ENVIRON["re"] { next }
     { name = $0; sub(/^.*snatcharr-/, "", name); sub(/:.*$/, "", name)
-      tag = $0; sub(/^.*:/, "", tag)
+      ref = $0; sub(/^.*snatcharr-(api|worker):/, "", ref); sub(/[[:space:]]+$/, "", ref)
+      at = index(ref, "@"); if (at == 0) next
+      tag = substr(ref, 1, at - 1); digest = substr(ref, at + 1)
+      if (digest !~ /^sha256:[0-9a-f]+$/ || length(digest) != 71) next
       if (tag == want) seen[name] = 1 }
     END { print seen["api"] + seen["worker"] }' "$1")
   if [ "$images" -ne 2 ] || [ "$current" -ne 2 ]; then
-    echo "Chart.yaml: artifacthub.io/images must list both images at appVersion $app ($images found, $current current)" >&2
+    echo "Chart.yaml: artifacthub.io/images must list both images at appVersion $app as tag@sha256 digest ($images found, $current current and pinned)" >&2
     exit 1
   fi
-  echo "Chart.yaml: appVersion $app, 4 markers, both images current"
+  echo "Chart.yaml: appVersion $app, 4 markers, both images current and digest-pinned"
 }
 
 # Only the top-level `metadata:` block counts: a pod template's metadata or a ServiceMonitor's

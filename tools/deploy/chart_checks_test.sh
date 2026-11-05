@@ -5,7 +5,8 @@
 # Planted cases for chart_checks.sh. Refused: an egress `to: []` on the rule line, `to: []` and
 # `to: null` after `ports`, a `to:` with no entry (also as the file's last line), a summary
 # other than WANT, a chart with three markers, a stale image, two api images and no worker
-# image, a version or registry host that only matches as a pattern, an object without a
+# image, a version or registry host that only matches as a pattern, an image without a full
+# lower-case sha256 digest (HISS-11), an object without a
 # top-level namespace (also when one sits below spec), an object in another namespace, a render
 # with no object. Accepted: the rule shapes the chart renders, an empty ingress `from`,
 # `to: []` inside a ConfigMap, a good chart, a render whose objects all sit in the namespace.
@@ -125,11 +126,16 @@ chart() {
   } >"$WORK/$1.yaml"
 }
 
-chart good 4 0.1.5 worker:0.1.5
-chart three_markers 3 0.1.5 worker:0.1.5
-chart stale_worker 4 0.1.5 worker:0.1.4
-chart two_api 4 0.1.5 api:0.1.5
-chart pattern_only 4 0.1.5 worker:0x1x5
+D=@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+chart good 4 "0.1.5$D" "worker:0.1.5$D"
+chart three_markers 3 "0.1.5$D" "worker:0.1.5$D"
+chart stale_worker 4 "0.1.5$D" "worker:0.1.4$D"
+chart two_api 4 "0.1.5$D" "api:0.1.5$D"
+chart pattern_only 4 "0.1.5$D" "worker:0x1x5$D"
+# HISS-11: a tag without a digest, a short digest, an upper-case digest.
+chart unpinned 4 "0.1.5$D" worker:0.1.5
+chart short_digest 4 "0.1.5$D" "worker:0.1.5@sha256:0123abcd"
+chart upper_digest 4 "0.1.5$D" "worker:0.1.5@sha256:0123456789ABCDEF0123456789abcdef0123456789abcdef0123456789abcdef"
 # The registry host with a dot that only a pattern matches.
 sed 's#ghcr\.io/lusoris/snatcharr-api#ghcrXio/lusoris/snatcharr-api#' "$WORK/good.yaml" >"$WORK/host_pattern.yaml"
 
@@ -139,6 +145,9 @@ expect 1 chart_stale_worker chart "$WORK/stale_worker.yaml" 0.1.5
 expect 1 chart_two_api chart "$WORK/two_api.yaml" 0.1.5
 expect 1 chart_pattern_only chart "$WORK/pattern_only.yaml" 0.1.5
 expect 1 chart_host_pattern chart "$WORK/host_pattern.yaml" 0.1.5
+expect 1 chart_unpinned chart "$WORK/unpinned.yaml" 0.1.5
+expect 1 chart_short_digest chart "$WORK/short_digest.yaml" 0.1.5
+expect 1 chart_upper_digest chart "$WORK/upper_digest.yaml" 0.1.5
 expect 1 chart_no_app chart "$WORK/good.yaml" ""
 expect 2 chart_usage chart "$WORK/good.yaml"
 # objects NAME DOCS...: a rendered file of the given documents, each led by `---`.
