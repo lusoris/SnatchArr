@@ -318,7 +318,7 @@ func TestPriorityReconcilerPauseResumeLifecycle(t *testing.T) {
 	if err := r.Tick(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	assertNoWriterMethod(t, writer.calls, "ResumeItems")
+	assertNoResumeWrites(t, writer.calls)
 
 	writer.calls = nil
 	currentItems = []PriorityItem{
@@ -336,6 +336,96 @@ func TestPriorityReconcilerPauseResumeLifecycle(t *testing.T) {
 	}
 	if source.ownership[c2.ID.String()+"\nlow"].PausedBySnatchArr {
 		t.Fatal("expected low paused_by_snatcharr flag to be cleared in store")
+	}
+}
+
+func TestPriorityReconcilerManualResumeReleasesOwnership(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"act", "observe"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			inputs := actTestInputs(domain.ClientQBittorrent, "act")
+			source := &prioritySourceFake{inputs: inputs}
+			obs := PriorityObservation{Items: []PriorityItem{
+				{Category: "tv", ID: "low", State: domain.DownloadItemActive},
+				{Category: "movies", ID: "high", State: domain.DownloadItemQueued},
+			}}
+			writer := &fakePriorityWriter{}
+			r := newActTestReconciler(source, &obs, writer)
+			if err := r.Tick(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			assertCall(t, writer.calls, "PauseItems", []string{"low"})
+			key := inputs.Clients[1].ID.String() + "\nlow"
+			if own := source.ownership[key]; !own.PausedBySnatchArr || own.PendingAction != "" {
+				t.Fatalf("pause not confirmed: %+v", own)
+			}
+
+			// A manual resume observed without higher-rank work must release ownership.
+			source.inputs.Clients[1].PriorityMode = mode
+			obs.Items = obs.Items[:1]
+			writer.calls = nil
+			if err := r.Tick(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			if source.ownership[key].PausedBySnatchArr {
+				t.Error("manual resume retained pause ownership")
+			}
+			assertNoResumeWrites(t, writer.calls)
+
+			// The user's subsequent pause must survive scheduling and withdrawal cleanup.
+			obs.Items[0].State = domain.DownloadItemPaused
+			writer.calls = nil
+			if err := r.Tick(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			assertNoResumeWrites(t, writer.calls)
+			plan, err := r.Latest(inputs.Clients[1].ID)
+			if err != nil || len(plan.Plan.Resume) != 0 {
+				t.Fatalf("user pause planned for resume: %+v, err=%v", plan, err)
+			}
+		})
+	}
+}
+
+func TestPriorityReconcilerConfirmedPauseRetainsOwnership(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"act", "observe"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			inputs := actTestInputs(domain.ClientQBittorrent, "act")
+			owner := inputs.Clients[1].ID
+			key := owner.String() + "\nlow"
+			source := &prioritySourceFake{inputs: inputs, ownership: map[string]PriorityOwnership{
+				key: {ClientID: owner, ItemID: "low", PausedBySnatchArr: true},
+			}}
+			obs := PriorityObservation{Items: []PriorityItem{
+				{Category: "tv", ID: "low", State: domain.DownloadItemPaused},
+				{Category: "movies", ID: "high", State: domain.DownloadItemActive},
+			}}
+			writer := &fakePriorityWriter{}
+			r := newActTestReconciler(source, &obs, writer)
+			for range 2 {
+				if err := r.Tick(t.Context()); err != nil {
+					t.Fatal(err)
+				}
+				assertNoResumeWrites(t, writer.calls)
+				if !source.ownership[key].PausedBySnatchArr {
+					t.Fatal("still-paused item lost ownership")
+				}
+			}
+			source.inputs.Clients[1].PriorityMode = mode
+			obs.Items = obs.Items[:1]
+			writer.calls = nil
+			if err := r.Tick(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			assertCall(t, writer.calls, "ResumeItems", []string{"low"})
+			plan, err := r.Latest(owner)
+			if err != nil || !slices.Equal(plan.Plan.Resume, []string{"low"}) {
+				t.Fatalf("owned pause missing from resume plan: %+v, err=%v", plan, err)
+			}
+		})
 	}
 }
 
@@ -522,11 +612,11 @@ func assertPlannedPriorityCalls(t *testing.T, r *Reconciler, clientID uuid.UUID,
 	}
 }
 
-func assertNoWriterMethod(t *testing.T, calls []writerCall, method string) {
+func assertNoResumeWrites(t *testing.T, calls []writerCall) {
 	t.Helper()
 	for _, call := range calls {
-		if call.Method == method {
-			t.Fatalf("unexpected %s: %+v", method, call)
+		if call.Method == "ResumeItems" {
+			t.Fatalf("unexpected ResumeItems: %+v", call)
 		}
 	}
 }

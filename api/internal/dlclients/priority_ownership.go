@@ -47,8 +47,9 @@ func (r *Reconciler) prepareItems(ctx context.Context, ids []string, clients map
 	return true
 }
 
-// Only the durable intent, written while an item was eligible, permits repair.
+// Only the durable intent, written while an item was eligible, permits claiming a paused item.
 // An observed paused item without an intent or confirmed owner is never claimed.
+// An observed running item releases confirmed pause ownership after a manual resume.
 func (r *Reconciler) recoverPriorityOwnership(ctx context.Context, items []PriorityItem, ownership []PriorityOwnership) bool {
 	if len(ownership) > maxPriorityItemsPerGroup*maxPriorityRowsPerTick {
 		r.logger.WarnContext(ctx, "download priority ownership truncated")
@@ -61,9 +62,6 @@ func (r *Reconciler) recoverPriorityOwnership(ctx context.Context, items []Prior
 	recordCtx, cancel := ownershipContext(ctx)
 	defer cancel()
 	for _, own := range ownership {
-		if own.PendingAction == "" {
-			continue
-		}
 		item, exists := observed[own.ItemID]
 		if !exists {
 			continue
@@ -77,6 +75,9 @@ func (r *Reconciler) recoverPriorityOwnership(ctx context.Context, items []Prior
 }
 
 func (r *Reconciler) recoverOwnershipItem(ctx context.Context, own PriorityOwnership, item PriorityItem) error {
+	if own.PendingAction == "" {
+		return r.releaseResumedPauseOwnership(ctx, own, item)
+	}
 	switch {
 	case own.PendingAction == "priority" && own.PendingPriority != nil && item.Priority == *own.PendingPriority:
 		return r.source.UpsertPriority(ctx, own.ClientID, own.ItemID, *own.PendingPriority)
@@ -87,6 +88,13 @@ func (r *Reconciler) recoverOwnershipItem(ctx context.Context, own PriorityOwner
 	default:
 		return r.source.CancelWrite(ctx, own.ClientID, own.ItemID)
 	}
+}
+
+func (r *Reconciler) releaseResumedPauseOwnership(ctx context.Context, own PriorityOwnership, item PriorityItem) error {
+	if own.PausedBySnatchArr && item.State != domain.DownloadItemPaused {
+		return r.source.ClearPaused(ctx, own.ClientID, own.ItemID)
+	}
+	return nil
 }
 
 func (r *Reconciler) cancelUnwritten(ctx context.Context, ids []string, writeErr error, clients map[string]uuid.UUID) {
