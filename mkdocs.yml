@@ -11,6 +11,9 @@ repo_name: lusoris/SnatchArr
 edit_uri: edit/main/docs/
 docs_dir: docs
 copyright: Docs CC BY-SA 4.0 · Code EUPL-1.2
+# A link to a missing heading anchor is a warning, so --strict refuses it (MkDocs logs it at info by default).
+validation:
+  anchors: warn
 
 theme:
   name: material
