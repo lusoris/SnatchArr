@@ -14,7 +14,7 @@ import hashlib
 import json
 import os
 import re
-import subprocess
+import subprocess  # nosec B404 -- runs git and pinned Gitleaks with argv lists, never a shell
 import sys
 import tempfile
 from dataclasses import dataclass
@@ -119,7 +119,7 @@ def parse_finding(fingerprint):
 
 def git_environment():
     """Remove Git's repository-local hook environment before targeting another repo."""
-    local = subprocess.run(
+    local = subprocess.run(  # nosec B603 -- fixed git argv, no shell
         ["git", "rev-parse", "--local-env-vars"], capture_output=True, text=True,
         timeout=60, check=True,
     )
@@ -131,7 +131,7 @@ def git_environment():
 def findings(gitleaks, repository, log_opts=None):
     """Return unfiltered fingerprints from full history or selected git log arguments."""
     environment = git_environment()
-    located = subprocess.run(["git", "rev-parse", "--absolute-git-dir"], cwd=repository, env=environment, capture_output=True, text=True, timeout=60, check=True)
+    located = subprocess.run(["git", "rev-parse", "--absolute-git-dir"], cwd=repository, env=environment, capture_output=True, text=True, timeout=60, check=True)  # nosec B603 -- fixed git argv, no shell
     with tempfile.TemporaryDirectory() as scratch:
         # Gitleaks applies a .gitleaksignore in its source directory without regard to expiry,
         # so it reads the history through GIT_DIR from a directory that holds no list.
@@ -175,7 +175,7 @@ def scan(gitleaks, repository, today, log_opts=None):
 def git(repository, *arguments):
     """Run fixture Git commands without inheriting the calling hook's repository."""
     identity = ["-c", "user.name=fixture", "-c", "user.email=fixture@invalid", "-c", "commit.gpgsign=false"]
-    subprocess.run(["git", *identity, *arguments], cwd=repository, env=git_environment(), capture_output=True, text=True, timeout=60, check=True)
+    subprocess.run(["git", *identity, *arguments], cwd=repository, env=git_environment(), capture_output=True, text=True, timeout=60, check=True)  # nosec B603 -- fixture argv from test code only, no shell
 
 
 def planted_line():

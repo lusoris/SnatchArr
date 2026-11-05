@@ -41,12 +41,13 @@ update() {
     printf 'refs/heads/main %s refs/heads/main %s\n' "$1" "$2"
 }
 
-# expect WANT LABEL INPUT NEEDLE: assert the status and safe diagnostic from the hook.
+# expect WANT LABEL INPUT NEEDLE [REMOTE]: assert the status and safe diagnostic from the hook.
 expect() {
     want="$1" label="$2" input="$3" needle="$4"
+    shift 4
     ran=$((ran + 1))
     rc=0
-    out="$(printf '%s' "$input" | timeout 660 sh "$check" 2>&1)" || rc=$?
+    out="$(printf '%s' "$input" | timeout 660 sh "$check" "$@" 2>&1)" || rc=$?
     if [ "$rc" -ne "$want" ]; then
         echo "FAIL $label: exit $rc, want $want" >&2
         printf '%s\n' "$out" >&2
@@ -67,14 +68,14 @@ check_exceptions() {
     future="$(python3 -I -c 'import datetime; print((datetime.datetime.now(datetime.UTC).date() + datetime.timedelta(days=1)).isoformat())')"
     for target in "$planted:settings.py:generic-api-key:1" 'settings.py:generic-api-key'; do
         printf '# expires %s: planted fixture\n%s\n' "$future" "$target" > .gitleaksignore
-        expect 0 "active exception $target" "$blocked_input" '0 blocking'
+        expect 0 "active exception $target" "$blocked_input" '0 blocking' origin
         printf '# expires 2000-01-01: planted fixture\n%s\n' "$target" > .gitleaksignore
-        expect 1 "expired exception $target" "$blocked_input" "$planted:settings.py:generic-api-key:1"
+        expect 1 "expired exception $target" "$blocked_input" "$planted:settings.py:generic-api-key:1" origin
     done
     printf '# expires %s: unused fixture\nabsent.py:generic-api-key\n' "$future" > .gitleaksignore
-    expect 0 'range omits unused exception diagnostics' "$clean_input" '0 blocking'
+    expect 0 'range omits unused exception diagnostics' "$clean_input" '0 blocking' origin
     printf '%s\n' 'malformed exception' > .gitleaksignore
-    expect 2 'malformed exception list fails closed' "$clean_input" 'could not scan'
+    expect 2 'malformed exception list fails closed' "$clean_input" 'could not scan' origin
     rm .gitleaksignore
 }
 
@@ -86,7 +87,7 @@ check_setup_failure() {
         printf 'corrupt archive\n' > "$work/broken/.cache/gitleaks/$(basename "$archive")"
     done
     check="$work/broken/tools/ci/prepush_secret_scan.sh"
-    expect 2 'corrupt scanner cache fails closed' "$clean_input" 'scanner setup failed'
+    expect 2 'corrupt scanner cache fails closed' "$clean_input" 'scanner setup failed' origin
     check="$HERE/prepush_secret_scan.sh"
 }
 
@@ -94,8 +95,8 @@ check_setup_failure() {
 check_hook_cases() (
     export GIT_DIR="$hook_gitdir" GIT_INDEX_FILE="$hook_gitdir/index"
     before_failed="$failed"
-    expect 1 'hook environment: planted range' "$blocked_input" "$planted:settings.py:generic-api-key:1"
-    expect 0 'hook environment: clean range' "$clean_input" '0 blocking'
+    expect 1 'hook environment: planted range' "$blocked_input" "$planted:settings.py:generic-api-key:1" origin
+    expect 0 'hook environment: clean range' "$clean_input" '0 blocking' origin
     mkdir -p "$work/hook-fixture" || exit 1
     fixture_git -C "$work/hook-fixture" init --quiet --initial-branch main || exit 1
     printf 'fixture\n' > "$work/hook-fixture/README.md"
@@ -138,6 +139,7 @@ printf 'fixture\n' > "$repo/README.md"
 fixture_git add README.md
 fixture_git commit --quiet --message fixture
 base="$(fixture_git rev-parse HEAD)"
+fixture_git remote add origin "$work/origin.git"
 fixture_git update-ref refs/remotes/origin/main "$base"
 # Derive the planted value at runtime; no key-shaped literal lives in this file.
 python3 -I -c 'import base64, hashlib, sys
@@ -160,22 +162,34 @@ blocked_input="$(update "$planted" "$base")
 "
 clean_input="$(update "$tip" "$planted")
 "
-expect 1 'planted commit in pushed range' "$blocked_input" "$planted:settings.py:generic-api-key:1"
-expect 0 'clean pushed range' "$clean_input" '0 blocking'
+expect 1 'planted commit in pushed range' "$blocked_input" "$planted:settings.py:generic-api-key:1" origin
+expect 0 'clean pushed range' "$clean_input" '0 blocking' origin
 fixture_git update-ref refs/remotes/origin/main "$planted"
-expect 0 'planted commit already on remote' "$clean_input" '0 blocking'
+expect 0 'planted commit already on remote' "$clean_input" '0 blocking' origin
 fixture_git update-ref refs/remotes/origin/main "$base"
-expect 1 'new branch containing planted commit' "$(update "$tip" "$zeros")" "$planted:settings.py:generic-api-key:1"
+expect 1 'new branch containing planted commit' "$(update "$tip" "$zeros")" "$planted:settings.py:generic-api-key:1" origin
+fixture_git update-ref refs/remotes/other/main "$planted"
+expect 1 'new branch includes commits only on other remote' "$(update "$tip" "$zeros")" "$planted:settings.py:generic-api-key:1" origin
 fixture_git update-ref refs/remotes/origin/main "$planted"
-expect 0 'new branch excludes commits on remotes' "$(update "$tip" "$zeros")" '0 blocking'
-expect 0 'delete ref' "$(update "$zeros" "$planted")" ''
-expect 0 'no ref updates' '' 'no stdin ref updates'
-expect 2 'malformed stdin line' 'refs/heads/main invalid' 'malformed stdin line'
-expect 2 'extra stdin field' "$(update "$tip" "$planted") extra" 'malformed stdin line'
-expect 2 'nonhex object ID' "$(update "${tip%?}x" "$planted")" 'malformed stdin line'
-expect 2 'unknown remote object fails closed' "$(update "$tip" "$missing")" 'could not scan'
-expect 1 'multiple refs include planted second range' "$clean_input$blocked_input" "$planted:settings.py:generic-api-key:1"
-expect 1 'multiple refs preserve earlier finding' "$blocked_input$clean_input" "$planted:settings.py:generic-api-key:1"
+expect 0 'new branch excludes destination remote commits' "$(update "$tip" "$zeros")" '0 blocking' origin
+expect 2 'missing remote argument fails closed' "$clean_input" 'missing remote argument'
+expect 2 'empty remote argument fails closed' "$clean_input" 'missing remote argument' ''
+expect 1 'URL destination scans full reachable history' "$(update "$tip" "$zeros")" "$planted:settings.py:generic-api-key:1" 'https://example.invalid/repo.git'
+for remote in 'with.dot-underscore_1' 'with space' 'with*glob'; do
+    fixture_git config "remote.$remote.url" "$work/remote.git"
+done
+fixture_git update-ref refs/remotes/with.dot-underscore_1/main "$planted"
+expect 0 'safe remote name excludes destination commits' "$(update "$tip" "$zeros")" '0 blocking' 'with.dot-underscore_1'
+expect 2 'remote name with space fails closed' "$clean_input" 'unsupported remote name' 'with space'
+expect 2 'remote name with glob fails closed' "$clean_input" 'unsupported remote name' 'with*glob'
+expect 0 'delete ref' "$(update "$zeros" "$planted")" '' origin
+expect 0 'no ref updates' '' 'no stdin ref updates' origin
+expect 2 'malformed stdin line' 'refs/heads/main invalid' 'malformed stdin line' origin
+expect 2 'extra stdin field' "$(update "$tip" "$planted") extra" 'malformed stdin line' origin
+expect 2 'nonhex object ID' "$(update "${tip%?}x" "$planted")" 'malformed stdin line' origin
+expect 2 'unknown remote object fails closed' "$(update "$tip" "$missing")" 'could not scan' origin
+expect 1 'multiple refs include planted second range' "$clean_input$blocked_input" "$planted:settings.py:generic-api-key:1" origin
+expect 1 'multiple refs preserve earlier finding' "$blocked_input$clean_input" "$planted:settings.py:generic-api-key:1" origin
 check_exceptions
 check_setup_failure
 # Full-history scans cannot see uncommitted worktree files: replay this source in git too.
@@ -183,7 +197,7 @@ cp "$HERE/prepush_secret_scan_test.sh" "$repo/check-fixture.sh"
 fixture_git add check-fixture.sh
 fixture_git commit --quiet --message 'test source'
 source_tip="$(fixture_git rev-parse HEAD)"
-expect 0 'test source contains no matching literal' "$(update "$source_tip" "$tip")" '0 blocking'
+expect 0 'test source contains no matching literal' "$(update "$source_tip" "$tip")" '0 blocking' origin
 check_hook_environment
 
 if [ "$failed" -ne 0 ]; then

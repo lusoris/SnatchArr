@@ -91,6 +91,6 @@ pre-push:
     secret-scan:
       priority: 1
       use_stdin: true
-      run: sh tools/ci/prepush_secret_scan.sh
+      run: sh tools/ci/prepush_secret_scan.sh {1}
     gate:
       run: sh .config/lefthook/engine.sh gate run --path=. --admit-unsupported

@@ -3,8 +3,25 @@
 # SPDX-License-Identifier: EUPL-1.2
 #
 # Scan each ref update supplied by git pre-push, using the CI scanner and exceptions.
+# Usage: sh tools/ci/prepush_secret_scan.sh REMOTE (pre-push remote name or URL).
 # Exit status: 0 clean/skipped, 1 blocking finding, 2 malformed input or unavailable scan.
 set -eu
+
+remote="${1:-}"
+if [ -z "$remote" ]; then
+    echo "pre-push scan: missing remote argument: expected remote name or URL" >&2
+    exit 2
+fi
+named_remote=0
+if timeout 60 git remote get-url -- "$remote" >/dev/null 2>&1; then
+    # LOG_OPTS is space-split by Gitleaks; glob characters also broaden --remotes.
+    case "$remote" in
+        *[!A-Za-z0-9._-]*)
+            echo "pre-push scan: unsupported remote name: use only A-Z, a-z, 0-9, dot, underscore or hyphen" >&2
+            exit 2 ;;
+    esac
+    named_remote=1
+fi
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 platform="$(uname -s)/$(uname -m)"
@@ -33,7 +50,13 @@ while read -r local_ref local_oid remote_ref remote_oid extra ||
     case "$local_oid" in *[!0]*) ;; *) continue ;; esac
     case "$remote_oid" in
         *[!0]*) range="$remote_oid..$local_oid"; set -- "$range" ;;
-        *) range="$local_oid --not --remotes"; set -- "$local_oid" --not --remotes ;;
+        *)
+            if [ "$named_remote" -eq 1 ]; then
+                range="$local_oid --not --remotes=$remote"
+                set -- "$local_oid" --not --remotes="$remote"
+            else
+                range="$local_oid"; set -- "$local_oid"
+            fi ;;
     esac
     # Gitleaks 8.30.1 can report a clean scan when git rejects an unknown object.
     if ! timeout 60 git rev-list --quiet "$@" >/dev/null 2>&1; then
