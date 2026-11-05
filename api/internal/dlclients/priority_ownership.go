@@ -37,6 +37,7 @@ func (r *Reconciler) prepareWrite(ctx context.Context, clientID uuid.UUID, itemI
 	return true
 }
 
+// prepareItems persists ownership intents before a batch of writes and cancels prepared intents if preparation fails.
 func (r *Reconciler) prepareItems(ctx context.Context, ids []string, clients map[string]uuid.UUID, action string) bool {
 	for i, id := range ids {
 		if !r.prepareWrite(ctx, clients[id], id, action, nil) {
@@ -47,6 +48,7 @@ func (r *Reconciler) prepareItems(ctx context.Context, ids []string, clients map
 	return true
 }
 
+// recoverPriorityOwnership reconciles durable ownership with observed items before planning further writes.
 // Only the durable intent, written while an item was eligible, permits claiming a paused item.
 // An observed paused item without an intent or confirmed owner is never claimed.
 // An observed running item releases confirmed pause ownership after a manual resume.
@@ -74,6 +76,8 @@ func (r *Reconciler) recoverPriorityOwnership(ctx context.Context, items []Prior
 	return true
 }
 
+// recoverOwnershipItem confirms or cancels a pending intent, or releases pause ownership after a manual resume.
+// A paused item can be claimed only through a durable pause intent.
 func (r *Reconciler) recoverOwnershipItem(ctx context.Context, own PriorityOwnership, item PriorityItem) error {
 	if own.PendingAction == "" {
 		return r.releaseResumedPauseOwnership(ctx, own, item)
@@ -90,6 +94,8 @@ func (r *Reconciler) recoverOwnershipItem(ctx context.Context, own PriorityOwner
 	}
 }
 
+// releaseResumedPauseOwnership releases confirmed pause ownership when an item runs with no pending action.
+// The user has taken the item back, so a later user pause must remain unowned.
 func (r *Reconciler) releaseResumedPauseOwnership(ctx context.Context, own PriorityOwnership, item PriorityItem) error {
 	if own.PausedBySnatchArr && item.State != domain.DownloadItemPaused {
 		return r.source.ClearPaused(ctx, own.ClientID, own.ItemID)
