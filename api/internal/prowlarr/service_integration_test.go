@@ -46,6 +46,7 @@ type stubClient struct {
 	keys      []string
 	calls     int
 	indexers  []prowlarrclient.Indexer
+	tags      map[int]string
 	statuses  map[int]time.Time
 	usage     map[int]prowlarrclient.Usage
 	usageHour map[int]prowlarrclient.Usage
@@ -73,6 +74,18 @@ func (c *stubClient) Indexers(_ context.Context, _, key string) ([]prowlarrclien
 		return nil, c.err
 	}
 	return c.indexers, nil
+}
+
+// Tags returns the configured tag labels and records the supplied API key.
+func (c *stubClient) Tags(_ context.Context, _, key string) (map[int]string, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.calls++
+	c.keys = append(c.keys, key)
+	if c.err != nil {
+		return nil, c.err
+	}
+	return c.tags, nil
 }
 
 func (c *stubClient) Usage(_ context.Context, _, key string, start, end time.Time) (map[int]prowlarrclient.Usage, error) {
