@@ -44,20 +44,22 @@ jobs:
           echo "::error title=$TITLE::$MESSAGE"
           echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
           exit 1
-      - &checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
       - name: The aggregate rule refuses its planted cases
         run: sh tools/ci/status_test.sh
       - name: The Security Scan issue step behaves on its planted cases
         run: sh tools/ci/security_issue_test.sh
       - name: The landing helper and the main commit check refuse their planted cases
         run: sh tools/ci/squash_merge_test.sh
-      # The commits job checks pull request commits only; the squash commit on main is checked here.
+      # The commits job checks pull requests; check every non-merge commit pushed to main here.
       - name: The commit on main passes the commit-msg policy
         if: github.event_name == 'push'
-        run: sh tools/ci/main_commit_check.sh "$GITHUB_SHA"
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: sh tools/ci/main_commit_check.sh "$BEFORE..$GITHUB_SHA"
       # These run at tag time only otherwise, so a pull request that breaks either script would land green.
       - name: The Codacy configuration excludes generated code, after its planted cases
         run: python3 -I tools/ci/codacy_config.py --self-test && python3 -I tools/ci/codacy_config.py
@@ -100,7 +102,10 @@ jobs:
     timeout-minutes: 15
     steps:
       - *stop-draft
-      - *checkout
+      - &checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: The scan script refuses its planted cases
         run: sh tools/ci/semgrep_scan_test.sh
       - name: Replay the rule fixtures, then scan the tracked Go files

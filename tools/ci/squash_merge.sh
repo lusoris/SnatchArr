@@ -16,8 +16,11 @@
 #   rc 4  subject plus body fail .config/hooks/commit-msg.sh, or the subject lacks "(#<pr>)"
 #   rc 5  mergeStateStatus is not CLEAN, or the head moved from <head-sha>
 #   rc 6  merged, but the commit on main does not carry the trailer
+#   rc 7  merge failed and the pull request is not confirmed MERGED
+#   rc 8  merged, but the main commit read-back failed
 #
 # GH names the forge client (default gh), for the planted cases in squash_merge_test.sh.
+# Platforms: POSIX sh, runs in CI on the ubuntu workflows job and on Linux maintainer hosts; macOS and Windows skipped: the repository's CI and landing run on Linux only.
 set -eu
 
 GH="${GH:-gh}"
@@ -41,6 +44,14 @@ printf '%s' "$sha" | grep -Eq '^[0-9a-f]{40}$' || {
 [ -z "$dry" ] || [ "$dry" = "--dry-run" ] || usage
 [ -f "$body" ] || { echo "refusing: no body file $body" >&2; exit 2; }
 
+# Snapshot before validation: the caller may change its file while gh reads the PR.
+umask 077
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' 0
+trap 'exit 1' HUP INT TERM
+body="$(mktemp "$work/body.XXXXXX")"
+cat <"$4" >"$body"
+
 if ! name="$(git -C "$ROOT" config user.name)" || ! email="$(git -C "$ROOT" config user.email)" ||
   [ -z "$name" ] || [ -z "$email" ]; then
   echo "refusing: git config user.name and user.email are required for the Signed-off-by trailer" >&2
@@ -59,8 +70,6 @@ case "$subject" in
   *" (#$pr)") ;;
   *) echo "refusing: the subject must end with ' (#$pr)'" >&2; exit 4 ;;
 esac
-work="$(mktemp -d)"
-trap 'rm -rf "$work"' EXIT
 { printf '%s\n\n' "$subject"; cat "$body"; } >"$work/msg"
 sh "$ROOT/.config/hooks/commit-msg.sh" "$work/msg" || exit 4
 
@@ -79,10 +88,27 @@ if [ "$dry" = "--dry-run" ]; then
   exit 0
 fi
 
-"$GH" pr merge "$pr" -R "$REPO" --squash --match-head-commit "$sha" \
-  --subject "$subject" --body-file "$body"
-merged="$("$GH" pr view "$pr" -R "$REPO" --json mergeCommit --jq '.mergeCommit.oid')"
-message="$("$GH" api "repos/$REPO/commits/$merged" --jq '.commit.message')"
+if "$GH" pr merge "$pr" -R "$REPO" --squash --match-head-commit "$sha" \
+  --subject "$subject" --body-file "$body"; then
+  merged="$("$GH" pr view "$pr" -R "$REPO" --json mergeCommit --jq '.mergeCommit.oid')" || {
+    echo "merged as unknown, read-back failed: check main_commit_check" >&2
+    exit 8
+  }
+else
+  view="$("$GH" pr view "$pr" -R "$REPO" --json state,mergeCommit \
+    --jq '[.state, .mergeCommit.oid] | @tsv')" || {
+    echo "merge failed: #$pr state unreadable" >&2
+    exit 7
+  }
+  state="$(printf '%s' "$view" | cut -f1)"
+  [ "$state" = MERGED ] || { echo "merge failed: #$pr state '$state'" >&2; exit 7; }
+  merged="$(printf '%s' "$view" | cut -f2)"
+  echo "merge completed despite the client error: #$pr as $merged"
+fi
+message="$("$GH" api "repos/$REPO/commits/$merged" --jq '.commit.message')" || {
+  echo "merged as $merged, read-back failed: check main_commit_check" >&2
+  exit 8
+}
 if ! printf '%s\n' "$message" | grep -Fxq "$trailer"; then
   echo "refusing: main $merged lacks '$trailer'; report it, never rewrite main" >&2
   exit 6

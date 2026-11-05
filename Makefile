@@ -104,7 +104,7 @@ api-gosec: ## gosec over the whole module (zero exclusions); fails on a finding 
 	log=$$(mktemp)
 	trap 'rm -f "$$log"' EXIT
 	status=0
-	# Only packages git tracks: gosec walks ./... itself and would load git-ignored .workingdir/.
+	# Tracked + untracked non-ignored packages; refuse ignored Go files gosec would load.
 	pkgs=$$(sh tools/ci/gosec_packages.sh $(if $(GOSEC_TAGS),-tags $(GOSEC_TAGS)) $(GOSEC_PKG)) || exit 1
 	gosec -conf .gosec.json -exclude-generated $(if $(GOSEC_TAGS),-tags $(GOSEC_TAGS)) -fmt sarif -out "$(GOSEC_SARIF)" -stdout -verbose text $$pkgs >"$$log" 2>&1 || status=$$?
 	cat "$$log"
