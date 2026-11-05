@@ -6,7 +6,9 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 # Download clients
 
 SnatchArr watches the clients your *arr apps hand grabs to, so it stops snatching when the
-grabs would only pile up. In observe mode, it never adds, pauses, resumes, removes or reorders a download.
+grabs would only pile up. In observe mode, it never adds, pauses, removes or reorders a download, and it
+resumes only downloads it paused itself, once act mode or attribution is withdrawn (`applyPriorityPlan` in
+`api/internal/dlclients/priority_cleanup.go`).
 
 Supported out of the box: **qBittorrent**, **Transmission**, **Deluge**, **rTorrent**,
 **SABnzbd** and **NZBGet**.
