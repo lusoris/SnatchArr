@@ -81,6 +81,8 @@ type Release struct {
 type Client interface {
 	Status(ctx context.Context, baseURL, apiKey string) (Status, error)
 	Indexers(ctx context.Context, baseURL, apiKey string) ([]Indexer, error)
+	// Tags returns Prowlarr tag labels keyed by their configured IDs.
+	Tags(ctx context.Context, baseURL, apiKey string) (map[int]string, error)
 	Usage(ctx context.Context, baseURL, apiKey string, start, end time.Time) (map[int]Usage, error)
 	Statuses(ctx context.Context, baseURL, apiKey string) (map[int]time.Time, error)
 	ProwlarrURLs(ctx context.Context, baseURL, apiKey string) ([]string, error)
@@ -141,6 +143,27 @@ func (h *HTTP) Indexers(ctx context.Context, baseURL, apiKey string) ([]Indexer,
 	out := make([]Indexer, 0, len(list))
 	for _, idx := range list {
 		out = append(out, parseIndexer(idx))
+	}
+	return out, nil
+}
+
+// Tags fetches tag labels keyed by ID. Transport or API failures wrap
+// domain.ErrUnreachable; a null response wraps domain.ErrInvalid.
+func (h *HTTP) Tags(ctx context.Context, baseURL, apiKey string) (map[int]string, error) {
+	pc, err := h.typed(baseURL, apiKey)
+	if err != nil {
+		return nil, err
+	}
+	items, err := pc.GetTags(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("%w: prowlarr tags: %w", domain.ErrUnreachable, arrclient.HintAPIError(err, "Prowlarr"))
+	}
+	if items == nil {
+		return nil, fmt.Errorf("%w: prowlarr tags: response is null", domain.ErrInvalid)
+	}
+	out := make(map[int]string, len(items))
+	for _, tag := range items {
+		out[tag.ID] = tag.Label
 	}
 	return out, nil
 }

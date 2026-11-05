@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -18,6 +19,49 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/prowlarrclient"
 )
+
+// TestHTTPClient_Tags verifies tag mapping, empty lists and invalid or failed responses.
+func TestHTTPClient_Tags(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		body    string
+		status  int
+		want    map[int]string
+		wantErr error
+	}{
+		{"success", `[{"id":7,"label":"lang-de"},{"id":2,"label":" LANG-FR "}]`, http.StatusOK, map[int]string{7: "lang-de", 2: " LANG-FR "}, nil},
+		{"empty list", `[]`, http.StatusOK, map[int]string{}, nil},
+		{"null body", `null`, http.StatusOK, nil, domain.ErrInvalid},
+		{"server error", `{"message":"unavailable"}`, http.StatusInternalServerError, nil, domain.ErrUnreachable},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodGet || r.URL.Path != "/api/v1/tag" || r.Header.Get("X-Api-Key") != "prowl-key" {
+					t.Errorf("unexpected request: %s %s, key %q", r.Method, r.URL.Path, r.Header.Get("X-Api-Key"))
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tc.status)
+				if _, err := w.Write([]byte(tc.body)); err != nil {
+					t.Errorf("write tags: %v", err)
+				}
+			}))
+			t.Cleanup(srv.Close)
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+			c := prowlarrclient.New(5*time.Second, "SnatchArr-test")
+			got, err := c.Tags(ctx, srv.URL, "prowl-key")
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("Tags() error = %v, want %v", err, tc.wantErr)
+			}
+			if !maps.Equal(got, tc.want) || (got == nil) != (tc.want == nil) {
+				t.Errorf("Tags() = %#v, want %#v", got, tc.want)
+			}
+		})
+	}
+}
 
 func fakeProwlarr(t *testing.T) *httptest.Server {
 	t.Helper()
