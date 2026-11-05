@@ -93,6 +93,7 @@ type Service struct {
 
 	cache        keyed.Map[uuid.UUID, LinkStatus]
 	indexerCache keyed.Map[uuid.UUID, cachedArrIndexers]
+	searchCache  searchCache
 }
 
 // New wires the service.
