@@ -25,6 +25,8 @@ COMMAND_SEPARATORS = {";", "&&", "||", "|", "&"}
 ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")
 REDIRECT = re.compile(r"(?:[0-9]+|&)?>>?")
 STDOUT_REDIRECTS = {">", ">>", "1>", "1>>", "&>", "&>>"}
+# curl 8.23.0: value-taking short options derived from `curl --help all`.
+SHORT_VALUE_OPTIONS = frozenset("ACDEFHKPQTUXYbcdehmortuwxyz")
 
 
 def git_tracked_files(root: Path) -> list[str]:
@@ -145,11 +147,11 @@ def curl_commands(line: str) -> Iterator[list[str]]:
 
 
 def short_options(word: str, words: Iterator[str]) -> Iterator[str]:
-    """Expand clustered output flags, consuming attached or separate values."""
+    """Expand output flags, ending clusters at the first value-taking option."""
     for index, option in enumerate(word[1:], 2):
         if option == "O":
             yield "--remote-name"
-        elif option in {"o", "K"}:
+        elif option in SHORT_VALUE_OPTIONS:
             value = word[index:] or next(words, None)
             if value is None:
                 raise ValueError("curl short option missing value")
