@@ -2,6 +2,8 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
+import { QueryClient } from '@tanstack/svelte-query';
+import { keys } from '#lib/query.js';
 import { ProblemError } from '@sveltesentio/core';
 import { screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -138,6 +140,18 @@ describe('ForeignSearchPreflight', () => {
 
 		expect((await screen.findByRole('alert')).textContent).toContain('Radarr unavailable');
 		expect(screen.queryByRole('table')).toBeNull();
+	});
+
+	it('refetches a just-cached verdict on mount', async () => {
+		const client = new QueryClient({
+			defaultOptions: { queries: { retry: false, staleTime: 15_000 } }
+		});
+		client.setQueryData(keys.foreignSearchPreflight(instanceId), report);
+		const get = stubGet({ [endpoint]: { ...report, profiles: [] } });
+		renderWithQuery(ForeignSearchPreflight, { instanceId }, client);
+		await waitFor(() => expect(get).toHaveBeenCalledTimes(1));
+		expect(await screen.findByText(m.foreign_search_preflight_empty())).toBeTruthy();
+		client.clear();
 	});
 
 	it('announces loading while the request is pending', () => {

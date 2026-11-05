@@ -6,6 +6,7 @@ package httpapi
 
 import (
 	"context"
+	"math"
 	"slices"
 
 	"github.com/google/uuid"
@@ -177,9 +178,9 @@ func foreignProfileToOAS(p policies.ProfilePreflight) oas.ForeignSearchProfile {
 		})
 	}
 	var profLang oas.NilRadarrLanguage
-	if p.Language != nil {
+	if p.Language != nil && p.Language.ID >= math.MinInt32 && p.Language.ID <= math.MaxInt32 {
 		profLang = oas.NewNilRadarrLanguage(oas.RadarrLanguage{
-			ID:   int32(p.Language.ID), // #nosec G115 -- profile language ID fits int32
+			ID:   int32(p.Language.ID),
 			Name: p.Language.Name,
 		})
 	} else {

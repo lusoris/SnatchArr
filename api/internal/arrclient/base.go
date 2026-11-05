@@ -7,6 +7,8 @@ package arrclient
 import (
 	"errors"
 	"fmt"
+	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"strings"
@@ -56,7 +58,22 @@ func (f BaseFactory) httpClient() *http.Client {
 
 // Base builds a goenvoy BaseClient configured with the factory's timeout and user agent.
 func (f BaseFactory) Base(baseURL, apiKey string) (*arr.BaseClient, error) {
-	c, err := arr.NewBaseClient(baseURL, apiKey, f.Options()...)
+	return f.baseWithClient(baseURL, apiKey, f.httpClient())
+}
+
+// BaseCapped builds a client whose response body cannot exceed maxBytes.
+// The limit applies only to this client, including chunked and decompressed bodies.
+func (f BaseFactory) BaseCapped(baseURL, apiKey string, maxBytes int64) (*arr.BaseClient, error) {
+	if maxBytes < 0 || maxBytes == math.MaxInt64 {
+		return nil, errors.New("base client: invalid response body limit")
+	}
+	client := f.httpClient()
+	client.Transport = cappedTransport{base: client.Transport, maxBytes: maxBytes}
+	return f.baseWithClient(baseURL, apiKey, client)
+}
+
+func (f BaseFactory) baseWithClient(baseURL, apiKey string, client *http.Client) (*arr.BaseClient, error) {
+	c, err := arr.NewBaseClient(baseURL, apiKey, arr.WithHTTPClient(client), arr.WithUserAgent(f.UserAgent))
 	if err != nil {
 		return nil, fmt.Errorf("base client: %w", err)
 	}
@@ -125,4 +142,35 @@ func sanitizeRedirect(req *http.Request, resp *http.Response) {
 	}
 	// net/http captures Location before CheckRedirect and includes it in url.Error.
 	resp.Header.Set("Location", safeLocation(location))
+}
+
+var errResponseBodyTooLarge = errors.New("API response body exceeds limit")
+
+type cappedTransport struct {
+	base     http.RoundTripper
+	maxBytes int64
+}
+
+func (t cappedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	resp, err := t.base.RoundTrip(req)
+	if err != nil {
+		return nil, fmt.Errorf("capped API transport: %w", err)
+	}
+	resp.Body = &cappedBody{ReadCloser: resp.Body, reader: &io.LimitedReader{R: resp.Body, N: t.maxBytes + 1}}
+	return resp, nil
+}
+
+type cappedBody struct {
+	io.ReadCloser
+	reader *io.LimitedReader
+}
+
+func (b *cappedBody) Read(p []byte) (int, error) {
+	n, err := b.reader.Read(p)
+	if b.reader.N == 0 {
+		return n, errResponseBodyTooLarge
+	}
+	// io.Reader contract: io.EOF is returned unwrapped, since io.ReadAll and the JSON decoder
+	// compare it by identity; other errors pass through as the base body returned them.
+	return n, err //nolint:wrapcheck // io.Reader passthrough; wrapping io.EOF breaks every reader
 }

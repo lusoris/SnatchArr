@@ -24,20 +24,18 @@ type fakeInstanceReader struct {
 	instErr  error
 	creds    instances.Credentials
 	credsErr error
+	calls    atomic.Int64
 }
 
-func (f *fakeInstanceReader) Get(context.Context, uuid.UUID) (domain.Instance, error) {
+func (f *fakeInstanceReader) GetWithCredentials(context.Context, uuid.UUID) (domain.Instance, instances.Credentials, error) {
+	f.calls.Add(1)
 	if f.instErr != nil {
-		return domain.Instance{}, f.instErr
+		return domain.Instance{}, instances.Credentials{}, f.instErr
 	}
-	return f.inst, nil
-}
-
-func (f *fakeInstanceReader) Credentials(context.Context, uuid.UUID) (instances.Credentials, error) {
 	if f.credsErr != nil {
-		return instances.Credentials{}, f.credsErr
+		return domain.Instance{}, instances.Credentials{}, f.credsErr
 	}
-	return f.creds, nil
+	return f.inst, f.creds, nil
 }
 
 type fakeProfileLanguager struct {
@@ -193,4 +191,44 @@ func TestForeignPreflight(t *testing.T) {
 			t.Fatalf("ForeignPreflight() error = %v, want wrapping %v", err, upstreamErr)
 		}
 	})
+}
+
+func TestOptionsSnapshot(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name              string
+		instErr, credsErr error
+	}{
+		{name: "positive empty upstream lists"},
+		{name: "negative missing instance", instErr: domain.ErrNotFound},
+		{name: "negative decrypt failure", credsErr: errors.New("invalid ciphertext")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			for _, preflight := range []bool{true, false} {
+				reader := &fakeInstanceReader{inst: domain.Instance{Kind: domain.KindRadarr}, instErr: tc.instErr, credsErr: tc.credsErr}
+				profiles := &fakeProfileLanguager{}
+				opts := newOptionsWithReader(reader, dummyLabeler{}, profiles)
+				var err error
+				if preflight {
+					_, err = opts.ForeignPreflight(t.Context(), uuid.Nil)
+				} else {
+					_, err = opts.FilterOptions(t.Context(), uuid.Nil)
+				}
+				want := tc.instErr
+				if want == nil {
+					want = tc.credsErr
+				}
+				if !errors.Is(err, want) {
+					t.Fatalf("preflight %t: error %v; want %v", preflight, err, want)
+				}
+				if reader.calls.Load() != 1 {
+					t.Fatalf("snapshot reads = %d; want 1", reader.calls.Load())
+				}
+				if want != nil && profiles.calls.Load() != 0 {
+					t.Fatal("upstream called after snapshot failure")
+				}
+			}
+		})
+	}
 }

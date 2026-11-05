@@ -208,15 +208,15 @@ instance offers (admins only); the policy form picks from that list.
 
 ### Foreign-search preflight
 
-`GET /api/v1/instances/{id}/foreign-search/preflight` provides a read-only compatibility check for Radarr instances (admins only). It evaluates whether each configured quality profile accepts releases found by foreign-title searches across supported rule languages (`de`, `fr`).
+`GET /api/v1/instances/{id}/foreign-search/preflight` provides a read-only compatibility check for Radarr instances (admins only). It evaluates whether each configured quality profile accepts releases found by foreign-title searches across supported rule languages (`de`, `fr`), assembled by [`ForeignPreflight`](../api/internal/policies/options.go). The endpoint contract and admin requirement are declared at `/instances/{instanceId}/foreign-search/preflight` in [OpenAPI](../api/openapi/openapi.yaml).
 
-The preflight reports one of three verdicts per profile and target language:
+The [verdict rules](../api/internal/foreigntitle/radarrlang.go), covered by [language decision tests](../api/internal/foreigntitle/radarrlang_test.go), report one of three verdicts per profile and target language:
 
 - `allowed`: The profile language is `Any` (-1) or explicitly matches the target language.
 - `original_only`: The profile language is `Original` (-2); searches pass only when the target language matches the movie's original language.
-- `skipped`: The profile language differs from the target language, is unmapped, or missing.
+- `skipped`: The profile language differs from the target language or is missing, or the target is unmapped for a profile other than `Any`.
 
-SnatchArr never changes or writes quality profile configurations in any *arr instance; the endpoint is strictly read-only.
+The [profile fetch](../api/internal/arrclient/profilelang.go) uses only `GET /api/v3/qualityprofile`; it never writes quality profile configurations. [Profile fetch tests](../api/internal/arrclient/profilelang_test.go) cover the method, language conversion, upstream failures and response bounds.
 
 ## Queue policy
 

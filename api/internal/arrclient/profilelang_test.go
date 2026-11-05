@@ -7,6 +7,7 @@ package arrclient_test
 import (
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -102,28 +103,115 @@ func TestProfileLanguages(t *testing.T) {
 			t.Fatalf("ProfileLanguages() err = %v, want ErrUnreachable", err)
 		}
 	})
+}
 
-	t.Run("negative oversized list refused", func(t *testing.T) {
-		t.Parallel()
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			var b strings.Builder
-			b.WriteString("[")
-			for i := 1; i <= 1001; i++ {
-				if i > 1 {
-					b.WriteString(",")
-				}
-				fmt.Fprintf(&b, `{"id":%d,"name":"p%d"}`, i, i)
+func TestProfileLanguageIDBounds(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		id   int64
+		keep bool
+	}{
+		{"positive", 4, true},
+		{"minimum", math.MinInt32, true},
+		{"maximum", math.MaxInt32, true},
+		{"below", math.MinInt32 - 1, false},
+		{"above", math.MaxInt32 + 1, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				fmt.Fprintf(w, `[{"id":1,"name":"profile","language":{"id":%d,"name":"lang"}}]`, tc.id)
+			}))
+			defer srv.Close()
+			p := arrclient.NewGoenvoyProber(arrclient.Options{Timeout: 2 * time.Second})
+			got, err := p.ProfileLanguages(t.Context(), domain.KindRadarr, srv.URL, "test-key")
+			if err != nil || len(got) != 1 {
+				t.Fatalf("profiles = %v, %v", got, err)
 			}
-			b.WriteString("]")
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(b.String()))
-		}))
-		defer srv.Close()
+			if (got[0].Language != nil) != tc.keep {
+				t.Fatalf("language = %v; keep %t", got[0].Language, tc.keep)
+			}
+			if tc.keep && int64(got[0].Language.ID) != tc.id {
+				t.Fatalf("language ID = %d; want %d", got[0].Language.ID, tc.id)
+			}
+			if !tc.keep {
+				_, reason := foreigntitle.RadarrProfileVerdict(got[0].Language, "de")
+				if reason != foreigntitle.ReasonProfileLanguageMissing {
+					t.Fatalf("reason = %s", reason)
+				}
+			}
+		})
+	}
+}
 
-		p := arrclient.NewGoenvoyProber(arrclient.Options{Timeout: 2 * time.Second})
-		_, err := p.ProfileLanguages(t.Context(), domain.KindRadarr, srv.URL, "key")
-		if !errors.Is(err, domain.ErrInvalid) {
-			t.Fatalf("ProfileLanguages() err = %v, want ErrInvalid", err)
-		}
-	})
+func TestProfileBodyCap(t *testing.T) {
+	t.Parallel()
+	const capBytes = 8 << 20
+	for _, tc := range []struct {
+		name    string
+		size    int
+		wantErr bool
+	}{
+		{"below", capBytes - 1, false}, {"exact", capBytes, false}, {"above", capBytes + 1, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			const profile = `[{"id":1,"name":"profile","language":{"id":4,"name":"German"}}]`
+			body := profile + strings.Repeat(" ", tc.size-len(profile))
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(body))
+			}))
+			defer srv.Close()
+			p := arrclient.NewGoenvoyProber(arrclient.Options{Timeout: 5 * time.Second})
+			got, err := p.ProfileLanguages(t.Context(), domain.KindRadarr, srv.URL, "test-key")
+			if tc.wantErr {
+				if !errors.Is(err, domain.ErrUnreachable) {
+					t.Fatalf("error = %v; want ErrUnreachable", err)
+				}
+			} else if err != nil || len(got) != 1 || got[0].Language.ID != 4 {
+				t.Fatalf("profiles = %v, %v", got, err)
+			}
+		})
+	}
+}
+
+func TestProfileCountBounds(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		count   int
+		wantErr bool
+	}{
+		{"empty", 0, false}, {"maximum", 1000, false}, {"above", 1001, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				var body strings.Builder
+				body.WriteString("[")
+				for i := 1; i <= tc.count; i++ {
+					if i > 1 {
+						body.WriteString(",")
+					}
+					fmt.Fprintf(&body, `{"id":%d,"name":"profile"}`, i)
+				}
+				body.WriteString("]")
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(body.String()))
+			}))
+			defer srv.Close()
+			p := arrclient.NewGoenvoyProber(arrclient.Options{Timeout: 2 * time.Second})
+			got, err := p.ProfileLanguages(t.Context(), domain.KindRadarr, srv.URL, "test-key")
+			if tc.wantErr {
+				if !errors.Is(err, domain.ErrUnreachable) || errors.Is(err, domain.ErrInvalid) {
+					t.Fatalf("error = %v; want ErrUnreachable only", err)
+				}
+			} else if err != nil || len(got) != tc.count {
+				t.Fatalf("profiles len = %d, error %v; want %d", len(got), err, tc.count)
+			}
+		})
+	}
 }

@@ -20,6 +20,7 @@ SPDX-License-Identifier: EUPL-1.2
 	const headingId = $props.id();
 	const preflight = createSentioQuery<Preflight | undefined>({
 		queryKey: keys.foreignSearchPreflight(id),
+		staleTime: 0,
 		queryFn: async () =>
 			(
 				await api.GET('/instances/{instanceId}/foreign-search/preflight', {

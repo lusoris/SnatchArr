@@ -41,8 +41,7 @@ type Preflight struct {
 }
 
 type instanceReader interface {
-	Get(ctx context.Context, instID uuid.UUID) (domain.Instance, error)
-	Credentials(ctx context.Context, instID uuid.UUID) (instances.Credentials, error)
+	GetWithCredentials(ctx context.Context, instID uuid.UUID) (domain.Instance, instances.Credentials, error)
 }
 
 // Options reads what an instance offers for the policy filters and foreign-search preflight.
@@ -71,11 +70,7 @@ func newOptionsWithReader(inst instanceReader, labels arrclient.Labeler, profile
 
 // FilterOptions returns the tags and quality profiles of a stored instance.
 func (o *Options) FilterOptions(ctx context.Context, instanceID uuid.UUID) (arrclient.Labels, error) {
-	inst, err := o.instances.Get(ctx, instanceID)
-	if err != nil {
-		return arrclient.Labels{}, err
-	}
-	creds, err := o.instances.Credentials(ctx, instanceID)
+	inst, creds, err := o.instances.GetWithCredentials(ctx, instanceID)
 	if err != nil {
 		return arrclient.Labels{}, err
 	}
@@ -88,7 +83,7 @@ func (o *Options) FilterOptions(ctx context.Context, instanceID uuid.UUID) (arrc
 
 // ForeignPreflight evaluates whether Radarr's quality profiles allow foreign-title searches in supported languages.
 func (o *Options) ForeignPreflight(ctx context.Context, instanceID uuid.UUID) (Preflight, error) {
-	inst, err := o.instances.Get(ctx, instanceID)
+	inst, creds, err := o.instances.GetWithCredentials(ctx, instanceID)
 	if err != nil {
 		return Preflight{}, err
 	}
@@ -100,10 +95,6 @@ func (o *Options) ForeignPreflight(ctx context.Context, instanceID uuid.UUID) (P
 		}, nil
 	}
 	langs, err := o.supportedLanguages()
-	if err != nil {
-		return Preflight{}, err
-	}
-	creds, err := o.instances.Credentials(ctx, instanceID)
 	if err != nil {
 		return Preflight{}, err
 	}

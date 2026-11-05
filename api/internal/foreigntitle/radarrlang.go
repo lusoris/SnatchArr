@@ -87,47 +87,46 @@ func RadarrLanguageID(iso string) (int, bool) {
 	return id, ok
 }
 
-// RadarrProfileVerdict determines whether a Radarr quality profile allows a foreign-title search in target language.
-func RadarrProfileVerdict(profile *RadarrLanguage, target string) (Verdict, Reason) {
+type languageDecision struct {
+	verdict  Verdict
+	reason   Reason
+	targetID int
+}
+
+func profileDecision(profile *RadarrLanguage, target string) languageDecision {
 	if profile == nil {
-		return VerdictSkipped, ReasonProfileLanguageMissing
+		return languageDecision{verdict: VerdictSkipped, reason: ReasonProfileLanguageMissing}
+	}
+	if profile.ID == RadarrLanguageAny {
+		return languageDecision{verdict: VerdictAllowed, reason: ReasonProfileAny}
 	}
 	targetID, ok := RadarrLanguageID(target)
 	if !ok {
-		return VerdictSkipped, ReasonLanguageUnmapped
-	}
-	if profile.ID == RadarrLanguageAny {
-		return VerdictAllowed, ReasonProfileAny
+		return languageDecision{verdict: VerdictSkipped, reason: ReasonLanguageUnmapped}
 	}
 	if profile.ID == RadarrLanguageOriginal {
-		return VerdictOriginalOnly, ReasonProfileOriginal
+		return languageDecision{verdict: VerdictOriginalOnly, reason: ReasonProfileOriginal, targetID: targetID}
 	}
 	if profile.ID == targetID {
-		return VerdictAllowed, ReasonProfileLanguageMatch
+		return languageDecision{verdict: VerdictAllowed, reason: ReasonProfileLanguageMatch}
 	}
-	return VerdictSkipped, ReasonProfileLanguageMismatch
+	return languageDecision{verdict: VerdictSkipped, reason: ReasonProfileLanguageMismatch}
+}
+
+// RadarrProfileVerdict determines whether a Radarr quality profile allows a foreign-title search in target language.
+func RadarrProfileVerdict(profile *RadarrLanguage, target string) (Verdict, Reason) {
+	decision := profileDecision(profile, target)
+	return decision.verdict, decision.reason
 }
 
 // RadarrMovieAllows evaluates whether a movie with a given original language satisfies the profile for a target language.
 func RadarrMovieAllows(profile *RadarrLanguage, original RadarrLanguage, target string) (bool, Reason) {
-	if profile == nil {
-		return false, ReasonProfileLanguageMissing
-	}
-	targetID, ok := RadarrLanguageID(target)
-	if !ok {
-		return false, ReasonLanguageUnmapped
-	}
-	if profile.ID == RadarrLanguageAny {
-		return true, ReasonProfileAny
-	}
-	if profile.ID == RadarrLanguageOriginal {
-		if original.ID == targetID {
+	decision := profileDecision(profile, target)
+	if decision.verdict == VerdictOriginalOnly {
+		if original.ID == decision.targetID {
 			return true, ReasonOriginalLanguageMatch
 		}
 		return false, ReasonOriginalLanguageMismatch
 	}
-	if profile.ID == targetID {
-		return true, ReasonProfileLanguageMatch
-	}
-	return false, ReasonProfileLanguageMismatch
+	return decision.verdict == VerdictAllowed, decision.reason
 }

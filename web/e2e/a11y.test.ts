@@ -19,7 +19,8 @@ import {
 	mockModulesApi,
 	mockSettingsApi,
 	mockSignedInApi,
-	samplePolicyData
+	samplePolicyData,
+	samplePreflightData
 } from './mocks.js';
 import { settleToasts } from './settle.js';
 
@@ -283,23 +284,7 @@ if (!process.env.SNATCHARR_E2E_API) {
 	test('/instances/[id]/policy has no axe violations', async ({ page }) => {
 		await setupInstanceMocks(page, instanceId, 'radarr');
 		await page.route(`**/api/v1/instances/${instanceId}/foreign-search/preflight`, (route) =>
-			route.fulfill(
-				json({
-					applies: true,
-					languages: ['de', 'fr'],
-					profiles: [
-						{
-							id: 1,
-							name: 'HD-1080p',
-							profile_language: { id: 4, name: 'German' },
-							verdicts: [
-								{ language: 'de', verdict: 'allowed', reason: 'profile_language_match' },
-								{ language: 'fr', verdict: 'skipped', reason: 'profile_language_mismatch' }
-							]
-						}
-					]
-				})
-			)
+			route.fulfill(json(samplePreflightData))
 		);
 		await page.goto(`/instances/${instanceId}/policy`);
 		await expect(page.getByRole('heading', { level: 1, name: 'Library Radarr' })).toBeVisible();

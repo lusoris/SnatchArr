@@ -236,3 +236,48 @@ func TestRadarrMovieAllows(t *testing.T) {
 		})
 	}
 }
+
+// Source: Radarr develop src/NzbDrone.Core/Languages/Language.cs,
+// https://github.com/Radarr/Radarr/blob/develop/src/NzbDrone.Core/Languages/Language.cs
+// Checked 2026-11-05: Tamil=43 and Telugu=45; special profile IDs are negative.
+func TestRadarrSourceLanguageIDs(t *testing.T) {
+	t.Parallel()
+	for code, want := range map[string]int{"en": 1, "de": 4, "ja": 8, "ko": 21, "ta": 43, "te": 45, "rm": 55, "mn": 56, "ka": 57} {
+		t.Run(code, func(t *testing.T) {
+			t.Parallel()
+			got, ok := foreigntitle.RadarrLanguageID(code)
+			if !ok || got != want {
+				t.Fatalf("ID(%q) = %d, %t; want %d", code, got, ok, want)
+			}
+		})
+	}
+	for name, tc := range map[string]struct{ got, want int }{
+		"Any":      {foreigntitle.RadarrLanguageAny, -1},
+		"Original": {foreigntitle.RadarrLanguageOriginal, -2},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			if tc.got != tc.want {
+				t.Fatalf("%s = %d; want %d", name, tc.got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRadarrAnyUnmappedTarget(t *testing.T) {
+	t.Parallel()
+	for _, target := range []string{"xx", ""} {
+		t.Run(target, func(t *testing.T) {
+			t.Parallel()
+			profile := &foreigntitle.RadarrLanguage{ID: foreigntitle.RadarrLanguageAny}
+			verdict, reason := foreigntitle.RadarrProfileVerdict(profile, target)
+			if verdict != foreigntitle.VerdictAllowed || reason != foreigntitle.ReasonProfileAny {
+				t.Errorf("verdict = %s, %s; want allowed, profile_any", verdict, reason)
+			}
+			allowed, reason := foreigntitle.RadarrMovieAllows(profile, foreigntitle.RadarrLanguage{}, target)
+			if !allowed || reason != foreigntitle.ReasonProfileAny {
+				t.Fatalf("movie = %t, %s; want true, profile_any", allowed, reason)
+			}
+		})
+	}
+}
