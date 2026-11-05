@@ -13,7 +13,8 @@ docs_dir: docs
 copyright: Docs CC BY-SA 4.0 · Code EUPL-1.2
 # A link to a missing heading anchor is a warning, so --strict refuses it (MkDocs logs it at info by default).
 validation:
-  anchors: warn
+  links:
+    anchors: warn
 
 theme:
   name: material

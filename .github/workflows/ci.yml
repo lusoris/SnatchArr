@@ -933,6 +933,9 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.15'
+      - name: Replay the planted docs cases
+        # Each case must fail as planted, so a check that stopped refusing it fails here first.
+        run: bash tools/ci/docs_check_test.sh "$RUNNER_TEMP/docs-cache"
       - name: Build site with the pinned docs toolchain
         # --strict turns every warning into a failure; no -q, which would hide them.
         run: sh tools/ci/docs_check.sh "$RUNNER_TEMP/docs-cache"
