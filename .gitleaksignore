@@ -15,5 +15,3 @@
 2a1038558d4a51318faaffecd01cd80ceeefadf4:api/internal/configarr/parse_test.go:generic-api-key:64
 # expires 2027-02-11: category D, helm-unittest mock lookup Secrets in the chart's csrf-secret refusal suite; low-entropy placeholder values, no credential
 deploy/helm/snatcharr/tests/secret_test.yaml:kubernetes-secret-yaml
-# expires 2026-11-08: category B, planted curl option fixture in download_retry_check_test.sh, no credential; the commit leaves main at the squash merge of #1019
-892581db29159e0da31d155eac1e93e6ddb3bbe7:tools/ci/download_retry_check_test.sh:curl-auth-user:247
