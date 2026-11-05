@@ -8,3 +8,4 @@
 *.sql eol=lf
 .golangci.yml eol=lf
 tools/moduleroutes/testdata/*.yaml eol=lf
+tools/oasdiff/testdata/*.yaml eol=lf
