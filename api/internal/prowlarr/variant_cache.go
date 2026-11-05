@@ -17,7 +17,6 @@ import (
 
 const (
 	maxSearchCacheEntries = 1024
-	maxCachedReleases     = 1000
 	searchCacheTTL        = time.Hour
 )
 
@@ -49,10 +48,11 @@ type cachedSearch struct {
 	fetchedAt time.Time
 }
 
-// searchCache keeps eviction and insertion under one lock; the zero value is ready.
+// searchCache keeps eviction and insertion under one lock; New supplies the validated limit.
 type searchCache struct {
-	mu      sync.Mutex
-	entries map[searchKey]cachedSearch
+	mu          sync.Mutex
+	entries     map[searchKey]cachedSearch
+	maxReleases int
 }
 
 func (c *searchCache) get(key searchKey, now time.Time) (cachedSearch, bool) {
@@ -71,7 +71,7 @@ func (c *searchCache) get(key searchKey, now time.Time) (cachedSearch, bool) {
 }
 
 func (c *searchCache) put(key searchKey, entry cachedSearch) {
-	if len(entry.releases) > maxCachedReleases {
+	if len(entry.releases) > c.maxReleases {
 		return
 	}
 	c.mu.Lock()
@@ -116,7 +116,8 @@ func (c *searchCache) evict(now time.Time) {
 }
 
 // cloneSearchReleases copies each response element and its mutable category list.
-// put rejects more than maxCachedReleases, bounding this loop on both put and get.
+// put rejects results above the validated max_cached_releases setting (<= 10000),
+// bounding this loop on both put and get.
 func cloneSearchReleases(releases []prowlarrclient.Release) []prowlarrclient.Release {
 	out := slices.Clone(releases)
 	for i := range out {

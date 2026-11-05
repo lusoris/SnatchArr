@@ -246,6 +246,14 @@ type Handler interface {
 	//
 	// GET /download-clients/status
 	GetDownloadClientStatus(ctx context.Context) ([]DownloadClientStatus, error)
+	// GetForeignSearchPreflight implements getForeignSearchPreflight operation.
+	//
+	// Read-only preflight check evaluating whether an instance's quality profiles allow
+	// foreign-title searches across supported rule languages. SnatchArr never changes
+	// the quality profile.
+	//
+	// GET /instances/{instanceId}/foreign-search/preflight
+	GetForeignSearchPreflight(ctx context.Context, params GetForeignSearchPreflightParams) (*ForeignSearchPreflight, error)
 	// GetHourlyCaps implements getHourlyCaps operation.
 	//
 	// Per-instance stamina spent in the last 60 minutes (rolling window).

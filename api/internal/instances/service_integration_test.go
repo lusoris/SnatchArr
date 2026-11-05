@@ -658,3 +658,45 @@ func TestNewTicker_Constructs(t *testing.T) {
 		t.Fatal("NewTicker() = nil")
 	}
 }
+
+func TestServiceSnapshot(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name             string
+		missing, corrupt bool
+	}{
+		{name: "positive same row"}, {name: "negative missing", missing: true}, {name: "boundary corrupt ciphertext", corrupt: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			f := newFixture(t)
+			inst, err := f.svc.Create(t.Context(), readarrInput(booksURL))
+			if err != nil {
+				t.Fatal(err)
+			}
+			instID := inst.ID
+			if tc.missing {
+				instID = uuid.Nil
+			}
+			if tc.corrupt {
+				_, err = f.st.Pool().Exec(t.Context(), "UPDATE instances SET api_key_enc = $1 WHERE id = $2", []byte("invalid ciphertext"), instID)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			got, creds, err := f.svc.GetWithCredentials(t.Context(), instID)
+			if tc.missing || tc.corrupt {
+				if err == nil || got.ID != uuid.Nil || creds != (instances.Credentials{}) {
+					t.Fatalf("snapshot failure leaked data: %v", err)
+				}
+				if tc.missing && !errors.Is(err, domain.ErrNotFound) {
+					t.Fatalf("error = %v; want ErrNotFound", err)
+				}
+				return
+			}
+			if err != nil || got.ID != inst.ID || got.Kind != inst.Kind || got.BaseURL != creds.BaseURL || creds.APIKey != testKey {
+				t.Fatalf("snapshot does not match stored instance: %v", err)
+			}
+		})
+	}
+}

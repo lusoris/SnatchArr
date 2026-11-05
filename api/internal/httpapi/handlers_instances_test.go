@@ -8,12 +8,15 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"math"
 	"testing"
 
 	"github.com/lusoris/SnatchArr/api/internal/arrclient"
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
+	"github.com/lusoris/SnatchArr/api/internal/foreigntitle"
 	"github.com/lusoris/SnatchArr/api/internal/instances"
+	"github.com/lusoris/SnatchArr/api/internal/policies"
 	"github.com/lusoris/SnatchArr/api/internal/queue"
 )
 
@@ -107,6 +110,33 @@ func TestTestInstanceInput(t *testing.T) {
 			}
 			if *got != tc.want {
 				t.Errorf("TestInstanceInput() = %+v, want %+v", *got, tc.want)
+			}
+		})
+	}
+}
+
+func TestForeignProfileLanguageBounds(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		language *foreigntitle.RadarrLanguage
+		wantNull bool
+	}{
+		{"missing", nil, true},
+		{"positive", &foreigntitle.RadarrLanguage{ID: 4}, false},
+		{"minimum", &foreigntitle.RadarrLanguage{ID: math.MinInt32}, false},
+		{"maximum", &foreigntitle.RadarrLanguage{ID: math.MaxInt32}, false},
+		{"below", &foreigntitle.RadarrLanguage{ID: math.MinInt32 - 1}, true},
+		{"above", &foreigntitle.RadarrLanguage{ID: math.MaxInt32 + 1}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := foreignProfileToOAS(policies.ProfilePreflight{Language: tc.language})
+			if got.ProfileLanguage.IsNull() != tc.wantNull {
+				t.Fatalf("language = %+v; want null %t", got.ProfileLanguage, tc.wantNull)
+			}
+			if !tc.wantNull && int(got.ProfileLanguage.Value.ID) != tc.language.ID {
+				t.Fatalf("ID = %d", got.ProfileLanguage.Value.ID)
 			}
 		})
 	}

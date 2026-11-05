@@ -89,7 +89,7 @@ func newVariantFixture(t *testing.T) variantFixture {
 		releases:   []prowlarrclient.Release{{GUID: "variant-release", Categories: []int{2000}}},
 	}
 	svc := prowlarr.New(st, enc, clk, id.New(), client, &stubDiscoverer{}, nil,
-		slog.New(slog.DiscardHandler), config.Options{Prowlarr: config.ProwlarrOptions{LimitThreshold: 0.9}})
+		slog.New(slog.DiscardHandler), config.Default())
 	link, err := svc.Create(t.Context(), prowlarr.Input{
 		Name: "variant", BaseURL: linkURL, APIKey: firstKey, Enabled: true, HourlyCap: 100,
 	})
@@ -441,13 +441,14 @@ func TestSearchVariant_CapChangedAfterPreflight(t *testing.T) {
 
 func TestSearchVariant_ReleaseCacheBound(t *testing.T) {
 	t.Parallel()
+	maxReleases := config.Default().Prowlarr.MaxCachedReleases
 	for _, tc := range []struct {
 		count       int
 		secondDebit int
 		calls       int
 	}{
-		{count: 1000, calls: 1},
-		{count: 1001, secondDebit: 2, calls: 2},
+		{count: maxReleases, calls: 1},
+		{count: maxReleases + 1, secondDebit: 2, calls: 2},
 	} {
 		t.Run(fmt.Sprintf("releases=%d", tc.count), func(t *testing.T) {
 			t.Parallel()

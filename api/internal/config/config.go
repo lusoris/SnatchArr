@@ -125,13 +125,21 @@ func (m MetricsOptions) Validate() error {
 
 // ProwlarrOptions configures the Prowlarr link and planner gate.
 type ProwlarrOptions struct {
-	LimitThreshold float64 `koanf:"limit_threshold"`
+	LimitThreshold    float64       `koanf:"limit_threshold"`
+	SearchDBTimeout   time.Duration `koanf:"search_db_timeout"`
+	MaxCachedReleases int           `koanf:"max_cached_releases"`
 }
 
-// Validate checks that the limit threshold is within (0, 1].
+// Validate checks the exhaustion threshold, search DB timeout and cache result limit.
 func (p ProwlarrOptions) Validate() error {
 	if p.LimitThreshold <= 0 || p.LimitThreshold > 1 {
 		return fmt.Errorf("config: prowlarr.limit_threshold must be between 0 (exclusive) and 1 (inclusive), got %v", p.LimitThreshold)
+	}
+	if p.SearchDBTimeout < time.Second || p.SearchDBTimeout > 60*time.Second {
+		return fmt.Errorf("config: prowlarr.search_db_timeout must be between 1s and 60s (inclusive), got %s", p.SearchDBTimeout)
+	}
+	if p.MaxCachedReleases < 1 || p.MaxCachedReleases > 10000 {
+		return fmt.Errorf("config: prowlarr.max_cached_releases must be between 1 and 10000 (inclusive), got %d", p.MaxCachedReleases)
 	}
 	return nil
 }
@@ -491,7 +499,9 @@ func Default() Options {
 			SecretHeader: DefaultProxySecretHeader,
 		},
 		Prowlarr: ProwlarrOptions{
-			LimitThreshold: 0.9,
+			LimitThreshold:    0.9,
+			SearchDBTimeout:   10 * time.Second,
+			MaxCachedReleases: 1000,
 		},
 		Jellyfin: JellyfinOptions{
 			Timeout:     10 * time.Second,
@@ -739,6 +749,8 @@ func CompoundKeys() []string {
 		"snatcharr.proxy_auth.trusted_cidrs",
 		"snatcharr.proxy_auth.allowed_users",
 		"snatcharr.prowlarr.limit_threshold",
+		"snatcharr.prowlarr.search_db_timeout",
+		"snatcharr.prowlarr.max_cached_releases",
 		"snatcharr.jellyfin.api_key",
 		"snatcharr.jellyfin.default_role",
 		"snatcharr.item_search.cooldown_seconds",

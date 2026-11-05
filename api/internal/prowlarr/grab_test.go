@@ -143,9 +143,7 @@ func setupGrabFixture(t *testing.T) grabFixture {
 	prowlClient := prowlarrclient.New(5*time.Second, "SnatchArr-test")
 	prober := arrclient.NewGoenvoyProber(arrclient.DefaultOptions())
 	instSvc := instances.New(st, enc, clk, id.New(), prober, slog.New(slog.DiscardHandler))
-	cfg := config.Options{
-		Prowlarr: config.ProwlarrOptions{LimitThreshold: 0.9},
-	}
+	cfg := config.Default()
 	svc := prowlarr.New(st, enc, clk, id.New(), prowlClient, prober, instSvc, slog.New(slog.DiscardHandler), cfg)
 
 	link, err := svc.Create(t.Context(), prowlarr.Input{

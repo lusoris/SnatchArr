@@ -653,6 +653,18 @@ func stepsPoliciesAndRuns() []routerStep {
 			},
 		},
 		{
+			op:     "getForeignSearchPreflight",
+			method: http.MethodGet,
+			path:   func(ids *idsState) string { return "/instances/" + ids.instanceID + "/foreign-search/preflight" },
+			want:   http.StatusOK,
+			capture: func(t *testing.T, _ *idsState, decoded map[string]any) {
+				t.Helper()
+				if _, ok := decoded["applies"].(bool); !ok {
+					t.Fatalf("getForeignSearchPreflight = %v; want applies boolean", decoded)
+				}
+			},
+		},
+		{
 			op:     "getQueuePolicy",
 			method: http.MethodGet,
 			path:   func(ids *idsState) string { return "/instances/" + ids.instanceID + "/queue-policy" },
@@ -2755,7 +2767,7 @@ func TestRouterRejectsViewerMutationsAndProbes(t *testing.T) {
 		t.Fatal("no operations tested")
 	}
 
-	adminOnlyReads := []string{"listLogs", "getConfigarrStatus", "getPolicyFilterOptions", "getModule"}
+	adminOnlyReads := []string{"listLogs", "getConfigarrStatus", "getPolicyFilterOptions", "getForeignSearchPreflight", "getModule"}
 	for _, opID := range adminOnlyReads {
 		step, ok := stepsByOp[opID]
 		if !ok {

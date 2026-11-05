@@ -33,6 +33,23 @@ export function problemJson(
 	};
 }
 
+// A Radarr preflight with one profile, so the foreign-title search check renders its table.
+export const samplePreflightData = {
+	applies: true,
+	languages: ['de', 'fr'],
+	profiles: [
+		{
+			id: 1,
+			name: 'HD-1080p',
+			profile_language: { id: 4, name: 'German' },
+			verdicts: [
+				{ language: 'de', verdict: 'allowed', reason: 'profile_language_match' },
+				{ language: 'fr', verdict: 'skipped', reason: 'profile_language_mismatch' }
+			]
+		}
+	]
+};
+
 export const samplePolicyData = {
 	missing_per_cycle: 10,
 	upgrade_per_cycle: 5,
@@ -379,6 +396,9 @@ export async function mockInstancePolicyApi(
 	});
 	await page.route(`**/api/v1/instances/${instanceId}/policy/filter-options`, (route) =>
 		route.fulfill(json({ tags: [], quality_profiles: [] }))
+	);
+	await page.route(`**/api/v1/instances/${instanceId}/foreign-search/preflight`, (route) =>
+		route.fulfill(json(samplePreflightData))
 	);
 }
 

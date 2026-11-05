@@ -36,6 +36,8 @@ UI.
 | `APP_SNATCHARR_CONFIGARR_SECRETS` | | Path to Configarr `secrets.yml` |
 | `APP_SNATCHARR_CONFIGARR_WATCH` | `true` | Re-import on file change |
 | `APP_SNATCHARR_PROWLARR_LIMIT_THRESHOLD` | `0.9` | Fraction (0, 1] of an indexer's Prowlarr query limit at which SnatchArr treats the indexer as exhausted ([Prowlarr](prowlarr.md)) |
+| `APP_SNATCHARR_PROWLARR_SEARCH_DB_TIMEOUT` | `10s` | Deadline for Prowlarr DB link lookups and budget transactions, including lock waits; range `1s` to `60s` inclusive (`snatcharr.prowlarr.search_db_timeout`) |
+| `APP_SNATCHARR_PROWLARR_MAX_CACHED_RELEASES` | `1000` | Largest search result kept in the variant cache; range `1` to `10000` inclusive. Larger results are returned uncached but still debited (`snatcharr.prowlarr.max_cached_releases`) |
 | `APP_SNATCHARR_JELLYFIN_ENABLED` | `false` | Enable Jellyfin authentication and Quick Connect |
 | `APP_SNATCHARR_JELLYFIN_URL` | | Jellyfin server base URL (must be http or https with host) |
 | `APP_SNATCHARR_JELLYFIN_API_KEY` | | Jellyfin service account API key |
@@ -205,6 +207,18 @@ Every instance has one policy (`GET/PUT /api/v1/instances/{id}/policy`). On `PUT
 An episode, album or book has the tags and quality profile of its series, artist or author.
 `GET /api/v1/instances/{id}/policy/filter-options` lists the tags and quality profiles the
 instance offers (admins only); the policy form picks from that list.
+
+### Foreign-search preflight
+
+`GET /api/v1/instances/{id}/foreign-search/preflight` provides a read-only compatibility check for Radarr instances (admins only). It evaluates whether each configured quality profile accepts releases found by foreign-title searches across supported rule languages (`de`, `fr`), assembled by `ForeignPreflight` (`api/internal/policies/options.go`). The endpoint contract is declared at `/instances/{instanceId}/foreign-search/preflight` in OpenAPI (`api/openapi/openapi.yaml`). Admin access is enforced by `GetForeignSearchPreflight` (`api/internal/httpapi/handlers_instances.go`).
+
+The verdict rules (`api/internal/foreigntitle/radarrlang.go`), covered by language decision tests (`api/internal/foreigntitle/radarrlang_test.go`), report one of three verdicts per profile and target language:
+
+- `allowed`: The profile language is `Any` (-1) or explicitly matches the target language.
+- `original_only`: The profile language is `Original` (-2); searches pass only when the target language matches the movie's original language.
+- `skipped`: The profile language differs from the target language or is missing, or the target is unmapped for a profile other than `Any`.
+
+The profile fetch (`api/internal/arrclient/profilelang.go`) uses only `GET /api/v3/qualityprofile`; it never writes quality profile configurations. Profile fetch tests (`api/internal/arrclient/profilelang_test.go`) cover the method, language conversion, upstream failures and response bounds.
 
 ## Queue policy
 
