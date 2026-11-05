@@ -17,6 +17,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/lusoris/SnatchArr/api/internal/config"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/prowlarrclient"
 )
@@ -158,7 +159,7 @@ func TestSearchCacheExpiry(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			var cache searchCache
+			cache := searchCache{maxReleases: config.Default().Prowlarr.MaxCachedReleases}
 			key := searchKey{query: "Title"}
 			cache.put(key, cachedSearch{fetchedAt: now})
 			if _, ok := cache.get(key, now.Add(tc.age)); ok != tc.hit {
@@ -176,7 +177,7 @@ func TestSearchCacheBound(t *testing.T) {
 	for _, expired := range []bool{false, true} {
 		t.Run(fmt.Sprintf("expired=%v", expired), func(t *testing.T) {
 			t.Parallel()
-			var cache searchCache
+			cache := searchCache{maxReleases: config.Default().Prowlarr.MaxCachedReleases}
 			now := time.Date(2026, time.November, 5, 0, 0, 0, 0, time.UTC)
 			for i := range maxSearchCacheEntries {
 				cache.put(searchKey{offset: i}, cachedSearch{fetchedAt: now.Add(time.Duration(i))})
@@ -210,7 +211,7 @@ func TestSearchCacheBound(t *testing.T) {
 
 func TestSearchCacheExpiredBeforeOldest(t *testing.T) {
 	t.Parallel()
-	var cache searchCache
+	cache := searchCache{maxReleases: config.Default().Prowlarr.MaxCachedReleases}
 	now := time.Date(2026, time.November, 5, 0, 0, 0, 0, time.UTC)
 	cache.put(searchKey{}, cachedSearch{fetchedAt: now.Add(-time.Hour - time.Nanosecond)})
 	for i := 1; i < maxSearchCacheEntries; i++ {
@@ -224,7 +225,7 @@ func TestSearchCacheExpiredBeforeOldest(t *testing.T) {
 
 func TestSearchCacheCopies(t *testing.T) {
 	t.Parallel()
-	var cache searchCache
+	cache := searchCache{maxReleases: config.Default().Prowlarr.MaxCachedReleases}
 	now := time.Date(2026, time.November, 5, 0, 0, 0, 0, time.UTC)
 	releases := []prowlarrclient.Release{{GUID: "original", Categories: []int{2000}}}
 	cache.put(searchKey{}, cachedSearch{fetchedAt: now, releases: releases})
@@ -245,10 +246,10 @@ func TestSearchCacheForgetLink(t *testing.T) {
 	for _, count := range []int{0, 2, maxSearchCacheEntries - 1} {
 		t.Run(fmt.Sprintf("entries=%d", count), func(t *testing.T) {
 			t.Parallel()
-			var cache searchCache
+			cache := searchCache{maxReleases: config.Default().Prowlarr.MaxCachedReleases}
 			a, b := uuid.New(), uuid.New()
 			now := time.Date(2026, time.November, 5, 0, 0, 0, 0, time.UTC)
-			cache.forgetLink(a) // Zero-value cache is safe.
+			cache.forgetLink(a) // Empty cache invalidation is safe.
 			cache.put(searchKey{linkID: b}, cachedSearch{fetchedAt: now})
 			for i := range count {
 				cache.put(searchKey{linkID: a, offset: i}, cachedSearch{fetchedAt: now})
@@ -272,10 +273,14 @@ func TestSearchCacheForgetLink(t *testing.T) {
 
 func TestSearchCacheReleaseBound(t *testing.T) {
 	t.Parallel()
-	for _, count := range []int{0, maxCachedReleases - 1, maxCachedReleases, maxCachedReleases + 1} {
+	const maxReleases = 3
+	for _, count := range []int{0, maxReleases - 1, maxReleases, maxReleases + 1} {
 		t.Run(fmt.Sprintf("releases=%d", count), func(t *testing.T) {
 			t.Parallel()
-			var cache searchCache
+			cfg := config.Default()
+			cfg.Prowlarr.MaxCachedReleases = maxReleases
+			svc := New(nil, nil, nil, nil, nil, nil, nil, nil, cfg)
+			cache := &svc.searchCache
 			now := time.Date(2026, time.November, 5, 0, 0, 0, 0, time.UTC)
 			releases := make([]prowlarrclient.Release, count)
 			for i := range count {
@@ -283,7 +288,7 @@ func TestSearchCacheReleaseBound(t *testing.T) {
 			}
 			cache.put(searchKey{}, cachedSearch{fetchedAt: now, releases: releases})
 			got, ok := cache.get(searchKey{}, now)
-			if wantHit := count <= maxCachedReleases; ok != wantHit {
+			if wantHit := count <= maxReleases; ok != wantHit {
 				t.Fatalf("cache hit = %v, want %v", ok, wantHit)
 			}
 			if ok && !reflect.DeepEqual(got.releases, releases) {
@@ -298,7 +303,7 @@ func TestSearchCacheReleaseBound(t *testing.T) {
 
 func TestSearchCacheConcurrent(t *testing.T) {
 	t.Parallel()
-	var cache searchCache
+	cache := searchCache{maxReleases: config.Default().Prowlarr.MaxCachedReleases}
 	var wg sync.WaitGroup
 	now := time.Date(2026, time.November, 5, 0, 0, 0, 0, time.UTC)
 	for worker := range 8 {

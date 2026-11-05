@@ -30,6 +30,8 @@ func ApplySetting(o *Options, key, val string) error {
 		return applyJellyfin(o, key, val)
 	case strings.HasPrefix(key, "snatcharr.configarr."):
 		return applyConfigarr(o, key, val)
+	case strings.HasPrefix(key, "snatcharr.prowlarr."):
+		return applyProwlarr(o, key, val)
 	default:
 		return applyCore(o, key, val)
 	}
@@ -92,7 +94,7 @@ func applySessionScalars(o *Options, key, val string) (bool, error) {
 	}
 }
 
-func applyOperationalScalars(o *Options, key, val string) error {
+func applyProwlarr(o *Options, key, val string) error {
 	switch key {
 	case "snatcharr.prowlarr.limit_threshold":
 		f, err := strconv.ParseFloat(val, 64)
@@ -100,6 +102,26 @@ func applyOperationalScalars(o *Options, key, val string) error {
 			return fmt.Errorf("%w: invalid float for %s", domain.ErrInvalid, key)
 		}
 		o.Prowlarr.LimitThreshold = f
+	case "snatcharr.prowlarr.search_db_timeout":
+		d, err := time.ParseDuration(val)
+		if err != nil {
+			return fmt.Errorf("%w: invalid duration for %s", domain.ErrInvalid, key)
+		}
+		o.Prowlarr.SearchDBTimeout = d
+	case "snatcharr.prowlarr.max_cached_releases":
+		n, err := strconv.Atoi(val)
+		if err != nil {
+			return fmt.Errorf("%w: invalid int for %s", domain.ErrInvalid, key)
+		}
+		o.Prowlarr.MaxCachedReleases = n
+	default:
+		return fmt.Errorf("%w: unknown prowlarr option %q", domain.ErrInvalid, key)
+	}
+	return nil
+}
+
+func applyOperationalScalars(o *Options, key, val string) error {
+	switch key {
 	case "snatcharr.item_search.cooldown_seconds":
 		n, err := strconv.Atoi(val)
 		if err != nil {

@@ -18,6 +18,7 @@ import (
 
 	"github.com/golusoris/golusoris/core/clock"
 
+	"github.com/lusoris/SnatchArr/api/internal/config"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/store"
 	"github.com/lusoris/SnatchArr/api/internal/store/sqlcgen"
@@ -64,7 +65,9 @@ func newDeadlineService(t *testing.T, tracer *deadlineTracer) *Service {
 		t.Fatalf("pool: %v", err)
 	}
 	t.Cleanup(pool.Close)
-	return &Service{st: store.New(pool)}
+	opts := config.Default().Prowlarr
+	opts.SearchDBTimeout = 2 * time.Second
+	return &Service{st: store.New(pool), cfg: opts}
 }
 
 func TestSearchDBDeadline(t *testing.T) {
@@ -111,8 +114,8 @@ func TestSearchDBDeadline(t *testing.T) {
 					if !tracer.deadline.Equal(deadline) {
 						t.Fatalf("parent deadline changed: %v -> %v", deadline, tracer.deadline)
 					}
-				} else if remaining := time.Until(tracer.deadline); remaining <= 0 || remaining > searchDBTimeout {
-					t.Fatalf("DB timeout remaining = %v, want (0, %v]", remaining, searchDBTimeout)
+				} else if remaining := time.Until(tracer.deadline); remaining <= 0 || remaining > svc.cfg.SearchDBTimeout {
+					t.Fatalf("DB timeout remaining = %v, want (0, %v]", remaining, svc.cfg.SearchDBTimeout)
 				}
 			})
 		}
