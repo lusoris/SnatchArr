@@ -325,7 +325,7 @@ func checkWhisparrGeneration(kind domain.AppKind, version string) error {
 	return nil
 }
 
-// Module provides the goenvoy-backed Prober, Discoverer, IndexerDiscoverer and Labeler.
+// Module provides the goenvoy-backed Prober, Discoverer, IndexerDiscoverer, Labeler and ProfileLanguager.
 var Module = fx.Module("snatcharr.arrclient",
 	fx.Provide(
 		func() *GoenvoyProber { return NewGoenvoyProber(DefaultOptions()) },
@@ -333,6 +333,7 @@ var Module = fx.Module("snatcharr.arrclient",
 		func(p *GoenvoyProber) Discoverer { return p },
 		func(p *GoenvoyProber) IndexerDiscoverer { return p },
 		func(p *GoenvoyProber) Labeler { return p },
+		func(p *GoenvoyProber) ProfileLanguager { return p },
 		func(p *GoenvoyProber) queue.ArrClient { return p },
 	),
 )

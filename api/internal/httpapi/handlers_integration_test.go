@@ -82,10 +82,12 @@ func (s *stubSnapshotter) Snapshot(_ context.Context, c domain.DownloadClient, _
 }
 
 type stubDiscoverer struct {
-	res       []arr.ProviderResource
-	err       error
-	labels    arrclient.Labels
-	labelsErr error
+	res             []arr.ProviderResource
+	err             error
+	labels          arrclient.Labels
+	labelsErr       error
+	profileLangs    []arrclient.ProfileLanguage
+	profileLangsErr error
 }
 
 func (d *stubDiscoverer) DownloadClients(context.Context, domain.AppKind, string, string) ([]arr.ProviderResource, error) {
@@ -98,6 +100,10 @@ func (d *stubDiscoverer) Indexers(context.Context, domain.AppKind, string, strin
 
 func (d *stubDiscoverer) Labels(context.Context, domain.AppKind, string, string) (arrclient.Labels, error) {
 	return d.labels, d.labelsErr
+}
+
+func (d *stubDiscoverer) ProfileLanguages(context.Context, domain.AppKind, string, string) ([]arrclient.ProfileLanguage, error) {
+	return d.profileLangs, d.profileLangsErr
 }
 
 type stubSeerrClient struct {
@@ -270,6 +276,7 @@ func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Genera
 	polSvc := policies.New(st, clk)
 	// The stub discoverer also answers the filter options; a fixture without one has none.
 	labeler, _ := dlDisc.(arrclient.Labeler)
+	profileLangs, _ := dlDisc.(arrclient.ProfileLanguager)
 	bus := events.New(logger)
 	webhookStore := notify.NewWebhookStore(st, enc)
 	notifySvc := notify.NewService(st, webhookStore, enc, clk, ids, logger)
@@ -318,7 +325,7 @@ func buildHandlers(t *testing.T, st *store.Store, clk clock.Clock, ids id.Genera
 		policies:        polSvc,
 		queue:           queueStore,
 		queueSvc:        queueSvc,
-		options:         policies.NewOptions(instSvc, labeler),
+		options:         policies.NewOptions(instSvc, labeler, profileLangs),
 		runs:            runs,
 		workers:         workers,
 		rec:             rec,

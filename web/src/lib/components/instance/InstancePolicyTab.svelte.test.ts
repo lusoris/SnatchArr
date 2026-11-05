@@ -30,7 +30,12 @@ function setupPolicyTab(instance: Instance = forkInstance) {
 	stubGet({
 		'/instances/{instanceId}': instance,
 		'/instances/{instanceId}/policy': samplePolicy,
-		'/instances/{instanceId}/policy/filter-options': sampleFilterOptions
+		'/instances/{instanceId}/policy/filter-options': sampleFilterOptions,
+		'/instances/{instanceId}/foreign-search/preflight': {
+			applies: true,
+			languages: ['de', 'fr'],
+			profiles: []
+		}
 	});
 	const renderResult = renderWithQuery(InstancePolicyTab, { id: instance.id });
 	return { put, ...renderResult };
@@ -46,6 +51,35 @@ describe('InstancePolicyTab', () => {
 	afterEach(() => {
 		session.user = null;
 		vi.restoreAllMocks();
+	});
+
+	it('shows the foreign-title search check for a Radarr admin', async () => {
+		setupPolicyTab(untestedInstance);
+
+		expect(
+			await screen.findByRole('heading', { name: m.foreign_search_preflight_title() })
+		).toBeTruthy();
+	});
+
+	it('does not request or show the foreign-title search check for Sonarr', async () => {
+		setupPolicyTab({ ...untestedInstance, kind: 'sonarr' });
+
+		await screen.findByRole('form', { name: m.policy_title() });
+		expect(screen.queryByRole('heading', { name: m.foreign_search_preflight_title() })).toBeNull();
+		expect(vi.mocked(api.GET).mock.calls.map((c) => c[0])).not.toContain(
+			'/instances/{instanceId}/foreign-search/preflight'
+		);
+	});
+
+	it('does not request the foreign-title search check for a Radarr viewer', async () => {
+		session.user = { id: 'u2', username: 'viewer', role: 'viewer' } as never;
+		setupPolicyTab(untestedInstance);
+
+		await screen.findByRole('form', { name: m.policy_title() });
+		expect(screen.queryByRole('heading', { name: m.foreign_search_preflight_title() })).toBeNull();
+		expect(vi.mocked(api.GET).mock.calls.map((c) => c[0])).not.toContain(
+			'/instances/{instanceId}/foreign-search/preflight'
+		);
 	});
 
 	it('asks a viewer for no admin-only filter options', async () => {

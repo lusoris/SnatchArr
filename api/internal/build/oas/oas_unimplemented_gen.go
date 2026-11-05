@@ -370,6 +370,17 @@ func (UnimplementedHandler) GetDownloadClientStatus(ctx context.Context) (r []Do
 	return r, ht.ErrNotImplemented
 }
 
+// GetForeignSearchPreflight implements getForeignSearchPreflight operation.
+//
+// Read-only preflight check evaluating whether an instance's quality profiles allow
+// foreign-title searches across supported rule languages. SnatchArr never changes
+// the quality profile.
+//
+// GET /instances/{instanceId}/foreign-search/preflight
+func (UnimplementedHandler) GetForeignSearchPreflight(ctx context.Context, params GetForeignSearchPreflightParams) (r *ForeignSearchPreflight, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // GetHourlyCaps implements getHourlyCaps operation.
 //
 // Per-instance stamina spent in the last 60 minutes (rolling window).
