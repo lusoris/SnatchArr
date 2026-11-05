@@ -59,7 +59,7 @@ func planSearchDebit(used, capacity, n int) (SearchBudget, error) {
 
 // SearchVariant searches explicit indexers, charging both buckets per distinct indexer.
 // Indexer IDs are sorted and deduplicated first, so the query sent, the debit and the
-// cache key agree. Successful searches with at most maxCachedReleases results,
+// cache key agree. Successful searches within the configured max_cached_releases limit,
 // including empty results, are cached for one hour.
 // A search error retains the committed debit and is never cached.
 func (s *Service) SearchVariant(ctx context.Context, linkID uuid.UUID, q prowlarrclient.SearchQuery) ([]prowlarrclient.Release, SearchBudget, error) {
@@ -88,8 +88,6 @@ func (s *Service) SearchVariant(ctx context.Context, linkID uuid.UUID, q prowlar
 	if err != nil {
 		return nil, budget, fmt.Errorf("prowlarr: variant search: %w", err)
 	}
-	if len(releases) <= maxCachedReleases {
-		s.searchCache.put(key, cachedSearch{releases: releases, budget: budget, fetchedAt: s.clk.Now()})
-	}
+	s.searchCache.put(key, cachedSearch{releases: releases, budget: budget, fetchedAt: s.clk.Now()})
 	return releases, budget, nil
 }

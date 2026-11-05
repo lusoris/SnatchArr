@@ -22,9 +22,6 @@ import (
 // ErrNoRelease indicates that no eligible release was found for the item.
 var ErrNoRelease = errors.New("no release found")
 
-// searchDBTimeout bounds link lookups and budget transactions, including lock waits.
-const searchDBTimeout = 10 * time.Second
-
 // GrabForItem searches Prowlarr for releases matching the query, picks the first release
 // whose indexer is enabled and not rate-limited per existing indexer data, and grabs it.
 func (s *Service) GrabForItem(ctx context.Context, linkID uuid.UUID, query prowlarrclient.SearchQuery) (prowlarrclient.Release, error) {
@@ -62,7 +59,7 @@ type preparedSearchLink struct {
 }
 
 func (s *Service) searchLink(ctx context.Context, linkID uuid.UUID) (preparedSearchLink, error) {
-	dbCtx, cancel := context.WithTimeout(ctx, searchDBTimeout)
+	dbCtx, cancel := context.WithTimeout(ctx, s.cfg.SearchDBTimeout)
 	defer cancel()
 	row, err := s.st.Q().GetProwlarrLink(dbCtx, linkID)
 	if err != nil {
@@ -108,7 +105,7 @@ func (s *Service) checkAndDebitGlobal(ctx context.Context, q *sqlcgen.Queries, g
 
 // acquireGrabBudget debits n searches atomically, locking link before global.
 func (s *Service) acquireGrabBudget(ctx context.Context, linkID uuid.UUID, n int) (SearchBudget, error) {
-	ctx, cancel := context.WithTimeout(ctx, searchDBTimeout)
+	ctx, cancel := context.WithTimeout(ctx, s.cfg.SearchDBTimeout)
 	defer cancel()
 	var budget SearchBudget
 	err := s.st.Tx(ctx, func(q *sqlcgen.Queries) error {

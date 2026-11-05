@@ -69,13 +69,17 @@ This ensures unexpected network disruptions or unmanaged indexers do not permane
 
 ## Configuration
 
-The threshold at which an indexer is treated as exhausted is configurable:
+The exhaustion threshold, search DB deadline and variant cache result limit are configurable:
 
 | Setting | Environment variable | Default | Range |
 | --- | --- | --- | --- |
 | `snatcharr.prowlarr.limit_threshold` | `APP_SNATCHARR_PROWLARR_LIMIT_THRESHOLD` | `0.9` | `(0, 1]` |
+| `snatcharr.prowlarr.search_db_timeout` | `APP_SNATCHARR_PROWLARR_SEARCH_DB_TIMEOUT` | `10s` | `[1s, 60s]` |
+| `snatcharr.prowlarr.max_cached_releases` | `APP_SNATCHARR_PROWLARR_MAX_CACHED_RELEASES` | `1000` | `[1, 10000]` |
 
 Validated on startup in `api/internal/config/config.go`. At the default value of `0.9`, SnatchArr treats an indexer with a limit of 1000 daily queries as exhausted once it reaches 900 queries.
+
+The search DB timeout bounds link lookups and budget transactions, including lock waits (`api/internal/prowlarr/grab.go`). The cache limit bounds the largest search result retained in the variant cache; larger results are returned uncached but still debited (`api/internal/prowlarr/variant.go`, `api/internal/prowlarr/variant_cache.go`).
 
 ## Observability
 

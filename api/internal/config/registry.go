@@ -393,6 +393,22 @@ var registry = []Setting{
 		Apply:   ApplyRestart,
 	},
 	{
+		Key:     "snatcharr.prowlarr.search_db_timeout",
+		Env:     "APP_SNATCHARR_PROWLARR_SEARCH_DB_TIMEOUT",
+		Class:   ClassRuntime,
+		Type:    "duration",
+		Default: "10s",
+		Apply:   ApplyRestart,
+	},
+	{
+		Key:     "snatcharr.prowlarr.max_cached_releases",
+		Env:     "APP_SNATCHARR_PROWLARR_MAX_CACHED_RELEASES",
+		Class:   ClassRuntime,
+		Type:    "int",
+		Default: "1000",
+		Apply:   ApplyRestart,
+	},
+	{
 		Key:     "snatcharr.jellyfin.enabled",
 		Env:     "APP_SNATCHARR_JELLYFIN_ENABLED",
 		Class:   ClassRuntime,

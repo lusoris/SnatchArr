@@ -36,6 +36,8 @@ UI.
 | `APP_SNATCHARR_CONFIGARR_SECRETS` | | Path to Configarr `secrets.yml` |
 | `APP_SNATCHARR_CONFIGARR_WATCH` | `true` | Re-import on file change |
 | `APP_SNATCHARR_PROWLARR_LIMIT_THRESHOLD` | `0.9` | Fraction (0, 1] of an indexer's Prowlarr query limit at which SnatchArr treats the indexer as exhausted ([Prowlarr](prowlarr.md)) |
+| `APP_SNATCHARR_PROWLARR_SEARCH_DB_TIMEOUT` | `10s` | Deadline for Prowlarr DB link lookups and budget transactions, including lock waits; range `1s` to `60s` inclusive (`snatcharr.prowlarr.search_db_timeout`) |
+| `APP_SNATCHARR_PROWLARR_MAX_CACHED_RELEASES` | `1000` | Largest search result kept in the variant cache; range `1` to `10000` inclusive. Larger results are returned uncached but still debited (`snatcharr.prowlarr.max_cached_releases`) |
 | `APP_SNATCHARR_JELLYFIN_ENABLED` | `false` | Enable Jellyfin authentication and Quick Connect |
 | `APP_SNATCHARR_JELLYFIN_URL` | | Jellyfin server base URL (must be http or https with host) |
 | `APP_SNATCHARR_JELLYFIN_API_KEY` | | Jellyfin service account API key |

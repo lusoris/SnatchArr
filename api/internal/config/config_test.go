@@ -18,6 +18,68 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 )
 
+func TestProwlarrSearchDBTimeoutValidate(t *testing.T) {
+	t.Parallel()
+	if got := config.Default().Prowlarr.SearchDBTimeout; got != 10*time.Second {
+		t.Fatalf("default search DB timeout = %v, want 10s", got)
+	}
+	for _, tc := range []struct {
+		name    string
+		value   time.Duration
+		wantErr bool
+	}{
+		{name: "default", value: config.Default().Prowlarr.SearchDBTimeout},
+		{name: "lower bound 1s", value: time.Second},
+		{name: "below lower 999ms", value: 999 * time.Millisecond, wantErr: true},
+		{name: "upper bound 60s", value: 60 * time.Second},
+		{name: "above upper 61s", value: 61 * time.Second, wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			opts := config.Default().Prowlarr
+			opts.SearchDBTimeout = tc.value
+			err := opts.Validate()
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("Validate() = %v, want error %v", err, tc.wantErr)
+			}
+			if err != nil && !strings.Contains(err.Error(), "prowlarr.search_db_timeout") {
+				t.Fatalf("wrong setting in error: %v", err)
+			}
+		})
+	}
+}
+
+func TestProwlarrMaxCachedReleasesValidate(t *testing.T) {
+	t.Parallel()
+	if got := config.Default().Prowlarr.MaxCachedReleases; got != 1000 {
+		t.Fatalf("default max cached releases = %d, want 1000", got)
+	}
+	for _, tc := range []struct {
+		name    string
+		value   int
+		wantErr bool
+	}{
+		{name: "default", value: config.Default().Prowlarr.MaxCachedReleases},
+		{name: "lower bound 1", value: 1},
+		{name: "below lower 0", value: 0, wantErr: true},
+		{name: "upper bound 10000", value: 10000},
+		{name: "above upper 10001", value: 10001, wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			opts := config.Default().Prowlarr
+			opts.MaxCachedReleases = tc.value
+			err := opts.Validate()
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("Validate() = %v, want error %v", err, tc.wantErr)
+			}
+			if err != nil && !strings.Contains(err.Error(), "prowlarr.max_cached_releases") {
+				t.Fatalf("wrong setting in error: %v", err)
+			}
+		})
+	}
+}
+
 func TestValidate(t *testing.T) {
 	t.Parallel()
 	prod := config.Default()
@@ -919,6 +981,26 @@ func TestLoadCompoundKeysFromEnv(t *testing.T) {
 				t.Helper()
 				if opts.Configarr.Policies != "/etc/snatcharr/policies.yml" {
 					t.Fatalf("Configarr.Policies = %q, want %q", opts.Configarr.Policies, "/etc/snatcharr/policies.yml")
+				}
+			},
+		},
+		{
+			name: "prowlarr search_db_timeout",
+			env:  map[string]string{"APP_SNATCHARR_PROWLARR_SEARCH_DB_TIMEOUT": "2s"},
+			assertFn: func(t *testing.T, opts config.Options) {
+				t.Helper()
+				if opts.Prowlarr.SearchDBTimeout != 2*time.Second {
+					t.Fatalf("Prowlarr.SearchDBTimeout = %v, want 2s", opts.Prowlarr.SearchDBTimeout)
+				}
+			},
+		},
+		{
+			name: "prowlarr max_cached_releases",
+			env:  map[string]string{"APP_SNATCHARR_PROWLARR_MAX_CACHED_RELEASES": "3"},
+			assertFn: func(t *testing.T, opts config.Options) {
+				t.Helper()
+				if opts.Prowlarr.MaxCachedReleases != 3 {
+					t.Fatalf("Prowlarr.MaxCachedReleases = %d, want 3", opts.Prowlarr.MaxCachedReleases)
 				}
 			},
 		},

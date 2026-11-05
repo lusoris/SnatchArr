@@ -104,6 +104,7 @@ func New(st *store.Store, enc *crypto.Encryptor, clk clock.Clock, ids id.Generat
 	return &Service{
 		st: st, enc: enc, clk: clk, ids: ids, client: client, discover: discover,
 		instances: inst, logger: logger, cfg: cfg.Prowlarr,
+		searchCache: searchCache{maxReleases: cfg.Prowlarr.MaxCachedReleases},
 	}
 }
 
