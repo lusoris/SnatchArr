@@ -146,3 +146,39 @@ func TestApplySettingTableDriven(t *testing.T) {
 		})
 	}
 }
+
+func TestApplySettingProwlarr(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		key     string
+		value   string
+		wantErr bool
+	}{
+		{name: "search timeout", key: "snatcharr.prowlarr.search_db_timeout", value: "2s"},
+		{name: "cache limit", key: "snatcharr.prowlarr.max_cached_releases", value: "3"},
+		{name: "invalid timeout", key: "snatcharr.prowlarr.search_db_timeout", value: "invalid", wantErr: true},
+		{name: "invalid limit", key: "snatcharr.prowlarr.max_cached_releases", value: "invalid", wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			opts := Default()
+			err := ApplySetting(&opts, tc.key, tc.value)
+			if tc.wantErr {
+				if !errors.Is(err, domain.ErrInvalid) {
+					t.Fatalf("ApplySetting() = %v, want ErrInvalid", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ApplySetting() = %v", err)
+			}
+			if tc.key == "snatcharr.prowlarr.search_db_timeout" && opts.Prowlarr.SearchDBTimeout != 2*time.Second {
+				t.Fatalf("timeout = %v, want 2s", opts.Prowlarr.SearchDBTimeout)
+			}
+			if tc.key == "snatcharr.prowlarr.max_cached_releases" && opts.Prowlarr.MaxCachedReleases != 3 {
+				t.Fatalf("limit = %v, want 3", opts.Prowlarr.MaxCachedReleases)
+			}
+		})
+	}
+}

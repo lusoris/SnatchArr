@@ -96,7 +96,7 @@ func TestOptionsKeysInRegistry(t *testing.T) {
 			name: "boundary_option_keys_count",
 			runTest: func(t *testing.T) {
 				t.Helper()
-				const expectedCount = 47
+				const expectedCount = 49
 				if len(keys) != expectedCount {
 					t.Fatalf("expected %d Option keys, got %d", expectedCount, len(keys))
 				}
@@ -136,7 +136,7 @@ func TestDocsConfigurationParity(t *testing.T) {
 			name: "boundary_registry_count",
 			runTest: func(t *testing.T) {
 				t.Helper()
-				const expectedCount = 126
+				const expectedCount = 128
 				if len(reg) != expectedCount {
 					t.Fatalf("expected %d registry entries, got %d", expectedCount, len(reg))
 				}
