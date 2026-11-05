@@ -31,6 +31,7 @@ archive="$cache/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
 if [ ! -f "$archive" ]; then
 	release="https://github.com/gitleaks/gitleaks/releases/download"
 	curl --fail --silent --show-error --location --proto '=https' --max-time 60 \
+		--connect-timeout 20 --retry 5 --retry-all-errors \
 		--output "$archive.part" "$release/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
 	mv "$archive.part" "$archive"
 fi
