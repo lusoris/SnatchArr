@@ -118,6 +118,7 @@ SPDX-License-Identifier: EUPL-1.2
 		return status.data?.find((s) => s.client_id === id);
 	}
 
+	/** Opens the priority plan dialog for one client. */
 	function showPriorityPlan(client: DownloadClient): void {
 		priorityClient = client;
 		priorityOpen = true;

@@ -57,10 +57,15 @@ SPDX-License-Identifier: EUPL-1.2
 	const supportsPriority = $derived(supportsDownloadClientPriority(kind));
 	const errors = $derived(fieldErrors(error));
 
+	/** Kinds without priority support only run in observe mode, so a kind switch resets the mode. */
 	$effect(() => {
 		if (!supportsPriority) priorityMode = 'observe';
 	});
 
+	/**
+	 * Request body for create and update. An update carries `priority_mode` only when this
+	 * form changed it, so a stale form never overwrites a mode changed elsewhere.
+	 */
 	function body(): DownloadClientInput {
 		const mode = supportsPriority ? priorityMode : 'observe';
 		return {
