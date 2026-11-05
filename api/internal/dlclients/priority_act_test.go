@@ -339,6 +339,8 @@ func TestPriorityReconcilerPauseResumeLifecycle(t *testing.T) {
 	}
 }
 
+// TestPriorityReconcilerManualResumeReleasesOwnership verifies that a manual resume relinquishes pause ownership
+// in act and observe modes, protecting a subsequent user pause from automatic resumption.
 func TestPriorityReconcilerManualResumeReleasesOwnership(t *testing.T) {
 	t.Parallel()
 	for _, mode := range []string{"act", "observe"} {
@@ -388,6 +390,8 @@ func TestPriorityReconcilerManualResumeReleasesOwnership(t *testing.T) {
 	}
 }
 
+// TestPriorityReconcilerConfirmedPauseRetainsOwnership verifies that a confirmed pause remains owned until
+// scheduling or observe cleanup resumes it after higher-rank work finishes.
 func TestPriorityReconcilerConfirmedPauseRetainsOwnership(t *testing.T) {
 	t.Parallel()
 	for _, mode := range []string{"act", "observe"} {
@@ -612,6 +616,7 @@ func assertPlannedPriorityCalls(t *testing.T, r *Reconciler, clientID uuid.UUID,
 	}
 }
 
+// assertNoResumeWrites verifies that the writer never resumes an item when ownership or scheduling forbids it.
 func assertNoResumeWrites(t *testing.T, calls []writerCall) {
 	t.Helper()
 	for _, call := range calls {

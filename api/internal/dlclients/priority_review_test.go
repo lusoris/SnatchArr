@@ -223,6 +223,8 @@ func TestReviewT6WithdrawnPauseCleanup(t *testing.T) {
 	}
 }
 
+// TestReviewManualResumeRepairFailure verifies that failed ownership repair preserves the durable record
+// and blocks writes and plan publication in act and observe modes.
 func TestReviewManualResumeRepairFailure(t *testing.T) {
 	t.Parallel()
 	for _, mode := range []string{"act", "observe"} {
