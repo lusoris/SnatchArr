@@ -61,6 +61,9 @@ cp "$REPO_ROOT/docs/index.md" "$root/docs/index.md"
 printf '\n[x](missing-doc-page.md)\n' >> "$root/docs/index.md"
 run_case 'missing doc page refused' 1 'missing-doc-page.md'
 cp "$REPO_ROOT/docs/index.md" "$root/docs/index.md"
+printf '\n[x](upstream-contracts.md#no-such-heading)\n' >> "$root/docs/index.md"
+run_case 'missing anchor refused' 1 'no-such-heading'
+cp "$REPO_ROOT/docs/index.md" "$root/docs/index.md"
 
 # A successful stub would make either refusal case fail if a build were reached.
 stub="$work/mkdocs-stub"
