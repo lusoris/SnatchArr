@@ -203,6 +203,7 @@ What the real releases showed:
 | Radarr maps a pushed release by tmdb id only when the title's year matches the movie. | `RADARR_TITLE` in `arr_setup.py` |
 | A file without an audio track is rejected ("No audio tracks detected"). | Planted case `audio` |
 | Sonarr maps the only video file of a download through grab history, whatever its name; a file it maps to an episode the series lacks is rejected ("Invalid season or episode") only when the download holds more than one. | Planted case `unmapped` puts two such files in the torrent. |
+
 ## Limits
 
 The check says "the spec documents what the client uses". It does not say more than that.
