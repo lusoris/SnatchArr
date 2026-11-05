@@ -61,14 +61,38 @@ def logical_lines(content: str) -> Iterator[tuple[int, str]]:
         yield start, pending
 
 
+def strip_comment(line: str) -> str:
+    """Remove only unquoted, unescaped comments at the start of shell words."""
+    quote = ""
+    escaped = False
+    word_start = True
+    for index, char in enumerate(line):
+        if escaped:
+            escaped = False
+            continue
+        if char == "\\" and quote != "'":
+            escaped = True
+            word_start = False
+            continue
+        if quote:
+            if char == quote:
+                quote = ""
+            continue
+        if char in {"'", '"'}:
+            quote = char
+        elif char == "#" and word_start:
+            return line[:index]
+        word_start = char in " \t\r\n;&|()<>"
+    return line
+
+
 def shell_words(line: str) -> Iterator[str]:
-    """Preserve redirect operators and fragments; stop at shell comment words."""
+    """Preserve redirect operators and fragments after stripping shell comments."""
+    line = strip_comment(line)
     lexer = shlex.shlex(line, posix=True, punctuation_chars=";&|()>")
     lexer.whitespace_split = True
     lexer.commenters = ""
     for word in lexer:
-        if word.startswith("#"):
-            break
         # shlex reads one character ahead: only adjacent digits name a descriptor.
         position = lexer.instream.tell()
         if re.fullmatch(r"[0-9]+", word) and line[position - 1:position] == ">":
@@ -84,13 +108,25 @@ def curl_arguments(command: list[str]) -> list[str] | None:
     """
     wrapped = False
     for index, word in enumerate(command):
-        if word == "curl":
+        if Path(word).name == "curl":
             return command[index + 1:]
         if word in COMMAND_WRAPPERS:
             wrapped = True
         elif not (wrapped or word in COMMAND_PREFIXES or ASSIGNMENT.match(word)):
             return None
     return None
+
+
+def curl_operations(arguments: list[str]) -> Iterator[list[str]]:
+    """Separate curl operations whose local options reset at --next or -:."""
+    operation: list[str] = []
+    for word in arguments:
+        if word in {"--next", "-:"}:
+            yield operation
+            operation = []
+        else:
+            operation.append(word)
+    yield operation
 
 
 def curl_commands(line: str) -> Iterator[list[str]]:
@@ -102,42 +138,83 @@ def curl_commands(line: str) -> Iterator[list[str]]:
         if word in COMMAND_SEPARATORS:
             arguments = curl_arguments(command)
             if arguments is not None:
-                yield arguments
+                yield from curl_operations(arguments)
             command = []
         else:
             command.append(word)
 
 
+def short_options(word: str, words: Iterator[str]) -> Iterator[str]:
+    """Expand clustered output flags, consuming attached or separate values."""
+    for index, option in enumerate(word[1:], 2):
+        if option == "O":
+            yield "--remote-name"
+        elif option in {"o", "K"}:
+            value = word[index:] or next(words, None)
+            if value is None:
+                raise ValueError("curl short option missing value")
+            if option == "o":
+                yield "--output"
+                yield value
+            return
+
+
+def output_arguments(arguments: list[str]) -> Iterator[str]:
+    """Normalize short output options without inspecting config file contents."""
+    words = iter(arguments)
+    for word in words:
+        if word.startswith("-") and not word.startswith("--") and word != "-":
+            yield from short_options(word, words)
+        elif word == "--config":
+            next(words, None)
+        else:
+            yield word
+            if word == "--output" or REDIRECT.fullmatch(word):
+                value = next(words, None)
+                if value is None:
+                    raise ValueError("curl output option or redirect missing filename")
+                yield value
+
+
 def output_file(word: str, words: Iterator[str]) -> bool | None:
     """Classify curl outputs and shell redirects, consuming their filenames."""
-    if word in {"--remote-name", "-O"}:
+    if word == "--remote-name":
         return True
     if word.startswith("--output="):
         return word.partition("=")[2] not in {"/dev/null", "-"}
-    if word.startswith("-o") and word != "-o":
-        return word[2:] not in {"/dev/null", "-"}
-    if word in {"--output", "-o"} or REDIRECT.fullmatch(word):
+    if word == "--output" or REDIRECT.fullmatch(word):
         target = next(words, None)
         if target is None:
             raise ValueError("curl output option or redirect missing filename")
         if word in STDOUT_REDIRECTS:
             return target != "/dev/null"
-        return word in {"--output", "-o"} and target not in {"/dev/null", "-"}
+        return word == "--output" and target not in {"/dev/null", "-"}
     return None
 
 
 def is_download(arguments: list[str]) -> bool:
     """Identify file outputs with an HTTPS or variable URL, excluding stdout polls."""
-    output = False
+    outputs: list[bool] = []
+    redirected = False
+    remote_all = False
     urls: list[str] = []
-    words = iter(arguments)
+    words = output_arguments(arguments)
     for word in words:
+        if word in {"--remote-name-all", "--no-remote-name-all"}:
+            remote_all = word == "--remote-name-all"
+            continue
         file_output = output_file(word, words)
         if file_output is None:
-            urls.append(word)
+            if word.startswith(("https://", "$")):
+                urls.append(word)
+        elif REDIRECT.fullmatch(word):
+            redirected |= file_output
         else:
-            output |= file_output
-    return output and any(url.startswith(("https://", "$")) for url in urls)
+            outputs.append(file_output)
+    return bool(urls) and (redirected or any(
+        outputs[index] if index < len(outputs) else remote_all
+        for index in range(len(urls))
+    ))
 
 
 def has_positive_retry(arguments: list[str]) -> bool:

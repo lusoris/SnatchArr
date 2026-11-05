@@ -202,4 +202,45 @@ expect_command redirect-adjacent-url 1 'curl https://x>f'
 expect_command redirect-spaced-fd 1 'curl https://x 2 > f'
 expect_command redirect-after-retried-command 1 'curl --retry 3 https://x; curl https://y > f'
 
+# Quoted and escaped hashes remain words; only shell comments end the line.
+expect_command hash-single-quoted 1 "echo '# heading'; curl -o archive https://x/f"
+expect_command hash-double-quoted 1 'echo "# heading"; curl -o archive https://x/f'
+expect_command hash-escaped 1 'echo \#x; curl -o archive https://x/f'
+expect_command hash-empty-quote-prefix 1 'echo ""#x; curl -o archive https://x/f'
+expect_command comment-after-separator 0 'echo ready;# curl -o archive https://x/f' 0
+
+# Remote-name defaults yield to explicit per-URL output and the disabling flag.
+expect_command remote-name-all 1 'curl --remote-name-all https://x/f'
+expect_command remote-name-all-retry 0 'curl --remote-name-all --retry 3 https://x/f'
+expect_command remote-name-all-stdout 0 'curl --remote-name-all -o - https://x' 0
+expect_command remote-name-all-output-stdout 0 'curl --remote-name-all --output - https://x' 0
+expect_command remote-name-all-disabled 0 'curl --remote-name-all --no-remote-name-all https://x' 0
+expect_command remote-name-all-null 0 'curl --remote-name-all -o /dev/null https://x' 0
+expect_command remote-name-all-mixed 1 'curl --remote-name-all -o - https://x https://y'
+
+# Each curl operation resets retry and output options at either next separator.
+expect_command next-missing-retry 1 'curl --retry 3 -o first https://x --next -o second https://y'
+expect_command next-both-retry 0 'curl --retry 3 -o first https://x --next --retry 2 -o second https://y' 2
+expect_command next-poll 0 'curl --retry 3 -o first https://x --next -o /dev/null https://y'
+expect_command next-short-missing-retry 1 'curl --retry 3 -o first https://x -: -o second https://y'
+expect_command next-short-both-retry 0 'curl --retry 3 -o first https://x -: --retry 2 -o second https://y' 2
+expect_command next-reset-remote-name-all 0 'curl --remote-name-all --retry 3 https://x --next https://y'
+
+# Command paths identify curl by basename without matching a longer command name.
+expect_command curl-absolute-path 1 '/usr/bin/curl -o archive https://x/a'
+expect_command curl-absolute-retry 0 '/usr/local/bin/curl --retry 2 -o archive https://x/a'
+expect_command curl-relative-path 1 './curl -o archive https://x/a'
+expect_command curl-variable-path 1 '"$CURL_DIR"/curl -o archive https://x/a'
+expect_command curl-longer-name 0 'curlx -o f https://x' 0
+
+# Short clusters consume output/config values; uppercase O remains a plain flag.
+expect_command cluster-output-separate 1 'curl -fsSLo archive https://x/a'
+expect_command cluster-output-attached 1 'curl -fsSLoarchive https://x/a'
+expect_command cluster-remote-name 1 'curl -fsSLO https://x/a'
+expect_command cluster-stdout 0 'curl -fsSLo - https://x/a' 0
+expect_command cluster-output-retry 0 'curl -fsSLo f --retry 3 https://x/a'
+expect_command cluster-output-missing 2 'curl https://x/a -fsSLo'
+expect_command cluster-config-attached 0 'curl -fsSKoptions https://x/a' 0
+expect_command cluster-config-separate 0 'curl -fsSK options https://x/a' 0
+
 echo "download_retry_check: all cases passed"
