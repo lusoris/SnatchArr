@@ -208,7 +208,7 @@ instance offers (admins only); the policy form picks from that list.
 
 ### Foreign-search preflight
 
-`GET /api/v1/instances/{id}/foreign-search/preflight` provides a read-only compatibility check for Radarr instances (admins only). It evaluates whether each configured quality profile accepts releases found by foreign-title searches across supported rule languages (`de`, `fr`), assembled by `ForeignPreflight` (`api/internal/policies/options.go`). The endpoint contract and admin requirement are declared at `/instances/{instanceId}/foreign-search/preflight` in OpenAPI (`api/openapi/openapi.yaml`).
+`GET /api/v1/instances/{id}/foreign-search/preflight` provides a read-only compatibility check for Radarr instances (admins only). It evaluates whether each configured quality profile accepts releases found by foreign-title searches across supported rule languages (`de`, `fr`), assembled by `ForeignPreflight` (`api/internal/policies/options.go`). The endpoint contract is declared at `/instances/{instanceId}/foreign-search/preflight` in OpenAPI (`api/openapi/openapi.yaml`). Admin access is enforced by `GetForeignSearchPreflight` (`api/internal/httpapi/handlers_instances.go`).
 
 The verdict rules (`api/internal/foreigntitle/radarrlang.go`), covered by language decision tests (`api/internal/foreigntitle/radarrlang_test.go`), report one of three verdicts per profile and target language:
 
