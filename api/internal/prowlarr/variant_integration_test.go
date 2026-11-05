@@ -10,6 +10,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"reflect"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -33,10 +35,21 @@ import (
 
 type variantClient struct {
 	*stubClient
-	searchMu    sync.Mutex
-	searchCalls int
-	searchErr   error
-	empty       bool
+	searchMu     sync.Mutex
+	searchCalls  int
+	searchErr    error
+	empty        bool
+	releases     []prowlarrclient.Release
+	beforeStatus func(context.Context) error
+}
+
+func (c *variantClient) Status(ctx context.Context, baseURL, key string) (prowlarrclient.Status, error) {
+	if c.beforeStatus != nil {
+		if err := c.beforeStatus(ctx); err != nil {
+			return prowlarrclient.Status{}, err
+		}
+	}
+	return c.stubClient.Status(ctx, baseURL, key)
 }
 
 func (c *variantClient) Search(context.Context, string, string, prowlarrclient.SearchQuery) ([]prowlarrclient.Release, error) {
@@ -46,7 +59,7 @@ func (c *variantClient) Search(context.Context, string, string, prowlarrclient.S
 	if c.empty {
 		return nil, c.searchErr
 	}
-	return []prowlarrclient.Release{{GUID: "variant-release", Categories: []int{2000}}}, c.searchErr
+	return c.releases, c.searchErr
 }
 
 func (c *variantClient) searches() int {
@@ -71,7 +84,10 @@ func newVariantFixture(t *testing.T) variantFixture {
 	if err != nil {
 		t.Fatalf("encryptor: %v", err)
 	}
-	client := &variantClient{stubClient: &stubClient{}}
+	client := &variantClient{
+		stubClient: &stubClient{},
+		releases:   []prowlarrclient.Release{{GUID: "variant-release", Categories: []int{2000}}},
+	}
 	svc := prowlarr.New(st, enc, clk, id.New(), client, &stubDiscoverer{}, nil,
 		slog.New(slog.DiscardHandler), config.Options{Prowlarr: config.ProwlarrOptions{LimitThreshold: 0.9}})
 	link, err := svc.Create(t.Context(), prowlarr.Input{
@@ -216,7 +232,7 @@ func TestSearchVariant_IndexerValidation(t *testing.T) {
 			for i := range tc.count {
 				ids[i] = i + 1
 			}
-			_, budget, err := f.svc.SearchVariant(t.Context(), f.linkID, prowlarrclient.SearchQuery{IndexerIDs: ids})
+			releases, budget, err := f.svc.SearchVariant(t.Context(), f.linkID, prowlarrclient.SearchQuery{IndexerIDs: ids})
 			if !errors.Is(err, tc.err) {
 				t.Fatalf("error = %v, want %v", err, tc.err)
 			}
@@ -227,6 +243,9 @@ func TestSearchVariant_IndexerValidation(t *testing.T) {
 				}
 			} else {
 				f.assertUsage(t, 1, 1)
+				if calls := f.client.searches(); calls != 1 || !reflect.DeepEqual(releases, f.client.releases) {
+					t.Fatalf("valid search = %+v, calls %d; want %+v, calls 1", releases, calls, f.client.releases)
+				}
 			}
 		})
 	}
@@ -245,12 +264,13 @@ func TestSearchVariant_NormalizedCache(t *testing.T) {
 		if err != nil {
 			t.Fatalf("search %d: %v", i, err)
 		}
-		wantDebit := []int{3, 0, 2}[i]
+		// A duplicate indexer is searched once, so it is charged once (codacy, #1009).
+		wantDebit := []int{2, 0, 2}[i]
 		if budget.Debited != wantDebit {
 			t.Fatalf("search %d debit = %d, want %d", i, budget.Debited, wantDebit)
 		}
 	}
-	f.assertUsage(t, 5, 5)
+	f.assertUsage(t, 4, 4)
 	if calls := f.client.searches(); calls != 2 {
 		t.Fatalf("Search calls = %d, want 2", calls)
 	}
@@ -354,5 +374,101 @@ func TestSearchVariant_EmptyResultsCached(t *testing.T) {
 	f.assertUsage(t, 2, 2)
 	if calls := f.client.searches(); calls != 1 {
 		t.Fatalf("Search calls = %d, want 1", calls)
+	}
+}
+
+func TestSearchVariant_UpdateInvalidatesCache(t *testing.T) {
+	t.Parallel()
+	f := newVariantFixture(t)
+	f.seedBudget(t, 100, 100, 0, 0)
+	q := prowlarrclient.SearchQuery{Query: "Title", IndexerIDs: []int{1, 2}}
+	for _, step := range []string{"prime", "cached", "updated"} {
+		if step == "updated" {
+			if _, err := f.svc.Update(t.Context(), f.linkID, prowlarr.Input{
+				Name: "renamed", BaseURL: linkURL, Enabled: true,
+			}); err != nil {
+				t.Fatalf("update link: %v", err)
+			}
+		}
+		_, budget, err := f.svc.SearchVariant(t.Context(), f.linkID, q)
+		wantDebit, wantCalls, wantUsage := 2, 1, int64(2)
+		if step == "cached" {
+			wantDebit = 0
+		}
+		if step == "updated" {
+			wantCalls, wantUsage = 2, 4
+		}
+		if err != nil || budget.Debited != wantDebit || f.client.searches() != wantCalls {
+			t.Fatalf("%s: budget %+v, error %v, calls %d; want debit %d, calls %d",
+				step, budget, err, f.client.searches(), wantDebit, wantCalls)
+		}
+		f.assertUsage(t, wantUsage, wantUsage)
+	}
+}
+
+func TestSearchVariant_CapChangedAfterPreflight(t *testing.T) {
+	t.Parallel()
+	for _, method := range []string{"variant", "grab"} {
+		t.Run(method, func(t *testing.T) {
+			t.Parallel()
+			f := newVariantFixture(t)
+			f.seedBudget(t, 100, 100, 8, 8)
+			changed := false
+			// Status runs after GetProwlarrLink captured cap 100, before the budget transaction.
+			f.client.beforeStatus = func(ctx context.Context) error {
+				_, err := f.st.Pool().Exec(ctx, "UPDATE prowlarr_links SET hourly_cap = 8 WHERE id = $1", f.linkID)
+				changed = err == nil
+				return err
+			}
+			q := prowlarrclient.SearchQuery{Query: "Title", IndexerIDs: []int{1, 2}}
+			var err error
+			if method == "grab" {
+				_, err = f.svc.GrabForItem(t.Context(), f.linkID, q)
+			} else {
+				var budget prowlarr.SearchBudget
+				_, budget, err = f.svc.SearchVariant(t.Context(), f.linkID, q)
+				if budget != (prowlarr.SearchBudget{}) {
+					t.Fatalf("refused search returned budget %+v", budget)
+				}
+			}
+			if !changed || !errors.Is(err, domain.ErrTooManyRequests) || f.client.searches() != 0 {
+				t.Fatalf("cap changed %v, error %v, calls %d; want refusal before search", changed, err, f.client.searches())
+			}
+			f.assertUsage(t, 8, 8)
+		})
+	}
+}
+
+func TestSearchVariant_ReleaseCacheBound(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		count       int
+		secondDebit int
+		calls       int
+	}{
+		{count: 1000, calls: 1},
+		{count: 1001, secondDebit: 2, calls: 2},
+	} {
+		t.Run(fmt.Sprintf("releases=%d", tc.count), func(t *testing.T) {
+			t.Parallel()
+			f := newVariantFixture(t)
+			f.seedBudget(t, 100, 100, 0, 0)
+			f.client.releases = make([]prowlarrclient.Release, tc.count)
+			for i := range tc.count {
+				f.client.releases[i] = prowlarrclient.Release{GUID: strconv.Itoa(i), Categories: []int{2000}}
+			}
+			q := prowlarrclient.SearchQuery{IndexerIDs: []int{1, 2}}
+			for _, wantDebit := range []int{2, tc.secondDebit} {
+				releases, budget, err := f.svc.SearchVariant(t.Context(), f.linkID, q)
+				if err != nil || budget.Debited != wantDebit || !reflect.DeepEqual(releases, f.client.releases) {
+					t.Fatalf("search returned %d releases, budget %+v, error %v; want %d releases, debit %d",
+						len(releases), budget, err, tc.count, wantDebit)
+				}
+			}
+			if calls := f.client.searches(); calls != tc.calls {
+				t.Fatalf("Search calls = %d, want %d", calls, tc.calls)
+			}
+			f.assertUsage(t, int64(2+tc.secondDebit), int64(2+tc.secondDebit))
+		})
 	}
 }

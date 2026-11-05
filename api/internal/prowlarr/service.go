@@ -195,6 +195,7 @@ func (s *Service) Update(ctx context.Context, linkID uuid.UUID, in Input) (domai
 		return domain.ProwlarrLink{}, fmt.Errorf("prowlarr: update: %w", store.MapError(err))
 	}
 	s.cache.Forget(linkID)
+	s.searchCache.forgetLink(linkID)
 	return store.ProwlarrLinkFromRow(row), nil
 }
 
@@ -208,6 +209,7 @@ func (s *Service) Delete(ctx context.Context, linkID uuid.UUID) error {
 		return fmt.Errorf("prowlarr: delete: %w", domain.ErrNotFound)
 	}
 	s.cache.Forget(linkID)
+	s.searchCache.forgetLink(linkID)
 	return nil
 }
 

@@ -36,6 +36,13 @@ type SearchBudget struct {
 	Warn     bool
 }
 
+// distinctIndexerIDs returns a sorted copy of ids without duplicates; the caller's slice is untouched.
+func distinctIndexerIDs(ids []int) []int {
+	out := slices.Clone(ids)
+	slices.Sort(out)
+	return slices.Compact(out)
+}
+
 // planSearchDebit applies all-or-nothing cap arithmetic shared by both buckets.
 func planSearchDebit(used, capacity, n int) (SearchBudget, error) {
 	if n < 1 || n > maxIndexers {
@@ -50,11 +57,18 @@ func planSearchDebit(used, capacity, n int) (SearchBudget, error) {
 	}, nil
 }
 
-// SearchVariant searches explicit indexers, charging both buckets per indexer.
-// Successful searches, including empty results, are cached for one hour.
+// SearchVariant searches explicit indexers, charging both buckets per distinct indexer.
+// Indexer IDs are sorted and deduplicated first, so the query sent, the debit and the
+// cache key agree. Successful searches with at most maxCachedReleases results,
+// including empty results, are cached for one hour.
 // A search error retains the committed debit and is never cached.
 func (s *Service) SearchVariant(ctx context.Context, linkID uuid.UUID, q prowlarrclient.SearchQuery) ([]prowlarrclient.Release, SearchBudget, error) {
-	if len(q.IndexerIDs) < 1 || len(q.IndexerIDs) > maxIndexers {
+	// Bound the raw list before sorting it; deduplication only shrinks it.
+	if len(q.IndexerIDs) > maxIndexers {
+		return nil, SearchBudget{}, fmt.Errorf("%w: variant search requires 1 to %d explicit indexers", domain.ErrInvalid, maxIndexers)
+	}
+	q.IndexerIDs = distinctIndexerIDs(q.IndexerIDs)
+	if len(q.IndexerIDs) < 1 {
 		return nil, SearchBudget{}, fmt.Errorf("%w: variant search requires 1 to %d explicit indexers", domain.ErrInvalid, maxIndexers)
 	}
 	link, err := s.searchLink(ctx, linkID)
@@ -66,7 +80,7 @@ func (s *Service) SearchVariant(ctx context.Context, linkID uuid.UUID, q prowlar
 		entry.budget.Debited = 0
 		return entry.releases, entry.budget, nil
 	}
-	budget, err := s.acquireGrabBudget(ctx, linkID, int(link.row.HourlyCap), len(q.IndexerIDs))
+	budget, err := s.acquireGrabBudget(ctx, linkID, len(q.IndexerIDs))
 	if err != nil {
 		return nil, SearchBudget{}, fmt.Errorf("prowlarr: variant budget: %w", err)
 	}
@@ -74,6 +88,8 @@ func (s *Service) SearchVariant(ctx context.Context, linkID uuid.UUID, q prowlar
 	if err != nil {
 		return nil, budget, fmt.Errorf("prowlarr: variant search: %w", err)
 	}
-	s.searchCache.put(key, cachedSearch{releases: releases, budget: budget, fetchedAt: s.clk.Now()})
+	if len(releases) <= maxCachedReleases {
+		s.searchCache.put(key, cachedSearch{releases: releases, budget: budget, fetchedAt: s.clk.Now()})
+	}
 	return releases, budget, nil
 }

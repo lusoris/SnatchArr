@@ -17,6 +17,7 @@ import (
 
 const (
 	maxSearchCacheEntries = 1024
+	maxCachedReleases     = 1000
 	searchCacheTTL        = time.Hour
 )
 
@@ -70,6 +71,9 @@ func (c *searchCache) get(key searchKey, now time.Time) (cachedSearch, bool) {
 }
 
 func (c *searchCache) put(key searchKey, entry cachedSearch) {
+	if len(entry.releases) > maxCachedReleases {
+		return
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.entries == nil {
@@ -80,6 +84,17 @@ func (c *searchCache) put(key searchKey, entry cachedSearch) {
 	}
 	entry.releases = cloneSearchReleases(entry.releases)
 	c.entries[key] = entry
+}
+
+func (c *searchCache) forgetLink(linkID uuid.UUID) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	// put bounds this loop by maxSearchCacheEntries.
+	for key := range c.entries {
+		if key.linkID == linkID {
+			delete(c.entries, key)
+		}
+	}
 }
 
 // evict requires mu. The map contains at most maxSearchCacheEntries entries.
@@ -101,6 +116,7 @@ func (c *searchCache) evict(now time.Time) {
 }
 
 // cloneSearchReleases copies each response element and its mutable category list.
+// put rejects more than maxCachedReleases, bounding this loop on both put and get.
 func cloneSearchReleases(releases []prowlarrclient.Release) []prowlarrclient.Release {
 	out := slices.Clone(releases)
 	for i := range out {

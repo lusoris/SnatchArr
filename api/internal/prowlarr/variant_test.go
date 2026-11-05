@@ -8,7 +8,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -18,6 +20,32 @@ import (
 	"github.com/lusoris/SnatchArr/api/internal/domain"
 	"github.com/lusoris/SnatchArr/api/internal/prowlarrclient"
 )
+
+func TestDistinctIndexerIDs(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		in   []int
+		want []int
+	}{
+		{name: "nil", want: []int{}},
+		{name: "one", in: []int{7}, want: []int{7}},
+		{name: "duplicates", in: []int{2, 1, 2, 1}, want: []int{1, 2}},
+		{name: "already distinct", in: []int{3, 1, 2}, want: []int{1, 2, 3}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			orig := slices.Clone(tc.in)
+			got := distinctIndexerIDs(tc.in)
+			if !slices.Equal(got, tc.want) {
+				t.Fatalf("distinctIndexerIDs(%v) = %v, want %v", tc.in, got, tc.want)
+			}
+			if !slices.Equal(tc.in, orig) {
+				t.Fatalf("input changed to %v, want %v", tc.in, orig)
+			}
+		})
+	}
+}
 
 func TestLimitVariants(t *testing.T) {
 	t.Parallel()
@@ -209,6 +237,62 @@ func TestSearchCacheCopies(t *testing.T) {
 	again, ok := cache.get(searchKey{}, now)
 	if !ok || again.releases[0].GUID != "original" || again.releases[0].Categories[0] != 2000 {
 		t.Fatalf("output aliases cache: %+v", again)
+	}
+}
+
+func TestSearchCacheForgetLink(t *testing.T) {
+	t.Parallel()
+	for _, count := range []int{0, 2, maxSearchCacheEntries - 1} {
+		t.Run(fmt.Sprintf("entries=%d", count), func(t *testing.T) {
+			t.Parallel()
+			var cache searchCache
+			a, b := uuid.New(), uuid.New()
+			now := time.Date(2026, time.November, 5, 0, 0, 0, 0, time.UTC)
+			cache.forgetLink(a) // Zero-value cache is safe.
+			cache.put(searchKey{linkID: b}, cachedSearch{fetchedAt: now})
+			for i := range count {
+				cache.put(searchKey{linkID: a, offset: i}, cachedSearch{fetchedAt: now})
+			}
+			cache.forgetLink(a)
+			cache.forgetLink(a) // Repeated invalidation is safe.
+			if len(cache.entries) != 1 {
+				t.Fatalf("cache size = %d, want only link b", len(cache.entries))
+			}
+			if _, ok := cache.get(searchKey{linkID: b}, now); !ok {
+				t.Fatal("unrelated link b evicted")
+			}
+			for i := range count {
+				if _, ok := cache.get(searchKey{linkID: a, offset: i}, now); ok {
+					t.Fatalf("link a entry %d retained", i)
+				}
+			}
+		})
+	}
+}
+
+func TestSearchCacheReleaseBound(t *testing.T) {
+	t.Parallel()
+	for _, count := range []int{0, maxCachedReleases - 1, maxCachedReleases, maxCachedReleases + 1} {
+		t.Run(fmt.Sprintf("releases=%d", count), func(t *testing.T) {
+			t.Parallel()
+			var cache searchCache
+			now := time.Date(2026, time.November, 5, 0, 0, 0, 0, time.UTC)
+			releases := make([]prowlarrclient.Release, count)
+			for i := range count {
+				releases[i] = prowlarrclient.Release{GUID: strconv.Itoa(i), Categories: []int{2000}}
+			}
+			cache.put(searchKey{}, cachedSearch{fetchedAt: now, releases: releases})
+			got, ok := cache.get(searchKey{}, now)
+			if wantHit := count <= maxCachedReleases; ok != wantHit {
+				t.Fatalf("cache hit = %v, want %v", ok, wantHit)
+			}
+			if ok && !reflect.DeepEqual(got.releases, releases) {
+				t.Fatal("cached results truncated or changed")
+			}
+			if !ok && len(cache.entries) != 0 {
+				t.Fatal("oversized result retained")
+			}
+		})
 	}
 }
 

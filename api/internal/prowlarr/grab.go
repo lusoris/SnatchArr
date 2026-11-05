@@ -22,6 +22,9 @@ import (
 // ErrNoRelease indicates that no eligible release was found for the item.
 var ErrNoRelease = errors.New("no release found")
 
+// searchDBTimeout bounds link lookups and budget transactions, including lock waits.
+const searchDBTimeout = 10 * time.Second
+
 // GrabForItem searches Prowlarr for releases matching the query, picks the first release
 // whose indexer is enabled and not rate-limited per existing indexer data, and grabs it.
 func (s *Service) GrabForItem(ctx context.Context, linkID uuid.UUID, query prowlarrclient.SearchQuery) (prowlarrclient.Release, error) {
@@ -29,7 +32,7 @@ func (s *Service) GrabForItem(ctx context.Context, linkID uuid.UUID, query prowl
 	if err != nil {
 		return prowlarrclient.Release{}, err
 	}
-	if _, err = s.acquireGrabBudget(ctx, linkID, int(link.row.HourlyCap), 1); err != nil {
+	if _, err = s.acquireGrabBudget(ctx, linkID, 1); err != nil {
 		return prowlarrclient.Release{}, fmt.Errorf("prowlarr: %w", err)
 	}
 
@@ -59,7 +62,9 @@ type preparedSearchLink struct {
 }
 
 func (s *Service) searchLink(ctx context.Context, linkID uuid.UUID) (preparedSearchLink, error) {
-	row, err := s.st.Q().GetProwlarrLink(ctx, linkID)
+	dbCtx, cancel := context.WithTimeout(ctx, searchDBTimeout)
+	defer cancel()
+	row, err := s.st.Q().GetProwlarrLink(dbCtx, linkID)
 	if err != nil {
 		return preparedSearchLink{}, fmt.Errorf("prowlarr: get link: %w", store.MapError(err))
 	}
@@ -102,42 +107,55 @@ func (s *Service) checkAndDebitGlobal(ctx context.Context, q *sqlcgen.Queries, g
 }
 
 // acquireGrabBudget debits n searches atomically, locking link before global.
-func (s *Service) acquireGrabBudget(ctx context.Context, linkID uuid.UUID, hourlyCap, n int) (SearchBudget, error) {
+func (s *Service) acquireGrabBudget(ctx context.Context, linkID uuid.UUID, n int) (SearchBudget, error) {
+	ctx, cancel := context.WithTimeout(ctx, searchDBTimeout)
+	defer cancel()
 	var budget SearchBudget
 	err := s.st.Tx(ctx, func(q *sqlcgen.Queries) error {
-		if err := q.LockProwlarrLinkBudget(ctx, linkID); err != nil {
-			return fmt.Errorf("lock prowlarr link budget: %w", err)
-		}
-		now := s.clk.Now()
-		linkUsage, err := q.ProwlarrBucketUsage(ctx, sqlcgen.ProwlarrBucketUsageParams{
-			Since: snatch.SpanStart(now), LinkID: linkID,
-		})
-		if err != nil {
-			return fmt.Errorf("prowlarr link usage: %w", err)
-		}
-		budget, err = planSearchDebit(int(linkUsage.Used), hourlyCap, n)
-		if err != nil {
-			return fmt.Errorf("prowlarr link %s hourly cap: %w", linkID, err)
-		}
-		settingsRow, err := q.GetSettings(ctx)
-		if err != nil {
-			return fmt.Errorf("get settings: %w", err)
-		}
-		globalWarn, err := s.checkAndDebitGlobal(ctx, q, int(settingsRow.GlobalHourlyCap), n, now)
-		if err != nil {
-			return err
-		}
-		budget.Warn = budget.Warn || globalWarn
-		if err := q.AddProwlarrBucketUsed(ctx, sqlcgen.AddProwlarrBucketUsedParams{
-			LinkID: linkID, WindowStart: snatch.Minute(now),
-			Used: int32(budget.Debited), // #nosec G115 -- n is 1 for grabs or at most maxIndexers for variants
-		}); err != nil {
-			return fmt.Errorf("debit prowlarr bucket: %w", err)
-		}
-		return nil
+		var err error
+		budget, err = s.debitSearchBudget(ctx, q, linkID, n)
+		return err
 	})
 	if err != nil {
 		return SearchBudget{}, fmt.Errorf("acquire search budget: %w", err)
+	}
+	return budget, nil
+}
+
+// debitSearchBudget runs inside a transaction, reading the cap after the link lock.
+func (s *Service) debitSearchBudget(ctx context.Context, q *sqlcgen.Queries, linkID uuid.UUID, n int) (SearchBudget, error) {
+	if err := q.LockProwlarrLinkBudget(ctx, linkID); err != nil {
+		return SearchBudget{}, fmt.Errorf("lock prowlarr link budget: %w", err)
+	}
+	link, err := q.GetProwlarrLink(ctx, linkID)
+	if err != nil {
+		return SearchBudget{}, fmt.Errorf("get prowlarr link cap: %w", store.MapError(err))
+	}
+	now := s.clk.Now()
+	linkUsage, err := q.ProwlarrBucketUsage(ctx, sqlcgen.ProwlarrBucketUsageParams{
+		Since: snatch.SpanStart(now), LinkID: linkID,
+	})
+	if err != nil {
+		return SearchBudget{}, fmt.Errorf("prowlarr link usage: %w", err)
+	}
+	budget, err := planSearchDebit(int(linkUsage.Used), int(link.HourlyCap), n)
+	if err != nil {
+		return SearchBudget{}, fmt.Errorf("prowlarr link %s hourly cap: %w", linkID, err)
+	}
+	settingsRow, err := q.GetSettings(ctx)
+	if err != nil {
+		return SearchBudget{}, fmt.Errorf("get settings: %w", err)
+	}
+	globalWarn, err := s.checkAndDebitGlobal(ctx, q, int(settingsRow.GlobalHourlyCap), n, now)
+	if err != nil {
+		return SearchBudget{}, err
+	}
+	budget.Warn = budget.Warn || globalWarn
+	if err := q.AddProwlarrBucketUsed(ctx, sqlcgen.AddProwlarrBucketUsedParams{
+		LinkID: linkID, WindowStart: snatch.Minute(now),
+		Used: int32(budget.Debited), // #nosec G115 -- n is 1 for grabs or at most maxIndexers for variants
+	}); err != nil {
+		return SearchBudget{}, fmt.Errorf("debit prowlarr bucket: %w", err)
 	}
 	return budget, nil
 }
