@@ -51,7 +51,7 @@ func (r *Reconciler) prepareItems(ctx context.Context, ids []string, clients map
 // recoverPriorityOwnership reconciles durable ownership with observed items before planning further writes.
 // Only the durable intent, written while an item was eligible, permits claiming a paused item.
 // An observed paused item without an intent or confirmed owner is never claimed.
-// An observed running item releases confirmed pause ownership after a manual resume.
+// An item observed in any state other than paused releases confirmed pause ownership when no action is pending.
 func (r *Reconciler) recoverPriorityOwnership(ctx context.Context, items []PriorityItem, ownership []PriorityOwnership) bool {
 	if len(ownership) > maxPriorityItemsPerGroup*maxPriorityRowsPerTick {
 		r.logger.WarnContext(ctx, "download priority ownership truncated")
@@ -76,8 +76,10 @@ func (r *Reconciler) recoverPriorityOwnership(ctx context.Context, items []Prior
 	return true
 }
 
-// recoverOwnershipItem confirms or cancels a pending intent, or releases pause ownership after a manual resume.
+// recoverOwnershipItem confirms or cancels a pending intent, or releases ownership of a SnatchArr pause.
 // A paused item can be claimed only through a durable pause intent.
+// With no pending action, an item observed in any state other than paused releases that ownership.
+// A later pause can no longer be attributed to SnatchArr and remains the user's.
 func (r *Reconciler) recoverOwnershipItem(ctx context.Context, own PriorityOwnership, item PriorityItem) error {
 	if own.PendingAction == "" {
 		return r.releaseResumedPauseOwnership(ctx, own, item)
@@ -94,8 +96,9 @@ func (r *Reconciler) recoverOwnershipItem(ctx context.Context, own PriorityOwner
 	}
 }
 
-// releaseResumedPauseOwnership releases confirmed pause ownership when an item runs with no pending action.
-// The user has taken the item back, so a later user pause must remain unowned.
+// releaseResumedPauseOwnership releases confirmed pause ownership when an item is observed in any state other than paused with no pending action.
+// This includes items resumed by the user and items observed as queued, active, or finished.
+// A later pause can no longer be attributed to SnatchArr and remains the user's.
 func (r *Reconciler) releaseResumedPauseOwnership(ctx context.Context, own PriorityOwnership, item PriorityItem) error {
 	if own.PausedBySnatchArr && item.State != domain.DownloadItemPaused {
 		return r.source.ClearPaused(ctx, own.ClientID, own.ItemID)
