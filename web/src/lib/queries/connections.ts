@@ -58,6 +58,7 @@ export function downloadClientPriorityPlanQuery(clientId: () => string, enabled:
 		queryKey: keys.dlpriorityPlan(clientId()),
 		enabled: enabled(),
 		refetchInterval: PRIORITY_PLAN_REFETCH_MS,
+		/** Fetches the plan within the deadline; a 404 (not observed yet) resolves to null. */
 		queryFn: async () => {
 			try {
 				const result = await api.GET('/download-clients/{clientId}/priority-plan', {
