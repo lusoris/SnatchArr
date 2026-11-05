@@ -55,7 +55,7 @@ Adding, deleting/removing, whole-queue pause/resume, force start, category chang
 
 ### 2. Observe by default, act per client
 
-Every download client defaults to observe mode; act requires explicit opt-in for that client. Existing clients remain observe on upgrade (`OQ-0046-2`), following the observe-first model of [ADR-0012](0012-queue-management-replaces-cleanuparr-link.md). In observe mode the same planner computes priority, queue-order, pause and resume moves but executes no writes. Every planned and executed move is logged and surfaced through the API and UI, with client, item, reason, old and intended state, mode and execution outcome (S3–S5).
+Every download client defaults to observe mode; act requires explicit opt-in for that client. Existing clients remain observe on upgrade (`OQ-0046-2`), following the observe-first model of [ADR-0012](0012-queue-management-replaces-cleanuparr-link.md). In observe mode the same planner computes priority, queue-order, pause and resume moves and executes exactly one write class: resuming items whose stored ownership record says SnatchArr paused them (section 4). This cleanup runs when act mode or attribution is withdrawn, so a pause SnatchArr made never outlives the mode that made it; observe never pauses, reorders or changes a priority. Amended by `snatcharr-observe-cleanup-resume-policy`. Every planned and executed move is logged and surfaced through the API and UI, with client, item, reason, old and intended state, mode and execution outcome (S3–S5).
 
 ### 3. Attribution, rank mapping and manual priorities
 
@@ -69,7 +69,7 @@ Priority and queue-order writes affect queued items only. Preserve hand-set prio
 
 The queued-only limit for priority changes does not prevent pausing an active lower-rank transfer. Pause it only while a higher-rank item on the same download client waits, meaning queued and not downloading. Equal ranks do not trigger a pause. Resume once the higher-rank items have finished, that is when no higher-rank item on that client is waiting or downloading (`OQ-0046-0`, widening `OQ-0046-4`). Resuming as soon as nothing waits would flap: the waiting item starts downloading, the paused item resumes and competes with it again.
 
-Persist which client/items SnatchArr paused. Resume only those items, never an item paused by the user; an absent ownership record authorizes no resume. The pause plan and ownership transitions belong to S2–S4, with lifecycle and user-paused-item tests in S4–S5.
+Persist which client/items SnatchArr paused. Resume only those items, never an item paused by the user; an absent ownership record authorizes no resume. A tick that sees an owned item running, with no pending action, releases the ownership record: the user took the item back, and a later pause by the user is theirs (#1016). A resume and re-pause by the user between two ticks is not visible in the client's state. The pause plan and ownership transitions belong to S2–S4, with lifecycle and user-paused-item tests in S4–S5.
 
 ### 5. Leader execution
 
@@ -86,6 +86,7 @@ The operator answered all five questions on 2026-11-01. Answers are paraphrased;
 | `OQ-0046-2` | `snatcharr-dlclient-prio-mode` | a | Observe by default per client, including upgrades; act is opt-in per client. |
 | `OQ-0046-3` | `snatcharr-dlclient-prio-mapping` | a | Read the category from the instance's `*arr` client entry; split distinct ranks across non-force levels; qBittorrent sorts by rank, then added time. |
 | `OQ-0046-4` | `snatcharr-dlclient-prio-scope` | b, widened by OQ-0046-0 | Priority writes touch queued items and preserve hand-set priorities; pause/resume may control active lower-rank transfers. |
+| `OQ-0046-5` | `snatcharr-observe-cleanup-resume-policy` | a | Keep the observe-mode cleanup: observe performs one write class, resuming items whose ownership record says SnatchArr paused them (answered 2026-11-05). |
 
 ## Implementation slices
 
@@ -136,6 +137,7 @@ S3–S5 must also supply independent behavioural tests: no writes in the fake cl
 - Priority domain logic: `api/internal/domain/priority.go` (`ResolveDownload`, `PresetMediaFirst`)
 - Pinned goenvoy client packages in `go.mod`
 - Operator answers, 2026-11-01 (paraphrased): `OQ-0046-0` / `snatcharr-dlclient-prio-adr0006`, `OQ-0046-1` / `snatcharr-dlclient-prio-clients`, `OQ-0046-2` / `snatcharr-dlclient-prio-mode`, `OQ-0046-3` / `snatcharr-dlclient-prio-mapping`, `OQ-0046-4` / `snatcharr-dlclient-prio-scope`; see Answered questions.
+- Operator answer, 2026-11-05 (paraphrased): `OQ-0046-5` / `snatcharr-observe-cleanup-resume-policy`; PR #1014 and issue #1016.
 - PR #969, squash `82a4a065`: read-side priority capability test (`api/internal/dlclients/priority_live_test.go`), live runner (`tools/e2e/dlclients_live.sh`), and pinned clients (`tools/e2e/dlclients/compose.yaml`); live run 2026-11-01.
 - qBittorrent [`release-5.3.0`, `src/webui/api/torrentscontroller.h:72-73`](https://github.com/qbittorrent/qBittorrent/blob/release-5.3.0/src/webui/api/torrentscontroller.h#L72-L73), with priority actions at [lines 101–104](https://github.com/qbittorrent/qBittorrent/blob/release-5.3.0/src/webui/api/torrentscontroller.h#L101-L104), commit `05fcaa8f505f`, read 2026-11-01.
 - NZBGet [`daemon/remote/XmlRpc.cpp:2422-2423`](https://github.com/nzbgetcom/nzbget/blob/eb68e5e1f801f0ee0587e220a9108dd49ed8538c/daemon/remote/XmlRpc.cpp#L2422-L2423): `GroupPause` / `GroupResume`; commit `eb68e5e1f801`, read 2026-11-01.

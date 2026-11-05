@@ -145,7 +145,7 @@ Purpose: snatch missing + cutoff-unmet media across *arr instances; respect per-
 - No `latest` image tags; no unpinned `uses:` in workflows.
 - Never edit generated code (`api/internal/build/oas`, `api/internal/gen`, `api/internal/store/sqlcgen`, `web/src/lib/api/schema.d.ts`, `worker/crates/snatch-proto/src/gen`) or compiled vendor context (`CLAUDE.md`, `.gemini/**`, `.codex/**`). Edit `AGENTS.md`, run `praetorctl compile-context`.
 - Never store or return *arr API keys in plaintext: encrypt at rest (`core/crypto` AES-GCM); write-only in API.
-- Queue management (stalled, slow, failed, import-blocked, unwanted) acts only through the *arr queue API, observe mode first (ADR-0012, #362); never call a download client directly (ADR-0006), except per-item priority, queue-order, pause and resume writes, off by default and gated by `priority_mode=act` (ADR-0046).
+- Queue management (stalled, slow, failed, import-blocked, unwanted) acts only through the *arr queue API, observe mode first (ADR-0012, #362); never call a download client directly (ADR-0006), except per-item priority, queue-order, pause and resume writes, off by default and gated by `priority_mode=act` (ADR-0046). Observe exception: resume of items whose ownership record says SnatchArr paused them, after act or attribution withdrawn (ADR-0046 sections 2, 4).
 
 ## Local development
 
