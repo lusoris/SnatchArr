@@ -21,7 +21,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import { FormEditor } from '#lib/formEditor.svelte.js';
 	import { deleteCallbacks, probeFailed, saveSuccess } from '#lib/forms.js';
 	import { HELP_MAP } from '#lib/help.js';
-	import { downloadClientName } from '#lib/kinds.js';
+	import { downloadClientName, supportsDownloadClientPriority } from '#lib/kinds.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { keys } from '#lib/query.js';
 	import { session } from '#lib/session.svelte.js';
@@ -189,24 +189,28 @@ SPDX-License-Identifier: EUPL-1.2
 								{@const st = statusFor(c.id)}
 								<tr class:target={session.isAdmin && c.source !== 'configarr'}>
 									<td data-label={m.instance_name()}>
-										<div class="flex items-center gap-2">
-											<AppLogo kind={c.kind} size={18} />
-											<h2
-												class="text-sm font-semibold break-words md:max-w-22 md:truncate"
-												title={c.name}
-											>
-												{c.name}
-											</h2>
+										<div class="flex min-w-0 flex-1 flex-col items-start gap-2">
+											<div class="flex max-w-full min-w-0 items-center gap-2">
+												<AppLogo kind={c.kind} size={18} />
+												<h2
+													class="text-sm font-semibold break-words md:max-w-22 md:truncate"
+													title={c.name}
+												>
+													{c.name}
+												</h2>
+											</div>
+											{#if c.enabled && supportsDownloadClientPriority(c.kind)}
+												<button
+													type="button"
+													class="btn max-w-full break-words whitespace-normal"
+													aria-haspopup="dialog"
+													aria-label={m.dlclients_priority_plan_open({ name: c.name })}
+													onclick={() => showPriorityPlan(c)}
+												>
+													{m.dlclients_priority_plan()}
+												</button>
+											{/if}
 										</div>
-										<button
-											type="button"
-											class="btn mt-2"
-											aria-haspopup="dialog"
-											aria-label={m.dlclients_priority_plan_open({ name: c.name })}
-											onclick={() => showPriorityPlan(c)}
-										>
-											{m.dlclients_priority_plan()}
-										</button>
 									</td>
 									<td class="text-sm text-subtle" data-label={m.dlclients_kind()}
 										>{downloadClientName(c.kind)} · {c.protocol}</td

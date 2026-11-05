@@ -43,16 +43,26 @@ export function downloadClientQueries() {
 	return { clients, status };
 }
 
+/** Poll period of the open priority plan. */
+export const PRIORITY_PLAN_REFETCH_MS = 30_000;
+
+/**
+ * Deadline of one plan request: a request still pending at the next poll is
+ * aborted, so stalled requests never pile up behind the refetch.
+ */
+export const PRIORITY_PLAN_DEADLINE_MS = PRIORITY_PLAN_REFETCH_MS;
+
 /** Loads the latest observation while its client plan is open; 404 means not observed yet. */
 export function downloadClientPriorityPlanQuery(clientId: () => string, enabled: () => boolean) {
 	return createSentioQuery<components['schemas']['DownloadClientPriorityPlan'] | null>(() => ({
 		queryKey: keys.dlpriorityPlan(clientId()),
 		enabled: enabled(),
-		refetchInterval: 30_000,
+		refetchInterval: PRIORITY_PLAN_REFETCH_MS,
 		queryFn: async () => {
 			try {
 				const result = await api.GET('/download-clients/{clientId}/priority-plan', {
-					params: { path: { clientId: clientId() } }
+					params: { path: { clientId: clientId() } },
+					signal: AbortSignal.timeout(PRIORITY_PLAN_DEADLINE_MS)
 				});
 				return result.data ?? null;
 			} catch (error) {

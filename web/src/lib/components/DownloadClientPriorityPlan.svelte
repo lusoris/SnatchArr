@@ -5,6 +5,7 @@ SPDX-License-Identifier: EUPL-1.2
 <script lang="ts">
 	import Dialog from '@sveltesentio/ui/dialog/component';
 	import type { components } from '#lib/api/schema.js';
+	import { supportsDownloadClientPriority } from '#lib/kinds.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
 	import { downloadClientPriorityPlanQuery } from '#lib/queries/connections.js';
@@ -20,7 +21,7 @@ SPDX-License-Identifier: EUPL-1.2
 	const dialogId = $props.id();
 	const plan = downloadClientPriorityPlanQuery(
 		() => client.id,
-		() => open
+		() => open && client.enabled && supportsDownloadClientPriority(client.kind)
 	);
 </script>
 

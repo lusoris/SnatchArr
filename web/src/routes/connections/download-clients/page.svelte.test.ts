@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api } from '#lib/api/client.js';
 import type { components } from '#lib/api/schema.js';
 import { m } from '#lib/paraglide/messages.js';
+import { DOWNLOAD_CLIENT_KINDS } from '#lib/kinds.js';
 import { session } from '#lib/session.svelte.js';
 import { getLocale } from '#lib/paraglide/runtime.js';
 import { formatWhen } from '#lib/stamina.js';
@@ -188,8 +189,8 @@ async function sampleCard() {
 }
 
 /** Stubs list GET endpoints and renders the page with a PUT spy. */
-async function openEdit() {
-	stubGet(listStubs);
+async function openEdit(client: DownloadClient = sampleClient) {
+	stubGet({ ...listStubs, '/download-clients': [client] });
 	const putSpy = vi.spyOn(api, 'PUT').mockResolvedValue({ data: sampleClient } as never);
 	renderWithQuery(DownloadClientsPage);
 	await fireEvent.click((await sampleCard()).getByRole('button', { name: m.action_edit() }));
@@ -317,8 +318,7 @@ describe('download-clients management', () => {
 				enabled: true,
 				max_active: 5,
 				max_queued: 0,
-				bandwidth_budget_bps: 0,
-				priority_mode: 'observe'
+				bandwidth_budget_bps: 0
 			}
 		});
 	});
@@ -556,6 +556,60 @@ describe('download-client priority', () => {
 		vi.restoreAllMocks();
 	});
 
+	it('keeps the name and plan within one shrinkable stacked cell for 320px reflow', async () => {
+		stubGet(listStubs);
+		renderWithQuery(DownloadClientsPage);
+		const button = await screen.findByRole('button', {
+			name: m.dlclients_priority_plan_open({ name: sampleClient.name })
+		});
+		const cell = button.closest('td')!;
+		const group = button.parentElement!;
+		expect(cell.children).toHaveLength(1);
+		expect(group.parentElement).toBe(cell);
+		for (const utility of ['flex', 'flex-col', 'flex-1', 'min-w-0']) {
+			expect(group.classList.contains(utility), utility).toBe(true);
+		}
+		expect(group.contains(screen.getByRole('heading', { name: sampleClient.name }))).toBe(true);
+		for (const utility of ['max-w-full', 'whitespace-normal', 'break-words']) {
+			expect(button.classList.contains(utility), utility).toBe(true);
+		}
+	});
+
+	it.each(
+		DOWNLOAD_CLIENT_KINDS.flatMap((kind) => [true, false].map((enabled) => ({ kind, enabled })))
+	)(
+		'plan availability for $kind enabled=$enabled matches the reconciler',
+		async ({ kind, enabled }) => {
+			const getSpy = stubGet({
+				...listStubs,
+				'/download-clients': [{ ...sampleClient, kind, enabled }]
+			});
+			renderWithQuery(DownloadClientsPage);
+			const row = await sampleCard();
+			const button = row.queryByRole('button', {
+				name: m.dlclients_priority_plan_open({ name: sampleClient.name })
+			});
+			expect(button !== null).toBe(enabled && ['qbittorrent', 'nzbget', 'sabnzbd'].includes(kind));
+			expect(
+				getSpy.mock.calls.some((call: unknown[]) => String(call[0]).endsWith('/priority-plan'))
+			).toBe(false);
+		}
+	);
+
+	it.each(['observe', 'act'] as const)(
+		'omits unchanged %s mode on an unrelated edit',
+		async (mode) => {
+			stubGet({ ...listStubs, '/download-clients': [{ ...sampleClient, priority_mode: mode }] });
+			const putSpy = vi.spyOn(api, 'PUT').mockResolvedValue({ data: sampleClient } as never);
+			renderWithQuery(DownloadClientsPage);
+			await fireEvent.click((await sampleCard()).getByRole('button', { name: m.action_edit() }));
+			await fill(m.instance_name(), 'Renamed');
+			await fireEvent.click(screen.getByRole('button', { name: m.action_save() }));
+			const body = (putSpy.mock.calls[0]?.[1] as { body: Record<string, unknown> }).body;
+			expect(body).not.toHaveProperty('priority_mode');
+		}
+	);
+
 	it('shows every planned move, effective mode, observation age and group notices', async () => {
 		const { dialog, getSpy } = await openPriorityPlan();
 		expect(await dialog.findByText(m.dlclients_priority_move(samplePlan.priority[0]))).toBeTruthy();
@@ -579,7 +633,8 @@ describe('download-client priority', () => {
 		).toBeTruthy();
 		expect(dialog.getByText(m.dlclients_priority_qbittorrent_limit())).toBeTruthy();
 		expect(getSpy).toHaveBeenCalledWith('/download-clients/{clientId}/priority-plan', {
-			params: { path: { clientId: sampleClient.id } }
+			params: { path: { clientId: sampleClient.id } },
+			signal: expect.any(AbortSignal)
 		});
 		expect(dialog.queryByText(m.dlclients_priority_empty())).toBeNull();
 	});
@@ -661,6 +716,40 @@ describe('download-client priority', () => {
 		);
 	});
 
+	it('sends observe when a stored act mode changes', async () => {
+		const putSpy = await openEdit({ ...sampleClient, priority_mode: 'act' });
+		await fireEvent.change(screen.getByLabelText(m.dlclients_priority_mode()), {
+			target: { value: 'observe' }
+		});
+		await fireEvent.click(screen.getByRole('button', { name: m.action_save() }));
+		expect(putSpy).toHaveBeenCalledWith('/download-clients/{clientId}', {
+			params: { path: { clientId: sampleClient.id } },
+			body: expect.objectContaining({ priority_mode: 'observe' })
+		});
+	});
+
+	it('omits a mode change reverted to its loaded value', async () => {
+		const putSpy = await openEdit();
+		const select = screen.getByLabelText(m.dlclients_priority_mode());
+		await fireEvent.change(select, { target: { value: 'act' } });
+		await fireEvent.change(select, { target: { value: 'observe' } });
+		await fireEvent.click(screen.getByRole('button', { name: m.action_save() }));
+		const body = (putSpy.mock.calls[0]?.[1] as { body: Record<string, unknown> }).body;
+		expect(body).not.toHaveProperty('priority_mode');
+	});
+
+	it('resets a stored act mode when switching to an unsupported kind', async () => {
+		const putSpy = await openEdit({ ...sampleClient, priority_mode: 'act' });
+		await fireEvent.change(screen.getByLabelText(m.dlclients_kind()), {
+			target: { value: 'transmission' }
+		});
+		await fireEvent.click(screen.getByRole('button', { name: m.action_save() }));
+		expect(putSpy).toHaveBeenCalledWith('/download-clients/{clientId}', {
+			params: { path: { clientId: sampleClient.id } },
+			body: expect.objectContaining({ kind: 'transmission', priority_mode: 'observe' })
+		});
+	});
+
 	it.each(['qbittorrent', 'nzbget', 'sabnzbd'])(
 		'sends priority_mode act when explicitly chosen for %s while editing',
 		async (kind) => {
@@ -695,8 +784,10 @@ describe('download-client priority', () => {
 			await fireEvent.click(screen.getByRole('button', { name: m.action_save() }));
 			expect(putSpy).toHaveBeenCalledWith('/download-clients/{clientId}', {
 				params: { path: { clientId: sampleClient.id } },
-				body: expect.objectContaining({ kind, priority_mode: 'observe' })
+				body: expect.objectContaining({ kind })
 			});
+			const body = (putSpy.mock.calls[0]?.[1] as { body: Record<string, unknown> }).body;
+			expect(body).not.toHaveProperty('priority_mode');
 		}
 	);
 });

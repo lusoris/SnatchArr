@@ -8,6 +8,7 @@ SPDX-License-Identifier: EUPL-1.2
 	import {
 		DOWNLOAD_CLIENT_KINDS,
 		downloadClientName,
+		supportsDownloadClientPriority,
 		type DownloadClientKind
 	} from '#lib/kinds.js';
 	import { m } from '#lib/paraglide/messages.js';
@@ -53,7 +54,7 @@ SPDX-License-Identifier: EUPL-1.2
 	let priorityMode = $state<components['schemas']['DownloadClientPriorityMode']>(
 		initial?.priority_mode ?? 'observe'
 	);
-	const supportsPriority = $derived(['qbittorrent', 'nzbget', 'sabnzbd'].includes(kind));
+	const supportsPriority = $derived(supportsDownloadClientPriority(kind));
 	const errors = $derived(fieldErrors(error));
 
 	$effect(() => {
@@ -61,6 +62,7 @@ SPDX-License-Identifier: EUPL-1.2
 	});
 
 	function body(): DownloadClientInput {
+		const mode = supportsPriority ? priorityMode : 'observe';
 		return {
 			kind,
 			name,
@@ -70,7 +72,7 @@ SPDX-License-Identifier: EUPL-1.2
 			max_active: maxActive ?? 0,
 			max_queued: maxQueued ?? 0,
 			bandwidth_budget_bps: bandwidth ?? 0,
-			priority_mode: supportsPriority ? priorityMode : 'observe',
+			...(!initial || mode !== initial.priority_mode ? { priority_mode: mode } : {}),
 			...filledPart('secret', secret),
 			...filledPart('instance_id', instanceId)
 		};
