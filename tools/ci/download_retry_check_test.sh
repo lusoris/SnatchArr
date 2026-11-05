@@ -244,7 +244,7 @@ expect_command cluster-config-attached 0 'curl -fsSKoptions https://x/a' 0
 expect_command cluster-config-separate 0 'curl -fsSK options https://x/a' 0
 
 # Value-taking short options end clusters and consume their entire argument.
-expect_command user-attached 0 'curl -uroot:pw https://x' 0
+expect_command user-attached 0 'curl -uroot https://x' 0
 expect_command header-attached-null 0 'curl -H"X: foo" -o /dev/null https://x' 0
 expect_command request-attached 0 'curl -sXGETo f https://x' 0
 expect_command referer-separate-output 1 'curl -e https://ref -o out https://x'
