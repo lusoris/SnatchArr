@@ -79,6 +79,11 @@ const channelNames = {
 export const DOWNLOAD_CLIENT_KINDS = Object.keys(downloadClientNames) as DownloadClientKind[];
 export const CHANNEL_KINDS = Object.keys(channelNames) as ChannelKind[];
 
+/** Client kinds admitted by the priority reconciler (ADR-0046). */
+export function supportsDownloadClientPriority(kind: DownloadClientKind): boolean {
+	return kind === 'qbittorrent' || kind === 'nzbget' || kind === 'sabnzbd';
+}
+
 /** The product name of a download client kind. Unknown kinds are returned as given. */
 export function downloadClientName(kind: string): string {
 	return Object.hasOwn(downloadClientNames, kind)

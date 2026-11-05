@@ -3,7 +3,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 import { createSentioQuery } from '@sveltesentio/query';
-import { api } from '#lib/api/client.js';
+import { api, problemStatus } from '#lib/api/client.js';
+import type { components } from '#lib/api/schema.js';
 import { keys } from '#lib/query.js';
 
 /**
@@ -40,4 +41,35 @@ export function downloadClientQueries() {
 	});
 
 	return { clients, status };
+}
+
+/** Poll period of the open priority plan. */
+export const PRIORITY_PLAN_REFETCH_MS = 30_000;
+
+/**
+ * Deadline of one plan request: a request still pending at the next poll is
+ * aborted, so stalled requests never pile up behind the refetch.
+ */
+export const PRIORITY_PLAN_DEADLINE_MS = PRIORITY_PLAN_REFETCH_MS;
+
+/** Loads the latest observation while its client plan is open; 404 means not observed yet. */
+export function downloadClientPriorityPlanQuery(clientId: () => string, enabled: () => boolean) {
+	return createSentioQuery<components['schemas']['DownloadClientPriorityPlan'] | null>(() => ({
+		queryKey: keys.dlpriorityPlan(clientId()),
+		enabled: enabled(),
+		refetchInterval: PRIORITY_PLAN_REFETCH_MS,
+		/** Fetches the plan within the deadline; a 404 (not observed yet) resolves to null. */
+		queryFn: async () => {
+			try {
+				const result = await api.GET('/download-clients/{clientId}/priority-plan', {
+					params: { path: { clientId: clientId() } },
+					signal: AbortSignal.timeout(PRIORITY_PLAN_DEADLINE_MS)
+				});
+				return result.data ?? null;
+			} catch (error) {
+				if (problemStatus(error) === 404) return null;
+				throw error;
+			}
+		}
+	}));
 }

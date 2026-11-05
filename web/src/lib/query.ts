@@ -26,6 +26,7 @@ export const keys = {
 	schedules: ['schedules'] as const,
 	dlclients: ['download-clients'] as const,
 	dlstatus: ['download-clients', 'status'] as const,
+	dlpriorityPlan: (id: string) => ['download-clients', id, 'priority-plan'] as const,
 	seerrLinks: ['seerr', 'links'] as const,
 	seerrRequests: ['seerr', 'requests'] as const,
 	prowlarrLinks: ['prowlarr', 'links'] as const,
