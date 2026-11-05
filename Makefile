@@ -633,6 +633,8 @@ workflows-verify: ## The rule of "CI success", the Security Scan issue step, the
 	python3 -I tools/ci/codacy_config.py
 	bash tools/ci/nosec_check_test.sh
 	python3 -I tools/ci/nosec_check.py
+	bash tools/ci/download_retry_check_test.sh
+	python3 -I tools/ci/download_retry_check.py
 	bash tools/ci/release_body_check_test.sh
 	bash tools/e2e/live_lib_test.sh
 	python3 -I tools/release/dogfood_gate.py --self-test
