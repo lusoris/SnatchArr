@@ -88,5 +88,9 @@ pre-push:
       run: sh .config/lefthook/engine.sh flavor audit .
     audit:
       run: sh .config/lefthook/engine.sh audit
+    secret-scan:
+      priority: 1
+      use_stdin: true
+      run: sh tools/ci/prepush_secret_scan.sh
     gate:
       run: sh .config/lefthook/engine.sh gate run --path=. --admit-unsupported

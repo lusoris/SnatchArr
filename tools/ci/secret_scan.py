@@ -69,25 +69,28 @@ def parse_exceptions(text):
             continue
         if not expires:
             raise ScanError(f"line {number}: exception without an expiry and reason")
-        if FINGERPRINT.fullmatch(line):
-            entries.append(Exemption(line, expires))
-            expires = None
-            continue
-        if any(char in WILDCARDS for char in line):
-            raise ScanError(f"line {number}: a path:rule exception names one exact path, no wildcards")
-        match = PATH_RULE.fullmatch(line)
-        if not match:
-            raise ScanError(f"line {number}: not a commit:path:rule:line or path:rule exception")
-        path, rule = match.groups()
-        if path.startswith("/") or Path(path).is_absolute() or any(part == ".." for part in path.replace("\\", "/").split("/")):
-            raise ScanError(f"line {number}: path must be relative and not contain .. segments")
-        entries.append(Exemption(line, expires, path=path, rule=rule))
+        entries.append(parse_target(line, expires, number))
         expires = None
     if expires:
         raise ScanError("an expiry at the end names no exception")
     if len(entries) > MAX_EXCEPTIONS or len({entry.target for entry in entries}) != len(entries):
         raise ScanError("exceptions are duplicated or exceed the supported count")
     return entries
+
+
+def parse_target(line, expires, number):
+    """Validate one fingerprint or exact path and rule, preserving its expiry."""
+    if FINGERPRINT.fullmatch(line):
+        return Exemption(line, expires)
+    if any(char in WILDCARDS for char in line):
+        raise ScanError(f"line {number}: a path:rule exception names one exact path, no wildcards")
+    match = PATH_RULE.fullmatch(line)
+    if not match:
+        raise ScanError(f"line {number}: not a commit:path:rule:line or path:rule exception")
+    path, rule = match.groups()
+    if path.startswith("/") or Path(path).is_absolute() or any(part == ".." for part in path.replace("\\", "/").split("/")):
+        raise ScanError(f"line {number}: path must be relative and not contain .. segments")
+    return Exemption(line, expires, path=path, rule=rule)
 
 
 def parse_date(value, number):
@@ -114,8 +117,8 @@ def parse_finding(fingerprint):
     return commit, path, rule, line
 
 
-def findings(gitleaks, repository):
-    """Return every fingerprint Gitleaks reports with no exception applied."""
+def findings(gitleaks, repository, log_opts=None):
+    """Return unfiltered fingerprints from full history or selected git log arguments."""
     located = subprocess.run(["git", "rev-parse", "--absolute-git-dir"], cwd=repository, capture_output=True, text=True, timeout=60, check=True)
     with tempfile.TemporaryDirectory() as scratch:
         # Gitleaks applies a .gitleaksignore in its source directory without regard to expiry,
@@ -127,6 +130,8 @@ def findings(gitleaks, repository):
             str(Path(gitleaks).resolve()), "git", "--redact", "--no-banner", "--exit-code", str(LEAK_EXIT),
             "--gitleaks-ignore-path", str(source), "--report-format", "json", "--report-path", str(report), str(source),
         ]
+        if log_opts is not None:
+            command.extend(["--log-opts", log_opts])
         environment = {**os.environ, "GIT_DIR": located.stdout.strip()}
         result = subprocess.run(command, cwd=source, env=environment, capture_output=True, text=True, timeout=SCAN_TIMEOUT_SECONDS, check=False)
         if result.returncode not in (0, LEAK_EXIT):
@@ -139,10 +144,10 @@ def findings(gitleaks, repository):
     return found
 
 
-def scan(gitleaks, repository, today):
+def scan(gitleaks, repository, today, log_opts=None):
     """Return (allowed, blocking, unused) fingerprints for one repository."""
     entries = load_exceptions(repository)
-    found = findings(gitleaks, repository)
+    found = findings(gitleaks, repository, log_opts)
     parsed = []
     for item in found:
         _, path, rule, _ = parse_finding(item)
@@ -304,18 +309,19 @@ def main(arguments=None):
     parser.add_argument("--gitleaks", type=Path, required=True)
     parser.add_argument("--repository", type=Path, default=Path("."))
     parser.add_argument("--self-test", action="store_true")
+    parser.add_argument("--log-opts", help="git log arguments selecting the pushed history")
     options = parser.parse_args(arguments)
     today = datetime.datetime.now(datetime.UTC).date()
     try:
         if options.self_test:
             self_test(options.gitleaks, today)
             return 0
-        allowed, blocking, unused = scan(options.gitleaks, options.repository, today)
+        allowed, blocking, unused = scan(options.gitleaks, options.repository, today, options.log_opts)
     except (ScanError, OSError, subprocess.SubprocessError, json.JSONDecodeError, KeyError) as error:
         print(f"Secret scan failed: {error}", file=sys.stderr)
         return 2
     print(f"Secret scan: {len(allowed)} findings allowed by unexpired exceptions, {len(blocking)} blocking")
-    for fingerprint in unused:
+    for fingerprint in unused if options.log_opts is None else []:
         print(f"Unused exception, remove it: {fingerprint}")
     for fingerprint in blocking:
         print(f"Blocking finding: {fingerprint}", file=sys.stderr)

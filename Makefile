@@ -588,8 +588,9 @@ governance-verify: ## compile-context --verify, audit, state audit, flavor audit
 	$(PRAETORCTL) state audit .
 	$(PRAETORCTL) flavor audit --flavor=go-service .
 
-hooks-verify: ## The commit-message policy against its accepted and refused cases
+hooks-verify: ## Commit-message policy and pushed-range scan against planted cases
 	sh .config/hooks/commit-msg_test.sh
+	sh tools/ci/prepush_secret_scan_test.sh
 
 secret-scan: ## gitleaks over every local ref, as CI job secret-scan (pinned release, cached in .cache/)
 	sh tools/ci/gitleaks_scan.sh .cache/gitleaks
