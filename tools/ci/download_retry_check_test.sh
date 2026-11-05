@@ -14,12 +14,12 @@ trap 'rm -rf "$work"' EXIT
 # shellcheck source=tools/ci/test_lib.sh
 . "$HERE/test_lib.sh"
 
-# expect NAME WANT_STATUS NEEDLE SETUP: plant a fixture and assert status plus output.
+# expect NAME WANT_STATUS NEEDLE SETUP [SOURCE]: plant a fixture and check output.
 expect() {
     local name=$1 want=$2 needle=$3 setup=$4 repo out status=0
     repo="$work/$name"
     new_repo "$repo"
-    (cd "$repo" && "$setup")
+    (cd "$repo" && "$setup" "${5-}")
     out=$(cd "$repo" && python3 -I "$check" 2>&1) || status=$?
     check_case "$name" "$want" "$status" "$needle" "$out"
     echo "ok   $name"
@@ -109,6 +109,25 @@ setup_read_error() {
     rm clean.sh
 }
 
+# setup_command SOURCE: track shell text without executing the fixture.
+setup_command() {
+    printf '%s\n' "$1" > download.sh
+    git add download.sh
+}
+
+# expect_command NAME STATUS SOURCE [DOWNLOADS]: check one shell command.
+expect_command() {
+    local name=$1 want=$2 source=$3 downloads=${4:-1} needle
+    if [[ $want == 1 ]]; then
+        needle='download.sh:1: curl download without --retry'
+    elif [[ $want == 2 ]]; then
+        needle='download_retry_check: cannot run:'
+    else
+        needle="download_retry_check: ok ($downloads downloads)"
+    fi
+    expect "$name" "$want" "$needle" setup_command "$source"
+}
+
 expect missing 1 'download.sh:2: curl download without --retry' setup_missing
 expect continued 0 'download_retry_check: ok (1 downloads)' setup_continued
 expect poll 0 'download_retry_check: ok (0 downloads)' setup_poll
@@ -123,5 +142,64 @@ expect capture 0 'download_retry_check: ok (0 downloads)' setup_capture
 expect testdata 0 'download_retry_check: ok (0 downloads)' setup_testdata
 expect self 0 'download_retry_check: ok (0 downloads)' setup_self
 expect read-error 2 'download_retry_check: cannot run:' setup_read_error
+
+expect_command retry-zero 1 'curl --retry 0 -o f https://x'
+expect_command retry-equals-zero 1 'curl --retry=0 -o f https://x'
+expect_command retry-equals-positive 0 'curl --retry=3 -o f https://x'
+expect_command retry-one 0 'curl --retry 1 -o f https://x'
+expect_command retry-negative 1 'curl --retry -1 -o f https://x'
+expect_command retry-invalid 1 'curl --retry invalid -o f https://x'
+expect_command retry-equals-invalid 1 'curl --retry=invalid -o f https://x'
+expect_command retry-fraction 1 'curl --retry=1.5 -o f https://x'
+expect_command retry-underscores 1 'curl --retry=1_0 -o f https://x'
+expect_command retry-explicit-plus 0 'curl --retry=+3 -o f https://x'
+expect_command retry-missing-value 1 'curl -o f https://x --retry'
+expect_command retry-empty-value 1 'curl --retry= -o f https://x'
+expect_command retry-last-zero 1 'curl --retry 3 --retry 0 -o f https://x'
+
+expect_command wrapper-env 1 'env curl -o f https://x'
+expect_command wrapper-assignment 1 'FOO=1 curl -o f https://x'
+expect_command wrapper-env-assignment 1 'env VAR=1 curl -o f https://x'
+expect_command wrapper-env-flag 1 'env -i curl -o f https://x'
+expect_command wrapper-sudo-flag 1 'sudo -E curl -o f https://x'
+expect_command wrapper-sudo-user 1 'sudo -u root curl -o f https://x'
+expect_command wrapper-nice-value 1 'nice -n 10 curl -o f https://x'
+expect_command not-a-wrapper 0 'echo curl -o f https://x' 0
+expect_command wrapper-env-retry 0 'env curl --retry 3 -o f https://x'
+expect_command wrapper-nested 1 'FOO=1 env -i BAR=2 command curl -o f https://x'
+for wrapper in sudo exec time nice command; do
+    expect_command "wrapper-$wrapper" 1 "$wrapper curl -o f https://x"
+done
+
+expect_command quoted-fragment 1 'curl -o f "https://x/a#b"'
+expect_command comment-retry 1 'curl -o f https://x # --retry 3'
+expect_command fragment-retry 0 'curl --retry 3 -o f https://x/a#b'
+expect_command fragment-before-output 1 'curl https://x/a#b -o f'
+expect_command fragment-before-retry 0 'curl -o f https://x/a#b --retry 3'
+expect_command comment-unclosed-quote 1 'curl -o f https://x # " --retry 3'
+expect_command malformed-quote 2 'curl -o f "https://x'
+
+expect_command redirect-attached 1 'curl https://x >f'
+expect_command redirect-separate 1 'curl https://x > f'
+expect_command redirect-append 1 'curl https://x >>f'
+expect_command redirect-fd-one 1 'curl https://x 1>f'
+expect_command redirect-fd-one-append 1 'curl https://x 1>>f'
+expect_command redirect-both 1 'curl https://x &>f'
+expect_command redirect-both-append 1 'curl https://x &>>f'
+expect_command redirect-append-separate 1 'curl https://x >> f'
+expect_command redirect-fd-one-separate 1 'curl https://x 1> f'
+expect_command redirect-fd-one-append-separate 1 'curl https://x 1>> f'
+expect_command redirect-both-separate 1 'curl https://x &> f'
+expect_command redirect-both-append-separate 1 'curl https://x &>> f'
+expect_command redirect-null 0 'curl https://x > /dev/null' 0
+expect_command redirect-stderr 0 'curl https://x 2>f' 0
+expect_command redirect-stderr-append 0 'curl https://x 2>>f' 0
+expect_command redirect-background 0 'curl https://x & > f' 0
+expect_command redirect-retry 0 'curl --retry 3 https://x > f'
+expect_command redirect-dash 1 'curl https://x > -'
+expect_command output-dash 0 'curl https://x -o -' 0
+expect_command redirect-adjacent-url 1 'curl https://x>f'
+expect_command redirect-spaced-fd 1 'curl https://x 2 > f'
+expect_command redirect-after-retried-command 1 'curl --retry 3 https://x; curl https://y > f'
 
 echo "download_retry_check: all cases passed"

@@ -18,9 +18,13 @@ from collections.abc import Iterator
 from pathlib import Path
 
 GIT_TIMEOUT_SECONDS = 60
-COMMAND_START = re.compile(r"(?:^|[;&|])\s*(?:(?:if|elif|while|until|then|do|!|command)\s+)*curl\b")
-COMMAND_PREFIXES = {"if", "elif", "while", "until", "then", "do", "!", "command"}
+COMMAND_START = re.compile(r"\bcurl\b")
+COMMAND_WRAPPERS = {"env", "sudo", "exec", "time", "nice", "command"}
+COMMAND_PREFIXES = {"if", "elif", "while", "until", "then", "do", "!"}
 COMMAND_SEPARATORS = {";", "&&", "||", "|", "&"}
+ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")
+REDIRECT = re.compile(r"(?:[0-9]+|&)?>>?")
+STDOUT_REDIRECTS = {">", ">>", "1>", "1>>", "&>", "&>>"}
 
 
 def git_tracked_files(root: Path) -> list[str]:
@@ -57,22 +61,69 @@ def logical_lines(content: str) -> Iterator[tuple[int, str]]:
         yield start, pending
 
 
+def shell_tokens(line: str) -> Iterator[str]:
+    """Preserve redirect operators and fragments; stop at shell comment words."""
+    lexer = shlex.shlex(line, posix=True, punctuation_chars=";&|()>")
+    lexer.whitespace_split = True
+    lexer.commenters = ""
+    for token in lexer:
+        if token.startswith("#"):
+            break
+        # shlex reads one character ahead: only adjacent digits name a descriptor.
+        position = lexer.instream.tell()
+        if re.fullmatch(r"[0-9]+", token) and line[position - 1:position] == ">":
+            token += next(lexer)
+        yield token
+
+
+def curl_arguments(command: list[str]) -> list[str] | None:
+    """Skip shell control words, assignments and command wrappers before curl.
+
+    After a wrapper word, its own options and their values (`sudo -u root`,
+    `nice -n 10`) come before the wrapped command, so the first `curl` token wins.
+    """
+    wrapped = False
+    for index, token in enumerate(command):
+        if token == "curl":
+            return command[index + 1:]
+        if token in COMMAND_WRAPPERS:
+            wrapped = True
+        elif not (wrapped or token in COMMAND_PREFIXES or ASSIGNMENT.match(token)):
+            return None
+    return None
+
+
 def curl_commands(line: str) -> Iterator[list[str]]:
     """Tokenize standalone curl calls without treating quoted fixture text as code."""
     if not COMMAND_START.search(line):
         return
-    lexer = shlex.shlex(line, posix=True, punctuation_chars=";&|()")
-    lexer.whitespace_split = True
     command: list[str] = []
-    for token in [*lexer, ";"]:
+    for token in [*shell_tokens(line), ";"]:
         if token in COMMAND_SEPARATORS:
-            if command and command[0] == "curl":
-                yield command[1:]
+            arguments = curl_arguments(command)
+            if arguments is not None:
+                yield arguments
             command = []
-        elif not command and token in COMMAND_PREFIXES:
-            continue
         else:
             command.append(token)
+
+
+def output_file(token: str, tokens: Iterator[str]) -> bool | None:
+    """Classify curl outputs and shell redirects, consuming their filenames."""
+    if token in {"--remote-name", "-O"}:
+        return True
+    if token.startswith("--output="):
+        return token.partition("=")[2] not in {"/dev/null", "-"}
+    if token.startswith("-o") and token != "-o":
+        return token[2:] not in {"/dev/null", "-"}
+    if token in {"--output", "-o"} or REDIRECT.fullmatch(token):
+        target = next(tokens, None)
+        if target is None:
+            raise ValueError("curl output option or redirect missing filename")
+        if token in STDOUT_REDIRECTS:
+            return target != "/dev/null"
+        return token in {"--output", "-o"} and target not in {"/dev/null", "-"}
+    return None
 
 
 def is_download(arguments: list[str]) -> bool:
@@ -81,20 +132,31 @@ def is_download(arguments: list[str]) -> bool:
     urls: list[str] = []
     tokens = iter(arguments)
     for token in tokens:
-        if token in {"--output", "-o"}:
-            target = next(tokens, None)
-            if target is None:
-                raise ValueError("curl output option missing filename")
-            output |= target not in {"/dev/null", "-"}
-        elif token.startswith("--output="):
-            output |= token.partition("=")[2] not in {"/dev/null", "-"}
-        elif token.startswith("-o"):
-            output |= token[2:] not in {"/dev/null", "-"}
-        elif token in {"--remote-name", "-O"}:
-            output = True
-        else:
+        file_output = output_file(token, tokens)
+        if file_output is None:
             urls.append(token)
+        else:
+            output |= file_output
     return output and any(url.startswith(("https://", "$")) for url in urls)
+
+
+def has_positive_retry(arguments: list[str]) -> bool:
+    """Require a positive decimal integer in the last retry option."""
+    value = None
+    tokens = iter(arguments)
+    for token in tokens:
+        if token == "--retry":
+            value = next(tokens, "")
+        elif token.startswith("--retry="):
+            value = token.partition("=")[2]
+    try:
+        return (
+            value is not None
+            and re.fullmatch(r"\+?[0-9]+", value) is not None
+            and int(value) > 0
+        )
+    except ValueError:
+        return False
 
 
 def scan_repository(root: Path) -> tuple[int, list[str]]:
@@ -110,7 +172,7 @@ def scan_repository(root: Path) -> tuple[int, list[str]]:
             for arguments in curl_commands(line):
                 if is_download(arguments):
                     downloads += 1
-                    if not any(arg == "--retry" or arg.startswith("--retry=") for arg in arguments):
+                    if not has_positive_retry(arguments):
                         findings.append(f"{rel_path}:{line_no}: curl download without --retry")
     return downloads, findings
 
