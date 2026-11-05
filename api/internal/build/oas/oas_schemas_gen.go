@@ -3196,6 +3196,265 @@ func (s *EventLevel) UnmarshalText(data []byte) error {
 	}
 }
 
+// Read-only foreign-title search preflight report for an instance. SnatchArr never changes the
+// profile.
+// Ref: #/components/schemas/ForeignSearchPreflight
+type ForeignSearchPreflight struct {
+	// True when the instance is Radarr and foreign-title language preflight applies.
+	Applies bool `json:"applies"`
+	// Supported foreign-title rule language codes, sorted.
+	Languages []string `json:"languages"`
+	// Quality profiles of the instance with per-language preflight verdicts.
+	Profiles []ForeignSearchProfile `json:"profiles"`
+}
+
+// GetApplies returns the value of Applies.
+func (s *ForeignSearchPreflight) GetApplies() bool {
+	return s.Applies
+}
+
+// GetLanguages returns the value of Languages.
+func (s *ForeignSearchPreflight) GetLanguages() []string {
+	return s.Languages
+}
+
+// GetProfiles returns the value of Profiles.
+func (s *ForeignSearchPreflight) GetProfiles() []ForeignSearchProfile {
+	return s.Profiles
+}
+
+// SetApplies sets the value of Applies.
+func (s *ForeignSearchPreflight) SetApplies(val bool) {
+	s.Applies = val
+}
+
+// SetLanguages sets the value of Languages.
+func (s *ForeignSearchPreflight) SetLanguages(val []string) {
+	s.Languages = val
+}
+
+// SetProfiles sets the value of Profiles.
+func (s *ForeignSearchPreflight) SetProfiles(val []ForeignSearchProfile) {
+	s.Profiles = val
+}
+
+// Ref: #/components/schemas/ForeignSearchProfile
+type ForeignSearchProfile struct {
+	ID              int32             `json:"id"`
+	Name            string            `json:"name"`
+	ProfileLanguage NilRadarrLanguage `json:"profile_language"`
+	// Preflight verdicts per supported foreign-title language.
+	Verdicts []ForeignSearchVerdict `json:"verdicts"`
+}
+
+// GetID returns the value of ID.
+func (s *ForeignSearchProfile) GetID() int32 {
+	return s.ID
+}
+
+// GetName returns the value of Name.
+func (s *ForeignSearchProfile) GetName() string {
+	return s.Name
+}
+
+// GetProfileLanguage returns the value of ProfileLanguage.
+func (s *ForeignSearchProfile) GetProfileLanguage() NilRadarrLanguage {
+	return s.ProfileLanguage
+}
+
+// GetVerdicts returns the value of Verdicts.
+func (s *ForeignSearchProfile) GetVerdicts() []ForeignSearchVerdict {
+	return s.Verdicts
+}
+
+// SetID sets the value of ID.
+func (s *ForeignSearchProfile) SetID(val int32) {
+	s.ID = val
+}
+
+// SetName sets the value of Name.
+func (s *ForeignSearchProfile) SetName(val string) {
+	s.Name = val
+}
+
+// SetProfileLanguage sets the value of ProfileLanguage.
+func (s *ForeignSearchProfile) SetProfileLanguage(val NilRadarrLanguage) {
+	s.ProfileLanguage = val
+}
+
+// SetVerdicts sets the value of Verdicts.
+func (s *ForeignSearchProfile) SetVerdicts(val []ForeignSearchVerdict) {
+	s.Verdicts = val
+}
+
+// Ref: #/components/schemas/ForeignSearchVerdict
+type ForeignSearchVerdict struct {
+	Language string                      `json:"language"`
+	Verdict  ForeignSearchVerdictVerdict `json:"verdict"`
+	Reason   ForeignSearchVerdictReason  `json:"reason"`
+}
+
+// GetLanguage returns the value of Language.
+func (s *ForeignSearchVerdict) GetLanguage() string {
+	return s.Language
+}
+
+// GetVerdict returns the value of Verdict.
+func (s *ForeignSearchVerdict) GetVerdict() ForeignSearchVerdictVerdict {
+	return s.Verdict
+}
+
+// GetReason returns the value of Reason.
+func (s *ForeignSearchVerdict) GetReason() ForeignSearchVerdictReason {
+	return s.Reason
+}
+
+// SetLanguage sets the value of Language.
+func (s *ForeignSearchVerdict) SetLanguage(val string) {
+	s.Language = val
+}
+
+// SetVerdict sets the value of Verdict.
+func (s *ForeignSearchVerdict) SetVerdict(val ForeignSearchVerdictVerdict) {
+	s.Verdict = val
+}
+
+// SetReason sets the value of Reason.
+func (s *ForeignSearchVerdict) SetReason(val ForeignSearchVerdictReason) {
+	s.Reason = val
+}
+
+type ForeignSearchVerdictReason string
+
+const (
+	ForeignSearchVerdictReasonProfileAny               ForeignSearchVerdictReason = "profile_any"
+	ForeignSearchVerdictReasonProfileLanguageMatch     ForeignSearchVerdictReason = "profile_language_match"
+	ForeignSearchVerdictReasonProfileOriginal          ForeignSearchVerdictReason = "profile_original"
+	ForeignSearchVerdictReasonProfileLanguageMismatch  ForeignSearchVerdictReason = "profile_language_mismatch"
+	ForeignSearchVerdictReasonProfileLanguageMissing   ForeignSearchVerdictReason = "profile_language_missing"
+	ForeignSearchVerdictReasonLanguageUnmapped         ForeignSearchVerdictReason = "language_unmapped"
+	ForeignSearchVerdictReasonOriginalLanguageMatch    ForeignSearchVerdictReason = "original_language_match"
+	ForeignSearchVerdictReasonOriginalLanguageMismatch ForeignSearchVerdictReason = "original_language_mismatch"
+)
+
+// AllValues returns all ForeignSearchVerdictReason values.
+func (ForeignSearchVerdictReason) AllValues() []ForeignSearchVerdictReason {
+	return []ForeignSearchVerdictReason{
+		ForeignSearchVerdictReasonProfileAny,
+		ForeignSearchVerdictReasonProfileLanguageMatch,
+		ForeignSearchVerdictReasonProfileOriginal,
+		ForeignSearchVerdictReasonProfileLanguageMismatch,
+		ForeignSearchVerdictReasonProfileLanguageMissing,
+		ForeignSearchVerdictReasonLanguageUnmapped,
+		ForeignSearchVerdictReasonOriginalLanguageMatch,
+		ForeignSearchVerdictReasonOriginalLanguageMismatch,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s ForeignSearchVerdictReason) MarshalText() ([]byte, error) {
+	switch s {
+	case ForeignSearchVerdictReasonProfileAny:
+		return []byte(s), nil
+	case ForeignSearchVerdictReasonProfileLanguageMatch:
+		return []byte(s), nil
+	case ForeignSearchVerdictReasonProfileOriginal:
+		return []byte(s), nil
+	case ForeignSearchVerdictReasonProfileLanguageMismatch:
+		return []byte(s), nil
+	case ForeignSearchVerdictReasonProfileLanguageMissing:
+		return []byte(s), nil
+	case ForeignSearchVerdictReasonLanguageUnmapped:
+		return []byte(s), nil
+	case ForeignSearchVerdictReasonOriginalLanguageMatch:
+		return []byte(s), nil
+	case ForeignSearchVerdictReasonOriginalLanguageMismatch:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *ForeignSearchVerdictReason) UnmarshalText(data []byte) error {
+	switch ForeignSearchVerdictReason(data) {
+	case ForeignSearchVerdictReasonProfileAny:
+		*s = ForeignSearchVerdictReasonProfileAny
+		return nil
+	case ForeignSearchVerdictReasonProfileLanguageMatch:
+		*s = ForeignSearchVerdictReasonProfileLanguageMatch
+		return nil
+	case ForeignSearchVerdictReasonProfileOriginal:
+		*s = ForeignSearchVerdictReasonProfileOriginal
+		return nil
+	case ForeignSearchVerdictReasonProfileLanguageMismatch:
+		*s = ForeignSearchVerdictReasonProfileLanguageMismatch
+		return nil
+	case ForeignSearchVerdictReasonProfileLanguageMissing:
+		*s = ForeignSearchVerdictReasonProfileLanguageMissing
+		return nil
+	case ForeignSearchVerdictReasonLanguageUnmapped:
+		*s = ForeignSearchVerdictReasonLanguageUnmapped
+		return nil
+	case ForeignSearchVerdictReasonOriginalLanguageMatch:
+		*s = ForeignSearchVerdictReasonOriginalLanguageMatch
+		return nil
+	case ForeignSearchVerdictReasonOriginalLanguageMismatch:
+		*s = ForeignSearchVerdictReasonOriginalLanguageMismatch
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+type ForeignSearchVerdictVerdict string
+
+const (
+	ForeignSearchVerdictVerdictAllowed      ForeignSearchVerdictVerdict = "allowed"
+	ForeignSearchVerdictVerdictOriginalOnly ForeignSearchVerdictVerdict = "original_only"
+	ForeignSearchVerdictVerdictSkipped      ForeignSearchVerdictVerdict = "skipped"
+)
+
+// AllValues returns all ForeignSearchVerdictVerdict values.
+func (ForeignSearchVerdictVerdict) AllValues() []ForeignSearchVerdictVerdict {
+	return []ForeignSearchVerdictVerdict{
+		ForeignSearchVerdictVerdictAllowed,
+		ForeignSearchVerdictVerdictOriginalOnly,
+		ForeignSearchVerdictVerdictSkipped,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s ForeignSearchVerdictVerdict) MarshalText() ([]byte, error) {
+	switch s {
+	case ForeignSearchVerdictVerdictAllowed:
+		return []byte(s), nil
+	case ForeignSearchVerdictVerdictOriginalOnly:
+		return []byte(s), nil
+	case ForeignSearchVerdictVerdictSkipped:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *ForeignSearchVerdictVerdict) UnmarshalText(data []byte) error {
+	switch ForeignSearchVerdictVerdict(data) {
+	case ForeignSearchVerdictVerdictAllowed:
+		*s = ForeignSearchVerdictVerdictAllowed
+		return nil
+	case ForeignSearchVerdictVerdictOriginalOnly:
+		*s = ForeignSearchVerdictVerdictOriginalOnly
+		return nil
+	case ForeignSearchVerdictVerdictSkipped:
+		*s = ForeignSearchVerdictVerdictSkipped
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
 type GetRuntimeSettingsForbidden ProblemStatusCode
 
 func (*GetRuntimeSettingsForbidden) getRuntimeSettingsRes() {}
@@ -4505,6 +4764,51 @@ func (o NilInt) Get() (v int, ok bool) {
 
 // Or returns value if set, or given parameter if does not.
 func (o NilInt) Or(d int) int {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewNilRadarrLanguage returns new NilRadarrLanguage with value set to v.
+func NewNilRadarrLanguage(v RadarrLanguage) NilRadarrLanguage {
+	return NilRadarrLanguage{
+		Value: v,
+	}
+}
+
+// NilRadarrLanguage is nullable RadarrLanguage.
+type NilRadarrLanguage struct {
+	Value RadarrLanguage
+	Null  bool
+}
+
+// SetTo sets value to v.
+func (o *NilRadarrLanguage) SetTo(v RadarrLanguage) {
+	o.Null = false
+	o.Value = v
+}
+
+// IsNull returns true if value is Null.
+func (o NilRadarrLanguage) IsNull() bool { return o.Null }
+
+// SetToNull sets value to null.
+func (o *NilRadarrLanguage) SetToNull() {
+	o.Null = true
+	var v RadarrLanguage
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o NilRadarrLanguage) Get() (v RadarrLanguage, ok bool) {
+	if o.Null {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o NilRadarrLanguage) Or(d RadarrLanguage) RadarrLanguage {
 	if v, ok := o.Get(); ok {
 		return v
 	}
@@ -8209,6 +8513,32 @@ func (s *QueueStrike) SetImportedAt(val OptDateTime) {
 // SetImportRefused sets the value of ImportRefused.
 func (s *QueueStrike) SetImportRefused(val OptBool) {
 	s.ImportRefused = val
+}
+
+// Ref: #/components/schemas/RadarrLanguage
+type RadarrLanguage struct {
+	ID   int32  `json:"id"`
+	Name string `json:"name"`
+}
+
+// GetID returns the value of ID.
+func (s *RadarrLanguage) GetID() int32 {
+	return s.ID
+}
+
+// GetName returns the value of Name.
+func (s *RadarrLanguage) GetName() string {
+	return s.Name
+}
+
+// SetID sets the value of ID.
+func (s *RadarrLanguage) SetID(val int32) {
+	s.ID = val
+}
+
+// SetName sets the value of Name.
+func (s *RadarrLanguage) SetName(val string) {
+	s.Name = val
 }
 
 // Ref: #/components/schemas/RequestsSettings

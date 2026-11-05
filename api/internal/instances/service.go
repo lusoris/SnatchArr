@@ -263,15 +263,21 @@ func (s *Service) TestInput(ctx context.Context, in Input) (arrclient.Result, er
 
 // Credentials decrypts what the worker needs for a lease.
 func (s *Service) Credentials(ctx context.Context, instID uuid.UUID) (Credentials, error) {
+	_, creds, err := s.GetWithCredentials(ctx, instID)
+	return creds, err
+}
+
+// GetWithCredentials reads instance metadata and decrypted credentials from one row snapshot.
+func (s *Service) GetWithCredentials(ctx context.Context, instID uuid.UUID) (domain.Instance, Credentials, error) {
 	row, err := s.st.Q().GetInstance(ctx, instID)
 	if err != nil {
-		return Credentials{}, fmt.Errorf("instances: get: %w", store.MapError(err))
+		return domain.Instance{}, Credentials{}, fmt.Errorf("instances: get: %w", store.MapError(err))
 	}
 	apiKey, err := s.decryptAPIKey(row.ApiKeyEnc)
 	if err != nil {
-		return Credentials{}, err
+		return domain.Instance{}, Credentials{}, err
 	}
-	return Credentials{BaseURL: row.BaseUrl, APIKey: apiKey}, nil
+	return store.InstanceFromRow(row), Credentials{BaseURL: row.BaseUrl, APIKey: apiKey}, nil
 }
 
 func (s *Service) decryptAPIKey(sealed []byte) (string, error) {
