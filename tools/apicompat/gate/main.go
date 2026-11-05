@@ -74,6 +74,7 @@ import (
 	"flag"
 	"fmt"
 	"go/ast"
+	"go/build"
 	"go/format"
 	"go/parser"
 	"go/token"
@@ -98,7 +99,7 @@ const (
 	// checkerPackage is the checker, github.com/joelanford/go-apidiff, built from the pinned build
 	// module (checkerGoMod, checkerGoSum, checkerTools) rather than installed as module@version.
 	// The build module requires go-apidiff at commit c3e0953fa2fd of its main branch (2026-09-10),
-	// the newest upstream commit, and golang.org/x/tools v0.51.0 exactly. Its newest release,
+	// the newest upstream commit, and golang.org/x/tools v0.52.0 exactly. Its newest release,
 	// v0.8.3, builds against x/tools v0.33.0 and the commit against v0.49.0, which reads export
 	// data up to version 4; Go 1.27.2 writes version 5, so either checker reads every package as
 	// empty and passes every module (#1049). The CLI is "go-apidiff <oldCommit> [newCommit]
@@ -134,10 +135,15 @@ const (
 	maxExceptions  = 1024
 	exceptionsDate = "2006-01-02"
 
-	runTimeout     = 3 * time.Hour
-	gitTimeout     = 2 * time.Minute
-	installTimeout = 10 * time.Minute
-	moduleTimeout  = 30 * time.Minute
+	runTimeout      = 55 * time.Minute
+	gitTimeout      = 2 * time.Minute
+	installTimeout  = 10 * time.Minute
+	moduleTimeout   = 30 * time.Minute
+	downloadTimeout = 5 * time.Minute
+
+	downloadAttempts = 3
+	firstBackoff     = 5 * time.Second
+	secondBackoff    = 15 * time.Second
 )
 
 // The checker's build module, written to a temporary directory by buildChecker. It is the text
@@ -156,7 +162,7 @@ go 1.26.0
 
 require (
 	github.com/joelanford/go-apidiff v0.8.4-0.20260910211158-c3e0953fa2fd
-	golang.org/x/tools v0.51.0
+	golang.org/x/tools v0.52.0
 )
 
 require (
@@ -180,12 +186,12 @@ require (
 	github.com/spf13/cobra v1.10.2 // indirect
 	github.com/spf13/pflag v1.0.9 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
-	golang.org/x/crypto v0.57.0 // indirect
+	golang.org/x/crypto v0.58.0 // indirect
 	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f // indirect
-	golang.org/x/mod v0.41.0 // indirect
-	golang.org/x/net v0.59.0 // indirect
-	golang.org/x/sync v0.23.0 // indirect
-	golang.org/x/sys v0.48.0 // indirect
+	golang.org/x/mod v0.42.0 // indirect
+	golang.org/x/net v0.61.0 // indirect
+	golang.org/x/sync v0.24.0 // indirect
+	golang.org/x/sys v0.49.0 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 )
 `
@@ -281,34 +287,34 @@ github.com/xanzy/ssh-agent v0.3.3 h1:+/15pJfg/RsTxqYcX6fHqOXZwwMP+2VyYWJeWM2qQFM
 github.com/xanzy/ssh-agent v0.3.3/go.mod h1:6dzNDKs0J9rVPHPhaGCukekBHKqfl+L3KghI1Bc68Uw=
 go.yaml.in/yaml/v3 v3.0.4/go.mod h1:DhzuOOF2ATzADvBadXxruRBLzYTpT36CKvDb3+aBEFg=
 golang.org/x/crypto v0.0.0-20220622213112-05595931fe9d/go.mod h1:IxCIyHEi3zRg3s0A5j5BB6A9Jmi73HwBIUl50j+osU4=
-golang.org/x/crypto v0.57.0 h1:3ZVCjf8Ggz7zneR/EHRVx68Ctf+2pmIMP2UFhh9cC6M=
-golang.org/x/crypto v0.57.0/go.mod h1:Fdz0i5U6CoizGwLda9DttjSk6qlZo25zYNtR+ycvuZA=
+golang.org/x/crypto v0.58.0 h1:COkYLr4k7nDI4r6QtMML2AfzeIswWHAJthLS6K/M/54=
+golang.org/x/crypto v0.58.0/go.mod h1:Xh+kl5A+M0gMiWDytH2Hhr5Z7WbNCpv/eB/EFgfSk+w=
 golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f h1:W3F4c+6OLc6H2lb//N1q4WpJkhzJCK5J6kUi1NTVXfM=
 golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f/go.mod h1:J1xhfL/vlindoeF/aINzNzt2Bket5bjo9sdOYzOsU80=
-golang.org/x/mod v0.41.0 h1:qJmnOUb4YB+FsEuM3HcWucdZASCPGhsX6uljO6pog0c=
-golang.org/x/mod v0.41.0/go.mod h1:Ek9pY8RKWXwsWvd3rQiHYtMqkjSUV+s1Rj7j4H5Ur6o=
+golang.org/x/mod v0.42.0 h1:ICeL3t2L30ljSPHHxDnR4fqVcBt/zR2zJAb9juavmQg=
+golang.org/x/mod v0.42.0/go.mod h1:u5fzIrRInkL8MaO1cbRkUHT64v303YIT5KEqpNr7jRs=
 golang.org/x/net v0.0.0-20211112202133-69e39bad7dc2/go.mod h1:9nx3DQGgdP8bBQD5qxJ1jj9UTztislL4KSBs9R2vV5Y=
-golang.org/x/net v0.59.0 h1:5zfYln+w5XCxwrnMMJPufRgNoXEaGxl0wo5GqPXyues=
-golang.org/x/net v0.59.0/go.mod h1:2DA/G1UfVbCpQPeWTmMPGY7Cs2PkBkwu743bVX5PIVg=
-golang.org/x/sync v0.23.0 h1:KameEIfc1IkluZyXWLn39Wd4tURc6GbCiISGiZm2bQk=
-golang.org/x/sync v0.23.0/go.mod h1:sUUOizhqBxiL6pEWpqNLUiaJn1ShEbZ6BBqskPbjZm0=
+golang.org/x/net v0.61.0 h1:RR+6j/BTBCrggOLugxa+66R8FvoN6MHlzDlZIbN9YFw=
+golang.org/x/net v0.61.0/go.mod h1:WgDCOTH8iwtB66T4/GfI94AHo/hhdb7Hah9NDseQfiI=
+golang.org/x/sync v0.24.0 h1:iqiDrGoDgyuvAKrhLQthUEzU/R378N78gXbBjxed7oA=
+golang.org/x/sync v0.24.0/go.mod h1:sUUOizhqBxiL6pEWpqNLUiaJn1ShEbZ6BBqskPbjZm0=
 golang.org/x/sys v0.0.0-20191026070338-33540a1f6037/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
 golang.org/x/sys v0.0.0-20201119102817-f84b799fce68/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
 golang.org/x/sys v0.0.0-20210124154548-22da62e12c0c/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
 golang.org/x/sys v0.0.0-20210423082822-04245dca01da/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
 golang.org/x/sys v0.0.0-20210615035016-665e8c7367d1/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
 golang.org/x/sys v0.0.0-20220715151400-c0bba94af5f8/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
-golang.org/x/sys v0.48.0 h1:bbX/i/6MgT9BVLM9RT1thmxL04yeTAhbEz4SyadbXoo=
-golang.org/x/sys v0.48.0/go.mod h1:hNLxWAXmnKAxqDtdwIYC4bM9oQPEecfsnNMuSxOs3og=
+golang.org/x/sys v0.49.0 h1:XbzkgYJHdqh/8m2Uu0W/dQv8nktxx4BFHp1M0gROTXA=
+golang.org/x/sys v0.49.0/go.mod h1:hNLxWAXmnKAxqDtdwIYC4bM9oQPEecfsnNMuSxOs3og=
 golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1/go.mod h1:bj7SfCRtBDWHUb9snDiAeCFNEtKQo2Wmx5Cou7ajbmo=
-golang.org/x/term v0.46.0 h1:3+OXuTbaKDgwk8jTi3aSLHRlmWqHEUDUtxnbFigO4YE=
-golang.org/x/term v0.46.0/go.mod h1:+K02xbkittuwc0Am4abfA3Fc+XRGXkvBXNO88NCXPoc=
+golang.org/x/term v0.47.0 h1:cpyOwQkr2Nzxe2p6KnrTG7Ei2wtzjsuSjhpXXepZ/BM=
+golang.org/x/term v0.47.0/go.mod h1:efAfAuG6RKABvg1ArGebRkvX6LXul14SM67o2e4mUCY=
 golang.org/x/text v0.3.6/go.mod h1:5Zoc/QRtKVWzQhOtBMvqHzDpF6irO9z98xDceosuGiQ=
-golang.org/x/text v0.42.0 h1:JbOZXgfeCPU9gacVtYliJqOhD+zhrEqK4LfdpmlUZqI=
-golang.org/x/text v0.42.0/go.mod h1:ojzP1Z+2QtioaF8DTtO8K5q7JWVVYwZKenzujK0Zd0E=
+golang.org/x/text v0.43.0 h1:1QivrlhwAsnMOcqgOdl9my7s9OyZl8O5/UGUTJVXoWc=
+golang.org/x/text v0.43.0/go.mod h1:hbSIYA/amXcRXTFSZqh8tWHEoqRvvbKPJ2uz/KU+a+s=
 golang.org/x/tools v0.0.0-20180917221912-90fa682c2a6e/go.mod h1:n7NCudcB/nEzxVGmLbDWY5pfWTLqBcC2KZ6jyYvM4mQ=
-golang.org/x/tools v0.51.0 h1:k4Xc/1Om9jwkBJBo4NVLMSARBoWtK10mx+W5BnXCeAI=
-golang.org/x/tools v0.51.0/go.mod h1:9eEncMayCV6zRMGhR5eZEC2iBx98qWcF1HZ9Z7wJOoA=
+golang.org/x/tools v0.52.0 h1:ryxg4U63oaUYk7uOLTF37n43f4qgtGvqV4Ioit1BaEs=
+golang.org/x/tools v0.52.0/go.mod h1:ItcP5UNaVGG+Yc4eIYmaFLNJ4soEopkx5Y2d4lcEurs=
 golang.org/x/tools/go/expect v0.1.1-deprecated h1:jpBZDwmgPhXsKZC6WhL20P4b/wmnpsEAGHaNy0n/rJM=
 golang.org/x/tools/go/expect v0.1.1-deprecated/go.mod h1:eihoPOH+FgIqa3FpoTwguz/bVUSGBlGQU67vpBeOrBY=
 golang.org/x/tools/go/packages/packagestest v0.1.1-deprecated h1:1h2MnaIAIXISqTFKdENegdpAgUXz6NrPEsbIeWaBRvM=
@@ -544,6 +550,8 @@ type repository struct {
 	// exceptions are the manifest's module exceptions and today the UTC day they are judged on.
 	exceptions []exception
 	today      time.Time
+	runner     toolRunner
+	wait       waitFunc
 }
 
 // policy is the compatibility policy: whether an incompatible change fails the gate, and why.
@@ -898,8 +906,12 @@ func compareEach(
 	for index := 0; index < len(plan.compared) && index < maxModules; index++ {
 		target := plan.compared[index]
 		stdout.printf("Comparing %s (%s) from %s to %s\n", target.dir, target.path, short(repo.base), short(repo.head))
-		buildErr := buildModule(ctx, repo.root, target.dir, stderr.w)
+		buildErr := buildModule(ctx, repo.root, target.dir, stderr.w, repo.runner, repo.wait)
 		if buildErr != nil {
+			var dlErr *downloadError
+			if errors.As(buildErr, &dlErr) {
+				return nil, fmt.Errorf("module %s (%s): %w", target.dir, target.path, buildErr)
+			}
 			note, err := excuseBuildFailure(repo, target, buildErr, stderr)
 			if err != nil {
 				return nil, err
@@ -916,13 +928,522 @@ func compareEach(
 	return results, nil
 }
 
-// buildModule builds the module's packages at HEAD in the repository at root. The checker reads
-// a package it cannot type-check as empty without saying so, so a module that does not build
-// would otherwise read as compatible; go list -export builds what the checker loads and writes
-// nothing into the working tree.
-func buildModule(ctx context.Context, root, dir string, stderr io.Writer) error {
+// toolRunner executes a command in dir with arguments under context.
+type toolRunner func(ctx context.Context, dir string, stdout, stderr io.Writer, name string, args ...string) error
+
+// waitFunc waits for duration d or until ctx is done.
+type waitFunc func(ctx context.Context, d time.Duration) error
+
+// downloadError reports persistent module download failure across attempts.
+type downloadError struct {
+	dir      string
+	attempts int
+	err      error
+}
+
+func (e *downloadError) Error() string {
+	return fmt.Sprintf("download dependencies of module %s failed after %d attempts: %v", e.dir, e.attempts, e.err)
+}
+
+func (e *downloadError) Unwrap() error {
+	return e.err
+}
+
+// defaultWait waits for duration d, stopping early if ctx is done.
+func defaultWait(ctx context.Context, d time.Duration) error {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+type modRequirement struct {
+	path    string
+	version string
+}
+
+// parseRequireLine extracts module path and version from a single require directive line.
+func parseRequireLine(line string) (modRequirement, bool) {
+	code, _, _ := strings.Cut(line, "//")
+	code = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(code), "require"))
+	fields := strings.Fields(code)
+	if len(fields) != 2 {
+		return modRequirement{}, false
+	}
+	modPath, err := unquotedModulePath(fields[0])
+	if err != nil {
+		return modRequirement{}, false
+	}
+	return modRequirement{path: modPath, version: fields[1]}, true
+}
+
+// isBlockOpen reports whether trimmed opens a multiline directive block with a parenthesis.
+func isBlockOpen(trimmed, directive string) bool {
+	rest, ok := strings.CutPrefix(trimmed, directive)
+	return ok && strings.TrimSpace(rest) == "("
+}
+
+// hasDirectivePrefix reports whether trimmed starts with the given go.mod directive name.
+func hasDirectivePrefix(trimmed, directive string) bool {
+	return strings.HasPrefix(trimmed, directive+" ") || strings.HasPrefix(trimmed, directive+"\t")
+}
+
+// isLocalPath reports whether target refers to a local file system directory across platforms.
+func isLocalPath(target string) bool {
+	// Match modfile.IsDirectoryPath across hosts; the shipped gate uses only the standard library.
+	switch {
+	case target == ".", target == "..":
+		return true
+	case strings.HasPrefix(target, "/"), strings.HasPrefix(target, `\`):
+		return true
+	case strings.HasPrefix(target, "./"), strings.HasPrefix(target, `.\`):
+		return true
+	case strings.HasPrefix(target, "../"), strings.HasPrefix(target, `..\`):
+		return true
+	default:
+		return isDrivePath(target)
+	}
+}
+
+// isDrivePath reports whether target begins with a Windows drive letter prefix.
+func isDrivePath(target string) bool {
+	if len(target) < 2 || target[1] != ':' {
+		return false
+	}
+	return ('A' <= target[0] && target[0] <= 'Z') || ('a' <= target[0] && target[0] <= 'z')
+}
+
+// parseLocalReplace parses a replace directive line pointing to a local directory path.
+func parseLocalReplace(line string) (string, string, bool) {
+	code, _, _ := strings.Cut(line, "//")
+	before, after, ok := strings.Cut(strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(code), "replace")), "=>")
+	if !ok {
+		return "", "", false
+	}
+	left, right := strings.Fields(before), strings.Fields(after)
+	if (len(left) != 1 && len(left) != 2) || len(right) != 1 || !isLocalPath(right[0]) {
+		return "", "", false
+	}
+	modPath, err := unquotedModulePath(left[0])
+	if err != nil {
+		return "", "", false
+	}
+	version := ""
+	if len(left) == 2 {
+		version = left[1]
+	}
+	return modPath, version, true
+}
+
+type goModScan struct {
+	raw           []modRequirement
+	localReplaced map[string]bool
+	inRequire     bool
+	inReplace     bool
+}
+
+// step processes a single trimmed line during go.mod requirement and replacement scanning.
+func (s *goModScan) step(trimmed string) {
+	switch {
+	case isBlockOpen(trimmed, "require"):
+		s.inRequire = true
+	case isBlockOpen(trimmed, "replace"):
+		s.inReplace = true
+	case trimmed == ")":
+		s.inRequire, s.inReplace = false, false
+	case s.inReplace || hasDirectivePrefix(trimmed, "replace"):
+		if modPath, version, ok := parseLocalReplace(trimmed); ok {
+			key := modPath
+			if version != "" {
+				key = modPath + "@" + version
+			}
+			s.localReplaced[key] = true
+		}
+	case s.inRequire || hasDirectivePrefix(trimmed, "require"):
+		if req, ok := parseRequireLine(trimmed); ok {
+			s.raw = append(s.raw, req)
+		}
+	}
+}
+
+// parseGoModRequirements extracts module requirements excluding locally replaced targets.
+func parseGoModRequirements(gomod string) ([]modRequirement, bool) {
+	lines := strings.Split(gomod, "\n")
+	if len(lines) > maxGoModLines {
+		return nil, false
+	}
+	scan := goModScan{localReplaced: make(map[string]bool)}
+	for index := 0; index < len(lines) && index < maxGoModLines && len(scan.raw) < maxGoModLines; index++ {
+		scan.step(strings.TrimSpace(lines[index]))
+	}
+	reqs := make([]modRequirement, 0, len(scan.raw))
+	for index := 0; index < len(scan.raw) && index < maxGoModLines; index++ {
+		req := scan.raw[index]
+		if !scan.localReplaced[req.path] && !scan.localReplaced[req.path+"@"+req.version] {
+			reqs = append(reqs, req)
+		}
+	}
+	return reqs, true
+}
+
+// hasGoModFile reports whether the directory entry list contains a regular go.mod file.
+func hasGoModFile(entries []os.DirEntry) bool {
+	for index := 0; index < len(entries) && index < maxTreeEntries; index++ {
+		if !entries[index].IsDir() && entries[index].Name() == "go.mod" {
+			return true
+		}
+	}
+	return false
+}
+
+// readBoundedRegularFile reads a regular file up to maxBytes under context cancellation.
+func readBoundedRegularFile(ctx context.Context, filePath string, maxBytes int64) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("read imports file %s: %w", filePath, err)
+	}
+	info, err := os.Lstat(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("read imports file %s: %w", filePath, err)
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("non-regular file: %s", filePath)
+	}
+	if info.Size() > maxBytes {
+		return nil, fmt.Errorf("file exceeds %d bytes: %s", maxBytes, filePath)
+	}
+	f, err := os.Open(filePath) // #nosec G304 -- filePath is inside a repository module walk
+	if err != nil {
+		return nil, fmt.Errorf("read imports file %s: %w", filePath, err)
+	}
+	data, readErr := io.ReadAll(io.LimitReader(f, maxBytes+1))
+	closeErr := f.Close()
+	if err := errors.Join(readErr, closeErr, ctx.Err()); err != nil {
+		return nil, fmt.Errorf("read imports file %s: %w", filePath, err)
+	}
+	if int64(len(data)) > maxBytes {
+		return nil, fmt.Errorf("file exceeds %d bytes: %s", maxBytes, filePath)
+	}
+	return data, nil
+}
+
+// recordNonTestFileImports parses imports from a single Go source file into the imports set.
+func recordNonTestFileImports(ctx context.Context, fset *token.FileSet, filePath string, imports map[string]bool) error {
+	src, err := readBoundedRegularFile(ctx, filePath, maxDeclBytes)
+	if err != nil {
+		return fmt.Errorf("parse imports file %s: %w", filePath, err)
+	}
+	f, err := parser.ParseFile(fset, filePath, src, parser.ImportsOnly)
+	if err != nil {
+		return fmt.Errorf("parse imports file %s: %w", filePath, err)
+	}
+	if len(f.Imports) > maxImports {
+		return fmt.Errorf("file imports exceed %d: %s", maxImports, filePath)
+	}
+	for index := 0; index < len(f.Imports) && index < maxImports; index++ {
+		val, err := strconv.Unquote(f.Imports[index].Path.Value)
+		if err != nil {
+			return fmt.Errorf("parse imports file %s: %w", filePath, err)
+		}
+		if val != "" {
+			imports[val] = true
+		}
+	}
+	return nil
+}
+
+// visitNonTestDirEntry inspects a directory entry and records imports for matching Go files.
+func visitNonTestDirEntry(ctx context.Context, buildCtx *build.Context, fset *token.FileSet, dir string, entry os.DirEntry, queue []string, imports map[string]bool) ([]string, error) {
+	name := entry.Name()
+	if entry.IsDir() {
+		if name == "node_modules" || skippedDirectory(name) {
+			return queue, nil
+		}
+		if len(queue) >= maxGoFiles {
+			return nil, fmt.Errorf("directory queue exceeds %d", maxGoFiles)
+		}
+		return append(queue, filepath.Join(dir, name)), nil
+	}
+	if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+		return queue, nil
+	}
+	match, err := buildCtx.MatchFile(dir, name)
+	if err != nil {
+		return nil, fmt.Errorf("match imports file %s: %w", filepath.Join(dir, name), err)
+	}
+	if !match {
+		return queue, nil
+	}
+	return queue, recordNonTestFileImports(ctx, fset, filepath.Join(dir, name), imports)
+}
+
+// appendNonTestDirImports walks bounded directory entries to collect non-test package imports.
+func appendNonTestDirImports(ctx context.Context, buildCtx *build.Context, fset *token.FileSet, dir string, entries []os.DirEntry, queue []string, imports map[string]bool) ([]string, error) {
+	if len(entries) > maxGoFiles {
+		return nil, fmt.Errorf("directory entries exceed %d: %s", maxGoFiles, dir)
+	}
+	for index := 0; index < len(entries) && index < maxGoFiles; index++ {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		var err error
+		queue, err = visitNonTestDirEntry(ctx, buildCtx, fset, dir, entries[index], queue, imports)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return queue, nil
+}
+
+// readNonTestDir bounds directory inventory before allocating the full entry set.
+func readNonTestDir(ctx context.Context, dir string) ([]os.DirEntry, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	f, err := os.Open(dir) // #nosec G304 -- dir is inside a repository module walk
+	if err != nil {
+		return nil, fmt.Errorf("open import directory %s: %w", dir, err)
+	}
+	entries, readErr := f.ReadDir(maxGoFiles + 1)
+	if errors.Is(readErr, io.EOF) {
+		readErr = nil
+	}
+	if err := errors.Join(readErr, f.Close(), ctx.Err()); err != nil {
+		return nil, fmt.Errorf("read import directory %s: %w", dir, err)
+	}
+	if len(entries) > maxGoFiles {
+		return nil, fmt.Errorf("directory entries exceed %d: %s", maxGoFiles, dir)
+	}
+	return entries, nil
+}
+
+// collectNonTestImports discovers all package import paths imported by non-test Go sources.
+func collectNonTestImports(ctx context.Context, moduleDir string, buildCtx build.Context) (map[string]bool, error) {
+	buildCtx.OpenFile = func(filePath string) (io.ReadCloser, error) {
+		data, err := readBoundedRegularFile(ctx, filePath, maxDeclBytes)
+		if err != nil {
+			return nil, err
+		}
+		return io.NopCloser(bytes.NewReader(data)), nil
+	}
+	fset := token.NewFileSet()
+	imports := make(map[string]bool)
+	queue := []string{moduleDir}
+	for seen := 0; len(queue) > 0 && seen < maxGoFiles; seen++ {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		dir := queue[0]
+		queue = queue[1:]
+		entries, err := readNonTestDir(ctx, dir)
+		if err != nil {
+			return nil, err
+		}
+		if dir != moduleDir && hasGoModFile(entries) {
+			continue
+		}
+		queue, err = appendNonTestDirImports(ctx, &buildCtx, fset, dir, entries, queue, imports)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if len(queue) > 0 {
+		return nil, fmt.Errorf("module directory count exceeds %d", maxGoFiles)
+	}
+	return imports, nil
+}
+
+// effectiveBuildContext asks Go to interpret GOFLAGS and platform/toolchain settings.
+// Listing only main modules avoids loading package imports or the dependency graph.
+func effectiveBuildContext(ctx context.Context, moduleDir string, run toolRunner) (build.Context, error) {
+	const format = `{{define "tags"}}[{{range $i, $v := .}}{{if $i}},{{end}}{{printf "%q" $v}}{{end}}]{{end}}
+{{with context}}{"GOOS":{{printf "%q" .GOOS}},"GOARCH":{{printf "%q" .GOARCH}},
+"Compiler":{{printf "%q" .Compiler}},"CgoEnabled":{{.CgoEnabled}},
+"BuildTags":{{template "tags" .BuildTags}},"ToolTags":{{template "tags" .ToolTags}},
+"ReleaseTags":{{template "tags" .ReleaseTags}}}{{end}}`
+	out := &boundedBuffer{limit: maxRecordBytes + 1}
+	diagnostics := &boundedBuffer{limit: maxRecordBytes}
+	var buildCtx build.Context
+	if err := run(ctx, moduleDir, out, diagnostics, "go", "list", "-m", "-f", format); err != nil {
+		return buildCtx, fmt.Errorf("read Go build context: %w: %s", errors.Join(err, ctx.Err()), diagnostics.String())
+	}
+	if len(out.data) > maxRecordBytes {
+		return buildCtx, fmt.Errorf("go build context exceeds %d bytes", maxRecordBytes)
+	}
+	// A workspace emits the same process-wide context for each main module; read the first.
+	if err := json.NewDecoder(bytes.NewReader(out.data)).Decode(&buildCtx); err != nil {
+		return buildCtx, fmt.Errorf("decode Go build context: %w", err)
+	}
+	return buildCtx, nil
+}
+
+// isImportedModule reports whether any collected import belongs to the module path.
+func isImportedModule(modPath string, imports map[string]bool) bool {
+	for imp := range imports {
+		if imp == modPath || strings.HasPrefix(imp, modPath+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+// selectImportedRequirements filters requirements down to those imported by non-test sources.
+func selectImportedRequirements(reqs []modRequirement, imports map[string]bool) ([]string, bool) {
+	var needed []string
+	for index := 0; index < len(reqs) && index < maxGoModLines; index++ {
+		req := reqs[index]
+		if isImportedModule(req.path, imports) {
+			needed = append(needed, req.path+"@"+req.version)
+		}
+	}
+	if len(needed) == 0 {
+		return nil, false
+	}
+	return append([]string{"mod", "download"}, needed...), true
+}
+
+// moduleDownloadArgs selects only non-test requirements; incomplete scans fail before any download.
+func moduleDownloadArgs(ctx context.Context, moduleDir string) ([]string, bool, error) {
+	data, err := readBoundedRegularFile(ctx, filepath.Join(moduleDir, "go.mod"), maxGoModBytes)
+	if err != nil {
+		return nil, false, fmt.Errorf("read module requirements: %w", err)
+	}
+	reqs, ok := parseGoModRequirements(string(data))
+	if !ok {
+		return nil, false, fmt.Errorf("module requirements exceed %d lines", maxGoModLines)
+	}
+	buildCtx, err := effectiveBuildContext(ctx, moduleDir, runTool)
+	if err != nil {
+		return nil, false, err
+	}
+	imports, err := collectNonTestImports(ctx, moduleDir, buildCtx)
+	if err != nil {
+		return nil, false, fmt.Errorf("scan non-test imports: %w", err)
+	}
+	args, needed := selectImportedRequirements(reqs, imports)
+	return args, needed, nil
+}
+
+// remainingBackoff returns the cumulative wait time reserved for remaining retry slots.
+func remainingBackoff(attempt int) time.Duration {
+	switch attempt {
+	case 1:
+		return firstBackoff + secondBackoff
+	case 2:
+		return secondBackoff
+	default:
+		return 0
+	}
+}
+
+// downloadBackoff computes the delay before retry attempt respecting remaining deadline.
+func downloadBackoff(ctx context.Context, attempt int) time.Duration {
+	backoff := firstBackoff
+	if attempt > 2 {
+		backoff = secondBackoff
+	}
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return backoff
+	}
+	remaining := time.Until(deadline)
+	if reserve := remainingBackoff(attempt - 1); remaining > 0 && remaining <= reserve*2 {
+		return min(backoff, max(time.Millisecond, remaining/8))
+	}
+	return backoff
+}
+
+// downloadAttemptTimeout caps each retry and divides the remaining context deadline across attempts.
+func downloadAttemptTimeout(ctx context.Context, attempt int, attemptCap time.Duration) (time.Duration, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return attemptCap, nil
+	}
+	remaining := time.Until(deadline)
+	if remaining <= 0 {
+		return 0, context.DeadlineExceeded
+	}
+	slots := time.Duration(downloadAttempts - attempt + 1)
+	if reserve := remainingBackoff(attempt); remaining > reserve*2 {
+		remaining -= reserve
+	} else {
+		slots++
+	}
+	perAttempt := max(time.Millisecond, remaining/slots)
+	return min(attemptCap, perAttempt), nil
+}
+
+// retryModuleGo runs a Go command up to downloadAttempts times with backoff and deadline caps.
+func retryModuleGo(ctx context.Context, moduleDir, dir, label string, args []string, attemptCap time.Duration, stderr io.Writer, run toolRunner, wait waitFunc) (int, error) {
+	var lastErr error
+	for attempt := 1; attempt <= downloadAttempts; attempt++ {
+		if attempt > 1 {
+			if err := wait(ctx, downloadBackoff(ctx, attempt)); err != nil {
+				return attempt - 1, err
+			}
+		}
+		timeout, timeoutErr := downloadAttemptTimeout(ctx, attempt, attemptCap)
+		if timeoutErr != nil {
+			return attempt - 1, timeoutErr
+		}
+		attemptCtx, cancel := context.WithTimeout(ctx, timeout)
+		err := run(attemptCtx, moduleDir, io.Discard, stderr, "go", args...)
+		cancel()
+		if err == nil {
+			return attempt, nil
+		}
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return attempt, ctxErr
+		}
+		lastErr = err
+		if _, printErr := fmt.Fprintf(stderr, "%s failed for %s (attempt %d of %d): %v\n", label, dir, attempt, downloadAttempts, err); printErr != nil {
+			return attempt, printErr
+		}
+	}
+	return downloadAttempts, lastErr
+}
+
+// downloadModule runs "go mod download" in moduleDir with bounded retries and backoff.
+func downloadModule(ctx context.Context, moduleDir, dir string, stderr io.Writer, run toolRunner, wait waitFunc) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("prepare dependencies of module %s: %w", dir, err)
+	}
+	args, needed, err := moduleDownloadArgs(ctx, moduleDir)
+	if err != nil {
+		return fmt.Errorf("prepare dependencies of module %s: %w", dir, err)
+	}
+	if !needed {
+		return nil
+	}
+	attempts, err := retryModuleGo(ctx, moduleDir, dir, "go mod download", args, downloadTimeout, stderr, run, wait)
+	if err != nil {
+		if attempts == 0 {
+			return fmt.Errorf("prepare dependencies of module %s: %w", dir, err)
+		}
+		return &downloadError{dir: dir, attempts: attempts, err: err}
+	}
+	return nil
+}
+
+// buildModule verifies that non-test packages type-check so broken packages never read as empty.
+func buildModule(ctx context.Context, root, dir string, stderr io.Writer, run toolRunner, wait waitFunc) error {
 	moduleDir := filepath.Join(root, filepath.FromSlash(dir))
-	if err := runTool(ctx, moduleDir, io.Discard, stderr, "go", "list", "-export", "./..."); err != nil {
+	if run == nil {
+		run = runTool
+	}
+	if wait == nil {
+		wait = defaultWait
+	}
+	if err := downloadModule(ctx, moduleDir, dir, stderr, run, wait); err != nil {
+		return err
+	}
+	if _, err := retryModuleGo(ctx, moduleDir, dir, "go list -export", []string{"list", "-export", "./..."}, moduleTimeout, stderr, run, wait); err != nil {
 		return fmt.Errorf("its packages do not build at HEAD, so the checker cannot read them: %w", err)
 	}
 	return nil
@@ -1848,6 +2369,18 @@ func collectAliasesAtHead(ctx context.Context, root, head string, modules []modu
 	return aliases, nil
 }
 
+// matchTypeSpecInGenDecl searches gen for a non-alias TypeSpec matching typeName.
+func matchTypeSpecInGenDecl(gen *ast.GenDecl, typeName string, imports []*ast.ImportSpec) (string, bool) {
+	for sIdx := 0; sIdx < len(gen.Specs) && sIdx < maxSpecs; sIdx++ {
+		ts, ok := gen.Specs[sIdx].(*ast.TypeSpec)
+		if !ok || ts.Assign.IsValid() || ts.Name.Name != typeName {
+			continue
+		}
+		return formatTypeDecl(ts, imports), true
+	}
+	return "", false
+}
+
 func matchTypeDeclInFile(fset *token.FileSet, filePath string, data []byte, typeName string) (string, bool) {
 	f, err := parser.ParseFile(fset, filePath, data, parser.SkipObjectResolution)
 	if err != nil {
@@ -1858,38 +2391,44 @@ func matchTypeDeclInFile(fset *token.FileSet, filePath string, data []byte, type
 		if !ok || gen.Tok != token.TYPE {
 			continue
 		}
-		for sIdx := 0; sIdx < len(gen.Specs) && sIdx < maxSpecs; sIdx++ {
-			ts, ok := gen.Specs[sIdx].(*ast.TypeSpec)
-			if !ok || ts.Assign.IsValid() || ts.Name.Name != typeName {
-				continue
-			}
-			return formatTypeDecl(ts, f.Imports), true
+		if decl, found := matchTypeSpecInGenDecl(gen, typeName, f.Imports); found {
+			return decl, true
 		}
 	}
 	return "", false
 }
 
+// findTypeDeclInModule searches a single module for typeName in pkgPath.
+func findTypeDeclInModule(ctx context.Context, fset *token.FileSet, root, rev string, target module, modules []module, pkgPath, typeName string) (string, error) {
+	files, err := listModuleGoFiles(ctx, root, rev, target, modules)
+	if err != nil {
+		return "", fmt.Errorf("list Go files in module %s: %w", target.dir, err)
+	}
+	for index := 0; index < len(files) && index < maxGoFiles; index++ {
+		filePath := files[index]
+		if filePackagePath(target.path, target.dir, filePath) != pkgPath {
+			continue
+		}
+		data, err := gitCapture(ctx, root, maxDeclBytes, "cat-file", "blob", rev+":"+filePath)
+		if err != nil {
+			return "", fmt.Errorf("read type source %s: %w", filePath, err)
+		}
+		if decl, found := matchTypeDeclInFile(fset, filePath, data, typeName); found {
+			return decl, nil
+		}
+	}
+	return "", nil
+}
+
 func findTypeDecl(ctx context.Context, root, rev string, modules []module, pkgPath, typeName string) (string, error) {
 	fset := token.NewFileSet()
 	for modIndex := 0; modIndex < len(modules) && modIndex < maxModules; modIndex++ {
-		target := modules[modIndex]
-		files, err := listModuleGoFiles(ctx, root, rev, target, modules)
+		decl, err := findTypeDeclInModule(ctx, fset, root, rev, modules[modIndex], modules, pkgPath, typeName)
 		if err != nil {
-			return "", fmt.Errorf("list Go files in module %s: %w", target.dir, err)
+			return "", err
 		}
-		for index := 0; index < len(files) && index < maxGoFiles; index++ {
-			filePath := files[index]
-			if filePackagePath(target.path, target.dir, filePath) != pkgPath {
-				continue
-			}
-			data, err := gitCapture(ctx, root, maxDeclBytes, "cat-file", "blob", rev+":"+filePath)
-			if err != nil {
-				return "", fmt.Errorf("read type source %s: %w", filePath, err)
-			}
-			decl, found := matchTypeDeclInFile(fset, filePath, data, typeName)
-			if found {
-				return decl, nil
-			}
+		if decl != "" {
+			return decl, nil
 		}
 	}
 	return "", nil

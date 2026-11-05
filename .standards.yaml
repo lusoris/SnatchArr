@@ -1,83 +1,87 @@
+---
 version: 1
 repository:
-    owner: lusoris
-    name: SnatchArr
-    visibility: public
-    description: "Snatches missing and cutoff-unmet media across *arr instances while respecting per-instance hourly caps"
-    homepage: "https://lusoris.github.io/SnatchArr/"
-    topics:
-        - arr
-        - sonarr
-        - radarr
-        - lidarr
-        - readarr
-        - whisparr
-        - kubernetes
-        - golusoris
-        - sveltesentio
-        - cloud-native
-        - go
-        - huntarr
-        - media-automation
-        - rust
-        - seerr
-        - svelte
+  owner: lusoris
+  name: SnatchArr
+  visibility: public
+  description: "Snatches missing and cutoff-unmet media across *arr instances while respecting per-instance hourly caps"
+  homepage: "https://lusoris.github.io/SnatchArr/"
+  topics:
+    - arr
+    - sonarr
+    - radarr
+    - lidarr
+    - readarr
+    - whisparr
+    - kubernetes
+    - golusoris
+    - sveltesentio
+    - cloud-native
+    - go
+    - huntarr
+    - media-automation
+    - rust
+    - seerr
+    - svelte
 adoption:
-    # Our devcontainer carries Go + Rust + Node; praetor's generated bundle is Go-only.
-    decline:
-        - dev-container
+  # Our devcontainer carries Go + Rust + Node; praetor's generated bundle is Go-only.
+  decline:
+    - dev-container
 profiles:
-    - app-service
+  - app-service
 # The agent clients and editors in use. Praetor generates and verifies the files of these
 # only; the files of an unselected one are not kept in the tree.
 agent_clients:
-    - claude
-    - codex
-    - gemini
+  - claude
+  - codex
+  - gemini
 editors:
-    - universal
-    - vscode
-    - antigravity
+  - universal
+  - vscode
+  - antigravity
 # The Go control plane at the root is the audited flavor (#1103 pin; api/ holds its packages).
 flavors:
-    - name: go-service
+  - name: go-service
 facets:
-    - security:high
-    - api:public-contract
-    - agent:sandboxed
+  - security:high
+  - api:public-contract
+  - agent:sandboxed
 # Overrides only raise strictness, except the explicit review mode below, which
 # permits single-maintainer operation as in cordanaLLM/praetor. Owner-approved 2026-10-09.
 # Restore independent review when a second maintainer or a review bot can approve; the
 # required count stays so that restoration keeps the minimum.
 overrides:
-    branch_protection:
-        enforce_linear_history: true
-        require_signed_commits: true
-        required_approving_reviewers: 1
-        review_mode: single_maintainer
-        dismiss_stale_reviews: true
-        # Declared at its live value; the forge default is the stricter one.
-        require_extra_approval_for_unattributed_changes: true
+  branch_protection:
+    enforce_linear_history: true
+    require_signed_commits: true
+    required_approving_reviewers: 1
+    review_mode: single_maintainer
+    dismiss_stale_reviews: true
+    # Declared at its live value; the forge default is the stricter one.
+    require_extra_approval_for_unattributed_changes: true
 register:
-    sources:
-        expected: 13
-        sha256:
-            sha256:5da19afebf05d639726782f18231ab9d3334e5d4ff427929b323f32db14d1634
-        inputs:
-            - path: .paperclip/harness.json
-              surface: prompts
-              kind: message
-              format: json
-              selector: operating_contract.*
-            - path: .paperclip/harness.json
-              surface: prompts
-              kind: message
-              format: json
-              selector: invariants.*
+  sources:
+    expected: 13
+    sha256:
+      sha256:5da19afebf05d639726782f18231ab9d3334e5d4ff427929b323f32db14d1634
+    inputs:
+      - path: .paperclip/harness.json
+        surface: prompts
+        kind: message
+        format: json
+        selector: operating_contract.*
+      - path: .paperclip/harness.json
+        surface: prompts
+        kind: message
+        format: json
+        selector: invariants.*
 exceptions:
-    - rule: HISS-18
-      path: .github/workflows/ci.yml
-      category: A
-      entered: "2026-10-09"
-      reason: "category A, until cordanaLLM/praetor#1108 ships (re-reviewed 2026-10-18, issue open, no fix in flight): every component job needs the changes job, which stops a draft in its first step, so GitHub skips them there; the CI success aggregate fails on the failed changes job (tools/ci/status.sh, planted cases in tools/ci/status_test.sh), but the engine has no accepted shape for dependents behind such a job yet"
-      expires: "2027-01-06"
+  - rule: HISS-18
+    path: .github/workflows/ci.yml
+    category: A
+    entered: "2026-10-09"
+    reason: "category A, until cordanaLLM/praetor#1108 ships (re-reviewed 2026-10-18, issue open, no fix in flight): every component job needs the changes job, which stops a draft in its first step, so GitHub skips them there; the CI success aggregate fails on the failed changes job (tools/ci/status.sh, planted cases in tools/ci/status_test.sh), but the engine has no accepted shape for dependents behind such a job yet"
+    expires: "2027-01-06"
+release:
+  e2e:
+    since: c861b394bc5bf520df75144d0c7a43925d44eaec
