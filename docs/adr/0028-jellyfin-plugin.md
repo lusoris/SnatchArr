@@ -6,7 +6,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # ADR-0028: Jellyfin companion plugin and its contract
 
-- Status: Accepted (open questions 1 to 4 answered on 2026-10-24, ledger ids `snatcharr-jellyfin-plugin-repo-name`, `snatcharr-jellyfin-plugin-org`, `snatcharr-jellyfin-plugin-license`, `snatcharr-jellyfin-plugin-web-injection-method` and `snatcharr-jellyfin-plugin-user-auth-method`; extended by [ADR-0035](0035-jellyfin-integration.md); acceptance is not evidence that the plugin slices below have shipped)
+- Status: Accepted (open questions 1 to 4 answered on 2026-10-24: question 1 under ledger ids `snatcharr-jellyfin-plugin-repo-name` and `snatcharr-jellyfin-plugin-org`, question 2 under `snatcharr-jellyfin-plugin-license`, question 3 under `snatcharr-jellyfin-plugin-web-injection-method`, question 4 under `snatcharr-jellyfin-plugin-user-auth-method`; extended by [ADR-0035](0035-jellyfin-integration.md); acceptance is not evidence that the plugin slices below have shipped)
 - **Implementation:** pending ([#572](https://github.com/lusoris/SnatchArr/issues/572))
 - Date: 2026-10-24
 - Related: [ADR-0018](0018-product-front-door.md), [ADR-0023](0023-sso-viewer-role.md), [ADR-0025](0025-module-switches.md), [ADR-0026](0026-accounts-and-roles.md), [ADR-0027](0027-adult-module.md), [ADR-0035](0035-jellyfin-integration.md)
