@@ -62,7 +62,7 @@ require (
 	github.com/CAFxX/httpcompression v0.0.9 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/alexedwards/argon2id v1.0.0 // indirect
-	github.com/andybalholm/brotli v1.2.6 // indirect
+	github.com/andybalholm/brotli v1.2.7 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
