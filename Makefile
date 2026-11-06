@@ -339,7 +339,7 @@ arr-forceimport-live: ## Real Sonarr and Radarr: ID-matched release force-import
 	  "audio:no clean, mapped manual-import candidate" "unmapped:no clean, mapped manual-import candidate" \
 	  "second-line:is not id-matched" "skip:is still in the queue"
 
-PUSHTITLE_EVIDENCE_DIR ?= .cache/pushtitle-evidence
+SNATCHARR_PUSHTITLE_EVIDENCE_DIR ?= .cache/pushtitle-evidence
 
 # Sonarr v3 and v4 push-title import guarantee (ADR-0019 open point 1) on real Sonarr
 # and qBittorrent (tools/e2e/forceimport/compose.yaml and tools/e2e/pushtitle/images.yaml):
@@ -350,10 +350,10 @@ arr-pushtitle-live: ## Real Sonarr v3 and v4: push-title import guarantee verifi
 	bash tools/e2e/pull_retry_test.sh
 	bash tools/e2e/planted_test.sh
 	bash tools/e2e/live_lib_test.sh
-	mkdir -p "$(PUSHTITLE_EVIDENCE_DIR)"
-	env SNATCHARR_PUSHTITLE_SONARR=v4 SNATCHARR_PUSHTITLE_EVIDENCE_DIR="$(PUSHTITLE_EVIDENCE_DIR)" bash tools/e2e/planted.sh SNATCHARR_PUSHTITLE_PLANT tools/e2e/pushtitle_live.sh \
+	mkdir -p "$(SNATCHARR_PUSHTITLE_EVIDENCE_DIR)"
+	env SNATCHARR_PUSHTITLE_SONARR=v4 SNATCHARR_PUSHTITLE_EVIDENCE_DIR="$(SNATCHARR_PUSHTITLE_EVIDENCE_DIR)" bash tools/e2e/planted.sh SNATCHARR_PUSHTITLE_PLANT tools/e2e/pushtitle_live.sh \
 	  "foreign:s1 not imported" "idonly:s3 import blocked"
-	env SNATCHARR_PUSHTITLE_SONARR=v3 SNATCHARR_PUSHTITLE_EVIDENCE_DIR="$(PUSHTITLE_EVIDENCE_DIR)" bash tools/e2e/planted.sh SNATCHARR_PUSHTITLE_PLANT tools/e2e/pushtitle_live.sh \
+	env SNATCHARR_PUSHTITLE_SONARR=v3 SNATCHARR_PUSHTITLE_EVIDENCE_DIR="$(SNATCHARR_PUSHTITLE_EVIDENCE_DIR)" bash tools/e2e/planted.sh SNATCHARR_PUSHTITLE_PLANT tools/e2e/pushtitle_live.sh \
 	  "foreign:s1 not imported" "idonly:s3 import blocked"
 
 # All supported integrations driven end to end against real application containers
