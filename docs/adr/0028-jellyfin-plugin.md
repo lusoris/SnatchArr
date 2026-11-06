@@ -129,11 +129,11 @@ Authentication uses a two-tier model:
    - `requests:read`, `requests:write`: Submit gap requests and query request statuses.
    - `adult:read`: Query adult scene metadata, performer profiles, and gallery image streams.
    This token authenticates all server-to-server operations (metadata scraping, scheduled sync tasks, background status updates).
-2. **User-delegated context**: For interactive actions initiated by a Jellyfin user (e.g. submitting a request or browsing adult discovery), SnatchArr must know which user acts and must not take the plugin's word for it. A caller-supplied user id header alone is never trusted. The protocol is open question 4; the recommended shape forwards the user's own Jellyfin access token, which SnatchArr verifies with Jellyfin `GET /Users/Me` (`Jellyfin.Api/Controllers/UserController.cs:581`) and maps to an account per ADR-0026, enforcing role (`requester` vs `viewer`) and the adult gate of that user.
+2. **User-delegated context**: For interactive actions initiated by a Jellyfin user (e.g. submitting a request or browsing adult discovery), SnatchArr must know which user acts and must not take the plugin's word for it. A caller-supplied user id header alone is never trusted. Question 4 settled the protocol (answered 2026-10-24, option b), and [ADR-0035](0035-jellyfin-integration.md) section 2 fixes its shape: the plugin exchanges the user's own Jellyfin access token at `POST /auth/jellyfin` (`jellyfinLogin`), SnatchArr verifies it with Jellyfin `GET /Users/Me` (`Jellyfin.Api/Controllers/UserController.cs:581`), maps it to an account per ADR-0026 and returns the `snatcharr_session` cookie (`cookieAuth`). Later interactive calls carry that cookie, which enforces the role (`requester` vs `viewer`) and the adult gate of that user. The scoped API key never acts for a user; SnatchArr ignores any user id header on API-key requests.
 
 #### Contract endpoints
 
-Paths are relative to the server URL `/api/v1`, as in `api/openapi/openapi.yaml`. Only `/system/status` exists today; every other path is proposed.
+Paths are relative to the server URL `/api/v1`, as in `api/openapi/openapi.yaml`. Only `/system/status` exists today; every other path is proposed. `bearerAuth` marks calls with the scoped server token, `cookieAuth` calls made for a signed-in Jellyfin user; an operation that lists both accepts either, and on the server token it returns only what the server-side sync may see.
 
 ```yaml
 # Contract operations consumed by the Jellyfin plugin
@@ -149,7 +149,7 @@ paths:
   /media/status:
     post:
       summary: Batch query item availability status for library badges
-      security: [{ bearerAuth: [] }]
+      security: [{ cookieAuth: [] }, { bearerAuth: [] }]
       requestBody:
         content:
           application/json:
@@ -173,10 +173,10 @@ paths:
   /requests:
     get:
       summary: List user requests and fulfillment progress
-      security: [{ bearerAuth: [] }]
+      security: [{ cookieAuth: [] }]
     post:
       summary: Submit a gap media request (adult scene, book, comic, game)
-      security: [{ bearerAuth: [] }]
+      security: [{ cookieAuth: [] }]
       requestBody:
         content:
           application/json:
@@ -207,7 +207,7 @@ paths:
   /adult/scenes/{id}/gallery:
     get:
       summary: Fetch image set gallery metadata for an adult scene
-      security: [{ bearerAuth: [] }]
+      security: [{ cookieAuth: [] }, { bearerAuth: [] }]
       responses:
         "200":
           description: Gallery image list with proxy URLs
@@ -217,7 +217,7 @@ paths:
   /adult/galleries/{id}/images/{imageId}:
     get:
       summary: Stream proxied gallery image bytes
-      security: [{ bearerAuth: [] }]
+      security: [{ cookieAuth: [] }, { bearerAuth: [] }]
       responses:
         "200":
           description: Image binary stream (image/jpeg, image/webp)
