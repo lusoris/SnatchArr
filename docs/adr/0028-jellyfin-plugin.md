@@ -6,10 +6,10 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # ADR-0028: Jellyfin companion plugin and its contract
 
-- Status: proposed
+- Status: Accepted (open questions 1 to 4 answered on 2026-10-24: question 1 under ledger ids `snatcharr-jellyfin-plugin-repo-name` and `snatcharr-jellyfin-plugin-org`, question 2 under `snatcharr-jellyfin-plugin-license`, question 3 under `snatcharr-jellyfin-plugin-web-injection-method`, question 4 under `snatcharr-jellyfin-plugin-user-auth-method`; extended by [ADR-0035](0035-jellyfin-integration.md); acceptance is not evidence that the plugin slices below have shipped)
 - **Implementation:** pending ([#572](https://github.com/lusoris/SnatchArr/issues/572))
 - Date: 2026-10-24
-- Related: [ADR-0018](0018-product-front-door.md), [ADR-0023](0023-sso-viewer-role.md), [ADR-0025](0025-module-switches.md), [ADR-0026](0026-accounts-and-roles.md), [ADR-0027](0027-adult-module.md)
+- Related: [ADR-0018](0018-product-front-door.md), [ADR-0023](0023-sso-viewer-role.md), [ADR-0025](0025-module-switches.md), [ADR-0026](0026-accounts-and-roles.md), [ADR-0027](0027-adult-module.md), [ADR-0035](0035-jellyfin-integration.md)
 
 ## Context
 
@@ -125,23 +125,22 @@ The plugin communicates with SnatchArr exclusively over HTTP REST, conforming to
 Authentication uses a two-tier model:
 
 1. **Server-level scoped token**: Configured in the plugin dashboard settings. The administrator generates a dedicated API key in SnatchArr with scopes:
-   - `core:read`: Read system status and indexer health.
-   - `requests:read`, `requests:write`: Submit gap requests and query request statuses.
-   - `adult:read`: Query adult scene metadata, performer profiles, and gallery image streams.
-   This token authenticates all server-to-server operations (metadata scraping, scheduled sync tasks, background status updates).
-2. **User-delegated context**: For interactive actions initiated by a Jellyfin user (e.g. submitting a request or browsing adult discovery), SnatchArr must know which user acts and must not take the plugin's word for it. A caller-supplied user id header alone is never trusted. The protocol is open question 4; the recommended shape forwards the user's own Jellyfin access token, which SnatchArr verifies with Jellyfin `GET /Users/Me` (`Jellyfin.Api/Controllers/UserController.cs:581`) and maps to an account per ADR-0026, enforcing role (`requester` vs `viewer`) and the adult gate of that user.
+   - `core:read`: Batch library badge status (`/media/status`). The plugin validates the token with an authenticated call such as `listModules` (`GET /system/modules`), since the `/system/status` handshake is public (`security: []` on `getSystemStatus`).
+   - `adult:read`: Query adult scene metadata, performer profiles, and gallery image streams (`/adult/*`).
+   This token authenticates only server-to-server operations (metadata scraping, scheduled badge sync). It never calls `/requests`: request listing and submission act for a user and take the session cookie below. The scopes of the background notification events (watch-aware notifications, health probes) are set in [ADR-0035](0035-jellyfin-integration.md) section 2.
+2. **User-delegated context**: For interactive actions initiated by a Jellyfin user (e.g. submitting a request or browsing adult discovery), SnatchArr must know which user acts and must not take the plugin's word for it. A caller-supplied user id header alone is never trusted. Question 4 settled the protocol (answered 2026-10-24, option b), and [ADR-0035](0035-jellyfin-integration.md) section 2 fixes its intended shape. That shape depends on API work that has not shipped: `jellyfinLogin` (`POST /auth/jellyfin`) accepts only a username and password today (`JellyfinLoginRequest` in `api/openapi/openapi.yaml`), and no by-token verification exists yet. Once that work lands, the plugin exchanges the user's own Jellyfin access token at `POST /auth/jellyfin` (`jellyfinLogin`), SnatchArr verifies it with Jellyfin `GET /Users/Me` (`Jellyfin.Api/Controllers/UserController.cs:581`), maps it to an account per ADR-0026 and returns the `snatcharr_session` cookie (`cookieAuth`). SnatchArr sends the user token to Jellyfin only over `https` in the prod profile, the rule `validateOIDCIssuer` applies to the OIDC issuer (`api/internal/config/config.go`); `validateConnection` accepts `http` in every profile today, and #1027 closes that gap. Later interactive calls carry that cookie, which enforces the role (`requester` vs `viewer`) and the adult gate of that user. The scoped API key never acts for a user; SnatchArr ignores any user id header on API-key requests.
 
 #### Contract endpoints
 
-Paths are relative to the server URL `/api/v1`, as in `api/openapi/openapi.yaml`. Only `/system/status` exists today; every other path is proposed.
+Paths are relative to the server URL `/api/v1`, as in `api/openapi/openapi.yaml`. Only `/system/status` exists today; every other path is proposed. `bearerAuth` marks calls with the scoped server token, `cookieAuth` calls made for a signed-in Jellyfin user; an operation that lists both accepts either, and on the server token it returns only what the server-side sync may see.
 
 ```yaml
 # Contract operations consumed by the Jellyfin plugin
 paths:
   /system/status:
     get:
-      summary: Service handshake and version compatibility check
-      security: [{ bearerAuth: [] }]
+      summary: Service handshake and version compatibility check (public; proves reachability, not the token)
+      security: []
       responses:
         "200":
           description: Service status, version, and active modules
@@ -149,7 +148,7 @@ paths:
   /media/status:
     post:
       summary: Batch query item availability status for library badges
-      security: [{ bearerAuth: [] }]
+      security: [{ cookieAuth: [] }, { bearerAuth: [] }]
       requestBody:
         content:
           application/json:
@@ -173,10 +172,10 @@ paths:
   /requests:
     get:
       summary: List user requests and fulfillment progress
-      security: [{ bearerAuth: [] }]
+      security: [{ cookieAuth: [] }]
     post:
       summary: Submit a gap media request (adult scene, book, comic, game)
-      security: [{ bearerAuth: [] }]
+      security: [{ cookieAuth: [] }]
       requestBody:
         content:
           application/json:
@@ -207,7 +206,7 @@ paths:
   /adult/scenes/{id}/gallery:
     get:
       summary: Fetch image set gallery metadata for an adult scene
-      security: [{ bearerAuth: [] }]
+      security: [{ cookieAuth: [] }, { bearerAuth: [] }]
       responses:
         "200":
           description: Gallery image list with proxy URLs
@@ -217,7 +216,7 @@ paths:
   /adult/galleries/{id}/images/{imageId}:
     get:
       summary: Stream proxied gallery image bytes
-      security: [{ bearerAuth: [] }]
+      security: [{ cookieAuth: [] }, { bearerAuth: [] }]
       responses:
         "200":
           description: Image binary stream (image/jpeg, image/webp)
