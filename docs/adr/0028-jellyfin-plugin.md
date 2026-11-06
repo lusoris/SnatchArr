@@ -235,7 +235,7 @@ In strict accordance with ADR-0025 ([0025-module-switches.md](0025-module-switch
 
 #### Versioning and compatibility
 
-1. Contract changes in `api/openapi/openapi.yaml` follow HISS-14 (append-only). An OpenAPI diff check against the base revision is a follow-up; the Go gate `tools/apicompat/gate/main.go` does not read the OpenAPI file.
+1. Contract changes in `api/openapi/openapi.yaml` follow HISS-14 (append-only). OpenAPI changes are checked by the oasdiff breaking check (`make api-openapi-breaking`, which runs `tools/oasdiff/breaking.sh`, part of `make api-verify`; CI job `api-openapi` compares with the pull request base); the Go gate `tools/apicompat/gate/main.go` does not read the OpenAPI file.
 2. During initialization, the plugin calls `GET /api/v1/system/status` and reads `version` (`components.schemas.SystemStatus` in `api/openapi/openapi.yaml`); a list of active modules is a proposed addition to that schema. If the major version differs or required capabilities are absent, the plugin logs an administrative warning and enters a degraded fallback mode (disabling advanced features while maintaining existing cached metadata).
 
 ### 4. Presentation and delivery of image-set galleries next to scenes
@@ -346,7 +346,7 @@ A three-tier testing strategy guarantees contract correctness and security bound
 2. **Contract tests against SnatchArr OpenAPI**:
    - Automated tests run against a mock HTTP server or schema validator generated from `api/openapi/openapi.yaml`.
    - Asserts that all endpoints, request bodies, query parameters, and RFC 9457 Problem Details responses match SnatchArr's published API contract.
-   - Changes in `api/openapi/openapi.yaml` are checked by the OpenAPI diff follow-up (HISS-14); the Go gate does not cover them.
+   - Changes in `api/openapi/openapi.yaml` are checked by the oasdiff breaking check (`make api-openapi-breaking`); the Go gate does not cover them.
 3. **Planted negative security case**:
    - **Scenario**: A Jellyfin user without adult media privileges (restricted by Jellyfin user group membership or parental age rating per `snatcharr-product-adult-visibility-20261020`) attempts to view an adult scene gallery or request an adult title via the plugin.
    - **Expected behavior**: The plugin and SnatchArr API refuse the request, returning an RFC 9457 HTTP 404 Problem Details response (`application/problem+json`). Zero metadata, images, or scene existence cues are returned.
