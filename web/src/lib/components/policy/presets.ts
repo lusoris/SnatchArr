@@ -27,7 +27,7 @@ const LABELS: Record<PresetKey, { label: () => string; description: () => string
 /** Build display presets from the API response, enriched with i18n labels. */
 export function toPresets(apiPresets: SnatchPolicyPreset[]): Preset[] {
 	return apiPresets
-		.filter((p): p is SnatchPolicyPreset & { key: PresetKey } => p.key in LABELS)
+		.filter((p): p is SnatchPolicyPreset & { key: PresetKey } => Object.hasOwn(LABELS, p.key))
 		.map((p) => {
 			const values: Partial<SnatchPolicy> = {
 				missing_per_cycle: p.missing_per_cycle,

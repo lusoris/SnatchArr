@@ -5,6 +5,7 @@ SPDX-License-Identifier: EUPL-1.2
 <script lang="ts">
 	import { createSentioQuery } from '@sveltesentio/query';
 	import { api } from '#lib/api/client.js';
+	import ProblemNote from '#lib/components/ProblemNote.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { keys } from '#lib/query.js';
 	import { estimateSearchesPerHour, toPresets, type SnatchPolicy } from './presets.js';
@@ -32,19 +33,23 @@ SPDX-License-Identifier: EUPL-1.2
 		<p class="text-xs text-subtle">{m.policy_presets_hint()}</p>
 	</div>
 
-	<div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
-		{#each presets as preset (preset.key)}
-			<button
-				type="button"
-				class="btn flex flex-col items-start gap-1 p-3 text-left"
-				onclick={() => onSelect(preset.values)}
-				title={preset.description()}
-			>
-				<span class="text-xs font-semibold">{preset.label()}</span>
-				<span class="text-xs text-subtle">{preset.description()}</span>
-			</button>
-		{/each}
-	</div>
+	{#if presetsQuery.isError}
+		<ProblemNote error={presetsQuery.error} />
+	{:else}
+		<div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+			{#each presets as preset (preset.key)}
+				<button
+					type="button"
+					class="btn flex flex-col items-start gap-1 p-3 text-left"
+					onclick={() => onSelect(preset.values)}
+					title={preset.description()}
+				>
+					<span class="text-xs font-semibold">{preset.label()}</span>
+					<span class="text-xs text-subtle">{preset.description()}</span>
+				</button>
+			{/each}
+		</div>
+	{/if}
 
 	<p class="text-brand text-xs font-medium" data-testid="estimate-text">
 		{m.policy_searches_estimate({ count: estimate, cap })}

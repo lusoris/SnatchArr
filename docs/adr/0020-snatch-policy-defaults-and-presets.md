@@ -56,7 +56,7 @@ The default policy updates three numeric fields. All other fields (selection ord
 
 ### 2. Named policy presets
 
-The UI settings preset module carries four standardized presets:
+The API serves four standardized presets via `GET /snatch-policy-presets`; the UI preset picker fetches them and merges client-side i18n labels:
 
 1. **`gentle` (Metered / Free Tier / ~100/day limits):** Paces searches for users on strict indexer quotas, capping daily queries at 96 searches/day.
 2. **`balanced` (Standard Daily Driver — New Defaults):** Paces searches for users on 1–3 mid-tier indexers ($D \approx 1000$), averaging 12 searches/hour with a 15/hour cap (288 nominal, 360 max daily).

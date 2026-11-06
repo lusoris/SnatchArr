@@ -45,38 +45,48 @@ func TestSnatchPolicyPresetsBalancedMatchesDefault(t *testing.T) {
 	}
 }
 
-func TestSnatchPolicyPresetsValuesInRange(t *testing.T) {
-	t.Parallel()
-	for _, p := range SnatchPolicyPresets() {
-		v := p.Values
-		if v.MissingPerCycle < 0 || v.MissingPerCycle > 100 {
-			t.Errorf("%s: MissingPerCycle %d out of [0, 100]", p.Key, v.MissingPerCycle)
-		}
-		if v.UpgradePerCycle < 0 || v.UpgradePerCycle > 100 {
-			t.Errorf("%s: UpgradePerCycle %d out of [0, 100]", p.Key, v.UpgradePerCycle)
-		}
-		if v.CycleInterval < 60*time.Second || v.CycleInterval > 604800*time.Second {
-			t.Errorf("%s: CycleInterval %v out of [60s, 604800s]", p.Key, v.CycleInterval)
-		}
-		if v.HourlyCap < 1 || v.HourlyCap > 500 {
-			t.Errorf("%s: HourlyCap %d out of [1, 500]", p.Key, v.HourlyCap)
-		}
-	}
-}
-
-func TestSnatchPolicyPresetsCatchUpHasSelection(t *testing.T) {
+func TestSnatchPolicyPresetsExactValues(t *testing.T) {
 	t.Parallel()
 	presets := SnatchPolicyPresets()
-	catchUp := presets[2]
-	if !catchUp.Values.HasSelection {
-		t.Fatal("catch_up: HasSelection false; want true")
+	cases := []struct {
+		key          PolicyPresetKey
+		missing      int
+		upgrade      int
+		interval     time.Duration
+		cap          int
+		selection    Selection
+		hasSelection bool
+	}{
+		{PresetGentle, 1, 0, 900 * time.Second, 4, "", false},
+		{PresetBalanced, 2, 1, 900 * time.Second, 15, "", false},
+		{PresetCatchUp, 10, 2, 300 * time.Second, 60, SelectionSequential, true},
+		{PresetUpgrades, 1, 5, 600 * time.Second, 25, "", false},
 	}
-	if catchUp.Values.Selection != SelectionSequential {
-		t.Errorf("catch_up: Selection = %q; want sequential", catchUp.Values.Selection)
+	if len(presets) != len(cases) {
+		t.Fatalf("len = %d; want %d", len(presets), len(cases))
 	}
-	for _, p := range []PolicyPreset{presets[0], presets[1], presets[3]} {
-		if p.Values.HasSelection {
-			t.Errorf("%s: HasSelection true; want false", p.Key)
+	for i, tc := range cases {
+		v := presets[i].Values
+		if presets[i].Key != tc.key {
+			t.Errorf("[%d] Key = %q; want %q", i, presets[i].Key, tc.key)
+		}
+		if v.MissingPerCycle != tc.missing {
+			t.Errorf("%s: MissingPerCycle = %d; want %d", tc.key, v.MissingPerCycle, tc.missing)
+		}
+		if v.UpgradePerCycle != tc.upgrade {
+			t.Errorf("%s: UpgradePerCycle = %d; want %d", tc.key, v.UpgradePerCycle, tc.upgrade)
+		}
+		if v.CycleInterval != tc.interval {
+			t.Errorf("%s: CycleInterval = %v; want %v", tc.key, v.CycleInterval, tc.interval)
+		}
+		if v.HourlyCap != tc.cap {
+			t.Errorf("%s: HourlyCap = %d; want %d", tc.key, v.HourlyCap, tc.cap)
+		}
+		if v.HasSelection != tc.hasSelection {
+			t.Errorf("%s: HasSelection = %v; want %v", tc.key, v.HasSelection, tc.hasSelection)
+		}
+		if tc.hasSelection && v.Selection != tc.selection {
+			t.Errorf("%s: Selection = %q; want %q", tc.key, v.Selection, tc.selection)
 		}
 	}
 }

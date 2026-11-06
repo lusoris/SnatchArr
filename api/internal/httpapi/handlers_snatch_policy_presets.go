@@ -6,6 +6,7 @@ package httpapi
 
 import (
 	"context"
+	"time"
 
 	"github.com/lusoris/SnatchArr/api/internal/build/oas"
 	"github.com/lusoris/SnatchArr/api/internal/domain"
@@ -20,7 +21,7 @@ func (h *Handlers) GetSnatchPolicyPresets(_ context.Context) ([]oas.SnatchPolicy
 			Key:             string(p.Key),
 			MissingPerCycle: p.Values.MissingPerCycle,
 			UpgradePerCycle: p.Values.UpgradePerCycle,
-			CycleIntervalS:  int(p.Values.CycleInterval.Seconds()),
+			CycleIntervalS:  int(p.Values.CycleInterval / time.Second),
 			HourlyCap:       p.Values.HourlyCap,
 		}
 		if p.Values.HasSelection {
