@@ -125,10 +125,10 @@ The plugin communicates with SnatchArr exclusively over HTTP REST, conforming to
 Authentication uses a two-tier model:
 
 1. **Server-level scoped token**: Configured in the plugin dashboard settings. The administrator generates a dedicated API key in SnatchArr with scopes:
-   - `core:read`: Read system status and batch library badge status (`/system/status`, `/media/status`).
+   - `core:read`: Batch library badge status (`/media/status`). The plugin validates the token with an authenticated call such as `listModules` (`GET /system/modules`), since the `/system/status` handshake is public (`security: []` on `getSystemStatus`).
    - `adult:read`: Query adult scene metadata, performer profiles, and gallery image streams (`/adult/*`).
-   This token authenticates only server-to-server operations (handshake, metadata scraping, scheduled badge sync). It never calls `/requests`: request listing and submission act for a user and take the session cookie below. The scopes of the background notification events (watch-aware notifications, health probes) are set in [ADR-0035](0035-jellyfin-integration.md) section 2.
-2. **User-delegated context**: For interactive actions initiated by a Jellyfin user (e.g. submitting a request or browsing adult discovery), SnatchArr must know which user acts and must not take the plugin's word for it. A caller-supplied user id header alone is never trusted. Question 4 settled the protocol (answered 2026-10-24, option b), and [ADR-0035](0035-jellyfin-integration.md) section 2 fixes its intended shape. That shape depends on API work that has not shipped: `jellyfinLogin` (`POST /auth/jellyfin`) accepts only a username and password today (`JellyfinLoginRequest` in `api/openapi/openapi.yaml`), and no by-token verification exists yet. Once that work lands, the plugin exchanges the user's own Jellyfin access token at `POST /auth/jellyfin` (`jellyfinLogin`), SnatchArr verifies it with Jellyfin `GET /Users/Me` (`Jellyfin.Api/Controllers/UserController.cs:581`), maps it to an account per ADR-0026 and returns the `snatcharr_session` cookie (`cookieAuth`). Later interactive calls carry that cookie, which enforces the role (`requester` vs `viewer`) and the adult gate of that user. The scoped API key never acts for a user; SnatchArr ignores any user id header on API-key requests.
+   This token authenticates only server-to-server operations (metadata scraping, scheduled badge sync). It never calls `/requests`: request listing and submission act for a user and take the session cookie below. The scopes of the background notification events (watch-aware notifications, health probes) are set in [ADR-0035](0035-jellyfin-integration.md) section 2.
+2. **User-delegated context**: For interactive actions initiated by a Jellyfin user (e.g. submitting a request or browsing adult discovery), SnatchArr must know which user acts and must not take the plugin's word for it. A caller-supplied user id header alone is never trusted. Question 4 settled the protocol (answered 2026-10-24, option b), and [ADR-0035](0035-jellyfin-integration.md) section 2 fixes its intended shape. That shape depends on API work that has not shipped: `jellyfinLogin` (`POST /auth/jellyfin`) accepts only a username and password today (`JellyfinLoginRequest` in `api/openapi/openapi.yaml`), and no by-token verification exists yet. Once that work lands, the plugin exchanges the user's own Jellyfin access token at `POST /auth/jellyfin` (`jellyfinLogin`), SnatchArr verifies it with Jellyfin `GET /Users/Me` (`Jellyfin.Api/Controllers/UserController.cs:581`), maps it to an account per ADR-0026 and returns the `snatcharr_session` cookie (`cookieAuth`). SnatchArr sends the user token to Jellyfin only over `https` in the prod profile, the rule `validateOIDCIssuer` applies to the OIDC issuer (`api/internal/config/config.go`); `validateConnection` accepts `http` in every profile today, and #1027 closes that gap. Later interactive calls carry that cookie, which enforces the role (`requester` vs `viewer`) and the adult gate of that user. The scoped API key never acts for a user; SnatchArr ignores any user id header on API-key requests.
 
 #### Contract endpoints
 
@@ -139,8 +139,8 @@ Paths are relative to the server URL `/api/v1`, as in `api/openapi/openapi.yaml`
 paths:
   /system/status:
     get:
-      summary: Service handshake and version compatibility check
-      security: [{ bearerAuth: [] }]
+      summary: Service handshake and version compatibility check (public; proves reachability, not the token)
+      security: []
       responses:
         "200":
           description: Service status, version, and active modules
