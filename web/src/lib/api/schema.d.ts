@@ -874,6 +874,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/snatch-policy-presets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Built-in snatch policy presets
+         * @description Returns the shipped presets (gentle, balanced, catch_up, upgrades) whose partial policy values can be applied to an instance's snatch policy. The balanced preset matches the server defaults (ADR-0020).
+         */
+        get: operations["getSnatchPolicyPresets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/logs": {
         parameters: {
             query?: never;
@@ -2155,6 +2175,16 @@ export interface components {
             skip_unavailable_movies?: boolean;
             /** Format: date-time */
             readonly updated_at?: string;
+        };
+        SnatchPolicyPreset: {
+            /** @description Unique preset identifier */
+            key: string;
+            missing_per_cycle: number;
+            upgrade_per_cycle: number;
+            cycle_interval_s: number;
+            hourly_cap: number;
+            /** @enum {string} */
+            selection?: "random" | "sequential" | "recent";
         };
         /** @enum {string} */
         SnatchKind: "missing" | "upgrade";
@@ -4678,6 +4708,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Settings"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getSnatchPolicyPresets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Ordered list of built-in presets */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SnatchPolicyPreset"][];
                 };
             };
             default: components["responses"]["Problem"];

@@ -581,6 +581,17 @@ func (UnimplementedHandler) GetSetupStatus(ctx context.Context) (r *SetupStatus,
 	return r, ht.ErrNotImplemented
 }
 
+// GetSnatchPolicyPresets implements getSnatchPolicyPresets operation.
+//
+// Returns the shipped presets (gentle, balanced, catch_up, upgrades) whose partial policy values can
+// be applied to an instance's snatch policy. The balanced preset matches the server defaults
+// (ADR-0020).
+//
+// GET /snatch-policy-presets
+func (UnimplementedHandler) GetSnatchPolicyPresets(ctx context.Context) (r []SnatchPolicyPreset, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // GetSystemStatus implements getSystemStatus operation.
 //
 // Service status and build information.

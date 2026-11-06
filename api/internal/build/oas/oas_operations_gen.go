@@ -68,6 +68,7 @@ const (
 	GetSessionOperation                       OperationName = "GetSession"
 	GetSettingsOperation                      OperationName = "GetSettings"
 	GetSetupStatusOperation                   OperationName = "GetSetupStatus"
+	GetSnatchPolicyPresetsOperation           OperationName = "GetSnatchPolicyPresets"
 	GetSystemStatusOperation                  OperationName = "GetSystemStatus"
 	GetWatchawareSyncStatusOperation          OperationName = "GetWatchawareSyncStatus"
 	ImportConfigarrOperation                  OperationName = "ImportConfigarr"

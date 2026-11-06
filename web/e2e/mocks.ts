@@ -50,6 +50,41 @@ export const samplePreflightData = {
 	]
 };
 
+export const samplePresetsData = [
+	{
+		key: 'gentle',
+		missing_per_cycle: 1,
+		upgrade_per_cycle: 0,
+		cycle_interval_s: 900,
+		hourly_cap: 4,
+		selection: 'random'
+	},
+	{
+		key: 'balanced',
+		missing_per_cycle: 2,
+		upgrade_per_cycle: 1,
+		cycle_interval_s: 900,
+		hourly_cap: 15,
+		selection: 'random'
+	},
+	{
+		key: 'catch_up',
+		missing_per_cycle: 10,
+		upgrade_per_cycle: 2,
+		cycle_interval_s: 300,
+		hourly_cap: 60,
+		selection: 'sequential'
+	},
+	{
+		key: 'upgrades',
+		missing_per_cycle: 1,
+		upgrade_per_cycle: 5,
+		cycle_interval_s: 600,
+		hourly_cap: 25,
+		selection: 'random'
+	}
+];
+
 export const samplePolicyData = {
 	missing_per_cycle: 10,
 	upgrade_per_cycle: 5,
@@ -399,6 +434,9 @@ export async function mockInstancePolicyApi(
 	);
 	await page.route(`**/api/v1/instances/${instanceId}/foreign-search/preflight`, (route) =>
 		route.fulfill(json(samplePreflightData))
+	);
+	await page.route('**/api/v1/snatch-policy-presets', (route) =>
+		route.fulfill(json(samplePresetsData))
 	);
 }
 

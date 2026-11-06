@@ -6655,6 +6655,52 @@ func (o OptSfwMode) Or(d SfwMode) SfwMode {
 	return d
 }
 
+// NewOptSnatchPolicyPresetSelection returns new OptSnatchPolicyPresetSelection with value set to v.
+func NewOptSnatchPolicyPresetSelection(v SnatchPolicyPresetSelection) OptSnatchPolicyPresetSelection {
+	return OptSnatchPolicyPresetSelection{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptSnatchPolicyPresetSelection is optional SnatchPolicyPresetSelection.
+type OptSnatchPolicyPresetSelection struct {
+	Value SnatchPolicyPresetSelection
+	Set   bool
+}
+
+// IsSet returns true if OptSnatchPolicyPresetSelection was set.
+func (o OptSnatchPolicyPresetSelection) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptSnatchPolicyPresetSelection) Reset() {
+	var v SnatchPolicyPresetSelection
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptSnatchPolicyPresetSelection) SetTo(v SnatchPolicyPresetSelection) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptSnatchPolicyPresetSelection) Get() (v SnatchPolicyPresetSelection, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptSnatchPolicyPresetSelection) Or(d SnatchPolicyPresetSelection) SnatchPolicyPresetSelection {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
 // NewOptStateReset returns new OptStateReset with value set to v.
 func NewOptStateReset(v StateReset) OptStateReset {
 	return OptStateReset{
@@ -10920,6 +10966,125 @@ func (s *SnatchPolicyLidarrMissingMode) UnmarshalText(data []byte) error {
 		return nil
 	case SnatchPolicyLidarrMissingModeAlbum:
 		*s = SnatchPolicyLidarrMissingModeAlbum
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/SnatchPolicyPreset
+type SnatchPolicyPreset struct {
+	// Unique preset identifier.
+	Key             string                         `json:"key"`
+	MissingPerCycle int                            `json:"missing_per_cycle"`
+	UpgradePerCycle int                            `json:"upgrade_per_cycle"`
+	CycleIntervalS  int                            `json:"cycle_interval_s"`
+	HourlyCap       int                            `json:"hourly_cap"`
+	Selection       OptSnatchPolicyPresetSelection `json:"selection"`
+}
+
+// GetKey returns the value of Key.
+func (s *SnatchPolicyPreset) GetKey() string {
+	return s.Key
+}
+
+// GetMissingPerCycle returns the value of MissingPerCycle.
+func (s *SnatchPolicyPreset) GetMissingPerCycle() int {
+	return s.MissingPerCycle
+}
+
+// GetUpgradePerCycle returns the value of UpgradePerCycle.
+func (s *SnatchPolicyPreset) GetUpgradePerCycle() int {
+	return s.UpgradePerCycle
+}
+
+// GetCycleIntervalS returns the value of CycleIntervalS.
+func (s *SnatchPolicyPreset) GetCycleIntervalS() int {
+	return s.CycleIntervalS
+}
+
+// GetHourlyCap returns the value of HourlyCap.
+func (s *SnatchPolicyPreset) GetHourlyCap() int {
+	return s.HourlyCap
+}
+
+// GetSelection returns the value of Selection.
+func (s *SnatchPolicyPreset) GetSelection() OptSnatchPolicyPresetSelection {
+	return s.Selection
+}
+
+// SetKey sets the value of Key.
+func (s *SnatchPolicyPreset) SetKey(val string) {
+	s.Key = val
+}
+
+// SetMissingPerCycle sets the value of MissingPerCycle.
+func (s *SnatchPolicyPreset) SetMissingPerCycle(val int) {
+	s.MissingPerCycle = val
+}
+
+// SetUpgradePerCycle sets the value of UpgradePerCycle.
+func (s *SnatchPolicyPreset) SetUpgradePerCycle(val int) {
+	s.UpgradePerCycle = val
+}
+
+// SetCycleIntervalS sets the value of CycleIntervalS.
+func (s *SnatchPolicyPreset) SetCycleIntervalS(val int) {
+	s.CycleIntervalS = val
+}
+
+// SetHourlyCap sets the value of HourlyCap.
+func (s *SnatchPolicyPreset) SetHourlyCap(val int) {
+	s.HourlyCap = val
+}
+
+// SetSelection sets the value of Selection.
+func (s *SnatchPolicyPreset) SetSelection(val OptSnatchPolicyPresetSelection) {
+	s.Selection = val
+}
+
+type SnatchPolicyPresetSelection string
+
+const (
+	SnatchPolicyPresetSelectionRandom     SnatchPolicyPresetSelection = "random"
+	SnatchPolicyPresetSelectionSequential SnatchPolicyPresetSelection = "sequential"
+	SnatchPolicyPresetSelectionRecent     SnatchPolicyPresetSelection = "recent"
+)
+
+// AllValues returns all SnatchPolicyPresetSelection values.
+func (SnatchPolicyPresetSelection) AllValues() []SnatchPolicyPresetSelection {
+	return []SnatchPolicyPresetSelection{
+		SnatchPolicyPresetSelectionRandom,
+		SnatchPolicyPresetSelectionSequential,
+		SnatchPolicyPresetSelectionRecent,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s SnatchPolicyPresetSelection) MarshalText() ([]byte, error) {
+	switch s {
+	case SnatchPolicyPresetSelectionRandom:
+		return []byte(s), nil
+	case SnatchPolicyPresetSelectionSequential:
+		return []byte(s), nil
+	case SnatchPolicyPresetSelectionRecent:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *SnatchPolicyPresetSelection) UnmarshalText(data []byte) error {
+	switch SnatchPolicyPresetSelection(data) {
+	case SnatchPolicyPresetSelectionRandom:
+		*s = SnatchPolicyPresetSelectionRandom
+		return nil
+	case SnatchPolicyPresetSelectionSequential:
+		*s = SnatchPolicyPresetSelectionSequential
+		return nil
+	case SnatchPolicyPresetSelectionRecent:
+		*s = SnatchPolicyPresetSelectionRecent
 		return nil
 	default:
 		return errors.Errorf("invalid value: %q", data)

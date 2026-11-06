@@ -110,7 +110,41 @@ describe('Field coverage against openapi.yaml', () => {
 			stubGet({
 				'/instances/{instanceId}': inst,
 				'/instances/{instanceId}/policy': samplePolicy,
-				'/instances/{instanceId}/policy/filter-options': sampleFilterOptions
+				'/instances/{instanceId}/policy/filter-options': sampleFilterOptions,
+				'/snatch-policy-presets': [
+					{
+						key: 'gentle',
+						missing_per_cycle: 1,
+						upgrade_per_cycle: 0,
+						cycle_interval_s: 900,
+						hourly_cap: 4,
+						selection: 'random'
+					},
+					{
+						key: 'balanced',
+						missing_per_cycle: 2,
+						upgrade_per_cycle: 1,
+						cycle_interval_s: 900,
+						hourly_cap: 15,
+						selection: 'random'
+					},
+					{
+						key: 'catch_up',
+						missing_per_cycle: 10,
+						upgrade_per_cycle: 2,
+						cycle_interval_s: 300,
+						hourly_cap: 60,
+						selection: 'sequential'
+					},
+					{
+						key: 'upgrades',
+						missing_per_cycle: 1,
+						upgrade_per_cycle: 5,
+						cycle_interval_s: 600,
+						hourly_cap: 25,
+						selection: 'random'
+					}
+				]
 			});
 			const { container } = renderWithQuery(InstancePolicyTab, { id: inst.id });
 			await within(container).findByRole('heading', { level: 2 });
@@ -196,6 +230,33 @@ describe('Field coverage against openapi.yaml', () => {
 		expect(missing).toEqual([]);
 	});
 
+	it('covers every writable RequestsSettings property', async () => {
+		const expectedProps = getWritableProperties(yaml, 'RequestsSettings');
+		expect(expectedProps).toEqual([
+			'voting_mode',
+			'allow_viewer_votes',
+			'visibility',
+			'voting_ttl_days'
+		]);
+
+		stubGet({
+			'/requests/settings': {
+				voting_mode: 'upvotes_only',
+				allow_viewer_votes: true,
+				visibility: 'public_attributed',
+				voting_ttl_days: 0
+			}
+		});
+
+		const { default: RequestsSettingsPage } =
+			await import('../../../routes/settings/requests/+page.svelte');
+		const { container } = renderWithQuery(RequestsSettingsPage);
+		await screen.findByRole('heading', { level: 2 });
+
+		const missing = checkFieldCoverage(container, expectedProps);
+		expect(missing).toEqual([]);
+	});
+
 	it('planted case: reports missing when a data-field is removed from rendered DOM', async () => {
 		const expectedProps = getWritableProperties(yaml, 'SnatchPolicy');
 
@@ -203,7 +264,41 @@ describe('Field coverage against openapi.yaml', () => {
 		stubGet({
 			'/instances/{instanceId}': inst,
 			'/instances/{instanceId}/policy': samplePolicy,
-			'/instances/{instanceId}/policy/filter-options': sampleFilterOptions
+			'/instances/{instanceId}/policy/filter-options': sampleFilterOptions,
+			'/snatch-policy-presets': [
+				{
+					key: 'gentle',
+					missing_per_cycle: 1,
+					upgrade_per_cycle: 0,
+					cycle_interval_s: 900,
+					hourly_cap: 4,
+					selection: 'random'
+				},
+				{
+					key: 'balanced',
+					missing_per_cycle: 2,
+					upgrade_per_cycle: 1,
+					cycle_interval_s: 900,
+					hourly_cap: 15,
+					selection: 'random'
+				},
+				{
+					key: 'catch_up',
+					missing_per_cycle: 10,
+					upgrade_per_cycle: 2,
+					cycle_interval_s: 300,
+					hourly_cap: 60,
+					selection: 'sequential'
+				},
+				{
+					key: 'upgrades',
+					missing_per_cycle: 1,
+					upgrade_per_cycle: 5,
+					cycle_interval_s: 600,
+					hourly_cap: 25,
+					selection: 'random'
+				}
+			]
 		});
 		const { container } = renderWithQuery(InstancePolicyTab, { id: inst.id });
 		await screen.findByRole('heading', { level: 2 });

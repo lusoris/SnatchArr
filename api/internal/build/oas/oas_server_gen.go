@@ -388,6 +388,14 @@ type Handler interface {
 	//
 	// GET /auth/setup/status
 	GetSetupStatus(ctx context.Context) (*SetupStatus, error)
+	// GetSnatchPolicyPresets implements getSnatchPolicyPresets operation.
+	//
+	// Returns the shipped presets (gentle, balanced, catch_up, upgrades) whose partial policy values can
+	// be applied to an instance's snatch policy. The balanced preset matches the server defaults
+	// (ADR-0020).
+	//
+	// GET /snatch-policy-presets
+	GetSnatchPolicyPresets(ctx context.Context) ([]SnatchPolicyPreset, error)
 	// GetSystemStatus implements getSystemStatus operation.
 	//
 	// Service status and build information.

@@ -55,5 +55,6 @@ export const keys = {
 	adultPerformer: (id: string) => ['adult', 'performers', 'detail', id] as const,
 	adultStudios: (favorite?: boolean) => ['adult', 'studios', favorite] as const,
 	adultStudio: (id: string) => ['adult', 'studios', 'detail', id] as const,
-	requestsSettings: ['requests', 'settings'] as const
+	requestsSettings: ['requests', 'settings'] as const,
+	snatchPolicyPresets: ['snatch-policy-presets'] as const
 };
