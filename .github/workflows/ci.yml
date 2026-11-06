@@ -138,6 +138,9 @@ jobs:
   changes:
     name: Detect changed components
     runs-on: ubuntu-26.04
+    # Fleet floor 5 min (hosted runner setup and checkout jitter); measured p95 under 10 s over
+    # 40 runs, so max(5, ceil(p95 x2)) = 5. Literal: env is not allowed in timeout-minutes.
+    timeout-minutes: 5
     permissions:
       contents: read
       pull-requests: read
