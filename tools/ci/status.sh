@@ -32,6 +32,7 @@ image-smoke api,worker,proto,web,deploy
 dev-compose deploy
 dlclients-live api
 arr-forceimport-live api
+arr-pushtitle-live api
 integrations-live api,web
 web web
 web-e2e-api api,web,release

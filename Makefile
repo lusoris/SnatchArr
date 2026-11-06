@@ -21,7 +21,7 @@ GOMODCACHE       = $(subst \,/,$(shell go env GOMODCACHE))
 GOLUSORIS_VER    = $(shell go list -m -f '{{.Version}}' github.com/golusoris/golusoris)
 GOLUSORIS_SHARED = $(GOMODCACHE)/github.com/golusoris/golusoris@$(GOLUSORIS_VER)/tools/Makefile.shared
 
-.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-soak e2e-compose-smoke e2e-compose-pg-upgrade e2e-compose-app-upgrade e2e-dev-compose-smoke dlclients-live arr-forceimport-live integrations-live e2e-cnpg-pg-upgrade e2e-cnpg-backup-restore e2e-chart-install web-verify web-e2e web-e2e-api web-visual web-visual-update proto-verify deploy-verify chart-package governance-verify hooks-verify contracts-verify workflows-verify workflows-lint release-e2e-check release-dogfood-check release-closes-check secret-scan py-lint docs-verify licences licences-check logos logos-check \
+.PHONY: help verify-all api-verify worker-verify worker-cover e2e-smoke e2e-image-smoke e2e-soak e2e-compose-smoke e2e-compose-pg-upgrade e2e-compose-app-upgrade e2e-dev-compose-smoke dlclients-live arr-forceimport-live arr-pushtitle-live integrations-live e2e-cnpg-pg-upgrade e2e-cnpg-backup-restore e2e-chart-install web-verify web-e2e web-e2e-api web-visual web-visual-update proto-verify deploy-verify chart-package governance-verify hooks-verify contracts-verify workflows-verify workflows-lint release-e2e-check release-dogfood-check release-closes-check secret-scan py-lint docs-verify licences licences-check logos logos-check \
 	images kind-up kind-deploy kind-keda-proof kind-down \
         api-gen api-gosec api-vuln gosec-install govulncheck-install sqlc-install tools-verify tools-lint tools-test tools-gosec web-gen proto-gen dev hooks setup api-openapi-breaking settings-parity settings-parity-check roadmap-check
 
@@ -338,6 +338,20 @@ arr-forceimport-live: ## Real Sonarr and Radarr: ID-matched release force-import
 	bash tools/e2e/planted.sh SNATCHARR_FORCEIMPORT_PLANT tools/e2e/forceimport_live.sh \
 	  "audio:no clean, mapped manual-import candidate" "unmapped:no clean, mapped manual-import candidate" \
 	  "second-line:is not id-matched" "skip:is still in the queue"
+
+# Sonarr v3 and v4 push-title import guarantee (ADR-0019 open point 1) on real Sonarr
+# and qBittorrent (tools/e2e/forceimport/compose.yaml and tools/e2e/pushtitle/images.yaml):
+# canonical release push guarantees automatic import of foreign folder and file names across
+# 7 test cases. The planted cases (foreign title push s1 not imported, id-only push s3
+# import blocked) must each fail. Not in verify-all (slow, needs Docker and metadata lookups).
+arr-pushtitle-live: ## Real Sonarr v3 and v4: push-title import guarantee verified (needs Docker)
+	bash tools/e2e/pull_retry_test.sh
+	bash tools/e2e/planted_test.sh
+	bash tools/e2e/live_lib_test.sh
+	env SNATCHARR_PUSHTITLE_SONARR=v4 bash tools/e2e/planted.sh SNATCHARR_PUSHTITLE_PLANT tools/e2e/pushtitle_live.sh \
+	  "foreign:s1 not imported" "idonly:s3 import blocked"
+	env SNATCHARR_PUSHTITLE_SONARR=v3 bash tools/e2e/planted.sh SNATCHARR_PUSHTITLE_PLANT tools/e2e/pushtitle_live.sh \
+	  "foreign:s1 not imported" "idonly:s3 import blocked"
 
 # All supported integrations driven end to end against real application containers
 # (tools/e2e/integrations): Sonarr, Radarr, Lidarr, Readarr, Whisparr v2, Whisparr v3,

@@ -624,6 +624,20 @@ jobs:
       - name: make arr-forceimport-live
         run: make arr-forceimport-live
 
+  arr-pushtitle-live:
+    name: push-title import (real Sonarr v3 and v4)
+    needs: changes
+    if: needs.changes.outputs.api == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 25
+    steps:
+      - *stop-draft
+      - *checkout
+      # Sonarr v3 and v4 push-title import guarantee (ADR-0019 open point 1) on real
+      # Sonarr and qBittorrent, after two planted defects the test must refuse.
+      - name: make arr-pushtitle-live
+        run: make arr-pushtitle-live
+
   integrations-live:
     name: integrations (real app containers)
     needs: changes
@@ -1034,6 +1048,7 @@ jobs:
       - dev-compose
       - dlclients-live
       - arr-forceimport-live
+      - arr-pushtitle-live
       - integrations-live
       - web
       - web-e2e-api
