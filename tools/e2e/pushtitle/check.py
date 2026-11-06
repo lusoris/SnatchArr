@@ -14,6 +14,7 @@ import json
 import os
 import sys
 import time
+import typing
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -27,6 +28,17 @@ SONARR_VER = os.environ.get("SNATCHARR_PUSHTITLE_SONARR", "v4")
 
 class CheckError(Exception):
     """Raised when an assertion or setup step fails."""
+
+
+def open_http(
+    req: urllib.request.Request | str, timeout: float
+) -> typing.Any:
+    """Validate that the URL scheme is http or https before opening."""
+    raw_url = req.full_url if isinstance(req, urllib.request.Request) else str(req)
+    scheme = urllib.parse.urlsplit(raw_url).scheme.lower()
+    if scheme not in ("http", "https"):
+        raise CheckError(f"refusing non-http URL scheme {scheme!r}: {raw_url}")
+    return urllib.request.urlopen(req, timeout=timeout)
 
 
 def call(
@@ -45,7 +57,7 @@ def call(
         headers={"X-Api-Key": key, "Content-Type": "application/json"},
     )
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with open_http(req, timeout=30) as resp:
             return json.loads(resp.read() or b"null")
     except urllib.error.HTTPError as err:
         body_text = err.read()[:600].decode("utf-8", "replace")
@@ -59,7 +71,7 @@ def wait_ready(base: str, key: str) -> None:
     )
     for _ in range(90):
         try:
-            with urllib.request.urlopen(req, timeout=5):
+            with open_http(req, timeout=5):
                 return
         except (urllib.error.URLError, OSError):
             time.sleep(1)
@@ -82,7 +94,7 @@ def qbit_login(port: int, password: str) -> dict[str, object]:
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with open_http(req, timeout=10) as resp:
             body = resp.read()[:80].decode("utf-8", "replace")
             return {"status": resp.status, "body": body}
     except urllib.error.HTTPError as err:
@@ -135,15 +147,19 @@ def setup_sonarr(
     base: str, key: str, qbit_port: int, qbit_pass: str
 ) -> dict[str, object]:
     """Configure root folder, language profile, download client, and test series."""
-    call(base, key, "POST", "/api/v3/rootfolder", {"path": "/downloads/library/tv"})
+    rf = call(base, key, "POST", "/api/v3/rootfolder", {"path": "/downloads/library/tv"})
+    if isinstance(rf, dict) and rf.get("_http"):
+        raise CheckError(f"POST /api/v3/rootfolder failed: {rf}")
     update_language_profile(base, key)
-    call(
+    dc = call(
         base,
         key,
         "POST",
         "/api/v3/downloadclient",
         make_download_client(qbit_port, qbit_pass),
     )
+    if isinstance(dc, dict) and dc.get("_http"):
+        raise CheckError(f"POST /api/v3/downloadclient failed: {dc}")
 
     lookup = call(base, key, "GET", f"/api/v3/series/lookup?term=tvdb:{TVDB_ID}")
     if not isinstance(lookup, list) or not lookup:
@@ -408,20 +424,31 @@ def verify_planted_cases(
         s1 = cases_by_id["s1"]
         s1_push = s1.get("push") or {}
         s1_outcome = s1.get("outcome") or {}
-        if s1_push.get("approved") and s1_outcome.get("result") == "imported":
-            raise CheckError("s1 was unexpectedly imported under foreign plant")
+        if s1_push.get("approved") is False and s1_push.get("rejections"):
+            raise CheckError(
+                f"s1 not imported: foreign plant active (approved={s1_push.get('approved')}, result={s1_outcome.get('result')})"
+            )
         raise CheckError(
-            f"s1 not imported: foreign plant active (approved={s1_push.get('approved')}, result={s1_outcome.get('result')})"
+            f"s1 foreign plant failed for an unexpected reason: push={s1_push}, outcome={s1_outcome}"
         )
 
     if plant == "idonly":
         s3 = cases_by_id["s3"]
+        s3_push = s3.get("push") or {}
         s3_outcome = s3.get("outcome") or {}
         s3_queue = s3_outcome.get("queue") or {}
-        if s3_outcome.get("result") == "imported":
-            raise CheckError("s3 was unexpectedly imported under idonly plant")
+        s3_grab = s3_outcome.get("grab_data") or {}
+        queue_dict = s3_queue if isinstance(s3_queue, dict) else None
+        if (
+            s3_push.get("approved")
+            and s3_grab.get("seriesMatchType") == "Id"
+            and id_match_blocked(queue_dict)
+        ):
+            raise CheckError(
+                f"s3 import blocked: idonly plant active (state={s3_queue.get('state')}, result={s3_outcome.get('result')})"
+            )
         raise CheckError(
-            f"s3 import blocked: idonly plant active (state={s3_queue.get('state')}, result={s3_outcome.get('result')})"
+            f"s3 idonly plant failed for an unexpected reason: push={s3_push}, outcome={s3_outcome}"
         )
 
 

@@ -15,6 +15,9 @@
 # SNATCHARR_PUSHTITLE_PLANT plants a defect the check must refuse:
 #   foreign  s1 pushes the foreign folder title instead of the canonical title -> s1 not imported
 #   idonly   s3 pushes an unparseable title with TVDB ID -> grab matched by ID, import blocked
+#
+# SNATCHARR_PUSHTITLE_EVIDENCE_DIR destination directory for evidence JSON files:
+#   $SNATCHARR_PUSHTITLE_EVIDENCE_DIR/$sonarr_ver-${plant:-clean}.json
 set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
@@ -142,6 +145,13 @@ done
     qbit_password >"$work/qbit.pass"
 )
 media
-evidence=${SNATCHARR_PUSHTITLE_EVIDENCE:-$work/evidence.json}
+if [ -n "${SNATCHARR_PUSHTITLE_EVIDENCE:-}" ]; then
+    evidence=$SNATCHARR_PUSHTITLE_EVIDENCE
+elif [ -n "${SNATCHARR_PUSHTITLE_EVIDENCE_DIR:-}" ]; then
+    mkdir -p "$SNATCHARR_PUSHTITLE_EVIDENCE_DIR"
+    evidence="$SNATCHARR_PUSHTITLE_EVIDENCE_DIR/$sonarr_ver-${plant:-clean}.json"
+else
+    evidence="$work/evidence.json"
+fi
 python3 -I "$root/tools/e2e/pushtitle/check.py" "$work" "$evidence"
 echo "ok   Sonarr $sonarr_ver push-title import guarantee verified"
