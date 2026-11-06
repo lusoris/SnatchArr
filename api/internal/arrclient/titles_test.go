@@ -24,6 +24,7 @@ import (
 
 var _ arrclient.ItemTitler = (*arrclient.GoenvoyProber)(nil)
 
+// titleServer serves metadata fixtures and checks the item request contract.
 func titleServer(t *testing.T, path, body string, status int) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -38,6 +39,19 @@ func titleServer(t *testing.T, path, body string, status int) *httptest.Server {
 	return srv
 }
 
+// fetchItemTitles fetches item 7 with shared request checks so boundary cases use the same setup.
+func fetchItemTitles(t *testing.T, kind domain.AppKind, body string, status int, timeout time.Duration) (arrclient.ItemTitles, error) {
+	t.Helper()
+	path := "/api/v3/movie/7"
+	if kind == domain.KindSonarr {
+		path = "/api/v3/series/7"
+	}
+	srv := titleServer(t, path, body, status)
+	p := arrclient.NewGoenvoyProber(arrclient.Options{Timeout: timeout})
+	return p.ItemTitles(t.Context(), kind, srv.URL, "test-key", 7)
+}
+
+// TestItemTitlesFetch checks cached metadata and alias conversion to preserve upstream title semantics.
 func TestItemTitlesFetch(t *testing.T) {
 	t.Parallel()
 	one, two := 1, 2
@@ -67,6 +81,7 @@ func TestItemTitlesFetch(t *testing.T) {
 	}
 }
 
+// assertAliasInput checks that search input retains the fetched titles and season scopes.
 func assertAliasInput(t *testing.T, got, want arrclient.ItemTitles) {
 	t.Helper()
 	in := got.AliasInput()
@@ -79,6 +94,7 @@ func assertAliasInput(t *testing.T, got, want arrclient.ItemTitles) {
 	}
 }
 
+// TestItemTitlesInvalid checks invalid inputs never send an upstream request.
 func TestItemTitlesInvalid(t *testing.T) {
 	t.Parallel()
 	var count atomic.Int64
@@ -113,6 +129,7 @@ func TestItemTitlesInvalid(t *testing.T) {
 	}
 }
 
+// TestItemTitlesErrors checks error identity and hints so callers can diagnose upstream failures.
 func TestItemTitlesErrors(t *testing.T) {
 	t.Parallel()
 	for _, kind := range []domain.AppKind{domain.KindSonarr, domain.KindRadarr} {
@@ -127,13 +144,7 @@ func TestItemTitlesErrors(t *testing.T) {
 		} {
 			t.Run(string(kind)+"/"+tc.name, func(t *testing.T) {
 				t.Parallel()
-				path := "/api/v3/movie/7"
-				if kind == domain.KindSonarr {
-					path = "/api/v3/series/7"
-				}
-				srv := titleServer(t, path, tc.body, tc.status)
-				p := arrclient.NewGoenvoyProber(arrclient.Options{Timeout: time.Second})
-				_, err := p.ItemTitles(t.Context(), kind, srv.URL, "test-key", 7)
+				_, err := fetchItemTitles(t, kind, tc.body, tc.status, time.Second)
 				apiErr, ok := errors.AsType[*arr.APIError](err)
 				if !errors.Is(err, tc.want) || !ok || apiErr.StatusCode != tc.status {
 					t.Fatalf("error = %v; want %v and API status %d", err, tc.want, tc.status)
@@ -146,6 +157,7 @@ func TestItemTitlesErrors(t *testing.T) {
 	}
 }
 
+// TestItemTitlesBodyCap checks the exact response limit so oversized metadata is rejected.
 func TestItemTitlesBodyCap(t *testing.T) {
 	t.Parallel()
 	const capBytes = 4 << 20
@@ -155,13 +167,7 @@ func TestItemTitlesBodyCap(t *testing.T) {
 				t.Parallel()
 				const item = `{"title":"Canonical"}`
 				body := item + strings.Repeat(" ", size-len(item))
-				path := "/api/v3/movie/7"
-				if kind == domain.KindSonarr {
-					path = "/api/v3/series/7"
-				}
-				srv := titleServer(t, path, body, http.StatusOK)
-				p := arrclient.NewGoenvoyProber(arrclient.Options{Timeout: 5 * time.Second})
-				got, err := p.ItemTitles(t.Context(), kind, srv.URL, "test-key", 7)
+				got, err := fetchItemTitles(t, kind, body, http.StatusOK, 5*time.Second)
 				if size > capBytes {
 					if !errors.Is(err, domain.ErrUnreachable) {
 						t.Fatalf("error = %v; want ErrUnreachable for oversized body", err)
@@ -174,6 +180,7 @@ func TestItemTitlesBodyCap(t *testing.T) {
 	}
 }
 
+// TestItemTitlesAliasBounds checks trimming and truncation so empty aliases do not consume the limit.
 func TestItemTitlesAliasBounds(t *testing.T) {
 	t.Parallel()
 	for _, kind := range []domain.AppKind{domain.KindSonarr, domain.KindRadarr} {
@@ -186,13 +193,7 @@ func TestItemTitlesAliasBounds(t *testing.T) {
 					aliases = append(aliases, fmt.Sprintf(`{"title":" Alias %d "}`, i))
 				}
 				body := `{"alternateTitles":[` + strings.Join(aliases, ",") + `]}`
-				path := "/api/v3/movie/7"
-				if kind == domain.KindSonarr {
-					path = "/api/v3/series/7"
-				}
-				srv := titleServer(t, path, body, http.StatusOK)
-				p := arrclient.NewGoenvoyProber(arrclient.Options{Timeout: time.Second})
-				got, err := p.ItemTitles(t.Context(), kind, srv.URL, "test-key", 7)
+				got, err := fetchItemTitles(t, kind, body, http.StatusOK, time.Second)
 				if err != nil || len(got.Aliases) != min(count, 200) {
 					t.Fatalf("aliases = %d, %v; want %d", len(got.Aliases), err, min(count, 200))
 				}
@@ -206,12 +207,11 @@ func TestItemTitlesAliasBounds(t *testing.T) {
 	}
 }
 
+// TestItemTitlesSonarrLanguageName checks language names survive app-specific ID differences.
 func TestItemTitlesSonarrLanguageName(t *testing.T) {
 	t.Parallel()
 	// Sonarr Thai is 32, while Radarr Thai is 28: cross-app ID lookup loses this name.
-	srv := titleServer(t, "/api/v3/series/7", `{"title":"Series","originalLanguage":{"id":32,"name":"Thai"}}`, http.StatusOK)
-	p := arrclient.NewGoenvoyProber(arrclient.Options{Timeout: time.Second})
-	got, err := p.ItemTitles(t.Context(), domain.KindSonarr, srv.URL, "test-key", 7)
+	got, err := fetchItemTitles(t, domain.KindSonarr, `{"title":"Series","originalLanguage":{"id":32,"name":"Thai"}}`, http.StatusOK, time.Second)
 	if err != nil || !strings.EqualFold(got.OriginalLanguage, (foreigntitle.Rules{Name: "Thai"}).Name) {
 		t.Fatalf("original language = %q, %v; want Thai by name", got.OriginalLanguage, err)
 	}

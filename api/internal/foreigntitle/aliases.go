@@ -47,6 +47,7 @@ func SearchTitles(in AliasInput, r Rules, season *int, maxTitles int) []string {
 	return c.titles
 }
 
+// markedAlias identifies language cues that justify a search beyond native *arr alias matching.
 func markedAlias(title string, r Rules) bool {
 	for i := range len(r.Expansions) {
 		if strings.ContainsAny(title, r.Expansions[i].From) {
@@ -57,6 +58,7 @@ func markedAlias(title string, r Rules) bool {
 	return stripped != ""
 }
 
+// normalizeAlias collapses whitespace so formatting differences do not create duplicate searches.
 func normalizeAlias(title string) string {
 	return strings.Join(strings.Fields(title), " ")
 }
@@ -67,6 +69,7 @@ type aliasCollector struct {
 	titles    []string
 }
 
+// add collects unique noncanonical titles within the limit to avoid redundant searches.
 func (c *aliasCollector) add(title string) {
 	title = normalizeAlias(title)
 	if title == "" || strings.EqualFold(title, c.canonical) || len(c.titles) >= c.max {

@@ -48,6 +48,7 @@ func (f BaseFactory) Options() []arr.Option {
 	return []arr.Option{arr.WithHTTPClient(f.httpClient()), arr.WithUserAgent(f.UserAgent)}
 }
 
+// httpClient shares timeout, response, and redirect policies across typed and base clients.
 func (f BaseFactory) httpClient() *http.Client {
 	return &http.Client{
 		Timeout:       f.Timeout,
@@ -81,6 +82,7 @@ func (f BaseFactory) OptionsCapped(maxBytes int64) ([]arr.Option, error) {
 	return []arr.Option{arr.WithHTTPClient(client), arr.WithUserAgent(f.UserAgent)}, nil
 }
 
+// baseWithOptions centralizes base client construction so capped and uncapped clients report errors consistently.
 func (f BaseFactory) baseWithOptions(baseURL, apiKey string, opts []arr.Option) (*arr.BaseClient, error) {
 	c, err := arr.NewBaseClient(baseURL, apiKey, opts...)
 	if err != nil {

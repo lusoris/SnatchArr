@@ -12,6 +12,7 @@ import (
 	"testing/quick"
 )
 
+// TestSearchTitles checks language, season, and limit rules so only eligible aliases become searches.
 func TestSearchTitles(t *testing.T) {
 	t.Parallel()
 	rules, err := Load()
@@ -40,6 +41,7 @@ type aliasCase struct {
 	want       []string
 }
 
+// aliasCases supplies eligibility and boundary fixtures to preserve alias selection semantics.
 func aliasCases() []aliasCase {
 	one, two := 1, 2
 	original := AliasInput{Title: "The Lives of Others", OriginalTitle: "Das Leben der Anderen", OriginalLanguage: "gErMaN", Aliases: []AliasEntry{{Title: "Die Ärzte"}}}
@@ -66,6 +68,7 @@ func aliasCases() []aliasCase {
 	}
 }
 
+// TestSearchTitlesManyAliases checks deduplication beyond the variant collector's bound to avoid repeated searches.
 func TestSearchTitlesManyAliases(t *testing.T) {
 	t.Parallel()
 	in := AliasInput{}
@@ -79,6 +82,7 @@ func TestSearchTitlesManyAliases(t *testing.T) {
 	}
 }
 
+// TestSearchTitlesProperties checks varied metadata cannot violate search limits or uniqueness.
 func TestSearchTitlesProperties(t *testing.T) {
 	t.Parallel()
 	rules, err := Load()
@@ -98,6 +102,7 @@ func TestSearchTitlesProperties(t *testing.T) {
 	}
 }
 
+// validSearchTitles rejects redundant or excessive searches for the randomized property check.
 func validSearchTitles(in AliasInput, titles []string, maxTitles int) bool {
 	if len(titles) > maxTitles {
 		return false

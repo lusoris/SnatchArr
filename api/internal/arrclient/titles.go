@@ -72,6 +72,7 @@ func (p *GoenvoyProber) ItemTitles(ctx context.Context, kind domain.AppKind, bas
 	return titles, nil
 }
 
+// itemTitlesError classifies upstream failures while preserving API details and base URL hints.
 func itemTitlesError(err error, kind domain.AppKind) error {
 	sentinel := domain.ErrUnreachable
 	if apiErr, ok := errors.AsType[*arr.APIError](err); ok && apiErr.StatusCode == http.StatusNotFound {
@@ -80,6 +81,7 @@ func itemTitlesError(err error, kind domain.AppKind) error {
 	return fmt.Errorf("%w: item titles: %w", sentinel, HintAPIError(err, string(kind)))
 }
 
+// sonarrTitles reads cached series metadata, retaining alias season scopes for targeted searches.
 func sonarrTitles(ctx context.Context, baseURL, apiKey string, itemID int, opts []arr.Option) (ItemTitles, error) {
 	c, err := sonarr.New(baseURL, apiKey, opts...)
 	if err != nil {
@@ -106,6 +108,7 @@ func sonarrTitles(ctx context.Context, baseURL, apiKey string, itemID int, opts 
 	return titles, nil
 }
 
+// radarrTitles reads cached movie metadata so searches can use original and alternative titles.
 func radarrTitles(ctx context.Context, baseURL, apiKey string, itemID int, opts []arr.Option) (ItemTitles, error) {
 	c, err := radarr.New(baseURL, apiKey, opts...)
 	if err != nil {
@@ -127,6 +130,7 @@ func radarrTitles(ctx context.Context, baseURL, apiKey string, itemID int, opts 
 	return titles, nil
 }
 
+// addItemAlias keeps nonblank aliases and signals the bound to stop collecting upstream metadata.
 func addItemAlias(t *ItemTitles, title string, season *int) bool {
 	if title = strings.TrimSpace(title); title != "" {
 		t.Aliases = append(t.Aliases, Alias{Title: title, SeasonNumber: season})
