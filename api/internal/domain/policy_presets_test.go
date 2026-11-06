@@ -57,10 +57,10 @@ func TestSnatchPolicyPresetsExactValues(t *testing.T) {
 		selection    Selection
 		hasSelection bool
 	}{
-		{PresetGentle, 1, 0, 900 * time.Second, 4, "", false},
-		{PresetBalanced, 2, 1, 900 * time.Second, 15, "", false},
+		{PresetGentle, 1, 0, 900 * time.Second, 4, SelectionRandom, true},
+		{PresetBalanced, 2, 1, 900 * time.Second, 15, SelectionRandom, true},
 		{PresetCatchUp, 10, 2, 300 * time.Second, 60, SelectionSequential, true},
-		{PresetUpgrades, 1, 5, 600 * time.Second, 25, "", false},
+		{PresetUpgrades, 1, 5, 600 * time.Second, 25, SelectionRandom, true},
 	}
 	if len(presets) != len(cases) {
 		t.Fatalf("len = %d; want %d", len(presets), len(cases))

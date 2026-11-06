@@ -42,14 +42,16 @@ function setupPolicyTab(instance: Instance = forkInstance) {
 				missing_per_cycle: 1,
 				upgrade_per_cycle: 0,
 				cycle_interval_s: 900,
-				hourly_cap: 4
+				hourly_cap: 4,
+				selection: 'random'
 			},
 			{
 				key: 'balanced',
 				missing_per_cycle: 2,
 				upgrade_per_cycle: 1,
 				cycle_interval_s: 900,
-				hourly_cap: 15
+				hourly_cap: 15,
+				selection: 'random'
 			},
 			{
 				key: 'catch_up',
@@ -64,7 +66,8 @@ function setupPolicyTab(instance: Instance = forkInstance) {
 				missing_per_cycle: 1,
 				upgrade_per_cycle: 5,
 				cycle_interval_s: 600,
-				hourly_cap: 25
+				hourly_cap: 25,
+				selection: 'random'
 			}
 		]
 	});

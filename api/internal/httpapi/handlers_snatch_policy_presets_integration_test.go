@@ -58,15 +58,17 @@ func TestGetSnatchPolicyPresetsHTTP(t *testing.T) {
 		t.Errorf("balanced.CycleIntervalS = %d; want %d", balanced.CycleIntervalS, int(dp.CycleInterval.Seconds()))
 	}
 
-	// catch_up has selection=sequential; others omit it.
+	// Every preset sets selection per ADR-0020 matrix.
 	catchUp := presets[2]
 	if !catchUp.Selection.Set {
 		t.Error("catch_up.Selection not set; want sequential")
 	} else if catchUp.Selection.Value != oas.SnatchPolicyPresetSelectionSequential {
 		t.Errorf("catch_up.Selection = %q; want sequential", catchUp.Selection.Value)
 	}
-	if presets[0].Selection.Set {
-		t.Error("gentle.Selection set; want absent")
+	if !presets[0].Selection.Set {
+		t.Error("gentle.Selection not set; want random")
+	} else if presets[0].Selection.Value != oas.SnatchPolicyPresetSelectionRandom {
+		t.Errorf("gentle.Selection = %q; want random", presets[0].Selection.Value)
 	}
 
 	// Negative: gentle has upgrade_per_cycle=0.

@@ -40,10 +40,12 @@ func SnatchPolicyPresets() []PolicyPreset {
 		{Key: PresetGentle, Values: PolicyPresetValues{
 			MissingPerCycle: 1, UpgradePerCycle: 0,
 			CycleInterval: 900 * time.Second, HourlyCap: 4,
+			Selection: SelectionRandom, HasSelection: true,
 		}},
 		{Key: PresetBalanced, Values: PolicyPresetValues{
 			MissingPerCycle: 2, UpgradePerCycle: 1,
 			CycleInterval: 900 * time.Second, HourlyCap: 15,
+			Selection: SelectionRandom, HasSelection: true,
 		}},
 		{Key: PresetCatchUp, Values: PolicyPresetValues{
 			MissingPerCycle: 10, UpgradePerCycle: 2,
@@ -53,6 +55,7 @@ func SnatchPolicyPresets() []PolicyPreset {
 		{Key: PresetUpgrades, Values: PolicyPresetValues{
 			MissingPerCycle: 1, UpgradePerCycle: 5,
 			CycleInterval: 600 * time.Second, HourlyCap: 25,
+			Selection: SelectionRandom, HasSelection: true,
 		}},
 	}
 }
