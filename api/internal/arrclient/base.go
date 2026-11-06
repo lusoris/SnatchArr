@@ -58,22 +58,31 @@ func (f BaseFactory) httpClient() *http.Client {
 
 // Base builds a goenvoy BaseClient configured with the factory's timeout and user agent.
 func (f BaseFactory) Base(baseURL, apiKey string) (*arr.BaseClient, error) {
-	return f.baseWithClient(baseURL, apiKey, f.httpClient())
+	return f.baseWithOptions(baseURL, apiKey, f.Options())
 }
 
 // BaseCapped builds a client whose response body cannot exceed maxBytes.
 // The limit applies only to this client, including chunked and decompressed bodies.
 func (f BaseFactory) BaseCapped(baseURL, apiKey string, maxBytes int64) (*arr.BaseClient, error) {
+	opts, err := f.OptionsCapped(maxBytes)
+	if err != nil {
+		return nil, err
+	}
+	return f.baseWithOptions(baseURL, apiKey, opts)
+}
+
+// OptionsCapped configures typed clients with the same response limit as BaseCapped.
+func (f BaseFactory) OptionsCapped(maxBytes int64) ([]arr.Option, error) {
 	if maxBytes < 0 || maxBytes == math.MaxInt64 {
 		return nil, errors.New("base client: invalid response body limit")
 	}
 	client := f.httpClient()
 	client.Transport = cappedTransport{base: client.Transport, maxBytes: maxBytes}
-	return f.baseWithClient(baseURL, apiKey, client)
+	return []arr.Option{arr.WithHTTPClient(client), arr.WithUserAgent(f.UserAgent)}, nil
 }
 
-func (f BaseFactory) baseWithClient(baseURL, apiKey string, client *http.Client) (*arr.BaseClient, error) {
-	c, err := arr.NewBaseClient(baseURL, apiKey, arr.WithHTTPClient(client), arr.WithUserAgent(f.UserAgent))
+func (f BaseFactory) baseWithOptions(baseURL, apiKey string, opts []arr.Option) (*arr.BaseClient, error) {
+	c, err := arr.NewBaseClient(baseURL, apiKey, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("base client: %w", err)
 	}
