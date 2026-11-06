@@ -2279,6 +2279,12 @@ func buildRouterSteps(f *routerFixture) []routerStep {
 	steps = append(steps, stepsAPIKeys()...)
 	steps = append(steps, stepsInstances()...)
 	steps = append(steps, stepsPoliciesAndRuns()...)
+	steps = append(steps, routerStep{
+		op:     "getSnatchPolicyPresets",
+		method: http.MethodGet,
+		path:   func(_ *idsState) string { return "/snatch-policy-presets" },
+		want:   http.StatusOK,
+	})
 	steps = append(steps, stepsPriority()...)
 	steps = append(steps, stepsPriorityPresetWrites()...)
 	steps = append(steps, stepsPriorityPresetApplyDelete()...)

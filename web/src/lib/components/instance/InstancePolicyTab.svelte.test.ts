@@ -35,7 +35,38 @@ function setupPolicyTab(instance: Instance = forkInstance) {
 			applies: true,
 			languages: ['de', 'fr'],
 			profiles: []
-		}
+		},
+		'/snatch-policy-presets': [
+			{
+				key: 'gentle',
+				missing_per_cycle: 1,
+				upgrade_per_cycle: 0,
+				cycle_interval_s: 900,
+				hourly_cap: 4
+			},
+			{
+				key: 'balanced',
+				missing_per_cycle: 2,
+				upgrade_per_cycle: 1,
+				cycle_interval_s: 900,
+				hourly_cap: 15
+			},
+			{
+				key: 'catch_up',
+				missing_per_cycle: 10,
+				upgrade_per_cycle: 2,
+				cycle_interval_s: 300,
+				hourly_cap: 60,
+				selection: 'sequential'
+			},
+			{
+				key: 'upgrades',
+				missing_per_cycle: 1,
+				upgrade_per_cycle: 5,
+				cycle_interval_s: 600,
+				hourly_cap: 25
+			}
+		]
 	});
 	const renderResult = renderWithQuery(InstancePolicyTab, { id: instance.id });
 	return { put, ...renderResult };

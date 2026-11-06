@@ -1258,6 +1258,27 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
 
+  /snatch-policy-presets:
+    get:
+      tags: [system]
+      operationId: getSnatchPolicyPresets
+      summary: Built-in snatch policy presets
+      description: >-
+        Returns the shipped presets (gentle, balanced, catch_up, upgrades) whose
+        partial policy values can be applied to an instance's snatch policy. The
+        balanced preset matches the server defaults (ADR-0020).
+      responses:
+        "200":
+          description: Ordered list of built-in presets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SnatchPolicyPreset"
+        default:
+          $ref: "#/components/responses/Problem"
+
   /logs:
     get:
       tags: [system]
@@ -3499,6 +3520,33 @@ components:
           type: string
           format: date-time
           readOnly: true
+
+    SnatchPolicyPreset:
+      type: object
+      required: [key, missing_per_cycle, upgrade_per_cycle, cycle_interval_s, hourly_cap]
+      properties:
+        key:
+          type: string
+          description: Unique preset identifier
+        missing_per_cycle:
+          type: integer
+          minimum: 0
+          maximum: 100
+        upgrade_per_cycle:
+          type: integer
+          minimum: 0
+          maximum: 100
+        cycle_interval_s:
+          type: integer
+          minimum: 60
+          maximum: 604800
+        hourly_cap:
+          type: integer
+          minimum: 1
+          maximum: 500
+        selection:
+          type: string
+          enum: [random, sequential, recent]
 
     SnatchKind:
       type: string

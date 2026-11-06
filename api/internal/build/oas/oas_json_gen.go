@@ -11998,6 +11998,39 @@ func (s *OptSfwMode) UnmarshalJSON(data []byte) error {
 	return s.Decode(d)
 }
 
+// Encode encodes SnatchPolicyPresetSelection as json.
+func (o OptSnatchPolicyPresetSelection) Encode(e *jx.Encoder) {
+	if !o.Set {
+		return
+	}
+	e.Str(string(o.Value))
+}
+
+// Decode decodes SnatchPolicyPresetSelection from json.
+func (o *OptSnatchPolicyPresetSelection) Decode(d *jx.Decoder) error {
+	if o == nil {
+		return errors.New("invalid: unable to decode OptSnatchPolicyPresetSelection to nil")
+	}
+	o.Set = true
+	if err := o.Value.Decode(d); err != nil {
+		return err
+	}
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s OptSnatchPolicyPresetSelection) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *OptSnatchPolicyPresetSelection) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
 // Encode encodes StateReset as json.
 func (o OptStateReset) Encode(e *jx.Encoder) {
 	if !o.Set {
@@ -20703,6 +20736,229 @@ func (s SnatchPolicyLidarrMissingMode) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *SnatchPolicyLidarrMissingMode) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode implements json.Marshaler.
+func (s *SnatchPolicyPreset) Encode(e *jx.Encoder) {
+	e.ObjStart()
+	s.encodeFields(e)
+	e.ObjEnd()
+}
+
+// encodeFields encodes fields.
+func (s *SnatchPolicyPreset) encodeFields(e *jx.Encoder) {
+	{
+		e.FieldStart("key")
+		e.Str(s.Key)
+	}
+	{
+		e.FieldStart("missing_per_cycle")
+		e.Int(s.MissingPerCycle)
+	}
+	{
+		e.FieldStart("upgrade_per_cycle")
+		e.Int(s.UpgradePerCycle)
+	}
+	{
+		e.FieldStart("cycle_interval_s")
+		e.Int(s.CycleIntervalS)
+	}
+	{
+		e.FieldStart("hourly_cap")
+		e.Int(s.HourlyCap)
+	}
+	{
+		if s.Selection.Set {
+			e.FieldStart("selection")
+			s.Selection.Encode(e)
+		}
+	}
+}
+
+var jsonFieldsNameOfSnatchPolicyPreset = [6]string{
+	0: "key",
+	1: "missing_per_cycle",
+	2: "upgrade_per_cycle",
+	3: "cycle_interval_s",
+	4: "hourly_cap",
+	5: "selection",
+}
+
+// Decode decodes SnatchPolicyPreset from json.
+func (s *SnatchPolicyPreset) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode SnatchPolicyPreset to nil")
+	}
+	var requiredBitSet [1]uint8
+
+	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
+		switch string(k) {
+		case "key":
+			requiredBitSet[0] |= 1 << 0
+			if err := func() error {
+				v, err := d.Str()
+				s.Key = string(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"key\"")
+			}
+		case "missing_per_cycle":
+			requiredBitSet[0] |= 1 << 1
+			if err := func() error {
+				v, err := d.Int()
+				s.MissingPerCycle = int(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"missing_per_cycle\"")
+			}
+		case "upgrade_per_cycle":
+			requiredBitSet[0] |= 1 << 2
+			if err := func() error {
+				v, err := d.Int()
+				s.UpgradePerCycle = int(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"upgrade_per_cycle\"")
+			}
+		case "cycle_interval_s":
+			requiredBitSet[0] |= 1 << 3
+			if err := func() error {
+				v, err := d.Int()
+				s.CycleIntervalS = int(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"cycle_interval_s\"")
+			}
+		case "hourly_cap":
+			requiredBitSet[0] |= 1 << 4
+			if err := func() error {
+				v, err := d.Int()
+				s.HourlyCap = int(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"hourly_cap\"")
+			}
+		case "selection":
+			if err := func() error {
+				s.Selection.Reset()
+				if err := s.Selection.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"selection\"")
+			}
+		default:
+			return d.Skip()
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "decode SnatchPolicyPreset")
+	}
+	// Validate required fields.
+	var failures []validate.FieldError
+	for i, mask := range [1]uint8{
+		0b00011111,
+	} {
+		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
+			// Mask only required fields and check equality to mask using XOR.
+			//
+			// If XOR result is not zero, result is not equal to expected, so some fields are missed.
+			// Bits of fields which would be set are actually bits of missed fields.
+			missed := bits.OnesCount8(result)
+			for bitN := 0; bitN < missed; bitN++ {
+				bitIdx := bits.TrailingZeros8(result)
+				fieldIdx := i*8 + bitIdx
+				var name string
+				if fieldIdx < len(jsonFieldsNameOfSnatchPolicyPreset) {
+					name = jsonFieldsNameOfSnatchPolicyPreset[fieldIdx]
+				} else {
+					name = strconv.Itoa(fieldIdx)
+				}
+				failures = append(failures, validate.FieldError{
+					Name:  name,
+					Error: validate.ErrFieldRequired,
+				})
+				// Reset bit.
+				result &^= 1 << bitIdx
+			}
+		}
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *SnatchPolicyPreset) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *SnatchPolicyPreset) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes SnatchPolicyPresetSelection as json.
+func (s SnatchPolicyPresetSelection) Encode(e *jx.Encoder) {
+	e.Str(string(s))
+}
+
+// Decode decodes SnatchPolicyPresetSelection from json.
+func (s *SnatchPolicyPresetSelection) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode SnatchPolicyPresetSelection to nil")
+	}
+	v, err := d.StrBytes()
+	if err != nil {
+		return err
+	}
+	// Try to use constant string.
+	switch SnatchPolicyPresetSelection(v) {
+	case SnatchPolicyPresetSelectionRandom:
+		*s = SnatchPolicyPresetSelectionRandom
+	case SnatchPolicyPresetSelectionSequential:
+		*s = SnatchPolicyPresetSelectionSequential
+	case SnatchPolicyPresetSelectionRecent:
+		*s = SnatchPolicyPresetSelectionRecent
+	default:
+		*s = SnatchPolicyPresetSelection(v)
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s SnatchPolicyPresetSelection) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *SnatchPolicyPresetSelection) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }

@@ -3,8 +3,11 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: EUPL-1.2
 -->
 <script lang="ts">
+	import { createSentioQuery } from '@sveltesentio/query';
+	import { api } from '#lib/api/client.js';
 	import { m } from '#lib/paraglide/messages.js';
-	import { PRESETS, estimateSearchesPerHour, type SnatchPolicy } from './presets.js';
+	import { keys } from '#lib/query.js';
+	import { estimateSearchesPerHour, toPresets, type SnatchPolicy } from './presets.js';
 
 	interface Props {
 		draft: SnatchPolicy;
@@ -13,6 +16,12 @@ SPDX-License-Identifier: EUPL-1.2
 
 	const { draft, onSelect }: Props = $props();
 
+	const presetsQuery = createSentioQuery({
+		queryKey: keys.snatchPolicyPresets,
+		queryFn: async () => (await api.GET('/snatch-policy-presets')).data
+	});
+
+	const presets = $derived(presetsQuery.data ? toPresets(presetsQuery.data) : []);
 	const estimate = $derived(estimateSearchesPerHour(draft));
 	const cap = $derived(draft.hourly_cap ?? 0);
 </script>
@@ -24,7 +33,7 @@ SPDX-License-Identifier: EUPL-1.2
 	</div>
 
 	<div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
-		{#each PRESETS as preset (preset.key)}
+		{#each presets as preset (preset.key)}
 			<button
 				type="button"
 				class="btn flex flex-col items-start gap-1 p-3 text-left"

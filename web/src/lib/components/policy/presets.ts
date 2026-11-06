@@ -6,48 +6,41 @@ import type { components } from '#lib/api/schema.js';
 import { m } from '#lib/paraglide/messages.js';
 
 export type SnatchPolicy = components['schemas']['SnatchPolicy'];
+export type SnatchPolicyPreset = components['schemas']['SnatchPolicyPreset'];
+
+export type PresetKey = 'gentle' | 'balanced' | 'catch_up' | 'upgrades';
 
 export interface Preset {
-	key: 'gentle' | 'balanced' | 'catch_up' | 'upgrades';
+	key: PresetKey;
 	label: () => string;
 	description: () => string;
 	values: Partial<SnatchPolicy>;
 }
 
-// Values and reasons: docs/adr/0020-snatch-policy-defaults-and-presets.md.
-// balanced equals the server defaults (domain.DefaultPolicy).
-export const PRESETS: Preset[] = [
-	{
-		key: 'gentle',
-		label: m.preset_gentle_label,
-		description: m.preset_gentle_desc,
-		values: { missing_per_cycle: 1, upgrade_per_cycle: 0, cycle_interval_s: 900, hourly_cap: 4 }
-	},
-	{
-		key: 'balanced',
-		label: m.preset_balanced_label,
-		description: m.preset_balanced_desc,
-		values: { missing_per_cycle: 2, upgrade_per_cycle: 1, cycle_interval_s: 900, hourly_cap: 15 }
-	},
-	{
-		key: 'catch_up',
-		label: m.preset_catch_up_label,
-		description: m.preset_catch_up_desc,
-		values: {
-			missing_per_cycle: 10,
-			upgrade_per_cycle: 2,
-			cycle_interval_s: 300,
-			hourly_cap: 60,
-			selection: 'sequential'
-		}
-	},
-	{
-		key: 'upgrades',
-		label: m.preset_upgrades_label,
-		description: m.preset_upgrades_desc,
-		values: { missing_per_cycle: 1, upgrade_per_cycle: 5, cycle_interval_s: 600, hourly_cap: 25 }
-	}
-];
+const LABELS: Record<PresetKey, { label: () => string; description: () => string }> = {
+	gentle: { label: m.preset_gentle_label, description: m.preset_gentle_desc },
+	balanced: { label: m.preset_balanced_label, description: m.preset_balanced_desc },
+	catch_up: { label: m.preset_catch_up_label, description: m.preset_catch_up_desc },
+	upgrades: { label: m.preset_upgrades_label, description: m.preset_upgrades_desc }
+};
+
+/** Build display presets from the API response, enriched with i18n labels. */
+export function toPresets(apiPresets: SnatchPolicyPreset[]): Preset[] {
+	return apiPresets
+		.filter((p): p is SnatchPolicyPreset & { key: PresetKey } => p.key in LABELS)
+		.map((p) => {
+			const values: Partial<SnatchPolicy> = {
+				missing_per_cycle: p.missing_per_cycle,
+				upgrade_per_cycle: p.upgrade_per_cycle,
+				cycle_interval_s: p.cycle_interval_s,
+				hourly_cap: p.hourly_cap
+			};
+			if (p.selection) {
+				values.selection = p.selection;
+			}
+			return { key: p.key, ...LABELS[p.key], values };
+		});
+}
 
 /**
  * Resulting searches/hour estimate: min(hourly_cap, (missing + upgrade) * 3600 / cycle_interval_s).

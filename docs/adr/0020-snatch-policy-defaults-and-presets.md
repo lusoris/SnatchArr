@@ -6,7 +6,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # ADR-0020: Snatch policy defaults and presets
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-10-20
 
 ## Context
