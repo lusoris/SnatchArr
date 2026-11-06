@@ -22,8 +22,8 @@ Issue [#567](https://github.com/lusoris/SnatchArr/issues/567) (under Epic [#572]
 A survey of the SnatchArr codebase and upstream dependencies establishes the foundation for this integration:
 
 1. **API scopes and permissions**:
-   - `api/openapi/openapi.yaml:1863-1879` defines `ApiKeyScope` with read and write pairs for `core`, `requests`, `download_clients`, `prowlarr`, `notifications`, `admin` and `adult`.
-   - API tokens are created with scoped permissions via `createAPIKey` (`api/openapi/openapi.yaml:241`) and authenticated via HTTP Bearer tokens (`api/openapi/openapi.yaml:1674-1676`). Every path is relative to the server URL `/api/v1` (`api/openapi/openapi.yaml:13-14`).
+   - `components.schemas.ApiKeyScope` in `api/openapi/openapi.yaml` defines `ApiKeyScope` with read and write pairs for `core`, `requests`, `download_clients`, `prowlarr`, `notifications`, `admin` and `adult`.
+   - API tokens are created with scoped permissions via `createAPIKey` (`operationId: createAPIKey` in `api/openapi/openapi.yaml`) and authenticated via HTTP Bearer tokens (`components.securitySchemes.bearerAuth` in `api/openapi/openapi.yaml`). Every path is relative to the server URL `/api/v1` (`servers` in `api/openapi/openapi.yaml`).
 2. **Standardized problem payloads**:
    - All API endpoints emit RFC 9457 Problem Details payloads (`application/problem+json`) via the error handler in `api/internal/httpapi/problem.go:45`.
    - `domain.ErrUnauthorized` resolves to HTTP 401, `domain.ErrForbidden` to HTTP 403 and `domain.ErrNotFound` to HTTP 404 (`api/internal/httpapi/problem.go:30,32,34`).
@@ -35,7 +35,7 @@ A survey of the SnatchArr codebase and upstream dependencies establishes the fou
    - ADR-0026 ([0026-accounts-and-roles.md](0026-accounts-and-roles.md), proposed) adds the `requester` role and Jellyfin sign-in (`snatcharr-product-users-20261020`).
    - Adult visibility follows each Jellyfin user's policy (`snatcharr-product-adult-visibility-20261020`); per the answered question `snatcharr-adult-rating-scale` the gate reads the user's `MaxParentalRating`, `BlockedTags` and `AllowedTags` and never grants more than Jellyfin allows.
 5. **Contract compatibility gate**:
-   - `tools/apicompat/gate/main.go` checks Go module API compatibility against a base revision. No check compares `api/openapi/openapi.yaml` against a base today; HISS-14 (append-only public API) binds the OpenAPI contract as policy only.
+   - `tools/apicompat/gate/main.go` checks Go module API compatibility against a base revision. The OpenAPI contract is checked by the oasdiff breaking check against origin/main (`make api-openapi-breaking`, which runs `tools/oasdiff/breaking.sh` and is part of `make api-verify`; at the time of the proposal no check compared `api/openapi/openapi.yaml` against a base, since added in [#662](https://github.com/lusoris/SnatchArr/pull/662)). HISS-14 (append-only public API) binds both contracts.
 6. **Multi-ecosystem engineering burden**:
    - ADR-0018 lists the multi-ecosystem maintenance burden of a C#/.NET Jellyfin plugin as a negative consequence (ADR-0018, Consequences, Negative).
 
@@ -236,7 +236,7 @@ In strict accordance with ADR-0025 ([0025-module-switches.md](0025-module-switch
 #### Versioning and compatibility
 
 1. Contract changes in `api/openapi/openapi.yaml` follow HISS-14 (append-only). An OpenAPI diff check against the base revision is a follow-up; the Go gate `tools/apicompat/gate/main.go` does not read the OpenAPI file.
-2. During initialization, the plugin calls `GET /api/v1/system/status` and reads `version` (`SystemStatus`, `api/openapi/openapi.yaml:1759`); a list of active modules is a proposed addition to that schema. If the major version differs or required capabilities are absent, the plugin logs an administrative warning and enters a degraded fallback mode (disabling advanced features while maintaining existing cached metadata).
+2. During initialization, the plugin calls `GET /api/v1/system/status` and reads `version` (`components.schemas.SystemStatus` in `api/openapi/openapi.yaml`); a list of active modules is a proposed addition to that schema. If the major version differs or required capabilities are absent, the plugin logs an administrative warning and enters a degraded fallback mode (disabling advanced features while maintaining existing cached metadata).
 
 ### 4. Presentation and delivery of image-set galleries next to scenes
 
@@ -295,7 +295,7 @@ Deep link / API to Seerr   Forward to SnatchArr
 | **Option 6B: Dedicated repository `lusoris/jellyfin-plugin-snatcharr` (Recommended)** | Dedicated repository under the `lusoris` GitHub organization. | Clean separation of C# build tooling, independent release cadence, isolated GPL licensing boundary, standard Jellyfin plugin manifest hosting. Requires multi-repo issue tracking. | **Adopted**. Standard Jellyfin community practice. |
 | **Option 6C: Multi-client companion plugins repository** | Combined repository for all future media server plugins (Jellyfin, Plex, Emby). | Premature abstraction before other platform plugins exist. | Rejected. |
 
-The repository was created as `lusoris/jellyfin-plugin-snatcharr` beside SnatchArr, with fleet adoption, after the licence answer (per answered question `snatcharr-jellyfin-plugin-repo-name`). On 2026-11-01 it moved to [`jellysin/plugin-snatcharr`](https://github.com/jellysin/plugin-snatcharr) in the jellysin organisation, which hosts the fleet's Jellyfin plugins and the [`jellysin/repo`](https://github.com/jellysin/repo) plugin catalogue; the old address redirects. Its rulesets and licence moved with it. Releases follow the jellysin release flow: [`.github/workflows/release-please.yml`](https://github.com/jellysin/plugin-snatcharr/blob/main/.github/workflows/release-please.yml) calls `jellysin/release-helper` on the job token, adopted in [jellysin/plugin-snatcharr#12](https://github.com/jellysin/plugin-snatcharr/pull/12). The plugin GUID above stays unchanged.
+The repository was created as `lusoris/jellyfin-plugin-snatcharr` beside SnatchArr, with fleet adoption, after the licence answer (per answered question `snatcharr-jellyfin-plugin-repo-name`). On 2026-11-01 it moved to [`jellysin/plugin-snatcharr`](https://github.com/jellysin/plugin-snatcharr) in the jellysin organisation, which hosts the fleet's Jellyfin plugins and the [`jellysin/repo`](https://github.com/jellysin/repo) plugin catalogue; the old address redirects. Its rulesets and licence moved with it. Releases follow the jellysin release flow: [`.github/workflows/release-please.yml`](https://github.com/jellysin/plugin-snatcharr/blob/main/.github/workflows/release-please.yml) calls `jellysin/release-helper` on the job token, adopted in [jellysin/plugin-snatcharr#12](https://github.com/jellysin/plugin-snatcharr/pull/12). The plugin GUID in the manifest item below stays unchanged.
 
 #### Build and release pipeline
 
@@ -332,7 +332,7 @@ The repository was created as `lusoris/jellyfin-plugin-snatcharr` beside SnatchA
 #### Licensing consequence of linking Jellyfin assemblies
 
 - **Legal fact**: Jellyfin Server is licensed under GPLv2 ([LICENSE](https://raw.githubusercontent.com/jellyfin/jellyfin/v12.3/LICENSE)) and Jellyfin Plugin Template is licensed under GPLv3 ([LICENSE](https://raw.githubusercontent.com/jellyfin/jellyfin-plugin-template/master/LICENSE)). Compiling a C# plugin requires linking against `Jellyfin.Controller`, `Jellyfin.Model`, `MediaBrowser.Controller`, and `MediaBrowser.Model`.
-- **Consequence**: Under the Free Software Foundation's reading of the GPL, dynamic linking against GPL libraries forms a combined work, so the plugin licence must be one under which that combination can be distributed. Per answered question `snatcharr-jellyfin-plugin-license`, the plugin carries `GPL-3.0-or-later`, matching `jellyfin/jellyfin-plugin-template`; recorded as a named exception to the fleet EUPL-1.2 own-code rule, reason: combined work with GPL Jellyfin assemblies; REUSE headers and the template's licence notice are carried. Template code may now be used with its notice. SnatchArr core stays EUPL-1.2.
+- **Consequence**: Under the Free Software Foundation's reading of the GPL, dynamic linking against GPL libraries forms a combined work, so the plugin licence must be one under which that combination can be distributed. Per answered question `snatcharr-jellyfin-plugin-license`, the plugin carries `GPL-3.0-or-later`, matching `jellyfin/jellyfin-plugin-template`; a named exception to the fleet EUPL-1.2 own-code rule, recorded in the plugin repository's licence section rather than the fleet exception list (see consequence table), reason: combined work with GPL Jellyfin assemblies; REUSE headers and the template's licence notice are carried. Template code may now be used with its notice. SnatchArr core stays EUPL-1.2.
 - **Separation benefit**: Housing the plugin in a dedicated repository `jellysin/plugin-snatcharr` (`Option 6B`) ensures that Jellyfin's GPL copyleft boundary remains strictly confined to the C# plugin repository and does not cross into SnatchArr's EUPL-1.2/MIT core repository.
 
 ### 7. Verification and testing architecture
@@ -456,6 +456,7 @@ A three-tier testing strategy guarantees contract correctness and security bound
 - [ADR-0018: Product front door of the media stack](0018-product-front-door.md).
 - [ADR-0023: Roles from single sign-on groups](0023-sso-viewer-role.md).
 - [ADR-0025: Architecture and mechanism of optional module switches](0025-module-switches.md).
-- `api/openapi/openapi.yaml:1863-1880`: `ApiKeyScope` enum definitions.
+- `components.schemas.ApiKeyScope` in `api/openapi/openapi.yaml`: `ApiKeyScope` enum definitions.
 - `api/internal/httpapi/problem.go:34,45-48`: Centralized RFC 9457 Problem Details error handler.
-- `tools/apicompat/gate/main.go:1-30`: Go and OpenAPI public contract compatibility gate.
+- `tools/apicompat/gate/main.go:1-30`: Go API compatibility gate.
+- `tools/oasdiff/breaking.sh`: OpenAPI breaking check against origin/main.
