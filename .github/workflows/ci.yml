@@ -627,6 +627,30 @@ jobs:
       - name: make arr-forceimport-live
         run: make arr-forceimport-live
 
+  arr-pushtitle-live:
+    name: push-title import (real Sonarr v3 and v4)
+    needs: changes
+    if: needs.changes.outputs.api == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 25
+    steps:
+      - *stop-draft
+      - *checkout
+      # Sonarr v3 and v4 push-title import guarantee (ADR-0019 open point 1) on real
+      # Sonarr and qBittorrent, after two planted defects the test must refuse.
+      - name: make arr-pushtitle-live
+        env:
+          SNATCHARR_PUSHTITLE_EVIDENCE_DIR: ${{ runner.temp }}/pushtitle-evidence
+        run: make arr-pushtitle-live
+      - name: Upload the push-title evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pushtitle-evidence-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/pushtitle-evidence
+          if-no-files-found: error
+          retention-days: 7
+
   integrations-live:
     name: integrations (real app containers)
     needs: changes
@@ -1037,6 +1061,7 @@ jobs:
       - dev-compose
       - dlclients-live
       - arr-forceimport-live
+      - arr-pushtitle-live
       - integrations-live
       - web
       - web-e2e-api

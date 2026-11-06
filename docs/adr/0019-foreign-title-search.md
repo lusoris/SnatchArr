@@ -99,12 +99,29 @@ Foreign-title search is part of the search and queue core module ([ADR-0018](001
 - **Title rewriting correctness risk**: Incorrectly parsing and reconstructing release titles could drop or corrupt season, episode, quality, or release group tokens. This risk is guarded by rigorous test fixtures.
 - **Prowlarr dependency**: Executing foreign-title search requires a linked Prowlarr instance; when Prowlarr is not configured, foreign-title search remains disabled.
 
-### Open points recorded as unverified
+### Open points and verification status
 
-The following operational behaviors from local research evidence are recorded as unverified and must be validated through the live integration check before the feature is enabled in production:
+Operational behaviors evaluated against live releases:
 
-1. **Push-title import guarantee across Sonarr releases**: Whether pushing a synthesized canonical English title via `POST /api/v3/release/push` guarantees 100% bypass of Sonarr's `SeriesMatchType.Id` block across both Sonarr v3 and Sonarr v4 in scenarios where the download client creates a root folder using the raw indexer foreign title.
-2. **Downloader folder parsing fallback**: Whether `TrackedDownloadService.cs` reliably falls back to `firstHistoryItem.SourceTitle` across all download clients and nested directory structures when `Parser.ParseTitle` fails on the localized directory path.
+1. **Push-title import guarantee across Sonarr releases (verified 2026-11-06)**: Pushing the canonical series title via `POST /api/v3/release/push` guarantees bypass of Sonarr's `SeriesMatchType.Id` automatic import block across both Sonarr v3 and Sonarr v4 when the download client saves items into directories bearing localized foreign titles. The behavior is checked by `make arr-pushtitle-live` across the following measured configurations:
+
+   | Release | Sonarr Image | qBittorrent Image | Result |
+   | :--- | :--- | :--- | :--- |
+   | v3 | `lscr.io/linuxserver/sonarr:3.0.10.1567-ls218@sha256:4f69472a0cdea29e23967db6a3395487539b759def3920327d1f49ae00b9dfd4` | `docker.io/linuxserver/qbittorrent:4.6.2@sha256:ef49e9a76faa73c5a594e2dbd89b5a7a3503abe53bcde5277f999f869658cdf6` | Imported as `SeriesMatchType.Title` across all canonical push cases |
+   | v4 | `lscr.io/linuxserver/sonarr:4.0.20.3014-ls329@sha256:44b06045a98bc1f237b9ffefc4b28dab64cb29305e4a2a94875ae93b5224e4cc` | `docker.io/linuxserver/qbittorrent:5.3.0@sha256:e887804fa9de4c60f5f0fb1f3a7e4febe40a8f69fe736f70c4e8589b1f868dab` | Imported as `SeriesMatchType.Title` across all canonical push cases |
+
+   *Client compatibility note*: Sonarr v3 cannot authenticate against qBittorrent 5.x because `QBittorrentProxyV2` expects an HTTP body containing `Ok.`, whereas qBittorrent 5.x returns an empty HTTP 204 response. In addition, Sonarr v3 requires `languageProfileId` on series creation and requires German allowed in the language profile (`PUT /api/v3/languageprofile/{id}`).
+
+   Measured test matrix (series TVDB 81189 Breaking Bad; foreign names `Alone Ueberlebe die Wildnis`):
+   - `s1`: Canonical push with TVDB ID, foreign folder and file -> imported (`SeriesMatchType.Title`).
+   - `s2`: Canonical push with TVDB ID, single foreign file without folder -> imported (`SeriesMatchType.Title`).
+   - `s3`: Canonical push without IDs, foreign folder and file -> imported (`SeriesMatchType.Title`).
+   - `s4`: Foreign title push with TVDB ID -> push rejected (matched alias of TVDB 444783).
+   - `s5`: Canonical push with TVDB ID, foreign folder with obfuscated file `kfr-106.mkv` -> imported (`SeriesMatchType.Title`).
+   - `s6`: Unparseable title with TVDB ID -> grab matched by ID; automatic import blocked with the warning "release was matched to series by ID". Sonarr v4 shows queue state `importBlocked`; Sonarr v3 has no such state and keeps `downloading` with status `warning` and the same message.
+   - `s7`: Canonical push with TVDB ID, nested directories (season/disc/file) -> imported (`SeriesMatchType.Title`).
+
+2. **Downloader folder parsing fallback (open)**: `TrackedDownloadService.cs` reliably falls back to `firstHistoryItem.SourceTitle` under qBittorrent for obfuscated filenames (`s5`) and nested directories (`s7`). Whether this fallback holds across all other supported download clients (Transmission, Deluge, rTorrent, SABnzbd, NZBGet) remains unverified.
 
 ## Alternatives considered
 

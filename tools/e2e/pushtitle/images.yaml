@@ -1,0 +1,16 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+#
+# Compose override selecting the Sonarr and qBittorrent image pair for
+# tools/e2e/pushtitle_live.sh (ADR-0019 open point 1). Pinned image digests:
+#   v3 Sonarr: lscr.io/linuxserver/sonarr:3.0.10.1567-ls218@sha256:4f69472a0cdea29e23967db6a3395487539b759def3920327d1f49ae00b9dfd4
+#   v3 qBit:   docker.io/linuxserver/qbittorrent:4.6.2@sha256:ef49e9a76faa73c5a594e2dbd89b5a7a3503abe53bcde5277f999f869658cdf6
+#   v4 Sonarr: lscr.io/linuxserver/sonarr:4.0.20.3014-ls329@sha256:44b06045a98bc1f237b9ffefc4b28dab64cb29305e4a2a94875ae93b5224e4cc
+#   v4 qBit:   docker.io/linuxserver/qbittorrent:5.3.0@sha256:e887804fa9de4c60f5f0fb1f3a7e4febe40a8f69fe736f70c4e8589b1f868dab
+
+services:
+  sonarr:
+    image: ${SNATCHARR_PUSHTITLE_SONARR_IMAGE:-lscr.io/linuxserver/sonarr:4.0.20.3014-ls329@sha256:44b06045a98bc1f237b9ffefc4b28dab64cb29305e4a2a94875ae93b5224e4cc}
+
+  qbittorrent:
+    image: ${SNATCHARR_PUSHTITLE_QBIT_IMAGE:-docker.io/linuxserver/qbittorrent:5.3.0@sha256:e887804fa9de4c60f5f0fb1f3a7e4febe40a8f69fe736f70c4e8589b1f868dab}
