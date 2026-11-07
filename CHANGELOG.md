@@ -1,5 +1,48 @@
 # Changelog
 
+## [0.9.0](https://github.com/lusoris/SnatchArr/compare/v0.8.1...v0.9.0) (2026-11-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* **api:** new snatch policies default sonarr_missing_mode to 'dynamic' instead of 'episodes'.
+* **worker:** dynamic search strategy per arr API family ([#1032](https://github.com/lusoris/SnatchArr/issues/1032))
+
+### Features
+
+* **api:** default sonarr_missing_mode to dynamic ([#1035](https://github.com/lusoris/SnatchArr/issues/1035)) ([3925cb7](https://github.com/lusoris/SnatchArr/commit/3925cb74948c09b6a1310298c59a609a1c46be1c))
+* **api:** serve snatch policy presets from API ([#1031](https://github.com/lusoris/SnatchArr/issues/1031)) ([d20ed0f](https://github.com/lusoris/SnatchArr/commit/d20ed0f89bd08c327888001f161b778dbf6e6212)), closes [#561](https://github.com/lusoris/SnatchArr/issues/561)
+* **arrclient:** harvest Sonarr and Radarr title aliases ([#1025](https://github.com/lusoris/SnatchArr/issues/1025)) ([f373bcf](https://github.com/lusoris/SnatchArr/commit/f373bcf55184afe92a02d9e537b32739a7c21b44))
+* **dlclients:** execute priority plans in act mode ([1c764cc](https://github.com/lusoris/SnatchArr/commit/1c764cc1ed7a404898ddaf53d55617ce9dfa0ad6))
+* **policies:** show which Radarr profiles allow foreign-title search ([#1010](https://github.com/lusoris/SnatchArr/issues/1010)) ([8bc3947](https://github.com/lusoris/SnatchArr/commit/8bc39474324adce78273f91235292c2fce032fa3)), closes [#204](https://github.com/lusoris/SnatchArr/issues/204)
+* **prowlarr:** charge variant searches per indexer and cache them ([#1009](https://github.com/lusoris/SnatchArr/issues/1009)) ([dcc1eb2](https://github.com/lusoris/SnatchArr/commit/dcc1eb23d176d4e5f33a4d3880eff981a06c32da)), closes [#696](https://github.com/lusoris/SnatchArr/issues/696)
+* **prowlarr:** make the search DB timeout and cache result limit settings ([#1017](https://github.com/lusoris/SnatchArr/issues/1017)) ([4041ae3](https://github.com/lusoris/SnatchArr/commit/4041ae39d7269f730e99ea0569aa0c1660a81dbf))
+* **prowlarr:** select indexers for a foreign-title language ([#1007](https://github.com/lusoris/SnatchArr/issues/1007)) ([c2c711e](https://github.com/lusoris/SnatchArr/commit/c2c711e62a49c950aedccea7c64d8d213a4c8ff8))
+* **web:** show download client priority plan and mode ([#1006](https://github.com/lusoris/SnatchArr/issues/1006)) ([8dc1be2](https://github.com/lusoris/SnatchArr/commit/8dc1be2bf8f77e08b8e3d613f8c08384e27c7255))
+* **worker:** dynamic search strategy per arr API family ([#1032](https://github.com/lusoris/SnatchArr/issues/1032)) ([e86ebe1](https://github.com/lusoris/SnatchArr/commit/e86ebe101660636b757b70d00a18985909df1e55))
+
+
+### Bug Fixes
+
+* **api:** skip instances deleted while hourly caps are read ([#1001](https://github.com/lusoris/SnatchArr/issues/1001)) ([416c781](https://github.com/lusoris/SnatchArr/commit/416c78148b360349101508e40d175c64eba696a1))
+* **deploy:** pin the devcontainer and chart images to tag@sha256 digests ([#1011](https://github.com/lusoris/SnatchArr/issues/1011)) ([4fbad2d](https://github.com/lusoris/SnatchArr/commit/4fbad2d3922abe589f860334b937961a420c6c92))
+* **dlclients:** keep user pauses and state the observe-mode resume ([#1014](https://github.com/lusoris/SnatchArr/issues/1014)) ([ac04287](https://github.com/lusoris/SnatchArr/commit/ac042873986041165961bc8522cb9c8a0e5e3f4f))
+* **docs:** restore the Limits anchor and refuse missing anchors ([#1018](https://github.com/lusoris/SnatchArr/issues/1018)) ([eb4711f](https://github.com/lusoris/SnatchArr/commit/eb4711f4d105a5c996b2396c77adf2658b52cd1f))
+* **queue:** classify the Lidarr missing-tracks check as broken ([#993](https://github.com/lusoris/SnatchArr/issues/993)) ([a09a4ce](https://github.com/lusoris/SnatchArr/commit/a09a4ce669cba089d48d9e434cda49a56cc04f93))
+* **queue:** turn on the stored import_fixable blocklist once ([#994](https://github.com/lusoris/SnatchArr/issues/994)) ([5991bb1](https://github.com/lusoris/SnatchArr/commit/5991bb128d2796a6b985d3806130dce3815d07ec))
+
+
+### Refactoring
+
+* **worker:** extract dispatch_or_defer helper ([#1038](https://github.com/lusoris/SnatchArr/issues/1038)) ([9ffbbff](https://github.com/lusoris/SnatchArr/commit/9ffbbffcd607bc558091e0bfbe034680ad5b04a9))
+
+
+### Documentation
+
+* **adr:** accept ADR-0028 Jellyfin companion plugin and its contract ([#1026](https://github.com/lusoris/SnatchArr/issues/1026)) ([3a9f053](https://github.com/lusoris/SnatchArr/commit/3a9f053c274dad608a3f8bac202a81755924dd55)), closes [#567](https://github.com/lusoris/SnatchArr/issues/567)
+* **adr:** fix stale anchors and contradictions in ADR-0028 ([#1028](https://github.com/lusoris/SnatchArr/issues/1028)) ([cbc627f](https://github.com/lusoris/SnatchArr/commit/cbc627f0b7eb6666a3ecf26ef4d8127d09c2dbda))
+* **dlclients:** document the pause ownership release functions ([#1020](https://github.com/lusoris/SnatchArr/issues/1020)) ([545a27c](https://github.com/lusoris/SnatchArr/commit/545a27ce963d5a83a66bd9ed7c543e21fe3ebc2c))
+
 ## [0.8.1](https://github.com/lusoris/SnatchArr/compare/v0.8.0...v0.8.1) (2026-11-04)
 
 
