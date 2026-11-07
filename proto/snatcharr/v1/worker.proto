@@ -66,6 +66,7 @@ enum SonarrMode {
   SONARR_MODE_EPISODES = 1;
   SONARR_MODE_SEASON_PACKS = 2;
   SONARR_MODE_SHOWS = 3;
+  SONARR_MODE_DYNAMIC = 4;
 }
 
 enum LidarrMode {

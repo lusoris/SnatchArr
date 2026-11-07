@@ -35,7 +35,7 @@ SPDX-License-Identifier: EUPL-1.2
 					<option value="cinema">{m.policy_radarr_release_cinema()}</option>
 				</select>
 			</Field>
-		{:else if kind === 'sonarr'}
+		{:else if kind === 'sonarr' || kind === 'whisparr_v2'}
 			<div class="grid gap-4 sm:grid-cols-2">
 				<Field
 					id="sonarr-missing-mode"
@@ -52,6 +52,7 @@ SPDX-License-Identifier: EUPL-1.2
 						<option value="episodes">{m.policy_sonarr_mode_episodes()}</option>
 						<option value="season_packs">{m.policy_sonarr_mode_season_packs()}</option>
 						<option value="shows">{m.policy_sonarr_mode_shows()}</option>
+						<option value="dynamic">{m.policy_sonarr_mode_dynamic()}</option>
 					</select>
 				</Field>
 
@@ -69,6 +70,7 @@ SPDX-License-Identifier: EUPL-1.2
 					>
 						<option value="episodes">{m.policy_sonarr_mode_episodes()}</option>
 						<option value="season_packs">{m.policy_sonarr_mode_season_packs()}</option>
+						<option value="dynamic">{m.policy_sonarr_mode_dynamic()}</option>
 					</select>
 				</Field>
 			</div>

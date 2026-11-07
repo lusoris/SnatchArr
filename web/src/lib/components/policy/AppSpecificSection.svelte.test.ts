@@ -37,11 +37,35 @@ describe('AppSpecificSection', () => {
 			m.policy_sonarr_upgrade_mode()
 		) as HTMLSelectElement;
 
-		await fireEvent.change(missingSelect, { target: { value: 'season_packs' } });
-		expect(policy.sonarr_missing_mode).toBe('season_packs');
+		expect(Array.from(missingSelect.options, (o) => o.value)).toEqual([
+			'episodes',
+			'season_packs',
+			'shows',
+			'dynamic'
+		]);
+		expect(Array.from(upgradeSelect.options, (o) => o.value)).toEqual([
+			'episodes',
+			'season_packs',
+			'dynamic'
+		]);
 
-		await fireEvent.change(upgradeSelect, { target: { value: 'season_packs' } });
-		expect(policy.sonarr_upgrade_mode).toBe('season_packs');
+		await fireEvent.change(missingSelect, { target: { value: 'dynamic' } });
+		expect(policy.sonarr_missing_mode).toBe('dynamic');
+
+		await fireEvent.change(upgradeSelect, { target: { value: 'dynamic' } });
+		expect(policy.sonarr_upgrade_mode).toBe('dynamic');
+	});
+
+	it('renders sonarr controls when kind is whisparr_v2', () => {
+		const policy: SnatchPolicy = {
+			...samplePolicy,
+			sonarr_missing_mode: 'episodes',
+			sonarr_upgrade_mode: 'episodes'
+		};
+		render(AppSpecificSection, { policy, kind: 'whisparr_v2' });
+
+		expect(screen.getByLabelText(m.policy_sonarr_missing_mode())).toBeTruthy();
+		expect(screen.getByLabelText(m.policy_sonarr_upgrade_mode())).toBeTruthy();
 	});
 
 	it('renders lidarr_missing_mode when kind is lidarr', async () => {
@@ -55,13 +79,13 @@ describe('AppSpecificSection', () => {
 		expect(policy.lidarr_missing_mode).toBe('album');
 	});
 
-	it('renders nothing when kind is not supported (readarr, whisparr, or undefined)', () => {
+	it('renders nothing when kind is not supported (readarr, whisparr_v3, or undefined)', () => {
 		const policy: SnatchPolicy = { ...samplePolicy };
 		const { unmount } = render(AppSpecificSection, { policy, kind: 'readarr' });
 		expect(screen.queryByText(m.policy_group_app_specific())).toBeNull();
 		unmount();
 
-		render(AppSpecificSection, { policy, kind: 'whisparr_v2' });
+		render(AppSpecificSection, { policy, kind: 'whisparr_v3' });
 		expect(screen.queryByText(m.policy_group_app_specific())).toBeNull();
 	});
 });

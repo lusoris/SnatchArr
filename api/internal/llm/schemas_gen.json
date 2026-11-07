@@ -3445,17 +3445,21 @@
             "type": "boolean"
           },
           "sonarr_missing_mode": {
+            "default": "episodes",
             "enum": [
               "episodes",
               "season_packs",
-              "shows"
+              "shows",
+              "dynamic"
             ],
             "type": "string"
           },
           "sonarr_upgrade_mode": {
+            "default": "episodes",
             "enum": [
               "episodes",
-              "season_packs"
+              "season_packs",
+              "dynamic"
             ],
             "type": "string"
           },

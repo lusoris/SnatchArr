@@ -1548,3 +1548,116 @@ async fn eligible_pool_wanted_fetch_failure_is_absent() -> TestResult {
     assert_eq!(sent.outcome, RunOutcome::Failed as i32);
     Ok(())
 }
+
+/// Verifies `sonarr_mode` maps `Unspecified` to `Episodes` and `Dynamic` to `Dynamic`.
+#[test]
+fn sonarr_mode_degrades_unspecified_to_episodes() {
+    let mut p = Policy {
+        sonarr_mode: snatch_proto::SonarrMode::Unspecified as i32,
+        ..Default::default()
+    };
+    assert_eq!(sonarr_mode(&p), snatch_core::SonarrMode::Episodes);
+    p.sonarr_mode = snatch_proto::SonarrMode::Dynamic as i32;
+    assert_eq!(sonarr_mode(&p), snatch_core::SonarrMode::Dynamic);
+}
+
+/// Verifies dynamic mode counts `season_wanted` over `c.keep` before `per_cycle` selection,
+/// fetches `GET /api/v3/series/{id}`, and warns + falls back to `EpisodeSearch` when the series
+/// endpoint fails.
+#[tokio::test]
+async fn dynamic_mode_enriches_seasons_and_warns_on_series_error() -> TestResult {
+    let api = FakeApi {
+        filter_unprocessed: vec![1, 2, 3, 4],
+        ..Default::default()
+    };
+    let server = MockServer::start().await;
+    mount_sonarr_wanted(&server, episodes(&[(1, 10), (2, 10), (3, 10), (4, 20)])).await;
+    Mock::given(method("GET"))
+        .and(path("/api/v3/series/10"))
+        .respond_with(ResponseTemplate::new(500).set_body_string("boom"))
+        .mount(&server)
+        .await;
+    mount_command(&server, queued_command()).await;
+    let mut run = default_run(&server.uri());
+    let pol = some(run.policy.as_mut(), "policy")?;
+    pol.per_cycle = 1;
+    pol.sonarr_mode = snatch_proto::SonarrMode::Dynamic as i32;
+    let (client, _) = start_fake_api(api.clone()).await?;
+    run_short_polling(client, run).await;
+
+    let events = api.reported_events.lock().await;
+    assert!(
+        events.iter().any(|ev| {
+            ev.level == Level::Warn as i32
+                && ev.title.contains("series 10")
+                && ev.title.contains("episode search")
+        }),
+        "expected warn fallback event in {events:?}"
+    );
+    drop(events);
+    let requests = some(server.received_requests().await, "recorded requests")?;
+    assert!(
+        requests
+            .iter()
+            .any(|r| r.method == "GET" && r.url.path() == "/api/v3/series/10"),
+        "dynamic mode must read series 10 season totals"
+    );
+    let sent = command_bodies(&requests);
+    assert_eq!(sent.len(), 1, "one search command: {sent:?}");
+    let cmd = some(sent.first(), "a search command")?;
+    assert_eq!(
+        cmd.get("name"),
+        Some(&serde_json::json!("EpisodeSearch")),
+        "fallback command: {sent:?}"
+    );
+    assert_eq!(cmd.get("episodeIds"), Some(&serde_json::json!([1])));
+    Ok(())
+}
+
+/// Verifies dynamic mode sends one `SeasonSearch` once `GET /api/v3/series/{id}` reports the
+/// season total, even when `per_cycle` selects one of the season's three wanted episodes.
+#[tokio::test]
+async fn dynamic_mode_sends_season_search_when_series_reports_totals() -> TestResult {
+    let api = FakeApi {
+        filter_unprocessed: vec![1, 2, 3],
+        ..Default::default()
+    };
+    let server = MockServer::start().await;
+    mount_sonarr_wanted(&server, episodes(&[(1, 10), (2, 10), (3, 10)])).await;
+    Mock::given(method("GET"))
+        .and(path("/api/v3/series/10"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "seasons": [{"seasonNumber": 1, "statistics": {"totalEpisodeCount": 10}}]
+        })))
+        .mount(&server)
+        .await;
+    mount_command(&server, queued_command()).await;
+    let mut run = default_run(&server.uri());
+    let pol = some(run.policy.as_mut(), "policy")?;
+    pol.per_cycle = 1;
+    pol.sonarr_mode = snatch_proto::SonarrMode::Dynamic as i32;
+    let (client, _) = start_fake_api(api.clone()).await?;
+    run_short_polling(client, run).await;
+
+    let requests = some(server.received_requests().await, "recorded requests")?;
+    let sent = command_bodies(&requests);
+    assert_eq!(sent.len(), 1, "one search command: {sent:?}");
+    let cmd = some(sent.first(), "a search command")?;
+    assert_eq!(
+        cmd.get("name"),
+        Some(&serde_json::json!("SeasonSearch")),
+        "3 wanted of 10: {sent:?}"
+    );
+    assert_eq!(cmd.get("seriesId"), Some(&serde_json::json!(10)));
+    assert_eq!(cmd.get("seasonNumber"), Some(&serde_json::json!(1)));
+    Ok(())
+}
+
+/// The JSON bodies of the search commands posted to `/api/v3/command`, in order.
+fn command_bodies(requests: &[wiremock::Request]) -> Vec<serde_json::Value> {
+    requests
+        .iter()
+        .filter(|r| r.method == "POST" && r.url.path() == "/api/v3/command")
+        .filter_map(|r| serde_json::from_slice(&r.body).ok())
+        .collect()
+}

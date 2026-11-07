@@ -20328,6 +20328,7 @@ func (s *SnatchPolicy) Decode(d *jx.Decoder) error {
 		return errors.New("invalid: unable to decode SnatchPolicy to nil")
 	}
 	var requiredBitSet [4]uint8
+	s.setDefaults()
 
 	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
 		switch string(k) {
@@ -21069,6 +21070,8 @@ func (s *SnatchPolicySonarrMissingMode) Decode(d *jx.Decoder) error {
 		*s = SnatchPolicySonarrMissingModeSeasonPacks
 	case SnatchPolicySonarrMissingModeShows:
 		*s = SnatchPolicySonarrMissingModeShows
+	case SnatchPolicySonarrMissingModeDynamic:
+		*s = SnatchPolicySonarrMissingModeDynamic
 	default:
 		*s = SnatchPolicySonarrMissingMode(v)
 	}
@@ -21109,6 +21112,8 @@ func (s *SnatchPolicySonarrUpgradeMode) Decode(d *jx.Decoder) error {
 		*s = SnatchPolicySonarrUpgradeModeEpisodes
 	case SnatchPolicySonarrUpgradeModeSeasonPacks:
 		*s = SnatchPolicySonarrUpgradeModeSeasonPacks
+	case SnatchPolicySonarrUpgradeModeDynamic:
+		*s = SnatchPolicySonarrUpgradeModeDynamic
 	default:
 		*s = SnatchPolicySonarrUpgradeMode(v)
 	}

@@ -26,6 +26,9 @@ func TestDefaultPolicyIsBalancedAndValid(t *testing.T) {
 	if !p.MonitoredOnly || !p.SkipFutureReleases || !p.SkipUnavailableMovies {
 		t.Fatal("monitored_only, skip_future_releases and skip_unavailable_movies must default to true")
 	}
+	if p.SonarrMissingMode != "episodes" || p.SonarrUpgradeMode != "episodes" {
+		t.Fatalf("sonarr modes drifted from ADR-0020 episodes default: %+v", p)
+	}
 	if err := p.Validate(); err != nil {
 		t.Fatalf("default policy must validate: %v", err)
 	}
@@ -62,6 +65,12 @@ func TestPolicyValidate(t *testing.T) {
 		{"negative release type", func(p *domain.Policy) { p.RadarrReleaseType = "streaming" }, true},
 		{"negative sonarr upgrade shows", func(p *domain.Policy) { p.SonarrUpgradeMode = "shows" }, true},
 		{"positive sonarr missing shows", func(p *domain.Policy) { p.SonarrMissingMode = "shows" }, false},
+		{"positive sonarr missing dynamic", func(p *domain.Policy) { p.SonarrMissingMode = "dynamic" }, false},
+		{"positive sonarr upgrade dynamic", func(p *domain.Policy) { p.SonarrUpgradeMode = "dynamic" }, false},
+		{"negative sonarr missing Dynamic", func(p *domain.Policy) { p.SonarrMissingMode = "Dynamic" }, true},
+		{"negative sonarr missing dyn", func(p *domain.Policy) { p.SonarrMissingMode = "dyn" }, true},
+		{"negative sonarr upgrade Dynamic", func(p *domain.Policy) { p.SonarrUpgradeMode = "Dynamic" }, true},
+		{"negative sonarr upgrade dyn", func(p *domain.Policy) { p.SonarrUpgradeMode = "dyn" }, true},
 		{"negative lidarr mode", func(p *domain.Policy) { p.LidarrMissingMode = "track" }, true},
 		{"boundary page size 10 ok", func(p *domain.Policy) { p.PageSize = 10 }, false},
 		{"boundary page size 9", func(p *domain.Policy) { p.PageSize = 9 }, true},

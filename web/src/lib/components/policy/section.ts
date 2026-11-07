@@ -16,5 +16,5 @@ export interface PolicySectionProps {
  * Returns true if the application kind has dedicated policy controls.
  */
 export function isAppSpecificKind(kind?: AppKind): boolean {
-	return kind === 'radarr' || kind === 'sonarr' || kind === 'lidarr';
+	return kind === 'radarr' || kind === 'sonarr' || kind === 'whisparr_v2' || kind === 'lidarr';
 }

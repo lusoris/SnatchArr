@@ -18,6 +18,7 @@
     )
 )]
 
+use std::collections::BTreeMap;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
@@ -149,6 +150,9 @@ pub enum Error {
     /// Base URL invalid.
     #[error("arr: invalid base url: {0}")]
     BaseUrl(#[from] url::ParseError),
+    /// Endpoint is not supported by this *arr application kind.
+    #[error("arr: season_totals unsupported for kind {}", .0.app_label())]
+    UnsupportedKind(Kind),
 }
 
 impl Error {
@@ -172,7 +176,7 @@ impl Error {
                 }
             }
             Self::Decode { .. } => "decode",
-            Self::BaseUrl(_) => "connect",
+            Self::BaseUrl(_) | Self::UnsupportedKind(_) => "connect",
         }
     }
 }
@@ -295,6 +299,41 @@ struct MonitoredParent {
     #[serde(default)]
     tags: Vec<i32>,
     quality_profile_id: Option<i32>,
+}
+
+/// Deserializes a JSON array or `null` into a `Vec<T>`, treating `null` as an empty vector.
+fn null_vec<'de, D, T>(de: D) -> Result<Vec<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Ok(Option::<Vec<T>>::deserialize(de)?.unwrap_or_default())
+}
+
+/// Lenient `GET /api/v3/series/{id}` payload carrying season statistics for dynamic search.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SeriesSeasons {
+    #[serde(default, deserialize_with = "null_vec")]
+    seasons: Vec<SeasonInfo>,
+}
+
+/// One season entry from `GET /api/v3/series/{id}`, tolerating missing or null fields.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SeasonInfo {
+    #[serde(default)]
+    season_number: Option<i32>,
+    #[serde(default)]
+    statistics: Option<SeasonStatistics>,
+}
+
+/// Season statistics from `GET /api/v3/series/{id}`, tolerating missing or null counts.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SeasonStatistics {
+    #[serde(default)]
+    total_episode_count: Option<i64>,
 }
 
 /// The author of a book. Chaptarr keeps a tag list and a quality profile per format beside the
@@ -836,6 +875,33 @@ impl ArrClient {
         self.get_json("command_status", &format!("command/{id}"), &[])
             .await
     }
+
+    /// Fetches per-season total episode counts (`GET series/{series_id}`) for Sonarr or
+    /// Whisparr v2, keeping regular seasons (`>= 1`) with positive `u32` episode totals.
+    pub async fn season_totals(&self, series_id: i64) -> Result<BTreeMap<i32, u32>, Error> {
+        if !matches!(self.kind, Kind::Sonarr | Kind::WhisparrV2) {
+            return Err(Error::UnsupportedKind(self.kind));
+        }
+        let series: SeriesSeasons = self
+            .get_json("series", &format!("series/{series_id}"), &[])
+            .await?;
+        let mut totals = BTreeMap::new();
+        for s in series.seasons {
+            let Some(num) = s.season_number.filter(|&n| n >= 1) else {
+                continue;
+            };
+            let Some(total) = s
+                .statistics
+                .and_then(|st| st.total_episode_count)
+                .and_then(|c| u32::try_from(c).ok())
+                .filter(|&c| c > 0)
+            else {
+                continue;
+            };
+            totals.insert(num, total);
+        }
+        Ok(totals)
+    }
 }
 
 fn page_of<T>(p: Paged<T>, map: impl Fn(T) -> Candidate) -> WantedPage {
@@ -847,6 +913,9 @@ fn page_of<T>(p: Paged<T>, map: impl Fn(T) -> Candidate) -> WantedPage {
     }
 }
 
+/// Maps a Sonarr wanted episode to a candidate grouped by series and season. The episode is
+/// monitored only when its series is too; season totals stay unknown until the executor reads
+/// them in dynamic mode.
 fn episode_candidate(e: EpisodeLike) -> Candidate {
     let parent_monitored = e.series.as_ref().is_none_or(|s| s.monitored);
     let labels = e.series.as_ref().map(Labels::from).unwrap_or_default();
@@ -863,9 +932,13 @@ fn episode_candidate(e: EpisodeLike) -> Candidate {
         available: None,
         tags: labels.tags,
         profiles: labels.profiles,
+        season_episode_count: None,
+        season_wanted: 0,
     }
 }
 
+/// Maps a Whisparr v2 wanted scene to a candidate grouped by site (series) and season, the
+/// same shape as [`episode_candidate`].
 fn scene_candidate(s: SceneLike) -> Candidate {
     let parent_monitored = s.series.as_ref().is_none_or(|p| p.monitored);
     let labels = s.series.as_ref().map(Labels::from).unwrap_or_default();
@@ -879,9 +952,12 @@ fn scene_candidate(s: SceneLike) -> Candidate {
         available: None,
         tags: labels.tags,
         profiles: labels.profiles,
+        season_episode_count: None,
+        season_wanted: 0,
     }
 }
 
+/// Maps a Radarr wanted movie to a candidate, dated by the release type the policy names.
 fn movie_candidate(m: MovieLike, release: RadarrRelease) -> Candidate {
     let date = match release {
         RadarrRelease::Physical => m.physical_release,
@@ -906,6 +982,8 @@ fn whisparr_movie_candidate(m: WhisparrMovieLike) -> Candidate {
     titled_movie(m.id, m.title, m.year, m.release_date, m.monitored, labels)
 }
 
+/// Builds a movie-family candidate that is its own group, titled `Title (Year)` when the year
+/// is known.
 fn titled_movie(
     id: i64,
     title: String,
@@ -928,9 +1006,13 @@ fn titled_movie(
         available: None,
         tags: labels.tags,
         profiles: labels.profiles,
+        season_episode_count: None,
+        season_wanted: 0,
     }
 }
 
+/// Maps a Lidarr album or a Readarr-family book to a candidate grouped by its artist or
+/// author, falling back to its own id when the parent is absent.
 fn child_candidate(c: ChildLike) -> Candidate {
     let parent_monitored = match (&c.artist, &c.author) {
         (Some(artist), _) => artist.monitored,
@@ -952,6 +1034,8 @@ fn child_candidate(c: ChildLike) -> Candidate {
         available: None,
         tags: labels.tags,
         profiles: labels.profiles,
+        season_episode_count: None,
+        season_wanted: 0,
     }
 }
 
@@ -1492,6 +1576,84 @@ mod tests {
         let url_err = Url::parse("invalid-url").unwrap_err();
         let e_base = Error::BaseUrl(url_err);
         assert_eq!(e_base.error_class(), "connect");
+
+        let e_kind = Error::UnsupportedKind(Kind::Radarr);
+        assert_eq!(e_kind.error_class(), "connect");
+    }
+
+    /// Verifies `season_totals` decodes valid seasons and skips malformed, special, or
+    /// out-of-range season entries.
+    #[tokio::test]
+    async fn season_totals_keeps_valid_regular_seasons_and_skips_invalid_entries() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/v3/series/42"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "seasons": [
+                    {"seasonNumber": 0, "statistics": {"totalEpisodeCount": 5}},
+                    {"seasonNumber": 1, "statistics": {"totalEpisodeCount": 10}},
+                    {"seasonNumber": 2, "statistics": {"totalEpisodeCount": 8}},
+                    {"statistics": {"totalEpisodeCount": 12}},
+                    {"seasonNumber": 3, "statistics": null},
+                    {"seasonNumber": 4, "statistics": {"totalEpisodeCount": 0}},
+                    {"seasonNumber": 5, "statistics": {"totalEpisodeCount": -3}},
+                    {"seasonNumber": 6, "statistics": {"totalEpisodeCount": i64::from(u32::MAX) + 1}}
+                ]
+            })))
+            .mount(&server)
+            .await;
+        let client = ArrClient::new(Kind::Sonarr, &server.uri(), "k", opts()).unwrap();
+        let totals = client.season_totals(42).await.unwrap();
+        assert_eq!(totals, BTreeMap::from([(1, 10), (2, 8)]));
+    }
+
+    /// Verifies `season_totals` treats a null or missing `seasons` field as an empty map.
+    #[tokio::test]
+    async fn season_totals_accepts_null_and_missing_seasons() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/v3/series/1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "seasons": null
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/v3/series/2"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+            .mount(&server)
+            .await;
+        let client = ArrClient::new(Kind::WhisparrV2, &server.uri(), "k", opts()).unwrap();
+        assert!(client.season_totals(1).await.unwrap().is_empty());
+        assert!(client.season_totals(2).await.unwrap().is_empty());
+    }
+
+    /// Verifies `season_totals` surfaces HTTP 404 and rejects non-Sonarr kinds without sending
+    /// an HTTP request.
+    #[tokio::test]
+    async fn season_totals_fails_on_404_and_rejects_unsupported_kind_without_request() {
+        let server = MockServer::start().await;
+        let radarr = ArrClient::new(Kind::Radarr, &server.uri(), "k", opts()).unwrap();
+        let err = radarr.season_totals(7).await.unwrap_err();
+        assert!(
+            err.to_string().contains("radarr"),
+            "error must name the unsupported kind: {err}"
+        );
+        assert!(
+            server.received_requests().await.unwrap().is_empty(),
+            "unsupported kind must not send any HTTP request"
+        );
+
+        Mock::given(method("GET"))
+            .and(path("/api/v3/series/99"))
+            .respond_with(ResponseTemplate::new(404).set_body_string("Not Found"))
+            .mount(&server)
+            .await;
+        let sonarr = ArrClient::new(Kind::Sonarr, &server.uri(), "k", opts()).unwrap();
+        assert!(matches!(
+            sonarr.season_totals(99).await,
+            Err(Error::Status { status: 404, .. })
+        ));
     }
 
     type RecordedCall = (Kind, &'static str, Duration, Option<String>);

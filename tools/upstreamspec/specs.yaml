@@ -35,6 +35,7 @@ specs:
       - GET /api/v3/history/since
       - GET /api/v3/wanted/missing
       - GET /api/v3/wanted/cutoff
+      - GET /api/v3/series/{id}
       - POST /api/v3/command
       - GET /api/v3/command/{id}
     commands:
@@ -127,6 +128,7 @@ specs:
       - GET /api/v3/history/since
       - GET /api/v3/wanted/missing
       - GET /api/v3/wanted/cutoff
+      - GET /api/v3/series/{id}
       - POST /api/v3/command
       - GET /api/v3/command/{id}
     commands:

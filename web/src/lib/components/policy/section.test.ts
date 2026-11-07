@@ -42,6 +42,10 @@ describe('isAppSpecificKind', () => {
 		it('returns true for lidarr', () => {
 			expect(isAppSpecificKind('lidarr')).toBe(true);
 		});
+
+		it('returns true for whisparr_v2', () => {
+			expect(isAppSpecificKind('whisparr_v2')).toBe(true);
+		});
 	});
 
 	describe('negative tests', () => {
@@ -49,8 +53,8 @@ describe('isAppSpecificKind', () => {
 			expect(isAppSpecificKind('readarr')).toBe(false);
 		});
 
-		it('returns false for whisparr_v2', () => {
-			expect(isAppSpecificKind('whisparr_v2')).toBe(false);
+		it('returns false for whisparr_v3', () => {
+			expect(isAppSpecificKind('whisparr_v3')).toBe(false);
 		});
 	});
 

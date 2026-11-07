@@ -1699,3 +1699,64 @@ func TestMigration000055QueueFixableBlocklist(t *testing.T) {
 	assertMigration000055Sweep(ctx, t, st, ids[0], now)
 	assertMigration000055RoundTrip(ctx, t, st, m, ids[0])
 }
+
+// TestMigration000057SonarrDynamicMode verifies migration 000057 widens both Sonarr mode CHECK
+// constraints to accept 'dynamic' while keeping 'episodes' as default, and that stepping down
+// rewrites 'dynamic' rows back to 'episodes' and restores the narrower CHECK constraints.
+func TestMigration000057SonarrDynamicMode(t *testing.T) {
+	t.Parallel()
+	st := storetest.New(t)
+	m := storetest.Migrator(t, st)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	now := time.Date(2026, 11, 7, 4, 0, 0, 0, time.UTC)
+
+	stepDownToVersion(t, m, 56)
+
+	instID := uuid.New()
+	const insInst = `INSERT INTO instances (
+		id, kind, name, base_url, api_key_enc, enabled, source, created_at, updated_at
+	) VALUES ($1, 'sonarr', 'sonarr-57', 'http://127.0.0.1:8989', '\x0102', true, 'manual', $2, $2)`
+	if _, err := st.Pool().Exec(ctx, insInst, instID, now); err != nil {
+		t.Fatalf("insert instance at v56: %v", err)
+	}
+	const insPolicy = `INSERT INTO snatch_policies (instance_id, updated_at) VALUES ($1, $2)`
+	if _, err := st.Pool().Exec(ctx, insPolicy, instID, now); err != nil {
+		t.Fatalf("insert default snatch_policies at v56: %v", err)
+	}
+	const setModes = `UPDATE snatch_policies SET sonarr_missing_mode = $2, sonarr_upgrade_mode = $2 WHERE instance_id = $1`
+	if _, err := st.Pool().Exec(ctx, setModes, instID, "dynamic"); err == nil {
+		t.Fatal("expected v56 CHECK constraint to reject 'dynamic'")
+	}
+
+	if err := m.Steps(1); err != nil {
+		t.Fatalf("Steps(1) up to 57: %v", err)
+	}
+	var missMode, upgMode string
+	const readModes = `SELECT sonarr_missing_mode, sonarr_upgrade_mode FROM snatch_policies WHERE instance_id = $1`
+	if err := st.Pool().QueryRow(ctx, readModes, instID).Scan(&missMode, &upgMode); err != nil {
+		t.Fatalf("read modes at v57: %v", err)
+	}
+	if missMode != "episodes" || upgMode != "episodes" {
+		t.Fatalf("defaults at v57 = (%q, %q), want ('episodes', 'episodes')", missMode, upgMode)
+	}
+	if _, err := st.Pool().Exec(ctx, setModes, instID, "dynamic"); err != nil {
+		t.Fatalf("expected v57 CHECK constraint to accept 'dynamic': %v", err)
+	}
+
+	if err := m.Steps(-1); err != nil {
+		t.Fatalf("Steps(-1) down to 56: %v", err)
+	}
+	if err := st.Pool().QueryRow(ctx, readModes, instID).Scan(&missMode, &upgMode); err != nil {
+		t.Fatalf("read modes after down to v56: %v", err)
+	}
+	if missMode != "episodes" || upgMode != "episodes" {
+		t.Fatalf("modes after down to v56 = (%q, %q), want ('episodes', 'episodes')", missMode, upgMode)
+	}
+	if _, err := st.Pool().Exec(ctx, setModes, instID, "dynamic"); err == nil {
+		t.Fatal("expected v56 CHECK constraint after down to reject 'dynamic'")
+	}
+	if err := m.Steps(1); err != nil {
+		t.Fatalf("Steps(1) back up to 57: %v", err)
+	}
+}
