@@ -11,7 +11,6 @@ import shutil
 import signal
 import stat
 import subprocess
-import sys
 import tempfile
 import threading
 import time
@@ -612,12 +611,7 @@ def sweep_stale_snapshots(root=None, now=None):
                 or (hasattr(os, "getuid") and info.st_uid != os.getuid())
             ):
                 continue
-            if sys.version_info >= (3, 12):
-                shutil.rmtree(entry, onexc=_writable_retry)
-            else:  # Python 3.10 and 3.11 (the hooks' floor) name the callback onerror
-                shutil.rmtree(
-                    entry, onerror=_writable_retry
-                )  # pylint: disable=deprecated-argument
+            shutil.rmtree(entry, onexc=_writable_retry)
             removed += 1
     return removed
 
