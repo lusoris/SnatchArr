@@ -629,6 +629,19 @@ pub fn group_flat(selected: &[Candidate]) -> Vec<Target> {
     }]
 }
 
+/// Dispatches `target` whole when it fits `available`, splits item-by-item targets at the
+/// grant when a partial dispatch fits, and defers whole-parent targets that cannot be split.
+fn dispatch_or_defer(target: Target, available: u32) -> (Option<Target>, Option<Target>) {
+    if available >= target.query_cost() {
+        (Some(target), None)
+    } else {
+        match target.split(available) {
+            Ok((head, tail)) => (Some(head), Some(tail)),
+            Err(whole) => (None, Some(whole)),
+        }
+    }
+}
+
 /// Applies the per-target grants of one `AcquireBudget` answer, in target order (#142). A
 /// full grant dispatches the target. A partial grant, which the API only gives to a target
 /// searched item by item, dispatches that many items and defers the rest. No grant defers
@@ -640,16 +653,12 @@ pub fn apply_grants(targets: Vec<Target>, grants: &[u32]) -> (Vec<Target>, Vec<T
     let mut deferred = Vec::new();
     let grants = grants.iter().copied().chain(std::iter::repeat(0));
     for (target, grant) in targets.into_iter().zip(grants) {
-        if grant >= target.query_cost() {
-            dispatch.push(target);
-            continue;
+        let (head, tail) = dispatch_or_defer(target, grant);
+        if let Some(h) = head {
+            dispatch.push(h);
         }
-        match target.split(grant) {
-            Ok((head, tail)) => {
-                dispatch.push(head);
-                deferred.push(tail);
-            }
-            Err(whole) => deferred.push(whole),
+        if let Some(t) = tail {
+            deferred.push(t);
         }
     }
     (dispatch, deferred)
@@ -667,20 +676,14 @@ pub fn cap(targets: Vec<Target>, granted: u32) -> (Vec<Target>, Vec<Target>) {
     let mut dispatch = Vec::new();
     let mut deferred = Vec::new();
     for t in targets {
-        let n = t.query_cost();
         let left = granted.saturating_sub(used);
-        if n <= left {
-            used = used.saturating_add(n);
-            dispatch.push(t);
-            continue;
+        let (head, tail) = dispatch_or_defer(t, left);
+        if let Some(h) = head {
+            used = used.saturating_add(h.query_cost());
+            dispatch.push(h);
         }
-        match t.split(left) {
-            Ok((head, tail)) => {
-                used = used.saturating_add(head.query_cost());
-                dispatch.push(head);
-                deferred.push(tail);
-            }
-            Err(whole) => deferred.push(whole),
+        if let Some(t) = tail {
+            deferred.push(t);
         }
     }
     (dispatch, deferred)
@@ -1389,6 +1392,41 @@ mod tests {
 
         let (dispatch, deferred) = apply_grants(Vec::new(), &[3]);
         assert!(dispatch.is_empty() && deferred.is_empty());
+    }
+
+    // dispatch_or_defer helper: positive (full grant or splittable partial), negative (atomic
+    // under partial grant), boundary (zero budget).
+    #[test]
+    fn dispatch_or_defer_cases() {
+        let items = Target::Items {
+            items: vec![1, 2, 3],
+        };
+        let whole = series(1, 2, vec![1, 2, 3]);
+
+        // Full grant dispatches whole target.
+        assert_eq!(
+            dispatch_or_defer(items.clone(), 3),
+            (Some(items.clone()), None)
+        );
+        assert_eq!(
+            dispatch_or_defer(whole.clone(), 5),
+            (Some(whole.clone()), None)
+        );
+
+        // Partial grant on splittable splits head and tail.
+        let (head, tail) = dispatch_or_defer(items.clone(), 2);
+        assert_eq!(head, Some(Target::Items { items: vec![1, 2] }));
+        assert_eq!(tail, Some(Target::Items { items: vec![3] }));
+
+        // Partial grant on atomic target defers whole.
+        assert_eq!(
+            dispatch_or_defer(whole.clone(), 1),
+            (None, Some(whole.clone()))
+        );
+
+        // Zero grant defers everything.
+        assert_eq!(dispatch_or_defer(items.clone(), 0), (None, Some(items)));
+        assert_eq!(dispatch_or_defer(whole.clone(), 0), (None, Some(whole)));
     }
 
     #[test]
