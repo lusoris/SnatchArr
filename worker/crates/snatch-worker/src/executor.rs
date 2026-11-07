@@ -5,7 +5,7 @@
 //! Executes one leased run: page the wanted list, filter, ask the API which ids are
 //! unprocessed, select, group into search targets, acquire budget, dispatch, report.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
@@ -269,10 +269,12 @@ fn filter_of(p: &Policy, now_unix: i64) -> Filter {
     }
 }
 
+/// Maps the lease's protobuf Sonarr mode to [`SonarrMode`], degrading `Unspecified` to `Episodes`.
 fn sonarr_mode(p: &Policy) -> SonarrMode {
     match p.sonarr_mode() {
         snatch_proto::SonarrMode::SeasonPacks => SonarrMode::SeasonPacks,
         snatch_proto::SonarrMode::Shows => SonarrMode::Shows,
+        snatch_proto::SonarrMode::Dynamic => SonarrMode::Dynamic,
         snatch_proto::SonarrMode::Episodes | snatch_proto::SonarrMode::Unspecified => {
             SonarrMode::Episodes
         }
@@ -536,6 +538,22 @@ fn record_report(
     }
 }
 
+/// Emits the run-start event, naming the Seerr focus when the lease carries one.
+async fn emit_started(p: &Prepared, events: &Events) {
+    let focused = if p.focus.is_some() {
+        " (focused on one Seerr request)"
+    } else {
+        ""
+    };
+    let msg = format!("{:?} snatch started{focused}", p.wanted);
+    events
+        .emit(Ev::run(Level::Info, EventType::RunStarted, msg))
+        .await;
+}
+
+/// Runs one leased snatch: pages the wanted list, filters and selects candidates, reads season
+/// totals in dynamic mode, groups the selection into targets, acquires budget, then dispatches
+/// the searches (or previews them on a dry run).
 async fn snatch(
     client: &mut Client,
     run: &Run,
@@ -545,31 +563,20 @@ async fn snatch(
     health: &Health,
 ) -> Result<Outcome, ExecError> {
     let p = prepare(run, arr_timeout, polling, health)?;
-    let focused = if p.focus.is_some() {
-        " (focused on one Seerr request)"
-    } else {
-        ""
-    };
-    events
-        .emit(Ev::run(
-            Level::Info,
-            EventType::RunStarted,
-            format!("{:?} snatch started{focused}", p.wanted),
-        ))
-        .await;
+    emit_started(&p, events).await;
     let mut rng = seeded_rng(run.seed);
     let (plan, first) = plan_pages(&p, &mut rng).await?;
-    let msg = format!(
+    let page_msg = format!(
         "{} wanted item(s), fetching {} page(s)",
         first.total_records,
         plan.pages.len()
     );
     events
-        .emit(Ev::run(Level::Debug, EventType::PageFetched, msg))
+        .emit(Ev::run(Level::Debug, EventType::PageFetched, page_msg))
         .await;
     let c = collect_candidates(client, &p, run, &plan.pages, first).await?;
     let eligible = u32::try_from(c.keep.len()).unwrap_or(u32::MAX);
-    let msg = format!(
+    let filter_msg = format!(
         "{} candidate(s) after filters and afterglow; {} skipped as queued or grabbed within {} h; {} skipped as not yet available; {} requested via Seerr",
         c.keep.len(),
         c.busy,
@@ -578,9 +585,13 @@ async fn snatch(
         c.priority_ids.len().saturating_add(c.priority_groups.len())
     );
     events
-        .emit(Ev::run(Level::Debug, EventType::CandidatesFiltered, msg))
+        .emit(Ev::run(
+            Level::Debug,
+            EventType::CandidatesFiltered,
+            filter_msg,
+        ))
         .await;
-    let selected = snatch_core::select_prioritised(
+    let mut selected = snatch_core::select_prioritised(
         &c.keep,
         p.policy.per_cycle as usize,
         selection_of(&p.policy),
@@ -588,6 +599,7 @@ async fn snatch(
         &c.priority_groups,
         &mut rng,
     );
+    enrich_dynamic_seasons(&p, &c.keep, &mut selected, events).await;
     let targets = group(p.kind, &p.policy, &selected);
     let dispatch = acquire(client, run, targets, events).await?;
     let by_id: HashMap<i64, Candidate> = selected.iter().map(|c| (c.id, c.clone())).collect();
@@ -598,6 +610,54 @@ async fn snatch(
     let mut outcome = Outcome::at(plan.next_cursor.to_string(), eligible);
     dispatch_all(&p, &dispatch, &by_id, events, &mut outcome, health).await;
     Ok(outcome)
+}
+
+/// Populates `season_wanted` from the run's eligible pool and fetches `season_episode_count`
+/// sequentially for selected Sonarr or Whisparr v2 series in dynamic mode that have at least two
+/// wanted episodes in a regular season (`>= 1`), warning and falling back to episode search on error.
+async fn enrich_dynamic_seasons(
+    p: &Prepared,
+    keep: &[Candidate],
+    selected: &mut [Candidate],
+    events: &Events,
+) {
+    if !matches!(p.kind, Kind::Sonarr | Kind::WhisparrV2)
+        || sonarr_mode(&p.policy) != SonarrMode::Dynamic
+    {
+        return;
+    }
+    let mut wanted_by_season: BTreeMap<(i64, Option<i32>), u32> = BTreeMap::new();
+    for c in keep {
+        let count = wanted_by_season.entry((c.group, c.season)).or_insert(0);
+        *count = count.saturating_add(1);
+    }
+    let mut series_ids: BTreeSet<i64> = BTreeSet::new();
+    for c in selected.iter_mut() {
+        c.season_wanted = wanted_by_season
+            .get(&(c.group, c.season))
+            .copied()
+            .unwrap_or(0);
+        if c.season.is_some_and(|s| s >= 1) && c.season_wanted >= 2 {
+            series_ids.insert(c.group);
+        }
+    }
+    // Bounded by `selected.len()` (at most `per_cycle` distinct series).
+    for series_id in series_ids {
+        match p.arr.season_totals(series_id).await {
+            Ok(totals) => {
+                for c in selected.iter_mut().filter(|c| c.group == series_id) {
+                    c.season_episode_count = c.season.and_then(|s| totals.get(&s).copied());
+                }
+            }
+            Err(e) => {
+                let msg =
+                    format!("series {series_id} season totals failed ({e}); using episode search");
+                events
+                    .emit(Ev::run(Level::Warn, EventType::CandidatesFiltered, msg))
+                    .await;
+            }
+        }
+    }
 }
 
 /// A run's RNG: seeded when the run carries a seed, so a preview and the real run it previews

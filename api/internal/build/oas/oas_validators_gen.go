@@ -5347,6 +5347,8 @@ func (s SnatchPolicySonarrMissingMode) Validate() error {
 		return nil
 	case "shows":
 		return nil
+	case "dynamic":
+		return nil
 	default:
 		return errors.Errorf("invalid value: %v", s)
 	}
@@ -5357,6 +5359,8 @@ func (s SnatchPolicySonarrUpgradeMode) Validate() error {
 	case "episodes":
 		return nil
 	case "season_packs":
+		return nil
+	case "dynamic":
 		return nil
 	default:
 		return errors.Errorf("invalid value: %v", s)

@@ -43,7 +43,7 @@ use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
 use super::{
     ArrClient, BusyLike, ChildLike, CommandStatus, EpisodeLike, Error, Kind, MovieLike, Options,
-    Paged, RadarrRelease, SceneLike, SystemStatus, Wanted, WhisparrMovieLike,
+    Paged, RadarrRelease, SceneLike, SeriesSeasons, SystemStatus, Wanted, WhisparrMovieLike,
 };
 
 /// The environment variable that names the cache directory.
@@ -256,7 +256,7 @@ fn missing<T: DeserializeOwned>(example: &Value) -> Vec<String> {
 type Reader = fn(&Value) -> Vec<String>;
 
 /// Every operation the client requests, with the wire type its response is decoded into.
-fn readers(kind: Kind) -> [(&'static str, &'static str, Reader); 7] {
+fn readers(kind: Kind) -> Vec<(&'static str, &'static str, Reader)> {
     let wanted: Reader = match kind {
         Kind::Sonarr => missing::<Paged<EpisodeLike>>,
         Kind::WhisparrV2 => missing::<Paged<SceneLike>>,
@@ -264,15 +264,19 @@ fn readers(kind: Kind) -> [(&'static str, &'static str, Reader); 7] {
         Kind::WhisparrV3 => missing::<Paged<WhisparrMovieLike>>,
         Kind::Lidarr | Kind::Readarr => missing::<Paged<ChildLike>>,
     };
-    [
-        ("GET", "system/status", missing::<SystemStatus>),
+    let mut ops = vec![
+        ("GET", "system/status", missing::<SystemStatus> as Reader),
         ("GET", "queue", missing::<Paged<BusyLike>>),
         ("GET", "history/since", missing::<Vec<BusyLike>>),
         ("GET", "wanted/missing", wanted),
         ("GET", "wanted/cutoff", wanted),
         ("POST", "command", missing::<CommandStatus>),
         ("GET", "command/{id}", missing::<CommandStatus>),
-    ]
+    ];
+    if matches!(kind, Kind::Sonarr | Kind::WhisparrV2) {
+        ops.push(("GET", "series/{id}", missing::<SeriesSeasons>));
+    }
+    ops
 }
 
 /// What the wire types read for another *arr family. `BusyLike` and `ChildLike` serve several
@@ -443,6 +447,13 @@ async fn calls(client: &ArrClient, kind: Kind) -> Vec<String> {
         "command_status",
         client.command_status(1).await,
     );
+    if matches!(kind, Kind::Sonarr | Kind::WhisparrV2) {
+        note(
+            &mut problems,
+            "season_totals",
+            client.season_totals(1).await,
+        );
+    }
     problems
 }
 
@@ -655,7 +666,7 @@ fn sample(kind: Kind) -> Contract {
     let mut listing = paging.to_vec();
     listing.extend(include);
     let prefix = format!(" {}/", kind.api_prefix());
-    let operations = [
+    let mut operations: BTreeMap<String, Operation> = [
         ("GET system/status", operation(&[], status)),
         ("GET queue", operation(&paging, paged(json!({ id: 1 })))),
         (
@@ -673,6 +684,14 @@ fn sample(kind: Kind) -> Contract {
     .into_iter()
     .map(|(key, operation)| (key.replacen(' ', &prefix, 1), operation))
     .collect();
+    if matches!(kind, Kind::Sonarr | Kind::WhisparrV2) {
+        let series =
+            json!({"seasons": [{"seasonNumber": 1, "statistics": {"totalEpisodeCount": 10}}]});
+        operations.insert(
+            format!("GET {}/series/{{id}}", kind.api_prefix()),
+            operation(&[], series),
+        );
+    }
     Contract {
         spec: "sample".to_owned(),
         commit: "0123abc".to_owned(),

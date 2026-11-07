@@ -197,6 +197,7 @@ const (
 	SonarrMode_SONARR_MODE_EPISODES     SonarrMode = 1
 	SonarrMode_SONARR_MODE_SEASON_PACKS SonarrMode = 2
 	SonarrMode_SONARR_MODE_SHOWS        SonarrMode = 3
+	SonarrMode_SONARR_MODE_DYNAMIC      SonarrMode = 4
 )
 
 // Enum value maps for SonarrMode.
@@ -206,12 +207,14 @@ var (
 		1: "SONARR_MODE_EPISODES",
 		2: "SONARR_MODE_SEASON_PACKS",
 		3: "SONARR_MODE_SHOWS",
+		4: "SONARR_MODE_DYNAMIC",
 	}
 	SonarrMode_value = map[string]int32{
 		"SONARR_MODE_UNSPECIFIED":  0,
 		"SONARR_MODE_EPISODES":     1,
 		"SONARR_MODE_SEASON_PACKS": 2,
 		"SONARR_MODE_SHOWS":        3,
+		"SONARR_MODE_DYNAMIC":      4,
 	}
 )
 
@@ -2203,13 +2206,14 @@ const file_snatcharr_v1_worker_proto_rawDesc = "" +
 	"\x15SELECTION_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10SELECTION_RANDOM\x10\x01\x12\x18\n" +
 	"\x14SELECTION_SEQUENTIAL\x10\x02\x12\x14\n" +
-	"\x10SELECTION_RECENT\x10\x03*x\n" +
+	"\x10SELECTION_RECENT\x10\x03*\x91\x01\n" +
 	"\n" +
 	"SonarrMode\x12\x1b\n" +
 	"\x17SONARR_MODE_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14SONARR_MODE_EPISODES\x10\x01\x12\x1c\n" +
 	"\x18SONARR_MODE_SEASON_PACKS\x10\x02\x12\x15\n" +
-	"\x11SONARR_MODE_SHOWS\x10\x03*X\n" +
+	"\x11SONARR_MODE_SHOWS\x10\x03\x12\x17\n" +
+	"\x13SONARR_MODE_DYNAMIC\x10\x04*X\n" +
 	"\n" +
 	"LidarrMode\x12\x1b\n" +
 	"\x17LIDARR_MODE_UNSPECIFIED\x10\x00\x12\x16\n" +

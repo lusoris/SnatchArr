@@ -3436,10 +3436,12 @@ components:
           enum: [physical, digital, cinema]
         sonarr_missing_mode:
           type: string
-          enum: [episodes, season_packs, shows]
+          enum: [episodes, season_packs, shows, dynamic]
+          default: episodes
         sonarr_upgrade_mode:
           type: string
-          enum: [episodes, season_packs]
+          enum: [episodes, season_packs, dynamic]
+          default: episodes
         lidarr_missing_mode:
           type: string
           enum: [artist, album]

@@ -11195,6 +11195,7 @@ const (
 	SnatchPolicySonarrMissingModeEpisodes    SnatchPolicySonarrMissingMode = "episodes"
 	SnatchPolicySonarrMissingModeSeasonPacks SnatchPolicySonarrMissingMode = "season_packs"
 	SnatchPolicySonarrMissingModeShows       SnatchPolicySonarrMissingMode = "shows"
+	SnatchPolicySonarrMissingModeDynamic     SnatchPolicySonarrMissingMode = "dynamic"
 )
 
 // AllValues returns all SnatchPolicySonarrMissingMode values.
@@ -11203,6 +11204,7 @@ func (SnatchPolicySonarrMissingMode) AllValues() []SnatchPolicySonarrMissingMode
 		SnatchPolicySonarrMissingModeEpisodes,
 		SnatchPolicySonarrMissingModeSeasonPacks,
 		SnatchPolicySonarrMissingModeShows,
+		SnatchPolicySonarrMissingModeDynamic,
 	}
 }
 
@@ -11214,6 +11216,8 @@ func (s SnatchPolicySonarrMissingMode) MarshalText() ([]byte, error) {
 	case SnatchPolicySonarrMissingModeSeasonPacks:
 		return []byte(s), nil
 	case SnatchPolicySonarrMissingModeShows:
+		return []byte(s), nil
+	case SnatchPolicySonarrMissingModeDynamic:
 		return []byte(s), nil
 	default:
 		return nil, errors.Errorf("invalid value: %q", s)
@@ -11232,6 +11236,9 @@ func (s *SnatchPolicySonarrMissingMode) UnmarshalText(data []byte) error {
 	case SnatchPolicySonarrMissingModeShows:
 		*s = SnatchPolicySonarrMissingModeShows
 		return nil
+	case SnatchPolicySonarrMissingModeDynamic:
+		*s = SnatchPolicySonarrMissingModeDynamic
+		return nil
 	default:
 		return errors.Errorf("invalid value: %q", data)
 	}
@@ -11242,6 +11249,7 @@ type SnatchPolicySonarrUpgradeMode string
 const (
 	SnatchPolicySonarrUpgradeModeEpisodes    SnatchPolicySonarrUpgradeMode = "episodes"
 	SnatchPolicySonarrUpgradeModeSeasonPacks SnatchPolicySonarrUpgradeMode = "season_packs"
+	SnatchPolicySonarrUpgradeModeDynamic     SnatchPolicySonarrUpgradeMode = "dynamic"
 )
 
 // AllValues returns all SnatchPolicySonarrUpgradeMode values.
@@ -11249,6 +11257,7 @@ func (SnatchPolicySonarrUpgradeMode) AllValues() []SnatchPolicySonarrUpgradeMode
 	return []SnatchPolicySonarrUpgradeMode{
 		SnatchPolicySonarrUpgradeModeEpisodes,
 		SnatchPolicySonarrUpgradeModeSeasonPacks,
+		SnatchPolicySonarrUpgradeModeDynamic,
 	}
 }
 
@@ -11258,6 +11267,8 @@ func (s SnatchPolicySonarrUpgradeMode) MarshalText() ([]byte, error) {
 	case SnatchPolicySonarrUpgradeModeEpisodes:
 		return []byte(s), nil
 	case SnatchPolicySonarrUpgradeModeSeasonPacks:
+		return []byte(s), nil
+	case SnatchPolicySonarrUpgradeModeDynamic:
 		return []byte(s), nil
 	default:
 		return nil, errors.Errorf("invalid value: %q", s)
@@ -11272,6 +11283,9 @@ func (s *SnatchPolicySonarrUpgradeMode) UnmarshalText(data []byte) error {
 		return nil
 	case SnatchPolicySonarrUpgradeModeSeasonPacks:
 		*s = SnatchPolicySonarrUpgradeModeSeasonPacks
+		return nil
+	case SnatchPolicySonarrUpgradeModeDynamic:
+		*s = SnatchPolicySonarrUpgradeModeDynamic
 		return nil
 	default:
 		return errors.Errorf("invalid value: %q", data)

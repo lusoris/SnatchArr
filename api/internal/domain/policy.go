@@ -190,10 +190,10 @@ func (p Policy) Validate() error {
 	if err := checkEnum("radarr_release_type", p.RadarrReleaseType, "physical", "digital", "cinema"); err != nil {
 		return err
 	}
-	if err := checkEnum("sonarr_missing_mode", p.SonarrMissingMode, "episodes", "season_packs", "shows"); err != nil {
+	if err := checkEnum("sonarr_missing_mode", p.SonarrMissingMode, "episodes", "season_packs", "shows", "dynamic"); err != nil {
 		return err
 	}
-	if err := checkEnum("sonarr_upgrade_mode", p.SonarrUpgradeMode, "episodes", "season_packs"); err != nil {
+	if err := checkEnum("sonarr_upgrade_mode", p.SonarrUpgradeMode, "episodes", "season_packs", "dynamic"); err != nil {
 		return err
 	}
 	return checkEnum("lidarr_missing_mode", p.LidarrMissingMode, "artist", "album")

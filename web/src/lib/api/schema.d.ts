@@ -2141,10 +2141,16 @@ export interface components {
             skip_future_releases: boolean;
             /** @enum {string} */
             radarr_release_type: "physical" | "digital" | "cinema";
-            /** @enum {string} */
-            sonarr_missing_mode: "episodes" | "season_packs" | "shows";
-            /** @enum {string} */
-            sonarr_upgrade_mode: "episodes" | "season_packs";
+            /**
+             * @default episodes
+             * @enum {string}
+             */
+            sonarr_missing_mode: "episodes" | "season_packs" | "shows" | "dynamic";
+            /**
+             * @default episodes
+             * @enum {string}
+             */
+            sonarr_upgrade_mode: "episodes" | "season_packs" | "dynamic";
             /**
              * @description Search grouping for Lidarr missing runs; upgrade runs always search per album.
              * @enum {string}

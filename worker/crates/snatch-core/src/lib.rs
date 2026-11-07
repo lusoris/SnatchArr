@@ -168,6 +168,10 @@ pub struct Candidate {
     /// Quality profile ids that apply to the item; more than one where an app keeps one per
     /// format (Chaptarr's audiobook and ebook profiles).
     pub profiles: Vec<i32>,
+    /// Total episodes in the item's season; `None` for non-episode kinds or unknown.
+    pub season_episode_count: Option<u32>,
+    /// Eligible wanted episodes of the candidate's `(group, season)` in this run; 0 when unknown.
+    pub season_wanted: u32,
 }
 
 /// An include and an exclude list of *arr ids (tags or quality profiles).
@@ -325,6 +329,12 @@ pub enum SonarrMode {
     SeasonPacks,
     /// One `SeriesSearch` per distinct series.
     Shows,
+    /// Per-season dynamic choice: dispatches one `SeasonSearch` for a regular season (`>= 1`)
+    /// whose total episode count is known and that has at least three wanted episodes in the run
+    /// or at least two wanted episodes covering half the season. Every other selected episode,
+    /// including specials (season 0) and seasons with unknown totals, falls back to
+    /// `EpisodeSearch` per series. Same-release episode grouping is not implemented yet (#558).
+    Dynamic,
 }
 
 /// Lidarr search granularity.
@@ -514,7 +524,76 @@ pub fn group_sonarr(selected: &[Candidate], mode: SonarrMode) -> Vec<Target> {
                 })
                 .collect()
         }
+        SonarrMode::Dynamic => group_sonarr_dynamic(selected),
     }
+}
+
+/// Wanted episodes in one season, counted over the run's eligible candidates, from which a
+/// season search replaces the episode searches. Sonarr's own bulk Missing and Cutoff Unmet
+/// search switches at 2 (EpisodeSearchService.SearchForBulkEpisodes). SnatchArr waits for 3
+/// unless SEASON_PACK_SHARE applies: a season search costs one search per indexer, never more
+/// than the episode searches it replaces, but its results are mostly season packs, and Sonarr's
+/// default season pack upgrade rule (All, 100 %) rejects a pack while an episode of the season
+/// on disk already meets cutoff. Deriving both thresholds from grab outcomes: #1034.
+const SEASON_PACK_MIN_WANTED: u32 = 3;
+
+/// Percentage of a season's episodes that, once wanted, picks the season search at two wanted
+/// episodes, below SEASON_PACK_MIN_WANTED. It decides only seasons of four episodes or fewer,
+/// where two wanted episodes are half the season or more; one wanted episode never picks the
+/// season search, as in Sonarr. Deriving it from grab outcomes: #1034.
+const SEASON_PACK_SHARE: u32 = 50;
+
+/// Groups selected Sonarr candidates into `Target::Season` packs when a regular season (`>= 1`)
+/// has a known total and enough wanted episodes, and `Target::Episodes` per series otherwise;
+/// season 0 (specials) always uses `Target::Episodes` because Sonarr's
+/// `ReleaseSearchService.SearchSpecial` fans a season-0 search out into per-episode queries (#1033).
+fn group_sonarr_dynamic(selected: &[Candidate]) -> Vec<Target> {
+    let mut by_season: BTreeMap<(i64, Option<i32>), Vec<&Candidate>> = BTreeMap::new();
+    for c in selected {
+        by_season.entry((c.group, c.season)).or_default().push(c);
+    }
+
+    let mut pack_seasons: Vec<Target> = Vec::new();
+    let mut episode_ids_by_series: BTreeMap<i64, Vec<i64>> = BTreeMap::new();
+
+    for ((series_id, season), eps) in &by_season {
+        let selected_len = u32::try_from(eps.len()).unwrap_or(u32::MAX);
+        let wanted = eps
+            .iter()
+            .map(|c| c.season_wanted)
+            .max()
+            .unwrap_or(0)
+            .max(selected_len);
+        let total = eps.iter().find_map(|c| c.season_episode_count);
+        let pack_season = season.filter(|&s| s >= 1).filter(|_| {
+            wanted >= 2
+                && total.is_some_and(|t| {
+                    t > 0
+                        && (wanted >= SEASON_PACK_MIN_WANTED
+                            || wanted.saturating_mul(100) >= t.saturating_mul(SEASON_PACK_SHARE))
+                })
+        });
+
+        if let Some(s) = pack_season {
+            pack_seasons.push(Target::Season {
+                series_id: *series_id,
+                season: s,
+                items: eps.iter().map(|c| c.id).collect(),
+            });
+        } else {
+            episode_ids_by_series
+                .entry(*series_id)
+                .or_default()
+                .extend(eps.iter().map(|c| c.id));
+        }
+    }
+
+    pack_seasons.extend(
+        episode_ids_by_series
+            .into_iter()
+            .map(|(series_id, items)| Target::Episodes { series_id, items }),
+    );
+    pack_seasons
 }
 
 /// Groups album candidates into Lidarr search targets.
@@ -612,11 +691,13 @@ mod tests {
     use std::collections::BTreeSet;
 
     use proptest::prelude::*;
+    use proptest::strategy::ValueTree;
     use rand::SeedableRng;
     use rand::rngs::SmallRng;
 
     use super::*;
 
+    /// Builds a baseline episode candidate for unit and property tests.
     fn cand(id: i64, group: i64, season: i32, release: Option<i64>, monitored: bool) -> Candidate {
         Candidate {
             id,
@@ -628,11 +709,26 @@ mod tests {
             available: None,
             tags: Vec::new(),
             profiles: Vec::new(),
+            season_episode_count: None,
+            season_wanted: 0,
         }
     }
 
+    /// Sets the candidate's availability flag for filter tests.
     fn with_available(mut c: Candidate, available: Option<bool>) -> Candidate {
         c.available = available;
+        c
+    }
+
+    /// Sets the candidate's total season episode count for dynamic grouping tests.
+    fn with_season_total(mut c: Candidate, total: u32) -> Candidate {
+        c.season_episode_count = Some(total);
+        c
+    }
+
+    /// Sets the candidate's eligible wanted count in its season for dynamic grouping tests.
+    fn with_season_wanted(mut c: Candidate, wanted: u32) -> Candidate {
+        c.season_wanted = wanted;
         c
     }
 
@@ -660,32 +756,52 @@ mod tests {
             })
     }
 
+    /// Generates candidates with small `(group, season)` ranges and one shared
+    /// `(season_wanted, season_episode_count)` draw per `(group, season)` pair.
     fn arb_candidates() -> impl Strategy<Value = Vec<Candidate>> {
+        let season_total = prop_oneof![Just(None), Just(Some(0u32)), (1u32..30).prop_map(Some)];
         prop::collection::vec(
             (
                 1i64..10_000,
-                1i64..50,
-                1i32..20,
+                1i64..8,
+                prop::option::of(0i32..6),
                 prop::option::of(-1000i64..1000),
                 any::<bool>(),
+                0u32..20,
+                season_total,
             )
-                .prop_map(|(id, g, s, r, m)| cand(id, g, s, r, m)),
+                .prop_map(|(id, g, s, r, m, wanted, total)| {
+                    let mut c = cand(id, g, s.unwrap_or(0), r, m);
+                    c.season = s;
+                    c.season_wanted = wanted;
+                    c.season_episode_count = total;
+                    c
+                }),
             0..64,
         )
         .prop_map(|mut v| {
             v.sort_by_key(|c| c.id);
             v.dedup_by_key(|c| c.id);
+            let mut pair_meta: BTreeMap<(i64, Option<i32>), (u32, Option<u32>)> = BTreeMap::new();
+            for c in &mut v {
+                let (wanted, total) = *pair_meta
+                    .entry((c.group, c.season))
+                    .or_insert((c.season_wanted, c.season_episode_count));
+                c.season_wanted = wanted;
+                c.season_episode_count = total;
+            }
             v
         })
     }
 
     // Targets of every shape: flat items, episodes per series, season packs, whole series.
     fn arb_targets() -> impl Strategy<Value = Vec<Target>> {
-        (arb_candidates(), 0u8..4).prop_map(|(cands, shape)| match shape {
+        (arb_candidates(), 0u8..5).prop_map(|(cands, shape)| match shape {
             0 => group_flat(&cands),
             1 => group_sonarr(&cands, SonarrMode::Episodes),
             2 => group_sonarr(&cands, SonarrMode::SeasonPacks),
-            _ => group_sonarr(&cands, SonarrMode::Shows),
+            3 => group_sonarr(&cands, SonarrMode::Shows),
+            _ => group_sonarr(&cands, SonarrMode::Dynamic),
         })
     }
 
@@ -825,6 +941,7 @@ mod tests {
                 group_sonarr(&cands, SonarrMode::Episodes),
                 group_sonarr(&cands, SonarrMode::SeasonPacks),
                 group_sonarr(&cands, SonarrMode::Shows),
+                group_sonarr(&cands, SonarrMode::Dynamic),
                 group_lidarr(&cands, LidarrMode::Artist),
                 group_lidarr(&cands, LidarrMode::Album),
                 group_readarr(&cands),
@@ -837,6 +954,26 @@ mod tests {
                 prop_assert_eq!(set.len(), seen.len(), "no id appears in two targets");
                 prop_assert_eq!(set, all.clone(), "every selected id is covered");
             }
+        }
+
+        #[test]
+        fn dynamic_grouping_bounds_cost_and_excludes_specials(cands in arb_candidates()) {
+            let all: BTreeSet<i64> = cands.iter().map(|c| c.id).collect();
+            let dyn_targets = group_sonarr(&cands, SonarrMode::Dynamic);
+            let ep_targets = group_sonarr(&cands, SonarrMode::Episodes);
+            let mut seen = Vec::new();
+            for t in &dyn_targets {
+                if let Target::Season { season, .. } = t {
+                    prop_assert!(*season >= 1, "no season pack for season {season}");
+                }
+                seen.extend_from_slice(t.items());
+            }
+            let set: BTreeSet<i64> = seen.iter().copied().collect();
+            prop_assert_eq!(set.len(), seen.len(), "each selected id in at most one target");
+            prop_assert_eq!(set, all, "each selected id in at least one target");
+            let dyn_cost: u32 = dyn_targets.iter().map(Target::query_cost).sum();
+            let ep_cost: u32 = ep_targets.iter().map(Target::query_cost).sum();
+            prop_assert!(dyn_cost <= ep_cost, "dynamic cost {dyn_cost} > episode cost {ep_cost}");
         }
 
         // With grants as the API computes them, the worker searches exactly what was debited
@@ -1272,6 +1409,221 @@ mod tests {
                 items: vec![1]
             }
             .atomic()
+        );
+    }
+
+    #[test]
+    fn dynamic_uses_season_pack_when_share_is_high() {
+        let cands: Vec<_> = (1..=2)
+            .map(|i| with_season_wanted(with_season_total(cand(i, 1, 1, None, true), 4), 2))
+            .collect();
+        let targets = group_sonarr(&cands, SonarrMode::Dynamic);
+        assert_eq!(
+            targets,
+            vec![Target::Season {
+                series_id: 1,
+                season: 1,
+                items: vec![1, 2],
+            }],
+            "2 wanted of total 4 (50% share boundary) triggers season pack"
+        );
+    }
+
+    #[test]
+    fn dynamic_uses_episodes_when_share_is_low() {
+        let cands: Vec<_> = (1..=2)
+            .map(|i| with_season_wanted(with_season_total(cand(i, 1, 1, None, true), 20), 2))
+            .collect();
+        let targets = group_sonarr(&cands, SonarrMode::Dynamic);
+        assert_eq!(
+            targets,
+            vec![Target::Episodes {
+                series_id: 1,
+                items: vec![1, 2],
+            }],
+            "2 of 20 episodes (10%) stays as episode search"
+        );
+    }
+
+    #[test]
+    fn dynamic_uses_season_pack_at_min_wanted_threshold() {
+        let cands: Vec<_> = (1..=3)
+            .map(|i| with_season_wanted(with_season_total(cand(i, 1, 1, None, true), 100), 3))
+            .collect();
+        let targets = group_sonarr(&cands, SonarrMode::Dynamic);
+        assert_eq!(
+            targets,
+            vec![Target::Season {
+                series_id: 1,
+                season: 1,
+                items: vec![1, 2, 3],
+            }],
+            "3 wanted of total 100 (min threshold) triggers season pack regardless of share"
+        );
+    }
+
+    #[test]
+    fn dynamic_mixed_seasons_split_correctly() {
+        let mut cands = Vec::new();
+        for i in 1..=5 {
+            cands.push(with_season_wanted(
+                with_season_total(cand(i, 1, 1, None, true), 8),
+                5,
+            ));
+        }
+        cands.push(with_season_wanted(
+            with_season_total(cand(10, 1, 2, None, true), 20),
+            1,
+        ));
+        let targets = group_sonarr(&cands, SonarrMode::Dynamic);
+        assert_eq!(
+            targets,
+            vec![
+                Target::Season {
+                    series_id: 1,
+                    season: 1,
+                    items: vec![1, 2, 3, 4, 5],
+                },
+                Target::Episodes {
+                    series_id: 1,
+                    items: vec![10],
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn dynamic_without_season_total_stays_as_episodes() {
+        let cands: Vec<_> = (1..=2)
+            .map(|i| with_season_wanted(cand(i, 1, 1, None, true), 20))
+            .collect();
+        let targets = group_sonarr(&cands, SonarrMode::Dynamic);
+        assert_eq!(
+            targets,
+            vec![Target::Episodes {
+                series_id: 1,
+                items: vec![1, 2],
+            }],
+            "total None with season_wanted 20 stays as episode search"
+        );
+    }
+
+    #[test]
+    fn dynamic_empty_input() {
+        assert!(group_sonarr(&[], SonarrMode::Dynamic).is_empty());
+    }
+
+    #[test]
+    fn dynamic_boundary_exactly_half() {
+        let cands = vec![with_season_wanted(
+            with_season_total(cand(1, 1, 1, None, true), 10),
+            5,
+        )];
+        let targets = group_sonarr(&cands, SonarrMode::Dynamic);
+        assert_eq!(
+            targets,
+            vec![Target::Season {
+                series_id: 1,
+                season: 1,
+                items: vec![1],
+            }],
+            "1 selected with season_wanted 5 of total 10 packs covering that 1 id"
+        );
+    }
+
+    #[test]
+    fn dynamic_boundary_just_below_half() {
+        let cands: Vec<_> = (1..=2)
+            .map(|i| with_season_wanted(with_season_total(cand(i, 1, 1, None, true), 5), 2))
+            .collect();
+        let targets = group_sonarr(&cands, SonarrMode::Dynamic);
+        assert_eq!(
+            targets,
+            vec![Target::Episodes {
+                series_id: 1,
+                items: vec![1, 2],
+            }],
+            "2 wanted of total 5 (40% < 50%, below min 3) stays as episodes"
+        );
+    }
+
+    /// Verifies negative and boundary cases for season 0, missing season, single wanted episode,
+    /// and zero season total in `SonarrMode::Dynamic`.
+    #[test]
+    fn dynamic_specials_missing_season_single_wanted_and_zero_total_use_episodes() {
+        let specials: Vec<_> = (1..=5)
+            .map(|i| with_season_wanted(with_season_total(cand(i, 1, 0, None, true), 5), 5))
+            .collect();
+        assert_eq!(
+            group_sonarr(&specials, SonarrMode::Dynamic),
+            vec![Target::Episodes {
+                series_id: 1,
+                items: vec![1, 2, 3, 4, 5],
+            }],
+            "season 0 with 5 of 5 wanted never uses SeasonSearch"
+        );
+
+        let mut no_season = with_season_wanted(with_season_total(cand(1, 1, 1, None, true), 4), 4);
+        no_season.season = None;
+        assert_eq!(
+            group_sonarr(&[no_season], SonarrMode::Dynamic),
+            vec![Target::Episodes {
+                series_id: 1,
+                items: vec![1],
+            }],
+            "season None always uses EpisodeSearch"
+        );
+
+        let one_wanted = [with_season_wanted(
+            with_season_total(cand(1, 1, 1, None, true), 2),
+            1,
+        )];
+        assert_eq!(
+            group_sonarr(&one_wanted, SonarrMode::Dynamic),
+            vec![Target::Episodes {
+                series_id: 1,
+                items: vec![1],
+            }],
+            "1 wanted of total 2 (50% share) never uses SeasonSearch"
+        );
+
+        let zero_total: Vec<_> = (1..=4)
+            .map(|i| with_season_wanted(with_season_total(cand(i, 1, 1, None, true), 0), 4))
+            .collect();
+        assert_eq!(
+            group_sonarr(&zero_total, SonarrMode::Dynamic),
+            vec![Target::Episodes {
+                series_id: 1,
+                items: vec![1, 2, 3, 4],
+            }],
+            "total 0 stays as EpisodeSearch"
+        );
+    }
+
+    /// Ensures `arb_candidates` exercises both `Target::Season` and `Target::Episodes` branches
+    /// in `SonarrMode::Dynamic` across a fixed seed range.
+    #[test]
+    fn arb_candidates_reaches_both_dynamic_branches() {
+        let mut runner = proptest::test_runner::TestRunner::deterministic();
+        let strat = arb_candidates();
+        let mut saw_season = false;
+        let mut saw_episodes = false;
+        for _ in 0..64 {
+            let tree = strat.new_tree(&mut runner).unwrap();
+            for t in group_sonarr(&tree.current(), SonarrMode::Dynamic) {
+                match t {
+                    Target::Season { .. } => saw_season = true,
+                    Target::Episodes { .. } => saw_episodes = true,
+                    _ => {}
+                }
+            }
+            if saw_season && saw_episodes {
+                break;
+            }
+        }
+        assert!(
+            saw_season && saw_episodes,
+            "expected both branches: season={saw_season}, episodes={saw_episodes}"
         );
     }
 }

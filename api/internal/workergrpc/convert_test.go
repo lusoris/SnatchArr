@@ -32,7 +32,7 @@ func TestEnumConversions(t *testing.T) {
 	if selection(domain.SelectionSequential) != snatcharrv1.Selection_SELECTION_SEQUENTIAL || selection(domain.SelectionRandom) != snatcharrv1.Selection_SELECTION_RANDOM {
 		t.Error("selection mapping")
 	}
-	if sonarrMode("season_packs") != snatcharrv1.SonarrMode_SONARR_MODE_SEASON_PACKS || sonarrMode("shows") != snatcharrv1.SonarrMode_SONARR_MODE_SHOWS || sonarrMode("episodes") != snatcharrv1.SonarrMode_SONARR_MODE_EPISODES {
+	if sonarrMode("season_packs") != snatcharrv1.SonarrMode_SONARR_MODE_SEASON_PACKS || sonarrMode("shows") != snatcharrv1.SonarrMode_SONARR_MODE_SHOWS || sonarrMode("episodes") != snatcharrv1.SonarrMode_SONARR_MODE_EPISODES || sonarrMode("dynamic") != snatcharrv1.SonarrMode_SONARR_MODE_DYNAMIC || sonarrMode("") != snatcharrv1.SonarrMode_SONARR_MODE_EPISODES {
 		t.Error("sonarrMode mapping")
 	}
 	if lidarrMode("album") != snatcharrv1.LidarrMode_LIDARR_MODE_ALBUM || lidarrMode("artist") != snatcharrv1.LidarrMode_LIDARR_MODE_ARTIST {
@@ -114,6 +114,37 @@ func TestLidarrModeFor(t *testing.T) {
 			}
 			if got := policyProto(p, tc.kind).GetLidarrMode(); got != tc.want {
 				t.Errorf("policyProto(mode=%q, kind=%v).GetLidarrMode() = %v, want %v", tc.mode, tc.kind, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestSonarrMode verifies sonarrMode and policyProto map known modes and fall back to EPISODES.
+func TestSonarrMode(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		in   string
+		want snatcharrv1.SonarrMode
+	}{
+		{name: "season_packs", in: "season_packs", want: snatcharrv1.SonarrMode_SONARR_MODE_SEASON_PACKS},
+		{name: "shows", in: "shows", want: snatcharrv1.SonarrMode_SONARR_MODE_SHOWS},
+		{name: "episodes", in: "episodes", want: snatcharrv1.SonarrMode_SONARR_MODE_EPISODES},
+		{name: "dynamic", in: "dynamic", want: snatcharrv1.SonarrMode_SONARR_MODE_DYNAMIC},
+		{name: "bogus", in: "bogus", want: snatcharrv1.SonarrMode_SONARR_MODE_EPISODES},
+		{name: "empty", in: "", want: snatcharrv1.SonarrMode_SONARR_MODE_EPISODES},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := sonarrMode(tc.in); got != tc.want {
+				t.Errorf("sonarrMode(%q) = %v, want %v", tc.in, got, tc.want)
+			}
+			p := domain.Policy{SonarrMissingMode: tc.in, SonarrUpgradeMode: tc.in}
+			for _, kind := range []domain.SnatchKind{domain.SnatchMissing, domain.SnatchUpgrade} {
+				if got := policyProto(p, kind).GetSonarrMode(); got != tc.want {
+					t.Errorf("policyProto(in=%q, kind=%v).GetSonarrMode() = %v, want %v", tc.in, kind, got, tc.want)
+				}
 			}
 		})
 	}

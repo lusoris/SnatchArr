@@ -51,6 +51,7 @@ func snatchKind(k domain.SnatchKind) snatcharrv1.SnatchKind {
 	}
 }
 
+// selection maps a domain selection order to its protobuf enum, defaulting to random.
 func selection(s domain.Selection) snatcharrv1.Selection {
 	switch s {
 	case domain.SelectionSequential:
@@ -64,12 +65,15 @@ func selection(s domain.Selection) snatcharrv1.Selection {
 	}
 }
 
+// sonarrMode maps a domain Sonarr search mode string to its protobuf enum, defaulting to episodes.
 func sonarrMode(mode string) snatcharrv1.SonarrMode {
 	switch mode {
 	case "season_packs":
 		return snatcharrv1.SonarrMode_SONARR_MODE_SEASON_PACKS
 	case "shows":
 		return snatcharrv1.SonarrMode_SONARR_MODE_SHOWS
+	case "dynamic":
+		return snatcharrv1.SonarrMode_SONARR_MODE_DYNAMIC
 	default:
 		return snatcharrv1.SonarrMode_SONARR_MODE_EPISODES
 	}
