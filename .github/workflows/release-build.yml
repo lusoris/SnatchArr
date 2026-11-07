@@ -186,6 +186,17 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: inject image digests into Chart.yaml annotations
+        env:
+          DIGEST_API: ${{ needs.image.outputs.digest-api }}
+          DIGEST_WORKER: ${{ needs.image.outputs.digest-worker }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          chart=deploy/helm/snatcharr/Chart.yaml
+          sed -i "s|ghcr.io/lusoris/snatcharr-api:[^@]*@sha256:[a-f0-9]*|ghcr.io/lusoris/snatcharr-api:${VERSION}@${DIGEST_API}|" "$chart"
+          sed -i "s|ghcr.io/lusoris/snatcharr-worker:[^@]*@sha256:[a-f0-9]*|ghcr.io/lusoris/snatcharr-worker:${VERSION}@${DIGEST_WORKER}|" "$chart"
+          grep -F "$DIGEST_API" "$chart" || { echo "::error::api digest not found in Chart.yaml"; exit 1; }
+          grep -F "$DIGEST_WORKER" "$chart" || { echo "::error::worker digest not found in Chart.yaml"; exit 1; }
       - name: make chart-package
         env:
           VERSION: ${{ inputs.version }}
